@@ -1150,5 +1150,53 @@
       "guard_production_order_root_immutable"
     ],
     "sequences": []
+  },
+  "0255_development_sla_enrollment": {
+    "checksum": "b18621d1203982798c64ebbe88ea56c31bf7a04b09f886ceac697e1bee0aeec6",
+    "tables": [
+      "digital_development_notices",
+      "digital_production_deadline_revisions",
+      "digital_development_route_facts",
+      "digital_development_upload_purposes"
+    ],
+    "functions": [],
+    "references": [
+      "app_users",
+      "digital_production_sources",
+      "digital_sla_configurations",
+      "digital_development_external_patterns",
+      "digital_development_revision_sources",
+      "attachments"
+    ],
+    "insert": [
+      "digital_production_deadline_policies"
+    ],
+    "update": [],
+    "creates": [
+      "digital_development_sla_plans",
+      "digital_development_fixed_cutting",
+      "digital_development_external_patterns",
+      "digital_development_external_pattern_receipts",
+      "digital_development_revision_sources",
+      "digital_development_inherited_files"
+    ],
+    "execute": [
+      "guard_production_order_root_immutable"
+    ],
+    "sequences": []
+  },
+  "0254_digital_sla_policy_references": {
+    "checksum": "791c0cb1f2d43297995560cc3716344d4907ca781738cb36a50c4165aeb3eee9",
+    "tables": [
+      "digital_sla_configurations",
+      "digital_production_deadline_policies"
+    ],
+    "functions": [],
+    "references": [],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": [],
+    "sequences": []
   }
 }

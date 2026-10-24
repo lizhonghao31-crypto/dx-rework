@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import type { PoolClient } from "pg";
 import { validateDigitalSlaSnapshot } from "@dx-rework/contracts/digital-sla";
-import { calculateSlaPlan, evaluateSlaPlan, type SlaNodeFact, type SlaPlan } from "@dx-rework/domain/digital-sla-plan";
+import { calculateSlaPlan, type SlaNodeFact, type SlaPlan } from "@dx-rework/domain/digital-sla-plan";
 import { validateBusinessTime, type BusinessTime } from "@dx-rework/domain/business-clock";
 import { SlaIdempotencyConflict, SlaVersionConflict } from "./sla-configuration-repository.js";
 
@@ -56,36 +56,5 @@ export class SlaPlanRepository {
     const saved = await this.client.query(`INSERT INTO digital_sla_plans(plan_id,production_order_id,revision,snapshot_id,plan_json,business_time,created_by,reason,request_key)
       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`, [randomUUID(), input.orderId, input.expectedRevision + 1, input.snapshotId, JSON.stringify(input.plan), JSON.stringify(input.time), input.actorId, reason, input.requestKey]);
     return mapPlan(saved.rows[0]);
-  }
-  async appendFact(input: { orderId: string; nodeId: string; planId: string; expectedRevision: number; fact: Omit<SlaNodeFact, "completedDeadline">;
-    time: BusinessTime; actorId: string; reason: string; requestKey: string; correction?: boolean }): Promise<void> {
-    validateBusinessTime(input.time); const reason = reasonText(input.reason);
-    if (!Number.isSafeInteger(input.expectedRevision) || input.expectedRevision < 0) throw new Error("Invalid fact revision");
-    await this.lock(input.orderId);
-    const history = await this.plans(input.orderId), plan = history.find(row => row.planId === input.planId);
-    if (!plan?.plan.nodes.some(n => n.id === input.nodeId)) throw new Error("SLA fact has no matching order plan node");
-    if (plan.time.scenarioId !== input.time.scenarioId) throw new Error("SLA fact clock scope mismatch");
-    if ("completedDeadline" in input.fact) throw new Error("Completion assessment is captured by the server");
-    const assessment = evaluateSlaPlan(plan.plan, { [input.nodeId]: input.fact }, input.time).find(n => n.id === input.nodeId)!;
-    const retry = (await this.client.query("SELECT * FROM digital_sla_node_facts WHERE request_key=$1", [input.requestKey])).rows[0];
-    if (retry) {
-      const requestedFact = { ...retry.fact_json }; delete requestedFact.completedDeadline;
-      if (retry.production_order_id !== input.orderId || retry.node_id !== input.nodeId || retry.plan_id !== input.planId || retry.revision !== input.expectedRevision + 1
-        || retry.created_by !== input.actorId || retry.reason !== reason || !isDeepStrictEqual(requestedFact, input.fact) || !isDeepStrictEqual(retry.business_time, input.time)) throw new SlaIdempotencyConflict("SLA fact request reused");
-      return;
-    }
-    if (history.at(-1)?.planId !== input.planId) throw new SlaVersionConflict("SLA plan changed before fact recording");
-    const previous = (await this.client.query("SELECT * FROM digital_sla_node_facts WHERE production_order_id=$1 AND node_id=$2 ORDER BY revision DESC LIMIT 1", [input.orderId, input.nodeId])).rows[0];
-    if ((previous?.revision ?? 0) !== input.expectedRevision) throw new SlaVersionConflict("SLA fact changed; reload before recording");
-    if (previous) {
-      if (Date.parse(input.time.now) < Date.parse(previous.business_time.now) || input.time.revision < previous.business_time.revision) throw new Error("SLA fact observation cannot regress");
-      if (!input.correction && ((previous.fact_json.startedAt && previous.fact_json.startedAt !== input.fact.startedAt)
-        || (previous.fact_json.completedAt && previous.fact_json.completedAt !== input.fact.completedAt))) throw new Error("Reassignment or return cannot reset actual SLA events");
-    }
-    const fact: SlaNodeFact = { ...input.fact };
-    if (fact.completedAt) fact.completedDeadline = previous?.fact_json.completedAt === fact.completedAt && !input.correction
-      ? previous.fact_json.completedDeadline ?? assessment.deadline : assessment.deadline;
-    await this.client.query(`INSERT INTO digital_sla_node_facts(fact_id,production_order_id,node_id,revision,plan_id,fact_json,business_time,created_by,reason,request_key)
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, [randomUUID(), input.orderId, input.nodeId, input.expectedRevision + 1, input.planId, JSON.stringify(fact), JSON.stringify(input.time), input.actorId, reason, input.requestKey]);
   }
 }

@@ -1059,6 +1059,14 @@
     {
       "version": "0253_digital_sla_plan_history",
       "checksum": "cf60cfc2f2d1261550d38e14352596925bddd27c14218b08a9483ba412f1cc7c"
+    },
+    {
+      "version": "0254_digital_sla_policy_references",
+      "checksum": "791c0cb1f2d43297995560cc3716344d4907ca781738cb36a50c4165aeb3eee9"
+    },
+    {
+      "version": "0255_development_sla_enrollment",
+      "checksum": "b18621d1203982798c64ebbe88ea56c31bf7a04b09f886ceac697e1bee0aeec6"
     }
   ]
 }

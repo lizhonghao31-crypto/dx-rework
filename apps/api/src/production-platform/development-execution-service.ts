@@ -1,5 +1,6 @@
+import { externalPatternRecords, recordExternalPatternFact } from "./development-external-pattern-facts.js";
 import {reopenDevelopmentMaterials,assertReopenedReturnIssues} from './development-material-reopen.js';
-import type {ReopenDevelopmentMaterials} from '@dx-rework/contracts/digital-development-execution';
+import type {DevelopmentExternalPattern,ReopenDevelopmentMaterials} from '@dx-rework/contracts/digital-development-execution';
 import {developmentAutomaticRoundDocument} from './development-document-format.js';
 import {validateExecutionTransfer} from './development-execution-transfer.js';
 import type {DevelopmentExecutionTransfer} from '@dx-rework/contracts/development-arrangement';
@@ -9,9 +10,10 @@ import {fabricCases} from "./development-fabric-cases.js";
 import {assertMaterialChecks,readMaterialVerification,saveMaterialVerification} from "./development-material-verification.js";
 import type {SaveMaterialVerification} from "@dx-rework/contracts/digital-development-execution";
 import type {DevelopmentArrangementInput} from "@dx-rework/contracts/development-arrangement";
-import {readArrangement,saveArrangement,arrangementsAvailable} from "./development-arrangement.js";
+import {readArrangement,saveArrangement,arrangementsAvailable,plannedRecipient} from "./development-arrangement.js";
 import {reuseJourneySnapshotReads} from "./journey-snapshot-reads.js";
 import {materialReadiness,materialCheckError} from "./development-material-readiness.js";
+import {developmentSlaPlan,savedDevelopmentRoute} from "./development-sla-enrollment.js";
 import { BulkPreparationService } from "./bulk-preparation-service.js";
 import {DevelopmentRoundService} from "./development-round-service.js";
 import {DevelopmentRouteService,type DevelopmentRouteAction} from "./development-route-service.js";
@@ -25,7 +27,8 @@ import {ApplicationError} from "../platform/errors.js";
 import {DigitalProductionAccessPolicy,digitalForbidden,digitalNotFound,isDigitalLeader,isDigitalTechnicalManager} from "./access-policy.js";
 import {DigitalDevelopmentService} from "./development-service.js";
 import {DigitalProductionTaskService} from "./task-service.js";
-import {developmentNextSteps,developmentRoute} from "./development-route.js";
+import {developmentNextSteps} from "./development-route.js";
+import {fixedDevelopmentCutter,canConfigureDevelopmentCutter,saveFixedDevelopmentCutter} from "./development-fixed-cutting.js";
 const fail=(message:string):never=>{throw new ApplicationError("DEVELOPMENT_EXECUTION_CONFLICT",message,409);};
 export class DevelopmentExecutionService {
   constructor(private readonly database:Pool,private readonly enabled:boolean,private readonly patternOrders?:PatternRoomOrderService){}
@@ -53,7 +56,10 @@ export class DevelopmentExecutionService {
       LEFT JOIN LATERAL(SELECT worker_user_id,worker_name FROM pattern_room_segments WHERE round_id=r.round_id ORDER BY segment_index DESC LIMIT 1)s ON true
       WHERE o.order_id=$1 AND o.deleted_at IS NULL`,[patternOrder.orderId])).rows[0]??null:null;
     const currentRound=sheet.roundNumber??1;
-    const route:string[]=currentRound===1&&sheet.document?developmentRoute(sheet.document):(await db.query('SELECT route_nodes FROM digital_development_rounds WHERE source_id=$1 AND round_number=$2',[sourceId,currentRound])).rows[0]?.route_nodes??[];
+    const plannedSewing=await plannedRecipient(db,sourceId,currentRound,'development_sewing');
+    const sewingRecipientId=tasks.find(t=>t.taskKind==='development_sewing'&&t.routeVersion===currentRound)?.assigneeId??(plannedSewing.planned?plannedSewing.id:dispatch?.sewingWorkerId);
+    const sewingRecipientName=sewingRecipientId?(await db.query("SELECT display_name FROM app_users WHERE id=$1",[sewingRecipientId])).rows[0]?.display_name??null:null;
+    const route:string[]=currentRound===1&&sheet.document?await savedDevelopmentRoute(db,sourceId,sheet.document):(await db.query('SELECT route_nodes FROM digital_development_rounds WHERE source_id=$1 AND round_number=$2',[sourceId,currentRound])).rows[0]?.route_nodes??[];
     const nextSteps=developmentNextSteps(route,tasks,currentRound);
     const readiness=sheet.document?await materialReadiness(db,sourceId,currentRound):null;
     const supplementTask=readiness?.sewingMissing.length?tasks.filter(task=>task.routeVersion===currentRound&&task.state==="completed"&&task.canExecute&&["development_materials","development_material_recheck"].includes(task.taskKind)).at(-1):null;
@@ -73,7 +79,9 @@ export class DevelopmentExecutionService {
        ORDER BY f.sequence DESC NULLS LAST LIMIT 1`,[sourceId,currentRound])).rows[0];
       if(candidate&&tasks.some(task=>task.taskId===candidate.check_id&&task.canExecute))reopenMaterialCheck={taskId:candidate.check_id,supplyTaskId:candidate.supply_id,roundNumber:currentRound,expectedDocumentVersion:sheet.version,expectedVerificationVersion:candidate.version};
     }
-    return {reopenMaterialCheck,fabricCases:await fabricCases(db,sourceId),materialVerification,unifiedArrangement:await arrangementsAvailable(db),arrangement:await readArrangement(db,actor,sourceId),canConfirmExecution:isRootActor(actor)||actor.actorRoles.includes("pattern_room_supervisor"),sheet,materialReadiness:readiness?.materials??[],supplementCheckTaskId:supplementTask?.taskId??null,nextSteps,dispatch,tasks,routeFacts,patternOrder,patternPreparation,facts:await this.facts(db,sourceId),canReportFabric:isRootActor(actor)||actor.actorRoles.some(role=>["pattern_room_worker","pattern_room_supervisor","order_merchandiser"].includes(role)),canDispatch:isDigitalLeader(actor)||isDigitalTechnicalManager(actor)||actor.actorRoles.includes("development_clerk"),canDecideFabric:isRootActor(actor)||actor.actorRoles.includes("production_management")};
+    const externalPatterns=await developmentSlaPlan(db,sourceId)?await externalPatternRecords(db,sourceId):[];
+    const canRequestExternalPattern=isRootActor(actor)||actor.actorRoles.includes('pattern_room_supervisor')&&await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,'pattern_room_supervisor');
+    return {externalPatterns,canRequestExternalPattern,sewingRecipientName,slaEnrolled:Boolean(await developmentSlaPlan(db,sourceId)),fixedCutting:await developmentSlaPlan(db,sourceId)?{...await fixedDevelopmentCutter(db),canConfigure:await canConfigureDevelopmentCutter(db,actor)}:null,reopenMaterialCheck,fabricCases:await fabricCases(db,sourceId),materialVerification,unifiedArrangement:await arrangementsAvailable(db),arrangement:await readArrangement(db,actor,sourceId),canConfirmExecution:isRootActor(actor)||actor.actorRoles.includes("pattern_room_supervisor"),sheet,materialReadiness:readiness?.materials??[],supplementCheckTaskId:supplementTask?.taskId??null,nextSteps,dispatch,tasks,routeFacts,patternOrder,patternPreparation,facts:await this.facts(db,sourceId),canReportFabric:isRootActor(actor)||actor.actorRoles.some(role=>["pattern_room_worker","pattern_room_supervisor","order_merchandiser"].includes(role)),canDispatch:isDigitalLeader(actor)||isDigitalTechnicalManager(actor)||actor.actorRoles.includes("development_clerk"),canDecideFabric:isDigitalLeader(actor)};
   }
   private async command(actor:TrustedActorContext,sourceId:string,kind:string,key:string,input:unknown,action:(db:PoolClient)=>Promise<unknown>){
     if(!this.enabled)digitalForbidden();if(!/^[A-Za-z0-9._:-]{1,128}$/.test(key))fail("缺少操作标识");
@@ -96,6 +104,15 @@ export class DevelopmentExecutionService {
   private async fact(db:PoolClient,actor:TrustedActorContext,sourceId:string,taskId:string|null,kind:string,payload:unknown){const id=randomUUID();await db.query("INSERT INTO digital_development_execution_facts(fact_id,source_id,task_id,kind,payload,actor_id) VALUES($1,$2,$3,$4,$5,$6)",[id,sourceId,taskId,kind,JSON.stringify(payload),actor.actorId]);return id;}
   async arrange(actor:TrustedActorContext,sourceId:string,input:DevelopmentArrangementInput,key:string){
     return this.command(actor,sourceId,"arrangement",key,input,db=>saveArrangement(db,this.database,actor,sourceId,input));
+  }
+  async configureFixedCutting(actor:TrustedActorContext,sourceId:string,input:{expectedVersion:number;assigneeId:string;reason:string},key:string){
+    return this.command(actor,sourceId,"fixed-cutting",key,input,async db=>{
+      if(!await developmentSlaPlan(db,sourceId))fail('此历史开发单保留原人员安排方式');
+      const result=await saveFixedDevelopmentCutter(db,actor,input);
+      for(const taskId of result.affected)await this.tasks().reassignWithClient(db,actor,taskId,input.assigneeId);
+      await db.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1,$2,$3,'development_fixed_cutting_changed','digital_development',$4,$5)",[randomUUID(),actor.requestId,actor.actorId,sourceId,JSON.stringify({...input,...result})]);
+      return {version:result.version,assignedTasks:result.affected.length};
+    });
   }
   async readNativeExecution(actor:TrustedActorContext,sourceId:string,client?:PoolClient){
     if(!this.enabled)digitalForbidden();await this.forms().read(actor,sourceId,client);
@@ -126,6 +143,10 @@ export class DevelopmentExecutionService {
     if(await arrangementsAvailable(this.database))fail("人员安排已统一到本单总委派页，请从我的待办打开“安排本轮师傅”。");
     if(!isDigitalLeader(actor)&&!isDigitalTechnicalManager(actor)&&!actor.actorRoles.includes("development_clerk"))digitalForbidden();
     return this.command(actor,sourceId,"dispatch",key,input,async db=>{
+      if(await developmentSlaPlan(db,sourceId)){
+        const fixed=await fixedDevelopmentCutter(db);
+        if(!fixed?.valid||input.cuttingWorkerId!==fixed.assigneeId)fail('开发裁板使用固定人员，请先设置有效固定岗位，不逐单分派');
+      }
       const before=(await db.query("SELECT * FROM digital_development_dispatch WHERE source_id=$1 FOR UPDATE",[sourceId])).rows[0];if((before?.version??0)!==input.expectedVersion)fail("派工已更新，请刷新");
       for(const [field,column,kind] of [
         ["patternWorkerId","pattern_worker_id","development_pattern"],
@@ -208,17 +229,19 @@ export class DevelopmentExecutionService {
           JOIN digital_production_tasks t ON t.task_id=f.task_id
           WHERE f.source_id=$1 AND f.kind='缺项退回' AND t.route_version=$2
           ORDER BY f.sequence DESC LIMIT 1`,[sourceId,task.route_version])).rows[0]?.payload.items??[];
+        const clerkReceiptRequired=Boolean(await developmentSlaPlan(db,sourceId));
         checkedItems=required.map(item=>{
           const checked=input.items.find(check=>check.materialId===item.materialId)??prior.find((check:{materialId:string})=>check.materialId===item.materialId);
           const expectedDate=sheet.materialEvents.filter(event=>event.materialId===item.materialId&&event.action==="修改预计日期").at(-1)?.expectedDate??item.expectedDate;
-          const error=materialCheckError(item,checked,input.note,expectedDate);if(error)fail(error);
+          const error=materialCheckError(item,checked,input.note,expectedDate,clerkReceiptRequired);if(error)fail(error);
           return checked;
         });
         await this.fabricReady(db,sourceId);
         const dispatch=(await db.query("SELECT * FROM digital_development_dispatch WHERE source_id=$1",[sourceId])).rows[0];
+        const fixedCutter=clerkReceiptRequired?await fixedDevelopmentCutter(db):null;
         if(task.route_version===1&&!supplemental){
         const pattern=await this.tasks().createWithClient(db,actor,{resource:{kind:"source",id:sourceId},authorizingTaskId:input.taskId,kind:"development_pattern",routeId:task.route_instance_id,routeVersion:task.route_version,occurrence:task.route_version,assigneeId:dispatch?.pattern_worker_id&&await new DigitalProductionAccessPolicy(db).activeRole(dispatch.pattern_worker_id,"pattern_room_worker")?dispatch.pattern_worker_id:null});
-        await this.tasks().createWithClient(db,actor,{resource:{kind:"source",id:sourceId},authorizingTaskId:input.taskId,kind:"development_cutting",routeId:task.route_instance_id,routeVersion:task.route_version,occurrence:task.route_version,assigneeId:dispatch?.cutting_worker_id&&await new DigitalProductionAccessPolicy(db).activeRole(dispatch.cutting_worker_id,"pattern_room_worker")?dispatch.cutting_worker_id:null,predecessors:[pattern.taskId]});
+        await this.tasks().createWithClient(db,actor,{resource:{kind:"source",id:sourceId},authorizingTaskId:input.taskId,kind:"development_cutting",routeId:task.route_instance_id,routeVersion:task.route_version,occurrence:task.route_version,assigneeId:clerkReceiptRequired?(fixedCutter?.valid?fixedCutter.assigneeId:null):dispatch?.cutting_worker_id&&await new DigitalProductionAccessPolicy(db).activeRole(dispatch.cutting_worker_id,"pattern_room_worker")?dispatch.cutting_worker_id:null,predecessors:[pattern.taskId]});
         await this.tasks().setConditionWithClient(db,actor,pattern.taskId,"materials_ready",true,undefined);await this.tasks().setConditionWithClient(db,actor,pattern.taskId,"handover_received",true,undefined,"核配通过并交纸样");
         }
       }
@@ -301,14 +324,15 @@ export class DevelopmentExecutionService {
     return this.command(actor,sourceId,"route",key,input,async db=>{await new DigitalProductionAccessPolicy(db).assert(actor,"task",input.taskId,"execute");await this.fabricReady(db,sourceId);
       const current=await this.task(db,sourceId,input.taskId);
       if(input.making&&(current.task_kind!=='development_tail_check'||input.result!=='退回'))fail('各码数量升级仅用于本次尾查退回；其他实际修改请从复版资料办理');
-      if(current.task_kind==='development_sewing'){
-        if(!input.attachmentIds?.length)fail('车板完成前请在本单资料上传本任务实际完成照片');
+      const tailEvidence=current.task_kind==='development_tail_check'&&Boolean(await developmentSlaPlan(db,sourceId));
+      if(current.task_kind==='development_sewing'||tailEvidence){
+        if(!input.attachmentIds?.length)fail(tailEvidence?'尾查提交前请上传本任务实际照片':'车板完成前请在本单资料上传本任务实际完成照片');
         const photo=await db.query("SELECT 1 FROM attachments WHERE attachment_id=ANY($1::uuid[]) AND mime_type IN ('image/jpeg','image/png','image/webp') AND status='ready'",[input.attachmentIds]);
-        if(!photo.rowCount)fail('车板成果至少需要一张实际完成照片');
+        if(!photo.rowCount)fail(tailEvidence?'尾查至少需要一张实际照片':'车板成果至少需要一张实际完成照片');
       }
       if(input.attachmentIds?.length){
-        await this.authorizeSewingUpload(actor,sourceId,input.taskId,db);
-        for(const attachmentId of input.attachmentIds)if(!(await db.query("SELECT 1 FROM digital_development_upload_purposes WHERE source_id=$1 AND attachment_id=$2 AND purpose='车板成果' AND task_id=$3",[sourceId,attachmentId,input.taskId])).rowCount)fail("成果附件不属于本次车板任务，请核对轮次");
+        await this.authorizeSewingUpload(actor,sourceId,input.taskId,db,tailEvidence?'development_tail_check':'development_sewing');
+        for(const attachmentId of input.attachmentIds)if(!(await db.query("SELECT 1 FROM digital_development_upload_purposes WHERE source_id=$1 AND attachment_id=$2 AND purpose=$4 AND task_id=$3",[sourceId,attachmentId,input.taskId,tailEvidence?'尾查照片':'车板成果'])).rowCount)fail("成果附件不属于本次任务，请核对轮次");
         const sheet=await this.forms().read(actor,sourceId,db);
         // bindFiles only establishes the original technical download binding; the
         // authoritative purpose remains 车板成果 and the route fact records task/round.
@@ -331,6 +355,40 @@ export class DevelopmentExecutionService {
       return {sourceId,routeVersion:input.routeVersion,customerSampleConfirmed:true};
     });
   }
+  async authorizeExternalPattern(actor:TrustedActorContext,sourceId:string,db:Pick<Pool,"query">=this.database){
+    await this.forms().read(actor,sourceId,db);
+    if(!isRootActor(actor)&&(!actor.actorRoles.includes('pattern_room_supervisor')||!await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,'pattern_room_supervisor')))digitalForbidden();
+  }
+  async externalPattern(actor:TrustedActorContext,sourceId:string,input:DevelopmentExternalPattern,key:string){
+    return this.command(actor,sourceId,'external-pattern',key,input,async db=>{
+      await this.authorizeExternalPattern(actor,sourceId,db);
+      if(!await developmentSlaPlan(db,sourceId))fail('历史开发单保留原办理记录');
+      const sheet=await this.forms().read(actor,sourceId,db),round=sheet.roundNumber??1;
+      if(input.action==='request'){
+        if(input.roundNumber!==round)fail('开发轮次已变化，请刷新');
+        if((await externalPatternRecords(db,sourceId)).some(r=>r.roundNumber===round&&!r.receivedAt))fail('本轮已经记录请求，请继续跟进原任务');
+        const requestId=randomUUID(),now=new Date().toISOString();
+        await recordExternalPatternFact(db,actor,sourceId,requestId,'external_pattern_requested',now,{requestId,roundNumber:round,note:input.note});
+        const occurrence=Number((await db.query("SELECT COALESCE(max(t.occurrence),0)+1 AS n FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND t.node_key='development_external_pattern'",[sourceId])).rows[0].n);
+        const task=await this.tasks().createWithClient(db,actor,{resource:{kind:'source',id:sourceId},kind:'development_external_pattern',routeId:requestId,routeVersion:round,occurrence,
+          assigneeId:await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,'pattern_room_supervisor')?actor.actorId:null});
+        return {requestId,taskId:task.taskId};
+      }
+      const request=(await externalPatternRecords(db,sourceId)).find(r=>r.requestId===input.requestId)??digitalNotFound();
+      if(request.roundNumber!==round)fail('请在当前轮次记录收到；旧轮记录保持历史');
+      if(request.receivedAt)fail('本轮纸样已经记录收到');
+      if(!request.taskId)digitalNotFound();
+      await new DigitalProductionAccessPolicy(db).assert(actor,'task',request.taskId!,'execute');
+      await this.assertUploadPurpose(db,sourceId,input.attachmentIds,'外部纸样');
+      await this.forms().bindFiles(db,actor,sourceId,{...sheet.document!,files:input.attachmentIds.map(attachmentId=>({attachmentId,kind:'工艺开发板'}))});
+      const now=new Date().toISOString();
+      if(Date.parse(now)<new Date(request.requestedAt).getTime())fail('收到时间不能早于请求时间');
+      await recordExternalPatternFact(db,actor,sourceId,randomUUID(),'external_pattern_received',now,{requestId:input.requestId,roundNumber:round,attachmentIds:input.attachmentIds,note:input.note});
+      await this.tasks().setConditionWithClient(db,actor,request.taskId!,'business_recorded',true,undefined,input.note);
+      await this.tasks().completeWithClient(db,actor,request.taskId!,{note:input.note},`external:${key}`);
+      return {requestId:input.requestId,taskId:request.taskId!};
+    });
+  }
   async patternOrder(actor:TrustedActorContext,sourceId:string,input:{categoryId:string;priceVersion:number},key:string){
     return this.command(actor,sourceId,"pattern-order",key,input,async db=>{
       if(!this.patternOrders)fail("打板衔接服务未配置");
@@ -343,13 +401,13 @@ export class DevelopmentExecutionService {
     return this.command(actor,sourceId,"fabric-report",key,input,async db=>{const sheet=await this.forms().read(actor,sourceId,db);await this.assertUploadPurpose(db,sourceId,input.attachmentIds,"面料报告");await this.forms().bindFiles(db,actor,sourceId,{...sheet.document!,files:input.attachmentIds.map(attachmentId=>({attachmentId,kind:"菲林"}))});if((await db.query("SELECT to_regclass('digital_development_material_verifications') AS relation")).rows[0]?.relation&&!input.materialIds?.length)fail("请选择本报告涉及的材料；旧报告原样保留，不能推定范围");if(input.materialIds?.some(id=>!sheet.document!.materials.some(m=>m.materialId===id)))fail("报告材料不属于本单资料");const reportId=await this.fact(db,actor,sourceId,null,"面料报告",{...input,scope:input.materialIds?{roundNumber:sheet.roundNumber??1,documentVersion:sheet.version,materials:sheet.document!.materials.filter(m=>input.materialIds!.includes(m.materialId))}:null});await new DevelopmentRouteService(this.database,this.patternOrders).releaseSewing(db,actor,sourceId);return {reportId};});
   }
   async decideFabric(actor:TrustedActorContext,sourceId:string,input:{reportId:string;decision:string;note:string;expectedDecisionId?:string|null|undefined},key:string){
-    if(!isRootActor(actor)&&!actor.actorRoles.includes("production_management"))digitalForbidden();
-    return this.command(actor,sourceId,"fabric-decision",key,input,async db=>{if(!isRootActor(actor)&&!await new DigitalProductionAccessPolicy(db).lockActiveRole(actor.actorId,"production_management"))digitalForbidden();const reports=(await this.facts(db,sourceId)).filter(f=>f.kind==="面料报告");const report=reports.find(f=>f.factId===input.reportId);if(!report)fail("面料报告不存在");if(report!.payload.recommendation!=="建议停用")fail("正常面料不需要总监审批");const latest=(await this.facts(db,sourceId)).filter(f=>f.kind==="面料决定"&&f.payload.reportId===input.reportId).at(-1);
+    if(!isDigitalLeader(actor))digitalForbidden();
+    return this.command(actor,sourceId,"fabric-decision",key,input,async db=>{if(!isRootActor(actor)){let allowed=false;for(const role of ["production_management","owner_group"])if(actor.actorRoles.includes(role)&&await new DigitalProductionAccessPolicy(db).lockActiveRole(actor.actorId,role))allowed=true;if(!allowed)digitalForbidden();}const reports=(await this.facts(db,sourceId)).filter(f=>f.kind==="面料报告");const report=reports.find(f=>f.factId===input.reportId);if(!report)fail("面料报告不存在");if(report!.payload.recommendation!=="建议停用")fail("正常面料不需要总监审批");const latest=(await this.facts(db,sourceId)).filter(f=>f.kind==="面料决定"&&f.payload.reportId===input.reportId).at(-1);
       if(input.expectedDecisionId!==undefined&&input.expectedDecisionId!==(latest?.factId??null))fail("该报告已有新的决定，请重新读取后核实，未覆盖原决定");
       if(input.expectedDecisionId===undefined&&(await db.query("SELECT to_regclass('digital_development_material_verifications') AS relation")).rows[0]?.relation)fail("请重新打开报告决定，核实当前决定版本后提交");
       const factId=await this.fact(db,actor,sourceId,null,"面料决定",input);await new DevelopmentRouteService(this.database,this.patternOrders).releaseSewing(db,actor,sourceId);return {factId};});
   }
-  private async assertUploadPurpose(db:Pick<Pool,"query">,sourceId:string,ids:string[],purpose:"工艺开发板"|"面料报告"){
+  private async assertUploadPurpose(db:Pick<Pool,"query">,sourceId:string,ids:string[],purpose:"工艺开发板"|"面料报告"|"外部纸样"){
     for(const attachmentId of ids)if(!(await db.query("SELECT 1 FROM digital_development_upload_purposes WHERE source_id=$1 AND attachment_id=$2 AND purpose=$3",[sourceId,attachmentId,purpose])).rowCount)fail(`附件用途不符，请在${purpose}栏重新上传`);
   }
   async authorizeSewingUpload(actor:TrustedActorContext,sourceId:string,taskId:string,db:Pick<Pool,"query">=this.database,kind='development_sewing'){
@@ -357,9 +415,10 @@ export class DevelopmentExecutionService {
     const task=(await db.query("SELECT t.state,a.task_kind FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE task_id=$1 AND source_id=$2",[taskId,sourceId])).rows[0];
     if(!task||task.task_kind!==kind||task.state!=='ready')fail('当前任务不具备成果上传条件');
   }
-  async recordUploadPurpose(actor:TrustedActorContext,sourceId:string,attachmentId:string,purpose:"工艺开发板"|"面料报告"|"车板成果"|"纸样成果",taskId?:string){
+  async recordUploadPurpose(actor:TrustedActorContext,sourceId:string,attachmentId:string,purpose:"工艺开发板"|"面料报告"|"车板成果"|"纸样成果"|"尾查照片"|"外部纸样",taskId?:string){
     await this.authorizeUpload(actor,sourceId);
-    if(purpose==='车板成果'||purpose==='纸样成果'){if(!taskId)fail('成果缺少任务');await this.authorizeSewingUpload(actor,sourceId,taskId!,this.database,purpose==='纸样成果'?'development_pattern':'development_sewing');}else if(taskId)fail('附件用途与任务不符');
+    if(purpose==='外部纸样')await this.authorizeExternalPattern(actor,sourceId);
+    if(purpose==='车板成果'||purpose==='纸样成果'||purpose==='尾查照片'){if(!taskId)fail('成果缺少任务');await this.authorizeSewingUpload(actor,sourceId,taskId!,this.database,purpose==='纸样成果'?'development_pattern':purpose==='尾查照片'?'development_tail_check':'development_sewing');}else if(taskId)fail('附件用途与任务不符');
     const result=await this.database.query("INSERT INTO digital_development_upload_purposes(attachment_id,source_id,purpose,uploaded_by,task_id) SELECT attachment_id,$2,$3,$4,$5 FROM attachments WHERE attachment_id=$1 AND uploaded_by=$4 AND entity_type IS NULL ON CONFLICT DO NOTHING RETURNING attachment_id",[attachmentId,sourceId,purpose,actor.actorId,taskId??null]);
     if(!result.rowCount)fail("上传用途登记失败，请重新上传");
   }
@@ -367,5 +426,5 @@ export class DevelopmentExecutionService {
     await this.authorizeUpload(actor,sourceId);
     if(!(await this.database.query("SELECT 1 FROM digital_development_upload_purposes WHERE source_id=$1 AND attachment_id=$2 AND uploaded_by=$3",[sourceId,attachmentId,actor.actorId])).rowCount)digitalForbidden();
   }
-  async authorizeUpload(actor:TrustedActorContext,sourceId:string){await this.forms().read(actor,sourceId);if(!isRootActor(actor)&&!actor.actorRoles.some(role=>["pattern_room_worker","pattern_room_supervisor","order_merchandiser"].includes(role)))digitalForbidden();}
+  async authorizeUpload(actor:TrustedActorContext,sourceId:string){await this.forms().read(actor,sourceId);if(!isRootActor(actor)&&!actor.actorRoles.some(role=>["pattern_room_worker","pattern_room_supervisor","order_merchandiser","pattern_room_tail_inspector"].includes(role)))digitalForbidden();}
 }

@@ -302,3 +302,18 @@
 @media screen{.dx-doc-development .development-document-layout--grouped :is(#development-materials,#development-sizes) .dx-doc-table-scroll{max-height:none;height:auto}}
 
 .development-print{overflow-wrap:anywhere}.development-print table{table-layout:fixed;max-width:100%}.development-print :is(th,td){overflow-wrap:anywhere}
+
+/* New actual measurements keep overflow inside the size table, not the workbench. */
+.task-workbench-handle fieldset:has(.development-inspection),
+.development-controls fieldset:has(.development-inspection){min-inline-size:0;max-width:100%;box-sizing:border-box}
+.development-inspection{min-width:0;max-width:100%;overflow-x:auto;overscroll-behavior-x:contain}
+.development-inspection table{width:100%;min-width:430px;border-collapse:collapse;table-layout:fixed}
+.development-inspection-label{font-weight:600;margin:0 0 8px}
+.development-inspection :is(th,td){padding:6px;border:1px solid var(--production-border,#dce3eb);text-align:left}
+.development-inspection th:first-child{width:130px;position:sticky;left:0;background:var(--dx-surface,#fff);z-index:1;overflow-wrap:anywhere}
+.development-inspection input{width:100%;min-width:0;box-sizing:border-box;min-height:32px;border:1px solid #cbd5e1;border-radius:5px;padding:5px 8px;font:inherit;color:inherit;background:var(--dx-surface,#fff)}
+
+.development-external-pattern fieldset{display:grid;gap:10px;min-width:0;border:0;padding:0}
+.development-external-pattern label{display:grid;gap:6px;min-width:0}
+.development-external-pattern input:not([type=file]){width:100%;box-sizing:border-box;min-height:32px;border:1px solid #cbd5e1;border-radius:5px;padding:5px 8px;font:inherit;color:inherit}
+.development-external-pattern button{justify-self:start}

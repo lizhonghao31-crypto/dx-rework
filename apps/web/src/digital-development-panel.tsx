@@ -68,7 +68,10 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound,embedded=
     if(!revision||writing.current)return;writing.current=true;setBusy(true);setError("");
     const body=publish?{expectedDraftVersion:draftVersion,basedOnRound:revision.basedOnRound}:{expectedDraftVersion:draftVersion,revision:{...revision,document}};
     const path=`${base}/${publish?"round-publish":"round-draft"}`,payload=JSON.stringify([path,body]);if(operation.current?.payload!==payload)operation.current={payload,key:createClientRequestId()};
-    try{const response=await digitalRequest<{draftVersion?:number}>(path,publish?"POST":"PUT",body,operation.current.key);operation.current=null;setDirty(false);previews.saved();
+    try{const response=await digitalRequest<{draftVersion?:number;sourceId?:string}>(path,publish?"POST":"PUT",body,operation.current.key);operation.current=null;setDirty(false);previews.saved();
+      if(publish&&response.sourceId&&response.sourceId!==sourceId){
+        setRevision(null);setDirty(false);window.location.assign(urls.pageUrl(`ui/digital-production?development=${response.sourceId}`));return;
+      }
       if(publish){const next=await digitalRequest<DevelopmentSheet>(base);setSheet(next);installDocument(next.document!);setRevision(null);setSelectedRound(next.roundNumber);const url=new URL(window.location.href);url.searchParams.set("round",String(next.roundNumber??1));window.history.replaceState(window.history.state,"",url);setRounds(await digitalRequest<Rounds>(`${base}/rounds`));}
       else{setDraftVersion(response.draftVersion!);const refreshed=await digitalRequest<Rounds>(`${base}/rounds`);setRounds(refreshed);if(refreshed.draft)installDocument(refreshed.draft.payload.document);}
     }catch(reason){setError(reason instanceof Error?reason.message:"复版操作失败");}finally{writing.current=false;setBusy(false);}
@@ -97,7 +100,7 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound,embedded=
   const issue=(id:string)=>issues.find(value=>value.id===id)?.message;
   const validate=(publish=false)=>{setValidationMode(publish?"publish":"save");return developmentIssues(document,quantityInput,measurementIds.current,publish,revision,sizeQuantityInputs,Boolean(revision&&sheet?.document?.orderDate===null)).length===0;};
   const save=()=>{if(!validate())return;if(revision)void revisionAction(false);else void run(base,{expectedVersion:sheet!.version,document},"PUT");};
-  const publish=()=>{if(!validate(true))return;if(dirty){setError("请先保存当前修改");return;}if(revision)void revisionAction(true);else{if(!patternChoice){setError("请先选择有效打板品类与执行价，再正式提交开发单");window.document.getElementById("development-pattern-preparation")?.scrollIntoView({block:"center"});return;}void run(`${base}/publish`,{expectedVersion:sheet!.version,patternOrder:patternChoice});}};
+  const publish=()=>{if(!validate(true))return;if(dirty){setError("请先保存当前修改");return;}if(revision)void revisionAction(true);else{if(!patternChoice&&sheet?.revisionSource?.outputKind!=='工艺布片'){setError("请先选择有效打板品类与执行价，再正式提交开发单");window.document.getElementById("development-pattern-preparation")?.scrollIntoView({block:"center"});return;}void run(`${base}/publish`,{expectedVersion:sheet!.version,...(sheet?.revisionSource?.outputKind==='工艺布片'?{}:{patternOrder:patternChoice})});}};
   const reload=async()=>{if(writing.current||dirty&&!await confirmInApp("重新载入将丢弃未保存修改，确定继续？"))return;setBusy(true);try{const value=await digitalRequest<DevelopmentSheet>(`${base}${selectedRound?`?round=${selectedRound}`:""}`);setSheet(value);installDocument(value.document??initial());setRevision(null);setDirty(false);setError("");if(value.status==="published")setRounds(await digitalRequest<Rounds>(`${base}/rounds`));}catch(reason){setError(reason instanceof Error?reason.message:"读取失败");}finally{setBusy(false);}};
   const readRef=useTodoContentRead({routeName:'digital_development',entityId:sourceId,developmentRound:sheet?.roundNumber??1},Boolean(sheet?.document));
   const savedPrint=revision?rounds.draft?.payload.document:sheet?.document;
@@ -105,13 +108,14 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound,embedded=
   return <Surface><section ref={readRef} className="development-editor dx-doc-development">
     <DocumentToolbar title={sheet?`开发单 · ${sheet.designStyleNo}`:"开发单"} status={busy?"保存中":error&&dirty?"没有保存成功，修改还在":dirty?"未保存修改":`${revision?`第${revision.basedOnRound+1}轮复版草稿`:sheet?.status==="published"?`已发布 · 第${sheet.roundNumber??1}轮${(sheet.roundNumber??1)===(sheet.latestRoundNumber??1)?" · 当前有效轮次":" · 历史轮次"}`:"草稿"} · ${revision?"复版草稿版本":"资料版本"} ${revision?draftVersion:sheet?.version??0}`}>
       {!embedded&&!contained&&<Button disabled={busy} onClick={onClose}>返回</Button>}
-      {!readonly&&<><Button disabled={busy} onClick={save}>保存草稿</Button><Button variant="primary" disabled={busy} onClick={publish}>{revision?"正式发布本轮修改":"发布开发单"}</Button></>}
+      {!readonly&&<><Button disabled={busy} onClick={save}>保存草稿</Button><Button variant="primary" disabled={busy} onClick={publish}>{revision?(sheet?.independentRevisions&&revision.origin!=="内部发现"?"建立独立复版单":"正式发布本轮修改"):"发布开发单"}</Button></>}
       <Button disabled={!savedPrint||dirty||busy} onClick={()=>window.print()}>打印 / 保存 PDF</Button>
     </DocumentToolbar>
     {previews.view}<DocumentErrors issues={issues} error={error}/>{error&&<Button disabled={busy} onClick={()=>void reload()}>重新载入</Button>}
     {!sheet&&<p>正在读取开发单</p>}
     {sheet&&<>
       {dirty||busy||!savedPrint?<article className="development-print"><p>当前单据不可打印，请先保存当前修改。</p></article>:<DevelopmentPrint sheet={revision?{...sheet,status:"draft",roundNumber:revision.basedOnRound+1,version:draftVersion}:sheet} document={savedPrint} imageUrl={imageUrl}/>}
+      {sheet.revisionSource&&<details><summary>复版 {sheet.revisionSource.revisionNumber} · 原单与原因</summary><p><a href={urls.pageUrl(`ui/digital-production?development=${sheet.revisionSource.parentSourceId}`)}>查看来源开发单</a> · 参考第 {sheet.revisionSource.parentRound} 轮</p><p>{sheet.revisionSource.origin} · {sheet.revisionSource.customerComment}</p><p>{sheet.revisionSource.categories.join('、')} · {sheet.revisionSource.explanation}</p></details>}
       <div className="development-heading dx-doc-card"><span>款号：<strong>{sheet.designStyleNo}</strong></span><span>代用号：{sheet.temporaryStyleNo??"—"}</span><span>客户：{sheet.customerCode??"通用开发"}</span><span>设计师：{sheet.designerName}</span><span>{sheet.developmentType} · 第{revision?revision.basedOnRound+1:sheet.roundNumber??1}轮 · 资料版本 {revision?draftVersion:sheet.version}</span></div>
 
 

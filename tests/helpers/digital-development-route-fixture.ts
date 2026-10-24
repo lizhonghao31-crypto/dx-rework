@@ -14,7 +14,6 @@ import {exerciseGarmentCraftRevision} from "./digital-development-craft-revision
 import {randomUUID} from 'node:crypto';
 import type {Pool} from 'pg';
 import {expect} from 'vitest';
-import {DigitalProductionIdentityService} from '../../apps/api/src/production-platform/identity-service.js';
 import {DigitalDevelopmentService} from '../../apps/api/src/production-platform/development-service.js';
 import {DevelopmentExecutionService} from '../../apps/api/src/production-platform/development-execution-service.js';
 import {PatternRoomOrderService} from '../../apps/api/src/pattern-room/order-service.js';
@@ -23,12 +22,15 @@ import {DevelopmentDocumentSchema} from '@dx-rework/contracts/digital-developmen
 import type {TrustedActorContext} from '../../apps/api/src/tools/repositories.js';
 import type {TodoProjectionService} from '../../apps/api/src/todos/projection-service.js';
 export async function exerciseDevelopmentRoute(db:Pool,todos:TodoProjectionService,root:TrustedActorContext,workerId:string,workerPersonId:string,qc:TrustedActorContext,replacementWorkerId:string,legacyMaking?:"tail"|"native",transferOnly:false|true|"authority"=false){
- const native=new PatternRoomOrderService(db,todos,{ordersEnabled:true}),execution=new DevelopmentExecutionService(db,true,native),forms=new DigitalDevelopmentService(db,true,native),identity=new DigitalProductionIdentityService(db,true);
+ const native=new PatternRoomOrderService(db,todos,{ordersEnabled:true}),execution=new DevelopmentExecutionService(db,true,native),forms=new DigitalDevelopmentService(db,true,native);
  const checkHistory=!legacyMaking&&!transferOnly;
  const routes=legacyMaking||transferOnly?([['无','免洗']] as const):([['无','免洗'],['印花','内洗'],['绣花','外洗'],['印绣花','免洗']] as const);
  for(const [craft,washing]of routes){
   const sourceStyle=`P07-${randomUUID()}`;
-  const source=await identity.createSource(root,{developmentType:'头版',designStyleNo:sourceStyle,temporaryStyleNo:null,customerCode:null},randomUUID());
+  // Pre-SLA sources retain the historical route and all its wage/revision regressions.
+  // New-source enrollment is exercised separately through the real creation API.
+  const source={sourceId:randomUUID()};
+  await db.query("INSERT INTO digital_production_sources(source_id,created_by,development_type,design_style_no) VALUES($1,$2,'头版',$3)",[source.sourceId,root.actorId,sourceStyle]);
   const sourceId=source.sourceId,fileId=randomUUID(),mainId=randomUUID(),trimId=randomUUID();
   await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'款图.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[fileId,`p07/${fileId}`,'a'.repeat(64),root.actorId]);
   const material={supplier:'',width:'',weight:'',composition:'',consumption:'',color:'黑',specification:'',quantity:'1',requiredThisRound:true};

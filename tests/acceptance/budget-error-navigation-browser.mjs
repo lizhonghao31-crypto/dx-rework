@@ -14,7 +14,7 @@ try{
  browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||'/usr/bin/chromium',args:['--no-sandbox']});if(evidence)await mkdir(evidence,{recursive:true});
  for(const width of [1440,390]){
   page=await browser.newPage({viewport:{width,height:900}});page.on('pageerror',error=>errors.push(error.message));await page.goto(`http://127.0.0.1:${server.address().port}/`);
-  await page.getByRole('textbox',{name:'月份系列',exact:true}).fill('TEST切章输入保留');await page.getByRole('button',{name:'费用与报价',exact:true}).click();await page.getByRole('button',{name:'发布预算',exact:true}).click();
+  await page.getByRole('textbox',{name:'月份系列',exact:true}).fill('TEST切章输入保留');await page.getByRole('button',{name:'费用与报价',exact:true}).click();await page.getByRole('button',{name:'最终发布',exact:true}).click();
   const locate=async(label,chapter,id)=>{await page.locator('.dx-doc-errors').getByRole('button',{name:label}).click();assert.equal(await page.getByRole('button',{name:chapter,exact:true}).getAttribute('aria-pressed'),'true');assert.equal(await page.evaluate(()=>document.activeElement?.id),id);const rect=await page.locator(`#${id}`).boundingBox();assert.ok(rect&&rect.y>=0&&rect.y<900,'focused error must be scrolled into view');};
   // The original failing route: fees chapter -> missing budget date in other information.
   await page.getByRole('button',{name:'费用与报价',exact:true}).click();await locate(/^预算日期：/,'其他信息','budget-date');for(let tab=0;tab<4&&await page.evaluate(()=>document.activeElement?.id)==='budget-date';tab++)await page.keyboard.press('Tab');assert.notEqual(await page.evaluate(()=>document.activeElement?.id),'budget-date');

@@ -20,6 +20,12 @@ const route = (washing: "yes" | "no" = "yes") => buildOrderSlaRoute(resolveDigit
   }, ["po-fixture"]);
 const get = <T extends { id: string }>(items: T[], id: string) => items.find(n => n.id === id)!;
 describe("complete SLA plan and frozen windows", () => {
+  it("keeps effective business completion when its actual time is unknown without inventing a downstream date",()=>{
+    const p=plan([node('done'),node('next',60,{anchorKey:null,dependsOn:['done']})]);
+    const rows=evaluateSlaPlan(p,{done:{businessCompleted:true,startedAt:t0,evidence:'task:completed-time-corrected'}},time(100));
+    expect(get(rows,'done')).toMatchObject({status:'completed_unrated',actualEnd:null,planOverdue:false});
+    expect(get(rows,'done').forecast.at).toBeNull();expect(get(rows,'next').forecast.at).toBeNull();
+  });
   it("projects included start/end targets from the late actual parent window without changing P0",()=>{
     const p=plan([node("parent",1440),node("handoff",30,{kind:"included",anchorKey:null,includedIn:"parent"}),
       node("return",30,{kind:"included",anchorKey:null,includedIn:"parent",includedPosition:"end"})]);

@@ -14,7 +14,7 @@ import { assertIdentityActor, digitalDateText } from "./identity-service.js";
 import { DigitalProductionTaskService } from "./task-service.js";
 import { BulkPreparationService } from "./bulk-preparation-service.js";
 import { OrderClosureService } from "./order-closure-service.js";
-import { developmentRoute } from "./development-route.js";
+import {savedDevelopmentRoute} from "./development-sla-enrollment.js";
 import { bulkCockpitProgress } from "./cockpit-progress.js";
 import { JOURNEY_NODES, journeyDefinition } from "./journey-catalog.js";
 import { journeyCompletion, journeyStages, selectJourneys } from "./journey-projection.js";
@@ -173,7 +173,7 @@ export class DigitalJourneyQuery {
     const round=selectedRound??latestRound??effectiveRound;
     if(selectedRound!==undefined&&selectedRound!==1&&!revisions.some(revision=>revision.round_number===selectedRound))digitalNotFound();
     const currentDocument=round&&round>1?revisions.find(revision=>revision.round_number===round):document;
-    const declared=currentDocument?.document?round===1?["development_materials",...developmentRoute(currentDocument.document as DevelopmentDocument)]:currentDocument.route_nodes as string[]:null;
+    const declared=currentDocument?.document?round===1?["development_materials",...await savedDevelopmentRoute(db,sid!,currentDocument.document as DevelopmentDocument)]:currentDocument.route_nodes as string[]:null;
     const inherited=currentDocument?.inherited??{};
     const currentPrep=oid?(await db.query(`SELECT p.preparation_id FROM digital_bulk_preparations p
       JOIN digital_instruction_documents d ON d.production_order_id=p.production_order_id AND d.published_version=p.instruction_version

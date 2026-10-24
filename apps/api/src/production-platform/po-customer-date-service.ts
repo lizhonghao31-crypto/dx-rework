@@ -25,7 +25,12 @@ export class PoCustomerDateService {
       if((await db.query("SELECT 1 FROM digital_order_closures WHERE production_order_id=$1",[id])).rowCount)return false;
     return true;
   }
-  private async manager(db:DB,actor:TrustedActorContext){return isRootActor(actor)||actor.actorRoles.includes("production_management")&&await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,"production_management");}
+  private async manager(db:DB,actor:TrustedActorContext){
+    if(isRootActor(actor))return true;
+    const access=new DigitalProductionAccessPolicy(db);
+    for(const role of ["production_management","owner_group"])if(actor.actorRoles.includes(role)&&await access.activeRole(actor.actorId,role))return true;
+    return false;
+  }
   private async requestRow(db:DB,id:string,requestId:string):Promise<Request>{
     const po=(await db.query(`SELECT r.*,NULL::text AS date,NULL::text AS old_date,'po' AS source,d.approved
       FROM digital_po_customer_requests r LEFT JOIN digital_po_customer_decisions d USING(request_id) WHERE r.production_order_id=$1 AND r.request_id=$2`,[id,requestId])).rows[0];
@@ -118,7 +123,7 @@ export class PoCustomerDateService {
   private async notice(db:PoolClient,actor:TrustedActorContext,id:string,title:string,key:string,directorsOnly=false){
     if(!(await db.query("SELECT to_regclass('digital_instruction_notices') AS relation")).rows[0]?.relation)return;
     const order=await new DigitalProductionIdentityService(this.database,true).readWithClient(actor,id,db);
-    await instructionNotice(db,order,null,title,key,directorsOnly,true);
+    await instructionNotice(db,order,null,title,key,directorsOnly,true,true);
   }
   async request(actor:TrustedActorContext,id:string,input:InstructionDateRequest,key:string){
     const parsed=InstructionDateRequestSchema.safeParse(input);if(!parsed.success)throw new ApplicationError("VALIDATION_ERROR",parsed.error.issues[0]?.message??"请选择明确 PO",400);

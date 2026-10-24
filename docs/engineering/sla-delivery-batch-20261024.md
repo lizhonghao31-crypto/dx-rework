@@ -1,0 +1,13 @@
+# SLA delivery candidate: foundation, development and budget
+
+Candidate restored from pr04-local-checkpoint/working-tree-before-pr05.tar.gz (90 saved files), not copied from the mixed WIP. Baseline original PR02 47756fcd4f5b06d1e15dd671654642912b158f34 retains original PR01/02 history. Current release 77a15f2f980d5d66c0312cc8d33b48544f289870 merged locally solely to retain the existing #853 CI event/build/summary fixes. No main changes or release writes.
+
+Scope: canonical policy references and compatibility migration0254; development enrollment0255; original development main chain, external patterns and independent numbered revisions; shared budget final merchandiser freeze; original three approval todo windows and owner/root authority. Shared API, task and native event connections are a single dependency-closed candidate. PR01/02 original branches/PRs remain unchanged; this candidate carries their original commits rather than reimplementing them.
+
+Excluded: PR05–08 later local business changes; unfinished PR09 settings/in-flight application; PR10 completion; Acceptance test clock. All remain preserved in WIP0ee7bd457a813be8a3fd1ceb859437f0ce616c4b and existing checkpoints. This is not completion of the full authorized SLA model. No fabrication of cutter receipt, shipping-sample gates, separate shipment registration or historical completion.
+
+Slow-test diagnostics change only sourcing-pr03-postgres.test.ts and full-business-chain-postgres.test.ts. Each main beforeAll logs schema_migration_ms then fixture_ms; afterAll logs cleanup_ms; sourcing C05 setup logs fixture_c05_ms. performance.now is monotonic; each phase uses finally, completed/failed status, and only suite/phase/ms/status. Missing phases do not become zero. Assertions, waits, migration coverage and isolation unchanged. Full business chain and C05 diagnostics are to be collected by the one necessary CI, not rerun locally.
+
+Local checks: API/Web typecheck passed. Foundation/config/plan/shared-budget targeted regressions15 passed; selected development enrollment/external pattern/revision/source-transfer4 passed; original approval-owner/root2 passed. Source suite emitted schema1252ms, fixture25ms, cleanup607ms in this local run; these are local evidence, not hosted-runner forecasts. No local Full run. Existing API errors in unfinished PR09 are excluded by checkpoint restoration, not hidden or patched.
+
+UI historical component-browser evidence remains in prior engineering record; no new claim of complete authenticated-app acceptance. Deployment account compatibility, full CI and remaining business groups are unverified. No Review/merge/deployment authorization executed for this candidate.

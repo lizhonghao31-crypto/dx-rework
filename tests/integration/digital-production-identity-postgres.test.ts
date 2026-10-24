@@ -1,3 +1,4 @@
+import { applySlaPolicyFixture } from "../helpers/sla-policy-fixture.js";
 import {historicalDigitalOrder} from "../helpers/historical-digital-order-fixture.js";
 import { PoCustomerDateService } from "../../apps/api/src/production-platform/po-customer-date-service.js";
 import { applyDigitalPoDateFixture } from "../helpers/digital-po-date-fixture.js";
@@ -40,6 +41,7 @@ run("digital production P01 identities", () => {
     await admin.query(`CREATE SCHEMA ${schema}`);
     for (const name of ["0001_platform_foundation.sql", "0002_dingtalk_identity_access.sql", "0216_digital_production_order_roots.sql", "0252_digital_sla_configuration_snapshots.sql", "0253_digital_sla_plan_history.sql"])
       await database.query(await readFile(new URL(`../../apps/api/migrations/${name}`, import.meta.url), "utf8"));
+    await applySlaPolicyFixture(database);
     // Existing-domain tables are represented only by referenced identity columns in this isolated fixture.
     // Full Gate separately replays the full real schema and original business chain.
     await database.query(`CREATE TABLE sourcing_cases(sourcing_case_id uuid PRIMARY KEY);

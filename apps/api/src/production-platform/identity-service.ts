@@ -1,5 +1,7 @@
 import type { SourcingService } from "../sourcing/sourcing-service.js";
 import { SlaOrderService } from "./sla-order-service.js";
+import { developmentRevisionSource } from "./development-revision-source.js";
+import { captureDevelopmentSla } from "./development-sla-enrollment.js";
 import type { BusinessClock } from "@dx-rework/domain/business-clock";
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
@@ -109,7 +111,10 @@ export class DigitalProductionIdentityService {
       const id = randomUUID();
       await client.query(`INSERT INTO digital_production_sources(source_id,created_by,development_type,design_style_no,temporary_style_no,customer_code)
         VALUES($1,$2,$3,$4,$5,$6)`, [id, actor.actorId, input.developmentType, input.designStyleNo, input.temporaryStyleNo, input.customerCode]);
-      await this.audit(client, actor, "digital_source_created", id, null, input);
+      const eventId = await this.audit(client, actor, "digital_source_created", id, null, input);
+      const time = this.businessClock ? await this.businessClock.read({ kind: "source", id })
+        : { now: this.now().toISOString(), scenarioId: null, revision: 0 };
+      await captureDevelopmentSla(client, actor, id, null, time, eventId);
       return { sourceId: id };
     });
   }
@@ -132,6 +137,7 @@ export class DigitalProductionIdentityService {
       let createdBy = actor.actorId;
       if (sourceId) {
         const source = await this.visibleSource(client, actor, sourceId, true);
+        if(await developmentRevisionSource(client,sourceId))fail('复版沿原开发档案的客户订单，不重复建立大货数量');
         if (!isRootActor(actor) && source.created_by !== actor.actorId) digitalForbidden();
         createdBy = source.created_by;
         if (source.design_style_no !== input.designStyleNo || (source.temporary_style_no ?? "") !== (input.temporaryStyleNo ?? "") || (source.customer_code && source.customer_code !== input.customerCode)) fail("下单资料与开发来源不一致");
@@ -163,7 +169,7 @@ export class DigitalProductionIdentityService {
         : { now: now.toISOString(), scenarioId: null, revision: 0 };
       await client.query(`INSERT INTO digital_production_orders(production_order_id,source_id,customer_code,product_group,design_style_no,temporary_style_no,order_date,contract_delivery_date,created_by,creation_hash,primary_merchandiser_id)
         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, [root.productionOrderId, sourceId, input.customerCode, input.productGroup, input.designStyleNo, input.temporaryStyleNo, input.orderDate, input.contractDeliveryDate, createdBy, digest(input), merchandiserId]);
-      const creationEventId = await this.audit(client, actor, "digital_order_created", root.productionOrderId, null, input);
+      const creationEventId = await this.audit(client, actor, "digital_order_created", root.productionOrderId, null, { ...input, slaBusinessTime: businessTime });
       for (const [position, line] of input.lines.entries()) {
         const lineId = randomUUID();
         await client.query(`INSERT INTO digital_production_po_lines(line_id,production_order_id,position,po_number,formal_style_no,temporary_style_no,color,color_foreign,delivery_date)

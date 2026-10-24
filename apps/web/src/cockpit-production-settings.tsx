@@ -20,20 +20,20 @@ function PolicyEditor({policy,onClose,onSaved,onConflict}:{policy:DigitalDeadlin
   if(writing.current)return;writing.current=true;setBusy(true);setError("");
   const fields=new FormData(form),body={expectedVersion:policy.version,slaHours:fields.get("hours")===""?null:Number(fields.get("hours")),warningRatio:Number(fields.get("ratio"))/100,note:String(fields.get("note")??"").trim()};
   const payload=JSON.stringify([policy.nodeKey,body]);if(pending.current?.payload!==payload)pending.current={payload,key:createClientRequestId()};
-  try{const result=await digitalRequest<{nodeKey:string;version:number;affectedTasks:number}>(`deadline-policies/${policy.nodeKey}`,"PUT",body,pending.current.key);pending.current=null;if(live.current)onSaved(`已保存 ${policy.label}，应用到 ${result.affectedTasks} 个未完成任务。`);}
+  try{const result=await digitalRequest<{nodeKey:string;version:number;affectedTasks:number;scope?:"new_orders"}>(`deadline-policies/${policy.nodeKey}`,"PUT",body,pending.current.key);pending.current=null;if(live.current)onSaved(result.scope==="new_orders"?`已保存 ${policy.label}，仅新订单采用。`:`已保存 ${policy.label}，应用到 ${result.affectedTasks} 个未完成任务。`);}
   catch(reason){if(live.current){if(reason instanceof DigitalRequestError&&reason.status===409){try{await onConflict();if(live.current)setError("参数已被其他人更新，现已刷新。请核对现行数值后重新填写并保存。");}catch{if(live.current)setError("参数发生冲突，读取现行数值失败。请关闭后刷新重试。");}}else setError(reason instanceof Error?reason.message:"保存失败，请重试");}}
   finally{writing.current=false;if(live.current)setBusy(false);}
  };
  return <dialog ref={dialog} className="cockpit-policy-dialog" aria-label={`编辑${policy.label}时效`} onCancel={event=>{event.preventDefault();if(!busy)onClose();}} onPointerDown={event=>{const box=event.currentTarget.getBoundingClientRect();backdropDown.current=event.target===event.currentTarget&&(event.clientX<box.left||event.clientX>box.right||event.clientY<box.top||event.clientY>box.bottom);}} onClick={event=>{const box=event.currentTarget.getBoundingClientRect();if(backdropDown.current&&event.target===event.currentTarget&&!busy&&(event.clientX<box.left||event.clientX>box.right||event.clientY<box.top||event.clientY>box.bottom))onClose();backdropDown.current=false;}} onKeyDown={trapCockpitDialogFocus}>
   <div><header><h2>{`编辑${policy.label}时效`}</h2><Button variant="secondary" disabled={busy} onClick={onClose}>关闭</Button></header>
-   <p className="cockpit-policy-impact">应用于所有订单该节点的未完成任务，已完成和已取消历史保留。</p>
+   <p className="cockpit-policy-impact">{policy.applicationScope==="new_orders"?"仅新订单采用；在途订单保持原标准。":"应用于所有订单该节点的未完成任务，已完成和已取消历史保留。"}</p>
    {error&&<p role="alert">{error}</p>}
    <form key={`${policy.nodeKey}:${policy.version}`} onSubmit={event=>{event.preventDefault();void save(event.currentTarget);}}><fieldset disabled={busy}>
-    <InsetField label="时限（小时，留空无时限）" name="hours" type="number" min="0.01" max="8760" step="0.01" defaultValue={policy.slaHours??""}/>
-    <InsetField label="临期比例（%） *" name="ratio" type="number" min="1" max="99" step="any" required defaultValue={policy.warningRatio*100}/>
+    <InsetField label={policy.durationRequired?"时限（小时）":"时限（小时，留空无时限）"} required={policy.durationRequired} readOnly={policy.durationEditable===false} name="hours" type="number" min="0.01" max="8760" step="0.01" defaultValue={policy.slaHours??""}/>
+    <InsetField label="临期比例（%） *" name="ratio" readOnly={policy.warningRatioEditable===false} type="number" min="1" max="99" step="any" required defaultValue={policy.warningRatio*100}/>
     <InsetField label="调整原因" name="note" maxLength={1000}/>
     <small className="cockpit-policy-baseline">现行版本 v{policy.version} · 最近调整 {date(policy.changedAt)}{policy.note?` · ${policy.note}`:""}</small>
-    <Button type="submit">{busy?"保存中…":"应用到未完成任务"}</Button>
+    <Button type="submit">{busy?"保存中…":policy.applicationScope==="new_orders"?"保存新单标准":"应用到未完成任务"}</Button>
    </fieldset></form>
   </div>
  </dialog>;
@@ -59,7 +59,7 @@ export function CockpitProductionSettings(){
     </section>
     <section className="cockpit-settings-node-section" id="cockpit-stage-policies"><div className="cockpit-settings-section-title"><h2>阶段节点设置：{currentStage?.label??"归属待核实的现有节点"}</h2></div>
      {rows.length?<ul className="cockpit-policy-cards">{rows.map(policy=><li key={policy.nodeKey}><span className="cockpit-policy-card-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5H6v16h14V5h-2M9 3h8v4H9zM9 11h8M9 15h6"/></svg></span><div><h3>{policy.label}</h3><strong>{policy.slaHours===null?"无时限":`${policy.slaHours} 小时`}</strong><small>临期比例 {policy.warningRatio*100}%</small></div><Button variant="secondary" aria-label={`编辑${policy.label}时效`} onClick={()=>{setSelected(policy.nodeKey);setNotice("");}}>编辑</Button></li>)}</ul>:<p className="cockpit-policy-empty">本阶段暂无现有节点参数。</p>}
-     <p className="cockpit-settings-footnote">未完成任务沿原规则应用调整，已完成和已取消历史保留。</p>
+     <p className="cockpit-settings-footnote">各项设置的生效范围在保存前显示，历史记录保留。</p>
     </section>
    </>}
   </>}

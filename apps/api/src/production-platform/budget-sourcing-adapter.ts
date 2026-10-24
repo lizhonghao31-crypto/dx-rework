@@ -18,7 +18,7 @@ export async function readBudgetSourcing(db: Pick<PoolClient, "query">, actor: T
   const lifecycle = (await db.query("SELECT state FROM digital_production_resource_lifecycle WHERE resource_kind='order' AND resource_id=$1", [orderId])).rows[0];
   if (lifecycle && lifecycle.state !== "active") conflict("母单已暂停或取消");
   const budget = (await db.query(`SELECT d.* FROM digital_budget_documents d JOIN digital_budget_preparations p USING(production_order_id)
-    WHERE d.production_order_id=$1 AND d.status='published' AND d.version=p.budget_version`, [orderId])).rows[0] ?? conflict("请先发布当前预算；由本单设计师在预算页核对并发布当前草稿，主跟单再从该页进入外发申请");
+    WHERE d.production_order_id=$1 AND d.status='published' AND d.version=p.budget_version`, [orderId])).rows[0] ?? conflict("请先发布当前预算；由本单跟单在预算页核对并最终发布当前草稿，再从该页进入外发申请");
   const document = budget.document as BudgetDocument;
   const lines = (await db.query(`SELECT l.line_id,l.position,l.formal_style_no,l.temporary_style_no,l.color,l.customer_warehouse_arrival_date::text AS customer,
     (SELECT sum(s.quantity)::integer FROM digital_production_po_sizes s WHERE s.line_id=l.line_id) AS quantity

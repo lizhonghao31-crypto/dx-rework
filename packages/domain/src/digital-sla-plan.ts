@@ -1,4 +1,5 @@
 import { validateBusinessTime, type BusinessTime } from "./business-clock.js";
+import { isSlaDurationMinutes } from "@dx-rework/contracts/digital-sla";
 
 export type SlaAnchor =
   | { precision: "instant"; value: string; source: string }
@@ -17,6 +18,8 @@ export type SlaTime = { at: string | null; exclusive: boolean; reasons: string[]
 export type SlaPlannedNode = { id: string; start: SlaTime; end: SlaTime };
 export type SlaNodeFact = {
   startedAt?: string; completedAt?: string; evidence: string;
+  /** Native business completion can remain valid even when its actual time is unknown. */
+  businessCompleted?: boolean;
   /** Captured when a responsibility window opens; formal changes append a new fact version. */
   standardMinutes?: number;
   /** Server-captured assessment target at completion, including unknown precision. */
@@ -74,7 +77,7 @@ export function orderedSlaNodes(plan: SlaPlan): SlaPlanNode[] {
     if (state.get(id) === 2) return;
     if (!n.id || !n.label || !Number.isInteger(n.stage) || n.stage < 1 || n.stage > 7) throw new Error("Invalid SLA node");
     if (new Set(n.dependsOn).size !== n.dependsOn.length) throw new Error("Duplicate SLA dependency");
-    if (["duration", "included", "estimate"].includes(n.kind) && (!Number.isSafeInteger(n.minutes) || n.minutes! <= 0)) throw new Error("Invalid SLA duration");
+    if (["duration", "included", "estimate"].includes(n.kind) && !isSlaDurationMinutes(n.minutes)) throw new Error("Invalid SLA duration");
     if (n.kind === "offset" && (!Number.isSafeInteger(n.offsetDays) || n.offsetDays! < 0)) throw new Error("Invalid SLA offset");
     if (n.kind === "included" && (!n.includedIn || n.dependsOn.length)) throw new Error("Included target must share exactly one parent window");
     if (n.kind !== "included" && n.includedIn !== null) throw new Error("Only included target may share a window");
@@ -157,7 +160,7 @@ export function evaluateSlaPlan(plan: SlaPlan, facts: Record<string, SlaNodeFact
     let deadline = missing(`${n.label}缺少可信开始时间`);
     if (n.kind === "order_date" || n.kind === "offset") deadline = p.end;
     else if (f?.startedAt && (n.kind === "duration" || n.kind === "included")) {
-      if (f.standardMinutes !== undefined && (!Number.isSafeInteger(f.standardMinutes) || f.standardMinutes <= 0)) throw new Error("Invalid captured SLA standard");
+      if (f.standardMinutes !== undefined && !isSlaDurationMinutes(f.standardMinutes)) throw new Error("Invalid captured SLA standard");
       deadline = add(known(instant(f.startedAt)), f.standardMinutes ?? n.minutes!);
     }
     else if (n.kind === "estimate") deadline = missing("仅物流预计，不是收货硬期限");
@@ -170,7 +173,10 @@ export function evaluateSlaPlan(plan: SlaPlan, facts: Record<string, SlaNodeFact
     let forecast = missing(`${n.label}缺少有效预计依据`);
     let forecastBasis: SlaNodeEvaluation["forecastBasis"] = "unknown";
     if (n.applicable === "yes") {
-      if (f?.completedAt) {
+      if (f?.businessCompleted && !f.completedAt) {
+        status = "completed_unrated";
+        forecast = missing(`${n.label}业务已完成，实际完成时间未知，无法评价时效`);
+      } else if (f?.completedAt) {
         forecast = known(instant(f.completedAt));
         forecastBasis = "actual";
         status = deadline.at === null ? "completed_unrated" : slaPastDeadline(f.completedAt, deadline) ? "completed_late" : "completed_on_time";
@@ -220,7 +226,7 @@ export function evaluateSlaPlan(plan: SlaPlan, facts: Record<string, SlaNodeFact
       }
     }
     result.set(n.id, { ...p, actualStart: f?.startedAt ?? null, actualEnd: f?.completedAt ?? null, deadline, forecast, status,
-      planOverdue: n.applicable === "yes" && !f?.completedAt && slaPastDeadline(time.now, p.end), forecastBasis });
+      planOverdue: n.applicable === "yes" && !f?.completedAt && !f?.businessCompleted && slaPastDeadline(time.now, p.end), forecastBasis });
     forecastWindows.set(n.id, { id: n.id, end: forecast,
       start: f?.startedAt ? known(instant(f.startedAt)) : f?.completedAt ? missing(`${n.label}已完成但缺少可信开始时间`)
         : f?.waitingFor ? missing(f.waitingFor.reason) : projected.start });

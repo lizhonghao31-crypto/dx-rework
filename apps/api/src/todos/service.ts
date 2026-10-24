@@ -1,4 +1,5 @@
 import {arrangementsAvailable} from "../production-platform/development-arrangement.js";
+import {sourcingTodoSla} from "../production-platform/sourcing-todo-sla.js";
 import {isDeepStrictEqual} from 'node:util';
 import {MarkTodoReadSchema,type MarkTodoRead} from '@dx-rework/contracts';
 import {nativeDevelopmentTodoExclusion} from "../production-platform/development-arrangement-todos.js";
@@ -578,6 +579,7 @@ export class TodoService {
       after: { sourceEventId: input.sourceEventId, sourceAction: input.sourceAction, todoType: input.todoType },
     });
     await this.setTodoContext(client, creationEventId, actor.requestId);
+    const sourcingTiming = input.todoType === "business_action" ? await sourcingTodoSla(client,input) : undefined;
     const created = await client.query<TodoRow>(
       `INSERT INTO rework_todos(
          todo_id,todo_type,category,source_event_id,source_action,entity_type,entity_id,
@@ -586,6 +588,7 @@ export class TodoService {
        ) VALUES(
          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,
          CASE
+           WHEN $19::boolean THEN $15::timestamptz
            WHEN $14::text IS NULL THEN NULL
            WHEN $14='deduction_follow_up' THEN $15::timestamptz
            WHEN $14='sourcing_contract_return' THEN NULL
@@ -603,8 +606,9 @@ export class TodoService {
         input.entityType, input.entityId, input.recipientUserId, input.requiredRole ?? null,
         input.requiredCapability ?? null, input.delegationId ?? null,
         input.todoType === "information" ? null : (input.delegationScopeId ?? input.entityId),
-        route, input.policyKey ?? null, input.authoritativeDueAt ?? null,
+        route, input.policyKey ?? null, sourcingTiming ? sourcingTiming.dueAt : input.authoritativeDueAt ?? null,
         input.dedupeKey, creationEventId, actor.requestId,
+        Boolean(sourcingTiming),
       ],
     );
     const todo = created.rows[0];
