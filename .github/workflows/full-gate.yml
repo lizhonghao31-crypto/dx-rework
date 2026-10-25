@@ -7,6 +7,8 @@ on:
       - release/digital-production-v1
       - feat/digital-production-a4
       - unified-p*
+      - deliver/sla-foundation-development-budget-20261024
+      - deliver/sla-preparation-cutting-dispatch-20261024
     types:
       - opened
       - synchronize

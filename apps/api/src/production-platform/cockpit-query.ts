@@ -3,6 +3,7 @@ import {savedDevelopmentRoute} from "./development-sla-enrollment.js";
 import { DigitalDevelopmentService } from "./development-service.js";
 import { OrderClosureService } from "./order-closure-service.js";
 import { bulkCockpitProgress } from "./cockpit-progress.js";
+import { BulkPreparationService } from "./bulk-preparation-service.js";
 import type { Pool } from "pg";
 import type { CockpitResult, CockpitRow, CockpitStage } from "@dx-rework/contracts/digital-production-cockpit";
 import type { TrustedActorContext } from "../tools/repositories.js";
@@ -86,14 +87,17 @@ SELECT o.production_order_id AS "orderId",s.source_id AS "sourceId",
           JOIN digital_instruction_versions v ON v.production_order_id=p.production_order_id AND v.version=p.instruction_version
           JOIN digital_instruction_documents d ON d.production_order_id=p.production_order_id AND d.published_version=p.instruction_version
           JOIN digital_development_current_documents src ON src.source_id=p.source_id
-          JOIN sourcing_approval_snapshots a ON a.sourcing_approval_snapshot_id=p.approval_snapshot_id
-          JOIN sourcing_decisions decision ON decision.sourcing_decision_id=a.sourcing_decision_id
+          LEFT JOIN sourcing_approval_snapshots a ON a.sourcing_approval_snapshot_id=p.approval_snapshot_id
+          LEFT JOIN sourcing_decisions decision ON decision.sourcing_decision_id=a.sourcing_decision_id
           WHERE p.production_order_id=$1 AND p.source_round=coalesce((SELECT max(round_number) FROM digital_development_rounds WHERE source_id=p.source_id),1)
           ORDER BY p.created_at DESC LIMIT 1`,[row.orderId])).rows[0];
         if (preparation) {
+          // Parallel technical preparation may predate its commercial approval.
+          // Read the real current approval without inventing or backfilling its FK.
+          const cuttingProcess=preparation.cutting_process??(await new BulkPreparationService(db).gates(db,row.orderId)).approval?.cutting_process;
           const routeIds = new Set((await db.query("SELECT task_id FROM digital_production_tasks WHERE route_instance_id=$1",[preparation.preparation_id])).rows.map(t=>t.task_id));
           const closure = await new OrderClosureService(db).read(actor,row.orderId);
-          progress = bulkCockpitProgress({preshrink:preparation.preshrink,secondaryCraft:preparation.document.secondaryCraft==='沿用开发'?preparation.source_document.craft:preparation.document.secondaryCraft,externalCutting:preparation.cutting_process==='outsourced',
+          if(cuttingProcess)progress = bulkCockpitProgress({preshrink:preparation.preshrink,secondaryCraft:preparation.document.secondaryCraft==='沿用开发'?preparation.source_document.craft:preparation.document.secondaryCraft,externalCutting:cuttingProcess==='outsourced',
             tasks:tasks.filter(t=>routeIds.has(t.taskId)),specialClosed:Boolean(closure.closed),packed:closure.stage==='本期装箱完成',
             received:closure.lines.length>0&&closure.lines.every(l=>l.receiptCount>0&&l.actualQuantity>=l.orderedQuantity&&(l.actualQuantity===l.documentQuantity||Boolean(l.receivingResolution)))});
         }

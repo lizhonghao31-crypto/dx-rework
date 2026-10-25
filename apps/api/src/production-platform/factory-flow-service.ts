@@ -180,7 +180,13 @@ export class FactoryFlowService{
   if(s.contract?.status!=='ready')fail('当前批准合同未就绪，不能发厂');
   const batch=s.route.secondary_craft==='无'?null:s.batch!.batches.find(b=>b.factId===(input.returnFactId??s.returned?.fact_id));
   if(s.route.secondary_craft!=='无'&&!batch)fail('请选择本单实际回仓批次');
-  if(!input.lines&&!s.allQc)fail('任一PO工艺QC未满足，不能整款发厂；请QC处理或选择已放行批次先发');
+  if(!input.lines&&!s.allQc){
+   const blocked=batch?.rows.filter(row=>row.available>0&&!row.allowDispatch).map(row=>{
+    const line=s.latest.find(item=>item.line.line_id===row.lineId)?.line;
+    return `PO ${line?.po_number??row.lineId}／${line?.color??''}：${row.result==='需处理'?'问题待处理及复查':'尚未检查'}`;
+   }).join('；');
+   fail(`任一PO工艺QC未满足，不能整款发厂：${blocked||'其他未发批次尚未全部放行'}。请QC在本单处理，仓库随后登记实际发厂，或选择已放行批次先发。`);
+  }
   const limits=batch?batch.rows.map(l=>({lineId:l.lineId,remaining:l.allowDispatch?Math.min(l.available,s.batch!.totals.find(t=>t.lineId===l.lineId)?.remaining??0):0})):s.batch!.totals;
   const lines=this.scope(input.lines,limits);
   if(s.tasks.find(t=>t.task_kind==='warehouse_dispatch')?.state!=='ready')fail(await this.taskBlockReason(db,actor,s,'warehouse_dispatch'));
