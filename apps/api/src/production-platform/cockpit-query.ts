@@ -95,7 +95,7 @@ SELECT o.production_order_id AS "orderId",s.source_id AS "sourceId",
           // Parallel technical preparation may predate its commercial approval.
           // Read the real current approval without inventing or backfilling its FK.
           const cuttingProcess=preparation.cutting_process??(await new BulkPreparationService(db).gates(db,row.orderId)).approval?.cutting_process;
-          const routeIds = new Set((await db.query("SELECT task_id FROM digital_production_tasks WHERE route_instance_id=$1",[preparation.preparation_id])).rows.map(t=>t.task_id));
+          const routeIds = new Set((await db.query("SELECT task_id FROM digital_production_tasks WHERE route_instance_id=$1 OR (route_instance_id=$2 AND node_key='bulk_ship_sample')",[preparation.preparation_id,row.orderId])).rows.map(t=>t.task_id));
           const closure = await new OrderClosureService(db).read(actor,row.orderId);
           if(cuttingProcess)progress = bulkCockpitProgress({preshrink:preparation.preshrink,secondaryCraft:preparation.document.secondaryCraft==='沿用开发'?preparation.source_document.craft:preparation.document.secondaryCraft,externalCutting:cuttingProcess==='outsourced',
             tasks:tasks.filter(t=>routeIds.has(t.taskId)),specialClosed:Boolean(closure.closed),packed:closure.stage==='本期装箱完成',

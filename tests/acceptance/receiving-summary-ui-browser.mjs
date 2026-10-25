@@ -19,7 +19,9 @@ try{
   await page.goto(`http://127.0.0.1:${server.address().port}/?mode=productionQc&factoryAction=productionQc`);
   await page.getByText(/待收齐 · 应收 200/).waitFor();
   await page.getByText('原收货事实',{exact:true}).first().click();
-  await page.getByText('2026-10-22（仅日期）',{exact:false}).first().waitFor();
+  const dateOnlyReceipt=input.lines.flatMap(line=>line.receipts).find(receipt=>receipt.receivedAt===null&&receipt.receivedDate);
+  assert.ok(dateOnlyReceipt,'real fixture must retain an explicitly date-only receipt');
+  await page.getByText(`${dateOnlyReceipt.receivedDate}（仅日期）`,{exact:false}).first().waitFor();
   assert.equal(await page.getByRole('button',{name:/出货|寄样/}).count(),0);
   await page.getByText('本批数量已更正，需核对原检查范围',{exact:true}).first().click();
   const form=page.locator('form').filter({has:page.getByText('到仓质检',{exact:true})}).first();
