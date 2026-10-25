@@ -4453,10 +4453,11 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const identity=new DigitalProductionIdentityService(database,true,service),receiving=new ReceivingService(database),closure=new OrderClosureService(database);
     let order=await identity.read(primary,ready.id);
     for(const line of order.lines)order=await identity.correctNumbers(primary,ready.id,line.lineId,{expectedVersion:order.version,formalStyleNo:`TEST-SLA08-${randomUUID().slice(0,8)}`},randomUUID());
+    const receivedDate=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai'}).format(new Date(Date.now()-86_400_000));
     const receipts=[];
     for(const line of (await closure.read(root,ready.id)).lines){
       const image=randomUUID();await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-receipt.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[image,`TEST/receipt/${image}`,'a'.repeat(64),root.actorId]);
-      const input={cuttingOrderId:line.cuttingId!,documentQuantity:line.orderedQuantity,actualQuantity:line.orderedQuantity,defectiveQuantity:0,attachmentIds:[image],receivedDate:'2026-10-22'},key=randomUUID();
+      const input={cuttingOrderId:line.cuttingId!,documentQuantity:line.orderedQuantity,actualQuantity:line.orderedQuantity,defectiveQuantity:0,attachmentIds:[image],receivedDate},key=randomUUID();
       const receipt=await receiving.create({...root,authorizationCapability:'receiving:create'},input,key);
       await receiving.create({...root,authorizationCapability:'receiving:create'},input,key);receipts.push(receipt.value);
     }
@@ -4466,7 +4467,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     let sheet=await closure.read(root,ready.id);
     expect(sheet.collection).toMatchObject({expected:200,received:200,status:'已收齐',shipmentQuantity:0});
     expect(sheet.stage).toBe('等待回货与装箱');
-    expect(sheet.lines.flatMap(l=>l.receipts).every(r=>r.receivedAt===null&&r.receivedDate==='2026-10-22')).toBe(true);
+    expect(sheet.lines.flatMap(l=>l.receipts).every(r=>r.receivedAt===null&&r.receivedDate===receivedDate)).toBe(true);
     const first=sheet.lines[0]!,style=order.lines.find(l=>l.lineId===first.lineId)!.formalStyleNo!;
     let board=(await receiving.board('2000-01-01','2999-12-31',style)).rows[0]!;
     const quality=sheet.quality!.find(q=>q.lineId===first.lineId)!,qualityInput={receiptId:quality.receiptId,quantityVersion:quality.quantityVersion,occurredAt:new Date().toISOString(),qualifiedQuantity:40,problem:'TEST其余待返工'},qcKey=randomUUID();
@@ -5321,6 +5322,10 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     try{
       await taskClient.query("BEGIN");
       for(const kind of ["bulk_cutting_external","factory_material_count","bulk_ship_sample","bulk_cutting","bulk_qc","warehouse_dispatch"] as const){
+        if(kind==='bulk_ship_sample'){
+          const existing=(await taskClient.query("SELECT task_id,assignee_id FROM digital_production_task_access WHERE production_order_id=$1 AND task_kind='bulk_ship_sample'",[id])).rows;
+          expect(existing).toHaveLength(1);expect(existing[0].assignee_id).toBe(merchandiserId);taskIds.push(existing[0].task_id);continue;
+        }
         const task=await tasks.createWithClient(taskClient,rootActor(),{resource:{kind:"order",id},kind,routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:["bulk_cutting_external","factory_material_count","bulk_ship_sample"].includes(kind)?merchandiserId:null});taskIds.push(task.taskId);
       }
       await taskClient.query("COMMIT");

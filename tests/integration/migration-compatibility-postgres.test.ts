@@ -93,6 +93,11 @@ suite('main and digital historical PostgreSQL upgrades',()=>{
    expect(effectiveGuard).toContain('sourcing_factory_remaining_lines');
    expect(effectiveGuard).toContain('proposed_total_amount');
    expect(effectiveGuard).toContain('sourcing_require_operation_event');
+   // Every admitted old history must install the exact forward-repair body,
+   // not merely a function with the right name or a surviving fragment.
+   const expectedGuardBody=catalog.find(m=>m.version==='0261_factory_change_guard_history_convergence')!.sql.match(/AS \$\$([\s\S]*?)\$\$;/)![1];
+   const actualGuardBody=(await client.query("SELECT prosrc FROM pg_proc WHERE oid='guard_sourcing_factory_change_request_insert()'::regprocedure")).rows[0].prosrc;
+   expect(actualGuardBody).toBe(expectedGuardBody);
    expect((await applyMigrations(scoped.toString())).applied).toEqual([]);
    const after=(await client.query('SELECT version,checksum,applied_at FROM schema_migrations ORDER BY version')).rows;
    expect(after.map(r=>({version:r.version,checksum:r.checksum}))).toEqual(catalog.map(({version,checksum})=>({version,checksum})));
