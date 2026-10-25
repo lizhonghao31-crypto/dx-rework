@@ -1,4 +1,6 @@
 import {reworkSlaEvidence} from '../../apps/api/src/production-platform/rework-sla-evidence.js';
+import {linkNewDigitalChild} from '../../apps/api/src/production-platform/child-link-repository.js';
+import {registerGarmentReceipt} from '../../apps/api/src/production-platform/garment-quality.js';
 import {SlaConfigurationRepository} from '../../apps/api/src/production-platform/sla-configuration-repository.js';
 import {SlaConfigurationService} from '../../apps/api/src/production-platform/sla-configuration-service.js';
 import {factoryReturnLogistics} from '../../apps/api/src/production-platform/factory-return-logistics.js';
@@ -4485,7 +4487,17 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     let board=(await receiving.board('2000-01-01','2999-12-31',style)).rows[0]!;
     const quality=sheet.quality!.find(q=>q.lineId===first.lineId)!,qualityInput={receiptId:quality.receiptId,quantityVersion:quality.quantityVersion,occurredAt:new Date().toISOString(),qualifiedQuantity:40,problem:'TEST其余待返工'},qcKey=randomUUID();
     await expect(closure.recordQuality(ready.people.warehouse_receiver!,ready.id,qualityInput,randomUUID())).rejects.toMatchObject({statusCode:403});
-    await closure.recordQuality(root,ready.id,qualityInput,qcKey);await closure.recordQuality(root,ready.id,qualityInput,qcKey);
+    const lifecycle=new DigitalProductionTaskService(database),qc=ready.people.quality_control!;
+    const qcTask=(await flow.read(root,ready.id)).tasks.find(t=>t.taskKind==='factory_production_qc')!;
+    await lifecycle.reassign(root,qcTask.taskId,qc.actorId,randomUUID());
+    await lifecycle.controlResource(root,{kind:'source',id:ready.sourceId},'pause','TEST来源暂停，母单仍活动',randomUUID());
+    expect(await qcTodos()).toHaveLength(0);
+    for(const viewer of [root,qc])await expect(closure.recordQuality(viewer,ready.id,qualityInput,randomUUID())).rejects.toMatchObject({statusCode:409,message:expect.stringContaining('开发来源')});
+    expect((await database.query("SELECT count(*)::int n FROM digital_production_task_events WHERE resource_id=$1 AND event_kind='garment_receipt_qc'",[ready.id])).rows[0].n).toBe(0);
+    expect((await closure.read(root,ready.id)).quality!.find(q=>q.receiptId===quality.receiptId)?.inspected).toBe(false);
+    await lifecycle.controlResource(root,{kind:'source',id:ready.sourceId},'resume','TEST来源恢复，原检查继续',randomUUID());
+    expect(await qcTodos()).toHaveLength(2);
+    await closure.recordQuality(qc,ready.id,qualityInput,qcKey);await closure.recordQuality(qc,ready.id,qualityInput,qcKey);
     expect((await database.query("SELECT count(*)::int n FROM digital_production_task_events WHERE resource_id=$1 AND event_kind='garment_receipt_qc'",[ready.id])).rows[0].n).toBe(1);
     expect(await qcTodos()).toHaveLength(1);
     const sla=await new SlaOrderService(database).read(root,ready.id);expect(sla.garments!.windows.find(w=>w.receiptId===quality.receiptId)).toMatchObject({complete:true,startedAt:null,deadline:null});
@@ -4504,11 +4516,34 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await expect(closure.recordQuality(root,ready.id,qualityInput,randomUUID())).rejects.toMatchObject({statusCode:409});
     expect(corrected.lines[0]!.packingRevisionId).toBe(sheet.lines[0]!.packingRevisionId);
     expect((await database.query('SELECT count(*)::int n FROM receiving_receipt_corrections WHERE receipt_id=$1',[receipts[0]!.receiptId])).rows[0].n).toBe(1);
+    await lifecycle.controlResource(root,{kind:'source',id:ready.sourceId},'cancel','TEST取消来源保留旧质检',randomUUID());
+    expect((await database.query("SELECT coalesce((SELECT state FROM digital_production_resource_lifecycle WHERE resource_kind='order' AND resource_id=$1),'active') AS state",[ready.id])).rows[0].state).toBe('active');
+    const remainingQuality=corrected.quality!.find(q=>q.receiptId!==quality.receiptId)!,nextInput={receiptId:remainingQuality.receiptId,quantityVersion:remainingQuality.quantityVersion,occurredAt:new Date().toISOString(),qualifiedQuantity:remainingQuality.quantity,problem:''};
+    for(const viewer of [root,qc])await expect(closure.recordQuality(viewer,ready.id,nextInput,randomUUID())).rejects.toMatchObject({statusCode:409,message:expect.stringContaining('开发来源')});
+    expect(await qcTodos()).toHaveLength(0);
+    expect((await closure.read(root,ready.id)).quality).toEqual(corrected.quality);
+    expect((await database.query("SELECT count(*)::int n FROM digital_production_task_events WHERE resource_id=$1 AND event_kind='garment_receipt_qc'",[ready.id])).rows[0].n).toBe(1);
+    const finalSheet=await closure.read(root,ready.id);
     if(process.env.SLA_CLOSURE_UI_INPUT)await writeFile(process.env.SLA_CLOSURE_UI_INPUT,JSON.stringify(corrected));
-    await expect(closure.close(ready.people.warehouse_receiver!,ready.id,{reason:'TEST普通仓库不能审批结案',expectedRevision:corrected.revision},randomUUID())).rejects.toMatchObject({statusCode:403});
+    await expect(closure.close(ready.people.warehouse_receiver!,ready.id,{reason:'TEST普通仓库不能审批结案',expectedRevision:finalSheet.revision},randomUUID())).rejects.toMatchObject({statusCode:403});
     expect((await closure.read(ownerActor(),ready.id)).canClose).toBe(true);
-    const closed=await closure.close(ownerActor(),ready.id,{reason:'TEST老板保留未清质量/数量事项特殊结案',expectedRevision:corrected.revision},randomUUID());
+    const closed=await closure.close(ownerActor(),ready.id,{reason:'TEST老板保留未清质量/数量事项特殊结案',expectedRevision:finalSheet.revision},randomUUID());
     expect(closed.closed).not.toBeNull();expect(closed.collection!.status).toBe('待收齐');expect(closed.lines[0]!.packingRevisionId).toBe(corrected.lines[0]!.packingRevisionId);
+  });
+
+  it('SLA08 accepts standalone historical receipt QC without borrowing an unrelated source lifecycle',async()=>{
+    const fixture=await budgetFixture(false,'TEST-SLA08-STANDALONE'),root=rootActor(),id=fixture.order.productionOrderId;
+    expect((await database.query('SELECT source_id FROM digital_production_orders WHERE production_order_id=$1',[id])).rows[0].source_id).toBeNull();
+    const identity=new DigitalProductionIdentityService(database,true),unrelated=await identity.createSource(fixture.designer,{developmentType:'头版',designStyleNo:`TEST-UNRELATED-${randomUUID()}`,temporaryStyleNo:null,customerCode:'PD'},randomUUID());
+    await new DigitalProductionTaskService(database).controlResource(root,{kind:'source',id:unrelated.sourceId},'cancel','TEST无关来源不影响独立母单',randomUUID());
+    const receipt=await receiving.create({...root,authorizationCapability:'receiving:create'},{styleNo:fixture.order.designStyleNo,documentQuantity:3,actualQuantity:3,defectiveQuantity:0,attachmentIds:[await readyCuttingSheet(root.actorId)]},randomUUID());
+    // Isolated legacy-import fixture: seed a stable original child association;
+    // never remove/rebind a source or expose an arbitrary legacy-linking endpoint.
+    const client=await database.connect();try{await client.query('BEGIN');await linkNewDigitalChild(client,{module:'receiving',childId:receipt.value.receiptId,productionOrderId:id,lines:[{childLineKey:'record',lineId:fixture.order.lines[0]!.lineId}]});await registerGarmentReceipt(client,id,receipt.value.receiptId);await client.query('COMMIT');}catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
+    const closure=new OrderClosureService(database),quality=(await closure.read(root,id)).quality![0]!,input={receiptId:quality.receiptId,quantityVersion:quality.quantityVersion,occurredAt:new Date().toISOString(),qualifiedQuantity:3,problem:''};
+    await expect(closure.recordQuality(merchandiserActor(),id,input,randomUUID())).rejects.toMatchObject({statusCode:403});
+    await closure.recordQuality(root,id,input,randomUUID());
+    expect((await closure.read(root,id)).quality![0]).toMatchObject({receiptId:receipt.value.receiptId,inspected:true,qualifiedQuantity:3});
   });
 
   it('SLA07 projects transferred factory scope as pending without erasing prior inspection history',async()=>{

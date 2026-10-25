@@ -47,7 +47,7 @@ export class GarmentQualityService{
    const command=`garment-qc:${orderId}`,payloadHash=createHash('sha256').update(JSON.stringify(input)).digest('hex');
    const prior=(await db.query('SELECT * FROM digital_production_commands WHERE actor_id=$1 AND command=$2 AND key=$3',[actor.actorId,command,key])).rows[0];
    if(prior){if(prior.payload_hash!==payloadHash)fail('该操作标识已用于不同内容');await db.query('COMMIT');return prior.response;}
-   if((await db.query("SELECT 1 FROM digital_order_closures WHERE production_order_id=$1 UNION ALL SELECT 1 FROM digital_production_resource_lifecycle WHERE resource_kind='order' AND resource_id=$1 AND state<>'active'",[orderId])).rowCount)fail('本单已暂停、取消或结案，原质检历史保留');
+   if((await db.query("SELECT 1 FROM digital_order_closures WHERE production_order_id=$1 UNION ALL SELECT 1 FROM digital_production_resource_lifecycle WHERE (resource_kind='order' AND resource_id=$1 OR resource_kind='source' AND resource_id=(SELECT source_id FROM digital_production_orders WHERE production_order_id=$1)) AND state<>'active'",[orderId])).rowCount)fail('订单或开发来源已暂停、取消或结案，原质检历史保留');
    const receipt=(await garmentQuality(db,orderId)).find(r=>r.receiptId===input.receiptId)!;
    if(receipt.quantityVersion!==input.quantityVersion)fail('收货数量已经更正，请刷新后核对本批次');
    if(input.qualifiedQuantity>receipt.quantity||input.qualifiedQuantity<0||!Number.isSafeInteger(input.qualifiedQuantity))fail('合格数量必须在本批有效实收范围内');
