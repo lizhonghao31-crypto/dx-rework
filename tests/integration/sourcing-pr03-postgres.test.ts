@@ -6087,4 +6087,206 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await expect(service.listCases({ ...rootActor(), authorizationCapability: "sourcing:delete" }, "SUMMARY-PAGE")).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
+  const quantityTransferCase = async (label: string, corrected = true, currentService = service) => {
+    const image = await readyCuttingSheet(merchandiserId);
+    const facts = {
+      gender: "男装" as const, styleName: "TEST-QUANTITY-" + label,
+      estimatedCutPieceSendDate: "2026-10-01", deliveryDate: "2026-10-20",
+      lineItems: [{ styleNo: "TEST-QUANTITY-" + label, color: "黑", quantity: 200 }],
+      attachmentIds: [image],
+    };
+    const created = await currentService.createCase(merchandiserActor(), { ...facts, daxingUnitPrice: "8" }, randomUUID());
+    const id = created.value.sourcingCaseId;
+    const quoted = await currentService.quoteIePrice(ieActor(), id, { unitPrice: "12.8" }, randomUUID());
+    if (corrected) {
+      const returned = await currentService.returnToMerchandiser(ownerActor(), id, {
+        expectedVersion: quoted.value.version, reason: "TEST核实数量及逐款资料",
+      }, randomUUID());
+      await currentService.correctCase(merchandiserActor(), id, {
+        ...facts, expectedVersion: returned.value.version, reason: "TEST按当前订单更正为两款一千件",
+        lineItems: [
+          { styleNo: facts.lineItems[0]!.styleNo, color: "黑", quantity: 600 },
+          { styleNo: facts.lineItems[0]!.styleNo + "-B", color: "白", quantity: 400 },
+        ],
+      }, randomUUID());
+      await currentService.quoteIePrice(ieActor(), id, {
+        linePrices: [{ position: 1, unitPrice: "12.8" }, { position: 2, unitPrice: "12.8" }],
+      }, randomUUID());
+    }
+    await currentService.recordManagementDecision(managerActor(), id, {
+      supplierId: factoryId, craftIds: [craftId("净色车缝")],
+      linePrices: (corrected ? [1, 2] : [1]).map(position => ({ position, unitPrice: "12.8" })),
+    }, randomUUID());
+    await currentService.decideOwner(ownerActor(), id, { decision: "approved" }, randomUUID());
+    await currentService.recordFinanceReconciliation(financeActor(), id, { result: "match" }, randomUUID());
+    expect(await currentService.getCase(readerActor(), id)).toMatchObject({
+      status: "closed", orderQuantity: corrected ? 1000 : 200,
+    });
+    return id;
+  };
+
+  it.each(["owner", "root"] as const)("effective-quantity: transfers a corrected finance-passed order through the existing %s path", async role => {
+    const id = await quantityTransferCase(role);
+    const oldDocument = (await contractService.getCurrent(rootActor(), id)).item!;
+    const original = (await database.query("SELECT * FROM sourcing_cases WHERE sourcing_case_id=$1", [id])).rows;
+    const corrections = (await database.query("SELECT * FROM sourcing_case_corrections WHERE sourcing_case_id=$1", [id])).rows;
+    const finance = (await database.query("SELECT * FROM sourcing_finance_reconciliations WHERE sourcing_case_id=$1", [id])).rows;
+    const oldContract = (await database.query("SELECT * FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1", [oldDocument.sourcingContractDocumentId])).rows;
+    const oldApproval = (await database.query("SELECT * FROM sourcing_approval_snapshots WHERE sourcing_approval_snapshot_id=$1", [oldDocument.sourcingApprovalSnapshotId])).rows;
+    const oldCutting = (await database.query("SELECT * FROM cutting_orders WHERE sourcing_case_id=$1 ORDER BY sourcing_line_position", [id])).rows;
+    expect(original[0].order_quantity).toBe(200);
+    expect(corrections).toHaveLength(1);
+    expect(corrections[0].order_quantity).toBe(1000);
+    const actor = role === "root"
+      ? { ...rootActor(), authorizationCapability: "sourcing:owner:approve" }
+      : ownerActor();
+    const input = {
+      supplierId: replacementFactoryId, unitPrice: "11.3", changeReason: "TEST按纠错后的有效数量转厂",
+      craftIds: [craftId("整烫"), craftId("净色车缝")],
+      ...(role === "root" ? { deliveryDate: "2026-11-05" } : {}),
+    };
+    const key = randomUUID();
+    const results = await Promise.all([
+      service.requestFactoryChange(actor, id, input, key),
+      service.requestFactoryChange(actor, id, input, key),
+    ]);
+    expect(results.map(result => result.reused).sort()).toEqual([false, true]);
+    const current = await service.getCase(readerActor(), id);
+    expect(current).toMatchObject({
+      status: "pending_finance_reconciliation", orderQuantity: 1000,
+      decision: { supplierId: replacementFactoryId, quantity: 1000, unitPrice: "11.3000", totalAmount: "11300.00" },
+      approvalSnapshot: { quantity: 1000, processes: ["整烫", "净色车缝"] },
+    });
+    expect((await database.query("SELECT proposed_quantity,requires_owner_approval FROM sourcing_factory_change_requests WHERE sourcing_case_id=$1", [id])).rows)
+      .toEqual([{ proposed_quantity: 1000, requires_owner_approval: false }]);
+    const document = (await contractService.getCurrent(rootActor(), id)).item!;
+    expect(document.contractVersion).toBe(oldDocument.contractVersion + 1);
+    expect(document.sourcingContractDocumentId).not.toBe(oldDocument.sourcingContractDocumentId);
+    const snapshot = (await database.query("SELECT approval_snapshot FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1", [document.sourcingContractDocumentId])).rows[0].approval_snapshot;
+    expect(snapshot).toMatchObject({ quantity: "1000", totalAmount: "11300.00",
+      deliveryDate: role === "root" ? "2026-11-05" : "2026-10-20", processes: ["整烫", "净色车缝"] });
+    expect(snapshot.lines).toMatchObject([
+      { position: 1, quantity: 600, unitPrice: "11.3000", totalAmount: "6780.00" },
+      { position: 2, quantity: 400, unitPrice: "11.3000", totalAmount: "4520.00" },
+    ]);
+    expect((await database.query("SELECT position,quantity,total_amount::text FROM sourcing_approval_snapshot_lines WHERE sourcing_approval_snapshot_id=$1 ORDER BY position", [document.sourcingApprovalSnapshotId])).rows)
+      .toEqual([{ position: 1, quantity: 600, total_amount: "6780.00" }, { position: 2, quantity: 400, total_amount: "4520.00" }]);
+    expect((await database.query("SELECT * FROM sourcing_cases WHERE sourcing_case_id=$1", [id])).rows).toEqual(original);
+    expect((await database.query("SELECT * FROM sourcing_case_corrections WHERE sourcing_case_id=$1", [id])).rows).toEqual(corrections);
+    expect((await database.query("SELECT * FROM sourcing_finance_reconciliations WHERE sourcing_case_id=$1", [id])).rows).toEqual(finance);
+    expect((await database.query("SELECT * FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1", [oldDocument.sourcingContractDocumentId])).rows).toEqual(oldContract);
+    expect((await database.query("SELECT * FROM sourcing_approval_snapshots WHERE sourcing_approval_snapshot_id=$1", [oldDocument.sourcingApprovalSnapshotId])).rows).toEqual(oldApproval);
+    expect((await database.query("SELECT * FROM cutting_orders WHERE sourcing_case_id=$1 ORDER BY sourcing_line_position", [id])).rows).toEqual(oldCutting);
+    expect((await database.query("SELECT 1 FROM sourcing_finance_reconciliations WHERE sourcing_contract_document_id=$1", [document.sourcingContractDocumentId])).rowCount).toBe(0);
+    expect((await service.nodeHistory(readerActor(), id, "created", id)).item.orderQuantity).toBe(200);
+  });
+
+  it("effective-quantity: preserves an uncorrected finance-passed management price reduction", async () => {
+    const id = await quantityTransferCase("UNCHANGED", false);
+    const result = await service.requestFactoryChange(managerActor(), id, {
+      supplierId: replacementFactoryId, unitPrice: "11.3", changeReason: "TEST数量未变的降价转厂",
+    }, randomUUID());
+    expect(result.value).toMatchObject({ status: "pending_finance_reconciliation", orderQuantity: 200,
+      decision: { supplierId: replacementFactoryId, quantity: 200, totalAmount: "2260.00" },
+      approvalSnapshot: { quantity: 200, totalAmount: "2260.00" } });
+    expect((await service.getCurrentFactoryChange(readerActor(), id)).item).toMatchObject({ status: "effective", requiresOwnerApproval: false });
+    expect((await database.query("SELECT 1 FROM sourcing_case_corrections WHERE sourcing_case_id=$1", [id])).rowCount).toBe(0);
+    expect((await database.query("SELECT order_quantity FROM sourcing_cases WHERE sourcing_case_id=$1", [id])).rows).toEqual([{ order_quantity: 200 }]);
+  });
+
+  it("effective-quantity: holds a corrected price increase until owner approval and freezes its lines, crafts and delivery", async () => {
+    const id = await quantityTransferCase("INCREASE");
+    const oldDocument = (await contractService.getCurrent(rootActor(), id)).item!;
+    await service.requestFactoryChange(managerActor(), id, {
+      supplierId: replacementFactoryId, unitPrice: "13.1", changeReason: "TEST纠错后涨价仍须老板审批",
+      craftIds: [craftId("整烫")], deliveryDate: "2026-11-05",
+    }, randomUUID());
+    const request = (await service.getCurrentFactoryChange(readerActor(), id)).item!;
+    expect(request).toMatchObject({ status: "pending_owner", proposedQuantity: 1000, requiresOwnerApproval: true });
+    expect((await service.getCase(readerActor(), id)).decision?.supplierId).toBe(factoryId);
+    expect((await contractService.getCurrent(rootActor(), id)).item?.sourcingContractDocumentId).toBe(oldDocument.sourcingContractDocumentId);
+    const result = await service.decideFactoryChange(ownerActor(), id, request.factoryChangeRequestId, {
+      decision: "approved", verificationReason: "TEST确认纠错后的涨价方案",
+    }, randomUUID());
+    expect(result.value).toMatchObject({ status: "pending_finance_reconciliation", orderQuantity: 1000,
+      decision: { supplierId: replacementFactoryId, quantity: 1000, totalAmount: "13100.00" },
+      approvalSnapshot: { quantity: 1000, totalAmount: "13100.00", deliveryDate: "2026-11-05", processes: ["整烫"] } });
+    const document = (await contractService.getCurrent(rootActor(), id)).item!;
+    const snapshot = (await database.query("SELECT approval_snapshot FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1", [document.sourcingContractDocumentId])).rows[0].approval_snapshot;
+    expect(snapshot).toMatchObject({ quantity: "1000", totalAmount: "13100.00", deliveryDate: "2026-11-05", processes: ["整烫"] });
+    expect(snapshot.lines).toMatchObject([{ position: 1, quantity: 600 }, { position: 2, quantity: 400 }]);
+  });
+
+  it("effective-quantity: rejects both the old quantity and a forged quantity without weakening audit guards", async () => {
+    const id = await quantityTransferCase("FORGED");
+    const before = await cycleSnapshot(id);
+    for (const quantity of [200, 999, 1000]) {
+      const client = await database.connect();
+      const actor = ownerActor();
+      const reason = "TEST禁止直接写入错误转厂数量或伪造审计";
+      try {
+        await client.query("BEGIN");
+        const eventId = await new OperationEventRepository().append(client, actor, {
+          action: quantity === 1000 ? "sourcing.factory_change.request" : "sourcing.factory_change.effective",
+          entityType: "sourcing_case", entityId: id, after: { quantity }, reason,
+        });
+        await expect(client.query(
+          `INSERT INTO sourcing_factory_change_requests(
+             factory_change_request_id,sourcing_case_id,from_decision_id,
+             proposed_supplier_id,proposed_supplier_code_snapshot,proposed_supplier_name_snapshot,
+             proposed_unit_price,proposed_quantity,proposed_total_amount,change_reason,
+             requested_by,operation_event_id,request_id,initiator_role,requires_owner_approval
+           ) SELECT $1,$2,decision.sourcing_decision_id,supplier.supplier_id,supplier.supplier_code,
+                    supplier.supplier_name,$4::numeric,$5::integer,round($4::numeric*$5::integer,2),
+                    $6,$7,$8,$9,'owner_group',false
+             FROM sourcing_decisions decision CROSS JOIN current_supplier_catalog supplier
+             WHERE decision.sourcing_case_id=$2 AND supplier.supplier_id=$3
+             ORDER BY decision.decision_version DESC LIMIT 1`,
+          [randomUUID(), id, replacementFactoryId, "11.3", quantity, reason, actor.actorId, eventId, actor.requestId],
+        )).rejects.toMatchObject(quantity === 1000
+          ? { code: "55000", message: "sourcing write requires the matching immutable operation event" }
+          : { code: "23514", constraint: "sourcing_factory_change_request_quantity_current" });
+      } finally {
+        await client.query("ROLLBACK");
+        client.release();
+      }
+    }
+    expect((await database.query("SELECT 1 FROM sourcing_factory_change_requests WHERE sourcing_case_id=$1", [id])).rowCount).toBe(0);
+    expect(await cycleSnapshot(id)).toEqual(before);
+  });
+
+  it("effective-quantity: rolls back a late transfer failure and retries the same key without duplicate effects", async () => {
+    const { projection, service: currentService } = await cycleTodoServices();
+    const id = await quantityTransferCase("ROLLBACK", true, currentService);
+    const before = await cycleSnapshot(id);
+    const documents = (await database.query("SELECT * FROM sourcing_contract_documents WHERE sourcing_case_id=$1 ORDER BY contract_version", [id])).rows;
+    const events = (await database.query("SELECT * FROM operation_events WHERE entity_type='sourcing_case' AND entity_id=$1 ORDER BY event_id", [id])).rows;
+    const actor = { ...rootActor(), authorizationCapability: "sourcing:owner:approve" };
+    const key = randomUUID();
+    const input = { supplierId: replacementFactoryId, unitPrice: "11.3", craftIds: [craftId("整烫")],
+      deliveryDate: "2026-11-05", changeReason: "TEST验证完整转厂事务回滚" };
+    const failure = vi.spyOn(projection, "actionableForAllAssignedRole").mockRejectedValueOnce(
+      Object.assign(new Error("TEST late finance todo failure"), { code: "23514", constraint: "test_transfer_late_failure" }),
+    );
+    try {
+      await expect(currentService.requestFactoryChange(actor, id, input, key)).rejects.toMatchObject({ statusCode: 409 });
+      expect(failure).toHaveBeenCalledOnce();
+    } finally { failure.mockRestore(); }
+    expect(await cycleSnapshot(id)).toEqual(before);
+    expect((await database.query("SELECT * FROM sourcing_contract_documents WHERE sourcing_case_id=$1 ORDER BY contract_version", [id])).rows).toEqual(documents);
+    expect((await database.query("SELECT * FROM operation_events WHERE entity_type='sourcing_case' AND entity_id=$1 ORDER BY event_id", [id])).rows).toEqual(events);
+    expect((await database.query("SELECT 1 FROM sourcing_factory_change_requests WHERE sourcing_case_id=$1", [id])).rowCount).toBe(0);
+    expect((await currentService.getCase(readerActor(), id)).status).toBe("closed");
+    const results = await Promise.all([
+      currentService.requestFactoryChange(actor, id, input, key),
+      currentService.requestFactoryChange(actor, id, input, key),
+    ]);
+    expect(results.map(result => result.reused).sort()).toEqual([false, true]);
+    expect((await database.query("SELECT 1 FROM sourcing_factory_change_requests WHERE sourcing_case_id=$1", [id])).rowCount).toBe(1);
+    expect((await database.query("SELECT 1 FROM sourcing_contract_documents WHERE sourcing_case_id=$1", [id])).rowCount).toBe(documents.length + 1);
+    const after = await cycleSnapshot(id);
+    await currentService.requestFactoryChange(actor, id, input, key);
+    expect(await cycleSnapshot(id)).toEqual(after);
+  });
+
 });
