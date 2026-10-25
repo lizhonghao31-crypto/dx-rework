@@ -81,8 +81,11 @@ export class DevelopmentRouteService {
      const existing=(await db.query("SELECT 1 FROM digital_production_task_access a JOIN digital_production_tasks t USING(task_id) WHERE a.source_id=$1 AND t.route_version=$2 AND a.task_kind='development_sewing_transfer'",[sourceId,task.route_version])).rowCount;
      if(!existing){
        nextKind='development_sewing';requireActualReceipt=true;
-       await db.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1,$2,$3,'development_system_route','digital_development',$4,$5)",[randomUUID(),actor.requestId,actor.actorId,sourceId,JSON.stringify({mode:'system_route',fromTaskId:taskId,round:task.route_version,nextKind,reason:'设计师已确认工艺，沿用本单车板安排；不记录人工转交或实物接收'})]);
      }
+   }
+   if(task.task_kind==='development_craft_confirmation'&&nextKind==='development_sewing')requireActualReceipt=true;
+   if(requireActualReceipt){
+       await db.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1,$2,$3,'development_system_route','digital_development',$4,$5)",[randomUUID(),actor.requestId,actor.actorId,sourceId,JSON.stringify({mode:'system_route',fromTaskId:taskId,round:task.route_version,nextKind,reason:'设计师已确认工艺，沿用本单车板安排；不记录人工转交或实物接收'})]);
    }
    const next=await this.startRound(db,actor,sourceId,nextKind,task.route_instance_id,task.route_version,taskId,taskId,nextAssigneeId,requireActualReceipt);
    if(requireActualReceipt)await new DigitalProductionTaskService(this.database).recordSystemRouteWithClient(db,actor,next.taskId,taskId);

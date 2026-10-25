@@ -969,6 +969,10 @@
       "checksum": "1d1fe7d53d4f84f8d0fc28b3b4bd309928f99e2df3e589f749ce5948e3b4ed18"
     },
     {
+      "version": "0230_sourcing_factory_change_current_quantity",
+      "checksum": "4091340fdb842e866aec8b9f124c73c9d5e7086bd122677c144864355052e6bf"
+    },
+    {
       "version": "0231_digital_order_closure",
       "checksum": "b1698097af226f2c0a2a52fe5463f54365dde375fe45e40f4b11677b778ba782"
     },

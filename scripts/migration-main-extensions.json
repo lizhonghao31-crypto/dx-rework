@@ -34,5 +34,9 @@
   {
     "version": "0229_sourcing_price_reapplications",
     "checksum": "633964acebe30386ae7d3877268dcb7519944e387ffeb9707fa4d92e3b3cc857"
+  },
+  {
+    "version": "0230_sourcing_factory_change_current_quantity",
+    "checksum": "4091340fdb842e866aec8b9f124c73c9d5e7086bd122677c144864355052e6bf"
   }
 ]

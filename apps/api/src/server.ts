@@ -174,6 +174,7 @@ const sourcingContractService = new SourcingContractService(database, attachment
 await sourcingContractService.resumePendingContracts();
 const sourcingService = new SourcingService(
   database,undefined,undefined,todoProjection,sourcingContractService,
+  (diagnostic): void => { app.log.warn({ factoryChangeFailure: diagnostic }, "factory change request failed"); },
 );
 const reworkService = new ReworkInitiationService(
   database,
