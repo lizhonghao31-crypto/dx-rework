@@ -24,8 +24,8 @@ jobs:
       group: pr-gate-${{ github.event.pull_request.number || format('manual-{0}', github.ref) }}
       cancel-in-progress: true
     runs-on: ubuntu-latest
-    # This authorized stacked plan includes every heavy gate; keep finite headroom.
-    timeout-minutes: ${{ github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'unified-p') && 30 || 20 }}
+    # User-authorized Full Gate ceiling; this changes the limit, not execution cost.
+    timeout-minutes: 30
     env:
       NODE_ENV: test
       GIT_SHA: ${{ github.event.pull_request.head.sha }}
@@ -188,7 +188,13 @@ jobs:
           for test_file in "${mapped_tests[@]}"; do
             test -f "$test_file"
             log="$RUNNER_TEMP/mapped-$(basename "$test_file").log"
-            NO_COLOR=1 npx vitest run "$test_file" 2>&1 | tee "$log"
+            vitest_args=()
+            case "$test_file" in
+              tests/integration/full-business-chain-postgres.test.ts|tests/integration/sourcing-pr03-postgres.test.ts)
+                vitest_args=(--config vitest.business-chain.config.ts)
+                ;;
+            esac
+            NO_COLOR=1 npx vitest run "$test_file" "${vitest_args[@]}" 2>&1 | tee "$log"
             grep -Eq 'Tests[[:space:]]+[0-9]+ passed' "$log" || {
               echo "Mapped PostgreSQL suite executed no passing tests: $test_file"
               exit 1

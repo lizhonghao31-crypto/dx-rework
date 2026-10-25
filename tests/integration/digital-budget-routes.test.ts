@@ -49,8 +49,8 @@ describe("P09 budget HTTP field and attachment boundary", () => {
       } finally { await app.close(); }
     });
   }
-  it("allows owner designer to edit and primary merchandiser to read, while requiring login", async () => {
-    for (const [role, userId, canEdit] of [["sample_designer", designerId, true], ["order_merchandiser", primaryId, false]] as const) {
+  it("allows own designer and active own merchandiser to share drafts, while requiring login", async () => {
+    for (const [role, userId, canEdit] of [["sample_designer", designerId, true], ["order_merchandiser", primaryId, true]] as const) {
       const { app } = await setup(role, userId);
       try {
         const response = await app.inject({ method: "GET", url: base, headers });

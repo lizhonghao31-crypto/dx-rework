@@ -5,6 +5,8 @@ import { isRootActor } from "../access/business-authority.js";
 import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
 import { DigitalProductionAccessPolicy } from "./access-policy.js";
+import { recordSlaPoDateChange } from "./sla-po-date-adapter.js";
+import type { BusinessClock } from "@dx-rework/domain/business-clock";
 
 type Database = Pick<PoolClient, "query">;
 export type PoDateChange = { lineId: string; date: string; expectedVersion: number };
@@ -14,7 +16,7 @@ const conflict = (message: string): never => { throw new ApplicationError("DIGIT
 // Internal transaction adapter. There is no generic HTTP date writer. Callers must
 // record the actual creation/approved command audit before passing its immutable ID.
 export class DigitalPoDateRepository {
-  constructor(private readonly db: Database) {}
+  constructor(private readonly db: Database, private readonly businessClock?: BusinessClock) {}
 
   async applyWithClient(actor: TrustedActorContext, orderId: string, source: Source,
     changes: readonly PoDateChange[], approvalEventId: string): Promise<void> {
@@ -26,7 +28,8 @@ export class DigitalPoDateRepository {
       const permitted = source === "initial_po"
         ? actor.actorRoles.includes("sample_designer") && await policy.activeRole(actor.actorId,"sample_designer")
         : source === "approved_customer_change"
-          ? actor.actorRoles.includes("production_management") && await policy.activeRole(actor.actorId,"production_management")
+          ? (actor.actorRoles.includes("production_management") && await policy.activeRole(actor.actorId,"production_management")
+            || actor.actorRoles.includes("owner_group") && await policy.activeRole(actor.actorId,"owner_group"))
           : actor.actorRoles.includes("production_management") && actor.authorizationCapability === "sourcing:decision:record"
             && await policy.activeRole(actor.actorId,"production_management")
             || actor.actorRoles.includes("owner_group") && actor.authorizationCapability === "sourcing:owner:approve"
@@ -52,6 +55,7 @@ export class DigitalPoDateRepository {
     if (!approval || approval.actor_id !== actor.actorId || approval.request_id !== actor.requestId
       || approval.entity_type !== "digital_production" || approval.entity_id !== orderId || approval.action !== action)
       conflict("缺少本次合法登记或审批证据");
+    let applied = false;
     for (const change of [...changes].sort((a,b) => a.lineId.localeCompare(b.lineId))) {
       if (!z.iso.date().safeParse(change.date).success || !Number.isSafeInteger(change.expectedVersion) || change.expectedVersion < 0)
         conflict("PO 交期或版本无效");
@@ -78,6 +82,8 @@ export class DigitalPoDateRepository {
         customer_date_version=customer_date_version+1,customer_date_source=$4 WHERE production_order_id=$1 AND line_id=$2`,[orderId,change.lineId,change.date,source]);
       else await this.db.query(`UPDATE digital_production_po_lines SET factory_delivery_date=$3,
         factory_date_version=factory_date_version+1,factory_date_source=$4 WHERE production_order_id=$1 AND line_id=$2`,[orderId,change.lineId,change.date,source]);
+      applied = true;
     }
+    if (applied && source !== "initial_po") await recordSlaPoDateChange(this.db, actor, orderId, kind, approvalEventId, approval.after_state.reason, this.businessClock);
   }
 }

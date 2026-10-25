@@ -285,6 +285,8 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
   });
 
   beforeAll(async () => {
+    {const stageStart=performance.now();let stageStatus='failed';try {
+
     await admin.query(`CREATE SCHEMA ${schema}`);
     // Exercise the current production read contract against the complete schema.
     // The previous hand-picked schema stopped at 0150 and omitted exclusion dependencies.
@@ -306,6 +308,11 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
         } catch (error) { await migrationClient.query("ROLLBACK"); throw error; }
       }
     } finally { migrationClient.release(); }
+      stageStatus='completed';
+    }finally {process.stdout.write(JSON.stringify({suite:'sourcing-pr03-postgres',phase:'schema_migration_ms',ms:Math.round(performance.now()-stageStart),status:stageStatus})+'\n');}}
+
+    {const stageStart=performance.now();let stageStatus='failed';try {
+
     await database.query(
       `INSERT INTO app_users(id,display_name,enabled) VALUES
        ($1,'订单跟单',true),($2,'IE报价员',true),
@@ -366,13 +373,21 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
           ENABLE TRIGGER supplier_catalog_items_require_initial_version
       `);
     }
-  });
+
+      stageStatus='completed';
+    }finally {process.stdout.write(JSON.stringify({suite:'sourcing-pr03-postgres',phase:'fixture_ms',ms:Math.round(performance.now()-stageStart),status:stageStatus})+'\n');}}
+});
 
   afterAll(async () => {
+    {const stageStart=performance.now();let stageStatus='failed';try {
+
     await database.end();
     await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
     await admin.end();
-  });
+
+      stageStatus='completed';
+    }finally {process.stdout.write(JSON.stringify({suite:'sourcing-pr03-postgres',phase:'cleanup_ms',ms:Math.round(performance.now()-stageStart),status:stageStatus})+'\n');}}
+});
 
   it("registers cutting roles and capabilities without assigning employees", async () => {
     const roles = await database.query<{ role_code: string }>(
@@ -3571,7 +3586,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const fixture = await budgetFixture(), primary = merchandiserActor(), root = rootActor();
     const ready = (await exerciseBulkPreparation(database, fixture, service, attachments,
       { primary, manager: managerActor(), owner: ownerActor(), ie: ieActor(), root },
-      factoryId, craftId('净色车缝'), 'none', { cuttingProcess: 'in_house', stopAtReady: true }))!;
+      factoryId, craftId('净色车缝'), 'none', { cuttingProcess: 'in_house', stopAtReady: true, legacyDevelopment: true }))!;
     const { id, sourceId, instruction, bulk, people } = ready;
     for (const version of [2, 3, 4]) {
       const sheet = await instruction.read(primary, id);
@@ -3585,10 +3600,12 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       origin: '客户新增要求', customerComment: 'TEST第2轮确认', internalProblem: '', explanation: '',
       categories: ['尺寸'], affectedNodes: ['纸样'], outputKind: '整件样板',
     } }, randomUUID());
-    await rounds.publish(fixture.designer, sourceId, { expectedDraftVersion: draft.draftVersion, basedOnRound: 1 }, randomUUID());
+    const publishedRound=await rounds.publish(fixture.designer, sourceId, { expectedDraftVersion: draft.draftVersion, basedOnRound: 1 }, randomUUID());
+    expect(publishedRound).toEqual({sourceId,roundNumber:2});
     await database.query("INSERT INTO digital_development_route_facts(fact_id,source_id,route_version,kind,payload,actor_id) VALUES($1,$2,2,'最终设计确认','{}',$3)", [randomUUID(), sourceId, fixture.designer.actorId]);
     await new DevelopmentExecutionService(database, true).customerSample(fixture.designer, sourceId, { routeVersion: 2, note: 'TEST第2轮客户确认' }, randomUUID());
     const fourth = await instruction.read(primary, id);
+    expect(fourth.sourceComparison).toMatchObject({sourceRound:2});
     const comparison=fourth.sourceComparison!;await instruction.reviewSource(primary,id,{expectedVersion:fourth.version,orderVersion:fourth.order.version,sourceRound:comparison.sourceRound,sourceVersion:comparison.sourceVersion,document:{...fourth.document,comments:'TEST制单v5核对开发第2轮'},decisions:comparison.groups.map(group=>({group,action:'retain' as const}))},randomUUID());
     await instruction.publish(primary, id, { expectedVersion: 5, orderVersion: fourth.order.version }, randomUUID());
     let prep = await bulk.read(primary, id);
@@ -3704,28 +3721,29 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
   });
   it("P09 preserves published budgets, rejects technical readers and stale or unauthorized writes", async () => {
     const { order, designer, document, imageId, budget } = await budgetFixture(), id = order.productionOrderId;
-    await expect(new DigitalBudgetService(database,false).save(designer,id,{expectedVersion:0,document},randomUUID())).rejects.toMatchObject({statusCode:409,code:"BUDGET_CONFLICT",message:expect.stringMatching(/预算新建尚未启用.*管理员.*预算页/)});
+    await expect(new DigitalBudgetService(database,false).save(designer,id,{expectedVersion:0,document},randomUUID())).rejects.toMatchObject({statusCode:409,code:"BUDGET_CONFLICT",message:expect.stringMatching(/预算新建尚未启用.*管理员/)});
     expect((await database.query("SELECT count(*)::int AS n FROM digital_budget_documents WHERE production_order_id=$1",[id])).rows[0].n).toBe(0);
     const key = randomUUID();
     const saved = await budget.save(designer, id, { expectedVersion: 0, document }, key);
     expect((await budget.save(designer, id, { expectedVersion: 0, document }, key)).version).toBe(saved.version);
     await expect(budget.save(designer, id, { expectedVersion: 0, document: { ...document, cm: "9" } }, key)).rejects.toMatchObject({ statusCode: 409 });
-    await expect(budget.save(merchandiserActor(), id, { expectedVersion: 1, document }, randomUUID())).rejects.toMatchObject({ statusCode: 403 });
+    expect((await budget.read(merchandiserActor(),id)).canEdit).toBe(true);
+    await expect(budget.publish(designer,id,1,randomUUID())).rejects.toMatchObject({statusCode:403});
     const technical = { ...ieActor(), actorRoles: ["pattern_room_supervisor"], authorizationCapability: "digital_production:view" };
     await expect(budget.read(technical, id)).rejects.toMatchObject({ statusCode: 404 });
     await expect(budget.canDownload(technical, id, imageId)).rejects.toMatchObject({ statusCode: 404 });
     expect(await budget.canDownload(designer, id, imageId)).toBe(true);
     const publishKey = randomUUID();
-    const published = await Promise.all([budget.publish(designer, id, 1, publishKey), budget.publish(designer, id, 1, publishKey)]);
+    const published = await Promise.all([budget.publish(merchandiserActor(), id, 1, publishKey), budget.publish(merchandiserActor(), id, 1, publishKey)]);
     expect(published.map(value => value.status)).toEqual(["published", "published"]);
     const task = (await database.query("SELECT p.task_id,t.state,a.assignee_id FROM digital_budget_preparations p JOIN digital_production_tasks t USING(task_id) JOIN digital_production_task_access a USING(task_id) WHERE p.production_order_id=$1", [id])).rows[0];
     expect(task).toMatchObject({ state: "ready", assignee_id: merchandiserId });
     await expect(new DigitalProductionTaskService(database).complete(merchandiserActor(), task.task_id, { note: "不能直接完成" }, randomUUID())).rejects.toMatchObject({ statusCode: 409 });
     await expect(budget.prepareSourcing(merchandiserActor(),id,0,attachments)).rejects.toMatchObject({statusCode:409,message:expect.stringMatching(/预算已更新.*本次未发起外发.*主跟单.*预算页/)});
     const disabled = new DigitalBudgetService(database, false);
-    await disabled.save(designer, id, { expectedVersion: 1, document: { ...document, cm: "9" } }, randomUUID());
+    await expect(disabled.save(designer, id, { expectedVersion: 1, document: { ...document, cm: "9" } }, randomUUID())).rejects.toMatchObject({statusCode:409});
     expect((await budget.read(designer, id, undefined, 1)).document?.cm).toBe("8.3");
-    await expect(budget.prepareSourcing(merchandiserActor(), id, 1, attachments)).rejects.toMatchObject({ statusCode: 409, message:expect.stringMatching(/请先发布当前预算.*本单设计师.*预算页.*主跟单/) });
+    expect((await budget.prepareSourcing(merchandiserActor(), id, 1, attachments)).budgetVersion).toBe(1);
     await expect(database.query("UPDATE digital_budget_versions SET document='{}' WHERE production_order_id=$1", [id])).rejects.toThrow("immutable");
     expect((await database.query("SELECT count(*)::int AS n FROM digital_production_task_access WHERE production_order_id=$1 AND task_kind='sourcing_preparation'", [id])).rows[0].n).toBe(1);
   });
@@ -3733,7 +3751,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
   it("Mother PR03 freezes three PO factory promises and preserves original correction, contract, return and finance boundaries",async()=>{
     const fixture=await budgetFixture(true),id=fixture.order.productionOrderId;
     await fixture.budget.save(fixture.designer,id,{expectedVersion:0,document:fixture.document},randomUUID());
-    await fixture.budget.publish(fixture.designer,id,1,randomUUID());
+    await fixture.budget.publish(merchandiserActor(),id,1,randomUUID());
     const prepared=await fixture.budget.prepareSourcing(merchandiserActor(),id,1,attachments);
     const dates=["2026-11-05","2026-11-08","2026-11-11"];
     const input={gender:prepared.gender,styleName:prepared.styleName,deliveryDate:dates[0]!,estimatedCutPieceSendDate:"2026-10-20",daxingUnitPrice:prepared.daxingUnitPrice,
@@ -3854,10 +3872,69 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     }finally{await missingDate.query('ROLLBACK');missingDate.release();}
   });
 
+  it.each(["owner", "root"] as const)("SLA04 binds original approval todos to frozen two-hour windows without resetting on return (%s)",async(approver)=>{
+    const {service:currentService}=await cycleTodoServices();
+    const {order,designer,document,budget}=await budgetFixture(),id=order.productionOrderId;
+    const additionalId=randomUUID();
+    await database.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'TEST SLA第二跟单',true)",[additionalId]);
+    await database.query(`INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at)
+      VALUES($1,$2,'dingtalk','corp',$3,$4,true,true,CURRENT_TIMESTAMP)`,[randomUUID(),additionalId,`ding-${additionalId}`,`union-${additionalId}`]);
+    await database.query("ALTER TABLE user_role_assignments DISABLE TRIGGER user_role_assignments_guard_creation");
+    try {await database.query("INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason) VALUES($1,$2,'order_merchandiser',$3,'TEST isolated SLA recipient')",[randomUUID(),additionalId,merchandiserId]);}
+    finally {await database.query("ALTER TABLE user_role_assignments ENABLE TRIGGER user_role_assignments_guard_creation");}
+    const secondary={...merchandiserActor(),actorId:additionalId};
+    const general=(await database.query("SELECT * FROM todo_policies WHERE policy_key='general'")).rows;
+    await budget.save(designer,id,{expectedVersion:0,document},randomUUID());
+    await budget.publish(merchandiserActor(),id,1,randomUUID());
+    const prepared=await budget.prepareSourcing(merchandiserActor(),id,1,attachments);
+    const input={additionalMerchandiserUserId:additionalId,gender:prepared.gender,styleName:prepared.styleName,deliveryDate:'2026-11-10',estimatedCutPieceSendDate:'2026-10-20',daxingUnitPrice:prepared.daxingUnitPrice,
+      attachmentIds:prepared.images.map(i=>i.attachmentId),lineItems:prepared.lineItems.map(({lineId,styleNo,alternateStyleNo,color,quantity})=>({lineId,styleNo,alternateStyleNo,color,quantity,factoryDeliveryDate:'2026-11-10'})),digitalBudget:{productionOrderId:id,budgetVersion:prepared.budgetVersion,orderVersion:prepared.orderVersion}};
+    await expect(currentService.createCase(merchandiserActor(),{...input,digitalBudget:{...input.digitalBudget,budgetVersion:2}},randomUUID())).rejects.toMatchObject({statusCode:409});
+    const created=await currentService.createCase(merchandiserActor(),input,randomUUID()),caseId=created.value.sourcingCaseId;
+    const todo=async(category:string)=>(await database.query(`SELECT t.*,s.transitioned_at,creation.after_state->'slaTiming' AS sla_timing FROM rework_todos t
+      JOIN operation_events creation ON creation.event_id=t.created_operation_event_id
+      JOIN sourcing_case_transitions s ON s.operation_event_id=t.source_event_id AND s.sourcing_case_id=$1::uuid
+      WHERE t.entity_id=$1::text AND t.category=$2 ORDER BY t.created_at,t.todo_id`,[caseId,category])).rows;
+    const first=(await todo('sourcing_ie_quote'))[0];expect(first).toBeTruthy();expect(first.due_at.getTime()-first.transitioned_at.getTime()).toBe(7200000);
+    const frozenSnapshot=(await database.query('SELECT snapshot_id FROM digital_sla_order_snapshots WHERE production_order_id=$1 ORDER BY revision LIMIT 1',[id])).rows[0].snapshot_id;
+    expect(first.sla_timing).toEqual({snapshotId:frozenSnapshot,dueAt:first.due_at.toISOString()});
+    expect((await todo('sourcing_ie_quote')).every(t=>t.recipient_user_id===ieId)).toBe(true);
+    const prices=input.lineItems.map((_,i)=>({position:i+1,unitPrice:'5.25'}));
+    await expect(currentService.quoteIePrice(merchandiserActor(),caseId,{linePrices:prices},randomUUID())).rejects.toMatchObject({statusCode:403});
+    const quoted=await currentService.quoteIePrice(ieActor(),caseId,{linePrices:prices},randomUUID());
+    const management=(await todo('sourcing_management_decision'))[0];expect(management.due_at.getTime()-management.transitioned_at.getTime()).toBe(7200000);
+    const returned=await currentService.returnToMerchandiser(ownerActor(),caseId,{expectedVersion:quoted.value.version,reason:'TEST核实原资料'},randomUUID());
+    expect((await database.query("SELECT recipient_user_id,todo_type FROM rework_todos WHERE entity_id=$1 AND category='sourcing_merchandiser_correction' ORDER BY todo_type",[caseId])).rows).toEqual([
+      {recipient_user_id:merchandiserId,todo_type:'business_action'},{recipient_user_id:additionalId,todo_type:'information'}]);
+    await expect(budget.save(secondary,id,{expectedVersion:1,document},randomUUID())).rejects.toMatchObject({statusCode:404});
+    const correction={gender:input.gender,styleName:input.styleName,deliveryDate:input.deliveryDate,estimatedCutPieceSendDate:input.estimatedCutPieceSendDate,attachmentIds:input.attachmentIds,lineItems:input.lineItems};
+    await expect(currentService.correctCase(secondary,caseId,{...correction,expectedVersion:returned.value.version,reason:'TEST非主跟单拒绝'},randomUUID())).rejects.toMatchObject({statusCode:403});
+    await currentService.correctCase(merchandiserActor(),caseId,{...correction,expectedVersion:returned.value.version,reason:'TEST沿原修改入口重新提交'},randomUUID());
+    expect((await todo('sourcing_ie_quote')).every(t=>t.due_at.getTime()===first.due_at.getTime())).toBe(true);
+    expect((await todo('sourcing_ie_quote')).every(t=>t.sla_timing.snapshotId===frozenSnapshot&&t.sla_timing.dueAt===first.due_at.toISOString())).toBe(true);
+    await currentService.quoteIePrice(ieActor(),caseId,{linePrices:prices},randomUUID());
+    expect((await todo('sourcing_management_decision')).every(t=>t.due_at.getTime()===management.due_at.getTime())).toBe(true);
+    await currentService.recordManagementDecision(managerActor(),caseId,{supplierId:factoryId,craftIds:[craftId('净色车缝')],linePrices:prices,cuttingProcess:'in_house'},randomUUID());
+    const owner=(await todo('sourcing_owner_approval'))[0];expect(owner.due_at.getTime()-owner.transitioned_at.getTime()).toBe(7200000);
+    await expect(currentService.decideOwner(merchandiserActor(),caseId,{decision:'approved'},randomUUID())).rejects.toMatchObject({statusCode:403});
+    await currentService.decideOwner(approver==="owner"?ownerActor():{...rootActor(),authorizationCapability:"sourcing:owner:approve"},caseId,{decision:'approved'},randomUUID());
+    expect((await database.query("SELECT * FROM todo_policies WHERE policy_key='general'")).rows).toEqual(general);
+    expect((await budget.read(designer,id,undefined,1)).document).toEqual(document);
+    const dates=new PoCustomerDateService(database),root=rootActor();
+    const version=(await database.query("SELECT version FROM digital_production_orders WHERE production_order_id=$1",[id])).rows[0].version;
+    const line=(await database.query("SELECT line_id,customer_date_version FROM digital_production_po_lines WHERE production_order_id=$1 ORDER BY position LIMIT 1",[id])).rows[0];
+    const request=await dates.request(root,id,{orderVersion:version,reason:'TEST SLA客户日期权限',changes:[{lineId:line.line_id,expectedVersion:line.customer_date_version,date:'2026-11-21'}]},randomUUID());
+    expect((await dates.read(ownerActor(),id)).canApproveDate).toBe(true);
+    expect((await database.query(`SELECT r.recipient_id FROM digital_production_notification_receipts r
+      JOIN digital_production_notification_events e USING(event_id) WHERE e.source_key=$1`,[`po-customer-request:${request.requestId}`])).rows.map(r=>r.recipient_id)).toContain(ownerActor().actorId);
+    await expect(dates.decide(designer,id,request.requestId,true,randomUUID())).rejects.toMatchObject({statusCode:403});
+    await dates.decide(approver==='owner'?ownerActor():root,id,request.requestId,true,randomUUID());
+    expect((await dates.read(root,id)).dateRequests.find(r=>r.requestId===request.requestId)?.status).toBe('已批准');
+  });
   it("P09 carries all PO quantities and owned image copies into exactly one original sourcing case", async () => {
     const { order, designer, document, imageId, budget } = await budgetFixture(), id = order.productionOrderId;
     await budget.save(designer, id, { expectedVersion: 0, document }, randomUUID());
-    await budget.publish(designer, id, 1, randomUUID());
+    await budget.publish(merchandiserActor(), id, 1, randomUUID());
     const prepared = await budget.prepareSourcing(merchandiserActor(), id, 1, attachments);
     expect(prepared.lineItems.map(line => line.quantity)).toEqual([137, 63]);
     expect(prepared.daxingUnitPrice).toBe("5.25");
@@ -3993,6 +4070,8 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       wages:(await database.query("SELECT count(*)::int n FROM rework_wage_items")).rows,
     });
     beforeAll(async()=>{
+    {const stageStart=performance.now();let stageStatus='failed';try {
+
       ready=(await exerciseBulkPreparation(database,await budgetFixture(false,"TEST-C05"),service,attachments,{primary:merchandiserActor(),manager:managerActor(),owner:ownerActor(),ie:ieActor(),root:rootActor()},factoryId,craftId("净色车缝"),'none',{cuttingProcess:'in_house',stopAtReady:true}))!;
       clerk=ready.people.development_clerk!;
       await database.query("INSERT INTO digital_production_resource_lifecycle(resource_kind,resource_id,state,changed_by,reason) VALUES('order',$1,'active',$2,'TEST isolated initial active lifecycle') ON CONFLICT(resource_kind,resource_id) DO NOTHING",[ready.id,managerId]);
@@ -4011,7 +4090,10 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
         const capabilities=(await database.query('SELECT DISTINCT capability FROM role_capabilities WHERE role_code=ANY($1::text[])',[roles])).rows.map(row=>row.capability as string);
         return {id:token!,displayName:user.display_name,businessRoles:roles,capabilities};
       }},ready.bulk);await app.ready();
-    },20000);
+
+      stageStatus='completed';
+    }finally {process.stdout.write(JSON.stringify({suite:'sourcing-pr03-postgres',phase:'fixture_c05_ms',ms:Math.round(performance.now()-stageStart),status:stageStatus})+'\n');}}
+},20000);
     it("keeps active preassignment insert/update/replay, denies unauthorized writes and rolls back an audit failure",async()=>{
       const sheet=await ready.bulk.read(clerk,ready.id);key=randomUUID();body={expectedVersion:sheet.dispatch.version,patternWorkerId:ready.people.pattern_room_worker!.actorId,deliverPattern:false};
       const response=await request(clerk,body,key);expect(response.statusCode).toBe(200);const saved=response.json();expect(saved.dispatch.version).toBe(body.expectedVersion+1);
@@ -4066,8 +4148,34 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
   it("ERP V3-039 searches and displays the order customer when its development source has no customer",async()=>{
     await exerciseBulkPreparation(database,await budgetFixture(),service,attachments,{primary:merchandiserActor(),manager:managerActor(),owner:ownerActor(),ie:ieActor(),root:rootActor()},factoryId,craftId("净色车缝"),'none',{cuttingProcess:'in_house',stopAtReady:true,sourceCustomerCode:null});
   });
+  it('SLA03 independent customer revision preserves the linked mother order and keeps worker access to its instruction',async()=>{
+    const fixture=await budgetFixture(),primary=merchandiserActor(),root=rootActor();
+    const ready=(await exerciseBulkPreparation(database,fixture,service,attachments,{primary,manager:managerActor(),owner:ownerActor(),ie:ieActor(),root},factoryId,craftId('净色车缝'),'none',{cuttingProcess:'in_house',stopAtReady:true}))!;
+    const {id,sourceId,instruction,bulk,people}=ready,worker=people.pattern_room_worker!;
+    const forms=new DigitalDevelopmentService(database,true),rounds=new DevelopmentRoundService(database,true),identity=new DigitalProductionIdentityService(database,true);
+    const original=await forms.read(fixture.designer,sourceId),beforeOrder=await identity.read(primary,id),beforeInstruction=await instruction.read(worker,id),beforePreparation=await bulk.read(primary,id);
+    const frozen=async()=>({
+      instructions:(await database.query('SELECT * FROM digital_instruction_versions WHERE production_order_id=$1 ORDER BY version',[id])).rows,
+      preparations:(await database.query('SELECT * FROM digital_bulk_preparations WHERE production_order_id=$1 ORDER BY preparation_id',[id])).rows,
+      tasks:(await database.query('SELECT t.* FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.production_order_id=$1 OR a.source_id=$2 ORDER BY t.task_id',[id,sourceId])).rows,
+      plans:(await database.query('SELECT * FROM digital_development_sla_plans WHERE source_id=$1 ORDER BY revision',[sourceId])).rows,
+    });
+    const before=await frozen();
+    const draft=await rounds.save(fixture.designer,sourceId,{expectedDraftVersion:0,revision:{basedOnRound:1,document:{...original.document!,instructions:'TEST独立客户复版'},origin:'客户新增要求',customerComment:'TEST独立复版不改原母单',internalProblem:'',explanation:'',categories:['尺寸'],affectedNodes:['纸样'],outputKind:'整件样板'}},randomUUID());
+    const revision=await rounds.publish(fixture.designer,sourceId,{expectedDraftVersion:draft.draftVersion,basedOnRound:1},randomUUID());
+    expect(revision.sourceId).not.toBe(sourceId);expect(revision).toMatchObject({roundNumber:1,revisionNumber:1,status:'draft'});
+    expect(await forms.read(fixture.designer,revision.sourceId)).toMatchObject({status:'draft',productionOrderId:null,roundNumber:1});
+    expect(await forms.read(fixture.designer,sourceId)).toMatchObject({version:original.version,roundNumber:1,productionOrderId:id});
+    expect(await identity.read(primary,id)).toMatchObject({sourceId,version:beforeOrder.version,lines:beforeOrder.lines});
+    expect(await instruction.read(worker,id)).toMatchObject({version:beforeInstruction.version,sourceRound:1,latestSourceRound:1,document:beforeInstruction.document,canEdit:false});
+    expect((await instruction.read(primary,id)).sourceComparison).toBeUndefined();
+    expect(await bulk.read(primary,id)).toMatchObject({preparationId:beforePreparation.preparationId,instructionValid:true,customerConfirmed:true});
+    expect(await frozen()).toEqual(before);
+    await expect(forms.read(worker,revision.sourceId)).rejects.toMatchObject({statusCode:404});
+    await expect(new DigitalJourneyQuery(database).read(worker,revision.sourceId)).rejects.toMatchObject({statusCode:404});
+  });
   it.each(['none','pattern-first','preshrink-first','concurrent'] as const)("P11 releases exactly one whole-order cutting task with %s preparation",async mode=>{
-    await exerciseBulkPreparation(database,await budgetFixture(),service,attachments,{primary:merchandiserActor(),manager:managerActor(),owner:ownerActor(),ie:ieActor(),root:rootActor()},factoryId,craftId("净色车缝"),mode);
+    await exerciseBulkPreparation(database,await budgetFixture(),service,attachments,{primary:merchandiserActor(),manager:managerActor(),owner:ownerActor(),ie:ieActor(),root:rootActor()},factoryId,craftId("净色车缝"),mode,mode==='none'?{cuttingProcess:'in_house',stopAtReady:false,legacyDevelopment:true}:undefined);
   });
 
   it("V2 hides deleted native sourcing decisions and dead record links from Journey",async()=>{
@@ -4749,7 +4857,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const nextActor={...merchandiserActor(),actorId:next},nextContract={...contractActor(),actorId:next},secondActor={...merchandiserActor(),actorId:second};
     const currentVersion=async()=>Number((await database.query("SELECT version FROM digital_production_orders WHERE production_order_id=$1",[id])).rows[0].version);
     await fixture.budget.save(fixture.designer,id,{expectedVersion:0,document:fixture.document},randomUUID());
-    await fixture.budget.publish(fixture.designer,id,1,randomUUID());
+    await fixture.budget.publish(merchandiserActor(),id,1,randomUUID());
     const prepared=await fixture.budget.prepareSourcing(merchandiserActor(),id,1,attachments);
     const input={gender:prepared.gender,styleName:prepared.styleName,deliveryDate:"2026-11-10",estimatedCutPieceSendDate:"2026-10-20",daxingUnitPrice:prepared.daxingUnitPrice,
       additionalMerchandiserUserId:second,attachmentIds:prepared.images.map(image=>image.attachmentId),
@@ -5791,7 +5899,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
   it("keeps reviewed PO history while an approved transfer activates only its frozen factory dates",async()=>{
     const fixture=await budgetFixture(true),orderId=fixture.order.productionOrderId;
     await fixture.budget.save(fixture.designer,orderId,{expectedVersion:0,document:fixture.document},randomUUID());
-    await fixture.budget.publish(fixture.designer,orderId,1,randomUUID());
+    await fixture.budget.publish(merchandiserActor(),orderId,1,randomUUID());
     const prepared=await fixture.budget.prepareSourcing(merchandiserActor(),orderId,1,attachments);
     const dates=["2026-11-05","2026-11-08","2026-11-11"];
     const created=(await service.createCase(merchandiserActor(),{gender:prepared.gender,styleName:prepared.styleName,
@@ -5981,6 +6089,211 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect((await service.listCases(anotherMerchandiserReader(), "SUMMARY-PAGE")).totalOrderQuantity).toBe(1836);
     await expect(service.listCases({ ...readerActor(), authorizationCapabilities: [] }, "SUMMARY-PAGE")).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(service.listCases({ ...rootActor(), authorizationCapability: "sourcing:delete" }, "SUMMARY-PAGE")).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  const quantityTransferCase = async (label: string, corrected = true, currentService = service, originalCrafts = ["整烫", "净色车缝"]) => {
+    const image = await readyCuttingSheet(merchandiserId);
+    const facts = {
+      gender: "男装" as const, styleName: "TEST-QUANTITY-" + label,
+      estimatedCutPieceSendDate: "2026-10-01", deliveryDate: "2026-10-20",
+      lineItems: [{ styleNo: "TEST-QUANTITY-" + label, color: "黑", quantity: 200 }],
+      attachmentIds: [image],
+    };
+    const created = await currentService.createCase(merchandiserActor(), { ...facts, daxingUnitPrice: "8" }, randomUUID());
+    const id = created.value.sourcingCaseId;
+    const quoted = await currentService.quoteIePrice(ieActor(), id, { unitPrice: "12.8" }, randomUUID());
+    if (corrected) {
+      const returned = await currentService.returnToMerchandiser(ownerActor(), id, {
+        expectedVersion: quoted.value.version, reason: "TEST核实数量及逐款资料",
+      }, randomUUID());
+      await currentService.correctCase(merchandiserActor(), id, {
+        ...facts, expectedVersion: returned.value.version, reason: "TEST按当前订单更正为两款一千件",
+        lineItems: [
+          { styleNo: facts.lineItems[0]!.styleNo, color: "黑", quantity: 600 },
+          { styleNo: facts.lineItems[0]!.styleNo + "-B", color: "白", quantity: 400 },
+        ],
+      }, randomUUID());
+      await currentService.quoteIePrice(ieActor(), id, {
+        linePrices: [{ position: 1, unitPrice: "12.8" }, { position: 2, unitPrice: "12.8" }],
+      }, randomUUID());
+    }
+    await currentService.recordManagementDecision(managerActor(), id, {
+      supplierId: factoryId, craftIds: originalCrafts.map(craftId),
+      linePrices: (corrected ? [1, 2] : [1]).map(position => ({ position, unitPrice: "12.8" })),
+    }, randomUUID());
+    await currentService.decideOwner(ownerActor(), id, { decision: "approved" }, randomUUID());
+    await currentService.recordFinanceReconciliation(financeActor(), id, { result: "match" }, randomUUID());
+    expect(await currentService.getCase(readerActor(), id)).toMatchObject({
+      status: "closed", orderQuantity: corrected ? 1000 : 200,
+      approvalSnapshot: { processes: originalCrafts },
+    });
+    return id;
+  };
+
+  it.each(["owner", "root"] as const)("effective-quantity: transfers a corrected finance-passed order through the existing %s path", async role => {
+    const id = await quantityTransferCase(role);
+    const oldDocument = (await contractService.getCurrent(rootActor(), id)).item!;
+    const original = (await database.query("SELECT * FROM sourcing_cases WHERE sourcing_case_id=$1", [id])).rows;
+    const corrections = (await database.query("SELECT * FROM sourcing_case_corrections WHERE sourcing_case_id=$1", [id])).rows;
+    const finance = (await database.query("SELECT * FROM sourcing_finance_reconciliations WHERE sourcing_case_id=$1", [id])).rows;
+    const oldContract = (await database.query("SELECT * FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1", [oldDocument.sourcingContractDocumentId])).rows;
+    const oldApproval = (await database.query("SELECT * FROM sourcing_approval_snapshots WHERE sourcing_approval_snapshot_id=$1", [oldDocument.sourcingApprovalSnapshotId])).rows;
+    const oldCutting = (await database.query("SELECT * FROM cutting_orders WHERE sourcing_case_id=$1 ORDER BY sourcing_line_position", [id])).rows;
+    expect(original[0].order_quantity).toBe(200);
+    expect(corrections).toHaveLength(1);
+    expect(corrections[0].order_quantity).toBe(1000);
+    const actor = role === "root"
+      ? { ...rootActor(), authorizationCapability: "sourcing:owner:approve" }
+      : ownerActor();
+    const input = {
+      supplierId: replacementFactoryId, unitPrice: "11.3", changeReason: "TEST按纠错后的有效数量转厂",
+      ...(role === "root" ? { deliveryDate: "2026-11-05" } : {}),
+    };
+    const key = randomUUID();
+    const results = await Promise.all([
+      service.requestFactoryChange(actor, id, input, key),
+      service.requestFactoryChange(actor, id, input, key),
+    ]);
+    expect(results.map(result => result.reused).sort()).toEqual([false, true]);
+    const current = await service.getCase(readerActor(), id);
+    expect(current).toMatchObject({
+      status: "pending_finance_reconciliation", orderQuantity: 1000,
+      decision: { supplierId: replacementFactoryId, quantity: 1000, unitPrice: "11.3000", totalAmount: "11300.00" },
+      approvalSnapshot: { quantity: 1000, processes: ["整烫", "净色车缝"] },
+    });
+    expect((await database.query("SELECT proposed_quantity,requires_owner_approval FROM sourcing_factory_change_requests WHERE sourcing_case_id=$1", [id])).rows)
+      .toEqual([{ proposed_quantity: 1000, requires_owner_approval: false }]);
+    const document = (await contractService.getCurrent(rootActor(), id)).item!;
+    expect(document.contractVersion).toBe(oldDocument.contractVersion + 1);
+    expect(document.sourcingContractDocumentId).not.toBe(oldDocument.sourcingContractDocumentId);
+    const snapshot = (await database.query("SELECT approval_snapshot FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1", [document.sourcingContractDocumentId])).rows[0].approval_snapshot;
+    expect(snapshot).toMatchObject({ quantity: "1000", totalAmount: "11300.00",
+      deliveryDate: role === "root" ? "2026-11-05" : "2026-10-20", processes: ["整烫", "净色车缝"] });
+    expect(snapshot.lines).toMatchObject([
+      { position: 1, quantity: 600, unitPrice: "11.3000", totalAmount: "6780.00" },
+      { position: 2, quantity: 400, unitPrice: "11.3000", totalAmount: "4520.00" },
+    ]);
+    expect((await database.query("SELECT position,quantity,total_amount::text FROM sourcing_approval_snapshot_lines WHERE sourcing_approval_snapshot_id=$1 ORDER BY position", [document.sourcingApprovalSnapshotId])).rows)
+      .toEqual([{ position: 1, quantity: 600, total_amount: "6780.00" }, { position: 2, quantity: 400, total_amount: "4520.00" }]);
+    expect((await database.query("SELECT * FROM sourcing_cases WHERE sourcing_case_id=$1", [id])).rows).toEqual(original);
+    expect((await database.query("SELECT * FROM sourcing_case_corrections WHERE sourcing_case_id=$1", [id])).rows).toEqual(corrections);
+    expect((await database.query("SELECT * FROM sourcing_finance_reconciliations WHERE sourcing_case_id=$1", [id])).rows).toEqual(finance);
+    expect((await database.query("SELECT * FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1", [oldDocument.sourcingContractDocumentId])).rows).toEqual(oldContract);
+    expect((await database.query("SELECT * FROM sourcing_approval_snapshots WHERE sourcing_approval_snapshot_id=$1", [oldDocument.sourcingApprovalSnapshotId])).rows).toEqual(oldApproval);
+    expect((await database.query("SELECT * FROM cutting_orders WHERE sourcing_case_id=$1 ORDER BY sourcing_line_position", [id])).rows).toEqual(oldCutting);
+    expect((await database.query("SELECT 1 FROM sourcing_finance_reconciliations WHERE sourcing_contract_document_id=$1", [document.sourcingContractDocumentId])).rowCount).toBe(0);
+    expect((await service.nodeHistory(readerActor(), id, "created", id)).item.orderQuantity).toBe(200);
+  });
+
+  it("effective-quantity: preserves an uncorrected finance-passed management price reduction", async () => {
+    const id = await quantityTransferCase("UNCHANGED", false);
+    const result = await service.requestFactoryChange(managerActor(), id, {
+      supplierId: replacementFactoryId, unitPrice: "11.3", changeReason: "TEST数量未变的降价转厂",
+    }, randomUUID());
+    expect(result.value).toMatchObject({ status: "pending_finance_reconciliation", orderQuantity: 200,
+      decision: { supplierId: replacementFactoryId, quantity: 200, totalAmount: "2260.00" },
+      approvalSnapshot: { quantity: 200, totalAmount: "2260.00" } });
+    expect((await service.getCurrentFactoryChange(readerActor(), id)).item).toMatchObject({ status: "effective", requiresOwnerApproval: false });
+    expect((await database.query("SELECT 1 FROM sourcing_case_corrections WHERE sourcing_case_id=$1", [id])).rowCount).toBe(0);
+    expect((await database.query("SELECT order_quantity FROM sourcing_cases WHERE sourcing_case_id=$1", [id])).rows).toEqual([{ order_quantity: 200 }]);
+  });
+
+  it("effective-quantity: holds a corrected price increase until owner approval and freezes its lines, crafts and delivery", async () => {
+    const id = await quantityTransferCase("INCREASE", true, service, ["整烫"]);
+    const oldDocument = (await contractService.getCurrent(rootActor(), id)).item!;
+    await service.requestFactoryChange(managerActor(), id, {
+      supplierId: replacementFactoryId, unitPrice: "13.1", changeReason: "TEST纠错后涨价仍须老板审批",
+      deliveryDate: "2026-11-05",
+    }, randomUUID());
+    const request = (await service.getCurrentFactoryChange(readerActor(), id)).item!;
+    expect(request).toMatchObject({ status: "pending_owner", proposedQuantity: 1000, requiresOwnerApproval: true });
+    expect((await service.getCase(readerActor(), id)).decision?.supplierId).toBe(factoryId);
+    expect((await contractService.getCurrent(rootActor(), id)).item?.sourcingContractDocumentId).toBe(oldDocument.sourcingContractDocumentId);
+    const result = await service.decideFactoryChange(ownerActor(), id, request.factoryChangeRequestId, {
+      decision: "approved", verificationReason: "TEST确认纠错后的涨价方案",
+    }, randomUUID());
+    expect(result.value).toMatchObject({ status: "pending_finance_reconciliation", orderQuantity: 1000,
+      decision: { supplierId: replacementFactoryId, quantity: 1000, totalAmount: "13100.00" },
+      approvalSnapshot: { quantity: 1000, totalAmount: "13100.00", deliveryDate: "2026-11-05", processes: ["整烫"] } });
+    const document = (await contractService.getCurrent(rootActor(), id)).item!;
+    const snapshot = (await database.query("SELECT approval_snapshot FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1", [document.sourcingContractDocumentId])).rows[0].approval_snapshot;
+    expect(snapshot).toMatchObject({ quantity: "1000", totalAmount: "13100.00", deliveryDate: "2026-11-05", processes: ["整烫"] });
+    expect(snapshot.lines).toMatchObject([{ position: 1, quantity: 600 }, { position: 2, quantity: 400 }]);
+  });
+
+  it("effective-quantity: rejects both the old quantity and a forged quantity without weakening audit guards", async () => {
+    const id = await quantityTransferCase("FORGED");
+    const guard = (await database.query("SELECT pg_get_functiondef('guard_sourcing_factory_change_request_insert()'::regprocedure) AS definition")).rows[0].definition;
+    expect(guard).toContain("sourcing_factory_remaining_lines");
+    expect(guard).toContain("sourcing_require_operation_event");
+    const before = await cycleSnapshot(id);
+    for (const quantity of [200, 999, 1000]) {
+      const client = await database.connect();
+      const actor = ownerActor();
+      const reason = "TEST禁止直接写入错误转厂数量或伪造审计";
+      try {
+        await client.query("BEGIN");
+        const eventId = await new OperationEventRepository().append(client, actor, {
+          action: quantity === 1000 ? "sourcing.factory_change.request" : "sourcing.factory_change.effective",
+          entityType: "sourcing_case", entityId: id, after: { quantity }, reason,
+        });
+        await expect(client.query(
+          `INSERT INTO sourcing_factory_change_requests(
+             factory_change_request_id,sourcing_case_id,from_decision_id,
+             proposed_supplier_id,proposed_supplier_code_snapshot,proposed_supplier_name_snapshot,
+             proposed_unit_price,proposed_quantity,proposed_total_amount,change_reason,
+             requested_by,operation_event_id,request_id,initiator_role,requires_owner_approval
+           ) SELECT $1,$2,decision.sourcing_decision_id,supplier.supplier_id,supplier.supplier_code,
+                    supplier.supplier_name,$4::numeric,$5::integer,round($4::numeric*$5::integer,2),
+                    $6,$7,$8,$9,'owner_group',false
+             FROM sourcing_decisions decision CROSS JOIN current_supplier_catalog supplier
+             WHERE decision.sourcing_case_id=$2 AND supplier.supplier_id=$3
+             ORDER BY decision.decision_version DESC LIMIT 1`,
+          [randomUUID(), id, replacementFactoryId, "11.3", quantity, reason, actor.actorId, eventId, actor.requestId],
+        )).rejects.toMatchObject(quantity === 1000
+          ? { code: "55000", message: "sourcing write requires the matching immutable operation event" }
+          : { code: "23514", message: "factory change must replace the current effective decision", constraint: undefined });
+      } finally {
+        await client.query("ROLLBACK");
+        client.release();
+      }
+    }
+    expect((await database.query("SELECT 1 FROM sourcing_factory_change_requests WHERE sourcing_case_id=$1", [id])).rowCount).toBe(0);
+    expect(await cycleSnapshot(id)).toEqual(before);
+  });
+
+  it("effective-quantity: rolls back a late transfer failure and retries the same key without duplicate effects", async () => {
+    const { projection, service: currentService } = await cycleTodoServices();
+    const id = await quantityTransferCase("ROLLBACK", true, currentService, ["整烫"]);
+    const before = await cycleSnapshot(id);
+    const documents = (await database.query("SELECT * FROM sourcing_contract_documents WHERE sourcing_case_id=$1 ORDER BY contract_version", [id])).rows;
+    const events = (await database.query("SELECT * FROM operation_events WHERE entity_type='sourcing_case' AND entity_id=$1 ORDER BY event_id", [id])).rows;
+    const actor = { ...rootActor(), authorizationCapability: "sourcing:owner:approve" };
+    const key = randomUUID();
+    const input = { supplierId: replacementFactoryId, unitPrice: "11.3",
+      deliveryDate: "2026-11-05", changeReason: "TEST验证完整转厂事务回滚" };
+    const failure = vi.spyOn(projection, "actionableForAllAssignedRole").mockRejectedValueOnce(
+      Object.assign(new Error("TEST late finance todo failure"), { code: "23514", constraint: "test_transfer_late_failure" }),
+    );
+    try {
+      await expect(currentService.requestFactoryChange(actor, id, input, key)).rejects.toMatchObject({ statusCode: 409 });
+      expect(failure).toHaveBeenCalledOnce();
+    } finally { failure.mockRestore(); }
+    expect(await cycleSnapshot(id)).toEqual(before);
+    expect((await database.query("SELECT * FROM sourcing_contract_documents WHERE sourcing_case_id=$1 ORDER BY contract_version", [id])).rows).toEqual(documents);
+    expect((await database.query("SELECT * FROM operation_events WHERE entity_type='sourcing_case' AND entity_id=$1 ORDER BY event_id", [id])).rows).toEqual(events);
+    expect((await database.query("SELECT 1 FROM sourcing_factory_change_requests WHERE sourcing_case_id=$1", [id])).rowCount).toBe(0);
+    expect((await currentService.getCase(readerActor(), id)).status).toBe("closed");
+    const results = await Promise.all([
+      currentService.requestFactoryChange(actor, id, input, key),
+      currentService.requestFactoryChange(actor, id, input, key),
+    ]);
+    expect(results.map(result => result.reused).sort()).toEqual([false, true]);
+    expect((await database.query("SELECT 1 FROM sourcing_factory_change_requests WHERE sourcing_case_id=$1", [id])).rowCount).toBe(1);
+    expect((await database.query("SELECT 1 FROM sourcing_contract_documents WHERE sourcing_case_id=$1", [id])).rowCount).toBe(documents.length + 1);
+    const after = await cycleSnapshot(id);
+    await currentService.requestFactoryChange(actor, id, input, key);
+    expect(await cycleSnapshot(id)).toEqual(after);
   });
 
 });

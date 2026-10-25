@@ -5,11 +5,26 @@ const material=(patch:Partial<DevelopmentMaterial>={}):DevelopmentMaterial=>({ma
 const doc=(row:DevelopmentMaterial)=>({materials:[row]} as DevelopmentDocument);
 const checked=(row:DevelopmentMaterial,physical=true)=>({materialId:row.materialId,physical,quantity:true,color:true,specification:true});
 describe('R2 material evidence',()=>{
+  it('requires submitted clerk receipt for new-model accessories; designer arrival never releases sewing',()=>{
+    const row=material({category:'辅料',name:'纽扣',available:true,expectedDate:'2026-10-16'}),items=[checked(row,false)];
+    const check={id:'check',kind:'核配通过',items,at:'2026-10-15T01:00:00Z'};
+    expect(materialCheckError(row,items[0],'辅料待到，由设计师跟进',row.expectedDate,true)).toBeNull();
+    for(const kind of ['到货','确认代用'])expect(effectiveMaterials(doc(row),[check,{id:'arrival',kind,materialId:row.materialId,at:'2026-10-15T02:00:00Z'}],true)[0]).toMatchObject({earlyAllowed:true,available:false,supplyAvailable:false,evidenceId:'check'});
+    expect(effectiveMaterials(doc(row),[check,{id:'clerk',kind:'核配通过',items:[checked(row)],at:'2026-10-15T03:00:00Z'}],true)[0]).toMatchObject({available:true,supplyAvailable:true,evidenceId:'clerk'});
+    const cloth=material();expect(materialCheckError(cloth,checked(cloth,false),'缺主布','2026-10-16',true)).toContain('实物');
+    expect(effectiveMaterials(doc(cloth),[{...check,items:[checked(cloth,false)]}],true)[0]?.earlyAllowed).toBe(false);
+  });
   it('uses a complete check despite no published physical stock or arrival event',()=>{
     const row=material();expect(effectiveMaterials(doc(row),[{id:'check',kind:'核配通过',items:[checked(row)],at:'2026-10-15T00:00:00Z'}])[0]).toMatchObject({available:true,verified:true,evidenceId:'check',missing:[]});
   });
   it('does not invent checks from published stock or an arrival',()=>{
     const row=material({available:true});expect(effectiveMaterials(doc(row),[{id:'arrival',kind:'到货',materialId:row.materialId,at:'2026-10-15T00:00:00Z'}])[0]).toMatchObject({available:false,verified:false,missing:['尚未逐项核验']});
+  });
+  it('lets a new-model designer delivery reach clerk recheck without releasing sewing or certifying receipt',()=>{
+    const row=material({category:'辅料',name:'拉链'}),returned={id:'returned',kind:'缺项退回',items:[checked(row,false)],at:'2026-10-15T01:00:00Z'};
+    expect(effectiveMaterials(doc(row),[returned],true)[0]).toMatchObject({supplyAvailable:false,available:false,verified:false});
+    const delivered={id:'delivery',kind:'到货',materialId:row.materialId,at:'2026-10-15T02:00:00Z'};
+    expect(effectiveMaterials(doc(row),[returned,delivered],true)[0]).toMatchObject({supplyAvailable:true,available:false,verified:false,earlyAllowed:false,evidenceId:'returned'});
   });
   it('never infers an exception from a free label or allows a cloth subtype',()=>{
     const row=material({category:'辅料',label:'拉链'});

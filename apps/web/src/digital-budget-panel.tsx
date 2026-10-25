@@ -129,7 +129,7 @@ export function DigitalBudgetPanel({ order, onClose, initialVersion:requestedVer
     <DocumentToolbar title="成本预算表" status={busy?"保存中":uncertain?"原预算提交结果待确认，原输入已保留":error&&dirty?"保存失败，修改未保存":dirty?"未保存修改":sheet?`${initialVersion?"历史已发布预算":sheet.status==="published"?"已发布预算":sheet.version?"预算草稿 · 已保存":"预算草稿"} · 预算版本 ${sheet.version} · ${readonly?"只读":"可编辑"}`:"待读取预算"}>
       {!embedded&&!contained&&<Button disabled={busy} onClick={onClose}>返回</Button>}
       {!embedded&&sheet?.canEdit&&sheet.status==="published"&&sheet.document&&initialVersion===undefined&&<Button disabled={busy||uncertain} onClick={()=>void copyPublished()}>另存为新草稿</Button>}
-      {!readonly&&<><Button disabled={busy} onClick={()=>void run(false)}>保存预算</Button><Button variant="primary" disabled={busy} onClick={()=>void run(true)}>发布预算</Button></>}
+      {!readonly&&<><Button disabled={busy} onClick={()=>void run(false)}>保存预算</Button>{sheet?.canPublish&&<Button variant="primary" disabled={busy} onClick={()=>void run(true)}>最终发布</Button>}</>}
       <Button disabled={!sheet?.document||dirty||busy} onClick={()=>window.print()}>打印 / 保存 PDF</Button>
     </DocumentToolbar>
     <p className="budget-mobile-overview">{order.designStyleNo} · {order.customerCode} · 成本 {amount(totals?.cost)} · 利润 {amount(totals?.profit)}</p>

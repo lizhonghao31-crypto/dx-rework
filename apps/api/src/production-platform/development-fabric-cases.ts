@@ -14,13 +14,13 @@ export async function fabricCases(db:DB,sourceId:string){
   LEFT JOIN app_users du ON du.id=d.actor_id
   WHERE f.source_id=$1 AND f.kind='面料报告' AND f.payload->>'recommendation'='建议停用' ORDER BY f.sequence`,[sourceId])).rows;
  const people=(await db.query(`SELECT DISTINCT u.id,u.display_name AS name FROM app_users u JOIN user_role_assignments r ON r.user_id=u.id
- WHERE u.enabled AND r.role_code='production_management' AND r.revoked_at IS NULL ORDER BY u.id`)).rows;
+ WHERE u.enabled AND r.role_code IN ('production_management','owner_group') AND r.revoked_at IS NULL ORDER BY u.id`)).rows;
  const responsible:Array<{id:string;name:string}>=[];
- for(const person of people)if(await new DigitalProductionAccessPolicy(db).activeRole(person.id,"production_management"))responsible.push(person);
+ for(const person of people)if(await new DigitalProductionAccessPolicy(db).activeRole(person.id,"production_management")||await new DigitalProductionAccessPolicy(db).activeRole(person.id,"owner_group"))responsible.push(person);
  return rows.map(row=>({...row,responsible,status:row.decision?.decision??"等待决定",scope:row.payload.scope??null}));
 }
 export async function fabricDecisionTodos(db:DB,actor:TrustedActorContext):Promise<TodoResponse[]>{
- const allowed=isRootActor(actor)||actor.actorRoles.includes("production_management")&&await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,"production_management");
+ let allowed=isRootActor(actor);for(const role of ["production_management","owner_group"])if(actor.actorRoles.includes(role)&&await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,role))allowed=true;
  if(!allowed)return [];
  if(!(await db.query("SELECT to_regclass('digital_development_material_verifications') AS relation")).rows[0]?.relation)return [];
  const sources=(await db.query(`SELECT s.source_id,s.design_style_no,coalesce((SELECT max(r.round_number) FROM digital_development_rounds r WHERE r.source_id=s.source_id),1) AS round_number FROM digital_production_sources s JOIN digital_development_documents d USING(source_id)
@@ -36,7 +36,7 @@ export async function fabricDecisionTodos(db:DB,actor:TrustedActorContext):Promi
   for(const report of await fabricCases(db,source.source_id)){
    if(report.decisionId)continue;
    const at=new Date(report.reportedAt).toISOString(),id=report.reportId;
-   result.push({contentToken:todoContentToken(['fabric',id,source.round_number]),todoId:id,taskTitle:"决定问题面料是否使用",todoType:"business_action",category:"digital_fabric_decision",sourceEventId:id,sourceAction:"development_fabric_report",entityType:task?"digital_task":"digital_development",entityId:task?.task_id??source.source_id,recipientUserId:actor.actorId,requiredRole:"production_management",requiredCapability:null,route:{routeName:task?"digital_production_task":"digital_development",entityId:task?.task_id??source.source_id,todoId:id,developmentRound:source.round_number},policyKey:null,dueAt:null,reminderCount:0,status:"pending",blockedReason:null,orderContext:{reworkNo:null,orderNo:null,styleNo:source.design_style_no,supplierName:null,status:"问题面料等待明确决定",updatedAt:at},unread:true,version:1,createdAt:at,updatedAt:at});
+   result.push({contentToken:todoContentToken(['fabric',id,source.round_number]),todoId:id,taskTitle:"决定问题面料是否使用",todoType:"business_action",category:"digital_fabric_decision",sourceEventId:id,sourceAction:"development_fabric_report",entityType:task?"digital_task":"digital_development",entityId:task?.task_id??source.source_id,recipientUserId:actor.actorId,requiredRole:actor.actorRoles.includes("owner_group")?"owner_group":"production_management",requiredCapability:null,route:{routeName:task?"digital_production_task":"digital_development",entityId:task?.task_id??source.source_id,todoId:id,developmentRound:source.round_number},policyKey:null,dueAt:null,reminderCount:0,status:"pending",blockedReason:null,orderContext:{reworkNo:null,orderNo:null,styleNo:source.design_style_no,supplierName:null,status:"问题面料等待明确决定",updatedAt:at},unread:true,version:1,createdAt:at,updatedAt:at});
   }
  }
  return result;

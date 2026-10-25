@@ -1,4 +1,5 @@
 .cockpit-settings{font-size:14px;max-width:1280px;margin:0 auto;padding:16px;color:#26384c}
+.cockpit-policy-dialog header button{flex-shrink:0;white-space:nowrap}
 .cockpit-settings-overview{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:18px 0 12px}
 .cockpit-settings-overview>article{display:flex;align-items:center;gap:13px;padding:18px;border:1px solid #dfebfa;border-radius:9px;background:#fff;min-width:0}
 .cockpit-settings-overview h2{font-size:17px;margin:0 0 5px}

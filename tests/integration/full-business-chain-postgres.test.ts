@@ -7,6 +7,7 @@ import { PatternOrderReader } from "../../apps/api/src/pattern-room/order-reader
 import { ReceivingService } from "../../apps/api/src/receiving/receiving-service.js";
 import { exceptions as readReportingExceptions } from "../../apps/api/src/reporting/management-reporting-exceptions.js";
 import {exerciseDevelopmentRoute} from "../helpers/digital-development-route-fixture.js";
+import {exerciseDevelopmentSlaNative} from "../helpers/development-sla-native-fixture.js";
 import { exerciseRevisionApproval } from "./helpers/revision-approval-scenario.js";
 import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { RootAuthority } from "../../apps/api/src/access/root-authority.js";
@@ -282,6 +283,8 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
   );
 
   beforeAll(async () => {
+    {const stageStart=performance.now();let stageStatus='failed';try {
+
     await adminPool.query(`CREATE SCHEMA ${schema}`);
     const manifest = JSON.parse(await readFile(
       new URL("../../apps/api/src/platform/migration-manifest.json", import.meta.url),
@@ -304,6 +307,11 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
         [migration.version, migration.checksum],
       );
     }
+      stageStatus='completed';
+    }finally {process.stdout.write(JSON.stringify({suite:'full-business-chain-postgres',phase:'schema_migration_ms',ms:Math.round(performance.now()-stageStart),status:stageStatus})+'\n');}}
+
+    {const stageStart=performance.now();let stageStatus='failed';try {
+
 
     // Role seeding happens before the corporation policy exists. This is the
     // reviewed bootstrap path used by integration fixtures; all later actions
@@ -402,9 +410,14 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       active: true,
       changeReason: "全链验收公共工序",
     })).processId;
-  });
+
+      stageStatus='completed';
+    }finally {process.stdout.write(JSON.stringify({suite:'full-business-chain-postgres',phase:'fixture_ms',ms:Math.round(performance.now()-stageStart),status:stageStatus})+'\n');}}
+});
 
   afterAll(async () => {
+    {const stageStart=performance.now();let stageStatus='failed';try {
+
     if (process.env.PATTERN_ROOM_EVIDENCE === "1") {
       const fixtures = await database.query("SELECT order_id,order_no,kind,style_no,task_name,status FROM pattern_room_orders ORDER BY submitted_at,order_id");
       process.stdout.write(`PATTERN_ROOM_FIXTURES ${JSON.stringify({schema,orders:fixtures.rows})}\n`);
@@ -413,7 +426,10 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     await adminPool.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
     if (process.env.PATTERN_ROOM_EVIDENCE === "1") process.stdout.write(`PATTERN_ROOM_CLEANUP ${JSON.stringify({schema,dropped:true})}\n`);
     await adminPool.end();
-  });
+
+      stageStatus='completed';
+    }finally {process.stdout.write(JSON.stringify({suite:'full-business-chain-postgres',phase:'cleanup_ms',ms:Math.round(performance.now()-stageStart),status:stageStatus})+'\n');}}
+});
 
   it("separates all merchandisers' discrepancy handling from warehouse facts and Root-only corrections", async () => {
     await exerciseReceivingDifferenceAuthority({database,rootId:ids.patternRoot,warehouseId:ids.receivingWarehouse,
@@ -3352,6 +3368,10 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
 
   it("P07/P08 development routes preserve wages, final confirmation and exact native history",async()=>{
     await exerciseDevelopmentRoute(database,todoProjection,actor(ids.patternRoot,["root_superuser"],"pattern_room:orders:view"),ids.worker,workerPersonId,actor(ids.qc,["quality_control"],"digital_production:view"),ids.otherPatternWorker);
+  },30000);
+
+  it("SLA03 enrolled development completes the native chain with fixed cutting and independent inspections", async()=>{
+    await exerciseDevelopmentSlaNative(database,todoProjection,actor(ids.patternRoot,["root_superuser"],"pattern_room:orders:view"),ids.worker);
   },30000);
 
   const returnedReportFixture = async () => {

@@ -1,4 +1,8 @@
 import type { SourcingService } from "../sourcing/sourcing-service.js";
+import { SlaOrderService } from "./sla-order-service.js";
+import { developmentRevisionSource } from "./development-revision-source.js";
+import { captureDevelopmentSla } from "./development-sla-enrollment.js";
+import type { BusinessClock } from "@dx-rework/domain/business-clock";
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import { DigitalOrderCreateSchema, beijingCalendarDate, customerOrderDateError, initialCustomerOrderInput, digitalFormalPoNo, digitalPoKey, initialCustomerDateErrors, minimumInitialCustomerDate } from "@dx-rework/contracts/digital-production";
@@ -38,7 +42,7 @@ const readScope = (kind: "order" | "source", alias: string) => {
     )`;
 };
 export class DigitalProductionIdentityService {
-  constructor(private readonly database: Pool, private readonly creationEnabled: boolean, private readonly sourcing?:SourcingService, private readonly now:()=>Date=()=>new Date()) {}
+  constructor(private readonly database: Pool, private readonly creationEnabled: boolean, private readonly sourcing?:SourcingService, private readonly now:()=>Date=()=>new Date(), private readonly businessClock?: BusinessClock) {}
   private async visibleOrder(client: Pick<Pool, "query"> | PoolClient, actor: TrustedActorContext, id: string, lock = false) {
     await new DigitalProductionAccessPolicy(client).assert(actor, "order", id, "technical");
     const result = await client.query(`SELECT o.* FROM digital_production_orders o WHERE production_order_id=$1 ${lock ? "FOR UPDATE" : ""}`, [id]);
@@ -107,7 +111,10 @@ export class DigitalProductionIdentityService {
       const id = randomUUID();
       await client.query(`INSERT INTO digital_production_sources(source_id,created_by,development_type,design_style_no,temporary_style_no,customer_code)
         VALUES($1,$2,$3,$4,$5,$6)`, [id, actor.actorId, input.developmentType, input.designStyleNo, input.temporaryStyleNo, input.customerCode]);
-      await this.audit(client, actor, "digital_source_created", id, null, input);
+      const eventId = await this.audit(client, actor, "digital_source_created", id, null, input);
+      const time = this.businessClock ? await this.businessClock.read({ kind: "source", id })
+        : { now: this.now().toISOString(), scenarioId: null, revision: 0 };
+      await captureDevelopmentSla(client, actor, id, null, time, eventId);
       return { sourceId: id };
     });
   }
@@ -130,6 +137,7 @@ export class DigitalProductionIdentityService {
       let createdBy = actor.actorId;
       if (sourceId) {
         const source = await this.visibleSource(client, actor, sourceId, true);
+        if(await developmentRevisionSource(client,sourceId))fail('复版沿原开发档案的客户订单，不重复建立大货数量');
         if (!isRootActor(actor) && source.created_by !== actor.actorId) digitalForbidden();
         createdBy = source.created_by;
         if (source.design_style_no !== input.designStyleNo || (source.temporary_style_no ?? "") !== (input.temporaryStyleNo ?? "") || (source.customer_code && source.customer_code !== input.customerCode)) fail("下单资料与开发来源不一致");
@@ -157,9 +165,11 @@ export class DigitalProductionIdentityService {
       if (merchandiserId === undefined) merchandiserId = defaultMerchandiserId;
       if (merchandiserId && !await new DigitalProductionAccessPolicy(client).lockActiveRole(merchandiserId, "order_merchandiser")) fail("主跟单必须为在职有效订单跟单", 400);
       const root = await new ProductionOrderRootRepository(client).create(createdBy);
+      const businessTime = this.businessClock ? await this.businessClock.read({ kind: "order", id: root.productionOrderId })
+        : { now: now.toISOString(), scenarioId: null, revision: 0 };
       await client.query(`INSERT INTO digital_production_orders(production_order_id,source_id,customer_code,product_group,design_style_no,temporary_style_no,order_date,contract_delivery_date,created_by,creation_hash,primary_merchandiser_id)
         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, [root.productionOrderId, sourceId, input.customerCode, input.productGroup, input.designStyleNo, input.temporaryStyleNo, input.orderDate, input.contractDeliveryDate, createdBy, digest(input), merchandiserId]);
-      const creationEventId = await this.audit(client, actor, "digital_order_created", root.productionOrderId, null, input);
+      const creationEventId = await this.audit(client, actor, "digital_order_created", root.productionOrderId, null, { ...input, slaBusinessTime: businessTime });
       for (const [position, line] of input.lines.entries()) {
         const lineId = randomUUID();
         await client.query(`INSERT INTO digital_production_po_lines(line_id,production_order_id,position,po_number,formal_style_no,temporary_style_no,color,color_foreign,delivery_date)
@@ -169,6 +179,7 @@ export class DigitalProductionIdentityService {
           [{lineId,date:customerDate,expectedVersion:0}],creationEventId);
         for (const size of line.sizes) await client.query("INSERT INTO digital_production_po_sizes(line_id,size,quantity) VALUES($1,$2,$3)", [lineId, size.size, size.quantity]);
       }
+      await new SlaOrderService(this.database).enrollNewOrder(client, actor, root.productionOrderId, creationEventId, businessTime);
       return this.readWith(client, actor, root.productionOrderId);
     });
   }
@@ -188,6 +199,7 @@ export class DigitalProductionIdentityService {
     });
   }
   async read(actor: TrustedActorContext, id: string): Promise<DigitalOrder> { assertIdentityActor(actor); return this.readWith(this.database, actor, id); }
+  async slaPlan(actor: TrustedActorContext, id: string) { assertIdentityActor(actor); return new SlaOrderService(this.database, this.businessClock).read(actor, id); }
   async readWithClient(actor: TrustedActorContext, id: string, client: Pick<Pool, "query">): Promise<DigitalOrder> { assertIdentityActor(actor); return this.readWith(client, actor, id); }
   private async readWith(client: Pick<Pool, "query"> | PoolClient, actor: TrustedActorContext, id: string): Promise<DigitalOrder> {
     const row = await this.visibleOrder(client, actor, id);

@@ -20,7 +20,7 @@ export type DigitalTask = {
   assigneeName: string | null; requiredRole: string; hasHandover: boolean; canManage: boolean; canCorrect: boolean; canControl: boolean;
   timeQuality: DigitalTimeQuality; blockedReason: string | null; canExecute: boolean;
 };
-export type DigitalDeadlinePolicy = { nodeKey: string; label: string; version: number; slaHours: number | null; warningRatio: number; changedAt: string; changedBy: string | null; note: string };
+export type DigitalDeadlinePolicy = { nodeKey: string; label: string; version: number; slaHours: number | null; warningRatio: number; changedAt: string; changedBy: string | null; note: string; applicationScope?: "new_orders"; warningRatioEditable?: boolean; durationRequired?: boolean; durationEditable?: boolean };
 
 export type DigitalTaskDocumentReference = {state:"unavailable"|"not_applicable"|"missing"|"draft"} | {state:"published";id:string;version:number;label:"本次采用"|"当前有效"};
 export type DigitalTaskDocuments = {development:DigitalTaskDocumentReference;instruction:DigitalTaskDocumentReference;budget:DigitalTaskDocumentReference};

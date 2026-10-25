@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./digital-sla": { "types": "./src/digital-sla.ts", "import": "./dist/digital-sla.js" },
     "./auxiliary-catalog": { "types": "./src/auxiliary-catalog.ts", "import": "./dist/auxiliary-catalog.js" },
     "./digital-development-amendments": { "types": "./src/digital-development-amendments.ts", "import": "./dist/digital-development-amendments.js" },
     "./development-arrangement": { "types": "./src/development-arrangement.ts", "import": "./dist/development-arrangement.js" },
@@ -131,6 +132,6 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "zod": "4.4.3"
+    "zod": "4.6.7"
   }
 }

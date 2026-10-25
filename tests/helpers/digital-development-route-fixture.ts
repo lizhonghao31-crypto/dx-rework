@@ -14,21 +14,32 @@ import {exerciseGarmentCraftRevision} from "./digital-development-craft-revision
 import {randomUUID} from 'node:crypto';
 import type {Pool} from 'pg';
 import {expect} from 'vitest';
-import {DigitalProductionIdentityService} from '../../apps/api/src/production-platform/identity-service.js';
 import {DigitalDevelopmentService} from '../../apps/api/src/production-platform/development-service.js';
 import {DevelopmentExecutionService} from '../../apps/api/src/production-platform/development-execution-service.js';
 import {PatternRoomOrderService} from '../../apps/api/src/pattern-room/order-service.js';
 import {digitalTodoTarget} from '../../apps/api/src/production-platform/notification-policy.js';
 import {DevelopmentDocumentSchema} from '@dx-rework/contracts/digital-development';
+import {developmentRoute} from '../../apps/api/src/production-platform/development-route.js';
 import type {TrustedActorContext} from '../../apps/api/src/tools/repositories.js';
 import type {TodoProjectionService} from '../../apps/api/src/todos/projection-service.js';
 export async function exerciseDevelopmentRoute(db:Pool,todos:TodoProjectionService,root:TrustedActorContext,workerId:string,workerPersonId:string,qc:TrustedActorContext,replacementWorkerId:string,legacyMaking?:"tail"|"native",transferOnly:false|true|"authority"=false){
- const native=new PatternRoomOrderService(db,todos,{ordersEnabled:true}),execution=new DevelopmentExecutionService(db,true,native),forms=new DigitalDevelopmentService(db,true,native),identity=new DigitalProductionIdentityService(db,true);
+ const native=new PatternRoomOrderService(db,todos,{ordersEnabled:true}),execution=new DevelopmentExecutionService(db,true,native),forms=new DigitalDevelopmentService(db,true,native);
  const checkHistory=!legacyMaking&&!transferOnly;
  const routes=legacyMaking||transferOnly?([['无','免洗']] as const):([['无','免洗'],['印花','内洗'],['绣花','外洗'],['印绣花','免洗']] as const);
+ const legacyNodes=[...new Set(['development_materials','development_material_supply','development_material_recheck',...routes.flatMap(([craft,washing])=>developmentRoute({craft,washing}))])];
+ const legacyStandard=(await db.query(`SELECT max(changed_at)::text AS created_at,count(*)::int AS nodes
+   FROM digital_production_deadline_policies WHERE version=1 AND node_key=ANY($1::text[])`,[legacyNodes])).rows[0];
+ expect(legacyStandard.nodes).toBe(legacyNodes.length);
+ expect((await db.query(`SELECT count(*)::int AS n FROM digital_production_deadline_policies
+   WHERE node_key=ANY($1::text[]) AND version>1 AND changed_at<=$2::timestamptz`,[legacyNodes,legacyStandard.created_at])).rows[0].n).toBe(0);
  for(const [craft,washing]of routes){
   const sourceStyle=`P07-${randomUUID()}`;
-  const source=await identity.createSource(root,{developmentType:'头版',designStyleNo:sourceStyle,temporaryStyleNo:null,customerCode:null},randomUUID());
+  // Pre-SLA sources retain the historical route and all its wage/revision regressions.
+  // New-source enrollment is exercised separately through the real creation API.
+  const source={sourceId:randomUUID()};
+  // Use the installed historical policy boundary, preserving PostgreSQL timestamp precision.
+  // CURRENT_TIMESTAMP would create a post-publication source when another case initialized SLA.
+  await db.query("INSERT INTO digital_production_sources(source_id,created_by,development_type,design_style_no,created_at) VALUES($1,$2,'头版',$3,$4::timestamptz)",[source.sourceId,root.actorId,sourceStyle,legacyStandard.created_at]);
   const sourceId=source.sourceId,fileId=randomUUID(),mainId=randomUUID(),trimId=randomUUID();
   await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'款图.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[fileId,`p07/${fileId}`,'a'.repeat(64),root.actorId]);
   const material={supplier:'',width:'',weight:'',composition:'',consumption:'',color:'黑',specification:'',quantity:'1',requiredThisRound:true};
@@ -60,6 +71,7 @@ export async function exerciseDevelopmentRoute(db:Pool,todos:TodoProjectionServi
    expect(await forms.publish(root,sourceId,saved.version,publishKey,patternChoice)).toEqual(sheet);
    expect((await db.query('SELECT count(*)::int n FROM digital_development_pattern_links WHERE source_id=$1',[sourceId])).rows[0].n).toBe(1);
   }
+  expect((await db.query('SELECT count(*)::int AS n FROM digital_development_sla_plans WHERE source_id=$1',[sourceId])).rows[0].n).toBe(0);
   await expect(execution.dispatch(root,sourceId,{expectedVersion:0,patternWorkerId:workerId,cuttingWorkerId:workerId,sewingWorkerId:workerId},randomUUID())).rejects.toThrow("总委派");
   const linked=await execution.patternOrder(root,sourceId,{categoryId:price.price_id,priceVersion:price.version},randomUUID()) as {orderId:string};
   expect(await digitalTodoTarget(db,{routeName:'pattern_room_order',entityId:linked.orderId,todoId:randomUUID()})).toEqual({kind:'source',id:sourceId});
@@ -176,7 +188,9 @@ export async function exerciseDevelopmentRoute(db:Pool,todos:TodoProjectionServi
   expect((await db.query("SELECT actor_id,after_state FROM operation_events WHERE entity_id=$1 AND action='pattern_room.order.work_completed'",[order.orderId])).rows).toMatchObject([{actor_id:executorId,after_state:{value:{developmentTaskId:sewing.taskId,executorUserId:executorId,wageWorkerUserId:workerId}}}]);
   await expect(native.handoff(root,order.orderId,{roundId:order.currentRoundId,version:order.version},randomUUID())).rejects.toMatchObject({statusCode:409});
   if(washing!=='免洗'){expect(await task('development_tail_check')).toBeUndefined();expect(await task('development_washing')).toBeUndefined();await execution.sendWashing(root,sourceId,(await task('development_washing_dispatch')).taskId,'文员实际送洗',randomUUID());expect((await task('development_washing')).slaHours).toBe(24);await route('development_washing');}
-  const tail=await task('development_tail_check');expect(tail).toMatchObject({state:'ready',slaHours:4});
+  const tail=await task('development_tail_check');expect(tail).toMatchObject({state:'ready',slaHours:4,policyVersion:1});
+  expect((await db.query(`SELECT DISTINCT policy_version FROM digital_production_deadline_revisions
+    WHERE task_id=$1 AND policy_node_key='development_tail_check'`,[tail.taskId])).rows).toEqual([{policy_version:1}]);
   await expect(execution.route(qc,sourceId,{craftExecution:null,taskId:tail.taskId,result:'通过',note:'QC不能办理板房尾查',nextAssigneeId:null,sentDate:null,trackingNo:null},randomUUID())).rejects.toMatchObject({statusCode:404});
   if(legacyMaking){
    if(legacyMaking==='native')await route('development_tail_check');

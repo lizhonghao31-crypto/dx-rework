@@ -969,6 +969,10 @@
       "checksum": "1d1fe7d53d4f84f8d0fc28b3b4bd309928f99e2df3e589f749ce5948e3b4ed18"
     },
     {
+      "version": "0230_sourcing_factory_change_current_quantity",
+      "checksum": "4091340fdb842e866aec8b9f124c73c9d5e7086bd122677c144864355052e6bf"
+    },
+    {
       "version": "0231_digital_order_closure",
       "checksum": "b1698097af226f2c0a2a52fe5463f54365dde375fe45e40f4b11677b778ba782"
     },
@@ -1051,6 +1055,22 @@
     {
       "version": "0251_contract_price_acceptance_bridge",
       "checksum": "fcaddd8b378656f7ff65e994c809c6e981d093f0a27d108ed0e9877a2806ff11"
+    },
+    {
+      "version": "0252_digital_sla_configuration_snapshots",
+      "checksum": "2cc2dceefe7fc33ebab4e2fc5c05acf14164cbb8dd6456f45e181b2fa3ecffa7"
+    },
+    {
+      "version": "0253_digital_sla_plan_history",
+      "checksum": "cf60cfc2f2d1261550d38e14352596925bddd27c14218b08a9483ba412f1cc7c"
+    },
+    {
+      "version": "0254_digital_sla_policy_references",
+      "checksum": "791c0cb1f2d43297995560cc3716344d4907ca781738cb36a50c4165aeb3eee9"
+    },
+    {
+      "version": "0255_development_sla_enrollment",
+      "checksum": "b18621d1203982798c64ebbe88ea56c31bf7a04b09f886ceac697e1bee0aeec6"
     }
   ]
 }
