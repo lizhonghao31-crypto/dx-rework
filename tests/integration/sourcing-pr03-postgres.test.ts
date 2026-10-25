@@ -6087,7 +6087,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await expect(service.listCases({ ...rootActor(), authorizationCapability: "sourcing:delete" }, "SUMMARY-PAGE")).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
-  const quantityTransferCase = async (label: string, corrected = true, currentService = service) => {
+  const quantityTransferCase = async (label: string, corrected = true, currentService = service, originalCrafts = ["整烫", "净色车缝"]) => {
     const image = await readyCuttingSheet(merchandiserId);
     const facts = {
       gender: "男装" as const, styleName: "TEST-QUANTITY-" + label,
@@ -6114,13 +6114,14 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       }, randomUUID());
     }
     await currentService.recordManagementDecision(managerActor(), id, {
-      supplierId: factoryId, craftIds: [craftId("净色车缝")],
+      supplierId: factoryId, craftIds: originalCrafts.map(craftId),
       linePrices: (corrected ? [1, 2] : [1]).map(position => ({ position, unitPrice: "12.8" })),
     }, randomUUID());
     await currentService.decideOwner(ownerActor(), id, { decision: "approved" }, randomUUID());
     await currentService.recordFinanceReconciliation(financeActor(), id, { result: "match" }, randomUUID());
     expect(await currentService.getCase(readerActor(), id)).toMatchObject({
       status: "closed", orderQuantity: corrected ? 1000 : 200,
+      approvalSnapshot: { processes: originalCrafts },
     });
     return id;
   };
@@ -6142,7 +6143,6 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       : ownerActor();
     const input = {
       supplierId: replacementFactoryId, unitPrice: "11.3", changeReason: "TEST按纠错后的有效数量转厂",
-      craftIds: [craftId("整烫"), craftId("净色车缝")],
       ...(role === "root" ? { deliveryDate: "2026-11-05" } : {}),
     };
     const key = randomUUID();
@@ -6195,11 +6195,11 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
   });
 
   it("effective-quantity: holds a corrected price increase until owner approval and freezes its lines, crafts and delivery", async () => {
-    const id = await quantityTransferCase("INCREASE");
+    const id = await quantityTransferCase("INCREASE", true, service, ["整烫"]);
     const oldDocument = (await contractService.getCurrent(rootActor(), id)).item!;
     await service.requestFactoryChange(managerActor(), id, {
       supplierId: replacementFactoryId, unitPrice: "13.1", changeReason: "TEST纠错后涨价仍须老板审批",
-      craftIds: [craftId("整烫")], deliveryDate: "2026-11-05",
+      deliveryDate: "2026-11-05",
     }, randomUUID());
     const request = (await service.getCurrentFactoryChange(readerActor(), id)).item!;
     expect(request).toMatchObject({ status: "pending_owner", proposedQuantity: 1000, requiresOwnerApproval: true });
@@ -6219,6 +6219,9 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
 
   it("effective-quantity: rejects both the old quantity and a forged quantity without weakening audit guards", async () => {
     const id = await quantityTransferCase("FORGED");
+    const guard = (await database.query("SELECT pg_get_functiondef('guard_sourcing_factory_change_request_insert()'::regprocedure) AS definition")).rows[0].definition;
+    expect(guard).toContain("sourcing_factory_remaining_lines");
+    expect(guard).toContain("sourcing_require_operation_event");
     const before = await cycleSnapshot(id);
     for (const quantity of [200, 999, 1000]) {
       const client = await database.connect();
@@ -6245,7 +6248,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
           [randomUUID(), id, replacementFactoryId, "11.3", quantity, reason, actor.actorId, eventId, actor.requestId],
         )).rejects.toMatchObject(quantity === 1000
           ? { code: "55000", message: "sourcing write requires the matching immutable operation event" }
-          : { code: "23514", constraint: "sourcing_factory_change_request_quantity_current" });
+          : { code: "23514", message: "factory change must replace the current effective decision", constraint: undefined });
       } finally {
         await client.query("ROLLBACK");
         client.release();
@@ -6257,13 +6260,13 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
 
   it("effective-quantity: rolls back a late transfer failure and retries the same key without duplicate effects", async () => {
     const { projection, service: currentService } = await cycleTodoServices();
-    const id = await quantityTransferCase("ROLLBACK", true, currentService);
+    const id = await quantityTransferCase("ROLLBACK", true, currentService, ["整烫"]);
     const before = await cycleSnapshot(id);
     const documents = (await database.query("SELECT * FROM sourcing_contract_documents WHERE sourcing_case_id=$1 ORDER BY contract_version", [id])).rows;
     const events = (await database.query("SELECT * FROM operation_events WHERE entity_type='sourcing_case' AND entity_id=$1 ORDER BY event_id", [id])).rows;
     const actor = { ...rootActor(), authorizationCapability: "sourcing:owner:approve" };
     const key = randomUUID();
-    const input = { supplierId: replacementFactoryId, unitPrice: "11.3", craftIds: [craftId("整烫")],
+    const input = { supplierId: replacementFactoryId, unitPrice: "11.3",
       deliveryDate: "2026-11-05", changeReason: "TEST验证完整转厂事务回滚" };
     const failure = vi.spyOn(projection, "actionableForAllAssignedRole").mockRejectedValueOnce(
       Object.assign(new Error("TEST late finance todo failure"), { code: "23514", constraint: "test_transfer_late_failure" }),

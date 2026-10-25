@@ -40,10 +40,11 @@ describe("factory-change HTTP quantity boundary", () => {
     if (root) expect(service.requestFactoryChange.mock.calls[0]?.[0]).toMatchObject({ actorRoles: expect.arrayContaining(["root_superuser"]) });
   });
 
-  it.each([false, true])("rejects quantity or line injection before the service with Root=%s", async root => {
+  it.each([false, true])("rejects quantity, line, or craft edits before the service with Root=%s", async root => {
     const { app, service } = setup(root ? [] : ["owner_group"], root ? [] : ["sourcing:owner:approve"], root);
     for (const extra of [
       { quantity: 200 }, { orderQuantity: 200 }, { proposedQuantity: 200 },
+      { craftIds: [randomUUID()] }, { craftNames: ["TEST不能通过转厂改工艺"] },
       { lineItems: [{ position: 1, quantity: 200 }] },
     ]) expect((await app.inject(request({ ...input, ...extra }))).statusCode).toBe(400);
     expect(service.requestFactoryChange).not.toHaveBeenCalled();
