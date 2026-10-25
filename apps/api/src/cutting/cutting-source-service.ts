@@ -610,6 +610,8 @@ export class CuttingService {
     const client = await this.database.connect();
     try {
       await client.query("BEGIN");
+      // Match native recording and factory dispatch: a correction must not race batch quantity checks.
+      await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
       const outcome = await this.idempotency.execute<CuttingRecordMutationResponse>(client, {
         scope,
         actorKey: actor.actorId,

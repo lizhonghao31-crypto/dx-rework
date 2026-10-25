@@ -1,3 +1,4 @@
+import {bulkFabricDecisionTodos} from "./bulk-fabric-todos.js";
 import {applyTodoReadState} from '../todos/content-reads.js';
 import {fabricDecisionTodos} from "./development-fabric-cases.js";
 import {arrangementTodos,hiddenNativeDevelopmentTodo} from "./development-arrangement-todos.js";
@@ -157,6 +158,7 @@ export class DigitalProductionNotificationService {
     const tasks=(await this.database.query<Task>(`${TASKS} WHERE ${ACTIVE} ORDER BY d.due_at NULLS LAST,t.created_at,t.task_id`)).rows;
     const unified=await arrangementsAvailable(this.database);
     const result:TodoResponse[]=unified?[...await arrangementTodos(this.database,actor),...await fabricDecisionTodos(this.database,actor)]:[];
+    result.push(...await bulkFabricDecisionTodos(this.database,actor));
     for(const task of tasks){
       const missing=!people.some(p=>p.actorId===task.assignee_id&&hasRequiredWarehouseRole(p.actorRoles,task.required_role));
       if(unified&&missing&&task.source_id&&(DEVELOPMENT_ARRANGEABLE_KINDS as readonly string[]).includes(task.task_kind))continue;

@@ -1,6 +1,6 @@
 import type { FastifyInstance,FastifyRequest } from "fastify";
 import { z } from "zod";
-import { BulkDispatchSchema,BulkCompletionSchema,BulkWorkroomFilterSchema } from "@dx-rework/contracts/bulk-preparation";
+import { BulkDispatchSchema,BulkCompletionSchema,BulkWorkroomFilterSchema,BulkFabricReportSchema,BulkFabricDecisionSchema,BulkMaterialsDispatchSchema } from "@dx-rework/contracts/bulk-preparation";
 import { businessActor } from "../access/business-authority.js";
 import { ApplicationError } from "../platform/errors.js";
 import type { DigitalIdentityDependencies } from "./identity-routes.js";
@@ -14,5 +14,8 @@ export function registerBulkPreparationRoutes(app:FastifyInstance,deps:DigitalId
  app.get('/digital-production/workspaces/bulk-pattern',async r=>service.workroom(await actor(r),parse(BulkWorkroomFilterSchema,r.query)));
  app.get(base,async r=>service.read(await actor(r),id(r)));
  app.put(`${base}/dispatch`,async r=>service.dispatch(await actor(r),id(r),parse(BulkDispatchSchema,r.body),key(r)));
+ app.post(`${base}/fabric-report`,async r=>service.reportFabric(await actor(r),id(r),parse(BulkFabricReportSchema,r.body),key(r)));
+ app.post(`${base}/fabric-decision`,async r=>service.decideFabric(await actor(r),id(r),parse(BulkFabricDecisionSchema,r.body),key(r)));
+ app.post(`${base}/materials-dispatch`,async r=>service.dispatchMaterials(await actor(r),id(r),parse(BulkMaterialsDispatchSchema,r.body),key(r)));
  app.post(`${base}/complete`,async r=>service.complete(await actor(r),id(r),parse(BulkCompletionSchema,r.body),key(r)));
 }

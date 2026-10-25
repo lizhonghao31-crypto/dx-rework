@@ -1071,6 +1071,14 @@
     {
       "version": "0255_development_sla_enrollment",
       "checksum": "b18621d1203982798c64ebbe88ea56c31bf7a04b09f886ceac697e1bee0aeec6"
+    },
+    {
+      "version": "0256_bulk_parallel_preparation",
+      "checksum": "b5cce8b4e7fec581356297f66132be3294640f46dcef24242df3e352cf08d35d"
+    },
+    {
+      "version": "0257_factory_batch_scope",
+      "checksum": "1b4757e82e72f455358a55aa1d64bea801b44cff67e8c2553f91e74f97cec45a"
     }
   ]
 }

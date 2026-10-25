@@ -1,3 +1,5 @@
+import {factoryTaskTiming,factoryBatchTiming} from './factory-batch-timing.js';
+import {bulkTaskTiming} from "./bulk-task-timing.js";
 import {DEVELOPMENT_ARRANGEABLE_KINDS} from "@dx-rework/contracts/development-arrangement";
 import {developmentTaskTiming} from "./development-task-timing.js";
 import {developmentSlaPlan} from "./development-sla-enrollment.js";
@@ -98,9 +100,9 @@ export class DigitalProductionTaskService {
     }
     return (await client.query("SELECT * FROM digital_production_deadline_policies WHERE node_key=$1 ORDER BY version DESC LIMIT 1", [key])).rows[0] ?? digitalNotFound();
   }
-  private async revision(client: PoolClient, actor: TrustedActorContext, taskId: string, policy: { node_key: string; version: number; sla_seconds: string | number | null; warning_ratio: string | number }, enteredAt: string | null, reason: string, eventId: string) {
+  private async revision(client: PoolClient, actor: TrustedActorContext, taskId: string, policy: { node_key: string; version: number; sla_seconds: string | number | null; warning_ratio: string | number }, enteredAt: string | null, reason: string, eventId: string, timingOverride?:Awaited<ReturnType<typeof factoryTaskTiming>>) {
     const task=await this.task(client,taskId);
-    const timing=await developmentTaskTiming(client,task);
+    const timing=timingOverride??await developmentTaskTiming(client,task)??await bulkTaskTiming(client,task)??await factoryTaskTiming(client,task);
     if(timing){
       const deadline=digitalDeadline(timing.enteredAt,timing.seconds,timing.warningRatio);
       await client.query(`INSERT INTO digital_production_deadline_revisions(task_id,policy_node_key,policy_version,entered_at,warning_at,due_at,reason,event_id,changed_by,sla_basis)
@@ -143,6 +145,8 @@ export class DigitalProductionTaskService {
     else if (facts.count > 0) {occurredAt = iso(facts.latest_at);quality=facts.has_unverified?'补报未核实':facts.all_verified?'已核实':'现场登记';}
     if (occurredAt === null) quality = "缺失";
     else if (quality === "缺失") quality = "补报未核实";
+    const bulkTiming=await bulkTaskTiming(client,task)??await factoryTaskTiming(client,task);
+    if(bulkTiming){occurredAt=bulkTiming.enteredAt;quality=bulkTiming.timeQuality as TimeQuality;}
     const policy = await this.policy(client, task.task_kind, task.task_id);
     const eventId = await this.event(client, actor, id, this.resource(task), "ready", occurredAt, quality);
     const deadline = await this.revision(client, actor, id, policy, occurredAt, "activation", eventId);
@@ -174,13 +178,18 @@ export class DigitalProductionTaskService {
     const id = await createDigitalTaskAccess(client, actor, { kind: input.kind, assigneeId: input.assigneeId, ...(input.resource.kind === "order" ? { orderId: input.resource.id } : { sourceId: input.resource.id }) });
     await client.query("INSERT INTO digital_production_tasks(task_id,node_key,route_instance_id,route_version,occurrence) VALUES($1,$2,$3,$4,$5)", [id, input.kind, input.routeId, input.routeVersion, input.occurrence]);
     for (const prior of input.predecessors ?? []) await client.query("INSERT INTO digital_production_task_dependencies(task_id,predecessor_id) VALUES($1,$2)", [id, prior]);
-    for (const condition of new Set([...(REQUIRED_ACTIVATION[input.kind] ?? []), ...(input.conditions ?? []), "business_recorded" as const])) {
+    let activation=REQUIRED_ACTIVATION[input.kind]??[];
+    if(input.resource.kind==='order'&&['bulk_pattern','warehouse_preshrink'].includes(input.kind)){
+      const prep=(await client.query('SELECT workflow_version FROM digital_bulk_preparations WHERE preparation_id=$1 AND production_order_id=$2',[input.routeId,input.resource.id])).rows[0];
+      if(prep?.workflow_version===2)activation=input.kind==='bulk_pattern'?['customer_confirmed']:['materials_ready'];
+    }
+    for (const condition of new Set([...activation, ...(input.conditions ?? []), "business_recorded" as const])) {
       if (!DIGITAL_CONDITION_KEYS.includes(condition)) fail("未知前置条件");
       await client.query("INSERT INTO digital_production_task_conditions(task_id,condition_key,stage) VALUES($1,$2,$3)", [id, condition, condition === "business_recorded" ? "completion" : "activation"]);
     }
     const createdEvent=await this.event(client, actor, id, input.resource, "created", new Date().toISOString(), "现场登记");
     const activated=await this.activate(client, actor, id, input.occurredAt === undefined ? new Date().toISOString() : input.occurredAt, input.occurredAt === null ? "缺失" : input.occurredAt === undefined ? "现场登记" : "补报未核实");
-    if(!activated&&input.resource.kind==='source'&&await developmentTaskTiming(client,await this.task(client,id)))
+    if(!activated&&(await developmentTaskTiming(client,await this.task(client,id))||await bulkTaskTiming(client,await this.task(client,id))||await factoryTaskTiming(client,await this.task(client,id))))
       await this.revision(client,actor,id,await this.policy(client,input.kind,id),null,'activation',createdEvent);
     return { taskId: id };
   }
@@ -287,6 +296,16 @@ export class DigitalProductionTaskService {
     for(const next of (await client.query('SELECT task_id FROM digital_production_task_dependencies WHERE predecessor_id=$1',[id])).rows)await this.activate(client,actor,next.task_id,at,'现场登记');
     await new FactoryFlowService(this.database).sync(client,actor,task.production_order_id);
     return true;
+  }
+  async refreshFactoryBatchTimingWithClient(client:PoolClient,actor:TrustedActorContext,orderId:string){
+    const prepared=await factoryBatchTiming(client,orderId);if(!prepared)return;
+    const rows=(await client.query("SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.production_order_id=$1 AND a.task_kind IN ('process_logistics','bulk_qc','warehouse_dispatch') AND t.state<>'cancelled'",[orderId])).rows;
+    for(const row of rows){const task=await this.task(client,row.task_id),timing=await factoryTaskTiming(client,task,prepared);if(!timing)continue;
+      const previous=(await client.query('SELECT sla_basis FROM digital_production_deadline_revisions WHERE task_id=$1 ORDER BY revision_id DESC LIMIT 1',[row.task_id])).rows[0]?.sla_basis;
+      if(previous&&JSON.stringify(previous.basis)===JSON.stringify(timing.basis)&&previous.enteredAt===timing.enteredAt&&previous.seconds===timing.seconds)continue;
+      const eventId=await this.event(client,actor,row.task_id,this.resource(task),'factory_batch_window',timing.enteredAt,timing.timeQuality as TimeQuality,{basis:timing.basis});
+      await this.revision(client,actor,row.task_id,await this.policy(client,task.task_kind,task.task_id),timing.enteredAt,'correction',eventId,timing);
+    }
   }
   async completeFactoryDispatchFactsWithClient(client:PoolClient,actor:TrustedActorContext,orderId:string,factId:string){
     const fact=(await client.query(`SELECT f.* FROM digital_factory_facts f JOIN digital_factory_routes r USING(preparation_id) WHERE r.production_order_id=$1 AND f.fact_id=$2 AND f.kind='仓库实际发厂' AND f.actor_id=$3`,[orderId,factId,actor.actorId])).rows[0];
@@ -489,7 +508,7 @@ export class DigitalProductionTaskService {
       assigneeId: task.assignee_id as string | null, state: task.state as DigitalTaskState, routeVersion: task.route_version as number, occurrence: task.occurrence as number,
       enteredAt: iso(effective?.sla_basis?effective.entered_at:task.entered_at), recordedAt: iso(task.created_at)!, completedAt: iso(task.completed_at), paused,
       dueAt: iso(effective?.due_at ?? null), warningAt: iso(effective?.warning_at ?? null), slaHours: currentPolicy.sla_seconds === null ? null : Number(currentPolicy.sla_seconds) / 3600,
-      policyVersion: currentPolicy.version as number, timeQuality: (effective?.sla_basis?(effective.entered_at?'现场登记':'缺失'):task.entered_quality) as DigitalTimeQuality, completedTimeQuality: task.completed_quality as string,
+      policyVersion: currentPolicy.version as number, timeQuality: (effective?.sla_basis?(effective.sla_basis.timeQuality??(effective.entered_at?'现场登记':'缺失')):task.entered_quality) as DigitalTimeQuality, completedTimeQuality: task.completed_quality as string,
       blockedReason: task.blocked_reason as string | null, canExecute: !paused && await policy.allowed(actor, "task", id, "execute") };
   }
   async cancelForSpecialClosureWithClient(client:PoolClient,actor:TrustedActorContext,orderId:string,reason:string){
