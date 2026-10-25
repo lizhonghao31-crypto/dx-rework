@@ -7,6 +7,7 @@ import type { TodoProjectionService } from "../../apps/api/src/todos/projection-
 import { PatternRoomOrderService } from "../../apps/api/src/pattern-room/order-service.js";
 import { DigitalProductionIdentityService } from "../../apps/api/src/production-platform/identity-service.js";
 import { DigitalDevelopmentService } from "../../apps/api/src/production-platform/development-service.js";
+import { DigitalProductionTaskService } from "../../apps/api/src/production-platform/task-service.js";
 import { DevelopmentExecutionService } from "../../apps/api/src/production-platform/development-execution-service.js";
 import { developmentSlaEvidence } from "../../apps/api/src/production-platform/development-sla-evidence.js";
 import { arrangementInput } from "./development-arrangement-fixture.js";
@@ -58,6 +59,17 @@ export async function exerciseDevelopmentSlaNative(db: Pool, todos: TodoProjecti
       const kind = craft === "印花" ? "development_printing" : craft === "绣花" ? "development_embroidery" : "development_print_embroidery";
       expect(await task(kind)).toMatchObject({ slaHours: craft === "印绣花" ? 168 : 96 });
       await route(kind); await route("development_craft_confirmation");
+      const sewing=await task("development_sewing");
+      expect(sewing.state).toBe("pending");
+      expect((await db.query("SELECT satisfied,occurred_at FROM digital_production_task_conditions WHERE task_id=$1 AND condition_key='handover_received'",[sewing.taskId])).rows[0]).toEqual({satisfied:false,occurred_at:null});
+      // No completed work or wages can be manufactured by a system route.
+      await expect(route("development_sewing")).rejects.toMatchObject({statusCode:409});
+      const receiptKey=randomUUID(),tasks=new DigitalProductionTaskService(db);
+      await tasks.handover(worker,sewing.taskId,{note:"TEST师傅实际收到工艺返回裁片"},receiptKey);
+      await tasks.handover(worker,sewing.taskId,{note:"TEST师傅实际收到工艺返回裁片"},receiptKey);
+      expect((await db.query("SELECT satisfied FROM digital_production_task_conditions WHERE task_id=$1 AND condition_key='handover_received'",[sewing.taskId])).rows[0]).toEqual({satisfied:true});
+      expect(await task("development_sewing")).toMatchObject({enteredAt:sewing.enteredAt,dueAt:sewing.dueAt});
+
     }
     expect(await task("development_sewing")).toMatchObject({ state: "ready", slaHours: 24 });
     await route("development_sewing");
