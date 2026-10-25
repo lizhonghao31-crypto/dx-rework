@@ -4349,7 +4349,11 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect((await cockpit.list(recorder,cockpitInput)).items.some(row=>row.orderId===id)).toBe(true);
     const outsider={...fixture.designer,actorId:randomUUID()};
     expect((await cockpit.list(outsider,cockpitInput)).total).toBe(0);
-    expect(partialProgress.lines).toHaveLength(2);expect(partialProgress.progress).toEqual({applicable:7,completed:1});
+    expect(partialProgress.lines).toHaveLength(2);// Newly enrolled preparation includes the mandatory warehouse preshrink node.
+    const partialPreparation=await bulk.read(primary,id);
+    expect(partialPreparation.preshrink).toBe('需要预缩');
+    expect(partialPreparation.tasks.find(t=>t.taskKind==='warehouse_preshrink')?.state).toBe('completed');
+    expect(partialProgress.progress).toEqual({applicable:8,completed:2});
     const before=(await bulk.read(primary,id)).tasks.find(t=>t.taskKind.startsWith('bulk_cutting'))!;
     const identity=new DigitalProductionIdentityService(database,true,service),current=await identity.read(primary,id);
     const formal=`TEST-P12-${randomUUID().slice(0,8)}`;
@@ -4362,7 +4366,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const input={pieceCount:3,actualCutCount:101,attachmentIds:[await photo(recorder)]},key=randomUUID();
     await cutting.record(recorder,ids[1],input,key);await cutting.record(recorder,ids[1],input,key);
     expect((await bulk.read(primary,id)).cutting.completed).toBe(true);
-    expect((await cockpit.list(primary,cockpitInput)).items.find(row=>row.orderId===id)!.progress).toEqual({applicable:7,completed:2});
+    expect((await cockpit.list(primary,cockpitInput)).items.find(row=>row.orderId===id)!.progress).toEqual({applicable:8,completed:3});
     expect((await database.query('SELECT 1 FROM digital_bulk_cutting_completions WHERE production_order_id=$1',[id])).rowCount).toBe(1);
     await cutting.correct({...root,authorizationCapability:'cutting:records:correct'},ids[0],{expectedVersion:1,pieceCount:4,actualCutCount:103,reason:'TEST真实实绩更正'},randomUUID());
     const final=await bulk.read(primary,id);expect(final.cutting.lines[0]).toMatchObject({orderQuantity:137,actualCutCount:103,pieceCount:4,corrected:true});
