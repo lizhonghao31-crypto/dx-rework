@@ -415,6 +415,14 @@ SQL累计包括驱动/网络/等待，不是PG CPU时间；嵌套步骤墙钟不
 
 本轮第一次新Head的Gate在6m35s普通测试阶段失败：504文件/2781项通过，1文件/1项失败，72文件/706项按原条件跳过；PG和恢复阶段未运行。`main-sync-release-history.test.ts` 动态从当前manifest筛旧Acceptance样本时漏排main新增0230，使248变249。这是本次同步遗漏fixture更新，不是超时、随机失败或生产故障。修正仍要求旧样本248条、明确不含新0230，同时目标manifest必须含其原身份和SHA256 `4091340fdb842e866aec8b9f124c73c9d5e7086bd122677c144864355052e6bf`。相关11文件47项本地通过，限定lint及main/候选精确历史校验通过；未重跑本地Full。后续Gate仍以新Head实际结果为准。
 
+### 40178861495 原生开发主链 fixture 的实收遗漏
+
+普通2782项全部通过；映射PG的完整业务链57/58，唯一失败为共用 `development-sla-native-fixture.ts` 在工艺确认后直接期待车板ready，未办理原实收。不是取消实收门禁的理由。fixture保留未收件pending、完成拒绝；由原师傅身份调用原handover动作，重复同key验证幂等，再继续原生执行/工资/尾查/财务链，且原起点及截止不因接收重置。调用索引只有full-business-chain的SLA03，内部覆盖无工艺及印花/绣花/印绣和内外洗水。
+
+本地恢复独立PostgreSQL16.2，数据库`dx_pr854_test`带`dx-rework-isolated-test-v1`标记，专用`dx_pr854_runner`无superuser/createdb/createrole/replication/bypassrls，原安全检查通过。仅loopback隔离实例，无生产或Acceptance连接。三组完整回归：full-business-chain58、development-sla-enrollment18、digital-journey23，共99通过，无失败跳过，66.04秒；未运行其它Full阶段。随后增加窗口不重置断言，按现有business-chain配置仅复验SLA03为1通过/57跳过，10.65秒，不能当作第二次完整58通过。实际修改helper限定ESLint退出0。PG版本与CI13/16具体小版本不同，后续仍以远端最终Head为准。
+
+漏检点：之前只用unit验证新路线保留收件，没有执行真实主链共用fixture；现已让正向链补原生动作并保留负例，不能再用“代码正确”解释fixture失败并删门禁。此修正不改生产服务、权限、时限、CI规则或其它业务。
+
 ### 最终 P7–8 候选的转厂守卫收敛（本地准备，未部署）
 
 `0236_factory_remainder_executions` 的原规则是仅转未完成数量/金额，且仍校验当前决定、权限事件、工厂和并发。main 的不可变 `0230_sourcing_factory_change_current_quantity` 在全新重放时先于0236，而补到已有集成库时会后执行；因此不能只同步该文件就声称升级语义相同。
