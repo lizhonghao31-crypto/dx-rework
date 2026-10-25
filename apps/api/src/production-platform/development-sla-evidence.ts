@@ -40,7 +40,12 @@ export async function developmentSlaEvidence(db: DB, sourceId: string, time: Bus
       reasons: row.due_at ? [] : ["原任务没有独立时限或可信起点"] };
     const fact: SlaNodeFact = { evidence: `task:${row.task_id}:round:1${row.correction_id ? `;correction:${row.correction_id}` : ""}` };
     fact.businessCompleted = businessCompleted(row);
-    if (row.entered_at && Date.parse(iso(row.entered_at)) <= Date.parse(time.now)) fact.startedAt = iso(row.entered_at);
+    // Older revisions may contain a planned tail-window start as entered_at.
+    // Recover the actual native return without rewriting any frozen deadline/history.
+    const enteredAt = nodeId === "development_craft_return"
+      ? [...first].reverse().find(candidate => ["development_printing", "development_embroidery", "development_print_embroidery"].includes(candidate.task_kind) && accepted(candidate))?.completed_at
+      : row.entered_at;
+    if (enteredAt && Date.parse(iso(enteredAt)) <= Date.parse(time.now)) fact.startedAt = iso(enteredAt);
     if (row.sla_basis.seconds !== null) fact.standardMinutes = row.sla_basis.seconds / 60;
     if (accepted(row)) {
       fact.completedAt = iso(row.completed_at);

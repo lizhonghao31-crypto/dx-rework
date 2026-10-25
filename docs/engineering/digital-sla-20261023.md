@@ -376,3 +376,12 @@ SQL累计包括驱动/网络/等待，不是PG CPU时间；嵌套步骤墙钟不
 若负责人以后明确批准推送，按当前[FULL]标题及原workflow是一次Full Gate job、30分钟上限，Quick job按原条件跳过；原后续检查范围及跨阶段重复执行仍保留。60秒是单case/hook截止上限，不是每例固定增加55秒；真实挂起会等待更久，仍可能受30分钟总预算限制。未取得账单/额度信息，不编造费用金额，也不以本机130.596秒预测远端整次费用。
 
 本轮证据位于 `runtime/timeout-755db5b/`：原CI日志、resolved-entry-configs.json、candidate-mapped完整两组原日志和execution.json、entrypoint-guards-final、两次三例profile及chain-full58原始记录、full-vs-isolated-summary.json、actions-cost-evidence.json。仅提交可审核的本地diff与结果；没有push、dispatch/rerun、Review、新PR、merge、deploy、Work或其它分支动作。下一次远端写入必须由负责人重新决定。
+
+## 2026-10-25 Review 与 main 转厂修复同步
+
+- #857 的最终 Head `3f6c7e8a0392137e1067c02dfb8e498c3a0c7fbd` 已经 Full Gate 和 Codex Review，merge commit `67841e105fe7090e219477171d3cf79565719241` 合入 main；未部署。
+- #854 两项 P1：工艺回收确认错误地以父计划末段推造实际开始；缩短路线遗漏原车板实物接收条件。实际起点改取同轮有效原工艺完成事实，未知仍未知；已保存错误起点的只读投影同样按原事实解释，不改 P0、原截止或持久化历史。新直达和旧跳过转交路线均保留原实收条件及审计；旧已存在转交、继承车板和工艺布片路线不扩门禁。与裁床收布无关。
+- main 转厂 SQL 原文及 checksum 原样同步，两个 0230 身份分别登记，扩展原 main lane 和 Acceptance inventory；不恢复仅属于 main 的 maintenance 工具，不把整条 main 合入 SLA。保留集成页面既有请求反馈/财务视图；只同步转厂错误分类、安全诊断和就近提示。迁移兼容 fixture 明确旧 release 尚不含新的 main 0230，并同步 current main 230 条数量断言，负例保留。
+- 本地使用 Node22.22.2；P1/开发路线/计划/读取/检查相关5文件64项通过；转厂及迁移相关8文件66项最终通过（main-release兼容旧 fixture 首轮失败后更正并完整14项通过）。候选自有 packages 重新构建，API/Web typecheck及实际修改文件限定 ESLint 通过。未运行本地 Full；本环境无现成隔离 PostgreSQL，真实 PG、迁移升级、恢复等由新 Head Full Gate 验证，不能将以上单测称数据库验收通过。
+- Chromium实跑390/1440下四角色转厂、失败保留输入/请求号/幂等键、切单隔离及成功后刷新失败不重复提交等共13个前置场景，截图保存在本地工程目录之外。完整继承浏览器脚本随后在原合同周期 fixture 的“本版本 V7 无回签记录”处超时；此项未验证通过，未为此修改合同业务或删除断言。截图为组件 fixture，非部署后全应用验收。
+- P9/P10/验收时钟未纳入；未触碰 WIP、生产数据或部署。新 CI/后续 Review 状态以 GitHub 对应 Head 为准。

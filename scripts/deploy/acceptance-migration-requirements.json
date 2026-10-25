@@ -1228,5 +1228,18 @@
     "creates": [],
     "execute": [],
     "sequences": []
+  },
+  "0230_sourcing_factory_change_current_quantity": {
+    "checksum": "4091340fdb842e866aec8b9f124c73c9d5e7086bd122677c144864355052e6bf",
+    "tables": [],
+    "functions": [
+      "guard_sourcing_factory_change_request_insert"
+    ],
+    "references": [],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": [],
+    "sequences": []
   }
 }

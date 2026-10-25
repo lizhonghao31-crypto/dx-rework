@@ -55,8 +55,9 @@ export async function developmentTaskTiming(db:DB,task:Task):Promise<Development
   else if(kind==='development_cutting')enteredAt=completed('development_pattern');
   else if(kind==='development_craft_dispatch'||kind===craft)enteredAt=completed('development_cutting');
   else if(kind==='development_craft_confirmation'){
-    const start=completed('development_cutting'),parent=craft?snapshot.parameters[craft]?.value:undefined;
-    if(start&&parent?.kind==='duration'&&seconds!==null)enteredAt=new Date(Date.parse(start)+parent.minutes*60000-seconds*1000).toISOString();
+    // A parent-window target is not evidence that the returned work was received.
+    // Keep the frozen parent target in the plan; start confirmation only at the native craft return/completion.
+    enteredAt=craft?completed(craft):null;
   }else if(kind==='development_sewing'||kind==='development_sewing_transfer')enteredAt=hasCraft?completed('development_craft_confirmation'):completed('development_cutting');
   else if(kind==='development_pre_wash_check')enteredAt=completed('development_sewing');
   else if(kind==='development_washing'||kind==='development_washing_dispatch')enteredAt=completed('development_pre_wash_check');
