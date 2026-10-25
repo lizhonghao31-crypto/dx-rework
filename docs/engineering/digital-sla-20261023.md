@@ -410,3 +410,11 @@ SQL累计包括驱动/网络/等待，不是PG CPU时间；嵌套步骤墙钟不
 - 本地使用 Node22.22.2；P1/开发路线/计划/读取/检查相关5文件64项通过；转厂及迁移相关8文件66项最终通过（main-release兼容旧 fixture 首轮失败后更正并完整14项通过）。候选自有 packages 重新构建，API/Web typecheck及实际修改文件限定 ESLint 通过。未运行本地 Full；本环境无现成隔离 PostgreSQL，真实 PG、迁移升级、恢复等由新 Head Full Gate 验证，不能将以上单测称数据库验收通过。
 - Chromium实跑390/1440下四角色转厂、失败保留输入/请求号/幂等键、切单隔离及成功后刷新失败不重复提交等共13个前置场景，截图保存在本地工程目录之外。完整继承浏览器脚本随后在原合同周期 fixture 的“本版本 V7 无回签记录”处超时；此项未验证通过，未为此修改合同业务或删除断言。截图为组件 fixture，非部署后全应用验收。
 - P9/P10/验收时钟未纳入；未触碰 WIP、生产数据或部署。新 CI/后续 Review 状态以 GitHub 对应 Head 为准。
+
+### 最终 P7–8 候选的转厂守卫收敛（本地准备，未部署）
+
+`0236_factory_remainder_executions` 的原规则是仅转未完成数量/金额，且仍校验当前决定、权限事件、工厂和并发。main 的不可变 `0230_sourcing_factory_change_current_quantity` 在全新重放时先于0236，而补到已有集成库时会后执行；因此不能只同步该文件就声称升级语义相同。
+
+P7–8 最终候选追加 `0261_factory_change_guard_history_convergence`，原样重建0236对应守卫，保留 `sourcing_factory_remaining_lines` 对当前有效行与原厂有效报数的计算。不改0230/0236或其它历史checksum，不回填数量，不把已完数量再次转走。登记 manifest 与原 Acceptance 函数维护清单，不新增业务填报/审批。
+
+原迁移兼容 PostgreSQL suite 在各历史路径升级后检查实际数据库中的最终守卫仍含余量、金额及操作事件守卫；真实PG尚未在本地执行，必须由最终P7–8 Head验证。静态migration lint、19项相关source/manifest/history unit、修改测试限定lint已通过。此兼容步骤是最终候选的必要条件，854/855的中间版本不可作为本阶段最终部署包；P7–8无需为此再开额外重复Full。

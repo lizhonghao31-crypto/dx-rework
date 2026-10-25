@@ -1091,6 +1091,10 @@
     {
       "version": "0260_digital_closure_owner_authority",
       "checksum": "e1299660700d0718eb67ac8356117841327b05c91cfa01874dfbc71e76c6b371"
+    },
+    {
+      "version": "0261_factory_change_guard_history_convergence",
+      "checksum": "76b674ea3650ae8a73a346df323f4fb347b4b3fb3a7eab3c7337831c905b4703"
     }
   ]
 }

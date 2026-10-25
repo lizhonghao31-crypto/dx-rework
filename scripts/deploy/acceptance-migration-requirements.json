@@ -1280,5 +1280,18 @@
     "creates": [],
     "execute": [],
     "sequences": []
+  },
+  "0261_factory_change_guard_history_convergence": {
+    "checksum": "76b674ea3650ae8a73a346df323f4fb347b4b3fb3a7eab3c7337831c905b4703",
+    "tables": [],
+    "functions": [
+      "guard_sourcing_factory_change_request_insert"
+    ],
+    "references": [],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": [],
+    "sequences": []
   }
 }

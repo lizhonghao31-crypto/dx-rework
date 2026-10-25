@@ -87,6 +87,12 @@ suite('main and digital historical PostgreSQL upgrades',()=>{
     await client.query('DROP TRIGGER test_stop ON schema_migrations');
    }
    const result=await applyMigrations(scoped.toString());expect(result.currentVersion).toBe(catalog.at(-1)!.version);
+   // A missing lower-numbered main migration must not leave old integrated databases
+   // with a different guard from a clean replay: only unfinished quantity moves.
+   const effectiveGuard=(await client.query("SELECT pg_get_functiondef('guard_sourcing_factory_change_request_insert()'::regprocedure) AS definition")).rows[0].definition;
+   expect(effectiveGuard).toContain('sourcing_factory_remaining_lines');
+   expect(effectiveGuard).toContain('proposed_total_amount');
+   expect(effectiveGuard).toContain('sourcing_require_operation_event');
    expect((await applyMigrations(scoped.toString())).applied).toEqual([]);
    const after=(await client.query('SELECT version,checksum,applied_at FROM schema_migrations ORDER BY version')).rows;
    expect(after.map(r=>({version:r.version,checksum:r.checksum}))).toEqual(catalog.map(({version,checksum})=>({version,checksum})));
