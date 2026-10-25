@@ -15,3 +15,19 @@ it('keeps every Full Gate at the authorized finite 30 minutes and rejects invali
  await writeFile(file,full);const quick=join(root,'.github/workflows/ci.yml');await writeFile(quick,(await readFile(quick,'utf8')).replace('timeout-minutes: 5','timeout-minutes: 30'));expect(run).toThrow();
  }finally{await rm(root,{recursive:true,force:true});}
 });
+it('admits only the two exact SLA dependency bases and rejects broader or incomplete lists',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'dx-sla-base-policy-')),paths=['.github/workflows/ci.yml','.github/workflows/full-gate.yml','.github/workflows/governance.yml','.github/workflows/pr-preview.yml','.github/workflows/pr-17-release.yml','scripts/ci/full-gate-risk-map.mjs','scripts/ci/verify-actions-policy.mjs'];
+ try{
+  for(const path of paths){await mkdir(dirname(join(root,path)),{recursive:true});await writeFile(join(root,path),await readFile(path));}
+  const run=()=>execFileSync(process.execPath,[join(root,'scripts/ci/verify-actions-policy.mjs')],{stdio:'pipe',encoding:'utf8'});
+  expect(run()).toContain('ACTIONS_USAGE_POLICY_OK');
+  for(const path of ['.github/workflows/ci.yml','.github/workflows/full-gate.yml']){
+   const file=join(root,path),original=await readFile(file,'utf8'),base='      - deliver/sla-foundation-development-budget-20261024\n';
+   expect(original).toContain(base);
+   for(const replacement of ['      - deliver/*\n','      - deliver/sla-*\n','      - deliver/unapproved\n','',base+base]){
+    await writeFile(file,original.replace(base,replacement));expect(run).toThrow();
+   }
+   await writeFile(file,original);
+  }
+ }finally{await rm(root,{recursive:true,force:true});}
+});
