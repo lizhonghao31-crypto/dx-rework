@@ -238,6 +238,10 @@ export class FactoryFlowService{
    await this.tasks().completeWithClient(db,actor,task.task_id,{note:input.note,occurredAt:input.occurredAt},`factory:${s.route.preparation_id}:${kind}`);
   }
  });}
- async authorizeUpload(actor:TrustedActorContext,id:string){await new DigitalProductionAccessPolicy(this.database).assert(actor,'order',id,'technical');const s=await this.state(this.database,id);if(!await this.authorized(this.database,actor,s,'bulk_qc')||s.dispatched||!s.returned)digitalForbidden();}
+ async authorizeUpload(actor:TrustedActorContext,id:string){
+  await new DigitalProductionAccessPolicy(this.database).assert(actor,'order',id,'technical');const s=await this.state(this.database,id);
+  const hasReturnedScope=s.batch?s.batch.batches.some(batch=>batch.rows.some(row=>row.available>0)):Boolean(s.returned);
+  if(!await this.authorized(this.database,actor,s,'bulk_qc')||s.dispatched||!hasReturnedScope)digitalForbidden();
+ }
  async canDownload(actor:TrustedActorContext,id:string,attachmentId:string){if(!await new DigitalProductionAccessPolicy(this.database).allowed(actor,'order',id,'technical'))return false;return Boolean((await this.database.query("SELECT 1 FROM digital_factory_qc q JOIN digital_factory_routes r USING(preparation_id) JOIN attachments a ON a.attachment_id=ANY(q.attachment_ids) AND a.entity_type='digital_factory_qc' AND a.entity_id=q.check_id::text WHERE r.production_order_id=$1 AND a.attachment_id=$2 AND a.status='ready'",[id,attachmentId])).rowCount);}
 }
