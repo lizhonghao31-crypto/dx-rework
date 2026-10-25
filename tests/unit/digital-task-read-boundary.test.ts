@@ -63,6 +63,7 @@ function fixture(sla: "absent" | "unenrolled" | "frozen" = "absent") {
     else if (sql.startsWith("SELECT po.line_id AS")) found = [];
     else if (sql.startsWith("SELECT kind,recorded_at")) found = [{ kind: "预缩完成", recordedAt: "2026-10-06T14:30:00Z" }];
     else if (sql.startsWith("SELECT t.*,a.task_kind,a.assignee_id")) found = rows;
+    else if (sql === "SELECT e.event_id,e.occurred_at,e.payload,u.display_name FROM digital_production_task_events e JOIN app_users u ON u.id=e.actor_id WHERE e.resource_kind='order' AND e.resource_id=$1 AND e.event_kind='bulk_materials_dispatched' ORDER BY e.recorded_at,e.event_id") found = params[0] === orderId ? [{event_id:'TEST-material-dispatch',occurred_at:'2026-10-06T14:30:00Z',payload:{note:'TEST原辅料已发出',items:[]},display_name:'TEST仓库'}] : [];
     else if (sql.startsWith("SELECT min(customer_warehouse_arrival_date")) found = [{ day: "2026-10-20" }];
     else if (sql.startsWith("SELECT child_id FROM digital_production_child_links")) found = [];
     else throw new Error(`Unexpected isolated query: ${sql}`);
@@ -140,11 +141,12 @@ describe("task metadata is authorized independently from necessary order documen
 
   it("keeps the worker's preparation sheet and prerequisite facts while returning only authorized tasks and dispatch identities", async () => {
     const f = fixture(), bulk = new BulkPreparationService(f.pool);
-    vi.spyOn(bulk, "gates").mockResolvedValue({ order: f.order, source: { round_number: 2 }, instruction: { version: 2, document: { preshrink: "需要预缩" } }, approval: { cutting_process: "in_house" }, customerConfirmed: true, ownerApproved: true, instructionValid: true, reasons: [] } as never);
+    vi.spyOn(bulk, "gates").mockResolvedValue({ order: f.order, source: { round_number: 2 }, instruction: { version: 2, document: { preshrink: "需要预缩" } }, approval: { cutting_process: "in_house" }, customerConfirmed: true, ownerApproved: true, instructionValid: true, technicalReasons: [], parallel: false, snapshotId: null, fabric: null, terminal: false, reasons: [] } as never);
     const sheet = await bulk.read(f.actor(), f.orderId);
     expect(sheet).toMatchObject({ sourceRound: 2, instructionVersion: 2, customerConfirmed: true, ownerApproved: true, instructionValid: true, dispatch: { patternWorkerId: f.workerId, warehouseWorkerId: null, cuttingWorkerId: null } });
     expect(sheet.tasks.map(task => task.taskId)).toEqual([f.own.task_id]);
     expect(sheet.facts[0]?.kind).toBe("预缩完成");
+    expect(sheet.materials?.history).toMatchObject([{eventId:"TEST-material-dispatch",note:"TEST原辅料已发出",items:[]}]);
     expect(JSON.stringify(sheet)).not.toContain(f.warehouseId);
     const manager = f.actor(randomUUID(), ["production_management"]);
     expect((await bulk.read(manager, f.orderId)).tasks).toHaveLength(2);
@@ -163,7 +165,7 @@ describe("task metadata is authorized independently from necessary order documen
     vi.spyOn(bulk, "gates").mockResolvedValue({ order: f.order, source: { round_number: 2, document: { files: [{ attachmentId: randomUUID(), kind: "款图" }] } },
       instruction: { version: 2, source_round: 2, order_snapshot: { productionOrderId: f.orderId, designStyleNo: "TEST-PUBLISHED-V2", customerCode: "TEST-CUSTOMER-V2", budget: "TEST-HIDDEN-BUDGET", primaryMerchandiserId: "TEST-HIDDEN-PERSON" },
         document: { preshrink: "需要预缩", images: [{ attachmentId: randomUUID(), kind: "其它工艺" }, { attachmentId: imageId, kind: "款图" }] } },
-      approval: { cutting_process: "in_house" }, customerConfirmed: true, ownerApproved: true, instructionValid: true, reasons: [] } as never);
+      approval: { cutting_process: "in_house" }, customerConfirmed: true, ownerApproved: true, instructionValid: true, technicalReasons: [], parallel: false, snapshotId: null, fabric: null, terminal: false, reasons: [] } as never);
     const sheet = await bulk.read(reader, f.orderId);
     expect(sheet.reference).toEqual({ designStyleNo: "TEST-PUBLISHED-V2", customerCode: "TEST-CUSTOMER-V2", styleImageUrl: `/api/digital-production/orders/${f.orderId}/instruction/attachments/${imageId}`, instructionVersion: 2, sourceRound: 2 });
     expect(sheet.tasks).toHaveLength(1);
@@ -180,7 +182,7 @@ describe("task metadata is authorized independently from necessary order documen
     const f = fixture(), bulk = new BulkPreparationService(f.pool), oldImageId = randomUUID();
     vi.spyOn(bulk, "gates").mockResolvedValue({ order: f.order, source: { round_number: 3 },
       instruction: { version: 2, source_round: 2, order_snapshot: { designStyleNo: "TEST-OLD-STYLE", customerCode: "TEST-OLD-CUSTOMER" }, document: { preshrink: "需要预缩", images: [{ attachmentId: oldImageId, kind: "款图" }] } },
-      approval: { cutting_process: "in_house" }, customerConfirmed: true, ownerApproved: true, instructionValid: false, reasons: ["请核对当前开发资料并发布有效大货制单"] } as never);
+      approval: { cutting_process: "in_house" }, customerConfirmed: true, ownerApproved: true, instructionValid: false, technicalReasons: ["请核对当前开发资料并发布有效大货制单"], parallel: false, snapshotId: null, fabric: null, terminal: false, reasons: ["请核对当前开发资料并发布有效大货制单"] } as never);
     const sheet = await bulk.read(f.actor(randomUUID(), ["pattern_room_supervisor"]), f.orderId);
     expect(sheet.reference).toEqual({ designStyleNo: f.order.design_style_no, customerCode: f.order.customer_code, styleImageUrl: null, instructionVersion: null, sourceRound: null });
     expect(sheet).toMatchObject({ sourceRound: 3, instructionVersion: 2, instructionValid: false });
@@ -193,7 +195,7 @@ describe("task metadata is authorized independently from necessary order documen
     const f = fixture(), bulk = new BulkPreparationService(f.pool), sourceImageId = randomUUID(), processImageId = randomUUID();
     vi.spyOn(bulk, "gates").mockResolvedValue({ order: f.order, source: { round_number: 2, document: { files: [{ attachmentId: sourceImageId, kind: "款图" }] } },
       instruction: { version: 2, source_round: 2, order_snapshot: { designStyleNo: "TEST-PUBLISHED-V2", customerCode: "TEST-CUSTOMER-V2" }, document: { preshrink: "需要预缩", images: [{ attachmentId: processImageId, kind: "其它工艺" }] } },
-      approval: { cutting_process: "in_house" }, customerConfirmed: true, ownerApproved: true, instructionValid: true, reasons: [] } as never);
+      approval: { cutting_process: "in_house" }, customerConfirmed: true, ownerApproved: true, instructionValid: true, technicalReasons: [], parallel: false, snapshotId: null, fabric: null, terminal: false, reasons: [] } as never);
     const sheet = await bulk.read(f.actor(), f.orderId);
     expect(sheet.reference).toMatchObject({ designStyleNo: "TEST-PUBLISHED-V2", customerCode: "TEST-CUSTOMER-V2", styleImageUrl: null, instructionVersion: 2, sourceRound: 2 });
     expect(JSON.stringify(sheet)).not.toContain(sourceImageId);
