@@ -3891,10 +3891,13 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       attachmentIds:prepared.images.map(i=>i.attachmentId),lineItems:prepared.lineItems.map(({lineId,styleNo,alternateStyleNo,color,quantity})=>({lineId,styleNo,alternateStyleNo,color,quantity,factoryDeliveryDate:'2026-11-10'})),digitalBudget:{productionOrderId:id,budgetVersion:prepared.budgetVersion,orderVersion:prepared.orderVersion}};
     await expect(currentService.createCase(merchandiserActor(),{...input,digitalBudget:{...input.digitalBudget,budgetVersion:2}},randomUUID())).rejects.toMatchObject({statusCode:409});
     const created=await currentService.createCase(merchandiserActor(),input,randomUUID()),caseId=created.value.sourcingCaseId;
-    const todo=async(category:string)=>(await database.query(`SELECT t.*,s.transitioned_at FROM rework_todos t
+    const todo=async(category:string)=>(await database.query(`SELECT t.*,s.transitioned_at,creation.after_state->'slaTiming' AS sla_timing FROM rework_todos t
+      JOIN operation_events creation ON creation.event_id=t.created_operation_event_id
       JOIN sourcing_case_transitions s ON s.operation_event_id=t.source_event_id AND s.sourcing_case_id=$1::uuid
       WHERE t.entity_id=$1::text AND t.category=$2 ORDER BY t.created_at,t.todo_id`,[caseId,category])).rows;
     const first=(await todo('sourcing_ie_quote'))[0];expect(first).toBeTruthy();expect(first.due_at.getTime()-first.transitioned_at.getTime()).toBe(7200000);
+    const frozenSnapshot=(await database.query('SELECT snapshot_id FROM digital_sla_order_snapshots WHERE production_order_id=$1 ORDER BY revision LIMIT 1',[id])).rows[0].snapshot_id;
+    expect(first.sla_timing).toEqual({snapshotId:frozenSnapshot,dueAt:first.due_at.toISOString()});
     expect((await todo('sourcing_ie_quote')).every(t=>t.recipient_user_id===ieId)).toBe(true);
     const prices=input.lineItems.map((_,i)=>({position:i+1,unitPrice:'5.25'}));
     await expect(currentService.quoteIePrice(merchandiserActor(),caseId,{linePrices:prices},randomUUID())).rejects.toMatchObject({statusCode:403});
@@ -3908,6 +3911,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await expect(currentService.correctCase(secondary,caseId,{...correction,expectedVersion:returned.value.version,reason:'TEST非主跟单拒绝'},randomUUID())).rejects.toMatchObject({statusCode:403});
     await currentService.correctCase(merchandiserActor(),caseId,{...correction,expectedVersion:returned.value.version,reason:'TEST沿原修改入口重新提交'},randomUUID());
     expect((await todo('sourcing_ie_quote')).every(t=>t.due_at.getTime()===first.due_at.getTime())).toBe(true);
+    expect((await todo('sourcing_ie_quote')).every(t=>t.sla_timing.snapshotId===frozenSnapshot&&t.sla_timing.dueAt===first.due_at.toISOString())).toBe(true);
     await currentService.quoteIePrice(ieActor(),caseId,{linePrices:prices},randomUUID());
     expect((await todo('sourcing_management_decision')).every(t=>t.due_at.getTime()===management.due_at.getTime())).toBe(true);
     await currentService.recordManagementDecision(managerActor(),caseId,{supplierId:factoryId,craftIds:[craftId('净色车缝')],linePrices:prices,cuttingProcess:'in_house'},randomUUID());
