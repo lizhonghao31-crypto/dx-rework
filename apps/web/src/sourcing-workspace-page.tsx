@@ -1951,7 +1951,7 @@ function OrderDetailPage({
                 setStyleEditRevision(item.identityRevision ?? 0);styleEditKey.current=null;setEditingStyles(true);
               }}>修改款号</button> : null}</div> : null}
                     {contractReturn?.contractReturnMonitoring ? <>
-                      {contractReturn.contractReturnedAt ? <p>{contractReturn.currentContractReturned && contractReturn.currentContractDocumentId === contract.sourcingContractDocumentId ? `本版本 V${contract.contractVersion} 已回签` : `本版本 V${contract.contractVersion} 无回签记录`}</p> : null}
+                      <p>{contractReturn.currentContractReturned && contractReturn.currentContractDocumentId === contract.sourcingContractDocumentId ? `本版本 V${contract.contractVersion} 已回签` : `本版本 V${contract.contractVersion} 无回签记录`}</p>
                       <div ref={contractReturnSectionRef} tabIndex={-1} className="sourcing-contract-bar__actions sourcing-contract-return-actions">
                   {new URLSearchParams(window.location.search).get("contractDocumentId") && new URLSearchParams(window.location.search).get("contractDocumentId") !== contractReturn.currentContractDocumentId ? <p role="status">该待办对应的合同已换版。下方显示当前合同，请核对版本后下载及回传。</p> : null}
                         {contractReturn.canUpload ? <>
@@ -1959,7 +1959,7 @@ function OrderDetailPage({
                             onChange={event=>{void uploadContractReturn(event.target.files);event.target.value="";}} />
                           <button className="dx-button dx-button--secondary" type="button" disabled={contractUploading || busy}
                             onClick={()=>contractFileInput.current?.click()}>
-                            {contractUploading?"正在上传…":contractReturn.attachments.length?"补传回签合同":"上传回签合同"}
+                            {contractUploading?"正在上传…":(contractReturn.uploadedFileCount ?? contractReturn.attachments.length)>0?"补传回签合同":"上传回签合同"}
                           </button>
                         </> : null}
                         {(contractReturn.uploadedFileCount ?? contractReturn.attachments.length)>=2 ? <span>已达累计文件上限，已保存附件及历史记录保留</span>
