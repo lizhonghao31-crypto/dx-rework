@@ -152,7 +152,11 @@ type FinanceReviewDraft = Readonly<{ differenceFields: readonly string[]; differ
 type FactoryChangeDraft = Readonly<{ supplierId: string; unitPrice: string; changeReason: string; craftNames?: readonly string[] | undefined; deliveryDate?: string | undefined }>;
 type ContractSupplementDraft = Readonly<Partial<Record<SourcingContractMissingField, string>>>;
 
-class SourcingRequestError extends SubmissionRequestError {}
+class SourcingRequestError extends SubmissionRequestError {
+  constructor(message: string, code?: string, status = 400, readonly requestId?: string) {
+    super(message, code, status);
+  }
+}
 
 const request = async <T,>(
   path: string,
@@ -170,8 +174,10 @@ const request = async <T,>(
     },
   });
   if (!response.ok) {
-    const body = await response.json().catch(() => null) as { error?: { message?: string; code?: string } } | null;
-    throw new SourcingRequestError(body?.error?.message ?? "操作失败，请稍后重试", body?.error?.code, response.status);
+    const body = await response.json().catch(() => null) as { error?: { message?: string; code?: string; requestId?: string } } | null;
+    const requestId = body?.error?.requestId;
+    throw new SourcingRequestError(body?.error?.message ?? "操作失败，请稍后重试", body?.error?.code, response.status,
+      typeof requestId === "string" && /^[A-Za-z0-9._:-]{1,128}$/.test(requestId) ? requestId : undefined);
   }
   return schema.parse(await response.json());
 };
@@ -1180,6 +1186,16 @@ function OrderDetailPage({
   const [factoryChangeDraft, setFactoryChangeDraft] = useState<FactoryChangeDraft>({ supplierId: "", unitPrice: "", changeReason: "" });
   const [factoryChangeReviewReason, setFactoryChangeReviewReason] = useState("");
   const [transferFormOpen, setTransferFormOpen] = useState(false);
+  const [factoryChangeFeedback, setFactoryChangeFeedback] = useState<Readonly<{
+    sourcingCaseId: string; kind: "error" | "success"; message: string; requestId?: string;
+  }> | null>(null);
+  const factoryChangeFeedbackRef = useRef<HTMLParagraphElement>(null);
+  useEffect(() => { setFactoryChangeFeedback(null); }, [sourcingCaseId]);
+  useEffect(() => {
+    if (factoryChangeFeedback?.kind !== "error" || factoryChangeFeedback.sourcingCaseId !== sourcingCaseId) return;
+    factoryChangeFeedbackRef.current?.focus({ preventScroll: true });
+    factoryChangeFeedbackRef.current?.scrollIntoView({ block: "nearest" });
+  }, [factoryChangeFeedback, sourcingCaseId]);
   const [exceptionReason, setExceptionReason] = useState("");
   const [selectedImage, setSelectedImage] = useState<SourcingAttachment | null>(null);
   const [mobileWorkflowExpanded, setMobileWorkflowExpanded] = useState(false);
@@ -1497,6 +1513,7 @@ function OrderDetailPage({
       });
       return;
     }
+    if (resetFactoryChange) { setFactoryChangeFeedback(null); setMessage(""); }
     setBusy(true);
     const requestKey = actionKey.current ?? createClientRequestId();
     actionKey.current = requestKey;
@@ -1507,8 +1524,8 @@ function OrderDetailPage({
         body: JSON.stringify(body),
       });
       actionKey.current = null;
-      setMessage(success);
       if (resetFactoryChange) {
+        setFactoryChangeFeedback({ sourcingCaseId, kind: "success", message: success });
         setFactoryChangeDraft({
           supplierId: "",
           unitPrice: updated.decision?.unitPrice || "",
@@ -1516,10 +1533,15 @@ function OrderDetailPage({
         });
         setFactoryChangeReviewReason("");
         setActiveCraftQuery("");
-      }
+      } else setMessage(success);
       await load();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "提交失败");
+      const failureMessage = error instanceof Error ? error.message : "提交失败";
+      if (resetFactoryChange) {
+        setFactoryChangeFeedback({ sourcingCaseId, kind: "error", message: failureMessage,
+          ...(error instanceof SourcingRequestError && error.requestId ? { requestId: error.requestId } : {}),
+        });
+      } else setMessage(failureMessage);
     } finally {
       setBusy(false);
     }
@@ -2055,7 +2077,7 @@ function OrderDetailPage({
                 <div><button className="dx-button dx-button--primary" type="button" disabled={busy || !factoryChangeReviewReason.trim()} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/factory-changes/${factoryChange.factoryChangeRequestId}/owner-decision`, { decision: "approved", verificationReason: factoryChangeReviewReason.trim() }, "老板已批准，转厂生效", true)}>批准转厂</button><button className="dx-button dx-button--secondary" type="button" disabled={busy || !factoryChangeReviewReason.trim()} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/factory-changes/${factoryChange.factoryChangeRequestId}/owner-decision`, { decision: "rejected", verificationReason: factoryChangeReviewReason.trim() }, "老板已驳回转厂", true)}>驳回</button></div>
               </div> : null}
             </> : canInitiateTransfer ? <>
-              <button className="dx-button dx-button--primary" type="button" aria-expanded={transferFormOpen} aria-controls="sourcing-transfer-form" onClick={() => setTransferFormOpen(value => !value)}>订单转厂</button>
+              <button className="dx-button dx-button--primary" type="button" aria-expanded={transferFormOpen} aria-controls="sourcing-transfer-form" onClick={() => { setFactoryChangeFeedback(null); setTransferFormOpen(value => !value); }}>订单转厂</button>
               {transferFormOpen ? <div id="sourcing-transfer-form" className="sourcing-transfer-form">
               <p>当前：{item.decision.supplierName} · {formatBusinessCurrency(item.decision.unitPrice)}/件。新单价不高于当前价时按角色规则直接生效；超过时交老板批准。</p>
               <div className="sourcing-form-grid">
@@ -2085,6 +2107,11 @@ function OrderDetailPage({
               </div>
             </div> : null}
             </> : <p>当前账号可查看转厂记录，但不能在本节点发起。</p>}
+            {factoryChangeFeedback?.sourcingCaseId === sourcingCaseId ? <p ref={factoryChangeFeedbackRef}
+              className="sourcing-action-message" role={factoryChangeFeedback.kind === "error" ? "alert" : "status"}
+              tabIndex={-1} style={{ overflowWrap: "anywhere" }}>
+              {factoryChangeFeedback.message}{factoryChangeFeedback.requestId ? <>（请求编号：{factoryChangeFeedback.requestId}）</> : null}
+            </p> : null}
           </section> : null}
         {item.status === "pending_owner_approval" && selectedNode === "owner" && canOwner ? <ActionBar className="sourcing-owner-actions" aria-label="老板审批操作">
           <button className="dx-button dx-button--secondary sourcing-owner-reject" type="button" disabled={busy} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/owner-decisions`, { decision: "rejected" }, "已驳回生产管理重新调整")}>驳回并退回生产管理</button>

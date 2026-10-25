@@ -105,6 +105,11 @@ const SOURCING_LIST_PAGE_SIZE = 15;
 
 type Result<T> = Readonly<{ value: T; reused: boolean }>;
 type SqlError = Readonly<{ code?: string; constraint?: string }>;
+export type FactoryChangeFailureDiagnostic = Readonly<{
+  requestId: string;
+  pgCode?: string;
+  constraint?: string;
+}>;
 
 type SourcingPricedLineRow = Readonly<{
   position: number;
@@ -448,6 +453,7 @@ export class SourcingService {
         | "completeOpenByDedupePrefix" | "information"
     > & Partial<Pick<TodoProjectionService,"actionableForNamedRecipient">>,
     private readonly contractService?: SourcingContractService,
+    private readonly reportFactoryChangeFailure?: (diagnostic: FactoryChangeFailureDiagnostic) => void | Promise<void>,
   ) {}
 
   private assertActor(
@@ -3778,8 +3784,23 @@ export class SourcingService {
       return { value: outcome.response, reused: outcome.reused };
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined);
-      if (databaseCode(error) === "23514" || databaseCode(error) === "23505") {
-        fail("转厂状态已经变化，请刷新后重试", 409, "INVALID_STATE_TRANSITION");
+      const pgCode = databaseCode(error);
+      const constraint = typeof error === "object" && error !== null ? (error as SqlError).constraint : undefined;
+      try {
+        void Promise.resolve(this.reportFactoryChangeFailure?.({
+          requestId: actor.requestId,
+          ...(typeof pgCode === "string" && /^[0-9A-Z]{5}$/.test(pgCode) ? { pgCode } : {}),
+          ...(typeof constraint === "string" && /^[A-Za-z_][A-Za-z0-9_$]{0,62}$/.test(constraint)
+            ? { constraint } : {}),
+        })).catch(() => undefined);
+      } catch {
+        // Diagnostics must not delay cleanup or replace the original business failure.
+      }
+      if (pgCode === "23514" && constraint === "sourcing_factory_change_request_quantity_current") {
+        fail("转厂数量与当前订单数量不一致，转厂未完成", 409, "FACTORY_CHANGE_QUANTITY_MISMATCH");
+      }
+      if (pgCode === "23514" || pgCode === "23505") {
+        fail(pgCode === "23514" ? "转厂校验未通过，转厂未完成" : "转厂记录存在冲突，转厂未完成", 409, "INVALID_STATE_TRANSITION");
       }
       throw error;
     } finally {
