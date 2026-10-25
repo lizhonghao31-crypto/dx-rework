@@ -4363,9 +4363,18 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect((await database.query('SELECT max(identity_version)::int AS n FROM sourcing_contract_documents WHERE sourcing_case_id=$1',[caseId])).rows[0].n).toBe(1);
     const after=(await bulk.read(primary,id)).tasks.find(t=>t.taskKind.startsWith('bulk_cutting'))!;
     expect([after.taskId,after.enteredAt,after.dueAt]).toEqual([before.taskId,before.enteredAt,before.dueAt]);
+    const beforeSla=await new SlaOrderService(database).read(root,id);expect(beforeSla.status).toBe('planned');
+    if(beforeSla.status==='planned'){expect(beforeSla.nodes.find(n=>n.id==='bulk_cutting')!.actualEnd).toBeNull();expect(beforeSla.progress.stages.find(stage=>stage.stage===4)!.completed).toBe(0);}
     const input={pieceCount:3,actualCutCount:101,attachmentIds:[await photo(recorder)]},key=randomUUID();
     await cutting.record(recorder,ids[1],input,key);await cutting.record(recorder,ids[1],input,key);
     expect((await bulk.read(primary,id)).cutting.completed).toBe(true);
+    const afterSla=await new SlaOrderService(database).read(root,id);expect(afterSla.status).toBe('planned');
+    if(afterSla.status==='planned'){
+      const cuttingNode=afterSla.nodes.find(n=>n.id==='bulk_cutting')!;
+      expect(cuttingNode.actualEnd).not.toBeNull();expect(cuttingNode.planOverdue).toBe(false);
+      expect(afterSla.progress.stages.find(stage=>stage.stage===4)!.completed).toBe(1);
+      if(mode==='outsourced'){expect(cuttingNode.actualStart).toBeNull();expect(cuttingNode.deadline.at).toBeNull();expect(cuttingNode.status).toBe('completed_unrated');}
+    }
     expect((await cockpit.list(primary,cockpitInput)).items.find(row=>row.orderId===id)!.progress).toEqual({applicable:8,completed:3});
     expect((await database.query('SELECT 1 FROM digital_bulk_cutting_completions WHERE production_order_id=$1',[id])).rowCount).toBe(1);
     await cutting.correct({...root,authorizationCapability:'cutting:records:correct'},ids[0],{expectedVersion:1,pieceCount:4,actualCutCount:103,reason:'TEST真实实绩更正'},randomUUID());
@@ -4439,6 +4448,50 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect(state.dispatched).toBe(true);expect(state.facts.find(f=>f.kind==='仓库实际发厂')!.payload.lines).toBeUndefined();expect(state.checks).toHaveLength(0);
   });
 
+  it('SLA06 keeps QC upload eligibility on returned batch A while later batch B is in transit',async()=>{
+    const fixture=await budgetFixture(),primary=merchandiserActor(),root=rootActor(),flow=new FactoryFlowService(database),tasks=new DigitalProductionTaskService(database);
+    const ready=(await exerciseBulkPreparation(database,fixture,service,attachments,{primary,manager:managerActor(),owner:ownerActor(),ie:ieActor(),root},factoryId,craftId("净色车缝"),'none',{cuttingProcess:'in_house',stopAtReady:true,secondaryCraft:'印花'}))!;
+    const {id,caseId,people,cutting}=ready,logistics=people.embroidery_washing_merchandiser!,qc=people.quality_control!,warehouse=people.warehouse_receiver!;
+    for(const row of (await database.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[caseId])).rows)await cutting.record({...root,authorizationCapability:'cutting:records:create'},row.cutting_order_id,{pieceCount:1,actualCutCount:100,attachmentIds:[await readyCuttingSheet(root.actorId)]},randomUUID());
+    let state=await flow.read(root,id);
+    for(const [kind,actor] of [['process_logistics',logistics],['bulk_qc',qc]] as const)await tasks.reassign(root,state.tasks.find(t=>t.taskKind===kind)!.taskId,actor.actorId,randomUUID());
+    await expect(flow.authorizeUpload(qc,id)).rejects.toMatchObject({statusCode:403});
+    const firstLine=state.batchTotals![0]!.lineId,a=[{lineId:firstLine,quantity:40}],b=state.batchTotals!.map(row=>({lineId:row.lineId,quantity:row.quantity-(row.lineId===firstLine?40:0)}));
+    state=await flow.logistics(logistics,id,{expectedRevision:state.revision,kind:'工艺发出',lines:a,occurredAt:new Date().toISOString(),supplier:'TEST A',note:''},randomUUID());
+    const sendA=state.facts.at(-1)!.factId;
+    state=await flow.logistics(logistics,id,{expectedRevision:state.revision,kind:'工艺回仓',sendFactId:sendA,lines:a,occurredAt:new Date().toISOString(),supplier:'TEST A',note:''},randomUUID());
+    const returnedA=state.facts.at(-1)!.factId;
+    state=await flow.logistics(logistics,id,{expectedRevision:state.revision,kind:'工艺发出',lines:b,occurredAt:new Date().toISOString(),supplier:'TEST B',note:''},randomUUID());
+    expect(state.currentReturn).toBeNull();expect(state.batches!.find(batch=>batch.factId===returnedA)!.rows[0]!.available).toBe(40);
+    const app=Fastify(),sessions=new Map([['qc',qc],['warehouse',warehouse],['logistics',logistics],['root',root]]);
+    app.setErrorHandler((error,_req,reply)=>{const e=error as ApplicationError;reply.code(e.statusCode??500).send({error:{message:e.message}});});
+    registerFactoryFlowRoutes(app,{service:new DigitalProductionIdentityService(database,true),creationEnabled:true,root:new RootAuthority(database,'corp',`ding-${merchandiserId}`),authenticate:async token=>{const actor=sessions.get(token??'');if(!actor)throw new ApplicationError('UNAUTHORIZED','TEST',401);return {id:actor.actorId,displayName:'TEST upload',businessRoles:actor.actorRoles,capabilities:['digital_production:view']};}},flow,attachments);
+    const path=`/digital-production/orders/${id}/factory-flow`,headers=(role:string)=>({cookie:`dx_rework_session=${role}`});
+    const bytes=await sharp({create:{width:16,height:16,channels:3,background:'#445566'}}).png().toBuffer(),sha256=createHash('sha256').update(bytes).digest('hex');
+    const payload={filename:'TEST-batch-A.png',mimeType:'image/png',sizeBytes:bytes.byteLength,sha256};
+    try{
+      for(const role of ['warehouse','logistics']){
+        expect((await app.inject({method:'GET',url:path+'/upload-limits',headers:headers(role)})).statusCode).toBe(403);
+        expect((await app.inject({method:'POST',url:path+'/upload-intents',headers:headers(role),payload})).statusCode).toBe(403);
+      }
+      expect((await app.inject({method:'GET',url:`/digital-production/orders/${randomUUID()}/factory-flow/upload-limits`,headers:headers('qc')})).statusCode).toBe(404);
+      for(const role of ['qc','root'])expect((await app.inject({method:'GET',url:path+'/upload-limits',headers:headers(role)})).statusCode).toBe(200);
+      const created=await app.inject({method:'POST',url:path+'/upload-intents',headers:headers('qc'),payload});expect(created.statusCode,created.body).toBe(200);
+      const intent=created.json();await contractStorage.writeImmutable(intent.objectKey,bytes,{mimeType:'image/png',sha256});
+      const finalize=path+`/attachments/${intent.attachmentId}/finalize`;
+      expect((await app.inject({method:'POST',url:finalize,headers:headers('warehouse')})).statusCode).toBe(403);
+      const completed=await app.inject({method:'POST',url:finalize,headers:headers('qc')});expect(completed.statusCode,completed.body).toBe(200);
+      state=await flow.qc(qc,id,{expectedRevision:state.revision,returnFactId:returnedA,checks:[{lineId:firstLine,result:'合格',problem:'',treatment:'',attachmentIds:[intent.attachmentId]}],note:''},randomUUID());
+      const check=state.checks.find(row=>row.returnFactId===returnedA)!;
+      expect(check.attachmentIds).toEqual([intent.attachmentId]);expect((await database.query('SELECT entity_type,entity_id FROM attachments WHERE attachment_id=$1',[intent.attachmentId])).rows).toEqual([{entity_type:'digital_factory_qc',entity_id:check.checkId}]);
+      state=await flow.dispatch(warehouse,id,{expectedRevision:state.revision,returnFactId:returnedA,lines:a,supplierId:factoryId,occurredAt:new Date().toISOString(),note:'TEST A先发，B仍在途'},randomUUID());
+      expect(state.dispatched).toBe(false);expect(state.batches!.find(batch=>batch.factId===returnedA)!.rows[0]!.available).toBe(0);
+      expect((await app.inject({method:'GET',url:path+'/upload-limits',headers:headers('qc')})).statusCode).toBe(403);
+      expect((await app.inject({method:'POST',url:path+'/upload-intents',headers:headers('qc'),payload})).statusCode).toBe(403);
+      expect((await app.inject({method:'POST',url:finalize,headers:headers('qc')})).statusCode).toBe(403);
+    }finally{await app.close();}
+  });
+
   it('SLA06 dispatches released partial batches without losing failed QC, duplicating production, or over-sending',async()=>{
     const fixture=await budgetFixture(),primary=merchandiserActor(),root=rootActor(),flow=new FactoryFlowService(database),tasks=new DigitalProductionTaskService(database);
     const ready=(await exerciseBulkPreparation(database,fixture,service,attachments,{primary,manager:managerActor(),owner:ownerActor(),ie:ieActor(),root},factoryId,craftId("净色车缝"),'none',{cuttingProcess:'in_house',stopAtReady:true,secondaryCraft:'印花',accessory:true}))!;
@@ -4464,6 +4517,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect(state.canPartialDispatch).toBe(false);
     state=await flow.logistics(logistics,id,{expectedRevision:state.revision,kind:'工艺发出',fromReturnId:returnFactId,lines:first,occurredAt:new Date().toISOString(),supplier:'TEST印花厂',note:'TEST本批重新处理'},randomUUID());
     const redoSend=state.facts.at(-1)!.factId;
+    await expect(flow.authorizeUpload(qc,id)).rejects.toMatchObject({statusCode:403});
     const originalWindow=state.batchWindows!.find(w=>w.key===sendFactId)!,redoWindow=state.batchWindows!.find(w=>w.key===redoSend)!;expect(redoWindow.enteredAt).toBe(originalWindow.enteredAt);expect(redoWindow.dueAt).toBe(originalWindow.dueAt);
     state=await flow.logistics(logistics,id,{expectedRevision:state.revision,kind:'工艺回仓',sendFactId:redoSend,lines:first,occurredAt:new Date().toISOString(),supplier:'TEST印花厂',note:''},randomUUID());
     returnFactId=state.facts.at(-1)!.factId;
