@@ -30,6 +30,13 @@ function fixture(sla: "absent" | "unenrolled" | "frozen" = "absent") {
   const query = vi.fn(async (sql: string, params: unknown[] = []) => {
     let found: object[] = [];
     if (sql === "SELECT to_regclass('digital_sla_configurations') AS relation") found = [{relation:sla==='absent'?null:'digital_sla_configurations'}];
+    else if (sql === "SELECT to_regclass('digital_sla_order_snapshots') AS relation") found = [{relation:'digital_sla_order_snapshots'}];
+    else if (sql === 'SELECT * FROM digital_sla_order_snapshots WHERE production_order_id=$1 ORDER BY revision DESC LIMIT 1') {expect(params[0]).toBe(orderId);found=[];}
+    else if (sql.startsWith('SELECT line_id, (customer_warehouse_arrival_date-$2::int)::text AS target_date,') && sql.includes('FROM digital_production_po_lines WHERE production_order_id=$1 ORDER BY position')) {expect(params[0]).toBe(orderId);found=[];}
+    else if (sql === "SELECT e.event_id,e.occurred_at,e.payload,u.display_name FROM digital_production_task_events e JOIN app_users u ON u.id=e.actor_id\n WHERE e.resource_kind='order' AND e.resource_id=$1 AND e.event_kind='ship_sample_sent' ORDER BY e.recorded_at,e.event_id") {expect(params[0]).toBe(orderId);found=[];}
+    else if (sql === "SELECT to_regclass('digital_factory_facts') AS relation") found = [{relation:'digital_factory_facts'}];
+    else if (sql.startsWith('SELECT f.*,u.display_name,v.order_snapshot FROM digital_factory_facts f JOIN digital_factory_routes r USING(preparation_id)') && sql.includes("WHERE r.production_order_id=$1 AND f.kind='船样寄出' ORDER BY f.recorded_at")) {expect(params[0]).toBe(orderId);found=[];}
+    else if (sql.startsWith('SELECT s.production_order_id,s.factory_decision_id,s.shipped_on::text AS shipped_on,s.operation_event_id,p.supplier_name_snapshot,') && sql.includes("WHERE link.module='production' AND link.production_order_id=$1 ORDER BY s.shipped_on,s.production_order_id,s.factory_decision_id")) {expect(params[0]).toBe(orderId);found=[];}
     else if (sql === "SELECT to_regclass('digital_development_sla_plans') AS relation") found = [{relation:null}];
     else if (sql.startsWith('SELECT t.created_at,a.production_order_id,a.source_id,')) found = rows.filter(row=>row.task_id===params[0]).map(row=>({...row,resource_created_at:row.created_at}));
     else if (sql.startsWith('SELECT p.* FROM digital_production_deadline_revisions r')) found = [];
@@ -254,9 +261,11 @@ describe("task metadata is authorized independently from necessary order documen
   it("keeps the warehouse's factory work and prerequisite state without sibling-task details", async () => {
     const f = fixture(); f.foreign.task_kind = "warehouse_dispatch";
     const flow = new FactoryFlowService(f.pool);
-    vi.spyOn(flow as unknown as { state(...args: unknown[]): Promise<unknown> }, "state").mockResolvedValue({ gate: { order: f.order, reasons: [], approval: {}, instruction: {} }, route: { preparation_id: f.preparationId, secondary_craft: "无" }, returned: null, revision: 1, tasks: f.rows, latest: [], facts: [], checks: [], allQc: true, lastMovement: null, dispatched: false, contract: { status: "ready" } });
+    vi.spyOn(flow as unknown as { state(...args: unknown[]): Promise<unknown> }, "state").mockResolvedValue({ gate: { order: f.order, reasons: [], approval: {}, instruction: {} }, route: { preparation_id: f.preparationId, secondary_craft: "无" }, returned: null, revision: 1, production: {history: [], checks: [], complete: false, facts: {}}, tasks: f.rows, latest: [], facts: [], checks: [], allQc: true, lastMovement: null, dispatched: false, contract: { status: "ready" } });
     const sheet = await flow.read(f.actor(f.warehouseId, ["warehouse_receiver"]), f.orderId);
     expect(sheet).toMatchObject({ allCut: true, allQc: true, canWarehouse: true });
+    expect(sheet.returnLogistics).toEqual([]);
+    expect(sheet.productionChecks).toEqual([]);expect(sheet.shipSamples).toEqual([]);expect(sheet.canProductionQc).toBe(false);expect(sheet.canRecordShipSample).toBe(false);
     expect(sheet.tasks.map(task => task.taskId)).toEqual([f.foreign.task_id]);
     expect(JSON.stringify(sheet)).not.toContain(f.workerId);
     expect((await flow.read(f.actor(randomUUID(), ["production_management"]), f.orderId)).tasks).toHaveLength(2);

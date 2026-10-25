@@ -1,3 +1,12 @@
+import {reworkSlaEvidence} from '../../apps/api/src/production-platform/rework-sla-evidence.js';
+import {linkNewDigitalChild} from '../../apps/api/src/production-platform/child-link-repository.js';
+import {registerGarmentReceipt} from '../../apps/api/src/production-platform/garment-quality.js';
+import {SlaConfigurationRepository} from '../../apps/api/src/production-platform/sla-configuration-repository.js';
+import {SlaConfigurationService} from '../../apps/api/src/production-platform/sla-configuration-service.js';
+import {factoryReturnLogistics} from '../../apps/api/src/production-platform/factory-return-logistics.js';
+import {factoryProductionFacts} from '../../apps/api/src/production-platform/factory-production-facts.js';
+import {shipSampleTargets} from '../../apps/api/src/production-platform/ship-sample-timing.js';
+import {shipSampleSlaEvidence} from '../../apps/api/src/production-platform/ship-sample-facts.js';
 import {registerFactoryFlowRoutes} from '../../apps/api/src/production-platform/factory-flow-routes.js';
 import {BulkPreparationService} from '../../apps/api/src/production-platform/bulk-preparation-service.js';
 import {bulkFabricDecisionTodos} from "../../apps/api/src/production-platform/bulk-fabric-todos.js";
@@ -3509,7 +3518,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect((await database.query("SELECT count(*)::int AS count FROM rework_todos WHERE entity_id=$1 AND category='sourcing_contract_return'",[id]))
       .rows[0]?.count).toBe(1);
   });
-  const budgetFixture = async (threePo=false,stylePrefix="TEST-P09") => {
+  const budgetFixture = async (threePo=false,stylePrefix="TEST-P09",secondCustomerDate="2026-11-20") => {
     await cycleTodoServices();
     const designerId = randomUUID();
     await database.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'TEST P09 designer',true)", [designerId]);
@@ -3524,7 +3533,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const order = await identity.createOrder(designer, DigitalOrderCreateSchema.parse({
       customerCode: "PD", productGroup: "男装", designStyleNo: `${stylePrefix}-${randomUUID()}`,
       orderDate: "2026-09-01", contractDeliveryDate: "2026-11-20", primaryMerchandiserId: merchandiserId,
-      lines: [{ poNumber: `TEST-PO1-${designerId}`, color: "黑", customerWarehouseArrivalDate:"2026-11-20", sizes: [{ size: "M", quantity: 137 }] }, { poNumber: `TEST-PO2-${designerId}`, color: "白", customerWarehouseArrivalDate:"2026-11-20", sizes: [{ size: "M", quantity: 63 }] }, ...(threePo?[{poNumber:`TEST-PO3-${designerId}`,color:"蓝",customerWarehouseArrivalDate:"2026-11-20",sizes:[{size:"M",quantity:40}]}]:[])],
+      lines: [{ poNumber: `TEST-PO1-${designerId}`, color: "黑", customerWarehouseArrivalDate:"2026-11-20", sizes: [{ size: "M", quantity: 137 }] }, { poNumber: `TEST-PO2-${designerId}`, color: "白", customerWarehouseArrivalDate:secondCustomerDate, sizes: [{ size: "M", quantity: 63 }] }, ...(threePo?[{poNumber:`TEST-PO3-${designerId}`,color:"蓝",customerWarehouseArrivalDate:"2026-11-20",sizes:[{size:"M",quantity:40}]}]:[])],
     }), randomUUID());
     const bytes = await sharp({ create: { width: 2, height: 2, channels: 3, background: "white" } }).png().toBuffer();
     const imageId = randomUUID(), objectKey = `tests/p09/${imageId}.png`, sha256 = createHash("sha256").update(bytes).digest("hex");
@@ -4402,6 +4411,230 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       .rejects.toMatchObject({ statusCode: 404 });
   });
 
+  it('SLA07 records factory inspection completion separately from quality and reporter status without a ship-sample gate',async()=>{
+    const primary=merchandiserActor(),root=rootActor(),flow=new FactoryFlowService(database);
+    const configClient=await database.connect(),config=new SlaConfigurationService(),repo=new SlaConfigurationRepository(configClient);
+    const before=await(async()=>{await configClient.query('BEGIN');try{const result=await repo.initialStandard(root.actorId);await configClient.query('COMMIT');return result;}catch(e){await configClient.query('ROLLBACK');configClient.release();throw e;}})();
+    const publish=async(values:typeof before.values)=>{await configClient.query('BEGIN');try{const current=await repo.initialStandard(root.actorId);await config.publishNewStandard(configClient,root,{expectedVersion:current.version,values,reason:'TEST船样冻结标准',requestKey:randomUUID()});await configClient.query('COMMIT');}catch(e){await configClient.query('ROLLBACK');throw e;}};
+    let fixture:Awaited<ReturnType<typeof budgetFixture>>;
+    try{await publish({...before.values,ship_sample_advance:{kind:'offset',days:12}});fixture=await budgetFixture();}finally{try{await publish(before.values);}finally{configClient.release();}}
+    const ready=(await exerciseBulkPreparation(database,fixture,service,attachments,{primary,manager:managerActor(),owner:ownerActor(),ie:ieActor(),root},factoryId,craftId('净色车缝'),'none',{cuttingProcess:'in_house',stopAtReady:true,secondaryCraft:'无'}))!;
+    for(const row of (await database.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[ready.caseId])).rows){const image=randomUUID();await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-qc.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[image,`TEST/factory-qc/${image}`,'d'.repeat(64),root.actorId]);await ready.cutting.record({...root,authorizationCapability:'cutting:records:create'},row.cutting_order_id,{pieceCount:1,actualCutCount:100,attachmentIds:[image]},randomUUID());}
+    let state=await flow.read(ready.people.warehouse_receiver!,ready.id);
+    state=await flow.dispatch(ready.people.warehouse_receiver!,ready.id,{expectedRevision:state.revision,supplierId:factoryId,occurredAt:new Date().toISOString(),note:'TEST无船样照原流程发厂'},randomUUID());
+    expect(state.shipSamples).toHaveLength(0);
+    const task=(await flow.read(root,ready.id)).tasks.find(t=>t.taskKind==='factory_production_qc')!,qc=ready.people.quality_control!;
+    await new DigitalProductionTaskService(database).reassign(root,task.taskId,qc.actorId,randomUUID());
+    state=await flow.read(qc,ready.id);expect(state.canProductionQc).toBe(true);
+    const input={expectedRevision:state.revision,factoryDecisionId:null,occurredAt:new Date().toISOString(),note:'TEST检查完但质量需处理',checks:state.productionChecks!.map(c=>({lineId:c.lineId,result:'需处理' as const,problem:'TEST缝线问题'}))};
+    await expect(flow.productionQc(ready.people.warehouse_receiver!,ready.id,input,randomUUID())).rejects.toMatchObject({statusCode:403});
+    const key=randomUUID();state=await flow.productionQc(qc,ready.id,input,key);await flow.productionQc(qc,ready.id,input,key);
+    expect(state.productionChecks!.every(c=>c.inspected&&c.result==='需处理')).toBe(true);
+    expect((await factoryProductionFacts(database,ready.id)).complete).toBe(true);
+    expect(state.tasks.find(t=>t.taskKind==='factory_production_qc')?.state).toBe('completed');
+    expect((await database.query('SELECT sourcing_factory_order_status($1) AS status',[state.productionId])).rows[0].status).toBe('in_production');
+    expect((await database.query("SELECT count(*)::int n FROM digital_production_task_events WHERE resource_id=$1 AND event_kind='factory_garment_qc'",[ready.id])).rows[0].n).toBe(1);
+    expect(state.shipSamples).toHaveLength(0);
+    expect((await new OrderClosureService(database).read(root,ready.id)).outstanding.some(reason=>reason.includes('船样'))).toBe(false);
+    expect(state.sampleTargetDate).toBe('2026-11-08');
+    const reporting=new ProductionReportingService(database),detail=await reporting.detail(root,state.productionId!);
+    expect(detail.order.poDeliveryDates!.every(l=>l.sampleTargetDate==='2026-11-08')).toBe(true);
+    const day=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+    for(const line of detail.order.lines)await reporting.report(root,state.productionId!,{position:line.position,businessDate:day,quantity:line.quantity},randomUUID());
+    await reporting.execute(root,state.productionId!,'complete',{businessDate:day,confirmed:true},randomUUID());
+    await reporting.execute(root,state.productionId!,'ship',{businessDate:day,confirmed:true},randomUUID());
+    const logistics=await factoryReturnLogistics(database,ready.id,new Date(Date.now()+4*86400000));
+    expect(logistics[0]).toMatchObject({dispatchPrecision:'date',actualDispatchedAt:null,shippedOn:day,estimatedMinutes:2880,estimateExpired:true,firstReceivedAt:null});
+    expect(Date.parse(logistics[0]!.arrivalRange!.toExclusive)-Date.parse(logistics[0]!.arrivalRange!.fromInclusive)).toBe(86400000);
+    expect((await new SlaOrderService(database).read(root,ready.id)).nodes!.filter(n=>n.id.startsWith('return_logistics:')).every(n=>n.actualStart===null&&n.deadline.at===null)).toBe(true);
+    state=await flow.read(qc,ready.id);
+    if(process.env.SLA_FACTORY_QC_UI_INPUT)await writeFile(process.env.SLA_FACTORY_QC_UI_INPUT,JSON.stringify({productionQc:state}));
+  });
+
+  it('SLA08 keeps collected, original packing and receipt corrections independent without a sample gate',async()=>{
+    const primary=merchandiserActor(),root=rootActor(),flow=new FactoryFlowService(database);
+    const configClient=await database.connect(),config=new SlaConfigurationService(),repo=new SlaConfigurationRepository(configClient);
+    const before=await(async()=>{await configClient.query('BEGIN');try{const result=await repo.initialStandard(root.actorId);await configClient.query('COMMIT');return result;}catch(e){await configClient.query('ROLLBACK');configClient.release();throw e;}})();
+    const publish=async(values:typeof before.values)=>{await configClient.query('BEGIN');try{const current=await repo.initialStandard(root.actorId);await config.publishNewStandard(configClient,root,{expectedVersion:current.version,values,reason:'TEST船样冻结标准',requestKey:randomUUID()});await configClient.query('COMMIT');}catch(e){await configClient.query('ROLLBACK');throw e;}};
+    let fixture:Awaited<ReturnType<typeof budgetFixture>>;
+    try{await publish({...before.values,ship_sample_advance:{kind:'offset',days:12}});fixture=await budgetFixture();}finally{try{await publish(before.values);}finally{configClient.release();}}
+    const ready=(await exerciseBulkPreparation(database,fixture,service,attachments,{primary,manager:managerActor(),owner:ownerActor(),ie:ieActor(),root},factoryId,craftId('净色车缝'),'none',{cuttingProcess:'in_house',stopAtReady:true,secondaryCraft:'无'}))!;
+    for(const row of (await database.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[ready.caseId])).rows){const image=randomUUID();await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-qc.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[image,`TEST/factory-qc/${image}`,'d'.repeat(64),root.actorId]);await ready.cutting.record({...root,authorizationCapability:'cutting:records:create'},row.cutting_order_id,{pieceCount:1,actualCutCount:100,attachmentIds:[image]},randomUUID());}
+    let state=await flow.read(ready.people.warehouse_receiver!,ready.id);
+    state=await flow.dispatch(ready.people.warehouse_receiver!,ready.id,{expectedRevision:state.revision,supplierId:factoryId,occurredAt:new Date().toISOString(),note:'TEST无船样照原流程发厂'},randomUUID());
+    expect(state.shipSamples).toHaveLength(0);
+    await database.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) SELECT $1,$2::uuid,'dingtalk','corp',$2::text,$2::text,true,true,CURRENT_TIMESTAMP WHERE NOT EXISTS(SELECT 1 FROM identity_mappings WHERE user_id=$2)",[randomUUID(),root.actorId]);
+    await database.query("INSERT INTO owner_bootstrap_consumptions(singleton,user_id,provider_user_id,corp_id) SELECT true,$1,i.provider_user_id,i.corp_id FROM identity_mappings i WHERE i.user_id=$1 AND i.active LIMIT 1 ON CONFLICT DO NOTHING",[root.actorId]);
+    const identity=new DigitalProductionIdentityService(database,true,service),receiving=new ReceivingService(database),closure=new OrderClosureService(database);
+    let order=await identity.read(primary,ready.id);
+    for(const line of order.lines)order=await identity.correctNumbers(primary,ready.id,line.lineId,{expectedVersion:order.version,formalStyleNo:`TEST-SLA08-${randomUUID().slice(0,8)}`},randomUUID());
+    const receivedDate=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai'}).format(new Date(Date.now()-86_400_000));
+    const receipts=[];
+    for(const line of (await closure.read(root,ready.id)).lines){
+      const image=randomUUID();await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-receipt.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[image,`TEST/receipt/${image}`,'a'.repeat(64),root.actorId]);
+      const input={cuttingOrderId:line.cuttingId!,documentQuantity:line.orderedQuantity,actualQuantity:line.orderedQuantity,defectiveQuantity:0,attachmentIds:[image],receivedDate},key=randomUUID();
+      const receipt=await receiving.create({...root,authorizationCapability:'receiving:create'},input,key);
+      await receiving.create({...root,authorizationCapability:'receiving:create'},input,key);receipts.push(receipt.value);
+    }
+    const notices=new DigitalProductionNotificationService(database);
+    const qcTodos=async()=> (await notices.todos(root)).filter(t=>t.entityId===ready.id&&t.category==='digital_garment_quality');
+    expect(await qcTodos()).toHaveLength(2);
+    let sheet=await closure.read(root,ready.id);
+    expect(sheet.collection).toMatchObject({expected:200,received:200,status:'已收齐',shipmentQuantity:0});
+    expect(sheet.stage).toBe('等待回货与装箱');
+    expect(sheet.lines.flatMap(l=>l.receipts).every(r=>r.receivedAt===null&&r.receivedDate===receivedDate)).toBe(true);
+    const first=sheet.lines[0]!,style=order.lines.find(l=>l.lineId===first.lineId)!.formalStyleNo!;
+    let board=(await receiving.board('2000-01-01','2999-12-31',style)).rows[0]!;
+    const quality=sheet.quality!.find(q=>q.lineId===first.lineId)!,qualityInput={receiptId:quality.receiptId,quantityVersion:quality.quantityVersion,occurredAt:new Date().toISOString(),qualifiedQuantity:40,problem:'TEST其余待返工'},qcKey=randomUUID();
+    await expect(closure.recordQuality(ready.people.warehouse_receiver!,ready.id,qualityInput,randomUUID())).rejects.toMatchObject({statusCode:403});
+    const lifecycle=new DigitalProductionTaskService(database),qc=ready.people.quality_control!;
+    const qcTask=(await flow.read(root,ready.id)).tasks.find(t=>t.taskKind==='factory_production_qc')!;
+    await lifecycle.reassign(root,qcTask.taskId,qc.actorId,randomUUID());
+    await lifecycle.controlResource(root,{kind:'source',id:ready.sourceId},'pause','TEST来源暂停，母单仍活动',randomUUID());
+    expect(await qcTodos()).toHaveLength(0);
+    for(const viewer of [root,qc])await expect(closure.recordQuality(viewer,ready.id,qualityInput,randomUUID())).rejects.toMatchObject({statusCode:409,message:expect.stringContaining('开发来源')});
+    expect((await database.query("SELECT count(*)::int n FROM digital_production_task_events WHERE resource_id=$1 AND event_kind='garment_receipt_qc'",[ready.id])).rows[0].n).toBe(0);
+    expect((await closure.read(root,ready.id)).quality!.find(q=>q.receiptId===quality.receiptId)?.inspected).toBe(false);
+    await lifecycle.controlResource(root,{kind:'source',id:ready.sourceId},'resume','TEST来源恢复，原检查继续',randomUUID());
+    expect(await qcTodos()).toHaveLength(2);
+    await closure.recordQuality(qc,ready.id,qualityInput,qcKey);await closure.recordQuality(qc,ready.id,qualityInput,qcKey);
+    expect((await database.query("SELECT count(*)::int n FROM digital_production_task_events WHERE resource_id=$1 AND event_kind='garment_receipt_qc'",[ready.id])).rows[0].n).toBe(1);
+    expect(await qcTodos()).toHaveLength(1);
+    const sla=await new SlaOrderService(database).read(root,ready.id);expect(sla.garments!.windows.find(w=>w.receiptId===quality.receiptId)).toMatchObject({complete:true,startedAt:null,deadline:null});
+    await receiving.recordPacking({...root,authorizationCapability:'receiving:packing_manage'},{receivingBatchId:board.receivingBatchId,expectedVersion:board.version,expectedPackingRevisionId:null,packingQuantity:40},randomUUID());
+    sheet=await closure.read(root,ready.id);expect(sheet.collection).toMatchObject({status:'已收齐',shipmentQuantity:40});
+    expect(sheet.shipmentStatus).toBe('按有效装箱记录');expect(state.shipSamples).toHaveLength(0);
+    board=(await receiving.board('2000-01-01','2999-12-31',style)).rows[0]!;
+    const correction={expectedVersion:board.version,source:'jiashun' as const,documentQuantity:first.documentQuantity,actualQuantity:first.actualQuantity-1,defectiveQuantity:0};
+    const results=await Promise.allSettled([receiving.correctReceipt({...root,authorizationCapability:'receiving:correct'},receipts[0]!.receiptId,correction),receiving.correctReceipt({...root,authorizationCapability:'receiving:correct'},receipts[0]!.receiptId,{...correction,actualQuantity:first.actualQuantity-2})]);
+    expect(results.filter(r=>r.status==='fulfilled')).toHaveLength(1);
+    expect(results.filter(r=>r.status==='rejected')).toHaveLength(1);
+    expect(await reworkSlaEvidence(database,ready.id)).toMatchObject({facts:{},windows:[]});
+    const corrected=await closure.read(root,ready.id);expect(corrected.collection!.status).toBe('待收齐');expect(corrected.collection!.remaining).toBeGreaterThan(0);expect(corrected.collection!.shipmentQuantity).toBe(40);expect(corrected.receivingSpan!.history.map(h=>h.state)).toEqual(['已收齐','待收齐']);expect(corrected.receivingSpan!.elapsedHours).toBeNull();
+    expect(await qcTodos()).toHaveLength(2);
+    expect(corrected.quality!.find(q=>q.receiptId===quality.receiptId)).toMatchObject({inspected:false,priorInspection:true});
+    await expect(closure.recordQuality(root,ready.id,qualityInput,randomUUID())).rejects.toMatchObject({statusCode:409});
+    expect(corrected.lines[0]!.packingRevisionId).toBe(sheet.lines[0]!.packingRevisionId);
+    expect((await database.query('SELECT count(*)::int n FROM receiving_receipt_corrections WHERE receipt_id=$1',[receipts[0]!.receiptId])).rows[0].n).toBe(1);
+    await lifecycle.controlResource(root,{kind:'source',id:ready.sourceId},'cancel','TEST取消来源保留旧质检',randomUUID());
+    expect((await database.query("SELECT coalesce((SELECT state FROM digital_production_resource_lifecycle WHERE resource_kind='order' AND resource_id=$1),'active') AS state",[ready.id])).rows[0].state).toBe('active');
+    const remainingQuality=corrected.quality!.find(q=>q.receiptId!==quality.receiptId)!,nextInput={receiptId:remainingQuality.receiptId,quantityVersion:remainingQuality.quantityVersion,occurredAt:new Date().toISOString(),qualifiedQuantity:remainingQuality.quantity,problem:''};
+    for(const viewer of [root,qc])await expect(closure.recordQuality(viewer,ready.id,nextInput,randomUUID())).rejects.toMatchObject({statusCode:409,message:expect.stringContaining('开发来源')});
+    expect(await qcTodos()).toHaveLength(0);
+    expect((await closure.read(root,ready.id)).quality).toEqual(corrected.quality);
+    expect((await database.query("SELECT count(*)::int n FROM digital_production_task_events WHERE resource_id=$1 AND event_kind='garment_receipt_qc'",[ready.id])).rows[0].n).toBe(1);
+    const finalSheet=await closure.read(root,ready.id);
+    if(process.env.SLA_CLOSURE_UI_INPUT)await writeFile(process.env.SLA_CLOSURE_UI_INPUT,JSON.stringify(corrected));
+    await expect(closure.close(ready.people.warehouse_receiver!,ready.id,{reason:'TEST普通仓库不能审批结案',expectedRevision:finalSheet.revision},randomUUID())).rejects.toMatchObject({statusCode:403});
+    expect((await closure.read(ownerActor(),ready.id)).canClose).toBe(true);
+    const closed=await closure.close(ownerActor(),ready.id,{reason:'TEST老板保留未清质量/数量事项特殊结案',expectedRevision:finalSheet.revision},randomUUID());
+    expect(closed.closed).not.toBeNull();expect(closed.collection!.status).toBe('待收齐');expect(closed.lines[0]!.packingRevisionId).toBe(corrected.lines[0]!.packingRevisionId);
+  });
+
+  it('SLA08 accepts standalone historical receipt QC without borrowing an unrelated source lifecycle',async()=>{
+    const fixture=await budgetFixture(false,'TEST-SLA08-STANDALONE'),root=rootActor(),id=fixture.order.productionOrderId;
+    expect((await database.query('SELECT source_id FROM digital_production_orders WHERE production_order_id=$1',[id])).rows[0].source_id).toBeNull();
+    const identity=new DigitalProductionIdentityService(database,true),unrelated=await identity.createSource(fixture.designer,{developmentType:'头版',designStyleNo:`TEST-UNRELATED-${randomUUID()}`,temporaryStyleNo:null,customerCode:'PD'},randomUUID());
+    await new DigitalProductionTaskService(database).controlResource(root,{kind:'source',id:unrelated.sourceId},'cancel','TEST无关来源不影响独立母单',randomUUID());
+    const receipt=await receiving.create({...root,authorizationCapability:'receiving:create'},{styleNo:fixture.order.designStyleNo,documentQuantity:3,actualQuantity:3,defectiveQuantity:0,attachmentIds:[await readyCuttingSheet(root.actorId)]},randomUUID());
+    // Isolated legacy-import fixture: seed a stable original child association;
+    // never remove/rebind a source or expose an arbitrary legacy-linking endpoint.
+    const client=await database.connect();try{await client.query('BEGIN');await linkNewDigitalChild(client,{module:'receiving',childId:receipt.value.receiptId,productionOrderId:id,lines:[{childLineKey:'record',lineId:fixture.order.lines[0]!.lineId}]});await registerGarmentReceipt(client,id,receipt.value.receiptId);await client.query('COMMIT');}catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
+    const closure=new OrderClosureService(database),quality=(await closure.read(root,id)).quality![0]!,input={receiptId:quality.receiptId,quantityVersion:quality.quantityVersion,occurredAt:new Date().toISOString(),qualifiedQuantity:3,problem:''};
+    await expect(closure.recordQuality(merchandiserActor(),id,input,randomUUID())).rejects.toMatchObject({statusCode:403});
+    await closure.recordQuality(root,id,input,randomUUID());
+    expect((await closure.read(root,id)).quality![0]).toMatchObject({receiptId:receipt.value.receiptId,inspected:true,qualifiedQuantity:3});
+  });
+
+  it('SLA07 projects transferred factory scope as pending without erasing prior inspection history',async()=>{
+    const primary=merchandiserActor(),root=rootActor(),flow=new FactoryFlowService(database);
+    const configClient=await database.connect(),config=new SlaConfigurationService(),repo=new SlaConfigurationRepository(configClient);
+    const before=await(async()=>{await configClient.query('BEGIN');try{const result=await repo.initialStandard(root.actorId);await configClient.query('COMMIT');return result;}catch(e){await configClient.query('ROLLBACK');configClient.release();throw e;}})();
+    const publish=async(values:typeof before.values)=>{await configClient.query('BEGIN');try{const current=await repo.initialStandard(root.actorId);await config.publishNewStandard(configClient,root,{expectedVersion:current.version,values,reason:'TEST船样冻结标准',requestKey:randomUUID()});await configClient.query('COMMIT');}catch(e){await configClient.query('ROLLBACK');throw e;}};
+    let fixture:Awaited<ReturnType<typeof budgetFixture>>;
+    try{await publish({...before.values,ship_sample_advance:{kind:'offset',days:12}});fixture=await budgetFixture();}finally{try{await publish(before.values);}finally{configClient.release();}}
+    const ready=(await exerciseBulkPreparation(database,fixture,service,attachments,{primary,manager:managerActor(),owner:ownerActor(),ie:ieActor(),root},factoryId,craftId('净色车缝'),'none',{cuttingProcess:'in_house',stopAtReady:true,secondaryCraft:'无'}))!;
+    for(const row of (await database.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[ready.caseId])).rows){const image=randomUUID();await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-qc.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[image,`TEST/factory-qc/${image}`,'d'.repeat(64),root.actorId]);await ready.cutting.record({...root,authorizationCapability:'cutting:records:create'},row.cutting_order_id,{pieceCount:1,actualCutCount:100,attachmentIds:[image]},randomUUID());}
+    let state=await flow.read(ready.people.warehouse_receiver!,ready.id);
+    state=await flow.dispatch(ready.people.warehouse_receiver!,ready.id,{expectedRevision:state.revision,supplierId:factoryId,occurredAt:new Date().toISOString(),note:'TEST无船样照原流程发厂'},randomUUID());
+    expect(state.shipSamples).toHaveLength(0);
+    const task=(await flow.read(root,ready.id)).tasks.find(t=>t.taskKind==='factory_production_qc')!,qc=ready.people.quality_control!;
+    await new DigitalProductionTaskService(database).reassign(root,task.taskId,qc.actorId,randomUUID());
+    state=await flow.read(qc,ready.id);expect(state.canProductionQc).toBe(true);
+    const input={expectedRevision:state.revision,factoryDecisionId:null,occurredAt:new Date().toISOString(),note:'TEST检查完但质量需处理',checks:state.productionChecks!.map(c=>({lineId:c.lineId,result:'需处理' as const,problem:'TEST缝线问题'}))};
+    await expect(flow.productionQc(ready.people.warehouse_receiver!,ready.id,input,randomUUID())).rejects.toMatchObject({statusCode:403});
+    const key=randomUUID();state=await flow.productionQc(qc,ready.id,input,key);await flow.productionQc(qc,ready.id,input,key);
+    expect(state.productionChecks!.every(c=>c.inspected&&c.result==='需处理')).toBe(true);
+    expect((await factoryProductionFacts(database,ready.id)).complete).toBe(true);
+    expect(state.tasks.find(t=>t.taskKind==='factory_production_qc')?.state).toBe('completed');
+    expect((await database.query('SELECT sourcing_factory_order_status($1) AS status',[state.productionId])).rows[0].status).toBe('in_production');
+    expect((await database.query("SELECT count(*)::int n FROM digital_production_task_events WHERE resource_id=$1 AND event_kind='factory_garment_qc'",[ready.id])).rows[0].n).toBe(1);
+    expect(state.shipSamples).toHaveLength(0);
+    expect((await new OrderClosureService(database).read(root,ready.id)).outstanding.some(reason=>reason.includes('船样'))).toBe(false);
+    expect(state.sampleTargetDate).toBe('2026-11-08');
+    const changed=await service.requestFactoryChange(ownerActor(),ready.caseId,{supplierId:replacementFactoryId,unitPrice:'12.0000',changeReason:'TEST已检后转厂'},randomUUID());
+    expect(changed.value.decision?.supplierId).toBe(replacementFactoryId);
+    const tasks=new DigitalProductionTaskService(database),notices=new DigitalProductionNotificationService(database);
+    expect((await tasks.read(qc,task.taskId)).state).toBe('ready');
+    expect((await factoryProductionFacts(database,ready.id)).complete).toBe(false);
+    expect((await notices.todos(qc)).some(t=>t.todoId===task.taskId&&t.status==='pending')).toBe(true);
+    expect((await new OrderClosureService(database).read(root,ready.id)).outstanding.some(reason=>reason.includes('工厂'))).toBe(true);
+    await expect(tasks.reassign(ready.people.warehouse_receiver!,task.taskId,qc.actorId,randomUUID())).rejects.toMatchObject({statusCode:403});
+    // Isolated fixture: an unavailable assignee must route to the existing assignment action.
+    await database.query('UPDATE digital_production_task_access SET assignee_id=NULL WHERE task_id=$1',[task.taskId]);
+    expect((await notices.todos(qc)).some(t=>t.todoId===task.taskId)).toBe(false);
+    expect((await notices.todos(root)).find(t=>t.todoId===task.taskId)).toMatchObject({todoType:'recipient_routing_exception',status:'blocked_recipient'});
+    await tasks.reassign(root,task.taskId,qc.actorId,randomUUID());
+    state=await flow.read(qc,ready.id);
+    const pending=state.productionChecks!.filter(c=>!c.inspected);
+    expect(pending.length).toBeGreaterThan(0);
+    state=await flow.productionQc(qc,ready.id,{expectedRevision:state.revision,factoryDecisionId:pending[0]!.factoryDecisionId,occurredAt:new Date().toISOString(),note:'TEST新厂独立检查',checks:pending.map(c=>({lineId:c.lineId,result:'合格' as const,problem:''}))},randomUUID());
+    expect((await tasks.read(qc,task.taskId)).state).toBe('completed');
+    expect((await factoryProductionFacts(database,ready.id)).history).toHaveLength(2);
+    expect((await notices.todos(qc)).some(t=>t.todoId===task.taskId)).toBe(false);
+    await expect(tasks.reassign(root,task.taskId,qc.actorId,randomUUID())).rejects.toBeDefined();
+  });
+
+  it('SLA07 records ship samples before cutting with original permissions and immutable PO facts',async()=>{
+    const fixture=await budgetFixture(),primary=merchandiserActor(),flow=new FactoryFlowService(database),id=fixture.order.productionOrderId;
+    let state=await flow.read(primary,id);expect(state.allCut).toBe(false);expect(state.canRecordShipSample).toBe(true);
+    const lineIds=state.lines.map(l=>l.lineId);expect(lineIds.length).toBeGreaterThan(0);
+    expect((await shipSampleTargets(database,id)).lines[0]).toMatchObject({targetDate:'2026-11-10',dueAt:'2026-11-10T16:00:00.000Z'});
+    expect(state.tasks.find(t=>t.taskKind==='bulk_ship_sample')?.dueAt).toBe('2026-11-10T16:00:00.000Z');
+    if(process.env.SLA_SAMPLE_UI_INPUT)await writeFile(process.env.SLA_SAMPLE_UI_INPUT,JSON.stringify({sample:state}));
+    const input={expectedRevision:state.revision,kind:'船样寄出' as const,lineIds,occurredAt:new Date(Date.now()-3600000).toISOString(),trackingNumber:'TEST-SAMPLE-07',note:'TEST生产前寄样'};
+    await expect(flow.followup(ieActor(),id,input,randomUUID())).rejects.toMatchObject({statusCode:404});
+    await expect(flow.followup(primary,id,{...input,trackingNumber:''},randomUUID())).rejects.toMatchObject({statusCode:409});
+    const key=randomUUID();state=await flow.followup(primary,id,input,key);await flow.followup(primary,id,input,key);
+    expect(state.allCut).toBe(false);expect(state.shipSamples).toHaveLength(1);expect(state.shipSamples![0]).toMatchObject({lineIds,occurredAt:input.occurredAt,trackingNumber:input.trackingNumber});
+    expect(state.tasks.find(t=>t.taskKind==='bulk_ship_sample')?.state).toBe('completed');
+    expect((await shipSampleSlaEvidence(database,id))[`ship_sample:${lineIds[0]}`]).toMatchObject({businessCompleted:true,completedAt:input.occurredAt});
+    expect((await database.query("SELECT count(*)::int n FROM digital_production_task_events WHERE resource_id=$1 AND event_kind='ship_sample_sent'",[id])).rows[0].n).toBe(1);
+    expect((await database.query('SELECT count(*)::int n FROM digital_factory_routes WHERE production_order_id=$1',[id])).rows[0].n).toBe(0);
+  });
+
+  it('SLA07 preserves date-only deadline boundaries and duration constraints without inventing a start',async()=>{
+    const fixture=await budgetFixture(false,"TEST-SAMPLE-BOUNDARY","2026-11-25"),primary=merchandiserActor(),flow=new FactoryFlowService(database),id=fixture.order.productionOrderId;
+    const state=await flow.read(primary,id),task=state.tasks.find(t=>t.taskKind==='bulk_ship_sample')!;
+    expect(task.enteredAt).toBeNull();expect(task.warningAt).toBeNull();
+    const notices=new DigitalProductionNotificationService(database),now=vi.spyOn(Date,'now');
+    const count=async()=>Number((await database.query("SELECT count(*)::int n FROM digital_production_notification_events WHERE task_id=$1 AND event_kind='overdue'",[task.taskId])).rows[0].n);
+    try{
+      now.mockReturnValue(Date.parse(task.dueAt!)-1);await notices.runOnce();expect(await count()).toBe(0);
+      now.mockReturnValue(Date.parse(task.dueAt!));await notices.runOnce();await notices.runOnce();expect(await count()).toBe(1);
+    }finally{now.mockRestore();}
+    await expect(database.query(`INSERT INTO digital_production_deadline_revisions(task_id,policy_node_key,policy_version,due_at,reason,changed_by)
+      SELECT task_id,policy_node_key,policy_version,due_at,'policy',changed_by FROM digital_production_deadline_revisions WHERE task_id=$1 LIMIT 1`,[task.taskId])).rejects.toMatchObject({code:'23514'});
+    await expect(database.query(`UPDATE digital_production_deadline_revisions SET due_at=due_at+interval '1 day' WHERE task_id=$1`,[task.taskId])).rejects.toBeDefined();
+    const input={expectedRevision:state.revision,kind:'船样寄出' as const,occurredAt:new Date(Date.now()-3600000).toISOString(),trackingNumber:'TEST-PARTIAL-SAMPLE',note:''};
+    const first=await flow.followup(primary,id,{...input,lineIds:[state.lines[0]!.lineId]},randomUUID());
+    expect(first.tasks.find(t=>t.taskKind==='bulk_ship_sample')).toMatchObject({state:'ready',dueAt:'2026-11-15T16:00:00.000Z'});
+    expect((await database.query('SELECT due_at FROM digital_production_deadline_revisions WHERE task_id=$1 ORDER BY revision_id LIMIT 1',[task.taskId])).rows[0].due_at.toISOString()).toBe(task.dueAt);
+    const second=await flow.followup(primary,id,{...input,lineIds:[state.lines[1]!.lineId],occurredAt:new Date(Date.parse(input.occurredAt)-3600000).toISOString()},randomUUID());
+    expect(second.tasks.find(t=>t.taskKind==='bulk_ship_sample')).toMatchObject({state:'completed',completedAt:input.occurredAt});
+    expect(second.shipSamples).toHaveLength(2);
+  });
+
   it('SLA06 serializes Root cutting correction against stale partial dispatch and keeps the opened deadline',async()=>{
     const fixture=await budgetFixture(),primary=merchandiserActor(),root=rootActor(),flow=new FactoryFlowService(database);
     const ready=(await exerciseBulkPreparation(database,fixture,service,attachments,{primary,manager:managerActor(),owner:ownerActor(),ie:ieActor(),root},factoryId,craftId("净色车缝"),'none',{cuttingProcess:'in_house',stopAtReady:true,secondaryCraft:'无'}))!;
@@ -4675,6 +4908,9 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     for(const viewer of [root,fixture.designer,warehouse])expect((await futureJourneys.read(viewer,id)).deliveryRisks!.some(risk=>risk.kind==='factory')).toBe(true);
     await reporting.execute(root,dispatched.productionId!,"complete",{businessDate:new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()),confirmed:true},randomUUID());
     expect((await database.query("SELECT sourcing_factory_order_status($1) AS status",[dispatched.productionId])).rows[0].status).toBe("production_completed");
+    expect((await futureJourneys.read(root,id)).deliveryRisks!.some(risk=>risk.kind==='factory')).toBe(true);
+    const qcSheet=await flow.read(root,id);
+    await flow.productionQc(root,id,{expectedRevision:qcSheet.revision,factoryDecisionId:null,occurredAt:new Date().toISOString(),note:'TEST工厂检查完成',checks:qcSheet.productionChecks!.map(c=>({lineId:c.lineId,result:'合格' as const,problem:''}))},randomUUID());
     for(const viewer of [root,fixture.designer,warehouse]){
       const completed=await futureJourneys.read(viewer,id);
       expect(completed.deliveryRisks!.filter(risk=>risk.kind==='factory')).toEqual([]);
@@ -5179,6 +5415,10 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     try{
       await taskClient.query("BEGIN");
       for(const kind of ["bulk_cutting_external","factory_material_count","bulk_ship_sample","bulk_cutting","bulk_qc","warehouse_dispatch"] as const){
+        if(kind==='bulk_ship_sample'){
+          const existing=(await taskClient.query("SELECT task_id,assignee_id FROM digital_production_task_access WHERE production_order_id=$1 AND task_kind='bulk_ship_sample'",[id])).rows;
+          expect(existing).toHaveLength(1);expect(existing[0].assignee_id).toBe(merchandiserId);taskIds.push(existing[0].task_id);continue;
+        }
         const task=await tasks.createWithClient(taskClient,rootActor(),{resource:{kind:"order",id},kind,routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:["bulk_cutting_external","factory_material_count","bulk_ship_sample"].includes(kind)?merchandiserId:null});taskIds.push(task.taskId);
       }
       await taskClient.query("COMMIT");

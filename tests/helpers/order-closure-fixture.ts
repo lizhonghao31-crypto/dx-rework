@@ -34,6 +34,7 @@ export async function exerciseOrderClosure(db:Pool,sourcing:SourcingService,id:s
   if(i===0)expect(nodes.find(node=>node.key==='receipts')?.state).toBe('active');
   expect(journey.links.some(link=>link.domain==='receiving'&&link.id===first.value.receiptId&&link.lineId===order.lines[i]!.lineId)).toBe(true);
   expect((await db.query("SELECT count(*)::int n FROM digital_production_child_lines WHERE module='receiving' AND production_order_id=$1 AND line_id=$2",[id,order.lines[i]!.lineId])).rows[0].n).toBe(2);
+  for(const q of current.quality?.filter(q=>q.lineId===order.lines[i]!.lineId)??[])await closure.recordQuality(root,id,{receiptId:q.receiptId,quantityVersion:q.quantityVersion,qualifiedQuantity:q.quantity,occurredAt:new Date().toISOString(),problem:''},randomUUID());
   await receiving.recordPacking({...root,authorizationCapability:'receiving:packing_manage'}, {receivingBatchId:board.receivingBatchId,expectedVersion:board.version,expectedPackingRevisionId:null,packingQuantity:qty},randomUUID());
  }
  if(!special){
@@ -93,7 +94,7 @@ export async function exerciseOrderClosure(db:Pool,sourcing:SourcingService,id:s
   }finally{resume();readSpy.mockRestore();await Promise.allSettled([closing,repeated,...(correction?[correction]:[]),...(newRework?[newRework]:[])]);}
  }
  sheet=concurrent[0]!;expect(concurrent[1]!.closed).toEqual(sheet.closed);expect(sheet.stage).toBe('特殊结案');expect(sheet.lines.map(l=>({...l,reworks:l.reworks.map(r=>Object.fromEntries(Object.entries(r).filter(([key])=>key!=='canView')))}))).toEqual(JSON.parse(before).map((l:typeof sheet.lines[number])=>({...l,reworks:l.reworks.map(r=>Object.fromEntries(Object.entries(r).filter(([key])=>key!=='canView')))})));
- expect(sheet.lines.flatMap(l=>l.reworks).every(r=>r.canView===true)).toBe(true);expect(sheet.closed!.outstanding.some(x=>x.includes('未完成'))).toBe(true);expect(sheet.shipmentStatus).toBe('未知');expect(sheet.customerReceiptStatus).toBe('未知');expect((await closure.close(manager,id,input,key)).closed).toEqual(sheet.closed);
+ expect(sheet.lines.flatMap(l=>l.reworks).every(r=>r.canView===true)).toBe(true);expect(sheet.closed!.outstanding.some(x=>x.includes('未完成'))).toBe(true);expect(sheet.shipmentStatus).toBe('按有效装箱记录');expect(sheet.customerReceiptStatus).toBe('未知');expect((await closure.close(manager,id,input,key)).closed).toEqual(sheet.closed);
  const dates=new PoCustomerDateService(db),closedDates=await dates.read(primary,id);
  expect(closedDates.canRequestDate).toBe(false);
  const liveVersion=(await db.query("SELECT version FROM digital_production_orders WHERE production_order_id=$1",[id])).rows[0].version;

@@ -33,7 +33,8 @@ export async function exerciseInstructions(database:Pool,order:DigitalOrder,prim
  expect((await service.read(primary,id)).publishedVersion).toBe(1);
  expect((await service.read(primary,id,undefined,1)).document.remarks).toBe("");
  await expect(database.query("UPDATE digital_instruction_versions SET document='{}' WHERE production_order_id=$1",[id])).rejects.toThrow("immutable");
- expect((await database.query("SELECT count(*)::int n FROM digital_production_task_access WHERE production_order_id=$1 AND task_kind LIKE 'bulk_%'",[id])).rows[0].n).toBe(0);
+ expect((await database.query("SELECT count(*)::int n FROM digital_production_task_access WHERE production_order_id=$1 AND task_kind LIKE 'bulk_%' AND task_kind<>'bulk_ship_sample'",[id])).rows[0].n).toBe(0);
+ expect((await database.query("SELECT task_kind,assignee_id FROM digital_production_task_access WHERE production_order_id=$1 AND task_kind='bulk_ship_sample'",[id])).rows).toEqual([{task_kind:'bulk_ship_sample',assignee_id:primary.actorId}]);
  const request=await service.requestDate(primary,id,{orderVersion:order.version,changes:order.lines.map(line=>({lineId:line.lineId,expectedVersion:line.customerDateVersion??0,date:"2026-11-25"})),reason:"TEST 客户要求"},randomUUID());
  expect(request.order.contractDeliveryDate).toBe("2026-11-20");const requestId=request.dateRequests[0]!.requestId;
  await expect(service.decideDate(primary,id,requestId,true,randomUUID())).rejects.toMatchObject({statusCode:403});

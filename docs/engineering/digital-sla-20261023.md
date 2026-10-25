@@ -182,6 +182,31 @@ bulkTaskTiming/bulkSlaEvidence读取原制单发布、验布报告/决定、任�
 
 未执行：推送、CI、Review、合并、部署、外部通知、真实库及部署账号迁移验证。0257须随新应用发布；不能把旧应用写新batch路线视为完整回退兼容（缺数量的旧写入将被约束拒绝）。本次证据只覆盖PR05/06本地候选，不代表后续07—11或整轮验收完成。
 
+PR06补充两事务反例已通过（7.69秒）：Root更正持生命周期锁时，pg_locks观察到发厂事务确实等待；实裁100→80、已发40，旧余量60请求拒绝，新余量40可发；过期更正版本及非当前批准厂拒绝；部分发厂/更正后原截止不重置。首轮夹具漏correct capability，权限拒绝后补正fixture，未放宽业务权限。测试文件及日志保存pr06-final-before-pr07。
+
+### PR07 local checkpoint — ship sample (2026-10-23 19:19 UTC)
+Reused original bulk_ship_sample task and digital_production_task_events; new orders create the original task before cutting. ShipSampleService records current PO scope, real sent time, operator and tracking, with original primary-merchandiser/root permission, lifecycle and command idempotency. No sample check added to production, QC, receiving, packing or shipping. Legacy preparation facts retain their original instruction-snapshot scope; unknown times remain unknown. Per-PO native evidence feeds SLA without a second editable fact table.
+ShipSampleTargets uses the order's frozen advance parameter; factory page, PO summary and journey share it. Partial PO shipment changes the active reminder to the remaining original target, retaining old revisions and per-PO completion evidence. Completed time is maximum actual scoped time, not the last input order. New 0258 adds a typed date-target branch to the original deadline revisions; duration invariants and immutable history remain, no fabricated entered_at. Date cutoff is exclusive Beijing next-midnight; reminder comparison follows this boundary.
+Two targeted PostgreSQL tests passed in 5.16s: before-cut recording, scope rejection, tracking required, retry uniqueness, date equality and notification dedupe, old duration constraint rejection, immutable history, partial scope and out-of-order actual times. Initial failures were 404-vs-403 test expectation, Date string conversion losing milliseconds (fixed), and original duration-only constraint (fixed through additive 0258). No broad test rerun. API/Web types, bounded lint, migration static and diff checks passed. Real React component browser at 1440/390 passed and screenshots inspected; followup hides unrelated factory prerequisites in a disclosure, time/tracking use two columns on PC. Synthetic HTTP with isolated PG response, not a full authenticated application pass.
+PR07 remains incomplete: factory garment-QC completion and return logistics adapters remain; current production complete is a reporter quantity/status fact, not QC. Existing shipments have business-date precision only. PR08 not started. No push/CI/review/merge/deployment. No commands running at checkpoint.
+
+### PR07 工厂检查/物流本地闭环（2026-10-23 19:39 UTC）
+- factoryProductionFacts读取原工厂有效分配与原task_events；检查完成结束生产时效，需处理结论及后续检查历史保留，不改变生产日报数量/状态。转厂原服务集成验证：新范围不得继承原厂已检查；当前任务/待办投影与原任务历史分离，缺失主办沿原分配入口，完成新范围后结束待办。
+- factoryReturnLogistics沿原shipped_on日精度和订单冻结48h生成预计区间，actualDispatchedAt保持null；无仓库硬期限。旧生产报表船样提前量已读同一冻结快照，12天冻结与后续全局恢复的反例通过。船样待办不成为结案/装箱间接门禁。
+- 2项真实隔离PG服务链测试通过9.68秒（/tmp/sla07-final-native.log），含QC允许/仓库拒绝、重试、原转厂、新范围再检、缺主办路由/重新分配、保留历史、无船样原生产/发回仓可办；API类型检查通过。QC范围3项单元测试此前通过。
+- 1440/390原React组件+实际服务响应浏览器验证通过并已查看截图（pr07-factory-qc-browser/final-scope）；长PO可换行，无横向溢出，历史折叠。此为组件合成HTTP环境，不冒充全应用认证入口验收。
+- 未推送、未运行CI/Review或部署。PR08从此快照后分离；收齐历时与返工有效轮次仍待接入，不报完成。
+
+## PR08 本地检查点（2026-10-23）
+
+原收货/更正/装箱事实派生收齐、历时及未来未收净量预测，不另建出货台账。R≥Q仅代表收齐，更正不足恢复待收，QC及装箱保持独立。到仓QC复用原事件，按收货数量版本判覆盖；原结案入口补老板允许，0260为兼容增量，不改历史迁移。多批累计装箱缺批次分配事实时保留完成业务事实、时效未知，不编造FIFO；历史数量调整来源不完整同样标精度限制。
+
+返工空数组根因：nativeReworkExecutionRows错误按整单special_process_type=inspection排除实际包含worker作业的单。已改为按configuration item的execution_kind=worker筛选，HAVING有效worker数>0；原派工确认起点、有效报告完成、拒绝报告与再次提交均沿原事件。真实业务链1项通过（3.28秒，/tmp/sla08-work-return.log），不等整查/核量/财务、不追加收货。
+
+收货更正/QC/待办/老板结案原生链通过7.87秒（/tmp/sla08-owner-native.log）；5文件11项单位反例通过362ms（/tmp/sla08-unit-final.log）。API/Web类型、限定lint与迁移静态检查已执行，日志保留。1440/390原组件+真实服务响应fixture页面已看图，窄屏无溢出、PC检查表单双列、历史/未清事项折叠；不是完整登录应用验收。截图pr08-summary-browser/quality-final。
+
+未验证：真实并发QC写入与收货更正（已测版本失效/拒绝与收货更正并发）；全部历史返工轮次重放；部署账号权限；完整认证页面；测试Clock贯穿仍待工具闭环。未推送、CI、Review、合并或部署。
+
 ## 854 本轮复盘与推送前证据（2026-10-24，当前修订未推送）
 
 以下记录本轮实际失败和漏检，不承诺零失败，不新增治理系统。
@@ -397,3 +422,11 @@ SQL累计包括驱动/网络/等待，不是PG CPU时间；嵌套步骤墙钟不
 本地恢复独立PostgreSQL16.2，数据库`dx_pr854_test`带`dx-rework-isolated-test-v1`标记，专用`dx_pr854_runner`无superuser/createdb/createrole/replication/bypassrls，原安全检查通过。仅loopback隔离实例，无生产或Acceptance连接。三组完整回归：full-business-chain58、development-sla-enrollment18、digital-journey23，共99通过，无失败跳过，66.04秒；未运行其它Full阶段。随后增加窗口不重置断言，按现有business-chain配置仅复验SLA03为1通过/57跳过，10.65秒，不能当作第二次完整58通过。实际修改helper限定ESLint退出0。PG版本与CI13/16具体小版本不同，后续仍以远端最终Head为准。
 
 漏检点：之前只用unit验证新路线保留收件，没有执行真实主链共用fixture；现已让正向链补原生动作并保留负例，不能再用“代码正确”解释fixture失败并删门禁。此修正不改生产服务、权限、时限、CI规则或其它业务。
+
+### 最终 P7–8 候选的转厂守卫收敛（本地准备，未部署）
+
+`0236_factory_remainder_executions` 的原规则是仅转未完成数量/金额，且仍校验当前决定、权限事件、工厂和并发。main 的不可变 `0230_sourcing_factory_change_current_quantity` 在全新重放时先于0236，而补到已有集成库时会后执行；因此不能只同步该文件就声称升级语义相同。
+
+P7–8 最终候选追加 `0261_factory_change_guard_history_convergence`，原样重建0236对应守卫，保留 `sourcing_factory_remaining_lines` 对当前有效行与原厂有效报数的计算。不改0230/0236或其它历史checksum，不回填数量，不把已完数量再次转走。登记 manifest 与原 Acceptance 函数维护清单，不新增业务填报/审批。
+
+原迁移兼容 PostgreSQL suite 在各历史路径升级后检查实际数据库中的最终守卫仍含余量、金额及操作事件守卫；真实PG尚未在本地执行，必须由最终P7–8 Head验证。静态migration lint、19项相关source/manifest/history unit、修改测试限定lint已通过。此兼容步骤是最终候选的必要条件，854/855的中间版本不可作为本阶段最终部署包；P7–8无需为此再开额外重复Full。

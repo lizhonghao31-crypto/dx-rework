@@ -1,3 +1,10 @@
+import {OrderClosureService} from './order-closure-service.js';
+import {packingSlaEvidence} from './packing-sla-evidence.js';
+import {garmentSlaEvidence} from './garment-sla-evidence.js';
+import {reworkSlaEvidence,reworkEvaluationPlan} from './rework-sla-evidence.js';
+import {factoryProductionFacts} from './factory-production-facts.js';
+import {ShipSampleService} from './ship-sample-service.js';
+import {shipSampleSlaEvidence} from './ship-sample-facts.js';
 import {factorySlaEvidence,factoryEvaluationPlan} from './factory-sla-evidence.js';
 import {bulkSlaEvidence} from "./bulk-sla-evidence.js";
 import { randomUUID } from "node:crypto";
@@ -66,6 +73,7 @@ export class SlaOrderService {
     }
     await plans.appendPlan({ orderId, expectedRevision: 0, snapshotId: snapshot.snapshotId, plan, time, actorId: actor.actorId,
       reason: "新订单保存全链首版计划；未有依据的日期保持未知", requestKey: randomUUID() });
+    await new ShipSampleService(this.database).ensureWithClient(client,actor,orderId);
     // Actual creation/confirmation is read from the original audit event, not copied three times.
     // Development evidence is retained on its original source/round, never copied as newly performed work.
     // Historical sources without enrollment remain unrated against today's standard.
@@ -90,12 +98,18 @@ export class SlaOrderService {
       const bulk=await bulkSlaEvidence(client,orderId);
       // Publication proves the sheet's end, not a replacement for its original order-confirmation start.
       if(bulk.production_sheet&&facts.production_sheet?.startedAt)bulk.production_sheet.startedAt=facts.production_sheet.startedAt;
-      Object.assign(facts,bulk);
+      Object.assign(facts,bulk,await shipSampleSlaEvidence(client,orderId),(await factoryProductionFacts(client,orderId)).facts);
       const factory=await factorySlaEvidence(client,orderId);if(factory)Object.assign(facts,factory.facts);
-      const evaluationPlan = developmentEvaluationPlan(factory?factoryEvaluationPlan(current.plan,factory.craftKey):current.plan, facts), nodes = evaluateSlaPlan(evaluationPlan, facts, time);
+      const garments=await garmentSlaEvidence(client,orderId);Object.assign(facts,garments.facts);
+      const receiving=await new OrderClosureService(this.database).read(actor,orderId,client);
+      const span=receiving.receivingSpan;facts.receiving_span={businessCompleted:receiving.collection?.status==='已收齐',evidence:`native-receipts:${receiving.revision}`,
+       ...(span?.firstEffectiveReceipt?.receivedAt?{startedAt:span.firstEffectiveReceipt.receivedAt}:{}),...(span?.collectedAt?{completedAt:span.collectedAt}:{})};
+      const packing=packingSlaEvidence(receiving);Object.assign(facts,packing.facts);
+      const rework=await reworkSlaEvidence(client,orderId);Object.assign(facts,rework.facts);
+      const evaluationPlan = reworkEvaluationPlan(developmentEvaluationPlan(factory?factoryEvaluationPlan(current.plan,factory.craftKey):current.plan, facts),rework.facts), nodes = evaluateSlaPlan(evaluationPlan, facts, time);
       const progress = slaBusinessProgress(evaluationPlan, Object.entries(facts).filter(([, f]) => f.businessCompleted || f.completedAt).map(([id]) => id));
       await client.query("COMMIT");
-      return { status: "planned" as const, time, original: history[0]!, current, history, nodes, progress, development, factory };
+      return { status: "planned" as const, time, original: history[0]!, current, history, nodes, progress, development, factory, rework, garments, receiving, packing };
     } catch (error) { await client.query("ROLLBACK"); throw error; } finally { client.release(); }
   }
 }

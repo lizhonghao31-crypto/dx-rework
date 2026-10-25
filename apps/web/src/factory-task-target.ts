@@ -1,5 +1,5 @@
 import {DigitalIdSchema} from "@dx-rework/contracts/digital-production";
-export const factoryActions=['overview','logistics','qc','dispatch','followup'] as const;
+export const factoryActions=['overview','logistics','qc','dispatch','followup','productionQc'] as const;
 export type FactoryTaskTarget={action:typeof factoryActions[number];lineId:string|null;error:string|null};
 export function factoryTaskTarget(search:string):FactoryTaskTarget{
  const params=new URLSearchParams(search),action=params.get('factoryAction')??'overview',lineId=params.get('line');
@@ -7,5 +7,5 @@ export function factoryTaskTarget(search:string):FactoryTaskTarget{
  return {action:action as FactoryTaskTarget['action'],lineId,error:null};
 }
 export function factoryTaskAction(kind:string):FactoryTaskTarget['action']{
- return kind==='process_logistics'?'logistics':kind==='bulk_qc'?'qc':kind==='warehouse_dispatch'?'dispatch':['factory_material_count','bulk_ship_sample'].includes(kind)?'followup':'overview';
+ return kind==='factory_production_qc'?'productionQc':kind==='process_logistics'?'logistics':kind==='bulk_qc'?'qc':kind==='warehouse_dispatch'?'dispatch':['factory_material_count','bulk_ship_sample'].includes(kind)?'followup':'overview';
 }

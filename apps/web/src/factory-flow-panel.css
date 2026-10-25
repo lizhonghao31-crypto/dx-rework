@@ -22,3 +22,7 @@
 .factory-flow .factory-batch-qc{grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}.factory-batch-qc>h4,.factory-batch-qc>details,.factory-batch-qc>.factory-qc-images{grid-column:1/-1}.factory-batch-panel textarea{min-height:64px}@media(max-width:640px){.factory-flow .factory-batch-qc{grid-template-columns:minmax(0,1fr)}}
 
 .factory-batch-qc>label:has(select){grid-column:1/-1}
+
+.factory-flow .ship-sample-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.ship-sample-fields>label:last-child{grid-column:1/-1}@media(max-width:640px){.factory-flow .ship-sample-fields{grid-template-columns:minmax(0,1fr)}}
+
+.factory-flow .factory-production-qc form{display:block}.factory-production-qc fieldset>label{max-width:24rem}.factory-production-qc .factory-batch-qc>label:has(select){grid-column:auto}.factory-production-qc .factory-batch-qc>p{grid-column:1/-1}

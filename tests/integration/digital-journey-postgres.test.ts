@@ -378,8 +378,20 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     await publishSource(source.sourceId);
     const linked=await identity.createOrder(actor(),linkedInput,randomUUID(),source.sourceId);
     const headers={cookie:`dx_rework_session=${root}`};
-    const emptyLogs=await app.inject({url:`/digital-production/journeys/${direct.productionOrderId}/logs`,headers});
-    expect(emptyLogs.statusCode,emptyLogs.body).toBe(200);expect(emptyLogs.json()).toMatchObject({items:[],nextCursor:null});
+    const initialLogs=await app.inject({url:`/digital-production/journeys/${direct.productionOrderId}/logs`,headers});
+    expect(initialLogs.statusCode,initialLogs.body).toBe(200);
+    // Confirmation creates the early ship-sample task; reads must expose its original
+    // creation/readiness facts, without inventing completion or mutating the log.
+    const sampleEvents=await db.query("SELECT e.event_id,e.event_kind,e.actor_id FROM digital_production_task_events e JOIN digital_production_task_access a USING(task_id) WHERE a.production_order_id=$1 AND a.task_kind='bulk_ship_sample'",[direct.productionOrderId]);
+    expect(sampleEvents.rows.map(row=>row.event_kind).sort()).toEqual(['created','ready']);
+    const expectedIds=sampleEvents.rows.map(row=>`task:${row.event_id}`).sort();
+    expect(initialLogs.json()).toMatchObject({nextCursor:null});
+    expect(initialLogs.json().items.map((entry:{id:string})=>entry.id).sort()).toEqual(expectedIds);
+    expect(initialLogs.json().items).toEqual(expect.arrayContaining(['创建节点','进入办理'].map(action=>expect.objectContaining({action,nodeKey:'bulk_ship_sample',object:'船样',source:'task_event',actor:{id:designer,name:'TEST-J sample_designer'}}))));
+    const repeatedLogs=await app.inject({url:`/digital-production/journeys/${direct.productionOrderId}/logs`,headers});
+    expect(repeatedLogs.statusCode,repeatedLogs.body).toBe(200);
+    expect(repeatedLogs.json().items).toEqual(initialLogs.json().items);
+    expect((await app.inject({url:`/digital-production/journeys/${direct.productionOrderId}/logs`,headers:{cookie:`dx_rework_session=${stranger}`}})).statusCode).toBe(404);
     for(const id of [direct.productionOrderId,linked.productionOrderId,source.sourceId]){
       const response=await app.inject({url:`/digital-production/journeys/${id}?view=cockpit`,headers});
       expect(response.statusCode,response.body).toBe(200);
