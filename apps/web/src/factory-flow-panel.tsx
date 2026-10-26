@@ -1,3 +1,4 @@
+import {acceptanceInputNow} from './acceptance-business-time.js';
 import {FactoryProductionQcPanel} from './factory-production-qc-panel.js';
 import {FactoryBatchPanel} from './factory-batch-panel.js';
 import {roleLabel} from "./components.js";
@@ -29,7 +30,7 @@ export function FactoryFlowPanel({orderId,onClose}:{orderId:string;onClose:()=>v
  const reload=async()=>setSheet(await digitalRequest<FactoryFlowSheet>(base));
  useEffect(()=>{let live=true;void digitalRequest<FactoryFlowSheet>(base).then(async s=>{if(!live)return;setSheet(s);if(s.canManage){const candidates=await digitalRequest<typeof people>('access/candidates');if(live)setPeople(candidates);}}).catch(e=>{if(live)setError(e.message);});return()=>{live=false;};},[base]);
  const save=async(path:string,body:Record<string,unknown>,outside=false)=>{if(writing.current||!sheet)return;writing.current=true;setBusy(true);setError('');const data=outside?body:{...body,expectedRevision:sheet.revision};const payload=JSON.stringify([path,data]);if(pending.current?.payload!==payload)pending.current={payload,key:createClientRequestId()};try{const response=await digitalRequest<FactoryFlowSheet>(outside?path:base+path,'POST',data,pending.current.key);if(outside)await reload();else setSheet(response);pending.current=null;eventTime.current=null;if(path==='/qc'){const completed=(body.checks as Array<{lineId:string}>).map(check=>check.lineId);setImages(current=>Object.fromEntries(Object.entries(current).filter(([line])=>!completed.includes(line))));setPreviews(current=>{for(const line of completed)for(const photo of current[line]??[]){URL.revokeObjectURL(photo.url);previewUrls.current.delete(photo.url);}return Object.fromEntries(Object.entries(current).filter(([line])=>!completed.includes(line)));});}}catch(e){setError(e instanceof Error?e.message:'办理失败');}finally{writing.current=false;setBusy(false);}};
- const at=(f:FormData)=>{if(f.get('unknown')==='on')return null;if(f.get('at'))return new Date(`${String(f.get('at'))}+08:00`).toISOString();const signature=JSON.stringify([...f.entries()]);if(eventTime.current?.signature!==signature)eventTime.current={signature,value:new Date().toISOString()};return eventTime.current.value;};
+ const at=(f:FormData)=>{if(f.get('unknown')==='on')return null;if(f.get('at'))return new Date(`${String(f.get('at'))}+08:00`).toISOString();const signature=JSON.stringify([...f.entries()]);if(eventTime.current?.signature!==signature)eventTime.current={signature,value:acceptanceInputNow().toISOString()};return eventTime.current.value;};
  const upload=async(lineId:string,files:File[])=>{
   if(writing.current||!files.length)return;
   writing.current=true;setBusy(true);setError('');

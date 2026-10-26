@@ -1,3 +1,4 @@
+import {acceptanceBusinessContext} from '../acceptance-clock/business-time.js';
 import {readPatternHistory} from './pattern-history-reader.js';
 import {PatternHistoryQuerySchema,type PatternHistoryQuery} from '@dx-rework/contracts/pattern-orders';
 import {developmentMakingBasis} from '@dx-rework/contracts/digital-development';
@@ -113,13 +114,17 @@ export class PatternOrderReader {
       const currentWorkerAccess = effective.actorRoles.includes("pattern_room_worker") && current?.worker_user_id === effective.actorId;
       const canReadRoundMaterials = (roundId:string) => allMaterials || (currentWorkerAccess && (roundId === order.current_round_id || segments.some(segment => segment.round_id === roundId && segment.worker_user_id === effective.actorId)));
       const nodes = (await client.query<{ round_id: string; stage: string; entered_at: Date; exited_at: Date | null; exit_reason: string | null; elapsed_seconds: number }>(
-        `SELECT node.*,GREATEST(0,EXTRACT(EPOCH FROM (COALESCE(node.exited_at,CURRENT_TIMESTAMP)-node.entered_at)))::float8 elapsed_seconds
-         FROM pattern_room_node_times node JOIN pattern_room_rounds round USING(round_id) WHERE round.order_id=$1 ORDER BY node.entered_at,node.node_id`, [orderId])).rows;
+        `SELECT node.*,GREATEST(0,EXTRACT(EPOCH FROM (COALESCE(node.exited_at,$2::timestamptz,CURRENT_TIMESTAMP)-node.entered_at)))::float8 elapsed_seconds
+         FROM pattern_room_node_times node JOIN pattern_room_rounds round USING(round_id) WHERE round.order_id=$1 ORDER BY node.entered_at,node.node_id`, [orderId,acceptanceBusinessContext()?.time.now??null])).rows;
       const files = (await client.query<{ attachment_id: string; round_id: string; original_filename: string; mime_type: string; size_bytes: string; active: boolean; bound_at: Date; reason: string }>(
         `SELECT binding.*,file.original_filename,file.mime_type,file.size_bytes FROM pattern_room_attachment_bindings binding
          JOIN attachments file USING(attachment_id) WHERE binding.order_id=$1 AND file.status='ready'
            AND ($2::boolean OR ($4::boolean AND EXISTS(SELECT 1 FROM pattern_room_segments own_segment WHERE own_segment.round_id=binding.round_id
-             AND own_segment.worker_user_id=$3 AND binding.bound_at<=COALESCE(own_segment.ended_at,CURRENT_TIMESTAMP))))
+             AND own_segment.worker_user_id=$3 AND binding.bound_at<=COALESCE((SELECT min(ended.created_at) FROM operation_events ended
+               WHERE ended.entity_type='pattern_room_order' AND ended.entity_id=$1::text AND ended.after_state->'acceptanceClock' IS NOT NULL
+                AND (ended.action='pattern_room.order.work_completed' AND ended.after_state->'value'->>'segmentId'=own_segment.segment_id::text
+                 OR ended.action='pattern_room.order.worker_changed' AND ended.after_state->'value'->>'previousSegmentId'=own_segment.segment_id::text
+                 OR ended.action='pattern_room.order.cancelled' AND ended.after_state->>'roundId'=own_segment.round_id::text)),own_segment.ended_at,CURRENT_TIMESTAMP))))
          ORDER BY binding.bound_at,binding.attachment_id`, [orderId, allMaterials, effective.actorId, currentWorkerAccess])).rows;
       const history = (await client.query<PatternHistoryEvent>(
         `SELECT event.after_state,event.action,COALESCE(person.display_name,event.actor_id::text) actor_name,event.created_at,CASE WHEN $2 THEN event.reason END reason

@@ -1,3 +1,4 @@
+import {businessNow} from '../acceptance-clock/business-time.js';
 import { createHash, randomUUID } from "node:crypto";
 
 import {
@@ -631,8 +632,8 @@ export class WorkReportingService {
       const eventId = await this.events.append(client, reportingActor, event);
       await this.context(client, eventId, actor.requestId);
       const reportInsert = await client.query<{ completed_at: Date }>(
-        "INSERT INTO rework_work_reports(work_report_id,work_task_id,rework_order_id,configuration_item_id,actual_quantity,completed_at,remark,group_amount,submitted_by,resubmits_work_report_id) VALUES($1,$2,$3,$4,$5,CURRENT_TIMESTAMP,$6,$7,$8,$9) RETURNING completed_at",
-        [reportId, workTaskId, task.rework_order_id, task.configuration_item_id, input.actualQuantity, input.remark ?? null, groupAmount, actor.actorId, resubmitsWorkReportId],
+        "INSERT INTO rework_work_reports(work_report_id,work_task_id,rework_order_id,configuration_item_id,actual_quantity,completed_at,remark,group_amount,submitted_by,resubmits_work_report_id) VALUES($1,$2,$3,$4,$5,$10,$6,$7,$8,$9) RETURNING completed_at",
+        [reportId, workTaskId, task.rework_order_id, task.configuration_item_id, input.actualQuantity, input.remark ?? null, groupAmount, actor.actorId, resubmitsWorkReportId,businessNow().toISOString()],
       );
       const completedAt = reportInsert.rows[0]?.completed_at ?? error("完工时间记录失败", 500, "INTERNAL_ERROR");
       if (resubmitsWorkReportId) {

@@ -1,3 +1,4 @@
+import {acceptanceBusinessContext,assertAcceptanceAssignee,businessNow} from '../acceptance-clock/business-time.js';
 import {arrangementsAvailable} from "../production-platform/development-arrangement.js";
 import {sourcingTodoSla} from "../production-platform/sourcing-todo-sla.js";
 import {isDeepStrictEqual} from 'node:util';
@@ -593,7 +594,7 @@ export class TodoService {
            WHEN $14::text IS NULL THEN NULL
            WHEN $14='deduction_follow_up' THEN $15::timestamptz
            WHEN $14='sourcing_contract_return' THEN NULL
-           ELSE CURRENT_TIMESTAMP + (
+           ELSE COALESCE($20::timestamptz,CURRENT_TIMESTAMP) + (
              SELECT policy.due_after_seconds * interval '1 second'
              FROM todo_policies policy WHERE policy.policy_key=$14 AND policy.enabled=true
            )
@@ -609,7 +610,7 @@ export class TodoService {
         input.todoType === "information" ? null : (input.delegationScopeId ?? input.entityId),
         route, input.policyKey ?? null, sourcingTiming ? sourcingTiming.dueAt : input.authoritativeDueAt ?? null,
         input.dedupeKey, creationEventId, actor.requestId,
-        Boolean(sourcingTiming),
+        Boolean(sourcingTiming),acceptanceBusinessContext()?businessNow().toISOString():null,
       ],
     );
     const todo = created.rows[0];
@@ -861,12 +862,12 @@ export class TodoService {
               todo.due_at,todo.reminder_count,todo.status,todo.blocked_reason,todo.version,
               todo.created_at,todo.updated_at,policy.due_after_seconds,
               policy.first_reminder_after_due_seconds,policy.second_reminder_after_due_seconds,
-              policy.escalate_after_due_seconds,policy.max_reminders,CURRENT_TIMESTAMP database_now
+              policy.escalate_after_due_seconds,policy.max_reminders,COALESCE($2::timestamptz,CURRENT_TIMESTAMP) database_now
        FROM rework_todos todo
        JOIN todo_policies policy ON policy.policy_key=todo.policy_key AND policy.enabled=true
        WHERE todo.todo_id=$1 AND todo.status='pending' AND todo.due_at IS NOT NULL
        FOR UPDATE`,
-      [todoId],
+      [todoId,acceptanceBusinessContext()?businessNow().toISOString():null],
     );
     const todo = result.rows[0];
     if (!todo || !todo.due_at) return null;
@@ -1364,6 +1365,13 @@ export class TodoService {
     operationRequestId: string,
     deliveryKind: "create" | "complete" | "reminder" | "escalation" | "information",
   ): Promise<void> {
+    const context=acceptanceBusinessContext();
+    if(context){
+      await assertAcceptanceAssignee(todo.recipient_user_id);
+      await client.query(`INSERT INTO acceptance_sla_clock_receipts(receipt_id,scenario_id,native_kind,native_event_id,recipient_id,business_time,details_json)
+        VALUES($1,$2,'todo',$3,$4,$5,$6) ON CONFLICT DO NOTHING`,[randomUUID(),context.scenarioId,operationEventId,todo.recipient_user_id,context.time.now,JSON.stringify({kind:deliveryKind,todoId:todo.todo_id})]);
+      return;
+    }
     if (todo.route_descriptor.routeName === "digital_production_task" || await digitalTodoTarget(client, TodoRouteDescriptorSchema.parse(todo.route_descriptor))) return;
     // Version-bound transfer contract tasks (including their routing exceptions) are in-system only.
     if (todo.route_descriptor.transferContract || todo.route_descriptor.contractReturn) return;

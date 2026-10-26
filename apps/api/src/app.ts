@@ -1,4 +1,6 @@
 import { publicErrorMessage } from "./platform/public-error-message.js";
+import {registerAcceptanceClockRoutes} from './acceptance-clock/routes.js';
+import type {AcceptanceClockRuntime} from './acceptance-clock/runtime.js';
 import { configureChineseValidation } from "@dx-rework/contracts/validation-language";
 import { registerDigitalIdentityRoutes, type DigitalIdentityDependencies } from "./production-platform/identity-routes.js";
 import { registerMemberModuleHttpGuard } from "./access/member-module-http.js";
@@ -64,6 +66,7 @@ export type AppDependencies = Readonly<{
   checkDatabase: () => Promise<void>;
   getAppliedSchemaHistory: () => Promise<AppliedSchemaState[] | null>;
   auth?: AuthService;
+  acceptanceClock?: AcceptanceClockRuntime;
   digitalIdentity?: DigitalIdentityDependencies;
   tools?: ToolsHttpDependencies;
   access?: AccessHttpDependencies;
@@ -143,6 +146,15 @@ export function buildApp(dependencies: AppDependencies): FastifyInstance {
   });
 
   registerBrowserMutationOriginGuard(app, new URL(config.dingtalk.qrRedirectUri).origin);
+
+  if(dependencies.acceptanceClock){
+    if(config.nodeEnv==='production'||!config.acceptanceLab.enabled||!dependencies.auth||!dependencies.digitalIdentity)throw new Error('Acceptance clock is unavailable in this server configuration');
+    registerAcceptanceClockRoutes(app,dependencies.acceptanceClock,dependencies.auth,dependencies.digitalIdentity.root);
+  }else{
+    app.addHook('onRequest',async request=>{
+      if(request.headers['x-acceptance-scenario']!==undefined)throw new ApplicationError('ACCEPTANCE_ISOLATION','本运行环境不接受测试场景请求',403);
+    });
+  }
 
   if (dependencies.auth) registerMemberModuleHttpGuard(app, token => dependencies.auth!.authenticate(token));
 

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import {acceptanceBusinessContext} from '../acceptance-clock/business-time.js';
 import type { PoolClient } from "pg";
 
 import { sanitizeOperationalError } from "@dx-rework/domain";
@@ -95,6 +96,11 @@ const rethrowMemberPolicyError = (error: unknown): never => {
 };
 
 export class OperationEventRepository {
+  private after(input:unknown):unknown {
+    const context=acceptanceBusinessContext();
+    return context&&input!==null&&typeof input==='object'&&!Array.isArray(input)
+      ?{...input,acceptanceClock:context.time}:input??null;
+  }
   private actorRoles(actor: TrustedActorContext): string[] {
     const actorRoles = [...new Set(actor.actorRoles)].sort();
     const safeCode = /^[A-Za-z0-9][A-Za-z0-9:._-]{0,127}$/;
@@ -113,7 +119,7 @@ export class OperationEventRepository {
     await client.query(
       `INSERT INTO operation_events(event_id,request_id,actor_id,actor_roles,authorization_capability,action,entity_type,entity_id,before_state,after_state,reason)
        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-      [eventId, actor.requestId, actor.actorId, actorRoles, actor.authorizationCapability, input.action, input.entityType, input.entityId, input.before ?? null, input.after ?? null, input.reason ?? null],
+      [eventId, actor.requestId, actor.actorId, actorRoles, actor.authorizationCapability, input.action, input.entityType, input.entityId, input.before ?? null, this.after(input.after), input.reason ?? null],
     ).catch(rethrowMemberPolicyError);
     return eventId;
   }
@@ -133,7 +139,7 @@ export class OperationEventRepository {
       entity_type: input.entityType,
       entity_id: input.entityId,
       before_state: input.before ?? null,
-      after_state: input.after ?? null,
+      after_state: this.after(input.after),
       reason: input.reason ?? null,
     }));
     await client.query(

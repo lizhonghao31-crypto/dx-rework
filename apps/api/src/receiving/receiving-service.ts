@@ -1,3 +1,4 @@
+import {businessNow} from '../acceptance-clock/business-time.js';
 import {linkDigitalReceipt} from "../production-platform/receiving-link-adapter.js";
 import {receivingDocumentHistory} from "./receiving-document-history.js";
 import { RECEIVING_BOARD_FILTERS_SQL } from "./receiving-board-filters.js";
@@ -611,7 +612,7 @@ const normalizeBoardDate = (value: string): string => {
   return value;
 };
 
-const normalizeReceivingBackfillDate = (value: string | undefined, now = new Date()): string | null => {
+const normalizeReceivingBackfillDate = (value: string | undefined, now = businessNow()): string | null => {
   if (value === undefined) return null;
   const parsed = Date.parse(`${value}T00:00:00Z`);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || !Number.isFinite(parsed) || new Date(parsed).toISOString().slice(0, 10) !== value) {
@@ -1813,15 +1814,15 @@ export class ReceivingService {
              receipt_id,receiving_batch_id,cutting_order_id,style_no,document_quantity,actual_quantity,defective_quantity,
              receiving_source,received_by,operation_event_id,request_id,received_at
            ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,COALESCE(
-             ($12::date+(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Shanghai')::time) AT TIME ZONE 'Asia/Shanghai',
-             CURRENT_TIMESTAMP
+             ($12::date+($13::timestamptz AT TIME ZONE 'Asia/Shanghai')::time) AT TIME ZONE 'Asia/Shanghai',
+             $13::timestamptz
            ))
            RETURNING receipt_id,receiving_batch_id,style_no,document_quantity,actual_quantity,defective_quantity,
                      difference_quantity,received_by,received_at`,
           [
             receiptId,receivingBatchId,input.cuttingOrderId,input.styleNo,input.documentQuantity,
             input.actualQuantity,input.defectiveQuantity,input.receivingSource,actor.actorId,eventId,
-            actor.requestId,input.receivedDate,
+            actor.requestId,input.receivedDate,businessNow().toISOString(),
           ],
         )
       : await client.query<{
@@ -1839,14 +1840,14 @@ export class ReceivingService {
              receipt_id,receiving_batch_id,style_no,document_quantity,actual_quantity,defective_quantity,
              receiving_source,received_by,operation_event_id,request_id,received_at
            ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,COALESCE(
-             ($11::date+(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Shanghai')::time) AT TIME ZONE 'Asia/Shanghai',
-             CURRENT_TIMESTAMP
+             ($11::date+($12::timestamptz AT TIME ZONE 'Asia/Shanghai')::time) AT TIME ZONE 'Asia/Shanghai',
+             $12::timestamptz
            ))
            RETURNING receipt_id,receiving_batch_id,style_no,document_quantity,actual_quantity,defective_quantity,
                      difference_quantity,received_by,received_at`,
           [
             receiptId,receivingBatchId,input.styleNo,input.documentQuantity,input.actualQuantity,
-            input.defectiveQuantity,input.receivingSource,actor.actorId,eventId,actor.requestId,input.receivedDate,
+            input.defectiveQuantity,input.receivingSource,actor.actorId,eventId,actor.requestId,input.receivedDate,businessNow().toISOString(),
           ],
         );
     if (input.receivingSource === "other_factory") {

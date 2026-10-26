@@ -7,6 +7,7 @@ import {
   type DigitalSlaSnapshot, type DigitalSlaValues,
 } from "@dx-rework/contracts/digital-sla";
 import { readSlaPolicyValues, slaPolicyKey, storeSlaPolicyValues } from "./sla-policy-values.js";
+import {acceptanceBusinessContext} from '../acceptance-clock/business-time.js';
 
 // Internal transaction-bound persistence. No route is exposed by this foundation.
 // The publishing/application service must check actor and order scope before calling.
@@ -36,6 +37,12 @@ export class SlaConfigurationRepository {
 
   /** Fixed approved bootstrap only. Order creators cannot supply or change standards. */
   async initialStandard(actorId: string): Promise<SlaConfiguration> {
+    const context=acceptanceBusinessContext();
+    if(context){
+      const row=(await this.transaction.query('SELECT * FROM digital_sla_configurations WHERE configuration_id=$1',[context.configurationId])).rows[0];
+      if(!row)throw new Error('Acceptance configuration reference is unavailable');
+      return {configurationId:row.configuration_id,version:row.version,values:await readSlaPolicyValues(this.transaction,row.policy_refs_json??row.values_json),createdBy:row.created_by,reason:row.reason};
+    }
     await this.transaction.query("LOCK TABLE digital_sla_configurations IN SHARE ROW EXCLUSIVE MODE");
     const current = await this.current();
     if (current) return current;
@@ -61,6 +68,7 @@ export class SlaConfigurationRepository {
   }
 
   async publish(input: { expectedVersion: number; values: DigitalSlaValues; actorId: string; reason: string; requestKey: string }): Promise<SlaConfiguration> {
+    if(acceptanceBusinessContext())throw new Error('测试时钟场景不能发布全局时效标准；仅可选择既有已发布版本');
     if (!Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 0) throw new Error("Invalid expected version");
     const values = validateDigitalSlaValues(input.values);
     const reason = reasonText(input.reason);

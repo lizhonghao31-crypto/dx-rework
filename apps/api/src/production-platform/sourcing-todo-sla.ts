@@ -1,3 +1,4 @@
+import {acceptanceBusinessContext,businessNow} from '../acceptance-clock/business-time.js';
 import type {PoolClient} from "pg";
 import {validateDigitalSlaSnapshot} from "@dx-rework/contracts/digital-sla";
 
@@ -27,5 +28,5 @@ export async function sourcingTodoSla(client:Pick<PoolClient,"query">,input:{cat
   if(value?.kind!=="duration")throw new Error("Frozen sourcing SLA duration missing");
   const transition=(await client.query(`SELECT transitioned_at FROM sourcing_case_transitions
     WHERE sourcing_case_id=$1 AND operation_event_id=$2 ORDER BY sequence DESC LIMIT 1`,[input.entityId,input.sourceEventId])).rows[0];
-  return {dueAt:transition?new Date(new Date(transition.transitioned_at).getTime()+value.minutes*60000):null,snapshotId:row.snapshot_id as string};
+  return {dueAt:transition?new Date((acceptanceBusinessContext()?businessNow().getTime():new Date(transition.transitioned_at).getTime())+value.minutes*60000):null,snapshotId:row.snapshot_id as string};
 }

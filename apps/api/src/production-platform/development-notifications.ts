@@ -11,7 +11,7 @@ import { DigitalProductionAccessPolicy } from "./access-policy.js";
 import { developmentSlaPlan } from "./development-sla-enrollment.js";
 import { receivedDevelopmentAccessories } from "./development-accessory-receipts.js";
 
-export async function projectDevelopmentNotices(db: PoolClient, people: TrustedActorContext[], now = new Date()) {
+export async function projectDevelopmentNotices(db: PoolClient, people: TrustedActorContext[], now = new Date(), includes:(sourceId:string)=>Promise<boolean>=async()=>true) {
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
   const rounds=await developmentRoundsAvailable(db);
   const documents=rounds?(await developmentReadTables(db)).current:"digital_development_documents";
@@ -29,6 +29,7 @@ export async function projectDevelopmentNotices(db: PoolClient, people: TrustedA
       await db.query("INSERT INTO digital_production_notification_receipts(event_id,source_event_id,recipient_id) VALUES($1,$1,$2)",[inserted.event_id,person.actorId]);
   };
   for (const row of rows) {
+    if(!await includes(row.source_id))continue;
     if((await db.query("SELECT to_regclass('digital_development_material_verifications') AS relation")).rows[0]?.relation){
       for(const report of await fabricCases(db,row.source_id)){
         if(report.decisionId)continue;

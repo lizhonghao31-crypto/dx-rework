@@ -1,3 +1,4 @@
+import {businessNow} from '../acceptance-clock/business-time.js';
 import {BulkMaterialsDispatchSchema,type BulkMaterialsDispatch} from '@dx-rework/contracts/bulk-preparation';
 import {bulkFabricFacts} from "./bulk-fabric-facts.js";
 import {BulkFabricReportSchema,BulkFabricDecisionSchema,type BulkFabricReport,type BulkFabricDecision} from "@dx-rework/contracts/bulk-preparation";
@@ -188,7 +189,7 @@ export class BulkPreparationService {
    if(!isRootActor(actor)&&!await policy.activeRole(actor.actorId,'warehouse_receiver')&&!await policy.activeRole(actor.actorId,'warehouse_supervisor'))digitalForbidden();
    const g=await this.gates(db,id);
    if(!g.instructionValid||g.instruction?.version!==input.instructionVersion||!g.approval||g.approval.supplier_id!==input.supplierId)fail('制单或批准加工厂已变化，请刷新本单材料信息');
-   if(Date.parse(input.occurredAt)>Date.now()||Date.parse(input.occurredAt)<new Date(g.instruction.published_at).getTime())fail('实际发出时间不能在未来或早于本版制单发布');
+   if(Date.parse(input.occurredAt)>businessNow().getTime()||Date.parse(input.occurredAt)<new Date(g.instruction.published_at).getTime())fail('实际发出时间不能在未来或早于本版制单发布');
    if(new Set(input.items.map(i=>i.materialId)).size!==input.items.length)fail('本次辅料不可重复');
    const items=input.items.map(item=>{const material=g.instruction.document.accessories.find((m:InstructionDocument['accessories'][number])=>m.id===item.materialId);if(!material)fail('辅料必须来自本单当前制单');return {...item,name:material.name};});
    await db.query(`INSERT INTO digital_production_task_events(event_id,resource_kind,resource_id,event_kind,actor_id,occurred_at,time_quality,payload) VALUES($1,'order',$2,'bulk_materials_dispatched',$3,$4,'补报未核实',$5)`,[randomUUID(),id,actor.actorId,input.occurredAt,JSON.stringify({...input,items})]);
@@ -200,7 +201,7 @@ export class BulkPreparationService {
   return this.command(actor,id,'fabric-report',input,key,async db=>{
    const policy=new DigitalProductionAccessPolicy(db);
    if(!isRootActor(actor)&&!await policy.activeRole(actor.actorId,'warehouse_receiver')&&!await policy.activeRole(actor.actorId,'warehouse_supervisor'))digitalForbidden();
-   for(const at of [input.arrivedAt,input.inspectedAt])if(at&&Date.parse(at)>Date.now())fail('实际时间不能在未来');
+   for(const at of [input.arrivedAt,input.inspectedAt])if(at&&Date.parse(at)>businessNow().getTime())fail('实际时间不能在未来');
    if(!(await this.gates(db,id)).parallel)fail('旧路线保留原办理方式，不能自动套用新验布规则');
    const prior=await bulkFabricFacts(db,id);
    if((prior.report?.reportId??null)!==input.expectedReportId)fail('验布报告已更新，请刷新');
@@ -217,7 +218,7 @@ export class BulkPreparationService {
    const state=await bulkFabricFacts(db,id);
    if(state.report?.reportId!==input.reportId||state.report.result!=='不合格'||(state.decision?.decisionId??null)!==input.expectedDecisionId)fail('验布报告或质量决定已更新，请刷新');
    await db.query(`INSERT INTO digital_production_task_events(event_id,resource_kind,resource_id,event_kind,actor_id,occurred_at,time_quality,payload)
-     VALUES($1,'order',$2,'bulk_fabric_decision',$3,CURRENT_TIMESTAMP,'现场登记',$4)`,[randomUUID(),id,actor.actorId,JSON.stringify(input)]);
+     VALUES($1,'order',$2,'bulk_fabric_decision',$3,$5,'现场登记',$4)`,[randomUUID(),id,actor.actorId,JSON.stringify(input),businessNow().toISOString()]);
    await this.sync(db,actor,id);
   });
  }

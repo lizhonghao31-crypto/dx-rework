@@ -1,3 +1,4 @@
+import {businessNow} from '../acceptance-clock/business-time.js';
 import {documentMetadata} from "./document-metadata.js";
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
@@ -110,7 +111,7 @@ export class DigitalBudgetService {
       if (errors.length) throw new ApplicationError("VALIDATION_ERROR", `${errors.join("；")}；请本单设计师或跟单在预算页逐项补齐后重新发布`, 400);
       await this.bindFiles(db, actor, orderId, row.document);
       await db.query("INSERT INTO digital_budget_versions(production_order_id,version,document,totals,published_by) VALUES($1,$2,$3,$4,$5)", [orderId, row.version, JSON.stringify(row.document), JSON.stringify(calculateBudget(row.document)), actor.actorId]);
-      await db.query("UPDATE digital_budget_documents SET status='published',published_at=CURRENT_TIMESTAMP,updated_by=$2 WHERE production_order_id=$1", [orderId, actor.actorId]);
+      await db.query("UPDATE digital_budget_documents SET status='published',published_at=$3,updated_by=$2 WHERE production_order_id=$1", [orderId, actor.actorId,businessNow().toISOString()]);
       await db.query("INSERT INTO digital_budget_preparations(production_order_id,budget_version) VALUES($1,$2) ON CONFLICT(production_order_id) DO UPDATE SET budget_version=EXCLUDED.budget_version", [orderId, row.version]);
       const preparation = (await db.query("SELECT task_id FROM digital_budget_preparations WHERE production_order_id=$1", [orderId])).rows[0];
       if (!preparation.task_id) {

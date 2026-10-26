@@ -1,3 +1,4 @@
+import {ContextBusinessClock} from '../acceptance-clock/business-time.js';
 import {factoryProductionFacts} from './factory-production-facts.js';
 import {shipSampleFacts} from './ship-sample-facts.js';
 import {developmentReadTables} from "./development-amendment-repository.js";
@@ -146,6 +147,9 @@ export class DigitalJourneyQuery {
   private async project(db:PoolClient,actor:TrustedActorContext,row:Candidate,asOf:string,selectedRound?:number,summaryOnly=false,patternKinds:string[]|null=null,compact=false):Promise<OrderJourney|null> {
     const policy=new DigitalProductionAccessPolicy(db),source=row.source,order=row.order;
     const sid=source?.source_id??null,oid=order?.production_order_id??null;
+    // Projection time is business time; the outer audit-log snapshot remains real.
+    const observed=await new ContextBusinessClock(this.database).read(oid?{kind:'order',id:oid}:{kind:'source',id:sid!});
+    if(observed.scenarioId)asOf=observed.now;
     const attached=Boolean(sid&&oid&&(await db.query("SELECT 1 FROM audit_events WHERE entity_type='digital_production' AND entity_id=$1 AND action='digital_source_attached' AND after_state->>'sourceId'=$2 LIMIT 1",[oid,sid])).rowCount);
     const canonicalId=attached?oid!:(sid??oid!);
     const sourceAccess=Boolean(sid&&await policy.allowed(actor,"source",sid,"technical"));
@@ -253,7 +257,7 @@ export class DigitalJourneyQuery {
       if(task.blockedReason&&task.blockedReason!=='前置条件未满足')node.blockers.push({key:"recorded_block",label:task.blockedReason,ownerId:task.assigneeId,record:node.records[0]!});
       if(task.state==='ready'&&!task.paused&&!node.blockers.length)for(const key of completionKeys){const detail=digitalConditionGuidance(key,raw.required_role);node.blockers.push({key:`completion:${key}`,label:`完成办理前：${detail.missing}；由${businessRoleLabel(detail.responsibleRole)}在原任务办理页核实并提交，当前记录可查看`,ownerId:task.assigneeId,record:node.records[0]!});}
       if(["active","blocked"].includes(state)) {
-        if(task.dueAt&&Date.parse(task.dueAt)<=Date.parse(asOf)){node.risks.push("overdue");node.overdueSeconds=(Date.parse(asOf)-Date.parse(task.dueAt))/1000;}
+        if(task.dueAt&&(task.deadlineExclusive===false?Date.parse(task.dueAt)<Date.parse(asOf):Date.parse(task.dueAt)<=Date.parse(asOf))){node.risks.push("overdue");node.overdueSeconds=(Date.parse(asOf)-Date.parse(task.dueAt))/1000;}
         else if(task.warningAt&&Date.parse(task.warningAt)<=Date.parse(asOf))node.risks.push("due_soon");
         if(state==="blocked")node.risks.push("blocked");
         if(!task.enteredAt)node.risks.push("unknown");

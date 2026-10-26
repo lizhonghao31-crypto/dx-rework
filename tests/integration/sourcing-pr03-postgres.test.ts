@@ -1,3 +1,4 @@
+import {withAcceptanceBusinessTime} from '../../apps/api/src/acceptance-clock/business-time.js';
 import {reworkSlaEvidence} from '../../apps/api/src/production-platform/rework-sla-evidence.js';
 import {linkNewDigitalChild} from '../../apps/api/src/production-platform/child-link-repository.js';
 import {registerGarmentReceipt} from '../../apps/api/src/production-platform/garment-quality.js';
@@ -4446,6 +4447,17 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const logistics=await factoryReturnLogistics(database,ready.id,new Date(Date.now()+4*86400000));
     expect(logistics[0]).toMatchObject({dispatchPrecision:'date',actualDispatchedAt:null,shippedOn:day,estimatedMinutes:2880,estimateExpired:true,firstReceivedAt:null});
     expect(Date.parse(logistics[0]!.arrivalRange!.toExclusive)-Date.parse(logistics[0]!.arrivalRange!.fromInclusive)).toBe(86400000);
+    // Read-only trusted-clock fixture: native shipment facts above stay untouched.
+    const closure=new OrderClosureService(database),boundary=Date.parse(logistics[0]!.arrivalRange!.toExclusive);
+    for(const offset of [-1,0,1]){
+      const [factory,receiving]=await withAcceptanceBusinessTime({scenarioId:'TEST-logistics-clock',configurationId:'TEST-read-only',time:{scenarioId:'TEST-logistics-clock',revision:1,now:new Date(boundary+offset).toISOString()},assertScope:async scope=>{expect(scope).toEqual({kind:'order',id:ready.id});},acceptsActor:async userId=>[root.actorId,qc.actorId].includes(userId),registerCreated:async()=>{throw new Error('TEST read-only clock must not create business data');}},()=>Promise.all([flow.read(qc,ready.id),closure.read(root,ready.id)]));
+      expect(factory.returnLogistics![0]!.estimateExpired).toBe(offset>=0);
+      expect(receiving.receivingForecast!.state).toBe(offset<0?'estimated':'unknown');
+      expect(receiving.collection!.received).toBe(0);
+    }
+    // Leaving the scene restores real-time reads; changing time creates no receipt.
+    expect((await flow.read(qc,ready.id)).returnLogistics![0]!.estimateExpired).toBe(false);
+    expect((await closure.read(root,ready.id)).receivingForecast!.state).toBe('estimated');
     expect((await new SlaOrderService(database).read(root,ready.id)).nodes!.filter(n=>n.id.startsWith('return_logistics:')).every(n=>n.actualStart===null&&n.deadline.at===null)).toBe(true);
     state=await flow.read(qc,ready.id);
     if(process.env.SLA_FACTORY_QC_UI_INPUT)await writeFile(process.env.SLA_FACTORY_QC_UI_INPUT,JSON.stringify({productionQc:state}));

@@ -1,4 +1,5 @@
 import {developmentRevisionSource,inheritedDevelopmentFile} from './development-revision-source.js';
+import {acceptanceBusinessContext,businessNow,observedBusinessTime} from '../acceptance-clock/business-time.js';
 import {validateAuxiliaryReferences} from '../access/auxiliary-catalog-service.js';
 import {DevelopmentAmendmentService} from "./development-amendment-service.js";
 import {developmentDraftForSave} from "./development-document-format.js";
@@ -53,7 +54,7 @@ export class DigitalDevelopmentService {
     let document=row?.document??null;
     if(document?.customerOrderDraft&&!source.can_view_order_draft){document={...document};delete document.customerOrderDraft;}
     const effectiveMaterials=row?.status==="published"&&(await db.query("SELECT to_regclass('digital_development_execution_facts') AS relation")).rows[0]?.relation?(await materialReadiness(db,sourceId,row.round_number??1)).materials:[];
-    return { revisionSource:await developmentRevisionSource(db,sourceId),independentRevisions:Boolean(await developmentSlaPlan(db,sourceId)),developmentCreatedDate:beijingCalendarDate(new Date(source.created_at)), metadata:await documentMetadata(db,row?.revision??row), materialReadiness:effectiveMaterials, sourceId, productionOrderId, designStyleNo: source.design_style_no, temporaryStyleNo: source.temporary_style_no, customerCode: source.customer_code,
+    return { revisionSource:await developmentRevisionSource(db,sourceId),independentRevisions:Boolean(await developmentSlaPlan(db,sourceId)),developmentCreatedDate:beijingCalendarDate(new Date(acceptanceBusinessContext()?(await db.query('SELECT business_time FROM digital_development_sla_plans WHERE source_id=$1 ORDER BY revision LIMIT 1',[sourceId])).rows[0]?.business_time?.now??source.created_at:source.created_at)), metadata:await documentMetadata(db,row?.revision??row), materialReadiness:effectiveMaterials, sourceId, productionOrderId, designStyleNo: source.design_style_no, temporaryStyleNo: source.temporary_style_no, customerCode: source.customer_code,
       developmentType: source.development_type, designerName: source.designer_name, version: row?.version ?? 0, status: row?.status ?? "draft",
       document, publishedAt: row?.published_at ? new Date(row.published_at).toISOString() : null, taskId: row?.task_id ?? null,
       canRevise:source.can_edit,roundNumber:row?.round_number??1,latestRoundNumber:row?.latest_round_number??1,canEdit: source.can_edit && (!row || row.round_number===row.latest_round_number), materialEvents };
@@ -96,7 +97,8 @@ export class DigitalDevelopmentService {
       if ((row?.version ?? 0) !== input.expectedVersion) conflict("开发单已更新，请重新打开后再保存");
       if (row?.status === "published") conflict("已发布开发单不可覆盖，请通过复版记录实际修改");
       const source=(await db.query("SELECT created_at FROM digital_production_sources WHERE source_id=$1",[sourceId])).rows[0];
-      const document=developmentDraftForSave(input.document,row?.document,source.created_at);
+      const sourceDate=acceptanceBusinessContext()?(await db.query('SELECT business_time FROM digital_development_sla_plans WHERE source_id=$1 ORDER BY revision LIMIT 1',[sourceId])).rows[0]?.business_time?.now??source.created_at:source.created_at;
+      const document=developmentDraftForSave(input.document,row?.document,sourceDate);
       if(document.customerOrderDraft?.withOrder&&await developmentRevisionSource(db,sourceId))conflict('复版沿原开发档案的客户订单，不重复填写大货数量');
       await validateAuxiliaryReferences(db,document,row?.document);
       await this.bindFiles(db, actor, sourceId, document);
@@ -120,7 +122,7 @@ export class DigitalDevelopmentService {
         const source=(await db.query("SELECT design_style_no,temporary_style_no,customer_code FROM digital_production_sources WHERE source_id=$1",[sourceId])).rows[0];
         if(source.design_style_no!==parsed.data.designStyleNo||(source.temporary_style_no??"")!==(parsed.data.temporaryStyleNo??"")||(source.customer_code&&source.customer_code!==parsed.data.customerCode))
           throw new ApplicationError("VALIDATION_ERROR","订购草稿的款号、代用款号及客户须与当前开发来源一致",400);
-        const now=this.now(),orderDateError=customerOrderDateError(parsed.data.orderDate,beijingCalendarDate(now));
+        const now=businessNow(this.now),orderDateError=customerOrderDateError(parsed.data.orderDate,beijingCalendarDate(now));
         if(orderDateError)throw new ApplicationError("VALIDATION_ERROR",orderDateError,400);
         const dateErrors=initialCustomerDateErrors(parsed.data.lines,minimumInitialCustomerDate(now));
         if(dateErrors.length)throw new ApplicationError("VALIDATION_ERROR",dateErrors.join("；"),400);
@@ -131,7 +133,7 @@ export class DigitalDevelopmentService {
       if(patternOrder&&!this.patternOrders)conflict("打板执行衔接服务未配置");
       await this.bindFiles(db, actor, sourceId, row.document);
       const time = this.businessClock ? await this.businessClock.read({ kind: "source", id: sourceId })
-        : { now: this.now().toISOString(), scenarioId: null, revision: 0 };
+        : observedBusinessTime(this.now);
       // Only sources enrolled at creation receive the new rules. Publishing a legacy draft is not enrollment.
       if (await developmentSlaPlan(db, sourceId)) await captureDevelopmentSla(db, actor, sourceId, row.document, time, `development-publish:${sourceId}:${key}`);
       const candidates = (await db.query(`SELECT DISTINCT u.id FROM app_users u JOIN user_role_assignments r ON r.user_id=u.id AND r.revoked_at IS NULL

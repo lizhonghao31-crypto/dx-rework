@@ -1,4 +1,5 @@
 import {developmentReadTables} from "./development-amendment-repository.js";
+import {acceptanceClockReaderEnabled} from '../acceptance-clock/business-time.js';
 import {savedDevelopmentRoute} from "./development-sla-enrollment.js";
 import { DigitalDevelopmentService } from "./development-service.js";
 import { OrderClosureService } from "./order-closure-service.js";
@@ -31,6 +32,10 @@ export class DigitalCockpitQuery {
       : `($6 OR $7 OR ('sample_designer'=ANY($5::text[]) AND o.created_by=$4) OR ('order_merchandiser'=ANY($5::text[]) AND o.primary_merchandiser_id=$4) OR (${clerk} AND o.source_id IS NOT NULL) OR ${bulkTasks})`;
     const column = input.stage === "development" ? "source_id" : "production_order_id";
     const visibleColumn=input.stage==='development'?'sourceId':'orderId';
+    const comparisonTime=acceptanceClockReaderEnabled(this.database)?`coalesce((SELECT c.business_now FROM acceptance_sla_clock_resources m JOIN acceptance_sla_clock_scenarios c USING(scenario_id) WHERE m.resource_kind='${input.stage==='development'?'source':'order'}' AND m.resource_id=a.${column}),CURRENT_TIMESTAMP)`:'CURRENT_TIMESTAMP';
+    const deadlineFields=acceptanceClockReaderEnabled(this.database)?'due_at,warning_at,sla_basis':'due_at,warning_at';
+    const overdueCondition=acceptanceClockReaderEnabled(this.database)?`CASE WHEN r.sla_basis IS NOT NULL AND coalesce((r.sla_basis->>'exclusive')::boolean,false)=false THEN r.due_at<${comparisonTime} ELSE r.due_at<=${comparisonTime} END`:`r.due_at<=${comparisonTime}`;
+    const dueSoonCondition=acceptanceClockReaderEnabled(this.database)?`r.warning_at<=${comparisonTime} AND NOT (${overdueCondition})`:`r.warning_at<=${comparisonTime} AND r.due_at>${comparisonTime}`;
     const result=(await db.query(`WITH visible AS (
 SELECT o.production_order_id AS "orderId",s.source_id AS "sourceId",
       coalesce(o.production_order_id,s.source_id) AS id,coalesce(o.design_style_no,s.design_style_no) AS "styleNo",
@@ -52,11 +57,11 @@ SELECT o.production_order_id AS "orderId",s.source_id AS "sourceId",
     ), summary AS (
       SELECT count(DISTINCT a.${column}) FILTER(WHERE t.state NOT IN ('completed','cancelled'))::int AS active,
       count(DISTINCT a.${column}) FILTER(WHERE t.state='blocked')::int AS blocked,
-      count(DISTINCT a.${column}) FILTER(WHERE t.state IN ('ready','blocked') AND r.due_at<=CURRENT_TIMESTAMP)::int AS overdue,
-      count(DISTINCT a.${column}) FILTER(WHERE t.state IN ('ready','blocked') AND r.warning_at<=CURRENT_TIMESTAMP AND r.due_at>CURRENT_TIMESTAMP)::int AS "dueSoon",
+      count(DISTINCT a.${column}) FILTER(WHERE t.state IN ('ready','blocked') AND (${overdueCondition}))::int AS overdue,
+      count(DISTINCT a.${column}) FILTER(WHERE t.state IN ('ready','blocked') AND (${dueSoonCondition}))::int AS "dueSoon",
       count(DISTINCT a.${column}) FILTER(WHERE t.state IN ('ready','blocked') AND t.entered_at IS NULL)::int AS unknown
       FROM digital_production_task_access a JOIN digital_production_tasks t USING(task_id)
-      LEFT JOIN LATERAL(SELECT due_at,warning_at FROM digital_production_deadline_revisions WHERE task_id=t.task_id ORDER BY revision_id DESC LIMIT 1) r ON true
+      LEFT JOIN LATERAL(SELECT ${deadlineFields} FROM digital_production_deadline_revisions WHERE task_id=t.task_id ORDER BY revision_id DESC LIMIT 1) r ON true
       WHERE EXISTS(SELECT 1 FROM visible v WHERE v."${visibleColumn}"=a.${column})
     ) SELECT totals.total,row_to_json(summary) AS summary,coalesce((SELECT json_agg(page) FROM page),'[]'::json) AS items FROM totals CROSS JOIN summary`,[input.stage,input.search,input.workload??"all",actor.actorId,actor.actorRoles,isDigitalLeader(actor),isDigitalTechnicalManager(actor),(input.page-1)*15])).rows[0];
     const summary=result.summary;
