@@ -1,3 +1,4 @@
+import {AcceptanceClockLauncher} from './acceptance-clock-panel.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button, StatusBadge, Surface } from "@dx-rework/ui";
@@ -438,6 +439,7 @@ export function AcceptanceLabPage() {
   </Surface></main>;
 
   return <main className="acceptance-lab">
+    <AcceptanceClockLauncher/>
     <header className="acceptance-lab__header">
       <div><StatusBadge tone="success">Acceptance Lab 已隔离</StatusBadge><h1>角色权限验收中心</h1><p>每次切换都会建立对应合成用户的真实业务 Session，不继承操作者 Root 权限。</p></div>
       <Button variant="secondary" onClick={() => void end()} disabled={matrixRunning || Boolean(scenarioRunning) || Boolean(scenarioDraft)}>结束验收</Button>

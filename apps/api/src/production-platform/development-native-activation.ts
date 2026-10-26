@@ -1,3 +1,4 @@
+import {businessNow} from '../acceptance-clock/business-time.js';
 import {randomUUID} from "node:crypto";
 import type {PoolClient} from "pg";
 import type {TrustedActorContext} from "../tools/repositories.js";
@@ -33,13 +34,13 @@ export async function activateInitialDevelopmentExecution(db:PoolClient,actor:Tr
     WHERE app_user_id=$1 AND active AND person_type='internal' FOR SHARE`,[task.assignee_id])).rows;
   if(people.length!==1)return false;
   const segmentId=randomUUID();
-  await db.query(`INSERT INTO pattern_room_segments(segment_id,round_id,segment_index,person_id,worker_user_id,worker_name,person_type,amount)
-    VALUES($1,$2,1,$3,$4,$5,'internal',$6)`,[segmentId,native.current_round_id,people[0].person_id,task.assignee_id,people[0].display_name,native.agreed_amount]);
-  await db.query(`UPDATE pattern_room_rounds SET status='in_progress',assigned_at=CURRENT_TIMESTAMP,assigned_by=$2,
-    supervisor_user_id=$3 WHERE round_id=$1`,[native.current_round_id,plan.changed_by,plan.manager_id]);
+  await db.query(`INSERT INTO pattern_room_segments(segment_id,round_id,segment_index,person_id,worker_user_id,worker_name,person_type,amount,started_at)
+    VALUES($1,$2,1,$3,$4,$5,'internal',$6,$7)`,[segmentId,native.current_round_id,people[0].person_id,task.assignee_id,people[0].display_name,native.agreed_amount,businessNow().toISOString()]);
+  await db.query(`UPDATE pattern_room_rounds SET status='in_progress',assigned_at=$4,assigned_by=$2,
+    supervisor_user_id=$3 WHERE round_id=$1`,[native.current_round_id,plan.changed_by,plan.manager_id,businessNow().toISOString()]);
   await db.query("UPDATE pattern_room_orders SET status='in_progress',version=version+1,updated_at=CURRENT_TIMESTAMP WHERE order_id=$1",[native.order_id]);
-  await db.query("UPDATE pattern_room_node_times SET exited_at=CURRENT_TIMESTAMP,exit_reason='completed' WHERE round_id=$1 AND exited_at IS NULL",[native.current_round_id]);
-  await db.query("INSERT INTO pattern_room_node_times(node_id,round_id,stage) VALUES($1,$2,'in_progress')",[randomUUID(),native.current_round_id]);
+  await db.query("UPDATE pattern_room_node_times SET exited_at=$2,exit_reason='completed' WHERE round_id=$1 AND exited_at IS NULL",[native.current_round_id,businessNow().toISOString()]);
+  await db.query("INSERT INTO pattern_room_node_times(node_id,round_id,stage,entered_at) VALUES($1,$2,'in_progress',$3)",[randomUUID(),native.current_round_id,businessNow().toISOString()]);
   await todos.completeOpenByDedupeKey(db,actor,`pattern-room:${native.order_id}:${native.current_round_id}:assignment`,"总委派人员及真实前置已齐备，首次车板已启动");
   await new OperationEventRepository().append(db,actor,{action:"development.initial_execution_activated",entityType:"pattern_room_order",entityId:native.order_id,
     after:{taskId,sourceId:task.source_id,roundNumber:task.route_version,nativeRoundId:native.current_round_id,segmentId,workerUserId:task.assignee_id,arrangedBy:plan.changed_by,planVersion:plan.version},

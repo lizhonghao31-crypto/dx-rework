@@ -1,3 +1,4 @@
+import {businessNow} from '../acceptance-clock/business-time.js';
 import { externalPatternRecords, recordExternalPatternFact } from "./development-external-pattern-facts.js";
 import {reopenDevelopmentMaterials,assertReopenedReturnIssues} from './development-material-reopen.js';
 import type {DevelopmentExternalPattern,ReopenDevelopmentMaterials} from '@dx-rework/contracts/digital-development-execution';
@@ -250,7 +251,7 @@ export class DevelopmentExecutionService {
       await this.tasks().setConditionWithClient(db,actor,input.taskId,"business_recorded",true,undefined,input.note);await this.tasks().completeWithClient(db,actor,input.taskId,{note:input.note},`check:${key}`);
       if(input.result==="通过"&&task.route_version>1&&!supplemental)await new DevelopmentRouteService(this.database,this.patternOrders).advance(db,actor,sourceId,input.taskId);
       if(input.result==="缺项退回"){
-        await db.query("INSERT INTO digital_production_task_events(event_id,task_id,resource_kind,resource_id,event_kind,actor_id,occurred_at,time_quality,payload) VALUES($1,$2,'source',$3,'material_returned',$4,CURRENT_TIMESTAMP,'现场登记',$5)",[randomUUID(),input.taskId,sourceId,actor.actorId,JSON.stringify({note:input.note})]);
+        await db.query("INSERT INTO digital_production_task_events(event_id,task_id,resource_kind,resource_id,event_kind,actor_id,occurred_at,time_quality,payload) VALUES($1,$2,'source',$3,'material_returned',$4,$6,'现场登记',$5)",[randomUUID(),input.taskId,sourceId,actor.actorId,JSON.stringify({note:input.note}),businessNow().toISOString()]);
         const designer=(await db.query("SELECT created_by FROM digital_production_sources WHERE source_id=$1",[sourceId])).rows[0].created_by;
         const supply=await this.tasks().createWithClient(db,actor,{resource:{kind:"source",id:sourceId},authorizingTaskId:input.taskId,kind:"development_material_supply",routeId:task.route_instance_id,routeVersion:task.route_version,occurrence:Number((await db.query("SELECT GREATEST(COALESCE(max(t.occurrence),0)+1,$2::integer) AS n FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND a.task_kind='development_material_supply'",[sourceId,task.occurrence])).rows[0].n),assigneeId:await new DigitalProductionAccessPolicy(db).activeRole(designer,"sample_designer")?designer:null});
         if(await developmentAmendmentsAvailable(db))await recordDevelopmentReturn(db,actor,sourceId,supply.taskId,input.taskId,sheet.version,input);
@@ -367,7 +368,7 @@ export class DevelopmentExecutionService {
       if(input.action==='request'){
         if(input.roundNumber!==round)fail('开发轮次已变化，请刷新');
         if((await externalPatternRecords(db,sourceId)).some(r=>r.roundNumber===round&&!r.receivedAt))fail('本轮已经记录请求，请继续跟进原任务');
-        const requestId=randomUUID(),now=new Date().toISOString();
+        const requestId=randomUUID(),now=businessNow().toISOString();
         await recordExternalPatternFact(db,actor,sourceId,requestId,'external_pattern_requested',now,{requestId,roundNumber:round,note:input.note});
         const occurrence=Number((await db.query("SELECT COALESCE(max(t.occurrence),0)+1 AS n FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND t.node_key='development_external_pattern'",[sourceId])).rows[0].n);
         const task=await this.tasks().createWithClient(db,actor,{resource:{kind:'source',id:sourceId},kind:'development_external_pattern',routeId:requestId,routeVersion:round,occurrence,
@@ -381,7 +382,7 @@ export class DevelopmentExecutionService {
       await new DigitalProductionAccessPolicy(db).assert(actor,'task',request.taskId!,'execute');
       await this.assertUploadPurpose(db,sourceId,input.attachmentIds,'外部纸样');
       await this.forms().bindFiles(db,actor,sourceId,{...sheet.document!,files:input.attachmentIds.map(attachmentId=>({attachmentId,kind:'工艺开发板'}))});
-      const now=new Date().toISOString();
+      const now=businessNow().toISOString();
       if(Date.parse(now)<new Date(request.requestedAt).getTime())fail('收到时间不能早于请求时间');
       await recordExternalPatternFact(db,actor,sourceId,randomUUID(),'external_pattern_received',now,{requestId:input.requestId,roundNumber:round,attachmentIds:input.attachmentIds,note:input.note});
       await this.tasks().setConditionWithClient(db,actor,request.taskId!,'business_recorded',true,undefined,input.note);

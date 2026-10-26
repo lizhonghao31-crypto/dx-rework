@@ -1293,5 +1293,29 @@
     "creates": [],
     "execute": [],
     "sequences": []
+  },
+  "0262_acceptance_sla_clock": {
+    "checksum": "3e690cf4e34bb8429692592685fe6b2d23f67d45616486ff2c8d93da8d73a98c",
+    "tables": [],
+    "functions": [],
+    "references": [
+      "app_users",
+      "digital_sla_configurations",
+      "audit_events",
+      "acceptance_sla_clock_scenarios"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [
+      "acceptance_sla_clock_scenarios",
+      "acceptance_sla_clock_resources",
+      "acceptance_sla_clock_events",
+      "acceptance_sla_clock_scans",
+      "acceptance_sla_clock_receipts"
+    ],
+    "execute": [
+      "guard_production_order_root_immutable"
+    ],
+    "sequences": []
   }
 }

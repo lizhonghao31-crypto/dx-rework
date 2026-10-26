@@ -1,3 +1,4 @@
+import {businessNow,assertAcceptanceAssignee} from '../acceptance-clock/business-time.js';
 import type {PatternHistoryQuery} from '@dx-rework/contracts/pattern-orders';
 import {developmentAutomaticRoundDocument} from '../production-platform/development-document-format.js';
 import {developmentMakingSizes} from "@dx-rework/contracts/digital-development";
@@ -116,8 +117,8 @@ export class PatternRoomOrderService {
       ...(before === undefined ? {} : { before }), ...(reason ? { reason } : {}) });
   }
   private async moveNode(client: PoolClient, roundId: string, next?: string, reason: "completed" | "rework" | "cancelled" = "completed") {
-    await client.query("UPDATE pattern_room_node_times SET exited_at=CURRENT_TIMESTAMP,exit_reason=$2 WHERE round_id=$1 AND exited_at IS NULL", [roundId, reason]);
-    if (next) await client.query("INSERT INTO pattern_room_node_times(node_id,round_id,stage) VALUES($1,$2,$3)", [randomUUID(), roundId, next]);
+    await client.query("UPDATE pattern_room_node_times SET exited_at=$3,exit_reason=$2 WHERE round_id=$1 AND exited_at IS NULL", [roundId, reason,businessNow().toISOString()]);
+    if (next) await client.query("INSERT INTO pattern_room_node_times(node_id,round_id,stage,entered_at) VALUES($1,$2,$3,$4)", [randomUUID(), roundId, next,businessNow().toISOString()]);
   }
   private async supervisor(client: PoolClient, fallback: string): Promise<string> {
     // Before release only Root may act; never route its acceptance work to real staff.
@@ -176,7 +177,7 @@ export class PatternRoomOrderService {
       if(association)await client.query("UPDATE pattern_room_orders SET misc_association=$2 WHERE order_id=$1",[orderId,JSON.stringify(association)]);
       await client.query(`INSERT INTO pattern_room_rounds(round_id,order_id,status,category_id,price_version,category_name,unit,unit_price,quantity,agreed_amount,requested_by)
         VALUES($1,$2,'pending_assignment',$3,$4,$5,$6,$7,$8,$7::numeric*$8::integer,$9)`, [roundId, orderId, price.price_id, price.version, price.name, price.unit, price.amount, parsed.quantity, effective.actorId]);
-      await client.query("INSERT INTO pattern_room_node_times(node_id,round_id,stage) VALUES($1,$2,'pending_assignment')", [randomUUID(), roundId]);
+      await client.query("INSERT INTO pattern_room_node_times(node_id,round_id,stage,entered_at) VALUES($1,$2,'pending_assignment',$3)", [randomUUID(), roundId,businessNow().toISOString()]);
       if(developmentSourceId)await client.query("INSERT INTO digital_development_pattern_links(source_id,order_id,linked_by) VALUES($1,$2,$3)",[developmentSourceId,orderId,effective.actorId]);
       await bindPatternMaterials(client, effective, orderId, roundId, parsed.attachmentIds, "创建制作资料", kind === "pattern");
       const eventId = await this.event(client, effective, action, orderId, roundId, {...parsed,styleNo,...(kind==="misc"?{association}: {})});
@@ -198,12 +199,13 @@ export class PatternRoomOrderService {
         WHERE person_id=$1 AND active AND person_type='internal' AND app_user_id IS NOT NULL
           AND (todo_user_has_direct_role(app_user_id,'pattern_room_worker','pattern_room:orders:complete') OR ($2 AND app_user_id=$3)) FOR SHARE`, [parsed.personId, isPatternRoot(effective), effective.actorId])).rows[0];
       if (!person) throw new ApplicationError("VALIDATION_ERROR", "请选择有有效账号的板房工人", 400);
+      await assertAcceptanceAssignee(person.app_user_id);
       const linkedAssignment=round.round_type==='rework'?await linkedAssignmentContext(client,effective,orderId,person.app_user_id,isPatternRoot(effective)):null;
       const segmentId = randomUUID(), supervisorId = await this.supervisor(client, effective.actorId);
-      await client.query(`INSERT INTO pattern_room_segments(segment_id,round_id,segment_index,person_id,worker_user_id,worker_name,person_type,amount)
-        VALUES($1,$2,1,$3,$4,$5,'internal',$6)`, [segmentId, round.round_id, person.person_id, person.app_user_id, person.display_name, parsed.amount ?? round.agreed_amount]);
+      await client.query(`INSERT INTO pattern_room_segments(segment_id,round_id,segment_index,person_id,worker_user_id,worker_name,person_type,amount,started_at)
+        VALUES($1,$2,1,$3,$4,$5,'internal',$6,$7)`, [segmentId, round.round_id, person.person_id, person.app_user_id, person.display_name, parsed.amount ?? round.agreed_amount,businessNow().toISOString()]);
       const index = round.round_type === "rework" ? order.rework_count + 1 : 0;
-      await client.query("UPDATE pattern_room_rounds SET status='in_progress',assigned_at=CURRENT_TIMESTAMP,assigned_by=$2,supervisor_user_id=$3,round_index=$4,agreed_amount=COALESCE($5::numeric,agreed_amount) WHERE round_id=$1", [round.round_id, effective.actorId, supervisorId, index, parsed.amount ?? null]);
+      await client.query("UPDATE pattern_room_rounds SET status='in_progress',assigned_at=$6,assigned_by=$2,supervisor_user_id=$3,round_index=$4,agreed_amount=COALESCE($5::numeric,agreed_amount) WHERE round_id=$1", [round.round_id, effective.actorId, supervisorId, index, parsed.amount ?? null,businessNow().toISOString()]);
       await client.query("UPDATE pattern_room_orders SET status='in_progress',version=version+1,updated_at=CURRENT_TIMESTAMP,rework_count=GREATEST(rework_count,$2) WHERE order_id=$1", [orderId, index]);
       await this.moveNode(client, round.round_id, "in_progress");
       const integratedAssignment=linkedAssignment?linkedAssignment.workerId===person.app_user_id?linkedAssignment.plan.readyToArrange:await syncLinkedExecutionTransfer(client,this.db,effective,orderId,linkedAssignment.workerId??person.app_user_id,person.app_user_id,'主管核定本轮返工执行归属','assign'):false;
@@ -265,8 +267,8 @@ export class PatternRoomOrderService {
   private async recordWorkCompletion(client: PoolClient, effective: TrustedActorContext, order: PatternOrderRow, round: PatternRoundRow, segment: PatternSegmentRow, developmentTaskId?: string) {
     const orderId=order.order_id,action="pattern_room.order.work_completed";
       const linked=order.kind==='pattern'&&Boolean((await client.query("SELECT to_regclass('digital_development_pattern_links') AS relation")).rows[0]?.relation)&&Boolean((await client.query("SELECT 1 FROM digital_development_pattern_links WHERE order_id=$1",[orderId])).rowCount);
-      await client.query("UPDATE pattern_room_segments SET ended_at=CURRENT_TIMESTAMP,worker_completed_at=CURRENT_TIMESTAMP WHERE segment_id=$1", [segment.segment_id]);
-      await client.query("UPDATE pattern_room_rounds SET status='pending_confirmation',completed_at=CURRENT_TIMESTAMP WHERE round_id=$1", [round.round_id]);
+      await client.query("UPDATE pattern_room_segments SET ended_at=$2,worker_completed_at=$2 WHERE segment_id=$1", [segment.segment_id,businessNow().toISOString()]);
+      await client.query("UPDATE pattern_room_rounds SET status='pending_confirmation',completed_at=$2 WHERE round_id=$1", [round.round_id,businessNow().toISOString()]);
       await client.query("UPDATE pattern_room_orders SET status='pending_confirmation',version=version+1,updated_at=CURRENT_TIMESTAMP WHERE order_id=$1", [orderId]);
       await this.moveNode(client, round.round_id, "pending_confirmation");
       const eventId = await this.event(client, effective, action, orderId, round.round_id, { segmentId: segment.segment_id, awaitingDesignerHandoff: order.kind === "pattern"&&!linked, awaitingDigitalFinalConfirmation:linked, awaitingCreatorConfirmation: order.kind === "misc", ...(developmentTaskId ? {developmentTaskId,executorUserId:effective.actorId,wageWorkerUserId:segment.worker_user_id} : {}) });
@@ -307,11 +309,11 @@ export class PatternRoomOrderService {
         const pending = (await client.query<PatternRoundRow>("SELECT * FROM pattern_room_rounds WHERE order_id=$1 AND completed_at IS NOT NULL AND handed_over_at IS NULL AND cancelled_at IS NULL ORDER BY requested_at,round_id FOR UPDATE", [orderId])).rows;
         for (const historical of pending) {
           await this.requireBalanced(client, historical.round_id, historical.agreed_amount);
-          await client.query("UPDATE pattern_room_rounds SET status='completed',handed_over_at=CURRENT_TIMESTAMP,handed_over_by=$2 WHERE round_id=$1", [historical.round_id, effective.actorId]);
+          await client.query("UPDATE pattern_room_rounds SET status='completed',handed_over_at=$3,handed_over_by=$2 WHERE round_id=$1", [historical.round_id, effective.actorId,businessNow().toISOString()]);
           await this.qualifyPattern(client, historical.round_id);
         }
-      } else await client.query("UPDATE pattern_room_rounds SET status='completed',handed_over_at=CURRENT_TIMESTAMP,handed_over_by=$2 WHERE round_id=$1", [round.round_id, effective.actorId]);
-      await client.query("UPDATE pattern_room_orders SET status='completed',completed_at=CURRENT_TIMESTAMP,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE order_id=$1", [orderId]);
+      } else await client.query("UPDATE pattern_room_rounds SET status='completed',handed_over_at=$3,handed_over_by=$2 WHERE round_id=$1", [round.round_id, effective.actorId,businessNow().toISOString()]);
+      await client.query("UPDATE pattern_room_orders SET status='completed',completed_at=$2,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE order_id=$1", [orderId,businessNow().toISOString()]);
       await this.moveNode(client, round.round_id);
       await this.event(client, effective, action, orderId, round.round_id, { confirmedReceived: kind === "pattern", confirmedCompleted: kind === "misc" });
       await this.todos.completeOpenByDedupeKey(client, effective, patternTodoKey(orderId, round.round_id, kind === "pattern" ? "handoff" : "misc-confirm"), kind === "pattern" ? "设计师确认收到样板" : "发起人确认杂事完成");
@@ -411,7 +413,7 @@ export class PatternRoomOrderService {
       if (materials.length > 20) throw new ApplicationError("VALIDATION_ERROR", "本轮制作资料合计不能超过20份，请整理后提交", 400);
       await bindPatternMaterials(client, effective, orderId, roundId, materials, parsed.reason);
       await this.moveNode(client, round.round_id, undefined, "rework");
-      await client.query("INSERT INTO pattern_room_node_times(node_id,round_id,stage) VALUES($1,$2,'pending_assignment')", [randomUUID(), roundId]);
+      await client.query("INSERT INTO pattern_room_node_times(node_id,round_id,stage,entered_at) VALUES($1,$2,'pending_assignment',$3)", [randomUUID(), roundId,businessNow().toISOString()]);
       await client.query("UPDATE pattern_room_orders SET current_round_id=$2,status='pending_assignment',completed_at=NULL,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE order_id=$1", [orderId, roundId]);
       if(linked){
         const sheet=await new DigitalDevelopmentService(this.db,true).read(effective,linked.source_id,client);
@@ -438,21 +440,22 @@ export class PatternRoomOrderService {
         WHERE person_id=$1 AND active AND person_type='internal' AND app_user_id IS NOT NULL
           AND (todo_user_has_direct_role(app_user_id,'pattern_room_worker','pattern_room:orders:complete') OR ($2 AND app_user_id=$3)) FOR SHARE`, [parsed.personId, isPatternRoot(effective), effective.actorId])).rows[0];
       if (!person || person.app_user_id === segment.worker_user_id) throw new ApplicationError("VALIDATION_ERROR", "请选择另一名有有效账号的工人", 400);
+      await assertAcceptanceAssignee(person.app_user_id);
       const segmentId = randomUUID();
       if (order.kind === "pattern") {
         if (parsed.amount === undefined || parsed.hours !== undefined) throw new ApplicationError("VALIDATION_ERROR", "请明确原工人应得部分金额，无实际制作填0", 400);
         const allocation = (await client.query<{ valid: boolean; remaining: string }>("SELECT $1::numeric<=$2::numeric AS valid,($2::numeric-$1::numeric)::text remaining", [parsed.amount, segment.amount])).rows[0]!;
         if (!allocation.valid) throw new ApplicationError("VALIDATION_ERROR", "原工人部分金额不能超过当前段剩余金额", 400);
-        await client.query("UPDATE pattern_room_segments SET amount=$2,ended_at=CURRENT_TIMESTAMP WHERE segment_id=$1", [segment.segment_id, parsed.amount]);
-        await client.query(`INSERT INTO pattern_room_segments(segment_id,round_id,segment_index,person_id,worker_user_id,worker_name,person_type,amount)
-          VALUES($1,$2,$3,$4,$5,$6,'internal',$7)`, [segmentId, round.round_id, segment.segment_index + 1, person.person_id, person.app_user_id, person.display_name, allocation.remaining]);
+        await client.query("UPDATE pattern_room_segments SET amount=$2,ended_at=$3 WHERE segment_id=$1", [segment.segment_id, parsed.amount,businessNow().toISOString()]);
+        await client.query(`INSERT INTO pattern_room_segments(segment_id,round_id,segment_index,person_id,worker_user_id,worker_name,person_type,amount,started_at)
+          VALUES($1,$2,$3,$4,$5,$6,'internal',$7,$8)`, [segmentId, round.round_id, segment.segment_index + 1, person.person_id, person.app_user_id, person.display_name, allocation.remaining,businessNow().toISOString()]);
       } else {
         if (parsed.hours === undefined || parsed.amount !== undefined) throw new ApplicationError("VALIDATION_ERROR", "请明确原工人已做工时，无实际制作填0", 400);
         const total = (await client.query<{ valid: boolean }>("SELECT COALESCE(sum(actual_hours),0)+$3::numeric<=999999.9 AS valid FROM pattern_room_segments WHERE round_id=$1 AND segment_id<>$2", [round.round_id, segment.segment_id, parsed.hours])).rows[0]!.valid;
         if (!total) throw new ApplicationError("VALIDATION_ERROR", "各执行段累计工时不能超过999,999.9小时", 400);
-        await client.query("UPDATE pattern_room_segments SET actual_hours=$2,amount=$2::numeric*$3::numeric,ended_at=CURRENT_TIMESTAMP WHERE segment_id=$1", [segment.segment_id, parsed.hours, round.unit_price]);
-        await client.query(`INSERT INTO pattern_room_segments(segment_id,round_id,segment_index,person_id,worker_user_id,worker_name,person_type,amount)
-          VALUES($1,$2,$3,$4,$5,$6,'internal',NULL)`, [segmentId, round.round_id, segment.segment_index + 1, person.person_id, person.app_user_id, person.display_name]);
+        await client.query("UPDATE pattern_room_segments SET actual_hours=$2,amount=$2::numeric*$3::numeric,ended_at=$4 WHERE segment_id=$1", [segment.segment_id, parsed.hours, round.unit_price,businessNow().toISOString()]);
+        await client.query(`INSERT INTO pattern_room_segments(segment_id,round_id,segment_index,person_id,worker_user_id,worker_name,person_type,amount,started_at)
+          VALUES($1,$2,$3,$4,$5,$6,'internal',NULL,$7)`, [segmentId, round.round_id, segment.segment_index + 1, person.person_id, person.app_user_id, person.display_name,businessNow().toISOString()]);
         await client.query("UPDATE pattern_room_rounds SET actual_hours=NULL,agreed_amount=NULL,hours_confirmed_by=NULL,hours_confirmed_at=NULL WHERE round_id=$1", [round.round_id]);
       }
       await client.query("UPDATE pattern_room_orders SET version=version+1,updated_at=CURRENT_TIMESTAMP WHERE order_id=$1", [orderId]);
@@ -480,11 +483,11 @@ export class PatternRoomOrderService {
           if (parsed.amount === undefined || parsed.hours !== undefined) throw new ApplicationError("VALIDATION_ERROR", "请明确当前工人的取消部分金额，无费用填0", 400);
           const valid = (await client.query<{ valid: boolean }>("SELECT $1::numeric<=$2::numeric AS valid", [parsed.amount, segment.amount])).rows[0]!.valid;
           if (!valid || segment.wage_eligible_at !== null) throw new ApplicationError("CONFLICT", "取消费用不能超过本段余额或覆盖已计薪事实", 409);
-          await client.query("UPDATE pattern_room_segments SET amount=$2,ended_at=COALESCE(ended_at,CURRENT_TIMESTAMP) WHERE segment_id=$1", [segment.segment_id, parsed.amount]);
+          await client.query("UPDATE pattern_room_segments SET amount=$2,ended_at=COALESCE(ended_at,$3::timestamptz) WHERE segment_id=$1", [segment.segment_id, parsed.amount,businessNow().toISOString()]);
         } else {
           const fixed = round.completed_at !== null && round.actual_hours !== null;
           if (parsed.amount !== undefined || (fixed ? parsed.hours !== undefined : parsed.hours === undefined)) throw new ApplicationError("VALIDATION_ERROR", fixed ? "已具备计薪条件的工时不能通过取消修改" : "请填写当前执行段实际停止时的工时，无实际工作填0", 400);
-          await client.query("UPDATE pattern_room_segments SET ended_at=COALESCE(ended_at,CURRENT_TIMESTAMP) WHERE segment_id=$1", [segment.segment_id]);
+          await client.query("UPDATE pattern_room_segments SET ended_at=COALESCE(ended_at,$2::timestamptz) WHERE segment_id=$1", [segment.segment_id,businessNow().toISOString()]);
         }
       }
       const amount = pending ? "0" : (await client.query<{ amount: string }>("SELECT COALESCE(sum(amount),0)::text amount FROM pattern_room_segments WHERE round_id=$1", [round.round_id])).rows[0]!.amount;

@@ -3,6 +3,7 @@ import { SlaOrderService } from "./sla-order-service.js";
 import { developmentRevisionSource } from "./development-revision-source.js";
 import { captureDevelopmentSla } from "./development-sla-enrollment.js";
 import type { BusinessClock } from "@dx-rework/domain/business-clock";
+import {acceptanceBusinessContext,businessNow,observedBusinessTime,registerAcceptanceCreated} from '../acceptance-clock/business-time.js';
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import { DigitalOrderCreateSchema, beijingCalendarDate, customerOrderDateError, initialCustomerOrderInput, digitalFormalPoNo, digitalPoKey, initialCustomerDateErrors, minimumInitialCustomerDate } from "@dx-rework/contracts/digital-production";
@@ -112,8 +113,9 @@ export class DigitalProductionIdentityService {
       await client.query(`INSERT INTO digital_production_sources(source_id,created_by,development_type,design_style_no,temporary_style_no,customer_code)
         VALUES($1,$2,$3,$4,$5,$6)`, [id, actor.actorId, input.developmentType, input.designStyleNo, input.temporaryStyleNo, input.customerCode]);
       const eventId = await this.audit(client, actor, "digital_source_created", id, null, input);
+      await registerAcceptanceCreated(client,{kind:'source',id},actor.actorId,eventId);
       const time = this.businessClock ? await this.businessClock.read({ kind: "source", id })
-        : { now: this.now().toISOString(), scenarioId: null, revision: 0 };
+        : observedBusinessTime(this.now);
       await captureDevelopmentSla(client, actor, id, null, time, eventId);
       return { sourceId: id };
     });
@@ -155,7 +157,7 @@ export class DigitalProductionIdentityService {
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [JSON.stringify(["digital-order-style",styleKey])]);
       if ((await client.query("SELECT 1 FROM digital_production_orders WHERE translate(btrim(design_style_no),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=$1 LIMIT 1", [styleKey])).rowCount)
         fail("该编号已有客户订单，请打开原档案继续办理");
-      const now=this.now(),orderDateError=customerOrderDateError(input.orderDate,beijingCalendarDate(now));
+      const now=businessNow(this.now),orderDateError=customerOrderDateError(input.orderDate,beijingCalendarDate(now));
       if(orderDateError)fail(orderDateError,400);
       const dateErrors = initialCustomerDateErrors(input.lines,minimumInitialCustomerDate(now));
       if (dateErrors.length) fail(dateErrors.join("；"),400);
@@ -166,10 +168,11 @@ export class DigitalProductionIdentityService {
       if (merchandiserId && !await new DigitalProductionAccessPolicy(client).lockActiveRole(merchandiserId, "order_merchandiser")) fail("主跟单必须为在职有效订单跟单", 400);
       const root = await new ProductionOrderRootRepository(client).create(createdBy);
       const businessTime = this.businessClock ? await this.businessClock.read({ kind: "order", id: root.productionOrderId })
-        : { now: now.toISOString(), scenarioId: null, revision: 0 };
+        : observedBusinessTime(()=>now);
       await client.query(`INSERT INTO digital_production_orders(production_order_id,source_id,customer_code,product_group,design_style_no,temporary_style_no,order_date,contract_delivery_date,created_by,creation_hash,primary_merchandiser_id)
         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, [root.productionOrderId, sourceId, input.customerCode, input.productGroup, input.designStyleNo, input.temporaryStyleNo, input.orderDate, input.contractDeliveryDate, createdBy, digest(input), merchandiserId]);
       const creationEventId = await this.audit(client, actor, "digital_order_created", root.productionOrderId, null, { ...input, slaBusinessTime: businessTime });
+      await registerAcceptanceCreated(client,{kind:'order',id:root.productionOrderId},actor.actorId,creationEventId);
       for (const [position, line] of input.lines.entries()) {
         const lineId = randomUUID();
         await client.query(`INSERT INTO digital_production_po_lines(line_id,production_order_id,position,po_number,formal_style_no,temporary_style_no,color,color_foreign,delivery_date)
@@ -185,6 +188,7 @@ export class DigitalProductionIdentityService {
   }
   async attachSource(actor: TrustedActorContext, id: string, sourceId: string, key: string): Promise<DigitalOrder> {
     return this.command(actor, `attach-source:${id}`, key, { sourceId }, async client => {
+      const context=acceptanceBusinessContext();if(context){await context.assertScope({kind:'order',id});await context.assertScope({kind:'source',id:sourceId});}
       const source = await this.visibleSource(client, actor, sourceId, true);
       const order = await this.visibleOrder(client, actor, id, true);
       if (!isDigitalLeader(actor) && !(actor.actorRoles.includes("sample_designer") && order.created_by === actor.actorId && source.created_by === actor.actorId)) digitalForbidden();

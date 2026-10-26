@@ -155,6 +155,9 @@ jobs:
           docker exec dx-rework-full-gate-postgres psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
             -c "CREATE DATABASE dx_rework_ci OWNER dx_rework_test"
           docker exec dx-rework-full-gate-postgres psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            -c "CREATE DATABASE dx_rework_acceptance_clock_test OWNER dx_rework_test" \
+            -c "COMMENT ON DATABASE dx_rework_acceptance_clock_test IS 'dx-rework-isolated-test-v1'"
+          docker exec dx-rework-full-gate-postgres psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
             -c "COMMENT ON DATABASE dx_rework_ci IS 'dx-rework-isolated-test-v1'"
           docker exec dx-rework-full-gate-postgres psql -U postgres -d dx_rework_ci -v ON_ERROR_STOP=1 \
             -c "CREATE ROLE dx_rework_acceptance NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE" \
@@ -163,6 +166,7 @@ jobs:
           test_url='postgresql://dx_rework_test:dx_rework_ci@127.0.0.1:5432/dx_rework_ci'
           NODE_ENV=test TEST_DATABASE_URL="$test_url" node scripts/test-database-safety.mjs
           { echo "DATABASE_URL=$test_url"; echo "TEST_DATABASE_URL=$test_url"; } >> "$GITHUB_ENV"
+          echo 'ACCEPTANCE_CLOCK_TEST_DATABASE_URL=postgresql://dx_rework_test:dx_rework_ci@127.0.0.1:5432/dx_rework_acceptance_clock_test' >> "$GITHUB_ENV"
 
       - name: Seed database with base-revision migration history
         id: db_seed

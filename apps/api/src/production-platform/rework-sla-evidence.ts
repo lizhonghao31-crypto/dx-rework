@@ -6,20 +6,20 @@ type DB=Pick<Pool|PoolClient,'query'>;
 export async function nativeReworkExecutionRows(db:DB,reworkIds:string[],orderId:string|null=null){
  if(!reworkIds.length)return [];
  return (await db.query(`SELECT r.rework_order_id,r.status,r.special_process_type,
-  start.event_id AS start_event_id,start.created_at AS started_at,snapshot.snapshot_id,snapshot.rule_version,snapshot.parameters_json,
+  start.event_id AS start_event_id,start.business_at AS started_at,snapshot.snapshot_id,snapshot.rule_version,snapshot.parameters_json,
   count(DISTINCT item.configuration_item_id)::int AS item_count,count(DISTINCT task.configuration_item_id)::int AS assigned_items,
   count(DISTINCT task.work_task_id)::int AS task_count,count(DISTINCT report.work_task_id)::int AS completed_tasks,max(report.completed_at) AS completed_at
   FROM rework_orders r
-  LEFT JOIN LATERAL(SELECT event_id,created_at FROM operation_events WHERE entity_type='rework_order' AND entity_id=r.rework_order_id::text
+  LEFT JOIN LATERAL(SELECT event_id,created_at,coalesce((after_state->'acceptanceClock'->>'now')::timestamptz,created_at) AS business_at FROM operation_events WHERE entity_type='rework_order' AND entity_id=r.rework_order_id::text
    AND action='rework.work_task.assignment_confirm' ORDER BY created_at DESC,event_id DESC LIMIT 1) start ON true
   LEFT JOIN LATERAL(SELECT snapshot_id,rule_version,parameters_json FROM digital_sla_order_snapshots WHERE production_order_id=$2 AND created_at<=start.created_at ORDER BY revision DESC LIMIT 1) snapshot ON true
   LEFT JOIN rework_process_configurations configuration ON configuration.rework_order_id=r.rework_order_id AND configuration.status='approved'
   LEFT JOIN rework_process_configuration_items item ON item.configuration_id=configuration.configuration_id AND item.execution_kind='worker'
   LEFT JOIN rework_work_tasks task ON task.configuration_item_id=item.configuration_item_id AND task.status='active'
-  LEFT JOIN rework_work_reports report ON report.work_task_id=task.work_task_id AND report.status='submitted' AND report.completed_at>=start.created_at
+  LEFT JOIN rework_work_reports report ON report.work_task_id=task.work_task_id AND report.status='submitted' AND report.completed_at>=start.business_at
    AND NOT EXISTS(SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id)
   WHERE r.rework_order_id=ANY($1::uuid[]) AND r.status NOT IN ('deleted','cancelled')
-  GROUP BY r.rework_order_id,r.status,r.special_process_type,start.event_id,start.created_at,snapshot.snapshot_id,snapshot.rule_version,snapshot.parameters_json HAVING count(DISTINCT item.configuration_item_id)>0`,[reworkIds,orderId])).rows;
+  GROUP BY r.rework_order_id,r.status,r.special_process_type,start.event_id,start.created_at,start.business_at,snapshot.snapshot_id,snapshot.rule_version,snapshot.parameters_json HAVING count(DISTINCT item.configuration_item_id)>0`,[reworkIds,orderId])).rows;
 }
 export async function reworkSlaEvidence(db:DB,orderId:string){
  const links=(await db.query("SELECT child_id,line_id FROM digital_production_child_lines WHERE module='rework' AND production_order_id=$1",[orderId])).rows;

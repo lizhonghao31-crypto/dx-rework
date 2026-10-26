@@ -1,0 +1,34 @@
+import assert from 'node:assert/strict';
+import {mkdir} from 'node:fs/promises';
+import {resolve} from 'node:path';
+const base=process.env.ACCEPTANCE_CLOCK_BROWSER_URL;
+if(!base||!/^http:\/\/127\.0\.0\.1:\d+$/.test(base))throw new Error('Only the isolated local browser server is supported');
+if(!process.env.CLOCK_CONTROL_TOKEN||!process.env.CLOCK_BUSINESS_TOKEN||!process.env.CLOCK_SOURCE_ID)throw new Error('An original local test control and business session are required');
+const {chromium}=await import(process.env.PLAYWRIGHT_MODULE??'playwright');
+const out=resolve(process.env.CLOCK_UI_OUTPUT??'/tmp/daxing-clock-ui');await mkdir(out,{recursive:true});
+const browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH??'/usr/bin/chromium',headless:true,args:['--no-sandbox']});
+try{
+ const context=await browser.newContext({viewport:{width:1440,height:1000}});
+ await context.addCookies([{name:'dx_acceptance_control',value:process.env.CLOCK_CONTROL_TOKEN,url:base,httpOnly:true,sameSite:'Lax'},{name:'dx_rework_session',value:process.env.CLOCK_BUSINESS_TOKEN,url:base,httpOnly:true,sameSite:'Lax'}]);
+ const page=await context.newPage(),errors=[];page.on('pageerror',error=>errors.push(error.message));
+ await page.goto(`${base}/ui/digital-production?development=${encodeURIComponent(process.env.CLOCK_SOURCE_ID)}`);
+ await page.getByText('测试时间',{exact:true}).waitFor({timeout:15000});
+ await page.getByRole('button',{name:'无确定客户订单',exact:true}).waitFor();
+ await page.screenshot({path:resolve(out,'clock-application-pc.png'),fullPage:true});
+ await page.locator('.acceptance-clock > summary').click();
+ const result=page.waitForResponse(response=>response.url().includes('/advance')&&response.request().method()==='POST');
+ await page.getByRole('button',{name:'前进30分钟',exact:true}).click();
+ const response=await result;assert.equal(response.status(),200);
+ const payload=await response.json();assert.equal(payload.scan.status,'completed');
+ await page.getByRole('status').filter({hasText:'时间已推进'}).waitFor();
+ await page.screenshot({path:resolve(out,'clock-application-expanded.png'),fullPage:true});
+ await page.reload();await page.getByText('测试时间',{exact:true}).waitFor();
+ const persisted=await page.request.get(`${base}/api/acceptance/clock/resource/${process.env.CLOCK_SOURCE_ID}`);
+ assert.equal((await persisted.json()).scene.now,payload.scene.now);
+ await page.setViewportSize({width:390,height:844});
+ assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth));
+ await page.screenshot({path:resolve(out,'clock-application-narrow.png'),fullPage:true});
+ assert.deepEqual(errors,[]);
+ console.log(JSON.stringify({suite:'acceptance-clock-live-application-browser',passed:5,viewports:['1440x1000','390x844'],evidence:out,scope:'original app page, actual UAT control/session, isolated PostgreSQL and original HTTP services'}));
+ await context.close();
+}finally{await browser.close();}

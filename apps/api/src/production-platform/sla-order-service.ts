@@ -11,7 +11,8 @@ import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import { resolveDigitalSlaSnapshot, validateDigitalSlaSnapshot } from "@dx-rework/contracts/digital-sla";
 import { evaluateSlaPlan, slaBusinessProgress, type SlaAnchor } from "@dx-rework/domain/digital-sla-plan";
-import { SystemBusinessClock, validateBusinessTime, type BusinessClock, type BusinessTime } from "@dx-rework/domain/business-clock";
+import { validateBusinessTime, type BusinessClock, type BusinessTime } from "@dx-rework/domain/business-clock";
+import {ContextBusinessClock} from '../acceptance-clock/business-time.js';
 import type { TrustedActorContext } from "../tools/repositories.js";
 import { DigitalProductionAccessPolicy } from "./access-policy.js";
 import { SlaConfigurationRepository } from "./sla-configuration-repository.js";
@@ -24,7 +25,7 @@ import { applyOrderCreationEvidence, orderCreationSlaEvidence } from "./sla-orde
 
 /** Creation and reads reuse order authorization; there is no generic event/date edit endpoint. */
 export class SlaOrderService {
-  constructor(private readonly database: Pool, private readonly clock: BusinessClock = new SystemBusinessClock()) {}
+  constructor(private readonly database: Pool, private readonly clock: BusinessClock = new ContextBusinessClock(database)) {}
 
   async enrollNewOrder(client: PoolClient, actor: TrustedActorContext, orderId: string, creationEventId: string, time: BusinessTime) {
     validateBusinessTime(time);

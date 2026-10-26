@@ -1,3 +1,4 @@
+import {acceptanceBusinessContext,acceptanceClockReaderEnabled,acceptanceIncludesNative,businessNow,ContextBusinessClock} from '../acceptance-clock/business-time.js';
 import {garmentQualityTodos} from './garment-quality-todos.js';
 import {factoryProductionQcTodos} from './factory-production-qc-todos.js';
 import {bulkFabricDecisionTodos} from "./bulk-fabric-todos.js";
@@ -107,14 +108,19 @@ export class DigitalProductionNotificationService {
   // Runs on the server even with no open page and with external todo delivery off.
   async runOnce():Promise<void> {
     await this.transaction(async client=>{
-      const people=await this.people(client);
+      const allPeople=await this.people(client),context=acceptanceBusinessContext(),people=context?await Promise.all(allPeople.map(async p=>await context.acceptsActor(p.actorId)?p:null)).then(rows=>rows.filter((p):p is TrustedActorContext=>p!==null)):allPeople;
       const unified=await arrangementsAvailable(client);
-      if ((await client.query("SELECT to_regclass('digital_development_documents') AS table_name")).rows[0]?.table_name) await projectDevelopmentNotices(client,people);
+      if ((await client.query("SELECT to_regclass('digital_development_documents') AS table_name")).rows[0]?.table_name) await projectDevelopmentNotices(client,people,businessNow(),id=>acceptanceIncludesNative(this.database,id));
+      const scopeFilter=acceptanceClockReaderEnabled(this.database)?`${context?'AND EXISTS':'AND NOT EXISTS'}(SELECT 1 FROM digital_production_task_access a
+        JOIN acceptance_sla_clock_resources m ON m.resource_kind=CASE WHEN a.production_order_id IS NULL THEN 'source' ELSE 'order' END
+          AND m.resource_id=coalesce(a.production_order_id,a.source_id)
+        WHERE a.task_id=i.task_id ${context?'AND m.scenario_id=$1':''})`:'';
       const intents=(await client.query(`SELECT i.* FROM digital_production_event_intents i
         WHERE NOT EXISTS(SELECT 1 FROM digital_production_notification_projection p WHERE p.event_id=i.event_id)
-        ORDER BY i.created_at,i.event_id LIMIT 200`)).rows;
+        ${scopeFilter} ORDER BY i.created_at,i.event_id LIMIT 200`,context?[context.scenarioId]:[])).rows;
       for(const intent of intents){
         const task=intent.task_id?(await client.query<Task>(`${TASKS} WHERE t.task_id=$1`,[intent.task_id])).rows[0]:undefined;
+        if(task&&!await acceptanceIncludesNative(this.database,task.task_id))continue;
         if(task&&people.some(p=>p.actorId===task.assignee_id&&hasRequiredWarehouseRole(p.actorRoles,task.required_role))&&labels[intent.event_kind]&&task.lifecycle==="active"&&
           await this.currentTaskEvent(client,task,intent.event_id,intent.event_kind)&&
           (intent.event_kind!=="created"||(task.state==="pending"&&!task.assignee_id))){
@@ -124,11 +130,12 @@ export class DigitalProductionNotificationService {
       }
       const tasks=(await client.query<Task>(`${TASKS} WHERE ${ACTIVE}`)).rows;
       for(const task of tasks){
+        if(!await acceptanceIncludesNative(this.database,task.task_id))continue;
         // Repair an unassigned/disabled operator as an upstream routing task; never broadcast to all craftspeople.
         if(!(unified&&task.source_id&&(DEVELOPMENT_ARRANGEABLE_KINDS as readonly string[]).includes(task.task_kind))&&!people.some(p=>p.actorId===task.assignee_id&&hasRequiredWarehouseRole(p.actorRoles,task.required_role)))
           await this.notice(client,{key:`missing:${task.task_id}:${task.assignee_id??'none'}`,taskId:task.task_id,kind:"created"},(await this.recipients(client,task,"created",people)).map(p=>p.actorId));
         if(task.state==="pending"&&!task.source_sla||!task.due_at)continue;
-        const now=Date.now(),due=new Date(task.due_at).getTime(),kind=(task.source_sla&&!task.deadline_exclusive?due<now:due<=now)?"overdue":task.warning_at&&new Date(task.warning_at).getTime()<=now?"warning":null;
+        const now=businessNow().getTime(),due=new Date(task.due_at).getTime(),kind=(task.source_sla&&!task.deadline_exclusive?due<now:due<=now)?"overdue":task.warning_at&&new Date(task.warning_at).getTime()<=now?"warning":null;
         if(kind)await this.notice(client,{key:`deadline:${task.task_id}:${task.revision_id}:${kind}`,taskId:task.task_id,kind,revision:task.revision_id},(await this.recipients(client,task,kind,people)).map(p=>p.actorId));
       }
       await this.projectChildren(client);
@@ -147,10 +154,13 @@ export class DigitalProductionNotificationService {
       for(const row of development)if(!rows.some(existing=>existing.todo_id===row.todo_id))rows.push(row);
     }
     for(const row of rows){
+      const nativeId=row.route_descriptor?.reworkOrderId??row.route_descriptor?.entityId;
+      if(!nativeId||!await acceptanceIncludesNative(this.database,nativeId))continue;
+      const context=acceptanceBusinessContext();if(context&&!await context.acceptsActor(row.recipient_user_id))continue;
       if(await hiddenNativeDevelopmentTodo(client,row.route_descriptor))continue;
       const kind=row.todo_type==="information"?"information":"ready";
       await this.notice(client,{key:`child:${row.source_event_id}:${row.todo_id}`,todoId:row.todo_id,kind,sourceEventId:row.source_event_id},[row.recipient_user_id]);
-      if(row.todo_type!=="information"&&row.due_at&&new Date(row.due_at).getTime()<=Date.now())
+      if(row.todo_type!=="information"&&row.due_at&&new Date(row.due_at).getTime()<=businessNow().getTime())
         await this.notice(client,{key:`child-overdue:${row.todo_id}:${iso(row.due_at)}`,todoId:row.todo_id,kind:"overdue"},[row.recipient_user_id]);
     }
   }
@@ -216,7 +226,8 @@ export class DigitalProductionNotificationService {
       if(!task||task.lifecycle!=="active")return null;
       if(!await this.currentTaskEvent(database,task,event.event_id,event.event_kind))return null;
       if(event.deadline_revision_id&&String(event.deadline_revision_id)!==String(task.revision_id))return null;
-      if(event.event_kind==="warning"&&task.due_at&&(task.source_sla&&!task.deadline_exclusive?new Date(task.due_at).getTime()<Date.now():new Date(task.due_at).getTime()<=Date.now()))return null;
+      const taskTime=await new ContextBusinessClock(this.database).read(task.production_order_id?{kind:'order',id:task.production_order_id}:{kind:'source',id:task.source_id!});
+      if(event.event_kind==="warning"&&task.due_at&&(task.source_sla&&!task.deadline_exclusive?new Date(task.due_at).getTime()<Date.parse(taskTime.now):new Date(task.due_at).getTime()<=Date.parse(taskTime.now)))return null;
       const missing=!people.some(p=>p.actorId===task.assignee_id&&hasRequiredWarehouseRole(p.actorRoles,task.required_role));
       if(event.event_kind==="created"&&(!missing||task.source_id&&(DEVELOPMENT_ARRANGEABLE_KINDS as readonly string[]).includes(task.task_kind)&&await arrangementsAvailable(database)))return null;
       if(!(await this.recipients(database,task,event.event_kind,people)).some(p=>p.actorId===actor.actorId))return null;
@@ -334,7 +345,7 @@ export class DigitalProductionNotificationService {
   // tabs consume only unseen events. Acknowledgement is a separate receipt field.
   async claim(actor:TrustedActorContext,includeRemaining=false):Promise<{notification:DigitalNotification|null;remainingCount?:number}> {
     const result=await this.transaction(async client=>{
-      const people=await this.people(client);
+      const allPeople=await this.people(client),context=acceptanceBusinessContext(),people=context?await Promise.all(allPeople.map(async p=>await context.acceptsActor(p.actorId)?p:null)).then(rows=>rows.filter((p):p is TrustedActorContext=>p!==null)):allPeople;
       const events=(await client.query(`SELECT e.* FROM digital_production_notification_receipts r JOIN digital_production_notification_events e USING(event_id)
         WHERE r.recipient_id=$1 AND r.shown_at IS NULL ORDER BY e.created_at,e.event_id LIMIT 100 FOR UPDATE OF r SKIP LOCKED`,[actor.actorId])).rows;
       for(const event of events){

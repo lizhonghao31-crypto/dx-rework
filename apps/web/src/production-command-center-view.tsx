@@ -1,3 +1,4 @@
+import {acceptanceTaskNow,useAcceptanceClockUpdates} from './acceptance-business-time.js';
 import { BusinessTable, FilterBar, KpiCard, PageHeader, Pagination } from "@dx-rework/ui/production";
 import {useState, type CSSProperties, type ReactNode} from "react";
 import type {CockpitResult, CockpitRow, CockpitStage} from "@dx-rework/contracts/digital-production-cockpit";
@@ -298,7 +299,7 @@ const currentTask=(row:CockpitRow)=>activeTasks(row).find(task=>task.state==='re
 function liveRisk(task:DigitalTask|undefined,now:Date):CommandRisk{
  if(!task||task.state==='pending'||!task.enteredAt)return 'unknown';
  if(task.state==='blocked')return 'high';
- const timing=digitalTaskTiming({...task,terminal:task.state==='completed'},now);
+ const timing=digitalTaskTiming({...task,terminal:task.state==='completed'},acceptanceTaskNow(task,now));
  return timing.state==='overdue'||timing.state==='completed_overdue'?'overdue':timing.state==='attention'?'attention':timing.state==='unknown'||timing.state==='unlimited'?'unknown':'normal';
 }
 function LiveStyleImage({row,small=false}:{row:CockpitRow;small?:boolean}){
@@ -317,6 +318,7 @@ function LiveTimeProgress({task,now}:{task:DigitalTask|undefined;now:Date}){
  return <div className="digital-progress is-time">{timing.percent!==null&&<progress max={100} value={Math.min(100,timing.percent)}/>}<span>{timing.label}{timing.percent!==null?` · ${timing.percent}%`:''}</span></div>;
 }
 export function ProductionCommandCenterLiveView(props:LiveProps){
+ useAcceptanceClockUpdates();
  const {data,stage,workload,search,page,onStage,onWorkload,onSearch,onPage,onSelect}=props;
  const [tab,setTab]=useState('生产进度'),[taskId,setTaskId]=useState('');
  const selected=data?.items.find(row=>row.id===props.selectedId)??data?.items[0];

@@ -26,10 +26,11 @@ export class OrderClosureService{
   const original=(await db.query(`SELECT p.*,(SELECT sum(quantity) FROM digital_production_po_sizes WHERE line_id=p.line_id) total_quantity,c.child_id AS cutting_id FROM digital_production_po_lines p LEFT JOIN digital_production_child_lines c ON c.production_order_id=p.production_order_id AND c.line_id=p.line_id AND c.module='cutting' WHERE p.production_order_id=$1 ORDER BY p.position`,[id])).rows;
   const cutIds=original.map(r=>r.cutting_id).filter(Boolean);
   const totals=cutIds.length?(await db.query(`${DIGITAL_RECEIVING_BASE_SQL}
-   SELECT totals.*,action.receiving_batch_id,packing.packing_revision_id,packing.packing_quantity,packing.created_at AS packing_recorded_at,
+   SELECT totals.*,action.receiving_batch_id,packing.packing_revision_id,packing.packing_quantity,coalesce((packing_event.after_state->'acceptanceClock'->>'now')::timestamptz,packing.created_at) AS packing_recorded_at,
     receiving.result AS receiving_resolution,packed.result AS packing_resolution
    FROM style_totals totals JOIN LATERAL(SELECT b.receiving_batch_id FROM batch_totals b WHERE b.group_key=totals.group_key ORDER BY b.last_all_received_at DESC,b.receiving_batch_id DESC LIMIT 1) action ON true
    LEFT JOIN LATERAL(SELECT p.* FROM receiving_packing_revisions p WHERE p.receiving_batch_id=action.receiving_batch_id ORDER BY p.created_at DESC,p.packing_revision_id DESC LIMIT 1) packing ON true
+   LEFT JOIN operation_events packing_event ON packing_event.event_id=packing.operation_event_id
    LEFT JOIN LATERAL(SELECT r.result FROM receiving_difference_resolutions r WHERE r.receiving_batch_id=action.receiving_batch_id AND r.difference_type='receiving' AND r.document_quantity_snapshot=totals.document_quantity AND r.actual_quantity_snapshot=totals.current_actual_quantity AND r.difference_quantity_snapshot=totals.current_actual_quantity-totals.document_quantity ORDER BY r.created_at DESC,r.resolution_id DESC LIMIT 1) receiving ON true
    LEFT JOIN LATERAL(SELECT r.result FROM receiving_difference_resolutions r WHERE r.receiving_batch_id=action.receiving_batch_id AND r.difference_type='packing' AND r.actual_quantity_snapshot=totals.current_actual_quantity AND r.packing_revision_id=packing.packing_revision_id AND r.packing_quantity_snapshot=packing.packing_quantity AND r.difference_quantity_snapshot=packing.packing_quantity-totals.current_actual_quantity ORDER BY r.created_at DESC,r.resolution_id DESC LIMIT 1) packed ON true
   `,['2000-01-01','2999-12-31','#',cutIds])).rows:[];

@@ -1,3 +1,4 @@
+import {businessNow} from '../acceptance-clock/business-time.js';
 import {createHash,randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {shipSampleFacts} from './ship-sample-facts.js';
@@ -17,7 +18,7 @@ export class ShipSampleService{
  }
  async record(actor:TrustedActorContext,orderId:string,input:FactoryFollowup,key:string){
   if(!/^[A-Za-z0-9._:-]{1,128}$/.test(key))fail('缺少有效操作标识');
-  if(!input.occurredAt||!Number.isFinite(Date.parse(input.occurredAt))||!input.trackingNumber.trim()||Date.parse(input.occurredAt)>Date.now())fail('请填写真实寄出时间和快递单号，时间不能在未来');
+  if(!input.occurredAt||!Number.isFinite(Date.parse(input.occurredAt))||!input.trackingNumber.trim()||Date.parse(input.occurredAt)>businessNow().getTime())fail('请填写真实寄出时间和快递单号，时间不能在未来');
   const db=await this.database.connect();try{
    await db.query('BEGIN');await db.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
    const policy=new DigitalProductionAccessPolicy(db);await policy.assert(actor,'order',orderId,'technical');

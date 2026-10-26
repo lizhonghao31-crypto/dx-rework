@@ -1,3 +1,4 @@
+import {businessNow} from '../acceptance-clock/business-time.js';
 import {documentMetadata} from "./document-metadata.js";
 import { instructionNotice } from "./instruction-notice.js";
 import { PoCustomerDateService } from "./po-customer-date-service.js";
@@ -142,7 +143,7 @@ export class ProductionInstructionService {
       if(current.sourceRound!==current.latestSourceRound)fail("开发单有新资料，请逐项核对采用或保留后发布");
       const issues=instructionErrors(current.document,order);if(issues.length)fail(issues.join("；"));
       await this.bindImages(db,actor,order,current.document);
-      await db.query("INSERT INTO digital_instruction_versions(production_order_id,version,order_version,document,order_snapshot,source_round,published_by) VALUES($1,$2,$3,$4,$5,$6,$7)",[id,current.version,order.version,JSON.stringify(current.document),JSON.stringify(order),current.sourceRound,actor.actorId]);
+      await db.query("INSERT INTO digital_instruction_versions(production_order_id,version,order_version,document,order_snapshot,source_round,published_by,published_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8)",[id,current.version,order.version,JSON.stringify(current.document),JSON.stringify(order),current.sourceRound,actor.actorId,businessNow().toISOString()]);
       await db.query("UPDATE digital_instruction_documents SET published_version=version WHERE production_order_id=$1",[id]);
       await instructionNotice(db,order,current.version,"大货制单已发布",`instruction:${id}:${current.version}`);
       await new BulkPreparationService(this.database).sync(db,actor,id);

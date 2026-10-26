@@ -12,9 +12,10 @@ import { DevelopmentExecutionService } from "../../apps/api/src/production-platf
 import { developmentSlaEvidence } from "../../apps/api/src/production-platform/development-sla-evidence.js";
 import { arrangementInput } from "./development-arrangement-fixture.js";
 import { taskResult } from "./development-task-result-fixture.js";
+import type {BusinessClock} from '@dx-rework/domain/business-clock';
 
 /** Current enrollment, real migrated schema and original native execution/wage integration. */
-export async function exerciseDevelopmentSlaNative(db: Pool, todos: TodoProjectionService, root: TrustedActorContext, workerId: string) {
+export async function exerciseDevelopmentSlaNative(db: Pool, todos: TodoProjectionService, root: TrustedActorContext, workerId: string, clock?:BusinessClock) {
   const native = new PatternRoomOrderService(db, todos, { ordersEnabled: true });
   const forms = new DigitalDevelopmentService(db, true, native), execution = new DevelopmentExecutionService(db, true, native);
   const identity = new DigitalProductionIdentityService(db, true);
@@ -89,7 +90,7 @@ export async function exerciseDevelopmentSlaNative(db: Pool, todos: TodoProjecti
     await route("development_confirmation");
     expect((await native.get(root, linked.orderId)).status).toBe("completed");
     expect((await db.query("SELECT worker_user_id,wage_eligible_at FROM pattern_room_segments s JOIN pattern_room_rounds r USING(round_id) WHERE r.order_id=$1", [linked.orderId])).rows).toEqual([expect.objectContaining({ worker_user_id: workerId, wage_eligible_at: expect.any(Date) })]);
-    const facts = await developmentSlaEvidence(db, sourceId, { now: new Date().toISOString(), scenarioId: null, revision: 0 });
+    const facts = await developmentSlaEvidence(db, sourceId, clock?await clock.read({kind:'source',id:sourceId}):{ now: new Date().toISOString(), scenarioId: null, revision: 0 });
     expect(facts!.facts.development_tail_check?.completedAt).toBeTruthy();
     expect(facts!.facts.development_materials?.standardMinutes).toBe(240);
     const recorded = (await db.query("SELECT payload->'inspection' AS inspection FROM digital_development_route_facts WHERE source_id=$1 AND kind IN ('洗前检查','尾查通过') ORDER BY sequence", [sourceId])).rows;

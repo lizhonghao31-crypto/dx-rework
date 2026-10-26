@@ -1,3 +1,4 @@
+import {businessNow} from '../acceptance-clock/business-time.js';
 import {factoryReturnLogistics} from './factory-return-logistics.js';
 import {factoryProductionFacts,factoryProductionScopes} from './factory-production-facts.js';
 import type {FactoryProductionQc} from '@dx-rework/contracts/factory-flow';
@@ -102,7 +103,7 @@ export class FactoryFlowService{
   return task.unmetConditions?.length?task.unmetConditions.map(item=>`${item.name}：${item.missing}；${item.action??'请本任务负责岗位核对当前办理页'}`).join('；'):'本工序尚未取得可办理状态，具体原因暂未确认；请重新读取本单，仍未恢复时提供任务链接给管理员核查';
  }
  private latestTime(...values:Array<Date|string|null|undefined>){const times=values.filter((v):v is Date|string=>v!=null).map(v=>new Date(v).getTime());return times.length?new Date(Math.max(...times)):null;}
- private checkTime(at:string|null,earliest?:Date|string|null){if(at&&(!Number.isFinite(new Date(at).getTime())||new Date(at).getTime()>Date.now()||earliest&&new Date(at)<new Date(earliest)))fail('真实时间不能晚于当前或早于前置发生时间；请在本页操作记录核对最近的实际发出、回仓或到厂时间后填写，不要用预计日期替代');}
+ private checkTime(at:string|null,earliest?:Date|string|null){if(at&&(!Number.isFinite(new Date(at).getTime())||new Date(at).getTime()>businessNow().getTime()||earliest&&new Date(at)<new Date(earliest)))fail('真实时间不能晚于当前或早于前置发生时间；请在本页操作记录核对最近的实际发出、回仓或到厂时间后填写，不要用预计日期替代');}
  private async fact(db:PoolClient,actor:TrustedActorContext,prep:string,kind:string,at:string|null,payload:unknown){const id=randomUUID();await db.query('INSERT INTO digital_factory_facts(fact_id,preparation_id,sequence,kind,payload,actor_id,occurred_at) SELECT $1,$2,coalesce(max(sequence),0)+1,$3,$4,$5,$6 FROM digital_factory_facts WHERE preparation_id=$2',[id,prep,kind,JSON.stringify(payload),actor.actorId,at]);return id;}
  async logistics(actor:TrustedActorContext,id:string,input:FactoryLogistics,key:string){return this.command(actor,id,'logistics',input,key,async(db,s)=>{
   if(!await this.authorized(db,actor,s,'process_logistics'))digitalForbidden();if(s.batch)return this.batchLogistics(db,actor,s,input);if(s.dispatched)fail('已发厂，裁后工艺记录已结束');if(s.tasks.find(t=>t.task_kind==='process_logistics')?.state!=='ready')fail(await this.taskBlockReason(db,actor,s,'process_logistics'));

@@ -1,3 +1,4 @@
+import {AcceptanceClockPanel} from './acceptance-clock-panel.js';
 import {TodoReadBoundary} from './todo-content-read.js';
 import {DevelopmentArrangementPage} from "./development-arrangement-page.js";
 import {customerPoDateLabel} from "./digital-workspace-copy.js";
@@ -148,5 +149,5 @@ function DigitalProductionPageContent() {
     case "development": detail = <OrderDocumentContainer key={`development:${route.id}:${route.version}`} initial={{kind:"development",id:route.id,version:route.version}} onClose={() => void closeDetail()} />; break;
     case "task": detail = <TaskDetail id={route.id} />; break;
   }
-  return <div className="pattern-orders digital-production">{detail}</div>;
+  return <div className="pattern-orders digital-production">{route.kind!=="landing"&&route.kind!=="invalid"&&<AcceptanceClockPanel resourceId={route.id}/>}{detail}</div>;
 }

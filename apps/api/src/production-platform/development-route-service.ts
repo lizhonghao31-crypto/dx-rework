@@ -1,3 +1,4 @@
+import {businessNow} from '../acceptance-clock/business-time.js';
 import {developmentRevisionSource} from './development-revision-source.js';
 import type {DevelopmentMakingUpgrade} from '@dx-rework/contracts/digital-development';
 import {plannedRecipient,arrangementsAvailable} from "./development-arrangement.js";
@@ -134,7 +135,7 @@ export class DevelopmentRouteService {
      input={...input,nextAssigneeId:recipient};
    }
    if(task.task_kind==='development_shipping'&&(!input.sentDate||!input.trackingNo?.trim()))fail('请填写实际寄出日期和快递号');
-   if(task.task_kind==='development_shipping'&&input.sentDate&&input.sentDate>new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Shanghai'}))fail('实际寄出日期不能晚于今天');
+   if(task.task_kind==='development_shipping'&&input.sentDate&&input.sentDate>businessNow().toLocaleDateString('en-CA',{timeZone:'Asia/Shanghai'}))fail('实际寄出日期不能晚于今天');
    if(task.task_kind==='development_sewing'){
      const readiness=await materialReadiness(db,sourceId,task.route_version);
      if(!readiness.sewingReady)fail(readiness.sewingMissing.map(item=>`${item.name}：${item.missing.join('、')}`).join('；')||'问题面料须供应链总监确认允许使用');
@@ -146,7 +147,7 @@ export class DevelopmentRouteService {
      const native=(await db.query("SELECT o.order_id,o.current_round_id,o.version,o.status FROM digital_development_pattern_links l JOIN pattern_room_orders o USING(order_id) WHERE l.source_id=$1 AND o.deleted_at IS NULL FOR UPDATE OF o",[sourceId])).rows[0];
      if(!native||!this.patternOrders)fail('请先由设计师提交原打板执行单，并由技术主管确认派工');
      const original=this.patternOrders!.inTransaction(db);
-     if(task.task_kind==='development_shipping'&&input.sentDate&&input.sentDate>new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Shanghai'}))fail('实际寄出日期不能晚于今天');
+     if(task.task_kind==='development_shipping'&&input.sentDate&&input.sentDate>businessNow().toLocaleDateString('en-CA',{timeZone:'Asia/Shanghai'}))fail('实际寄出日期不能晚于今天');
    if(task.task_kind==='development_sewing'){
        if(native.status==='in_progress')await original.completeDevelopment(actor,sourceId,input.taskId,native.order_id,{roundId:native.current_round_id,version:native.version});
        else if(native.status!=='pending_confirmation'&&!(task.route_version>1&&native.status==='completed'))fail('原打板执行状态不允许报车板完成');

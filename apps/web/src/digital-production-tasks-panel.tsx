@@ -1,3 +1,4 @@
+import {acceptanceTaskNow,useAcceptanceClockUpdates} from './acceptance-business-time.js';
 import {useTodoContentRead} from './todo-content-read.js';
 import {roleLabel} from "./components.js";
 import { SearchableSelect } from "./search-select.js";
@@ -18,6 +19,7 @@ import type { DigitalAccessOptions } from "./digital-production-access-panel.js"
 type History = { events: {eventId:string;kind:string;occurredAt:string|null;recordedAt:string;quality:string;correctsEventId:string|null;payload:{reason?:string;note?:string};actorName:string}[]; revisions:{revisionId:string;policyVersion:number;enteredAt:string|null;dueAt:string|null;reason:string;changedAt:string;warningAt:string|null;hasSla:boolean;changedByName:string}[] };
 const date = (value:string|null) => value ? new Date(value).toLocaleString("zh-CN",{hour12:false,timeZone:"Asia/Shanghai"}) : "未知";
 export function DigitalTasksPanel({options, taskId, compact = false, view = "handle", onChanged,embeddedBusiness=false,feedbackOnly=false,initialTask}:{initialTask?:DigitalTask;options:DigitalAccessOptions;taskId?:string;compact?:boolean;view?:DigitalTaskView;onChanged?:()=>void;embeddedBusiness?:boolean;feedbackOnly?:boolean}) {
+  useAcceptanceClockUpdates();
   const [items,setItems]=useState<DigitalTask[]>([]),[selected,setSelected]=useState<DigitalTask|null>(null),[page,setPage]=useState(1);
   const [policies,setPolicies]=useState<DigitalDeadlinePolicy[]>([]),[history,setHistory]=useState<History|null>(null);
   const [people,setPeople]=useState<{id:string;displayName:string;roles:string[]}[]>([]);
@@ -30,7 +32,7 @@ export function DigitalTasksPanel({options, taskId, compact = false, view = "han
   const open=async(id:string,fresh=false)=>{const version=++openVersion.current;setNow(new Date());setError("");try{const [task,events]=await Promise.all([!fresh&&initialTask?.taskId===id?Promise.resolve(initialTask):digitalRequest<DigitalTask>(`tasks/${id}`),digitalRequest<History>(`tasks/${id}/history`)]);if(version!==openVersion.current)return;setSelected(task);setHistory(events);}catch(e){if(version===openVersion.current)setError(e instanceof Error?e.message:"读取失败");}};
   useEffect(()=>{const id=taskId??new URLSearchParams(window.location.search).get("task");if(id&&/^[0-9a-f-]{36}$/i.test(id))void open(id);return()=>{openVersion.current++;};},[taskId,initialTask]);
   const save=async(path:string,body:unknown,method="POST")=>{if(!canWriteDigitalTask(view,selected,path)||writing.current)return;writing.current=true;setBusy(true);setError("");const payload=JSON.stringify([path,body,method]);if(pending.current?.payload!==payload)pending.current={payload,key:createClientRequestId()};try{await digitalRequest(path,method,body,pending.current.key);pending.current=null;await load();if(selected)await open(selected.taskId,true);onChanged?.();}catch(e){setError(e instanceof Error?e.message:unsavedInputLabel);}finally{writing.current=false;setBusy(false);}};
-  const timing=(task:DigitalTask)=>{if(task.state==="pending")return pendingTaskTimingLabel;if(task.state==="cancelled")return "已取消";const result=digitalTaskTiming({...task,terminal:task.state==="completed"},now);const label={unlimited:"无时限",unknown:"时间待核实",normal:task.paused?"原期限内":"办理中",attention:"临期",overdue:"已超时",completed_on_time:"按期完成",completed_overdue:"超时完成"}[result.state];return `${label}${result.elapsedSeconds===null?"":` · 停留 ${(result.elapsedSeconds/3600).toFixed(1)} 小时`}`;};
+  const timing=(task:DigitalTask)=>{if(task.state==="pending")return pendingTaskTimingLabel;if(task.state==="cancelled")return "已取消";const result=digitalTaskTiming({...task,terminal:task.state==="completed"},acceptanceTaskNow(task,now));const label={unlimited:"无时限",unknown:"时间待核实",normal:task.paused?"原期限内":"办理中",attention:"临期",overdue:"已超时",completed_on_time:"按期完成",completed_overdue:"超时完成"}[result.state];return `${label}${result.elapsedSeconds===null?"":` · 停留 ${(result.elapsedSeconds/3600).toFixed(1)} 小时`}`;};
   const developmentBusinessTask = selected !== null && developmentTaskNeedsBusinessPage(selected.taskKind);
   const genericCompletion = !developmentBusinessTask;
   const readBody=useTodoContentRead({routeName:"digital_production_task",entityId:selected?.taskId??"",developmentRound:selected?.routeVersion},Boolean(selected&&history&&!developmentBusinessTask&&!embeddedBusiness&&!feedbackOnly));

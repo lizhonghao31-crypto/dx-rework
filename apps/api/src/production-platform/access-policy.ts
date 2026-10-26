@@ -1,3 +1,4 @@
+import {acceptanceBusinessContext} from '../acceptance-clock/business-time.js';
 import type { Pool, PoolClient } from "pg";
 import type { DigitalResourceKind, DigitalAccessPurpose } from "@dx-rework/contracts/digital-production-access";
 import type { TrustedActorContext } from "../tools/repositories.js";
@@ -13,6 +14,7 @@ export class DigitalProductionAccessPolicy {
   constructor(private readonly database: Database) {}
   // Hold current eligibility while a personnel write commits; deactivation/revocation must serialize.
   async lockActiveRole(userId: string, role: string): Promise<boolean> {
+    const context=acceptanceBusinessContext();if(context&&!await context.acceptsActor(userId))return false;
     const found=await this.database.query(`SELECT 1 FROM app_users u
       JOIN user_role_assignments a ON a.user_id=u.id AND (a.role_code=$2 OR ($2='warehouse_receiver' AND a.role_code='warehouse_supervisor')) AND a.revoked_at IS NULL
       JOIN business_roles r ON r.role_code=a.role_code AND r.enabled
@@ -22,6 +24,7 @@ export class DigitalProductionAccessPolicy {
     return Boolean(found.rowCount);
   }
   async activeRole(userId: string, role: string): Promise<boolean> {
+    const context=acceptanceBusinessContext();if(context&&!await context.acceptsActor(userId))return false;
     const found = await this.database.query(`SELECT 1 FROM app_users u JOIN user_role_assignments a ON a.user_id=u.id
       JOIN business_roles r ON r.role_code=a.role_code AND r.enabled
       WHERE u.id=$1 AND u.enabled AND coalesce((to_jsonb(u)->>'manual_access_disabled')::boolean,false)=false AND (a.role_code=$2 OR ($2='warehouse_receiver' AND a.role_code='warehouse_supervisor')) AND a.revoked_at IS NULL

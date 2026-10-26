@@ -1,3 +1,4 @@
+import {acceptanceClockReaderEnabled,acceptanceIncludesNative,acceptanceBusinessContext,businessNow} from '../acceptance-clock/business-time.js';
 import { memberCanReceiveFact } from "../access/member-module-policy.js";
 import type { Pool, PoolClient } from "pg";
 
@@ -40,6 +41,15 @@ export class TodoTimingService {
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
       throw new Error("Todo timing limit must be between 1 and 100");
     }
+    let allowedTodos:string[]|null=null,allowedReworks:string[]|null=null;
+    if(acceptanceClockReaderEnabled(this.database)){
+      allowedTodos=[];allowedReworks=[];
+      const rows=(await this.database.query("SELECT todo_id,entity_id,route_descriptor FROM rework_todos WHERE status='pending'")).rows;
+      for(const row of rows){const native=row.route_descriptor?.reworkOrderId??row.route_descriptor?.entityId??row.entity_id;if(native&&await acceptanceIncludesNative(this.database,native))allowedTodos.push(row.todo_id);}
+      const orders=(await this.database.query("SELECT rework_order_id FROM rework_orders WHERE status<>'deleted'")).rows;
+      for(const row of orders)if(await acceptanceIncludesNative(this.database,row.rework_order_id))allowedReworks.push(row.rework_order_id);
+    }
+    const comparison=acceptanceBusinessContext()?businessNow().toISOString():null;
     const [candidates, overdueCandidates] = await Promise.all([
       this.database.query<{ todo_id: string }>(
       `SELECT todo.todo_id
@@ -51,26 +61,27 @@ export class TodoTimingService {
            CASE WHEN todo.entity_type='rework_order' THEN todo.entity_id::uuid END
          )
        WHERE todo.status='pending' AND todo.due_at IS NOT NULL
+         AND ($3::uuid[] IS NULL OR todo.todo_id=ANY($3::uuid[]))
          AND (order_record.rework_order_id IS NULL OR order_record.status<>'deleted')
          AND (
            (todo.reminder_count<policy.max_reminders AND (
              (todo.reminder_count=0
-               AND CURRENT_TIMESTAMP>=todo.due_at
+               AND COALESCE($2::timestamptz,CURRENT_TIMESTAMP)>=todo.due_at
                  + policy.first_reminder_after_due_seconds * interval '1 second')
              OR
              (todo.reminder_count=1
                AND policy.second_reminder_after_due_seconds IS NOT NULL
-               AND CURRENT_TIMESTAMP>=todo.due_at
+               AND COALESCE($2::timestamptz,CURRENT_TIMESTAMP)>=todo.due_at
                  + policy.second_reminder_after_due_seconds * interval '1 second')
            ))
            OR
            (todo.escalated_at IS NULL
-             AND CURRENT_TIMESTAMP>=todo.due_at
+             AND COALESCE($2::timestamptz,CURRENT_TIMESTAMP)>=todo.due_at
                + policy.escalate_after_due_seconds * interval '1 second')
          )
        ORDER BY todo.due_at,todo.todo_id
        LIMIT $1`,
-        [limit],
+        [limit,comparison,allowedTodos],
       ),
       this.database.query<{
         case_id: string;
@@ -91,12 +102,12 @@ export class TodoTimingService {
            ORDER BY created_at DESC,follow_up_id DESC
            LIMIT 1
          ) follow ON true
-         WHERE case_record.status='deduction_follow_up'
+         WHERE case_record.status='deduction_follow_up' AND ($3::uuid[] IS NULL OR case_record.rework_order_id=ANY($3::uuid[]))
            AND order_record.status<>'deleted'
-           AND follow.next_follow_up_at<=CURRENT_TIMESTAMP
+           AND follow.next_follow_up_at<=COALESCE($2::timestamptz,CURRENT_TIMESTAMP)
          ORDER BY follow.next_follow_up_at,case_record.case_id
          LIMIT $1`,
-        [limit],
+        [limit,comparison,allowedReworks],
       ),
     ]);
     let reminders = 0;

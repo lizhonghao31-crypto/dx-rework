@@ -1,3 +1,4 @@
+import {businessNow} from '../acceptance-clock/business-time.js';
 import {validateDigitalSlaSnapshot} from '@dx-rework/contracts/digital-sla';
 import {createHash,randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
@@ -53,7 +54,7 @@ export class GarmentQualityService{
    if(input.qualifiedQuantity>receipt.quantity||input.qualifiedQuantity<0||!Number.isSafeInteger(input.qualifiedQuantity))fail('合格数量必须在本批有效实收范围内');
    if(input.qualifiedQuantity<receipt.quantity&&!input.problem.trim())fail('存在不合格成衣时请保留具体质量问题');
    const at=Date.parse(input.occurredAt),earliest=receipt.receivedAt?Date.parse(receipt.receivedAt):receipt.receivedDate?Date.parse(`${receipt.receivedDate}T00:00:00+08:00`):null;
-   if(!Number.isFinite(at)||at>Date.now()||earliest!==null&&at<earliest)fail('检查完成时间不能早于到仓范围或晚于当前时间');
+   if(!Number.isFinite(at)||at>businessNow().getTime()||earliest!==null&&at<earliest)fail('检查完成时间不能早于到仓范围或晚于当前时间');
    const snapshot=(await db.query('SELECT snapshot_id FROM digital_sla_order_snapshots WHERE production_order_id=$1 ORDER BY revision DESC LIMIT 1',[orderId])).rows[0];
    const eventId=randomUUID();await db.query(`INSERT INTO digital_production_task_events(event_id,resource_kind,resource_id,event_kind,actor_id,occurred_at,time_quality,payload)
     VALUES($1,'order',$2,'garment_receipt_qc',$3,$4,'补报未核实',$5)`,[eventId,orderId,actor.actorId,input.occurredAt,JSON.stringify({...input,quantity:receipt.quantity,snapshotId:snapshot?.snapshot_id??null})]);
