@@ -1,10 +1,13 @@
+import {todoSlaTiming} from "../todos/sla-presentation.js";
+import {ContextBusinessClock} from "../acceptance-clock/business-time.js";
+import type {BusinessClock} from "@dx-rework/domain/business-clock";
 import type {Pool,PoolClient} from 'pg';
 import type {TodoResponse} from '@dx-rework/contracts';
 import type {TrustedActorContext} from '../tools/repositories.js';
 import {DigitalProductionAccessPolicy} from './access-policy.js';
 import {garmentSlaEvidence} from './garment-sla-evidence.js';
 import {todoContentToken} from '../todos/content-reads.js';
-export async function garmentQualityTodos(db:Pick<Pool|PoolClient,'query'>,actor:TrustedActorContext):Promise<TodoResponse[]>{
+export async function garmentQualityTodos(db:Pick<Pool|PoolClient,'query'>,actor:TrustedActorContext,clock:BusinessClock=new ContextBusinessClock(db as Pool)):Promise<TodoResponse[]>{
  const policy=new DigitalProductionAccessPolicy(db);
  if(!actor.actorRoles.includes('root_superuser')&&(!actor.actorRoles.includes('quality_control')||!await policy.activeRole(actor.actorId,'quality_control')))return [];
  const records=(await db.query(`SELECT e.event_id,e.recorded_at,e.resource_id AS order_id,e.payload->>'receiptId' AS receipt_id,o.design_style_no
@@ -16,11 +19,11 @@ export async function garmentQualityTodos(db:Pick<Pool|PoolClient,'query'>,actor
  const result:TodoResponse[]=[];
  for(const id of new Set(records.map(r=>r.order_id))){
   if(!await policy.allowed(actor,'order',id,'technical'))continue;
-  const state=await garmentSlaEvidence(db,id);
+  const state=await garmentSlaEvidence(db,id),time=await clock.read({kind:"order",id});
   for(const row of records.filter(r=>r.order_id===id)){
    const receipt=state.quality.find(r=>r.receiptId===row.receipt_id);if(!receipt||receipt.inspected)continue;
    const window=state.windows.find(w=>w.receiptId===receipt.receiptId),at=new Date(row.recorded_at).toISOString();
-   result.push({todoId:row.event_id,contentToken:todoContentToken(['garment-quality',receipt.receiptId,receipt.quantityVersion]),taskTitle:receipt.priorInspection?'核对更正后的到仓检查范围':'办理成衣到仓质检',todoType:'business_action',category:'digital_garment_quality',sourceEventId:row.event_id,sourceAction:'garment_receipt_registered',entityType:'digital_production',entityId:id,recipientUserId:actor.actorId,requiredRole:'quality_control',requiredCapability:null,route:{routeName:'digital_production_closure',entityId:id,todoId:row.event_id},policyKey:null,dueAt:window?.deadline??null,reminderCount:0,status:'pending',blockedReason:null,orderContext:{reworkNo:null,orderNo:null,styleNo:row.design_style_no,supplierName:null,status:receipt.receivedAt?`本批实收${receipt.quantity}件，待检查`:`本批实收${receipt.quantity}件，到仓仅有日期，精确时效未知`,updatedAt:at},unread:true,version:1,createdAt:at,updatedAt:at});
+   result.push({todoId:row.event_id,contentToken:todoContentToken(['garment-quality',receipt.receiptId,receipt.quantityVersion]),taskTitle:receipt.priorInspection?'核对更正后的到仓检查范围':'办理成衣到仓质检',todoType:'business_action',category:'digital_garment_quality',sourceEventId:row.event_id,sourceAction:'garment_receipt_registered',entityType:'digital_production',entityId:id,recipientUserId:actor.actorId,requiredRole:'quality_control',requiredCapability:null,route:{routeName:'digital_production_closure',entityId:id,todoId:row.event_id},policyKey:null,dueAt:window?.deadline??null,timing:todoSlaTiming({dueAt:window?.deadline??null,warningAt:window?.warningAt??null,enteredAt:window?.startedAt??null,asOf:time.now}),reminderCount:0,status:'pending',blockedReason:null,orderContext:{reworkNo:null,orderNo:null,styleNo:row.design_style_no,supplierName:null,status:receipt.receivedAt?`本批实收${receipt.quantity}件，待检查`:`本批实收${receipt.quantity}件，到仓仅有日期，精确时效未知`,updatedAt:at},unread:true,version:1,createdAt:at,updatedAt:at});
   }
  }
  return result;

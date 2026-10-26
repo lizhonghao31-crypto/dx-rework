@@ -1,3 +1,4 @@
+import {validateDigitalSlaSnapshot} from '@dx-rework/contracts/digital-sla';
 import type { PoolClient } from "pg";
 import type { SlaPlan, SlaNodeFact, SlaTime } from "@dx-rework/domain/digital-sla-plan";
 import type { BusinessTime } from "@dx-rework/domain/business-clock";
@@ -46,6 +47,7 @@ export async function developmentSlaEvidence(db: DB, sourceId: string, time: Bus
       ? [...first].reverse().find(candidate => ["development_printing", "development_embroidery", "development_print_embroidery"].includes(candidate.task_kind) && accepted(candidate))?.completed_at
       : row.entered_at;
     if (enteredAt && Date.parse(iso(enteredAt)) <= Date.parse(time.now)) fact.startedAt = iso(enteredAt);
+    if(typeof row.sla_basis.warningRatio==='number')fact.standardWarningPercent=row.sla_basis.warningRatio*100;
     if (row.sla_basis.seconds !== null) fact.standardMinutes = row.sla_basis.seconds / 60;
     if (accepted(row)) {
       fact.completedAt = iso(row.completed_at);
@@ -75,7 +77,8 @@ export async function developmentSlaEvidence(db: DB, sourceId: string, time: Bus
     fact.businessCompleted = Boolean(row && businessCompleted(row));
     if (!fact.startedAt && row?.sla_basis && row.entered_at && Date.parse(iso(row.entered_at)) <= Date.parse(time.now)) {
       fact.startedAt = iso(row.entered_at);
-      if (row.sla_basis.seconds !== null) fact.standardMinutes = row.sla_basis.seconds / 60;
+      if(typeof row.sla_basis.warningRatio==='number')fact.standardWarningPercent=row.sla_basis.warningRatio*100;
+    if (row.sla_basis.seconds !== null) fact.standardMinutes = row.sla_basis.seconds / 60;
     }
     if (row && accepted(row) && row.sla_basis) {
       fact.completedAt = iso(row.completed_at);
@@ -95,7 +98,7 @@ export async function developmentSlaEvidence(db: DB, sourceId: string, time: Bus
     if (receipt?.completedAt) { parent.completedAt = receipt.completedAt; parent.evidence += `;${receipt.evidence}`; }
     else { delete parent.completedDeadline; parent.waitingFor = { reason: "工艺回收尚未确认", source: parent.evidence }; }
   }
-  return { sourceId, sourceRevision: saved.revision, facts, originalFacts,
+  return { sourceId, sourceRevision: saved.revision, originalSnapshot:validateDigitalSlaSnapshot({ruleVersion:saved.rule_version,parameters:saved.parameters_json}),facts, originalFacts,
     corrections: rows.filter(row => row.route_version > 1).map(row => ({ taskId: row.task_id, roundNumber: row.route_version,
       taskKind: row.task_kind, state: row.state, completedAt: accepted(row) ? iso(row.completed_at) : null })) };
 }

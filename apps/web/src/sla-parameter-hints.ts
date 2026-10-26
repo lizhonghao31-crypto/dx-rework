@@ -1,0 +1,11 @@
+/** Human-readable help for the fixed business boundaries; settings cannot edit dependencies. */
+export const slaParameterHints: Record<string, string> = {
+    order_creation: '订单创建沿原入口办理，无独立限时。', customer_confirmation: '客户确认下单沿原事实办理，无独立限时。',
+    development_materials: '从发布开发单开始，到文员核配委派完成；正常等待包含在内。', development_pattern: '本轮纸样就绪至纸样完成。', external_pattern: '外部纸样请求发出至实际收到，由技术主管跟进。', development_cutting: '纸样完成至固定人员裁板完成，不逐单另派。',
+    development_printing: '开发工艺具备条件至回收确认，含运输与正常等待。', development_embroidery: '开发工艺具备条件至回收确认，含运输与正常等待。', development_print_embroidery: '开发工艺具备条件至回收确认，含运输与正常等待。',
+    development_craft_dispatch: '发工艺目标内含于本轮工艺窗口，不重复相加。', development_craft_return: '回收确认目标内含于本轮工艺窗口，不重复相加。', development_sewing: '所需工艺及物料满足原条件后开始，至车板完成。', development_sewing_transfer: '转车板目标内含于车板窗口。', development_pre_wash_check: '车板完成至洗前尺寸检查完成，独立计时。', development_washing: '洗前检查完成至洗水完成。', development_washing_dispatch: '发洗水目标内含于洗水窗口。', development_tail_check: '最终检查就绪至尾查通过且照片齐备；洗后检查不另算一次，无洗水也适用。', development_accessories: '文员确认实际收到开发辅料，无独立限时。', development_shipping: '原开发寄样记录，无新增门禁或独立限时。', budget: '设计师与本单跟单共用预算，跟单最终发布冻结；无交接或独立工时，预算不是合同价。',
+    production_sheet: '客户确认下单至制单发布。', bulk_pattern: '制单发布至大货纸样和唛架完成，合并计算且不等外发批价。', sourcing_ie: '进入原IE报价待办至报价完成。', sourcing_selection: '进入原选厂待办至选厂完成。', sourcing_approval: '进入原审批待办至审批决定完成。', fabric_inspection: '整单布到仓至验布完成。', warehouse_preshrink: '验布合格或获准继续使用至预缩完成；未放行仍等待。', bulk_cutting: '整单真实收布至裁完；不新增裁床收布确认，缺少可信时间不伪造，原开工条件保留。',
+    bulk_printing: '该批发工艺至回仓，包含运输。', bulk_embroidery: '该批发工艺至回仓，包含运输。', bulk_print_embroidery: '该批发工艺至回仓，包含运输。', bulk_qc: '该批工艺回仓至总查完成。', warehouse_dispatch: '该批满足发厂条件至仓库实际发出，含备货等车、不含在途。', warehouse_accessories: '原仓库按面辅料资料安排发出，无新增申请审批或硬时限。',
+    factory_production: '按外发申请的工厂交货日期监督，工厂QC检查完成结束生产段；不代表质量放行。', ship_sample: '生产前安排船样，原区域记录寄出状态、时间、操作人及快递号；不拦其他业务。', ship_sample_advance: '以客户要求我方出货日期向前计算完成目标，不是生产或装箱放行条件。', order_shipping_reminder: '以客户要求我方出货日期向前计算整单提醒。', return_logistics: '工厂实际发回仓至到仓仅作物流预计，不是收货硬期限；只有日期时保留日期精度。',
+    garment_inspection: '每批成衣实际到仓至原仓库质检完成。', garment_rework: '该轮派工确认进入执行至有效返工作业完成，不等核量财务、不增加复检。', garment_packing: '满足原装箱条件至有效装箱；装箱数量即大货出货数量。', receiving_span: '首笔有效实收至累计有效实收达到母单应收；收齐不等于合格、装箱完成或结案，无独立时限。', warning_ratio: '按各自责任窗口经过的比例提示临期，不改变业务完成进度。', stage_buffer: '只增加路径计算的阶段缓冲，不重复加入内含交接，也不改变业务条件。',
+};

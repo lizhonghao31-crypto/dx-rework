@@ -105,6 +105,7 @@ export const TodoResponseSchema = z.object({
   route: TodoRouteDescriptorSchema,
   policyKey: TodoPolicyKeySchema.nullable(),
   dueAt: z.string().datetime().nullable(),
+  timing:z.object({elapsedSeconds:z.number().int().nonnegative().nullable(),status:z.enum(["normal","warning","overdue","unknown","unlimited"]),asOf:z.iso.datetime(),warningAt:z.iso.datetime().nullable(),exclusive:z.boolean(),reason:z.string().nullable()}).strict().optional(),
   reminderCount: z.number().int().min(0).max(2),
   status: TodoStatusSchema,
   blockedReason: z.string().nullable(),

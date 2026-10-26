@@ -1,3 +1,4 @@
+import {slaApplications,appliedSlaWindow} from './sla-applied-window.js';
 import {externalPatternRecords} from "./development-external-pattern-facts.js";
 import type {PoolClient} from "pg";
 import {validateDigitalSlaSnapshot} from "@dx-rework/contracts/digital-sla";
@@ -17,9 +18,12 @@ export async function developmentTaskTiming(db:DB,task:Task):Promise<Development
   if(!saved?.route_nodes.length)return null;
   const document=await developmentDocumentRow(db,task.source_id,task.route_version);
   if(!document)return null;
-  const snapshot=validateDigitalSlaSnapshot({ruleVersion:saved.rule_version,parameters:saved.parameters_json});
+  let snapshot=validateDigitalSlaSnapshot({ruleVersion:saved.rule_version,parameters:saved.parameters_json});
   const kind=task.task_kind;
   const parameterKey=kind==='development_external_pattern'?'external_pattern':kind==='development_material_recheck'?'development_materials':kind==='development_craft_confirmation'?'development_craft_return':kind;
+  const orders=(await db.query('SELECT production_order_id FROM digital_production_orders WHERE source_id=$1',[task.source_id])).rows;
+  const applied=orders.length===1?appliedSlaWindow(snapshot,parameterKey,`task:${task.task_id}`,await slaApplications(db,orders[0].production_order_id)):null;
+  if(applied)snapshot=applied.snapshot;
   const parameter=snapshot.parameters[parameterKey]?.value;
   if(!parameter)return null;
   const warning=snapshot.parameters.warning_ratio!.value;
@@ -63,5 +67,5 @@ export async function developmentTaskTiming(db:DB,task:Task):Promise<Development
   else if(kind==='development_washing'||kind==='development_washing_dispatch')enteredAt=completed('development_pre_wash_check');
   else if(kind==='development_tail_check')enteredAt=document.document.washing==='免洗'?completed('development_sewing'):completed('development_washing');
   else seconds=null;
-  return {sourceId:task.source_id,sourceRevision:saved.revision,configurationId:saved.configuration_id,parameterKey,enteredAt,seconds,warningRatio:warning.percent/100,basis};
+  return {sourceId:task.source_id,sourceRevision:saved.revision,configurationId:applied?.configurationId??saved.configuration_id,parameterKey,...(applied?.applicationId?{applicationId:applied.applicationId,snapshotId:applied.snapshotId}:{}),enteredAt,seconds,warningRatio:warning.percent/100,basis};
 }

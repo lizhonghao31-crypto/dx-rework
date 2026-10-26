@@ -1,3 +1,8 @@
+import {AccessMasterDataService} from "../../apps/api/src/access/service.js";
+import {DigitalProductionNotificationService} from "../../apps/api/src/production-platform/notification-service.js";
+import {TodoService} from "../../apps/api/src/todos/service.js";
+import {SlaOrderService} from "../../apps/api/src/production-platform/sla-order-service.js";
+import {installAcceptanceClockReader} from "../../apps/api/src/acceptance-clock/business-time.js";
 import {SystemBusinessClock} from '@dx-rework/domain/business-clock';
 import { migrationExecutionSql } from "../../scripts/deploy/migration-execution-compatibility.mjs";
 import { DevelopmentDocumentSchema } from "@dx-rework/contracts/digital-development";
@@ -546,5 +551,61 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     expect(statements.some(sql=>sql.includes('board_task.task_kind=ANY($5::text[])'))).toBe(true);
     console.info(JSON.stringify({evidence:'R2 board SQL count',baseline:baselineCount,optimized:statements.length,cards:actual.total}));
   },120000);
+
+  it("SLA10 projects one canonical mother plan inside the original authorized snapshot without changing business progress or P0",async()=>{
+    const rootActor=actor(root,["root_superuser"]),created=await identity.createOrder(rootActor,{...input("SLA10"),primaryMerchandiserId:merchandiser},randomUUID());
+    const id=created.productionOrderId;
+    const before=(await db.query("SELECT plan_json FROM digital_sla_plans WHERE production_order_id=$1 ORDER BY revision",[id])).rows;
+    const expected=await new SlaOrderService(db).read(rootActor,id),detail=await journeys.read(rootActor,id,undefined,true);
+    expect(expected.status).toBe("planned");expect(detail.supervision?.status).toBe("planned");
+    if(expected.status!=="planned")throw Error("fixture must enroll");
+    const sheet=detail.supervision!.nodes.find(n=>n.id==='production_sheet')!,canonical=expected.nodes.find(n=>n.id==='production_sheet')!;
+    expect(sheet.target).toEqual(canonical.deadline);expect(sheet.forecast).toEqual(canonical.forecast);expect(sheet.original).toEqual(expected.original.plan.nodes.length?expected.nodes.find(n=>n.id==='production_sheet')!.end:null);
+    expect(detail.supervision!.coverage.some(c=>c.key==='factory_date')).toBe(true);
+    const listed=await journeys.list(rootActor,JourneyFilterSchema.parse({scope:'production',search:'TEST-J-SLA10'}));
+    expect(listed.items).toHaveLength(1);expect(listed.items[0]!.supervision!.nodes.find(n=>n.id==='production_sheet')!.target).toEqual(sheet.target);
+    expect(listed.supervision?.coverage.some(c=>c.key==='factory_date'&&c.orders===1)).toBe(true);
+    expect((await db.query("SELECT plan_json FROM digital_sla_plans WHERE production_order_id=$1 ORDER BY revision",[id])).rows).toEqual(before);
+    await expect(journeys.read(actor(stranger),id,undefined,true)).rejects.toMatchObject({statusCode:404});
+    const isolatedWorker=randomUUID();
+    await db.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'TEST-SLA10 isolated worker',true)",[isolatedWorker]);
+    await db.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) VALUES($1,$2::uuid,'dingtalk','TEST',$2::text,$2::text,true,true,CURRENT_TIMESTAMP)",[randomUUID(),isolatedWorker]);
+    const authorization=new AccessMasterDataService(db,'TEST');await authorization.ensureOrganizationPolicy();
+    await authorization.assignRole(rootActor,{userId:isolatedWorker,roleCode:'pattern_room_worker',reason:'TEST isolated SLA10 scope, independent of the revoked paging fixture'});
+    const scoped=await createTask({resource:{kind:'order',id},kind:'bulk_pattern',routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:isolatedWorker});
+    const workerRead=await journeys.read(actor(isolatedWorker,['pattern_room_worker']),id,undefined,true);
+    expect(workerRead.supervision).toMatchObject({status:"limited",nodes:[],currentRevision:null});
+    expect((await journeys.read(actor(isolatedWorker,["pattern_room_worker","production_management"]),id,undefined,true)).supervision).toMatchObject({status:"limited",nodes:[],currentRevision:null});expect(workerRead.stages.flatMap(s=>s.nodes).some(n=>n.records.some(r=>r.id===scoped.taskId))).toBe(true);
+  });
+  it("SLA10 source supervision follows the trusted business clock and preserves prior-round dates and read-only facts",async()=>{
+    const source=(await identity.createSource(actor(),{developmentType:'头版',designStyleNo:'TEST-SLA10-SOURCE',temporaryStyleNo:null,customerCode:null},randomUUID())).sourceId;
+    await publishSource(source);
+    const normal=await journeys.read(actor(),source,undefined,true);expect(normal.supervision?.status).toBe('planned');
+    const observed=normal.supervision!.asOf,next=new Date(Date.parse(observed)+5*86400000).toISOString();
+    const scoped={connect:db.connect.bind(db),query:db.query.bind(db)} as unknown as pg.Pool;
+    installAcceptanceClockReader(scoped,{read:async()=>({now:next,scenarioId:null,revision:0}),nativeScenario:async()=>null});
+    const later=await new DigitalJourneyQuery(scoped).read(actor(),source,undefined,true);
+    expect(later.supervision?.asOf).toBe(next);expect(later.display?.actualRatio).toEqual(normal.display?.actualRatio);
+    const first=normal.supervision!.nodes.find(n=>n.id==='development_materials')!,second=later.supervision!.nodes.find(n=>n.id==='development_materials')!;
+    expect(second.original).toEqual(first.original);expect(second.target).toEqual(first.target);expect(second.status).toBe('overdue');
+    expect(later.stages.flatMap(s=>s.nodes).find(n=>n.key==='development_materials')!.state).toEqual(normal.stages.flatMap(s=>s.nodes).find(n=>n.key==='development_materials')!.state);
+  });
+
+  it('SLA10 keeps the same original task target, read receipt and business state while its trusted scene time advances',async()=>{
+    const sourceId=(await identity.createSource(actor(),{developmentType:'头版',designStyleNo:'TEST-SLA10-TODO',temporaryStyleNo:null,customerCode:null},randomUUID())).sourceId;
+    const task=await createTask({resource:{kind:'source',id:sourceId},kind:'development_materials',routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:clerk});
+    const f={taskId:task.taskId,sourceId},notices=new DigitalProductionNotificationService(db),todos=new TodoService(db,undefined,undefined,undefined,notices),clerkActor={...actor(clerk,['development_clerk']),authorizationCapability:'todo:view',authorizationCapabilities:['todo:view']},rootActor=actor(root,['root_superuser']);
+    const initial=(await notices.todos(clerkActor)).find(t=>t.todoId===f.taskId)!;
+    expect(initial.timing).toBeDefined();
+    await todos.markReadForActor(clerkActor,f.taskId,{contentToken:initial.contentToken!,route:initial.route});
+    const snapshot=await tasks.read(rootActor,f.taskId),future=new Date(Date.parse(initial.timing!.asOf)+8*86400000).toISOString();
+    const scoped={connect:db.connect.bind(db),query:db.query.bind(db)} as unknown as pg.Pool;
+    installAcceptanceClockReader(scoped,{read:async scope=>scope.id===f.sourceId?{now:future,scenarioId:null,revision:0}:null,nativeScenario:async()=>null});
+    const next=(await new DigitalProductionNotificationService(scoped).todos(clerkActor)).find(t=>t.todoId===f.taskId)!;
+    expect(next.timing!.asOf).toBe(future);expect(next.dueAt).toBe(initial.dueAt);expect(next.contentToken).toBe(initial.contentToken);expect(next.unread).toBe(false);expect(next.status).toBe('pending');
+    expect(next.timing!.status).toBe(initial.dueAt?'overdue':'unknown');
+    expect(await tasks.read(rootActor,f.taskId)).toEqual(snapshot);
+    expect((await new DigitalProductionNotificationService(scoped).todos(actor(stranger,['sample_designer']))).some(t=>t.todoId===f.taskId)).toBe(false);
+  });
 
 });

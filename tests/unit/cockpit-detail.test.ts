@@ -13,7 +13,7 @@ const render=(o:OrderJourney,busy=false)=>renderToStaticMarkup(createElement(Coc
 it("renders seven double rings with only two date rows, risk color and no invented time ratio",()=>{
   const html=render(fixture());
   expect(html.match(/class="cockpit-stage-rings"/g)).toHaveLength(7);expect(html.match(/class="cockpit-stage-dates"/g)).toHaveLength(7);
-  expect(html).toContain('stroke="#d83145"');expect(html).toContain('fill="#d83145"');expect(html).toContain("时间规则待完善");expect(html).not.toContain("含逾期");expect(html).not.toContain("时间100%");expect(html).not.toContain("订单进度 · 全单范围");
+  expect(html).toContain('stroke="#d83145"');expect(html).toContain('fill="#d83145"');expect(html).not.toContain("时间规则待完善");expect(html).toContain("业务完成进度");expect(html).not.toContain("含逾期");expect(html).not.toContain("时间100%");expect(html).not.toContain("订单进度 · 全单范围");
 });
 it("keeps exactly one handling link above the full node table, with completed records read-only",()=>{
   const html=render(fixture());

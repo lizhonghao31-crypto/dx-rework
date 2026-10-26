@@ -3,7 +3,7 @@ import { DIGITAL_SLA_PARAMETERS, validateDigitalSlaValues, type DigitalSlaValues
 
 /** Existing task keys remain authoritative, including the original craft-confirmation key. */
 export const slaPolicyKey = (parameter: string) => parameter === "development_craft_return" ? "development_craft_confirmation" : parameter === "external_pattern" ? "development_external_pattern" : parameter;
-export const slaParameterKey = (policy: string) => policy === "development_craft_confirmation" ? "development_craft_return" : policy === "development_external_pattern" ? "external_pattern" : policy;
+export const slaParameterKey = (policy: string) => policy === "development_material_recheck" ? "development_materials" : policy === "development_craft_confirmation" ? "development_craft_return" : policy === "development_external_pattern" ? "external_pattern" : policy;
 type References = { storage: "policy_refs_v1"; policies: Record<string, { nodeKey: string; version: number }>; parameters: DigitalSlaValues };
 
 /** Historical inline standards are immutable and remain readable; new publications only reference durations. */

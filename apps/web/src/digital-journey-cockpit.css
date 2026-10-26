@@ -161,3 +161,15 @@
 .digital-journey-cockpit .journey-node-table .is-focused td:last-child{background:#edf5ff}
 .digital-journey-cockpit .journey-node-table a,.digital-journey-cockpit .journey-node-table .journey-text-action{text-decoration:underline;text-underline-offset:2px}
 .digital-journey-cockpit .journey-node-table :is(a,button):focus-visible{outline:2px solid var(--production-primary);outline-offset:1px}
+
+/* Original statistics stay compact; evidence and multiple dates are opt-in. */
+.journey-stat-note {display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 14px;font-size:13px;color:#637b9d;margin:4px 0 12px}
+.journey-stat-note details {min-width:0;max-width:100%}
+.journey-stat-note summary {cursor:pointer;overflow-wrap:anywhere}
+.journey-stat-note details[open] button {display:block;text-align:left;white-space:normal;margin-top:4px}
+.journey-sla-details {margin:8px 0 12px;padding:10px 14px;border:1px solid #dce5ef;border-radius:6px;background:#fff;font-size:13px}
+.journey-sla-details summary {cursor:pointer;color:#34597e}
+.journey-sla-table {overflow:auto;max-height:420px}
+.journey-sla-table table {width:100%;border-collapse:collapse;min-width:600px;text-align:left}
+.journey-sla-table th,.journey-sla-table td {vertical-align:top;padding:8px;border-bottom:1px solid #e7edf4;max-width:300px;overflow-wrap:anywhere}
+.journey-sla-table small {display:block;color:#637b9d;margin-top:4px}

@@ -14,7 +14,7 @@ it("chooses the earliest unresolved risk and retains every parallel current node
 it("renders seven compact columns and never substitutes old 80% for unavailable display facts",()=>{
   const o=order([node("work")]);o.styleImageUrl="/TEST.png";
   const html=renderToStaticMarkup(createElement(CockpitHome,{data:{ruleVersion:"journey-v2.0",asOf:"2026-10-19T00:00:00Z",page:1,pageSize:15,total:1,summary:{all:1,active:1,dueSoon:0,overdue:0,blocked:0,completed:0},items:[o]},error:"",context:JourneyReturnContextSchema.parse({scope:"production"}),onChange(){}}));
-  expect(html.match(/<th>/g)).toHaveLength(7);expect(html).toContain("时间规则待完善");expect(html).toContain("暂无法读取订单状态");expect(html).toContain("预览TEST-HOME款图");expect(html).not.toContain("80%");expect(html).not.toContain("<small>0%</small>");expect(html).not.toContain(">详情<");
+  expect(html.match(/<th>/g)).toHaveLength(7);expect(html).not.toContain("时间规则待完善");expect(html).not.toContain("<span>时间</span>");expect(html).toContain("暂无法读取订单状态");expect(html).toContain("预览TEST-HOME款图");expect(html).not.toContain("80%");expect(html).not.toContain("<small>0%</small>");expect(html).not.toContain(">详情<");
 });
 it("keeps a real zero distinct from unavailable progress and uses the server's main state",()=>{
   const o=order([node("local-risk",{risks:["overdue"]})]);o.display={ruleVersion:"cockpit-display-v1",mainState:"active",earliestShipmentDate:"2026-11-30",missingShipmentDates:0,closedAt:null,actualRatio:0,actualLabel:"0.0%",awaitingClosure:false,stages:[],timeRatio:null,timeLabel:"时间规则待完善"};

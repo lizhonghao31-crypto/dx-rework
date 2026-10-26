@@ -1,12 +1,15 @@
+import { ContextBusinessClock } from '../acceptance-clock/business-time.js';
 import type { PoolClient } from "pg";
 import type { TrustedActorContext } from "../tools/repositories.js";
-import { SystemBusinessClock, type BusinessClock } from "@dx-rework/domain/business-clock";
+import type { BusinessClock } from "@dx-rework/domain/business-clock";
 import { SlaPlanRepository } from "./sla-plan-repository.js";
 
-/** Called only after the existing approved PO-date writer in the same transaction. */
+/** Called after the approved PO-date writer in the same transaction.
+ * Both factory and customer adapters inherit verified scenario time; ordinary
+ * orders retain the real-time fallback. Explicit injected clocks remain supported. */
 export async function recordSlaPoDateChange(client: Pick<PoolClient, "query">, actor: TrustedActorContext,
   orderId: string, kind: "customer" | "factory", approvalEventId: string, reason: string,
-  clock: BusinessClock = new SystemBusinessClock()): Promise<void> {
+  clock: BusinessClock = new ContextBusinessClock()): Promise<void> {
   const repo = new SlaPlanRepository(client);
   if (!await repo.available()) return;
   const previous = (await repo.plans(orderId)).at(-1);

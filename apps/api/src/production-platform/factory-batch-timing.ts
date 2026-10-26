@@ -1,7 +1,8 @@
+import {slaApplications,appliedSlaWindow} from './sla-applied-window.js';
 import type {PoolClient} from 'pg';
 import {validateDigitalSlaSnapshot} from '@dx-rework/contracts/digital-sla';
 import {factoryBatchLedger,type FactoryScope} from './factory-batch-ledger.js';
-export type FactoryWindow={key:string;kind:'process_logistics'|'bulk_qc'|'warehouse_dispatch';enteredAt:string|null;dueAt:string|null;warningAt:string|null;completedAt:string|null;complete:boolean;evidence:string;minutes:number;lineId?:string};
+export type FactoryWindow={key:string;kind:'process_logistics'|'bulk_qc'|'warehouse_dispatch';enteredAt:string|null;dueAt:string|null;warningAt:string|null;completedAt:string|null;complete:boolean;evidence:string;minutes:number;parameterKey:string;applicationId?:string|null;snapshotId?:string;lineId?:string};
 const latest=(values:Array<Date|string|null|undefined>)=>values.every(Boolean)&&values.length?new Date(Math.max(...values.map(v=>new Date(v!).getTime()))).toISOString():null;
 /** Batch windows derive only from original factory facts and the preparation's frozen standard. */
 export async function factoryBatchTiming(db:Pick<PoolClient,'query'>,orderId:string){
@@ -19,8 +20,15 @@ export async function factoryBatchTiming(db:Pick<PoolClient,'query'>,orderId:str
  const ledger=factoryBatchLedger(lines,facts,checks,row.secondary_craft==='无');
  // Retain the first contract-ready fact; later contract revisions do not reset the opened window.
  const contract=(await db.query(`SELECT d.generated_at FROM digital_production_child_links l JOIN sourcing_contract_documents d ON d.sourcing_case_id=l.child_id WHERE l.production_order_id=$1 AND l.module='sourcing' AND d.generated_at IS NOT NULL ORDER BY d.generated_at,d.contract_version LIMIT 1`,[orderId])).rows[0];
+ const applications=await slaApplications(db,orderId);
  const windows:FactoryWindow[]=[];
- const add=(key:string,kind:FactoryWindow['kind'],enteredAt:string|null,complete:boolean,completedAt:string|null,duration:number,evidence:string,lineId?:string)=>windows.push({key,kind,enteredAt,complete,completedAt,minutes:duration,evidence,dueAt:enteredAt?new Date(Date.parse(enteredAt)+duration*60000).toISOString():null,warningAt:enteredAt?new Date(Date.parse(enteredAt)+duration*60000*warning.percent/100).toISOString():null,...(lineId?{lineId}:{})});
+ const add=(key:string,kind:FactoryWindow['kind'],enteredAt:string|null,complete:boolean,completedAt:string|null,duration:number,evidence:string,lineId?:string)=>{
+  const parameterKey=kind==='process_logistics'?(row.secondary_craft==='印花'?'bulk_printing':row.secondary_craft==='绣花'?'bulk_embroidery':'bulk_print_embroidery'):kind;
+  const applied=appliedSlaWindow(snapshot,parameterKey,`factory:${kind}:${key}`,applications),v=applied.snapshot.parameters[parameterKey]?.value,w=applied.snapshot.parameters.warning_ratio!.value;
+  const minutes=v?.kind==='duration'?v.minutes:duration,ratio=w.kind==='ratio'?w.percent/100:warning.percent/100;
+  windows.push({key,kind,parameterKey,enteredAt,complete,completedAt,minutes,evidence,applicationId:applied.applicationId,snapshotId:applied.snapshotId??row.sla_snapshot_id,
+   dueAt:enteredAt?new Date(Date.parse(enteredAt)+minutes*60000).toISOString():null,warningAt:enteredAt?new Date(Date.parse(enteredAt)+minutes*60000*ratio).toISOString():null,...(lineId?{lineId}:{})});
+ };
  if(row.secondary_craft!=='无'){
   const craftKey=row.secondary_craft==='印花'?'bulk_printing':row.secondary_craft==='绣花'?'bulk_embroidery':'bulk_print_embroidery';
   for(const send of ledger.pendingSends){
@@ -50,5 +58,5 @@ export async function factoryTaskTiming(db:Pick<PoolClient,'query'>,task:{produc
  const timing=prepared??await factoryBatchTiming(db,task.production_order_id);if(!timing||timing.preparationId!==task.route_instance_id)return null;
  const rows=timing.windows.filter(w=>w.kind===task.task_kind),open=rows.filter(w=>!w.complete);
  const selected=open.slice().sort((a,b)=>(a.dueAt?Date.parse(a.dueAt):Infinity)-(b.dueAt?Date.parse(b.dueAt):Infinity))[0];
- return {snapshotId:timing.snapshotId,parameterKey:task.task_kind,enteredAt:selected?.enteredAt??null,timeQuality:selected?.enteredAt?'补报未核实':'缺失',seconds:selected?selected.minutes*60:null,warningRatio:timing.warningRatio,basis:selected?[selected.key,selected.evidence]:[],unknownWindows:open.filter(w=>!w.enteredAt).length};
+ return {snapshotId:selected?.snapshotId??timing.snapshotId,parameterKey:selected?.parameterKey??task.task_kind,enteredAt:selected?.enteredAt??null,timeQuality:selected?.enteredAt?'补报未核实':'缺失',seconds:selected?selected.minutes*60:null,warningRatio:selected?.warningAt&&selected.enteredAt&&selected.dueAt?(Date.parse(selected.warningAt)-Date.parse(selected.enteredAt))/(Date.parse(selected.dueAt)-Date.parse(selected.enteredAt)):timing.warningRatio,basis:selected?[selected.key,selected.evidence]:[],unknownWindows:open.filter(w=>!w.enteredAt).length};
 }

@@ -1,3 +1,5 @@
+import {effectiveSourcingDueSql} from '../production-platform/sla-sourcing-deadline-sql.js';
+import {sourcingTodoPresentation} from "./sla-presentation.js";
 import {acceptanceBusinessContext,assertAcceptanceAssignee,businessNow} from '../acceptance-clock/business-time.js';
 import {arrangementsAvailable} from "../production-platform/development-arrangement.js";
 import {sourcingTodoSla} from "../production-platform/sourcing-todo-sla.js";
@@ -285,7 +287,9 @@ const validateCreateInput = (input: CreateTodoInTransactionInput): void => {
 };
 
 export class TodoService {
-  private async contextSql(){return TODO_WITH_CONTEXT_SQL+(this.digital&&await arrangementsAvailable(this.database)?` WHERE ${nativeDevelopmentTodoExclusion}`:"");}
+  private slaAvailability?:Promise<boolean>;
+  private async appliedSlaAvailable(db:Pick<Pool,"query">){return this.slaAvailability??=db.query("SELECT to_regclass('digital_sla_order_snapshots') AS relation").then(r=>!!r.rows[0]?.relation);}
+  private async contextSql(){const sql=await this.appliedSlaAvailable(this.database)?TODO_WITH_CONTEXT_SQL.replace('todos.due_at,',`${effectiveSourcingDueSql('todos')} AS due_at,`):TODO_WITH_CONTEXT_SQL;return sql+(this.digital&&await arrangementsAvailable(this.database)?` WHERE ${nativeDevelopmentTodoExclusion}`:"");}
   constructor(
     private readonly database: Pool,
     private readonly events = new OperationEventRepository(),
@@ -345,7 +349,7 @@ export class TodoService {
         for(const key of ["due_at","created_at","updated_at","rework_updated_at","sourcing_updated_at","sample_updated_at","pattern_updated_at","supplier_request_updated_at"]){if(row[key]!=null)row[key]=new Date(String(row[key]));}
         return todoResponse(row as unknown as TodoRow);
       });
-      return {todos,activeModule,moduleCounts,searchScope:"all",page:result.page,pageSize:15,totalCount:Number(result.total_count),totalPages:result.total_pages};
+      return {todos:await sourcingTodoPresentation(this.database,todos),activeModule,moduleCounts,searchScope:"all",page:result.page,pageSize:15,totalCount:Number(result.total_count),totalPages:result.total_pages};
     }
     if (activeModule === "production" || activeModule === "digital_production") {
       const filtered = (activeModule === "production" ? productionTodos : digitalTodos).filter(todo => !normalizedQuery ||
@@ -408,7 +412,7 @@ export class TodoService {
       ],
     );
     return {
-      todos: result.rows.map(todoResponse),
+      todos: await sourcingTodoPresentation(this.database,result.rows.map(todoResponse)),
       activeModule,
       moduleCounts,
       page,
@@ -437,7 +441,7 @@ export class TodoService {
     if (!row && this.production) { const todo = (await this.production.todos(actor)).find(item=>item.todoId===todoId); if(todo)return todo; }
     if (!row && this.digital) { const todo = (await this.digital.todos(actor)).find(item=>item.todoId===todoId); if(todo)return todo; }
     if (!row) throw new ApplicationError("NOT_FOUND", "待办不存在或已不再分配给你", 404);
-    return todoResponse(row);
+    return (await sourcingTodoPresentation(this.database,[todoResponse(row)]))[0]!;
   }
 
   async countIndicatorForActor(actor: TrustedActorContext): Promise<TodoCountIndicator> {
@@ -848,6 +852,7 @@ export class TodoService {
     if (!(await this.ensureOpenRecipientEligibleInTransaction(client, actor, todoId))) {
       return null;
     }
+    const effectiveDue=await this.appliedSlaAvailable(client)?effectiveSourcingDueSql('todo'):'todo.due_at';
     const result = await client.query<TodoRow & {
       due_after_seconds: number | null;
       first_reminder_after_due_seconds: number | null;
@@ -859,14 +864,14 @@ export class TodoService {
       `SELECT todo.todo_id,todo.todo_type,todo.category,todo.source_event_id,todo.source_action,
               todo.entity_type,todo.entity_id,todo.recipient_user_id,todo.required_role,
               todo.required_capability,todo.delegation_id,todo.delegation_scope_id,todo.route_descriptor,todo.policy_key,
-              todo.due_at,todo.reminder_count,todo.status,todo.blocked_reason,todo.version,
+              ${effectiveDue} AS due_at,todo.reminder_count,todo.status,todo.blocked_reason,todo.version,
               todo.created_at,todo.updated_at,policy.due_after_seconds,
               policy.first_reminder_after_due_seconds,policy.second_reminder_after_due_seconds,
               policy.escalate_after_due_seconds,policy.max_reminders,COALESCE($2::timestamptz,CURRENT_TIMESTAMP) database_now
        FROM rework_todos todo
        JOIN todo_policies policy ON policy.policy_key=todo.policy_key AND policy.enabled=true
-       WHERE todo.todo_id=$1 AND todo.status='pending' AND todo.due_at IS NOT NULL
-       FOR UPDATE`,
+       WHERE todo.todo_id=$1 AND todo.status='pending' AND ${effectiveDue} IS NOT NULL
+       FOR UPDATE OF todo,policy`,
       [todoId,acceptanceBusinessContext()?businessNow().toISOString():null],
     );
     const todo = result.rows[0];

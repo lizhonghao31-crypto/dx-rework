@@ -288,6 +288,37 @@ const url=process.env.TEST_DATABASE_URL;
   finally{await employees.restoreAccess(actor("root"),ids.designer,"TEST恢复夹具账号");}
   expect((await db.query("SELECT created_by FROM digital_production_sources WHERE source_id=$1",[f.sourceId])).rows[0].created_by).toBe(ids.designer);expect((await db.query("SELECT published_by FROM digital_development_amendments WHERE source_id=$1",[f.sourceId])).rows[0].published_by).toBe(ids.root);
  });
+ it('allows a returned correction while shipping is only automatically ready, preserving original clocks and frozen standards',async()=>{
+  const f=await prepare();
+  const shipping=(await execution.read(actor('designer'),f.sourceId)).tasks.find(t=>t.taskKind==='development_shipping')!;
+  expect(shipping.state).toBe('ready');expect((await db.query('SELECT entered_at FROM digital_production_tasks WHERE task_id=$1',[shipping.taskId])).rows[0].entered_at).not.toBeNull();
+  const snapshot=async()=>({
+   tasks:(await db.query(`SELECT t.task_id,t.entered_at,t.completed_at FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id)
+    WHERE a.source_id=$1 AND a.task_kind NOT IN ('development_material_supply','development_material_recheck') ORDER BY t.task_id`,[f.sourceId])).rows,
+   deadlines:(await db.query(`SELECT d.* FROM digital_production_deadline_revisions d JOIN digital_production_task_access a USING(task_id)
+    WHERE a.source_id=$1 ORDER BY d.revision_id`,[f.sourceId])).rows,
+   frozen:(await db.query('SELECT * FROM digital_development_sla_plans WHERE source_id=$1 ORDER BY revision',[f.sourceId])).rows
+  });
+  const before=await snapshot(),{saved}=await save(f),key=randomUUID();
+  const input={taskId:f.supply.taskId,roundNumber:1,expectedDocumentVersion:f.sheet.version,expectedDraftVersion:saved.draftVersion};
+  const result=await amendments.submit(actor('designer'),f.sourceId,input,key);
+  expect(await amendments.submit(actor('designer'),f.sourceId,input,key)).toEqual(result);
+  const after=await snapshot();expect(after.tasks).toEqual(before.tasks);expect(after.frozen).toEqual(before.frozen);
+  // The new recheck may get its own deadline revision; all original revisions stay intact.
+  expect(after.deadlines.filter(d=>before.deadlines.some(b=>b.revision_id===d.revision_id))).toEqual(before.deadlines);
+  expect((await forms.read(actor('designer'),f.sourceId)).document!.materials[0]!.specification).toBe('42支');
+  const recheck=(await execution.read(actor('clerk'),f.sourceId)).tasks.find(t=>t.taskKind==='development_material_recheck')!;
+  expect(recheck.enteredAt).toBe(f.sheet.publishedAt);
+ });
+ it('still refuses a correction after actual shipping and preserves its draft and published basis',async()=>{
+  const f=await prepare(),{saved}=await save(f);
+  const shipping=(await execution.read(actor('designer'),f.sourceId)).tasks.find(t=>t.taskKind==='development_shipping')!;
+  await execution.route(actor('designer'),f.sourceId,{taskId:shipping.taskId,result:'通过',note:'TEST实际寄出',craftExecution:null,nextAssigneeId:null,sentDate:new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()),trackingNo:'TEST-SHIPPED'},randomUUID());
+  const before=await forms.read(actor('designer'),f.sourceId);
+  await expect(amendments.submit(actor('designer'),f.sourceId,{taskId:f.supply.taskId,roundNumber:1,expectedDocumentVersion:f.sheet.version,expectedDraftVersion:saved.draftVersion},randomUUID())).rejects.toThrow('实际修改 / 复版');
+  expect(await forms.read(actor('designer'),f.sourceId)).toEqual(before);
+  expect((await amendments.read(actor('designer'),f.sourceId,f.supply.taskId)).draft?.version).toBe(saved.draftVersion);
+ });
  it("refuses an amendment after paper work has really activated and preserves its clock and published basis",async()=>{
   const f=await prepare(),first=await save(f);await amendments.submit(actor("designer"),f.sourceId,{taskId:f.supply.taskId,roundNumber:1,expectedDocumentVersion:f.sheet.version,expectedDraftVersion:first.saved.draftVersion},randomUUID());
   let state=await execution.read(actor("clerk"),f.sourceId);const recheck=state.tasks.find(t=>t.taskKind==="development_material_recheck")!,entries=state.materialVerification!.entries.map(row=>({materialId:row.materialId,usage:"use" as const,physical:true,quantity:true,color:true,specification:true,note:"",confirmedWith:""}));

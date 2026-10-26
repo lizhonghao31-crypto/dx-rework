@@ -1,3 +1,4 @@
+import {effectiveSourcingDueSql} from '../production-platform/sla-sourcing-deadline-sql.js';
 import {acceptanceClockReaderEnabled,acceptanceIncludesNative,acceptanceBusinessContext,businessNow} from '../acceptance-clock/business-time.js';
 import { memberCanReceiveFact } from "../access/member-module-policy.js";
 import type { Pool, PoolClient } from "pg";
@@ -49,6 +50,8 @@ export class TodoTimingService {
       const orders=(await this.database.query("SELECT rework_order_id FROM rework_orders WHERE status<>'deleted'")).rows;
       for(const row of orders)if(await acceptanceIncludesNative(this.database,row.rework_order_id))allowedReworks.push(row.rework_order_id);
     }
+    const applied=!!(await this.database.query("SELECT to_regclass('digital_sla_order_snapshots') AS relation")).rows[0]?.relation;
+    const effectiveDue=applied?effectiveSourcingDueSql('todo'):'todo.due_at';
     const comparison=acceptanceBusinessContext()?businessNow().toISOString():null;
     const [candidates, overdueCandidates] = await Promise.all([
       this.database.query<{ todo_id: string }>(
@@ -60,26 +63,26 @@ export class TodoTimingService {
            NULLIF(todo.route_descriptor->>'reworkOrderId','')::uuid,
            CASE WHEN todo.entity_type='rework_order' THEN todo.entity_id::uuid END
          )
-       WHERE todo.status='pending' AND todo.due_at IS NOT NULL
+       WHERE todo.status='pending' AND ${effectiveDue} IS NOT NULL
          AND ($3::uuid[] IS NULL OR todo.todo_id=ANY($3::uuid[]))
          AND (order_record.rework_order_id IS NULL OR order_record.status<>'deleted')
          AND (
            (todo.reminder_count<policy.max_reminders AND (
              (todo.reminder_count=0
-               AND COALESCE($2::timestamptz,CURRENT_TIMESTAMP)>=todo.due_at
+               AND COALESCE($2::timestamptz,CURRENT_TIMESTAMP)>=${effectiveDue}
                  + policy.first_reminder_after_due_seconds * interval '1 second')
              OR
              (todo.reminder_count=1
                AND policy.second_reminder_after_due_seconds IS NOT NULL
-               AND COALESCE($2::timestamptz,CURRENT_TIMESTAMP)>=todo.due_at
+               AND COALESCE($2::timestamptz,CURRENT_TIMESTAMP)>=${effectiveDue}
                  + policy.second_reminder_after_due_seconds * interval '1 second')
            ))
            OR
            (todo.escalated_at IS NULL
-             AND COALESCE($2::timestamptz,CURRENT_TIMESTAMP)>=todo.due_at
+             AND COALESCE($2::timestamptz,CURRENT_TIMESTAMP)>=${effectiveDue}
                + policy.escalate_after_due_seconds * interval '1 second')
          )
-       ORDER BY todo.due_at,todo.todo_id
+       ORDER BY ${effectiveDue},todo.todo_id
        LIMIT $1`,
         [limit,comparison,allowedTodos],
       ),

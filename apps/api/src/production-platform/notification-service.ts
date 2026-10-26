@@ -1,3 +1,6 @@
+import {effectiveSourcingDueSql} from './sla-sourcing-deadline-sql.js';
+import {slaNotificationWindow} from './sla-notification-window.js';
+import {todoSlaTiming,explicitlyUnlimitedSla} from "../todos/sla-presentation.js";
 import {acceptanceBusinessContext,acceptanceClockReaderEnabled,acceptanceIncludesNative,businessNow,ContextBusinessClock} from '../acceptance-clock/business-time.js';
 import {garmentQualityTodos} from './garment-quality-todos.js';
 import {factoryProductionQcTodos} from './factory-production-qc-todos.js';
@@ -33,14 +36,14 @@ const ACTIVE = "t.state IN ('pending','ready','blocked') AND coalesce(l.state,'a
 const TASKS = `SELECT t.*,a.assignee_id,a.required_role,a.task_kind,a.production_order_id,a.source_id,
   coalesce(o.created_by,s.created_by) AS designer_id,o.primary_merchandiser_id,
   o.design_style_no AS order_style_no,s.design_style_no AS source_style_no,
-  p.label,d.revision_id,d.warning_at,d.due_at,NULLIF(to_jsonb(d)->'sla_basis','null'::jsonb) IS NOT NULL AS source_sla,coalesce((to_jsonb(d)->'sla_basis'->>'exclusive')::boolean,false) AS deadline_exclusive,coalesce(l.state,'active') AS lifecycle
+  p.label,d.revision_id,d.entered_at,to_jsonb(d)->'sla_basis' AS sla_basis,d.warning_at,d.due_at,NULLIF(to_jsonb(d)->'sla_basis','null'::jsonb) IS NOT NULL AS source_sla,coalesce((to_jsonb(d)->'sla_basis'->>'exclusive')::boolean,false) AS deadline_exclusive,coalesce(l.state,'active') AS lifecycle
   FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id)
   LEFT JOIN digital_production_orders o USING(production_order_id)
   LEFT JOIN digital_production_sources s ON s.source_id=a.source_id
   LEFT JOIN digital_production_resource_lifecycle l ON l.resource_kind=CASE WHEN a.production_order_id IS NULL THEN 'source' ELSE 'order' END AND l.resource_id=coalesce(a.production_order_id,a.source_id)
   JOIN LATERAL(SELECT label FROM digital_production_deadline_policies WHERE node_key=t.node_key ORDER BY version DESC LIMIT 1)p ON true
   LEFT JOIN LATERAL(SELECT * FROM digital_production_deadline_revisions WHERE task_id=t.task_id ORDER BY revision_id DESC LIMIT 1)d ON true`;
-type Task = {deadline_exclusive?:boolean;source_sla?:boolean;route_version:number;task_id:string;state:string;assignee_id:string|null;required_role:string;task_kind:string;production_order_id:string|null;source_id:string|null;order_style_no:string|null;source_style_no:string|null;designer_id:string;primary_merchandiser_id:string|null;label:string;revision_id:string|null;warning_at:Date|null;due_at:Date|null;lifecycle:string;created_at:Date};
+type Task = {entered_at:Date|null;sla_basis?:unknown;deadline_exclusive?:boolean;source_sla?:boolean;route_version:number;task_id:string;state:string;assignee_id:string|null;required_role:string;task_kind:string;production_order_id:string|null;source_id:string|null;order_style_no:string|null;source_style_no:string|null;designer_id:string;primary_merchandiser_id:string|null;label:string;revision_id:string|null;warning_at:Date|null;due_at:Date|null;lifecycle:string;created_at:Date};
 const labels: Record<string,string> = {ready:"待办理",reassigned:"已改派给你",unblocked:"已解除阻断",blocked:"办理遇到阻断",completed:"已完成",warning:"即将超时",overdue:"已超时",created:"待分配主办"};
 
 export class DigitalProductionNotificationService {
@@ -136,14 +139,20 @@ export class DigitalProductionNotificationService {
           await this.notice(client,{key:`missing:${task.task_id}:${task.assignee_id??'none'}`,taskId:task.task_id,kind:"created"},(await this.recipients(client,task,"created",people)).map(p=>p.actorId));
         if(task.state==="pending"&&!task.source_sla||!task.due_at)continue;
         const now=businessNow().getTime(),due=new Date(task.due_at).getTime(),kind=(task.source_sla&&!task.deadline_exclusive?due<now:due<=now)?"overdue":task.warning_at&&new Date(task.warning_at).getTime()<=now?"warning":null;
-        if(kind)await this.notice(client,{key:`deadline:${task.task_id}:${task.revision_id}:${kind}`,taskId:task.task_id,kind,revision:task.revision_id},(await this.recipients(client,task,kind,people)).map(p=>p.actorId));
+        if(kind){
+          const prior=task.source_sla?(await client.query(`SELECT n.source_key,r.entered_at,to_jsonb(r)->'sla_basis' AS sla_basis
+            FROM digital_production_notification_events n JOIN digital_production_deadline_revisions r ON r.revision_id=n.deadline_revision_id
+            WHERE n.task_id=$1 AND n.event_kind=$2 ORDER BY n.created_at,n.event_id`,[task.task_id,kind])).rows.find(row=>slaNotificationWindow(row)===slaNotificationWindow(task)):null;
+          await this.notice(client,{key:prior?.source_key??`deadline:${task.task_id}:${task.revision_id}:${kind}`,taskId:task.task_id,kind,revision:task.revision_id},(await this.recipients(client,task,kind,people)).map(p=>p.actorId));
+        }
       }
       await this.projectChildren(client);
     });
   }
   private async projectChildren(client:PoolClient) {
     if(!(await client.query("SELECT to_regclass('rework_todos') AS relation")).rows[0]?.relation)return;
-    const rows=(await client.query(`SELECT t.* FROM rework_todos t JOIN digital_production_child_links l ON
+    const applied=!!(await client.query("SELECT to_regclass('digital_sla_order_snapshots') AS relation")).rows[0]?.relation;
+    const rows=(await client.query(`SELECT t.*${applied?`,${effectiveSourcingDueSql('t')} AS due_at`:''} FROM rework_todos t JOIN digital_production_child_links l ON
       l.child_id=coalesce(nullif(t.route_descriptor->>'reworkOrderId',''),t.route_descriptor->>'entityId')::uuid
       AND l.module=CASE t.route_descriptor->>'routeName' WHEN 'sourcing_detail' THEN 'sourcing' WHEN 'production_detail' THEN 'production' WHEN 'pattern_room_order' THEN 'pattern_room' ELSE 'rework' END
       WHERE t.status IN ('pending','blocked_recipient')`)).rows;
@@ -160,8 +169,10 @@ export class DigitalProductionNotificationService {
       if(await hiddenNativeDevelopmentTodo(client,row.route_descriptor))continue;
       const kind=row.todo_type==="information"?"information":"ready";
       await this.notice(client,{key:`child:${row.source_event_id}:${row.todo_id}`,todoId:row.todo_id,kind,sourceEventId:row.source_event_id},[row.recipient_user_id]);
-      if(row.todo_type!=="information"&&row.due_at&&new Date(row.due_at).getTime()<=businessNow().getTime())
-        await this.notice(client,{key:`child-overdue:${row.todo_id}:${iso(row.due_at)}`,todoId:row.todo_id,kind:"overdue"},[row.recipient_user_id]);
+      if(row.todo_type!=="information"&&row.due_at&&new Date(row.due_at).getTime()<=businessNow().getTime()){
+        const prior=(await client.query("SELECT source_key FROM digital_production_notification_events WHERE todo_id=$1 AND event_kind='overdue' ORDER BY created_at,event_id LIMIT 1",[row.todo_id])).rows[0];
+        await this.notice(client,{key:prior?.source_key??`child-overdue:${row.todo_id}:${iso(row.due_at)}`,todoId:row.todo_id,kind:"overdue"},[row.recipient_user_id]);
+      }
     }
   }
   async todos(actor:TrustedActorContext):Promise<TodoResponse[]> {
@@ -170,7 +181,7 @@ export class DigitalProductionNotificationService {
     const tasks=(await this.database.query<Task>(`${TASKS} WHERE ${ACTIVE} ORDER BY d.due_at NULLS LAST,t.created_at,t.task_id`)).rows;
     const unified=await arrangementsAvailable(this.database);
     const result:TodoResponse[]=unified?[...await arrangementTodos(this.database,actor),...await fabricDecisionTodos(this.database,actor)]:[];
-    result.push(...await bulkFabricDecisionTodos(this.database,actor),...await factoryProductionQcTodos(this.database,actor),...await garmentQualityTodos(this.database,actor));
+    result.push(...await bulkFabricDecisionTodos(this.database,actor),...await factoryProductionQcTodos(this.database,actor,new ContextBusinessClock(this.database)),...await garmentQualityTodos(this.database,actor,new ContextBusinessClock(this.database)));
     for(const task of tasks){
       const missing=!people.some(p=>p.actorId===task.assignee_id&&hasRequiredWarehouseRole(p.actorRoles,task.required_role));
       if(unified&&missing&&task.source_id&&(DEVELOPMENT_ARRANGEABLE_KINDS as readonly string[]).includes(task.task_kind))continue;
@@ -187,7 +198,8 @@ export class DigitalProductionNotificationService {
         // Source/task visibility alone does not reveal a linked mother's PO list.
         if(linkedOrder&&await new DigitalProductionAccessPolicy(this.database).allowed(actor,'order',linkedOrder,'technical'))orderContext.poNumbers=(await this.database.query('SELECT po_number FROM digital_production_po_lines WHERE production_order_id=$1 ORDER BY position',[linkedOrder])).rows.flatMap(row=>row.po_number?[row.po_number as string]:[]);
       }
-      result.push({todoId:task.task_id,taskTitle:task.label,todoType:missing?"recipient_routing_exception":"business_action",category:missing?"digital_assignment":"digital_task",sourceEventId:task.task_id,sourceAction:"digital_task",entityType:"digital_task",entityId:task.task_id,recipientUserId:actor.actorId,requiredRole:task.required_role,requiredCapability:null,route:{routeName:"digital_production_task",entityId:task.task_id,todoId:task.task_id,...(task.source_id?{developmentRound:task.route_version}:{})},policyKey:null,dueAt:task.due_at?iso(task.due_at):null,reminderCount:0,status:missing?"blocked_recipient":"pending",blockedReason:missing?"主办缺失或已失效，请重新分配":null,orderContext,unread:true,version:1,createdAt:iso(task.created_at),updatedAt:iso(task.created_at)});
+      const time=await new ContextBusinessClock(this.database).read(task.production_order_id?{kind:'order',id:task.production_order_id}:{kind:'source',id:task.source_id!});
+      result.push({todoId:task.task_id,taskTitle:task.label,todoType:missing?"recipient_routing_exception":"business_action",category:missing?"digital_assignment":"digital_task",sourceEventId:task.task_id,sourceAction:"digital_task",entityType:"digital_task",entityId:task.task_id,recipientUserId:actor.actorId,requiredRole:task.required_role,requiredCapability:null,route:{routeName:"digital_production_task",entityId:task.task_id,todoId:task.task_id,...(task.source_id?{developmentRound:task.route_version}:{})},policyKey:null,dueAt:task.due_at?iso(task.due_at):null,timing:todoSlaTiming({dueAt:task.due_at?iso(task.due_at):null,warningAt:task.warning_at?iso(task.warning_at):null,enteredAt:task.entered_at?iso(task.entered_at):null,exclusive:task.source_sla?(task.deadline_exclusive??false):false,asOf:time.now,unlimited:explicitlyUnlimitedSla(task.sla_basis)}),reminderCount:0,status:missing?"blocked_recipient":"pending",blockedReason:missing?"主办缺失或已失效，请重新分配":null,orderContext,unread:true,version:1,createdAt:iso(task.created_at),updatedAt:iso(task.created_at)});
     }
     return applyTodoReadState(this.database,actor,result);
   }
@@ -225,9 +237,14 @@ export class DigitalProductionNotificationService {
       const task=(await database.query<Task>(`${TASKS} WHERE t.task_id=$1`,[event.task_id])).rows[0];
       if(!task||task.lifecycle!=="active")return null;
       if(!await this.currentTaskEvent(database,task,event.event_id,event.event_kind))return null;
-      if(event.deadline_revision_id&&String(event.deadline_revision_id)!==String(task.revision_id))return null;
+      if(event.deadline_revision_id&&String(event.deadline_revision_id)!==String(task.revision_id)){
+        const prior=task.source_sla?(await database.query("SELECT entered_at,to_jsonb(r)->'sla_basis' AS sla_basis FROM digital_production_deadline_revisions r WHERE revision_id=$1 AND task_id=$2",[event.deadline_revision_id,task.task_id])).rows[0]:null;
+        if(!prior||slaNotificationWindow(prior)!==slaNotificationWindow(task))return null;
+      }
       const taskTime=await new ContextBusinessClock(this.database).read(task.production_order_id?{kind:'order',id:task.production_order_id}:{kind:'source',id:task.source_id!});
       if(event.event_kind==="warning"&&task.due_at&&(task.source_sla&&!task.deadline_exclusive?new Date(task.due_at).getTime()<Date.parse(taskTime.now):new Date(task.due_at).getTime()<=Date.parse(taskTime.now)))return null;
+      if(event.event_kind==='warning'&&(!task.warning_at||Date.parse(taskTime.now)<new Date(task.warning_at).getTime()))return null;
+      if(event.event_kind==='overdue'&&(!task.due_at||(task.source_sla&&!task.deadline_exclusive?Date.parse(taskTime.now)<=new Date(task.due_at).getTime():Date.parse(taskTime.now)<new Date(task.due_at).getTime())))return null;
       const missing=!people.some(p=>p.actorId===task.assignee_id&&hasRequiredWarehouseRole(p.actorRoles,task.required_role));
       if(event.event_kind==="created"&&(!missing||task.source_id&&(DEVELOPMENT_ARRANGEABLE_KINDS as readonly string[]).includes(task.task_kind)&&await arrangementsAvailable(database)))return null;
       if(!(await this.recipients(database,task,event.event_kind,people)).some(p=>p.actorId===actor.actorId))return null;
@@ -242,6 +259,12 @@ export class DigitalProductionNotificationService {
       if(!row||await hiddenNativeDevelopmentTodo(database,row.route_descriptor))return null;
       const parent=await digitalTodoTarget(database,row.route_descriptor);
       if(!parent)return null;
+      if(event.event_kind==='overdue'){
+        const applied=row.entity_type==='sourcing_case'&&!!(await database.query("SELECT to_regclass('digital_sla_order_snapshots') AS relation")).rows[0]?.relation;
+        const due=applied?(await database.query(`SELECT ${effectiveSourcingDueSql('t')} AS due_at FROM rework_todos t WHERE t.todo_id=$1`,[row.todo_id])).rows[0]?.due_at:row.due_at;
+        const time=await new ContextBusinessClock(this.database).read(parent);
+        if(!due||new Date(due).getTime()>Date.parse(time.now))return null;
+      }
       if(row.todo_type==="information"&&!isRootActor(actor)&&!await new DigitalProductionAccessPolicy(database).allowed(people.find(p=>p.actorId===actor.actorId)!,parent.kind,parent.id,"technical"))return null;
       if(row.required_role&&!await new DigitalProductionAccessPolicy(database).activeRole(actor.actorId,row.required_role))return null;
       if(row.required_capability&&!(actor.authorizationCapabilities??[]).includes(row.required_capability))return null;
