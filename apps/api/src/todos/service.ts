@@ -1,3 +1,4 @@
+import {sourcingTodoPresentation} from "./sla-presentation.js";
 import {acceptanceBusinessContext,assertAcceptanceAssignee,businessNow} from '../acceptance-clock/business-time.js';
 import {arrangementsAvailable} from "../production-platform/development-arrangement.js";
 import {sourcingTodoSla} from "../production-platform/sourcing-todo-sla.js";
@@ -345,7 +346,7 @@ export class TodoService {
         for(const key of ["due_at","created_at","updated_at","rework_updated_at","sourcing_updated_at","sample_updated_at","pattern_updated_at","supplier_request_updated_at"]){if(row[key]!=null)row[key]=new Date(String(row[key]));}
         return todoResponse(row as unknown as TodoRow);
       });
-      return {todos,activeModule,moduleCounts,searchScope:"all",page:result.page,pageSize:15,totalCount:Number(result.total_count),totalPages:result.total_pages};
+      return {todos:await sourcingTodoPresentation(this.database,todos),activeModule,moduleCounts,searchScope:"all",page:result.page,pageSize:15,totalCount:Number(result.total_count),totalPages:result.total_pages};
     }
     if (activeModule === "production" || activeModule === "digital_production") {
       const filtered = (activeModule === "production" ? productionTodos : digitalTodos).filter(todo => !normalizedQuery ||
@@ -408,7 +409,7 @@ export class TodoService {
       ],
     );
     return {
-      todos: result.rows.map(todoResponse),
+      todos: await sourcingTodoPresentation(this.database,result.rows.map(todoResponse)),
       activeModule,
       moduleCounts,
       page,
@@ -437,7 +438,7 @@ export class TodoService {
     if (!row && this.production) { const todo = (await this.production.todos(actor)).find(item=>item.todoId===todoId); if(todo)return todo; }
     if (!row && this.digital) { const todo = (await this.digital.todos(actor)).find(item=>item.todoId===todoId); if(todo)return todo; }
     if (!row) throw new ApplicationError("NOT_FOUND", "待办不存在或已不再分配给你", 404);
-    return todoResponse(row);
+    return (await sourcingTodoPresentation(this.database,[todoResponse(row)]))[0]!;
   }
 
   async countIndicatorForActor(actor: TrustedActorContext): Promise<TodoCountIndicator> {

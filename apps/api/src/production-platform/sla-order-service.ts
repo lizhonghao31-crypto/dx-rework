@@ -84,11 +84,19 @@ export class SlaOrderService {
     const client = await this.database.connect();
     try {
       await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+      const result = await this.readWithClient(actor, orderId, client);
+      await client.query("COMMIT");
+      return result;
+    } catch (error) { await client.query("ROLLBACK"); throw error; } finally { client.release(); }
+  }
+
+  /** Reuse the caller's authorized read snapshot; never open a nested connection/transaction. */
+  async readWithClient(actor: TrustedActorContext, orderId: string, client: PoolClient) {
       await new DigitalProductionAccessPolicy(client).assert(actor, "order", orderId, "technical");
       const repo = new SlaPlanRepository(client), time = validateBusinessTime(await this.clock.read({ kind: "order", id: orderId }));
       const history = await repo.available() ? await repo.plans(orderId) : [];
       const current = history.at(-1);
-      if (!current) { await client.query("COMMIT"); return { status: "legacy_unenrolled" as const, time, reason: "此历史订单未建立首版计划，未补造历史时间" }; }
+      if (!current) { return { status: "legacy_unenrolled" as const, time, reason: "此历史订单未建立首版计划，未补造历史时间" }; }
       if (current.time.scenarioId !== time.scenarioId) throw new Error("SLA clock scope mismatch");
       const sourceId = (await client.query("SELECT source_id FROM digital_production_orders WHERE production_order_id=$1", [orderId])).rows[0]?.source_id;
       const development = sourceId ? await developmentSlaEvidence(client, sourceId, time) : null;
@@ -109,8 +117,7 @@ export class SlaOrderService {
       const rework=await reworkSlaEvidence(client,orderId);Object.assign(facts,rework.facts);
       const evaluationPlan = reworkEvaluationPlan(developmentEvaluationPlan(factory?factoryEvaluationPlan(current.plan,factory.craftKey):current.plan, facts),rework.facts), nodes = evaluateSlaPlan(evaluationPlan, facts, time);
       const progress = slaBusinessProgress(evaluationPlan, Object.entries(facts).filter(([, f]) => f.businessCompleted || f.completedAt).map(([id]) => id));
-      await client.query("COMMIT");
-      return { status: "planned" as const, time, original: history[0]!, current, history, nodes, progress, development, factory, rework, garments, receiving, packing };
-    } catch (error) { await client.query("ROLLBACK"); throw error; } finally { client.release(); }
+      return { status: "planned" as const, time, original: history[0]!, current, history, nodes, progress, evaluationPlan, development, factory, rework, garments, receiving, packing };
   }
+
 }

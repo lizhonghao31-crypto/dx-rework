@@ -94,8 +94,9 @@ const categoryLabel = (todo: TodoResponse): string => {
 
 const todoHref = (todo: TodoResponse): string => todoRouteHref(todo.route);
 
-const formatDueAt = (value: string | null): string => {
+const formatDueAt = (value: string | null,exclusive=false): string => {
   if (!value) return "无固定截止时间";
+  if(exclusive)return new Intl.DateTimeFormat("zh-CN",{month:"2-digit",day:"2-digit",timeZone:"Asia/Shanghai"}).format(new Date(Date.parse(value)-1))+" 当天结束";
   return new Intl.DateTimeFormat("zh-CN", {
     month: "2-digit",
     day: "2-digit",
@@ -106,8 +107,10 @@ const formatDueAt = (value: string | null): string => {
   }).format(new Date(value));
 };
 
-const formatNodeDuration = (value: string): string => {
-  const elapsed = Math.max(0, Date.now() - new Date(value).getTime());
+const formatNodeDuration = (value: string,timing?:TodoResponse["timing"]): string => {
+  if(timing?.status==="unlimited")return "不单独计时";
+  if(timing&&timing.elapsedSeconds===null)return "开始时间未知";
+  const elapsed = timing?timing.elapsedSeconds!*1000:Math.max(0, Date.now() - new Date(value).getTime());
   const minutes = Math.floor(elapsed / 60_000);
   if (minutes < 60) return `${minutes} 分钟`;
   const hours = Math.floor(minutes / 60);
@@ -348,15 +351,16 @@ export function MyTodosPage() {
                     <div className="my-todo-primary">
                       <div className="my-todo-title">
                         <h2>{taskTitle(todo)}</h2>
+                        {todo.timing&&<StatusBadge tone={todo.timing.status==="overdue"?"danger":todo.timing.status==="warning"?"warning":"neutral"}>{({overdue:"逾期",warning:"临期",normal:"时效正常",unknown:"时效未定",unlimited:"无独立时限"})[todo.timing.status]}</StatusBadge>}
                         <StatusBadge tone="warning">{todo.unread === undefined ? "待处理" : todo.unread ? "未读" : todo.entityType==="production_order" ? "已读 · 风险仍在" : "已读"}</StatusBadge>
                       </div>
-                      <p>{orderSummary}</p>
+                      <p>{orderSummary}</p>{todo.timing?.reason&&<small>{todo.timing.reason}</small>}
                     </div>
                     <div className="my-todo-metrics" aria-label="待办业务信息">
                       <span><small>当前节点</small>{categoryLabel(todo)}</span>
-                      <span><small>{todo.entityType === "production_order" ? "风险持续" : "节点停留"}</small>{formatNodeDuration(todo.createdAt)}</span>
+                      <span><small>{todo.entityType === "production_order" ? "风险持续" : "节点停留"}</small>{formatNodeDuration(todo.createdAt,todo.timing)}</span>
                       {todo.entityType === "production_order" ? <span><small>生产进度</small>{formatBusinessDecimal(todo.productionProgress ?? 0)}%</span> : ["sample", "pattern_room_order", "supplier_onboarding", "digital_task"].includes(todo.entityType) ? null : <span><small>相关金额</small>待核定</span>}
-                      <span><small>截止</small>{["sourcing_contract_return","sourcing_transfer_contract_return","sourcing_price_contract_return"].includes(todo.category) ? "见订单回签状态" : formatDueAt(todo.dueAt)}</span>
+                      <span><small>截止</small>{["sourcing_contract_return","sourcing_transfer_contract_return","sourcing_price_contract_return"].includes(todo.category) ? "见订单回签状态" : formatDueAt(todo.dueAt,todo.timing?.exclusive)}</span>
                     </div>
                   </a>
                 )}

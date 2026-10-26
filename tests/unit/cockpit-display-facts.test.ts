@@ -12,7 +12,7 @@ const nodes=(o:OrderJourney)=>o.stages.flatMap(stage=>stage.nodes);
 function date(o:OrderJourney,value:string|null){o.lines=[{id:o.id,po:"PO",color:"黑",formalStyleNo:null,temporaryStyleNo:null,orderedQuantity:1}];o.poDeliveryDates=[{lineId:o.id,position:1,poNumber:"PO",color:"黑",customerWarehouseArrivalDate:value,factoryDeliveryDate:"2026-01-01",sampleTargetDate:null}];return o;}
 it("keeps the unique creation share at 1/7 even before workflow activation; time remains unavailable",()=>{
   const display=journeyDisplay(order(),asOf);
-  expect(display).toMatchObject({actualRatio:1/7,actualLabel:"14.3%",mainState:"not_started",timeRatio:null,timeLabel:"时间规则待完善"});
+  expect(display).toMatchObject({actualRatio:1/7,actualLabel:"14.3%",mainState:"not_started",timeRatio:null,timeLabel:"沿原任务截止监督"});
 });
 it("counts business nodes once across POs and requires every applicable instance, ignoring legacy count",()=>{
   const o=order(),cut=nodes(o).find(node=>node.key==="bulk_cutting")!;

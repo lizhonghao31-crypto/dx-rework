@@ -1,3 +1,4 @@
+import {readJourneySupervision} from "./journey-supervision.js";
 import {ContextBusinessClock} from '../acceptance-clock/business-time.js';
 import {factoryProductionFacts} from './factory-production-facts.js';
 import {shipSampleFacts} from './ship-sample-facts.js';
@@ -81,7 +82,7 @@ export class DigitalJourneyQuery {
       const summaryOnly=options.details===false||!exportAll||Boolean(selectPage);
       const items:OrderJourney[]=[],candidates=new Map<string,Candidate>();
       const patternKinds=options.patternBusiness?PATTERN_GROUPS.flatMap(group=>[...group.nodes]).filter(kind=>options.patternBusiness==="all"||(options.patternBusiness==="bulk"?kind==="bulk_pattern":kind!=="bulk_pattern")):null;
-      for(const row of await this.candidates(db,actor,null,patternKinds)) { const item=await this.project(db,actor,row,asOf,undefined,summaryOnly,patternKinds);if(item){items.push(item);candidates.set(item.id,row);} }
+      for(const row of await this.candidates(db,actor,null,patternKinds)) { const item=await this.project(db,actor,row,asOf,undefined,summaryOnly,patternKinds,false,Boolean(filter.scope));if(item){items.push(item);candidates.set(item.id,row);} }
       const facets = {
         customers: [...new Set(items.map(item=>item.customer).filter((value):value is string=>Boolean(value)))].sort(),
         categories: [...new Set(items.map(item=>item.category).filter((value):value is string=>Boolean(value)))].sort(),
@@ -105,10 +106,11 @@ export class DigitalJourneyQuery {
     assertIdentityActor(actor);
     return this.snapshot(async(db,asOf)=>{
       const row=(await this.candidates(db,actor,id))[0]??digitalNotFound();
-      const item=await this.project(db,actor,row,asOf,round,false,null,compact);if(!item)return digitalNotFound();
-      const current=round===undefined?item:await this.project(db,actor,row,asOf,undefined,true);
+      const item=await this.project(db,actor,row,asOf,round,false,null,compact,compact);if(!item)return digitalNotFound();
+      const current=round===undefined?item:await this.project(db,actor,row,asOf,undefined,true,null,false,compact);
       if(current){
         if(current.display)item.display=current.display;
+        if(current.supervision)item.supervision=current.supervision;
         if(compact)item.flowStages=current.stages.map(stage=>({...stage,nodes:stage.nodes.filter(node=>node.current)}));
         item.currentRiskNodes=current.stages.flatMap(stage=>stage.nodes).filter(node=>node.current&&!["completed","cancelled","inherited","not_applicable"].includes(node.state)&&(node.risks.length>0||node.state==="blocked"));
         item.currentDeliveryRisks=current.deliveryRisks??[];
@@ -144,7 +146,7 @@ export class DigitalJourneyQuery {
           AND o.status='pending_assignment' AND r.status='pending_assignment'`,[authorized])).rows;
     });
   }
-  private async project(db:PoolClient,actor:TrustedActorContext,row:Candidate,asOf:string,selectedRound?:number,summaryOnly=false,patternKinds:string[]|null=null,compact=false):Promise<OrderJourney|null> {
+  private async project(db:PoolClient,actor:TrustedActorContext,row:Candidate,asOf:string,selectedRound?:number,summaryOnly=false,patternKinds:string[]|null=null,compact=false,supervision=false):Promise<OrderJourney|null> {
     const policy=new DigitalProductionAccessPolicy(db),source=row.source,order=row.order;
     const sid=source?.source_id??null,oid=order?.production_order_id??null;
     // Projection time is business time; the outer audit-log snapshot remains real.
@@ -485,6 +487,18 @@ export class DigitalJourneyQuery {
     const item:OrderJourney={asOf,styleImageUrl,developmentType:sourceAccess?source?.development_type??null:null,requiredCompletionDate:sourceAccess?currentDocument?.document?.returnDate??null:null,id:canonicalId,sourceId:sid,orderId:orderAccess?oid:null,designStyleNo:chosenIdentity.design_style_no,temporaryStyleNo:chosenIdentity.temporary_style_no,customer:chosenIdentity.customer_code,category:currentDocument?.document.template??(orderAccess?order?.product_group:null)??null,styleName,designer,merchandisers,orderNumbers,createdAt:iso(sourceAccess?source!.created_at:orderAccess?order!.created_at:(source?.created_at??order!.created_at))!,deliveryDate:orderAccess?digitalDateText(order?.contract_delivery_date??null):null,poDeliveryDates,deliveryRisks,selectedRound:round,adoptedRound:instruction?.source_round??null,sourceVersion:currentDocument?.version??currentDocument?.document_version??null,instructionVersion:instruction?.version??null,lines,links,stages,progress,hitReasons:[]};
     const lifecycle=oid&&orderAccess?{kind:"order",id:oid}:!oid&&sid&&sourceAccess?{kind:"source",id:sid}:null;
     const cancelled=Boolean(!patternKinds&&lifecycle&&(await db.query("SELECT 1 FROM digital_production_resource_lifecycle WHERE resource_kind=$1 AND resource_id=$2 AND state='cancelled'",[lifecycle.kind,lifecycle.id])).rowCount);
+    // Do not expand an assigned worker's single-task read scope to the whole SLA/PO history.
+    if(supervision&&!patternKinds&&selectedRound===undefined){
+    const timingRoles=['production_management','owner_group','pattern_room_supervisor','development_clerk'];
+    let liveTimingAuthority=isRootActor(actor);
+    if(!liveTimingAuthority)for(const role of timingRoles)if(actor.actorRoles.includes(role)&&await policy.activeRole(actor.actorId,role)){liveTimingAuthority=true;break;}
+    const ownSource=sourceAccess&&source?.created_by===actor.actorId&&actor.actorRoles.includes('sample_designer')&&await policy.activeRole(actor.actorId,'sample_designer');
+    const ownOrder=order?.created_by===actor.actorId&&actor.actorRoles.includes('sample_designer')&&await policy.activeRole(actor.actorId,'sample_designer')
+      ||order?.primary_merchandiser_id===actor.actorId&&actor.actorRoles.includes('order_merchandiser')&&await policy.activeRole(actor.actorId,'order_merchandiser');
+    if(fullOrder&&(liveTimingAuthority||ownOrder)||!oid&&sourceAccess&&(liveTimingAuthority||ownSource))
+      await readJourneySupervision(this.database,db,actor,item,observed,visibleTasks.some(task=>task.task_kind==='bulk_cutting_external'));
+    else item.supervision={asOf:observed.now,status:'limited',originalRevision:null,currentRevision:null,nodes:[],coverage:[{key:'scope',message:'仅有本岗位节点权限，整单SLA未计入；已授权节点照常监督'}],customerReminderDate:null};
+    }
     item.display=journeyDisplay(item,asOf,{cancelled,closedAt:baseNodes.find(node=>node.current&&node.key==='special_closure'&&node.state==='completed')?.actualAt??null});
     this.authorizedTasks.set(item,visibleTasks.map(task=>({id:task.task_id,key:journeyDefinition(task.task_kind)?.key??task.task_kind,label:journeyDefinition(task.task_kind)?.label??"业务节点",round:task.route_version})));
     return item;

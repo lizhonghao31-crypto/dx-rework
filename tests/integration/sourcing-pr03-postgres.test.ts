@@ -1,3 +1,4 @@
+import {installAcceptanceClockReader} from "../../apps/api/src/acceptance-clock/business-time.js";
 import {withAcceptanceBusinessTime} from '../../apps/api/src/acceptance-clock/business-time.js';
 import {reworkSlaEvidence} from '../../apps/api/src/production-platform/rework-sla-evidence.js';
 import {linkNewDigitalChild} from '../../apps/api/src/production-platform/child-link-repository.js';
@@ -4491,6 +4492,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const notices=new DigitalProductionNotificationService(database);
     const qcTodos=async()=> (await notices.todos(root)).filter(t=>t.entityId===ready.id&&t.category==='digital_garment_quality');
     expect(await qcTodos()).toHaveLength(2);
+    expect((await qcTodos()).every(t=>t.timing?.status==='unknown'&&t.timing.elapsedSeconds===null)).toBe(true);
     let sheet=await closure.read(root,ready.id);
     expect(sheet.collection).toMatchObject({expected:200,received:200,status:'已收齐',shipmentQuantity:0});
     expect(sheet.stage).toBe('等待回货与装箱');
@@ -4590,6 +4592,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect((await tasks.read(qc,task.taskId)).state).toBe('ready');
     expect((await factoryProductionFacts(database,ready.id)).complete).toBe(false);
     expect((await notices.todos(qc)).some(t=>t.todoId===task.taskId&&t.status==='pending')).toBe(true);
+    expect((await notices.todos(qc)).find(t=>t.todoId===task.taskId)?.timing).toMatchObject({exclusive:true,elapsedSeconds:null});
     expect((await new OrderClosureService(database).read(root,ready.id)).outstanding.some(reason=>reason.includes('工厂'))).toBe(true);
     await expect(tasks.reassign(ready.people.warehouse_receiver!,task.taskId,qc.actorId,randomUUID())).rejects.toMatchObject({statusCode:403});
     // Isolated fixture: an unavailable assignee must route to the existing assignment action.
@@ -5404,6 +5407,18 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       additionalMerchandiserUserId:second,attachmentIds:prepared.images.map(image=>image.attachmentId),
       lineItems:prepared.lineItems.map(line=>({lineId:line.lineId,styleNo:line.styleNo,alternateStyleNo:line.alternateStyleNo,color:line.color,quantity:line.quantity,factoryDeliveryDate:"2026-11-10"})),digitalBudget:{productionOrderId:id,budgetVersion:prepared.budgetVersion,orderVersion:prepared.orderVersion}};
     const created=(await currentService.createCase(merchandiserActor(),input,randomUUID())).value,caseId=created.sourcingCaseId;
+    // P10: the original IE todo supplies the presentation clock/target; no second deadline or task is persisted.
+    const ieReader={...ieActor(),authorizationCapability:'todo:view',authorizationCapabilities:['todo:view']};
+    const originalTodo=(await new TodoService(database).listForActor(ieReader,{module:'sourcing'})).todos.find(t=>t.entityId===caseId&&t.category==='sourcing_ie_quote')!;
+    expect(originalTodo).toBeDefined();expect(originalTodo.timing?.warningAt).toBeTruthy();expect(originalTodo.timing?.status).toBe('normal');
+    const persisted=(await database.query('SELECT due_at,reminder_count,status FROM rework_todos WHERE todo_id=$1',[originalTodo.todoId])).rows[0];
+    expect(originalTodo.dueAt).toBe(new Date(persisted.due_at).toISOString());
+    const shifted={connect:database.connect.bind(database),query:database.query.bind(database)} as unknown as pg.Pool;
+    const slaFuture=new Date(Date.parse(originalTodo.dueAt!)+3600000).toISOString();
+    installAcceptanceClockReader(shifted,{read:async scope=>scope.id===id?{now:slaFuture,scenarioId:null,revision:0}:null,nativeScenario:async()=>null});
+    const lateTodo=(await new TodoService(shifted).listForActor(ieReader,{module:'sourcing'})).todos.find(t=>t.todoId===originalTodo.todoId)!;
+    expect(lateTodo.timing).toMatchObject({asOf:slaFuture,status:'overdue'});expect(lateTodo.dueAt).toBe(originalTodo.dueAt);
+    expect((await database.query('SELECT due_at,reminder_count,status FROM rework_todos WHERE todo_id=$1',[originalTodo.todoId])).rows[0]).toEqual(persisted);
     const returned=(await currentService.returnToMerchandiser(ownerActor(),caseId,{expectedVersion:created.version,reason:"TEST correction before handover"},randomUUID())).value;
     const todoRows=async()=>(await database.query("SELECT * FROM rework_todos WHERE entity_id=$1 ORDER BY todo_id",[caseId])).rows;
     const beforeCorrection=await todoRows(),correction=beforeCorrection.find(row=>row.category==="sourcing_merchandiser_correction"&&row.todo_type==="business_action"&&row.status==="pending")!;

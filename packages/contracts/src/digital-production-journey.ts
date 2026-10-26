@@ -37,6 +37,7 @@ export const JourneyFilterSchema = z.object({
   node: z.string().trim().max(100).refine(value=>JOURNEY_NODES.some(node=>node.key===value),"未知流程节点").optional(),
   state: JourneyStateSchema.optional(),
   risk: z.enum(["overdue", "due_soon", "blocked", "unknown"]).optional(),
+  missing: z.enum(["customer_date", "factory_date", "fabric_date", "cutting_time", "plan", "scope"]).optional(),
   kpi: z.enum(["all", "active", "not_started", "due_soon", "overdue", "blocked", "completed"]).default("all"),
   startDate: z.iso.date().optional(), endDate: z.iso.date().optional(),
 }).strict().superRefine((value, context) => {
@@ -45,7 +46,20 @@ export const JourneyFilterSchema = z.object({
 export type JourneyFilter = z.infer<typeof JourneyFilterSchema>;
 export type JourneyRecord = { domain: string; id: string; url: string | null; mode: "read" | "handle"; version: number | null; lineId: string | null };
 export type JourneyDocumentMetadata={created:{at:string|null;by:string|null};edited:{at:string|null;by:string|null};published:{at:string|null;by:string|null}};
+export type JourneyTiming = {
+  id:string;label:string;stage:JourneyStageKey;kind:string;
+  status:"not_applicable"|"unknown"|"not_started"|"running"|"warning"|"overdue"|"completed_on_time"|"completed_late"|"completed_unrated";
+  actualStart:string|null;actualEnd:string|null;
+  target:{at:string|null;exclusive:boolean;reasons:string[]};
+  forecast:{at:string|null;exclusive:boolean;reasons:string[]};
+  forecastBasis:"actual"|"remaining_estimate"|"standard_window"|"plan"|"unknown";
+  original:{at:string|null;exclusive:boolean;reasons:string[]};
+  current:{at:string|null;exclusive:boolean;reasons:string[]};
+};
+export type JourneyCoverage = {key:"customer_date"|"factory_date"|"fabric_date"|"cutting_time"|"plan"|"scope";message:string};
+export type JourneySupervision = {asOf:string;status:"planned"|"legacy_unenrolled"|"limited";originalRevision:number|null;currentRevision:number|null;nodes:JourneyTiming[];coverage:JourneyCoverage[];customerReminderDate:string|null};
 export type JourneyNode = {
+  timing?:JourneyTiming;
   /** Read-only applicability evidence; unknown never supplies a progress denominator. */
   progressApplicability?: "applicable" | "not_applicable" | "unknown";
   key: string; instanceId: string; label: string; stage: JourneyStageKey; state: JourneyState;
@@ -67,6 +81,7 @@ export type JourneyNode = {
 };
 export type OrderJourney = {
   display?: JourneyDisplay;
+  supervision?:JourneySupervision;
   operationLog?: JourneyLogPage;
   currentRiskNodes?: JourneyNode[];
   /** Current effective flow overview stays independent of the selected historical round. */
@@ -91,6 +106,7 @@ export type OrderJourney = {
 export type JourneyResult = { ruleVersion: "journey-v2.0"; asOf: string; page: number; pageSize: 15; total: number; canManagePolicies?: boolean;
   facets?: { customers: string[]; categories: string[]; merchandisers: Array<{id:string;name:string|null}> };
   summary: {all:number;active:number;dueSoon:number;overdue:number;blocked:number;completed:number;notStarted?:number};
+  supervision?:{overdue:number;dueSoon:number;coverage:Array<{key:JourneyCoverage["key"];orders:number;message:string}>};
   scopeCounts?: {production:number;development:number;cancelled:number}; items: OrderJourney[] };
 
 export type JourneyDisplay = {
@@ -99,7 +115,7 @@ export type JourneyDisplay = {
   earliestShipmentDate: string | null; missingShipmentDates: number; closedAt: string | null;
   actualRatio: number | null; actualLabel: string; awaitingClosure: boolean;
   stages: Array<{key:JourneyStageKey;ratio:number|null;applicable:number|null;completed:number|null;notApplicable:boolean;risk:"overdue"|"due_soon"|"normal"|"unknown"}>;
-  timeRatio: null; timeLabel: "时间规则待完善";
+  timeRatio: null; timeLabel: string;
 };
 export type JourneyLogEntry = {id:string;at:string;actor:{id:string;name:string|null}|null;action:string;object:string;nodeKey:string|null;source:"task_event"|"task_assignment"};
 export type JourneyLogPage = {items:JourneyLogEntry[];nextCursor:string|null;asOf:string;coverage:readonly string[]};
