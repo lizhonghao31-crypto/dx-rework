@@ -87,6 +87,42 @@ const databaseUrl=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TE
   await expect(runtime.create(actor(realId),{name:'TEST拒绝真实身份',requestKey:randomUUID()})).rejects.toMatchObject({statusCode:403});
   await expect(runtime.create(actor(rootId),input)).rejects.toMatchObject({statusCode:409});
  });
+ it('denies original creation permissions before persisting any scenario, and permits a safe same-key retry',async()=>{
+  const input={name:'TEST-no-unauthorized-residue',requestKey:randomUUID()};
+  const counts=async()=> (await db.query(`SELECT
+   (SELECT count(*) FROM acceptance_sla_clock_scenarios)::int scenarios,
+   (SELECT count(*) FROM acceptance_sla_clock_resources)::int resources,
+   (SELECT count(*) FROM digital_production_sources)::int sources,
+   (SELECT count(*) FROM digital_development_sla_plans)::int plans`)).rows[0];
+  const before=await counts();
+  const clerk={...actor(clerkId),actorRoles:['development_clerk']};
+  const noCapability={...actor(designerId),authorizationCapabilities:['digital_production:view']};
+  for(const denied of [clerk,noCapability]){
+   await expect(runtime.create(denied,input)).rejects.toMatchObject({statusCode:403});
+   expect(await counts()).toEqual(before);
+  }
+  const disabled=new AcceptanceClockRuntime(db,await verifyAcceptanceClockServer(db,databaseUrl!,environment),secret,false);
+  await expect(disabled.create(actor(designerId),input)).rejects.toMatchObject({statusCode:403});
+  expect(await counts()).toEqual(before);
+  // Each boot proof supersedes the previous runtime for this pool.
+  runtime=new AcceptanceClockRuntime(db,await verifyAcceptanceClockServer(db,databaseUrl!,environment),secret,true);
+  const [first,retry]=await Promise.all([runtime.create(actor(designerId),input),runtime.create(actor(designerId),input)]);
+  expect(first.sourceIds).toHaveLength(1);expect(retry).toEqual(first);
+ });
+ it.each(['before','after'] as const)('recovers source creation interrupted %s commit with one initialized source',async(failure)=>{
+  const input={name:`TEST-source-interruption-${failure}`,requestKey:randomUUID()},create=DigitalProductionIdentityService.prototype.createSource;
+  const interrupted=vi.spyOn(DigitalProductionIdentityService.prototype,'createSource').mockImplementationOnce(async function(this:DigitalProductionIdentityService,...args){
+   if(failure==='after')await create.apply(this,args);
+   throw new Error('TEST source interruption');
+  });
+  try{await expect(runtime.create(actor(designerId),input)).rejects.toThrow('TEST source interruption');}finally{interrupted.mockRestore();}
+  runtime=new AcceptanceClockRuntime(db,await verifyAcceptanceClockServer(db,databaseUrl!,environment),secret,true);
+  const results=await Promise.all([runtime.create(actor(designerId),input),runtime.create(actor(designerId),input)]);
+  expect(results[0]).toEqual(results[1]);expect(results[0]!.sourceIds).toHaveLength(1);
+  const sourceId=results[0]!.sourceIds[0]!;
+  expect((await db.query('SELECT count(*)::int n FROM digital_development_sla_plans WHERE source_id=$1',[sourceId])).rows[0].n).toBe(1);
+  expect((await db.query("SELECT count(*)::int n FROM audit_events WHERE entity_id=$1 AND action='digital_source_created'",[sourceId])).rows[0].n).toBe(1);
+ });
  it('rejects existing or cross-scenario bindings and keeps ordinary source history intact',async()=>{
   const old=await new DigitalProductionIdentityService(db,true).createSource(actor(realId),{developmentType:'头版',designStyleNo:`TEST-old-${randomUUID()}`,temporaryStyleNo:null,customerCode:null},randomUUID());
   const a=await runtime.create(actor(),{name:'TEST-A',requestKey:randomUUID()}),b=await runtime.create(actor(),{name:'TEST-B',requestKey:randomUUID()});
@@ -320,6 +356,49 @@ const databaseUrl=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TE
   expect((await db.query("SELECT count(*)::int n FROM acceptance_sla_clock_scans WHERE scenario_id=$1 AND status='pending'",[scene.scenarioId])).rows[0].n).toBe(0);
   await expect(control.standard(scene.scenarioId,actor(designerId),{expectedVersion:failed.version,configurationId:scene.configurationId,requestKey:randomUUID()})).rejects.toMatchObject({statusCode:403});
  });
+
+ it.each([-2*3600000,0,2*3600000])('uses frozen business time through native receipt, automatic activation and completion at wall offset %s',async(offset)=>{
+  // Freeze Date only while creating a fresh isolated fixture at the reference wall
+  // offset. Restore it before exercising native receipt/activation/completion;
+  // the persisted scene remains frozen while JS and PostgreSQL use real time.
+  const reference=new Date(Date.now()+offset);
+  vi.useFakeTimers({toFake:['Date']});vi.setSystemTime(reference);
+  const scene=await runtime.create(actor(),{name:`TEST-native-wall-offset-${offset}`,requestKey:randomUUID()}).finally(()=>vi.useRealTimers());
+  const at=scene.now;
+  const configurationId=(await db.query('SELECT configuration_id FROM digital_sla_configurations ORDER BY version LIMIT 1')).rows[0].configuration_id;
+  await new AcceptanceClockControlService(runtime).standard(scene.scenarioId,actor(),{expectedVersion:scene.version,configurationId,requestKey:randomUUID()});
+  await runtime.run(scene.scenarioId,actor(),()=>exerciseDevelopmentSlaNative(db,new TodoProjectionService(new TodoService(db)),actor(),workerId,new ContextBusinessClock(db)));
+  const rows=(await db.query(`SELECT t.entered_at,t.completed_at,c.occurred_at FROM acceptance_sla_clock_resources r
+   JOIN digital_production_task_access a ON a.source_id=r.resource_id JOIN digital_production_tasks t USING(task_id)
+   JOIN digital_production_task_conditions c USING(task_id)
+   WHERE r.scenario_id=$1 AND a.task_kind='development_sewing' AND c.condition_key='pattern_assignment_ready'`,[scene.scenarioId])).rows;
+  expect(rows).toHaveLength(4);
+  for(const row of rows)expect([row.entered_at,row.completed_at,row.occurred_at].map(d=>d.toISOString())).toEqual([at,at,at]);
+  const receipts=(await db.query(`SELECT c.occurred_at FROM acceptance_sla_clock_resources r
+   JOIN digital_production_task_access a ON a.source_id=r.resource_id JOIN digital_production_task_conditions c USING(task_id)
+   WHERE r.scenario_id=$1 AND a.task_kind='development_sewing' AND c.condition_key='handover_received'`,[scene.scenarioId])).rows;
+  expect(receipts).toHaveLength(4);expect(receipts.every(r=>r.occurred_at.toISOString()===at)).toBe(true);
+  const audits=(await db.query(`SELECT e.recorded_at FROM digital_production_task_events e
+   JOIN acceptance_sla_clock_resources r ON r.resource_id=e.resource_id AND r.resource_kind=e.resource_kind WHERE r.scenario_id=$1`,[scene.scenarioId])).rows;
+  expect(audits.length).toBeGreaterThan(0);expect(audits.every(r=>Math.abs(r.recorded_at.getTime()-Date.now())<60000)).toBe(true);
+ },30000);
+ it('keeps ordinary source receipt, activation and completion on real time without scenario registration',async()=>{
+  const before=new Date(),tasks=new DigitalProductionTaskService(db);
+  const source=await new DigitalProductionIdentityService(db,true).createSource(actor(),{developmentType:'头版',designStyleNo:`TEST-ordinary-clock-${randomUUID()}`,temporaryStyleNo:null,customerCode:null},randomUUID());
+  const client=await db.connect();let taskId:string;
+  try{
+   await client.query('BEGIN');
+   taskId=(await tasks.createWithClient(client,actor(),{resource:{kind:'source',id:source.sourceId},kind:'budget',routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:null,conditions:['handover_received']})).taskId;
+   await client.query('COMMIT');
+  }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
+  await tasks.handover(actor(),taskId!,{note:'TEST真实接收'},randomUUID());
+  const completing=await db.connect();
+  try{await completing.query('BEGIN');await tasks.setConditionWithClient(completing,actor(),taskId!,'business_recorded',true);await tasks.completeWithClient(completing,actor(),taskId!,{note:'TEST完成'},randomUUID());await completing.query('COMMIT');}
+  catch(error){await completing.query('ROLLBACK');throw error;}finally{completing.release();}
+  const row=(await db.query('SELECT entered_at,completed_at FROM digital_production_tasks WHERE task_id=$1',[taskId!])).rows[0];
+  expect(row.entered_at.getTime()).toBeGreaterThanOrEqual(before.getTime());expect(row.completed_at.getTime()).toBeGreaterThanOrEqual(row.entered_at.getTime());expect(row.completed_at.getTime()).toBeLessThanOrEqual(Date.now());
+  expect((await db.query("SELECT 1 FROM acceptance_sla_clock_resources WHERE resource_kind='source' AND resource_id=$1",[source.sourceId])).rowCount).toBe(0);
+ },30000);
 
  (process.env.ACCEPTANCE_CLOCK_BROWSER_URL?it:it.skip)('runs the original browser detail and persisted clock through real isolated HTTP services',async()=>{
   const auth=new AuthService(new AcceptanceDingTalkProvider(db,corp,secret),new PostgresAuthStore(db,corp,'uat-root'),corp,3600000,secret),root=new RootAuthority(db,corp,'uat-root');

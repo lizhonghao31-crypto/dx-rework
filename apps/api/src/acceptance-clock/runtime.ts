@@ -58,6 +58,9 @@ export class AcceptanceClockRuntime{
  }
  async create(actor:TrustedActorContext,input:{name:string;requestKey:string;copyScenarioId?:string|undefined}){
   await this.assertActor(actor);
+  const identity=new DigitalProductionIdentityService(this.database,this.creationEnabled);
+  // Denied native creation must not reserve a request key or leave an empty Lab scenario.
+  identity.assertSourceCreation(actor);
   let original:Awaited<ReturnType<DigitalDevelopmentService['read']>>|undefined;
   if(input.copyScenarioId){
    const root=(await this.database.query("SELECT resource_id FROM acceptance_sla_clock_resources WHERE scenario_id=$1 AND resource_kind='source' ORDER BY created_at,resource_id LIMIT 1",[input.copyScenarioId])).rows[0];
@@ -68,7 +71,7 @@ export class AcceptanceClockRuntime{
   await this.run(row.scenario_id,actor,async()=>{
    const existing=(await this.repository.view(row.scenario_id)).sourceIds[0];
    const style=`TEST-SLA-${row.scenario_id.slice(0,8)}`;
-   const source=existing?{sourceId:existing}:await new DigitalProductionIdentityService(this.database,this.creationEnabled).createSource(actor,{developmentType:'头版',designStyleNo:style,temporaryStyleNo:null,customerCode:original?.customerCode??null},row.scenario_id);
+   const source=existing?{sourceId:existing}:await identity.createSource(actor,{developmentType:'头版',designStyleNo:style,temporaryStyleNo:null,customerCode:original?.customerCode??null},row.scenario_id);
    const forms=new DigitalDevelopmentService(this.database,this.creationEnabled);
    // Source creation and native document save commit separately. Resume a missing
    // document after interruption; a saved/edited document must never be recopied.
