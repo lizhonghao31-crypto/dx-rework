@@ -1,4 +1,5 @@
-import {sourcingSlaEvidence} from "./sourcing-sla-evidence.js";
+import {sourcingSlaEvidence} from './sourcing-sla-evidence.js';
+import {slaApplications,appliedSlaWindow} from './sla-applied-window.js';
 import {OrderClosureService} from './order-closure-service.js';
 import {packingSlaEvidence} from './packing-sla-evidence.js';
 import {garmentSlaEvidence} from './garment-sla-evidence.js';
@@ -116,9 +117,23 @@ export class SlaOrderService {
        ...(span?.firstEffectiveReceipt?.receivedAt?{startedAt:span.firstEffectiveReceipt.receivedAt}:{}),...(span?.collectedAt?{completedAt:span.collectedAt}:{})};
       const packing=packingSlaEvidence(receiving);Object.assign(facts,packing.facts);
       const rework=await reworkSlaEvidence(client,orderId);Object.assign(facts,rework.facts);
+      const applications=await slaApplications(client,orderId);
+      if(applications.length){
+        const originalSnapshot=await new SlaConfigurationRepository(client).orderSnapshot(orderId,1);
+        if(!originalSnapshot)throw new Error('Applied SLA order has no original snapshot');
+        for(const node of current.plan.nodes){
+          const fact=facts[node.id];if(!fact||fact.batchWindows?.length)continue;
+          const applied=appliedSlaWindow(node.stage===2&&development?development.originalSnapshot:originalSnapshot.snapshot,node.parameterKey,`node:${node.id}`,applications);
+          const warning=applied.snapshot.parameters.warning_ratio!.value;
+          if(warning.kind==='ratio')fact.standardWarningPercent=warning.percent;
+          if(!applied.applicationId)continue;
+          const value=applied.snapshot.parameters[node.parameterKey]?.value;
+          if(value&&'minutes' in value)fact.standardMinutes=value.minutes;
+        }
+      }
       const evaluationPlan = reworkEvaluationPlan(developmentEvaluationPlan(factory?factoryEvaluationPlan(current.plan,factory.craftKey):current.plan, facts),rework.facts), nodes = evaluateSlaPlan(evaluationPlan, facts, time);
       const progress = slaBusinessProgress(evaluationPlan, Object.entries(facts).filter(([, f]) => f.businessCompleted || f.completedAt).map(([id]) => id));
-      return { status: "planned" as const, time, original: history[0]!, current, history, nodes, progress, evaluationPlan, development, factory, rework, garments, receiving, packing };
+      return { status: "planned" as const, time, original: history[0]!, current, history, nodes, facts, evaluationPlan, applications, progress, development, factory, rework, garments, receiving, packing };
   }
 
 }

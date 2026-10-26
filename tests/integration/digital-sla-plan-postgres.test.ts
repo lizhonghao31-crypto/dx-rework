@@ -106,4 +106,19 @@ run("SLA P0, formal versions and observed facts", () => {
       await expect(orderCreationSlaEvidence(c, orderId, original)).rejects.toThrow(/scope/);
     });
   });
+  it('retains completed node targets only by an exact prior node and same-order snapshot reference',async()=>{
+    await tx(async c=>{
+      const plans=new SlaPlanRepository(c),before=(await plans.plans(orderId)).at(-1)!,repo=new SlaConfigurationRepository(c),current=(await repo.current())!,values=structuredClone(current.values);
+      values.production_sheet={kind:'duration',minutes:6000};const published=await repo.publish({expectedVersion:current.version,values,actorId,reason:'TEST future standard',requestKey:randomUUID()}),latest=(await repo.orderSnapshot(orderId))!;
+      const snapshot=await repo.appendOrder({orderId,expectedRevision:latest.revision,configurationId:published.configurationId,snapshot:resolveDigitalSlaSnapshot({version:published.version,values}),actorId,reason:'TEST selected future windows',requestKey:randomUUID()});
+      const plan=structuredClone(before.plan);plan.retainedNodeSnapshots={production_sheet:before.snapshotId};
+      const input={orderId,expectedRevision:before.revision,snapshotId:snapshot.snapshotId,plan,time:time(81,5),actorId,reason:'TEST preserve completed target',requestKey:randomUUID()};
+      const saved=await plans.appendPlan(input);expect(saved.plan.nodes).toEqual(before.plan.nodes);
+      const forged=structuredClone(plan);forged.nodes[0]!.minutes=60;
+      await expect(plans.appendPlan({...input,expectedRevision:saved.revision,plan:forged,requestKey:randomUUID()})).rejects.toThrow(/Retained/);
+      const foreign=structuredClone(plan);foreign.retainedNodeSnapshots!.production_sheet=randomUUID();
+      await expect(plans.appendPlan({...input,expectedRevision:saved.revision,plan:foreign,requestKey:randomUUID()})).rejects.toThrow(/Retained/);
+    });
+  });
+
 });

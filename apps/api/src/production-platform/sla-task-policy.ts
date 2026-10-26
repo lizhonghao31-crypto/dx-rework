@@ -1,3 +1,5 @@
+import {slaApplications,appliedSlaWindow} from './sla-applied-window.js';
+import {validateDigitalSlaSnapshot} from '@dx-rework/contracts/digital-sla';
 import type { PoolClient } from "pg";
 import { slaParameterKey } from "./sla-policy-values.js";
 
@@ -13,11 +15,30 @@ export async function frozenSlaTaskPolicy(client: Pick<PoolClient, "query">, tas
   const evaluated = (await client.query(`SELECT p.* FROM digital_production_deadline_revisions r
     JOIN digital_production_deadline_policies p ON p.node_key=r.policy_node_key AND p.version=r.policy_version
     WHERE r.task_id=$1 ORDER BY r.revision_id DESC LIMIT 1`, [taskId])).rows[0];
+  const orderId=task.production_order_id??(task.source_id?(await client.query('SELECT production_order_id FROM digital_production_orders WHERE source_id=$1',[task.source_id])).rows[0]?.production_order_id:null);
+  if(orderId){
+    const saved=(await client.query('SELECT * FROM digital_sla_order_snapshots WHERE production_order_id=$1 ORDER BY revision LIMIT 1',[orderId])).rows[0];
+    const applications=saved?await slaApplications(client,orderId):[],key=slaParameterKey(nodeKey);
+    if(saved&&applications.length){
+      const applied=appliedSlaWindow(validateDigitalSlaSnapshot({ruleVersion:saved.rule_version,parameters:saved.parameters_json}),key,`task:${taskId}`,applications),parameter=applied.snapshot.parameters[key];
+      if(applied.applicationId&&parameter){
+        const sourceVersion=parameter.source==='global'?parameter.sourceVersion:null;
+        const referenced=(await client.query('SELECT policy_refs_json FROM digital_sla_configurations WHERE ($1::integer IS NOT NULL AND version=$1) OR ($1::integer IS NULL AND configuration_id=$2::uuid)',[sourceVersion,saved.configuration_id])).rows[0];
+        const ref=referenced?.policy_refs_json?.policies[key];
+        const policy=ref?(await client.query('SELECT * FROM digital_production_deadline_policies WHERE node_key=$1 AND version=$2',[ref.nodeKey,ref.version])).rows[0]:evaluated;
+        if(!policy)throw new Error('Applied SLA policy reference is missing');
+        const warning=applied.snapshot.parameters.warning_ratio!.value;
+        const seconds='minutes' in parameter.value?parameter.value.minutes*60:null,ratio=warning.kind==='ratio'?warning.percent/100:policy.warning_ratio;
+        return {...policy,sla_seconds:seconds,warning_ratio:ratio,sla_application_basis:{snapshotId:applied.snapshotId,applicationId:applied.applicationId,parameterKey:key,seconds,warningRatio:ratio}};
+      }
+    }
+  }
   if (evaluated) return evaluated;
   let config;
   if (task.production_order_id) {
-    config = (await client.query(`SELECT c.* FROM digital_sla_order_snapshots s JOIN digital_sla_configurations c USING(configuration_id)
-      WHERE s.production_order_id=$1 ORDER BY s.revision DESC LIMIT 1`, [task.production_order_id])).rows[0];
+    config = (await client.query(`SELECT c.* FROM digital_sla_order_snapshots s
+      JOIN digital_sla_configurations c ON c.version=(s.parameters_json->$2->>'sourceVersion')::integer
+      WHERE s.production_order_id=$1 ORDER BY s.revision DESC LIMIT 1`, [task.production_order_id,slaParameterKey(nodeKey)])).rows[0];
   } else if (task.source_id && (await client.query("SELECT to_regclass('digital_development_sla_plans') AS relation")).rows[0]?.relation) {
     config = (await client.query(`SELECT c.* FROM digital_development_sla_plans s JOIN digital_sla_configurations c USING(configuration_id)
       WHERE s.source_id=$1 ORDER BY s.revision DESC LIMIT 1`, [task.source_id])).rows[0];

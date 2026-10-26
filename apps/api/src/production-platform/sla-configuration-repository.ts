@@ -29,8 +29,8 @@ export type SlaOrderSnapshot = {
 export class SlaConfigurationRepository {
   constructor(private readonly transaction: PoolClient) {}
 
-  async current(): Promise<SlaConfiguration | null> {
-    const row = (await this.transaction.query("SELECT * FROM digital_sla_configurations ORDER BY version DESC LIMIT 1")).rows[0];
+  async current(version?:number): Promise<SlaConfiguration | null> {
+    const row = (version===undefined?await this.transaction.query("SELECT * FROM digital_sla_configurations ORDER BY version DESC LIMIT 1"):await this.transaction.query("SELECT * FROM digital_sla_configurations WHERE version=$1",[version])).rows[0];
     return row ? { configurationId: row.configuration_id, version: row.version,
       values: await readSlaPolicyValues(this.transaction, row.policy_refs_json ?? row.values_json), createdBy: row.created_by, reason: row.reason } : null;
   }
@@ -46,6 +46,13 @@ export class SlaConfigurationRepository {
     await this.transaction.query("LOCK TABLE digital_sla_configurations IN SHARE ROW EXCLUSIVE MODE");
     const current = await this.current();
     if (current) return current;
+    const values = await this.bootstrapValues();
+    return await this.publish({ expectedVersion: 0, values, actorId,
+      reason: "系统按已确认标准初始化（随首张新单保存）", requestKey: "1f259aa4-27bc-47e7-8d95-75454a407890" });
+  }
+
+  /** Read-only initial values; opening settings must not publish a version. */
+  async bootstrapValues():Promise<DigitalSlaValues>{
     const values = digitalSlaDefaults();
     // Preserve prior explicit duration edits; version-one seeds are superseded by the approved standard.
     for (const [key, value] of Object.entries(values)) {
@@ -53,8 +60,7 @@ export class SlaConfigurationRepository {
       const prior = (await this.transaction.query("SELECT version,sla_seconds FROM digital_production_deadline_policies WHERE node_key=$1 ORDER BY version DESC LIMIT 1", [slaPolicyKey(key)])).rows[0];
       if (prior && Number(prior.version) > 1 && prior.sla_seconds !== null) values[key] = { kind: value.kind, minutes: Number(prior.sla_seconds) / 60 };
     }
-    return await this.publish({ expectedVersion: 0, values, actorId,
-      reason: "系统按已确认标准初始化（随首张新单保存）", requestKey: "1f259aa4-27bc-47e7-8d95-75454a407890" });
+    return values;
   }
 
   async orderSnapshot(orderId: string, revision?: number): Promise<SlaOrderSnapshot | null> {
@@ -102,8 +108,16 @@ export class SlaConfigurationRepository {
     const config = (await this.transaction.query("SELECT * FROM digital_sla_configurations WHERE configuration_id=$1", [input.configurationId])).rows[0];
     if (!config) throw new Error("SLA configuration not found");
     const configurationValues = await readSlaPolicyValues(this.transaction, config.policy_refs_json ?? config.values_json);
+    const versions=new Map<number,DigitalSlaValues>([[Number(config.version),configurationValues]]);
     for (const [key, row] of Object.entries(snapshot.parameters)) {
-      if (row.source === "global" && (row.sourceVersion !== config.version || !equal(row.value, configurationValues[key]))) throw new Error("Snapshot global source does not match configuration");
+      if(row.source!=="global")continue;
+      if(row.sourceVersion>Number(config.version))throw new Error("Snapshot global source does not match configuration");
+      if(!versions.has(row.sourceVersion)){
+        const referenced=(await this.transaction.query('SELECT * FROM digital_sla_configurations WHERE version=$1',[row.sourceVersion])).rows[0];
+        if(!referenced)throw new Error("Snapshot global source does not match configuration");
+        versions.set(row.sourceVersion,await readSlaPolicyValues(this.transaction,referenced.policy_refs_json??referenced.values_json));
+      }
+      if(!equal(row.value,versions.get(row.sourceVersion)![key]))throw new Error("Snapshot global source does not match configuration");
     }
     const prior = (await this.transaction.query("SELECT * FROM digital_sla_order_snapshots WHERE request_key=$1", [input.requestKey])).rows[0];
     if (prior) {

@@ -1,3 +1,4 @@
+import {slaApplications,appliedSlaWindow} from './sla-applied-window.js';
 import type {Pool,PoolClient} from 'pg';
 import type {SlaNodeFact} from '@dx-rework/domain/digital-sla-plan';
 import {validateDigitalSlaSnapshot} from '@dx-rework/contracts/digital-sla';
@@ -8,14 +9,15 @@ export async function garmentSlaEvidence(db:Pick<Pool|PoolClient,'query'>,orderI
  const snapshots=(await db.query(`SELECT e.payload->>'receiptId' AS receipt_id,s.* FROM digital_production_task_events e
  JOIN digital_sla_order_snapshots s ON s.snapshot_id::text=e.payload->>'snapshotId'
  WHERE e.resource_kind='order' AND e.resource_id=$1 AND e.event_kind='garment_receipt_registered'`,[orderId])).rows;
+ const applications=await slaApplications(db,orderId);
  const windows=quality.map(r=>{
-  const saved=snapshots.find(s=>s.receipt_id===r.receiptId),parameters=saved?validateDigitalSlaSnapshot({ruleVersion:saved.rule_version,parameters:saved.parameters_json}).parameters:null;
+  const saved=snapshots.find(s=>s.receipt_id===r.receiptId),base=saved?validateDigitalSlaSnapshot({ruleVersion:saved.rule_version,parameters:saved.parameters_json}):null,applied=base?appliedSlaWindow(base,'garment_inspection',`receipt:${r.receiptId}`,applications):null,parameters=applied?.snapshot.parameters;
   const value=parameters?.garment_inspection?.value,warning=parameters?.warning_ratio?.value;
   const minutes=value?.kind==='duration'?value.minutes:null;
   return {lineId:r.lineId,receiptId:r.receiptId,startedAt:r.receivedAt,completedAt:r.completedAt,complete:r.inspected,
    deadline:r.receivedAt&&minutes!==null?new Date(Date.parse(r.receivedAt)+minutes*60000).toISOString():null,
    warningAt:r.receivedAt&&minutes!==null&&warning?.kind==='ratio'?new Date(Date.parse(r.receivedAt)+minutes*60000*warning.percent/100).toISOString():null,
-   evidence:`receipt:${r.receiptId}:quantity:${r.quantityVersion}:qc:${r.eventId??'unknown'}`,snapshotId:saved?.snapshot_id??null,precision:r.precision};
+   evidence:`receipt:${r.receiptId}:quantity:${r.quantityVersion}:qc:${r.eventId??'unknown'}`,snapshotId:applied?.snapshotId??saved?.snapshot_id??null,precision:r.precision};
  });
  const expected=(await db.query('SELECT line.line_id,sum(size.quantity)::bigint AS quantity FROM digital_production_po_lines line JOIN digital_production_po_sizes size USING(line_id) WHERE line.production_order_id=$1 GROUP BY line.line_id',[orderId])).rows;
  const facts:Record<string,SlaNodeFact>={};

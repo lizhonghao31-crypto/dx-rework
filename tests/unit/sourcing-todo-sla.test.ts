@@ -6,7 +6,7 @@ const input={category:"sourcing_ie_quote",entityType:"sourcing_case",entityId:"c
 const fixture=(minutes=120,transition=true,enrolled=true)=>{
  const values=digitalSlaDefaults();for(const key of ['sourcing_ie','sourcing_selection','sourcing_approval'])values[key]={kind:'duration',minutes};
  const frozen=resolveDigitalSlaSnapshot({version:1,values});
- const query=vi.fn(async(sql:string)=>({rows:sql.includes('to_regclass')?[{relation:'digital_sla_order_snapshots'}]:sql.includes('digital_production_child_links')?(enrolled?[{rule_version:frozen.ruleVersion,parameters_json:frozen.parameters,snapshot_id:'snapshot-fixture',production_order_id:'order-fixture'}]:[]):sql.includes('sourcing_case_transitions')?(transition?[{transitioned_at:'2026-10-23T00:00:00Z'}]:[]):[]}));
+ const query=vi.fn(async(sql:string)=>({rows:sql.includes('to_regclass')?[{relation:'digital_sla_order_snapshots'}]:sql.startsWith('SELECT s.rule_version')?(enrolled?[{rule_version:frozen.ruleVersion,parameters_json:frozen.parameters,snapshot_id:'snapshot-fixture',production_order_id:'order-fixture'}]:[]):sql.includes('sourcing_case_transitions')?(transition?[{transitioned_at:'2026-10-23T00:00:00Z'}]:[]):[]}));
  return {client:{query} as unknown as Pick<PoolClient,'query'>,query};
 };
 describe('original sourcing todo frozen SLA adapter',()=>{

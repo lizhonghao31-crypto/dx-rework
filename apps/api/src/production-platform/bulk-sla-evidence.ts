@@ -28,7 +28,7 @@ export async function bulkSlaEvidence(db:Pick<PoolClient,'query'>,orderId:string
   const planNode=task.task_kind==='bulk_cutting_external'?'bulk_cutting':task.task_kind;
   result[planNode]={evidence:`task:${task.task_id}`,businessCompleted:task.state==='completed',
    ...(timing.enteredAt?{startedAt:timing.enteredAt}:{}),...(task.completed_at?{completedAt:new Date(task.completed_at).toISOString()}:{}),
-   ...(timing.seconds!==null?{standardMinutes:timing.seconds/60}:{}),
+   standardWarningPercent:timing.warningRatio*100,...(timing.seconds!==null?{standardMinutes:timing.seconds/60}:{}),
    ...(task.task_kind==='warehouse_preshrink'&&!fabric.usable&&task.state!=='completed'?{waitingFor:{reason:'验布尚未合格或获准使用，预缩仍等待',source:`order:${orderId}:fabric`}}:{})};
  }
  return result;

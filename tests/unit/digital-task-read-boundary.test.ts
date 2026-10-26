@@ -31,8 +31,8 @@ function fixture(sla: "absent" | "unenrolled" | "frozen" = "absent") {
     let found: object[] = [];
     if (sql === "SELECT to_regclass('digital_sla_configurations') AS relation") found = [{relation:sla==='absent'?null:'digital_sla_configurations'}];
     else if (sql === "SELECT to_regclass('digital_sla_order_snapshots') AS relation") found = [{relation:'digital_sla_order_snapshots'}];
-    else if (sql === 'SELECT * FROM digital_sla_order_snapshots WHERE production_order_id=$1 ORDER BY revision DESC LIMIT 1') {expect(params[0]).toBe(orderId);found=[];}
-    else if (sql.startsWith('SELECT line_id, (customer_warehouse_arrival_date-$2::int)::text AS target_date,') && sql.includes('FROM digital_production_po_lines WHERE production_order_id=$1 ORDER BY position')) {expect(params[0]).toBe(orderId);found=[];}
+    else if ((sql === 'SELECT * FROM digital_sla_order_snapshots WHERE production_order_id=$1 ORDER BY revision DESC LIMIT 1'||sql === 'SELECT * FROM digital_sla_order_snapshots WHERE production_order_id=$1 ORDER BY revision LIMIT 1')) {expect(params[0]).toBe(orderId);found=[];}
+    else if (sql.startsWith('SELECT line_id, customer_warehouse_arrival_date::text AS customer_date, (customer_warehouse_arrival_date-$2::int)::text AS target_date,') && sql.includes('FROM digital_production_po_lines WHERE production_order_id=$1 ORDER BY position')) {expect(params[0]).toBe(orderId);found=[];}
     else if (sql === "SELECT e.event_id,e.occurred_at,e.payload,u.display_name FROM digital_production_task_events e JOIN app_users u ON u.id=e.actor_id\n WHERE e.resource_kind='order' AND e.resource_id=$1 AND e.event_kind='ship_sample_sent' ORDER BY e.recorded_at,e.event_id") {expect(params[0]).toBe(orderId);found=[];}
     else if (sql === "SELECT to_regclass('digital_factory_facts') AS relation") found = [{relation:'digital_factory_facts'}];
     else if (sql.startsWith('SELECT f.*,u.display_name,v.order_snapshot FROM digital_factory_facts f JOIN digital_factory_routes r USING(preparation_id)') && sql.includes("WHERE r.production_order_id=$1 AND f.kind='船样寄出' ORDER BY f.recorded_at")) {expect(params[0]).toBe(orderId);found=[];}
@@ -40,7 +40,7 @@ function fixture(sla: "absent" | "unenrolled" | "frozen" = "absent") {
     else if (sql === "SELECT to_regclass('digital_development_sla_plans') AS relation") found = [{relation:null}];
     else if (sql.startsWith('SELECT t.created_at,a.production_order_id,a.source_id,')) found = rows.filter(row=>row.task_id===params[0]).map(row=>({...row,resource_created_at:row.created_at}));
     else if (sql.startsWith('SELECT p.* FROM digital_production_deadline_revisions r')) found = [];
-    else if (sql.startsWith('SELECT c.* FROM digital_sla_order_snapshots s JOIN digital_sla_configurations c USING(configuration_id)')) found = sla==='frozen'&&params[0]===orderId?[{policy_refs_json:{policies:{bulk_pattern:{nodeKey:'bulk_pattern',version:7}}}}]:[];
+    else if (sql.startsWith('SELECT c.* FROM digital_sla_order_snapshots s')&&sql.includes('JOIN digital_sla_configurations c')) found = sla==='frozen'&&params[0]===orderId?[{policy_refs_json:{policies:{bulk_pattern:{nodeKey:'bulk_pattern',version:7}}}}]:[];
     else if (sql === 'SELECT * FROM digital_production_deadline_policies WHERE node_key=$1 AND version=$2') found = params[0]==='bulk_pattern'&&params[1]===7?[{label:'TEST frozen task',version:7,sla_seconds:7200,warning_ratio:0.7}]:[];
     else if (sql.startsWith("SELECT * FROM digital_production_task_access WHERE")) found = rows.filter(row => row.task_id === params[0]);
     else if (sql.includes("SELECT 1 FROM app_users u JOIN user_role_assignments")) found = activeRoles.get(String(params[0]))?.includes(String(params[1])) ? [{}] : [];

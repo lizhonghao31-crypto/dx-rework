@@ -21,7 +21,7 @@ describe('native craft confirmation timing',()=>{
   vi.mocked(developmentDocumentRow).mockResolvedValue({document:{craft},revision:null} as never);
   for(const returned of ['2026-10-01T05:00:00.000Z','2026-10-10T05:00:00.000Z',null]){
    const rows=[{task_id:'cut',task_kind:'development_cutting',route_version:1,completed_at:cut},...(returned?[{task_id:'craft',task_kind:parent,route_version:1,completed_at:returned}]:[])];
-   const db={query:vi.fn(async()=>({rows}))};
+   const db={query:vi.fn(async(sql:string,params:unknown[])=>{if(sql==='SELECT production_order_id FROM digital_production_orders WHERE source_id=$1'){expect(params).toEqual(['source']);return {rows:[]};}if(sql.startsWith('SELECT t.task_id,t.route_version,t.completed_at,a.task_kind'))return {rows};throw new Error(`Unexpected timing query: ${sql}`);})};
    const timing=await developmentTaskTiming(db as never,{task_id:'confirm',source_id:'source',task_kind:'development_craft_confirmation',route_version:1});
    expect(timing?.enteredAt).toBe(returned);expect(timing?.seconds).toBe(1800);
    expect(timing?.configurationId).toBe('frozen');
@@ -40,7 +40,7 @@ describe('saved synthetic start compatibility',()=>{
    {id:'development_craft_return',label:'回收确认',stage:2,parameterKey:'development_craft_return',applicable:'yes',countsProgress:false,kind:'included',minutes:30,offsetDays:null,dependsOn:[],anchorKey:null,targetKey:null,includedIn:'development_printing',includedPosition:'end'},
   ],anchors:{cut:{precision:'instant',value:cut,source:'cut'}},warningPercent:70,stageBufferMinutes:0};
   const original=structuredClone(plan);
-  vi.mocked(developmentSlaPlan).mockResolvedValue({plan_json:plan,business_time:{scenarioId:null},revision:2});
+  vi.mocked(developmentSlaPlan).mockResolvedValue({plan_json:plan,business_time:{scenarioId:null},revision:2,rule_version:snapshot.ruleVersion,parameters_json:snapshot.parameters});
   const oldStart='2026-10-04T23:30:00.000Z',returned='2026-10-01T05:00:00.000Z';
   const row=(task_id:string,task_kind:string,entered_at:string,completed_at:string)=>({task_id,task_kind,entered_at,completed_at,route_version:1,state:'completed',completed_quality:'已核实',returned:false,rejected:false,due_at:'2026-10-05T00:00:00.000Z',sla_basis:{seconds:task_kind==='development_printing'?345600:1800}});
   const rows=[row('craft','development_printing',cut,returned),row('return','development_craft_confirmation',oldStart,'2026-10-01T05:10:00.000Z')];

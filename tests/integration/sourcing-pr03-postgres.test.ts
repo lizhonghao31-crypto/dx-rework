@@ -1,5 +1,5 @@
-import {installAcceptanceClockReader} from "../../apps/api/src/acceptance-clock/business-time.js";
-import {withAcceptanceBusinessTime} from '../../apps/api/src/acceptance-clock/business-time.js';
+import {registerDigitalTaskRoutes} from '../../apps/api/src/production-platform/task-routes.js';
+import {withAcceptanceBusinessTime,installAcceptanceClockReader} from '../../apps/api/src/acceptance-clock/business-time.js';
 import {reworkSlaEvidence} from '../../apps/api/src/production-platform/rework-sla-evidence.js';
 import {linkNewDigitalChild} from '../../apps/api/src/production-platform/child-link-repository.js';
 import {registerGarmentReceipt} from '../../apps/api/src/production-platform/garment-quality.js';
@@ -3547,6 +3547,182 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     return { order, designer, document, imageId, budget };
   };
 
+  const withSla09Standard=async<T,>(action:(tasks:DigitalProductionTaskService,baseline:Awaited<ReturnType<DigitalProductionTaskService['slaSettings']>>)=>Promise<T>)=>{
+    const tasks=new DigitalProductionTaskService(database,'TEST settings preview secret'),baseline=await tasks.slaSettings(rootActor());
+    const restore=async()=>{
+      const db=await database.connect();
+      try{
+        await db.query('BEGIN');const repo=new SlaConfigurationRepository(db),current=(await repo.current())!;
+        await repo.publish({expectedVersion:current.version,values:baseline.values,actorId:merchandiserId,reason:'TEST restore original defaults after isolated settings case',requestKey:randomUUID()});
+        await db.query('COMMIT');
+      }catch(e){await db.query('ROLLBACK');throw e;}finally{db.release();}
+    };
+    try{return await action(tasks,baseline);}finally{await restore();}
+  };
+  it('SLA09 publishes only new-order defaults with strict signed preview, original policy storage and active three-role permissions',async()=>{
+    const fixture=await budgetFixture();await withSla09Standard(async(tasks,baseline)=>{
+      for(const actor of [rootActor(),managerActor(),ownerActor()])expect((await tasks.slaSettings(actor)).version).toBe(baseline.version);
+      await expect(tasks.slaSettings(fixture.designer)).rejects.toMatchObject({statusCode:403});
+      const before=(await database.query('SELECT * FROM digital_sla_order_snapshots WHERE production_order_id=$1 ORDER BY revision',[fixture.order.productionOrderId])).rows;
+      const draft={expectedVersion:baseline.version,values:{...baseline.values,production_sheet:{kind:'duration' as const,minutes:5760}},reason:'TEST new standard only'};
+      const preview=await tasks.previewSlaSettings(ownerActor(),draft);
+      await expect(tasks.publishSlaSettings(managerActor(),{...draft,previewToken:preview.token},randomUUID())).rejects.toMatchObject({statusCode:409});
+      await expect(tasks.publishSlaSettings(ownerActor(),{...draft,reason:'tampered',previewToken:preview.token},randomUUID())).rejects.toMatchObject({statusCode:409});
+      const key=randomUUID(),body={...draft,previewToken:preview.token},published=await tasks.publishSlaSettings(ownerActor(),body,key);
+      expect(published).toMatchObject({version:baseline.version+1,scope:'new_orders',existingOrdersChanged:0});
+      expect(await tasks.publishSlaSettings(ownerActor(),body,key)).toEqual(published);
+      expect((await database.query('SELECT * FROM digital_sla_order_snapshots WHERE production_order_id=$1 ORDER BY revision',[fixture.order.productionOrderId])).rows).toEqual(before);
+      const newer=await budgetFixture(false,'TEST-SLA09-NEW');
+      expect((await database.query('SELECT parameters_json FROM digital_sla_order_snapshots WHERE production_order_id=$1 ORDER BY revision LIMIT 1',[newer.order.productionOrderId])).rows[0].parameters_json.production_sheet.value.minutes).toBe(5760);
+      await expect(tasks.publishSlaSettings(ownerActor(),body,randomUUID())).rejects.toMatchObject({statusCode:409});
+      const invalid={...draft,expectedVersion:published.version,values:{...draft.values,development_sewing:{kind:'duration' as const,minutes:5}}};
+      await expect(tasks.previewSlaSettings(rootActor(),invalid)).rejects.toMatchObject({statusCode:400});
+    });
+  });
+  it('SLA09 explicitly applies selected unfinished windows without changing P0, actual starts, completed targets or unselected parameter provenance',async()=>{
+    const fixture=await budgetFixture();await withSla09Standard(async(tasks,baseline)=>{
+      const ready=await exerciseParallelTechnical(database,fixture,{primary:merchandiserActor(),manager:managerActor(),owner:ownerActor(),ie:ieActor(),root:rootActor()});
+      const inspected=await ready.bulk.reportFabric(ready.warehouse,ready.id,{expectedReportId:null,material:'TEST whole fabric',arrivedAt:new Date(Date.now()-41*3600000).toISOString(),inspectedAt:new Date(Date.now()-40*3600000).toISOString(),result:'合格',note:'TEST actual original receipt'},randomUUID());
+      const oldTask=inspected.tasks.find(t=>t.taskKind==='warehouse_preshrink')!,sla=new SlaOrderService(database),before=await sla.read(rootActor(),ready.id);expect(before.status).toBe('planned');if(before.status!=='planned')throw new Error('missing initial plan');
+      const notifications=new DigitalProductionNotificationService(database);await notifications.runOnce();
+      const overdueCount=async()=>Number((await database.query("SELECT count(*) n FROM digital_production_notification_events WHERE task_id=$1 AND event_kind='overdue'",[oldTask.taskId])).rows[0].n);expect(await overdueCount()).toBe(1);
+      const draft={expectedVersion:baseline.version,values:{...baseline.values,warehouse_preshrink:{kind:'duration' as const,minutes:4320},production_sheet:{kind:'duration' as const,minutes:5760}},reason:'TEST two values, only apply one'};
+      const standard=await tasks.previewSlaSettings(rootActor(),draft),published=await tasks.publishSlaSettings(rootActor(),{...draft,previewToken:standard.token},randomUUID());
+      expect((await ready.bulk.read(rootActor(),ready.id)).tasks.find(t=>t.taskKind==='warehouse_preshrink')?.dueAt).toBe(oldTask.dueAt);
+      const selection={orderId:ready.id,configurationVersion:published.version,parameterKeys:['warehouse_preshrink'],reason:'TEST only selected active window'};
+      const preview=await tasks.previewSlaOrder(rootActor(),selection);expect(preview.changes.some(n=>n.nodeId==='warehouse_preshrink')).toBe(true);
+      const snapshotsBefore=(await database.query('SELECT count(*) n FROM digital_sla_order_snapshots WHERE production_order_id=$1',[ready.id])).rows[0].n;
+      const failure=vi.spyOn(DigitalProductionTaskService.prototype,'applySlaVersionWithClient').mockRejectedValueOnce(new Error('TEST downstream failure'));
+      try{await expect(tasks.applySlaOrder(rootActor(),{...selection,previewToken:preview.token},randomUUID())).rejects.toThrow('downstream failure');}finally{failure.mockRestore();}
+      expect((await database.query('SELECT count(*) n FROM digital_sla_order_snapshots WHERE production_order_id=$1',[ready.id])).rows[0].n).toBe(snapshotsBefore);
+      const key=randomUUID(),body={...selection,previewToken:preview.token},result=await tasks.applySlaOrder(rootActor(),body,key);expect(await tasks.applySlaOrder(rootActor(),body,key)).toEqual(result);
+      const after=await sla.read(rootActor(),ready.id);expect(after.status).toBe('planned');if(after.status!=='planned')throw new Error('missing applied plan');
+      expect(after.original).toEqual(before.original);expect(after.current.revision).toBe(before.current.revision+1);
+      expect(after.nodes.find(n=>n.id==='warehouse_preshrink')?.actualStart).toBe(before.nodes.find(n=>n.id==='warehouse_preshrink')?.actualStart);
+      expect(after.nodes.find(n=>n.id==='production_sheet')).toEqual(before.nodes.find(n=>n.id==='production_sheet'));
+      const updated=(await ready.bulk.read(rootActor(),ready.id)).tasks.find(t=>t.taskKind==='warehouse_preshrink')!;
+      const supervised=await new DigitalJourneyQuery(database).read(rootActor(),ready.id,undefined,true);
+      expect(supervised.supervision?.nodes.find(n=>n.id==='warehouse_preshrink')?.target.at).toBe(updated.dueAt);
+      expect(supervised.supervision?.originalRevision).toBe(before.original.revision);expect(supervised.supervision?.currentRevision).toBe(after.current.revision);
+      expect(Date.parse(updated.dueAt!)-Date.parse(oldTask.dueAt!)).toBe(36*3600000);
+      const snapshot=(await database.query('SELECT parameters_json FROM digital_sla_order_snapshots WHERE production_order_id=$1 ORDER BY revision DESC LIMIT 1',[ready.id])).rows[0].parameters_json;
+      expect(snapshot.warehouse_preshrink.sourceVersion).toBe(published.version);expect(snapshot.production_sheet).toEqual((await database.query('SELECT parameters_json FROM digital_sla_order_snapshots WHERE production_order_id=$1 ORDER BY revision LIMIT 1',[ready.id])).rows[0].parameters_json.production_sheet);
+      await expect(tasks.applySlaOrder(rootActor(),body,randomUUID())).rejects.toMatchObject({statusCode:409});
+      await notifications.runOnce();expect(await overdueCount()).toBe(1);
+      const latest=await tasks.slaSettings(rootActor()),shorter={expectedVersion:latest.version,values:{...latest.values,warehouse_preshrink:{kind:'duration' as const,minutes:2160}},reason:'TEST shorten same actual window'},shortPreview=await tasks.previewSlaSettings(rootActor(),shorter),shortPublished=await tasks.publishSlaSettings(rootActor(),{...shorter,previewToken:shortPreview.token},randomUUID());
+      const selectedAgain={...selection,configurationVersion:shortPublished.version},previewAgain=await tasks.previewSlaOrder(rootActor(),selectedAgain);
+      await tasks.applySlaOrder(rootActor(),{...selectedAgain,previewToken:previewAgain.token},randomUUID());await notifications.runOnce();expect(await overdueCount()).toBe(1);
+      const retained=(await database.query("SELECT payload->'previousEvaluations' AS evaluations FROM digital_production_task_events WHERE resource_id=$1 AND event_kind='sla_standard_applied' ORDER BY recorded_at,event_id LIMIT 1",[ready.id])).rows[0].evaluations;
+      expect(retained.find((n:{id:string})=>n.id==='warehouse_preshrink').status).toBe('overdue');
+
+      await ready.bulk.complete(ready.warehouse,ready.id,{preparationId:ready.preparationId,kind:'预缩完成'},randomUUID());
+      expect((await ready.bulk.read(rootActor(),ready.id)).tasks.find(t=>t.taskKind==='warehouse_preshrink')?.state).toBe('completed');
+    });
+  });
+
+  it('SLA09 keeps sourcing work area, plan and original todo on the same explicitly applied window across the original return and correction flow',async()=>{
+    const fixture=await budgetFixture(),id=fixture.order.productionOrderId,primary=merchandiserActor();
+    await withSla09Standard(async(tasks,baseline)=>{
+      await fixture.budget.save(fixture.designer,id,{expectedVersion:0,document:fixture.document},randomUUID());await fixture.budget.publish(primary,id,1,randomUUID());
+      const prepared=await fixture.budget.prepareSourcing(primary,id,1,attachments),{service:currentService}=await cycleTodoServices();
+      const created=await currentService.createCase(primary,{gender:prepared.gender,styleName:prepared.styleName,deliveryDate:'2026-11-10',estimatedCutPieceSendDate:'2026-10-20',daxingUnitPrice:prepared.daxingUnitPrice,attachmentIds:prepared.images.map(i=>i.attachmentId),lineItems:prepared.lineItems.map(({lineId,styleNo,alternateStyleNo,color,quantity})=>({lineId,styleNo,alternateStyleNo,color,quantity,factoryDeliveryDate:'2026-11-10'})),digitalBudget:{productionOrderId:id,budgetVersion:prepared.budgetVersion,orderVersion:prepared.orderVersion}},randomUUID());
+      const caseId=created.value.sourcingCaseId,original=(await database.query("SELECT * FROM rework_todos WHERE entity_type='sourcing_case' AND entity_id=$1 AND category='sourcing_ie_quote' ORDER BY created_at,todo_id LIMIT 1",[caseId])).rows[0];
+      const reader={...ieActor(),authorizationCapability:'todo:view',authorizationCapabilities:['sourcing:view','sourcing:price:quote','todo:view']},todos=new TodoService(database),before=await todos.getForActor(reader,original.todo_id),sla=new SlaOrderService(database),first=await sla.read(rootActor(),id);
+      expect(first.status).toBe('planned');if(first.status!=='planned')throw new Error('missing plan');
+      expect(first.nodes.find(n=>n.id==='sourcing_ie')?.deadline.at).toBe(before.dueAt);
+      const shifted={connect:database.connect.bind(database),query:database.query.bind(database)} as unknown as pg.Pool;
+      let sceneNow=new Date(Date.parse(before.dueAt!)+1800000).toISOString();
+      installAcceptanceClockReader(shifted,{read:async scope=>scope.id===id?{now:sceneNow,scenarioId:null,revision:0}:null,nativeScenario:async()=>null});
+      const notices=new DigitalProductionNotificationService(shifted),wall=vi.spyOn(Date,'now').mockReturnValue(Date.parse(sceneNow));
+      try{await notices.runOnce();}finally{wall.mockRestore();}
+      const notice=(await database.query("SELECT * FROM digital_production_notification_events WHERE todo_id=$1 AND event_kind='overdue'",[original.todo_id])).rows[0];expect(notice).toBeTruthy();
+      const unreadBefore=(await notices.current(reader,notice.event_id,true)).remainingCount!;expect(unreadBefore).toBeGreaterThan(0);
+      const draft={expectedVersion:baseline.version,values:{...baseline.values,sourcing_ie:{kind:'duration' as const,minutes:180}},reason:'TEST IE three hours only'};
+      const standard=await tasks.previewSlaSettings(rootActor(),draft),published=await tasks.publishSlaSettings(rootActor(),{...draft,previewToken:standard.token},randomUUID()),selection={orderId:id,configurationVersion:published.version,parameterKeys:['sourcing_ie'],reason:'TEST selected IE native window'};
+      const preview=await tasks.previewSlaOrder(rootActor(),selection);await tasks.applySlaOrder(rootActor(),{...selection,previewToken:preview.token},randomUUID());
+      const after=await todos.getForActor(reader,original.todo_id),evaluation=await sla.read(rootActor(),id);expect(Date.parse(after.dueAt!)-Date.parse(before.dueAt!)).toBe(3600000);
+      expect((await notices.current(reader,notice.event_id,true)).remainingCount).toBe(unreadBefore-1);
+      await database.query('UPDATE digital_production_notification_receipts SET shown_at=CURRENT_TIMESTAMP WHERE event_id=$1 AND recipient_id=$2',[notice.event_id,reader.actorId]);
+      expect((await notices.current(reader,notice.event_id)).notification).toBeNull();
+      sceneNow=after.dueAt!;expect((await notices.current(reader,notice.event_id)).notification).toMatchObject({eventId:notice.event_id,actionable:true});
+      sceneNow=new Date(Date.parse(after.dueAt!)+1).toISOString();expect((await notices.current(reader,notice.event_id)).notification).toMatchObject({eventId:notice.event_id});
+      const dueScan=vi.spyOn(Date,'now').mockReturnValue(Date.parse(sceneNow));
+      try{await notices.runOnce();await notices.runOnce();}finally{dueScan.mockRestore();}
+      expect((await database.query("SELECT * FROM digital_production_notification_events WHERE todo_id=$1 AND event_kind='overdue'",[original.todo_id])).rows).toEqual([notice]);
+      expect((await notices.current({...reader,authorizationCapabilities:['todo:view','sourcing:view']},notice.event_id)).notification).toBeNull();
+      expect((await notices.current({...reader,actorId:randomUUID()},notice.event_id)).notification).toBeNull();
+      expect(evaluation.status).toBe('planned');if(evaluation.status!=='planned')throw new Error('missing applied plan');
+      expect(evaluation.nodes.find(n=>n.id==='sourcing_ie')?.deadline.at).toBe(after.dueAt);expect(evaluation.nodes.find(n=>n.id==='sourcing_ie')?.actualStart).toBe(first.nodes.find(n=>n.id==='sourcing_ie')?.actualStart);
+      const supervised=await new DigitalJourneyQuery(database).read(rootActor(),id,undefined,true);
+      expect(supervised.supervision?.nodes.find(n=>n.id==='sourcing_ie')?.target.at).toBe(after.dueAt);
+      expect(after.timing?.warningAt).toBe(new Date(Date.parse(first.nodes.find(n=>n.id==='sourcing_ie')!.actualStart!)+(Date.parse(after.dueAt!)-Date.parse(first.nodes.find(n=>n.id==='sourcing_ie')!.actualStart!))*0.7).toISOString());
+      expect((await database.query('SELECT due_at,reminder_count FROM rework_todos WHERE todo_id=$1',[original.todo_id])).rows[0]).toMatchObject({due_at:original.due_at,reminder_count:original.reminder_count});
+      // Ordinary reassignment/read must not replace the selected application or reset the responsibility window.
+      await tasks.slaSettings(rootActor());expect((await todos.getForActor(reader,original.todo_id)).dueAt).toBe(after.dueAt);
+      const prices=prepared.lineItems.map((_,i)=>({position:i+1,unitPrice:'5.25'})),quoted=await currentService.quoteIePrice(ieActor(),caseId,{linePrices:prices},randomUUID());
+      const returned=await currentService.returnToMerchandiser(ownerActor(),caseId,{expectedVersion:quoted.value.version,reason:'TEST retain applied deadline'},randomUUID());
+      await currentService.correctCase(primary,caseId,{gender:prepared.gender,styleName:prepared.styleName,deliveryDate:'2026-11-10',estimatedCutPieceSendDate:'2026-10-20',attachmentIds:prepared.images.map(i=>i.attachmentId),lineItems:prepared.lineItems.map(({lineId,styleNo,alternateStyleNo,color,quantity})=>({lineId,styleNo,alternateStyleNo,color,quantity,factoryDeliveryDate:'2026-11-10'})),expectedVersion:returned.value.version,reason:'TEST original correction'},randomUUID());
+      const nextTodo=(await database.query("SELECT * FROM rework_todos WHERE entity_id=$1 AND category='sourcing_ie_quote' AND status='pending' ORDER BY created_at DESC LIMIT 1",[caseId])).rows[0];
+      expect(nextTodo.due_at.toISOString()).toBe(after.dueAt);expect((await todos.getForActor(reader,nextTodo.todo_id)).dueAt).toBe(after.dueAt);
+      const retried=await sla.read(rootActor(),id);if(retried.status!=='planned')throw new Error('missing retry plan');
+      expect(retried.nodes.find(n=>n.id==='sourcing_ie')).toMatchObject({actualStart:first.nodes.find(n=>n.id==='sourcing_ie')!.actualStart,actualEnd:null,deadline:{at:after.dueAt}});
+
+    });
+  });
+
+  it('SLA09 rejects stale native facts and serializes concurrent commands without partial snapshots or changing business gates',async()=>{
+    const fixture=await budgetFixture();await withSla09Standard(async(tasks,baseline)=>{
+      const ready=await exerciseParallelTechnical(database,fixture,{primary:merchandiserActor(),manager:managerActor(),owner:ownerActor(),ie:ieActor(),root:rootActor()});
+      const draft={expectedVersion:baseline.version,values:{...baseline.values,warehouse_preshrink:{kind:'duration' as const,minutes:4320}},reason:'TEST frozen preview'};
+      const standard=await tasks.previewSlaSettings(rootActor(),draft),published=await tasks.publishSlaSettings(rootActor(),{...draft,previewToken:standard.token},randomUUID()),selection={orderId:ready.id,configurationVersion:published.version,parameterKeys:['warehouse_preshrink'],reason:'TEST stale actual evidence'};
+      const preview=await tasks.previewSlaOrder(rootActor(),selection);
+      await ready.bulk.reportFabric(ready.warehouse,ready.id,{expectedReportId:null,material:'TEST shared actual fabric',arrivedAt:new Date(Date.now()-3600000).toISOString(),inspectedAt:new Date(Date.now()-1800000).toISOString(),result:'合格',note:'TEST changed original facts'},randomUUID());
+      await expect(tasks.applySlaOrder(rootActor(),{...selection,previewToken:preview.token},randomUUID())).rejects.toMatchObject({statusCode:409});
+      const fresh=await tasks.previewSlaOrder(rootActor(),selection),body={...selection,previewToken:fresh.token},key=randomUUID();
+      const results=await Promise.allSettled([tasks.applySlaOrder(rootActor(),body,key),tasks.applySlaOrder(rootActor(),body,key)]);
+      expect(results.some(r=>r.status==='fulfilled')).toBe(true);for(const r of results)if(r.status==='rejected')expect(r.reason).toMatchObject({statusCode:409});
+      const response=await tasks.applySlaOrder(rootActor(),body,key);expect(response.orderId).toBe(ready.id);
+      expect((await database.query("SELECT count(*)::int n FROM digital_production_task_events WHERE resource_id=$1 AND event_kind='sla_standard_applied'",[ready.id])).rows[0].n).toBe(1);
+      // No trustworthy cutter receipt is created, and applying a standard does not complete any task.
+      const current=await ready.bulk.read(rootActor(),ready.id);expect(current.tasks.find(t=>t.taskKind==='warehouse_preshrink')?.state).toBe('ready');
+      expect((await database.query("SELECT count(*)::int n FROM digital_production_task_events WHERE resource_id=$1 AND event_kind='cutting_fabric_actually_received'",[ready.id])).rows[0].n).toBe(0);
+      const disabled={...managerActor()};await database.query('UPDATE identity_mappings SET active=false WHERE user_id=$1',[disabled.actorId]);
+      try{await expect(tasks.previewSlaOrder(disabled,selection)).rejects.toMatchObject({statusCode:403});}finally{await database.query('UPDATE identity_mappings SET active=true WHERE user_id=$1',[disabled.actorId]);}
+    });
+  });
+
+  it('SLA09 HTTP routes enforce authentication, active role, typed inputs, signed previews and exact idempotent publication',async()=>{
+    await cycleTodoServices();await withSla09Standard(async(tasks,baseline)=>{
+      const app=Fastify();app.setErrorHandler((error,_request,reply)=>{const known=error as ApplicationError;reply.code(known.statusCode??500).send({code:known.code,message:known.message});});
+      registerDigitalTaskRoutes(app,{service:new DigitalProductionIdentityService(database,true),creationEnabled:true,authenticate:async token=>{
+        if(token!=='owner'&&token!=='manager'&&token!=='ordinary')throw new ApplicationError('UNAUTHORIZED','请登录',401);
+        return {id:token==='owner'?ownerId:token==='manager'?managerId:merchandiserId,displayName:'TEST HTTP actor',businessRoles:[token==='owner'?'owner_group':token==='manager'?'production_management':'order_merchandiser'],capabilities:[]};
+      }},tasks);
+      try{
+        await app.ready();const headers={cookie:'dx_rework_session=owner'},base='/digital-production/sla-settings';
+        expect((await app.inject({method:'GET',url:base})).statusCode).toBe(401);
+        expect((await app.inject({method:'GET',url:base,headers:{cookie:'dx_rework_session=ordinary'}})).statusCode).toBe(403);
+        expect((await app.inject({method:'GET',url:base,headers:{cookie:'dx_rework_session=manager'}})).statusCode).toBe(200);
+        const draft={expectedVersion:baseline.version,values:{...baseline.values,warning_ratio:{kind:'ratio',percent:80}},reason:'TEST typed HTTP standard'};
+        for(const value of [{...draft,values:{...draft.values,warning_ratio:{kind:'ratio',percent:0}}},{...draft,values:{...draft.values,production_sheet:{kind:'duration',minutes:-1}}},{...draft,unexpected:true}])expect((await app.inject({method:'POST',url:base+'/preview',headers,payload:value})).statusCode).toBe(400);
+        const preview=await app.inject({method:'POST',url:base+'/preview',headers,payload:draft});expect(preview.statusCode).toBe(200);const body={...draft,previewToken:preview.json().token},writeHeaders={...headers,'idempotency-key':randomUUID()};
+        expect((await app.inject({method:'POST',url:base+'/publish',headers,payload:body})).statusCode).toBe(400);
+        const published=await app.inject({method:'POST',url:base+'/publish',headers:writeHeaders,payload:body});expect(published.statusCode).toBe(200);expect((await app.inject({method:'POST',url:base+'/publish',headers:writeHeaders,payload:body})).json()).toEqual(published.json());
+        const historicalVersion=baseline.version||published.json().version,historical=await app.inject({method:'GET',url:`${base}?version=${historicalVersion}`,headers});expect(historical.statusCode).toBe(200);expect(historical.json().values).toEqual(baseline.version?baseline.values:draft.values);
+        expect((await app.inject({method:'GET',url:base+'?version=-1',headers})).statusCode).toBe(400);
+      }finally{await app.close();}
+    });
+  });
+
+
+  it('SLA09 rejects an invalid partial included target as a known validation failure without opening another business gate',async()=>{
+    const fixture=await budgetFixture();await withSla09Standard(async(tasks,baseline)=>{
+      const draft={expectedVersion:baseline.version,values:{...baseline.values,development_sewing:{kind:'duration' as const,minutes:10},development_sewing_transfer:{kind:'included' as const,minutes:5}},reason:'TEST internally valid future standard'};
+      const preview=await tasks.previewSlaSettings(rootActor(),draft),published=await tasks.publishSlaSettings(rootActor(),{...draft,previewToken:preview.token},randomUUID());
+      await expect(tasks.previewSlaOrder(rootActor(),{orderId:fixture.order.productionOrderId,configurationVersion:published.version,parameterKeys:['development_sewing'],reason:'TEST invalid subset keeps old 30-minute included target'})).rejects.toMatchObject({statusCode:400,code:'VALIDATION_ERROR'});
+      expect((await database.query('SELECT count(*)::int n FROM digital_sla_order_snapshots WHERE production_order_id=$1',[fixture.order.productionOrderId])).rows[0].n).toBe(1);
+    });
+  });
   it('R2 task document directory preserves independent budget rights and exact development round',async()=>{
     const fixture=await budgetFixture(false,"TEST-R2"),root=rootActor();
     const ready=(await exerciseBulkPreparation(database,fixture,service,attachments,{primary:merchandiserActor(),manager:managerActor(),owner:ownerActor(),ie:ieActor(),root},factoryId,craftId('净色车缝'),'none',{cuttingProcess:'in_house',stopAtReady:true}))!;

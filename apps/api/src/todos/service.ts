@@ -1,3 +1,4 @@
+import {effectiveSourcingDueSql} from '../production-platform/sla-sourcing-deadline-sql.js';
 import {sourcingTodoPresentation} from "./sla-presentation.js";
 import {acceptanceBusinessContext,assertAcceptanceAssignee,businessNow} from '../acceptance-clock/business-time.js';
 import {arrangementsAvailable} from "../production-platform/development-arrangement.js";
@@ -286,7 +287,9 @@ const validateCreateInput = (input: CreateTodoInTransactionInput): void => {
 };
 
 export class TodoService {
-  private async contextSql(){return TODO_WITH_CONTEXT_SQL+(this.digital&&await arrangementsAvailable(this.database)?` WHERE ${nativeDevelopmentTodoExclusion}`:"");}
+  private slaAvailability?:Promise<boolean>;
+  private async appliedSlaAvailable(db:Pick<Pool,"query">){return this.slaAvailability??=db.query("SELECT to_regclass('digital_sla_order_snapshots') AS relation").then(r=>!!r.rows[0]?.relation);}
+  private async contextSql(){const sql=await this.appliedSlaAvailable(this.database)?TODO_WITH_CONTEXT_SQL.replace('todos.due_at,',`${effectiveSourcingDueSql('todos')} AS due_at,`):TODO_WITH_CONTEXT_SQL;return sql+(this.digital&&await arrangementsAvailable(this.database)?` WHERE ${nativeDevelopmentTodoExclusion}`:"");}
   constructor(
     private readonly database: Pool,
     private readonly events = new OperationEventRepository(),
@@ -849,6 +852,7 @@ export class TodoService {
     if (!(await this.ensureOpenRecipientEligibleInTransaction(client, actor, todoId))) {
       return null;
     }
+    const effectiveDue=await this.appliedSlaAvailable(client)?effectiveSourcingDueSql('todo'):'todo.due_at';
     const result = await client.query<TodoRow & {
       due_after_seconds: number | null;
       first_reminder_after_due_seconds: number | null;
@@ -860,14 +864,14 @@ export class TodoService {
       `SELECT todo.todo_id,todo.todo_type,todo.category,todo.source_event_id,todo.source_action,
               todo.entity_type,todo.entity_id,todo.recipient_user_id,todo.required_role,
               todo.required_capability,todo.delegation_id,todo.delegation_scope_id,todo.route_descriptor,todo.policy_key,
-              todo.due_at,todo.reminder_count,todo.status,todo.blocked_reason,todo.version,
+              ${effectiveDue} AS due_at,todo.reminder_count,todo.status,todo.blocked_reason,todo.version,
               todo.created_at,todo.updated_at,policy.due_after_seconds,
               policy.first_reminder_after_due_seconds,policy.second_reminder_after_due_seconds,
               policy.escalate_after_due_seconds,policy.max_reminders,COALESCE($2::timestamptz,CURRENT_TIMESTAMP) database_now
        FROM rework_todos todo
        JOIN todo_policies policy ON policy.policy_key=todo.policy_key AND policy.enabled=true
-       WHERE todo.todo_id=$1 AND todo.status='pending' AND todo.due_at IS NOT NULL
-       FOR UPDATE`,
+       WHERE todo.todo_id=$1 AND todo.status='pending' AND ${effectiveDue} IS NOT NULL
+       FOR UPDATE OF todo,policy`,
       [todoId,acceptanceBusinessContext()?businessNow().toISOString():null],
     );
     const todo = result.rows[0];

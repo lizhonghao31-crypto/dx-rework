@@ -61,3 +61,16 @@ Node22，隔离PostgreSQL16.2，独立owned schema。没有真实订单、真实
 - API/Web类型、所有实际修改代码/测试限定lint、API build、secret-scan和diff whitespace检查通过。无新依赖、migration、workflow或真实数据操作。
 
 上述旧Head Full40325843349成功不能移用为修复后Head通过；修复稳定提交后由同一PR自然触发新Head Full。旧组合tree1d8f080d不再代表最终四PR组合，父线程需按新Head重建。原Review不是修后独立二审。旧夹具缺口保持不变，不计通过。
+
+
+## 四PR最终组合与部署边界
+
+2026-10-26从release9b0a899按860(a2bc4cc4)→861(20f578e3)→859(c9295b05)→862(3fe0dd6a)组合。四处文本交界逐项并存双方导入、通知字段/去重/有效截止及完整SLA返回字段；产品代码不另加业务修补。最后P10合入实际新release时重现同一解析，并追加6行原生交叉断言，验证显式应用后预缩/IE的座舱目标等于原任务/待办，原计划与当前版本/临期依据一致。
+
+本地PG16.2组合初跑：Sourcing140、Journey26、补正25、clock25(1原live-browser跳过)、共享预算2、配置10、计划5及开发局部16项通过，共249通过/2失败/1跳过。两个局部开发失败不能算通过：
+- 旧设置入口用例在请求内声明owner_group，但其精简schema没有真实老板角色/授权；仅在本地证据分支补真实授权和撤权负例后通过，证明原生产live-role守卫正确。
+- 源单转母单用例精简schema只装开发模块，缺bulk_ship_sample原策略和后续域依赖；在未改7ec4213复现同一policy查询缺行错误，相关源/测试与9b0a899逐字相同。完整真实schema的clock用例“retains the original frozen source when confirming a mother and creates an independent same-scene revision”实际创建母单、读SLA、核冻结配置及同场景来源通过，不冒称它替代所有更正断言。
+
+未将上述局部夹具扩表、mock或授权维护夹入P10，原断言原样保留；本地维护证明保存在local-evidence分支，不推远端。该旧测试债与真实业务回归分别记录，不修改分类器/门禁/skip求绿。最终Head按真实相对release增量运行原映射Journey/Sourcing、普通测试、PG13及完整业务长链；分类未映射的局部夹具不计通过。
+
+组合API/Web类型/构建、实际冲突文件lint、secret scan通过；settings和journey实际App路由的合成HTTP浏览器1440/390通过，截图已查看，无横向溢出。原生PG另证，非现场Acceptance。最终内容树与保存组合的产品源码须一致，差异仅此记录及不夹带的局部测试维护。四PR分别通过不替代最终P10合基线后的新Head Gate；无追加人工Review，解除草稿可能触发平台自动审查须另核。无migration/workflow/依赖改变。只合release，部署及现场数据由用户操作。
