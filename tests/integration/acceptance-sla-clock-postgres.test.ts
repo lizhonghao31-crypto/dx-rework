@@ -1,3 +1,4 @@
+import {exerciseAcceptanceSourcingApproval} from '../helpers/acceptance-sourcing-approval-fixture.js';
 import {digitalTaskTiming} from '@dx-rework/domain/digital-task-deadline';
 import {DigitalCockpitQuery} from '../../apps/api/src/production-platform/cockpit-query.js';
 import {PatternRoomOrderService} from '../../apps/api/src/pattern-room/order-service.js';
@@ -399,6 +400,8 @@ const databaseUrl=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TE
   expect(row.entered_at.getTime()).toBeGreaterThanOrEqual(before.getTime());expect(row.completed_at.getTime()).toBeGreaterThanOrEqual(row.entered_at.getTime());expect(row.completed_at.getTime()).toBeLessThanOrEqual(Date.now());
   expect((await db.query("SELECT 1 FROM acceptance_sla_clock_resources WHERE resource_kind='source' AND resource_id=$1",[source.sourceId])).rowCount).toBe(0);
  },30000);
+
+ it.each(['scene-change','scene-same','scene-rollback','ordinary'] as const)('preserves clock scope through native owner factory-date approval and customer-date approval (%s)',async mode=>{await exerciseAcceptanceSourcingApproval(db,runtime,actor(),corp,mode);},30000);
 
  (process.env.ACCEPTANCE_CLOCK_BROWSER_URL?it:it.skip)('runs the original browser detail and persisted clock through real isolated HTTP services',async()=>{
   const auth=new AuthService(new AcceptanceDingTalkProvider(db,corp,secret),new PostgresAuthStore(db,corp,'uat-root'),corp,3600000,secret),root=new RootAuthority(db,corp,'uat-root');
