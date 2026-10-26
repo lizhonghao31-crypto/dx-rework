@@ -85,7 +85,7 @@ export async function exerciseAcceptanceSourcingApproval(db:Pool,runtime:Accepta
    (SELECT count(*) FROM sourcing_owner_decisions WHERE sourcing_case_id=$1)::int owners,
    (SELECT count(*) FROM sourcing_approval_snapshots WHERE sourcing_case_id=$1)::int snapshots,
    (SELECT count(*) FROM digital_po_date_changes WHERE production_order_id=$2 AND date_kind='factory')::int dates,
-   (SELECT count(*) FROM digital_sla_plans WHERE production_order_id=$2)::int plans,
+   (SELECT count(*) FROM digital_sla_plans WHERE production_order_id=$2)::int AS plans,
    (SELECT count(*) FROM sourcing_approval_snapshot_lines l JOIN sourcing_approval_snapshots s USING(sourcing_approval_snapshot_id) WHERE s.sourcing_case_id=$1)::int lines,
    (SELECT count(*) FROM idempotency_records WHERE scope='sourcing.owner.approved' AND actor_key=$3 AND idempotency_key=$4)::int receipts,
    (SELECT count(*) FROM operation_events WHERE entity_id=$1::text AND action='sourcing.owner.approve')::int approval_events`,[caseId,id,people.owner!.actorId,key])).rows[0];

@@ -43,3 +43,9 @@
 - 故障回归在工厂日期与新 SLA plan 均已写入事务后故意抛错，核 owner decision/snapshot/lines/date/plan/operation event/idempotency receipt 全部回滚，随后同 key 正常批准成功。未使用外层 ROLLBACK 包真实已提交服务。
 - 追加后完整 clock PG：25pass/1条件浏览器skip；SLA plan PG4项及 clock单元6项共10pass；API typecheck、改动文件 ESLint、diff和secret scan通过。调查夹具的编码/角色单例/附件复用/审批精确字段/SQL类型与 reused标记问题已修正夹具，没有改生产守卫。
 - `361cddae25907f4cc2687ab6ef5870cbc5ead189` 的 Full `40320833645` 原已成功；追加产生的新 Head 必须重新核最终 Full Gate，不复用旧绿灯。#860 Head `a2bc4cc41deadcf5ab1c6c0413eb588970b84f90` / Full `40320650533` 成功且保持不变。
+
+### PG13 追加核验及推前遗漏记录
+
+- 本地隔离 PostgreSQL13.23：未修基线三组对照完成（其中场景首次变更按预期复现原缺陷）；最终代码四组老板/客户日期及故障回滚回归4pass。PG16.15最终整组重新25pass/1浏览器skip。
+- PG13初次补测在新增夹具统计查询的裸 `plans` 别名处报语法错误，尚未进入批准断言；仅增加显式 `AS` 后通过。生产SQL和防回退守卫未因此改变。PG13此处结果是本地原生批准路径验证，不把CI未适用的PG13 Journey计为已执行。
+- 26258973推送前未完成这项PG13补测，是本次推前验证遗漏；修正新增测试夹具后集中复验并更新Head，26258973的Gate由最终Head证据替代。不是CI随机失败，不重跑未变#860。
