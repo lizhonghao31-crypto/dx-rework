@@ -101,9 +101,13 @@ export class DevelopmentAmendmentService{
    }
    const changes:Array<{field:string;before:unknown;after:unknown}>=[];
    for(const field of ["materials","files","instructions"] as const)if(!isDeepStrictEqual(before[field],document[field]))changes.push({field,before:before[field],after:document[field]});
+   // Shipping is made ready at publication, before any making or shipment occurs.
+   // Its availability alone is not execution. Preserve the making-task boundary
+   // and reject actual shipping facts/completion as well as downstream execution.
    const started=(await db.query(`SELECT 1 FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id)
     WHERE a.source_id=$1 AND t.route_version=$2 AND a.task_kind NOT IN ('development_materials','development_material_recheck','development_material_supply')
-     AND (t.entered_at IS NOT NULL OR t.state='completed') LIMIT 1`,[sourceId,input.roundNumber])).rowCount;
+     AND (t.state='completed' OR (t.entered_at IS NOT NULL AND a.task_kind<>'development_shipping')
+      OR EXISTS(SELECT 1 FROM digital_development_route_facts f WHERE f.task_id=t.task_id)) LIMIT 1`,[sourceId,input.roundNumber])).rowCount;
    if(changes.length&&started)fail("本轮后续工序已进入办理，补正不能改写已有制作依据、执行段或工资；请原有权人通过“实际修改 / 复版”处理影响范围");
    if(!changes.length&&requirements&&requirements.issues.every(issue=>developmentReturnNeed(issue)==="supply")){
     await db.query("DELETE FROM digital_development_amendment_drafts WHERE source_id=$1 AND task_id=$2",[sourceId,input.taskId]);
