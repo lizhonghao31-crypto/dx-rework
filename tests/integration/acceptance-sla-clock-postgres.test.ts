@@ -279,6 +279,36 @@ const databaseUrl=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TE
   expect(times.every(t=>t.now===copied.now&&t.scenarioId===copied.scenarioId)).toBe(true);
  },10000);
 
+ it('resumes interrupted copied documents on the same request without duplicating or overwriting native inputs',async()=>{
+  const forms=new DigitalDevelopmentService(db,true),original=await runtime.create(actor(),{name:'TEST-copy-recovery-original',requestKey:randomUUID()});
+  const document=DevelopmentDocumentSchema.parse({documentFormatVersion:2,sizeQuantities:[1],template:'上衣',quantity:1,sampleSize:'M',orderDate:null,returnDate:null,unit:'cm',sizes:['M'],measurements:[{name:'胸围',values:['50']}],interlining:'',placketInterlining:'',sewingThread:'',buttonholeThread:'',stitchDensity:'',washingIroning:'',packaging:'',formalSizes:'',casualSizes:'',mainLabel:false,mainLabelMethod:'',sizeLabel:false,careLabel:false,instructions:'TEST必须实际复制的输入',craft:'无',washing:'免洗',materials:[{materialId:randomUUID(),category:'主布',label:'TEST主布',supplier:'TEST供应商',name:'TEST棉布',width:'',weight:'',composition:'',consumption:'',color:'',specification:'',quantity:'1',requiredThisRound:true,available:true,expectedDate:'2027-01-01'}],files:[]});
+  await runtime.run(original.scenarioId,actor(),()=>forms.save(actor(),original.sourceIds[0]!,{expectedVersion:0,document},randomUUID()));
+  for(const failure of ['before','after'] as const){
+   const input={name:`TEST-copy-${failure}-commit`,requestKey:randomUUID(),copyScenarioId:original.scenarioId},save=DigitalDevelopmentService.prototype.save;
+   const interrupted=vi.spyOn(DigitalDevelopmentService.prototype,'save').mockImplementationOnce(async function(this:DigitalDevelopmentService,...args){
+    if(failure==='after')await save.apply(this,args);
+    throw new Error(`TEST interrupted ${failure} document commit`);
+   });
+   try{await expect(runtime.create(actor(),input)).rejects.toThrow(`TEST interrupted ${failure}`);}finally{interrupted.mockRestore();}
+   const row=(await db.query('SELECT scenario_id FROM acceptance_sla_clock_scenarios WHERE request_key=$1',[input.requestKey])).rows[0];
+   const pending=await runtime.repository.view(row.scenario_id);expect(pending.sourceIds).toHaveLength(1);
+   const beforeRetry=await forms.read(actor(),pending.sourceIds[0]!);expect(Boolean(beforeRetry.document)).toBe(failure==='after');
+   // Recreate the runtime to prove recovery does not depend on process memory.
+   runtime=new AcceptanceClockRuntime(db,await verifyAcceptanceClockServer(db,databaseUrl!,environment),secret,true);
+   const copies=await Promise.all([runtime.create(actor(),input),runtime.create(actor(),input)]);
+   expect(copies.every(copy=>copy.scenarioId===pending.scenarioId&&copy.sourceIds[0]===pending.sourceIds[0])).toBe(true);
+   const copied=await forms.read(actor(),pending.sourceIds[0]!);
+   expect(copied.version).toBe(1);expect(copied.status).toBe('draft');expect(copied.publishedAt).toBeNull();
+   expect(copied.document).toMatchObject({instructions:document.instructions,measurements:document.measurements,files:[],materials:[{name:'TEST棉布',available:false,expectedDate:null}]});
+   expect(copied.document!.materials[0]!.materialId).not.toBe(document.materials[0]!.materialId);
+   expect((await db.query('SELECT count(*)::int n FROM digital_development_sla_plans WHERE source_id=$1',[copied.sourceId])).rows[0].n).toBe(1);
+   expect((await db.query('SELECT count(*)::int n FROM digital_production_task_access WHERE source_id=$1',[copied.sourceId])).rows[0].n).toBe(0);
+   const edited=await runtime.run(pending.scenarioId,actor(),()=>forms.save(actor(),copied.sourceId,{expectedVersion:copied.version,document:{...copied.document!,instructions:'TEST后续编辑必须保留'}},randomUUID()));
+   await runtime.create(actor(),input);
+   expect(await forms.read(actor(),copied.sourceId)).toMatchObject({version:edited.version,document:{instructions:'TEST后续编辑必须保留'}});
+  }
+ },15000);
+
  it('persists scan failure without rolling back time and recovers interrupted scans without duplicate effects',async()=>{
   const scene=await runtime.create(actor(),{name:'TEST-failed-scan',requestKey:randomUUID()}),control=new AcceptanceClockControlService(runtime),at=new Date(Date.parse(scene.now)+1800000).toISOString(),key=randomUUID();
   const fault=vi.spyOn(DigitalProductionNotificationService.prototype,'runOnce').mockRejectedValueOnce(new Error('TEST deterministic interrupted scan'));

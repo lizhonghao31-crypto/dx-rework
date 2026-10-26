@@ -66,13 +66,16 @@ export class AcceptanceClockRuntime{
   }
   const row=await this.repository.create(actor.actorId,this.proof.corporationId,input);
   await this.run(row.scenario_id,actor,async()=>{
-   if((await this.repository.view(row.scenario_id)).sourceIds.length)return;
+   const existing=(await this.repository.view(row.scenario_id)).sourceIds[0];
    const style=`TEST-SLA-${row.scenario_id.slice(0,8)}`;
-   const source=await new DigitalProductionIdentityService(this.database,this.creationEnabled).createSource(actor,{developmentType:'头版',designStyleNo:style,temporaryStyleNo:null,customerCode:original?.customerCode??null},row.scenario_id);
-   if(original?.document){
+   const source=existing?{sourceId:existing}:await new DigitalProductionIdentityService(this.database,this.creationEnabled).createSource(actor,{developmentType:'头版',designStyleNo:style,temporaryStyleNo:null,customerCode:original?.customerCode??null},row.scenario_id);
+   const forms=new DigitalDevelopmentService(this.database,this.creationEnabled);
+   // Source creation and native document save commit separately. Resume a missing
+   // document after interruption; a saved/edited document must never be recopied.
+   if(original?.document&&!(await forms.read(actor,source.sourceId)).document){
     const document=structuredClone(original.document);document.files=[];delete document.customerOrderDraft;
     document.materials=document.materials.map(m=>({...m,materialId:randomUUID(),available:false,expectedDate:null}));
-    await new DigitalDevelopmentService(this.database,this.creationEnabled).save(actor,source.sourceId,{expectedVersion:0,document},row.scenario_id);
+    await forms.save(actor,source.sourceId,{expectedVersion:0,document},row.scenario_id);
    }
   });
   return this.repository.view(row.scenario_id);
