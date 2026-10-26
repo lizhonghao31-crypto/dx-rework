@@ -36,8 +36,20 @@ export class SlaPlanRepository {
     const snapshot = (await this.client.query("SELECT * FROM digital_sla_order_snapshots WHERE snapshot_id=$1 AND production_order_id=$2", [input.snapshotId, input.orderId])).rows[0];
     if (!snapshot) throw new Error("SLA snapshot belongs to another order or is missing");
     const values = validateDigitalSlaSnapshot({ ruleVersion: snapshot.rule_version, parameters: snapshot.parameters_json }).parameters;
+    const history = await this.plans(input.orderId), previous = history.at(-1);
+    const retained=new Map<string,ReturnType<typeof validateDigitalSlaSnapshot>>();
+    for(const [id,reference] of Object.entries(input.plan.retainedNodeSnapshots??{})){
+      const before=previous?.plan.nodes.find(n=>n.id===id),after=input.plan.nodes.find(n=>n.id===id);
+      if(!before||!after||!isDeepStrictEqual(before,after)||!(previous?.snapshotId===reference||previous?.plan.retainedNodeSnapshots?.[id]===reference))throw new Error('Retained SLA target must match its previous immutable plan');
+      if(!retained.has(reference)){
+        const original=(await this.client.query('SELECT * FROM digital_sla_order_snapshots WHERE snapshot_id=$1 AND production_order_id=$2',[reference,input.orderId])).rows[0];
+        if(!original)throw new Error('Retained SLA snapshot belongs to another order or is missing');
+        retained.set(reference,validateDigitalSlaSnapshot({ruleVersion:original.rule_version,parameters:original.parameters_json}));
+      }
+    }
     for (const node of input.plan.nodes) {
-      const value = values[node.parameterKey]?.value;
+      const reference=input.plan.retainedNodeSnapshots?.[node.id];
+      const value = (reference?retained.get(reference)!.parameters:values)[node.parameterKey]?.value;
       if (!value || node.kind !== value.kind || node.minutes !== ("minutes" in value ? value.minutes : null)
         || node.offsetDays !== ("days" in value ? value.days : null)) throw new Error("SLA plan does not match its frozen parameter snapshot");
     }
@@ -50,7 +62,6 @@ export class SlaPlanRepository {
         || prior.created_by !== input.actorId || prior.reason !== reason || !isDeepStrictEqual(prior.plan_json, input.plan) || !isDeepStrictEqual(prior.business_time, input.time)) throw new SlaIdempotencyConflict("SLA plan request reused");
       return mapPlan(prior);
     }
-    const history = await this.plans(input.orderId), previous = history.at(-1);
     if ((previous?.revision ?? 0) !== input.expectedRevision) throw new SlaVersionConflict("SLA plan changed; preview again");
     if (previous && (previous.time.scenarioId !== input.time.scenarioId || Date.parse(input.time.now) < Date.parse(previous.time.now) || input.time.revision < previous.time.revision)) throw new Error("SLA clock scope or time cannot regress");
     const saved = await this.client.query(`INSERT INTO digital_sla_plans(plan_id,production_order_id,revision,snapshot_id,plan_json,business_time,created_by,reason,request_key)

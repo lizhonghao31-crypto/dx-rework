@@ -7,6 +7,7 @@ import { TodoService } from "../../apps/api/src/todos/service.js";
 describe("todo list query", () => {
   it("searches all authorized modules and preserves direct numeric pagination", async () => {
     const query = vi.fn()
+      .mockResolvedValueOnce({rows:[{relation:null}]})
       .mockResolvedValueOnce({ rows: [{ todo_module: "rework", todo_count: "16" }] })
       .mockResolvedValueOnce({
         rows: [{total_count:16,total_pages:2,page:2,items:[{kind:"database",value:{
@@ -73,16 +74,16 @@ describe("todo list query", () => {
       todos: [{ orderContext: { supplierName: "嘉顺", styleNo: "IN20541804" } }],
     });
 
-    const countSql = String(query.mock.calls[0]![0]);
-    const searchSql = String(query.mock.calls[1]![0]);
+    const countSql = String(query.mock.calls[1]![0]);
+    const searchSql = String(query.mock.calls[2]![0]);
     expect(countSql).toContain("LEFT JOIN supplier_catalog_versions rework_supplier");
     expect(searchSql).toContain("recipient_user_id=$1");
     expect(searchSql).toContain("COALESCE(supplier_name_snapshot,'')");
     expect(searchSql).toContain("UNION ALL");
     expect(searchSql).toContain("LIMIT 15 OFFSET");
     expect(searchSql).not.toContain("todo_module=$2");
-    expect(query.mock.calls).toHaveLength(2);
-    expect(query.mock.calls[1]![1]).toEqual(["00000000-0000-4000-8000-000000000016","嘉顺","[]",2,expect.any(String)]);
+    expect(query.mock.calls).toHaveLength(3);
+    expect(query.mock.calls[2]![1]).toEqual(["00000000-0000-4000-8000-000000000016","嘉顺","[]",2,expect.any(String)]);
     expect(result.searchScope).toBe("all");
   });
 });

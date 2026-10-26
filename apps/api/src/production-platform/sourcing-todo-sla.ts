@@ -1,3 +1,4 @@
+import {sourcingAppliedDeadlineSql} from './sla-sourcing-deadline-sql.js';
 import {acceptanceBusinessContext,businessNow} from '../acceptance-clock/business-time.js';
 import type {PoolClient} from "pg";
 import {validateDigitalSlaSnapshot} from "@dx-rework/contracts/digital-sla";
@@ -16,13 +17,14 @@ export async function sourcingTodoSla(client:Pick<PoolClient,"query">,input:{cat
   if(!row)return undefined;
   // A return/reassignment can create another original todo, but does not grant a
   // fresh responsibility window. Preserve the first captured deadline, even null.
-  const previous=(await client.query(`SELECT t.due_at,original.snapshot_id FROM rework_todos t
+  const previous=(await client.query(`SELECT t.due_at,original.snapshot_id,${sourcingAppliedDeadlineSql("t")} AS application FROM rework_todos t
     LEFT JOIN operation_events e ON e.event_id=t.created_operation_event_id
       AND e.action='todo.create' AND e.entity_type='rework_todo' AND e.entity_id=t.todo_id::text
     LEFT JOIN digital_sla_order_snapshots original ON original.snapshot_id::text=e.after_state->'slaTiming'->>'snapshotId'
       AND original.production_order_id=$3
     WHERE t.entity_type='sourcing_case' AND t.entity_id=$1 AND t.category=$2 AND t.todo_type='business_action'
     ORDER BY t.created_at,t.todo_id LIMIT 1`,[input.entityId,input.category,row.production_order_id])).rows[0];
+  if(previous?.application)return {dueAt:previous.application.dueAt===null?null:new Date(previous.application.dueAt),snapshotId:previous.application.snapshotId as string};
   if(previous)return {dueAt:previous.due_at===null?null:new Date(previous.due_at),snapshotId:(previous.snapshot_id??null) as string|null};
   const value=validateDigitalSlaSnapshot({ruleVersion:row.rule_version,parameters:row.parameters_json}).parameters[parameter]?.value;
   if(value?.kind!=="duration")throw new Error("Frozen sourcing SLA duration missing");

@@ -2,7 +2,7 @@ import type { PoolClient } from "pg";
 import { createHash } from "node:crypto";
 import { DIGITAL_SLA_PARAMETERS, validateDigitalSlaValues, type DigitalSlaValues } from "@dx-rework/contracts/digital-sla";
 import type { TrustedActorContext } from "../tools/repositories.js";
-import { digitalForbidden, isDigitalLeader } from "./access-policy.js";
+import {assertSlaSettingsActor} from './sla-settings-authority.js';
 import { SlaConfigurationRepository, SlaVersionConflict } from "./sla-configuration-repository.js";
 import { slaParameterKey } from "./sla-policy-values.js";
 import { ApplicationError } from "../platform/errors.js";
@@ -12,14 +12,14 @@ export class SlaConfigurationService {
   async publishNewStandard(client: PoolClient, actor: TrustedActorContext, input: {
     expectedVersion: number; values: DigitalSlaValues; reason: string; requestKey: string;
   }) {
-    if (!isDigitalLeader(actor)) digitalForbidden();
+    await assertSlaSettingsActor(client,actor,true);
     return new SlaConfigurationRepository(client).publish({ ...input, values: validateDigitalSlaValues(input.values), actorId: actor.actorId });
   }
 
   async changeLegacyPolicy(client: PoolClient, actor: TrustedActorContext, nodeKey: string, input: {
     expectedVersion: number; slaHours: number | null; warningRatio: number; note: string;
   }, requestKey: string) {
-    if (!isDigitalLeader(actor)) digitalForbidden();
+    await assertSlaSettingsActor(client,actor,true);
     const parameterKey = slaParameterKey(nodeKey);
     const parameter = DIGITAL_SLA_PARAMETERS.find(p => p.key === parameterKey);
     if (!parameter) throw new Error("Policy is outside the SLA parameter catalog");

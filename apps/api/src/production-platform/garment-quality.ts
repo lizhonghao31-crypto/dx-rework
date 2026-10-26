@@ -1,3 +1,4 @@
+import {slaApplications,appliedSlaWindow} from './sla-applied-window.js';
 import {businessNow} from '../acceptance-clock/business-time.js';
 import {validateDigitalSlaSnapshot} from '@dx-rework/contracts/digital-sla';
 import {createHash,randomUUID} from 'node:crypto';
@@ -22,12 +23,13 @@ export async function garmentQuality(db:DB,orderId:string){
   LEFT JOIN app_users u ON u.id=q.actor_id
   LEFT JOIN digital_sla_order_snapshots snapshot ON snapshot.snapshot_id::text=q.payload->>'snapshotId' AND snapshot.production_order_id=l.production_order_id
   WHERE l.module='receiving' AND l.production_order_id=$1 AND b.deleted_at IS NULL ORDER BY r.received_at,r.receipt_id`,[orderId])).rows;
+ const applications=await slaApplications(db,orderId);
  return rows.map(r=>{
-  const frozen=r.snapshot_id?validateDigitalSlaSnapshot({ruleVersion:r.rule_version,parameters:r.parameters_json}).parameters:null;
+  const base=r.snapshot_id?validateDigitalSlaSnapshot({ruleVersion:r.rule_version,parameters:r.parameters_json}):null,applied=base?appliedSlaWindow(base,'garment_packing',`packing:${r.line_id}`,applications):null,frozen=applied?.snapshot.parameters;
   const packing=frozen?.garment_packing?.value,warning=frozen?.warning_ratio?.value;
   const valid=Boolean(r.event_id&&r.payload.quantityVersion===r.quantity_version&&r.payload.quantity===Number(r.quantity));
   return {receiptId:r.receipt_id as string,lineId:r.line_id as string,batchId:r.receiving_batch_id as string,cuttingId:r.cutting_order_id as string|null,
-   packingMinutes:packing?.kind==='duration'?packing.minutes:null,warningPercent:warning?.kind==='ratio'?warning.percent:null,snapshotId:r.snapshot_id??null,quantity:Number(r.quantity),quantityVersion:r.quantity_version as string,...receiptTime(r.received_at,r.after_state),
+   packingMinutes:packing?.kind==='duration'?packing.minutes:null,warningPercent:warning?.kind==='ratio'?warning.percent:null,snapshotId:applied?.snapshotId??r.snapshot_id??null,quantity:Number(r.quantity),quantityVersion:r.quantity_version as string,...receiptTime(r.received_at,r.after_state),
    inspected:valid,qualifiedQuantity:valid?Number(r.payload.qualifiedQuantity):0,problem:valid?r.payload.problem as string:'',
    completedAt:valid&&r.occurred_at?new Date(r.occurred_at).toISOString():null,eventId:r.event_id as string|null,operator:r.display_name as string|null,
    priorInspection:Boolean(r.event_id)&&!valid};

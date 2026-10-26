@@ -1,3 +1,5 @@
+import {SlaSettingsService,type StandardDraft} from './sla-settings-service.js';
+import {SlaOrderApplicationService} from './sla-order-application.js';
 import {businessNow,assertAcceptanceAssignee,acceptanceBusinessContext,ContextBusinessClock} from '../acceptance-clock/business-time.js';
 import {factoryProductionFacts} from './factory-production-facts.js';
 import {shipSampleTargets} from './ship-sample-timing.js';
@@ -44,7 +46,7 @@ const REQUIRED_ACTIVATION: Partial<Record<DigitalTaskKind, readonly typeof DIGIT
   bulk_cutting: ["owner_approved", "pattern_ready", "preshrink_ready"], bulk_cutting_external: ["owner_approved", "pattern_ready", "preshrink_ready"], warehouse_dispatch: ["qc_approved", "all_po_complete"], factory_material_count: ["factory_arrived"],
 };
 export class DigitalProductionTaskService {
-  constructor(private readonly database: Pool) {}
+  constructor(private readonly database: Pool,private readonly previewSecret?:string) {}
   async syncSourcingAssignee(client: PoolClient, actor: TrustedActorContext, orderId: string, assigneeId: string) {
     if (!(await client.query("SELECT to_regclass('digital_budget_preparations') AS relation")).rows[0]?.relation) return;
     const tasks = (await client.query(`SELECT a.task_id FROM digital_production_task_access a JOIN digital_production_tasks t USING(task_id)
@@ -103,7 +105,7 @@ export class DigitalProductionTaskService {
     }
     return (await client.query("SELECT * FROM digital_production_deadline_policies WHERE node_key=$1 ORDER BY version DESC LIMIT 1", [key])).rows[0] ?? digitalNotFound();
   }
-  private async revision(client: PoolClient, actor: TrustedActorContext, taskId: string, policy: { node_key: string; version: number; sla_seconds: string | number | null; warning_ratio: string | number }, enteredAt: string | null, reason: string, eventId: string, timingOverride?:Awaited<ReturnType<typeof factoryTaskTiming>>) {
+  private async revision(client: PoolClient, actor: TrustedActorContext, taskId: string, policy: { node_key: string; version: number; sla_seconds: string | number | null; warning_ratio: string | number;sla_application_basis?:Record<string,unknown> }, enteredAt: string | null, reason: string, eventId: string, timingOverride?:Awaited<ReturnType<typeof factoryTaskTiming>>) {
     const task=await this.task(client,taskId);
     if(task.task_kind==='bulk_ship_sample'&&task.production_order_id){
       const targets=await shipSampleTargets(client,task.production_order_id);
@@ -124,8 +126,13 @@ export class DigitalProductionTaskService {
       return deadline;
     }
     const deadline = digitalDeadline(enteredAt, policy.sla_seconds === null ? null : Number(policy.sla_seconds), Number(policy.warning_ratio));
+    if(policy.sla_application_basis){
+      await client.query(`INSERT INTO digital_production_deadline_revisions(task_id,policy_node_key,policy_version,entered_at,warning_at,due_at,reason,event_id,changed_by,sla_basis)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,[taskId,policy.node_key,policy.version,enteredAt,deadline.warningAt,deadline.dueAt,reason,eventId,actor.actorId,JSON.stringify({...policy.sla_application_basis,enteredAt,basis:[`task:${taskId}`]})]);
+    }else{
     await client.query(`INSERT INTO digital_production_deadline_revisions(task_id,policy_node_key,policy_version,entered_at,warning_at,due_at,reason,event_id,changed_by)
       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, [taskId, policy.node_key, policy.version, enteredAt, deadline.warningAt, deadline.dueAt, reason, eventId, actor.actorId]);
+    }
     return deadline;
   }
   private async activate(client: PoolClient, actor: TrustedActorContext, id: string, occurredAt: string | null, quality: TimeQuality) {
@@ -324,6 +331,18 @@ export class DigitalProductionTaskService {
     const eventId=await this.event(client,actor,row.task_id,this.resource(task),'ship_sample_window',null,'缺失',{remainingLineIds:remaining.map(l=>l.lineId)});
     await this.revision(client,actor,row.task_id,await this.policy(client,task.task_kind,row.task_id),null,'correction',eventId);
   }
+  async applySlaVersionWithClient(client:PoolClient,actor:TrustedActorContext,orderId:string,applicationId:string,keys:string[]){
+    const rows=(await client.query(`SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id)
+      WHERE (a.production_order_id=$1 OR a.source_id=(SELECT source_id FROM digital_production_orders WHERE production_order_id=$1)) AND t.state NOT IN ('completed','cancelled')`,[orderId])).rows;
+    for(const row of rows){
+      const task=await this.task(client,row.task_id),parameter=slaParameterKey(task.task_kind);
+      const relevant=keys.includes(parameter)||DIGITAL_SLA_PARAMETERS.find(p=>p.key===parameter)?.includedIn?.some(k=>keys.includes(k))||keys.includes('warning_ratio')||task.task_kind==='process_logistics'&&keys.some(k=>['bulk_printing','bulk_embroidery','bulk_print_embroidery'].includes(k))||task.task_kind==='bulk_ship_sample'&&keys.includes('ship_sample_advance');
+      if(!relevant)continue;
+      const policy=await this.policy(client,task.task_kind,task.task_id);
+      const event=await this.event(client,actor,task.task_id,this.resource(task),'sla_application_reference',null,'缺失',{applicationId});
+      await this.revision(client,actor,task.task_id,policy,iso(task.entered_at),'policy',event);
+    }
+  }
   async refreshFactoryBatchTimingWithClient(client:PoolClient,actor:TrustedActorContext,orderId:string){
     const prepared=await factoryBatchTiming(client,orderId);if(!prepared)return;
     const rows=(await client.query("SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.production_order_id=$1 AND a.task_kind IN ('process_logistics','bulk_qc','warehouse_dispatch') AND t.state<>'cancelled'",[orderId])).rows;
@@ -405,6 +424,17 @@ export class DigitalProductionTaskService {
     const ready=task.task_kind==='development_sewing'?readiness.sewingReady:readiness.earlyReady;
     const before=(await client.query("SELECT satisfied FROM digital_production_task_conditions WHERE task_id=$1 AND condition_key='materials_ready'",[id])).rows[0];
     if(before.satisfied!==ready||(!ready&&task.state==='ready'))await this.setConditionWithClient(client,actor,id,'materials_ready',ready,undefined,'派工前核实本轮材料事实');
+  }
+  async previewSlaOrder(actor:TrustedActorContext,input:Parameters<SlaOrderApplicationService['preview']>[1]){return new SlaOrderApplicationService(this.database,this.previewSecret).preview(actor,input);}
+  async applySlaOrder(actor:TrustedActorContext,input:Parameters<SlaOrderApplicationService['apply']>[1],key:string){return new SlaOrderApplicationService(this.database,this.previewSecret).apply(actor,input,key);}
+  async slaSettings(actor:TrustedActorContext,version?:number){
+    return this.transaction(client=>new SlaSettingsService(this.previewSecret).read(client,actor,version));
+  }
+  async previewSlaSettings(actor:TrustedActorContext,input:StandardDraft){
+    return this.transaction(client=>new SlaSettingsService(this.previewSecret).preview(client,actor,input));
+  }
+  async publishSlaSettings(actor:TrustedActorContext,input:StandardDraft&{previewToken:string},key:string){
+    return this.transaction(client=>new SlaSettingsService(this.previewSecret).publish(client,actor,input,key));
   }
   async policies(actor: TrustedActorContext) {
     if (!isDigitalLeader(actor)) digitalForbidden();

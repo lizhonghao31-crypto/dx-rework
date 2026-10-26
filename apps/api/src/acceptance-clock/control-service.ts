@@ -36,7 +36,7 @@ export class AcceptanceClockControlService{
      if(!node.deadline.at||node.status==='not_applicable'||node.status.startsWith('completed'))continue;
      const plan=read.current.plan.nodes.find(n=>n.id===node.id)!;
      const start=node.actualStart??node.start.at,due=Date.parse(node.deadline.at);
-     const warning=['duration','included'].includes(plan.kind)&&start&&due>=Date.parse(start)?new Date(Date.parse(start)+(due-Date.parse(start))*read.current.plan.warningPercent/100).toISOString():null;
+     const warning=['duration','included'].includes(plan.kind)&&start&&due>=Date.parse(start)?new Date(Date.parse(start)+(due-Date.parse(start))*(read.facts[node.id]?.standardWarningPercent??read.current.plan.warningPercent)/100).toISOString():null;
      result.push({id:`${orderId}:${node.id}`,label:plan.label,dueAt:node.deadline.at,warningAt:warning,exclusive:node.deadline.exclusive});
     }
    }

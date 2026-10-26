@@ -20,10 +20,10 @@ describe("todo query return and merchandiser search",()=>{
   expect(readTodoQuery("?page=-1&module=admin&q=李生")).toEqual({q:"李生",page:1});
  });
  it("uses the real merchandiser join in a global query while preserving recipient scope",async()=>{
-  const query=vi.fn().mockResolvedValueOnce({rows:[]}).mockResolvedValueOnce({rows:[{total_count:0,total_pages:0,page:1,items:[]}]});
+  const query=vi.fn().mockResolvedValueOnce({rows:[{relation:null}]}).mockResolvedValueOnce({rows:[]}).mockResolvedValueOnce({rows:[{total_count:0,total_pages:0,page:1,items:[]}]});
   const service=new TodoService({query} as never);
   expect(await service.listForActor(actor,{module:"rework",query:"黄建华",page:6})).toMatchObject({page:1,totalCount:0,todos:[]});
-  for(const index of [1]){
+  for(const index of [2]){
    const [sql,args]=query.mock.calls[index]!;
    expect(sql).toContain("rework_merchandiser.id=orders.merchandiser_user_id");
    expect(sql).toContain("sourcing_merchandiser.id=sourcing.created_by");
@@ -34,6 +34,7 @@ describe("todo query return and merchandiser search",()=>{
  });
  it("finds production risks by the source-order merchandiser and clamps the page after completion",async()=>{
   const query=vi.fn().mockImplementation(async(sql:string,args:unknown[])=>{
+   if(sql==="SELECT to_regclass('digital_sla_order_snapshots') AS relation")return {rows:[{relation:null}]};
    if(sql.includes("GROUP BY todo_module"))return {rows:[]};
    const records=JSON.parse(String(args[2])) as Record<string,unknown>[];
    return {rows:[{total_count:records.length,total_pages:records.length?1:0,page:1,items:records.map(value=>({kind:"provider",value}))}]};
