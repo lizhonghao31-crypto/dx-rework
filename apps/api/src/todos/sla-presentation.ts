@@ -1,9 +1,18 @@
+import {DIGITAL_SLA_PARAMETERS} from "@dx-rework/contracts/digital-sla";
 import type {Pool} from 'pg';
 import type {TodoResponse} from '@dx-rework/contracts';
 import {digitalTaskTiming} from '@dx-rework/domain/digital-task-deadline';
 import {ContextBusinessClock} from '../acceptance-clock/business-time.js';
 import {sourcingAppliedDeadlineSql} from '../production-platform/sla-sourcing-deadline-sql.js';
 
+/** A missing batch deadline is not an unlimited rule. Parameter kinds are code-owned,
+ * immutable within the captured SLA rule version; settings only change their values. */
+export function explicitlyUnlimitedSla(basis:unknown):boolean {
+ if(!basis||typeof basis!=='object'||Array.isArray(basis))return false;
+ const value=basis as {seconds?:unknown;parameterKey?:unknown};
+ return value.seconds===null&&typeof value.parameterKey==='string'
+  &&DIGITAL_SLA_PARAMETERS.some(p=>p.key===value.parameterKey&&p.defaultValue.kind==='unlimited');
+}
 export function todoSlaTiming(input:{dueAt:string|null;warningAt:string|null;enteredAt:string|null;exclusive?:boolean;unlimited?:boolean;asOf:string}):NonNullable<TodoResponse['timing']>{
  const {state,elapsedSeconds}=digitalTaskTiming({slaHours:null,enteredAt:input.enteredAt,completedAt:null,terminal:false,dueAt:input.dueAt,warningAt:input.warningAt,deadlineExclusive:input.exclusive??false},new Date(input.asOf));
  const status=input.unlimited?'unlimited':!input.dueAt?'unknown':state==='overdue'?'overdue':state==='attention'?'warning':input.warningAt?'normal':'unknown';

@@ -25,7 +25,11 @@ try{
   await page.goto(origin+'/ui/my-tasks');await page.getByRole('heading',{name:'开发纸样',exact:true}).waitFor();
   await page.getByText('逾期',{exact:true}).waitFor();await page.getByText('已读',{exact:true}).waitFor();assert.match(await page.locator('.my-todo-metrics').textContent(),/3 天 0 小时/);
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));await page.screenshot({path:join(evidence,`todos-${width}.png`),fullPage:true});
-  assert.deepEqual(await page.evaluate(()=>window.journeyEvidence.writes.filter(path=>!path.includes("/notifications/claim"))),[]);results.push({width,fullAppRoute:true,coverageFilter:true,detailsFolded:true,readOnlyLinks:true,refreshPreservesFacts:true,overflow:false});await page.close();
+  await page.goto(origin+'/ui/my-tasks?unknown-batch=1');await page.getByRole('heading',{name:'裁后批次QC',exact:true}).waitFor();
+  await page.getByText('时效未定',{exact:true}).waitFor();assert.equal(await page.getByText('无独立时限',{exact:true}).count(),0);
+  assert.match(await page.locator('.my-todo-metrics').textContent(),/开始时间未知/);assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+  await page.screenshot({path:join(evidence,`unknown-batch-${width}.png`),fullPage:true});
+  assert.deepEqual(await page.evaluate(()=>window.journeyEvidence.writes.filter(path=>!path.includes("/notifications/claim"))),[]);results.push({width,fullAppRoute:true,coverageFilter:true,detailsFolded:true,readOnlyLinks:true,refreshPreservesFacts:true,unknownBatchNotUnlimited:true,overflow:false});await page.close();
  }
  assert.deepEqual(errors,[]);await writeFile(join(evidence,'results.json'),JSON.stringify({scope:'Actual App route/components with synthetic HTTP; native API/PG verified separately',results,errors},null,2));console.log(JSON.stringify(results));
 }finally{await browser?.close();if(server)await new Promise(resolve=>server.close(resolve));await rm(out,{recursive:true,force:true});}

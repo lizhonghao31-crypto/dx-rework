@@ -45,3 +45,19 @@ Node22，隔离PostgreSQL16.2，独立owned schema。没有真实订单、真实
 ## 远端Gate与成本
 
 真实分类：businessChainSensitive/dbRequired/journeyPg13Compat=true，migrationSensitive/deploymentSensitive=false。映射Journey与Sourcing；初始化/Head迁移、普通测试、业务长链及Journey PG13按现行工作流适用步骤执行。没有新migration/manifest/checksum、workflow/阈值/timeout/依赖锁修改。30分钟仅是Full上限，runner实际耗时未知；不另跑本地整套Full再重复远端，不重复触发Review。新Head的Gate与本地定向、后续审查、现场验收各自独立取证。
+
+## 2026-10-26 Codex Review 两项闭环
+
+审查对象为9e4492bc6508600809c95522b7b978524f759c16，receipt5652918519，13:44:48 UTC完成。父线程已获用户批准统一安排四PR审查与组合回归；本PR不再请求Review，也不自行合并或部署。
+
+- r4377890596：独立P10缺少原商务责任窗口/原生transition事实适配，因此个人待办已有IE逾期或审批完成，座舱仍显示未开始。此前组合验证因P09已带同一适配器而未发现独立交付缺口。现逐字复用P09 sourcing-sla-evidence.ts并接入SlaOrderService.readWithClient；读取原待办截止、原创建事件冻结快照和实际审批事件，显式应用仍共用原SQL，不新增可编辑事实来源。
+- r4377890607：将seconds=null等同无独立时限，混淆了尚无开放批次窗口。现仅在捕获的parameterKey对应固定unlimited参数类型且seconds为空时显示无独立时限；缺批次窗口、未知参数及缺依据均保持未知，不从当前全局数值补历史。未改变原时限、权限、批次或完成条件。
+
+本轮实际验证：
+
+- 相关单元38项通过，覆盖unknown/unlimited类型、原通知上下文和商务待办；没有删除原负例。
+- 隔离PG16.2完整Sourcing134、Journey26、Acceptance时钟14项通过，共174通过、1原live-browser明确跳过。新增原生商务逾期/全部三段审批完成与原待办目标一致、无批次窗口未知→真实回仓后有窗口的断言。跨角色/场景和历史更正沿完整原套件验证；不代表现场Acceptance已验收。
+- 实际App路由/原组件，合成HTTP，1440和390两尺寸通过：未知批次显示“时效未定”，不显示“无独立时限”，无横向溢出；原筛选、折叠、只读链接、刷新失败保留事实及未读/完成区分仍通过。新截图unknown-batch-390.png在本任务证据目录；原生数据链由上述PG另证。
+- API/Web类型、所有实际修改代码/测试限定lint、API build、secret-scan和diff whitespace检查通过。无新依赖、migration、workflow或真实数据操作。
+
+上述旧Head Full40325843349成功不能移用为修复后Head通过；修复稳定提交后由同一PR自然触发新Head Full。旧组合tree1d8f080d不再代表最终四PR组合，父线程需按新Head重建。原Review不是修后独立二审。旧夹具缺口保持不变，不计通过。

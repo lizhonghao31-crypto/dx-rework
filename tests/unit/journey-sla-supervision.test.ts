@@ -4,7 +4,7 @@ import {evaluateSlaPlan,type SlaPlan} from '@dx-rework/domain/digital-sla-plan';
 import {attachJourneySupervision} from '../../apps/api/src/production-platform/journey-supervision.js';
 import {journeyStages,selectJourneys} from '../../apps/api/src/production-platform/journey-projection.js';
 import {journeyDisplay} from '../../apps/api/src/production-platform/journey-display.js';
-import {todoSlaTiming} from '../../apps/api/src/todos/sla-presentation.js';
+import {todoSlaTiming,explicitlyUnlimitedSla} from '../../apps/api/src/todos/sla-presentation.js';
 import {slaTargetLabel} from '../../apps/web/src/journey-sla-details.js';
 const now='2026-10-20T00:00:00.000Z',time={now,scenarioId:null,revision:0};
 const plan=(kind:'duration'|'order_date'|'estimate'='duration'):SlaPlan=>({nodes:[{id:'development_pattern',label:'纸样',stage:2,parameterKey:'development_pattern',kind,minutes:120,offsetDays:null,applicable:'yes',countsProgress:true,dependsOn:[],anchorKey:'published',targetKey:kind==='order_date'?'target':null,includedIn:null,includedPosition:'start'}],anchors:{published:{precision:'instant',value:'2026-10-19T00:00:00.000Z',source:'native'},target:{precision:'date',value:'2026-10-20',source:'native-po'}},warningPercent:70,stageBufferMinutes:0});
@@ -58,4 +58,14 @@ it('retains late completion history without counting an ended task as an in-prog
  const o=order(),n=o.stages.flatMap(s=>s.nodes).find(n=>n.key==='development_pattern')!;n.state='completed';n.risks=['overdue'];
  o.display=journeyDisplay(o,now);const result=selectJourneys([o],JourneyFilterSchema.parse({scope:'production'}),now);
  expect(n.risks).toEqual(['overdue']);expect(result.supervision?.overdue).toBe(0);
+});
+
+it('distinguishes unknown batch windows from captured unlimited rule types',()=>{
+ for(const parameterKey of ['process_logistics','bulk_qc','warehouse_dispatch','development_pattern','external_pattern','ship_sample_advance']){
+  const basis={parameterKey,seconds:null,snapshotId:'frozen-window',basis:[]};
+  expect(explicitlyUnlimitedSla(basis)).toBe(false);
+  expect(todoSlaTiming({dueAt:null,warningAt:null,enteredAt:null,asOf:now,unlimited:explicitlyUnlimitedSla(basis)}).status).toBe('unknown');
+ }
+ for(const parameterKey of ['development_shipping','budget','warehouse_accessories'])expect(explicitlyUnlimitedSla({parameterKey,seconds:null})).toBe(true);
+ for(const basis of [null,undefined,[],{seconds:null},{parameterKey:'not_known',seconds:null},{parameterKey:'budget',seconds:3600}])expect(explicitlyUnlimitedSla(basis)).toBe(false);
 });

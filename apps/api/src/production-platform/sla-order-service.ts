@@ -1,3 +1,4 @@
+import {sourcingSlaEvidence} from "./sourcing-sla-evidence.js";
 import {OrderClosureService} from './order-closure-service.js';
 import {packingSlaEvidence} from './packing-sla-evidence.js';
 import {garmentSlaEvidence} from './garment-sla-evidence.js';
@@ -107,7 +108,7 @@ export class SlaOrderService {
       const bulk=await bulkSlaEvidence(client,orderId);
       // Publication proves the sheet's end, not a replacement for its original order-confirmation start.
       if(bulk.production_sheet&&facts.production_sheet?.startedAt)bulk.production_sheet.startedAt=facts.production_sheet.startedAt;
-      Object.assign(facts,bulk,await shipSampleSlaEvidence(client,orderId),(await factoryProductionFacts(client,orderId)).facts);
+      Object.assign(facts,bulk,await sourcingSlaEvidence(client,orderId),await shipSampleSlaEvidence(client,orderId),(await factoryProductionFacts(client,orderId)).facts);
       const factory=await factorySlaEvidence(client,orderId);if(factory)Object.assign(facts,factory.facts);
       const garments=await garmentSlaEvidence(client,orderId);Object.assign(facts,garments.facts);
       const receiving=await new OrderClosureService(this.database).read(actor,orderId,client);

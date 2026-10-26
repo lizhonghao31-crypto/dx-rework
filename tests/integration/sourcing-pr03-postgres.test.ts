@@ -4702,6 +4702,10 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const {id,caseId,people,cutting}=ready,logistics=people.embroidery_washing_merchandiser!,qc=people.quality_control!,warehouse=people.warehouse_receiver!;
     for(const row of (await database.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[caseId])).rows)await cutting.record({...root,authorizationCapability:'cutting:records:create'},row.cutting_order_id,{pieceCount:1,actualCutCount:100,attachmentIds:[await readyCuttingSheet(root.actorId)]},randomUUID());
     let state=await flow.read(root,id);
+    const noWindow=state.tasks.find(t=>t.taskKind==='bulk_qc')!;
+    const pendingTodo=(await new DigitalProductionNotificationService(database).todos(managerActor())).find(t=>t.todoId===noWindow.taskId)!;
+    expect(pendingTodo).toMatchObject({status:'blocked_recipient',dueAt:null,timing:{status:'unknown',elapsedSeconds:null}});
+
     for(const [kind,actor] of [['process_logistics',logistics],['bulk_qc',qc]] as const)await tasks.reassign(root,state.tasks.find(t=>t.taskKind===kind)!.taskId,actor.actorId,randomUUID());
     await expect(flow.authorizeUpload(qc,id)).rejects.toMatchObject({statusCode:403});
     const firstLine=state.batchTotals![0]!.lineId,a=[{lineId:firstLine,quantity:40}],b=state.batchTotals!.map(row=>({lineId:row.lineId,quantity:row.quantity-(row.lineId===firstLine?40:0)}));
@@ -4709,6 +4713,9 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const sendA=state.facts.at(-1)!.factId;
     state=await flow.logistics(logistics,id,{expectedRevision:state.revision,kind:'工艺回仓',sendFactId:sendA,lines:a,occurredAt:new Date().toISOString(),supplier:'TEST A',note:''},randomUUID());
     const returnedA=state.facts.at(-1)!.factId;
+    const openedTodo=(await new DigitalProductionNotificationService(database).todos(qc)).find(t=>t.todoId===noWindow.taskId)!;
+    expect(openedTodo.dueAt).toBeTruthy();expect(openedTodo.timing?.status).toBe('normal');
+
     state=await flow.logistics(logistics,id,{expectedRevision:state.revision,kind:'工艺发出',lines:b,occurredAt:new Date().toISOString(),supplier:'TEST B',note:''},randomUUID());
     expect(state.currentReturn).toBeNull();expect(state.batches!.find(batch=>batch.factId===returnedA)!.rows[0]!.available).toBe(40);
     const app=Fastify(),sessions=new Map([['qc',qc],['warehouse',warehouse],['logistics',logistics],['root',root]]);
@@ -5418,6 +5425,12 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     installAcceptanceClockReader(shifted,{read:async scope=>scope.id===id?{now:slaFuture,scenarioId:null,revision:0}:null,nativeScenario:async()=>null});
     const lateTodo=(await new TodoService(shifted).listForActor(ieReader,{module:'sourcing'})).todos.find(t=>t.todoId===originalTodo.todoId)!;
     expect(lateTodo.timing).toMatchObject({asOf:slaFuture,status:'overdue'});expect(lateTodo.dueAt).toBe(originalTodo.dueAt);
+    const latePlan=await new SlaOrderService(shifted).read(rootActor(),id);expect(latePlan.status).toBe('planned');
+    if(latePlan.status!=='planned')throw Error('TEST native mother must have a frozen SLA plan');
+    expect(latePlan.nodes.find(n=>n.id==='sourcing_ie')).toMatchObject({status:'overdue',deadline:{at:originalTodo.dueAt}});
+    const lateCockpit=await new DigitalJourneyQuery(shifted).read(rootActor(),id,undefined,true);
+    expect(lateCockpit.supervision!.nodes.find(n=>n.id==='sourcing_ie')).toMatchObject({status:'overdue',target:{at:originalTodo.dueAt}});
+
     expect((await database.query('SELECT due_at,reminder_count,status FROM rework_todos WHERE todo_id=$1',[originalTodo.todoId])).rows[0]).toEqual(persisted);
     const returned=(await currentService.returnToMerchandiser(ownerActor(),caseId,{expectedVersion:created.version,reason:"TEST correction before handover"},randomUUID())).value;
     const todoRows=async()=>(await database.query("SELECT * FROM rework_todos WHERE entity_id=$1 ORDER BY todo_id",[caseId])).rows;
@@ -5508,6 +5521,14 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await currentService.quoteIePrice(ieActor(),caseId,{linePrices:prices},randomUUID());
     await currentService.recordManagementDecision(managerActor(),caseId,{supplierId:factoryId,craftIds:[craftId("净色车缝")],linePrices:prices,cuttingProcess:"in_house"},randomUUID());
     await currentService.decideOwner(ownerActor(),caseId,{decision:"approved"},randomUUID());
+    const completedSla=await new SlaOrderService(database).read(rootActor(),id);expect(completedSla.status).toBe('planned');
+    if(completedSla.status!=='planned')throw Error('TEST native mother must retain a frozen SLA plan');
+    const completedCockpit=await new DigitalJourneyQuery(database).read(rootActor(),id,undefined,true);
+    for(const key of ['sourcing_ie','sourcing_selection','sourcing_approval']){
+      expect(completedSla.nodes.find(n=>n.id===key)?.status).toMatch(/^completed_/);
+      expect(completedSla.nodes.find(n=>n.id===key)?.actualEnd).toBeTruthy();
+      expect(completedCockpit.supervision!.nodes.find(n=>n.id===key)?.status).toMatch(/^completed_/);
+    }
     const approvedTodos=await todoRows(),returnTodo=approvedTodos.find(row=>row.category==="sourcing_contract_return"&&row.recipient_user_id===next)!;
     expect(returnTodo.status).toBe("pending");
     const sourceBefore=(await database.query("SELECT * FROM sourcing_cases WHERE sourcing_case_id=$1",[caseId])).rows[0];expect(sourceBefore.created_by).toBe(merchandiserId);
