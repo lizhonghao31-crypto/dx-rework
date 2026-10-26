@@ -1,5 +1,7 @@
 import {randomUUID} from "node:crypto";
+import {execFile} from "node:child_process";
 import {readFile} from "node:fs/promises";
+import {promisify} from "node:util";
 import pg from "pg";
 import {describe,it,expect} from "vitest";
 import {ownedPostgresSchema} from "../helpers/owned-postgres-schema.js";
@@ -81,14 +83,39 @@ async function fixture(run:(f:{db:pg.Pool;env:NodeJS.ProcessEnv;id:string;root:T
  it('rejects an existing Root with a wrong UAT union marker without attempting to repair it',async()=>fixture(async f=>{
   const before=await f.snapshot();await expect(maintainAcceptanceCuttingWorker(f.db,f.env,f.args)).rejects.toThrow('UAT identity');expect(await f.snapshot()).toEqual(before);
  },{rootUnionId:'broken-root'}),60000);
- it('preserves the original dirty-old-standard-identity rejection before target creation',async()=>fixture(async f=>{
-  await f.access.assignRole(f.root,{userId:f.old,roleCode:'quality_control',reason:'TEST dirty old standard identity'});const before=await f.snapshot();
-  await expect(maintainAcceptanceCuttingWorker(f.db,f.env,f.args)).rejects.toThrow('non-standard authorization');expect(await f.snapshot()).toEqual(before);
+ it('leaves unrelated multi-role worker-b untouched while single-target checks and creation succeed, but the original full seeder still refuses it',async()=>fixture(async f=>{
+  const workerB=randomUUID();
+  await f.db.query("INSERT INTO app_users(id,display_name,enabled,manual_access_disabled) VALUES($1,'TEST preserved worker-b',true,false)",[workerB]);
+  await f.db.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) VALUES($1,$2,'dingtalk',$3,'uat-worker-b','uat-union-worker-b',true,true,'2026-10-01T00:00:00Z')",[randomUUID(),workerB,f.env.DINGTALK_CORP_ID]);
+  for(const roleCode of ['worker','pattern_room_worker'])await f.access.assignRole(f.root,{userId:workerB,roleCode,reason:'TEST preserve existing worker-b roles'});
+  await f.access.createPerson({...f.root,authorizationCapability:'master_data:manage'},{personType:'internal',appUserId:workerB,displayName:'TEST preserved worker-b person',aliases:['TEST preserved worker-b alias'],reason:'TEST preserve existing worker-b person'});
+  await f.db.query("INSERT INTO auth_sessions(id,token_hash,user_id,expires_at) VALUES($1,$2,$3,CURRENT_TIMESTAMP+INTERVAL '1 day')",[randomUUID(),`TEST-preserved-session-${randomUUID()}`,workerB]);
+  await f.access.createDelegation({...f.root,authorizationCapability:'delegation:manage'},{grantorUserId:workerB,granteeUserId:f.old,capability:'pattern_room:orders:view',scopeType:'global',validFrom:new Date(Date.now()+86400000).toISOString(),validUntil:new Date(Date.now()+2*86400000).toISOString(),reason:'TEST preserve unrelated future delegation'});
+  const before=await f.snapshot(),schema=(await f.db.query('SELECT current_schema() AS name')).rows[0].name as string;
+  expect(schema).toMatch(/^acceptance_cutting_[a-f0-9]+$/);
+  const seedUrl=new URL(f.env.ACCEPTANCE_DATABASE_URL!);
+  seedUrl.searchParams.set('options',`${seedUrl.searchParams.get('options')??''} -c search_path=${schema}`.trim());
+  const fullSeed=()=>promisify(execFile)(process.execPath,['--import','tsx','scripts/acceptance/seed-role-users.ts'],{cwd:new URL('../../',import.meta.url),env:{...process.env,...f.env,ACCEPTANCE_DATABASE_URL:seedUrl.toString()},timeout:20000});
+  const seedRefusal={code:1,stderr:expect.stringContaining('Acceptance identity worker-b has non-standard authorization (unexpected roles: pattern_room_worker)')};
+  await expect(fullSeed()).rejects.toMatchObject(seedRefusal);expect(await f.snapshot()).toEqual(before);
+  expect(await maintainAcceptanceCuttingWorker(f.db,f.env,['--check',`--expected-user-id=${f.id}`])).toMatchObject({status:'missing',applied:false});expect(await f.snapshot()).toEqual(before);
+  const results=await Promise.all([1,2,3].map(()=>maintainAcceptanceCuttingWorker(f.db,f.env,f.args)));
+  expect(results.filter(r=>r.created)).toHaveLength(1);expect(results.filter(r=>r.grantedRole)).toHaveLength(1);expect(results.every(r=>r.userId===f.id&&r.status==='ready')).toBe(true);
+  expect((await f.db.query('SELECT role_code FROM user_role_assignments WHERE user_id=$1 AND revoked_at IS NULL ORDER BY role_code',[workerB])).rows).toEqual([{role_code:'pattern_room_worker'},{role_code:'worker'}]);
+  expect(await f.snapshot(true)).toEqual(before);
+  const stable=await f.snapshot();expect(await maintainAcceptanceCuttingWorker(f.db,f.env,['--check',`--expected-user-id=${f.id}`])).toMatchObject({status:'ready',applied:false});
+  expect(await maintainAcceptanceCuttingWorker(f.db,f.env,f.args)).toMatchObject({created:false,grantedRole:false});expect(await f.snapshot()).toEqual(stable);
+  await expect(fullSeed()).rejects.toMatchObject(seedRefusal);expect(await f.snapshot()).toEqual(stable);
  }),60000);
  it('rejects an unrevoked future delegation on the target with all original data untouched',async()=>fixture(async f=>{
   await f.target();await f.access.assignRole(f.root,{userId:f.id,roleCode:'cutting_worker',reason:'TEST target standard role'});
   await f.access.createDelegation({...f.root,authorizationCapability:'delegation:manage'},{grantorUserId:f.old,granteeUserId:f.id,capability:'pattern_room:orders:view',scopeType:'global',validFrom:new Date(Date.now()+86400000).toISOString(),validUntil:new Date(Date.now()+2*86400000).toISOString(),reason:'TEST future delegation must block'});
   const before=await f.snapshot();await expect(maintainAcceptanceCuttingWorker(f.db,f.env,f.args)).rejects.toThrow('unrevoked delegations');expect(await f.snapshot()).toEqual(before);
+ }),60000);
+ it('rejects outgoing delegation from the fixed cutting target without changing the target or any older identity',async()=>fixture(async f=>{
+  await f.target();await f.access.assignRole(f.root,{userId:f.id,roleCode:'cutting_worker',reason:'TEST target standard role'});
+  await f.access.createDelegation({...f.root,authorizationCapability:'delegation:manage'},{grantorUserId:f.id,granteeUserId:f.old,capability:'cutting:records:create',scopeType:'global',validFrom:new Date(Date.now()+86400000).toISOString(),validUntil:new Date(Date.now()+2*86400000).toISOString(),reason:'TEST target outgoing delegation must block'});
+  const before=await f.snapshot();await expect(maintainAcceptanceCuttingWorker(f.db,f.env,f.args)).rejects.toThrow('outgoing delegations');expect(await f.snapshot()).toEqual(before);
  }),60000);
  it('rejects a real non-Acceptance connected database before any business or identity queries can write',async()=>fixture(async f=>{
   const other=new URL(url!);other.pathname='/dx_rework_ci';const nonAcceptance=new pg.Pool({connectionString:other.toString()});

@@ -5,7 +5,6 @@ import { assertAcceptanceServerDatabase } from "../../apps/api/src/auth/acceptan
 import { OperationEventRepository } from "../../apps/api/src/tools/repositories.js";
 import { preflightAcceptanceRootState, preflightExistingAcceptanceIdentity } from "./authorization-guard.js";
 import { assertAcceptanceDatabaseName, assertAcceptanceDatabaseUrl } from "./database-guard.js";
-import { STANDARD_ACCEPTANCE_USERS } from "./standard-identities.js";
 
 const alias = "cutting-worker", providerId = "uat-cutting-worker", unionId = "uat-union-cutting-worker";
 const roleCode = "cutting_worker", displayName = "[UAT] 裁床师傅";
@@ -45,9 +44,8 @@ async function inspect(pool: Pool, db: PoolClient, config: Configuration, env: N
     throw new Error("Acceptance Root must retain both UAT identity markers");
   const policy = (await db.query("SELECT dingtalk_corp_id FROM access_security_policy WHERE policy_key='primary'")).rows[0];
   if (policy?.dingtalk_corp_id !== config.corpId) throw new Error("Acceptance corporation policy differs");
-  // Preserve the original all-standard-identity rejection guard, using SELECTs only.
-  for (const [oldAlias, , expectedRole] of STANDARD_ACCEPTANCE_USERS) if (oldAlias !== "root")
-    await preflightExistingAcceptanceIdentity(db, { corpId: config.corpId, alias: oldAlias, expectedRole });
+  // This operation inspects Root and the fixed cutting target. Catalog-wide
+  // identity preflight remains owned by the unchanged full seeder.
   if (!(await db.query(`SELECT 1 FROM business_roles WHERE role_code='cutting_worker' AND enabled ${config.apply ? "FOR SHARE" : ""}`)).rowCount)
     throw new Error("The original cutting_worker role is unavailable");
   const identities = (await db.query(`SELECT * FROM identity_mappings WHERE provider='dingtalk'
