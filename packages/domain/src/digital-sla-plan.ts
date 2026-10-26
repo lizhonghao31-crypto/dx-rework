@@ -13,7 +13,8 @@ export type SlaPlanNode = {
   dependsOn: string[]; anchorKey: string | null; targetKey: string | null;
   includedIn: string | null; includedPosition: "start" | "end";
 };
-export type SlaPlan = { nodes: SlaPlanNode[]; anchors: Record<string, SlaAnchor>; warningPercent: number; stageBufferMinutes: number };
+/** Per-node references are server-authored when an explicit application retains completed targets. */
+export type SlaPlan = { retainedNodeSnapshots?: Record<string,string>; nodes: SlaPlanNode[]; anchors: Record<string, SlaAnchor>; warningPercent: number; stageBufferMinutes: number };
 export type SlaTime = { at: string | null; exclusive: boolean; reasons: string[] };
 export type SlaPlannedNode = { id: string; start: SlaTime; end: SlaTime };
 export type SlaBatchWindow={startedAt:string|null;deadline:string|null;warningAt:string|null;completedAt:string|null;complete:boolean;evidence:string};
@@ -25,6 +26,8 @@ export type SlaNodeFact = {
   businessCompleted?: boolean;
   /** Captured when a responsibility window opens; formal changes append a new fact version. */
   standardMinutes?: number;
+  /** A retained window can keep its original warning ratio after a later application. */
+  standardWarningPercent?: number;
   /** Server-captured assessment target at completion, including unknown precision. */
   completedDeadline?: SlaTime;
   /** Existing business hold, projected only; this model never creates a new gate. */
@@ -187,7 +190,7 @@ export function evaluateSlaPlan(plan: SlaPlan, facts: Record<string, SlaNodeFact
         if (slaPastDeadline(time.now, deadline)) status = "overdue";
         else if (f?.startedAt) {
           status = "running";
-          if (deadline.at && now >= instant(f.startedAt) + (instant(deadline.at) - instant(f.startedAt)) * plan.warningPercent / 100) status = "warning";
+          if (deadline.at && now >= instant(f.startedAt) + (instant(deadline.at) - instant(f.startedAt)) * (f.standardWarningPercent??plan.warningPercent) / 100) status = "warning";
         }
         if (f?.waitingFor) {
           if (!f.waitingFor.reason.trim() || !f.waitingFor.source.trim()) throw new Error("Business hold evidence required");

@@ -1,3 +1,4 @@
+import {slaApplications,appliedSlaWindow} from './sla-applied-window.js';
 import {bulkFabricFacts} from "./bulk-fabric-facts.js";
 import type {PoolClient} from 'pg';
 import {validateDigitalSlaSnapshot} from '@dx-rework/contracts/digital-sla';
@@ -9,7 +10,8 @@ export async function bulkTaskTiming(db:Pick<PoolClient,'query'>,task:{task_id:s
    JOIN digital_sla_order_snapshots s ON s.snapshot_id=p.sla_snapshot_id AND s.production_order_id=p.production_order_id
    WHERE p.preparation_id=$1 AND p.production_order_id=$2 AND p.workflow_version=2`,[task.route_instance_id,task.production_order_id])).rows[0];
  if(!row)return null;
- const snapshot=validateDigitalSlaSnapshot({ruleVersion:row.rule_version,parameters:row.parameters_json});
+ const applied=appliedSlaWindow(validateDigitalSlaSnapshot({ruleVersion:row.rule_version,parameters:row.parameters_json}),task.task_kind,`task:${task.task_id}`,await slaApplications(db,task.production_order_id));
+ const snapshot=applied.snapshot;
  const parameter=snapshot.parameters[task.task_kind]?.value,warning=snapshot.parameters.warning_ratio?.value;
  if(warning?.kind!=='ratio')throw new Error('Invalid frozen bulk warning ratio');
  const seconds=parameter?.kind==='duration'?parameter.minutes*60:null;
@@ -24,6 +26,6 @@ export async function bulkTaskTiming(db:Pick<PoolClient,'query'>,task:{task_id:s
   enteredAt=original?new Date(original.entered_at).toISOString():fabric.usableAt;
   timeQuality=original?.sla_basis?.timeQuality??fabric.usableQuality;
  }
- return {snapshotId:row.sla_snapshot_id,parameterKey:task.task_kind,enteredAt,timeQuality,seconds,warningRatio:warning.percent/100,
+ return {snapshotId:applied.snapshotId??row.sla_snapshot_id,parameterKey:task.task_kind,enteredAt,timeQuality,seconds,warningRatio:warning.percent/100,
    basis:enteredAt?[`instruction:${task.production_order_id}:${row.preparation_id}:published`]:[]};
 }

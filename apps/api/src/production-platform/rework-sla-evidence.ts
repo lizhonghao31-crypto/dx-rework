@@ -1,3 +1,4 @@
+import {slaApplications,appliedSlaWindow} from './sla-applied-window.js';
 import type {Pool,PoolClient} from 'pg';
 import type {SlaNodeFact,SlaPlan} from '@dx-rework/domain/digital-sla-plan';
 import {validateDigitalSlaSnapshot} from '@dx-rework/contracts/digital-sla';
@@ -25,15 +26,16 @@ export async function reworkSlaEvidence(db:DB,orderId:string){
  const links=(await db.query("SELECT child_id,line_id FROM digital_production_child_lines WHERE module='rework' AND production_order_id=$1",[orderId])).rows;
  const native=await nativeReworkExecutionRows(db,links.map(l=>l.child_id),orderId);
  const rows=links.flatMap(l=>native.filter(r=>r.rework_order_id===l.child_id).map(r=>({...r,line_id:l.line_id})));
+ const applications=await slaApplications(db,orderId);
  const windows=rows.map(r=>{
-  const frozen=r.snapshot_id?validateDigitalSlaSnapshot({ruleVersion:r.rule_version,parameters:r.parameters_json}):null;
+  const base=r.snapshot_id?validateDigitalSlaSnapshot({ruleVersion:r.rule_version,parameters:r.parameters_json}):null,windowKey=`rework:${r.rework_order_id}:${r.start_event_id}`,applied=base?appliedSlaWindow(base,'garment_rework',windowKey,applications):null,frozen=applied?.snapshot;
   const parameter=frozen?.parameters.garment_rework?.value,warning=frozen?.parameters.warning_ratio?.value;
   const minutes=parameter?.kind==='duration'?parameter.minutes:null;
   const startedAt=r.started_at?new Date(r.started_at).toISOString():null;
   const complete=!!startedAt&&r.item_count>0&&r.item_count===r.assigned_items&&r.task_count>0&&r.task_count===r.completed_tasks;
-  return {lineId:r.line_id as string,reworkId:r.rework_order_id as string,startedAt,completedAt:complete&&r.completed_at?new Date(r.completed_at).toISOString():null,complete,
+  return {windowKey,lineId:r.line_id as string,reworkId:r.rework_order_id as string,startedAt,completedAt:complete&&r.completed_at?new Date(r.completed_at).toISOString():null,complete,
    deadline:startedAt&&minutes!==null?new Date(Date.parse(startedAt)+minutes*60000).toISOString():null,warningAt:startedAt&&minutes!==null&&warning?.kind==='ratio'?new Date(Date.parse(startedAt)+minutes*60000*warning.percent/100).toISOString():null,
-   evidence:`rework:${r.rework_order_id}:assignment:${r.start_event_id??'unknown'}:effective-worker-reports`,snapshotId:r.snapshot_id??null};
+   evidence:`rework:${r.rework_order_id}:assignment:${r.start_event_id??'unknown'}:effective-worker-reports`,snapshotId:applied?.snapshotId??r.snapshot_id??null};
  });
  const facts:Record<string,SlaNodeFact>={};
  for(const lineId of new Set(windows.map(w=>w.lineId))){const parts=windows.filter(w=>w.lineId===lineId),done=parts.every(w=>w.complete);

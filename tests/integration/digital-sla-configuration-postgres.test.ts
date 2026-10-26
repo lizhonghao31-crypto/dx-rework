@@ -25,11 +25,15 @@ run("SLA immutable standards and order snapshots", () => {
   }
   beforeAll(async () => {
     await admin.query(`CREATE SCHEMA ${schema}`);
-    for (const name of ["0001_platform_foundation.sql", "0002_dingtalk_identity_access.sql", "0216_digital_production_order_roots.sql", "0252_digital_sla_configuration_snapshots.sql"]) {
+    for (const name of ["0001_platform_foundation.sql", "0002_dingtalk_identity_access.sql", "0004_public_tools_foundation.sql", "0005_access_master_data.sql", "0216_digital_production_order_roots.sql", "0252_digital_sla_configuration_snapshots.sql"]) {
       await db.query(await readFile(new URL(`../../apps/api/migrations/${name}`, import.meta.url), "utf8"));
     }
     await applySlaPolicyFixture(db);
     await db.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'SLA fixture',true)", [actorId]);
+    await db.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) VALUES($1,$2::uuid,'dingtalk','test-sla',$2::text,$2::text,true,true,CURRENT_TIMESTAMP)",[randomUUID(),actorId]);
+    await db.query('ALTER TABLE user_role_assignments DISABLE TRIGGER user_role_assignments_guard_creation');
+    try{for(const role of ['production_management','owner_group'])await db.query("INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason) VALUES($1,$2,$3,$2,'TEST settings role')",[randomUUID(),actorId,role]);}
+    finally{await db.query('ALTER TABLE user_role_assignments ENABLE TRIGGER user_role_assignments_guard_creation');}
     await db.query("INSERT INTO production_order_roots(production_order_id,workflow_generation,created_by) VALUES($1,'digital_production_v1',$2)", [orderId, actorId]);
   });
   afterAll(async () => { await db.end(); await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`); await admin.end(); });
@@ -196,4 +200,17 @@ run("SLA immutable standards and order snapshots", () => {
     })).rejects.toThrow("publication transaction failed");
     expect(await counts()).toEqual(before);
   });
+  it('accepts verified mixed publication versions but rejects invented values and future provenance',async()=>{
+    await transaction(async repo=>{
+      const original=(await repo.orderSnapshot(orderId,1))!,current=(await repo.current())!,latest=(await repo.orderSnapshot(orderId))!,mixed=structuredClone(original.snapshot);
+      mixed.parameters.production_sheet={value:current.values.production_sheet!,source:'global',sourceVersion:current.version};
+      const input={orderId,expectedRevision:latest.revision,configurationId:current.configurationId,snapshot:mixed,actorId,reason:'TEST verified partial application',requestKey:randomUUID()};
+      const saved=await repo.appendOrder(input);expect(saved.snapshot.parameters.development_pattern).toEqual(original.snapshot.parameters.development_pattern);
+      const forged=structuredClone(mixed);forged.parameters.production_sheet!.value={kind:'duration',minutes:123};
+      await expect(repo.appendOrder({...input,snapshot:forged,expectedRevision:saved.revision,requestKey:randomUUID()})).rejects.toThrow(/global source/);
+      const future=structuredClone(mixed);future.parameters.production_sheet!.sourceVersion=current.version+100;
+      await expect(repo.appendOrder({...input,snapshot:future,expectedRevision:saved.revision,requestKey:randomUUID()})).rejects.toThrow(/global source/);
+    });
+  });
+
 });
