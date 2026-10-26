@@ -100,9 +100,15 @@ export class DigitalProductionIdentityService {
       AND ($6::boolean OR NOT $6::boolean) ORDER BY s.created_at DESC,s.source_id DESC LIMIT 15 OFFSET $4`, [isDigitalLeader(actor) || isDigitalTechnicalManager(actor), actor.actorId, search, (page - 1) * 15, actor.actorRoles.includes("sample_designer"), actor.actorRoles.includes("order_merchandiser")]);
     return { items: result.rows, page };
   }
-  async createSource(actor: TrustedActorContext, input: DigitalSourceInput, key: string): Promise<{ sourceId: string }> {
+  // Shared preflight for callers that persist tool state before native creation.
+  // Keep the original Root/designer + capability policy in one place.
+  assertSourceCreation(actor: TrustedActorContext): void {
     this.assertCreation();
     assertCreator(actor);
+    assertIdentityActor(actor);
+  }
+  async createSource(actor: TrustedActorContext, input: DigitalSourceInput, key: string): Promise<{ sourceId: string }> {
+    this.assertSourceCreation(actor);
     return this.command(actor, "create-source", key, input, async client => {
       if (input.customerCode) await this.customer(client, input.customerCode);
       const styleKey = digitalPoKey(input.designStyleNo);
