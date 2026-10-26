@@ -86,11 +86,14 @@ export class SlaOrderService {
     const client = await this.database.connect();
     try {
       await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
-      const result=await this.readWithClient(actor,orderId,client);
-      await client.query('COMMIT');return result;
+      const result = await this.readWithClient(actor, orderId, client);
+      await client.query("COMMIT");
+      return result;
     } catch (error) { await client.query("ROLLBACK"); throw error; } finally { client.release(); }
   }
-  async readWithClient(actor:TrustedActorContext,orderId:string,client:PoolClient){
+
+  /** Reuse the caller's authorized read snapshot; never open a nested connection/transaction. */
+  async readWithClient(actor: TrustedActorContext, orderId: string, client: PoolClient) {
       await new DigitalProductionAccessPolicy(client).assert(actor, "order", orderId, "technical");
       const repo = new SlaPlanRepository(client), time = validateBusinessTime(await this.clock.read({ kind: "order", id: orderId }));
       const history = await repo.available() ? await repo.plans(orderId) : [];
@@ -132,4 +135,5 @@ export class SlaOrderService {
       const progress = slaBusinessProgress(evaluationPlan, Object.entries(facts).filter(([, f]) => f.businessCompleted || f.completedAt).map(([id]) => id));
       return { status: "planned" as const, time, original: history[0]!, current, history, nodes, facts, evaluationPlan, applications, progress, development, factory, rework, garments, receiving, packing };
   }
+
 }

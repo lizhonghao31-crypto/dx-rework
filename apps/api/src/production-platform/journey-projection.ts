@@ -39,18 +39,23 @@ export function selectJourneys(items:OrderJourney[],filter:JourneyFilter,asOf:st
     &&(!filter.startDate||day(item.createdAt)>=filter.startDate)&&(!filter.endDate||day(item.createdAt)<=filter.endDate)
     &&(!hasNodeFilter||nodesOf(item).some(nodeMatches)||deliveryMatches(item)));
   const summary={all:scoped.length,active:scoped.filter(ongoing).length,dueSoon:scoped.filter(item=>risk(item,"due_soon")).length,overdue:scoped.filter(item=>risk(item,"overdue")).length,blocked:scoped.filter(item=>risk(item,"blocked")).length,completed:scoped.filter(completed).length};
-  const filtered=scoped.filter(item=>filter.kpi==="all"||filter.kpi==="active"&&ongoing(item)||filter.kpi==="completed"&&completed(item)||filter.kpi==="due_soon"&&risk(item,"due_soon")||filter.kpi==="overdue"&&risk(item,"overdue")||filter.kpi==="blocked"&&risk(item,"blocked"));
+  const filtered=scoped.filter(item=>(!filter.missing||item.supervision?.coverage.some(c=>c.key===filter.missing))&&(filter.kpi==="all"||filter.kpi==="active"&&ongoing(item)||filter.kpi==="completed"&&completed(item)||filter.kpi==="due_soon"&&risk(item,"due_soon")||filter.kpi==="overdue"&&risk(item,"overdue")||filter.kpi==="blocked"&&risk(item,"blocked")));
   const selected=(paginate?filtered.slice((filter.page-1)*15,filter.page*15):filtered).map(item=>({...item,hitReasons:nodesOf(item).filter(node=>nodeMatches(node)&&(hasNodeFilter||node.risks.length>0)&&(filter.kpi!=="overdue"||node.risks.includes("overdue"))&&(filter.kpi!=="due_soon"||node.risks.includes("due_soon"))&&(filter.kpi!=="blocked"||node.risks.includes("blocked"))).map(node=>({nodeId:node.instanceId,nodeKey:node.key,stage:node.stage,risks:node.risks}))}));
   return {ruleVersion:"journey-v2.0",asOf,page:filter.page,pageSize:15,total:filtered.length,summary,items:selected};
 }
 
 function selectCockpitJourneys(items:OrderJourney[],filter:JourneyFilter,asOf:string,paginate:boolean):JourneyResult {
-  const base=selectJourneys(items,{...filter,scope:undefined,kpi:"all",page:1},asOf,false).items
+  const base=selectJourneys(items,{...filter,scope:undefined,kpi:"all",page:1,missing:undefined},asOf,false).items
     .map(item=>({...item,display:item.display??journeyDisplay(item,asOf)}));
   const scopeCounts={production:base.filter(item=>item.orderId&&item.display.mainState!=="cancelled").length,development:base.filter(item=>!item.orderId).length,cancelled:base.filter(item=>item.display.mainState==="cancelled").length};
   const scoped=base.filter(item=>filter.scope==="development"?!item.orderId:Boolean(item.orderId)&&item.display.mainState!=="cancelled").sort(compareCockpitOrders);
   const count=(state:NonNullable<OrderJourney["display"]>["mainState"])=>scoped.filter(item=>item.display.mainState===state).length;
   const summary={all:scoped.length,active:count("active"),notStarted:count("not_started"),dueSoon:count("due_soon"),overdue:count("overdue"),completed:count("completed"),blocked:scoped.filter(item=>nodesOf(item).some(node=>node.state==="blocked")).length};
-  const filtered=scoped.filter(item=>filter.kpi==="all"||filter.kpi==="blocked"&&nodesOf(item).some(node=>node.state==="blocked")||item.display.mainState===filter.kpi);
-  return {ruleVersion:"journey-v2.0",asOf,page:filter.page,pageSize:15,total:filtered.length,summary,scopeCounts,items:paginate?filtered.slice((filter.page-1)*15,filter.page*15):filtered};
+  const coverageKeys=["customer_date","factory_date","fabric_date","cutting_time","plan","scope"] as const;
+  const active=scoped.filter(item=>!["completed","cancelled"].includes(item.display.mainState));
+  const inProgress=(item:OrderJourney)=>nodesOf(item).filter(n=>!["completed","inherited","cancelled","not_applicable","unavailable"].includes(n.state));
+  const supervision={overdue:active.filter(item=>inProgress(item).some(n=>n.risks.includes("overdue"))).length,dueSoon:active.filter(item=>inProgress(item).some(n=>n.risks.includes("due_soon"))).length,
+    coverage:coverageKeys.flatMap(key=>{const affected=active.filter(item=>item.supervision?.coverage.some(c=>c.key===key));return affected.length?[{key,orders:affected.length,message:affected[0]!.supervision!.coverage.find(c=>c.key===key)!.message}]:[];})};
+  const filtered=scoped.filter(item=>(!filter.missing||item.supervision?.coverage.some(c=>c.key===filter.missing))&&(filter.kpi==="all"||filter.kpi==="blocked"&&nodesOf(item).some(node=>node.state==="blocked")||item.display.mainState===filter.kpi));
+  return {ruleVersion:"journey-v2.0",asOf,page:filter.page,pageSize:15,total:filtered.length,summary,supervision,scopeCounts,items:paginate?filtered.slice((filter.page-1)*15,filter.page*15):filtered};
 }

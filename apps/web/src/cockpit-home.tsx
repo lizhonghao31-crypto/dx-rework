@@ -1,3 +1,4 @@
+import {slaTargetLabel} from "./journey-sla-details.js";
 import {JOURNEY_STAGES,type JourneyNode,type JourneyResult,type OrderJourney} from "@dx-rework/contracts/digital-production-journey";
 import {StatusBadge} from "@dx-rework/ui";
 import {BusinessTable,Pagination} from "@dx-rework/ui/production";
@@ -12,7 +13,6 @@ function ActualProgress({order}:{order:OrderJourney}){
   const actual=order.display?.actualRatio;
   const stages=(order.display?.stages??[]).filter(stage=>order.orderId||stage.key==="development");
   return <div className="cockpit-double-progress" aria-label={order.orderId?"全单进度":"开发进度"}>
-    <div title="时间规则待完善"><span>时间</span><i className="is-empty"/><small>待完善</small></div>
     <div title={order.display?.actualLabel??"进度资料暂不可用"}><span>实际</span><i>{actual!==null&&actual!==undefined&&<b style={{width:`${Math.max(0,Math.min(1,actual))*100}%`}}/>}</i><small>{actual===undefined?"—":actual===null?"待核":order.display!.actualLabel}</small></div>
     {actual===null&&stages.length>0&&<details className="cockpit-progress-facts"><summary>{order.display!.actualLabel}</summary><ul>{stages.map(stage=><li key={stage.key}>{JOURNEY_STAGES.find(definition=>definition.key===stage.key)?.label}：{stage.notApplicable?"不适用":stage.ratio===null?"资料待核":`${Math.round(stage.ratio*1000)/10}%`}</li>)}</ul></details>}
     {order.display?.awaitingClosure&&<small>节点已完成，待业务收口</small>}
@@ -21,13 +21,13 @@ function ActualProgress({order}:{order:OrderJourney}){
 function Task({node}:{node:JourneyNode}){
   const status=node.risks.includes("overdue")?"局部逾期":node.risks.includes("due_soon")?"即将到期":node.state==="blocked"?"受阻":node.state==="active"?"进行中":"等待前置";
   const blockers=node.blockers.map(blocker=>blocker.label).join("；");
-  return <><strong>{node.label}{node.owner?.name?` · ${node.owner.name}`:""}</strong><StatusBadge tone={node.risks.includes("overdue")?"danger":node.risks.includes("due_soon")?"warning":node.state==="active"?"info":"neutral"}>{status}</StatusBadge>{blockers&&<small className="cockpit-home-blocker" title={blockers}>{blockers}</small>}</>;
+  return <><strong>{node.label}{node.owner?.name?` · ${node.owner.name}`:""}</strong><StatusBadge tone={node.risks.includes("overdue")?"danger":node.risks.includes("due_soon")?"warning":node.state==="active"?"info":"neutral"}>{status}</StatusBadge>{node.timing&&<small>{node.timing.forecast.at&&node.timing.forecast.at!==node.timing.target.at?`预计：${slaTargetLabel(node.timing.forecast)}`:`目标：${slaTargetLabel(node.timing.target)}`}</small>}{blockers&&<small className="cockpit-home-blocker" title={blockers}>{blockers}</small>}</>;
 }
 function DeliveryRisk({risk}:{risk:PoDeliveryRisk}){return <span className="cockpit-home-delivery-line">{risk.poNumber||"待补PO"} / {risk.color} · {poDeliveryKindLabels[risk.kind]} <time>{risk.date}</time> · <StatusBadge tone={risk.risk==="overdue"?"danger":"warning"}>{risk.risk==="overdue"?"约定日期已过":"今天到期"}</StatusBadge></span>;}
 export function CockpitHome({data,error,context,onChange}:{data:JourneyResult|null;error:string;context:CockpitContext;onChange:(patch:Partial<CockpitContext>,preserve?:boolean)=>void}){
   const enter=(order:OrderJourney,node?:JourneyNode)=>onChange({selected:order.id,round:undefined,expanded:node?.stage,focus:node?.instanceId,row:undefined},true);
   return <section className="dx-production-panel journey-orders cockpit-home" aria-label="订单列表" aria-busy={!data&&!error}>
-    <div className="journey-section-title"><h2>订单总览</h2><span>{data?`共 ${data.total} 个订单`:"正在读取…"}</span>{data&&<span>统计基准：{new Date(data.asOf).toLocaleString("zh-CN",{timeZone:"Asia/Shanghai",hour12:false})}</span>}<span>时间规则待完善</span></div>
+    <div className="journey-section-title"><h2>订单总览</h2><span>{data?`共 ${data.total} 个订单`:"正在读取…"}</span>{data&&<span>统计基准：{new Date(data.asOf).toLocaleString("zh-CN",{timeZone:"Asia/Shanghai",hour12:false})}</span>}</div>
     {data?.scopeCounts&&data.scopeCounts.cancelled>0&&<p className="journey-muted">已取消 {data.scopeCounts.cancelled} 单，不计入有效生产订单统计。</p>}
     <div className="cockpit-home-scroll" role="region" aria-label="订单列表，可横向滚动查看全部列" tabIndex={0}><BusinessTable>
       <thead><tr><th>款图</th><th>款号 / 订单号</th><th>客户 / 类型</th><th>PO 与日期</th><th>当前任务 / 风险</th><th>{context.scope==="development"?"进度（开发）":"进度（全单）"}</th><th>整单状态</th></tr></thead>

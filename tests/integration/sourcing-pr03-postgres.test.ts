@@ -3601,6 +3601,9 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       expect(after.nodes.find(n=>n.id==='warehouse_preshrink')?.actualStart).toBe(before.nodes.find(n=>n.id==='warehouse_preshrink')?.actualStart);
       expect(after.nodes.find(n=>n.id==='production_sheet')).toEqual(before.nodes.find(n=>n.id==='production_sheet'));
       const updated=(await ready.bulk.read(rootActor(),ready.id)).tasks.find(t=>t.taskKind==='warehouse_preshrink')!;
+      const supervised=await new DigitalJourneyQuery(database).read(rootActor(),ready.id,undefined,true);
+      expect(supervised.supervision?.nodes.find(n=>n.id==='warehouse_preshrink')?.target.at).toBe(updated.dueAt);
+      expect(supervised.supervision?.originalRevision).toBe(before.original.revision);expect(supervised.supervision?.currentRevision).toBe(after.current.revision);
       expect(Date.parse(updated.dueAt!)-Date.parse(oldTask.dueAt!)).toBe(36*3600000);
       const snapshot=(await database.query('SELECT parameters_json FROM digital_sla_order_snapshots WHERE production_order_id=$1 ORDER BY revision DESC LIMIT 1',[ready.id])).rows[0].parameters_json;
       expect(snapshot.warehouse_preshrink.sourceVersion).toBe(published.version);expect(snapshot.production_sheet).toEqual((await database.query('SELECT parameters_json FROM digital_sla_order_snapshots WHERE production_order_id=$1 ORDER BY revision LIMIT 1',[ready.id])).rows[0].parameters_json.production_sheet);
@@ -3650,6 +3653,9 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       expect((await notices.current({...reader,actorId:randomUUID()},notice.event_id)).notification).toBeNull();
       expect(evaluation.status).toBe('planned');if(evaluation.status!=='planned')throw new Error('missing applied plan');
       expect(evaluation.nodes.find(n=>n.id==='sourcing_ie')?.deadline.at).toBe(after.dueAt);expect(evaluation.nodes.find(n=>n.id==='sourcing_ie')?.actualStart).toBe(first.nodes.find(n=>n.id==='sourcing_ie')?.actualStart);
+      const supervised=await new DigitalJourneyQuery(database).read(rootActor(),id,undefined,true);
+      expect(supervised.supervision?.nodes.find(n=>n.id==='sourcing_ie')?.target.at).toBe(after.dueAt);
+      expect(after.timing?.warningAt).toBe(new Date(Date.parse(first.nodes.find(n=>n.id==='sourcing_ie')!.actualStart!)+(Date.parse(after.dueAt!)-Date.parse(first.nodes.find(n=>n.id==='sourcing_ie')!.actualStart!))*0.7).toISOString());
       expect((await database.query('SELECT due_at,reminder_count FROM rework_todos WHERE todo_id=$1',[original.todo_id])).rows[0]).toMatchObject({due_at:original.due_at,reminder_count:original.reminder_count});
       // Ordinary reassignment/read must not replace the selected application or reset the responsibility window.
       await tasks.slaSettings(rootActor());expect((await todos.getForActor(reader,original.todo_id)).dueAt).toBe(after.dueAt);
@@ -4662,6 +4668,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const notices=new DigitalProductionNotificationService(database);
     const qcTodos=async()=> (await notices.todos(root)).filter(t=>t.entityId===ready.id&&t.category==='digital_garment_quality');
     expect(await qcTodos()).toHaveLength(2);
+    expect((await qcTodos()).every(t=>t.timing?.status==='unknown'&&t.timing.elapsedSeconds===null)).toBe(true);
     let sheet=await closure.read(root,ready.id);
     expect(sheet.collection).toMatchObject({expected:200,received:200,status:'已收齐',shipmentQuantity:0});
     expect(sheet.stage).toBe('等待回货与装箱');
@@ -4761,6 +4768,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect((await tasks.read(qc,task.taskId)).state).toBe('ready');
     expect((await factoryProductionFacts(database,ready.id)).complete).toBe(false);
     expect((await notices.todos(qc)).some(t=>t.todoId===task.taskId&&t.status==='pending')).toBe(true);
+    expect((await notices.todos(qc)).find(t=>t.todoId===task.taskId)?.timing).toMatchObject({exclusive:true,elapsedSeconds:null});
     expect((await new OrderClosureService(database).read(root,ready.id)).outstanding.some(reason=>reason.includes('工厂'))).toBe(true);
     await expect(tasks.reassign(ready.people.warehouse_receiver!,task.taskId,qc.actorId,randomUUID())).rejects.toMatchObject({statusCode:403});
     // Isolated fixture: an unavailable assignee must route to the existing assignment action.
@@ -4870,6 +4878,10 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const {id,caseId,people,cutting}=ready,logistics=people.embroidery_washing_merchandiser!,qc=people.quality_control!,warehouse=people.warehouse_receiver!;
     for(const row of (await database.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[caseId])).rows)await cutting.record({...root,authorizationCapability:'cutting:records:create'},row.cutting_order_id,{pieceCount:1,actualCutCount:100,attachmentIds:[await readyCuttingSheet(root.actorId)]},randomUUID());
     let state=await flow.read(root,id);
+    const noWindow=state.tasks.find(t=>t.taskKind==='bulk_qc')!;
+    const pendingTodo=(await new DigitalProductionNotificationService(database).todos(managerActor())).find(t=>t.todoId===noWindow.taskId)!;
+    expect(pendingTodo).toMatchObject({status:'blocked_recipient',dueAt:null,timing:{status:'unknown',elapsedSeconds:null}});
+
     for(const [kind,actor] of [['process_logistics',logistics],['bulk_qc',qc]] as const)await tasks.reassign(root,state.tasks.find(t=>t.taskKind===kind)!.taskId,actor.actorId,randomUUID());
     await expect(flow.authorizeUpload(qc,id)).rejects.toMatchObject({statusCode:403});
     const firstLine=state.batchTotals![0]!.lineId,a=[{lineId:firstLine,quantity:40}],b=state.batchTotals!.map(row=>({lineId:row.lineId,quantity:row.quantity-(row.lineId===firstLine?40:0)}));
@@ -4877,6 +4889,9 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const sendA=state.facts.at(-1)!.factId;
     state=await flow.logistics(logistics,id,{expectedRevision:state.revision,kind:'工艺回仓',sendFactId:sendA,lines:a,occurredAt:new Date().toISOString(),supplier:'TEST A',note:''},randomUUID());
     const returnedA=state.facts.at(-1)!.factId;
+    const openedTodo=(await new DigitalProductionNotificationService(database).todos(qc)).find(t=>t.todoId===noWindow.taskId)!;
+    expect(openedTodo.dueAt).toBeTruthy();expect(openedTodo.timing?.status).toBe('normal');
+
     state=await flow.logistics(logistics,id,{expectedRevision:state.revision,kind:'工艺发出',lines:b,occurredAt:new Date().toISOString(),supplier:'TEST B',note:''},randomUUID());
     expect(state.currentReturn).toBeNull();expect(state.batches!.find(batch=>batch.factId===returnedA)!.rows[0]!.available).toBe(40);
     const app=Fastify(),sessions=new Map([['qc',qc],['warehouse',warehouse],['logistics',logistics],['root',root]]);
@@ -5575,6 +5590,24 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       additionalMerchandiserUserId:second,attachmentIds:prepared.images.map(image=>image.attachmentId),
       lineItems:prepared.lineItems.map(line=>({lineId:line.lineId,styleNo:line.styleNo,alternateStyleNo:line.alternateStyleNo,color:line.color,quantity:line.quantity,factoryDeliveryDate:"2026-11-10"})),digitalBudget:{productionOrderId:id,budgetVersion:prepared.budgetVersion,orderVersion:prepared.orderVersion}};
     const created=(await currentService.createCase(merchandiserActor(),input,randomUUID())).value,caseId=created.sourcingCaseId;
+    // P10: the original IE todo supplies the presentation clock/target; no second deadline or task is persisted.
+    const ieReader={...ieActor(),authorizationCapability:'todo:view',authorizationCapabilities:['todo:view']};
+    const originalTodo=(await new TodoService(database).listForActor(ieReader,{module:'sourcing'})).todos.find(t=>t.entityId===caseId&&t.category==='sourcing_ie_quote')!;
+    expect(originalTodo).toBeDefined();expect(originalTodo.timing?.warningAt).toBeTruthy();expect(originalTodo.timing?.status).toBe('normal');
+    const persisted=(await database.query('SELECT due_at,reminder_count,status FROM rework_todos WHERE todo_id=$1',[originalTodo.todoId])).rows[0];
+    expect(originalTodo.dueAt).toBe(new Date(persisted.due_at).toISOString());
+    const shifted={connect:database.connect.bind(database),query:database.query.bind(database)} as unknown as pg.Pool;
+    const slaFuture=new Date(Date.parse(originalTodo.dueAt!)+3600000).toISOString();
+    installAcceptanceClockReader(shifted,{read:async scope=>scope.id===id?{now:slaFuture,scenarioId:null,revision:0}:null,nativeScenario:async()=>null});
+    const lateTodo=(await new TodoService(shifted).listForActor(ieReader,{module:'sourcing'})).todos.find(t=>t.todoId===originalTodo.todoId)!;
+    expect(lateTodo.timing).toMatchObject({asOf:slaFuture,status:'overdue'});expect(lateTodo.dueAt).toBe(originalTodo.dueAt);
+    const latePlan=await new SlaOrderService(shifted).read(rootActor(),id);expect(latePlan.status).toBe('planned');
+    if(latePlan.status!=='planned')throw Error('TEST native mother must have a frozen SLA plan');
+    expect(latePlan.nodes.find(n=>n.id==='sourcing_ie')).toMatchObject({status:'overdue',deadline:{at:originalTodo.dueAt}});
+    const lateCockpit=await new DigitalJourneyQuery(shifted).read(rootActor(),id,undefined,true);
+    expect(lateCockpit.supervision!.nodes.find(n=>n.id==='sourcing_ie')).toMatchObject({status:'overdue',target:{at:originalTodo.dueAt}});
+
+    expect((await database.query('SELECT due_at,reminder_count,status FROM rework_todos WHERE todo_id=$1',[originalTodo.todoId])).rows[0]).toEqual(persisted);
     const returned=(await currentService.returnToMerchandiser(ownerActor(),caseId,{expectedVersion:created.version,reason:"TEST correction before handover"},randomUUID())).value;
     const todoRows=async()=>(await database.query("SELECT * FROM rework_todos WHERE entity_id=$1 ORDER BY todo_id",[caseId])).rows;
     const beforeCorrection=await todoRows(),correction=beforeCorrection.find(row=>row.category==="sourcing_merchandiser_correction"&&row.todo_type==="business_action"&&row.status==="pending")!;
@@ -5664,6 +5697,14 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await currentService.quoteIePrice(ieActor(),caseId,{linePrices:prices},randomUUID());
     await currentService.recordManagementDecision(managerActor(),caseId,{supplierId:factoryId,craftIds:[craftId("净色车缝")],linePrices:prices,cuttingProcess:"in_house"},randomUUID());
     await currentService.decideOwner(ownerActor(),caseId,{decision:"approved"},randomUUID());
+    const completedSla=await new SlaOrderService(database).read(rootActor(),id);expect(completedSla.status).toBe('planned');
+    if(completedSla.status!=='planned')throw Error('TEST native mother must retain a frozen SLA plan');
+    const completedCockpit=await new DigitalJourneyQuery(database).read(rootActor(),id,undefined,true);
+    for(const key of ['sourcing_ie','sourcing_selection','sourcing_approval']){
+      expect(completedSla.nodes.find(n=>n.id===key)?.status).toMatch(/^completed_/);
+      expect(completedSla.nodes.find(n=>n.id===key)?.actualEnd).toBeTruthy();
+      expect(completedCockpit.supervision!.nodes.find(n=>n.id===key)?.status).toMatch(/^completed_/);
+    }
     const approvedTodos=await todoRows(),returnTodo=approvedTodos.find(row=>row.category==="sourcing_contract_return"&&row.recipient_user_id===next)!;
     expect(returnTodo.status).toBe("pending");
     const sourceBefore=(await database.query("SELECT * FROM sourcing_cases WHERE sourcing_case_id=$1",[caseId])).rows[0];expect(sourceBefore.created_by).toBe(merchandiserId);
