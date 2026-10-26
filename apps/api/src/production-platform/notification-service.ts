@@ -257,6 +257,12 @@ export class DigitalProductionNotificationService {
       if(!row||await hiddenNativeDevelopmentTodo(database,row.route_descriptor))return null;
       const parent=await digitalTodoTarget(database,row.route_descriptor);
       if(!parent)return null;
+      if(event.event_kind==='overdue'){
+        const applied=row.entity_type==='sourcing_case'&&!!(await database.query("SELECT to_regclass('digital_sla_order_snapshots') AS relation")).rows[0]?.relation;
+        const due=applied?(await database.query(`SELECT ${effectiveSourcingDueSql('t')} AS due_at FROM rework_todos t WHERE t.todo_id=$1`,[row.todo_id])).rows[0]?.due_at:row.due_at;
+        const time=await new ContextBusinessClock(this.database).read(parent);
+        if(!due||new Date(due).getTime()>Date.parse(time.now))return null;
+      }
       if(row.todo_type==="information"&&!isRootActor(actor)&&!await new DigitalProductionAccessPolicy(database).allowed(people.find(p=>p.actorId===actor.actorId)!,parent.kind,parent.id,"technical"))return null;
       if(row.required_role&&!await new DigitalProductionAccessPolicy(database).activeRole(actor.actorId,row.required_role))return null;
       if(row.required_capability&&!(actor.authorizationCapabilities??[]).includes(row.required_capability))return null;

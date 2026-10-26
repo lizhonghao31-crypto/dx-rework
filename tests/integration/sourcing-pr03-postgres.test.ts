@@ -1,5 +1,5 @@
 import {registerDigitalTaskRoutes} from '../../apps/api/src/production-platform/task-routes.js';
-import {withAcceptanceBusinessTime} from '../../apps/api/src/acceptance-clock/business-time.js';
+import {withAcceptanceBusinessTime,installAcceptanceClockReader} from '../../apps/api/src/acceptance-clock/business-time.js';
 import {reworkSlaEvidence} from '../../apps/api/src/production-platform/rework-sla-evidence.js';
 import {linkNewDigitalChild} from '../../apps/api/src/production-platform/child-link-repository.js';
 import {registerGarmentReceipt} from '../../apps/api/src/production-platform/garment-quality.js';
@@ -3624,13 +3624,30 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       const prepared=await fixture.budget.prepareSourcing(primary,id,1,attachments),{service:currentService}=await cycleTodoServices();
       const created=await currentService.createCase(primary,{gender:prepared.gender,styleName:prepared.styleName,deliveryDate:'2026-11-10',estimatedCutPieceSendDate:'2026-10-20',daxingUnitPrice:prepared.daxingUnitPrice,attachmentIds:prepared.images.map(i=>i.attachmentId),lineItems:prepared.lineItems.map(({lineId,styleNo,alternateStyleNo,color,quantity})=>({lineId,styleNo,alternateStyleNo,color,quantity,factoryDeliveryDate:'2026-11-10'})),digitalBudget:{productionOrderId:id,budgetVersion:prepared.budgetVersion,orderVersion:prepared.orderVersion}},randomUUID());
       const caseId=created.value.sourcingCaseId,original=(await database.query("SELECT * FROM rework_todos WHERE entity_type='sourcing_case' AND entity_id=$1 AND category='sourcing_ie_quote' ORDER BY created_at,todo_id LIMIT 1",[caseId])).rows[0];
-      const reader={...ieActor(),authorizationCapability:'todo:view',authorizationCapabilities:['sourcing:view','todo:view']},todos=new TodoService(database),before=await todos.getForActor(reader,original.todo_id),sla=new SlaOrderService(database),first=await sla.read(rootActor(),id);
+      const reader={...ieActor(),authorizationCapability:'todo:view',authorizationCapabilities:['sourcing:view','sourcing:price:quote','todo:view']},todos=new TodoService(database),before=await todos.getForActor(reader,original.todo_id),sla=new SlaOrderService(database),first=await sla.read(rootActor(),id);
       expect(first.status).toBe('planned');if(first.status!=='planned')throw new Error('missing plan');
       expect(first.nodes.find(n=>n.id==='sourcing_ie')?.deadline.at).toBe(before.dueAt);
+      const shifted={connect:database.connect.bind(database),query:database.query.bind(database)} as unknown as pg.Pool;
+      let sceneNow=new Date(Date.parse(before.dueAt!)+1800000).toISOString();
+      installAcceptanceClockReader(shifted,{read:async scope=>scope.id===id?{now:sceneNow,scenarioId:null,revision:0}:null,nativeScenario:async()=>null});
+      const notices=new DigitalProductionNotificationService(shifted),wall=vi.spyOn(Date,'now').mockReturnValue(Date.parse(sceneNow));
+      try{await notices.runOnce();}finally{wall.mockRestore();}
+      const notice=(await database.query("SELECT * FROM digital_production_notification_events WHERE todo_id=$1 AND event_kind='overdue'",[original.todo_id])).rows[0];expect(notice).toBeTruthy();
+      const unreadBefore=(await notices.current(reader,notice.event_id,true)).remainingCount!;expect(unreadBefore).toBeGreaterThan(0);
       const draft={expectedVersion:baseline.version,values:{...baseline.values,sourcing_ie:{kind:'duration' as const,minutes:180}},reason:'TEST IE three hours only'};
       const standard=await tasks.previewSlaSettings(rootActor(),draft),published=await tasks.publishSlaSettings(rootActor(),{...draft,previewToken:standard.token},randomUUID()),selection={orderId:id,configurationVersion:published.version,parameterKeys:['sourcing_ie'],reason:'TEST selected IE native window'};
       const preview=await tasks.previewSlaOrder(rootActor(),selection);await tasks.applySlaOrder(rootActor(),{...selection,previewToken:preview.token},randomUUID());
       const after=await todos.getForActor(reader,original.todo_id),evaluation=await sla.read(rootActor(),id);expect(Date.parse(after.dueAt!)-Date.parse(before.dueAt!)).toBe(3600000);
+      expect((await notices.current(reader,notice.event_id,true)).remainingCount).toBe(unreadBefore-1);
+      await database.query('UPDATE digital_production_notification_receipts SET shown_at=CURRENT_TIMESTAMP WHERE event_id=$1 AND recipient_id=$2',[notice.event_id,reader.actorId]);
+      expect((await notices.current(reader,notice.event_id)).notification).toBeNull();
+      sceneNow=after.dueAt!;expect((await notices.current(reader,notice.event_id)).notification).toMatchObject({eventId:notice.event_id,actionable:true});
+      sceneNow=new Date(Date.parse(after.dueAt!)+1).toISOString();expect((await notices.current(reader,notice.event_id)).notification).toMatchObject({eventId:notice.event_id});
+      const dueScan=vi.spyOn(Date,'now').mockReturnValue(Date.parse(sceneNow));
+      try{await notices.runOnce();await notices.runOnce();}finally{dueScan.mockRestore();}
+      expect((await database.query("SELECT * FROM digital_production_notification_events WHERE todo_id=$1 AND event_kind='overdue'",[original.todo_id])).rows).toEqual([notice]);
+      expect((await notices.current({...reader,authorizationCapabilities:['todo:view','sourcing:view']},notice.event_id)).notification).toBeNull();
+      expect((await notices.current({...reader,actorId:randomUUID()},notice.event_id)).notification).toBeNull();
       expect(evaluation.status).toBe('planned');if(evaluation.status!=='planned')throw new Error('missing applied plan');
       expect(evaluation.nodes.find(n=>n.id==='sourcing_ie')?.deadline.at).toBe(after.dueAt);expect(evaluation.nodes.find(n=>n.id==='sourcing_ie')?.actualStart).toBe(first.nodes.find(n=>n.id==='sourcing_ie')?.actualStart);
       expect((await database.query('SELECT due_at,reminder_count FROM rework_todos WHERE todo_id=$1',[original.todo_id])).rows[0]).toMatchObject({due_at:original.due_at,reminder_count:original.reminder_count});
