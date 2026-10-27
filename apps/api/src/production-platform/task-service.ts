@@ -316,7 +316,7 @@ export class DigitalProductionTaskService {
     await this.revision(client,actor,id,await this.policy(client,task.task_kind,task.task_id),iso(task.entered_at),'completion',eventId);
     await client.query("UPDATE digital_production_tasks SET state='completed',completed_at=$2,completed_quality='现场登记',terminal_recorded_at=CURRENT_TIMESTAMP WHERE task_id=$1",[id,at]);
     if(task.baseline_clock_id)await new ProductionOrderNodeClockRepository(client).complete(id,new Date(at));
-    await client.query('INSERT INTO digital_bulk_cutting_completions(preparation_id,production_order_id,task_id,completed_by) VALUES($1,$2,$3,$4) ON CONFLICT(preparation_id) DO NOTHING',[native.preparation_id,task.production_order_id,id,actor.actorId]);
+    await client.query('INSERT INTO digital_bulk_cutting_completions(preparation_id,production_order_id,task_id,completed_by,completed_at) VALUES($1,$2,$3,$4,$5) ON CONFLICT(preparation_id) DO NOTHING',[native.preparation_id,task.production_order_id,id,actor.actorId,at]);
     for(const next of (await client.query('SELECT task_id FROM digital_production_task_dependencies WHERE predecessor_id=$1',[id])).rows)await this.activate(client,actor,next.task_id,at,'现场登记');
     await new FactoryFlowService(this.database).sync(client,actor,task.production_order_id);
     return true;

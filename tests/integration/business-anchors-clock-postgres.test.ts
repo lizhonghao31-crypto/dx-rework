@@ -1,0 +1,182 @@
+import {randomUUID} from 'node:crypto';
+import {afterAll,beforeAll,describe,expect,it,vi} from 'vitest';
+import {businessAnchorFixture} from '../helpers/business-anchor-fixture.js';
+import {businessNow,ContextBusinessClock} from '../../apps/api/src/acceptance-clock/business-time.js';
+import {FactoryFlowService} from '../../apps/api/src/production-platform/factory-flow-service.js';
+import {DigitalProductionTaskService} from '../../apps/api/src/production-platform/task-service.js';
+import {factoryBatchTiming} from '../../apps/api/src/production-platform/factory-batch-timing.js';
+import {firstContractBusinessReady} from '../../apps/api/src/production-platform/contract-business-ready.js';
+import {CreateSupplierSchema} from '@dx-rework/contracts';
+
+const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
+const nativeIt=(name:string,action:()=>Promise<void>)=>it(name,action,60_000);
+(url?describe:describe.skip)('native business occurrence anchors with all SQL guards',()=>{
+ let fixture:Awaited<ReturnType<typeof businessAnchorFixture>>;
+ beforeAll(async()=>{fixture=await businessAnchorFixture(url!);},120000);
+ afterAll(async()=>{await fixture?.dispose();});
+ for(const mode of ['past','present','future','ordinary'] as const)for(const craft of ['无','印花'] as const){
+  nativeIt(`${mode} / ${craft}: budget, contract, cutting and QC share the original business domain`,async()=>{
+   const f=fixture,wall=Date.now(),initial=new Date(wall+(mode==='past'?-7*86400000:mode==='future'?7*86400000:0)).toISOString();
+   const scene=mode==='ordinary'?null:await f.scene(initial);
+   const run=<T>(action:()=>Promise<T>)=>scene?f.runtime.run(scene,f.root,action):action();
+   const ready=await run(()=>f.bulkReady(craft));
+   await run(async()=>{
+    const budget=(await f.db.query(`SELECT t.completed_at,c.occurred_at FROM digital_budget_preparations p JOIN digital_production_tasks t USING(task_id) JOIN digital_production_task_conditions c ON c.task_id=t.task_id AND c.condition_key='business_recorded' WHERE p.production_order_id=$1`,[ready.id])).rows[0];
+    expect(budget.completed_at.toISOString()).toBe(budget.occurred_at.toISOString());
+    if(scene)expect(budget.completed_at.toISOString()).toBe(initial);
+    expect((await f.db.query('SELECT count(*)::int n FROM sourcing_cases WHERE sourcing_case_id=$1',[ready.caseId])).rows[0].n).toBe(1);
+    const contract=await firstContractBusinessReady(f.db,ready.id);expect(contract.kind).toBe('business');
+    if(scene)expect(contract.at).toBe(initial);
+    const original=(await f.db.query('SELECT * FROM sourcing_contract_business_ready_facts WHERE sourcing_case_id=$1',[ready.caseId])).rows;
+    expect(original).toHaveLength(1);expect(original[0].business_time.scenarioId).toBe(scene);
+    const pdf=(await f.db.query('SELECT generated_at FROM sourcing_contract_documents WHERE sourcing_case_id=$1',[ready.caseId])).rows[0];
+    expect(pdf.generated_at.getTime()).toBeGreaterThanOrEqual(wall-1000);
+    if(scene&&mode!=='present')expect(pdf.generated_at.toISOString()).not.toBe(initial);
+    const orders=(await f.db.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[ready.caseId])).rows;
+    const cutter={...f.people['cutting-worker']!,authorizationCapability:'cutting:records:create',authorizationCapabilities:['cutting:records:create']};
+    for(const row of orders){const attachment=await f.image(cutter),key=randomUUID(),input={pieceCount:1,actualCutCount:10,attachmentIds:[attachment]};
+     await ready.cutting.record(cutter,row.cutting_order_id,input,key);
+     expect((await ready.cutting.record(cutter,row.cutting_order_id,input,key)).reused).toBe(true);
+    }
+    const cutting=(await f.db.query(`SELECT c.completed_at,t.completed_at AS task_completed FROM digital_bulk_cutting_completions c JOIN digital_production_tasks t USING(task_id) WHERE c.production_order_id=$1`,[ready.id])).rows[0];
+    expect(cutting.completed_at.toISOString()).toBe(cutting.task_completed.toISOString());
+    if(scene)expect(cutting.completed_at.toISOString()).toBe(initial);
+   });
+   if(scene)await f.advance(scene,new Date(Date.parse(initial)+3600000).toISOString());
+   await run(async()=>{
+    const flow=new FactoryFlowService(f.db),tasks=new DigitalProductionTaskService(f.db);
+    let state=await flow.read(f.root,ready.id);
+    if(craft==='印花'){
+     for(const [kind,actor] of [['process_logistics',f.people['embroidery-washing-merchandiser']!],['bulk_qc',f.people.qc!]] as const)await tasks.reassign(f.root,state.tasks.find(t=>t.taskKind===kind)!.taskId,actor.actorId,randomUUID());
+     state=await flow.read(f.root,ready.id);
+     const logistics=f.people['embroidery-washing-merchandiser']!,at=businessNow().toISOString();
+     state=await flow.logistics(logistics,ready.id,{expectedRevision:state.revision,kind:'工艺发出',occurredAt:at,supplier:'TEST工艺',note:''},randomUUID());
+     state=await flow.logistics(logistics,ready.id,{expectedRevision:state.revision,kind:'工艺回仓',occurredAt:at,supplier:'TEST工艺',note:''},randomUUID());
+     const returned=state.facts.at(-1)!.factId,line=state.batchTotals![0]!.lineId,qc=f.people.qc!;
+     const key=randomUUID(),input={expectedRevision:state.revision,returnFactId:returned,checks:[{lineId:line,result:'需处理' as const,problem:'TEST问题',treatment:'TEST待处理',attachmentIds:[]}],note:''};
+     state=await flow.qc(qc,ready.id,input,key);await flow.qc(qc,ready.id,input,key);
+     let timing=await factoryBatchTiming(f.db,ready.id);
+     expect(timing!.windows.find(w=>w.kind==='bulk_qc')).toMatchObject({complete:true});
+     expect(timing!.windows.filter(w=>w.kind==='warehouse_dispatch')).toHaveLength(0);
+     const checked=(await f.db.query('SELECT checked_at FROM digital_factory_qc WHERE preparation_id=$1',[ready.preparationId])).rows;
+     expect(checked).toHaveLength(1);if(scene)expect(checked[0].checked_at.toISOString()).toBe(at);
+     state=await flow.qc(qc,ready.id,{expectedRevision:state.revision,returnFactId:returned,checks:[{lineId:line,result:'需处理',problem:'TEST问题',treatment:'TEST后续安排',allowDispatch:true,dispatchReason:'TEST允许先发',attachmentIds:[]}],note:''},randomUUID());
+     timing=await factoryBatchTiming(f.db,ready.id);
+     const warehouse=timing!.windows.find(w=>w.kind==='warehouse_dispatch')!;
+     expect(warehouse.enteredAt).toBe((await f.db.query('SELECT max(checked_at) AS checked_at FROM digital_factory_qc WHERE preparation_id=$1',[ready.preparationId])).rows[0].checked_at.toISOString());
+     expect(Date.parse(warehouse.dueAt!)-Date.parse(warehouse.enteredAt!)).toBe(24*3600000);
+    }else{
+     const timing=await factoryBatchTiming(f.db,ready.id),cut=(await f.db.query('SELECT completed_at FROM digital_bulk_cutting_completions WHERE production_order_id=$1',[ready.id])).rows[0];
+     expect(timing!.windows.find(w=>w.kind==='warehouse_dispatch')!.enteredAt).toBe(cut.completed_at.toISOString());
+    }
+    const before=await firstContractBusinessReady(f.db,ready.id);
+    await f.contracts.generateIfReady(f.root,ready.caseId);await f.contracts.generateIfReady(f.root,ready.caseId);
+    expect(await firstContractBusinessReady(f.db,ready.id)).toEqual(before);
+    expect((await f.db.query('SELECT count(*)::int n FROM sourcing_contract_business_ready_facts WHERE sourcing_case_id=$1',[ready.caseId])).rows[0].n).toBe(1);
+   });
+  });
+ }
+ nativeIt('rolls back a failed first-ready fact with the ready state and retries the same PDF safely',async()=>{
+  const f=fixture,scene=await f.scene(new Date(Date.now()-86400000).toISOString());
+  // A generation failure is tolerated by native owner approval, then retried explicitly.
+  const original=f.contracts.generateIfReady.bind(f.contracts);
+  const deferred=vi.spyOn(f.contracts,'generateIfReady').mockRejectedValueOnce(new Error('TEST deferred generation'));
+  let ready:Awaited<ReturnType<typeof f.bulkReady>>;
+  try{ready=await f.runtime.run(scene,f.root,()=>f.bulkReady('无'));}finally{deferred.mockRestore();}
+  expect((await f.db.query('SELECT count(*)::int n FROM sourcing_contract_business_ready_facts WHERE sourcing_case_id=$1',[ready!.caseId])).rows[0].n).toBe(0);
+  await f.runtime.run(scene,f.root,async()=>{
+   const order=(await f.db.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[ready!.caseId])).rows[0],cutter={...f.people['cutting-worker']!,authorizationCapability:'cutting:records:create',authorizationCapabilities:['cutting:records:create']};
+   await ready!.cutting.record(cutter,order.cutting_order_id,{pieceCount:1,actualCutCount:10,attachmentIds:[await f.image(cutter)]},randomUUID());
+   expect((await factoryBatchTiming(f.db,ready!.id))!.windows.find(w=>w.kind==='warehouse_dispatch')).toMatchObject({enteredAt:null,dueAt:null});
+  });
+  await f.advance(scene,new Date(Date.parse((await f.runtime.repository.row(scene)).business_now.toISOString())+7200000).toISOString());
+  await f.db.query(`CREATE FUNCTION test_fail_ready() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'TEST fail ready persistence'; END $$;
+   CREATE TRIGGER test_fail_ready AFTER INSERT ON sourcing_contract_business_ready_facts FOR EACH ROW EXECUTE FUNCTION test_fail_ready()`);
+  try{await expect(f.runtime.run(scene,f.root,()=>original(f.root,ready!.caseId))).rejects.toThrow('TEST fail ready persistence');}finally{await f.db.query('DROP TRIGGER test_fail_ready ON sourcing_contract_business_ready_facts; DROP FUNCTION test_fail_ready()');}
+  expect((await f.db.query('SELECT count(*)::int n FROM sourcing_contract_business_ready_facts WHERE sourcing_case_id=$1',[ready!.caseId])).rows[0].n).toBe(0);
+  const document=(await f.db.query('SELECT status,generated_at FROM sourcing_contract_documents WHERE sourcing_case_id=$1',[ready!.caseId])).rows[0];expect(document.generated_at).toBeNull();expect(document.status).not.toBe('ready');
+  const clockRow=await f.runtime.repository.row(scene),clock={now:clockRow.business_now.toISOString(),scenarioId:scene,revision:clockRow.version};
+  for(const bad of [{...clock,scenarioId:randomUUID()},{...clock,revision:clock.revision-1},{...clock,now:new Date(Date.parse(clock.now)-1).toISOString()}]){
+   const miswired=vi.spyOn(ContextBusinessClock.prototype,'read').mockResolvedValueOnce(bad);
+   try{await expect(original(f.root,ready!.caseId)).rejects.toThrow();}finally{miswired.mockRestore();}
+   expect((await f.db.query('SELECT count(*)::int n FROM sourcing_contract_business_ready_facts WHERE sourcing_case_id=$1',[ready!.caseId])).rows[0].n).toBe(0);
+   expect((await f.db.query("SELECT count(*)::int n FROM operation_events WHERE entity_type='sourcing_contract_document' AND entity_id IN (SELECT sourcing_contract_document_id::text FROM sourcing_contract_documents WHERE sourcing_case_id=$1) AND action='sourcing.contract.business_ready'",[ready!.caseId])).rows[0].n).toBe(0);
+  }
+  // Background resume has no ALS request; the installed guarded resource reader must supply the scene.
+  await original(f.root,ready!.caseId);
+  const first=await firstContractBusinessReady(f.db,ready!.id),businessAt=(await f.runtime.repository.row(scene)).business_now.toISOString();
+  expect(first.at).toBe(businessAt);
+  const window=(await factoryBatchTiming(f.db,ready!.id))!.windows.find(w=>w.kind==='warehouse_dispatch')!;
+  expect(window).toMatchObject({enteredAt:businessAt,dueAt:new Date(Date.parse(businessAt)+86400000).toISOString()});
+  const revisions=(await f.db.query(`SELECT r.entered_at,r.due_at FROM digital_production_deadline_revisions r JOIN digital_production_task_access t USING(task_id) WHERE t.production_order_id=$1 AND t.task_kind='warehouse_dispatch' ORDER BY r.revision_id DESC LIMIT 1`,[ready!.id])).rows[0];
+  expect(revisions.entered_at.toISOString()).toBe(window.enteredAt);expect(revisions.due_at.toISOString()).toBe(window.dueAt);
+  const replacement=await f.access.createSupplier(f.root,CreateSupplierSchema.parse({supplierCode:`TEST-REPLACEMENT-${randomUUID().slice(0,8).toUpperCase()}`,supplierType:'factory',supplierName:'TEST replacement',address:'TEST',contractEntityName:'TEST factory',partyBRepresentative:'TEST',payeeName:'TEST',bankAccount:'TEST0002',bankName:'TEST',changeReason:'TEST next contract version'}));
+  await f.advance(scene,new Date(Date.parse(businessAt)+7200000).toISOString());
+  await f.runtime.run(scene,f.root,()=>f.sourcing.requestFactoryChange(f.people['production-management']!,ready!.caseId,{supplierId:replacement.supplierId,unitPrice:'5',changeReason:'TEST next contract must not restart warehouse window'},randomUUID()));
+  expect(await firstContractBusinessReady(f.db,ready!.id)).toEqual(first);
+  expect((await f.db.query('SELECT is_first_for_case FROM sourcing_contract_business_ready_facts WHERE sourcing_case_id=$1 ORDER BY is_first_for_case DESC',[ready!.caseId])).rows.map(r=>r.is_first_for_case)).toEqual([true,false]);
+  expect((await factoryBatchTiming(f.db,ready!.id))!.windows.find(w=>w.kind==='warehouse_dispatch')).toMatchObject({enteredAt:window.enteredAt,dueAt:window.dueAt});
+ });
+ for(const mode of ['past','present','future','ordinary'] as const)nativeIt(`${mode}: multi-capability batch reports keep occurrence time, authorization and atomic retry`,async()=>{
+  const f=fixture,wall=Date.now(),at=new Date(wall+(mode==='past'?-7*86400000:mode==='future'?7*86400000:0)).toISOString(),scene=mode==='ordinary'?null:await f.scene(at);
+  const run=<T>(action:()=>Promise<T>)=>scene?f.runtime.run(scene,f.root,action):action();
+  const prepared=await run(()=>f.reworkReady());
+  const {id,work,state,worker}=prepared;
+  expect((await f.db.query("SELECT production_order_id FROM digital_production_child_links WHERE module='rework' AND child_id=$1",[id])).rows[0].production_order_id).toBe(prepared.ready.id);
+  const reports=state.tasks.map(t=>({workTaskId:t.workTaskId,actualQuantity:5,completedAt:at})),input={expectedOrderVersion:state.orderVersion,reports},key=randomUUID();
+  const snapshot=async()=>(await f.db.query(`SELECT
+   (SELECT count(*) FROM rework_work_reports WHERE rework_order_id=$1)::int reports,
+   (SELECT count(*) FROM rework_work_report_member_shares s JOIN rework_work_reports r USING(work_report_id) WHERE r.rework_order_id=$1)::int shares,
+   (SELECT count(*) FROM operation_events WHERE entity_id=$1::text AND action='rework.work_report.submit')::int events,
+   (SELECT version FROM rework_orders WHERE rework_order_id=$1)::int AS order_version`,[id])).rows[0];
+  const before=await snapshot();
+  await expect(run(()=>work.submitReportsBatch({...worker,authorizationCapabilities:['work:report']},id,input,randomUUID()))).rejects.toMatchObject({statusCode:403});
+  expect(await snapshot()).toEqual(before);
+  await f.db.query(`CREATE FUNCTION test_batch_fail() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF EXISTS(SELECT 1 FROM operation_events WHERE event_id=current_setting('dx_rework.work_event_id',true)::uuid AND authorization_capability='work:report_for_worker') THEN RAISE EXCEPTION 'TEST second capability group'; END IF; RETURN NEW; END $$;
+   CREATE TRIGGER test_batch_fail AFTER INSERT ON rework_work_reports FOR EACH ROW EXECUTE FUNCTION test_batch_fail()`);
+  try{await expect(run(()=>work.submitReportsBatch(worker,id,input,key))).rejects.toThrow('TEST second capability group');}finally{await f.db.query('DROP TRIGGER test_batch_fail ON rework_work_reports; DROP FUNCTION test_batch_fail()');}
+  expect(await snapshot()).toEqual(before);
+  const results=await run(()=>Promise.all([work.submitReportsBatch(worker,id,input,key),work.submitReportsBatch(worker,id,input,key)]));
+  expect(results.map(r=>r.reused).sort()).toEqual([false,true]);
+  const persisted=(await f.db.query('SELECT completed_at,created_at FROM rework_work_reports WHERE rework_order_id=$1',[id])).rows;
+  expect(persisted).toHaveLength(2);expect(new Set(persisted.map(r=>r.completed_at.toISOString())).size).toBe(1);
+  if(scene)for(const report of persisted)expect(report.completed_at.toISOString()).toBe(at);
+  for(const report of persisted)expect(report.created_at.getTime()).toBeGreaterThanOrEqual(wall-1000);
+  expect((await f.db.query("SELECT DISTINCT authorization_capability FROM operation_events WHERE entity_id=$1::text AND action='rework.work_report.submit' ORDER BY authorization_capability",[id])).rows.map(r=>r.authorization_capability)).toEqual(['work:report','work:report_for_worker']);
+  expect(await run(()=>work.submitReportsBatch(worker,id,input,key))).toMatchObject({reused:true});
+ });
+ nativeIt('rolls back budget binding after native task completion, then preserves same-key and different-key protections',async()=>{
+  const f=fixture,at=new Date(Date.now()-86400000).toISOString(),scene=await f.scene(at);
+  const ready=await f.runtime.run(scene,f.root,()=>f.bulkReady('无',async(input,key,primary)=>{
+   const snapshot=async()=>(await f.db.query(`SELECT
+    (SELECT count(*) FROM sourcing_cases)::int cases,(SELECT count(*) FROM sourcing_case_lines)::int lines,
+    (SELECT count(*) FROM sourcing_case_transitions)::int transitions,(SELECT count(*) FROM digital_production_child_links)::int links,
+    (SELECT count(*) FROM idempotency_records)::int receipts,(SELECT count(*) FROM operation_events)::int events,
+    (SELECT jsonb_agg(to_jsonb(t) ORDER BY t.task_id) FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.production_order_id=$1) AS tasks,
+    (SELECT jsonb_agg(to_jsonb(c) ORDER BY c.task_id,c.condition_key) FROM digital_production_task_conditions c JOIN digital_production_task_access t USING(task_id) WHERE t.production_order_id=$1) AS conditions`,[input.digitalBudget!.productionOrderId])).rows[0];
+   const before=await snapshot(),complete=DigitalProductionTaskService.prototype.completeWithClient;
+   const fault=vi.spyOn(DigitalProductionTaskService.prototype,'completeWithClient').mockImplementationOnce(async function(this:DigitalProductionTaskService,...args){await complete.apply(this,args);throw new Error('TEST budget completion rollback');});
+   try{await expect(f.sourcing.createCase(primary,input,key)).rejects.toThrow('TEST budget completion rollback');}finally{fault.mockRestore();}
+   expect(await snapshot()).toEqual(before);
+  }));
+  await f.runtime.run(scene,f.root,async()=>{
+   expect((await f.sourcing.createCase(ready.primary,ready.input,ready.key)).reused).toBe(true);
+   await expect(f.sourcing.createCase(ready.primary,ready.input,randomUUID())).rejects.toMatchObject({statusCode:409});
+  });
+ });
+ for(const mode of ['past','present','future','ordinary'] as const)nativeIt(`${mode}: single worker report and Root proxy preserve business completion and true audit time`,async()=>{
+  const f=fixture,wall=Date.now(),at=new Date(wall+(mode==='past'?-7*86400000:mode==='future'?7*86400000:0)).toISOString(),scene=mode==='ordinary'?null:await f.scene(at);
+  const run=<T>(action:()=>Promise<T>)=>scene?f.runtime.run(scene,f.root,action):action();
+  await run(async()=>{
+   const {id,work,state,worker,own}=await f.reworkReady(),ownTask=state.tasks.find(t=>t.members.some(m=>m.personId===own))!,other=state.tasks.find(t=>t.workTaskId!==ownTask.workTaskId)!;
+   const input={expectedOrderVersion:state.orderVersion,actualQuantity:5,completedAt:at},key=randomUUID();
+   await expect(work.submitReport({...worker,actorId:f.people['worker-b']!.actorId},ownTask.workTaskId,input,randomUUID())).rejects.toMatchObject({statusCode:403});
+   const first=await work.submitReport(worker,ownTask.workTaskId,input,key);
+   expect((await work.submitReport(worker,ownTask.workTaskId,input,key)).reused).toBe(true);
+   const current=await work.list(f.root,id),rootProxy={...f.root,authorizationCapability:'work:report_for_worker',authorizationCapabilities:['work:report_for_worker']};
+   const second=await work.submitReport(rootProxy,other.workTaskId,{...input,expectedOrderVersion:current.orderVersion},randomUUID());
+   if(scene){expect(first.value.completedAt).toBe(at);expect(second.value.completedAt).toBe(at);}else{expect(Date.parse(first.value.completedAt)).toBeGreaterThanOrEqual(wall);expect(Date.parse(second.value.completedAt)).toBeGreaterThanOrEqual(wall);}
+   const rows=(await f.db.query('SELECT created_at FROM rework_work_reports WHERE rework_order_id=$1',[id])).rows;expect(rows).toHaveLength(2);for(const row of rows)expect(row.created_at.getTime()).toBeGreaterThanOrEqual(wall-1000);
+  });
+ });
+});

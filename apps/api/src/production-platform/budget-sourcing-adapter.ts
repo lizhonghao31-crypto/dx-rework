@@ -1,3 +1,4 @@
+import { businessNow } from "../acceptance-clock/business-time.js";
 import type { Pool, PoolClient } from "pg";
 import { DigitalProductionTaskService } from "./task-service.js";
 import type { CreateSourcingCase } from "@dx-rework/contracts";
@@ -51,7 +52,8 @@ export async function bindBudgetSourcing(db: PoolClient, pool: Pool, actor: Trus
   const preparation = (await db.query("SELECT task_id FROM digital_budget_preparations WHERE production_order_id=$1", [orderId])).rows[0];
   if (preparation?.task_id) {
     const tasks = new DigitalProductionTaskService(pool);
-    await tasks.setConditionWithClient(db, actor, preparation.task_id, "business_recorded", true, new Date().toISOString(), "原外发单已创建");
-    await tasks.completeWithClient(db, actor, preparation.task_id, { note: "原外发单已创建" }, `sourcing-created:${caseId}`);
+    const occurredAt = businessNow().toISOString();
+    await tasks.setConditionWithClient(db, actor, preparation.task_id, "business_recorded", true, occurredAt, "原外发单已创建");
+    await tasks.completeWithClient(db, actor, preparation.task_id, { occurredAt, note: "原外发单已创建" }, `sourcing-created:${caseId}`);
   }
 }

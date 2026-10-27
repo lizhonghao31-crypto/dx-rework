@@ -1,3 +1,4 @@
+import {firstContractBusinessReady} from './contract-business-ready.js';
 import {slaApplications,appliedSlaWindow} from './sla-applied-window.js';
 import type {PoolClient} from 'pg';
 import {validateDigitalSlaSnapshot} from '@dx-rework/contracts/digital-sla';
@@ -19,7 +20,7 @@ export async function factoryBatchTiming(db:Pick<PoolClient,'query'>,orderId:str
  const lines=(await db.query(`SELECT p.line_id AS "lineId",r.actual_cut_count::int AS quantity FROM digital_production_po_lines p JOIN digital_production_child_lines l ON l.module='cutting' AND l.line_id=p.line_id JOIN current_cutting_records r ON r.cutting_order_id=l.child_id WHERE p.production_order_id=$1`,[orderId])).rows as FactoryScope[];
  const ledger=factoryBatchLedger(lines,facts,checks,row.secondary_craft==='无');
  // Retain the first contract-ready fact; later contract revisions do not reset the opened window.
- const contract=(await db.query(`SELECT d.generated_at FROM digital_production_child_links l JOIN sourcing_contract_documents d ON d.sourcing_case_id=l.child_id WHERE l.production_order_id=$1 AND l.module='sourcing' AND d.generated_at IS NOT NULL ORDER BY d.generated_at,d.contract_version LIMIT 1`,[orderId])).rows[0];
+ const contract=await firstContractBusinessReady(db,orderId);
  const applications=await slaApplications(db,orderId);
  const windows:FactoryWindow[]=[];
  const add=(key:string,kind:FactoryWindow['kind'],enteredAt:string|null,complete:boolean,completedAt:string|null,duration:number,evidence:string,lineId?:string)=>{
@@ -45,11 +46,11 @@ export async function factoryBatchTiming(db:Pick<PoolClient,'query'>,orderId:str
     if(!firstRelease||line.reworked>0&&line.available===0&&line.sent===0)continue;
     const dispatched=facts.filter(f=>f.kind==='仓库实际发厂'&&f.payload.returnFactId===batch.factId&&f.payload.lines?.some((l:FactoryScope)=>l.lineId===line.lineId));
     const done=line.available===0&&line.sent>0;
-    add(`${batch.factId}:${line.lineId}`,'warehouse_dispatch',latest([firstRelease.checked_at,contract?.generated_at??null]),done,done?latest(dispatched.map(f=>f.occurred_at)):null,minutes('warehouse_dispatch'),`factory-qc:${firstRelease.check_id}`,line.lineId);
+    add(`${batch.factId}:${line.lineId}`,'warehouse_dispatch',latest([firstRelease.checked_at,contract.at]),done,done?latest(dispatched.map(f=>f.occurred_at)):null,minutes('warehouse_dispatch'),`factory-qc:${firstRelease.check_id}${contract.kind==='business'?`;${contract.evidence}`:''}`,line.lineId);
    }
   }
  }else{
-  for(const line of ledger.totals){const dispatched=facts.filter(f=>f.kind==='仓库实际发厂'&&f.payload.lines?.some((l:FactoryScope)=>l.lineId===line.lineId));add(`cut:${line.lineId}`,'warehouse_dispatch',latest([row.completed_at,contract?.generated_at??null]),line.remaining===0,line.remaining===0?latest(dispatched.map(f=>f.occurred_at)):null,minutes('warehouse_dispatch'),`cut-completion:${row.preparation_id}`,line.lineId);}
+  for(const line of ledger.totals){const dispatched=facts.filter(f=>f.kind==='仓库实际发厂'&&f.payload.lines?.some((l:FactoryScope)=>l.lineId===line.lineId));add(`cut:${line.lineId}`,'warehouse_dispatch',latest([row.completed_at,contract.at]),line.remaining===0,line.remaining===0?latest(dispatched.map(f=>f.occurred_at)):null,minutes('warehouse_dispatch'),`cut-completion:${row.preparation_id}${contract.kind==='business'?`;${contract.evidence}`:''}`,line.lineId);}
  }
  return {preparationId:row.preparation_id,snapshotId:row.sla_snapshot_id,warningRatio:warning.percent/100,windows,ledger};
 }

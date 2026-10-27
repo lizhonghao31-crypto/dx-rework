@@ -117,13 +117,14 @@ export class FactoryFlowService{
   if(input.kind==='工艺回仓'){const task=s.tasks.find(t=>t.task_kind==='bulk_qc');await this.tasks().setConditionWithClient(db,actor,task.task_id,'handover_received',true,input.occurredAt,'整款工艺已回仓待QC');}
  });}
  async qc(actor:TrustedActorContext,id:string,input:FactoryQc,key:string){return this.command(actor,id,'qc',input,key,async(db,s)=>{
-  if(!await this.authorized(db,actor,s,'bulk_qc'))digitalForbidden();if(s.batch)return this.batchQc(db,actor,s,input);if(s.dispatched||!s.returned)fail(s.dispatched?'本单已经实际发厂，本轮QC记录已结束；请QC在本单操作记录核对原检查结果，不要补写本轮检查':'尚无整款工艺回仓记录；请印绣洗跟单在本单工艺物流登记实际回仓，再由QC逐PO检查');if(s.tasks.find(t=>t.task_kind==='bulk_qc')?.state!=='ready')fail(await this.taskBlockReason(db,actor,s,'bulk_qc'));
+  if(!await this.authorized(db,actor,s,'bulk_qc'))digitalForbidden();const checkedAt=businessNow().toISOString();if(s.batch)return this.batchQc(db,actor,s,input,checkedAt);if(s.dispatched||!s.returned)fail(s.dispatched?'本单已经实际发厂，本轮QC记录已结束；请QC在本单操作记录核对原检查结果，不要补写本轮检查':'尚无整款工艺回仓记录；请印绣洗跟单在本单工艺物流登记实际回仓，再由QC逐PO检查');if(s.tasks.find(t=>t.task_kind==='bulk_qc')?.state!=='ready')fail(await this.taskBlockReason(db,actor,s,'bulk_qc'));
+  this.checkTime(checkedAt,this.latestTime(s.route.cutting_completed_at,s.returned.occurred_at));
   if(new Set(input.checks.map(c=>c.lineId)).size!==input.checks.length||input.checks.some(c=>!s.lines.some(l=>l.line_id===c.lineId)))fail('检查款色必须属于本母单且不可重复');
   for(const check of input.checks){
    if(check.result==='需处理'&&!check.problem.trim())fail('需处理必须说明问题及处理要求');
    if(new Set(check.attachmentIds).size!==check.attachmentIds.length)fail('图片不可重复');
    const images=await db.query("SELECT attachment_id FROM attachments WHERE attachment_id=ANY($1::uuid[]) AND uploaded_by=$2 AND status='ready' AND entity_type IS NULL AND entity_id IS NULL AND mime_type IN ('image/jpeg','image/png','image/webp') FOR UPDATE",[check.attachmentIds,actor.actorId]);if(images.rowCount!==check.attachmentIds.length)fail('检查图片须由本人上传并可用，不能借用其他模块图片');
-   const checkId=randomUUID();await db.query('INSERT INTO digital_factory_qc(check_id,preparation_id,return_fact_id,line_id,result,problem,treatment,attachment_ids,checked_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)',[checkId,s.route.preparation_id,s.returned.fact_id,check.lineId,check.result,check.problem,check.treatment,check.attachmentIds,actor.actorId]);
+   const checkId=randomUUID();await db.query('INSERT INTO digital_factory_qc(check_id,preparation_id,return_fact_id,line_id,result,problem,treatment,attachment_ids,checked_by,checked_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',[checkId,s.route.preparation_id,s.returned.fact_id,check.lineId,check.result,check.problem,check.treatment,check.attachmentIds,actor.actorId,checkedAt]);
    await db.query("UPDATE attachments SET entity_type='digital_factory_qc',entity_id=$1,updated_at=CURRENT_TIMESTAMP WHERE attachment_id=ANY($2::uuid[])",[checkId,check.attachmentIds]);
   }
  });}
@@ -162,9 +163,10 @@ export class FactoryFlowService{
   await this.fact(db,actor,s.route.preparation_id,input.kind,input.occurredAt,{supplier:input.supplier,note:input.note,lines,...(sendFactId?{sendFactId}:{}),...(fromReturnId?{fromReturnId}:{})});
   if(input.kind==='工艺回仓'){const task=s.tasks.find(t=>t.task_kind==='bulk_qc');await this.tasks().setConditionWithClient(db,actor,task.task_id,'handover_received',true,input.occurredAt,'已有工艺批次回仓，先回先检查');}
  }
- private async batchQc(db:PoolClient,actor:TrustedActorContext,s:Awaited<ReturnType<FactoryFlowService['state']>>,input:FactoryQc){
+ private async batchQc(db:PoolClient,actor:TrustedActorContext,s:Awaited<ReturnType<FactoryFlowService['state']>>,input:FactoryQc,checkedAt:string){
   const batch=s.batch!.batches.find(b=>b.factId===(input.returnFactId??s.returned?.fact_id));
   if(s.dispatched||!batch||s.tasks.find(t=>t.task_kind==='bulk_qc')?.state!=='ready')fail('请在本单选择可检查的实际回仓批次');
+  this.checkTime(checkedAt,this.latestTime(s.route.cutting_completed_at,batch!.occurredAt));
   if(new Set(input.checks.map(c=>c.lineId)).size!==input.checks.length)fail('同批检查PO不可重复');
   for(const check of input.checks){
    const row=batch!.rows.find(l=>l.lineId===check.lineId);if(!row||row.available<=0)fail('本批PO已发完或已重新发工艺，不可覆盖检查');
@@ -172,7 +174,7 @@ export class FactoryFlowService{
    if(check.allowDispatch&&(check.result!=='需处理'||!check.dispatchReason?.trim()||!check.treatment.trim()))fail('不合格先发须由质检填写原因及后续安排');
    if(new Set(check.attachmentIds).size!==check.attachmentIds.length)fail('图片不可重复');
    const images=await db.query("SELECT attachment_id FROM attachments WHERE attachment_id=ANY($1::uuid[]) AND uploaded_by=$2 AND status='ready' AND entity_type IS NULL AND entity_id IS NULL AND mime_type IN ('image/jpeg','image/png','image/webp') FOR UPDATE",[check.attachmentIds,actor.actorId]);if(images.rowCount!==check.attachmentIds.length)fail('检查图片须由本人上传并可用');
-   const checkId=randomUUID();await db.query('INSERT INTO digital_factory_qc(check_id,preparation_id,return_fact_id,line_id,result,problem,treatment,attachment_ids,checked_by,allow_dispatch,dispatch_reason) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)',[checkId,s.route.preparation_id,batch!.factId,check.lineId,check.result,check.problem,check.treatment,check.attachmentIds,actor.actorId,check.allowDispatch??false,check.dispatchReason??'']);
+   const checkId=randomUUID();await db.query('INSERT INTO digital_factory_qc(check_id,preparation_id,return_fact_id,line_id,result,problem,treatment,attachment_ids,checked_by,allow_dispatch,dispatch_reason,checked_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)',[checkId,s.route.preparation_id,batch!.factId,check.lineId,check.result,check.problem,check.treatment,check.attachmentIds,actor.actorId,check.allowDispatch??false,check.dispatchReason??'',checkedAt]);
    await db.query("UPDATE attachments SET entity_type='digital_factory_qc',entity_id=$1,updated_at=CURRENT_TIMESTAMP WHERE attachment_id=ANY($2::uuid[])",[checkId,check.attachmentIds]);
   }
  }

@@ -1099,6 +1099,10 @@
     {
       "version": "0262_acceptance_sla_clock",
       "checksum": "3e690cf4e34bb8429692592685fe6b2d23f67d45616486ff2c8d93da8d73a98c"
+    },
+    {
+      "version": "0263_contract_business_ready_facts",
+      "checksum": "ddeacbaf10de93863201f46a3c62a85296aaee8d42d650863e4561fd7391fa96"
     }
   ]
 }
