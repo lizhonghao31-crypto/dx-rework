@@ -108,6 +108,9 @@ if (config.acceptanceLab.enabled) {
   }
 }
 
+const acceptanceClock = acceptanceClockProof && config.digitalProduction?.enabled
+  ? new AcceptanceClockRuntime(database, acceptanceClockProof, config.acceptanceLab.secret!, config.digitalProduction.creationEnabled)
+  : undefined;
 const rootAuthority = new RootAuthority(
   database,
   config.dingtalk.corpId,
@@ -242,7 +245,7 @@ const externalResponsibilityService = new ExternalResponsibilityApplicationServi
 const wageService = new WageService(database, undefined, undefined, todoProjection);
 const reportingService = new ManagementReportingService(database);
 const app = buildApp({
-  ...(acceptanceClockProof&&config.digitalProduction?.enabled?{acceptanceClock:new AcceptanceClockRuntime(database,acceptanceClockProof,config.acceptanceLab.secret!,config.digitalProduction.creationEnabled)}:{}),
+  ...(acceptanceClock ? { acceptanceClock } : {}),
   ...(config.digitalProduction?.enabled ? { digitalIdentity: { analysis:new DigitalAnalysisQuery(database), cockpit:new DigitalCockpitQuery(database), journeys:new DigitalJourneyQuery(database), closureService:new OrderClosureService(database), factoryFlowService:new FactoryFlowService(database), bulkPreparationService: new BulkPreparationService(database), instructionService: new ProductionInstructionService(database, config.digitalProduction.creationEnabled), budgetService: new DigitalBudgetService(database, config.digitalProduction.creationEnabled), ...(config.todoRuntime.publicBaseUrl ? { developmentQrBase: new URL(config.todoRuntime.publicBaseUrl).origin + config.appBasePath } : {}), developmentRounds:new DevelopmentRoundService(database,config.digitalProduction.creationEnabled), developmentExecution: new DevelopmentExecutionService(database, config.digitalProduction.creationEnabled, patternOrders), developmentService: new DigitalDevelopmentService(database, config.digitalProduction.creationEnabled, patternOrders), developmentAttachments: attachments, ...(digitalNotifications ? { notificationService: digitalNotifications } : {}), taskService: new DigitalProductionTaskService(database,config.sessionSecret), accessService: new DigitalProductionAccessService(database), authenticate: (token: string | undefined) => auth.authenticate(token), root: rootAuthority, service: new DigitalProductionIdentityService(database, config.digitalProduction.creationEnabled, sourcingService), creationEnabled: config.digitalProduction.creationEnabled } } : {}),
   operationDiagnostics: (row) => recordOperationDiagnostic(database,row),
   config,

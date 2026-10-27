@@ -1,3 +1,5 @@
+import { recordContractBusinessReady } from "../production-platform/contract-business-ready.js";
+import { DigitalProductionTaskService } from "../production-platform/task-service.js";
 import { SourcingTransferContractTodos } from "./sourcing-transfer-contract-todos.js";
 import {effectiveSourcingMerchandiser,lockDigitalSourcingHandover} from "./current-merchandiser.js";
 import { SourcingContractContentService, loadContractContent, hydrateContractContentImages, canEditContractContent } from "./sourcing-contract-content.js";
@@ -428,13 +430,17 @@ export class SourcingContractService {
         await client.query("BEGIN");
         await lockDigitalSourcingHandover(client,sourcingCaseId,actor);
         await client.query("SELECT sourcing_case_id FROM sourcing_cases WHERE sourcing_case_id=$1 FOR UPDATE", [sourcingCaseId]);
-        await client.query(
+        const readyUpdate = await client.query(
           `UPDATE sourcing_contract_documents
            SET status='ready',snapshot_fingerprint=$2,pdf_attachment_id=$3,
                pdf_sha256=$4,generated_at=COALESCE(generated_at,CURRENT_TIMESTAMP),failure_reason=NULL
            WHERE sourcing_contract_document_id=$1 AND status='generating'`,
           [source.sourcing_contract_document_id,fingerprint,attachment.attachmentId,attachment.sha256],
         );
+        if (readyUpdate.rowCount && source.generated_at === null) {
+          const ready = await recordContractBusinessReady(client, this.database, actor, this.events, sourcingCaseId, source.sourcing_contract_document_id);
+          if (ready.created && ready.first && ready.orderId) await new DigitalProductionTaskService(this.database).refreshFactoryBatchTimingWithClient(client, actor, ready.orderId);
+        }
         // A routing configuration problem must not turn a valid generated PDF into a failed contract.
         // Keep an audited retry fact; explicit reconciliation uses the same version-bound projection.
         await client.query("SAVEPOINT transfer_contract_todos");

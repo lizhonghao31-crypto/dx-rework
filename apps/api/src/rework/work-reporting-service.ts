@@ -845,6 +845,7 @@ export class WorkReportingService {
         }
 
         const completedAtByReport = new Map<string, Date>();
+        const businessCompletedAt = businessNow().toISOString();
         for (const group of byCapability.values()) {
           await this.context(client, group[0]!.eventId, actor.requestId);
           const inserted = await client.query<{ work_report_id: string; completed_at: Date }>(
@@ -853,7 +854,7 @@ export class WorkReportingService {
                actual_quantity,completed_at,remark,group_amount,submitted_by,resubmits_work_report_id
              )
              SELECT report.work_report_id::uuid,report.work_task_id::uuid,report.rework_order_id::uuid,
-                    report.configuration_item_id::uuid,report.actual_quantity,CURRENT_TIMESTAMP,
+                    report.configuration_item_id::uuid,report.actual_quantity,$2::timestamptz,
                     report.remark,report.group_amount,report.submitted_by::uuid,
                     report.resubmits_work_report_id::uuid
              FROM jsonb_to_recordset($1::jsonb) AS report(
@@ -873,7 +874,7 @@ export class WorkReportingService {
               group_amount: 0,
               submitted_by: actor.actorId,
               resubmits_work_report_id: item.resubmitsWorkReportId,
-            })))],
+            }))), businessCompletedAt],
           );
           if (inserted.rows.length !== group.length) {
             error("批量报数记录不完整", 500, "INTERNAL_ERROR");

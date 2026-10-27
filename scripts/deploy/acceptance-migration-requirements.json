@@ -1317,5 +1317,25 @@
       "guard_production_order_root_immutable"
     ],
     "sequences": []
+  },
+  "0263_contract_business_ready_facts": {
+    "checksum": "ddeacbaf10de93863201f46a3c62a85296aaee8d42d650863e4561fd7391fa96",
+    "tables": [],
+    "functions": [],
+    "references": [
+      "sourcing_contract_documents",
+      "sourcing_cases",
+      "attachments",
+      "operation_events"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [
+      "sourcing_contract_business_ready_facts"
+    ],
+    "execute": [
+      "guard_production_order_root_immutable"
+    ],
+    "sequences": []
   }
 }
