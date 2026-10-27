@@ -13,14 +13,22 @@
 ## Golden Source 与提交证据
 
 - Repository：`lizhonghao31-crypto/dx-rework`
-- Base branch：`main`
-- Base SHA：
+- Base branch（实际获授权目标）：
+- Base SHA（真实远端 tip，非旧 PR 快照）：
 - Head branch：
 - Head SHA：
 - 需求基线：
 - Figma 节点/页面（如适用）：
 
 > Head SHA 必须与 GitHub 当前 PR head 完全一致；不一致时禁止合并。
+
+## 开工与集中收口
+
+- 旧测试健康及已知基线失败：
+- 入口/读取消费者覆盖、已修/原正确/范围外/未验证：
+- 合法/非法、失败回滚、同/不同key重试、并发矩阵：
+- 已有授权与禁止边界；是否有拒绝/不确定动作：
+- 本地完整自查、Review发现和自查遗漏已集中收齐：
 
 ## 修改文件
 
@@ -35,7 +43,13 @@
 - [ ] 状态合法/非法流转测试（如适用）
 - [ ] 桌面端截图（如适用）
 - [ ] 移动端截图（如适用）
-- [ ] GitHub Actions 运行对应当前 Head SHA
+- [ ] 当前 Head 的 Push light checks 实际成功
+- [ ] Review 请求ID/发出时间/实际审核SHA/结论/线程闭环（超15分钟按异常复核再重开）
+- [ ] 集中修复后冻结最终 Head，并显式请求对应等级 Gate
+- [ ] 当前 Head/base/等级的真实 run/job/attempt 成功；非 skipped/旧SHA/空跑
+- [ ] `verify-merge` 只读证据通过（不冒称已配置 GitHub required checks）
+- 实际命令/最近完成结果/未验证边界：
+- 轻/重检查次数与实际耗时、返工或重跑原因：
 
 ## 数据与权限影响
 
@@ -59,3 +73,5 @@
 - [ ] 产品验收
 - [ ] 业务验收
 - [ ] 技术证据完整
+- Merge SHA/tree（仅获授权并实际合并后填写）：
+- 部署/业务验收状态（不得用CI通过替代）：

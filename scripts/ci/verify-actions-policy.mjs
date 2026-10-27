@@ -37,36 +37,55 @@ for (const expression of [
   assert(containsSecretsContext(expression), `secret context detector must reject ${expression}`);
 }
 
-// Keep the integration branch subject to the same exact-Head gates as main.
-for (const [name, source] of [["Quick Gate", quick], ["Full Gate", full]]) {
-  const branches = source.match(/ {2}pull_request:\n {4}branches:\n((?: {6}- [^\n]+\n)+)/)?.[1]
-    .trim().split("\n").map(line => line.trim().slice(2));
-  assert(JSON.stringify(branches) === JSON.stringify(["main", "release/digital-production-v1", "feat/digital-production-a4", "unified-p*", "deliver/sla-foundation-development-budget-20261024", "deliver/sla-preparation-cutting-dispatch-20261024"]),
-    `${name} must gate main and the approved digital-production integration and approved A4/unified-plan and two exact SLA stacked base branches only`);
-}
-
+// One caller filters supported PR bases before allocating light jobs. Expensive
+// work is reusable-only and selected by an immutable explicit create request.
+const branches = quick.match(/ {2}pull_request:\n {4}branches:\n((?: {6}- [^\n]+\n)+)/)?.[1]
+  .trim().split("\n").map(line => line.trim().slice(2));
+assert(JSON.stringify(branches) === JSON.stringify(["main", "release/digital-production-v1", "feat/digital-production-a4", "unified-p*", "deliver/sla-foundation-development-budget-20261024", "deliver/sla-preparation-cutting-dispatch-20261024"]),
+  "CI caller must admit only the approved exact PR base branches");
 assert(quick.includes("timeout-minutes: 5"), "Quick Gate timeout must stay at 5 minutes");
-const fullBudget=/^ {4}timeout-minutes: 30[ \t]*$/m;
-assert(countOccurrences(full,'timeout-minutes:')===1&&fullBudget.test(full),"Full Gate must retain the explicitly approved finite 30-minute budget");
-assert(quick.includes("!startsWith(github.event.pull_request.title, '[FULL] ')"), "Quick Gate must skip FULL-title PRs before allocating its job");
-assert(stepBlock(quick, "Require explicit Quick Gate title").includes("[QUICK]"), "Quick Gate must require an explicit QUICK title");
-assert(full.includes("startsWith(github.event.pull_request.title, '[FULL] ')"), "Full Gate must run only for FULL-title PRs");
-assert(stepBlock(full, "Require explicit Full Gate title").includes("[FULL]"), "Full Gate must require an explicit FULL title");
-for (const event of ["opened", "synchronize", "reopened", "edited"]) {
-  assert(quick.includes(`- ${event}`), `Quick Gate must react to ${event}`);
-  assert(full.includes(`- ${event}`), `Full Gate must react to ${event}`);
+assert(countOccurrences(quick, 'timeout-minutes:') === 3 && countOccurrences(quick, 'timeout-minutes: 2') === 2,
+  "Only two bounded request/certification metadata jobs may accompany the five-minute light/Quick worker");
+assert(countOccurrences(full,'timeout-minutes:')===1 && /^ {4}timeout-minutes: 30[ \t]*$/m.test(full),
+  "Full Gate must retain the explicitly approved finite 30-minute budget");
+assert(/^ {2}workflow_call:/m.test(full) && !/^ {2}(pull_request|push|create|workflow_dispatch):/m.test(full),
+  "Full Gate must be reusable-only; pushes and metadata must not allocate an expensive worker");
+for(const input of ['pr_number','head_sha','base_sha','base_ref','gate_kind']) {
+  assert(full.includes(`      ${input}:\n        type: string\n        required: true`), `Full request must freeze ${input}`);
+  assert(quick.includes(input + ": ${{ needs.request.outputs."), `Caller must pass frozen ${input}`);
 }
-assert(quick.includes("cancel-in-progress: true"), "Quick Gate must cancel stale runs");
-assert(full.includes("cancel-in-progress: true"), "Full Gate must cancel stale runs");
-for (const [name, source] of [["Quick Gate", quick], ["Full Gate", full]]) {
-  assert(!/^concurrency:/m.test(source), `${name} must not cancel a running gate before its job event filter`);
-  assert(source.includes("    concurrency:\n      group: pr-gate-${{ github.event.pull_request.number || format('manual-{0}', github.ref) }}\n      cancel-in-progress: true"), `${name} must share job-level cancellation for meaningful PR changes`);
-  assert(source.includes("github.event.action != 'edited' || github.event.changes.base || (github.event.changes.title &&"), `${name} must filter unrelated PR edits before runner allocation`);
-  assert(source.includes("startsWith(github.event.changes.title.from, '[FULL] ') != startsWith(github.event.pull_request.title, '[FULL] ')")
-    && source.includes("startsWith(github.event.changes.title.from, '[QUICK] ') != startsWith(github.event.pull_request.title, '[QUICK] ')"), `${name} must preserve mode changes without rerunning title wording edits`);
-  assert(source.includes("GATE_STEPS_JSON: ${{ toJSON(steps) }}") && source.includes("if: always()"), `${name} must summarize actual step outcomes, including interruptions`);
+for(const event of ['opened','synchronize','reopened','edited']) assert(quick.includes(`- ${event}`), `Light checks must react to ${event}`);
+assert(/^ {2}create:/m.test(quick) && quick.includes("github.event.ref_type == 'branch'"), "Final requests must use branch creation only");
+assert(quick.includes("startsWith(github.event.ref, 'gate/full/')") && quick.includes("startsWith(github.event.ref, 'gate/quick/')"),
+  "Ordinary branch/tag creation must allocate no final job");
+assert(quick.includes("github.event.action != 'edited' || github.event.changes.base || (github.event.changes.title &&"),
+  "Body and same-mode wording edits must allocate no runner");
+for(const mode of ['FULL','QUICK']) assert(quick.includes(`startsWith(github.event.changes.title.from, '[${mode}] ') != startsWith(github.event.pull_request.title, '[${mode}] ')`),
+  "Risk mode and base edits must invalidate the old request");
+assert(quick.includes("'Push light checks'") && quick.includes("'Final Gate exact Head' || 'Final approval not selected'"),
+  "Skipped/metadata/light checks must not impersonate final approval");
+assert(quick.includes("WORKER_RESULT:") && quick.includes("needs.full.result") && quick.includes("needs.validate.result")
+  && quick.includes("WORKER_RECEIPT:") && quick.includes("ci-gate-runtime.mjs certify"),
+  "Final approval must certify GitHub's actual selected worker result and receipt");
+assert(quick.includes("uses: ./.github/workflows/full-gate.yml"), "Caller must select the existing full worker");
+assert(quick.includes("group: pr-gate-${{ github.event.pull_request.number || needs.request.outputs.pr || format('manual-{0}', github.ref) }}")
+  && quick.includes("cancel-in-progress: ${{ github.event_name != 'create' }}")
+  && full.includes("group: pr-gate-${{ inputs.pr_number }}\n      cancel-in-progress: false"),
+  "A new PR Head must cancel stale work; duplicate explicit final requests must not cancel/restart it");
+for(const [name,source] of [["CI caller",quick],["Full worker",full]]) {
+  assert(!/^concurrency:/m.test(source), `${name} must filter events before acquiring concurrency`);
+  assert(source.includes("permissions:\n  contents: read") && !/^ {2}(actions|pull-requests|checks|issues):/m.test(source),
+    `${name} must not add token scopes or write permissions`);
+  assert(!/contents: write|secrets: inherit/.test(source), `${name} must remain read-only`);
+  assert(source.includes("node --test scripts/ci/*.test.mjs"), `${name} must execute protocol regressions`);
+  assert(source.includes("GATE_STEPS_JSON: ${{ toJSON(steps) }}") && source.includes("if: always()")
+    && source.includes("ci-gate-runtime.mjs emit"), `${name} must retain actual interrupted/omitted-check reporting and structured evidence`);
   assert(!source.includes('Standard lint/typecheck/build/tests/migration-lint/secret-scan: completed'), `${name} must not claim unexecuted checks completed`);
 }
+assert(stepBlock(quick,"Require explicit Quick Gate title").includes('[QUICK]')
+  && stepBlock(quick,"Require explicit Quick Gate title").includes('[FULL]'), "Light checks must accept both explicit risk modes");
+assert(stepBlock(full,"Require explicit Full Gate title").includes('REQUEST_HEAD')
+  && stepBlock(full,"Require explicit Full Gate title").includes('GITHUB_SHA'), "Full worker must enforce the actual request commit");
 assert(quick.includes("full-gate-risk-map.mjs --require-quick-safe"), "Quick Gate must use the shared sensitive-path classifier");
 
 const classifier = stepBlock(quick, "Classify Quick Gate scope");

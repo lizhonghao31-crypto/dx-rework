@@ -1,19 +1,26 @@
 name: Full Gate
 
 on:
-  pull_request:
-    branches:
-      - main
-      - release/digital-production-v1
-      - feat/digital-production-a4
-      - unified-p*
-      - deliver/sla-foundation-development-budget-20261024
-      - deliver/sla-preparation-cutting-dispatch-20261024
-    types:
-      - opened
-      - synchronize
-      - reopened
-      - edited
+  workflow_call:
+    inputs:
+      pr_number:
+        type: string
+        required: true
+      head_sha:
+        type: string
+        required: true
+      base_sha:
+        type: string
+        required: true
+      base_ref:
+        type: string
+        required: true
+      gate_kind:
+        type: string
+        required: true
+    outputs:
+      receipt:
+        value: ${{ jobs.full-validate.outputs.receipt }}
 
 permissions:
   contents: read
@@ -21,16 +28,18 @@ permissions:
 jobs:
   full-validate:
     name: Full Gate exact Head
-    if: ${{ startsWith(github.event.pull_request.title, '[FULL] ') && (github.event.action != 'edited' || github.event.changes.base || (github.event.changes.title && (startsWith(github.event.changes.title.from, '[FULL] ') != startsWith(github.event.pull_request.title, '[FULL] ') || startsWith(github.event.changes.title.from, '[QUICK] ') != startsWith(github.event.pull_request.title, '[QUICK] ')))) }}
+    outputs:
+      receipt: ${{ steps.summary.outputs.receipt }}
+    if: ${{ inputs.gate_kind == 'full' }}
     concurrency:
-      group: pr-gate-${{ github.event.pull_request.number || format('manual-{0}', github.ref) }}
-      cancel-in-progress: true
+      group: pr-gate-${{ inputs.pr_number }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     # User-authorized Full Gate ceiling; this changes the limit, not execution cost.
     timeout-minutes: 30
     env:
       NODE_ENV: test
-      GIT_SHA: ${{ github.event.pull_request.head.sha }}
+      GIT_SHA: ${{ inputs.head_sha }}
       SERVICE_NAME: dx-rework-api
 
     steps:
@@ -38,16 +47,19 @@ jobs:
         id: title
         shell: bash
         env:
-          PR_TITLE: ${{ github.event.pull_request.title }}
+          EVENT_NAME: ${{ github.event_name }}
+          REQUEST_KIND: ${{ inputs.gate_kind }}
+          REQUEST_HEAD: ${{ inputs.head_sha }}
         run: |
           set -euo pipefail
-          [[ "$PR_TITLE" == "[FULL] "* ]]
+          [[ "$EVENT_NAME" == "create" && "$REQUEST_KIND" == "full" ]]
+          test "$REQUEST_HEAD" = "$GITHUB_SHA"
 
       - name: Checkout exact PR Head
         id: checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ inputs.head_sha }}
           fetch-depth: 0
 
       - name: Set up Node 22
@@ -65,22 +77,36 @@ jobs:
         id: head
         shell: bash
         env:
-          EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          EXPECTED_HEAD_SHA: ${{ inputs.head_sha }}
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "${EXPECTED_HEAD_SHA}"
           echo "BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "${GITHUB_ENV}"
 
+      - name: Validate frozen request identity
+        id: protocol
+        env:
+          EXPECTED_GATE_KIND: ${{ inputs.gate_kind }}
+          EXPECTED_GATE_HEAD: ${{ inputs.head_sha }}
+          EXPECTED_GATE_BASE: ${{ inputs.base_sha }}
+          EXPECTED_GATE_PR: ${{ inputs.pr_number }}
+          EXPECTED_GATE_BASE_REF: ${{ inputs.base_ref }}
+        run: node scripts/ci/ci-gate-runtime.mjs resolve
+
       - name: Verify Actions usage policy
         id: policy
         run: node scripts/ci/verify-actions-policy.mjs
+
+      - name: Run CI protocol regression tests
+        id: protocol_tests
+        run: node --test scripts/ci/*.test.mjs
 
       - name: Classify Full Gate risk from exact PR diff
         id: risk
         shell: bash
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ inputs.base_sha }}
+          HEAD_SHA: ${{ inputs.head_sha }}
         run: |
           set -euo pipefail
           git diff --name-only "${BASE_SHA}" "${HEAD_SHA}" > "$RUNNER_TEMP/full-gate-changed-files.txt"
@@ -88,10 +114,10 @@ jobs:
 
       - name: Compare exact candidate with current remote main migration history
         id: main_compat
-        if: github.base_ref == 'release/digital-production-v1'
+        if: inputs.base_ref == 'release/digital-production-v1'
         shell: bash
         env:
-          COMPAT_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          COMPAT_BASE_SHA: ${{ inputs.base_sha }}
         run: |
           set -euo pipefail
           node scripts/check-main-release-compat.mjs --candidate-ref "$GIT_SHA" --tool-ref "$GIT_SHA" --baseline-ref "$COMPAT_BASE_SHA" --output "$RUNNER_TEMP/main-release-compat.json"
@@ -173,7 +199,7 @@ jobs:
         if: env.DB_REQUIRED == 'true'
         shell: bash
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BASE_SHA: ${{ inputs.base_sha }}
         run: bash scripts/seed-base-migrations.sh
 
       - name: Apply and validate exact Head migration history against PostgreSQL
@@ -273,7 +299,7 @@ jobs:
 
       - name: Main and existing release histories through low-privilege Acceptance maintenance
         id: release_history
-        if: github.base_ref == 'release/digital-production-v1' && env.DEPLOYMENT_SENSITIVE == 'true'
+        if: inputs.base_ref == 'release/digital-production-v1' && env.DEPLOYMENT_SENSITIVE == 'true'
         run: |
           node scripts/ci/main-release-history-drill.mjs 13 "$RUNNER_TEMP/main-release-compat.json"
           node scripts/ci/main-release-history-drill.mjs 16 "$RUNNER_TEMP/main-release-compat.json"
@@ -314,17 +340,19 @@ jobs:
 
 
       - name: Write actual gate summary
+        id: summary
         if: always()
         shell: bash
         env:
           GATE_KIND: full
+          GATE_PHASE: ${{ steps.protocol.outputs.phase }}
           GATE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
           GATE_JOB_STATUS: ${{ job.status }}
           GATE_STEPS_JSON: ${{ toJSON(steps) }}
           GATE_SCOPE_JSON: >-
-            {"event": "${{ github.event_name }}", "base": "${{ github.base_ref }}", "db": "${{ env.DB_REQUIRED }}", "mapped": "${{ env.MAPPED_POSTGRES_TESTS }}", "journey": "${{ env.JOURNEY_PG13_COMPAT }}", "migration": "${{ env.MIGRATION_SENSITIVE }}", "business_chain": "${{ env.BUSINESS_CHAIN_SENSITIVE }}", "deployment": "${{ env.DEPLOYMENT_SENSITIVE }}"}
+            {"event": "${{ github.event_name }}", "final": "true", "base": "${{ inputs.base_ref }}", "db": "${{ env.DB_REQUIRED }}", "mapped": "${{ env.MAPPED_POSTGRES_TESTS }}", "journey": "${{ env.JOURNEY_PG13_COMPAT }}", "migration": "${{ env.MIGRATION_SENSITIVE }}", "business_chain": "${{ env.BUSINESS_CHAIN_SENSITIVE }}", "deployment": "${{ env.DEPLOYMENT_SENSITIVE }}"}
           GATE_CHECKS_JSON: >-
-            [["title", "Require explicit Full Gate title", "always"], ["checkout", "Checkout exact PR Head", "always"], ["node", "Set up Node 22", "always"], ["npm", "Pin npm 10", "always"], ["head", "Verify exact Head", "always"], ["policy", "Verify Actions usage policy", "always"], ["risk", "Classify Full Gate risk from exact PR diff", "always"], ["main_compat", "Compare exact candidate with current remote main migration history", "release"], ["install", "Install locked dependencies", "always"], ["audit", "Audit production dependency graph", "always"], ["lint", "Lint", "always"], ["types", "Typecheck", "always"], ["build", "Build workspaces without deployment postbuild", "always"], ["tests", "Full unit and integration suite without runtime DB escalation", "always"], ["migration_lint", "Validate migration files statically", "always"], ["secrets", "Scan repository history and first-party artifacts for secrets", "always"], ["db_start", "Start isolated PostgreSQL only for DB-sensitive changes", "db"], ["db_seed", "Seed database with base-revision migration history", "db"], ["db_migrate", "Apply and validate exact Head migration history against PostgreSQL", "db"], ["db_tests", "Run mapped PostgreSQL sensitive-domain regressions", "mapped"], ["journey", "Run PostgreSQL 13 Journey read compatibility", "journey"], ["root_audit", "Run PostgreSQL Root audit control-boundary regressions for migration changes", "migration"], ["business_chain", "Run PostgreSQL business chain for business, migration or deployment-sensitive changes", "chain"], ["backup", "PostgreSQL backup and isolated restore drill", "deployment"], ["acceptance_recovery", "Acceptance low-privilege migration and backup recovery", "deployment"], ["release_history", "Main and existing release histories through low-privilege Acceptance maintenance", "release_deployment"], ["release_acceptance", "PR-17 exact-head acceptance and lifecycle", "deployment"], ["package", "PR-17 package, runtime and relocation-safe transfer", "deployment"], ["db_stop", "Stop isolated PostgreSQL", "db"]]
+            [["title","Require explicit Full Gate title","always"],["checkout","Checkout exact PR Head","always"],["node","Set up Node 22","always"],["npm","Pin npm 10","always"],["head","Verify exact Head","always"],["protocol","Validate frozen request identity","always"],["policy","Verify Actions usage policy","always"],["protocol_tests","Run CI protocol regression tests","always"],["risk","Classify Full Gate risk from exact PR diff","always"],["main_compat","Compare exact candidate with current remote main migration history","release"],["install","Install locked dependencies","always"],["audit","Audit production dependency graph","always"],["lint","Lint","always"],["types","Typecheck","always"],["build","Build workspaces without deployment postbuild","always"],["tests","Full unit and integration suite without runtime DB escalation","always"],["migration_lint","Validate migration files statically","always"],["secrets","Scan repository history and first-party artifacts for secrets","always"],["db_start","Start isolated PostgreSQL only for DB-sensitive changes","db"],["db_seed","Seed database with base-revision migration history","db"],["db_migrate","Apply and validate exact Head migration history against PostgreSQL","db"],["db_tests","Run mapped PostgreSQL sensitive-domain regressions","mapped"],["journey","Run PostgreSQL 13 Journey read compatibility","journey"],["root_audit","Run PostgreSQL Root audit control-boundary regressions for migration changes","migration"],["business_chain","Run PostgreSQL business chain for business, migration or deployment-sensitive changes","chain"],["backup","PostgreSQL backup and isolated restore drill","deployment"],["acceptance_recovery","Acceptance low-privilege migration and backup recovery","deployment"],["release_history","Main and existing release histories through low-privilege Acceptance maintenance","release_deployment"],["release_acceptance","PR-17 exact-head acceptance and lifecycle","deployment"],["package","PR-17 package, runtime and relocation-safe transfer","deployment"],["db_stop","Stop isolated PostgreSQL","db"]]
         run: |
           node <<'GATE_SUMMARY_JS'
           const fs = require('node:fs');
@@ -336,6 +364,7 @@ jobs:
           function required(kind) {
             if (kind === 'always') return true;
             if (kind === 'pr') return scope.event === 'pull_request';
+            if (kind === 'pr_or_final') return scope.event === 'pull_request' || flag('final');
             if (kind === 'release') return scope.base === 'release/digital-production-v1';
             if (!classified) return null;
             if (kind === 'release_deployment') return flag('deployment') && scope.base === 'release/digital-production-v1';
@@ -361,10 +390,11 @@ jobs:
             if (needed !== false && !noWebTests && step?.outcome !== 'success') missing.push(label);
             return '| ' + label + ' | ' + status + ' |';
           });
-          const report = ['## ' + (process.env.GATE_KIND === 'full' ? 'Full' : 'Quick') + ' Gate 执行明细',
+          const report = ['## ' + (['light','invalidate'].includes(process.env.GATE_PHASE) ? 'Push light checks' : process.env.GATE_KIND === 'full' ? 'Full' : 'Quick') + ' Gate 执行明细',
             '', '- Head SHA: `' + process.env.GATE_HEAD + '`', '- 摘要前 Job 状态：' + process.env.GATE_JOB_STATUS,
             '- 最终结论以 GitHub Job 为准；清理或摘要成功不代表门禁通过。', '', '| 检查 | 实际结果 |', '| --- | --- |', ...rows,
             '', '未完成必需检查（含范围未判定）：' + (missing.length ? missing.join('；') : '无'), ''].join('\n');
           fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, report);
           if (missing.length && process.env.GATE_JOB_STATUS === 'success') process.exitCode = 1;
           GATE_SUMMARY_JS
+          node scripts/ci/ci-gate-runtime.mjs emit
