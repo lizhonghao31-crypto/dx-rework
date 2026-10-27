@@ -1,4 +1,5 @@
 import {randomUUID} from 'node:crypto';
+import pg from 'pg';
 import {afterAll,beforeAll,describe,expect,it} from 'vitest';
 import {CreateSupplierSchema} from '@dx-rework/contracts';
 import {businessAnchorFixture} from '../helpers/business-anchor-fixture.js';
@@ -34,6 +35,16 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   }finally{client.release();}
   expect((await f.db.query('SELECT contract_generated_at,contract_return_due_at,contract_returned_at FROM sourcing_contract_return_monitors WHERE sourcing_case_id=$1',[p.caseId])).rows[0]).toMatchObject({contract_generated_at:original.contract_generated_at,contract_return_due_at:original.contract_return_due_at,contract_returned_at:original.contract_returned_at});
   const cycle=(await f.db.query('SELECT cycle.generated_at,document.generated_at AS pdf_generated_at FROM sourcing_contract_return_cycles cycle JOIN sourcing_contract_documents document ON document.sourcing_contract_document_id=cycle.first_document_id WHERE cycle.sourcing_approval_snapshot_id=$1',[state.contractReturnCycleId])).rows[0];expect(cycle.generated_at).toEqual(cycle.pdf_generated_at);
+ },60000);
+ it('rejects unverified readers and foreign ALS scope in the version-todo adapter itself',async()=>{
+  const p=await prepare(),other=await f.scene('2026-11-02T02:00:00.000Z'),unverified=new pg.Pool({...f.db.options});
+  try{const client=await unverified.connect();try{
+   await expect(new SourcingTransferContractTodos(unverified).inspect(client,p.caseId)).rejects.toMatchObject({code:'ACCEPTANCE_ISOLATION'});
+  }finally{client.release();}}finally{await unverified.end();}
+  const client=await f.db.connect();try{
+   expect((await new SourcingTransferContractTodos(f.db).inspect(client,randomUUID())).current).toBeUndefined();
+   await expect(f.runtime.run(other,f.root,()=>new SourcingTransferContractTodos(f.db).inspect(client,p.caseId))).rejects.toMatchObject({code:'ACCEPTANCE_CLOCK_CONFLICT'});
+  }finally{client.release();}
  },60000);
  it('reads without ALS at full pool capacity using the callers existing transactions',async()=>{
   const p=await prepare(),clients=[];

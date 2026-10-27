@@ -20,7 +20,7 @@
 | get → contractReturnState | 原四态及截止相等时仍pending/on_time，逾期剔除上海周日。 | 当前场景asOf按原单；有效终点取第一条实际有效回传的匹配业务事实，补传/推进clock不清零。PDF实际生成和版本submittedAt仍真实。 |
 | sourcing readCase/list/filter/totals | 当前两处查询及全部逾期筛选用CURRENT_TIMESTAMP；列表可能混多个scene。 | 统一扩展facts，逐单business asOf，同一SQL快照的筛选与总量一致；全局列表不套单场景clock。缺证据显示时效未知，不能归入已证的四态指标。 |
 | 历史与旧scene | 普通旧数据走原audit读口径；三单历史cycle及其余未纳入旧记录的规则不改，不执行历史补录工具。 | 只有同实际PDF/有效submission/原场景/可信clock版本证据才可明确只读投影，否则unknown。历史节点尚无可靠终结cutoff的场景合同不套当前资料/当前now；一般历史同秒/附件序列继续PR4。 |
-| transfer/price contract todos | 原policy due_at=NULL、max_reminders=0，不制造24h或新48h todo deadline。 | 有效文件是否已回传与业务时效质量分开；旧时间缺证据不重开已完成待办。网络/认证/outbox重试继续真实时间。 |
+| transfer/price contract todos | 原policy due_at=NULL、max_reminders=0，不制造24h或新48h todo deadline。 | 有效文件是否已回传与业务时效质量分开；旧时间缺证据不重开已完成待办；适配器自身核已验证reader与原scope，复用当前事务。网络/认证/outbox重试继续真实时间。 |
 
 ## 最小兼容schema与读写边界
 
@@ -59,11 +59,12 @@
 ## 回归记录
 
 - 原始RED：PG16原生过去/未来起点及回传终点3项均失败；263业务ready与真实PDF审计同时存在，已固定复现。
-- 最终PG16/PG13.23：各4文件169项全部通过（原外发140＋新增原生20、cycle/SQL/满池4、原HTTP5）。过去/当前/未来/普通、多场景、Sunday与日终/due±1ms、先回传后ready、首次终点冻结、同/异key与并发、price/factory重签、信息修订不重启、失败整事务回滚、未知/唯一旧证据、无reader/错scene及SQL守卫均有实际断言。
+- 最终PG16/PG13.23：各4文件170项全部通过（原外发140＋新增原生20、cycle/SQL/满池/适配器scope5、原HTTP5）。过去/当前/未来/普通、多场景、Sunday与日终/due±1ms、先回传后ready、首次终点冻结、同/异key与并发、price/factory重签、信息修订不重启、失败整事务回滚、未知/唯一旧证据、无reader/错scene及SQL守卫均有实际断言。
 - 本地合成浏览器34项通过，含390/1440宽“时效未知”原因、旧文件、只读零POST；原角色与转厂/价格/合同版本显示回归保留。
 - 发现并修复：PL/pgSQL旧事件分支变量/列名歧义；普通单新增墙钟asOf破坏原两项只读快照，已恢复普通单原响应，原140项完整重跑通过。两处普通单query mock补充原scope读取，未降低业务断言。
 - 早先使用旧SQL定义的PG13运行取消，不计通过；上面的PG13结果为当前完整SQL/TS的独立重跑。旧migration及checksum完全未改。
 - 全部单测最终聚合482文件/2527项通过；最终lint/typecheck、API/web构建、时间写入口检查/候选清单/secret scan通过。两版PG另各13项migration兼容与低权限维护回归通过；唯一旧证据投影追加歧义分支后，两版各1项定向复验通过（其余19项为本次过滤，非跳过整轮）。
+- 补充入口红测：版本待办适配器直接读取业务投影时缺少reader/scope校验，已复现后补齐；保留固定历史盘点缺单时的原前置阻断，不将缺单当可计算时效。170项聚合后，该最终适配器含缺单断言的5项在两版PG再定向复验；旧Head的CI不作为新Head交付证明。
 - 精确Head source compatibility、CI和Review状态记录于PR证据，须全部满足才合并。CI之后若有实际代码修复必须核新Head，不以本地或旧Head绿灯替代。
 
 PR4–PR6未开始，Acceptance未更新。本地隔离fixture/合成浏览器通过不代表现场业务复验通过。

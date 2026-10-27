@@ -1,3 +1,4 @@
+import {contractReturnClock} from "./contract-return-clock.js";
 import {effectiveSourcingMerchandiser} from "./current-merchandiser.js";
 import type { Pool, PoolClient } from "pg";
 import type { TrustedActorContext } from "../tools/repositories.js";
@@ -33,11 +34,14 @@ export type CurrentTransferContract = {
 /** Reconcile only authoritative current-version facts under the existing order lock. */
 export class SourcingTransferContractTodos {
   private readonly projection: TodoProjectionService;
-  constructor(database: Pool, projection?: TodoProjectionService) {
+  constructor(private readonly database: Pool, projection?: TodoProjectionService) {
     this.projection = projection ?? new TodoProjectionService(new TodoService(database));
   }
 
   async inspect(client: PoolClient, caseId: string) {
+    // The fixed historical inventory also represents absent cases as blocked preconditions.
+    if((await client.query("SELECT 1 FROM sourcing_cases WHERE sourcing_case_id=$1",[caseId])).rows.length)
+      await contractReturnClock(this.database,client,caseId);
     const current = (await client.query<CurrentTransferContract>(`SELECT document.sourcing_contract_document_id,
         document.contract_version,document.status,document.pdf_attachment_id,
         document.generated_at::text AS generated_at,document.sourcing_approval_snapshot_id,
