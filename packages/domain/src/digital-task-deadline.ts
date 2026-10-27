@@ -9,7 +9,8 @@ export function digitalDeadline(enteredAt: Date | string | null, slaSeconds: num
 export function digitalTaskTiming(input: { slaHours: number | null; enteredAt: string | null; completedAt: string | null; terminal: boolean; dueAt: string | null; warningAt: string | null; deadlineExclusive?:boolean }, now: Date) {
   const entered = input.enteredAt ? new Date(input.enteredAt).getTime() : null;
   const end = input.completedAt ? new Date(input.completedAt).getTime() : now.getTime();
-  const elapsedSeconds = entered === null ? null : Math.max(0, Math.floor((end - entered) / 1000));
+  if(!Number.isFinite(end)||!Number.isFinite(now.getTime())||entered!==null&&(!Number.isFinite(entered)||end<entered)||input.completedAt&&end>now.getTime())return {state:"unknown" as const,elapsedSeconds:null,onTime:null};
+  const elapsedSeconds = entered === null ? null : Math.floor((end - entered) / 1000);
   if (input.terminal && input.completedAt === null) return { state: "unknown" as const, elapsedSeconds: null, onTime: null };
   if (entered === null && input.slaHours !== null) return { state: "unknown" as const, elapsedSeconds: null, onTime: null };
   if (input.dueAt === null) return { state: "unlimited" as const, elapsedSeconds, onTime: null };

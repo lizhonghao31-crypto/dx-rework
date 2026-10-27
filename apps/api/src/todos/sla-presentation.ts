@@ -15,7 +15,7 @@ export function explicitlyUnlimitedSla(basis:unknown):boolean {
 }
 export function todoSlaTiming(input:{dueAt:string|null;warningAt:string|null;enteredAt:string|null;exclusive?:boolean;unlimited?:boolean;asOf:string}):NonNullable<TodoResponse['timing']>{
  const {state,elapsedSeconds}=digitalTaskTiming({slaHours:null,enteredAt:input.enteredAt,completedAt:null,terminal:false,dueAt:input.dueAt,warningAt:input.warningAt,deadlineExclusive:input.exclusive??false},new Date(input.asOf));
- const status=input.unlimited?'unlimited':!input.dueAt?'unknown':state==='overdue'?'overdue':state==='attention'?'warning':input.warningAt?'normal':'unknown';
+ const status=input.unlimited?'unlimited':!input.dueAt||state==='unknown'?'unknown':state==='overdue'?'overdue':state==='attention'?'warning':input.warningAt?'normal':'unknown';
  return {status,elapsedSeconds,asOf:input.asOf,warningAt:input.warningAt,exclusive:input.exclusive??false,reason:input.unlimited?null:!input.dueAt?'未有可信截止时间，仍按原业务条件办理':status==='unknown'?'已有截止时间，缺少临期起点或比例；已知逾期仍统计':status==='overdue'?'原节点截止已过，进入原办理页处理':status==='warning'?'原节点即将到期，进入原办理页处理':null};
 }
 /** Enrich only already-authorized personal responses. Never read a whole mother's facts for a worker. */

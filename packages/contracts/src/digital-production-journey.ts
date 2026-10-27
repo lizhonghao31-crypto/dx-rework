@@ -37,7 +37,7 @@ export const JourneyFilterSchema = z.object({
   node: z.string().trim().max(100).refine(value=>JOURNEY_NODES.some(node=>node.key===value),"未知流程节点").optional(),
   state: JourneyStateSchema.optional(),
   risk: z.enum(["overdue", "due_soon", "blocked", "unknown"]).optional(),
-  missing: z.enum(["customer_date", "factory_date", "fabric_date", "cutting_time", "plan", "scope"]).optional(),
+  missing: z.enum(["customer_date", "factory_date", "fabric_date", "cutting_time", "plan", "scope", "fact_time"]).optional(),
   kpi: z.enum(["all", "active", "not_started", "due_soon", "overdue", "blocked", "completed"]).default("all"),
   startDate: z.iso.date().optional(), endDate: z.iso.date().optional(),
 }).strict().superRefine((value, context) => {
@@ -49,6 +49,8 @@ export type JourneyDocumentMetadata={created:{at:string|null;by:string|null};edi
 export type JourneyTiming = {
   id:string;label:string;stage:JourneyStageKey;kind:string;
   status:"not_applicable"|"unknown"|"not_started"|"running"|"warning"|"overdue"|"completed_on_time"|"completed_late"|"completed_unrated";
+  provenRisk?:"overdue"|"warning";
+  assessmentIssue?:{code:"completion_before_start"|"actual_after_observation";reason:string};
   actualStart:string|null;actualEnd:string|null;
   target:{at:string|null;exclusive:boolean;reasons:string[]};
   forecast:{at:string|null;exclusive:boolean;reasons:string[]};
@@ -56,8 +58,8 @@ export type JourneyTiming = {
   original:{at:string|null;exclusive:boolean;reasons:string[]};
   current:{at:string|null;exclusive:boolean;reasons:string[]};
 };
-export type JourneyCoverage = {key:"customer_date"|"factory_date"|"fabric_date"|"cutting_time"|"plan"|"scope";message:string};
-export type JourneySupervision = {asOf:string;status:"planned"|"legacy_unenrolled"|"limited";originalRevision:number|null;currentRevision:number|null;nodes:JourneyTiming[];coverage:JourneyCoverage[];customerReminderDate:string|null};
+export type JourneyCoverage = {key:"customer_date"|"factory_date"|"fabric_date"|"cutting_time"|"plan"|"scope"|"fact_time";message:string};
+export type JourneySupervision = {assessment?:"complete"|"partially_unavailable";requestId?:string;asOf:string;status:"planned"|"legacy_unenrolled"|"limited";originalRevision:number|null;currentRevision:number|null;nodes:JourneyTiming[];coverage:JourneyCoverage[];customerReminderDate:string|null};
 export type JourneyNode = {
   timing?:JourneyTiming;
   /** Read-only applicability evidence; unknown never supplies a progress denominator. */

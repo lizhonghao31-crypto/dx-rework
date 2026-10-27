@@ -24,7 +24,7 @@ export async function digitalRequest<T>(path: string, method = "GET", body?: unk
   const request=(async()=>{
     const response=await feedbackFetch(urls.apiUrl(`digital-production/${path}`),{method,credentials:'include',cache:'no-store',
       headers:{'content-type':'application/json',...(key?{'idempotency-key':key}:{})},...(body===undefined?{}:{body:JSON.stringify(body)}),...(reading&&options?.signal?{signal:options.signal}:{})}).catch(error=>{if(error?.name==='AbortError')throw error;throw new DigitalRequestError(error.message,null);});
-    const value=await feedbackJson(response,method,value=>value,(message,code,status)=>new DigitalRequestError(message,status,code));
+    const value=await feedbackJson(response,method,value=>value,(message,code,status)=>{const id=response.headers?.get('x-request-id');return new DigitalRequestError(id&&/^[\w.:-]{1,128}$/.test(id)?`${message}（请求编号：${id}）`:message,status,code);});
     if(!reading)invalidate();
     if(reading&&(identity!==sessionCacheVersion()||revision!==generation))throw new Error('读取条件已变化，请重试刷新');
     return value;

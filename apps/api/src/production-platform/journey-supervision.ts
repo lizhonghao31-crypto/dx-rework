@@ -16,8 +16,8 @@ const open=(state:string)=>!['completed','inherited','cancelled','not_applicable
 export function attachJourneySupervision(item:OrderJourney,plan:SlaPlan|null,original:SlaPlan|null,nodes:SlaNodeEvaluation[],time:BusinessTime,revisions:{original:number|null;current:number|null},external=false) {
  const definitions=new Map(plan?.nodes.map(n=>[n.id,n])??[]),originals=new Map(original?calculateSlaPlan(original).map(n=>[n.id,n.end]):[]);
  const timing:JourneyTiming[]=nodes.flatMap(n=>{const definition=definitions.get(n.id);if(!definition||definition.applicable==='no'||definition.kind==='unlimited'||definition.parameterKey==='bulk_cutting'&&external)return [];
-  return [{id:n.id,label:definition.label,stage:JOURNEY_STAGES[definition.stage-1]!.key,kind:definition.kind,status:n.status,actualStart:n.actualStart,actualEnd:n.actualEnd,target:n.deadline,forecast:n.forecast,forecastBasis:n.forecastBasis,original:originals.get(n.id)??{at:null,exclusive:false,reasons:['没有首版目标']},current:n.end}];});
- const coverage:JourneySupervision['coverage']=[];
+  return [{id:n.id,label:definition.label,stage:JOURNEY_STAGES[definition.stage-1]!.key,kind:definition.kind,status:n.status,...(n.assessmentIssue?{assessmentIssue:n.assessmentIssue}:{}),...(n.provenRisk?{provenRisk:n.provenRisk}:{}),actualStart:n.actualStart,actualEnd:n.actualEnd,target:n.deadline,forecast:n.forecast,forecastBasis:n.forecastBasis,original:originals.get(n.id)??{at:null,exclusive:false,reasons:['没有首版目标']},current:n.end}];});
+ const coverage:JourneySupervision['coverage']=nodes.flatMap(n=>n.assessmentIssue?[{key:'fact_time' as const,message:`${definitions.get(n.id)?.label??n.id}：${n.assessmentIssue.reason}${n.provenRisk==='overdue'?'；另有可信批次已逾期':n.provenRisk==='warning'?'；另有可信批次已临期':''}`}]:[]);
  if(item.orderId){
   const dates=item.poDeliveryDates??[],missingCustomer=Math.max(item.lines.length-dates.filter(l=>l.customerWarehouseArrivalDate).length,0),missingFactory=Math.max(item.lines.length-dates.filter(l=>l.factoryDeliveryDate).length,0);
   if(missingCustomer)coverage.push({key:'customer_date',message:`${missingCustomer}个PO没填客户要求出货日期，整单交期统计只含已填PO；到原订单补齐`});
@@ -29,7 +29,7 @@ export function attachJourneySupervision(item:OrderJourney,plan:SlaPlan|null,ori
  }
  if(!plan)coverage.push({key:'plan',message:'此历史单没有首版SLA计划，仍监督原任务截止；不补造历史计划'});
  const reminder=timing.filter(n=>n.id.startsWith('order_shipping_reminder:')&&n.target.at).map(n=>new Date(Date.parse(n.target.at!)-(n.target.exclusive?1:0)).toLocaleDateString('en-CA',{timeZone:'Asia/Shanghai'})).sort()[0]??null;
- item.supervision={asOf:time.now,status:plan?'planned':'legacy_unenrolled',originalRevision:revisions.original,currentRevision:revisions.current,nodes:timing,coverage,customerReminderDate:reminder};
+ item.supervision={assessment:nodes.some(n=>n.assessmentIssue)?'partially_unavailable':'complete',asOf:time.now,status:plan?'planned':'legacy_unenrolled',originalRevision:revisions.original,currentRevision:revisions.current,nodes:timing,coverage,customerReminderDate:reminder};
  for(const stage of item.stages)for(const node of stage.nodes){
   if(!node.current)continue;
   const matches=timing.filter(t=>(aliases[t.id.split(':')[0]!]??t.id.split(':')[0])===node.key);
@@ -42,23 +42,24 @@ export function attachJourneySupervision(item:OrderJourney,plan:SlaPlan|null,ori
   }
   if(open(node.state)){
    node.risks=node.risks.filter(r=>r!=='overdue'&&(r!=='due_soon'||matches.every(t=>['offset','order_date'].includes(t.kind))));
-   if(matches.some(t=>t.status==='overdue'))node.risks.push('overdue');else if(matches.some(t=>t.status==='warning'))node.risks.push('due_soon');
+   if(matches.some(t=>t.status==='overdue'||t.provenRisk==='overdue'))node.risks.push('overdue');else if(matches.some(t=>t.status==='warning'||t.provenRisk==='warning'))node.risks.push('due_soon');
    if(matches.some(t=>t.status==='unknown')&&!node.risks.includes('unknown'))node.risks.push('unknown');
   }
  }
 }
 export async function readJourneySupervision(database:Pool,db:PoolClient,actor:TrustedActorContext,item:OrderJourney,time:BusinessTime,external=false){
- if(item.orderId){const read=await new SlaOrderService(database,{read:async()=>time}).readWithClient(actor,item.orderId,db);
+ if(item.orderId){const read=await new SlaOrderService(database,{read:async()=>time}).readWithClient(actor,item.orderId,db,{mode:"read_projection"});
   if(read.status==='planned')attachJourneySupervision(item,read.evaluationPlan,read.original.plan,read.nodes,read.time,{original:read.original.revision,current:read.current.revision},external);
   else attachJourneySupervision(item,null,null,[],read.time,{original:null,current:null});
  }else if(item.sourceId){const saved=await developmentSlaPlan(db,item.sourceId);
   if(!saved){attachJourneySupervision(item,null,null,[],time,{original:null,current:null});}
   else {
   const evidence=await developmentSlaEvidence(db,item.sourceId,time),plan=developmentEvaluationPlan(saved.plan_json,evidence?.facts??{});
-  attachJourneySupervision(item,plan,saved.plan_json,evaluateSlaPlan(plan,evidence?.facts??{},time),time,{original:1,current:saved.revision});
+  attachJourneySupervision(item,plan,saved.plan_json,evaluateSlaPlan(plan,evidence?.facts??{},time,{mode:"read_projection"}),time,{original:1,current:saved.revision});
   }
  }
- if(time.scenarioId){const current=await new ContextBusinessClock(database).read(item.orderId?{kind:'order',id:item.orderId}:{kind:'source',id:item.sourceId!});
+ if(item.supervision?.assessment==='partially_unavailable')item.supervision.requestId=actor.requestId;
+ if(time.scenarioId){const current=await new ContextBusinessClock(database,db).read(item.orderId?{kind:'order',id:item.orderId}:{kind:'source',id:item.sourceId!});
   if(current.scenarioId!==time.scenarioId||current.revision!==time.revision)throw new ApplicationError('CONFLICT','测试时钟在读取期间已变化，请刷新原页面',409);
  }
 }

@@ -1,0 +1,9 @@
+import {createRoot} from 'react-dom/client';
+import type {DigitalTask} from '@dx-rework/contracts/digital-production-tasks';
+import {DigitalTasksPanel} from '../../apps/web/src/digital-production-tasks-panel.js';
+const id='00000000-0000-4000-8000-000000000004';
+const mode=new URLSearchParams(location.search).get('mode');
+const task:DigitalTask={deadlineMode:'date_target',taskId:id,orderId:null,sourceId:null,taskKind:'bulk_ship_sample',label:'船样',assigneeId:id,assigneeName:'TEST师傅',requiredRole:'pattern_room_worker',state:'ready',routeVersion:1,occurrence:1,enteredAt:null,recordedAt:'2026-10-01T00:00:00.000Z',completedAt:null,paused:false,dueAt:'2026-10-26T16:00:00.000Z',deadlineExclusive:true,warningAt:null,slaHours:null,policyVersion:1,routeProgress:{applicable:1,completed:0,cancelled:0},hasHandover:false,canManage:false,canCorrect:false,canControl:false,timeQuality:'缺失',blockedReason:null,canExecute:false};
+if(mode==='missing')task.dueAt=null;if(mode==='unlimited'){task.deadlineMode='unlimited';task.dueAt=null;}if(mode==='duration'){task.deadlineMode='duration';task.deadlineExclusive=false;task.slaHours=24;task.enteredAt='2026-10-25T16:00:00.000Z';}
+window.fetch=async input=>{if(String(input).endsWith('/history'))return Response.json({events:[],revisions:[{revisionId:'TEST-date-revision',policyVersion:1,enteredAt:task.enteredAt,warningAt:null,dueAt:task.dueAt,deadlineMode:task.deadlineMode,reason:'activation',changedAt:task.recordedAt,hasSla:task.deadlineMode!=='unlimited',changedByName:'TEST原登记人'}]});throw Error('Unexpected TEST-only request');};
+createRoot(document.getElementById('root')!).render(<DigitalTasksPanel initialTask={task} taskId={id} compact feedbackOnly view="read" options={{manage:false,customers:false,approveDelivery:false,create:false,actorId:id,roles:['pattern_room_worker']}}/>);

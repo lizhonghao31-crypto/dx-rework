@@ -5,7 +5,7 @@ import {createHash} from 'node:crypto';
 
 const inventoryPath='docs/engineering/acceptance-time-sites-20261027.json';
 const roots=['apps/api/src','apps/web/src','packages/domain/src','packages/contracts/src','apps/api/migrations','scripts'];
-const patterns={wall:/\b(?:CURRENT_TIMESTAMP|CURRENT_DATE|LOCALTIMESTAMP|clock_timestamp\s*\(|statement_timestamp\s*\(|transaction_timestamp\s*\(|Date\.now\s*\(|new Date\s*\(\s*\))/g,
+const patterns={reader:/\b(?:evaluateSlaPlan|digitalTaskTiming|taskAnalysis|isAnalysisOverdue|todoSlaTiming|journeyTaskSummaries|acceptanceTaskNow)\s*\(/g,wall:/\b(?:CURRENT_TIMESTAMP|CURRENT_DATE|LOCALTIMESTAMP|clock_timestamp\s*\(|statement_timestamp\s*\(|transaction_timestamp\s*\(|Date\.now\s*\(|new Date\s*\(\s*\))/g,
  business:/\b(?:businessNow|observedBusinessTime|ContextBusinessClock|SystemBusinessClock|BusinessClock|businessToday|beijingCalendarDate)\b/g,
  dateControl:/type=["']date["']|type:\s*["']date["']|\b(?:maxDate|minDate|date_target)\b/g,
  anchor:/\b(?:max|min)\s*\([^;\n]*(?:_at|occurred|completed|generated)|Math\.(?:max|min)\([^;\n]*(?:[Aa]t|[Tt]ime|[Dd]ate)/gi};

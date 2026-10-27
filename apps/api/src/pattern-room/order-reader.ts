@@ -1,4 +1,4 @@
-import {acceptanceBusinessContext} from '../acceptance-clock/business-time.js';
+import {ContextBusinessClock} from '../acceptance-clock/business-time.js';
 import {readPatternHistory} from './pattern-history-reader.js';
 import {PatternHistoryQuerySchema,type PatternHistoryQuery} from '@dx-rework/contracts/pattern-orders';
 import {developmentMakingBasis} from '@dx-rework/contracts/digital-development';
@@ -22,7 +22,7 @@ export type PatternRoundRow = { round_id: string; order_id: string; round_index:
   quantity: number | null; unit_price: string | null; agreed_amount: string | null; actual_hours: string | null; assigned_at: Date | null; assigned_by: string | null; supervisor_user_id: string | null; completed_at: Date | null; handed_over_at: Date | null;
   stopped_at: Date | null; cancelled_at: Date | null; cancelled_amount: string | null; fee_confirmed_at: Date | null };
 export type PatternSegmentRow = { segment_id: string; round_id: string; segment_index: number; person_id: string; worker_user_id: string; worker_name: string;
-  amount: string | null; actual_hours: string | null; started_at: Date; ended_at: Date | null; worker_completed_at: Date | null; wage_eligible_at: Date | null };
+  amount: string | null; actual_hours: string | null; started_at: Date; ended_at: Date | null; worker_completed_at: Date | null; wage_audit_at?:string|null; wage_eligible_at: Date | null };
 export const patternIso = (value: Date | null) => value?.toISOString() ?? null;
 export const patternSummary = (row: PatternOrderRow): PatternOrderSummary => ({ orderId: row.order_id, orderNo: row.order_no, kind: row.kind, taskName: row.task_name, status: row.status,
   version: row.version, styleNo: row.style_no, creatorId: row.created_by, creatorName: row.creator_name, currentWorkerName: row.current_worker_name ?? null,
@@ -107,17 +107,19 @@ export class PatternOrderReader {
       const allCosts = canReadAllPatternOrders(effective) || (order.created_by === effective.actorId && (effective.actorRoles.includes("sample_designer") || (order.kind === "misc" && effective.actorRoles.includes("order_merchandiser"))));
       const allMaterials = canReadAllPatternTechnicalOrders(effective) || (order.created_by === effective.actorId && (effective.actorRoles.includes("sample_designer") || (order.kind === "misc" && effective.actorRoles.includes("order_merchandiser"))));
       const rounds = (await client.query<PatternRoundRow>("SELECT * FROM pattern_room_rounds WHERE order_id=$1 ORDER BY requested_at,round_id", [orderId])).rows;
-      const segments = (await client.query<PatternSegmentRow>(`SELECT segment.* FROM pattern_room_segments segment JOIN pattern_room_rounds round USING(round_id)
+      const segments = (await client.query<PatternSegmentRow>(`SELECT segment.*,to_char(segment.wage_eligible_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS wage_audit_at FROM pattern_room_segments segment JOIN pattern_room_rounds round USING(round_id)
         WHERE round.order_id=$1 ORDER BY round.round_index,segment.segment_index`, [orderId])).rows;
       const current = segments.filter(segment => segment.round_id === order.current_round_id).at(-1);
       // Finance reads do not widen the worker's original current-assignment scope.
       const currentWorkerAccess = effective.actorRoles.includes("pattern_room_worker") && current?.worker_user_id === effective.actorId;
       const canReadRoundMaterials = (roundId:string) => allMaterials || (currentWorkerAccess && (roundId === order.current_round_id || segments.some(segment => segment.round_id === roundId && segment.worker_user_id === effective.actorId)));
-      const nodes = (await client.query<{ round_id: string; stage: string; entered_at: Date; exited_at: Date | null; exit_reason: string | null; elapsed_seconds: number }>(
-        `SELECT node.*,GREATEST(0,EXTRACT(EPOCH FROM (COALESCE(node.exited_at,$2::timestamptz,CURRENT_TIMESTAMP)-node.entered_at)))::float8 elapsed_seconds
-         FROM pattern_room_node_times node JOIN pattern_room_rounds round USING(round_id) WHERE round.order_id=$1 ORDER BY node.entered_at,node.node_id`, [orderId,acceptanceBusinessContext()?.time.now??null])).rows;
-      const files = (await client.query<{ attachment_id: string; round_id: string; original_filename: string; mime_type: string; size_bytes: string; active: boolean; bound_at: Date; reason: string }>(
-        `SELECT binding.*,file.original_filename,file.mime_type,file.size_bytes FROM pattern_room_attachment_bindings binding
+      const link=(await client.query("SELECT to_regclass('digital_development_pattern_links') AS relation")).rows[0]?.relation?(await client.query("SELECT source_id FROM digital_development_pattern_links WHERE order_id=$1",[orderId])).rows[0]:null;
+      const observed=link?await new ContextBusinessClock(this.db,client).read({kind:'source',id:link.source_id}):null;
+      const nodes = (await client.query<{ round_id: string; stage: string; entered_at: Date; exited_at: Date | null; exit_reason: string | null; elapsed_seconds: number|null }>(
+        `SELECT node.*,CASE WHEN COALESCE(node.exited_at,$2::timestamptz,CURRENT_TIMESTAMP)>=node.entered_at THEN EXTRACT(EPOCH FROM (COALESCE(node.exited_at,$2::timestamptz,CURRENT_TIMESTAMP)-node.entered_at))::float8 END elapsed_seconds
+         FROM pattern_room_node_times node JOIN pattern_room_rounds round USING(round_id) WHERE round.order_id=$1 ORDER BY node.entered_at,node.node_id`, [orderId,observed?.now??null])).rows;
+      const files = (await client.query<{ attachment_id: string; round_id: string; original_filename: string; mime_type: string; size_bytes: string; active: boolean; bound_at: Date; audit_at:string; reason: string }>(
+        `SELECT binding.*,to_char(binding.bound_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS audit_at,file.original_filename,file.mime_type,file.size_bytes FROM pattern_room_attachment_bindings binding
          JOIN attachments file USING(attachment_id) WHERE binding.order_id=$1 AND file.status='ready'
            AND ($2::boolean OR ($4::boolean AND EXISTS(SELECT 1 FROM pattern_room_segments own_segment WHERE own_segment.round_id=binding.round_id
              AND own_segment.worker_user_id=$3 AND binding.bound_at<=COALESCE((SELECT min(ended.created_at) FROM operation_events ended
@@ -127,7 +129,7 @@ export class PatternOrderReader {
                  OR ended.action='pattern_room.order.cancelled' AND ended.after_state->>'roundId'=own_segment.round_id::text)),own_segment.ended_at,CURRENT_TIMESTAMP))))
          ORDER BY binding.bound_at,binding.attachment_id`, [orderId, allMaterials, effective.actorId, currentWorkerAccess])).rows;
       const history = (await client.query<PatternHistoryEvent>(
-        `SELECT event.after_state,event.action,COALESCE(person.display_name,event.actor_id::text) actor_name,event.created_at,CASE WHEN $2 THEN event.reason END reason
+        `SELECT event.event_id,to_char(event.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS audit_at,event.after_state,event.action,COALESCE(person.display_name,event.actor_id::text) actor_name,event.created_at,CASE WHEN $2 THEN event.reason END reason
          FROM operation_events event LEFT JOIN app_users person ON person.id=event.actor_id WHERE event.entity_type='pattern_room_order' AND event.entity_id=$1
          ORDER BY event.created_at,event.event_id`, [orderId, allMaterials])).rows;
       const currentRound = rounds.find(round => round.round_id === order.current_round_id);
@@ -135,7 +137,7 @@ export class PatternOrderReader {
       const creator = isPatternRoot(effective) || order.created_by === effective.actorId;
       const mayRework = order.kind === "pattern" && ["pending_confirmation", "completed"].includes(order.status) && !!currentRound?.completed_at && available("pattern_room:orders:rework") && (creator || effective.actorRoles.includes("pattern_room_supervisor"));
       const reworkCutBlocked = mayRework && await patternReworkCutBlocked(client, orderId);
-      const developmentSource=allMaterials&&(await client.query("SELECT to_regclass('digital_development_pattern_links') AS relation")).rows[0]?.relation?(await client.query("SELECT source_id FROM digital_development_pattern_links WHERE order_id=$1",[orderId])).rows[0]:null;
+      const developmentSource=allMaterials?link:null;
       const makingDocument=developmentSource&&mayRework&&!reworkCutBlocked&&(!selection.round||selection.round===order.current_round_id)&&(!selection.node||selection.node===order.status)&&await new DigitalProductionAccessPolicy(client).allowed(effective,'source',developmentSource.source_id,'technical')?await developmentDocumentRow(client,developmentSource.source_id):null;
       const detail = PatternOrderDetailSchema.parse({ ...patternSummary(order),...(makingDocument?{developmentMakingBasis:developmentMakingBasis(makingDocument.document,makingDocument.version)}:{}), association:order.misc_association??null,...(developmentSource?{developmentSourceId:developmentSource.source_id}:{}), currentRoundId: order.current_round_id, customer: order.customer, sizeColor: order.size_color,
         reworkBlockedReason: reworkCutBlocked ? PATTERN_REWORK_CUT_BLOCK : null,
@@ -152,7 +154,7 @@ export class PatternOrderReader {
         })),
         canReadMaterials: allMaterials || files.length>0,
         attachments: files.map(file => ({ attachmentId: file.attachment_id, roundId: file.round_id, filename: file.original_filename, mimeType: file.mime_type, sizeBytes: Number(file.size_bytes), active: file.active, addedAt: file.bound_at.toISOString(), reason: file.reason })),
-        history: history.map(event => ({ action: event.action, actorName: event.actor_name, at: event.created_at.toISOString(), reason: event.reason })),
+        history: history.map(event => ({ eventId:event.event_id,action: event.action, actorName: event.actor_name, at: event.created_at.toISOString(), reason: event.reason })),
         actions: { delete: isPatternRoot(effective), assign: order.status === "pending_assignment" && available("pattern_room:orders:assign"),
           complete: order.status === "in_progress" && !!current && (isPatternRoot(effective) || current.worker_user_id === effective.actorId) && available("pattern_room:orders:complete"),
           handoff: order.status === "pending_confirmation" && creator && available(order.kind === "pattern" ? "pattern_room:orders:handoff" : "pattern_room:misc:confirm"),
@@ -163,7 +165,7 @@ export class PatternOrderReader {
           cancel: available("pattern_room:orders:cancel") && (order.status === "pending_assignment" ? isPatternRoot(effective) || currentRound?.requested_by === effective.actorId : ["in_progress", "pending_confirmation"].includes(order.status) && (isPatternRoot(effective) || effective.actorRoles.includes("pattern_room_supervisor"))),
           cancelFees: order.kind === "pattern" && order.status === "cancelled" && creator && available("pattern_room:orders:cancel_fees") && rounds.some(round => round.cancelled_amount !== null && /[1-9]/.test(round.cancelled_amount) && round.fee_confirmed_at === null && round.handed_over_at === null) },
       });
-      return patternOrderAtNode(detail, selection, history, { technical: canReadRoundMaterials(selection.round ?? order.current_round_id), allCosts, unitPrices: new Map(rounds.map(round => [round.round_id, round.unit_price])), wageEligibleAt: new Map(segments.map(segment => [segment.segment_id, patternIso(segment.wage_eligible_at)])) });
+      return patternOrderAtNode(detail, selection, history, { technical: canReadRoundMaterials(selection.round ?? order.current_round_id), allCosts, unitPrices: new Map(rounds.map(round => [round.round_id, round.unit_price])), attachmentAuditAt:new Map(files.map(file=>[file.attachment_id,file.audit_at])),wageEligibleAuditAt:new Map(segments.map(segment=>[segment.segment_id,segment.wage_audit_at??null])),wageEligibleAt: new Map(segments.map(segment => [segment.segment_id, patternIso(segment.wage_eligible_at)])) });
     });
   }
 }

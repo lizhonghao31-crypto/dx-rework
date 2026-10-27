@@ -20,7 +20,7 @@ export function patternTasks(items: OrderJourney[]): PatternWorkspaceTask[] {
     const group = PATTERN_GROUPS.find(group => (group.nodes as readonly string[]).includes(node.key));
     // Material plans, uncreated placeholders and inherited references are not tasks.
     if (!group || !node.current || !/^[0-9a-f-]{36}$/i.test(node.instanceId) || !node.records.some(record => record.domain === "task" && record.id === node.instanceId) || ["cancelled", "unavailable", "not_applicable", "inherited", "uncreated"].includes(node.state)) return [];
-    return [{ journeyId: item.id, sourceId: item.sourceId, orderId: item.orderId, designStyleNo: item.designStyleNo, customer: item.customer, designer: item.designer, node, group: group.key }];
+    return [{ asOf:item.asOf??null, journeyId: item.id, sourceId: item.sourceId, orderId: item.orderId, designStyleNo: item.designStyleNo, customer: item.customer, designer: item.designer, node, group: group.key }];
   }));
 }
 

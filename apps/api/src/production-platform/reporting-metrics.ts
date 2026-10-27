@@ -1,4 +1,6 @@
+import type {BusinessTime} from '@dx-rework/domain/business-clock';
 export type AnalysisTask = {
+ businessTime?:BusinessTime;deadlineMode?:"duration"|"date_target";
  taskId:string;sourceId:string|null;orderId:string|null;styleNo:string;customer:string;category:string;requiredRole:string;
  assigneeId:string|null;assigneeName:string|null;nodeKey:string;label:string;round:number;state:string;createdAt:string;
  sourceRound:number|null;instructionVersion:number|null;
@@ -16,13 +18,14 @@ export function intervalUnionSeconds(intervals:readonly [number,number][]) {
  return (total+(start===null?0:end-start))/1000;
 }
 export function taskAnalysis(task:AnalysisTask,asOf:string){
+ const observed=task.businessTime?.now??asOf;
  const completed=task.state==='completed';
  const start=task.enteredAt?Date.parse(task.enteredAt):NaN,end=task.completedAt?Date.parse(task.completedAt):NaN;
- const validTime=Number.isFinite(start)&&Number.isFinite(end)&&end>=start&&trusted(task.enteredQuality)&&trusted(task.completedQuality);
- const measurable=completed&&validTime;
+ const validTime=Number.isFinite(start)&&Number.isFinite(end)&&end>=start&&(!task.businessTime||end<=Date.parse(observed))&&trusted(task.enteredQuality)&&trusted(task.completedQuality);
+ const measurable=completed&&validTime&&task.deadlineMode!=='date_target';
  const handlingSeconds=measurable?(end-start)/1000:null;
  const slaIncluded=measurable&&task.dueAt!==null&&Number.isFinite(Date.parse(task.dueAt))&&Date.parse(task.dueAt)>start;
- const exclusion=!completed?'尚未有效完成':!validTime?'起终点缺失、未核实或顺序异常':!task.dueAt?'无 SLA':!slaIncluded?'有效期限异常':null;
+ const exclusion=task.deadlineMode==='date_target'?'日期目标，未虚构办理时长起点；按原日期截止单独监督':!completed?'尚未有效完成':!validTime?'起终点缺失、未核实、顺序异常或晚于业务观察':!task.dueAt?'无 SLA':!slaIncluded?'有效期限异常':null;
  const intervals:[number,number][]=[];let blocked:number|null=null,unknownWaiting=0;
  // P03's current task columns are the authoritative corrected projection, not event timestamp ordering.
  const effectiveEvents=task.events.filter(e=>!e.correctsId).map(event=>event.kind==='ready'?{...event,at:task.enteredAt,quality:task.enteredQuality}:event.kind==='completed'?{...event,at:task.completedAt,quality:task.completedQuality}:event);
@@ -37,15 +40,15 @@ export function taskAnalysis(task:AnalysisTask,asOf:string){
   if(event.kind==='blocked'){
    if(event.at&&Number.isFinite(Date.parse(event.at))&&trusted(event.quality)){if(blocked===null)blocked=Date.parse(event.at);}else unknownWaiting++;
   }else if(['unblocked','completed','cancelled','cancel'].includes(event.kind)&&blocked!==null){
-   if(event.at&&Number.isFinite(Date.parse(event.at))&&Date.parse(event.at)>=blocked&&trusted(event.quality))intervals.push([blocked,Date.parse(event.at)]);else unknownWaiting++;
+   if(event.at&&Number.isFinite(Date.parse(event.at))&&Date.parse(event.at)>=blocked&&Date.parse(event.at)<=Date.parse(observed)&&trusted(event.quality))intervals.push([blocked,Date.parse(event.at)]);else unknownWaiting++;
    blocked=null;
   }
  }
- if(blocked!==null){if(!['completed','cancelled'].includes(task.state)&&Date.parse(asOf)>=blocked)intervals.push([blocked,Date.parse(asOf)]);else unknownWaiting++;}
- const delays=effectiveEvents.filter(e=>e.at&&trusted(e.quality)&&Number.isFinite(Date.parse(e.at))&&Number.isFinite(Date.parse(e.recordedAt))&&Date.parse(e.recordedAt)>=Date.parse(e.at)).map(e=>(Date.parse(e.recordedAt)-Date.parse(e.at!))/1000);
+ if(blocked!==null){if(!['completed','cancelled'].includes(task.state)&&Date.parse(observed)>=blocked)intervals.push([blocked,Date.parse(observed)]);else unknownWaiting++;}
+ const delays=task.businessTime?.scenarioId?[]:effectiveEvents.filter(e=>e.at&&trusted(e.quality)&&Number.isFinite(Date.parse(e.at))&&Number.isFinite(Date.parse(e.recordedAt))&&Date.parse(e.recordedAt)>=Date.parse(e.at)).map(e=>(Date.parse(e.recordedAt)-Date.parse(e.at!))/1000);
  return {...task,handlingSeconds,slaIncluded,onTime:slaIncluded?Date.parse(task.completedAt!)<=Date.parse(task.dueAt!):null,exclusion,
   waitingSeconds:intervalUnionSeconds(intervals),waitingIntervals:intervals,unknownWaiting:unknownWaiting+Number(task.state==='pending'&&task.pendingConditions.some(c=>['materials_ready','handover_received'].includes(c))),
-  missingTime:!['pending','cancelled'].includes(task.state)&&(!task.enteredAt||(completed&&!task.completedAt)),unverifiedTime:task.enteredQuality==='补报未核实'||(completed&&task.completedQuality==='补报未核实'),
+  missingTime:!['pending','cancelled'].includes(task.state)&&(task.deadlineMode!=='date_target'&&!task.enteredAt||(completed&&!task.completedAt)),unverifiedTime:task.enteredQuality==='补报未核实'||(completed&&task.completedQuality==='补报未核实'),
   registrationDelaySeconds:delays.length?delays.reduce((a,b)=>a+b,0)/delays.length:null};
 }
 export function summarizeAnalysis(rows:ReturnType<typeof taskAnalysis>[],from:string,to:string){

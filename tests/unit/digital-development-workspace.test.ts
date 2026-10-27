@@ -15,6 +15,18 @@ const node = (key: string, state: JourneyNode["state"] = "active", patch: Partia
 const journey = (nodes: JourneyNode[], patch: Partial<OrderJourney> = {}): OrderJourney => ({id: randomUUID(), sourceId: randomUUID(), orderId: null, designStyleNo: "TEST-view", temporaryStyleNo: null, customer: "PD", category: "上衣", designer: "TEST", styleName: null, merchandisers: [], orderNumbers: [], createdAt: "2026-10-01T00:00:00Z", deliveryDate: null, selectedRound: 1, adoptedRound: null, sourceVersion: 1, instructionVersion: null, lines: [], links: [], stages: JOURNEY_STAGES.map(stage => ({...stage, state: "active", nodes: nodes.filter(node => node.stage === stage.key)})), progress: {development: null, bulk: null}, hitReasons: [], ...patch});
 const actor: TrustedActorContext = {actorId: randomUUID(), actorRoles: ["sample_designer"], authorizationCapability: "pattern_room:orders:create", authorizationCapabilities: ["pattern_room:orders:create"], requestId: "TEST-workspace"};
 
+describe("pattern task business observation",()=>{
+  it("retains each original journey clock across mixed board rows, previews and risks while list snapshot stays real",async()=>{
+    const wall="2026-10-27T19:36:00.000Z",times=["2026-10-20T09:57:00.000Z",wall,"2026-11-01T09:57:00.000Z"];
+    const items=times.map(asOf=>journey([node("development_sewing","active",{owner:{id:actor.actorId,name:"TEST师傅"},risks:["overdue"]})],{asOf}));
+    const query=new DevelopmentWorkspaceQuery({list:async()=>({asOf:wall,items})} as unknown as DigitalJourneyQuery);
+    const result=await query.pattern({...actor,actorRoles:["development_clerk"]},PatternWorkspaceFilterSchema.parse({scope:"all"}));
+    expect(result.asOf).toBe(wall);
+    for(const rows of [result.items,result.boardPreview!,result.risks!])expect(rows.map(row=>Reflect.get(row,"asOf"))).toEqual(times);
+    expect(result.total).toBe(3);expect(result.archiveTotal).toBe(3);
+  });
+});
+
 describe("bulk paper tasks share the read-only workroom projection", () => {
   it("previews three recent tasks in every full-range lane without changing totals or full-lane paging",async()=>{
     const items=Array.from({length:19},(_,index)=>journey(PATTERN_LANES.map(lane=>node(PATTERN_GROUPS.find(group=>group.key===lane.groups[0])!.nodes[0],"active",{owner:{id:actor.actorId,name:"TEST师傅"}})),{designStyleNo:`TEST-newest-${index}`}));

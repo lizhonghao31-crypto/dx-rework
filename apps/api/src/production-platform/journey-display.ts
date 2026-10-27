@@ -36,7 +36,7 @@ export function journeyDisplay(order:OrderJourney,asOf:string,terminal:{cancelle
   const actualRatio=progressStages.some(stage=>stage.ratio===null)?null:progressStages.reduce((sum,stage)=>sum+stage.ratio!,0)/progressStages.length;
   const unknownLabels=progressStages.filter(stage=>stage.ratio===null).map(stage=>JOURNEY_STAGES.find(definition=>definition.key===stage.key)!.label);
   const actualLabel=actualRatio===null?`${unknownLabels.join("、")}资料待核`:progressLabel(actualRatio);
-  return {ruleVersion:"cockpit-display-v1",mainState,earliestShipmentDate,missingShipmentDates:Math.max(order.lines.length-dates.filter(line=>line.customerWarehouseArrivalDate).length,0),closedAt:terminal.closedAt??null,actualRatio,actualLabel,awaitingClosure:Boolean(order.orderId)&&actualRatio===1&&!closed&&!terminal.cancelled,stages,timeRatio:null,timeLabel:order.supervision?.status==='planned'?"节点时效按冻结标准评价":"沿原任务截止监督"};
+  return {ruleVersion:"cockpit-display-v1",mainState,earliestShipmentDate,missingShipmentDates:Math.max(order.lines.length-dates.filter(line=>line.customerWarehouseArrivalDate).length,0),closedAt:terminal.closedAt??null,actualRatio,actualLabel,awaitingClosure:Boolean(order.orderId)&&actualRatio===1&&!closed&&!terminal.cancelled,stages,timeRatio:null,timeLabel:order.supervision?.assessment==='partially_unavailable'?"部分节点时效不可评估，请查看原因":order.supervision?.status==='planned'?"节点时效按冻结标准评价":"沿原任务截止监督"};
 }
 const itemReminder=(order:OrderJourney)=>order.supervision?.customerReminderDate;
 /** Explicit cockpit scope. Existing workspace consumers keep their legacy selection contract. */

@@ -1,3 +1,5 @@
+import {assertBusinessClockUnchanged,ContextBusinessClock} from '../acceptance-clock/business-time.js';
+import {validateBusinessTime,type BusinessTime,type BusinessTimeScope} from '@dx-rework/domain/business-clock';
 import {randomUUID,createHash} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import type {DigitalAnalysisFilters,DigitalAnalysisNote,DigitalAnalysisResult} from '@dx-rework/contracts/digital-production-analysis';
@@ -13,6 +15,7 @@ import {materialReadiness} from './development-material-readiness.js';
 const iso=(value:Date|string|null)=>value===null?null:new Date(value).toISOString();
 const range=(filters:DigitalAnalysisFilters)=>({from:new Date(`${filters.from}T00:00:00+08:00`).toISOString(),to:new Date(Date.parse(`${filters.to}T00:00:00+08:00`)+86400000).toISOString()});
 export class DigitalAnalysisQuery{
+ private readonly observations=new WeakMap<PoolClient,Map<string,{scope:BusinessTimeScope;time:BusinessTime}>>();
  constructor(private readonly database:Pool){}
  private exportAllowed(actor:TrustedActorContext){try{assertBusinessExportAllowed(actor.actorRoles,'report:export');return isDigitalLeader(actor)&&actor.actorRoles.includes('root_superuser')||Boolean(actor.authorizationCapabilities?.includes('report:view'));}catch{return false;}}
  private async snapshot(db:PoolClient,actor:TrustedActorContext,filters:DigitalAnalysisFilters){
@@ -23,7 +26,7 @@ export class DigitalAnalysisQuery{
     CASE WHEN a.source_id IS NOT NULL THEN t.route_version ELSE bp.source_round END AS "sourceRound",bp.instruction_version AS "instructionVersion",
     t.created_at AS "createdAt",t.entered_at AS "enteredAt",t.completed_at AS "completedAt",t.entered_quality AS "enteredQuality",t.completed_quality AS "completedQuality",
     ARRAY(SELECT condition_key FROM digital_production_task_conditions WHERE task_id=t.task_id AND NOT satisfied AND condition_key IN ('materials_ready','handover_received')) AS "pendingConditions",
-    r.due_at AS "dueAt",r.policy_version AS "policyVersion",s.created_at AS "sourceCreatedAt",d.published_at AS "sourcePublishedAt",coalesce(d.status='published',false) AS "sourcePublished"
+    r.due_at AS "dueAt",COALESCE(r.deadline_kind,'duration') AS "deadlineMode",r.policy_version AS "policyVersion",s.created_at AS "sourceCreatedAt",d.published_at AS "sourcePublishedAt",coalesce(d.status='published',false) AS "sourcePublished"
     FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id)
     LEFT JOIN digital_production_orders o ON o.production_order_id=a.production_order_id
     LEFT JOIN digital_bulk_preparations bp ON bp.preparation_id=t.route_instance_id AND bp.production_order_id=a.production_order_id
@@ -31,7 +34,7 @@ export class DigitalAnalysisQuery{
     LEFT JOIN digital_development_documents d ON d.source_id=s.source_id
     LEFT JOIN app_users u ON u.id=a.assignee_id
     JOIN LATERAL(SELECT label FROM digital_production_deadline_policies WHERE node_key=t.node_key ORDER BY version DESC LIMIT 1)p ON true
-    LEFT JOIN LATERAL(SELECT due_at,policy_version FROM digital_production_deadline_revisions WHERE task_id=t.task_id ORDER BY revision_id DESC LIMIT 1)r ON true
+    LEFT JOIN LATERAL(SELECT due_at,policy_version,to_jsonb(digital_production_deadline_revisions)->>'deadline_kind' AS deadline_kind FROM digital_production_deadline_revisions WHERE task_id=t.task_id ORDER BY revision_id DESC LIMIT 1)r ON true
     WHERE ($1='' OR coalesce(o.customer_code,s.customer_code)=$1)
       AND ($2='' OR d.document->>'template'=$2) AND ($3='' OR a.required_role=$3) AND ($4::uuid IS NULL OR s.created_by=$4)
       AND (($7::text IS NULL AND t.created_at>=$5 AND t.created_at<$6) OR ($7::text IS NOT NULL AND (
@@ -58,7 +61,14 @@ export class DigitalAnalysisQuery{
     WHERE a.action='digital_task_reassigned' AND a.entity_id=ANY($1::text[]) ORDER BY a.created_at,a.id`,[ids])).rows;
   const delegations=(await db.query(`SELECT d.task_id AS "taskId",u.display_name AS name,d.created_at AS "from",d.expires_at AS "expiresAt",d.revoked_at AS "revokedAt"
     FROM digital_production_delegations d JOIN app_users u ON u.id=d.delegate_id WHERE d.task_id=ANY($1::uuid[]) AND d.purpose='execute' ORDER BY d.created_at,d.delegation_id`,[ids])).rows;
-  const rows=authorized.map(row=>taskAnalysis({...row,materialSupplyPending:row.nodeKey==='development_material_supply'&&missingSupplyRounds.has(`${row.sourceId}:${row.round}`),createdAt:iso(row.createdAt)!,enteredAt:iso(row.enteredAt),completedAt:iso(row.completedAt),dueAt:iso(row.dueAt),sourceCreatedAt:iso(row.sourceCreatedAt),sourcePublishedAt:iso(row.sourcePublishedAt),events:events.filter(e=>e.taskId===row.taskId).map(e=>({...e,at:iso(e.at),recordedAt:iso(e.recordedAt)!}))} as AnalysisTask,asOf));
+  const times=new Map<string,BusinessTime>(),clock=new ContextBusinessClock(this.database,db);
+  for(const row of authorized){
+   const scope:BusinessTimeScope|null=row.orderId?{kind:'order',id:row.orderId}:row.sourceId?{kind:'source',id:row.sourceId}:null;
+   if(!scope)throw new ApplicationError('CONFLICT','任务缺少可验证的原业务归属',409);
+   const key=`${scope.kind}:${scope.id}`;
+   if(!times.has(key)){const time=validateBusinessTime(await clock.read(scope));times.set(key,time);if(time.scenarioId)this.observations.get(db)?.set(key,{scope,time});}
+  }
+  const rows=authorized.map(row=>taskAnalysis({...row,businessTime:times.get(`${row.orderId?'order':'source'}:${row.orderId??row.sourceId}`)!,materialSupplyPending:row.nodeKey==='development_material_supply'&&missingSupplyRounds.has(`${row.sourceId}:${row.round}`),createdAt:iso(row.createdAt)!,enteredAt:iso(row.enteredAt),completedAt:iso(row.completedAt),dueAt:iso(row.dueAt),sourceCreatedAt:iso(row.sourceCreatedAt),sourcePublishedAt:iso(row.sourcePublishedAt),events:events.filter(e=>e.taskId===row.taskId).map(e=>({...e,at:iso(e.at),recordedAt:iso(e.recordedAt)!}))} as AnalysisTask,asOf));
   const attributedRows=rows.map(row=>({...row,assignmentHistory:assignments.filter(a=>a.taskId===row.taskId).map(a=>({...a,at:iso(a.at)!})),delegations:delegations.filter(d=>d.taskId===row.taskId).map(d=>({...d,from:iso(d.from)!,expiresAt:iso(d.expiresAt)!,revokedAt:iso(d.revokedAt)}))}));
   const people=[...new Map(attributedRows.filter(row=>row.assigneeId).map(row=>[row.assigneeId!,{id:row.assigneeId!,name:row.assigneeName}])).values()];
   const scopedRows=filters.assigneeId?attributedRows.filter(row=>row.assigneeId===filters.assigneeId):attributedRows;
@@ -87,14 +97,20 @@ export class DigitalAnalysisQuery{
   return {ruleVersion:filters.scope?WORKSPACE_ANALYSIS_RULE_VERSION:ANALYSIS_RULE_VERSION,asOf,filters,canExport:this.exportAllowed(actor),canRecord:isDigitalLeader(actor)||isDigitalTechnicalManager(actor),page:filters.page,total:selectedRows.length,
     summary:summarizeAnalysis(selectedRows,window.from,window.to),people,overview:analysisWorkspaceOverview(scopedRows,window.from,window.to,asOf),rounds,rows:selectedRows,notes};
  }
- private async read<T>(action:(db:PoolClient)=>Promise<T>){const db=await this.database.connect();try{await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');const result=await action(db);await db.query('COMMIT');return result;}catch(e){await db.query('ROLLBACK');throw e;}finally{db.release();}}
+ private async read<T>(action:(db:PoolClient)=>Promise<T>){
+  const db=await this.database.connect(),observations=new Map<string,{scope:BusinessTimeScope;time:BusinessTime}>();this.observations.set(db,observations);let result:T;
+  try{await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');result=await action(db);await db.query('COMMIT');}catch(e){await db.query('ROLLBACK');throw e;}finally{this.observations.delete(db);db.release();}
+  for(const {scope,time} of observations.values())await assertBusinessClockUnchanged(new ContextBusinessClock(this.database),scope,time);
+  return result;
+ }
+
  async list(actor:TrustedActorContext,filters:DigitalAnalysisFilters):Promise<DigitalAnalysisResult>{return this.read(async db=>{const all=await this.snapshot(db,actor,filters);return {...all,rows:all.rows.slice((filters.page-1)*15,filters.page*15)};});}
  async export(actor:TrustedActorContext,filters:DigitalAnalysisFilters){
   if(!this.exportAllowed(actor))digitalForbidden();
   const result=await this.read(db=>this.snapshot(db,actor,filters));
-  const rows:WorkbookCell[][]=[['任务','来源','母单','款号','客户','品类','岗位','当前主办','开发轮次','制单版本','节点','状态','进入','完成','时间质量','期限','SLA版本','按期纳入','排除原因','办理秒数','已知等待秒数','等待缺失数'],
-    ...result.rows.map(r=>[r.taskId,r.sourceId??'',r.orderId??'',r.styleNo,r.customer,r.category,r.requiredRole,r.assigneeName??'',r.sourceRound??'',r.instructionVersion??'',r.label,r.state,r.enteredAt??'',r.completedAt??'',`${r.enteredQuality}/${r.completedQuality}`,r.dueAt??'',r.policyVersion??'',r.slaIncluded?'是':'否',r.exclusion??'',r.handlingSeconds??'',r.waitingSeconds,r.unknownWaiting])];
-  const content=await buildWorkbook([{name:'范围与口径',rows:[['规则版本',result.ruleVersion],['生成时间',result.asOf],['统计窗口',filters.scope==='snapshot'?'当前积压快照（不按创建日期排除）':filters.scope==='completed'?'任务原完成日期（北京时间）':filters.scope==='published'?'来源首次原发布日期（北京时间）':filters.scope==='revisions'?'复版原发布日期（北京时间）':'任务创建日期（北京时间）'],['筛选',JSON.stringify(filters)],['说明','无SLA不入按期分母；未核实不计算精确周期；办理周期不是净工时；并行等待按每来源区间并集']]},{name:'节点明细',rows},{name:'办理及更正事实',rows:[['任务','事件','操作者','发生','登记','质量','更正原事件','原因'],...result.rows.flatMap(r=>r.events.map(e=>[r.taskId,e.kind,e.actorName??e.actorId,e.at??'',e.recordedAt,e.quality,e.correctsId??'',String(e.payload.reason??e.payload.note??'')]))]},{name:'主办接续及代理',rows:[['任务','类型','时间','原主办','接续/代理','记录人/结束'],...result.rows.flatMap(r=>[...r.assignmentHistory.map(a=>[r.taskId,'改派',a.at,a.beforeName??'',a.afterName??'',a.actorName]),...r.delegations.map(d=>[r.taskId,'代理',d.from,'',d.name,d.revokedAt??d.expiresAt])])]}]);
+  const rows:WorkbookCell[][]=[['任务','来源','母单','款号','客户','品类','岗位','当前主办','开发轮次','制单版本','节点','状态','进入','完成','时间质量','期限','SLA版本','按期纳入','排除原因','办理秒数','已知等待秒数','等待缺失数','业务观察时刻'],
+    ...result.rows.map(r=>[r.taskId,r.sourceId??'',r.orderId??'',r.styleNo,r.customer,r.category,r.requiredRole,r.assigneeName??'',r.sourceRound??'',r.instructionVersion??'',r.label,r.state,r.enteredAt??'',r.completedAt??'',`${r.enteredQuality}/${r.completedQuality}`,r.dueAt??'',r.policyVersion??'',r.slaIncluded?'是':'否',r.exclusion??'',r.handlingSeconds??'',r.waitingSeconds,r.unknownWaiting,r.businessTime?.now??''])];
+  const content=await buildWorkbook([{name:'范围与口径',rows:[['规则版本',result.ruleVersion],['生成时间',result.asOf],['统计窗口',filters.scope==='snapshot'?'当前积压快照（不按创建日期排除）':filters.scope==='completed'?'任务原完成日期（北京时间）':filters.scope==='published'?'来源首次原发布日期（北京时间）':filters.scope==='revisions'?'复版原发布日期（北京时间）':'任务创建日期（北京时间）'],['筛选',JSON.stringify(filters)],['说明','无SLA不入按期分母；未核实不计算精确周期；办理周期不是净工时；并行等待按每来源区间并集；任务时效按逐单业务观察时刻，生成时间为真实时间；场景业务时间不与真实登记时间计算登记延迟']]},{name:'节点明细',rows},{name:'办理及更正事实',rows:[['任务','事件','操作者','发生','登记','质量','更正原事件','原因'],...result.rows.flatMap(r=>r.events.map(e=>[r.taskId,e.kind,e.actorName??e.actorId,e.at??'',e.recordedAt,e.quality,e.correctsId??'',String(e.payload.reason??e.payload.note??'')]))]},{name:'主办接续及代理',rows:[['任务','类型','时间','原主办','接续/代理','记录人/结束'],...result.rows.flatMap(r=>[...r.assignmentHistory.map(a=>[r.taskId,'改派',a.at,a.beforeName??'',a.afterName??'',a.actorName]),...r.delegations.map(d=>[r.taskId,'代理',d.from,'',d.name,d.revokedAt??d.expiresAt])])]}]);
   await this.database.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1::uuid,$2,$3,'digital.analysis.exported','digital_analysis',$1::text,$4)",[randomUUID(),actor.requestId,actor.actorId,JSON.stringify({filters,ruleVersion:result.ruleVersion,rowCount:result.total})]);
   return content;
  }

@@ -1,5 +1,6 @@
+import type {BusinessTime,BusinessTimeScope} from '@dx-rework/domain/business-clock';
 import {readJourneySupervision} from "./journey-supervision.js";
-import {ContextBusinessClock} from '../acceptance-clock/business-time.js';
+import {assertBusinessClockUnchanged,ContextBusinessClock} from '../acceptance-clock/business-time.js';
 import {factoryProductionFacts} from './factory-production-facts.js';
 import {shipSampleFacts} from './ship-sample-facts.js';
 import {developmentReadTables} from "./development-amendment-repository.js";
@@ -46,14 +47,18 @@ const emptyNode = (key:string,state:JourneyState,round:number|null=null):Journey
 
 /** Additive query API. No writes, new lifecycle, quantities or wage materialization. */
 export class DigitalJourneyQuery {
+  private readonly observations=new WeakMap<PoolClient,Map<string,{scope:BusinessTimeScope;time:BusinessTime}>>();
   private readonly authorizedTasks=new WeakMap<OrderJourney,readonly JourneyAuthorizedTask[]>();
   constructor(private readonly database:Pool) {}
   private async snapshot<T>(work:(db:PoolClient,asOf:string)=>Promise<T>) {
-    const db=await this.database.connect();
+    const db=await this.database.connect(),reads=reuseJourneySnapshotReads(db),observations=new Map<string,{scope:BusinessTimeScope;time:BusinessTime}>();
+    this.observations.set(reads,observations);let result:T;
     try { await db.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
       const asOf=iso((await db.query("SELECT CURRENT_TIMESTAMP AS as_of")).rows[0].as_of)!;
-      const result=await work(reuseJourneySnapshotReads(db),asOf);await db.query("COMMIT");return result;
-    } catch(error) { await db.query("ROLLBACK");throw error; } finally {db.release();}
+      result=await work(reads,asOf);await db.query("COMMIT");
+    } catch(error) { await db.query("ROLLBACK");throw error; } finally {this.observations.delete(reads);db.release();}
+    for(const {scope,time} of observations.values())await assertBusinessClockUnchanged(new ContextBusinessClock(this.database),scope,time);
+    return result;
   }
   private async candidates(db:PoolClient,actor:TrustedActorContext,id:string|null=null,patternKinds:string[]|null=null):Promise<Candidate[]> {
     const leader=isDigitalLeader(actor)||isDigitalTechnicalManager(actor);
@@ -150,7 +155,9 @@ export class DigitalJourneyQuery {
     const policy=new DigitalProductionAccessPolicy(db),source=row.source,order=row.order;
     const sid=source?.source_id??null,oid=order?.production_order_id??null;
     // Projection time is business time; the outer audit-log snapshot remains real.
-    const observed=await new ContextBusinessClock(this.database).read(oid?{kind:'order',id:oid}:{kind:'source',id:sid!});
+    const scope:BusinessTimeScope=oid?{kind:'order',id:oid}:{kind:'source',id:sid!};
+    const observed=await new ContextBusinessClock(this.database,db).read(scope);
+    if(observed.scenarioId)this.observations.get(db)?.set(`${scope.kind}:${scope.id}`,{scope,time:observed});
     if(observed.scenarioId)asOf=observed.now;
     const attached=Boolean(sid&&oid&&(await db.query("SELECT 1 FROM audit_events WHERE entity_type='digital_production' AND entity_id=$1 AND action='digital_source_attached' AND after_state->>'sourceId'=$2 LIMIT 1",[oid,sid])).rowCount);
     const canonicalId=attached?oid!:(sid??oid!);
@@ -223,7 +230,7 @@ export class DigitalJourneyQuery {
     const materialStates=new Map<number,Awaited<ReturnType<typeof materialReadiness>>>();
     const materialsFor=async(version:number)=>{let value=materialStates.get(version);if(!value){value=await materialReadiness(db,sid!,version);materialStates.set(version,value);}return value;};
     const taskService=new DigitalProductionTaskService(this.database),taskDtos=[];
-    const summaries=summaryOnly||compact?await journeyTaskSummaries(db,visibleTasks.map(task=>task.task_id)):null;
+    const summaries=summaryOnly||compact?await journeyTaskSummaries(db,visibleTasks.map(task=>task.task_id),observed):null;
     for(const raw of visibleTasks) {
       const definition=journeyDefinition(raw.task_kind);if(!definition)continue;
       const task=summaryOnly?summaries!.get(raw.task_id)!:await taskService.read(actor,raw.task_id,db);taskDtos.push(task);

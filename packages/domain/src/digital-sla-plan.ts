@@ -34,7 +34,11 @@ export type SlaNodeFact = {
   waitingFor?: { reason: string; source: string };
   remaining?: { minutes: number; asOf: string; validUntil: string; source: string };
 };
+export type SlaFactIssue = {code:"completion_before_start"|"actual_after_observation";reason:string};
 export type SlaNodeEvaluation = SlaPlannedNode & {
+  /** Enumerated native-fact inconsistency; only authorized read projections may isolate it. */
+  assessmentIssue?:SlaFactIssue;
+  provenRisk?:"overdue"|"warning";
   actualStart: string | null; actualEnd: string | null; deadline: SlaTime; forecast: SlaTime;
   planOverdue: boolean;
   forecastBasis: "actual" | "remaining_estimate" | "standard_window" | "plan" | "unknown";
@@ -149,7 +153,7 @@ export function slaPastDeadline(at: string, deadline: SlaTime): boolean {
   return deadline.exclusive ? instant(at) >= instant(deadline.at) : instant(at) > instant(deadline.at);
 }
 /** Reads one captured clock; never writes status, starts work, or grants permissions. */
-export function evaluateSlaPlan(plan: SlaPlan, facts: Record<string, SlaNodeFact>, time: BusinessTime): SlaNodeEvaluation[] {
+export function evaluateSlaPlan(plan: SlaPlan, facts: Record<string, SlaNodeFact>, time: BusinessTime, options: {mode?:"read_projection"} = {}): SlaNodeEvaluation[] {
   validateBusinessTime(time); const now = instant(time.now);
   const planned = new Map(calculateSlaPlan(plan).map(n => [n.id, n]));
   const result = new Map<string, SlaNodeEvaluation>();
@@ -159,10 +163,27 @@ export function evaluateSlaPlan(plan: SlaPlan, facts: Record<string, SlaNodeFact
     const p = planned.get(n.id)!, f = facts[n.id];
     const projected = planNode(n, plan, forecastWindows);
     if (f && !f.evidence.trim()) throw new Error("Actual SLA event evidence required");
-    if (f?.startedAt && f.completedAt && instant(f.completedAt) < instant(f.startedAt)) throw new Error("SLA completion precedes start");
+    // Validate evidence/shape even for a classified chronology error. Unknown errors never degrade.
     if (f?.startedAt) instant(f.startedAt);
     if (f?.completedAt) instant(f.completedAt);
-    if ((f?.startedAt && instant(f.startedAt) > now) || (f?.completedAt && instant(f.completedAt) > now)) throw new Error("Actual SLA event cannot be in the future");
+    if(f?.standardMinutes!==undefined&&!isSlaDurationMinutes(f.standardMinutes))throw new Error("Invalid captured SLA standard");
+    if(f?.completedDeadline?.at)instant(f.completedDeadline.at);
+    if(f?.waitingFor&&(!f.waitingFor.reason.trim()||!f.waitingFor.source.trim()))throw new Error("Business hold evidence required");
+    if(f?.remaining){const r=f.remaining;if(!r.source.trim()||!Number.isSafeInteger(r.minutes)||r.minutes<0||instant(r.validUntil)<instant(r.asOf))throw new Error("Invalid remaining-work estimate");}
+    for(const w of f?.batchWindows??[]){if(!w.evidence.trim())throw new Error('Batch window evidence required');for(const at of [w.startedAt,w.deadline,w.warningAt,w.completedAt])if(at)instant(at);}
+    const actuals=[{startedAt:f?.startedAt,completedAt:f?.completedAt},...(f?.batchWindows??[])];
+    const issue:SlaFactIssue|undefined=actuals.some(w=>w.startedAt&&w.completedAt&&instant(w.completedAt)<instant(w.startedAt))
+      ?{code:"completion_before_start",reason:"实际完成早于实际进入，时效不可评估"}
+      :actuals.some(w=>w.startedAt&&instant(w.startedAt)>now||w.completedAt&&instant(w.completedAt)>now)
+        ?{code:"actual_after_observation",reason:"实际发生时间晚于本单业务观察时刻，时效不可评估"}:undefined;
+    if(issue){
+      if(options.mode!=="read_projection")throw new Error(issue.code==='completion_before_start'?"SLA completion precedes start":"Actual SLA event cannot be in the future");
+      const validOpen=(f?.batchWindows??[]).filter(w=>!w.complete&&(!w.startedAt||instant(w.startedAt)<=now)&&(!w.completedAt||instant(w.completedAt)<=now)&&(!w.startedAt||!w.completedAt||instant(w.completedAt)>=instant(w.startedAt)));
+      const provenRisk=validOpen.some(w=>w.deadline&&now>instant(w.deadline))?'overdue' as const:validOpen.some(w=>w.warningAt&&now>=instant(w.warningAt))?'warning' as const:undefined;
+      const unknown=missing(issue.reason);
+      result.set(n.id,{...p,actualStart:null,actualEnd:null,deadline:unknown,forecast:unknown,status:"unknown",forecastBasis:"unknown",planOverdue:false,assessmentIssue:issue,...(provenRisk?{provenRisk}:{})});
+      forecastWindows.set(n.id,{id:n.id,start:unknown,end:unknown});continue;
+    }
     let deadline = missing(`${n.label}缺少可信开始时间`);
     if (n.kind === "order_date" || n.kind === "offset") deadline = p.end;
     else if (f?.startedAt && (n.kind === "duration" || n.kind === "included")) {
