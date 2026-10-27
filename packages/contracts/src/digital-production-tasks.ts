@@ -13,6 +13,7 @@ export type DigitalTask = {
   /** Present only for a server-verified isolated Acceptance resource. */
   acceptanceBusinessNow?:string;
   deadlineExclusive?:boolean;
+  deadlineMode?:"duration"|"date_target"|"unlimited";
   unmetConditions?:DigitalTaskBlocker[];
   identity?: { designStyleNo: string; customerCode: string | null } | null;
   priority?: "normal" | "urgent"; taskId: string; orderId: string | null; sourceId: string | null; taskKind: string; label: string;

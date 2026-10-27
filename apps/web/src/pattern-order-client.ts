@@ -27,7 +27,8 @@ export async function uploadPatternOriginal(file: File, kind: "pattern" | "misc"
   }, maxUploadBytes);
 }
 export const patternTime = (value: string | null) => value ? new Date(value).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai", hour12: false }) : "—";
-export function elapsedText(seconds: number) {
+export function elapsedText(seconds: number|null) {
+  if(seconds===null||!Number.isFinite(seconds)||seconds<0)return "时间待核实";
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) return `${minutes} 分钟`;
   const hours = Math.floor(minutes / 60);

@@ -51,11 +51,11 @@ function selectCockpitJourneys(items:OrderJourney[],filter:JourneyFilter,asOf:st
   const scoped=base.filter(item=>filter.scope==="development"?!item.orderId:Boolean(item.orderId)&&item.display.mainState!=="cancelled").sort(compareCockpitOrders);
   const count=(state:NonNullable<OrderJourney["display"]>["mainState"])=>scoped.filter(item=>item.display.mainState===state).length;
   const summary={all:scoped.length,active:count("active"),notStarted:count("not_started"),dueSoon:count("due_soon"),overdue:count("overdue"),completed:count("completed"),blocked:scoped.filter(item=>nodesOf(item).some(node=>node.state==="blocked")).length};
-  const coverageKeys=["customer_date","factory_date","fabric_date","cutting_time","plan","scope"] as const;
+  const coverageKeys=["customer_date","factory_date","fabric_date","cutting_time","plan","scope","fact_time"] as const;
   const active=scoped.filter(item=>!["completed","cancelled"].includes(item.display.mainState));
   const inProgress=(item:OrderJourney)=>nodesOf(item).filter(n=>!["completed","inherited","cancelled","not_applicable","unavailable"].includes(n.state));
   const supervision={overdue:active.filter(item=>inProgress(item).some(n=>n.risks.includes("overdue"))).length,dueSoon:active.filter(item=>inProgress(item).some(n=>n.risks.includes("due_soon"))).length,
-    coverage:coverageKeys.flatMap(key=>{const affected=active.filter(item=>item.supervision?.coverage.some(c=>c.key===key));return affected.length?[{key,orders:affected.length,message:affected[0]!.supervision!.coverage.find(c=>c.key===key)!.message}]:[];})};
+    coverage:coverageKeys.flatMap(key=>{const affected=(key==='fact_time'?scoped:active).filter(item=>item.supervision?.coverage.some(c=>c.key===key));return affected.length?[{key,orders:affected.length,message:affected[0]!.supervision!.coverage.find(c=>c.key===key)!.message}]:[];})};
   const filtered=scoped.filter(item=>(!filter.missing||item.supervision?.coverage.some(c=>c.key===filter.missing))&&(filter.kpi==="all"||filter.kpi==="blocked"&&nodesOf(item).some(node=>node.state==="blocked")||item.display.mainState===filter.kpi));
   return {ruleVersion:"journey-v2.0",asOf,page:filter.page,pageSize:15,total:filtered.length,summary,supervision,scopeCounts,items:paginate?filtered.slice((filter.page-1)*15,filter.page*15):filtered};
 }

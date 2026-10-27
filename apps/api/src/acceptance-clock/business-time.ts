@@ -37,6 +37,7 @@ export function observedBusinessTime(fallback:()=>Date=()=>new Date()):BusinessT
 export class ContextBusinessClock implements BusinessClock{
  /** Pass only the caller's existing transaction from this same guarded pool. */
  constructor(private readonly database?:Pool,private readonly transaction?:PoolClient){}
+ withTransaction(transaction:PoolClient){return new ContextBusinessClock(this.database,transaction);}
  async read(scope:BusinessTimeScope):Promise<BusinessTime>{
   const context=contexts.getStore();
   if(context){await context.assertScope(scope);return observedBusinessTime();}
@@ -48,4 +49,12 @@ export async function registerAcceptanceCreated(db:PoolClient,scope:BusinessTime
 }
 export async function assertAcceptanceAssignee(userId:string|null|undefined){
  const context=contexts.getStore();if(context&&userId&&!await context.acceptsActor(userId))throw new ApplicationError('ACCEPTANCE_ISOLATION','测试场景只能选择既有有效UAT身份，不能影响真实员工',403);
+}
+
+/** Call only after releasing an owned read transaction: a repeatable snapshot cannot see a newer clock version. */
+export async function assertBusinessClockUnchanged(clock:BusinessClock,scope:BusinessTimeScope,observed:BusinessTime){
+ if(!observed.scenarioId)return;
+ const current=await clock.read(scope);
+ if(current.scenarioId!==observed.scenarioId||current.revision!==observed.revision||current.now!==observed.now)
+  throw new ApplicationError('CONFLICT','测试时钟在读取期间已变化，请刷新原页面',409);
 }

@@ -71,3 +71,8 @@ it('shows safe human feedback while retaining image-normalization recovery and o
  vi.stubGlobal('fetch',vi.fn().mockResolvedValue(Response.json({error:{code:'ATTACHMENT_METADATA_MISMATCH',message:'Uploaded object is not a valid file of the declared type'}},{status:400})));await expect(sampleRequest('/TEST',schema,init)).rejects.toMatchObject({code:'ATTACHMENT_METADATA_MISMATCH',message:'附件内容与申报文件类型不一致，请重新选择有效原文件'});
  vi.stubGlobal('fetch',vi.fn().mockResolvedValue(Response.json({error:{code:'TEST_DB',message:'duplicate key value violates unique constraint 中文资料'}},{status:500})));const error=await cuttingRequest('TEST',schema).catch(e=>e);expect(error.code).toBe('TEST_DB');expect(error.message).not.toContain('constraint');expect(error.message).not.toContain('中文资料');expect(error.message).toContain('未能读取原资料');
 });
+
+it('retains the safe server request identifier on an unclassified digital read failure',async()=>{
+ vi.stubGlobal('fetch',vi.fn(async()=>Response.json({error:{code:'INTERNAL_ERROR',message:'Internal error'}},{status:500,headers:{'x-request-id':'TEST-read-failure-42'}})));
+ await expect(digitalRequest('journeys/TEST-request-id')).rejects.toThrow('请求编号：TEST-read-failure-42');
+});

@@ -58,6 +58,8 @@ export const PatternWorkspaceFilterSchema = z.object({
 }).strict();
 export type PatternWorkspaceFilter = z.infer<typeof PatternWorkspaceFilterSchema>;
 export type PatternWorkspaceTask = {
+  /** Original journey business observation; list snapshot must never substitute for it. */
+  asOf?: string | null;
   journeyId: string; sourceId: string | null; orderId: string | null; designStyleNo: string;
   customer: string | null; designer: string | null; node: JourneyNode;
   group: typeof PATTERN_GROUPS[number]["key"];

@@ -25,10 +25,10 @@ import { patternTaskAction } from "./pattern-task-action.js";
 
 const states = {uncreated: "尚未创建", pending: "等待前置", active: "办理中", blocked: "暂时办不了", completed: "已完成", cancelled: "已取消", inherited: "沿用", unavailable: "不可访问", not_applicable: "不适用"};
 const date = (value: string | null) => value ? new Date(value).toLocaleString("sv-SE", {hour12: false, timeZone: "Asia/Shanghai", year:"numeric", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit"}) : "未登记";
-const duration = (seconds: number) => {if (!Number.isFinite(seconds)) return '时间待核实'; const minutes = Math.floor(Math.max(0, seconds) / 60), days = Math.floor(minutes / 1440), hours = Math.floor(minutes % 1440 / 60); return days ? `${days}天${hours ? `${hours}小时` : ''}` : hours ? `${hours}小时${minutes % 60 ? `${minutes % 60}分` : ''}` : `${minutes}分`;};
-const stay = (task: PatternWorkspaceTask, asOf: string) => {
+const duration = (seconds: number) => {if (!Number.isFinite(seconds) || seconds < 0) return '时间待核实'; const minutes = Math.floor(seconds / 60), days = Math.floor(minutes / 1440), hours = Math.floor(minutes % 1440 / 60); return days ? `${days}天${hours ? `${hours}小时` : ''}` : hours ? `${hours}小时${minutes % 60 ? `${minutes % 60}分` : ''}` : `${minutes}分`;};
+const stay = (task: PatternWorkspaceTask) => {
   if (!task.node.enteredAt) return "尚未启动计时";
-  const end = ['completed','cancelled'].includes(task.node.state) ? task.node.actualAt : asOf;
+  const end = ['completed','cancelled'].includes(task.node.state) ? task.node.actualAt : task.asOf;
   if (!end) return "停留时间待核实";
   return `停留 ${duration((Date.parse(end) - Date.parse(task.node.enteredAt)) / 1000)}`;
 };
@@ -134,18 +134,18 @@ export function DigitalPatternWorkspace({selectedOnly=false,initialTask,initialA
       {boardItems.filter(task => (lane.groups as readonly string[]).includes(task.group)).slice(0,filter.lane||filter.group?undefined:3).map(task => <PatternBoardCard key={task.node.instanceId} overdue={task.node.risks.includes("overdue")} onClick={() => choose(task.node.instanceId)}>
         {approvedLayout?<>
         <span className="pattern-card-identity"><strong>{task.designStyleNo}</strong><small>{task.customer??'通用开发'} · 第 {task.node.round??1} 轮</small></span>
-        <span className="pattern-card-business"><b>{task.node.label}</b><small>当前主办：{task.node.owner?.name??'待派工'}</small><small>{result?stay(task,result.asOf):'计时读取中'}</small></span>
+        <span className="pattern-card-business"><b>{task.node.label}</b><small>当前主办：{task.node.owner?.name??'待派工'}</small><small>{result?stay(task):'计时读取中'}</small></span>
         <span className="pattern-card-status"><StatusBadge tone={task.node.risks.includes('overdue')||task.node.state==='blocked'?'danger':task.node.state==='completed'?'success':'info'}>{task.node.risks.includes('overdue')?'超时':states[task.node.state]}</StatusBadge><small title={task.node.expectedAt??undefined}>要求完成 {deadline(task)}</small><small>进入 {task.node.enteredAt?date(task.node.enteredAt):'尚未启动'}</small><span className="pattern-task-action">{task.nativeAssignment?'分派师傅':patternTaskAction(task.node)}</span></span>
         <span className="pattern-card-blockers"><small>{task.node.blockers.map(blocker=>blocker.label).join('；')||'无已记录阻断'}</small></span>
         </>:<>        <strong>{task.designStyleNo}</strong><small>{task.customer ?? "通用开发"} · 第 {task.node.round ?? 1} 轮</small><small>{task.node.label}</small><small>当前主办：{task.node.owner?.name ?? "待派工"}</small>
         <StatusBadge tone={task.node.risks.includes("overdue") || task.node.state === "blocked" ? "danger" : task.node.state === "completed" ? "success" : "info"}>{task.node.risks.includes("overdue") ? "超时" : states[task.node.state]}</StatusBadge>
-        <small>{task.node.blockers.map(blocker=>blocker.label).join("；")||"无已记录阻断"}</small><small>{result ? stay(task,result.asOf) : '计时读取中'}</small>
+        <small>{task.node.blockers.map(blocker=>blocker.label).join("；")||"无已记录阻断"}</small><small>{result ? stay(task) : '计时读取中'}</small>
         <small title={task.node.expectedAt ?? undefined}>截止 {deadline(task)}</small><span className="pattern-task-action">{task.nativeAssignment?"分派师傅":patternTaskAction(task.node)}</span></>}
 
       </PatternBoardCard>)}
       {result && !boardItems.some(task => (lane.groups as readonly string[]).includes(task.group)) && <p>{lane.groups.some(group => result.counts[group] > 0) ? "本页无此环节任务" : "暂无任务"}</p>}
       </PatternBoardLane>)}</div></div>{!filter.lane && !filter.group && <p className="pattern-board-scroll-hint">每栏显示最近3项任务，查看全部可继续浏览</p>}
-</>:      <div className="development-table-scroll pattern-role-task-table"><table><thead><tr><th>款号</th><th>客户 / 轮次</th><th>当前任务</th><th>主办人</th><th>状态</th><th>要求完成</th><th>停留</th><th>操作</th></tr></thead><tbody>{result?.items.map(task=><tr key={task.node.instanceId} className={selectedId===task.node.instanceId?"is-selected":""}><td><strong>{task.designStyleNo}</strong></td><td>{task.customer??"通用开发"} · 第{task.node.round??1}轮</td><td>{task.node.label}</td><td>{task.node.owner?.name??"待派工"}</td><td><StatusBadge tone={task.node.state==="blocked"||task.node.risks.includes("overdue")?"danger":task.node.state==="completed"?"success":"info"}>{states[task.node.state]}</StatusBadge></td><td>{deadline(task)}</td><td>{result?stay(task,result.asOf):"—"}</td><td><Button type="button" variant="primary" onClick={()=>choose(task.node.instanceId)}>{task.nativeAssignment?"分派师傅":patternTaskAction(task.node)}</Button></td></tr>)}</tbody></table></div>}
+</>:      <div className="development-table-scroll pattern-role-task-table"><table><thead><tr><th>款号</th><th>客户 / 轮次</th><th>当前任务</th><th>主办人</th><th>状态</th><th>要求完成</th><th>停留</th><th>操作</th></tr></thead><tbody>{result?.items.map(task=><tr key={task.node.instanceId} className={selectedId===task.node.instanceId?"is-selected":""}><td><strong>{task.designStyleNo}</strong></td><td>{task.customer??"通用开发"} · 第{task.node.round??1}轮</td><td>{task.node.label}</td><td>{task.node.owner?.name??"待派工"}</td><td><StatusBadge tone={task.node.state==="blocked"||task.node.risks.includes("overdue")?"danger":task.node.state==="completed"?"success":"info"}>{states[task.node.state]}</StatusBadge></td><td>{deadline(task)}</td><td>{result?stay(task):"—"}</td><td><Button type="button" variant="primary" onClick={()=>choose(task.node.instanceId)}>{task.nativeAssignment?"分派师傅":patternTaskAction(task.node)}</Button></td></tr>)}</tbody></table></div>}
       {!result && !error && <p role="status">正在读取授权任务…</p>}{result && !result.items.length && <p>当前筛选暂无真实任务</p>}
       {!error&&(!showBoard||Boolean(filter.lane||filter.group))&&<Pagination page={filter.page} pageSize={15} total={result?.total ?? null} onPage={page => update({page})}/>}
     </section></div>

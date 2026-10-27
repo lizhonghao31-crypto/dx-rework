@@ -535,7 +535,7 @@ export class DigitalProductionTaskService {
     const task = await this.task(db, id);
     const effective = (await db.query(`SELECT r.entered_at,r.warning_at,r.due_at,p.version,
       CASE WHEN NULLIF(to_jsonb(r)->'sla_basis','null'::jsonb) IS NOT NULL THEN (to_jsonb(r)->'sla_basis'->>'seconds')::numeric ELSE p.sla_seconds END AS sla_seconds,
-      to_jsonb(r)->'sla_basis' AS sla_basis,p.label FROM digital_production_deadline_revisions r
+      to_jsonb(r)->'sla_basis' AS sla_basis,to_jsonb(r)->>'deadline_kind' AS timing_mode,p.label FROM digital_production_deadline_revisions r
       JOIN digital_production_deadline_policies p ON p.node_key=r.policy_node_key AND p.version=r.policy_version JOIN app_users u ON u.id=r.changed_by WHERE r.task_id=$1 ORDER BY r.revision_id DESC LIMIT 1`, [id])).rows[0];
     const currentPolicy = effective ?? await this.policy(db, task.task_kind, task.task_id);
     const resource = this.resource(task);
@@ -564,8 +564,8 @@ export class DigitalProductionTaskService {
     if(paused)unmetConditions.push({condition:'paused',name:'业务暂停',missing:'当前业务已暂停，须先由有权人员恢复',responsibleRole:'业务负责人',action:canControl?'恢复业务':null,evidenceId:null,verified:true});
     if(task.state==='blocked'&&task.blocked_reason&&task.blocked_reason!=='前置条件未满足')unmetConditions.push({condition:'manual_block',name:'任务阻断',missing:task.blocked_reason,responsibleRole:task.required_role,action:canManage?'处理阻断原因':null,evidenceId:null,verified:true});
     const factoryQc=task.task_kind==='factory_production_qc'&&task.production_order_id?await factoryProductionFacts(db,task.production_order_id):null;
-    const observed=await new ContextBusinessClock(this.database).read(resource);
-    return { ...(observed.scenarioId?{acceptanceBusinessNow:observed.now,...(effective?.sla_basis?{deadlineExclusive:effective.sla_basis.exclusive===true}:{})}:{}),unmetConditions, identity, priority, taskId: id, orderId: task.production_order_id as string | null, sourceId: task.source_id as string | null, taskKind: task.task_kind as string, label: currentPolicy.label as string,
+    const observed=await new ContextBusinessClock(this.database,db === this.database ? undefined : db as PoolClient).read(resource);
+    return { ...(effective?.timing_mode?{deadlineMode:effective.timing_mode as "duration"|"date_target"|"unlimited",...(effective.timing_mode==='date_target'?{deadlineExclusive:true}:{})}:{}),...(observed.scenarioId?{acceptanceBusinessNow:observed.now,...(effective?.sla_basis?{deadlineExclusive:effective.sla_basis.exclusive===true}:{})}:{}),unmetConditions, identity, priority, taskId: id, orderId: task.production_order_id as string | null, sourceId: task.source_id as string | null, taskKind: task.task_kind as string, label: currentPolicy.label as string,
       routeProgress: route, assigneeName: assignee, requiredRole: task.required_role, hasHandover: Boolean(handover.rowCount), canManage, canControl, canCorrect: isDigitalLeader(actor) || isDigitalTechnicalManager(actor),
       assigneeId: task.assignee_id as string | null, state: (factoryQc&&task.state==='completed'&&!factoryQc.complete?'ready':task.state) as DigitalTaskState, routeVersion: task.route_version as number, occurrence: task.occurrence as number,
       enteredAt: iso(effective?.sla_basis?effective.entered_at:task.entered_at), recordedAt: iso(task.created_at)!, completedAt: factoryQc?factoryQc.complete&&factoryQc.checks.every(c=>c.completedAt)?new Date(Math.max(...factoryQc.checks.map(c=>Date.parse(c.completedAt!)))).toISOString():null:iso(task.completed_at), paused,
@@ -652,6 +652,6 @@ export class DigitalProductionTaskService {
   async history(actor: TrustedActorContext, id: string) {
     await new DigitalProductionAccessPolicy(this.database).assert(actor, "task", id, "technical");
     return { events: (await this.database.query("SELECT event_id AS \"eventId\",event_kind AS kind,occurred_at AS \"occurredAt\",recorded_at AS \"recordedAt\",time_quality AS quality,corrects_event_id AS \"correctsEventId\",payload,u.display_name AS \"actorName\" FROM digital_production_task_events e JOIN app_users u ON u.id=e.actor_id WHERE task_id=$1 ORDER BY recorded_at,event_id", [id])).rows,
-      revisions: (await this.database.query("SELECT r.revision_id AS \"revisionId\",r.policy_version AS \"policyVersion\",r.entered_at AS \"enteredAt\",r.warning_at AS \"warningAt\",r.due_at AS \"dueAt\",r.reason,r.changed_at AS \"changedAt\",p.sla_seconds IS NOT NULL AS \"hasSla\",u.display_name AS \"changedByName\" FROM digital_production_deadline_revisions r JOIN digital_production_deadline_policies p ON p.node_key=r.policy_node_key AND p.version=r.policy_version JOIN app_users u ON u.id=r.changed_by WHERE r.task_id=$1 ORDER BY r.revision_id", [id])).rows };
+      revisions: (await this.database.query("SELECT r.revision_id AS \"revisionId\",r.policy_version AS \"policyVersion\",r.entered_at AS \"enteredAt\",r.warning_at AS \"warningAt\",r.due_at AS \"dueAt\",to_jsonb(r)->>'deadline_kind' AS \"deadlineMode\",r.reason,r.changed_at AS \"changedAt\",(p.sla_seconds IS NOT NULL OR COALESCE(to_jsonb(r)->>'deadline_kind'='date_target',false)) AS \"hasSla\",u.display_name AS \"changedByName\" FROM digital_production_deadline_revisions r JOIN digital_production_deadline_policies p ON p.node_key=r.policy_node_key AND p.version=r.policy_version JOIN app_users u ON u.id=r.changed_by WHERE r.task_id=$1 ORDER BY r.revision_id", [id])).rows };
   }
 }

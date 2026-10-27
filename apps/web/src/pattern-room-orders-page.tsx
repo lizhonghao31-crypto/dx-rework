@@ -173,7 +173,7 @@ function PatternRoomDetailWorkspace({ orderId, assignmentOnly=false, inlineExecu
     {!order && !error ? <p role="status">正在读取订单…</p> : null}
     {order ? <>
       {historyRead&&!order.historicalView&&<div className="pattern-history-notice"><span>历史记录 · 只读</span><a href={currentHref}>返回当前订单</a></div>}
-      {order.historicalView ? <div className="pattern-history-notice"><span>历史节点 · 只读 · {order.historicalView.actorName} · {patternTime(order.historicalView.at)}</span><a href={currentHref}>返回当前节点</a>{order.historicalView.missingFacts && <p>本次提交的任务资料未完整留存，缺失字段未使用当前资料补齐。</p>}</div> : null}
+      {order.historicalView ? <div className="pattern-history-notice"><span>历史节点 · 只读 · {order.historicalView.actorName} · {patternTime(order.historicalView.at)}</span><a href={currentHref}>返回当前节点</a>{order.historicalView.missingFacts && <p>{order.historicalView.reason??"本次提交的任务资料未完整留存，缺失字段未使用当前资料补齐。"}</p>}</div> : null}
       <Surface className="pattern-order-summary">
         <div className="pattern-summary-core"><dl className="pattern-facts">
           <div><dt>板房师傅</dt><dd>{displayRound?.segments.at(-1)?.workerName ?? order.currentWorkerName ?? (readOnlyView ? "无可见分配记录" : "待分配")}</dd></div>

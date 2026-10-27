@@ -14,7 +14,7 @@ import type { Pool, PoolClient } from "pg";
 import { resolveDigitalSlaSnapshot, validateDigitalSlaSnapshot } from "@dx-rework/contracts/digital-sla";
 import { evaluateSlaPlan, slaBusinessProgress, type SlaAnchor } from "@dx-rework/domain/digital-sla-plan";
 import { validateBusinessTime, type BusinessClock, type BusinessTime } from "@dx-rework/domain/business-clock";
-import {ContextBusinessClock} from '../acceptance-clock/business-time.js';
+import {assertBusinessClockUnchanged,ContextBusinessClock} from '../acceptance-clock/business-time.js';
 import type { TrustedActorContext } from "../tools/repositories.js";
 import { DigitalProductionAccessPolicy } from "./access-policy.js";
 import { SlaConfigurationRepository } from "./sla-configuration-repository.js";
@@ -84,18 +84,20 @@ export class SlaOrderService {
 
   async read(actor: TrustedActorContext, orderId: string) {
     const client = await this.database.connect();
+    let result:Awaited<ReturnType<SlaOrderService["readWithClient"]>>;
     try {
       await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
-      const result = await this.readWithClient(actor, orderId, client);
+      result = await this.readWithClient(actor, orderId, client,{mode:"read_projection"});
       await client.query("COMMIT");
-      return result;
     } catch (error) { await client.query("ROLLBACK"); throw error; } finally { client.release(); }
+    await assertBusinessClockUnchanged(this.clock,{kind:"order",id:orderId},result.time);
+    return result;
   }
 
   /** Reuse the caller's authorized read snapshot; never open a nested connection/transaction. */
-  async readWithClient(actor: TrustedActorContext, orderId: string, client: PoolClient) {
+  async readWithClient(actor: TrustedActorContext, orderId: string, client: PoolClient, options:{mode?:"read_projection"}={}) {
       await new DigitalProductionAccessPolicy(client).assert(actor, "order", orderId, "technical");
-      const repo = new SlaPlanRepository(client), time = validateBusinessTime(await this.clock.read({ kind: "order", id: orderId }));
+      const repo = new SlaPlanRepository(client), time = validateBusinessTime(await (this.clock instanceof ContextBusinessClock?this.clock.withTransaction(client):this.clock).read({ kind: "order", id: orderId }));
       const history = await repo.available() ? await repo.plans(orderId) : [];
       const current = history.at(-1);
       if (!current) { return { status: "legacy_unenrolled" as const, time, reason: "此历史订单未建立首版计划，未补造历史时间" }; }
@@ -131,7 +133,7 @@ export class SlaOrderService {
           if(value&&'minutes' in value)fact.standardMinutes=value.minutes;
         }
       }
-      const evaluationPlan = reworkEvaluationPlan(developmentEvaluationPlan(factory?factoryEvaluationPlan(current.plan,factory.craftKey):current.plan, facts),rework.facts), nodes = evaluateSlaPlan(evaluationPlan, facts, time);
+      const evaluationPlan = reworkEvaluationPlan(developmentEvaluationPlan(factory?factoryEvaluationPlan(current.plan,factory.craftKey):current.plan, facts),rework.facts), nodes = evaluateSlaPlan(evaluationPlan, facts, time,options);
       const progress = slaBusinessProgress(evaluationPlan, Object.entries(facts).filter(([, f]) => f.businessCompleted || f.completedAt).map(([id]) => id));
       return { status: "planned" as const, time, original: history[0]!, current, history, nodes, facts, evaluationPlan, applications, progress, development, factory, rework, garments, receiving, packing };
   }
