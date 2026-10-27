@@ -155,6 +155,7 @@ if [[ "$command" == update && "$sha" != "$(cat "$tool_root/TOOL_SHA")" ]]; then
     staging="$(mktemp -d "$tools/.refresh.XXXXXX")"
     cp -a "$snapshot/." "$staging/"
     rm -rf -- "$staging/.acceptance-preflight"
+    rm -f -- "$staging/acceptance-identity.json"
     printf '%s\n' "$sha" > "$staging/TOOL_SHA"
     chown -R root:root "$staging"
     chmod -R go-w "$staging"

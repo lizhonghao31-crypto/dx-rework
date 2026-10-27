@@ -29,13 +29,15 @@ check_live_identity() {
 if [[ "$action" != prepare ]]; then
   evidence="$(cat "$source_dir/worker-evidence")"
   [[ "$evidence" == "$DX_ROOT/logs/update-$sha-"* && -d "$evidence" && ! -L "$evidence" ]]
-  mkdir -p "$evidence/preflight"
-  cp -rn "$source_dir/.acceptance-preflight/." "$evidence/preflight/"
+  # Failure routing must stop the candidate even when storage cannot allocate
+  # more evidence. Keep identity/path guards, but perform no optional copy first.
   if [[ "$action" == halt ]]; then
     pm2 stop dx-rework-acceptance-api >/dev/null
     echo failed-runtime-stopped > "$evidence/phase"
     exit 0
   fi
+  mkdir -p "$evidence/preflight"
+  cp -rn "$source_dir/.acceptance-preflight/." "$evidence/preflight/"
   load_app_config
   export PGCONNECT_TIMEOUT=10
   check_live_identity

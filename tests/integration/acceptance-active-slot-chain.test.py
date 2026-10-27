@@ -245,7 +245,9 @@ class Fixture:
                 else:model['acceptancePm2Status']='stopped'
                 file.write_text(json.dumps(model))
             elif args==['save']:
-                if (root.parent/'fail-pm2-save').exists():sys.exit('TEST PM2 save failure')
+                if (root.parent/'fail-pm2-save').exists():
+                    if (root.parent/'fail-evidence-copy-on-save').exists():(root.parent/'fail-evidence-copy').write_text('TEST evidence allocation failed')
+                    sys.exit('TEST PM2 save failure')
                 target=root.parent/'acceptance-home/.pm2/dump.pm2';target.parent.mkdir(parents=True,exist_ok=True);target.write_text(json.dumps([process()]))
             else:sys.exit('Unexpected PM2 action')
         """ % (str(self.acceptance), str(self.trace), SHA0), 0o755)
@@ -748,6 +750,26 @@ class ActiveSlotChainTests(unittest.TestCase):
                 self.assertEqual(before,f.production_fingerprint())
         write(config,original,0o600)
 
+    def test_data_only_refresh_remains_exactly_reinstallable_without_runtime_evidence(self):
+        f=self.fixture;f.install();original=f.sha;before=f.production_fingerprint()
+        command([REAL_GIT,'-C',str(f.repo),'checkout','-q','release/digital-production-v1'])
+        write(f.repo/'apps/fixture-data-only','TEST candidate with identical executable tool policy\n')
+        command([REAL_GIT,'-C',str(f.repo),'add','apps/fixture-data-only'])
+        command([REAL_GIT,'-C',str(f.repo),'commit','-qm','TEST data-only tool refresh'])
+        f.sha=command([REAL_GIT,'-C',str(f.repo),'rev-parse','HEAD']).stdout.strip()
+        f.candidate=f.acceptance/'candidates'/f.sha;f.release(f.candidate,f.sha,True)
+        model=json.loads(f.network.read_text());model['acceptanceCandidate']=str(f.candidate);write(f.network,json.dumps(model))
+        result=f.update()
+        self.assertIn('ACCEPTANCE_TOOL_REFRESH_OK sha='+f.sha,result.stdout)
+        self.assertTrue((f.tools/original).is_dir())
+        target=f.tools/f.sha
+        self.assertFalse((target/'.acceptance-preflight').exists())
+        self.assertFalse((target/'acceptance-identity.json').exists(),'Instance evidence is not part of an immutable source revision')
+        self.assertIn('Installed.',f.install().stdout,'Explicit install of the identical clean SHA must remain idempotent')
+        self.assertEqual(before,f.production_fingerprint())
+        for name in ('dx-acceptance','dx-rework-update'):
+            self.assertIn(str(target),(f.launch/name).read_text())
+
     def test_each_capacity_failure_precedes_its_heavy_action_and_preserves_old_data(self):
         f=self.fixture;f.install();before=f.production_fingerprint()
         write(f.acceptance/'backups/postgres/retained-backup','retained')
@@ -793,6 +815,23 @@ class ActiveSlotChainTests(unittest.TestCase):
         self.assertEqual('stopped',json.loads(f.network.read_text())['acceptancePm2Status'])
         self.assertTrue(any(x['kind']=='pm2' and x['args']==['save'] for x in f.calls()))
         self.assertTrue(any((p/'phase').read_text().strip()=='failed-runtime-stopped' for p in (f.acceptance/'logs').glob('update-*')))
+
+    def test_failed_evidence_copy_cannot_prevent_halt_after_pm2_save_failure(self):
+        f=self.fixture;f.install();before=f.production_fingerprint()
+        write(f.directory/'fail-pm2-save','fail');write(f.directory/'fail-evidence-copy-on-save','fail')
+        write(f.bin/'cp',"""#!/usr/bin/env bash
+            if [[ -f '%s/fail-evidence-copy' && "$*" == *'.acceptance-preflight'* ]]; then
+              echo TEST_EVIDENCE_COPY_FAILED >&2; exit 88
+            fi
+            exec /usr/bin/cp "$@"
+        """ % f.directory,0o755)
+        result=f.update(check=False)
+        self.assertNotEqual(result.returncode,0)
+        self.assertNotIn('ACCEPTANCE_UPDATE_FINISHED',result.stdout)
+        self.assertTrue((f.directory/'fail-evidence-copy').is_file())
+        self.assertEqual('stopped',json.loads(f.network.read_text())['acceptancePm2Status'])
+        self.assertNotIn('TEST_EVIDENCE_COPY_FAILED',result.stderr,'Halt must stop the candidate before any optional evidence copy')
+        self.assertEqual(before,f.production_fingerprint())
 
 
 if __name__ == "__main__":
