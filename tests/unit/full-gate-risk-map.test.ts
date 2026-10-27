@@ -127,6 +127,7 @@ describe("mapped PostgreSQL entrypoint", () => {
   const script = step.split("        run: |\n")[1].split("\n").map(line => line.startsWith("          ") ? line.slice(10) : line).join("\n");
   const full = "tests/integration/full-business-chain-postgres.test.ts";
   const sourcing = "tests/integration/sourcing-pr03-postgres.test.ts";
+  const rework = "tests/integration/rework-postgres.test.ts";
   const ordinary = "tests/integration/digital-sla-configuration-postgres.test.ts";
   // Execute the real workflow shell; command doubles make these boundary checks independent of a database.
   const run = (files: string[], extra: Record<string, string> = {}) => {
@@ -150,13 +151,13 @@ npx() {
     } finally { rmSync(dir, { recursive: true, force: true }); }
   };
 
-  it("uses the existing finite chain config only for the two long suites and resets it before ordinary suites", () => {
-    const files = [full, ordinary, sourcing, "tests/integration/digital-sla-plan-postgres.test.ts"];
+  it("uses the existing finite chain config for current-schema long suites and resets it before ordinary suites", () => {
+    const files = [full, ordinary, sourcing, rework, "tests/integration/digital-sla-plan-postgres.test.ts"];
     const result = run(files);
     expect(result.status, result.stderr).toBe(0);
     expect(result.commands).toEqual([
       "safety|scripts/test-database-safety.mjs|test|postgresql://isolated-command-fixture/test",
-      ...files.map(file => `vitest|vitest|run|${file}${file === full || file === sourcing ? "|--config|vitest.business-chain.config.ts" : ""}|color=1`),
+      ...files.map(file => `vitest|vitest|run|${file}${[full, sourcing, rework].includes(file) ? "|--config|vitest.business-chain.config.ts" : ""}|color=1`),
     ]);
   });
 
