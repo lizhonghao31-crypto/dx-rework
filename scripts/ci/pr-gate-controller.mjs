@@ -12,16 +12,45 @@ import {REPOSITORY, FINAL_CHECK, LIGHT_CHECK, gateKind, finalRef, requireSha,
 export class GitHubError extends Error {
   constructor(status, message) { super(`GitHub ${status}: ${message}`); this.status = status; }
 }
+export function decodeGitHubResponse(output) {
+  const text = String(output).replace(/\r\n/g, '\n');
+  const headers = [...text.matchAll(/^HTTP\/[\d.]+[ \t]+(\d{3})[^\n]*\n/gm)];
+  const header = headers.at(-1);
+  if (!header) throw new Error('GitHub CLI response status missing; outcome may be unknown');
+  const end = text.indexOf('\n\n', header.index);
+  if (end < 0) throw new Error('GitHub CLI response headers incomplete; outcome may be unknown');
+  return {status: Number(header[1]), body: text.slice(end + 2)};
+}
 export class GitHub {
-  constructor(token, fetcher = fetch) { this.token = token; this.fetcher = fetcher; }
+  constructor(token, fetcher) { this.token = token; this.fetcher = fetcher; }
   async request(path, {method = 'GET', body, raw = false} = {}) {
     if (!path.startsWith(`/repos/${REPOSITORY}/`) && path !== '/graphql') throw new Error('Unexpected API repository');
     if (process.env.GITHUB_ACTIONS === 'true' && method !== 'GET'
       && !(path === '/graphql' && /^query\b/.test(body?.query ?? ''))) throw new Error('Operator writes are not a CI permission');
-    const response = await this.fetcher(`https://api.github.com${path}`, {method,
-      headers: {authorization: `Bearer ${this.token}`, accept: 'application/vnd.github+json',
-        'x-github-api-version': '2022-11-28', ...(body ? {'content-type': 'application/json'} : {})},
-      ...(body ? {body: JSON.stringify(body)} : {})});
+    let response;
+    if (this.fetcher) {
+      response = await this.fetcher(`https://api.github.com${path}`, {method,
+        headers: {authorization: `Bearer ${this.token}`, accept: 'application/vnd.github+json',
+          'x-github-api-version': '2022-11-28', ...(body ? {'content-type': 'application/json'} : {})},
+        ...(body ? {body: JSON.stringify(body)} : {})});
+    } else {
+      // Reuse the installed operator connection and its proxy/auth handling.
+      // No shell interpolation, token printing or dependency installation.
+      const args = ['api', '--hostname', 'github.com', '--include', '--method', method,
+        '-H', 'X-GitHub-Api-Version: 2022-11-28', ...(body ? ['--input', '-'] : []), path];
+      let output;
+      try {
+        output = execFileSync('gh', args, {encoding: 'utf8', timeout: 30_000, maxBuffer: 32 * 1024 * 1024,
+          input: body ? JSON.stringify(body) : undefined, stdio: ['pipe', 'pipe', 'pipe'],
+          env: {...process.env, ...(this.token ? {GH_TOKEN: this.token} : {})}});
+      } catch (error) {
+        if (!error.stdout) throw new Error('GitHub CLI transport failed; operation outcome may be unknown');
+        output = error.stdout;
+      }
+      const decoded = decodeGitHubResponse(output);
+      response = {ok: decoded.status >= 200 && decoded.status < 300, status: decoded.status,
+        text: async () => decoded.body};
+    }
     const text = await response.text();
     if (!response.ok) {
       let message = 'request failed'; try { message = JSON.parse(text).message; } catch { /* No response payload in diagnostics. */ }
@@ -60,7 +89,7 @@ export async function inspect(api, number, head) {
   const actualBase = requireSha(branch.commit?.sha);
   const plan = {repository: REPOSITORY, pr: number, head, base: actualBase,
     baseRef: pr.base.ref, kind, phase: 'final'};
-  return {pr, plan, ref: finalRef(plan)};
+  return {pr, plan, ref: finalRef(plan), branch};
 }
 
 export async function approvedReview(api, number, head) {
@@ -70,6 +99,11 @@ export async function approvedReview(api, number, head) {
     const comparison = await api.request(`${prefix}/compare/${review.commit_sha}...${head}`);
     if (comparison.status !== 'ahead' || comparison.behind_by !== 0) throw new Error('Reviewed commit is not an ancestor of the final Head');
   }
+  await resolvedThreads(api, number);
+  return {...review, required: true};
+}
+
+async function resolvedThreads(api, number) {
   let cursor = null;
   for (let page = 0; page < 100; page++) {
     const result = await api.request('/graphql', {method: 'POST', body: {
@@ -78,11 +112,28 @@ export async function approvedReview(api, number, head) {
     if (result.errors?.length) throw new Error('Cannot read Review thread resolution');
     const threads = result.data?.repository?.pullRequest?.reviewThreads;
     if (!threads || threads.nodes.some(t => !t.isResolved)) throw new Error('Review has unreadable or unresolved threads');
-    if (!threads.pageInfo.hasNextPage) return review;
+    if (!threads.pageInfo.hasNextPage) return;
     if (!threads.pageInfo.endCursor || threads.pageInfo.endCursor === cursor) throw new Error('Review cursor did not advance');
     cursor = threads.pageInfo.endCursor;
   }
   throw new Error('Review pagination exceeded the bounded read');
+}
+
+async function reviewFor(api, snapshot, decision) {
+  const {plan} = snapshot;
+  if (decision === undefined || decision?.required === true) return approvedReview(api, plan.pr, plan.head);
+  if (decision?.required !== false || plan.kind !== 'quick') throw new Error('Only explicitly authorized low-risk Quick changes can declare Review not required');
+  for (const field of ['reason', 'authorization']) {
+    const value = decision[field];
+    if (typeof value !== 'string' || !value.trim() || value.length > 1000
+      || [...value].some(c => c.codePointAt(0) < 32 || c.codePointAt(0) === 127)) {
+      throw new Error(`No-review ${field} must identify the risk decision and existing authority`);
+    }
+  }
+  // A declaration cannot erase a started/failed Review or known open findings.
+  if (trustedReview(await api.comments(plan.pr))) return approvedReview(api, plan.pr, plan.head);
+  await resolvedThreads(api, plan.pr);
+  return {required: false, reason: decision.reason.trim(), authorization: decision.authorization.trim()};
 }
 
 async function jobs(api, run) { return api.pages(`${prefix}/actions/runs/${run.id}/jobs`, 'jobs'); }
@@ -126,15 +177,19 @@ async function existingRef(api, ref, head) {
   if (result.ref !== `refs/heads/${ref}` || result.object?.sha !== head) throw new Error('Existing request ref was rewritten or differs');
   return result;
 }
-export async function requestFinal(api, number, head, {apply = false} = {}) {
+export async function requestFinal(api, number, head, {apply = false, reviewPolicy} = {}) {
   const snapshot = await inspect(api, number, head);
-  const review = await approvedReview(api, number, head);
+  const review = await reviewFor(api, snapshot, reviewPolicy);
   const light = await lightProof(api, snapshot.plan);
-  if (await existingRef(api, snapshot.ref, head)) return finalStatus(api, snapshot.plan, snapshot.ref);
+  if (await existingRef(api, snapshot.ref, head)) {
+    const status = await finalStatus(api, snapshot.plan, snapshot.ref);
+    if ((await inspect(api, number, head)).ref !== snapshot.ref) throw new Error('PR base/mode changed while inspecting the existing final request');
+    return {...status, reviewDecision: review};
+  }
   const request = {ref: `refs/heads/${snapshot.ref}`, sha: head};
-  if (!apply) return {state: 'plan', request, review: review.commentId, lightRun: light.runId};
   const fresh = await inspect(api, number, head);
   if (fresh.ref !== snapshot.ref) throw new Error('PR base/mode changed before the final request');
+  if (!apply) return {state: 'plan', request, review: review.commentId ?? null, reviewDecision: review, lightRun: light.runId};
   try { await api.request(`${prefix}/git/refs`, {method: 'POST', body: request}); }
   catch (error) {
     // Atomic create is the idempotency boundary. Never update, force, delete or
@@ -142,18 +197,20 @@ export async function requestFinal(api, number, head, {apply = false} = {}) {
     if (error instanceof GitHubError && ![422].includes(error.status)) throw error;
     if (!await existingRef(api, snapshot.ref, head)) throw error;
   }
-  return {state: 'requested', ref: snapshot.ref, head, review: review.commentId, lightRun: light.runId};
+  return {state: 'requested', ref: snapshot.ref, head, review: review.commentId ?? null, reviewDecision: review, lightRun: light.runId};
 }
 
-export async function verifyMerge(api, number, head) {
+export async function verifyMerge(api, number, head, {reviewPolicy} = {}) {
   const snapshot = await inspect(api, number, head);
-  const review = await approvedReview(api, number, head);
+  const review = await reviewFor(api, snapshot, reviewPolicy);
   const light = await lightProof(api, snapshot.plan);
   if (!await existingRef(api, snapshot.ref, head)) throw new Error('No explicit final request for this Head/base/mode');
   const final = await finalStatus(api, snapshot.plan, snapshot.ref);
   if (final.state !== 'approved') throw new Error(`Final Gate is ${final.state}, not approved`);
-  const branch = await api.request(`${prefix}/branches/${encodeURIComponent(snapshot.plan.baseRef)}`);
-  return {head, base: snapshot.plan.base, review: review.commentId, reviewedHead: review.commit_sha,
+  const fresh = await inspect(api, number, head);
+  if (fresh.ref !== snapshot.ref) throw new Error('PR Head/base/mode changed during merge verification');
+  const {branch} = fresh;
+  return {head, base: snapshot.plan.base, review: review.commentId ?? null, reviewedHead: review.commit_sha ?? null, reviewDecision: review,
     lightRun: light.runId, final, platform: {protected: branch.protected,
       visibleRequiredChecks: branch.protection?.required_status_checks ?? null,
       boundary: 'Read-only evidence permits the governed merge operation; this command does not merge or change server protection.'}};
@@ -198,12 +255,12 @@ async function main() {
     pr: {type: 'string'}, head: {type: 'string'}, apply: {type: 'boolean', default: false},
     'request-id': {type: 'string'}, watch: {type: 'boolean', default: false},
     'review-retry-authorized': {type: 'boolean', default: false}, 'state-dir': {type: 'string'},
+    'review-not-required': {type: 'boolean', default: false}, 'review-reason': {type: 'string'}, 'review-authorization': {type: 'string'},
   }});
-  let token = process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN;
-  if (!token) token = execFileSync('gh', ['auth', 'token'], {encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']}).trim();
-  const api = new GitHub(token), number = Number(values.pr), head = requireSha(values.head);
-  if (positionals[0] === 'request-final') console.log(JSON.stringify(await requestFinal(api, number, head, {apply: values.apply}), null, 2));
-  else if (positionals[0] === 'verify-merge') console.log(JSON.stringify(await verifyMerge(api, number, head), null, 2));
+  const api = new GitHub(), number = Number(values.pr), head = requireSha(values.head);
+  const reviewPolicy = values['review-not-required'] ? {required: false, reason: values['review-reason'], authorization: values['review-authorization']} : undefined;
+  if (positionals[0] === 'request-final') console.log(JSON.stringify(await requestFinal(api, number, head, {apply: values.apply, reviewPolicy}), null, 2));
+  else if (positionals[0] === 'verify-merge') console.log(JSON.stringify(await verifyMerge(api, number, head, {reviewPolicy}), null, 2));
   else if (positionals[0] === 'watch-review') {
     if (values.apply && !values['review-retry-authorized']) throw new Error('Review retry requires the explicit standing authorization flag');
     let requestId = Number(values['request-id']);

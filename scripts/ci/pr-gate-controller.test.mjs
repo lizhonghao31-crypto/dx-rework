@@ -3,7 +3,7 @@ import {test} from 'node:test';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {GitHub,GitHubError,requestFinal,verifyMerge,reviewStep} from './pr-gate-controller.mjs';
+import {GitHub,GitHubError,decodeGitHubResponse,requestFinal,verifyMerge,reviewStep} from './pr-gate-controller.mjs';
 import {REPOSITORY,REVIEW_BOT,FINAL_CHECK,LIGHT_CHECK,finalRef,RECEIPT_PREFIX} from './pr-gate-protocol.mjs';
 const head='a'.repeat(40),base='b'.repeat(40),baseRef='release/digital-production-v1',prefix=`/repos/${REPOSITORY}`;
 const plan={repository:REPOSITORY,pr:901,head,base,baseRef,kind:'full',phase:'final'};
@@ -96,4 +96,57 @@ test('late Review completion suppresses timeout write; denied or uncertain comme
 test('API client rejects another repository before fetching or sending operator credentials',async()=>{
  let called=false;const api=new GitHub('local-dummy-not-a-token',async()=>{called=true;});
  await assert.rejects(()=>api.request('/repos/other/repo/actions/runs'));assert.equal(called,false);
+});
+
+test('managed CLI response decoding preserves real HTTP denial and redirect/final status without exposing auth',()=>{
+ assert.deepEqual(decodeGitHubResponse('HTTP/2.0 200 OK\r\nContent-Type: application/json\r\n\r\n{"ok":true}'),{status:200,body:'{"ok":true}'});
+ assert.equal(decodeGitHubResponse('HTTP/2.0 302 Found\nlocation: fixture\n\nHTTP/2.0 200 OK\ncontent-type: text/plain\n\n2026-10-27T00:00:00Z log').status,200);
+ assert.deepEqual(decodeGitHubResponse('HTTP/2.0 403 Forbidden\ncontent-type: application/json\n\n{"message":"Resource not accessible"}'),{status:403,body:'{"message":"Resource not accessible"}'});
+ assert.throws(()=>decodeGitHubResponse('connection refused'),/status missing/);
+ assert.throws(()=>decodeGitHubResponse('HTTP/2.0 201 Created\ncontent-type: application/json'),/headers incomplete/);
+});
+
+test('base observed changing during proof verification invalidates the result before return',async()=>{
+ const{api,state,addFinal}=fixture();state.ref={ref:`refs/heads/${finalRef(plan)}`,object:{sha:head}};addFinal();
+ const original=api.request;let reads=0;
+ api.request=async(path,options)=>{const result=await original(path,options);if(path.includes('/branches/')&&++reads===2)result.commit.sha='d'.repeat(40);return result;};
+ await assert.rejects(()=>verifyMerge(api,901,head),/base|changed|stale/);
+});
+const noReview={required:false,reason:'Isolated low-risk documentation; no mandatory review domain',authorization:'AGENTS.md#8-codex-review / approved task scope'};
+function quickFixture(){
+ const f=fixture();f.addFinal();f.state.pr.title='[QUICK] isolated documentation';f.state.comments=[];
+ const ref=finalRef({...plan,kind:'quick'});f.state.ref={ref:`refs/heads/${ref}`,object:{sha:head}};f.state.runs.final[0].head_branch=ref;
+ for(const id of Object.keys(f.state.logs))f.state.logs[id]=f.state.logs[id].replace('"kind":"full"','"kind":"quick"');
+ return f;
+}
+test('authorized low-risk no-review decision works in final request and merge verification without a Codex summary',async()=>{
+ const{api,state}=quickFixture();state.ref=null;
+ assert.equal((await requestFinal(api,901,head,{reviewPolicy:noReview})).state,'plan');
+ await requestFinal(api,901,head,{reviewPolicy:noReview,apply:true});
+ const result=await verifyMerge(api,901,head,{reviewPolicy:noReview});
+ assert.equal(result.reviewDecision.required,false);assert.equal(result.reviewDecision.authorization,noReview.authorization);
+ assert.equal(result.reviewedHead,null);assert.equal(result.final.state,'approved');
+});
+for(const fault of ['missing_authority','missing_reason','full','unresolved','running'])test(`no-review declaration cannot bypass ${fault}`,async()=>{
+ const f=quickFixture();let decision={...noReview};
+ if(fault==='missing_authority')delete decision.authorization;
+ if(fault==='missing_reason')delete decision.reason;
+ if(fault==='full')f.state.pr.title='[FULL] permission change';
+ if(fault==='unresolved')f.state.threads=[{id:'known',isResolved:false}];
+ if(fault==='running')f.state.comments=[summary('running')];
+ await assert.rejects(()=>requestFinal(f.api,901,head,{reviewPolicy:decision,apply:true}));
+ assert.equal(f.state.writes.some(w=>w.path.endsWith('/git/refs')),false);
+});
+
+for(const fault of ['head','mode','base_ref'])test(`late ${fault} drift is rejected after otherwise successful evidence`,async()=>{
+ const{api,state,addFinal}=fixture();state.ref={ref:`refs/heads/${finalRef(plan)}`,object:{sha:head}};addFinal();
+ const original=api.pr;let reads=0;api.pr=async number=>{
+  const result=await original(number);if(++reads===2){
+   if(fault==='head')result.head.sha='d'.repeat(40);
+   if(fault==='mode')result.title='[QUICK] retitled';
+   if(fault==='base_ref')result.base.ref='main';
+  }return result;
+ };
+ await assert.rejects(()=>verifyMerge(api,901,head),/moved|changed/);
+ assert.equal(state.writes.some(w=>w.path!=='/graphql'),false);
 });
