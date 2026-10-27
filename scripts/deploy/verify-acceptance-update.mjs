@@ -3,11 +3,13 @@ import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {assertVersion} from './acceptance-update-policy.mjs';
+import {verifyAcceptanceRuntime} from './acceptance-runtime-state.mjs';
 const [candidate,productionReceipt]=process.argv.slice(2);
 if(!candidate||!productionReceipt||process.argv.length!==4)throw Error('Candidate and pinned production receipt are required');
 const expected=JSON.parse(await readFile(`${candidate}/api/release-manifest.json`,'utf8'));
 const frontend=JSON.parse(await readFile(`${candidate}/frontend/release-manifest.json`,'utf8'));
 assertVersion(frontend,expected);
+const runtime=await verifyAcceptanceRuntime(expected.gitSha);
 if(frontend.schemaChecksum!==expected.schemaChecksum)throw Error('Frontend schema checksum mismatch');
 async function get(url) {
   const response=await fetch(url,{signal:AbortSignal.timeout(15000),headers:{'Cache-Control':'no-cache'}});
@@ -34,4 +36,4 @@ for(const asset of new Set(assets)) {
 }
 const helper=fileURLToPath(new URL('./production-runtime-health.py',import.meta.url));
 const production=JSON.parse(execFileSync('python3',[helper,'check','--receipt',productionReceipt],{encoding:'utf8',timeout:12000,stdio:['ignore','pipe','pipe']}));
-process.stdout.write(JSON.stringify({status:'verified',gitSha:expected.gitSha,schema:expected.schemaVersion,production_port:production.port,production_sha:production.sha,production:'ready'})+'\n');
+process.stdout.write(JSON.stringify({status:'verified',gitSha:expected.gitSha,schema:expected.schemaVersion,runtime,production_port:production.port,production_sha:production.sha,production:'ready'})+'\n');

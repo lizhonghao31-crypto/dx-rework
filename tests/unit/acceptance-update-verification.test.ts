@@ -21,7 +21,8 @@ describe('Acceptance public deployment verification',()=>{
     const calls:string[]=[];
     const productionReceipt=join(candidate,'production-runtime.json');
     productionProbe.mockReset();
-    productionProbe.mockImplementation(()=>{
+    productionProbe.mockImplementation((command:string)=>{
+      if(command==='pm2')return JSON.stringify([{name:'dx-rework-acceptance-api',pm2_env:{status:'online',pm_cwd:`/opt/dx-rework-acceptance/releases/${expected.gitSha}`,pm_exec_path:`/opt/dx-rework-acceptance/releases/${expected.gitSha}/scripts/deploy/start-acceptance-api.sh`}}]);
       if(scenario==='production-not-ready')throw Error('PRODUCTION_HEALTH_GUARD_FAILED');
       return JSON.stringify({port:3203,sha:'c'.repeat(40),source:'active-receipt',phase:'completed'});
     });

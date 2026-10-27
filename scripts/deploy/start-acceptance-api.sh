@@ -41,6 +41,7 @@ for key in $DX_REWORK_DEPLOY_ENV_KEYS $DX_REWORK_RESTORE_ENV_KEYS; do
   [[ "$key" == DX_REWORK_NODE_BIN ]] || unset "$key"
 done
 unset DX_REWORK_NODE_BIN DX_REWORK_EXPECTED_OWNER DX_REWORK_CONFIG_LOADED DX_REWORK_LOCK_FD
+unset DX_REWORK_ACCEPTANCE_RELEASE_SHA
 
 cd "$release"
 exec "$node_bin" apps/api/dist/server.js

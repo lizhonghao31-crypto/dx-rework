@@ -22,17 +22,25 @@ assert_safe_path "$build" >/dev/null
 assert_safe_path "$candidate" >/dev/null
 manifest="$source_dir/apps/api/src/platform/migration-manifest.json"
 policy="$tool_root/scripts/deploy/acceptance-update-policy.mjs"
+check_live_identity() {
+  pg_exec psql "$DATABASE_URL" -XqAt -v ON_ERROR_STOP=1 -c "SELECT json_build_object('database',current_database(),'port',current_setting('port')::integer,'oid',(SELECT oid::bigint FROM pg_database WHERE datname=current_database()),'address',inet_server_addr(),'role',current_user,'sessionRole',session_user)" > "$evidence/live-acceptance-identity.json"
+  cmp -s "$source_dir/acceptance-identity.json" "$evidence/live-acceptance-identity.json" || die 'Acceptance identity changed since the capacity preflight'
+}
 if [[ "$action" != prepare ]]; then
   evidence="$(cat "$source_dir/worker-evidence")"
   [[ "$evidence" == "$DX_ROOT/logs/update-$sha-"* && -d "$evidence" && ! -L "$evidence" ]]
-  load_app_config
-  export PGCONNECT_TIMEOUT=10
-  [[ "$(pg_exec psql "$DATABASE_URL" -XAtqc 'select current_database()')" == dx_rework_acceptance ]]
+  # Failure routing must stop the candidate even when storage cannot allocate
+  # more evidence. Keep identity/path guards, but perform no optional copy first.
   if [[ "$action" == halt ]]; then
     pm2 stop dx-rework-acceptance-api >/dev/null
     echo failed-runtime-stopped > "$evidence/phase"
     exit 0
   fi
+  mkdir -p "$evidence/preflight"
+  cp -rn "$source_dir/.acceptance-preflight/." "$evidence/preflight/"
+  load_app_config
+  export PGCONNECT_TIMEOUT=10
+  check_live_identity
   if [[ "$action" == backup ]]; then
     current_before="$(node_exec "$candidate/api/scripts/deploy/database-state.mjs" print-current)"
     node_exec "$candidate/api/scripts/deploy/database-state.mjs" verify-prefix "$manifest"
@@ -69,12 +77,14 @@ if [[ "$action" != prepare ]]; then
     previous="$(cat "$evidence/previous-sha")"
     assert_active_release "$previous"
     node_exec "$DX_ROOT/current/scripts/deploy/database-state.mjs" verify-current "$DX_ROOT/current/apps/api/src/platform/migration-manifest.json"
-    pm2 startOrReload "$DX_ROOT/current/infra/pm2/ecosystem.acceptance.config.cjs" --only dx-rework-acceptance-api --update-env
+    DX_REWORK_ACCEPTANCE_RELEASE_SHA="$previous" pm2 startOrReload "$tool_root/infra/pm2/ecosystem.acceptance.config.cjs" --only dx-rework-acceptance-api --update-env
     for _ in {1..30}; do
       if curl --max-time 3 -fsS http://127.0.0.1:3202/health/ready >/dev/null 2>&1; then break; fi
       sleep 1
     done
     node_exec "$tool_root/scripts/deploy/verify-acceptance-update.mjs" "$DX_ROOT/generations/$previous" "$source_dir/production-runtime.json"
+    pm2 save
+    node_exec "$tool_root/scripts/deploy/acceptance-runtime-state.mjs" "$previous" saved > "$evidence/recovered-runtime.json"
     echo old-runtime-verified > "$evidence/phase"
     exit 0
   fi
@@ -110,6 +120,9 @@ done
 [[ "$ready" == true ]] || die 'Acceptance readiness failed; inspect the current candidate logs'
 echo '[5/5] Verify local/public versions, HTML/assets and production health'
 node_exec "$tool_root/scripts/deploy/verify-acceptance-update.mjs" "$candidate" "$source_dir/production-runtime.json" | tee "$evidence/verification.json"
+echo runtime-verified-awaiting-persistence > "$evidence/phase"
+pm2 save
+node_exec "$tool_root/scripts/deploy/acceptance-runtime-state.mjs" "$sha" saved > "$evidence/saved-runtime.json"
 trap - ERR
 echo "Evidence: $evidence"
   echo verified > "$evidence/phase"
@@ -123,6 +136,9 @@ if [[ ! -d "$candidate" ]]; then
   mkdir -p "$build"
   cp -a "$source_dir/." "$build/"
   cd "$build"
+  [[ ! -L "$DX_ROOT/build/npm-cache" && ! -L "$DX_ROOT/build/tmp" ]] || die 'Acceptance cache/temp path cannot be shared symlinks'
+  mkdir -m 0700 -p "$DX_ROOT/build/npm-cache" "$DX_ROOT/build/tmp"
+  export npm_config_cache="$DX_ROOT/build/npm-cache" TMPDIR="$DX_ROOT/build/tmp"
   lock_hash="$(sha256sum package-lock.json | cut -d' ' -f1)"
   dependencies_ready=false
   if [[ -f .dependencies-ready && "$(cat .dependencies-ready)" == "$lock_hash" && -d node_modules && ! -L node_modules ]] && \
@@ -177,6 +193,8 @@ for key in OSS_REGION OSS_ENDPOINT OSS_BUCKET OSS_ACCESS_KEY_ID OSS_ACCESS_KEY_S
 [[ "$(pg_exec psql "$DATABASE_URL" -XAtqc 'select current_database()')" == dx_rework_acceptance ]] || die 'Acceptance database name mismatch'
 evidence="$DX_ROOT/logs/update-$sha-$(date -u +%Y%m%dT%H%M%SZ)-$$"
 mkdir -m 0700 "$evidence"
+mkdir -p "$evidence/preflight"
+cp -rn "$source_dir/.acceptance-preflight/." "$evidence/preflight/"
 cp "$source_dir/production-history.json" "$evidence/production-history.json"
 export_history() {
   (umask 077; PGOPTIONS='-c default_transaction_read_only=on' pg_exec psql "$DATABASE_URL" -XqAt -v ON_ERROR_STOP=1 -c "BEGIN READ ONLY" -c "SELECT json_build_object('database',current_database(),'migrations',coalesce(json_agg(json_build_object('version',version,'checksum',btrim(checksum)) ORDER BY version),'[]'::json)) FROM schema_migrations" -c COMMIT > "$evidence/acceptance-history.json")
@@ -197,7 +215,7 @@ if [[ "$status" == online ]]; then
   node_exec -e 'const v=JSON.parse(process.argv[1]),m=require(process.argv[2]);if(v.gitSha!==m.gitSha||v.schemaVersion!==m.schemaVersion)process.exit(1)' "$version" "$DX_ROOT/current/release-manifest.json"
 fi
 node_exec "$candidate/api/scripts/deploy/database-state.mjs" export-history > "$evidence/initial-history.json"
-pg_exec psql "$DATABASE_URL" -XqAt -v ON_ERROR_STOP=1 -c "SELECT json_build_object('database',current_database(),'port',current_setting('port')::integer,'oid',(SELECT oid::bigint FROM pg_database WHERE datname=current_database()),'address',inet_server_addr())" > "$source_dir/acceptance-identity.json"
+check_live_identity
 printf '%s\n' "$evidence" > "$source_dir/worker-evidence"
 echo prepared > "$evidence/phase"
 schema_current=false
@@ -205,6 +223,7 @@ if node_exec scripts/deploy/database-state.mjs verify-current "$manifest" >/dev/
 next_action="$(node_exec "$policy" next-action "$previous" "$sha" "$schema_current" "$status")"
 if [[ "$next_action" == verify ]]; then
   node_exec "$tool_root/scripts/deploy/verify-acceptance-update.mjs" "$candidate" "$source_dir/production-runtime.json"
+  node_exec "$tool_root/scripts/deploy/acceptance-runtime-state.mjs" "$sha" saved > "$evidence/saved-runtime.json"
   echo "Already current and healthy: $sha"
   exit 10
 fi

@@ -9,7 +9,7 @@ case "$command" in
   install|update|diagnose) ;;
   *) echo 'Usage: dx-acceptance update [40-character SHA] | diagnose [40-character SHA] | install'; exit 64 ;;
 esac
-if [[ "$command" == update || "$command" == diagnose ]]; then
+if [[ "$command" == update || "$command" == diagnose || "$command" == install ]]; then
   [[ $# -le 2 ]] || exit 64
   [[ -z "${2:-}" || "$2" =~ ^[0-9a-f]{40}$ ]] || exit 64
 fi
@@ -21,14 +21,16 @@ production_lock=/opt/dx-rework/locks/release.lock
 exec 7<"$production_lock"
 flock -n 7 || { echo 'Production release work is in progress; Acceptance was not changed.' >&2; exit 1; }
 if [[ "$command" == install ]]; then
-  [[ $# == 1 ]] || exit 64
+  [[ $# == 1 || $# == 2 ]] || exit 64
   exec 8>/run/lock/dx-acceptance-update.lock
   flock -n 8 || { echo 'Another Acceptance tool installation or update is running.' >&2; exit 1; }
   # Install an immutable, complete tool revision, independently of the app SHA.
   owner="$(stat -c %U "$tool_root")"
   tool_sha="$(runuser -u "$owner" -- git -C "$tool_root" rev-parse HEAD)"
   [[ "$tool_sha" =~ ^[0-9a-f]{40}$ ]]
+  [[ -z "${2:-}" || "$2" == "$tool_sha" ]] || { echo 'Expected tool SHA does not match the clean checkout.' >&2; exit 1; }
   [[ -z "$(runuser -u "$owner" -- git -C "$tool_root" status --porcelain)" ]]
+  python3 "$tool_root/scripts/deploy/acceptance-capacity.py" install "$tool_root" "$tool_root" "$tool_sha"
   tools=/opt/dx-rework-acceptance-tools
   install -d -o root -g root -m 0755 "$tools"
   staging="$(mktemp -d "$tools/.install.XXXXXX")"
@@ -109,14 +111,40 @@ origin="$(git_source remote get-url origin)"
 [[ "$origin" == git@github.com:lizhonghao31-crypto/dx-rework.git || "$origin" == https://github.com/lizhonghao31-crypto/dx-rework.git ]]
 production_guard="$(python3 "$tool_root/scripts/deploy/production-runtime-health.py" check)"
 nginx -t
+snapshot="$(mktemp -d /tmp/dx-acceptance-source.XXXXXX)"
+chmod 0755 "$snapshot"
+trap 'rc=$?; if [[ -n "${staging:-}" && "$staging" == /opt/dx-rework-acceptance-tools/.refresh.* ]]; then rm -rf -- "$staging"; fi; if ((rc)); then echo "Acceptance update failed; evidence=$snapshot; no production deployment was performed." >&2; else rm -rf -- "$snapshot"; fi' EXIT
+metadata="$snapshot/.acceptance-preflight"
+mkdir -m 0755 "$metadata"
+capacity_check() {
+  local phase="$1" target_sha="$2" identity="$metadata/identity-$1.json" input="$metadata/identity-$1-input.json" source_dir="$snapshot" storage=()
+  [[ "$phase" == *download ]] && source_dir="$src"
+  install -o dxacceptance -g dxacceptance -m 0600 /dev/null "$input"
+  runuser -u dxacceptance -- env -i HOME=/home/dxacceptance USER=dxacceptance PATH="$PATH" \
+    bash "$tool_root/scripts/deploy/inspect-acceptance-identity.sh" "$snapshot" "$tool_root" "$phase-input" || return $?
+  install -o root -g root -m 0444 "$input" "$identity"
+  rm -f -- "$input"
+  if [[ "$command" == update ]]; then
+    python3 "$tool_root/scripts/deploy/inspect-acceptance-storage.py" "$identity" "$metadata/storage-$phase.json" || return $?
+    storage=(--storage "$metadata/storage-$phase.json")
+  else
+    python3 "$tool_root/scripts/deploy/inspect-acceptance-storage.py" "$identity" --validate-only || return $?
+  fi
+  if [[ -e "$metadata/identity-first.json" ]]; then
+    cmp -s "$metadata/identity-first.json" "$identity" || { echo 'Acceptance database identity changed during update.' >&2; return 1; }
+  else
+    cp "$identity" "$metadata/identity-first.json"
+  fi
+  python3 "$tool_root/scripts/deploy/acceptance-capacity.py" "$phase" "$source_dir" "$tool_root" "$target_sha" "${storage[@]}" | tee "$metadata/capacity-$phase.json"
+}
+if [[ "$command" == update ]]; then capacity_check download "${requested:--}"; else capacity_check diagnose-download "${requested:--}"; fi
 git_source fetch --quiet origin refs/heads/release/digital-production-v1:refs/remotes/origin/release/digital-production-v1
 sha="${requested:-$(git_source rev-parse refs/remotes/origin/release/digital-production-v1)}"
 [[ "$sha" =~ ^[0-9a-f]{40}$ ]]
 git_source merge-base --is-ancestor "$sha" refs/remotes/origin/release/digital-production-v1
-snapshot="$(mktemp -d /tmp/dx-acceptance-source.XXXXXX)"
-chmod 0755 "$snapshot"
-trap 'rc=$?; if [[ -n "${staging:-}" && "$staging" == /opt/dx-rework-acceptance-tools/.refresh.* ]]; then rm -rf -- "$staging"; fi; if ((rc)); then echo "Acceptance update failed; evidence=$snapshot; no production deployment was performed." >&2; else rm -rf -- "$snapshot"; fi' EXIT
-bash "$tool_root/scripts/deploy/fetch-update-source.sh" "$sha" "$snapshot"
+bash "$tool_root/scripts/deploy/fetch-update-source.sh" "$sha" "$snapshot" "$command"
+cp "$metadata/identity-first.json" "$snapshot/acceptance-identity.json"
+chmod 0444 "$snapshot/acceptance-identity.json"
 if [[ "$command" == update && "$sha" != "$(cat "$tool_root/TOOL_SHA")" ]]; then
   python3 "$tool_root/scripts/deploy/verify-tool-refresh.py" "$tool_root" "$snapshot"
   # Only the immutable installed validator authorizes this data refresh.
@@ -126,6 +154,8 @@ if [[ "$command" == update && "$sha" != "$(cat "$tool_root/TOOL_SHA")" ]]; then
   if [[ ! -e "$target" ]]; then
     staging="$(mktemp -d "$tools/.refresh.XXXXXX")"
     cp -a "$snapshot/." "$staging/"
+    rm -rf -- "$staging/.acceptance-preflight"
+    rm -f -- "$staging/acceptance-identity.json"
     printf '%s\n' "$sha" > "$staging/TOOL_SHA"
     chown -R root:root "$staging"
     chmod -R go-w "$staging"
@@ -168,9 +198,6 @@ if [[ "$command" == diagnose ]]; then
   [[ -f "$root/locks/release.lock" && ! -L "$root/locks/release.lock" ]]
   exec 9>"$root/locks/release.lock"
   flock -n 9 || { echo 'Acceptance release lock is held.' >&2; exit 1; }
-  install -o dxacceptance -g dxacceptance -m 0600 /dev/null "$snapshot/acceptance-identity.json"
-  runuser -u dxacceptance -- env -i HOME=/home/dxacceptance USER=dxacceptance PATH="$PATH" \
-    bash "$tool_root/scripts/deploy/inspect-acceptance-identity.sh" "$snapshot" "$tool_root"
   bash "$tool_root/scripts/deploy/run-acceptance-maintenance.sh" "$snapshot" preflight
   echo "ACCEPTANCE_DIAGNOSTICS_FINISHED sha=$sha"
   exit 0
@@ -193,12 +220,16 @@ runuser -u dxrework -- env -i HOME=/home/dxrework USER=dxrework PATH="$PATH" \
   bash "$tool_root/scripts/deploy/export-production-history.sh" > "$snapshot/production-history.json"
 chown dxacceptance:dxacceptance "$snapshot/production-history.json"
 chmod 0600 "$snapshot/production-history.json"
-install -o dxacceptance -g dxacceptance -m 0600 /dev/null "$snapshot/acceptance-identity.json"
 install -o dxacceptance -g dxacceptance -m 0600 /dev/null "$snapshot/worker-evidence"
 [[ -f "$root/locks/release.lock" && ! -L "$root/locks/release.lock" ]]
 exec 9>"$root/locks/release.lock"
 flock -n 9 || { echo 'Acceptance release lock is held.' >&2; exit 1; }
 worker() {
+  case "$1" in
+    prepare) capacity_check build "$sha" || return $?;;
+    backup) capacity_check backup "$sha" || return $?;;
+    stop) capacity_check stop "$sha" || return $?;;
+  esac
   runuser -u dxacceptance -- env -i HOME=/home/dxacceptance USER=dxacceptance PATH="$PATH" DX_REWORK_LOCK_FD=9 \
     bash "$tool_root/scripts/deploy/update-acceptance-local.sh" "$sha" "$snapshot" "$1" "$tool_root" 7<&-
 }

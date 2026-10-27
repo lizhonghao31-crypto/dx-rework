@@ -96,6 +96,7 @@ class Fixture:
             "/opt/dx-rework/source": str(self.repo),
             "/opt/dx-rework": str(self.runtime),
             "/usr/local/bin": str(self.launch),
+            "/home/dxacceptance": str(self.directory / 'acceptance-home'),
             "/run/lock": str(self.directory / "lock"),
             "/tmp/dx-acceptance-source.": str(self.tmp / "dx-acceptance-source."),
             "/tmp/dx-g1-compat.": str(self.tmp / "dx-g1-compat."),
@@ -131,6 +132,9 @@ class Fixture:
                     "scripts/deploy/production-runtime-health.py",
                     "scripts/deploy/fetch-update-source.sh",
                     "scripts/deploy/inspect-acceptance-identity.sh",
+                    "scripts/deploy/inspect-acceptance-storage.py",
+                    "scripts/deploy/acceptance-capacity.py",
+                    "scripts/deploy/acceptance-runtime-state.mjs",
                     "scripts/migration-history-policy.mjs", "scripts/migration-branches.json",
                     "scripts/check-main-release-compat.mjs",
                     "docs/operations/g1-acceptance-compat-update.sh"]
@@ -150,7 +154,7 @@ class Fixture:
         write(self.repo / "scripts/deploy/acceptance-migration-requirements.json", "{}\n")
         write(self.repo / "package.json", '{"name":"offline-slot-fixture","private":true}\n')
         write(self.repo / "package-lock.json", '{"name":"offline-slot-fixture","lockfileVersion":3}\n')
-        write(self.repo / "infra/pm2/ecosystem.acceptance.config.cjs", "module.exports={}\n")
+        write(self.repo / "infra/pm2/ecosystem.acceptance.config.cjs", self.mapped((REPOSITORY / 'infra/pm2/ecosystem.acceptance.config.cjs').read_text()))
         # The database/exporter boundary is a fixture. The application update
         # worker and the orchestration/failure routing above it remain real.
         write(self.repo / "scripts/deploy/export-production-history.sh", "#!/bin/sh\nprintf '%s\\n' '" + json.dumps(self.history) + "'\n", 0o755)
@@ -206,14 +210,15 @@ class Fixture:
         """ % self.trace, 0o755)
         # A local git repository supplies all objects; no SSH program is used.
         write(self.bin / "git", """#!/usr/bin/env python3
-            import subprocess,sys
+            import subprocess,sys,json
             args=sys.argv[1:]
+            with open(%r,'a') as f:f.write(json.dumps({'kind':'git','args':args})+'\\n')
             if 'remote' in args and 'get-url' in args:
                 print('git@github.com:lizhonghao31-crypto/dx-rework.git');sys.exit(0)
             if 'remote' in args and 'add' in args:
                 args=[%r if x=='git@github.com:lizhonghao31-crypto/dx-rework.git' else x for x in args]
             sys.exit(subprocess.call([%r]+args))
-        """ % (str(self.repo), REAL_GIT), 0o755)
+        """ % (str(self.trace), str(self.repo), REAL_GIT), 0o755)
         self.make_http_commands()
         self.make_python_command()
         self.make_node_command()
@@ -222,30 +227,44 @@ class Fixture:
             echo 'Unexpected fixture build/npm action' >&2; exit 98
         """, 0o755)
         write(self.bin / "pm2", """#!/usr/bin/env python3
-            import json,sys,pathlib
+            import json,sys,pathlib,os
             root=pathlib.Path(%r);args=sys.argv[1:]
             with open(%r,'a') as f:f.write(json.dumps({'kind':'pm2','args':args})+'\\n')
+            file=root.parent/'network.json';model=json.loads(file.read_text())
+            def process():
+                sha=model.get('acceptancePm2Sha',%r);release=str(root/'releases'/sha)
+                return {'name':'dx-rework-acceptance-api','pm2_env':{'status':model.get('acceptancePm2Status','online'),'pm_cwd':release,'pm_exec_path':release+'/scripts/deploy/start-acceptance-api.sh'}}
             if args==['jlist']:
-                print('[{"name":"dx-rework-acceptance-api","pm2_env":{"status":"online"}}]')
+                print(json.dumps([process()]))
             elif args and args[0] in ('startOrReload','stop'):
                 if 'dx-rework-acceptance-api' not in args:sys.exit('Production process action is forbidden')
                 if args[0]=='startOrReload':
-                    file=root.parent/'network.json';model=json.loads(file.read_text())
+                    model['acceptancePm2Sha']=os.environ.get('DX_REWORK_ACCEPTANCE_RELEASE_SHA') or pathlib.Path(args[1]).parents[2].name
+                    model['acceptancePm2Status']='online'
                     model['3202']['version']=json.loads((root/'current/release-manifest.json').read_text())
-                    file.write_text(json.dumps(model))
+                else:model['acceptancePm2Status']='stopped'
+                file.write_text(json.dumps(model))
+            elif args==['save']:
+                if (root.parent/'fail-pm2-save').exists():
+                    if (root.parent/'fail-evidence-copy-on-save').exists():(root.parent/'fail-evidence-copy').write_text('TEST evidence allocation failed')
+                    sys.exit('TEST PM2 save failure')
+                target=root.parent/'acceptance-home/.pm2/dump.pm2';target.parent.mkdir(parents=True,exist_ok=True);target.write_text(json.dumps([process()]))
             else:sys.exit('Unexpected PM2 action')
-        """ % (str(self.acceptance), str(self.trace)), 0o755)
+        """ % (str(self.acceptance), str(self.trace), SHA0), 0o755)
         for name in ("psql", "pg_dump", "pg_restore"):
             write(self.bin / name, """#!/usr/bin/env python3
-                import json,sys
+                import json,sys,os
                 args=' '.join(sys.argv[1:])
-                with open(%r,'a') as f:f.write(json.dumps({'kind':'database','args':sys.argv[1:]})+'\\n')
-                if 'pg_database_size' in args:print('1024')
+                readonly='default_transaction_read_only=on' in os.environ.get('PGOPTIONS','')
+                metadata=readonly and ("'storageRole',current_user" in args or "'sessionRole',session_user" in args or args.endswith('select current_database()'))
+                with open(%r,'a') as f:f.write(json.dumps({'kind':'capacity-metadata' if metadata else 'database','args':sys.argv[1:],'readonly':readonly})+'\\n')
+                if "'storageRole',current_user" in args:print(%r)
+                elif 'pg_database_size' in args:print('1024')
                 elif 'current_database()' in args and 'json_build_object' not in args:print('dx_rework_acceptance')
                 elif 'json_build_object' in args and "'migrations'" in args:print(%r)
-                elif 'json_build_object' in args and "'oid'" in args:print('{"database":"dx_rework_acceptance","port":5432,"oid":42,"address":"127.0.0.1"}')
+                elif 'json_build_object' in args and "'oid'" in args:print('{"database":"dx_rework_acceptance","port":5432,"oid":42,"address":"127.0.0.1","role":"dx_rework_acceptance_app","sessionRole":"dx_rework_acceptance_app"}')
                 elif '--version' in args:print('PostgreSQL 16.0')
-            """ % (str(self.trace), json.dumps({"database": "dx_rework_acceptance", "migrations": self.manifest["migrations"]})), 0o755)
+            """ % (str(self.trace), json.dumps({'database':'dx_rework_acceptance','port':5432,'oid':42,'storageRole':'postgres','serverVersion':130023,'databaseBytes':1024,'maxWalBytes':1048576,'dataDirectory':str(self.directory/'pgdata'),'directoryPaths':['base/42'],'logDirectory':'log'}), json.dumps({"database": "dx_rework_acceptance", "migrations": self.manifest["migrations"]})), 0o755)
 
     def make_http_commands(self):
         # Shared response model: refusal, readiness/version mismatch and assets.
@@ -320,6 +339,15 @@ class Fixture:
                 try:module.main(sys.argv[1:],owner_uid=os.getuid())
                 except (module.GuardError,OSError,ValueError,urllib.error.URLError) as error:
                     sys.exit('PRODUCTION_HEALTH_GUARD_FAILED: '+str(error))
+            elif file.endswith('/acceptance-capacity.py') or file.endswith('/inspect-acceptance-storage.py'):
+                spec=importlib.util.spec_from_file_location('capacity_fixture',file);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+                if file.endswith('/acceptance-capacity.py'):
+                    phase=sys.argv[1]
+                    with open(root+'/trace.jsonl','a') as f:f.write(json.dumps({'kind':'capacity','phase':phase})+'\\n')
+                    state=pathlib.Path(root)/'capacity-state.json';model=json.loads(state.read_text()) if state.exists() else {}
+                    def probe(path):return {'device':'fixture-volume','probe':str(path),'available':0 if model.get('failPhase')==phase else 100*1024**3,'total':200*1024**3}
+                    sys.exit(module.main(sys.argv[1:],probe=probe))
+                else:module.main(sys.argv[1:],owner_uid=os.getuid(),psql=root+'/bin/psql')
             else:runpy.run_path(file,run_name='__main__')
         """ % (str(self.directory), str(self.directory)))
         write(self.bin / "python3", "#!/bin/sh\nexec " + REAL_PYTHON + " " + str(wrapper) + ' "$@"\n', 0o755)
@@ -376,7 +404,7 @@ class Fixture:
             write(api / "scripts/deploy" / script, "// fixture data boundary\n")
         write(api / "scripts/check-migration-export.mjs", "// fixture data boundary\n")
         write(api / "scripts/deploy/verify-runtime.sh", "#!/bin/sh\nexit 0\n", 0o755)
-        write(api / "scripts/backup-postgres.sh", "#!/bin/sh\necho FIXTURE_BACKUP_ONLY\n", 0o755)
+        write(api / "scripts/backup-postgres.sh", "#!/bin/sh\nprintf '%s\\n' '{\"kind\":\"backup\"}' >> '" + str(self.trace) + "'\necho FIXTURE_BACKUP_ONLY\n", 0o755)
         write(api / "scripts/deploy/install-release.sh", """#!/usr/bin/env bash
             set -euo pipefail
             root='%s';sha="$1";candidate="$2"
@@ -433,6 +461,10 @@ class Fixture:
         write(self.state / "original-deploy-entry", "fixture original launcher\n")
         write(self.launch / "dx-rework-deploy", "#!/bin/sh\necho MAIN_LAUNCHER_UNCHANGED\n", 0o755)
         write(self.launch / "dx-rework-maintenance-update", "#!/bin/sh\nexit 98\n", 0o755)
+        release = str(self.acceptance / 'releases' / SHA0)
+        write(self.directory / 'acceptance-home/.pm2/dump.pm2', json.dumps([
+            {'name':'dx-rework-acceptance-api','pm2_env':{'status':'online',
+             'pm_cwd':release,'pm_exec_path':release+'/scripts/deploy/start-acceptance-api.sh'}}]))
 
     def set_production(self, sha, port, phase="completed", health=200):
         write(self.state / "active.json", json.dumps({"sha": sha, "port": port}) + "\n", 0o600)
@@ -488,6 +520,8 @@ class Fixture:
         shutil.copytree(self.repo,old,ignore=shutil.ignore_patterns('.git'))
         baseline=REPOSITORY / 'tests/fixtures/acceptance-controller-before-active-slots.sh'
         write(old/'scripts/dx-acceptance.sh',self.mapped(baseline.read_text()),0o755)
+        fetch_baseline=REPOSITORY / 'tests/fixtures/acceptance-fetch-before-capacity.sh'
+        write(old/'scripts/deploy/fetch-update-source.sh',self.mapped(fetch_baseline.read_text()),0o755)
         (old/'scripts/deploy/production-runtime-health.py').unlink()
         write(old/'TOOL_SHA',SHA0+'\n')
         write(self.launch/'dx-acceptance','#!/usr/bin/env bash\nexec bash '+str(old/'scripts/dx-acceptance.sh')+' "$@"\n',0o755)
@@ -618,6 +652,8 @@ class ActiveSlotChainTests(unittest.TestCase):
         self.assertIn('TOOL_CODE_UPGRADE_REQUIRED',result.stderr)
         self.assertEqual(old,(f.launch/'dx-acceptance').read_bytes())
         self.assertEqual(before,f.production_fingerprint())
+        self.assertIn('ACCEPTANCE_DIAGNOSTICS_FINISHED',f.run(f.launch/'dx-acceptance','diagnose',f.sha).stdout)
+        self.assertEqual(old,(f.launch/'dx-acceptance').read_bytes(), 'Old diagnose must never refresh executable policy')
         handoff=f.repo/'docs/operations/g1-acceptance-compat-update.sh'
         self.assertIn('CHECK_FINISHED',f.run(handoff,'check',f.sha).stdout)
         self.assertEqual(before,f.production_fingerprint())
@@ -642,6 +678,13 @@ class ActiveSlotChainTests(unittest.TestCase):
         self.assertNotEqual(result.returncode,0);self.assertIn('MISSING_MAIN_IDENTITY',result.stderr)
         self.assertEqual(before,f.production_fingerprint())
         self.assertFalse(any(x['kind'] in ('database','database-state','pm2','maintenance') for x in f.calls()))
+        metadata=[x for x in f.calls() if x['kind']=='capacity-metadata']
+        self.assertTrue(metadata, 'Capacity must inspect only fixed catalog metadata before download')
+        for call in metadata:
+            self.assertTrue(call['readonly'])
+            sql=' '.join(call['args'])
+            self.assertNotIn('schema_migrations',sql)
+            self.assertFalse(any(word in sql.upper() for word in ('INSERT ', 'UPDATE ', 'DELETE ', 'ALTER ', 'GRANT ')))
 
     def test_real_main_then_acceptance_then_main_controller_chain(self):
         f=self.fixture;f.install();f.setup_main_controller()
@@ -677,6 +720,118 @@ class ActiveSlotChainTests(unittest.TestCase):
         self.assertIn('Installed.',f.install().stdout)
         self.assertEqual(before,f.production_fingerprint())
         self.assertNotEqual(entries['dx-acceptance'],(f.launch/'dx-acceptance').read_bytes())
+
+    def test_install_capacity_and_expected_sha_fail_before_archive_or_entry_changes(self):
+        f=self.fixture;f.old_fixed_tools();before=f.production_fingerprint()
+        entries={name:(f.launch/name).read_bytes() for name in ('dx-acceptance','dx-rework-update')}
+        for phase in ('wrong-sha','install'):
+            with self.subTest(phase=phase):
+                write(f.trace,'')
+                if phase=='install':write(f.directory/'capacity-state.json',json.dumps({'failPhase':'install'}))
+                result=f.run(f.repo/'scripts/dx-acceptance.sh','install',SHA2 if phase=='wrong-sha' else f.sha,check=False)
+                self.assertNotEqual(result.returncode,0)
+                self.assertEqual(entries,{name:(f.launch/name).read_bytes() for name in entries})
+                self.assertEqual(before,f.production_fingerprint())
+                self.assertFalse(any(x['kind']=='git' and 'archive' in x['args'] for x in f.calls()))
+
+    def test_wrong_acceptance_config_is_rejected_before_fetch_without_changing_runtime(self):
+        f=self.fixture;f.install();before=f.production_fingerprint()
+        config=f.acceptance/'shared/.env';original=config.read_text()
+        for old,new in (('APP_BASE_PATH=/acceptance/','APP_BASE_PATH=/'),
+                        ('ROOT_DINGTALK_USER_ID=uat-root','ROOT_DINGTALK_USER_ID=non-uat'),
+                        ('ACCEPTANCE_LAB_ENABLED=true','ACCEPTANCE_LAB_ENABLED=false')):
+            with self.subTest(setting=old.split('=')[0]):
+                write(config,original.replace(old,new),0o600);write(f.trace,'')
+                result=f.update(check=False)
+                self.assertNotEqual(result.returncode,0)
+                self.assertIn('Acceptance identity/configuration mismatch',result.stdout+result.stderr)
+                self.assertFalse(any(x['kind']=='git' and 'fetch' in x['args'] for x in f.calls()))
+                self.assertFalse(any(x['kind'] in ('pm2','backup','maintenance') for x in f.calls()))
+                self.assertEqual(before,f.production_fingerprint())
+        write(config,original,0o600)
+
+    def test_data_only_refresh_remains_exactly_reinstallable_without_runtime_evidence(self):
+        f=self.fixture;f.install();original=f.sha;before=f.production_fingerprint()
+        command([REAL_GIT,'-C',str(f.repo),'checkout','-q','release/digital-production-v1'])
+        write(f.repo/'apps/fixture-data-only','TEST candidate with identical executable tool policy\n')
+        command([REAL_GIT,'-C',str(f.repo),'add','apps/fixture-data-only'])
+        command([REAL_GIT,'-C',str(f.repo),'commit','-qm','TEST data-only tool refresh'])
+        f.sha=command([REAL_GIT,'-C',str(f.repo),'rev-parse','HEAD']).stdout.strip()
+        f.candidate=f.acceptance/'candidates'/f.sha;f.release(f.candidate,f.sha,True)
+        model=json.loads(f.network.read_text());model['acceptanceCandidate']=str(f.candidate);write(f.network,json.dumps(model))
+        result=f.update()
+        self.assertIn('ACCEPTANCE_TOOL_REFRESH_OK sha='+f.sha,result.stdout)
+        self.assertTrue((f.tools/original).is_dir())
+        target=f.tools/f.sha
+        self.assertFalse((target/'.acceptance-preflight').exists())
+        self.assertFalse((target/'acceptance-identity.json').exists(),'Instance evidence is not part of an immutable source revision')
+        self.assertIn('Installed.',f.install().stdout,'Explicit install of the identical clean SHA must remain idempotent')
+        self.assertEqual(before,f.production_fingerprint())
+        for name in ('dx-acceptance','dx-rework-update'):
+            self.assertIn(str(target),(f.launch/name).read_text())
+
+    def test_each_capacity_failure_precedes_its_heavy_action_and_preserves_old_data(self):
+        f=self.fixture;f.install();before=f.production_fingerprint()
+        write(f.acceptance/'backups/postgres/retained-backup','retained')
+        write(f.acceptance/'logs/retained-evidence','retained')
+        for phase in ('download','archive','build','backup','stop'):
+            with self.subTest(phase=phase):
+                write(f.trace,'');write(f.directory/'capacity-state.json',json.dumps({'failPhase':phase}))
+                result=f.update(check=False);calls=f.calls()
+                self.assertNotEqual(result.returncode,0,result.stdout+result.stderr)
+                self.assertIn('capacity_insufficient',result.stdout)
+                self.assertEqual(before,f.production_fingerprint())
+                self.assertEqual('retained',(f.acceptance/'backups/postgres/retained-backup').read_text())
+                self.assertEqual('retained',(f.acceptance/'logs/retained-evidence').read_text())
+                self.assertFalse(any(x['kind']=='pm2' and x['args'][0] in ('stop','startOrReload') for x in calls))
+                self.assertFalse(any(x['kind']=='maintenance' and x['action']=='apply' for x in calls))
+                if phase=='download':self.assertFalse(any(x['kind']=='git' and 'fetch' in x['args'] for x in calls))
+                if phase=='archive':self.assertFalse(any(x['kind']=='git' and 'archive' in x['args'] for x in calls))
+                if phase in ('download','archive','build'):self.assertNotIn('[1/5]',result.stdout)
+                if phase!='stop':self.assertFalse(any(x['kind']=='backup' for x in calls))
+                else:self.assertTrue(any(x['kind']=='backup' for x in calls))
+
+    def test_success_records_stage_capacity_and_persists_immutable_restart_generation(self):
+        f=self.fixture;f.install();write(f.trace,'');result=f.update();calls=f.calls()
+        self.assertIn('ACCEPTANCE_UPDATE_FINISHED',result.stdout)
+        self.assertEqual(['download','archive','build','backup','stop'],[x['phase'] for x in calls if x['kind']=='capacity'])
+        saved=json.loads((f.directory/'acceptance-home/.pm2/dump.pm2').read_text())[0]['pm2_env']
+        self.assertEqual(str(f.acceptance/'releases'/f.sha),saved['pm_cwd'])
+        self.assertEqual(str(f.acceptance/'releases'/f.sha/'scripts/deploy/start-acceptance-api.sh'),saved['pm_exec_path'])
+        evidence=list((f.acceptance/'logs').glob('update-*'))[-1]
+        self.assertEqual('verified',(evidence/'phase').read_text().strip())
+        self.assertEqual(f.sha,json.loads((evidence/'saved-runtime.json').read_text())['sha'])
+        self.assertTrue((evidence/'preflight/tree-sha').is_file())
+        for phase in ('download','archive','build','backup','stop'):
+            self.assertEqual('capacity_sufficient',json.loads((evidence/'preflight'/('capacity-'+phase+'.json')).read_text())['status'])
+
+    def test_pm2_persistence_failure_halts_only_acceptance_and_does_not_report_success(self):
+        f=self.fixture;f.install();before=f.production_fingerprint();write(f.trace,'')
+        write(f.directory/'fail-pm2-save','fail')
+        result=f.update(check=False)
+        self.assertNotEqual(result.returncode,0)
+        self.assertNotIn('ACCEPTANCE_UPDATE_FINISHED',result.stdout)
+        self.assertEqual(before,f.production_fingerprint())
+        self.assertEqual('stopped',json.loads(f.network.read_text())['acceptancePm2Status'])
+        self.assertTrue(any(x['kind']=='pm2' and x['args']==['save'] for x in f.calls()))
+        self.assertTrue(any((p/'phase').read_text().strip()=='failed-runtime-stopped' for p in (f.acceptance/'logs').glob('update-*')))
+
+    def test_failed_evidence_copy_cannot_prevent_halt_after_pm2_save_failure(self):
+        f=self.fixture;f.install();before=f.production_fingerprint()
+        write(f.directory/'fail-pm2-save','fail');write(f.directory/'fail-evidence-copy-on-save','fail')
+        write(f.bin/'cp',"""#!/usr/bin/env bash
+            if [[ -f '%s/fail-evidence-copy' && "$*" == *'.acceptance-preflight'* ]]; then
+              echo TEST_EVIDENCE_COPY_FAILED >&2; exit 88
+            fi
+            exec /usr/bin/cp "$@"
+        """ % f.directory,0o755)
+        result=f.update(check=False)
+        self.assertNotEqual(result.returncode,0)
+        self.assertNotIn('ACCEPTANCE_UPDATE_FINISHED',result.stdout)
+        self.assertTrue((f.directory/'fail-evidence-copy').is_file())
+        self.assertEqual('stopped',json.loads(f.network.read_text())['acceptancePm2Status'])
+        self.assertNotIn('TEST_EVIDENCE_COPY_FAILED',result.stderr,'Halt must stop the candidate before any optional evidence copy')
+        self.assertEqual(before,f.production_fingerprint())
 
 
 if __name__ == "__main__":
