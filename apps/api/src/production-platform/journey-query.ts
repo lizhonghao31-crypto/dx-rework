@@ -230,7 +230,7 @@ export class DigitalJourneyQuery {
     const materialStates=new Map<number,Awaited<ReturnType<typeof materialReadiness>>>();
     const materialsFor=async(version:number)=>{let value=materialStates.get(version);if(!value){value=await materialReadiness(db,sid!,version);materialStates.set(version,value);}return value;};
     const taskService=new DigitalProductionTaskService(this.database),taskDtos=[];
-    const summaries=summaryOnly||compact?await journeyTaskSummaries(db,visibleTasks.map(task=>task.task_id)):null;
+    const summaries=summaryOnly||compact?await journeyTaskSummaries(db,visibleTasks.map(task=>task.task_id),observed):null;
     for(const raw of visibleTasks) {
       const definition=journeyDefinition(raw.task_kind);if(!definition)continue;
       const task=summaryOnly?summaries!.get(raw.task_id)!:await taskService.read(actor,raw.task_id,db);taskDtos.push(task);

@@ -1,0 +1,11 @@
+import {createRoot} from 'react-dom/client';
+import {DigitalAnalysisFilterSchema,type DigitalAnalysisResult,type DigitalAnalysisRow} from '@dx-rework/contracts/digital-production-analysis';
+import {DigitalAnalysisPage} from '../../apps/web/src/digital-analysis-page.js';
+const id=(n:number)=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`,wall='2026-10-27T09:32:28.196Z';
+const moments=['2026-10-20T09:32:26.539Z',wall,'2026-11-03T09:32:26.539Z',wall];
+const rows:DigitalAnalysisRow[]=moments.map((now,index)=>({businessTime:{now,scenarioId:index===3?null:id(100+index),revision:index===3?0:1},deadlineMode:'duration',taskId:id(10+index),sourceId:id(20+index),orderId:null,styleNo:`TEST分析原单-${index}`,customer:'TEST',category:'上衣',requiredRole:'pattern_room_worker',assigneeId:id(1),assigneeName:'TEST师傅',nodeKey:'development_sewing',label:'车板',round:1,sourceRound:1,instructionVersion:null,canReadSourceRound:false,state:'ready',createdAt:wall,enteredAt:now,completedAt:null,enteredQuality:'现场登记',completedQuality:'缺失',dueAt:new Date(Date.parse(now)+4*3600000).toISOString(),policyVersion:1,events:[],assignmentHistory:[],delegations:[],pendingConditions:[],handlingSeconds:null,slaIncluded:false,onTime:null,exclusion:'尚未有效完成',waitingSeconds:3600,unknownWaiting:0,missingTime:false,unverifiedTime:false,registrationDelaySeconds:null}));
+const filters=DigitalAnalysisFilterSchema.parse({from:'2026-01-01',to:'2027-12-31',scope:'snapshot'});
+const result:DigitalAnalysisResult={ruleVersion:'TEST scoped read',asOf:wall,filters,canExport:false,canRecord:false,page:1,total:4,summary:{newStyles:4,materialPending:0,handoverPending:0,tasks:4,cancelled:0,completed:0,slaDenominator:0,onTime:0,measurable:0,handlingSeconds:0,waitingSeconds:14400,unknownWaiting:0,missingTime:0,unverifiedTime:0,correctedTasks:0},rounds:[],rows,people:[],notes:[]};
+const requests:Array<{path:string;method:string}>=[];Object.assign(window,{analysisClockFixture:{requests}});
+window.fetch=async(input,init)=>{const path=String(input),method=init?.method??'GET';requests.push({path,method});if(method==='GET'&&path.includes('/analysis?'))return Response.json(result);throw Error(`Unexpected TEST-only request ${path}`);};
+createRoot(document.getElementById('root')!).render(<DigitalAnalysisPage/>);

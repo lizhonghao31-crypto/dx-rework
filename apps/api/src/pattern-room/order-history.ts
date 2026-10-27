@@ -32,7 +32,7 @@ export function patternOrderAtNode(detail: PatternOrderDetail, selection: Patter
     : stage === "pending_assignment" ? "assigned" : stage === "in_progress" ? "work_completed"
     : detail.kind === "misc" ? "confirmed" : "handed_over";
   const candidates=events.filter(event=>event.action.endsWith(`.${terminalAction}`));
-  const direct=candidates.filter(event=>event.after_state?.roundId===round.roundId||terminalAction==='rework_requested'&&event.after_state?.value?.previousRoundId===round.roundId);
+  const direct=candidates.filter(event=>terminalAction==='rework_requested'?event.after_state?.value?.previousRoundId===round.roundId:event.after_state?.roundId===round.roundId);
   // Handoff/cancellation also finalize older rounds. Use a unique event at their recorded business end.
   const terminalEvents=direct.length?direct:candidates.filter(event=>Date.parse(business(event))===Date.parse(cutoff)&&(terminalAction==='handed_over'&&round.handedOverAt===cutoff||terminalAction==='cancelled'&&round.cancelledAt===cutoff));
   const terminal=terminalEvents.length===1?terminalEvents[0]:undefined;

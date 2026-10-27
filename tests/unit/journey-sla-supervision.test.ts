@@ -69,3 +69,7 @@ it('distinguishes unknown batch windows from captured unlimited rule types',()=>
  for(const parameterKey of ['development_shipping','budget','warehouse_accessories'])expect(explicitlyUnlimitedSla({parameterKey,seconds:null})).toBe(true);
  for(const basis of [null,undefined,[],{seconds:null},{parameterKey:'not_known',seconds:null},{parameterKey:'budget',seconds:3600}])expect(explicitlyUnlimitedSla(basis)).toBe(false);
 });
+
+it('does not turn a task chronology marked unknown into a normal todo merely because a warning exists',()=>{
+ const result=todoSlaTiming({enteredAt:'2026-10-21T00:00:00.000Z',dueAt:'2026-10-22T00:00:00.000Z',warningAt:'2026-10-21T12:00:00.000Z',asOf:'2026-10-20T00:00:00.000Z'});expect(result.status).toBe('unknown');expect(result.elapsedSeconds).toBeNull();
+});

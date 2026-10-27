@@ -63,6 +63,14 @@ describe("board-room submitted node pages", () => {
     const current=fixture();current.status='in_progress';current.rounds[0]!.status='in_progress';current.rounds[0]!.nodes[1]!.exitedAt=null;
     expect(patternOrderAtNode(current,{round:'round'},events,options)).toBe(current);
   });
+  it("closes an already reworked round through previousRoundId without counting the event that created it",()=>{
+    const detail=fixture(),round=detail.rounds[0]!;detail.currentRoundId='next';round.roundType='rework';round.index=1;round.nodes[2]!.exitReason='rework';
+    const creation={...event(1,'rework_requested',{previousRoundId:'initial',attachments:['old']}),actor_name:'创建本轮人'};
+    const terminal={...event(6,'rework_requested',{previousRoundId:'round',attachments:['new']}),actor_name:'结束本轮人',after_state:{roundId:'next',value:{previousRoundId:'round',attachments:['new']}}};
+    const initial={...event(0,'submitted',{styleNo:'原款号',note:'原备注',attachmentIds:['old']}),after_state:{roundId:'initial',value:{styleNo:'原款号',note:'原备注',attachmentIds:['old']}}};
+    const result=patternOrderAtNode(detail,{round:'round',node:'pending_confirmation'},[initial,creation,...events.slice(1,5),terminal],options);
+    expect(result.historicalView).toMatchObject({actorName:'结束本轮人',missingFacts:false});expect(result.styleNo).toBe('新款号');expect(result.attachments.map(a=>a.attachmentId)).toEqual(['new']);expect(result.rounds[0]!.segments).toHaveLength(2);
+  });
   it.each(["rework", "handoff", "cancel"] as const)("attributes a prior round's %s to the cross-round terminal event", action => {
     const detail = fixture(); detail.currentRoundId = "later-round";
     const round = detail.rounds[0]!;

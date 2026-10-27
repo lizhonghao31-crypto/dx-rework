@@ -1,3 +1,5 @@
+import {DigitalAnalysisQuery} from '../../apps/api/src/production-platform/reporting-query.js';
+import {DigitalAnalysisFilterSchema} from '@dx-rework/contracts/digital-production-analysis';
 import type {Pool,PoolClient} from 'pg';
 import {randomUUID} from 'node:crypto';
 import {afterAll,beforeAll,describe,expect,it,vi} from 'vitest';
@@ -57,6 +59,15 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   for(const task of [...board.items,...board.boardPreview??[],...board.risks??[]]){const original=rows.items.find(row=>row.sourceId===task.sourceId)!;if(sources.find(s=>s.id===task.sourceId)?.mode==='ordinary')expect(Math.abs(Date.parse(task.asOf!)-Date.now())).toBeLessThan(60000);else expect(task.asOf).toBe(original.asOf);}
   expect(board.items.length).toBeGreaterThan(0);
  },60000);
+ it('analysis filters, KPIs and export keep real report audit but use each authorized original task clock',async()=>{
+  const service=new DigitalAnalysisQuery(f.db),filters=DigitalAnalysisFilterSchema.parse({from:'2026-01-01',to:'2027-12-31',scope:'snapshot',node:'development_materials'});
+  const rows=await service.list(f.root,filters);expect(rows.total).toBe(4);expect(Math.abs(Date.parse(rows.asOf)-Date.now())).toBeLessThan(60000);
+  for(const row of rows.rows){const source=sources.find(s=>s.id===row.sourceId)!;expect(row.businessTime).toBeDefined();if(source.mode!=='ordinary'){expect(row.businessTime?.now).toBe(source.at);expect(row.registrationDelaySeconds).toBeNull();}else expect(Math.abs(Date.parse(row.businessTime!.now)-Date.now())).toBeLessThan(60000);}
+  expect((await service.list(f.root,{...filters,metric:'overdue'})).total).toBe(0);expect(rows.overview?.snapshot.overdue).toBe(0);
+  const workbook=await service.export(f.root,filters);expect(workbook.toString('utf8')).toContain('业务观察时刻');for(const source of sources.filter(s=>s.mode!=='ordinary'))expect(workbook.toString('utf8')).toContain(source.at);
+  const audit=(await f.db.query("SELECT created_at FROM audit_events WHERE action='digital.analysis.exported' ORDER BY created_at DESC LIMIT 1")).rows[0];expect(Math.abs(audit.created_at.getTime()-Date.now())).toBeLessThan(60000);
+  await expect(service.list(f.people['worker-b']!,filters)).rejects.toMatchObject({statusCode:403});expect((await service.list(f.people['pattern-room-worker']!,filters)).total).toBe(0);
+ },60000);
  it('isolates an old bad native completion, retains good search results and leaves all original facts unchanged',async()=>{
   const bad=sources.find(s=>s.mode==='past')!,task=(await f.db.query("SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND a.task_kind='development_materials' AND t.route_version=1",[bad.id])).rows[0];
   // Synthetic historical poison, reproducing the former default-wall-time write. No trigger/guard is disabled.
@@ -81,24 +92,74 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  it('reads at full pool capacity without ALS or nested borrowing and preserves scope checks',async()=>{
   const source=sources.find(s=>s.mode==='future')!,query=new DigitalJourneyQuery(f.db);
   const results=await Promise.all(Array.from({length:10},()=>query.read(f.root,source.id,undefined,true)));expect(results).toHaveLength(10);for(const row of results)expect(row.asOf).toBe(source.at);
+  const analysis=await Promise.all(Array.from({length:10},()=>new DigitalAnalysisQuery(f.db).list(f.root,DigitalAnalysisFilterSchema.parse({from:'2026-01-01',to:'2027-12-31',scope:'snapshot'}))));expect(analysis).toHaveLength(10);
   const other=sources.find(s=>s.mode==='past')!;const scene=(await f.db.query("SELECT scenario_id FROM acceptance_sla_clock_resources WHERE resource_kind='source' AND resource_id=$1",[source.id])).rows[0]?.scenario_id;
   if(!scene)throw Error('TEST original scope binding missing');
   await expect(f.runtime.run(scene,f.root,()=>query.read(f.root,other.id,undefined,true))).rejects.toMatchObject({code:'ACCEPTANCE_CLOCK_CONFLICT'});
  },60000);
  it('detects a no-ALS clock advance after snapshot COMMIT without holding a pool connection for the fresh check',async()=>{
   const source=sources.find(s=>s.mode==='future')!,scenario=(await f.db.query("SELECT scenario_id FROM acceptance_sla_clock_resources WHERE resource_kind='source' AND resource_id=$1",[source.id])).rows[0].scenario_id;
+  for(const reader of ['journey','analysis'] as const){
   const connect=f.db.connect.bind(f.db) as (...args:unknown[])=>unknown;let advanced=false;
   const spy=vi.spyOn(f.db,'connect').mockImplementation(((...args:unknown[])=>{
    const opened=connect(...args);if(args.length)return opened;
    return (opened as Promise<PoolClient>).then(client=>new Proxy(client,{get(target,key){
     if(key==='query')return (...queryArgs:unknown[])=>{
      const result=Reflect.apply(target.query,target,queryArgs);
-     if(queryArgs[0]==='COMMIT'&&!advanced){advanced=true;return (result as Promise<unknown>).then(async value=>{await f.advance(scenario,new Date(Date.parse(source.at)+1).toISOString());return value;});}
+     if(queryArgs[0]==='COMMIT'&&!advanced){advanced=true;return (result as Promise<unknown>).then(async value=>{await f.advance(scenario,new Date(Date.parse(source.at)+(reader==='journey'?1:2)).toISOString());return value;});}
      return result;
     };const value=Reflect.get(target,key,target);return typeof value==='function'?value.bind(target):value;
    }}));
   }) as Pool['connect']);
-  try{await expect(new DigitalJourneyQuery(f.db).read(f.root,source.id,undefined,true)).rejects.toMatchObject({code:'CONFLICT',statusCode:409});expect(advanced).toBe(true);}finally{spy.mockRestore();}
+  try{await expect(reader==='journey'?new DigitalJourneyQuery(f.db).read(f.root,source.id,undefined,true):new DigitalAnalysisQuery(f.db).list(f.root,DigitalAnalysisFilterSchema.parse({from:'2026-01-01',to:'2027-12-31',scope:'snapshot'}))).rejects.toMatchObject({code:'CONFLICT',statusCode:409});expect(advanced).toBe(true);}finally{spy.mockRestore();}
+  }
+ },60000);
+
+ it('summary and detail keep identical duration dueAt boundaries in lists, risks and KPI filters',async()=>{
+  const scene=await f.scene('2026-10-20T09:00:00.000Z'),id=await f.runtime.run(scene,f.root,makeSource),row=(await f.db.query("SELECT t.task_id,t.node_key,r.due_at FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) JOIN LATERAL(SELECT due_at FROM digital_production_deadline_revisions WHERE task_id=t.task_id ORDER BY revision_id DESC LIMIT 1)r ON true WHERE a.source_id=$1 AND a.task_kind='development_materials'",[id])).rows[0];
+  const style=(await f.db.query('SELECT design_style_no FROM digital_production_sources WHERE source_id=$1',[id])).rows[0].design_style_no;
+  const query=new DigitalJourneyQuery(f.db),workspace=new DevelopmentWorkspaceQuery(query),service=new DigitalProductionTaskService(f.db);
+  for(const offset of [-1,0,1]){
+   await f.advance(scene,new Date(row.due_at.getTime()+offset).toISOString());
+   const task=await service.read(f.root,row.task_id),detail=await query.read(f.root,id),node=detail.stages.flatMap(s=>s.nodes).find(n=>n.instanceId===row.task_id)!;
+   expect(task.deadlineExclusive).toBe(false);expect(node.risks.includes('overdue')).toBe(offset>0);
+   const board=await workspace.pattern(f.root,{business:'all',scope:'all',state:'all',page:1,search:style,group:'materials'});
+   expect(board.items.find(t=>t.node.instanceId===row.task_id)!.node.risks.includes('overdue')).toBe(offset>0);expect(board.riskCounts.materials.overdue).toBe(offset>0?1:0);
+   const hits=await query.list(f.root,JourneyFilterSchema.parse({search:style,node:'development_materials',risk:'overdue',kpi:'overdue'}),true);expect(hits.total).toBe(offset>0?1:0);
+  }
+ },60000);
+
+ it('analysis date-target filters honor the exclusive Beijing date end without requiring a fake duration start',async()=>{
+  const scene=await f.scene('2026-10-20T09:00:00.000Z'),order=await f.runtime.run(scene,f.root,()=>f.bulkReady('无'));
+  const raw=(await f.db.query("SELECT t.task_id,r.due_at FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) JOIN LATERAL(SELECT due_at FROM digital_production_deadline_revisions WHERE task_id=t.task_id ORDER BY revision_id DESC LIMIT 1)r ON true WHERE a.production_order_id=$1 AND a.task_kind='bulk_ship_sample'",[order.id])).rows[0];
+  const service=new DigitalAnalysisQuery(f.db),filters=DigitalAnalysisFilterSchema.parse({from:'2026-01-01',to:'2027-12-31',scope:'snapshot',node:'bulk_ship_sample',metric:'overdue'});
+  for(const offset of [-1,0,1]){await f.advance(scene,new Date(raw.due_at.getTime()+offset).toISOString());const result=await service.list(f.root,filters),row=result.rows.find(r=>r.taskId===raw.task_id);expect(Boolean(row)).toBe(offset>=0);if(row){expect(row.enteredAt).toBeNull();expect(row.deadlineMode).toBe('date_target');expect(row.missingTime).toBe(false);expect(row.slaIncluded).toBe(false);}}
+ },60000);
+
+ it('two consecutive native reworks retain the selected round historical fields and attachment at its closing event',async()=>{
+  const scene=await f.scene('2026-10-20T09:00:00.000Z'),service=new PatternRoomOrderService(f.db,new TodoProjectionService(new TodoService(f.db)),{ordersEnabled:true}),run=<T>(action:()=>Promise<T>)=>f.runtime.run(scene,f.root,action);
+  const category=(await f.db.query("SELECT price_id,version FROM pattern_room_prices WHERE kind='category' AND enabled AND amount IS NOT NULL LIMIT 1")).rows[0],file=await f.image(f.root);
+  let order=await run(()=>createHistoricalPatternFixture(service,f.root,{styleNo:'TEST repeated rework history',categoryId:category.price_id,priceVersion:category.version,quantity:1,attachmentIds:[file],note:'TEST original historical facts'},randomUUID()));
+  order=await run(()=>service.assign(f.root,order.orderId,{version:order.version,roundId:order.currentRoundId,personId:workerPerson},randomUUID()));
+  order=await run(()=>service.complete(f.root,order.orderId,{version:order.version,roundId:order.currentRoundId},randomUUID()));
+  order=await run(()=>service.requestRework(f.root,order.orderId,{version:order.version,roundId:order.currentRoundId,reason:'TEST first rework',reasonCategory:'workmanship',attachmentIds:[]},randomUUID()));
+  const selectedRound=order.currentRoundId;
+  order=await run(()=>service.assign(f.root,order.orderId,{version:order.version,roundId:order.currentRoundId,personId:workerPerson,amount:'1'},randomUUID()));
+  order=await run(()=>service.complete(f.root,order.orderId,{version:order.version,roundId:order.currentRoundId},randomUUID()));
+  order=await run(()=>service.requestRework(f.root,order.orderId,{version:order.version,roundId:order.currentRoundId,reason:'TEST second rework',reasonCategory:'workmanship',attachmentIds:[]},randomUUID()));
+  const history=await service.get(f.root,order.orderId,{round:selectedRound,node:'pending_confirmation'});
+  expect(history.historicalView?.missingFacts).toBe(false);expect(history.historicalView?.terminalEventId).toBeTruthy();expect(history.styleNo).toBe('TEST repeated rework history');expect(history.attachments.map(a=>a.attachmentId)).toEqual([file]);expect(history.rounds[0]!.segments).toHaveLength(1);expect(Object.values(history.actions).every(v=>!v)).toBe(true);
+ },60000);
+
+ it('native blocked waiting and derived totals/export stop at its own business observation and actual unblock',async()=>{
+  const scene=await f.scene('2026-10-20T09:00:00.000Z'),source=await f.runtime.run(scene,f.root,makeSource),id=(await f.db.query("SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND a.task_kind='development_materials'",[source])).rows[0].task_id;
+  const tasks=new DigitalProductionTaskService(f.db),analysis=new DigitalAnalysisQuery(f.db),filters=DigitalAnalysisFilterSchema.parse({from:'2026-01-01',to:'2027-12-31',scope:'snapshot',node:'development_materials',metric:'waiting'});
+  await f.runtime.run(scene,f.root,()=>tasks.feedback(f.root,id,'TEST actual blocked wait',true,randomUUID()));await f.advance(scene,'2026-10-20T10:00:00.000Z');
+  const first=await analysis.list(f.root,filters),row=first.rows.find(r=>r.taskId===id)!;expect(row.waitingSeconds).toBe(3600);expect(first.summary.waitingSeconds).toBe(3600);expect(row.registrationDelaySeconds).toBeNull();
+  const block=row.events.find(e=>e.kind==='blocked')!;expect(block.at).toBe('2026-10-20T09:00:00.000Z');expect(Math.abs(Date.parse(block.recordedAt)-Date.now())).toBeLessThan(60000);
+  const workbook=await analysis.export(f.root,filters);expect(workbook.toString('utf8')).toContain('<v>3600</v>');
+  await f.runtime.run(scene,f.root,()=>tasks.feedback(f.root,id,'TEST actual wait ended',false,randomUUID()));await f.advance(scene,'2026-10-20T10:30:00.000Z');
+  expect((await analysis.list(f.root,filters)).rows.find(r=>r.taskId===id)?.waitingSeconds).toBe(3600);
  },60000);
 
 });

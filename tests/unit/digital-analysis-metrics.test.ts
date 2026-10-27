@@ -1,3 +1,5 @@
+import {isAnalysisOverdue,workspaceAnalysisRows,analysisWorkspaceOverview} from '../../apps/api/src/production-platform/analysis-workspace-metrics.js';
+import {DigitalAnalysisFilterSchema} from '@dx-rework/contracts/digital-production-analysis';
 import {describe,it,expect} from 'vitest';
 import {intervalUnionSeconds,taskAnalysis,summarizeAnalysis,type AnalysisTask,type AnalysisEvent} from '../../apps/api/src/production-platform/reporting-metrics.js';
 const at=(h:number)=>new Date(Date.UTC(2026,9,4,h)).toISOString();
@@ -36,4 +38,25 @@ describe('P16 auditable truth set',()=>{
   }
  });
 
+});
+
+describe('analysis consumers use each original business observation',()=>{
+ for(const offset of [-7,0,7])it(`uses its own ${offset}-day scenario clock for waiting, overdue filters and KPIs while keeping real audit stamps`,()=>{
+  const wall=at(12),now=new Date(Date.parse(wall)+offset*86400000).toISOString(),point=(hours:number)=>new Date(Date.parse(now)+hours*3600000).toISOString();
+  const original=task({state:'ready',enteredAt:point(-2),completedAt:null,dueAt:point(2),events:[{...event('blocked',0),at:point(-1),recordedAt:wall}],businessTime:{now,scenarioId:'TEST-native-original',revision:1}}),before=structuredClone(original);
+  const row=taskAnalysis(original,wall);
+  expect(row.waitingSeconds).toBe(3600);expect(row.registrationDelaySeconds).toBeNull();expect(isAnalysisOverdue(row,wall)).toBe(false);expect(original).toEqual(before);
+  const overdue=taskAnalysis({...original,taskId:'TEST-late',dueAt:point(-1)},wall);
+  const selected=workspaceAnalysisRows([row,overdue],[],DigitalAnalysisFilterSchema.parse({from:'2026-01-01',to:'2027-12-31',scope:'snapshot',metric:'overdue'}),'2026-01-01','2028-01-01',wall);
+  expect(selected.map(r=>r.taskId)).toEqual(['TEST-late']);expect(analysisWorkspaceOverview([row,overdue],'2026-01-01','2028-01-01',wall).snapshot.overdue).toBe(1);
+ });
+ it('retains ordinary real-time registration delay and excludes a future actual completion from precision/on-time denominators',()=>{
+  const ordinary=taskAnalysis(task({businessTime:{now:at(12),scenarioId:null,revision:0},events:[{...event('completed',4),recordedAt:at(6)}]}),at(12));expect(ordinary.registrationDelaySeconds).toBe(7200);expect(ordinary.slaIncluded).toBe(true);
+  const invalid=taskAnalysis(task({businessTime:{now:at(3),scenarioId:'TEST-scene',revision:1}}),at(12));expect(invalid.slaIncluded).toBe(false);expect(invalid.handlingSeconds).toBeNull();expect(invalid.state).toBe('completed');
+ });
+ it.each([-1,0,1])('keeps date-target day-end %+i ms independent of a duration start',offset=>{
+  const due='2026-10-26T16:00:00.000Z',now=new Date(Date.parse(due)+offset).toISOString();
+  const row=taskAnalysis(task({deadlineMode:'date_target',state:'ready',enteredAt:null,completedAt:null,dueAt:due,businessTime:{now,scenarioId:'TEST-scene',revision:1}}),at(12));
+  expect(isAnalysisOverdue(row,at(12))).toBe(offset>=0);expect(row.missingTime).toBe(false);expect(row.slaIncluded).toBe(false);expect(row.exclusion).toContain('日期目标');
+ });
 });

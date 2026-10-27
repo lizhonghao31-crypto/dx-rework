@@ -1,3 +1,4 @@
+import type {BusinessTime} from '@dx-rework/domain/business-clock';
 import type {Pool,PoolClient} from 'pg';
 import {taskAssigneeBlocker,patternExecutionBlockers} from './development-task-blockers.js';
 import {DEVELOPMENT_ARRANGEABLE_KINDS} from '@dx-rework/contracts/development-arrangement';
@@ -9,11 +10,11 @@ const excluded=new Set(['development_material_supply','development_craft_dispatc
 const iso=(value:Date|string|null|undefined)=>value==null?null:new Date(value).toISOString();
 /** Internal read-only selection facts. Never returned as an executable task DTO. */
 type SummaryTask=DigitalTask&{completionKeys:string[];completion:{actor_id:string;actor_name:string;recorded_at:string}|null;laterOwner:{assigneeId:string|null}|null;previousOwnerName:string|null};
-export async function journeyTaskSummaries(db:Pick<Pool|PoolClient,'query'>,ids:string[]):Promise<Map<string,SummaryTask>>{
+export async function journeyTaskSummaries(db:Pick<Pool|PoolClient,'query'>,ids:string[],time?:BusinessTime):Promise<Map<string,SummaryTask>>{
  if(!ids.length)return new Map();
  const rows=(await db.query(`SELECT t.*,a.source_id,a.production_order_id,a.task_kind,a.assignee_id,a.required_role,
    owner.display_name AS assignee_name,life.state='paused' AS paused,
-   effective.due_at,effective.warning_at,effective.entered_at AS sla_entered_at,effective.sla_basis,coalesce(effective.version,policy.version) AS policy_version,
+   effective.due_at,effective.warning_at,effective.entered_at AS sla_entered_at,effective.sla_basis,effective.deadline_kind,coalesce(effective.version,policy.version) AS policy_version,
    CASE WHEN effective.version IS NOT NULL THEN effective.sla_seconds ELSE policy.sla_seconds END AS sla_seconds,
    coalesce(effective.label,policy.label) AS label,route.tasks AS route_tasks,
    document.document AS published_document,revision.route_nodes,
@@ -29,7 +30,7 @@ export async function journeyTaskSummaries(db:Pick<Pool|PoolClient,'query'>,ids:
   FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id)
   LEFT JOIN app_users owner ON owner.id=a.assignee_id
   LEFT JOIN digital_production_resource_lifecycle life ON life.resource_kind=CASE WHEN a.production_order_id IS NULL THEN 'source' ELSE 'order' END AND life.resource_id=coalesce(a.production_order_id,a.source_id)
-  LEFT JOIN LATERAL(SELECT r.due_at,r.warning_at,r.entered_at,to_jsonb(r)->'sla_basis' AS sla_basis,p.version,
+  LEFT JOIN LATERAL(SELECT r.due_at,r.warning_at,r.entered_at,to_jsonb(r)->'sla_basis' AS sla_basis,to_jsonb(r)->>'deadline_kind' AS deadline_kind,p.version,
     CASE WHEN NULLIF(to_jsonb(r)->'sla_basis','null'::jsonb) IS NOT NULL THEN (to_jsonb(r)->'sla_basis'->>'seconds')::numeric ELSE p.sla_seconds END AS sla_seconds,p.label FROM digital_production_deadline_revisions r
     JOIN digital_production_deadline_policies p ON p.node_key=r.policy_node_key AND p.version=r.policy_version JOIN app_users u ON u.id=r.changed_by
     WHERE r.task_id=t.task_id ORDER BY r.revision_id DESC LIMIT 1)effective ON true
@@ -67,7 +68,7 @@ export async function journeyTaskSummaries(db:Pick<Pool|PoolClient,'query'>,ids:
    }
    for(const prior of row.predecessors)unmet.push({condition:'predecessor',name:prior.name,missing:prior.name+(prior.state==='cancelled'?'已取消，不能作为完成依据':'尚未完成'),responsibleRole:prior.role,action:`请该岗位从「我的待办」办理本单${prior.name}；已取消的上游由本单管理人员核对当前轮次`,evidenceId:null,verified:true});
   }
-  const value:SummaryTask={unmetConditions:unmet,completionKeys:row.completion_keys,completion:row.completion,laterOwner:row.later_owner,previousOwnerName:row.previous_owner_name,identity:null,priority:'normal',taskId:row.task_id,orderId:row.production_order_id,sourceId:row.source_id,taskKind:row.task_kind,label:row.label,routeProgress,
+  const value:SummaryTask={...(row.deadline_kind?{deadlineMode:row.deadline_kind,...(row.deadline_kind==='date_target'?{deadlineExclusive:true}:{})}:{}),...(time?.scenarioId&&row.sla_basis?{deadlineExclusive:row.sla_basis.exclusive===true}:{}),unmetConditions:unmet,completionKeys:row.completion_keys,completion:row.completion,laterOwner:row.later_owner,previousOwnerName:row.previous_owner_name,identity:null,priority:'normal',taskId:row.task_id,orderId:row.production_order_id,sourceId:row.source_id,taskKind:row.task_kind,label:row.label,routeProgress,
    assigneeName:row.assignee_name??null,requiredRole:row.required_role,hasHandover:false,canManage:false,canControl:false,canCorrect:false,assigneeId:row.assignee_id,
    state:row.state,routeVersion:row.route_version,occurrence:row.occurrence,enteredAt:iso(row.sla_basis?row.sla_entered_at:row.entered_at),recordedAt:iso(row.created_at)!,completedAt:iso(row.completed_at),paused:Boolean(row.paused),dueAt:iso(row.due_at),warningAt:iso(row.warning_at),slaHours:row.sla_seconds===null?null:Number(row.sla_seconds)/3600,policyVersion:row.policy_version,timeQuality:row.sla_basis?(row.sla_entered_at?"现场登记":"缺失"):row.entered_quality,blockedReason:row.blocked_reason,canExecute:false};
   result.set(value.taskId,value);

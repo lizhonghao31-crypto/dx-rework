@@ -6,7 +6,10 @@ export type AnalysisWorkspaceRow=ReturnType<typeof taskAnalysis>&{sourcePublishe
 export type PublishedAnalysisRound={sourceId:string;round:number;origin:string;publishedAt:string};
 const inRange=(value:string|null|undefined,from:string,to:string)=>Boolean(value&&value>=from&&value<to);
 export const currentAnalysisRow=(row:AnalysisWorkspaceRow)=>!['completed','cancelled'].includes(row.state);
-export function isAnalysisOverdue(row:AnalysisWorkspaceRow,asOf:string){return currentAnalysisRow(row)&&Boolean(row.enteredAt&&row.dueAt&&Date.parse(row.dueAt)<Date.parse(asOf));}
+export function isAnalysisOverdue(row:AnalysisWorkspaceRow,asOf:string){
+ const now=Date.parse(row.businessTime?.now??asOf);
+ return currentAnalysisRow(row)&&Boolean(row.dueAt&&(row.deadlineMode==='date_target'?Date.parse(row.dueAt)<=now:row.enteredAt&&Date.parse(row.enteredAt)<=now&&Date.parse(row.dueAt)<now));
+}
 export function workspaceAnalysisRows<Row extends AnalysisWorkspaceRow>(rows:Row[],rounds:PublishedAnalysisRound[],filters:DigitalAnalysisFilters,from:string,to:string,asOf:string){
  const publishedRounds=new Set(rounds.filter(round=>!filters.origin||round.origin===filters.origin).map(round=>`${round.sourceId}:${round.round}`));
  return rows.filter(row=>{
