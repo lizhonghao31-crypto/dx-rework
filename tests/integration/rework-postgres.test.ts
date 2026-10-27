@@ -1,8 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
 
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+
+import { applyMigrations, discoverValidatedMigrations } from "../../scripts/migration-lib.mjs";
+import { assertTestDatabaseTarget } from "../../scripts/test-database-safety.mjs";
+import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { completeInspectionReport } from "../inspection-report-fixture.js";
 
 import { ReworkInitiationService } from "../../apps/api/src/rework/service.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
@@ -12,7 +16,8 @@ const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
 const runWithPostgres = databaseUrl ? describe : describe.skip;
 
 runWithPostgres("QC rework initiation PostgreSQL contracts", () => {
-  const schema = `rework_${randomUUID().replaceAll("-", "")}`;
+  const schema = ownedPostgresSchema("rework");
+  let schemaCreated = false;
   const admin = new Pool({ connectionString: databaseUrl! });
   const database = new Pool({
     connectionString: databaseUrl!,
@@ -34,6 +39,10 @@ runWithPostgres("QC rework initiation PostgreSQL contracts", () => {
     authorizationCapability: "rework:initiate",
     requestId: randomUUID(),
   });
+  const supplementActor = (): TrustedActorContext => ({
+    ...qcActor(),
+    authorizationCapability: "tools:user",
+  });
   const rootActor = (): TrustedActorContext => ({
     actorId: qcId,
     actorRoles: ["root_superuser"],
@@ -43,32 +52,26 @@ runWithPostgres("QC rework initiation PostgreSQL contracts", () => {
   });
 
   beforeAll(async () => {
+    await assertTestDatabaseTarget(databaseUrl!);
     await admin.query(`CREATE SCHEMA ${schema}`);
-    for (const migration of [
-      "0001_platform_foundation.sql",
-      "0002_dingtalk_identity_access.sql",
-      "0003_identity_union_continuity.sql",
-      "0004_public_tools_foundation.sql",
-      "0005_access_master_data.sql",
-      "0006_rework_initiation.sql",
-      "0007_process_configuration_ie_review.sql",
-      "0049_post_creation_order_image_binding.sql",
-      "0053_root_rework_order_logical_deletion.sql",
-      "0068_n01_image_and_wage_integrity.sql",
-    ]) {
-      const sql = await readFile(
-        new URL(`../../apps/api/migrations/${migration}`, import.meta.url),
-        "utf8",
-      );
-      await database.query(sql);
-    }
+    schemaCreated = true;
+    const scoped = new URL(databaseUrl!);
+    scoped.searchParams.set("options", `-c search_path=${schema}`);
+    const migrations = await discoverValidatedMigrations();
+    const initialized = await applyMigrations(scoped.toString());
+    expect(initialized.currentVersion).toBe(migrations.at(-1)!.version);
+    expect(initialized.applied).toHaveLength(migrations.length);
+    expect((await database.query("SELECT current_schema() AS schema")).rows[0].schema).toBe(schema);
+    expect((await database.query("SELECT version,checksum FROM schema_migrations ORDER BY version")).rows)
+      .toEqual(migrations.map(({ version, checksum }) => ({ version, checksum })));
+    expect((await applyMigrations(scoped.toString())).applied).toEqual([]);
     for (const [userId, displayName] of [
       [qcId, "品控一"],
       [otherQcId, "品控二"],
       [merchandiserId, "订单跟单"],
     ] as const) {
       await database.query(
-        "INSERT INTO app_users(id,display_name) VALUES($1,$2)",
+        "INSERT INTO app_users(id,display_name,enabled) VALUES($1,$2,true)",
         [userId, displayName],
       );
       await database.query(
@@ -99,8 +102,14 @@ runWithPostgres("QC rework initiation PostgreSQL contracts", () => {
 
   afterAll(async () => {
     await database.end();
-    await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
-    await admin.end();
+    try {
+      if (schemaCreated) {
+        await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
+        expect((await admin.query("SELECT 1 FROM pg_namespace WHERE nspname=$1", [schema])).rowCount).toBe(0);
+      }
+    } finally {
+      await admin.end();
+    }
   });
 
   it("reuses one idempotent draft and rejects changed semantics", async () => {
@@ -132,6 +141,9 @@ runWithPostgres("QC rework initiation PostgreSQL contracts", () => {
     const draft = await service.createDraft(qcActor(), {
       styleNo: "PD20529725",
       orderNo: "SO-001",
+      orderQuantity: 281,
+      tailInspectionCostBearer: "own_factory",
+      inspectionReport: completeInspectionReport(),
       merchandiserUserId: merchandiserId,
       processingFactory: { type: "own_factory" },
       problemPart: "后浪",
@@ -171,7 +183,7 @@ runWithPostgres("QC rework initiation PostgreSQL contracts", () => {
        ) VALUES($1,$2,'supplemental.webp','image/webp',10,$3,$4,'ready',CURRENT_TIMESTAMP)`,
       [supplementalImageId, `private/${supplementalImageId}.webp`, "c".repeat(64), qcId],
     );
-    const supplemented = await service.supplementOrderImages(qcActor(), draft.value.reworkOrderId, {
+    const supplemented = await service.supplementOrderImages(supplementActor(), draft.value.reworkOrderId, {
       expectedVersion: submitted.value.version,
       attachmentIds: [supplementalImageId],
     }, randomUUID());
@@ -194,11 +206,11 @@ runWithPostgres("QC rework initiation PostgreSQL contracts", () => {
        ) VALUES($1,$2,'not-an-image.pdf','application/pdf',10,$3,$4,'ready',CURRENT_TIMESTAMP)`,
       [nonImageId, `private/${nonImageId}.pdf`, "d".repeat(64), qcId],
     );
-    await expect(service.supplementOrderImages(qcActor(), draft.value.reworkOrderId, {
+    await expect(service.supplementOrderImages(supplementActor(), draft.value.reworkOrderId, {
       expectedVersion: supplemented.value.version,
       attachmentIds: [nonImageId],
     }, randomUUID())).rejects.toMatchObject({ code: "ATTACHMENT_NOT_READY", statusCode: 409 });
-    await expect(service.supplementOrderImages(qcActor(), draft.value.reworkOrderId, {
+    await expect(service.supplementOrderImages(supplementActor(), draft.value.reworkOrderId, {
       expectedVersion: supplemented.value.version,
       attachmentIds: Array.from({ length: 7 }, () => randomUUID()),
     }, randomUUID())).rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
@@ -234,6 +246,9 @@ runWithPostgres("QC rework initiation PostgreSQL contracts", () => {
     );
     const draft = await service.createDraft(qcActor(), {
       styleNo: "PD20611308",
+      orderQuantity: 100,
+      tailInspectionCostBearer: "own_factory",
+      inspectionReport: completeInspectionReport(),
       merchandiserUserId: merchandiserId,
       processingFactory: { type: "own_factory" },
       problemPart: "袖口",
@@ -264,8 +279,23 @@ runWithPostgres("QC rework initiation PostgreSQL contracts", () => {
       reason: "现场确认无需继续返工",
     }, randomUUID());
     expect(cancelled.value.status).toBe("cancelled");
-    expect(cancelled.value.attachmentIds).toEqual([]);
-    await expect(service.supplementOrderImages(qcActor(), draft.value.reworkOrderId, {
+    expect(cancelled.value.attachmentIds).toEqual([attachmentId]);
+    expect((await database.query(
+      "SELECT entity_type,entity_id,status FROM attachments WHERE attachment_id=$1",
+      [attachmentId],
+    )).rows).toEqual([{
+      entity_type: "rework_order",
+      entity_id: draft.value.reworkOrderId,
+      status: "ready",
+    }]);
+    expect((await database.query(
+      "SELECT before_state,after_state FROM operation_events WHERE entity_id=$1 AND action='rework.cancel'",
+      [draft.value.reworkOrderId],
+    )).rows).toMatchObject([{
+      before_state: { attachmentIds: [attachmentId] },
+      after_state: { attachmentIds: [attachmentId] },
+    }]);
+    await expect(service.supplementOrderImages(supplementActor(), draft.value.reworkOrderId, {
       expectedVersion: cancelled.value.version,
       attachmentIds: [randomUUID()],
     }, randomUUID())).rejects.toMatchObject({
@@ -298,6 +328,9 @@ runWithPostgres("QC rework initiation PostgreSQL contracts", () => {
   it("rejects N01 submission without a ready image even when all other order facts are present", async () => {
     const draft = await service.createDraft(qcActor(), {
       styleNo: "N01-NO-IMAGE",
+      orderQuantity: 1,
+      tailInspectionCostBearer: "own_factory",
+      inspectionReport: completeInspectionReport(),
       merchandiserUserId: merchandiserId,
       processingFactory: { type: "own_factory" },
       problemPart: "袖口",
@@ -377,6 +410,10 @@ runWithPostgres("QC rework initiation PostgreSQL contracts", () => {
     const client = await database.connect();
     const eventId = randomUUID();
     const requestId = randomUUID();
+    const originalState = (await database.query<{ after_state: Record<string, unknown> }>(
+      "SELECT after_state FROM operation_events WHERE entity_id=$1 AND action='rework.draft.create'",
+      [draft.value.reworkOrderId],
+    )).rows[0]!.after_state;
     try {
       await client.query("BEGIN");
       await client.query(
@@ -385,28 +422,33 @@ runWithPostgres("QC rework initiation PostgreSQL contracts", () => {
            action,entity_type,entity_id,after_state
          ) VALUES(
            $1,$2,$3,ARRAY['quality_control'],'rework:initiate',
-           'rework.draft.update','rework_order',$4::text,
-           jsonb_build_object(
-             'reworkOrderId',$4::text,'reworkNo',NULL,'status','draft',
-             'styleNo','PD20611309','orderNo',NULL,'merchandiserUserId',NULL,
-             'processingFactory',NULL,'problemPart',NULL,
-             'problemDescription','已审计的问题描述','reworkQuantity',NULL,
-             'attachmentIds',jsonb_build_array(),'version',2
-           )
+           'rework.draft.update','rework_order',$4::text,$5::jsonb
          )`,
-        [eventId, requestId, qcId, draft.value.reworkOrderId],
+        [eventId, requestId, qcId, draft.value.reworkOrderId,
+          JSON.stringify({ ...originalState, version: 2 })],
       );
       await client.query(
         "SELECT set_config('dx_rework.rework_event_id',$1,true),set_config('dx_rework.rework_request_id',$2,true)",
         [eventId, requestId],
       );
+      await client.query("SAVEPOINT mismatched_snapshot");
       await expect(client.query(
         `UPDATE rework_orders
          SET problem_description='未审计的篡改',updated_by=$2,version=version+1
          WHERE rework_order_id=$1`,
         [draft.value.reworkOrderId, qcId],
       )).rejects.toMatchObject({ code: "55000" });
+      await client.query("ROLLBACK TO SAVEPOINT mismatched_snapshot");
+      // The same complete event accepts its actual snapshot. This prevents a
+      // missing newer field from masquerading as the intended mismatch check.
+      await client.query(
+        `UPDATE rework_orders SET problem_description=$2,updated_by=$3,version=version+1
+         WHERE rework_order_id=$1`,
+        [draft.value.reworkOrderId, originalState.problemDescription, qcId],
+      );
       await client.query("ROLLBACK");
+      expect((await service.getOwn(qcActor(), draft.value.reworkOrderId)).version).toBe(draft.value.version);
+      expect((await database.query("SELECT 1 FROM operation_events WHERE event_id=$1", [eventId])).rowCount).toBe(0);
     } finally {
       client.release();
     }

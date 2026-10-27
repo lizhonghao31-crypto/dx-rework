@@ -196,7 +196,7 @@ jobs:
             log="$RUNNER_TEMP/mapped-$(basename "$test_file").log"
             vitest_args=()
             case "$test_file" in
-              tests/integration/full-business-chain-postgres.test.ts|tests/integration/sourcing-pr03-postgres.test.ts)
+              tests/integration/full-business-chain-postgres.test.ts|tests/integration/sourcing-pr03-postgres.test.ts|tests/integration/rework-postgres.test.ts)
                 vitest_args=(--config vitest.business-chain.config.ts)
                 ;;
             esac
