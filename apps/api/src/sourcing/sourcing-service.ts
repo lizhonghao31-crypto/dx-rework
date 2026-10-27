@@ -64,7 +64,8 @@ import {
   type TrustedActorContext,
 } from "../tools/repositories.js";
 import type { SourcingContractService } from "./sourcing-contract-service.js";
-import { contractReturnState, type ContractReturnFilter } from "./contract-return-state.js";
+import { assertContractReturnListClock,contractReturnClock } from "./contract-return-clock.js";
+import { contractReturnState, type ContractReturnFacts, type ContractReturnFilter } from "./contract-return-state.js";
 
 const CASE_CREATE_CAPABILITY = "sourcing:inquiry:create";
 const IE_QUOTE_CAPABILITY = "sourcing:price:quote";
@@ -224,6 +225,8 @@ type SourcingCaseRow = Readonly<{
   contract_returned_at: Date | string | null;
   contract_return_overdue_seconds: number | string | null;
   contract_return_as_of: Date | string;
+  time_quality?: ContractReturnFacts["time_quality"];
+  time_reason?: string|null;
   total_count?: string;
   total_order_quantity?: string;
 }>;
@@ -538,9 +541,9 @@ export class SourcingService {
           COALESCE(monitor_case.contract_return_catchup,false) AS contract_return_catchup,monitor_case.contract_generated_at,
          monitor_case.contract_return_due_at,monitor_case.contract_returned_at,
          sourcing_contract_return_elapsed_seconds(
-           monitor_case.contract_return_due_at,COALESCE(monitor_case.contract_returned_at,CURRENT_TIMESTAMP)
+           monitor_case.contract_return_due_at,COALESCE(monitor_case.contract_returned_at,monitor_case.business_as_of)
          ) AS contract_return_overdue_seconds,
-         CURRENT_TIMESTAMP AS contract_return_as_of,
+         monitor_case.business_as_of AS contract_return_as_of,monitor_case.time_quality,monitor_case.time_reason,
          quote_row.sourcing_ie_quote_id,quote_row.quote_version,
          quote_row.unit_price,quote_row.quantity AS quote_quantity,
          quote_row.total_amount,quote_row.quote_reason,
@@ -584,7 +587,7 @@ export class SourcingService {
        JOIN app_users creator_user ON creator_user.id=case_view.created_by
        JOIN sourcing_cases additional_case ON additional_case.sourcing_case_id=case_view.sourcing_case_id
        LEFT JOIN app_users additional_user ON additional_user.id=nullif(to_jsonb(additional_case)->>'additional_merchandiser_user_id','')::uuid
-       LEFT JOIN LATERAL sourcing_contract_return_facts(case_view.sourcing_case_id) monitor_case ON true
+       LEFT JOIN LATERAL sourcing_contract_return_business_state(case_view.sourcing_case_id) monitor_case ON true
        LEFT JOIN LATERAL (
          SELECT jsonb_agg(
            jsonb_build_object(
@@ -690,6 +693,7 @@ export class SourcingService {
       LEFT JOIN app_users current_person ON current_person.id=$2
       LEFT JOIN app_users additional ON additional.id=nullif(to_jsonb(source)->>'additional_merchandiser_user_id','')::uuid
       WHERE source.sourcing_case_id=$1`,[sourcingCaseId,row.effective_created_by])).rows[0]?.name??null};
+    if(!history)await contractReturnClock(this.database,client,sourcingCaseId);
     const item = mapCase(history ? { ...row,contract_return_monitor_enabled:false } : row, actor);
     if (row.workflow_generation === "digital_production_v1") {
       const lines = (await factoryPoLines(client,sourcingCaseId,history?.at ?? null))!;
@@ -758,6 +762,7 @@ export class SourcingService {
     const principalJoins=principalAvailable?`LEFT JOIN digital_production_child_links principal_link ON principal_link.module='sourcing' AND principal_link.child_id=case_view.sourcing_case_id
       LEFT JOIN digital_production_orders principal_order ON principal_order.production_order_id=principal_link.production_order_id
       LEFT JOIN app_users principal_user ON principal_user.id=principal_order.primary_merchandiser_id`:"";
+    await assertContractReturnListClock(this.database);
     const result = await this.database.query<SourcingCaseRow>(
       `WITH filtered_cases AS MATERIALIZED (
        SELECT
@@ -786,9 +791,9 @@ export class SourcingService {
           COALESCE(monitor_case.contract_return_catchup,false) AS contract_return_catchup,monitor_case.contract_generated_at,
          monitor_case.contract_return_due_at,monitor_case.contract_returned_at,
          sourcing_contract_return_elapsed_seconds(
-           monitor_case.contract_return_due_at,COALESCE(monitor_case.contract_returned_at,CURRENT_TIMESTAMP)
+           monitor_case.contract_return_due_at,COALESCE(monitor_case.contract_returned_at,monitor_case.business_as_of)
          ) AS contract_return_overdue_seconds,
-         CURRENT_TIMESTAMP AS contract_return_as_of,
+         monitor_case.business_as_of AS contract_return_as_of,monitor_case.time_quality,monitor_case.time_reason,
          quote_row.sourcing_ie_quote_id,quote_row.quote_version,
          quote_row.unit_price,quote_row.quantity AS quote_quantity,
          quote_row.total_amount,quote_row.quote_reason,
@@ -829,7 +834,7 @@ export class SourcingService {
          snapshot.approved_by AS approval_by,snapshot.approved_at AS approval_at
        FROM current_sourcing_cases case_view
        JOIN LATERAL sourcing_case_facts_at(case_view.sourcing_case_id) source_case ON true
-       LEFT JOIN LATERAL sourcing_contract_return_facts(case_view.sourcing_case_id) monitor_case ON true
+       LEFT JOIN LATERAL sourcing_contract_return_business_state(case_view.sourcing_case_id) monitor_case ON true
        JOIN app_users creator_user ON creator_user.id=case_view.created_by
        JOIN sourcing_cases additional_case ON additional_case.sourcing_case_id=case_view.sourcing_case_id
        LEFT JOIN app_users additional_user ON additional_user.id=nullif(to_jsonb(additional_case)->>'additional_merchandiser_user_id','')::uuid
@@ -986,20 +991,21 @@ export class SourcingService {
              monitor_case.contract_return_monitor_enabled
              AND (
                $6::text='all'
-               OR ($6::text='pending' AND monitor_case.contract_returned_at IS NULL
+               OR (monitor_case.time_quality<>'unknown' AND ( ($6::text='pending' AND monitor_case.contract_returned_at IS NULL
                  AND (monitor_case.contract_return_due_at IS NULL
-                   OR CURRENT_TIMESTAMP<=monitor_case.contract_return_due_at))
+                   OR monitor_case.business_as_of<=monitor_case.contract_return_due_at))
                OR ($6::text='returned_on_time' AND monitor_case.contract_returned_at IS NOT NULL
                  AND (monitor_case.contract_return_due_at IS NULL
                    OR monitor_case.contract_returned_at<=monitor_case.contract_return_due_at))
                OR ($6::text='overdue_pending'
                  AND monitor_case.contract_returned_at IS NULL
-                 AND CURRENT_TIMESTAMP>monitor_case.contract_return_due_at)
+                 AND monitor_case.business_as_of>monitor_case.contract_return_due_at)
                OR ($6::text='returned_late'
                  AND monitor_case.contract_returned_at>monitor_case.contract_return_due_at)
                OR ($6::text='all_overdue' AND (
                  monitor_case.contract_returned_at>monitor_case.contract_return_due_at
-                 OR (monitor_case.contract_returned_at IS NULL AND CURRENT_TIMESTAMP>monitor_case.contract_return_due_at)
+                 OR (monitor_case.contract_returned_at IS NULL AND monitor_case.business_as_of>monitor_case.contract_return_due_at)
+               ))
                ))
              )
            )
@@ -1029,6 +1035,7 @@ export class SourcingService {
     );
     const pageRows = result.rows.filter(row => row.sourcing_case_id != null);
     const totalCount = Number(result.rows[0]?.total_count ?? "0");
+    for(const row of pageRows)await contractReturnClock(this.database,this.database,row.sourcing_case_id);
     const items=pageRows.map(row=>mapCase(row,actor));
     for(const [index,row] of pageRows.entries())if(row.workflow_generation==='digital_production_v1') {
       const dates=(await factoryPoLines(this.database,row.sourcing_case_id))!;

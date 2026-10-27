@@ -59,6 +59,14 @@ const row = (index: number, totalCount = 16) => ({
   owner_decided_at: null,
 });
 
+// These pagination fixtures model ordinary standalone orders. Clock isolation is
+// exercised against actual native links/scene ledgers in the PostgreSQL suite.
+const ordinaryPool=(query:ReturnType<typeof vi.fn>)=>({query:(sql:string,...args:unknown[])=>{
+  if(sql.includes('SELECT DISTINCT ON (r.scenario_id)'))return Promise.resolve({rows:[]});
+  if(sql.includes('sourcing_contract_return_clock_scope'))return Promise.resolve({rows:[{native_order_id:null,scenario_id:null}]});
+  return query(sql,...args);
+}} as unknown as Pool);
+
 describe("sourcing list pagination", () => {
   it("returns true 15-row numbered pages and the total page count", async () => {
     const query = vi.fn()
@@ -66,7 +74,7 @@ describe("sourcing list pagination", () => {
       .mockResolvedValueOnce({ rows: Array.from({ length: 15 }, (_, index) => row(index + 1)) })
       .mockResolvedValueOnce({rows:[{relation:null}]})
       .mockResolvedValueOnce({ rows: [row(16)] });
-    const service = new SourcingService({ query } as unknown as Pool);
+    const service = new SourcingService(ordinaryPool(query));
 
     const first = await service.listCases(actor, "", "pending", 1);
     expect(first.items).toHaveLength(15);
@@ -87,7 +95,7 @@ describe("sourcing list pagination", () => {
 
   it("rejects invalid page numbers before querying PostgreSQL", async () => {
     const query = vi.fn();
-    const service = new SourcingService({ query } as unknown as Pool);
+    const service = new SourcingService(ordinaryPool(query));
 
     await expect(service.listCases(actor, "", "all", 0)).rejects.toMatchObject({
       code: "VALIDATION_ERROR",
@@ -99,7 +107,7 @@ describe("sourcing list pagination", () => {
   it("returns the order's first ready image and merchandiser in the existing paginated list", async () => {
     const firstImage = "00000000-0000-4000-8000-000000000099";
     const query = vi.fn().mockResolvedValueOnce({rows:[{relation:null}]}).mockResolvedValue({ rows: [{ ...row(1, 1), merchandiser_name: "原跟单/协同跟单", first_image_attachment_id: firstImage }] });
-    const service = new SourcingService({ query } as unknown as Pool);
+    const service = new SourcingService(ordinaryPool(query));
 
     const result = await service.listCases(actor, "", "pending", 1);
     expect(result.items[0]).toMatchObject({ merchandiserName: "原跟单/协同跟单", firstImageAttachmentId: firstImage });
@@ -115,14 +123,14 @@ describe("sourcing list pagination", () => {
       .mockResolvedValueOnce({ rows: [{ sourcing_case_id: null, total_count: "16", total_order_quantity: "1600" }] })
       .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [{ sourcing_case_id: null, total_count: "0", total_order_quantity: "0" }] });
-    const service = new SourcingService({ query } as unknown as Pool);
+    const service = new SourcingService(ordinaryPool(query));
     expect(await service.listCases(actor, "", "pending", 3)).toMatchObject({ items: [], totalCount: 16, totalOrderQuantity: 1600, totalPages: 2 });
     expect(await service.listCases(actor, "not found")).toMatchObject({ items: [], totalCount: 0, totalOrderQuantity: 0 });
   });
 
   it("does not query or expose summary without the existing read capability", async () => {
     const query = vi.fn();
-    const service = new SourcingService({ query } as unknown as Pool);
+    const service = new SourcingService(ordinaryPool(query));
     await expect(service.listCases({ ...actor, authorizationCapabilities: [] })).rejects.toMatchObject({ code: "FORBIDDEN" });
     expect(query).not.toHaveBeenCalled();
   });

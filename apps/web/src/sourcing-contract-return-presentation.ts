@@ -1,8 +1,9 @@
 import type { SourcingCaseSummary, SourcingContractReturnResponse } from "@dx-rework/contracts";
 
 export function sourcingContractReturnLabel(
-  state: Pick<SourcingContractReturnResponse,"contractReturnStatus"|"contractReturnOverdueHours">,
+  state: Pick<SourcingContractReturnResponse,"contractReturnStatus"|"contractReturnOverdueHours"|"contractReturnTimeQuality">,
 ): string {
+  if(state.contractReturnTimeQuality==="unknown")return "回签时效未知";
   const hours=state.contractReturnOverdueHours;
   const suffix=hours === null ? "" : hours < 1 ? "<1 小时" : `${hours} 小时`;
   switch(state.contractReturnStatus) {
@@ -16,8 +17,9 @@ export function sourcingContractReturnLabel(
 
 // One short badge beside the style number; details retain the full wording.
 export function sourcingContractReturnBadgeLabel(
-  state: Pick<SourcingCaseSummary,"contractReturnStatus"|"contractReturnOverdueHours">,
+  state: Pick<SourcingCaseSummary,"contractReturnStatus"|"contractReturnOverdueHours"|"contractReturnTimeQuality">,
 ): string | null {
+  if(state.contractReturnTimeQuality==="unknown")return "回签时效未知";
   const hours=state.contractReturnOverdueHours;
   const elapsed=hours == null || hours < 1 ? "<1 小时" : `${hours} 小时`;
   switch(state.contractReturnStatus) {

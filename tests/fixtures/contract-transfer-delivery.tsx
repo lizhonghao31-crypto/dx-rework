@@ -11,7 +11,8 @@ import '../../apps/web/src/workflow-state-visual.css';
 import '../../apps/web/src/ui-polish.css';
 const id=(n:number)=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
 const now='2026-10-13T00:00:00.000Z',params=new URLSearchParams(location.search);
-const cycle=params.get('cycle')==='1';
+const cycle=params.get('cycle')==='1',unknownTime=params.get('unknownTime')==='1';
+const unknownFacts=unknownTime?{contractReturnTimeQuality:'unknown' as const,contractReturnTimeReason:'TEST 原有效回传缺少匹配的业务时间证据',contractReturnAsOf:'2026-11-01T02:00:00.000Z',contractReturnStatus:null,contractReturnOverdueHours:null,contractGeneratedAt:null,contractReturnDueAt:null,contractReturnedAt:null}:{};
 const role=params.get('role') ?? 'root', reviewed=params.get('reviewed')==='1';
 const roles=role==='root'?['root_superuser']:role==='management'?['production_management']:role==='owner'?['owner_group']:['order_merchandiser'];
 const capabilities=['sourcing:view','supplier_contract_data:read','sourcing:inquiry:create','sourcing:contract:record',
@@ -26,7 +27,7 @@ let item=SourcingCaseSummarySchema.parse({
   decision:{sourcingDecisionId:id(3),decisionVersion:2,sourceType:'factory_change',sourceIeQuoteId:null,supersedesDecisionId:id(2),supplierId:id(4),supplierCode:'TEST-OLD',supplierName:'TEST原工厂',unitPrice:'15.5',quantity:2020,totalAmount:'31310',linePrices:lines.map(({position,quantity,unitPrice,totalAmount})=>({position,quantity,unitPrice,totalAmount})),decisionReason:'TEST',decidedBy:id(1),decidedAt:now},
   ownerDecision:null,
   approvalSnapshot:{sourcingApprovalSnapshotId:id(6),sourcingDecisionId:id(3),decisionVersion:2,supplierId:id(4),supplierCode:'TEST-OLD',supplierName:'TEST原工厂',quantity:2020,totalAmount:'31310',estimatedCutPieceSendDate:'2026-10-04',deliveryDate:'2026-10-22',processes:['TEST-车缝'],linePrices:lines,approvedBy:id(1),approvedAt:now},
-  contractReturnMonitoring:true,contractReturnStatus:cycle?'pending':'returned_late',contractReturnOverdueHours:cycle?0:61,
+  contractReturnMonitoring:true,contractReturnStatus:cycle?'pending':'returned_late',contractReturnOverdueHours:cycle?0:61,...unknownFacts,
 });
 const contractDocument={sourcingContractDocumentId:id(55),sourcingApprovalSnapshotId:id(6),contractNumber:'TEST-CONTRACT-V7',contractVersion:7,templateVersion:4,status:'ready',missingFields:[],snapshotFingerprint:'a'.repeat(64),pdfAttachmentId:id(57),pdfSha256:'b'.repeat(64),failureReason:null,preparedAt:now,generatedAt:now,canSupplement:false,canRefreshInformation:role==='root',canEditContent:role==='root'&&!reviewed};
 const content={contractTitle:'TEST合同',contractNumber:'TEST-CONTRACT-V7',contractDate:'2026-10-13',partyAName:'TEST甲方',partyAAddress:'TEST地址',partyARepresentative:'TEST',partyASigningDate:'',partyBSigningDate:'',partyBName:'TEST原工厂',partyBAddress:'TEST地址',partyBRepresentative:'TEST',payeeName:'TEST',bankAccount:'TEST',bankName:'TEST',signingPlace:'TEST',gender:'女装',styleName:'TEST交期',estimatedCutPieceSendDate:'2026-10-04',deliveryDate:'2026-10-22',processes:['TEST-车缝'],lines,totalQuantity:2020,totalAmount:'31310',terms:Object.fromEntries(Object.keys(CONTRACT_TERM_LABELS).map(key=>[key,'TEST条款']))};
@@ -64,7 +65,7 @@ window.fetch=async(input,init)=>{
   if(path.endsWith('/price-reapplications/current'))return Response.json({item:priceRequest});
   if(path.endsWith('/factory-changes/current'))return Response.json({item:null});
   if(path.endsWith('/contract'))return Response.json({item:contractDocument});
-  if(path.endsWith('/contract-return'))return Response.json({contractReturnCycleId:cycle?id(6):null,contractReturnMonitoring:true,contractReturnStatus:cycle?'pending':'returned_late',contractGeneratedAt:now,contractReturnDueAt:now,contractReturnedAt:cycle?null:now,contractReturnOverdueHours:cycle?0:61,uploadedByName:cycle?null:'TEST跟单',canUpload:true,uploadedFileCount:cycle?0:1,uploadedTotalBytes:cycle?0:128,currentContractReturned:false,currentContractDocumentId:id(55),signedContractDocumentId:id(54),signedContractVersion:6,signedContractNumber:'TEST-V6',attachments:[{attachmentId:id(58),filename:'TEST-signed.pdf',mimeType:'application/pdf',sizeBytes:128}],history:[]});
+  if(path.endsWith('/contract-return'))return Response.json({contractReturnCycleId:cycle?id(6):null,contractReturnMonitoring:true,contractReturnStatus:cycle?'pending':'returned_late',contractGeneratedAt:now,contractReturnDueAt:now,contractReturnedAt:cycle?null:now,contractReturnOverdueHours:cycle?0:61,uploadedByName:cycle?null:'TEST跟单',canUpload:true,uploadedFileCount:cycle?0:1,uploadedTotalBytes:cycle?0:128,currentContractReturned:false,currentContractDocumentId:id(55),signedContractDocumentId:id(54),signedContractVersion:6,signedContractNumber:'TEST-V6',attachments:[{attachmentId:id(58),filename:'TEST-signed.pdf',mimeType:'application/pdf',sizeBytes:128}],history:[],...unknownFacts});
   if(path.endsWith('/dispatch'))return Response.json({item:null,canDispatch:false});
   if(path.endsWith('/cases/'+renderedCaseId))return Response.json({...item,sourcingCaseId:renderedCaseId});
   if(path.includes('master-data/crafts'))return Response.json([]);

@@ -303,6 +303,9 @@ export const SourcingContractReturnUploadSchema = z.object({
 }).strict();
 export const SourcingContractReturnResponseSchema = z.object({
   contractReturnCycleId: IdSchema.nullable().optional(),
+  contractReturnTimeQuality: z.enum(["business_projection","legacy_audit","unknown","not_applicable"]).optional(),
+  contractReturnTimeReason: z.string().nullable().optional(),
+  contractReturnAsOf: z.string().datetime().optional(),
   contractReturnMonitoring: z.boolean(),
   contractReturnStatus: z.enum(["pending","returned_on_time","overdue_pending","returned_late"]).nullable(),
   contractGeneratedAt: z.string().datetime().nullable(),
@@ -562,6 +565,9 @@ export const SourcingCaseSummarySchema = z.object({
   decision: SourcingDecisionSchema.nullable(),
   ownerDecision: SourcingOwnerDecisionSchema.nullable(),
   approvalSnapshot: SourcingApprovalSnapshotSchema.nullable().default(null),
+  contractReturnTimeQuality: z.enum(["business_projection","legacy_audit","unknown","not_applicable"]).optional(),
+  contractReturnTimeReason: z.string().nullable().optional(),
+  contractReturnAsOf: z.string().datetime().optional(),
   contractReturnMonitoring: z.boolean().optional(),
   contractReturnStatus: z.enum(["pending","returned_on_time","overdue_pending","returned_late"]).nullable().optional(),
   contractGeneratedAt: z.string().datetime().nullable().optional(),

@@ -140,6 +140,17 @@ try{
     assert.equal((await page.evaluate(()=>window.contractTransferRequests.filter(r=>r.method==='POST'))).length,0);
     results.push({reviewed,rootEditorFollowsVersionFlag:true,refreshPreviewReadOnly:true,passed:true});await page.close();
   }
+  for(const width of [390,1440]){
+    const page=await browser.newPage({viewport:{width,height:960}}),errors=[];page.on('pageerror',error=>errors.push(error.message));
+    await page.goto(origin+'/?role=management&unknownTime=1');
+    await page.getByText('TEST 原有效回传缺少匹配的业务时间证据',{exact:true}).waitFor();
+    assert.equal(await page.getByRole('link',{name:'查看 V6 回签合同',exact:true}).count(),1);
+    assert.equal(await page.locator('.sourcing-contract-return-facts dt').filter({hasText:'回签起算时间'}).count(),1);
+    assert.equal(await page.locator('.sourcing-contract-return-facts summary').innerText(),'首次回签时效 · 回签时效未知');
+    assert.equal(await page.getByText('逾期回签 61 小时',{exact:true}).count(),0);
+    assert.equal((await page.evaluate(()=>window.contractTransferRequests.filter(r=>r.method==='POST'))).length,0);
+    assert.deepEqual(errors,[]);results.push({width,unknownReasonVisible:true,oldSignaturePreserved:true,noFalseTimingStatus:true,readOnly:true,passed:true});await page.close();
+  }
   for(const [width,height] of [[1440,1024],[1280,800],[768,1024],[390,844],[360,800]]) {
     const page=await browser.newPage({viewport:{width,height}});
     await page.goto(origin+'/?role=management&cycle=1');
