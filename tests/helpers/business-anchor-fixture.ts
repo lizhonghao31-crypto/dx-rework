@@ -42,7 +42,7 @@ export async function businessAnchorFixture(url:string){
  await assertTestDatabaseTarget(url);
  const schema=ownedPostgresSchema('business_anchors'),admin=new pg.Pool({connectionString:url});
  await admin.query(`CREATE SCHEMA ${schema}`);
- const db=new pg.Pool({connectionString:url,options:`-c search_path=${schema}`});
+ const db=new pg.Pool({connectionString:url,options:`-c search_path=${schema}`,application_name:schema,max:10,connectionTimeoutMillis:3000});
  const dispose=async()=>{await db.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();};
  try{
   const version=Number((await db.query('SHOW server_version_num')).rows[0].server_version_num);

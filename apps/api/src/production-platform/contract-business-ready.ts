@@ -63,7 +63,7 @@ export async function recordContractBusinessReady(
   }
   if ((await db.query("SELECT 1 FROM sourcing_contract_business_ready_facts WHERE sourcing_contract_document_id=$1", [documentId])).rowCount)
     return { created: false, first: false, orderId: scope.orderId };
-  const time = validateBusinessTime(await new ContextBusinessClock(pool).read({ kind: "order", id: scope.orderId }));
+  const time = validateBusinessTime(await new ContextBusinessClock(pool, db).read({ kind: "order", id: scope.orderId }));
   if (time.scenarioId !== scope.scenarioId) conflict();
   const document = (await db.query("SELECT pdf_attachment_id,pdf_sha256 FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1 AND sourcing_case_id=$2 AND status='ready'", [documentId, caseId])).rows[0];
   if (!document) throw new ApplicationError("INVALID_STATE_TRANSITION", "合同尚未成功就绪", 409);

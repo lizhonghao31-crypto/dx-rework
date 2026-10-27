@@ -11,7 +11,7 @@ export type AcceptanceBusinessContext=Readonly<{
  registerCreated:(db:PoolClient,scope:BusinessTimeScope,actorId:string,auditEventId:string)=>Promise<void>;
 }>;
 const contexts=new AsyncLocalStorage<AcceptanceBusinessContext>();
-type ClockReader=Readonly<{read:(scope:BusinessTimeScope)=>Promise<BusinessTime|null>;nativeScenario:(id:string)=>Promise<string|null>}>;
+type ClockReader=Readonly<{read:(scope:BusinessTimeScope,transaction?:PoolClient)=>Promise<BusinessTime|null>;nativeScenario:(id:string)=>Promise<string|null>}>;
 const readers=new WeakMap<object,ClockReader>();
 /** Called once by the boot-verified runtime, not by a public configuration endpoint. */
 export function installAcceptanceClockReader(database:Pool,reader:ClockReader){readers.set(database,reader);}
@@ -35,11 +35,12 @@ export function observedBusinessTime(fallback:()=>Date=()=>new Date()):BusinessT
  const context=contexts.getStore();return context?{...context.time}:{now:fallback().toISOString(),scenarioId:null,revision:0};
 }
 export class ContextBusinessClock implements BusinessClock{
- constructor(private readonly database?:Pool){}
+ /** Pass only the caller's existing transaction from this same guarded pool. */
+ constructor(private readonly database?:Pool,private readonly transaction?:PoolClient){}
  async read(scope:BusinessTimeScope):Promise<BusinessTime>{
   const context=contexts.getStore();
   if(context){await context.assertScope(scope);return observedBusinessTime();}
-  return this.database?await readers.get(this.database)?.read(scope)??observedBusinessTime():observedBusinessTime();
+  return this.database?await readers.get(this.database)?.read(scope,this.transaction)??observedBusinessTime():observedBusinessTime();
  }
 }
 export async function registerAcceptanceCreated(db:PoolClient,scope:BusinessTimeScope,actorId:string,eventId:string){

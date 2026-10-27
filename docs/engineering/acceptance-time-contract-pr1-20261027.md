@@ -105,7 +105,7 @@ Library 第一轮报告 libfile_c9b5c43077c48191a213a4c2bf51bdda（115914 bytes�
 - `time-site-inventory.mjs` 冻结原路由及 raw clock、BusinessClock、SQL组合锚点和日期控件候选；新增/删改候选需要明确更新目录及语义清单。它不会证明某个参数来源正确，不能替代原生过去/当前/未来/普通时间和事务回归。
 - 目录中的后续 PR pending 不算通过；PR1只对自己的实际测试结果负责。六 PR 最终合并树仍需重跑本轮所有新增/受影响回归与 PG13.23/16兼容，不能拿最后一个PR的diff Gate代替累计验证。
 
-## PR1 本地验证记录（2026-10-27）
+## PR1 首次 Head 6756695b 本地验证记录（2026-10-27）
 
 运行工具为 Node 22.22.2、npm 10.9.9；实际隔离 PostgreSQL 为 13.23 与 16.15。数据库均先核低权限测试角色、精确数据库身份及 `dx-rework-isolated-test-v1` 标记。新夹具使用全量当前 schema、原受支持标准 UAT 初始化入口及原单裁床入口，全部原授权/SQL trigger 保持启用；业务调用均为本地隔离 fixture。开发“最终设计确认”是明确种入的新夹具前置事实，其后的产前、外发、裁床、收货、返工、人员方案、批准与报工走原生服务；不声称这一前置替代了开发全链或浏览器验收。
 
@@ -121,3 +121,15 @@ Library 第一轮报告 libfile_c9b5c43077c48191a213a4c2bf51bdda（115914 bytes�
 | 类型、构建、静态检查 | 全工作区typecheck、API build、全仓lint、migration manifest/checksum静态检查通过。 |
 
 原现场坏TEST事实和deadline revisions未动；本地通过不等于现场补验通过。PR1最终Head的远端Full Gate与一次Codex Review仍须独立记录后才按授权合release；本节不提前声称CI/Review/合并/部署完成。其余五PR仅列责任与待验矩阵，未创建或施工。
+
+## 唯一一次 Review 的 P2 与收口验证
+
+首次 Head 6756695b40e47f160e27b1f495db341bed1728c2 的 Full Gate 40436878549 成功（包含新增18项、PG16历史升级12项、原完整数据库链29文件393项）。随后唯一一次手动 Codex Review 请求6432311834完成，finding r4384566937 指出无ALS后台生成持有事务连接/生命周期锁后，时钟reader再次从同一10连接池借连接的饥饿风险。未带问题合并，未另开Review。
+
+本地先红：原生创建10份 generation_pending 合同，过去/未来两场景各5份；使用与服务端一致的max=10、connectionTimeoutMillis=3000。独立只读观察连接确认9个事务实际在等待advisory锁且业务池10连接全部占用，原生产代码使1份合同因 `timeout exceeded when trying to connect` 变成 generation_failed，其余9份ready。较早仅等待“10个连接忙”的版本没有稳定复现，未将它当红测证据。
+
+最小修复：ContextBusinessClock增加内部可选的当前事务连接，只有调用方原服务事务传入；已安装reader仍先核启动proof并按固定resource kind/id查询原绑定，改用该连接执行原SQL。合同ready adapter传入它已持有的同池事务连接；ALS assertScope、普通无场景真实时间、SQL原场景/UAT/clock version校验均保持。没有扩池、加长超时、放宽事务/角色或吞掉失败。
+
+修后PG13.23与PG16.15先各定向通过该容量用例：10份全部ready，事实逐份匹配原场景/业务时刻/revision，重复恢复不新增事实。随后受影响聚合（新增19项 + 原clock套件）在两版本各44通过/1原有浏览器条件跳过；PG13首轮还发现原clock夹具两处裸别名 `plans` / `at` 的语法问题，只补显式AS、保留全部断言后完整聚合重跑通过。全部单元481文件2521项再次通过；全工作区类型、API构建、lint、受保护写入/候选目录、迁移静态校验通过。
+
+新增生产改动仅business-time/runtime/contract-business-ready三处连接传递；0263及其checksum未变。修复后新Head须重新通过Full Gate，6756695b的旧绿灯不能代替；Review次数仍为一次，完成发现闭环后才合release并开始PR2。

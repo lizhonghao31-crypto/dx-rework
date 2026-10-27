@@ -7,6 +7,7 @@ import {DigitalProductionTaskService} from '../../apps/api/src/production-platfo
 import {factoryBatchTiming} from '../../apps/api/src/production-platform/factory-batch-timing.js';
 import {firstContractBusinessReady} from '../../apps/api/src/production-platform/contract-business-ready.js';
 import {CreateSupplierSchema} from '@dx-rework/contracts';
+import pg from 'pg';
 
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 const nativeIt=(name:string,action:()=>Promise<void>)=>it(name,action,60_000);
@@ -178,5 +179,37 @@ const nativeIt=(name:string,action:()=>Promise<void>)=>it(name,action,60_000);
    if(scene){expect(first.value.completedAt).toBe(at);expect(second.value.completedAt).toBe(at);}else{expect(Date.parse(first.value.completedAt)).toBeGreaterThanOrEqual(wall);expect(Date.parse(second.value.completedAt)).toBeGreaterThanOrEqual(wall);}
    const rows=(await f.db.query('SELECT created_at FROM rework_work_reports WHERE rework_order_id=$1',[id])).rows;expect(rows).toHaveLength(2);for(const row of rows)expect(row.created_at.getTime()).toBeGreaterThanOrEqual(wall-1000);
   });
+ });
+ nativeIt('resumes a full ten-connection batch without ALS, extra clock connections or lost scenarios',async()=>{
+  const f=fixture,cases:Array<{caseId:string;orderId:string;sceneId:string;at:string}>=[];
+  const defer=vi.spyOn(f.contracts,'generateIfReady').mockRejectedValue(new Error('TEST defer until startup recovery'));
+  try{
+   for(const delta of [-7,7]){
+    const at=new Date(Date.now()+delta*86400000).toISOString(),sceneId=await f.scene(at);
+    await f.runtime.run(sceneId,f.root,async()=>{for(let i=0;i<5;i++){const ready=await f.bulkReady('无');cases.push({caseId:ready.caseId,orderId:ready.id,sceneId,at});}});
+   }
+  }finally{defer.mockRestore();}
+  const caseIds=cases.map(c=>c.caseId);
+  expect((await f.db.query("SELECT count(*)::int n FROM sourcing_contract_documents WHERE sourcing_case_id=ANY($1::uuid[]) AND status='generation_pending'",[caseIds])).rows[0].n).toBe(10);
+  // A separate read-only observer does not lend the service pool a connection.
+  // Wait for nine actual transaction lock waiters, not merely ten busy queries.
+  const observer=new pg.Pool({connectionString:url!,application_name:'TEST-clock-pool-observer',max:1});
+  const read=ContextBusinessClock.prototype.read;let heldAtCapacity=false;
+  const barrier=vi.spyOn(ContextBusinessClock.prototype,'read').mockImplementation(async function(this:ContextBusinessClock,...args){
+   if(!heldAtCapacity){heldAtCapacity=true;await vi.waitFor(async()=>{expect(f.db.totalCount).toBe(10);expect(f.db.idleCount).toBe(0);
+    const waiting=(await observer.query("SELECT count(*)::int n FROM pg_stat_activity WHERE application_name=$1 AND state='active' AND wait_event_type='Lock' AND wait_event='advisory' AND xact_start IS NOT NULL",[f.db.options.application_name])).rows[0].n;expect(waiting).toBe(9);
+   },{timeout:15000,interval:20});}
+   return read.apply(this,args);
+  });
+  try{await f.contracts.resumePendingContracts();}finally{barrier.mockRestore();await observer.end();}
+  expect(heldAtCapacity).toBe(true);
+  const documents=(await f.db.query('SELECT status,failure_reason FROM sourcing_contract_documents WHERE sourcing_case_id=ANY($1::uuid[])',[caseIds])).rows;
+  expect(documents,JSON.stringify(documents)).toHaveLength(10);
+  expect(documents,JSON.stringify(documents)).toEqual(Array.from({length:10},()=>({status:'ready',failure_reason:null})));
+  const facts=(await f.db.query('SELECT sourcing_case_id,business_ready_at,business_time FROM sourcing_contract_business_ready_facts WHERE sourcing_case_id=ANY($1::uuid[])',[caseIds])).rows;
+  expect(facts).toHaveLength(10);
+  for(const expected of cases){const fact=facts.find(row=>row.sourcing_case_id===expected.caseId)!;expect(fact.business_ready_at.toISOString()).toBe(expected.at);expect(fact.business_time).toEqual({now:expected.at,scenarioId:expected.sceneId,revision:1});}
+  await f.contracts.resumePendingContracts();
+  expect((await f.db.query('SELECT count(*)::int n FROM sourcing_contract_business_ready_facts WHERE sourcing_case_id=ANY($1::uuid[])',[caseIds])).rows[0].n).toBe(10);
  });
 });

@@ -91,10 +91,10 @@ const databaseUrl=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TE
  it('denies original creation permissions before persisting any scenario, and permits a safe same-key retry',async()=>{
   const input={name:'TEST-no-unauthorized-residue',requestKey:randomUUID()};
   const counts=async()=> (await db.query(`SELECT
-   (SELECT count(*) FROM acceptance_sla_clock_scenarios)::int scenarios,
-   (SELECT count(*) FROM acceptance_sla_clock_resources)::int resources,
-   (SELECT count(*) FROM digital_production_sources)::int sources,
-   (SELECT count(*) FROM digital_development_sla_plans)::int plans`)).rows[0];
+   (SELECT count(*) FROM acceptance_sla_clock_scenarios)::int AS scenarios,
+   (SELECT count(*) FROM acceptance_sla_clock_resources)::int AS resources,
+   (SELECT count(*) FROM digital_production_sources)::int AS sources,
+   (SELECT count(*) FROM digital_development_sla_plans)::int AS plans`)).rows[0];
   const before=await counts();
   const clerk={...actor(clerkId),actorRoles:['development_clerk']};
   const noCapability={...actor(designerId),authorizationCapabilities:['digital_production:view']};
@@ -160,7 +160,7 @@ const databaseUrl=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TE
   })));
   expect(times[0]!.scenarioId).not.toBe(times[1]!.scenarioId);expect(times[0]!.now).not.toBe(times[1]!.now);
   await expect(authority.begin(code)).resolves.toEqual(expect.any(String));
-  const recorded=(await db.query('SELECT max(recorded_at) at FROM acceptance_sla_clock_events')).rows[0].at as Date;
+  const recorded=(await db.query('SELECT max(recorded_at) AS recorded_at FROM acceptance_sla_clock_events')).rows[0].recorded_at as Date;
   expect(recorded.getTime()).toBeLessThan(Date.parse(times[0]!.now));
  });
  it('selects only an existing published reference for new test inputs and never publishes a global default from the scene',async()=>{
