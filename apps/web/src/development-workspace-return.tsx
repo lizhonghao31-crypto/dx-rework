@@ -4,12 +4,14 @@ import { DevelopmentWorkspaceFilterSchema, PatternWorkspaceFilterSchema } from "
 import { createWebUrls } from "../url-contract.js";
 import {documentCategories,documentChapterIds,taskTabLabels} from './digital-detail-context.js';
 
-const designerDocumentKeys=['round','documentCategory','documentChapter','documentKind'] as const;
+const designerDocumentKeys=['round','instructionVersion','budgetVersion','documentCategory','documentChapter','documentKind'] as const;
+const selectedDocumentVersion=z.union([z.literal('current'),z.string().regex(/^[1-9]\d*$/).refine(value=>Number.isSafeInteger(Number(value)))]).optional();
 const designerReturnSchema=DevelopmentWorkspaceFilterSchema.safeExtend({
   workspace:z.literal('designer'),selected:z.string().uuid().optional(),development:z.string().uuid().optional(),
   round:z.string().regex(/^[1-9]\d*$/).refine(value=>Number.isSafeInteger(Number(value))).optional(),
   documentCategory:z.enum(documentCategories).optional(),documentChapter:z.enum(documentChapterIds).optional(),
   documentKind:z.enum(['development','instruction','budget']).optional(),
+  instructionVersion:selectedDocumentVersion,budgetVersion:selectedDocumentVersion,
 });
 
 /** Allow only local read workspaces, with validated filters and selected task. */

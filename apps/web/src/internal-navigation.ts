@@ -50,6 +50,17 @@ export function installInternalNavigation(basePath: string, sync: () => void): (
     position = Number.isSafeInteger(current.state?.[POSITION]) ? Number(current.state[POSITION]) : position;
     sync();
   };
+  // Filters, chapters and versions intentionally replace the current entry
+  // without remounting its editor. Track that URL for a later cancelled pop.
+  const originalReplace=window.history.replaceState;
+  const replace:History['replaceState']=function(this:History,...args){
+    originalReplace.apply(this,args);
+    if(this===window.history){
+      current={href:window.location.href,state:window.history.state};
+      position=Number.isSafeInteger(current.state?.[POSITION])?Number(current.state[POSITION]):position;
+    }
+  };
+  window.history.replaceState=replace;
   const pop = async () => {
     if (restoring && window.location.href === current.href) { restoring = false; return; }
     if (window.location.href === current.href) { remember(); return; }
@@ -114,5 +125,5 @@ export function installInternalNavigation(basePath: string, sync: () => void): (
   };
   window.addEventListener("popstate", pop);
   document.addEventListener("click", navigate);
-  return () => { ++generation; if (activeNavigate === go) activeNavigate = undefined; window.removeEventListener("popstate", pop); document.removeEventListener("click", navigate); };
+  return () => { ++generation; if (activeNavigate === go) activeNavigate = undefined; if(window.history.replaceState===replace)window.history.replaceState=originalReplace; window.removeEventListener("popstate", pop); document.removeEventListener("click", navigate); };
 }
