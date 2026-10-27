@@ -1,0 +1,13 @@
+import '../../apps/web/src/App.js';
+import '../../apps/web/src/workflow-shell.css';
+import '../../apps/web/src/workflow-state-visual.css';
+import '../../apps/web/src/ui-polish.css';
+import {createRoot} from 'react-dom/client';
+import {ProductionReportingPage} from '../../apps/web/src/production-reporting-page.js';
+import '@dx-rework/ui/tokens.css';
+import '@dx-rework/ui/components.css';
+import '../../apps/web/src/styles.css';
+const scenario=new URLSearchParams(location.search).get('case')!;
+const native=window.fetch.bind(window);
+window.fetch=(input,init)=>{const headers=new Headers(init?.headers);headers.set('x-test-calendar',scenario);return native(input,{...init,headers});};
+createRoot(document.getElementById('root')!).render(<ProductionReportingPage productionOrderId="00000000-0000-4000-8000-000000000040"/>);

@@ -21,7 +21,7 @@ export async function acceptanceClockActor(request:FastifyRequest,auth:AuthServi
 export function registerAcceptanceClockHooks(app:FastifyInstance,runtime:AcceptanceClockRuntime,auth:AuthService,root:RootAuthority|undefined){
  app.addHook('preHandler',(request,reply,done)=>{
   const path=request.routeOptions.url??request.url;
-  if(path.startsWith('/acceptance/')||!/^\/(?:digital-production|sourcing|cutting|receiving|rework|work-|pattern-room)/.test(path)){done();return;}
+  if(path.startsWith('/acceptance/')||!/^\/(?:digital-production|sourcing|production-reporting|cutting|receiving|rework|work-|pattern-room)/.test(path)){done();return;}
   const resolve=async()=>{
    await auth.authenticate(acceptanceCookie(request,'dx_rework_session'));
    const claimed=request.headers['x-acceptance-scenario'];
