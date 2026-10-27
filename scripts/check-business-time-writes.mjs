@@ -11,6 +11,7 @@ export const BUSINESS_OCCURRENCE_COLUMNS=Object.freeze({
  digital_bulk_cutting_completions:'completed_at',
  rework_work_reports:'completed_at',
  sourcing_contract_business_ready_facts:'business_ready_at',
+ sourcing_contract_return_business_facts:'business_returned_at',
 });
 export function businessTimeWriteViolations(sql){
  const errors=[];

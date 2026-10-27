@@ -1352,5 +1352,24 @@
     "creates": [],
     "execute": [],
     "sequences": []
+  },
+  "0265_contract_return_business_time": {
+    "checksum": "ea102e436b5d9c11350e72ca43ade97f976125014ad570baff5c081acd9932aa",
+    "tables": [],
+    "functions": [],
+    "references": [
+      "sourcing_contract_return_submissions",
+      "sourcing_cases",
+      "operation_events"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [
+      "sourcing_contract_return_business_facts"
+    ],
+    "execute": [
+      "guard_production_order_root_immutable"
+    ],
+    "sequences": []
   }
 }

@@ -8,7 +8,8 @@ import { memberCanWriteModule } from "../access/member-module-policy.js";
 import { ApplicationError } from "../platform/errors.js";
 import { TodoProjectionService } from "../todos/projection-service.js";
 import { TodoService } from "../todos/service.js";
-import { contractReturnState } from "./contract-return-state.js";
+import { contractReturnClock } from "./contract-return-clock.js";
+import { contractReturnState, type ContractReturnFacts } from "./contract-return-state.js";
 
 const ROOT = "root_superuser";
 const READ = "sourcing:view";
@@ -18,7 +19,7 @@ const OWNER = "owner_group";
 const MIME_TYPES = ["application/pdf","image/jpeg","image/png"] as const;
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 
-type MonitorRow = {
+type MonitorRow = Pick<ContractReturnFacts,"time_quality"|"time_reason"> & {
   sourcing_case_id: string;
   created_by: string;
   additional_merchandiser_user_id: string | null;
@@ -70,10 +71,10 @@ export class SourcingContractReturnService {
     const result = await this.database.query<MonitorRow>(`SELECT source_case.sourcing_case_id,source_case.created_by,
       nullif(to_jsonb(source_case)->>'additional_merchandiser_user_id','')::uuid AS additional_merchandiser_user_id,
       monitor.contract_return_monitor_enabled,monitor.contract_return_catchup,monitor.contract_generated_at,monitor.contract_return_due_at,
-      monitor.contract_returned_at,monitor.contract_return_uploaded_by,monitor.return_cycle_id,
+      monitor.contract_returned_at,monitor.contract_return_uploaded_by,monitor.return_cycle_id,monitor.time_quality,monitor.time_reason,
       sourcing_contract_return_elapsed_seconds(monitor.contract_return_due_at,
-        COALESCE(monitor.contract_returned_at,CURRENT_TIMESTAMP)) AS contract_return_overdue_seconds,
-      uploader.display_name AS uploader_name,CURRENT_TIMESTAMP AS as_of,
+        COALESCE(monitor.contract_returned_at,monitor.business_as_of)) AS contract_return_overdue_seconds,
+      uploader.display_name AS uploader_name,monitor.business_as_of AS as_of,
       COALESCE((SELECT (decision.source_change_request_id IS NULL AND NOT EXISTS(SELECT 1 FROM sourcing_contract_return_cycles cycle WHERE cycle.sourcing_approval_snapshot_id=document.sourcing_approval_snapshot_id)) OR document.status='ready'
         FROM sourcing_contract_documents document
         JOIN sourcing_decisions decision ON decision.sourcing_decision_id=document.sourcing_decision_id
@@ -89,12 +90,13 @@ export class SourcingContractReturnService {
           FROM sourcing_contract_documents document WHERE document.sourcing_case_id=source_case.sourcing_case_id
           ORDER BY document.contract_version DESC LIMIT 1)) AS current_contract_returned
       FROM sourcing_cases source_case
-      LEFT JOIN LATERAL sourcing_contract_return_facts(source_case.sourcing_case_id) monitor ON true
+      LEFT JOIN LATERAL sourcing_contract_return_business_state(source_case.sourcing_case_id) monitor ON true
       LEFT JOIN app_users uploader ON uploader.id=COALESCE(
         monitor.contract_return_latest_uploaded_by,monitor.contract_return_uploaded_by)
       WHERE source_case.sourcing_case_id=$1 AND source_case.deleted_at IS NULL`,[sourcingCaseId]);
     const row=result.rows[0];
     if (!row) throw new ApplicationError("NOT_FOUND","外发订单不存在",404);
+    await contractReturnClock(this.database,this.database,sourcingCaseId);
     const status=contractReturnState({ ...row,contract_return_monitor_enabled:row.contract_return_monitor_enabled === true },row.as_of);
     const canViewFile=actor.actorRoles.includes(ROOT)
       || (actor.authorizationCapabilities ?? []).includes(READ)
@@ -233,6 +235,7 @@ export class SourcingContractReturnService {
       }
       const next=(await client.query<{revision:number}>(`SELECT COALESCE(max(revision),0)+1 AS revision
         FROM sourcing_contract_return_submissions WHERE sourcing_case_id=$1`,[sourcingCaseId])).rows[0]!.revision;
+      const businessTime=await contractReturnClock(this.database,client,sourcingCaseId);
       const submissionId=randomUUID();
       const submission=await client.query<{submitted_at:Date|string}>(`INSERT INTO sourcing_contract_return_submissions(
         submission_id,sourcing_case_id,revision,request_id,submitted_by,submitted_at,sourcing_contract_document_id
@@ -253,9 +256,13 @@ export class SourcingContractReturnService {
             contract_return_uploaded_by=COALESCE(contract_return_uploaded_by,$3::uuid),
             contract_return_latest_uploaded_by=$3::uuid
         WHERE sourcing_case_id=$1`,[sourcingCaseId,submission.rows[0]!.submitted_at,actor.actorId]);
-      await this.events.append(client,actor,{action:"sourcing.contract_return.upload",
+      const eventId=await this.events.append(client,actor,{action:"sourcing.contract_return.upload",
         entityType:"sourcing_case",entityId:sourcingCaseId,
-        after:{submissionId,revision:next,attachmentIds:[...attachmentIds],sourcingContractDocumentId:documentId,firstReturn:monitor.contract_returned_at === null}});
+        after:{submissionId,revision:next,attachmentIds:[...attachmentIds],sourcingContractDocumentId:documentId,firstReturn:monitor.contract_returned_at === null,
+          ...(businessTime?.scenarioId ? {businessTime} : {})}});
+      if(businessTime?.scenarioId)await client.query(`INSERT INTO sourcing_contract_return_business_facts(
+        submission_id,sourcing_case_id,business_returned_at,business_time,operation_event_id) VALUES($1,$2,$3,$4,$5)`,
+        [submissionId,sourcingCaseId,businessTime.now,JSON.stringify(businessTime),eventId]);
       if (documentId) for(const prefix of [transferContractVersionPrefix(sourcingCaseId,documentId),priceContractVersionPrefix(sourcingCaseId,documentId)])
         await this.todos.completeOpenByDedupePrefix(client,actor,prefix,"当前版本合同已有效回传");
       if (monitor.contract_returned_at === null) {

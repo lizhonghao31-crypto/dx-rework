@@ -1990,12 +1990,13 @@ function OrderDetailPage({
                         </div>)}
                       </details> : null}
                       {contractReturnError ? <p role="alert" className="sourcing-contract-return-error">{contractReturnError}</p> : null}
+                      {contractReturn.contractReturnTimeQuality === "unknown" ? <p role="status">{contractReturn.contractReturnTimeReason ?? "缺少可信业务时间证据，回签时效无法评估"}</p> : null}
                       <details className="sourcing-contract-return-facts" open={!window.matchMedia("(max-width: 768px)").matches}>
                         <summary className={`sourcing-contract-return-status--${contractReturn.contractReturnStatus}`}>{contractReturn.contractReturnCycleId ? "本次合同回签时效" : "首次回签时效"} · {sourcingContractReturnLabel(contractReturn)}</summary>
                         <dl className="sourcing-finance-reference">
-                          <div><dt>合同生成时间</dt><dd>{contractReturn.contractGeneratedAt?formatDateTime(contractReturn.contractGeneratedAt):"—"}</dd></div>
-                          <div><dt>回传截止时间</dt><dd>{contractReturn.contractReturnDueAt?formatDateTime(contractReturn.contractReturnDueAt):"待合同生成"}</dd></div>
-                          <div><dt>实际回传时间</dt><dd>{contractReturn.contractReturnedAt?formatDateTime(contractReturn.contractReturnedAt):"—"}</dd></div>
+                          <div><dt>回签起算时间</dt><dd>{contractReturn.contractGeneratedAt?formatDateTime(contractReturn.contractGeneratedAt):"—"}</dd></div>
+                          <div><dt>回传截止时间</dt><dd>{contractReturn.contractReturnDueAt?formatDateTime(contractReturn.contractReturnDueAt):contractReturn.contractReturnTimeQuality === "unknown" ? "时效未知" : "待合同生成"}</dd></div>
+                          <div><dt>有效回传时间</dt><dd>{contractReturn.contractReturnedAt?formatDateTime(contractReturn.contractReturnedAt):"—"}</dd></div>
                           <div><dt>上传人</dt><dd>{contractReturn.uploadedByName??"—"}</dd></div>
                           <div><dt>{contractReturn.contractReturnCycleId ? "本次回签状态" : "首次回签状态"}</dt><dd className={`sourcing-contract-return-status sourcing-contract-return-status--${contractReturn.contractReturnStatus}`}>{sourcingContractReturnLabel(contractReturn)}</dd></div>
                         </dl>

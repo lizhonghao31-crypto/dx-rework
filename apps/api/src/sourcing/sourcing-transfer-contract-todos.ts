@@ -45,7 +45,7 @@ export class SourcingTransferContractTodos {
         decision.source_change_request_id,decision.supplier_name_snapshot,source.created_by,
         nullif(to_jsonb(source)->>'additional_merchandiser_user_id','')::uuid AS additional_merchandiser_user_id,
         snapshot.operation_event_id,event.action AS source_action,decision.source_price_request_id IS NOT NULL AS price_change,
-        CASE WHEN clock.return_cycle_id IS NOT NULL THEN clock.contract_returned_at IS NOT NULL ELSE EXISTS(SELECT 1 FROM sourcing_contract_return_submissions signed
+        CASE WHEN clock.return_cycle_id IS NOT NULL THEN clock.has_valid_return ELSE EXISTS(SELECT 1 FROM sourcing_contract_return_submissions signed
           JOIN sourcing_contract_return_attachments link ON link.submission_id=signed.submission_id
           JOIN attachments file ON file.attachment_id=link.attachment_id AND file.status='ready'
           WHERE signed.sourcing_contract_document_id=document.sourcing_contract_document_id) END AS returned,
@@ -60,7 +60,7 @@ export class SourcingTransferContractTodos {
       JOIN sourcing_approval_snapshots snapshot ON snapshot.sourcing_approval_snapshot_id=document.sourcing_approval_snapshot_id
       JOIN sourcing_decisions decision ON decision.sourcing_decision_id=snapshot.sourcing_decision_id
       JOIN operation_events event ON event.event_id=snapshot.operation_event_id
-      LEFT JOIN LATERAL sourcing_contract_return_facts(source.sourcing_case_id) clock ON true
+      LEFT JOIN LATERAL sourcing_contract_return_business_state(source.sourcing_case_id) clock ON true
       WHERE source.sourcing_case_id=$1 AND source.deleted_at IS NULL`, [caseId])).rows[0];
     const primary = current ? await effectiveSourcingMerchandiser(client,caseId,current.created_by) : null;
     const recipients = [];

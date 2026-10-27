@@ -8,6 +8,8 @@ describe('business occurrence SQL writer contract',()=>{
   expect(businessTimeWriteViolations('INSERT INTO rework_work_reports(work_report_id,completed_at) SELECT id,CURRENT_TIMESTAMP FROM input')).toEqual(['rework_work_reports.completed_at: SQL wall clock']);
   expect(businessTimeWriteViolations('INSERT INTO digital_bulk_cutting_completions(completed_at) VALUES(now())')).toHaveLength(1);
   expect(businessTimeWriteViolations('INSERT INTO sourcing_contract_business_ready_facts(business_ready_at) VALUES(clock_timestamp())')).toHaveLength(1);
+  expect(businessTimeWriteViolations('INSERT INTO sourcing_contract_return_business_facts(submission_id) VALUES($1)')).toEqual(['sourcing_contract_return_business_facts.business_returned_at: implicit SQL default']);
+  expect(businessTimeWriteViolations('INSERT INTO sourcing_contract_return_business_facts(business_returned_at) VALUES(CURRENT_TIMESTAMP)')).toHaveLength(1);
  });
  it('preserves real audit/security time and accepts explicit occurrence parameters',()=>{
   expect(businessTimeWriteViolations('INSERT INTO operation_events(created_at) VALUES(CURRENT_TIMESTAMP)')).toEqual([]);

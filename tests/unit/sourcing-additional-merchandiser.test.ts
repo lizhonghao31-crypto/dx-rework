@@ -17,6 +17,7 @@ describe("additional merchandiser contract scope",()=>{
   it("allows either named merchandiser to return the first contract but not another merchandiser",async()=>{
     let returned=false;
     const query=vi.fn(async (sql:string)=>{
+      if (sql.includes("sourcing_contract_return_clock_scope")) return {rows:[{native_order_id:null,scenario_id:null}]};
       if (sql.includes("business_module_owner_bindings")) return {rows:[{available:false}]};
       if (sql.includes("FROM sourcing_cases source_case")) return {rows:[{
         sourcing_case_id:caseId,created_by:creator,additional_merchandiser_user_id:additional,

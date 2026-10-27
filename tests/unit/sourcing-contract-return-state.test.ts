@@ -57,6 +57,21 @@ describe("contract return 48-hour clock", () => {
   });
 });
 
+describe("contract return evidence quality", () => {
+  it("keeps proven endpoints but excludes an unproven interval from status and overdue metrics", () => {
+    const unknown=contractReturnState({...facts,time_quality:"unknown",time_reason:"缺原起点",contract_return_overdue_seconds:99999},due);
+    expect(unknown).toMatchObject({contractReturnMonitoring:true,contractReturnStatus:null,contractReturnOverdueHours:null,contractReturnTimeQuality:"unknown",contractReturnTimeReason:"缺原起点",contractReturnAsOf:due,contractGeneratedAt:generated});
+    expect(sourcingContractReturnBadgeLabel(unknown)).toBe("回签时效未知");
+    expect(sourcingContractReturnLabel(unknown)).toBe("回签时效未知");
+  });
+  it("preserves the complete ordinary audit response without adding a volatile observation field",()=>{
+    expect(contractReturnState({...facts,time_quality:"legacy_audit"},due)).toEqual(contractReturnState(facts,due));
+  });
+  it("does not expose current timing or evidence on the pre-existing hidden history path", () => {
+    expect(contractReturnState({...facts,time_quality:"unknown",time_reason:"current scene",contract_return_monitor_enabled:false},due)).toEqual({contractReturnMonitoring:false,contractReturnStatus:null,contractGeneratedAt:null,contractReturnDueAt:null,contractReturnedAt:null,contractReturnOverdueHours:null});
+  });
+});
+
 describe("contract return wording", () => {
   it("distinguishes unreturned lateness from a late signed contract", () => {
     expect(sourcingContractReturnBadgeLabel({contractReturnStatus:"overdue_pending",contractReturnOverdueHours:0})).toBe("逾期 <1 小时");
