@@ -2564,7 +2564,9 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       await expect(reporting.report(user,order.productionOrderId,{position:1,businessDate:dispatchDates.before_dispatch,quantity:1},randomUUID()))
         .rejects.toMatchObject({statusCode:400,message:"上报业务日期不能早于正式派单日期"});
     }
-    expect(await reporting.detail(reporter(),order.productionOrderId)).toEqual(beforeRejectedReports);
+    const afterRejectedReports=await reporting.detail(reporter(),order.productionOrderId);
+    expect(Date.parse(afterRejectedReports.asOf!)).toBeGreaterThanOrEqual(Date.parse(beforeRejectedReports.asOf!));
+    expect(afterRejectedReports).toEqual({...beforeRejectedReports,asOf:afterRejectedReports.asOf});
     const key=randomUUID(),input={position:1,businessDate:dispatchDates.dispatched_on,quantity:10};
     const [first,duplicate]=await Promise.all([reporting.report(reporter(),order.productionOrderId,input,key),reporting.report(reporter(),order.productionOrderId,input,key)]);
     expect(first.value.order.completedQuantity).toBe(10);expect(duplicate.value.order.completedQuantity).toBe(10);
@@ -2591,7 +2593,9 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
         [reportId,rootReportId,revision,order.productionOrderId,dispatchDates.before_dispatch,merchandiserId,reason,eventId]))
         .rejects.toMatchObject({code:"55000",message:"invalid production report authorization or date/state"});
     }
-    expect(await reporting.detail(reporter(),order.productionOrderId)).toEqual(beforeRejectedCorrections);
+    const afterRejectedCorrections=await reporting.detail(reporter(),order.productionOrderId);
+    expect(Date.parse(afterRejectedCorrections.asOf!)).toBeGreaterThanOrEqual(Date.parse(beforeRejectedCorrections.asOf!));
+    expect(afterRejectedCorrections).toEqual({...beforeRejectedCorrections,asOf:afterRejectedCorrections.asOf});
     await reporting.correct(rootActor(),order.productionOrderId,firstReport.rootReportId,{expectedReportId:firstReport.reportId,businessDate,quantity:0,reason:"误报撤销，原值仍保留"},randomUUID());
     const corrected=await reporting.detail(reporter(),order.productionOrderId);
     expect(corrected.order.completedQuantity).toBe(6);

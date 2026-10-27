@@ -13,6 +13,7 @@ import {
 import { ApplicationError } from "../platform/errors.js";
 import { IdempotencyService, OperationEventRepository, type TrustedActorContext } from "../tools/repositories.js";
 import { selectFactoryProduction, toOrder, type ProductionRow } from "./sourcing-production-service.js";
+import {assertProductionReportingDate,productionReportingObservation} from './production-reporting-clock.js';
 
 const ROOT = "root_superuser";
 const CAP = "production-reporting";
@@ -25,8 +26,6 @@ const manager = (actor: TrustedActorContext) => isRoot(actor) ||
 const canRead = (actor: TrustedActorContext) => manager(actor) || isProductionReporter(actor)
   || (actor.actorRoles.includes("order_merchandiser") && (actor.authorizationCapabilities ?? [actor.authorizationCapability]).includes("sourcing:view"));
 function fail(message: string, status = 409): never { throw new ApplicationError(status === 403 ? "FORBIDDEN" : status === 404 ? "NOT_FOUND" : status === 400 ? "VALIDATION_ERROR" : "INVALID_STATE_TRANSITION", message, status); }
-const today = () => new Intl.DateTimeFormat("en-CA", {timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
-const dateCheck = (date: string) => { if (date > today()) fail("业务日期不能晚于今天",400); };
 const asIso = (date: string | Date) => new Date(date).toISOString();
 type Query = Pick<PoolClient,"query">;
 // Parent case deletion does not hide production. Scope uses the frozen supplier.
@@ -81,7 +80,7 @@ export class ProductionReportingService {
     const shipment=await client.query<{first_style_no:string;shipped_on:string;recorded_quantity:number}>(
       "SELECT sourcing_current_first_style(production.sourcing_case_id) AS first_style_no,shipment.shipped_on::text,shipment.recorded_quantity FROM sourcing_production_shipments shipment JOIN sourcing_production_orders production USING(production_order_id) WHERE production_order_id=$1 AND shipment.factory_decision_id IS NOT DISTINCT FROM $2::uuid",[id,factoryDecisionId]);
     const allowed=await client.query<{allowed:boolean}>("SELECT sourcing_production_factory_reporter_allowed($1,$2,$3) AS allowed",[actor.actorId,id,factoryDecisionId]);
-    return ProductionReportingDetailSchema.parse({order,canReport:await memberCanWriteModule(client,actor.actorId,"sourcing")&&isProductionReporter(actor)&&(isRoot(actor)||allowed.rows[0]?.allowed===true),canCorrect:isRoot(actor),
+    return ProductionReportingDetailSchema.parse({order,...await productionReportingObservation(this.database,client,id),canReport:await memberCanWriteModule(client,actor.actorId,"sourcing")&&isProductionReporter(actor)&&(isRoot(actor)||allowed.rows[0]?.allowed===true),canCorrect:isRoot(actor),
       history:history.rows.map(r=>({reportId:r.report_id,rootReportId:r.root_report_id,revision:r.revision,position:r.position,businessDate:r.business_date,
         quantity:r.quantity,actorName:r.actor_name,createdAt:asIso(r.created_at),reason:r.reason,effective:r.effective})),
       transitions:transitions.rows.map(r=>({status:r.status,businessDate:r.business_date,actorName:r.display_name,createdAt:asIso(r.created_at)})),
@@ -104,7 +103,7 @@ export class ProductionReportingService {
     } catch(error) {await client.query("ROLLBACK").catch(()=>undefined);throw error;} finally {client.release();}
   }
   async report(actor:TrustedActorContext,id:string,input:ProductionReportInput,key:string) {
-    const parsed=ProductionReportInputSchema.safeParse(input);if (!parsed.success) fail("请填写款色、有效日期和本次新增数量",400);dateCheck(parsed.data.businessDate);
+    const parsed=ProductionReportInputSchema.safeParse(input);if (!parsed.success) fail("请填写款色、有效日期和本次新增数量",400);
     if (!isProductionReporter(actor)) fail("仅驻厂填报人员可上报",403);
     return this.write(actor,id,key,"sourcing.production.report",parsed.data,parsed.data.factoryDecisionId??null,async client=>{
       const factoryDecisionId=parsed.data.factoryDecisionId??null;const order=await this.order(client,actor,id,factoryDecisionId);if(order.status!=="in_production")fail("生产完成后不能继续日常上报");
@@ -116,7 +115,7 @@ export class ProductionReportingService {
   }
   async correct(actor:TrustedActorContext,id:string,rootReportId:string,input:ProductionCorrectionInput,key:string) {
     if(!isRoot(actor))fail("仅Root可修正生产记录",403);
-    const parsed=ProductionCorrectionInputSchema.safeParse(input);if(!parsed.success)fail("修正必须填写有效数量、日期和原因",400);dateCheck(parsed.data.businessDate);
+    const parsed=ProductionCorrectionInputSchema.safeParse(input);if(!parsed.success)fail("修正必须填写有效数量、日期和原因",400);
     return this.write(actor,id,key,"sourcing.production.correct",{rootReportId,...parsed.data},parsed.data.factoryDecisionId??null,async client=>{
       const factoryDecisionId=parsed.data.factoryDecisionId??null;const order=await this.order(client,actor,id,factoryDecisionId);
       const result=await client.query<{report_id:string;revision:number;position:number;quantity:number}>(
@@ -140,12 +139,13 @@ export class ProductionReportingService {
     const eventId=await this.events.append(client,{...actor,authorizationCapability:CAP},{
       action:revision===1?"sourcing.production.report":"sourcing.production.correct",entityType:"sourcing_production_report",entityId:reportId,
       ...(before?{before}:{}),after:{factoryDecisionId:input.factoryDecisionId??null,productionOrderId:id,rootReportId,revision,position:input.position,businessDate:input.businessDate,quantity:input.quantity},reason:reason??"驻厂人员上报本次新增生产数量"});
+    await assertProductionReportingDate(client,id,eventId,input.businessDate);
     await client.query(`INSERT INTO sourcing_production_reports(report_id,root_report_id,revision,production_order_id,position,business_date,quantity,actor_id,actor_name,reason,operation_event_id,factory_decision_id)
       SELECT $1,$2,$3,$4,$5,$6,$7,id,display_name,$9,$10,$11 FROM app_users WHERE id=$8`,
       [reportId,rootReportId,revision,id,input.position,input.businessDate,input.quantity,actor.actorId,reason,eventId,input.factoryDecisionId??null]);
   }
   async execute(actor:TrustedActorContext,id:string,kind:"complete"|"ship",input:ProductionExecutionInput,key:string) {
-    const parsed=ProductionExecutionInputSchema.safeParse(input);if(!parsed.success)fail("请填写业务日期并确认操作",400);dateCheck(parsed.data.businessDate);
+    const parsed=ProductionExecutionInputSchema.safeParse(input);if(!parsed.success)fail("请填写业务日期并确认操作",400);
     if(!isProductionReporter(actor))fail("仅驻厂填报人员可记录生产完成或发货",403);
     return this.write(actor,id,key,`sourcing.production.${kind}`,parsed.data,parsed.data.factoryDecisionId??null,async client=>{
       const factoryDecisionId=parsed.data.factoryDecisionId??null;const order=await this.order(client,actor,id,factoryDecisionId);const expected=kind==="complete"?"in_production":"production_completed";
@@ -156,6 +156,7 @@ export class ProductionReportingService {
       const status=kind==="complete"?"production_completed":"shipped";
       const eventId=await this.events.append(client,{...actor,authorizationCapability:CAP},{action:`sourcing.production.${kind}`,entityType:"sourcing_production_order",entityId:id,
         before:{status:order.status},after:{factoryDecisionId,status,businessDate:parsed.data.businessDate,recordedQuantity:order.completedQuantity,firstStyleNo:order.firstStyleNo},reason:kind==="complete"?"确认实际生产完成":"登记供应商实际发货，尚未确认仓库收货"});
+      await assertProductionReportingDate(client,id,eventId,parsed.data.businessDate);
       await client.query(`INSERT INTO sourcing_production_transitions(production_transition_id,production_order_id,sequence,status,business_date,actor_id,operation_event_id,factory_decision_id)
         VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,[randomUUID(),id,kind==="complete"?2:3,status,parsed.data.businessDate,actor.actorId,eventId,factoryDecisionId]);
       if(kind==="ship")await client.query(`INSERT INTO sourcing_production_shipments(production_order_id,first_style_no,shipped_on,recorded_quantity,actor_id,operation_event_id,factory_decision_id)

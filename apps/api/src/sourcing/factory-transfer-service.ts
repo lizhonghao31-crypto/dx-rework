@@ -24,6 +24,6 @@ export async function transferProductionFactory(client:Query,caseId:string,fromD
   for(const line of lines)await client.query(`INSERT INTO sourcing_production_factory_transfer_lines(factory_decision_id,position,retained_quantity,transferred_quantity)
     VALUES($1,$2,$3,$4)`,[decisionId,line.position,line.completed_quantity,line.quantity]);
   await client.query(`INSERT INTO sourcing_production_transitions(production_transition_id,production_order_id,factory_decision_id,sequence,status,business_date,actor_id,operation_event_id,created_at)
-    SELECT $1,$2,$3,1,'in_production',(transfer.effective_at AT TIME ZONE 'Asia/Shanghai')::date,event.actor_id,event.event_id,transfer.effective_at FROM operation_events event JOIN sourcing_production_factory_transfers transfer ON transfer.factory_decision_id=$3 WHERE event.event_id=$4`,
+    SELECT $1,$2,$3,1,'in_production',sourcing_production_business_date($2,$4),event.actor_id,event.event_id,transfer.effective_at FROM operation_events event JOIN sourcing_production_factory_transfers transfer ON transfer.factory_decision_id=$3 WHERE event.event_id=$4`,
     [randomUUID(),production.production_order_id,decisionId,eventId]);
 }

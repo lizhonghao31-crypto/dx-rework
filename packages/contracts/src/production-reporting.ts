@@ -21,11 +21,13 @@ export const ProductionReportHistorySchema = z.object({
 }).strict();
 export const ProductionReportingDetailSchema = z.object({
   order: SourcingProductionOrderSchema,
+  // Old successful idempotency receipts lack both; a new GET supplies the trusted date controls.
+  businessToday:DateOnly.optional(),asOf:z.string().datetime().optional(),
   canReport: z.boolean(), canCorrect: z.boolean(),
   history: z.array(ProductionReportHistorySchema),
   transitions: z.array(z.object({status:z.string(), businessDate:DateOnly, actorName:z.string(), createdAt:z.string().datetime()}).strict()),
   shipment: z.object({firstStyleNo:z.string(), shippedOn:DateOnly, recordedQuantity:z.number().int().nonnegative()}).strict().nullable(),
-}).strict();
+}).strict().refine(value=>(value.businessToday===undefined)===(value.asOf===undefined),'日期上限与观测时刻必须同时提供');
 export const ProductionReportingListSchema = z.object({
   items: z.array(SourcingProductionOrderSchema).max(15), page:z.number().int().positive(), pageSize:z.literal(15), totalCount:z.number().int().nonnegative(),
   suppliers:z.array(z.object({supplierId:Id,supplierName:z.string()}).strict()),

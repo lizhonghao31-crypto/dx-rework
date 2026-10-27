@@ -11,7 +11,7 @@ const patterns={wall:/\b(?:CURRENT_TIMESTAMP|CURRENT_DATE|LOCALTIMESTAMP|clock_t
  anchor:/\b(?:max|min)\s*\([^;\n]*(?:_at|occurred|completed|generated)|Math\.(?:max|min)\([^;\n]*(?:[Aa]t|[Tt]ime|[Dd]ate)/gi};
 function ownership(path){
  if(path.startsWith('scripts/'))return 'PR6';
- if(/production-reporting|production-execution|factory-remainder-executions/.test(path))return 'PR2';
+ if(/production[-_]reporting|production[-_]execution|factory[-_]remainder[-_]executions|factory-transfer-service/.test(path))return 'PR2';
  if(/contract-return|contract_return|return-cycle/.test(path))return 'PR3';
  if(path.startsWith('apps/web/'))return 'PR5';
  if(/factory-flow-service|factory-batch-timing|contract-business-ready|budget-sourcing-adapter|work-reporting-service|\/task-service|0263_contract_business_ready/.test(path))return 'PR1';
