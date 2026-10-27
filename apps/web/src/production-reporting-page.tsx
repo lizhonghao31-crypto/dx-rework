@@ -5,7 +5,7 @@ import { shanghaiBusinessTime } from "./business-date.js";
 import { productionDisplayReturnUrl } from "./production-display-context.js";
 import { moduleCanWrite } from "./member-module-policy.js";
 import { NavigationIcon } from "./navigation-icons.js";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { z } from "zod";
 import { ProductionReportingDetailSchema, ProductionReportingListSchema, ProductionScopeDirectorySchema,
   type ProductionReportingDetail, type ProductionScopeInput } from "@dx-rework/contracts";
@@ -13,6 +13,7 @@ import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { Button, StatusBadge, Surface } from "@dx-rework/ui";
 import { Header, Shell } from "./components.js";
 import { verifySession, type AuthorizedUser } from "./auth.js";
+import {registerSessionInvalidator,sessionCacheVersion} from './auth-session.js';
 import { ListPagination } from "./list-pagination.js";
 import { createClientRequestId } from "./client-request-id.js";
 import { confirmInApp } from "./system-dialog.js";
@@ -32,50 +33,78 @@ export async function saveProductionScope(input:ProductionScopeInput,key:string)
  const response=await feedbackFetch(apiUrl("production-reporting/scopes"),{method:"POST",credentials:"include",headers:{"content-type":"application/json","idempotency-key":key},body:JSON.stringify(input)});await feedbackJson(response,"POST",value=>{if(!value||typeof value!=="object"||!("saved"in value)||value.saved!==true)throw Error("invalid scope receipt");return value;});
 }
 
-type ProductionAttempt={payload:string;key:string;startedAt:number;uncertain?:boolean};
+type ProductionAttempt={payload:string;key:string;startedAt:number;uncertain?:boolean;inFlight?:boolean};
+// In-memory recovery belongs to the verified principal and original command,
+// not to a mounted detail. No payload/key is persisted or shared across users.
+const productionAttempts=new Map<string,ProductionAttempt>(),scopeAttempts=new Map<string,ProductionAttempt>();
+let attemptRevision=0;
+const attemptListeners=new Set<()=>void>(),attemptSnapshot=()=>attemptRevision;
+const subscribeAttempts=(listener:()=>void)=>{attemptListeners.add(listener);return()=>{attemptListeners.delete(listener);};};
+const changedAttempts=()=>{attemptRevision++;for(const listener of attemptListeners)listener();};
 export function ProductionReportingPage({productionOrderId}:{productionOrderId?:string|undefined}) {
+  useSyncExternalStore(subscribeAttempts,attemptSnapshot,attemptSnapshot);
   const factoryDecisionId=new URLSearchParams(window.location.search).get('factoryDecisionId');
   const factoryQuery=factoryDecisionId?'?'+new URLSearchParams({factoryDecisionId}):'';
-  const [user,setUser]=useState<AuthorizedUser|null>(null),[error,setError]=useState(""),[message,setMessage]=useState("");
+  const identityVersion=useSyncExternalStore(registerSessionInvalidator,sessionCacheVersion,sessionCacheVersion);
+  const [verified,setVerified]=useState<{version:number;user:AuthorizedUser}|null>(null),[error,setError]=useState(""),[message,setMessage]=useState("");
+  const user=verified?.version===identityVersion?verified.user:null;
   const [busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[page,setPage]=useState(1);
   const [q,setQ]=useState(""),[supplier,setSupplier]=useState(""),[status,setStatus]=useState("");
-  const [list,setList]=useState<z.infer<typeof ProductionReportingListSchema>|null>(null);
-  const [detail,setDetail]=useState<ProductionReportingDetail|null>(null);
+  const [listResult,setList]=useState<{key:string;value:z.infer<typeof ProductionReportingListSchema>}|null>(null);
+  const [detailResult,setDetail]=useState<{key:string;value:ProductionReportingDetail}|null>(null);
   const [quantities,setQuantities]=useState<Record<number,string>>({}),[date,setDate]=useState('');
   const [correcting,setCorrecting]=useState<ProductionReportingDetail["history"][number]|null>(null);
   const [correctionQuantity,setCorrectionQuantity]=useState(""),[correctionDate,setCorrectionDate]=useState(''),[reason,setReason]=useState("");
-  const [directory,setDirectory]=useState<z.infer<typeof ProductionScopeDirectorySchema>|null>(null);
+  const [directoryResult,setDirectory]=useState<{key:string;value:z.infer<typeof ProductionScopeDirectorySchema>}|null>(null);
   const [scopeError,setScopeError]=useState("");
   const [scopeUser,setScopeUser]=useState(""),[scopeRefreshPending,setScopeRefreshPending]=useState(false),[scopeSupplier,setScopeSupplier]=useState("");
-  const contextKey=`${user?.id??"unverified"}:${productionOrderId??"list"}:${factoryDecisionId??"original"}`,context=useRef(contextKey);context.current=contextKey;
+  // Permission changes invalidate reads without discarding this principal's
+  // original uncertain command or authorizing another command in its place.
+  const authority=user?[user.id,user.isRoot===true,[...(user.businessRoles??[])].sort(),[...user.capabilities].sort(),user.effectiveWriteCapabilities?[...user.effectiveWriteCapabilities].sort():null,[...(user.readOnlyModules??[])].sort()]:null;
+  const contextKey=JSON.stringify([authority,productionOrderId??null,factoryDecisionId]);
+  const commandKey=JSON.stringify([user?.id??null,productionOrderId??null,factoryDecisionId]);
+  const readKey=JSON.stringify([contextKey,identityVersion]),context=useRef(readKey);context.current=readKey;
+  const sameOrder=(value:ProductionReportingDetail)=>value.order.productionOrderId===productionOrderId&&(value.order.factoryDecisionId??null)===factoryDecisionId;
+  const detail=productionOrderId&&detailResult?.key===readKey&&sameOrder(detailResult.value)?detailResult.value:null;
+  const list=!productionOrderId&&listResult?.key===readKey?listResult.value:null;
+  const directory=directoryResult?.key===readKey?directoryResult.value:null;
   const dateContext=useRef('');
   const businessToday=detail&&detail.order.productionOrderId===productionOrderId&&(detail.order.factoryDecisionId??null)===factoryDecisionId&&detail.asOf?detail.businessToday:undefined;
   useEffect(()=>{
     if(!businessToday)return;
     if(dateContext.current!==contextKey){dateContext.current=contextKey;setDate(businessToday);setCorrectionDate(businessToday);}
   },[businessToday,contextKey]);
-  const pendingByContext=useRef(new Map<string,ProductionAttempt>());
-  const retry=useMemo(()=>{const attempts=pendingByContext.current;return {get current(){return attempts.get(contextKey)??null;},set current(value:ProductionAttempt|null){if(value)attempts.set(contextKey,value);else attempts.delete(contextKey);}};},[contextKey]);
-  const mutation=useRef(false),scopeRetry=useRef<{payload:string;key:string;startedAt:number;uncertain?:boolean}|null>(null),version=useRef(0);
-  useEffect(()=>{void verifySession().then(s=>{if(s!=="denied"&&s.status==="authorized")setUser(s.user);});},[]);
+  const retry=useMemo(()=>({get current(){return productionAttempts.get(commandKey)??null;},set current(value:ProductionAttempt|null){if(value)productionAttempts.set(commandKey,value);else productionAttempts.delete(commandKey);changedAttempts();}}),[commandKey]);
+  const scopeKey=user?.id??'unverified';
+  const scopeRetry=useMemo(()=>({get current(){return scopeAttempts.get(scopeKey)??null;},set current(value:ProductionAttempt|null){if(value)scopeAttempts.set(scopeKey,value);else scopeAttempts.delete(scopeKey);changedAttempts();}}),[scopeKey]);
+  const mutation=useRef(false),version=useRef(0);
+  useEffect(()=>{let live=true;const pending=verifySession(),version=sessionCacheVersion();void pending.then(s=>{if(live&&version===sessionCacheVersion())setVerified(s!=="denied"&&s.status==="authorized"?{version,user:s.user}:null);});return()=>{live=false;};},[identityVersion]);
+  useEffect(()=>{setError('');setMessage('');setScopeError('');setQuantities({});setCorrecting(null);setScopeUser('');setScopeSupplier('');},[readKey]);
   const load=async()=>{
+    if(!user)return;
+    const startedContext=readKey;
     const current=++version.current;setLoading(true);setError("");
     try {
-      if(productionOrderId){const result=await request(`/${productionOrderId}${factoryQuery}`,ProductionReportingDetailSchema);if(current===version.current)setDetail(result);}
+      if(productionOrderId){const result=await request(`/${productionOrderId}${factoryQuery}`,ProductionReportingDetailSchema);if(!sameOrder(result))throw new Error('生产资料与当前订单或工厂版本不一致，请从原订单重新读取');if(current===version.current&&context.current===startedContext)setDetail({key:startedContext,value:result});}
       else {const params=new URLSearchParams({page:String(page)});if(q.trim())params.set("q",q.trim());if(supplier)params.set("supplierId",supplier);if(status)params.set("status",status);
-        const result=await request(`?${params}`,ProductionReportingListSchema);if(current===version.current)setList(result);}
-    }catch(e){if(current===version.current)setError(e instanceof Error?e.message:"加载失败");}
-    finally{if(current===version.current)setLoading(false);}
+        const result=await request(`?${params}`,ProductionReportingListSchema);if(current===version.current&&context.current===startedContext)setList({key:startedContext,value:result});}
+    }catch(e){if(current===version.current&&context.current===startedContext)setError(e instanceof Error?e.message:"加载失败");}
+    finally{if(current===version.current&&context.current===startedContext)setLoading(false);}
   };
-  useEffect(()=>{const timer=setTimeout(()=>{void load();},q?250:0);return()=>{clearTimeout(timer);version.current++;};},[productionOrderId,factoryDecisionId,page,q,supplier,status]);
+  useEffect(()=>{const timer=setTimeout(()=>{void load();},q?250:0);return()=>{clearTimeout(timer);version.current++;};},[readKey,page,q,supplier,status]);
   const write=async(path:string,body:unknown,success:string,recover=false)=>{
-    const startedContext=contextKey;
-    if(mutation.current)return;mutation.current=true;setBusy(true);setError("");setMessage("");
+    const startedContext=readKey;
+    if(!user||!detail||context.current!==startedContext)return;
+    if(mutation.current||retry.current?.inFlight)return;
+    if(recover&&!retry.current)return; // A stale recovery control cannot allocate a new key after confirmation.
+    mutation.current=true;setBusy(true);setError("");setMessage("");
     if(!recover)body={...(body as Record<string,unknown>),factoryDecisionId};const payload=JSON.stringify({path,body});if(retry.current?.uncertain&&retry.current.payload!==payload){setError("上次提交结果尚未确认，请先刷新原订单核对；重试时须保留原内容和请求标识。");mutation.current=false;setBusy(false);return;}if(retry.current?.payload!==payload)retry.current={payload,key:createClientRequestId(),startedAt:Date.now()};
     if(retry.current.uncertain&&Date.now()-retry.current.startedAt>=SUBMISSION_RECOVERY_WINDOW_MS){setError("原提交已超出安全重试时间，请核对原订单；本次未重发，也不会另建请求标识。");mutation.current=false;setBusy(false);return;}
-    try {const result=await request(path,ProductionReportingDetailSchema,{method:"POST",body:JSON.stringify(body),headers:{"idempotency-key":retry.current.key}});
-      retry.current=null;if(context.current!==startedContext)return;setDetail(result);setMessage(success);setQuantities({});setCorrecting(null);
-    }catch(e){if(retry.current?.uncertain||unknownWriteResult(e)){if(retry.current)retry.current.uncertain=true;}else retry.current=null;if(context.current===startedContext)setError((e instanceof Error?e.message:"提交结果尚未确认，请核对原订单")+(retry.current?.uncertain?"；原提交结果仍未确认，请核对原订单。":""));}finally{mutation.current=false;setBusy(false);}
+    const attempt=retry.current;attempt.inFlight=true;changedAttempts();
+    try {const result=await request(path,ProductionReportingDetailSchema,{method:"POST",body:JSON.stringify(body),headers:{"idempotency-key":attempt.key}});
+      if(!sameOrder(result))throw new Error('提交回执与原订单或工厂版本不一致，结果尚未确认，请核对原记录');
+      retry.current=null;if(context.current!==startedContext)return;setDetail({key:startedContext,value:result});setMessage(success);setQuantities({});setCorrecting(null);
+    }catch(e){if(retry.current?.uncertain||unknownWriteResult(e)){if(retry.current)retry.current.uncertain=true;}else retry.current=null;if(context.current===startedContext)setError((e instanceof Error?e.message:"提交结果尚未确认，请核对原订单")+(retry.current?.uncertain?"；原提交结果仍未确认，请核对原订单。":""));}finally{attempt.inFlight=false;changedAttempts();mutation.current=false;setBusy(false);}
   };
   const execute=async(kind:"complete"|"ship")=>{
     if(!detail||busy||selectedLine.lineId||!businessToday||!date)return;
@@ -83,17 +112,19 @@ export function ProductionReportingPage({productionOrderId}:{productionOrderId?:
       `确认已发货？款号 ${detail.order.firstStyleNo}，已登记产量 ${formatBusinessDecimal(detail.order.completedQuantity)} 件。此操作不会确认仓库收货。`;
     if(await confirmInApp(text,{confirmLabel:kind==="complete"?"确认生产完成":"确认已发货"}))await write(`/${productionOrderId}/${kind}`,{businessDate:date,confirmed:true},kind==="complete"?"已登记生产完成":"已登记发货，等待仓库实际收货");
   };
-  const loadScopes=async()=>{try{setDirectory(await request("/scopes",ProductionScopeDirectorySchema));setScopeRefreshPending(false);setScopeError("");setMessage(value=>value.includes("最新范围暂未读取")?"负责范围变更已保存，最新范围已读取。":value);return true;}catch(e){setScopeError(e instanceof Error?e.message:"负责范围未能读取，请重新读取");return false;}};
+  const loadScopes=async()=>{const startedContext=readKey;try{const value=await request("/scopes",ProductionScopeDirectorySchema);if(context.current!==startedContext)return false;setDirectory({key:startedContext,value});setScopeRefreshPending(false);setScopeError("");setMessage(value=>value.includes("最新范围暂未读取")?"负责范围变更已保存，最新范围已读取。":value);return true;}catch(e){if(context.current===startedContext)setScopeError(e instanceof Error?e.message:"负责范围未能读取，请重新读取");return false;}};
   const saveScope=async(input:ProductionScopeInput)=>{
-    if(scopeRefreshPending){setScopeError("负责范围已保存，请先重新读取负责范围；本次未重复提交。");return;}if(mutation.current)return;mutation.current=true;setBusy(true);setScopeError("");setMessage("");
+    const startedContext=readKey;
+    if(scopeRefreshPending){setScopeError("负责范围已保存，请先重新读取负责范围；本次未重复提交。");return;}if(mutation.current||scopeRetry.current?.inFlight)return;mutation.current=true;setBusy(true);setScopeError("");setMessage("");
     const payload=JSON.stringify(input);if(scopeRetry.current?.uncertain&&scopeRetry.current.payload!==payload){setScopeError("上次负责范围提交结果尚未确认，请先读取原范围核对；重试时须保留原内容和请求标识。");mutation.current=false;setBusy(false);return;}if(scopeRetry.current?.payload!==payload)scopeRetry.current={payload,key:createClientRequestId(),startedAt:Date.now()};
     if(scopeRetry.current.uncertain&&Date.now()-scopeRetry.current.startedAt>=SUBMISSION_RECOVERY_WINDOW_MS){setScopeError("原提交已超出安全重试时间，请核对原负责范围；本次未重发，也不会另建请求标识。");mutation.current=false;setBusy(false);return;}
-    try{await saveProductionScope(input,scopeRetry.current.key);scopeRetry.current=null;setScopeRefreshPending(true);
-      setMessage(input.active?"负责范围已保存":"负责范围已撤销");
-      const refreshed=await loadScopes();if(!refreshed)setMessage("负责范围已保存，最新范围暂未读取；请重新读取负责范围，不要重复提交。");
-    }catch(e){if(scopeRetry.current?.uncertain||unknownWriteResult(e)){if(scopeRetry.current)scopeRetry.current.uncertain=true;}else scopeRetry.current=null;setScopeError((e instanceof Error?e.message:"负责范围提交结果尚未确认，请读取原范围核对")+(scopeRetry.current?.uncertain?"；原提交结果仍未确认，请读取原范围核对。":""));}finally{mutation.current=false;setBusy(false);}
+    const attempt=scopeRetry.current;attempt.inFlight=true;changedAttempts();
+    try{await saveProductionScope(input,attempt.key);scopeRetry.current=null;setScopeRefreshPending(true);
+      if(context.current!==startedContext)return;setMessage(input.active?"负责范围已保存":"负责范围已撤销");
+      const refreshed=await loadScopes();if(context.current!==startedContext)return;if(!refreshed)setMessage("负责范围已保存，最新范围暂未读取；请重新读取负责范围，不要重复提交。");
+    }catch(e){if(scopeRetry.current?.uncertain||unknownWriteResult(e)){if(scopeRetry.current)scopeRetry.current.uncertain=true;}else scopeRetry.current=null;if(context.current===startedContext)setScopeError((e instanceof Error?e.message:"负责范围提交结果尚未确认，请读取原范围核对")+(scopeRetry.current?.uncertain?"；原提交结果仍未确认，请读取原范围核对。":""));}finally{attempt.inFlight=false;changedAttempts();mutation.current=false;setBusy(false);}
   };
-  const pendingProduction=retry.current?.uncertain?JSON.parse(retry.current.payload) as {path:string;body:{factoryDecisionId?:string|null}}:null;
+  const pendingProduction=retry.current&&(retry.current.uncertain||retry.current.inFlight)?JSON.parse(retry.current.payload) as {path:string;body:{factoryDecisionId?:string|null}}:null;
   const canRecoverProduction=Boolean(pendingProduction&&pendingProduction.path.startsWith(`/${productionOrderId}/`)&&(pendingProduction.body.factoryDecisionId??null)===factoryDecisionId);
   const recoverProduction=async()=>{if(!canRecoverProduction||!pendingProduction||busy)return;await write(pendingProduction.path,pendingProduction.body,"原生产提交已确认，最新办理状态已读取。",true);};
   const selectedLine=productionLineTarget(window.location.search,detail?.order.poDeliveryDates);
@@ -103,7 +134,7 @@ export function ProductionReportingPage({productionOrderId}:{productionOrderId?:
     <a href={pageUrl("ui/production-dashboard")}><NavigationIcon route="/ui/production-dashboard" />实时看板</a>
     {error?<p role="alert" className="sourcing-delete-error">{error}</p>:null}
     {scopeError?<p role="alert" className="sourcing-delete-error">{scopeError}</p>:null}
-    {canRecoverProduction?<section aria-label="原生产提交恢复"><p>原生产提交结果仍未确认。刷新后的业务阶段不会撤销原请求；请先用原内容核对结果，再办理下一步。</p><Button disabled={busy||loading} onClick={()=>void recoverProduction()}>使用原内容核对生产提交</Button></section>:null}
+    {canRecoverProduction?<section aria-label="原生产提交恢复"><p>原生产提交结果仍未确认。刷新后的业务阶段不会撤销原请求；请先用原内容核对结果，再办理下一步。</p><Button disabled={busy||loading||!detail||retry.current?.inFlight} onClick={()=>void recoverProduction()}>使用原内容核对生产提交</Button></section>:null}
     {message?<p role="status">{message}</p>:null}
     {productionOrderId?<a href={orderReturn??productionDisplayReturnUrl(new URLSearchParams(window.location.search).get("returnTo"))??pageUrl("ui/production-reporting")}>{orderReturn?"返回这张订单":productionDisplayReturnUrl(new URLSearchParams(window.location.search).get("returnTo"))?"返回实时生产展示":"返回生产订单"}</a>:null}
     <Button disabled={busy||loading} variant="secondary" onClick={()=>{void load();}}>刷新</Button>

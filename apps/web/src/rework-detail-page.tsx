@@ -169,6 +169,7 @@ type WorkflowNode = Readonly<{
   ownerName: string;
   state: WorkflowNodeState;
   preview: string;
+  prerequisite?: string;
 }>;
 type WorkflowStage = Readonly<{ key: string; title: string; nodes: readonly WorkflowNode[] }>;
 
@@ -302,7 +303,15 @@ const currentOwner = (
   confirmedAssignee: boolean,
 ): string => state === "current" && confirmedAssignee && user ? user.displayName : fallback;
 
-const buildWorkflow = (
+const n05RecordedHandler = (detail: ReworkBusinessDetail, state: WorkflowNodeState): string => {
+  if (state !== 'completed') return '未记录具体负责人';
+  const facts=detail.workflowHistory.filter(event=>event.action==='rework.tail_completion.confirm'&&Number.isFinite(Date.parse(event.handledAt)));
+  const latest=Math.max(...facts.map(event=>Date.parse(event.handledAt)));
+  const names=new Set(facts.filter(event=>Date.parse(event.handledAt)===latest).map(event=>event.handledBy).filter(Boolean));
+  return names.size===1?[...names][0]!:'未记录具体负责人';
+};
+
+export const buildWorkflow = (
   detail: ReworkBusinessDetail,
   user: AuthorizedUser | null,
   assignedNode?: WorkflowNodeKey,
@@ -321,9 +330,10 @@ const buildWorkflow = (
       number,
       label,
       ownerRole,
-      ownerName: currentOwner(state, user, fallbackOwner, assignedNode === key),
+      ownerName: key==='whole_order_review'?n05RecordedHandler(detail,state):currentOwner(state, user, fallbackOwner, assignedNode === key),
       state,
       preview,
+      ...(key==='whole_order_review'?{prerequisite:detail.status==='cancelled'?'订单已取消，不可办理':state==='future'?'待全部执行报数完成':state==='current'?'执行报数已完成，可办理最终数量确认':'最终数量确认已提交'}:{}),
     };
   };
   return [
@@ -347,7 +357,7 @@ const buildWorkflow = (
       key: "responsibility",
       title: detail.reworkKind === "inhouse_finishing" ? "最终确认与计薪" : "责任与结算",
       nodes: [
-        node("whole_order_review", "05", "尾部最终数量确认", "尾部主管", "待全部执行报数完成", detail.tailInspectionRequired ? `逐工序对照工人原报数与${specialProcessLabel(detail)}数，提交最终确认数量并保留每版审计。` : "系统按工人有效上数生成最终数量，并保留每版审计。"),
+        node("whole_order_review", "05", "尾部最终数量确认", "尾部主管", "未记录具体负责人", detail.tailInspectionRequired ? `逐工序对照工人原报数与${specialProcessLabel(detail)}数，提交最终确认数量并保留每版审计。` : "系统按工人有效上数生成最终数量，并保留每版审计。"),
         node("final_quantity_ie_review", "06", "IE 最终数量复核", "IE", "待 N05 提交", detail.reworkKind === "inhouse_finishing" ? "IE 复核通过后按原上数计薪并完成本厂做尾，不进入责任判定或老板签字；退回则回到 N05。" : "只复核数量与质量事实；通过后生成正式工资，退回则回到 N05。"),
         ...(detail.reworkKind === "inhouse_finishing" ? [] : [
         node("responsibility", "07", "责任判定", "供应链总监", "待 N06 通过", "每道工序可登记多个责任方，比例合计为100%；外部扣款倍率默认且最低1.2，可按原规则上调。"),
@@ -648,7 +658,7 @@ function CurrentReworkDetailPage({
       </StatusBadge>
       <h2>{selected.number} · {selected.label}</h2>
       <p>{selected.preview}</p>
-      <p>负责角色：{selected.ownerRole}{" · "}实际负责人：{selected.ownerName}</p>
+      {selected.key!=='whole_order_review'&&<p>负责角色：{selected.ownerRole}{" · "}实际负责人：{selected.ownerName}</p>}
       {selected.state === "completed" && (
         <details className="rework-detail-node-history">
           <summary>处理历史{nodeHistory.length ? ` · ${formatBusinessDecimal(nodeHistory.length)} 条` : ""}</summary>
@@ -840,6 +850,7 @@ function CurrentReworkDetailPage({
             {detail.inspectionReport ? <InspectionReportReadonly report={detail.inspectionReport} /> : null}
             <section id="node-workspace" className="rework-detail-task rework-detail-workspace" aria-label="节点任务">
               <div className="rework-detail-task__heading"><h2>办理区<span className="rework-mobile-current-node"> · {selected?.number} {selected?.label}</span></h2>{detail.canReadBusinessDetails !== false && <span className="rework-detail-single-piece-total">单件返工总价：{detail.singlePieceReworkTotal === null ? "待核价" : formatBusinessCurrency(detail.singlePieceReworkTotal)}</span>}</div>
+              {selected?.key==='whole_order_review'&&<div aria-label="最终数量确认责任"><p>前置条件：{selected.prerequisite}</p><p>负责角色：{selected.ownerRole} · {selected.state==='completed'?'已记录办理人':'实际负责人'}：{selected.ownerName}</p></div>}
               {detail.status === "pending_process_configuration" && canHandleInitiation ? <InitiationFollowUpActions detail={detail} statusLabel={statusMeta[detail.status].label} canHandleInitiation={initiationAccess.canWithdraw} ownershipNotice={initiationOwnershipNotice} onChanged={syncAfterNodeAction} /> : null}
               {canWaiveTailInspection ? <TailInspectionWaiverAction detail={detail} onChanged={syncAfterNodeAction} /> : null}
               {invalidSelectedNode?<p role="alert">该业务没有此办理节点，请选择本单已有节点查看。</p>:renderSelectedTask()}

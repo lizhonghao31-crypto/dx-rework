@@ -8,6 +8,15 @@ const url=(value:string)=>new URL(value,'https://local.invalid');
 const detail=(kind:string,id:string,extra:Record<string,string>={})=>'/ui/digital-production?'+new URLSearchParams({[kind]:id,...extra});
 afterEach(()=>vi.unstubAllGlobals());
 describe('existing source and presentation context survive native detail hops',()=>{
+ it.each(['/','/acceptance/'])('validates selected document versions while retaining the original source identity: %s',base=>{
+  const standalone=base+'ui/digital-production?'+new URLSearchParams({development:order,round:'2',documentKind:'budget',documentCategory:'budget',budgetVersion:'3',returnTo:base+'ui/my-tasks?q=TEST&page=3'});
+  expect(digitalDetailReturnUrl(standalone,base)).toBe(standalone);expect(digitalDetailRoute(url(standalone).search)).toEqual({kind:'development',id:order,version:2});
+  const designer=base+'ui/digital-production?'+new URLSearchParams({workspace:'designer',development:order,round:'2',selected:order,search:'TEST',page:'2',documentKind:'budget',documentCategory:'budget',budgetVersion:'current'});
+  expect(digitalDetailReturnUrl(designer,base)).toBe(designer);
+  for(const value of ['0','-1','3e0','3.5','toString']){const bad=url(standalone);bad.searchParams.set('budgetVersion',value);expect(digitalDetailReturnUrl(bad.pathname+bad.search,base)).toBeNull();}
+  expect(digitalDetailReturnUrl(standalone+'&budgetVersion=3',base)).toBeNull();
+  const orphan=url(designer);orphan.searchParams.delete('development');expect(digitalDetailReturnUrl(orphan.pathname+orphan.search,base)).toBeNull();
+ });
  it.each(['/','/acceptance/'])('returns an inherited record to the exact designer editor and filtered archive: %s',base=>{
   const current=base+'ui/digital-production?'+new URLSearchParams({workspace:'designer',page:'2',search:'TEST-CUSTOMER-FALLBACK',view:'all',selected:order,development:order,round:'3',documentChapter:'development-handling'});
   const child=url(productionWorkspaceDomainHref('/ui/digital-production?'+new URLSearchParams({task:history,taskView:'read'}),url(current).search,base,base+'ui/digital-production'));
