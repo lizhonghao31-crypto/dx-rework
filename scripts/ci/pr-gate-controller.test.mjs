@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {mkdtemp,rm} from 'node:fs/promises';
+import {mkdtemp,rm,readFile} from 'node:fs/promises';
+import {checkTimeSiteInventory} from '../acceptance/time-site-inventory.mjs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {GitHub,GitHubError,decodeGitHubResponse,requestFinal,verifyMerge,reviewStep} from './pr-gate-controller.mjs';
@@ -149,4 +150,13 @@ for(const fault of ['head','mode','base_ref'])test(`late ${fault} drift is rejec
  };
  await assert.rejects(()=>verifyMerge(api,901,head),/moved|changed/);
  assert.equal(state.writes.some(w=>w.path!=='/graphql'),false);
+});
+
+test('cheap CI preflight includes the shared time-source inventory and explicit real audit/security classification',async()=>{
+ assert.deepEqual(await checkTimeSiteInventory(),[]);
+ const inventory=JSON.parse(await readFile('docs/engineering/acceptance-time-sites-20261027.json','utf8'));
+ const entry=inventory.entries.find(e=>e.path==='scripts/ci/pr-gate-controller.mjs');
+ assert.equal(entry.timeDomain,'real-audit-security');
+ assert.equal(entry.semanticStatus,'reviewed-real-audit-security');
+ assert.ok(entry.semanticReview);assert.ok(entry.evidence);
 });
