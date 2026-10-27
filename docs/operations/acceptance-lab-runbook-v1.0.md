@@ -81,11 +81,13 @@ TODO_TIMING_ENABLED=false
 
 本节定义仓库工具的交付行为，不代表服务器已经安装此版本或已经恢复。PR615 已关闭未合并；现场曾安装其衍生脚本并有本地修改，不能把 `247ccd0` 源码当作现场完整脚本。
 
-经审核的 `scripts/dx-acceptance.sh install` 安装完整、不可变的工具版本到 `/opt/dx-rework-acceptance-tools/<工具SHA>`，并原子替换 `/usr/local/bin/dx-acceptance` 启动入口。安装来源必须为干净且经 Gate/Review 核准的 checkout。安装或升级工具是显式运维步骤，不由常规更新偷偷执行。工具版本与业务候选版本分别记录；工具不再从旧业务候选中寻找新维护脚本。
+经审核的 `bash scripts/dx-acceptance.sh install <已核准的40位工具SHA>` 安装完整、不可变的工具版本到 `/opt/dx-rework-acceptance-tools/<工具SHA>`，并原子替换 `/usr/local/bin/dx-acceptance` 与 `/usr/local/bin/dx-rework-update` 两个入口；第二入口失败会恢复两者。安装来源必须为干净且经 Gate/Review 核准的完整远端 checkout，预期 SHA 不符时不得安装。安装或升级工具是显式运维步骤，不由常规更新偷偷执行。工具版本与业务候选版本分别记录；工具不再从旧业务候选中寻找新维护脚本。
 
 后续单一入口为 `dx-acceptance update <已核准的40位候选SHA>`。省略参数时先解析集成分支当前 SHA 并固定该次运行；生产源码只用于既有认证的 fetch/archive，不 checkout、不构建、不部署生产。只有此前通过 Gate 的集成候选才可交付执行。
 
-顺序固定为：候选构建与完整性校验 → 两套实际历史与配置检查 → 实际维护角色只读权限预检 → 必要数据库备份 → 停止Acceptance → 重新检查历史/身份/权限并迁移 → 同代前后端切换 → 本机及公网验收。任何构建、配置、权限、备份失败都不得先停止原服务。
+顺序固定为：生产实际运行保护 → 本机 Acceptance 配置/实际 DB 身份及下载前容量预检 → 固定候选下载与解包前复核 → 原 source-only main/release 兼容检查 → 依赖/构建前容量复核与完整性校验 → 两套实际历史与配置检查 → 实际维护角色只读权限预检 → 备份前容量复核与数据库备份 → 停服前容量复核 → 停止Acceptance → 重新检查历史/身份/权限并迁移 → 同代前后端切换 → 本机/公网及 PM2 持久化验收。任何构建、配置、权限、备份失败都不得先停止原服务。
+
+下载前只允许固定 catalog 元数据读口，不提前导出生产历史或读取业务行：先由原应用连接读取本机数据库名、实际 port/OID、current/session role，Root 固定为不可写证据；随后 Root 通过既有本机 postgres peer 边界，以只读事务和固定 SQL 核同一数据库身份并读取本库体积、数据/表空间、WAL、日志实际位置。语句/锁/连接均有限时。不向应用授予 `pg_read_all_settings`、不改变 owner/成员/ACL；任意身份变化、权限失败或不可读容量均拒绝，不回退到猜测值。迁移仍在原固定 owner 下执行，原 source 兼容检查仍在历史导出、构建、备份、停服和迁移之前。
 
 复用 PR615 的依赖准备、打包、历史校验和资源验证。新的业务候选始终从同一 SHA 构建 API 和 Web，禁止复制旧前端改 manifest。只有具有当前工具产生的构建来源记录、候选 SHA、前端来源 SHA、完整 checksum 的整个候选包才可复用；现场旧候选缺少来源记录时应在停服前拒绝，由运维审核后另行处理，不能自动覆盖已存在的 release。
 
@@ -95,13 +97,19 @@ TODO_TIMING_ENABLED=false
 
 正式只读诊断入口为 `dx-acceptance diagnose <40位候选SHA>`。它使用已安装工具，复用现有认证fetch/archive，在本机产生临时证据并取得运维锁；数据库只读，无候选构建、备份、PM2操作或迁移。权限不满足时完整报告仍输出并返回失败。成功只表示该时刻维护前置条件通过，不表示已部署或业务已验收。
 
-角色报告同时输出实际 `server_version_num` 和成员角色的 `member_rolinherit`。PostgreSQL 16 以前不存在逐条成员关系的 `inherit_option/set_option`；对应报告值为 `not_applicable`，不能解释为 false。有效继承与所有者能力仍使用服务器真实 `pg_has_role(...,'USAGE')` 判断。README 的标准环境要求仍为 PostgreSQL 16；本工具补充 PG15/16 真实诊断、迁移及备份恢复回归，不表示已支持所有更早版本。现场缺少 PG16 catalog 列只能证明该列不可用，不能仅凭客户端路径或此错误断言服务器就是 PG15。
+`diagnose` 不自动刷新工具；新执行策略、依赖或 infra 改动仍必须经显式 `install`。`update` 的 data-only refresh 仅限原 validator 证明全部执行代码/锁依赖一致且冻结迁移/checksum 不变的情形，不能拿新源码替换已安装信任策略。
 
-备份完成后、停服前还要求Acceptance目录所在文件系统剩余空间至少为当前数据库大小且不低于256MiB，否则拒绝停服；这不是数据库所在卷空间充足的证明，独立数据库卷需在现场执行前核实。备份在停进程前完成；它是在线一致性快照，不承诺包含其后的业务写入。迁移历史相同、PM2 当前 stopped，均不能证明备份后没有业务写入或期间未重启；因此新版不自动复用旧进程留下的备份凭据。每次确有更新的调用只备份一次，已是同候选且 schema current、运行验收健康的调用只验证、不重启、不备份。若此前激活失败后候选已停止，同SHA重试核验候选/配置/完整schema后仅重新激活该候选，不重跑迁移或备份，不切回旧代码。保留所有既有备份。额外记录对象 owner/ACL 供恢复核对；现有 dump 使用 `--no-owner --no-acl`，并不自动重建原授权。
+角色报告同时输出实际 `server_version_num` 和成员角色的 `member_rolinherit`。PostgreSQL 16 以前不存在逐条成员关系的 `inherit_option/set_option`；对应报告值为 `not_applicable`，不能解释为 false。有效继承与所有者能力仍使用服务器真实 `pg_has_role(...,'USAGE')` 判断。README 的标准环境要求仍为 PostgreSQL 16；本工具已有 PG15/16 真实诊断、迁移及备份恢复回归，本轮另以实际 PG13.23/16.15 和 Python3.6.15 验证固定存储查询、原维护与隔离恢复；不表示已支持所有其它早期版本。现场缺少 PG16 catalog 列只能证明该列不可用，不能仅凭客户端路径或此错误断言服务器就是 PG15。
+
+每个实际挂载分别按剩余工作预留源码/独立 Git 对象库与认证源码库 fetch 增量、工具 staging、锁依赖/缓存/解压临时集、build/candidate/API release/前端 release、在线备份临时集、数据重写、WAL 与日志余量；现存旧代和备份占用不抵扣。逐卷记录 available/required/shortfall 与真实探针路径，任一卷不足在对应重操作前拒绝；不自动删备份、清历史或扩盘。估算不是空间预留，也不能保证并发写入不耗尽余量；后续阶段仍需复核，精确公式见 [PR6 工程记录](../engineering/acceptance-delivery-capacity-pr6-20261027.md)。原备份后至少256MiB/本库大小的停服前检查继续保留。
+
+备份在停进程前完成；它是在线一致性快照，不承诺包含其后的业务写入。迁移历史相同、PM2 当前 stopped，均不能证明备份后没有业务写入或期间未重启；因此新版不自动复用旧进程留下的备份凭据。每次确有更新的调用只备份一次，已是同候选且 schema current、运行验收健康的调用只验证、不重启、不备份。若此前激活失败后候选已停止，同SHA重试核验候选/配置/完整schema后仅重新激活该候选，不重跑迁移或备份，不切回旧代码。保留所有既有备份。额外记录对象 owner/ACL 供恢复核对；现有 dump 使用 `--no-owner --no-acl`，并不自动重建原授权。
 
 `shared/attachments` 永不清理或随 release 覆盖。数据库回退若需要匹配历史附件，必须另行核实时间点及附件保全，不能只恢复数据库然后宣称附件一致。当前更新工具没有自动回库功能；现有 `restore-postgres.sh` 仅允许隔离演练库，不得放宽其目标限制。
 
 每次尝试写入 `logs/update-<SHA>-<时间>-<PID>`，记录初始进程状态、旧 SHA、完整迁移历史、备份及阶段。失败时保留 root 控制的候选 SQL/现场历史临时证据路径，不输出凭据。
+
+预检证据在 `.acceptance-preflight` 中逐阶段记录，worker 开始后复制到上述日志目录；首次失败尚无 worker 时保留并输出 root 临时证据路径。PM2 live 与 `pm2 save` 后的 dump 都必须仅有 Acceptance API，cwd/script 指向 `releases/<同一SHA>`，不得通过可变 `current` 作为重启依据。公网验证通过后才持久化并核 saved 路径；任一失败仍失败并停止候选，不自动修复旧 dump、旧 owner 或 root PM2。此前旧代恢复也只在原完整历史不变等条件成立时，由新工具明确 pin 旧 SHA；不改写旧 release。
 
 | 失败阶段 | 行为 |
 |---|---|

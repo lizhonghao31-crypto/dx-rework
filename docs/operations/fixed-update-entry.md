@@ -2,13 +2,13 @@
 
 本次范围为发布工具，不修改业务审批、历史 migration 或 UI。PR1 基于 release/digital-production-v1 3684699f；PR2 基于 main ab028c31，保持独立分支历史。两项均使用 FULL，不合并、不部署。
 
-首次由用户从最终合并且审核过的准确 release SHA 的完整远端 checkout 执行 `bash scripts/dx-acceptance.sh install`。不要从生产 partial/promisor 仓库 local clone、shared clone 或复制对象库。安装产生 root 所有的不可变工具版本及原子入口；中断后可以从同一干净 checkout 重试，已有版本不完整时拒绝覆盖。
+首次由用户从最终合并且审核过的准确 release SHA 的完整远端 checkout 执行 `bash scripts/dx-acceptance.sh install <同一40位工具SHA>`。不要从生产 partial/promisor 仓库 local clone、shared clone 或复制对象库。安装先核预期 SHA 与实际卷容量，产生 root 所有的不可变工具版本及两个原子入口；第二入口失败恢复两者。中断后可以从同一干净 checkout 重试，已有版本不完整时拒绝覆盖。
 
 之后固定使用：
 
 ```sh
 dx-rework-update main
-dx-rework-update acceptance
+dx-rework-update acceptance <已核准的40位候选SHA>
 ```
 
 main 复用既有 dx-rework-deploy 入口，不依赖先人工更新 Acceptance。安全切换能力另由 PR2 提供，不能仅安装 PR1 就宣称 main 发布安全。
@@ -18,5 +18,7 @@ Acceptance 通过现有 dxrework Git SSH 身份从唯一远端建立独立完整
 如果工具代码、策略或依赖改变，返回 `TOOL_CODE_UPGRADE_REQUIRED`，发生在构建、备份、停止 Acceptance 和 migration 之前。这里不是未经审核任意 HEAD 的 root 代码自更新通道。未知历史、checksum 漂移、SQL/清单不一致继续拒绝；后续编号超出现有已审核策略时也不能自动放宽。真正的新执行策略需独立审核和明确安装，正常业务与兼容清单更新不再靠用户拼脚本。
 
 PR1 保留既有 Acceptance 的停止/迁移/恢复流程，不承诺它无中断；无阻塞发布与数据库不兼容边界由 PR2 明确处理。不能用工具刷新成功代替业务发布、Gate、Review 或线上验收成功。
+
+2026-10-27 的六 PR 修复中，PR6 补充下载/解包/依赖构建/备份/停服前的实际挂载峰值估算，固定本机 Acceptance DB name/port/OID/role 与仅只读的存储元数据观察，以及不可变 PM2 live/saved 重启路径。估算失败不清理备份、历史或自动扩盘；旧 `diagnose` 不自动刷新执行策略。安装/候选 SHA、逐阶段容量与恢复证据、限制和用户更新顺序均以 [Acceptance 唯一手册](acceptance-lab-runbook-v1.0.md#4-每一批acceptance固定流程) 为准。这些是本地/CI 工具能力，不代表本轮已在现场执行。
 
 隔离证据：Node22.22.2 定向四组 27 项通过；真实 PostgreSQL13.23 十种历史升级通过，包含冻结 main222→release238、旧main/Acceptance历史、部分事务提交重试、checksum/未知历史拒绝与业务哨兵/原 applied_at 保留。本地 npm run check 全部通过。真实 Python3.6 容器执行原 installer 两次，不可变版本及两个原子入口安装/重试通过；同解释器执行真实238项策略校验通过。上述不是生产 ECS 安装或真实业务持续下单演练。
