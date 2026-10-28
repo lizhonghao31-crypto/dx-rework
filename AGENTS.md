@@ -1,6 +1,6 @@
 # AGENTS.md
 
-状态：长期施工规则 V2.0  
+状态：长期施工规则 V2.1（2026-10-27 Review-first 更新）
 适用仓库：`lizhonghao31-crypto/dx-rework`  
 生效日期：2026-09-10（Acceptance规则补充：2026-09-30）
 
@@ -42,8 +42,8 @@
 
 ```text
 repository: lizhonghao31-crypto/dx-rework
-base branch: main
-base SHA: <current main>
+base branch: <explicit authorized target; default main>
+base SHA: <actual remote target tip; not a stale PR base snapshot>
 working branch: <branch>
 task scope: <one sentence>
 allowed files: <paths>
@@ -73,14 +73,19 @@ GitHub Actions 是验收层，不是开发 scratchpad。
 - 同一 Head 的瞬态失败最多 rerun 一次；再次失败先查根因。
 - 禁止 noop commit 只为触发 CI。
 
+- 开工记录旧测试健康、入口/读取消费者清单，以及合法/非法、失败/回滚、重试/并发矩阵；已知范围内遗漏须集中收齐再推送。
+- 执行顺序：**本地验证 → push 轻检查与必要 GitHub Codex Review → 收齐发现集中修复 → 冻结最终 SHA → 显式跑对应 Gate → 核准合并**。不得为尚在审查的每个小修复反复启动昂贵 Gate。
+- 轻检查、最终 Gate、Review、合并、部署和业务验收分别报告；每个实际阶段给命令/结果/阻断，活动中不得超过一分钟没有有意义的进度说明。
+- 已授权范围连续推进，不重复询问同一普通步骤；拒绝动作须报告原动作/原因/是否执行，不换路径绕过。授权变化要保存原始用户证据。
+
 详细 Actions 规则见 `docs/governance/github-actions-usage-policy-v1.0.md`。
 
 ## 7. Quick Gate / Full Gate 二选一（P0）
 
 在创建 PR **之前**确定 Gate 等级，并体现在 PR 标题：
 
-- `[QUICK] ...`：低风险，仅跑 Quick Gate。
-- `[FULL] ...`：高风险，仅跑 Full Gate；Quick Gate 必须跳过且不得分配 hosted runner。
+- `[QUICK] ...`：低风险，push 先跑轻检查；最终显式请求 Quick Gate。
+- `[FULL] ...`：高风险，push 先跑轻检查；最终只选择 Full 重检查，不额外跑完整 Quick。轻检查不代表最终 Gate。
 
 下列任一项使用 `[FULL]`：
 
@@ -96,18 +101,20 @@ GitHub Actions 是验收层，不是开发 scratchpad。
 
 纯文档、低风险文案/CSS、隔离测试维护等，在不触及上述边界时用 `[QUICK]`。
 
-任何新 Head 都使旧 Gate 证据失效。合并证据必须来自当前 Head。
+任何新 Head、真实 base tip 或等级变化都使旧最终批准不适用。合并证据必须来自当前完整 Head 的实际成功 job 和对应 base/等级；同名 skipped、旧 SHA、缺失/空跑不得放行。受支持工具见 `docs/governance/review-first-final-head-20261027.md`；仓库保护设置未配置时不得声称此为服务器硬门禁。
 
 ## 8. Codex Review
 
 - 业务负责人长期要求（2026-10-03）：凡需要 Review 的 PR，统一在 GitHub PR 上使用 **Codex Review**；本地、子代理或其它独立审查不能替代。此规则不表示所有 PR 都必须 Review，是否需要仍按下述风险与授权判断。
-- Codex Review 只针对最终 intended Head；代码已经冻结且所需 Gate 全绿后才进入 Review。
+- 本地完整自查、push 轻检查实际通过后发起 GitHub Codex Review；审查发现与同范围自查遗漏一起修复，再冻结最终 Head 跑相应 Gate。记录实际审核 SHA、修复后的最终 SHA 及 finding 闭环，不冒称最终提交再次审核。
 - 是否需要 Review按当前任务风险和业务负责人授权执行；权限、财务、migration、核心状态机、P0/P1 默认应 Review。
-- 默认每 PR 最多一次；只有 Review 发现真实 P0/P1 后发生实质修复，或业务负责人明确授权，才进行第二次。
+- 正常结论默认每 PR 一次。用户长期授权（2026-10-27）：从请求发出起 **15 分钟无结论一律异常**，先核刚完成/新请求，再重开一轮；不 push、不重跑 CI、不将超时/服务失败算通过。每轮重新计时，不并发多发；发送结果不确定或被拒先核结果，不盲重试。
 - Review 建议先核验是否真实、未过期且属于本 PR；范围外重构和纯偏好不自动阻塞交付。
 - Codex Review 不得自动转化为 Codex 施工。
 
 ## 9. 测试与结论纪律
+
+收尾记录精确 merge SHA/tree、已跑/失败/未跑边界、实际检查与审查耗时/次数，以及重复检查或返工原因；无日志不得猜工时或模型速度。
 
 “已修改”“定向测试通过”“Gate 通过”“Review 通过”“已合并”“已部署”“业务验收通过”是不同状态，不得互相替代。
 

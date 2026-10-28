@@ -61,7 +61,11 @@ const isDeployment = (path) =>
   || path === "scripts/restore-postgres.sh"
   || path.startsWith("infra/")
   || path.startsWith(".github/workflows/")
-  || path === "scripts/ci/full-gate-risk-map.mjs";
+  || path === "scripts/ci/full-gate-risk-map.mjs"
+  || path === "scripts/ci/ci-gate-runtime.mjs"
+  || path === "scripts/ci/pr-gate-protocol.mjs"
+  || path === "scripts/ci/pr-gate-controller.mjs"
+  || path === "scripts/ci/verify-actions-policy.mjs";
 
 const isBackendOrContract = (path) =>
   path.startsWith("apps/api/src/") || path.startsWith("packages/contracts/src/");

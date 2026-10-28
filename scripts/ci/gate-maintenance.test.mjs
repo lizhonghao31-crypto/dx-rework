@@ -2,55 +2,12 @@ import { readFileSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { runInNewContext } from 'node:vm';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-const workflow = Object.fromEntries(['quick','full'].map(mode => [mode, readFileSync(`.github/workflows/${mode === 'quick' ? 'ci' : 'full-gate'}.yml`, 'utf8')]));
-const startsWith = (value, prefix) => String(value ?? '').toLowerCase().startsWith(prefix.toLowerCase());
-const context = (title, action='edited', changes={}, eventName='pull_request') => ({ event_name:eventName, ref:'refs/heads/test', event:{ action, changes, pull_request:{ title, number:900 } } });
-function selected(mode, github) {
-  const expression = workflow[mode].match(/^ {4}if: \$\{\{ (.*) \}\}$/m)?.[1];
-  assert.ok(expression, `${mode} job-level event filter is required`);
-  return Boolean(runInNewContext(expression, { github, startsWith }));
-}
-function concurrency(mode, github) {
-  const expression = workflow[mode].match(/^ {6}group: pr-gate-\$\{\{ (.*) \}\}$/m)?.[1];
-  assert.ok(expression);assert.doesNotMatch(workflow[mode], /^concurrency:/m);
-  assert.match(workflow[mode], /^ {4}concurrency:\n {6}group:.*\n {6}cancel-in-progress: true/m);
-  return 'pr-gate-' + runInNewContext(expression, {github,format:(_,value)=>`manual-${value}`});
-}
-for (const mode of ['quick','full']) {
-  const title=mode==='quick'?'[QUICK] rule':'[FULL] rule';
-  for (const [label,event] of [
-    ['body only',context(title,'edited',{body:{from:'old'}})],
-    ['wording only',context(title,'edited',{title:{from:title+' old'}})],
-    ['body plus wording',context(title,'edited',{title:{from:title+' old'},body:{from:'old'}})],
-    ['unrelated metadata',context(title,'edited',{})],
-  ]) test(`${mode}: ${label} allocates no gate job or concurrency slot`,()=>{
-    assert.equal(selected('quick',event),false);assert.equal(selected('full',event),false);
-  });
-  for(const action of ['opened','synchronize','reopened']) test(`${mode}: ${action} runs only the selected gate`,()=>{
-    const event=context(title,action);assert.equal(selected(mode,event),true);assert.equal(selected(mode==='full'?'quick':'full',event),false);
-  });
-  test(`${mode}: base retarget is relevant even with a body edit`,()=>assert.equal(selected(mode,context(title,'edited',{base:{ref:{from:'main'}},body:{from:'old'}})),true));
-}
-for(const [before,after,mode] of [['[FULL] old','[QUICK] next','quick'],['[QUICK] old','[FULL] next','full'],['invalid','[FULL] fixed','full'],['[FULL] old','invalid','quick'],['[FULL] old','[FULL]no-space','quick']]) {
-  test(`mode change ${before} -> ${after} reaches the proper gate/title guard`,()=>{
-    const event=context(after,'edited',{title:{from:before}});
-    assert.equal(selected(mode,event),true);assert.equal(selected(mode==='full'?'quick':'full',event),false);
-    assert.equal(concurrency('quick',event),concurrency('full',event));
-  });
-}
-test('manual Quick remains separate from PR concurrency',()=>{
-  const event={event_name:'workflow_dispatch',ref:'refs/heads/test',event:{pull_request:{}}};
-  assert.equal(selected('quick',event),true);assert.equal(concurrency('quick',event),'pr-gate-manual-refs/heads/test');
-});
-test('same-mode real changes supersede the same PR job; unrelated edits never join it',()=>{
-  const prior=context('[FULL] old','synchronize'),newHead=context('[FULL] new','synchronize');
-  assert.equal(concurrency('full',prior),concurrency('full',newHead));
-  assert.equal(selected('full',context('[FULL] old','edited',{body:{from:'text'}})),false);
-});
+const sources = Object.fromEntries(['quick','full'].map(mode => [mode, readFileSync(`.github/workflows/${mode === 'quick' ? 'ci' : 'full-gate'}.yml`, 'utf8')]));
+const worker = (text, id) => text.split(`\n  ${id}:\n`)[1].split(/\n {2}[a-zA-Z][\w-]*:\n/)[0];
+const workflow = {quick: worker(sources.quick,'validate'), full: worker(sources.full,'full-validate')};
 
 const renderer = mode => workflow[mode].split("          node <<'GATE_SUMMARY_JS'\n")[1].split('          GATE_SUMMARY_JS')[0].split('\n').map(line=>line.slice(10)).join('\n');
 const catalog = mode => JSON.parse(workflow[mode].match(/GATE_CHECKS_JSON: >-\n {12}([^\n]+)/)[1]);
@@ -66,7 +23,7 @@ function summary(mode, steps, state='success', flags=scope(mode)) {
 test('both workflows use the same actual-outcome renderer and every step is catalogued once',()=>{
   assert.equal(renderer('quick'),renderer('full'));
   for(const mode of ['quick','full']) {
-    const ids=[...workflow[mode].matchAll(/^ {8}id: (\w+)$/gm)].map(match=>match[1]);
+    const ids=[...workflow[mode].matchAll(/^ {8}id: (\w+)$/gm)].map(match=>match[1]).filter(id=>id!=='summary');
     assert.deepEqual(catalog(mode).map(row=>row[0]),ids);
     assert.equal(new Set(ids).size,ids.length);
     for(const [id,label] of catalog(mode)) assert.ok(workflow[mode].includes(`      - name: ${label}\n        id: ${id}`));

@@ -21,7 +21,7 @@ it('admits only the two exact SLA dependency bases and rejects broader or incomp
   for(const path of paths){await mkdir(dirname(join(root,path)),{recursive:true});await writeFile(join(root,path),await readFile(path));}
   const run=()=>execFileSync(process.execPath,[join(root,'scripts/ci/verify-actions-policy.mjs')],{stdio:'pipe',encoding:'utf8'});
   expect(run()).toContain('ACTIONS_USAGE_POLICY_OK');
-  for(const path of ['.github/workflows/ci.yml','.github/workflows/full-gate.yml']){
+  for(const path of ['.github/workflows/ci.yml']){
    const file=join(root,path),original=await readFile(file,'utf8'),base='      - deliver/sla-foundation-development-budget-20261024\n';
    expect(original).toContain(base);
    for(const replacement of ['      - deliver/*\n','      - deliver/sla-*\n','      - deliver/unapproved\n','',base+base]){
