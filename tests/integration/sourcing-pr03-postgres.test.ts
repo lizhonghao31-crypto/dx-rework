@@ -4871,8 +4871,10 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const client=await database.connect();try{await client.query('BEGIN');await client.query('ALTER TABLE digital_bulk_preparations DISABLE TRIGGER USER');await client.query("UPDATE digital_bulk_preparations SET workflow_version=1,sla_snapshot_id=NULL,approval_snapshot_id=$2 WHERE production_order_id=$1",[ready.id,legacyApproval]);await client.query('ALTER TABLE digital_bulk_preparations ENABLE TRIGGER USER');await client.query('COMMIT');}catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}
     for(const row of (await database.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[ready.caseId])).rows){const image=randomUUID();await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-legacy-batch.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[image,`TEST/legacy-batch/${image}`,'c'.repeat(64),root.actorId]);await ready.cutting.record({...root,authorizationCapability:'cutting:records:create'},row.cutting_order_id,{pieceCount:1,actualCutCount:100,attachmentIds:[image]},randomUUID());}
     let state=await flow.read(ready.people.warehouse_receiver!,ready.id);expect(state.batchMode).toBe(false);expect(state.tasks.some(t=>t.taskKind==='bulk_qc')).toBe(false);
-    const input={expectedRevision:state.revision,occurredAt:new Date().toISOString(),supplierId:factoryId,note:'TEST旧路线'},key=randomUUID();
+    const beforeDispatch=Date.now(),input={expectedRevision:state.revision,supplierId:factoryId,note:'TEST旧路线'},key=randomUUID();
     state=await flow.dispatch(ready.people.warehouse_receiver!,ready.id,input,key);await flow.dispatch(ready.people.warehouse_receiver!,ready.id,input,key);
+    const occurred=Date.parse(state.facts.find(f=>f.kind==='仓库实际发厂')!.occurredAt!);expect(occurred).toBeGreaterThanOrEqual(beforeDispatch);expect(occurred).toBeLessThanOrEqual(Date.now());
+    expect((await database.query("SELECT count(*)::int n FROM digital_factory_facts WHERE preparation_id=$1 AND kind='仓库实际发厂'",[state.preparationId])).rows[0].n).toBe(1);
     expect(state.dispatched).toBe(true);expect(state.facts.find(f=>f.kind==='仓库实际发厂')!.payload.lines).toBeUndefined();expect(state.checks).toHaveLength(0);
   });
 
