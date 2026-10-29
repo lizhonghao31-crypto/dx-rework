@@ -383,7 +383,15 @@ export class DigitalJourneyQuery {
       if(sourcing&&sourcingFields) {
         setFact("sourcing_preparation","completed",[record("sourcing",sourcing.child_id,`/ui/sourcing/orders/${sourcing.child_id}`)]);
         const target=record("sourcing",sourcing.child_id,`/ui/sourcing/orders/${sourcing.child_id}`,gates.approval?.decision_version??null);
-        const decision=gates.approval?.sourcing_decision_id;
+        // Price reapplication is independent of the original IE / factory-choice
+        // approvals. Keep those historical actors and times, not the price reviewer.
+        const effectiveDecision=gates.approval?.sourcing_decision_id;
+        const decision=effectiveDecision?(await db.query(`WITH RECURSIVE basis AS (
+          SELECT sourcing_decision_id,source_type,supersedes_decision_id FROM sourcing_decisions WHERE sourcing_decision_id=$1 AND sourcing_case_id=$2
+          UNION ALL SELECT parent.sourcing_decision_id,parent.source_type,parent.supersedes_decision_id
+          FROM sourcing_decisions parent JOIN basis child ON child.source_type='price_reapplication' AND parent.sourcing_decision_id=child.supersedes_decision_id
+          WHERE parent.sourcing_case_id=$2)
+          SELECT sourcing_decision_id FROM basis WHERE source_type<>'price_reapplication' LIMIT 1`,[effectiveDecision,sourcing.child_id])).rows[0]?.sourcing_decision_id:undefined;
         const ie=(await db.query(`SELECT q.sourcing_ie_quote_id,q.quote_version,q.quoted_by,q.quoted_at FROM sourcing_ie_quotes q
           WHERE q.sourcing_case_id=$1 AND ($2::uuid IS NULL OR q.sourcing_ie_quote_id=(SELECT source_ie_quote_id FROM sourcing_decisions WHERE sourcing_decision_id=$2)) ORDER BY quote_version DESC LIMIT 1`,[sourcing.child_id,decision??null])).rows[0];
         setFact("sourcing_ie",ie?"completed":"pending",[{...target,version:ie?.quote_version??null,url:ie?`${target.url}?view=node-history&node=ie_quote&entryId=${ie.sourcing_ie_quote_id}`:target.url}],iso(ie?.quoted_at),ie?{id:ie.quoted_by,name:null}:null);

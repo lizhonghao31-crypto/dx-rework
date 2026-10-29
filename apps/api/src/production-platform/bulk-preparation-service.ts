@@ -29,7 +29,13 @@ export class BulkPreparationService {
   if(sourcing){
    await resolveDigitalChild(db,'sourcing',sourcing.sourcing_case_id,sourcing.workflow_generation);
    approval=(await db.query(`SELECT a.*,decision.cutting_process FROM sourcing_approval_snapshots a JOIN sourcing_decisions decision ON decision.sourcing_decision_id=a.sourcing_decision_id WHERE a.sourcing_case_id=$1 AND a.sourcing_decision_id=(SELECT sourcing_decision_id FROM sourcing_decisions WHERE sourcing_case_id=$1 ORDER BY decision_version DESC LIMIT 1)
-    AND (EXISTS(SELECT 1 FROM sourcing_owner_decisions d WHERE d.sourcing_case_id=$1 AND d.sourcing_decision_id=a.sourcing_decision_id AND d.decision='approved') OR EXISTS(SELECT 1 FROM sourcing_decisions effective WHERE effective.sourcing_decision_id=a.sourcing_decision_id AND effective.source_type='factory_change' AND effective.source_change_request_id IS NOT NULL)) ORDER BY a.approved_at DESC LIMIT 1`,[sourcing.sourcing_case_id])).rows[0];
+    AND (EXISTS(SELECT 1 FROM sourcing_owner_decisions d WHERE d.sourcing_case_id=$1 AND d.sourcing_decision_id=a.sourcing_decision_id AND d.decision='approved') OR EXISTS(SELECT 1 FROM sourcing_decisions effective WHERE effective.sourcing_decision_id=a.sourcing_decision_id AND effective.source_type='factory_change' AND effective.source_change_request_id IS NOT NULL)
+      OR (decision.source_type='price_reapplication' AND EXISTS(
+        SELECT 1 FROM sourcing_price_reapplications request JOIN sourcing_price_reviews review USING(price_request_id)
+        WHERE request.price_request_id=decision.source_price_request_id AND request.sourcing_case_id=a.sourcing_case_id
+          AND request.base_decision_id=decision.supersedes_decision_id AND review.decision='approved'
+          AND review.operation_event_id=decision.operation_event_id AND review.operation_event_id=a.operation_event_id)))
+    ORDER BY a.approved_at DESC LIMIT 1`,[sourcing.sourcing_case_id])).rows[0];
   }
   const instructionValid=Boolean(instruction&&source&&instruction.source_round===source.round_number&&['需要预缩','无需预缩'].includes(instruction.document.preshrink));
   const ownerApproved=Boolean(approval&&!sourcing?.deleted_at);
