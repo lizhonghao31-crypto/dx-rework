@@ -19,6 +19,29 @@ function fixture(): PatternOrderDetail {
     actions: { delete: true, assign: false, complete: false, handoff: false, edit: false, hours: false, rework: true, transfer: false, cancel: false, cancelFees: false } };
 }
 const options = { technical: true, allCosts: true, unitPrices: new Map([["round", "40"]]), wageEligibleAt: new Map([["one", time(6)], ["two", time(6)]]) };
+describe('round-scoped historical attachment evidence',()=>{
+  it('uses the selected round binding audit and never a later binding of the same object',()=>{
+    const detail=fixture();detail.currentRoundId='later';
+    detail.attachments.push({...detail.attachments[1]!,roundId:'later',addedAt:time(7)});
+    const audit=new Map([['round',new Map([['old',time(1)],['new',time(3)]])],['later',new Map([['new',time(7)]])]]);
+    const result=patternOrderAtNode(detail,{round:'round',node:'in_progress'},events,{...options,attachmentAuditAt:audit});
+    expect(result.attachments.map(file=>[file.roundId,file.attachmentId])).toEqual([['round','new']]);
+    expect(result.historicalView?.missingFacts).toBe(false);
+  });
+  it('keeps strict microsecond cutoff for each binding instead of falling back to rounded addedAt',()=>{
+    const detail=fixture(),at='2026-09-22T05:00:00.123Z';detail.rounds[0]!.nodes[1]!.exitedAt=at;
+    const terminal={...events[4]!,created_at:new Date(at),audit_at:'2026-09-22T05:00:00.123100Z'};
+    detail.attachments[1]!.addedAt=at;
+    const audit=new Map([['round',new Map([['new','2026-09-22T05:00:00.123200Z']])]]);
+    const result=patternOrderAtNode(detail,{node:'in_progress'},[...events.slice(0,4),terminal],{...options,attachmentAuditAt:audit});
+    expect(result.attachments).toEqual([]);
+  });
+  it('marks missing round ownership or audit evidence unknown and does not borrow the current attachment',()=>{
+    const detail=fixture();detail.currentRoundId='later';detail.attachments[1]!.roundId='later';
+    const result=patternOrderAtNode(detail,{round:'round',node:'in_progress'},events,{...options,attachmentAuditAt:new Map()});
+    expect(result.attachments).toEqual([]);expect(result.historicalView?.missingFacts).toBe(true);expect(result.historicalView?.reason).toContain('附件');
+  });
+});
 describe("frozen-business-time native history",()=>{
   it("replays material fields and attachment identities to the real terminal event, excluding later edits in the same business second",()=>{
     const detail=fixture(),business="2026-09-15T00:00:00.000Z",round=detail.rounds[0]!;

@@ -1,4 +1,5 @@
 import {createIndependentDevelopmentRevision} from './development-revision-source.js';
+import {businessNow} from '../acceptance-clock/business-time.js';
 import {developmentSlaPlan,developmentSlaRoute} from "./development-sla-enrollment.js";
 import {validateAuxiliaryReferences} from '../access/auxiliary-catalog-service.js';
 import {verificationAvailable} from "./development-material-verification.js";
@@ -98,8 +99,8 @@ export class DevelopmentRoundService {
   for(const task of tasks){const kind=task.task_kind==='development_material_recheck'?'development_materials':task.task_kind;if(!completed[kind])completed[kind]={taskId:task.task_id,roundNumber:task.route_version};}
   const {route,inherited}=developmentRevisionPlan({...input,document,affectedNodes},completed,await developmentSlaPlan(db,sourceId)?developmentSlaRoute(document):undefined),roundNumber=input.basedOnRound+1,routeId=randomUUID();
   await this.forms().bindFiles(db,actor,sourceId,document);
-  await db.query(`INSERT INTO digital_development_rounds(source_id,round_number,based_on_round,document_version,document,origin,customer_comment,internal_problem,explanation,categories,affected_nodes,output_kind,route_nodes,inherited,return_task_id,route_id,created_by)
-    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,[sourceId,roundNumber,input.basedOnRound,sheet.version+1,JSON.stringify(document),input.origin,input.customerComment,input.internalProblem,input.explanation,input.categories,affectedNodes,input.outputKind,route,JSON.stringify(inherited),returnTaskId??null,routeId,actor.actorId]);
+  await db.query(`INSERT INTO digital_development_rounds(source_id,round_number,based_on_round,document_version,document,origin,customer_comment,internal_problem,explanation,categories,affected_nodes,output_kind,route_nodes,inherited,return_task_id,route_id,created_by,published_at)
+    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,[sourceId,roundNumber,input.basedOnRound,sheet.version+1,JSON.stringify(document),input.origin,input.customerComment,input.internalProblem,input.explanation,input.categories,affectedNodes,input.outputKind,route,JSON.stringify(inherited),returnTaskId??null,routeId,actor.actorId,businessNow().toISOString()]);
   await new DigitalProductionTaskService(this.database).supersedeSourceTasksWithClient(db,actor,sourceId,input.basedOnRound,returnTaskId);
   await new DevelopmentRouteService(this.database).startRound(db,actor,sourceId,route[0]!,routeId,roundNumber,returnTaskId);
   if(await developmentSlaPlan(db,sourceId)){

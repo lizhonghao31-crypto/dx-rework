@@ -165,7 +165,13 @@ export class PatternOrderReader {
           cancel: available("pattern_room:orders:cancel") && (order.status === "pending_assignment" ? isPatternRoot(effective) || currentRound?.requested_by === effective.actorId : ["in_progress", "pending_confirmation"].includes(order.status) && (isPatternRoot(effective) || effective.actorRoles.includes("pattern_room_supervisor"))),
           cancelFees: order.kind === "pattern" && order.status === "cancelled" && creator && available("pattern_room:orders:cancel_fees") && rounds.some(round => round.cancelled_amount !== null && /[1-9]/.test(round.cancelled_amount) && round.fee_confirmed_at === null && round.handed_over_at === null) },
       });
-      return patternOrderAtNode(detail, selection, history, { technical: canReadRoundMaterials(selection.round ?? order.current_round_id), allCosts, unitPrices: new Map(rounds.map(round => [round.round_id, round.unit_price])), attachmentAuditAt:new Map(files.map(file=>[file.attachment_id,file.audit_at])),wageEligibleAuditAt:new Map(segments.map(segment=>[segment.segment_id,segment.wage_audit_at??null])),wageEligibleAt: new Map(segments.map(segment => [segment.segment_id, patternIso(segment.wage_eligible_at)])) });
+      const attachmentAuditAt=new Map<string,Map<string,string>>();
+      for(const file of files){
+        let bindings=attachmentAuditAt.get(file.round_id);
+        if(!bindings){bindings=new Map();attachmentAuditAt.set(file.round_id,bindings);}
+        bindings.set(file.attachment_id,file.audit_at);
+      }
+      return patternOrderAtNode(detail, selection, history, { technical: canReadRoundMaterials(selection.round ?? order.current_round_id), allCosts, unitPrices: new Map(rounds.map(round => [round.round_id, round.unit_price])), attachmentAuditAt,wageEligibleAuditAt:new Map(segments.map(segment=>[segment.segment_id,segment.wage_audit_at??null])),wageEligibleAt: new Map(segments.map(segment => [segment.segment_id, patternIso(segment.wage_eligible_at)])) });
     });
   }
 }
