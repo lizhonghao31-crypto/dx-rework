@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import { expect } from "vitest";
-import { DevelopmentDocumentSchema } from "@dx-rework/contracts/digital-development";
+import { DevelopmentDocumentSchema, type DevelopmentDocument } from "@dx-rework/contracts/digital-development";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 import type { TodoProjectionService } from "../../apps/api/src/todos/projection-service.js";
 import { PatternRoomOrderService } from "../../apps/api/src/pattern-room/order-service.js";
@@ -15,7 +15,9 @@ import { taskResult } from "./development-task-result-fixture.js";
 import type {BusinessClock} from '@dx-rework/domain/business-clock';
 
 /** Current enrollment, real migrated schema and original native execution/wage integration. */
-export async function exerciseDevelopmentSlaNative(db: Pool, todos: TodoProjectionService, root: TrustedActorContext, workerId: string, clock?:BusinessClock) {
+export async function exerciseDevelopmentSlaNative(db: Pool, todos: TodoProjectionService, root: TrustedActorContext, workerId: string, clock?:BusinessClock,
+  variants:readonly (readonly [DevelopmentDocument['craft'],DevelopmentDocument['washing']])[]=[["无", "免洗"], ["印花", "内洗"], ["绣花", "外洗"], ["印绣花", "内洗"]]) {
+  const created:Array<{sourceId:string;orderId:string}>=[];
   const native = new PatternRoomOrderService(db, todos, { ordersEnabled: true });
   const forms = new DigitalDevelopmentService(db, true, native), execution = new DevelopmentExecutionService(db, true, native);
   const identity = new DigitalProductionIdentityService(db, true);
@@ -23,7 +25,7 @@ export async function exerciseDevelopmentSlaNative(db: Pool, todos: TodoProjecti
   const clerk = { ...root, actorId: clerkId, actorRoles: ["development_clerk"], authorizationCapability: "digital_production:view", authorizationCapabilities: ["digital_production:view", "todo:view"] };
   const worker = { ...root, actorId: workerId, actorRoles: ["pattern_room_worker"], authorizationCapability: "pattern_room:orders:complete", authorizationCapabilities: ["pattern_room:orders:complete", "pattern_room:orders:view", "digital_production:view"] };
   const price = (await db.query("SELECT price_id,version FROM pattern_room_prices WHERE kind='category' AND enabled ORDER BY price_id LIMIT 1")).rows[0];
-  for (const [craft, washing] of [["无", "免洗"], ["印花", "内洗"], ["绣花", "外洗"], ["印绣花", "内洗"]] as const) {
+  for (const [craft, washing] of variants) {
     const { sourceId } = await identity.createSource(root, { developmentType: "头版", designStyleNo: `TEST-SLA03-${randomUUID()}`, temporaryStyleNo: null, customerCode: null }, randomUUID());
     const fileId = randomUUID(), materialId = randomUUID();
     await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)", [fileId, `test-sla03/${fileId}`, "a".repeat(64), root.actorId]);
@@ -75,6 +77,7 @@ export async function exerciseDevelopmentSlaNative(db: Pool, todos: TodoProjecti
     expect(await task("development_sewing")).toMatchObject({ state: "ready", slaHours: 24 });
     await route("development_sewing");
     const linked = (await state()).patternOrder!;
+    created.push({sourceId,orderId:linked.orderId});
     expect((await native.get(root, linked.orderId)).status).toBe("pending_confirmation");
     if (washing !== "免洗") {
       expect(await task("development_pre_wash_check")).toMatchObject({ state: "ready", slaHours: 0.5 });
@@ -97,4 +100,5 @@ export async function exerciseDevelopmentSlaNative(db: Pool, todos: TodoProjecti
     if (washing !== "免洗") expect(recorded).toMatchObject([{ inspection: { phase: "洗前", measurements: [{ values: ["51"] }] } }, { inspection: { phase: "洗后", measurements: [{ values: ["50"] }] } }]);
     else expect(recorded).toEqual([{ inspection: null }]);
   }
+  return created;
 }

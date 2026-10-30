@@ -13,7 +13,7 @@ const multiply = (a: string, b: string) => amountText(units(a) * units(b) / scal
 const sum = (values: string[]) => amountText(values.reduce((total, value) => total + units(value), 0n));
 
 /** Reconstruct only an already-authorized projection; never return raw audit payloads. */
-export function patternOrderAtNode(detail: PatternOrderDetail, selection: PatternHistorySelection, events: PatternHistoryEvent[], options: { technical: boolean; allCosts: boolean; unitPrices: Map<string, string | null>; wageEligibleAt: Map<string, string | null>; wageEligibleAuditAt?:Map<string,string|null>; attachmentAuditAt?:Map<string,string> }): PatternOrderDetail {
+export function patternOrderAtNode(detail: PatternOrderDetail, selection: PatternHistorySelection, events: PatternHistoryEvent[], options: { technical: boolean; allCosts: boolean; unitPrices: Map<string, string | null>; wageEligibleAt: Map<string, string | null>; wageEligibleAuditAt?:Map<string,string|null>; attachmentAuditAt?:ReadonlyMap<string,ReadonlyMap<string,string>> }): PatternOrderDetail {
   if (!selection.node && !selection.round) return detail;
   const round = detail.rounds.find(item => item.roundId === (selection.round ?? detail.currentRoundId));
   if (!round) throw new ApplicationError("NOT_FOUND", "历史轮次不存在或无权查看", 404);
@@ -122,7 +122,13 @@ export function patternOrderAtNode(detail: PatternOrderDetail, selection: Patter
   const materialEvent = local.filter(event => /\.(submitted|materials_changed|rework_requested)$/.test(event.action)).at(-1);
   const value = materialEvent?.after_state?.value;
   const ids = Array.isArray(value?.attachmentIds) ? value.attachmentIds : Array.isArray(value?.attachments) ? value.attachments : [];
-  result.attachments = options.technical ? result.attachments.filter(file => file.roundId === round.roundId && ids.includes(file.attachmentId) && terminal && key(options.attachmentAuditAt?.get(file.attachmentId)??file.addedAt)<=audit(terminal)).map(file => ({ ...file, active: true })) : [];
+  result.attachments = options.technical ? result.attachments.filter(file => {
+    if(file.roundId!==round.roundId||!ids.includes(file.attachmentId)||!terminal)return false;
+    // The same object may be inherited by several rounds; each binding has its own real audit time.
+    const boundAt=options.attachmentAuditAt?options.attachmentAuditAt.get(file.roundId)?.get(file.attachmentId):file.addedAt;
+    return !!boundAt&&key(boundAt)<=audit(terminal);
+  }).map(file => ({ ...file, active: true })) : [];
+  const attachmentEvidenceMissing=options.technical&&!reason&&(!Array.isArray(value?.attachmentIds)&&!Array.isArray(value?.attachments)||ids.some(id=>!result.attachments.some(file=>file.attachmentId===id)));
   result.rounds = [snapshot];
   result.currentWorkerName = snapshot.segments.at(-1)?.workerName ?? null;
   result.history = result.history.filter(event => past.some(saved=>saved.event_id&&event.eventId?saved.event_id===event.eventId:saved.action===event.action&&saved.created_at.toISOString()===event.at));
@@ -130,6 +136,7 @@ export function patternOrderAtNode(detail: PatternOrderDetail, selection: Patter
   result.reworkBlockedReason=null;
   result.reworkCount = snapshot.index ?? 0;
   result.actions = { delete: false, assign: false, complete: false, handoff: false, edit: false, hours: false, rework: false, transfer: false, cancel: false, cancelFees: false };
-  result.historicalView = { node: stage, at: cutoff, actorName: terminal&&!reason ? terminal.actor_name : "历史未记录", currentRoundId: originalRoundId, missingFacts: !facts,...(reason?{reason}:{}),...(terminal?.event_id&&!reason?{terminalEventId:terminal.event_id}:{}) };
+  const historicalReason=reason??(attachmentEvidenceMissing?'历史附件归属或绑定审计时间未留证':null);
+  result.historicalView = { node: stage, at: cutoff, actorName: terminal&&!reason ? terminal.actor_name : "历史未记录", currentRoundId: originalRoundId, missingFacts: !facts||attachmentEvidenceMissing,...(historicalReason?{reason:historicalReason}:{}),...(terminal?.event_id&&!reason?{terminalEventId:terminal.event_id}:{}) };
   return result;
 }
