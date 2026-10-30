@@ -111,6 +111,20 @@ TODO_TIMING_ENABLED=false
 
 预检证据在 `.acceptance-preflight` 中逐阶段记录，worker 开始后复制到上述日志目录；首次失败尚无 worker 时保留并输出 root 临时证据路径。PM2 live 与 `pm2 save` 后的 dump 都必须仅有 Acceptance API，cwd/script 指向 `releases/<同一SHA>`，不得通过可变 `current` 作为重启依据。公网验证通过后才持久化并核 saved 路径；任一失败仍失败并停止候选，不自动修复旧 dump、旧 owner 或 root PM2。此前旧代恢复也只在原完整历史不变等条件成立时，由新工具明确 pin 旧 SHA；不改写旧 release。
 
+#### Acceptance 单进程不可变路径切换
+
+PM2 6.0.14 的同名 `startOrReload`、普通 restart 和 `--cwd` 均不能保证重算旧注册的 `pm_cwd/pm_exec_path`。更新器因此只在数据库迁移完成、完整 manifest/readiness 校验通过并选择新 generation 后，重建**已确认 stopped、身份唯一的 Acceptance API 注册**，使用精确 PM2 ID 删除；不删除 daemon、其它应用或生产槽。PM2_HOME 固定为 `/home/dxacceptance/.pm2`。不能在普通 update 之前手工删除注册，否则原 prepare 无法读取初始状态。旧 legacy `current` 注册仅允许停止和替换，不据此启动旧代码；实际新启动和最终 runtime guard 仍须全部指向本次不可变 release。
+
+备份仍先于停服和迁移。停服阶段保存并核对 `dump.pm2` 及其 `.bak` 都为 stopped 后才允许迁移，避免 daemon 重启回退到旧 online 记录；**online 候选的保存仍只发生在原本机/公网完整验证之后**。新启动失败时，helper 只注册 `autostart:false` 的目标占位并保持 stopped，不执行旧代码；原失败仍返回失败，阶段及配置证据保留。同 SHA 再次调用原 update 时，须完整 schema 已 current、当前 generation 为该 SHA且注册明确 stopped，才沿原激活重试路径续跑，不重复迁移或备份；已健康且 saved 正确时保持无操作。不能只看末版本0265判断完整历史。
+
+删除 stopped 注册之前，另写入 `shared/update-checkpoints/<SHA>.pm2.json` 激活记录，绑定固定候选 manifest、完整迁移历史、实际数据库身份、原 runtime 阶段及主/备用 stopped dump 的摘要。若进程被强制终止在删除后、启动前，原 update 仅在同 SHA/generation/schema、原阶段与所有摘要仍匹配、既有 PM2 daemon 存活且无其它应用时，重建 `autostart:false` 的目标 stopped 注册，再沿原激活路径续跑；不执行旧 dump，不重跑备份或迁移。没有该记录、版本/历史/身份/dump 任一不符均拒绝，不把一般性缺应用当作可自动修复。若中断发生于目标已 online 但尚未保存，原 update 必须重新完成本机/公网/生产验收，再保存与核 saved 路径，最后标记激活记录 verified。该记录不是旧备份复用凭据；保留原日志，不授权手工删注册或恢复旧代码。
+
+验证或保存失败后，只停止 Acceptance API并验证 stopped 重启记录。若保存失败但已有主/备用 dump 都能证明 stopped，可保留该安全记录，整个更新仍失败；若连停止状态或持久化都不能证明，记录 `failed-runtime-state-unverified`，不得宣称已安全恢复或自动切旧代码。保留证据并先修复具体存储/进程异常。此处不授予 owner/ACL，不重seed，不改任何业务事实或旧TEST记录。
+
+本修复新增执行策略，必须先从通过 Gate/Review 的干净固定版本完整 checkout 显式 `install`，再同版本 `diagnose` / `update`；旧工具的 data-only refresh 不得替换此策略。调用仍受原生产锁、Acceptance 更新锁及 release 锁保护，原生产实际 SHA/端口/health 保护不变。生产工具未新增 Python 参数，保持既有 Python3.6 兼容入口和 Node22。
+
+可复现的独立本地验证：`tests/acceptance/acceptance-pm2-real.mjs` 接受已安装且固定6.0.14的 `PM2_TEST_CLI` 与私有证据目录；`acceptance-pm2-postgres.mjs` 另接受本地测试目标文件。它们只创建随机测试 PM2_HOME / 自有 PostgreSQL schema，不是现场运维命令。真实 PG13.23/16.15 的原流函数阶段、SQL事务回滚、pg_dump、278→279、失败激活与同SHA续跑已联合验证；HTTP、root及构建边界由另一个完整 controller/worker 离线夹具验证。本地结果不代表现场更新、公网TLS、实体业务验收已执行。
+
 | 失败阶段 | 行为 |
 |---|---|
 | 准备/权限/备份 | 原服务不停止；无迁移 |
