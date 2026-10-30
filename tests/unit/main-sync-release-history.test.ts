@@ -8,7 +8,7 @@ const manifest = JSON.parse(readFileSync("apps/api/src/platform/migration-manife
 const branches = JSON.parse(readFileSync("scripts/migration-branches.json", "utf8"));
 const extensions = JSON.parse(readFileSync("scripts/migration-main-extensions.json", "utf8"));
 const frozenMain225Extensions = extensions.filter((row: {version:string})=>Number(row.version.slice(0,4))<=225);
-const newlyReconciledMain = ["0226_external_revision_preserve_handler", "0227_qc_other_craft", "0228_sourcing_contract_return_cycles", "0229_sourcing_price_reapplications", "0230_sourcing_factory_change_current_quantity"];
+const newlyReconciledMain = ["0226_external_revision_preserve_handler", "0227_qc_other_craft", "0228_sourcing_contract_return_cycles", "0229_sourcing_price_reapplications", "0230_sourcing_factory_change_current_quantity", "0231_temporary_special_process_proxy_reporting"];
 const production = [...manifest.migrations.slice(0, 217), ...branches.main, ...frozenMain225Extensions].sort((a, b) => a.version.localeCompare(b.version));
 const added = ["0225_warehouse_supervisor_cutting_read", "0242_warehouse_supervisor_digital_dispatch", "0243_misc_order_stable_association", "0244_development_sewing_result_attachments", "0245_development_pattern_result_attachments", "0246_development_round_arrangements", "0247_development_material_verification"];
 const acceptance = manifest.migrations.filter((row: { version: string }) => Number(row.version.slice(0,4))<=247 && !added.includes(row.version) && !newlyReconciledMain.includes(row.version));
@@ -19,6 +19,8 @@ describe("main 0225 and Acceptance 248 compatible sync", () => {
     expect(acceptance).toHaveLength(248);
     // This is the frozen old Acceptance sample, not the current target manifest.
     expect(acceptance.some((row:{version:string})=>row.version==='0230_sourcing_factory_change_current_quantity')).toBe(false);
+    expect(acceptance.some((row:{version:string})=>row.version==='0231_temporary_special_process_proxy_reporting')).toBe(false);
+    expect(manifest.migrations.find((row:{version:string})=>row.version==='0231_temporary_special_process_proxy_reporting')).toEqual({version:'0231_temporary_special_process_proxy_reporting',checksum:'39a9c918c6589c9905ab0cf32de1f7cc304119fd4840a3fa8da34ddfb3e3d6b4'});
     expect(manifest.migrations.find((row:{version:string})=>row.version==='0230_sourcing_factory_change_current_quantity')).toEqual({version:'0230_sourcing_factory_change_current_quantity',checksum:'4091340fdb842e866aec8b9f124c73c9d5e7086bd122677c144864355052e6bf'});
     expect(checkHistory({ database: "dx_rework", migrations: production }, manifest, "production").pending).toHaveLength(manifest.migrations.length-production.length);
     expect(checkHistory({ database: "dx_rework_acceptance", migrations: acceptance }, manifest, "acceptance").pending).toEqual(manifest.migrations.filter((row:{version:string})=>!acceptance.some((old:{version:string})=>old.version===row.version)).map((row:{version:string})=>row.version));

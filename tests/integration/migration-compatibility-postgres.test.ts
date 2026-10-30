@@ -98,6 +98,17 @@ suite('main and digital historical PostgreSQL upgrades',()=>{
    const expectedGuardBody=catalog.find(m=>m.version==='0261_factory_change_guard_history_convergence')!.sql.match(/AS \$\$([\s\S]*?)\$\$;/)![1];
    const actualGuardBody=(await client.query("SELECT prosrc FROM pg_proc WHERE oid='guard_sourcing_factory_change_request_insert()'::regprocedure")).rows[0].prosrc;
    expect(actualGuardBody).toBe(expectedGuardBody);
+   // Check the effective proxy-reporting guard after the complete catalog has
+   // replayed, including on an empty database where later migrations run last.
+   const proxySql=catalog.find(m=>m.version==='0231_temporary_special_process_proxy_reporting')!.sql;
+   for(const name of ['guard_rework_work_report_insert','rework_work_report_actor_authorized']){
+    const body=proxySql.match(new RegExp(`CREATE(?: OR REPLACE)? FUNCTION ${name}\\([\\s\\S]*?AS \\$\\$([\\s\\S]*?)\\$\\$;`))?.[1];
+    expect(body).toBeDefined();
+    const signature=name==='guard_rework_work_report_insert'?`${name}()`:`${name}(uuid,text,uuid)`;
+    const row=(await client.query('SELECT prosrc,prosecdef,provolatile FROM pg_proc WHERE oid=$1::regprocedure',[signature])).rows[0];
+    expect(row.prosrc).toBe(body);expect(row.prosecdef).toBe(false);expect(row.provolatile).toBe(name==='guard_rework_work_report_insert'?'v':'s');
+   }
+   expect((await client.query("SELECT tgfoid='guard_rework_work_report_insert()'::regprocedure AS exact,tgenabled FROM pg_trigger WHERE tgrelid='rework_work_reports'::regclass AND tgname='rework_work_reports_guard_insert'")).rows).toEqual([{exact:true,tgenabled:'O'}]);
    expect((await applyMigrations(scoped.toString())).applied).toEqual([]);
    const after=(await client.query('SELECT version,checksum,applied_at FROM schema_migrations ORDER BY version')).rows;
    expect(after.map(r=>({version:r.version,checksum:r.checksum}))).toEqual(catalog.map(({version,checksum})=>({version,checksum})));
