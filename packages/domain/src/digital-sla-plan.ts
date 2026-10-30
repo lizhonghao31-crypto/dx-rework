@@ -1,5 +1,6 @@
 import { validateBusinessTime, type BusinessTime } from "./business-clock.js";
 import { isSlaDurationMinutes } from "@dx-rework/contracts/digital-sla";
+import type {FactoryReturnLogisticsWindow} from '@dx-rework/contracts/factory-flow';
 
 export type SlaAnchor =
   | { precision: "instant"; value: string; source: string }
@@ -36,6 +37,8 @@ export type SlaNodeFact = {
 };
 export type SlaFactIssue = {code:"completion_before_start"|"actual_after_observation";reason:string};
 export type SlaNodeEvaluation = SlaPlannedNode & {
+  /** Authorized native logistics read projection; excluded from precise-time SLA arithmetic. */
+  logisticsWindows?:FactoryReturnLogisticsWindow[];
   /** Enumerated native-fact inconsistency; only authorized read projections may isolate it. */
   assessmentIssue?:SlaFactIssue;
   provenRisk?:"overdue"|"warning";
