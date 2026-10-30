@@ -148,5 +148,17 @@
     "languages": ["plpgsql"],
     "onlineCompatible": false,
     "rollback": "restart-previous-only-if-entire-history-unchanged"
+  },
+  {
+    "version": "0231_temporary_special_process_proxy_reporting",
+    "checksum": "39a9c918c6589c9905ab0cf32de1f7cc304119fd4840a3fa8da34ddfb3e3d6b4",
+    "strategy": "quiesce-backup-transactional-ddl",
+    "tables": [],
+    "triggerTables": [],
+    "schema": "public",
+    "functions": ["public.guard_rework_work_report_insert()"],
+    "languages": ["plpgsql"],
+    "onlineCompatible": false,
+    "rollback": "restart-previous-only-if-entire-history-unchanged"
   }
 ]

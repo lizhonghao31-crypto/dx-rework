@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 const root = process.cwd();
 const plans = JSON.parse(readFileSync("scripts/deploy/main-maintenance-plans.json", "utf8"));
 const manifest = JSON.parse(readFileSync("apps/api/src/platform/migration-manifest.json", "utf8"));
-const versions = ["0223_sourcing_factory_change_craft_names","0224_contract_version_review_transfer_delivery","0225_warehouse_supervisor_cutting_read","0226_external_revision_preserve_handler","0227_qc_other_craft","0230_sourcing_factory_change_current_quantity"] as const;
+const versions = ["0223_sourcing_factory_change_craft_names","0224_contract_version_review_transfer_delivery","0225_warehouse_supervisor_cutting_read","0226_external_revision_preserve_handler","0227_qc_other_craft","0230_sourcing_factory_change_current_quantity","0231_temporary_special_process_proxy_reporting"] as const;
 
 function check(version: string, mode = "allowed", oldPlans = false, drift = false) {
   const selectedManifest={...manifest,migrations:manifest.migrations.filter((row: {version:string})=>row.version<=version)};
@@ -63,15 +63,16 @@ describe.each(versions)("%s main maintenance admission", version => {
   const revision=version.startsWith("0226");
   const craft=version.startsWith("0227");
   const quantity=version.startsWith("0230");
+  const proxy=version.startsWith("0231");
   it("admits the exact plan while retaining maintenance-only routing", () => {
     const result = run();
     expect(result.status, result.stderr).toBe(0);
     expect(JSON.parse(result.stdout)).toMatchObject({ pending: [version], onlineAllowed: false });
     expect(plans.find((p: { version: string }) => p.version === version)).toMatchObject({
       checksum: manifest.migrations.find((row: {version:string})=>row.version===version).checksum,
-      tables: craft ? ["public.rework_orders","public.rework_process_configuration_items"] : revision || quantity ? [] : warehouse ? ["public.business_roles","public.role_capabilities"] : current ? ["public.sourcing_case_transitions"] : ["public.craft_catalog_versions"], schema: "public",
-      triggerTables: craft ? ["public.rework_orders","public.rework_process_configuration_items"] : revision || quantity ? [] : warehouse ? ["public.business_roles","public.role_capabilities"] : current ? ["public.sourcing_factory_change_requests","public.sourcing_approval_snapshots"] : ["public.craft_catalog_versions"],
-      functions: quantity ? ["public.guard_sourcing_factory_change_request_insert()"] : craft ? ["public.guard_rework_order_write()"] : revision ? ["public.guard_determination_insert()"] : warehouse ? ["public.receiving_authorized_board_operator(uuid,text)","public.cutting_authorized_roles(uuid,text)"] : current ? ["public.guard_sourcing_contract_content_creation()","public.guard_sourcing_transition_insert()","public.sourcing_effective_delivery_date(uuid,date,timestamp with time zone)"] : ["public.guard_craft_catalog_version_creation()"], languages: revision ? ["sql","plpgsql"] : ["plpgsql"],
+      tables: craft ? ["public.rework_orders","public.rework_process_configuration_items"] : revision || quantity || proxy ? [] : warehouse ? ["public.business_roles","public.role_capabilities"] : current ? ["public.sourcing_case_transitions"] : ["public.craft_catalog_versions"], schema: "public",
+      triggerTables: craft ? ["public.rework_orders","public.rework_process_configuration_items"] : revision || quantity || proxy ? [] : warehouse ? ["public.business_roles","public.role_capabilities"] : current ? ["public.sourcing_factory_change_requests","public.sourcing_approval_snapshots"] : ["public.craft_catalog_versions"],
+      functions: proxy ? ["public.guard_rework_work_report_insert()"] : quantity ? ["public.guard_sourcing_factory_change_request_insert()"] : craft ? ["public.guard_rework_order_write()"] : revision ? ["public.guard_determination_insert()"] : warehouse ? ["public.receiving_authorized_board_operator(uuid,text)","public.cutting_authorized_roles(uuid,text)"] : current ? ["public.guard_sourcing_contract_content_creation()","public.guard_sourcing_transition_insert()","public.sourcing_effective_delivery_date(uuid,date,timestamp with time zone)"] : ["public.guard_craft_catalog_version_creation()"], languages: revision ? ["sql","plpgsql"] : ["plpgsql"],
       onlineCompatible: false,
     });
   });
@@ -86,12 +87,12 @@ describe.each(versions)("%s main maintenance admission", version => {
     ["trigger", craft ? "table public.rework_orders TRIGGER" : warehouse ? "table public.business_roles TRIGGER" : current ? "table public.sourcing_factory_change_requests TRIGGER" : "table public.craft_catalog_versions TRIGGER"],
     ["schema", "schema public USAGE/CREATE/current_schema"],
     ["shadow-schema", "schema public USAGE/CREATE/current_schema"],
-    ["function", quantity ? "function public.guard_sourcing_factory_change_request_insert() owner" : craft ? "function public.guard_rework_order_write() owner" : revision ? "function public.guard_determination_insert() owner" : warehouse ? "function public.receiving_authorized_board_operator(uuid,text) owner" : current ? "function public.guard_sourcing_contract_content_creation() owner" : "function public.guard_craft_catalog_version_creation() owner"],
-    ["missing-function", quantity ? "function public.guard_sourcing_factory_change_request_insert() owner" : craft ? "function public.guard_rework_order_write() owner" : revision ? "function public.guard_determination_insert() owner" : warehouse ? "function public.receiving_authorized_board_operator(uuid,text) owner" : current ? "function public.guard_sourcing_contract_content_creation() owner" : "function public.guard_craft_catalog_version_creation() owner"],
+    ["function", proxy ? "function public.guard_rework_work_report_insert() owner" : quantity ? "function public.guard_sourcing_factory_change_request_insert() owner" : craft ? "function public.guard_rework_order_write() owner" : revision ? "function public.guard_determination_insert() owner" : warehouse ? "function public.receiving_authorized_board_operator(uuid,text) owner" : current ? "function public.guard_sourcing_contract_content_creation() owner" : "function public.guard_craft_catalog_version_creation() owner"],
+    ["missing-function", proxy ? "function public.guard_rework_work_report_insert() owner" : quantity ? "function public.guard_sourcing_factory_change_request_insert() owner" : craft ? "function public.guard_rework_order_write() owner" : revision ? "function public.guard_determination_insert() owner" : warehouse ? "function public.receiving_authorized_board_operator(uuid,text) owner" : current ? "function public.guard_sourcing_contract_content_creation() owner" : "function public.guard_craft_catalog_version_creation() owner"],
     ["language", revision ? "language sql USAGE" : "language plpgsql USAGE"],
     ...(revision ? [["plpgsql", "language plpgsql USAGE"]] : []),
     ...(craft ? [["table-second","public.rework_process_configuration_items"],["trigger-second","table public.rework_process_configuration_items TRIGGER"]] : []),
-  ].filter(([mode])=>!(revision || quantity) || !["table","trigger"].includes(mode!)))("rejects insufficient %s permission without writes", (mode, object) => {
+  ].filter(([mode])=>!(revision || quantity || proxy) || !["table","trigger"].includes(mode!)))("rejects insufficient %s permission without writes", (mode, object) => {
     const result = run(mode);
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain(`MIGRATION_PERMISSION_REQUIRED: ${object}`);
