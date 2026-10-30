@@ -119,7 +119,7 @@ export function acceptancePm2(mode,sha,previous,evidence,io={}){
  }
  if(mode==='complete'){
   const saved=witness(),row=read();if(!row||row.pm2_env.status!=='online'||!canonical(row.pm2_env,sha))fail('Cannot complete another runtime activation');
-  store({...saved,phase:'verified'});return {status:'verified'};
+  store({...saved,phase:'verified'});return {status:'activation-record-verified'};
  }
  if(mode==='recover'){
   if(read())fail('Recovery is limited to a missing Acceptance registration');
