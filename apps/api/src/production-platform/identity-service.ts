@@ -3,7 +3,7 @@ import { SlaOrderService } from "./sla-order-service.js";
 import { developmentRevisionSource } from "./development-revision-source.js";
 import { captureDevelopmentSla } from "./development-sla-enrollment.js";
 import type { BusinessClock } from "@dx-rework/domain/business-clock";
-import {acceptanceBusinessContext,businessNow,observedBusinessTime,registerAcceptanceCreated} from '../acceptance-clock/business-time.js';
+import {acceptanceBusinessContext,businessNow,observedBusinessTime,registerAcceptanceCreated,ContextBusinessClock} from '../acceptance-clock/business-time.js';
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import { DigitalOrderCreateSchema, beijingCalendarDate, customerOrderDateError, initialCustomerOrderInput, digitalFormalPoNo, digitalPoKey, initialCustomerDateErrors, minimumInitialCustomerDate } from "@dx-rework/contracts/digital-production";
@@ -90,6 +90,15 @@ export class DigitalProductionIdentityService {
     assertIdentityActor(actor);
     const result = await this.database.query('SELECT c.code,c.name,c.product_groups AS "productGroups",c.default_merchandiser_id AS "defaultMerchandiserId",u.display_name AS "defaultMerchandiserName" FROM digital_production_customers c LEFT JOIN app_users u ON u.id=c.default_merchandiser_id WHERE c.enabled ORDER BY c.code');
     return result.rows;
+  }
+  async orderCalendar(actor:TrustedActorContext,sourceId?:string){
+    assertIdentityActor(actor);
+    let now=this.now();
+    if(sourceId){
+      await this.visibleSource(this.database,actor,sourceId);
+      now=new Date((await (this.businessClock??new ContextBusinessClock(this.database)).read({kind:'source',id:sourceId})).now);
+    }
+    return {serverToday:beijingCalendarDate(now),minimumInitialCustomerDate:minimumInitialCustomerDate(now)};
   }
   async sources(actor: TrustedActorContext, page: number, search: string): Promise<{ items: DigitalSource[]; page: number }> {
     assertIdentityActor(actor);

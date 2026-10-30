@@ -128,7 +128,9 @@ export class FactoryFlowService{
    await db.query("UPDATE attachments SET entity_type='digital_factory_qc',entity_id=$1,updated_at=CURRENT_TIMESTAMP WHERE attachment_id=ANY($2::uuid[])",[checkId,check.attachmentIds]);
   }
  });}
- async dispatch(actor:TrustedActorContext,id:string,input:FactoryDispatch,key:string){return this.command(actor,id,'warehouse',input,key,async(db,s)=>{
+ async dispatch(actor:TrustedActorContext,id:string,request:FactoryDispatch,key:string){return this.command(actor,id,'warehouse',request,key,async(db,s)=>{
+  // Resolve only inside the first execution, after the original idempotency check.
+  const input={...request,occurredAt:request.occurredAt===undefined?businessNow().toISOString():request.occurredAt};
   if(!await this.authorized(db,actor,s,'warehouse_dispatch'))digitalForbidden();if(s.batch)return this.batchDispatch(db,actor,id,s,input);if(s.dispatched)fail('整款已实际发厂，不能重复发出');if(!s.allQc)fail(`任一PO工艺QC未合格，整款不可发厂：${!s.returned?'尚无本轮工艺回仓记录，请印绣洗跟单在工艺物流登记实际回仓':s.latest.filter(row=>row.check?.result!=='合格').map(row=>`PO ${row.line.po_number}／${row.line.color}：${row.check?.result==='需处理'?'问题待处理及复查':'尚未检查'}`).join('；')}。请QC在本单工艺QC逐项处理，仓库随后登记实际发厂。`);
   if(input.supplierId!==s.gate.approval?.supplier_id)fail('请刷新确认当前原批准的唯一加工厂');
   const task=s.tasks.find(t=>t.task_kind==='warehouse_dispatch');if(task?.state!=='ready')fail(await this.taskBlockReason(db,actor,s,'warehouse_dispatch'));
@@ -178,7 +180,7 @@ export class FactoryFlowService{
    await db.query("UPDATE attachments SET entity_type='digital_factory_qc',entity_id=$1,updated_at=CURRENT_TIMESTAMP WHERE attachment_id=ANY($2::uuid[])",[checkId,check.attachmentIds]);
   }
  }
- private async batchDispatch(db:PoolClient,actor:TrustedActorContext,id:string,s:Awaited<ReturnType<FactoryFlowService['state']>>,input:FactoryDispatch){
+ private async batchDispatch(db:PoolClient,actor:TrustedActorContext,id:string,s:Awaited<ReturnType<FactoryFlowService['state']>>,input:FactoryDispatch&{occurredAt:string}){
   if(s.dispatched)fail('全部应发裁片已发厂');
   if(input.supplierId!==s.gate.approval?.supplier_id)fail('请刷新确认当前批准加工厂');
   if(s.contract?.status!=='ready')fail('当前批准合同未就绪，不能发厂');

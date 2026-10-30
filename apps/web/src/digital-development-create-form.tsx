@@ -2,7 +2,7 @@ import {DocumentToolbar,DocumentErrors} from "./document-editor.js";
 import { DevelopmentDocumentFields } from "./development-document-fields.js";
 import { DevelopmentPatternLink, type DevelopmentPatternChoice } from "./development-pattern-link.js";
 import { developmentIssues } from "./digital-development-validation.js";
-import { customerOrderDateError, initialCustomerDateErrors, minimumInitialCustomerDate, digitalPoKey } from "@dx-rework/contracts/digital-production";
+import { customerOrderDateError, initialCustomerDateErrors, digitalPoKey } from "@dx-rework/contracts/digital-production";
 import { createWebUrls } from "../url-contract.js";
 import "./digital-development.css";
 import { SearchableSelect } from "./search-select.js";
@@ -28,6 +28,7 @@ import {customerPoDateLabel} from "./digital-workspace-copy.js";
 type CreatePicture = {id: string; file: File; preview: string; kind: DevelopmentDocument["files"][number]["kind"]; attachmentId?: string; error?: string | undefined};
 
 export type DevelopmentCreateIntent = "development" | "certain_order" | "confirm_order";
+export const developmentOrderOptionsPath=(sourceId:string|null)=>sourceId?`options?sourceId=${encodeURIComponent(sourceId)}`:'options';
 const newLine = (): DevelopmentOrderDraft["lines"][number] => ({formalPoNo:null, customerWarehouseArrivalDate:null, poNumber: null, formalStyleNo: null, temporaryStyleNo: null, color: "", colorForeign: null, deliveryDate: null, sizes: [{size: "", quantity: ""}]});
 export function initialDevelopmentOrder(customers: DigitalCustomer[], source?: OrderJourney): DevelopmentOrderDraft {
   return {customerCode: source?.customer ?? "", designStyleNo: source?.designStyleNo ?? "", temporaryStyleNo: source?.temporaryStyleNo ?? null,
@@ -37,8 +38,8 @@ export function initialDevelopmentOrder(customers: DigitalCustomer[], source?: O
 }
 
 /** A facade over the existing source and order commands; no sample approval or route writes. */
-export function DevelopmentCreateForm({intent, source, customers, onCancel, onCreated, onIntentChange, existingDraft, minimumDate, serverToday, contained=false, cancelLabel="返回列表"}: {
-  contained?:boolean; intent: DevelopmentCreateIntent; source?: OrderJourney; existingDraft?: DevelopmentSheet; minimumDate?:string|undefined; serverToday?:string|undefined; customers: DigitalCustomer[];
+export function DevelopmentCreateForm({intent, source, customers, onCancel, onCreated, onIntentChange, existingDraft, minimumDate, serverToday, calendarSourceId, contained=false, cancelLabel="返回列表"}: {
+  contained?:boolean; intent: DevelopmentCreateIntent; source?: OrderJourney; existingDraft?: DevelopmentSheet; minimumDate?:string|undefined; serverToday?:string|undefined; calendarSourceId?:string|null; customers: DigitalCustomer[];
   onCancel: () => void; onCreated: (sourceId: string, orderId: string | null) => void; cancelLabel?:string;
   onIntentChange?: (intent: "development" | "certain_order") => void;
 }) {
@@ -60,7 +61,6 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
   const successfulUploads=useRef(new Map<string,string>()),publishKey=useRef<{payload:string;key:string}|null>(null);
   const edit=(patch:Partial<DevelopmentDocument>)=>setDocument(current=>({...current,...patch}));
   const issues=validationMode?developmentIssues(document,quantityInput,measurementIds.current,validationMode==="publish",null,sizeQuantityInputs):[];
-  const dateMinimum=minimumDate??minimumInitialCustomerDate();
   const [designerName, setDesignerName] = useState<string | null>(existingDraft?.designerName ?? source?.designer ?? null);
   useEffect(() => {
     if (source || existingDraft) return;
@@ -93,6 +93,35 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
   const draftSnapshot = (items: CreatePicture[], value=document, order=form, quantity=quantityInput) => JSON.stringify({intent, form:order, developmentType, document:value, quantityInput:quantity, sizeQuantityInputs, pictures: items.map(item => [item.id, item.attachmentId ?? null])});
   const currentSnapshot = draftSnapshot(pictures);
   const initial = useRef(currentSnapshot), dirty = useRef(false), completed = useRef(false);
+  type Calendar={sourceId:string|null;serverToday:string;minimumInitialCustomerDate:string};
+  const preloadedCalendar=Boolean(serverToday&&minimumDate&&(createdSource===null||calendarSourceId===createdSource));
+  const [calendar,setCalendar]=useState<Calendar|null>(()=>preloadedCalendar?{sourceId:createdSource,serverToday:serverToday!,minimumInitialCustomerDate:minimumDate!}:null);
+  const [calendarError,setCalendarError]=useState(''),[calendarRefresh,setCalendarRefresh]=useState(0);
+  const initialCalendarSource=useRef(createdSource),calendarInitialized=useRef<{sourceId:string|null}|null>(preloadedCalendar?{sourceId:createdSource}:null);
+  const calendarReady=calendar?.sourceId===createdSource;
+  const calendarToday=calendarReady?calendar!.serverToday:undefined;
+  const dateMinimum=calendarReady?calendar!.minimumInitialCustomerDate:undefined;
+  useEffect(()=>{
+    let live=true;const abort=new AbortController();
+    const refresh=()=>setCalendarRefresh(value=>value+1);
+    window.addEventListener('focus',refresh);window.addEventListener('acceptance-clock-changed',refresh);
+    if(busy||writing.current)return()=>{live=false;abort.abort();window.removeEventListener('focus',refresh);window.removeEventListener('acceptance-clock-changed',refresh);};
+    if(preloadedCalendar&&calendarRefresh===0){setCalendarError('');setCalendar({sourceId:createdSource,serverToday:serverToday!,minimumInitialCustomerDate:minimumDate!});}
+    else {
+      setCalendarError('');
+      void digitalRequest<Omit<Calendar,'sourceId'>>(developmentOrderOptionsPath(createdSource),'GET',undefined,undefined,{signal:abort.signal}).then(next=>{
+        if(!live)return;
+        if(!next.serverToday||!next.minimumInitialCustomerDate)throw new Error('未取得本单日期，请重新读取；输入仍保留');
+        // Initialize once before editing; later clock/date refreshes retain every entered fact.
+        if(calendarInitialized.current?.sourceId!==createdSource){
+          if(createdSource===initialCalendarSource.current&&!existingDraft?.document?.customerOrderDraft)setForm(current=>{const updated={...current,orderDate:next.serverToday};initial.current=draftSnapshot(picturesRef.current,document,updated,quantityInput);return updated;});
+          calendarInitialized.current={sourceId:createdSource};
+        }
+        setCalendar({...next,sourceId:createdSource});
+      }).catch(reason=>{if(live&&reason?.name!=='AbortError')setCalendarError(reason instanceof Error?reason.message:'本单日期读取失败');});
+    }
+    return()=>{live=false;abort.abort();window.removeEventListener('focus',refresh);window.removeEventListener('acceptance-clock-changed',refresh);};
+  },[createdSource,calendarRefresh,calendarSourceId,serverToday,minimumDate,busy]);
   dirty.current = currentSnapshot !== initial.current;
   const documentGuards = useContext(DocumentGuardContext);
   useEffect(() => {
@@ -150,7 +179,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
       const sourceInput = DigitalSourceCreateSchema.parse({developmentType, designStyleNo: form.designStyleNo, temporaryStyleNo: form.temporaryStyleNo, customerCode: form.customerCode || null});
       const orderInput = withOrder && !draftOnly ? DigitalOrderCreateSchema.parse(developmentOrderInput(form)) : null;
       if(orderInput){
-        const calendar=await digitalRequest<{serverToday:string;minimumInitialCustomerDate:string}>("options");
+        const calendar=await digitalRequest<{serverToday:string;minimumInitialCustomerDate:string}>(developmentOrderOptionsPath(createdSource));
         if(!calendar.serverToday||!calendar.minimumInitialCustomerDate)throw new Error("未取得服务器日期，请重试；输入仍保留");
         const dateError=customerOrderDateError(orderInput.orderDate,calendar.serverToday);
         if(dateError)throw new Error(dateError);
@@ -236,15 +265,17 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
     if ((!dirty.current || await confirmInApp("有未保存开发资料或订购信息，确定离开？")) && !writing.current) onCancel();
   };
   return <Surface className="development-create development-create-reference dx-doc-development"><form id={formId} noValidate onKeyDown={event=>{if(event.key==="Enter"&&event.nativeEvent.isComposing)event.preventDefault();}} onSubmit={event => {event.preventDefault(); void save();}}>
-    <DocumentToolbar title={title} status={busy?"保存中":publishStatus}>{!contained&&<Button type="button" disabled={busy} onClick={()=>void returnToList()}>{cancelLabel}</Button>}{!source&&!published&&<Button type="button" disabled={busy} onClick={()=>void save(true)}>保存开发资料草稿</Button>}<Button form={formId} type="submit" variant="primary" disabled={busy}>{busy?"保存中…":submitLabel}</Button></DocumentToolbar>
+    <DocumentToolbar title={title} status={busy?"保存中":publishStatus}>{!contained&&<Button type="button" disabled={busy} onClick={()=>void returnToList()}>{cancelLabel}</Button>}{!source&&!published&&<Button type="button" disabled={busy||!calendarReady||Boolean(calendarError)} onClick={()=>void save(true)}>保存开发资料草稿</Button>}<Button form={formId} type="submit" variant="primary" disabled={busy||!calendarReady||Boolean(calendarError)}>{busy?"保存中…":submitLabel}</Button></DocumentToolbar>
     {!source&&!existingDraft?.revisionSource&&<div className="development-order-intent" role="group" aria-label="确定客户订单">{([['development','无确定客户订单'],['certain_order','有确定客户订单']] as const).map(([value,label])=><Button key={value} type="button" aria-pressed={intent===value} disabled={busy||published||!onIntentChange} onClick={()=>onIntentChange?.(value)}>{label}</Button>)}</div>}
     {source && <p>沿用第 {source.adoptedRound ?? source.selectedRound ?? 1} 轮开发资料；头版/开发板与已有工序保持原档案。</p>}
     {error && <DocumentErrors error={error} issues={errorField?[{id:errorField,label:"定位需核实字段",message:error}]:[]}/>}
+    {calendarError?<p role="alert">{calendarError}</p>:!calendarReady&&<p role="status">正在读取本单日期…</p>}
+    {(createdSource||calendarError)&&<Button type="button" disabled={busy} onClick={()=>setCalendarRefresh(value=>value+1)}>重新读取本单日期</Button>}
     {duplicateSource&&<a href={createWebUrls(import.meta.env.BASE_URL).pageUrl(`ui/digital-production?development=${duplicateSource}`)}>打开已有开发档案</a>}
     {!busy&&!published&&savedDraft === currentSnapshot && <p role="status">开发资料与订购草稿已保存，可返回列表后继续填写；发布和确认订单分别办理。</p>}
     {createdSource&&error&&<p role="status">{developmentPublished?withOrder?"开发单已发布；本次客户订单确认未取得成功回执，请先核对原档案，再继续确认。":"开发单已发布，请打开原档案核对。":savedDraft===currentSnapshot?"当前草稿已保存；发布尚未取得成功回执，请先核对原档案再继续。":"当前填写尚未取得保存成功回执，输入仍保留；重试会沿用此档案。"} <a className="dx-button dx-button--secondary" href={createWebUrls(import.meta.env.BASE_URL).pageUrl(`ui/digital-production?development=${createdSource}`)}>打开原开发档案</a></p>}
     {boundOrder&&<p role="status">订购草稿已随开发资料发布；确认与重试沿用已发布的 PO、数量和日期。</p>}
-    <fieldset disabled={busy}><fieldset disabled={Boolean(boundOrder)} className="development-order-fields"><div className="development-create-layout development-create-layout-existing">
+    <fieldset disabled={busy||!calendarReady}><fieldset disabled={Boolean(boundOrder)} className="development-order-fields"><div className="development-create-layout development-create-layout-existing">
     <div className="development-create-order"><section className="development-create-card"><h3>1 · 基本资料</h3><div className="development-create-grid">
       {intent !== "confirm_order" && <label>开发类型<select aria-label="开发类型" disabled={Boolean(createdSource)} value={developmentType} onChange={event => setDevelopmentType(event.target.value as "头版" | "开发板")}><option>头版</option><option>开发板</option></select></label>}
       <label>设计款号（必填）<input id="development-create-style" aria-label="设计款号" required maxLength={100} value={form.designStyleNo} readOnly={Boolean(createdSource)} onBlur={event=>void findExistingSource(event.target.value)} onChange={event => {sourceSearchSequence.current++;setDuplicateSource(null);setForm({...form, designStyleNo: event.target.value});}}/></label>
@@ -253,7 +284,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
 </div><div className="development-create-grid development-create-grid-secondary">
       <label>客户{withOrder ? "（必填）" : "（选填）"}<SearchableSelect id="development-create-customer" aria-label="客户" required={withOrder} disabled={Boolean(createdSource && (fixedCustomer || !withOrder))} value={form.customerCode} onChange={event => {const customer = customers.find(customer => customer.code === event.target.value); setForm({...form, customerCode: event.target.value, primaryMerchandiserId: customer?.defaultMerchandiserId ?? null, productGroup: initialDigitalProductGroup(customers, event.target.value)});}}><option value="">通用开发 / 请选择</option>{customers.map(customer => <option key={customer.code} value={customer.code}>{customer.code} · {customer.name}</option>)}</SearchableSelect></label>
 {withOrder && <><label>产品分组<select aria-label="产品分组" value={form.productGroup} onChange={event => setForm({...form, productGroup: event.target.value as DigitalOrderInput["productGroup"]})}>{(customers.find(customer => customer.code === form.customerCode)?.productGroups ?? [form.productGroup]).map(group => <option key={group}>{group}</option>)}</select></label>
-        <label>客户下单日期（必填）<input id="development-customer-order-date" aria-label="客户下单日期" required max={serverToday} type="date" value={form.orderDate} onChange={event => setForm({...form, orderDate: event.target.value})}/></label>
+        <label>客户下单日期（必填）<input id="development-customer-order-date" aria-label="客户下单日期" required max={calendarToday} type="date" value={form.orderDate} onChange={event => setForm({...form, orderDate: event.target.value})}/></label>
 </>}<label>开发下单日期（固定）<input id="development-orderDate" aria-label="开发下单日期" readOnly value={document.orderDate??(published?"历史未登记":"保存后由服务器确定")}/></label><label>工艺<select aria-label="工艺" disabled={published} value={document.craft} onChange={event=>edit({craft:event.target.value as DevelopmentDocument["craft"]})}>{["无","印花","绣花","印绣花"].map(value=><option key={value}>{value}</option>)}</select></label></div></section>
     {withOrder && <section className="development-create-card development-create-details"><h3>2 · 客户订单明细 <small>默认主跟单：{customers.find(customer=>customer.code===form.customerCode)?.defaultMerchandiserName??"未配置，待主管指派"}</small></h3>
       {!sharedPoColumns&&<p className="development-legacy-po-note">本草稿各 PO 原尺码不同，按原行保留；修改尺码只影响该 PO，订购数量不会并入其它尺码。</p>}
@@ -293,6 +324,6 @@ export function ResumeDevelopmentCreateForm({sheet,onClose,onCreated,onViewPubli
   const [options,setOptions]=useState<{customers:DigitalCustomer[];minimumInitialCustomerDate?:string;serverToday?:string}|null>(null);
   const [error,setError]=useState("");
   const [intent,setIntent]=useState<"development"|"certain_order">(sheet.document?.customerOrderDraft?.withOrder?"certain_order":"development");
-  useEffect(()=>{let live=true;void digitalRequest<{customers:DigitalCustomer[];minimumInitialCustomerDate?:string;serverToday?:string}>("options").then(value=>{if(live)setOptions(value);}).catch(reason=>{if(live)setError(reason instanceof Error?reason.message:"读取客户资料失败");});return()=>{live=false;};},[]);
-  return error?<p role="alert">{error}</p>:!options?<p role="status">正在读取开发草稿…</p>:<>{sheet.status==="published"&&onViewPublished&&<Button type="button" onClick={onViewPublished}>查看已发布资料、版本与办理</Button>}<DevelopmentCreateForm contained={contained} existingDraft={sheet} intent={intent} customers={options.customers} minimumDate={options.minimumInitialCustomerDate} serverToday={options.serverToday} onIntentChange={setIntent} onCancel={onClose} onCreated={onCreated}/></>;
+  useEffect(()=>{let live=true;setOptions(null);setError('');void digitalRequest<{customers:DigitalCustomer[];minimumInitialCustomerDate?:string;serverToday?:string}>(developmentOrderOptionsPath(sheet.sourceId)).then(value=>{if(live)setOptions(value);}).catch(reason=>{if(live)setError(reason instanceof Error?reason.message:"读取客户资料失败");});return()=>{live=false;};},[sheet.sourceId]);
+  return error?<p role="alert">{error}</p>:!options?<p role="status">正在读取开发草稿…</p>:<>{sheet.status==="published"&&onViewPublished&&<Button type="button" onClick={onViewPublished}>查看已发布资料、版本与办理</Button>}<DevelopmentCreateForm contained={contained} existingDraft={sheet} intent={intent} customers={options.customers} minimumDate={options.minimumInitialCustomerDate} serverToday={options.serverToday} calendarSourceId={sheet.sourceId} onIntentChange={setIntent} onCancel={onClose} onCreated={onCreated}/></>;
 }
