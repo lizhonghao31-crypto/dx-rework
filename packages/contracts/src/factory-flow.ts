@@ -1,5 +1,7 @@
 import {z} from 'zod';
 import type {DigitalTask} from './digital-production-tasks.js';
+/** Original date-precision shipment projection, shared by factory and cockpit reads. */
+export type FactoryReturnLogisticsWindow=NonNullable<FactoryFlowSheet['returnLogistics']>[number];
 const base={expectedRevision:z.number().int().nonnegative(),note:z.string().trim().max(2000).default('')};
 export const FactoryScopeSchema=z.array(z.object({lineId:z.string().uuid(),quantity:z.number().int().positive().max(10000000)}).strict()).min(1).max(100);
 export const FactoryLogisticsSchema=z.object({...base,kind:z.enum(['工艺发出','工艺回仓','工艺沟通']),lines:FactoryScopeSchema.optional(),sendFactId:z.string().uuid().optional(),fromReturnId:z.string().uuid().optional(),occurredAt:z.iso.datetime({offset:true}).nullable(),supplier:z.string().trim().max(200).default('')}).strict();

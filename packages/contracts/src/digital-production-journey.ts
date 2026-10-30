@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { PoDeliveryDate,PoDeliveryRisk } from "./po-delivery-dates.js";
+import type {FactoryReturnLogisticsWindow} from './factory-flow.js';
 
 export const JOURNEY_STAGES = [
   { key: "creation", label: "订单创建" },
@@ -47,6 +48,8 @@ export type JourneyFilter = z.infer<typeof JourneyFilterSchema>;
 export type JourneyRecord = { domain: string; id: string; url: string | null; mode: "read" | "handle"; version: number | null; lineId: string | null };
 export type JourneyDocumentMetadata={created:{at:string|null;by:string|null};edited:{at:string|null;by:string|null};published:{at:string|null;by:string|null}};
 export type JourneyTiming = {
+  /** Date ranges are estimates, never exact starts, deadlines or permission to receive. */
+  logisticsWindows?:FactoryReturnLogisticsWindow[];
   id:string;label:string;stage:JourneyStageKey;kind:string;
   status:"not_applicable"|"unknown"|"not_started"|"running"|"warning"|"overdue"|"completed_on_time"|"completed_late"|"completed_unrated";
   provenRisk?:"overdue"|"warning";

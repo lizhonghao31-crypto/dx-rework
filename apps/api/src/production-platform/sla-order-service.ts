@@ -5,6 +5,8 @@ import {packingSlaEvidence} from './packing-sla-evidence.js';
 import {garmentSlaEvidence} from './garment-sla-evidence.js';
 import {reworkSlaEvidence,reworkEvaluationPlan} from './rework-sla-evidence.js';
 import {factoryProductionFacts} from './factory-production-facts.js';
+import {factoryReturnLogistics} from './factory-return-logistics.js';
+import {attachFactoryLogisticsRanges} from './factory-logistics-sla-projection.js';
 import {ShipSampleService} from './ship-sample-service.js';
 import {shipSampleSlaEvidence} from './ship-sample-facts.js';
 import {factorySlaEvidence,factoryEvaluationPlan} from './factory-sla-evidence.js';
@@ -111,7 +113,8 @@ export class SlaOrderService {
       const bulk=await bulkSlaEvidence(client,orderId);
       // Publication proves the sheet's end, not a replacement for its original order-confirmation start.
       if(bulk.production_sheet&&facts.production_sheet?.startedAt)bulk.production_sheet.startedAt=facts.production_sheet.startedAt;
-      Object.assign(facts,bulk,await sourcingSlaEvidence(client,orderId),await shipSampleSlaEvidence(client,orderId),(await factoryProductionFacts(client,orderId)).facts);
+      const production=await factoryProductionFacts(client,orderId);
+      Object.assign(facts,bulk,await sourcingSlaEvidence(client,orderId),await shipSampleSlaEvidence(client,orderId),production.facts);
       const factory=await factorySlaEvidence(client,orderId);if(factory)Object.assign(facts,factory.facts);
       const garments=await garmentSlaEvidence(client,orderId);Object.assign(facts,garments.facts);
       const receiving=await new OrderClosureService(this.database).read(actor,orderId,client);
@@ -133,7 +136,11 @@ export class SlaOrderService {
           if(value&&'minutes' in value)fact.standardMinutes=value.minutes;
         }
       }
-      const evaluationPlan = reworkEvaluationPlan(developmentEvaluationPlan(factory?factoryEvaluationPlan(current.plan,factory.craftKey):current.plan, facts),rework.facts), nodes = evaluateSlaPlan(evaluationPlan, facts, time,options);
+      const evaluationPlan = reworkEvaluationPlan(developmentEvaluationPlan(factory?factoryEvaluationPlan(current.plan,factory.craftKey):current.plan, facts),rework.facts);
+      const evaluated=evaluateSlaPlan(evaluationPlan,facts,time,options);
+      // Display-only ranges must not enter strict before/after business comparisons.
+      const nodes=options.mode==='read_projection'?attachFactoryLogisticsRanges(evaluated,evaluationPlan,
+        await factoryReturnLogistics(client,orderId,new Date(time.now)),production.checks):evaluated;
       const progress = slaBusinessProgress(evaluationPlan, Object.entries(facts).filter(([, f]) => f.businessCompleted || f.completedAt).map(([id]) => id));
       return { status: "planned" as const, time, original: history[0]!, current, history, nodes, facts, evaluationPlan, applications, progress, development, factory, rework, garments, receiving, packing };
   }

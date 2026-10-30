@@ -80,11 +80,11 @@ export async function businessAnchorFixture(url:string){
    }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
   };
   const advance=async(id:string,at:string)=>runtime.run(id,root,async()=>{const row=await runtime.repository.row(id);await runtime.repository.change(id,root.actorId,{expectedVersion:row.version,requestKey:randomUUID(),at});});
-  const bulkReady=async(secondaryCraft:'无'|'印花',beforeCreate?:(input:Parameters<SourcingService['createCase']>[1],key:string,primary:TrustedActorContext)=>Promise<void>)=>{
+  const bulkReady=async(secondaryCraft:'无'|'印花',beforeCreate?:(input:Parameters<SourcingService['createCase']>[1],key:string,primary:TrustedActorContext)=>Promise<void>,poCount=1,sourcingCommands=sourcing)=>{
    const designer=people['sample-designer']!,primary=people.merchandiser!,manager=people['production-management']!,owner=people.owner!,ie=people.ie!;
    const identity=new DigitalProductionIdentityService(db,true),forms=new DigitalDevelopmentService(db,true),bulk=new BulkPreparationService(db),instruction=new ProductionInstructionService(db,true),budget=new DigitalBudgetService(db,true);
    const style=`TEST-ANCHOR-${randomUUID()}`;
-   const order=await identity.createOrder(designer,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:style,orderDate:beijingCalendarDate(businessNow()),primaryMerchandiserId:primary.actorId,lines:[{formalPoNo:style,color:'黑',customerWarehouseArrivalDate:'2027-03-01',sizes:[{size:'M',quantity:10}]}]}),randomUUID());
+   const order=await identity.createOrder(designer,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:style,orderDate:beijingCalendarDate(businessNow()),primaryMerchandiserId:primary.actorId,lines:Array.from({length:poCount},(_,index)=>({formalPoNo:poCount===1?style:`${style}-${index+1}`,color:index?'白':'黑',customerWarehouseArrivalDate:'2027-03-01',sizes:[{size:'M',quantity:10}]}))}),randomUUID());
    const id=order.productionOrderId,source=await identity.createSource(designer,{developmentType:'头版',designStyleNo:style,temporaryStyleNo:null,customerCode:'PD'},randomUUID());
    await identity.attachSource(designer,id,source.sourceId,randomUUID());
    const photo=await image(designer);
@@ -100,9 +100,9 @@ export async function businessAnchorFixture(url:string){
    const prepared=await budget.prepareSourcing(primary,id,1,attachments);
    const input={gender:prepared.gender,styleName:prepared.styleName,deliveryDate:'2026-12-10',estimatedCutPieceSendDate:'2026-11-01',daxingUnitPrice:prepared.daxingUnitPrice,attachmentIds:prepared.images.map(i=>i.attachmentId),lineItems:prepared.lineItems.map(({lineId,styleNo,alternateStyleNo,color,quantity})=>({lineId,styleNo,alternateStyleNo,color,quantity,factoryDeliveryDate:'2026-12-10'})),digitalBudget:{productionOrderId:id,budgetVersion:prepared.budgetVersion,orderVersion:prepared.orderVersion}};
    const key=randomUUID();await beforeCreate?.(input,key,primary);
-   const created=await sourcing.createCase(primary,input,key),caseId=created.value.sourcingCaseId;
-   const prices=[{position:1,unitPrice:'5'}];await sourcing.quoteIePrice(ie,caseId,{linePrices:prices},randomUUID());await sourcing.recordManagementDecision(manager,caseId,{supplierId:supplier.supplierId,craftIds:[craft.craftId],linePrices:prices,cuttingProcess:'in_house'},randomUUID());
-   await sourcing.decideOwner(owner,caseId,{decision:'approved'},randomUUID());
+   const created=await sourcingCommands.createCase(primary,input,key),caseId=created.value.sourcingCaseId;
+   const prices=input.lineItems.map((_,index)=>({position:index+1,unitPrice:'5'}));await sourcingCommands.quoteIePrice(ie,caseId,{linePrices:prices},randomUUID());await sourcingCommands.recordManagementDecision(manager,caseId,{supplierId:supplier.supplierId,craftIds:[craft.craftId],linePrices:prices,cuttingProcess:'in_house'},randomUUID());
+   await sourcingCommands.decideOwner(owner,caseId,{decision:'approved'},randomUUID());
    await new DevelopmentExecutionService(db,true).customerSample(designer,source.sourceId,{routeVersion:1,note:'TEST客户确认'},randomUUID());
    await bulk.dispatch(people['development-clerk']!,id,{expectedVersion:1,patternWorkerId:people['pattern-room-worker']!.actorId,deliverPattern:true},randomUUID());
    await bulk.reportFabric(people.warehouse!,id,{expectedReportId:null,material:'TEST本单面料',arrivedAt:businessNow().toISOString(),inspectedAt:businessNow().toISOString(),result:'合格',note:'TEST'},randomUUID());
