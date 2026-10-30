@@ -977,6 +977,10 @@
       "checksum": "b1698097af226f2c0a2a52fe5463f54365dde375fe45e40f4b11677b778ba782"
     },
     {
+      "version": "0231_temporary_special_process_proxy_reporting",
+      "checksum": "39a9c918c6589c9905ab0cf32de1f7cc304119fd4840a3fa8da34ddfb3e3d6b4"
+    },
+    {
       "version": "0232_reconcile_contract_and_digital_histories",
       "checksum": "e80fa66d9ae060a43430a8bed70513ecac17ae6daed729e307921fcae66b56c3"
     },

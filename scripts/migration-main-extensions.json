@@ -38,5 +38,9 @@
   {
     "version": "0230_sourcing_factory_change_current_quantity",
     "checksum": "4091340fdb842e866aec8b9f124c73c9d5e7086bd122677c144864355052e6bf"
+  },
+  {
+    "version": "0231_temporary_special_process_proxy_reporting",
+    "checksum": "39a9c918c6589c9905ab0cf32de1f7cc304119fd4840a3fa8da34ddfb3e3d6b4"
   }
 ]

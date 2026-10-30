@@ -28,11 +28,19 @@ describe('frozen main / digital migration reconciliation',()=>{
   expect(()=>assertAppliedMigrationHistory([...original,original.at(-1)!],target)).toThrow('Duplicate');
   expect(()=>assertAppliedMigrationHistory([...original,target.at(-1)!],target)).toThrow('both complete');
  });
- it('only permits the three exact frozen prefix collisions',()=>{
+ it('only permits exact approved identity/checksum prefix pairs',()=>{
   expect(()=>assertMigrationSequence(target)).not.toThrow();
   const fake={version:'0218_unapproved',checksum:'0'.repeat(64)};
   expect(()=>assertMigrationSequence(sorted([...target,fake]))).toThrow();
   expect(()=>assertMigrationSequence(target.map(r=>r.version===branches.main[0]!.version?{...r,checksum:'0'.repeat(64)}:r))).toThrow('Frozen');
   expect(()=>assertMigrationSequence(target.filter(r=>!r.version.startsWith('0227_')))).toThrow('sequence gap');
+ });
+ it('admits precisely the main hotfix and existing digital 0231 without accepting a third identity or drift',()=>{
+  const version='0231_temporary_special_process_proxy_reporting',checksum='39a9c918c6589c9905ab0cf32de1f7cc304119fd4840a3fa8da34ddfb3e3d6b4';
+  expect(target.filter(row=>row.version.startsWith('0231_'))).toEqual([{version:'0231_digital_order_closure',checksum:target.find(row=>row.version==='0231_digital_order_closure')!.checksum},{version,checksum}]);
+  expect(()=>assertAppliedMigrationHistory(target.filter(row=>row.version!==version),target)).not.toThrow();
+  expect(()=>assertMigrationSequence(sorted([...target,{version:'0231_unapproved_third',checksum:'0'.repeat(64)}]))).toThrow();
+  expect(()=>assertMigrationSequence(target.map(row=>row.version===version?{...row,checksum:'0'.repeat(64)}:row))).toThrow('Frozen');
+  expect(()=>assertAppliedMigrationHistory(target.filter(row=>row.version!=='0230_sourcing_factory_change_current_quantity'),target)).toThrow();
  });
 });
