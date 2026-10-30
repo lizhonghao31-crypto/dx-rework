@@ -46,7 +46,7 @@ def write(path, content, mode=0o644):
 
 def command(args, cwd=None, env=None, check=True):
     result = subprocess.run(args, cwd=cwd, env=env, text=True,
-                            capture_output=True, timeout=60)
+                            capture_output=True, timeout=60, start_new_session=True)
     if check and result.returncode:
         raise AssertionError("Command failed: {}\n{}\n{}".format(
             args, result.stdout, result.stderr))
@@ -135,6 +135,7 @@ class Fixture:
                     "scripts/deploy/inspect-acceptance-storage.py",
                     "scripts/deploy/acceptance-capacity.py",
                     "scripts/deploy/acceptance-runtime-state.mjs",
+                    "scripts/deploy/acceptance-pm2-activation.mjs",
                     "scripts/migration-history-policy.mjs", "scripts/migration-branches.json",
                     "scripts/check-main-release-compat.mjs",
                     "docs/operations/g1-acceptance-compat-update.sh"]
@@ -227,28 +228,46 @@ class Fixture:
             echo 'Unexpected fixture build/npm action' >&2; exit 98
         """, 0o755)
         write(self.bin / "pm2", """#!/usr/bin/env python3
-            import json,sys,pathlib,os
+            import json,sys,pathlib,os,signal
             root=pathlib.Path(%r);args=sys.argv[1:]
-            with open(%r,'a') as f:f.write(json.dumps({'kind':'pm2','args':args})+'\\n')
+            with open(%r,'a') as f:f.write(json.dumps({'kind':'pm2','args':args,'home':os.environ.get('PM2_HOME')})+'\\n')
             file=root.parent/'network.json';model=json.loads(file.read_text())
             def process():
                 sha=model.get('acceptancePm2Sha',%r);release=str(root/'releases'/sha)
-                return {'name':'dx-rework-acceptance-api','pm2_env':{'status':model.get('acceptancePm2Status','online'),'pm_cwd':release,'pm_exec_path':release+'/scripts/deploy/start-acceptance-api.sh'}}
+                return {'name':'dx-rework-acceptance-api','pm_id':model.get('acceptancePm2Id',0),'pid':4242 if model.get('acceptancePm2Status','online')=='online' else 0,'pm2_env':{'name':'dx-rework-acceptance-api','status':model.get('acceptancePm2Status','online'),'pm_cwd':release,'pm_exec_path':release+'/scripts/deploy/start-acceptance-api.sh'}}
             if args==['jlist']:
-                print(json.dumps([process()]))
+                print(json.dumps([process()] if model.get('acceptancePm2Present',True) else []))
+            elif args and args[0]=='delete':
+                if args[1]!=str(model.get('acceptancePm2Id',0)) or model.get('acceptancePm2Status','online')!='stopped':sys.exit('Only the stopped Acceptance ID can be deleted')
+                model['acceptancePm2Present']=False;file.write_text(json.dumps(model))
+                if (root.parent/'kill-after-pm2-delete').exists():
+                    (root.parent/'kill-after-pm2-delete').unlink();os.killpg(os.getpgrp(),signal.SIGKILL)
             elif args and args[0] in ('startOrReload','stop'):
-                if 'dx-rework-acceptance-api' not in args:sys.exit('Production process action is forbidden')
+                if 'dx-rework-acceptance-api' not in args and not (args[0]=='stop' and args[1]==str(model.get('acceptancePm2Id',0))):sys.exit('Production process action is forbidden')
                 if args[0]=='startOrReload':
-                    model['acceptancePm2Sha']=os.environ.get('DX_REWORK_ACCEPTANCE_RELEASE_SHA') or pathlib.Path(args[1]).parents[2].name
-                    model['acceptancePm2Status']='online'
-                    model['3202']['version']=json.loads((root/'current/release-manifest.json').read_text())
+                    if (root.parent/'fail-pm2-start-once').exists() and args[1].endswith('.cjs'):
+                        (root.parent/'fail-pm2-start-once').unlink();sys.exit('TEST PM2 start failed')
+                    config=json.loads(pathlib.Path(args[1]).read_text())['apps'][0] if args[1].endswith('.json') else None
+                    if not model.get('acceptancePm2Present',True):
+                        model['acceptancePm2Sha']=os.environ.get('DX_REWORK_ACCEPTANCE_RELEASE_SHA') or (pathlib.Path(config['cwd']).name if config else pathlib.Path(args[1]).parents[2].name)
+                        model['acceptancePm2Id']=model.get('acceptancePm2Id',0)+1
+                    model['acceptancePm2Present']=True
+                    model['acceptancePm2Status']='stopped' if config and config.get('autostart') is False else 'online'
+                    model['3202']['version']=json.loads((root/'releases'/model.get('acceptancePm2Sha','1111111111111111111111111111111111111111')/'release-manifest.json').read_text())
                 else:model['acceptancePm2Status']='stopped'
                 file.write_text(json.dumps(model))
+                if args[0]=='startOrReload' and (root.parent/'kill-after-pm2-start').exists():
+                    (root.parent/'kill-after-pm2-start').unlink();os.killpg(os.getpgrp(),signal.SIGKILL)
             elif args==['save']:
-                if (root.parent/'fail-pm2-save').exists():
+                if model.get('acceptancePm2Status','online')=='stopped':
+                    model['stopSaveCount']=model.get('stopSaveCount',0)+1;file.write_text(json.dumps(model))
+                    if (root.parent/'fail-pm2-stop-save').exists() or ((root.parent/'fail-pm2-stop-backup-save').exists() and model['stopSaveCount']==2):sys.exit('TEST stopped save failure')
+                if (root.parent/'fail-pm2-save').exists() and model.get('acceptancePm2Status','online')=='online':
                     if (root.parent/'fail-evidence-copy-on-save').exists():(root.parent/'fail-evidence-copy').write_text('TEST evidence allocation failed')
                     sys.exit('TEST PM2 save failure')
-                target=root.parent/'acceptance-home/.pm2/dump.pm2';target.parent.mkdir(parents=True,exist_ok=True);target.write_text(json.dumps([process()]))
+                target=root.parent/'acceptance-home/.pm2/dump.pm2';target.parent.mkdir(parents=True,exist_ok=True)
+                if target.exists():target.with_name('dump.pm2.bak').write_bytes(target.read_bytes())
+                target.write_text(json.dumps([process()]))
             else:sys.exit('Unexpected PM2 action')
         """ % (str(self.acceptance), str(self.trace), SHA0), 0o755)
         for name in ("psql", "pg_dump", "pg_restore"):
@@ -413,6 +432,8 @@ class Fixture:
         """ % self.acceptance, 0o755)
         for config in ("ecosystem.config.cjs", "ecosystem.acceptance.config.cjs"):
             write(api / "infra/pm2" / config, "module.exports={}\n")
+        if acceptance:
+            write(api / "infra/pm2/ecosystem.acceptance.config.cjs", (self.repo / "infra/pm2/ecosystem.acceptance.config.cjs").read_text())
         write(root / "build-provenance.json", json.dumps({"sourceSha": sha, "frontendSourceSha": sha, "frontendBuilt": True}) + "\n")
         for directory in (api, frontend, root):
             rows=[]
@@ -462,6 +483,7 @@ class Fixture:
         write(self.launch / "dx-rework-deploy", "#!/bin/sh\necho MAIN_LAUNCHER_UNCHANGED\n", 0o755)
         write(self.launch / "dx-rework-maintenance-update", "#!/bin/sh\nexit 98\n", 0o755)
         release = str(self.acceptance / 'releases' / SHA0)
+        write(self.directory / 'acceptance-home/.pm2/pm2.pid', str(os.getpid())+'\n',0o600)
         write(self.directory / 'acceptance-home/.pm2/dump.pm2', json.dumps([
             {'name':'dx-rework-acceptance-api','pm2_env':{'status':'online',
              'pm_cwd':release,'pm_exec_path':release+'/scripts/deploy/start-acceptance-api.sh'}}]))
@@ -804,6 +826,103 @@ class ActiveSlotChainTests(unittest.TestCase):
         self.assertTrue((evidence/'preflight/tree-sha').is_file())
         for phase in ('download','archive','build','backup','stop'):
             self.assertEqual('capacity_sufficient',json.loads((evidence/'preflight'/('capacity-'+phase+'.json')).read_text())['status'])
+
+    def test_start_failure_keeps_stopped_registration_and_same_sha_retry_skips_migration(self):
+        f=self.fixture;f.install();before=f.production_fingerprint();write(f.trace,'')
+        write(f.directory/'fail-pm2-start-once','fail')
+        result=f.update(check=False)
+        self.assertNotEqual(result.returncode,0)
+        self.assertNotIn('ACCEPTANCE_UPDATE_FINISHED',result.stdout)
+        model=json.loads(f.network.read_text())
+        self.assertTrue(model['acceptancePm2Present'])
+        self.assertEqual(f.sha,model['acceptancePm2Sha'])
+        self.assertEqual('stopped',model['acceptancePm2Status'])
+        self.assertEqual(before,f.production_fingerprint())
+        write(f.trace,'');retry=f.update();calls=f.calls()
+        self.assertIn('ACCEPTANCE_UPDATE_FINISHED',retry.stdout)
+        self.assertFalse(any(x['kind']=='backup' for x in calls))
+        self.assertFalse(any(x['kind']=='maintenance' and x['action']=='apply' for x in calls))
+        self.assertTrue(all(x['home']==str(f.directory/'acceptance-home/.pm2') for x in calls if x['kind']=='pm2'))
+        write(f.trace,'');healthy=f.update();calls=f.calls()
+        self.assertIn('Already current and healthy',healthy.stdout)
+        self.assertFalse(any(x['kind']=='pm2' and x['args'][0] in ('stop','delete','startOrReload','save') for x in calls))
+        self.assertEqual(before,f.production_fingerprint())
+
+    def interrupt_after_delete(self):
+        f=self.fixture;f.install();before=f.production_fingerprint()
+        write(f.directory/'kill-after-pm2-delete','kill fixture session')
+        result=f.update(check=False)
+        self.assertEqual(-9,result.returncode)
+        self.assertFalse(json.loads(f.network.read_text())['acceptancePm2Present'])
+        self.assertEqual(before,f.production_fingerprint())
+        checkpoint=f.acceptance/'shared/update-checkpoints'/(f.sha+'.pm2.json')
+        self.assertEqual('registering',json.loads(checkpoint.read_text())['phase'])
+        return f,before,checkpoint
+
+    def test_hard_kill_after_delete_resumes_through_original_update_entry(self):
+        f,before,checkpoint=self.interrupt_after_delete();write(f.trace,'')
+        result=f.update();calls=f.calls()
+        self.assertIn('ACCEPTANCE_UPDATE_FINISHED',result.stdout)
+        self.assertFalse(any(x['kind']=='backup' for x in calls))
+        self.assertFalse(any(x['kind']=='maintenance' and x['action']=='apply' for x in calls))
+        self.assertEqual('verified',json.loads(checkpoint.read_text())['phase'])
+        self.assertEqual(before,f.production_fingerprint())
+
+    def test_hard_kill_after_start_revalidates_before_online_save(self):
+        f=self.fixture;f.install();before=f.production_fingerprint();write(f.directory/'kill-after-pm2-start','kill fixture session')
+        self.assertEqual(-9,f.update(check=False).returncode)
+        self.assertEqual('online',json.loads(f.network.read_text())['acceptancePm2Status'])
+        checkpoint=f.acceptance/'shared/update-checkpoints'/(f.sha+'.pm2.json')
+        self.assertEqual('registering',json.loads(checkpoint.read_text())['phase'])
+        saved=json.loads((f.directory/'acceptance-home/.pm2/dump.pm2').read_text())[0]['pm2_env']
+        self.assertEqual('stopped',saved['status'])
+        write(f.trace,'');result=f.update();calls=f.calls()
+        self.assertIn('ACCEPTANCE_UPDATE_FINISHED',result.stdout)
+        self.assertFalse(any(x['kind']=='backup' or (x['kind']=='maintenance' and x['action']=='apply') for x in calls))
+        self.assertFalse(any(x['kind']=='pm2' and x['args'][0] in ('stop','delete','startOrReload') for x in calls))
+        self.assertEqual('verified',json.loads(checkpoint.read_text())['phase'])
+        self.assertEqual('online',json.loads((f.directory/'acceptance-home/.pm2/dump.pm2').read_text())[0]['pm2_env']['status'])
+        self.assertEqual(before,f.production_fingerprint())
+
+    def test_missing_registration_without_witness_is_rejected(self):
+        f,before,checkpoint=self.interrupt_after_delete();checkpoint.unlink();write(f.trace,'')
+        result=f.update(check=False)
+        self.assertNotEqual(0,result.returncode)
+        self.assertFalse(json.loads(f.network.read_text())['acceptancePm2Present'])
+        self.assertFalse(any(x['kind']=='pm2' and x['args'][0] in ('startOrReload','save','delete') for x in f.calls()))
+        self.assertEqual(before,f.production_fingerprint())
+
+    def test_missing_registration_with_wrong_sha_is_rejected(self):
+        f,before,checkpoint=self.interrupt_after_delete();data=json.loads(checkpoint.read_text());data['sha']=SHA0;checkpoint.write_text(json.dumps(data));write(f.trace,'')
+        result=f.update(check=False)
+        self.assertNotEqual(0,result.returncode)
+        self.assertFalse(json.loads(f.network.read_text())['acceptancePm2Present'])
+        self.assertFalse(any(x['kind']=='pm2' and x['args'][0] in ('startOrReload','save','delete') for x in f.calls()))
+        self.assertEqual(before,f.production_fingerprint())
+
+    def test_missing_registration_with_wrong_dump_is_rejected(self):
+        f,before,checkpoint=self.interrupt_after_delete()
+        dump=f.directory/'acceptance-home/.pm2/dump.pm2';data=json.loads(dump.read_text());data[0]['pm2_env']['status']='online';dump.write_text(json.dumps(data));write(f.trace,'')
+        result=f.update(check=False)
+        self.assertNotEqual(0,result.returncode)
+        self.assertFalse(json.loads(f.network.read_text())['acceptancePm2Present'])
+        self.assertFalse(any(x['kind']=='pm2' and x['args'][0] in ('startOrReload','save','delete') for x in f.calls()))
+        self.assertEqual(before,f.production_fingerprint())
+
+    def assert_stopped_save_blocks_migration(self,flag):
+        f=self.fixture;f.install();before=f.production_fingerprint();write(f.trace,'')
+        write(f.directory/flag,'fail');result=f.update(check=False);calls=f.calls()
+        self.assertNotEqual(result.returncode,0)
+        self.assertFalse(any(x['kind']=='maintenance' and x['action']=='apply' for x in calls))
+        self.assertFalse(any(x['kind']=='pm2' and x['args'][0] in ('delete','startOrReload') for x in calls))
+        self.assertEqual(before,f.production_fingerprint())
+        self.assertEqual('stopped',json.loads(f.network.read_text())['acceptancePm2Status'])
+
+    def test_first_stopped_save_failure_blocks_migration(self):
+        self.assert_stopped_save_blocks_migration('fail-pm2-stop-save')
+
+    def test_backup_stopped_save_failure_blocks_migration(self):
+        self.assert_stopped_save_blocks_migration('fail-pm2-stop-backup-save')
 
     def test_pm2_persistence_failure_halts_only_acceptance_and_does_not_report_success(self):
         f=self.fixture;f.install();before=f.production_fingerprint();write(f.trace,'')
