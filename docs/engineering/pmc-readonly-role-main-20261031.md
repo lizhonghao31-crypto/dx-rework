@@ -38,3 +38,7 @@ Node 22.22.2 / npm 10.9.9; dedicated loopback Docker PostgreSQL 16.15 and 13.23.
 - Browser fixtures are synthetic. No live user, account-role assignment, production database, deployed environment or real order was validated or modified.
 
 Remote Full Gate and GitHub Codex Review are separate required evidence and must be recorded for the final PR head; this local record does not claim they have run.
+
+## First remote Full result
+
+Full `41216272841` on `106da38b` passed lint/types/build, then reported 2116 passed / 1 failed / 399 skipped. The failure was the unchanged exact trusted-actor assertion in `public-tools-routes.test.ts`: an unnecessary `authorizationCapabilities` property had been added by this PR. The property was removed from the Tools actor; existing per-request capabilities still drive the route checks and bound-download callback. No assertion or authority was relaxed. A corrected-head Full and subsequent GitHub Review remain required.
