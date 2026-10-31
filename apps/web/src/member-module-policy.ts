@@ -1,8 +1,9 @@
+import { isPmcOnly } from "@dx-rework/contracts";
 import { verifySession } from "./auth.js";
 
-type PolicyUser = { isRoot?: boolean; readOnlyModules?: readonly ("rework" | "sourcing")[] };
+type PolicyUser = { businessRoles?: readonly string[]; isRoot?: boolean; readOnlyModules?: readonly ("rework" | "sourcing")[] };
 export function moduleCanWrite(user: PolicyUser | null, module: "rework" | "sourcing"): boolean {
-  return user !== null && (user.isRoot === true || !user.readOnlyModules?.includes(module));
+  return user !== null && (user.isRoot === true || (!isPmcOnly(user.businessRoles ?? []) && !user.readOnlyModules?.includes(module)));
 }
 
 export async function currentModuleCanWrite(module: "rework" | "sourcing"): Promise<boolean> {

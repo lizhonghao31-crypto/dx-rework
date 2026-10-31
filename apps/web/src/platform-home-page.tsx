@@ -10,6 +10,7 @@ const ROLE_LABELS: Record<string, string> = {
   cutting_worker: "裁床工人",
   owner_group: "老板",
   production_management: "生产管理",
+  pmc: "PMC",
   order_merchandiser: "订单跟单",
   factory_payables: "加工厂应付会计",
   finance_director: "财务总监",

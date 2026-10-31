@@ -23,8 +23,8 @@ const fail = (message: string, status = 409): never => {
 const canWrite = (actor: TrustedActorContext, createdBy: string): boolean => actor.actorRoles.includes(ROOT)
   || (has(actor, WRITE) && actor.actorRoles.includes("order_merchandiser") && actor.actorId === createdBy);
 const canReadOrders = (actor: TrustedActorContext): boolean => actor.actorRoles.includes(ROOT)
-  || (has(actor, READ) && actor.actorRoles.some((role) => ["order_merchandiser", "production_management", "owner_group"].includes(role)));
-const readAll = (actor: TrustedActorContext): boolean => actor.actorRoles.some((role) => [ROOT, "production_management", "owner_group"].includes(role));
+  || (has(actor, READ) && actor.actorRoles.some((role) => ["order_merchandiser", "production_management", "pmc", "owner_group"].includes(role)));
+const readAll = (actor: TrustedActorContext): boolean => actor.actorRoles.some((role) => [ROOT, "production_management", "pmc", "owner_group"].includes(role));
 
 type Source = {
   sourcing_case_id: string; created_by: string;

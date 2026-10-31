@@ -27,8 +27,8 @@ try {
     await page.goto(origin + path + '?role=' + role + '&recorded=' + (recorded ? '1' : '0'));
     return { page, errors };
   };
-  for (const width of [390, 1440]) for (const recorded of [false, true]) {
-    const { page, errors } = await pageFor(width, 'supervisor', recorded);
+  for (const role of ['supervisor','pmc']) for (const width of [390, 1440]) for (const recorded of [false, true]) {
+    const { page, errors } = await pageFor(width, role, recorded);
     await page.locator('.cutting-detail__facts').waitFor();
     assert.equal(await page.locator('input[type=file]').count(), 0);
     assert.equal(await page.locator('.cutting-count-control input').count(), 0);
@@ -40,8 +40,8 @@ try {
     assert.equal((await page.evaluate(() => window.warehouseTestRequests.filter(r => r.method !== 'GET'))).length, 0);
     assert.equal(await page.evaluate(() => document.body.scrollWidth > innerWidth), false);
     assert.deepEqual(errors, []);
-    if (evidence) await page.screenshot({ path: join(evidence, 'supervisor-' + width + '-' + (recorded ? 'recorded' : 'pending') + '.png') });
-    results.push({ width, role: 'supervisor', recorded, readOnly: true, passed: true }); await page.close();
+    if (evidence) await page.screenshot({ path: join(evidence, role + '-' + width + '-' + (recorded ? 'recorded' : 'pending') + '.png') });
+    results.push({ width, role, recorded, readOnly: true, passed: true }); await page.close();
   }
   for (const width of [390, 1440]) {
     const { page, errors } = await pageFor(width, 'mixed');

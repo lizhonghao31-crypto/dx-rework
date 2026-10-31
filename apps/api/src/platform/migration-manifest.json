@@ -230,7 +230,8 @@
     {"version": "0228_sourcing_contract_return_cycles", "checksum": "86eec9b3696bade0d7eda97773f9f5a4636f6b38e891879e6882437c7f16cb4c"},
     {"version": "0229_sourcing_price_reapplications", "checksum": "633964acebe30386ae7d3877268dcb7519944e387ffeb9707fa4d92e3b3cc857"},
     {"version": "0230_sourcing_factory_change_current_quantity", "checksum": "4091340fdb842e866aec8b9f124c73c9d5e7086bd122677c144864355052e6bf"},
-    {"version": "0231_temporary_special_process_proxy_reporting", "checksum": "39a9c918c6589c9905ab0cf32de1f7cc304119fd4840a3fa8da34ddfb3e3d6b4"}
+    {"version": "0231_temporary_special_process_proxy_reporting", "checksum": "39a9c918c6589c9905ab0cf32de1f7cc304119fd4840a3fa8da34ddfb3e3d6b4"},
+    {"version": "0232_pmc_readonly_role", "checksum": "31d01d06ce698735c21b2e8b9ab5f2f1da29d2ceb0838a130320e32e2bbe6547"}
   ]
 }
 

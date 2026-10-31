@@ -1,6 +1,6 @@
 // Actual application pages and navigation; requests use only isolated TEST fixtures.
 import { createRoot } from 'react-dom/client';
-import { CuttingOrderDetailSchema, CuttingOrderListItemSchema } from '@dx-rework/contracts';
+import { CuttingOrderDetailSchema, CuttingOrderListItemSchema, PMC_READ_CAPABILITIES } from '@dx-rework/contracts';
 import { App } from '../../apps/web/src/App.js';
 import '../../packages/ui/src/tokens.css';
 import '../../packages/ui/src/components.css';
@@ -11,11 +11,12 @@ import '../../apps/web/src/workflow-state-visual.css';
 import '../../apps/web/src/ui-polish.css';
 
 const id = (n: number) => '00000000-0000-4000-8000-' + String(n).padStart(12, '0');
-const params = new URLSearchParams(location.search), role = params.get('role') ?? 'supervisor';
+const params = new URLSearchParams(location.search), role = params.get('role') ?? sessionStorage.getItem('testRole') ?? 'supervisor';
+sessionStorage.setItem('testRole',role);
 const recorded = params.get('recorded') === '1', now = '2026-10-13T00:00:00.000Z';
-const roles = role === 'root' ? ['root_superuser'] : role === 'mixed' ? ['warehouse_supervisor', 'cutting_worker']
+const roles = role === 'pm' ? ['production_management'] : role === 'pmc' ? ['pmc'] : role === 'root' ? ['root_superuser'] : role === 'mixed' ? ['warehouse_supervisor', 'cutting_worker']
   : role === 'receiver' ? ['warehouse_receiver'] : ['warehouse_supervisor'];
-const capabilities = ['receiving:create', 'receiving:packing_manage', 'tools:user',
+const capabilities = role === 'pm' ? [...PMC_READ_CAPABILITIES,'supplier_onboarding:approve','supplier_profile:write','tools:user'] : role === 'pmc' ? [...PMC_READ_CAPABILITIES] : ['receiving:create', 'receiving:packing_manage', 'tools:user',
   ...(role === 'receiver' ? [] : ['cutting:orders:view']), ...(role === 'mixed' ? ['cutting:records:create'] : [])];
 const record = { cuttingRecordId: id(8), version: 1, pieceCount: 100, actualCutCount: 2020,
   initialPieceCount: 100, initialActualCutCount: 2020, recordedBy: id(2), recordedByName: 'TEST裁床工人',
@@ -43,6 +44,11 @@ window.fetch = async (input, init) => {
   if (method === 'POST' && path.endsWith('/cutting/orders/' + id(10) + '/records')) {
     detail = { ...detail, status: 'recorded', pieceCount: 100, actualCutCount: 2020, recordedByName: 'TEST裁床工人', recordedAt: now, outOfRange: false, record, canRecord: false };
     return Response.json({ outcome: 'created', item: detail });
+  }
+  if (method === 'GET' && path.includes('supplier-onboarding/requests')) {
+    const profile = { supplierName:'TEST供应商申请',supplierType:'factory',notes:'TEST只读',supportedCrafts:['车缝'],dailyCapacity:100,contactPerson:'TEST联系人',contactPhone:'123456789',address:'TEST地址',contractEntityName:null,partyBRepresentative:null,payeeName:'TEST收款人',bankAccount:'001234567890',bankName:'TEST银行' };
+    const item={requestId:id(30),applicantId:id(4),applicantName:'TEST跟单',supplierName:profile.supplierName,supplierType:'factory',status:'pending_approval',version:1,supplierId:null,createdAt:now,updatedAt:now};
+    return Response.json(path.includes('/requests/'+id(30)) ? {...item,profile,versions:[{version:1,profile,submittedAt:now}],decisions:[],duplicateCheck:{formalSupplierCount:0,pendingRequestCount:0,checkedAt:now}} : [item]);
   }
   if (method !== 'GET') return Response.json({ error: { message: 'TEST unexpected mutation' } }, { status: 403 });
   if (path.includes('/cutting/orders/' + id(10))) return Response.json(detail);

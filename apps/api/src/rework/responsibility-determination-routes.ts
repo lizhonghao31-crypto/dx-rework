@@ -35,6 +35,8 @@ export type ResponsibilityDeterminationHttpDependencies = Readonly<{
 export function registerResponsibilityDeterminationRoutes(app: FastifyInstance, dependencies: ResponsibilityDeterminationHttpDependencies): void {
   const actor = async (request: FastifyRequest, capability: string): Promise<TrustedActorContext> => {
     const user = await dependencies.authenticate(token(request));
+    if (request.method === "GET" && user.businessRoles?.includes("pmc") && user.capabilities.includes("external_responsibility:view")
+      && !user.capabilities.includes(capability)) capability = "external_responsibility:view";
     const trusted = await businessActor(
       dependencies.root,
       user,

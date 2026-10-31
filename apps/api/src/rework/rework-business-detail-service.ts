@@ -219,6 +219,7 @@ const broadBusinessReader = (actor: TrustedActorContext): boolean =>
     "root_superuser",
     "owner_group",
     "production_management",
+    "pmc",
     "tail_supervisor",
     "finance_director",
     "finance_read",

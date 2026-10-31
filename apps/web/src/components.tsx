@@ -54,6 +54,7 @@ const ROLE_LABELS: Record<string, string> = {
   owner_group: "老板",
   system_admin: "系统管理员",
   production_management: "生产管理",
+  pmc: "PMC",
   quality_control: "质检",
   warehouse_receiver: "仓管人员",
   warehouse_supervisor: "仓库主管",

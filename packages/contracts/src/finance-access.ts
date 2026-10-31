@@ -1,6 +1,6 @@
 // 2026-09-12: finance entry/read/export and paid markers are distinct permissions.
 export const FINANCE_WAGE_ROLES = [
-  "owner_group", "production_management", "finance_director",
+  "owner_group", "production_management", "pmc", "finance_director",
   "wage_month_close_accountant", "finance_read",
 ] as const;
 

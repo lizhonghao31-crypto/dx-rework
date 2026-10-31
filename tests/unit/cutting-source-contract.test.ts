@@ -46,6 +46,7 @@ describe("cutting source contract", () => {
       "cutting_worker",
       "owner_group",
       "production_management",
+      "pmc",
       "order_merchandiser",
       "warehouse_supervisor",
     ]);
