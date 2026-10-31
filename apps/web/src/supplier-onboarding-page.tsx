@@ -8,7 +8,7 @@ import { NavigationIcon } from "./navigation-icons.js";
 import { SupplierProfileForm } from "./supplier-profile-form.js";
 import { emptyDraft } from "./supplier-profile-draft.js";
 import { SUPPLIER_TYPE_LABELS } from "./supplier-center-model.js";
-import { canApproveSupplier, canRequestSupplier, supplierApplicationDraft, supplierApplicationPayload, supplierApplicationVersion, SUPPLIER_REQUEST_STATUS } from "./supplier-onboarding-model.js";
+import { canApproveSupplier, canReadSupplierApplications, canRequestSupplier, supplierApplicationDraft, supplierApplicationPayload, supplierApplicationVersion, SUPPLIER_REQUEST_STATUS } from "./supplier-onboarding-model.js";
 import { ListPagination, usePaginatedItems } from "./list-pagination.js";
 import { createSupplierDraftGuard } from "./supplier-draft-guard.js";
 import { registerInternalNavigationGuard } from "./internal-navigation.js";
@@ -47,11 +47,11 @@ export function SupplierDuplicateCheck({ check }: { check: SupplierOnboardingDet
     <p>正式供应商（含停用）：{check.formalSupplierCount} 条；其他待审批申请：{check.pendingRequestCount} 条。</p>
     <small>检查时间：{date(check.checkedAt)}。通过时会再次检查。</small></div>;
 }
-export function SupplierApplicationList({ items, reviewer }: { items: readonly SupplierOnboardingSummary[]; reviewer: boolean }) {
+export function SupplierApplicationList({ items, reviewer, canApprove = reviewer }: { items: readonly SupplierOnboardingSummary[]; reviewer: boolean; canApprove?: boolean }) {
   return <table className="supplier-records supplier-applications-table"><thead><tr><th>供应商</th>{reviewer ? <th>申请人</th> : null}<th>状态</th><th>更新时间</th><th>操作</th></tr></thead>
     <tbody>{items.map(item => <tr key={item.requestId}><td><strong>{item.supplierName}</strong><small>{SUPPLIER_TYPE_LABELS[item.supplierType]} · 第 {item.version} 版</small></td>
       {reviewer ? <td data-label="申请人">{item.applicantName}</td> : null}<td data-label="状态"><StatusBadge tone={item.status === "approved" ? "success" : item.status === "returned" ? "warning" : "info"}>{SUPPLIER_REQUEST_STATUS[item.status]}</StatusBadge></td>
-      <td data-label="更新时间"><time dateTime={item.updatedAt}>{date(item.updatedAt)}</time></td><td className="supplier-records__action"><a href={pageUrl(`ui/suppliers/requests/${item.requestId}`)}>{reviewer && item.status === "pending_approval" ? "审批" : item.status === "returned" && !reviewer ? "查看并修改" : "查看"}</a></td></tr>)}</tbody></table>;
+      <td data-label="更新时间"><time dateTime={item.updatedAt}>{date(item.updatedAt)}</time></td><td className="supplier-records__action"><a href={pageUrl(`ui/suppliers/requests/${item.requestId}`)}>{canApprove && item.status === "pending_approval" ? "审批" : item.status === "returned" && !reviewer ? "查看并修改" : "查看"}</a></td></tr>)}</tbody></table>;
 }
 export function SupplierOnboardingPage({ requestId, user: providedUser }: { requestId?: string; user?: AuthorizedUser }) {
   const [user, setUser] = useState<AuthorizedUser | null>(providedUser ?? null);
@@ -62,7 +62,7 @@ export function SupplierOnboardingPage({ requestId, user: providedUser }: { requ
   const [draft, setDraft] = useState(emptyDraft), [editing, setEditing] = useState(false), [reason, setReason] = useState("");
   const [query, setQuery] = useState(""), [status, setStatus] = useState<SupplierOnboardingStatus | "all">("all");
   const lock = useRef(false), alive = useRef(true), operation = useRef<{ fingerprint: string; key: string } | null>(null);
-  const creating = requestId === "new", reviewer = user ? canApproveSupplier(user) : false, applicant = user ? canRequestSupplier(user) : false;
+  const creating = requestId === "new", reviewer = user ? canApproveSupplier(user) : false, reader = user ? canReadSupplierApplications(user) : false, applicant = user ? canRequestSupplier(user) : false;
   const baseDraft = detail ? supplierApplicationDraft(detail.profile) : emptyDraft();
   const dirty = (creating || editing) && JSON.stringify(draft) !== JSON.stringify(baseDraft);
   const [guard] = useState(() => createSupplierDraftGuard({ isBlocked: () => lock.current,
@@ -85,7 +85,7 @@ export function SupplierOnboardingPage({ requestId, user: providedUser }: { requ
   }, [providedUser]);
   useEffect(() => { setStatus(reviewer ? "pending_approval" : "all"); }, [reviewer]);
   useEffect(() => {
-    if (!user || (!reviewer && !applicant)) { setLoading(false); return; }
+    if (!user || (!reader && !applicant)) { setLoading(false); return; }
     const controller = new AbortController(); setError(""); setLoading(true);
     const load = async () => {
       if (creating) { setLoading(false); return; }
@@ -95,13 +95,13 @@ export function SupplierOnboardingPage({ requestId, user: providedUser }: { requ
         if (controller.signal.aborted) return;
         setDetail(value); setDraft(supplierApplicationDraft(value.profile)); setSelectedVersion(value.version);
       } else {
-        const values = await request<SupplierOnboardingSummary[]>(`supplier-onboarding/requests?scope=${reviewer ? "all" : "mine"}`, { signal: controller.signal });
+        const values = await request<SupplierOnboardingSummary[]>(`supplier-onboarding/requests?scope=${reader ? "all" : "mine"}`, { signal: controller.signal });
         if (!controller.signal.aborted) setItems(values);
       }
     };
     void load().catch(e => { if (!controller.signal.aborted) setError(e instanceof Error ? e.message : "加载失败"); }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [user, requestId, creating, reviewer, applicant, reload]);
+  }, [user, requestId, creating, reader, applicant, reload]);
   const filtered = useMemo(() => items.filter(item => (status === "all" || item.status === status)
     && `${item.supplierName} ${item.applicantName} ${SUPPLIER_TYPE_LABELS[item.supplierType]}`.toLocaleLowerCase("zh-CN").includes(query.trim().toLocaleLowerCase("zh-CN"))), [items, status, query]);
   const page = usePaginatedItems(filtered, `${status}:${query}`);
@@ -136,8 +136,8 @@ export function SupplierOnboardingPage({ requestId, user: providedUser }: { requ
   };
   if (identityError) return <Shell active="资料维护"><p role="alert">{identityError}</p><Button onClick={() => window.location.reload()}>重新核验</Button></Shell>;
   if (!user) return <Shell active="资料维护"><p role="status">核验身份中…</p></Shell>;
-  if ((!applicant && !reviewer) || (creating && !applicant)) return <Shell active="资料维护"><p>当前账号不能提交新增申请。</p><a href={pageUrl("ui/suppliers/manage")}>返回资料维护</a></Shell>;
-  const title = creating ? "申请新增供应商" : requestId ? "供应商申请详情" : reviewer ? "新增供应商审批" : "我的申请";
+  if ((!applicant && !reader) || (creating && !applicant)) return <Shell active="资料维护"><p>当前账号不能提交新增申请。</p><a href={pageUrl("ui/suppliers/manage")}>返回资料维护</a></Shell>;
+  const title = creating ? "申请新增供应商" : requestId ? "供应商申请详情" : reviewer ? "新增供应商审批" : reader ? "供应商申请" : "我的申请";
   const viewingCurrent = detail && selectedVersion === detail.version;
   const selected = detail ? supplierApplicationVersion(detail, selectedVersion) : undefined;
   const shown = selected?.profile;
@@ -145,7 +145,7 @@ export function SupplierOnboardingPage({ requestId, user: providedUser }: { requ
   const returnPath = todoReturnPath(window.location.search);
   return <Shell active="资料维护"><div className="supplier-onboarding-page">
     <header className="page-heading supplier-center-heading"><div><h1><NavigationIcon route="/ui/suppliers/manage" size="title" />{title}</h1>
-      <p>{reviewer ? "核对申请资料，通过后成为正式供应商" : "填写完整资料，审批通过后即可选用"}</p></div>
+      <p>{reviewer ? "核对申请资料，通过后成为正式供应商" : reader ? "只读查看申请资料与审批历史" : "填写完整资料，审批通过后即可选用"}</p></div>
       <div className="supplier-center-heading__actions">{!requestId && applicant ? <a className="dx-button dx-button--primary" href={pageUrl("ui/suppliers/requests/new")}>申请新增供应商</a> : null}
         {returnPath ? <a className="dx-button" href={pageUrl(returnPath.replace(/^\//, ""))}>返回待办列表</a> : null}
         <a className="dx-button" href={pageUrl("ui/suppliers/manage")}>资料维护</a><a className="dx-button" href={pageUrl("ui/suppliers")}>供应商目录</a>
@@ -172,12 +172,12 @@ export function SupplierOnboardingPage({ requestId, user: providedUser }: { requ
           </form> : null}
         </Surface>
         <Surface className="supplier-application-history"><h2>审批记录</h2>{detail.decisions.length ? detail.decisions.map(d => <div key={d.version}><strong>第 {d.version} 版 · {d.decision === "approved" ? "通过" : "退回"}</strong><p>{d.reviewerName} · {date(d.decidedAt)}</p>{d.reason ? <p>{d.reason}</p> : null}</div>) : <p>暂无审批记录</p>}</Surface>
-        <a href={pageUrl(reviewer ? "ui/suppliers/requests" : "ui/suppliers/manage")}>返回申请列表</a>
+        <a href={pageUrl(reader ? "ui/suppliers/requests" : "ui/suppliers/manage")}>返回申请列表</a>
       </> : !requestId ? <Surface className="supplier-directory"><div className="supplier-directory__filters">
           <input value={query} onChange={e => setQuery(e.target.value)} placeholder="搜索供应商名称或申请人" aria-label="搜索申请" /><select aria-label="申请状态" value={status} onChange={e => setStatus(e.target.value as typeof status)}><option value="all">全部状态</option>{Object.entries(SUPPLIER_REQUEST_STATUS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
           <Button disabled={busy} onClick={() => setReload(v => v + 1)}>刷新</Button></div>
         <p>共 {filtered.length} 条申请</p>
-        {filtered.length ? <SupplierApplicationList items={page.items} reviewer={reviewer} /> : <p className="supplier-center-empty">{query || status !== "all" ? "没有符合条件的申请" : "暂无申请，可点击上方申请新增供应商"}</p>}
+        {filtered.length ? <SupplierApplicationList items={page.items} reviewer={reader} canApprove={reviewer} /> : <p className="supplier-center-empty">{query || status !== "all" ? "没有符合条件的申请" : "暂无申请，可点击上方申请新增供应商"}</p>}
         <ListPagination page={page.page} totalPages={page.totalPages} onPageChange={page.setPage} ariaLabel="申请列表分页" />
       </Surface> : null}
   </div></Shell>;

@@ -411,6 +411,7 @@ function AppRoutes() {
       { requiredRole: "production_reporter", requiredCapability: "production-reporting" },
       { requiredRole: "owner_group", requiredCapability: "sourcing:view" },
       { requiredRole: "production_management", requiredCapability: "sourcing:view" },
+      { requiredRole: "pmc", requiredCapability: "sourcing:view" },
       { requiredRole: "order_merchandiser", requiredCapability: "sourcing:view" },
       { requiredRole: "finance_director", requiredCapability: "sourcing:view" },
       { requiredRole: "finance_read", requiredCapability: "sourcing:view" },
@@ -421,6 +422,7 @@ function AppRoutes() {
       { requiredRole: "production_reporter", requiredCapability: "production-reporting" },
       { requiredRole: "owner_group", requiredCapability: "sourcing:view" },
       { requiredRole: "production_management", requiredCapability: "sourcing:view" },
+      { requiredRole: "pmc", requiredCapability: "sourcing:view" },
       { requiredRole: "order_merchandiser", requiredCapability: "sourcing:view" },
     ]}>{page}</AuthGate>;
   }
@@ -455,6 +457,7 @@ function AppRoutes() {
   }
   if (path === "/ui/responsibility") {
     return <AuthGate requiredAnyOf={[
+      { requiredRole: "pmc", requiredCapability: "external_responsibility:view" },
       owner,
       { requiredCapability: "responsibility:determine" },
       { requiredCapability: "responsibility:takeover" },

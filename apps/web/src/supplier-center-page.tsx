@@ -1,6 +1,6 @@
 import { SearchableSelect } from "./search-select.js";
 import { SupplierOnboardingPage } from "./supplier-onboarding-page.js";
-import { canRequestSupplier, canApproveSupplier, canAccessSupplierMaintenance } from "./supplier-onboarding-model.js";
+import { canRequestSupplier, canReadSupplierApplications, canAccessSupplierMaintenance } from "./supplier-onboarding-model.js";
 import { ProductionAnalysisPanel } from "./production-analysis-panel.js";
 import { NavigationIcon } from "./navigation-icons.js";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -269,7 +269,7 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
         </div>
         <div className="supplier-center-heading__actions">
           <StatusBadge tone={canMaintain ? "info" : "neutral"}>{identityLoading?"核验身份中":canMaintain ? "可维护" : "只读"}</StatusBadge>
-          {canMaintain && user && canApproveSupplier(user) ? <a className="dx-button" href={pageUrl("ui/suppliers/requests")}>待审批申请</a> : null}
+          {user && canReadSupplierApplications(user) ? <a className="dx-button" href={pageUrl("ui/suppliers/requests")}>{canMaintain ? "待审批申请" : "供应商申请"}</a> : null}
           {canMaintain && !batchOpen ? <><Button disabled={busy || refreshing} onClick={() => void beginBatch()}>批量录入</Button><Button variant="primary" disabled={busy||refreshing} onClick={()=>void beginCreate()}>新增供应商</Button></> : null}
         </div>
       </header>

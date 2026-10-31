@@ -97,8 +97,8 @@ export function registerTodoRoutes(
   }
   const actor = async (
     request: FastifyRequest,
-    capability: "todo:view" | "todo:routing_exception_manage",
-    role?: "production_management",
+    capability: "todo:view" | "todo:routing_exception_manage" | "todo:routing_exception_read",
+    role?: "production_management" | "pmc",
   ): Promise<TrustedActorContext> => {
     const user = await dependencies.authenticate(cookieToken(request));
     if (
@@ -157,7 +157,12 @@ export function registerTodoRoutes(
   app.get("/todos/routing-exceptions/mine", async (request) =>
     TodoRoutingExceptionListResponseSchema.parse({
       routingExceptions: await dependencies.service.listRoutingExceptionsForActor(
-        await actor(request, "todo:routing_exception_manage", "production_management"),
+        await (async () => {
+          const user = await dependencies.authenticate(cookieToken(request));
+          return user.businessRoles?.includes("pmc") && user.capabilities.includes("todo:routing_exception_read")
+            ? actor(request, "todo:routing_exception_read", "pmc")
+            : actor(request, "todo:routing_exception_manage", "production_management");
+        })(),
       ),
     }));
 

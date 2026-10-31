@@ -1,3 +1,4 @@
+import { registerPmcReadonlyHttpGuard } from "./access/pmc-readonly-http.js";
 import { registerMemberModuleHttpGuard } from "./access/member-module-http.js";
 import { registerSupplierOnboardingRoutes, type SupplierOnboardingDependencies } from "./access/supplier-onboarding-routes.js";
 import { registerPatternRoomPriceRoutes, type PatternRoomPriceDependencies } from "./pattern-room/price-routes.js";
@@ -138,7 +139,11 @@ export function buildApp(dependencies: AppDependencies): FastifyInstance {
 
   registerBrowserMutationOriginGuard(app, new URL(config.dingtalk.qrRedirectUri).origin);
 
-  if (dependencies.auth) registerMemberModuleHttpGuard(app, token => dependencies.auth!.authenticate(token));
+  if (dependencies.auth) {
+    registerMemberModuleHttpGuard(app, token => dependencies.auth!.authenticate(token));
+    registerPmcReadonlyHttpGuard(app, token => dependencies.auth!.authenticate(token),
+      id => dependencies.access?.root.isRootUser(id) ?? Promise.resolve(false));
+  }
 
   if (dependencies.operationDiagnostics) registerOperationDiagnostics(app,dependencies.operationDiagnostics);
 

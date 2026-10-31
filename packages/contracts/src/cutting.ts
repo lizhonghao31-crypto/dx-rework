@@ -5,6 +5,7 @@ export const CUTTING_VIEW_ROLES = [
   "cutting_worker",
   "owner_group",
   "production_management",
+  "pmc",
   "order_merchandiser",
   "warehouse_supervisor",
 ] as const;

@@ -1,3 +1,4 @@
+import { isPmcOnly } from "@dx-rework/contracts";
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 
@@ -93,6 +94,7 @@ export class AttachmentService {
   }
 
   async createUploadIntent(actor: TrustedActorContext, input: CreateUploadIntent): Promise<UploadIntentResponse> {
+    if (isPmcOnly(actor.actorRoles)) throw new ApplicationError("FORBIDDEN", "PMC不能上传或确认附件", 403);
     this.validate(input);
     const attachmentId = randomUUID();
     const objectKey = createPrivateObjectKey(this.options.prefix, input.filename);
@@ -155,6 +157,7 @@ export class AttachmentService {
   }
 
   async finalize(actor: TrustedActorContext, attachmentId: string): Promise<AttachmentResponse> {
+    if (isPmcOnly(actor.actorRoles)) throw new ApplicationError("FORBIDDEN", "PMC不能上传或确认附件", 403);
     const row = await this.owned(attachmentId, actor.actorId);
     if (row.status === "ready") return this.dto(row);
     if (row.status !== "pending") {

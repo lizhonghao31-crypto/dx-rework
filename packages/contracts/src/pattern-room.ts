@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const PATTERN_PRICE_READ_ROLES = ["owner_group", "production_management", "finance_director", "finance_read", "pattern_room_supervisor"] as const;
+export const PATTERN_PRICE_READ_ROLES = ["owner_group", "production_management", "pmc", "finance_director", "finance_read", "pattern_room_supervisor"] as const;
 export const PATTERN_PRICE_WRITE_ROLES = ["owner_group", "production_management"] as const;
 export const PATTERN_HOURLY_WRITE_ROLES = ["owner_group"] as const;
 export const PATTERN_QUOTE_ROLES = [...PATTERN_PRICE_READ_ROLES, "sample_designer"] as const;

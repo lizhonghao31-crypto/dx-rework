@@ -8,6 +8,8 @@ const directRole = (user: AuthorizedUser) => user.isRoot === true || user.busine
 export const canRequestSupplier = (user: AuthorizedUser): boolean => !directRole(user) && user.capabilities.includes("supplier_onboarding:request")
   && user.businessRoles?.some(role => ["order_merchandiser", "embroidery_washing_merchandiser"].includes(role)) === true;
 export const canApproveSupplier = (user: AuthorizedUser): boolean => user.isRoot === true || (directRole(user) && user.capabilities.includes("supplier_onboarding:approve"));
+export const canReadSupplierApplications = (user: AuthorizedUser): boolean => canApproveSupplier(user)
+  || (user.businessRoles?.includes("pmc") === true && user.capabilities.includes("supplier_onboarding:read"));
 export const canAccessSupplierMaintenance = (user: AuthorizedUser): boolean => canWriteSupplierProfiles(user) || canRequestSupplier(user);
 export const supplierApplicationDraft = (profile: SupplierOnboardingProfile): SupplierDraft => ({
   ...emptyDraft(), ...profile, contractEntityName: profile.contractEntityName ?? "", partyBRepresentative: profile.partyBRepresentative ?? "",

@@ -435,7 +435,8 @@ export class TodoService {
   async listRoutingExceptionsForActor(
     actor: TrustedActorContext,
   ): Promise<TodoRoutingException[]> {
-    this.requireCapability(actor, "todo:routing_exception_manage", "production_management");
+    if (actor.authorizationCapability === "todo:routing_exception_read") this.requireCapability(actor, "todo:routing_exception_read", "pmc");
+    else this.requireCapability(actor, "todo:routing_exception_manage", "production_management");
     const result = await this.database.query<RoutingExceptionResponseRow>(
       `SELECT routing_exception_id,todo_id,routing_todo_id,original_recipient_user_id,
               assigned_to_user_id,status,reason,resolution_reason,created_at,updated_at

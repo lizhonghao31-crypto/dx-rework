@@ -599,6 +599,7 @@ function CurrentReworkDetailPage({
   };
 
   const canSeeResponsibility = elevated(currentUser)
+    || (hasRole(currentUser,"pmc") && hasCapability(currentUser,"external_responsibility:view"))
     || hasCapability(currentUser, "responsibility:determine")
     || hasCapability(currentUser, "responsibility:takeover")
     || hasCapability(currentUser, "responsibility:confirm_high_multiplier")

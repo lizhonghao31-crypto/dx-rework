@@ -166,6 +166,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     worker: randomUUID(),
     merchandiser: randomUUID(),
     production: randomUUID(),
+    pmc: randomUUID(),
     factoryPayables: randomUUID(),
     fabricPayables: randomUUID(),
     financeDirector: randomUUID(),
@@ -308,6 +309,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       [ids.worker, "工人", "worker"],
       [ids.merchandiser, "订单跟单", "order_merchandiser"],
       [ids.production, "生产管理", "production_management"],
+      [ids.pmc, "PMC只读", "pmc"],
       [ids.factoryPayables, "加工厂应付", "factory_payables"],
       [ids.fabricPayables, "面料应付", "fabric_payables"],
       [ids.financeDirector, "财务总监", "finance_director"],
@@ -1453,6 +1455,15 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       calculationTotal: "180.00",
     });
     expect(n07Draft.value.determination!.processes).toHaveLength(2);
+    const pmcReadCaps=(await database.query<{capability:string}>("SELECT capability FROM role_capabilities WHERE role_code='pmc'")).rows.map(row=>row.capability);
+    const pmcReader=actor(ids.pmc,["pmc"],...pmcReadCaps);
+    const pmcPending=await responsibility.get(pmcReader,submitted.value.reworkOrderId);
+    expect(pmcPending.determination).toEqual(n07Draft.value.determination);
+    expect(pmcPending).toMatchObject({canDetermine:false,canTakeover:false,canConfirmHighMultiplier:false,canOwnerSign:false});
+    const pmcQueue=await responsibility.listQueue(pmcReader);
+    expect(pmcQueue.items.find(row=>row.reworkOrderId===submitted.value.reworkOrderId)).toMatchObject({canDetermine:false,canTakeover:false,canConfirmHighMultiplier:false});
+    await expect(responsibility.saveDraft(pmcReader,submitted.value.reworkOrderId,CreateResponsibilityDraftSchema.parse({expectedOrderVersion:pmcPending.orderVersion,expectedCurrentDeterminationVersion:pmcPending.determination!.version,handlerUserId:ids.production,tailInspectionCostBearer:"processing_factory",processes:n07Processes}),randomUUID())).rejects.toMatchObject({statusCode:403});
+
     const workerResponsibility = n07Draft.value.determination!.processes.find(
       (process) => process.configurationItemId === approvedItem.configurationItemId,
     );
@@ -1571,7 +1582,15 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
         if(confirmation?.reviewedAt) expect(Date.parse(confirmation.reviewedAt)).toBeLessThanOrEqual(Date.parse(first.at));
         expect(original.entry.id).toBe(first.id);
       }
-      if(node==='responsibility'||node==='owner_signature') expect(historical.page?.responsibility?.determination).not.toBeNull();
+      if(node==='responsibility'||node==='owner_signature') {
+        expect(historical.page?.responsibility?.determination).not.toBeNull();
+        const pmcHistory=await businessDetail.history(pmcReader,submitted.value.reworkOrderId,node);
+        const managerHistory=await businessDetail.history(production(),submitted.value.reworkOrderId,node);
+        expect(pmcHistory).toEqual(managerHistory);
+        expect(pmcHistory.page!.responsibility).toMatchObject({canDetermine:false,canTakeover:false,canConfirmHighMultiplier:false,canOwnerSign:false});
+        await expect(businessDetail.history({...pmcReader,authorizationCapabilities:[]},submitted.value.reworkOrderId,node)).rejects.toMatchObject({statusCode:403});
+        await expect(businessDetail.history(pmcReader,submitted.value.reworkOrderId,node,randomUUID())).rejects.toMatchObject({statusCode:404});
+      }
       if(node==='work_reporting') expect(historical.page?.workTasks?.tasks.length).toBeGreaterThan(0);
       expect(historical.fields.find(field => field.label === "订单数量")?.value).toBe("1000");
       expect(historical.fields.find(field => field.label === "整查费用承担方")?.value).toBe("processing_factory");
@@ -2348,14 +2367,14 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     registerManagementReportingRoutes(app, { service: reporting, exportService: exporter, authenticate: async () => ({ id: current.actorId, businessRoles: current.actorRoles, capabilities: ["wage:view", "wage:export", "wage:settlement_mark"] }) });
     const query = "from=2020-01-01&to=2099-12-31&wageSource=pattern_room&limit=500";
     try {
-      for (const [id, role] of [[ids.financeDirector, "finance_director"], [ids.financeRead, "finance_read"], [ids.monthClose, "wage_month_close_accountant"], [ids.patternRoot, "root_superuser"], [ids.ownerOne, "owner_group"], [ids.production, "production_management"]] as const) {
+      for (const [id, role] of [[ids.financeDirector, "finance_director"], [ids.financeRead, "finance_read"], [ids.monthClose, "wage_month_close_accountant"], [ids.patternRoot, "root_superuser"], [ids.ownerOne, "owner_group"], [ids.production, "production_management"], [ids.pmc, "pmc"]] as const) {
         current = financeWages(id, [role]);
         const report = await app.inject({ url: `/management/reports/wages?${query}` });
         expect(report.statusCode).toBe(200);
         const body = report.json(); expect(body.rows.length).toBeGreaterThan(0);
         for (const row of body.rows) {expect(row).not.toHaveProperty("attachments");expect(row).not.toHaveProperty("customer");expect(row).not.toHaveProperty("requestReason");}
         expect((await app.inject({ url: `/management/reports/wages/export.xlsx?${query}` })).statusCode).toBe(200);
-        expect((await app.inject({ url: `/management/wages/settlement-preview?${query}` })).statusCode).toBe(["owner_group", "production_management"].includes(role) ? 403 : 200);
+        expect((await app.inject({ url: `/management/wages/settlement-preview?${query}` })).statusCode).toBe(["owner_group", "production_management", "pmc"].includes(role) ? 403 : 200);
       }
       for (const [id, role] of [[ids.patternSupervisor, "pattern_room_supervisor"], [ids.patternDesigner, "sample_designer"], [ids.worker, "pattern_room_worker"], [ids.merchandiser, "order_merchandiser"]] as const) {
         current = financeWages(id, [role]);
@@ -3120,6 +3139,22 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       await Promise.allSettled([deletion, marking]);
       await markingPool.end();
     }
+  });
+
+  it("gives PMC the manager's completed-order/attachment/amount history with no responsibility actions",async()=>{
+    const orderId=(await database.query<{rework_order_id:string}>("SELECT d.rework_order_id FROM rework_responsibility_determinations d JOIN rework_orders o USING(rework_order_id) WHERE d.stage='finalized' AND o.status<>'deleted' ORDER BY d.created_at LIMIT 1")).rows[0]!.rework_order_id;
+    const caps=(await database.query<{capability:string}>("SELECT capability FROM role_capabilities WHERE role_code='pmc'")).rows.map(row=>row.capability);
+    const pmc=actor(ids.pmc,["pmc"],...caps);
+    const manager=actor(ids.production,["production_management"],"responsibility:determine","external_responsibility:view","report:view","wage:view");
+    const pmView=await businessDetail.get(manager,orderId),pmcView=await businessDetail.get(pmc,orderId);
+    expect(pmcView).toEqual(pmView);
+    expect(pmcView.attachments.length).toBeGreaterThan(0);
+    const current=await responsibility.get(pmc,orderId),pmCurrent=await responsibility.get(manager,orderId);
+    expect(current.determination).toEqual(pmCurrent.determination);
+    expect(current).toMatchObject({canDetermine:false,canTakeover:false,canConfirmHighMultiplier:false,canOwnerSign:false});
+    const revision=await responsibility.revisions.get(pmc,orderId);expect(revision.canReopen).toBe(false);
+    expect(revision.history.length).toBeGreaterThan(0);
+    await expect(responsibility.revisions.reopen(pmc,orderId,{expectedOrderVersion:current.orderVersion,expectedDeterminationVersion:current.determination!.version,reason:"PMC不能重开"},randomUUID())).rejects.toMatchObject({statusCode:403});
   });
 
 });
