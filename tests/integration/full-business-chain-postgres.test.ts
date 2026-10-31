@@ -1582,7 +1582,15 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
         if(confirmation?.reviewedAt) expect(Date.parse(confirmation.reviewedAt)).toBeLessThanOrEqual(Date.parse(first.at));
         expect(original.entry.id).toBe(first.id);
       }
-      if(node==='responsibility'||node==='owner_signature') expect(historical.page?.responsibility?.determination).not.toBeNull();
+      if(node==='responsibility'||node==='owner_signature') {
+        expect(historical.page?.responsibility?.determination).not.toBeNull();
+        const pmcHistory=await businessDetail.history(pmcReader,submitted.value.reworkOrderId,node);
+        const managerHistory=await businessDetail.history(production(),submitted.value.reworkOrderId,node);
+        expect(pmcHistory).toEqual(managerHistory);
+        expect(pmcHistory.page!.responsibility).toMatchObject({canDetermine:false,canTakeover:false,canConfirmHighMultiplier:false,canOwnerSign:false});
+        await expect(businessDetail.history({...pmcReader,authorizationCapabilities:[]},submitted.value.reworkOrderId,node)).rejects.toMatchObject({statusCode:403});
+        await expect(businessDetail.history(pmcReader,submitted.value.reworkOrderId,node,randomUUID())).rejects.toMatchObject({statusCode:404});
+      }
       if(node==='work_reporting') expect(historical.page?.workTasks?.tasks.length).toBeGreaterThan(0);
       expect(historical.fields.find(field => field.label === "订单数量")?.value).toBe("1000");
       expect(historical.fields.find(field => field.label === "整查费用承担方")?.value).toBe("processing_factory");

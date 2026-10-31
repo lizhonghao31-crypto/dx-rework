@@ -19,6 +19,16 @@ describe('rework historical node boundary',()=>{
   expect(canReadReworkHistoryNode(actor('factory_payables',['rework:finance_orders:read']),'owner_signature')).toBe(false);
   expect(canReadReworkHistoryNode(actor('finance_director',['rework:finance_nodes:read']),'owner_signature')).toBe(true);
  });
+ it('grants PMC only the manager responsibility history reads, without operation grants',()=>{
+  for(const node of ['responsibility','owner_signature'] as const){
+   expect(canReadReworkHistoryNode(actor('pmc',['external_responsibility:view']),node)).toBe(true);
+   expect(canReadReworkHistoryNode(actor('pmc',[]),node)).toBe(false);
+   expect(canReadReworkHistoryNode(actor('worker',['external_responsibility:view']),node)).toBe(false);
+   expect(canReadReworkHistoryNode(actor('production_management',['responsibility:determine']),node)).toBe(true);
+  }
+  for(const node of ['process_configuration','work_reporting','whole_order_review','quantity_adjustment'] as const)
+   expect(canReadReworkHistoryNode(actor('pmc',['external_responsibility:view']),node)).toBe(false);
+ });
  it('preserves complete submitted fields when later node audits contain only partial order facts',()=>{
   const submission={styleNo:'HISTORY',orderQuantity:1000,reworkReason:'断线',reworkProcess:'修线',tailInspectionCostBearer:'processing_factory',inspectionReport:{styleName:'历史验货报告'}};
   expect(selectReworkInitiationSnapshot([
