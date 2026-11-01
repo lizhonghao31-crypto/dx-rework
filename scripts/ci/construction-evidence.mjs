@@ -11,6 +11,13 @@ export function sourceFingerprint(cwd='.'){
  const files=[...new Set(lines(git(cwd,'ls-files','--cached','--others','--exclude-standard')))].filter(sourcePath).sort();
  return sha(JSON.stringify(files.map(p=>{const f=cwd+'/'+p;if(!existsSync(f))return[p,'deleted'];const s=lstatSync(f);return[p,sha(s.isSymbolicLink()?readlinkSync(f):readFileSync(f))];})));
 }
+export function inputFingerprint(cwd,paths){
+ if(!Array.isArray(paths)||!paths.length)throw Error('EVIDENCE_INPUT_SCOPE_REQUIRED');
+ for(const p of paths)if(typeof p!=='string'||!p||p.startsWith('/')||p.includes('..')||p.includes('\\')||p==='node_modules'||p.startsWith('node_modules/')||!existsSync(cwd+'/'+p))throw Error('EVIDENCE_INPUT_SCOPE_REJECTED');
+ const files=[...new Set(lines(git(cwd,'ls-files','--cached','--others','--exclude-standard')))].filter(p=>paths.some(scope=>p===scope||p.startsWith(scope+'/'))).sort();
+ if(!files.length)throw Error('EVIDENCE_INPUT_SCOPE_EMPTY');
+ return sha(JSON.stringify(files.map(p=>{const f=cwd+'/'+p;if(!existsSync(f))return[p,'deleted'];const s=lstatSync(f);return[p,sha(s.isSymbolicLink()?readlinkSync(f):readFileSync(f))];})));
+}
 function requireText(v,label){if(typeof v!=='string'||v.trim().length<8||/^(?:已检查|checked|ok|正常|通过)$/i.test(v.trim()))throw Error('EVIDENCE_DETAIL_REQUIRED: '+label);}
 function fileRef(cwd,value,base,allowDeleted=false){
  if(typeof value!=='string'||value.includes('..')||value.startsWith('/')||value.includes('\\'))throw Error('EVIDENCE_FILE_REFERENCE_REQUIRED');
@@ -36,7 +43,8 @@ export function validateEvidence(record,{cwd='.',base,head=git(cwd,'rev-parse','
     if(['passed','failed','skipped'].some(k=>c[k]!==undefined))throw Error('EVIDENCE_COMMAND_MUST_NOT_INVENT_TEST_COUNTS');
    }else if(c.kind!==undefined&&c.kind!=='tests'||!Number.isInteger(c.passed)||c.passed<1||c.failed!==0||!Number.isInteger(c.skipped)||c.skipped<0)throw Error('EVIDENCE_CHECK_INCOMPLETE: '+c.id);
    if(!/^[0-9a-f]{64}$/.test(c.logSha256??'')||!Number.isFinite(Date.parse(c.startedAt))||!Number.isFinite(Date.parse(c.endedAt))||Date.parse(c.endedAt)<Date.parse(c.startedAt))throw Error('EVIDENCE_RESULT_PROVENANCE_REQUIRED');
-   if(c.sourceFingerprint!==record.sourceFingerprint)throw Error('EVIDENCE_CHECK_SOURCE_CHANGED');
+   if(c.inputPaths!==undefined){if(!/^[0-9a-f]{64}$/.test(c.sourceFingerprint??'')||c.inputFingerprint!==inputFingerprint(cwd,c.inputPaths))throw Error('EVIDENCE_CHECK_INPUT_CHANGED');}
+   else if(c.sourceFingerprint!==record.sourceFingerprint)throw Error('EVIDENCE_CHECK_SOURCE_CHANGED');
    if(!/^[0-9a-f]{40}$/.test(c.testedHead??''))throw Error('EVIDENCE_TESTED_HEAD_REQUIRED');
    if(c.testedHead!==head)try{git(cwd,'merge-base','--is-ancestor',c.testedHead,head);}catch{throw Error('EVIDENCE_TESTED_HEAD_NOT_ANCESTOR');}
    requireText(c.context,'runtime context');
@@ -49,6 +57,7 @@ export function validateEvidence(record,{cwd='.',base,head=git(cwd,'rev-parse','
   for(const key of ['rule','source','initialization','dateAndPermission','expectation'])requireText(r[key],key);
   for(const key of ['writes','reads','oldTests']){if(!Array.isArray(r[key])||!r[key].length)throw Error('EVIDENCE_CONSUMERS_REQUIRED: '+key);for(const ref of r[key]){const p=fileRef(cwd,ref,base,key==='writes');if(key==='writes')covered.add(p);}}
   if(!Array.isArray(r.checks)||!r.checks.length||r.checks.some(id=>!checks.has(id)))throw Error('EVIDENCE_RULE_CHECK_REQUIRED');
+  for(const ref of r.writes){const p=ref.split('#')[0];if(!r.checks.some(id=>{const c=checks.get(id);return c.status==='passed'&&(!c.inputPaths||c.inputPaths.some(scope=>p===scope||p.startsWith(scope+'/')));}))throw Error('EVIDENCE_WRITE_WITHOUT_CURRENT_CHECK_SCOPE: '+p);}
  }
  const changed=[...new Set([...lines(git(cwd,'diff','--name-only',base)),...lines(git(cwd,'ls-files','--others','--exclude-standard'))])].filter(sourcePath);
  const missing=changed.filter(p=>!covered.has(p));if(missing.length)throw Error('EVIDENCE_CHANGED_FILE_UNCOVERED: '+missing.join(','));
