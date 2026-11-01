@@ -1,3 +1,4 @@
+import {customerQuotationFixture} from './customer-quotation-fixture.js';
 import {PoCustomerDateService} from '../../apps/api/src/production-platform/po-customer-date-service.js';
 import {AuthService} from '../../apps/api/src/auth/service.js';
 import {PostgresAuthStore} from '../../apps/api/src/auth/postgres-store.js';
@@ -68,8 +69,9 @@ export async function exerciseAcceptanceSourcingApproval(db:Pool,runtime:Accepta
   await storage.writeImmutable(budgetObjectKey,bytes,{mimeType:'image/png',sha256});
   await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-budget.png','image/png',$3,$4,$5,'ready',CURRENT_TIMESTAMP)",[budgetImageId,budgetObjectKey,bytes.length,sha256,root.actorId]);
   const budget=new DigitalBudgetService(db,true),budgetDoc=BudgetDocumentSchema.parse({fabricType:'梭织',productCategory:'上衣',date:beijingCalendarDate(businessNow()),currency:'人民币',monthSeries:'',rows:[],freight:'0',cm:'5',salePrice:'20',outsourcingScope:'车缝',outsourcingUnitPrice:'5',imageAttachmentIds:[budgetImageId]});
-  await budget.save(root,id,{expectedVersion:0,document:budgetDoc},randomUUID());await budget.save(people.merch!,id,{expectedVersion:1,document:budgetDoc},randomUUID());await budget.publish(people.merch!,id,2,randomUUID());
-  const prepared=await budget.prepareSourcing(people.merch!,id,2,attachments);
+  await customerQuotationFixture(db,root,id);
+  await budget.save(root,id,{expectedVersion:1,document:budgetDoc},randomUUID());await budget.save(people.merch!,id,{expectedVersion:2,document:budgetDoc},randomUUID());await budget.publish(people.merch!,id,3,randomUUID());
+  const prepared=await budget.prepareSourcing(people.merch!,id,3,attachments);
   const created=await service.createCase(people.merch!,{gender:prepared.gender,styleName:prepared.styleName,deliveryDate:'2026-12-10',estimatedCutPieceSendDate:'2026-11-01',daxingUnitPrice:prepared.daxingUnitPrice,attachmentIds:prepared.images.map(i=>i.attachmentId),lineItems:prepared.lineItems.map(({lineId,styleNo,alternateStyleNo,color,quantity})=>({lineId,styleNo,alternateStyleNo,color,quantity,factoryDeliveryDate:'2026-12-10'})),digitalBudget:{productionOrderId:id,budgetVersion:prepared.budgetVersion,orderVersion:prepared.orderVersion}},randomUUID());
   const caseId=created.value.sourcingCaseId,prices=[{position:1,unitPrice:'5'}];
   await service.quoteIePrice(people.ie!,caseId,{linePrices:prices},randomUUID());await service.recordManagementDecision(people.manager!,caseId,{supplierId:factory.supplierId,craftIds:[crafts[0]!.craftId],linePrices:prices,cuttingProcess:'in_house'},randomUUID());

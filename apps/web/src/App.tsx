@@ -5,6 +5,7 @@ import {CockpitProductionSettings} from "./cockpit-production-settings.js";
 import { ProductionWorkspace } from "@dx-rework/ui/production";
 import { DigitalAnalysisPage } from "./digital-analysis-page.js";
 import { DigitalCockpitPage } from "./digital-cockpit-page.js";
+import {DigitalQuotationPage} from './digital-quotation-panel.js';
 import { DigitalProductionPage } from "./digital-production-page.js";
 import { DigitalDesignerWorkspace } from "./digital-designer-workspace.js";
 import { DigitalPatternWorkspace } from "./digital-pattern-workspace.js";
@@ -291,6 +292,7 @@ function AppRoutes() {
   let page;
   if (path === "/ui/digital-analysis") page = <Shell active="板房数据沙盘" appearance="digital"><ProductionWorkspace><DigitalAnalysisPage navigation={navigation} /></ProductionWorkspace></Shell>;
   else if (path === "/ui/digital-cockpit") page = <Shell active="生产管理座舱" appearance="digital"><ProductionWorkspace>{new URLSearchParams(search).get("workspace")==="settings" ? <CockpitProductionSettings/> : ["pattern","preparation"].includes(new URLSearchParams(search).get("workspace")??"") ? <DigitalPatternWorkspace key={search}/> : ["factory"].includes(new URLSearchParams(search).get("workspace") ?? "") ? <DigitalProductionWorkspace key={search} kind={new URLSearchParams(search).get("workspace") === "factory" ? "factory" : "preparation"}/> : <DigitalCockpitPage key={search} />}</ProductionWorkspace></Shell>;
+  else if(path === "/ui/digital-quotation") page = <Shell active="客户报价协作" appearance="digital"><ProductionWorkspace><DigitalQuotationPage key={search}/></ProductionWorkspace></Shell>;
   else if (path === "/ui/digital-production") page = <Shell active="开发与大货办理" appearance="digital"><ProductionWorkspace>{new URLSearchParams(search).get("workspace") === "designer" ? <DigitalDesignerWorkspace key={search}/> : <><DevelopmentWorkspaceReturn/><DigitalProductionPage key={search} /></>}</ProductionWorkspace></Shell>;
   else if (path === "/ui/digital-pattern-room") page = <Shell active="digital-pattern" appearance="digital"><ProductionWorkspace><DigitalPatternWorkspace key={search}/></ProductionWorkspace></Shell>;
   else if (path === "/ui/home") page = <HomeLanding />;
@@ -368,6 +370,7 @@ function AppRoutes() {
 
   const owner = { requiredRole: "owner_group" } as const;
 
+  if(path === "/ui/digital-quotation")return <AuthGate requiredAnyOf={["sample_designer","order_merchandiser","pattern_room_worker","ie_reviewer","embroidery_washing_merchandiser","production_management","owner_group"].map(requiredRole=>({requiredRole}))}>{page}</AuthGate>;
   if(path === "/ui/digital-pattern-room")return <AuthGate requiredAnyOf={[...DIGITAL_PRODUCTION_ROLES.map(requiredRole=>({requiredRole})),...patternRoomOrderRequirements,...patternRoomPriceRequirements,...patternRoomCreateRequirements]}>{page}</AuthGate>;
   if (path === "/ui/digital-production" || path === "/ui/digital-cockpit" || path === "/ui/digital-analysis" || path === "/ui/digital-pattern-room") return <AuthGate requiredAnyOf={DIGITAL_PRODUCTION_ROLES.map(requiredRole => ({ requiredRole }))}>{page}</AuthGate>;
   if (path === "/ui/home") return <AuthGate>{page}</AuthGate>;

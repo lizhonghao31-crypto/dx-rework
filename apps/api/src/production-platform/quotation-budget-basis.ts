@@ -1,0 +1,46 @@
+import type {Pool,PoolClient} from 'pg';
+import {compareQuotationBudget,type BudgetQuoteComparison,type QuotationConfirmation} from '@dx-rework/contracts/digital-quotation';
+import type {BudgetDocument} from '@dx-rework/contracts/digital-budget';
+import {ApplicationError} from '../platform/errors.js';
+type Database=Pick<Pool|PoolClient,'query'>;
+export async function hasQuotationSchema(db:Database){return Boolean((await db.query("SELECT to_regclass('digital_quotation_documents') AS relation")).rows[0]?.relation);}
+export async function formalOrderQuantity(db:Database,orderId:string):Promise<number>{
+ return Number((await db.query('SELECT coalesce(sum(s.quantity),0)::text AS quantity FROM digital_production_po_lines l JOIN digital_production_po_sizes s USING(line_id) WHERE l.production_order_id=$1',[orderId])).rows[0]?.quantity??0);
+}
+// Called only inside an authenticated command transaction holding the shared
+// lifecycle lock. GET/read operations never create drafts or adopt old orders.
+export async function ensureQuotationBudget(db:Database,orderId:string,actorId:string){
+ if(!await hasQuotationSchema(db))return;
+ const order=(await db.query('SELECT * FROM digital_production_orders WHERE production_order_id=$1 FOR UPDATE',[orderId])).rows[0];
+ if(!order)return;
+ const candidates=(await db.query('SELECT * FROM digital_quotation_documents WHERE production_order_id=$1 OR ($2::uuid IS NOT NULL AND source_id=$2) FOR UPDATE',[orderId,order.source_id])).rows;
+ if(candidates.length>1)throw new ApplicationError('QUOTATION_RESOURCE_CONFLICT','订单与开发来源各有独立报价，不能自动合并或覆盖确认依据；请先核对原报价',409);
+ const quote=candidates[0];
+ if(!quote)return;
+ if(!quote.production_order_id)await db.query('UPDATE digital_quotation_documents SET production_order_id=$2 WHERE quote_id=$1',[quote.quote_id,orderId]);
+ if(!quote.confirmed_version)return;
+ const rule=(await db.query('SELECT 1 FROM digital_commercial_order_rules WHERE production_order_id=$1',[orderId])).rowCount;
+ if(!rule)return; // Explicit historical adoption is separate; never infer consent.
+ const current=(await db.query('SELECT * FROM digital_budget_documents WHERE production_order_id=$1 FOR UPDATE',[orderId])).rows[0];
+ if(current)return; // Revisions must be explicitly adopted; no overwrite.
+ const version=(await db.query('SELECT * FROM digital_quotation_versions WHERE quote_id=$1 AND version=$2',[quote.quote_id,quote.confirmed_version])).rows[0];
+ if(!version)return;
+ await db.query('INSERT INTO digital_budget_quote_conversions(production_order_id,quote_id,quote_version,created_budget_version) VALUES($1,$2,$3,1) ON CONFLICT DO NOTHING',[orderId,quote.quote_id,quote.confirmed_version]);
+ await db.query(`INSERT INTO digital_budget_documents(production_order_id,version,status,document,updated_by,quote_id,quote_version)
+ VALUES($1,1,'draft',$2,$3,$4,$5)`,[orderId,version.document,actorId,quote.quote_id,quote.confirmed_version]);
+}
+export async function readBudgetQuoteComparison(db:Database,orderId:string,budget:{document:BudgetDocument;quote_id?:string|null;quote_version?:number|null}|undefined,historical=false):Promise<BudgetQuoteComparison>{
+ const legacy:BudgetQuoteComparison={policy:'legacy',quoteId:null,quoteVersion:null,currentConfirmedVersion:null,state:'legacy',reason:'历史预算，未补造客户确认报价',budgetComparableTotal:null,confirmedQuoteTotal:null,amountScope:null,baseline:null,confirmation:null};
+ if(!await hasQuotationSchema(db))return legacy;
+ if(!(await db.query('SELECT 1 FROM digital_commercial_order_rules WHERE production_order_id=$1',[orderId])).rowCount)return legacy;
+ const quote=(await db.query('SELECT quote_id,version,confirmed_version FROM digital_quotation_documents WHERE production_order_id=$1',[orderId])).rows[0];
+ const comparison:BudgetQuoteComparison={...legacy,policy:'quote_v1',state:'waiting_confirmation',reason:'等待客户确认报价与正式下单，不能发布预算',currentConfirmedVersion:quote?.confirmed_version??null,pendingQuotationVersion:quote&&quote.version!==quote.confirmed_version?quote.version:null};
+ if(!quote?.confirmed_version)return comparison;
+ if(!budget?.quote_id||!budget.quote_version||budget.quote_id!==quote.quote_id||!historical&&budget.quote_version!==quote.confirmed_version)return {...comparison,state:'review_required',reason:'客户确认报价已有新版本，请跟单明确采用后复核预算'};
+ const source=(await db.query('SELECT document,confirmation,customer_code FROM digital_quotation_versions WHERE quote_id=$1 AND version=$2',[budget.quote_id,budget.quote_version])).rows[0];
+ if(!source)throw new ApplicationError('BUDGET_QUOTE_BASIS_MISSING','报价对照依据缺失，未放行预算',409);
+ const confirmation=source.confirmation as QuotationConfirmation;
+ const customer=(await db.query('SELECT customer_code FROM digital_production_orders WHERE production_order_id=$1',[orderId])).rows[0]?.customer_code;
+ if(source.customer_code!==customer)return {...comparison,state:'incomparable',reason:'客户确认报价所属客户与当前订单不一致，不能发布预算'};
+ return {...comparison,...compareQuotationBudget(budget.document,confirmation,historical&&confirmation.quantity!==null?confirmation.quantity:await formalOrderQuantity(db,orderId)),quoteId:budget.quote_id,quoteVersion:budget.quote_version,baseline:source.document,confirmation,amountScope:confirmation.amountScope};
+}

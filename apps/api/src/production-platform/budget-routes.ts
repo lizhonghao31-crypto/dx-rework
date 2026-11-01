@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { CreateUploadIntentSchema } from "@dx-rework/contracts";
-import { SaveBudgetSchema, PublishBudgetSchema } from "@dx-rework/contracts/digital-budget";
+import { SaveBudgetSchema, PublishBudgetSchema,AdoptBudgetQuotationSchema } from "@dx-rework/contracts/digital-budget";
 import { businessActor } from "../access/business-authority.js";
 import { ApplicationError } from "../platform/errors.js";
 import type { AttachmentService } from "../tools/attachments.js";
@@ -26,7 +26,8 @@ export function registerBudgetRoutes(app: FastifyInstance, dependencies: Digital
     return service.read(await actor(request), id(request, "orderId"), undefined, query.version);
   });
   app.put(base, async request => service.save(await actor(request), id(request, "orderId"), parse(SaveBudgetSchema, request.body), key(request)));
-  app.post(`${base}/publish`, async request => service.publish(await actor(request), id(request, "orderId"), parse(PublishBudgetSchema, request.body).expectedVersion, key(request)));
+  app.post(`${base}/publish`, async request => {const input=parse(PublishBudgetSchema,request.body);return service.publish(await actor(request),id(request,'orderId'),input.expectedVersion,key(request),input.sourceQuoteVersion);});
+  app.post(`${base}/adopt-quotation`,async request=>service.adoptQuotation(await actor(request),id(request,'orderId'),parse(AdoptBudgetQuotationSchema,request.body),key(request)));
   app.post(`${base}/prepare-sourcing`, async request => service.prepareSourcing(await actor(request), id(request, "orderId"), parse(PublishBudgetSchema, request.body).expectedVersion, attachments));
   app.get(`${base}/upload-limits`, async request => { await service.authorizeUpload(await actor(request), id(request, "orderId")); return attachments.uploadLimits(); });
   app.post(`${base}/upload-intents`, async request => {

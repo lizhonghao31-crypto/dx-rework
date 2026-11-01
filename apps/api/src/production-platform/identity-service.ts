@@ -15,6 +15,7 @@ import type { TrustedActorContext } from "../tools/repositories.js";
 import { ApplicationError } from "../platform/errors.js";
 import { DigitalProductionAccessPolicy, isDigitalLeader, isDigitalTechnicalManager, digitalForbidden } from "./access-policy.js";
 import { ProductionOrderRootRepository } from "./order-root-repository.js";
+import {ensureQuotationBudget} from './quotation-budget-basis.js';
 
 const fail = (message: string, status = 409): never => { throw new ApplicationError(status === 404 ? "NOT_FOUND" : status === 403 ? "FORBIDDEN" : "DIGITAL_PRODUCTION_CONFLICT", message, status); };
 const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -60,7 +61,7 @@ export class DigitalProductionIdentityService {
     const client = await this.database.connect();
     try {
       await client.query("BEGIN");
-      if(command.startsWith("numbers:")||command.startsWith("confirm-source:"))await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
+      if(command.startsWith("numbers:")||command.startsWith("confirm-source:")||command.startsWith('attach-source:'))await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [JSON.stringify([actor.actorId, command, key])]);
       const hash = digest(payload);
       const prior = await client.query("SELECT payload_hash,response FROM digital_production_commands WHERE actor_id=$1 AND command=$2 AND key=$3", [actor.actorId, command, key]);
@@ -213,6 +214,7 @@ export class DigitalProductionIdentityService {
         for (const size of line.sizes) await client.query("INSERT INTO digital_production_po_sizes(line_id,size,quantity) VALUES($1,$2,$3)", [lineId, size.size, size.quantity]);
       }
       await new SlaOrderService(this.database).enrollNewOrder(client, actor, root.productionOrderId, creationEventId, businessTime);
+      await ensureQuotationBudget(client,root.productionOrderId,actor.actorId);
       return this.readWith(client, actor, root.productionOrderId);
     });
   }
@@ -228,6 +230,7 @@ export class DigitalProductionIdentityService {
       const used = await client.query("SELECT 1 FROM digital_production_orders WHERE source_id=$1", [sourceId]);
       if (used.rowCount) fail("该开发来源已有履约母单");
       await client.query("UPDATE digital_production_orders SET source_id=$2,version=version+1 WHERE production_order_id=$1", [id, sourceId]);
+      await ensureQuotationBudget(client,id,actor.actorId);
       await this.audit(client, actor, "digital_source_attached", id, { sourceId: null }, { sourceId });
       return this.readWith(client, actor, id);
     });

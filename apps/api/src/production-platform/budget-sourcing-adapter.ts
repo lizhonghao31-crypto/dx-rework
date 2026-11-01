@@ -8,6 +8,7 @@ import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
 import { DigitalProductionAccessPolicy, digitalForbidden } from "./access-policy.js";
 import { linkNewDigitalChild } from "./child-link-repository.js";
+import {readBudgetQuoteComparison} from './quotation-budget-basis.js';
 
 const conflict = (message: string): never => { throw new ApplicationError("BUDGET_CONFLICT", message, 409); };
 export async function readBudgetSourcing(db: Pick<PoolClient, "query">, actor: TrustedActorContext, orderId: string) {
@@ -21,6 +22,8 @@ export async function readBudgetSourcing(db: Pick<PoolClient, "query">, actor: T
   const budget = (await db.query(`SELECT d.* FROM digital_budget_documents d JOIN digital_budget_preparations p USING(production_order_id)
     WHERE d.production_order_id=$1 AND d.status='published' AND d.version=p.budget_version`, [orderId])).rows[0] ?? conflict("请先发布当前预算；由本单跟单在预算页核对并最终发布当前草稿，再从该页进入外发申请");
   const document = budget.document as BudgetDocument;
+  const comparison=await readBudgetQuoteComparison(db,orderId,budget);
+  if(!['legacy','within_limit'].includes(comparison.state))conflict(`${comparison.reason}；请跟单回预算页处理，未改变原批准合同`);
   const lines = (await db.query(`SELECT l.line_id,l.position,l.formal_style_no,l.temporary_style_no,l.color,l.customer_warehouse_arrival_date::text AS customer,
     (SELECT sum(s.quantity)::integer FROM digital_production_po_sizes s WHERE s.line_id=l.line_id) AS quantity
     FROM digital_production_po_lines l WHERE l.production_order_id=$1 ORDER BY l.position`, [orderId])).rows;

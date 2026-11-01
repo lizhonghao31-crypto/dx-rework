@@ -1,3 +1,4 @@
+import {quotationHref} from './digital-quotation-panel.js';
 import {DocumentToolbar,DocumentErrors} from "./document-editor.js";
 import { DevelopmentDocumentFields } from "./development-document-fields.js";
 import { DevelopmentPatternLink, type DevelopmentPatternChoice } from "./development-pattern-link.js";
@@ -349,5 +350,5 @@ export function ResumeDevelopmentCreateForm({sheet,onClose,onCreated,onViewPubli
   const [error,setError]=useState("");
   const [intent,setIntent]=useState<"development"|"certain_order">(sheet.document?.customerOrderDraft?.withOrder?"certain_order":"development");
   useEffect(()=>{let live=true;setOptions(null);setError('');void digitalRequest<{customers:DigitalCustomer[];minimumInitialCustomerDate?:string;serverToday?:string}>(developmentOrderOptionsPath(sheet.sourceId)).then(value=>{if(live)setOptions(value);}).catch(reason=>{if(live)setError(reason instanceof Error?reason.message:"读取客户资料失败");});return()=>{live=false;};},[sheet.sourceId]);
-  return error?<p role="alert">{error}</p>:!options?<p role="status">正在读取开发草稿…</p>:<>{sheet.status==="published"&&onViewPublished&&<Button type="button" onClick={onViewPublished}>查看已发布资料、版本与办理</Button>}<DevelopmentCreateForm contained={contained} existingDraft={sheet} intent={intent} customers={options.customers} minimumDate={options.minimumInitialCustomerDate} serverToday={options.serverToday} calendarSourceId={sheet.sourceId} onIntentChange={setIntent} onCancel={onClose} onCreated={onCreated}/></>;
+  return error?<p role="alert">{error}</p>:!options?<p role="status">正在读取开发草稿…</p>:<>{sheet.status==="published"&&onViewPublished&&<Button type="button" onClick={onViewPublished}>查看已发布资料、版本与办理</Button>}<DevelopmentCreateForm contained={contained} existingDraft={sheet} intent={intent} customers={options.customers} minimumDate={options.minimumInitialCustomerDate} serverToday={options.serverToday} calendarSourceId={sheet.sourceId} onIntentChange={setIntent} onCancel={onClose} onCreated={onCreated}/>{sheet.canEdit&&<a className="dx-button dx-button--secondary" href={quotationHref({kind:"source",id:sheet.sourceId},window.location.pathname+window.location.search)}>客户报价协作</a>}</>;
 }

@@ -14,7 +14,7 @@ type Entry={version:string;checksum:string};
 const url=process.env.TEST_DATABASE_URL;
 const suite=url?describe:describe.skip;
 suite('main and digital historical PostgreSQL upgrades',()=>{
- it.each(['main','main-219-derived','acceptance-prefix','a3','empty','interrupted-main','main-221','main-222','acceptance-236','integrated-237','main-229','acceptance-260','main-232','release-265'] as const)('upgrades %s preserving identities, checksums, timestamps and business rows',async lane=>{
+ it.each(['main','main-219-derived','acceptance-prefix','a3','empty','interrupted-main','main-221','main-222','acceptance-236','integrated-237','main-229','acceptance-260','main-232','release-265','release-266'] as const)('upgrades %s preserving identities, checksums, timestamps and business rows',async lane=>{
   await assertTestDatabaseTarget(url!);
   const catalog=await discoverValidatedMigrations();
   const main:Entry[]=JSON.parse(await readFile('tests/fixtures/migration-histories/main-99db5239.json','utf8')).migrations;
@@ -27,7 +27,8 @@ suite('main and digital historical PostgreSQL upgrades',()=>{
   const mainLane=new Set([...JSON.parse(await readFile('scripts/migration-branches.json','utf8')).main,...JSON.parse(await readFile('scripts/migration-main-extensions.json','utf8'))].map((row:Entry)=>row.version));
   const main232=catalog.filter(row=>Number(row.version.slice(0,4))<=217||mainLane.has(row.version));
   const release265=catalog.filter(row=>Number(row.version.slice(0,4))<=265&&row.version!=='0232_pmc_readonly_role');
-  const history=lane==='main-232'?main232:lane==='release-265'?release265:lane==='main-229'?main229:lane==='acceptance-260'?acceptance260:lane==='main-222'?main222:lane==='main-221'?main221:lane==='acceptance-236'?acceptance236:lane==='integrated-237'?catalog:lane==='main-219-derived'?main.slice(0,219):lane==='main'||lane==='interrupted-main'?main:lane==='a3'?digital:lane==='acceptance-prefix'?digital.slice(0,225):[];
+  const release266:Entry[]=JSON.parse(await readFile('tests/fixtures/migration-histories/release-0cfe0f1e.json','utf8')).migrations;
+  const history=lane==='release-266'?release266:lane==='main-232'?main232:lane==='release-265'?release265:lane==='main-229'?main229:lane==='acceptance-260'?acceptance260:lane==='main-222'?main222:lane==='main-221'?main221:lane==='acceptance-236'?acceptance236:lane==='integrated-237'?catalog:lane==='main-219-derived'?main.slice(0,219):lane==='main'||lane==='interrupted-main'?main:lane==='a3'?digital:lane==='acceptance-prefix'?digital.slice(0,225):[];
   const schema=ownedPostgresSchema('migration_compat');
   const admin=new pg.Client({connectionString:url});await admin.connect();
   const scoped=new URL(url!);scoped.searchParams.set('options',`-c search_path=${schema}`);
@@ -79,6 +80,14 @@ suite('main and digital historical PostgreSQL upgrades',()=>{
    }
    const sentinel=randomUUID();
    if(history.length)await client.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'TEST migration retained business identity',true)",[sentinel]);
+   const retainedBudgetId=randomUUID();
+   const retainedDocument={fabricType:'TEST针织',productCategory:'TEST上衣',monthSeries:'',date:'2026-10-31',currency:'人民币',rows:[],freight:'0',cm:'8',salePrice:'20',outsourcingScope:'TEST车缝',outsourcingUnitPrice:'8',imageAttachmentIds:[]};
+   if(lane==='release-266'){
+    await client.query("INSERT INTO production_order_roots(production_order_id,workflow_generation,created_by) VALUES($1,'digital_production_v1',$2)",[retainedBudgetId,sentinel]);
+    await client.query("INSERT INTO digital_production_orders(production_order_id,customer_code,product_group,design_style_no,order_date,created_by,creation_hash) VALUES($1,'PD','男装','TEST historical before quote rollout','2026-10-31',$2,'TEST historical')",[retainedBudgetId,sentinel]);
+    await client.query("INSERT INTO digital_budget_documents(production_order_id,version,status,document,updated_by,published_at) VALUES($1,1,'published',$2,$3,'2026-10-31T00:00:00Z')",[retainedBudgetId,JSON.stringify(retainedDocument),sentinel]);
+    await client.query("INSERT INTO digital_budget_versions(production_order_id,version,document,totals,published_by) VALUES($1,1,$2,$3,$4)",[retainedBudgetId,JSON.stringify(retainedDocument),JSON.stringify({cost:'8'}),sentinel]);
+   }
    const env={...process.env,DATABASE_URL:scoped.toString()};
    const run=(command:string)=>JSON.parse(execFileSync(process.execPath,['scripts/deploy/database-state.mjs',command,'apps/api/src/platform/migration-manifest.json'],{env,encoding:'utf8'}));
    expect(run('verify-prefix').status).toBe('pass');
@@ -114,14 +123,20 @@ suite('main and digital historical PostgreSQL upgrades',()=>{
     expect(row.prosrc).toBe(body);expect(row.prosecdef).toBe(false);expect(row.provolatile).toBe(name==='guard_rework_work_report_insert'?'v':'s');
    }
    expect((await client.query("SELECT tgfoid='guard_rework_work_report_insert()'::regprocedure AS exact,tgenabled FROM pg_trigger WHERE tgrelid='rework_work_reports'::regclass AND tgname='rework_work_reports_guard_insert'")).rows).toEqual([{exact:true,tgenabled:'O'}]);
+   if(lane==='release-266'){
+    expect((await client.query('SELECT * FROM digital_commercial_order_rules WHERE production_order_id=$1',[retainedBudgetId])).rows).toHaveLength(0);
+    expect((await client.query('SELECT document,quote_id,published_at FROM digital_budget_documents WHERE production_order_id=$1',[retainedBudgetId])).rows[0]).toMatchObject({document:retainedDocument,quote_id:null,published_at:new Date('2026-10-31T00:00:00Z')});
+    expect((await client.query('SELECT document,quote_id FROM digital_budget_versions WHERE production_order_id=$1',[retainedBudgetId])).rows[0]).toMatchObject({document:retainedDocument,quote_id:null});
+    expect((await client.query('SELECT count(*)::int n FROM digital_quotation_versions')).rows[0].n).toBe(0);
+   }
    expect((await applyMigrations(scoped.toString())).applied).toEqual([]);
    const after=(await client.query('SELECT version,checksum,applied_at FROM schema_migrations ORDER BY version')).rows;
-   if(['main-232','release-265'].includes(lane)){
+   if(['main-232','release-265','release-266'].includes(lane)){
     expect((await client.query('SELECT * FROM user_role_assignments ORDER BY assignment_id')).rows).toEqual(employeeGrants);
     const capabilities=(await client.query("SELECT * FROM role_capabilities WHERE role_code<>'pmc' ORDER BY role_code,capability")).rows;
     // Main additionally installs the original digital lane; its existing grants
     // must survive, while the already integrated release gains only PMC.
-    if(lane==='release-265')expect(capabilities).toEqual(originalCapabilities);
+    if(['release-265','release-266'].includes(lane))expect(capabilities).toEqual(originalCapabilities);
     else expect(capabilities).toEqual(expect.arrayContaining(originalCapabilities!));
     expect((await client.query("SELECT count(*)::int n FROM pg_trigger WHERE tgname='attachments_pmc_readonly_guard' AND tgenabled='O' AND tgrelid='attachments'::regclass")).rows[0].n).toBe(1);
    }

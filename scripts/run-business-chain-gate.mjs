@@ -210,6 +210,7 @@ const tests = [
 if (hasDatabase) {
   tests.push(
     "tests/integration/full-business-chain-postgres.test.ts",
+    "tests/integration/customer-quotation-postgres.test.ts",
     "tests/integration/own-tail-responsibility-history-postgres.test.ts",
     "tests/integration/root-single-account-two-pass-postgres.test.ts",
     "tests/integration/receiving-postgres.test.ts",

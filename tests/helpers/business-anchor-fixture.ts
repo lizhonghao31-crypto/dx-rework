@@ -1,3 +1,4 @@
+import {customerQuotationFixture} from './customer-quotation-fixture.js';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {randomUUID,createHash} from 'node:crypto';
@@ -95,9 +96,10 @@ export async function businessAnchorFixture(url:string){
    const current=await identity.read(primary,id),instructionDoc={...initialInstruction(),styleName:'TEST产前',secondaryCraft,category:'上衣',date:beijingCalendarDate(businessNow()),preshrink:'无需预缩' as const,sizes:['M'],measurements:[{id:randomUUID(),name:'袖长',tolerance:'±1/4',method:'平量',values:['6']}],images:[{attachmentId:photo,kind:'款图' as const,description:'TEST'}]};
    await instruction.save(primary,id,{expectedVersion:0,orderVersion:current.version,sourceRound:1,document:instructionDoc},randomUUID());await instruction.publish(primary,id,{expectedVersion:1,orderVersion:current.version},randomUUID());
    await bulk.dispatch(manager,id,{expectedVersion:0,patternWorkerId:people['pattern-room-worker']!.actorId,warehouseWorkerId:people.warehouse!.actorId,cuttingWorkerId:people['cutting-worker']!.actorId,deliverPattern:false},randomUUID());
+   await customerQuotationFixture(db,root,id);
    const budgetImage=await image(designer),budgetDoc=BudgetDocumentSchema.parse({fabricType:'梭织',productCategory:'上衣',date:beijingCalendarDate(businessNow()),currency:'人民币',monthSeries:'',rows:[],freight:'0',cm:'5',salePrice:'20',outsourcingScope:'车缝',outsourcingUnitPrice:'5',imageAttachmentIds:[budgetImage]});
-   await budget.save(designer,id,{expectedVersion:0,document:budgetDoc},randomUUID());await budget.publish(primary,id,1,randomUUID());
-   const prepared=await budget.prepareSourcing(primary,id,1,attachments);
+   await budget.save(designer,id,{expectedVersion:1,document:budgetDoc},randomUUID());await budget.publish(primary,id,2,randomUUID());
+   const prepared=await budget.prepareSourcing(primary,id,2,attachments);
    const input={gender:prepared.gender,styleName:prepared.styleName,deliveryDate:'2026-12-10',estimatedCutPieceSendDate:'2026-11-01',daxingUnitPrice:prepared.daxingUnitPrice,attachmentIds:prepared.images.map(i=>i.attachmentId),lineItems:prepared.lineItems.map(({lineId,styleNo,alternateStyleNo,color,quantity})=>({lineId,styleNo,alternateStyleNo,color,quantity,factoryDeliveryDate:'2026-12-10'})),digitalBudget:{productionOrderId:id,budgetVersion:prepared.budgetVersion,orderVersion:prepared.orderVersion}};
    const key=randomUUID();await beforeCreate?.(input,key,primary);
    const created=await sourcingCommands.createCase(primary,input,key),caseId=created.value.sourcingCaseId;

@@ -18,6 +18,9 @@ import { NavigationIcon } from "./navigation-icons.js";
 import { useDigitalDetailNavigationGuard } from "./use-digital-detail-navigation-guard.js";
 import {productionWorkspaceDomainHref} from "./digital-detail-route.js";
 import "./digital-budget.css";
+import {compareQuotationBudget,quotationRowDelta} from '@dx-rework/contracts/digital-quotation';
+import {quotationHref} from './digital-quotation-panel.js';
+import './digital-quotation.css';
 
 const urls = createWebUrls(import.meta.env.BASE_URL);
 const newRow = (section: BudgetRow["section"], category = ""): BudgetRow => ({ rowId: createClientRequestId(), section, category, name: "", specification: "", unit: "", supplier: "", consumption: "", unitPrice: "" });
@@ -30,7 +33,7 @@ export async function budgetRequest(path:string,orderId:string,method="GET",body
  const value=await digitalRequest<BudgetSheet>(path,method,body,key);
  let valid=Boolean(value&&value.productionOrderId===orderId&&Number.isSafeInteger(value.version)&&value.version>=0&&["draft","published"].includes(value.status)&&typeof value.canEdit==="boolean"&&typeof value.canSubmitSourcing==="boolean"&&typeof value.designerName==="string"&&(value.merchandiserName===null||typeof value.merchandiserName==="string")&&(value.versions===undefined||Array.isArray(value.versions)&&value.versions.every(version=>Number.isSafeInteger(version)&&version>0)));
  if(valid&&value.document!==null){try{valid=Boolean(value.document&&Array.isArray(value.document.rows)&&value.document.rows.every(row=>row&&typeof row.rowId==="string")&&Array.isArray(value.document.imageAttachmentIds)&&value.document.imageAttachmentIds.every(id=>typeof id==="string"));if(valid)calculateBudget(value.document);}catch{valid=false;}}
- if(valid&&method!=="GET"){const expected=(body as {expectedVersion?:number}|undefined)?.expectedVersion;valid=BudgetDocumentSchema.safeParse(value.document).success&&Number.isSafeInteger(expected)&&(method==="PUT"?value.version===expected!+1&&value.status==="draft":path.endsWith("/publish")&&value.version===expected&&value.status==="published");}
+ if(valid&&method!=="GET"){const expected=(body as {expectedVersion?:number}|undefined)?.expectedVersion;valid=BudgetDocumentSchema.safeParse(value.document).success&&Number.isSafeInteger(expected)&&(method==="PUT"?value.version===expected!+1&&value.status==="draft":(path.endsWith("/publish")&&value.version===expected&&value.status==="published"||path.endsWith("/adopt-quotation")&&value.version===expected!+1&&value.status==="draft"));}
  if(!valid)throw new DigitalRequestError(method==="GET"?"预算资料返回不完整，尚未确认当前资料；请重新读取":"未收到可确认的预算提交回执，请先核对原预算版本，避免重复提交",200,"INVALID_RESPONSE");
  return value;
 }
@@ -73,7 +76,7 @@ export function DigitalBudgetPanel({ order, onClose, initialVersion:requestedVer
         value=await write(base,"PUT",{expectedVersion:sheet.version,document:saveDocument});
         if(currentGeneration!==generation.current)return;setSheet(value);setDoc(value.document!);setDirty(false);previews.saved();
       }
-      if(publish)value=await write(`${base}/publish`,"POST",{expectedVersion:value.version});
+      if(publish)value=await write(`${base}/publish`,"POST",{expectedVersion:value.version,...(value.comparison?.policy==='quote_v1'?{sourceQuoteVersion:value.comparison.quoteVersion}:{})});
       if(currentGeneration!==generation.current)return;setSheet(value);setDoc(value.document!);setDirty(false);previews.saved();
     }
     catch (reason) { if(currentGeneration===generation.current){const unknown=reason instanceof DigitalRequestError?reason.resultUnknown:unknownWriteResult(reason);setUncertain(unknown);if(!unknown)operation.current=null;setError(reason instanceof Error ? reason.message : "预算提交结果尚未确认，请核对原预算版本");} }
@@ -117,6 +120,18 @@ export function DigitalBudgetPanel({ order, onClose, initialVersion:requestedVer
     finally { if(uploadGeneration===generation.current){writing.current = false; setBusy(false);} }
   };
   const valid = BudgetDocumentSchema.safeParse(doc), totals = valid.success ? calculateBudget(valid.data) : null;
+  const comparison=sheet?.comparison,previewComparison=valid.success&&comparison?.confirmation?compareQuotationBudget(valid.data,comparison.confirmation,order.lines.reduce((sum,line)=>sum+line.sizes.reduce((n,s)=>n+s.quantity,0),0)):null;
+  const omittedQuoteRows=comparison?.baseline?.rows.filter(row=>row.name&&!doc.rows.some(current=>current.rowId===row.rowId))??[];
+  const adopt=async()=>{
+    if(!sheet?.canAdoptQuotation||writing.current||uncertain)return;
+    if(!await confirmInApp('采用最新客户确认报价？保留当前预算明细，形成新的待复核草稿；旧发布版本不变。'))return;
+    const currentGeneration=generation.current;writing.current=true;setBusy(true);setError('');
+    const body={expectedVersion:sheet.version,sourceQuoteVersion:comparison!.currentConfirmedVersion};
+    const command={payload:JSON.stringify([`${base}/adopt-quotation`,body]),key:createClientRequestId(),path:`${base}/adopt-quotation`,method:'POST',body,startedAt:Date.now()};operation.current=command;
+    try{const value=await budgetRequest(command.path,order.productionOrderId,command.method,body,command.key);if(currentGeneration!==generation.current)return;install(value);operation.current=null;}
+    catch(reason){if(currentGeneration===generation.current){const unknown=reason instanceof DigitalRequestError?reason.resultUnknown:unknownWriteResult(reason);setUncertain(unknown);if(!unknown)operation.current=null;setError(reason instanceof Error?reason.message:'采用报价结果待确认');}}
+    finally{if(currentGeneration===generation.current){writing.current=false;setBusy(false);}}
+  };
   const amount = (value: string | null | undefined) => value == null ? "—" : budgetDisplayAmount(value);
   const readonly=uncertain||embedded||!sheet?.canEdit||sheet.status==="published", issues=validationMode?budgetIssues(doc,validationMode==="publish"):[];
   const issue=(id:string)=>issues.find(item=>item.id===id)?.message;
@@ -135,6 +150,10 @@ export function DigitalBudgetPanel({ order, onClose, initialVersion:requestedVer
     <p className="budget-mobile-overview">{order.designStyleNo} · {order.customerCode} · 成本 {amount(totals?.cost)} · 利润 {amount(totals?.profit)}</p>
     {sheet&&<label>查看预算版本<select aria-label="查看预算版本" disabled={busy||embedded||uncertain} value={initialVersion??''} onChange={async event=>{const version=event.target.value?Number(event.target.value):undefined;if(writing.current||dirty&&!await confirmInApp('切换版本将丢弃未保存修改，确定继续？'))return;setInitialVersion(version);const url=new URL(window.location.href);if(version)url.searchParams.set('budgetVersion',String(version));else url.searchParams.delete('budgetVersion');window.history.replaceState(window.history.state,'',url);onVersionChange?.(version);}}>{!embedded&&<option value="">当前资料</option>}{sheet.versions?.map(version=><option key={version} value={version}>已发布版本 {version}</option>)}</select></label>}
     {previews.view}<DocumentErrors issues={issues} error={error} onLocateField={revealField}/>
+    {!embedded&&<a className="dx-button dx-button--secondary budget-controls" href={quotationHref({kind:'order',id:order.productionOrderId},window.location.pathname+window.location.search)}>客户报价协作</a>}
+    {comparison&&<section aria-label="客户报价对照"><p>{comparison.policy==='legacy'?comparison.reason:`客户确认报价 ${comparison.quoteVersion?`v${comparison.quoteVersion}`:'尚未采用'} · ${dirty&&previewComparison?previewComparison.reason:comparison.reason}`}</p>{comparison.confirmedQuoteTotal!==null&&<p>客户确认上限：{comparison.confirmedQuoteTotal} 元（{comparison.amountScope==='order_total'?'整单':'每件'}） · 当前预算可比总额：{dirty?previewComparison?.budgetComparableTotal??'口径待核':comparison.budgetComparableTotal??'口径待核'} 元</p>}{sheet?.canAdoptQuotation&&<Button disabled={busy||dirty||uncertain} onClick={()=>void adopt()}>明确采用最新报价并复核预算</Button>}</section>}
+    {omittedQuoteRows.length>0&&<details><summary>本预算已删除或未采用的原报价明细 · {omittedQuoteRows.length} 项（仅参考）</summary><ul>{omittedQuoteRows.map(row=><li key={row.rowId}>{row.name} · {row.specification||'未分规格'} · 单位{row.unit} · 原用量{row.consumption} · 原单价{row.unitPrice}</li>)}</ul></details>}
+    {comparison?.pendingQuotationVersion&&<p>报价协作有尚未获客户确认的修改 v{comparison.pendingQuotationVersion}，请核对成本变化；当前比较仍使用已确认版，不自动改动预算或合同。</p>}
     {uncertain?<section aria-label="原预算提交恢复"><Button disabled={busy} onClick={()=>void retryOriginal()}>使用原内容核对预算提交</Button><Button disabled={busy} onClick={()=>void reload()}>仅核对当前预算版本</Button><p>读取当前版本不等于取得原提交回执；核对期间不会生成新请求或自动重发。</p></section>:null}
     {error&&!uncertain&&/更新|版本|冲突/.test(error)&&<Button disabled={busy} onClick={()=>void reload()}>重新载入最新版本</Button>}
     {sheet?.canSubmitSourcing&&initialVersion===undefined&&!dirty&&<a className="dx-button dx-button--secondary budget-controls" href={productionWorkspaceDomainHref(`${urls.pageUrl("ui/sourcing/create")}?budget=${order.productionOrderId}&budgetVersion=${sheet.version}`,window.location.search)}>核实预算并进入外发申请</a>}
@@ -158,10 +177,10 @@ export function DigitalBudgetPanel({ order, onClose, initialVersion:requestedVer
           <DocumentAnchors sections={[{id:"budget-basic",label:"基本资料"},...BUDGET_SECTIONS.map((section,index)=>({id:`budget-section-${index}`,label:section})),{id:"budget-summary",label:"费用与报价"}]}/>
           {templateDefaults.current.size>0&&<label className="budget-template-toggle budget-controls"><input type="checkbox" checked={showTemplates} onChange={event=>setShowTemplates(event.target.checked)}/>显示未使用模板行（完整保存）</label>}
           {BUDGET_SECTIONS.map((section,index)=>{const visible=doc.rows.filter(row=>row.section===section&&(showTemplates||!unused(row)));return <DocumentSection key={section} id={`budget-section-${index}`} title={section} detail={`共 ${visible.length} 行`}>
-            <DocumentTableScroll className="budget-table-scroll"><table className="budget-detail-table"><thead><tr>{Object.values(columns).map(label=><th key={label}>{label}</th>)}<th>金额</th>{!readonly&&<th className="budget-controls">操作</th>}</tr></thead><tbody>
-              {doc.rows.filter(row=>row.section===section).map(row=><tr key={row.rowId} data-doc-row={row.rowId} className={!showTemplates&&unused(row)?"budget-template-row":undefined}>{(Object.keys(columns) as Array<keyof typeof columns>).map(key=>{const id=`budget-${row.rowId}-${key}`;return <td key={key}><DocumentField id={id} label={`${section} ${columns[key]}`} value={readonly&&key==="unitPrice"&&row[key]?budgetDisplayAmount(row[key]):row[key]} onValue={value=>changeRow(row.rowId,{[key]:value})} readonly={readonly} disabled={busy} numeric={key==="consumption"||key==="unitPrice"} column={key} maxLength={key==="consumption"||key==="unitPrice"?21:100} issue={issue(id)} onBlur={key==="consumption"||key==="unitPrice"?()=>setValidationMode(current=>current??"save"):undefined}/></td>;})}<td className="budget-money">{amount(totals?.rows.find(item=>item.rowId===row.rowId)?.amount)}</td>{!readonly&&<td className="budget-controls"><Button type="button" disabled={busy} aria-label={`删除${section} ${row.name||row.category||"未命名行"}`} onClick={()=>void removeRow(row)}>删除</Button></td>}</tr>)}
-              {!visible.length&&<tr><td colSpan={readonly?8:9} className="budget-empty budget-screen-empty">暂无使用明细，可添加{section}。</td></tr>}
-            </tbody><tfoot><tr><th colSpan={7}>{section}合计</th><td className="budget-money">{amount(totals?.[section==="主料"?"main":section==="辅料"?"accessories":"processes"])}</td>{!readonly&&<td className="budget-controls"/>}</tr></tfoot></table></DocumentTableScroll>
+            <DocumentTableScroll className="budget-table-scroll" {...(comparison?.policy==='quote_v1'?{scrollLabel:`${section}预算明细，可左右滚动查看报价差异`}:{})}><table className={`budget-detail-table${comparison?.policy==='quote_v1'?' has-quotation-delta':''}`}><thead><tr>{Object.values(columns).map(label=><th key={label}>{label}</th>)}<th>金额</th>{comparison?.policy==='quote_v1'&&<th>较报价变化<br/>（仅参考）</th>}{!readonly&&<th className="budget-controls">操作</th>}</tr></thead><tbody>
+              {doc.rows.filter(row=>row.section===section).map(row=><tr key={row.rowId} data-doc-row={row.rowId} className={!showTemplates&&unused(row)?"budget-template-row":undefined}>{(Object.keys(columns) as Array<keyof typeof columns>).map(key=>{const id=`budget-${row.rowId}-${key}`;return <td key={key}><DocumentField id={id} label={`${section} ${columns[key]}`} value={readonly&&key==="unitPrice"&&row[key]?budgetDisplayAmount(row[key]):row[key]} onValue={value=>changeRow(row.rowId,{[key]:value})} readonly={readonly} disabled={busy} numeric={key==="consumption"||key==="unitPrice"} column={key} maxLength={key==="consumption"||key==="unitPrice"?21:100} issue={issue(id)} onBlur={key==="consumption"||key==="unitPrice"?()=>setValidationMode(current=>current??"save"):undefined}/></td>;})}<td className="budget-money">{amount(totals?.rows.find(item=>item.rowId===row.rowId)?.amount)}</td>{comparison?.policy==='quote_v1'&&<td className={`quotation-delta quotation-delta-${quotationRowDelta(row,comparison.baseline?.rows.find(r=>r.rowId===row.rowId)).kind}`}>{quotationRowDelta(row,comparison.baseline?.rows.find(r=>r.rowId===row.rowId)).label}</td>}{!readonly&&<td className="budget-controls"><Button type="button" disabled={busy} aria-label={`删除${section} ${row.name||row.category||"未命名行"}`} onClick={()=>void removeRow(row)}>删除</Button></td>}</tr>)}
+              {!visible.length&&<tr><td colSpan={(readonly?8:9)+(comparison?.policy==='quote_v1'?1:0)} className="budget-empty budget-screen-empty">暂无使用明细，可添加{section}。</td></tr>}
+            </tbody><tfoot><tr><th colSpan={7}>{section}合计</th><td className="budget-money">{amount(totals?.[section==="主料"?"main":section==="辅料"?"accessories":"processes"])}</td>{comparison?.policy==='quote_v1'&&<td/>}{!readonly&&<td className="budget-controls"/>}</tr></tfoot></table></DocumentTableScroll>
             {!readonly&&<DocumentAddRow label={`添加${section}`} disabled={busy||doc.rows.length>=300&&!doc.rows.some(row=>row.section===section&&unused(row))} onClick={()=>addRow(section)}/>}
           </DocumentSection>;})}
         </div>

@@ -16,6 +16,8 @@ import { registerInstructionRoutes } from "./production-instruction-routes.js";
 import type { ProductionInstructionService } from "./production-instruction-service.js";
 import { registerBudgetRoutes } from "./budget-routes.js";
 import type { DigitalBudgetService } from "./budget-service.js";
+import {registerQuotationRoutes} from './quotation-routes.js';
+import type {DigitalQuotationService} from './quotation-service.js';
 import {registerDevelopmentRoundRoutes} from "./development-round-routes.js";
 import type {DevelopmentRoundService} from "./development-round-service.js";
 import { registerDevelopmentExecutionRoutes } from "./development-execution-routes.js";
@@ -43,6 +45,7 @@ export type DigitalIdentityDependencies = {
   cockpit?: DigitalCockpitQuery;
   journeys?: DigitalJourneyQuery;
   budgetService?: DigitalBudgetService;
+  quotationService?:DigitalQuotationService;
   instructionService?: ProductionInstructionService;
   bulkPreparationService?: BulkPreparationService;
   closureService?:OrderClosureService;
@@ -64,6 +67,7 @@ const parse = <T>(schema: z.ZodType<T>, value: unknown): T => {
   return result.data;
 };
 export function registerDigitalIdentityRoutes(app: FastifyInstance, dependencies: DigitalIdentityDependencies): void {
+  if(dependencies.quotationService)registerQuotationRoutes(app,dependencies,dependencies.quotationService);
   if(dependencies.analysis) registerDigitalAnalysisRoutes(app,dependencies,dependencies.analysis);
   if(dependencies.closureService)registerOrderClosureRoutes(app,dependencies,dependencies.closureService);
   if(dependencies.factoryFlowService&&dependencies.developmentAttachments)registerFactoryFlowRoutes(app,dependencies,dependencies.factoryFlowService,dependencies.developmentAttachments);
