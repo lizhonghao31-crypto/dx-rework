@@ -3,6 +3,8 @@ import type { PoolClient } from "pg";
 import type { TrustedActorContext } from "../tools/repositories.js";
 import { DigitalProductionAccessPolicy, digitalForbidden, digitalNotFound, isDigitalLeader, isDigitalTechnicalManager } from "./access-policy.js";
 export const DIGITAL_TASK_ROLES = {
+  development_positioning:'sample_designer',development_size_review:'pattern_room_worker',development_patch:'pattern_room_worker',
+  development_patch_tail_check:'pattern_room_tail_inspector',development_patch_confirmation:'sample_designer',
   sourcing_preparation: "order_merchandiser",
   development_external_pattern: "pattern_room_supervisor",
   development_washing_dispatch: "development_clerk",

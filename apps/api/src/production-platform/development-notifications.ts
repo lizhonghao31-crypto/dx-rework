@@ -1,3 +1,4 @@
+import {technicalEnrollment} from './development-technical-repository.js';
 import {externalPatternRecords} from "./development-external-pattern-facts.js";
 import {developmentReadTables} from "./development-amendment-repository.js";
 import {effectiveVerificationDocument} from "./development-material-verification.js";
@@ -47,6 +48,7 @@ export async function projectDevelopmentNotices(db: PoolClient, people: TrustedA
       const receipts=(await externalPatternRecords(db,row.source_id)).filter(r=>r.receivedAt);
       for(const receipt of receipts)await notice({...row,round_number:receipt.roundNumber},`external-pattern-received:${receipt.requestId}`,'外部纸样已收到，附件可查看',true);
     }
+    const newTechnical=Boolean(await technicalEnrollment(db,row.source_id));
     const document = await effectiveVerificationDocument(db,row.source_id,row.round_number??1,row.document as DevelopmentDocument);
     const clerkReceipts = await developmentSlaPlan(db,row.source_id)
       ? await receivedDevelopmentAccessories(db,row.source_id,row.round_number??1,document) : null;
@@ -60,7 +62,7 @@ export async function projectDevelopmentNotices(db: PoolClient, people: TrustedA
       const date = revision?.date ?? material.expectedDate;
       if (!date) continue;
       const days = Math.round((Date.parse(`${date}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86400000);
-      const stage = days < 0 ? "已逾期" : days === 0 ? "今日预计到货" : days === 1 ? "明日预计到货" : null;
+      const stage = days < 0 ? "已逾期" : days === 0 ? "今日预计到货" : days === 1 ? "明日预计到货" : days === 2 && newTechnical ? "两日后预计到货" : null;
       // Only the current stage is emitted: importing an overdue item never replays yesterday/today.
       if (stage) await notice(row,`development-due:${row.source_id}:${material.materialId}:${clerkReceipts ? `round-${row.round_number??1}:` : ''}${revision?.event_id ?? row.version}:${stage}`,`${material.label || material.name} · ${stage}（${date}）${clerkReceipts ? '，待文员确认实收' : ''}`,false,clerkReceipts ? material.materialId : null);
     }

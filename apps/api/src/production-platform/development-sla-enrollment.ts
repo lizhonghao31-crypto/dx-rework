@@ -9,6 +9,7 @@ import { buildOrderSlaRoute, type SlaRouteSelection } from "./sla-route.js";
 import { isDeepStrictEqual } from "node:util";
 import { developmentRoute } from "./development-route.js";
 import type { DigitalTaskKind } from "./task-access-repository.js";
+import {captureTechnicalEnrollment,captureTechnicalRound} from './development-cycle-evidence.js';
 
 type DB = Pick<PoolClient, "query">;
 export async function developmentSlaPlan(db: DB, sourceId: string) {
@@ -69,4 +70,9 @@ export async function captureDevelopmentSla(db: PoolClient, actor: TrustedActorC
     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, [sourceId, revision, prior?.configuration_id ?? config!.configurationId, snapshot.ruleVersion,
     JSON.stringify(snapshot.parameters), JSON.stringify(plan), document ? developmentSlaRoute(document,outputKind) : [], actor.actorId, JSON.stringify(time),
     document ? "开发发布：保存本单适用路线，文员窗口从发布开始" : "新开发单：冻结初版标准，未发布日期保持未知", eventKey]);
+  if(!prior&&!document)await captureTechnicalEnrollment(db,actor.actorId,sourceId,eventKey);
+  if(document){
+    const washing=snapshot.parameters.development_washing!.value,warning=snapshot.parameters.warning_ratio!.value;
+    await captureTechnicalRound(db,actor.actorId,sourceId,1,time.now,'minutes' in washing?washing.minutes:1440,warning.kind==='ratio'?warning.percent/100:0.7);
+  }
 }

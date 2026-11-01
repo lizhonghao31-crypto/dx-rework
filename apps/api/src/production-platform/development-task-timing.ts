@@ -4,6 +4,7 @@ import type {PoolClient} from "pg";
 import {validateDigitalSlaSnapshot} from "@dx-rework/contracts/digital-sla";
 import {developmentSlaPlan} from "./development-sla-enrollment.js";
 import {developmentDocumentRow} from "./development-round-repository.js";
+import {technicalDevelopmentTiming} from './development-cycle-evidence.js';
 
 type DB=Pick<PoolClient,"query">;
 type Task={task_id:string;source_id:string|null;task_kind:string;route_version:number};
@@ -14,6 +15,7 @@ const iso=(value:string|Date)=>new Date(value).toISOString();
 /** Responsibility starts at the business boundary, even while assignment or the next action waits. */
 export async function developmentTaskTiming(db:DB,task:Task):Promise<DevelopmentTiming|null>{
   if(!task.source_id)return null;
+  const technical=await technicalDevelopmentTiming(db,task);if(technical)return technical;
   const saved=await developmentSlaPlan(db,task.source_id);
   if(!saved?.route_nodes.length)return null;
   const document=await developmentDocumentRow(db,task.source_id,task.route_version);

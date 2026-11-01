@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./development-cycle": { "types": "./src/development-cycle.ts", "import": "./dist/development-cycle.js" },
     "./business-clock": { "types": "./src/business-clock.ts", "import": "./dist/business-clock.js" },
     "./digital-sla-plan": { "types": "./src/digital-sla-plan.ts", "import": "./dist/digital-sla-plan.js" },
     "./digital-task-deadline": { "types": "./src/digital-task-deadline.ts", "import": "./dist/digital-task-deadline.js" },

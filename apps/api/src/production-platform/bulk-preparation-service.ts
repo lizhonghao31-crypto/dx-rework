@@ -1,3 +1,4 @@
+import {technicalEnrollment,effectiveTechnicalEvidence} from './development-technical-repository.js';
 import {businessNow} from '../acceptance-clock/business-time.js';
 import {BulkMaterialsDispatchSchema,type BulkMaterialsDispatch} from '@dx-rework/contracts/bulk-preparation';
 import {bulkFabricFacts} from "./bulk-fabric-facts.js";
@@ -23,7 +24,8 @@ export class BulkPreparationService {
   const order=(await db.query("SELECT * FROM digital_production_orders WHERE production_order_id=$1",[id])).rows[0]??digitalNotFound();
   const source=order.source_id?await developmentDocumentRow(db,order.source_id):null;
   const instruction=(await db.query(`SELECT v.* FROM digital_instruction_documents d JOIN digital_instruction_versions v ON v.production_order_id=d.production_order_id AND v.version=d.published_version WHERE d.production_order_id=$1`,[id])).rows[0];
-  const customerConfirmed=Boolean(source?.status==='published'&&(await db.query("SELECT 1 FROM digital_development_route_facts WHERE source_id=$1 AND route_version=$2 AND kind='客户样板确认'",[order.source_id,source.round_number])).rowCount);
+  const technical=source&&await technicalEnrollment(db,order.source_id)?await effectiveTechnicalEvidence(db,order.source_id,source.round_number,'整款',order.customer_code):null;
+  const customerConfirmed=technical?technical.state==='effective':Boolean(source?.status==='published'&&(await db.query("SELECT 1 FROM digital_development_route_facts WHERE source_id=$1 AND route_version=$2 AND kind='客户样板确认'",[order.source_id,source.round_number])).rowCount);
   const sourcing=(await db.query("SELECT s.* FROM digital_production_child_links l JOIN sourcing_cases s ON s.sourcing_case_id=l.child_id WHERE l.module='sourcing' AND l.production_order_id=$1",[id])).rows[0];
   let approval;
   if(sourcing){
@@ -48,7 +50,7 @@ export class BulkPreparationService {
   const reasons:string[]=[],commercialReasons:string[]=[];
   const closed=Boolean((await db.query("SELECT to_regclass('digital_order_closures') AS relation")).rows[0]?.relation&&(await db.query('SELECT 1 FROM digital_order_closures WHERE production_order_id=$1',[id])).rowCount);
   if(closed)reasons.push('母单已特殊结案，原实绩及历史继续保留');
-  if(!customerConfirmed)reasons.push('当前开发轮次尚未确认客户样板：请设计师取得客户确认后，在本单开发办理页登记客户样板确认');
+  if(!customerConfirmed)reasons.push(technical?'当前走货技术依据尚未有效：请设计登记最终批复，并由技术完成本次尺寸复核；资料变版须重新核对':'当前开发轮次尚未确认客户样板：请设计师取得客户确认后，在本单开发办理页登记客户样板确认');
   if(ownerApproved&&!['in_house','outsourced'].includes(approval.cutting_process))commercialReasons.push('当前选厂方案缺裁剪方式：请主跟单在本单原外发选厂方案明确本厂裁或外厂裁，再按原审批流程办理');
   if(!ownerApproved)commercialReasons.push('当前选厂方案尚无有效老板批准：请主跟单在本单原外发选厂页核对当前方案，由老板按原审批流程办理');
   if(!instructionValid)reasons.push('当前大货制单未发布、与开发轮次不符或缺预缩选择：请主跟单在本单大货制单核对当前资料及预缩要求后发布');

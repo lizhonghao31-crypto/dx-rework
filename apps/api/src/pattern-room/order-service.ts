@@ -1,3 +1,5 @@
+import {technicalMeasurementDocument} from '../production-platform/development-technical-repository.js';
+import {syncDevelopmentPatchAssignment} from '../production-platform/development-patch-assignment.js';
 import {businessNow,assertAcceptanceAssignee} from '../acceptance-clock/business-time.js';
 import type {PatternHistoryQuery} from '@dx-rework/contracts/pattern-orders';
 import {developmentAutomaticRoundDocument} from '../production-platform/development-document-format.js';
@@ -208,7 +210,7 @@ export class PatternRoomOrderService {
       await client.query("UPDATE pattern_room_rounds SET status='in_progress',assigned_at=$6,assigned_by=$2,supervisor_user_id=$3,round_index=$4,agreed_amount=COALESCE($5::numeric,agreed_amount) WHERE round_id=$1", [round.round_id, effective.actorId, supervisorId, index, parsed.amount ?? null,businessNow().toISOString()]);
       await client.query("UPDATE pattern_room_orders SET status='in_progress',version=version+1,updated_at=CURRENT_TIMESTAMP,rework_count=GREATEST(rework_count,$2) WHERE order_id=$1", [orderId, index]);
       await this.moveNode(client, round.round_id, "in_progress");
-      const integratedAssignment=linkedAssignment?linkedAssignment.workerId===person.app_user_id?linkedAssignment.plan.readyToArrange:await syncLinkedExecutionTransfer(client,this.db,effective,orderId,linkedAssignment.workerId??person.app_user_id,person.app_user_id,'主管核定本轮返工执行归属','assign'):false;
+      const integratedAssignment=await syncDevelopmentPatchAssignment(client,this.db,effective,orderId,person.app_user_id,'assign')|| (linkedAssignment?linkedAssignment.workerId===person.app_user_id?linkedAssignment.plan.readyToArrange:await syncLinkedExecutionTransfer(client,this.db,effective,orderId,linkedAssignment.workerId??person.app_user_id,person.app_user_id,'主管核定本轮返工执行归属','assign'):false);
       const eventId = await this.event(client, effective, action, orderId, round.round_id, { segmentId, personId: person.person_id, workerUserId: person.app_user_id, roundIndex: index, agreedAmount: parsed.amount ?? round.agreed_amount });
       await this.todos.completeOpenByDedupeKey(client, effective, patternTodoKey(orderId, round.round_id, "assignment"), "已分配工人");
       if (this.enabled&&!integratedAssignment) await this.todos.actionableForRecipient(client, effective, { ...this.projection(orderId, round.round_id, eventId, action, `execution:${segmentId}`), category: "pattern_room_execution",
@@ -251,8 +253,8 @@ export class PatternRoomOrderService {
       JOIN digital_production_task_access a USING(task_id)
       JOIN digital_development_pattern_links l ON l.source_id=a.source_id
       JOIN digital_development_route_facts f ON f.task_id=t.task_id AND f.source_id=a.source_id AND f.route_version=t.route_version
-      WHERE t.task_id=$1 AND a.source_id=$2 AND l.order_id=$3 AND a.task_kind='development_sewing'
-        AND t.state='ready' AND f.kind='车板完成' AND f.actor_id=$4`,[taskId,sourceId,orderId,effective.actorId])).rowCount;
+      WHERE t.task_id=$1 AND a.source_id=$2 AND l.order_id=$3 AND (a.task_kind='development_sewing' AND f.kind='车板完成' OR a.task_kind='development_patch' AND f.kind='补做完成' AND EXISTS(SELECT 1 FROM digital_development_patch_tasks pt JOIN digital_development_patch_native_rounds pn USING(issue_id) JOIN pattern_room_orders po ON po.current_round_id=pn.native_round_id WHERE pt.task_id=t.task_id AND po.order_id=$3))
+        AND t.state='ready' AND f.actor_id=$4`,[taskId,sourceId,orderId,effective.actorId])).rowCount;
     if(!linked) throw new ApplicationError("FORBIDDEN","仅本开发单当前车板任务的有效完工可衔接原打板",403);
     const parsed=parse(PatternRoundActionSchema,input);
     const order=(await client.query<PatternOrderRow>("SELECT * FROM pattern_room_orders WHERE order_id=$1 AND deleted_at IS NULL FOR UPDATE",[orderId])).rows[0];
@@ -393,7 +395,10 @@ export class PatternRoomOrderService {
     await client.query("UPDATE pattern_room_rounds SET actual_hours=$2,agreed_amount=$3,hours_confirmed_by=$4,hours_confirmed_at=CURRENT_TIMESTAMP WHERE round_id=$1", [round.round_id, total.hours, total.amount, actor.actorId]);
   }
 
-  async requestRework(actor: TrustedActorContext, orderId: string, input: unknown, key: string) {
+  requestRework(actor: TrustedActorContext, orderId: string, input: unknown, key: string) {return this.requestReworkBound(actor,orderId,input,key);}
+  /** Internal adapter, bound to an actual supervisor triage record; never accepted from a public rework request. */
+  requestDevelopmentPatch(actor:TrustedActorContext,orderId:string,input:unknown,key:string,issueId:string){return this.requestReworkBound(actor,orderId,input,key,issueId);}
+  private async requestReworkBound(actor: TrustedActorContext, orderId: string, input: unknown, key: string,patchIssueId?:string) {
     const parsed = parse(RequestPatternReworkSchema, input), action = "pattern_room.order.rework_requested";
     return this.mutate(actor, "pattern_room:orders:rework", action, key, { orderId, ...parsed }, async (client, effective) => {
       const { order, round } = await this.target(client, effective, orderId, parsed, ["pending_confirmation", "completed"]);
@@ -403,6 +408,11 @@ export class PatternRoomOrderService {
       const linked=(await client.query("SELECT to_regclass('digital_development_pattern_links') AS relation")).rows[0]?.relation?(await client.query("SELECT source_id FROM digital_development_pattern_links WHERE order_id=$1",[orderId])).rows[0]:null;
       if(linked&&(!parsed.developmentNodes||!parsed.developmentProblems))throw new ApplicationError("VALIDATION_ERROR","请明确本轮受影响工序与问题分类，同步数字开发复版",400);
       if(!linked&&(parsed.developmentNodes||parsed.developmentProblems||parsed.developmentMaking))throw new ApplicationError("VALIDATION_ERROR","独立原打板单不使用数字开发复版参数",400);
+      if(patchIssueId){
+        if(!this.options.transactionClient||!linked||!(await client.query(`SELECT 1 FROM digital_development_patch_issues i JOIN digital_development_patch_decisions d USING(issue_id)
+          WHERE i.issue_id=$1 AND i.source_id=$2 AND d.decision='patch' AND d.reusable_artifacts
+          AND d.decided_by=$3 AND i.round_number=(SELECT coalesce(max(route_version),1) FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=i.source_id)`,[patchIssueId,linked.source_id,effective.actorId])).rowCount)throw new ApplicationError('FORBIDDEN','补做须依据本单当前技术主管判定',403);
+      }
       const roundId = randomUUID();
       await client.query(`INSERT INTO pattern_room_rounds(round_id,order_id,round_type,round_index,status,category_id,price_version,category_name,unit,unit_price,quantity,agreed_amount,requested_by,request_reason,reason_category)
         VALUES($1,$2,'rework',NULL,'pending_assignment',$3,$4,'打板返工','轮',NULL,NULL,NULL,$5,$6,$7)`, [roundId, orderId, round.category_id, round.price_version, effective.actorId, parsed.reason, parsed.reasonCategory]);
@@ -415,10 +425,12 @@ export class PatternRoomOrderService {
       await this.moveNode(client, round.round_id, undefined, "rework");
       await client.query("INSERT INTO pattern_room_node_times(node_id,round_id,stage,entered_at) VALUES($1,$2,'pending_assignment',$3)", [randomUUID(), roundId,businessNow().toISOString()]);
       await client.query("UPDATE pattern_room_orders SET current_round_id=$2,status='pending_assignment',completed_at=NULL,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE order_id=$1", [orderId, roundId]);
-      if(linked){
+      if(patchIssueId)await client.query('INSERT INTO digital_development_patch_native_rounds(issue_id,native_round_id) VALUES($1,$2)',[patchIssueId,roundId]);
+      if(linked&&!patchIssueId){
         const sheet=await new DigitalDevelopmentService(this.db,true).read(effective,linked.source_id,client);
+        const technical=await technicalMeasurementDocument(client,linked.source_id,sheet.roundNumber??1,sheet.document!);
         await new DevelopmentRoundService(this.db,true).publishWithClient(client,effective,linked.source_id,{
-          basedOnRound:sheet.roundNumber??1,document:developmentAutomaticRoundDocument(sheet.document!,sheet.version,parsed.developmentMaking),origin:parsed.reasonCategory==='customer_change'?'客户新增要求':parsed.reasonCategory==='workmanship'?'未达原要求':'内部发现',
+          basedOnRound:sheet.roundNumber??1,document:developmentAutomaticRoundDocument(technical?.document??sheet.document!,sheet.version,parsed.developmentMaking),origin:parsed.reasonCategory==='customer_change'?'客户新增要求':parsed.reasonCategory==='workmanship'?'未达原要求':'内部发现',
           customerComment:parsed.reasonCategory==='other'?'':parsed.reason,internalProblem:parsed.reasonCategory==='other'?parsed.reason:'',explanation:parsed.reason,
           affectedNodes:parsed.developmentNodes!,categories:parsed.developmentProblems!,outputKind:'整件样板'
         },undefined,roundId);

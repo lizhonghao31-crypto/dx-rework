@@ -1127,6 +1127,10 @@
     {
       "version": "0267_customer_quotation_budget_basis",
       "checksum": "a479699de440210e1ba7a5682e1f6e5d4f8e7a8d99f390b61bf7fdc9b891573f"
+    },
+    {
+      "version": "0268_development_technical_evidence",
+      "checksum": "151ef7cbe0208d5a657f3e3e21ee5f2e8fcea0f35cc16703be4ba5c5bae7b979"
     }
   ]
 }

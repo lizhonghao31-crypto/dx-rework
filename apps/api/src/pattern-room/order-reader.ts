@@ -1,3 +1,4 @@
+import {technicalMeasurementDocument} from '../production-platform/development-technical-repository.js';
 import {ContextBusinessClock} from '../acceptance-clock/business-time.js';
 import {readPatternHistory} from './pattern-history-reader.js';
 import {PatternHistoryQuerySchema,type PatternHistoryQuery} from '@dx-rework/contracts/pattern-orders';
@@ -139,7 +140,7 @@ export class PatternOrderReader {
       const reworkCutBlocked = mayRework && await patternReworkCutBlocked(client, orderId);
       const developmentSource=allMaterials?link:null;
       const makingDocument=developmentSource&&mayRework&&!reworkCutBlocked&&(!selection.round||selection.round===order.current_round_id)&&(!selection.node||selection.node===order.status)&&await new DigitalProductionAccessPolicy(client).allowed(effective,'source',developmentSource.source_id,'technical')?await developmentDocumentRow(client,developmentSource.source_id):null;
-      const detail = PatternOrderDetailSchema.parse({ ...patternSummary(order),...(makingDocument?{developmentMakingBasis:developmentMakingBasis(makingDocument.document,makingDocument.version)}:{}), association:order.misc_association??null,...(developmentSource?{developmentSourceId:developmentSource.source_id}:{}), currentRoundId: order.current_round_id, customer: order.customer, sizeColor: order.size_color,
+      const detail = PatternOrderDetailSchema.parse({ ...patternSummary(order),...(makingDocument?{developmentMakingBasis:developmentMakingBasis((await technicalMeasurementDocument(client,developmentSource!.source_id,makingDocument.round_number??1,makingDocument.document))?.document??makingDocument.document,makingDocument.version)}:{}), association:order.misc_association??null,...(developmentSource?{developmentSourceId:developmentSource.source_id}:{}), currentRoundId: order.current_round_id, customer: order.customer, sizeColor: order.size_color,
         reworkBlockedReason: reworkCutBlocked ? PATTERN_REWORK_CUT_BLOCK : null,
         referenceStyleNo: order.reference_style_no, variant: order.variant, note: allMaterials || currentWorkerAccess ? order.note : null,
         rounds: rounds.filter(round => allCosts || round.round_id === order.current_round_id || segments.some(segment => segment.round_id === round.round_id && segment.worker_user_id === effective.actorId)).map(round => ({

@@ -306,11 +306,11 @@ export class FakeObjectStorage implements ObjectStorage {
   }
 }
 
-export function createPrivateObjectKey(prefix: string, filename: string, now = new Date()): string {
+export function createPrivateObjectKey(prefix: string, filename: string, now = new Date(),policy:{technicalPlot?:true}={}): string {
   if (filename.includes("/") || filename.includes("\\") || filename.includes("..") || /\.(?:exe|js|html)\.[A-Za-z0-9]+$/i.test(filename)) {
     throw new ApplicationError("VALIDATION_ERROR", "Unsafe filename", 400);
   }
-  const extension = filename.toLowerCase().match(/\.(jpe?g|png|webp|pdf)$/)?.[1];
+  const extension = filename.toLowerCase().match(/\.(jpe?g|png|webp|pdf)$/)?.[1]??(policy.technicalPlot?filename.toLowerCase().match(/\.(plt)$/)?.[1]:undefined);
   const normalized = extension === "jpeg" ? "jpg" : extension;
   if (!normalized) throw new ApplicationError("VALIDATION_ERROR", "Filename extension is not allowed", 400);
   const date = now.toISOString().slice(0, 10).replaceAll("-", "/");

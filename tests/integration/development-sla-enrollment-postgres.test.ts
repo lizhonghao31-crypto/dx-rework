@@ -13,17 +13,15 @@ import {receivedDevelopmentAccessories} from "../../apps/api/src/production-plat
 import {projectDevelopmentNotices} from "../../apps/api/src/production-platform/development-notifications.js";
 import {captureDevelopmentSla,developmentSlaPlan} from "../../apps/api/src/production-platform/development-sla-enrollment.js";
 import {SlaConfigurationRepository} from "../../apps/api/src/production-platform/sla-configuration-repository.js";
-import {SlaOrderService} from "../../apps/api/src/production-platform/sla-order-service.js";
 import {developmentSlaEvidence} from "../../apps/api/src/production-platform/development-sla-evidence.js";
 import Fastify from "fastify";
 import {registerDevelopmentExecutionRoutes} from "../../apps/api/src/production-platform/development-execution-routes.js";
 import {ApplicationError} from "../../apps/api/src/platform/errors.js";
-import {DigitalOrderCreateSchema,beijingCalendarDate} from "@dx-rework/contracts/digital-production";
 import {digitalSlaDefaults} from "@dx-rework/contracts/digital-sla";
 import {DevelopmentDocumentSchema,type DevelopmentDocument} from "@dx-rework/contracts/digital-development";
-import {ownedPostgresSchema} from "../helpers/owned-postgres-schema.js";
+import {ownedPostgresSchema,createOwnedPostgresSchema,dropOwnedPostgresSchema} from "../helpers/owned-postgres-schema.js";
 import type {TrustedActorContext} from "../../apps/api/src/tools/repositories.js";
-const databaseUrl=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
+const databaseUrl=process.env.TEST_DATABASE_URL;
 const run=databaseUrl?describe:describe.skip;
 run("development SLA enrollment and legacy isolation",()=>{
   const schema=ownedPostgresSchema("development_sla");
@@ -38,7 +36,7 @@ run("development SLA enrollment and legacy isolation",()=>{
   const service=new DigitalProductionIdentityService(database,true,undefined,()=>new Date(),clock);
   const development=new DigitalDevelopmentService(database,true,undefined,()=>new Date(),clock);
   beforeAll(async () => {
-    await admin.query(`CREATE SCHEMA ${schema}`);
+    await createOwnedPostgresSchema(admin,schema);
     for (const name of ["0001_platform_foundation.sql", "0002_dingtalk_identity_access.sql", "0004_public_tools_foundation.sql", "0216_digital_production_order_roots.sql", "0217_digital_production_node_clocks.sql"])
       await database.query(await readFile(new URL(`../../apps/api/migrations/${name}`, import.meta.url), "utf8"));
     // Existing-domain tables are represented only by referenced identity columns in this isolated fixture.
@@ -60,7 +58,7 @@ run("development SLA enrollment and legacy isolation",()=>{
       CREATE TABLE role_capabilities(role_code text,capability text);
       CREATE TRIGGER role_capabilities_no_insert BEFORE INSERT ON role_capabilities FOR EACH ROW EXECUTE FUNCTION fixture_role_guard();
       CREATE TABLE user_role_assignments(user_id uuid,role_code text,revoked_at timestamptz);
-      INSERT INTO business_roles(role_code) VALUES('sample_designer'),('order_merchandiser'),('pattern_room_supervisor'),('pattern_room_worker'),('production_management'),('quality_control'),('embroidery_washing_merchandiser'),('warehouse_receiver');`);
+      INSERT INTO business_roles(role_code) VALUES('sample_designer'),('order_merchandiser'),('pattern_room_supervisor'),('pattern_room_worker'),('production_management'),('quality_control'),('embroidery_washing_merchandiser'),('warehouse_receiver'),('owner_group');`);
     await database.query(await readFile(new URL("../../apps/api/migrations/0219_digital_production_access.sql", import.meta.url), "utf8"));
     await database.query(`CREATE FUNCTION fixture_identity() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
       INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at)
@@ -74,11 +72,15 @@ run("development SLA enrollment and legacy isolation",()=>{
     legacyId=(await service.createSource(actor(),{developmentType:"头版",designStyleNo:`TEST-LEGACY-${randomUUID()}`,temporaryStyleNo:null,customerCode:null},randomUUID())).sourceId;
     // These sources really exist before SLA enrollment is installed; no historical timestamp is rewritten.
     for(const timing of ['before','after'])legacyPolicySources.set(timing,(await service.createSource(actor(),{developmentType:"头版",designStyleNo:`TEST-LEGACY-POLICY-${randomUUID()}`,temporaryStyleNo:null,customerCode:null},randomUUID())).sourceId);
-    for(const name of ["0223_digital_development_execution.sql","0224_digital_development_route.sql","0225_digital_development_rounds.sql","0244_development_sewing_result_attachments.sql","0245_development_pattern_result_attachments.sql","0252_digital_sla_configuration_snapshots.sql", "0253_digital_sla_plan_history.sql","0254_digital_sla_policy_references.sql","0255_development_sla_enrollment.sql"])
+    for(const name of ["0223_digital_development_execution.sql","0224_digital_development_route.sql","0225_digital_development_rounds.sql","0244_development_sewing_result_attachments.sql","0245_development_pattern_result_attachments.sql","0252_digital_sla_configuration_snapshots.sql", "0253_digital_sla_plan_history.sql","0254_digital_sla_policy_references.sql","0255_development_sla_enrollment.sql","0258_ship_sample_date_target.sql"])
       await database.query(await readFile(new URL(`../../apps/api/migrations/${name}`,import.meta.url),"utf8"));
+    // Actual management authority and the native0230 policy are required even in
+    // this intentionally historical partial-schema fixture. Do not bypass either guard.
+    await database.query("INSERT INTO user_role_assignments(user_id,role_code) VALUES($1,'owner_group')",[root]);
+    await database.query("INSERT INTO digital_production_deadline_policies(node_key,version,label,sla_seconds,warning_ratio) VALUES('bulk_ship_sample',1,'大货船样寄出',NULL,0.8)");
   });
 
-  afterAll(async()=>{await database.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();});
+  afterAll(async()=>{await database.end();await dropOwnedPostgresSchema(admin,schema);await admin.end();});
   const source=async()=> (await service.createSource(actor(),{developmentType:"头版",designStyleNo:`TEST-P05-${randomUUID()}`,temporaryStyleNo:null,customerCode:null},randomUUID())).sourceId;
   const draft=():DevelopmentDocument=>DevelopmentDocumentSchema.parse({documentFormatVersion:2,sizeQuantities:[null],template:"上衣",quantity:null,sampleSize:"",orderDate:null,returnDate:null,unit:"cm",sizes:["M"],measurements:[{name:"胸围",values:[""]}],interlining:"",placketInterlining:"",sewingThread:"",buttonholeThread:"",stitchDensity:"",washingIroning:"",packaging:"",formalSizes:"",casualSizes:"",mainLabel:false,mainLabelMethod:"",sizeLabel:false,careLabel:false,instructions:"",craft:"无",washing:"免洗",materials:[],files:[]});
   const ready=async()=>{
@@ -416,61 +418,7 @@ run("development SLA enrollment and legacy isolation",()=>{
     expect((await developmentSlaPlan(database,await source())).parameters_json.development_pattern.value.minutes).toBe(3600);
   });
 
-  it("converts a source without resetting its frozen standard or copying original actual evidence",async()=>{
-    const id=await source(),document=await ready(),materialId=randomUUID();
-    document.materials=[{materialId,category:"主布",label:"主布",supplier:"",name:"棉",width:"",weight:"",composition:"",consumption:"",color:"黑",specification:"40支",quantity:"1",requiredThisRound:true,available:true,expectedDate:null}];
-    const saved=await development.save(actor(),id,{expectedVersion:0,document},randomUUID());
-    const published=await development.publish(actor(),id,saved.version,randomUUID());
-    const sourcePlan=await developmentSlaPlan(database,id);
-    const db=await database.connect();try{
-      await db.query('BEGIN');const repo=new SlaConfigurationRepository(db),current=(await repo.current())!;
-      await repo.publish({expectedVersion:current.version,values:{...current.values,development_materials:{kind:'duration',minutes:360}},actorId:root,reason:'TEST new orders only',requestKey:randomUUID()});
-      await db.query('COMMIT');
-    }finally{db.release();}
-    const rootActor=actor(root,['root_superuser']),execute=new DevelopmentExecutionService(database,true);
-    await execute.check(rootActor,id,{taskId:published.taskId!,result:'通过',note:'TEST original evidence',items:[{materialId,physical:true,quantity:true,color:true,specification:true}]},randomUUID());
-    businessNow=new Date().toISOString();
-    const style=(await database.query('SELECT design_style_no FROM digital_production_sources WHERE source_id=$1',[id])).rows[0].design_style_no;
-    const input=DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:style,temporaryStyleNo:null,orderDate:beijingCalendarDate(new Date()),lines:[{color:'黑',sizes:[{size:'M',quantity:2000}],deliveryDate:'2027-03-01'}]});
-    const key=randomUUID(),order=await service.createOrder(rootActor,input,key,id);
-    expect((await service.createOrder(rootActor,input,key,id)).productionOrderId).toBe(order.productionOrderId);
-    const snapshotClient=await database.connect();
-    let snapshot;try{snapshot=await new SlaConfigurationRepository(snapshotClient).orderSnapshot(order.productionOrderId);}finally{snapshotClient.release();}
-    expect(snapshot!.configurationId).toBe(sourcePlan.configuration_id);
-    expect(snapshot!.snapshot.parameters.development_materials!.value).toEqual(sourcePlan.parameters_json.development_materials.value);
-    const sla=new SlaOrderService(database,clock),read=await sla.read(rootActor,order.productionOrderId);
-    expect(read.status).toBe('planned');if(read.status!=='planned')throw new Error('missing plan');
-    const completed=(await database.query('SELECT completed_at FROM digital_production_tasks WHERE task_id=$1',[published.taskId])).rows[0].completed_at.toISOString();
-    expect(read.nodes.find(n=>n.id==='development_materials')).toMatchObject({actualStart:published.publishedAt,actualEnd:completed});
-    expect(read.nodes.find(n=>n.id==='development_pattern')).toMatchObject({actualStart:completed});
-    expect(read.development!.facts.development_materials!.evidence).toContain(published.taskId!);
-    expect((await database.query("SELECT count(*)::int n FROM digital_sla_node_facts WHERE production_order_id=$1 AND node_id LIKE 'development_%'",[order.productionOrderId])).rows[0].n).toBe(0);
-    const originalPlan=structuredClone(read.original);
-    // Historical second-ledger copies must not mask an original-business correction.
-    await database.query(`INSERT INTO digital_sla_node_facts(fact_id,production_order_id,node_id,revision,plan_id,fact_json,business_time,created_by,reason,request_key)
-      VALUES($1,$2,'development_materials',1,$3,$4,$5,$6,'legacy compatibility fixture',$7)`,
-      [randomUUID(),order.productionOrderId,read.original.planId,JSON.stringify(read.development!.facts.development_materials),JSON.stringify(await clock.read()),root,randomUUID()]);
-    const completionEvent=(await database.query("SELECT event_id FROM digital_production_task_events WHERE task_id=$1 AND event_kind='completed' ORDER BY recorded_at DESC LIMIT 1",[published.taskId])).rows[0].event_id;
-    const tasks=new DigitalProductionTaskService(database);
-    const corrected=await tasks.correctTime(rootActor,published.taskId!,{eventId:completionEvent,occurredAt:null,reason:'TEST original time unknown'},randomUUID());
-    const unknown=await sla.read(rootActor,order.productionOrderId);
-    if(unknown.status!=='planned')throw new Error('missing plan');
-    expect(unknown.nodes.find(n=>n.id==='development_materials')!.actualEnd).toBeNull();
-    expect(unknown.nodes.find(n=>n.id==='development_materials')).toMatchObject({status:'completed_unrated',planOverdue:false});
-    expect(unknown.progress).toEqual(read.progress);
-    expect((await tasks.read(rootActor,published.taskId!)).state).toBe('completed');
-    expect(unknown.development!.facts.development_materials!.evidence).toContain(corrected.eventId);
-    expect(unknown.original).toEqual(originalPlan);
-    await tasks.correctTime(rootActor,published.taskId!,{eventId:completionEvent,occurredAt:completed,reason:'TEST verified original time'},randomUUID());
-    const restored=await sla.read(rootActor,order.productionOrderId);
-    if(restored.status!=='planned')throw new Error('missing plan');
-    expect(restored.nodes.find(n=>n.id==='development_materials')!.actualEnd).toBe(completed);
-    expect(restored.original).toEqual(originalPlan);
-    expect((await database.query("SELECT count(*)::int n FROM digital_sla_node_facts WHERE production_order_id=$1",[order.productionOrderId])).rows[0].n).toBe(1);
-    expect((await database.query("SELECT count(*)::int n FROM digital_production_task_events WHERE task_id=$1 AND corrects_event_id=$2",[published.taskId,completionEvent])).rows[0].n).toBe(2);
-    await expect(sla.read(actor(other),order.productionOrderId)).rejects.toMatchObject({statusCode:404});
-    await expect(new SlaOrderService(database,{read:async()=>({now:businessNow,scenarioId:null,revision:0})}).read(rootActor,order.productionOrderId)).rejects.toThrow('scope mismatch');
-  });
+  // Source-to-order correction coverage runs on the complete native schema in development-technical-postgres.test.ts.
   it.each(['before','after'] as const)('keeps historical and enrolled tail policies frozen when the legacy task is created %s a default change',async timing=>{
     const legacySourceId=legacyPolicySources.get(timing)!;
     const leader=actor(root,['root_superuser']),tasks=new DigitalProductionTaskService(database);

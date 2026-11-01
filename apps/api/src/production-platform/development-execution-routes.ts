@@ -10,12 +10,32 @@ import {ApplicationError} from "../platform/errors.js";
 import type {AttachmentService} from "../tools/attachments.js";
 import type {DigitalIdentityDependencies} from "./identity-routes.js";
 import type {DevelopmentExecutionService} from "./development-execution-service.js";
+import {SaveTechnicalArtifactSchema,RecordFinalCommentSchema,CompleteSizeReviewSchema,CompletePositionSchema,TechnicalPlotUploadSchema,DEVELOPMENT_UPLOAD_PURPOSES,DEVELOPMENT_PURPOSE_TASK_KIND,DevelopmentUrgentRequestSchema,SaveTechnicalMaterialDecisionSchema,SavePreparationBasisSchema,DevelopmentCycleDraftSchema,DevelopmentCyclePublishSchema,SaveTechnicalTemplateSchema,ExternalPaperIntervalSchema,DevelopmentPatchDecisionSchema,CompleteDevelopmentPatchSchema} from '@dx-rework/contracts/digital-development-technical';
 export function registerDevelopmentExecutionRoutes(app:FastifyInstance,dependencies:DigitalIdentityDependencies,service:DevelopmentExecutionService,attachments:AttachmentService){
   const parse=<T>(schema:z.ZodType<T>,input:unknown):T=>{const result=schema.safeParse(input);if(!result.success)throw new ApplicationError("VALIDATION_ERROR",result.error.issues[0]?.message??"请检查办理资料",400);return result.data;};
   const actor=async(request:FastifyRequest)=>{const token=request.headers.cookie?.split(";").map(v=>v.trim()).find(v=>v.startsWith("dx_rework_session="))?.slice(18);return businessActor(dependencies.root,await dependencies.authenticate(token),request.id,"digital_production:view");};
   const id=(request:FastifyRequest,name="sourceId")=>parse(z.string().uuid(),(request.params as Record<string,unknown>)[name]);
   const key=(request:FastifyRequest)=>typeof request.headers["idempotency-key"]==="string"?request.headers["idempotency-key"]:"";
   const base="/digital-production/sources/:sourceId/execution";
+  const technical=service.technicalEvidenceService();
+  app.get(`${base}/technical`,async request=>{const query=parse(z.object({roundNumber:z.coerce.number().int().positive().optional(),scopeRef:z.string().trim().min(1).max(100).default('整款')}).strict(),request.query);return technical.read(await actor(request),id(request),query.roundNumber,query.scopeRef);});
+  app.post(`${base}/technical/artifacts`,async request=>technical.saveArtifact(await actor(request),id(request),parse(SaveTechnicalArtifactSchema,request.body),key(request)));
+  app.post(`${base}/technical/comments`,async request=>technical.recordComment(await actor(request),id(request),parse(RecordFinalCommentSchema,request.body),key(request)));
+  app.post(`${base}/technical/size-review`,async request=>technical.completeReview(await actor(request),id(request),parse(CompleteSizeReviewSchema,request.body),key(request)));
+  app.post(`${base}/technical/external-paper-interval`,async request=>technical.externalPaperInterval(await actor(request),id(request),parse(ExternalPaperIntervalSchema,request.body),key(request)));
+  app.post(`${base}/technical/position`,async request=>technical.completePosition(await actor(request),id(request),parse(CompletePositionSchema,request.body),key(request)));
+  app.post(`${base}/technical/urgent`,async request=>technical.urgent(await actor(request),id(request),parse(DevelopmentUrgentRequestSchema,request.body),key(request)));
+  app.post(`${base}/technical/material-decision`,async request=>technical.saveMaterialDecision(await actor(request),id(request),parse(SaveTechnicalMaterialDecisionSchema,request.body),key(request)));
+  app.post(`${base}/technical/preparation-basis`,async request=>technical.savePreparationBasis(await actor(request),id(request),parse(SavePreparationBasisSchema,request.body),key(request)));
+  app.post(`${base}/technical/patch-decision`,async request=>technical.decidePatch(await actor(request),id(request),parse(DevelopmentPatchDecisionSchema,request.body),key(request)));
+  app.post(`${base}/technical/patch-complete`,async request=>technical.completePatch(await actor(request),id(request),parse(CompleteDevelopmentPatchSchema,request.body),key(request)));
+  app.get(`${base}/technical/history`,async request=>technical.history(await actor(request),id(request),parse(z.object({roundNumber:z.coerce.number().int().positive(),scopeRef:z.string().trim().min(1).max(100).default('整款'),kind:z.enum(['artifacts','comments']),beforeVersion:z.coerce.number().int().positive().optional()}).strict(),request.query)));
+  const settings=technical.settingsService(),settingsBase='/digital-production/development-technical-settings';
+  app.get(settingsBase,async request=>settings.read(await actor(request),parse(z.object({version:z.coerce.number().int().positive().optional()}).strict(),request.query).version));
+  app.post(`${settingsBase}/preview`,async request=>settings.preview(await actor(request),parse(DevelopmentCycleDraftSchema,request.body)));
+  app.post(`${settingsBase}/publish`,async request=>settings.publish(await actor(request),parse(DevelopmentCyclePublishSchema,request.body),key(request)));
+  app.get('/digital-production/technical-size-templates',async request=>settings.templates(await actor(request),parse(z.object({customerCode:z.string().trim().min(1).max(30).optional()}).strict(),request.query).customerCode));
+  app.post('/digital-production/technical-size-templates',async request=>settings.saveTemplate(await actor(request),parse(SaveTechnicalTemplateSchema,request.body),key(request)));
   app.get(base,async request=>({...await service.read(await actor(request),id(request)),qrAvailable:Boolean(dependencies.developmentQrBase)}));
   app.put(`${base}/dispatch`,async request=>service.dispatch(await actor(request),id(request),parse(DevelopmentDispatchSchema,request.body),key(request)));
   app.put(`${base}/arrangement`,async request=>service.arrange(await actor(request),id(request),parse(DevelopmentArrangementSchema,request.body),key(request)));
@@ -37,7 +57,18 @@ export function registerDevelopmentExecutionRoutes(app:FastifyInstance,dependenc
   app.post(`${base}/fabric-reports`,async request=>service.report(await actor(request),id(request),parse(DevelopmentFabricReportSchema,request.body),key(request)));
   app.post(`${base}/fabric-decisions`,async request=>service.decideFabric(await actor(request),id(request),parse(DevelopmentFabricDecisionSchema,request.body),key(request)));
   app.get(`${base}/upload-limits`,async request=>{await service.authorizeUpload(await actor(request),id(request));return attachments.uploadLimits();});
-  app.post(`${base}/upload-intents`,async request=>{const trusted=await actor(request);await service.authorizeUpload(trusted,id(request));const {purpose,taskId,...input}=parse(CreateUploadIntentSchema.extend({purpose:z.enum(["工艺开发板","面料报告","车板成果","纸样成果","尾查照片","外部纸样"]),taskId:z.string().uuid().optional()}).superRefine((value,context)=>{if((['车板成果','纸样成果','尾查照片'].includes(value.purpose))!==Boolean(value.taskId))context.addIssue({code:'custom',message:'成果照片必须指定原任务，其他用途不能附带任务'});}),request.body);if(purpose==='外部纸样')await service.authorizeExternalPattern(trusted,id(request));if(purpose==='车板成果'||purpose==='纸样成果'||purpose==='尾查照片')await service.authorizeSewingUpload(trusted,id(request),taskId!,undefined,purpose==='纸样成果'?'development_pattern':purpose==='尾查照片'?'development_tail_check':'development_sewing');const intent=await attachments.createUploadIntent(trusted,input);await service.recordUploadPurpose(trusted,id(request),intent.attachmentId,purpose,taskId);return intent;});
+  app.post(`${base}/upload-intents`,async request=>{
+    const trusted=await actor(request),sourceId=id(request);await service.authorizeUpload(trusted,sourceId);
+    const extras={purpose:z.enum(DEVELOPMENT_UPLOAD_PURPOSES),taskId:z.string().uuid().optional()};
+    const {purpose,taskId,...input}=parse(z.union([CreateUploadIntentSchema.extend(extras),TechnicalPlotUploadSchema.extend(extras)]).superRefine((value,context)=>{
+      if(Boolean(DEVELOPMENT_PURPOSE_TASK_KIND[value.purpose])!==Boolean(value.taskId))context.addIssue({code:'custom',message:'成果须指定原任务；一般依据不附带任务'});
+      if(value.mimeType==='application/octet-stream'&&value.purpose!=='纸样成果')context.addIssue({code:'custom',message:'PLT仅用于本次纸样或尺寸复核成果'});
+    }),request.body);
+    if(purpose==='外部纸样')await service.authorizeExternalPattern(trusted,sourceId);
+    await service.authorizeResultPurpose(trusted,sourceId,purpose,taskId);
+    const intent=input.mimeType==='application/octet-stream'?await attachments.createTechnicalPlotUploadIntent(trusted,sourceId,taskId!,input):await attachments.createUploadIntent(trusted,input);
+    await service.recordUploadPurpose(trusted,sourceId,intent.attachmentId,purpose,taskId);return intent;
+  });
   app.post(`${base}/attachments/:attachmentId/finalize`,async request=>{const trusted=await actor(request);await service.authorizeFinalize(trusted,id(request),id(request,"attachmentId"));return attachments.finalize(trusted,id(request,"attachmentId"));});
   app.get(`${base}/tasks/:taskId/qr`,async(request,reply)=>{
     const state=await service.read(await actor(request),id(request));const taskId=id(request,"taskId");if(!state.tasks.some(task=>task.taskId===taskId))throw new ApplicationError("NOT_FOUND","任务不存在",404);
