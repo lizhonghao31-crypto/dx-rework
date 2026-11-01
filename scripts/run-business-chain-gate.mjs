@@ -168,27 +168,35 @@ async function ownedSchemasFromManifest() {
     if (resource?.kind !== "postgres-schema" || resource.runId !== runId
       || typeof resource.schema !== "string" || entry.name !== `${resource.schema}.json`
       || !ISOLATED_GATE_SCHEMA.test(resource.schema)
-      || !resource.schema.slice(-32).startsWith(runId)) {
+      || !resource.schema.slice(-32).startsWith(runId)
+      || (resource.databaseTarget !== undefined && (resource.databaseTarget !== "acceptance-clock"
+        || !resource.schema.startsWith("business_anchors_") || !process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL))) {
       throw new Error(`BUSINESS_CHAIN_RESOURCE_MANIFEST_REJECTED: ${entry.name}`);
     }
-    schemas.push(resource.schema);
+    schemas.push({schema: resource.schema, databaseTarget: resource.databaseTarget ?? "default"});
   }
-  return [...new Set(schemas)].sort();
+  return schemas.sort((a,b)=>a.schema.localeCompare(b.schema));
 }
 
 async function cleanupOwnedGateSchemas() {
   if (!databaseUrl) return;
   const schemas = await ownedSchemasFromManifest();
   if (schemas.length === 0) return;
-  const pool = new Pool({ connectionString: databaseUrl, max: 1 });
+  const pools = new Map();
   try {
-    for (const schema of schemas) {
+    for (const {schema, databaseTarget} of schemas) {
+      if (!pools.has(databaseTarget)) {
+        const targetUrl=databaseTarget==="acceptance-clock" ? process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL : databaseUrl;
+        await assertTestDatabaseTarget(targetUrl);
+        pools.set(databaseTarget,new Pool({ connectionString: targetUrl, max: 1 }));
+      }
+      const pool=pools.get(databaseTarget);
       await pool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
-      process.stdout.write(`BUSINESS_CHAIN_GATE_SCHEMA_CLEANED: ${schema}\n`);
+      process.stdout.write(`BUSINESS_CHAIN_GATE_SCHEMA_CLEANED: ${schema} databaseTarget=${databaseTarget}\n`);
     }
     process.stdout.write(`BUSINESS_CHAIN_GATE_CLEANUP_PASSED: run=${runId} resources=${schemas.length}\n`);
   } finally {
-    await pool.end();
+    await Promise.all([...pools.values()].map(pool=>pool.end()));
   }
 }
 

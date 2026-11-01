@@ -52,6 +52,34 @@ describe("business-chain isolated schema cleanup",()=>{
     expect(source).toContain("BUSINESS_CHAIN_GATE_INTERRUPTED");
   });
 
+  it("records the clock database alias without storing credentials or widening schema ownership",async()=>{
+    const dir=await mkdtemp(join(tmpdir(),"dx-rework-clock-owned-"));
+    try{
+      process.env.DX_REWORK_TEST_RUN_ID="1234abcd";
+      process.env.DX_REWORK_TEST_RESOURCE_MANIFEST_DIR=dir;
+      const schema=ownedPostgresSchema("business_anchors","acceptance-clock");
+      expect(JSON.parse(await readFile(join(dir,`${schema}.json`),"utf8")))
+        .toEqual({kind:"postgres-schema",runId:"1234abcd",schema,databaseTarget:"acceptance-clock"});
+      expect(()=>ownedPostgresSchema("receiving","acceptance-clock")).toThrow("Unsupported");
+      expect(()=>ownedPostgresSchema("business_anchors","untrusted" as "acceptance-clock")).toThrow("Unsupported");
+      expect(await readdir(dir)).toEqual([`${schema}.json`]);
+    }finally{await rm(dir,{recursive:true,force:true});}
+  });
+
+  it("keeps the original clock fixture and every child initializer on its explicit isolated database",async()=>{
+    const [test,fixture,gate]=await Promise.all([
+      readFile(new URL("../integration/development-technical-postgres.test.ts",import.meta.url),"utf8"),
+      readFile(new URL("../helpers/business-anchor-fixture.ts",import.meta.url),"utf8"),
+      readFile(new URL("../../scripts/run-business-chain-gate.mjs",import.meta.url),"utf8"),
+    ]);
+    expect(test).toContain("process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL");
+    expect(fixture).toContain("DATABASE_URL:'',TEST_DATABASE_URL:url");
+    expect(fixture).toContain("ACCEPTANCE_DATABASE_URL:scoped.toString()");
+    expect(gate).toContain('resource.databaseTarget !== "acceptance-clock"');
+    expect(gate).toContain('!resource.schema.startsWith("business_anchors_")');
+    expect(gate).toContain("await assertTestDatabaseTarget(targetUrl)");
+  });
+
   it("registers personnel test schemas without admitting arbitrary schema names", async () => {
     const source = await readFile(new URL("../../scripts/run-business-chain-gate.mjs", import.meta.url), "utf8");
     const expression = source.match(/const ISOLATED_GATE_SCHEMA = \/(.+)\/;/)?.[1];

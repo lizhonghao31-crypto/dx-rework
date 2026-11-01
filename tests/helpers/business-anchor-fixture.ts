@@ -41,7 +41,8 @@ import {completeInspectionReport} from '../inspection-report-fixture.js';
 /** Full current schema and original supported UAT seeder; no trigger or clock guards disabled. */
 export async function businessAnchorFixture(url:string){
  await assertTestDatabaseTarget(url);
- const schema=ownedPostgresSchema('business_anchors'),admin=new pg.Pool({connectionString:url});
+ const databaseTarget=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL===url&&url!==process.env.TEST_DATABASE_URL?'acceptance-clock':undefined;
+ const schema=ownedPostgresSchema('business_anchors',databaseTarget),admin=new pg.Pool({connectionString:url});
  await admin.query(`CREATE SCHEMA ${schema}`);
  const db=new pg.Pool({connectionString:url,options:`-c search_path=${schema}`,application_name:schema,max:10,connectionTimeoutMillis:3000});
  const dispose=async()=>{await db.end();await dropOwnedPostgresSchema(admin, schema);await admin.end();};
@@ -51,7 +52,7 @@ export async function businessAnchorFixture(url:string){
   await db.query('CREATE TABLE schema_migrations(version text PRIMARY KEY,checksum char(64) NOT NULL,applied_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP)');
   for(const migration of manifest.migrations){const sql=await readFile(new URL(`../../apps/api/migrations/${migration.version}.sql`,import.meta.url),'utf8');await db.query(migrationExecutionSql({...migration,sql},version));await db.query('INSERT INTO schema_migrations(version,checksum) VALUES($1,$2)',[migration.version,migration.checksum]);}
   const scoped=new URL(url);scoped.searchParams.set('options',`-c search_path=${schema}`);
-  const env={...process.env,NODE_ENV:'test',ACCEPTANCE_LAB_ENABLED:'true',ROOT_DINGTALK_USER_ID:'uat-root',DINGTALK_CORP_ID:'anchor-test',ACCEPTANCE_DATABASE_URL:scoped.toString()};
+  const env={...process.env,DATABASE_URL:'',TEST_DATABASE_URL:url,NODE_ENV:'test',ACCEPTANCE_LAB_ENABLED:'true',ROOT_DINGTALK_USER_ID:'uat-root',DINGTALK_CORP_ID:'anchor-test',ACCEPTANCE_DATABASE_URL:scoped.toString()};
   await promisify(execFile)(process.execPath,['--import','tsx','scripts/acceptance/seed-role-users.ts'],{cwd:process.cwd(),env});
   await maintainAcceptanceCuttingWorker(db,env,['--apply',`--expected-user-id=${randomUUID()}`]);
   const people:Record<string,TrustedActorContext>={};

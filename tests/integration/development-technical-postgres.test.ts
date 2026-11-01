@@ -21,7 +21,9 @@ import {DevelopmentDocumentSchema} from '@dx-rework/contracts/digital-developmen
 import type {TechnicalArtifactBody,SaveTechnicalArtifact,RecordFinalComment} from '@dx-rework/contracts/digital-development-technical';
 import {DEVELOPMENT_ARRANGEABLE_KINDS} from '@dx-rework/contracts/development-arrangement';
 
-const url=process.env.TEST_DATABASE_URL;
+// This fixture exercises the real Acceptance business clock and original UAT
+// initializer, so use the existing clock-test database rather than the CI app DB.
+const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (url?describe:describe.skip)('approved development technical evidence on complete native schema',()=>{
  let f:Awaited<ReturnType<typeof businessAnchorFixture>>,identity:DigitalProductionIdentityService,forms:DigitalDevelopmentService,execution:DevelopmentExecutionService,technical:DevelopmentTechnicalService,tasks:DigitalProductionTaskService;
  let native:PatternRoomOrderService;

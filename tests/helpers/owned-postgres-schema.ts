@@ -7,8 +7,11 @@ const RUN_ID_PATTERN = /^[0-9a-f]{8}$/;
 const PREFIX_PATTERN = /^[a-z][a-z0-9_]{1,40}$/;
 const generatedSchemas = new Set<string>();
 
-export const ownedPostgresSchema = (prefix: string): string => {
+export const ownedPostgresSchema = (prefix: string, databaseTarget?: "acceptance-clock"): string => {
   if (!PREFIX_PATTERN.test(prefix)) throw new Error(`Invalid PostgreSQL test schema prefix: ${prefix}`);
+  if (databaseTarget !== undefined && (databaseTarget !== "acceptance-clock" || prefix !== "business_anchors")) {
+    throw new Error("Unsupported PostgreSQL test database target");
+  }
   const runId = process.env.DX_REWORK_TEST_RUN_ID?.trim().toLowerCase();
   const manifestDir = process.env.DX_REWORK_TEST_RESOURCE_MANIFEST_DIR?.trim();
   if (Boolean(runId) !== Boolean(manifestDir)) {
@@ -23,7 +26,7 @@ export const ownedPostgresSchema = (prefix: string): string => {
   if (runId && manifestDir) {
     mkdirSync(manifestDir, { recursive: true });
     writeFileSync(join(manifestDir, `${schema}.json`),
-      `${JSON.stringify({ kind: "postgres-schema", runId, schema })}\n`,
+      `${JSON.stringify({ kind: "postgres-schema", runId, schema, ...(databaseTarget ? { databaseTarget } : {}) })}\n`,
       { encoding: "utf8", flag: "wx" });
   }
   generatedSchemas.add(schema);
