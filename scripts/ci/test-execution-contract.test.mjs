@@ -129,3 +129,12 @@ test('immediate deletion is a separate single-worker stage, without changing its
  const runner=readFileSync('scripts/run-business-chain-gate.mjs','utf8');assert.ok(runner.includes("['vitest.config.ts','vitest.postgres-immediate.config.ts','vitest.business-chain.config.ts']"));
  const config=readFileSync('vitest.postgres-immediate.config.ts','utf8');assert.ok(config.includes('maxWorkers:testExecutionConfig.workers.postgres'));
 });
+
+test('SQL-heavy full business fixture is isolated while other long suites remain bounded parallel',()=>{
+ const full='tests/integration/full-business-chain-postgres.test.ts',peer=POSTGRES_CHAIN_TESTS.find(path=>path!==full);
+ const plan=postgresPlan({mapped:[full],chain:true});
+ assert.equal(plan.filter(row=>row.path===full).length,1);assert.equal(configForSuite(full),'vitest.postgres-immediate.config.ts');
+ assert.equal(configForSuite(peer),'vitest.business-chain.config.ts');
+ const source=readFileSync(full,'utf8');assert.ok(source.includes('timeout: 60_000'));
+ const config=readFileSync('vitest.business-chain.config.ts','utf8');assert.ok(config.includes('testExecutionConfig.workers.longCorrectness'));
+});
