@@ -95,3 +95,5 @@ CLI日志重定向403的准确阻断保留；依既有Review-first说明，用�
 创建防漏的后续定点复核补充：同文件裸CREATE已经拒绝，但实际TS源码中的反斜杠换行转义仍可能漏；之前测试把转义预先变成换行，未覆盖原源文本。预检现保守归一化源码中的换行/字符/Unicode/hex转义和相邻常量拼接，再禁止消费者裸DDL。新增 String.raw 保留真实源文本的反例（另含String.raw消费者、Unicode、hex及身份转义）；原生协议111项无skip通过，不做任何扫描删除。其余已关闭四项不重复审查，无新增Full/Review；修复仅便宜反例后新Head light与最终Full。
 
 该补充提交的脚本误将本交接文档写成测试源码；提交后完整diff核对已发现，恢复此前全部证据与本段追加记录。测试源码与DDL防漏修复本身保持原样；不把该文档误写候选作为最终交付。
+
+最终 Full41296812316/attempt1 在安装前预检真实失败：111项Node协议均通过，后续静态migration lint因共享migration-lib顶层导入未安装pg而ERR_MODULE_NOT_FOUND；安装/DB/整链未执行，summary失败为连带结果，不能当通过。最小修复只把pg加载移到原applyMigrations入口，Pool配置、SQL、事务/锁/回滚和历史断言完全保留。新增无node_modules源快照的静态校验回归；原生112项、实际DB迁移集成（checksum漂移/删除拒绝）通过。提交后在独立无依赖干净worktree按Full安装前阶段运行完整preflight，再push新Head，不重跑失败旧Head。

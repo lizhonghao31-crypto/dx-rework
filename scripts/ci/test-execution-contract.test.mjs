@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {execFileSync} from 'node:child_process';
-import {mkdtempSync,readFileSync,writeFileSync,rmSync,mkdirSync} from 'node:fs';
+import {mkdtempSync,readFileSync,writeFileSync,rmSync,mkdirSync,cpSync,existsSync} from 'node:fs';
 import {tmpdir} from 'node:os';
-import {join} from 'node:path';
+import {join,dirname} from 'node:path';
 import {createHash} from 'node:crypto';
 import {postgresPlan,configForSuite,assertSuiteResults,assertExecutionReceipt,executionFingerprint,fullGatePostgresPlan,POSTGRES_CHAIN_TESTS,ROOT_AUDIT_TESTS} from '../test-suite-plan.mjs';
 import {ownedPostgresSchema,createOwnedPostgresSchema,readOwnedResources,SCHEMA_PREFIXES} from '../test-resource-contract.mjs';
@@ -110,4 +110,16 @@ test('Full PG requires explicit risk context and a nonempty execution; no-DB sco
  assert.throws(()=>fullGatePostgresPlan({...valid,MAPPED_POSTGRES_TESTS:''}),/EMPTY_PLAN/);
  assert.throws(()=>fullGatePostgresPlan({...valid,DB_REQUIRED:'false'}),/CONTRADICTION/);
  assert.equal(fullGatePostgresPlan({...valid,DB_REQUIRED:'false',MAPPED_POSTGRES_TESTS:''}).status,'not-applicable');
+});
+
+test('migration static preflight actually runs before dependencies in a fresh source-only snapshot',()=>{
+ const dir=mkdtempSync(join(tmpdir(),'dx-source-only-migrations-'));
+ try{
+  for(const path of ['package.json','scripts/check-migrations.mjs','scripts/migration-lib.mjs','scripts/migration-history-policy.mjs','scripts/migration-branches.json','scripts/migration-main-extensions.json','scripts/deploy/migration-execution-compatibility.mjs','scripts/deploy/migration-execution-compatibility.json','apps/api/migrations','apps/api/src/platform/migration-manifest.json']){
+   const target=join(dir,path);mkdirSync(dirname(target),{recursive:true});cpSync(path,target,{recursive:true});
+  }
+  assert.equal(existsSync(join(dir,'node_modules')),false);
+  const result=JSON.parse(execFileSync(process.execPath,[join(dir,'scripts/check-migrations.mjs')],{cwd:dir,encoding:'utf8',stdio:['ignore','pipe','pipe']}));
+  assert.equal(result.success,true);assert.equal(result.migrations.length,JSON.parse(readFileSync('apps/api/src/platform/migration-manifest.json','utf8')).migrations.length);
+ }finally{rmSync(dir,{recursive:true,force:true});}
 });
