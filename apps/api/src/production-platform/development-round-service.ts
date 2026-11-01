@@ -1,3 +1,6 @@
+import {captureTechnicalRound} from './development-cycle-evidence.js';
+import {technicalEnrollment,inheritTechnicalArtifact} from './development-technical-repository.js';
+import {DevelopmentTechnicalService} from './development-technical-service.js';
 import {createIndependentDevelopmentRevision} from './development-revision-source.js';
 import {businessNow} from '../acceptance-clock/business-time.js';
 import {developmentSlaPlan,developmentSlaRoute} from "./development-sla-enrollment.js";
@@ -101,8 +104,12 @@ export class DevelopmentRoundService {
   await this.forms().bindFiles(db,actor,sourceId,document);
   await db.query(`INSERT INTO digital_development_rounds(source_id,round_number,based_on_round,document_version,document,origin,customer_comment,internal_problem,explanation,categories,affected_nodes,output_kind,route_nodes,inherited,return_task_id,route_id,created_by,published_at)
     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,[sourceId,roundNumber,input.basedOnRound,sheet.version+1,JSON.stringify(document),input.origin,input.customerComment,input.internalProblem,input.explanation,input.categories,affectedNodes,input.outputKind,route,JSON.stringify(inherited),returnTaskId??null,routeId,actor.actorId,businessNow().toISOString()]);
+  const priorCycle=await technicalEnrollment(db,sourceId)?(await db.query('SELECT * FROM digital_development_cycle_rounds WHERE source_id=$1 AND round_number=$2',[sourceId,input.basedOnRound])).rows[0]:null;
+  if(priorCycle)await captureTechnicalRound(db,actor.actorId,sourceId,roundNumber,businessNow().toISOString(),priorCycle.internal_wash_minutes,Number(priorCycle.warning_ratio));
+  if(!affectedNodes.includes('纸样'))await inheritTechnicalArtifact(db,actor.actorId,sourceId,roundNumber,sourceId,input.basedOnRound,businessNow().toISOString());
   await new DigitalProductionTaskService(this.database).supersedeSourceTasksWithClient(db,actor,sourceId,input.basedOnRound,returnTaskId);
   await new DevelopmentRouteService(this.database).startRound(db,actor,sourceId,route[0]!,routeId,roundNumber,returnTaskId);
+  await new DevelopmentTechnicalService(this.database,this.enabled).ensurePositionForRound(db,actor,sourceId,roundNumber,routeId,returnTaskId);
   if(await developmentSlaPlan(db,sourceId)){
     const designer=(await db.query('SELECT created_by FROM digital_production_sources WHERE source_id=$1',[sourceId])).rows[0].created_by;
     await new DigitalProductionTaskService(this.database).createWithClient(db,actor,{resource:{kind:'source',id:sourceId},...(returnTaskId?{authorizingTaskId:returnTaskId}:{}),kind:'development_shipping',routeId,routeVersion:roundNumber,occurrence:roundNumber,

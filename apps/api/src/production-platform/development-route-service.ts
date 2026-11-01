@@ -1,4 +1,5 @@
 import {businessNow} from '../acceptance-clock/business-time.js';
+import {technicalEnrollment,publishedTechnicalArtifact,technicalMeasurementDocument} from './development-technical-repository.js';
 import {developmentRevisionSource} from './development-revision-source.js';
 import type {DevelopmentMakingUpgrade} from '@dx-rework/contracts/digital-development';
 import {plannedRecipient,arrangementsAvailable} from "./development-arrangement.js";
@@ -52,7 +53,8 @@ export class DevelopmentRouteService {
  }
  async startRound(db:PoolClient,actor:TrustedActorContext,sourceId:string,kind:DigitalTaskKind,routeId:string,roundNumber:number,authorizingTaskId?:string,predecessorId?:string,nextAssigneeId:string|null=null,requireActualReceipt=false){
    const sheet=await new DigitalDevelopmentService(this.database,true).read(actor,sourceId,db,roundNumber),service=new DigitalProductionTaskService(this.database);
-   const next=await service.createWithClient(db,actor,{resource:{kind:'source',id:sourceId},...(authorizingTaskId?{authorizingTaskId}:{}),kind,routeId,routeVersion:roundNumber,occurrence:roundNumber,assigneeId:await this.recipient(db,sourceId,kind,nextAssigneeId,roundNumber),predecessors:predecessorId?[predecessorId]:[],conditions:kind==='development_sewing'?['pattern_assignment_ready']:kind==='development_cutting'?['materials_ready']:[]});
+   const positioning=kind==='development_craft_dispatch'&&await technicalEnrollment(db,sourceId)?(await db.query(`SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND t.route_version=$2 AND a.task_kind='development_positioning' AND t.state<>'cancelled' ORDER BY t.created_at DESC LIMIT 1`,[sourceId,roundNumber])).rows[0]:null;
+   const next=await service.createWithClient(db,actor,{resource:{kind:'source',id:sourceId},...(authorizingTaskId?{authorizingTaskId}:{}),kind,routeId,routeVersion:roundNumber,occurrence:roundNumber,assigneeId:await this.recipient(db,sourceId,kind,nextAssigneeId,roundNumber),predecessors:[...(predecessorId?[predecessorId]:[]),...(positioning?[positioning.task_id]:[])],conditions:kind==='development_sewing'?['pattern_assignment_ready']:kind==='development_cutting'?['materials_ready']:[]});
    if(!requireActualReceipt&&['development_pattern','development_cutting','development_sewing','development_washing'].includes(kind))await service.setConditionWithClient(db,actor,next.taskId,'handover_received',true,undefined,'本轮已交出');
    if(['development_pattern','development_cutting','development_sewing'].includes(kind)){
      const materialState=await materialReadiness(db,sourceId,roundNumber);
@@ -112,13 +114,16 @@ export class DevelopmentRouteService {
    await new DigitalProductionAccessPolicy(db).assert(actor,'task',input.taskId,'execute');
    const task=await this.task(db,sourceId,input.taskId);
    const currentPlan=await developmentSlaPlan(db,sourceId);
-   let inspection: {phase:string;unit:string;sizes:string[];measurements:DevelopmentActualMeasurements}|undefined;
+   let inspection: {phase:string;unit:string;sizes:string[];measurements:DevelopmentActualMeasurements;artifactRef?:{id:string;version:number}}|undefined;
    if(currentPlan&&['development_pre_wash_check','development_tail_check'].includes(task.task_kind)){
      const sheet=await new DigitalDevelopmentService(this.database,true).read(actor,sourceId,db,task.route_version);
      if(task.task_kind==='development_pre_wash_check'&&sheet.document!.washing==='免洗')fail('免洗开发单没有洗前检查');
-     if(sheet.document!.washing!=='免洗')validateDevelopmentMeasurements(sheet.document!,input.measurements);
-     else if(input.measurements?.length)validateDevelopmentMeasurements(sheet.document!,input.measurements);
-     if(input.measurements?.length)inspection={phase:task.task_kind==='development_pre_wash_check'?'洗前':sheet.document!.washing==='免洗'?'尾查':'洗后',unit:sheet.document!.unit,sizes:sheet.document!.sizes,measurements:input.measurements};
+     const enrolled=!!await technicalEnrollment(db,sourceId),basis=await technicalMeasurementDocument(db,sourceId,task.route_version,sheet.document!);
+     if(enrolled&&!basis)fail('请先形成本轮有效技术基码尺寸表，再记录实际尺寸');
+     const document=basis?.document??sheet.document!;
+     if(enrolled||document.washing!=='免洗')validateDevelopmentMeasurements(document,input.measurements,enrolled);
+     else if(input.measurements?.length)validateDevelopmentMeasurements(document,input.measurements);
+     if(input.measurements?.length)inspection={phase:task.task_kind==='development_pre_wash_check'?'洗前':document.washing==='免洗'?'尾查':'洗后',unit:document.unit,sizes:document.sizes,measurements:input.measurements,...(basis?.artifactRef?{artifactRef:basis.artifactRef}:{})};
    }
    const kinds:Partial<Record<DigitalTaskKind,string>>={development_craft_dispatch:'发工艺',development_printing:'工艺完成',development_embroidery:'工艺完成',development_print_embroidery:'工艺完成',development_craft_confirmation:'工艺确认',development_sewing_transfer:'转交车板',development_sewing:'车板完成',development_washing:'洗水完成',development_pre_wash_check:'洗前检查',development_tail_check:input.result==='退回'?'尾查退回':'尾查通过',development_confirmation:'最终设计确认',development_shipping:'寄出'};
    const kind=kinds[task.task_kind as DigitalTaskKind];if(!kind||task.state!=='ready')fail('当前节点尚不可办理');
@@ -127,6 +132,12 @@ export class DevelopmentRouteService {
    if(input.nextAssigneeId&&task.task_kind!=='development_craft_dispatch')fail('本操作不能改派下一节点，请使用任务改派');
    if(task.task_kind==='development_craft_dispatch'&&!input.craftExecution)fail('请记录工艺内部制作或外发');
    if(task.task_kind==='development_craft_dispatch'){
+     if(await technicalEnrollment(db,sourceId)){
+       const artifact=await publishedTechnicalArtifact(db,sourceId,task.route_version);
+       const position=(await db.query(`SELECT f.payload FROM digital_development_route_facts f JOIN digital_production_tasks t ON t.task_id=f.task_id
+         WHERE f.source_id=$1 AND f.route_version=$2 AND f.kind='定位图确认' AND t.state='completed' ORDER BY f.sequence DESC LIMIT 1`,[sourceId,task.route_version])).rows[0];
+       if(!artifact||!position||position.payload.artifactSetId!==artifact.artifact.artifactSetId||position.payload.artifactVersion!==artifact.artifact.version)fail('相应裁片和当前纸样的定位图尚未形成；设计定位可与裁板并行，但发工艺前须具备有效定位');
+     }
      const sheet=await new DigitalDevelopmentService(this.database,true).read(actor,sourceId,db,task.route_version);
      const route:DigitalTaskKind[]=task.route_version===1?await savedDevelopmentRoute(db,sourceId,sheet.document!):(await db.query('SELECT route_nodes FROM digital_development_rounds WHERE source_id=$1 AND round_number=$2',[sourceId,task.route_version])).rows[0].route_nodes;
      const nextKind=route[route.indexOf(task.task_kind)+1];

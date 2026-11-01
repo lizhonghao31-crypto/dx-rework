@@ -1,3 +1,4 @@
+import {syncDevelopmentPatchAssignment,isCurrentDevelopmentPatch} from './development-patch-assignment.js';
 import type {Pool,PoolClient} from 'pg';
 import {randomUUID} from 'node:crypto';
 import {authorizePatternOrder} from '../pattern-room/order-authority.js';
@@ -33,6 +34,7 @@ export async function validateExecutionTransfer(db:PoolClient,actor:TrustedActor
 }
 /** Native endpoint and the unified adapter share this transaction; no front-end two-write illusion. */
 export async function syncLinkedExecutionTransfer(db:PoolClient,database:Pool,actor:TrustedActorContext,orderId:string,oldUserId:string,nextUserId:string,reason:string,nativeAction:"assign"|"transfer"="transfer"){
+ if(await syncDevelopmentPatchAssignment(db,database,actor,orderId,nextUserId,nativeAction))return true;
  if(!await arrangementsAvailable(db))return false;
  const link=(await db.query('SELECT source_id FROM digital_development_pattern_links WHERE order_id=$1',[orderId])).rows[0];if(!link)return false;
  await authorizePatternOrder(db,actor,nativeAction==='assign'?'pattern_room:orders:assign':'pattern_room:orders:transfer',true);
@@ -59,6 +61,7 @@ export async function syncLinkedExecutionTransfer(db:PoolClient,database:Pool,ac
 
 /** Rework assignment keeps the saved personnel plan; changing it remains an explicit arrangement action. */
 export async function linkedAssignmentContext(db:PoolClient,actor:TrustedActorContext,orderId:string,nextUserId:string,root:boolean){
+ if(await isCurrentDevelopmentPatch(db,orderId))return null;
  if(!await arrangementsAvailable(db))return null;
  const link=(await db.query('SELECT source_id FROM digital_development_pattern_links WHERE order_id=$1',[orderId])).rows[0];if(!link)return null;
  await authorizePatternOrder(db,actor,'pattern_room:orders:assign',true);

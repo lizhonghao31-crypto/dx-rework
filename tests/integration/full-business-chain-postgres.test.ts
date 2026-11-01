@@ -9,7 +9,7 @@ import { exceptions as readReportingExceptions } from "../../apps/api/src/report
 import {exerciseDevelopmentRoute} from "../helpers/digital-development-route-fixture.js";
 import {exerciseDevelopmentSlaNative} from "../helpers/development-sla-native-fixture.js";
 import { exerciseRevisionApproval } from "./helpers/revision-approval-scenario.js";
-import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { RootAuthority } from "../../apps/api/src/access/root-authority.js";
 import { exerciseReceivingDifferenceAuthority } from "./helpers/receiving-difference-authority-scenario.js";
 import { WorkerAwareAccessMasterDataService } from "../../apps/api/src/access/worker-aware-access-service.js";
@@ -423,7 +423,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       process.stdout.write(`PATTERN_ROOM_FIXTURES ${JSON.stringify({schema,orders:fixtures.rows})}\n`);
     }
     await database.end();
-    await adminPool.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
+    await dropOwnedPostgresSchema(adminPool, schema);
     if (process.env.PATTERN_ROOM_EVIDENCE === "1") process.stdout.write(`PATTERN_ROOM_CLEANUP ${JSON.stringify({schema,dropped:true})}\n`);
     await adminPool.end();
 

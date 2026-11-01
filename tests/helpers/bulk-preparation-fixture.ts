@@ -1,3 +1,4 @@
+import {confirmedTechnicalFixture} from './development-technical-fixture.js';
 import {DigitalJourneyQuery} from "../../apps/api/src/production-platform/journey-query.js";
 import {DigitalCockpitQuery} from "../../apps/api/src/production-platform/cockpit-query.js";
 import { DevelopmentRoundService } from "../../apps/api/src/production-platform/development-round-service.js";
@@ -15,14 +16,17 @@ import type { SourcingService } from "../../apps/api/src/sourcing/sourcing-servi
 import type { DigitalBudgetService } from "../../apps/api/src/production-platform/budget-service.js";
 import { DigitalProductionIdentityService } from "../../apps/api/src/production-platform/identity-service.js";
 import { DigitalDevelopmentService } from "../../apps/api/src/production-platform/development-service.js";
-import { DevelopmentExecutionService } from "../../apps/api/src/production-platform/development-execution-service.js";
 import { ProductionInstructionService } from "../../apps/api/src/production-platform/production-instruction-service.js";
 import { BulkPreparationService } from "../../apps/api/src/production-platform/bulk-preparation-service.js";
 import { DigitalProductionTaskService } from "../../apps/api/src/production-platform/task-service.js";
 import { CuttingService } from "../../apps/api/src/cutting/cutting-source-service.js";
 import { developmentRoute } from "../../apps/api/src/production-platform/development-route.js";
+async function confirmTechnicalSample(db:Pool,root:TrustedActorContext,sourceId:string,workerId:string,roundNumber:number){
+ const sheet=await new DigitalDevelopmentService(db,true).read(root,sourceId,db,roundNumber);
+ await confirmedTechnicalFixture(db,root,sourceId,sheet.document!,sheet.version,workerId,undefined,undefined,roundNumber);
+}
 export async function exerciseBulkPreparation(db:Pool,fixture:{order:DigitalOrder;designer:TrustedActorContext;document:BudgetDocument;budget:DigitalBudgetService},service:SourcingService,attachments:AttachmentService,actors:{primary:TrustedActorContext;manager:TrustedActorContext;owner:TrustedActorContext;ie:TrustedActorContext;root:TrustedActorContext},factoryId:string,craftId:string,mode:'none'|'pattern-first'|'preshrink-first'|'concurrent',options?:{cuttingProcess:'in_house'|'outsourced';stopAtReady:boolean;secondaryCraft?:'无'|'印花';accessory?:boolean;warehouseRole?:'warehouse_receiver'|'warehouse_supervisor';sourceCustomerCode?:string|null;legacyDevelopment?:boolean}){
- const primary=actors.primary,designer=fixture.designer,id=fixture.order.productionOrderId,bulk=new BulkPreparationService(db),identity=new DigitalProductionIdentityService(db,true),forms=new DigitalDevelopmentService(db,true),instruction=new ProductionInstructionService(db,true),execution=new DevelopmentExecutionService(db,true),tasks=new DigitalProductionTaskService(db),cutting=new CuttingService(db);
+ const primary=actors.primary,designer=fixture.designer,id=fixture.order.productionOrderId,bulk=new BulkPreparationService(db),identity=new DigitalProductionIdentityService(db,true),forms=new DigitalDevelopmentService(db,true),instruction=new ProductionInstructionService(db,true),tasks=new DigitalProductionTaskService(db),cutting=new CuttingService(db);
  const beforeRecords=await bulk.workroom(actors.root,{page:1,search:fixture.order.designStyleNo,scope:"all"});
  expect(beforeRecords.items.some(item=>item.orderId===id)).toBe(false);
  const people:Record<string,TrustedActorContext>={};
@@ -52,7 +56,7 @@ export async function exerciseBulkPreparation(db:Pool,fixture:{order:DigitalOrde
  }else source=await identity.createSource(designer,sourceInput,randomUUID());
  await identity.attachSource(designer,id,source.sourceId,randomUUID());
  const image=randomUUID();await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-bulk.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[image,`TEST/bulk/${image}`,'a'.repeat(64),designer.actorId]);
- const development=DevelopmentDocumentSchema.parse({documentFormatVersion:2,sizeQuantities:[1],template:'上衣',quantity:1,sampleSize:'M',orderDate:null,returnDate:null,unit:'inch',sizes:['M'],measurements:[{name:'袖长',values:['6 1/8']}],interlining:'',placketInterlining:'',sewingThread:'',buttonholeThread:'',stitchDensity:'',washingIroning:'',packaging:'',formalSizes:'',casualSizes:'',mainLabel:false,mainLabelMethod:'',sizeLabel:false,careLabel:false,instructions:'',craft:'无',washing:'免洗',materials:[],files:[{attachmentId:image,kind:'款图'}]});
+ const development=DevelopmentDocumentSchema.parse({documentFormatVersion:2,sizeQuantities:[1],template:'上衣',quantity:1,sampleSize:'M',orderDate:null,returnDate:null,unit:'inch',sizes:['M'],measurements:[{name:'袖长',values:['6 1/8']}],interlining:'',placketInterlining:'',sewingThread:'',buttonholeThread:'',stitchDensity:'',washingIroning:'',packaging:'',formalSizes:'',casualSizes:'',mainLabel:false,mainLabelMethod:'',sizeLabel:false,careLabel:false,instructions:'',craft:'无',washing:'免洗',materials:[{materialId:randomUUID(),category:'主布',label:'主布',supplier:'TEST',name:'TEST主布',width:'150',weight:'200',composition:'棉',consumption:'1',color:'黑',specification:'TEST',quantity:'1',requiredThisRound:true,available:true,expectedDate:null}],files:[{attachmentId:image,kind:'款图'}]});
  const savedDevelopment=await forms.save(designer,source.sourceId,{expectedVersion:0,document:development},randomUUID());
  const publishedDevelopment=await forms.publish(designer,source.sourceId,savedDevelopment.version,randomUUID());
  expect((await db.query('SELECT count(*)::int AS n FROM digital_development_sla_plans WHERE source_id=$1',[source.sourceId])).rows[0].n).toBe(options?.legacyDevelopment?0:2);
@@ -72,7 +76,7 @@ export async function exerciseBulkPreparation(db:Pool,fixture:{order:DigitalOrde
  const created=await service.createCase(primary,{gender:prepared.gender,styleName:prepared.styleName,deliveryDate:'2026-11-10',estimatedCutPieceSendDate:'2026-10-20',daxingUnitPrice:prepared.daxingUnitPrice,attachmentIds:prepared.images.map(i=>i.attachmentId),lineItems:prepared.lineItems.map(({lineId,styleNo,alternateStyleNo,color,quantity})=>({lineId,styleNo,alternateStyleNo,color,quantity,factoryDeliveryDate:"2026-11-10"})),digitalBudget:{productionOrderId:id,budgetVersion:prepared.budgetVersion,orderVersion:prepared.orderVersion}},randomUUID());
  const caseId=created.value.sourcingCaseId,prices=[{position:1,unitPrice:'5.50'},{position:2,unitPrice:'5.50'}];
  await service.quoteIePrice(actors.ie,caseId,{linePrices:prices},randomUUID());await service.recordManagementDecision(actors.manager,caseId,{supplierId:factoryId,craftIds:[craftId],linePrices:prices,cuttingProcess:options?.cuttingProcess??'in_house'},randomUUID());
- if(mode==='none'){await execution.customerSample(designer,source.sourceId,{routeVersion:1,note:'TEST客户确认'},randomUUID());expect((await bulk.read(primary,id)).tasks.some(t=>t.taskKind==='bulk_pattern')).toBe(true);}
+ if(mode==='none'){await confirmTechnicalSample(db,actors.root,source.sourceId,worker.actorId,1);expect((await bulk.read(primary,id)).tasks.some(t=>t.taskKind==='bulk_pattern')).toBe(true);}
  if(mode==='none'){
   await service.decideOwner(actors.owner,caseId,{decision:'rejected'},randomUUID());
   const rejected=await new DigitalJourneyQuery(db).read(actors.root,id),owner=rejected.stages.flatMap(stage=>stage.nodes).find(node=>node.key==='sourcing_owner');
@@ -84,7 +88,7 @@ export async function exerciseBulkPreparation(db:Pool,fixture:{order:DigitalOrde
   await service.recordManagementDecision(actors.manager,caseId,{supplierId:factoryId,craftIds:[craftId],linePrices:prices,decisionReason:'TEST按原拒绝意见重新确认',cuttingProcess:options?.cuttingProcess??'in_house'},randomUUID());
  }
  await service.decideOwner(actors.owner,caseId,{decision:'approved'},randomUUID());
- if(mode!=='none'){expect((await bulk.read(primary,id)).tasks).toHaveLength(0);await execution.customerSample(designer,source.sourceId,{routeVersion:1,note:'TEST客户确认'},randomUUID());}
+ if(mode!=='none'){expect((await bulk.read(primary,id)).tasks).toHaveLength(0);await confirmTechnicalSample(db,actors.root,source.sourceId,worker.actorId,1);}
  let sheet=await bulk.read(primary,id);
  const publishedAt=(await db.query('SELECT published_at FROM digital_instruction_versions WHERE production_order_id=$1 AND version=1',[id])).rows[0].published_at.toISOString();
  expect(sheet.tasks.find(t=>t.taskKind==='bulk_pattern')).toMatchObject({state:'pending',enteredAt:publishedAt,dueAt:new Date(Date.parse(publishedAt)+48*3600000).toISOString()});
@@ -199,7 +203,7 @@ export async function exerciseBulkPreparation(db:Pool,fixture:{order:DigitalOrde
   expect((await forms.read(designer,source.sourceId,undefined,1)).document!.orderDate).toBe(publishedDevelopment.document!.orderDate);
   await expect(instruction.read(worker,id)).rejects.toMatchObject({statusCode:404});
   expect((await bulk.read(primary,id))).toMatchObject({customerConfirmed:false,instructionValid:false,preparationId:null});
-  await execution.customerSample(designer,source.sourceId,{routeVersion:1,note:'TEST旧确认不能解新轮'},randomUUID());
+  await confirmTechnicalSample(db,actors.root,source.sourceId,worker.actorId,1);
   expect((await bulk.read(primary,id)).customerConfirmed).toBe(false);
   await instruction.save(primary,id,{expectedVersion:2,orderVersion:order.version,document:{...doc,comments:'TEST核对第二轮开发'}},randomUUID());
   const unreviewed=await instruction.read(primary,id);expect(unreviewed.sourceRound).toBe(1);expect(unreviewed.latestSourceRound).toBe(2);expect(unreviewed.document.comments).toBe('TEST核对第二轮开发');
@@ -221,7 +225,7 @@ export async function exerciseBulkPreparation(db:Pool,fixture:{order:DigitalOrde
   expect((await db.query('SELECT count(*)::int n FROM digital_instruction_versions WHERE production_order_id=$1 AND version=4',[id])).rows[0].n).toBe(1);
   expect((await bulk.read(primary,id)).tasks).toHaveLength(0);
   await db.query("INSERT INTO digital_development_route_facts(fact_id,source_id,route_version,kind,payload,actor_id) VALUES($1,$2,2,'最终设计确认','{}',$3)",[randomUUID(),source.sourceId,designer.actorId]);
-  await execution.customerSample(designer,source.sourceId,{routeVersion:2,note:'TEST客户确认第二轮'},randomUUID());
+  await confirmTechnicalSample(db,actors.root,source.sourceId,worker.actorId,2);
   const latest=await bulk.read(primary,id);expect(latest).toMatchObject({customerConfirmed:true,instructionValid:true,sourceRound:2,instructionVersion:4});expect(latest.tasks.some(t=>t.taskKind===(options?.cuttingProcess==='outsourced'?'bulk_cutting_external':'bulk_cutting'))).toBe(false);
 
   }else{
@@ -253,7 +257,7 @@ export async function exerciseBulkPreparation(db:Pool,fixture:{order:DigitalOrde
 
 /** Real commands up to technical readiness, deliberately before any sourcing case/approval. */
 export async function exerciseParallelTechnical(db:Pool,fixture:Parameters<typeof exerciseBulkPreparation>[1],actors:Parameters<typeof exerciseBulkPreparation>[4],options?:Parameters<typeof exerciseBulkPreparation>[8]){
- const primary=actors.primary,designer=fixture.designer,id=fixture.order.productionOrderId,bulk=new BulkPreparationService(db),identity=new DigitalProductionIdentityService(db,true),forms=new DigitalDevelopmentService(db,true),instruction=new ProductionInstructionService(db,true),execution=new DevelopmentExecutionService(db,true);
+ const primary=actors.primary,designer=fixture.designer,id=fixture.order.productionOrderId,bulk=new BulkPreparationService(db),identity=new DigitalProductionIdentityService(db,true),forms=new DigitalDevelopmentService(db,true),instruction=new ProductionInstructionService(db,true);
  const beforeRecords=await bulk.workroom(actors.root,{page:1,search:fixture.order.designStyleNo,scope:"all"});
  expect(beforeRecords.items.some(item=>item.orderId===id)).toBe(false);
  const people:Record<string,TrustedActorContext>={};
@@ -271,7 +275,7 @@ export async function exerciseParallelTechnical(db:Pool,fixture:Parameters<typeo
  const source=await identity.createSource(designer,{developmentType:'头版',designStyleNo:fixture.order.designStyleNo,temporaryStyleNo:null,customerCode:options?.sourceCustomerCode===undefined?'PD':options.sourceCustomerCode},randomUUID());
  await identity.attachSource(designer,id,source.sourceId,randomUUID());
  const image=randomUUID();await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-bulk.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[image,`TEST/bulk/${image}`,'a'.repeat(64),designer.actorId]);
- const development=DevelopmentDocumentSchema.parse({documentFormatVersion:2,sizeQuantities:[1],template:'上衣',quantity:1,sampleSize:'M',orderDate:null,returnDate:null,unit:'inch',sizes:['M'],measurements:[{name:'袖长',values:['6 1/8']}],interlining:'',placketInterlining:'',sewingThread:'',buttonholeThread:'',stitchDensity:'',washingIroning:'',packaging:'',formalSizes:'',casualSizes:'',mainLabel:false,mainLabelMethod:'',sizeLabel:false,careLabel:false,instructions:'',craft:'无',washing:'免洗',materials:[],files:[{attachmentId:image,kind:'款图'}]});
+ const development=DevelopmentDocumentSchema.parse({documentFormatVersion:2,sizeQuantities:[1],template:'上衣',quantity:1,sampleSize:'M',orderDate:null,returnDate:null,unit:'inch',sizes:['M'],measurements:[{name:'袖长',values:['6 1/8']}],interlining:'',placketInterlining:'',sewingThread:'',buttonholeThread:'',stitchDensity:'',washingIroning:'',packaging:'',formalSizes:'',casualSizes:'',mainLabel:false,mainLabelMethod:'',sizeLabel:false,careLabel:false,instructions:'',craft:'无',washing:'免洗',materials:[{materialId:randomUUID(),category:'主布',label:'主布',supplier:'TEST',name:'TEST主布',width:'150',weight:'200',composition:'棉',consumption:'1',color:'黑',specification:'TEST',quantity:'1',requiredThisRound:true,available:true,expectedDate:null}],files:[{attachmentId:image,kind:'款图'}]});
  const savedDevelopment=await forms.save(designer,source.sourceId,{expectedVersion:0,document:development},randomUUID());
  const publishedDevelopment=await forms.publish(designer,source.sourceId,savedDevelopment.version,randomUUID());
  expect(publishedDevelopment.document!.orderDate).toBe(publishedDevelopment.developmentCreatedDate);
@@ -283,7 +287,7 @@ export async function exerciseParallelTechnical(db:Pool,fixture:Parameters<typeo
  await expect(instruction.save(primary,id,{expectedVersion:0,orderVersion:order.version,sourceRound:2,document:doc},randomUUID())).rejects.toMatchObject({statusCode:409});
  await instruction.save(primary,id,{expectedVersion:0,orderVersion:order.version,sourceRound:1,document:doc},randomUUID());await instruction.publish(primary,id,{expectedVersion:1,orderVersion:order.version},randomUUID());
 
- await execution.customerSample(designer,source.sourceId,{routeVersion:1,note:'TEST技术线不等批价'},randomUUID());
+ await confirmTechnicalSample(db,actors.root,source.sourceId,worker.actorId,1);
  const sheet=await bulk.dispatch(actors.manager,id,{expectedVersion:0,patternWorkerId:worker.actorId,warehouseWorkerId:warehouse.actorId,cuttingWorkerId:people.cutting_worker!.actorId,deliverPattern:true},randomUUID());
  expect(sheet.ownerApproved).toBe(false);
  const pattern=sheet.tasks.find(t=>t.taskKind==='bulk_pattern')!;

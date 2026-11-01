@@ -1,3 +1,4 @@
+import {confirmedTechnicalFixture} from './development-technical-fixture.js';
 import {customerQuotationFixture} from './customer-quotation-fixture.js';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
@@ -7,14 +8,13 @@ import pg from 'pg';
 import sharp from 'sharp';
 import {migrationExecutionSql} from '../../scripts/deploy/migration-execution-compatibility.mjs';
 import {assertTestDatabaseTarget} from '../../scripts/test-database-safety.mjs';
-import {ownedPostgresSchema} from './owned-postgres-schema.js';
+import { ownedPostgresSchema, dropOwnedPostgresSchema } from './owned-postgres-schema.js';
 import {verifyAcceptanceClockServer} from '../../apps/api/src/acceptance-clock/guard.js';
 import {AcceptanceClockRuntime} from '../../apps/api/src/acceptance-clock/runtime.js';
 import {businessNow} from '../../apps/api/src/acceptance-clock/business-time.js';
 import {SlaConfigurationRepository} from '../../apps/api/src/production-platform/sla-configuration-repository.js';
 import {DigitalProductionIdentityService} from '../../apps/api/src/production-platform/identity-service.js';
 import {DigitalDevelopmentService} from '../../apps/api/src/production-platform/development-service.js';
-import {DevelopmentExecutionService} from '../../apps/api/src/production-platform/development-execution-service.js';
 import {ProductionInstructionService} from '../../apps/api/src/production-platform/production-instruction-service.js';
 import {DigitalBudgetService} from '../../apps/api/src/production-platform/budget-service.js';
 import {BulkPreparationService} from '../../apps/api/src/production-platform/bulk-preparation-service.js';
@@ -44,7 +44,7 @@ export async function businessAnchorFixture(url:string){
  const schema=ownedPostgresSchema('business_anchors'),admin=new pg.Pool({connectionString:url});
  await admin.query(`CREATE SCHEMA ${schema}`);
  const db=new pg.Pool({connectionString:url,options:`-c search_path=${schema}`,application_name:schema,max:10,connectionTimeoutMillis:3000});
- const dispose=async()=>{await db.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();};
+ const dispose=async()=>{await db.end();await dropOwnedPostgresSchema(admin, schema);await admin.end();};
  try{
   const version=Number((await db.query('SHOW server_version_num')).rows[0].server_version_num);
   const manifest=JSON.parse(await readFile(new URL('../../apps/api/src/platform/migration-manifest.json',import.meta.url),'utf8'));
@@ -89,7 +89,7 @@ export async function businessAnchorFixture(url:string){
    const id=order.productionOrderId,source=await identity.createSource(designer,{developmentType:'头版',designStyleNo:style,temporaryStyleNo:null,customerCode:'PD'},randomUUID());
    await identity.attachSource(designer,id,source.sourceId,randomUUID());
    const photo=await image(designer);
-   const development=DevelopmentDocumentSchema.parse({documentFormatVersion:2,sizeQuantities:[1],template:'上衣',quantity:1,sampleSize:'M',orderDate:null,returnDate:null,unit:'inch',sizes:['M'],measurements:[{name:'袖长',values:['6']}],interlining:'',placketInterlining:'',sewingThread:'',buttonholeThread:'',stitchDensity:'',washingIroning:'',packaging:'',formalSizes:'',casualSizes:'',mainLabel:false,mainLabelMethod:'',sizeLabel:false,careLabel:false,instructions:'',craft:'无',washing:'免洗',materials:[],files:[{attachmentId:photo,kind:'款图'}]});
+   const development=DevelopmentDocumentSchema.parse({documentFormatVersion:2,sizeQuantities:[1],template:'上衣',quantity:1,sampleSize:'M',orderDate:null,returnDate:null,unit:'inch',sizes:['M'],measurements:[{name:'袖长',values:['6']}],interlining:'',placketInterlining:'',sewingThread:'',buttonholeThread:'',stitchDensity:'',washingIroning:'',packaging:'',formalSizes:'',casualSizes:'',mainLabel:false,mainLabelMethod:'',sizeLabel:false,careLabel:false,instructions:'',craft:'无',washing:'免洗',materials:[{materialId:randomUUID(),category:'主布',label:'主布',supplier:'TEST',name:'TEST真实主布',width:'150',weight:'200',composition:'棉',consumption:'1',color:'黑',specification:'TEST',quantity:'1',requiredThisRound:true,available:true,expectedDate:null}],files:[{attachmentId:photo,kind:'款图'}]});
    const saved=await forms.save(designer,source.sourceId,{expectedVersion:0,document:development},randomUUID());await forms.publish(designer,source.sourceId,saved.version,randomUUID());
    // Development completion is a fixture precondition; the production path below uses native commands.
    await db.query("INSERT INTO digital_development_route_facts(fact_id,source_id,route_version,kind,payload,actor_id) VALUES($1,$2,1,'最终设计确认','{}',$3)",[randomUUID(),source.sourceId,designer.actorId]);
@@ -105,7 +105,7 @@ export async function businessAnchorFixture(url:string){
    const created=await sourcingCommands.createCase(primary,input,key),caseId=created.value.sourcingCaseId;
    const prices=input.lineItems.map((_,index)=>({position:index+1,unitPrice:'5'}));await sourcingCommands.quoteIePrice(ie,caseId,{linePrices:prices},randomUUID());await sourcingCommands.recordManagementDecision(manager,caseId,{supplierId:supplier.supplierId,craftIds:[craft.craftId],linePrices:prices,cuttingProcess:'in_house'},randomUUID());
    await sourcingCommands.decideOwner(owner,caseId,{decision:'approved'},randomUUID());
-   await new DevelopmentExecutionService(db,true).customerSample(designer,source.sourceId,{routeVersion:1,note:'TEST客户确认'},randomUUID());
+   await confirmedTechnicalFixture(db,root,source.sourceId,development,(await forms.read(root,source.sourceId)).version,people['pattern-room-worker']!.actorId,attachments,storage);
    await bulk.dispatch(people['development-clerk']!,id,{expectedVersion:1,patternWorkerId:people['pattern-room-worker']!.actorId,deliverPattern:true},randomUUID());
    await bulk.reportFabric(people.warehouse!,id,{expectedReportId:null,material:'TEST本单面料',arrivedAt:businessNow().toISOString(),inspectedAt:businessNow().toISOString(),result:'合格',note:'TEST'},randomUUID());
    const sheet=await bulk.read(primary,id);

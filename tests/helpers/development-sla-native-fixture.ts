@@ -1,3 +1,4 @@
+import {publishedTechnicalFixture} from './development-technical-fixture.js';
 import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import { expect } from "vitest";
@@ -48,16 +49,20 @@ export async function exerciseDevelopmentSlaNative(db: Pool, todos: TodoProjecti
     for (const kind of ["development_pattern", "development_cutting"]) {
       const current = await task(kind);
       expect(current).toMatchObject({ state: "ready", slaHours: kind === "development_pattern" ? 48 : 4, assigneeId: workerId });
-      await execution.complete(root, sourceId, { taskId: current.taskId, note: "TEST完成", attachmentIds: kind === "development_pattern" ? [await taskResult(db, execution, root, sourceId, current.taskId, "纸样成果")] : [] }, randomUUID());
+      const artifact=kind==='development_pattern'?await publishedTechnicalFixture(db,root,sourceId,published.document!,published.version,workerId):null;
+      await execution.complete(root, sourceId, { taskId: current.taskId, note: "TEST完成", attachmentIds:[],...(artifact?{artifactRef:{id:artifact.artifactSetId,version:artifact.version,scopeRef:'整款'}}:{}) }, randomUUID());
     }
     const route = async (kind: string) => {
       const current = await task(kind), actor = kind === "development_sewing" ? worker : root;
       return execution.route(actor, sourceId, { taskId: current.taskId, result: "通过", note: "TEST实做", craftExecution: kind === "development_craft_dispatch" ? "内部" : null,
         nextAssigneeId: null, sentDate: null, trackingNo: null,
-        ...(kind === "development_pre_wash_check" || kind === "development_tail_check" && washing !== "免洗" ? { measurements: [{ name: "胸围", values: [kind === "development_pre_wash_check" ? "51" : "50"] }] } : {}),
-        ...(["development_sewing", "development_tail_check"].includes(kind) ? { attachmentIds: [await taskResult(db, execution, actor, sourceId, current.taskId, kind === "development_sewing" ? "车板成果" : "尾查照片")] } : {}) }, randomUUID());
+        ...(kind === "development_pre_wash_check" || kind === "development_tail_check" ? { measurements: [{ name: "胸围", values: [kind === "development_pre_wash_check" ? "51" : "50"] }] } : {}),
+        ...(["development_sewing", "development_tail_check","development_printing","development_embroidery","development_print_embroidery"].includes(kind) ? { attachmentIds: [await taskResult(db, execution, actor, sourceId, current.taskId, kind === "development_sewing" ? "车板成果" : kind === "development_tail_check"?"尾查照片":"工艺回样照片")] } : {}) }, randomUUID());
     };
     if (craft !== "无") {
+      const position=await task('development_positioning'),technical=execution.technicalEvidenceService(),group=(await technical.read(root,sourceId)).artifacts.find(a=>a.status==='published')!;
+      if(position.state!=='ready'){const designer=(await db.query("SELECT user_id FROM user_role_assignments WHERE role_code='sample_designer' AND revoked_at IS NULL LIMIT 1")).rows[0].user_id;await new DigitalProductionTaskService(db).reassign(root,position.taskId,designer,randomUUID());}
+      await technical.completePosition(root,sourceId,{taskId:position.taskId,artifactSetId:group.artifactSetId,artifactVersion:group.version,attachmentIds:[await taskResult(db,execution,root,sourceId,position.taskId,'定位图')],note:'TEST本轮定位依据'},randomUUID());
       await route("development_craft_dispatch");
       const kind = craft === "印花" ? "development_printing" : craft === "绣花" ? "development_embroidery" : "development_print_embroidery";
       expect(await task(kind)).toMatchObject({ slaHours: craft === "印绣花" ? 168 : 96 });
@@ -83,7 +88,7 @@ export async function exerciseDevelopmentSlaNative(db: Pool, todos: TodoProjecti
       expect(await task("development_pre_wash_check")).toMatchObject({ state: "ready", slaHours: 0.5 });
       await route("development_pre_wash_check");
       await execution.sendWashing(root, sourceId, (await task("development_washing_dispatch")).taskId, "TEST实际送洗", randomUUID());
-      expect(await task("development_washing")).toMatchObject({ state: "ready", slaHours: 24 });
+      expect(await task("development_washing")).toMatchObject({ state: "ready", slaHours:washing==='外洗'?72:24 });
       await route("development_washing");
     } else expect(await task("development_pre_wash_check")).toBeUndefined();
     expect(await task("development_tail_check")).toMatchObject({ state: "ready", slaHours: 0.5 });
@@ -98,7 +103,7 @@ export async function exerciseDevelopmentSlaNative(db: Pool, todos: TodoProjecti
     expect(facts!.facts.development_materials?.standardMinutes).toBe(240);
     const recorded = (await db.query("SELECT payload->'inspection' AS inspection FROM digital_development_route_facts WHERE source_id=$1 AND kind IN ('洗前检查','尾查通过') ORDER BY sequence", [sourceId])).rows;
     if (washing !== "免洗") expect(recorded).toMatchObject([{ inspection: { phase: "洗前", measurements: [{ values: ["51"] }] } }, { inspection: { phase: "洗后", measurements: [{ values: ["50"] }] } }]);
-    else expect(recorded).toEqual([{ inspection: null }]);
+    else expect(recorded).toMatchObject([{inspection:{phase:"尾查",measurements:[{values:["50"]}]}}]);
   }
   return created;
 }

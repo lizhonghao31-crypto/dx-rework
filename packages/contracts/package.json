@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./digital-development-technical": { "types": "./src/digital-development-technical.ts", "import": "./dist/digital-development-technical.js" },
     "./digital-quotation": { "types": "./src/digital-quotation.ts", "import": "./dist/digital-quotation.js" },
     "./acceptance-clock": { "types": "./src/acceptance-clock.ts", "import": "./dist/acceptance-clock.js" },
     "./digital-sla": { "types": "./src/digital-sla.ts", "import": "./dist/digital-sla.js" },

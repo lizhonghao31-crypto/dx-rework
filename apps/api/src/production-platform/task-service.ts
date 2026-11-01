@@ -38,7 +38,7 @@ type Resource = { kind: "order" | "source"; id: string };
 type TimeQuality = "现场登记" | "补报未核实" | "已核实" | "缺失";
 const fail = (message: string): never => { throw new ApplicationError("DIGITAL_TASK_CONFLICT", message, 409); };
 const iso = (value: Date | string | null) => value === null ? null : new Date(value).toISOString();
-const requiresDevelopmentAssignee = async (client:PoolClient,task: { source_id: string | null; task_kind: string }) => Boolean(task.source_id) && (["development_pattern","development_cutting","development_sewing"].includes(task.task_kind)||(DEVELOPMENT_ARRANGEABLE_KINDS as readonly string[]).includes(task.task_kind)&&Boolean((await client.query("SELECT to_regclass('digital_development_round_arrangements') AS relation")).rows[0]?.relation));
+const requiresDevelopmentAssignee = async (client:PoolClient,task: { source_id: string | null; task_kind: string }) => Boolean(task.source_id) && (["development_pattern","development_cutting","development_sewing","development_positioning","development_size_review","development_patch","development_patch_tail_check","development_patch_confirmation"].includes(task.task_kind)||(DEVELOPMENT_ARRANGEABLE_KINDS as readonly string[]).includes(task.task_kind)&&Boolean((await client.query("SELECT to_regclass('digital_development_round_arrangements') AS relation")).rows[0]?.relation));
 export const DIGITAL_CONDITION_KEYS = ["customer_confirmed", "owner_approved", "materials_ready", "handover_received", "pattern_ready", "preshrink_ready", "qc_approved", "all_po_complete", "factory_arrived", "washing_finished", "pattern_assignment_ready", "business_recorded"] as const;
 const REQUIRED_ACTIVATION: Partial<Record<DigitalTaskKind, readonly typeof DIGITAL_CONDITION_KEYS[number][]>> = {
   development_pattern: ["materials_ready", "handover_received"], development_cutting: ["handover_received"], development_sewing: ["materials_ready", "handover_received"],
@@ -134,6 +134,17 @@ export class DigitalProductionTaskService {
       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, [taskId, policy.node_key, policy.version, enteredAt, deadline.warningAt, deadline.dueAt, reason, eventId, actor.actorId]);
     }
     return deadline;
+  }
+  /** Fixed technical adapters refresh a real event basis; assignment never resets its clock. */
+  async refreshDevelopmentDeadlineWithClient(client:PoolClient,actor:TrustedActorContext,taskId:string){
+    const task=await this.task(client,taskId);
+    if(!task.source_id)return;
+    await new DigitalProductionAccessPolicy(client).assert(actor,'source',task.source_id,'technical');
+    const timing=await developmentTaskTiming(client,task);if(!timing)return;
+    const prior=(await client.query('SELECT sla_basis FROM digital_production_deadline_revisions WHERE task_id=$1 ORDER BY revision_id DESC LIMIT 1',[taskId])).rows[0]?.sla_basis;
+    if(isDeepStrictEqual(prior,timing))return;
+    const event=await this.event(client,actor,taskId,{kind:'source',id:task.source_id},'technical_basis_recorded',businessNow().toISOString(),'现场登记',{basis:timing.basis});
+    await this.revision(client,actor,taskId,await this.policy(client,task.task_kind,taskId),null,'activation',event);
   }
   private async activate(client: PoolClient, actor: TrustedActorContext, id: string, occurredAt: string | null, quality: TimeQuality) {
     const task = await this.task(client, id, true);
@@ -401,9 +412,10 @@ export class DigitalProductionTaskService {
     await assertAcceptanceAssignee(assigneeId);
     return this.transaction(async client => {
       const task = await this.task(client, id, true);
+      if(task.task_kind==='development_patch')fail('本次补做人员与金额请在原计件执行单派工或转交，不能只改任务归属');
       if(task.task_kind==='development_cutting'&&task.source_id&&await developmentSlaPlan(client,task.source_id))fail('开发裁板使用固定人员，请在本单人员安排查看固定岗位设置，不逐单分派');
       if (!isDigitalLeader(actor) && !isDigitalTechnicalManager(actor) && !actor.actorRoles.includes("development_clerk")) digitalForbidden();
-      if(await requiresDevelopmentAssignee(client,task)&&(await client.query("SELECT to_regclass('digital_development_round_arrangements') AS relation")).rows[0]?.relation)fail("请在本单总委派页改派，填写原因并核对当前安排。");
+      if((DEVELOPMENT_ARRANGEABLE_KINDS as readonly string[]).includes(task.task_kind)&&(await client.query("SELECT to_regclass('digital_development_round_arrangements') AS relation")).rows[0]?.relation)fail("请在本单总委派页改派，填写原因并核对当前安排。");
       return this.command(client, actor, `task-reassign:${id}`, key, { assigneeId }, async () => {
         const currentFactoryScopePending = task.task_kind === "factory_production_qc" && task.state === "completed" && task.production_order_id && !(await factoryProductionFacts(client, task.production_order_id)).complete;
         if (task.state === "cancelled" || (task.state === "completed" && !currentFactoryScopePending)) fail("已结束任务不可日常改派");
@@ -580,7 +592,7 @@ export class DigitalProductionTaskService {
   }
   async reassignWithClient(client:PoolClient,actor:TrustedActorContext,id:string,assigneeId:string){
     await assertAcceptanceAssignee(assigneeId);
-    const task=await this.task(client,id,true);if(['completed','cancelled'].includes(task.state))fail("已结束任务不可改派");
+    const task=await this.task(client,id,true);if(task.task_kind==='development_patch')fail('补做归属须随原计件执行段派工或转交');if(['completed','cancelled'].includes(task.state))fail("已结束任务不可改派");
     await reassignDigitalTask(client,actor,id,assigneeId);await this.event(client,actor,id,this.resource(task),"reassigned",businessNow().toISOString(),"现场登记",{assigneeId});
     await this.refreshDevelopmentMaterialCondition(client,actor,id);
     if (await requiresDevelopmentAssignee(client,task)) await this.activate(client,actor,id,businessNow().toISOString(),"现场登记");
@@ -590,11 +602,12 @@ export class DigitalProductionTaskService {
   async syncNativeSewingWithClient(client:PoolClient,actor:TrustedActorContext,id:string,orderId:string,assigneeId:string,nativeAction:'assign'|'transfer'){
     await authorizePatternOrder(client,actor,nativeAction==='assign'?'pattern_room:orders:assign':'pattern_room:orders:transfer',true);
     const task=await this.task(client,id,true);
-    if(task.task_kind!=='development_sewing'||!task.source_id||['completed','cancelled'].includes(task.state))digitalForbidden();
+    if(!['development_sewing','development_patch'].includes(task.task_kind)||!task.source_id||['completed','cancelled'].includes(task.state))digitalForbidden();
     const segment=(await client.query(`SELECT 1 FROM digital_development_pattern_links l JOIN pattern_room_orders o USING(order_id)
       JOIN pattern_room_segments s ON s.round_id=o.current_round_id AND s.ended_at IS NULL
       WHERE l.source_id=$1 AND o.order_id=$2 AND s.worker_user_id=$3 AND o.status='in_progress'`,[task.source_id,orderId,assigneeId])).rowCount;
     if(!segment)digitalForbidden();
+    if(task.task_kind==='development_patch'&&!(await client.query('SELECT 1 FROM digital_development_patch_tasks p JOIN digital_development_patch_native_rounds n USING(issue_id) JOIN pattern_room_orders o ON o.current_round_id=n.native_round_id WHERE p.task_id=$1 AND o.order_id=$2',[id,orderId])).rowCount)digitalForbidden();
     const policy=new DigitalProductionAccessPolicy(client);
     if(!await policy.lockActiveRole(assigneeId,'pattern_room_worker')&&!(await isNativeRootSewingRecipient(client,task.source_id,assigneeId)))digitalForbidden();
     if(task.assignee_id!==assigneeId){
@@ -603,6 +616,7 @@ export class DigitalProductionTaskService {
         VALUES($1,$2,$3,'digital_task_reassigned','digital_task',$4,$5,$6)`,[randomUUID(),actor.requestId,actor.actorId,id,JSON.stringify({assigneeId:task.assignee_id}),JSON.stringify({assigneeId,nativeOrderId:orderId})]);
       await this.event(client,actor,id,this.resource(task),'reassigned',businessNow().toISOString(),'现场登记',{previousAssigneeId:task.assignee_id,assigneeId,nativeOrderId:orderId});
     }
+    if(task.task_kind==='development_patch')await this.setConditionWithClient(client,actor,id,'pattern_assignment_ready',true,undefined,'本次补做原执行段已实际派工');
     await this.refreshDevelopmentMaterialCondition(client,actor,id);
     await this.activate(client,actor,id,businessNow().toISOString(),'现场登记');
   }

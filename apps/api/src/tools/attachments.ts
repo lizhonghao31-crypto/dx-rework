@@ -10,6 +10,10 @@ import type {
 } from "@dx-rework/contracts";
 import { ApplicationError } from "../platform/errors.js";
 import { InvalidStoredFileError, validateStoredFileContent } from "./file-content-validation.js";
+import {TechnicalPlotUploadSchema} from '@dx-rework/contracts/digital-development-technical';
+import {validateOpaquePlotContent} from './plot-file-content.js';
+import {DigitalProductionAccessPolicy} from '../production-platform/access-policy.js';
+import {technicalEnrollment} from '../production-platform/development-technical-repository.js';
 import { createPrivateObjectKey, ObjectStorageObjectNotFoundError, type ObjectStorage } from "./storage.js";
 import type { TrustedActorContext } from "./repositories.js";
 import { OperationEventRepository } from "./repositories.js";
@@ -126,8 +130,25 @@ export class AttachmentService {
 
   async createUploadIntent(actor: TrustedActorContext, input: CreateUploadIntent): Promise<UploadIntentResponse> {
     this.validate(input);
+    return this.createUploadIntentCore(actor,input);
+  }
+  /** Scoped PLT entry only. Generic /tools upload schema and MIME allowlist remain unchanged. */
+  async createTechnicalPlotUploadIntent(actor:TrustedActorContext,sourceId:string,taskId:string,raw:unknown):Promise<UploadIntentResponse>{
+    const parsed=TechnicalPlotUploadSchema.safeParse(raw);
+    if(!parsed.success)throw new ApplicationError('VALIDATION_ERROR','请上传有效.plt原件并保留文件校验信息',400);
+    await this.assertTechnicalPlotTask(actor,sourceId,taskId);
+    this.validate(parsed.data,true);
+    return this.createUploadIntentCore(actor,parsed.data,true);
+  }
+  private async assertTechnicalPlotTask(actor:TrustedActorContext,sourceId:string,taskId:string){
+    await new DigitalProductionAccessPolicy(this.pool).assert(actor,'task',taskId,'execute');
+    const task=(await this.pool.query(`SELECT t.state,a.task_kind FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id)
+      WHERE t.task_id=$1 AND a.source_id=$2`,[taskId,sourceId])).rows[0];
+    if(!task||task.state!=='ready'||!['development_pattern','development_size_review'].includes(task.task_kind)||!await technicalEnrollment(this.pool,sourceId))throw new ApplicationError('FORBIDDEN','当前任务不具备PLT原件上传权限',403);
+  }
+  private async createUploadIntentCore(actor:TrustedActorContext,input:Omit<CreateUploadIntent,'mimeType'>&{mimeType:string},plot=false):Promise<UploadIntentResponse>{
     const attachmentId = randomUUID();
-    const objectKey = createPrivateObjectKey(this.options.prefix, input.filename);
+    const objectKey = createPrivateObjectKey(this.options.prefix, input.filename,undefined,plot?{technicalPlot:true}:{});
     const uploadGrant = await this.storageCall(() => this.storage.createExactSizeNonOverwritableUploadGrant(objectKey, {
       mimeType: input.mimeType,
       sizeBytes: input.sizeBytes,
@@ -216,6 +237,11 @@ export class AttachmentService {
     row: AttachmentRow,
     attachmentId: string,
   ): Promise<AttachmentResponse> {
+    if(row.mime_type==='application/octet-stream'){
+      const purpose=(await this.pool.query("SELECT source_id,task_id FROM digital_development_upload_purposes WHERE attachment_id=$1 AND purpose='纸样成果' AND task_id IS NOT NULL AND uploaded_by=$2",[attachmentId,actor.actorId])).rows[0];
+      if(!purpose)throw new ApplicationError('FORBIDDEN','PLT原件没有本任务上传用途',403);
+      await this.assertTechnicalPlotTask(actor,purpose.source_id,purpose.task_id);
+    }
     const metadata = await this.verificationCall(actor, row, () => this.storage.head(row.object_key));
 
     if (
@@ -239,7 +265,8 @@ export class AttachmentService {
       await this.rejectVerification(actor, row, "content_sha256_mismatch", "Uploaded object digest does not match the upload intent");
     }
     try {
-      await validateStoredFileContent(content, row.mime_type);
+      if(row.mime_type==='application/octet-stream')validateOpaquePlotContent(content);
+      else await validateStoredFileContent(content, row.mime_type);
     } catch (error) {
       if (error instanceof InvalidStoredFileError) {
         await this.rejectVerification(actor, row, "content_invalid", "Uploaded object is not a valid file of the declared type");
@@ -370,7 +397,7 @@ export class AttachmentService {
     const grant = await this.storageCall(() => this.storage.createDownloadGrant(row.object_key, {
       ttlSeconds: this.options.ttlSeconds,
       filename: row.original_filename,
-      disposition,
+      disposition:row.mime_type==='application/octet-stream'?'attachment':disposition,
       ...(variant ? { variant } : {}),
     }));
     const client = await this.pool.connect();
@@ -536,12 +563,12 @@ export class AttachmentService {
     }
   }
 
-  private validate(input: CreateUploadIntent): void {
+  private validate(input: Omit<CreateUploadIntent,'mimeType'>&{mimeType:string},plot=false): void {
     if (input.sizeBytes > this.options.maxUploadBytes) {
       throw new ApplicationError("VALIDATION_ERROR", "File exceeds the configured size limit", 413);
     }
     const extension = input.filename.toLowerCase().split(".").at(-1) ?? "";
-    if (!MIME_EXTENSIONS[input.mimeType]?.includes(extension)) {
+    if (!(plot&&input.mimeType==='application/octet-stream'&&extension==='plt')&&!MIME_EXTENSIONS[input.mimeType]?.includes(extension)) {
       throw new ApplicationError("VALIDATION_ERROR", "Filename extension does not match MIME type", 400);
     }
     if (input.filename.includes("/") || input.filename.includes("\\") || input.filename.includes("..")) {

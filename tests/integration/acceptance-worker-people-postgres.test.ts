@@ -4,7 +4,7 @@ import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AccessMasterDataService } from "../../apps/api/src/access/service.js";
 import { maintainAcceptanceWorkerPeople } from "../../scripts/acceptance/worker-people-maintenance.js";
-import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 (databaseUrl ? describe : describe.skip)("Acceptance personnel-only maintenance", () => {
@@ -39,7 +39,7 @@ const databaseUrl = process.env.TEST_DATABASE_URL;
   });
   afterAll(async () => {
     await database.end();
-    await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
+    await dropOwnedPostgresSchema(admin, schema);
     await admin.end();
   });
 

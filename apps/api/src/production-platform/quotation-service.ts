@@ -1,9 +1,12 @@
+import type {DevelopmentMaterial} from '@dx-rework/contracts/digital-development';
 import {createHash,randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import type {z} from 'zod';
 import {BudgetDocumentSchema,type BudgetDocument} from '@dx-rework/contracts/digital-budget';
 import {QuotationConfirmationSchema,SaveQuotationSchema,QuotationRowInputSchema,type QuotationResource,type QuotationAssignment,type QuotationConsumptionSource,type QuotationSheet} from '@dx-rework/contracts/digital-quotation';
 import {acceptanceBusinessContext,acceptanceIncludesNative,businessNow} from '../acceptance-clock/business-time.js';
+import {publishedTechnicalArtifact,technicalDocumentFingerprint} from './development-technical-repository.js';
+import {developmentDocumentRow} from './development-round-repository.js';
 import {isRootActor} from '../access/business-authority.js';
 import {ApplicationError} from '../platform/errors.js';
 import type {TrustedActorContext} from '../tools/repositories.js';
@@ -54,7 +57,15 @@ export class DigitalQuotationService{
     technicalAssigneeName:a.technicalAssigneeId?names.get(a.technicalAssigneeId)??null:null,priceAssigneeName:a.priceAssigneeId?names.get(a.priceAssigneeId)??null:null,
     canEditConsumption:version===undefined&&(isRootActor(actor)||technical),canEditPrice:version===undefined&&(isRootActor(actor)||price),consumptionSource:sources[row.rowId]??null}];
   });
-  return {quoteId:q?.quote_id??null,resource,productionOrderId:c.orderId,sourceId:c.sourceId,designStyleNo:c.row.design_style_no,designerId:c.row.created_by,customerCode:c.customerCode,
+  const technicalConsumptionOptions:NonNullable<QuotationSheet['technicalConsumptionOptions']>=[];
+  if(version===undefined&&c.sourceId&&rows.some(r=>r.canEditConsumption)){
+   const source=await developmentDocumentRow(db,c.sourceId),artifact=source?await publishedTechnicalArtifact(db,c.sourceId,source.round_number??1):null;
+   if(source?.document&&artifact&&artifact.row.document_fingerprint===technicalDocumentFingerprint(source.document))for(const r of artifact.artifact.body.consumptionRows){
+    const material=source.document.materials.find((m:DevelopmentMaterial)=>m.materialId===r.materialId);
+    if(material&&r.unit&&r.consumption!=='')technicalConsumptionOptions.push({artifactSetId:artifact.artifact.artifactSetId,artifactVersion:artifact.artifact.version,materialId:r.materialId,name:material.name,unit:r.unit,consumption:r.consumption});
+   }
+  }
+  return {technicalConsumptionOptions,quoteId:q?.quote_id??null,resource,productionOrderId:c.orderId,sourceId:c.sourceId,designStyleNo:c.row.design_style_no,designerId:c.row.created_by,customerCode:c.customerCode,
    version:version??q?.version??0,status:(version!==undefined||Boolean(q)&&q?.version===q?.confirmed_version)?'confirmed':'draft',confirmedVersion:q?.confirmed_version??null,
    versions:c.full&&q?(await db.query('SELECT version FROM digital_quotation_versions WHERE quote_id=$1 ORDER BY version DESC',[q.quote_id])).rows.map(x=>x.version):[],
    document:c.full?doc??null:null,rows,assignments:c.full?assignments:rows.map(r=>r.assignment),confirmation:c.full?confirmation??null:null,
@@ -136,11 +147,21 @@ export class DigitalQuotationService{
    const q=c.quote??digitalNotFound();if(q.version!==input.expectedVersion)conflict('报价版本已更新，请核对当前行后再提交');
    const row=q.document.rows.find(r=>r.rowId===rowId)??digitalNotFound(),a=q.assignments.find(a=>a.rowId===rowId)??digitalNotFound();
    const tech=a.technicalAssigneeId===actor.actorId&&c.roles.has('pattern_room_worker'),price=a.priceAssigneeId===actor.actorId&&c.roles.has(a.priceRole);
-   if(input.consumption!==undefined&&!isRootActor(actor)&&!tech||input.unitPrice!==undefined&&!isRootActor(actor)&&!price)digitalForbidden();
+   if((input.consumption!==undefined||input.artifactConsumption)&&!isRootActor(actor)&&!tech||input.unitPrice!==undefined&&!isRootActor(actor)&&!price)digitalForbidden();
    const version=q.version+1,sources={...q.consumption_sources},priceSources={...q.price_sources};
+   let adoptedConsumption:string|undefined;
+   if(input.artifactConsumption){
+    if(!c.sourceId)conflict('本报价尚无开发技术来源，可继续按真实技术数据直接填写');
+    const source=await developmentDocumentRow(db,c.sourceId!),artifact=source?await publishedTechnicalArtifact(db,c.sourceId!,source.round_number??1):null,ref=input.artifactConsumption;
+    if(!source?.document||!artifact||artifact.artifact.artifactSetId!==ref.id||artifact.artifact.version!==ref.version||artifact.row.document_fingerprint!==technicalDocumentFingerprint(source.document))conflict('技术成果已变版，请重新读取后显式采用');
+    const consumption=artifact!.artifact.body.consumptionRows.find(r=>r.materialId===ref.materialId);
+    if(!consumption||!row.unit.trim()||consumption.unit!==row.unit.trim())conflict('该物料或单位与本报价行不符，请核对；不自动换算单位');
+    if(!['主料','辅料'].includes(row.section))conflict('物料用量成果仅用于对应材料行，工序用量仍按实际技术填写');
+    adoptedConsumption=consumption!.consumption;sources[rowId]={kind:'technical_artifact',actorId:actor.actorId,version,recordedAt:businessNow().toISOString(),artifactRef:{id:ref.id,version:ref.version,materialId:ref.materialId}};
+   }
    if(input.consumption!==undefined){if(!row.unit)conflict('请设计先填写物料单位');sources[rowId]={kind:'technical_manual',actorId:actor.actorId,version,recordedAt:businessNow().toISOString()};}
    if(input.unitPrice!==undefined)priceSources[rowId]={actorId:actor.actorId,role:isRootActor(actor)?'root_superuser':a.priceRole,version,recordedAt:businessNow().toISOString()};
-   const document={...q.document,rows:q.document.rows.map(r=>r.rowId===rowId?{...r,...(input.consumption!==undefined?{consumption:input.consumption}:{}),...(input.unitPrice!==undefined?{unitPrice:input.unitPrice}:{})}:r)};
+   const document={...q.document,rows:q.document.rows.map(r=>r.rowId===rowId?{...r,...(adoptedConsumption!==undefined?{consumption:adoptedConsumption}:input.consumption!==undefined?{consumption:input.consumption}:{}),...(input.unitPrice!==undefined?{unitPrice:input.unitPrice}:{})}:r)};
    await db.query('UPDATE digital_quotation_documents SET version=$2,document=$3,consumption_sources=$4,price_sources=$5,updated_by=$6,updated_at=CURRENT_TIMESTAMP WHERE quote_id=$1',[q.quote_id,version,JSON.stringify(document),JSON.stringify(sources),JSON.stringify(priceSources),actor.actorId]);
   });
  }

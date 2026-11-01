@@ -45,7 +45,7 @@ import type * as CryptoModule from "node:crypto";
 import { contractReturnState } from "../../apps/api/src/sourcing/contract-return-state.js";
 import type * as HistoricalScopeModule from "../../apps/api/src/sourcing/sourcing-contract-history-scope.js";
 import { SourcingTransferContractReconciliation } from "../../apps/api/src/sourcing/sourcing-transfer-contract-reconciliation.js";
-import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { migrationExecutionSql } from "../../scripts/deploy/migration-execution-compatibility.mjs";
 import "./work-analysis-postgres.cases.js";
 import { readQuoteAnalysis } from "../../apps/api/src/sourcing/sourcing-analysis.js";
@@ -399,7 +399,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     {const stageStart=performance.now();let stageStatus='failed';try {
 
     await database.end();
-    await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
+    await dropOwnedPostgresSchema(admin, schema);
     await admin.end();
 
       stageStatus='completed';
@@ -3733,7 +3733,12 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const fixture=await budgetFixture(false,"TEST-R2"),root=rootActor();
     const ready=(await exerciseBulkPreparation(database,fixture,service,attachments,{primary:merchandiserActor(),manager:managerActor(),owner:ownerActor(),ie:ieActor(),root},factoryId,craftId('净色车缝'),'none',{cuttingProcess:'in_house',stopAtReady:true}))!;
     const tasks=new DigitalProductionTaskService(database),worker=ready.people.pattern_room_worker!,client=await database.connect();let taskId:string;
-    try{await client.query('BEGIN');taskId=(await tasks.createWithClient(client,root,{resource:{kind:'source',id:ready.sourceId},kind:'development_pattern',routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:worker.actorId})).taskId;await client.query('COMMIT');}catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
+    try{await client.query('BEGIN');
+      // The new technical prerequisite already creates this exact round's paper task.
+      // Reuse it rather than inventing a duplicate task to test its document rights.
+      const existing=(await client.query("SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND a.task_kind='development_pattern' AND t.route_version=1 AND t.occurrence=1",[ready.sourceId])).rows[0];
+      taskId=existing?.task_id??(await tasks.createWithClient(client,root,{resource:{kind:'source',id:ready.sourceId},kind:'development_pattern',routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:worker.actorId})).taskId;
+      await client.query('COMMIT');}catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
     const full=await tasks.documents(root,taskId);
     expect(full).toMatchObject({development:{state:'published',id:ready.sourceId,version:1},instruction:{state:'published',id:ready.id,version:1},budget:{state:'published',id:ready.id,version:2}});
     const limited=await tasks.documents(worker,taskId);

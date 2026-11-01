@@ -2,7 +2,7 @@
 // Keep other task kinds eligible for their existing generic completion action.
 const developmentBusinessTasks = new Set([
   "development_materials", "development_material_recheck", "development_material_supply",
-  "development_pattern", "development_external_pattern", "development_cutting", "development_craft_dispatch",
+  "development_pattern", "development_size_review", "development_positioning", "development_patch", "development_patch_tail_check", "development_patch_confirmation", "development_external_pattern", "development_cutting", "development_craft_dispatch",
   "development_printing", "development_embroidery", "development_print_embroidery",
   "development_craft_confirmation", "development_sewing_transfer", "development_sewing",
   "development_washing_dispatch", "development_washing", "development_pre_wash_check", "development_tail_check",

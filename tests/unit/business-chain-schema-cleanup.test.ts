@@ -1,8 +1,9 @@
 import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
-import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { Pool } from "pg";
+import { ownedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 
 const oldRunId=process.env.DX_REWORK_TEST_RUN_ID;
 const oldManifest=process.env.DX_REWORK_TEST_RESOURCE_MANIFEST_DIR;
@@ -12,6 +13,21 @@ afterEach(()=>{
 });
 
 describe("business-chain isolated schema cleanup",()=>{
+  it("rejects an unowned cleanup before opening a database connection", async()=>{
+    const connect=vi.fn();
+    await expect(dropOwnedPostgresSchema({connect} as unknown as Pool,`root_http_1_${'f'.repeat(32)}`)).rejects.toThrow('not generated');
+    expect(connect).not.toHaveBeenCalled();
+  });
+
+  it("rolls back a failed owned teardown and releases its serialization lock", async()=>{
+    const schema=ownedPostgresSchema('root_http_1'),failure=new Error('TEST failed schema teardown');
+    const query=vi.fn().mockResolvedValue({rows:[]}).mockImplementationOnce(async()=>({rows:[]})).mockImplementationOnce(async()=>({rows:[]})).mockRejectedValueOnce(failure);
+    const release=vi.fn(),pool={connect:async()=>({query,release})} as unknown as Pool;
+    await expect(dropOwnedPostgresSchema(pool,schema)).rejects.toBe(failure);
+    expect(query).toHaveBeenLastCalledWith('ROLLBACK');
+    expect(release).toHaveBeenCalledOnce();
+  });
+
   it("records only schemas owned by the current run",async()=>{
     const dir=await mkdtemp(join(tmpdir(),"dx-rework-owned-schema-"));
     try{
@@ -54,6 +70,7 @@ describe("business-chain isolated schema cleanup",()=>{
       const schema=ownedPostgresSchema("customer_quote");
       const source=await readFile(new URL("../../scripts/run-business-chain-gate.mjs",import.meta.url),"utf8");
       const allowed=new RegExp(source.match(/const ISOLATED_GATE_SCHEMA = \/(.+)\/;/)![1]!);
+      expect(allowed.test(ownedPostgresSchema("business_anchors"))).toBe(true);
       const manifest=JSON.parse(await readFile(join(dir,`${schema}.json`),"utf8"));
       expect(allowed.test(manifest.schema)).toBe(true);
       expect(manifest).toEqual({kind:"postgres-schema",runId:"1234abcd",schema});

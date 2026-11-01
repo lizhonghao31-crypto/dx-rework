@@ -1453,5 +1453,48 @@
     ],
     "execute": [],
     "sequences": []
+  },
+  "0268_development_technical_evidence": {
+    "checksum": "151ef7cbe0208d5a657f3e3e21ee5f2e8fcea0f35cc16703be4ba5c5bae7b979",
+    "tables": [
+      "attachments",
+      "digital_development_upload_purposes",
+      "digital_development_route_facts"
+    ],
+    "functions": [],
+    "references": [
+      "app_users",
+      "digital_production_sources",
+      "digital_production_tasks",
+      "pattern_room_rounds"
+    ],
+    "insert": [
+      "digital_production_deadline_policies"
+    ],
+    "update": [],
+    "creates": [
+      "digital_development_cycle_standards",
+      "digital_development_technical_enrollments",
+      "digital_development_cycle_rounds",
+      "digital_development_urgent_events",
+      "digital_development_artifact_heads",
+      "digital_development_artifact_versions",
+      "digital_development_artifact_inheritances",
+      "digital_development_final_comments",
+      "digital_development_size_review_requests",
+      "digital_development_size_review_results",
+      "digital_development_technical_templates",
+      "digital_development_technical_material_decisions",
+      "digital_development_external_intervals",
+      "digital_development_patch_issues",
+      "digital_development_patch_decisions",
+      "digital_development_patch_native_rounds",
+      "digital_development_patch_tasks",
+      "digital_development_preparation_basis"
+    ],
+    "execute": [
+      "guard_production_order_root_immutable"
+    ],
+    "sequences": []
   }
 }

@@ -5,13 +5,13 @@ type DB = Pick<PoolClient, "query">;
 export type ExternalPatternRecord = {
   requestId: string; roundNumber: number; requestedAt: Date; requestedBy: string; note: string;
   receivedAt: Date | null; receivedBy: string | null; attachmentIds: string[] | null;
-  receiptNote: string | null; taskId: string | null;
+  receiptNote: string | null; taskId: string | null;actualDeparture?:string|null;intervalVersion?:number;
 };
 
 /** Existing two-table records are read-only compatibility data. New facts use the original event history. */
 export async function externalPatternRecords(db: DB, sourceId: string): Promise<ExternalPatternRecord[]> {
   const legacy = Boolean((await db.query("SELECT to_regclass('digital_development_external_patterns') AS relation")).rows[0]?.relation);
-  return (await db.query(`WITH requests AS (
+  const records:ExternalPatternRecord[]=(await db.query(`WITH requests AS (
     SELECT event_id request_id,(payload->>'roundNumber')::integer round_number,occurred_at requested_at,
       actor_id requested_by,payload->>'note' note FROM digital_production_task_events
       WHERE resource_kind='source' AND resource_id=$1 AND event_kind='external_pattern_requested'
@@ -28,6 +28,11 @@ export async function externalPatternRecords(db: DB, sourceId: string): Promise<
     LEFT JOIN digital_production_tasks t ON t.route_instance_id=r.request_id AND t.node_key='development_external_pattern'
     LEFT JOIN digital_production_task_access a ON a.task_id=t.task_id AND a.source_id=$1
     ORDER BY r.round_number,r.requested_at,r.request_id`, [sourceId])).rows;
+  if((await db.query("SELECT to_regclass('digital_development_external_intervals') AS relation")).rows[0]?.relation){
+   const intervals=(await db.query("SELECT DISTINCT ON(external_pattern_request_id) external_pattern_request_id,departed_at,version FROM digital_development_external_intervals WHERE source_id=$1 AND kind='外部纸样' ORDER BY external_pattern_request_id,version DESC",[sourceId])).rows;
+   for(const record of records){const interval=intervals.find(i=>i.external_pattern_request_id===record.requestId);record.actualDeparture=interval?.departed_at?new Date(interval.departed_at).toISOString():null;record.intervalVersion=interval?.version??0;}
+  }
+  return records;
 }
 
 /** Caller holds the original lifecycle lock and checks source/role/attachment authorization. */
