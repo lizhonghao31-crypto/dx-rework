@@ -4,6 +4,7 @@ import {SeriesSourceEventSchema} from '@dx-rework/contracts/digital-series-plan'
 import {developmentDocumentRow} from './development-round-repository.js';
 import {effectiveTechnicalEvidence} from './development-technical-repository.js';
 import {bulkFabricFacts} from './bulk-fabric-facts.js';
+import {factoryBatchLedger,type FactoryScope} from './factory-batch-ledger.js';
 type DB=Pick<PoolClient,'query'>;
 const iso=(v:Date|string|null|undefined)=>v?new Date(v).toISOString():null;
 /** Native records remain authoritative. recorded_at is never substituted for an unknown actual time. */
@@ -31,13 +32,25 @@ export async function readSeriesPlanFacts(db:DB,orderId:string,sourceId:string|n
    }
   }
  }
- const sends=(await db.query(`SELECT f.fact_id,f.sequence,f.occurred_at,f.payload FROM digital_factory_facts f JOIN digital_factory_routes r USING(preparation_id)
-  WHERE r.production_order_id=$1 AND f.kind='仓库实际发厂' ORDER BY f.sequence`,[orderId])).rows;
- revisions.dispatch=sends.map(f=>[f.fact_id,f.sequence,f.payload]);
+ const route=(await db.query('SELECT preparation_id,workflow_version,secondary_craft FROM digital_factory_routes WHERE production_order_id=$1',[orderId])).rows[0];
+ const movements=route?(await db.query('SELECT * FROM digital_factory_facts WHERE preparation_id=$1 ORDER BY sequence',[route.preparation_id])).rows:[],sends=movements.filter(f=>f.kind==='仓库实际发厂');
+ revisions.dispatch={route:route??null,facts:movements.map(f=>[f.fact_id,f.sequence,f.payload,iso(f.occurred_at)])};
+ let allDispatched=false,completionReason='已发部分批次；不将部分发出推断为整单发齐';
+ if(sends.length&&route?.workflow_version===2){
+  const quantities=(await db.query(`SELECT po.line_id AS "lineId",r.actual_cut_count::int AS quantity FROM digital_production_po_lines po
+   LEFT JOIN digital_production_child_lines l ON l.module='cutting' AND l.line_id=po.line_id LEFT JOIN current_cutting_records r ON r.cutting_order_id=l.child_id
+   WHERE po.production_order_id=$1 ORDER BY po.position`,[orderId])).rows as Array<{lineId:string;quantity:number|null}>;
+  const known=quantities.length>0&&quantities.every(q=>q.quantity!==null&&Number.isSafeInteger(q.quantity)&&q.quantity>0);
+  // Completion uses the original quantity ledger. This does not infer QC approval or permission to dispatch.
+  const ledger=factoryBatchLedger(quantities.filter((q):q is FactoryScope=>q.quantity!==null&&Number.isSafeInteger(q.quantity)&&q.quantity>0),movements,[],route.secondary_craft==='无');
+  revisions.dispatchQuantities=quantities;allDispatched=known&&ledger.complete&&!ledger.quantityConflict;
+  completionReason=!known?'原实裁数量范围缺证，不推断整单发齐':ledger.quantityConflict?'已发数量超过当前实裁，保留原事实并待原数量差异处理':allDispatched?'原批次数量账本确认全部发齐':completionReason;
+ }else if(sends.length){allDispatched=sends.some(f=>!Array.isArray(f.payload?.lines));if(allDispatched)completionReason='原整款仓库发厂记录';}
  for(const f of sends){const at=iso(f.occurred_at);facts.push({key:'processing_dispatch',scopeRef:`batch:${f.fact_id}`,sourceDomain:'factory-flow',sourceRecordId:f.fact_id,sourceVersion:f.sequence,
   completed:true,started:true,occurredAt:at,occurredDate:null,precision:at?'instant':'unknown',reason:'原仓库实际发厂批次；不代表其他批次已发齐'});}
- if(sends.length&&!instrumented.has('processing_dispatch:whole')){const full=sends.find(f=>!Array.isArray(f.payload?.lines)),last=full??sends.at(-1)!;facts.push({key:'processing_dispatch',scopeRef:'whole',sourceDomain:'factory-flow',sourceRecordId:last.fact_id,sourceVersion:last.sequence,
-  completed:Boolean(full),started:true,occurredAt:full?iso(full.occurred_at):null,occurredDate:null,precision:full&&full.occurred_at?'instant':'unknown',reason:full?'原整款仓库发厂记录':'已发部分批次；不将部分发出推断为整单发齐'});}
+ if(sends.length&&!instrumented.has('processing_dispatch:whole')){const last=sends.at(-1)!,at=allDispatched&&sends.every(f=>f.occurred_at)?new Date(Math.max(...sends.map(f=>new Date(f.occurred_at).getTime()))).toISOString():null;
+  facts.push({key:'processing_dispatch',scopeRef:'whole',sourceDomain:'factory-flow',sourceRecordId:last.fact_id,sourceVersion:last.sequence,
+  completed:allDispatched,started:true,occurredAt:at,occurredDate:null,precision:at?'instant':'unknown',reason:allDispatched&&!at?`${completionReason}；部分实际发出时间未知，不补造完成时刻`:completionReason});}
  return {facts,revisions,document,fabric};
 }
 /** PR05 native producers call inside their authorized transaction; deliberately not an HTTP command. */

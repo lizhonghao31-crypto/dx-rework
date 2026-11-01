@@ -4,10 +4,11 @@ import {businessAnchorFixture} from '../helpers/business-anchor-fixture.js';
 import {DigitalProductionIdentityService} from '../../apps/api/src/production-platform/identity-service.js';
 import {ShortLeadService} from '../../apps/api/src/production-platform/short-lead-service.js';
 import {SeriesPlanService} from '../../apps/api/src/production-platform/series-plan-service.js';
-import {appendSeriesSourceEvent} from '../../apps/api/src/production-platform/series-plan-facts.js';
+import {appendSeriesSourceEvent,readSeriesPlanFacts} from '../../apps/api/src/production-platform/series-plan-facts.js';
+import {FactoryFlowService} from '../../apps/api/src/production-platform/factory-flow-service.js';
 import {seriesPlanJourney} from '../../apps/api/src/production-platform/series-plan-journey.js';
 import {PoCustomerDateService} from '../../apps/api/src/production-platform/po-customer-date-service.js';
-import {ContextBusinessClock} from '../../apps/api/src/acceptance-clock/business-time.js';
+import {ContextBusinessClock,businessNow} from '../../apps/api/src/acceptance-clock/business-time.js';
 import {DigitalDevelopmentService} from '../../apps/api/src/production-platform/development-service.js';
 import {initialDevelopmentDocument} from '../../apps/web/src/digital-development-editing.js';
 import {DevelopmentDocumentSchema} from '@dx-rework/contracts/digital-development';
@@ -57,6 +58,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect((await f.db.query('SELECT 1 FROM digital_series_plans WHERE production_order_id=$1',[id])).rowCount).toBe(0);
   await expect(plans.apply(manager(),id,{...p.input,previewToken:p.previewToken,reason:'TEST 未明确采用建议'},randomUUID())).rejects.toMatchObject({statusCode:409});
   const key=randomUUID();const result=await apply(id,p,key);expect(result.revision).toBe(1);expect((await apply(id,p,key)).revision).toBe(1);
+  expect(result.planningGraph).toEqual(p.planningGraph);expect(result.dependencies).toEqual(p.dependencies);expect(result.risks).toEqual(p.risks);expect(result.slaSnapshotRef).toEqual(p.sourceRevisionSet.slaSnapshotRef);
   expect((await f.db.query('SELECT * FROM digital_production_po_lines WHERE production_order_id=$1',[id])).rows).toEqual(before);
   expect((await f.db.query('SELECT * FROM digital_sla_order_snapshots WHERE production_order_id=$1',[id])).rows).toEqual(native);
   await expect(apply(id,p)).rejects.toMatchObject({statusCode:409});
@@ -113,6 +115,33 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const id=(await create()).productionOrderId,p=await prepare(id),results=await Promise.allSettled([apply(id,p),apply(id,p)]);
   expect(results.filter(r=>r.status==='fulfilled')).toHaveLength(1);expect(results.filter(r=>r.status==='rejected')).toHaveLength(1);
   expect((await f.db.query('SELECT 1 FROM digital_series_plans WHERE production_order_id=$1',[id])).rowCount).toBe(1);
+ });
+ it('keeps P as the mandatory linked anchor and preserves a visible customer conflict after adoption/refresh',async()=>{
+  const id=(await create()).productionOrderId,p=await prepare(id,'2027-03-25');
+  await expect(plans.preview(manager(),id,{...p.input,selectedNodeIds:['design_handover:whole']})).rejects.toMatchObject({statusCode:409});
+  await apply(id,p);const current=await plans.read(manager(),id);expect(current.current?.milestones.find(m=>m.key==='planned_shipment')?.targetDate).toBe(current.current?.plannedShippingDate);expect(current.risks.some(r=>r.code==='CUSTOMER_EARLIER_THAN_PLAN')).toBe(true);
+  const time=await new ContextBusinessClock(f.db).read({kind:'order',id});await appendSeriesSourceEvent(f.db,{eventId:randomUUID(),orderId:id,key:'planned_shipment',scopeRef:'whole',sourceDomain:'receiving',sourceRecordId:randomUUID(),sourceVersion:1,occurredAt:null,occurredDate:'2026-10-31',precision:'date',supersedesEventId:null,voided:false,reason:'TEST实际出货已有原记录，原计划不可平移'},f.root.actorId,time);
+  await expect(prepare(id,'2027-03-26')).rejects.toMatchObject({statusCode:409});expect((await plans.read(manager(),id)).current?.plannedShippingDate).toBe('2027-03-25');
+ });
+ it('projects native v2 partial dispatch and all-PO completion from actual cut quantities, retaining the last actual dispatch time',async()=>{
+  const scene=await f.scene('2026-11-01T15:50:00Z'),flow=new FactoryFlowService(f.db);let id='',sourceId='',lineId='';
+  await f.runtime.run(scene,f.root,async()=>{
+   const ready=await f.bulkReady('无');id=ready.id;sourceId=ready.sourceId;
+   const cut=(await f.db.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[ready.caseId])).rows[0];
+   const cutter={...f.people['cutting-worker']!,authorizationCapability:'cutting:records:create',authorizationCapabilities:['cutting:records:create']};
+   await ready.cutting.record(cutter,cut.cutting_order_id,{pieceCount:1,actualCutCount:10,attachmentIds:[await f.image(cutter)]},randomUUID());
+   const state=await flow.read(f.root,id);lineId=(await f.db.query('SELECT line_id FROM digital_production_po_lines WHERE production_order_id=$1',[id])).rows[0].line_id;
+   await flow.dispatch(f.people.warehouse!,id,{expectedRevision:state.revision,occurredAt:businessNow().toISOString(),supplierId:f.supplierId,note:'TEST首批4件',lines:[{lineId,quantity:4}]},randomUUID());
+   const partial=(await readSeriesPlanFacts(f.db,id,sourceId,'PD')).facts.find(x=>x.key==='processing_dispatch'&&x.scopeRef==='whole');
+   expect(partial).toMatchObject({started:true,completed:false,occurredAt:null,precision:'unknown'});
+  });
+  await f.advance(scene,'2026-11-01T16:10:00Z');
+  await f.runtime.run(scene,f.root,async()=>{
+   const state=await flow.read(f.root,id);await flow.dispatch(f.people.warehouse!,id,{expectedRevision:state.revision,occurredAt:businessNow().toISOString(),supplierId:f.supplierId,note:'TEST余量6件发齐',lines:[{lineId,quantity:6}]},randomUUID());
+   const all=(await readSeriesPlanFacts(f.db,id,sourceId,'PD')).facts;
+   expect(all.filter(x=>x.key==='processing_dispatch'&&x.scopeRef.startsWith('batch:'))).toHaveLength(2);
+   expect(all.find(x=>x.key==='processing_dispatch'&&x.scopeRef==='whole')).toMatchObject({started:true,completed:true,occurredAt:'2026-11-01T16:10:00.000Z',precision:'instant'});
+  });
  });
  it('does not silently overflow profile dates or rewrite in-flight plans, and keeps revoked manager retries denied',async()=>{
   const id=(await create()).productionOrderId;await apply(id,await prepare(id));

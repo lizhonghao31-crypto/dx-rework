@@ -52,11 +52,13 @@ export type PlanningDependency={id:string;label:string;scopeRef:string;dependsOn
 export type PlanningDependencyResult={id:string;label:string;scopeRef:string;startAt:string|null;endAt:string|null;lateMinutes:number|null;basis:'confirmed'|'estimate'|'unknown';reasons:string[]};
 export type SeriesRisk={code:string;message:string;nodeId:string|null;tone:'danger'|'warning'|'unknown'};
 export type SeriesPlanSnapshot={revision:number;plannedShippingDate:string;route:SeriesRoute;salesYear:number|null;salesSeries:string|null;
- profile:SeriesProfile;milestones:SeriesMilestone[];plannedDurations:SeriesPreviewInput['plannedDurations'];reason:string;createdBy:string;recordedAt:string};
+ profile:SeriesProfile;milestones:SeriesMilestone[];plannedDurations:SeriesPreviewInput['plannedDurations'];reason:string;createdBy:string;recordedAt:string;
+ /** Frozen adoption evidence; absent in a legacy snapshot is unknown, never a recomputed pass. */
+ planningGraph?:PlanningDependency[];dependencies?:PlanningDependencyResult[];risks?:SeriesRisk[];slaSnapshotRef?:{id:string;revision:number}|null};
 export type SeriesPlanPreview={orderId:string;input:SeriesPreviewInput;orderVersion:number;planRevision:number;profile:SeriesProfile;
  candidateDate:string|null;basis:'manual'|'configured-series'|'series-suggestion'|'unavailable';route:SeriesRoute|null;
  previewToken:string;milestones:SeriesMilestone[];facts:SeriesObservedFact[];selectedNodeIds:string[];risks:SeriesRisk[];
- dependencies:PlanningDependencyResult[];sourceRevisionSet:Record<string,unknown>};
+ planningGraph:PlanningDependency[];dependencies:PlanningDependencyResult[];sourceRevisionSet:Record<string,unknown>};
 export type SeriesPlanState={orderId:string;serverToday:string;orderVersion:number;sourceId:string|null;canEditSeries:boolean;canApply:boolean;canRequest:boolean;active:boolean;
  salesYear:number|null;salesSeries:string|null;requiresColorMatching:boolean|null;profile:SeriesProfile;customerDates:Array<{lineId:string;poNumber:string|null;color:string;date:string|null;version:number}>;
  current:SeriesPlanSnapshot|null;history:SeriesPlanSnapshot[];facts:SeriesObservedFact[];risks:SeriesRisk[];pendingRequests:Array<{requestId:string;requestedBy:string;reason:string;candidateDate:string|null;requestedAt:string;input:SeriesPreviewInput;stale:boolean}>};
