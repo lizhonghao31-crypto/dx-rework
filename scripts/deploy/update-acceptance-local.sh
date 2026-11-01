@@ -134,8 +134,7 @@ echo "Evidence: $evidence"
   echo verified > "$evidence/phase"
   exit 0
 fi
-echo '[1/5] Validate production migration history (read only)'
-node_exec "$policy" "$source_dir/production-history.json" "$manifest" production
+echo '[1/5] Independent Acceptance target: production promotion remains unverified'
 
 echo '[2/5] Prepare immutable candidate'
 if [[ ! -d "$candidate" ]]; then
@@ -189,7 +188,6 @@ cmp -s "$manifest" "$candidate/api/apps/api/src/platform/migration-manifest.json
 [[ "$(manifest_field "$candidate/api/release-manifest.json" appBasePath)" == /acceptance/ ]] || die 'Candidate base path mismatch'
 bash "$candidate/api/scripts/deploy/verify-runtime.sh" "$candidate/api"
 cd "$candidate/api"
-node_exec scripts/check-migration-export.mjs "$source_dir/production-history.json"
 
 echo '[3/5] Validate Acceptance and prepare backup'
 load_app_config
@@ -201,7 +199,6 @@ evidence="$DX_ROOT/logs/update-$sha-$(date -u +%Y%m%dT%H%M%SZ)-$$"
 mkdir -m 0700 "$evidence"
 mkdir -p "$evidence/preflight"
 cp -rn "$source_dir/.acceptance-preflight/." "$evidence/preflight/"
-cp "$source_dir/production-history.json" "$evidence/production-history.json"
 export_history() {
   (umask 077; PGOPTIONS='-c default_transaction_read_only=on' pg_exec psql "$DATABASE_URL" -XqAt -v ON_ERROR_STOP=1 -c "BEGIN READ ONLY" -c "SELECT json_build_object('database',current_database(),'migrations',coalesce(json_agg(json_build_object('version',version,'checksum',btrim(checksum)) ORDER BY version),'[]'::json)) FROM schema_migrations" -c COMMIT > "$evidence/acceptance-history.json")
   node_exec "$policy" "$evidence/acceptance-history.json" "$manifest" acceptance

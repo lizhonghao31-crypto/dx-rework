@@ -1,4 +1,4 @@
-import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema, createOwnedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import {randomUUID,createHash} from 'node:crypto';
 import {readFile,readdir} from 'node:fs/promises';
 import pg from 'pg';
@@ -29,7 +29,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   }finally{client.release();}
  };
  beforeAll(async()=>{
-  await admin.query(`CREATE SCHEMA ${schema}`);
+  await createOwnedPostgresSchema(admin,schema);
   await db.query('CREATE TABLE schema_migrations(version text PRIMARY KEY,checksum char(64) NOT NULL,applied_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP)');
   const folder=new URL('../../apps/api/migrations/',import.meta.url);
   for(const name of (await readdir(folder)).filter(name=>/^\d{4}_.*\.sql$/.test(name)).sort()){
@@ -49,7 +49,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   await db.query("INSERT INTO owner_bootstrap_consumptions(singleton,user_id,provider_user_id,corp_id) VALUES(true,$1,$2,'sample-handoff-corp')",[root,`sample-${root}`]);
   
  },60000);
- afterAll(async()=>{await db.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();});
+ afterAll(async()=>{await db.end();await dropOwnedPostgresSchema(admin,schema);await admin.end();});
  it('imports twice, applies final return delta, checks all five totals and guards cutover against later writes',async()=>{
   const attachmentId=randomUUID(),key='daxing-sample/receipt/test.png';await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'test.png','image/png',10,$3,$4,'ready',CURRENT_TIMESTAMP)",[attachmentId,`sample-test/${attachmentId}`,'a'.repeat(64),root]);
   const history={id:'h1',borrower:'同名员工',department:'设计',purpose:'采购后直接开发/打板',borrowedAt:'2020-01-01T01:00:00.525Z',returnedAt:null as string|null};

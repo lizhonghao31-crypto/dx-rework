@@ -1,3 +1,4 @@
+import { ownedPostgresSchema, createOwnedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { randomUUID } from "node:crypto";
 import pg from "pg";
 import { beforeAll, afterAll, describe, expect, it } from "vitest";
@@ -5,12 +6,12 @@ import { canDownloadBasicReworkAttachment, readBasicRework } from "../../apps/ap
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 const url=process.env.TEST_DATABASE_URL;
 (url?describe:describe.skip)("quality basic rework whitelist",()=>{
- const schema=`quality_basic_${randomUUID().replaceAll("-","")}`,quality=randomUUID(),other=randomUUID();
+ const schema=ownedPostgresSchema("quality_basic"),quality=randomUUID(),other=randomUUID();
  const admin=new pg.Pool({connectionString:url}),db=new pg.Pool({connectionString:url,options:`-c search_path=${schema}`});
  const actor=(id=quality,cap=true):TrustedActorContext=>({actorId:id,actorRoles:["quality_control"],requestId:randomUUID(),authorizationCapability:"tools:user",authorizationCapabilities:cap?["rework:basic:view"]:[]});
  const receiving=randomUUID(),activePhoto=randomUUID(),retiredPhoto=randomUUID(),listedOrder=randomUUID(),reworkPhoto=randomUUID();
  beforeAll(async()=>{
-  await admin.query(`CREATE SCHEMA ${schema}`);
+  await createOwnedPostgresSchema(admin,schema);
   await db.query(`CREATE TABLE app_users(id uuid,display_name text);
    CREATE TABLE supplier_catalog_versions(supplier_id uuid,version int,supplier_name text);
    CREATE TABLE rework_orders(rework_order_id uuid,rework_no text,style_no text,order_no text,
@@ -29,7 +30,7 @@ const url=process.env.TEST_DATABASE_URL;
   for(const [id,mime] of [[activePhoto,'image/jpeg'],[retiredPhoto,'image/png'],[randomUUID(),'application/pdf']])await db.query("INSERT INTO attachments VALUES($1,'凭证','receiving_batch',$2,'ready',$3,CURRENT_TIMESTAMP)",[id,receiving,mime]);
   await db.query("INSERT INTO receiving_attachment_retirements VALUES($1)",[retiredPhoto]);
  });
- afterAll(async()=>{await db.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();});
+ afterAll(async()=>{await db.end();await dropOwnedPostgresSchema(admin,schema);await admin.end();});
  it("reads unrelated orders with accurate pagination and no financial or node detail fields",async()=>{
   const first=await readBasicRework(db,actor(),{q:'跟单张三',page:1});expect(first.totalCount).toBe(16);expect(first.items).toHaveLength(15);
   expect(Object.keys(first.items[0]!).sort()).toEqual(['reworkOrderId','reworkNo','styleNo','orderNo','processingFactory','merchandiser','quantity','reason','problemPart','problemDescription','status','nodeLabel','photos'].sort());

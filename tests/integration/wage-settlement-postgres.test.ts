@@ -1,3 +1,4 @@
+import { ownedPostgresSchema, createOwnedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import pg from "pg";
@@ -8,7 +9,7 @@ import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.
 
 const url=process.env.TEST_DATABASE_URL;
 (url ? describe : describe.skip)("wage settlement filtered range",()=>{
- const schema=`wage_marker_${randomUUID().replaceAll("-","")}`;
+ const schema=ownedPostgresSchema("wage_marker");
  const admin=new pg.Pool({connectionString:url});
  const db=new pg.Pool({connectionString:url,options:`-c search_path=${schema}`});
  const finance=randomUUID(),viewer=randomUUID(),other=randomUUID(),person=randomUUID(),sameName=randomUUID();
@@ -27,7 +28,7 @@ const url=process.env.TEST_DATABASE_URL;
   return id;
  };
  beforeAll(async()=>{
-  await admin.query(`CREATE SCHEMA ${schema}`);
+  await createOwnedPostgresSchema(admin,schema);
   // Small isolated SQL fixture: these tests exercise report/marker semantics, not the order workflow.
   await db.query(`CREATE TABLE capability_catalog(capability text PRIMARY KEY,display_name text,description text);
    CREATE TABLE role_capabilities(role_code text,capability text,PRIMARY KEY(role_code,capability));
@@ -74,7 +75,7 @@ const url=process.env.TEST_DATABASE_URL;
   await insertLine(person,"internal","2026-09-10T15:59:59Z");
   await insertLine(person,"internal","2026-09-11T16:00:00Z");
  },30000);
- afterAll(async()=>{await db.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();});
+ afterAll(async()=>{await db.end();await dropOwnedPostgresSchema(admin,schema);await admin.end();});
  it("uses the whole filtered range, distinguishes same-name people and includes both date boundaries",async()=>{
   const report=await service.report(actor(),"wages",filters);
   expect(report.rows).toHaveLength(500);expect(report.truncated).toBe(true);

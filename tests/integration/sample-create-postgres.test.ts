@@ -1,4 +1,4 @@
-import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema, createOwnedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import pg from "pg";
@@ -23,7 +23,7 @@ const url = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
   const input = async () => ({ brand:"测试品牌",styleName:"测试样衣",color:"蓝",department:"设计",purchaseDate:"2020-01-01",purchasePrice:"123.45",purchaserUserId:userId,receiptAttachmentIds:[await attachment()] });
   const count = async () => Number((await db.query("SELECT count(*) FROM sample_items")).rows[0].count);
   beforeAll(async () => {
-    await admin.query(`CREATE SCHEMA ${schema}`);
+    await createOwnedPostgresSchema(admin,schema);
     for (const name of ["0001_platform_foundation.sql","0002_dingtalk_identity_access.sql","0003_identity_union_continuity.sql","0004_public_tools_foundation.sql","0005_access_master_data.sql","0152_sample_domain_foundation.sql","0153_sample_read_indexes_snapshots.sql","0154_sample_write_control.sql","0155_sample_financial_audit.sql", "0157_sample_disposal_import.sql"]) {
       await db.query(await readFile(new URL(`../../apps/api/migrations/${name}`,import.meta.url),"utf8"));
     }
@@ -36,7 +36,7 @@ const url = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
         VALUES($1,$2::uuid,'dingtalk',$3,($2::uuid)::text,($2::uuid)::text,true,true,CURRENT_TIMESTAMP)`,[randomUUID(),id,id === foreignId ? "foreign-corp" : "sample-fixture-corp"]);
     }
   });
-  afterAll(async () => { await db.end(); await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`); await admin.end(); });
+  afterAll(async () => { await db.end(); await dropOwnedPostgresSchema(admin,schema); await admin.end(); });
 
   it("stays closed until explicit cutover and denies unrelated roles", async () => {
     const item = await input();

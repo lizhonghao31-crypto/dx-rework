@@ -4,7 +4,7 @@ import pg from 'pg';
 import {describe,it,expect} from 'vitest';
 import {discoverValidatedMigrations,applyMigrations} from '../../scripts/migration-lib.mjs';
 import {assertTestDatabaseTarget} from '../../scripts/test-database-safety.mjs';
-import {ownedPostgresSchema} from '../helpers/owned-postgres-schema.js';
+import {ownedPostgresSchema,createOwnedPostgresSchema,dropOwnedPostgresSchema} from '../helpers/owned-postgres-schema.js';
 
 const url=process.env.TEST_DATABASE_URL;
 const suite=url?describe:describe.skip;
@@ -18,7 +18,7 @@ suite('Acceptance maintenance permissions on isolated PostgreSQL',()=>{
   const catalog=await discoverValidatedMigrations();
   const digital=JSON.parse(await readFile('tests/fixtures/migration-histories/digital-da6590cc.json','utf8')).migrations.slice(0,225) as {version:string;checksum:string}[];
   try{
-   await admin.query(`CREATE SCHEMA ${schema}`);
+   await createOwnedPostgresSchema(admin,schema);
    await admin.query(`GRANT USAGE,CREATE ON SCHEMA ${schema} TO dx_rework_acceptance,dx_rework_acceptance_app`);
    await client.connect();
    await client.query('CREATE TABLE schema_migrations(version text PRIMARY KEY,checksum char(64) NOT NULL,applied_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP)');
@@ -73,6 +73,6 @@ print(json.dumps(m.permission_query(json.loads(sys.argv[1]),r)))
    expect(after).toHaveLength(catalog.length);
    for(const row of before)expect(after.find(x=>x.version===row.version)).toEqual(row);
    expect((await client.query("SELECT has_table_privilege('dx_rework_acceptance_app','sourcing_contract_return_submissions','INSERT') AS allowed")).rows[0].allowed).toBe(true);
-  }finally{await client.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();}
+  }finally{await client.end();await dropOwnedPostgresSchema(admin,schema);await admin.end();}
  },120000);
 });

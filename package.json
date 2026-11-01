@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "达兴内部计件返工系统独立技术基座",
+  "description": "\u8fbe\u5174\u5185\u90e8\u8ba1\u4ef6\u8fd4\u5de5\u7cfb\u7edf\u72ec\u7acb\u6280\u672f\u57fa\u5ea7",
   "engines": {
     "node": ">=22 <23",
     "npm": ">=10 <11"
@@ -38,9 +38,12 @@
     "db:migrate:check": "node scripts/migration-integration-check.mjs",
     "secret:scan": "node scripts/secret-scan.mjs --worktree",
     "secret:scan:full": "node scripts/secret-scan.mjs --all",
-    "check": "npm run lint && npm run typecheck && npm run build && npm run test && npm run db:migrate:lint && npm run secret:scan",
+    "check": "npm run test:preflight && npm run lint && npm run typecheck && npm run build --workspaces --if-present && node node_modules/vitest/vitest.mjs run && node scripts/run-business-chain-gate.mjs --static-already-validated && npm run secret:scan",
     "preview:dry-run": "bash scripts/preview/dry-run.sh",
-    "pr17:acceptance": "node scripts/acceptance/validate.mjs docs/operations/pr-17-acceptance-matrix.json"
+    "pr17:acceptance": "node scripts/acceptance/validate.mjs docs/operations/pr-17-acceptance-matrix.json",
+    "test:preflight": "node scripts/test-preflight.mjs",
+    "test:postgres": "node scripts/run-business-chain-gate.mjs --full-gate",
+    "test:plan": "node --input-type=module -e 'import {postgresPlan} from \"./scripts/test-suite-plan.mjs\"; console.log(JSON.stringify(postgresPlan({rootAudit:process.env.MIGRATION_SENSITIVE===\"true\",mapped:(process.env.MAPPED_POSTGRES_TESTS||\"\").split(\",\").filter(Boolean),chain:process.env.BUSINESS_CHAIN_SENSITIVE===\"true\"||process.env.MIGRATION_SENSITIVE===\"true\"||process.env.DEPLOYMENT_SENSITIVE===\"true\"}),null,2))'"
   },
   "devDependencies": {
     "@eslint/js": "9.39.4",

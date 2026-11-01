@@ -85,7 +85,7 @@ TODO_TIMING_ENABLED=false
 
 后续单一入口为 `dx-acceptance update <已核准的40位候选SHA>`。省略参数时先解析集成分支当前 SHA 并固定该次运行；生产源码只用于既有认证的 fetch/archive，不 checkout、不构建、不部署生产。只有此前通过 Gate 的集成候选才可交付执行。
 
-顺序固定为：生产实际运行保护 → 本机 Acceptance 配置/实际 DB 身份及下载前容量预检 → 固定候选下载与解包前复核 → 原 source-only main/release 兼容检查 → 依赖/构建前容量复核与完整性校验 → 两套实际历史与配置检查 → 实际维护角色只读权限预检 → 备份前容量复核与数据库备份 → 停服前容量复核 → 停止Acceptance → 重新检查历史/身份/权限并迁移 → 同代前后端切换 → 本机/公网及 PM2 持久化验收。任何构建、配置、权限、备份失败都不得先停止原服务。
+顺序固定为：生产实际运行保护 → 本机 Acceptance 配置/实际 DB 身份及下载前容量预检 → 固定候选下载与解包前复核 → 明确 Acceptance 意图的候选源码完整性检查（main 差异列为未验证发布待办） → 依赖/构建前容量复核与完整性校验 → Acceptance 自身实际历史与配置检查 → 实际维护角色只读权限预检 → 备份前容量复核与数据库备份 → 停服前容量复核 → 停止Acceptance → 重新检查历史/身份/权限并迁移 → 同代前后端切换 → 本机/公网及 PM2 持久化验收。任何构建、配置、权限、备份失败都不得先停止原服务。
 
 下载前只允许固定 catalog 元数据读口，不提前导出生产历史或读取业务行：先由原应用连接读取本机数据库名、实际 port/OID、current/session role，Root 固定为不可写证据；随后 Root 通过既有本机 postgres peer 边界，以只读事务和固定 SQL 核同一数据库身份并读取本库体积、数据/表空间、WAL、日志实际位置。语句/锁/连接均有限时。不向应用授予 `pg_read_all_settings`、不改变 owner/成员/ACL；任意身份变化、权限失败或不可读容量均拒绝，不回退到猜测值。迁移仍在原固定 owner 下执行，原 source 兼容检查仍在历史导出、构建、备份、停服和迁移之前。
 
@@ -356,3 +356,12 @@ Acceptance 启动通过既有独立数据库和 uat-root 校验后，自动使�
 本次更新仅后端代码和文档变化，依赖及schema不变。按既有本机candidate更新路径构建API，
 保留同SHA候选manifest一致性；无需重建环境、执行migration或配置真实OSS。
 部署后在测试开发单上传PNG和PDF、保存重开、查看附件，再发布并继续岗位接力验收。
+
+
+### 2026-11-01 工程治理：独立 Acceptance 与生产晋级
+
+Acceptance 更新仍通过固定 root launcher、生产只读健康/锁、实际 Acceptance port/OID/角色/库名、owner 权限预检、必要备份和失败恢复，不接受手填数据库身份。源码检查使用 `--intent acceptance`；实际 Acceptance ledger 的未知 migration、checksum 漂移、历史缺口继续硬拒。生产 history 不再作为独立 Acceptance 更新的必要前置，不向 Acceptance worker 导出生产凭证或赋权。
+
+实时 main 新增 migration 明确输出 `PENDING_RELEASE_INTEGRATION`，`productionPromotionVerified=false`、`applicationSemanticsVerified=false`。这不是生产上线通过。生产晋级/切换仍只允许准确 main SHA，须核真实 production ledger→candidate、声明支持源历史的真实升级/低权限/ACL/恢复及必要应用行为；禁止直接 release 部署 production。源码完整性不能证明 PMC 应用/API 已兼容；既有 PMC 部分403仍是独立上线待办，不为门禁抄 SQL 或扩大角色。
+
+策略变更涉及已安装工具：仍遵守本手册原有显式同版本 `install` 后 `diagnose/update` 要求，不能靠 data-only refresh 偷换执行策略。本治理交付不执行任何现场 install/update/deploy。

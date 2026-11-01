@@ -38,6 +38,7 @@ jobs:
     # User-authorized Full Gate ceiling; this changes the limit, not execution cost.
     timeout-minutes: 30
     env:
+      BASE_SHA: ${{ inputs.base_sha }}
       NODE_ENV: test
       GIT_SHA: ${{ inputs.head_sha }}
       SERVICE_NAME: dx-rework-api
@@ -99,7 +100,7 @@ jobs:
 
       - name: Run CI protocol regression tests
         id: protocol_tests
-        run: node --test scripts/ci/*.test.mjs
+        run: node scripts/test-preflight.mjs
 
       - name: Classify Full Gate risk from exact PR diff
         id: risk
@@ -120,7 +121,7 @@ jobs:
           COMPAT_BASE_SHA: ${{ inputs.base_sha }}
         run: |
           set -euo pipefail
-          node scripts/check-main-release-compat.mjs --candidate-ref "$GIT_SHA" --tool-ref "$GIT_SHA" --baseline-ref "$COMPAT_BASE_SHA" --output "$RUNNER_TEMP/main-release-compat.json"
+          node scripts/check-main-release-compat.mjs --intent integration --candidate-ref "$GIT_SHA" --tool-ref "$GIT_SHA" --baseline-ref "$COMPAT_BASE_SHA" --output "$RUNNER_TEMP/main-release-compat.json"
 
       - name: Install locked dependencies
         id: install
@@ -141,10 +142,6 @@ jobs:
       - name: Build workspaces without deployment postbuild
         id: build
         run: npm run build --workspaces --if-present
-
-      - name: Full unit and integration suite without runtime DB escalation
-        id: tests
-        run: node node_modules/vitest/vitest.mjs run
 
       - name: Validate migration files statically
         id: migration_lint
@@ -207,31 +204,26 @@ jobs:
         if: env.DB_REQUIRED == 'true'
         run: npm run db:migrate:check
 
+      - name: Validate database resource lifecycle before expensive suites
+        id: resource_smoke
+        if: env.DB_REQUIRED == 'true'
+        run: node scripts/test-preflight.mjs --database
+
+      - name: Full unit and integration suite without runtime DB escalation
+        id: tests
+        env:
+          TEST_DATABASE_URL: ''
+          ACCEPTANCE_CLOCK_TEST_DATABASE_URL: ''
+        run: node node_modules/vitest/vitest.mjs run
+
       - name: Run mapped PostgreSQL sensitive-domain regressions
         id: db_tests
-        if: env.MAPPED_POSTGRES_TESTS != ''
-        shell: bash
-        run: |
-          set -euo pipefail
-          : "${TEST_DATABASE_URL:?TEST_DATABASE_URL is required for mapped PostgreSQL regressions}"
-          NODE_ENV=test TEST_DATABASE_URL="$TEST_DATABASE_URL" node scripts/test-database-safety.mjs
-          IFS=',' read -r -a mapped_tests <<< "$MAPPED_POSTGRES_TESTS"
-          (( ${#mapped_tests[@]} > 0 ))
-          for test_file in "${mapped_tests[@]}"; do
-            test -f "$test_file"
-            log="$RUNNER_TEMP/mapped-$(basename "$test_file").log"
-            vitest_args=()
-            case "$test_file" in
-              tests/integration/full-business-chain-postgres.test.ts|tests/integration/sourcing-pr03-postgres.test.ts|tests/integration/rework-postgres.test.ts)
-                vitest_args=(--config vitest.business-chain.config.ts)
-                ;;
-            esac
-            NO_COLOR=1 npx vitest run "$test_file" "${vitest_args[@]}" 2>&1 | tee "$log"
-            grep -Eq 'Tests[[:space:]]+[0-9]+ passed' "$log" || {
-              echo "Mapped PostgreSQL suite executed no passing tests: $test_file"
-              exit 1
-            }
-          done
+        if: env.DB_REQUIRED == 'true'
+        env:
+          BASE_SHA: ${{ inputs.base_sha }}
+          DX_REWORK_POSTGRES_RECEIPT: ${{ runner.temp }}/postgres-execution.json
+        run: node scripts/run-business-chain-gate.mjs --full-gate
+        # Mapped PostgreSQL suite executed no passing tests is a hard error in the shared runner.
 
       - name: Run PostgreSQL 13 Journey read compatibility
         id: journey
@@ -241,16 +233,22 @@ jobs:
       - name: Run PostgreSQL Root audit control-boundary regressions for migration changes
         id: root_audit
         if: env.MIGRATION_SENSITIVE == 'true'
-        run: npx vitest run tests/integration/root-self-system-admin-postgres.test.ts
+        env:
+          BASE_SHA: ${{ inputs.base_sha }}
+          DX_REWORK_POSTGRES_RECEIPT: ${{ runner.temp }}/postgres-execution.json
+        run: node scripts/run-business-chain-gate.mjs --full-gate --verify-receipt
 
       - name: Run PostgreSQL business chain for business, migration or deployment-sensitive changes
         id: business_chain
         if: env.BUSINESS_CHAIN_SENSITIVE == 'true' || env.MIGRATION_SENSITIVE == 'true' || env.DEPLOYMENT_SENSITIVE == 'true'
-        run: DX_REWORK_REQUIRE_TEST_DATABASE=true node scripts/run-business-chain-gate.mjs
+        env:
+          BASE_SHA: ${{ inputs.base_sha }}
+          DX_REWORK_POSTGRES_RECEIPT: ${{ runner.temp }}/postgres-execution.json
+        run: node scripts/run-business-chain-gate.mjs --full-gate --verify-receipt
 
       - name: PostgreSQL backup and isolated restore drill
         id: backup
-        if: env.DEPLOYMENT_SENSITIVE == 'true'
+        if: env.MAINTENANCE_SENSITIVE == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -291,7 +289,7 @@ jobs:
 
       - name: Acceptance low-privilege migration and backup recovery
         id: acceptance_recovery
-        if: env.DEPLOYMENT_SENSITIVE == 'true'
+        if: env.MAINTENANCE_SENSITIVE == 'true'
         run: |
           node scripts/ci/acceptance-maintenance-drill.mjs 13
           node scripts/ci/acceptance-maintenance-drill.mjs 15
@@ -299,14 +297,14 @@ jobs:
 
       - name: Main and existing release histories through low-privilege Acceptance maintenance
         id: release_history
-        if: inputs.base_ref == 'release/digital-production-v1' && env.DEPLOYMENT_SENSITIVE == 'true'
+        if: inputs.base_ref == 'release/digital-production-v1' && env.MAINTENANCE_SENSITIVE == 'true'
         run: |
           node scripts/ci/main-release-history-drill.mjs 13 "$RUNNER_TEMP/main-release-compat.json"
           node scripts/ci/main-release-history-drill.mjs 16 "$RUNNER_TEMP/main-release-compat.json"
 
       - name: PR-17 exact-head acceptance and lifecycle
         id: release_acceptance
-        if: env.DEPLOYMENT_SENSITIVE == 'true'
+        if: env.ACTIVATION_SENSITIVE == 'true'
         shell: bash
         run: |
           TARGET_SHA="$(git rev-parse HEAD)" npm run pr17:acceptance
@@ -320,7 +318,7 @@ jobs:
 
       - name: PR-17 package, runtime and relocation-safe transfer
         id: package
-        if: env.DEPLOYMENT_SENSITIVE == 'true'
+        if: env.TRANSFER_SENSITIVE == 'true'
         shell: bash
         env:
           DX_REWORK_BUILD_ROOT: ${{ runner.temp }}/pr17-build
@@ -350,9 +348,9 @@ jobs:
           GATE_JOB_STATUS: ${{ job.status }}
           GATE_STEPS_JSON: ${{ toJSON(steps) }}
           GATE_SCOPE_JSON: >-
-            {"event": "${{ github.event_name }}", "final": "true", "base": "${{ inputs.base_ref }}", "db": "${{ env.DB_REQUIRED }}", "mapped": "${{ env.MAPPED_POSTGRES_TESTS }}", "journey": "${{ env.JOURNEY_PG13_COMPAT }}", "migration": "${{ env.MIGRATION_SENSITIVE }}", "business_chain": "${{ env.BUSINESS_CHAIN_SENSITIVE }}", "deployment": "${{ env.DEPLOYMENT_SENSITIVE }}"}
+            {"event": "${{ github.event_name }}", "final": "true", "base": "${{ inputs.base_ref }}", "db": "${{ env.DB_REQUIRED }}", "mapped": "${{ env.MAPPED_POSTGRES_TESTS }}", "journey": "${{ env.JOURNEY_PG13_COMPAT }}", "migration": "${{ env.MIGRATION_SENSITIVE }}", "business_chain": "${{ env.BUSINESS_CHAIN_SENSITIVE }}", "deployment": "${{ env.DEPLOYMENT_SENSITIVE }}", "maintenance": "${{ env.MAINTENANCE_SENSITIVE }}", "activation": "${{ env.ACTIVATION_SENSITIVE }}", "transfer": "${{ env.TRANSFER_SENSITIVE }}"}
           GATE_CHECKS_JSON: >-
-            [["title","Require explicit Full Gate title","always"],["checkout","Checkout exact PR Head","always"],["node","Set up Node 22","always"],["npm","Pin npm 10","always"],["head","Verify exact Head","always"],["protocol","Validate frozen request identity","always"],["policy","Verify Actions usage policy","always"],["protocol_tests","Run CI protocol regression tests","always"],["risk","Classify Full Gate risk from exact PR diff","always"],["main_compat","Compare exact candidate with current remote main migration history","release"],["install","Install locked dependencies","always"],["audit","Audit production dependency graph","always"],["lint","Lint","always"],["types","Typecheck","always"],["build","Build workspaces without deployment postbuild","always"],["tests","Full unit and integration suite without runtime DB escalation","always"],["migration_lint","Validate migration files statically","always"],["secrets","Scan repository history and first-party artifacts for secrets","always"],["db_start","Start isolated PostgreSQL only for DB-sensitive changes","db"],["db_seed","Seed database with base-revision migration history","db"],["db_migrate","Apply and validate exact Head migration history against PostgreSQL","db"],["db_tests","Run mapped PostgreSQL sensitive-domain regressions","mapped"],["journey","Run PostgreSQL 13 Journey read compatibility","journey"],["root_audit","Run PostgreSQL Root audit control-boundary regressions for migration changes","migration"],["business_chain","Run PostgreSQL business chain for business, migration or deployment-sensitive changes","chain"],["backup","PostgreSQL backup and isolated restore drill","deployment"],["acceptance_recovery","Acceptance low-privilege migration and backup recovery","deployment"],["release_history","Main and existing release histories through low-privilege Acceptance maintenance","release_deployment"],["release_acceptance","PR-17 exact-head acceptance and lifecycle","deployment"],["package","PR-17 package, runtime and relocation-safe transfer","deployment"],["db_stop","Stop isolated PostgreSQL","db"]]
+            [["title","Require explicit Full Gate title","always"],["checkout","Checkout exact PR Head","always"],["node","Set up Node 22","always"],["npm","Pin npm 10","always"],["head","Verify exact Head","always"],["protocol","Validate frozen request identity","always"],["policy","Verify Actions usage policy","always"],["protocol_tests","Run CI protocol regression tests","always"],["risk","Classify Full Gate risk from exact PR diff","always"],["main_compat","Compare exact candidate with current remote main migration history","release"],["install","Install locked dependencies","always"],["audit","Audit production dependency graph","always"],["lint","Lint","always"],["types","Typecheck","always"],["build","Build workspaces without deployment postbuild","always"],["migration_lint","Validate migration files statically","always"],["secrets","Scan repository history and first-party artifacts for secrets","always"],["db_start","Start isolated PostgreSQL only for DB-sensitive changes","db"],["db_seed","Seed database with base-revision migration history","db"],["db_migrate","Apply and validate exact Head migration history against PostgreSQL","db"],["resource_smoke","Validate database resource lifecycle before expensive suites","db"],["tests","Full unit and integration suite without runtime DB escalation","always"],["db_tests","Run mapped PostgreSQL sensitive-domain regressions","db"],["journey","Run PostgreSQL 13 Journey read compatibility","journey"],["root_audit","Run PostgreSQL Root audit control-boundary regressions for migration changes","migration"],["business_chain","Run PostgreSQL business chain for business, migration or deployment-sensitive changes","chain"],["backup","PostgreSQL backup and isolated restore drill","maintenance"],["acceptance_recovery","Acceptance low-privilege migration and backup recovery","maintenance"],["release_history","Main and existing release histories through low-privilege Acceptance maintenance","release_deployment"],["release_acceptance","PR-17 exact-head acceptance and lifecycle","activation"],["package","PR-17 package, runtime and relocation-safe transfer","transfer"],["db_stop","Stop isolated PostgreSQL","db"]]
         run: |
           node <<'GATE_SUMMARY_JS'
           const fs = require('node:fs');
@@ -367,13 +365,13 @@ jobs:
             if (kind === 'pr_or_final') return scope.event === 'pull_request' || flag('final');
             if (kind === 'release') return scope.base === 'release/digital-production-v1';
             if (!classified) return null;
-            if (kind === 'release_deployment') return flag('deployment') && scope.base === 'release/digital-production-v1';
+            if (kind === 'release_deployment') return flag('maintenance') && scope.base === 'release/digital-production-v1';
             if (kind === 'chain') return flag('business_chain') || flag('migration') || flag('deployment');
             if (kind === 'mapped') return Boolean(scope.mapped);
             if (kind === 'governance') return flag('governance');
             if (kind === 'not_governance') return !flag('governance');
             if (kind === 'business') return !flag('governance') && !flag('web');
-            if (['db','journey','migration','deployment','web','maintenance'].includes(kind)) return flag(kind);
+            if (['db','journey','migration','deployment','activation','transfer','web','maintenance'].includes(kind)) return flag(kind);
             throw new Error('Unknown gate scope: ' + kind);
           }
           const missing = [];

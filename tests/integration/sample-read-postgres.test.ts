@@ -1,4 +1,4 @@
-import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema, createOwnedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import './sample-analysis-postgres.cases.js';
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
@@ -30,7 +30,7 @@ run("sample read projections, paging and exact amounts", () => {
     return id;
   };
   beforeAll(async () => {
-    await admin.query(`CREATE SCHEMA ${schema}`);
+    await createOwnedPostgresSchema(admin,schema);
     for (const name of ["0001_platform_foundation.sql", "0002_dingtalk_identity_access.sql", "0003_identity_union_continuity.sql", "0004_public_tools_foundation.sql", "0005_access_master_data.sql", "0152_sample_domain_foundation.sql", "0153_sample_read_indexes_snapshots.sql", "0157_sample_disposal_import.sql"]) {
       await db.query(await readFile(new URL(`../../apps/api/migrations/${name}`, import.meta.url), "utf8"));
     }
@@ -54,7 +54,7 @@ run("sample read projections, paging and exact amounts", () => {
       before: { purchasePrice: "SECRET_FINANCE_VALUE" }, after: { receiptUrl: "PRIVATE_RECEIPT_REFERENCE" }, reason: "SENSITIVE_REASON" }); }
     finally { client.release(); }
   });
-  afterAll(async () => { await db.end(); await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`); await admin.end(); });
+  afterAll(async () => { await db.end(); await dropOwnedPostgresSchema(admin,schema); await admin.end(); });
 
   it.each(["sample_designer", "sample_administrative", "sample_finance", "owner_group", "root_superuser"])("paginates real rows and total for %s", async role => {
     const first = await service.list(actor(role), {}), second = await service.list(actor(role), { page: 2 }), third = await service.list(actor(role), { page: 3 });

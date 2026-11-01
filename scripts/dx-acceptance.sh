@@ -182,7 +182,7 @@ if ! runuser -u dxrework -- env -i HOME=/home/dxrework USER=dxrework PATH="$PATH
     set -euo pipefail
     source "$1/scripts/deploy/lib.sh"
     load_node_config
-    node_exec "$1/scripts/check-main-release-compat.mjs" --repo "$2" --candidate-ref "$3" --tool-ref "$4"
+    node_exec "$1/scripts/check-main-release-compat.mjs" --intent acceptance --repo "$2" --candidate-ref "$3" --tool-ref "$4"
   ' _ "$tool_root" "$src" "$sha" "$(cat "$tool_root/TOOL_SHA")" > "$snapshot/main-release-compat.json"; then
   cat "$snapshot/main-release-compat.json" >&2
   exit 1
@@ -215,11 +215,8 @@ else
   printf '__full_build__\n' > "$snapshot/changed-paths.txt"
 fi
 echo "Candidate: $sha"
-# The exporter remains root-owned. Production credentials never enter the Acceptance worker.
-runuser -u dxrework -- env -i HOME=/home/dxrework USER=dxrework PATH="$PATH" \
-  bash "$tool_root/scripts/deploy/export-production-history.sh" > "$snapshot/production-history.json"
-chown dxacceptance:dxacceptance "$snapshot/production-history.json"
-chmod 0600 "$snapshot/production-history.json"
+# Independent Acceptance updates validate their own live ledger in the trusted worker.
+# Production migration compatibility is a required production-promotion check.
 install -o dxacceptance -g dxacceptance -m 0600 /dev/null "$snapshot/worker-evidence"
 [[ -f "$root/locks/release.lock" && ! -L "$root/locks/release.lock" ]]
 exec 9>"$root/locks/release.lock"

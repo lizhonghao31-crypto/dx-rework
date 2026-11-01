@@ -18,6 +18,8 @@ describe('fixed Acceptance update policy',()=>{
   });
   it('stops on missing, unknown or drifted live history',()=>{
     expect(()=>checkHistory({database:'dx_rework_acceptance',migrations:[]},manifest,'acceptance')).toThrow('empty');
+    expect(()=>checkHistory({database:'dx_rework_acceptance',migrations:[...main.migrations,{version:'9999_unknown',checksum:'f'.repeat(64)}]},manifest,'acceptance')).toThrow('absent');
+    expect(()=>checkHistory({database:'dx_rework_acceptance',migrations:main.migrations.map((row:{version:string;checksum:string},i:number)=>i?row:{...row,checksum:'0'.repeat(64)})},manifest,'acceptance')).toThrow('drift');
     expect(()=>checkHistory({database:'dx_rework',migrations:[...main.migrations,{version:'9999_unknown',checksum:'f'.repeat(64)}]},manifest,'production')).toThrow('absent');
     expect(()=>checkHistory({database:'dx_rework',migrations:main.migrations.map((row:{version:string;checksum:string},i:number)=>i?row:{...row,checksum:'0'.repeat(64)})},manifest,'production')).toThrow('drift');
   });
