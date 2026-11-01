@@ -1,3 +1,4 @@
+import {ProductionReadinessPanel} from './production-readiness-panel.js';
 import {ShortLeadPanel} from './short-lead-panel.js';
 import {SeriesCreationPreview} from './series-creation-preview.js';
 import {matchingShortLeadApproval,type ShortLeadState} from '@dx-rework/contracts/short-commitment';
@@ -351,7 +352,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
     </fieldset>
     {withOrder&&<SeriesCreationPreview customerCode={form.customerCode} salesYear={form.salesYear??null} salesSeries={form.salesSeries??null} requiresColorMatching={form.requiresColorMatching??null}/>}
     {withOrder&&!preorder&&shortInput&&dateMinimum&&initialCustomerDateErrors(shortInput.lines,dateMinimum).length>0&&<ShortLeadPanel key={createdSource??'new'} sourceId={createdSource} order={shortInput} onState={setShortState} {...(!source&&!published?{saveDraft:()=>save(true)}:{})}/>}
-  </form></Surface>;
+  </form>{createdSource&&preorder&&<ProductionReadinessPanel resource={{kind:"source",id:createdSource}} sourceDocumentVersion={loadedVersion.current??undefined} readonly={busy||dirty.current}/>}</Surface>;
 }
 
 export function ResumeDevelopmentCreateForm({sheet,onClose,onCreated,onViewPublished,contained=false}:{contained?:boolean;sheet:DevelopmentSheet;onClose:()=>void;onCreated:()=>void;onViewPublished?:()=>void}) {

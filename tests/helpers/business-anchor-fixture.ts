@@ -1,4 +1,4 @@
-import {confirmedTechnicalFixture} from './development-technical-fixture.js';
+import {productionReadinessFixture,completeBulkRangeFixture} from './production-readiness-fixture.js';
 import {customerQuotationFixture} from './customer-quotation-fixture.js';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
@@ -82,7 +82,7 @@ export async function businessAnchorFixture(url:string){
    }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
   };
   const advance=async(id:string,at:string)=>runtime.run(id,root,async()=>{const row=await runtime.repository.row(id);await runtime.repository.change(id,root.actorId,{expectedVersion:row.version,requestKey:randomUUID(),at});});
-  const bulkReady=async(secondaryCraft:'无'|'印花',beforeCreate?:(input:Parameters<SourcingService['createCase']>[1],key:string,primary:TrustedActorContext)=>Promise<void>,poCount=1,sourcingCommands=sourcing)=>{
+  const bulkReady=async(secondaryCraft:'无'|'印花',beforeCreate?:(input:Parameters<SourcingService['createCase']>[1],key:string,primary:TrustedActorContext)=>Promise<void>,poCount=1,sourcingCommands=sourcing,options?:{stopBeforeCompletion?:boolean;accessory?:boolean})=>{
    const designer=people['sample-designer']!,primary=people.merchandiser!,manager=people['production-management']!,owner=people.owner!,ie=people.ie!;
    const identity=new DigitalProductionIdentityService(db,true),forms=new DigitalDevelopmentService(db,true),bulk=new BulkPreparationService(db),instruction=new ProductionInstructionService(db,true),budget=new DigitalBudgetService(db,true);
    const style=`TEST-ANCHOR-${randomUUID()}`;
@@ -94,8 +94,8 @@ export async function businessAnchorFixture(url:string){
    const saved=await forms.save(designer,source.sourceId,{expectedVersion:0,document:development},randomUUID());await forms.publish(designer,source.sourceId,saved.version,randomUUID());
    // Development completion is a fixture precondition; the production path below uses native commands.
    await db.query("INSERT INTO digital_development_route_facts(fact_id,source_id,route_version,kind,payload,actor_id) VALUES($1,$2,1,'最终设计确认','{}',$3)",[randomUUID(),source.sourceId,designer.actorId]);
-   const current=await identity.read(primary,id),instructionDoc={...initialInstruction(),styleName:'TEST产前',secondaryCraft,category:'上衣',date:beijingCalendarDate(businessNow()),preshrink:'无需预缩' as const,sizes:['M'],measurements:[{id:randomUUID(),name:'袖长',tolerance:'±1/4',method:'平量',values:['6']}],images:[{attachmentId:photo,kind:'款图' as const,description:'TEST'}]};
-   await instruction.save(primary,id,{expectedVersion:0,orderVersion:current.version,sourceRound:1,document:instructionDoc},randomUUID());await instruction.publish(primary,id,{expectedVersion:1,orderVersion:current.version},randomUUID());
+   const current=await identity.read(primary,id),instructionDoc={...initialInstruction(),...(options?.accessory?{accessories:[{id:randomUUID(),group:'车缝' as const,garmentColors:'黑',materialColor:'黑',name:'TEST纽扣',category:'扣',part:'门襟',specification:'TEST',consumption:'1',remarks:''}]}:{}),styleName:'TEST产前',secondaryCraft,category:'上衣',date:beijingCalendarDate(businessNow()),preshrink:'无需预缩' as const,sizes:['M'],measurements:[{id:randomUUID(),name:'袖长',tolerance:'±1/4',method:'平量',values:['6']}],images:[{attachmentId:photo,kind:'款图' as const,description:'TEST'}]};
+   await instruction.save(primary,id,{expectedVersion:0,orderVersion:current.version,sourceRound:1,document:instructionDoc},randomUUID());const readyBasis=await productionReadinessFixture(db,root,id,people['pattern-room-worker']!.actorId,people.warehouse!);await instruction.publish(primary,id,{expectedVersion:1,orderVersion:current.version,expectedReadinessRevision:readyBasis.revision},randomUUID());
    await bulk.dispatch(manager,id,{expectedVersion:0,patternWorkerId:people['pattern-room-worker']!.actorId,warehouseWorkerId:people.warehouse!.actorId,cuttingWorkerId:people['cutting-worker']!.actorId,deliverPattern:false},randomUUID());
    await customerQuotationFixture(db,root,id);
    const budgetImage=await image(designer),budgetDoc=BudgetDocumentSchema.parse({fabricType:'梭织',productCategory:'上衣',date:beijingCalendarDate(businessNow()),currency:'人民币',monthSeries:'',rows:[],freight:'0',cm:'5',salePrice:'20',outsourcingScope:'车缝',outsourcingUnitPrice:'5',imageAttachmentIds:[budgetImage]});
@@ -106,11 +106,11 @@ export async function businessAnchorFixture(url:string){
    const created=await sourcingCommands.createCase(primary,input,key),caseId=created.value.sourcingCaseId;
    const prices=input.lineItems.map((_,index)=>({position:index+1,unitPrice:'5'}));await sourcingCommands.quoteIePrice(ie,caseId,{linePrices:prices},randomUUID());await sourcingCommands.recordManagementDecision(manager,caseId,{supplierId:supplier.supplierId,craftIds:[craft.craftId],linePrices:prices,cuttingProcess:'in_house'},randomUUID());
    await sourcingCommands.decideOwner(owner,caseId,{decision:'approved'},randomUUID());
-   await confirmedTechnicalFixture(db,root,source.sourceId,development,(await forms.read(root,source.sourceId)).version,people['pattern-room-worker']!.actorId,attachments,storage);
+   // The final customer/size prerequisites were established before final publication above.
    await bulk.dispatch(people['development-clerk']!,id,{expectedVersion:1,patternWorkerId:people['pattern-room-worker']!.actorId,deliverPattern:true},randomUUID());
-   await bulk.reportFabric(people.warehouse!,id,{expectedReportId:null,material:'TEST本单面料',arrivedAt:businessNow().toISOString(),inspectedAt:businessNow().toISOString(),result:'合格',note:'TEST'},randomUUID());
+   {const fabric=(await bulk.read(people.warehouse!,id)).fabric;if(!fabric?.usable)throw Error('TEST final instruction prerequisite must retain actual usable fabric');}
    const sheet=await bulk.read(primary,id);
-   for(const kind of ['纸样完成','唛架完成','预缩完成'] as const)await bulk.complete(kind==='预缩完成'?people.warehouse!:people['pattern-room-worker']!,id,{preparationId:sheet.preparationId!,kind},randomUUID());
+   if(!options?.stopBeforeCompletion)for(const kind of ['纸样完成','唛架完成','预缩完成'] as const)await completeBulkRangeFixture(db,kind==='预缩完成'?people.warehouse!:people['pattern-room-worker']!,id,sheet.preparationId!,kind);
    return {id,caseId,sourceId:source.sourceId,preparationId:sheet.preparationId!,input,key,cutting:new CuttingService(db),primary};
   };
   const reworkReady=async()=>{

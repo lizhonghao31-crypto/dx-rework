@@ -1,3 +1,4 @@
+import {BulkPreparationService} from './bulk-preparation-service.js';
 import {businessNow} from '../acceptance-clock/business-time.js';
 import {technicalEnrollment,publishedTechnicalArtifact,technicalMeasurementDocument} from './development-technical-repository.js';
 import {developmentRevisionSource} from './development-revision-source.js';
@@ -153,7 +154,7 @@ export class DevelopmentRouteService {
    }
    const revision=task.route_version>1?(await db.query('SELECT output_kind FROM digital_development_rounds WHERE source_id=$1 AND round_number=$2',[sourceId,task.route_version])).rows[0]:{output_kind:(await developmentRevisionSource(db,sourceId))?.outputKind};
    const nativeRoundId=task.task_kind==='development_confirmation'&&revision?.output_kind!=='工艺布片'?(await db.query("SELECT o.current_round_id FROM digital_development_pattern_links l JOIN pattern_room_orders o USING(order_id) WHERE l.source_id=$1 AND o.deleted_at IS NULL FOR UPDATE OF o",[sourceId])).rows[0]?.current_round_id??null:null;
-   await db.query('INSERT INTO digital_development_route_facts(fact_id,source_id,task_id,route_version,kind,payload,actor_id) VALUES($1,$2,$3,$4,$5,$6,$7)',[randomUUID(),sourceId,input.taskId,task.route_version,kind,JSON.stringify({...input,...(task.task_kind==='development_confirmation'?{nativeRoundId}:{}),...(inspection?{inspection}:{})}),actor.actorId]);
+   await db.query('INSERT INTO digital_development_route_facts(fact_id,source_id,task_id,route_version,kind,payload,actor_id) VALUES($1,$2,$3,$4,$5,$6,$7)',[randomUUID(),sourceId,input.taskId,task.route_version,kind,JSON.stringify({...input,actualCompletedAt:businessNow().toISOString(),...(task.task_kind==='development_confirmation'?{nativeRoundId}:{}),...(inspection?{inspection}:{})}),actor.actorId]);
    if((task.task_kind==='development_sewing'||task.task_kind==='development_confirmation')&&revision?.output_kind!=='工艺布片'){
      const native=(await db.query("SELECT o.order_id,o.current_round_id,o.version,o.status FROM digital_development_pattern_links l JOIN pattern_room_orders o USING(order_id) WHERE l.source_id=$1 AND o.deleted_at IS NULL FOR UPDATE OF o",[sourceId])).rows[0];
      if(!native||!this.patternOrders)fail('请先由设计师提交原打板执行单，并由技术主管确认派工');
@@ -170,6 +171,7 @@ export class DevelopmentRouteService {
    const service=new DigitalProductionTaskService(this.database);
    await service.setConditionWithClient(db,actor,input.taskId,'business_recorded',true,undefined,input.note);
    await service.completeWithClient(db,actor,input.taskId,{note:input.note},`route:${key}`);
+   if(task.task_kind==='development_tail_check')await new BulkPreparationService(this.database).syncSource(db,actor,sourceId);
    if(input.result!=='退回')await this.advance(db,actor,sourceId,input.taskId,input.nextAssigneeId);
    return {taskId:input.taskId,result:input.result};
  }

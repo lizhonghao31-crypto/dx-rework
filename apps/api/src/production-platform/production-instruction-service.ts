@@ -1,3 +1,7 @@
+import {technicalMeasurementDocument,publishedTechnicalArtifact} from './development-technical-repository.js';
+import {ProductionReadinessService} from './production-readiness-service.js';
+import {preparationAdoption} from './preparation-material-repository.js';
+import {productionReadiness,recordInstructionWork} from './production-readiness-repository.js';
 import {businessNow} from '../acceptance-clock/business-time.js';
 import {documentMetadata} from "./document-metadata.js";
 import { instructionNotice } from "./instruction-notice.js";
@@ -35,7 +39,7 @@ export class ProductionInstructionService {
     const document = initialInstruction(); document.sizes = [...new Set(order.lines.flatMap(line => line.sizes.map(size => size.size)))];
     const row = order.sourceId ? await developmentDocumentRow(db, order.sourceId, roundNumber) : null;
     if (!row || row.status !== "published") return { document, sourceRound: null };
-    const source = row.document as DevelopmentDocument;
+    const source = (await technicalMeasurementDocument(db,order.sourceId!,row.round_number,row.document as DevelopmentDocument))?.document??row.document as DevelopmentDocument;
     document.secondaryCraft=source.craft; document.unit = source.unit; document.process = [source.craft === "无" ? "" : source.craft, source.washing === "免洗" ? "" : source.washing].filter(Boolean).join("／");
     document.comments = source.instructions;
     document.measurements = source.measurements.map(item => ({ id: randomUUID(), name: item.name, tolerance: "", method: "", values: document.sizes.map(size => item.values[source.sizes.indexOf(size)] ?? "") }));
@@ -65,7 +69,8 @@ export class ProductionInstructionService {
     }
     const review=(await db.query("SELECT a.after_state,a.created_at,u.display_name FROM audit_events a LEFT JOIN app_users u ON u.id=a.actor_id WHERE a.entity_type='digital_instruction' AND a.entity_id=$1 AND a.action='instruction_source_decisions' AND (a.after_state->>'version')::int<=$2 ORDER BY a.created_at DESC LIMIT 1",[id,row?.version??0])).rows[0];
     const sourceReview:InstructionSheet["sourceReview"]=review?{sourceRound:review.after_state.sourceRound,...(typeof review.after_state.sourceVersion==='number'?{sourceVersion:review.after_state.sourceVersion}:{}),instructionVersion:review.after_state.version,decisions:review.after_state.decisions,reviewedAt:new Date(review.created_at).toISOString(),reviewedBy:review.display_name??"",...(review.after_state.priorMeasurements?{priorMeasurements:review.after_state.priorMeasurements}:{})}:undefined;
-    return { metadata:await documentMetadata(db,row), order: selectedVersion ? {...row.order_snapshot,lines:(row.order_snapshot as DigitalOrder).lines.map(line=>{const current=order.lines.find(l=>l.lineId===line.lineId);return current?{...line,poNumber:current.poNumber,formalStyleNo:current.formalStyleNo,temporaryStyleNo:current.temporaryStyleNo}:line;})} : order, currentOrderVersion:order.version,currentDeliveryDate:order.contractDeliveryDate, document: seeded.document, version: row?.version ?? 0,
+    const technicalTable=order.sourceId&&latestSourceRound?(await publishedTechnicalArtifact(db,order.sourceId,latestSourceRound))?.artifact.body.baseSizeTable:null;
+    return { ...(technicalTable?{technicalSizeTable:technicalTable}:{}),...(await preparationAdoption(db,{kind:'order',id})?{readiness:await new ProductionReadinessService(this.database).read(actor,{kind:'order',id},db)}:{}), metadata:await documentMetadata(db,row), order: selectedVersion ? {...row.order_snapshot,lines:(row.order_snapshot as DigitalOrder).lines.map(line=>{const current=order.lines.find(l=>l.lineId===line.lineId);return current?{...line,poNumber:current.poNumber,formalStyleNo:current.formalStyleNo,temporaryStyleNo:current.temporaryStyleNo}:line;})} : order, currentOrderVersion:order.version,currentDeliveryDate:order.contractDeliveryDate, document: seeded.document, version: row?.version ?? 0,
       publishedVersion: selectedVersion ?? published, isPublishedSnapshot:Boolean(selectedVersion), sourceRound: seeded.sourceRound, latestSourceRound, ...(sourceComparison?{sourceComparison}:{}),...(sourceReview?{sourceReview}:{}),
       versions: (await db.query("SELECT version FROM digital_instruction_versions WHERE production_order_id=$1 ORDER BY version DESC", [id])).rows.map(r => r.version),
       canEdit: draftAccess && !version && (Boolean(row) || this.creationEnabled), cutStarted, merchandiserName: name,
@@ -115,6 +120,7 @@ export class ProductionInstructionService {
       await this.bindImages(db,actor,order,input.document);
       await db.query(`INSERT INTO digital_instruction_documents(production_order_id,version,order_version,document,source_round,updated_by) VALUES($1,1,$2,$3,$4,$5)
         ON CONFLICT(production_order_id) DO UPDATE SET version=digital_instruction_documents.version+1,order_version=EXCLUDED.order_version,document=EXCLUDED.document,source_round=EXCLUDED.source_round,updated_by=EXCLUDED.updated_by,updated_at=CURRENT_TIMESTAMP`, [id,order.version,JSON.stringify(input.document),current.sourceRound,actor.actorId]);
+      await recordInstructionWork(db,actor.actorId,id,'draft_saved',current.version+1);
       return this.read(actor,id,db);
     });
   }
@@ -135,16 +141,23 @@ export class ProductionInstructionService {
       return this.read(actor,id,db);
     });
   }
-  async publish(actor: TrustedActorContext,id:string,input:{expectedVersion:number;orderVersion:number},key:string) {
+  async publish(actor: TrustedActorContext,id:string,input:{expectedVersion:number;orderVersion:number;expectedReadinessRevision?:string|undefined},key:string) {
     return this.command(actor,id,"publish",key,input,async(db,order) => {
       const current=await this.read(actor,id,db);
       if (!current.canEdit || !current.version || current.version!==input.expectedVersion || order.version!==input.orderVersion) fail("母单或制单已更新，请重新打开");
       if(current.publishedVersion===current.version)return current;
       if(current.sourceRound!==current.latestSourceRound)fail("开发单有新资料，请逐项核对采用或保留后发布");
+      const readiness=await productionReadiness(db,id);
+      if(readiness.adoption){if(input.expectedReadinessRevision!==readiness.revision)fail('产前依据已变化，请刷新并核对当前有效资料');if(readiness.finalReasons.length)fail(readiness.finalReasons.join('；'));
+       const table=(await publishedTechnicalArtifact(db,order.sourceId!,current.sourceRound!))!.artifact.body.baseSizeTable;
+       if(current.document.unit!==table.unit||order.lines.some(l=>l.sizes.some(s=>!table.sizes.includes(s.size)))||table.sizes.some(size=>!current.document.sizes.includes(size))||table.measurements.some(row=>!current.document.measurements.some(m=>m.name===row.name&&table.sizes.every((size,i)=>m.values[current.document.sizes.indexOf(size)]?.trim()===row.values[i]?.trim()))))fail('制单尺寸与当前有效技术尺寸表不一致，请明确采用技术表；缺订购尺码须由技术补充复核');
+      }
       const issues=instructionErrors(current.document,order);if(issues.length)fail(issues.join("；"));
       await this.bindImages(db,actor,order,current.document);
       await db.query("INSERT INTO digital_instruction_versions(production_order_id,version,order_version,document,order_snapshot,source_round,published_by,published_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8)",[id,current.version,order.version,JSON.stringify(current.document),JSON.stringify(order),current.sourceRound,actor.actorId,businessNow().toISOString()]);
       await db.query("UPDATE digital_instruction_documents SET published_version=version WHERE production_order_id=$1",[id]);
+      if(readiness.adoption)await db.query('INSERT INTO digital_instruction_preparation_bases(production_order_id,instruction_version,readiness_revision,technical_revision,basis_json) VALUES($1,$2,$3,$4,$5)',[id,current.version,readiness.revision,readiness.technical!.revision,JSON.stringify({artifact:readiness.technical!.artifactRef,review:readiness.technical!.reviewRef,comment:readiness.technical!.finalCommentRef})]);
+      await recordInstructionWork(db,actor.actorId,id,'published',current.version,{technicalRevision:readiness.technical?.revision??null});
       await instructionNotice(db,order,current.version,"大货制单已发布",`instruction:${id}:${current.version}`);
       await new BulkPreparationService(this.database).sync(db,actor,id);
       return this.read(actor,id,db);

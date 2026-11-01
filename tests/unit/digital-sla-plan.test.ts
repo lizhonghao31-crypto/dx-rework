@@ -20,6 +20,13 @@ const route = (washing: "yes" | "no" = "yes") => buildOrderSlaRoute(resolveDigit
   }, ["po-fixture"]);
 const get = <T extends { id: string }>(items: T[], id: string) => items.find(n => n.id === id)!;
 describe("complete SLA plan and frozen windows", () => {
+  it("keeps a supplemental unknown duration unknown instead of borrowing the original48h",()=>{
+    const p=plan([node('bulk_pattern',2880)]);
+    const [running]=evaluateSlaPlan(p,{bulk_pattern:{evidence:'supplement:new-scope',startedAt:t0,standardMinutes:null}},time(65));
+    expect(running!.deadline.at).toBeNull();expect(running!.status).toBe('running');expect(running!.forecast.at).toBeNull();
+    const [completed]=evaluateSlaPlan(p,{bulk_pattern:{evidence:'supplement:actual-complete',startedAt:t0,completedAt:at(65),businessCompleted:true,standardMinutes:null}},time(65));
+    expect(completed!.status).toBe('completed_unrated');expect(completed!.actualEnd).toBe(at(65));
+  });
   it("keeps effective business completion when its actual time is unknown without inventing a downstream date",()=>{
     const p=plan([node('done'),node('next',60,{anchorKey:null,dependsOn:['done']})]);
     const rows=evaluateSlaPlan(p,{done:{businessCompleted:true,startedAt:t0,evidence:'task:completed-time-corrected'}},time(100));

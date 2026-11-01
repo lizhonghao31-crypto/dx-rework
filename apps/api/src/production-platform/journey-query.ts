@@ -1,3 +1,4 @@
+import {styleLabelCuttingReason,preparationTestReasons} from './production-readiness-repository.js';
 import {seriesPlanJourney} from './series-plan-journey.js';
 import type {BusinessTime,BusinessTimeScope} from '@dx-rework/domain/business-clock';
 import {readJourneySupervision} from "./journey-supervision.js";
@@ -366,6 +367,7 @@ export class DigitalJourneyQuery {
         if(patternTask?.state!=="completed")gate.blockers.push({key:"pattern_ready",label:"纸样/唛架尚未全部完成",ownerId:patternTask?.assigneeId??null,record:patternTask?record("task",patternTask.taskId,taskUrl(patternTask.taskId)):gate.records[0]!});
         if(bulk.preshrink!=="无需预缩"&&shrinkTask?.state!=="completed")gate.blockers.push({key:"preshrink_ready",label:"预缩条件尚未齐备",ownerId:shrinkTask?.assigneeId??null,record:shrinkTask?record("task",shrinkTask.taskId,taskUrl(shrinkTask.taskId)):gate.records[0]!});
       }
+      if(!bulk.cutting.completed){const physical=await styleLabelCuttingReason(db,oid,bulk.cutting.lines.map(l=>l.lineId));const tests=await preparationTestReasons(db,oid);for(const [index,label] of [...(physical?[physical]:[]),...tests].entries())gate.blockers.push({key:`physical_cutting_${index}`,label,ownerId:physical&&index===0?bulk.readiness?.responsibility.warehouseWorkerId??null:null,record:gate.records[0]!});}
       gate.state=!gate.blockers.length&&cuttingTask?"completed":"pending";
       // A released cutting task and original all-line cutting facts are historical
       // convergence evidence. Current write restrictions cannot undo that fact.

@@ -1,3 +1,4 @@
+import {preparationAdoption} from './preparation-material-repository.js';
 import { factoryReturnLogistics } from './factory-return-logistics.js';
 import { assertSlaSettingsActor } from './sla-settings-authority.js';
 import { SlaPreviewTokens } from './sla-preview-token.js';
@@ -52,7 +53,9 @@ export class SlaOrderApplicationService {
                 fail('关联开发单被多个母单共用，不能单独改写其时效');
         }
         const next = structuredClone(snapshot!.snapshot), skipped: string[] = [];
+        const preparation=await preparationAdoption(db,{kind:'order',id:input.orderId});
         for (const key of keys) {
+            if(key==='production_sheet'&&preparation){skipped.push(key);continue;}
             if (next.parameters[key]!.source !== 'global') {
                 skipped.push(key);
                 continue;
@@ -136,7 +139,7 @@ export class SlaOrderApplicationService {
         const changes = after.filter(n => n.status!=='not_applicable'&&!completed(n.id) && (stable(n) !== stable(current.nodes.find(old => old.id === n.id)) || effectiveKeys.includes(plan.nodes.find(p => p.id === n.id)!.parameterKey) || effectiveKeys.includes('warning_ratio') && ['duration', 'included'].includes(plan.nodes.find(p => p.id === n.id)!.kind) || effectiveKeys.includes('stage_buffer'))).map(n => ({ nodeId: n.id, label: plan.nodes.find(p => p.id === n.id)?.label, before: current.nodes.find(old => old.id === n.id), after: n, parameterKey: plan.nodes.find(p => p.id === n.id)!.parameterKey, beforeMinutes: current.facts[n.id]?.standardMinutes ?? current.current.plan.nodes.find(p => p.id === n.id)?.minutes ?? null, afterMinutes: plan.nodes.find(p => p.id === n.id)?.minutes ?? null, beforeWarningPercent: current.facts[n.id]?.standardWarningPercent ?? current.current.plan.warningPercent, afterWarningPercent: plan.warningPercent, beforeDays: current.current.plan.nodes.find(p => p.id === n.id)?.offsetDays ?? null, afterDays: plan.nodes.find(p => p.id === n.id)?.offsetDays ?? null }));
         if (!changes.length)
             fail('所选节点均已完成或不适用，没有未完成节点可调整');
-        return { repo, configuration, snapshot: snapshot!, current, next, plan, token, completedWindows, effectiveKeys, changes, skipped };
+        return { repo, configuration, snapshot: snapshot!, current, next, plan, token, completedWindows, taskWindows:tasks.filter(t=>!['completed','cancelled'].includes(t.state)).map(t=>`task:${t.task_id}`), effectiveKeys, changes, skipped };
     }
     async preview(actor: TrustedActorContext, input: Selection) {
         const db = await this.pool.connect();
@@ -176,7 +179,7 @@ export class SlaOrderApplicationService {
             const plan = await new SlaPlanRepository(db).appendPlan({ orderId: input.orderId, expectedRevision: p.current.current.revision, snapshotId: saved.snapshotId, plan: p.plan, time: p.current.time, actorId: actor.actorId, reason: input.reason, requestKey: randomUUID() });
             const eventId = randomUUID();
             await db.query(`INSERT INTO digital_production_task_events(event_id,resource_kind,resource_id,event_kind,actor_id,occurred_at,time_quality,payload)
-    VALUES($1,'order',$2,'sla_standard_applied',$3,$4,'现场登记',$5)`, [eventId, input.orderId, actor.actorId, p.current.time.now, JSON.stringify({ snapshotId: saved.snapshotId, parameterKeys: p.effectiveKeys, completedWindows: p.completedWindows, planId: plan.planId, previousPlanId: p.current.current.planId, reason: input.reason, previousEvaluations: p.current.nodes })]);
+    VALUES($1,'order',$2,'sla_standard_applied',$3,$4,'现场登记',$5)`, [eventId, input.orderId, actor.actorId, p.current.time.now, JSON.stringify({ snapshotId: saved.snapshotId, parameterKeys: p.effectiveKeys, completedWindows: p.completedWindows, taskWindows:p.taskWindows, planId: plan.planId, previousPlanId: p.current.current.planId, reason: input.reason, previousEvaluations: p.current.nodes })]);
             await new DigitalProductionTaskService(this.pool).applySlaVersionWithClient(db, actor, input.orderId, eventId, p.effectiveKeys);
             const response = { orderId: input.orderId, snapshotId: saved.snapshotId, planId: plan.planId, applicationId: eventId, changedNodes: p.changes.length, skipped: p.skipped };
             await db.query('INSERT INTO digital_production_commands(actor_id,command,key,payload_hash,response) VALUES($1,$2,$3,$4,$5)', [actor.actorId, command, key, hash, JSON.stringify(response)]);

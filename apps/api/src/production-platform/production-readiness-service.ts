@@ -1,0 +1,166 @@
+import {BulkPreparationService} from './bulk-preparation-service.js';
+import {bridgePreparationMaterials} from './preparation-series-bridge.js';
+import {randomUUID} from 'node:crypto';
+import type {Pool,PoolClient} from 'pg';
+import {PreparationMaterialRecordSchema,PreparationResponsibilitySchema,PreparationAdoptionSchema,InstructionDeliverySchema,PREPARATION_RULE_VERSION,type PreparationMaterialKind,type PreparationMaterialRecord,type PreparationResource,type ProductionReadinessState} from '@dx-rework/contracts/production-readiness';
+import type {TrustedActorContext} from '../tools/repositories.js';
+import {isRootActor} from '../access/business-authority.js';
+import {businessNow,acceptanceBusinessContext,observedBusinessTime} from '../acceptance-clock/business-time.js';
+import {ApplicationError} from '../platform/errors.js';
+import {DigitalProductionAccessPolicy,digitalForbidden} from './access-policy.js';
+import {developmentDocumentRow} from './development-round-repository.js';
+import {preparationContext,preparationAvailable,preparationAdoption,preparationHash,preparationIso,preparationMaterialHistory,currentPreparationMaterials,preparationResponsibility,appendPreparationMaterial,type PreparationDB} from './preparation-material-repository.js';
+import {productionReadiness,preparationWindow,refreshPreparationWindows} from './production-readiness-repository.js';
+const conflict=(message:string):never=>{throw new ApplicationError('PREPARATION_CONFLICT',message,409);};
+export class ProductionReadinessService{
+ constructor(private readonly database:Pool){}
+ private async access(db:PreparationDB,actor:TrustedActorContext,resource:PreparationResource){
+  const context=await preparationContext(db,resource),policy=new DigitalProductionAccessPolicy(db),responsibility=await preparationResponsibility(db,context);
+  const role=async(name:string)=>actor.actorRoles.includes(name)&&await policy.activeRole(actor.actorId,name);
+  const leader=isRootActor(actor)||await role('owner_group')||await role('production_management');
+  const designer=Boolean(context.source?.created_by===actor.actorId&&await role('sample_designer'));
+  const history=await preparationMaterialHistory(db,context),facts=currentPreparationMaterials(history,context.orderId);
+  const handover=facts.find(f=>f.kind==='design_handover'&&f.scopeRef==='whole');
+  const merch=Boolean((context.order?.primary_merchandiser_id===actor.actorId||!context.order&&handover?.state==='ready'&&handover.valid&&handover.recipientId===actor.actorId)&&await role('order_merchandiser'));
+  const warehouse=responsibility.warehouseWorkerId===actor.actorId&&await role('warehouse_receiver')||responsibility.warehouseWorkerId===actor.actorId&&await role('warehouse_supervisor');
+  const color=responsibility.colorConfirmationWorkerId===actor.actorId&&Boolean(responsibility.colorConfirmationRole&&await role(responsibility.colorConfirmationRole));
+  const readable=leader||designer||merch||warehouse||color||await policy.allowed(actor,resource.kind,resource.id,'technical');
+  if(!readable)digitalForbidden();
+  await acceptanceBusinessContext()?.assertScope(resource);
+  return {context,policy,responsibility,history,facts,leader,designer,merch,warehouse,color};
+ }
+ async authorize(actor:TrustedActorContext,resource:PreparationResource){await this.access(this.database,actor,resource);}
+ async read(actor:TrustedActorContext,resource:PreparationResource,db:PreparationDB=this.database):Promise<ProductionReadinessState>{
+  const a=await this.access(db,actor,resource),orderId=a.context.orderId;
+  const readiness=orderId?await productionReadiness(db,orderId):null;
+  const adoption=await preparationAdoption(db,resource),enrolled=Boolean(orderId?readiness?.adoption:adoption);
+  const revision=readiness?.revision??preparationHash({source:resource.id,facts:a.facts.map(f=>[f.recordId,f.version,f.valid]),responsibility:a.responsibility});
+  const canRecord:PreparationMaterialKind[]=[];
+  if(a.designer||isRootActor(actor))canRecord.push('design_handover');
+  if(a.merch||isRootActor(actor))canRecord.push('material_investment');
+  if(a.warehouse||isRootActor(actor))canRecord.push('fabric_receipt','accessories_ready','style_label_ready');
+  if(a.color||isRootActor(actor))canRecord.push('color_confirmation');
+  const acknowledged=orderId&&await preparationAvailable(db)?Boolean((await db.query('SELECT 1 FROM digital_preparation_adoption_acknowledgements WHERE production_order_id=$1 AND basis_revision=$2',[orderId,revision])).rowCount):false;
+  const deliveries=orderId&&await preparationAvailable(db)?(await db.query('SELECT * FROM digital_instruction_deliveries WHERE production_order_id=$1 ORDER BY recorded_at,event_id',[orderId])).rows:[];
+  const ranges=orderId&&await preparationAvailable(db)?(await db.query('SELECT r.* FROM digital_bulk_work_ranges r JOIN digital_bulk_preparations p USING(preparation_id) WHERE p.production_order_id=$1 ORDER BY r.occurred_at,r.range_id',[orderId])).rows:[];
+  const sourceDocument=a.context.sourceId?await developmentDocumentRow(db,a.context.sourceId):null;
+  return {sourceIsPreorderDraft:sourceDocument?.status==='draft'&&sourceDocument.document.customerOrderDraft?.withOrder===true&&sourceDocument.document.customerOrderDraft.stage==='preorder',sourceDocumentVersion:sourceDocument?.version??null,lines:a.context.lines.map(l=>({lineId:l.line_id,color:l.color,orderQuantity:l.order_quantity})),resource,orderId,sourceId:a.context.sourceId,enrolled,ruleVersion:enrolled?PREPARATION_RULE_VERSION:null,revision,facts:a.facts,history:a.history,canRecord,responsibility:a.responsibility,canAssign:a.leader,
+   canDeliverInstruction:a.merch||isRootActor(actor),canAcknowledgeAdoption:!enrolled&&Boolean(orderId)&&(a.merch||isRootActor(actor)),canAdopt:!enrolled&&Boolean(orderId)&&a.leader&&acknowledged,adoptionAcknowledged:acknowledged,
+   adoptionReason:enrolled?null:'历史单未自动套用；主跟单核对预览后由供应链总监、老板或 Root 明确采用，完成实绩不重算',finalReasons:readiness?.finalReasons??[],technicalRevision:readiness?.technical?.revision??null,
+   draftWindow:orderId?await preparationWindow(db,orderId,'draft'): {startedAt:null,dueAt:null,completedAt:null,minutes:null,reason:'正式单形成前保留真实投料及到仓记录',status:'waiting'},
+   finalWindow:orderId?await preparationWindow(db,orderId,'final',readiness?.finalReasons):{startedAt:null,dueAt:null,completedAt:null,minutes:null,reason:null,status:'waiting'},
+   instructionDeliveries:deliveries.map(r=>({eventId:r.event_id,instructionVersion:r.instruction_version,recipient:r.recipient,occurredAt:preparationIso(r.occurred_at)!,note:r.note,evidenceIds:r.evidence_ids})),
+   ranges:ranges.map(r=>({rangeId:r.range_id,preparationId:r.preparation_id,kind:r.kind,version:r.version,lineIds:r.line_ids,complete:r.complete,pendingMaterialIds:r.pending_material_ids,note:r.note,recordedAt:preparationIso(r.occurred_at)!}))};
+ }
+ private async command(actor:TrustedActorContext,resource:PreparationResource,action:string,input:unknown,key:string,work:(db:PoolClient,a:Awaited<ReturnType<ProductionReadinessService['access']>>)=>Promise<void>){
+  if(!/^[A-Za-z0-9._:-]{1,128}$/.test(key))conflict('缺少有效操作标识');
+  const db=await this.database.connect();try{
+   await db.query('BEGIN');await db.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
+   const a=await this.access(db,actor,resource);
+   if(!await preparationAvailable(db))conflict('产前资料版本尚未安装');
+   if(a.context.orderId)await db.query('SELECT production_order_id FROM digital_production_orders WHERE production_order_id=$1 FOR UPDATE',[a.context.orderId]);
+   if(a.context.sourceId)await db.query('SELECT source_id FROM digital_production_sources WHERE source_id=$1 FOR UPDATE',[a.context.sourceId]);
+   const inactive=(await db.query("SELECT 1 FROM digital_production_resource_lifecycle WHERE ((resource_kind='order' AND resource_id=$1) OR (resource_kind='source' AND resource_id=$2)) AND state<>'active'",[a.context.orderId,a.context.sourceId])).rowCount;
+   if(inactive)conflict('订单或开发来源已暂停、取消，不能新增办理事实');
+   if(a.context.orderId&&(await db.query('SELECT 1 FROM digital_order_closures WHERE production_order_id=$1',[a.context.orderId])).rowCount)conflict('本单已结案，原资料和实际记录保持不变');
+   if(!isRootActor(actor)){
+    let required:string|null=null;
+    if(action==='record'){
+     const kind=(input as PreparationMaterialRecord).kind;
+     if(kind==='design_handover'&&a.designer)required='sample_designer';
+     else if(kind==='material_investment'&&a.merch)required='order_merchandiser';
+     else if(['fabric_receipt','accessories_ready','style_label_ready'].includes(kind)&&a.warehouse)required=actor.actorRoles.includes('warehouse_supervisor')?'warehouse_supervisor':'warehouse_receiver';
+     else if(kind==='color_confirmation'&&a.color)required=a.responsibility.colorConfirmationRole;
+    }else if(action==='deliver'||action==='acknowledge'){if(a.merch)required='order_merchandiser';}
+    else if(a.leader)required=actor.actorRoles.includes('owner_group')?'owner_group':'production_management';
+    if(!required||!await a.policy.lockActiveRole(actor.actorId,required))digitalForbidden();
+   }
+   const command=`preparation:${resource.kind}:${resource.id}:${action}`,hash=preparationHash(input);
+   const prior=(await db.query('SELECT payload_hash,response FROM digital_production_commands WHERE actor_id=$1 AND command=$2 AND key=$3',[actor.actorId,command,key])).rows[0];
+   // Eligibility is rechecked before replay; a revoked user cannot recover prior private responses.
+   if(prior&&prior.payload_hash!==hash)conflict('操作标识已用于不同内容');
+   if(prior){await db.query('COMMIT');return prior.response as ProductionReadinessState;}
+   await work(db,a);
+   if(a.context.orderId){await bridgePreparationMaterials(db,a.context,actor.actorId);await refreshPreparationWindows(db,a.context.orderId);await new BulkPreparationService(this.database).sync(db,actor,a.context.orderId);}
+   const response=await this.read(actor,resource,db);
+   await db.query('INSERT INTO digital_production_commands(actor_id,command,key,payload_hash,response) VALUES($1,$2,$3,$4,$5)',[actor.actorId,command,key,hash,JSON.stringify(response)]);
+   await db.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1,$2,$3,$4,'digital_preparation',$5,$6)",[randomUUID(),actor.requestId,actor.actorId,`preparation_${action}`,resource.id,JSON.stringify(input)]);
+   await db.query('COMMIT');return response;
+  }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
+ }
+ async bindFiles(db:PreparationDB,actor:TrustedActorContext,resource:PreparationResource,ids:string[]){
+  const a=await this.access(db,actor,resource);
+  const source=a.context.sourceId?await developmentDocumentRow(db,a.context.sourceId):null;
+  const handedDraft=source&&a.merch&&a.facts.some(f=>f.kind==='design_handover'&&f.state==='ready'&&f.valid&&f.sourceDocumentVersion===source.version);
+  const sourceFiles=source&&(source.status==='published'||a.designer||isRootActor(actor)||handedDraft)?source.document.files.map((f:{attachmentId:string})=>f.attachmentId):[];
+  for(const id of [...ids].sort()){
+   const row=(await db.query('SELECT * FROM attachments WHERE attachment_id=$1 FOR UPDATE',[id])).rows[0];
+   if(!row||row.status!=='ready')conflict('凭证尚未上传完成或已失效');
+   if(row.entity_type==='digital_preparation'&&[a.context.sourceId,a.context.orderId].includes(row.entity_id))continue;
+   if(row.entity_type==='digital_development'&&row.entity_id===a.context.sourceId&&sourceFiles.includes(id))continue;
+   if(row.entity_type||row.uploaded_by!==actor.actorId)digitalForbidden();
+   await db.query("UPDATE attachments SET entity_type='digital_preparation',entity_id=$2,updated_at=CURRENT_TIMESTAMP WHERE attachment_id=$1",[id,resource.id]);
+  }
+ }
+ async record(actor:TrustedActorContext,resource:PreparationResource,raw:PreparationMaterialRecord,key:string){
+  const input=PreparationMaterialRecordSchema.parse(raw);
+  return this.command(actor,resource,'record',input,key,async(db,a)=>{
+   const state=await this.read(actor,resource,db);if(!state.canRecord.includes(input.kind))digitalForbidden();
+   if(input.occurredAt&&Date.parse(input.occurredAt)>businessNow().getTime())conflict('实际时间不能在未来');
+   const prior=a.facts.find(f=>f.kind===input.kind&&f.scopeRef===input.scopeRef);
+   if((prior?.version??0)!==input.expectedVersion)conflict('本项资料已更新，请刷新后追加订正');
+   if(input.kind==='design_handover'&&input.state==='ready'){
+    if(!input.recipientId||!await a.policy.lockActiveRole(input.recipientId,'order_merchandiser'))conflict('请指定有效订单跟单接收资料');
+    if(a.context.order?.primary_merchandiser_id&&a.context.order.primary_merchandiser_id!==input.recipientId)conflict('请交给本单主跟单，不另建第二责任人');
+    const d=a.context.sourceId?await developmentDocumentRow(db,a.context.sourceId):null;
+    const preorder=d?.status==='draft'&&d.document.customerOrderDraft?.withOrder===true&&d.document.customerOrderDraft.stage==='preorder';
+    if(!d||d.status!=='published'&&!preorder||d.version!==input.sourceDocumentVersion)conflict('设计交接须引用当前已保存投料草稿或有效发布资料版本');
+    if(preorder&&!d.document.materials.some((m:{category:string;name:string;quantity:string})=>m.category!=='辅料'&&m.name.trim()&&m.quantity.trim()))conflict('预下单交接请先保存实际面料名称和数量资料；不要求完整尺码、预算或正式单');
+   }
+   if(input.kind==='color_confirmation'&&a.context.order?.requires_color_matching===false)conflict('设计已选择无需对色，不重复建立确认步骤');
+   for(const q of input.quantities){
+    if(q.lineId&&!a.context.lines.some(l=>l.line_id===q.lineId))conflict('物料款色不属于本单');
+    if(q.materialId){const d=a.context.sourceId?await developmentDocumentRow(db,a.context.sourceId):null;const instruction=a.context.orderId?(await db.query('SELECT document FROM digital_instruction_documents WHERE production_order_id=$1',[a.context.orderId])).rows[0]:null;
+     if(!d?.document.materials.some((m:{materialId:string})=>m.materialId===q.materialId)&&!instruction?.document.accessories.some((m:{id:string})=>m.id===q.materialId))conflict('物料不属于本单当前资料');}
+   }
+   await this.bindFiles(db,actor,resource,input.evidenceIds);
+   await appendPreparationMaterial(db,a.context,actor.actorId,input);
+  });
+ }
+ async assign(actor:TrustedActorContext,resource:PreparationResource,raw:unknown,key:string){
+  const input=PreparationResponsibilitySchema.parse(raw);return this.command(actor,resource,'assign',input,key,async(db,a)=>{
+   if(!a.leader)digitalForbidden();if(a.responsibility.version!==input.expectedVersion)conflict('人员安排已更新，请刷新');
+   if(input.warehouseWorkerId&&!await a.policy.lockActiveRole(input.warehouseWorkerId,'warehouse_receiver'))conflict('收料人须为在职有效仓库岗位');
+   if(input.colorConfirmationWorkerId&&(!input.colorConfirmationRole||!await a.policy.lockActiveRole(input.colorConfirmationWorkerId,input.colorConfirmationRole)))conflict('对色确认人须具备所选有效岗位，不在此授予新角色');
+   await db.query(`INSERT INTO digital_preparation_responsibilities(resource_kind,resource_id,version,warehouse_worker_id,color_confirmation_worker_id,color_confirmation_role,reason,actor_id,occurred_at)
+    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,[resource.kind,resource.id,input.expectedVersion+1,input.warehouseWorkerId,input.colorConfirmationWorkerId,input.colorConfirmationRole,input.reason,actor.actorId,businessNow().toISOString()]);
+  });
+ }
+ async adopt(actor:TrustedActorContext,resource:PreparationResource,raw:unknown,key:string,acknowledge=false){
+  const input=PreparationAdoptionSchema.parse(raw);return this.command(actor,resource,acknowledge?'acknowledge':'adopt',input,key,async(db,a)=>{
+   if(resource.kind!=='order')conflict('历史采用须从订单预览办理');
+   const state=await this.read(actor,resource,db);if(state.enrolled||state.revision!==input.previewRevision)conflict('预览版本已变化，请重新核对；不自动改写在途计划或已完成实绩');
+   if(acknowledge){if(!state.canAcknowledgeAdoption)digitalForbidden();await db.query(`INSERT INTO digital_preparation_adoption_acknowledgements(acknowledgement_id,production_order_id,basis_revision,reason,actor_id,business_time)
+    VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(production_order_id,basis_revision) DO NOTHING`,[randomUUID(),resource.id,state.revision,input.reason,actor.actorId,JSON.stringify(observedBusinessTime())]);}
+   else{if(!state.canAdopt)digitalForbidden();const original=(await db.query('SELECT version,published_version FROM digital_instruction_documents WHERE production_order_id=$1',[resource.id])).rows[0];const ack=(await db.query('SELECT actor_id FROM digital_preparation_adoption_acknowledgements WHERE production_order_id=$1 AND basis_revision=$2',[resource.id,state.revision])).rows[0];
+    await db.query(`INSERT INTO digital_preparation_rule_adoptions(adoption_id,resource_kind,resource_id,revision,rule_version,basis_revision,reason,standards,acknowledged_by,adopted_by,creation_event_id,business_time)
+     VALUES($1,'order',$2,1,$3,$4,$5,$6,$7,$8,NULL,$9)`,[randomUUID(),resource.id,PREPARATION_RULE_VERSION,state.revision,input.reason,JSON.stringify({draftMinutes:1440,finalMinutes:1440,retainedDraftVersion:original?.version??0,retainedInstructionVersion:original?.published_version??null,retainedTechnicalRevision:state.technicalRevision}),ack.actor_id,actor.actorId,JSON.stringify(observedBusinessTime())]);}
+   void a;
+  });
+ }
+ async deliver(actor:TrustedActorContext,orderId:string,raw:unknown,key:string){
+  const input=InstructionDeliverySchema.parse(raw);return this.command(actor,{kind:'order',id:orderId},'deliver',input,key,async(db,a)=>{
+   if(!a.merch&&!isRootActor(actor))digitalForbidden();if(Date.parse(input.occurredAt)>businessNow().getTime())conflict('交付发生时间不能在未来');
+   const version=(await db.query('SELECT published_at FROM digital_instruction_versions WHERE production_order_id=$1 AND version=$2',[orderId,input.instructionVersion])).rows[0];
+   if(!version||Date.parse(input.occurredAt)<new Date(version.published_at).getTime())conflict('须交付已正式发布版本，实际交付不能早于该版发布');
+   await this.bindFiles(db,actor,{kind:'order',id:orderId},input.evidenceIds);
+   await db.query(`INSERT INTO digital_instruction_deliveries(event_id,production_order_id,instruction_version,recipient,occurred_at,note,evidence_ids,actor_id)
+    VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,[randomUUID(),orderId,input.instructionVersion,input.recipient,input.occurredAt,input.note,input.evidenceIds,actor.actorId]);
+  });
+ }
+ async canDownload(actor:TrustedActorContext,resource:PreparationResource,attachmentId:string){
+  const a=await this.access(this.database,actor,resource);
+  if(a.history.some(f=>f.evidenceIds.includes(attachmentId)))return true;
+  return a.context.orderId?Boolean((await this.database.query('SELECT 1 FROM digital_instruction_deliveries WHERE production_order_id=$1 AND $2=ANY(evidence_ids)',[a.context.orderId,attachmentId])).rowCount):false;
+ }
+}

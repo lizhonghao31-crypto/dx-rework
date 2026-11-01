@@ -1,0 +1,28 @@
+import type {FastifyInstance,FastifyRequest} from 'fastify';
+import {z} from 'zod';
+import {PreparationMaterialRecordSchema,PreparationResponsibilitySchema,PreparationAdoptionSchema,InstructionDeliverySchema,type PreparationResource} from '@dx-rework/contracts/production-readiness';
+import {CreateUploadIntentSchema} from '@dx-rework/contracts';
+import {businessActor} from '../access/business-authority.js';
+import {ApplicationError} from '../platform/errors.js';
+import type {AttachmentService} from '../tools/attachments.js';
+import type {DigitalIdentityDependencies} from './identity-routes.js';
+import type {ProductionReadinessService} from './production-readiness-service.js';
+export function registerProductionReadinessRoutes(app:FastifyInstance,deps:DigitalIdentityDependencies,service:ProductionReadinessService,files:AttachmentService){
+ const parse=<T>(schema:z.ZodType<T>,value:unknown):T=>{const result=schema.safeParse(value);if(!result.success)throw new ApplicationError('VALIDATION_ERROR',result.error.issues[0]?.message??'请核对办理内容',400);return result.data;};
+ const actor=async(r:FastifyRequest)=>businessActor(deps.root,await deps.authenticate(r.headers.cookie?.split(';').map(v=>v.trim()).find(v=>v.startsWith('dx_rework_session='))?.slice(18)),r.id,'digital_production:view');
+ const key=(r:FastifyRequest)=>typeof r.headers['idempotency-key']==='string'?r.headers['idempotency-key']:'';
+ for(const [route,kind] of [['orders','order'],['sources','source']] as const){
+  const base=`/digital-production/${route}/:resourceId/production-readiness`;
+  const resource=(r:FastifyRequest):PreparationResource=>({kind,id:parse(z.uuid(),(r.params as {resourceId:unknown}).resourceId)});
+  app.get(base,async r=>service.read(await actor(r),resource(r)));
+  app.post(`${base}/materials`,async r=>service.record(await actor(r),resource(r),parse(PreparationMaterialRecordSchema,r.body),key(r)));
+  app.put(`${base}/responsibility`,async r=>service.assign(await actor(r),resource(r),parse(PreparationResponsibilitySchema,r.body),key(r)));
+  app.post(`${base}/adoption-acknowledgement`,async r=>service.adopt(await actor(r),resource(r),parse(PreparationAdoptionSchema,r.body),key(r),true));
+  app.post(`${base}/adoption`,async r=>service.adopt(await actor(r),resource(r),parse(PreparationAdoptionSchema,r.body),key(r)));
+  if(kind==='order')app.post(`${base}/instruction-deliveries`,async r=>service.deliver(await actor(r),resource(r).id,parse(InstructionDeliverySchema,r.body),key(r)));
+  app.get(`${base}/upload-limits`,async r=>{await service.authorize(await actor(r),resource(r));return files.uploadLimits();});
+  app.post(`${base}/upload-intents`,async r=>{const trusted=await actor(r);await service.authorize(trusted,resource(r));return files.createUploadIntent(trusted,parse(CreateUploadIntentSchema,r.body));});
+  app.post(`${base}/attachments/:attachmentId/finalize`,async r=>{const trusted=await actor(r);await service.authorize(trusted,resource(r));return files.finalize(trusted,parse(z.uuid(),(r.params as {attachmentId:unknown}).attachmentId));});
+  app.get(`${base}/attachments/:attachmentId`,async(r,reply)=>{const trusted=await actor(r),target=resource(r),id=parse(z.uuid(),(r.params as {attachmentId:unknown}).attachmentId);await service.authorize(trusted,target);const grant=await files.createDownloadIntent(trusted,id,()=>service.canDownload(trusted,target,id),'attachment');return reply.redirect(grant.downloadUrl);});
+ }
+}

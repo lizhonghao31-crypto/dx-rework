@@ -1,3 +1,4 @@
+import {PreparationWindows} from './production-readiness-panel.js';
 import {uploadAttachmentWithRecovery} from "./attachment-upload-recovery.js";
 import {instructionFeedbackProjection} from './document-feedback-projections.js';
 import {instructionCommandMatches} from './command-receipt-content.js';
@@ -147,7 +148,7 @@ export function ProductionInstructionPanel({ orderId, initialVersion, onClose, e
     const validation = instructionIssues(doc, order, true);
     if (dirty) { setError("请先保存当前修改"); if (validation[0]) focus(validation[0].tab, validation[0].id); return; }
     if (validation.length) { setError("请核对发布所需资料"); focus(validation[0]!.tab, validation[0]!.id); return; }
-    void act("/publish", "POST", { expectedVersion: sheet.version, orderVersion: order.version });
+    void act("/publish", "POST", { expectedVersion: sheet.version, orderVersion: order.version,...(sheet.readiness?{expectedReadinessRevision:sheet.readiness.revision}:{}) });
   };
   const remove = async (message: string, nonempty: boolean, action: () => void) => {
     if (inputDisabled) return;
@@ -177,8 +178,9 @@ export function ProductionInstructionPanel({ orderId, initialVersion, onClose, e
         <div className="instruction-summary-details"><h2>{order.designStyleNo}</h2><dl><div><dt>客户</dt><dd>{order.customerCode}</dd></div><div><dt>款名</dt><dd>{doc.styleName || "—"}</dd></div><div><dt>跟单</dt><dd>{sheet.merchandiserName || "待指派"}</dd></div><div><dt>类型</dt><dd>{doc.category || "—"}</dd></div><div><dt>年份季节</dt><dd>{doc.season || "—"}</dd></div><div><dt>当前{customerPoDateLabel}</dt><dd>{[...new Set((sheet.customerPoDates??[]).map(line=>line.date).filter(Boolean))].sort().join("、")||"未登记"}</dd></div></dl></div>
         <div className="instruction-po-summary"><h3>PO / 颜色概要</h3><p>{new Set(order.lines.map(line => line.poNumber).filter(Boolean)).size} 个 PO · {order.lines.length} 个款色 · 总数 <strong>{total.toLocaleString()}</strong> 件</p>{order.lines.slice(0, 2).map(line => <div key={line.lineId}><span>{line.color}{line.colorForeign ? ` / ${line.colorForeign}` : ""}</span><strong>{line.sizes.reduce((n, size) => n + size.quantity, 0).toLocaleString()} 件</strong></div>)}{order.lines.length > 2 && <button type="button" onClick={() => focus("main", "instruction-quantities")}>查看全部 {order.lines.length} 个款色</button>}</div>
       </header>
-      {receipt&&!dirty&&!busy&&!error&&<p role="status">{receipt}</p>}
+      {sheet.readiness&&!version&&!embedded&&<><PreparationWindows state={sheet.readiness}/>{sheet.readiness.finalReasons.length>0&&<p className="instruction-notice">正式发布前：{sheet.readiness.finalReasons.join("；")}。可先保存草稿。</p>}</>}{receipt&&!dirty&&!busy&&!error&&<p role="status">{receipt}</p>}
       {sheet.cutStarted && <p className="instruction-notice">已开裁，制单内容只读；编号补齐请使用原母单入口。</p>}
+      {!readonly&&sheet.technicalSizeTable&&<Button type="button" variant="secondary" disabled={busy||inputDisabled} onClick={()=>{const table=sheet.technicalSizeTable!;change({unit:table.unit,sizes:table.sizes,measurements:table.measurements.map(row=>({id:createClientRequestId(),name:row.name,tolerance:row.tolerance,method:row.method,values:row.values}))});}}>采用当前技术尺寸表</Button>}
       {sheet.sourceRound !== sheet.latestSourceRound && <div className="instruction-notice">开发单有新资料，请核对（第 {sheet.latestSourceRound ?? "—"} 轮）。保存正文不会更新采用记录。{!readonly&&sheet.sourceComparison&&<Button type="button" disabled={busy} onClick={()=>setSourceReviewOpen(true)}>查看改变并核对</Button>}</div>}
       {sourceReviewOpen&&<InstructionSourceReviewPanel key={`${sheet.sourceComparison?.sourceRound}:${sheet.sourceComparison?.sourceVersion}`} sheet={sheet} document={doc} busy={busy} imageUrl={imageUrl} onClose={()=>setSourceReviewOpen(false)} onReview={decisions=>{const comparison=sheet.sourceComparison;if(comparison)void act("/source-review","POST",{expectedVersion:sheet.version,orderVersion:sheet.order.version,sourceRound:comparison.sourceRound,sourceVersion:comparison.sourceVersion,document:doc,decisions}).then(success=>{if(success)setSourceReviewOpen(false);});}}/>}
       {sheet.sourceReview&&<p className="instruction-note">制单版本 {sheet.sourceReview.instructionVersion} 由 {sheet.sourceReview.reviewedBy||"跟单"} 于 {new Date(sheet.sourceReview.reviewedAt).toLocaleString()} 核对开发第 {sheet.sourceReview.sourceRound} 轮：{sheet.sourceReview.decisions.map(item=>`${instructionSourceLabels[item.group]}${item.action==="retain"?"保留本单原值":"采用新开发值"}`).join("；")||"技术资料未变化"}。</p>}

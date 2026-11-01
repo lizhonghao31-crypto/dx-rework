@@ -1,3 +1,5 @@
+import {registerProductionReadinessRoutes} from './production-readiness-routes.js';
+import type {ProductionReadinessService} from './production-readiness-service.js';
 import type { DigitalJourneyQuery } from "./journey-query.js";
 import { DevelopmentWorkspaceQuery } from "./development-workspace-query.js";
 import { DevelopmentWorkspaceFilterSchema, PatternWorkspaceFilterSchema } from "@dx-rework/contracts/digital-development-workspace";
@@ -44,6 +46,7 @@ import { ApplicationError } from "../platform/errors.js";
 import { assertIdentityActor, type DigitalProductionIdentityService } from "./identity-service.js";
 
 export type DigitalIdentityDependencies = {
+  readinessService?:ProductionReadinessService;
   analysis?: DigitalAnalysisQuery;
   cockpit?: DigitalCockpitQuery;
   journeys?: DigitalJourneyQuery;
@@ -71,6 +74,7 @@ const parse = <T>(schema: z.ZodType<T>, value: unknown): T => {
   return result.data;
 };
 export function registerDigitalIdentityRoutes(app: FastifyInstance, dependencies: DigitalIdentityDependencies): void {
+  if(dependencies.readinessService&&dependencies.developmentAttachments)registerProductionReadinessRoutes(app,dependencies,dependencies.readinessService,dependencies.developmentAttachments);
   if(dependencies.seriesPlans&&dependencies.shortLead)registerSeriesPlanRoutes(app,dependencies,dependencies.seriesPlans,dependencies.shortLead);
   if(dependencies.quotationService)registerQuotationRoutes(app,dependencies,dependencies.quotationService);
   if(dependencies.analysis) registerDigitalAnalysisRoutes(app,dependencies,dependencies.analysis);

@@ -1,3 +1,6 @@
+import {physicalCuttingLabelsFixture} from '../helpers/production-readiness-fixture.js';
+import {ProductionReadinessService} from '../../apps/api/src/production-platform/production-readiness-service.js';
+import {historicalDigitalOrder} from '../helpers/historical-digital-order-fixture.js';
 import {customerQuotationFixture} from '../helpers/customer-quotation-fixture.js';
 import {registerDigitalTaskRoutes} from '../../apps/api/src/production-platform/task-routes.js';
 import {withAcceptanceBusinessTime,installAcceptanceClockReader} from '../../apps/api/src/acceptance-clock/business-time.js';
@@ -3525,7 +3528,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect((await database.query("SELECT count(*)::int AS count FROM rework_todos WHERE entity_id=$1 AND category='sourcing_contract_return'",[id]))
       .rows[0]?.count).toBe(1);
   });
-  const budgetFixture = async (threePo=false,stylePrefix="TEST-P09",secondCustomerDate="2026-11-20") => {
+  const budgetFixture = async (threePo=false,stylePrefix="TEST-P09",secondCustomerDate="2026-11-20",historicalPreparation=false) => {
     await cycleTodoServices();
     const designerId = randomUUID();
     await database.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'TEST P09 designer',true)", [designerId]);
@@ -3537,7 +3540,8 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const designer: TrustedActorContext = { actorId: designerId, actorRoles: ["sample_designer"], authorizationCapability: "digital_production:view", authorizationCapabilities: ["digital_production:view", "pattern_room:orders:create"], requestId: randomUUID() };
     await database.query("UPDATE digital_production_customers SET default_merchandiser_id=$1 WHERE code='PD'", [merchandiserId]);
     const identity = new DigitalProductionIdentityService(database, true, undefined,()=>new Date("2026-09-01T00:00:00Z"));
-    const order = await identity.createOrder(designer, DigitalOrderCreateSchema.parse({
+    const createOrder=historicalPreparation?(actor:TrustedActorContext,input:Parameters<typeof historicalDigitalOrder>[2])=>historicalDigitalOrder(database,actor,input,{slaBeforePreparation:true}):identity.createOrder.bind(identity);
+    const order = await createOrder(designer, DigitalOrderCreateSchema.parse({
       customerCode: "PD", productGroup: "男装", designStyleNo: `${stylePrefix}-${randomUUID()}`,
       orderDate: "2026-09-01", contractDeliveryDate: "2026-11-20", primaryMerchandiserId: merchandiserId,
       lines: [{ poNumber: `TEST-PO1-${designerId}`, color: "黑", customerWarehouseArrivalDate:"2026-11-20", sizes: [{ size: "M", quantity: 137 }] }, { poNumber: `TEST-PO2-${designerId}`, color: "白", customerWarehouseArrivalDate:secondCustomerDate, sizes: [{ size: "M", quantity: 63 }] }, ...(threePo?[{poNumber:`TEST-PO3-${designerId}`,color:"蓝",customerWarehouseArrivalDate:"2026-11-20",sizes:[{size:"M",quantity:40}]}]:[])],
@@ -3586,7 +3590,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     });
   });
   it('SLA09 explicitly applies selected unfinished windows without changing P0, actual starts, completed targets or unselected parameter provenance',async()=>{
-    const fixture=await budgetFixture();await withSla09Standard(async(tasks,baseline)=>{
+    const fixture=await budgetFixture(false,"TEST-PRE0270-SLA","2026-11-20",true);await withSla09Standard(async(tasks,baseline)=>{
       const ready=await exerciseParallelTechnical(database,fixture,{primary:merchandiserActor(),manager:managerActor(),owner:ownerActor(),ie:ieActor(),root:rootActor()});
       const inspected=await ready.bulk.reportFabric(ready.warehouse,ready.id,{expectedReportId:null,material:'TEST whole fabric',arrivedAt:new Date(Date.now()-41*3600000).toISOString(),inspectedAt:new Date(Date.now()-40*3600000).toISOString(),result:'合格',note:'TEST actual original receipt'},randomUUID());
       const oldTask=inspected.tasks.find(t=>t.taskKind==='warehouse_preshrink')!,sla=new SlaOrderService(database),before=await sla.read(rootActor(),ready.id);expect(before.status).toBe('planned');if(before.status!=='planned')throw new Error('missing initial plan');
@@ -3677,7 +3681,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
   });
 
   it('SLA09 rejects stale native facts and serializes concurrent commands without partial snapshots or changing business gates',async()=>{
-    const fixture=await budgetFixture();await withSla09Standard(async(tasks,baseline)=>{
+    const fixture=await budgetFixture(false,"TEST-PRE0270-SLA","2026-11-20",true);await withSla09Standard(async(tasks,baseline)=>{
       const ready=await exerciseParallelTechnical(database,fixture,{primary:merchandiserActor(),manager:managerActor(),owner:ownerActor(),ie:ieActor(),root:rootActor()});
       const draft={expectedVersion:baseline.version,values:{...baseline.values,warehouse_preshrink:{kind:'duration' as const,minutes:4320}},reason:'TEST frozen preview'};
       const standard=await tasks.previewSlaSettings(rootActor(),draft),published=await tasks.publishSlaSettings(rootActor(),{...draft,previewToken:standard.token},randomUUID()),selection={orderId:ready.id,configurationVersion:published.version,parameterKeys:['warehouse_preshrink'],reason:'TEST stale actual evidence'};
@@ -3786,7 +3790,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
   },240000);
 
   it('analysis separates frozen development rounds from preparation and factory instruction versions', async () => {
-    const fixture = await budgetFixture(), primary = merchandiserActor(), root = rootActor();
+    const fixture = await budgetFixture(false,"TEST-LEGACY-ROUNDS","2026-11-20",true), primary = merchandiserActor(), root = rootActor();
     const ready = (await exerciseBulkPreparation(database, fixture, service, attachments,
       { primary, manager: managerActor(), owner: ownerActor(), ie: ieActor(), root },
       factoryId, craftId('净色车缝'), 'none', { cuttingProcess: 'in_house', stopAtReady: true, legacyDevelopment: true }))!;
@@ -4079,7 +4083,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
   });
 
   it("SLA05 preserves a historical version-one route without retroactive fabric or preshrink gates",async()=>{
-    const root=rootActor(),ready=(await exerciseBulkPreparation(database,await budgetFixture(),service,attachments,{primary:merchandiserActor(),manager:managerActor(),owner:ownerActor(),ie:ieActor(),root},factoryId,craftId('净色车缝'),'none',{cuttingProcess:'in_house',stopAtReady:true}))!;
+    const root=rootActor(),ready=(await exerciseBulkPreparation(database,await budgetFixture(false,"TEST-P09","2026-11-20",true),service,attachments,{primary:merchandiserActor(),manager:managerActor(),owner:ownerActor(),ie:ieActor(),root},factoryId,craftId('净色车缝'),'none',{cuttingProcess:'in_house',stopAtReady:true}))!;
     const client=await database.connect();
     try{
       await client.query('BEGIN');
@@ -4110,7 +4114,9 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await app.ready();
     const post=(suffix:string,body:unknown,actor?:TrustedActorContext,key=randomUUID())=>app.inject({method:'POST',url:`/digital-production/orders/${ready.id}/bulk-preparation/${suffix}`,headers:{...(actor?{cookie:`dx_rework_session=${actor.actorId}`} : {}),'idempotency-key':key},payload:body as Record<string,unknown>});
     try{
-      const input={expectedReportId:null,material:'TEST并发整批布',arrivedAt:'2026-10-22T00:00:00Z',inspectedAt:'2026-10-22T08:00:00Z',result:'不合格',note:'TEST保留原色差'};
+      const native=await new ProductionReadinessService(database).read(rootActor(),{kind:'order',id:ready.id}),receipt=native.facts.find(f=>f.kind==='fabric_receipt')!,previous=(await ready.bulk.read(rootActor(),ready.id)).fabric!.report;
+      const priorCount=Number((await database.query("SELECT count(*)::int n FROM digital_production_task_events WHERE resource_id=$1 AND event_kind='bulk_fabric_report'",[ready.id])).rows[0].n);
+      const input={expectedReportId:previous?.reportId??null,expectedReceiptVersion:receipt.version,material:'TEST并发整批布',arrivedAt:receipt.occurredAt,inspectedAt:new Date().toISOString(),result:'不合格',note:'TEST保留原色差'};
       expect((await post('fabric-report',input)).statusCode).toBe(401);
       expect((await post('fabric-report',input,ready.worker)).statusCode).toBe(403);
       const key=randomUUID(),responses=await Promise.all([post('fabric-report',input,ready.warehouse,key),post('fabric-report',input,ready.warehouse,key)]);
@@ -4135,12 +4141,12 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       const rootKey=randomUUID(),next={reportId,expectedDecisionId:result.decision!.decisionId,allowUse:true,note:'TEST root按原事实准用'};
       expect((await post('fabric-decision',next,rootActor(),rootKey)).statusCode).toBe(200);
       expect((await post('fabric-decision',next,rootActor(),rootKey)).statusCode).toBe(200);
-      expect((await database.query("SELECT count(*)::int n FROM digital_production_task_events WHERE resource_id=$1 AND event_kind='bulk_fabric_report'",[ready.id])).rows[0].n).toBe(1);
+      expect((await database.query("SELECT count(*)::int n FROM digital_production_task_events WHERE resource_id=$1 AND event_kind='bulk_fabric_report'",[ready.id])).rows[0].n).toBe(priorCount+1);
       expect((await database.query("SELECT count(*)::int n FROM digital_production_task_events WHERE resource_id=$1 AND event_kind='bulk_fabric_decision'",[ready.id])).rows[0].n).toBe(2);
     }finally{await app.close();}
   });
   it("SLA05 allows real technical preparation before pricing while preserving warehouse and cutting gates",async()=>{
-    const fixture=await budgetFixture();
+    const fixture=await budgetFixture(false,"TEST-PRE0270-SLA","2026-11-20",true);
     const ready=await exerciseParallelTechnical(database,fixture,{primary:merchandiserActor(),manager:managerActor(),owner:ownerActor(),ie:ieActor(),root:rootActor()});
     const {bulk,id,warehouse,worker,preparationId}=ready;
     const input={expectedReportId:null,material:'TEST本单整批面料',arrivedAt:'2026-10-22T00:00:00Z',inspectedAt:'2026-10-22T12:00:00Z',result:'不合格' as const,note:'TEST色差'};
@@ -4186,7 +4192,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
   });
   it.each(["owner", "root"] as const)("SLA04 binds original approval todos to frozen two-hour windows without resetting on return (%s)",async(approver)=>{
     const {service:currentService}=await cycleTodoServices();
-    const {order,designer,document,budget}=await budgetFixture(),id=order.productionOrderId;
+    const {order,designer,document,budget}=await budgetFixture(false,"TEST-PRE0270-SLA","2026-11-20",true),id=order.productionOrderId;
     const additionalId=randomUUID();
     await database.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'TEST SLA第二跟单',true)",[additionalId]);
     await database.query(`INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at)
@@ -4302,7 +4308,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
 
 
   it("receiving source regression keeps distinct PO receipts mapped and rejects cross-source repeats", async () => {
-    const fixture = await budgetFixture(), primary = merchandiserActor(), root = rootActor();
+    const fixture = await budgetFixture(false,"TEST-LEGACY-ROUNDS","2026-11-20",true), primary = merchandiserActor(), root = rootActor();
     const ready = (await exerciseBulkPreparation(database, fixture, service, attachments,
       { primary, manager: managerActor(), owner: ownerActor(), ie: ieActor(), root },
       factoryId, craftId("净色车缝"), "none", { cuttingProcess: "in_house", stopAtReady: true }))!;
@@ -4376,7 +4382,8 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
   });
 
   it("P10 keeps technical versions, units, date approval and budget boundaries independent", async () => {
-    const fixture=await budgetFixture();
+    const fixture=await budgetFixture(false,"TEST-P10-HISTORICAL","2026-11-20",true);
+    expect(await new ProductionReadinessService(database).read(rootActor(),{kind:"order",id:fixture.order.productionOrderId})).toMatchObject({enrolled:false});
     await fixture.budget.save(fixture.designer,fixture.order.productionOrderId,{expectedVersion:1,document:fixture.document},randomUUID());
     await exerciseInstructions(database,fixture.order,merchandiserActor(),fixture.designer,managerActor("TEST P10"),fixture.imageId);
   });
@@ -4499,7 +4506,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await expect(new DigitalJourneyQuery(database).read(worker,revision.sourceId)).rejects.toMatchObject({statusCode:404});
   });
   it.each(['none','pattern-first','preshrink-first','concurrent'] as const)("P11 releases exactly one whole-order cutting task with %s preparation",async mode=>{
-    await exerciseBulkPreparation(database,await budgetFixture(),service,attachments,{primary:merchandiserActor(),manager:managerActor(),owner:ownerActor(),ie:ieActor(),root:rootActor()},factoryId,craftId("净色车缝"),mode,mode==='none'?{cuttingProcess:'in_house',stopAtReady:false,legacyDevelopment:true}:undefined);
+    await exerciseBulkPreparation(database,await budgetFixture(false,"TEST-P09","2026-11-20",mode==='none'),service,attachments,{primary:merchandiserActor(),manager:managerActor(),owner:ownerActor(),ie:ieActor(),root:rootActor()},factoryId,craftId("净色车缝"),mode,mode==='none'?{cuttingProcess:'in_house',stopAtReady:false,legacyDevelopment:true}:undefined);
   });
 
   it("V2 hides deleted native sourcing decisions and dead record links from Journey",async()=>{
@@ -4540,6 +4547,9 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     }finally{await uploadApp.close();intent.mockRestore();}
     const photo=async(actor:typeof recorder)=>{const image=randomUUID();await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-P12.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[image,`TEST/P12/${image}`,'c'.repeat(64),actor.actorId]);return image;};
     await expect(cutting.record(wrong,ids[0],{pieceCount:2,actualCutCount:99,attachmentIds:[await photo(wrong)]},randomUUID())).rejects.toMatchObject({statusCode:403});
+    await physicalCuttingLabelsFixture(database,root,ids[0],98);
+    await expect(cutting.record(recorder,ids[0],{pieceCount:2,actualCutCount:99,attachmentIds:[await photo(recorder)]},randomUUID())).rejects.toMatchObject({statusCode:409});
+    await physicalCuttingLabelsFixture(database,root,ids[0],99);
     await cutting.record(recorder,ids[0],{pieceCount:2,actualCutCount:99,attachmentIds:[await photo(recorder)]},randomUUID());
     expect((await bulk.read(primary,id)).cutting.completed).toBe(false);
     expect((await database.query('SELECT 1 FROM digital_bulk_cutting_completions WHERE production_order_id=$1',[id])).rowCount).toBe(0);
@@ -4565,6 +4575,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const beforeSla=await new SlaOrderService(database).read(root,id);expect(beforeSla.status).toBe('planned');
     if(beforeSla.status==='planned'){expect(beforeSla.nodes.find(n=>n.id==='bulk_cutting')!.actualEnd).toBeNull();expect(beforeSla.progress.stages.find(stage=>stage.stage===4)!.completed).toBe(0);}
     const input={pieceCount:3,actualCutCount:101,attachmentIds:[await photo(recorder)]},key=randomUUID();
+    await physicalCuttingLabelsFixture(database,root,ids[1],input.actualCutCount);
     await cutting.record(recorder,ids[1],input,key);await cutting.record(recorder,ids[1],input,key);
     expect((await bulk.read(primary,id)).cutting.completed).toBe(true);
     const afterSla=await new SlaOrderService(database).read(root,id);expect(afterSla.status).toBe('planned');
@@ -4609,7 +4620,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     let fixture:Awaited<ReturnType<typeof budgetFixture>>;
     try{await publish({...before.values,ship_sample_advance:{kind:'offset',days:12}});fixture=await budgetFixture();}finally{try{await publish(before.values);}finally{configClient.release();}}
     const ready=(await exerciseBulkPreparation(database,fixture,service,attachments,{primary,manager:managerActor(),owner:ownerActor(),ie:ieActor(),root},factoryId,craftId('净色车缝'),'none',{cuttingProcess:'in_house',stopAtReady:true,secondaryCraft:'无'}))!;
-    for(const row of (await database.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[ready.caseId])).rows){const image=randomUUID();await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-qc.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[image,`TEST/factory-qc/${image}`,'d'.repeat(64),root.actorId]);await ready.cutting.record({...root,authorizationCapability:'cutting:records:create'},row.cutting_order_id,{pieceCount:1,actualCutCount:100,attachmentIds:[image]},randomUUID());}
+    for(const row of (await database.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[ready.caseId])).rows){const image=randomUUID();await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-qc.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[image,`TEST/factory-qc/${image}`,'d'.repeat(64),root.actorId]);await physicalCuttingLabelsFixture(database,root,row.cutting_order_id,100);await ready.cutting.record({...root,authorizationCapability:'cutting:records:create'},row.cutting_order_id,{pieceCount:1,actualCutCount:100,attachmentIds:[image]},randomUUID());}
     let state=await flow.read(ready.people.warehouse_receiver!,ready.id);
     state=await flow.dispatch(ready.people.warehouse_receiver!,ready.id,{expectedRevision:state.revision,supplierId:factoryId,occurredAt:new Date().toISOString(),note:'TEST无船样照原流程发厂'},randomUUID());
     expect(state.shipSamples).toHaveLength(0);
@@ -4660,7 +4671,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     let fixture:Awaited<ReturnType<typeof budgetFixture>>;
     try{await publish({...before.values,ship_sample_advance:{kind:'offset',days:12}});fixture=await budgetFixture();}finally{try{await publish(before.values);}finally{configClient.release();}}
     const ready=(await exerciseBulkPreparation(database,fixture,service,attachments,{primary,manager:managerActor(),owner:ownerActor(),ie:ieActor(),root},factoryId,craftId('净色车缝'),'none',{cuttingProcess:'in_house',stopAtReady:true,secondaryCraft:'无'}))!;
-    for(const row of (await database.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[ready.caseId])).rows){const image=randomUUID();await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-qc.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[image,`TEST/factory-qc/${image}`,'d'.repeat(64),root.actorId]);await ready.cutting.record({...root,authorizationCapability:'cutting:records:create'},row.cutting_order_id,{pieceCount:1,actualCutCount:100,attachmentIds:[image]},randomUUID());}
+    for(const row of (await database.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[ready.caseId])).rows){const image=randomUUID();await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-qc.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[image,`TEST/factory-qc/${image}`,'d'.repeat(64),root.actorId]);await physicalCuttingLabelsFixture(database,root,row.cutting_order_id,100);await ready.cutting.record({...root,authorizationCapability:'cutting:records:create'},row.cutting_order_id,{pieceCount:1,actualCutCount:100,attachmentIds:[image]},randomUUID());}
     let state=await flow.read(ready.people.warehouse_receiver!,ready.id);
     state=await flow.dispatch(ready.people.warehouse_receiver!,ready.id,{expectedRevision:state.revision,supplierId:factoryId,occurredAt:new Date().toISOString(),note:'TEST无船样照原流程发厂'},randomUUID());
     expect(state.shipSamples).toHaveLength(0);
@@ -4756,7 +4767,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     let fixture:Awaited<ReturnType<typeof budgetFixture>>;
     try{await publish({...before.values,ship_sample_advance:{kind:'offset',days:12}});fixture=await budgetFixture();}finally{try{await publish(before.values);}finally{configClient.release();}}
     const ready=(await exerciseBulkPreparation(database,fixture,service,attachments,{primary,manager:managerActor(),owner:ownerActor(),ie:ieActor(),root},factoryId,craftId('净色车缝'),'none',{cuttingProcess:'in_house',stopAtReady:true,secondaryCraft:'无'}))!;
-    for(const row of (await database.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[ready.caseId])).rows){const image=randomUUID();await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-qc.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[image,`TEST/factory-qc/${image}`,'d'.repeat(64),root.actorId]);await ready.cutting.record({...root,authorizationCapability:'cutting:records:create'},row.cutting_order_id,{pieceCount:1,actualCutCount:100,attachmentIds:[image]},randomUUID());}
+    for(const row of (await database.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[ready.caseId])).rows){const image=randomUUID();await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-qc.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[image,`TEST/factory-qc/${image}`,'d'.repeat(64),root.actorId]);await physicalCuttingLabelsFixture(database,root,row.cutting_order_id,100);await ready.cutting.record({...root,authorizationCapability:'cutting:records:create'},row.cutting_order_id,{pieceCount:1,actualCutCount:100,attachmentIds:[image]},randomUUID());}
     let state=await flow.read(ready.people.warehouse_receiver!,ready.id);
     state=await flow.dispatch(ready.people.warehouse_receiver!,ready.id,{expectedRevision:state.revision,supplierId:factoryId,occurredAt:new Date().toISOString(),note:'TEST无船样照原流程发厂'},randomUUID());
     expect(state.shipSamples).toHaveLength(0);
@@ -4842,7 +4853,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const fixture=await budgetFixture(),primary=merchandiserActor(),root=rootActor(),flow=new FactoryFlowService(database);
     const ready=(await exerciseBulkPreparation(database,fixture,service,attachments,{primary,manager:managerActor(),owner:ownerActor(),ie:ieActor(),root},factoryId,craftId("净色车缝"),'none',{cuttingProcess:'in_house',stopAtReady:true,secondaryCraft:'无'}))!;
     const cutRows=(await database.query("SELECT c.cutting_order_id,l.line_id FROM cutting_orders c JOIN digital_production_child_lines l ON l.module='cutting' AND l.child_id=c.cutting_order_id WHERE c.sourcing_case_id=$1 ORDER BY c.sourcing_line_position",[ready.caseId])).rows;
-    for(const row of cutRows){const image=randomUUID();await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-race.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[image,`TEST/race/${image}`,'c'.repeat(64),root.actorId]);await ready.cutting.record({...root,authorizationCapability:'cutting:records:create'},row.cutting_order_id,{pieceCount:1,actualCutCount:100,attachmentIds:[image]},randomUUID());}
+    for(const row of cutRows){const image=randomUUID();await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-race.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[image,`TEST/race/${image}`,'c'.repeat(64),root.actorId]);await physicalCuttingLabelsFixture(database,root,row.cutting_order_id,100);await ready.cutting.record({...root,authorizationCapability:'cutting:records:create'},row.cutting_order_id,{pieceCount:1,actualCutCount:100,attachmentIds:[image]},randomUUID());}
     const warehouse=ready.people.warehouse_receiver!,lineId=cutRows[0]!.line_id,cutId=cutRows[0]!.cutting_order_id;
     let state=await flow.read(warehouse,ready.id);
     const deadline=state.batchWindows!.find(w=>w.lineId===lineId&&w.kind==='warehouse_dispatch')!.dueAt;
@@ -4877,7 +4888,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     // Isolated fixture models a preparation persisted before the additive migrations.
     const legacyApproval=(await new BulkPreparationService(database).gates(database,ready.id)).approval.sourcing_approval_snapshot_id;
     const client=await database.connect();try{await client.query('BEGIN');await client.query('ALTER TABLE digital_bulk_preparations DISABLE TRIGGER USER');await client.query("UPDATE digital_bulk_preparations SET workflow_version=1,sla_snapshot_id=NULL,approval_snapshot_id=$2 WHERE production_order_id=$1",[ready.id,legacyApproval]);await client.query('ALTER TABLE digital_bulk_preparations ENABLE TRIGGER USER');await client.query('COMMIT');}catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}
-    for(const row of (await database.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[ready.caseId])).rows){const image=randomUUID();await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-legacy-batch.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[image,`TEST/legacy-batch/${image}`,'c'.repeat(64),root.actorId]);await ready.cutting.record({...root,authorizationCapability:'cutting:records:create'},row.cutting_order_id,{pieceCount:1,actualCutCount:100,attachmentIds:[image]},randomUUID());}
+    for(const row of (await database.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[ready.caseId])).rows){const image=randomUUID();await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-legacy-batch.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[image,`TEST/legacy-batch/${image}`,'c'.repeat(64),root.actorId]);await physicalCuttingLabelsFixture(database,root,row.cutting_order_id,100);await ready.cutting.record({...root,authorizationCapability:'cutting:records:create'},row.cutting_order_id,{pieceCount:1,actualCutCount:100,attachmentIds:[image]},randomUUID());}
     let state=await flow.read(ready.people.warehouse_receiver!,ready.id);expect(state.batchMode).toBe(false);expect(state.tasks.some(t=>t.taskKind==='bulk_qc')).toBe(false);
     const beforeDispatch=Date.now(),input={expectedRevision:state.revision,supplierId:factoryId,note:'TEST旧路线'},key=randomUUID();
     state=await flow.dispatch(ready.people.warehouse_receiver!,ready.id,input,key);await flow.dispatch(ready.people.warehouse_receiver!,ready.id,input,key);
@@ -4890,7 +4901,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const fixture=await budgetFixture(),primary=merchandiserActor(),root=rootActor(),flow=new FactoryFlowService(database),tasks=new DigitalProductionTaskService(database);
     const ready=(await exerciseBulkPreparation(database,fixture,service,attachments,{primary,manager:managerActor(),owner:ownerActor(),ie:ieActor(),root},factoryId,craftId("净色车缝"),'none',{cuttingProcess:'in_house',stopAtReady:true,secondaryCraft:'印花'}))!;
     const {id,caseId,people,cutting}=ready,logistics=people.embroidery_washing_merchandiser!,qc=people.quality_control!,warehouse=people.warehouse_receiver!;
-    for(const row of (await database.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[caseId])).rows)await cutting.record({...root,authorizationCapability:'cutting:records:create'},row.cutting_order_id,{pieceCount:1,actualCutCount:100,attachmentIds:[await readyCuttingSheet(root.actorId)]},randomUUID());
+    for(const row of (await database.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[caseId])).rows){await physicalCuttingLabelsFixture(database,root,row.cutting_order_id,100);await cutting.record({...root,authorizationCapability:'cutting:records:create'},row.cutting_order_id,{pieceCount:1,actualCutCount:100,attachmentIds:[await readyCuttingSheet(root.actorId)]},randomUUID());}
     let state=await flow.read(root,id);
     const noWindow=state.tasks.find(t=>t.taskKind==='bulk_qc')!;
     const pendingTodo=(await new DigitalProductionNotificationService(database).todos(managerActor())).find(t=>t.todoId===noWindow.taskId)!;
@@ -4948,7 +4959,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect((await bulk.read(primary,id)).materials!.history).toHaveLength(1);
     if(process.env.SLA_MATERIALS_UI_INPUT)await writeFile(process.env.SLA_MATERIALS_UI_INPUT,JSON.stringify({warehouse:await bulk.read(people.warehouse_receiver!,id),readonly:await bulk.read(primary,id)}));
     expect((await database.query("SELECT 1 FROM digital_production_task_events WHERE resource_id=$1 AND event_kind='factory_arrived'",[id])).rowCount).toBe(0);
-    for(const row of (await database.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[caseId])).rows){const image=randomUUID();await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-batch.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[image,`TEST/batch/${image}`,'c'.repeat(64),root.actorId]);await cutting.record({...root,authorizationCapability:'cutting:records:create'},row.cutting_order_id,{pieceCount:1,actualCutCount:100,attachmentIds:[image]},randomUUID());}
+    for(const row of (await database.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[caseId])).rows){const image=randomUUID();await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-batch.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[image,`TEST/batch/${image}`,'c'.repeat(64),root.actorId]);await physicalCuttingLabelsFixture(database,root,row.cutting_order_id,100);await cutting.record({...root,authorizationCapability:'cutting:records:create'},row.cutting_order_id,{pieceCount:1,actualCutCount:100,attachmentIds:[image]},randomUUID());}
     const logistics=people.embroidery_washing_merchandiser!,qc=people.quality_control!,warehouse=people.warehouse_receiver!;
     let state=await flow.read(root,id);expect(state.batchMode).toBe(true);
     for(const [kind,actor] of [['process_logistics',logistics],['bulk_qc',qc]] as const)await tasks.reassign(root,state.tasks.find(t=>t.taskKind===kind)!.taskId,actor.actorId,randomUUID());
@@ -5010,7 +5021,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const ready=(await exerciseBulkPreparation(database,fixture,service,attachments,{primary,manager:managerActor(),owner:ownerActor(),ie:ieActor(),root},factoryId,craftId("净色车缝"),'none',{cuttingProcess:'in_house',stopAtReady:true,secondaryCraft,...(variant==='仓库主管'?{warehouseRole:'warehouse_supervisor' as const}:{})}))!;
     const {id,caseId,people,cutting}=ready;
     const ids=(await database.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1 ORDER BY sourcing_line_position',[caseId])).rows.map(r=>r.cutting_order_id);
-    for(const cuttingId of ids){const image=randomUUID();await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-P13-cut.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[image,`TEST/P13/${image}`,'c'.repeat(64),root.actorId]);await cutting.record({...root,authorizationCapability:'cutting:records:create'},cuttingId,{pieceCount:1,actualCutCount:100,attachmentIds:[image]},randomUUID());}
+    for(const cuttingId of ids){const image=randomUUID();await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-P13-cut.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[image,`TEST/P13/${image}`,'c'.repeat(64),root.actorId]);await physicalCuttingLabelsFixture(database,root,cuttingId,100);await cutting.record({...root,authorizationCapability:'cutting:records:create'},cuttingId,{pieceCount:1,actualCutCount:100,attachmentIds:[image]},randomUUID());}
     let state=await flow.read(primary,id);expect(state).toMatchObject({allCut:true,secondaryCraft,dispatched:false,sampleTargetDate:'2026-11-10'});
     expect(state.tasks.find(t=>t.taskKind==='factory_material_count')).toMatchObject({state:'pending',enteredAt:null,dueAt:null});
     const instruction=new ProductionInstructionService(database,true),before=await instruction.read(primary,id);
@@ -5948,7 +5959,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       todos:(await database.query('SELECT * FROM rework_todos WHERE entity_id=$1 ORDER BY todo_id',[order.orderId])).rows,
       audits:(await database.query('SELECT * FROM operation_events WHERE entity_id=$1 ORDER BY event_id',[order.orderId])).rows});
     const evidence=await readyCuttingSheet(root.actorId);
-    await ready.cutting.record({...root,authorizationCapability:'cutting:records:create'},ready.cuttingId,{pieceCount:1,actualCutCount:137,attachmentIds:[evidence]},randomUUID());
+    await physicalCuttingLabelsFixture(database,root,ready.cuttingId,137);await ready.cutting.record({...root,authorizationCapability:'cutting:records:create'},ready.cuttingId,{pieceCount:1,actualCutCount:137,attachmentIds:[evidence]},randomUUID());
     const frozen=await before(),input={roundId:order.currentRoundId,version:order.version,reason:'客户开裁后修改',reasonCategory:'other'};
     for(const actor of [nativeRoot,{...fixture.designer,authorizationCapability:'pattern_room:orders:rework',authorizationCapabilities:['pattern_room:orders:view','pattern_room:orders:rework']}]){
       const view=await native.get(actor,order.orderId);expect(view.actions.rework).toBe(false);expect(view.reworkBlockedReason).toContain('已开始实裁');
@@ -6081,10 +6092,12 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect(await count()).toBe(1);
     const audit=(await database.query("SELECT actor_id,after_state FROM operation_events WHERE entity_id=$1 AND action='sourcing.transfer_contract_todo.reconcile'",[key])).rows;
     expect(audit).toHaveLength(1);expect(audit[0]).toMatchObject({actor_id:rootActor().actorId,after_state:{contracts:selected}});
+    const nativeIdentity=(await database.query("SELECT user_id,provider_user_id FROM owner_bootstrap_consumptions WHERE singleton=true AND corp_id='corp'")).rows[0];
+    const httpRootId=nativeIdentity?.user_id??merchandiserId,httpRootProvider=nativeIdentity?.provider_user_id??`ding-${merchandiserId}`;
     const app=Fastify();
     app.setErrorHandler((error,_request,reply)=>reply.code((error as {statusCode?:number}).statusCode??500).send({error:error.message}));
     registerTodoRoutes(app,{service:new TodoService(database),transferContractReconciliation:repair,
-      root:new RootAuthority(database,"corp",`ding-${merchandiserId}`),
+      root:new RootAuthority(database,"corp",httpRootProvider),
       authenticate:async token=>{if(!token) throw Object.assign(new Error("unauthorized"),{statusCode:401});
         return {id:token,displayName:"TEST",businessRoles:["root_superuser"],capabilities:["todo:routing_exception_manage"]};}});
     await app.ready();
@@ -6094,7 +6107,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
         expect((await app.inject({method:"POST",url,payload:{}})).statusCode).toBe(401);
         expect((await app.inject({method:"POST",url,headers:{cookie:`dx_rework_session=${managerId}`},payload:{}})).statusCode).toBe(403);
       }
-      const headers={cookie:`dx_rework_session=${merchandiserId}`};
+      const headers={cookie:`dx_rework_session=${httpRootId}`};
       expect((await app.inject({method:"POST",url:"/todos/transfer-contract-reconciliation/preview",headers,payload:{caseIds:[id]}})).statusCode).toBe(200);
       expect((await app.inject({method:"POST",url:"/todos/transfer-contract-reconciliation/apply",headers,payload:{selected,reason:"TEST-no-key"}})).statusCode).toBe(400);
       const result=await app.inject({method:"POST",url:"/todos/transfer-contract-reconciliation/apply",headers:{...headers,'idempotency-key':randomUUID()},payload:{selected,reason:"TEST-route"}});

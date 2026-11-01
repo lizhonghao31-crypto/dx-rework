@@ -1,3 +1,5 @@
+import {productionReadinessFixture,completeBulkRangeFixture} from './production-readiness-fixture.js';
+import {ProductionReadinessService} from '../../apps/api/src/production-platform/production-readiness-service.js';
 import {confirmedTechnicalFixture} from './development-technical-fixture.js';
 import {DigitalJourneyQuery} from "../../apps/api/src/production-platform/journey-query.js";
 import {DigitalCockpitQuery} from "../../apps/api/src/production-platform/cockpit-query.js";
@@ -27,6 +29,7 @@ async function confirmTechnicalSample(db:Pool,root:TrustedActorContext,sourceId:
 }
 export async function exerciseBulkPreparation(db:Pool,fixture:{order:DigitalOrder;designer:TrustedActorContext;document:BudgetDocument;budget:DigitalBudgetService},service:SourcingService,attachments:AttachmentService,actors:{primary:TrustedActorContext;manager:TrustedActorContext;owner:TrustedActorContext;ie:TrustedActorContext;root:TrustedActorContext},factoryId:string,craftId:string,mode:'none'|'pattern-first'|'preshrink-first'|'concurrent',options?:{cuttingProcess:'in_house'|'outsourced';stopAtReady:boolean;secondaryCraft?:'无'|'印花';accessory?:boolean;warehouseRole?:'warehouse_receiver'|'warehouse_supervisor';sourceCustomerCode?:string|null;legacyDevelopment?:boolean}){
  const primary=actors.primary,designer=fixture.designer,id=fixture.order.productionOrderId,bulk=new BulkPreparationService(db),identity=new DigitalProductionIdentityService(db,true),forms=new DigitalDevelopmentService(db,true),instruction=new ProductionInstructionService(db,true),tasks=new DigitalProductionTaskService(db),cutting=new CuttingService(db);
+ const newRule=(await new ProductionReadinessService(db).read(actors.root,{kind:'order',id})).enrolled;
  const beforeRecords=await bulk.workroom(actors.root,{page:1,search:fixture.order.designStyleNo,scope:"all"});
  expect(beforeRecords.items.some(item=>item.orderId===id)).toBe(false);
  const people:Record<string,TrustedActorContext>={};
@@ -67,7 +70,7 @@ export async function exerciseBulkPreparation(db:Pool,fixture:{order:DigitalOrde
  const doc={...initialInstruction(),...(options?.accessory?{accessories:[{id:randomUUID(),group:'车缝' as const,garmentColors:'黑白',materialColor:'黑',name:'TEST拉链',category:'拉链',part:'门襟',specification:'20cm',consumption:'1',remarks:''}]}:{}),styleName:'TEST产前',secondaryCraft:options?.secondaryCraft??'沿用开发',category:'上衣',date:'2026-10-01',preshrink:mode==='none'?'无需预缩' as const:'需要预缩' as const,sizes:['M'],measurements:[{id:randomUUID(),name:'袖长',tolerance:'±1/4',method:'平量',values:['6 1/8']}],images:[{attachmentId:image,kind:'款图' as const,description:'TEST'}]};
  await expect(instruction.save(primary,id,{expectedVersion:0,orderVersion:order.version,document:doc},randomUUID())).rejects.toMatchObject({statusCode:409});
  await expect(instruction.save(primary,id,{expectedVersion:0,orderVersion:order.version,sourceRound:2,document:doc},randomUUID())).rejects.toMatchObject({statusCode:409});
- await instruction.save(primary,id,{expectedVersion:0,orderVersion:order.version,sourceRound:1,document:doc},randomUUID());await instruction.publish(primary,id,{expectedVersion:1,orderVersion:order.version},randomUUID());
+ await instruction.save(primary,id,{expectedVersion:0,orderVersion:order.version,sourceRound:1,document:doc},randomUUID());if(!newRule)await instruction.publish(primary,id,{expectedVersion:1,orderVersion:order.version},randomUUID());
  const dispatch={expectedVersion:0,patternWorkerId:worker.actorId,warehouseWorkerId:warehouse.actorId,cuttingWorkerId:people.cutting_worker!.actorId,deliverPattern:false};
  await bulk.dispatch(actors.manager,id,dispatch,randomUUID());expect((await bulk.read(primary,id)).tasks).toHaveLength(0);
  await expect(bulk.dispatch(clerk,id,{expectedVersion:1,patternWorkerId:worker.actorId,deliverPattern:true},randomUUID())).rejects.toMatchObject({statusCode:409});
@@ -76,7 +79,7 @@ export async function exerciseBulkPreparation(db:Pool,fixture:{order:DigitalOrde
  const created=await service.createCase(primary,{gender:prepared.gender,styleName:prepared.styleName,deliveryDate:'2026-11-10',estimatedCutPieceSendDate:'2026-10-20',daxingUnitPrice:prepared.daxingUnitPrice,attachmentIds:prepared.images.map(i=>i.attachmentId),lineItems:prepared.lineItems.map(({lineId,styleNo,alternateStyleNo,color,quantity})=>({lineId,styleNo,alternateStyleNo,color,quantity,factoryDeliveryDate:"2026-11-10"})),digitalBudget:{productionOrderId:id,budgetVersion:prepared.budgetVersion,orderVersion:prepared.orderVersion}},randomUUID());
  const caseId=created.value.sourcingCaseId,prices=[{position:1,unitPrice:'5.50'},{position:2,unitPrice:'5.50'}];
  await service.quoteIePrice(actors.ie,caseId,{linePrices:prices},randomUUID());await service.recordManagementDecision(actors.manager,caseId,{supplierId:factoryId,craftIds:[craftId],linePrices:prices,cuttingProcess:options?.cuttingProcess??'in_house'},randomUUID());
- if(mode==='none'){await confirmTechnicalSample(db,actors.root,source.sourceId,worker.actorId,1);expect((await bulk.read(primary,id)).tasks.some(t=>t.taskKind==='bulk_pattern')).toBe(true);}
+ if(mode==='none'){await confirmTechnicalSample(db,actors.root,source.sourceId,worker.actorId,1);if(newRule){order=await identity.read(primary,id);const basis=await productionReadinessFixture(db,actors.root,id,worker.actorId,warehouse);await instruction.publish(primary,id,{expectedVersion:1,orderVersion:order.version,expectedReadinessRevision:basis.revision},randomUUID());}expect((await bulk.read(primary,id)).tasks.some(t=>t.taskKind==='bulk_pattern')).toBe(true);}
  if(mode==='none'){
   await service.decideOwner(actors.owner,caseId,{decision:'rejected'},randomUUID());
   const rejected=await new DigitalJourneyQuery(db).read(actors.root,id),owner=rejected.stages.flatMap(stage=>stage.nodes).find(node=>node.key==='sourcing_owner');
@@ -88,7 +91,7 @@ export async function exerciseBulkPreparation(db:Pool,fixture:{order:DigitalOrde
   await service.recordManagementDecision(actors.manager,caseId,{supplierId:factoryId,craftIds:[craftId],linePrices:prices,decisionReason:'TEST按原拒绝意见重新确认',cuttingProcess:options?.cuttingProcess??'in_house'},randomUUID());
  }
  await service.decideOwner(actors.owner,caseId,{decision:'approved'},randomUUID());
- if(mode!=='none'){expect((await bulk.read(primary,id)).tasks).toHaveLength(0);await confirmTechnicalSample(db,actors.root,source.sourceId,worker.actorId,1);}
+ if(mode!=='none'){expect((await bulk.read(primary,id)).tasks).toHaveLength(0);await confirmTechnicalSample(db,actors.root,source.sourceId,worker.actorId,1);if(newRule){order=await identity.read(primary,id);const basis=await productionReadinessFixture(db,actors.root,id,worker.actorId,warehouse);await instruction.publish(primary,id,{expectedVersion:1,orderVersion:order.version,expectedReadinessRevision:basis.revision},randomUUID());}}
  let sheet=await bulk.read(primary,id);
  const publishedAt=(await db.query('SELECT published_at FROM digital_instruction_versions WHERE production_order_id=$1 AND version=1',[id])).rows[0].published_at.toISOString();
  expect(sheet.tasks.find(t=>t.taskKind==='bulk_pattern')).toMatchObject({state:'pending',enteredAt:publishedAt,dueAt:new Date(Date.parse(publishedAt)+48*3600000).toISOString()});
@@ -139,7 +142,7 @@ export async function exerciseBulkPreparation(db:Pool,fixture:{order:DigitalOrde
  sheet=await bulk.read(worker,id);expect(sheet.tasks.map(t=>t.taskKind)).toEqual(['bulk_pattern']);expect(sheet.tasks.find(t=>t.taskKind==='bulk_pattern')).toMatchObject({state:'ready',slaHours:48,timeQuality:'现场登记'});
  expect(sheet.dispatch).toMatchObject({patternWorkerId:worker.actorId,warehouseWorkerId:null,cuttingWorkerId:null});
  expect((await tasks.history(worker,sheet.tasks[0]!.taskId)).events.length).toBeGreaterThan(0);
- await bulk.reportFabric(warehouse,id,{expectedReportId:null,material:'TEST本单整批面料',arrivedAt:new Date(Date.now()-3600000).toISOString(),inspectedAt:new Date().toISOString(),result:'合格',note:'TEST原链验布合格'},randomUUID());
+ if(!newRule)await bulk.reportFabric(warehouse,id,{expectedReportId:null,material:'TEST本单整批面料',arrivedAt:new Date(Date.now()-3600000).toISOString(),inspectedAt:new Date().toISOString(),result:'合格',note:'TEST原链验布合格'},randomUUID());
  {
   const warehouseSheet=await bulk.read(warehouse,id),warehouseTask=warehouseSheet.tasks.find(t=>t.taskKind==='warehouse_preshrink')!;
   expect(warehouseSheet.tasks.map(t=>t.taskKind)).toEqual(['warehouse_preshrink']);expect(warehouseTask).toMatchObject({state:'ready',slaHours:36,timeQuality:'补报未核实'});
@@ -151,7 +154,7 @@ export async function exerciseBulkPreparation(db:Pool,fixture:{order:DigitalOrde
  await expect(fixture.budget.read(worker,id)).rejects.toMatchObject({statusCode:404});
  expect((await instruction.read(worker,id)).canEdit).toBe(false);
  await expect(bulk.complete(clerk,id,{preparationId:sheet.preparationId!,kind:'纸样完成'},randomUUID())).rejects.toMatchObject({statusCode:404});
- const done=async(kind:'纸样完成'|'唛架完成'|'预缩完成')=>bulk.complete(kind==='预缩完成'?warehouse:worker,id,{preparationId:sheet.preparationId!,kind},randomUUID());
+ const done=async(kind:'纸样完成'|'唛架完成'|'预缩完成')=>newRule?completeBulkRangeFixture(db,kind==='预缩完成'?warehouse:worker,id,sheet.preparationId!,kind):bulk.complete(kind==='预缩完成'?warehouse:worker,id,{preparationId:sheet.preparationId!,kind},randomUUID());
  if(mode==='preshrink-first')await done('预缩完成');
  await done('纸样完成');expect((await bulk.read(primary,id)).tasks.some(t=>t.taskKind===(options?.cuttingProcess==='outsourced'?'bulk_cutting_external':'bulk_cutting'))).toBe(false);
  if(mode==='concurrent')await Promise.all([done('唛架完成'),done('预缩完成')]);else await done('唛架完成');
@@ -185,7 +188,7 @@ export async function exerciseBulkPreparation(db:Pool,fixture:{order:DigitalOrde
  }
  // New technical release invalidates the old completed facts and the old pending cutting event.
 
- order=await identity.read(primary,id);await instruction.save(primary,id,{expectedVersion:1,orderVersion:order.version,document:{...doc,comments:'TEST新技术要求'}},randomUUID());await instruction.publish(primary,id,{expectedVersion:2,orderVersion:order.version},randomUUID());
+ order=await identity.read(primary,id);await instruction.save(primary,id,{expectedVersion:1,orderVersion:order.version,document:{...doc,comments:'TEST新技术要求'}},randomUUID());await instruction.publish(primary,id,{expectedVersion:2,orderVersion:order.version,...(newRule?{expectedReadinessRevision:(await new ProductionReadinessService(db).read(primary,{kind:'order',id})).revision}:{})},randomUUID());
  const revised=await bulk.read(primary,id);expect(revised.preparationId).not.toBe(sheet.preparationId);expect(revised.tasks.some(t=>t.taskKind===(options?.cuttingProcess==='outsourced'?'bulk_cutting_external':'bulk_cutting'))).toBe(false);expect(revised.facts.some(f=>f.kind==='纸样完成')).toBe(false);
  await expect(bulk.read(people.cutting_worker!,id)).rejects.toMatchObject({statusCode:404});await expect(instruction.read(people.cutting_worker!,id)).rejects.toMatchObject({statusCode:404});expect((await instruction.read(worker,id)).canEdit).toBe(false);
  await expect(done('纸样完成')).rejects.toMatchObject({statusCode:409});expect((await cutting.get(actors.root,cuttingId)).canRecord).toBe(false);
@@ -271,6 +274,7 @@ export async function exerciseParallelTechnical(db:Pool,fixture:Parameters<typeo
   await db.query('ALTER TABLE user_role_assignments DISABLE TRIGGER user_role_assignments_guard_creation');try{await db.query("INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason) VALUES($1,$2,$3,$4,'TEST P11')",[randomUUID(),person,actualRole,primary.actorId]);}finally{await db.query('ALTER TABLE user_role_assignments ENABLE TRIGGER user_role_assignments_guard_creation');}
   people[role]={actorId:person,actorRoles:[actualRole],authorizationCapability:'digital_production:view',authorizationCapabilities:['digital_production:view'],requestId:randomUUID()};
  }
+ const newRule=(await new ProductionReadinessService(db).read(actors.root,{kind:'order',id})).enrolled;
  const worker=people.pattern_room_worker!,warehouse=people.warehouse_receiver!;
  const source=await identity.createSource(designer,{developmentType:'头版',designStyleNo:fixture.order.designStyleNo,temporaryStyleNo:null,customerCode:options?.sourceCustomerCode===undefined?'PD':options.sourceCustomerCode},randomUUID());
  await identity.attachSource(designer,id,source.sourceId,randomUUID());
@@ -285,16 +289,16 @@ export async function exerciseParallelTechnical(db:Pool,fixture:Parameters<typeo
  const doc={...initialInstruction(),...(options?.accessory?{accessories:[{id:randomUUID(),group:'车缝' as const,garmentColors:'黑白',materialColor:'黑',name:'TEST拉链',category:'拉链',part:'门襟',specification:'20cm',consumption:'1',remarks:''}]}:{}),styleName:'TEST产前',secondaryCraft:options?.secondaryCraft??'沿用开发',category:'上衣',date:'2026-10-01',preshrink:'需要预缩' as const,sizes:['M'],measurements:[{id:randomUUID(),name:'袖长',tolerance:'±1/4',method:'平量',values:['6 1/8']}],images:[{attachmentId:image,kind:'款图' as const,description:'TEST'}]};
  await expect(instruction.save(primary,id,{expectedVersion:0,orderVersion:order.version,document:doc},randomUUID())).rejects.toMatchObject({statusCode:409});
  await expect(instruction.save(primary,id,{expectedVersion:0,orderVersion:order.version,sourceRound:2,document:doc},randomUUID())).rejects.toMatchObject({statusCode:409});
- await instruction.save(primary,id,{expectedVersion:0,orderVersion:order.version,sourceRound:1,document:doc},randomUUID());await instruction.publish(primary,id,{expectedVersion:1,orderVersion:order.version},randomUUID());
+ await instruction.save(primary,id,{expectedVersion:0,orderVersion:order.version,sourceRound:1,document:doc},randomUUID());const basis=await productionReadinessFixture(db,actors.root,id,worker.actorId,warehouse);await instruction.publish(primary,id,{expectedVersion:1,orderVersion:order.version,expectedReadinessRevision:basis.revision},randomUUID());
 
- await confirmTechnicalSample(db,actors.root,source.sourceId,worker.actorId,1);
+ if(newRule){const quality=(await bulk.read(warehouse,id)).fabric!.report!;const receipt=(await new ProductionReadinessService(db).read(warehouse,{kind:'order',id})).facts.find(f=>f.kind==='fabric_receipt')!;await bulk.reportFabric(warehouse,id,{expectedReportId:quality.reportId,expectedReceiptVersion:receipt.version,material:'TEST quality recheck',arrivedAt:receipt.occurredAt,inspectedAt:new Date().toISOString(),result:'不合格',note:'TEST new failure retains original clock; paper can proceed'},randomUUID());}else await confirmTechnicalSample(db,actors.root,source.sourceId,worker.actorId,1);
  const sheet=await bulk.dispatch(actors.manager,id,{expectedVersion:0,patternWorkerId:worker.actorId,warehouseWorkerId:warehouse.actorId,cuttingWorkerId:people.cutting_worker!.actorId,deliverPattern:true},randomUUID());
  expect(sheet.ownerApproved).toBe(false);
  const pattern=sheet.tasks.find(t=>t.taskKind==='bulk_pattern')!;
  expect(pattern).toMatchObject({state:'ready',slaHours:48});
- expect(sheet.tasks.find(t=>t.taskKind==='warehouse_preshrink')).toMatchObject({state:'pending',enteredAt:null});
+ expect(sheet.tasks.find(t=>t.taskKind==='warehouse_preshrink')?.canExecute).toBe(false);if(newRule)expect(sheet.tasks.find(t=>t.taskKind==='warehouse_preshrink')?.enteredAt).not.toBeNull();else expect(sheet.tasks.find(t=>t.taskKind==='warehouse_preshrink')).toMatchObject({state:'pending',enteredAt:null});
  expect((await db.query('SELECT approval_snapshot_id,workflow_version FROM digital_bulk_preparations WHERE preparation_id=$1',[sheet.preparationId])).rows[0]).toEqual({approval_snapshot_id:null,workflow_version:2});
- for(const kind of ['纸样完成','唛架完成'] as const)await bulk.complete(worker,id,{preparationId:sheet.preparationId!,kind},randomUUID());
+ for(const kind of ['纸样完成','唛架完成'] as const)await completeBulkRangeFixture(db,worker,id,sheet.preparationId!,kind);
  const completed=await bulk.read(actors.root,id);
  expect(completed.tasks.find(t=>t.taskKind==='bulk_pattern')?.state).toBe('completed');
  expect(completed.tasks.some(t=>['bulk_cutting','bulk_cutting_external'].includes(t.taskKind))).toBe(false);

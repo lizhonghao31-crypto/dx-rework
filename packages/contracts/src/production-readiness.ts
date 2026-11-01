@@ -1,0 +1,44 @@
+import {z} from 'zod';
+
+export const PREPARATION_RULE_VERSION='production-readiness-20261101';
+export const PREPARATION_MATERIAL_KINDS=['design_handover','material_investment','fabric_receipt','color_confirmation','accessories_ready','style_label_ready'] as const;
+export type PreparationMaterialKind=typeof PREPARATION_MATERIAL_KINDS[number];
+export const preparationMaterialLabels:Record<PreparationMaterialKind,string>={design_handover:'设计交资料',material_investment:'跟单投料',fabric_receipt:'面料实际到仓',color_confirmation:'对色完成',accessories_ready:'辅料实物备齐',style_label_ready:'款号唛实物备齐'};
+// These are discrete pieces only; packages/boxes have no implicit conversion.
+export const isStyleLabelPieceUnit=(unit:string)=>['枚','个','件'].includes(unit.trim());
+export const normalizeStyleLabelUnit=(unit:string)=>isStyleLabelPieceUnit(unit)?'枚':null;
+const quantity=z.object({lineId:z.uuid().nullable(),materialId:z.uuid().nullable(),name:z.string().trim().min(1).max(200),quantity:z.number().positive().max(10000000),unit:z.string().trim().min(1).max(20)}).strict();
+export const PreparationMaterialRecordSchema=z.object({
+ kind:z.enum(PREPARATION_MATERIAL_KINDS),scopeRef:z.string().trim().min(1).max(150).default('whole'),
+ expectedVersion:z.number().int().nonnegative(),state:z.enum(['ready','partial','unknown','withdrawn']),
+ occurredAt:z.iso.datetime({offset:true}).nullable(),note:z.string().trim().min(1).max(1000),
+ quantities:z.array(quantity).max(400).default([]),evidenceIds:z.array(z.uuid()).max(40).default([]),
+ sourceDocumentVersion:z.number().int().positive().nullable().default(null),
+ recipientId:z.uuid().nullable().default(null),
+}).strict().transform(x=>({...x,quantities:x.quantities.map(q=>({...q,unit:x.kind==='style_label_ready'?(normalizeStyleLabelUnit(q.unit)??q.unit):q.unit}))})).superRefine((x,c)=>{
+ if(['ready','partial'].includes(x.state)&&!x.occurredAt)c.addIssue({code:'custom',path:['occurredAt'],message:'实际办理须填写真实发生时间'});
+ if(['unknown','withdrawn'].includes(x.state)&&x.occurredAt)c.addIssue({code:'custom',path:['occurredAt'],message:'未知或撤回不填写完成时间'});
+ if(x.kind==='style_label_ready'&&x.quantities.some(q=>!isStyleLabelPieceUnit(q.unit)))c.addIssue({code:'custom',path:['quantities'],message:'款号唛须按枚、个或件计数；箱、包和长度单位不能自动折算'});
+ if(x.kind==='style_label_ready'&&x.quantities.some(q=>!Number.isSafeInteger(q.quantity)))c.addIssue({code:'custom',path:['quantities'],message:'款号唛实物数量须为整数'});
+ if(x.state==='ready'&&['material_investment','accessories_ready','style_label_ready'].includes(x.kind)&&!x.quantities.length)c.addIssue({code:'custom',path:['quantities'],message:'请记录本次物料及实际数量'});
+ if(new Set(x.quantities.map(q=>JSON.stringify([q.lineId,q.materialId,q.name,q.unit]))).size!==x.quantities.length)c.addIssue({code:'custom',path:['quantities'],message:'同一款色物料及单位不能重复，请合并实际数量'});
+ if(new Set(x.evidenceIds).size!==x.evidenceIds.length)c.addIssue({code:'custom',path:['evidenceIds'],message:'凭证不可重复'});
+});
+export type PreparationMaterialRecord=z.infer<typeof PreparationMaterialRecordSchema>;
+export type PreparationResource={kind:'source'|'order';id:string};
+export type PreparationMaterialFact=PreparationMaterialRecord&{handoverMaterials?:Array<{name:string;quantity:string;color:string;specification:string}>;recordId:string;version:number;resource:PreparationResource;recordedAt:string;recordedBy:string;operatorName:string;valid:boolean;invalidReasons:string[]};
+export const PreparationResponsibilitySchema=z.object({expectedVersion:z.number().int().nonnegative(),warehouseWorkerId:z.uuid().nullable(),colorConfirmationWorkerId:z.uuid().nullable(),colorConfirmationRole:z.string().trim().min(1).max(100).nullable(),reason:z.string().trim().min(1).max(1000)}).strict().refine(x=>Boolean(x.colorConfirmationWorkerId)===Boolean(x.colorConfirmationRole),'对色确认人和现有岗位须同时选择');
+export type PreparationResponsibility=z.infer<typeof PreparationResponsibilitySchema>;
+export const PreparationAdoptionSchema=z.object({previewRevision:z.string().min(1),reason:z.string().trim().min(1).max(1000)}).strict();
+export const InstructionDeliverySchema=z.object({instructionVersion:z.number().int().positive(),recipient:z.string().trim().min(1).max(200),occurredAt:z.iso.datetime({offset:true}),note:z.string().trim().min(1).max(1000),evidenceIds:z.array(z.uuid()).max(40).default([])}).strict();
+export type InstructionDelivery=z.infer<typeof InstructionDeliverySchema>;
+export type PreparationWindow={startedAt:string|null;dueAt:string|null;completedAt:string|null;minutes:number|null;reason:string|null;status:'waiting'|'running'|'overdue'|'completed_on_time'|'completed_late'|'unknown'};
+export type ProductionReadinessState={
+ sourceIsPreorderDraft:boolean;sourceDocumentVersion:number|null;lines:Array<{lineId:string;color:string;orderQuantity:number}>;resource:PreparationResource;orderId:string|null;sourceId:string|null;enrolled:boolean;ruleVersion:string|null;revision:string;
+ facts:PreparationMaterialFact[];history:PreparationMaterialFact[];canRecord:PreparationMaterialKind[];
+ responsibility:{version:number;warehouseWorkerId:string|null;colorConfirmationWorkerId:string|null;colorConfirmationRole:string|null};canAssign:boolean;
+ canDeliverInstruction:boolean;canAcknowledgeAdoption:boolean;canAdopt:boolean;adoptionAcknowledged:boolean;adoptionReason:string|null;
+ finalReasons:string[];technicalRevision:string|null;draftWindow:PreparationWindow;finalWindow:PreparationWindow;
+ instructionDeliveries:Array<{eventId:string;instructionVersion:number;recipient:string;occurredAt:string;note:string;evidenceIds:string[]}>;
+ ranges:Array<{rangeId:string;preparationId:string;kind:string;version:number;lineIds:string[];complete:boolean;pendingMaterialIds:string[];note:string;recordedAt:string}>;
+};

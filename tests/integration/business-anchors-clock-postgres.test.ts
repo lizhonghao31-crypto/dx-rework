@@ -22,6 +22,8 @@ const nativeIt=(name:string,action:()=>Promise<void>)=>it(name,action,60_000);
    const run=<T>(action:()=>Promise<T>)=>scene?f.runtime.run(scene,f.root,action):action();
    const ready=await run(()=>f.bulkReady(craft));
    await run(async()=>{
+    const preparationWindows=(await f.db.query('SELECT kind,started_at,minutes FROM digital_preparation_windows WHERE production_order_id=$1 ORDER BY kind',[ready.id])).rows;
+    expect(preparationWindows).toHaveLength(2);for(const window of preparationWindows){expect(window.minutes).toBe(1440);if(scene)expect(window.started_at.toISOString()).toBe(initial);else expect(window.started_at.getTime()).toBeGreaterThanOrEqual(wall);}
     const budget=(await f.db.query(`SELECT t.completed_at,c.occurred_at FROM digital_budget_preparations p JOIN digital_production_tasks t USING(task_id) JOIN digital_production_task_conditions c ON c.task_id=t.task_id AND c.condition_key='business_recorded' WHERE p.production_order_id=$1`,[ready.id])).rows[0];
     expect(budget.completed_at.toISOString()).toBe(budget.occurred_at.toISOString());
     if(scene)expect(budget.completed_at.toISOString()).toBe(initial);

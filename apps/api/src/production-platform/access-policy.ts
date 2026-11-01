@@ -55,6 +55,18 @@ export class DigitalProductionAccessPolicy {
     if(kind==="source"&&purpose==="technical"&&actor.actorRoles.includes("order_merchandiser")&&await this.activeRole(actor.actorId,"order_merchandiser")){
       if((await this.database.query("SELECT 1 FROM digital_production_orders WHERE source_id=$1 AND primary_merchandiser_id=$2",[id,actor.actorId])).rowCount)return true;
     }
+    // Early preparation participation grants only scoped technical documents, never budget or other task metadata.
+    if(purpose==='technical'&&includeTaskParticipation&&(await this.database.query("SELECT to_regclass('digital_preparation_responsibilities') AS relation")).rows[0]?.relation){
+      const sourceId=kind==='source'?id:row.source_id??null,orderId=kind==='order'?id:null;
+      if(orderId&&(await this.database.query('SELECT 1 FROM digital_bulk_dispatch WHERE production_order_id=$1 AND warehouse_worker_id=$2',[orderId,actor.actorId])).rowCount&&await this.activeRole(actor.actorId,'warehouse_receiver'))return true;
+      const assigned=(await this.database.query(`SELECT * FROM digital_preparation_responsibilities WHERE (resource_kind='order' AND resource_id=$1) OR (resource_kind='source' AND resource_id=$2) ORDER BY (resource_kind='order') DESC,version DESC LIMIT 1`,[orderId,sourceId])).rows[0];
+      if(assigned?.warehouse_worker_id===actor.actorId&&await this.activeRole(actor.actorId,'warehouse_receiver'))return true;
+      if(assigned?.color_confirmation_worker_id===actor.actorId&&await this.activeRole(actor.actorId,assigned.color_confirmation_role))return true;
+      if(kind==='source'&&actor.actorRoles.includes('order_merchandiser')&&await this.activeRole(actor.actorId,'order_merchandiser')){
+        const handover=(await this.database.query("SELECT m.state,m.body,d.version AS document_version FROM digital_preparation_material_versions m LEFT JOIN digital_development_documents d ON d.source_id=m.resource_id WHERE m.resource_kind='source' AND m.resource_id=$1 AND m.kind='design_handover' AND m.scope_ref='whole' ORDER BY m.version DESC LIMIT 1",[id])).rows[0];
+        if(handover?.state==='ready'&&handover.body.recipientId===actor.actorId&&handover.body.sourceDocumentVersion===handover.document_version)return true;
+      }
+    }
     const owns = actor.actorRoles.includes("sample_designer") && row.created_by === actor.actorId;
     const primary = kind === "order" && actor.actorRoles.includes("order_merchandiser") && row.primary_merchandiser_id === actor.actorId;
     if (owns || primary && await this.activeRole(actor.actorId,"order_merchandiser")) return true;
