@@ -1,3 +1,4 @@
+import {canLeaveInternalPage} from './internal-navigation.js';
 import {useLiveSearch} from "./use-live-search.js";
 import {DigitalReadFailure} from './digital-read-failure.js';
 import {PatternBoardLane} from "./pattern-board-parts.js";
@@ -30,9 +31,9 @@ export function BulkPatternWorkspace({orderId,canViewAll,onOrderChange}:{orderId
   window.history.replaceState(window.history.state,'',`${createWebUrls(import.meta.env.BASE_URL).pageUrl('ui/digital-pattern-room')}?${query}`);
  };
  const update=(patch:Partial<BulkWorkroomFilter>)=>{const next=BulkWorkroomFilterSchema.parse({...filter,page:1,...patch});setFilter(next);persist(next,selected);};
- const choose=(id:string|null)=>{setSelected(id);onOrderChange?.(id);persist(filter,id);};
+ const choose=async(id:string|null)=>{if(!await canLeaveInternalPage())return;setSelected(id);onOrderChange?.(id);persist(filter,id);};
  return <section className="dx-production-panel bulk-pattern-workspace" aria-label="大货纸样与唛架岗位任务">
-  <header className="pattern-board-title"><h2>大货纸样与唛架</h2><span>{data?`${data.total} 张大货订单`:error?'读取失败':'读取中…'}</span><Button type="button" onClick={()=>setRefresh(value=>value+1)}>刷新</Button></header>
+  <header className="pattern-board-title"><h2>大货纸样与唛架</h2><span>{data?`${data.total} 张大货订单`:error?'读取失败':'读取中…'}</span><Button type="button" onClick={()=>void (async()=>{if(await canLeaveInternalPage())setRefresh(value=>value+1);})()}>刷新</Button></header>
   <nav className="development-tabs" aria-label="大货任务范围"><button aria-pressed={filter.scope==='mine'} onClick={()=>update({scope:'mine'})}>我的大货任务</button>{canViewAll&&<button aria-pressed={filter.scope==='all'} onClick={()=>update({scope:'all'})}>全部进度</button>}</nav>
   <form className="pattern-keyword-search" onSubmit={event=>{event.preventDefault();update({search:search.trim()});}}><label>关键词<input placeholder="款号 / PO / 客户 / 当前主办人" maxLength={100} value={search} onCompositionStart={liveSearch.onCompositionStart} onCompositionEnd={liveSearch.onCompositionEnd} onChange={event=>setSearch(event.target.value)} onKeyDown={event=>{if(event.key==='Enter'&&event.nativeEvent.isComposing)event.preventDefault();}}/></label></form>
   {error&&<DigitalReadFailure error={error} onRetry={()=>setListRetry(value=>value+1)} retryLabel="重试读取大货任务"/>}{!data&&!error&&<p role="status">读取真实大货任务…</p>}{data&&!data.items.length&&<p>当前范围暂无大货任务</p>}
@@ -42,6 +43,6 @@ export function BulkPatternWorkspace({orderId,canViewAll,onOrderChange}:{orderId
    return <BulkPatternCard key={item.orderId} item={item} href={`${createWebUrls(import.meta.env.BASE_URL).pageUrl('ui/digital-production')}?${task?`task=${task.taskId}`:`bulk=${item.orderId}`}&returnTo=${encodeURIComponent(window.location.pathname+window.location.search)}`}/>;
   })}{data&&!data.items.some(item=>bulkPatternLane(item.sheet)===lane.key)&&<p>本页无此类记录</p>}</PatternBoardLane>)}</div></div>
   {!error&&<Pagination page={filter.page} pageSize={15} total={data?.total??null} onPage={page=>update({page})}/>}
-  {selected&&<section className="bulk-workroom-detail"><a href={`${createWebUrls(import.meta.env.BASE_URL).pageUrl('ui/digital-cockpit')}?selected=${selected}`}>查看这张订单的七大阶段</a><BulkPreparationPanel key={`${selected}:${refresh}`} orderId={selected} onClose={()=>{choose(null);setRefresh(value=>value+1);}}/></section>}
+  {selected&&<section className="bulk-workroom-detail"><a href={`${createWebUrls(import.meta.env.BASE_URL).pageUrl('ui/digital-cockpit')}?selected=${selected}`}>查看这张订单的七大阶段</a><BulkPreparationPanel key={`${selected}:${refresh}`} orderId={selected} onClose={()=>{void choose(null);}}/></section>}
  </section>;
 }

@@ -1,4 +1,5 @@
 import {randomUUID} from 'node:crypto';
+import {isStyleLabelPieceUnit} from '@dx-rework/contracts/production-readiness';
 import type {PreparationWindow} from '@dx-rework/contracts/production-readiness';
 import {businessNow} from '../acceptance-clock/business-time.js';
 import {bulkFabricFacts} from './bulk-fabric-facts.js';
@@ -33,7 +34,9 @@ export async function productionReadiness(db:PreparationDB,orderId:string){
  const timeRows=technical?.finalCommentRef?(await db.query(`SELECT c.recorded_at,r.reviewed_at FROM digital_development_final_comments c
   LEFT JOIN digital_development_size_review_requests q ON q.final_comment_id=c.comment_id
   LEFT JOIN digital_development_size_review_results r USING(review_id) WHERE c.comment_id=$1`,[technical.finalCommentRef.id])).rows[0]:null;
- const times=[fabric.usableAt,preparationIso(timeRows?.recorded_at),preparationIso(timeRows?.reviewed_at),...(!repeat?[preparationIso(tail?.task_id?tail.completed_at:tail?.payload?.actualCompletedAt)]:[])];
+ // For confirmed_repeat, created_at is the designer's explicit native confirmation at businessNow,
+ // not an attachment upload or a warehouse/audit timestamp. It is itself a prerequisite.
+ const times=[fabric.usableAt,preparationIso(timeRows?.recorded_at),preparationIso(timeRows?.reviewed_at),...(repeat?[preparationIso(basis?.created_at)]:[preparationIso(tail?.task_id?tail.completed_at:tail?.payload?.actualCompletedAt)])];
  const readyAt=!finalReasons.length&&times.every(Boolean)?new Date(Math.max(...times.map(t=>Date.parse(t!)))).toISOString():null;
  const revision=preparationHash({adoption:adoption?.adoption_id??null,source:document?[document.round_number,document.version]:null,
   technical:technical?.revision??null,tail:tail??null,repeat,basis:basis?[basis.version,basis.sample_evidence_ids,basis.customer_fabric_evidence_ids]:null,
@@ -83,7 +86,7 @@ export async function styleLabelCuttingReason(db:PreparationDB,orderId:string,li
  const context=await preparationContext(db,{kind:'order',id:orderId});
  const facts=currentPreparationMaterials(await preparationMaterialHistory(db,context),orderId).filter(f=>f.kind==='style_label_ready'&&f.state==='ready'&&f.valid);
  if(!lineIds.length)return '开裁款色关联不完整，请从原裁床单核对，不推断款号唛已齐';
- const missing=lineIds.filter(id=>!facts.some(f=>f.quantities.filter(q=>q.lineId===id&&Number.isSafeInteger(q.quantity)).reduce((n,q)=>n+q.quantity,0)>=(requiredQuantity??context.lines.find(l=>l.line_id===id)?.order_quantity??1)));
+ const missing=lineIds.filter(id=>!facts.some(f=>f.quantities.filter(q=>q.lineId===id&&Number.isSafeInteger(q.quantity)&&isStyleLabelPieceUnit(q.unit)).reduce((n,q)=>n+q.quantity,0)>=(requiredQuantity??context.lines.find(l=>l.line_id===id)?.order_quantity??1)));
  return missing.length?'本次开裁款色的款号唛实物尚未有效备齐，请指定仓管核实物料；不影响无关纸样唛架准备':null;
 }
 

@@ -6,6 +6,7 @@ export type SlaApplication = {
     configurationId?: string;
     keys: string[];
     excluded: string[];
+    taskWindows?: string[];
     snapshot: DigitalSlaSnapshot;
     recordedAt?: string;
     previousEvaluations?: unknown;
@@ -16,7 +17,7 @@ export async function slaApplications(db: Pick<PoolClient, 'query'>, orderId: st
  JOIN digital_sla_order_snapshots s ON s.snapshot_id::text=e.payload->>'snapshotId' AND s.production_order_id=e.resource_id
  WHERE e.resource_kind='order' AND e.resource_id=$1 AND e.event_kind='sla_standard_applied'
  ORDER BY s.revision`, [orderId])).rows;
-    return rows.map(r => ({ eventId: r.event_id, snapshotId: r.snapshot_id, configurationId: r.configuration_id, recordedAt: new Date(r.application_recorded_at).toISOString(), previousEvaluations: r.payload.previousEvaluations, keys: r.payload.parameterKeys, excluded: r.payload.completedWindows,
+    return rows.map(r => ({ eventId: r.event_id, snapshotId: r.snapshot_id, configurationId: r.configuration_id, recordedAt: new Date(r.application_recorded_at).toISOString(), previousEvaluations: r.payload.previousEvaluations, keys: r.payload.parameterKeys, excluded: r.payload.completedWindows, taskWindows:r.payload.taskWindows,
         snapshot: validateDigitalSlaSnapshot({ ruleVersion: r.rule_version, parameters: r.parameters_json }) }));
 }
 /** Never changes a business start or completion. Completed-at-application windows keep their old assessment. */

@@ -128,7 +128,7 @@ export class SlaOrderService {
         const originalSnapshot=await new SlaConfigurationRepository(client).orderSnapshot(orderId,1);
         if(!originalSnapshot)throw new Error('Applied SLA order has no original snapshot');
         for(const node of current.plan.nodes){
-          const fact=facts[node.id];if(!fact||fact.batchWindows?.length||node.id==='production_sheet'&&await preparationAdoption(client,{kind:'order',id:orderId}))continue;
+          const fact=facts[node.id];if(!fact||fact.batchWindows?.length||node.id==='bulk_pattern'&&bulk.bulk_pattern||node.id==='production_sheet'&&await preparationAdoption(client,{kind:'order',id:orderId}))continue;
           const applied=appliedSlaWindow(node.stage===2&&development?development.originalSnapshot:originalSnapshot.snapshot,node.parameterKey,`node:${node.id}`,applications);
           const warning=applied.snapshot.parameters.warning_ratio!.value;
           if(warning.kind==='ratio')fact.standardWarningPercent=warning.percent;

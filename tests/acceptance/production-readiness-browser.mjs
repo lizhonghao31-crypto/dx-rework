@@ -8,16 +8,38 @@ const input=JSON.parse(await readFile(process.env.PREPARATION_UI_INPUT,'utf8'));
 const {chromium}=await import(process.env.PLAYWRIGHT_IMPORT||'playwright');
 const out=await mkdtemp(join(tmpdir(),'dx-readiness-ui-')),evidence=process.env.PREPARATION_UI_EVIDENCE,results=[],errors=[];
 let browser,server,page;
+const expectEnabled=async locator=>{await locator.waitFor();assert.equal(await locator.isEnabled(),true);};
 try{
  await build({configFile:false,esbuild:{jsx:'automatic'},define:{'import.meta.env.BASE_URL':'"/"','process.env.NODE_ENV':'"production"'},build:{outDir:out,lib:{entry:resolve('tests/fixtures/production-readiness-ui.tsx'),name:'PreparationUi',formats:['iife']}}});
  const names=await readdir(out),js=await readFile(join(out,names.find(n=>n.endsWith('.js'))),'utf8'),css=await readFile(join(out,names.find(n=>n.endsWith('.css'))),'utf8');
  const html=`<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css}</style><div id="root"></div><script>window.preparationInput=${JSON.stringify(input).replace(/</g,'\\u003c')};${js.replace(/<\/script/gi,'<\\/script')}</script></html>`;
  server=createServer((_req,res)=>{res.setHeader('content-type','text/html;charset=utf-8');res.end(html);});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
  browser=await chromium.launch({headless:true,executablePath:'/usr/bin/chromium',args:['--no-sandbox']});await mkdir(evidence,{recursive:true});
- for(const width of [1280,1440])for(const mode of ['normal','conflict','uncertain','refreshfail','readonly','instruction','range','loadfail','empty']){
+ for(const width of [1280,1440])for(const mode of (process.env.PREPARATION_UI_MODES?.split(',')??['normal','conflict','uncertain','refreshfail','readonly','instruction','range','loadfail','empty','parent-drafts','parent-range-uncertain','parent-writing','supplement'])){
   page=await browser.newPage({viewport:{width,height:900}});page.setDefaultTimeout(10000);page.on('pageerror',e=>errors.push(e.message));
   await page.goto(`http://127.0.0.1:${server.address().port}/?mode=${mode}`);
-  if(mode==='instruction'){
+  if(mode==='supplement'){await page.getByText(/截止：未设置期限/).waitFor();const scope=page.locator('.preparation-range-action');await scope.locator('summary').first().click();await scope.getByText(/新补做未明确期限时显示未设置/).waitFor();
+  }else if(mode.startsWith('parent-')){
+   const detail=page.locator('.bulk-workroom-detail'),workspace=page.locator('.bulk-pattern-workspace'),materials=page.locator('.preparation-readiness>details'),scope=page.locator('.preparation-range-action');
+   await materials.locator(':scope>summary').waitFor();await materials.locator(':scope>summary').click();
+   const cancel=async(button)=>{await button.click();await page.getByRole('dialog').waitFor();await page.getByRole('button',{name:'取消',exact:true}).click();};
+   if(mode==='parent-drafts'){
+    await materials.getByText('指定仓管和对色确认人',{exact:true}).click();await materials.getByRole('combobox',{name:'本单收料仓管',exact:true}).fill('待指定');await page.getByRole('option',{name:'待指定',exact:true}).click();await materials.getByLabel('安排原因',{exact:true}).fill('TEST unsaved personnel');
+    await materials.locator('.preparation-readiness-facts>div').filter({has:page.getByText('面料实际到仓',{exact:true})}).getByRole('button',{name:'追加订正'}).click();await materials.getByLabel('本次情况 / 订正原因').fill('TEST independent material save');await materials.getByRole('button',{name:'保存本项记录'}).click();await page.getByRole('status').filter({hasText:'已保存原业务记录'}).waitFor();
+    assert.equal(await materials.locator('select[aria-label="本单收料仓管"]').inputValue(),'');assert.equal(await materials.getByLabel('安排原因',{exact:true}).inputValue(),'TEST unsaved personnel');
+    await cancel(detail.getByRole('button',{name:'返回',exact:true}));assert.equal(await materials.getByLabel('安排原因',{exact:true}).inputValue(),'TEST unsaved personnel');
+    await materials.getByText('登记制单对外交付',{exact:true}).click();await materials.getByLabel('接收加工厂 / 联系人').fill('TEST unsaved delivery');await materials.getByRole('button',{name:'保存人员安排'}).click();await page.waitForFunction(()=>window.preparationWrites()===2);await expectEnabled(materials.getByRole('button',{name:'保存人员安排'}));
+    assert.equal(await materials.getByLabel('接收加工厂 / 联系人').inputValue(),'TEST unsaved delivery');await cancel(workspace.locator('.pattern-board-title').getByRole('button',{name:'刷新',exact:true}));assert.equal(await materials.getByLabel('接收加工厂 / 联系人').inputValue(),'TEST unsaved delivery');
+    await workspace.locator('.pattern-board-title').getByRole('button',{name:'刷新',exact:true}).click();await page.getByRole('dialog').waitFor();await page.getByRole('button',{name:'确认',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('.preparation-readiness>details')?.open);assert.equal(await page.getByLabel('接收加工厂 / 联系人').inputValue(),'');
+   }else{
+    await scope.locator(':scope>summary').click();await scope.getByLabel('本次已做范围及待补做说明').fill('TEST immutable partial range');await scope.getByRole('button',{name:'保存局部准备，不放行整单'}).click();
+    if(mode==='parent-writing')await page.waitForFunction(()=>typeof window.resolvePreparationWrite==='function');else await page.getByRole('button',{name:'使用原内容核对范围提交结果'}).waitFor();
+    for(const button of [workspace.locator('.pattern-board-title').getByRole('button',{name:'刷新',exact:true}),detail.getByRole('button',{name:'返回',exact:true})])await button.click();
+    assert.equal(await scope.getByLabel('本次已做范围及待补做说明').inputValue(),'TEST immutable partial range');assert.equal(await scope.getByLabel('本次已做范围及待补做说明').isDisabled(),true);assert.equal(await page.getByRole('dialog').count(),0);
+    if(mode==='parent-writing')await page.evaluate(()=>window.resolvePreparationWrite());else await page.getByRole('button',{name:'使用原内容核对范围提交结果'}).click();await scope.getByRole('status').filter({hasText:'已保存实际准备范围'}).waitFor();
+    assert.equal(await page.evaluate(()=>window.preparationWrites()),1);const requests=await page.evaluate(()=>window.preparationRequests.filter(r=>r.path.endsWith('/complete')));assert.equal(requests.length,mode==='parent-writing'?1:2);if(requests.length===2){assert.equal(requests[0].key,requests[1].key);assert.deepEqual(requests[0].body,requests[1].body);}assert.equal(await scope.getByText(/纸样完成 · 第1次/).count(),1);
+   }
+  }else if(mode==='instruction'){
    await page.getByText('制单草稿 · 到仓后24小时',{exact:true}).waitFor();await page.getByRole('button',{name:'采用当前技术尺寸表'}).click();await page.getByText('未保存修改',{exact:true}).waitFor();
   }else if(mode==='loadfail'||mode==='empty'){
    if(mode==='loadfail'){await page.getByRole('alert').filter({hasText:'TEST初次读取失败'}).waitFor();await page.getByRole('button',{name:'重新读取',exact:true}).click();}

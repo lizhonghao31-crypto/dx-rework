@@ -2,7 +2,7 @@
   "version": 1,
   "base": "c005275c469ba4bc3c5a435418e3e18e21faf362",
   "risk": "full",
-  "sourceFingerprint": "d87752f099485da8afe3a5c18dc4a520c766e81a79d070b4d9bbbcd3aac2283f",
+  "sourceFingerprint": "a61a44c72d4a1c5071089fbea62a13a15beebfcd3be6d8b84e5d9644a0d972dc",
   "rules": [
     {
       "rule": "Append-only migration, precise inventories and canonical PostgreSQL registration",
@@ -24,11 +24,11 @@
       ],
       "source": "docs/engineering/new-flow-20261031-approved-plan.md §PR05 / F.5 / H; latest approved user construction scope",
       "writes": [
+        "apps/api/migrations/0270_production_readiness_materials.sql",
         "apps/api/src/platform/migration-manifest.json",
         "packages/contracts/package.json",
         "scripts/deploy/acceptance-migration-requirements.json",
-        "scripts/test-suite-plan.mjs",
-        "apps/api/migrations/0270_production_readiness_materials.sql"
+        "scripts/test-suite-plan.mjs"
       ]
     },
     {
@@ -45,21 +45,22 @@
       ],
       "initialization": "Original creation transaction enrolls new sources/orders; in-flight primary acknowledgement and explicit leader adoption retain completed history. Saved genuine preorder remains draft, sizes/order/full budget not required for actual investment.",
       "dateAndPermission": "Designer/primary merch/assigned warehouse/current color-confirmation role write only their facts. Native Root and exact-current handed draft evidence reuse tested. Optimistic versions, active-role recheck before cached response, binding and audit guards remain.",
-      "expectation": "Current9 native PG cases cover source-to-order references, partial/unknown/withdrawn heads, cross-order/role rejection, immutable history, private upload/download, preorder no-publication and no unshared future draft read.",
+      "expectation": "Current14 native PG cases cover source-to-order references, partial/unknown/withdrawn heads, cross-order/role rejection, immutable history, private upload/download, preorder no-publication and no unshared future draft read.",
       "checks": [
         "final-affected-postgres",
+        "review-native",
         "frozen-static"
       ],
       "source": "docs/engineering/new-flow-20261031-approved-plan.md §PR05 / F.5 / H; latest approved user construction scope",
       "writes": [
         "apps/api/src/production-platform/identity-routes.ts",
         "apps/api/src/production-platform/identity-service.ts",
-        "apps/api/src/server.ts",
         "apps/api/src/production-platform/preparation-material-repository.ts",
         "apps/api/src/production-platform/preparation-series-bridge.ts",
         "apps/api/src/production-platform/production-readiness-repository.ts",
         "apps/api/src/production-platform/production-readiness-routes.ts",
         "apps/api/src/production-platform/production-readiness-service.ts",
+        "apps/api/src/server.ts",
         "packages/contracts/src/production-readiness.ts"
       ]
     },
@@ -81,6 +82,7 @@
       "expectation": "A early fabric/later final response cannot release prematurely. Completed legacy history unchanged; partial at24h/material60h/full65h stays17h late; same-round unfinished instruction change retains original clock; unconfigured supplement has unknown duration until explicit panel application.",
       "checks": [
         "final-affected-postgres",
+        "review-native",
         "final-unit",
         "frozen-static"
       ],
@@ -89,6 +91,7 @@
         "apps/api/src/production-platform/bulk-sla-evidence.ts",
         "apps/api/src/production-platform/bulk-task-timing.ts",
         "apps/api/src/production-platform/production-instruction-service.ts",
+        "apps/api/src/production-platform/sla-applied-window.ts",
         "apps/api/src/production-platform/sla-order-application.ts",
         "apps/api/src/production-platform/sla-order-service.ts",
         "packages/contracts/src/production-instruction.ts",
@@ -111,6 +114,7 @@
       "expectation": "Ordinary/urgent partial work does not set whole completion, create duplicate wages or release entire cut. Current old P12 in-house/outsourced and returned-batch QC cases pass, including wrong-recorder403 and insufficient physical label409.",
       "checks": [
         "final-affected-postgres",
+        "review-native",
         "final-unit",
         "frozen-static"
       ],
@@ -143,7 +147,7 @@
       "checks": [
         "final-affected-postgres",
         "final-unit",
-        "notification-baseline-attribution",
+        "review-native",
         "frozen-static"
       ],
       "source": "docs/engineering/new-flow-20261031-approved-plan.md §PR05 / F.5 / H; latest approved user construction scope",
@@ -151,9 +155,9 @@
         "apps/api/src/production-platform/access-policy.ts",
         "apps/api/src/production-platform/journey-query.ts",
         "apps/api/src/production-platform/notification-service.ts",
+        "apps/api/src/production-platform/preparation-todos.ts",
         "apps/api/src/production-platform/series-plan-facts.ts",
-        "packages/contracts/src/digital-series-plan.ts",
-        "apps/api/src/production-platform/preparation-todos.ts"
+        "packages/contracts/src/digital-series-plan.ts"
       ]
     },
     {
@@ -171,7 +175,7 @@
       ],
       "initialization": "Original navigation/header/three columns/current instruction fields/actions remain. Local CSS only, shared components/tokens retained; PR07 directory and PR08 required-material display not introduced here.",
       "dateAndPermission": "Readonly stays readonly; source change resets editor context and generations. Current-row edits preserve other same-color material rows and references. Primary actions remain original entry points.",
-      "expectation": "18 browser scenarios at1280/1440: collapsed first view, keyboard/focus, long text, readonly, load error/recovery/empty,409, immutable retry, double click, confirmed save/read failure, multi-row preservation, checkbox-only leave cancellation, explicit technical size adoption.28 inspected captures, no overflow/page errors.",
+      "expectation": "26 browser scenarios at1280/1440: collapsed first view, keyboard/focus, long text, readonly, load error/recovery/empty,409, immutable retry, double click, confirmed save/read failure, multi-row preservation, actual parent Return/Refresh guard, cross-form draft retention, immutable range recovery and writing protection, explicit technical size adoption.36 inspected captures, no overflow/page errors.",
       "checks": [
         "frozen-browser",
         "frozen-static",
@@ -180,6 +184,7 @@
       "source": "docs/engineering/new-flow-20261031-approved-plan.md §PR05 / F.5 / H; latest approved user construction scope",
       "writes": [
         "apps/web/src/bulk-fabric-panel.tsx",
+        "apps/web/src/bulk-pattern-workspace.tsx",
         "apps/web/src/bulk-preparation-panel.tsx",
         "apps/web/src/development-technical-basis.tsx",
         "apps/web/src/digital-development-create-form.tsx",
@@ -212,19 +217,19 @@
         "final-affected-postgres",
         "final-unit",
         "frozen-static",
-        "notification-baseline-attribution"
+        "review-native"
       ],
       "source": "docs/engineering/new-flow-20261031-approved-plan.md §PR05 / F.5 / H; latest approved user construction scope",
       "writes": [
         "tests/helpers/bulk-preparation-fixture.ts",
         "tests/helpers/business-anchor-fixture.ts",
         "tests/helpers/historical-digital-order-fixture.ts",
+        "tests/helpers/production-readiness-fixture.ts",
         "tests/integration/business-anchors-clock-postgres.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts",
         "tests/integration/sourcing-pr03-postgres.test.ts",
         "tests/unit/digital-sla-plan.test.ts",
         "tests/unit/digital-task-read-boundary.test.ts",
-        "tests/helpers/production-readiness-fixture.ts",
-        "tests/integration/production-readiness-postgres.test.ts",
         "tests/unit/production-readiness-contract.test.ts"
       ]
     }
@@ -233,34 +238,41 @@
     {
       "id": "final-affected-postgres",
       "kind": "tests",
-      "command": "[\"flock\",\"/workspace/dx-governance-local-pg-instance.lock\",\"node\",\"/workspace/dx-p05-final-targeted-postgres.mjs\"]",
+      "command": "[\"flock\",\"/workspace/dx-governance-local-pg-instance.lock\",\"node\",\"/workspace/dx-p05-review-affected.mjs\"]",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "c005275c469ba4bc3c5a435418e3e18e21faf362",
-      "sourceFingerprint": "d87752f099485da8afe3a5c18dc4a520c766e81a79d070b4d9bbbcd3aac2283f",
+      "testedHead": "6b380e35d6b9812efb6e54f4c63379e716a66217",
+      "sourceFingerprint": "9d5dd42515e09468e23915ba31771bfce50333743f6af8fa08b96e133746aa73",
       "inputPaths": [
         "apps/api",
-        "packages",
+        "packages/contracts",
+        "packages/domain",
         "tests/helpers",
-        "tests/integration",
+        "tests/integration/sourcing-pr03-postgres.test.ts",
+        "tests/integration/factory-logistics-cockpit-postgres.test.ts",
         "scripts",
         "package.json",
         "package-lock.json",
-        "tsconfig.base.json",
         "vitest.config.ts",
         "vitest.business-chain.config.ts",
-        "vitest.postgres-immediate.config.ts"
+        "tsconfig.base.json"
       ],
-      "inputFingerprint": "cafb26bcbe54cbe0dbb5ab028d4dbf7e9a37ab9a0259e45e9066e354ec1f0494",
+      "inputFingerprint": "8a9f4baf26b7558420143f5c1ccef93ae7de158da803bb52d0faf40de2fa9b6c",
       "sourceState": "Uncommitted candidate: full source fingerprint and declared input fingerprint captured before command; declared inputs reverified after command; testedHead is ancestor, not a claim of a committed tested Head",
       "context": "Local Node 22.23.4; owned marked PG16 instance/low-privilege test role, explicit canonical workers; no claim of CI hardware equivalence or authenticated full-site acceptance",
-      "startedAt": "2026-11-01T20:38:46.271Z",
-      "endedAt": "2026-11-01T20:39:16.910Z",
-      "logSha256": "1b01d15b89d71a70f098c8c01da2bb824597a4c553a5cb0a47e2d4d9219990de",
-      "log": "/workspace/dx-p05-recorded-final-affected-postgres-1793565526271.log",
-      "passed": 12,
+      "startedAt": "2026-11-01T21:01:16.929Z",
+      "endedAt": "2026-11-01T21:05:52.911Z",
+      "logSha256": "12a3d427f6e62aa15570fe02280298f5e8bc74d6faeaeeeee5128a9ee7d67425",
+      "log": "/workspace/dx-p05-recorded-final-affected-postgres-1793566876930.log",
+      "passed": 151,
       "failed": 0,
-      "skipped": 137
+      "skipped": 0,
+      "scopedAt": "2026-11-01T21:06:22.848Z",
+      "coveredSuites": [
+        "tests/integration/sourcing-pr03-postgres.test.ts",
+        "tests/integration/factory-logistics-cockpit-postgres.test.ts"
+      ],
+      "scopedBoundary": "Original real batch:165 passed/0 failures (including native14); this reusable check covers old Sourcing140+factory-logistics11=151 only. Captured before integration-fixture-only lint adjustment with original full source fingerprint matching. Native14 rerun separately after that test-only edit."
     },
     {
       "id": "final-unit",
@@ -268,8 +280,8 @@
       "command": "[\"node\",\"node_modules/vitest/vitest.mjs\",\"run\",\"tests/unit/digital-task-read-boundary.test.ts\",\"tests/unit/production-readiness-contract.test.ts\",\"tests/unit/digital-sla-plan.test.ts\",\"tests/unit/business-chain-ui-contract.test.ts\",\"tests/unit/cutting-access.test.ts\",\"tests/unit/cutting-source-contract.test.ts\",\"tests/unit/cutting-quantity.test.ts\",\"tests/unit/digital-sla-configuration.test.ts\",\"tests/unit/sla-applied-window.test.ts\",\"tests/unit/order-board-cutting-facts.test.ts\"]",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "c005275c469ba4bc3c5a435418e3e18e21faf362",
-      "sourceFingerprint": "d87752f099485da8afe3a5c18dc4a520c766e81a79d070b4d9bbbcd3aac2283f",
+      "testedHead": "6b380e35d6b9812efb6e54f4c63379e716a66217",
+      "sourceFingerprint": "a61a44c72d4a1c5071089fbea62a13a15beebfcd3be6d8b84e5d9644a0d972dc",
       "inputPaths": [
         "apps",
         "packages",
@@ -283,13 +295,13 @@
         "vitest.postgres-immediate.config.ts",
         "eslint.config.js"
       ],
-      "inputFingerprint": "f0f21d7b9719247fc584bc6c9c4d59075f134bf7f36c2545d0914db7db80af68",
+      "inputFingerprint": "6f2155154e3746ff0ee1b86ccf55812315105d8460edc8f539e7c1c278d00366",
       "sourceState": "Uncommitted candidate: full source fingerprint and declared input fingerprint captured before command; declared inputs reverified after command; testedHead is ancestor, not a claim of a committed tested Head",
       "context": "Local Node 22.23.4; owned marked PG16 instance/low-privilege test role, explicit canonical workers; no claim of CI hardware equivalence or authenticated full-site acceptance",
-      "startedAt": "2026-11-01T20:39:12.756Z",
-      "endedAt": "2026-11-01T20:39:19.921Z",
-      "logSha256": "cac97b2746f0af9535ecebe1867d4f1ad1b212e88d29f4c2dca5e9f1101ba393",
-      "log": "/workspace/dx-p05-recorded-final-unit-1793565552756.log",
+      "startedAt": "2026-11-01T21:09:04.160Z",
+      "endedAt": "2026-11-01T21:09:09.874Z",
+      "logSha256": "5b81730a9c894137375913ed7e6cc92b6c7fe77ad3dbbe34a704a6a41f7a43fa",
+      "log": "/workspace/dx-p05-recorded-final-unit-1793567344161.log",
       "passed": 96,
       "failed": 0,
       "skipped": 0
@@ -300,34 +312,30 @@
       "command": "[\"node\",\"tests/acceptance/production-readiness-browser.mjs\"]",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "c005275c469ba4bc3c5a435418e3e18e21faf362",
-      "sourceFingerprint": "d87752f099485da8afe3a5c18dc4a520c766e81a79d070b4d9bbbcd3aac2283f",
+      "testedHead": "6b380e35d6b9812efb6e54f4c63379e716a66217",
+      "sourceFingerprint": "a61a44c72d4a1c5071089fbea62a13a15beebfcd3be6d8b84e5d9644a0d972dc",
       "inputPaths": [
-        "apps",
+        "apps/web",
         "packages",
-        "tests",
-        "scripts",
+        "tests/fixtures/production-readiness-ui.tsx",
+        "tests/acceptance/production-readiness-browser.mjs",
         "package.json",
         "package-lock.json",
-        "tsconfig.base.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts",
-        "vitest.postgres-immediate.config.ts",
-        "eslint.config.js"
+        "tsconfig.base.json"
       ],
-      "inputFingerprint": "f0f21d7b9719247fc584bc6c9c4d59075f134bf7f36c2545d0914db7db80af68",
+      "inputFingerprint": "9069ab3fb6a97c011c59a3fac131cd55ea0dfc4485592880d3bcaabc4dc64e32",
       "sourceState": "Uncommitted candidate: full source fingerprint and declared input fingerprint captured before command; declared inputs reverified after command; testedHead is ancestor, not a claim of a committed tested Head",
       "context": "Local Node 22.23.4; owned marked PG16 instance/low-privilege test role, explicit canonical workers; no claim of CI hardware equivalence or authenticated full-site acceptance",
-      "startedAt": "2026-11-01T20:39:12.714Z",
-      "endedAt": "2026-11-01T20:39:31.611Z",
-      "logSha256": "40d0bcdf7206e73f1f50c589cb72db69c4c15c866c9283235ffe9832d1ce1c89",
-      "log": "/workspace/dx-p05-recorded-frozen-browser-1793565552714.log",
+      "startedAt": "2026-11-01T21:09:02.851Z",
+      "endedAt": "2026-11-01T21:09:28.883Z",
+      "logSha256": "71e3d9ea4f9716043fb3e3e5f31275fecfd9f66b21e90b383aef20e081cb44e8",
+      "log": "/workspace/dx-p05-recorded-frozen-browser-1793567342851.log",
       "browserEvidence": {
-        "cases": 18,
+        "cases": 26,
         "errors": [],
-        "resultSha256": "cf515b29d4cf768b29a7c3357a400eb06644b1a6cf110f2f981d8faff504a56d",
-        "screenshots": 28,
-        "visualInspection": "All28 screenshots examined in seven contact sheets; normal/instruction detail inspected, and four changed repeated captures re-inspected at full resolution. Other24 repeated captures byte-identical. TEST responses and synthetic HTTP faults, not authenticated full-site/live acceptance."
+        "resultSha256": "52734176e927f3c9ec14e3acea81a4f68e6eb9ec58a8f3d79e0f7b2509517be6",
+        "screenshots": 36,
+        "visualInspection": "All36 screenshots examined in nine contact sheets; actual parent-range recovery, parent writing, parent refresh/discard and instruction details additionally inspected at full resolution. TEST responses and synthetic HTTP faults, not authenticated full-site/live acceptance."
       }
     },
     {
@@ -336,8 +344,8 @@
       "command": "[\"bash\",\"-c\",\"npm run lint && npm run typecheck && npm run build --workspaces --if-present && npm run test:preflight && npm run secret:scan\"]",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "c005275c469ba4bc3c5a435418e3e18e21faf362",
-      "sourceFingerprint": "d87752f099485da8afe3a5c18dc4a520c766e81a79d070b4d9bbbcd3aac2283f",
+      "testedHead": "6b380e35d6b9812efb6e54f4c63379e716a66217",
+      "sourceFingerprint": "a61a44c72d4a1c5071089fbea62a13a15beebfcd3be6d8b84e5d9644a0d972dc",
       "inputPaths": [
         "apps",
         "packages",
@@ -351,42 +359,45 @@
         "vitest.postgres-immediate.config.ts",
         "eslint.config.js"
       ],
-      "inputFingerprint": "f0f21d7b9719247fc584bc6c9c4d59075f134bf7f36c2545d0914db7db80af68",
+      "inputFingerprint": "6f2155154e3746ff0ee1b86ccf55812315105d8460edc8f539e7c1c278d00366",
       "sourceState": "Uncommitted candidate: full source fingerprint and declared input fingerprint captured before command; declared inputs reverified after command; testedHead is ancestor, not a claim of a committed tested Head",
       "context": "Local Node 22.23.4; owned marked PG16 instance/low-privilege test role, explicit canonical workers; no claim of CI hardware equivalence or authenticated full-site acceptance",
-      "startedAt": "2026-11-01T20:39:12.742Z",
-      "endedAt": "2026-11-01T20:40:41.972Z",
-      "logSha256": "4e3572e4c62928dccc62d9fda1f472afbaff0f27c7f20fe7f4f0613968ffcf78",
-      "log": "/workspace/dx-p05-recorded-frozen-static-1793565552742.log"
+      "startedAt": "2026-11-01T21:09:02.037Z",
+      "endedAt": "2026-11-01T21:10:29.434Z",
+      "logSha256": "66b58a19ddfc5e1b31ea041727e164b46c0bd142df34b2a8a76ec9d929a7d3b6",
+      "log": "/workspace/dx-p05-recorded-frozen-static-1793567342037.log"
     },
     {
-      "id": "notification-baseline-attribution",
-      "kind": "command",
-      "command": "[\"node\",\"/workspace/dx-p05-notification-baseline-compare.mjs\"]",
+      "id": "review-native",
+      "kind": "tests",
+      "command": "[\"flock\",\"/workspace/dx-governance-local-pg-instance.lock\",\"node\",\"/workspace/dx-p05-review-native.mjs\"]",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "c005275c469ba4bc3c5a435418e3e18e21faf362",
-      "sourceFingerprint": "d87752f099485da8afe3a5c18dc4a520c766e81a79d070b4d9bbbcd3aac2283f",
+      "testedHead": "6b380e35d6b9812efb6e54f4c63379e716a66217",
+      "sourceFingerprint": "40b9922b7f8b899f7117d658e96a971e7986ede73af886ee798a071d427ca119",
       "inputPaths": [
-        "apps",
-        "packages",
-        "tests",
+        "apps/api",
+        "packages/contracts",
+        "packages/domain",
+        "tests/helpers",
+        "tests/integration/production-readiness-postgres.test.ts",
         "scripts",
         "package.json",
         "package-lock.json",
-        "tsconfig.base.json",
         "vitest.config.ts",
         "vitest.business-chain.config.ts",
-        "vitest.postgres-immediate.config.ts",
-        "eslint.config.js"
+        "tsconfig.base.json"
       ],
-      "inputFingerprint": "f0f21d7b9719247fc584bc6c9c4d59075f134bf7f36c2545d0914db7db80af68",
+      "inputFingerprint": "6f8e37cf99b6294fcd95fcb9f520f6e6aadf3b0fd2ed08bdc2a0c9be2b16f36c",
       "sourceState": "Uncommitted candidate: full source fingerprint and declared input fingerprint captured before command; declared inputs reverified after command; testedHead is ancestor, not a claim of a committed tested Head",
       "context": "Local Node 22.23.4; owned marked PG16 instance/low-privilege test role, explicit canonical workers; no claim of CI hardware equivalence or authenticated full-site acceptance",
-      "startedAt": "2026-11-01T20:43:51.414Z",
-      "endedAt": "2026-11-01T20:43:51.446Z",
-      "logSha256": "60e97eff914810ada00c9f0dad0601993b01f75d399c4ea88aa69b06d966b1e1",
-      "log": "/workspace/dx-p05-recorded-notification-baseline-attribution-1793565831415.log"
+      "startedAt": "2026-11-01T21:06:22.991Z",
+      "endedAt": "2026-11-01T21:06:53.956Z",
+      "logSha256": "a7adfc68699cfade432197f2f557da38cad6081b754b167e6ab9d2d0c01d3b6b",
+      "log": "/workspace/dx-p05-recorded-review-native-1793567182991.log",
+      "passed": 14,
+      "failed": 0,
+      "skipped": 0
     }
   ],
   "boundary": "Current command checks and selected native/old regressions only; not a claim that a local or remote final Full Gate has passed. Earlier broad failures retained in execution narrative, not converted to passed checks."

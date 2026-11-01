@@ -10,6 +10,9 @@ describe('native preparation input boundaries',()=>{
  it('rejects fractional physical labels, repeated quantity rows and non-finite values',()=>{
   const q={lineId:randomUUID(),materialId:null,name:'TEST款号唛',quantity:10,unit:'枚'},row={...input(),kind:'style_label_ready',state:'ready',quantities:[q]};
   expect(PreparationMaterialRecordSchema.safeParse(row).success).toBe(true);
+  for(const unit of ['箱','包','米'])expect(PreparationMaterialRecordSchema.safeParse({...row,quantities:[q,{...q,name:'TEST different batch',unit}]}).success).toBe(false);
+  expect(PreparationMaterialRecordSchema.parse({...row,quantities:[{...q,unit:'件'}]}).quantities[0]!.unit).toBe('枚');
+  expect(PreparationMaterialRecordSchema.safeParse({...row,quantities:[q,{...q,unit:'个'}]}).success).toBe(false);
   expect(PreparationMaterialRecordSchema.safeParse({...row,quantities:[{...q,quantity:0.5}]}).success).toBe(false);
   expect(PreparationMaterialRecordSchema.safeParse({...row,quantities:[q,q]}).success).toBe(false);
   expect(PreparationMaterialRecordSchema.safeParse({...row,quantities:[{...q,quantity:Infinity}]}).success).toBe(false);

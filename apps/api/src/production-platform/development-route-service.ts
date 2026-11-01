@@ -1,3 +1,4 @@
+import {BulkPreparationService} from './bulk-preparation-service.js';
 import {businessNow} from '../acceptance-clock/business-time.js';
 import {technicalEnrollment,publishedTechnicalArtifact,technicalMeasurementDocument} from './development-technical-repository.js';
 import {developmentRevisionSource} from './development-revision-source.js';
@@ -170,6 +171,7 @@ export class DevelopmentRouteService {
    const service=new DigitalProductionTaskService(this.database);
    await service.setConditionWithClient(db,actor,input.taskId,'business_recorded',true,undefined,input.note);
    await service.completeWithClient(db,actor,input.taskId,{note:input.note},`route:${key}`);
+   if(task.task_kind==='development_tail_check')await new BulkPreparationService(this.database).syncSource(db,actor,sourceId);
    if(input.result!=='退回')await this.advance(db,actor,sourceId,input.taskId,input.nextAssigneeId);
    return {taskId:input.taskId,result:input.result};
  }

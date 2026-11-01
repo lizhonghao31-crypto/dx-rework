@@ -1,3 +1,4 @@
+import {BulkPreparationService} from './bulk-preparation-service.js';
 import {bridgePreparationMaterials} from './preparation-series-bridge.js';
 import {randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
@@ -80,7 +81,7 @@ export class ProductionReadinessService{
    if(prior&&prior.payload_hash!==hash)conflict('操作标识已用于不同内容');
    if(prior){await db.query('COMMIT');return prior.response as ProductionReadinessState;}
    await work(db,a);
-   if(a.context.orderId){await bridgePreparationMaterials(db,a.context,actor.actorId);await refreshPreparationWindows(db,a.context.orderId);}
+   if(a.context.orderId){await bridgePreparationMaterials(db,a.context,actor.actorId);await refreshPreparationWindows(db,a.context.orderId);await new BulkPreparationService(this.database).sync(db,actor,a.context.orderId);}
    const response=await this.read(actor,resource,db);
    await db.query('INSERT INTO digital_production_commands(actor_id,command,key,payload_hash,response) VALUES($1,$2,$3,$4,$5)',[actor.actorId,command,key,hash,JSON.stringify(response)]);
    await db.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1,$2,$3,$4,'digital_preparation',$5,$6)",[randomUUID(),actor.requestId,actor.actorId,`preparation_${action}`,resource.id,JSON.stringify(input)]);

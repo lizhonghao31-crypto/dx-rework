@@ -80,11 +80,14 @@ export class BulkPreparationService {
   let prep=await this.current(db,id,g);
   if(!prep){
    await this.tasks().supersedeBulkTasksWithClient(db,actor,id);
-   const priorUnfinished=(await db.query(`SELECT p.* FROM digital_bulk_preparations p WHERE p.production_order_id=$1 AND p.source_round=$2 AND NOT EXISTS(SELECT 1 FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE t.route_instance_id=p.preparation_id AND a.task_kind='bulk_pattern' AND t.state='completed') ORDER BY p.created_at DESC,p.preparation_id LIMIT 1`,[id,g.source!.round_number])).rows[0];
+   const priorUnfinished=(await db.query(`SELECT p.* FROM digital_bulk_preparations p WHERE p.production_order_id=$1 AND p.source_round=$2 AND p.preparation_id=(SELECT latest.preparation_id FROM digital_bulk_preparations latest WHERE latest.production_order_id=$1 ORDER BY latest.created_at DESC,latest.preparation_id DESC LIMIT 1) AND NOT EXISTS(SELECT 1 FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE t.route_instance_id=p.preparation_id AND a.task_kind='bulk_pattern' AND t.state='completed') ORDER BY p.created_at DESC,p.preparation_id LIMIT 1`,[id,g.source!.round_number])).rows[0];
    const priorCompleted=(await db.query(`SELECT p.preparation_id FROM digital_bulk_preparations p JOIN digital_production_tasks t ON t.route_instance_id=p.preparation_id JOIN digital_production_task_access a USING(task_id)
     WHERE p.production_order_id=$1 AND a.task_kind='bulk_pattern' AND t.state='completed' ORDER BY p.created_at DESC LIMIT 1`,[id])).rows[0];
-   const supplement=await preparationAdoption(db,{kind:'order',id})?priorCompleted?.preparation_id??null:null;
-   const origin=!supplement&&await preparationAdoption(db,{kind:'order',id})?(priorUnfinished?.clock_origin_preparation_id??priorUnfinished?.preparation_id??null):null;
+   const adopted=await preparationAdoption(db,{kind:'order',id});
+   // A replacement of an unfinished supplemental scope retains that scope's original clock.
+   const continuing=adopted&&priorUnfinished;
+   const supplement=adopted?(continuing?priorUnfinished.supplement_of_preparation_id:priorCompleted?.preparation_id??null):null;
+   const origin=continuing?(priorUnfinished.clock_origin_preparation_id??priorUnfinished.preparation_id):null;
    const pid=randomUUID(),document=g.instruction.document as InstructionDocument;
    await db.query("INSERT INTO digital_bulk_preparations(preparation_id,production_order_id,instruction_version,approval_snapshot_id,source_id,source_round,preshrink,created_by,workflow_version,sla_snapshot_id,supplement_of_preparation_id,clock_origin_preparation_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)",[pid,id,g.instruction.version,g.approval?.sourcing_approval_snapshot_id??null,g.order.source_id,g.source!.round_number,g.parallel?'需要预缩':document.preshrink,actor.actorId,g.parallel?2:1,g.parallel?g.snapshotId:null,supplement,origin]);
    prep=(await db.query("SELECT * FROM digital_bulk_preparations WHERE preparation_id=$1",[pid])).rows[0];
@@ -264,7 +267,7 @@ export class BulkPreparationService {
   if((await db.query('SELECT 1 FROM digital_bulk_preparation_facts WHERE preparation_id=$1 AND kind=$2',[prep.preparation_id,input.kind])).rowCount)return;
   const readiness=await productionReadiness(db,id);
   if(readiness.adoption){
-   if(input.kind==='预缩完成'){const tests=await preparationTestReasons(db,id,true);if(tests.length)fail(tests.join('；'));}
+   if(input.kind==='预缩完成'){if(!readiness.fabric.usable)fail('当前主料尚未通过有效验布或获准使用，请重新核对到仓及验布依据');const tests=await preparationTestReasons(db,id,true);if(tests.length)fail(tests.join('；'));}
    if(input.expectedReadinessRevision!==readiness.revision)fail('实际物料或技术依据已变化，请刷新当前任务');
    if(input.kind!=='预缩完成'){
     const range=input.range;if(!range)return fail('请明确本次已做范围及仍欠物料，不能把局部准备记为整单完成');

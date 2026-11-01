@@ -1,3 +1,9 @@
+import {DigitalProductionTaskService} from '../../apps/api/src/production-platform/task-service.js';
+import {DevelopmentExecutionService} from '../../apps/api/src/production-platform/development-execution-service.js';
+import {DevelopmentTechnicalService} from '../../apps/api/src/production-platform/development-technical-service.js';
+import {SlaOrderApplicationService} from '../../apps/api/src/production-platform/sla-order-application.js';
+import {SlaConfigurationService} from '../../apps/api/src/production-platform/sla-configuration-service.js';
+import {SlaConfigurationRepository} from '../../apps/api/src/production-platform/sla-configuration-repository.js';
 import {historicalDigitalOrder} from '../helpers/historical-digital-order-fixture.js';
 import {SlaOrderService} from '../../apps/api/src/production-platform/sla-order-service.js';
 import Fastify from 'fastify';
@@ -93,7 +99,9 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   await f.advance(scene,'2026-11-11T00:00:00Z');await f.runtime.run(scene,f.root,async()=>{
    const sheet=await bulk.read(f.people['pattern-room-worker']!,ready.id),current=await service.read(f.people['pattern-room-worker']!,{kind:'order',id:ready.id});
    const lineIds=(await identity.read(ready.primary,ready.id)).lines.map(l=>l.lineId);
-   await bulk.complete(f.people['pattern-room-worker']!,ready.id,{preparationId:ready.preparationId,kind:'纸样完成',expectedReadinessRevision:current.revision,range:{expectedVersion:0,lineIds,complete:false,pendingMaterialIds:[accessory],note:'TEST已做不受纽扣影响部分',evidenceIds:[]}},randomUUID());
+   const partial={preparationId:ready.preparationId,kind:'纸样完成' as const,expectedReadinessRevision:current.revision,range:{expectedVersion:0,lineIds,complete:false,pendingMaterialIds:[accessory],note:'TEST已做不受纽扣影响部分',evidenceIds:[]}},key=randomUUID();await bulk.complete(f.people['pattern-room-worker']!,ready.id,partial,key);
+   // Simulate the client losing that response: after a fresh read, replay the immutable v0 body/key.
+   expect((await bulk.read(f.root,ready.id)).readiness!.ranges.filter(r=>r.preparationId===ready.preparationId&&r.kind==='纸样完成')).toHaveLength(1);await bulk.complete(f.people['pattern-room-worker']!,ready.id,partial,key);expect((await bulk.read(f.root,ready.id)).readiness!.ranges.filter(r=>r.preparationId===ready.preparationId&&r.kind==='纸样完成')).toHaveLength(1);
    expect((await bulk.read(ready.primary,ready.id)).facts.some(x=>x.kind==='纸样完成')).toBe(false);expect((await preparationMaterialsTodos(f.db,f.people.warehouse!)).filter(t=>t.entityId===ready.id)).toHaveLength(1);
    expect((await bulk.read(ready.primary,ready.id)).tasks.some(x=>x.taskKind==='bulk_cutting')).toBe(false);
    const pattern=sheet.tasks.find(t=>t.taskKind==='bulk_pattern')!;expect(pattern.dueAt).toBe('2026-11-12T00:00:00.000Z');
@@ -200,6 +208,53 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   await forms.save(p.designer,source.sourceId,{expectedVersion:saved.version,document:{...document,instructions:'TEST尚未交接的新草稿'}},randomUUID());
   await expect(service.read(p.primary,resource)).rejects.toMatchObject({statusCode:403});
   expect((await service.read(f.root,resource)).history.find(f=>f.kind==='design_handover')?.handoverMaterials?.[0]?.quantity).toBe('100米，预单投料量');
+ });
+
+ it('counts physical labels only as normalized pieces, never as boxes or lengths',async()=>{
+  const p=await setup(),created=await order(p),resource={kind:'order' as const,id:created.productionOrderId},line=(await identity.read(p.primary,resource.id)).lines[0]!.lineId;
+  const q={lineId:line,materialId:null,name:'TEST款号唛',quantity:60,unit:'枚'},body={kind:'style_label_ready' as const,scopeRef:'whole',expectedVersion:0,state:'ready' as const,occurredAt:businessNow().toISOString(),note:'TEST discrete pieces, no package conversion',quantities:[q],evidenceIds:[],sourceDocumentVersion:null,recipientId:null};
+  for(const unit of ['箱','米'])await expect(service.record(p.warehouse,resource,{...body,quantities:[q,{...q,name:'TEST第二批',quantity:40,unit}]},randomUUID())).rejects.toThrow('款号唛须按');
+  await service.record(p.warehouse,resource,body,randomUUID());expect(await styleLabelCuttingReason(f.db,resource.id,[line],100)).toContain('款号唛');
+  const saved=await service.record(p.warehouse,resource,{...body,expectedVersion:1,quantities:[q,{...q,name:'TEST第二批',quantity:40,unit:'个'}]},randomUUID());expect(saved.facts.find(x=>x.kind==='style_label_ready')!.quantities.map(q=>q.unit)).toEqual(['枚','枚']);expect(await styleLabelCuttingReason(f.db,resource.id,[line],100)).toBeNull();
+ });
+ it('invalidates warehouse readiness in the receipt correction transaction and rejects stale preshrink completion',async()=>{
+  const ready=await f.bulkReady('无',undefined,1,f.sourcing,{stopBeforeCompletion:true}),resource={kind:'order' as const,id:ready.id};
+  const before=await bulk.read(f.root,ready.id);expect(before.tasks.find(t=>t.taskKind==='warehouse_preshrink')!.state).toBe('ready');
+  const current=await service.read(f.root,resource),receipt=current.facts.find(x=>x.kind==='fabric_receipt');
+  await service.record(f.people.warehouse!,resource,{kind:'fabric_receipt',scopeRef:'whole',expectedVersion:receipt?.version??0,state:'unknown',occurredAt:null,note:'TEST receipt corrected to unknown after earlier release',quantities:[],evidenceIds:[],sourceDocumentVersion:null,recipientId:null},randomUUID());
+  const after=await bulk.read(f.root,ready.id);expect(after.fabric!.usable).toBe(false);expect(after.tasks.find(t=>t.taskKind==='warehouse_preshrink')!.state).not.toBe('ready');
+  await expect(completeBulkRangeFixture(f.db,f.people.warehouse!,ready.id,ready.preparationId,'预缩完成')).rejects.toMatchObject({statusCode:409});
+  expect((await bulk.read(f.root,ready.id)).facts.some(x=>x.kind==='预缩完成')).toBe(false);expect((await bulk.read(f.root,ready.id)).tasks.some(t=>t.taskKind==='bulk_cutting')).toBe(false);
+ });
+ it.each(['native_tail','confirmed_repeat'] as const)('starts final24h immediately when %s is the last prerequisite',async last=>{
+  const scene=await f.scene('2026-12-01T00:00:00Z');let p!:Awaited<ReturnType<typeof setup>>,id='';
+  await f.runtime.run(scene,f.root,async()=>{p=await setup();id=(await order(p)).productionOrderId;await record(p,{kind:'order',id},'fabric_receipt');
+   await confirmedTechnicalFixture(f.db,f.root,p.sourceId,p.document,(await forms.read(f.root,p.sourceId)).version,f.people['pattern-room-worker']!.actorId);
+   const receipt=(await service.read(f.root,{kind:'order',id})).facts.find(x=>x.kind==='fabric_receipt')!;await bulk.reportFabric(p.warehouse,id,{expectedReportId:null,expectedReceiptVersion:receipt.version,material:'TEST fabric',arrivedAt:receipt.occurredAt,inspectedAt:businessNow().toISOString(),result:'合格',note:'TEST earlier quality release'},randomUUID());
+   expect((await service.read(p.primary,{kind:'order',id})).finalWindow.startedAt).toBeNull();expect((await preparationWindowTodos(f.db,p.primary)).some(t=>t.entityId===id&&t.taskTitle==='前提已齐：发布有效制单')).toBe(false);
+  });
+  await f.advance(scene,'2026-12-01T06:00:00Z');await f.runtime.run(scene,f.root,async()=>{
+   if(last==='confirmed_repeat'){
+    await new DevelopmentTechnicalService(f.db,true).savePreparationBasis(p.designer,p.sourceId,{roundNumber:1,expectedVersion:0,basis:'confirmed_repeat',finalFabric:true,finalCraft:true,sampleEvidenceIds:[p.photo],customerFabricEvidenceIds:[p.photo],note:'TEST designer now confirms original sample and customer fabric evidence'},randomUUID());
+   }else{
+    // Fixture creates a real tail task; the native execution command still enforces photo and measured-size evidence.
+    const client=await f.db.connect();let taskId='';try{await client.query('BEGIN');const tasks=new DigitalProductionTaskService(f.db),inspector=Object.values(f.people).find(p=>p.actorRoles.includes('pattern_room_tail_inspector'))!;const task=await tasks.createWithClient(client,f.root,{resource:{kind:'source',id:p.sourceId},kind:'development_tail_check',routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:inspector.actorId});taskId=task.taskId;await tasks.setConditionWithClient(client,f.root,taskId,'washing_finished',true,undefined,'TEST native no-wash applicability');await client.query('COMMIT');}catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}
+    const execution=new DevelopmentExecutionService(f.db,true),photo=await f.image(f.root);await execution.recordUploadPurpose(f.root,p.sourceId,photo,'尾查照片',taskId);
+    await execution.route(f.root,p.sourceId,{taskId,note:'TEST native last tail prerequisite',result:'通过',craftExecution:null,nextAssigneeId:null,sentDate:null,trackingNo:null,attachmentIds:[photo],measurements:[{name:'胸围',values:['48']}]},randomUUID());
+   }
+   const state=await service.read(p.primary,{kind:'order',id});expect(state.finalReasons).toEqual([]);expect(state.finalWindow.startedAt).toBe('2026-12-01T06:00:00.000Z');expect(state.finalWindow.dueAt).toBe('2026-12-02T06:00:00.000Z');expect((await preparationWindowTodos(f.db,p.primary)).filter(t=>t.entityId===id&&t.taskTitle==='前提已齐：发布有效制单')).toHaveLength(1);
+  });
+ });
+ it('does not reuse an earlier SLA application for new supplemental work and preserves an explicitly applied unfinished supplement across replacement',async()=>{
+  const scene=await f.scene('2026-12-10T00:00:00Z'),applications=new SlaOrderApplicationService(f.db,'TEST supplemental preview secret '.repeat(3));let ready!:Awaited<ReturnType<typeof f.bulkReady>>,version=0,oldValues!:Awaited<ReturnType<SlaConfigurationRepository['initialStandard']>>['values'];
+  const apply=async()=>{const input={orderId:ready.id,configurationVersion:version,parameterKeys:['bulk_pattern'],reason:'TEST explicitly apply only existing unfinished work'},preview=await applications.preview(f.root,input);return applications.apply(f.root,{...input,previewToken:preview.token},randomUUID());};
+  const replace=async(note:string)=>{const old=await instruction.read(ready.primary,ready.id);await instruction.save(ready.primary,ready.id,{expectedVersion:old.version,orderVersion:old.order.version,document:{...old.document,comments:note}},randomUUID());const saved=await instruction.read(ready.primary,ready.id);await instruction.publish(ready.primary,ready.id,{expectedVersion:saved.version,orderVersion:saved.order.version,expectedReadinessRevision:saved.readiness!.revision},randomUUID());return bulk.read(f.root,ready.id);};
+  await f.runtime.run(scene,f.root,async()=>{ready=await f.bulkReady('无',undefined,1,f.sourcing,{stopBeforeCompletion:true});});const client=await f.db.connect();try{await client.query('BEGIN');const config=await new SlaConfigurationRepository(client).initialStandard(f.root.actorId);oldValues=config.values;const values={...config.values,bulk_pattern:{kind:'duration' as const,minutes:3600}};version=(await new SlaConfigurationService().publishNewStandard(client,f.root,{expectedVersion:config.version,values,reason:'TEST sixty hour explicit standard',requestKey:randomUUID()})).version;await client.query('COMMIT');}catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}await f.runtime.run(scene,f.root,async()=>{await apply();for(const kind of ['纸样完成','唛架完成'] as const)await completeBulkRangeFixture(f.db,f.people['pattern-room-worker']!,ready.id,ready.preparationId,kind);});
+  const restoreDefault=async()=>{const client=await f.db.connect();try{await client.query('BEGIN');const config=await new SlaConfigurationRepository(client).current();await new SlaConfigurationService().publishNewStandard(client,f.root,{expectedVersion:config!.version,values:oldValues,reason:'TEST restore default after explicit-application regression',requestKey:randomUUID()});await client.query('COMMIT');}catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}};
+  try{
+   await f.advance(scene,'2026-12-10T04:00:00Z');let supplementalId='',due='';await f.runtime.run(scene,f.root,async()=>{const next=await replace('TEST new work after completed original');supplementalId=next.preparationId!;expect(next.tasks.find(t=>t.taskKind==='bulk_pattern')!.dueAt).toBeNull();await apply();due=(await bulk.read(f.root,ready.id)).tasks.find(t=>t.taskKind==='bulk_pattern')!.dueAt!;expect(due).toBe('2026-12-12T16:00:00.000Z');});
+   await f.advance(scene,'2026-12-10T08:00:00Z');await f.runtime.run(scene,f.root,async()=>{const next=await replace('TEST same unfinished supplemental scope clarification');expect(next.preparationId).not.toBe(supplementalId);expect(next.tasks.find(t=>t.taskKind==='bulk_pattern')!.dueAt).toBe(due);const row=(await f.db.query('SELECT clock_origin_preparation_id,supplement_of_preparation_id FROM digital_bulk_preparations WHERE preparation_id=$1',[next.preparationId])).rows[0];expect(row).toMatchObject({clock_origin_preparation_id:supplementalId,supplement_of_preparation_id:ready.preparationId});});
+  }finally{await restoreDefault();}
  });
 
 });
