@@ -79,3 +79,5 @@ release #885审查源Head232548515bb7714dad670121f176eac652a5cccd；一次Codex 
 |G09 忽略元数据|产物选择与controller的lightProof一致：无实际required-name light的元数据run跳过|成功light→忽略metadata仍选原成功；更新真实失败/skip/in-progress light绝不跳过去拿旧pass。此前producer artifact13094415836成功约9.23MB；Full实际命中仍待固定最终Head运行，不提前算节省|
 
 本轮最后定向验证：release140项native、25项原消费者、真实PG资源/维护10、即时删除7及受管pattern1；main78项native、23项原消费者、真实资源9及受管pattern1，实际解析即时删除配置maxWorkers1。命令、真实退出/测试数、源码指纹与不可变尝试日志摘要见当前construction-evidence；它们是定向组合，不能相加冒充一次完整Full。昂贵最终Gate只在冻结Head后请求。
+
+本轮#885 Head8d及main9c的light再次在便宜证据前置处拒绝，未运行昂贵Full：记录生成后未重新git add，工作区校验读到新记录，提交却包含旧记录。全新检出源码hash与本地相同，git show:index记录不同，已明确归因暂存遗漏，不称业务失败。新增verify-change的真实索引/遗漏文件检查及“暂存后生成记录”反例，规定生成记录后暂存、提交后新鲜检出复验；不为过校验暂存无关用户修改。
