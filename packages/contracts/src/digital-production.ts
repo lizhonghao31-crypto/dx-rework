@@ -1,4 +1,5 @@
 import { z } from "zod";
+import {addCalendarDays} from "./series-calendar.js";
 
 const text = z.string().trim().min(1).max(100);
 const optionalText = z.string().trim().max(100).nullable().default(null);
@@ -57,6 +58,7 @@ export const DigitalOrderCreateSchema = z.object({
   orderDate: date,
   contractDeliveryDate: date.nullable().default(null),
   primaryMerchandiserId: z.string().uuid().nullable().optional(),
+  shortLeadApprovalId: z.string().uuid().optional(),
   lines: z.array(DigitalPoInputSchema).min(1).max(50),
 }).strict().superRefine((value, context) => {
   const keys = value.lines.map(line => digitalPoKey(digitalFormalPoNo(line))).filter(Boolean);
@@ -95,7 +97,7 @@ export type DigitalOrder = Omit<DigitalOrderInput, "lines"> & {
   }>;
 };
 
-/** Initial customer-order dates use the server's Shanghai calendar and clamp month-end. */
+/** Customer promises use the server business calendar; formal lead time is30natural days. */
 export function beijingCalendarDate(now: Date = new Date()): string {
   return new Intl.DateTimeFormat("en-CA", {timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit"}).format(now);
 }
@@ -103,17 +105,12 @@ export function customerOrderDateError(orderDate:string,today:string): string|nu
   return orderDate>today?`客户下单日期不能晚于服务器北京时间今日（${today}）`:null;
 }
 export function minimumInitialCustomerDate(now: Date = new Date()): string {
-  const day = beijingCalendarDate(now);
-  const [year, month, date] = day.split("-").map(Number) as [number, number, number];
-  const nextYear = month === 12 ? year + 1 : year;
-  const nextMonth = month === 12 ? 1 : month + 1;
-  const lastDay = new Date(Date.UTC(nextYear, nextMonth, 0)).getUTCDate();
-  return `${nextYear}-${String(nextMonth).padStart(2,"0")}-${String(Math.min(date,lastDay)).padStart(2,"0")}`;
+  return addCalendarDays(beijingCalendarDate(now),30);
 }
 export function initialCustomerDateErrors(lines: ReadonlyArray<{customerWarehouseArrivalDate?: string | null | undefined; deliveryDate?: string | null | undefined}>, minimum: string = minimumInitialCustomerDate()): string[] {
   return lines.flatMap((line,index) => {
     const date = line.customerWarehouseArrivalDate === undefined ? line.deliveryDate : line.customerWarehouseArrivalDate;
-    return !date || date < minimum ? [`PO ${index+1} 出货日期须填写 ${minimum} 或之后的日期（首次确定订单至少一个自然月）`] : [];
+    return !date || date < minimum ? [`PO ${index+1} 出货日期须填写 ${minimum} 或之后的日期（不足30自然日须老板或Root特批）`] : [];
   });
 }
 
@@ -145,15 +142,30 @@ export function initialCustomerOrderInput(draft: InitialCustomerOrderDraft): Dig
   })};
 }
 
+/** The same customer facts on server and browser; assignment and approval references are not customer promises. */
+export function formalCommitmentFacts(input:DigitalOrderInput){
+ const v=DigitalOrderCreateSchema.parse(input),compare=(a:string,b:string)=>a<b?-1:a>b?1:0;
+ return {customerCode:v.customerCode,productGroup:v.productGroup,designStyleNo:v.designStyleNo,temporaryStyleNo:v.temporaryStyleNo??null,
+  orderDate:v.orderDate,contractDeliveryDate:v.contractDeliveryDate,salesYear:v.salesYear??null,salesSeries:v.salesSeries??null,requiresColorMatching:v.requiresColorMatching??null,
+  lines:v.lines.map(p=>({formalPoNo:digitalFormalPoNo(p),temporaryStyleNo:p.temporaryStyleNo??null,color:p.color,colorForeign:p.colorForeign??null,
+   customerDate:p.customerWarehouseArrivalDate===undefined?p.deliveryDate:p.customerWarehouseArrivalDate,
+   sizes:p.sizes.map(s=>({...s})).sort((a,b)=>compare(a.size,b.size))})).sort((a,b)=>compare(`${a.formalPoNo??''}\u0000${a.color}`,`${b.formalPoNo??''}\u0000${b.color}`))};
+}
+export type FormalCommitmentFacts=ReturnType<typeof formalCommitmentFacts>;
+export type ApprovedShortLeadCalendar={requestId:string;facts:FormalCommitmentFacts;commitmentDay:string};
+export type CustomerOrderCalendar={serverToday:string;minimumInitialCustomerDate:string;approvedShortLead?:ApprovedShortLeadCalendar|null};
+
 /** A published development may retain incomplete ordering details; formal confirmation stays strict. */
-export function initialCustomerOrderIsReady(draft: InitialCustomerOrderDraft,calendar:{serverToday:string;minimumInitialCustomerDate:string}|undefined): boolean {
+export function initialCustomerOrderIsReady(draft: InitialCustomerOrderDraft,calendar:CustomerOrderCalendar|undefined): boolean {
   try {
     if(!calendar)return false;
     const parsed=DigitalOrderCreateSchema.safeParse(initialCustomerOrderInput(draft));
     // Schema dates are nullable for drafts/legacy reads. Missing customer promises
     // must not freeze the ordering fields before the strict confirmation command.
     return parsed.success && !customerOrderDateError(parsed.data.orderDate,calendar.serverToday)
-      && initialCustomerDateErrors(parsed.data.lines,calendar.minimumInitialCustomerDate).length===0;
+      && parsed.data.lines.every(line=>(line.customerWarehouseArrivalDate===undefined?line.deliveryDate:line.customerWarehouseArrivalDate)!==null)
+      && (initialCustomerDateErrors(parsed.data.lines,calendar.minimumInitialCustomerDate).length===0
+        || Boolean(calendar.approvedShortLead&&JSON.stringify(formalCommitmentFacts(parsed.data))===JSON.stringify(calendar.approvedShortLead.facts)));
   }
   catch { return false; }
 }

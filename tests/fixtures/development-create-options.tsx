@@ -1,3 +1,5 @@
+import {seriesMilestones} from '@dx-rework/domain/series-plan';
+import {formalCommitmentFacts} from '@dx-rework/contracts/short-commitment';
 // Real creation component and inherited styles; synthetic API is isolated from business data.
 import {createRoot} from 'react-dom/client';
 import {useState} from 'react';
@@ -24,13 +26,16 @@ if(params.has('shortDate'))order.lines[0]!.customerWarehouseArrivalDate='2026-11
 if(params.has('futureOrderDate'))order.orderDate='2026-11-02';
 if(params.has('crossDay'))order.lines[0]!.customerWarehouseArrivalDate='2026-12-01';
 if(params.has('mixedDate'))order.lines.push({...order.lines[0]!,formalPoNo:'TEST-PO-02',color:'TEST红',customerWarehouseArrivalDate:'2026-11-15'});
-const state={saved:{sourceId:id(1),designStyleNo:order.designStyleNo,temporaryStyleNo:null,customerCode:params.has('preorder')?null:'PD',developmentType:'头版',designerName:'TEST 设计师',version:1,status:'draft',document,publishedAt:null,taskId:null,canEdit:true,materialEvents:[]} as DevelopmentSheet,
+const shortState={canRequest:true,canApprove:false,serverToday:'2026-11-01',minimumNormalDate:'2026-12-01',requests:[] as Array<Record<string,unknown>>};
+const state={short:shortState,saved:{sourceId:id(1),designStyleNo:order.designStyleNo,temporaryStyleNo:null,customerCode:params.has('preorder')?null:'PD',developmentType:'头版',designerName:'TEST 设计师',version:1,status:'draft',document,publishedAt:null,taskId:null,canEdit:true,materialEvents:[]} as DevelopmentSheet,
   requests:[] as Array<{path:string;method:string;body:unknown}>,failNextSave:false,failNextConfirm:false,created:0,orderId:null as string|null,calendar:params.has('crossDay')?{serverToday:'2026-11-02',minimumInitialCustomerDate:'2026-12-02'}:{serverToday:'2026-11-01',minimumInitialCustomerDate:'2026-12-01'}};
 if(restore)state.saved={...state.saved,status:'published',version:2};
 Object.assign(window,{creationOptionsFixture:state});
 window.fetch=async(input,init)=>{
   const path=String(input),method=init?.method??'GET',body=init?.body?JSON.parse(String(init.body)):null;
   state.requests.push({path,method,body});
+  if(path.includes('/series-candidate?')){const q=new URL(path,location.href).searchParams,year=Number(q.get('salesYear')),month=Number(q.get('salesSeries')?.slice(1)),d=new Date(Date.UTC(year,month-3,15)),day=d.toISOString().slice(0,10);return Response.json({profile:{customerCode:null,version:0,monthOffset:-2,shippingDay:null,suggestionDay:15,configured:false},candidateDate:day,basis:'series-suggestion',milestones:q.get('requiresColorMatching')===''?[]:seriesMilestones(day,q.get('requiresColorMatching')==='true'?'A':'B')});}
+  if(path.endsWith('/short-lead-requests')){if(method==='POST'){const r={requestId:id(51),sourceId:id(1),customerCode:'PD',designStyleNo:body.order.designStyleNo,order:body.order,facts:formalCommitmentFacts(body.order),commitmentDay:'2026-11-01',minimumNormalDate:'2026-12-01',reason:body.reason,requestedBy:id(9),requesterName:'TEST设计师',requestedAt:'2026-11-01T00:00:00Z',decision:null,consumedOrderId:null,staleReason:null};shortState.requests.push(r);return Response.json({requestId:r.requestId});}return Response.json(shortState);}
   if(path.includes('/auth/'))return Response.json({status:'authorized',user:{id:id(9),displayName:'TEST 设计师',capabilities:['pattern_room:orders:create']}});
   if(path.includes('/design-codes/check'))return Response.json({code:new URL(path,location.href).searchParams.get('code'),available:!path.includes('USED')});
   if(path.includes('/options'))return Response.json({...state.calendar,customers});
@@ -47,7 +52,7 @@ window.fetch=async(input,init)=>{
   if(path.endsWith('/confirm')){
     if(state.failNextConfirm){state.failNextConfirm=false;return Response.json({error:{message:'TEST 确认失败，输入保留'}},{status:503});}
     const parsed=DigitalOrderCreateSchema.parse(body),errors=initialCustomerDateErrors(parsed.lines,state.calendar.minimumInitialCustomerDate);
-    if(errors.length)return Response.json({error:{message:errors.join('；')}},{status:400});
+    if(errors.length&&!parsed.shortLeadApprovalId)return Response.json({error:{message:errors.join('；')}},{status:400});
     return Response.json({...parsed,productionOrderId:id(8)});
   }
   if(path.endsWith('/development')){

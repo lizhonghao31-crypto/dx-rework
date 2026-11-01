@@ -1,3 +1,6 @@
+import {ShortLeadPanel} from './short-lead-panel.js';
+import {SeriesCreationPreview} from './series-creation-preview.js';
+import {matchingShortLeadApproval,type ShortLeadState} from '@dx-rework/contracts/short-commitment';
 import {quotationHref} from './digital-quotation-panel.js';
 import {DocumentToolbar,DocumentErrors} from "./document-editor.js";
 import { DevelopmentDocumentFields } from "./development-document-fields.js";
@@ -9,7 +12,7 @@ import "./digital-development.css";
 import { SearchableSelect } from "./search-select.js";
 import { useContext, useEffect, useRef, useState, useId } from "react";
 import { Button, Surface } from "@dx-rework/ui";
-import { DigitalOrderCreateSchema, DigitalSourceCreateSchema, type DigitalCustomer, type DigitalOrder, type DigitalOrderInput, type DigitalSource } from "@dx-rework/contracts/digital-production";
+import { DigitalOrderCreateSchema, DigitalSourceCreateSchema, type DigitalCustomer, type DigitalOrder, type DigitalOrderInput, type DigitalSource, type CustomerOrderCalendar } from "@dx-rework/contracts/digital-production";
 import type { OrderJourney } from "@dx-rework/contracts/digital-production-journey";
 import { digitalRequest } from "./digital-production-api.js";
 import { initialDigitalProductGroup } from "./digital-production-defaults.js";
@@ -115,7 +118,11 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
   const calendarReady=calendar?.sourceId===createdSource;
   const calendarToday=calendarReady?calendar!.serverToday:undefined;
   const dateMinimum=calendarReady?calendar!.minimumInitialCustomerDate:undefined;
-  const confirmationCalendar=calendarReady?calendar!:undefined;
+  const [shortState,setShortState]=useState<ShortLeadState|null>(null);
+  let shortInput:DigitalOrderInput|undefined;try{shortInput=DigitalOrderCreateSchema.parse(developmentOrderInput(form));}catch{/* Incomplete ordering drafts remain editable. */}
+  const shortApproval=shortInput&&shortState?matchingShortLeadApproval(shortInput,shortState.requests):null;
+  const approvedCalendar=shortApproval?{requestId:shortApproval.requestId,facts:shortApproval.facts,commitmentDay:shortApproval.commitmentDay}:null;
+  const confirmationCalendar=calendarReady?{...calendar!,approvedShortLead:approvedCalendar}:undefined;
   const boundOrder=publishedOrder&&initialCustomerOrderIsReady(publishedOrder,confirmationCalendar)?publishedOrder:null;
   useEffect(()=>{
     let live=true;const abort=new AbortController();
@@ -194,16 +201,16 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
       if(withOrder&&!preorder&&!draftOnly&&!form.customerCode)throw new Error("请选择客户");
       const sourceInput = DigitalSourceCreateSchema.parse({developmentType, designStyleNo: form.designStyleNo, temporaryStyleNo: form.temporaryStyleNo, customerCode: form.customerCode || null});
       const shouldConfirmOrder=withOrder&&!draftOnly&&(intent==="confirm_order"||published||Boolean(source)||initialCustomerOrderIsReady(form,confirmationCalendar));
-      const orderInput = shouldConfirmOrder ? DigitalOrderCreateSchema.parse(developmentOrderInput(form)) : null;
-      let liveConfirmationCalendar:Pick<Calendar,'serverToday'|'minimumInitialCustomerDate'>|undefined=confirmationCalendar;
+      const orderInput = shouldConfirmOrder ? DigitalOrderCreateSchema.parse({...developmentOrderInput(form),...(shortApproval?{shortLeadApprovalId:shortApproval.requestId}:{})}) : null;
+      let liveConfirmationCalendar:CustomerOrderCalendar|undefined=confirmationCalendar;
       const submissionDocument:DevelopmentDocument={...document,customerOrderDraft:{withOrder,stage:preorder?'preorder':'formal',order:form}};
       if(orderInput){
         const calendar=await digitalRequest<{serverToday:string;minimumInitialCustomerDate:string}>(developmentOrderOptionsPath(createdSource));
         if(!calendar.serverToday||!calendar.minimumInitialCustomerDate)throw new Error("未取得服务器日期，请重试；输入仍保留");
-        liveConfirmationCalendar=calendar;setCalendar({...calendar,sourceId:createdSource});
+        liveConfirmationCalendar={...calendar,approvedShortLead:approvedCalendar};setCalendar({...calendar,sourceId:createdSource});
         const dateError=customerOrderDateError(orderInput.orderDate,calendar.serverToday);
         if(dateError)throw new Error(dateError);
-        const errors=initialCustomerDateErrors(orderInput.lines,calendar.minimumInitialCustomerDate);if(errors.length)throw new Error(errors.join("；"));
+        const errors=initialCustomerDateErrors(orderInput.lines,calendar.minimumInitialCustomerDate);if(errors.length&&!shortApproval)throw new Error(errors.join("；"));
       }
       if(!source&&!published){setValidationMode(draftOnly?"save":"publish");if(developmentIssues(submissionDocument,quantityInput,measurementIds.current,!draftOnly,null,sizeQuantityInputs).length)return;if(!draftOnly&&!patternChoice&&existingDraft?.revisionSource?.outputKind!=='工艺布片')throw new Error("请先选择有效打板品类与执行价，再发布开发单");}
       let id = createdSource;
@@ -342,6 +349,8 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
       <DevelopmentDocumentFields sectionStart={withOrder?3:2} basicDetailsExternal uploadHelp="选择后可预览，保存草稿或发布时上传；失败资料仍保留。" document={document} edit={edit} readonly={published} busy={busy} writing={writing} sizeQuantityInputs={sizeQuantityInputs} setSizeQuantityInputs={setSizeQuantityInputs} quantityInput={quantityInput} setQuantityInput={setQuantityInput} measurementIds={measurementIds} successfulUploads={successfulUploads} fileIdentity={id=>{const picture=picturesRef.current.find(picture=>picture.id===id||picture.attachmentId===id);return picture?{filename:picture.file.name,mimeType:picture.file.type,sizeBytes:picture.file.size}:undefined;}} metadataPath={id=>createdSource&&!picturesRef.current.some(picture=>picture.id===id&&!picture.attachmentId)?`sources/${createdSource}/development/attachments/${id}/metadata`:undefined} imageUrl={id=>picturesRef.current.find(picture=>picture.id===id||picture.attachmentId===id)?.preview??createWebUrls(import.meta.env.BASE_URL).apiUrl(`digital-production/sources/${createdSource}/development/attachments/${id}`)} upload={selectPictures} fileKind={fileKind} setFileKind={setFileKind} issue={id=>issues.find(value=>value.id===id)?.message} patternSection={!published&&existingDraft?.revisionSource?.outputKind!=='工艺布片'?<div id="development-pattern-preparation"><DevelopmentPatternLink busy={busy} preparing selectedCategoryId={document.patternCategoryId??""} onCategoryChange={categoryId=>edit({patternCategoryId:categoryId||null})} onSelection={setPatternChoice}/></div>:null}/>
     </div>}
     </fieldset>
+    {withOrder&&<SeriesCreationPreview customerCode={form.customerCode} salesYear={form.salesYear??null} salesSeries={form.salesSeries??null} requiresColorMatching={form.requiresColorMatching??null}/>}
+    {withOrder&&!preorder&&shortInput&&dateMinimum&&initialCustomerDateErrors(shortInput.lines,dateMinimum).length>0&&<ShortLeadPanel key={createdSource??'new'} sourceId={createdSource} order={shortInput} onState={setShortState} {...(!source&&!published?{saveDraft:()=>save(true)}:{})}/>}
   </form></Surface>;
 }
 

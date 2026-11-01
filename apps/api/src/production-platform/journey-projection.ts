@@ -1,4 +1,4 @@
-import { JOURNEY_STAGES, type JourneyFilter, type JourneyNode, type JourneyResult, type OrderJourney, type JourneyState } from "@dx-rework/contracts/digital-production-journey";
+import { JOURNEY_STAGES, isJourneyPlanningNode, type JourneyFilter, type JourneyNode, type JourneyResult, type OrderJourney, type JourneyState } from "@dx-rework/contracts/digital-production-journey";
 import {compareCockpitOrders,journeyDisplay} from "./journey-display.js";
 
 export function journeyCompletion(expected:string|null,actual:string|null,verified:boolean) {
@@ -7,6 +7,7 @@ export function journeyCompletion(expected:string|null,actual:string|null,verifi
   return {result:difference>0?"late" as const:difference<0?"early" as const:"on_time" as const,overdueSeconds:Math.max(0,difference)};
 }
 export function stageState(nodes:JourneyNode[]):JourneyState {
+  nodes=nodes.filter(node=>!isJourneyPlanningNode(node));
   if(nodes.some(node=>node.state==="blocked"))return "blocked";
   if(nodes.some(node=>node.state==="active"))return "active";
   if(nodes.some(node=>node.state==="pending"))return "pending";
@@ -20,7 +21,7 @@ export function stageState(nodes:JourneyNode[]):JourneyState {
 }
 export function journeyStages(nodes:JourneyNode[]) { return JOURNEY_STAGES.map(stage=>({...stage,state:stageState(nodes.filter(node=>node.stage===stage.key&&node.current)),nodes:nodes.filter(node=>node.stage===stage.key)})); }
 const nodesOf=(item:OrderJourney)=>item.stages.flatMap(stage=>stage.nodes).filter(node=>node.current);
-const ongoing=(item:OrderJourney)=>!completed(item)&&nodesOf(item).some(node=>["active","pending","blocked"].includes(node.state));
+const ongoing=(item:OrderJourney)=>!completed(item)&&nodesOf(item).some(node=>!isJourneyPlanningNode(node)&&["active","pending","blocked"].includes(node.state));
 // Whole-order completion comes only from the authoritative final packing/special-closure projection.
 const completed=(item:OrderJourney)=>nodesOf(item).some(node=>["packing","special_closure"].includes(node.key)&&node.state==="completed");
 export const journeyMatchesSearch=(item:OrderJourney,search:string)=>!search||[item.id,item.sourceId,item.orderId,item.designStyleNo,item.temporaryStyleNo,item.customer,item.designer,item.styleName,...item.orderNumbers,...item.links.map(link=>link.id),...item.merchandisers.map(person=>person.name),...item.lines.flatMap(line=>[line.po,line.formalStyleNo,line.temporaryStyleNo])].some(value=>value?.toLocaleLowerCase().includes(search));

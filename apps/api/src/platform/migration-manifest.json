@@ -1131,6 +1131,10 @@
     {
       "version": "0268_development_technical_evidence",
       "checksum": "151ef7cbe0208d5a657f3e3e21ee5f2e8fcea0f35cc16703be4ba5c5bae7b979"
+    },
+    {
+      "version": "0269_series_plans_short_lead",
+      "checksum": "879a472aea12a3eb1ab028ebd0615869537a6d598491c9b75877d19c5f795d5e"
     }
   ]
 }

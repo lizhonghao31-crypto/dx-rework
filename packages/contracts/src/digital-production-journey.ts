@@ -13,7 +13,8 @@ export const JOURNEY_STAGES = [
 ] as const;
 export type JourneyStageKey = typeof JOURNEY_STAGES[number]["key"];
 /** Public names and stable keys only. Applicability is evaluated against original route facts. */
-export const JOURNEY_NODES: ReadonlyArray<{key:string;label:string;stage:JourneyStageKey;count:boolean}> = [
+export const JOURNEY_NODES: ReadonlyArray<{key:string;label:string;stage:JourneyStageKey;count:boolean;planningOnly?:boolean}> = [
+  ...Object.entries({design_handover:'设计资料交接',material_investment:'跟单投面料',fabric_receipt:'面料到仓',color_confirmation:'对色完成',client_sample_approval:'客户最终批复',accessories_ready:'辅料实物备齐',style_label_ready:'款号唛实物备齐',processing_dispatch:'发加工计划',planned_shipment:'系统计划出货'}).map(([key,label])=>({key:`series_${key}`,label,stage:key==='processing_dispatch'?'post_cutting' as const:key==='planned_shipment'?'receiving' as const:'preparation' as const,count:false,planningOnly:true})),
   {key:"product_development",label:"创建产品开发",stage:"creation",count:false},
   {key:"development_publish",label:"开发资料保存/发布",stage:"creation",count:false},
   {key:"order_information",label:"订购信息",stage:"creation",count:false},
@@ -26,6 +27,8 @@ export const JOURNEY_NODES: ReadonlyArray<{key:string;label:string;stage:Journey
 ];
 
 export const JourneyStateSchema = z.enum(["uncreated", "pending", "active", "blocked", "completed", "cancelled", "not_applicable", "unavailable", "inherited"]);
+/** Plan rows can display deadlines/actual references without becoming execution shares or lifecycle gates. */
+export const isJourneyPlanningNode=(node:{key:string;planningOnly?:boolean})=>Boolean(node.planningOnly||JOURNEY_NODES.find(d=>d.key===node.key)?.planningOnly);
 export type JourneyState = z.infer<typeof JourneyStateSchema>;
 export const JourneyFilterSchema = z.object({
   page: z.coerce.number().int().min(1).max(100000).default(1),
@@ -64,6 +67,8 @@ export type JourneyTiming = {
 export type JourneyCoverage = {key:"customer_date"|"factory_date"|"fabric_date"|"cutting_time"|"plan"|"scope"|"fact_time";message:string};
 export type JourneySupervision = {assessment?:"complete"|"partially_unavailable";requestId?:string;asOf:string;status:"planned"|"legacy_unenrolled"|"limited";originalRevision:number|null;currentRevision:number|null;nodes:JourneyTiming[];coverage:JourneyCoverage[];customerReminderDate:string|null};
 export type JourneyNode = {
+  planningOnly?:boolean;
+  responsibilityRole?:string;
   timing?:JourneyTiming;
   /** Read-only applicability evidence; unknown never supplies a progress denominator. */
   progressApplicability?: "applicable" | "not_applicable" | "unknown";
@@ -76,6 +81,8 @@ export type JourneyNode = {
   /** Plan dates retain their original date-only precision; no midnight is invented. */
   expectedPrecision: "instant" | "date" | "missing" | "unavailable";
   subject?: string;
+  /** Known actual day without a reliable instant. Never synthesize midnight in actualAt. */
+  actualDate?:string|null;
   actualAt: string | null; actualQuality: "verified" | "unverified" | "missing" | "unavailable";
   enteredAt: string | null; sla: "running" | "finished" | "not_started" | "not_set" | "unavailable";
   completionResult: "early" | "on_time" | "late" | "unknown" | null; overdueSeconds: number | null;
@@ -85,6 +92,7 @@ export type JourneyNode = {
   countsInProgress: boolean; unavailableReason: "permission" | "fact_not_recorded" | null;
 };
 export type OrderJourney = {
+  seriesPlanVisible?:boolean;
   display?: JourneyDisplay;
   supervision?:JourneySupervision;
   operationLog?: JourneyLogPage;

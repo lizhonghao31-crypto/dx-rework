@@ -9,6 +9,12 @@ function order(id="A"):OrderJourney{
   return {id,sourceId:null,orderId:id,designStyleNo:id,temporaryStyleNo:null,customer:"PD",category:null,designer:null,styleName:null,merchandisers:[],orderNumbers:[],createdAt:asOf,deliveryDate:null,selectedRound:null,adoptedRound:null,sourceVersion:null,instructionVersion:null,lines:[],links:[],stages:journeyStages(nodes),progress:{development:null,bulk:null},hitReasons:[]};
 }
 const nodes=(o:OrderJourney)=>o.stages.flatMap(stage=>stage.nodes);
+it('keeps read-only series plan rows out of original execution shares, activation and stage state',()=>{
+  const o=order(),before=journeyDisplay(o,asOf),beforeStages=o.stages.map(s=>s.state);
+  for(const n of nodes(o).filter(n=>n.key.startsWith('series_'))){n.state='active';n.enteredAt=asOf;n.progressApplicability='unknown';n.risks=['overdue'];n.records=[{domain:'series-plan',id:'TEST',url:null,mode:'read',version:1,lineId:null}];}
+  expect(journeyDisplay(o,asOf)).toEqual(before);expect(journeyStages(nodes(o)).map(s=>s.state)).toEqual(beforeStages);
+  o.stages.forEach(s=>s.nodes=s.nodes.filter(n=>!n.key.startsWith('series_')));expect(journeyDisplay(o,asOf)).toEqual(before);
+});
 function date(o:OrderJourney,value:string|null){o.lines=[{id:o.id,po:"PO",color:"黑",formalStyleNo:null,temporaryStyleNo:null,orderedQuantity:1}];o.poDeliveryDates=[{lineId:o.id,position:1,poNumber:"PO",color:"黑",customerWarehouseArrivalDate:value,factoryDeliveryDate:"2026-01-01",sampleTargetDate:null}];return o;}
 it("keeps the unique creation share at 1/7 even before workflow activation; time remains unavailable",()=>{
   const display=journeyDisplay(order(),asOf);

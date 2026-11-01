@@ -4,23 +4,23 @@ import {DevelopmentDocumentSchema} from "@dx-rework/contracts/digital-developmen
 import {initialDevelopmentDocument} from "../../apps/web/src/digital-development-editing.js";
 describe("first confirmed customer-order calendar",()=>{
  it.each([
-  ["2026-04-30T16:00:00Z","2026-06-01"],
-  ["2026-01-30T16:00:00Z","2026-02-28"],
-  ["2024-01-30T16:00:00Z","2024-02-29"],
-  ["2026-12-30T16:00:00Z","2027-01-31"],
-  ["2026-05-27T16:00:00Z","2026-06-28"],
- ])("uses Shanghai day and natural-month clamping: %s",(now,minimum)=>expect(minimumInitialCustomerDate(new Date(now))).toBe(minimum));
+  ["2026-04-30T16:00:00Z","2026-05-31"],
+  ["2026-01-30T16:00:00Z","2026-03-02"],
+  ["2024-01-30T16:00:00Z","2024-03-01"],
+  ["2026-12-30T16:00:00Z","2027-01-30"],
+  ["2026-05-27T16:00:00Z","2026-06-27"],
+ ])("uses Shanghai day and exactly 30 natural days: %s",(now,minimum)=>expect(minimumInitialCustomerDate(new Date(now))).toBe(minimum));
  it("rejects future customer order facts using the supplied server day",()=>{
   const today=beijingCalendarDate(new Date('2026-10-14T16:00:00Z'));
   expect(today).toBe('2026-10-15');
   expect(customerOrderDateError('2026-10-14',today)).toBeNull();expect(customerOrderDateError(today,today)).toBeNull();
   expect(customerOrderDateError('2026-10-16',today)).toContain('服务器北京时间今日');
-  expect(initialCustomerDateErrors([{deliveryDate:'2026-11-14'},{deliveryDate:'2026-11-15'},{deliveryDate:'2026-11-16'}],minimumInitialCustomerDate(new Date('2026-10-15T00:00:00Z')))).toHaveLength(1);
+  expect(initialCustomerDateErrors([{deliveryDate:'2026-11-13'},{deliveryDate:'2026-11-14'},{deliveryDate:'2026-11-15'}],minimumInitialCustomerDate(new Date('2026-10-15T00:00:00Z')))).toHaveLength(1);
  });
  it("locates each invalid PO and accepts the boundary; does not validate factory or sample dates",()=>{
   expect(initialCustomerDateErrors([{customerWarehouseArrivalDate:"2026-06-01"},{deliveryDate:"2026-05-28"},{customerWarehouseArrivalDate:null}],"2026-06-01")).toEqual([
-   "PO 2 出货日期须填写 2026-06-01 或之后的日期（首次确定订单至少一个自然月）",
-   "PO 3 出货日期须填写 2026-06-01 或之后的日期（首次确定订单至少一个自然月）",
+   "PO 2 出货日期须填写 2026-06-01 或之后的日期（不足30自然日须老板或Root特批）",
+   "PO 3 出货日期须填写 2026-06-01 或之后的日期（不足30自然日须老板或Root特批）",
   ]);
  });
  it("persists incomplete PO text with the same development document without treating it as an order",()=>{

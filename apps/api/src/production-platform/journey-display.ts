@@ -1,4 +1,4 @@
-import { JOURNEY_NODES, JOURNEY_STAGES, type JourneyDisplay, type JourneyNode, type OrderJourney } from "@dx-rework/contracts/digital-production-journey";
+import { JOURNEY_NODES, JOURNEY_STAGES, isJourneyPlanningNode, type JourneyDisplay, type JourneyNode, type OrderJourney } from "@dx-rework/contracts/digital-production-journey";
 
 /** Canonical business shares, independent of legacy count flags and PO/task multiplicity. */
 const businessKey=(key:string)=>key==="development_material_recheck"?"development_materials":key;
@@ -9,7 +9,7 @@ export function progressLabel(ratio:number|null):string {
   return `${percentage.toFixed(1)}%`;
 }
 export function journeyDisplay(order:OrderJourney,asOf:string,terminal:{cancelled?:boolean;closedAt?:string|null}={}):JourneyDisplay {
-  const nodes=order.stages.flatMap(stage=>stage.nodes).filter(node=>node.current);
+  const nodes=order.stages.flatMap(stage=>stage.nodes).filter(node=>node.current&&!isJourneyPlanningNode(node));
   const closed=nodes.some(node=>["packing","special_closure"].includes(node.key)&&node.state==="completed");
   const today=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(asOf));
   const dates=order.poDeliveryDates??[];
@@ -19,7 +19,7 @@ export function journeyDisplay(order:OrderJourney,asOf:string,terminal:{cancelle
   const mainState=terminal.cancelled?"cancelled":closed?"completed":earliestShipmentDate&&earliestShipmentDate<today?"overdue":earliestShipmentDate&&(itemReminder(order)??earliestShipmentDate)<=today?"due_soon":activated?"active":"not_started";
   const stages=JOURNEY_STAGES.map(definition=>{
     const candidates=nodes.filter(node=>node.stage===definition.key&&(definition.key!=="creation"||node.key===(order.orderId?"order_information":"product_development")));
-    const expectedKeys=new Set(JOURNEY_NODES.filter(node=>node.stage===definition.key&&(definition.key!=="creation"||node.key===(order.orderId?"order_information":"product_development"))).map(node=>businessKey(node.key)));
+    const expectedKeys=new Set(JOURNEY_NODES.filter(node=>!node.planningOnly&&node.stage===definition.key&&(definition.key!=="creation"||node.key===(order.orderId?"order_information":"product_development"))).map(node=>businessKey(node.key)));
     const groups=new Map<string,JourneyNode[]>();
     for(const node of candidates){const key=businessKey(node.key);groups.set(key,[...(groups.get(key)??[]),node]);}
     // A missing catalog definition/permission/applicability cannot disappear from the denominator.
