@@ -1,3 +1,4 @@
+import {memberCanWriteModule} from '../access/member-module-policy.js';
 import {createHash} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import type {TodoResponse,TodoRouteDescriptor} from '@dx-rework/contracts';
@@ -22,10 +23,10 @@ export async function qcProgressNotices(db:DB,people:TrustedActorContext[],onlyO
   if(!await acceptanceIncludesNative(database,order.task_id))continue;
   const settings=(await db.query('SELECT quality_lead_id FROM digital_qc_supervision_settings WHERE production_order_id=$1 ORDER BY version DESC LIMIT 1',[order.production_order_id])).rows[0];
   const time=await new ContextBusinessClock(database,db===database?undefined:db as PoolClient).read({kind:'order',id:order.production_order_id});
-  const eligible=async(id:string|null,role:string)=>{const person=people.find(p=>p.actorId===id&&p.actorRoles.includes(role));return person&&await policy.activeRole(person.actorId,role)&&await policy.allowed(person,'order',order.production_order_id,'technical')?person.actorId:null;};
+  const eligible=async(id:string|null,role:string)=>{const person=people.find(p=>p.actorId===id&&p.actorRoles.includes(role));return person&&await memberCanWriteModule(db,person.actorId,'sourcing')&&await policy.activeRole(person.actorId,role)&&await policy.allowed(person,'order',order.production_order_id,'technical')?person.actorId:null;};
   const qc=await eligible(order.assignee_id,'quality_control'),lead=await eligible(settings?.quality_lead_id??null,'quality_control'),primary=await eligible(order.primary_merchandiser_id,'order_merchandiser');
   const managers:string[]=[];
-  for(const p of people)if(p.actorRoles.some(r=>['production_management','owner_group'].includes(r))&&await policy.allowed(p,'order',order.production_order_id,'technical'))managers.push(p.actorId);
+  for(const p of people)if(p.actorRoles.some(r=>['production_management','owner_group'].includes(r))&&await memberCanWriteModule(db,p.actorId,'sourcing')&&await policy.allowed(p,'order',order.production_order_id,'technical'))managers.push(p.actorId);
   for(const evidence of await readQcExecutionEvidence(db,order.production_order_id,time.now)){
    if(evidence.finished)continue;
    for(const window of evidence.windows){const clock=window.clock;if(!clock.anchor||!clock.remindAt||!clock.escalateAt)continue;

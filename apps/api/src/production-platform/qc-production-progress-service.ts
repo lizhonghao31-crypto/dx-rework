@@ -47,6 +47,7 @@ export class QcProductionProgressService{
  }
  private async leader(db:PoolClient,actor:TrustedActorContext){
   if(isRootActor(actor))return true;
+  if(!await memberCanWriteModule(db,actor.actorId,'sourcing'))return false;
   for(const role of ['owner_group','production_management'])if(actor.actorRoles.includes(role)&&await new DigitalProductionAccessPolicy(db).lockActiveRole(actor.actorId,role))return true;
   return false;
  }
@@ -73,7 +74,7 @@ export class QcProductionProgressService{
    const records=(await db.query('SELECT * FROM digital_qc_progress_records WHERE tracking_id=$1 ORDER BY revision DESC',[archive.tracking_id])).rows;
    if(records.length)archivedExecutions.push({factoryDecisionId:archive.factory_decision_id,supplierName:archive.supplier_name_snapshot,records:records.map(r=>this.mapRecord(r))});
   }
-  return {archivedExecutions,viewerId:actor.actorId,orderId:id,asOf:time.now,canManage:isDigitalLeader(actor),canRecord:executions.some(e=>e.canRecord),paused:lifecycle.paused||lifecycle.closed,
+  return {archivedExecutions,viewerId:actor.actorId,orderId:id,asOf:time.now,canManage:isDigitalLeader(actor)&&await memberCanWriteModule(db,actor.actorId,'sourcing'),canRecord:executions.some(e=>e.canRecord),paused:lifecycle.paused||lifecycle.closed,
    qcUserId:task?.assignee_id??null,qcName:task?.assignee_name??null,qualityLeadId:settings?.quality_lead_id??null,qualityLeadName:settings?.lead_name??null,settingsVersion:Number(settings?.version??0),executions};
  }
  private async transaction<T>(actor:TrustedActorContext,id:string,action:string,input:unknown,key:string,before:(db:PoolClient)=>Promise<void>,work:(db:PoolClient)=>Promise<T>):Promise<T>{
@@ -138,7 +139,7 @@ export class QcProductionProgressService{
  async settingsCommand(actor:TrustedActorContext,id:string,input:{expectedVersion:number;qualityLeadId:string|null},key:string){
   return this.transaction(actor,id,'settings',input,key,async db=>{if(!await this.leader(db,actor))digitalForbidden();},async db=>{
    const current=await this.settings(db,id);if(Number(current?.version??0)!==input.expectedVersion)conflict('质检负责人配置已变化，请读取最新内容');
-   if(input.qualityLeadId&&!await new DigitalProductionAccessPolicy(db).lockActiveRole(input.qualityLeadId,'quality_control'))conflict('请指定在职且具有QC岗位的质检负责人；不新增岗位权限');
+   if(input.qualityLeadId&&(!await new DigitalProductionAccessPolicy(db).lockActiveRole(input.qualityLeadId,'quality_control')||!await memberCanWriteModule(db,input.qualityLeadId,'sourcing')))conflict('请指定在职且具有QC岗位的质检负责人；不新增岗位权限');
    const audit=randomUUID();await db.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1,$2,$3,'digital.qc.settings','digital_production_order',$4,$5)",[audit,actor.requestId,actor.actorId,id,JSON.stringify(input)]);
    await db.query('INSERT INTO digital_qc_supervision_settings(production_order_id,version,quality_lead_id,changed_by,audit_id) VALUES($1,$2,$3,$4,$5)',[id,input.expectedVersion+1,input.qualityLeadId,actor.actorId,audit]);return {version:input.expectedVersion+1,committed:true as const};
   });

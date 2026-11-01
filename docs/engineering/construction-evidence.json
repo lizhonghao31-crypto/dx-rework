@@ -2,7 +2,7 @@
   "version": 1,
   "base": "61a33d1b774698ae90d4d450fd9d4a45b569fe25",
   "risk": "full",
-  "sourceFingerprint": "097426fcbe0b8549ed88624c44177cc04a34daa9f669745cfebb82f01c7e2b4c",
+  "sourceFingerprint": "51a78f30123108234e3171877a9c3690843c7338fcd57241b6d37d40273d8e91",
   "rules": [
     {
       "rule": "Append271 with exact inventories and owned fixtures",
@@ -26,8 +26,8 @@
       "dateAndPermission": "Real occurrence and audit wall times remain distinct. Clock reads do not write facts. Exact assigned QC/factory/PO and current allocation eligibility; no factory receipt/count, finance, ship-sample or missing-SLA-evidence gate. Contract48h still excludes Beijing Sundays.",
       "expectation": "No previous SQL/checksum changed. New unfinished receipt/count tasks retire as cancelled without completed facts; historical states are preserved in immutable retirement rows. Native role capability and private evidence tables are append-only.",
       "checks": [
-        "final-static",
-        "frozen-core-postgres"
+        "fixed-static",
+        "fixed-core-postgres"
       ]
     },
     {
@@ -48,9 +48,9 @@
       "dateAndPermission": "Real occurrence and audit wall times remain distinct. Clock reads do not write facts. Exact assigned QC/factory/PO and current allocation eligibility; no factory receipt/count, finance, ship-sample or missing-SLA-evidence gate. Contract48h still excludes Beijing Sundays.",
       "expectation": "Tracked QC freshness uses48/72 recipients; quantity alerts compare underlying quantity risk so a QC-stale but quantity-normal factory does not mask another factory high risk. Legacy stale behavior remains for untracked orders.",
       "checks": [
-        "final-unit",
-        "frozen-quantity-alert-postgres-cwd",
-        "final-static"
+        "fixed-unit",
+        "fixed-quantity-postgres",
+        "fixed-static"
       ]
     },
     {
@@ -84,9 +84,8 @@
       "expectation": "Original components, private upload service and local CSS reused. Per-form drafts survive sibling saves. Immutable body/key retained on uncertain writes under verified principal; committed-save/read-failure does not re-submit. Real parent Return/Refresh and one-file upload recovery exercised at1280/1440; no live-site claim.",
       "checks": [
         "frozen-browser",
-        "final-unit",
-        "final-static",
-        "keyboard-pc"
+        "fixed-unit",
+        "fixed-static"
       ]
     },
     {
@@ -114,9 +113,9 @@
       "dateAndPermission": "Real occurrence and audit wall times remain distinct. Clock reads do not write facts. Exact assigned QC/factory/PO and current allocation eligibility; no factory receipt/count, finance, ship-sample or missing-SLA-evidence gate. Contract48h still excludes Beijing Sundays.",
       "expectation": "Stage proportions are observations, optional positive added finished quantity writes native ledger, photos-only cannot reset progress. Original contract/production facts unchanged; removed receipt/count is not a new mandatory node. Exact factory scope travels to the existing page.",
       "checks": [
-        "final-unit",
-        "final-static",
-        "frozen-core-postgres"
+        "fixed-unit",
+        "fixed-static",
+        "fixed-core-postgres"
       ]
     },
     {
@@ -140,9 +139,9 @@
       "dateAndPermission": "Real occurrence and audit wall times remain distinct. Clock reads do not write facts. Exact assigned QC/factory/PO and current allocation eligibility; no factory receipt/count, finance, ship-sample or missing-SLA-evidence gate. Contract48h still excludes Beijing Sundays.",
       "expectation": "Fixed missing original closure structure, native generation/PO linkage, snapshot asOf comparisons and projection/delivery using the same test-only Date. Four inherited failures reproduced at exact04981 tree, not called PR06 regressions. Stale queued legacy artifact is an explicit negative fixture, not an approved digital creation path. Updated all affected denominator and retired410 expectations; shared resource create/release APIs used.",
       "checks": [
-        "frozen-core-postgres",
-        "final-unit",
-        "final-static"
+        "fixed-core-postgres",
+        "fixed-unit",
+        "fixed-static"
       ]
     },
     {
@@ -167,8 +166,8 @@
       "dateAndPermission": "Real occurrence and audit wall times remain distinct. Clock reads do not write facts. Exact assigned QC/factory/PO and current allocation eligibility; no factory receipt/count, finance, ship-sample or missing-SLA-evidence gate. Contract48h still excludes Beijing Sundays.",
       "expectation": "New qc-production-progress capability is not the old reporter role. API, DB, upload claim, native scope reader and menu match. Live eligibility checked before replay. Root correction/finish/ship retained; QC receives none of those or warehouse quantity edits. One submissionId links observation, applicable native quantities and photos; any overflow rolls everything back.",
       "checks": [
-        "frozen-core-postgres",
-        "final-static"
+        "fixed-core-postgres",
+        "fixed-static"
       ]
     },
     {
@@ -191,9 +190,9 @@
       "dateAndPermission": "Real occurrence and audit wall times remain distinct. Clock reads do not write facts. Exact assigned QC/factory/PO and current allocation eligibility; no factory receipt/count, finance, ship-sample or missing-SLA-evidence gate. Contract48h still excludes Beijing Sundays.",
       "expectation": "Starts only from real approved/warehouse dispatch or explicitly adopted current supervision for unknown history. No waiting for factory receipt. Per-PO observation windows, original snapshots and exact factory scope. Photos, read, refresh, reassignment and old backfill do not wash current deadlines. Current recipient and observation window rechecked at delivery, same-recipient48/72 de-duplicated; missing recipients are management work. Original quality-inspection todos remain distinct facts, not suppressed by progress.",
       "checks": [
-        "frozen-core-postgres",
-        "final-unit",
-        "final-static"
+        "fixed-core-postgres",
+        "fixed-unit",
+        "fixed-static"
       ]
     },
     {
@@ -225,21 +224,21 @@
       "dateAndPermission": "Real occurrence and audit wall times remain distinct. Clock reads do not write facts. Exact assigned QC/factory/PO and current allocation eligibility; no factory receipt/count, finance, ship-sample or missing-SLA-evidence gate. Contract48h still excludes Beijing Sundays.",
       "expectation": "No new receipt/count task, current count, pending dependency, reminder or completion condition. Old records read-only, old commands410 before cached responses, active orders do not wait for plan adoption. Keep original warehouse dispatch/receiving, QC quality, ship samples, rework/own-tail and packing boundaries.",
       "checks": [
-        "frozen-core-postgres",
-        "final-unit",
-        "final-static"
+        "fixed-core-postgres",
+        "fixed-unit",
+        "fixed-static"
       ]
     }
   ],
   "checks": [
     {
-      "id": "final-static",
+      "id": "fixed-static",
       "kind": "command",
       "command": "[\"node\",\"/workspace/dx-p06-static-precheck.mjs\"]",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "61a33d1b774698ae90d4d450fd9d4a45b569fe25",
-      "sourceFingerprint": "097426fcbe0b8549ed88624c44177cc04a34daa9f669745cfebb82f01c7e2b4c",
+      "testedHead": "b3d712d6357056be1976f61c0704055891729bc6",
+      "sourceFingerprint": "51a78f30123108234e3171877a9c3690843c7338fcd57241b6d37d40273d8e91",
       "inputPaths": [
         "apps",
         "packages",
@@ -253,22 +252,22 @@
         "vitest.postgres-immediate.config.ts",
         "eslint.config.js"
       ],
-      "inputFingerprint": "8b463f91acc458e2a0bb315599c2035e5261e88eb599c7345ec8db9171d557ce",
+      "inputFingerprint": "f627df7c1cd4c7debbd26baf0fe53fff8574a43bb50ecdd1083a838b9920b3b5",
       "sourceState": "Uncommitted candidate: full source fingerprint and declared input fingerprint captured before command; declared inputs reverified after command; testedHead is ancestor, not a claim of a committed tested Head",
       "context": "Local Node 22.23.4; owned marked PG16 instance/low-privilege test role, explicit canonical workers; no claim of CI hardware equivalence or authenticated full-site acceptance",
-      "startedAt": "2026-11-01T22:56:55.280Z",
-      "endedAt": "2026-11-01T22:58:19.707Z",
-      "logSha256": "b5017ac9fdced0410a7f08b870f3807ebd92b7869472c79e8b819cb2956da441",
-      "log": "/workspace/dx-p06-recorded-final-static-1793573815281.log"
+      "startedAt": "2026-11-01T23:12:37.517Z",
+      "endedAt": "2026-11-01T23:14:06.911Z",
+      "logSha256": "bc68177e88c12d76d54427638a5e71b4d66b38c88eb55bd47f2c28293ffd5314",
+      "log": "/workspace/dx-p06-recorded-fixed-static-1793574757517.log"
     },
     {
-      "id": "final-unit",
+      "id": "fixed-unit",
       "kind": "tests",
       "command": "[\"node\",\"node_modules/vitest/vitest.mjs\",\"run\",\"tests/unit/production-closure.test.ts\",\"tests/unit/qc-progress-reminders.test.ts\",\"tests/unit/factory-task-target.test.ts\",\"tests/unit/production-reporting-clock-contract.test.ts\",\"tests/unit/todo-destination-parity.test.ts\",\"tests/unit/todo-presentation.test.ts\",\"tests/unit/production-dashboard-motion.test.ts\",\"tests/unit/platform-modules.test.ts\",\"tests/unit/production-dashboard.test.ts\",\"tests/unit/production-reporting.test.ts\",\"tests/unit/digital-journey-projection.test.ts\",\"tests/unit/business-time-write-contract.test.ts\"]",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "61a33d1b774698ae90d4d450fd9d4a45b569fe25",
-      "sourceFingerprint": "097426fcbe0b8549ed88624c44177cc04a34daa9f669745cfebb82f01c7e2b4c",
+      "testedHead": "b3d712d6357056be1976f61c0704055891729bc6",
+      "sourceFingerprint": "51a78f30123108234e3171877a9c3690843c7338fcd57241b6d37d40273d8e91",
       "inputPaths": [
         "apps",
         "packages",
@@ -282,126 +281,77 @@
         "vitest.postgres-immediate.config.ts",
         "eslint.config.js"
       ],
-      "inputFingerprint": "8b463f91acc458e2a0bb315599c2035e5261e88eb599c7345ec8db9171d557ce",
+      "inputFingerprint": "f627df7c1cd4c7debbd26baf0fe53fff8574a43bb50ecdd1083a838b9920b3b5",
       "sourceState": "Uncommitted candidate: full source fingerprint and declared input fingerprint captured before command; declared inputs reverified after command; testedHead is ancestor, not a claim of a committed tested Head",
       "context": "Local Node 22.23.4; owned marked PG16 instance/low-privilege test role, explicit canonical workers; no claim of CI hardware equivalence or authenticated full-site acceptance",
-      "startedAt": "2026-11-01T22:56:56.537Z",
-      "endedAt": "2026-11-01T22:57:04.442Z",
-      "logSha256": "7706c0f10f0fbd4f1ba87498b6c3a544555f654a632d169e2f929361ce4743cb",
-      "log": "/workspace/dx-p06-recorded-final-unit-1793573816537.log",
+      "startedAt": "2026-11-01T23:12:58.307Z",
+      "endedAt": "2026-11-01T23:13:06.216Z",
+      "logSha256": "d7c43d049905530d8e47ffaefb3247587137741e1fff8d3b97632a4b2fc5965a",
+      "log": "/workspace/dx-p06-recorded-fixed-unit-1793574778307.log",
       "passed": 131,
       "failed": 0,
       "skipped": 0
     },
     {
-      "id": "frozen-core-postgres",
+      "id": "fixed-core-postgres",
       "kind": "tests",
       "command": "[\"flock\",\"/workspace/dx-governance-local-pg-instance.lock\",\"node\",\"/workspace/dx-p06-focused-postgres.mjs\"]",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "61a33d1b774698ae90d4d450fd9d4a45b569fe25",
-      "sourceFingerprint": "18f1bb014d5c14c6f2311a13d3e72743f4b916998cafade1ff47b9fbdde480e8",
+      "testedHead": "b3d712d6357056be1976f61c0704055891729bc6",
+      "sourceFingerprint": "51a78f30123108234e3171877a9c3690843c7338fcd57241b6d37d40273d8e91",
       "inputPaths": [
-        "apps/api/migrations",
-        "apps/api/package.json",
-        "apps/api/scripts",
-        "apps/api/tsconfig.json",
-        "apps/api/src/acceptance-clock",
-        "apps/api/src/access",
-        "apps/api/src/admin-audit-routes.ts",
-        "apps/api/src/admin-audit-service.ts",
-        "apps/api/src/admin-console-routes.ts",
-        "apps/api/src/admin-console-service.ts",
-        "apps/api/src/app.ts",
-        "apps/api/src/assets",
-        "apps/api/src/auth",
-        "apps/api/src/cutting",
-        "apps/api/src/pattern-room",
-        "apps/api/src/platform",
-        "apps/api/src/production-platform",
-        "apps/api/src/receiving",
-        "apps/api/src/reporting",
-        "apps/api/src/rework",
-        "apps/api/src/samples",
-        "apps/api/src/server.ts",
-        "apps/api/src/sourcing/contract-return-clock.ts",
-        "apps/api/src/sourcing/contract-return-state.ts",
-        "apps/api/src/sourcing/current-merchandiser.ts",
-        "apps/api/src/sourcing/factory-settlement-service.ts",
-        "apps/api/src/sourcing/factory-transfer-service.ts",
-        "apps/api/src/sourcing/production-analysis.ts",
-        "apps/api/src/sourcing/production-chase.ts",
-        "apps/api/src/sourcing/production-closure-routes.ts",
-        "apps/api/src/sourcing/production-dashboard-routes.ts",
-        "apps/api/src/sourcing/production-dashboard-service.ts",
-        "apps/api/src/sourcing/production-exclusion-service.ts",
-        "apps/api/src/sourcing/production-reporting-clock.ts",
-        "apps/api/src/sourcing/production-reporting-routes.ts",
-        "apps/api/src/sourcing/production-reporting-service.ts",
-        "apps/api/src/sourcing/production-visibility.ts",
-        "apps/api/src/sourcing/sourcing-analysis.ts",
-        "apps/api/src/sourcing/sourcing-contract-content.ts",
-        "apps/api/src/sourcing/sourcing-contract-history-scope.ts",
-        "apps/api/src/sourcing/sourcing-contract-management-service.ts",
-        "apps/api/src/sourcing/sourcing-contract-pdf.ts",
-        "apps/api/src/sourcing/sourcing-contract-return-service.ts",
-        "apps/api/src/sourcing/sourcing-contract-service.ts",
-        "apps/api/src/sourcing/sourcing-production-service.ts",
-        "apps/api/src/sourcing/sourcing-routes.ts",
-        "apps/api/src/sourcing/sourcing-service.ts",
-        "apps/api/src/sourcing/sourcing-transfer-contract-reconciliation.ts",
-        "apps/api/src/sourcing/sourcing-transfer-contract-todos.ts",
-        "apps/api/src/todos",
-        "apps/api/src/tools",
-        "apps/api/src/wages",
+        "apps",
         "packages",
-        "tests/integration",
-        "tests/helpers",
+        "tests",
         "scripts",
         "package.json",
         "package-lock.json",
+        "tsconfig.base.json",
+        "vitest.config.ts",
         "vitest.business-chain.config.ts",
-        "vitest.config.ts"
+        "vitest.postgres-immediate.config.ts",
+        "eslint.config.js"
       ],
-      "inputFingerprint": "fdbe3601e99ce8f80bac578d344af529924d2181aeba4c68b6034ad583fac7a9",
+      "inputFingerprint": "f627df7c1cd4c7debbd26baf0fe53fff8574a43bb50ecdd1083a838b9920b3b5",
       "sourceState": "Uncommitted candidate: full source fingerprint and declared input fingerprint captured before command; declared inputs reverified after command; testedHead is ancestor, not a claim of a committed tested Head",
       "context": "Local Node 22.23.4; owned marked PG16 instance/low-privilege test role, explicit canonical workers; no claim of CI hardware equivalence or authenticated full-site acceptance",
-      "startedAt": "2026-11-01T22:54:09.215Z",
-      "endedAt": "2026-11-01T22:55:39.609Z",
-      "logSha256": "bb02d54551619bd7b2b009297caa4a941ec960e30a24adc9d8c73d317d303599",
-      "log": "/workspace/dx-p06-recorded-frozen-affected-postgres-1793573649216.log",
-      "passed": 42,
+      "startedAt": "2026-11-01T23:12:36.269Z",
+      "endedAt": "2026-11-01T23:14:09.762Z",
+      "logSha256": "af600d8d7c54d4bb207f647385464a7be603a2ceb0687e17812d1f4f246831b6",
+      "log": "/workspace/dx-p06-recorded-fixed-core-postgres-1793574756269.log",
+      "passed": 43,
       "failed": 0,
-      "skipped": 131,
-      "scopeCapturedAt": "2026-11-01T22:56:40.921Z",
-      "scopeReason": "Same completed command and log, while original full source and declared input fingerprints still exactly match. Excluded only production-closure-service.ts: reporting and receiving dependencies use import type and no instance is supplied in these four suites. Its changed alert selection is separately verified by its own unit/PostgreSQL suites. No remote Gate reuse."
+      "skipped": 131
     },
     {
-      "id": "frozen-quantity-alert-postgres-cwd",
+      "id": "fixed-quantity-postgres",
       "kind": "tests",
       "command": "[\"flock\",\"/workspace/dx-governance-local-pg-instance.lock\",\"node\",\"/workspace/dx-p06-focused-postgres.mjs\"]",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "61a33d1b774698ae90d4d450fd9d4a45b569fe25",
-      "sourceFingerprint": "097426fcbe0b8549ed88624c44177cc04a34daa9f669745cfebb82f01c7e2b4c",
+      "testedHead": "b3d712d6357056be1976f61c0704055891729bc6",
+      "sourceFingerprint": "51a78f30123108234e3171877a9c3690843c7338fcd57241b6d37d40273d8e91",
       "inputPaths": [
-        "apps/api",
+        "apps",
         "packages",
-        "tests/integration/production-closure-postgres.test.ts",
-        "tests/helpers",
+        "tests",
         "scripts",
         "package.json",
         "package-lock.json",
+        "tsconfig.base.json",
+        "vitest.config.ts",
         "vitest.business-chain.config.ts",
-        "vitest.config.ts"
+        "vitest.postgres-immediate.config.ts",
+        "eslint.config.js"
       ],
-      "inputFingerprint": "0c9e771f8aa97afcb6b4cab9de8cc58d1bc758a328f625c3d4afc943d21d4e9b",
+      "inputFingerprint": "f627df7c1cd4c7debbd26baf0fe53fff8574a43bb50ecdd1083a838b9920b3b5",
       "sourceState": "Uncommitted candidate: full source fingerprint and declared input fingerprint captured before command; declared inputs reverified after command; testedHead is ancestor, not a claim of a committed tested Head",
       "context": "Local Node 22.23.4; owned marked PG16 instance/low-privilege test role, explicit canonical workers; no claim of CI hardware equivalence or authenticated full-site acceptance",
-      "startedAt": "2026-11-01T22:56:54.015Z",
-      "endedAt": "2026-11-01T22:57:09.748Z",
-      "logSha256": "50a87735eddbee03f221991b75578b281a098cf813eaf9588ec0cdb1033174e7",
-      "log": "/workspace/dx-p06-recorded-frozen-quantity-alert-postgres-cwd-1793573814015.log",
+      "startedAt": "2026-11-01T23:13:31.711Z",
+      "endedAt": "2026-11-01T23:14:22.348Z",
+      "logSha256": "ede48b32ff1b332db16d7c13d0e6cbd75b983b6a3c88857154429e0de5b36aa2",
+      "log": "/workspace/dx-p06-recorded-fixed-quantity-postgres-1793574811711.log",
       "passed": 17,
       "failed": 0,
       "skipped": 0
@@ -430,32 +380,7 @@
       "endedAt": "2026-11-01T22:52:45.464Z",
       "logSha256": "6a0b75334a9190ec61cd2836a3ec3730b8e0404a166a1e919d7b3a807de3bc6d",
       "log": "/workspace/dx-p06-recorded-frozen-browser-1793573543286.log"
-    },
-    {
-      "id": "keyboard-pc",
-      "kind": "command",
-      "command": "[\"node\",\"/workspace/dx-p06-keyboard-only.mjs\"]",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "61a33d1b774698ae90d4d450fd9d4a45b569fe25",
-      "sourceFingerprint": "097426fcbe0b8549ed88624c44177cc04a34daa9f669745cfebb82f01c7e2b4c",
-      "inputPaths": [
-        "apps/web",
-        "packages",
-        "tests/fixtures/qc-production-progress-ui.tsx",
-        "tests/acceptance/qc-production-progress-browser.mjs",
-        "package.json",
-        "package-lock.json",
-        "tsconfig.base.json"
-      ],
-      "inputFingerprint": "c3577d9e9871d990ff202e04be9bddffdd67cd5ea7348a57d1d867fbe460ab67",
-      "sourceState": "Uncommitted candidate: full source fingerprint and declared input fingerprint captured before command; declared inputs reverified after command; testedHead is ancestor, not a claim of a committed tested Head",
-      "context": "Local Node 22.23.4; owned marked PG16 instance/low-privilege test role, explicit canonical workers; no claim of CI hardware equivalence or authenticated full-site acceptance",
-      "startedAt": "2026-11-01T22:59:20.405Z",
-      "endedAt": "2026-11-01T22:59:23.084Z",
-      "logSha256": "d0d61d64056ff2407c07124a8ed8d330c5f4eca4cf430b9338f0e0ffb3f37805",
-      "log": "/workspace/dx-p06-recorded-keyboard-pc-1793573960406.log"
     }
   ],
-  "scopeNote": "Local fixed-source evidence, not final GitHub Gate.42 focused PostgreSQL checks include27 notification cases +15 native/affected-source cases,131 intentional skips in the source file; separate17 quantity/receiving cases and131 unit cases. Full gate must execute every applicable suite and upgrade/restore phase."
+  "scopeNote": "Local fixed-source evidence, not final GitHub Gate.43 focused PostgreSQL checks include27 notification cases +16 native/affected-source cases,131 intentional skips in the source file; separate17 quantity/receiving cases and131 unit cases. Full gate must execute every applicable suite and upgrade/restore phase."
 }

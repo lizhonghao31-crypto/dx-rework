@@ -1,6 +1,6 @@
 # PR06 工厂旧节点退役与QC统一生产记录
 
-当前：组装完成，准备一次GitHub Codex Review；尚未最终Gate/合并/部署。下文开工和首轮记录为历史检查点，当前证据见末节。
+当前：PR #888 首轮GitHub Codex Review已完成，正在集中修复及验证；尚未最终Gate/合并/部署。下文开工和首轮记录为历史检查点，当前证据见末节。
 
 目标分支 `release/digital-production-v1`，实际远端基线 `61a33d1b774698ae90d4d450fd9d4a45b569fe25`（已合PR05）；工作分支 `feature/new-flow-p06-20261101`。沿本轮8PR及后续恢复的明确施工/Review/修复/逐项合并授权。不部署、不操作真实订单、不合业务到main、不修改用户模型/速度配置。PR07目录与PR08材料一览留后续。
 
@@ -51,3 +51,15 @@
 - 保留原成衣QC任务/检查待办，因为它与进度采集是不同事实；仅替代同一未更新事实的旧2自然日提示。原船样、完工/发回、仓库实际收货、返工/本厂做尾和装箱条件保留；装箱不等责任/财务，合同48小时周日暂停未改。
 
 当前construction-evidence.json绑定实际组装源码与base，含真实命令、源/输入指纹、日志摘要和通过/跳过边界。随后按light→一次CodexReview→集中修复→最终准确HeadGate→合并执行，不将上述本地定向结果冒称远端认证。
+
+## 首轮Review与集中修复
+
+- 初始推送Head `b3d712d6357056be1976f61c0704055891729bc6`，light `41360019829` / job `125008209863` 成功。23:05:29 UTC 请求唯一一轮Codex Review，23:08:01 UTC完成；审核的是该初始Head，不冒称后续修复被重新审核。
+- 发现 `discussion_r4437745433`：QC身份误激活撤销生产填报角色后残留的供应商scope。拆分旧reporter与精确分派QC的可见条件，覆盖原生产列表/详情、看板列表/详情及分析报表共同读取谓词；保留真实QC本单与活跃旧reporter原范围。
+- 同轮自检补齐只读成员的主管设置/监督采用及提醒收件人过滤。现有成员绑定命令在隔离库中真实Root审计执行；不禁用DB守卫、不伪造身份。权限变更后旧幂等缓存也拒绝，只读仍可看有权历史，Root原例外保留。
+- 原生7项初步通过：实际角色授予、供应商scope、撤销角色后残留scope事实仍在但不再可见；只读成员绑定后写命令/旧响应恢复拒绝、提醒不再投给只读成员；2项资源实际清理。另补分析报表入口断言，随后按当前源码重验完整受影响组合，不借先前7项结果代替新增断言执行。
+- 父级固定初始Head的本轮退役/时间通知/范围与恢复定点核验已收口，无额外阻断；不是第二轮完整Review，也不是独立浏览器或现场验收。删除原新文件尾部空行，保留先前提示的真实记录。
+
+集中修复后的当前源码：43项定向PG（27旧通知＋7新QC＋9受影响旧流程，131项显式过滤未执行）通过，6项资源父清理成功；17项原风险/实收/装箱通过，2项资源父清理成功；131项相关单元通过；整仓preflight/lint/types/workspace build/时间索引/secret scan/diff检查通过。前端及其声明输入未变，保留已核20场景/两档键盘证据，不重复模拟整页，也不把它称真实账号验收。
+
+定向PG实际选择：`P06_PG_FILES=[digital-production-notification-delivery-postgres,digital-production-notifications-postgres,qc-progress-retirement-postgres,sourcing-pr03-postgres]`（均为tests/integration下.ts测试文件）；名称正则 `QC progress native lifecycle|P12 aggregates all original PO|SLA07 projects transferred|P13/P14 whole-order`，原通知两文件不施加名称过滤。另独立执行完整production-closure-postgres文件17项；canonical普通PG配置worker1、长正确性worker2，受管父runner持有同一隔离PG实例锁并在所有worker退出后真实清理。实际命令/日志/起止/指纹见construction-evidence.json，不把本地Node/硬件宣称CI完全等效。

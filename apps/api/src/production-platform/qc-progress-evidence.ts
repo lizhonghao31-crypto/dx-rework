@@ -45,4 +45,3 @@ export async function readQcExecutionEvidence(db:DB,id:string,asOf:string,closed
  }
  return result;
 }
-

@@ -1,3 +1,4 @@
+import {MemberModuleBindingService} from '../../apps/api/src/access/member-module-binding-service.js';
 import {DigitalCockpitQuery} from '../../apps/api/src/production-platform/cockpit-query.js';
 import {qcProgressNotices} from '../../apps/api/src/production-platform/qc-progress-todos.js';
 import {DigitalProductionNotificationService} from '../../apps/api/src/production-platform/notification-service.js';
@@ -63,6 +64,23 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const otherQcId=f.people['worker-a']!.actorId;
   await f.access.assignRole(f.root,{userId:otherQcId,roleCode:'quality_control',reason:'TEST valid second QC for exact order-scope reassignment'});
   await tasks.reassign(f.root,other.taskId,otherQcId,randomUUID());
+  const native=new ProductionReportingService(f.db),own=(await service.read(qc,ready.id)).executions[0]!,outside=(await service.read(f.root,other.id)).executions[0]!;
+  const assignment=await f.access.assignRole(f.root,{userId:qc.actorId,roleCode:'production_reporter',reason:'TEST real reporter grant followed by revocation'});
+  await native.setScope(f.root,{userId:qc.actorId,scopeType:'supplier',scopeId:f.supplierId,active:true},randomUUID());
+  const reporter={...qc,actorRoles:[...qc.actorRoles,'production_reporter'],authorizationCapabilities:[...qc.authorizationCapabilities!,'production-reporting']};
+  expect((await native.list(reporter)).items.some(row=>row.productionOrderId===outside.productionId)).toBe(true);
+  await f.access.revokeRole(f.root,assignment.assignmentId,'TEST revoke reporter while retaining assigned QC');
+  // Revocation deliberately retains the native supplier scope; QC must not reuse it.
+  expect((await f.db.query('SELECT sourcing_production_factory_reporter_allowed($1,$2,$3) allowed',[qc.actorId,outside.productionId,outside.factoryDecisionId])).rows[0].allowed).toBe(true);
+  expect((await native.list(qc)).items.some(row=>row.productionOrderId===outside.productionId)).toBe(false);
+  await expect(native.detail(qc,outside.productionId,undefined,outside.factoryDecisionId)).rejects.toMatchObject({statusCode:404});
+  const dashboard=new ProductionDashboardService(f.db,native,()=>businessNow());
+  expect((await dashboard.list(qc)).items.some(row=>row.order.productionOrderId===outside.productionId)).toBe(false);
+  await expect(dashboard.detail(qc,outside.productionId,outside.factoryDecisionId)).rejects.toMatchObject({statusCode:404});
+  const analysis=await dashboard.analysis(qc,{});
+  expect(analysis.items.some(row=>row.order.productionOrderId===outside.productionId)).toBe(false);
+  expect(analysis.items.some(row=>row.order.productionOrderId===own.productionId)).toBe(true);
+  expect((await native.detail(qc,own.productionId,undefined,own.factoryDecisionId)).order.productionOrderId).toBe(own.productionId);
   expect((await f.db.query('SELECT digital_qc_report_allowed($1,$2,$3) allowed',[qc.actorId,(await service.read(f.root,other.id)).executions[0]!.productionId,null])).rows[0].allowed).toBe(false);
   await expect(service.read(qc,other.id)).rejects.toMatchObject({statusCode:404});
   // Revocation is checked before serving an old idempotency response.
@@ -135,6 +153,25 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect((await app.inject({method:'GET',url:`/digital-production/orders/${randomUUID()}/qc-progress/attachments/${intent.attachmentId}`,headers})).statusCode).toBeGreaterThanOrEqual(400);
    const denied=await app.inject({method:'POST',url,headers:{cookie:'dx_rework_session=TEST-primary'},payload:{...body,submissionId:randomUUID()}});expect(denied.statusCode).toBe(403);
   }finally{await app.close();}
+ });
+ it('honors real readonly-member policy for management writes, replay and reminder routing while retaining Root',async()=>{
+  const manager=f.people['production-management']!,owner=f.people.owner!;
+  await f.access.assignRole(f.root,{userId:manager.actorId,roleCode:'owner_group',reason:'TEST isolated readonly owner policy fixture'});
+  await f.access.assignRole(f.root,{userId:manager.actorId,roleCode:'quality_control',reason:'TEST isolated combined owner/QC policy fixture'});
+  const readonly={...manager,actorRoles:[...new Set([...manager.actorRoles,'owner_group','quality_control'])],authorizationCapabilities:[...manager.authorizationCapabilities!,QC_PROGRESS_CAPABILITY]},scene=await f.scene('2026-11-12T00:00:00Z');
+  let ready!:Awaited<ReturnType<typeof dispatch>>,key!:string;
+  await f.runtime.run(scene,f.root,async()=>{ready=await dispatch();await tasks.reassign(f.root,ready.taskId,readonly.actorId,randomUUID());key=randomUUID();await service.settingsCommand(readonly,ready.id,{expectedVersion:0,qualityLeadId:readonly.actorId},key);});
+  // Original Root-audited binding command, outside the business scenario; no trigger disabling.
+  await new MemberModuleBindingService(f.db).run(f.root.actorId,{li_zhonghao:owner.actorId,wu_yunfeng:readonly.actorId,li_junyue:f.root.actorId},true);
+  await f.advance(scene,'2026-11-15T00:00:00Z');await f.runtime.run(scene,f.root,async()=>{
+   const sheet=await service.read(readonly,ready.id);expect(sheet).toMatchObject({canManage:false,canRecord:false});
+   await expect(service.settingsCommand(readonly,ready.id,{expectedVersion:0,qualityLeadId:readonly.actorId},key)).rejects.toMatchObject({statusCode:403});
+   const e=(await service.read(f.root,ready.id)).executions[0]!;
+   await expect(service.adopt(readonly,ready.id,{factoryDecisionId:e.factoryDecisionId,expectedScopeRevision:e.scopeRevision,reason:'TEST readonly cannot adopt'},randomUUID())).rejects.toMatchObject({statusCode:403});
+   const people=[...Object.values(f.people).filter(p=>p.actorId!==readonly.actorId),readonly],notices=await qcProgressNotices(f.db,people,ready.id);
+   expect(notices.length).toBeGreaterThan(0);expect(notices.every(n=>!n.recipients.includes(readonly.actorId))).toBe(true);
+   await expect(service.settingsCommand(f.root,ready.id,{expectedVersion:1,qualityLeadId:qc.actorId},randomUUID())).resolves.toMatchObject({committed:true,version:2});
+  });
  });
  it('retires a genuine previous-schema pending task without completed facts or losing queued/history records',async()=>{
   const old=await businessAnchorFixture(url!,{throughVersion:'0270_production_readiness_materials'});try{

@@ -33,9 +33,11 @@ type Query = Pick<PoolClient,"query">;
 // Parent case deletion does not hide production. Scope uses the frozen supplier.
 const visible = `${productionNotExcluded} AND ($1::boolean OR ($2::boolean AND sourcing_production_factory_reporter_allowed($3,production.production_order_id,production.factory_decision_id))
   OR ($4::boolean AND ${productionMerchandiserId}=$3))`;
-const visibility = (actor: TrustedActorContext) => [manager(actor), isProductionReporter(actor)||isQcReader(actor), actor.actorId, actor.actorRoles.includes("order_merchandiser") && (actor.authorizationCapabilities ?? [actor.authorizationCapability]).includes("sourcing:view")];
+const visibility = (actor: TrustedActorContext) => [manager(actor), isProductionReporter(actor), actor.actorId, actor.actorRoles.includes("order_merchandiser") && (actor.authorizationCapabilities ?? [actor.authorizationCapability]).includes("sourcing:view")];
 
-const factoryVisibleFor=(actor:TrustedActorContext)=>isQcReader(actor)?visible.replace('sourcing_production_factory_reporter_allowed($3,production.production_order_id,production.factory_decision_id)','(sourcing_production_factory_reporter_allowed($3,production.production_order_id,production.factory_decision_id) OR digital_qc_report_allowed($3,production.production_order_id,production.factory_decision_id))'):visible;
+// Reporter scopes and assigned-QC access are independent: a revoked reporter's
+// surviving supplier-scope rows must never be reactivated by their QC role.
+const factoryVisibleFor=(actor:TrustedActorContext)=>isQcReader(actor)?visible.replace('($2::boolean AND sourcing_production_factory_reporter_allowed($3,production.production_order_id,production.factory_decision_id))','(($2::boolean AND sourcing_production_factory_reporter_allowed($3,production.production_order_id,production.factory_decision_id)) OR digital_qc_report_allowed($3,production.production_order_id,production.factory_decision_id))'):visible;
 
 export class ProductionReportingService {
   constructor(private readonly database: Pool, private readonly idempotency = new IdempotencyService(), private readonly events = new OperationEventRepository(), private readonly closure?: Pick<ProductionClosureService,"refreshOrder">) {}
