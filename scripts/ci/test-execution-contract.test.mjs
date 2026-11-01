@@ -16,7 +16,7 @@ test('local and CI resolve one canonical union; long correctness uses finite con
  const plan=postgresPlan({mapped,chain:true});assert.equal(plan.filter(r=>r.path===mapped[0]).length,1);assert.deepEqual(plan.find(r=>r.path===mapped[0]).memberships,['mapped','chain']);assert.equal(plan.length,POSTGRES_CHAIN_TESTS.length+1);
  assert.equal(configForSuite('tests/integration/development-technical-postgres.test.ts'),'vitest.business-chain.config.ts');assert.equal(configForSuite(mapped[2]),'vitest.config.ts');
  const workflow=readFileSync('.github/workflows/full-gate.yml','utf8'),pkg=JSON.parse(readFileSync('package.json','utf8'));
- assert.ok(workflow.includes(pkg.scripts['test:postgres']));assert.ok(workflow.includes('--full-gate --verify-receipt'));
+ assert.ok(workflow.includes(pkg.scripts['test:postgres']));assert.ok(pkg.scripts.check.includes('npm run build --workspaces --if-present'));assert.ok(pkg.scripts.check.includes('node node_modules/vitest/vitest.mjs run'));assert.ok(!pkg.scripts.check.includes('npm run test &&'));assert.ok(pkg.scripts.check.includes('--static-already-validated'));assert.ok(workflow.includes('--full-gate --verify-receipt'));
  const defaultConfig=readFileSync('vitest.config.ts','utf8');
  assert.doesNotMatch(defaultConfig,/testTimeout/);assert.match(defaultConfig,/exclude: process.env.DX_REWORK_TEST_SUITE_KIND === "postgres" \? \[\] : postgresTestFiles\(\)/);
 });

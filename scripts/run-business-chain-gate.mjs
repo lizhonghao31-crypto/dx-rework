@@ -128,7 +128,9 @@ async function runVitest(files,config,environment,output){
  if(code!==0)throw Error('BUSINESS_CHAIN_GATE_FAILED: vitest exited '+code);
  const report=JSON.parse(readFileSync(output,'utf8'));assertSuiteResults(report,files);return report;
 }
-if(!hasDatabase){
+if(!hasDatabase&&process.argv.includes('--static-already-validated')){
+ console.log('BUSINESS_CHAIN_DATABASE_NOT_VERIFIED: no explicit TEST_DATABASE_URL; static tests already ran in the canonical non-DB suite');
+}else if(!hasDatabase){
  await runVitest(STATIC_CHAIN_TESTS,'vitest.config.ts',{TEST_DATABASE_URL:'',ACCEPTANCE_CLOCK_TEST_DATABASE_URL:''},'/tmp/dx-static-chain-'+randomUUID()+'.json');
  await verifyOssRuntime();console.log('BUSINESS_CHAIN_STATIC_GATES_PASSED');
 }else{
