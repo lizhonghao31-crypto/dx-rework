@@ -1,3 +1,5 @@
+import {preparationAdoption} from './preparation-material-repository.js';
+import {preparationWindow} from './production-readiness-repository.js';
 import type {PoolClient} from 'pg';
 import type {SlaNodeFact} from '@dx-rework/domain/digital-sla-plan';
 import {validateDigitalSlaSnapshot} from '@dx-rework/contracts/digital-sla';
@@ -19,8 +21,14 @@ export async function bulkSlaEvidence(db:Pick<PoolClient,'query'>,orderId:string
    JOIN digital_instruction_documents d ON d.production_order_id=p.production_order_id AND d.published_version=p.instruction_version
    JOIN digital_instruction_versions v ON v.production_order_id=p.production_order_id AND v.version=p.instruction_version
    WHERE p.production_order_id=$1 AND p.workflow_version=2 ORDER BY p.created_at DESC LIMIT 1`,[orderId])).rows[0];
+ const adoption=await preparationAdoption(db,{kind:'order',id:orderId});
+ const retainLegacy=Boolean(adoption?.standards.retainedInstructionVersion&&prep?.instruction_version<=adoption.standards.retainedInstructionVersion);
+ if(adoption&&!retainLegacy){const window=await preparationWindow(db,orderId,'final');
+  const completion=(await db.query("SELECT occurred_at FROM digital_preparation_instruction_events WHERE production_order_id=$1 AND kind='published' ORDER BY instruction_version LIMIT 1",[orderId])).rows[0];
+  result.production_sheet={evidence:`preparation-window:${orderId}:final`,businessCompleted:Boolean(completion),standardMinutes:adoption.standards.finalMinutes,
+   ...(window.startedAt?{startedAt:window.startedAt}:{}),...(completion?{completedAt:new Date(completion.occurred_at).toISOString()}:{})};}
  if(!prep)return result;
- result.production_sheet={evidence:`instruction:${orderId}:${prep.instruction_version}`,businessCompleted:true,completedAt:new Date(prep.published_at).toISOString()};
+ if(!adoption||retainLegacy)result.production_sheet={evidence:`instruction:${orderId}:${prep.instruction_version}`,businessCompleted:true,completedAt:new Date(prep.published_at).toISOString()};
  const tasks=(await db.query(`SELECT t.*,a.task_kind,a.production_order_id FROM digital_production_tasks t
    JOIN digital_production_task_access a USING(task_id) WHERE t.route_instance_id=$1 AND a.production_order_id=$2 AND t.state<>'cancelled'`,[prep.preparation_id,orderId])).rows;
  for(const task of tasks){
@@ -28,7 +36,7 @@ export async function bulkSlaEvidence(db:Pick<PoolClient,'query'>,orderId:string
   const planNode=task.task_kind==='bulk_cutting_external'?'bulk_cutting':task.task_kind;
   result[planNode]={evidence:`task:${task.task_id}`,businessCompleted:task.state==='completed',
    ...(timing.enteredAt?{startedAt:timing.enteredAt}:{}),...(task.completed_at?{completedAt:new Date(task.completed_at).toISOString()}:{}),
-   standardWarningPercent:timing.warningRatio*100,...(timing.seconds!==null?{standardMinutes:timing.seconds/60}:{}),
+   standardWarningPercent:timing.warningRatio*100,standardMinutes:timing.seconds!==null?timing.seconds/60:null,
    ...(task.task_kind==='warehouse_preshrink'&&!fabric.usable&&task.state!=='completed'?{waitingFor:{reason:'验布尚未合格或获准使用，预缩仍等待',source:`order:${orderId}:fabric`}}:{})};
  }
  return result;

@@ -1,3 +1,4 @@
+import {preparationAdoption} from './preparation-material-repository.js';
 import { factoryReturnLogistics } from './factory-return-logistics.js';
 import { assertSlaSettingsActor } from './sla-settings-authority.js';
 import { SlaPreviewTokens } from './sla-preview-token.js';
@@ -52,7 +53,9 @@ export class SlaOrderApplicationService {
                 fail('关联开发单被多个母单共用，不能单独改写其时效');
         }
         const next = structuredClone(snapshot!.snapshot), skipped: string[] = [];
+        const preparation=await preparationAdoption(db,{kind:'order',id:input.orderId});
         for (const key of keys) {
+            if(key==='production_sheet'&&preparation){skipped.push(key);continue;}
             if (next.parameters[key]!.source !== 'global') {
                 skipped.push(key);
                 continue;

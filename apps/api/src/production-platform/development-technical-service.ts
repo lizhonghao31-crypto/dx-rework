@@ -254,8 +254,8 @@ export class DevelopmentTechnicalService {
    if((old?.version??0)!==input.expectedVersion)conflict('该物料技术依据已有新版本');
    await this.bindTechnicalFiles(db,actor,sourceId,input.supplierEvidenceIds,'面料报告',undefined,old?.supplier_evidence_ids??[]);
    const version=input.expectedVersion+1;
-   await db.query(`INSERT INTO digital_development_technical_material_decisions(source_id,round_number,material_id,version,high_temperature_required,basis,supplier_evidence_ids,warp_shrink_percent,weft_shrink_percent,created_by,created_at)
-    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,[sourceId,input.roundNumber,input.materialId,version,input.highTemperatureRequired,input.basis,input.supplierEvidenceIds,input.warpShrinkPercent,input.weftShrinkPercent,actor.actorId,businessNow().toISOString()]);
+   await db.query(`INSERT INTO digital_development_technical_material_decisions(source_id,round_number,material_id,version,high_temperature_required,basis,supplier_evidence_ids,warp_shrink_percent,weft_shrink_percent,created_by,created_at,preshrink_method)
+    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,[sourceId,input.roundNumber,input.materialId,version,input.highTemperatureRequired,input.basis,input.supplierEvidenceIds,input.warpShrinkPercent,input.weftShrinkPercent,actor.actorId,businessNow().toISOString(),input.preshrinkMethod??null]);
    return {materialId:input.materialId,version};
   });
  }
@@ -405,7 +405,7 @@ export class DevelopmentTechnicalService {
    WHERE i.source_id=$1 AND i.round_number=$2 ORDER BY i.created_at`,[sourceId,selected])).rows.map(r=>({issueId:r.issue_id,roundNumber:r.round_number,tailTaskId:r.tail_task_id,note:r.payload.note??'',decision:r.decision??null,workTaskId:r.task_id??null,nativeOrderId:r.order_id??null}));
   const basis=(await db.query('SELECT * FROM digital_development_preparation_basis WHERE source_id=$1 AND round_number=$2 ORDER BY version DESC LIMIT 1',[sourceId,selected])).rows[0];
   empty.preparationBasis=basis?{version:basis.version,basis:basis.basis,finalFabric:basis.final_fabric,finalCraft:basis.final_craft,sampleEvidenceIds:basis.sample_evidence_ids,customerFabricEvidenceIds:basis.customer_fabric_evidence_ids,note:basis.note}:null;
-  empty.materialDecisions=(await db.query(`SELECT DISTINCT ON(material_id) * FROM digital_development_technical_material_decisions WHERE source_id=$1 AND round_number=$2 ORDER BY material_id,version DESC`,[sourceId,selected])).rows.map(r=>({materialId:r.material_id,version:r.version,highTemperatureRequired:r.high_temperature_required,basis:r.basis,supplierEvidenceIds:r.supplier_evidence_ids,warpShrinkPercent:r.warp_shrink_percent,weftShrinkPercent:r.weft_shrink_percent}));
+  empty.materialDecisions=(await db.query(`SELECT DISTINCT ON(material_id) * FROM digital_development_technical_material_decisions WHERE source_id=$1 AND round_number=$2 ORDER BY material_id,version DESC`,[sourceId,selected])).rows.map(r=>({materialId:r.material_id,version:r.version,preshrinkMethod:r.preshrink_method??null,highTemperatureRequired:r.high_temperature_required,basis:r.basis,supplierEvidenceIds:r.supplier_evidence_ids,warpShrinkPercent:r.warp_shrink_percent,weftShrinkPercent:r.weft_shrink_percent}));
   return empty;
  }
 }

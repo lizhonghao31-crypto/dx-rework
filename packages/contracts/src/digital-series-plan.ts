@@ -43,7 +43,7 @@ export type SeriesObservedFact={key:SeriesMilestoneKey;scopeRef:string;sourceDom
 export const SeriesSourceEventSchema=z.object({eventId:z.uuid(),orderId:z.uuid(),key:SeriesMilestoneKeySchema,scopeRef:z.string().trim().min(1).max(150),
  sourceDomain:z.enum(['development','bulk-preparation','production-instruction','cutting','factory-flow','receiving']),sourceRecordId:z.uuid(),sourceVersion:z.number().int().positive(),
  occurredAt:z.iso.datetime({offset:true}).nullable(),occurredDate:SeriesDateSchema.nullable(),precision:z.enum(['instant','date','unknown']),
- supersedesEventId:z.uuid().nullable(),voided:z.boolean().default(false),reason:z.string().trim().min(1).max(1000),
+ supersedesEventId:z.uuid().nullable(),voided:z.boolean().default(false),businessCompleted:z.boolean().optional(),reason:z.string().trim().min(1).max(1000),
 }).strict().superRefine((x,c)=>{
  if(x.precision==='instant'?!x.occurredAt||x.occurredDate!==null:x.precision==='date'?!x.occurredDate||x.occurredAt!==null:x.occurredAt!==null||x.occurredDate!==null)c.addIssue({code:'custom',path:['precision'],message:'时间精度与实际依据不符'});
 });

@@ -1525,5 +1525,40 @@
     ],
     "execute": [],
     "sequences": []
+  },
+  "0270_production_readiness_materials": {
+    "checksum": "214566f2a63a79caa2c2fc024ee040ddd2b2a0dee05f26a617b45624f0ea2a6d",
+    "tables": [
+      "digital_development_technical_material_decisions",
+      "digital_series_source_events",
+      "digital_bulk_preparations"
+    ],
+    "functions": [],
+    "references": [
+      "production_order_roots",
+      "app_users",
+      "audit_events",
+      "business_roles",
+      "digital_instruction_versions",
+      "digital_bulk_preparations",
+      "digital_production_tasks"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [
+      "digital_preparation_rule_adoptions",
+      "digital_preparation_adoption_acknowledgements",
+      "digital_preparation_responsibilities",
+      "digital_preparation_material_versions",
+      "digital_preparation_windows",
+      "digital_preparation_instruction_events",
+      "digital_instruction_preparation_bases",
+      "digital_instruction_deliveries",
+      "digital_bulk_work_ranges"
+    ],
+    "execute": [
+      "guard_production_order_root_immutable"
+    ],
+    "sequences": []
   }
 }

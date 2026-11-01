@@ -1,3 +1,6 @@
+import {bridgePreparationMaterials} from './preparation-series-bridge.js';
+import {refreshPreparationWindows} from './production-readiness-repository.js';
+import {enrollPreparation,preparationContext} from './preparation-material-repository.js';
 import {approvedShortLeadCalendar,validateInitialLeadTime,consumeShortLead} from './short-lead-evidence.js';
 import type { SourcingService } from "../sourcing/sourcing-service.js";
 import { SlaOrderService } from "./sla-order-service.js";
@@ -136,6 +139,7 @@ export class DigitalProductionIdentityService {
         await client.query("INSERT INTO digital_design_code_registry(code_key,source_id,code,created_by) VALUES($1,$2,$3,$4)",[styleKey,id,input.designStyleNo,actor.actorId]);
       const eventId = await this.audit(client, actor, "digital_source_created", id, null, input);
       await registerAcceptanceCreated(client,{kind:'source',id},actor.actorId,eventId);
+      await enrollPreparation(client,{kind:'source',id},actor.actorId,eventId);
       const time = this.businessClock ? await this.businessClock.read({ kind: "source", id })
         : observedBusinessTime(this.now);
       await captureDevelopmentSla(client, actor, id, null, time, eventId);
@@ -214,6 +218,9 @@ export class DigitalProductionIdentityService {
       }
       await consumeShortLead(client,actor,root.productionOrderId,shortApproval,businessTime,creationEventId);
       await new SlaOrderService(this.database).enrollNewOrder(client, actor, root.productionOrderId, creationEventId, businessTime);
+      await enrollPreparation(client,{kind:'order',id:root.productionOrderId},actor.actorId,creationEventId);
+      await bridgePreparationMaterials(client,await preparationContext(client,{kind:'order',id:root.productionOrderId}),actor.actorId);
+      await refreshPreparationWindows(client,root.productionOrderId);
       await ensureQuotationBudget(client,root.productionOrderId,actor.actorId);
       return this.readWith(client, actor, root.productionOrderId);
     });
@@ -232,6 +239,8 @@ export class DigitalProductionIdentityService {
       await client.query("UPDATE digital_production_orders SET source_id=$2,version=version+1 WHERE production_order_id=$1", [id, sourceId]);
       await ensureQuotationBudget(client,id,actor.actorId);
       await this.audit(client, actor, "digital_source_attached", id, { sourceId: null }, { sourceId });
+      await bridgePreparationMaterials(client,await preparationContext(client,{kind:'order',id}),actor.actorId);
+      await refreshPreparationWindows(client,id);
       return this.readWith(client, actor, id);
     });
   }

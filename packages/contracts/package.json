@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./production-readiness": { "types": "./src/production-readiness.ts", "import": "./dist/production-readiness.js" },
     "./short-commitment": { "types": "./src/short-commitment.ts", "import": "./dist/short-commitment.js" },
     "./series-calendar": { "types": "./src/series-calendar.ts", "import": "./dist/series-calendar.js" },
     "./digital-series-plan": { "types": "./src/digital-series-plan.ts", "import": "./dist/digital-series-plan.js" },

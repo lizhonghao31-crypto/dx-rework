@@ -1135,6 +1135,10 @@
     {
       "version": "0269_series_plans_short_lead",
       "checksum": "879a472aea12a3eb1ab028ebd0615869537a6d598491c9b75877d19c5f795d5e"
+    },
+    {
+      "version": "0270_production_readiness_materials",
+      "checksum": "214566f2a63a79caa2c2fc024ee040ddd2b2a0dee05f26a617b45624f0ea2a6d"
     }
   ]
 }

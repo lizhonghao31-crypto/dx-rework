@@ -478,7 +478,7 @@ export class CuttingService {
     try {
       await client.query("BEGIN");
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
-      const authority=await digitalCuttingGate(client,this.database,cuttingOrderId);
+      const authority=await digitalCuttingGate(client,this.database,cuttingOrderId,input.actualCutCount);
       if(!await this.authorizedRecorder(client,actor,authority))throw new ApplicationError('FORBIDDEN','当前岗位无权登记此内外裁实裁',403);
       if(!authority?.external)this.assertRecorder(actor);
       const outcome = await this.idempotency.execute<CuttingRecordMutationResponse>(client, {
@@ -488,7 +488,7 @@ export class CuttingService {
         requestHash: hash({ cuttingOrderId, ...input }),
         expiresAt: new Date("9999-12-31T00:00:00Z"),
       }, async () => {
-        const productionGate=await digitalCuttingGate(client,this.database,cuttingOrderId);
+        const productionGate=await digitalCuttingGate(client,this.database,cuttingOrderId,input.actualCutCount);
         if(productionGate&&!productionGate.ready)fail(productionGate.reason);
         await this.lockActiveOrder(client, cuttingOrderId);
         const source = await client.query<{

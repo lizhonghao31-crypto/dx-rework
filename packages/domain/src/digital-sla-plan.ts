@@ -26,7 +26,7 @@ export type SlaNodeFact = {
   /** Native business completion can remain valid even when its actual time is unknown. */
   businessCompleted?: boolean;
   /** Captured when a responsibility window opens; formal changes append a new fact version. */
-  standardMinutes?: number;
+  standardMinutes?: number | null;
   /** A retained window can keep its original warning ratio after a later application. */
   standardWarningPercent?: number;
   /** Server-captured assessment target at completion, including unknown precision. */
@@ -169,7 +169,7 @@ export function evaluateSlaPlan(plan: SlaPlan, facts: Record<string, SlaNodeFact
     // Validate evidence/shape even for a classified chronology error. Unknown errors never degrade.
     if (f?.startedAt) instant(f.startedAt);
     if (f?.completedAt) instant(f.completedAt);
-    if(f?.standardMinutes!==undefined&&!isSlaDurationMinutes(f.standardMinutes))throw new Error("Invalid captured SLA standard");
+    if(f?.standardMinutes!==undefined&&f.standardMinutes!==null&&!isSlaDurationMinutes(f.standardMinutes))throw new Error("Invalid captured SLA standard");
     if(f?.completedDeadline?.at)instant(f.completedDeadline.at);
     if(f?.waitingFor&&(!f.waitingFor.reason.trim()||!f.waitingFor.source.trim()))throw new Error("Business hold evidence required");
     if(f?.remaining){const r=f.remaining;if(!r.source.trim()||!Number.isSafeInteger(r.minutes)||r.minutes<0||instant(r.validUntil)<instant(r.asOf))throw new Error("Invalid remaining-work estimate");}
@@ -190,8 +190,8 @@ export function evaluateSlaPlan(plan: SlaPlan, facts: Record<string, SlaNodeFact
     let deadline = missing(`${n.label}缺少可信开始时间`);
     if (n.kind === "order_date" || n.kind === "offset") deadline = p.end;
     else if (f?.startedAt && (n.kind === "duration" || n.kind === "included")) {
-      if (f.standardMinutes !== undefined && !isSlaDurationMinutes(f.standardMinutes)) throw new Error("Invalid captured SLA standard");
-      deadline = add(known(instant(f.startedAt)), f.standardMinutes ?? n.minutes!);
+      if (f.standardMinutes !== undefined && f.standardMinutes!==null && !isSlaDurationMinutes(f.standardMinutes)) throw new Error("Invalid captured SLA standard");
+      deadline = f.standardMinutes===null?missing(`${n.label}本次补做期限尚未明确，不自动复用已完成轮次的时限`):add(known(instant(f.startedAt)), f.standardMinutes ?? n.minutes!);
     }
     else if (n.kind === "estimate") deadline = missing("仅物流预计，不是收货硬期限");
     else if (n.kind === "unlimited") deadline = missing("无独立时限");

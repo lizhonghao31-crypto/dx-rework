@@ -1,3 +1,5 @@
+import {SlaOrderService} from '../../apps/api/src/production-platform/sla-order-service.js';
+import {observedBusinessTime} from '../../apps/api/src/acceptance-clock/business-time.js';
 import {createHash,randomUUID} from "node:crypto";
 import type {Pool} from "pg";
 import {digitalFormalPoNo,type DigitalOrderInput} from "@dx-rework/contracts/digital-production";
@@ -7,7 +9,7 @@ import {DigitalPoDateRepository} from "../../apps/api/src/production-platform/po
 import {DigitalProductionIdentityService} from "../../apps/api/src/production-platform/identity-service.js";
 
 /** Seed genuine pre-rule records in an owned test schema. Never a production creation bypass. */
-export async function historicalDigitalOrder(database:Pool,actor:TrustedActorContext,input:DigitalOrderInput){
+export async function historicalDigitalOrder(database:Pool,actor:TrustedActorContext,input:DigitalOrderInput,options?:{slaBeforePreparation?:boolean}){
   const client=await database.connect();
   let id:string;
   try{
@@ -17,7 +19,7 @@ export async function historicalDigitalOrder(database:Pool,actor:TrustedActorCon
       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,[id,input.customerCode,input.productGroup,input.designStyleNo,input.temporaryStyleNo,input.orderDate,input.contractDeliveryDate,actor.actorId,createHash("sha256").update(JSON.stringify(input)).digest("hex"),input.primaryMerchandiserId??null]);
     const eventId=randomUUID();
     await client.query(`INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state)
-      VALUES($1,$2,$3,'digital_order_created','digital_production',$4,$5)`,[eventId,actor.requestId,actor.actorId,id,JSON.stringify(input)]);
+      VALUES($1,$2,$3,'digital_order_created','digital_production',$4,$5)`,[eventId,actor.requestId,actor.actorId,id,JSON.stringify({...input,...(options?.slaBeforePreparation?{slaBusinessTime:observedBusinessTime()}:{})})]);
     for(const [position,line] of input.lines.entries()){
       const lineId=randomUUID();
       await client.query(`INSERT INTO digital_production_po_lines(line_id,production_order_id,position,po_number,formal_style_no,temporary_style_no,color,color_foreign,delivery_date)
@@ -26,6 +28,7 @@ export async function historicalDigitalOrder(database:Pool,actor:TrustedActorCon
       if(date)await new DigitalPoDateRepository(client).applyWithClient(actor,id,"initial_po",[{lineId,date,expectedVersion:0}],eventId);
       for(const size of line.sizes)await client.query("INSERT INTO digital_production_po_sizes(line_id,size,quantity) VALUES($1,$2,$3)",[lineId,size.size,size.quantity]);
     }
+    if(options?.slaBeforePreparation)await new SlaOrderService(database).enrollNewOrder(client,actor,id,eventId,observedBusinessTime());
     await client.query("COMMIT");
   }catch(error){await client.query("ROLLBACK");throw error;}finally{client.release();}
   return new DigitalProductionIdentityService(database,false).read(actor,id);

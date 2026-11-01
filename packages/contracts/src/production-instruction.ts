@@ -1,3 +1,5 @@
+import type {TechnicalSizeTable} from "./digital-development-technical.js";
+import type {ProductionReadinessState} from "./production-readiness.js";
 import { z } from "zod";
 import type {JourneyDocumentMetadata} from "./digital-production-journey.js";
 import type { DigitalOrder } from "./digital-production.js";
@@ -61,7 +63,7 @@ export function applyInstructionSourceReview(current:InstructionDocument,propose
  }
  return InstructionDocumentSchema.parse(result);
 }
-export const PublishInstructionSchema = z.object({ expectedVersion: z.number().int().positive(), orderVersion: z.number().int().positive() }).strict();
+export const PublishInstructionSchema = z.object({ expectedReadinessRevision:z.string().min(1).optional(), expectedVersion: z.number().int().positive(), orderVersion: z.number().int().positive() }).strict();
 export const InstructionDateRequestSchema = z.object({
   orderVersion: z.number().int().positive(), reason: z.string().trim().min(1).max(500),
   changes: z.array(z.object({lineId:z.string().uuid(),expectedVersion:z.number().int().nonnegative(),date:z.iso.date()}).strict()).min(1).max(50),
@@ -88,6 +90,8 @@ export function instructionErrors(doc: InstructionDocument, order: DigitalOrder)
   return errors;
 }
 export type InstructionSheet = {
+  technicalSizeTable?:TechnicalSizeTable;
+  readiness?:ProductionReadinessState;
   metadata?:JourneyDocumentMetadata;
   order: DigitalOrder; currentOrderVersion: number; currentDeliveryDate: string | null; document: InstructionDocument; version: number; publishedVersion: number | null;
   versions: number[]; isPublishedSnapshot: boolean; canEdit: boolean; cutStarted: boolean; merchandiserName: string | null;

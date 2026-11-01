@@ -1,3 +1,4 @@
+import {preparationAdoption} from './preparation-material-repository.js';
 import {sourcingSlaEvidence} from './sourcing-sla-evidence.js';
 import {slaApplications,appliedSlaWindow} from './sla-applied-window.js';
 import {OrderClosureService} from './order-closure-service.js';
@@ -112,7 +113,7 @@ export class SlaOrderService {
         await orderCreationSlaEvidence(client, orderId, history[0]!));
       const bulk=await bulkSlaEvidence(client,orderId);
       // Publication proves the sheet's end, not a replacement for its original order-confirmation start.
-      if(bulk.production_sheet&&facts.production_sheet?.startedAt)bulk.production_sheet.startedAt=facts.production_sheet.startedAt;
+      if(bulk.production_sheet?.evidence.startsWith('instruction:')&&facts.production_sheet?.startedAt)bulk.production_sheet.startedAt=facts.production_sheet.startedAt;
       const production=await factoryProductionFacts(client,orderId);
       Object.assign(facts,bulk,await sourcingSlaEvidence(client,orderId),await shipSampleSlaEvidence(client,orderId),production.facts);
       const factory=await factorySlaEvidence(client,orderId);if(factory)Object.assign(facts,factory.facts);
@@ -127,7 +128,7 @@ export class SlaOrderService {
         const originalSnapshot=await new SlaConfigurationRepository(client).orderSnapshot(orderId,1);
         if(!originalSnapshot)throw new Error('Applied SLA order has no original snapshot');
         for(const node of current.plan.nodes){
-          const fact=facts[node.id];if(!fact||fact.batchWindows?.length)continue;
+          const fact=facts[node.id];if(!fact||fact.batchWindows?.length||node.id==='production_sheet'&&await preparationAdoption(client,{kind:'order',id:orderId}))continue;
           const applied=appliedSlaWindow(node.stage===2&&development?development.originalSnapshot:originalSnapshot.snapshot,node.parameterKey,`node:${node.id}`,applications);
           const warning=applied.snapshot.parameters.warning_ratio!.value;
           if(warning.kind==='ratio')fact.standardWarningPercent=warning.percent;

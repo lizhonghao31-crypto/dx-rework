@@ -1,3 +1,4 @@
+import {preparationAvailable,preparationContext,preparationMaterialHistory,currentPreparationMaterials} from './preparation-material-repository.js';
 import type {PoolClient} from 'pg';
 import type {SeriesObservedFact,SeriesSourceEvent} from '@dx-rework/contracts/digital-series-plan';
 import {SeriesSourceEventSchema} from '@dx-rework/contracts/digital-series-plan';
@@ -12,10 +13,12 @@ export async function readSeriesPlanFacts(db:DB,orderId:string,sourceId:string|n
  const facts:SeriesObservedFact[]=[],revisions:Record<string,unknown>={};
  const events=(await db.query(`SELECT DISTINCT ON(node_key,scope_ref) *,occurred_date::text AS occurred_date
   FROM digital_series_source_events WHERE production_order_id=$1 ORDER BY node_key,scope_ref,source_version DESC`,[orderId])).rows;
- revisions.events=events.map(e=>[e.event_id,e.source_version,e.voided]);
+ revisions.events=events.map(e=>[e.event_id,e.source_version,e.voided,e.business_completed]);
  const instrumented=new Set(events.map(e=>`${e.node_key}:${e.scope_ref}`));
- for(const e of events)if(!e.voided)facts.push({key:e.node_key,scopeRef:e.scope_ref,sourceDomain:e.source_domain,sourceRecordId:e.source_record_id,sourceVersion:e.source_version,
-  completed:true,started:true,occurredAt:iso(e.occurred_at),occurredDate:e.occurred_date?String(e.occurred_date).slice(0,10):null,precision:e.precision,reason:e.reason});
+ const nativeMaterials=await preparationAvailable(db)?currentPreparationMaterials(await preparationMaterialHistory(db,await preparationContext(db,{kind:'order',id:orderId})),orderId):[];
+ revisions.materialValidity=nativeMaterials.map(f=>[f.recordId,f.version,f.valid]);
+ for(const e of events)if(!e.voided){const native=nativeMaterials.find(f=>f.recordId===e.source_record_id&&f.version===e.source_version);facts.push({key:e.node_key,scopeRef:e.scope_ref,sourceDomain:e.source_domain,sourceRecordId:e.source_record_id,sourceVersion:e.source_version,
+  completed:e.business_completed!==false&&(!native||native.valid),started:true,occurredAt:iso(e.occurred_at),occurredDate:e.occurred_date?String(e.occurred_date).slice(0,10):null,precision:e.precision,reason:native&&!native.valid?native.invalidReasons.join('；'):e.reason});}
  const fabric=await bulkFabricFacts(db,orderId);revisions.fabric=fabric;
  if(fabric.report&&!instrumented.has('fabric_receipt:whole')){const at=iso(fabric.report.arrivedAt);facts.push({key:'fabric_receipt',scopeRef:'whole',sourceDomain:'bulk-preparation',sourceRecordId:fabric.report.reportId,sourceVersion:1,
   completed:Boolean(at),started:Boolean(at),occurredAt:at,occurredDate:null,precision:at?'instant':'unknown',reason:at?'来自原验布到仓记录':'原验布记录未提供可信到仓时间'});}
@@ -56,6 +59,6 @@ export async function readSeriesPlanFacts(db:DB,orderId:string,sourceId:string|n
 /** PR05 native producers call inside their authorized transaction; deliberately not an HTTP command. */
 export async function appendSeriesSourceEvent(db:DB,event:SeriesSourceEvent,actorId:string,businessTime:unknown){
  const e=SeriesSourceEventSchema.parse(event);
- await db.query(`INSERT INTO digital_series_source_events(event_id,production_order_id,node_key,scope_ref,source_domain,source_record_id,source_version,occurred_at,occurred_date,precision,supersedes_event_id,voided,reason,created_by,business_time)
-  VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,[e.eventId,e.orderId,e.key,e.scopeRef,e.sourceDomain,e.sourceRecordId,e.sourceVersion,e.occurredAt,e.occurredDate,e.precision,e.supersedesEventId,e.voided,e.reason,actorId,JSON.stringify(businessTime)]);
+ await db.query(`INSERT INTO digital_series_source_events(event_id,production_order_id,node_key,scope_ref,source_domain,source_record_id,source_version,occurred_at,occurred_date,precision,supersedes_event_id,voided,reason,created_by,business_time,business_completed)
+  VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,[e.eventId,e.orderId,e.key,e.scopeRef,e.sourceDomain,e.sourceRecordId,e.sourceVersion,e.occurredAt,e.occurredDate,e.precision,e.supersedesEventId,e.voided,e.reason,actorId,JSON.stringify(businessTime),e.businessCompleted??true]);
 }
