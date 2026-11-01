@@ -13,7 +13,7 @@ const { Pool } = pg;
 const DEFAULT_ECS_ENV_FILE = "/opt/dx-rework/shared/.env";
 const runtimeEnvFile = process.env.DX_REWORK_ENV_FILE || DEFAULT_ECS_ENV_FILE;
 const hasSharedRuntimeEnv = existsSync(runtimeEnvFile);
-const ISOLATED_GATE_SCHEMA = /^(?:full_chain|root_http_[12]|receiving|rework_v2|sourcing|sample|acceptance_roles|acceptance_people|own_tail|pattern_backfill)_[0-9a-f]{32}$/;
+const ISOLATED_GATE_SCHEMA = /^(?:full_chain|root_http_[12]|receiving|rework_v2|sourcing|sample|acceptance_roles|acceptance_people|own_tail|pattern_backfill|customer_quote)_[0-9a-f]{32}$/;
 const RUNTIME_ENV_KEYS = new Set([
   "OSS_REGION",
   "OSS_ENDPOINT",
