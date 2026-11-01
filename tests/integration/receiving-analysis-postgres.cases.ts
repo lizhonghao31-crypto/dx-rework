@@ -1,5 +1,5 @@
 import {readFile} from "node:fs/promises";
-import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import {randomUUID} from "node:crypto";
 import {RECEIVING_BOARD_BASE_SQL} from "../../apps/api/src/receiving/receiving-service.js";
 import pg from "pg";
@@ -50,7 +50,7 @@ const url = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
       await database.query("INSERT INTO receiving_receipts(receipt_id,receiving_batch_id,received_at,document_quantity,actual_quantity) VALUES($1,$2,'2026-09-03',10,10)", [randomUUID(), id]);
     }
   });
-  afterAll(async () => {await database.end(); await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`); await admin.end();});
+  afterAll(async () => {await database.end(); await dropOwnedPostgresSchema(admin,schema); await admin.end();});
   it("aggregates all matching styles before pagination without repeating the delivery note for split batches", async () => {
     const result = await readReceivingAnalysis(database, base, actor, query);
     expect(result.items).toHaveLength(15); expect(result.summary.totalCount).toBe(17);

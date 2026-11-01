@@ -1,3 +1,4 @@
+import { ownedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
@@ -53,7 +54,7 @@ class FixtureDirectoryProvider extends OfficialDingTalkProvider {
 }
 
 runWithPostgres("employee access role lifecycle", () => {
-  const schema = `employee_access_${randomUUID().replaceAll("-", "")}`;
+  const schema = ownedPostgresSchema("employee_access");
   const admin = new Pool({ connectionString: databaseUrl! });
   const database = new Pool({
     connectionString: databaseUrl!,
@@ -62,7 +63,7 @@ runWithPostgres("employee access role lifecycle", () => {
 
   afterAll(async () => {
     await database.end();
-    await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
+    await dropOwnedPostgresSchema(admin,schema);
     await admin.end();
   });
 

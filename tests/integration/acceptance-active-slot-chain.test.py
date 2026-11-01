@@ -687,7 +687,7 @@ class ActiveSlotChainTests(unittest.TestCase):
         self.assertIn('ACCEPTANCE_UPDATE_FINISHED',f.run(handoff,'update',f.sha).stdout)
         self.assertEqual(before,f.production_fingerprint())
 
-    def test_advanced_main_source_blocks_before_database_or_worker(self):
+    def test_advanced_main_is_release_todo_without_blocking_independent_acceptance(self):
         f=self.fixture;f.install();before=f.production_fingerprint()
         command([REAL_GIT,'-C',str(f.repo),'checkout','-q','main'])
         sql='-- TEST next main migration, never executed\n'
@@ -697,9 +697,11 @@ class ActiveSlotChainTests(unittest.TestCase):
         command([REAL_GIT,'-C',str(f.repo),'add','.']);command([REAL_GIT,'-C',str(f.repo),'commit','-qm','TEST main advanced'])
         command([REAL_GIT,'-C',str(f.repo),'checkout','-q','release/digital-production-v1'])
         f.trace.unlink(missing_ok=True);result=f.update(check=False)
-        self.assertNotEqual(result.returncode,0);self.assertIn('MISSING_MAIN_IDENTITY',result.stderr)
+        self.assertEqual(result.returncode,0,result.stderr);self.assertIn('MISSING_MAIN_IDENTITY',result.stdout)
+        self.assertIn('PENDING_RELEASE_INTEGRATION',result.stdout)
+        self.assertIn('\"productionPromotionVerified\": false',result.stdout)
         self.assertEqual(before,f.production_fingerprint())
-        self.assertFalse(any(x['kind'] in ('database','database-state','pm2','maintenance') for x in f.calls()))
+        self.assertTrue(any(x['kind']=='maintenance' for x in f.calls()))
         metadata=[x for x in f.calls() if x['kind']=='capacity-metadata']
         self.assertTrue(metadata, 'Capacity must inspect only fixed catalog metadata before download')
         for call in metadata:

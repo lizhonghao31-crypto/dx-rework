@@ -1,4 +1,4 @@
-import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import {readFile} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
 import pg from 'pg';
@@ -58,7 +58,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   await db.query("INSERT INTO operation_events(event_id,entity_id,entity_type,action,before_state,after_state,created_at) VALUES($1,'private-person','supplier','master_data.supplier.revise',$2,$3,'2026-09-07')",[randomUUID(),JSON.stringify({active:true,bankAccount:'old-secret',cookie:'secret'}),JSON.stringify({active:false,bankAccount:'new-secret',cookie:'changed-secret'})]);
   for(const [index,status] of [200,400,403,503].entries())await recordOperationDiagnostic(db,{operation:'sample_create',status,code:status===400?'VALIDATION_ERROR':'arbitrary-secret',replayed:true,durationMs:10.5+index});
  });
- afterAll(async()=>{await db.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();});
+ afterAll(async()=>{await db.end();await dropOwnedPostgresSchema(admin,schema);await admin.end();});
  it('preserves all price versions, quantities and four-decimal history; excludes transfer approvals',async()=>{
   const result=await readQuoteAnalysis(db,{q:'ORDER-00'}),item=result.items[0]!;
   expect(item.initial.lines[0]).toMatchObject({quantity:'100',unitPrice:'1.2345'});expect(item.ie.map(s=>s.version)).toEqual([1,2]);expect(item.approved).toHaveLength(1);expect(item.approved[0]?.lines[0]).toMatchObject({quantity:'90',unitPrice:'1.1678'});expect(JSON.stringify(result)).not.toMatch(/TRANSFER|9.9999|bank/);

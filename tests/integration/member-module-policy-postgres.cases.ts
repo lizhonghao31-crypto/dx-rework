@@ -2,7 +2,7 @@ import {minimumInitialCustomerDate} from "@dx-rework/contracts/digital-productio
 import { DigitalProductionAccessService } from "../../apps/api/src/production-platform/access-service.js";
 import { DigitalProductionIdentityService } from "../../apps/api/src/production-platform/identity-service.js";
 import { DigitalOrderCreateSchema } from "@dx-rework/contracts/digital-production";
-import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { RootAwareTodoProjectionService } from "../../apps/api/src/todos/root-aware-projection-service.js";
 import { CreateSupplierSchema } from "@dx-rework/contracts";
 import { SourcingService } from "../../apps/api/src/sourcing/sourcing-service.js";
@@ -69,7 +69,7 @@ const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
     await database.query("INSERT INTO owner_bootstrap_consumptions(singleton,user_id,provider_user_id,corp_id) VALUES(true,$1,$2,'corp')", [ids.li_junyue, `ding-${ids.li_junyue}`]);
     await new AccessMasterDataService(database, "corp").ensureOrganizationPolicy();
   }, 120_000);
-  afterAll(async () => { await database.end(); await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`); await admin.end(); });
+  afterAll(async () => { await database.end(); await dropOwnedPostgresSchema(admin,schema); await admin.end(); });
 
   it("atomically binds three verified IDs, preserves old reads and audits, denies stale mixed-role writes and closes old deliveries", async () => {
     await new AccessMasterDataService(database, "corp").createDelegation(actor(ids.li_junyue,"delegation:manage"), {

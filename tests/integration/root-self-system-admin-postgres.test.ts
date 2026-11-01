@@ -1,7 +1,4 @@
-import "./supplier-onboarding-postgres.test.js";
-import "./supplier-maintenance-postgres.test.js";
-import "./quality-basic-rework-postgres.test.js";
-import "./wage-settlement-postgres.test.js";
+import { ownedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
@@ -51,7 +48,7 @@ runWithPostgres("Root self system administrator assignment", () => {
   });
 
   it("allows only Root to self-assign system_admin and preserves every other self-assignment denial", async () => {
-    const schema = `root_self_admin_${randomUUID().replaceAll("-", "")}`;
+    const schema = ownedPostgresSchema("root_self_admin");
     await admin.query(`CREATE SCHEMA ${schema}`);
     const database = new Pool({
       connectionString: databaseUrl!,
@@ -189,7 +186,7 @@ runWithPostgres("Root self system administrator assignment", () => {
       await expectDatabaseSelfGrantRejected(otherUserId, "system_admin");
     } finally {
       await database.end();
-      await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
+      await dropOwnedPostgresSchema(admin,schema);
     }
   }, 20_000);
 });

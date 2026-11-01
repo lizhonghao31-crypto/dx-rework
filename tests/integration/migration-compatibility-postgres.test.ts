@@ -8,7 +8,7 @@ import pg from 'pg';
 import {describe,it,expect} from 'vitest';
 import {applyMigrations,discoverValidatedMigrations} from '../../scripts/migration-lib.mjs';
 import {assertTestDatabaseTarget} from '../../scripts/test-database-safety.mjs';
-import {ownedPostgresSchema} from '../helpers/owned-postgres-schema.js';
+import {ownedPostgresSchema,dropOwnedPostgresSchema} from '../helpers/owned-postgres-schema.js';
 
 type Entry={version:string;checksum:string};
 const url=process.env.TEST_DATABASE_URL;
@@ -152,6 +152,6 @@ suite('main and digital historical PostgreSQL upgrades',()=>{
    await client.query('UPDATE schema_migrations SET checksum=$1 WHERE version=$2',[catalog[0]!.checksum,catalog[0]!.version]);
    await client.query("INSERT INTO schema_migrations(version,checksum) VALUES('9999_unknown_test',$1)",['f'.repeat(64)]);
    await expect(applyMigrations(scoped.toString())).rejects.toThrow('absent from Head');
-  }finally{await client.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();}
+  }finally{await client.end();await dropOwnedPostgresSchema(admin,schema);await admin.end();}
  },120000);
 });

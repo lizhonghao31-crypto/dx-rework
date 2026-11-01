@@ -35,7 +35,7 @@ try{
  const testUrl=url(user,database);await assertTestDatabaseTarget(testUrl);
  const result=spawnSync(process.execPath,["node_modules/vitest/vitest.mjs","run","tests/integration/digital-journey-postgres.test.ts","--maxWorkers=2"],{
   encoding:"utf8",timeout:300000,maxBuffer:8*1024*1024,
-  env:{...process.env,NODE_ENV:"test",DATABASE_URL:"",TEST_DATABASE_URL:testUrl,NO_COLOR:"1",FORCE_COLOR:"0"},
+  env:{...process.env,NODE_ENV:"test",DX_REWORK_TEST_SUITE_KIND:"postgres",DATABASE_URL:"",TEST_DATABASE_URL:testUrl,NO_COLOR:"1",FORCE_COLOR:"0"},
  });
  const output=clean(`${result.stdout??""}${result.stderr??""}`);process.stdout.write(output);
  if(result.error||result.status!==0)throw new Error("Journey PG13 regression suite failed");

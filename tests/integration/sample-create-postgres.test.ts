@@ -1,4 +1,4 @@
-import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import pg from "pg";
@@ -36,7 +36,7 @@ const url = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
         VALUES($1,$2::uuid,'dingtalk',$3,($2::uuid)::text,($2::uuid)::text,true,true,CURRENT_TIMESTAMP)`,[randomUUID(),id,id === foreignId ? "foreign-corp" : "sample-fixture-corp"]);
     }
   });
-  afterAll(async () => { await db.end(); await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`); await admin.end(); });
+  afterAll(async () => { await db.end(); await dropOwnedPostgresSchema(admin,schema); await admin.end(); });
 
   it("stays closed until explicit cutover and denies unrelated roles", async () => {
     const item = await input();

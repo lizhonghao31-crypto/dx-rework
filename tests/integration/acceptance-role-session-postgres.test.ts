@@ -1,4 +1,4 @@
-import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
@@ -131,7 +131,7 @@ runWithPostgres("acceptance role sessions", () => {
   afterAll(async () => {
     await app.close();
     await database.end();
-    await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
+    await dropOwnedPostgresSchema(admin,schema);
     await admin.end();
   });
 

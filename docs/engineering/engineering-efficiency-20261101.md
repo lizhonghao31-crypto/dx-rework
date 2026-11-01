@@ -1,0 +1,71 @@
+# 2026-11-01 工程效率治理：执行契约、范围与兼容意图
+
+用户 09:11 UTC「ok」、09:12 询问三项目标后 09:13「好」，批准一个独立治理 PR 验证并合入 release；09:15 明确要求机制性解决多次漏接清理器。按当前明确委派执行此工程任务，覆盖默认 main 施工基线；最终仅合 release，不部署、不推进暂停的 #882，不恢复 PR04。
+
+## 一次预检与边界
+
+- repository: `lizhonghao31-crypto/dx-rework`
+- base: `release/digital-production-v1`，实际远端 `53fb44e8a56db8464027de65f7016aca16822638`（#881）
+- main: `1de4bb07d24d4eb98913a7dcfc528ef984ebe359`（#879）
+- branch: `chore/engineering-gates-20261101`；FULL，独立 worktree `/workspace/dx-gates`
+- 允许：测试执行/夹具资源接线、CI 风险/实际回执、Acceptance 验证策略、对应文档规则。
+- 禁止：业务 API/UI/contracts/财务权限逻辑、已有 SQL/checksum、生产/Acceptance 数据/权限/凭证、main 合并、部署、branch protection。
+- 原健康证据：#881 最终 Head `7332f5a0`、Full `41279368078` 和精确 Head 认证成功；完整 2936 通过、944 条件跳过，mapped/PG13/Root/业务链 406、恢复/历史/生命周期/包均有实际执行记录。只读 #882 的 `docs/engineering/new-flow-20261101-authorization.md`（69–179）核对失败与消费者，不重跑旧失败 Head。
+
+## 三项机制与验收矩阵
+
+| 目标 | 实现及允许/拒绝边界 | 验收证据 |
+| --- | --- | --- |
+| local/CI 一致 | 同一 `test-suite-plan.mjs`、同一 `test:postgres`；明确 suite 文件集、配置、DB 实际 OID/角色/版本及子进程 env；先原生协议/全仓时间索引、源码/静态迁移、DB 初始化和资源 smoke，再直接影响/长链；非 DB 在发现阶段排除 PG | 原生协议正反例；local plan 与 workflow 命令相同；完整非 DB、PG 实际执行及最终 CI 分开记录 |
+| 漏接清理器 | 创建、manifest、清理共用一个 registry；新/修改创建入口要求接入，未知前缀 CREATE 前拒绝；manifest 必须有当前 run、32hex、精确文件名、实际测试库身份；真实失败子进程后 finally 精确清理、查询无残留；大型 teardown 共享事务 advisory lock，失败回滚/释放；清理失败保留 manifest | 全 registry 正例；未知 prefix/别名、其它 run、OID 漂移、无 marker 库、错误已标记库均拒绝；default/Acceptance-clock 真实双库 |
+| 一次真实执行 | mapped/chain/Root 显式并集，每文件只一次；Root 原隐式导入移到共享组合；后续步骤核同一 run 逐文件 JSON 结果及成功清理 | 重复文件只一次；全 skip/缺失/重复结果/失败/不同 PG、角色、Head、base、attempt 均拒绝；PG13 独立执行保留 |
+| 精确风险 | migration+checksum-bound inventory 保留真实升级、Root/ACL、低权限、多版本维护及恢复；维护/备份、激活、打包传输分别选；未知部署执行器保守全测 | inventory-only 不选激活/包；真实执行器仍全范围；协议与 YAML/认证同源正反例 |
+| 兼容意图 | integration 必须实际冻结 release base→candidate；Acceptance 固定 launcher+实际自身 ledger/身份/权限；production 仍严格 main 来源、真实 production history、支持源版本与必要应用行为 | main 独立新增允许集成/独立 Acceptance，明确 TODO/production 未验证；production intent 拒绝；实际未知 identity/checksum/历史缺口拒绝；实际离线 Acceptance 控制链保留生产健康/锁 |
+
+原 Node 协议与 Vitest 是两个集合；不得用「本地几千项」代替不同入口。`npm test`/CI 广泛套件共用默认非 DB discovery；PG 只在显式 `DX_REWORK_TEST_SUITE_KIND=postgres` 的 canonical runner 中启用。现有长正确性套件沿 60s 配置，新增 PR03 技术历史套件路径预先绑定该配置；默认/性能用例没有全局放宽。
+
+历史上未接入集中 registry 的独立旧测试保持原实现；一旦新建/修改或纳入受管整链，便宜接线检查要求先迁入同一 API。为避免无关旧 fixture 修复扩包，本 PR 不把所有历史 PostgreSQL 用例都变成 mapped，也不声称它们已运行/通过。所有现有 `ownedPostgresSchema` 前缀统一受 registry 拒绝规则保护。
+
+## 当前本地结果与真实失败
+
+- Node 22.22.2/npm 10.9.9；隔离 PG16-alpine，`dx_rework_test` 无超级用户/建库/建角色/复制/BYPASSRLS，两个库均有原安全 marker；不连接任何现场数据库。
+- 原生便宜协议 107 项通过、无 skip；4 个受影响 Vitest 文件 45 项通过；workspace typecheck/build、Lint、静态迁移校验已通过。
+- 实际 release base 初始化、Head 迁移校验通过，checksum 漂移/删除迁移拒绝；串行清理后 15 条历史升级＋1 条低权限权限维护共 16 项通过（67.82s）。真实失败子进程资源 smoke 及跨 run/OID/无 marker 保护通过。
+- 初次把所有历史 schema 命名统一接入时，额外带入无关旧 fixture 的映射，暴露 `manual_access_disabled`/`receiving_batches` 缺失；该扩包已撤回，未修改业务来适配。该次 33 文件执行 22 失败/11 成功，失败不算通过。相同次还暴露并发大型 DROP 的 `out of shared memory`；本 run 的 56 个精确资源清理成功，已对受管整链及直接相关 fixture 统一事务串行清理，不加 PG 锁参数。
+- 广泛非 DB 首次 531 文件中 529 通过/1 失败/1 跳过，2927 通过/1 失败/11 跳过；唯一失败为旧离线控制链仍断言 main 新增必须阻断 Acceptance。已改为验证独立 Acceptance 成功、production 状态不变、main 差异明确待办且 productionPromotionVerified=false；生产不健康拒绝用例保留。不能把该失败写成全量通过，修复后定向/最终 Head 另记。
+
+## 本地/CI 操作契约
+
+```bash
+npm run test:preflight
+# 用真实冻结 BASE_SHA 生成路径集合并导出 risk env（CI 使用相同 classifier）
+node scripts/ci/full-gate-risk-map.mjs --github-env "$risk_env" "$changed_files"
+# 新鲜、带 marker 的低权限 default/clock 两库；先执行原 seed-base-migrations 和 migration check
+NODE_ENV=test node scripts/test-preflight.mjs --database
+# 非 DB：清空泛 URL 和专库变量，原 workspace build 只一次
+TEST_DATABASE_URL= ACCEPTANCE_CLOCK_TEST_DATABASE_URL= node node_modules/vitest/vitest.mjs run
+# PG：BASE_SHA、TEST_DATABASE_URL、ACCEPTANCE_CLOCK_TEST_DATABASE_URL 和分类 flags 已导出
+# CI run/attempt 自动绑定；本地必须显式设置本次唯一执行 ID，不将 worktree 回执当交付认证
+export DX_REWORK_TEST_EXECUTION_ID=<local-run-id> DX_REWORK_POSTGRES_RECEIPT=<temporary-receipt>
+npm run test:plan
+npm run test:postgres
+node scripts/run-business-chain-gate.mjs --full-gate --verify-receipt
+```
+
+回执仅在所有计划文件实际成功且清理成功后写 passed；绑定实际 PG 版本/角色/库 OID、Node、配置、Head/base/run/attempt/本地执行 ID。不同 PG13、低权限维护及恢复演练不去重；CI 最终认证仍核完整 exact tuple 与所有适用实际步骤。
+
+## 本治理自身的原/新门禁
+
+本 diff 改 workflow/执行器，原有效规则下全部维护、恢复、历史、生命周期、发布包仍适用。冻结候选后额外从原 base 提取未改的 strict main comparator，对最终完整 Head/tool SHA/真实 base 检查；不借新 integration intent 豁免原保护目的。最终仍按原 Review-first：本地→一次 assembled draft push→light 实际成功→GitHub Codex Review→集中修复→冻结 Head→显式 Full→核证授权合 release。保留旧失败，不提交 APPROVE review。
+
+## #882 交接与发布边界
+
+本 PR 不携带 #882 的业务/0268SQL。#882 同步后保留其 fixture 已有的 Acceptance-clock 选库、seed/schema 和清空泛 URL；共同 `ownedPostgresSchema(prefix, 'acceptance-clock')` / `dropOwnedPostgresSchema(pool, schema)` API 已支持，不需要再维护 runner 前缀正则。技术历史测试已在共享 long-correctness 配置中登记，但只有 #882 合入其文件才实际存在/执行；此处不声称已跑该未合套件。同步时应保留业务 fixture 改动，使用治理的共享 registry/runner/Root 组合，不恢复旧独立白名单。
+
+PMC SQL 已在 release 的事实保持原 checksum；其应用层部分403仍是独立上线待办。本任务不顺带移植 PMC、赋权、撤迁移、部署或将源码兼容冒充完整应用兼容。
+
+收益来源是提前截获契约失败、相同套件只执行一次、非 DB 不 import 大量 PG 套件、迁移 inventory 不再触发无关激活/打包、业务集成不追无关实时 main。未给固定提速比例；真实耗时、执行次数、最终 Head/Review/run/job/attempt/merge/tree 在 PR 外部证据回执保存，避免为追加已发生 CI 结果再造新 Head。
+
+## 提交前补充回执
+
+收窄范围后的实际并集测试：默认配置 9 文件84项通过；长正确性配置17文件327通过/1失败，失败仅为新清理 helper 错误释放调用方借出的 Client，54个精确资源仍清理成功。已改为只释放 helper 自己从 Pool 获取的连接，调用方 Client 保持可用；该真实失败不算全链通过。修复后原 own-tail 历史＋资源契约2文件6项通过，Root/供应商/双库接线4文件11项通过。新的 canonical runner 用同一资源文件重复输入及 own-tail 两个文件实际执行6项，成功清理后跨进程核回执；原生协议107项通过。离线 Acceptance 控制链及相关 guards3文件8项通过（158.13s），含原22条 Python控制/中断子场景。最终完整并集由最终Head的显式 Full再次证明，不能拼接局部结果冒充当前完整链绿。

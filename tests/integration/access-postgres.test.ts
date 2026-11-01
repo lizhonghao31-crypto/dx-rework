@@ -1,3 +1,4 @@
+import { ownedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
@@ -14,7 +15,7 @@ const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
 const runWithPostgres = databaseUrl ? describe : describe.skip;
 
 runWithPostgres("role permissions and versioned master data", () => {
-  const schema = `access_${randomUUID().replaceAll("-", "")}`;
+  const schema = ownedPostgresSchema("access");
   const adminDatabase = new Pool({ connectionString: databaseUrl! });
   const database = new Pool({ connectionString: databaseUrl!, options: `-c search_path=${schema}` });
   const service = new AccessMasterDataService(database, "corp");
@@ -164,7 +165,7 @@ runWithPostgres("role permissions and versioned master data", () => {
 
   afterAll(async () => {
     await database.end();
-    await adminDatabase.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
+    await dropOwnedPostgresSchema(adminDatabase,schema);
     await adminDatabase.end();
   });
 

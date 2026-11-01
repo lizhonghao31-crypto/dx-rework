@@ -1,7 +1,7 @@
 import {WholeOrderReviewService} from '../../apps/api/src/rework/whole-order-review-service.js';
 import {nativeReworkExecutionRows} from '../../apps/api/src/production-platform/rework-sla-evidence.js';
 import { ReworkBusinessDetailService } from "../../apps/api/src/rework/rework-business-detail-service.js";
-import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
@@ -159,7 +159,7 @@ runWithPostgres("PR-04 unified execution PostgreSQL", () => {
 
   afterAll(async () => {
     await database.end();
-    await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
+    await dropOwnedPostgresSchema(admin,schema);
     await admin.end();
   });
 

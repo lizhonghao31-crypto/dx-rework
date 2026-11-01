@@ -1,4 +1,4 @@
-import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import pg from 'pg';
@@ -39,7 +39,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   await disposal('lost','loss','7.00','2026-09-03T01:00:00Z','2026-09-04T01:00:00Z');
   await disposal('loss_payment_pending','loss','9.00','2026-09-04T01:00:00Z',null);
  });
- afterAll(async()=>{await db.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();});
+ afterAll(async()=>{await db.end();await dropOwnedPostgresSchema(admin,schema);await admin.end();});
  it('aggregates all qualifying rows while paging only fifteen, preserving exact money and historical coverage',async()=>{
   const first=await service.read(actor(),{}),second=await service.read(actor(),{page:2});
   expect(first.totalCount).toBe(21);expect(first.items).toHaveLength(15);expect(second.items).toHaveLength(6);

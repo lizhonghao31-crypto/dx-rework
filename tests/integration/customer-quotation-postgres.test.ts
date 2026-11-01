@@ -3,7 +3,7 @@ import {readFile} from 'node:fs/promises';
 import pg from 'pg';
 import Fastify from 'fastify';
 import {beforeAll,afterAll,describe,it,expect} from 'vitest';
-import {ownedPostgresSchema} from '../helpers/owned-postgres-schema.js';
+import {ownedPostgresSchema,dropOwnedPostgresSchema} from '../helpers/owned-postgres-schema.js';
 import {applyDigitalPoDateFixture} from '../helpers/digital-po-date-fixture.js';
 import {DigitalProductionIdentityService} from '../../apps/api/src/production-platform/identity-service.js';
 import {DigitalBudgetService} from '../../apps/api/src/production-platform/budget-service.js';
@@ -68,7 +68,7 @@ const url=process.env.TEST_DATABASE_URL;
  await database.query(await readFile(new URL('../../apps/api/migrations/0267_customer_quotation_budget_basis.sql',import.meta.url),'utf8'));
  for(const name of ['0221_digital_production_notifications.sql','0222_digital_development_documents.sql'])await database.query(await readFile(new URL(`../../apps/api/migrations/${name}`,import.meta.url),'utf8'));
  });
- afterAll(async()=>{await database.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();});
+ afterAll(async()=>{await database.end();await dropOwnedPostgresSchema(admin,schema);await admin.end();});
  it('enrols every new formal order at database boundary and preserves historical budgets without fabricated quotes',async()=>{
    const id=await order();expect((await budget.read(owner(),id)).comparison?.policy).toBe('quote_v1');
    await expect(budget.save(owner(),id,{expectedVersion:0,document:baseDocument()},randomUUID())).rejects.toMatchObject({statusCode:409});

@@ -10,13 +10,13 @@ export function scopeRequired(kind, scope) {
   if (kind === 'pr') return scope.event === 'pull_request';
   if (kind === 'pr_or_final') return scope.event === 'pull_request' || flag('final');
   if (kind === 'release') return scope.base === 'release/digital-production-v1';
-  if (kind === 'release_deployment') return flag('deployment') && scope.base === 'release/digital-production-v1';
+  if (kind === 'release_deployment') return flag('maintenance') && scope.base === 'release/digital-production-v1';
   if (kind === 'chain') return flag('business_chain') || flag('migration') || flag('deployment');
   if (kind === 'mapped') return Boolean(scope.mapped);
   if (kind === 'governance') return flag('governance');
   if (kind === 'not_governance') return !flag('governance');
   if (kind === 'business') return !flag('governance') && !flag('web');
-  if (['db', 'journey', 'migration', 'deployment', 'web', 'maintenance'].includes(kind)) return flag(kind);
+  if (['db', 'journey', 'migration', 'deployment', 'activation', 'transfer', 'web', 'maintenance'].includes(kind)) return flag(kind);
   throw new Error(`Unknown required-check applicability: ${kind}`);
 }
 
@@ -39,7 +39,7 @@ export function scopeFor(plan, paths) {
   return {event: 'create', base: plan.baseRef, final: 'true', db: String(risk.dbRequired),
     mapped: risk.mappedPostgresTests.join(','), journey: String(risk.journeyPg13Compat),
     migration: String(risk.migrationSensitive), business_chain: String(risk.businessChainSensitive),
-    deployment: String(risk.deploymentSensitive)};
+    deployment: String(risk.deploymentSensitive),maintenance: String(risk.maintenanceSensitive),activation: String(risk.activationSensitive),transfer: String(risk.transferSensitive)};
 }
 
 export function checkCatalog(kind, phase = 'final') {

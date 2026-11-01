@@ -1,4 +1,4 @@
-import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import "./receiving-analysis-postgres.cases.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
@@ -330,7 +330,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
 
   afterAll(async () => {
     await database.end();
-    await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
+    await dropOwnedPostgresSchema(admin,schema);
     await admin.end();
   });
 

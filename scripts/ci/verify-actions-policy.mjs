@@ -77,7 +77,7 @@ for(const [name,source] of [["CI caller",quick],["Full worker",full]]) {
   assert(source.includes("permissions:\n  contents: read") && !/^ {2}(actions|pull-requests|checks|issues):/m.test(source),
     `${name} must not add token scopes or write permissions`);
   assert(!/contents: write|secrets: inherit/.test(source), `${name} must remain read-only`);
-  assert(source.includes("node --test scripts/ci/*.test.mjs"), `${name} must execute protocol regressions`);
+  assert(source.includes(name === "Full worker" ? "run: node scripts/test-preflight.mjs" : "node --test scripts/ci/*.test.mjs"), `${name} must execute protocol regressions`);
   assert(source.includes("GATE_STEPS_JSON: ${{ toJSON(steps) }}") && source.includes("if: always()")
     && source.includes("ci-gate-runtime.mjs emit"), `${name} must retain actual interrupted/omitted-check reporting and structured evidence`);
   assert(!source.includes('Standard lint/typecheck/build/tests/migration-lint/secret-scan: completed'), `${name} must not claim unexecuted checks completed`);
@@ -122,7 +122,9 @@ assert(stepBlock(full, "Run PostgreSQL 13 Journey read compatibility").includes(
 assert(stepBlock(full, "Run PostgreSQL 13 Journey read compatibility").includes("node scripts/ci/journey-pg13-regression.mjs"), "Journey changes must execute the real PostgreSQL 13 read regression");
 assert(full.includes("DB_REQUIRED"), "Full Gate must retain conditional PostgreSQL escalation");
 assert(full.includes("if: env.DB_REQUIRED == 'true'"), "PostgreSQL work must remain conditional");
-assert(full.includes("if: env.DEPLOYMENT_SENSITIVE == 'true'"), "release and backup work must remain conditional");
+for(const flag of ['MAINTENANCE_SENSITIVE','ACTIVATION_SENSITIVE','TRANSFER_SENSITIVE'])assert(full.includes(`if: env.${flag} == 'true'`), 'release/backup/transfer must use exact risk scopes');
+assert(stepBlock(full, 'Run mapped PostgreSQL sensitive-domain regressions').includes('node scripts/run-business-chain-gate.mjs --full-gate'), 'Local and CI must use the same canonical PostgreSQL runner');
+assert(stepBlock(full, 'Run PostgreSQL business chain for business, migration or deployment-sensitive changes').includes('--verify-receipt'), 'Chain must verify exact actual coverage instead of repeating suites');
 assert(full.includes("npm audit --omit=dev --audit-level=high"), "Full Gate must audit the production dependency graph");
 assert(full.includes("npm run secret:scan:full"), "Full Gate must scan complete Git history and first-party build artifacts");
 assert(stepBlock(full, "Full unit and integration suite without runtime DB escalation").includes("run: node node_modules/vitest/vitest.mjs run"), "Full Gate must execute the same complete Vitest suite without repeating npm pretest builds");
