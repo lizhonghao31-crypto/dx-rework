@@ -151,3 +151,8 @@ PMC #879已合main但未部署，最终Head无CI是仅该PR的单次例外，不
 - 修复后完整原脚本实际退出0：31文件420测试全通过，26个本次精确登记schema清理成功（run `5ef0c84a`），输出`BUSINESS_CHAIN_GATE_PASSED`。保留PG默认64锁参数及原并发业务用例，只串行大型schema清理；没有隐藏或跳过原业务断言。当前最终评语长历史补正另有1项真实PG通过（13项文件筛选其余12项），不冒称此项已包含上述420。
 - 最后参数设置复用现`.sla-value-input`/`.sla-change-reason`，整件数量复用现form tokens；10组浏览器再次全通过，受影响3张截图逐张重看。最后相关Lint/API类型/API构建、时间写入4项保护、技术/清理21项定向及secret/diff通过。没有重复PG13/16相同SQL演练、原全量2626unit或已通过的其它页面回归；最终远端Full仍会核完整候选。
 - 本机浏览器第一次重跑未传已安装Playwright模块入口而未启动；使用已支持的`PLAYWRIGHT_IMPORT`本机路径后正常运行，没有安装依赖、改网络/认证或降低权限。未配置真实OSS，因此本地原脚本明确跳过OSS预检；不把FakeObjectStorage实际字节链当真实OSS联调。
+
+### PR03 首次轻检查的原时间分类恢复
+
+- #882 Head35d37b34247425757f92e551adb048ddd3baeebc的轻检查41286760450在CI协议100项中99通过/1失败，后续安装/Lint/构建未执行，也未发起Review或Full。原因是原候选索引生成器会重置人工注记，本次整份刷新误把未改动`pr-gate-controller.mjs`的既有`real-audit-security`分类覆盖为pending。之前4项Vitest时间写入保护不检查这条Node原协议断言，本地预检遗漏了同一Node命令。
+- 仅恢复原release同一条索引的owner/语义分类/原证据，先核两处原sites完全相同；其余新源索引和原断言、扫描器、CI规则不改。不改Review十五分钟真实时间和任何业务时钟。失败轻检查保持失败；修正后跑原`node --test scripts/ci/*.test.mjs`再推送，不重复原业务/数据库/页面验证。
