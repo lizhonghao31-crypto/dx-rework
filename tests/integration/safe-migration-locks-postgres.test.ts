@@ -1,8 +1,8 @@
+import { ownedPostgresSchema, createOwnedPostgresSchema, releaseOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import pg from 'pg';
 import { describe, it, expect } from 'vitest';
 import { applyMigrations, discoverValidatedMigrations } from '../../scripts/migration-lib.mjs';
 import { assertTestDatabaseTarget } from '../../scripts/test-database-safety.mjs';
-import { ownedPostgresSchema } from '../helpers/owned-postgres-schema.js';
 
 const url = process.env.TEST_DATABASE_URL;
 (url ? describe : describe.skip)('bounded release migration locks on real PostgreSQL', () => {
@@ -14,10 +14,10 @@ const url = process.env.TEST_DATABASE_URL;
     const database = new pg.Client({ connectionString: scoped.toString() });
     const blocker = new pg.Client({ connectionString: scoped.toString() });
     try {
-      await admin.query(`CREATE SCHEMA ${schema}`); await database.connect(); await blocker.connect();
+      await createOwnedPostgresSchema(admin, schema); await database.connect(); await blocker.connect();
       const migrations = await discoverValidatedMigrations();
       await database.query('CREATE TABLE schema_migrations(version text PRIMARY KEY,checksum char(64) NOT NULL,applied_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP)');
-      for (const row of migrations.slice(0, -1)) {
+      for (const row of migrations.filter(row=>row.version < "0222_")) {
         await database.query('BEGIN'); await database.query(row.sql);
         await database.query('INSERT INTO schema_migrations(version,checksum) VALUES($1,$2)', [row.version, row.checksum]);
         await database.query('COMMIT');
@@ -36,12 +36,12 @@ const url = process.env.TEST_DATABASE_URL;
       expect((await database.query('SELECT * FROM schema_migrations ORDER BY version')).rows).toEqual(before);
       expect((await database.query("SELECT 1 FROM pg_constraint WHERE conrelid='sourcing_approval_snapshots'::regclass AND conname='sourcing_approval_snapshots_case_identity'")).rowCount).toBe(0);
       await blocker.query('ROLLBACK');
-      expect((await applyMigrations(scoped.toString())).applied).toEqual(['0222_sourcing_cutting_approved_line_identity']);
+      expect((await applyMigrations(scoped.toString())).applied).toEqual(migrations.filter(row=>row.version >= "0222_").map(row=>row.version));
       expect((await applyMigrations(scoped.toString())).applied).toEqual([]);
       const after = (await database.query('SELECT * FROM schema_migrations ORDER BY version')).rows;
       for (const row of before) expect(after.find(r => r.version === row.version)).toEqual(row);
     } finally {
-      await blocker.end(); await database.end(); await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`); await admin.end();
+      await blocker.end(); await database.end(); await releaseOwnedPostgresSchema(admin, schema); await admin.end();
     }
   }, 120_000);
 });

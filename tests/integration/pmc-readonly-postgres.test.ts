@@ -1,3 +1,4 @@
+import { ownedPostgresSchema, createOwnedPostgresSchema, releaseOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { createHash, randomUUID } from "node:crypto";
 import pg from "pg";
 import Fastify from "fastify";
@@ -5,7 +6,6 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PMC_READ_CAPABILITIES } from "@dx-rework/contracts";
 import { applyMigrations, discoverValidatedMigrations } from "../../scripts/migration-lib.mjs";
 import { assertTestDatabaseTarget } from "../../scripts/test-database-safety.mjs";
-import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { AccessMasterDataService } from "../../apps/api/src/access/service.js";
 import { PostgresAuthStore } from "../../apps/api/src/auth/postgres-store.js";
 import { SupplierOnboardingService } from "../../apps/api/src/access/supplier-onboarding-service.js";
@@ -40,7 +40,7 @@ const url = process.env.TEST_DATABASE_URL;
   };
   beforeAll(async () => {
     await assertTestDatabaseTarget(url!);
-    await admin.query(`CREATE SCHEMA ${schema}`);
+    await createOwnedPostgresSchema(admin, schema);
     // Genuine previous schema, then the official incremental migrator; no partial DDL fixtures.
     await db.query("CREATE TABLE schema_migrations(version text PRIMARY KEY,checksum char(64) NOT NULL,applied_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP)");
     const migrations = await discoverValidatedMigrations();
@@ -63,7 +63,7 @@ const url = process.env.TEST_DATABASE_URL;
       else for(const roleCode of roles) await access.assignRole({...root(),requestId:randomUUID()},{userId:id,roleCode,reason:"PMC隔离回归"});
     }
   },120000);
-  afterAll(async () => { await db.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end(); });
+  afterAll(async () => { await db.end();await releaseOwnedPostgresSchema(admin, schema);await admin.end(); });
 
   it("appends only the independent role/read grants, preserving historical checksums/timestamps and zero employee grants", async () => {
     expect((await db.query("SELECT * FROM schema_migrations WHERE version<>'0232_pmc_readonly_role' ORDER BY version")).rows).toEqual(oldHistory);

@@ -38,9 +38,12 @@
     "db:migrate:check": "node scripts/migration-integration-check.mjs",
     "secret:scan": "node scripts/secret-scan.mjs --worktree",
     "secret:scan:full": "node scripts/secret-scan.mjs --all",
-    "check": "npm run lint && npm run typecheck && npm run build && npm run test && npm run db:migrate:lint && npm run secret:scan",
+    "check": "npm run test:preflight && npm run lint && npm run typecheck && npm run build --workspaces --if-present && node node_modules/vitest/vitest.mjs run && node scripts/run-business-chain-gate.mjs --static-already-validated && npm run secret:scan",
     "preview:dry-run": "bash scripts/preview/dry-run.sh",
-    "pr17:acceptance": "node scripts/acceptance/validate.mjs docs/operations/pr-17-acceptance-matrix.json"
+    "pr17:acceptance": "node scripts/acceptance/validate.mjs docs/operations/pr-17-acceptance-matrix.json",
+    "test:preflight": "node scripts/test-preflight.mjs",
+    "test:postgres": "node scripts/run-business-chain-gate.mjs --full-gate",
+    "test:plan": "node --input-type=module -e 'import {postgresPlan} from \"./scripts/test-suite-plan.mjs\"; console.log(JSON.stringify(postgresPlan({rootAudit:process.env.MIGRATION_SENSITIVE===\"true\",mapped:(process.env.MAPPED_POSTGRES_TESTS||\"\").split(\",\").filter(Boolean),chain:process.env.BUSINESS_CHAIN_SENSITIVE===\"true\"||process.env.MIGRATION_SENSITIVE===\"true\"||process.env.DEPLOYMENT_SENSITIVE===\"true\"}),null,2))'"
   },
   "devDependencies": {
     "@eslint/js": "9.39.4",

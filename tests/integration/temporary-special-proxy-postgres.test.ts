@@ -1,3 +1,4 @@
+import { ownedPostgresSchema, createOwnedPostgresSchema, releaseOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { createHash, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
@@ -14,7 +15,6 @@ import { WholeOrderReviewService } from "../../apps/api/src/rework/whole-order-r
 import { WorkReportingService } from "../../apps/api/src/rework/work-reporting-service.js";
 import { OperationEventRepository, type TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 import { completeInspectionReport } from "../inspection-report-fixture.js";
-import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const run = databaseUrl ? describe : describe.skip;
@@ -49,13 +49,15 @@ run("temporary special-process proxy reporting on the complete production schema
   const tail = () => actor(ids.tail, "work:assign", "work:report_for_worker");
 
   beforeAll(async () => {
-    await admin.query(`CREATE SCHEMA ${schema}`);
+    await createOwnedPostgresSchema(admin, schema);
     const identity = (await database.query("SELECT rolsuper,rolbypassrls,rolcreatedb,rolcreaterole FROM pg_roles WHERE rolname=current_user")).rows[0];
     expect(Object.values(identity)).toEqual([false, false, false, false]);
     const manifest = JSON.parse(await readFile(new URL("../../apps/api/src/platform/migration-manifest.json", import.meta.url), "utf8")) as { migrations: Array<{ version: string; checksum: string }> };
-    expect(manifest.migrations.at(-1)?.version).toBe(migrationVersion);
+    // This regression intentionally tests the 0231 upgrade boundary, independently of later main migrations.
+    const testMigrations=manifest.migrations.filter(row=>row.version<=migrationVersion);
+    expect(testMigrations.at(-1)?.version).toBe(migrationVersion);
     await database.query("CREATE TABLE schema_migrations(version text PRIMARY KEY,checksum char(64) NOT NULL,applied_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP)");
-    for (const migration of manifest.migrations) {
+    for (const migration of testMigrations) {
       const sql = await readFile(new URL(`../../apps/api/migrations/${migration.version}.sql`, import.meta.url), "utf8");
       expect(createHash("sha256").update(sql).digest("hex")).toBe(migration.checksum);
       if (migration.version === migrationVersion) { hotfixSql = sql; continue; }
@@ -85,7 +87,7 @@ run("temporary special-process proxy reporting on the complete production schema
 
   afterAll(async () => {
     await database.end();
-    await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
+    await releaseOwnedPostgresSchema(admin, schema);
     await admin.end();
   });
 

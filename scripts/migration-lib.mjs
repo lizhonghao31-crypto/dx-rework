@@ -5,9 +5,6 @@ import { readdir, readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import pg from "pg";
-
-const { Pool } = pg;
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const defaultMigrationsDirectory = resolve(projectRoot, "apps/api/migrations");
 const defaultManifestPath = resolve(projectRoot, "apps/api/src/platform/migration-manifest.json");
@@ -76,6 +73,8 @@ export async function discoverValidatedMigrations() {
 }
 
 export async function applyMigrations(databaseUrl) {
+  const { default: pg } = await import("pg");
+  const { Pool } = pg;
   const pool = new Pool({ connectionString: databaseUrl, max: 2, connectionTimeoutMillis: 5_000, query_timeout: 65_000 });
   const client = await pool.connect();
   const applied = [];

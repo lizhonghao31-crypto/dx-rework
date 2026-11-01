@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+if(process.argv.includes("--approved-quick-maintenance"))throw Error("RETIRED_SINGLE_PR_MAINTENANCE_AUTHORIZATION");
 
 const files = {
   quick: ".github/workflows/ci.yml",
@@ -37,17 +38,55 @@ for (const expression of [
   assert(containsSecretsContext(expression), `secret context detector must reject ${expression}`);
 }
 
+// One caller filters supported PR bases before allocating light jobs. Expensive
+// work is reusable-only and selected by an immutable explicit create request.
+const branches = quick.match(/ {2}pull_request:\n {4}branches:\n((?: {6}- [^\n]+\n)+)/)?.[1]
+  .trim().split("\n").map(line => line.trim().slice(2));
+assert(JSON.stringify(branches) === JSON.stringify(["main", "release/digital-production-v1", "feat/digital-production-a4", "unified-p*", "deliver/sla-foundation-development-budget-20261024", "deliver/sla-preparation-cutting-dispatch-20261024"]),
+  "CI caller must admit only the approved exact PR base branches");
 assert(quick.includes("timeout-minutes: 5"), "Quick Gate timeout must stay at 5 minutes");
-assert(quick.includes("!startsWith(github.event.pull_request.title, '[FULL]')"), "Quick Gate must skip FULL-title PRs before allocating its job");
-assert(stepBlock(quick, "Require explicit Quick Gate title").includes("[QUICK]"), "Quick Gate must require an explicit QUICK title");
-assert(full.includes("startsWith(github.event.pull_request.title, '[FULL]')"), "Full Gate must run only for FULL-title PRs");
-assert(stepBlock(full, "Require explicit Full Gate title").includes("[FULL]"), "Full Gate must require an explicit FULL title");
-for (const event of ["opened", "synchronize", "reopened", "edited"]) {
-  assert(quick.includes(`- ${event}`), `Quick Gate must react to ${event}`);
-  assert(full.includes(`- ${event}`), `Full Gate must react to ${event}`);
+assert(countOccurrences(quick, 'timeout-minutes:') === 3 && countOccurrences(quick, 'timeout-minutes: 2') === 2,
+  "Only two bounded request/certification metadata jobs may accompany the five-minute light/Quick worker");
+assert(countOccurrences(full,'timeout-minutes:')===1 && /^ {4}timeout-minutes: 30[ \t]*$/m.test(full),
+  "Full Gate must retain the explicitly approved finite 30-minute budget");
+assert(/^ {2}workflow_call:/m.test(full) && !/^ {2}(pull_request|push|create|workflow_dispatch):/m.test(full),
+  "Full Gate must be reusable-only; pushes and metadata must not allocate an expensive worker");
+for(const input of ['pr_number','head_sha','base_sha','base_ref','gate_kind']) {
+  assert(full.includes(`      ${input}:\n        type: string\n        required: true`), `Full request must freeze ${input}`);
+  assert(quick.includes(input + ": ${{ needs.request.outputs."), `Caller must pass frozen ${input}`);
 }
-assert(quick.includes("cancel-in-progress: true"), "Quick Gate must cancel stale runs");
-assert(full.includes("cancel-in-progress: true"), "Full Gate must cancel stale runs");
+for(const event of ['opened','synchronize','reopened','edited']) assert(quick.includes(`- ${event}`), `Light checks must react to ${event}`);
+assert(/^ {2}create:/m.test(quick) && quick.includes("github.event.ref_type == 'branch'"), "Final requests must use branch creation only");
+assert(quick.includes("startsWith(github.event.ref, 'gate/full/')") && quick.includes("startsWith(github.event.ref, 'gate/quick/')"),
+  "Ordinary branch/tag creation must allocate no final job");
+assert(quick.includes("github.event.action != 'edited' || github.event.changes.base || (github.event.changes.title &&"),
+  "Body and same-mode wording edits must allocate no runner");
+for(const mode of ['FULL','QUICK']) assert(quick.includes(`startsWith(github.event.changes.title.from, '[${mode}] ') != startsWith(github.event.pull_request.title, '[${mode}] ')`),
+  "Risk mode and base edits must invalidate the old request");
+assert(quick.includes("'Push light checks'") && quick.includes("'Final Gate exact Head' || 'Final approval not selected'"),
+  "Skipped/metadata/light checks must not impersonate final approval");
+assert(quick.includes("WORKER_RESULT:") && quick.includes("needs.full.result") && quick.includes("needs.validate.result")
+  && quick.includes("WORKER_RECEIPT:") && quick.includes("ci-gate-runtime.mjs certify"),
+  "Final approval must certify GitHub's actual selected worker result and receipt");
+assert(quick.includes("uses: ./.github/workflows/full-gate.yml"), "Caller must select the existing full worker");
+assert(quick.includes("group: pr-gate-${{ github.event.pull_request.number || needs.request.outputs.pr || format('manual-{0}', github.ref) }}")
+  && quick.includes("cancel-in-progress: ${{ github.event_name != 'create' }}")
+  && full.includes("group: pr-gate-${{ inputs.pr_number }}\n      cancel-in-progress: false"),
+  "A new PR Head must cancel stale work; duplicate explicit final requests must not cancel/restart it");
+for(const [name,source] of [["CI caller",quick],["Full worker",full]]) {
+  assert(!/^concurrency:/m.test(source), `${name} must filter events before acquiring concurrency`);
+  assert(source.includes("permissions:\n  contents: read") && !/(?:pull-requests|checks|issues):|contents: write|actions: write/.test(source),
+    `${name} allows only contents/read and artifact actions/read, never writes`);
+  assert(!/contents: write|secrets: inherit/.test(source), `${name} must remain read-only`);
+  assert(source.includes(name === "Full worker" ? "run: node scripts/test-preflight.mjs" : "node --test scripts/ci/*.test.mjs"), `${name} must execute protocol regressions`);
+  assert(source.includes("GATE_STEPS_JSON: ${{ toJSON(steps) }}") && source.includes("if: always()")
+    && source.includes("ci-gate-runtime.mjs emit"), `${name} must retain actual interrupted/omitted-check reporting and structured evidence`);
+  assert(!source.includes('Standard lint/typecheck/build/tests/migration-lint/secret-scan: completed'), `${name} must not claim unexecuted checks completed`);
+}
+assert(stepBlock(quick,"Require explicit Quick Gate title").includes('[QUICK]')
+  && stepBlock(quick,"Require explicit Quick Gate title").includes('[FULL]'), "Light checks must accept both explicit risk modes");
+assert(stepBlock(full,"Require explicit Full Gate title").includes('REQUEST_HEAD')
+  && stepBlock(full,"Require explicit Full Gate title").includes('GITHUB_SHA'), "Full worker must enforce the actual request commit");
 assert(quick.includes("full-gate-risk-map.mjs --require-quick-safe"), "Quick Gate must use the shared sensitive-path classifier");
 
 const classifier = stepBlock(quick, "Classify Quick Gate scope");
@@ -82,9 +121,13 @@ assert(full.includes("Run mapped PostgreSQL sensitive-domain regressions"), "Ful
 assert(full.includes("Mapped PostgreSQL suite executed no passing tests"), "Mapped PostgreSQL suites must fail when nothing actually runs");
 assert(full.includes("DB_REQUIRED"), "Full Gate must retain conditional PostgreSQL escalation");
 assert(full.includes("if: env.DB_REQUIRED == 'true'"), "PostgreSQL work must remain conditional");
-assert(full.includes("if: env.DEPLOYMENT_SENSITIVE == 'true'"), "release and backup work must remain conditional");
+for(const flag of ['MAINTENANCE_SENSITIVE','ACTIVATION_SENSITIVE','TRANSFER_SENSITIVE'])assert(full.includes(`if: env.${flag} == 'true'`), 'release/backup/transfer must use exact risk scopes');
+assert(stepBlock(full, 'Run mapped PostgreSQL sensitive-domain regressions').includes('node scripts/run-business-chain-gate.mjs --full-gate'), 'Local and CI must use the same canonical PostgreSQL runner');
+assert(stepBlock(full, 'Run PostgreSQL business chain for business, migration or deployment-sensitive changes').includes('--verify-receipt'), 'Chain must verify exact actual coverage instead of repeating suites');
 assert(full.includes("npm audit --omit=dev --audit-level=high"), "Full Gate must audit the production dependency graph");
 assert(full.includes("npm run secret:scan:full"), "Full Gate must scan complete Git history and first-party build artifacts");
+assert(stepBlock(full, "Full unit and integration suite without runtime DB escalation").includes("run: node node_modules/vitest/vitest.mjs run"), "Full Gate must execute the same complete Vitest suite without repeating npm pretest builds");
+assert(!/^\s*run: npm test\s*$/m.test(full), "Full Gate must not rebuild packages through pretest");
 assert(!containsSecretsContext(quick), "Quick Gate must not receive repository or environment secrets");
 assert(!containsSecretsContext(full), "Full Gate must not receive repository or environment secrets");
 assert(!containsSecretsContext(governance), "Governance validation must not receive repository or environment secrets");

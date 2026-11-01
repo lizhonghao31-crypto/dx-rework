@@ -24,6 +24,9 @@ const TESTS = Object.freeze({
   ],
 });
 
+// Preflight validates the same existing domain mappings before a future PR selects them.
+export const EXISTING_MAPPED_POSTGRES_TESTS = Object.freeze([...new Set(Object.values(TESTS).flat())]);
+
 // Case modules are imported by runnable Vitest suites, never CLI entry points.
 export const POSTGRES_CASE_SUITES = Object.freeze({
   "tests/integration/receiving-analysis-postgres.cases.ts": "tests/integration/receiving-postgres.test.ts",
@@ -36,27 +39,46 @@ export const POSTGRES_CASE_SUITES = Object.freeze({
 
 const isMigration = (path) =>
   path.startsWith("apps/api/migrations/")
+  || path.startsWith("scripts/deploy/migration-execution-compatibility.")
   || path === "apps/api/src/platform/migration-manifest.json"
+  || path === "scripts/deploy/acceptance-migration-requirements.json"
   || [
     "scripts/seed-base-migrations.sh",
     "scripts/migrate.mjs",
+    "scripts/migration-lib.mjs",
     "scripts/migration-integration-check.mjs",
+    "scripts/migration-history-policy.mjs",
+    "scripts/migration-branches.json",
+    "scripts/migration-main-extensions.json",
+    "scripts/check-migration-export.mjs",
     "scripts/check-migrations.mjs",
   ].includes(path);
 
 const isDeployment = (path) =>
-  path.startsWith("scripts/deploy/")
+  (path.startsWith("scripts/deploy/") && path !== "scripts/deploy/acceptance-migration-requirements.json" && !path.startsWith("scripts/deploy/migration-execution-compatibility."))
+  || path === "scripts/dx-acceptance.sh"
+  || path === "scripts/ci/acceptance-maintenance-drill.mjs"
+  || path === "scripts/ci/main-release-history-drill.mjs"
+  || path === "scripts/check-main-release-compat.mjs"
+  || path === "docs/operations/g1-acceptance-compat-update.sh"
   || path === "scripts/backup-postgres.sh"
   || path === "scripts/restore-postgres.sh"
   || path.startsWith("infra/")
   || path.startsWith(".github/workflows/")
-  || path === "scripts/ci/full-gate-risk-map.mjs";
+  || path === "scripts/ci/full-gate-risk-map.mjs"
+  || path === "scripts/ci/ci-gate-runtime.mjs"
+  || path === "scripts/ci/pr-gate-protocol.mjs"
+  || path === "scripts/ci/pr-gate-controller.mjs"
+  || path === "scripts/ci/verify-actions-policy.mjs"
+  || path === "scripts/ci/light-reuse.mjs"
+  || path === "scripts/ci/construction-evidence.mjs";
 
 const isBackendOrContract = (path) =>
   path.startsWith("apps/api/src/") || path.startsWith("packages/contracts/src/");
 
 const isPostgresTest = (path) =>
   /^tests\/integration\/.*postgres.*\.(?:test|cases)\.ts$/.test(path);
+
 
 const matchesAccess = (path) =>
   path.startsWith("apps/api/src/access/")
@@ -96,6 +118,10 @@ export const classifyFullGatePaths = (inputPaths) => {
   let receivingSensitive = false;
   let businessChainSensitive = false;
   let deploymentSensitive = false;
+  let journeyPg13Compat = false;
+  let maintenanceSensitive = false;
+  let activationSensitive = false;
+  let transferSensitive = false;
 
   for (const path of paths) {
     if (isMigration(path)) {
@@ -105,6 +131,11 @@ export const classifyFullGatePaths = (inputPaths) => {
     }
     if (isDeployment(path)) {
       deploymentSensitive = true;
+      const activationOnly = /^scripts\/deploy\/(?:activate-release|commit-online-generation|start-online-slot|save-online-processes|render-online-nginx|nginx-workers|drain-nginx-workers|static-release)\./.test(path);
+      const transferOnly = /^scripts\/deploy\/(?:package-release|create-transfer-bundle|verify-runtime|build-release|dependency-bins|prepare-build-dependencies)\./.test(path);
+      maintenanceSensitive ||= !activationOnly && !transferOnly;
+      activationSensitive ||= !transferOnly;
+      transferSensitive ||= !activationOnly;
       domains.add("deployment");
     }
     if (isBackendOrContract(path)) {
@@ -112,10 +143,15 @@ export const classifyFullGatePaths = (inputPaths) => {
       businessChainSensitive = true;
       domains.add("backend");
     }
-    if (path === "scripts/run-business-chain-gate.mjs") {
+    if (["scripts/test-fixture-prerequisites.mjs","scripts/owned-command.mjs","scripts/test-execution-config.mjs","scripts/ci/test-runtime-metadata.mjs","scripts/run-business-chain-gate.mjs","scripts/test-suite-plan.mjs","scripts/test-resource-contract.mjs","scripts/test-resource-lifecycle.mjs","scripts/test-database-safety.mjs","scripts/test-preflight.mjs","tests/helpers/owned-postgres-schema.ts","vitest.config.ts","vitest.postgres-immediate.config.ts","vitest.business-chain.config.ts"].includes(path)) {
       businessChainSensitive = true;
       domains.add("business-chain");
     }
+    if (path.startsWith("tests/helpers/") && (path === "tests/helpers/owned-postgres-schema.ts" || !existsSync(path) || readFileSync(path,"utf8").includes("ownedPostgresSchema"))) {
+      businessChainSensitive = true;
+      domains.add("postgres-fixture");
+    }
+    if (path === "scripts/test-database-safety.mjs" || path.startsWith("scripts/test-resource-")) mappedTests.add("tests/integration/test-resource-contract-postgres.test.ts");
     if (isPostgresTest(path) || Object.hasOwn(POSTGRES_CASE_SUITES, path)) {
       businessChainSensitive = true;
       domains.add("postgres-test");
@@ -157,6 +193,7 @@ export const classifyFullGatePaths = (inputPaths) => {
     }
   }
 
+  maintenanceSensitive ||= migrationSensitive;
   const tests = [...mappedTests].sort();
   const dbRequired = migrationSensitive
     || receivingSensitive
@@ -170,6 +207,10 @@ export const classifyFullGatePaths = (inputPaths) => {
     receivingSensitive,
     businessChainSensitive,
     deploymentSensitive,
+    journeyPg13Compat,
+    maintenanceSensitive,
+    activationSensitive,
+    transferSensitive,
     dbRequired,
     highRisk,
     domains: [...domains].sort(),
@@ -214,6 +255,10 @@ const runCli = () => {
       ["RECEIVING_SENSITIVE", result.receivingSensitive],
       ["BUSINESS_CHAIN_SENSITIVE", result.businessChainSensitive],
       ["DEPLOYMENT_SENSITIVE", result.deploymentSensitive],
+      ["JOURNEY_PG13_COMPAT", result.journeyPg13Compat],
+      ["MAINTENANCE_SENSITIVE", result.maintenanceSensitive],
+      ["ACTIVATION_SENSITIVE", result.activationSensitive],
+      ["TRANSFER_SENSITIVE", result.transferSensitive],
       ["DB_REQUIRED", result.dbRequired],
       ["FULL_GATE_DOMAINS", result.domains.join(",")],
       ["MAPPED_POSTGRES_TESTS", result.mappedPostgresTests.join(",")],

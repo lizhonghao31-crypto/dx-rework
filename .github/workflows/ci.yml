@@ -4,50 +4,90 @@ on:
   pull_request:
     branches:
       - main
+      - release/digital-production-v1
+      - feat/digital-production-a4
+      - unified-p*
+      - deliver/sla-foundation-development-budget-20261024
+      - deliver/sla-preparation-cutting-dispatch-20261024
     types:
       - opened
       - synchronize
       - reopened
       - edited
   workflow_dispatch:
+  create:
 
 permissions:
   contents: read
 
-concurrency:
-  group: quick-gate-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
-
 jobs:
+  request:
+    name: Resolve immutable final request
+    if: ${{ github.event_name == 'create' && github.event.ref_type == 'branch' && (startsWith(github.event.ref, 'gate/full/') || startsWith(github.event.ref, 'gate/quick/')) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      phase: ${{ steps.protocol.outputs.phase }}
+      kind: ${{ steps.protocol.outputs.kind }}
+      pr: ${{ steps.protocol.outputs.pr }}
+      head: ${{ steps.protocol.outputs.head }}
+      base: ${{ steps.protocol.outputs.base }}
+      base_ref: ${{ steps.protocol.outputs.base_ref }}
+    steps:
+      - name: Checkout immutable final request
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+      - name: Set up request Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - name: Resolve complete request identity
+        id: protocol
+        run: node scripts/ci/ci-gate-runtime.mjs resolve
+
   validate:
-    if: ${{ github.event_name != 'pull_request' || !startsWith(github.event.pull_request.title, '[FULL]') }}
-    name: Lint, test, migrate and build exact Head
+    needs: request
+    if: ${{ always() && ((github.event_name == 'pull_request' && (github.event.action != 'edited' || github.event.changes.base || (github.event.changes.title && (startsWith(github.event.changes.title.from, '[FULL] ') != startsWith(github.event.pull_request.title, '[FULL] ') || startsWith(github.event.changes.title.from, '[QUICK] ') != startsWith(github.event.pull_request.title, '[QUICK] '))))) || github.event_name == 'workflow_dispatch' || ((github.event_name == 'create' && github.event.ref_type == 'branch' && (startsWith(github.event.ref, 'gate/full/') || startsWith(github.event.ref, 'gate/quick/'))) && needs.request.result == 'success' && needs.request.outputs.kind == 'quick')) }}
+    name: ${{ (github.event_name == 'pull_request' && (github.event.action != 'edited' || github.event.changes.base || (github.event.changes.title && (startsWith(github.event.changes.title.from, '[FULL] ') != startsWith(github.event.pull_request.title, '[FULL] ') || startsWith(github.event.changes.title.from, '[QUICK] ') != startsWith(github.event.pull_request.title, '[QUICK] '))))) && 'Push light checks' || github.event_name == 'create' && 'Quick Gate exact Head' || 'Manual Quick checks' }}
+    outputs:
+      receipt: ${{ steps.summary.outputs.receipt }}
+    concurrency:
+      group: pr-gate-${{ github.event.pull_request.number || needs.request.outputs.pr || format('manual-{0}', github.ref) }}
+      cancel-in-progress: ${{ github.event_name != 'create' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
       NODE_ENV: test
       GIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      SERVICE_NAME: dx-rework-api
 
     steps:
       - name: Require explicit Quick Gate title
-        if: ${{ github.event_name == 'pull_request' }}
+        id: title
+        if: ${{ github.event_name == 'pull_request' || github.event_name == 'create' }}
         shell: bash
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           set -euo pipefail
-          [[ "$PR_TITLE" == "[QUICK] "* ]] || {
-            echo "PR title must start with [QUICK] or [FULL]."
-            exit 1
-          }
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            [[ "$PR_TITLE" == "[QUICK] "* || "$PR_TITLE" == "[FULL] "* ]]
+          else
+            [[ "$GITHUB_REF" == refs/heads/gate/quick/* ]]
+          fi
 
       - name: Checkout exact PR Head
+        id: checkout
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 1
+          fetch-depth: 0
 
       - name: Verify immutable evidence and governance files
+        id: head
         shell: bash
         env:
           EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -55,6 +95,7 @@ jobs:
           set -euo pipefail
           actual_sha="$(git rev-parse HEAD)"
           test "${actual_sha}" = "${EXPECTED_HEAD_SHA}"
+          echo "BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "${GITHUB_ENV}"
           required_files=(
             "README.md"
             "AGENTS.md"
@@ -66,20 +107,33 @@ jobs:
           for path in "${required_files[@]}"; do test -f "${path}"; done
           printf 'repository=%s\nhead_sha=%s\n' "${GITHUB_REPOSITORY}" "${actual_sha}"
 
+      - name: Set up Node 22
+        id: node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Validate frozen request identity
+        id: protocol
+        run: node scripts/ci/ci-gate-runtime.mjs resolve
+
       - name: Classify Quick Gate scope
         id: classify
         shell: bash
         env:
           EVENT_NAME: ${{ github.event_name }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          BASE_SHA: ${{ steps.protocol.outputs.base }}
+          HEAD_SHA: ${{ steps.protocol.outputs.head }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          SELECTED_KIND: ${{ steps.protocol.outputs.kind }}
         run: |
           set -euo pipefail
           governance_only=false
           web_only=false
           has_web_source=false
 
-          if [[ "${EVENT_NAME}" == "pull_request" ]]; then
+          if [[ "${EVENT_NAME}" == "pull_request" || "${EVENT_NAME}" == "create" ]]; then
             test -n "${BASE_SHA}"
             test -n "${HEAD_SHA}"
             test "$(git rev-parse HEAD)" = "${HEAD_SHA}"
@@ -87,7 +141,9 @@ jobs:
 
             git diff --name-only "${BASE_SHA}" "${HEAD_SHA}" > "$RUNNER_TEMP/quick-gate-changed-files.txt"
             mapfile -t changed_files < "$RUNNER_TEMP/quick-gate-changed-files.txt"
-            node scripts/ci/full-gate-risk-map.mjs --require-quick-safe "$RUNNER_TEMP/quick-gate-changed-files.txt"
+            if [[ "$SELECTED_KIND" == "quick" ]]; then
+              node scripts/ci/full-gate-risk-map.mjs --require-quick-safe "$RUNNER_TEMP/quick-gate-changed-files.txt"
+            fi
             if (( ${#changed_files[@]} > 0 )); then
               governance_only=true
               web_only=true
@@ -124,14 +180,26 @@ jobs:
           echo "Quick Gate web-only: ${web_only}"
 
       - name: Verify Actions usage policy
+        id: policy
         run: node scripts/ci/verify-actions-policy.mjs
 
+      - name: Verify current change evidence
+        id: construction
+        env:
+          EVIDENCE_BASE: ${{ steps.protocol.outputs.base }}
+        run: node scripts/ci/construction-evidence.mjs verify-change "$EVIDENCE_BASE"
+
+      - name: Run CI protocol regression tests
+        id: protocol_tests
+        run: node --test scripts/ci/*.test.mjs
+
       - name: Verify changed governance script syntax
+        id: governance_syntax
         if: ${{ steps.classify.outputs.governance_only == 'true' }}
         shell: bash
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ steps.protocol.outputs.base }}
+          HEAD_SHA: ${{ steps.protocol.outputs.head }}
         run: |
           set -euo pipefail
           while IFS= read -r path; do
@@ -140,51 +208,53 @@ jobs:
             esac
           done < <(git diff --name-only "${BASE_SHA}" "${HEAD_SHA}")
 
-      - name: Set up Node 22
-        if: ${{ steps.classify.outputs.governance_only != 'true' }}
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22.22.2
-          cache: npm
-
       - name: Pin npm 10
+        id: npm
         if: ${{ steps.classify.outputs.governance_only != 'true' }}
-        run: npm install --global npm@10.9.9 --no-audit --no-fund --prefer-offline
+        run: npm install --global "$(node -p "require('./package.json').packageManager")" --no-audit --no-fund --prefer-offline
 
       - name: Install locked dependencies
+        id: install
         if: ${{ steps.classify.outputs.governance_only != 'true' && steps.classify.outputs.web_only != 'true' }}
         run: npm ci --no-audit --no-fund --prefer-offline
 
       - name: Lint
+        id: lint
         if: ${{ steps.classify.outputs.governance_only != 'true' && steps.classify.outputs.web_only != 'true' }}
         run: npm run lint
 
       - name: Typecheck
+        id: types
         if: ${{ steps.classify.outputs.governance_only != 'true' && steps.classify.outputs.web_only != 'true' }}
         run: npm run typecheck
 
       - name: Build workspaces without root postbuild business-chain gate
+        id: build
         if: ${{ steps.classify.outputs.governance_only != 'true' && steps.classify.outputs.web_only != 'true' }}
         run: npm run build --workspaces --if-present
 
       - name: Validate migration files statically
+        id: migration_lint
         if: ${{ steps.classify.outputs.governance_only != 'true' && steps.classify.outputs.web_only != 'true' }}
         run: npm run db:migrate:lint
 
       - name: Scan repository for committed secret signatures
+        id: secrets
         if: ${{ steps.classify.outputs.governance_only != 'true' && steps.classify.outputs.web_only != 'true' }}
         run: npm run secret:scan
 
       - name: Install web locked dependencies
+        id: web_install
         if: ${{ steps.classify.outputs.web_only == 'true' }}
-        run: npm ci --include-workspace-root --workspace @dx-rework/web --workspace @dx-rework/contracts --workspace @dx-rework/ui --no-audit --no-fund --prefer-offline
+        run: npm ci --include-workspace-root --workspace @dx-rework/web --workspace @dx-rework/contracts --workspace @dx-rework/domain --workspace @dx-rework/ui --no-audit --no-fund --prefer-offline
 
       - name: Lint changed web files
+        id: web_lint
         if: ${{ steps.classify.outputs.web_only == 'true' }}
         shell: bash
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ steps.protocol.outputs.base }}
+          HEAD_SHA: ${{ steps.protocol.outputs.head }}
         run: |
           set -euo pipefail
           mapfile -t lint_files < <(git diff --name-only "${BASE_SHA}" "${HEAD_SHA}" | grep -E '^(apps/web|packages/ui|tests/unit)/.*\.(js|jsx|ts|tsx)$' || true)
@@ -193,70 +263,150 @@ jobs:
           fi
 
       - name: Typecheck web workspaces
+        id: web_types
         if: ${{ steps.classify.outputs.web_only == 'true' }}
-        run: npm run typecheck --workspace @dx-rework/contracts --workspace @dx-rework/ui --workspace @dx-rework/web --if-present
+        run: npm run typecheck --workspace @dx-rework/contracts --workspace @dx-rework/domain --workspace @dx-rework/ui --workspace @dx-rework/web --if-present
 
       - name: Build web workspaces
+        id: web_build
         if: ${{ steps.classify.outputs.web_only == 'true' }}
-        run: npm run build --workspace @dx-rework/contracts --workspace @dx-rework/ui --workspace @dx-rework/web --if-present
+        run: npm run build --workspace @dx-rework/contracts --workspace @dx-rework/domain --workspace @dx-rework/ui --workspace @dx-rework/web --if-present
 
       - name: Run changed web unit tests
+        id: web_tests
         if: ${{ steps.classify.outputs.web_only == 'true' }}
         shell: bash
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ steps.protocol.outputs.base }}
+          HEAD_SHA: ${{ steps.protocol.outputs.head }}
         run: |
           set -euo pipefail
           mapfile -t changed_tests < <(git diff --name-only "${BASE_SHA}" "${HEAD_SHA}" | grep -E '^tests/unit/.*\.test\.(js|jsx|ts|tsx)$' || true)
           if (( ${#changed_tests[@]} > 0 )); then
+            echo "has_tests=true" >> "$GITHUB_OUTPUT"
             npx vitest run "${changed_tests[@]}"
+          else
+            echo "has_tests=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Scan web-only changes for committed secret signatures
+        id: web_secrets
         if: ${{ steps.classify.outputs.web_only == 'true' }}
         run: npm run secret:scan
 
-      - name: Write web-only quick-gate summary
-        if: ${{ steps.classify.outputs.web_only == 'true' }}
-        shell: bash
-        run: |
-          {
-            echo "## Web Quick Gate"
-            echo
-            echo "- Head SHA: $(git rev-parse HEAD)"
-            echo "- Exact Head / Actions policy: passed"
-            echo "- Scoped dependency install: web + contracts + UI"
-            echo "- Changed-file lint / web typecheck / web build: passed"
-            echo "- Changed web unit tests / secret scan: passed"
-            echo "- API, migration and full business-chain checks skipped: web-only diff"
-          } >> "${GITHUB_STEP_SUMMARY}"
 
-      - name: Write governance-only quick-gate summary
-        if: ${{ steps.classify.outputs.governance_only == 'true' }}
-        shell: bash
-        run: |
-          {
-            echo "## Quick Gate"
-            echo
-            echo "- Head SHA: $(git rev-parse HEAD)"
-            echo "- Exact Head / governance: passed"
-            echo "- Actions policy: passed"
-            echo "- Governance script syntax: passed"
-            echo "- Business checks skipped: governance-only change"
-          } >> "${GITHUB_STEP_SUMMARY}"
+      - name: Publish source-bound light build evidence
+        id: reuse_publish
+        if: ${{ success() && github.event_name == 'pull_request' && steps.build.outcome == 'success' }}
+        env:
+          LIGHT_STEPS: ${{ toJSON(steps) }}
+        run: node scripts/ci/light-reuse.mjs publish "$RUNNER_TEMP/light-build"
 
-      - name: Write business quick-gate summary
-        if: ${{ steps.classify.outputs.governance_only != 'true' && steps.classify.outputs.web_only != 'true' }}
+      - name: Save immutable light build artifact
+        id: reuse_upload
+        if: ${{ success() && github.event_name == 'pull_request' && steps.build.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: light-build-${{ github.event.pull_request.head.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/light-build/light-build.json
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Write actual gate summary
+        id: summary
+        if: always()
         shell: bash
+        env:
+          GATE_KIND: quick
+          GATE_PHASE: ${{ steps.protocol.outputs.phase }}
+          GATE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          GATE_JOB_STATUS: ${{ job.status }}
+          GATE_STEPS_JSON: ${{ toJSON(steps) }}
+          GATE_SCOPE_JSON: >-
+            {"event": "${{ github.event_name }}", "final": "${{ github.event_name == 'create' }}", "base": "${{ steps.protocol.outputs.base_ref }}", "governance": "${{ steps.classify.outputs.governance_only }}", "web": "${{ steps.classify.outputs.web_only }}", "maintenance": "false"}
+          GATE_CHECKS_JSON: >-
+            [["title","Require explicit Quick Gate title","pr_or_final"],["checkout","Checkout exact PR Head","always"],["head","Verify immutable evidence and governance files","always"],["node","Set up Node 22","always"],["protocol","Validate frozen request identity","always"],["classify","Classify Quick Gate scope","always"],["policy","Verify Actions usage policy","always"],["construction","Verify current change evidence","always"],["protocol_tests","Run CI protocol regression tests","always"],["governance_syntax","Verify changed governance script syntax","governance"],["npm","Pin npm 10","not_governance"],["install","Install locked dependencies","business"],["lint","Lint","business"],["types","Typecheck","business"],["build","Build workspaces without root postbuild business-chain gate","business"],["migration_lint","Validate migration files statically","business"],["secrets","Scan repository for committed secret signatures","business"],["web_install","Install web locked dependencies","web"],["web_lint","Lint changed web files","web"],["web_types","Typecheck web workspaces","web"],["web_build","Build web workspaces","web"],["web_tests","Run changed web unit tests","web"],["web_secrets","Scan web-only changes for committed secret signatures","web"],["reuse_publish","Publish source-bound light build evidence","light_build"],["reuse_upload","Save immutable light build artifact","light_build"]]
         run: |
-          {
-            echo "## Quick Gate"
-            echo
-            echo "- Head SHA: $(git rev-parse HEAD)"
-            echo "- Exact Head / governance: passed"
-            echo "- Actions policy: passed"
-            echo "- Lint / typecheck / workspace build: passed"
-            echo "- Migration lint / secret scan: passed"
-            echo "- Heavy DB, full test, release and preview work intentionally deferred to Full Gate"
-          } >> "${GITHUB_STEP_SUMMARY}"
+          node <<'GATE_SUMMARY_JS'
+          const fs = require('node:fs');
+          const steps = JSON.parse(process.env.GATE_STEPS_JSON || '{}');
+          const checks = JSON.parse(process.env.GATE_CHECKS_JSON);
+          const scope = JSON.parse(process.env.GATE_SCOPE_JSON);
+          const classified = steps[process.env.GATE_KIND === 'full' ? 'risk' : 'classify']?.outcome === 'success';
+          const flag = name => scope[name] === 'true';
+          function required(kind) {
+            if (kind === 'always') return true;
+            if (kind === 'pr') return scope.event === 'pull_request';
+            if (kind === 'pr_or_final') return scope.event === 'pull_request' || flag('final');
+            if (kind === 'release') return scope.base === 'release/digital-production-v1';
+            if (!classified) return null;
+            if (kind === 'release_deployment') return flag('maintenance') && scope.base === 'release/digital-production-v1';
+            if (kind === 'chain') return flag('business_chain') || flag('migration') || flag('deployment');
+            if (kind === 'mapped') return Boolean(scope.mapped);
+            if (kind === 'governance') return flag('governance');
+            if (kind === 'not_governance') return !flag('governance');
+            if (kind === 'business') return !flag('governance') && !flag('web');
+            if (kind === 'light_build') return scope.event === 'pull_request' && !flag('governance') && !flag('web');
+            if (kind === 'optional') return false;
+            if (['db','journey','migration','deployment','activation','transfer','web','maintenance'].includes(kind)) return flag(kind);
+            throw new Error('Unknown gate scope: ' + kind);
+          }
+          const missing = [];
+          const rows = checks.map(([id, label, kind]) => {
+            const step = steps[id], needed = required(kind);
+            const noWebTests = id === 'web_tests' && step?.outcome === 'success' && step.outputs?.has_tests === 'false';
+            let status;
+            if (step?.outcome === 'failure') status = '失败';
+            else if (step?.outcome === 'cancelled') status = '取消';
+            else if (noWebTests || needed === false && (!step || ['skipped','success'].includes(step.outcome))) status = '不适用';
+            else if (step?.outcome === 'success') status = '成功';
+            else if (needed === null) status = '范围未判定，未完成';
+            else status = process.env.GATE_JOB_STATUS === 'cancelled' ? '取消导致未执行' : '上游中断或未执行';
+            if (needed !== false && !noWebTests && step?.outcome !== 'success') missing.push(label);
+            return '| ' + label + ' | ' + status + ' |';
+          });
+          const report = ['## ' + (['light','invalidate'].includes(process.env.GATE_PHASE) ? 'Push light checks' : process.env.GATE_KIND === 'full' ? 'Full' : 'Quick') + ' Gate 执行明细',
+            '', '- Head SHA: `' + process.env.GATE_HEAD + '`', '- 摘要前 Job 状态：' + process.env.GATE_JOB_STATUS,
+            '- 最终结论以 GitHub Job 为准；清理或摘要成功不代表门禁通过。', '', '| 检查 | 实际结果 |', '| --- | --- |', ...rows,
+            '', '未完成必需检查（含范围未判定）：' + (missing.length ? missing.join('；') : '无'), ''].join('\n');
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, report);
+          if (missing.length && process.env.GATE_JOB_STATUS === 'success') process.exitCode = 1;
+          GATE_SUMMARY_JS
+          node scripts/ci/ci-gate-runtime.mjs emit
+
+  full:
+    permissions:
+      contents: read
+      actions: read
+    name: Full Gate worker
+    needs: request
+    if: ${{ always() && github.event_name == 'create' && needs.request.result == 'success' && needs.request.outputs.kind == 'full' }}
+    uses: ./.github/workflows/full-gate.yml
+    with:
+      pr_number: ${{ needs.request.outputs.pr }}
+      head_sha: ${{ needs.request.outputs.head }}
+      base_sha: ${{ needs.request.outputs.base }}
+      base_ref: ${{ needs.request.outputs.base_ref }}
+      gate_kind: ${{ needs.request.outputs.kind }}
+
+  approval:
+    name: ${{ (github.event_name == 'create' && github.event.ref_type == 'branch' && (startsWith(github.event.ref, 'gate/full/') || startsWith(github.event.ref, 'gate/quick/'))) && 'Final Gate exact Head' || 'Final approval not selected' }}
+    needs: [request, validate, full]
+    if: ${{ always() && (github.event_name == 'create' && github.event.ref_type == 'branch' && (startsWith(github.event.ref, 'gate/full/') || startsWith(github.event.ref, 'gate/quick/'))) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Checkout exact approval Head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+      - name: Set up approval Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - name: Certify actual selected Gate result
+        env:
+          WORKER_RESULT: ${{ needs.request.outputs.kind == 'full' && needs.full.result || needs.validate.result }}
+          WORKER_RECEIPT: ${{ needs.request.outputs.kind == 'full' && needs.full.outputs.receipt || needs.validate.outputs.receipt }}
+        run: node scripts/ci/ci-gate-runtime.mjs certify

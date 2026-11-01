@@ -1,3 +1,4 @@
+import { ownedPostgresSchema, createOwnedPostgresSchema, releaseOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
@@ -53,7 +54,7 @@ class FixtureDirectoryProvider extends OfficialDingTalkProvider {
 }
 
 runWithPostgres("employee access role lifecycle", () => {
-  const schema = `employee_access_${randomUUID().replaceAll("-", "")}`;
+  const schema = ownedPostgresSchema("employee_access");
   const admin = new Pool({ connectionString: databaseUrl! });
   const database = new Pool({
     connectionString: databaseUrl!,
@@ -62,12 +63,12 @@ runWithPostgres("employee access role lifecycle", () => {
 
   afterAll(async () => {
     await database.end();
-    await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
+    await releaseOwnedPostgresSchema(admin, schema);
     await admin.end();
   });
 
   it("preserves existing role holders and atomically follows first grant and last revoke", async () => {
-    await admin.query(`CREATE SCHEMA ${schema}`);
+    await createOwnedPostgresSchema(admin, schema);
     const manifest = JSON.parse(await readFile(
       new URL("../../apps/api/src/platform/migration-manifest.json", import.meta.url),
       "utf8",
