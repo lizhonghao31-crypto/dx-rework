@@ -10,7 +10,7 @@ import {ApplicationError} from "../platform/errors.js";
 import type {AttachmentService} from "../tools/attachments.js";
 import type {DigitalIdentityDependencies} from "./identity-routes.js";
 import type {DevelopmentExecutionService} from "./development-execution-service.js";
-import {SaveTechnicalArtifactSchema,RecordFinalCommentSchema,CompleteSizeReviewSchema,CompletePositionSchema,TechnicalPlotUploadSchema,DEVELOPMENT_UPLOAD_PURPOSES,DEVELOPMENT_PURPOSE_TASK_KIND,DevelopmentUrgentRequestSchema,SaveTechnicalMaterialDecisionSchema,SavePreparationBasisSchema,DevelopmentCycleDraftSchema,DevelopmentCyclePublishSchema,SaveTechnicalTemplateSchema} from '@dx-rework/contracts/digital-development-technical';
+import {SaveTechnicalArtifactSchema,RecordFinalCommentSchema,CompleteSizeReviewSchema,CompletePositionSchema,TechnicalPlotUploadSchema,DEVELOPMENT_UPLOAD_PURPOSES,DEVELOPMENT_PURPOSE_TASK_KIND,DevelopmentUrgentRequestSchema,SaveTechnicalMaterialDecisionSchema,SavePreparationBasisSchema,DevelopmentCycleDraftSchema,DevelopmentCyclePublishSchema,SaveTechnicalTemplateSchema,ExternalPaperIntervalSchema,DevelopmentPatchDecisionSchema,CompleteDevelopmentPatchSchema} from '@dx-rework/contracts/digital-development-technical';
 export function registerDevelopmentExecutionRoutes(app:FastifyInstance,dependencies:DigitalIdentityDependencies,service:DevelopmentExecutionService,attachments:AttachmentService){
   const parse=<T>(schema:z.ZodType<T>,input:unknown):T=>{const result=schema.safeParse(input);if(!result.success)throw new ApplicationError("VALIDATION_ERROR",result.error.issues[0]?.message??"请检查办理资料",400);return result.data;};
   const actor=async(request:FastifyRequest)=>{const token=request.headers.cookie?.split(";").map(v=>v.trim()).find(v=>v.startsWith("dx_rework_session="))?.slice(18);return businessActor(dependencies.root,await dependencies.authenticate(token),request.id,"digital_production:view");};
@@ -22,13 +22,13 @@ export function registerDevelopmentExecutionRoutes(app:FastifyInstance,dependenc
   app.post(`${base}/technical/artifacts`,async request=>technical.saveArtifact(await actor(request),id(request),parse(SaveTechnicalArtifactSchema,request.body),key(request)));
   app.post(`${base}/technical/comments`,async request=>technical.recordComment(await actor(request),id(request),parse(RecordFinalCommentSchema,request.body),key(request)));
   app.post(`${base}/technical/size-review`,async request=>technical.completeReview(await actor(request),id(request),parse(CompleteSizeReviewSchema,request.body),key(request)));
-  app.post(`${base}/technical/external-paper-interval`,async request=>technical.externalPaperInterval(await actor(request),id(request),request.body,key(request)));
+  app.post(`${base}/technical/external-paper-interval`,async request=>technical.externalPaperInterval(await actor(request),id(request),parse(ExternalPaperIntervalSchema,request.body),key(request)));
   app.post(`${base}/technical/position`,async request=>technical.completePosition(await actor(request),id(request),parse(CompletePositionSchema,request.body),key(request)));
   app.post(`${base}/technical/urgent`,async request=>technical.urgent(await actor(request),id(request),parse(DevelopmentUrgentRequestSchema,request.body),key(request)));
   app.post(`${base}/technical/material-decision`,async request=>technical.saveMaterialDecision(await actor(request),id(request),parse(SaveTechnicalMaterialDecisionSchema,request.body),key(request)));
   app.post(`${base}/technical/preparation-basis`,async request=>technical.savePreparationBasis(await actor(request),id(request),parse(SavePreparationBasisSchema,request.body),key(request)));
-  app.post(`${base}/technical/patch-decision`,async request=>technical.decidePatch(await actor(request),id(request),request.body,key(request)));
-  app.post(`${base}/technical/patch-complete`,async request=>technical.completePatch(await actor(request),id(request),request.body,key(request)));
+  app.post(`${base}/technical/patch-decision`,async request=>technical.decidePatch(await actor(request),id(request),parse(DevelopmentPatchDecisionSchema,request.body),key(request)));
+  app.post(`${base}/technical/patch-complete`,async request=>technical.completePatch(await actor(request),id(request),parse(CompleteDevelopmentPatchSchema,request.body),key(request)));
   app.get(`${base}/technical/history`,async request=>technical.history(await actor(request),id(request),parse(z.object({roundNumber:z.coerce.number().int().positive(),scopeRef:z.string().trim().min(1).max(100).default('整款'),kind:z.enum(['artifacts','comments']),beforeVersion:z.coerce.number().int().positive().optional()}).strict(),request.query)));
   const settings=technical.settingsService(),settingsBase='/digital-production/development-technical-settings';
   app.get(settingsBase,async request=>settings.read(await actor(request),parse(z.object({version:z.coerce.number().int().positive().optional()}).strict(),request.query).version));

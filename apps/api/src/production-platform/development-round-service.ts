@@ -1,5 +1,5 @@
 import {captureTechnicalRound} from './development-cycle-evidence.js';
-import {technicalEnrollment,inheritTechnicalArtifact} from './development-technical-repository.js';
+import {technicalEnrollment,inheritTechnicalArtifact,publishedTechnicalArtifact} from './development-technical-repository.js';
 import {DevelopmentTechnicalService} from './development-technical-service.js';
 import {createIndependentDevelopmentRevision} from './development-revision-source.js';
 import {businessNow} from '../acceptance-clock/business-time.js';
@@ -107,6 +107,7 @@ export class DevelopmentRoundService {
   const priorCycle=await technicalEnrollment(db,sourceId)?(await db.query('SELECT * FROM digital_development_cycle_rounds WHERE source_id=$1 AND round_number=$2',[sourceId,input.basedOnRound])).rows[0]:null;
   if(priorCycle)await captureTechnicalRound(db,actor.actorId,sourceId,roundNumber,businessNow().toISOString(),priorCycle.internal_wash_minutes,Number(priorCycle.warning_ratio));
   if(!affectedNodes.includes('纸样'))await inheritTechnicalArtifact(db,actor.actorId,sourceId,roundNumber,sourceId,input.basedOnRound,businessNow().toISOString());
+  if(await technicalEnrollment(db,sourceId)&&!route.includes('development_pattern')&&!await publishedTechnicalArtifact(db,sourceId,roundNumber))fail('本次技术依据已改变，原成果不能沿用；请将纸样加入受影响节点后再发布，当前草稿与原轮次保持');
   await new DigitalProductionTaskService(this.database).supersedeSourceTasksWithClient(db,actor,sourceId,input.basedOnRound,returnTaskId);
   await new DevelopmentRouteService(this.database).startRound(db,actor,sourceId,route[0]!,routeId,roundNumber,returnTaskId);
   await new DevelopmentTechnicalService(this.database,this.enabled).ensurePositionForRound(db,actor,sourceId,roundNumber,routeId,returnTaskId);
