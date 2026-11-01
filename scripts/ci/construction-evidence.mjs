@@ -2,6 +2,7 @@ import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {existsSync,lstatSync,readFileSync,readlinkSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
+import {classifyFullGatePaths} from './full-gate-risk-map.mjs';
 
 const sha=v=>createHash('sha256').update(v).digest('hex');
 const git=(cwd,...args)=>execFileSync('git',['-C',cwd,...args],{encoding:'utf8'}).trim();
@@ -32,6 +33,10 @@ export function validateEvidence(record,{cwd='.',base,head=git(cwd,'rev-parse','
  if(!/^[0-9a-f]{40}$/.test(base??'')||record.version!==1||record.base!==base)throw Error('EVIDENCE_BASE_MISMATCH');
  if(record.sourceFingerprint!==sourceFingerprint(cwd))throw Error('EVIDENCE_SOURCE_CHANGED');
  if(!Array.isArray(record.rules)||!record.rules.length||!Array.isArray(record.checks)||!record.checks.length)throw Error('EVIDENCE_EMPTY');
+ const changed=[...new Set([...lines(git(cwd,'diff','--name-only',base)),...lines(git(cwd,'ls-files','--others','--exclude-standard'))])].filter(sourcePath);
+ const risk=classifyFullGatePaths(changed).highRisk?'full':'quick';
+ if(record.risk!==undefined&&record.risk!==risk)throw Error('EVIDENCE_RISK_MISMATCH');
+ const alternativeEligible=risk==='quick'&&changed.every(p=>p==='AGENTS.md'||/\.(?:md|css|png|jpe?g|webp|gif|svg|woff2?|ttf|txt)$/.test(p));
  const checks=new Map();
  for(const c of record.checks){
   if(!/^[a-z0-9_-]{2,80}$/.test(c.id??''))throw Error('EVIDENCE_CHECK_ID_REQUIRED');
@@ -51,17 +56,27 @@ export function validateEvidence(record,{cwd='.',base,head=git(cwd,'rev-parse','
   }
   checks.set(c.id,c);
  }
- if(!record.checks.some(c=>c.status==='passed'&&c.kind!=='command'))throw Error('EVIDENCE_NO_EXECUTED_CHECK');
+ if(!record.checks.some(c=>c.status==='passed'&&c.kind!=='command')){
+  const alt=record.alternativeVerification;
+  if(!alternativeEligible||typeof record.automaticTestsNotApplicable!=='string'||record.automaticTestsNotApplicable.trim().length<20||!alt||typeof alt.reason!=='string'||alt.reason.trim().length<20||!Array.isArray(alt.checks)||!alt.checks.length||alt.checks.some(id=>checks.get(id)?.kind!=='command'||checks.get(id)?.status!=='passed'))throw Error('EVIDENCE_NO_EXECUTED_CHECK');
+ }
  const covered=new Set();
  for(const r of record.rules){
   for(const key of ['rule','source','initialization','dateAndPermission','expectation'])requireText(r[key],key);
-  for(const key of ['writes','reads','oldTests']){if(!Array.isArray(r[key])||!r[key].length)throw Error('EVIDENCE_CONSUMERS_REQUIRED: '+key);for(const ref of r[key]){const p=fileRef(cwd,ref,base,key==='writes');if(key==='writes')covered.add(p);}}
+  for(const key of ['writes','reads']){if(!Array.isArray(r[key])||!r[key].length)throw Error('EVIDENCE_CONSUMERS_REQUIRED: '+key);for(const ref of r[key]){const p=fileRef(cwd,ref,base,key==='writes');if(key==='writes')covered.add(p);}}
+  if(!Array.isArray(r.oldTests))throw Error('EVIDENCE_CONSUMERS_REQUIRED: oldTests');
+  if(r.oldTests.length){for(const ref of r.oldTests)fileRef(cwd,ref,base);}
+  else{
+   if(typeof r.noExistingTestsReason!=='string'||r.noExistingTestsReason.trim().length<20)throw Error('EVIDENCE_NO_OLD_TEST_REASON_REQUIRED');
+   if(!alternativeEligible&&(!Array.isArray(r.newTests)||!r.newTests.length))throw Error('EVIDENCE_NEW_TESTS_REQUIRED');
+   for(const ref of r.newTests??[])fileRef(cwd,ref,base);
+  }
   if(!Array.isArray(r.checks)||!r.checks.length||r.checks.some(id=>!checks.has(id)))throw Error('EVIDENCE_RULE_CHECK_REQUIRED');
   for(const ref of r.writes){const p=ref.split('#')[0];if(!r.checks.some(id=>{const c=checks.get(id);return c.status==='passed'&&(!c.inputPaths||c.inputPaths.some(scope=>p===scope||p.startsWith(scope+'/')));}))throw Error('EVIDENCE_WRITE_WITHOUT_CURRENT_CHECK_SCOPE: '+p);}
  }
- const changed=[...new Set([...lines(git(cwd,'diff','--name-only',base)),...lines(git(cwd,'ls-files','--others','--exclude-standard'))])].filter(sourcePath);
+
  const missing=changed.filter(p=>!covered.has(p));if(missing.length)throw Error('EVIDENCE_CHANGED_FILE_UNCOVERED: '+missing.join(','));
- return {rules:record.rules.length,checks:checks.size,sourceFingerprint:record.sourceFingerprint,base,head,boundary:'Structural and source checks, not proof that every semantic consumer was discovered.'};
+ return {rules:record.rules.length,checks:checks.size,risk,sourceFingerprint:record.sourceFingerprint,base,head,boundary:'Structural and source checks, not proof that every semantic consumer was discovered.'};
 }
 if(import.meta.url===pathToFileURL(process.argv[1]??'').href){
  const [mode,path,base]=process.argv.slice(2);

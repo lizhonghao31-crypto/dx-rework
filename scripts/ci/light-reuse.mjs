@@ -42,24 +42,31 @@ export function validateBundle(bundle,{cwd='.',plan,context=reuseContext(cwd),se
 export function restoreBundle(bundle,options){const proof=validateBundle(bundle,options);for(const f of bundle.files){const path=join(options.cwd??'.',f.path);if(existsSync(path)&&lstatSync(path).isSymbolicLink())throw Error('REUSE_OUTPUT_SYMLINK_REJECTED');mkdirSync(dirname(path),{recursive:true});writeFileSync(path,Buffer.from(f.content,'base64'),{mode:f.mode});}return proof;}
 const output=(key,value)=>appendFileSync(process.env.GITHUB_OUTPUT,`${key}=${value}\n`);
 async function github(path,{text=false}={}){const r=await fetch('https://api.github.com/repos/'+REPOSITORY+path,{headers:{Authorization:`Bearer ${process.env.GITHUB_TOKEN}`,Accept:'application/vnd.github+json'},signal:AbortSignal.timeout(20000)});if(!r.ok){const e=Error('REUSE_GITHUB_READ_HTTP_'+r.status);e.status=r.status;throw e;}return text?await r.text():await r.json();}
-async function select(plan){
- const runs=await github(`/actions/runs?head_sha=${plan.head}&event=pull_request&per_page=100`);if(runs.total_count>100)throw Error('REUSE_RUN_PAGINATION_REQUIRED');
- const run=runs.workflow_runs.filter(r=>r.path==='.github/workflows/ci.yml'&&r.head_sha===plan.head&&r.event==='pull_request').sort((a,b)=>b.id-a.id)[0];
- if(!run||run.status!=='completed'||run.conclusion!=='success')return null;
- const jobs=await github(`/actions/runs/${run.id}/jobs?per_page=100`);if(jobs.total_count>100)throw Error('REUSE_JOB_PAGINATION_REQUIRED');const matches=jobs.jobs.filter(j=>j.name===LIGHT_CHECK);if(matches.length!==1)return null;const job=matches[0];
- const receipt=parseReceipt(await github(`/actions/jobs/${job.id}/logs`,{text:true}));
- try{assertRunBinding(run,job,receipt,{...plan,phase:'light',requiredIds:REUSABLE_CHECKS});}catch{return null;}
- const artifacts=await github(`/actions/runs/${run.id}/artifacts?per_page=100`);if(artifacts.total_count>100)throw Error('REUSE_ARTIFACT_PAGINATION_REQUIRED');
- const found=artifacts.artifacts.filter(a=>a.name===`light-build-${plan.head}-${run.run_attempt}`&&!a.expired);if(found.length!==1)return null;
- return {run,job,receipt,artifact:found[0]};
+export async function selectLightSource(plan,read=github){
+ const runs=await read(`/actions/runs?head_sha=${plan.head}&event=pull_request&per_page=100`);if(runs.total_count>100)throw Error('REUSE_RUN_PAGINATION_REQUIRED');
+ const candidates=runs.workflow_runs.filter(r=>r.path==='.github/workflows/ci.yml'&&r.head_sha===plan.head&&r.event==='pull_request').sort((a,b)=>b.id-a.id);
+ for(const run of candidates){
+  const jobs=await read(`/actions/runs/${run.id}/jobs?per_page=100`);if(jobs.total_count>100)throw Error('REUSE_JOB_PAGINATION_REQUIRED');
+  const matches=jobs.jobs.filter(j=>j.name===LIGHT_CHECK);
+  if(!matches.length)continue; // Same rule as lightProof: ignored metadata has no actual required-name job.
+  // A newer actual light failure/skip/in-progress run can never be bypassed with an old pass.
+  if(matches.length!==1||run.status!=='completed'||run.conclusion!=='success')return null;const job=matches[0];
+  const receipt=parseReceipt(await read(`/actions/jobs/${job.id}/logs`,{text:true}));
+  try{assertRunBinding(run,job,receipt,{...plan,phase:'light',requiredIds:REUSABLE_CHECKS});}catch{return null;}
+  const artifacts=await read(`/actions/runs/${run.id}/artifacts?per_page=100`);if(artifacts.total_count>100)throw Error('REUSE_ARTIFACT_PAGINATION_REQUIRED');
+  const found=artifacts.artifacts.filter(a=>a.name===`light-build-${plan.head}-${run.run_attempt}`&&!a.expired);if(found.length!==1)return null;
+  return {run,job,receipt,artifact:found[0]};
+ }
+ return null;
 }
+
 async function cli(){
  const [command,...args]=process.argv.slice(2),plan=currentPlan();
  if(command==='publish'){
   const steps=JSON.parse(process.env.LIGHT_STEPS),receipt={version:1,repository:REPOSITORY,pr:plan.pr,head:plan.head,base:plan.base,baseRef:plan.baseRef,kind:plan.kind,phase:'light',jobStatus:'snapshot',runId:Number(process.env.GITHUB_RUN_ID),attempt:Number(process.env.GITHUB_RUN_ATTEMPT),checks:REUSABLE_CHECKS.map(id=>({id,applicable:true,outcome:steps[id]?.outcome??'not_run'}))};
   const bundle=createBundle({plan,receipt});mkdirSync(args[0],{recursive:true});writeFileSync(join(args[0],'light-build.json'),JSON.stringify(bundle));
  }else if(command==='select'){
-  let server=null;try{server=await select(plan);}catch(e){console.log(e.message);}
+  let server=null;try{server=await selectLightSource(plan);}catch(e){console.log(e.message);}
   writeFileSync(args[0],JSON.stringify({server}));output('artifact_id',server?.artifact.id??'');output('run_id',server?.run.id??'');
  }else if(command==='restore'){
   const {server}=JSON.parse(readFileSync(args[0],'utf8'));if(!server)throw Error('REUSE_SOURCE_MISSING');const file=args[1];if(lstatSync(file).size>MAX_BYTES*2)throw Error('REUSE_ARTIFACT_TOO_LARGE');const bundle=JSON.parse(readFileSync(file,'utf8'));let proof;

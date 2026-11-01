@@ -101,3 +101,9 @@ test('migration static preflight actually runs before dependencies in a fresh so
   assert.equal(result.success,true);assert.equal(result.migrations.length,JSON.parse(readFileSync('apps/api/src/platform/migration-manifest.json','utf8')).migrations.length);
  }finally{rmSync(dir,{recursive:true,force:true});}
 });
+
+test('immediate deletion is a separate single-worker stage, without changing its absence assertion',()=>{
+ const file='tests/integration/rework-postgres.test.ts',plan=postgresPlan({mapped:[file],chain:true});assert.equal(plan.filter(r=>r.path===file).length,1);assert.equal(configForSuite(file),'vitest.postgres-immediate.config.ts');
+ const runner=readFileSync('scripts/run-business-chain-gate.mjs','utf8');assert.ok(runner.includes("['vitest.config.ts','vitest.postgres-immediate.config.ts','vitest.business-chain.config.ts']"));
+ const config=readFileSync('vitest.postgres-immediate.config.ts','utf8');assert.ok(config.includes('maxWorkers:testExecutionConfig.workers.postgres'));
+});
