@@ -13,7 +13,7 @@ const context={head:'a'.repeat(40),base:'b'.repeat(40),runId:'12',attempt:'1',id
 test('local and CI resolve one canonical union; long correctness uses finite config, ordinary/performance keeps defaults',()=>{
  const mapped=[POSTGRES_CHAIN_TESTS[0],POSTGRES_CHAIN_TESTS[0],'tests/integration/access-postgres.test.ts'];
  const plan=postgresPlan({mapped,chain:true});assert.equal(plan.filter(r=>r.path===mapped[0]).length,1);assert.deepEqual(plan.find(r=>r.path===mapped[0]).memberships,['mapped','chain']);assert.equal(plan.length,POSTGRES_CHAIN_TESTS.length+1);
- assert.equal(configForSuite(POSTGRES_CHAIN_TESTS[0]),'vitest.business-chain.config.ts');assert.equal(configForSuite(mapped[2]),'vitest.config.ts');
+ assert.equal(configForSuite(POSTGRES_CHAIN_TESTS[0]),'vitest.postgres-immediate.config.ts');assert.equal(configForSuite(mapped[2]),'vitest.config.ts');
  const workflow=readFileSync('.github/workflows/full-gate.yml','utf8'),pkg=JSON.parse(readFileSync('package.json','utf8'));
  assert.ok(workflow.includes(pkg.scripts['test:postgres']));assert.ok(pkg.scripts.check.includes('npm run build --workspaces --if-present'));assert.ok(pkg.scripts.check.includes('node node_modules/vitest/vitest.mjs run'));assert.ok(!pkg.scripts.check.includes('npm run test &&'));assert.ok(pkg.scripts.check.includes('--static-already-validated'));assert.ok(workflow.includes('--full-gate --verify-receipt'));
  const defaultConfig=readFileSync('vitest.config.ts','utf8');
@@ -113,4 +113,13 @@ test('every existing domain mapping remains runnable under managed-resource pref
  assert.deepEqual([...EXISTING_MAPPED_POSTGRES_TESTS].sort(),selected);
  for(const path of selected)assert.doesNotThrow(()=>assertManagedSchemaCreation(readFileSync(path,'utf8'),path));
  assert.doesNotThrow(()=>checkResourceRegistration());
+});
+
+test('SQL-heavy full business fixture is isolated while other long suites remain bounded parallel',()=>{
+ const full='tests/integration/full-business-chain-postgres.test.ts',peer=POSTGRES_CHAIN_TESTS.find(path=>path!==full);
+ const plan=postgresPlan({mapped:[full],chain:true});
+ assert.equal(plan.filter(row=>row.path===full).length,1);assert.equal(configForSuite(full),'vitest.postgres-immediate.config.ts');
+ assert.equal(configForSuite(peer),'vitest.business-chain.config.ts');
+ const source=readFileSync(full,'utf8');assert.ok(source.includes('timeout: 60_000'));
+ const config=readFileSync('vitest.business-chain.config.ts','utf8');assert.ok(config.includes('testExecutionConfig.workers.longCorrectness'));
 });
