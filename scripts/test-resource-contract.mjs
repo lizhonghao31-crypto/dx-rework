@@ -3,7 +3,7 @@ import {mkdirSync,writeFileSync,readFileSync,readdirSync,lstatSync} from 'node:f
 import {join} from 'node:path';
 
 // Creation and cleanup consume this one registry. Unknown prefixes fail before CREATE.
-export const SCHEMA_PREFIXES = Object.freeze(["acceptance_roles", "business_anchors", "full_chain", "own_tail", "pattern_backfill", "pmc_role", "quality_basic", "receiving", "release_lock", "resource_smoke", "rework", "rework_v2", "root_http_1", "root_http_2", "root_self_admin", "sample", "sourcing", "supplier", "temporary_proxy", "wage_marker"]);
+export const SCHEMA_PREFIXES = Object.freeze(["access", "employee_access", "finance_access", "tools", "acceptance_roles", "business_anchors", "full_chain", "own_tail", "pattern_backfill", "pmc_role", "quality_basic", "receiving", "release_lock", "resource_smoke", "rework", "rework_v2", "root_http_1", "root_http_2", "root_self_admin", "sample", "sourcing", "supplier", "temporary_proxy", "wage_marker"]);
 const suffix=/^[0-9a-f]{32}$/;
 const generated=new Map();
 export function assertRegisteredSchema(schema) {

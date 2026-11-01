@@ -6,8 +6,8 @@ import {tmpdir} from 'node:os';
 import {join,dirname} from 'node:path';
 import {postgresPlan,configForSuite,assertSuiteResults,assertExecutionReceipt,executionFingerprint,fullGatePostgresPlan,POSTGRES_CHAIN_TESTS,ROOT_AUDIT_TESTS} from '../test-suite-plan.mjs';
 import {ownedPostgresSchema,createOwnedPostgresSchema,readOwnedResources,SCHEMA_PREFIXES} from '../test-resource-contract.mjs';
-import {classifyFullGatePaths} from './full-gate-risk-map.mjs';
-import {assertManagedSchemaCreation,resourceChangedPaths} from '../test-preflight.mjs';
+import {classifyFullGatePaths,EXISTING_MAPPED_POSTGRES_TESTS} from './full-gate-risk-map.mjs';
+import {assertManagedSchemaCreation,resourceChangedPaths,checkResourceRegistration} from '../test-preflight.mjs';
 const identity={database:'dx_rework_ci',username:'dx_rework_test',databaseOid:'42',serverVersion:'160015',marker:'dx-rework-isolated-test-v1'};
 const context={head:'a'.repeat(40),base:'b'.repeat(40),runId:'12',attempt:'1',identities:{default:identity},node:'22.22.2'};
 test('local and CI resolve one canonical union; long correctness uses finite config, ordinary/performance keeps defaults',()=>{
@@ -106,4 +106,11 @@ test('immediate deletion is a separate single-worker stage, without changing its
  const file='tests/integration/rework-postgres.test.ts',plan=postgresPlan({mapped:[file],chain:true});assert.equal(plan.filter(r=>r.path===file).length,1);assert.equal(configForSuite(file),'vitest.postgres-immediate.config.ts');
  const runner=readFileSync('scripts/run-business-chain-gate.mjs','utf8');assert.ok(runner.includes("['vitest.config.ts','vitest.postgres-immediate.config.ts','vitest.business-chain.config.ts']"));
  const config=readFileSync('vitest.postgres-immediate.config.ts','utf8');assert.ok(config.includes('maxWorkers:testExecutionConfig.workers.postgres'));
+});
+
+test('every existing domain mapping remains runnable under managed-resource preflight',()=>{
+ const selected=classifyFullGatePaths(['apps/api/src/access/service.ts','apps/api/src/auth/session.ts','apps/api/src/wages/service.ts','apps/api/src/tools/service.ts','apps/api/src/receiving/service.ts','apps/api/src/access/supplier-service.ts']).mappedPostgresTests;
+ assert.deepEqual([...EXISTING_MAPPED_POSTGRES_TESTS].sort(),selected);
+ for(const path of selected)assert.doesNotThrow(()=>assertManagedSchemaCreation(readFileSync(path,'utf8'),path));
+ assert.doesNotThrow(()=>checkResourceRegistration());
 });

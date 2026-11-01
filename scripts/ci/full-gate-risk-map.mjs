@@ -24,6 +24,9 @@ const TESTS = Object.freeze({
   ],
 });
 
+// Preflight validates the same existing domain mappings before a future PR selects them.
+export const EXISTING_MAPPED_POSTGRES_TESTS = Object.freeze([...new Set(Object.values(TESTS).flat())]);
+
 // Case modules are imported by runnable Vitest suites, never CLI entry points.
 export const POSTGRES_CASE_SUITES = Object.freeze({
   "tests/integration/receiving-analysis-postgres.cases.ts": "tests/integration/receiving-postgres.test.ts",

@@ -4,6 +4,7 @@ import {pathToFileURL} from 'node:url';
 import {resolve} from 'node:path';
 import {POSTGRES_CHAIN_TESTS} from './test-suite-plan.mjs';
 import {SCHEMA_PREFIXES} from './test-resource-contract.mjs';
+import {EXISTING_MAPPED_POSTGRES_TESTS} from './ci/full-gate-risk-map.mjs';
 
 export function resourceChangedPaths(repo='.',base=process.env.BASE_SHA){
  const git=args=>execFileSync('git',['-C',repo,...args],{encoding:'utf8'}).trim().split('\n').filter(Boolean);
@@ -22,7 +23,7 @@ export function assertManagedSchemaCreation(source,path){
 }
 export function checkResourceRegistration(){
  const changed=resourceChangedPaths();
- const managed=new Set([...POSTGRES_CHAIN_TESTS,...(process.env.MAPPED_POSTGRES_TESTS??'').split(',').filter(Boolean)]);
+ const managed=new Set([...EXISTING_MAPPED_POSTGRES_TESTS,...POSTGRES_CHAIN_TESTS,...(process.env.MAPPED_POSTGRES_TESTS??'').split(',').filter(Boolean)]);
  const walk=dir=>readdirSync(dir,{withFileTypes:true}).flatMap(e=>e.isDirectory()?walk(dir+'/'+e.name):e.name.endsWith('.ts')?[dir+'/'+e.name]:[]);
  for(const path of walk('tests')){
   if(path.startsWith('tests/unit/'))continue;

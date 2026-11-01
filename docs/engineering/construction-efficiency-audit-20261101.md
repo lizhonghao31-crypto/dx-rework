@@ -87,3 +87,12 @@ release #885审查源Head232548515bb7714dad670121f176eac652a5cccd；一次Codex 
 本轮最后定向验证：release140项native、25项原消费者、真实PG资源/维护10、即时删除7及受管pattern1；main78项native、23项原消费者、真实资源9及受管pattern1，实际解析即时删除配置maxWorkers1。命令、真实退出/测试数、源码指纹与不可变尝试日志摘要见当前construction-evidence；它们是定向组合，不能相加冒充一次完整Full。昂贵最终Gate只在冻结Head后请求。
 
 本轮#885 Head8d及main9c的light再次在便宜证据前置处拒绝，未运行昂贵Full：记录生成后未重新git add，工作区校验读到新记录，提交却包含旧记录。全新检出源码hash与本地相同，git show:index记录不同，已明确归因暂存遗漏，不称业务失败。新增verify-change的真实索引/遗漏文件检查及“暂存后生成记录”反例，规定生成记录后暂存、提交后新鲜检出复验；不为过校验暂存无关用户修改。
+
+
+## main必要Review收口
+
+main #886的独立Review在61777fb9完成，提出两项P1。所谓b63746f祖先失败来自审查环境的合成提交，不是实际候选：真实历史61777fb9→9c728291→e1b32f93→1de4bb07；全新准确检出verify-change及官方light41335731694均通过。本次使用merge commit保留证据历史，不增加squash豁免。
+
+另一项属实：此前只核实际当前chain，未一次闭合风险映射所有既有入口。main既有24个入口中access、employee_access、tools、finance_access四个旧夹具仍裸建schema。仅把这四处的schema生成、CREATE和退出交回接入共享所有权契约，保留原部分迁移与全部业务断言；未带release业务SQL。preflight现在从风险映射同一导出取得所有既有域套件，即使本PR未选该域，也先检查其生产者合同；新增实际分类集合一致性及逐项预检反例。release既有28个入口逐项核无此遗漏，不更改已冻结release。
+
+局部验证第一次意外采用Shell默认Node24，native实际80通过但任务记录器只接受Node22 TAP统计，因此拒收而没有记通过；随后显式固定现有Node22路径重新验证。此处是本地执行入口偏差，不能称CI故障或隐瞒成一次通过；正式记录保留实际Node版本与不可变日志，CI仍使用仓库22.22.2。
