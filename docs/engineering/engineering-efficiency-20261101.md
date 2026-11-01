@@ -69,3 +69,5 @@ PMC SQL 已在 release 的事实保持原 checksum；其应用层部分403仍是
 ## 提交前补充回执
 
 收窄范围后的实际并集测试：默认配置 9 文件84项通过；长正确性配置17文件327通过/1失败，失败仅为新清理 helper 错误释放调用方借出的 Client，54个精确资源仍清理成功。已改为只释放 helper 自己从 Pool 获取的连接，调用方 Client 保持可用；该真实失败不算全链通过。修复后原 own-tail 历史＋资源契约2文件6项通过，Root/供应商/双库接线4文件11项通过。新的 canonical runner 用同一资源文件重复输入及 own-tail 两个文件实际执行6项，成功清理后跨进程核回执；原生协议107项通过。离线 Acceptance 控制链及相关 guards3文件8项通过（158.13s），含原22条 Python控制/中断子场景。最终完整并集由最终Head的显式 Full再次证明，不能拼接局部结果冒充当前完整链绿。
+
+首次 assembled 提交 f00acb73 后核对发现 `vitest.config.ts` 未包含在显式 git add 范围，实际本地已验证的 discovery 配置仍在 worktree。立即在 Review/Full 前补齐该文件与原生配置契约断言，不把首个 light 候选当最终证据；不重跑未变化的业务或 SQL 演练。

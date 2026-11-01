@@ -17,7 +17,8 @@ test('local and CI resolve one canonical union; long correctness uses finite con
  assert.equal(configForSuite('tests/integration/development-technical-postgres.test.ts'),'vitest.business-chain.config.ts');assert.equal(configForSuite(mapped[2]),'vitest.config.ts');
  const workflow=readFileSync('.github/workflows/full-gate.yml','utf8'),pkg=JSON.parse(readFileSync('package.json','utf8'));
  assert.ok(workflow.includes(pkg.scripts['test:postgres']));assert.ok(workflow.includes('--full-gate --verify-receipt'));
- assert.doesNotMatch(readFileSync('vitest.config.ts','utf8'),/testTimeout/);
+ const defaultConfig=readFileSync('vitest.config.ts','utf8');
+ assert.doesNotMatch(defaultConfig,/testTimeout/);assert.match(defaultConfig,/exclude: process.env.DX_REWORK_TEST_SUITE_KIND === "postgres" \? \[\] : postgresTestFiles\(\)/);
 });
 test('Root audit composition is explicit: shared supplier/wage suites execute exactly once and each needs real results',()=>{
  const plan=postgresPlan({mapped:ROOT_AUDIT_TESTS.slice(1),chain:true,rootAudit:true});
