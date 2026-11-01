@@ -19,6 +19,7 @@ export const POSTGRES_CHAIN_TESTS=Object.freeze([
   "tests/integration/full-business-chain-postgres.test.ts",
   "tests/integration/customer-quotation-postgres.test.ts",
   "tests/integration/development-technical-postgres.test.ts",
+  "tests/integration/series-plan-postgres.test.ts",
   "tests/integration/own-tail-responsibility-history-postgres.test.ts",
   "tests/integration/root-single-account-two-pass-postgres.test.ts",
   "tests/integration/receiving-postgres.test.ts",

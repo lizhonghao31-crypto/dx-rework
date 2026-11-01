@@ -1,3 +1,4 @@
+import {seriesPlanJourney} from './series-plan-journey.js';
 import type {BusinessTime,BusinessTimeScope} from '@dx-rework/domain/business-clock';
 import {readJourneySupervision} from "./journey-supervision.js";
 import {assertBusinessClockUnchanged,ContextBusinessClock} from '../acceptance-clock/business-time.js';
@@ -197,7 +198,7 @@ export class DigitalJourneyQuery {
     const instruction=oid&&fullOrder?(await db.query(`SELECT v.version,v.source_round,v.published_at,v.published_by FROM digital_instruction_documents d
       JOIN digital_instruction_versions v ON v.production_order_id=d.production_order_id AND v.version=d.published_version WHERE d.production_order_id=$1`,[oid])).rows[0]:null;
     const policies=(await db.query("SELECT DISTINCT ON(node_key) node_key,sla_seconds FROM digital_production_deadline_policies ORDER BY node_key,version DESC")).rows;
-    const baseNodes=JOURNEY_NODES.map(definition=>{
+    const baseNodes=JOURNEY_NODES.filter(d=>!d.key.startsWith("series_")).map(definition=>{
       const allowed=definition.stage==="creation"?sourceAccess||fullOrder:definition.stage==="development"?sourceAccess||fullOrder&&!sid:fullOrder;
       let state:JourneyState=allowed?"uncreated":"unavailable";
       if(!oid&&!["creation","development"].includes(definition.stage))state="not_applicable";
@@ -498,8 +499,9 @@ export class DigitalJourneyQuery {
       else if(["receiving_inspection","rework","rework_review","responsibility","quantity_difference","special_closure"].includes(node.key)&&node.state==="uncreated")node.progressApplicability=finalClosed?"not_applicable":"unknown";
       else node.progressApplicability="applicable";
     }
+    if(!patternKinds&&fullOrder&&oid){const planned=await seriesPlanJourney(db,oid,promiseDay,Boolean(terminal));for(const n of planned){const existing=baseNodes.findIndex(v=>v.key===n.key);if(existing>=0)baseNodes[existing]=n;else baseNodes.push(n);}}
     const stages=journeyStages(baseNodes);
-    const item:OrderJourney={asOf,styleImageUrl,developmentType:sourceAccess?source?.development_type??null:null,requiredCompletionDate:sourceAccess?currentDocument?.document?.returnDate??null:null,id:canonicalId,sourceId:sid,orderId:orderAccess?oid:null,designStyleNo:chosenIdentity.design_style_no,temporaryStyleNo:chosenIdentity.temporary_style_no,customer:chosenIdentity.customer_code,category:currentDocument?.document.template??(orderAccess?order?.product_group:null)??null,styleName,designer,merchandisers,orderNumbers,createdAt:iso(sourceAccess?source!.created_at:orderAccess?order!.created_at:(source?.created_at??order!.created_at))!,deliveryDate:orderAccess?digitalDateText(order?.contract_delivery_date??null):null,poDeliveryDates,deliveryRisks,selectedRound:round,adoptedRound:instruction?.source_round??null,sourceVersion:currentDocument?.version??currentDocument?.document_version??null,instructionVersion:instruction?.version??null,lines,links,stages,progress,hitReasons:[]};
+    const item:OrderJourney={seriesPlanVisible:Boolean(!patternKinds&&fullOrder&&oid),asOf,styleImageUrl,developmentType:sourceAccess?source?.development_type??null:null,requiredCompletionDate:sourceAccess?currentDocument?.document?.returnDate??null:null,id:canonicalId,sourceId:sid,orderId:orderAccess?oid:null,designStyleNo:chosenIdentity.design_style_no,temporaryStyleNo:chosenIdentity.temporary_style_no,customer:chosenIdentity.customer_code,category:currentDocument?.document.template??(orderAccess?order?.product_group:null)??null,styleName,designer,merchandisers,orderNumbers,createdAt:iso(sourceAccess?source!.created_at:orderAccess?order!.created_at:(source?.created_at??order!.created_at))!,deliveryDate:orderAccess?digitalDateText(order?.contract_delivery_date??null):null,poDeliveryDates,deliveryRisks,selectedRound:round,adoptedRound:instruction?.source_round??null,sourceVersion:currentDocument?.version??currentDocument?.document_version??null,instructionVersion:instruction?.version??null,lines,links,stages,progress,hitReasons:[]};
     const lifecycle=oid&&orderAccess?{kind:"order",id:oid}:!oid&&sid&&sourceAccess?{kind:"source",id:sid}:null;
     const cancelled=Boolean(!patternKinds&&lifecycle&&(await db.query("SELECT 1 FROM digital_production_resource_lifecycle WHERE resource_kind=$1 AND resource_id=$2 AND state='cancelled'",[lifecycle.kind,lifecycle.id])).rowCount);
     // Do not expand an assigned worker's single-task read scope to the whole SLA/PO history.

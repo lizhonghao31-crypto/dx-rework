@@ -1,4 +1,5 @@
 import {DevelopmentCycleSettings} from './development-cycle-settings.js';
+import {SeriesSettings} from './series-settings.js';
 import {useEffect,useState} from 'react';
 import {PageHeader} from '@dx-rework/ui/production';
 import {JOURNEY_NODES} from '@dx-rework/contracts/digital-production-journey';
@@ -16,6 +17,6 @@ export function CockpitProductionSettings(){
   {!access&&!error&&<p>正在读取设置…</p>}
   {access&&!access.manage&&!access.customers&&<p>当前岗位无权访问生产管理设置。</p>}
   {access?.customers&&<details className="cockpit-settings-node-section"><summary>客户默认跟单</summary><DigitalCockpitPersonnel orderId={null} onChanged={()=>undefined}/></details>}
-  {access?.manage&&<><SlaStandardEditor/><DevelopmentCycleSettings/></>}
+  {access?.manage&&<><SlaStandardEditor/><DevelopmentCycleSettings/><SeriesSettings/></>}
  </div>;
 }

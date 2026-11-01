@@ -1496,5 +1496,34 @@
       "guard_production_order_root_immutable"
     ],
     "sequences": []
+  },
+  "0269_series_plans_short_lead": {
+    "checksum": "879a472aea12a3eb1ab028ebd0615869537a6d598491c9b75877d19c5f795d5e",
+    "tables": [
+      "digital_production_orders"
+    ],
+    "functions": [],
+    "references": [
+      "digital_production_customers",
+      "production_order_roots",
+      "app_users",
+      "audit_events",
+      "digital_production_sources"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [
+      "digital_series_profiles",
+      "digital_series_context_changes",
+      "digital_series_plans",
+      "digital_series_requests",
+      "digital_series_request_decisions",
+      "digital_series_source_events",
+      "digital_short_lead_requests",
+      "digital_short_lead_decisions",
+      "digital_short_lead_consumptions"
+    ],
+    "execute": [],
+    "sequences": []
   }
 }

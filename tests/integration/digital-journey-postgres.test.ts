@@ -14,7 +14,8 @@ import pg from "pg";
 import Fastify from "fastify";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { JourneyFilterSchema } from "@dx-rework/contracts/digital-production-journey";
-import { DigitalOrderCreateSchema } from "@dx-rework/contracts/digital-production";
+import { DigitalOrderCreateSchema,beijingCalendarDate,minimumInitialCustomerDate } from "@dx-rework/contracts/digital-production";
+import {addCalendarDays} from '@dx-rework/contracts/series-calendar';
 import { DigitalProductionIdentityService } from "../../apps/api/src/production-platform/identity-service.js";
 import { DigitalProductionTaskService } from "../../apps/api/src/production-platform/task-service.js";
 import { DigitalProductionAccessPolicy } from "../../apps/api/src/production-platform/access-policy.js";
@@ -23,7 +24,7 @@ import { DigitalJourneyQuery } from "../../apps/api/src/production-platform/jour
 import { developmentView, patternTasks, DevelopmentWorkspaceQuery } from "../../apps/api/src/production-platform/development-workspace-query.js";
 import { DevelopmentWorkspaceFilterSchema, PatternWorkspaceFilterSchema } from "@dx-rework/contracts/digital-development-workspace";
 import { registerDigitalIdentityRoutes } from "../../apps/api/src/production-platform/identity-routes.js";
-import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema,createOwnedPostgresSchema,dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 import { ApplicationError } from "../../apps/api/src/platform/errors.js";
 import { RootAuthority } from "../../apps/api/src/access/root-authority.js";
@@ -35,8 +36,11 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
   const db=new pg.Pool({connectionString:databaseUrl,options:`-c search_path=${schema}`});
   const root=randomUUID(),designer=randomUUID(),stranger=randomUUID(),worker=randomUUID(),clerk=randomUUID(),tail=randomUUID(),merchandiser=randomUUID();
   const actor=(id=designer,roles=["sample_designer"]):TrustedActorContext=>({actorId:id,actorRoles:roles,authorizationCapability:"pattern_room:orders:create",authorizationCapabilities:["pattern_room:orders:create"],requestId:"TEST-v2-journey"});
-  const identity=new DigitalProductionIdentityService(db,true,undefined,()=>new Date("2026-09-01T00:00:00Z"),new SystemBusinessClock()),journeys=new DigitalJourneyQuery(db),tasks=new DigitalProductionTaskService(db);
-  const input=(suffix="0001")=>DigitalOrderCreateSchema.parse({customerCode:"PD",productGroup:"男装",designStyleNo:`TEST-J-${suffix}`,temporaryStyleNo:`TEST-T-${suffix}`,orderDate:"2026-09-01",lines:[{poNumber:"PO-J1",color:"黑",sizes:[{size:"M",quantity:100}],deliveryDate:"2026-10-20"},{poNumber:"PO-J2",color:"白",sizes:[{size:"L",quantity:200}],deliveryDate:"2026-10-22"}]});
+  // Formal confirmation and SLA enrollment share the real business clock. This
+  // projection suite is not a short-lead exception fixture; its promises remain
+  // safely beyond the same server calendar used for source-linked confirmation.
+  const identity=new DigitalProductionIdentityService(db,true,undefined,()=>new Date(),new SystemBusinessClock()),journeys=new DigitalJourneyQuery(db),tasks=new DigitalProductionTaskService(db);
+  const input=(suffix="0001")=>{const now=new Date(),minimum=minimumInitialCustomerDate(now);return DigitalOrderCreateSchema.parse({customerCode:"PD",productGroup:"男装",designStyleNo:`TEST-J-${suffix}`,temporaryStyleNo:`TEST-T-${suffix}`,orderDate:beijingCalendarDate(now),lines:[{poNumber:"PO-J1",color:"黑",sizes:[{size:"M",quantity:100}],deliveryDate:addCalendarDays(minimum,20)},{poNumber:"PO-J2",color:"白",sizes:[{size:"L",quantity:200}],deliveryDate:addCalendarDays(minimum,22)}]});};
   const publishSource=async(sourceId:string)=>{
     const fileId=randomUUID();
     await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[fileId,`TEST/journey/${fileId}`,"a".repeat(64),designer]);
@@ -49,7 +53,7 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
   };
   const app=Fastify();
   beforeAll(async()=>{
-    await admin.query(`CREATE SCHEMA ${schema}`);
+    await createOwnedPostgresSchema(admin,schema);
     const manifest=JSON.parse(await readFile(new URL("../../apps/api/src/platform/migration-manifest.json",import.meta.url),"utf8")) as {migrations:Array<{version:string;checksum:string}>};
     await db.query("CREATE TABLE schema_migrations(version text PRIMARY KEY,checksum char(64) NOT NULL,applied_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP)");
     const serverVersion=Number((await db.query("SHOW server_version_num")).rows[0].server_version_num);
@@ -69,7 +73,7 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     }});
     await app.ready();
   },120000);
-  afterAll(async()=>{await app.close();await db.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();});
+  afterAll(async()=>{await app.close();await db.end();await dropOwnedPostgresSchema(admin,schema);await admin.end();});
   it("uses the original assignment, upstream and completion reasons in both management summary and detail",async()=>{
     const sourceId=(await identity.createSource(actor(),{developmentType:"头版",designStyleNo:"TEST-A02-BLOCKERS",temporaryStyleNo:null,customerCode:null},randomUUID())).sourceId;
     const routeId=randomUUID();

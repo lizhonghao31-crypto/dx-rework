@@ -18,6 +18,9 @@ import { registerBudgetRoutes } from "./budget-routes.js";
 import type { DigitalBudgetService } from "./budget-service.js";
 import {registerQuotationRoutes} from './quotation-routes.js';
 import type {DigitalQuotationService} from './quotation-service.js';
+import {registerSeriesPlanRoutes} from './series-plan-routes.js';
+import type {SeriesPlanService} from './series-plan-service.js';
+import type {ShortLeadService} from './short-lead-service.js';
 import {registerDevelopmentRoundRoutes} from "./development-round-routes.js";
 import type {DevelopmentRoundService} from "./development-round-service.js";
 import { registerDevelopmentExecutionRoutes } from "./development-execution-routes.js";
@@ -46,6 +49,7 @@ export type DigitalIdentityDependencies = {
   journeys?: DigitalJourneyQuery;
   budgetService?: DigitalBudgetService;
   quotationService?:DigitalQuotationService;
+  seriesPlans?:SeriesPlanService; shortLead?:ShortLeadService;
   instructionService?: ProductionInstructionService;
   bulkPreparationService?: BulkPreparationService;
   closureService?:OrderClosureService;
@@ -67,6 +71,7 @@ const parse = <T>(schema: z.ZodType<T>, value: unknown): T => {
   return result.data;
 };
 export function registerDigitalIdentityRoutes(app: FastifyInstance, dependencies: DigitalIdentityDependencies): void {
+  if(dependencies.seriesPlans&&dependencies.shortLead)registerSeriesPlanRoutes(app,dependencies,dependencies.seriesPlans,dependencies.shortLead);
   if(dependencies.quotationService)registerQuotationRoutes(app,dependencies,dependencies.quotationService);
   if(dependencies.analysis) registerDigitalAnalysisRoutes(app,dependencies,dependencies.analysis);
   if(dependencies.closureService)registerOrderClosureRoutes(app,dependencies,dependencies.closureService);

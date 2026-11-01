@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./short-commitment": { "types": "./src/short-commitment.ts", "import": "./dist/short-commitment.js" },
+    "./series-calendar": { "types": "./src/series-calendar.ts", "import": "./dist/series-calendar.js" },
+    "./digital-series-plan": { "types": "./src/digital-series-plan.ts", "import": "./dist/digital-series-plan.js" },
     "./digital-development-technical": { "types": "./src/digital-development-technical.ts", "import": "./dist/digital-development-technical.js" },
     "./digital-quotation": { "types": "./src/digital-quotation.ts", "import": "./dist/digital-quotation.js" },
     "./acceptance-clock": { "types": "./src/acceptance-clock.ts", "import": "./dist/acceptance-clock.js" },

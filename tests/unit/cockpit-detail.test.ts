@@ -10,6 +10,10 @@ function fixture():OrderJourney{
   return {id,sourceId:id,orderId:id,designStyleNo:"TEST-DETAIL",temporaryStyleNo:null,customer:"PD",category:"上衣",designer:null,styleName:null,merchandisers:[],orderNumbers:[],createdAt:"2026-10-19T00:00:00Z",deliveryDate:null,selectedRound:1,adoptedRound:1,sourceVersion:1,instructionVersion:1,lines:[],links:[],stages:JOURNEY_STAGES.map(stage=>({...stage,state:"pending",nodes:stage.key==="development"?[current,completed]:[]})),progress:{development:{completed:8,applicable:10},bulk:null},hitReasons:[],display:{ruleVersion:"cockpit-display-v1",mainState:"active",earliestShipmentDate:null,missingShipmentDates:0,closedAt:null,actualRatio:.5,actualLabel:"50.0%",awaitingClosure:false,timeRatio:null,timeLabel:"时间规则待完善",stages:JOURNEY_STAGES.map(stage=>({key:stage.key,ratio:.5,applicable:2,completed:1,notApplicable:false,risk:stage.key==="development"?"overdue":"normal"}))},currentRiskNodes:[],currentDeliveryRisks:[],riskHistory:[],operationLog:{items:[],nextCursor:null,asOf:"2026-10-19T00:00:00Z",coverage:["节点事件"]}};
 }
 const render=(o:OrderJourney,busy=false)=>renderToStaticMarkup(createElement(CockpitDetail,{order:o,context:JourneyReturnContextSchema.parse({selected:id,scope:"production",focus:task}),asOf:"2026-10-19T00:00:00Z",actions:null,busy,onChange(){}}));
+it('shows an actual day as a day in both detail and node rows, without an invented midnight or 08:00',()=>{
+  const o=fixture(),n=o.stages[1]!.nodes[0]!;n.actualDate='2026-10-17';n.actualAt=null;n.state='completed';
+  const html=render(o);expect(html).toContain('<dt>实际完成：</dt><dd>2026-10-17</dd>');expect(html).toContain('<span>2026-10-17</span>');expect(html).not.toContain('2026/10/17 08:00');expect(html).not.toContain('2026-10-17T00:00');
+});
 it("renders seven double rings with only two date rows, risk color and no invented time ratio",()=>{
   const html=render(fixture());
   expect(html.match(/class="cockpit-stage-rings"/g)).toHaveLength(7);expect(html.match(/class="cockpit-stage-dates"/g)).toHaveLength(7);

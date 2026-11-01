@@ -1,12 +1,13 @@
+import {approvedShortLeadCalendar,validateInitialLeadTime,consumeShortLead} from './short-lead-evidence.js';
 import type { SourcingService } from "../sourcing/sourcing-service.js";
 import { SlaOrderService } from "./sla-order-service.js";
 import { developmentRevisionSource } from "./development-revision-source.js";
 import { captureDevelopmentSla } from "./development-sla-enrollment.js";
 import type { BusinessClock } from "@dx-rework/domain/business-clock";
-import {acceptanceBusinessContext,businessNow,observedBusinessTime,registerAcceptanceCreated,ContextBusinessClock} from '../acceptance-clock/business-time.js';
+import {acceptanceBusinessContext,observedBusinessTime,registerAcceptanceCreated,ContextBusinessClock,acceptanceClockReaderEnabled} from '../acceptance-clock/business-time.js';
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
-import { DigitalOrderCreateSchema, beijingCalendarDate, customerOrderDateError, initialCustomerOrderInput, initialCustomerOrderIsReady, digitalFormalPoNo, digitalPoKey, initialCustomerDateErrors, minimumInitialCustomerDate } from "@dx-rework/contracts/digital-production";
+import { DigitalOrderCreateSchema, formalCommitmentFacts, beijingCalendarDate, customerOrderDateError, initialCustomerOrderInput, initialCustomerOrderIsReady, digitalFormalPoNo, digitalPoKey, minimumInitialCustomerDate } from "@dx-rework/contracts/digital-production";
 import {developmentDocumentRow} from "./development-round-repository.js";
 import { DigitalPoDateRepository } from "./po-date-repository.js";
 import type { DigitalCustomer, DigitalOrder, DigitalOrderInput, DigitalSource, DigitalSourceInput, DigitalNumberCorrection, InitialCustomerOrderDraft } from "@dx-rework/contracts/digital-production";
@@ -19,12 +20,7 @@ import {ensureQuotationBudget} from './quotation-budget-basis.js';
 
 const fail = (message: string, status = 409): never => { throw new ApplicationError(status === 404 ? "NOT_FOUND" : status === 403 ? "FORBIDDEN" : "DIGITAL_PRODUCTION_CONFLICT", message, status); };
 const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
-const orderFactsDigest=(value:DigitalOrderInput)=>{
-  const facts=DigitalOrderCreateSchema.parse(value);
-  // Assignment continues through the existing active-role/default/Root policy.
-  delete facts.primaryMerchandiserId;
-  return digest(facts);
-};
+const orderFactsDigest=(value:DigitalOrderInput)=>digest(formalCommitmentFacts(value));
 export const digitalDateText = (value: Date | string | null) => value instanceof Date
   ? new Intl.DateTimeFormat("en-CA", {
       timeZone: "Asia/Shanghai",
@@ -183,20 +179,23 @@ export class DigitalProductionIdentityService {
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [JSON.stringify(["digital-order-style",styleKey])]);
       if ((await client.query("SELECT 1 FROM digital_production_orders WHERE translate(btrim(design_style_no),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=$1 LIMIT 1", [styleKey])).rowCount)
         fail("该编号已有客户订单，请打开原档案继续办理");
-      const now=businessNow(this.now),orderDateError=customerOrderDateError(input.orderDate,beijingCalendarDate(now));
+      const formalTime=sourceId&&(this.businessClock||acceptanceClockReaderEnabled(this.database)||acceptanceBusinessContext())
+        ? await (this.businessClock??new ContextBusinessClock(this.database,client)).read({kind:'source',id:sourceId}):observedBusinessTime(this.now);
+      const now=new Date(formalTime.now),orderDateError=customerOrderDateError(input.orderDate,beijingCalendarDate(now));
       if(orderDateError)fail(orderDateError,400);
-      if(frozenOrdering&&initialCustomerOrderIsReady(frozenOrdering,{serverToday:beijingCalendarDate(now),minimumInitialCustomerDate:minimumInitialCustomerDate(now)})&&orderFactsDigest(input)!==orderFactsDigest(initialCustomerOrderInput(frozenOrdering)))
+      let frozenInput:DigitalOrderInput|null=null;
+      if(frozenOrdering){try{const parsed=DigitalOrderCreateSchema.safeParse(initialCustomerOrderInput(frozenOrdering));if(parsed.success)frozenInput=parsed.data;}catch{/* Incomplete published ordering remains recoverable. */}}
+      const frozenApproval=sourceId&&frozenInput?await approvedShortLeadCalendar(client,sourceId,frozenInput,formalTime.scenarioId):null;
+      if(frozenOrdering&&frozenInput&&initialCustomerOrderIsReady(frozenOrdering,{serverToday:beijingCalendarDate(now),minimumInitialCustomerDate:minimumInitialCustomerDate(now),approvedShortLead:frozenApproval})&&orderFactsDigest(input)!==orderFactsDigest(frozenInput!))
         fail("确认信息须与当前已发布的订购草稿一致，请重新打开原档案恢复资料");
-      const dateErrors = initialCustomerDateErrors(input.lines,minimumInitialCustomerDate(now));
-      if (dateErrors.length) fail(dateErrors.join("；"),400);
+      const shortApproval=await validateInitialLeadTime(client,actor,sourceId,input,formalTime);
       let merchandiserId = input.primaryMerchandiserId;
       const defaultMerchandiserId = (await client.query("SELECT default_merchandiser_id FROM digital_production_customers WHERE code=$1 FOR SHARE", [input.customerCode])).rows[0]?.default_merchandiser_id ?? null;
       if (!isDigitalLeader(actor) && merchandiserId !== undefined && merchandiserId !== defaultMerchandiserId) digitalForbidden();
       if (merchandiserId === undefined) merchandiserId = defaultMerchandiserId;
       if (merchandiserId && !await new DigitalProductionAccessPolicy(client).lockActiveRole(merchandiserId, "order_merchandiser")) fail("主跟单必须为在职有效订单跟单", 400);
       const root = await new ProductionOrderRootRepository(client).create(createdBy);
-      const businessTime = this.businessClock ? await this.businessClock.read({ kind: "order", id: root.productionOrderId })
-        : observedBusinessTime(()=>now);
+      const businessTime = !sourceId&&this.businessClock ? await this.businessClock.read({ kind: "order", id: root.productionOrderId }) : formalTime;
       await client.query(`INSERT INTO digital_production_orders(production_order_id,source_id,customer_code,product_group,design_style_no,temporary_style_no,order_date,contract_delivery_date,created_by,creation_hash,primary_merchandiser_id)
         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, [root.productionOrderId, sourceId, input.customerCode, input.productGroup, input.designStyleNo, input.temporaryStyleNo, input.orderDate, input.contractDeliveryDate, createdBy, digest(input), merchandiserId]);
       if (input.salesYear !== undefined || input.salesSeries !== undefined || input.requiresColorMatching !== undefined) {
@@ -213,6 +212,7 @@ export class DigitalProductionIdentityService {
           [{lineId,date:customerDate,expectedVersion:0}],creationEventId);
         for (const size of line.sizes) await client.query("INSERT INTO digital_production_po_sizes(line_id,size,quantity) VALUES($1,$2,$3)", [lineId, size.size, size.quantity]);
       }
+      await consumeShortLead(client,actor,root.productionOrderId,shortApproval,businessTime,creationEventId);
       await new SlaOrderService(this.database).enrollNewOrder(client, actor, root.productionOrderId, creationEventId, businessTime);
       await ensureQuotationBudget(client,root.productionOrderId,actor.actorId);
       return this.readWith(client, actor, root.productionOrderId);
