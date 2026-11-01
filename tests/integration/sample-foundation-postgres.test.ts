@@ -1,4 +1,4 @@
-import { ownedPostgresSchema, createOwnedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema, createOwnedPostgresSchema, releaseOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import pg from "pg";
@@ -25,7 +25,7 @@ run("sample domain database boundaries", () => {
   });
   afterAll(async () => {
     await database.end();
-    await dropOwnedPostgresSchema(admin,schema);
+    await releaseOwnedPostgresSchema(admin,schema);
     await admin.end();
   });
   const createItem = async (status: string, holder: string | null, location: string | null) => {

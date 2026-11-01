@@ -45,7 +45,7 @@ import type * as CryptoModule from "node:crypto";
 import { contractReturnState } from "../../apps/api/src/sourcing/contract-return-state.js";
 import type * as HistoricalScopeModule from "../../apps/api/src/sourcing/sourcing-contract-history-scope.js";
 import { SourcingTransferContractReconciliation } from "../../apps/api/src/sourcing/sourcing-transfer-contract-reconciliation.js";
-import { ownedPostgresSchema, createOwnedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema, createOwnedPostgresSchema, releaseOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { migrationExecutionSql } from "../../scripts/deploy/migration-execution-compatibility.mjs";
 import "./work-analysis-postgres.cases.js";
 import { readQuoteAnalysis } from "../../apps/api/src/sourcing/sourcing-analysis.js";
@@ -399,7 +399,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     {const stageStart=performance.now();let stageStatus='failed';try {
 
     await database.end();
-    await dropOwnedPostgresSchema(admin,schema);
+    await releaseOwnedPostgresSchema(admin,schema);
     await admin.end();
 
       stageStatus='completed';

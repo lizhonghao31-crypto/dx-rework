@@ -5,6 +5,7 @@ export const REPOSITORY = 'lizhonghao31-crypto/dx-rework';
 export const FINAL_CHECK = 'Final Gate exact Head';
 export const LIGHT_CHECK = 'Push light checks';
 export const RECEIPT_PREFIX = 'DX_GATE_RECEIPT_V1=';
+export const REUSABLE_CHECKS=Object.freeze(['lint','types','build','migration_lint']);
 export const REVIEW_BOT = 'chatgpt-codex-connector[bot]';
 export const REVIEW_TIMEOUT_MS = 15 * 60 * 1000;
 const SHA = /^[0-9a-f]{40}$/;
@@ -145,8 +146,22 @@ export function assertReceipt(receipt, expected) {
   for (const check of rows.values()) {
     if (check.applicable !== true && check.applicable !== false) throw new Error('Unknown Gate applicability');
     if (check.applicable && check.outcome !== 'success') throw new Error(`Applicable check not successful: ${check.id}`);
+    if(check.execution==='verified_reuse'){
+      const s=check.source;
+      if(expected.phase!=='final'||expected.kind!=='full'||!REUSABLE_CHECKS.includes(check.id)||!s||s.check!==check.id||s.phase!=='light'||s.workflow!=='.github/workflows/ci.yml')throw Error('Invalid reused check source');
+      for(const key of ['repository','pr','head','base','kind'])if(s[key]!==expected[key])throw Error('Reused check tuple differs: '+key);
+      if(expected.baseRef!==undefined&&s.baseRef!==expected.baseRef)throw Error('Reused check target branch differs');
+      if(!Number.isSafeInteger(s.runId)||s.runId<=0||s.runId===receipt.runId||!Number.isSafeInteger(s.jobId)||s.jobId<=0||!Number.isSafeInteger(s.attempt)||s.attempt<1||! /^[0-9a-f]{64}$/.test(s.fingerprint??'')||! /^[0-9a-f]{64}$/.test(s.artifactSha256??''))throw Error('Reused check provenance missing');
+    }else if(check.execution!==undefined&&check.execution!=='executed')throw Error('Unknown check execution source');
   }
   return receipt;
+}
+export function assertReuseLineage(receipt,light){
+ for(const c of receipt.checks??[])if(c.execution==='verified_reuse'){
+  const s=c.source;if(s.runId!==light.runId||s.jobId!==light.jobId||s.attempt!==light.receipt.attempt||s.head!==light.receipt.head||s.base!==light.receipt.base||(light.receipt.baseRef!==undefined&&s.baseRef!==light.receipt.baseRef))throw Error('Reused check is not the verified current light job');
+  const row=light.receipt.checks.find(r=>r.id===c.id);if(row?.outcome!=='success'||row.applicable!==true)throw Error('Reused light check was not successful');
+ }
+ return receipt;
 }
 
 export function assertRunBinding(run, job, receipt, expected) {

@@ -1,4 +1,4 @@
-import { ownedPostgresSchema, createOwnedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema, createOwnedPostgresSchema, releaseOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import './sample-analysis-postgres.cases.js';
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
@@ -54,7 +54,7 @@ run("sample read projections, paging and exact amounts", () => {
       before: { purchasePrice: "SECRET_FINANCE_VALUE" }, after: { receiptUrl: "PRIVATE_RECEIPT_REFERENCE" }, reason: "SENSITIVE_REASON" }); }
     finally { client.release(); }
   });
-  afterAll(async () => { await db.end(); await dropOwnedPostgresSchema(admin,schema); await admin.end(); });
+  afterAll(async () => { await db.end(); await releaseOwnedPostgresSchema(admin,schema); await admin.end(); });
 
   it.each(["sample_designer", "sample_administrative", "sample_finance", "owner_group", "root_superuser"])("paginates real rows and total for %s", async role => {
     const first = await service.list(actor(role), {}), second = await service.list(actor(role), { page: 2 }), third = await service.list(actor(role), { page: 3 });

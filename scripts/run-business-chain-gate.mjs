@@ -1,4 +1,5 @@
-import {spawn} from 'node:child_process';
+import {runOwnedCommand,ownedInterruptionGuard} from './owned-command.mjs';
+import {assertFixturePrerequisites} from './test-fixture-prerequisites.mjs';
 import {existsSync,readFileSync,writeFileSync} from 'node:fs';
 import {rm,readFile} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
@@ -123,24 +124,25 @@ async function verifyOssRuntime() {
 
 async function runVitest(files,config,environment,output){
  if(!files.length)return;
- const child=spawn(process.execPath,['node_modules/vitest/vitest.mjs','run','--config',config,'--reporter=default','--reporter=json','--outputFile='+output,...files],{stdio:'inherit',env:{...process.env,...environment,NODE_ENV:'test',DATABASE_URL:'',DX_REWORK_TEST_SUITE_KIND:'postgres'}});
- const forward=signal=>child.kill(signal),onInt=()=>forward('SIGINT'),onTerm=()=>forward('SIGTERM');
- process.on('SIGINT',onInt);process.on('SIGTERM',onTerm);
- let code;
- try{code=await new Promise((resolve,reject)=>{child.once('error',reject);child.once('exit',(code,signal)=>resolve(signal?1:code??1));});}
- finally{process.removeListener('SIGINT',onInt);process.removeListener('SIGTERM',onTerm);}
+ interruption.assertActive();
+ const metadata=await runOwnedCommand(process.execPath,['scripts/ci/test-runtime-metadata.mjs','--config',config],{stateFile:environment.DX_REWORK_TEST_EXECUTION_STATE,env:{...process.env,...environment,NODE_ENV:'test',DATABASE_URL:'',DX_REWORK_TEST_SUITE_KIND:'postgres'}});
+ interruption.assertActive();if(metadata.code!==0)throw Error('TEST_RUNTIME_CONTEXT_REJECTED');
+ const {code}=await runOwnedCommand(process.execPath,['node_modules/vitest/vitest.mjs','run','--config',config,'--reporter=default','--reporter=json','--outputFile='+output,...files],{stateFile:environment.DX_REWORK_TEST_EXECUTION_STATE,env:{...process.env,...environment,NODE_ENV:'test',DATABASE_URL:'',DX_REWORK_TEST_SUITE_KIND:'postgres'}});
+ interruption.assertActive();
  if(code!==0)throw Error('BUSINESS_CHAIN_GATE_FAILED: vitest exited '+code);
  const report=JSON.parse(readFileSync(output,'utf8'));assertSuiteResults(report,files);return report;
 }
+const interruption=ownedInterruptionGuard();
 if(!hasDatabase&&process.argv.includes('--static-already-validated')){
  console.log('BUSINESS_CHAIN_DATABASE_NOT_VERIFIED: no explicit TEST_DATABASE_URL; static tests already ran in the canonical non-DB suite');
 }else if(!hasDatabase){
  await runVitest(STATIC_CHAIN_TESTS,'vitest.config.ts',{TEST_DATABASE_URL:'',ACCEPTANCE_CLOCK_TEST_DATABASE_URL:''},'/tmp/dx-static-chain-'+randomUUID()+'.json');
  await verifyOssRuntime();console.log('BUSINESS_CHAIN_STATIC_GATES_PASSED');
 }else{
+ const plan=declared?.plan??postgresPlan({mapped,chain});
+ await assertFixturePrerequisites(databaseUrl,plan);
  const resources=await resourceContext({default:databaseUrl,...(process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL?{'acceptance-clock':process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL}:{})});
  let cleanupPassed=false;
- const plan=declared?.plan??postgresPlan({mapped,chain});
  const context={head:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),base:process.env.BASE_SHA??null,runId:process.env.GITHUB_RUN_ID??null,attempt:process.env.GITHUB_RUN_ATTEMPT??null,identities:resources.identities,executionId:process.env.DX_REWORK_TEST_EXECUTION_ID??`${process.env.GITHUB_RUN_ID}/${process.env.GITHUB_RUN_ATTEMPT}`,node:process.versions.node,nodeEnv:'test',databaseUrlCleared:true};
  try{
   if(verify){if(!receiptPath)throw Error('POSTGRES_RECEIPT_REQUIRED');assertExecutionReceipt(JSON.parse(readFileSync(receiptPath,'utf8')),context,plan);console.log('BUSINESS_CHAIN_COVERAGE_VERIFIED: same execution covers mapped and chain');}
@@ -149,18 +151,22 @@ if(!hasDatabase&&process.argv.includes('--static-already-validated')){
    if(receiptPath)writeFileSync(receiptPath,JSON.stringify({status:'running'}));
    await resourceSmoke(databaseUrl);
    const env={...resourceEnvironment(resources),TEST_DATABASE_URL:databaseUrl};
-   const reports=[];
+   console.log('OWNED_TEST_EXECUTION_STATE='+env.DX_REWORK_TEST_EXECUTION_STATE);
+   const reports=[];let safeToClean=true;
    try{
     // Directly affected ordinary PG suites run before long current-schema correctness chains.
-    for(const config of ['vitest.config.ts','vitest.business-chain.config.ts']){
+    for(const config of ['vitest.config.ts','vitest.postgres-immediate.config.ts','vitest.business-chain.config.ts']){
      const files=plan.filter(s=>s.config===config).map(s=>s.path);if(files.length)reports.push(await runVitest(files,config,env,resources.dir+'-'+config+'.json'));
     }
-   }finally{await cleanupResources(resources);cleanupPassed=true;}
+   }catch(error){if(error.unsafeToCleanup)safeToClean=false;throw error;}
+   finally{if(safeToClean){await cleanupResources(resources);cleanupPassed=true;}else console.error('TEST_RESOURCE_WORKERS_NOT_STOPPED: retaining '+resources.dir);}
    const results={success:true,numFailedTests:0,numFailedTestSuites:0,testResults:reports.flatMap(r=>r.testResults)};
    assertSuiteResults(results,plan.map(s=>s.path));
    if(chain)await verifyOssRuntime();
+   interruption.assertActive();
    if(receiptPath)writeFileSync(receiptPath,JSON.stringify({version:1,status:'passed',cleanup:'passed',context,plan,results,fingerprint:executionFingerprint(context,plan)}));
    console.log('BUSINESS_CHAIN_GATE_PASSED: '+plan.length+' unique PostgreSQL suites');
   }
  }finally{if(verify||cleanupPassed)await rm(resources.dir,{recursive:true,force:true});else console.error('TEST_RESOURCE_CLEANUP_EVIDENCE_RETAINED: '+resources.dir);}
 }
+interruption.close();

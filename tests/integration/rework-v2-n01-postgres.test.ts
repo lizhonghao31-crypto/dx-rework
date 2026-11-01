@@ -1,4 +1,4 @@
-import { ownedPostgresSchema, createOwnedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema, createOwnedPostgresSchema, releaseOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
@@ -197,7 +197,7 @@ runWithPostgres("rework v2 N01 PostgreSQL contracts", () => {
 
   afterAll(async () => {
     await database.end();
-    await dropOwnedPostgresSchema(admin,schema);
+    await releaseOwnedPostgresSchema(admin,schema);
     await admin.end();
   });
 

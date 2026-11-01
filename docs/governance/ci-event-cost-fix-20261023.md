@@ -1,5 +1,6 @@
 # 2026-10-23 CI 小修：单独授权与验收边界
 
+> 历史执行记录：旧暂停、特批、批次和当时strict比较器只描述当时状态，不是当前施工指令。现行规则见根 AGENTS.md。
 用户明确要求本小 PR 只跑 Quick，不发 Codex Review，Quick Gate 通过后合并。这一授权仅限以下三项，不延伸到暂停中的业务 PR。实现基于 release/digital-production-v1 的 cab8412cbd4d0141044f05cd71f2102e874b518f，不包含 PR01/02/03 的业务改动。
 
 1. PR 正文、同模式标题文字等无关 edited：不分配校验 runner、不参与并发取消。GitHub 仍可能保留 skipped 事件记录。打开、代码同步、重新打开、改目标分支及 QUICK/FULL/非法标题之间的模式变更继续校验。并发控制放到选中的 job，两个模式使用同一 PR 分组，合法新任务可以取代旧任务。保留原手动 Quick 入口。

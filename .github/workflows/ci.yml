@@ -42,7 +42,7 @@ jobs:
       - name: Set up request Node 22
         uses: actions/setup-node@v4
         with:
-          node-version: 22.22.2
+          node-version-file: .node-version
       - name: Resolve complete request identity
         id: protocol
         run: node scripts/ci/ci-gate-runtime.mjs resolve
@@ -61,6 +61,7 @@ jobs:
     env:
       NODE_ENV: test
       GIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      SERVICE_NAME: dx-rework-api
 
     steps:
       - name: Require explicit Quick Gate title
@@ -83,7 +84,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 1
+          fetch-depth: 0
 
       - name: Verify immutable evidence and governance files
         id: head
@@ -94,6 +95,7 @@ jobs:
           set -euo pipefail
           actual_sha="$(git rev-parse HEAD)"
           test "${actual_sha}" = "${EXPECTED_HEAD_SHA}"
+          echo "BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "${GITHUB_ENV}"
           required_files=(
             "README.md"
             "AGENTS.md"
@@ -109,7 +111,7 @@ jobs:
         id: node
         uses: actions/setup-node@v4
         with:
-          node-version: 22.22.2
+          node-version-file: .node-version
           cache: npm
 
       - name: Validate frozen request identity
@@ -130,7 +132,6 @@ jobs:
           governance_only=false
           web_only=false
           has_web_source=false
-          approved_maintenance=false
 
           if [[ "${EVENT_NAME}" == "pull_request" || "${EVENT_NAME}" == "create" ]]; then
             test -n "${BASE_SHA}"
@@ -140,9 +141,7 @@ jobs:
 
             git diff --name-only "${BASE_SHA}" "${HEAD_SHA}" > "$RUNNER_TEMP/quick-gate-changed-files.txt"
             mapfile -t changed_files < "$RUNNER_TEMP/quick-gate-changed-files.txt"
-            if node scripts/ci/verify-actions-policy.mjs --approved-quick-maintenance "$RUNNER_TEMP/quick-gate-changed-files.txt"; then
-              approved_maintenance=true
-            elif [[ "$SELECTED_KIND" == "quick" ]]; then
+            if [[ "$SELECTED_KIND" == "quick" ]]; then
               node scripts/ci/full-gate-risk-map.mjs --require-quick-safe "$RUNNER_TEMP/quick-gate-changed-files.txt"
             fi
             if (( ${#changed_files[@]} > 0 )); then
@@ -173,7 +172,6 @@ jobs:
             fi
           fi
 
-          echo "approved_maintenance=${approved_maintenance}" >> "$GITHUB_OUTPUT"
           echo "governance_only=${governance_only}" >> "${GITHUB_OUTPUT}"
           echo "web_only=${web_only}" >> "${GITHUB_OUTPUT}"
           echo "GOVERNANCE_ONLY=${governance_only}" >> "${GITHUB_ENV}"
@@ -184,6 +182,12 @@ jobs:
       - name: Verify Actions usage policy
         id: policy
         run: node scripts/ci/verify-actions-policy.mjs
+
+      - name: Verify current change evidence
+        id: construction
+        env:
+          EVIDENCE_BASE: ${{ steps.protocol.outputs.base }}
+        run: node scripts/ci/construction-evidence.mjs verify-change "$EVIDENCE_BASE"
 
       - name: Run CI protocol regression tests
         id: protocol_tests
@@ -207,7 +211,7 @@ jobs:
       - name: Pin npm 10
         id: npm
         if: ${{ steps.classify.outputs.governance_only != 'true' }}
-        run: npm install --global npm@10.9.9 --no-audit --no-fund --prefer-offline
+        run: npm install --global "$(node -p "require('./package.json').packageManager")" --no-audit --no-fund --prefer-offline
 
       - name: Install locked dependencies
         id: install
@@ -291,10 +295,22 @@ jobs:
         run: npm run secret:scan
 
 
-      - name: Verify approved CI maintenance fixtures
-        id: maintenance_tests
-        if: steps.classify.outputs.approved_maintenance == 'true'
-        run: node --test scripts/ci/gate-maintenance.test.mjs
+      - name: Publish source-bound light build evidence
+        id: reuse_publish
+        if: ${{ success() && github.event_name == 'pull_request' && steps.build.outcome == 'success' }}
+        env:
+          LIGHT_STEPS: ${{ toJSON(steps) }}
+        run: node scripts/ci/light-reuse.mjs publish "$RUNNER_TEMP/light-build"
+
+      - name: Save immutable light build artifact
+        id: reuse_upload
+        if: ${{ success() && github.event_name == 'pull_request' && steps.build.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: light-build-${{ github.event.pull_request.head.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/light-build/light-build.json
+          if-no-files-found: error
+          retention-days: 3
 
       - name: Write actual gate summary
         id: summary
@@ -307,9 +323,9 @@ jobs:
           GATE_JOB_STATUS: ${{ job.status }}
           GATE_STEPS_JSON: ${{ toJSON(steps) }}
           GATE_SCOPE_JSON: >-
-            {"event": "${{ github.event_name }}", "final": "${{ github.event_name == 'create' }}", "base": "${{ steps.protocol.outputs.base_ref }}", "governance": "${{ steps.classify.outputs.governance_only }}", "web": "${{ steps.classify.outputs.web_only }}", "maintenance": "${{ steps.classify.outputs.approved_maintenance }}"}
+            {"event": "${{ github.event_name }}", "final": "${{ github.event_name == 'create' }}", "base": "${{ steps.protocol.outputs.base_ref }}", "governance": "${{ steps.classify.outputs.governance_only }}", "web": "${{ steps.classify.outputs.web_only }}", "maintenance": "false"}
           GATE_CHECKS_JSON: >-
-            [["title","Require explicit Quick Gate title","pr_or_final"],["checkout","Checkout exact PR Head","always"],["head","Verify immutable evidence and governance files","always"],["node","Set up Node 22","always"],["protocol","Validate frozen request identity","always"],["classify","Classify Quick Gate scope","always"],["policy","Verify Actions usage policy","always"],["protocol_tests","Run CI protocol regression tests","always"],["governance_syntax","Verify changed governance script syntax","governance"],["npm","Pin npm 10","not_governance"],["install","Install locked dependencies","business"],["lint","Lint","business"],["types","Typecheck","business"],["build","Build workspaces without root postbuild business-chain gate","business"],["migration_lint","Validate migration files statically","business"],["secrets","Scan repository for committed secret signatures","business"],["web_install","Install web locked dependencies","web"],["web_lint","Lint changed web files","web"],["web_types","Typecheck web workspaces","web"],["web_build","Build web workspaces","web"],["web_tests","Run changed web unit tests","web"],["web_secrets","Scan web-only changes for committed secret signatures","web"],["maintenance_tests","Verify approved CI maintenance fixtures","maintenance"]]
+            [["title","Require explicit Quick Gate title","pr_or_final"],["checkout","Checkout exact PR Head","always"],["head","Verify immutable evidence and governance files","always"],["node","Set up Node 22","always"],["protocol","Validate frozen request identity","always"],["classify","Classify Quick Gate scope","always"],["policy","Verify Actions usage policy","always"],["construction","Verify current change evidence","always"],["protocol_tests","Run CI protocol regression tests","always"],["governance_syntax","Verify changed governance script syntax","governance"],["npm","Pin npm 10","not_governance"],["install","Install locked dependencies","business"],["lint","Lint","business"],["types","Typecheck","business"],["build","Build workspaces without root postbuild business-chain gate","business"],["migration_lint","Validate migration files statically","business"],["secrets","Scan repository for committed secret signatures","business"],["web_install","Install web locked dependencies","web"],["web_lint","Lint changed web files","web"],["web_types","Typecheck web workspaces","web"],["web_build","Build web workspaces","web"],["web_tests","Run changed web unit tests","web"],["web_secrets","Scan web-only changes for committed secret signatures","web"],["reuse_publish","Publish source-bound light build evidence","light_build"],["reuse_upload","Save immutable light build artifact","light_build"]]
         run: |
           node <<'GATE_SUMMARY_JS'
           const fs = require('node:fs');
@@ -330,6 +346,8 @@ jobs:
             if (kind === 'governance') return flag('governance');
             if (kind === 'not_governance') return !flag('governance');
             if (kind === 'business') return !flag('governance') && !flag('web');
+            if (kind === 'light_build') return scope.event === 'pull_request' && !flag('governance') && !flag('web');
+            if (kind === 'optional') return false;
             if (['db','journey','migration','deployment','activation','transfer','web','maintenance'].includes(kind)) return flag(kind);
             throw new Error('Unknown gate scope: ' + kind);
           }
@@ -357,6 +375,9 @@ jobs:
           node scripts/ci/ci-gate-runtime.mjs emit
 
   full:
+    permissions:
+      contents: read
+      actions: read
     name: Full Gate worker
     needs: request
     if: ${{ always() && github.event_name == 'create' && needs.request.result == 'success' && needs.request.outputs.kind == 'full' }}
@@ -383,7 +404,7 @@ jobs:
       - name: Set up approval Node 22
         uses: actions/setup-node@v4
         with:
-          node-version: 22.22.2
+          node-version-file: .node-version
       - name: Certify actual selected Gate result
         env:
           WORKER_RESULT: ${{ needs.request.outputs.kind == 'full' && needs.full.result || needs.validate.result }}

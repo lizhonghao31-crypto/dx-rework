@@ -13,7 +13,7 @@ export async function resourceContext(urls) {
  return {runId:randomUUID().replaceAll('-','').slice(0,8),dir:await mkdtemp(join(tmpdir(),'dx-test-resources-')),urls,identities};
 }
 export function resourceEnvironment(context) {
- return {DX_REWORK_TEST_RUN_ID:context.runId,DX_REWORK_TEST_RESOURCE_MANIFEST_DIR:context.dir,DX_REWORK_TEST_RESOURCE_IDENTITIES:JSON.stringify(context.identities)};
+ return {DX_REWORK_TEST_RUN_ID:context.runId,DX_REWORK_TEST_RESOURCE_MANIFEST_DIR:context.dir,DX_REWORK_TEST_RESOURCE_IDENTITIES:JSON.stringify(context.identities),DX_REWORK_TEST_SCHEMA_CLEANUP:'after-workers',DX_REWORK_TEST_EXECUTION_STATE:context.dir+'.process.json'};
 }
 export async function cleanupResources(context) {
  // Validate every receipt and every live target BEFORE the first DROP; never discover schemas to delete.

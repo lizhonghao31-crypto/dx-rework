@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+if(process.argv.includes("--approved-quick-maintenance"))throw Error("RETIRED_SINGLE_PR_MAINTENANCE_AUTHORIZATION");
 
 const files = {
   quick: ".github/workflows/ci.yml",
@@ -74,8 +75,8 @@ assert(quick.includes("group: pr-gate-${{ github.event.pull_request.number || ne
   "A new PR Head must cancel stale work; duplicate explicit final requests must not cancel/restart it");
 for(const [name,source] of [["CI caller",quick],["Full worker",full]]) {
   assert(!/^concurrency:/m.test(source), `${name} must filter events before acquiring concurrency`);
-  assert(source.includes("permissions:\n  contents: read") && !/^ {2}(actions|pull-requests|checks|issues):/m.test(source),
-    `${name} must not add token scopes or write permissions`);
+  assert(source.includes("permissions:\n  contents: read") && !/(?:pull-requests|checks|issues):|contents: write|actions: write/.test(source),
+    `${name} allows only contents/read and artifact actions/read, never writes`);
   assert(!/contents: write|secrets: inherit/.test(source), `${name} must remain read-only`);
   assert(source.includes(name === "Full worker" ? "run: node scripts/test-preflight.mjs" : "node --test scripts/ci/*.test.mjs"), `${name} must execute protocol regressions`);
   assert(source.includes("GATE_STEPS_JSON: ${{ toJSON(steps) }}") && source.includes("if: always()")
@@ -149,22 +150,4 @@ assert(release.includes("npm run secret:scan:full"), "manual release must rescan
 assert(!/^\s*pull_request:/m.test(governance), "standalone Governance must not auto-run on pull requests");
 assert(!/^\s*pull_request:/m.test(preview), "Preview must not auto-run on pull requests");
 
-// Explicit user exception for this one CI-maintenance branch and its frozen release base.
-// The shared risk classifier is unchanged. Any unrelated file, fork or base must use it normally.
-const maintenanceIndex = process.argv.indexOf("--approved-quick-maintenance");
-if (maintenanceIndex >= 0) {
-  const allowed = new Set([
-    ".github/workflows/ci.yml", ".github/workflows/full-gate.yml",
-    "scripts/ci/verify-actions-policy.mjs", "scripts/ci/gate-maintenance.test.mjs",
-    "docs/governance/ci-event-cost-fix-20261023.md",
-  ]);
-  const changed = (await readFile(process.argv[maintenanceIndex + 1], "utf8")).trim().split(/\r?\n/);
-  const approved = process.env.GITHUB_REPOSITORY === "lizhonghao31-crypto/dx-rework"
-    && process.env.HEAD_REPO === process.env.GITHUB_REPOSITORY
-    && process.env.GITHUB_HEAD_REF === "fix/ci-event-cost-summary"
-    && process.env.BASE_SHA === "cab8412cbd4d0141044f05cd71f2102e874b518f"
-    && changed.length > 0 && changed.every(path => allowed.has(path))
-    && changed.some(path => path.startsWith(".github/workflows/"));
-  if (!approved) process.exitCode = 1;
-  else console.log("APPROVED_SINGLE_PR_QUICK_MAINTENANCE");
-} else console.log("ACTIONS_USAGE_POLICY_OK");
+console.log("ACTIONS_USAGE_POLICY_OK");

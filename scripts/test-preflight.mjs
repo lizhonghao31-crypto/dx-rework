@@ -22,7 +22,7 @@ export function assertManagedSchemaCreation(source,path){
 }
 export function checkResourceRegistration(){
  const changed=resourceChangedPaths();
- const managed=new Set(POSTGRES_CHAIN_TESTS);
+ const managed=new Set([...POSTGRES_CHAIN_TESTS,...(process.env.MAPPED_POSTGRES_TESTS??'').split(',').filter(Boolean)]);
  const walk=dir=>readdirSync(dir,{withFileTypes:true}).flatMap(e=>e.isDirectory()?walk(dir+'/'+e.name):e.name.endsWith('.ts')?[dir+'/'+e.name]:[]);
  for(const path of walk('tests')){
   if(path.startsWith('tests/unit/'))continue;
@@ -37,7 +37,8 @@ checkResourceRegistration();
 if(process.argv.includes('--database')){
  const {resourceSmoke}=await import('./test-resource-lifecycle.mjs');await resourceSmoke(process.env.TEST_DATABASE_URL);
 }else{
- execFileSync(process.execPath,['--test',...readdirSync('scripts/ci').filter(p=>p.endsWith('.test.mjs')).map(p=>'scripts/ci/'+p)],{stdio:'inherit'});
+ const nativeWorkers=2;console.log('NATIVE_PROTOCOL_WORKER_LIMIT='+nativeWorkers);
+ execFileSync(process.execPath,['--test','--test-concurrency='+nativeWorkers,...readdirSync('scripts/ci').filter(p=>p.endsWith('.test.mjs')).map(p=>'scripts/ci/'+p)],{stdio:'inherit'});
  execFileSync(process.execPath,['scripts/check-migrations.mjs'],{stdio:'inherit'});
 }
 console.log('TEST_PREFLIGHT_PASSED');

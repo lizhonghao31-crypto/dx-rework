@@ -6,7 +6,7 @@ import {join} from 'node:path';
 import {parseArgs} from 'node:util';
 import {pathToFileURL} from 'node:url';
 import {REPOSITORY, FINAL_CHECK, LIGHT_CHECK, gateKind, finalRef, requireSha,
-  trustedReview, reviewDecision, parseReceipt, assertRunBinding, allowedBase} from './pr-gate-protocol.mjs';
+  trustedReview, reviewDecision, parseReceipt, assertRunBinding, assertReuseLineage, allowedBase} from './pr-gate-protocol.mjs';
 
 // Operator-side only. CI uses ci-gate-runtime.mjs and needs no API permission.
 export class GitHubError extends Error {
@@ -207,6 +207,7 @@ export async function verifyMerge(api, number, head, {reviewPolicy} = {}) {
   if (!await existingRef(api, snapshot.ref, head)) throw new Error('No explicit final request for this Head/base/mode');
   const final = await finalStatus(api, snapshot.plan, snapshot.ref);
   if (final.state !== 'approved') throw new Error(`Final Gate is ${final.state}, not approved`);
+  assertReuseLineage(final.receipt,light);
   const fresh = await inspect(api, number, head);
   if (fresh.ref !== snapshot.ref) throw new Error('PR Head/base/mode changed during merge verification');
   const {branch} = fresh;

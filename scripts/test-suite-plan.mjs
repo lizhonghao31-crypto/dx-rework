@@ -37,7 +37,10 @@ export const POSTGRES_CHAIN_TESTS=Object.freeze([
   "tests/integration/acceptance-worker-people-postgres.test.ts"
 ]);
 export const LONG_CORRECTNESS_TESTS=Object.freeze([...POSTGRES_CHAIN_TESTS,'tests/integration/rework-postgres.test.ts','tests/integration/development-technical-postgres.test.ts']);
-export const configForSuite=path=>LONG_CORRECTNESS_TESTS.includes(path)?'vitest.business-chain.config.ts':'vitest.config.ts';
+export const IMMEDIATE_DELETE_TESTS=Object.freeze(['tests/integration/rework-postgres.test.ts']);
+// The full business fixture is SQL-heavy and must not contend with another full migration/chain.
+export const ISOLATED_CORRECTNESS_TESTS=Object.freeze([...IMMEDIATE_DELETE_TESTS,'tests/integration/full-business-chain-postgres.test.ts']);
+export const configForSuite=path=>ISOLATED_CORRECTNESS_TESTS.includes(path)?'vitest.postgres-immediate.config.ts':LONG_CORRECTNESS_TESTS.includes(path)?'vitest.business-chain.config.ts':'vitest.config.ts';
 export const postgresTestFiles=()=>readdirSync('tests/integration').filter(name=>name.endsWith('.test.ts')&&readFileSync('tests/integration/'+name,'utf8').includes('TEST_DATABASE_URL')).map(name=>'tests/integration/'+name).sort();
 export const ROOT_AUDIT_TESTS=Object.freeze(['tests/integration/root-self-system-admin-postgres.test.ts','tests/integration/supplier-onboarding-postgres.test.ts','tests/integration/supplier-maintenance-postgres.test.ts','tests/integration/quality-basic-rework-postgres.test.ts','tests/integration/wage-settlement-postgres.test.ts']);
 export function postgresPlan({mapped=[],chain=false,rootAudit=false}={}) {
@@ -58,7 +61,7 @@ export function fullGatePostgresPlan(environment){
  return {status:'required',mapped,chain,plan};
 }
 export function executionFingerprint(context,plan) {
- return createHash('sha256').update(JSON.stringify({context,plan,configs:[...new Set(plan.map(s=>s.config))].sort().map(path=>[path,readFileSync(path,'utf8')]),contract:readFileSync('scripts/test-resource-contract.mjs','utf8')})).digest('hex');
+ return createHash('sha256').update(JSON.stringify({context,plan,configs:[...new Set(plan.map(s=>s.config))].sort().map(path=>[path,readFileSync(path,'utf8')]),runtime:readFileSync('scripts/test-execution-config.mjs','utf8'),executor:readFileSync('scripts/owned-command.mjs','utf8'),contract:readFileSync('scripts/test-resource-contract.mjs','utf8')})).digest('hex');
 }
 export function assertSuiteResults(report,files) {
  if(!Array.isArray(files)||files.length===0)throw Error('POSTGRES_EMPTY_PLAN_REJECTED');

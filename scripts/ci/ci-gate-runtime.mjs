@@ -16,6 +16,8 @@ export function scopeRequired(kind, scope) {
   if (kind === 'governance') return flag('governance');
   if (kind === 'not_governance') return !flag('governance');
   if (kind === 'business') return !flag('governance') && !flag('web');
+  if (kind === 'light_build') return scope.event==='pull_request'&&!flag('governance')&&!flag('web');
+  if (kind === 'optional') return false;
   if (['db', 'journey', 'migration', 'deployment', 'activation', 'transfer', 'web', 'maintenance'].includes(kind)) return flag(kind);
   throw new Error(`Unknown required-check applicability: ${kind}`);
 }
@@ -85,7 +87,7 @@ export function emitReceipt(environment = process.env) {
   const catalog = JSON.parse(environment.GATE_CHECKS_JSON);
   const checks = catalog.map(([id, , kind]) => ({id,
     applicable: scopeRequired(kind, scope) && !(id === 'web_tests' && steps[id]?.outputs?.has_tests === 'false'),
-    outcome: steps[id]?.outcome ?? 'not_run'}));
+    outcome: steps[id]?.outcome ?? 'not_run',...(steps[id]?.outputs?.reuse_source?{execution:'verified_reuse',source:JSON.parse(steps[id].outputs.reuse_source)}:{execution:'executed'})}));
   const missing = checks.filter(c => c.applicable && c.outcome !== 'success').map(c => c.id);
   const receipt = {version: 1, repository: REPOSITORY, pr: plan.pr, head: plan.head, base: plan.base,
     baseRef: plan.baseRef, kind: plan.kind, phase: plan.phase === 'invalidate' ? 'light' : plan.phase,

@@ -70,12 +70,12 @@ test('web scope with no changed tests reports not applicable rather than tests p
 test('CI runs the original full Vitest command without changing local npm pretest or coverage',()=>{
   const pkg=JSON.parse(readFileSync('package.json','utf8'));assert.equal(pkg.scripts.test,'vitest run');assert.equal(pkg.scripts.pretest,'npm run build:packages');
   assert.match(workflow.full,/run: node node_modules\/vitest\/vitest.mjs run\n/);assert.doesNotMatch(workflow.full,/run: npm test/);
-  assert.equal((workflow.full.match(/run: npm run build --workspaces --if-present/g)||[]).length,1);
+  assert.equal((workflow.full.match(/run: node scripts\/ci\/light-reuse.mjs run build npm run build --workspaces --if-present/g)||[]).length,1);
 });
 const allowFiles=['.github/workflows/ci.yml','.github/workflows/full-gate.yml','scripts/ci/verify-actions-policy.mjs','scripts/ci/gate-maintenance.test.mjs','docs/governance/ci-event-cost-fix-20261023.md'];
 const approvedEnv={GITHUB_REPOSITORY:'lizhonghao31-crypto/dx-rework',HEAD_REPO:'lizhonghao31-crypto/dx-rework',GITHUB_HEAD_REF:'fix/ci-event-cost-summary',BASE_SHA:'cab8412cbd4d0141044f05cd71f2102e874b518f'};
 for(const [label,env,files,code] of [
-  ['this explicitly approved isolated maintenance PR',approvedEnv,allowFiles,0],
+  ['retired maintenance authorization cannot be reused',approvedEnv,allowFiles,1],
   ['another branch',{...approvedEnv,GITHUB_HEAD_REF:'feature/other'},allowFiles,1],
   ['fork',{...approvedEnv,HEAD_REPO:'other/fork'},allowFiles,1],
   ['different base',{...approvedEnv,BASE_SHA:'changed'},allowFiles,1],
@@ -87,6 +87,6 @@ for(const [label,env,files,code] of [
   const dir=mkdtempSync(join(tmpdir(),'ci-exception-'));try{
     const file=join(dir,'files');writeFileSync(file,files.join('\n'));
     const result=spawnSync(process.execPath,['scripts/ci/verify-actions-policy.mjs','--approved-quick-maintenance',file],{encoding:'utf8',env:{...process.env,...env}});
-    assert.equal(result.status,code,result.stderr);
+    assert.equal(result.status,code,result.stderr);assert.match(result.stderr,/RETIRED_SINGLE_PR_MAINTENANCE_AUTHORIZATION/);
   }finally{rmSync(dir,{recursive:true,force:true});}
 });

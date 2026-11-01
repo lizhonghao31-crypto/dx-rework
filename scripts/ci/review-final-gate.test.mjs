@@ -3,13 +3,14 @@ import {readFileSync} from 'node:fs';
 import {runInNewContext} from 'node:vm';
 import {test} from 'node:test';
 import {finalRef, FINAL_CHECK, LIGHT_CHECK, REPOSITORY} from './pr-gate-protocol.mjs';
+import {scopeFor,scopeRequired} from './ci-gate-runtime.mjs';
 const ci=readFileSync('.github/workflows/ci.yml','utf8');
 const full=readFileSync('.github/workflows/full-gate.yml','utf8');
 const head='a'.repeat(40),base='b'.repeat(40),baseRef='release/digital-production-v1';
 const job=(source,id)=>source.split(`\n  ${id}:\n`)[1]?.split(/\n {2}[a-zA-Z][\w-]*:\n/)[0];
 const expression=(source,key,indent=4)=>source.match(new RegExp(`^ {${indent}}${key}: (.*)$`,'m'))?.[1];
 const evaluate=(value,c)=>{
- const env={...c,always:()=>true,startsWith:(s,p)=>String(s??'').toLowerCase().startsWith(p.toLowerCase()),format:(s,...a)=>s.replace(/\{(\d+)\}/g,(_,i)=>a[Number(i)])};
+ const env={...c,always:()=>true,success:()=>true,startsWith:(s,p)=>String(s??'').toLowerCase().startsWith(p.toLowerCase()),format:(s,...a)=>s.replace(/\{(\d+)\}/g,(_,i)=>a[Number(i)])};
  if(value?.startsWith('${{ '))return runInNewContext(value.slice(4,-3),env);
  return value?.replace(/\$\{\{ (.*?) \}\}/g,(_,e)=>runInNewContext(e,env));
 };
@@ -64,11 +65,17 @@ test('manual Quick cannot claim final approval',()=>{
 });
 test('workflow wiring preserves least privilege, actual receipts, exact Head and the existing heavy worker',()=>{
  assert.match(full,/^ {2}workflow_call:/m);assert.doesNotMatch(full,/^ {2}pull_request:/m);
- for(const source of [ci,full]){assert.match(source,/permissions:\n {2}contents: read/);assert.doesNotMatch(source,/actions:|pull-requests:|contents: write|secrets\./);assert.match(source,/ci-gate-runtime\.mjs emit/);}
+ for(const source of [ci,full]){assert.match(source,/permissions:\n {2}contents: read/);assert.doesNotMatch(source,/actions: write|pull-requests:|contents: write|secrets\./);assert.match(source,/ci-gate-runtime\.mjs emit/);}
  assert.match(job(ci,'approval'),/WORKER_RESULT:.*needs\.full\.result/);
  assert.match(job(ci,'approval'),/WORKER_RECEIPT:.*needs\.full\.outputs\.receipt/);
  assert.match(job(ci,'approval'),/ci-gate-runtime\.mjs certify/);
  assert.match(job(ci,'full'),/uses: \.\/\.github\/workflows\/full-gate.yml/);
  assert.match(job(ci,'full'),/head_sha: \$\{\{ needs.request.outputs.head \}\}/);
  assert.equal(REPOSITORY,'lizhonghao31-crypto/dx-rework');
+});
+
+for(const changes of [{base:{ref:{from:'main'}}},{title:{from:'[QUICK] old'}}])test('edited base/mode business light publishes the same artifact required by its catalog',()=>{
+ const c=context('[FULL] change','edited',changes);const scope=scopeFor({phase:'invalidate',baseRef,kind:'full'},['scripts/test-execution-config.mjs']);assert.equal(scopeRequired('light_build',scope),true);c.steps={protocol:{outputs:{phase:'invalidate'}},build:{outcome:'success'}};assert.equal(selected('validate',c),true);
+ for(const id of ['reuse_publish','reuse_upload']){const block=job(ci,'validate').split(`        id: ${id}\n`)[1].split('      - name:')[0];const condition=expression(block,'if',8);assert.equal(Boolean(evaluate(condition,c)),true,id);}
+ c.github.event_name='create';for(const id of ['reuse_publish','reuse_upload']){const block=job(ci,'validate').split(`        id: ${id}\n`)[1].split('      - name:')[0];assert.equal(Boolean(evaluate(expression(block,'if',8),c)),false,id);}
 });
