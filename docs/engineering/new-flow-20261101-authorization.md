@@ -214,3 +214,10 @@ PMC #879已合main但未部署，最终Head无CI是仅该PR的单次例外，不
 - 根因是原Journey fixture同时给旧日期校验注入固定9月1日、给SLA注入真实SystemBusinessClock；本PR来源确认使用可信业务时钟后，原10月20/22日已过去。本地漏跑此旧组合是本次遗漏，不是权限阻断或CI协议故障。
 - 仅修fixture：正常订单的下单日/交付日使用与SystemBusinessClock一致的当前历法，交付日在30日下限之后20/22日；保留历史日志固定时刻、原性能约束及全部26个原断言。生产30日硬限、老板/Root特批和14项新规则PG均未放宽。触及的schema创建/清理入口同步采用既有shared owned helpers，不修改registry/守卫。
 - 修后原vitest.config.ts下完整Journey26项退出0，88.88秒；preflight112协议与静态校验、定向Lint/diff通过。没有重跑不变业务页面、SQL演练或Codex Review。下一个冻结Head还须验证实际受影响PG并集并取得自己的最终Full，旧回执不复用为新Head最终证据。
+
+### PR04 第二轮最终Full：全部业务通过，历史演练未完成
+
+- Head aad2dc3d 的 Full41319539342/job124886692399 从15:07:08运行至15:37:13，共30m05s，取消时仅 release_history 不完整。配置worker上限30分钟，日志只记 operation was canceled，未提供人工取消者；时间证据吻合预算耗尽，不冒称用户主动取消或服务故障。该次仍非最终通过，不拼接其他运行的结果。
+- 实际通过：非DB2962/11原条件跳过；PG首组7文件57项、长链19文件357项，共26文件414项，51资源清理；PG13 Journey26项；Root/业务链同次覆盖核验、隔离备份恢复及PG13/15/16低权限演练。历史演练仅main232→284通过，release分支在30分钟处中断，不能报全历史通过。未合并、未部署。
+- 原因核对：两组PG墙钟322.93s/610.38s，测试累计317.49s/592.16s，表现为串行。已安装Vitest resolveMaxWorkers 默认 max(availableParallelism−1,1)；本机4核且无worker覆盖，默认3，双核环境会变1，原配置未固定。修复仅明确PG使用2个worker：普通配置仅DX_REWORK_TEST_SUITE_KIND=postgres时生效，长正确性配置为2；非DB默认、全部文件选择、5秒普通/60秒长正确性断言、资源守卫及30分钟worker上限保持原样。无新增治理PR或重复Codex Review。
+- 修后先以CI=true、Node进程两CPU亲和、同一canonical计划和低权限标记库验证，再推送新Head。该模拟不冒称同一远端机器或保证其耗时。新配置改变执行指纹，旧PG/Full回执不当作新Head最终证据；最终仍需新Head完整Full。
