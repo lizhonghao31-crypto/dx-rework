@@ -3,6 +3,17 @@ import { z } from "zod";
 const text = z.string().trim().min(1).max(100);
 const optionalText = z.string().trim().max(100).nullable().default(null);
 const date = z.iso.date();
+export const SalesSeriesSchema = z.enum(["P01","P02","P03","P04","P05","P06","P07","P08","P09","P10","P11","P12"]);
+const salesContext = {
+  salesYear: z.number().int().min(1000).max(9999).nullable().optional(),
+  salesSeries: SalesSeriesSchema.nullable().optional(),
+  requiresColorMatching: z.boolean().nullable().optional(),
+};
+/** Options use the server's business date; an existing year is never silently discarded. */
+export function salesYearOptions(serverToday: string | undefined, selected?: number | null): number[] {
+  const year = serverToday && /^\d{4}-\d{2}-\d{2}$/.test(serverToday) ? Number(serverToday.slice(0,4)) : null;
+  return [...new Set([...(year ? [year, year + 1] : []),...(selected ? [selected] : [])])].sort((a,b)=>a-b);
+}
 // Match normalize_sourcing_style_key: trim and ASCII case folding only.
 export const digitalPoKey = (value: string | null | undefined): string =>
   (value?.trim() ?? "").replace(/[A-Z]/g, letter => letter.toLowerCase());
@@ -38,6 +49,7 @@ export const DigitalPoInputSchema = z.object({
     context.addIssue({ code: "custom", path: ["sizes"], message: "数量超过上限" });
 });
 export const DigitalOrderCreateSchema = z.object({
+  ...salesContext,
   customerCode: text,
   productGroup: z.enum(["男装", "女装", "男童", "女童"]),
   designStyleNo: text,
@@ -60,6 +72,7 @@ export const DigitalNumberCorrectionSchema = z.object({
   formalPoNo: z.string().trim().max(100).nullable().optional(),
 }).strict().superRefine(validatePoIdentity);
 export const DigitalIdSchema = z.string().uuid();
+export const DigitalDesignCodeCheckSchema = z.object({ code: text }).strict();
 export const DigitalPageSchema = z.object({
   page: z.coerce.number().int().min(1).max(100000).default(1),
   search: z.string().trim().max(100).default(""),
@@ -106,6 +119,7 @@ export function initialCustomerDateErrors(lines: ReadonlyArray<{customerWarehous
 
 /** Incomplete PO values belong to the development draft, not a production-order root. */
 export const InitialCustomerOrderDraftSchema = z.object({
+  ...salesContext,
   customerCode: z.string().max(100), productGroup: z.enum(["男装","女装","男童","女童"]),
   designStyleNo: z.string().max(100), temporaryStyleNo: optionalText,
   orderDate: z.string().max(10), contractDeliveryDate: date.nullable(),
@@ -129,4 +143,17 @@ export function initialCustomerOrderInput(draft: InitialCustomerOrderDraft): Dig
     if(!sizes.length)throw new Error(`PO ${index+1} 至少填写一项正整数订购数量`);
     return {...line,temporaryStyleNo:line.temporaryStyleNo??draft.temporaryStyleNo,sizes};
   })};
+}
+
+/** A published development may retain incomplete ordering details; formal confirmation stays strict. */
+export function initialCustomerOrderIsReady(draft: InitialCustomerOrderDraft,calendar:{serverToday:string;minimumInitialCustomerDate:string}|undefined): boolean {
+  try {
+    if(!calendar)return false;
+    const parsed=DigitalOrderCreateSchema.safeParse(initialCustomerOrderInput(draft));
+    // Schema dates are nullable for drafts/legacy reads. Missing customer promises
+    // must not freeze the ordering fields before the strict confirmation command.
+    return parsed.success && !customerOrderDateError(parsed.data.orderDate,calendar.serverToday)
+      && initialCustomerDateErrors(parsed.data.lines,calendar.minimumInitialCustomerDate).length===0;
+  }
+  catch { return false; }
 }

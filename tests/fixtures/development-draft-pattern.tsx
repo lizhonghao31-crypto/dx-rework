@@ -37,6 +37,7 @@ window.fetch=async(input,init)=>{
   const path=String(input),method=init?.method??"GET",body=init?.body?JSON.parse(String(init.body)):null;
   state.requests.push({path,method,body});
   if(path.includes("/attachments/")){if(path.endsWith("/metadata"))return Response.json({filename:"TEST款图.png",mimeType:"image/png",sizeBytes:68});return new Response(Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a7V8AAAAASUVORK5CYII="),c=>c.charCodeAt(0)),{headers:{"content-type":"image/png"}});}
+  if(path.includes("/digital-production/options"))return Response.json({serverToday:"2026-10-17",minimumInitialCustomerDate:"2026-11-17"});
   if(path.endsWith("/category-options"))return Response.json(categories);
   if(path.includes("/category-options/")&&path.endsWith("/quote")){
     if(state.failQuote)return Response.json({error:{message:"TEST 价格读取失败"}},{status:503});

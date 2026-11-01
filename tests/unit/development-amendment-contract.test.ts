@@ -4,7 +4,7 @@ import {initialDevelopmentDocument} from "../../apps/web/src/digital-development
 import {DevelopmentDocumentSchema,developmentPublishErrors,type DevelopmentDocument} from "@dx-rework/contracts/digital-development";
 import {DevelopmentReturnIssueSchema,developmentAmendmentErrors,SaveDevelopmentAmendmentSchema} from "@dx-rework/contracts/digital-development-amendments";
 import {validateDevelopmentReturn} from "../../apps/api/src/production-platform/development-supply.js";
-const document=():DevelopmentDocument=>({...initialDevelopmentDocument(),quantity:1,sizeQuantities:[1,0],sampleSize:"M",orderDate:"2026-10-20",files:[{attachmentId:randomUUID(),kind:"款图"}],materials:[]});
+const document=():DevelopmentDocument=>({...initialDevelopmentDocument(),sizes:["M","L"],measurements:[{name:"胸围",values:["",""]}],quantity:1,sizeQuantities:[1,0],sampleSize:"M",orderDate:"2026-10-20",files:[{attachmentId:randomUUID(),kind:"款图"}],materials:[]});
 const material=(requiredThisRound=false)=>({materialId:randomUUID(),category:"主布" as const,label:"主布A",name:"TEST棉布",specification:"",quantity:"1",color:"黑",supplier:"",width:"",weight:"",composition:"",consumption:"",requiredThisRound,available:true,expectedDate:null});
 describe("P02 publication, returns and same-round correction boundaries",()=>{
  it("keeps incomplete draft saveable but applies the same main-fabric specification rule to initial and added rows",()=>{

@@ -6,10 +6,10 @@ import type { BusinessClock } from "@dx-rework/domain/business-clock";
 import {acceptanceBusinessContext,businessNow,observedBusinessTime,registerAcceptanceCreated,ContextBusinessClock} from '../acceptance-clock/business-time.js';
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
-import { DigitalOrderCreateSchema, beijingCalendarDate, customerOrderDateError, initialCustomerOrderInput, digitalFormalPoNo, digitalPoKey, initialCustomerDateErrors, minimumInitialCustomerDate } from "@dx-rework/contracts/digital-production";
+import { DigitalOrderCreateSchema, beijingCalendarDate, customerOrderDateError, initialCustomerOrderInput, initialCustomerOrderIsReady, digitalFormalPoNo, digitalPoKey, initialCustomerDateErrors, minimumInitialCustomerDate } from "@dx-rework/contracts/digital-production";
 import {developmentDocumentRow} from "./development-round-repository.js";
 import { DigitalPoDateRepository } from "./po-date-repository.js";
-import type { DigitalCustomer, DigitalOrder, DigitalOrderInput, DigitalSource, DigitalSourceInput, DigitalNumberCorrection } from "@dx-rework/contracts/digital-production";
+import type { DigitalCustomer, DigitalOrder, DigitalOrderInput, DigitalSource, DigitalSourceInput, DigitalNumberCorrection, InitialCustomerOrderDraft } from "@dx-rework/contracts/digital-production";
 import { isRootActor } from "../access/business-authority.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
 import { ApplicationError } from "../platform/errors.js";
@@ -116,6 +116,14 @@ export class DigitalProductionIdentityService {
     assertCreator(actor);
     assertIdentityActor(actor);
   }
+  async checkDesignCode(actor: TrustedActorContext, code: string) {
+    this.assertSourceCreation(actor);
+    const value=code.trim();
+    if(!value||value.length>100)fail("设计业务ID须为1—100个字符",400);
+    const result=await this.database.query("SELECT 1 FROM digital_production_sources WHERE translate(btrim(design_style_no),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=$1 LIMIT 1",[digitalPoKey(value)]);
+    // Never return another designer's source ID, customer, files or ownership.
+    return {code:value,available:!result.rowCount};
+  }
   async createSource(actor: TrustedActorContext, input: DigitalSourceInput, key: string): Promise<{ sourceId: string }> {
     this.assertSourceCreation(actor);
     return this.command(actor, "create-source", key, input, async client => {
@@ -127,6 +135,8 @@ export class DigitalProductionIdentityService {
       const id = randomUUID();
       await client.query(`INSERT INTO digital_production_sources(source_id,created_by,development_type,design_style_no,temporary_style_no,customer_code)
         VALUES($1,$2,$3,$4,$5,$6)`, [id, actor.actorId, input.developmentType, input.designStyleNo, input.temporaryStyleNo, input.customerCode]);
+      if((await client.query("SELECT to_regclass('digital_design_code_registry') AS relation")).rows[0]?.relation)
+        await client.query("INSERT INTO digital_design_code_registry(code_key,source_id,code,created_by) VALUES($1,$2,$3,$4)",[styleKey,id,input.designStyleNo,actor.actorId]);
       const eventId = await this.audit(client, actor, "digital_source_created", id, null, input);
       await registerAcceptanceCreated(client,{kind:'source',id},actor.actorId,eventId);
       const time = this.businessClock ? await this.businessClock.read({ kind: "source", id })
@@ -152,6 +162,7 @@ export class DigitalProductionIdentityService {
     return this.command(actor, sourceId ? `confirm-source:${sourceId}` : "direct-order", key, input, async client => {
       await this.customer(client, input.customerCode, input.productGroup);
       let createdBy = actor.actorId;
+      let frozenOrdering:InitialCustomerOrderDraft|undefined;
       if (sourceId) {
         const source = await this.visibleSource(client, actor, sourceId, true);
         if(await developmentRevisionSource(client,sourceId))fail('复版沿原开发档案的客户订单，不重复建立大货数量');
@@ -165,8 +176,7 @@ export class DigitalProductionIdentityService {
         }
         const published=await developmentDocumentRow(client,sourceId);
         if(published?.status!=="published")fail("请先发布开发单，再正式确认客户订单");
-        if(published.document?.customerOrderDraft?.withOrder&&orderFactsDigest(input)!==orderFactsDigest(initialCustomerOrderInput(published.document.customerOrderDraft.order)))
-          fail("确认信息须与当前已发布的订购草稿一致，请重新打开原档案恢复资料");
+        if(published.document?.customerOrderDraft?.withOrder&&published.document.customerOrderDraft.stage!=='preorder')frozenOrdering=published.document.customerOrderDraft.order;
       }
       const styleKey = digitalPoKey(input.designStyleNo);
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [JSON.stringify(["digital-order-style",styleKey])]);
@@ -174,6 +184,8 @@ export class DigitalProductionIdentityService {
         fail("该编号已有客户订单，请打开原档案继续办理");
       const now=businessNow(this.now),orderDateError=customerOrderDateError(input.orderDate,beijingCalendarDate(now));
       if(orderDateError)fail(orderDateError,400);
+      if(frozenOrdering&&initialCustomerOrderIsReady(frozenOrdering,{serverToday:beijingCalendarDate(now),minimumInitialCustomerDate:minimumInitialCustomerDate(now)})&&orderFactsDigest(input)!==orderFactsDigest(initialCustomerOrderInput(frozenOrdering)))
+        fail("确认信息须与当前已发布的订购草稿一致，请重新打开原档案恢复资料");
       const dateErrors = initialCustomerDateErrors(input.lines,minimumInitialCustomerDate(now));
       if (dateErrors.length) fail(dateErrors.join("；"),400);
       let merchandiserId = input.primaryMerchandiserId;
@@ -186,6 +198,9 @@ export class DigitalProductionIdentityService {
         : observedBusinessTime(()=>now);
       await client.query(`INSERT INTO digital_production_orders(production_order_id,source_id,customer_code,product_group,design_style_no,temporary_style_no,order_date,contract_delivery_date,created_by,creation_hash,primary_merchandiser_id)
         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, [root.productionOrderId, sourceId, input.customerCode, input.productGroup, input.designStyleNo, input.temporaryStyleNo, input.orderDate, input.contractDeliveryDate, createdBy, digest(input), merchandiserId]);
+      if (input.salesYear !== undefined || input.salesSeries !== undefined || input.requiresColorMatching !== undefined) {
+        await client.query("UPDATE digital_production_orders SET sales_year=$2,sales_series=$3,requires_color_matching=$4 WHERE production_order_id=$1",[root.productionOrderId,input.salesYear??null,input.salesSeries??null,input.requiresColorMatching??null]);
+      }
       const creationEventId = await this.audit(client, actor, "digital_order_created", root.productionOrderId, null, { ...input, slaBusinessTime: businessTime });
       await registerAcceptanceCreated(client,{kind:'order',id:root.productionOrderId},actor.actorId,creationEventId);
       for (const [position, line] of input.lines.entries()) {
@@ -230,7 +245,7 @@ export class DigitalProductionIdentityService {
       COALESCE(l.factory_date_source,'legacy_unregistered') AS "factoryDateSource",
       (SELECT jsonb_agg(jsonb_build_object('size',s.size,'quantity',s.quantity) ORDER BY s.size) FROM digital_production_po_sizes s WHERE s.line_id=l.line_id) AS sizes
       FROM digital_production_po_lines l WHERE production_order_id=$1 ORDER BY position`, [id]);
-    return { productionOrderId: id, sourceId: row.source_id, customerCode: row.customer_code, productGroup: row.product_group,
+    return { ...(row.requires_color_matching!=null?{requiresColorMatching:row.requires_color_matching}:{}),...(row.sales_year!=null?{salesYear:Number(row.sales_year)}:{}),...(row.sales_series!=null?{salesSeries:row.sales_series}:{}),productionOrderId: id, sourceId: row.source_id, customerCode: row.customer_code, productGroup: row.product_group,
       designStyleNo: row.design_style_no, temporaryStyleNo: row.temporary_style_no, orderDate: digitalDateText(row.order_date)!, contractDeliveryDate: digitalDateText(row.contract_delivery_date),
       createdBy: row.created_by, createdAt: new Date(row.created_at).toISOString(), status: row.source_id ? "development_linked" : "waiting_development",
       version: row.version, primaryMerchandiserId: row.primary_merchandiser_id, workflowGeneration: "digital_production_v1", notificationPolicy: "IN_APP_ONLY", lines: lines.rows.map(line => {

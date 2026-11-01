@@ -31,7 +31,7 @@ import { registerDigitalAccessRoutes } from "./access-routes.js";
 import type { DigitalProductionAccessService } from "./access-service.js";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { z } from "zod";
-import { DigitalSourceCreateSchema, DigitalOrderCreateSchema, DigitalNumberCorrectionSchema, DigitalIdSchema, DigitalPageSchema } from "@dx-rework/contracts/digital-production";
+import { DigitalSourceCreateSchema, DigitalOrderCreateSchema, DigitalNumberCorrectionSchema, DigitalIdSchema, DigitalPageSchema, DigitalDesignCodeCheckSchema } from "@dx-rework/contracts/digital-production";
 import { businessActor } from "../access/business-authority.js";
 import type { RootAuthority } from "../access/root-authority.js";
 import type { AuthUser } from "../auth/service.js";
@@ -113,6 +113,7 @@ export function registerDigitalIdentityRoutes(app: FastifyInstance, dependencies
     const trusted = await actor(request); const query = parse(DigitalPageSchema, request.query);
     return dependencies.service.sources(trusted, query.page, query.search);
   });
+  app.get("/digital-production/design-codes/check",async request=>dependencies.service.checkDesignCode(await actor(request),parse(DigitalDesignCodeCheckSchema,request.query).code));
   app.post("/digital-production/sources", async request => dependencies.service.createSource(await actor(request), parse(DigitalSourceCreateSchema, request.body), key(request)));
   app.post("/digital-production/sources/:sourceId/confirm", async request => dependencies.service.createOrder(await actor(request), parse(DigitalOrderCreateSchema, request.body), key(request), id(request, "sourceId")));
   app.get("/digital-production/orders", async request => {

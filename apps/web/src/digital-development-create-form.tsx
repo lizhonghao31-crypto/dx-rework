@@ -2,7 +2,7 @@ import {DocumentToolbar,DocumentErrors} from "./document-editor.js";
 import { DevelopmentDocumentFields } from "./development-document-fields.js";
 import { DevelopmentPatternLink, type DevelopmentPatternChoice } from "./development-pattern-link.js";
 import { developmentIssues } from "./digital-development-validation.js";
-import { customerOrderDateError, initialCustomerDateErrors, digitalPoKey } from "@dx-rework/contracts/digital-production";
+import { customerOrderDateError, initialCustomerDateErrors, digitalPoKey, initialCustomerOrderIsReady, salesYearOptions, SalesSeriesSchema } from "@dx-rework/contracts/digital-production";
 import { createWebUrls } from "../url-contract.js";
 import "./digital-development.css";
 import { SearchableSelect } from "./search-select.js";
@@ -50,8 +50,9 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
   const [quantityInput,setQuantityInput]=useState(()=>document.quantity===null?"":String(document.quantity));
   const [validationMode,setValidationMode]=useState<"save"|"publish"|null>(null);
   const [patternChoice,setPatternChoice]=useState<DevelopmentPatternChoice|null>(null);
+  const [preorder,setPreorder]=useState(existingDraft?.document?.customerOrderDraft?.stage==='preorder');
   const [published,setPublished]=useState(existingDraft?.status==="published");
-  const [boundOrder,setBoundOrder]=useState(existingDraft?.status==="published"&&existingDraft.document?.customerOrderDraft?.withOrder?existingDraft.document.customerOrderDraft.order:null);
+  const [publishedOrder,setPublishedOrder]=useState(existingDraft?.status==="published"&&existingDraft.document?.customerOrderDraft?.withOrder?existingDraft.document.customerOrderDraft.order:null);
   const loadedVersion=useRef<number|null>(existingDraft?.version??null);
   const [fileKind,setFileKind]=useState<DevelopmentDocument["files"][number]["kind"]>("款图");
   const measurementIds=useRef(document.measurements.map(()=>createClientRequestId()));
@@ -60,7 +61,8 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
   const poSizeIds=useRef(Array.from({length:maxPoSizeCount},()=>createClientRequestId()));
   const successfulUploads=useRef(new Map<string,string>()),publishKey=useRef<{payload:string;key:string}|null>(null);
   const edit=(patch:Partial<DevelopmentDocument>)=>setDocument(current=>({...current,...patch}));
-  const issues=validationMode?developmentIssues(document,quantityInput,measurementIds.current,validationMode==="publish",null,sizeQuantityInputs):[];
+  const validationDocument:DevelopmentDocument=document.customerOrderDraft?{...document,customerOrderDraft:{...document.customerOrderDraft,stage:preorder?'preorder':'formal'}}:document;
+  const issues=validationMode?developmentIssues(validationDocument,quantityInput,measurementIds.current,validationMode==="publish",null,sizeQuantityInputs):[];
   const [designerName, setDesignerName] = useState<string | null>(existingDraft?.designerName ?? source?.designer ?? null);
   useEffect(() => {
     if (source || existingDraft) return;
@@ -88,25 +90,38 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
       if(existing){setDuplicateSource(existing.sourceId);setError("该编号已有开发档案，请打开原档案继续办理");}
     }catch{ /* Submission still enforces the authoritative duplicate check. */ }
   };
+  const [codeCheck,setCodeCheck]=useState<{code:string;available:boolean}|null>(null);
+  const [checkingCode,setCheckingCode]=useState(false);
+  const checkCode=async()=>{
+    const value=form.designStyleNo.trim(),sequence=++sourceSearchSequence.current;
+    if(!value||createdSource)return;
+    setCheckingCode(true);setCodeCheck(null);
+    try {const result=await digitalRequest<{code:string;available:boolean}>(`design-codes/check?code=${encodeURIComponent(value)}`);if(sequence===sourceSearchSequence.current)setCodeCheck(result);}
+    catch(reason){if(sequence===sourceSearchSequence.current)setError(reason instanceof Error?reason.message:'编号读取失败，请重试');}
+    finally{setCheckingCode(false);}
+  };
   const [savedDraft, setSavedDraft] = useState<string | null>(null);
   const writing = useRef(false), sourceKey = useRef<{payload: string; key: string} | null>(null), orderKey = useRef<{payload: string; key: string} | null>(null);
-  const draftSnapshot = (items: CreatePicture[], value=document, order=form, quantity=quantityInput) => JSON.stringify({intent, form:order, developmentType, document:value, quantityInput:quantity, sizeQuantityInputs, pictures: items.map(item => [item.id, item.attachmentId ?? null])});
+  const draftSnapshot = (items: CreatePicture[], value=document, order=form, quantity=quantityInput) => JSON.stringify({intent, preorder, form:order, developmentType, document:value, quantityInput:quantity, sizeQuantityInputs, pictures: items.map(item => [item.id, item.attachmentId ?? null])});
   const currentSnapshot = draftSnapshot(pictures);
   const initial = useRef(currentSnapshot), dirty = useRef(false), completed = useRef(false);
   type Calendar={sourceId:string|null;serverToday:string;minimumInitialCustomerDate:string};
   const preloadedCalendar=Boolean(serverToday&&minimumDate&&(createdSource===null||calendarSourceId===createdSource));
   const [calendar,setCalendar]=useState<Calendar|null>(()=>preloadedCalendar?{sourceId:createdSource,serverToday:serverToday!,minimumInitialCustomerDate:minimumDate!}:null);
   const [calendarError,setCalendarError]=useState(''),[calendarRefresh,setCalendarRefresh]=useState(0);
+  const preloadedCalendarConsumed=useRef(false);
   const initialCalendarSource=useRef(createdSource),calendarInitialized=useRef<{sourceId:string|null}|null>(preloadedCalendar?{sourceId:createdSource}:null);
   const calendarReady=calendar?.sourceId===createdSource;
   const calendarToday=calendarReady?calendar!.serverToday:undefined;
   const dateMinimum=calendarReady?calendar!.minimumInitialCustomerDate:undefined;
+  const confirmationCalendar=calendarReady?calendar!:undefined;
+  const boundOrder=publishedOrder&&initialCustomerOrderIsReady(publishedOrder,confirmationCalendar)?publishedOrder:null;
   useEffect(()=>{
     let live=true;const abort=new AbortController();
     const refresh=()=>setCalendarRefresh(value=>value+1);
     window.addEventListener('focus',refresh);window.addEventListener('acceptance-clock-changed',refresh);
     if(busy||writing.current)return()=>{live=false;abort.abort();window.removeEventListener('focus',refresh);window.removeEventListener('acceptance-clock-changed',refresh);};
-    if(preloadedCalendar&&calendarRefresh===0){setCalendarError('');setCalendar({sourceId:createdSource,serverToday:serverToday!,minimumInitialCustomerDate:minimumDate!});}
+    if(preloadedCalendar&&calendarRefresh===0&&!preloadedCalendarConsumed.current){preloadedCalendarConsumed.current=true;setCalendarError('');setCalendar({sourceId:createdSource,serverToday:serverToday!,minimumInitialCustomerDate:minimumDate!});}
     else {
       setCalendarError('');
       void digitalRequest<Omit<Calendar,'sourceId'>>(developmentOrderOptionsPath(createdSource),'GET',undefined,undefined,{signal:abort.signal}).then(next=>{
@@ -138,9 +153,9 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
   }, [documentGuards]);
   const withOrder = intent !== "development";
   const developmentPublished=published||Boolean(source);
-  const publishStatus=developmentPublished?(withOrder?"开发单已发布 · 客户订单待核对确认":"开发单已发布 · 尚无确定客户订单"):`开发草稿 · ${dirty.current?"有未保存修改":savedDraft||existingDraft?.document?"已保存，可继续填写":"尚未保存"}`;
-  const submitLabel=intent==="confirm_order"?"确认下单":published?(withOrder?"确认客户订单":"返回已发布档案"):withOrder?"发布开发单并确认订单":"发布开发单";
-  const title = existingDraft?.revisionSource?`复版 ${existingDraft.revisionSource.revisionNumber} · ${existingDraft.designStyleNo}`:intent === "confirm_order" ? "客户确定订单 · 补订购信息" : withOrder ? "产品开发（有确定订单）" : "产品开发（无确定订单）";
+  const publishStatus=preorder&&!developmentPublished?`预下单草稿 · ${dirty.current?"有未保存修改":"可继续补充资料"}`:developmentPublished?(withOrder?"开发单已发布 · 客户订单待核对确认":"开发单已发布 · 尚无确定客户订单"):`开发草稿 · ${dirty.current?"有未保存修改":savedDraft||existingDraft?.document?"已保存，可继续填写":"尚未保存"}`;
+  const submitLabel=preorder&&!published?"保存预下单备料资料":intent==="confirm_order"?"确认下单":published?(withOrder?"确认客户订单":"返回已发布档案"):"发布开发单";
+  const title = preorder&&!published?"预下单备料 · 资料可后补":existingDraft?.revisionSource?`复版 ${existingDraft.revisionSource.revisionNumber} · ${existingDraft.designStyleNo}`:intent === "confirm_order" ? "客户确定订单 · 补订购信息" : withOrder ? "产品开发（有确定订单）" : "产品开发（无确定订单）";
   const line = (index: number, patch: Partial<DevelopmentOrderDraft["lines"][number]>) => setForm(current => ({...current, lines: current.lines.map((value, i) => i === index ? {...value, ...patch} : value)}));
   const selectPictures = async (files: File[]) => {
     if (writing.current || !files.length) return;
@@ -175,17 +190,21 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
     writing.current = true; setBusy(true); setError("");setErrorField(null);
     try {
       if(!form.designStyleNo.trim())throw new Error("请填写设计款号");
-      if(withOrder&&!draftOnly&&!form.customerCode)throw new Error("请选择客户");
+      if(withOrder&&!preorder&&!draftOnly&&!form.customerCode)throw new Error("请选择客户");
       const sourceInput = DigitalSourceCreateSchema.parse({developmentType, designStyleNo: form.designStyleNo, temporaryStyleNo: form.temporaryStyleNo, customerCode: form.customerCode || null});
-      const orderInput = withOrder && !draftOnly ? DigitalOrderCreateSchema.parse(developmentOrderInput(form)) : null;
+      const shouldConfirmOrder=withOrder&&!draftOnly&&(intent==="confirm_order"||published||Boolean(source)||initialCustomerOrderIsReady(form,confirmationCalendar));
+      const orderInput = shouldConfirmOrder ? DigitalOrderCreateSchema.parse(developmentOrderInput(form)) : null;
+      let liveConfirmationCalendar:Pick<Calendar,'serverToday'|'minimumInitialCustomerDate'>|undefined=confirmationCalendar;
+      const submissionDocument:DevelopmentDocument={...document,customerOrderDraft:{withOrder,stage:preorder?'preorder':'formal',order:form}};
       if(orderInput){
         const calendar=await digitalRequest<{serverToday:string;minimumInitialCustomerDate:string}>(developmentOrderOptionsPath(createdSource));
         if(!calendar.serverToday||!calendar.minimumInitialCustomerDate)throw new Error("未取得服务器日期，请重试；输入仍保留");
+        liveConfirmationCalendar=calendar;setCalendar({...calendar,sourceId:createdSource});
         const dateError=customerOrderDateError(orderInput.orderDate,calendar.serverToday);
         if(dateError)throw new Error(dateError);
         const errors=initialCustomerDateErrors(orderInput.lines,calendar.minimumInitialCustomerDate);if(errors.length)throw new Error(errors.join("；"));
       }
-      if(!source&&!published){setValidationMode(draftOnly?"save":"publish");if(developmentIssues(document,quantityInput,measurementIds.current,!draftOnly,null,sizeQuantityInputs).length)return;if(!draftOnly&&!patternChoice&&existingDraft?.revisionSource?.outputKind!=='工艺布片')throw new Error("请先选择有效打板品类与执行价，再发布开发单");}
+      if(!source&&!published){setValidationMode(draftOnly?"save":"publish");if(developmentIssues(submissionDocument,quantityInput,measurementIds.current,!draftOnly,null,sizeQuantityInputs).length)return;if(!draftOnly&&!patternChoice&&existingDraft?.revisionSource?.outputKind!=='工艺布片')throw new Error("请先选择有效打板品类与执行价，再发布开发单");}
       let id = createdSource;
       if (!id) {
         const payload = JSON.stringify(sourceInput);
@@ -211,7 +230,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
               }catch(reason){const message=reason instanceof Error?reason.message:"上传失败，请重试";picturesRef.current=picturesRef.current.map(item=>item.id===picture.id?{...item,error:message}:item);setPictures(picturesRef.current);throw reason;}
             }
           }
-          persistedDocument={...document,orderDate:sheet.document?.orderDate??sheet.developmentCreatedDate??document.orderDate,customerOrderDraft:{withOrder,order:form},files:document.files.map(file=>({ ...file,attachmentId:picturesRef.current.find(picture=>picture.id===file.attachmentId)?.attachmentId??file.attachmentId }))};
+          persistedDocument={...submissionDocument,orderDate:sheet.document?.orderDate??sheet.developmentCreatedDate??document.orderDate,files:document.files.map(file=>({ ...file,attachmentId:picturesRef.current.find(picture=>picture.id===file.attachmentId)?.attachmentId??file.attachmentId }))};
           setDocument(persistedDocument);
           if(loadedVersion.current!==null&&sheet.version!==loadedVersion.current&&JSON.stringify(sheet.document)!==JSON.stringify(persistedDocument))throw new Error("开发单已更新，请重新打开后再保存；当前填写仍保留");
           if(JSON.stringify(sheet.document)!==JSON.stringify(persistedDocument)){
@@ -232,9 +251,9 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
             const body={expectedVersion:sheet.version,...(existingDraft?.revisionSource?.outputKind==='工艺布片'?{}:{patternOrder:patternChoice})},payload=JSON.stringify(body);
             if(publishKey.current?.payload!==payload)publishKey.current={payload,key:createClientRequestId()};
             const publishedSheet=await digitalRequest<DevelopmentSheet>(`${base}/publish`,"POST",body,publishKey.current.key);setPublished(true);
-            if(publishedSheet.document?.customerOrderDraft?.withOrder){setBoundOrder(publishedSheet.document.customerOrderDraft.order);setForm(publishedSheet.document.customerOrderDraft.order);}
+            if(publishedSheet.document?.customerOrderDraft?.withOrder){const draft=publishedSheet.document.customerOrderDraft.order;setPublishedOrder(draft);setForm(draft);}
           }
-        } else {setPublished(true);if(sheet.document?.customerOrderDraft?.withOrder){setBoundOrder(sheet.document.customerOrderDraft.order);setForm(sheet.document.customerOrderDraft.order);}if(draftOnly)throw new Error("开发单已发布，请继续确认客户订单或重新打开查看");persistedDocument=sheet.document??document;}
+        } else {setPublished(true);if(sheet.document?.customerOrderDraft?.withOrder){const draft=sheet.document.customerOrderDraft.order;setPublishedOrder(draft);if(initialCustomerOrderIsReady(draft,liveConfirmationCalendar))setForm(draft);}if(draftOnly)throw new Error("开发单已发布，请继续确认客户订单或重新打开查看");persistedDocument=sheet.document??document;}
       }
       let orderId: string | null = null;
       if (orderInput) {
@@ -264,9 +283,11 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
   const returnToList = async () => {
     if ((!dirty.current || await confirmInApp("有未保存开发资料或订购信息，确定离开？")) && !writing.current) onCancel();
   };
-  return <Surface className="development-create development-create-reference dx-doc-development"><form id={formId} noValidate onKeyDown={event=>{if(event.key==="Enter"&&event.nativeEvent.isComposing)event.preventDefault();}} onSubmit={event => {event.preventDefault(); void save();}}>
-    <DocumentToolbar title={title} status={busy?"保存中":publishStatus}>{!contained&&<Button type="button" disabled={busy} onClick={()=>void returnToList()}>{cancelLabel}</Button>}{!source&&!published&&<Button type="button" disabled={busy||!calendarReady||Boolean(calendarError)} onClick={()=>void save(true)}>保存开发资料草稿</Button>}<Button form={formId} type="submit" variant="primary" disabled={busy||!calendarReady||Boolean(calendarError)}>{busy?"保存中…":submitLabel}</Button></DocumentToolbar>
-    {!source&&!existingDraft?.revisionSource&&<div className="development-order-intent" role="group" aria-label="确定客户订单">{([['development','无确定客户订单'],['certain_order','有确定客户订单']] as const).map(([value,label])=><Button key={value} type="button" aria-pressed={intent===value} disabled={busy||published||!onIntentChange} onClick={()=>onIntentChange?.(value)}>{label}</Button>)}</div>}
+  return <Surface className="development-create development-create-reference dx-doc-development"><form id={formId} noValidate onKeyDown={event=>{if(event.key==="Enter"&&event.nativeEvent.isComposing)event.preventDefault();}} onSubmit={event => {event.preventDefault(); void save(preorder&&!published);}}>
+    <DocumentToolbar title={title} status={busy?"保存中":publishStatus}>{!contained&&<Button type="button" disabled={busy} onClick={()=>void returnToList()}>{cancelLabel}</Button>}{!source&&!published&&!preorder&&<Button type="button" disabled={busy||!calendarReady||Boolean(calendarError)} onClick={()=>void save(true)}>保存开发资料草稿</Button>}<Button form={formId} type="submit" variant="primary" disabled={busy||!calendarReady||Boolean(calendarError)}>{busy?"保存中…":submitLabel}</Button></DocumentToolbar>
+    {preorder?<p className="dx-doc-hint">先记录已知的面料及备料信息，其余客户、PO和配码资料在正式下单时补齐。</p>:withOrder&&!published&&!initialCustomerOrderIsReady(form,confirmationCalendar)&&<p className="dx-doc-hint">订购信息待核实，可先发布开发资料；正式确认订单时再核对PO、颜色、尺码数量及客户约定出货日期。</p>}
+
+    {!source&&!existingDraft?.revisionSource&&<div className="development-order-intent" role="group" aria-label="确定客户订单">{([['development','无确定客户订单'],['preorder','预下单备料'],['certain_order','有确定客户订单']] as const).map(([value,label])=><Button key={value} type="button" aria-pressed={preorder?value==='preorder':intent===value} disabled={busy||published||!onIntentChange} onClick={()=>{setPreorder(value==='preorder');onIntentChange?.(value==='preorder'?'certain_order':value);}}>{label}</Button>)}</div>}
     {source && <p>沿用第 {source.adoptedRound ?? source.selectedRound ?? 1} 轮开发资料；头版/开发板与已有工序保持原档案。</p>}
     {error && <DocumentErrors error={error} issues={errorField?[{id:errorField,label:"定位需核实字段",message:error}]:[]}/>}
     {calendarError?<p role="alert">{calendarError}</p>:!calendarReady&&<p role="status">正在读取本单日期…</p>}
@@ -278,12 +299,15 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
     <fieldset disabled={busy||!calendarReady}><fieldset disabled={Boolean(boundOrder)} className="development-order-fields"><div className="development-create-layout development-create-layout-existing">
     <div className="development-create-order"><section className="development-create-card"><h3>1 · 基本资料</h3><div className="development-create-grid">
       {intent !== "confirm_order" && <label>开发类型<select aria-label="开发类型" disabled={Boolean(createdSource)} value={developmentType} onChange={event => setDevelopmentType(event.target.value as "头版" | "开发板")}><option>头版</option><option>开发板</option></select></label>}
-      <label>设计款号（必填）<input id="development-create-style" aria-label="设计款号" required maxLength={100} value={form.designStyleNo} readOnly={Boolean(createdSource)} onBlur={event=>void findExistingSource(event.target.value)} onChange={event => {sourceSearchSequence.current++;setDuplicateSource(null);setForm({...form, designStyleNo: event.target.value});}}/></label>
+      <label>设计款号 / 业务ID（必填）<input id="development-create-style" aria-label="设计款号" required maxLength={100} value={form.designStyleNo} readOnly={Boolean(createdSource)} onBlur={event=>void findExistingSource(event.target.value)} onChange={event => {sourceSearchSequence.current++;setDuplicateSource(null);setCodeCheck(null);setForm({...form, designStyleNo: event.target.value});}}/>{!createdSource&&<div className="development-code-check"><Button type="button" disabled={busy||checkingCode||!form.designStyleNo.trim()} onClick={()=>void checkCode()}>{checkingCode?'检查编号中…':'检查业务ID'}</Button><small role="status">{codeCheck?.code===form.designStyleNo.trim()?(codeCheck.available?'该编号当前可用，提交时将再次检查':'该编号已有档案，请使用原档案或核对设计编号'):'填入设计业务ID后可检查是否已使用。'}</small></div>}</label>
       <label>代用款号（选填）<input maxLength={100} value={form.temporaryStyleNo ?? ""} readOnly={Boolean(createdSource)} onChange={event => setForm({...form, temporaryStyleNo: event.target.value || null})}/></label>
       <label>设计师（只读）<input aria-label="设计师（只读）" readOnly value={designerName ?? "正在确认身份…"}/></label>
 </div><div className="development-create-grid development-create-grid-secondary">
-      <label>客户{withOrder ? "（必填）" : "（选填）"}<SearchableSelect id="development-create-customer" aria-label="客户" required={withOrder} disabled={Boolean(createdSource && (fixedCustomer || !withOrder))} value={form.customerCode} onChange={event => {const customer = customers.find(customer => customer.code === event.target.value); setForm({...form, customerCode: event.target.value, primaryMerchandiserId: customer?.defaultMerchandiserId ?? null, productGroup: initialDigitalProductGroup(customers, event.target.value)});}}><option value="">通用开发 / 请选择</option>{customers.map(customer => <option key={customer.code} value={customer.code}>{customer.code} · {customer.name}</option>)}</SearchableSelect></label>
+      <label>客户{withOrder&&!preorder ? "（必填）" : "（选填）"}<SearchableSelect id="development-create-customer" aria-label="客户" required={withOrder&&!preorder} disabled={Boolean(createdSource && (fixedCustomer || !withOrder))} value={form.customerCode} onChange={event => {const customer = customers.find(customer => customer.code === event.target.value); setForm({...form, customerCode: event.target.value, primaryMerchandiserId: customer?.defaultMerchandiserId ?? null, productGroup: initialDigitalProductGroup(customers, event.target.value)});}}><option value="">通用开发 / 请选择</option>{customers.map(customer => <option key={customer.code} value={customer.code}>{customer.code} · {customer.name}</option>)}</SearchableSelect></label>
 {withOrder && <><label>产品分组<select aria-label="产品分组" value={form.productGroup} onChange={event => setForm({...form, productGroup: event.target.value as DigitalOrderInput["productGroup"]})}>{(customers.find(customer => customer.code === form.customerCode)?.productGroups ?? [form.productGroup]).map(group => <option key={group}>{group}</option>)}</select></label>
+        <label>销售年份<select aria-label="销售年份" value={form.salesYear??""} onChange={event=>setForm({...form,salesYear:event.target.value?Number(event.target.value):null})}><option value="">请选择年份</option>{salesYearOptions(calendarToday,form.salesYear).map(year=><option key={year} value={year}>{year}</option>)}</select></label>
+        <label>销售系列<select aria-label="销售系列" value={form.salesSeries??""} onChange={event=>setForm({...form,salesSeries:event.target.value?SalesSeriesSchema.parse(event.target.value):null})}><option value="">请选择系列</option>{SalesSeriesSchema.options.map(series=><option key={series} value={series}>{series} · {Number(series.slice(1))}月上架</option>)}</select></label>
+        <label>辅料是否需要对色<select aria-label="辅料是否需要对色" value={form.requiresColorMatching===true?'yes':form.requiresColorMatching===false?'no':''} onChange={event=>setForm({...form,requiresColorMatching:event.target.value===''?null:event.target.value==='yes'})}><option value="">尚未确定</option><option value="yes">需要对色（A路线）</option><option value="no">无需对色（B路线）</option></select></label>
         <label>客户下单日期（必填）<input id="development-customer-order-date" aria-label="客户下单日期" required max={calendarToday} type="date" value={form.orderDate} onChange={event => setForm({...form, orderDate: event.target.value})}/></label>
 </>}<label>开发下单日期（固定）<input id="development-orderDate" aria-label="开发下单日期" readOnly value={document.orderDate??(published?"历史未登记":"保存后由服务器确定")}/></label><label>工艺<select aria-label="工艺" disabled={published} value={document.craft} onChange={event=>edit({craft:event.target.value as DevelopmentDocument["craft"]})}>{["无","印花","绣花","印绣花"].map(value=><option key={value}>{value}</option>)}</select></label></div></section>
     {withOrder && <section className="development-create-card development-create-details"><h3>2 · 客户订单明细 <small>默认主跟单：{customers.find(customer=>customer.code===form.customerCode)?.defaultMerchandiserName??"未配置，待主管指派"}</small></h3>

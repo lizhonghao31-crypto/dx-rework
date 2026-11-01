@@ -1385,5 +1385,48 @@
     "creates": [],
     "execute": [],
     "sequences": []
+  },
+  "0266_new_flow_creation_context": {
+    "checksum": "9683e62e89bcc0107d095983175e9d0e53ff07b64185429a2070bae45e27e528",
+    "tables": [
+      "digital_production_orders"
+    ],
+    "functions": [],
+    "references": [
+      "app_users",
+      "digital_production_sources"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [
+      "digital_design_code_registry"
+    ],
+    "execute": [],
+    "sequences": []
+  },
+  "0232_pmc_readonly_role": {
+    "checksum": "31d01d06ce698735c21b2e8b9ab5f2f1da29d2ceb0838a130320e32e2bbe6547",
+    "tables": [
+      "business_roles",
+      "capability_catalog",
+      "role_capabilities",
+      "attachments"
+    ],
+    "functions": [
+      "access_authorized_actor_roles",
+      "pattern_room_authorized_order_roles",
+      "pattern_room_authorized_price_roles",
+      "cutting_authorized_roles",
+      "finance_authorized_wage_roles",
+      "external_responsibility_can_view_all",
+      "own_factory_approval_can_view",
+      "supplier_onboarding_authorized_roles"
+    ],
+    "references": [],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": [],
+    "sequences": []
   }
 }

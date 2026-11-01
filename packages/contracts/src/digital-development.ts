@@ -24,7 +24,7 @@ export const DevelopmentDocumentSchema = z.object({
   // Missing version belongs to frozen historical documents, never an exemption for new publication.
   documentFormatVersion: z.literal(2).optional(),
   sizeQuantities: z.array(z.number().int().min(0).max(100000).nullable()).max(20).optional(),
-  customerOrderDraft: z.object({withOrder:z.boolean(),order:InitialCustomerOrderDraftSchema}).strict().optional(),
+  customerOrderDraft: z.object({withOrder:z.boolean(),stage:z.enum(['preorder','formal']).optional(),order:InitialCustomerOrderDraftSchema}).strict().optional(),
   // Draft selection only. Publication still obtains and validates the current price quote.
   patternCategoryId: z.string().uuid().nullable().optional(),
   template: z.enum(["上衣", "裤子"]), quantity: z.number().int().min(1).max(100000).nullable(),
@@ -82,12 +82,16 @@ export function developmentSizeQuantityIssues(document:DevelopmentDocument):Arra
   }
   return issues;
 }
+/** Creation/publication can precede technical sizes. Supplied counts remain fully validated. */
+export function developmentPublicationSizeIssues(document:DevelopmentDocument):Array<{index:number|null;message:string}>{
+  return document.sizeQuantities?.some(value => value !== null) ? developmentSizeQuantityIssues(document) : [];
+}
 /** Only server-proven frozen same-round corrections may opt into historical reading rules. */
 export function developmentPublishErrors(document: DevelopmentDocument, options:{allowLegacySizeQuantities?:boolean;allowMissingOrderDate?:boolean}={}): string[] {
   const errors: string[] = [];
+  if(document.customerOrderDraft?.stage==='preorder')errors.push('预下单备料资料仅可保存草稿，请先明确切换为开发单后再发布');
   if (!document.quantity) errors.push("请填写本轮打板数量");
-  if(!options.allowLegacySizeQuantities)errors.push(...developmentSizeQuantityIssues(document).map(issue=>issue.message));
-  if (!document.sizes.length) errors.push("至少填写一个尺码列，或先保存草稿");
+  if(!options.allowLegacySizeQuantities)errors.push(...developmentPublicationSizeIssues(document).map(issue=>issue.message));
   if (document.sizes.some(size => !size.trim())) errors.push("请填写尺码列名称，或删除不用的列");
   if (!document.orderDate&&!options.allowMissingOrderDate) errors.push("缺少服务器开发下单日期，请重新读取本单资料；不要填写客户下单日期替代");
   if (!document.files.some(file => file.kind === "款图")) errors.push("请上传款图");
