@@ -1,4 +1,4 @@
-import { ownedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema, createOwnedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
@@ -68,7 +68,7 @@ runWithPostgres("employee access role lifecycle", () => {
   });
 
   it("preserves existing role holders and atomically follows first grant and last revoke", async () => {
-    await admin.query(`CREATE SCHEMA ${schema}`);
+    await createOwnedPostgresSchema(admin,schema);
     const manifest = JSON.parse(await readFile(
       new URL("../../apps/api/src/platform/migration-manifest.json", import.meta.url),
       "utf8",

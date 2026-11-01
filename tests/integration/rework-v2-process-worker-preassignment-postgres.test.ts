@@ -1,7 +1,7 @@
 import {WholeOrderReviewService} from '../../apps/api/src/rework/whole-order-review-service.js';
 import {nativeReworkExecutionRows} from '../../apps/api/src/production-platform/rework-sla-evidence.js';
 import { ReworkBusinessDetailService } from "../../apps/api/src/rework/rework-business-detail-service.js";
-import { ownedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema, createOwnedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
@@ -73,7 +73,7 @@ runWithPostgres("PR-04 unified execution PostgreSQL", () => {
   const tailReport = () => actor(ids.tailInspector, ["tail_inspector"], "tail_inspection:report");
 
   beforeAll(async () => {
-    await admin.query(`CREATE SCHEMA ${schema}`);
+    await createOwnedPostgresSchema(admin,schema);
     const manifest = JSON.parse(await readFile(
       new URL("../../apps/api/src/platform/migration-manifest.json", import.meta.url),
       "utf8",

@@ -1,5 +1,5 @@
 import { assertTestDatabaseTarget } from "../../scripts/test-database-safety.mjs";
-import { ownedPostgresSchema, dropOwnedPostgresSchema } from "./owned-postgres-schema.js";
+import { ownedPostgresSchema, createOwnedPostgresSchema, dropOwnedPostgresSchema } from "./owned-postgres-schema.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import pg from "pg";
@@ -11,7 +11,7 @@ export async function supplierFixture() {
   await assertTestDatabaseTarget(url);
   const schema = ownedPostgresSchema("supplier");
   const admin = new pg.Pool({ connectionString: url! });
-  await admin.query(`CREATE SCHEMA ${schema}`);
+  await createOwnedPostgresSchema(admin,schema);
   const db = new pg.Pool({ connectionString: url!, options: `-c search_path=${schema}` });
   const manifest = JSON.parse(await readFile(new URL("../../apps/api/src/platform/migration-manifest.json", import.meta.url), "utf8")) as { migrations: { version: string; checksum: string }[] };
   await db.query("CREATE TABLE schema_migrations(version text PRIMARY KEY,checksum char(64),applied_at timestamptz DEFAULT CURRENT_TIMESTAMP)");

@@ -45,7 +45,7 @@ import type * as CryptoModule from "node:crypto";
 import { contractReturnState } from "../../apps/api/src/sourcing/contract-return-state.js";
 import type * as HistoricalScopeModule from "../../apps/api/src/sourcing/sourcing-contract-history-scope.js";
 import { SourcingTransferContractReconciliation } from "../../apps/api/src/sourcing/sourcing-transfer-contract-reconciliation.js";
-import { ownedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema, createOwnedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { migrationExecutionSql } from "../../scripts/deploy/migration-execution-compatibility.mjs";
 import "./work-analysis-postgres.cases.js";
 import { readQuoteAnalysis } from "../../apps/api/src/sourcing/sourcing-analysis.js";
@@ -304,7 +304,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
   beforeAll(async () => {
     {const stageStart=performance.now();let stageStatus='failed';try {
 
-    await admin.query(`CREATE SCHEMA ${schema}`);
+    await createOwnedPostgresSchema(admin,schema);
     // Exercise the current production read contract against the complete schema.
     // The previous hand-picked schema stopped at 0150 and omitted exclusion dependencies.
     const manifest = JSON.parse(await readFile(new URL("../../apps/api/src/platform/migration-manifest.json", import.meta.url), "utf8")) as { migrations: { version: string; checksum: string }[] };

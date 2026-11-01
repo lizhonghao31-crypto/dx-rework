@@ -1,4 +1,4 @@
-import { ownedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema, createOwnedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { randomUUID } from "node:crypto";
 import pg from "pg";
 import { beforeAll, afterAll, describe, expect, it } from "vitest";
@@ -11,7 +11,7 @@ const url=process.env.TEST_DATABASE_URL;
  const actor=(id=quality,cap=true):TrustedActorContext=>({actorId:id,actorRoles:["quality_control"],requestId:randomUUID(),authorizationCapability:"tools:user",authorizationCapabilities:cap?["rework:basic:view"]:[]});
  const receiving=randomUUID(),activePhoto=randomUUID(),retiredPhoto=randomUUID(),listedOrder=randomUUID(),reworkPhoto=randomUUID();
  beforeAll(async()=>{
-  await admin.query(`CREATE SCHEMA ${schema}`);
+  await createOwnedPostgresSchema(admin,schema);
   await db.query(`CREATE TABLE app_users(id uuid,display_name text);
    CREATE TABLE supplier_catalog_versions(supplier_id uuid,version int,supplier_name text);
    CREATE TABLE rework_orders(rework_order_id uuid,rework_no text,style_no text,order_no text,

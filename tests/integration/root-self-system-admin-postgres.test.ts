@@ -1,4 +1,4 @@
-import { ownedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema, createOwnedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
@@ -49,7 +49,7 @@ runWithPostgres("Root self system administrator assignment", () => {
 
   it("allows only Root to self-assign system_admin and preserves every other self-assignment denial", async () => {
     const schema = ownedPostgresSchema("root_self_admin");
-    await admin.query(`CREATE SCHEMA ${schema}`);
+    await createOwnedPostgresSchema(admin,schema);
     const database = new Pool({
       connectionString: databaseUrl!,
       options: `-c search_path=${schema}`,

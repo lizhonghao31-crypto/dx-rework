@@ -36,6 +36,14 @@ export function readOwnedResources(dir,runId,identities) {
   return r;
  });
 }
+export async function createOwnedPostgresSchema(pool,schema) {
+ if(!generated.has(schema))throw Error('TEST_RESOURCE_NOT_CREATED_BY_THIS_PROCESS');
+ assertRegisteredSchema(schema);
+ const {assertTestDatabaseTarget}=await import('./test-database-safety.mjs');
+ const actual=await assertTestDatabaseTarget(generated.get(schema).url,pool),expected=generated.get(schema).identity;
+ if(expected&&JSON.stringify(actual)!==JSON.stringify(expected))throw Error('TEST_RESOURCE_LIVE_IDENTITY_CHANGED');
+ await pool.query(`CREATE SCHEMA "${schema}"`);
+}
 export async function dropOwnedPostgresSchema(pool,schema) {
  if(!generated.has(schema))throw Error('TEST_RESOURCE_NOT_CREATED_BY_THIS_PROCESS');
  assertRegisteredSchema(schema);

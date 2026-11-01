@@ -1,4 +1,4 @@
-import { ownedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema, createOwnedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
@@ -89,7 +89,7 @@ runWithPostgres("role permissions and versioned master data", () => {
   };
 
   beforeAll(async () => {
-    await adminDatabase.query(`CREATE SCHEMA ${schema}`);
+    await createOwnedPostgresSchema(adminDatabase,schema);
     for (const migration of [
       "0001_platform_foundation.sql",
       "0002_dingtalk_identity_access.sql",

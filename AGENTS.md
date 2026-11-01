@@ -165,7 +165,7 @@ Root 作为业务负责人/超级调试身份的既有特殊能力必须保留�
 - 本地与 CI 先运行 `npm run test:preflight`（原生 Node 协议、全仓时间索引、资源接线、迁移静态校验），不能用 Vitest 通过替代原生协议通过。
 - 非 DB Vitest 在发现阶段排除数据库套件；PG 使用 `npm run test:postgres` 的 canonical plan、实际标记库/低权限角色、清空通用 DATABASE_URL 和相同配置。`npm run test:plan` 用于核对实际文件集合；长正确性用例使用明确有限配置，性能断言保持原约束。
 - 同 Head/base/run/attempt、PG 实际版本、角色、库身份及配置下，mapped/整链/Root 审计并集一次执行，后续步骤核实际逐文件回执及成功清理。不同版本、角色、运行或配置不得复用。失败、全 skip、缺失文件或未清理不算通过。
-- `ownedPostgresSchema`、manifest 与清理共用 `scripts/test-resource-contract.mjs` 注册定义；新/修改的 schema 创建入口必须接入，未登记前缀在 CREATE 前拒绝。昂贵 PG 前执行真实失败子进程的创建→登记→精确清理→无残留冒烟。只清本 run、正确实际测试库身份、32hex 尾码的精确资源；失败清理保留 manifest，不扫描/通配删除。
+- `ownedPostgresSchema`、manifest 与清理共用 `scripts/test-resource-contract.mjs` 注册定义；新/修改的 schema 创建入口必须使用 `createOwnedPostgresSchema`；消费者的每个裸 CREATE 均拒绝，不因同文件另有受管创建而豁免，未登记前缀/未生成资源在 DDL 前拒绝。昂贵 PG 前执行真实失败子进程的创建→登记→精确清理→无残留冒烟。只清本 run、正确实际测试库身份、32hex 尾码的精确资源；失败清理保留 manifest，不扫描/通配删除。
 - release 集成证明实际冻结 release base→candidate；独立 Acceptance 更新证明自身实际 DB→candidate。实时 main 新增差异列为发布待办/未验证，不要求业务 PR 为绿灯复制 SQL。
 - 生产晋级/切换仍须准确 main SHA 来源、实际 production ledger、声明支持历史的真实升级与必要应用语义验证。未知 identity/checksum 漂移/历史缺口硬拒。源级兼容、CI 通过均不能替代生产或应用验收；PMC 应用缺口保留独立上线待办。
 - migration＋权限 inventory 保留真实升级、Root/ACL、低权限和恢复；维护/备份执行器、激活与打包传输分别映射，未知部署逻辑保守全测。本治理不改权限/财务/业务规则、branch protection 或部署授权。

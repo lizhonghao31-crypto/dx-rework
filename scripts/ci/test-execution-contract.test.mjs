@@ -1,13 +1,15 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {mkdtempSync,readFileSync,writeFileSync,rmSync} from 'node:fs';
+import {execFileSync} from 'node:child_process';
+import {mkdtempSync,readFileSync,writeFileSync,rmSync,mkdirSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createHash} from 'node:crypto';
-import {postgresPlan,configForSuite,assertSuiteResults,assertExecutionReceipt,executionFingerprint,POSTGRES_CHAIN_TESTS,ROOT_AUDIT_TESTS} from '../test-suite-plan.mjs';
-import {ownedPostgresSchema,readOwnedResources,SCHEMA_PREFIXES} from '../test-resource-contract.mjs';
+import {postgresPlan,configForSuite,assertSuiteResults,assertExecutionReceipt,executionFingerprint,fullGatePostgresPlan,POSTGRES_CHAIN_TESTS,ROOT_AUDIT_TESTS} from '../test-suite-plan.mjs';
+import {ownedPostgresSchema,createOwnedPostgresSchema,readOwnedResources,SCHEMA_PREFIXES} from '../test-resource-contract.mjs';
 import {classifyFullGatePaths} from './full-gate-risk-map.mjs';
 import {worktreeSnapshot,inspectCompatibility} from '../check-main-release-compat.mjs';
+import {assertManagedSchemaCreation,resourceChangedPaths} from '../test-preflight.mjs';
 import {reconcileTimeInventory} from '../acceptance/time-site-inventory.mjs';
 const identity={database:'dx_rework_ci',username:'dx_rework_test',databaseOid:'42',serverVersion:'160015',marker:'dx-rework-isolated-test-v1'};
 const context={head:'a'.repeat(40),base:'b'.repeat(40),runId:'12',attempt:'1',identities:{default:identity},node:'22.22.2'};
@@ -27,7 +29,7 @@ test('Root audit composition is explicit: shared supplier/wage suites execute ex
 });
 test('executed coverage rejects empty/all skipped, missing, repeated, failed and foreign suites',()=>{
  const file=POSTGRES_CHAIN_TESTS[0],valid={success:true,numFailedTests:0,numFailedTestSuites:0,testResults:[{name:'/repo/'+file,status:'passed',assertionResults:[{status:'passed'}]}]};
- assertSuiteResults(valid,[file]);
+ assertSuiteResults(valid,[file]);assert.throws(()=>assertSuiteResults({...valid,testResults:[]},[]),/EMPTY_PLAN/);
  for(const report of [{...valid,success:false},{...valid,numFailedTests:1},{...valid,testResults:[]},{...valid,testResults:[...valid.testResults,...valid.testResults]},{...valid,testResults:[{...valid.testResults[0],assertionResults:[{status:'pending'}]}]}])assert.throws(()=>assertSuiteResults(report,[file]));
  const plan=postgresPlan({mapped:[file]}),receipt={version:1,status:'passed',cleanup:'passed',context,plan,results:valid,fingerprint:executionFingerprint(context,plan)};
  assertExecutionReceipt(receipt,context,plan);
@@ -61,7 +63,7 @@ test('main additions are explicit unverified release work; actual source unknown
  const main={sha:'c'.repeat(40),read:path=>path===manifest?JSON.stringify({migrations:mainRows}):path.endsWith(version+'.sql')?sql:candidate.read(path),paths:()=>mainRows.map(r=>'apps/api/migrations/'+r.version+'.sql')};
  const integration=await inspectCompatibility({main,candidate,baseline:candidate,intent:'integration'});assert.equal(integration.passed,true);assert.equal(integration.releaseTodos[0].version,version);assert.equal(integration.mainCompatibility.productionPromotionVerified,false);
  assert.equal((await inspectCompatibility({main,candidate,intent:'acceptance'})).passed,true);
- assert.equal((await inspectCompatibility({main,candidate,intent:'production'})).passed,false);
+ const production=await inspectCompatibility({main,candidate,intent:'production'});assert.equal(production.passed,false);assert.equal(production.mainCompatibility.status,'BLOCKED_INVALID_SOURCE');
  for(const history of [[extra],[{...rows[0],checksum:'f'.repeat(64)}],rows.slice(1)]){
   const baseline={...candidate,read:path=>path===manifest?JSON.stringify({migrations:history}):candidate.read(path),paths:()=>history.map(r=>'apps/api/migrations/'+r.version+'.sql')};
   let rejected=false;try{rejected=!(await inspectCompatibility({main,candidate,baseline,intent:'integration'})).passed;}catch{rejected=true;}assert.equal(rejected,true);
@@ -70,4 +72,29 @@ test('main additions are explicit unverified release work; actual source unknown
 test('inventory reconciliation preserves every unchanged manual semantic field',()=>{
  const old={sourceBase:'exact-source',entries:[{path:'unchanged',owner:'human',semanticStatus:'reviewed',evidence:'retained',sites:[[1,'wall','hash']]}]};
  const next=reconcileTimeInventory(old,[{path:'unchanged',owner:'generated',sites:[{line:9,kind:'wall',sourceSha256:'hash'}]}]);assert.deepEqual(next,old);
+});
+
+test('each managed creation is constrained: one registered call cannot hide a second bare CREATE',async()=>{
+ const managed="const schema=ownedPostgresSchema('sample'); await createOwnedPostgresSchema(pool,schema);";
+ assert.doesNotThrow(()=>assertManagedSchemaCreation(managed,'fixture.ts'));
+ assert.throws(()=>assertManagedSchemaCreation(managed+' const historySchema=randomUUID(); await pool.query(`CREATE SCHEMA ${historySchema}`);','fixture.ts'),/NOT_REGISTERED/);
+ assert.throws(()=>assertManagedSchemaCreation(managed+' await client.query("create \n schema raw");','fixture.ts'),/NOT_REGISTERED/);
+ await assert.rejects(()=>createOwnedPostgresSchema({query:()=>{throw Error('MUST_NOT_QUERY');}},'resource_smoke_'+'f'.repeat(32)),/NOT_CREATED/);
+});
+test('local preflight observes staged, unstaged and untracked fixture changes',()=>{
+ const dir=mkdtempSync(join(tmpdir(),'dx-staged-resource-')),git=(...args)=>execFileSync('git',['-C',dir,...args],{encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim();
+ try{
+  git('init','-q');git('config','user.name','TEST');git('config','user.email','test@example.invalid');writeFileSync(join(dir,'base'),'base');git('add','.');git('commit','-qm','base');const base=git('rev-parse','HEAD');
+  mkdirSync(join(dir,'tests'));const staged='tests/staged-fixture.ts',untracked='tests/untracked-fixture.ts';writeFileSync(join(dir,staged),'CREATE SCHEMA bare');git('add',staged);writeFileSync(join(dir,untracked),'CREATE SCHEMA bare');
+  for(const ref of [null,base]){const changed=resourceChangedPaths(dir,ref);assert.ok(changed.has(staged));assert.ok(changed.has(untracked));}
+  writeFileSync(join(dir,'base'),'unstaged');assert.ok(resourceChangedPaths(dir,null).has('base'));
+ }finally{rmSync(dir,{recursive:true,force:true});}
+});
+test('Full PG requires explicit risk context and a nonempty execution; no-DB scope is never a PG pass',()=>{
+ const valid={DB_REQUIRED:'true',BUSINESS_CHAIN_SENSITIVE:'false',MIGRATION_SENSITIVE:'false',DEPLOYMENT_SENSITIVE:'false',MAPPED_POSTGRES_TESTS:POSTGRES_CHAIN_TESTS[0],BASE_SHA:'b'.repeat(40)};
+ assert.equal(fullGatePostgresPlan(valid).plan.length,1);
+ for(const key of Object.keys(valid)){const bad={...valid};delete bad[key];assert.throws(()=>fullGatePostgresPlan(bad),/RISK_CONTEXT/);}
+ assert.throws(()=>fullGatePostgresPlan({...valid,MAPPED_POSTGRES_TESTS:''}),/EMPTY_PLAN/);
+ assert.throws(()=>fullGatePostgresPlan({...valid,DB_REQUIRED:'false'}),/CONTRADICTION/);
+ assert.equal(fullGatePostgresPlan({...valid,DB_REQUIRED:'false',MAPPED_POSTGRES_TESTS:''}).status,'not-applicable');
 });

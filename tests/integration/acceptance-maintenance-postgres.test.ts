@@ -4,7 +4,7 @@ import pg from 'pg';
 import {describe,it,expect} from 'vitest';
 import {discoverValidatedMigrations,applyMigrations} from '../../scripts/migration-lib.mjs';
 import {assertTestDatabaseTarget} from '../../scripts/test-database-safety.mjs';
-import {ownedPostgresSchema,dropOwnedPostgresSchema} from '../helpers/owned-postgres-schema.js';
+import {ownedPostgresSchema,createOwnedPostgresSchema,dropOwnedPostgresSchema} from '../helpers/owned-postgres-schema.js';
 
 const url=process.env.TEST_DATABASE_URL;
 const suite=url?describe:describe.skip;
@@ -18,7 +18,7 @@ suite('Acceptance maintenance permissions on isolated PostgreSQL',()=>{
   const catalog=await discoverValidatedMigrations();
   const digital=JSON.parse(await readFile('tests/fixtures/migration-histories/digital-da6590cc.json','utf8')).migrations.slice(0,225) as {version:string;checksum:string}[];
   try{
-   await admin.query(`CREATE SCHEMA ${schema}`);
+   await createOwnedPostgresSchema(admin,schema);
    await admin.query(`GRANT USAGE,CREATE ON SCHEMA ${schema} TO dx_rework_acceptance,dx_rework_acceptance_app`);
    await client.connect();
    await client.query('CREATE TABLE schema_migrations(version text PRIMARY KEY,checksum char(64) NOT NULL,applied_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP)');

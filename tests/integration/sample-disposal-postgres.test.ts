@@ -1,4 +1,4 @@
-import { ownedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema, createOwnedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import {randomUUID,createHash} from 'node:crypto';
 import {readFile,readdir} from 'node:fs/promises';
 import pg from 'pg';
@@ -30,7 +30,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
  const issue=async(id:string,version:number)=>{await service.issueQr(user(),id,{version},randomUUID());return token;};
 
  beforeAll(async()=>{
-  await admin.query(`CREATE SCHEMA ${schema}`);
+  await createOwnedPostgresSchema(admin,schema);
   await db.query('CREATE TABLE schema_migrations(version text PRIMARY KEY,checksum char(64) NOT NULL,applied_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP)');
   const folder=new URL('../../apps/api/migrations/',import.meta.url);
   for(const name of (await readdir(folder)).filter(name=>/^\d{4}_.*\.sql$/.test(name)).sort()){

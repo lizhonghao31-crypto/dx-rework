@@ -40,10 +40,10 @@ export async function resourceSmoke(url) {
  try{
   const child=spawnSync(process.execPath,['--input-type=module','-e',`
    import pg from 'pg';
-   import {ownedPostgresSchema} from './scripts/test-resource-contract.mjs';
+   import {ownedPostgresSchema,createOwnedPostgresSchema} from './scripts/test-resource-contract.mjs';
    if(process.env.DATABASE_URL!=='')throw Error('GENERIC_DATABASE_INHERITED');
    const schema=ownedPostgresSchema('resource_smoke');const pool=new pg.Pool({connectionString:process.env.TEST_DATABASE_URL});
-   try{await pool.query('CREATE SCHEMA "'+schema+'"');await pool.query('CREATE TABLE "'+schema+'".smoke(id integer)');console.log(schema);}finally{await pool.end();}
+   try{await createOwnedPostgresSchema(pool,schema);await pool.query('CREATE TABLE "'+schema+'".smoke(id integer)');console.log(schema);}finally{await pool.end();}
    throw Error('EXPECTED_FIXTURE_FAILURE');
   `],{encoding:'utf8',env:{...process.env,...env,NODE_ENV:'test',DATABASE_URL:'',TEST_DATABASE_URL:url}});
   if(child.status!==1||!child.stderr.includes('EXPECTED_FIXTURE_FAILURE'))throw Error('TEST_RESOURCE_FAILURE_CHILD_DID_NOT_EXECUTE');

@@ -1,4 +1,4 @@
-import { ownedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema, createOwnedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import "./production-analysis-postgres.cases.js";
 import { ProductionDashboardService } from "../../apps/api/src/sourcing/production-dashboard-service.js";
 import { ProductionExclusionService } from "../../apps/api/src/sourcing/production-exclusion-service.js";
@@ -45,7 +45,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   return attachmentId;
  };
  beforeAll(async()=>{
-  await admin.query(`CREATE SCHEMA ${schema}`);
+  await createOwnedPostgresSchema(admin,schema);
   const manifest=JSON.parse(await readFile(new URL("../../apps/api/src/platform/migration-manifest.json",import.meta.url),"utf8")) as {migrations:{version:string;checksum:string}[]};
   // Full-schema migrations inspect their recorded predecessors, just as in the deploy runner.
   await database.query(`CREATE TABLE schema_migrations (

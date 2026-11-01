@@ -1,4 +1,4 @@
-import { ownedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema, createOwnedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { readProductionDays } from "../../apps/api/src/sourcing/production-chase.js";
 import {randomUUID} from "node:crypto";
 import {readFile} from "node:fs/promises";
@@ -19,7 +19,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
     lines:[{position:1,styleNo:`STYLE-${index}`,alternateStyleNo:null,color:"蓝",quantity:100,completedQuantity:40}]}));
   const read=async(input:unknown={},reader=actor,visible=orders)=>{const client=await database.connect();try{await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");const result=await readProductionAnalysis(client,visible,reader,"2026-09-07T07:00:00Z",ProductionAnalysisQuerySchema.parse(input));await client.query("COMMIT");return result;}finally{client.release();}};
   beforeAll(async()=>{
-    await admin.query(`CREATE SCHEMA ${schema}`);
+    await createOwnedPostgresSchema(admin,schema);
     await database.query("SET TIME ZONE 'UTC'");
     await database.query(`CREATE TABLE receiving_batches(receiving_batch_id uuid PRIMARY KEY,deleted_at timestamptz,actual_quantity_adjustment bigint DEFAULT 0);
       CREATE TABLE receiving_receipts(receipt_id uuid PRIMARY KEY,receiving_batch_id uuid,received_at timestamptz,actual_quantity bigint);

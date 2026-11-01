@@ -1,5 +1,5 @@
 import {readFile} from "node:fs/promises";
-import { ownedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema, createOwnedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import {randomUUID} from "node:crypto";
 import {RECEIVING_BOARD_BASE_SQL} from "../../apps/api/src/receiving/receiving-service.js";
 import pg from "pg";
@@ -18,7 +18,7 @@ const url = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
   const query = {startDate: "2026-09-01", endDate: "2026-09-07"};
   beforeAll(async () => {
     base = RECEIVING_BOARD_BASE_SQL;
-    await admin.query(`CREATE SCHEMA ${schema}`);
+    await createOwnedPostgresSchema(admin,schema);
     // Isolated table fixtures for the production SQL, not replacement business migrations.
     await database.query(`CREATE TABLE receiving_batches(receiving_batch_id uuid PRIMARY KEY,style_no text,cutting_order_id uuid,deleted_at timestamptz,
       delivery_note_quantity bigint,actual_quantity_adjustment bigint DEFAULT 0,defective_quantity_adjustment bigint DEFAULT 0,version int DEFAULT 1);

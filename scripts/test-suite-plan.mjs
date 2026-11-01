@@ -43,10 +43,23 @@ export function postgresPlan({mapped=[],chain=false,rootAudit=false}={}) {
  const suites=[...new Set([...mapped,...(chain?POSTGRES_CHAIN_TESTS:[]),...(audit?ROOT_AUDIT_TESTS:[])])].sort();
  return suites.map(path=>({path,config:configForSuite(path),memberships:[...(mapped.includes(path)?['mapped']:[]),...(chain&&POSTGRES_CHAIN_TESTS.includes(path)?['chain']:[]),...(audit&&ROOT_AUDIT_TESTS.includes(path)?['root-audit']:[])]}));
 }
+export function fullGatePostgresPlan(environment){
+ for(const key of ['DB_REQUIRED','BUSINESS_CHAIN_SENSITIVE','MIGRATION_SENSITIVE','DEPLOYMENT_SENSITIVE'])if(!['true','false'].includes(environment[key]))throw Error('POSTGRES_RISK_CONTEXT_REQUIRED: '+key);
+ if(typeof environment.MAPPED_POSTGRES_TESTS!=='string'||!/^[0-9a-f]{40}$/.test(environment.BASE_SHA??''))throw Error('POSTGRES_RISK_CONTEXT_REQUIRED: mapped suites and immutable base');
+ const mapped=environment.MAPPED_POSTGRES_TESTS.split(',').filter(Boolean),chain=environment.BUSINESS_CHAIN_SENSITIVE==='true'||environment.MIGRATION_SENSITIVE==='true'||environment.DEPLOYMENT_SENSITIVE==='true';
+ if(environment.DB_REQUIRED==='false'){
+  if(chain||mapped.length)throw Error('POSTGRES_RISK_CONTEXT_CONTRADICTION');
+  return {status:'not-applicable',mapped,chain:false,plan:[]};
+ }
+ const plan=postgresPlan({mapped,chain,rootAudit:environment.MIGRATION_SENSITIVE==='true'});
+ if(!plan.length)throw Error('POSTGRES_EMPTY_PLAN_REJECTED');
+ return {status:'required',mapped,chain,plan};
+}
 export function executionFingerprint(context,plan) {
  return createHash('sha256').update(JSON.stringify({context,plan,configs:[...new Set(plan.map(s=>s.config))].sort().map(path=>[path,readFileSync(path,'utf8')]),contract:readFileSync('scripts/test-resource-contract.mjs','utf8')})).digest('hex');
 }
 export function assertSuiteResults(report,files) {
+ if(!Array.isArray(files)||files.length===0)throw Error('POSTGRES_EMPTY_PLAN_REJECTED');
  if(report.success!==true||report.numFailedTests||report.numFailedTestSuites)throw Error('POSTGRES_EXECUTION_FAILED');
  for(const file of files){
   const matches=report.testResults.filter(r=>r.name.endsWith('/'+file));

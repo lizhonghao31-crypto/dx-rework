@@ -148,6 +148,8 @@ class Fixture:
         checksum = hashlib.sha256(sql.encode()).hexdigest()
         self.manifest = {"migrations": [{"version": SCHEMA, "checksum": checksum}]}
         self.history = {"database": "dx_rework", "migrations": self.manifest["migrations"]}
+        self.acceptance_ledger = self.directory/'acceptance-ledger.json'
+        write(self.acceptance_ledger,json.dumps({'database':'dx_rework_acceptance','migrations':self.manifest['migrations']}))
         write(self.repo / "apps/api/migrations" / (SCHEMA + ".sql"), sql)
         write(self.repo / "apps/api/src/platform/migration-manifest.json", json.dumps(self.manifest) + "\n")
         write(self.repo / "scripts/migration-main-extensions.json", "[]\n")
@@ -280,10 +282,10 @@ class Fixture:
                 if "'storageRole',current_user" in args:print(%r)
                 elif 'pg_database_size' in args:print('1024')
                 elif 'current_database()' in args and 'json_build_object' not in args:print('dx_rework_acceptance')
-                elif 'json_build_object' in args and "'migrations'" in args:print(%r)
+                elif 'json_build_object' in args and "'migrations'" in args:print(open(%r).read())
                 elif 'json_build_object' in args and "'oid'" in args:print('{"database":"dx_rework_acceptance","port":5432,"oid":42,"address":"127.0.0.1","role":"dx_rework_acceptance_app","sessionRole":"dx_rework_acceptance_app"}')
                 elif '--version' in args:print('PostgreSQL 16.0')
-            """ % (str(self.trace), json.dumps({'database':'dx_rework_acceptance','port':5432,'oid':42,'storageRole':'postgres','serverVersion':130023,'databaseBytes':1024,'maxWalBytes':1048576,'dataDirectory':str(self.directory/'pgdata'),'directoryPaths':['base/42'],'logDirectory':'log'}), json.dumps({"database": "dx_rework_acceptance", "migrations": self.manifest["migrations"]})), 0o755)
+            """ % (str(self.trace), json.dumps({'database':'dx_rework_acceptance','port':5432,'oid':42,'storageRole':'postgres','serverVersion':130023,'databaseBytes':1024,'maxWalBytes':1048576,'dataDirectory':str(self.directory/'pgdata'),'directoryPaths':['base/42'],'logDirectory':'log'}), str(self.acceptance_ledger)), 0o755)
 
     def make_http_commands(self):
         # Shared response model: refusal, readiness/version mismatch and assets.
@@ -398,7 +400,7 @@ class Fixture:
             if [[ "$*" == '-p process.versions.node.split(".")[0]' ]]; then echo 22;exit 0; fi
             if [[ "${1:-}" == */database-state.mjs ]]; then
               printf '{"kind":"database-state","action":"%%s"}\\n' "${2:-}" >> '%s'
-              if [[ "${2:-}" == export-history ]]; then printf '%%s\\n' '%s'; fi
+              if [[ "${2:-}" == export-history ]]; then cat '%s'; fi
               if [[ "${2:-}" == print-current ]]; then printf '{"count":1,"version":"%s","checksum":"fixture"}\\n'; fi
               exit 0
             fi
@@ -407,7 +409,7 @@ class Fixture:
             if [[ "${1:-}" == */nginx-workers.mjs ]]; then echo '[]';exit 0;fi
             if [[ "${1:-}" == */drain-nginx-workers.mjs ]]; then exit 0;fi
             exec '%s' --require '%s' "$@"
-        """ % (self.trace, json.dumps({"database": "dx_rework_acceptance", "migrations": self.manifest["migrations"]}), SCHEMA, REAL_NODE, preload), 0o755)
+        """ % (self.trace, self.acceptance_ledger, SCHEMA, REAL_NODE, preload), 0o755)
 
     def release(self, root, sha, acceptance=False):
         version = {"gitSha": sha, "schemaVersion": SCHEMA,
@@ -688,7 +690,7 @@ class ActiveSlotChainTests(unittest.TestCase):
         self.assertEqual(before,f.production_fingerprint())
 
     def test_advanced_main_is_release_todo_without_blocking_independent_acceptance(self):
-        f=self.fixture;f.install();before=f.production_fingerprint()
+        f=self.fixture;f.old_fixed_tools();before=f.production_fingerprint();old=(f.launch/'dx-acceptance').read_bytes()
         command([REAL_GIT,'-C',str(f.repo),'checkout','-q','main'])
         sql='-- TEST next main migration, never executed\n'
         checksum=hashlib.sha256(sql.encode()).hexdigest()
@@ -696,7 +698,23 @@ class ActiveSlotChainTests(unittest.TestCase):
         write(f.repo/'apps/api/src/platform/migration-manifest.json',json.dumps({'migrations':f.manifest['migrations']+[{'version':'0002_main_advanced','checksum':checksum}]})+'\n')
         command([REAL_GIT,'-C',str(f.repo),'add','.']);command([REAL_GIT,'-C',str(f.repo),'commit','-qm','TEST main advanced'])
         command([REAL_GIT,'-C',str(f.repo),'checkout','-q','release/digital-production-v1'])
-        f.trace.unlink(missing_ok=True);result=f.update(check=False)
+        handoff=f.repo/'docs/operations/g1-acceptance-compat-update.sh'
+        checked=f.run(handoff,'check',f.sha)
+        self.assertIn('CHECK_FINISHED',checked.stdout);self.assertIn('PENDING_RELEASE_INTEGRATION',checked.stdout)
+        self.assertEqual(old,(f.launch/'dx-acceptance').read_bytes())
+        installed=f.run(handoff,'install',f.sha)
+        self.assertIn('INSTALLED_TOOL_VERIFIED',installed.stdout);self.assertIn('PENDING_RELEASE_INTEGRATION',installed.stdout)
+        self.assertEqual(before,f.production_fingerprint())
+        self.assertIn('ACCEPTANCE_DIAGNOSTICS_FINISHED',f.run(handoff,'diagnose',f.sha).stdout)
+        valid={'database':'dx_rework_acceptance','migrations':f.manifest['migrations']}
+        for history,reason in [([],'empty'),(valid['migrations']+[{'version':'9999_unknown','checksum':'f'*64}],'absent'),([{**valid['migrations'][0],'checksum':'f'*64}],'drift')]:
+            write(f.acceptance_ledger,json.dumps({'database':'dx_rework_acceptance','migrations':history}))
+            f.trace.unlink(missing_ok=True);rejected=f.run(handoff,'update',f.sha,check=False)
+            self.assertNotEqual(rejected.returncode,0);self.assertIn(reason,rejected.stderr)
+            self.assertEqual(before,f.production_fingerprint())
+            self.assertFalse(any(x['kind'] in ('backup','pm2') for x in f.calls()))
+        write(f.acceptance_ledger,json.dumps(valid))
+        f.trace.unlink(missing_ok=True);result=f.run(handoff,'update',f.sha,check=False)
         self.assertEqual(result.returncode,0,result.stderr);self.assertIn('MISSING_MAIN_IDENTITY',result.stdout)
         self.assertIn('PENDING_RELEASE_INTEGRATION',result.stdout)
         self.assertIn('\"productionPromotionVerified\": false',result.stdout)

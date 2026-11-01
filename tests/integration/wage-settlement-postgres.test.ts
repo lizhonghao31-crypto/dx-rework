@@ -1,4 +1,4 @@
-import { ownedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema, createOwnedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import pg from "pg";
@@ -28,7 +28,7 @@ const url=process.env.TEST_DATABASE_URL;
   return id;
  };
  beforeAll(async()=>{
-  await admin.query(`CREATE SCHEMA ${schema}`);
+  await createOwnedPostgresSchema(admin,schema);
   // Small isolated SQL fixture: these tests exercise report/marker semantics, not the order workflow.
   await db.query(`CREATE TABLE capability_catalog(capability text PRIMARY KEY,display_name text,description text);
    CREATE TABLE role_capabilities(role_code text,capability text,PRIMARY KEY(role_code,capability));

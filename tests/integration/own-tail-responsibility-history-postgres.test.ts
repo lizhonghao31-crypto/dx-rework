@@ -1,4 +1,4 @@
-import { ownedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema, createOwnedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { readFile } from "node:fs/promises";
 
 import pg from "pg";
@@ -15,7 +15,7 @@ runWithPostgres("confirmed own-tail historical responsibility repair", () => {
     const client = await pool.connect();
     const schema = ownedPostgresSchema("own_tail");
     try {
-      await client.query(`CREATE SCHEMA ${schema}`);
+      await createOwnedPostgresSchema(client,schema);
       await client.query(`SET search_path TO ${schema}`);
       await client.query("CREATE TABLE schema_migrations (version text PRIMARY KEY, checksum text NOT NULL, applied_at timestamptz DEFAULT now())");
       const manifest = JSON.parse(await readFile("apps/api/src/platform/migration-manifest.json", "utf8")) as { migrations: Array<{ version: string; checksum: string }> };

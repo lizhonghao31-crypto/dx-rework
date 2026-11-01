@@ -1,4 +1,4 @@
-import { ownedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema, createOwnedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import pg from "pg";
@@ -16,7 +16,7 @@ const url = process.env.TEST_DATABASE_URL;
   const actors = new Map([...allowed, ...denied, "root_superuser"].map(role => [role, randomUUID()]));
 
   beforeAll(async () => {
-    await admin.query(`CREATE SCHEMA ${schema}`);
+    await createOwnedPostgresSchema(admin,schema);
     await db.query(`
       CREATE TABLE role_capabilities(role_code text,capability text,PRIMARY KEY(role_code,capability));
       CREATE TABLE test_roles(user_id uuid,role_code text);

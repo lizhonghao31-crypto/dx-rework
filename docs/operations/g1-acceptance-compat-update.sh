@@ -33,7 +33,7 @@ if [[ "$phase" == check || "$phase" == install ]]; then
     set -euo pipefail
     source "$1/scripts/deploy/lib.sh"
     load_node_config
-    node_exec "$1/scripts/check-main-release-compat.mjs" --repo "$2" --candidate-ref "$3" --tool-ref "$3"
+    node_exec "$1/scripts/check-main-release-compat.mjs" --intent acceptance --repo "$2" --candidate-ref "$3" --tool-ref "$3"
   ' _ "$checkout" "$src" "$target_sha"
   if [[ "$phase" == check ]]; then echo 'CHECK_FINISHED: no tool installation, migration or service update performed.'; exit 0; fi
   # Explicit reviewed installation; never relax the old data-only refresh validator.

@@ -3,7 +3,7 @@ import {readFile} from 'node:fs/promises';
 import pg from 'pg';
 import Fastify from 'fastify';
 import {beforeAll,afterAll,describe,it,expect} from 'vitest';
-import {ownedPostgresSchema,dropOwnedPostgresSchema} from '../helpers/owned-postgres-schema.js';
+import {ownedPostgresSchema,createOwnedPostgresSchema,dropOwnedPostgresSchema} from '../helpers/owned-postgres-schema.js';
 import {applyDigitalPoDateFixture} from '../helpers/digital-po-date-fixture.js';
 import {DigitalProductionIdentityService} from '../../apps/api/src/production-platform/identity-service.js';
 import {DigitalBudgetService} from '../../apps/api/src/production-platform/budget-service.js';
@@ -28,7 +28,7 @@ const url=process.env.TEST_DATABASE_URL;
  const confirmation=(version:number,total='20')=>QuotationConfirmationSchema.parse({expectedVersion:version,customerCode:'PD',customerConfirmedTotal:total,amountScope:'per_piece',quantity:null,quantityUnit:'件',currency:'人民币',taxBasis:'excludes_tax',sourceKind:'explicit_customer_confirmation',sourceField:'customerConfirmedTotal',templateVersion:'online-quotation-v1',evidenceNote:'TEST 客户邮件：确认每件20元，不使用内部成本或销售价替代',confirmedAt:'2026-01-01T00:00:00Z'});
  const readyQuote=async(resource:QuotationResource,process=false)=>{const rowId=randomUUID(),document={...baseDocument(),rows:[{rowId,section:process?'外发工序' as const:'主料' as const,category:'',name:'TEST 面料',specification:'TEST',unit:'米',supplier:'TEST',consumption:'',unitPrice:process?'':'10'}]};let sheet=await quotes.save(actor(),resource,{expectedVersion:0,document,assignments:[{rowId,technicalAssigneeId:tech,priceAssigneeId:process?ie:designer,priceRole:process?'ie_reviewer':'sample_designer'}]},randomUUID());sheet=await quotes.fillRow(actor(tech,['pattern_room_worker']),resource,rowId,{expectedVersion:sheet.version,consumption:'1'},randomUUID());if(process)sheet=await quotes.fillRow(actor(ie,['ie_reviewer']),resource,rowId,{expectedVersion:sheet.version,unitPrice:'10'},randomUUID());return {sheet,rowId};};
  beforeAll(async()=>{
- await admin.query(`CREATE SCHEMA ${schema}`);
+ await createOwnedPostgresSchema(admin,schema);
     for (const name of ["0001_platform_foundation.sql", "0002_dingtalk_identity_access.sql", "0004_public_tools_foundation.sql", "0216_digital_production_order_roots.sql", "0217_digital_production_node_clocks.sql"])
       await database.query(await readFile(new URL(`../../apps/api/migrations/${name}`, import.meta.url), "utf8"));
     // Existing-domain tables are represented only by referenced identity columns in this isolated fixture.

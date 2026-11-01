@@ -8,7 +8,7 @@ import pg from 'pg';
 import {describe,it,expect} from 'vitest';
 import {applyMigrations,discoverValidatedMigrations} from '../../scripts/migration-lib.mjs';
 import {assertTestDatabaseTarget} from '../../scripts/test-database-safety.mjs';
-import {ownedPostgresSchema,dropOwnedPostgresSchema} from '../helpers/owned-postgres-schema.js';
+import {ownedPostgresSchema,createOwnedPostgresSchema,dropOwnedPostgresSchema} from '../helpers/owned-postgres-schema.js';
 
 type Entry={version:string;checksum:string};
 const url=process.env.TEST_DATABASE_URL;
@@ -34,7 +34,7 @@ suite('main and digital historical PostgreSQL upgrades',()=>{
   const scoped=new URL(url!);scoped.searchParams.set('options',`-c search_path=${schema}`);
   const client=new pg.Client({connectionString:scoped.toString()});
   try{
-   await admin.query(`CREATE SCHEMA ${schema}`);await client.connect();
+   await createOwnedPostgresSchema(admin,schema);await client.connect();
    await client.query('CREATE TABLE schema_migrations(version text PRIMARY KEY,checksum char(64) NOT NULL,applied_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP)');
    const serverVersion=Number((await client.query("SHOW server_version_num")).rows[0].server_version_num);
    for(const entry of history){

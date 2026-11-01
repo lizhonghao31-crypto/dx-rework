@@ -3,7 +3,7 @@ import {existsSync,readFileSync,writeFileSync} from 'node:fs';
 import {rm,readFile} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
 import {randomUUID} from 'node:crypto';
-import {STATIC_CHAIN_TESTS,postgresPlan,assertSuiteResults,executionFingerprint,assertExecutionReceipt} from './test-suite-plan.mjs';
+import {STATIC_CHAIN_TESTS,postgresPlan,fullGatePostgresPlan,assertSuiteResults,executionFingerprint,assertExecutionReceipt} from './test-suite-plan.mjs';
 import {resourceContext,resourceEnvironment,cleanupResources,resourceSmoke} from './test-resource-lifecycle.mjs';
 
 const DEFAULT_ECS_ENV_FILE='/opt/dx-rework/shared/.env';
@@ -17,9 +17,13 @@ if(hasSharedRuntimeEnv)for(const line of (await readFile(runtimeEnvFile,'utf8'))
 const databaseUrl=process.env.TEST_DATABASE_URL?.trim(),hasDatabase=Boolean(databaseUrl),hasOss=Boolean(process.env.OSS_BUCKET);
 const full=process.argv.includes('--full-gate'),verify=process.argv.includes('--verify-receipt');
 const receiptPath=process.env.DX_REWORK_POSTGRES_RECEIPT;
+const declared=full?fullGatePostgresPlan(process.env):null;
+if(declared?.status==='not-applicable'){
+ if(receiptPath)writeFileSync(receiptPath,JSON.stringify({status:'not-applicable',reason:'no database-sensitive scope'}));
+ console.log('POSTGRES_NOT_APPLICABLE: no PostgreSQL pass signed');process.exit(0);
+}
+const chain=declared?.chain??true,mapped=declared?.mapped??[];
 if(full&&!process.env.GITHUB_RUN_ID&&!process.env.DX_REWORK_TEST_EXECUTION_ID)throw Error('POSTGRES_LOCAL_EXECUTION_ID_REQUIRED');
-const chain=full?process.env.BUSINESS_CHAIN_SENSITIVE==='true'||process.env.MIGRATION_SENSITIVE==='true'||process.env.DEPLOYMENT_SENSITIVE==='true':true;
-const mapped=full?(process.env.MAPPED_POSTGRES_TESTS||'').split(',').filter(Boolean):[];
 if((full||process.env.DX_REWORK_REQUIRE_TEST_DATABASE==='true')&&!hasDatabase)throw Error('BUSINESS_CHAIN_TEST_DATABASE_REQUIRED: explicit TEST_DATABASE_URL is required');
 function ossBrowserBaseUrl(endpointValue, bucket) {
   const endpoint = new URL(endpointValue);
@@ -136,7 +140,7 @@ if(!hasDatabase&&process.argv.includes('--static-already-validated')){
 }else{
  const resources=await resourceContext({default:databaseUrl,...(process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL?{'acceptance-clock':process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL}:{})});
  let cleanupPassed=false;
- const plan=postgresPlan({mapped,chain,rootAudit:full&&process.env.MIGRATION_SENSITIVE==='true'});
+ const plan=declared?.plan??postgresPlan({mapped,chain});
  const context={head:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),base:process.env.BASE_SHA??null,runId:process.env.GITHUB_RUN_ID??null,attempt:process.env.GITHUB_RUN_ATTEMPT??null,identities:resources.identities,executionId:process.env.DX_REWORK_TEST_EXECUTION_ID??`${process.env.GITHUB_RUN_ID}/${process.env.GITHUB_RUN_ATTEMPT}`,node:process.versions.node,nodeEnv:'test',databaseUrlCleared:true};
  try{
   if(verify){if(!receiptPath)throw Error('POSTGRES_RECEIPT_REQUIRED');assertExecutionReceipt(JSON.parse(readFileSync(receiptPath,'utf8')),context,plan);console.log('BUSINESS_CHAIN_COVERAGE_VERIFIED: same execution covers mapped and chain');}
