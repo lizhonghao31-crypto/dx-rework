@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';import {test} from 'node:test';
 import {mkdtempSync,mkdirSync,writeFileSync,rmSync}from'node:fs';import{tmpdir}from'node:os';import{join}from'node:path';import{execFileSync}from'node:child_process';
-import{sourceFingerprint,validateEvidence,inputFingerprint}from'./construction-evidence.mjs';
+import{sourceFingerprint,validateEvidence,inputFingerprint,assertCandidateIndex}from'./construction-evidence.mjs';
 function fixture(work){const cwd=mkdtempSync(join(tmpdir(),'dx-evidence-')),git=(...a)=>execFileSync('git',['-C',cwd,...a],{encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim();try{
  git('init','-q');git('config','user.name','TEST');git('config','user.email','test@example.invalid');writeFileSync(join(cwd,'source.mjs'),'export const original=1;');writeFileSync(join(cwd,'existing.test.mjs'),'// Existing consumer coverage');git('add','.');git('commit','-qm','base');const base=git('rev-parse','HEAD');writeFileSync(join(cwd,'source.mjs'),'export const original=2;');
  const fingerprint=sourceFingerprint(cwd),record={version:1,base,sourceFingerprint:fingerprint,rules:[{rule:'Actual changed business contract',source:'User approved current change',writes:['source.mjs#original'],reads:['existing.test.mjs'],oldTests:['existing.test.mjs'],initialization:'No schema change; existing fixture retained',dateAndPermission:'No date or permission change in this fixture',expectation:'The original consumer accepts value two',checks:['focused']}],checks:[{id:'focused',command:'node --test existing.test.mjs',status:'passed',exitCode:0,passed:1,failed:0,skipped:0,testedHead:base,sourceFingerprint:fingerprint,context:'Node22 isolated test fixture, no database',startedAt:'2026-11-01T00:00:00Z',endedAt:'2026-11-01T00:00:01Z',logSha256:'a'.repeat(64)}]};work({cwd,base,git,record});
@@ -52,4 +52,10 @@ test('static material/rule changes can use real alternative command evidence, ex
  record.alternativeVerification={reason:'Actual static validation and recorded visual comparison cover the changed material without unrelated tests.',checks:['focused']};assert.equal(validateEvidence(record,{cwd,base}).risk,'quick');
  const bad=structuredClone(record);bad.automaticTestsNotApplicable='';assert.throws(()=>validateEvidence(bad,{cwd,base}),/NO_EXECUTED_CHECK/);
  mkdirSync(join(cwd,'apps/api'),{recursive:true});writeFileSync(join(cwd,'apps/api/service.mjs'),'export const mutation=1;');record.sourceFingerprint=sourceFingerprint(cwd);c.sourceFingerprint=record.sourceFingerprint;assert.throws(()=>validateEvidence(record,{cwd,base}),/NO_EXECUTED_CHECK/);
+}));
+
+test('the final candidate rejects an evidence record generated after staging, even when code fingerprint matches',()=>fixture(({cwd,git})=>{
+ mkdirSync(join(cwd,'docs/engineering'),{recursive:true});const p=join(cwd,'docs/engineering/construction-evidence.json');writeFileSync(p,'old staged result');git('add','.');assert.doesNotThrow(()=>assertCandidateIndex(cwd));
+ const fp=sourceFingerprint(cwd);writeFileSync(p,'actual newly generated result');assert.equal(sourceFingerprint(cwd),fp);assert.throws(()=>assertCandidateIndex(cwd),/CANDIDATE_NOT_STAGED/);
+ git('add','.');assert.doesNotThrow(()=>assertCandidateIndex(cwd));writeFileSync(join(cwd,'forgotten-new-module.mjs'),'export const forgotten=1');assert.throws(()=>assertCandidateIndex(cwd),/CANDIDATE_NOT_STAGED/);git('add','.');assert.doesNotThrow(()=>assertCandidateIndex(cwd));
 }));

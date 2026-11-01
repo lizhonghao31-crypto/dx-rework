@@ -21,3 +21,5 @@ CI 的 light/最终 Gate 调用 `verify-change <base>`：仅文档差异记录�
 确无对应既有测试时，`oldTests:[]` 加不少于20字的 `noExistingTestsReason`，新代码引用 `newTests`（新建或扩充的真实测试）；不能伪装一个无关旧测试。仅规则/文案/CSS/静态素材且实际diff不属高风险时，可说明 `automaticTestsNotApplicable`，提供 `alternativeVerification.reason/checks` 指向真实通过的静态/构建/文件或人工核对辅助命令及其日志凭证，不虚构测试数。可执行代码、Actions、权限、金额和业务状态等仍必须有真实自动验证，不适用声明不能降级实际风险。
 
 对于无原测试的新模块，`newTests`指本次新增或扩充的针对性验证，不填不相关测试凑数。生产业务、权限或可执行代码不适用静态素材的替代出口。
+
+提交顺序：生成当前记录→暂存已批准文件（包括新生成记录）→`verify-change <base>`索引及内容校验→commit→全新检出复验。该最终入口拒绝未暂存/未跟踪文件，不自动暂存任何用户修改；规划期可用`verify <记录> <base>`验证工作草稿。

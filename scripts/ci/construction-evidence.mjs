@@ -19,6 +19,11 @@ export function inputFingerprint(cwd,paths){
  if(!files.length)throw Error('EVIDENCE_INPUT_SCOPE_EMPTY');
  return sha(JSON.stringify(files.map(p=>{const f=cwd+'/'+p;if(!existsSync(f))return[p,'deleted'];const s=lstatSync(f);return[p,sha(s.isSymbolicLink()?readlinkSync(f):readFileSync(f))];})));
 }
+export function assertCandidateIndex(cwd='.'){
+ const unstaged=lines(git(cwd,'diff','--name-only'));
+ const untracked=lines(git(cwd,'ls-files','--others','--exclude-standard'));
+ if(unstaged.length||untracked.length)throw Error('EVIDENCE_CANDIDATE_NOT_STAGED: '+[...unstaged,...untracked].join(','));
+}
 function requireText(v,label){if(typeof v!=='string'||v.trim().length<8||/^(?:已检查|checked|ok|正常|通过)$/i.test(v.trim()))throw Error('EVIDENCE_DETAIL_REQUIRED: '+label);}
 function fileRef(cwd,value,base,allowDeleted=false){
  if(typeof value!=='string'||value.includes('..')||value.startsWith('/')||value.includes('\\'))throw Error('EVIDENCE_FILE_REFERENCE_REQUIRED');
@@ -83,6 +88,7 @@ if(import.meta.url===pathToFileURL(process.argv[1]??'').href){
  if(mode==='fingerprint')console.log(sourceFingerprint());
  else if(mode==='verify')console.log(JSON.stringify(validateEvidence(JSON.parse(readFileSync(path,'utf8')),{base:base??process.env.BASE_SHA})));
  else if(mode==='verify-change'){
+  assertCandidateIndex();
   const actualBase=path??process.env.BASE_SHA;if(!/^[0-9a-f]{40}$/.test(actualBase??''))throw Error('EVIDENCE_BASE_REQUIRED');
   const changed=lines(git('.','diff','--name-only',actualBase)).filter(sourcePath);
   if(changed.length)console.log(JSON.stringify(validateEvidence(JSON.parse(readFileSync('docs/engineering/construction-evidence.json','utf8')),{base:actualBase})));
