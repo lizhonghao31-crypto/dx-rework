@@ -22,7 +22,7 @@ export function assertManagedSchemaCreation(source,path){
 }
 export function checkResourceRegistration(){
  const changed=resourceChangedPaths();
- const managed=new Set(POSTGRES_CHAIN_TESTS);
+ const managed=new Set([...POSTGRES_CHAIN_TESTS,...(process.env.MAPPED_POSTGRES_TESTS??'').split(',').filter(Boolean)]);
  const walk=dir=>readdirSync(dir,{withFileTypes:true}).flatMap(e=>e.isDirectory()?walk(dir+'/'+e.name):e.name.endsWith('.ts')?[dir+'/'+e.name]:[]);
  for(const path of walk('tests')){
   if(path.startsWith('tests/unit/'))continue;

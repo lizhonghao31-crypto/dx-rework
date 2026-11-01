@@ -9,30 +9,39 @@ export function ownedInterruptionGuard(){
  return {assertActive(){if(interrupted)throw Error('OWNED_TASK_INTERRUPTED');},close(){process.removeListener('SIGINT',mark);process.removeListener('SIGTERM',mark);}};
 }
 function signalGroup(pid,signal){try{process.kill(-pid,signal);}catch(e){if(e.code!=='ESRCH')throw e;}}
+async function waitGroup(pid,milliseconds){const end=performance.now()+milliseconds;while(activeGroup(pid)&&performance.now()<end)await pause(50);return !activeGroup(pid);}
+async function stopGroup(pid,initial){
+ signalGroup(pid,initial);if(await waitGroup(pid,500))return;
+ signalGroup(pid,'SIGTERM');if(await waitGroup(pid,500))return;
+ signalGroup(pid,'SIGKILL');if(await waitGroup(pid,1000))return;
+ const error=Error('OWNED_COMMAND_CHILDREN_STILL_RUNNING');error.unsafeToCleanup=true;throw error;
+}
 export async function runOwnedCommand(command,args,{env=process.env,stateFile,stdio='inherit'}={}){
  if(process.platform!=='linux')throw Error('OWNED_PROCESS_GROUP_REQUIRES_LINUX');
  if(stateFile&&existsSync(stateFile)&&(lstatSync(stateFile).isSymbolicLink()||!lstatSync(stateFile).isFile()||lstatSync(stateFile).uid!==process.getuid()))throw Error('OWNED_COMMAND_STATE_REJECTED');
- const child=spawn(command,args,{env,stdio,detached:true});let interrupted=false,spawnError;
+ const child=spawn(command,args,{env,stdio,detached:true});let interrupted=false,spawnError,stopping;
  const state={version:1,controllerPid:process.pid,controllerStarted:startTicks(process.pid),childPid:child.pid,group:child.pid,status:'running'};
  const save=()=>{if(stateFile){if(existsSync(stateFile)&&lstatSync(stateFile).isSymbolicLink())throw Error('OWNED_COMMAND_STATE_REJECTED');const tmp=stateFile+'.tmp-'+process.pid;writeFileSync(tmp,JSON.stringify(state)+'\n',{mode:0o600,flag:'wx'});renameSync(tmp,stateFile);}};
- const forward=signal=>{interrupted=true;if(child.pid)signalGroup(child.pid,signal);};
+ let rejectStop;
+ const stopFailure=new Promise((_,reject)=>{rejectStop=reject;});
+ const forward=signal=>{
+  interrupted=true;
+  // Escalation starts now, independently of close: ignored signals cannot hang await completion.
+  if(!stopping&&child.pid){stopping=stopGroup(child.pid,signal);stopping.catch(rejectStop);}
+ };
  const onInt=()=>forward('SIGINT'),onTerm=()=>forward('SIGTERM');process.on('SIGINT',onInt);process.on('SIGTERM',onTerm);
  let code,signal;
  const completion=new Promise(resolve=>{child.once('error',error=>{spawnError=error;resolve({code:1,signal:null});});child.once('close',(code,signal)=>resolve({code,signal}));});
  try{
-  save();({code,signal}=await completion);
+  save();({code,signal}=await Promise.race([completion,stopFailure]));
+  if(stopping)await stopping;
   let orphaned=false;
-  if(child.pid&&activeGroup(child.pid)){
-   orphaned=!interrupted;
-   signalGroup(child.pid,'SIGTERM');for(let i=0;i<10&&activeGroup(child.pid);i++)await pause(100);
-   if(activeGroup(child.pid)){signalGroup(child.pid,'SIGKILL');for(let i=0;i<10&&activeGroup(child.pid);i++)await pause(100);}
-   if(activeGroup(child.pid)){const e=Error('OWNED_COMMAND_CHILDREN_STILL_RUNNING');e.unsafeToCleanup=true;throw e;}
-  }
+  if(child.pid&&activeGroup(child.pid)){orphaned=!interrupted;await stopGroup(child.pid,'SIGTERM');}
   Object.assign(state,{status:'children_exited',code:interrupted||signal?130:orphaned?1:code??1,signal,interrupted,orphaned,allExited:true});save();
   if(spawnError)throw spawnError;
   return {...state};
  }catch(error){
-  if(child.pid&&activeGroup(child.pid)){signalGroup(child.pid,'SIGKILL');for(let i=0;i<10&&activeGroup(child.pid);i++)await pause(100);if(activeGroup(child.pid))error.unsafeToCleanup=true;}
+  if(child.pid&&activeGroup(child.pid)){signalGroup(child.pid,'SIGKILL');if(!await waitGroup(child.pid,1000))error.unsafeToCleanup=true;}
   Object.assign(state,{status:'failed',allExited:!error.unsafeToCleanup,error:error.code??error.message});try{save();}catch{console.error('OWNED_COMMAND_STATE_WRITE_FAILED');}throw error;
  }
  finally{process.removeListener('SIGINT',onInt);process.removeListener('SIGTERM',onTerm);}

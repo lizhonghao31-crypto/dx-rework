@@ -153,7 +153,7 @@ export const classifyFullGatePaths = (inputPaths) => {
       businessChainSensitive = true;
       domains.add("backend");
     }
-    if (["scripts/test-fixture-prerequisites.mjs","scripts/owned-command.mjs","scripts/test-execution-config.mjs","scripts/ci/test-runtime-metadata.mjs","scripts/run-business-chain-gate.mjs","scripts/test-suite-plan.mjs","scripts/test-resource-contract.mjs","scripts/test-resource-lifecycle.mjs","scripts/test-database-safety.mjs","scripts/test-preflight.mjs","tests/helpers/owned-postgres-schema.ts","vitest.config.ts","vitest.business-chain.config.ts"].includes(path)) {
+    if (["scripts/test-fixture-prerequisites.mjs","scripts/owned-command.mjs","scripts/test-execution-config.mjs","scripts/ci/test-runtime-metadata.mjs","scripts/run-business-chain-gate.mjs","scripts/test-suite-plan.mjs","scripts/test-resource-contract.mjs","scripts/test-resource-lifecycle.mjs","scripts/test-database-safety.mjs","scripts/test-preflight.mjs","tests/helpers/owned-postgres-schema.ts","vitest.config.ts","vitest.postgres-immediate.config.ts","vitest.business-chain.config.ts"].includes(path)) {
       businessChainSensitive = true;
       domains.add("business-chain");
     }

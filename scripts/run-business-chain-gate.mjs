@@ -155,7 +155,7 @@ if(!hasDatabase&&process.argv.includes('--static-already-validated')){
    const reports=[];let safeToClean=true;
    try{
     // Directly affected ordinary PG suites run before long current-schema correctness chains.
-    for(const config of ['vitest.config.ts','vitest.business-chain.config.ts']){
+    for(const config of ['vitest.config.ts','vitest.postgres-immediate.config.ts','vitest.business-chain.config.ts']){
      const files=plan.filter(s=>s.config===config).map(s=>s.path);if(files.length)reports.push(await runVitest(files,config,env,resources.dir+'-'+config+'.json'));
     }
    }catch(error){if(error.unsafeToCleanup)safeToClean=false;throw error;}

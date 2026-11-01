@@ -423,8 +423,8 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       process.stdout.write(`PATTERN_ROOM_FIXTURES ${JSON.stringify({schema,orders:fixtures.rows})}\n`);
     }
     await database.end();
-    await releaseOwnedPostgresSchema(adminPool,schema);
-    if (process.env.PATTERN_ROOM_EVIDENCE === "1") process.stdout.write(`PATTERN_ROOM_CLEANUP ${JSON.stringify({schema,dropped:true})}\n`);
+    const cleanup=await releaseOwnedPostgresSchema(adminPool,schema);
+    if (process.env.PATTERN_ROOM_EVIDENCE === "1") process.stdout.write(`PATTERN_ROOM_CLEANUP ${JSON.stringify({schema,state:cleanup.state,dropped:cleanup.state==='deleted'})}\n`);
     await adminPool.end();
 
       stageStatus='completed';

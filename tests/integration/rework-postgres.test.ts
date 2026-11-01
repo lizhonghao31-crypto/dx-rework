@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { applyMigrations, discoverValidatedMigrations } from "../../scripts/migration-lib.mjs";
 import { assertTestDatabaseTarget } from "../../scripts/test-database-safety.mjs";
-import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema, createOwnedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { completeInspectionReport } from "../inspection-report-fixture.js";
 
 import { ReworkInitiationService } from "../../apps/api/src/rework/service.js";
@@ -53,7 +53,7 @@ runWithPostgres("QC rework initiation PostgreSQL contracts", () => {
 
   beforeAll(async () => {
     await assertTestDatabaseTarget(databaseUrl!);
-    await admin.query(`CREATE SCHEMA ${schema}`);
+    await createOwnedPostgresSchema(admin,schema);
     schemaCreated = true;
     const scoped = new URL(databaseUrl!);
     scoped.searchParams.set("options", `-c search_path=${schema}`);
@@ -104,7 +104,7 @@ runWithPostgres("QC rework initiation PostgreSQL contracts", () => {
     await database.end();
     try {
       if (schemaCreated) {
-        await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
+        await dropOwnedPostgresSchema(admin,schema);
         expect((await admin.query("SELECT 1 FROM pg_namespace WHERE nspname=$1", [schema])).rowCount).toBe(0);
       }
     } finally {

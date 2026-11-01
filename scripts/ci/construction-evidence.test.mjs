@@ -39,3 +39,17 @@ test('a real shallow CI clone rejects missing ancestry; complete history proves 
   assert.equal(validateEvidence(record,{cwd:clone,base}).checks,1);
  }finally{rmSync(container,{recursive:true,force:true});}
 }));
+
+test('a genuinely new module names its new tests instead of inventing an old consumer test',()=>fixture(({cwd,base,record})=>{
+ record.rules[0].oldTests=[];record.rules[0].noExistingTestsReason='This is a new module with no prior applicable tests; new behavior is covered explicitly.';record.rules[0].newTests=['existing.test.mjs'];assert.equal(validateEvidence(record,{cwd,base}).checks,1);
+ record.rules[0].newTests=[];assert.throws(()=>validateEvidence(record,{cwd,base}),/NEW_TESTS_REQUIRED/);
+}));
+test('static material/rule changes can use real alternative command evidence, executable/business changes cannot',()=>fixture(({cwd,base,record})=>{
+ writeFileSync(join(cwd,'source.mjs'),'export const original=1;');writeFileSync(join(cwd,'asset.css'),'.status { color: green; }');record.sourceFingerprint=sourceFingerprint(cwd);
+ const c=record.checks[0];c.kind='command';c.command='node verify-css-and-inspection-evidence.mjs';c.sourceFingerprint=record.sourceFingerprint;delete c.passed;delete c.failed;delete c.skipped;
+ record.rules[0].writes=['asset.css'];record.rules[0].reads=['asset.css'];record.rules[0].oldTests=[];record.rules[0].noExistingTestsReason='Only static CSS material is changed; no executable module or corresponding old test exists.';
+ record.automaticTestsNotApplicable='The change contains static CSS only and has no business, authorization or automatic behavior.';
+ record.alternativeVerification={reason:'Actual static validation and recorded visual comparison cover the changed material without unrelated tests.',checks:['focused']};assert.equal(validateEvidence(record,{cwd,base}).risk,'quick');
+ const bad=structuredClone(record);bad.automaticTestsNotApplicable='';assert.throws(()=>validateEvidence(bad,{cwd,base}),/NO_EXECUTED_CHECK/);
+ mkdirSync(join(cwd,'apps/api'),{recursive:true});writeFileSync(join(cwd,'apps/api/service.mjs'),'export const mutation=1;');record.sourceFingerprint=sourceFingerprint(cwd);c.sourceFingerprint=record.sourceFingerprint;assert.throws(()=>validateEvidence(record,{cwd,base}),/NO_EXECUTED_CHECK/);
+}));

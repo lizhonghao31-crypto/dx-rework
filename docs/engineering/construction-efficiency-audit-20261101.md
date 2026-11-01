@@ -61,3 +61,21 @@ A 为固定源码/PR/运行记录；B 为既有聊天或当时助手报告，本
 本地新隔离库首次漏建两个 CI 已有的维护角色，导致完成15个升级用例和9个资源契约后维护用例失败（约76秒套件墙钟）；全部16资源成功清理。修复的是自有测试库前置，不改业务权限；后续只补失败项和未执行长链，不盲重跑已过15个历史升级。新增只读 `scripts/test-fixture-prerequisites.mjs` 在canonical runner耗时迁移前检查对应角色及membership/低权限，反例覆盖缺角色和错误权限。此为本轮可避免遗漏，不掩饰成业务缺陷。main适配首次引用了release不存在于main的依赖和导入pg的静态迁移库；本地源快照测试提前拒绝，分别按main实际入口改为惰性加载及自身依赖清单，未复制业务SQL或放宽守卫。
 
 本轮#885首次light在证据校验处快速拒绝：checkout深度1缺被测祖先提交，不是业务/构建失败，未分配昂贵Full。修为保留完整历史，新增真实本地file://浅克隆→补齐历史的正反例，保留祖先校验。同时本地定向证据按实际捕获的明确输入文件/目录摘要复用；纯CI历史深度修复不迫使不相关PG业务重跑，输入变动/新增文件/未覆盖写入必须拒绝。跨Head的GitHub最终Gate依旧不能复用。
+
+## 独立定点核验及一次 Codex Review 的集中修复
+
+release #885审查源Head232548515bb7714dad670121f176eac652a5cccd；一次Codex Review17:53:28完成，唯一P1（discussion4436723258）与主对话独立发现的忽略信号问题相同。后续修复不声称又被该Review重审。集中处理以下九项，不为每项再开Review/Full：
+
+|项|实际执行改变|反例/实证与边界|
+|---|---|---|
+|G01 有界停止|收到中断即独立启动升级，不等child.close；使用monotonic performance.now控制终止预算|真实worker+孙进程均忽略INT/TERM、控制者Date.now冻结仍非零退出；确认进程组无人运行后才写清理许可。正常失败/陈旧PID/遗孤检查保留|
+|G02 即时删除隔离|rework即时DROP及pg_namespace不存在断言保留，单独single-worker有限正确性阶段，和长链分阶段await|release真实7项通过；普通mapped实际前置扫描包括MAPPED_POSTGRES_TESTS。main未改其古老部分schema业务夹具，若未来显式映射其裸CREATE会在DDL前拒绝，不假称该遗留业务测试通过|
+|G03 清理证据|PATTERN_ROOM_CLEANUP记录releaseOwned的实际state，retained不称dropped|两分支真实选择原pattern业务用例：日志retained_for_runner/dropped:false、父清理前schema确实存在、父清理后确实不存在；各2份声明资源核清|
+|G04 领域执行旧约束|样衣/外发文档的main唯一基线、旧SSP启动与Gate后Review执行段标历史，指向AGENTS|业务、Root、质量、数据/生产cutover条件不删除；当前授权目标base独立核验|
+|G05 适用验证|真无旧测试可说明理由并列新增/扩充验证；仅低风险规则/静态素材可用有理由且有实际命令/凭证的替代核验|新模块不凑无关旧测试；可执行代码/Actions/业务/权限不能借静态素材声明免自动验证，缺理由和高风险反例拒绝|
+|G06 生成与归因义务|AGENTS明确相关生成器修改保护人工语义/必要稳定性；归因不明才最小精确旧SHA对照|不要求每PR生成全索引或全量重跑基线；未改time-site人工注记，实计时预算采用单调时钟，旧索引原样保留|
+|G07 重试上限|已证瞬态原因后同Head最多一次|断言失败先定位修复；不扩大Full预算、不把人工取消/预算/故障混称|
+|G08 edited事件|base/模式编辑的真实业务light按同一pull_request条件发布/必需产物|Node执行实际工作流表达式并核scopeRequired，invalidate可成功，旧Gate仍失效；final/create不发布light产物|
+|G09 忽略元数据|产物选择与controller的lightProof一致：无实际required-name light的元数据run跳过|成功light→忽略metadata仍选原成功；更新真实失败/skip/in-progress light绝不跳过去拿旧pass。此前producer artifact13094415836成功约9.23MB；Full实际命中仍待固定最终Head运行，不提前算节省|
+
+本轮最后定向验证：release140项native、25项原消费者、真实PG资源/维护10、即时删除7及受管pattern1；main78项native、23项原消费者、真实资源9及受管pattern1，实际解析即时删除配置maxWorkers1。命令、真实退出/测试数、源码指纹与不可变尝试日志摘要见当前construction-evidence；它们是定向组合，不能相加冒充一次完整Full。昂贵最终Gate只在冻结Head后请求。
