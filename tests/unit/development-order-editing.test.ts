@@ -46,7 +46,7 @@ describe("creation quantity buffers and development matrix", () => {
   });
   it("removes exactly the chosen column without mutating the previous version or losing raw units and fractions", () => {
     const before=initialDevelopmentDocument("裤子");
-    before.unit="inch";before.measurements=[{name:"腰围",values:["2 1/2","123.456"]}];
+    before.sizes=["M","L"];before.sizeQuantities=[null,null];before.unit="inch";before.measurements=[{name:"腰围",values:["2 1/2","123.456"]}];
     const after=removeDevelopmentSize(before,0);
     expect(after.sizes).toEqual(["L"]);expect(after.measurements[0]!.values).toEqual(["123.456"]);
     expect(before.measurements[0]!.values).toEqual(["2 1/2","123.456"]);
@@ -54,11 +54,11 @@ describe("creation quantity buffers and development matrix", () => {
     expect(after.unit).toBe("inch");
     const empty=removeDevelopmentSize(after,0);
     expect(DevelopmentDocumentSchema.safeParse(empty).success).toBe(true);
-    expect(developmentPublishErrors(empty)).toContain("至少填写一个尺码列，或先保存草稿");
+    expect(developmentPublishErrors(empty)).not.toContain("至少填写一个尺码列，或先保存草稿");
   });
   it("permits incomplete size names in a draft, locates them at publication, and preserves legacy combined instructions", () => {
     const old=initialDevelopmentDocument();delete old.washingMethod;delete old.ironing;
-    old.washingIroning="TEST原洗水整烫说明";old.sizes=["",""];
+    old.washingIroning="TEST原洗水整烫说明";old.sizes=["",""];old.sizeQuantities=[null,null];old.measurements=old.measurements.map(row=>({...row,values:["",""]}));
     expect(DevelopmentDocumentSchema.parse(old).washingIroning).toBe("TEST原洗水整烫说明");
     expect(developmentPublishErrors(old)).toContain("请填写尺码列名称，或删除不用的列");
     const next=DevelopmentDocumentSchema.parse({...old,washing:"免洗",ironing:"独立整烫",washingMethod:"保留待洗说明"});

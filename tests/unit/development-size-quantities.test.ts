@@ -4,7 +4,7 @@ import {randomUUID} from "node:crypto";
 import {createElement} from "react";
 import {renderToStaticMarkup} from "react-dom/server";
 import {DevelopmentPrint} from "../../apps/web/src/digital-development-print.js";
-import {DevelopmentDocumentSchema,developmentPublishErrors,developmentMakingSizes} from "@dx-rework/contracts/digital-development";
+import {DevelopmentDocumentSchema,developmentPublishErrors,developmentMakingSizes,developmentSizeQuantityIssues} from "@dx-rework/contracts/digital-development";
 import {developmentAmendmentErrors} from "@dx-rework/contracts/digital-development-amendments";
 import {initialDevelopmentDocument,removeDevelopmentSize,moveDevelopmentSize,developmentSizeQuantityInputs,developmentOrderInput} from "../../apps/web/src/digital-development-editing.js";
 import {developmentIssues} from "../../apps/web/src/digital-development-validation.js";
@@ -19,7 +19,7 @@ describe("P03 per-size making quantities and frozen development date",()=>{
   const value=document();expect(DevelopmentDocumentSchema.safeParse({...value,sizeQuantities:[null,null,null]}).success).toBe(true);
   for(const sizeQuantities of [[null,1,0],[0,0,0],[1,1,0]])expect(developmentPublishErrors({...value,sizeQuantities}).length).toBeGreaterThan(0);
   for(const sizeQuantities of [[-1,4,0],[1.5,1.5,0],[100001,0,0],[2,1]])expect(DevelopmentDocumentSchema.safeParse({...value,sizeQuantities}).success).toBe(false);
-  const {documentFormatVersion:_version,sizeQuantities:_counts,...legacy}=value;void _version;void _counts;expect(developmentPublishErrors(legacy).join()).toContain("逐码");expect(DevelopmentDocumentSchema.safeParse({...value,documentFormatVersion:1}).success).toBe(false);
+  const {documentFormatVersion:_version,sizeQuantities:_counts,...legacy}=value;void _version;void _counts;expect(developmentPublishErrors(legacy)).toEqual([]);expect(developmentSizeQuantityIssues(legacy).length).toBeGreaterThan(0);expect(DevelopmentDocumentSchema.safeParse({...value,documentFormatVersion:1}).success).toBe(false);
   for(const input of ["-1","1.5","2件","100001"]){const issues=developmentIssues({...value,sizeQuantities:[null,1,0]},"3",["row"],false,null,[input,"1","0"]);expect(issues[0]?.id).toBe("development-size-quantity-0");}
  });
  it("moves/removes the same column atomically, retaining zero and technical fractions",()=>{
@@ -39,7 +39,7 @@ describe("P03 per-size making quantities and frozen development date",()=>{
   expect(developmentMakingSizes(legacy)).toBe("旧码 42");expect(developmentDraftForSave(legacy,legacy,"2026-09-30T00:00:00Z")).toMatchObject({documentFormatVersion:2,sizeQuantities:[null,null,null],orderDate:"2026-09-30"});
   const corrected={...legacy,instructions:"资料澄清"},options=legacyAmendmentPublicationOptions(legacy,corrected);expect(developmentPublishErrors(corrected,options)).toEqual([]);expect(legacy.orderDate).toBeNull();
   expect(developmentAmendmentErrors(legacy,{...corrected,quantity:4}).length).toBeGreaterThan(0);expect(legacyAmendmentPublicationOptions(document(),legacy).allowLegacySizeQuantities).toBe(false);
-  expect(developmentPublishErrors(developmentRevisionForSave(legacy,legacy),{allowMissingOrderDate:true}).join()).toContain("制作数量");expect(()=>developmentRevisionForSave({...document(),orderDate:"2026-10-21"},document())).toThrow("首次");
+  expect(developmentPublishErrors(developmentRevisionForSave(legacy,legacy),{allowMissingOrderDate:true})).toEqual([]);expect(developmentSizeQuantityIssues(developmentRevisionForSave(legacy,legacy)).length).toBeGreaterThan(0);expect(()=>developmentRevisionForSave({...document(),orderDate:"2026-10-21"},document())).toThrow("首次");
  });
  it("requires explicit automatic-round upgrades with a matching basis and never mutates frozen making facts",()=>{
   const legacy=document();delete legacy.documentFormatVersion;delete legacy.sizeQuantities;legacy.orderDate=null;

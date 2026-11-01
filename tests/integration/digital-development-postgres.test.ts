@@ -37,6 +37,7 @@ run("P05 development forms PostgreSQL", () => {
       CREATE TABLE rework_orders(rework_order_id uuid PRIMARY KEY);
       CREATE TABLE pattern_room_orders(order_id uuid PRIMARY KEY);`);
     await database.query(await readFile(new URL("../../apps/api/migrations/0218_digital_production_identity.sql", import.meta.url), "utf8"));
+    await database.query(await readFile(new URL("../../apps/api/migrations/0266_new_flow_creation_context.sql", import.meta.url), "utf8"));
     await applyDigitalPoDateFixture(database);
     await database.query(`CREATE TABLE business_roles(role_code text PRIMARY KEY,display_name text,description text,enabled boolean DEFAULT true,updated_at timestamptz);
       CREATE FUNCTION fixture_role_guard() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$;
@@ -83,31 +84,30 @@ run("P05 development forms PostgreSQL", () => {
     expect(SaveDevelopmentSchema.safeParse({expectedVersion:2,document:{...document,patternPrice:"40.000"}}).success).toBe(false);
     expect((await development.read(actor(),await source())).document).toBeNull();
   });
-  it("persists incomplete customer PO drafts, rejects invalid initial publication without tasks, and hides PO drafts from technical readers",async()=>{
-    const id=await source(),identity=await development.read(actor(),id);
-    const document:DevelopmentDocument=await ready();
-    const order=InitialCustomerOrderDraftSchema.parse({customerCode:"PD",productGroup:"男装",designStyleNo:identity.designStyleNo,temporaryStyleNo:null,orderDate:"2026-10-15",contractDeliveryDate:null,lines:[{color:"TEST蓝",deliveryDate:null,sizes:[{size:"M",quantity:"12."}]}]});
+  it("publishes development with incomplete PO sizes while formal confirmation remains separate",async()=>{
+    for(const withOrder of [false,true]){
+      const id=await source(),identity=await development.read(actor(),id),document=await ready();
+      document.sizes=[];document.sizeQuantities=[];document.measurements=[];
+      if(withOrder)document.customerOrderDraft={withOrder:true,order:InitialCustomerOrderDraftSchema.parse({customerCode:"PD",productGroup:"男装",designStyleNo:identity.designStyleNo,temporaryStyleNo:null,orderDate:"2026-10-15",contractDeliveryDate:null,salesYear:2027,salesSeries:"P05",requiresColorMatching:true,lines:[{color:"TEST蓝",deliveryDate:null,sizes:[{size:"",quantity:""}]}]})};
+      const saved=await development.save(actor(),id,{expectedVersion:0,document},randomUUID());
+      const published=await development.publish(actor(),id,saved.version,randomUUID());
+      expect(published.status).toBe("published");expect(published.document?.sizes).toEqual([]);
+      expect((await database.query("SELECT count(*)::int n FROM digital_production_orders WHERE source_id=$1",[id])).rows[0].n).toBe(0);
+      if(withOrder){
+        const order=structuredClone(published.document!.customerOrderDraft!.order);
+        expect(()=>initialCustomerOrderInput(order)).toThrow("正整数订购数量");
+        order.lines[0]!.sizes=[{size:"M",quantity:"19"}];order.lines[0]!.customerWarehouseArrivalDate=minimumInitialCustomerDate();
+        const confirmed=await service.createOrder(actor(),DigitalOrderCreateSchema.parse(initialCustomerOrderInput(order)),randomUUID(),id);
+        expect(confirmed.lines[0]?.sizes[0]?.quantity).toBe(19);expect(confirmed.salesYear).toBe(2027);expect(confirmed.salesSeries).toBe("P05");expect(confirmed.requiresColorMatching).toBe(true);
+        expect((await development.read(actor(),id)).document?.customerOrderDraft?.order.lines[0]?.sizes[0]?.quantity).toBe("");
+      }
+    }
+  });
+  it("freezes complete ordering drafts and hides them from technical readers",async()=>{
+    const id=await source(),identity=await development.read(actor(),id),document=await ready();
+    const order=InitialCustomerOrderDraftSchema.parse({customerCode:"PD",productGroup:"男装",designStyleNo:identity.designStyleNo,temporaryStyleNo:null,orderDate:"2026-10-15",contractDeliveryDate:null,lines:[{color:"TEST蓝",customerWarehouseArrivalDate:minimumInitialCustomerDate(),deliveryDate:null,sizes:[{size:"M",quantity:"12"}]}]});
     document.customerOrderDraft={withOrder:true,order};
-    const count=async()=>(await database.query("SELECT count(*)::int n FROM digital_production_task_access WHERE source_id=$1",[id])).rows[0].n;
-    let saved=await development.save(actor(),id,{expectedVersion:0,document},randomUUID());
-    expect(saved.document?.customerOrderDraft?.order.lines[0]?.sizes[0]?.quantity).toBe("12.");
-    await expect(development.publish(actor(),id,saved.version,randomUUID())).rejects.toMatchObject({statusCode:400,message:expect.stringContaining("PO 1")});
-    expect(await count()).toBe(0);
-    order.lines[0]!.sizes[0]!.quantity="12";
-    const minimum=minimumInitialCustomerDate(),prior=new Date(`${minimum}T00:00:00Z`);prior.setUTCDate(prior.getUTCDate()-1);
-    order.lines[0]!.customerWarehouseArrivalDate=prior.toISOString().slice(0,10);
-    saved=await development.save(actor(),id,{expectedVersion:saved.version,document},randomUUID());
-    await expect(development.publish(actor(),id,saved.version,randomUUID())).rejects.toMatchObject({statusCode:400,message:expect.stringContaining("出货日期")});
-    expect(await count()).toBe(0);
-    order.lines[0]!.customerWarehouseArrivalDate=minimum;order.orderDate='2099-01-01';
-    saved=await development.save(actor(),id,{expectedVersion:saved.version,document},randomUUID());
-    await expect(development.publish(actor(),id,saved.version,randomUUID())).rejects.toMatchObject({statusCode:400,message:expect.stringContaining('客户下单日期')});expect(await count()).toBe(0);
-    order.orderDate='2026-10-15';order.designStyleNo="TEST-TAMPERED";
-    saved=await development.save(actor(),id,{expectedVersion:saved.version,document},randomUUID());
-    await expect(development.publish(actor(),id,saved.version,randomUUID())).rejects.toMatchObject({statusCode:400,message:expect.stringContaining("当前开发来源一致")});
-    expect(await count()).toBe(0);
-    order.designStyleNo=identity.designStyleNo;
-    saved=await development.save(actor(),id,{expectedVersion:saved.version,document},randomUUID());
+    const saved=await development.save(actor(),id,{expectedVersion:0,document},randomUUID());
     await development.publish(actor(),id,saved.version,randomUUID());
     const confirmation=DigitalOrderCreateSchema.parse(initialCustomerOrderInput(order));
     for(const patch of [
@@ -126,6 +126,26 @@ run("P05 development forms PostgreSQL", () => {
     await database.query("INSERT INTO user_role_assignments(user_id,role_code) VALUES($1,'pattern_room_supervisor')",[other]);
     const technical=await development.read(actor(other,['pattern_room_supervisor']),id);
     expect(technical.document?.customerOrderDraft).toBeUndefined();expect(technical.productionOrderId).toBeNull();expect(technical.document?.quantity).toBe(1);
+  });
+  it("saves a preorder with only real material information, without formal PO or production tasks",async()=>{
+    const designStyleNo=`TEST-PRE-${randomUUID()}`;
+    const {sourceId:id}=await service.createSource(actor(),{developmentType:"头版",designStyleNo,temporaryStyleNo:null,customerCode:null},randomUUID());
+    const document={...draft(),quantity:null,sizes:[],sizeQuantities:[],measurements:[],files:[],customerOrderDraft:{withOrder:true,stage:"preorder" as const,order:InitialCustomerOrderDraftSchema.parse({customerCode:"",productGroup:"男装",designStyleNo,temporaryStyleNo:null,orderDate:"",contractDeliveryDate:null,lines:[{color:"",deliveryDate:null,sizes:[{size:"",quantity:""}]}]})}};
+    const saved=await development.save(actor(),id,{expectedVersion:0,document},randomUUID());
+    expect(saved.status).toBe("draft");expect(saved.document?.customerOrderDraft?.stage).toBe("preorder");
+    expect(saved.document?.quantity).toBeNull();expect(saved.document?.files).toEqual([]);
+    expect((await database.query("SELECT count(*)::int n FROM digital_production_task_access WHERE source_id=$1",[id])).rows[0].n).toBe(0);
+    expect((await database.query("SELECT count(*)::int n FROM digital_production_orders WHERE source_id=$1",[id])).rows[0].n).toBe(0);
+  });
+  it("keeps business IDs unique under concurrency and exposes no other-source metadata",async()=>{
+    const input={developmentType:"头版" as const,designStyleNo:`TEST-ID-${randomUUID()}`,temporaryStyleNo:null,customerCode:"PD"};
+    const key=randomUUID();
+    const results=await Promise.allSettled([service.createSource(actor(),input,key),service.createSource(actor(other),{...input,designStyleNo:input.designStyleNo.toLowerCase()},randomUUID())]);
+    expect(results.filter(result=>result.status==="fulfilled")).toHaveLength(1);expect(results.filter(result=>result.status==="rejected")).toHaveLength(1);
+    expect((await database.query("SELECT count(*)::int n FROM digital_design_code_registry WHERE code_key=$1",[input.designStyleNo.toLowerCase()])).rows[0].n).toBe(1);
+    const check=await service.checkDesignCode(actor(other),input.designStyleNo);
+    expect(check).toEqual({code:input.designStyleNo,available:false});expect(Object.keys(check).sort()).toEqual(["available","code"]);
+    await expect(service.checkDesignCode(actor(other,["quality_control"]),input.designStyleNo)).rejects.toMatchObject({statusCode:403});
   });
   it("retains later customer confirmation with independent PO quantities after development published without an order",async()=>{
     const id=await source(),sheet=await development.read(actor(),id),document=await ready();
@@ -230,7 +250,7 @@ run("P05 development forms PostgreSQL", () => {
     const emptyId=await source();expect(await loadCockpitDocumentCategory({sourceId:emptyId,orderId:null} as OrderJourney,'development',read(actor(),emptyId),signal)).toMatchObject({state:'missing',entries:[]});
   });
 
-  it("P03 fixes the development date to server source time and enforces new making counts at first publication",async()=>{
+  it("preserves the source date and validates supplied making counts independently of optional creation sizes",async()=>{
     const id=await source(),doc=await ready();
     const sourceDate=(await development.read(actor(),id)).developmentCreatedDate!;
     await expect(development.save(actor(),id,{expectedVersion:0,document:{...doc,orderDate:sourceDate==="2026-10-21"?"2026-10-22":"2026-10-21"}},randomUUID())).rejects.toMatchObject({statusCode:400});
@@ -238,7 +258,6 @@ run("P05 development forms PostgreSQL", () => {
     const {documentFormatVersion:_version,sizeQuantities:_counts,...oldDraft}=doc;void _version;void _counts;
     const legacySaved=await development.save(actor(),id,{expectedVersion:0,document:oldDraft},randomUUID());
     expect(legacySaved.document).toMatchObject({documentFormatVersion:2,sizeQuantities:[null],orderDate:sourceDate});
-    await expect(development.publish(actor(),id,legacySaved.version,randomUUID())).rejects.toThrow("制作数量");
     expect((await database.query("SELECT count(*)::int n FROM digital_production_task_access WHERE source_id=$1",[id])).rows[0].n).toBe(0);
     await expect(development.save(actor(),id,{expectedVersion:legacySaved.version,document:oldDraft},randomUUID())).rejects.toThrow("不能移除");
     const next={...legacySaved.document!,sizeQuantities:[2],quantity:3};

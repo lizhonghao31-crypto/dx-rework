@@ -1,0 +1,52 @@
+// Real creation component and inherited styles; synthetic API is isolated from business data.
+import {createRoot} from 'react-dom/client';
+import {useState} from 'react';
+import {DevelopmentCreateForm,initialDevelopmentOrder} from '../../apps/web/src/digital-development-create-form.js';
+import {initialDevelopmentDocument} from '../../apps/web/src/digital-development-editing.js';
+import {SaveDevelopmentSchema,developmentPublishErrors,type DevelopmentSheet,type DevelopmentDocument} from '@dx-rework/contracts/digital-development';
+import '../../packages/ui/src/tokens.css';
+import '../../packages/ui/src/components.css';
+import '../../apps/web/src/styles.css';
+import '../../apps/web/src/digital-development-workspace.css';
+
+const id=(n:number)=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
+const params=new URLSearchParams(location.search),withOrder=!params.has('pure'),fresh=params.has('fresh');
+const customers=[{code:'PD',name:'TEST 客户',productGroups:['男装'],defaultMerchandiserId:null}];
+const order={...initialDevelopmentOrder(customers),customerCode:'PD',designStyleNo:'TEST-OPTIONS',orderDate:'2026-11-01',salesYear:params.has('historical')?2025:null,salesSeries:null,lines:[{formalPoNo:'TEST-PO-01',poNumber:null,formalStyleNo:null,temporaryStyleNo:null,color:'TEST 蓝',colorForeign:null,deliveryDate:null,customerWarehouseArrivalDate:'2027-03-15',sizes:[{size:'',quantity:''}]}]};
+const document:DevelopmentDocument={...initialDevelopmentDocument(),quantity:1,orderDate:'2026-11-01',materials:[],patternCategoryId:id(2),files:[{attachmentId:id(3),kind:'款图' as const}],customerOrderDraft:{withOrder,order}};
+if(params.has('preorder')){document.customerOrderDraft={withOrder:true,order,...{stage:'preorder' as const}};document.quantity=null;document.files=[];document.patternCategoryId=null;order.customerCode='';order.orderDate='';}
+const state={saved:{sourceId:id(1),designStyleNo:order.designStyleNo,temporaryStyleNo:null,customerCode:params.has('preorder')?null:'PD',developmentType:'头版',designerName:'TEST 设计师',version:1,status:'draft',document,publishedAt:null,taskId:null,canEdit:true,materialEvents:[]} as DevelopmentSheet,
+  requests:[] as Array<{path:string;method:string;body:unknown}>,failNextSave:false,created:0,orderId:null as string|null};
+Object.assign(window,{creationOptionsFixture:state});
+window.fetch=async(input,init)=>{
+  const path=String(input),method=init?.method??'GET',body=init?.body?JSON.parse(String(init.body)):null;
+  state.requests.push({path,method,body});
+  if(path.includes('/auth/'))return Response.json({status:'authorized',user:{id:id(9),displayName:'TEST 设计师',capabilities:['pattern_room:orders:create']}});
+  if(path.includes('/design-codes/check'))return Response.json({code:new URL(path,location.href).searchParams.get('code'),available:!path.includes('USED')});
+  if(path.includes('/options'))return Response.json({serverToday:'2026-11-01',minimumInitialCustomerDate:'2026-12-01',customers});
+  if(path.endsWith('/category-options'))return Response.json([{priceId:id(2),name:'TEST 短袖上衣',unit:'件'}]);
+  if(path.endsWith('/quote'))return Response.json({priceId:id(2),name:'TEST 短袖上衣',unit:'件',amount:'40.000',version:1});
+  if(path.includes('/attachments/')){
+    if(path.endsWith('/metadata'))return Response.json({filename:'TEST现有款图.png',mimeType:'image/png',sizeBytes:68});
+    return new Response(Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a7V8AAAAASUVORK5CYII='),c=>c.charCodeAt(0)),{headers:{'content-type':'image/png'}});
+  }
+  if(path.endsWith('/development/publish')){
+    const errors=developmentPublishErrors(state.saved.document!);if(errors.length)return Response.json({error:{message:errors.join('；')}},{status:400});
+    state.saved={...state.saved,status:'published',version:state.saved.version+1};return Response.json(state.saved);
+  }
+  if(path.endsWith('/development')){
+    if(method==='PUT'){
+      if(state.failNextSave){state.failNextSave=false;return Response.json({error:{message:'TEST 保存失败，输入保留'}},{status:503});}
+      const parsed=SaveDevelopmentSchema.parse(body);if(parsed.expectedVersion!==state.saved.version)return Response.json({error:{message:'TEST 版本冲突'}},{status:409});
+      state.saved={...state.saved,version:state.saved.version+1,document:structuredClone(parsed.document)};
+    }
+    return Response.json(state.saved);
+  }
+  if(path.includes('/sources?'))return Response.json({items:[],page:1});
+  throw new Error(`Unmapped creation fixture: ${method} ${path}`);
+};
+function Fixture(){
+  const [done,setDone]=useState(false);
+  return done?<p role="status">TEST 开发已发布，正式订购配码待后续确认</p>:<DevelopmentCreateForm intent={withOrder?'certain_order':'development'} {...(fresh?{}:{existingDraft:structuredClone(state.saved)})} customers={customers} serverToday="2026-11-01" minimumDate="2026-12-01" onCancel={()=>{}} onCreated={(_id,orderId)=>{state.created++;state.orderId=orderId;setDone(true);}}/>;
+}
+createRoot(window.document.getElementById('root')!).render(<Fixture/>);

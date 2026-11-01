@@ -1,4 +1,4 @@
-import { DevelopmentDocumentSchema, developmentPublishErrors, developmentSizeQuantityIssues, developmentMaterialPublishIssues, type DevelopmentDocument } from "@dx-rework/contracts/digital-development";
+import { DevelopmentDocumentSchema, developmentPublishErrors, developmentPublicationSizeIssues, developmentMaterialPublishIssues, type DevelopmentDocument } from "@dx-rework/contracts/digital-development";
 import {developmentMakingQuantityError} from "./digital-development-editing.js";
 import { DevelopmentRevisionSchema, type DevelopmentRevision } from "@dx-rework/contracts/digital-development-rounds";
 import type { DocumentIssue } from "./document-editor.js";
@@ -21,12 +21,12 @@ export function developmentIssues(document:DevelopmentDocument,quantityInput:str
  if(revision){const parsedRevision=DevelopmentRevisionSchema.safeParse({...revision,document});if(!parsedRevision.success)for(const issue of parsedRevision.error.issues)if(issue.path[0]!=="document")issues.push({id:"development-revision",label:"复版修改依据",message:issue.message});}
  if(!publish||!parsed.success||issues.length)return issues;
  for(const message of developmentPublishErrors(parsed.data,{allowMissingOrderDate})){
-  if(developmentSizeQuantityIssues(parsed.data).some(issue=>issue.message===message))continue;
+  if(developmentPublicationSizeIssues(parsed.data).some(issue=>issue.message===message))continue;
   if(developmentMaterialPublishIssues(parsed.data).some(issue=>issue.message===message))continue;
   const key=message.includes("数量")?"quantity":message.includes("打样尺码")?"sampleSize":message.includes("尺码列")?"sizes":message.includes("下单日期")?"orderDate":message.includes("仅适用于")?"craft":"files";
   issues.push({id:key==="files"?"development-upload":key==="sizes"?document.sizes.length?`development-size-${document.sizes.findIndex(size=>!size.trim())}`:"development-sizes":`development-${key}`,label:labels[key]??key,message});
  }
- for(const issue of developmentSizeQuantityIssues(parsed.data))issues.push({id:issue.index===null?"development-size-quantities":`development-size-quantity-${issue.index}`,label:"尺寸表 · 制作数量",message:issue.message});
+ for(const issue of developmentPublicationSizeIssues(parsed.data))issues.push({id:issue.index===null?"development-size-quantities":`development-size-quantity-${issue.index}`,label:"尺寸表 · 制作数量",message:issue.message});
  for(const issue of developmentMaterialPublishIssues(parsed.data)){const row=parsed.data.materials.find(row=>row.materialId===issue.materialId)!;issues.push({id:`development-${row.materialId}-${issue.field}`,label:`面辅料 · ${row.label||row.category} · ${labels[issue.field]}`,message:issue.message});}
  return issues;
 }

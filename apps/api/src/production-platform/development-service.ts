@@ -1,5 +1,5 @@
 import {developmentRevisionSource,inheritedDevelopmentFile} from './development-revision-source.js';
-import {acceptanceBusinessContext,businessNow,observedBusinessTime} from '../acceptance-clock/business-time.js';
+import {acceptanceBusinessContext,observedBusinessTime} from '../acceptance-clock/business-time.js';
 import {validateAuxiliaryReferences} from '../access/auxiliary-catalog-service.js';
 import {DevelopmentAmendmentService} from "./development-amendment-service.js";
 import {developmentDraftForSave} from "./development-document-format.js";
@@ -7,7 +7,7 @@ import type {SaveDevelopmentAmendment,SubmitDevelopmentAmendment} from "@dx-rewo
 import {effectiveVerificationDocument} from "./development-material-verification.js";
 import {documentMetadata} from "./document-metadata.js";
 import {materialReadiness} from "./development-material-readiness.js";
-import { DigitalOrderCreateSchema, beijingCalendarDate, customerOrderDateError, minimumInitialCustomerDate, initialCustomerOrderInput, initialCustomerDateErrors } from "@dx-rework/contracts/digital-production";
+import { beijingCalendarDate } from "@dx-rework/contracts/digital-production";
 import {developmentDocumentRow,developmentRoundsAvailable} from "./development-round-repository.js";
 import {DevelopmentRouteService} from "./development-route-service.js";
 import type {PatternRoomOrderService} from "../pattern-room/order-service.js";
@@ -115,17 +115,12 @@ export class DigitalDevelopmentService {
       const errors = developmentPublishErrors(row.document);
       if (errors.length) throw new ApplicationError("VALIDATION_ERROR", errors.join("；"), 400);
       if(row.document.customerOrderDraft?.withOrder){
-        let input;
-        try{input=initialCustomerOrderInput(row.document.customerOrderDraft.order);}catch(reason){throw new ApplicationError("VALIDATION_ERROR",reason instanceof Error?reason.message:"请核实订购数量",400);}
-        const parsed=DigitalOrderCreateSchema.safeParse(input);
-        if(!parsed.success)throw new ApplicationError("VALIDATION_ERROR","请补齐客户、产品分组、下单日期及各 PO 的颜色、尺码和订购数量，并核实没有重复 PO 或颜色",400);
+        // This is development publication, not formal PO confirmation. Preserve incomplete
+        // ordering data for the later strict createOrder command without inventing sizes.
+        const draft=row.document.customerOrderDraft.order;
         const source=(await db.query("SELECT design_style_no,temporary_style_no,customer_code FROM digital_production_sources WHERE source_id=$1",[sourceId])).rows[0];
-        if(source.design_style_no!==parsed.data.designStyleNo||(source.temporary_style_no??"")!==(parsed.data.temporaryStyleNo??"")||(source.customer_code&&source.customer_code!==parsed.data.customerCode))
+        if(source.design_style_no!==draft.designStyleNo||(source.temporary_style_no??"")!==(draft.temporaryStyleNo??"")||(source.customer_code&&source.customer_code!==draft.customerCode))
           throw new ApplicationError("VALIDATION_ERROR","订购草稿的款号、代用款号及客户须与当前开发来源一致",400);
-        const now=businessNow(this.now),orderDateError=customerOrderDateError(parsed.data.orderDate,beijingCalendarDate(now));
-        if(orderDateError)throw new ApplicationError("VALIDATION_ERROR",orderDateError,400);
-        const dateErrors=initialCustomerDateErrors(parsed.data.lines,minimumInitialCustomerDate(now));
-        if(dateErrors.length)throw new ApplicationError("VALIDATION_ERROR",dateErrors.join("；"),400);
       }
       const craftPiece=(await developmentRevisionSource(db,sourceId))?.outputKind==='工艺布片';
       if(this.patternOrders&&!patternOrder&&!craftPiece)conflict("请先选择有效打板品类与执行价，再正式提交开发单");
