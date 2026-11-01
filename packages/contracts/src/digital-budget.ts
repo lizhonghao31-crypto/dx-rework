@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type {JourneyDocumentMetadata} from "./digital-production-journey.js";
+import type {BudgetQuoteComparison} from './digital-quotation.js';
 
 const short = z.string().trim().max(100);
 const decimal = z.string().regex(/^(?:0|[1-9]\d{0,9})(?:\.\d{1,6})?$/, "请输入最多六位小数的非负数字");
@@ -24,7 +25,8 @@ export const BudgetDocumentSchema = z.object({
     ctx.addIssue({ code: "custom", path: ["imageAttachmentIds"], message: "图片不能重复" });
 });
 export const SaveBudgetSchema = z.object({ expectedVersion: z.number().int().nonnegative(), document: BudgetDocumentSchema }).strict();
-export const PublishBudgetSchema = z.object({ expectedVersion: z.number().int().positive() }).strict();
+export const PublishBudgetSchema = z.object({ expectedVersion: z.number().int().positive(), sourceQuoteVersion:z.number().int().positive().optional() }).strict();
+export const AdoptBudgetQuotationSchema=z.object({expectedVersion:z.number().int().nonnegative(),sourceQuoteVersion:z.number().int().positive()}).strict();
 export type BudgetDocument = z.infer<typeof BudgetDocumentSchema>;
 export type BudgetRow = z.infer<typeof BudgetRowSchema>;
 
@@ -80,6 +82,8 @@ export function budgetPublishErrors(document: BudgetDocument): string[] {
   return errors;
 }
 export type BudgetSheet = {
+  comparison?:BudgetQuoteComparison;
+  canAdoptQuotation?:boolean;
   metadata?:JourneyDocumentMetadata;
   versions?:number[];
   productionOrderId: string; version: number; status: "draft" | "published";

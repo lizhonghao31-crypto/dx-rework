@@ -574,7 +574,7 @@ export function Shell({
     ...(currentUser&&canAccessPatternRoomOrders(currentUser)?[{name:"打板/杂事历史看板",description:"旧打板、杂事与新开发已完成执行轮",href:"/ui/pattern-room/history",activeKey:"pattern-room-history"}]:[]),
     ...patternRoomNavigation.filter(entry => entry.href === "/ui/pattern-room/prices"),
   ];
-  const preparationNavigation: NavigationEntry[] = [];
+  const preparationNavigation: NavigationEntry[] = isRoot || ["sample_designer","order_merchandiser","pattern_room_worker","ie_reviewer","embroidery_washing_merchandiser","production_management","owner_group"].some(hasRole) ? [{name:"客户报价协作",description:"按分工填写用量与价格，记录客户确认",href:"/ui/digital-quotation"}] : [];
   const factoryNavigation: NavigationEntry[] = digital ? [{ name: "裁后工艺与发厂", description: "工艺、QC与实际发厂", href: "/ui/digital-cockpit?stage=post_cutting&workspace=factory", activeKey: "digital-factory" }] : [];
   const navigation: NavigationEntry[] = [
     ...creationNavigation,

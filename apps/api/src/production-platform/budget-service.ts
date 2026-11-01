@@ -10,6 +10,7 @@ import { isRootActor } from "../access/business-authority.js";
 import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
 import { DigitalProductionAccessPolicy, digitalForbidden, digitalNotFound } from "./access-policy.js";
+import {readBudgetQuoteComparison} from './quotation-budget-basis.js';
 
 type Database = Pick<Pool | PoolClient, "query">;
 const conflict = (message: string): never => { throw new ApplicationError("BUDGET_CONFLICT", message, 409); };
@@ -44,10 +45,15 @@ export class DigitalBudgetService {
     const linked = (await db.query("SELECT child_id FROM digital_production_child_links WHERE module='sourcing' AND production_order_id=$1", [orderId])).rows[0];
     const row = (await db.query(version === undefined ? "SELECT * FROM digital_budget_documents WHERE production_order_id=$1" : "SELECT *, 'published' AS status FROM digital_budget_versions WHERE production_order_id=$1 AND version=$2", version === undefined ? [orderId] : [orderId, version])).rows[0];
     if (version !== undefined && !row) digitalNotFound();
+    const comparison=await readBudgetQuoteComparison(db,orderId,row,version!==undefined);
+    if(linked&&comparison.state==='review_required')comparison.reason='客户报价有新确认版；原外发合同保留已采用版本，后续调整沿原外发更正入口办理，不自动改变生产流程';
+    const current=version===undefined;
+    const hasDraft=comparison.policy==='legacy'||Boolean(row);
     return { metadata:await documentMetadata(db,row), versions:(await db.query("SELECT version FROM digital_budget_versions WHERE production_order_id=$1 ORDER BY version DESC",[orderId])).rows.map(item=>item.version), productionOrderId: orderId, version: row?.version ?? 0, status: row?.status ?? "draft", document: row?.document ?? null,
-      totals: row ? calculateBudget(row.document) : null, canEdit: order.canEdit && !linked && row?.status !== "published" && version === undefined && (Boolean(row) || this.creationEnabled),
-      canPublish: order.canPublish && !linked && row?.status !== "published" && version === undefined && (Boolean(row) || this.creationEnabled),
-      canSubmitSourcing: !linked && row?.status === "published" && (isRootActor(actor) || actor.actorRoles.includes("order_merchandiser") && order.primary_merchandiser_id === actor.actorId),
+      totals: row ? calculateBudget(row.document) : null, canEdit: order.canEdit && !linked && row?.status !== "published" && current && hasDraft && (Boolean(row) || this.creationEnabled),
+      canPublish: order.canPublish && !linked && row?.status !== "published" && current && hasDraft && (Boolean(row) || this.creationEnabled),
+      comparison,canAdoptQuotation:current&&this.creationEnabled&&order.canPublish&&!linked&&comparison.policy==='quote_v1'&&comparison.state==='review_required',
+      canSubmitSourcing: !linked && row?.status === "published" && ['legacy','within_limit'].includes(comparison.state) && (isRootActor(actor) || actor.actorRoles.includes("order_merchandiser") && order.primary_merchandiser_id === actor.actorId),
       sourcingCaseId: linked?.child_id ?? null, publishedAt: row?.published_at ? new Date(row.published_at).toISOString() : null,
       designerName: order.designer_name, merchandiserName: order.merchandiser_name ?? null };
   }
@@ -65,8 +71,9 @@ export class DigitalBudgetService {
       if (prior && prior.payload_hash !== hash) conflict("同一操作标识不能用于不同内容");
       if (prior) { await db.query("COMMIT"); return prior.response as T; }
       const sheet = await this.read(actor, orderId, db);
+      if(action==='adopt'&&!sheet.canAdoptQuotation)conflict('当前不能切换报价依据；已关联外发的预算和合同保持原批准版本');
       if (action === "publish" && !sheet.canPublish) throw new ApplicationError("FORBIDDEN","预算由本单跟单最终发布，发布后内容冻结",403);
-      if (!sheet.canEdit) conflict(sheet.status === "published" ? "预算已最终发布并冻结，请查看已发布版本" : sheet.sourcingCaseId ? "已进入外发审批，请通过原外发预算更正入口处理" : "预算新建尚未启用，请管理员核对当前环境设置");
+      if (!sheet.canEdit&&action!=='adopt') conflict(sheet.comparison?.policy==='quote_v1'&&!sheet.document?'请先由本单负责岗位完成客户确认报价及正式下单，再生成预算草稿':sheet.status === "published" ? "预算已最终发布并冻结，请查看已发布版本" : sheet.sourcingCaseId ? "已进入外发审批，请通过原外发预算更正入口处理" : "预算新建尚未启用，请管理员核对当前环境设置");
       const lifecycle = (await db.query("SELECT state FROM digital_production_resource_lifecycle WHERE resource_kind='order' AND resource_id=$1", [orderId])).rows[0];
       if (lifecycle && lifecycle.state !== "active") conflict(lifecycle.state === "paused" ? "母单已暂停，预算暂不能修改；请本单负责人在原任务入口核对暂停原因，由原有权岗位恢复后再办理" : lifecycle.state === "cancelled" ? "母单已取消，不能继续修改本单预算；请本单负责人核对原取消记录，历史预算与批准依据保留" : "母单当前状态未确认，暂不能修改预算；请重新读取原单，仍异常请管理员核查");
       const result = await work(db);
@@ -102,15 +109,32 @@ export class DigitalBudgetService {
       return this.read(actor, orderId, db);
     });
   }
-  async publish(actor: TrustedActorContext, orderId: string, expectedVersion: number, key: string) {
-    return this.command(actor, orderId, "publish", key, { expectedVersion }, async db => {
+  async adoptQuotation(actor:TrustedActorContext,orderId:string,input:{expectedVersion:number;sourceQuoteVersion:number},key:string){
+    return this.command(actor,orderId,'adopt',key,input,async db=>{
+      const row=(await db.query('SELECT * FROM digital_budget_documents WHERE production_order_id=$1',[orderId])).rows[0];
+      if((row?.version??0)!==input.expectedVersion)conflict('预算已更新，请读取当前版本后明确采用报价');
+      const quote=(await db.query('SELECT q.quote_id,q.confirmed_version,v.document FROM digital_quotation_documents q JOIN digital_quotation_versions v ON v.quote_id=q.quote_id AND v.version=q.confirmed_version WHERE q.production_order_id=$1',[orderId])).rows[0];
+      if(!quote||quote.confirmed_version!==input.sourceQuoteVersion)conflict('客户确认报价版本已变，请重新核对');
+      const next=(row?.version??0)+1;
+      await db.query('INSERT INTO digital_budget_quote_conversions(production_order_id,quote_id,quote_version,created_budget_version) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING',[orderId,quote.quote_id,quote.confirmed_version,next]);
+      await db.query(`INSERT INTO digital_budget_documents(production_order_id,version,status,document,updated_by,quote_id,quote_version) VALUES($1,$2,'draft',$3,$4,$5,$6)
+        ON CONFLICT(production_order_id) DO UPDATE SET version=EXCLUDED.version,status='draft',quote_id=EXCLUDED.quote_id,quote_version=EXCLUDED.quote_version,updated_by=EXCLUDED.updated_by,updated_at=CURRENT_TIMESTAMP,published_at=NULL`,[orderId,next,JSON.stringify(row?.document??quote.document),actor.actorId,quote.quote_id,quote.confirmed_version]);
+      return this.read(actor,orderId,db);
+    });
+  }
+  async publish(actor: TrustedActorContext, orderId: string, expectedVersion: number, key: string,sourceQuoteVersion?:number) {
+    return this.command(actor, orderId, "publish", key, { expectedVersion,...(sourceQuoteVersion!==undefined?{sourceQuoteVersion}:{}) }, async db => {
       const row = (await db.query("SELECT * FROM digital_budget_documents WHERE production_order_id=$1", [orderId])).rows[0] ?? conflict("请先在本单预算页保存预算草稿，再由本单跟单核对并最终发布；草稿保存本身不会发起外发");
       if (row.version !== expectedVersion) conflict("预算已更新，本次未发布；请本单跟单在预算页重新读取最新草稿，核对后再发布");
       if (row.status === "published") return this.read(actor, orderId, db);
       const errors = budgetPublishErrors(row.document);
       if (errors.length) throw new ApplicationError("VALIDATION_ERROR", `${errors.join("；")}；请本单设计师或跟单在预算页逐项补齐后重新发布`, 400);
       await this.bindFiles(db, actor, orderId, row.document);
-      await db.query("INSERT INTO digital_budget_versions(production_order_id,version,document,totals,published_by) VALUES($1,$2,$3,$4,$5)", [orderId, row.version, JSON.stringify(row.document), JSON.stringify(calculateBudget(row.document)), actor.actorId]);
+      const comparison=await readBudgetQuoteComparison(db,orderId,row);
+      if(comparison.policy==='quote_v1'){
+        if(sourceQuoteVersion!==undefined&&sourceQuoteVersion!==comparison.quoteVersion||comparison.state!=='within_limit')throw new ApplicationError(comparison.state==='exceeds'?'BUDGET_TOTAL_EXCEEDS_QUOTE':'BUDGET_QUOTE_BASIS_CONFLICT',comparison.reason,409);
+        await db.query(`INSERT INTO digital_budget_versions(production_order_id,version,document,totals,published_by,quote_id,quote_version,budget_comparable_total,confirmed_quote_total) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,[orderId,row.version,JSON.stringify(row.document),JSON.stringify(calculateBudget(row.document)),actor.actorId,comparison.quoteId,comparison.quoteVersion,comparison.budgetComparableTotal,comparison.confirmedQuoteTotal]);
+      }else await db.query("INSERT INTO digital_budget_versions(production_order_id,version,document,totals,published_by) VALUES($1,$2,$3,$4,$5)", [orderId, row.version, JSON.stringify(row.document), JSON.stringify(calculateBudget(row.document)), actor.actorId]);
       await db.query("UPDATE digital_budget_documents SET status='published',published_at=$3,updated_by=$2 WHERE production_order_id=$1", [orderId, actor.actorId,businessNow().toISOString()]);
       await db.query("INSERT INTO digital_budget_preparations(production_order_id,budget_version) VALUES($1,$2) ON CONFLICT(production_order_id) DO UPDATE SET budget_version=EXCLUDED.budget_version", [orderId, row.version]);
       const preparation = (await db.query("SELECT task_id FROM digital_budget_preparations WHERE production_order_id=$1", [orderId])).rows[0];

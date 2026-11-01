@@ -1428,5 +1428,30 @@
     "creates": [],
     "execute": [],
     "sequences": []
+  },
+  "0267_customer_quotation_budget_basis": {
+    "checksum": "a479699de440210e1ba7a5682e1f6e5d4f8e7a8d99f390b61bf7fdc9b891573f",
+    "tables": [
+      "digital_production_orders",
+      "digital_budget_documents",
+      "digital_budget_versions"
+    ],
+    "functions": [],
+    "references": [
+      "app_users",
+      "digital_production_orders",
+      "digital_production_sources",
+      "digital_production_customers"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [
+      "digital_commercial_order_rules",
+      "digital_quotation_documents",
+      "digital_quotation_versions",
+      "digital_budget_quote_conversions"
+    ],
+    "execute": [],
+    "sequences": []
   }
 }

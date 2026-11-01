@@ -12,6 +12,7 @@ import {setTimeout} from 'node:timers/promises';
 import pg from 'pg';
 import {discoverValidatedMigrations,applyMigrations} from '../migration-lib.mjs';
 import {DigitalProductionIdentityService} from '../../apps/api/dist/production-platform/identity-service.js';
+import {DigitalQuotationService} from '../../apps/api/dist/production-platform/quotation-service.js';
 import {DigitalBudgetService} from '../../apps/api/dist/production-platform/budget-service.js';
 
 const repo=resolve(fileURLToPath(new URL('../..',import.meta.url)));
@@ -220,10 +221,14 @@ try {
  const service=new DigitalProductionIdentityService(appDb,true,undefined,()=>new Date('2026-10-03T00:00:00Z')),budget=new DigitalBudgetService(appDb,true);
  const order=await service.createOrder(actor,{customerCode:'PD',productGroup:'男装',designStyleNo:'TEST-MIGRATION',temporaryStyleNo:'TEST-MIGRATION',orderDate:'2026-10-03',lines:[{color:'黑',sizes:[{size:'M',quantity:10}],deliveryDate:'2026-11-03'}]},randomUUID());
  const document={fabricType:'针织',productCategory:'套装',monthSeries:'',date:'2026-10-03',currency:'人民币',rows:[],freight:'0.3',cm:'8.3',salePrice:'48',outsourcingScope:'裁、车、烫、包装',outsourcingUnitPrice:'8.3',imageAttachmentIds:[]};
- const key=randomUUID();assert.equal((await budget.save(actor,order.productionOrderId,{expectedVersion:0,document},key)).version,1);
- assert.equal((await budget.save(actor,order.productionOrderId,{expectedVersion:0,document},key)).version,1);
+ const quotation=new DigitalQuotationService(appDb,true),resource={kind:'order',id:order.productionOrderId},rowId=randomUUID();
+ let quote=await quotation.save(actor,resource,{expectedVersion:0,document:{...document,imageAttachmentIds:[],rows:[{rowId,section:'主料',category:'TEST',name:'TEST material',specification:'TEST',unit:'件',supplier:'TEST',consumption:'',unitPrice:'1'}]},assignments:[{rowId,technicalAssigneeId:actorId,priceAssigneeId:actorId,priceRole:'sample_designer'}]},randomUUID());
+ quote=await quotation.fillRow(actor,resource,rowId,{expectedVersion:quote.version,consumption:'1'},randomUUID());
+ await quotation.confirm(actor,resource,{expectedVersion:quote.version,customerCode:'PD',customerConfirmedTotal:'50',amountScope:'per_piece',quantity:null,quantityUnit:'件',currency:'人民币',taxBasis:'excludes_tax',sourceKind:'explicit_customer_confirmation',sourceField:'customerConfirmedTotal',templateVersion:'online-quotation-v1',evidenceNote:'TEST isolated maintenance customer confirmation',confirmedAt:'2026-01-01T00:00:00Z'},randomUUID());
+ const key=randomUUID();assert.equal((await budget.save(actor,order.productionOrderId,{expectedVersion:1,document},key)).version,2);
+ assert.equal((await budget.save(actor,order.productionOrderId,{expectedVersion:1,document},key)).version,2);
  assert.equal((await budget.read(actor,order.productionOrderId)).document.cm,'8.3');
- await assert.rejects(()=>budget.save(actor,order.productionOrderId,{expectedVersion:0,document:{...document,cm:'9'}},key),e=>e.statusCode===409);
+ await assert.rejects(()=>budget.save(actor,order.productionOrderId,{expectedVersion:1,document:{...document,cm:'9'}},key),e=>e.statusCode===409);
  report(`low-privilege app read ${tables.length} new tables; budget create/save/read/idempotency/conflict; identity INSERT without USAGE`);
  const runtime=join(scratch,'runtime');mkdirSync(join(runtime,'shared'),{recursive:true});
  const internalUrl=(name)=>`postgresql://${app}:${password}@127.0.0.1:5432/${name}`;

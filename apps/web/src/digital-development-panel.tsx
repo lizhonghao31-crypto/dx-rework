@@ -1,4 +1,5 @@
 import {useTodoContentRead} from './todo-content-read.js';
+import {quotationHref} from './digital-quotation-panel.js';
 import {DevelopmentAmendmentHistory} from "./development-amendment-history.js";
 import {developmentInheritedLabels as inheritedLabels} from './development-round-context.js';
 import {useDocumentUploadPreviews} from "./document-upload-previews.js";
@@ -111,7 +112,7 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound,embedded=
       {!readonly&&<><Button disabled={busy} onClick={save}>保存草稿</Button><Button variant="primary" disabled={busy} onClick={publish}>{revision?(sheet?.independentRevisions&&revision.origin!=="内部发现"?"建立独立复版单":"正式发布本轮修改"):"发布开发单"}</Button></>}
       <Button disabled={!savedPrint||dirty||busy} onClick={()=>window.print()}>打印 / 保存 PDF</Button>
     </DocumentToolbar>
-    {previews.view}<DocumentErrors issues={issues} error={error}/>{error&&<Button disabled={busy} onClick={()=>void reload()}>重新载入</Button>}
+    {sheet?.canEdit&&!embedded&&<a className="dx-button dx-button--secondary" href={quotationHref({kind:'source',id:sourceId},window.location.pathname+window.location.search)}>客户报价协作</a>}{previews.view}<DocumentErrors issues={issues} error={error}/>{error&&<Button disabled={busy} onClick={()=>void reload()}>重新载入</Button>}
     {!sheet&&<p>正在读取开发单</p>}
     {sheet&&<>
       {dirty||busy||!savedPrint?<article className="development-print"><p>当前单据不可打印，请先保存当前修改。</p></article>:<DevelopmentPrint sheet={revision?{...sheet,status:"draft",roundNumber:revision.basedOnRound+1,version:draftVersion}:sheet} document={savedPrint} imageUrl={imageUrl}/>}

@@ -1,0 +1,71 @@
+import {z} from 'zod';
+import {BudgetDocumentSchema,calculateBudget,type BudgetDocument,type BudgetRow} from './digital-budget.js';
+
+export const QuotationDecimalSchema=z.string().regex(/^(?:0|[1-9]\d{0,9})(?:\.\d{1,6})?$/,'请输入最多六位小数的非负数字');
+export const QuotationResourceSchema=z.object({kind:z.enum(['source','order']),id:z.string().uuid()}).strict();
+export type QuotationResource=z.infer<typeof QuotationResourceSchema>;
+export const QuotationAssignmentsSchema=z.array(z.object({
+  rowId:z.string().uuid(),technicalAssigneeId:z.string().uuid().nullable(),
+  priceAssigneeId:z.string().uuid().nullable(),priceRole:z.enum(['sample_designer','ie_reviewer','embroidery_washing_merchandiser']),
+}).strict()).max(300);
+export type QuotationAssignment=z.infer<typeof QuotationAssignmentsSchema>[number];
+export const SaveQuotationSchema=z.object({expectedVersion:z.number().int().nonnegative(),document:BudgetDocumentSchema,assignments:QuotationAssignmentsSchema}).strict().superRefine((v,c)=>{
+  const ids=v.assignments.map(a=>a.rowId);
+  if(new Set(ids).size!==ids.length||ids.length!==v.document.rows.length||v.document.rows.some(r=>!ids.includes(r.rowId)))c.addIssue({code:'custom',message:'每条报价明细须有且仅有一条责任分工'});
+  if(v.document.imageAttachmentIds.length)c.addIssue({code:'custom',message:'报价沿用原单款图；确认依据请填写真实来源，不重复上传预算图片'});
+});
+export const QuotationRowInputSchema=z.object({expectedVersion:z.number().int().positive(),consumption:QuotationDecimalSchema.optional(),unitPrice:QuotationDecimalSchema.optional()}).strict().refine(v=>v.consumption!==undefined||v.unitPrice!==undefined,'请填写负责的用量或价格');
+export const QuotationConfirmationSchema=z.object({
+  customerCode:z.string().trim().min(1).max(30),
+  expectedVersion:z.number().int().positive(),customerConfirmedTotal:QuotationDecimalSchema,
+  amountScope:z.enum(['per_piece','order_total']),quantity:z.number().int().positive().max(1_000_000_000).nullable(),
+  quantityUnit:z.literal('件'),currency:z.literal('人民币'),taxBasis:z.enum(['excludes_tax','includes_tax']),
+  sourceKind:z.literal('explicit_customer_confirmation'),sourceField:z.literal('customerConfirmedTotal'),
+  templateVersion:z.literal('online-quotation-v1'),evidenceNote:z.string().trim().min(1).max(2000),
+  confirmedAt:z.iso.datetime({offset:true}),
+}).strict().refine(v=>v.amountScope==='order_total'?v.quantity!==null:v.quantity===null,'整单金额须填确认件数；单件金额不填整单件数');
+export type QuotationConfirmation=z.infer<typeof QuotationConfirmationSchema>;
+export type QuotationConsumptionSource={kind:'technical_manual'|'technical_artifact';actorId:string;version:number;recordedAt:string;artifactRef?:{id:string;version:number}};
+export type QuotationVisibleRow=Omit<BudgetRow,'unitPrice'|'consumption'> & {unitPrice:string|null;consumption:string|null;assignment:QuotationAssignment;technicalAssigneeName?:string|null;priceAssigneeName?:string|null;canEditConsumption:boolean;canEditPrice:boolean;consumptionSource:QuotationConsumptionSource|null};
+export type QuotationSheet={
+  commandReceipt?:{action:string;appliedVersion:number};
+  quoteId:string|null;resource:QuotationResource;productionOrderId:string|null;sourceId:string|null;
+  designStyleNo:string;designerId:string;customerCode:string|null;version:number;status:'draft'|'confirmed';confirmedVersion:number|null;versions:number[];
+  document:BudgetDocument|null;rows:QuotationVisibleRow[];assignments:QuotationAssignment[];
+  confirmation:QuotationConfirmation|null;canStructure:boolean;canConfirm:boolean;fullCost:boolean;
+  budget:{state:'waiting_formal_order'|'waiting_confirmation'|'created'|'review_required'|'legacy_published';version:number|null};
+};
+export type BudgetQuoteComparison={
+  pendingQuotationVersion?:number|null;
+  policy:'legacy'|'quote_v1';quoteId:string|null;quoteVersion:number|null;currentConfirmedVersion:number|null;
+  state:'legacy'|'waiting_confirmation'|'review_required'|'incomparable'|'within_limit'|'exceeds';reason:string;
+  budgetComparableTotal:string|null;confirmedQuoteTotal:string|null;amountScope:'per_piece'|'order_total'|null;
+  baseline:BudgetDocument|null;confirmation:QuotationConfirmation|null;
+};
+const SCALE=1_000_000_000_000n;
+export function quotationExact(value:string):bigint{
+  if(!/^\d+(?:\.\d{1,12})?$/.test(value))throw new Error('金额口径无效');
+  const [whole,fraction='']=value.split('.');return BigInt(whole!)*SCALE+BigInt(fraction.padEnd(12,'0'));
+}
+export function quotationAmount(value:bigint):string{
+  const sign=value<0n?'-':'';const n=value<0n?-value:value,f=(n%SCALE).toString().padStart(12,'0').replace(/0+$/,'');
+  return `${sign}${n/SCALE}${f?'.'+f:''}`;
+}
+export function compareQuotationBudget(document:BudgetDocument,confirmation:QuotationConfirmation,quantity:number){
+  if(confirmation.taxBasis!=='excludes_tax')return {state:'incomparable' as const,reason:'客户确认含税金额与当前不含税预算不可直接比较，请核对真实报价口径',budgetComparableTotal:null,confirmedQuoteTotal:confirmation.customerConfirmedTotal};
+  if(confirmation.amountScope==='order_total'&&confirmation.quantity!==quantity)return {state:'incomparable' as const,reason:'正式订单件数与客户确认报价件数不一致，请复核报价版本',budgetComparableTotal:null,confirmedQuoteTotal:confirmation.customerConfirmedTotal};
+  const cost=quotationExact(calculateBudget(document).cost)*(confirmation.amountScope==='order_total'?BigInt(quantity):1n),limit=quotationExact(confirmation.customerConfirmedTotal);
+  return {state:cost<=limit?'within_limit' as const:'exceeds' as const,reason:cost<=limit?'预算总额不高于客户确认报价':'预算总额高于客户确认报价，不能发布（无特批）',budgetComparableTotal:quotationAmount(cost),confirmedQuoteTotal:confirmation.customerConfirmedTotal};
+}
+export type QuotationRowDelta={kind:'up'|'down'|'equal'|'new'|'unmatched';amount:string|null;percent:string|null;label:string};
+export function quotationRowDelta(row:BudgetRow,baseline:BudgetRow|undefined):QuotationRowDelta{
+  if(!baseline)return {kind:'new',amount:null,percent:null,label:'新增'};
+  if(row.rowId!==baseline.rowId||row.section!==baseline.section||row.name!==baseline.name||row.specification!==baseline.specification||row.unit!==baseline.unit||[row.consumption,row.unitPrice,baseline.consumption,baseline.unitPrice].includes(''))return {kind:'unmatched',amount:null,percent:null,label:'未匹配口径'};
+  const amount=(r:BudgetRow)=>quotationExact(r.consumption)*quotationExact(r.unitPrice)/SCALE;
+  const before=amount(baseline),delta=amount(row)-before;
+  if(delta===0n)return {kind:'equal',amount:'0',percent:before===0n?null:'0.00',label:'— 持平'};
+  if(before===0n)return {kind:'new',amount:quotationAmount(delta),percent:null,label:'新增（原金额为零）'};
+  const magnitude=delta<0n?-delta:delta,rounded=(magnitude*10_000n+before/2n)/before;
+  const percent=`${rounded/100n}.${(rounded%100n).toString().padStart(2,'0')}`;
+  return {kind:delta>0n?'up':'down',amount:quotationAmount(delta),percent,label:`${delta>0n?'↑':'↓'} ${percent}%`};
+}

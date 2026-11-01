@@ -1,3 +1,4 @@
+import {customerQuotationFixture} from '../helpers/customer-quotation-fixture.js';
 import {registerDigitalTaskRoutes} from '../../apps/api/src/production-platform/task-routes.js';
 import {withAcceptanceBusinessTime,installAcceptanceClockReader} from '../../apps/api/src/acceptance-clock/business-time.js';
 import {reworkSlaEvidence} from '../../apps/api/src/production-platform/rework-sla-evidence.js';
@@ -3547,6 +3548,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST.png','image/png',$3,$4,$5,'ready',CURRENT_TIMESTAMP)", [imageId, objectKey, bytes.length, sha256, designerId]);
     const document = BudgetDocumentSchema.parse({ fabricType: "梭织", productCategory: "短裤", monthSeries: "", date: "2026-09-30", currency: "人民币", rows: [],
       freight: "0.3", cm: "8.3", salePrice: "48", outsourcingScope: "车缝、整烫", outsourcingUnitPrice: "5.25", imageAttachmentIds: [imageId] });
+    await customerQuotationFixture(database,rootActor(),order.productionOrderId);
     const budget = new DigitalBudgetService(database, true);
     return { order, designer, document, imageId, budget };
   };
@@ -3627,8 +3629,8 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
   it('SLA09 keeps sourcing work area, plan and original todo on the same explicitly applied window across the original return and correction flow',async()=>{
     const fixture=await budgetFixture(),id=fixture.order.productionOrderId,primary=merchandiserActor();
     await withSla09Standard(async(tasks,baseline)=>{
-      await fixture.budget.save(fixture.designer,id,{expectedVersion:0,document:fixture.document},randomUUID());await fixture.budget.publish(primary,id,1,randomUUID());
-      const prepared=await fixture.budget.prepareSourcing(primary,id,1,attachments),{service:currentService}=await cycleTodoServices();
+      await fixture.budget.save(fixture.designer,id,{expectedVersion:1,document:fixture.document},randomUUID());await fixture.budget.publish(primary,id,2,randomUUID());
+      const prepared=await fixture.budget.prepareSourcing(primary,id,2,attachments),{service:currentService}=await cycleTodoServices();
       const created=await currentService.createCase(primary,{gender:prepared.gender,styleName:prepared.styleName,deliveryDate:'2026-11-10',estimatedCutPieceSendDate:'2026-10-20',daxingUnitPrice:prepared.daxingUnitPrice,attachmentIds:prepared.images.map(i=>i.attachmentId),lineItems:prepared.lineItems.map(({lineId,styleNo,alternateStyleNo,color,quantity})=>({lineId,styleNo,alternateStyleNo,color,quantity,factoryDeliveryDate:'2026-11-10'})),digitalBudget:{productionOrderId:id,budgetVersion:prepared.budgetVersion,orderVersion:prepared.orderVersion}},randomUUID());
       const caseId=created.value.sourcingCaseId,original=(await database.query("SELECT * FROM rework_todos WHERE entity_type='sourcing_case' AND entity_id=$1 AND category='sourcing_ie_quote' ORDER BY created_at,todo_id LIMIT 1",[caseId])).rows[0];
       const reader={...ieActor(),authorizationCapability:'todo:view',authorizationCapabilities:['sourcing:view','sourcing:price:quote','todo:view']},todos=new TodoService(database),before=await todos.getForActor(reader,original.todo_id),sla=new SlaOrderService(database),first=await sla.read(rootActor(),id);
@@ -3733,7 +3735,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const tasks=new DigitalProductionTaskService(database),worker=ready.people.pattern_room_worker!,client=await database.connect();let taskId:string;
     try{await client.query('BEGIN');taskId=(await tasks.createWithClient(client,root,{resource:{kind:'source',id:ready.sourceId},kind:'development_pattern',routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:worker.actorId})).taskId;await client.query('COMMIT');}catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
     const full=await tasks.documents(root,taskId);
-    expect(full).toMatchObject({development:{state:'published',id:ready.sourceId,version:1},instruction:{state:'published',id:ready.id,version:1},budget:{state:'published',id:ready.id,version:1}});
+    expect(full).toMatchObject({development:{state:'published',id:ready.sourceId,version:1},instruction:{state:'published',id:ready.id,version:1},budget:{state:'published',id:ready.id,version:2}});
     const limited=await tasks.documents(worker,taskId);
     expect(limited.development).toEqual(full.development);
     expect((await new DigitalDevelopmentService(database,true).read(worker,ready.sourceId)).sourceId).toBe(ready.sourceId);
@@ -3919,20 +3921,21 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
   });
   it("P09 preserves published budgets, rejects technical readers and stale or unauthorized writes", async () => {
     const { order, designer, document, imageId, budget } = await budgetFixture(), id = order.productionOrderId;
-    await expect(new DigitalBudgetService(database,false).save(designer,id,{expectedVersion:0,document},randomUUID())).rejects.toMatchObject({statusCode:409,code:"BUDGET_CONFLICT",message:expect.stringMatching(/预算新建尚未启用.*管理员/)});
-    expect((await database.query("SELECT count(*)::int AS n FROM digital_budget_documents WHERE production_order_id=$1",[id])).rows[0].n).toBe(0);
+    // The confirmed quotation already created this draft: disabling new creation does not revoke an existing shared draft.
+    expect((await new DigitalBudgetService(database,false).read(designer,id)).canEdit).toBe(true);
+    expect((await database.query("SELECT count(*)::int AS n FROM digital_budget_documents WHERE production_order_id=$1",[id])).rows[0].n).toBe(1);
     const key = randomUUID();
-    const saved = await budget.save(designer, id, { expectedVersion: 0, document }, key);
-    expect((await budget.save(designer, id, { expectedVersion: 0, document }, key)).version).toBe(saved.version);
-    await expect(budget.save(designer, id, { expectedVersion: 0, document: { ...document, cm: "9" } }, key)).rejects.toMatchObject({ statusCode: 409 });
+    const saved = await budget.save(designer, id, { expectedVersion: 1, document }, key);
+    expect((await budget.save(designer, id, { expectedVersion: 1, document }, key)).version).toBe(saved.version);
+    await expect(budget.save(designer, id, { expectedVersion: 1, document: { ...document, cm: "9" } }, key)).rejects.toMatchObject({ statusCode: 409 });
     expect((await budget.read(merchandiserActor(),id)).canEdit).toBe(true);
-    await expect(budget.publish(designer,id,1,randomUUID())).rejects.toMatchObject({statusCode:403});
+    await expect(budget.publish(designer,id,2,randomUUID())).rejects.toMatchObject({statusCode:403});
     const technical = { ...ieActor(), actorRoles: ["pattern_room_supervisor"], authorizationCapability: "digital_production:view" };
     await expect(budget.read(technical, id)).rejects.toMatchObject({ statusCode: 404 });
     await expect(budget.canDownload(technical, id, imageId)).rejects.toMatchObject({ statusCode: 404 });
     expect(await budget.canDownload(designer, id, imageId)).toBe(true);
     const publishKey = randomUUID();
-    const published = await Promise.all([budget.publish(merchandiserActor(), id, 1, publishKey), budget.publish(merchandiserActor(), id, 1, publishKey)]);
+    const published = await Promise.all([budget.publish(merchandiserActor(), id, 2, publishKey), budget.publish(merchandiserActor(), id, 2, publishKey)]);
     expect(published.map(value => value.status)).toEqual(["published", "published"]);
     const task = (await database.query("SELECT p.task_id,t.state,a.assignee_id FROM digital_budget_preparations p JOIN digital_production_tasks t USING(task_id) JOIN digital_production_task_access a USING(task_id) WHERE p.production_order_id=$1", [id])).rows[0];
     expect(task).toMatchObject({ state: "ready", assignee_id: merchandiserId });
@@ -3940,17 +3943,17 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await expect(budget.prepareSourcing(merchandiserActor(),id,0,attachments)).rejects.toMatchObject({statusCode:409,message:expect.stringMatching(/预算已更新.*本次未发起外发.*主跟单.*预算页/)});
     const disabled = new DigitalBudgetService(database, false);
     await expect(disabled.save(designer, id, { expectedVersion: 1, document: { ...document, cm: "9" } }, randomUUID())).rejects.toMatchObject({statusCode:409});
-    expect((await budget.read(designer, id, undefined, 1)).document?.cm).toBe("8.3");
-    expect((await budget.prepareSourcing(merchandiserActor(), id, 1, attachments)).budgetVersion).toBe(1);
+    expect((await budget.read(designer, id, undefined, 2)).document?.cm).toBe("8.3");
+    expect((await budget.prepareSourcing(merchandiserActor(), id, 2, attachments)).budgetVersion).toBe(2);
     await expect(database.query("UPDATE digital_budget_versions SET document='{}' WHERE production_order_id=$1", [id])).rejects.toThrow("immutable");
     expect((await database.query("SELECT count(*)::int AS n FROM digital_production_task_access WHERE production_order_id=$1 AND task_kind='sourcing_preparation'", [id])).rows[0].n).toBe(1);
   });
 
   it("Mother PR03 freezes three PO factory promises and preserves original correction, contract, return and finance boundaries",async()=>{
     const fixture=await budgetFixture(true),id=fixture.order.productionOrderId;
-    await fixture.budget.save(fixture.designer,id,{expectedVersion:0,document:fixture.document},randomUUID());
-    await fixture.budget.publish(merchandiserActor(),id,1,randomUUID());
-    const prepared=await fixture.budget.prepareSourcing(merchandiserActor(),id,1,attachments);
+    await fixture.budget.save(fixture.designer,id,{expectedVersion:1,document:fixture.document},randomUUID());
+    await fixture.budget.publish(merchandiserActor(),id,2,randomUUID());
+    const prepared=await fixture.budget.prepareSourcing(merchandiserActor(),id,2,attachments);
     const dates=["2026-11-05","2026-11-08","2026-11-11"];
     const input={gender:prepared.gender,styleName:prepared.styleName,deliveryDate:dates[0]!,estimatedCutPieceSendDate:"2026-10-20",daxingUnitPrice:prepared.daxingUnitPrice,
       attachmentIds:prepared.images.map(image=>image.attachmentId),lineItems:prepared.lineItems.map((line,index)=>({lineId:line.lineId,alternateStyleNo:line.alternateStyleNo,color:line.color,quantity:line.quantity,factoryDeliveryDate:dates[index]!,styleNo:index===0?`TEST-VERIFY-${id}`:line.styleNo})),
@@ -4161,9 +4164,9 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await bulk.complete(warehouse,id,{preparationId,kind:'预缩完成'},randomUUID());
     expect((await bulk.read(rootActor(),id)).tasks.some(t=>['bulk_cutting','bulk_cutting_external'].includes(t.taskKind))).toBe(false);
     const primary=merchandiserActor();
-    await fixture.budget.save(fixture.designer,id,{expectedVersion:0,document:fixture.document},randomUUID());
-    await fixture.budget.publish(primary,id,1,randomUUID());
-    const prepared=await fixture.budget.prepareSourcing(primary,id,1,attachments);
+    await fixture.budget.save(fixture.designer,id,{expectedVersion:1,document:fixture.document},randomUUID());
+    await fixture.budget.publish(primary,id,2,randomUUID());
+    const prepared=await fixture.budget.prepareSourcing(primary,id,2,attachments);
     const created=await service.createCase(primary,{gender:prepared.gender,styleName:prepared.styleName,deliveryDate:'2026-11-10',estimatedCutPieceSendDate:'2026-10-20',daxingUnitPrice:prepared.daxingUnitPrice,
       attachmentIds:prepared.images.map(i=>i.attachmentId),lineItems:prepared.lineItems.map(({lineId,styleNo,alternateStyleNo,color,quantity})=>({lineId,styleNo,alternateStyleNo,color,quantity,factoryDeliveryDate:'2026-11-10'})),digitalBudget:{productionOrderId:id,budgetVersion:prepared.budgetVersion,orderVersion:prepared.orderVersion}},randomUUID());
     const caseId=created.value.sourcingCaseId,prices=prepared.lineItems.map((_,i)=>({position:i+1,unitPrice:'5.50'}));
@@ -4188,12 +4191,12 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     finally {await database.query("ALTER TABLE user_role_assignments ENABLE TRIGGER user_role_assignments_guard_creation");}
     const secondary={...merchandiserActor(),actorId:additionalId};
     const general=(await database.query("SELECT * FROM todo_policies WHERE policy_key='general'")).rows;
-    await budget.save(designer,id,{expectedVersion:0,document},randomUUID());
-    await budget.publish(merchandiserActor(),id,1,randomUUID());
-    const prepared=await budget.prepareSourcing(merchandiserActor(),id,1,attachments);
+    await budget.save(designer,id,{expectedVersion:1,document},randomUUID());
+    await budget.publish(merchandiserActor(),id,2,randomUUID());
+    const prepared=await budget.prepareSourcing(merchandiserActor(),id,2,attachments);
     const input={additionalMerchandiserUserId:additionalId,gender:prepared.gender,styleName:prepared.styleName,deliveryDate:'2026-11-10',estimatedCutPieceSendDate:'2026-10-20',daxingUnitPrice:prepared.daxingUnitPrice,
       attachmentIds:prepared.images.map(i=>i.attachmentId),lineItems:prepared.lineItems.map(({lineId,styleNo,alternateStyleNo,color,quantity})=>({lineId,styleNo,alternateStyleNo,color,quantity,factoryDeliveryDate:'2026-11-10'})),digitalBudget:{productionOrderId:id,budgetVersion:prepared.budgetVersion,orderVersion:prepared.orderVersion}};
-    await expect(currentService.createCase(merchandiserActor(),{...input,digitalBudget:{...input.digitalBudget,budgetVersion:2}},randomUUID())).rejects.toMatchObject({statusCode:409});
+    await expect(currentService.createCase(merchandiserActor(),{...input,digitalBudget:{...input.digitalBudget,budgetVersion:3}},randomUUID())).rejects.toMatchObject({statusCode:409});
     const created=await currentService.createCase(merchandiserActor(),input,randomUUID()),caseId=created.value.sourcingCaseId;
     const todo=async(category:string)=>(await database.query(`SELECT t.*,s.transitioned_at,creation.after_state->'slaTiming' AS sla_timing FROM rework_todos t
       JOIN operation_events creation ON creation.event_id=t.created_operation_event_id
@@ -4235,7 +4238,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await expect(currentService.decideOwner(merchandiserActor(),caseId,{decision:'approved'},randomUUID())).rejects.toMatchObject({statusCode:403});
     await currentService.decideOwner(approver==="owner"?ownerActor():{...rootActor(),authorizationCapability:"sourcing:owner:approve"},caseId,{decision:'approved'},randomUUID());
     expect((await database.query("SELECT * FROM todo_policies WHERE policy_key='general'")).rows).toEqual(general);
-    expect((await budget.read(designer,id,undefined,1)).document).toEqual(document);
+    expect((await budget.read(designer,id,undefined,2)).document).toEqual(document);
     const dates=new PoCustomerDateService(database),root=rootActor();
     const version=(await database.query("SELECT version FROM digital_production_orders WHERE production_order_id=$1",[id])).rows[0].version;
     const line=(await database.query("SELECT line_id,customer_date_version FROM digital_production_po_lines WHERE production_order_id=$1 ORDER BY position LIMIT 1",[id])).rows[0];
@@ -4249,14 +4252,14 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
   });
   it("P09 carries all PO quantities and owned image copies into exactly one original sourcing case", async () => {
     const { order, designer, document, imageId, budget } = await budgetFixture(), id = order.productionOrderId;
-    await budget.save(designer, id, { expectedVersion: 0, document }, randomUUID());
-    await budget.publish(merchandiserActor(), id, 1, randomUUID());
-    const prepared = await budget.prepareSourcing(merchandiserActor(), id, 1, attachments);
+    await budget.save(designer, id, { expectedVersion: 1, document }, randomUUID());
+    await budget.publish(merchandiserActor(), id, 2, randomUUID());
+    const prepared = await budget.prepareSourcing(merchandiserActor(), id, 2, attachments);
     expect(prepared.lineItems.map(line => line.quantity)).toEqual([137, 63]);
     expect(prepared.daxingUnitPrice).toBe("5.25");
     expect(prepared.contractDeliveryDate).toBe("2026-11-20");
     expect(prepared.images[0]!.attachmentId).not.toBe(imageId);
-    expect((await budget.prepareSourcing(merchandiserActor(), id, 1, attachments)).images).toEqual(prepared.images);
+    expect((await budget.prepareSourcing(merchandiserActor(), id, 2, attachments)).images).toEqual(prepared.images);
     const input = {
       gender: prepared.gender, styleName: prepared.styleName, deliveryDate: "2026-11-10",
       estimatedCutPieceSendDate: "2026-10-20", daxingUnitPrice: prepared.daxingUnitPrice,
@@ -4369,7 +4372,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
 
   it("P10 keeps technical versions, units, date approval and budget boundaries independent", async () => {
     const fixture=await budgetFixture();
-    await fixture.budget.save(fixture.designer,fixture.order.productionOrderId,{expectedVersion:0,document:fixture.document},randomUUID());
+    await fixture.budget.save(fixture.designer,fixture.order.productionOrderId,{expectedVersion:1,document:fixture.document},randomUUID());
     await exerciseInstructions(database,fixture.order,merchandiserActor(),fixture.designer,managerActor("TEST P10"),fixture.imageId);
   });
 
@@ -5589,9 +5592,9 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     }
     const nextActor={...merchandiserActor(),actorId:next},nextContract={...contractActor(),actorId:next},secondActor={...merchandiserActor(),actorId:second};
     const currentVersion=async()=>Number((await database.query("SELECT version FROM digital_production_orders WHERE production_order_id=$1",[id])).rows[0].version);
-    await fixture.budget.save(fixture.designer,id,{expectedVersion:0,document:fixture.document},randomUUID());
-    await fixture.budget.publish(merchandiserActor(),id,1,randomUUID());
-    const prepared=await fixture.budget.prepareSourcing(merchandiserActor(),id,1,attachments);
+    await fixture.budget.save(fixture.designer,id,{expectedVersion:1,document:fixture.document},randomUUID());
+    await fixture.budget.publish(merchandiserActor(),id,2,randomUUID());
+    const prepared=await fixture.budget.prepareSourcing(merchandiserActor(),id,2,attachments);
     const input={gender:prepared.gender,styleName:prepared.styleName,deliveryDate:"2026-11-10",estimatedCutPieceSendDate:"2026-10-20",daxingUnitPrice:prepared.daxingUnitPrice,
       additionalMerchandiserUserId:second,attachmentIds:prepared.images.map(image=>image.attachmentId),
       lineItems:prepared.lineItems.map(line=>({lineId:line.lineId,styleNo:line.styleNo,alternateStyleNo:line.alternateStyleNo,color:line.color,quantity:line.quantity,factoryDeliveryDate:"2026-11-10"})),digitalBudget:{productionOrderId:id,budgetVersion:prepared.budgetVersion,orderVersion:prepared.orderVersion}};
@@ -6661,9 +6664,9 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
 
   it("keeps reviewed PO history while an approved transfer activates only its frozen factory dates",async()=>{
     const fixture=await budgetFixture(true),orderId=fixture.order.productionOrderId;
-    await fixture.budget.save(fixture.designer,orderId,{expectedVersion:0,document:fixture.document},randomUUID());
-    await fixture.budget.publish(merchandiserActor(),orderId,1,randomUUID());
-    const prepared=await fixture.budget.prepareSourcing(merchandiserActor(),orderId,1,attachments);
+    await fixture.budget.save(fixture.designer,orderId,{expectedVersion:1,document:fixture.document},randomUUID());
+    await fixture.budget.publish(merchandiserActor(),orderId,2,randomUUID());
+    const prepared=await fixture.budget.prepareSourcing(merchandiserActor(),orderId,2,attachments);
     const dates=["2026-11-05","2026-11-08","2026-11-11"];
     const created=(await service.createCase(merchandiserActor(),{gender:prepared.gender,styleName:prepared.styleName,
       deliveryDate:dates[0]!,estimatedCutPieceSendDate:"2026-10-20",daxingUnitPrice:prepared.daxingUnitPrice,

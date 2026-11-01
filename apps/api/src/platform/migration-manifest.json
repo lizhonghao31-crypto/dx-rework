@@ -1123,6 +1123,10 @@
     {
       "version": "0266_new_flow_creation_context",
       "checksum": "9683e62e89bcc0107d095983175e9d0e53ff07b64185429a2070bae45e27e528"
+    },
+    {
+      "version": "0267_customer_quotation_budget_basis",
+      "checksum": "a479699de440210e1ba7a5682e1f6e5d4f8e7a8d99f390b61bf7fdc9b891573f"
     }
   ]
 }

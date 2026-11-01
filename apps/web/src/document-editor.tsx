@@ -83,7 +83,7 @@ export function DocumentSectionGroup({chapters,title,children}:{chapters:string[
  if(chapter&&!chapters.includes(chapter))return null;
  return <section className="development-section-group dx-doc-card"><h2>{title}</h2>{children}</section>;
 }
-export function DocumentTableScroll({ children, className = "" }: { children: ReactNode; className?: string }) {
+export function DocumentTableScroll({ children, className = "",scrollLabel }: { children: ReactNode; className?: string;scrollLabel?:string }) {
   const viewport = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const wrapper = viewport.current;
@@ -128,7 +128,7 @@ export function DocumentTableScroll({ children, className = "" }: { children: Re
       reset();
     };
   }, []);
-  return <div ref={viewport} className={`dx-doc-table-scroll dx-doc-table-viewport ${className}`.trim()}>{children}</div>;
+  return <div ref={viewport} className={`dx-doc-table-scroll dx-doc-table-viewport ${className}`.trim()} {...(scrollLabel?{tabIndex:0,role:'region','aria-label':scrollLabel}:{})}>{children}</div>;
 }
 export function DocumentAddRow({ label, disabled, onClick }: { label: string; disabled?: boolean; onClick: () => void }) {
   return <Button className="dx-doc-add-row budget-controls" type="button" disabled={disabled} onClick={onClick}>＋ {label}</Button>;

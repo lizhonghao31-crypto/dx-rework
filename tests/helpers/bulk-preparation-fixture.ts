@@ -67,8 +67,8 @@ export async function exerciseBulkPreparation(db:Pool,fixture:{order:DigitalOrde
  const dispatch={expectedVersion:0,patternWorkerId:worker.actorId,warehouseWorkerId:warehouse.actorId,cuttingWorkerId:people.cutting_worker!.actorId,deliverPattern:false};
  await bulk.dispatch(actors.manager,id,dispatch,randomUUID());expect((await bulk.read(primary,id)).tasks).toHaveLength(0);
  await expect(bulk.dispatch(clerk,id,{expectedVersion:1,patternWorkerId:worker.actorId,deliverPattern:true},randomUUID())).rejects.toMatchObject({statusCode:409});
- await fixture.budget.save(designer,id,{expectedVersion:0,document:fixture.document},randomUUID());await fixture.budget.publish(primary,id,1,randomUUID());
- const prepared=await fixture.budget.prepareSourcing(primary,id,1,attachments);
+ await fixture.budget.save(designer,id,{expectedVersion:1,document:fixture.document},randomUUID());await fixture.budget.publish(primary,id,2,randomUUID());
+ const prepared=await fixture.budget.prepareSourcing(primary,id,2,attachments);
  const created=await service.createCase(primary,{gender:prepared.gender,styleName:prepared.styleName,deliveryDate:'2026-11-10',estimatedCutPieceSendDate:'2026-10-20',daxingUnitPrice:prepared.daxingUnitPrice,attachmentIds:prepared.images.map(i=>i.attachmentId),lineItems:prepared.lineItems.map(({lineId,styleNo,alternateStyleNo,color,quantity})=>({lineId,styleNo,alternateStyleNo,color,quantity,factoryDeliveryDate:"2026-11-10"})),digitalBudget:{productionOrderId:id,budgetVersion:prepared.budgetVersion,orderVersion:prepared.orderVersion}},randomUUID());
  const caseId=created.value.sourcingCaseId,prices=[{position:1,unitPrice:'5.50'},{position:2,unitPrice:'5.50'}];
  await service.quoteIePrice(actors.ie,caseId,{linePrices:prices},randomUUID());await service.recordManagementDecision(actors.manager,caseId,{supplierId:factoryId,craftIds:[craftId],linePrices:prices,cuttingProcess:options?.cuttingProcess??'in_house'},randomUUID());
