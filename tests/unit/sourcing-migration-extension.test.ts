@@ -9,8 +9,7 @@ const extension:Entry[]=JSON.parse(readFileSync("scripts/migration-main-extensio
 const common=head.slice(0,217);
 const main=[...common,...branches.main,...extension];
 const sorted=(rows:Entry[])=>[...rows].sort((a,b)=>a.version.localeCompare(b.version));
-const markers=[{version:"0232_reconcile_contract_and_digital_histories",checksum:"a".repeat(64)},
-  {version:"0233_manual_contract_template_provenance",checksum:"b".repeat(64)}];
+const markers=head.filter(row=>['0232_reconcile_contract_and_digital_histories','0233_manual_contract_template_provenance'].includes(row.version));
 const release=sorted([...common,...branches.main,...branches.digital,...markers]);
 const merged=sorted([...release,...extension]);
 
@@ -31,6 +30,7 @@ describe("explicit main extension alongside the existing release migration ident
     expect(merged.filter(r=>r.version.startsWith("0225_"))).toHaveLength(2);
     expect(merged.filter(r=>r.version.startsWith("0226_"))).toHaveLength(2);
     expect(merged.filter(r=>r.version.startsWith("0227_"))).toHaveLength(2);
+    expect(merged.filter(r=>r.version.startsWith("0232_"))).toHaveLength(2);
     for(const prefix of ["0226","0227"])expect(()=>assertMigrationSequence(sorted([...merged,{version:`${prefix}_unapproved`,checksum:"0".repeat(64)}]))).toThrow();
     expect(()=>assertMigrationSequence(sorted([...merged,{version:"0225_unapproved",checksum:"0".repeat(64)}]))).toThrow();
     expect(()=>assertMigrationSequence(sorted([...merged,{version:"0224_unapproved",checksum:"0".repeat(64)}]))).toThrow();

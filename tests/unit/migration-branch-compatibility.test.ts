@@ -38,9 +38,18 @@ describe('frozen main / digital migration reconciliation',()=>{
  it('admits precisely the main hotfix and existing digital 0231 without accepting a third identity or drift',()=>{
   const version='0231_temporary_special_process_proxy_reporting',checksum='39a9c918c6589c9905ab0cf32de1f7cc304119fd4840a3fa8da34ddfb3e3d6b4';
   expect(target.filter(row=>row.version.startsWith('0231_'))).toEqual([{version:'0231_digital_order_closure',checksum:target.find(row=>row.version==='0231_digital_order_closure')!.checksum},{version,checksum}]);
-  expect(()=>assertAppliedMigrationHistory(target.filter(row=>row.version!==version),target)).not.toThrow();
+  expect(()=>assertAppliedMigrationHistory(target.filter(row=>![version,'0232_pmc_readonly_role'].includes(row.version)),target)).not.toThrow();
   expect(()=>assertMigrationSequence(sorted([...target,{version:'0231_unapproved_third',checksum:'0'.repeat(64)}]))).toThrow();
   expect(()=>assertMigrationSequence(target.map(row=>row.version===version?{...row,checksum:'0'.repeat(64)}:row))).toThrow('Frozen');
   expect(()=>assertAppliedMigrationHistory(target.filter(row=>row.version!=='0230_sourcing_factory_change_current_quantity'),target)).toThrow();
+ });
+ it('keeps exact PMC main history and pre-PMC release history valid, without admitting another 0232 fork',()=>{
+  const extensions:Entry[]=JSON.parse(readFileSync('scripts/migration-main-extensions.json','utf8'));
+  const main=sorted([...common,...branches.main,...extensions]);
+  const oldRelease=target.filter(row=>row.version!=='0232_pmc_readonly_role');
+  for(const history of [main,oldRelease]){const before=JSON.stringify(history);expect(()=>assertAppliedMigrationHistory(history,target)).not.toThrow();expect(JSON.stringify(history)).toBe(before);}
+  expect(()=>assertMigrationSequence(sorted([...target,{version:'0232_unapproved_third',checksum:'0'.repeat(64)}]))).toThrow();
+  for(const version of ['0232_pmc_readonly_role','0232_reconcile_contract_and_digital_histories'])expect(()=>assertMigrationSequence(target.map(row=>row.version===version?{...row,checksum:'0'.repeat(64)}:row))).toThrow('Frozen');
+  expect(()=>assertAppliedMigrationHistory(main.filter(row=>row.version!=='0231_temporary_special_process_proxy_reporting'),target)).toThrow();
  });
 });

@@ -65,3 +65,13 @@ PMC #879已合main但未部署，最终Head无CI是仅该PR的单次例外，不
 - 修复后490文件2616项unit及隔离PG集成通过，含真实HTTP预单发布拒绝/显式转开发成功。浏览器7组场景通过，含1280/1440恢复缺日期、确认失败保留输入并重试、预单转开发。两张新增恢复页截图逐张目视完成；非现场登录验收。
 - 本轮已存在的全部单测重复只因这两处真实Review修复；首次新HTTP测试未授设计创建能力，先得到403，修正测试身份后通过，没有放宽服务端权限。新增测试的type-only import按Lint修正。最终GitHub Gate、merge与部署仍分别记录，未用本地结果代替。
 - 修复集中完成后Lint、全workspace typecheck、精确时间索引、secret scan和diff检查均通过；未改迁移或放宽任何Gate。
+
+### PR01 当前main迁移兼容修复（首次最终Gate失败）
+
+- 19b67ef4的轻检查41267609832成功；首次最终Full Gate41267901431在源码历史兼容步骤失败，后续安装/测试/DB重检查未执行。失败不是通过；请求ref和运行保留，不对同Head盲重跑。
+- 实际main `1de4bb07d24d4eb98913a7dcfc528ef984ebe359` 已包含PMC #879的`0232_pmc_readonly_role`，初次本地测试仍用旧main的231份测试快照，未运行当前远端兼容预检，导致漏掉该差异。这是本次遗漏，不能归因于业务尺码测试或要求用户再次授权。
+- 最小修复仅带入该原始SQL，SHA256 `31d01d06ce698735c21b2e8b9ab5f2f1da29d2ceb0838a130320e32e2bbe6547`，登记完整迁移身份/manifest及受限维护inventory。没有带入main全量源码、重做PMC页面/API或赋给任何员工角色；不声称PMC功能已在release完整接通。
+- 精确允许该main身份与原release `0232_reconcile_contract_and_digital_histories` 的校验和配对，两个独立历史仍分别核其合法前缀；main原历史不被强行要求先具备digital历史。第三个同号、任一SQL漂移、旧历史缺口继续拒绝。
+- 新SQL两处CURRENT_TIMESTAMP只用于原授权有效期检查，属原main安全授权时间，不是生产节点发生时刻或SLA起点；只增加该文件的精确时间索引，保留其余条目、扫描器和断言。
+- 当前远端源码worktree核验通过：main232→候选281，以及原release279→候选281。新增两条隔离PG升级回归，另核历史checksum/applied_at、原员工赋权及非PMC能力不变、原触发器仍启用；现有低权限维护演练在最终Gate继续执行。
+- 兼容改动的完整本地回归490文件2617测试通过（全部unit＋14条实际PostgreSQL历史升级）；Lint、workspace typecheck、migration静态检查、时间索引、secret scan通过。旧历史夹具须排除尚未出现的PMC，并用真实reconcile校验和；main补原digital能力是原批准历史，保留旧能力而非错误要求main升级后能力一项不增。没有放宽非法第三分支、checksum或历史缺口断言。

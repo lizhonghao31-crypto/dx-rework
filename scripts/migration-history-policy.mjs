@@ -3,7 +3,11 @@ import mainExtensions from './migration-main-extensions.json' with { type: 'json
 
 const commonCount = 217;
 const known = [...branches.main, ...branches.digital];
-const approved = [...known,...mainExtensions];
+// Current main's immutable 0232 is distinct from the already applied release
+// reconciliation. Only this checksummed pair may share that numeric prefix.
+const sharedReconciliations=[{version:'0232_reconcile_contract_and_digital_histories',checksum:'e80fa66d9ae060a43430a8bed70513ecac17ae6daed729e307921fcae66b56c3'}];
+const approved = [...known,...mainExtensions,...sharedReconciliations];
+const mainExtensionVersions=new Set(mainExtensions.map(row=>row.version));
 const knownByVersion = new Map(approved.map(row => [row.version, row.checksum]));
 const approvedByPrefix = new Map();
 for (const row of approved) {
@@ -47,8 +51,10 @@ export function assertAppliedMigrationHistory(applied, expected) {
     const versions = new Set(lane.map(row => row.version));
     assertPrefix(applied.filter(row => versions.has(row.version)), lane);
   }
-  const later = expected.filter(row => Number(row.version.slice(0, 4)) > 231);
-  const laterApplied = applied.filter(row => Number(row.version.slice(0, 4)) > 231);
+  // A main-lane extension may precede digital reconciliation on a main host.
+  // It is validated in its exact lane above, not as release continuation.
+  const later = expected.filter(row => Number(row.version.slice(0, 4)) > 231&&!mainExtensionVersions.has(row.version));
+  const laterApplied = applied.filter(row => Number(row.version.slice(0, 4)) > 231&&!mainExtensionVersions.has(row.version));
   if (laterApplied.length && !known.every(row => seen.has(row.version))) {
     throw new Error('Post-reconciliation migrations require both complete branch histories');
   }
