@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "\u8fbe\u5174\u5185\u90e8\u8ba1\u4ef6\u8fd4\u5de5\u7cfb\u7edf\u72ec\u7acb\u6280\u672f\u57fa\u5ea7",
+  "description": "达兴内部计件返工系统独立技术基座",
   "engines": {
     "node": ">=22 <23",
     "npm": ">=10 <11"

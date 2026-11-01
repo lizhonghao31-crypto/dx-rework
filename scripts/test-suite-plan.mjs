@@ -58,7 +58,7 @@ export function fullGatePostgresPlan(environment){
  return {status:'required',mapped,chain,plan};
 }
 export function executionFingerprint(context,plan) {
- return createHash('sha256').update(JSON.stringify({context,plan,configs:[...new Set(plan.map(s=>s.config))].sort().map(path=>[path,readFileSync(path,'utf8')]),contract:readFileSync('scripts/test-resource-contract.mjs','utf8')})).digest('hex');
+ return createHash('sha256').update(JSON.stringify({context,plan,configs:[...new Set(plan.map(s=>s.config))].sort().map(path=>[path,readFileSync(path,'utf8')]),runtime:readFileSync('scripts/test-execution-config.mjs','utf8'),executor:readFileSync('scripts/owned-command.mjs','utf8'),contract:readFileSync('scripts/test-resource-contract.mjs','utf8')})).digest('hex');
 }
 export function assertSuiteResults(report,files) {
  if(!Array.isArray(files)||files.length===0)throw Error('POSTGRES_EMPTY_PLAN_REJECTED');

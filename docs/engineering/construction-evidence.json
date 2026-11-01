@@ -1,0 +1,294 @@
+{
+  "version": 1,
+  "base": "3fd11867aa24a2433faf4a5d2409bbbe8325bd97",
+  "sourceFingerprint": "8113aa697172b8b59aa4ed59633962acf0cc5e3cdeb60a1bd45d498b4defaee6",
+  "rules": [
+    {
+      "id": "policy",
+      "rule": "历史授权/旧阶段与长期规则分离，目标分支和当前授权成为事实源",
+      "source": "2026-11-01 用户批准双分支治理；见construction-efficiency-audit-20261101 E01-E24及当前失败补记",
+      "writes": [
+        "AGENTS.md"
+      ],
+      "reads": [
+        "docs/governance/chatgpt-codex-construction-workflow-v1.0.md",
+        "docs/governance/github-actions-usage-policy-v1.0.md"
+      ],
+      "oldTests": [
+        "scripts/ci/governance-policy.test.mjs"
+      ],
+      "checks": [
+        "native"
+      ],
+      "initialization": "原文归档；样衣仅解释历史授权/环境，不删除生产cutover及Root安全条件",
+      "dateAndPermission": "不自动部署或赋真人权限；保留用户标准速度与Fast设置",
+      "expectation": "保留已有断言；正向实际办理通过，负向身份/上下文/清理/回执错误必须拒绝；对应原测试与命令记录逐项核验"
+    },
+    {
+      "id": "gate",
+      "rule": "Review-first、准确最终tuple与真实状态，不沿用单次Quick特批",
+      "source": "2026-11-01 用户批准双分支治理；见construction-efficiency-audit-20261101 E01-E24及当前失败补记",
+      "writes": [
+        ".github/workflows/ci.yml",
+        ".github/workflows/full-gate.yml",
+        "scripts/ci/ci-gate-runtime.mjs",
+        "scripts/ci/gate-maintenance.test.mjs",
+        "scripts/ci/pr-gate-controller.mjs",
+        "scripts/ci/pr-gate-protocol.mjs",
+        "scripts/ci/review-final-gate.test.mjs",
+        "scripts/ci/verify-actions-policy.mjs"
+      ],
+      "reads": [
+        "scripts/ci/pr-gate-controller.mjs",
+        "scripts/ci/ci-gate-runtime.mjs"
+      ],
+      "oldTests": [
+        "scripts/ci/review-final-gate.test.mjs",
+        "scripts/ci/gate-maintenance.test.mjs"
+      ],
+      "checks": [
+        "native",
+        "consumers"
+      ],
+      "initialization": "head/base/mode/run/job/attempt都绑定；最终ref只创建一次；旧例外直接拒绝",
+      "dateAndPermission": "只新增actions:read读取产物，保护和生产权限不改；不提交APPROVE",
+      "expectation": "保留已有断言；正向实际办理通过，负向身份/上下文/清理/回执错误必须拒绝；对应原测试与命令记录逐项核验"
+    },
+    {
+      "id": "reuse",
+      "rule": "同Head四项light证据和产物真实复用，其他上下文不复用",
+      "source": "2026-11-01 用户批准双分支治理；见construction-efficiency-audit-20261101 E01-E24及当前失败补记",
+      "writes": [
+        "scripts/ci/light-reuse.mjs",
+        "scripts/ci/light-reuse.test.mjs"
+      ],
+      "reads": [
+        "scripts/ci/ci-gate-runtime.mjs",
+        "scripts/ci/pr-gate-protocol.mjs"
+      ],
+      "oldTests": [
+        "scripts/ci/light-reuse.test.mjs"
+      ],
+      "checks": [
+        "native"
+      ],
+      "initialization": "源run实际成功、attempt、Node/npm/image/lock/env及文件摘要匹配；无可靠源时原命令fresh执行",
+      "dateAndPermission": "失败/skip/旧Head/不同base/腐坏文件/路径逃逸拒绝，不能用产物代替PG或恢复证据",
+      "expectation": "保留已有断言；正向实际办理通过，负向身份/上下文/清理/回执错误必须拒绝；对应原测试与命令记录逐项核验"
+    },
+    {
+      "id": "evidence",
+      "rule": "真实diff/旧消费者与当前源码绑定，测试结果与非测试命令分开",
+      "source": "2026-11-01 用户批准双分支治理；见construction-efficiency-audit-20261101 E01-E24及当前失败补记",
+      "writes": [
+        "scripts/ci/construction-evidence.mjs",
+        "scripts/ci/construction-evidence.test.mjs"
+      ],
+      "reads": [
+        "AGENTS.md",
+        "scripts/ci/ci-gate-runtime.mjs"
+      ],
+      "oldTests": [
+        "scripts/ci/construction-evidence.test.mjs"
+      ],
+      "checks": [
+        "native"
+      ],
+      "initialization": "记录实际命令、exit、测试数或command类型、前后相同指纹及日志hash；文档自引用不生成假head",
+      "dateAndPermission": "结构检查不宣称语义零遗漏；无记录/错误base/源码漂移/全skip必须拒绝",
+      "expectation": "保留已有断言；正向实际办理通过，负向身份/上下文/清理/回执错误必须拒绝；对应原测试与命令记录逐项核验"
+    },
+    {
+      "id": "execution",
+      "rule": "本地与CI显式工具/config/worker，受管中断不留孤儿任务",
+      "source": "2026-11-01 用户批准双分支治理；见construction-efficiency-audit-20261101 E01-E24及当前失败补记",
+      "writes": [
+        ".node-version",
+        "package.json",
+        "scripts/ci/full-gate-risk-map.mjs",
+        "scripts/ci/governance-policy.test.mjs",
+        "scripts/ci/owned-command.test.mjs",
+        "scripts/ci/test-runtime-metadata.mjs",
+        "scripts/owned-command.mjs",
+        "scripts/run-business-chain-gate.mjs",
+        "scripts/test-execution-config.mjs",
+        "scripts/test-suite-plan.mjs",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts"
+      ],
+      "reads": [
+        "scripts/test-suite-plan.mjs",
+        "scripts/run-business-chain-gate.mjs",
+        "scripts/owned-command.mjs"
+      ],
+      "oldTests": [
+        "scripts/ci/owned-command.test.mjs",
+        "scripts/ci/test-execution-contract.test.mjs"
+      ],
+      "checks": [
+        "native",
+        "consumers"
+      ],
+      "initialization": "普通PG1/长链2来自同一配置；已有严格测试时限不变；本地22.23.4与CI22.22.2差异显式记录",
+      "dateAndPermission": "中断父子孙退出后才清理/签证据；PID启动身份变化或未证退出拒绝；不扩大timeout",
+      "expectation": "保留已有断言；正向实际办理通过，负向身份/上下文/清理/回执错误必须拒绝；对应原测试与命令记录逐项核验"
+    },
+    {
+      "id": "resources",
+      "rule": "所有改动资源生产者与登记/清理共用严格所有权契约",
+      "source": "2026-11-01 用户批准双分支治理；见construction-efficiency-audit-20261101 E01-E24及当前失败补记",
+      "writes": [
+        "scripts/test-resource-contract.mjs",
+        "scripts/test-resource-lifecycle.mjs",
+        "tests/helpers/business-anchor-fixture.ts",
+        "tests/helpers/owned-postgres-schema.ts",
+        "tests/helpers/supplier-maintenance-fixture.ts",
+        "tests/integration/acceptance-role-session-postgres.test.ts",
+        "tests/integration/acceptance-worker-people-postgres.test.ts",
+        "tests/integration/customer-quotation-postgres.test.ts",
+        "tests/integration/full-business-chain-postgres.test.ts",
+        "tests/integration/own-tail-responsibility-history-postgres.test.ts",
+        "tests/integration/production-closure-postgres.test.ts",
+        "tests/integration/receiving-postgres.test.ts",
+        "tests/integration/rework-v2-n01-postgres.test.ts",
+        "tests/integration/rework-v2-process-worker-preassignment-postgres.test.ts",
+        "tests/integration/root-single-account-two-pass-postgres.test.ts",
+        "tests/integration/sample-create-postgres.test.ts",
+        "tests/integration/sample-disposal-postgres.test.ts",
+        "tests/integration/sample-foundation-postgres.test.ts",
+        "tests/integration/sample-import-postgres.test.ts",
+        "tests/integration/sample-read-postgres.test.ts",
+        "tests/integration/sample-workflow-postgres.test.ts",
+        "tests/integration/sourcing-pr03-postgres.test.ts",
+        "tests/integration/test-resource-contract-postgres.test.ts"
+      ],
+      "reads": [
+        "scripts/test-resource-contract.mjs",
+        "scripts/test-resource-lifecycle.mjs",
+        "scripts/run-business-chain-gate.mjs"
+      ],
+      "oldTests": [
+        "tests/unit/business-chain-schema-cleanup.test.ts",
+        "tests/integration/test-resource-contract-postgres.test.ts"
+      ],
+      "checks": [
+        "native",
+        "consumers",
+        "resource-targeted"
+      ],
+      "initialization": "低权限标记DB/OID及run精确manifest；受管并行重型schema交回；worker全退出父跨库串行清理；独立模式仍真实删除",
+      "dateAndPermission": "不变业务断言、Root/角色权限、质量和金额规则；错目标/身份/run拒绝；失败保留清理证据",
+      "expectation": "保留已有断言；正向实际办理通过，负向身份/上下文/清理/回执错误必须拒绝；对应原测试与命令记录逐项核验"
+    },
+    {
+      "id": "prerequisites",
+      "rule": "先核真实夹具前置，再进入长迁移/业务链",
+      "source": "2026-11-01 用户批准双分支治理；见construction-efficiency-audit-20261101 E01-E24及当前失败补记",
+      "writes": [
+        "scripts/ci/fixture-prerequisites.test.mjs",
+        "scripts/test-fixture-prerequisites.mjs"
+      ],
+      "reads": [
+        "scripts/run-business-chain-gate.mjs",
+        "scripts/test-fixture-prerequisites.mjs"
+      ],
+      "oldTests": [
+        "scripts/ci/fixture-prerequisites.test.mjs"
+      ],
+      "checks": [
+        "native",
+        "fixture-prerequisite"
+      ],
+      "initialization": "只读检查维护角色存在、membership及低权限属性；不能自动创建或授真实权限",
+      "dateAndPermission": "缺角色/不合法权限早拒绝；main不盲带release业务功能或数据库迁移",
+      "expectation": "保留已有断言；正向实际办理通过，负向身份/上下文/清理/回执错误必须拒绝；对应原测试与命令记录逐项核验"
+    }
+  ],
+  "checks": [
+    {
+      "id": "consumers",
+      "kind": "tests",
+      "command": "[\"node\",\"node_modules/vitest/vitest.mjs\",\"run\",\"tests/unit/full-gate-risk-map.test.ts\",\"tests/unit/business-chain-schema-cleanup.test.ts\"]",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "054c7d4359f3c279c2468ed14e173c008b0384f4",
+      "sourceFingerprint": "8113aa697172b8b59aa4ed59633962acf0cc5e3cdeb60a1bd45d498b4defaee6",
+      "sourceState": "working tree including staged changes, exactly fingerprinted before and after command",
+      "context": "Local Node 22.23.4; owned isolated workspace/test database only, not a claim of CI hardware equivalence",
+      "startedAt": "2026-11-01T17:40:11.923Z",
+      "endedAt": "2026-11-01T17:40:12.745Z",
+      "logSha256": "301d431dbfb93eb7b788803ec2026ade87cc6184c9b7b652d6bd8601e0a31eb1",
+      "log": "/workspace/dx-governance-release-recorded-consumers.log",
+      "passed": 25,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "id": "fixture-prerequisite",
+      "kind": "command",
+      "command": "[\"node\",\"--input-type=module\",\"-e\",\"import {assertFixturePrerequisites} from './scripts/test-fixture-prerequisites.mjs';await assertFixturePrerequisites(process.env.TEST_DATABASE_URL,[{path:'tests/integration/acceptance-maintenance-postgres.test.ts'}]);\"]",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "054c7d4359f3c279c2468ed14e173c008b0384f4",
+      "sourceFingerprint": "8113aa697172b8b59aa4ed59633962acf0cc5e3cdeb60a1bd45d498b4defaee6",
+      "sourceState": "working tree including staged changes, exactly fingerprinted before and after command",
+      "context": "Local Node 22.23.4; owned isolated workspace/test database only, not a claim of CI hardware equivalence",
+      "startedAt": "2026-11-01T17:40:45.528Z",
+      "endedAt": "2026-11-01T17:40:45.587Z",
+      "logSha256": "44236a9fb37dca632329bdfbdfa497119b243018538493741c68ec87a8511601",
+      "log": "/workspace/dx-governance-release-recorded-fixture-prerequisite.log"
+    },
+    {
+      "id": "lint",
+      "kind": "command",
+      "command": "[\"node\",\"node_modules/eslint/bin/eslint.js\",\"scripts/ci/acceptance-maintenance-drill.mjs\",\"scripts/ci/ci-gate-runtime.mjs\",\"scripts/ci/ci-gate-runtime.test.mjs\",\"scripts/ci/construction-evidence.mjs\",\"scripts/ci/construction-evidence.test.mjs\",\"scripts/ci/fixture-prerequisites.test.mjs\",\"scripts/ci/full-gate-risk-map.mjs\",\"scripts/ci/gate-maintenance.test.mjs\",\"scripts/ci/governance-policy.test.mjs\",\"scripts/ci/journey-pg13-regression.mjs\",\"scripts/ci/light-reuse.mjs\",\"scripts/ci/light-reuse.test.mjs\",\"scripts/ci/main-release-history-drill.mjs\",\"scripts/ci/owned-command.test.mjs\",\"scripts/ci/pr-gate-controller.mjs\",\"scripts/ci/pr-gate-controller.test.mjs\",\"scripts/ci/pr-gate-protocol.mjs\",\"scripts/ci/pr-gate-protocol.test.mjs\",\"scripts/ci/review-final-gate.test.mjs\",\"scripts/ci/test-execution-contract.test.mjs\",\"scripts/ci/test-runtime-metadata.mjs\",\"scripts/ci/verify-actions-policy.mjs\",\"scripts/test-fixture-prerequisites.mjs\",\"scripts/owned-command.mjs\",\"scripts/run-business-chain-gate.mjs\",\"scripts/test-execution-config.mjs\",\"--max-warnings=0\"]",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "054c7d4359f3c279c2468ed14e173c008b0384f4",
+      "sourceFingerprint": "8113aa697172b8b59aa4ed59633962acf0cc5e3cdeb60a1bd45d498b4defaee6",
+      "sourceState": "working tree including staged changes, exactly fingerprinted before and after command",
+      "context": "Local Node 22.23.4; owned isolated workspace/test database only, not a claim of CI hardware equivalence",
+      "startedAt": "2026-11-01T17:40:12.928Z",
+      "endedAt": "2026-11-01T17:40:14.147Z",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "log": "/workspace/dx-governance-release-recorded-lint.log"
+    },
+    {
+      "id": "native",
+      "kind": "tests",
+      "command": "[\"node\",\"scripts/test-preflight.mjs\"]",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "054c7d4359f3c279c2468ed14e173c008b0384f4",
+      "sourceFingerprint": "8113aa697172b8b59aa4ed59633962acf0cc5e3cdeb60a1bd45d498b4defaee6",
+      "sourceState": "working tree including staged changes, exactly fingerprinted before and after command",
+      "context": "Local Node 22.23.4; owned isolated workspace/test database only, not a claim of CI hardware equivalence",
+      "startedAt": "2026-11-01T17:40:10.314Z",
+      "endedAt": "2026-11-01T17:40:11.728Z",
+      "logSha256": "7f20a184b61ce7eab22b9bbe1a6697dfb5221098237e300babe48c6e581bbf85",
+      "log": "/workspace/dx-governance-release-recorded-native.log",
+      "passed": 130,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "id": "resource-targeted",
+      "kind": "tests",
+      "command": "[\"node\",\"node_modules/vitest/vitest.mjs\",\"run\",\"tests/integration/test-resource-contract-postgres.test.ts\",\"tests/integration/acceptance-maintenance-postgres.test.ts\"]",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "054c7d4359f3c279c2468ed14e173c008b0384f4",
+      "sourceFingerprint": "8113aa697172b8b59aa4ed59633962acf0cc5e3cdeb60a1bd45d498b4defaee6",
+      "sourceState": "working tree including staged changes, exactly fingerprinted before and after command",
+      "context": "Local Node 22.23.4; owned isolated workspace/test database only, not a claim of CI hardware equivalence",
+      "startedAt": "2026-11-01T17:40:39.219Z",
+      "endedAt": "2026-11-01T17:40:45.353Z",
+      "logSha256": "06bb608cfa4d5001be1fb59e6898695ed81592f873de379b05b329b11651f731",
+      "log": "/workspace/dx-governance-release-recorded-resource-targeted.log",
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0
+    }
+  ],
+  "scope": "Local focused validation; never a replacement for precise final GitHub Gate or deployment acceptance"
+}

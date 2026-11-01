@@ -64,7 +64,7 @@ test('manual Quick cannot claim final approval',()=>{
 });
 test('workflow wiring preserves least privilege, actual receipts, exact Head and the existing heavy worker',()=>{
  assert.match(full,/^ {2}workflow_call:/m);assert.doesNotMatch(full,/^ {2}pull_request:/m);
- for(const source of [ci,full]){assert.match(source,/permissions:\n {2}contents: read/);assert.doesNotMatch(source,/actions:|pull-requests:|contents: write|secrets\./);assert.match(source,/ci-gate-runtime\.mjs emit/);}
+ for(const source of [ci,full]){assert.match(source,/permissions:\n {2}contents: read/);assert.doesNotMatch(source,/actions: write|pull-requests:|contents: write|secrets\./);assert.match(source,/ci-gate-runtime\.mjs emit/);}
  assert.match(job(ci,'approval'),/WORKER_RESULT:.*needs\.full\.result/);
  assert.match(job(ci,'approval'),/WORKER_RECEIPT:.*needs\.full\.outputs\.receipt/);
  assert.match(job(ci,'approval'),/ci-gate-runtime\.mjs certify/);
