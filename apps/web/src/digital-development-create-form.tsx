@@ -52,7 +52,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
   const [patternChoice,setPatternChoice]=useState<DevelopmentPatternChoice|null>(null);
   const [preorder,setPreorder]=useState(existingDraft?.document?.customerOrderDraft?.stage==='preorder');
   const [published,setPublished]=useState(existingDraft?.status==="published");
-  const [boundOrder,setBoundOrder]=useState(existingDraft?.status==="published"&&existingDraft.document?.customerOrderDraft?.withOrder&&initialCustomerOrderIsReady(existingDraft.document.customerOrderDraft.order)?existingDraft.document.customerOrderDraft.order:null);
+  const [publishedOrder,setPublishedOrder]=useState(existingDraft?.status==="published"&&existingDraft.document?.customerOrderDraft?.withOrder?existingDraft.document.customerOrderDraft.order:null);
   const loadedVersion=useRef<number|null>(existingDraft?.version??null);
   const [fileKind,setFileKind]=useState<DevelopmentDocument["files"][number]["kind"]>("款图");
   const measurementIds=useRef(document.measurements.map(()=>createClientRequestId()));
@@ -109,16 +109,19 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
   const preloadedCalendar=Boolean(serverToday&&minimumDate&&(createdSource===null||calendarSourceId===createdSource));
   const [calendar,setCalendar]=useState<Calendar|null>(()=>preloadedCalendar?{sourceId:createdSource,serverToday:serverToday!,minimumInitialCustomerDate:minimumDate!}:null);
   const [calendarError,setCalendarError]=useState(''),[calendarRefresh,setCalendarRefresh]=useState(0);
+  const preloadedCalendarConsumed=useRef(false);
   const initialCalendarSource=useRef(createdSource),calendarInitialized=useRef<{sourceId:string|null}|null>(preloadedCalendar?{sourceId:createdSource}:null);
   const calendarReady=calendar?.sourceId===createdSource;
   const calendarToday=calendarReady?calendar!.serverToday:undefined;
   const dateMinimum=calendarReady?calendar!.minimumInitialCustomerDate:undefined;
+  const confirmationCalendar=calendarReady?calendar!:undefined;
+  const boundOrder=publishedOrder&&initialCustomerOrderIsReady(publishedOrder,confirmationCalendar)?publishedOrder:null;
   useEffect(()=>{
     let live=true;const abort=new AbortController();
     const refresh=()=>setCalendarRefresh(value=>value+1);
     window.addEventListener('focus',refresh);window.addEventListener('acceptance-clock-changed',refresh);
     if(busy||writing.current)return()=>{live=false;abort.abort();window.removeEventListener('focus',refresh);window.removeEventListener('acceptance-clock-changed',refresh);};
-    if(preloadedCalendar&&calendarRefresh===0){setCalendarError('');setCalendar({sourceId:createdSource,serverToday:serverToday!,minimumInitialCustomerDate:minimumDate!});}
+    if(preloadedCalendar&&calendarRefresh===0&&!preloadedCalendarConsumed.current){preloadedCalendarConsumed.current=true;setCalendarError('');setCalendar({sourceId:createdSource,serverToday:serverToday!,minimumInitialCustomerDate:minimumDate!});}
     else {
       setCalendarError('');
       void digitalRequest<Omit<Calendar,'sourceId'>>(developmentOrderOptionsPath(createdSource),'GET',undefined,undefined,{signal:abort.signal}).then(next=>{
@@ -189,12 +192,14 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
       if(!form.designStyleNo.trim())throw new Error("请填写设计款号");
       if(withOrder&&!preorder&&!draftOnly&&!form.customerCode)throw new Error("请选择客户");
       const sourceInput = DigitalSourceCreateSchema.parse({developmentType, designStyleNo: form.designStyleNo, temporaryStyleNo: form.temporaryStyleNo, customerCode: form.customerCode || null});
-      const shouldConfirmOrder=withOrder&&!draftOnly&&(intent==="confirm_order"||published||Boolean(source)||initialCustomerOrderIsReady(form));
+      const shouldConfirmOrder=withOrder&&!draftOnly&&(intent==="confirm_order"||published||Boolean(source)||initialCustomerOrderIsReady(form,confirmationCalendar));
       const orderInput = shouldConfirmOrder ? DigitalOrderCreateSchema.parse(developmentOrderInput(form)) : null;
+      let liveConfirmationCalendar:Pick<Calendar,'serverToday'|'minimumInitialCustomerDate'>|undefined=confirmationCalendar;
       const submissionDocument:DevelopmentDocument={...document,customerOrderDraft:{withOrder,stage:preorder?'preorder':'formal',order:form}};
       if(orderInput){
         const calendar=await digitalRequest<{serverToday:string;minimumInitialCustomerDate:string}>(developmentOrderOptionsPath(createdSource));
         if(!calendar.serverToday||!calendar.minimumInitialCustomerDate)throw new Error("未取得服务器日期，请重试；输入仍保留");
+        liveConfirmationCalendar=calendar;setCalendar({...calendar,sourceId:createdSource});
         const dateError=customerOrderDateError(orderInput.orderDate,calendar.serverToday);
         if(dateError)throw new Error(dateError);
         const errors=initialCustomerDateErrors(orderInput.lines,calendar.minimumInitialCustomerDate);if(errors.length)throw new Error(errors.join("；"));
@@ -246,9 +251,9 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
             const body={expectedVersion:sheet.version,...(existingDraft?.revisionSource?.outputKind==='工艺布片'?{}:{patternOrder:patternChoice})},payload=JSON.stringify(body);
             if(publishKey.current?.payload!==payload)publishKey.current={payload,key:createClientRequestId()};
             const publishedSheet=await digitalRequest<DevelopmentSheet>(`${base}/publish`,"POST",body,publishKey.current.key);setPublished(true);
-            if(publishedSheet.document?.customerOrderDraft?.withOrder){const draft=publishedSheet.document.customerOrderDraft.order;if(initialCustomerOrderIsReady(draft))setBoundOrder(draft);setForm(draft);}
+            if(publishedSheet.document?.customerOrderDraft?.withOrder){const draft=publishedSheet.document.customerOrderDraft.order;setPublishedOrder(draft);setForm(draft);}
           }
-        } else {setPublished(true);if(sheet.document?.customerOrderDraft?.withOrder){const draft=sheet.document.customerOrderDraft.order;if(initialCustomerOrderIsReady(draft)){setBoundOrder(draft);setForm(draft);}}if(draftOnly)throw new Error("开发单已发布，请继续确认客户订单或重新打开查看");persistedDocument=sheet.document??document;}
+        } else {setPublished(true);if(sheet.document?.customerOrderDraft?.withOrder){const draft=sheet.document.customerOrderDraft.order;setPublishedOrder(draft);if(initialCustomerOrderIsReady(draft,liveConfirmationCalendar))setForm(draft);}if(draftOnly)throw new Error("开发单已发布，请继续确认客户订单或重新打开查看");persistedDocument=sheet.document??document;}
       }
       let orderId: string | null = null;
       if (orderInput) {
@@ -280,7 +285,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
   };
   return <Surface className="development-create development-create-reference dx-doc-development"><form id={formId} noValidate onKeyDown={event=>{if(event.key==="Enter"&&event.nativeEvent.isComposing)event.preventDefault();}} onSubmit={event => {event.preventDefault(); void save(preorder&&!published);}}>
     <DocumentToolbar title={title} status={busy?"保存中":publishStatus}>{!contained&&<Button type="button" disabled={busy} onClick={()=>void returnToList()}>{cancelLabel}</Button>}{!source&&!published&&!preorder&&<Button type="button" disabled={busy||!calendarReady||Boolean(calendarError)} onClick={()=>void save(true)}>保存开发资料草稿</Button>}<Button form={formId} type="submit" variant="primary" disabled={busy||!calendarReady||Boolean(calendarError)}>{busy?"保存中…":submitLabel}</Button></DocumentToolbar>
-    {preorder?<p className="dx-doc-hint">先记录已知的面料及备料信息，其余客户、PO和配码资料在正式下单时补齐。</p>:withOrder&&!published&&!initialCustomerOrderIsReady(form)&&<p className="dx-doc-hint">订购信息尚未齐备，可先发布开发资料；正式确认订单时再核对PO、颜色、尺码数量及客户约定出货日期。</p>}
+    {preorder?<p className="dx-doc-hint">先记录已知的面料及备料信息，其余客户、PO和配码资料在正式下单时补齐。</p>:withOrder&&!published&&!initialCustomerOrderIsReady(form,confirmationCalendar)&&<p className="dx-doc-hint">订购信息待核实，可先发布开发资料；正式确认订单时再核对PO、颜色、尺码数量及客户约定出货日期。</p>}
 
     {!source&&!existingDraft?.revisionSource&&<div className="development-order-intent" role="group" aria-label="确定客户订单">{([['development','无确定客户订单'],['preorder','预下单备料'],['certain_order','有确定客户订单']] as const).map(([value,label])=><Button key={value} type="button" aria-pressed={preorder?value==='preorder':intent===value} disabled={busy||published||!onIntentChange} onClick={()=>{setPreorder(value==='preorder');onIntentChange?.(value==='preorder'?'certain_order':value);}}>{label}</Button>)}</div>}
     {source && <p>沿用第 {source.adoptedRound ?? source.selectedRound ?? 1} 轮开发资料；头版/开发板与已有工序保持原档案。</p>}

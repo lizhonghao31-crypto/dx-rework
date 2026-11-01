@@ -6,6 +6,7 @@ import {initialDevelopmentDocument} from '../../apps/web/src/digital-development
 import {developmentIssues} from '../../apps/web/src/digital-development-validation.js';
 
 const order=()=>InitialCustomerOrderDraftSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:'TEST-ID',temporaryStyleNo:null,orderDate:'2026-11-01',contractDeliveryDate:null,salesYear:2027,salesSeries:'P05',requiresColorMatching:false,lines:[{color:'蓝',deliveryDate:'2027-03-15',sizes:[{size:'',quantity:''}]}]});
+const calendar={serverToday:'2026-11-01',minimumInitialCustomerDate:'2026-12-01'};
 describe('development creation sizes are optional for both order intents',()=>{
   for(const withOrder of [false,true])it(`publishes without fabricated sizes withOrder=${withOrder}`,()=>{
     const document={...initialDevelopmentDocument(),quantity:1,orderDate:'2026-11-01',files:[{attachmentId:randomUUID(),kind:'款图' as const}],...(withOrder?{customerOrderDraft:{withOrder,order:order()}}:{})};
@@ -16,27 +17,39 @@ describe('development creation sizes are optional for both order intents',()=>{
     expect(developmentSizeQuantityIssues(document).length).toBeGreaterThan(0);
   });
   it('preserves strict actual PO and supplied per-size quantity validation',()=>{
-    expect(initialCustomerOrderIsReady(order())).toBe(false);
+    expect(initialCustomerOrderIsReady(order(),calendar)).toBe(false);
     const invalid={...initialDevelopmentDocument(),quantity:2,sizes:['M'],sizeQuantities:[1],measurements:[],orderDate:'2026-11-01',files:[{attachmentId:randomUUID(),kind:'款图' as const}]};
     expect(developmentPublishErrors(invalid).join()).toContain('合计');
     expect(DigitalOrderCreateSchema.safeParse({...order(),lines:[{color:'蓝',sizes:[]}]}).success).toBe(false);
   });
   it('keeps all ordering fields editable until every PO has a customer promise',()=>{
     const complete=order();complete.lines[0]!.sizes=[{size:'M',quantity:'12'}];
-    expect(initialCustomerOrderIsReady(complete)).toBe(true);
+    expect(initialCustomerOrderIsReady(complete,calendar)).toBe(true);
     const missing=structuredClone(complete);missing.lines[0]!.deliveryDate=null;
-    expect(initialCustomerOrderIsReady(missing)).toBe(false);
+    expect(initialCustomerOrderIsReady(missing,calendar)).toBe(false);
     missing.contractDeliveryDate='2027-03-15';
-    expect(initialCustomerOrderIsReady(missing)).toBe(false);
+    expect(initialCustomerOrderIsReady(missing,calendar)).toBe(false);
     const mixed=structuredClone(complete);mixed.lines.push({...missing.lines[0]!,color:'红'});
-    expect(initialCustomerOrderIsReady(mixed)).toBe(false);
+    expect(initialCustomerOrderIsReady(mixed,calendar)).toBe(false);
     missing.lines[0]!.customerWarehouseArrivalDate='2027-03-15';
-    expect(initialCustomerOrderIsReady(missing)).toBe(true);
+    expect(initialCustomerOrderIsReady(missing,calendar)).toBe(true);
   });
   it('rejects publication of a fully filled preorder until explicitly changed to development',()=>{
     const document={...initialDevelopmentDocument(),quantity:1,orderDate:'2026-11-01',files:[{attachmentId:randomUUID(),kind:'款图' as const}],customerOrderDraft:{withOrder:true,stage:'preorder' as const,order:order()}};
     expect(developmentPublishErrors(document)).toContain('预下单备料资料仅可保存草稿，请先明确切换为开发单后再发布');
     expect(developmentPublishErrors({...document,customerOrderDraft:{...document.customerOrderDraft,stage:'formal'}})).toEqual([]);
+  });
+  it('uses the supplied server calendar for invalid, mixed and next-day promises without inventing dates',()=>{
+    const value=order();value.lines[0]!.sizes=[{size:'M',quantity:'12'}];
+    expect(initialCustomerOrderIsReady(value,undefined)).toBe(false);
+    value.lines[0]!.deliveryDate='2026-11-15';expect(initialCustomerOrderIsReady(value,calendar)).toBe(false);
+    value.lines[0]!.deliveryDate='2026-12-01';expect(initialCustomerOrderIsReady(value,calendar)).toBe(true);
+    expect(initialCustomerOrderIsReady(value,{serverToday:'2026-11-02',minimumInitialCustomerDate:'2026-12-02'})).toBe(false);
+    value.lines.push({...value.lines[0]!,color:'红',deliveryDate:'2026-11-15'});
+    expect(initialCustomerOrderIsReady(value,calendar)).toBe(false);
+    value.lines.pop();value.lines[0]!.deliveryDate='2027-03-15';value.orderDate='2026-11-02';
+    expect(initialCustomerOrderIsReady(value,calendar)).toBe(false);
+    expect(initialCustomerOrderIsReady(value,{serverToday:'2026-11-02',minimumInitialCustomerDate:'2026-12-02'})).toBe(true);
   });
   it('retains historical sales years and distinguishes series from a customer promise',()=>{
     expect(salesYearOptions('2026-11-01')).toEqual([2026,2027]);

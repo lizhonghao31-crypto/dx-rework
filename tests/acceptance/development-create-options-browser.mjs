@@ -38,18 +38,26 @@ try{
   await preorderPage.goto(url+'?preorder');await preorderPage.getByRole('combobox',{name:'销售年份',exact:true}).selectOption('2027');
   await preorderPage.getByRole('button',{name:'保存预下单备料资料',exact:true}).click();await preorderPage.getByRole('status').filter({hasText:'开发资料与订购草稿已保存'}).waitFor();
   const preorderState=await preorderPage.evaluate(()=>window.creationOptionsFixture);assert.equal(preorderState.saved.document.customerOrderDraft.stage,'preorder');assert.equal(preorderState.saved.document.quantity,null);assert.equal(preorderState.saved.status,'draft');assert.equal(preorderState.requests.some(r=>r.path.endsWith('/development/publish')||r.path.endsWith('/confirm')),false);await preorderPage.close();
-  for(const width of [1280,1440]){
+  for(const width of [1280,1440])for(const scenario of ['missingDate','shortDate','futureOrderDate','crossDay','mixedDate']){
     const restored=await browser.newPage({viewport:{width,height:900},locale:'zh-CN'});restored.on('pageerror',error=>errors.push(error.message));
-    await restored.goto(url+'?missingDate');const promised=restored.locator('#development-po-date-1');
-    await promised.waitFor();assert.equal(await promised.isDisabled(),false);await promised.fill('2027-03-15');
+    await restored.goto(url+'?'+scenario);const promised=restored.locator(`#development-po-date-${scenario==='mixedDate'?2:1}`);
+    await promised.waitFor();const originalPromise=await promised.inputValue();
+    if(scenario==='crossDay'){
+      assert.equal(await promised.isDisabled(),true);await restored.getByRole('button',{name:'重新读取本单日期',exact:true}).click();
+      await restored.waitForFunction(()=>!document.querySelector('#development-po-date-1').matches(':disabled'));assert.equal(await promised.inputValue(),originalPromise);
+    }
+    assert.equal(await promised.isDisabled(),false);
+    if(scenario==='futureOrderDate')await restored.locator('#development-customer-order-date').fill('2026-11-01');
+    else await promised.fill(scenario==='crossDay'?'2026-12-02':'2027-03-15');
+    const editedPromise=await promised.inputValue();
     await restored.evaluate(()=>{window.creationOptionsFixture.failNextConfirm=true;});
     await restored.getByRole('button',{name:'确认客户订单',exact:true}).click();await restored.getByRole('alert').filter({hasText:'TEST 确认失败'}).waitFor();
-    assert.equal(await promised.inputValue(),'2027-03-15');assert.equal(await promised.isDisabled(),false);
-    if(evidence){await restored.evaluate(()=>window.scrollTo(0,0));await restored.screenshot({path:join(evidence,`restore-date-retry-${width}.png`),fullPage:true});}
+    assert.equal(await promised.inputValue(),editedPromise);assert.equal(await promised.isDisabled(),false);
+    if(evidence&&['crossDay','mixedDate'].includes(scenario)){await restored.evaluate(()=>window.scrollTo(0,0));await restored.screenshot({path:join(evidence,`restore-${scenario}-${width}.png`)});}
     await restored.getByRole('button',{name:'确认客户订单',exact:true}).click();await restored.getByRole('status').filter({hasText:'TEST 开发已发布'}).waitFor();
     const confirmed=await restored.evaluate(()=>window.creationOptionsFixture);assert.equal(confirmed.orderId,'00000000-0000-4000-8000-000000000008');
     assert.equal(confirmed.requests.filter(r=>r.path.endsWith('/development/publish')).length,0);
-    assert.equal(confirmed.saved.document.customerOrderDraft.order.lines[0].customerWarehouseArrivalDate,null);results.push({width,scenario:'published missing promise',checks:['editable date','confirmation failure keeps input','retry confirms without republishing','published basis remains unchanged']});await restored.close();
+    assert.equal(confirmed.saved.document.customerOrderDraft.order.lines[scenario==='mixedDate'?1:0].customerWarehouseArrivalDate,originalPromise||null);results.push({width,scenario,checks:['editable invalid ordering','server calendar refresh retains promise','confirmation failure keeps input','retry confirms without republishing','published basis remains unchanged']});await restored.close();
   }
   const promotedPage=await browser.newPage({viewport:{width:1280,height:900},locale:'zh-CN'});
   await promotedPage.goto(url+'?preorderReady');await promotedPage.getByText('执行单价：40.000 元/件',{exact:true}).waitFor();

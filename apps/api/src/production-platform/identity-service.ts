@@ -9,7 +9,7 @@ import type { Pool, PoolClient } from "pg";
 import { DigitalOrderCreateSchema, beijingCalendarDate, customerOrderDateError, initialCustomerOrderInput, initialCustomerOrderIsReady, digitalFormalPoNo, digitalPoKey, initialCustomerDateErrors, minimumInitialCustomerDate } from "@dx-rework/contracts/digital-production";
 import {developmentDocumentRow} from "./development-round-repository.js";
 import { DigitalPoDateRepository } from "./po-date-repository.js";
-import type { DigitalCustomer, DigitalOrder, DigitalOrderInput, DigitalSource, DigitalSourceInput, DigitalNumberCorrection } from "@dx-rework/contracts/digital-production";
+import type { DigitalCustomer, DigitalOrder, DigitalOrderInput, DigitalSource, DigitalSourceInput, DigitalNumberCorrection, InitialCustomerOrderDraft } from "@dx-rework/contracts/digital-production";
 import { isRootActor } from "../access/business-authority.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
 import { ApplicationError } from "../platform/errors.js";
@@ -162,6 +162,7 @@ export class DigitalProductionIdentityService {
     return this.command(actor, sourceId ? `confirm-source:${sourceId}` : "direct-order", key, input, async client => {
       await this.customer(client, input.customerCode, input.productGroup);
       let createdBy = actor.actorId;
+      let frozenOrdering:InitialCustomerOrderDraft|undefined;
       if (sourceId) {
         const source = await this.visibleSource(client, actor, sourceId, true);
         if(await developmentRevisionSource(client,sourceId))fail('复版沿原开发档案的客户订单，不重复建立大货数量');
@@ -175,8 +176,7 @@ export class DigitalProductionIdentityService {
         }
         const published=await developmentDocumentRow(client,sourceId);
         if(published?.status!=="published")fail("请先发布开发单，再正式确认客户订单");
-        if(published.document?.customerOrderDraft?.withOrder&&published.document.customerOrderDraft.stage!=='preorder'&&initialCustomerOrderIsReady(published.document.customerOrderDraft.order)&&orderFactsDigest(input)!==orderFactsDigest(initialCustomerOrderInput(published.document.customerOrderDraft.order)))
-          fail("确认信息须与当前已发布的订购草稿一致，请重新打开原档案恢复资料");
+        if(published.document?.customerOrderDraft?.withOrder&&published.document.customerOrderDraft.stage!=='preorder')frozenOrdering=published.document.customerOrderDraft.order;
       }
       const styleKey = digitalPoKey(input.designStyleNo);
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [JSON.stringify(["digital-order-style",styleKey])]);
@@ -184,6 +184,8 @@ export class DigitalProductionIdentityService {
         fail("该编号已有客户订单，请打开原档案继续办理");
       const now=businessNow(this.now),orderDateError=customerOrderDateError(input.orderDate,beijingCalendarDate(now));
       if(orderDateError)fail(orderDateError,400);
+      if(frozenOrdering&&initialCustomerOrderIsReady(frozenOrdering,{serverToday:beijingCalendarDate(now),minimumInitialCustomerDate:minimumInitialCustomerDate(now)})&&orderFactsDigest(input)!==orderFactsDigest(initialCustomerOrderInput(frozenOrdering)))
+        fail("确认信息须与当前已发布的订购草稿一致，请重新打开原档案恢复资料");
       const dateErrors = initialCustomerDateErrors(input.lines,minimumInitialCustomerDate(now));
       if (dateErrors.length) fail(dateErrors.join("；"),400);
       let merchandiserId = input.primaryMerchandiserId;

@@ -164,6 +164,21 @@ run("P05 development forms PostgreSQL", () => {
       expect((await database.query('SELECT count(*)::int n FROM digital_production_orders WHERE source_id=$1',[id])).rows[0].n).toBe(0);
     }finally{await app.close();}
   });
+  it.each(['short promise','future order date','next-day restore','mixed PO dates'])('keeps published %s editable for strict formal confirmation',async scenario=>{
+    const now=new Date(scenario==='next-day restore'?'2026-11-02T04:00:00Z':'2026-11-01T04:00:00Z');
+    const confirmationService=new DigitalProductionIdentityService(database,true,undefined,()=>now);
+    const id=await source(),identity=await development.read(actor(),id),document=await ready();
+    const order=InitialCustomerOrderDraftSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:identity.designStyleNo,temporaryStyleNo:null,orderDate:scenario==='future order date'?'2026-11-02':'2026-10-15',contractDeliveryDate:null,lines:[{color:'TEST待核日期',deliveryDate:null,customerWarehouseArrivalDate:scenario==='next-day restore'||scenario==='future order date'?'2026-12-01':'2026-11-15',sizes:[{size:'M',quantity:'12'}]}]});
+    if(scenario==='mixed PO dates')order.lines.push({...order.lines[0]!,color:'TEST另一PO',customerWarehouseArrivalDate:'2027-03-15'});
+    document.customerOrderDraft={withOrder:true,stage:'formal',order};
+    const saved=await development.save(actor(),id,{expectedVersion:0,document},randomUUID());await development.publish(actor(),id,saved.version,randomUUID());
+    const original=structuredClone(order);
+    await expect(confirmationService.createOrder(actor(),DigitalOrderCreateSchema.parse(initialCustomerOrderInput(order)),randomUUID(),id)).rejects.toMatchObject({statusCode:400});
+    order.orderDate='2026-11-01';order.lines[0]!.customerWarehouseArrivalDate=minimumInitialCustomerDate(now);
+    const confirmed=await confirmationService.createOrder(actor(),DigitalOrderCreateSchema.parse(initialCustomerOrderInput(order)),randomUUID(),id);
+    expect(confirmed.lines).toHaveLength(order.lines.length);expect(confirmed.lines[0]?.sizes[0]?.quantity).toBe(12);
+    expect((await development.read(actor(),id)).document?.customerOrderDraft?.order).toEqual(original);
+  });
   it("saves a preorder with only real material information, without formal PO or production tasks",async()=>{
     const designStyleNo=`TEST-PRE-${randomUUID()}`;
     const {sourceId:id}=await service.createSource(actor(),{developmentType:"头版",designStyleNo,temporaryStyleNo:null,customerCode:null},randomUUID());

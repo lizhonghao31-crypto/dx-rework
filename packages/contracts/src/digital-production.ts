@@ -146,12 +146,14 @@ export function initialCustomerOrderInput(draft: InitialCustomerOrderDraft): Dig
 }
 
 /** A published development may retain incomplete ordering details; formal confirmation stays strict. */
-export function initialCustomerOrderIsReady(draft: InitialCustomerOrderDraft): boolean {
+export function initialCustomerOrderIsReady(draft: InitialCustomerOrderDraft,calendar:{serverToday:string;minimumInitialCustomerDate:string}|undefined): boolean {
   try {
+    if(!calendar)return false;
     const parsed=DigitalOrderCreateSchema.safeParse(initialCustomerOrderInput(draft));
     // Schema dates are nullable for drafts/legacy reads. Missing customer promises
     // must not freeze the ordering fields before the strict confirmation command.
-    return parsed.success && parsed.data.lines.every(line=>Boolean(line.customerWarehouseArrivalDate===undefined?line.deliveryDate:line.customerWarehouseArrivalDate));
+    return parsed.success && !customerOrderDateError(parsed.data.orderDate,calendar.serverToday)
+      && initialCustomerDateErrors(parsed.data.lines,calendar.minimumInitialCustomerDate).length===0;
   }
   catch { return false; }
 }
