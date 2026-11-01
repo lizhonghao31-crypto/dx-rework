@@ -73,3 +73,11 @@
 仅修改该单元测试及本次证据记录；生产API/SQL/UI与已通过43＋17定向PG的e7d6a8fa逐字不变。其有效输入范围在完整e7源码仍完全匹配时冻结，保留真实PG和原生产静态证据；新单元文件重新执行及lint，不将较早静态命令称为已检查新文本。浏览器声明输入亦未变。原失败Gate保留，不rerun旧Head；新Head按原协议执行匹配light/最终Full，无第二轮Review。
 
 本次补正后的13文件136项单元通过，相关13文件lint通过。生产源码零差异，真实PG证据仍为43＋17、旧来源131项显式未执行；这些不冒称本次失败Full的未跑阶段已经通过。
+
+## 第二次最终Full失败：历史能力快照的批准增量未纳入
+
+`41362475569` / worker `125015648057`：2982项非DB通过、11项显式skip；第一组PG82通过、2失败，27项资源清理成功，后续长业务链/PG13/恢复未执行。两个失败均在migration-compatibility的release-265/release-266历史路径：原断言“除PMC外不新增能力”，实际多出且仅多出批准的quality_control→qc-production-progress。不是业务角色被擅自赋给员工，也不是数据库资源或超时故障。初始化矩阵虽列过该文件，此前只跑了新退役场景的0270→0271升级，未实际跑完整历史组合，属于执行遗漏。
+
+集中核对角色能力精确快照同源消费者，仅该历史文件有“release只增PMC”旧预期。修复仍逐行保留旧role_capabilities及granted_at，允许且只允许QC新增qc-production-progress一条；员工user_role_assignments仍逐字相等，不改迁移SQL、不禁用任何守卫、不改arrayContaining放行所有新增角色。全部15条历史升级路径已本地通过，15项受管资源已核无残留；136项相关单元及两改动测试文件lint通过。
+
+本次依然只有历史测试与证据改动，生产API/SQL/UI逐字未变。当前其它PG输入在改历史文件前已核原已通过输入完全匹配，再只排除本次待重验历史文件；保留原43项实际PG和原生产静态结果，不把它们说成本轮新运行。17项原数量/回货链因原本地证明的输入范围过宽而重新按精确输入执行；新历史完整15项记录单列。普通历史组实际命令vitest.config.ts、DX_REWORK_TEST_SUITE_KIND=postgres、maxWorkers=1；额外运行原runtime-metadata入口验证解析值。早期wrapper首条metadata展示长配置2worker，不冒称那就是本次普通组实际配置；没有更改任何仓库worker或timeout。

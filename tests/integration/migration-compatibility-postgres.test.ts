@@ -134,9 +134,15 @@ suite('main and digital historical PostgreSQL upgrades',()=>{
    if(['main-232','release-265','release-266'].includes(lane)){
     expect((await client.query('SELECT * FROM user_role_assignments ORDER BY assignment_id')).rows).toEqual(employeeGrants);
     const capabilities=(await client.query("SELECT * FROM role_capabilities WHERE role_code<>'pmc' ORDER BY role_code,capability")).rows;
-    // Main additionally installs the original digital lane; its existing grants
-    // must survive, while the already integrated release gains only PMC.
-    if(['release-265','release-266'].includes(lane))expect(capabilities).toEqual(originalCapabilities);
+    // Main additionally installs the original digital lane. Integrated release
+    // preserves every old grant/timestamp and adds only the approved QC capability.
+    if(['release-265','release-266'].includes(lane)){
+      const isQcProgress=(row:{role_code:string;capability:string})=>row.role_code==='quality_control'&&row.capability==='qc-production-progress';
+      expect(originalCapabilities!.filter(isQcProgress)).toEqual([]);
+      expect(capabilities.filter(isQcProgress)).toHaveLength(1);
+      expect(capabilities.filter(row=>!isQcProgress(row))).toEqual(originalCapabilities);
+      expect((await client.query("SELECT role_code,capability FROM role_capabilities WHERE capability='qc-production-progress' ORDER BY role_code")).rows).toEqual([{role_code:'quality_control',capability:'qc-production-progress'}]);
+    }
     else expect(capabilities).toEqual(expect.arrayContaining(originalCapabilities!));
     expect((await client.query("SELECT count(*)::int n FROM pg_trigger WHERE tgname='attachments_pmc_readonly_guard' AND tgenabled='O' AND tgrelid='attachments'::regclass")).rows[0].n).toBe(1);
    }
