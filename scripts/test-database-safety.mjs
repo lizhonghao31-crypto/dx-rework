@@ -38,15 +38,18 @@ export const validateTestDatabaseIdentity = (databaseUrl, identity) => {
 
 export const assertTestDatabaseTarget = async (
   databaseUrl = process.env.TEST_DATABASE_URL?.trim(),
+  queryable,
 ) => {
   const checkedUrl = requireTestDatabaseUrl({ ...process.env, TEST_DATABASE_URL: databaseUrl });
-  const client = new pg.Client({ connectionString: checkedUrl });
-  await client.connect();
+  const client = queryable ?? new pg.Client({ connectionString: checkedUrl });
+  if (!queryable) await client.connect();
   try {
     const result = await client.query(`
       SELECT current_database() AS database, current_user AS username,
         shobj_description(database.oid, 'pg_database') AS marker,
         database.datallowconn AS allow_connections, database.datistemplate AS is_template,
+        database.oid::text AS database_oid, current_setting('server_version_num') AS server_version,
+        current_setting('port') AS port, inet_server_addr()::text AS address,
         role.rolsuper AS is_superuser, role.rolcreatedb AS can_create_database,
         role.rolcreaterole AS can_create_role, role.rolreplication AS can_replicate,
         role.rolbypassrls AS can_bypass_rls
@@ -58,6 +61,7 @@ export const assertTestDatabaseTarget = async (
     if (!row) throw new Error("TEST_DATABASE_REJECTED: database identity unavailable");
     const identity = {
       database: row.database, username: row.username, marker: row.marker,
+      databaseOid: row.database_oid, serverVersion: row.server_version, port: row.port, address: row.address,
       allowConnections: row.allow_connections, isTemplate: row.is_template,
       isSuperuser: row.is_superuser, canCreateDatabase: row.can_create_database,
       canCreateRole: row.can_create_role, canReplicate: row.can_replicate, canBypassRls: row.can_bypass_rls,
@@ -65,7 +69,7 @@ export const assertTestDatabaseTarget = async (
     validateTestDatabaseIdentity(checkedUrl, identity);
     return identity;
   } finally {
-    await client.end();
+    if (!queryable) await client.end();
   }
 };
 

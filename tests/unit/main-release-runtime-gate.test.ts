@@ -7,7 +7,7 @@ const source=readFileSync('scripts/dx-acceptance.sh','utf8');
 const start=source.indexOf('# MAIN_RELEASE_COMPAT_START'),end=source.indexOf('# MAIN_RELEASE_COMPAT_END')+'# MAIN_RELEASE_COMPAT_END'.length;
 describe('source compatibility gate in existing Acceptance controller',()=>{
  it('runs before production-history export and candidate maintenance using the exact candidate/tool SHA',()=>{
-  expect(start).toBeGreaterThan(0);expect(start).toBeLessThan(source.indexOf('export-production-history.sh'));expect(start).toBeLessThan(source.indexOf('acceptance_update_flow\n'));
+  expect(start).toBeGreaterThan(0);expect(source).not.toContain('export-production-history.sh');expect(source).toContain('--intent acceptance');expect(start).toBeLessThan(source.indexOf('acceptance_update_flow\n'));
   const workflow=readFileSync('.github/workflows/full-gate.yml','utf8');expect(workflow).toContain('Compare exact candidate with current remote main migration history');expect(workflow).toContain('--candidate-ref "$GIT_SHA" --tool-ref "$GIT_SHA"');
  });
  it.each([0,1])('keeps application credentials outside the checker and stops on checker exit %i',exitCode=>{

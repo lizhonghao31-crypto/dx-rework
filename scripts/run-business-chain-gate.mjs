@@ -1,69 +1,30 @@
-import { randomUUID } from "node:crypto";
-import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
-import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import {spawn} from 'node:child_process';
+import {existsSync,readFileSync,writeFileSync} from 'node:fs';
+import {rm,readFile} from 'node:fs/promises';
+import {execFileSync} from 'node:child_process';
+import {randomUUID} from 'node:crypto';
+import {STATIC_CHAIN_TESTS,postgresPlan,fullGatePostgresPlan,assertSuiteResults,executionFingerprint,assertExecutionReceipt} from './test-suite-plan.mjs';
+import {resourceContext,resourceEnvironment,cleanupResources,resourceSmoke} from './test-resource-lifecycle.mjs';
 
-import pg from "pg";
-
-import { assertTestDatabaseTarget } from "./test-database-safety.mjs";
-
-const { Pool } = pg;
-const DEFAULT_ECS_ENV_FILE = "/opt/dx-rework/shared/.env";
-const runtimeEnvFile = process.env.DX_REWORK_ENV_FILE || DEFAULT_ECS_ENV_FILE;
-const hasSharedRuntimeEnv = existsSync(runtimeEnvFile);
-const ISOLATED_GATE_SCHEMA = /^(?:full_chain|root_http_[12]|receiving|rework_v2|sourcing|sample|acceptance_roles|acceptance_people|own_tail|pattern_backfill|customer_quote|business_anchors)_[0-9a-f]{32}$/;
-const RUNTIME_ENV_KEYS = new Set([
-  "OSS_REGION",
-  "OSS_ENDPOINT",
-  "OSS_BUCKET",
-  "OSS_ACCESS_KEY_ID",
-  "OSS_ACCESS_KEY_SECRET",
-  "OSS_PRIVATE_PREFIX",
-  "DINGTALK_QR_REDIRECT_URI",
-]);
-
-function parseEnvValue(raw) {
-  const value = raw.trim();
-  if (
-    (value.startsWith('"') && value.endsWith('"'))
-    || (value.startsWith("'") && value.endsWith("'"))
-  ) {
-    return value.slice(1, -1);
-  }
-  return value;
+const DEFAULT_ECS_ENV_FILE='/opt/dx-rework/shared/.env';
+const runtimeEnvFile=process.env.DX_REWORK_ENV_FILE||DEFAULT_ECS_ENV_FILE;
+const hasSharedRuntimeEnv=existsSync(runtimeEnvFile);
+const RUNTIME_ENV_KEYS=new Set(['OSS_REGION','OSS_ENDPOINT','OSS_BUCKET','OSS_ACCESS_KEY_ID','OSS_ACCESS_KEY_SECRET','OSS_PRIVATE_PREFIX','DINGTALK_QR_REDIRECT_URI']);
+if(hasSharedRuntimeEnv)for(const line of (await readFile(runtimeEnvFile,'utf8')).split(/\r?\n/)){
+ const match=line.trim().match(/^(?:export\s+)?([A-Z0-9_]+)=(.*)$/);if(!match||!RUNTIME_ENV_KEYS.has(match[1])||process.env[match[1]])continue;
+ process.env[match[1]]=match[2].trim().replace(/^["']|["']$/g,'');
 }
-
-async function hydrateRuntimeEnv() {
-  if (!hasSharedRuntimeEnv) return;
-
-  const text = await readFile(runtimeEnvFile, "utf8");
-  for (const rawLine of text.split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith("#")) continue;
-    const match = line.match(/^(?:export\s+)?([A-Z0-9_]+)=(.*)$/);
-    if (!match) continue;
-    const [, key, rawValue] = match;
-    if (!RUNTIME_ENV_KEYS.has(key) || process.env[key]) continue;
-    const value = parseEnvValue(rawValue);
-    if (value) process.env[key] = value;
-  }
+const databaseUrl=process.env.TEST_DATABASE_URL?.trim(),hasDatabase=Boolean(databaseUrl),hasOss=Boolean(process.env.OSS_BUCKET);
+const full=process.argv.includes('--full-gate'),verify=process.argv.includes('--verify-receipt');
+const receiptPath=process.env.DX_REWORK_POSTGRES_RECEIPT;
+const declared=full?fullGatePostgresPlan(process.env):null;
+if(declared?.status==='not-applicable'){
+ if(receiptPath)writeFileSync(receiptPath,JSON.stringify({status:'not-applicable',reason:'no database-sensitive scope'}));
+ console.log('POSTGRES_NOT_APPLICABLE: no PostgreSQL pass signed');process.exit(0);
 }
-
-await hydrateRuntimeEnv();
-
-const databaseUrl = process.env.TEST_DATABASE_URL?.trim();
-const requireDatabase = process.env.DX_REWORK_REQUIRE_TEST_DATABASE === "true";
-if (requireDatabase && !databaseUrl) {
-  throw new Error("BUSINESS_CHAIN_TEST_DATABASE_REQUIRED: explicit TEST_DATABASE_URL is required");
-}
-const hasDatabase = Boolean(databaseUrl);
-if (databaseUrl) await assertTestDatabaseTarget(databaseUrl);
-const hasOss = Boolean(process.env.OSS_BUCKET);
-const runId = randomUUID().replaceAll("-", "").slice(0, 8);
-const resourceManifestDir = await mkdtemp(join(tmpdir(), `dx-rework-business-chain-${runId}-`));
-
+const chain=declared?.chain??true,mapped=declared?.mapped??[];
+if(full&&!process.env.GITHUB_RUN_ID&&!process.env.DX_REWORK_TEST_EXECUTION_ID)throw Error('POSTGRES_LOCAL_EXECUTION_ID_REQUIRED');
+if((full||process.env.DX_REWORK_REQUIRE_TEST_DATABASE==='true')&&!hasDatabase)throw Error('BUSINESS_CHAIN_TEST_DATABASE_REQUIRED: explicit TEST_DATABASE_URL is required');
 function ossBrowserBaseUrl(endpointValue, bucket) {
   const endpoint = new URL(endpointValue);
   if (endpoint.protocol !== "https:") {
@@ -159,136 +120,47 @@ async function verifyOssRuntime() {
   process.stdout.write("OSS_RUNTIME_PREFLIGHT_PASSED: signed HEAD + browser POST CORS\n");
 }
 
-async function ownedSchemasFromManifest() {
-  const entries = await readdir(resourceManifestDir, { withFileTypes: true });
-  const schemas = [];
-  for (const entry of entries) {
-    if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
-    const resource = JSON.parse(await readFile(join(resourceManifestDir, entry.name), "utf8"));
-    if (resource?.kind !== "postgres-schema" || resource.runId !== runId
-      || typeof resource.schema !== "string" || entry.name !== `${resource.schema}.json`
-      || !ISOLATED_GATE_SCHEMA.test(resource.schema)
-      || !resource.schema.slice(-32).startsWith(runId)
-      || (resource.databaseTarget !== undefined && (resource.databaseTarget !== "acceptance-clock"
-        || !resource.schema.startsWith("business_anchors_") || !process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL))) {
-      throw new Error(`BUSINESS_CHAIN_RESOURCE_MANIFEST_REJECTED: ${entry.name}`);
+
+async function runVitest(files,config,environment,output){
+ if(!files.length)return;
+ const child=spawn(process.execPath,['node_modules/vitest/vitest.mjs','run','--config',config,'--reporter=default','--reporter=json','--outputFile='+output,...files],{stdio:'inherit',env:{...process.env,...environment,NODE_ENV:'test',DATABASE_URL:'',DX_REWORK_TEST_SUITE_KIND:'postgres'}});
+ const forward=signal=>child.kill(signal),onInt=()=>forward('SIGINT'),onTerm=()=>forward('SIGTERM');
+ process.on('SIGINT',onInt);process.on('SIGTERM',onTerm);
+ let code;
+ try{code=await new Promise((resolve,reject)=>{child.once('error',reject);child.once('exit',(code,signal)=>resolve(signal?1:code??1));});}
+ finally{process.removeListener('SIGINT',onInt);process.removeListener('SIGTERM',onTerm);}
+ if(code!==0)throw Error('BUSINESS_CHAIN_GATE_FAILED: vitest exited '+code);
+ const report=JSON.parse(readFileSync(output,'utf8'));assertSuiteResults(report,files);return report;
+}
+if(!hasDatabase&&process.argv.includes('--static-already-validated')){
+ console.log('BUSINESS_CHAIN_DATABASE_NOT_VERIFIED: no explicit TEST_DATABASE_URL; static tests already ran in the canonical non-DB suite');
+}else if(!hasDatabase){
+ await runVitest(STATIC_CHAIN_TESTS,'vitest.config.ts',{TEST_DATABASE_URL:'',ACCEPTANCE_CLOCK_TEST_DATABASE_URL:''},'/tmp/dx-static-chain-'+randomUUID()+'.json');
+ await verifyOssRuntime();console.log('BUSINESS_CHAIN_STATIC_GATES_PASSED');
+}else{
+ const resources=await resourceContext({default:databaseUrl,...(process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL?{'acceptance-clock':process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL}:{})});
+ let cleanupPassed=false;
+ const plan=declared?.plan??postgresPlan({mapped,chain});
+ const context={head:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),base:process.env.BASE_SHA??null,runId:process.env.GITHUB_RUN_ID??null,attempt:process.env.GITHUB_RUN_ATTEMPT??null,identities:resources.identities,executionId:process.env.DX_REWORK_TEST_EXECUTION_ID??`${process.env.GITHUB_RUN_ID}/${process.env.GITHUB_RUN_ATTEMPT}`,node:process.versions.node,nodeEnv:'test',databaseUrlCleared:true};
+ try{
+  if(verify){if(!receiptPath)throw Error('POSTGRES_RECEIPT_REQUIRED');assertExecutionReceipt(JSON.parse(readFileSync(receiptPath,'utf8')),context,plan);console.log('BUSINESS_CHAIN_COVERAGE_VERIFIED: same execution covers mapped and chain');}
+  else{
+   if(full&&!receiptPath)throw Error('POSTGRES_RECEIPT_REQUIRED');
+   if(receiptPath)writeFileSync(receiptPath,JSON.stringify({status:'running'}));
+   await resourceSmoke(databaseUrl);
+   const env={...resourceEnvironment(resources),TEST_DATABASE_URL:databaseUrl};
+   const reports=[];
+   try{
+    // Directly affected ordinary PG suites run before long current-schema correctness chains.
+    for(const config of ['vitest.config.ts','vitest.business-chain.config.ts']){
+     const files=plan.filter(s=>s.config===config).map(s=>s.path);if(files.length)reports.push(await runVitest(files,config,env,resources.dir+'-'+config+'.json'));
     }
-    schemas.push({schema: resource.schema, databaseTarget: resource.databaseTarget ?? "default"});
+   }finally{await cleanupResources(resources);cleanupPassed=true;}
+   const results={success:true,numFailedTests:0,numFailedTestSuites:0,testResults:reports.flatMap(r=>r.testResults)};
+   assertSuiteResults(results,plan.map(s=>s.path));
+   if(chain)await verifyOssRuntime();
+   if(receiptPath)writeFileSync(receiptPath,JSON.stringify({version:1,status:'passed',cleanup:'passed',context,plan,results,fingerprint:executionFingerprint(context,plan)}));
+   console.log('BUSINESS_CHAIN_GATE_PASSED: '+plan.length+' unique PostgreSQL suites');
   }
-  return schemas.sort((a,b)=>a.schema.localeCompare(b.schema));
+ }finally{if(verify||cleanupPassed)await rm(resources.dir,{recursive:true,force:true});else console.error('TEST_RESOURCE_CLEANUP_EVIDENCE_RETAINED: '+resources.dir);}
 }
-
-async function cleanupOwnedGateSchemas() {
-  if (!databaseUrl) return;
-  const schemas = await ownedSchemasFromManifest();
-  if (schemas.length === 0) return;
-  const pools = new Map();
-  try {
-    for (const {schema, databaseTarget} of schemas) {
-      if (!pools.has(databaseTarget)) {
-        const targetUrl=databaseTarget==="acceptance-clock" ? process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL : databaseUrl;
-        await assertTestDatabaseTarget(targetUrl);
-        pools.set(databaseTarget,new Pool({ connectionString: targetUrl, max: 1 }));
-      }
-      const pool=pools.get(databaseTarget);
-      await pool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
-      process.stdout.write(`BUSINESS_CHAIN_GATE_SCHEMA_CLEANED: ${schema} databaseTarget=${databaseTarget}\n`);
-    }
-    process.stdout.write(`BUSINESS_CHAIN_GATE_CLEANUP_PASSED: run=${runId} resources=${schemas.length}\n`);
-  } finally {
-    await Promise.all([...pools.values()].map(pool=>pool.end()));
-  }
-}
-
-const tests = [
-  "tests/unit/current-migration-manifest-checksum.test.ts",
-  "tests/unit/business-chain-ui-contract.test.ts",
-  "tests/unit/business-chain-schema-cleanup.test.ts",
-  "tests/unit/aliyun-oss-v4-client.test.ts",
-  "tests/unit/work-reporting.test.ts",
-  "tests/unit/root-superuser-self-review.test.ts",
-  "tests/unit/root-global-business-bypass.test.ts",
-  "tests/unit/root-ui-entry-contract.test.ts",
-  "tests/unit/receiving-pr01-contract.test.ts",
-  "tests/unit/n01-paper-report-entry.test.ts",
-  "tests/unit/acceptance-control.test.ts",
-  "tests/unit/acceptance-lab-web.test.ts",
-  "tests/integration/acceptance-control-routes.test.ts",
-];
-if (hasDatabase) {
-  tests.push(
-    "tests/integration/full-business-chain-postgres.test.ts",
-    "tests/integration/customer-quotation-postgres.test.ts",
-    "tests/integration/development-technical-postgres.test.ts",
-    "tests/integration/own-tail-responsibility-history-postgres.test.ts",
-    "tests/integration/root-single-account-two-pass-postgres.test.ts",
-    "tests/integration/receiving-postgres.test.ts",
-    "tests/integration/rework-v2-n01-postgres.test.ts",
-    "tests/integration/rework-v2-process-worker-preassignment-postgres.test.ts",
-    "tests/integration/sourcing-pr03-postgres.test.ts",
-    "tests/integration/production-closure-postgres.test.ts",
-    "tests/integration/sample-foundation-postgres.test.ts",
-    "tests/integration/sample-read-postgres.test.ts",
-    "tests/integration/sample-create-postgres.test.ts",
-    "tests/integration/sample-workflow-postgres.test.ts",
-    "tests/integration/sample-disposal-postgres.test.ts",
-    "tests/integration/sample-import-postgres.test.ts",
-    "tests/integration/acceptance-role-session-postgres.test.ts",
-    "tests/integration/acceptance-worker-people-postgres.test.ts",
-  );
-  process.stdout.write(
-    "BUSINESS_CHAIN_GATE_START: sourcing PR03 + receiving + N01 v2 + process-worker preassignment + current-schema N01-N11 + two fresh Root single-account HTTP passes + isolated acceptance role sessions/control switching + browser/root/storage regressions\n",
-  );
-} else {
-  process.stdout.write(
-    "BUSINESS_CHAIN_DB_GATE_SKIPPED: no database URL; running static chain gates only\n",
-  );
-}
-
-
-const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
-let exitCode;
-let child;
-let interruptedSignal;
-const interrupt = (signal) => { interruptedSignal = signal; child?.kill(signal); };
-const onSigint = () => interrupt("SIGINT");
-const onSigterm = () => interrupt("SIGTERM");
-process.once("SIGINT", onSigint);
-process.once("SIGTERM", onSigterm);
-try {
-  child = spawn(npmCommand, [
-    "exec", "--", "vitest", "run", "--config", "vitest.business-chain.config.ts", ...tests,
-  ], {
-    stdio: "inherit",
-    env: { ...process.env, DATABASE_URL: "", TEST_DATABASE_URL: databaseUrl ?? "", DX_REWORK_TEST_RUN_ID: runId, DX_REWORK_TEST_RESOURCE_MANIFEST_DIR: resourceManifestDir },
-  });
-  exitCode = await new Promise((resolve, reject) => {
-    child.once("error", reject);
-    child.once("exit", (code, signal) => resolve(signal ? 1 : (code ?? 1)));
-  });
-} finally {
-  process.removeListener("SIGINT", onSigint);
-  process.removeListener("SIGTERM", onSigterm);
-  try { if (hasDatabase) await cleanupOwnedGateSchemas(); }
-  finally { await rm(resourceManifestDir, { recursive: true, force: true }); }
-}
-if (interruptedSignal) throw new Error(`BUSINESS_CHAIN_GATE_INTERRUPTED: ${interruptedSignal}`);
-
-if (exitCode !== 0) {
-  throw new Error(`BUSINESS_CHAIN_GATE_FAILED: vitest exited ${exitCode}`);
-}
-
-process.stdout.write(
-  hasDatabase
-    ? "BUSINESS_CHAIN_CORE_GATE_PASSED: sourcing PR03 + receiving + N01 v2 + process-worker preassignment + N01-N11 + two fresh Root single-account passes + isolated acceptance role sessions/control switching\n"
-    : "BUSINESS_CHAIN_STATIC_CORE_GATES_PASSED\n",
-);
-
-await verifyOssRuntime();
-
-process.stdout.write(
-  hasDatabase
-    ? "BUSINESS_CHAIN_GATE_PASSED\n"
-    : "BUSINESS_CHAIN_STATIC_GATES_PASSED\n",
-);
-

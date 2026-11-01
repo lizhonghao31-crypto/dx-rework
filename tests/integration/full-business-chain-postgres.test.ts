@@ -9,7 +9,7 @@ import { exceptions as readReportingExceptions } from "../../apps/api/src/report
 import {exerciseDevelopmentRoute} from "../helpers/digital-development-route-fixture.js";
 import {exerciseDevelopmentSlaNative} from "../helpers/development-sla-native-fixture.js";
 import { exerciseRevisionApproval } from "./helpers/revision-approval-scenario.js";
-import { ownedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema, createOwnedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { RootAuthority } from "../../apps/api/src/access/root-authority.js";
 import { exerciseReceivingDifferenceAuthority } from "./helpers/receiving-difference-authority-scenario.js";
 import { WorkerAwareAccessMasterDataService } from "../../apps/api/src/access/worker-aware-access-service.js";
@@ -285,7 +285,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
   beforeAll(async () => {
     {const stageStart=performance.now();let stageStatus='failed';try {
 
-    await adminPool.query(`CREATE SCHEMA ${schema}`);
+    await createOwnedPostgresSchema(adminPool,schema);
     const manifest = JSON.parse(await readFile(
       new URL("../../apps/api/src/platform/migration-manifest.json", import.meta.url),
       "utf8",
@@ -423,7 +423,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       process.stdout.write(`PATTERN_ROOM_FIXTURES ${JSON.stringify({schema,orders:fixtures.rows})}\n`);
     }
     await database.end();
-    await dropOwnedPostgresSchema(adminPool, schema);
+    await dropOwnedPostgresSchema(adminPool,schema);
     if (process.env.PATTERN_ROOM_EVIDENCE === "1") process.stdout.write(`PATTERN_ROOM_CLEANUP ${JSON.stringify({schema,dropped:true})}\n`);
     await adminPool.end();
 
@@ -2321,7 +2321,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     const expected = (await database.query(`SELECT ${releaseColumns} FROM pattern_room_wage_items ORDER BY segment_id`)).rows;
     const oldMarks = (await database.query("SELECT line_id,wage_item_id,closure_line_id,marked_by,marked_at FROM rework_wage_settlement_marks WHERE pattern_wage_item_id IS NULL ORDER BY line_id")).rows;
     const historySchema = ownedPostgresSchema("pattern_backfill");
-    await adminPool.query(`CREATE SCHEMA ${historySchema}`);
+    await createOwnedPostgresSchema(adminPool,historySchema);
     const history = new Pool({ connectionString: databaseUrl!, options: `-c search_path=${historySchema}` });
     try {
       // Copy genuine workflow sources, but no 0179 ledger/triggers, into an isolated pre-migration snapshot.
@@ -2341,7 +2341,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       const exported = await new ReportExportService(new ManagementReportingService(database), database, "pr06-backfill-verification").export(financeWages(), "wages", {...allWageDates,wageSource:"order_rework"});
       const xml = exported.content.toString("utf8"), sheet = [...xml.matchAll(/<worksheet[\s\S]*?<\/worksheet>/g)][1]![0];
       expect(xml).toContain('formatCode="#,##0.###"'); expect(sheet).toContain('s="4" t="n"');
-    } finally { await history.end(); await adminPool.query(`DROP SCHEMA ${historySchema} CASCADE`); }
+    } finally { await history.end(); await dropOwnedPostgresSchema(adminPool,historySchema); }
   });
 
   // Also invoked by the mapped-PostgreSQL gate with the default Vitest config.

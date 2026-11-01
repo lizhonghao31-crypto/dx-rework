@@ -1,3 +1,4 @@
+import { ownedPostgresSchema, createOwnedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import pg from "pg";
@@ -6,7 +7,7 @@ import { requireFinanceWageAccess } from "../../apps/api/src/wages/wage-access.j
 
 const url = process.env.TEST_DATABASE_URL;
 (url ? describe : describe.skip)("finance wage persisted authorization", () => {
-  const schema = `finance_access_${randomUUID().replaceAll("-", "")}`;
+  const schema = ownedPostgresSchema("finance_access");
   const admin = new pg.Pool({ connectionString: url });
   const db = new pg.Pool({ connectionString: url, options: `-c search_path=${schema}` });
   const allowed = ["owner_group", "production_management", "finance_director", "wage_month_close_accountant", "finance_read"];
@@ -15,7 +16,7 @@ const url = process.env.TEST_DATABASE_URL;
   const actors = new Map([...allowed, ...denied, "root_superuser"].map(role => [role, randomUUID()]));
 
   beforeAll(async () => {
-    await admin.query(`CREATE SCHEMA ${schema}`);
+    await createOwnedPostgresSchema(admin,schema);
     await db.query(`
       CREATE TABLE role_capabilities(role_code text,capability text,PRIMARY KEY(role_code,capability));
       CREATE TABLE test_roles(user_id uuid,role_code text);
@@ -46,7 +47,7 @@ const url = process.env.TEST_DATABASE_URL;
       CREATE TRIGGER role_capabilities_no_delete BEFORE DELETE ON role_capabilities FOR EACH ROW EXECUTE FUNCTION immutable_catalog();`);
     await db.query(await readFile(new URL("../../apps/api/migrations/0174_finance_wage_access.sql", import.meta.url), "utf8"));
   });
-  afterAll(async () => { await db.end(); await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`); await admin.end(); });
+  afterAll(async () => { await db.end(); await dropOwnedPostgresSchema(admin,schema); await admin.end(); });
 
   it("grants all five role categories read/export and preserves only existing markers", async () => {
     for (const role of allowed) {

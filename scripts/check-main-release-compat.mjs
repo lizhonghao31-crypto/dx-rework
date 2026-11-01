@@ -60,15 +60,17 @@ async function actualPolicy(source) {
   }finally{rmSync(dir,{recursive:true,force:true});}
 }
 
-export async function inspectCompatibility({main,candidate,tool=candidate,baseline}) {
-  const issues=[];
+export async function inspectCompatibility({main,candidate,tool=candidate,baseline,intent='production'}) {
+  if(!['integration','acceptance','production'].includes(intent))throw Error('Unknown compatibility intent');
+  if(intent==='integration'&&!baseline)throw Error('Integration requires the actual immutable release base');
+  const issues=[],releaseTodos=[];
   const m=readCatalog(main,issues,'main'),c=readCatalog(candidate,issues,'candidate'),t=readCatalog(tool,issues,'tool');
   if(tool.sha!==candidate.sha)issues.push({kind:'TOOL_CANDIDATE_SHA_MISMATCH'});
   if(JSON.stringify(c.rows)!==JSON.stringify(t.rows))issues.push({kind:'TOOL_CANDIDATE_MANIFEST_MISMATCH'});
-  for(const row of m.rows){if(!c.map.has(row.version))issues.push({kind:'MISSING_MAIN_IDENTITY',...row});else if(c.map.get(row.version)!==row.checksum)issues.push({kind:'MAIN_CHECKSUM_DRIFT',...row,actual:c.map.get(row.version)});}
+  for(const row of m.rows){if(!c.map.has(row.version))(intent==='production'?issues:releaseTodos).push({kind:'MISSING_MAIN_IDENTITY',...row});else if(c.map.get(row.version)!==row.checksum)issues.push({kind:'MAIN_CHECKSUM_DRIFT',...row,actual:c.map.get(row.version)});}
   const branches=JSON.parse(tool.read(policyPaths[1])),extensions=JSON.parse(tool.read(policyPaths[2]));
   const lane=[...branches.main,...extensions];
-  const expectedMain=m.rows.filter(row=>Number(row.version.slice(0,4))>217);
+  const expectedMain=m.rows.filter(row=>Number(row.version.slice(0,4))>217&&(intent==='production'||c.map.has(row.version)));
   if(!sameSet(lane.map(row=>row.version),expectedMain.map(row=>row.version)))issues.push({kind:'MAIN_LANE_IDENTITY_SET_MISMATCH'});
   for(const row of lane)if(m.map.get(row.version)!==row.checksum||c.map.get(row.version)!==row.checksum)issues.push({kind:'MAIN_LANE_CHECKSUM_MISMATCH',version:row.version});
   for(const row of branches.digital)if(c.map.get(row.version)!==row.checksum)issues.push({kind:'DIGITAL_LANE_CHECKSUM_MISMATCH',version:row.version});
@@ -84,16 +86,16 @@ export async function inspectCompatibility({main,candidate,tool=candidate,baseli
     if(owners&&(!sameSet(entry.tables??[],owners.tables)||!sameSet(entry.functions??[],owners.functions)||['references','insert','update','creates','execute','sequences'].some(key=>entry[key]?.length)))issues.push({kind:'OWNER_SCOPE_MISMATCH',version:row.version});
   }
   const policy=await actualPolicy(tool);
-  for(const [name,fn] of [['candidate_sequence',()=>policy.assertMigrationSequence(c.rows)],['main_to_candidate',()=>policy.assertAppliedMigrationHistory(m.rows,c.rows)],['tool_sequence',()=>policy.assertMigrationSequence(t.rows)]]){
+  for(const [name,fn] of [['candidate_sequence',()=>policy.assertMigrationSequence(c.rows)],...(intent==='production'?[['main_to_candidate',()=>policy.assertAppliedMigrationHistory(m.rows,c.rows)]]:[]),['tool_sequence',()=>policy.assertMigrationSequence(t.rows)]]){
     try{fn();}catch(error){issues.push({kind:'POLICY_REJECTION',check:name,error:error.message});}
   }
   if(baseline){const b=readCatalog(baseline,issues,'baseline');try{policy.assertAppliedMigrationHistory(b.rows,c.rows);}catch(error){issues.push({kind:'POLICY_REJECTION',check:'existing_release_to_candidate',error:error.message});}}
-  return {mainSha:main.sha,candidateSha:candidate.sha,toolSha:tool.sha,baselineSha:baseline?.sha??null,mode:candidate.mode??'IMMUTABLE_COMMIT',mainCount:m.rows.length,candidateCount:c.rows.length,toolCount:t.rows.length,commonCount:m.rows.filter(row=>c.map.get(row.version)===row.checksum).length,toolPolicySha256:sha256(policyPaths.concat(inventoryPath).map(path=>tool.read(path)).join('\n')),issues,passed:issues.length===0,limits:'Source identities, actual SQL/checksums, exact lane/inventory and actual policy checks. Runtime permissions and business semantics require isolated PostgreSQL and business regressions.'};
+  return {intent,releaseTodos,mainCompatibility:{status:issues.length?'BLOCKED_INVALID_SOURCE':releaseTodos.length?'PENDING_RELEASE_INTEGRATION':'SOURCE_COMPATIBLE_RUNTIME_UNVERIFIED',productionPromotionVerified:false,applicationSemanticsVerified:false},mainSha:main.sha,candidateSha:candidate.sha,toolSha:tool.sha,baselineSha:baseline?.sha??null,mode:candidate.mode??'IMMUTABLE_COMMIT',mainCount:m.rows.length,candidateCount:c.rows.length,toolCount:t.rows.length,commonCount:m.rows.filter(row=>c.map.get(row.version)===row.checksum).length,toolPolicySha256:sha256(policyPaths.concat(inventoryPath).map(path=>tool.read(path)).join('\n')),issues,passed:issues.length===0,limits:'Source identities, actual SQL/checksums, exact lane/inventory and actual policy checks. Runtime permissions and business semantics require isolated PostgreSQL and business regressions.'};
 }
 
 export async function runCompatibilityCheck(argv=process.argv.slice(2)) {
   const args=new Map();
-  for(let i=0;i<argv.length;i++){const key=argv[i];if(key==='--worktree'){args.set(key,true);continue;}if(!['--repo','--candidate-ref','--tool-ref','--baseline-ref','--expected-main-sha','--output'].includes(key)||!argv[i+1])throw Error('Invalid compatibility checker arguments');args.set(key,argv[++i]);}
+  for(let i=0;i<argv.length;i++){const key=argv[i];if(key==='--worktree'){args.set(key,true);continue;}if(!['--intent','--repo','--candidate-ref','--tool-ref','--baseline-ref','--expected-main-sha','--output'].includes(key)||!argv[i+1])throw Error('Invalid compatibility checker arguments');args.set(key,argv[++i]);}
   if(args.has('--output'))writeFileSync(args.get('--output'),JSON.stringify({passed:false,status:'NOT_VERIFIED'})+'\n');
   const repo=resolve(args.get('--repo')??'.');
   const resolveCommit=ref=>{if(ref!=='HEAD'&&!shaPattern.test(ref))throw Error('Expected HEAD or a full SHA');const sha=git(repo,['rev-parse','--verify',`${ref}^{commit}`]).trim();if(!shaPattern.test(sha))throw Error('Invalid commit');return sha;};
@@ -101,7 +103,7 @@ export async function runCompatibilityCheck(argv=process.argv.slice(2)) {
   const candidate=args.has('--worktree')?worktreeSnapshot(repo):gitSnapshot(repo,resolveCommit(args.get('--candidate-ref')??'HEAD'));
   const tool=args.has('--tool-ref')?gitSnapshot(repo,resolveCommit(args.get('--tool-ref'))):candidate;
   const baseline=args.has('--baseline-ref')?gitSnapshot(repo,resolveCommit(args.get('--baseline-ref'))):undefined;
-  const report=await inspectCompatibility({main:gitSnapshot(repo,mainSha),candidate,tool,baseline});
+  const report=await inspectCompatibility({main:gitSnapshot(repo,mainSha),candidate,tool,baseline,intent:args.get('--intent')??'production'});
   if(args.has('--output'))writeFileSync(args.get('--output'),JSON.stringify(report,null,2)+'\n');
   return report;
 }

@@ -48,11 +48,21 @@ export async function checkTimeSiteInventory(){
  const before=identities(frozen),after=identities(actual);
  return JSON.stringify(before)===JSON.stringify(after)?[]:['Time source candidates changed: review the occurrence/consumer chain and refresh the explicit inventory.'];
 }
+export function reconcileTimeInventory(previous,current){
+ const identity=sites=>sites.map(site=>Array.isArray(site)?site.slice(1).join(':'):site.kind+':'+site.sourceSha256).sort().join('\n');
+ const byPath=new Map(previous.entries.map(entry=>[entry.path,entry]));
+ return {...previous,entries:current.map(entry=>{
+  const old=byPath.get(entry.path);
+  if(old&&identity(old.sites)===identity(entry.sites))return old;
+  return {...entry,owner:old?.owner??entry.owner,semanticStatus:'pending-per-entry-review',sites:entry.sites.map(site=>[site.line,site.kind,site.sourceSha256])};
+ })};
+}
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
  if(process.argv[2]==='--write'){
-  const entries=await timeSiteInventory(),header={sourceBase:'21aa4de4f4c33c645d42aa60dcdc24cab0823480',purpose:'Candidate index; pending means NOT verified or approved. See semantic chains and per-PR evidence.',siteColumns:['line','kind','sourceSha256']};
-  const rows=entries.map(entry=>JSON.stringify({...entry,sites:entry.sites.map(site=>[site.line,site.kind,site.sourceSha256])}));
-  await writeFile(inventoryPath,JSON.stringify(header).slice(0,-1)+',"entries":[\n'+rows.join(',\n')+'\n]}\n');
+  const entries=await timeSiteInventory(),previous=JSON.parse(await readFile(inventoryPath,'utf8'));
+  const next=reconcileTimeInventory(previous,entries);
+  const {entries:rows,...header}=next;
+  await writeFile(inventoryPath,JSON.stringify(header).slice(0,-1)+',"entries":[\n'+rows.map(row=>JSON.stringify(row)).join(',\n')+'\n]}\n');
   process.stdout.write(JSON.stringify({files:entries.length,sites:entries.reduce((n,e)=>n+e.sites.length,0),path:relative(process.cwd(),resolve(inventoryPath))})+'\n');
  }else{const errors=await checkTimeSiteInventory();if(errors.length){process.stderr.write(errors.join('\n')+'\n');process.exitCode=1;}else process.stdout.write('Time source candidate inventory matches; semantic verification remains separate.\n');}
 }

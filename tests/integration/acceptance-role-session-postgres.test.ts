@@ -1,4 +1,4 @@
-import { ownedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema, createOwnedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
@@ -92,7 +92,7 @@ runWithPostgres("acceptance role sessions", () => {
   };
 
   beforeAll(async () => {
-    await admin.query(`CREATE SCHEMA ${schema}`);
+    await createOwnedPostgresSchema(admin,schema);
     const manifest = JSON.parse(await readFile(
       new URL("../../apps/api/src/platform/migration-manifest.json", import.meta.url),
       "utf8",
@@ -131,7 +131,7 @@ runWithPostgres("acceptance role sessions", () => {
   afterAll(async () => {
     await app.close();
     await database.end();
-    await dropOwnedPostgresSchema(admin, schema);
+    await dropOwnedPostgresSchema(admin,schema);
     await admin.end();
   });
 

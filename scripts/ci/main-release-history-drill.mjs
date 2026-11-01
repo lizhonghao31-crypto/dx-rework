@@ -19,9 +19,11 @@ assert.ok(process.argv.length===4&&['13','16'].includes(major),'Usage: main-rele
 const proof=JSON.parse(readFileSync(proofPath,'utf8'));
 assert.equal(proof.passed,true);assert.equal(proof.toolSha,proof.candidateSha);assert.ok(proof.baselineSha);
 assert.equal(proof.candidateSha,execFileSync('git',['-C',repo,'rev-parse','HEAD'],{encoding:'utf8'}).trim());
-const sourceHistories=readComparedHistories(repo,proof);
-assert.equal(sourceHistories[1].sha,proof.baselineSha);
-assert.equal(sourceHistories[0].rows.length,proof.mainCount);assert.ok(sourceHistories[1].rows.length>0&&sourceHistories[1].rows.length<=proof.candidateCount);
+const comparedHistories=readComparedHistories(repo,proof);
+const sourceHistories=comparedHistories.filter(source=>source.label!=='main'||!proof.releaseTodos?.length);
+if(proof.releaseTodos?.length)console.log('PRODUCTION_PROMOTION_NOT_VERIFIED: current main history is a release TODO; integration drills only the actual release base');
+assert.equal(comparedHistories[1].sha,proof.baselineSha);
+assert.equal(comparedHistories[0].rows.length,proof.mainCount);assert.ok(comparedHistories[1].rows.length>0&&comparedHistories[1].rows.length<=proof.candidateCount);
 const scratch=mkdtempSync(join(tmpdir(),'dx-main-release-history-'));
 const container='dx-main-release-history-'+randomUUID(),password=randomUUID(),owner='dx_rework_acceptance',app='dx_rework_acceptance_app',database='dx_rework_acceptance';
 const docker=args=>execFileSync('docker',args,{encoding:'utf8',stdio:['pipe','pipe','pipe'],maxBuffer:20*1024*1024});
@@ -90,7 +92,7 @@ try{
   log(`${source.label} ${source.sha} ${before.length}->${after.length}; original identity/checksum/applied_at + existing ACL preserved; actual low-privilege preflight/apply/repeat PASS`);
   await db.end();db=null;await admin.query(`DROP DATABASE ${database}`);
  }
- log('both history paths PASS; no user database URL or production/Acceptance connection accepted');
+ log(`${sourceHistories.length} supported history paths PASS; production promotion and application semantics remain unverified; no user database URL accepted`);
 }finally{
  await appDb?.end().catch(()=>{});await db?.end().catch(()=>{});await admin?.end().catch(()=>{});
  if(started)docker(['rm','-f',container]);rmSync(scratch,{recursive:true,force:true});

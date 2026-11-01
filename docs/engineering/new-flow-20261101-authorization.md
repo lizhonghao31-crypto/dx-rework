@@ -177,3 +177,10 @@ PMC #879已合main但未部署，最终Head无CI是仅该PR的单次例外，不
 - 本机新建两份本轮拥有的隔离库，均同CI库名、原安全标记及无集群特权测试账号；未连接真实Acceptance或生产。两库同时配置下技术资料15项＋原守卫/清理26项共41项通过。完整原业务链、原CI默认配置入口和最终Head证据随后单独记录；本次测试接线修复不重复Codex Review、UI截图或不变SQL的PG13/16演练。
 - 修复后的双库完整原脚本退出0：31文件425测试通过，本次run `593a922b` 的26个精确schema清理通过，其中技术资料`business_anchors`明确在`acceptance-clock`目标清理。与前次423相比仅新增2项数据库接线/归属保护。原报价、返工/做尾/工资/装箱和Root两轮HTTP断言保留；本机OSS仍未配置，不冒称真实OSS联调。Lint、workspace类型、原100项CI协议、真实时间索引和secret/diff检查通过。
 - CI实际默认入口（不传business-chain配置）的同双库15项技术PG测试亦全部通过，退出0，23.20秒；确认不依赖本机旧数据库名称或额外超时设置。后续只在此集中修复的新Head请求一次规范最终Full，旧失败回执保留。
+
+### PR03 恢复：同步已批准效率治理
+
+- 用户暂停后的业务写入/新CI/合并均停止；原Full41289928353自然失败，技术PG14通过/1项100条历史正确性用例触发默认5秒超时，完整非DB2958通过，后续恢复未执行。失败保留，不算交付。
+- 按主对话恢复指令同步实际release `8e6904aa4ec3e46ac801e28c9fa533662044fb8e`（#883）；不合main、不部署。保留已完成PR03业务及原Review修复，采用治理共享runner/registry，移除旧手工清理器，不再维护两份前缀/资源身份定义。
+- development-technical-postgres加入POSTGRES_CHAIN_TESTS，复用已批准有限60秒长正确性配置，mapped/chain同上下文只执行一次；不放宽其它默认/性能约束。新fixture及本次改动的旧SLAfixture使用createOwnedPostgresSchema，保留clock专库、原UATseed/schema绑定和通用DATABASE_URL清空。
+- 冲突仅按治理API合并创建/清理调用，PR03技术成果、权限、工资、用量、实际时钟及页面功能保持原修复。原生preflight已通过112项和静态迁移；后续只跑本次必要契约/真实PG并集验证和新Head要求的实际门禁，不重复Codex Review或不变SQL/页面演练。PMC应用层独立上线待办保留。

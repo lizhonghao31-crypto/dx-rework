@@ -1,4 +1,4 @@
-import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema, createOwnedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import pg from "pg";
@@ -17,7 +17,7 @@ run("sample domain database boundaries", () => {
     purchaser: "historical-label", currentHolder: "historical-label", borrowHistory: [{}], disposalHistory: [], receiptImages: [] }],
   logs: [{ id: "log-1", sampleId: "old-1", actor: "historical-label", detail: "history retained" }], borrowRequests: [], updatedAt: "2026-09-01" };
   beforeAll(async () => {
-    await admin.query(`CREATE SCHEMA ${schema}`);
+    await createOwnedPostgresSchema(admin,schema);
     for (const name of ["0001_platform_foundation.sql", "0002_dingtalk_identity_access.sql", "0003_identity_union_continuity.sql", "0004_public_tools_foundation.sql", "0005_access_master_data.sql", "0152_sample_domain_foundation.sql"]) {
       await database.query(await readFile(new URL(`../../apps/api/migrations/${name}`, import.meta.url), "utf8"));
     }
@@ -25,7 +25,7 @@ run("sample domain database boundaries", () => {
   });
   afterAll(async () => {
     await database.end();
-    await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
+    await dropOwnedPostgresSchema(admin,schema);
     await admin.end();
   });
   const createItem = async (status: string, holder: string | null, location: string | null) => {

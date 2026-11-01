@@ -1,4 +1,4 @@
-import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema, createOwnedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import "./receiving-analysis-postgres.cases.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
@@ -273,7 +273,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
   };
 
   beforeAll(async () => {
-    await admin.query(`CREATE SCHEMA ${schema}`);
+    await createOwnedPostgresSchema(admin,schema);
     for (const name of [
       "0001_platform_foundation.sql",
       "0002_dingtalk_identity_access.sql",
@@ -330,7 +330,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
 
   afterAll(async () => {
     await database.end();
-    await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
+    await dropOwnedPostgresSchema(admin,schema);
     await admin.end();
   });
 

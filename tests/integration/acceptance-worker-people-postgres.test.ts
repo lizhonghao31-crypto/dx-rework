@@ -4,7 +4,7 @@ import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AccessMasterDataService } from "../../apps/api/src/access/service.js";
 import { maintainAcceptanceWorkerPeople } from "../../scripts/acceptance/worker-people-maintenance.js";
-import { ownedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema, createOwnedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 (databaseUrl ? describe : describe.skip)("Acceptance personnel-only maintenance", () => {
@@ -15,7 +15,7 @@ const databaseUrl = process.env.TEST_DATABASE_URL;
   const rootId = randomUUID();
   const workerIds = [randomUUID(), randomUUID(), randomUUID()];
   beforeAll(async () => {
-    await admin.query(`CREATE SCHEMA ${schema}`);
+    await createOwnedPostgresSchema(admin,schema);
     const manifest = JSON.parse(await readFile(new URL("../../apps/api/src/platform/migration-manifest.json", import.meta.url), "utf8")) as {
       migrations: { version: string; checksum: string }[];
     };
@@ -39,7 +39,7 @@ const databaseUrl = process.env.TEST_DATABASE_URL;
   });
   afterAll(async () => {
     await database.end();
-    await dropOwnedPostgresSchema(admin, schema);
+    await dropOwnedPostgresSchema(admin,schema);
     await admin.end();
   });
 

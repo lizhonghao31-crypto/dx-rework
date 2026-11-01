@@ -8,7 +8,7 @@ import pg from 'pg';
 import sharp from 'sharp';
 import {migrationExecutionSql} from '../../scripts/deploy/migration-execution-compatibility.mjs';
 import {assertTestDatabaseTarget} from '../../scripts/test-database-safety.mjs';
-import { ownedPostgresSchema, dropOwnedPostgresSchema } from './owned-postgres-schema.js';
+import { ownedPostgresSchema, createOwnedPostgresSchema, dropOwnedPostgresSchema } from './owned-postgres-schema.js';
 import {verifyAcceptanceClockServer} from '../../apps/api/src/acceptance-clock/guard.js';
 import {AcceptanceClockRuntime} from '../../apps/api/src/acceptance-clock/runtime.js';
 import {businessNow} from '../../apps/api/src/acceptance-clock/business-time.js';
@@ -43,7 +43,7 @@ export async function businessAnchorFixture(url:string){
  await assertTestDatabaseTarget(url);
  const databaseTarget=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL===url&&url!==process.env.TEST_DATABASE_URL?'acceptance-clock':undefined;
  const schema=ownedPostgresSchema('business_anchors',databaseTarget),admin=new pg.Pool({connectionString:url});
- await admin.query(`CREATE SCHEMA ${schema}`);
+ await createOwnedPostgresSchema(admin,schema);
  const db=new pg.Pool({connectionString:url,options:`-c search_path=${schema}`,application_name:schema,max:10,connectionTimeoutMillis:3000});
  const dispose=async()=>{await db.end();await dropOwnedPostgresSchema(admin, schema);await admin.end();};
  try{

@@ -1,4 +1,4 @@
-import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema, createOwnedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import pg from 'pg';
@@ -24,7 +24,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
    VALUES($1,$2,$3,$4,$5,$5,$6,$7,$8,$9,$6)`,[randomUUID(),request,sampleId,type,amount,person,approved,paid?person:null,paid]);
  }
  beforeAll(async()=>{
-  await admin.query(`CREATE SCHEMA ${schema}`);
+  await createOwnedPostgresSchema(admin,schema);
   for(const name of ['0001_platform_foundation.sql','0002_dingtalk_identity_access.sql','0003_identity_union_continuity.sql','0004_public_tools_foundation.sql','0005_access_master_data.sql','0152_sample_domain_foundation.sql','0153_sample_read_indexes_snapshots.sql','0157_sample_disposal_import.sql','0160_sample_analysis.sql'])await db.query(await readFile(new URL('../../apps/api/migrations/'+name,import.meta.url),'utf8'));
   for(const id of [person,other])await db.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'同名人员',true)",[id]);
   for(let i=0;i<17;i++)ids.push(await sample('borrowed','0.10',i===16?other:person,i===16?'品牌Ａ':'品牌A'));
@@ -39,7 +39,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   await disposal('lost','loss','7.00','2026-09-03T01:00:00Z','2026-09-04T01:00:00Z');
   await disposal('loss_payment_pending','loss','9.00','2026-09-04T01:00:00Z',null);
  });
- afterAll(async()=>{await db.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();});
+ afterAll(async()=>{await db.end();await dropOwnedPostgresSchema(admin,schema);await admin.end();});
  it('aggregates all qualifying rows while paging only fifteen, preserving exact money and historical coverage',async()=>{
   const first=await service.read(actor(),{}),second=await service.read(actor(),{page:2});
   expect(first.totalCount).toBe(21);expect(first.items).toHaveLength(15);expect(second.items).toHaveLength(6);

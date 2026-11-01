@@ -11,7 +11,7 @@ const workflow = {quick: worker(sources.quick,'validate'), full: worker(sources.
 
 const renderer = mode => workflow[mode].split("          node <<'GATE_SUMMARY_JS'\n")[1].split('          GATE_SUMMARY_JS')[0].split('\n').map(line=>line.slice(10)).join('\n');
 const catalog = mode => JSON.parse(workflow[mode].match(/GATE_CHECKS_JSON: >-\n {12}([^\n]+)/)[1]);
-const scope = mode => mode==='full'?{event:'pull_request',base:'release/digital-production-v1',db:'true',mapped:'test.ts',journey:'true',migration:'true',business_chain:'true',deployment:'true'}:{event:'pull_request',base:'release/digital-production-v1',governance:'true',web:'false',maintenance:'true'};
+const scope = mode => mode==='full'?{event:'pull_request',base:'release/digital-production-v1',db:'true',mapped:'test.ts',journey:'true',migration:'true',business_chain:'true',deployment:'true',maintenance:'true',activation:'true',transfer:'true'}:{event:'pull_request',base:'release/digital-production-v1',governance:'true',web:'false',maintenance:'true'};
 const allSteps = mode => Object.fromEntries(catalog(mode).map(([id])=>[id,{outcome:'success',conclusion:'success'}]));
 function summary(mode, steps, state='success', flags=scope(mode)) {
   const dir=mkdtempSync(join(tmpdir(),'ci-summary-fixture-')),file=join(dir,'summary.md');
@@ -54,7 +54,7 @@ test('unclassified risk is not silently declared inapplicable',()=>{
   assert.match(result.text,/Start isolated PostgreSQL only for DB-sensitive changes \| 范围未判定，未完成/);
 });
 test('known non-DB scope reports DB stages inapplicable',()=>{
-  const flags={...scope('full'),base:'main',db:'false',mapped:'',journey:'false',migration:'false',business_chain:'false',deployment:'false'},steps=allSteps('full');
+  const flags={...scope('full'),base:'main',db:'false',mapped:'',journey:'false',migration:'false',business_chain:'false',deployment:'false',maintenance:'false',activation:'false',transfer:'false'},steps=allSteps('full');
   for(const [id,,kind]of catalog('full'))if(kind!=='always')steps[id]={outcome:'skipped'};
   const result=summary('full',steps,'success',flags);assert.equal(result.code,0);assert.match(result.text,/Start isolated PostgreSQL only for DB-sensitive changes \| 不适用/);
 });

@@ -1,3 +1,4 @@
+import { ownedPostgresSchema, createOwnedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import pg from "pg";
@@ -10,7 +11,7 @@ const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
 const runWithPostgres = databaseUrl ? describe : describe.skip;
 
 runWithPostgres("public tools PostgreSQL concurrency contracts", () => {
-  const schema = `tools_${randomUUID().replaceAll("-", "")}`;
+  const schema = ownedPostgresSchema("tools");
   const admin = new Pool({ connectionString: databaseUrl! });
   const pool = new Pool({ connectionString: databaseUrl!, options: `-c search_path=${schema}` });
   const idempotency = new IdempotencyRepository();
@@ -18,7 +19,7 @@ runWithPostgres("public tools PostgreSQL concurrency contracts", () => {
   const actorId = randomUUID();
 
   beforeAll(async () => {
-    await admin.query(`CREATE SCHEMA ${schema}`);
+    await createOwnedPostgresSchema(admin,schema);
     for (const migration of ["0001_platform_foundation.sql", "0002_dingtalk_identity_access.sql", "0003_identity_union_continuity.sql", "0004_public_tools_foundation.sql"]) {
       const sql = await readFile(new URL(`../../apps/api/migrations/${migration}`, import.meta.url), "utf8");
       await pool.query(sql);
@@ -28,7 +29,7 @@ runWithPostgres("public tools PostgreSQL concurrency contracts", () => {
 
   afterAll(async () => {
     await pool.end();
-    await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
+    await dropOwnedPostgresSchema(admin,schema);
     await admin.end();
   });
 

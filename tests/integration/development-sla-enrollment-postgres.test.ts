@@ -19,9 +19,9 @@ import {registerDevelopmentExecutionRoutes} from "../../apps/api/src/production-
 import {ApplicationError} from "../../apps/api/src/platform/errors.js";
 import {digitalSlaDefaults} from "@dx-rework/contracts/digital-sla";
 import {DevelopmentDocumentSchema,type DevelopmentDocument} from "@dx-rework/contracts/digital-development";
-import {ownedPostgresSchema} from "../helpers/owned-postgres-schema.js";
+import {ownedPostgresSchema,createOwnedPostgresSchema,dropOwnedPostgresSchema} from "../helpers/owned-postgres-schema.js";
 import type {TrustedActorContext} from "../../apps/api/src/tools/repositories.js";
-const databaseUrl=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
+const databaseUrl=process.env.TEST_DATABASE_URL;
 const run=databaseUrl?describe:describe.skip;
 run("development SLA enrollment and legacy isolation",()=>{
   const schema=ownedPostgresSchema("development_sla");
@@ -36,7 +36,7 @@ run("development SLA enrollment and legacy isolation",()=>{
   const service=new DigitalProductionIdentityService(database,true,undefined,()=>new Date(),clock);
   const development=new DigitalDevelopmentService(database,true,undefined,()=>new Date(),clock);
   beforeAll(async () => {
-    await admin.query(`CREATE SCHEMA ${schema}`);
+    await createOwnedPostgresSchema(admin,schema);
     for (const name of ["0001_platform_foundation.sql", "0002_dingtalk_identity_access.sql", "0004_public_tools_foundation.sql", "0216_digital_production_order_roots.sql", "0217_digital_production_node_clocks.sql"])
       await database.query(await readFile(new URL(`../../apps/api/migrations/${name}`, import.meta.url), "utf8"));
     // Existing-domain tables are represented only by referenced identity columns in this isolated fixture.
@@ -80,7 +80,7 @@ run("development SLA enrollment and legacy isolation",()=>{
     await database.query("INSERT INTO digital_production_deadline_policies(node_key,version,label,sla_seconds,warning_ratio) VALUES('bulk_ship_sample',1,'大货船样寄出',NULL,0.8)");
   });
 
-  afterAll(async()=>{await database.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();});
+  afterAll(async()=>{await database.end();await dropOwnedPostgresSchema(admin,schema);await admin.end();});
   const source=async()=> (await service.createSource(actor(),{developmentType:"头版",designStyleNo:`TEST-P05-${randomUUID()}`,temporaryStyleNo:null,customerCode:null},randomUUID())).sourceId;
   const draft=():DevelopmentDocument=>DevelopmentDocumentSchema.parse({documentFormatVersion:2,sizeQuantities:[null],template:"上衣",quantity:null,sampleSize:"",orderDate:null,returnDate:null,unit:"cm",sizes:["M"],measurements:[{name:"胸围",values:[""]}],interlining:"",placketInterlining:"",sewingThread:"",buttonholeThread:"",stitchDensity:"",washingIroning:"",packaging:"",formalSizes:"",casualSizes:"",mainLabel:false,mainLabelMethod:"",sizeLabel:false,careLabel:false,instructions:"",craft:"无",washing:"免洗",materials:[],files:[]});
   const ready=async()=>{
