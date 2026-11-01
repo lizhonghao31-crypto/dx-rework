@@ -23,18 +23,21 @@ export function ownedPostgresSchema(prefix,databaseTarget='default',environment=
   mkdirSync(dir,{recursive:true});
   writeFileSync(join(dir,schema+'.json'),JSON.stringify({version:1,kind:'postgres-schema',runId,schema,databaseTarget,identity})+'\n',{flag:'wx',mode:0o600});
  }
- generated.set(schema,{databaseTarget,url:databaseTarget==='acceptance-clock'?environment.ACCEPTANCE_CLOCK_TEST_DATABASE_URL:environment.TEST_DATABASE_URL,identity:runId?JSON.parse(environment.DX_REWORK_TEST_RESOURCE_IDENTITIES)[databaseTarget]:null});return schema;
+ generated.set(schema,{databaseTarget,url:databaseTarget==='acceptance-clock'?environment.ACCEPTANCE_CLOCK_TEST_DATABASE_URL:environment.TEST_DATABASE_URL,identity:runId?JSON.parse(environment.DX_REWORK_TEST_RESOURCE_IDENTITIES)[databaseTarget]:null,runId:runId??null,manifestDir:dir??null});return schema;
 }
-export function readOwnedResources(dir,runId,identities) {
+export function readOwnedResource(dir,name,runId,identities) {
  if(!/^[0-9a-f]{8}$/.test(runId))throw Error('TEST_RESOURCE_RUN_REJECTED');
- return readdirSync(dir).map(name=>{
+ if(name.includes('/')||name.includes('\\')||!name.endsWith('.json'))throw Error('TEST_RESOURCE_MANIFEST_REJECTED');
   const path=join(dir,name);
   if(!name.endsWith('.json')||!lstatSync(path).isFile()||lstatSync(path).isSymbolicLink())throw Error('TEST_RESOURCE_MANIFEST_REJECTED');
   const r=JSON.parse(readFileSync(path,'utf8'));assertRegisteredSchema(r.schema??'');
   if(r.version!==1||r.kind!=='postgres-schema'||r.runId!==runId||!r.schema.slice(-32).startsWith(runId)||name!==r.schema+'.json'||!identities[r.databaseTarget]||JSON.stringify(r.identity)!==JSON.stringify(identities[r.databaseTarget]))throw Error('TEST_RESOURCE_MANIFEST_REJECTED: '+name);
   if(r.databaseTarget==='acceptance-clock'&&!r.schema.startsWith('business_anchors_'))throw Error('TEST_RESOURCE_TARGET_REJECTED');
   return r;
- });
+}
+export function readOwnedResources(dir,runId,identities) {
+ if(!/^[0-9a-f]{8}$/.test(runId))throw Error('TEST_RESOURCE_RUN_REJECTED');
+ return readdirSync(dir).map(name=>readOwnedResource(dir,name,runId,identities));
 }
 export async function createOwnedPostgresSchema(pool,schema) {
  if(!generated.has(schema))throw Error('TEST_RESOURCE_NOT_CREATED_BY_THIS_PROCESS');
@@ -55,4 +58,24 @@ export async function dropOwnedPostgresSchema(pool,schema) {
  const client=acquired?await pool.connect():pool;
  try{await client.query('BEGIN');await client.query("SELECT pg_advisory_xact_lock(hashtextextended('test-owned-schema-teardown-v1',0))");await client.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);await client.query('COMMIT');}
  catch(error){await client.query('ROLLBACK');throw error;}finally{if(acquired)client.release();}
+}
+// Fixture teardown is a handoff, never a claim that the schema was deleted.
+// The managed runner already waits for Vitest's workers and then consumes the
+// exact manifest serially across both databases. Standalone runs still delete.
+export async function releaseOwnedPostgresSchema(pool,schema,environment=process.env) {
+ if(!generated.has(schema))throw Error('TEST_RESOURCE_NOT_CREATED_BY_THIS_PROCESS');
+ if(environment.DX_REWORK_TEST_SCHEMA_CLEANUP&&environment.DX_REWORK_TEST_SCHEMA_CLEANUP!=='after-workers')throw Error('TEST_RESOURCE_CLEANUP_MODE_REJECTED');
+ if(environment.DX_REWORK_TEST_SCHEMA_CLEANUP!=='after-workers'){
+  await dropOwnedPostgresSchema(pool,schema);return {state:'deleted',schema};
+ }
+ const owner=generated.get(schema);
+ if(!owner.runId||owner.runId!==environment.DX_REWORK_TEST_RUN_ID||owner.manifestDir!==environment.DX_REWORK_TEST_RESOURCE_MANIFEST_DIR)throw Error('TEST_RESOURCE_CLEANUP_OWNER_REQUIRED');
+ const identities=JSON.parse(environment.DX_REWORK_TEST_RESOURCE_IDENTITIES??'{}');
+ // Another worker may still be writing its own receipt. Only this process's
+ // already completed receipt is read here; the parent validates ALL after exit.
+ const resource=readOwnedResource(owner.manifestDir,schema+'.json',owner.runId,identities);
+ if(!resource||JSON.stringify(resource.identity)!==JSON.stringify(owner.identity))throw Error('TEST_RESOURCE_CLEANUP_OWNER_REQUIRED');
+ const {assertTestDatabaseTarget}=await import('./test-database-safety.mjs');
+ if(JSON.stringify(await assertTestDatabaseTarget(owner.url,pool))!==JSON.stringify(owner.identity))throw Error('TEST_RESOURCE_LIVE_IDENTITY_CHANGED');
+ return {state:'retained_for_runner',schema,runId:owner.runId};
 }

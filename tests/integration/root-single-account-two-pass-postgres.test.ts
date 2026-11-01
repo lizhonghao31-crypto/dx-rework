@@ -1,4 +1,4 @@
-import { ownedPostgresSchema, createOwnedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema, createOwnedPostgresSchema, releaseOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
@@ -883,7 +883,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
     } finally {
       await fixture.app.close();
       await fixture.database.end();
-      await dropOwnedPostgresSchema(admin,fixture.schema);
+      await releaseOwnedPostgresSchema(admin,fixture.schema);
     }
   }
 

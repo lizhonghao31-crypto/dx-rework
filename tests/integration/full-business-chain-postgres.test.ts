@@ -9,7 +9,7 @@ import { exceptions as readReportingExceptions } from "../../apps/api/src/report
 import {exerciseDevelopmentRoute} from "../helpers/digital-development-route-fixture.js";
 import {exerciseDevelopmentSlaNative} from "../helpers/development-sla-native-fixture.js";
 import { exerciseRevisionApproval } from "./helpers/revision-approval-scenario.js";
-import { ownedPostgresSchema, createOwnedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema, createOwnedPostgresSchema, releaseOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { RootAuthority } from "../../apps/api/src/access/root-authority.js";
 import { exerciseReceivingDifferenceAuthority } from "./helpers/receiving-difference-authority-scenario.js";
 import { WorkerAwareAccessMasterDataService } from "../../apps/api/src/access/worker-aware-access-service.js";
@@ -423,7 +423,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       process.stdout.write(`PATTERN_ROOM_FIXTURES ${JSON.stringify({schema,orders:fixtures.rows})}\n`);
     }
     await database.end();
-    await dropOwnedPostgresSchema(adminPool,schema);
+    await releaseOwnedPostgresSchema(adminPool,schema);
     if (process.env.PATTERN_ROOM_EVIDENCE === "1") process.stdout.write(`PATTERN_ROOM_CLEANUP ${JSON.stringify({schema,dropped:true})}\n`);
     await adminPool.end();
 
@@ -2341,7 +2341,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       const exported = await new ReportExportService(new ManagementReportingService(database), database, "pr06-backfill-verification").export(financeWages(), "wages", {...allWageDates,wageSource:"order_rework"});
       const xml = exported.content.toString("utf8"), sheet = [...xml.matchAll(/<worksheet[\s\S]*?<\/worksheet>/g)][1]![0];
       expect(xml).toContain('formatCode="#,##0.###"'); expect(sheet).toContain('s="4" t="n"');
-    } finally { await history.end(); await dropOwnedPostgresSchema(adminPool,historySchema); }
+    } finally { await history.end(); await releaseOwnedPostgresSchema(adminPool,historySchema); }
   });
 
   // Also invoked by the mapped-PostgreSQL gate with the default Vitest config.

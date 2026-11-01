@@ -1,5 +1,5 @@
 import { assertTestDatabaseTarget } from "../../scripts/test-database-safety.mjs";
-import { ownedPostgresSchema, createOwnedPostgresSchema, dropOwnedPostgresSchema } from "./owned-postgres-schema.js";
+import { ownedPostgresSchema, createOwnedPostgresSchema, releaseOwnedPostgresSchema } from "./owned-postgres-schema.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import pg from "pg";
@@ -31,7 +31,7 @@ export async function supplierFixture() {
     if (role === "root_superuser") await db.query("INSERT INTO owner_bootstrap_consumptions(singleton,user_id,provider_user_id,corp_id) VALUES(true,$1,'root_superuser','corp')", [id]);
     else await service.assignRole({ ...actors.root_superuser!, actorRoles: ["root_superuser", "owner_group"], authorizationCapability: "access:admin", authorizationCapabilities: ["access:admin"] }, { userId: id, roleCode: role, reason: "供应商权限测试" });
   }
-  return { db, service, actors, close: async () => { await db.end(); await dropOwnedPostgresSchema(admin,schema); await admin.end(); } };
+  return { db, service, actors, close: async () => { await db.end(); await releaseOwnedPostgresSchema(admin,schema); await admin.end(); } };
 }
 export const supplierInput = (name: string, supplierType: "factory" | "fabric" = "factory") => ({
   supplierCode: `SUP_${randomUUID().replaceAll("-", "").slice(0, 16).toUpperCase()}`, supplierName: name, supplierType,

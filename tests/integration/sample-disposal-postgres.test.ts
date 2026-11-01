@@ -1,4 +1,4 @@
-import { ownedPostgresSchema, createOwnedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema, createOwnedPostgresSchema, releaseOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import {randomUUID,createHash} from 'node:crypto';
 import {readFile,readdir} from 'node:fs/promises';
 import pg from 'pg';
@@ -50,7 +50,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   await db.query("INSERT INTO owner_bootstrap_consumptions(singleton,user_id,provider_user_id,corp_id) VALUES(true,$1,$2,'sample-handoff-corp')",[root,`sample-${root}`]);
   await db.query("UPDATE sample_write_control SET enabled=true,changed_by=$1,changed_at=CURRENT_TIMESTAMP,reason='isolated fixture'",[root]);
  },60000);
- afterAll(async()=>{await db.end();await dropOwnedPostgresSchema(admin,schema);await admin.end();});
+ afterAll(async()=>{await db.end();await releaseOwnedPostgresSchema(admin,schema);await admin.end();});
  const stock=async()=>{const id=await sample();await service.returnRequest(user(),id,{version:1,photoAttachmentIds:[await photo()]},randomUUID());await service.confirm(clerk(),id,{version:2,token:await issue(id,2),storageLocation:'A01'},randomUUID());return id;};
  it('only owner approves sale and reject restores actual borrowed responsibility',async()=>{
   const id=await stock();await disposal.request(clerk(),id,{version:3,type:'sale',recipient:'买家',amount:'35.10',proofAttachmentIds:[await attachment(administrative)]},randomUUID());

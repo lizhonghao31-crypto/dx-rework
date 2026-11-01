@@ -1,4 +1,4 @@
-import { ownedPostgresSchema, createOwnedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema, createOwnedPostgresSchema, releaseOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { readFile } from "node:fs/promises";
 
 import pg from "pg";
@@ -31,7 +31,7 @@ runWithPostgres("confirmed own-tail historical responsibility repair", () => {
     } finally {
       await client.query("ROLLBACK");
       await client.query("SET search_path TO public");
-      await dropOwnedPostgresSchema(client,schema);
+      await releaseOwnedPostgresSchema(client,schema);
       client.release();
       await pool.end();
     }

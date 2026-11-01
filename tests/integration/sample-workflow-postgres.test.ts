@@ -1,4 +1,4 @@
-import { ownedPostgresSchema, createOwnedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema, createOwnedPostgresSchema, releaseOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import {randomUUID,createHash} from 'node:crypto';
 import {readFile,readdir} from 'node:fs/promises';
 import pg from 'pg';
@@ -46,7 +46,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   await db.query("INSERT INTO owner_bootstrap_consumptions(singleton,user_id,provider_user_id,corp_id) VALUES(true,$1,$2,'sample-handoff-corp')",[root,`sample-${root}`]);
   await db.query("UPDATE sample_write_control SET enabled=true,changed_by=$1,changed_at=CURRENT_TIMESTAMP,reason='isolated fixture'",[root]);
  },60000);
- afterAll(async()=>{await db.end();await dropOwnedPostgresSchema(admin,schema);await admin.end();});
+ afterAll(async()=>{await db.end();await releaseOwnedPostgresSchema(admin,schema);await admin.end();});
  it('keeps holder responsible until matching QR, location and real administrative handoff',async()=>{
   const id=await sample();const req=await service.returnRequest(user(),id,{version:1,photoAttachmentIds:[await photo()]},randomUUID());
   expect((await row(id)).holder_user_id).toBe(designer);expect((await row(id)).status).toBe('return_pending');
