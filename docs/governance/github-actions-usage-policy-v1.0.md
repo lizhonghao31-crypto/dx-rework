@@ -1,38 +1,28 @@
-# GitHub Actions Usage Constitution v2.0
+# GitHub Actions 执行政策 V3
 
-Status: P0 mandatory for `lizhonghao31-crypto/dx-rework`.
+长期规则见[AGENTS §4–5](../../AGENTS.md)。本文件说明实现边界；历史单次授权、分组发布与旧预算不再作为默认规则。
 
-## Purpose
+- PR push 只跑 light；必要 Review 后冻结候选，显式选择最终 Quick 或 Full。无关正文/同模式标题编辑不分配校验 runner，也不取消已有最终请求。
+- Quick 不运行 PostgreSQL、恢复、打包或现场验收；Full 按实际 base→candidate 风险执行所需领域。未知执行风险不能当无风险。最终批准绑定准确 Head/base、等级、run/job/attempt 及实际回执。
+- 请求 ref 不可变，不删除重建、force、更换nonce或用noop触发。相同请求先 reconcile。过期 Head、失败、取消、全skip、空计划和缺阶段均不能签成功。
+- 实际预算由 `.github/workflows/ci.yml` 和 `full-gate.yml` 维护，文档不复制另一组值。超时先定位阶段和资源，不直接加大全局限制。
 
-GitHub Actions is an evidence layer, not a development scratchpad. Diagnosis and targeted checks happen before pushing; GitHub validates an intended PR Head.
+## 同Head light→Full复用
 
-## Gate selection
+`scripts/ci/light-reuse.mjs` 发布源快照，最终Full读取 GitHub 的实际成功 light run/job 和唯一回执，下载该 run/attempt 的唯一不可变 artifact。读取需要本仓库最小 `actions: read`；不增加token写权限、仓库保护、生产秘密或安装授权。实现遵循[GitHub Artifact API](https://docs.github.com/en/rest/actions/artifacts)与官方[下载动作](https://github.com/actions/download-artifact/tree/v4)。
 
-Every PR is classified **before creation** and its title must start with exactly one prefix:
+可复用项仅为同语义的 lint、typecheck、workspace build、迁移静态检查。Head、实际base、PR/等级、树/锁文件、Node/npm、runner镜像/平台、声明的构建环境必须一致。源快照不是最终Gate回执；源Job最终成功且服务端实际检查成功才可采用。
 
-- `[QUICK]` — low-risk change; run Quick Gate only.
-- `[FULL]` — high-risk change; run Full Gate only.
+产物逐文件校验内容、路径和权限，禁止跳目录、覆盖tracked源码、符号链接或未验证内容。源缺失/不适用/环境变化会执行真实原检查；损坏产物与伪造来源拒绝。每个采用项保存源run/job/attempt与指纹，最终核证还要与当前已核light对照。不是把skipped同名检查变绿，不跨Head复用；完整历史secret扫描、生产依赖审计、业务测试、DB/恢复保持各自语义，不拿light替代。
 
-The workflows are mutually exclusive by title. A `[FULL]` PR must not allocate the Quick Gate hosted job. A `[QUICK]` PR must not allocate the Full Gate hosted job.
+## 受管PostgreSQL
 
-High-risk means migration/schema, auth/permissions, financial or quantity semantics, core workflow/approval/audit/idempotency, cross-module critical behavior, deployment/infrastructure/Actions, shared platform changes, or P0/P1 fixes.
+本分支 canonical plan 和资源契约规定文件集合、配置、真实DB身份、共享注册与精确清理。mapped/chain/Root同上下文并集只执行一次；不同版本或恢复环境不得复用。参数由共享执行配置维护，记录实际解析值，不能靠机器核数默认。
 
-## Execution policy
+并行worker交回重型schema，全部退出后父runner按同manifest顺序实际删除；交回不等于删除。立即删除契约和独立本地模式仍真实删除。失败保留清单，不扫描/通配猜归属。测试不得因缺资源接线、清理失败或被中断而签passed。
 
-1. Do not push iterative debugging commits when the same diagnosis and repair can be completed before push.
-2. Known incomplete changes must not be pushed.
-3. Related code/tests/migration/manifest changes are prepared as one intended Head.
-4. Any new Head invalidates prior Gate evidence.
-5. Quick Gate stays lightweight: exact Head, governance guard, install, lint, typecheck, workspace build without root `postbuild`, migration static lint and secret scan. It must not run PostgreSQL, full migration replay, backup/restore, PR-17 acceptance, release packaging, browser installation or preview.
-6. Full Gate owns heavy validation and runs only for `[FULL]` PRs.
-7. Automatic PR Preview and standalone Governance runners remain disabled for ordinary PR events.
-8. No noop commit may be created only to trigger CI.
-9. A failed job may be rerun once on the same Head. Repeated failure requires root-cause diagnosis before another run.
-10. Codex Review starts only after the required Gate passes on the final intended Head. Default maximum is one Review; a second requires a real P0/P1 repair or explicit business-owner approval.
-11. Review does not authorize Codex construction; implementation remains with the current ChatGPT Work/assistant unless the business owner explicitly requests Codex coding.
+## 证据与例外
 
-## Machine guard
+summary按实际outcome列成功、失败、取消、不适用及未执行。render/清理成功不等于Gate成功。操作者核证不是平台保护；未知服务器设置保持未知，不擅改required checks。用户明确接受某PR剩余风险而直接合并时，保留失败、未验范围和原文来源，绝不伪造Gate成功；该单次决定不扩大成长期豁免。
 
-`scripts/ci/verify-actions-policy.mjs` enforces the mutually exclusive `[QUICK]` / `[FULL]` topology, lightweight Quick Gate, no automatic Preview/Governance runners, and stale-run cancellation.
-
-Weakening or bypassing this policy requires explicit business-owner approval.
+Review服务恢复、连接器/CLI传输差异及有效授权按[协议](review-first-final-head-20261027.md)处理，不为无关平台波动重复跑全部业务检查。

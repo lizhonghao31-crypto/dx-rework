@@ -1,4 +1,4 @@
-import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema, createOwnedPostgresSchema, releaseOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import {readFile} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
 import pg from 'pg';
@@ -11,7 +11,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
  const schema=ownedPostgresSchema("sourcing"),admin=new pg.Pool({connectionString:url!}),db=new pg.Pool({connectionString:url!,options:`-c search_path=${schema}`});
  const ids=Array.from({length:17},()=>randomUUID()),rw=randomUUID(),missing=randomUUID(),q1=randomUUID(),q2=randomUUID(),decision=randomUUID(),transfer=randomUUID(),approved=randomUUID(),transferApproved=randomUUID();
  beforeAll(async()=>{
-  await admin.query(`CREATE SCHEMA ${schema}`);await db.query("SET TIME ZONE 'UTC'");
+  await createOwnedPostgresSchema(admin, schema);await db.query("SET TIME ZONE 'UTC'");
   await db.query(`CREATE TABLE sourcing_cases(sourcing_case_id uuid PRIMARY KEY,erp_order_no text,style_no text,created_at timestamptz,deleted_at timestamptz);
    CREATE TABLE sourcing_case_lines(sourcing_case_id uuid,position int,style_no text,color text,quantity int,external_unit_price numeric(18,4),PRIMARY KEY(sourcing_case_id,position));
    CREATE VIEW current_sourcing_case_lines AS SELECT * FROM sourcing_case_lines;
@@ -58,7 +58,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   await db.query("INSERT INTO operation_events(event_id,entity_id,entity_type,action,before_state,after_state,created_at) VALUES($1,'private-person','supplier','master_data.supplier.revise',$2,$3,'2026-09-07')",[randomUUID(),JSON.stringify({active:true,bankAccount:'old-secret',cookie:'secret'}),JSON.stringify({active:false,bankAccount:'new-secret',cookie:'changed-secret'})]);
   for(const [index,status] of [200,400,403,503].entries())await recordOperationDiagnostic(db,{operation:'sample_create',status,code:status===400?'VALIDATION_ERROR':'arbitrary-secret',replayed:true,durationMs:10.5+index});
  });
- afterAll(async()=>{await db.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();});
+ afterAll(async()=>{await db.end();await releaseOwnedPostgresSchema(admin, schema);await admin.end();});
  it('preserves all price versions, quantities and four-decimal history; excludes transfer approvals',async()=>{
   const result=await readQuoteAnalysis(db,{q:'ORDER-00'}),item=result.items[0]!;
   expect(item.initial.lines[0]).toMatchObject({quantity:'100',unitPrice:'1.2345'});expect(item.ie.map(s=>s.version)).toEqual([1,2]);expect(item.approved).toHaveLength(1);expect(item.approved[0]?.lines[0]).toMatchObject({quantity:'90',unitPrice:'1.1678'});expect(JSON.stringify(result)).not.toMatch(/TRANSFER|9.9999|bank/);

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { supplierFixture, supplierInput } from "./supplier-maintenance-postgres.test.js";
+import { supplierFixture, supplierInput } from "../helpers/supplier-fixture.js";
 import { SupplierOnboardingService } from "../../apps/api/src/access/supplier-onboarding-service.js";
 import { SupplierOnboardingProfileSchema } from "@dx-rework/contracts/supplier-onboarding";
 import { TodoService } from "../../apps/api/src/todos/service.js";

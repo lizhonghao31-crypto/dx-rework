@@ -1,4 +1,4 @@
-import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema, createOwnedPostgresSchema, releaseOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { readProductionDays } from "../../apps/api/src/sourcing/production-chase.js";
 import {randomUUID} from "node:crypto";
 import pg from "pg";
@@ -18,7 +18,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
     lines:[{position:1,styleNo:`STYLE-${index}`,alternateStyleNo:null,color:"蓝",quantity:100,completedQuantity:40}]}));
   const read=async(input:unknown={},reader=actor,visible=orders)=>{const client=await database.connect();try{await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");const result=await readProductionAnalysis(client,visible,reader,"2026-09-07T07:00:00Z",ProductionAnalysisQuerySchema.parse(input));await client.query("COMMIT");return result;}finally{client.release();}};
   beforeAll(async()=>{
-    await admin.query(`CREATE SCHEMA ${schema}`);
+    await createOwnedPostgresSchema(admin, schema);
     await database.query("SET TIME ZONE 'UTC'");
     await database.query(`CREATE TABLE receiving_batches(receiving_batch_id uuid PRIMARY KEY,deleted_at timestamptz,actual_quantity_adjustment bigint DEFAULT 0);
       CREATE TABLE receiving_receipts(receipt_id uuid PRIMARY KEY,receiving_batch_id uuid,received_at timestamptz,actual_quantity bigint);
@@ -45,7 +45,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
     await database.query("INSERT INTO sourcing_production_reports(production_order_id,report_id,created_at,business_date) VALUES($1,$2,'2026-09-03','2026-09-02')",[orders[0]!.productionOrderId,randomUUID()]);
     for(const source of [batch,batch,shared])await database.query("INSERT INTO rework_orders VALUES($1,'RW-TEST',10,'completed',$2)",[randomUUID(),source]);
   });
-  afterAll(async()=>{await database.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();});
+  afterAll(async()=>{await database.end();await releaseOwnedPostgresSchema(admin, schema);await admin.end();});
   it("uses latest report revisions and sums real daily records for chasing",async()=>{
     const id=randomUUID(),root=randomUUID(),other=randomUUID();
     await database.query("INSERT INTO sourcing_production_reports(production_order_id,root_report_id,revision,quantity,business_date,created_at) VALUES($1,$2,1,100,'2026-09-08','2026-09-08'),($1,$2,2,80,'2026-09-08','2026-09-09'),($1,$3,1,20,'2026-09-08','2026-09-08')",[id,root,other]);

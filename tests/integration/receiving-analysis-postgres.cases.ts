@@ -1,4 +1,4 @@
-import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema, createOwnedPostgresSchema, releaseOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import {randomUUID} from "node:crypto";
 import {readFile} from "node:fs/promises";
 import pg from "pg";
@@ -18,7 +18,7 @@ const url = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
   beforeAll(async () => {
     const source = await readFile(new URL("../../apps/api/src/receiving/receiving-service.ts", import.meta.url), "utf8");
     base = source.match(/const RECEIVING_BOARD_BASE_SQL = `([\s\S]*?)`;/)![1]!;
-    await admin.query(`CREATE SCHEMA ${schema}`);
+    await createOwnedPostgresSchema(admin, schema);
     // Isolated table fixtures for the production SQL, not replacement business migrations.
     await database.query(`CREATE TABLE receiving_batches(receiving_batch_id uuid PRIMARY KEY,style_no text,cutting_order_id uuid,deleted_at timestamptz,
       delivery_note_quantity bigint,actual_quantity_adjustment bigint DEFAULT 0,defective_quantity_adjustment bigint DEFAULT 0,version int DEFAULT 1);
@@ -50,7 +50,7 @@ const url = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
       await database.query("INSERT INTO receiving_receipts(receipt_id,receiving_batch_id,received_at,document_quantity,actual_quantity) VALUES($1,$2,'2026-09-03',10,10)", [randomUUID(), id]);
     }
   });
-  afterAll(async () => {await database.end(); await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`); await admin.end();});
+  afterAll(async () => {await database.end(); await releaseOwnedPostgresSchema(admin, schema); await admin.end();});
   it("aggregates all matching styles before pagination without repeating the delivery note for split batches", async () => {
     const result = await readReceivingAnalysis(database, base, actor, query);
     expect(result.items).toHaveLength(15); expect(result.summary.totalCount).toBe(17);

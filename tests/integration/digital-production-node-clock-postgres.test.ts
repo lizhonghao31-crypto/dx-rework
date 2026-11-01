@@ -1,10 +1,10 @@
+import { ownedPostgresSchema, createOwnedPostgresSchema, releaseOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ProductionOrderRootRepository } from "../../apps/api/src/production-platform/order-root-repository.js";
 import { ProductionOrderNodeClockRepository } from "../../apps/api/src/production-platform/node-clock-repository.js";
-import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 
 const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
 const run = databaseUrl ? describe : describe.skip;
@@ -17,7 +17,7 @@ run("digital production node clock boundaries", () => {
   let productionOrderId = "";
 
   beforeAll(async () => {
-    await admin.query(`CREATE SCHEMA ${schema}`);
+    await createOwnedPostgresSchema(admin, schema);
     for (const name of [
       "0001_platform_foundation.sql",
       "0002_dingtalk_identity_access.sql",
@@ -35,7 +35,7 @@ run("digital production node clock boundaries", () => {
 
   afterAll(async () => {
     await database.end();
-    await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
+    await releaseOwnedPostgresSchema(admin, schema);
     await admin.end();
   });
 
