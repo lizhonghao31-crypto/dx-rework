@@ -1,7 +1,8 @@
+import {assertCurrentFactoryTask,isRetiredFactoryTask,FACTORY_RECEIPT_RETIREMENT} from './retired-factory-nodes.js';
 import {SlaSettingsService,type StandardDraft} from './sla-settings-service.js';
 import {SlaOrderApplicationService} from './sla-order-application.js';
 import {businessNow,assertAcceptanceAssignee,acceptanceBusinessContext,ContextBusinessClock} from '../acceptance-clock/business-time.js';
-import {factoryProductionFacts} from './factory-production-facts.js';
+import {factoryProductionFacts,factoryProductionScopes} from './factory-production-facts.js';
 import {shipSampleTargets} from './ship-sample-timing.js';
 import {factoryTaskTiming,factoryBatchTiming} from './factory-batch-timing.js';
 import {bulkTaskTiming} from "./bulk-task-timing.js";
@@ -50,7 +51,7 @@ export class DigitalProductionTaskService {
   async syncSourcingAssignee(client: PoolClient, actor: TrustedActorContext, orderId: string, assigneeId: string) {
     if (!(await client.query("SELECT to_regclass('digital_budget_preparations') AS relation")).rows[0]?.relation) return;
     const tasks = (await client.query(`SELECT a.task_id FROM digital_production_task_access a JOIN digital_production_tasks t USING(task_id)
-      WHERE a.production_order_id=$1 AND a.task_kind IN ('sourcing_preparation','bulk_cutting_external','factory_material_count','bulk_ship_sample') AND t.state NOT IN ('completed','cancelled')`, [orderId])).rows;
+      WHERE a.production_order_id=$1 AND a.task_kind IN ('sourcing_preparation','bulk_cutting_external','bulk_ship_sample') AND t.state NOT IN ('completed','cancelled')`, [orderId])).rows;
     for (const task of tasks) {
       await reassignDigitalTask(client, actor, task.task_id, assigneeId);
       await this.event(client, actor, task.task_id, { kind: "order", id: orderId }, "reassigned", businessNow().toISOString(), "现场登记", { assigneeId });
@@ -67,6 +68,8 @@ export class DigitalProductionTaskService {
   }
   private async command<T>(client: PoolClient, actor: TrustedActorContext, command: string, key: string, payload: unknown, action: () => Promise<T>): Promise<T> {
     if (!/^[A-Za-z0-9._:-]{1,128}$/.test(key)) fail("缺少有效操作标识");
+    const target=command.match(/^(?:task-(?:complete|handover|block|reassign|time)|priority):([0-9a-f-]{36})$/i);
+    if(target)assertCurrentFactoryTask((await this.task(client,target[1]!)).task_kind);
     const hash = createHash("sha256").update(JSON.stringify(payload)).digest("hex");
     const prior = (await client.query("SELECT payload_hash,response FROM digital_production_commands WHERE actor_id=$1 AND command=$2 AND key=$3", [actor.actorId, command, key])).rows[0];
     if (prior) { if (prior.payload_hash !== hash) fail("操作标识已用于不同内容"); return prior.response as T; }
@@ -75,8 +78,10 @@ export class DigitalProductionTaskService {
     return result;
   }
   private async task(client: PoolClient | Pick<Pool, "query">, id: string, lock = false) {
-    return (await client.query(`SELECT t.*,a.production_order_id,a.source_id,a.task_kind,a.assignee_id,a.required_role FROM digital_production_tasks t
+    const task=(await client.query(`SELECT t.*,a.production_order_id,a.source_id,a.task_kind,a.assignee_id,a.required_role FROM digital_production_tasks t
       JOIN digital_production_task_access a USING(task_id) WHERE t.task_id=$1 ${lock ? "FOR UPDATE OF t,a" : ""}`, [id])).rows[0] ?? digitalNotFound();
+    if(lock)assertCurrentFactoryTask(task.task_kind);
+    return task;
   }
   private resource(task: { production_order_id: string | null; source_id: string | null }): Resource {
     return task.production_order_id ? { kind: "order", id: task.production_order_id } : { kind: "source", id: task.source_id! };
@@ -88,7 +93,7 @@ export class DigitalProductionTaskService {
   }
   private async conditionsReady(client: PoolClient, id: string, completion = false) {
     const unmet = await client.query(`SELECT 1 FROM digital_production_task_conditions WHERE task_id=$1 AND NOT satisfied AND (stage='activation' OR $2::boolean)
-      UNION ALL SELECT 1 FROM digital_production_task_dependencies d JOIN digital_production_tasks p ON p.task_id=d.predecessor_id WHERE d.task_id=$1 AND p.state<>'completed' LIMIT 1`, [id, completion]);
+      UNION ALL SELECT 1 FROM digital_production_task_dependencies d JOIN digital_production_tasks p ON p.task_id=d.predecessor_id WHERE d.task_id=$1 AND p.state<>'completed' AND p.node_key<>'factory_material_count' LIMIT 1`, [id, completion]);
     return !unmet.rowCount;
   }
   private async event(client: PoolClient, actor: TrustedActorContext, taskId: string | null, resource: Resource, kind: string, occurredAt: string | null, quality: TimeQuality, payload: unknown = {}, corrects: string | null = null) {
@@ -170,7 +175,7 @@ export class DigitalProductionTaskService {
         WHERE e.task_id=c.task_id AND e.event_kind='condition' AND e.payload->>'condition'=c.condition_key
         ORDER BY (to_jsonb(i)->>'notification_sequence')::bigint DESC NULLS LAST,e.recorded_at DESC,e.event_id DESC LIMIT 1) AS quality
       FROM digital_production_task_conditions c WHERE c.task_id=$1 AND c.stage='activation' AND c.satisfied
-      UNION ALL SELECT p.completed_at,p.completed_quality FROM digital_production_task_dependencies d JOIN digital_production_tasks p ON p.task_id=d.predecessor_id WHERE d.task_id=$1
+      UNION ALL SELECT p.completed_at,p.completed_quality FROM digital_production_task_dependencies d JOIN digital_production_tasks p ON p.task_id=d.predecessor_id WHERE d.task_id=$1 AND p.node_key<>'factory_material_count'
       UNION ALL SELECT occurred_at,time_quality FROM digital_production_task_events
         WHERE task_id=$1 AND event_kind='reassigned' AND $2::boolean
       ) facts`, [id, await requiresDevelopmentAssignee(client,task)])).rows[0];
@@ -194,6 +199,7 @@ export class DigitalProductionTaskService {
   }
   // Called by fixed business adapters inside their own transaction; no public task-builder route.
   async createWithClient(client: PoolClient, actor: TrustedActorContext, input: { resource: Resource; authorizingTaskId?: string; kind: DigitalTaskKind; routeId: string; routeVersion: number; occurrence: number; assigneeId: string | null; predecessors?: string[]; conditions?: typeof DIGITAL_CONDITION_KEYS[number][]; occurredAt?: string | null }) {
+    assertCurrentFactoryTask(input.kind);
     await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
     await this.active(client, input.resource);
     const context=acceptanceBusinessContext();if(context)await context.assertScope(input.resource);
@@ -417,7 +423,7 @@ export class DigitalProductionTaskService {
       if (!isDigitalLeader(actor) && !isDigitalTechnicalManager(actor) && !actor.actorRoles.includes("development_clerk")) digitalForbidden();
       if((DEVELOPMENT_ARRANGEABLE_KINDS as readonly string[]).includes(task.task_kind)&&(await client.query("SELECT to_regclass('digital_development_round_arrangements') AS relation")).rows[0]?.relation)fail("请在本单总委派页改派，填写原因并核对当前安排。");
       return this.command(client, actor, `task-reassign:${id}`, key, { assigneeId }, async () => {
-        const currentFactoryScopePending = task.task_kind === "factory_production_qc" && task.state === "completed" && task.production_order_id && !(await factoryProductionFacts(client, task.production_order_id)).complete;
+        const currentFactoryScopePending = task.task_kind === "factory_production_qc" && task.state === "completed" && task.production_order_id && (!(await factoryProductionFacts(client, task.production_order_id)).complete || (await factoryProductionScopes(client,task.production_order_id)).some(scope=>scope.execution_status==='in_production'));
         if (task.state === "cancelled" || (task.state === "completed" && !currentFactoryScopePending)) fail("已结束任务不可日常改派");
         const result = await reassignDigitalTask(client, actor, id, assigneeId);
         await this.event(client, actor, id, this.resource(task), "reassigned", businessNow().toISOString(), "现场登记", { previousAssigneeId: task.assignee_id, assigneeId });
@@ -455,7 +461,7 @@ export class DigitalProductionTaskService {
       const unified = Boolean((await client.query("SELECT to_regclass('digital_sla_configurations') AS relation")).rows[0]?.relation);
       const config = unified ? await new SlaConfigurationRepository(client).current() : null;
       return (await client.query(`SELECT DISTINCT ON(node_key) node_key AS "nodeKey",label,version,sla_seconds/3600.0 AS "slaHours",warning_ratio AS "warningRatio",changed_at AS "changedAt",changed_by AS "changedBy",note
-        FROM digital_production_deadline_policies ORDER BY node_key,version DESC`)).rows.map(row => {
+        FROM digital_production_deadline_policies WHERE node_key<>'factory_material_count' ORDER BY node_key,version DESC`)).rows.map(row => {
         const parameter = unified ? DIGITAL_SLA_PARAMETERS.find(p => p.key === slaParameterKey(row.nodeKey)) : undefined;
         const warning = config?.values.warning_ratio;
         const resolved = parameter ? config?.values[parameter.key] ?? (row.version === 1 ? parameter.defaultValue : undefined) : undefined;
@@ -465,6 +471,7 @@ export class DigitalProductionTaskService {
     });
   }
   async changePolicy(actor: TrustedActorContext, nodeKey: string, input: { expectedVersion: number; slaHours: number | null; warningRatio: number; note: string }, key: string) {
+    assertCurrentFactoryTask(nodeKey);
     if (!isDigitalLeader(actor)) digitalForbidden();
     const slaSeconds = input.slaHours === null ? null : input.slaHours * 3600;
     digitalDeadline(null, slaSeconds, input.warningRatio);
@@ -545,6 +552,7 @@ export class DigitalProductionTaskService {
     const policy = new DigitalProductionAccessPolicy(db);
     await policy.assert(actor, "task", id, "technical");
     const task = await this.task(db, id);
+    const retired=isRetiredFactoryTask(task.task_kind);
     const effective = (await db.query(`SELECT r.entered_at,r.warning_at,r.due_at,p.version,
       CASE WHEN NULLIF(to_jsonb(r)->'sla_basis','null'::jsonb) IS NOT NULL THEN (to_jsonb(r)->'sla_basis'->>'seconds')::numeric ELSE p.sla_seconds END AS sla_seconds,
       to_jsonb(r)->'sla_basis' AS sla_basis,to_jsonb(r)->>'deadline_kind' AS timing_mode,p.label FROM digital_production_deadline_revisions r
@@ -560,7 +568,7 @@ export class DigitalProductionTaskService {
     const canManage = isDigitalLeader(actor) || ((task.task_kind.startsWith("development_") || task.task_kind === "bulk_pattern") && (isDigitalTechnicalManager(actor) || actor.actorRoles.includes("development_clerk")));
     const canControl = isDigitalLeader(actor) || (resource.kind === "order" ? actor.actorRoles.includes("order_merchandiser") && parent.primary_merchandiser_id === actor.actorId : actor.actorRoles.includes("sample_designer") && parent.created_by === actor.actorId);
     const assignee = task.assignee_id ? (await db.query("SELECT display_name FROM app_users WHERE id=$1", [task.assignee_id])).rows[0]?.display_name ?? null : null;
-    let route = (await db.query("SELECT count(*)::int AS applicable,count(*) FILTER(WHERE state='completed')::int AS completed,count(*) FILTER(WHERE state='cancelled')::int AS cancelled FROM digital_production_tasks t WHERE route_instance_id=$1 AND node_key NOT IN ('development_material_supply','development_craft_dispatch','development_sewing_transfer','development_washing_dispatch') AND NOT EXISTS(SELECT 1 FROM digital_production_task_events e WHERE e.task_id=t.task_id AND e.event_kind='material_returned')", [task.route_instance_id])).rows[0];
+    let route = (await db.query("SELECT count(*)::int AS applicable,count(*) FILTER(WHERE state='completed')::int AS completed,count(*) FILTER(WHERE state='cancelled')::int AS cancelled FROM digital_production_tasks t WHERE route_instance_id=$1 AND node_key NOT IN ('factory_material_count','development_material_supply','development_craft_dispatch','development_sewing_transfer','development_washing_dispatch') AND NOT EXISTS(SELECT 1 FROM digital_production_task_events e WHERE e.task_id=t.task_id AND e.event_kind='material_returned')", [task.route_instance_id])).rows[0];
     if(task.source_id&&(await db.query("SELECT to_regclass('digital_development_documents') AS relation")).rows[0]?.relation){
       const document=(await db.query("SELECT document FROM digital_development_documents WHERE source_id=$1 AND status='published'",[task.source_id])).rows[0];
       if(document){
@@ -572,18 +580,18 @@ export class DigitalProductionTaskService {
     }
     const handover = await db.query("SELECT 1 FROM digital_production_task_conditions WHERE task_id=$1 AND condition_key='handover_received'", [id]);
     const priority = (await db.query("SELECT payload->>'priority' AS priority FROM digital_production_task_events WHERE task_id=$1 AND event_kind='priority_changed' ORDER BY recorded_at DESC,event_id DESC LIMIT 1",[id])).rows[0]?.priority === "urgent" ? "urgent" as const : "normal" as const;
-    const unmetConditions=await developmentTaskBlockers(db,task,canManage);
+    const unmetConditions=retired?[]:await developmentTaskBlockers(db,task,canManage);
     if(paused)unmetConditions.push({condition:'paused',name:'业务暂停',missing:'当前业务已暂停，须先由有权人员恢复',responsibleRole:'业务负责人',action:canControl?'恢复业务':null,evidenceId:null,verified:true});
     if(task.state==='blocked'&&task.blocked_reason&&task.blocked_reason!=='前置条件未满足')unmetConditions.push({condition:'manual_block',name:'任务阻断',missing:task.blocked_reason,responsibleRole:task.required_role,action:canManage?'处理阻断原因':null,evidenceId:null,verified:true});
     const factoryQc=task.task_kind==='factory_production_qc'&&task.production_order_id?await factoryProductionFacts(db,task.production_order_id):null;
     const observed=await new ContextBusinessClock(this.database,db === this.database ? undefined : db as PoolClient).read(resource);
-    return { ...(effective?.timing_mode?{deadlineMode:effective.timing_mode as "duration"|"date_target"|"unlimited",...(effective.timing_mode==='date_target'?{deadlineExclusive:true}:{})}:{}),...(observed.scenarioId?{acceptanceBusinessNow:observed.now,...(effective?.sla_basis?{deadlineExclusive:effective.sla_basis.exclusive===true}:{})}:{}),unmetConditions, identity, priority, taskId: id, orderId: task.production_order_id as string | null, sourceId: task.source_id as string | null, taskKind: task.task_kind as string, label: currentPolicy.label as string,
-      routeProgress: route, assigneeName: assignee, requiredRole: task.required_role, hasHandover: Boolean(handover.rowCount), canManage, canControl, canCorrect: isDigitalLeader(actor) || isDigitalTechnicalManager(actor),
+    return { ...(effective?.timing_mode?{deadlineMode:effective.timing_mode as "duration"|"date_target"|"unlimited",...(effective.timing_mode==='date_target'?{deadlineExclusive:true}:{})}:{}),...(observed.scenarioId?{acceptanceBusinessNow:observed.now,...(effective?.sla_basis?{deadlineExclusive:effective.sla_basis.exclusive===true}:{})}:{}),unmetConditions, identity, priority,...(retired?{retiredRule:FACTORY_RECEIPT_RETIREMENT}:{}), taskId: id, orderId: task.production_order_id as string | null, sourceId: task.source_id as string | null, taskKind: task.task_kind as string, label: retired?`${currentPolicy.label}（已停用）`:currentPolicy.label as string,
+      routeProgress: route, assigneeName: assignee, requiredRole: task.required_role, hasHandover: Boolean(handover.rowCount), canManage:!retired&&canManage, canControl:!retired&&canControl, canCorrect:!retired&&( isDigitalLeader(actor) || isDigitalTechnicalManager(actor)),
       assigneeId: task.assignee_id as string | null, state: (factoryQc&&task.state==='completed'&&!factoryQc.complete?'ready':task.state) as DigitalTaskState, routeVersion: task.route_version as number, occurrence: task.occurrence as number,
       enteredAt: iso(effective?.sla_basis?effective.entered_at:task.entered_at), recordedAt: iso(task.created_at)!, completedAt: factoryQc?factoryQc.complete&&factoryQc.checks.every(c=>c.completedAt)?new Date(Math.max(...factoryQc.checks.map(c=>Date.parse(c.completedAt!)))).toISOString():null:iso(task.completed_at), paused,
-      dueAt: iso(effective?.due_at ?? null), warningAt: iso(effective?.warning_at ?? null), slaHours: currentPolicy.sla_seconds === null ? null : Number(currentPolicy.sla_seconds) / 3600,
+      dueAt: retired?null:iso(effective?.due_at ?? null), warningAt: retired?null:iso(effective?.warning_at ?? null), slaHours: retired||currentPolicy.sla_seconds === null ? null : Number(currentPolicy.sla_seconds) / 3600,
       policyVersion: currentPolicy.version as number, timeQuality: (effective?.sla_basis?(effective.sla_basis.timeQuality??(effective.entered_at?'现场登记':'缺失')):task.entered_quality) as DigitalTimeQuality, completedTimeQuality: task.completed_quality as string,
-      blockedReason: task.blocked_reason as string | null, canExecute: !paused && await policy.allowed(actor, "task", id, "execute") };
+      blockedReason: task.blocked_reason as string | null, canExecute: !retired && !paused && await policy.allowed(actor, "task", id, "execute") };
   }
   async cancelForSpecialClosureWithClient(client:PoolClient,actor:TrustedActorContext,orderId:string,reason:string){
     if(!(await client.query('SELECT 1 FROM digital_order_closures WHERE production_order_id=$1 AND closed_by=$2',[orderId,actor.actorId])).rowCount)digitalForbidden();
@@ -592,7 +600,7 @@ export class DigitalProductionTaskService {
   }
   async reassignWithClient(client:PoolClient,actor:TrustedActorContext,id:string,assigneeId:string){
     await assertAcceptanceAssignee(assigneeId);
-    const task=await this.task(client,id,true);if(task.task_kind==='development_patch')fail('补做归属须随原计件执行段派工或转交');if(['completed','cancelled'].includes(task.state))fail("已结束任务不可改派");
+    const task=await this.task(client,id,true);if(task.task_kind==='development_patch')fail('补做归属须随原计件执行段派工或转交');if(task.state==='cancelled'||task.state==='completed'&&(task.task_kind!=='factory_production_qc'||!(await factoryProductionScopes(client,task.production_order_id)).some(scope=>scope.execution_status==='in_production')))fail("已结束任务不可改派");
     await reassignDigitalTask(client,actor,id,assigneeId);await this.event(client,actor,id,this.resource(task),"reassigned",businessNow().toISOString(),"现场登记",{assigneeId});
     await this.refreshDevelopmentMaterialCondition(client,actor,id);
     if (await requiresDevelopmentAssignee(client,task)) await this.activate(client,actor,id,businessNow().toISOString(),"现场登记");
@@ -651,8 +659,8 @@ export class DigitalProductionTaskService {
     const global = isDigitalLeader(actor) || isDigitalTechnicalManager(actor);
     const result = await this.database.query(`SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id)
       LEFT JOIN digital_production_orders o ON o.production_order_id=a.production_order_id LEFT JOIN digital_production_sources s ON s.source_id=a.source_id
-      WHERE $1::boolean OR a.assignee_id=$2 OR ($3::boolean AND (o.created_by=$2 OR s.created_by=$2)) OR ($4::boolean AND o.primary_merchandiser_id=$2)
-      OR ($5::boolean AND a.task_kind LIKE 'development_%') ORDER BY t.created_at DESC,t.task_id DESC LIMIT 15 OFFSET $6`, [global, actor.actorId, actor.actorRoles.includes("sample_designer"), actor.actorRoles.includes("order_merchandiser"), actor.actorRoles.includes("development_clerk"), (page-1)*15]);
+      WHERE t.node_key<>'factory_material_count' AND ($1::boolean OR a.assignee_id=$2 OR ($3::boolean AND (o.created_by=$2 OR s.created_by=$2)) OR ($4::boolean AND o.primary_merchandiser_id=$2)
+      OR ($5::boolean AND a.task_kind LIKE 'development_%')) ORDER BY t.created_at DESC,t.task_id DESC LIMIT 15 OFFSET $6`, [global, actor.actorId, actor.actorRoles.includes("sample_designer"), actor.actorRoles.includes("order_merchandiser"), actor.actorRoles.includes("development_clerk"), (page-1)*15]);
     const policy = new DigitalProductionAccessPolicy(this.database); const items = [];
     for (const row of result.rows) if (await policy.allowed(actor, "task", row.task_id, "technical")) items.push(await this.read(actor, row.task_id));
     return { items, page };

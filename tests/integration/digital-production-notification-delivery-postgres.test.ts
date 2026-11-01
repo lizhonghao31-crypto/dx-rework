@@ -4,7 +4,7 @@ import { TodoListResponseSchema } from "@dx-rework/contracts";
 import { randomUUID } from "node:crypto";
 import { readFile,readdir } from "node:fs/promises";
 import pg from "pg";
-import { afterAll,beforeAll,describe,expect,it,vi } from "vitest";
+import { afterAll,afterEach,beforeAll,describe,expect,it,vi } from "vitest";
 import { DigitalOrderCreateSchema } from "@dx-rework/contracts/digital-production";
 import { DigitalProductionIdentityService } from "../../apps/api/src/production-platform/identity-service.js";
 import { DigitalProductionNotificationService } from "../../apps/api/src/production-platform/notification-service.js";
@@ -17,7 +17,7 @@ import type { DigitalTaskKind } from "../../apps/api/src/production-platform/tas
 import { linkNewDigitalChild } from "../../apps/api/src/production-platform/child-link-repository.js";
 import { TodoService } from "../../apps/api/src/todos/service.js";
 import { TodoDeliveryWorker } from "../../apps/api/src/todos/delivery-worker.js";
-import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema,createOwnedPostgresSchema,releaseOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
 (url?describe:describe.skip)("P04 full-schema legacy and digital notification delivery",()=>{
@@ -26,7 +26,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   const actor:TrustedActorContext={actorId:user,actorRoles:["root_superuser","order_merchandiser"],authorizationCapability:"sourcing:inquiry:create",authorizationCapabilities:["sourcing:inquiry:create","todo:view"],requestId:randomUUID()};
   const service=new TodoService(database);
   beforeAll(async()=>{
-    await admin.query(`CREATE SCHEMA ${schema}`);
+    await createOwnedPostgresSchema(admin,schema);
     await database.query("CREATE TABLE schema_migrations(version text PRIMARY KEY,checksum text NOT NULL,applied_at timestamptz DEFAULT CURRENT_TIMESTAMP)");
     const directory=new URL("../../apps/api/migrations/",import.meta.url);
     for(const file of (await readdir(directory)).filter(f=>f.endsWith(".sql")).sort())await database.query(await readFile(new URL(file,directory),"utf8"));
@@ -35,17 +35,19 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
     await database.query("INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason) VALUES($1,$2,'order_merchandiser',$2,'TEST')",[randomUUID(),user]);
     await database.query("INSERT INTO access_security_policy(policy_key,dingtalk_corp_id) VALUES('primary','P04') ON CONFLICT(policy_key) DO UPDATE SET dingtalk_corp_id='P04'");
   },60000);
-  afterAll(async()=>{await database.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();});
+  afterAll(async()=>{await database.end();await releaseOwnedPostgresSchema(admin,schema);await admin.end();});
   const create=async(digital:boolean,linkAfter=false)=>{
     const child=randomUUID(),source=randomUUID(),requestId=randomUUID();
     const order=digital?await new DigitalProductionIdentityService(database,true).createOrder(actor,DigitalOrderCreateSchema.parse({customerCode:"PD",primaryMerchandiserId:user,productGroup:"男装",designStyleNo:`TEST-P04-${randomUUID()}`,orderDate:"2026-09-29",lines:[{color:"黑",customerWarehouseArrivalDate:minimumInitialCustomerDate(),sizes:[{size:"M",quantity:5}]}]}),randomUUID()):null;
     const c=await database.connect();
     try{await c.query("BEGIN");
       await c.query("INSERT INTO operation_events(event_id,request_id,actor_id,actor_roles,authorization_capability,action,entity_type,entity_id,reason) VALUES($1,$2,$3,ARRAY['order_merchandiser'],'sourcing:inquiry:create','sourcing.case.create','sourcing_case',$4,'TEST')",[source,requestId,user,child]);
-      await c.query("INSERT INTO sourcing_cases(sourcing_case_id,erp_order_id,erp_order_no,style_no,lane_key,order_quantity,created_by,operation_event_id,request_id,creation_reason) VALUES($1,$1::uuid::text,'TEST','TEST','garment_processing',5,$2,$3,$4,'TEST')",[child,user,source,requestId]);
+      await c.query("INSERT INTO sourcing_cases(sourcing_case_id,erp_order_id,erp_order_no,style_no,lane_key,order_quantity,created_by,operation_event_id,request_id,creation_reason,workflow_generation) VALUES($1,$1::uuid::text,'TEST','TEST','garment_processing',5,$2,$3,$4,'TEST',$5)",[child,user,source,requestId,order&&!linkAfter?"digital_production_v1":"legacy"]);
       await c.query("INSERT INTO sourcing_case_transitions(sourcing_transition_id,sourcing_case_id,sequence,from_status,to_status,business_action,transition_reason,actor_id,operation_event_id,request_id) VALUES($1,$2,1,NULL,'pending_ie_quote','created','TEST',$3,$4,$5)",[randomUUID(),child,user,source,requestId]);
       if(order&&!linkAfter)await linkNewDigitalChild(c,{module:"sourcing",childId:child,productionOrderId:order.productionOrderId,lines:[]});
       const todo=await service.createInTransaction(c,actor,{todoType:"information",category:"configuration_notice",sourceEventId:source,sourceAction:"sourcing.case.create",entityType:"sourcing_case",entityId:child,recipientUserId:user,route:{routeName:"sourcing_detail",entityId:child},dedupeKey:randomUUID()});
+      // Deliberately queued historical legacy artifact: test delivery-time suppression,
+      // not a supported new digital source creation sequence.
       if(order&&linkAfter)await linkNewDigitalChild(c,{module:"sourcing",childId:child,productionOrderId:order.productionOrderId,lines:[]});
       await c.query("COMMIT");return todo;
     }catch(e){await c.query("ROLLBACK");throw e;}finally{c.release();}
@@ -57,22 +59,26 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
     expect(await new TodoDeliveryWorker(database,provider,"https://acceptance.example/").runOnce()).toEqual({claimed:2,sent:1,suppressed:1,failed:0});
     expect(provider.createTodo).toHaveBeenCalledTimes(1);expect(provider.createTodo.mock.calls[0]?.[0].todoId).toBe(legacy.todoId);
     const notifications=new DigitalProductionNotificationService(database);await notifications.runOnce();
-    const first=(await notifications.claim({...actor,actorRoles:["order_merchandiser"]})).notification!,second=(await notifications.claim({...actor,actorRoles:["order_merchandiser"]})).notification!;
-    expect([first.route.todoId,second.route.todoId].sort()).toEqual([digital.todoId,late.todoId].sort());
-    await notifications.acknowledge(actor,first.eventId);
-    expect((await database.query("SELECT status FROM rework_todos WHERE todo_id=$1",[first.route.todoId])).rows[0].status).toBe("pending");
+    const expected=new Set([digital.todoId,late.todoId]),seen=[];
+    for(let i=0;i<50&&seen.length<2;i++){const notice=(await notifications.claim({...actor,actorRoles:["order_merchandiser"]})).notification;if(!notice)break;if(expected.has(notice.route.todoId))seen.push(notice);}
+    expect(seen).toHaveLength(2);const [first,second]=seen;
+    expect([first!.route.todoId,second!.route.todoId].sort()).toEqual([digital.todoId,late.todoId].sort());
+    await notifications.acknowledge(actor,first!.eventId);
+    expect((await database.query("SELECT status FROM rework_todos WHERE todo_id=$1",[first!.route.todoId])).rows[0].status).toBe("pending");
   });
   it("integrates actionable tasks into the original todo list and badge without letting prompt acknowledgement clear either",async()=>{
     const order=await new DigitalProductionIdentityService(database,true).createOrder(actor,DigitalOrderCreateSchema.parse({customerCode:"PD",primaryMerchandiserId:user,productGroup:"男装",designStyleNo:`TEST-P04-${randomUUID()}`,orderDate:"2026-09-29",lines:[{color:"黑",customerWarehouseArrivalDate:minimumInitialCustomerDate(),sizes:[{size:"M",quantity:5}]}]}),randomUUID());
     const tasks=new DigitalProductionTaskService(database),notifications=new DigitalProductionNotificationService(database),todos=new TodoService(database,undefined,undefined,undefined,notifications);
+    const todoActor={...actor,authorizationCapability:"todo:view"},baseline=TodoListResponseSchema.parse(await todos.listForActor(todoActor,{module:"digital_production"})),baselineIndicator=await todos.countIndicatorForActor(todoActor);
     const c=await database.connect();let taskId:string;
     try{await c.query("BEGIN");taskId=(await tasks.createWithClient(c,actor,{resource:{kind:"order",id:order.productionOrderId},kind:"production_sheet",routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:user})).taskId;await c.query("COMMIT");}catch(e){await c.query("ROLLBACK");throw e;}finally{c.release();}
-    const todoActor={...actor,authorizationCapability:"todo:view"};
     const list=TodoListResponseSchema.parse(await todos.listForActor(todoActor,{module:"digital_production"}));
-    expect(list.moduleCounts.digital_production).toBe(1);expect(list.todos[0]?.todoId).toBe(taskId);
-    const before=await todos.countIndicatorForActor(todoActor);expect(before.pendingCount).toBe(1);
-    await notifications.runOnce();const notice=(await notifications.claim({...actor,actorRoles:["order_merchandiser"]})).notification!;expect(notice.route.entityId).toBe(taskId);
-    await notifications.acknowledge(actor,notice.eventId);
+    expect(list.moduleCounts.digital_production).toBe(baseline.moduleCounts.digital_production+1);expect(list.todos.filter(t=>t.todoId===taskId)).toHaveLength(1);
+    const before=await todos.countIndicatorForActor(todoActor);expect(before.pendingCount).toBe(baselineIndicator.pendingCount+1);
+    await notifications.runOnce();let notice;
+    for(let i=0;i<50;i++){const candidate=(await notifications.claim({...actor,actorRoles:["order_merchandiser"]})).notification;if(!candidate)break;if(candidate.route.entityId===taskId){notice=candidate;break;}}
+    expect(notice?.route.entityId).toBe(taskId);
+    await notifications.acknowledge(actor,notice!.eventId);
     expect(await todos.countIndicatorForActor(todoActor)).toEqual(before);
     expect((await todos.getForActor(todoActor,taskId)).status).toBe("pending");
   });
@@ -110,9 +116,10 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
     const row=(await database.query("SELECT design_style_no FROM digital_production_sources WHERE source_id=$1",[source.sourceId])).rows[0];
     return {...source,designStyleNo:row.design_style_no as string};
   };
+  afterEach(()=>vi.useRealTimers());
   const runOverdueChildren=async(notices:DigitalProductionNotificationService)=>{
-    const clock=vi.spyOn(Date,"now").mockReturnValue(Date.now()+7*86400000);
-    try{await notices.runOnce();}finally{clock.mockRestore();}
+    // Projection and delivery must observe the same time. Fake Date only, never timers/PG I/O.
+    const future=Date.now()+7*86400000;vi.useFakeTimers({toFake:['Date']});vi.setSystemTime(future);await notices.runOnce();
   };
   const financeNotice=async(recipient:TrustedActorContext,styleNo:string,information=false,routeCaseId?:string)=>{
     const child=randomUUID(),event=randomUUID();
@@ -120,9 +127,9 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
       DigitalOrderCreateSchema.parse({customerCode:"PD",primaryMerchandiserId:user,productGroup:"男装",designStyleNo:`TEST-PRIVATE-MOTHER-${randomUUID()}`,orderDate:"2026-09-29",lines:[{poNumber:"TEST-PRIVATE-SIBLING-PO",color:"PRIVATE-COLOR",customerWarehouseArrivalDate:minimumInitialCustomerDate(),sizes:[{size:"M",quantity:5}]}]}),randomUUID());
     const todo=await transaction(async c=>{
       await c.query("INSERT INTO operation_events(event_id,request_id,actor_id,actor_roles,authorization_capability,action,entity_type,entity_id,reason) VALUES($1,$1::uuid::text,$2,ARRAY['order_merchandiser'],'sourcing:inquiry:create','sourcing.case.create','sourcing_case',$3,'TEST DEF008')",[event,user,child]);
-      await c.query("INSERT INTO sourcing_cases(sourcing_case_id,erp_order_id,erp_order_no,style_no,lane_key,order_quantity,created_by,operation_event_id,request_id,creation_reason) VALUES($1,$1::uuid::text,'TEST', $4,'garment_processing',5,$2,$3,$3::uuid::text,'TEST DEF008')",[child,user,event,styleNo]);
+      await c.query("INSERT INTO sourcing_cases(sourcing_case_id,erp_order_id,erp_order_no,style_no,lane_key,order_quantity,created_by,operation_event_id,request_id,creation_reason,workflow_generation) VALUES($1,$1::uuid::text,'TEST', $4,'garment_processing',5,$2,$3,$3::uuid::text,'TEST DEF008','digital_production_v1')",[child,user,event,styleNo]);
       await c.query("INSERT INTO sourcing_case_transitions(sourcing_transition_id,sourcing_case_id,sequence,from_status,to_status,business_action,transition_reason,actor_id,operation_event_id,request_id) VALUES($1,$2,1,NULL,'pending_ie_quote','created','TEST DEF008',$3,$4,$4::uuid::text)",[randomUUID(),child,user,event]);
-      await linkNewDigitalChild(c,{module:"sourcing",childId:child,productionOrderId:order.productionOrderId,lines:[]});
+      await linkNewDigitalChild(c,{module:"sourcing",childId:child,productionOrderId:order.productionOrderId,lines:(await c.query('SELECT line_id FROM digital_production_po_lines WHERE production_order_id=$1 ORDER BY position',[order.productionOrderId])).rows.map((r,i)=>({childLineKey:String(i+1),lineId:r.line_id}))});
       return service.createInTransaction(c,actor,{todoType:information?"information":"business_action",category:information?"configuration_notice":"sourcing_finance_reconcile",sourceEventId:event,sourceAction:"sourcing.case.create",entityType:"sourcing_case",entityId:child,recipientUserId:recipient.actorId,
         ...(!information?{requiredRole:"factory_payables",requiredCapability:"sourcing:finance:reconcile",policyKey:"general" as const}:{}),
         route:{routeName:"sourcing_detail",entityId:routeCaseId??child},dedupeKey:randomUUID()});

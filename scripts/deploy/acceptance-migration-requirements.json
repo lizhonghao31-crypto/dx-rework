@@ -1560,5 +1560,46 @@
       "guard_production_order_root_immutable"
     ],
     "sequences": []
+  },
+  "0271_qc_production_progress": {
+    "checksum": "cc03c853371ccdb7727564aaf332d7035143499f17a3ef15c44732e271b9d5b3",
+    "tables": [
+      "capability_catalog",
+      "role_capabilities",
+      "digital_production_tasks",
+      "digital_production_task_access",
+      "digital_factory_facts"
+    ],
+    "functions": [
+      "guard_sourcing_production_report"
+    ],
+    "references": [
+      "digital_production_tasks",
+      "digital_production_orders",
+      "sourcing_production_orders",
+      "sourcing_decisions",
+      "digital_factory_facts",
+      "app_users",
+      "attachments",
+      "audit_events"
+    ],
+    "insert": [
+      "capability_catalog",
+      "role_capabilities"
+    ],
+    "update": [
+      "digital_production_tasks"
+    ],
+    "creates": [
+      "digital_factory_task_retirements",
+      "digital_qc_tracking_starts",
+      "digital_qc_progress_records",
+      "digital_qc_supervision_settings",
+      "digital_qc_progress_uploads"
+    ],
+    "execute": [
+      "guard_production_order_root_immutable"
+    ],
+    "sequences": []
   }
 }

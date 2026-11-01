@@ -1,3 +1,4 @@
+import {QC_PROGRESS_CAPABILITY} from '@dx-rework/contracts/qc-production-progress';
 import { memberCanWriteModule } from "../access/member-module-policy.js";
 import { ProductionExclusionService } from "./production-exclusion-service.js";
 import { productionNotExcluded, productionMerchandiserId } from "./production-visibility.js";
@@ -20,10 +21,11 @@ const CAP = "production-reporting";
 const isRoot = (actor: TrustedActorContext) => actor.actorRoles.includes(ROOT);
 export const isProductionReporter = (actor: TrustedActorContext) => isRoot(actor)
   || (actor.actorRoles.includes("production_reporter") && (actor.authorizationCapabilities ?? [actor.authorizationCapability]).includes(CAP));
+const isQcReader=(actor:TrustedActorContext)=>actor.actorRoles.includes('quality_control')&&(actor.authorizationCapabilities??[actor.authorizationCapability]).includes(QC_PROGRESS_CAPABILITY);
 const manager = (actor: TrustedActorContext) => isRoot(actor) ||
   (actor.actorRoles.some((role) => ["owner_group", "production_management", "finance_director", "finance_read"].includes(role))
     && (actor.authorizationCapabilities ?? [actor.authorizationCapability]).includes("sourcing:view"));
-const canRead = (actor: TrustedActorContext) => manager(actor) || isProductionReporter(actor)
+const canRead = (actor: TrustedActorContext) => manager(actor) || isProductionReporter(actor) || isQcReader(actor)
   || (actor.actorRoles.includes("order_merchandiser") && (actor.authorizationCapabilities ?? [actor.authorizationCapability]).includes("sourcing:view"));
 function fail(message: string, status = 409): never { throw new ApplicationError(status === 403 ? "FORBIDDEN" : status === 404 ? "NOT_FOUND" : status === 400 ? "VALIDATION_ERROR" : "INVALID_STATE_TRANSITION", message, status); }
 const asIso = (date: string | Date) => new Date(date).toISOString();
@@ -31,7 +33,9 @@ type Query = Pick<PoolClient,"query">;
 // Parent case deletion does not hide production. Scope uses the frozen supplier.
 const visible = `${productionNotExcluded} AND ($1::boolean OR ($2::boolean AND sourcing_production_factory_reporter_allowed($3,production.production_order_id,production.factory_decision_id))
   OR ($4::boolean AND ${productionMerchandiserId}=$3))`;
-const visibility = (actor: TrustedActorContext) => [manager(actor), isProductionReporter(actor), actor.actorId, actor.actorRoles.includes("order_merchandiser") && (actor.authorizationCapabilities ?? [actor.authorizationCapability]).includes("sourcing:view")];
+const visibility = (actor: TrustedActorContext) => [manager(actor), isProductionReporter(actor)||isQcReader(actor), actor.actorId, actor.actorRoles.includes("order_merchandiser") && (actor.authorizationCapabilities ?? [actor.authorizationCapability]).includes("sourcing:view")];
+
+const factoryVisibleFor=(actor:TrustedActorContext)=>isQcReader(actor)?visible.replace('sourcing_production_factory_reporter_allowed($3,production.production_order_id,production.factory_decision_id)','(sourcing_production_factory_reporter_allowed($3,production.production_order_id,production.factory_decision_id) OR digital_qc_report_allowed($3,production.production_order_id,production.factory_decision_id))'):visible;
 
 export class ProductionReportingService {
   constructor(private readonly database: Pool, private readonly idempotency = new IdempotencyService(), private readonly events = new OperationEventRepository(), private readonly closure?: Pick<ProductionClosureService,"refreshOrder">) {}
@@ -39,7 +43,7 @@ export class ProductionReportingService {
   excludeProduction(actor: TrustedActorContext, id: string, input: ProductionExclusionInput, key: string) { return new ProductionExclusionService(this.database, this.idempotency, this.events).exclude(actor, id, input, key); }
   private async order(client: Query, actor: TrustedActorContext, id: string,factoryDecisionId:string|null=null) {
     if (!canRead(actor)) fail("无权查看生产数据",403);
-    const result = await client.query<ProductionRow>(`${selectFactoryProduction} WHERE ${visible} AND production.production_order_id=$5 AND production.factory_decision_id IS NOT DISTINCT FROM $6::uuid`, [...visibility(actor),id,factoryDecisionId]);
+    const result = await client.query<ProductionRow>(`${selectFactoryProduction} WHERE ${factoryVisibleFor(actor)} AND production.production_order_id=$5 AND production.factory_decision_id IS NOT DISTINCT FROM $6::uuid`, [...visibility(actor),id,factoryDecisionId]);
     return result.rows[0] ? toOrder(result.rows[0]) : fail("生产订单不存在或不在负责范围内",404);
   }
   private async writable(client: Query, actor: TrustedActorContext, id: string,factoryDecisionId:string|null=null) {
@@ -53,7 +57,7 @@ export class ProductionReportingService {
     if (!canRead(actor)) fail("无权查看生产数据",403);
     const page=input.page ?? 1;
     if (!Number.isInteger(page)||page<1||page>100000) fail("分页页码无效",400);
-    const filter=`${visible} AND ($5::uuid IS NULL OR production.supplier_id=$5)
+    const filter=`${factoryVisibleFor(actor)} AND ($5::uuid IS NULL OR production.supplier_id=$5)
       AND ($6::text='' OR production.first_style_no ILIKE '%'||$6||'%' OR production.supplier_name_snapshot ILIKE '%'||$6||'%'
         OR EXISTS(SELECT 1 FROM sourcing_style_aliases line WHERE line.sourcing_case_id=production.sourcing_case_id AND line.style_no ILIKE '%'||$6||'%'))
       AND ($7::text='' OR transition.status=$7)`;
@@ -63,7 +67,7 @@ export class ProductionReportingService {
     const count=await this.database.query<{total:string}>(`SELECT count(*)::text AS total FROM (${selectFactoryProduction} WHERE ${filter}) selected`,args);
     const suppliers=await this.database.query<{supplier_id:string;supplier_name:string}>(`SELECT DISTINCT production.supplier_id,
       production.supplier_name_snapshot AS supplier_name FROM sourcing_production_factory_orders production
-      JOIN sourcing_cases source_case USING(sourcing_case_id) WHERE ${visible} ORDER BY supplier_name`,visibility(actor));
+      JOIN sourcing_cases source_case USING(sourcing_case_id) WHERE ${factoryVisibleFor(actor)} ORDER BY supplier_name`,visibility(actor));
     return {items:rows.rows.map(toOrder),page,pageSize:15 as const,totalCount:Number(count.rows[0]?.total??0),
       suppliers:suppliers.rows.map(r=>({supplierId:r.supplier_id,supplierName:r.supplier_name}))};
   }
@@ -80,7 +84,9 @@ export class ProductionReportingService {
     const shipment=await client.query<{first_style_no:string;shipped_on:string;recorded_quantity:number}>(
       "SELECT sourcing_current_first_style(production.sourcing_case_id) AS first_style_no,shipment.shipped_on::text,shipment.recorded_quantity FROM sourcing_production_shipments shipment JOIN sourcing_production_orders production USING(production_order_id) WHERE production_order_id=$1 AND shipment.factory_decision_id IS NOT DISTINCT FROM $2::uuid",[id,factoryDecisionId]);
     const allowed=await client.query<{allowed:boolean}>("SELECT sourcing_production_factory_reporter_allowed($1,$2,$3) AS allowed",[actor.actorId,id,factoryDecisionId]);
-    return ProductionReportingDetailSchema.parse({order,...await productionReportingObservation(this.database,client,id),canReport:await memberCanWriteModule(client,actor.actorId,"sourcing")&&isProductionReporter(actor)&&(isRoot(actor)||allowed.rows[0]?.allowed===true),canCorrect:isRoot(actor),
+    let qcProgressOrderId:string|undefined;
+    if(isQcReader(actor)&&(await client.query("SELECT to_regclass('digital_production_child_links') AS relation")).rows[0]?.relation)qcProgressOrderId=(await client.query("SELECT production_order_id FROM digital_production_child_links WHERE module='production' AND child_id=$1",[id])).rows[0]?.production_order_id;
+    return ProductionReportingDetailSchema.parse({... (qcProgressOrderId?{qcProgressOrderId}:{}),order,...await productionReportingObservation(this.database,client,id),canReport:await memberCanWriteModule(client,actor.actorId,"sourcing")&&isProductionReporter(actor)&&(isRoot(actor)||allowed.rows[0]?.allowed===true),canCorrect:isRoot(actor),
       history:history.rows.map(r=>({reportId:r.report_id,rootReportId:r.root_report_id,revision:r.revision,position:r.position,businessDate:r.business_date,
         quantity:r.quantity,actorName:r.actor_name,createdAt:asIso(r.created_at),reason:r.reason,effective:r.effective})),
       transitions:transitions.rows.map(r=>({status:r.status,businessDate:r.business_date,actorName:r.display_name,createdAt:asIso(r.created_at)})),
@@ -106,12 +112,25 @@ export class ProductionReportingService {
     const parsed=ProductionReportInputSchema.safeParse(input);if (!parsed.success) fail("请填写款色、有效日期和本次新增数量",400);
     if (!isProductionReporter(actor)) fail("仅驻厂填报人员可上报",403);
     return this.write(actor,id,key,"sourcing.production.report",parsed.data,parsed.data.factoryDecisionId??null,async client=>{
-      const factoryDecisionId=parsed.data.factoryDecisionId??null;const order=await this.order(client,actor,id,factoryDecisionId);if(order.status!=="in_production")fail("生产完成后不能继续日常上报");
-      const line=order.lines.find(l=>l.position===parsed.data.position);if(!line)fail("款色行不存在",400);
-      if(line.completedQuantity+parsed.data.quantity>line.quantity)fail("本次上报超过该款色剩余数量；请驻厂填报人员在本页核对已累计数量，本次只填新增实绩，已有记录错误由Root在原记录修正",400);
-      const reportId=randomUUID();await this.insertReport(client,actor,id,reportId,reportId,1,parsed.data,null);
+      await this.appendNewReport(client,actor,id,parsed.data);
       return this.detail(actor,id,client,parsed.data.factoryDecisionId??null);
     });
+  }
+  private async appendNewReport(client:PoolClient,actor:TrustedActorContext,id:string,input:ProductionReportInput,qc?:{recordId:string;reportId:string}) {
+    const factoryDecisionId=input.factoryDecisionId??null,order=await this.order(client,actor,id,factoryDecisionId);
+    if(order.status!=="in_production")fail("生产完成后不能继续日常上报");
+    const line=order.lines.find(l=>l.position===input.position);if(!line)fail("款色行不存在",400);
+    if(line.completedQuantity+input.quantity>line.quantity)fail("本次新增成品量超过当前款色余量；已有数量错误仍由Root在原记录订正",400);
+    const reportId=qc?.reportId??randomUUID();
+    await this.insertReport(client,actor,id,reportId,reportId,1,input,null,undefined,qc);
+    return reportId;
+  }
+  /** Internal original-ledger adapter; no QC complete/ship/correction route is granted. */
+  async reportQcWithClient(client:PoolClient,actor:TrustedActorContext,id:string,input:ProductionReportInput,recordId:string,reportId:string){
+    const parsed=ProductionReportInputSchema.safeParse(input);if(!parsed.success)fail("QC成品量或业务日期无效",400);
+    if(!isRoot(actor)&&(!isQcReader(actor)||!(await client.query<{allowed:boolean}>("SELECT digital_qc_report_allowed($1,$2,$3) AS allowed",[actor.actorId,id,input.factoryDecisionId??null])).rows[0]?.allowed))fail("无权记录本工厂PO产量",403);
+    if(!await memberCanWriteModule(client,actor.actorId,"sourcing"))fail("当前账号仅可查看",403);
+    return this.appendNewReport(client,actor,id,parsed.data,{recordId,reportId});
   }
   async correct(actor:TrustedActorContext,id:string,rootReportId:string,input:ProductionCorrectionInput,key:string) {
     if(!isRoot(actor))fail("仅Root可修正生产记录",403);
@@ -131,14 +150,14 @@ export class ProductionReportingService {
     });
   }
   private async insertReport(client:PoolClient,actor:TrustedActorContext,id:string,reportId:string,rootReportId:string,revision:number,
-    input:{position:number;businessDate:string;quantity:number;factoryDecisionId?:string|null|undefined},reason:string|null,before?:unknown) {
+    input:{position:number;businessDate:string;quantity:number;factoryDecisionId?:string|null|undefined},reason:string|null,before?:unknown,qc?:{recordId:string;reportId:string}) {
     const dispatch=await client.query<{business_date:string}>(
       "SELECT business_date::text FROM sourcing_production_transitions WHERE production_order_id=$1 AND sequence=1 AND factory_decision_id IS NOT DISTINCT FROM $2::uuid",[id,input.factoryDecisionId??null]);
     if(!dispatch.rows[0])fail("生产订单缺少正式派单记录；请主跟单在原生产订单核对派单事实，记录未恢复前不能用填报日期替代派单日期");
     if(input.businessDate<dispatch.rows[0].business_date)fail("上报业务日期不能早于正式派单日期",400);
-    const eventId=await this.events.append(client,{...actor,authorizationCapability:CAP},{
+    const eventId=await this.events.append(client,{...actor,authorizationCapability:qc?QC_PROGRESS_CAPABILITY:CAP},{
       action:revision===1?"sourcing.production.report":"sourcing.production.correct",entityType:"sourcing_production_report",entityId:reportId,
-      ...(before?{before}:{}),after:{factoryDecisionId:input.factoryDecisionId??null,productionOrderId:id,rootReportId,revision,position:input.position,businessDate:input.businessDate,quantity:input.quantity},reason:reason??"驻厂人员上报本次新增生产数量"});
+      ...(before?{before}:{}),after:{...(qc?{qcProgressRecordId:qc.recordId}:{}),factoryDecisionId:input.factoryDecisionId??null,productionOrderId:id,rootReportId,revision,position:input.position,businessDate:input.businessDate,quantity:input.quantity},reason:reason??(qc?"QC同次进度采集记录本次新增成品量":"驻厂人员上报本次新增生产数量")});
     await assertProductionReportingDate(client,id,eventId,input.businessDate);
     await client.query(`INSERT INTO sourcing_production_reports(report_id,root_report_id,revision,production_order_id,position,business_date,quantity,actor_id,actor_name,reason,operation_event_id,factory_decision_id)
       SELECT $1,$2,$3,$4,$5,$6,$7,id,display_name,$9,$10,$11 FROM app_users WHERE id=$8`,
@@ -208,3 +227,6 @@ export class ProductionReportingService {
 export const factoryProductionVisibility=visible;
 export const productionVisibility=visible.replace('sourcing_production_factory_reporter_allowed($3,production.production_order_id,production.factory_decision_id)','sourcing_production_reporter_allowed($3,production.production_order_id)');
 export { canRead as canReadProductionReporting, visibility as productionVisibilityArgs };
+
+export const factoryProductionVisibilityFor=factoryVisibleFor;
+export const productionVisibilityFor=(actor:TrustedActorContext)=>factoryVisibleFor(actor).replace('sourcing_production_factory_reporter_allowed($3,production.production_order_id,production.factory_decision_id)','sourcing_production_reporter_allowed($3,production.production_order_id)').replace('digital_qc_report_allowed($3,production.production_order_id,production.factory_decision_id)','digital_qc_order_report_allowed($3,production.production_order_id)');

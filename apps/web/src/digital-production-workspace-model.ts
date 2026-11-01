@@ -14,7 +14,8 @@ export const productionWorkspaceGroups = {
   {label:'二次工艺收发', keys:['process_logistics']},
   {label:'工艺 QC / 处理 / 复查', keys:['bulk_qc']},
   {label:'仓库实际发厂', keys:['warehouse_dispatch']},
-  {label:'到厂 / 清点 / 船样', keys:['factory_arrival','factory_material_count','bulk_ship_sample']},
+  {label:'QC生产进度 / 成衣检查', keys:['production_reporting','factory_production_qc']},
+  {label:'船样', keys:['bulk_ship_sample']},
  ],
 } as const;
 export function workspaceGroupNodes(order: OrderJourney, keys: readonly string[]): JourneyNode[] {

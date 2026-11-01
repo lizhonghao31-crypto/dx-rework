@@ -16,7 +16,7 @@ import { DigitalProductionTaskService } from "../../apps/api/src/production-plat
 import { registerDigitalIdentityRoutes } from "../../apps/api/src/production-platform/identity-routes.js";
 import { DigitalProductionAccessService } from "../../apps/api/src/production-platform/access-service.js";
 import { ApplicationError } from "../../apps/api/src/platform/errors.js";
-import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema,createOwnedPostgresSchema,releaseOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 import type { DigitalTaskKind } from "../../apps/api/src/production-platform/task-access-repository.js";
 const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
@@ -37,7 +37,7 @@ run("P04 in-app notifications PostgreSQL", () => {
   const create=async(resource:{kind:"order"|"source";id:string},kind:DigitalTaskKind="budget",extra:Partial<Parameters<DigitalProductionTaskService["createWithClient"]>[2]>={})=>tx(c=>tasks.createWithClient(c,boss,{resource,kind,routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:kind==="budget"?designer:null,...extra}));
   const condition=async(id:string,key:Parameters<DigitalProductionTaskService["setConditionWithClient"]>[3],at:string|null=null)=>tx(c=>tasks.setConditionWithClient(c,boss,id,key,true,at));
   beforeAll(async () => {
-    await admin.query(`CREATE SCHEMA ${schema}`);
+    await createOwnedPostgresSchema(admin,schema);
     for (const name of ["0001_platform_foundation.sql", "0002_dingtalk_identity_access.sql", "0004_public_tools_foundation.sql", "0216_digital_production_order_roots.sql", "0217_digital_production_node_clocks.sql"])
       await database.query(await readFile(new URL(`../../apps/api/migrations/${name}`, import.meta.url), "utf8"));
     // Existing-domain tables are represented only by referenced identity columns in this isolated fixture.
@@ -69,6 +69,7 @@ run("P04 in-app notifications PostgreSQL", () => {
     for (const id of [designer, other]) await database.query("INSERT INTO user_role_assignments(user_id,role_code) VALUES($1,'sample_designer')", [id]);
     await database.query(await readFile(new URL("../../apps/api/migrations/0220_digital_production_tasks.sql", import.meta.url), "utf8"));
     await database.query(await readFile(new URL("../../apps/api/migrations/0221_digital_production_notifications.sql", import.meta.url), "utf8"));
+    await database.query(await readFile(new URL("../../apps/api/migrations/0231_digital_order_closure.sql",import.meta.url),"utf8"));
     app.setErrorHandler((error, _request, reply) => { const known = error as ApplicationError; reply.code(known.statusCode ?? 500).send({ error: { code: known.code, message: known.message } }); });
     registerDigitalIdentityRoutes(app, { service, notificationService:notifications, taskService: tasks, accessService: new DigitalProductionAccessService(database), creationEnabled: true, authenticate: async token => {
       if (token !== designer && token !== other) throw new ApplicationError("UNAUTHORIZED", "请登录", 401);
@@ -76,7 +77,7 @@ run("P04 in-app notifications PostgreSQL", () => {
     } });
     await app.ready();
   });
-  afterAll(async () => { await app.close(); await database.end(); await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`); await admin.end(); });
+  afterAll(async () => { await app.close(); await database.end(); await releaseOwnedPostgresSchema(admin,schema); await admin.end(); });
   const drain=async(id=designer)=>{for(let i=0;i<100;i++){if(!(await notifications.claim(actor(id))).notification)return;}throw new Error("queue did not drain");};
   it("counts only valid unseen reminders, excludes the current receipt and preserves business todos on acknowledge",async()=>{
     await drain();const ids=[];
@@ -87,7 +88,10 @@ run("P04 in-app notifications PostgreSQL", () => {
     expect((await notifications.current(actor(),first.notification!.eventId,true)).remainingCount).toBe(2);
     expect(await notifications.current(actor(other),first.notification!.eventId)).toMatchObject({notification:null});
     await notifications.acknowledge(actor(),first.notification!.eventId);await notifications.acknowledge(actor(),first.notification!.eventId);
-    expect((await notifications.todos(actor())).filter(todo=>ids.includes(todo.todoId))).toEqual(before);
+    const afterAck=(await notifications.todos(actor())).filter(todo=>ids.includes(todo.todoId));
+    for(const item of afterAck){const prior=before.find(p=>p.todoId===item.todoId)!;expect(Date.parse(item.timing!.asOf)).toBeGreaterThanOrEqual(Date.parse(prior.timing!.asOf));expect(item.timing!.elapsedSeconds??0).toBeGreaterThanOrEqual(prior.timing!.elapsedSeconds??0);}
+    const stable=(rows:typeof before)=>rows.map(({timing,...todo})=>({...todo,timing:timing?{...timing,asOf:undefined,elapsedSeconds:undefined}:undefined}));
+    expect(stable(afterAck)).toEqual(stable(before));
     const second=await notifications.claim(actor(),true);expect(second.notification!.eventId).not.toBe(first.notification!.eventId);expect(second.remainingCount).toBe(1);
     await notifications.acknowledge(actor(),second.notification!.eventId);const third=await notifications.claim(actor(),true);expect(third.remainingCount).toBe(0);
     await notifications.acknowledge(actor(),third.notification!.eventId);expect(await notifications.claim(actor(),true)).toEqual({notification:null,remainingCount:0});

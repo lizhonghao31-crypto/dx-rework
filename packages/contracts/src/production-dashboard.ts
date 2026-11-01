@@ -4,6 +4,8 @@ import { ProductionReportingDetailSchema } from "./production-reporting.js";
 import { PoDeliveryRiskSchema } from "./po-delivery-dates.js";
 export const ProductionProgressStateSchema = z.enum(["pending_first_report", "normal", "behind", "high_risk", "stale", "completed"]);
 export const ProductionProgressSchema = z.object({
+  qcObservation:z.object({state:z.enum(["unknown","not_due","due","escalated","finished"]),anchor:z.string().datetime().nullable(),remindAt:z.string().datetime().nullable(),escalateAt:z.string().datetime().nullable()}).strict().optional(),
+  quantityRiskState:ProductionProgressStateSchema.optional(),
   productionProgress: z.number().min(0).max(100), timeProgress: z.number().min(0).max(100).nullable(),
   plannedWorkdays: z.number().int().nonnegative().nullable(), elapsedWorkdays: z.number().int().nonnegative().nullable(),
   progressState: ProductionProgressStateSchema, daysWithoutUpdate: z.number().int().nonnegative().nullable(),

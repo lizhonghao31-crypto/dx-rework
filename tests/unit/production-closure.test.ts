@@ -3,7 +3,7 @@ import { describe,expect,it,vi } from "vitest";
 import type { Pool } from "pg";
 import { TodoResponseSchema,ProductionExpectedReceiptsSchema } from "@dx-rework/contracts";
 import { calculateProductionProgress } from "@dx-rework/domain";
-import { ProductionClosureService,isProductionRiskRecipient,productionRiskKind } from "../../apps/api/src/sourcing/production-closure-service.js";
+import { ProductionClosureService,isProductionRiskRecipient,productionRiskKind,productionAlertRank,productionAlertState } from "../../apps/api/src/sourcing/production-closure-service.js";
 import { TodoService } from "../../apps/api/src/todos/service.js";
 import { buildTodoDeepLink } from "../../apps/api/src/todos/deep-link.js";
 import { todoRouteHref } from "../../apps/web/src/todo-route-link.js";
@@ -72,5 +72,15 @@ describe("production closure recipient and observation boundaries",()=>{
   const shipment={productionOrderId:randomUUID(),firstStyleNo:"A",contractNumber:"SSP-0001",supplierName:"B",shippedOn:"2026-09-05",expectedQuantity:12,receipts:[]};
   expect(ProductionExpectedReceiptsSchema.safeParse({items:[shipment],page:1,totalCount:1}).success).toBe(true);
   expect(ProductionExpectedReceiptsSchema.safeParse({items:[{...shipment,daxingUnitPrice:"8"}],page:1,totalCount:1}).success).toBe(false);
+ });
+});
+
+describe('QC freshness and quantity alert aggregation',()=>{
+ it('does not let a stale but quantity-normal factory hide another actual factory high risk',()=>{
+  const qc={progressState:'stale' as const,quantityRiskState:'normal' as const},late={progressState:'high_risk' as const};
+  expect(productionAlertRank(qc)).toBeGreaterThan(productionAlertRank(late));expect(productionRiskKind(productionAlertState(qc))).toBeNull();expect(productionRiskKind(productionAlertState(late))).toBe('high_risk');
+ });
+ it('retains legacy stale alerts and underlying quantity lag after QC-only observations',()=>{
+  expect(productionRiskKind(productionAlertState({progressState:'stale'}))).toBe('stale');expect(productionRiskKind(productionAlertState({progressState:'stale',quantityRiskState:'behind'}))).toBe('behind');
  });
 });

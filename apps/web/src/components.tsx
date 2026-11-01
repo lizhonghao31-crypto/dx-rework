@@ -446,7 +446,7 @@ export function Shell({
       name: "实时生产看板",
       description: "查看生产订单与进度",
       href: "/ui/production-dashboard?workspace=display",
-      ...(canAccessProductionReporting(currentUser) ? { children: [{ name: "生产数据填报", description: "按负责范围登记生产、完成与发货", href: "/ui/production-reporting" }] } : {}),
+      ...(canAccessProductionReporting(currentUser) ? { children: [{ name: "生产数据填报", description: "查看负责范围的生产记录与办理入口", href: "/ui/production-reporting" }] } : {}),
     });
   }
   globalNavigation.push({
@@ -559,7 +559,7 @@ export function Shell({
     ? [
         { name: "实时看板", description: "查看生产双进度、交期与更新状态", href: "/ui/production-dashboard?workspace=display" },
         ...(canAccessProductionReporting(currentUser)
-          ? [{ name: "生产数据填报", description: "按负责范围登记生产、完成与发货", href: "/ui/production-reporting" }]
+          ? [{ name: "生产数据填报", description: "查看负责范围的生产记录与办理入口", href: "/ui/production-reporting" }]
           : []),
       ]
     : [];

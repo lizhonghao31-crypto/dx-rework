@@ -1,3 +1,4 @@
+import {productionDisplayDomainHref} from './production-display-context.js';
 import {SUBMISSION_RECOVERY_WINDOW_MS} from "./submission-attempt.js";
 import {feedbackFetch,feedbackJson,unknownWriteResult} from "./request-response-feedback.js";
 import { SearchableSelect } from "./search-select.js";
@@ -161,6 +162,7 @@ export function ProductionReportingPage({productionOrderId}:{productionOrderId?:
         <p>工艺：{detail.order.processes.join("、")}</p>
         {!businessToday?<p role="status">本单业务日期上限尚未读取，请刷新后再办理；已提交的原请求仍可核对结果。</p>:null}
         {(moduleCanWrite(user,"sourcing")&&detail.canReport)&&detail.order.status!=="shipped"?<div className="sourcing-form-grid"><label>业务日期<input type="date" value={date} max={businessToday} onChange={e=>setDate(e.target.value)} disabled={busy||!businessToday}/></label></div>:null}
+        {detail.qcProgressOrderId&&<p><a href={productionDisplayDomainHref(pageUrl(`ui/digital-production?factory=${detail.qcProgressOrderId}&factoryAction=productionProgress${detail.order.factoryDecisionId?`&factoryDecisionId=${detail.order.factoryDecisionId}`:''}`),window.location.search)}>进入QC统一办理：生产进度、适用成品量与现场照片</a></p>}
         <div className="sourcing-order-list">{detail.order.lines.filter(line=>selectedLine.position===null||line.position===selectedLine.position).map(line=><Surface key={line.position} className="sourcing-order-card"><div className="production-reporting__line">
           <strong>{line.position}. {line.styleNo} · {line.color??"未记录颜色"}</strong>
           <p>累计 {formatBusinessDecimal(line.completedQuantity)} / {formatBusinessDecimal(line.quantity)} 件 · 剩余 {formatBusinessDecimal(line.quantity-line.completedQuantity)} 件</p>

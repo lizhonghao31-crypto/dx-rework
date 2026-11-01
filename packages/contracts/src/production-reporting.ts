@@ -23,6 +23,7 @@ export const ProductionReportingDetailSchema = z.object({
   order: SourcingProductionOrderSchema,
   // Old successful idempotency receipts lack both; a new GET supplies the trusted date controls.
   businessToday:DateOnly.optional(),asOf:z.string().datetime().optional(),
+  qcProgressOrderId:Id.optional(),
   canReport: z.boolean(), canCorrect: z.boolean(),
   history: z.array(ProductionReportHistorySchema),
   transitions: z.array(z.object({status:z.string(), businessDate:DateOnly, actorName:z.string(), createdAt:z.string().datetime()}).strict()),

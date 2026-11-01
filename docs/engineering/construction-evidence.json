@@ -1,281 +1,245 @@
 {
   "version": 1,
-  "base": "c005275c469ba4bc3c5a435418e3e18e21faf362",
+  "base": "61a33d1b774698ae90d4d450fd9d4a45b569fe25",
   "risk": "full",
-  "sourceFingerprint": "c9edba90ee92bde7810d55c0c94cf6b246407ddd71a8ece060792daee216e4c3",
+  "sourceFingerprint": "097426fcbe0b8549ed88624c44177cc04a34daa9f669745cfebb82f01c7e2b4c",
   "rules": [
     {
-      "rule": "Append-only migration, precise inventories and canonical PostgreSQL registration",
-      "reads": [
-        "scripts/migration-lib.mjs",
-        "scripts/test-suite-plan.mjs",
-        "scripts/test-resource-lifecycle.mjs"
-      ],
-      "oldTests": [
-        "tests/integration/migration-compatibility-postgres.test.ts",
-        "tests/unit/current-migration-manifest-checksum.test.ts"
-      ],
-      "initialization": "0270 appends structures only; no historical evidence backfill. Existing SQL checksums retained, exact manifest/maintenance inventory updated. New suite uses owned resource contract. Earlier local canonical historical stage passed15 upgrade histories; current final Full still required.",
-      "dateAndPermission": "SQL recorded_at stays audit wall time; explicit occurrence/business clocks are separate. Low-privilege owned isolated databases, default and clock identities verified, no live data.",
-      "expectation": "Fresh270 initialization exercised by current native fixtures; migration lint and preflight pass, exact history/low-privilege Full remains a separate final-head attestation.",
-      "checks": [
-        "frozen-static",
-        "final-affected-postgres"
-      ],
-      "source": "docs/engineering/new-flow-20261031-approved-plan.md §PR05 / F.5 / H; latest approved user construction scope",
+      "rule": "Append271 with exact inventories and owned fixtures",
+      "source": "docs/engineering/new-flow-20261031-approved-plan.md PR06 / F.6; latest user removal and QC recording decisions",
       "writes": [
-        "apps/api/migrations/0270_production_readiness_materials.sql",
+        "apps/api/migrations/0271_qc_production_progress.sql",
         "apps/api/src/platform/migration-manifest.json",
         "packages/contracts/package.json",
         "scripts/deploy/acceptance-migration-requirements.json",
-        "scripts/test-suite-plan.mjs"
+        "scripts/test-suite-plan.mjs",
+        "tests/helpers/business-anchor-fixture.ts"
+      ],
+      "reads": [
+        "apps/api/migrations/0271_qc_production_progress.sql",
+        "docs/requirements/sourcing-supplier-production-v1.0.md"
+      ],
+      "oldTests": [
+        "tests/integration/migration-compatibility-postgres.test.ts"
+      ],
+      "initialization": "No previous SQL/checksum changed. New unfinished receipt/count tasks retire as cancelled without completed facts; historical states are preserved in immutable retirement rows. Native role capability and private evidence tables are append-only.",
+      "dateAndPermission": "Real occurrence and audit wall times remain distinct. Clock reads do not write facts. Exact assigned QC/factory/PO and current allocation eligibility; no factory receipt/count, finance, ship-sample or missing-SLA-evidence gate. Contract48h still excludes Beijing Sundays.",
+      "expectation": "No previous SQL/checksum changed. New unfinished receipt/count tasks retire as cancelled without completed facts; historical states are preserved in immutable retirement rows. Native role capability and private evidence tables are append-only.",
+      "checks": [
+        "final-static",
+        "frozen-core-postgres"
       ]
     },
     {
-      "rule": "Native design handover, preorder investment and material revision references",
-      "reads": [
-        "apps/api/src/production-platform/development-round-repository.ts",
-        "apps/api/src/production-platform/development-technical-repository.ts",
-        "apps/api/src/production-platform/series-plan-facts.ts",
-        "apps/api/src/production-platform/access-policy.ts"
-      ],
-      "oldTests": [
-        "tests/integration/sourcing-pr03-postgres.test.ts",
-        "tests/integration/series-plan-postgres.test.ts"
-      ],
-      "initialization": "Original creation transaction enrolls new sources/orders; in-flight primary acknowledgement and explicit leader adoption retain completed history. Saved genuine preorder remains draft, sizes/order/full budget not required for actual investment.",
-      "dateAndPermission": "Designer/primary merch/assigned warehouse/current color-confirmation role write only their facts. Native Root and exact-current handed draft evidence reuse tested. Optimistic versions, active-role recheck before cached response, binding and audit guards remain.",
-      "expectation": "Current14 native PG cases (within the final17-case targeted run) cover source-to-order references, partial/unknown/withdrawn heads, cross-order/role rejection, immutable history, private upload/download, preorder no-publication and no unshared future draft read.",
-      "checks": [
-        "final-affected-postgres",
-        "review-api-static",
-        "frozen-static"
-      ],
-      "source": "docs/engineering/new-flow-20261031-approved-plan.md §PR05 / F.5 / H; latest approved user construction scope",
+      "rule": "One observation clock while retaining actual quantity and multi-factory risk",
+      "source": "docs/engineering/new-flow-20261031-approved-plan.md PR06 / F.6; latest user removal and QC recording decisions",
       "writes": [
-        "apps/api/src/production-platform/identity-routes.ts",
-        "apps/api/src/production-platform/identity-service.ts",
-        "apps/api/src/production-platform/preparation-material-repository.ts",
-        "apps/api/src/production-platform/preparation-series-bridge.ts",
-        "apps/api/src/production-platform/production-readiness-repository.ts",
-        "apps/api/src/production-platform/production-readiness-routes.ts",
-        "apps/api/src/production-platform/production-readiness-service.ts",
-        "apps/api/src/server.ts",
-        "packages/contracts/src/production-readiness.ts"
-      ]
-    },
-    {
-      "rule": "Independent draft/final24h and canonical technical instruction publication",
+        "apps/api/src/sourcing/production-closure-service.ts",
+        "tests/unit/production-closure.test.ts"
+      ],
       "reads": [
-        "apps/api/src/production-platform/development-technical-repository.ts",
-        "apps/api/src/production-platform/production-instruction-routes.ts",
-        "apps/web/src/production-instruction-panel.tsx"
+        "apps/api/src/sourcing/production-dashboard-service.ts",
+        "docs/requirements/sourcing-supplier-production-v1.0.md"
       ],
       "oldTests": [
-        "tests/integration/sourcing-pr03-postgres.test.ts",
-        "tests/integration/business-anchors-clock-postgres.test.ts",
-        "tests/unit/digital-sla-plan.test.ts",
-        "tests/unit/sla-applied-window.test.ts"
+        "tests/integration/production-closure-postgres.test.ts"
       ],
-      "initialization": "Legacy completed72h and frozen snapshots retained; current adoption does not invent old completion timestamps. No Root exception to current effective technical/basis requirements.",
-      "dateAndPermission": "First trusted partial/whole actual receipt starts draft goal; canonical final prerequisites form independent final24h. Original order merch writes/releases/delivers. C/P/actual and contract Sunday-paused business time remain distinct.",
-      "expectation": "A early fabric/later final response cannot release prematurely. Completed legacy history unchanged; partial at24h/material60h/full65h stays17h late; same-round unfinished instruction change retains original clock; unconfigured supplement has unknown duration until explicit panel application.",
+      "initialization": "Tracked QC freshness uses48/72 recipients; quantity alerts compare underlying quantity risk so a QC-stale but quantity-normal factory does not mask another factory high risk. Legacy stale behavior remains for untracked orders.",
+      "dateAndPermission": "Real occurrence and audit wall times remain distinct. Clock reads do not write facts. Exact assigned QC/factory/PO and current allocation eligibility; no factory receipt/count, finance, ship-sample or missing-SLA-evidence gate. Contract48h still excludes Beijing Sundays.",
+      "expectation": "Tracked QC freshness uses48/72 recipients; quantity alerts compare underlying quantity risk so a QC-stale but quantity-normal factory does not mask another factory high risk. Legacy stale behavior remains for untracked orders.",
       "checks": [
-        "final-affected-postgres",
-        "review-api-static",
         "final-unit",
-        "frozen-static"
-      ],
-      "source": "docs/engineering/new-flow-20261031-approved-plan.md §PR05 / F.5 / H; latest approved user construction scope",
-      "writes": [
-        "apps/api/src/production-platform/bulk-sla-evidence.ts",
-        "apps/api/src/production-platform/bulk-task-timing.ts",
-        "apps/api/src/production-platform/production-instruction-service.ts",
-        "apps/api/src/production-platform/sla-applied-window.ts",
-        "apps/api/src/production-platform/sla-order-application.ts",
-        "apps/api/src/production-platform/sla-order-service.ts",
-        "packages/contracts/src/production-instruction.ts",
-        "packages/domain/src/digital-sla-plan.ts"
+        "frozen-quantity-alert-postgres-cwd",
+        "final-static"
       ]
     },
     {
-      "rule": "Concrete cutting range, partial paper/marker work and quality dependency",
-      "reads": [
-        "apps/api/src/production-platform/development-technical-repository.ts",
-        "apps/api/src/production-platform/factory-flow-service.ts"
-      ],
-      "oldTests": [
-        "tests/integration/sourcing-pr03-postgres.test.ts",
-        "tests/unit/cutting-access.test.ts",
-        "tests/unit/cutting-quantity.test.ts"
-      ],
-      "initialization": "Physical style labels and technical shrink applicability are original-domain additions, not BOM/factory-receipt forms. Successful downstream TEST cutting fixtures explicitly stock their actual requested counts without altering order quantities or bypassing guards.",
-      "dateAndPermission": "Failed quality does not pause clocks; actual cutting retains labels/quality/current technical prerequisites. Missing label returns legal business conflict with original recorder authority, not an accidental403 for authorized external-cut merch. Already-cut history retained.",
-      "expectation": "Ordinary/urgent partial work does not set whole completion, create duplicate wages or release entire cut. Current old P12 in-house/outsourced and returned-batch QC cases pass, including wrong-recorder403 and insufficient physical label409.",
-      "checks": [
-        "final-affected-postgres",
-        "review-api-static",
-        "final-unit",
-        "frozen-static"
-      ],
-      "source": "docs/engineering/new-flow-20261031-approved-plan.md §PR05 / F.5 / H; latest approved user construction scope",
+      "rule": "One QC entry in the actual factory workspace with original controls and guarded navigation",
+      "source": "docs/engineering/new-flow-20261031-approved-plan.md PR06 / F.6; latest user removal and QC recording decisions",
       "writes": [
-        "apps/api/src/cutting/cutting-source-service.ts",
-        "apps/api/src/production-platform/bulk-fabric-facts.ts",
-        "apps/api/src/production-platform/bulk-preparation-service.ts",
-        "apps/api/src/production-platform/development-route-service.ts",
-        "apps/api/src/production-platform/development-technical-service.ts",
-        "packages/contracts/src/bulk-preparation.ts",
-        "packages/contracts/src/digital-development-technical.ts"
-      ]
-    },
-    {
-      "rule": "Same-source projected facts, scoped readers and deduplicated material/instruction todos",
+        "apps/web/src/App.tsx",
+        "apps/web/src/components.tsx",
+        "apps/web/src/digital-production-tasks-panel.tsx",
+        "apps/web/src/digital-production-workspace-model.ts",
+        "apps/web/src/factory-flow-panel.tsx",
+        "apps/web/src/factory-task-target.ts",
+        "apps/web/src/platform-access.ts",
+        "apps/web/src/platform-modules.ts",
+        "apps/web/src/production-dashboard-model.ts",
+        "apps/web/src/production-reporting-page.tsx",
+        "apps/web/src/qc-production-progress-panel.css",
+        "apps/web/src/qc-production-progress-panel.tsx",
+        "tests/acceptance/qc-production-progress-browser.mjs",
+        "tests/fixtures/qc-production-progress-ui.tsx"
+      ],
       "reads": [
-        "apps/api/src/production-platform/task-service.ts",
-        "apps/api/src/production-platform/notification-policy.ts",
-        "apps/api/src/todos/service.ts"
+        "apps/web/src/factory-flow-panel.tsx",
+        "docs/requirements/sourcing-supplier-production-v1.0.md"
       ],
       "oldTests": [
-        "tests/unit/digital-task-read-boundary.test.ts",
-        "tests/integration/digital-production-notifications-postgres.test.ts",
-        "tests/integration/digital-production-notification-delivery-postgres.test.ts"
+        "tests/unit/factory-task-target.test.ts"
       ],
-      "initialization": "New reads tolerate absence of270 in old partial schemas; new real events share sourceRecordId/version and current validity, never a second manually ticked completion source.",
-      "dateAndPermission": "No generic source-event HTTP, no actual date on read/download/save; one material-scope warehouse todo and original technical supplement task; read receipt never completes work. Scope and role checks precede counts and private responses.",
-      "expectation": "Original22 task-read-boundary cases pass without loosening unknown-query/denial assertions. The two legacy notification suites reproduce the identical18 failed cases/9 passed at exact c005 baseline; attribution is recorded, not a passed business result. Native current preparation todos and Sourcing HTTP notification consumers are covered by the explicitly scoped runs. Missing/withdrawn heads cannot resurrect old fallback completion.",
-      "checks": [
-        "final-affected-postgres",
-        "final-unit",
-        "review-api-static",
-        "frozen-static"
-      ],
-      "source": "docs/engineering/new-flow-20261031-approved-plan.md §PR05 / F.5 / H; latest approved user construction scope",
-      "writes": [
-        "apps/api/src/production-platform/access-policy.ts",
-        "apps/api/src/production-platform/journey-query.ts",
-        "apps/api/src/production-platform/notification-service.ts",
-        "apps/api/src/production-platform/preparation-todos.ts",
-        "apps/api/src/production-platform/series-plan-facts.ts",
-        "packages/contracts/src/digital-series-plan.ts"
-      ]
-    },
-    {
-      "rule": "Unified existing PC workspaces, source-specific editors and error recovery",
-      "reads": [
-        "packages/ui/src/index.tsx",
-        "packages/ui/src/tokens.css",
-        "apps/web/src/submission-attempt.ts",
-        "apps/web/src/use-digital-detail-navigation-guard.ts"
-      ],
-      "oldTests": [
-        "tests/unit/instruction-command-receipt.test.ts",
-        "tests/unit/instruction-source-review.test.ts",
-        "tests/unit/business-chain-ui-contract.test.ts"
-      ],
-      "initialization": "Original navigation/header/three columns/current instruction fields/actions remain. Local CSS only, shared components/tokens retained; PR07 directory and PR08 required-material display not introduced here.",
-      "dateAndPermission": "Readonly stays readonly; source change resets editor context and generations. Current-row edits preserve other same-color material rows and references. Primary actions remain original entry points.",
-      "expectation": "26 browser scenarios at1280/1440: collapsed first view, keyboard/focus, long text, readonly, load error/recovery/empty,409, immutable retry, double click, confirmed save/read failure, multi-row preservation, actual parent Return/Refresh guard, cross-form draft retention, immutable range recovery and writing protection, explicit technical size adoption.36 inspected captures, no overflow/page errors.",
+      "initialization": "Original components, private upload service and local CSS reused. Per-form drafts survive sibling saves. Immutable body/key retained on uncertain writes under verified principal; committed-save/read-failure does not re-submit. Real parent Return/Refresh and one-file upload recovery exercised at1280/1440; no live-site claim.",
+      "dateAndPermission": "Real occurrence and audit wall times remain distinct. Clock reads do not write facts. Exact assigned QC/factory/PO and current allocation eligibility; no factory receipt/count, finance, ship-sample or missing-SLA-evidence gate. Contract48h still excludes Beijing Sundays.",
+      "expectation": "Original components, private upload service and local CSS reused. Per-form drafts survive sibling saves. Immutable body/key retained on uncertain writes under verified principal; committed-save/read-failure does not re-submit. Real parent Return/Refresh and one-file upload recovery exercised at1280/1440; no live-site claim.",
       "checks": [
         "frozen-browser",
-        "frozen-static",
-        "final-unit"
-      ],
-      "source": "docs/engineering/new-flow-20261031-approved-plan.md §PR05 / F.5 / H; latest approved user construction scope",
-      "writes": [
-        "apps/web/src/bulk-fabric-panel.tsx",
-        "apps/web/src/bulk-pattern-workspace.tsx",
-        "apps/web/src/bulk-preparation-panel.tsx",
-        "apps/web/src/development-technical-basis.tsx",
-        "apps/web/src/digital-development-create-form.tsx",
-        "apps/web/src/digital-development-panel.tsx",
-        "apps/web/src/production-instruction-panel.tsx",
-        "apps/web/src/production-readiness-panel.tsx",
-        "apps/web/src/production-readiness-range-action.tsx",
-        "apps/web/src/production-readiness.css",
-        "tests/acceptance/production-readiness-browser.mjs",
-        "tests/fixtures/production-readiness-ui.tsx"
+        "final-unit",
+        "final-static",
+        "keyboard-pc"
       ]
     },
     {
-      "rule": "Test prerequisites and historical compatibility are explicit, not runtime bypasses",
+      "rule": "Explicit typed QC facts, original7 stages and stable todo routing",
+      "source": "docs/engineering/new-flow-20261031-approved-plan.md PR06 / F.6; latest user removal and QC recording decisions",
+      "writes": [
+        "packages/contracts/src/digital-production-journey.ts",
+        "packages/contracts/src/digital-production-tasks.ts",
+        "packages/contracts/src/production-dashboard.ts",
+        "packages/contracts/src/production-reporting.ts",
+        "packages/contracts/src/qc-production-progress.ts",
+        "packages/contracts/src/todo-destination.ts",
+        "packages/contracts/src/todo-presentation.ts",
+        "packages/contracts/src/todos.ts",
+        "packages/domain/src/production-progress.ts"
+      ],
       "reads": [
-        "apps/api/src/production-platform/production-readiness-service.ts",
-        "apps/api/src/production-platform/bulk-preparation-service.ts",
-        "scripts/test-resource-contract.mjs",
-        "scripts/test-suite-plan.mjs"
+        "packages/contracts/src/todos.ts",
+        "docs/requirements/sourcing-supplier-production-v1.0.md"
       ],
       "oldTests": [
-        "tests/integration/sourcing-pr03-postgres.test.ts",
-        "tests/integration/business-anchors-clock-postgres.test.ts",
-        "tests/unit/digital-task-read-boundary.test.ts"
+        "tests/unit/todo-destination-parity.test.ts"
       ],
-      "initialization": "Only named genuine historical scenarios use pre270 fixtures. Modern orders establish canonical technical review, usable material and actual labels through native commands. Native Root HTTP uses actual bootstrap identity, independent of earlier cases.",
-      "dateAndPermission": "Actual receipt/report versions, current order revision, role grants, source and quantity scopes are supplied; wrong/stale/forged states remain rejected. Owned schema/clock cleanup verified after failures.",
-      "expectation": "Initial broad failures and later12-case selection retain truthful counts and logs; no claim of current-head complete canonical success. Final GitHub Full executes complete applicable current context after Review.",
+      "initialization": "Stage proportions are observations, optional positive added finished quantity writes native ledger, photos-only cannot reset progress. Original contract/production facts unchanged; removed receipt/count is not a new mandatory node. Exact factory scope travels to the existing page.",
+      "dateAndPermission": "Real occurrence and audit wall times remain distinct. Clock reads do not write facts. Exact assigned QC/factory/PO and current allocation eligibility; no factory receipt/count, finance, ship-sample or missing-SLA-evidence gate. Contract48h still excludes Beijing Sundays.",
+      "expectation": "Stage proportions are observations, optional positive added finished quantity writes native ledger, photos-only cannot reset progress. Original contract/production facts unchanged; removed receipt/count is not a new mandatory node. Exact factory scope travels to the existing page.",
       "checks": [
-        "final-affected-postgres",
         "final-unit",
-        "frozen-static",
-        "review-api-static"
-      ],
-      "source": "docs/engineering/new-flow-20261031-approved-plan.md §PR05 / F.5 / H; latest approved user construction scope",
+        "final-static",
+        "frozen-core-postgres"
+      ]
+    },
+    {
+      "rule": "Close existing consumer and fixture requirements without weakening guards",
+      "source": "docs/engineering/new-flow-20261031-approved-plan.md PR06 / F.6; latest user removal and QC recording decisions",
       "writes": [
-        "tests/helpers/bulk-preparation-fixture.ts",
-        "tests/helpers/business-anchor-fixture.ts",
-        "tests/helpers/historical-digital-order-fixture.ts",
-        "tests/helpers/production-readiness-fixture.ts",
-        "tests/integration/business-anchors-clock-postgres.test.ts",
-        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/helpers/order-closure-fixture.ts",
+        "tests/integration/digital-production-notification-delivery-postgres.test.ts",
+        "tests/integration/digital-production-notifications-postgres.test.ts",
         "tests/integration/sourcing-pr03-postgres.test.ts",
-        "tests/unit/digital-sla-plan.test.ts",
-        "tests/unit/digital-task-read-boundary.test.ts",
-        "tests/unit/production-readiness-contract.test.ts"
+        "tests/unit/factory-task-target.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/notification-service.ts",
+        "docs/requirements/sourcing-supplier-production-v1.0.md"
+      ],
+      "oldTests": [
+        "tests/integration/sourcing-pr03-postgres.test.ts"
+      ],
+      "initialization": "Fixed missing original closure structure, native generation/PO linkage, snapshot asOf comparisons and projection/delivery using the same test-only Date. Four inherited failures reproduced at exact04981 tree, not called PR06 regressions. Stale queued legacy artifact is an explicit negative fixture, not an approved digital creation path. Updated all affected denominator and retired410 expectations; shared resource create/release APIs used.",
+      "dateAndPermission": "Real occurrence and audit wall times remain distinct. Clock reads do not write facts. Exact assigned QC/factory/PO and current allocation eligibility; no factory receipt/count, finance, ship-sample or missing-SLA-evidence gate. Contract48h still excludes Beijing Sundays.",
+      "expectation": "Fixed missing original closure structure, native generation/PO linkage, snapshot asOf comparisons and projection/delivery using the same test-only Date. Four inherited failures reproduced at exact04981 tree, not called PR06 regressions. Stale queued legacy artifact is an explicit negative fixture, not an approved digital creation path. Updated all affected denominator and retired410 expectations; shared resource create/release APIs used.",
+      "checks": [
+        "frozen-core-postgres",
+        "final-unit",
+        "final-static"
+      ]
+    },
+    {
+      "rule": "Native QC assignment, current PO scope, private photos and one quantity transaction",
+      "source": "docs/engineering/new-flow-20261031-approved-plan.md PR06 / F.6; latest user removal and QC recording decisions",
+      "writes": [
+        "apps/api/src/production-platform/factory-production-facts.ts",
+        "apps/api/src/production-platform/identity-routes.ts",
+        "apps/api/src/production-platform/qc-production-progress-routes.ts",
+        "apps/api/src/production-platform/qc-production-progress-service.ts",
+        "apps/api/src/server.ts",
+        "apps/api/src/sourcing/production-reporting-service.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/access-policy.ts",
+        "docs/requirements/sourcing-supplier-production-v1.0.md"
+      ],
+      "oldTests": [
+        "tests/unit/production-reporting.test.ts"
+      ],
+      "initialization": "New qc-production-progress capability is not the old reporter role. API, DB, upload claim, native scope reader and menu match. Live eligibility checked before replay. Root correction/finish/ship retained; QC receives none of those or warehouse quantity edits. One submissionId links observation, applicable native quantities and photos; any overflow rolls everything back.",
+      "dateAndPermission": "Real occurrence and audit wall times remain distinct. Clock reads do not write facts. Exact assigned QC/factory/PO and current allocation eligibility; no factory receipt/count, finance, ship-sample or missing-SLA-evidence gate. Contract48h still excludes Beijing Sundays.",
+      "expectation": "New qc-production-progress capability is not the old reporter role. API, DB, upload claim, native scope reader and menu match. Live eligibility checked before replay. Root correction/finish/ship retained; QC receives none of those or warehouse quantity edits. One submissionId links observation, applicable native quantities and photos; any overflow rolls everything back.",
+      "checks": [
+        "frozen-core-postgres",
+        "final-static"
+      ]
+    },
+    {
+      "rule": "Trusted warehouse start and each-PO rolling48/72 projection",
+      "source": "docs/engineering/new-flow-20261031-approved-plan.md PR06 / F.6; latest user removal and QC recording decisions",
+      "writes": [
+        "apps/api/src/production-platform/notification-service.ts",
+        "apps/api/src/production-platform/qc-progress-evidence.ts",
+        "apps/api/src/production-platform/qc-progress-todos.ts",
+        "apps/api/src/sourcing/production-dashboard-service.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/qc-progress-evidence.ts",
+        "docs/requirements/sourcing-supplier-production-v1.0.md"
+      ],
+      "oldTests": [
+        "tests/integration/digital-production-notification-delivery-postgres.test.ts"
+      ],
+      "initialization": "Starts only from real approved/warehouse dispatch or explicitly adopted current supervision for unknown history. No waiting for factory receipt. Per-PO observation windows, original snapshots and exact factory scope. Photos, read, refresh, reassignment and old backfill do not wash current deadlines. Current recipient and observation window rechecked at delivery, same-recipient48/72 de-duplicated; missing recipients are management work. Original quality-inspection todos remain distinct facts, not suppressed by progress.",
+      "dateAndPermission": "Real occurrence and audit wall times remain distinct. Clock reads do not write facts. Exact assigned QC/factory/PO and current allocation eligibility; no factory receipt/count, finance, ship-sample or missing-SLA-evidence gate. Contract48h still excludes Beijing Sundays.",
+      "expectation": "Starts only from real approved/warehouse dispatch or explicitly adopted current supervision for unknown history. No waiting for factory receipt. Per-PO observation windows, original snapshots and exact factory scope. Photos, read, refresh, reassignment and old backfill do not wash current deadlines. Current recipient and observation window rechecked at delivery, same-recipient48/72 de-duplicated; missing recipients are management work. Original quality-inspection todos remain distinct facts, not suppressed by progress.",
+      "checks": [
+        "frozen-core-postgres",
+        "final-unit",
+        "final-static"
+      ]
+    },
+    {
+      "rule": "RetireF02/F03 throughout commands, projections, notification and closure",
+      "source": "docs/engineering/new-flow-20261031-approved-plan.md PR06 / F.6; latest user removal and QC recording decisions",
+      "writes": [
+        "apps/api/src/production-platform/access-policy.ts",
+        "apps/api/src/production-platform/cockpit-progress.ts",
+        "apps/api/src/production-platform/cockpit-query.ts",
+        "apps/api/src/production-platform/development-task-blockers.ts",
+        "apps/api/src/production-platform/factory-flow-service.ts",
+        "apps/api/src/production-platform/journey-query.ts",
+        "apps/api/src/production-platform/order-closure-service.ts",
+        "apps/api/src/production-platform/retired-factory-nodes.ts",
+        "apps/api/src/production-platform/task-access-repository.ts",
+        "apps/api/src/production-platform/task-service.ts",
+        "apps/api/src/todos/deep-link.ts",
+        "tests/integration/qc-progress-retirement-postgres.test.ts",
+        "tests/unit/qc-progress-reminders.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/task-service.ts",
+        "docs/requirements/sourcing-supplier-production-v1.0.md"
+      ],
+      "oldTests": [
+        "tests/integration/sourcing-pr03-postgres.test.ts"
+      ],
+      "initialization": "No new receipt/count task, current count, pending dependency, reminder or completion condition. Old records read-only, old commands410 before cached responses, active orders do not wait for plan adoption. Keep original warehouse dispatch/receiving, QC quality, ship samples, rework/own-tail and packing boundaries.",
+      "dateAndPermission": "Real occurrence and audit wall times remain distinct. Clock reads do not write facts. Exact assigned QC/factory/PO and current allocation eligibility; no factory receipt/count, finance, ship-sample or missing-SLA-evidence gate. Contract48h still excludes Beijing Sundays.",
+      "expectation": "No new receipt/count task, current count, pending dependency, reminder or completion condition. Old records read-only, old commands410 before cached responses, active orders do not wait for plan adoption. Keep original warehouse dispatch/receiving, QC quality, ship samples, rework/own-tail and packing boundaries.",
+      "checks": [
+        "frozen-core-postgres",
+        "final-unit",
+        "final-static"
       ]
     }
   ],
   "checks": [
     {
-      "id": "final-affected-postgres",
-      "kind": "tests",
-      "command": "[\"flock\",\"/workspace/dx-governance-local-pg-instance.lock\",\"node\",\"/workspace/dx-p05-final-targeted-postgres.mjs\"]",
+      "id": "final-static",
+      "kind": "command",
+      "command": "[\"node\",\"/workspace/dx-p06-static-precheck.mjs\"]",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "fcecd2efacce2562183f9f0d2984da2852fff3ac",
-      "sourceFingerprint": "c9edba90ee92bde7810d55c0c94cf6b246407ddd71a8ece060792daee216e4c3",
-      "inputPaths": [
-        "apps/api",
-        "packages/contracts",
-        "packages/domain",
-        "tests/helpers",
-        "tests/integration/production-readiness-postgres.test.ts",
-        "tests/integration/sourcing-pr03-postgres.test.ts",
-        "scripts",
-        "package.json",
-        "package-lock.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts",
-        "tsconfig.base.json"
-      ],
-      "inputFingerprint": "8208fa5b73ffc489a80fb3ae27ef950be80381257ea9e072381a5eb67a994144",
-      "sourceState": "Uncommitted candidate: full source fingerprint and declared input fingerprint captured before command; declared inputs reverified after command; testedHead is ancestor, not a claim of a committed tested Head",
-      "context": "Local Node 22.23.4; owned marked PG16 instance/low-privilege test role, explicit canonical workers; no claim of CI hardware equivalence or authenticated full-site acceptance",
-      "startedAt": "2026-11-01T21:18:26.860Z",
-      "endedAt": "2026-11-01T21:19:10.925Z",
-      "logSha256": "4e321fa52f8aadf9da556ca48a281128402598685df76be2666bbc36f51a5e25",
-      "log": "/workspace/dx-p05-recorded-final-affected-postgres-1793567906860.log",
-      "passed": 17,
-      "failed": 0,
-      "skipped": 137
-    },
-    {
-      "id": "final-unit",
-      "kind": "tests",
-      "command": "[\"node\",\"node_modules/vitest/vitest.mjs\",\"run\",\"tests/unit/digital-task-read-boundary.test.ts\",\"tests/unit/production-readiness-contract.test.ts\",\"tests/unit/digital-sla-plan.test.ts\",\"tests/unit/business-chain-ui-contract.test.ts\",\"tests/unit/cutting-access.test.ts\",\"tests/unit/cutting-source-contract.test.ts\",\"tests/unit/cutting-quantity.test.ts\",\"tests/unit/digital-sla-configuration.test.ts\",\"tests/unit/sla-applied-window.test.ts\",\"tests/unit/order-board-cutting-facts.test.ts\"]",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "fcecd2efacce2562183f9f0d2984da2852fff3ac",
-      "sourceFingerprint": "c9edba90ee92bde7810d55c0c94cf6b246407ddd71a8ece060792daee216e4c3",
+      "testedHead": "61a33d1b774698ae90d4d450fd9d4a45b569fe25",
+      "sourceFingerprint": "097426fcbe0b8549ed88624c44177cc04a34daa9f669745cfebb82f01c7e2b4c",
       "inputPaths": [
         "apps",
         "packages",
@@ -289,62 +253,27 @@
         "vitest.postgres-immediate.config.ts",
         "eslint.config.js"
       ],
-      "inputFingerprint": "ce3307500042c53faede3563244b5b0a5d53b3b4e7a904a91badb73ca8cdc796",
+      "inputFingerprint": "8b463f91acc458e2a0bb315599c2035e5261e88eb599c7345ec8db9171d557ce",
       "sourceState": "Uncommitted candidate: full source fingerprint and declared input fingerprint captured before command; declared inputs reverified after command; testedHead is ancestor, not a claim of a committed tested Head",
       "context": "Local Node 22.23.4; owned marked PG16 instance/low-privilege test role, explicit canonical workers; no claim of CI hardware equivalence or authenticated full-site acceptance",
-      "startedAt": "2026-11-01T21:18:29.306Z",
-      "endedAt": "2026-11-01T21:18:34.702Z",
-      "logSha256": "da6efcc38f89e85064bf925d5aa85ba1c900e8cea8c62bf4e5ea6479ed8ed7b9",
-      "log": "/workspace/dx-p05-recorded-final-unit-1793567909306.log",
-      "passed": 96,
-      "failed": 0,
-      "skipped": 0
+      "startedAt": "2026-11-01T22:56:55.280Z",
+      "endedAt": "2026-11-01T22:58:19.707Z",
+      "logSha256": "b5017ac9fdced0410a7f08b870f3807ebd92b7869472c79e8b819cb2956da441",
+      "log": "/workspace/dx-p06-recorded-final-static-1793573815281.log"
     },
     {
-      "id": "frozen-browser",
-      "kind": "command",
-      "command": "[\"node\",\"tests/acceptance/production-readiness-browser.mjs\"]",
+      "id": "final-unit",
+      "kind": "tests",
+      "command": "[\"node\",\"node_modules/vitest/vitest.mjs\",\"run\",\"tests/unit/production-closure.test.ts\",\"tests/unit/qc-progress-reminders.test.ts\",\"tests/unit/factory-task-target.test.ts\",\"tests/unit/production-reporting-clock-contract.test.ts\",\"tests/unit/todo-destination-parity.test.ts\",\"tests/unit/todo-presentation.test.ts\",\"tests/unit/production-dashboard-motion.test.ts\",\"tests/unit/platform-modules.test.ts\",\"tests/unit/production-dashboard.test.ts\",\"tests/unit/production-reporting.test.ts\",\"tests/unit/digital-journey-projection.test.ts\",\"tests/unit/business-time-write-contract.test.ts\"]",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "6b380e35d6b9812efb6e54f4c63379e716a66217",
-      "sourceFingerprint": "a61a44c72d4a1c5071089fbea62a13a15beebfcd3be6d8b84e5d9644a0d972dc",
+      "testedHead": "61a33d1b774698ae90d4d450fd9d4a45b569fe25",
+      "sourceFingerprint": "097426fcbe0b8549ed88624c44177cc04a34daa9f669745cfebb82f01c7e2b4c",
       "inputPaths": [
-        "apps/web",
+        "apps",
         "packages",
-        "tests/fixtures/production-readiness-ui.tsx",
-        "tests/acceptance/production-readiness-browser.mjs",
-        "package.json",
-        "package-lock.json",
-        "tsconfig.base.json"
-      ],
-      "inputFingerprint": "9069ab3fb6a97c011c59a3fac131cd55ea0dfc4485592880d3bcaabc4dc64e32",
-      "sourceState": "Uncommitted candidate: full source fingerprint and declared input fingerprint captured before command; declared inputs reverified after command; testedHead is ancestor, not a claim of a committed tested Head",
-      "context": "Local Node 22.23.4; owned marked PG16 instance/low-privilege test role, explicit canonical workers; no claim of CI hardware equivalence or authenticated full-site acceptance",
-      "startedAt": "2026-11-01T21:09:02.851Z",
-      "endedAt": "2026-11-01T21:09:28.883Z",
-      "logSha256": "71e3d9ea4f9716043fb3e3e5f31275fecfd9f66b21e90b383aef20e081cb44e8",
-      "log": "/workspace/dx-p05-recorded-frozen-browser-1793567342851.log",
-      "browserEvidence": {
-        "cases": 26,
-        "errors": [],
-        "resultSha256": "52734176e927f3c9ec14e3acea81a4f68e6eb9ec58a8f3d79e0f7b2509517be6",
-        "screenshots": 36,
-        "visualInspection": "All36 screenshots examined in nine contact sheets; actual parent-range recovery, parent writing, parent refresh/discard and instruction details additionally inspected at full resolution. TEST responses and synthetic HTTP faults, not authenticated full-site/live acceptance."
-      }
-    },
-    {
-      "id": "frozen-static",
-      "kind": "command",
-      "command": "[\"bash\",\"-c\",\"npm run lint && npm run typecheck && npm run build --workspaces --if-present && npm run test:preflight && npm run secret:scan\"]",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "6b380e35d6b9812efb6e54f4c63379e716a66217",
-      "sourceFingerprint": "a61a44c72d4a1c5071089fbea62a13a15beebfcd3be6d8b84e5d9644a0d972dc",
-      "inputPaths": [
-        "apps/web",
-        "packages",
+        "tests",
         "scripts",
-        "tests/unit",
         "package.json",
         "package-lock.json",
         "tsconfig.base.json",
@@ -353,44 +282,180 @@
         "vitest.postgres-immediate.config.ts",
         "eslint.config.js"
       ],
-      "inputFingerprint": "4d4aaea52a9e12ca388b35330b4f7e93cbe79d4a54b09dd8a1cb64a7f1561235",
+      "inputFingerprint": "8b463f91acc458e2a0bb315599c2035e5261e88eb599c7345ec8db9171d557ce",
       "sourceState": "Uncommitted candidate: full source fingerprint and declared input fingerprint captured before command; declared inputs reverified after command; testedHead is ancestor, not a claim of a committed tested Head",
       "context": "Local Node 22.23.4; owned marked PG16 instance/low-privilege test role, explicit canonical workers; no claim of CI hardware equivalence or authenticated full-site acceptance",
-      "startedAt": "2026-11-01T21:09:02.037Z",
-      "endedAt": "2026-11-01T21:10:29.434Z",
-      "logSha256": "66b58a19ddfc5e1b31ea041727e164b46c0bd142df34b2a8a76ec9d929a7d3b6",
-      "log": "/workspace/dx-p05-recorded-frozen-static-1793567342037.log",
-      "scopedAt": "2026-11-01T21:18:26.715Z",
-      "scopedBoundary": "Captured before the additional API-only supplemental-lineage correction. Reuse covers unchanged web/contracts/domain/UI static outputs; new API lint/types/build/preflight/security checked separately. Original successful whole-source fingerprint matched at capture."
+      "startedAt": "2026-11-01T22:56:56.537Z",
+      "endedAt": "2026-11-01T22:57:04.442Z",
+      "logSha256": "7706c0f10f0fbd4f1ba87498b6c3a544555f654a632d169e2f929361ce4743cb",
+      "log": "/workspace/dx-p06-recorded-final-unit-1793573816537.log",
+      "passed": 131,
+      "failed": 0,
+      "skipped": 0
     },
     {
-      "id": "review-api-static",
-      "kind": "command",
-      "command": "[\"bash\",\"-c\",\"npm run lint && npm run typecheck -w @dx-rework/api && npm run build -w @dx-rework/api && npm run test:preflight && npm run secret:scan\"]",
+      "id": "frozen-core-postgres",
+      "kind": "tests",
+      "command": "[\"flock\",\"/workspace/dx-governance-local-pg-instance.lock\",\"node\",\"/workspace/dx-p06-focused-postgres.mjs\"]",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "fcecd2efacce2562183f9f0d2984da2852fff3ac",
-      "sourceFingerprint": "c9edba90ee92bde7810d55c0c94cf6b246407ddd71a8ece060792daee216e4c3",
+      "testedHead": "61a33d1b774698ae90d4d450fd9d4a45b569fe25",
+      "sourceFingerprint": "18f1bb014d5c14c6f2311a13d3e72743f4b916998cafade1ff47b9fbdde480e8",
+      "inputPaths": [
+        "apps/api/migrations",
+        "apps/api/package.json",
+        "apps/api/scripts",
+        "apps/api/tsconfig.json",
+        "apps/api/src/acceptance-clock",
+        "apps/api/src/access",
+        "apps/api/src/admin-audit-routes.ts",
+        "apps/api/src/admin-audit-service.ts",
+        "apps/api/src/admin-console-routes.ts",
+        "apps/api/src/admin-console-service.ts",
+        "apps/api/src/app.ts",
+        "apps/api/src/assets",
+        "apps/api/src/auth",
+        "apps/api/src/cutting",
+        "apps/api/src/pattern-room",
+        "apps/api/src/platform",
+        "apps/api/src/production-platform",
+        "apps/api/src/receiving",
+        "apps/api/src/reporting",
+        "apps/api/src/rework",
+        "apps/api/src/samples",
+        "apps/api/src/server.ts",
+        "apps/api/src/sourcing/contract-return-clock.ts",
+        "apps/api/src/sourcing/contract-return-state.ts",
+        "apps/api/src/sourcing/current-merchandiser.ts",
+        "apps/api/src/sourcing/factory-settlement-service.ts",
+        "apps/api/src/sourcing/factory-transfer-service.ts",
+        "apps/api/src/sourcing/production-analysis.ts",
+        "apps/api/src/sourcing/production-chase.ts",
+        "apps/api/src/sourcing/production-closure-routes.ts",
+        "apps/api/src/sourcing/production-dashboard-routes.ts",
+        "apps/api/src/sourcing/production-dashboard-service.ts",
+        "apps/api/src/sourcing/production-exclusion-service.ts",
+        "apps/api/src/sourcing/production-reporting-clock.ts",
+        "apps/api/src/sourcing/production-reporting-routes.ts",
+        "apps/api/src/sourcing/production-reporting-service.ts",
+        "apps/api/src/sourcing/production-visibility.ts",
+        "apps/api/src/sourcing/sourcing-analysis.ts",
+        "apps/api/src/sourcing/sourcing-contract-content.ts",
+        "apps/api/src/sourcing/sourcing-contract-history-scope.ts",
+        "apps/api/src/sourcing/sourcing-contract-management-service.ts",
+        "apps/api/src/sourcing/sourcing-contract-pdf.ts",
+        "apps/api/src/sourcing/sourcing-contract-return-service.ts",
+        "apps/api/src/sourcing/sourcing-contract-service.ts",
+        "apps/api/src/sourcing/sourcing-production-service.ts",
+        "apps/api/src/sourcing/sourcing-routes.ts",
+        "apps/api/src/sourcing/sourcing-service.ts",
+        "apps/api/src/sourcing/sourcing-transfer-contract-reconciliation.ts",
+        "apps/api/src/sourcing/sourcing-transfer-contract-todos.ts",
+        "apps/api/src/todos",
+        "apps/api/src/tools",
+        "apps/api/src/wages",
+        "packages",
+        "tests/integration",
+        "tests/helpers",
+        "scripts",
+        "package.json",
+        "package-lock.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts"
+      ],
+      "inputFingerprint": "fdbe3601e99ce8f80bac578d344af529924d2181aeba4c68b6034ad583fac7a9",
+      "sourceState": "Uncommitted candidate: full source fingerprint and declared input fingerprint captured before command; declared inputs reverified after command; testedHead is ancestor, not a claim of a committed tested Head",
+      "context": "Local Node 22.23.4; owned marked PG16 instance/low-privilege test role, explicit canonical workers; no claim of CI hardware equivalence or authenticated full-site acceptance",
+      "startedAt": "2026-11-01T22:54:09.215Z",
+      "endedAt": "2026-11-01T22:55:39.609Z",
+      "logSha256": "bb02d54551619bd7b2b009297caa4a941ec960e30a24adc9d8c73d317d303599",
+      "log": "/workspace/dx-p06-recorded-frozen-affected-postgres-1793573649216.log",
+      "passed": 42,
+      "failed": 0,
+      "skipped": 131,
+      "scopeCapturedAt": "2026-11-01T22:56:40.921Z",
+      "scopeReason": "Same completed command and log, while original full source and declared input fingerprints still exactly match. Excluded only production-closure-service.ts: reporting and receiving dependencies use import type and no instance is supplied in these four suites. Its changed alert selection is separately verified by its own unit/PostgreSQL suites. No remote Gate reuse."
+    },
+    {
+      "id": "frozen-quantity-alert-postgres-cwd",
+      "kind": "tests",
+      "command": "[\"flock\",\"/workspace/dx-governance-local-pg-instance.lock\",\"node\",\"/workspace/dx-p06-focused-postgres.mjs\"]",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "61a33d1b774698ae90d4d450fd9d4a45b569fe25",
+      "sourceFingerprint": "097426fcbe0b8549ed88624c44177cc04a34daa9f669745cfebb82f01c7e2b4c",
       "inputPaths": [
         "apps/api",
         "packages",
+        "tests/integration/production-closure-postgres.test.ts",
+        "tests/helpers",
         "scripts",
-        "tests",
         "package.json",
         "package-lock.json",
-        "tsconfig.base.json",
-        "vitest.config.ts",
         "vitest.business-chain.config.ts",
-        "eslint.config.js"
+        "vitest.config.ts"
       ],
-      "inputFingerprint": "5dc1041b9429d10540c7805296f56baff1b34e3ed35bb467fcdb3f1993c4feac",
+      "inputFingerprint": "0c9e771f8aa97afcb6b4cab9de8cc58d1bc758a328f625c3d4afc943d21d4e9b",
       "sourceState": "Uncommitted candidate: full source fingerprint and declared input fingerprint captured before command; declared inputs reverified after command; testedHead is ancestor, not a claim of a committed tested Head",
       "context": "Local Node 22.23.4; owned marked PG16 instance/low-privilege test role, explicit canonical workers; no claim of CI hardware equivalence or authenticated full-site acceptance",
-      "startedAt": "2026-11-01T21:18:27.959Z",
-      "endedAt": "2026-11-01T21:19:19.763Z",
-      "logSha256": "cfd4504897545cb460b89d1459253cfde8449a4872507b4ef39d5ba567885f93",
-      "log": "/workspace/dx-p05-recorded-review-api-static-1793567907959.log"
+      "startedAt": "2026-11-01T22:56:54.015Z",
+      "endedAt": "2026-11-01T22:57:09.748Z",
+      "logSha256": "50a87735eddbee03f221991b75578b281a098cf813eaf9588ec0cdb1033174e7",
+      "log": "/workspace/dx-p06-recorded-frozen-quantity-alert-postgres-cwd-1793573814015.log",
+      "passed": 17,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "id": "frozen-browser",
+      "kind": "command",
+      "command": "[\"node\",\"tests/acceptance/qc-production-progress-browser.mjs\"]",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "61a33d1b774698ae90d4d450fd9d4a45b569fe25",
+      "sourceFingerprint": "18f1bb014d5c14c6f2311a13d3e72743f4b916998cafade1ff47b9fbdde480e8",
+      "inputPaths": [
+        "apps/web",
+        "packages",
+        "tests/fixtures/qc-production-progress-ui.tsx",
+        "tests/acceptance/qc-production-progress-browser.mjs",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json"
+      ],
+      "inputFingerprint": "c3577d9e9871d990ff202e04be9bddffdd67cd5ea7348a57d1d867fbe460ab67",
+      "sourceState": "Uncommitted candidate: full source fingerprint and declared input fingerprint captured before command; declared inputs reverified after command; testedHead is ancestor, not a claim of a committed tested Head",
+      "context": "Local Node 22.23.4; owned marked PG16 instance/low-privilege test role, explicit canonical workers; no claim of CI hardware equivalence or authenticated full-site acceptance",
+      "startedAt": "2026-11-01T22:52:23.286Z",
+      "endedAt": "2026-11-01T22:52:45.464Z",
+      "logSha256": "6a0b75334a9190ec61cd2836a3ec3730b8e0404a166a1e919d7b3a807de3bc6d",
+      "log": "/workspace/dx-p06-recorded-frozen-browser-1793573543286.log"
+    },
+    {
+      "id": "keyboard-pc",
+      "kind": "command",
+      "command": "[\"node\",\"/workspace/dx-p06-keyboard-only.mjs\"]",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "61a33d1b774698ae90d4d450fd9d4a45b569fe25",
+      "sourceFingerprint": "097426fcbe0b8549ed88624c44177cc04a34daa9f669745cfebb82f01c7e2b4c",
+      "inputPaths": [
+        "apps/web",
+        "packages",
+        "tests/fixtures/qc-production-progress-ui.tsx",
+        "tests/acceptance/qc-production-progress-browser.mjs",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json"
+      ],
+      "inputFingerprint": "c3577d9e9871d990ff202e04be9bddffdd67cd5ea7348a57d1d867fbe460ab67",
+      "sourceState": "Uncommitted candidate: full source fingerprint and declared input fingerprint captured before command; declared inputs reverified after command; testedHead is ancestor, not a claim of a committed tested Head",
+      "context": "Local Node 22.23.4; owned marked PG16 instance/low-privilege test role, explicit canonical workers; no claim of CI hardware equivalence or authenticated full-site acceptance",
+      "startedAt": "2026-11-01T22:59:20.405Z",
+      "endedAt": "2026-11-01T22:59:23.084Z",
+      "logSha256": "d0d61d64056ff2407c07124a8ed8d330c5f4eca4cf430b9338f0e0ffb3f37805",
+      "log": "/workspace/dx-p06-recorded-keyboard-pc-1793573960406.log"
     }
   ],
-  "boundary": "Current17-case native/old targeted checks plus reused unchanged UI/static surfaces; earlier165-case success belongs to fcecd2ef, not this later API correction; not a claim that a local or remote final Full Gate has passed. Earlier broad failures retained in execution narrative, not converted to passed checks."
+  "scopeNote": "Local fixed-source evidence, not final GitHub Gate.42 focused PostgreSQL checks include27 notification cases +15 native/affected-source cases,131 intentional skips in the source file; separate17 quantity/receiving cases and131 unit cases. Full gate must execute every applicable suite and upgrade/restore phase."
 }

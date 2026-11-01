@@ -1,3 +1,4 @@
+import {assertCurrentFactoryTask} from "./retired-factory-nodes.js";
 import { randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
 import type { TrustedActorContext } from "../tools/repositories.js";
@@ -21,6 +22,7 @@ export type DigitalTaskKind = keyof typeof DIGITAL_TASK_ROLES;
 // Internal transactional adapter: no public endpoint can invent a task to obtain access.
 export async function createDigitalTaskAccess(client: PoolClient, actor: TrustedActorContext, input: { taskId?: string; orderId?: string; sourceId?: string; kind: DigitalTaskKind; assigneeId: string | null }) {
   const policy = new DigitalProductionAccessPolicy(client);
+  assertCurrentFactoryTask(input.kind);
   const role = DIGITAL_TASK_ROLES[input.kind];
   if (!role || Boolean(input.orderId) === Boolean(input.sourceId)) digitalForbidden();
   if (input.assigneeId && !await policy.activeRole(input.assigneeId, role)) digitalForbidden();
@@ -31,7 +33,8 @@ export async function createDigitalTaskAccess(client: PoolClient, actor: Trusted
 }
 export async function reassignDigitalTask(client: PoolClient, actor: TrustedActorContext, taskId: string, assigneeId: string) {
   const task = (await client.query("SELECT * FROM digital_production_task_access WHERE task_id=$1 FOR UPDATE", [taskId])).rows[0] ?? digitalNotFound();
-  if (["sourcing_preparation","bulk_cutting_external","factory_material_count","bulk_ship_sample"].includes(task.task_kind) && !(await client.query("SELECT 1 FROM digital_production_orders WHERE production_order_id=$1 AND primary_merchandiser_id=$2", [task.production_order_id, assigneeId])).rowCount) digitalForbidden();
+  assertCurrentFactoryTask(task.task_kind);
+  if (["sourcing_preparation","bulk_cutting_external","bulk_ship_sample"].includes(task.task_kind) && !(await client.query("SELECT 1 FROM digital_production_orders WHERE production_order_id=$1 AND primary_merchandiser_id=$2", [task.production_order_id, assigneeId])).rowCount) digitalForbidden();
   const development = task.task_kind.startsWith("development_") || task.task_kind === "bulk_pattern";
   if (!isDigitalLeader(actor) && !(development && (isDigitalTechnicalManager(actor) || actor.actorRoles.includes("development_clerk")))) digitalForbidden();
   if (!await new DigitalProductionAccessPolicy(client).activeRole(assigneeId, task.required_role)) digitalForbidden();

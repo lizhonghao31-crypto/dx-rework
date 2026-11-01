@@ -425,6 +425,7 @@ function AppRoutes() {
   if (path.startsWith("/ui/production-dashboard")) {
     return <AuthGate requiredAnyOf={[
       { requiredRole: "production_reporter", requiredCapability: "production-reporting" },
+      { requiredRole: "quality_control", requiredCapability: "qc-production-progress" },
       { requiredRole: "owner_group", requiredCapability: "sourcing:view" },
       { requiredRole: "production_management", requiredCapability: "sourcing:view" },
       { requiredRole: "order_merchandiser", requiredCapability: "sourcing:view" },
@@ -435,6 +436,7 @@ function AppRoutes() {
   if (path.startsWith("/ui/production-reporting")) {
     return <AuthGate requiredAnyOf={[
       { requiredRole: "production_reporter", requiredCapability: "production-reporting" },
+      { requiredRole: "quality_control", requiredCapability: "qc-production-progress" },
       { requiredRole: "owner_group", requiredCapability: "sourcing:view" },
       { requiredRole: "production_management", requiredCapability: "sourcing:view" },
       { requiredRole: "order_merchandiser", requiredCapability: "sourcing:view" },

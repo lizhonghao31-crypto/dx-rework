@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./qc-production-progress": { "types": "./src/qc-production-progress.ts", "import": "./dist/qc-production-progress.js" },
     "./production-readiness": { "types": "./src/production-readiness.ts", "import": "./dist/production-readiness.js" },
     "./short-commitment": { "types": "./src/short-commitment.ts", "import": "./dist/short-commitment.js" },
     "./series-calendar": { "types": "./src/series-calendar.ts", "import": "./dist/series-calendar.js" },

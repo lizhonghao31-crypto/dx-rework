@@ -7,7 +7,7 @@ describe('original cutting and factory task destinations',()=>{
  it('retains stable PO and actual action without accepting ambiguous or invalid targets',()=>{
   expect(factoryTaskTarget(`?factory=${id}&factoryAction=qc&line=${id}`)).toEqual({action:'qc',lineId:id,error:null});
   for(const search of ['?factoryAction=qc&factoryAction=dispatch','?factoryAction=finance','?line=unknown',`?line=${id}&line=${id}`])expect(factoryTaskTarget(search).error).toBeTruthy();
-  expect(factoryTaskAction('warehouse_dispatch')).toBe('dispatch');expect(factoryTaskAction('bulk_qc')).toBe('qc');expect(factoryTaskAction('process_logistics')).toBe('logistics');expect(factoryTaskAction('factory_material_count')).toBe('followup');
+  expect(factoryTaskAction('warehouse_dispatch')).toBe('dispatch');expect(factoryTaskAction('bulk_qc')).toBe('qc');expect(factoryTaskAction('process_logistics')).toBe('logistics');expect(factoryTaskAction('factory_material_count')).toBe('overview');
  });
  it('resolves production PO by persisted child mapping and refuses guesses',()=>{const dates=[{lineId:id,position:2,poNumber:'TEST',color:'黑',customerWarehouseArrivalDate:null,factoryDeliveryDate:null,sampleTargetDate:null}];expect(productionLineTarget(`?line=${id}`,dates).position).toBe(2);expect(productionLineTarget(`?line=${id}`,undefined).error).toBeTruthy();expect(productionLineTarget(`?line=${id}&line=${id}`,dates).error).toBeTruthy();});
  it('returns cutting records to the exact mother while preserving filtered original lists and rejecting external returns',()=>{

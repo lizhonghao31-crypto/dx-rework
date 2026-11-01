@@ -1,3 +1,4 @@
+import {startQcTrackingFromDispatch} from './qc-production-progress-service.js';
 import {businessNow,ContextBusinessClock} from '../acceptance-clock/business-time.js';
 import {factoryReturnLogistics} from './factory-return-logistics.js';
 import {factoryProductionFacts,factoryProductionScopes} from './factory-production-facts.js';
@@ -27,7 +28,7 @@ export class FactoryFlowService{
   const gate=await new BulkPreparationService(this.database).gates(db,id);
   const route=(await db.query('SELECT route.*,completion.completed_at AS cutting_completed_at FROM digital_factory_routes route JOIN digital_bulk_cutting_completions completion USING(preparation_id) WHERE route.production_order_id=$1',[id])).rows[0];
   const facts=route?(await db.query('SELECT f.*,u.display_name AS actor_name FROM digital_factory_facts f JOIN app_users u ON u.id=f.actor_id WHERE preparation_id=$1 ORDER BY sequence',[route.preparation_id])).rows:[];
-  const tasks=(await db.query("SELECT t.*,a.task_kind,a.assignee_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.production_order_id=$1 AND (t.route_instance_id=$2 OR a.task_kind='bulk_ship_sample') AND a.task_kind IN ('process_logistics','bulk_qc','factory_production_qc','warehouse_dispatch','factory_material_count','bulk_ship_sample') ORDER BY t.created_at",[id,route?.preparation_id??null])).rows;
+  const tasks=(await db.query("SELECT t.*,a.task_kind,a.assignee_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.production_order_id=$1 AND (t.route_instance_id=$2 OR a.task_kind='bulk_ship_sample') AND a.task_kind IN ('process_logistics','bulk_qc','factory_production_qc','warehouse_dispatch','bulk_ship_sample') ORDER BY t.created_at",[id,route?.preparation_id??null])).rows;
   const lines=(await db.query('SELECT line_id,po_number,color,customer_warehouse_arrival_date::text AS customer_date,(customer_warehouse_arrival_date-10)::text AS sample_date FROM digital_production_po_lines WHERE production_order_id=$1 ORDER BY position',[id])).rows;
   const checks=route?(await db.query('SELECT q.*,u.display_name AS checker FROM digital_factory_qc q JOIN app_users u ON u.id=q.checked_by WHERE preparation_id=$1 ORDER BY q.sequence',[route.preparation_id])).rows:[];
   const lastMovement=facts.filter(f=>['工艺发出','工艺回仓'].includes(f.kind)).at(-1),returned=lastMovement?.kind==='工艺回仓'?lastMovement:null;
@@ -51,9 +52,9 @@ export class FactoryFlowService{
    if(!['无','印花','绣花','印绣花'].includes(craft))fail('请在有效制单明确大货印绣路线');
    await db.query('INSERT INTO digital_factory_routes(preparation_id,production_order_id,secondary_craft,workflow_version) VALUES($1,$2,$3,$4)',[completion.preparation_id,id,craft,s.gate.parallel?2:1]);
    const warehouse=(await db.query('SELECT warehouse_worker_id FROM digital_bulk_dispatch WHERE production_order_id=$1',[id])).rows[0]?.warehouse_worker_id;
-   for(const kind of [...(craft==='无'?[]:['process_logistics','bulk_qc'] as const),'warehouse_dispatch','factory_material_count','bulk_ship_sample'] as const){
+   for(const kind of [...(craft==='无'?[]:['process_logistics','bulk_qc'] as const),'warehouse_dispatch','bulk_ship_sample'] as const){
     if(kind==='bulk_ship_sample'&&s.tasks.some(t=>t.task_kind==='bulk_ship_sample'))continue;
-    let assignee=kind==='warehouse_dispatch'?warehouse:['factory_material_count','bulk_ship_sample'].includes(kind)?s.gate.order.primary_merchandiser_id:null;
+    let assignee=kind==='warehouse_dispatch'?warehouse:kind==='bulk_ship_sample'?s.gate.order.primary_merchandiser_id:null;
     const role=kind==='warehouse_dispatch'?'warehouse_receiver':'order_merchandiser';
     if(assignee&&!await new DigitalProductionAccessPolicy(db).activeRole(assignee,role))assignee=null;
     const task=await this.tasks().createWithClient(db,actor,{resource:{kind:'order',id},kind,routeId:completion.preparation_id,routeVersion:s.gate.instruction.version,occurrence:1,assigneeId:assignee,conditions:kind==='bulk_qc'?['handover_received']:[]});
@@ -72,7 +73,7 @@ export class FactoryFlowService{
  private async authorized(db:DB,actor:TrustedActorContext,s:Awaited<ReturnType<FactoryFlowService['state']>>,kind:string){
   const task=s.tasks.find(t=>t.task_kind===kind);if(!task)return false;
   if(actor.actorRoles.includes(ROOT))return true;
-  if(['factory_material_count','bulk_ship_sample'].includes(kind)&&s.gate.order.primary_merchandiser_id!==actor.actorId)return false;
+  if(kind==='bulk_ship_sample'&&s.gate.order.primary_merchandiser_id!==actor.actorId)return false;
   return new DigitalProductionAccessPolicy(db).allowed(actor,'task',task.task_id,'execute');
  }
  async read(actor:TrustedActorContext,id:string,db:DB=this.database):Promise<FactoryFlowSheet>{
@@ -82,7 +83,7 @@ export class FactoryFlowService{
   const tasks=await this.tasks().readAuthorized(actor,s.tasks.map(t=>t.task_id),db);
   const batchTiming=s.batch?await factoryBatchTiming(db,id):null;
   const now=new Date((await new ContextBusinessClock(this.database).read({kind:'order',id})).now);
-  return {returnLogistics:await factoryReturnLogistics(db,id,now),productionInspectionHistory:s.production.history,productionChecks:s.production.checks,canProductionQc:await this.authorized(db,actor,s,'factory_production_qc'),sampleAdvanceDays:sampleTargets.days,canRecordShipSample:actor.actorRoles.includes(ROOT)||s.gate.order.primary_merchandiser_id===actor.actorId&&await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,'order_merchandiser'),shipSamples:await shipSampleFacts(db,id),...(batchTiming?{batchWindows:batchTiming.windows}:{}),batchMode:Boolean(s.batch),canPartialDispatch:s.batch?.canDispatch??s.allQc,...(s.batch?{batches:s.batch.batches,batchTotals:s.batch.totals,pendingSends:s.batch.pendingSends}:{}),currentReturn:s.returned?{factId:s.returned.fact_id,occurredAt:iso(s.returned.occurred_at),recordedAt:iso(s.returned.recorded_at)!}:null,orderId:id,preparationId:s.route?.preparation_id??null,revision:s.revision,secondaryCraft:s.route?.secondary_craft??null,reasons:[...s.gate.reasons,...(s.batch?.quantityConflict?['已发数量超过当前实裁，请核对原数量更正记录']:[]),...(!s.route?['全部PO实裁尚未完成']:[]),...(s.route&&!s.dispatched&&s.contract?.status!=='ready'?['当前原合同尚未生成，发厂前请在原合同页补齐资料']:[])],allCut:Boolean(s.route),allQc:s.allQc,inTransit:s.batch?s.batch.pendingSends.some(b=>b.rows.some(l=>l.remaining>0)):s.lastMovement?.kind==='工艺发出',dispatched:Boolean(s.dispatched),supplierId:s.gate.approval?.supplier_id??null,supplierName:s.gate.approval?.supplier_name_snapshot??null,productionId:link?.child_id??null,sampleTargetDate,canManage:isDigitalLeader(actor),canLogistics:await this.authorized(db,actor,s,'process_logistics'),canQc:await this.authorized(db,actor,s,'bulk_qc'),canWarehouse:await this.authorized(db,actor,s,'warehouse_dispatch'),canFollowup:await this.authorized(db,actor,s,'factory_material_count'),tasks,lines:s.latest.map(({line,check})=>({lineId:line.line_id,poNumber:line.po_number,color:line.color,customerWarehouseArrivalDate:line.customer_date,sampleTargetDate:sampleTargets.lines.find(l=>l.lineId===line.line_id)?.targetDate??null,result:check?.result??null,problem:check?.problem??'',treatment:check?.treatment??''})),facts:s.facts.map(f=>({factId:f.fact_id,kind:f.kind,occurredAt:iso(f.occurred_at),recordedAt:iso(f.recorded_at)!,actorName:f.actor_name,payload:f.payload})),checks:s.checks.map(c=>({checkId:c.check_id,lineId:c.line_id,returnFactId:c.return_fact_id,result:c.result,problem:c.problem,treatment:c.treatment,attachmentIds:c.attachment_ids,checkedBy:c.checker,checkedAt:iso(c.checked_at)!}))};
+  return {returnLogistics:await factoryReturnLogistics(db,id,now),productionInspectionHistory:s.production.history,productionChecks:s.production.checks,canProductionQc:await this.authorized(db,actor,s,'factory_production_qc'),sampleAdvanceDays:sampleTargets.days,canRecordShipSample:actor.actorRoles.includes(ROOT)||s.gate.order.primary_merchandiser_id===actor.actorId&&await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,'order_merchandiser'),shipSamples:await shipSampleFacts(db,id),...(batchTiming?{batchWindows:batchTiming.windows}:{}),batchMode:Boolean(s.batch),canPartialDispatch:s.batch?.canDispatch??s.allQc,...(s.batch?{batches:s.batch.batches,batchTotals:s.batch.totals,pendingSends:s.batch.pendingSends}:{}),currentReturn:s.returned?{factId:s.returned.fact_id,occurredAt:iso(s.returned.occurred_at),recordedAt:iso(s.returned.recorded_at)!}:null,orderId:id,preparationId:s.route?.preparation_id??null,revision:s.revision,secondaryCraft:s.route?.secondary_craft??null,reasons:[...s.gate.reasons,...(s.batch?.quantityConflict?['已发数量超过当前实裁，请核对原数量更正记录']:[]),...(!s.route?['全部PO实裁尚未完成']:[]),...(s.route&&!s.dispatched&&s.contract?.status!=='ready'?['当前原合同尚未生成，发厂前请在原合同页补齐资料']:[])],allCut:Boolean(s.route),allQc:s.allQc,inTransit:s.batch?s.batch.pendingSends.some(b=>b.rows.some(l=>l.remaining>0)):s.lastMovement?.kind==='工艺发出',dispatched:Boolean(s.dispatched),supplierId:s.gate.approval?.supplier_id??null,supplierName:s.gate.approval?.supplier_name_snapshot??null,productionId:link?.child_id??null,sampleTargetDate,canManage:isDigitalLeader(actor),canLogistics:await this.authorized(db,actor,s,'process_logistics'),canQc:await this.authorized(db,actor,s,'bulk_qc'),canWarehouse:await this.authorized(db,actor,s,'warehouse_dispatch'),canFollowup:false,tasks,lines:s.latest.map(({line,check})=>({lineId:line.line_id,poNumber:line.po_number,color:line.color,customerWarehouseArrivalDate:line.customer_date,sampleTargetDate:sampleTargets.lines.find(l=>l.lineId===line.line_id)?.targetDate??null,result:check?.result??null,problem:check?.problem??'',treatment:check?.treatment??''})),facts:s.facts.map(f=>({factId:f.fact_id,kind:f.kind,occurredAt:iso(f.occurred_at),recordedAt:iso(f.recorded_at)!,actorName:f.actor_name,payload:f.payload})),checks:s.checks.map(c=>({checkId:c.check_id,lineId:c.line_id,returnFactId:c.return_fact_id,result:c.result,problem:c.problem,treatment:c.treatment,attachmentIds:c.attachment_ids,checkedBy:c.checker,checkedAt:iso(c.checked_at)!}))};
  }
  private async command(actor:TrustedActorContext,id:string,action:string,input:{expectedRevision:number},key:string,work:(db:PoolClient,s:Awaited<ReturnType<FactoryFlowService['state']>>)=>Promise<void>){
   if(!/^[A-Za-z0-9._:-]{1,128}$/.test(key))fail('缺少有效操作标识');const db=await this.database.connect();try{
@@ -138,6 +139,7 @@ export class FactoryFlowService{
   const factId=await this.fact(db,actor,s.route.preparation_id,'仓库实际发厂',input.occurredAt,{supplierId:input.supplierId,note:input.note});
   await new SourcingProductionService(this.database).dispatchDigitalWithClient(db,actor,id,factId);
   await this.ensureProductionQc(db,actor,id,s.route.preparation_id);
+  await startQcTrackingFromDispatch(db,actor,id,factId);
   await this.tasks().completeFactoryDispatchFactsWithClient(db,actor,id,factId);
  });}
  private scope(input:FactoryScope[]|undefined,limits:Array<{lineId:string;remaining:number}>):FactoryScope[]{
@@ -200,6 +202,7 @@ export class FactoryFlowService{
   const factId=await this.fact(db,actor,s.route.preparation_id,'仓库实际发厂',input.occurredAt,{supplierId:input.supplierId,note:input.note,lines,...(batch?{returnFactId:batch.factId,releaseCheckIds:lines.map(l=>({lineId:l.lineId,checkId:s.checks.filter(c=>c.return_fact_id===batch.factId&&c.line_id===l.lineId).at(-1)!.check_id}))}:{})});
   await new SourcingProductionService(this.database).dispatchDigitalWithClient(db,actor,id,factId);
   await this.ensureProductionQc(db,actor,id,s.route.preparation_id);
+  await startQcTrackingFromDispatch(db,actor,id,factId);
   const after=await this.state(db,id);if(after.batch!.complete)await this.tasks().completeFactoryDispatchFactsWithClient(db,actor,id,factId);
  }
  private async ensureProductionQc(db:PoolClient,actor:TrustedActorContext,id:string,routeId:string){
@@ -229,21 +232,13 @@ export class FactoryFlowService{
    await this.tasks().completeWithClient(db,actor,task.task_id,{occurredAt:completedAt,note:input.note},`factory-qc:${eventId}`);
   }
  });}
- async followup(actor:TrustedActorContext,id:string,input:FactoryFollowup,key:string){if(input.kind==='船样寄出'){await new ShipSampleService(this.database).record(actor,id,input,key);return this.read(actor,id);}return this.command(actor,id,'followup',input,key,async(db,s)=>{
-  const kind=input.kind==='船样寄出'?'bulk_ship_sample':'factory_material_count';if(!await this.authorized(db,actor,s,kind))digitalForbidden();this.checkTime(input.occurredAt);
-  const prior=s.facts.filter(f=>f.kind===input.kind).at(-1),task=s.tasks.find(t=>t.task_kind===kind);
-  if(prior&&(input.kind!=='工厂到料'||prior.occurred_at))fail('已有该实际事实，不能重复改写');
-  if(input.kind!=='工厂到料'&&task?.state!=='ready')fail(await this.taskBlockReason(db,actor,s,kind));
-  if(input.kind==='船样寄出'&&(!input.occurredAt||!input.trackingNumber))fail('请填写真实寄出日期和快递单号');
-  if(input.kind==='到料清点'&&(!input.occurredAt||!input.note.trim()))fail('请填写真实清点时间和清点结果');
-  const arrived=s.facts.filter(f=>f.kind==='工厂到料'&&f.occurred_at).at(-1);if(input.kind==='到料清点'){if(!arrived)fail('实际到厂时间未确认，不能完成48小时清点；请主跟单先在本页工厂到料登记实际收到时间，再登记清点结果');this.checkTime(input.occurredAt,arrived.occurred_at);}
-  await this.fact(db,actor,s.route.preparation_id,input.kind,input.occurredAt,{trackingNumber:input.trackingNumber,note:input.note});
-  if(input.kind==='工厂到料'&&input.occurredAt)await this.tasks().setConditionWithClient(db,actor,task.task_id,'factory_arrived',true,input.occurredAt,'主跟单确认工厂实际收到面辅料');
-  if(input.kind!=='工厂到料'){
-   await this.tasks().setConditionWithClient(db,actor,task.task_id,'business_recorded',true,input.occurredAt,input.note);
-   await this.tasks().completeWithClient(db,actor,task.task_id,{note:input.note,occurredAt:input.occurredAt},`factory:${s.route.preparation_id}:${kind}`);
+ async followup(actor:TrustedActorContext,id:string,input:FactoryFollowup,key:string){
+  if(input.kind!=='船样寄出'){
+   await new DigitalProductionAccessPolicy(this.database).assert(actor,'order',id,'technical');
+   throw new ApplicationError('FACTORY_RECEIPT_RETIRED','工厂到料确认和到料清点已停用，无需填报；原历史保留，船样仍在原入口办理',410);
   }
- });}
+  await new ShipSampleService(this.database).record(actor,id,input,key);return this.read(actor,id);
+ }
  async authorizeUpload(actor:TrustedActorContext,id:string){
   await new DigitalProductionAccessPolicy(this.database).assert(actor,'order',id,'technical');const s=await this.state(this.database,id);
   const hasReturnedScope=s.batch?s.batch.batches.some(batch=>batch.rows.some(row=>row.available>0)):Boolean(s.returned);

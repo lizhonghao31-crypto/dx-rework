@@ -2,7 +2,7 @@ import type { ProductionDashboardItem, ProductionDashboardEvent } from "@dx-rewo
 export const productionStatusLabels={in_production:"生产中",production_completed:"生产完成",shipped:"已发货"} as const;
 export const progressLabels={pending_first_report:"待首次上报",normal:"进度正常",behind:"进度落后",high_risk:"高风险",stale:"未更新",completed:"已完成"} as const;
 export function progressText(progress:ProductionDashboardItem["progress"]) {
-  return progress.progressState==="stale"?`${progress.daysWithoutUpdate}天没更新`:progressLabels[progress.progressState];
+  return progress.qcObservation&&progress.progressState==="stale"?(progress.qcObservation.state==="escalated"?"QC进度72小时未更新":"QC进度48小时未更新"):progress.progressState==="stale"?`${progress.daysWithoutUpdate}天没更新`:progressLabels[progress.progressState];
 }
 export function changedDashboardOrders(before:ProductionDashboardItem[],after:ProductionDashboardItem[]):string[] {
   const prior=new Map(before.map(item=>[productionDashboardKey(item.order),JSON.stringify(item)]));

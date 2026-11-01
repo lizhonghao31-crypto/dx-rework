@@ -22,7 +22,7 @@ export const JOURNEY_NODES: ReadonlyArray<{key:string;label:string;stage:Journey
   ...Object.entries({customer_sample:"客户样板确认",budget:"预算",sourcing_preparation:"跟单发起外发",sourcing_ie:"IE报价",sourcing_director:"供应链总监确认",sourcing_owner:"老板批准",production_instruction:"大货制单",bulk_pattern:"大货纸样",bulk_marker:"唛架",warehouse_preshrink:"预缩/无需预缩",cutting_gate:"开裁条件汇合"}).map(([key,label])=>({key,label,stage:"preparation" as const,count:["bulk_pattern","warehouse_preshrink"].includes(key)})),
   {key:"bulk_cutting",label:"本厂/外厂整款开裁",stage:"cutting",count:true},
   ...Object.entries({process_logistics:"二次工艺收发",bulk_qc:"工艺QC/问题处理/复查",warehouse_dispatch:"仓库实际发加工厂"}).map(([key,label])=>({key,label,stage:"post_cutting" as const,count:true})),
-  ...Object.entries({factory_arrival:"到厂/到料确认",factory_material_count:"到料清点",production_reporting:"实际生产填报",factory_production_qc:"工厂成衣QC检查",bulk_ship_sample:"船样"}).map(([key,label])=>({key,label,stage:"production" as const,count:["factory_material_count","bulk_ship_sample","factory_production_qc"].includes(key)})),
+  ...Object.entries({production_reporting:"QC生产进度与现场照片",factory_production_qc:"工厂成衣QC检查",bulk_ship_sample:"船样"}).map(([key,label])=>({key,label,stage:"production" as const,count:["bulk_ship_sample","factory_production_qc"].includes(key)})),
   ...Object.entries({receipts:"回货/实收",receiving_inspection:"回货质检",rework:"本厂做尾/QC返工",rework_review:"复核",responsibility:"责任相关",packing:"装箱",quantity_difference:"数量差异",special_closure:"特殊结案"}).map(([key,label])=>({key,label,stage:"receiving" as const,count:["receipts","packing"].includes(key)})),
 ];
 

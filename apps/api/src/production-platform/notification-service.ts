@@ -1,3 +1,4 @@
+import {qcProgressNotices,qcNoticesAsTodos} from './qc-progress-todos.js';
 import {preparationWindowTodos,preparationMaterialsTodos,preparationSupplement} from './preparation-todos.js';
 import {effectiveSourcingDueSql} from './sla-sourcing-deadline-sql.js';
 import {slaNotificationWindow} from './sla-notification-window.js';
@@ -38,7 +39,7 @@ const TASKS = `SELECT t.*,a.assignee_id,a.required_role,a.task_kind,a.production
   coalesce(o.created_by,s.created_by) AS designer_id,o.primary_merchandiser_id,
   o.design_style_no AS order_style_no,s.design_style_no AS source_style_no,
   p.label,d.revision_id,d.entered_at,to_jsonb(d)->'sla_basis' AS sla_basis,d.warning_at,d.due_at,NULLIF(to_jsonb(d)->'sla_basis','null'::jsonb) IS NOT NULL AS source_sla,coalesce((to_jsonb(d)->'sla_basis'->>'exclusive')::boolean,false) AS deadline_exclusive,coalesce(l.state,'active') AS lifecycle
-  FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id)
+  FROM digital_production_tasks t JOIN digital_production_task_access a ON a.task_id=t.task_id AND a.task_kind<>'factory_material_count'
   LEFT JOIN digital_production_orders o USING(production_order_id)
   LEFT JOIN digital_production_sources s ON s.source_id=a.source_id
   LEFT JOIN digital_production_resource_lifecycle l ON l.resource_kind=CASE WHEN a.production_order_id IS NULL THEN 'source' ELSE 'order' END AND l.resource_id=coalesce(a.production_order_id,a.source_id)
@@ -147,6 +148,7 @@ export class DigitalProductionNotificationService {
           await this.notice(client,{key:prior?.source_key??`deadline:${task.task_id}:${task.revision_id}:${kind}`,taskId:task.task_id,kind,revision:task.revision_id},(await this.recipients(client,task,kind,people)).map(p=>p.actorId));
         }
       }
+      for(const notice of await qcProgressNotices(client,people,undefined,this.database)){if(await acceptanceIncludesNative(this.database,notice.taskId))await this.notice(client,{key:notice.key,taskId:notice.taskId,kind:'qc_progress'},notice.recipients);}
       await this.projectChildren(client);
     });
   }
@@ -183,6 +185,7 @@ export class DigitalProductionNotificationService {
     const unified=await arrangementsAvailable(this.database);
     const result:TodoResponse[]=unified?[...await arrangementTodos(this.database,actor),...await fabricDecisionTodos(this.database,actor)]:[];
     result.push(...await preparationWindowTodos(this.database,actor),...await preparationMaterialsTodos(this.database,actor),...await bulkFabricDecisionTodos(this.database,actor),...await factoryProductionQcTodos(this.database,actor,new ContextBusinessClock(this.database)),...await garmentQualityTodos(this.database,actor,new ContextBusinessClock(this.database)));
+    result.push(...qcNoticesAsTodos(await qcProgressNotices(this.database,people),actor));
     for(const task of tasks){
       const missing=!people.some(p=>p.actorId===task.assignee_id&&hasRequiredWarehouseRole(p.actorRoles,task.required_role));
       if(unified&&missing&&task.source_id&&(DEVELOPMENT_ARRANGEABLE_KINDS as readonly string[]).includes(task.task_kind))continue;
@@ -205,8 +208,15 @@ export class DigitalProductionNotificationService {
     }
     return applyTodoReadState(this.database,actor,result);
   }
-  private async render(database:Database,actor:TrustedActorContext,event:{instruction_order_id?:string|null;development_source_id?:string|null;event_id:string;task_id:string|null;todo_id:string|null;event_kind:string;deadline_revision_id:string|null;created_at:Date},people:TrustedActorContext[],includeContext=true):Promise<DigitalNotification|null> {
+  private async render(database:Database,actor:TrustedActorContext,event:{instruction_order_id?:string|null;development_source_id?:string|null;event_id:string;task_id:string|null;todo_id:string|null;event_kind:string;deadline_revision_id:string|null;created_at:Date;source_key?:string},people:TrustedActorContext[],includeContext=true):Promise<DigitalNotification|null> {
     if(!people.some(p=>p.actorId===actor.actorId))return null;
+    if(event.event_kind==='qc_progress'){
+      const parent=(await database.query('SELECT production_order_id FROM digital_production_task_access WHERE task_id=$1',[event.task_id])).rows[0];
+      if(!parent)return null;
+      const notice=(await qcProgressNotices(database,people,parent.production_order_id,this.database)).find(n=>n.key===event.source_key&&n.recipients.includes(actor.actorId));
+      if(!notice)return null;
+      return {eventId:event.event_id,title:notice.title,actionable:true,route:notice.route,createdAt:iso(event.created_at),...(includeContext?{context:{styleNo:notice.styleNo,orderId:notice.orderId,colors:[],poNumbers:[]}}:{})};
+    }
     let title:string,actionable:boolean,route:TodoRouteDescriptor;
     let contextTarget:{kind:"source"|"order";id:string}|null=null;
     let ownDevelopmentTask:Task|null=null;

@@ -1,3 +1,4 @@
+import {readQcExecutionEvidence} from '../production-platform/qc-progress-evidence.js';
 import { addProductionChase, readProductionDays } from "./production-chase.js";
 import { ProductionAnalysisQuerySchema,poDeliveryRisks } from "@dx-rework/contracts";
 import { readProductionAnalysis } from "./production-analysis.js";
@@ -9,7 +10,7 @@ import { ProductionDashboardQuerySchema, ProductionDashboardSchema, ProductionDa
 import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
 import { selectFactoryProduction, toOrder, type ProductionRow } from "./sourcing-production-service.js";
-import { type ProductionReportingService, canReadProductionReporting, factoryProductionVisibility, productionVisibilityArgs } from "./production-reporting-service.js";
+import { type ProductionReportingService, canReadProductionReporting, factoryProductionVisibilityFor, productionVisibilityArgs } from "./production-reporting-service.js";
 
 type FactsRow = {id:string;status:ProductionProgressFacts["status"];quantity:number;completed_quantity:number;first_on:string|null;due:string|null;last_at:Date|null;completed_on:string|null};
 const iso = (date:Date|string) => new Date(date).toISOString();
@@ -20,14 +21,14 @@ export function selectDashboardPage(items:ProductionDashboardItem[],input:Produc
   const q=input.q?.trim().toLocaleLowerCase()??"";
   const filtered=items.filter(({order,progress:p,chase,deliveryRisks})=>(!input.supplierId||order.supplierId===input.supplierId)
     &&(!input.status||order.status===input.status)&&(!input.progressState||p.progressState===input.progressState)
-    &&(!input.risk||(input.risk==="attention" ? p.attention||chase?.deliveryPressure : input.risk==="stale" ? p.daysWithoutUpdate!==null&&p.daysWithoutUpdate>=2 : input.risk==='po_deadline'?Boolean(deliveryRisks?.length):chase?.deliveryPressure&&chase.dueThisWeek))
+    &&(!input.risk||(input.risk==="attention" ? p.attention||chase?.deliveryPressure : input.risk==="stale" ? p.progressState==="stale" : input.risk==='po_deadline'?Boolean(deliveryRisks?.length):chase?.deliveryPressure&&chase.dueThisWeek))
     &&(!q||[order.supplierName,...order.lines.map(l=>l.styleNo)].some(s=>s.toLocaleLowerCase().includes(q))));
   filtered.sort((a,b)=>productionProgressRank(a.progress.progressState)-productionProgressRank(b.progress.progressState)
     ||(a.order.deliveryDate??"9999").localeCompare(b.order.deliveryDate??"9999")||a.order.productionOrderId.localeCompare(b.order.productionOrderId));
   const page=input.page??1;
   return {filtered,items:filtered.slice((page-1)*15,page*15),page,pageSize:15 as const,totalCount:filtered.length,
     chaseCounts:{attention:filtered.filter(i=>i.progress.attention||i.chase?.deliveryPressure).length,
-      stale:filtered.filter(i=>i.progress.daysWithoutUpdate!==null&&i.progress.daysWithoutUpdate>=2).length,
+      stale:filtered.filter(i=>i.progress.progressState==="stale").length,
       duePressure:filtered.filter(i=>i.chase?.deliveryPressure&&i.chase.dueThisWeek).length},
     counts:{inProduction:filtered.filter(i=>i.order.status==="in_production").length,completed:filtered.filter(i=>i.order.status==="production_completed").length,
       shipped:filtered.filter(i=>i.order.status==="shipped").length,attention:filtered.filter(i=>i.progress.attention).length}};
@@ -67,7 +68,14 @@ export async function readFactoryProductionProgressFacts(client:PoolClient,ids:s
    FROM (SELECT DISTINCT ON(root_report_id) quantity,business_date,created_at FROM sourcing_production_reports report WHERE report.production_order_id=production.production_order_id
     AND report.factory_decision_id IS NOT DISTINCT FROM production.factory_decision_id AND report.created_at<=$2 ORDER BY root_report_id,revision DESC) effective) reports ON true
   WHERE production.production_order_id=ANY($1::uuid[]) AND ${productionNotExcluded}`,[ids,asOf]);
- return new Map(result.rows.map(row=>[executionKey(row.id,row.factory_decision_id),progress(row,asOf)]));
+ const qc=new Map<string,NonNullable<ProductionProgressFacts['qcObservation']>>();
+ if(result.rows.length&&(await client.query("SELECT to_regclass('digital_qc_tracking_starts') AS relation")).rows[0]?.relation){
+  const masters=(await client.query("SELECT production_order_id,child_id FROM digital_production_child_links WHERE module='production' AND child_id=ANY($1::uuid[])",[ids])).rows;
+  for(const master of masters)for(const e of await readQcExecutionEvidence(client,master.production_order_id,asOf)){
+   if(!e.tracking)continue;const c=e.clock;qc.set(executionKey(e.group.rows[0].production_order_id,e.group.rows[0].factory_decision_id),{state:c.state,anchor:c.anchor,remindAt:c.remindAt,escalateAt:c.escalateAt});
+  }
+ }
+ return new Map(result.rows.map(row=>{const key=executionKey(row.id,row.factory_decision_id),observation=qc.get(key);return [key,observation?calculateProductionProgress({status:row.status,quantity:row.quantity,completedQuantity:row.completed_quantity,firstReportedOn:row.first_on,deliveryDate:row.due,lastUpdatedAt:row.last_at?iso(row.last_at):null,completedOn:row.completed_on,qcObservation:observation},asOf):progress(row,asOf)];}));
 }
 
 export class ProductionDashboardService {
@@ -87,7 +95,7 @@ export class ProductionDashboardService {
     return this.read(actor,async(client,asOf)=>{
       const parsed=ProductionAnalysisQuerySchema.safeParse(input);
       if(!parsed.success)throw new ApplicationError("VALIDATION_ERROR","生产分析筛选无效",400);
-      const rows=await client.query<ProductionRow>(`${selectFactoryProduction} WHERE ${factoryProductionVisibility}`,productionVisibilityArgs(actor));
+      const rows=await client.query<ProductionRow>(`${selectFactoryProduction} WHERE ${factoryProductionVisibilityFor(actor)}`,productionVisibilityArgs(actor));
       return readProductionAnalysis(client,rows.rows.map(toOrder),actor,asOf,parsed.data);
     });
   }
@@ -97,7 +105,7 @@ export class ProductionDashboardService {
     input=parsed.data;
     return this.read(actor,async(client,asOf)=>{
       if(input.previousAsOf&&input.previousAsOf>asOf)throw new ApplicationError("VALIDATION_ERROR","上次刷新时间不能晚于当前时间",400);
-      const result=await client.query<ProductionRow>(`${selectFactoryProduction} WHERE ${factoryProductionVisibility}`,productionVisibilityArgs(actor));
+      const result=await client.query<ProductionRow>(`${selectFactoryProduction} WHERE ${factoryProductionVisibilityFor(actor)}`,productionVisibilityArgs(actor));
       const orders=result.rows.map(toOrder),ids=orders.map(o=>o.productionOrderId);
       const current=await readFactoryProductionProgressFacts(client,ids,asOf);
       const items=addProductionChase(orders.filter(o=>current.has(executionKey(o.productionOrderId,o.factoryDecisionId))).map(order=>({order,progress:current.get(executionKey(order.productionOrderId,order.factoryDecisionId))!})),await readProductionDays(client,ids,asOf,true),asOf).map(item=>({...item,deliveryRisks:poDeliveryRisks(item.order.poDeliveryDates??[],shanghaiDay(asOf),{finished:Boolean(item.order.poDeliveryClosed),factoryFinished:item.order.status!=='in_production',sampleFinished:true}).filter(risk=>risk.kind==='factory')}));

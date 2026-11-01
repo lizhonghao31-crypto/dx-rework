@@ -3,6 +3,7 @@ export type ProductionProgressFacts = {
   status: "in_production" | "production_completed" | "shipped";
   quantity: number; completedQuantity: number; firstReportedOn: string | null;
   deliveryDate: string | null; lastUpdatedAt: string | null; completedOn: string | null;
+  qcObservation?:{state:"unknown"|"not_due"|"due"|"escalated"|"finished";anchor:string|null;remindAt:string|null;escalateAt:string|null};
 };
 const DAY = 86400000;
 const epoch = (day: string) => Date.parse(`${day}T00:00:00Z`);
@@ -34,10 +35,11 @@ export function calculateProductionProgress(facts: ProductionProgressFacts, asOf
   const lag = timeProgress === null ? null : timeProgress - productionProgress;
   const daysWithoutUpdate = !frozen && start && facts.lastUpdatedAt
     ? naturalDaysBetween(shanghaiDay(facts.lastUpdatedAt), day) : null;
-  const progressState: ProductionProgressState = frozen ? "completed" : !start ? "pending_first_report"
+  const quantityRiskState:ProductionProgressState=frozen?"completed":!start?"pending_first_report":lag===null||lag<=1e-9?"normal":lag<=20+1e-9?"behind":"high_risk";
+  const progressState: ProductionProgressState = facts.qcObservation ? (frozen?"completed":["due","escalated"].includes(facts.qcObservation.state)?"stale":quantityRiskState) : frozen ? "completed" : !start ? "pending_first_report"
     : daysWithoutUpdate !== null && daysWithoutUpdate >= 2 ? "stale"
     : lag === null || lag <= 1e-9 ? "normal" : lag <= 20 + 1e-9 ? "behind" : "high_risk";
-  return { productionProgress, timeProgress, plannedWorkdays, elapsedWorkdays, progressState, daysWithoutUpdate,
+  return { ...(facts.qcObservation?{qcObservation:facts.qcObservation,quantityRiskState}:{}),productionProgress, timeProgress, plannedWorkdays, elapsedWorkdays, progressState, daysWithoutUpdate,
     frozen, firstReportedOn: start, completedQuantity: facts.completedQuantity, lastUpdatedAt: facts.lastUpdatedAt,
     attention: ["stale", "high_risk", "behind"].includes(progressState) };
 }
