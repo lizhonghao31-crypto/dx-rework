@@ -89,6 +89,7 @@ export function developmentPublicationSizeIssues(document:DevelopmentDocument):A
 /** Only server-proven frozen same-round corrections may opt into historical reading rules. */
 export function developmentPublishErrors(document: DevelopmentDocument, options:{allowLegacySizeQuantities?:boolean;allowMissingOrderDate?:boolean}={}): string[] {
   const errors: string[] = [];
+  if(document.customerOrderDraft?.stage==='preorder')errors.push('预下单备料资料仅可保存草稿，请先明确切换为开发单后再发布');
   if (!document.quantity) errors.push("请填写本轮打板数量");
   if(!options.allowLegacySizeQuantities)errors.push(...developmentPublicationSizeIssues(document).map(issue=>issue.message));
   if (document.sizes.some(size => !size.trim())) errors.push("请填写尺码列名称，或删除不用的列");

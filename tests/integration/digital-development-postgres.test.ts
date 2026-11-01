@@ -1,4 +1,9 @@
 import { applyDigitalPoDateFixture } from "../helpers/digital-po-date-fixture.js";
+import Fastify from "fastify";
+import {registerDevelopmentRoutes} from "../../apps/api/src/production-platform/development-routes.js";
+import {AttachmentService} from "../../apps/api/src/tools/attachments.js";
+import {FakeObjectStorage} from "../../apps/api/src/tools/storage.js";
+import type {ApplicationError} from "../../apps/api/src/platform/errors.js";
 import {DigitalOrderCreateSchema,InitialCustomerOrderDraftSchema,initialCustomerOrderInput,minimumInitialCustomerDate} from "@dx-rework/contracts/digital-production";
 import { DigitalProductionTaskService } from "../../apps/api/src/production-platform/task-service.js";
 import { DigitalCockpitQuery } from "../../apps/api/src/production-platform/cockpit-query.js";
@@ -126,6 +131,38 @@ run("P05 development forms PostgreSQL", () => {
     await database.query("INSERT INTO user_role_assignments(user_id,role_code) VALUES($1,'pattern_room_supervisor')",[other]);
     const technical=await development.read(actor(other,['pattern_room_supervisor']),id);
     expect(technical.document?.customerOrderDraft).toBeUndefined();expect(technical.productionOrderId).toBeNull();expect(technical.document?.quantity).toBe(1);
+  });
+  it("accepts a later customer promise without locking a published incomplete ordering draft",async()=>{
+    const id=await source(),identity=await development.read(actor(),id),document=await ready();
+    const order=InitialCustomerOrderDraftSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:identity.designStyleNo,temporaryStyleNo:null,orderDate:'2026-10-15',contractDeliveryDate:null,lines:[{color:'TEST缺日期',deliveryDate:null,sizes:[{size:'M',quantity:'12'}]}]});
+    document.customerOrderDraft={withOrder:true,order};
+    const saved=await development.save(actor(),id,{expectedVersion:0,document},randomUUID());
+    await development.publish(actor(),id,saved.version,randomUUID());
+    await expect(service.createOrder(actor(),DigitalOrderCreateSchema.parse(initialCustomerOrderInput(order)),randomUUID(),id)).rejects.toMatchObject({statusCode:400});
+    order.lines[0]!.customerWarehouseArrivalDate=minimumInitialCustomerDate();
+    const confirmed=await service.createOrder(actor(),DigitalOrderCreateSchema.parse(initialCustomerOrderInput(order)),randomUUID(),id);
+    expect(confirmed.lines[0]?.sizes[0]?.quantity).toBe(12);
+    expect((await development.read(actor(),id)).document?.customerOrderDraft?.order.lines[0]?.deliveryDate).toBeNull();
+  });
+  it("enforces preorder draft-only through HTTP and publishes only after an explicit stage change",async()=>{
+    const id=await source(),identity=await development.read(actor(),id),document=await ready();
+    document.customerOrderDraft={withOrder:true,stage:'preorder',order:InitialCustomerOrderDraftSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:identity.designStyleNo,temporaryStyleNo:null,orderDate:'2026-10-15',contractDeliveryDate:null,lines:[{color:'TEST预单',deliveryDate:null,sizes:[{size:'',quantity:''}]}]})};
+    const saved=await development.save(actor(),id,{expectedVersion:0,document},randomUUID());
+    const app=Fastify();app.setErrorHandler((error,_request,reply)=>{const value=error as ApplicationError;void reply.code(value.statusCode??500).send({code:value.code,message:value.message});});
+    registerDevelopmentRoutes(app,{service,creationEnabled:true,authenticate:async()=>({id:designer,displayName:'TEST设计',businessRoles:['sample_designer'],capabilities:['digital_production:view','pattern_room:orders:create']})},development,new AttachmentService(database,new FakeObjectStorage(),{prefix:'TEST',ttlSeconds:60,maxUploadBytes:1000}));
+    try{
+      const url=`/digital-production/sources/${id}/development`,headers={'idempotency-key':randomUUID()};
+      const rejected=await app.inject({method:'POST',url:`${url}/publish`,headers,payload:{expectedVersion:saved.version}});
+      expect(rejected.statusCode).toBe(400);expect(rejected.json().message).toContain('预下单');
+      expect((await development.read(actor(),id)).status).toBe('draft');
+      expect((await database.query('SELECT count(*)::int n FROM digital_production_task_access WHERE source_id=$1',[id])).rows[0].n).toBe(0);
+      const promoted=await app.inject({method:'PUT',url,headers:{'idempotency-key':randomUUID()},payload:{expectedVersion:saved.version,document:{...document,customerOrderDraft:{...document.customerOrderDraft,stage:'formal'}}}});
+      expect(promoted.statusCode).toBe(200);
+      const published=await app.inject({method:'POST',url:`${url}/publish`,headers:{'idempotency-key':randomUUID()},payload:{expectedVersion:promoted.json().version}});
+      expect(published.statusCode).toBe(200);expect(published.json().status).toBe('published');
+      expect((await database.query('SELECT count(*)::int n FROM digital_production_task_access WHERE source_id=$1',[id])).rows[0].n).toBe(1);
+      expect((await database.query('SELECT count(*)::int n FROM digital_production_orders WHERE source_id=$1',[id])).rows[0].n).toBe(0);
+    }finally{await app.close();}
   });
   it("saves a preorder with only real material information, without formal PO or production tasks",async()=>{
     const designStyleNo=`TEST-PRE-${randomUUID()}`;

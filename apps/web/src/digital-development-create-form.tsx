@@ -61,7 +61,8 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
   const poSizeIds=useRef(Array.from({length:maxPoSizeCount},()=>createClientRequestId()));
   const successfulUploads=useRef(new Map<string,string>()),publishKey=useRef<{payload:string;key:string}|null>(null);
   const edit=(patch:Partial<DevelopmentDocument>)=>setDocument(current=>({...current,...patch}));
-  const issues=validationMode?developmentIssues(document,quantityInput,measurementIds.current,validationMode==="publish",null,sizeQuantityInputs):[];
+  const validationDocument:DevelopmentDocument=document.customerOrderDraft?{...document,customerOrderDraft:{...document.customerOrderDraft,stage:preorder?'preorder':'formal'}}:document;
+  const issues=validationMode?developmentIssues(validationDocument,quantityInput,measurementIds.current,validationMode==="publish",null,sizeQuantityInputs):[];
   const [designerName, setDesignerName] = useState<string | null>(existingDraft?.designerName ?? source?.designer ?? null);
   useEffect(() => {
     if (source || existingDraft) return;
@@ -190,6 +191,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
       const sourceInput = DigitalSourceCreateSchema.parse({developmentType, designStyleNo: form.designStyleNo, temporaryStyleNo: form.temporaryStyleNo, customerCode: form.customerCode || null});
       const shouldConfirmOrder=withOrder&&!draftOnly&&(intent==="confirm_order"||published||Boolean(source)||initialCustomerOrderIsReady(form));
       const orderInput = shouldConfirmOrder ? DigitalOrderCreateSchema.parse(developmentOrderInput(form)) : null;
+      const submissionDocument:DevelopmentDocument={...document,customerOrderDraft:{withOrder,stage:preorder?'preorder':'formal',order:form}};
       if(orderInput){
         const calendar=await digitalRequest<{serverToday:string;minimumInitialCustomerDate:string}>(developmentOrderOptionsPath(createdSource));
         if(!calendar.serverToday||!calendar.minimumInitialCustomerDate)throw new Error("未取得服务器日期，请重试；输入仍保留");
@@ -197,7 +199,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
         if(dateError)throw new Error(dateError);
         const errors=initialCustomerDateErrors(orderInput.lines,calendar.minimumInitialCustomerDate);if(errors.length)throw new Error(errors.join("；"));
       }
-      if(!source&&!published){setValidationMode(draftOnly?"save":"publish");if(developmentIssues(document,quantityInput,measurementIds.current,!draftOnly,null,sizeQuantityInputs).length)return;if(!draftOnly&&!patternChoice&&existingDraft?.revisionSource?.outputKind!=='工艺布片')throw new Error("请先选择有效打板品类与执行价，再发布开发单");}
+      if(!source&&!published){setValidationMode(draftOnly?"save":"publish");if(developmentIssues(submissionDocument,quantityInput,measurementIds.current,!draftOnly,null,sizeQuantityInputs).length)return;if(!draftOnly&&!patternChoice&&existingDraft?.revisionSource?.outputKind!=='工艺布片')throw new Error("请先选择有效打板品类与执行价，再发布开发单");}
       let id = createdSource;
       if (!id) {
         const payload = JSON.stringify(sourceInput);
@@ -223,7 +225,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
               }catch(reason){const message=reason instanceof Error?reason.message:"上传失败，请重试";picturesRef.current=picturesRef.current.map(item=>item.id===picture.id?{...item,error:message}:item);setPictures(picturesRef.current);throw reason;}
             }
           }
-          persistedDocument={...document,orderDate:sheet.document?.orderDate??sheet.developmentCreatedDate??document.orderDate,customerOrderDraft:{withOrder,...(preorder?{stage:"preorder" as const}:{}),order:form},files:document.files.map(file=>({ ...file,attachmentId:picturesRef.current.find(picture=>picture.id===file.attachmentId)?.attachmentId??file.attachmentId }))};
+          persistedDocument={...submissionDocument,orderDate:sheet.document?.orderDate??sheet.developmentCreatedDate??document.orderDate,files:document.files.map(file=>({ ...file,attachmentId:picturesRef.current.find(picture=>picture.id===file.attachmentId)?.attachmentId??file.attachmentId }))};
           setDocument(persistedDocument);
           if(loadedVersion.current!==null&&sheet.version!==loadedVersion.current&&JSON.stringify(sheet.document)!==JSON.stringify(persistedDocument))throw new Error("开发单已更新，请重新打开后再保存；当前填写仍保留");
           if(JSON.stringify(sheet.document)!==JSON.stringify(persistedDocument)){
@@ -246,7 +248,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
             const publishedSheet=await digitalRequest<DevelopmentSheet>(`${base}/publish`,"POST",body,publishKey.current.key);setPublished(true);
             if(publishedSheet.document?.customerOrderDraft?.withOrder){const draft=publishedSheet.document.customerOrderDraft.order;if(initialCustomerOrderIsReady(draft))setBoundOrder(draft);setForm(draft);}
           }
-        } else {setPublished(true);if(sheet.document?.customerOrderDraft?.withOrder){const draft=sheet.document.customerOrderDraft.order;if(initialCustomerOrderIsReady(draft))setBoundOrder(draft);setForm(draft);}if(draftOnly)throw new Error("开发单已发布，请继续确认客户订单或重新打开查看");persistedDocument=sheet.document??document;}
+        } else {setPublished(true);if(sheet.document?.customerOrderDraft?.withOrder){const draft=sheet.document.customerOrderDraft.order;if(initialCustomerOrderIsReady(draft)){setBoundOrder(draft);setForm(draft);}}if(draftOnly)throw new Error("开发单已发布，请继续确认客户订单或重新打开查看");persistedDocument=sheet.document??document;}
       }
       let orderId: string | null = null;
       if (orderInput) {

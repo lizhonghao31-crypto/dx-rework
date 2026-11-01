@@ -1,9 +1,10 @@
 // Real creation component and inherited styles; synthetic API is isolated from business data.
 import {createRoot} from 'react-dom/client';
 import {useState} from 'react';
-import {DevelopmentCreateForm,initialDevelopmentOrder} from '../../apps/web/src/digital-development-create-form.js';
-import {initialDevelopmentDocument} from '../../apps/web/src/digital-development-editing.js';
+import {DevelopmentCreateForm,initialDevelopmentOrder,type DevelopmentCreateIntent} from '../../apps/web/src/digital-development-create-form.js';
+import {initialDevelopmentDocument,type DevelopmentOrderDraft} from '../../apps/web/src/digital-development-editing.js';
 import {SaveDevelopmentSchema,developmentPublishErrors,type DevelopmentSheet,type DevelopmentDocument} from '@dx-rework/contracts/digital-development';
+import {DigitalOrderCreateSchema,initialCustomerDateErrors} from '@dx-rework/contracts/digital-production';
 import '../../packages/ui/src/tokens.css';
 import '../../packages/ui/src/components.css';
 import '../../apps/web/src/styles.css';
@@ -12,11 +13,14 @@ import '../../apps/web/src/digital-development-workspace.css';
 const id=(n:number)=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 const params=new URLSearchParams(location.search),withOrder=!params.has('pure'),fresh=params.has('fresh');
 const customers=[{code:'PD',name:'TEST 客户',productGroups:['男装'],defaultMerchandiserId:null}];
-const order={...initialDevelopmentOrder(customers),customerCode:'PD',designStyleNo:'TEST-OPTIONS',orderDate:'2026-11-01',salesYear:params.has('historical')?2025:null,salesSeries:null,lines:[{formalPoNo:'TEST-PO-01',poNumber:null,formalStyleNo:null,temporaryStyleNo:null,color:'TEST 蓝',colorForeign:null,deliveryDate:null,customerWarehouseArrivalDate:'2027-03-15',sizes:[{size:'',quantity:''}]}]};
+const order:DevelopmentOrderDraft={...initialDevelopmentOrder(customers),customerCode:'PD',designStyleNo:'TEST-OPTIONS',orderDate:'2026-11-01',salesYear:params.has('historical')?2025:null,salesSeries:null,lines:[{formalPoNo:'TEST-PO-01',poNumber:null,formalStyleNo:null,temporaryStyleNo:null,color:'TEST 蓝',colorForeign:null,deliveryDate:null,customerWarehouseArrivalDate:'2027-03-15',sizes:[{size:'',quantity:''}]}]};
 const document:DevelopmentDocument={...initialDevelopmentDocument(),quantity:1,orderDate:'2026-11-01',materials:[],patternCategoryId:id(2),files:[{attachmentId:id(3),kind:'款图' as const}],customerOrderDraft:{withOrder,order}};
-if(params.has('preorder')){document.customerOrderDraft={withOrder:true,order,...{stage:'preorder' as const}};document.quantity=null;document.files=[];document.patternCategoryId=null;order.customerCode='';order.orderDate='';}
+if(params.has('preorder')||params.has('preorderReady'))document.customerOrderDraft={withOrder:true,order,stage:'preorder'};
+if(params.has('preorder')){document.quantity=null;document.files=[];document.patternCategoryId=null;order.customerCode='';order.orderDate='';}
+if(params.has('missingDate')){order.lines[0]!.customerWarehouseArrivalDate=null;order.lines[0]!.sizes=[{size:'M',quantity:'12'}];}
 const state={saved:{sourceId:id(1),designStyleNo:order.designStyleNo,temporaryStyleNo:null,customerCode:params.has('preorder')?null:'PD',developmentType:'头版',designerName:'TEST 设计师',version:1,status:'draft',document,publishedAt:null,taskId:null,canEdit:true,materialEvents:[]} as DevelopmentSheet,
-  requests:[] as Array<{path:string;method:string;body:unknown}>,failNextSave:false,created:0,orderId:null as string|null};
+  requests:[] as Array<{path:string;method:string;body:unknown}>,failNextSave:false,failNextConfirm:false,created:0,orderId:null as string|null};
+if(params.has('missingDate'))state.saved={...state.saved,status:'published',version:2};
 Object.assign(window,{creationOptionsFixture:state});
 window.fetch=async(input,init)=>{
   const path=String(input),method=init?.method??'GET',body=init?.body?JSON.parse(String(init.body)):null;
@@ -34,6 +38,12 @@ window.fetch=async(input,init)=>{
     const errors=developmentPublishErrors(state.saved.document!);if(errors.length)return Response.json({error:{message:errors.join('；')}},{status:400});
     state.saved={...state.saved,status:'published',version:state.saved.version+1};return Response.json(state.saved);
   }
+  if(path.endsWith('/confirm')){
+    if(state.failNextConfirm){state.failNextConfirm=false;return Response.json({error:{message:'TEST 确认失败，输入保留'}},{status:503});}
+    const parsed=DigitalOrderCreateSchema.parse(body),errors=initialCustomerDateErrors(parsed.lines,'2026-12-01');
+    if(errors.length)return Response.json({error:{message:errors.join('；')}},{status:400});
+    return Response.json({...parsed,productionOrderId:id(8)});
+  }
   if(path.endsWith('/development')){
     if(method==='PUT'){
       if(state.failNextSave){state.failNextSave=false;return Response.json({error:{message:'TEST 保存失败，输入保留'}},{status:503});}
@@ -47,6 +57,7 @@ window.fetch=async(input,init)=>{
 };
 function Fixture(){
   const [done,setDone]=useState(false);
-  return done?<p role="status">TEST 开发已发布，正式订购配码待后续确认</p>:<DevelopmentCreateForm intent={withOrder?'certain_order':'development'} {...(fresh?{}:{existingDraft:structuredClone(state.saved)})} customers={customers} serverToday="2026-11-01" minimumDate="2026-12-01" onCancel={()=>{}} onCreated={(_id,orderId)=>{state.created++;state.orderId=orderId;setDone(true);}}/>;
+  const [intent,setIntent]=useState<DevelopmentCreateIntent>(withOrder?'certain_order':'development');
+  return done?<p role="status">TEST 开发已发布，正式订购配码待后续确认</p>:<DevelopmentCreateForm intent={intent} onIntentChange={setIntent} {...(fresh?{}:{existingDraft:structuredClone(state.saved)})} customers={customers} serverToday="2026-11-01" minimumDate="2026-12-01" onCancel={()=>{}} onCreated={(_id,orderId)=>{state.created++;state.orderId=orderId;setDone(true);}}/>;
 }
 createRoot(window.document.getElementById('root')!).render(<Fixture/>);
