@@ -81,6 +81,19 @@ test('each managed creation is constrained: one registered call cannot hide a se
  assert.throws(()=>assertManagedSchemaCreation(managed+' await client.query("create \n schema raw");','fixture.ts'),/NOT_REGISTERED/);
  await assert.rejects(()=>createOwnedPostgresSchema({query:()=>{throw Error('MUST_NOT_QUERY');}},'resource_smoke_'+'f'.repeat(32)),/NOT_CREATED/);
 });
+test('bare schema DDL rejects actual escaped TS/JS source, including String.raw',()=>{
+ const prefix="const schema=ownedPostgresSchema('sample'); await createOwnedPostgresSchema(pool,schema); ";
+ const sources=[
+  String.raw`await pool.query("CREATE\nSCHEMA history_unregistered");`,
+  String.raw`await pool.query("CREATE\r\nSCHEMA history_unregistered");`,
+  String.raw`await pool.query("CRE\u0041TE\u0020SCHE\x4dA history_unregistered");`,
+  String.raw`await pool.query("CR\EATE SCHEMA history_unregistered");`,
+  String.raw`await pool.query("CRE" + "ATE\nSCHEMA history_unregistered");`,
+  'await pool.query(String.raw`CREATE'+String.raw`\n`+'SCHEMA history_unregistered`);',
+ ];
+ assert.ok(sources[0].includes(String.raw`\n`));assert.equal(sources[0].includes('\n'),false);
+ for(const source of sources)assert.throws(()=>assertManagedSchemaCreation(prefix+source,'fixture.ts'),/NOT_REGISTERED/);
+});
 test('local preflight observes staged, unstaged and untracked fixture changes',()=>{
  const dir=mkdtempSync(join(tmpdir(),'dx-staged-resource-')),git=(...args)=>execFileSync('git',['-C',dir,...args],{encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim();
  try{

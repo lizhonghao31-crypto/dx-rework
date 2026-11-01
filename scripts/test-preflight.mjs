@@ -12,7 +12,13 @@ export function resourceChangedPaths(repo='.',base=process.env.BASE_SHA){
 export function assertManagedSchemaCreation(source,path){
  // Every CREATE is forbidden in consumers, even if another call in the same file is registered.
  // Only the shared creation API may issue DDL after checking generation and live DB identity.
- if(/CREATE\s+SCHEMA\b/i.test(source))throw Error('TEST_RESOURCE_CREATOR_NOT_REGISTERED: '+path);
+ const normalized=source
+  .replace(/\\+\r?\n/g,'')
+  .replace(/\\+(?:u\{([0-9a-f]{1,6})\}|u([0-9a-f]{4})|x([0-9a-f]{2}))/gi,(_,brace,unicode,hex)=>String.fromCodePoint(parseInt(brace??unicode??hex,16)))
+  .replace(/\\+[nrtvfb0]/g,' ')
+  .replace(/\\+(.)/gs,'$1')
+  .replace(/['"`]\s*\+\s*['"`]/g,'');
+ if(/CREATE\s+SCHEMA\b/i.test(normalized))throw Error('TEST_RESOURCE_CREATOR_NOT_REGISTERED: '+path);
 }
 export function checkResourceRegistration(){
  const changed=resourceChangedPaths();
