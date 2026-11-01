@@ -2,7 +2,7 @@
   "version": 1,
   "base": "61a33d1b774698ae90d4d450fd9d4a45b569fe25",
   "risk": "full",
-  "sourceFingerprint": "51a78f30123108234e3171877a9c3690843c7338fcd57241b6d37d40273d8e91",
+  "sourceFingerprint": "c41a7d47b29dd1d9d8ec894b1f67aa56be163ba8d08cc5359a1ba286bc074b49",
   "rules": [
     {
       "rule": "Append271 with exact inventories and owned fixtures",
@@ -26,8 +26,8 @@
       "dateAndPermission": "Real occurrence and audit wall times remain distinct. Clock reads do not write facts. Exact assigned QC/factory/PO and current allocation eligibility; no factory receipt/count, finance, ship-sample or missing-SLA-evidence gate. Contract48h still excludes Beijing Sundays.",
       "expectation": "No previous SQL/checksum changed. New unfinished receipt/count tasks retire as cancelled without completed facts; historical states are preserved in immutable retirement rows. Native role capability and private evidence tables are append-only.",
       "checks": [
-        "fixed-static",
-        "fixed-core-postgres"
+        "retained-fixed-static",
+        "retained-fixed-core-postgres"
       ]
     },
     {
@@ -48,9 +48,9 @@
       "dateAndPermission": "Real occurrence and audit wall times remain distinct. Clock reads do not write facts. Exact assigned QC/factory/PO and current allocation eligibility; no factory receipt/count, finance, ship-sample or missing-SLA-evidence gate. Contract48h still excludes Beijing Sundays.",
       "expectation": "Tracked QC freshness uses48/72 recipients; quantity alerts compare underlying quantity risk so a QC-stale but quantity-normal factory does not mask another factory high risk. Legacy stale behavior remains for untracked orders.",
       "checks": [
-        "fixed-unit",
-        "fixed-quantity-postgres",
-        "fixed-static"
+        "denominator-unit",
+        "retained-fixed-quantity-postgres",
+        "retained-fixed-static"
       ]
     },
     {
@@ -84,8 +84,8 @@
       "expectation": "Original components, private upload service and local CSS reused. Per-form drafts survive sibling saves. Immutable body/key retained on uncertain writes under verified principal; committed-save/read-failure does not re-submit. Real parent Return/Refresh and one-file upload recovery exercised at1280/1440; no live-site claim.",
       "checks": [
         "frozen-browser",
-        "fixed-unit",
-        "fixed-static"
+        "denominator-unit",
+        "retained-fixed-static"
       ]
     },
     {
@@ -113,9 +113,9 @@
       "dateAndPermission": "Real occurrence and audit wall times remain distinct. Clock reads do not write facts. Exact assigned QC/factory/PO and current allocation eligibility; no factory receipt/count, finance, ship-sample or missing-SLA-evidence gate. Contract48h still excludes Beijing Sundays.",
       "expectation": "Stage proportions are observations, optional positive added finished quantity writes native ledger, photos-only cannot reset progress. Original contract/production facts unchanged; removed receipt/count is not a new mandatory node. Exact factory scope travels to the existing page.",
       "checks": [
-        "fixed-unit",
-        "fixed-static",
-        "fixed-core-postgres"
+        "denominator-unit",
+        "retained-fixed-static",
+        "retained-fixed-core-postgres"
       ]
     },
     {
@@ -126,6 +126,7 @@
         "tests/integration/digital-production-notification-delivery-postgres.test.ts",
         "tests/integration/digital-production-notifications-postgres.test.ts",
         "tests/integration/sourcing-pr03-postgres.test.ts",
+        "tests/unit/digital-cockpit-progress.test.ts",
         "tests/unit/factory-task-target.test.ts"
       ],
       "reads": [
@@ -133,15 +134,17 @@
         "docs/requirements/sourcing-supplier-production-v1.0.md"
       ],
       "oldTests": [
-        "tests/integration/sourcing-pr03-postgres.test.ts"
+        "tests/integration/sourcing-pr03-postgres.test.ts",
+        "tests/unit/digital-cockpit-progress.test.ts"
       ],
       "initialization": "Fixed missing original closure structure, native generation/PO linkage, snapshot asOf comparisons and projection/delivery using the same test-only Date. Four inherited failures reproduced at exact04981 tree, not called PR06 regressions. Stale queued legacy artifact is an explicit negative fixture, not an approved digital creation path. Updated all affected denominator and retired410 expectations; shared resource create/release APIs used.",
       "dateAndPermission": "Real occurrence and audit wall times remain distinct. Clock reads do not write facts. Exact assigned QC/factory/PO and current allocation eligibility; no factory receipt/count, finance, ship-sample or missing-SLA-evidence gate. Contract48h still excludes Beijing Sundays.",
       "expectation": "Fixed missing original closure structure, native generation/PO linkage, snapshot asOf comparisons and projection/delivery using the same test-only Date. Four inherited failures reproduced at exact04981 tree, not called PR06 regressions. Stale queued legacy artifact is an explicit negative fixture, not an approved digital creation path. Updated all affected denominator and retired410 expectations; shared resource create/release APIs used.",
       "checks": [
-        "fixed-core-postgres",
-        "fixed-unit",
-        "fixed-static"
+        "retained-fixed-core-postgres",
+        "denominator-unit",
+        "retained-fixed-static",
+        "denominator-unit-lint"
       ]
     },
     {
@@ -166,8 +169,8 @@
       "dateAndPermission": "Real occurrence and audit wall times remain distinct. Clock reads do not write facts. Exact assigned QC/factory/PO and current allocation eligibility; no factory receipt/count, finance, ship-sample or missing-SLA-evidence gate. Contract48h still excludes Beijing Sundays.",
       "expectation": "New qc-production-progress capability is not the old reporter role. API, DB, upload claim, native scope reader and menu match. Live eligibility checked before replay. Root correction/finish/ship retained; QC receives none of those or warehouse quantity edits. One submissionId links observation, applicable native quantities and photos; any overflow rolls everything back.",
       "checks": [
-        "fixed-core-postgres",
-        "fixed-static"
+        "retained-fixed-core-postgres",
+        "retained-fixed-static"
       ]
     },
     {
@@ -190,9 +193,9 @@
       "dateAndPermission": "Real occurrence and audit wall times remain distinct. Clock reads do not write facts. Exact assigned QC/factory/PO and current allocation eligibility; no factory receipt/count, finance, ship-sample or missing-SLA-evidence gate. Contract48h still excludes Beijing Sundays.",
       "expectation": "Starts only from real approved/warehouse dispatch or explicitly adopted current supervision for unknown history. No waiting for factory receipt. Per-PO observation windows, original snapshots and exact factory scope. Photos, read, refresh, reassignment and old backfill do not wash current deadlines. Current recipient and observation window rechecked at delivery, same-recipient48/72 de-duplicated; missing recipients are management work. Original quality-inspection todos remain distinct facts, not suppressed by progress.",
       "checks": [
-        "fixed-core-postgres",
-        "fixed-unit",
-        "fixed-static"
+        "retained-fixed-core-postgres",
+        "denominator-unit",
+        "retained-fixed-static"
       ]
     },
     {
@@ -218,21 +221,23 @@
         "docs/requirements/sourcing-supplier-production-v1.0.md"
       ],
       "oldTests": [
-        "tests/integration/sourcing-pr03-postgres.test.ts"
+        "tests/integration/sourcing-pr03-postgres.test.ts",
+        "tests/unit/digital-cockpit-progress.test.ts"
       ],
       "initialization": "No new receipt/count task, current count, pending dependency, reminder or completion condition. Old records read-only, old commands410 before cached responses, active orders do not wait for plan adoption. Keep original warehouse dispatch/receiving, QC quality, ship samples, rework/own-tail and packing boundaries.",
       "dateAndPermission": "Real occurrence and audit wall times remain distinct. Clock reads do not write facts. Exact assigned QC/factory/PO and current allocation eligibility; no factory receipt/count, finance, ship-sample or missing-SLA-evidence gate. Contract48h still excludes Beijing Sundays.",
       "expectation": "No new receipt/count task, current count, pending dependency, reminder or completion condition. Old records read-only, old commands410 before cached responses, active orders do not wait for plan adoption. Keep original warehouse dispatch/receiving, QC quality, ship samples, rework/own-tail and packing boundaries.",
       "checks": [
-        "fixed-core-postgres",
-        "fixed-unit",
-        "fixed-static"
+        "retained-fixed-core-postgres",
+        "denominator-unit",
+        "retained-fixed-static",
+        "denominator-unit-lint"
       ]
     }
   ],
   "checks": [
     {
-      "id": "fixed-static",
+      "id": "retained-fixed-static",
       "kind": "command",
       "command": "[\"node\",\"/workspace/dx-p06-static-precheck.mjs\"]",
       "status": "passed",
@@ -242,7 +247,10 @@
       "inputPaths": [
         "apps",
         "packages",
-        "tests",
+        "tests/integration",
+        "tests/helpers",
+        "tests/fixtures",
+        "tests/acceptance",
         "scripts",
         "package.json",
         "package-lock.json",
@@ -252,22 +260,24 @@
         "vitest.postgres-immediate.config.ts",
         "eslint.config.js"
       ],
-      "inputFingerprint": "f627df7c1cd4c7debbd26baf0fe53fff8574a43bb50ecdd1083a838b9920b3b5",
+      "inputFingerprint": "3ab59742a283867643133cadc262ab72374d4f722079edd6305eab9146416e15",
       "sourceState": "Uncommitted candidate: full source fingerprint and declared input fingerprint captured before command; declared inputs reverified after command; testedHead is ancestor, not a claim of a committed tested Head",
       "context": "Local Node 22.23.4; owned marked PG16 instance/low-privilege test role, explicit canonical workers; no claim of CI hardware equivalence or authenticated full-site acceptance",
       "startedAt": "2026-11-01T23:12:37.517Z",
       "endedAt": "2026-11-01T23:14:06.911Z",
       "logSha256": "bc68177e88c12d76d54427638a5e71b4d66b38c88eb55bd47f2c28293ffd5314",
-      "log": "/workspace/dx-p06-recorded-fixed-static-1793574757517.log"
+      "log": "/workspace/dx-p06-recorded-fixed-static-1793574757517.log",
+      "scopeCapturedAt": "2026-11-01T23:26:52.864Z",
+      "scopeReason": "Captured while complete e7d6a8fa source and original check inputs still match. Preserve actual passed source/config/static results; unit-test sources excluded because the two denominator expectations and explicit retired-history regression will be changed and freshly linted/executed. No claim the changed tests were linted by this older command."
     },
     {
-      "id": "fixed-unit",
+      "id": "denominator-unit",
       "kind": "tests",
-      "command": "[\"node\",\"node_modules/vitest/vitest.mjs\",\"run\",\"tests/unit/production-closure.test.ts\",\"tests/unit/qc-progress-reminders.test.ts\",\"tests/unit/factory-task-target.test.ts\",\"tests/unit/production-reporting-clock-contract.test.ts\",\"tests/unit/todo-destination-parity.test.ts\",\"tests/unit/todo-presentation.test.ts\",\"tests/unit/production-dashboard-motion.test.ts\",\"tests/unit/platform-modules.test.ts\",\"tests/unit/production-dashboard.test.ts\",\"tests/unit/production-reporting.test.ts\",\"tests/unit/digital-journey-projection.test.ts\",\"tests/unit/business-time-write-contract.test.ts\"]",
+      "command": "[\"node\",\"node_modules/vitest/vitest.mjs\",\"run\",\"tests/unit/digital-cockpit-progress.test.ts\",\"tests/unit/production-closure.test.ts\",\"tests/unit/qc-progress-reminders.test.ts\",\"tests/unit/factory-task-target.test.ts\",\"tests/unit/production-reporting-clock-contract.test.ts\",\"tests/unit/todo-destination-parity.test.ts\",\"tests/unit/todo-presentation.test.ts\",\"tests/unit/production-dashboard-motion.test.ts\",\"tests/unit/platform-modules.test.ts\",\"tests/unit/production-dashboard.test.ts\",\"tests/unit/production-reporting.test.ts\",\"tests/unit/digital-journey-projection.test.ts\",\"tests/unit/business-time-write-contract.test.ts\"]",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "b3d712d6357056be1976f61c0704055891729bc6",
-      "sourceFingerprint": "51a78f30123108234e3171877a9c3690843c7338fcd57241b6d37d40273d8e91",
+      "testedHead": "e7d6a8fa9af6825ed6061b074cd2c5f01df2b622",
+      "sourceFingerprint": "c41a7d47b29dd1d9d8ec894b1f67aa56be163ba8d08cc5359a1ba286bc074b49",
       "inputPaths": [
         "apps",
         "packages",
@@ -281,19 +291,19 @@
         "vitest.postgres-immediate.config.ts",
         "eslint.config.js"
       ],
-      "inputFingerprint": "f627df7c1cd4c7debbd26baf0fe53fff8574a43bb50ecdd1083a838b9920b3b5",
+      "inputFingerprint": "eb3d2e2329d801a0c40eba19b5d561d48c27655c98078028f32142d935791505",
       "sourceState": "Uncommitted candidate: full source fingerprint and declared input fingerprint captured before command; declared inputs reverified after command; testedHead is ancestor, not a claim of a committed tested Head",
       "context": "Local Node 22.23.4; owned marked PG16 instance/low-privilege test role, explicit canonical workers; no claim of CI hardware equivalence or authenticated full-site acceptance",
-      "startedAt": "2026-11-01T23:12:58.307Z",
-      "endedAt": "2026-11-01T23:13:06.216Z",
-      "logSha256": "d7c43d049905530d8e47ffaefb3247587137741e1fff8d3b97632a4b2fc5965a",
-      "log": "/workspace/dx-p06-recorded-fixed-unit-1793574778307.log",
-      "passed": 131,
+      "startedAt": "2026-11-01T23:26:58.461Z",
+      "endedAt": "2026-11-01T23:27:04.951Z",
+      "logSha256": "2d5dc64d3862c1e03ee9e8adc4beb268444243a69572fc76b0cc8975aeda31e4",
+      "log": "/workspace/dx-p06-recorded-denominator-unit-1793575618462.log",
+      "passed": 136,
       "failed": 0,
       "skipped": 0
     },
     {
-      "id": "fixed-core-postgres",
+      "id": "retained-fixed-core-postgres",
       "kind": "tests",
       "command": "[\"flock\",\"/workspace/dx-governance-local-pg-instance.lock\",\"node\",\"/workspace/dx-p06-focused-postgres.mjs\"]",
       "status": "passed",
@@ -303,7 +313,10 @@
       "inputPaths": [
         "apps",
         "packages",
-        "tests",
+        "tests/integration",
+        "tests/helpers",
+        "tests/fixtures",
+        "tests/acceptance",
         "scripts",
         "package.json",
         "package-lock.json",
@@ -313,7 +326,7 @@
         "vitest.postgres-immediate.config.ts",
         "eslint.config.js"
       ],
-      "inputFingerprint": "f627df7c1cd4c7debbd26baf0fe53fff8574a43bb50ecdd1083a838b9920b3b5",
+      "inputFingerprint": "3ab59742a283867643133cadc262ab72374d4f722079edd6305eab9146416e15",
       "sourceState": "Uncommitted candidate: full source fingerprint and declared input fingerprint captured before command; declared inputs reverified after command; testedHead is ancestor, not a claim of a committed tested Head",
       "context": "Local Node 22.23.4; owned marked PG16 instance/low-privilege test role, explicit canonical workers; no claim of CI hardware equivalence or authenticated full-site acceptance",
       "startedAt": "2026-11-01T23:12:36.269Z",
@@ -322,10 +335,12 @@
       "log": "/workspace/dx-p06-recorded-fixed-core-postgres-1793574756269.log",
       "passed": 43,
       "failed": 0,
-      "skipped": 131
+      "skipped": 131,
+      "scopeCapturedAt": "2026-11-01T23:26:52.674Z",
+      "scopeReason": "Captured while complete e7d6a8fa source and original check inputs still match. Unit tests are not imports/inputs to this PostgreSQL command; preserve actual unchanged production, integration/helper/fixture/config evidence before changing only the old unit denominator assertions. No remote Gate reuse."
     },
     {
-      "id": "fixed-quantity-postgres",
+      "id": "retained-fixed-quantity-postgres",
       "kind": "tests",
       "command": "[\"flock\",\"/workspace/dx-governance-local-pg-instance.lock\",\"node\",\"/workspace/dx-p06-focused-postgres.mjs\"]",
       "status": "passed",
@@ -335,7 +350,10 @@
       "inputPaths": [
         "apps",
         "packages",
-        "tests",
+        "tests/integration",
+        "tests/helpers",
+        "tests/fixtures",
+        "tests/acceptance",
         "scripts",
         "package.json",
         "package-lock.json",
@@ -345,7 +363,7 @@
         "vitest.postgres-immediate.config.ts",
         "eslint.config.js"
       ],
-      "inputFingerprint": "f627df7c1cd4c7debbd26baf0fe53fff8574a43bb50ecdd1083a838b9920b3b5",
+      "inputFingerprint": "3ab59742a283867643133cadc262ab72374d4f722079edd6305eab9146416e15",
       "sourceState": "Uncommitted candidate: full source fingerprint and declared input fingerprint captured before command; declared inputs reverified after command; testedHead is ancestor, not a claim of a committed tested Head",
       "context": "Local Node 22.23.4; owned marked PG16 instance/low-privilege test role, explicit canonical workers; no claim of CI hardware equivalence or authenticated full-site acceptance",
       "startedAt": "2026-11-01T23:13:31.711Z",
@@ -354,7 +372,9 @@
       "log": "/workspace/dx-p06-recorded-fixed-quantity-postgres-1793574811711.log",
       "passed": 17,
       "failed": 0,
-      "skipped": 0
+      "skipped": 0,
+      "scopeCapturedAt": "2026-11-01T23:26:52.773Z",
+      "scopeReason": "Captured while complete e7d6a8fa source and original check inputs still match. Unit tests are not imports/inputs to this PostgreSQL command; preserve actual unchanged production, integration/helper/fixture/config evidence before changing only the old unit denominator assertions. No remote Gate reuse."
     },
     {
       "id": "frozen-browser",
@@ -380,7 +400,36 @@
       "endedAt": "2026-11-01T22:52:45.464Z",
       "logSha256": "6a0b75334a9190ec61cd2836a3ec3730b8e0404a166a1e919d7b3a807de3bc6d",
       "log": "/workspace/dx-p06-recorded-frozen-browser-1793573543286.log"
+    },
+    {
+      "id": "denominator-unit-lint",
+      "kind": "command",
+      "command": "[\"node\",\"node_modules/eslint/bin/eslint.js\",\"tests/unit/digital-cockpit-progress.test.ts\",\"tests/unit/production-closure.test.ts\",\"tests/unit/qc-progress-reminders.test.ts\",\"tests/unit/factory-task-target.test.ts\",\"tests/unit/production-reporting-clock-contract.test.ts\",\"tests/unit/todo-destination-parity.test.ts\",\"tests/unit/todo-presentation.test.ts\",\"tests/unit/production-dashboard-motion.test.ts\",\"tests/unit/platform-modules.test.ts\",\"tests/unit/production-dashboard.test.ts\",\"tests/unit/production-reporting.test.ts\",\"tests/unit/digital-journey-projection.test.ts\",\"tests/unit/business-time-write-contract.test.ts\",\"--max-warnings=0\"]",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "e7d6a8fa9af6825ed6061b074cd2c5f01df2b622",
+      "sourceFingerprint": "c41a7d47b29dd1d9d8ec894b1f67aa56be163ba8d08cc5359a1ba286bc074b49",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "tests",
+        "scripts",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts",
+        "vitest.postgres-immediate.config.ts",
+        "eslint.config.js"
+      ],
+      "inputFingerprint": "eb3d2e2329d801a0c40eba19b5d561d48c27655c98078028f32142d935791505",
+      "sourceState": "Uncommitted candidate: full source fingerprint and declared input fingerprint captured before command; declared inputs reverified after command; testedHead is ancestor, not a claim of a committed tested Head",
+      "context": "Local Node 22.23.4; owned marked PG16 instance/low-privilege test role, explicit canonical workers; no claim of CI hardware equivalence or authenticated full-site acceptance",
+      "startedAt": "2026-11-01T23:26:59.709Z",
+      "endedAt": "2026-11-01T23:27:00.647Z",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "log": "/workspace/dx-p06-recorded-denominator-unit-lint-1793575619709.log"
     }
   ],
-  "scopeNote": "Local fixed-source evidence, not final GitHub Gate.43 focused PostgreSQL checks include27 notification cases +16 native/affected-source cases,131 intentional skips in the source file; separate17 quantity/receiving cases and131 unit cases. Full gate must execute every applicable suite and upgrade/restore phase."
+  "scopeNote": "Local fixed-source evidence, not final GitHub Gate.43 focused PostgreSQL checks include27 notification cases +16 native/affected-source cases,131 intentional skips in the source file; separate17 quantity/receiving cases and136 unit cases. Full gate must execute every applicable suite and upgrade/restore phase."
 }

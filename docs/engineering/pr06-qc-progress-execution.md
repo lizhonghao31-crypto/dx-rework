@@ -63,3 +63,13 @@
 集中修复后的当前源码：43项定向PG（27旧通知＋7新QC＋9受影响旧流程，131项显式过滤未执行）通过，6项资源父清理成功；17项原风险/实收/装箱通过，2项资源父清理成功；131项相关单元通过；整仓preflight/lint/types/workspace build/时间索引/secret scan/diff检查通过。前端及其声明输入未变，保留已核20场景/两档键盘证据，不重复模拟整页，也不把它称真实账号验收。
 
 定向PG实际选择：`P06_PG_FILES=[digital-production-notification-delivery-postgres,digital-production-notifications-postgres,qc-progress-retirement-postgres,sourcing-pr03-postgres]`（均为tests/integration下.ts测试文件）；名称正则 `QC progress native lifecycle|P12 aggregates all original PO|SLA07 projects transferred|P13/P14 whole-order`，原通知两文件不施加名称过滤。另独立执行完整production-closure-postgres文件17项；canonical普通PG配置worker1、长正确性worker2，受管父runner持有同一隔离PG实例锁并在所有worker退出后真实清理。实际命令/日志/起止/指纹见construction-evidence.json，不把本地Node/硬件宣称CI完全等效。
+
+## 首次最终Full失败：旧统计单元断言漏检
+
+`41361432442` / worker `125012502183` 在23:25:12 UTC失败，2977项非DB通过、2项失败、11项明确skip；尚未进入数据库业务链及恢复尾段，不能记最终通过。失败均为`tests/unit/digital-cockpit-progress.test.ts`的旧有效分母7/10，源码移除清点后实际6/9。此前相关单元组合未纳入该统计函数的直接旧单元文件，这是执行者遗漏，不是权限、CI环境故障或业务守卫应当放宽。
+
+同根因闭包重新按实际符号搜索：`bulkCockpitProgress`实际消费者只有`cockpit-query.ts`、`journey-query.ts`及该旧单元文件；受影响P12真实PG断言已改且通过，本次补齐直接旧单元文件。历史清点pending/completed/cancelled三种状态均明确不进当前分母/完成数，保留重复PO不多算、取消工序及特殊结案不冒充装箱的旧保护。全文搜索清点任务/到料事件残留，当前余项均为明确退役拒绝、历史解码或旧库升级fixture，不引回当前任务。
+
+仅修改该单元测试及本次证据记录；生产API/SQL/UI与已通过43＋17定向PG的e7d6a8fa逐字不变。其有效输入范围在完整e7源码仍完全匹配时冻结，保留真实PG和原生产静态证据；新单元文件重新执行及lint，不将较早静态命令称为已检查新文本。浏览器声明输入亦未变。原失败Gate保留，不rerun旧Head；新Head按原协议执行匹配light/最终Full，无第二轮Review。
+
+本次补正后的13文件136项单元通过，相关13文件lint通过。生产源码零差异，真实PG证据仍为43＋17、旧来源131项显式未执行；这些不冒称本次失败Full的未跑阶段已经通过。
