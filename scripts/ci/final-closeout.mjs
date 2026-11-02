@@ -71,7 +71,18 @@ export async function verifyFinalCloseout(api,plan,path,review){
    const parsed=check.kind==='command'?parsedFiles[0]:{passed:parsedFiles.reduce((n,r)=>n+r.passed,0),failed:parsedFiles.reduce((n,r)=>n+r.failed,0),skipped:parsedFiles.reduce((n,r)=>n+r.skipped,0),names:parsedFiles.flatMap(r=>r.names)};
    if(check.kind==='command'){
     if(files.length!==1||files[0].format!=='command-record'||plan.kind!=='quick'||!detail(evidence.automaticTestsNotApplicable)||parsed.command!==check.command)throw Error('command-only proof is not an authorized static Quick alternative');
-   }else{const actual=logTotals(log.toString('utf8'));if(files.some(f=>f.format==='command-record')||['passed','failed','skipped'].some(key=>parsed[key]!==check[key]||actual[key]!==check[key]))throw Error('actual test/log counts differ from construction record');}
+   }else{
+    const actual=logTotals(log.toString('utf8'));
+    if(files.some(f=>f.format==='command-record')||['passed','failed','skipped'].some(key=>parsed[key]!==check[key]||actual[key]!==check[key]))throw Error('actual test/log counts differ from construction record');
+    if(actual.names){
+     if(JSON.stringify([...actual.names].sort())!==JSON.stringify([...parsed.names].sort()))throw Error('test case identities differ from original command log');
+    }else{
+     // Human summaries omit case names: only structured report bytes recorded
+     // with this exact committed command can supply them, never a later file.
+     const pinned=check.resultReports;
+     if(!Array.isArray(pinned)||!pinned.length||pinned.some(f=>!['node-tap','vitest-json'].includes(f.format)||!/^[0-9a-f]{64}$/.test(f.sha256??''))||JSON.stringify(pinned.map(f=>f.format+':'+f.sha256).sort())!==JSON.stringify(files.map(f=>f.format+':'+f.sha256).sort()))throw Error('structured report digest is not bound to the pinned command resultReports');
+    }
+   }
    reports.set(report.checkId,{...parsed,check});
   }catch(e){errors.push('report '+String(report.checkId)+': '+e.message);}}
   const items=[...(Array.isArray(pack.findings)?pack.findings:[]),...(Array.isArray(pack.scopeChecks)?pack.scopeChecks:[])];

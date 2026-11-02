@@ -54,3 +54,17 @@ test('empty, failed, skipped-only or unknown result formats are not a real passi
  assert.throws(()=>closeoutReport(JSON.stringify({success:false,testResults:[],numPassedTests:1,numFailedTests:0}),'vitest-json'));
  assert.throws(()=>closeoutReport('passed','plain-passed'));
 });
+test('same totals from an unrelated report cannot close a case absent from the pinned command log',async()=>{
+ const f=setup(),name='TEST unrelated stale test never executed by the pinned command';
+ const body=`TAP version 13\nok 1 - ${name}\n1..1\n# tests 1\n# pass 1\n# fail 0\n# skipped 0\n`,path=f.closeout.dir+'/unrelated.log';writeFileSync(path,body);
+ f.closeout.pack.reports=[{checkId:'unit',path,sha256:closeoutSha(body),format:'node-tap'}];f.closeout.pack.scopeChecks[0].testNames=[name];f.closeout.save();
+ await assert.rejects(()=>requestFinal(f.api,901,head,{apply:true,closeoutPath:f.closeout.path}),/test case identities differ from original command log/);assert.equal(f.state.writes.length,0);
+});
+test('a names-free command summary needs structured result bytes pinned by that exact construction check',async()=>{
+ const f=setup(),summary=' Tests  1 passed (1)\n';writeFileSync(f.closeout.log,summary);f.closeout.evidence.checks[0].logSha256=closeoutSha(summary);
+ const body=JSON.stringify({success:true,numPassedTests:1,numFailedTests:0,numPendingTests:0,testResults:[{assertionResults:[{status:'passed',fullName:f.closeout.name}]}]}),path=f.closeout.dir+'/vitest.json';writeFileSync(path,body);
+ f.closeout.pack.reports=[{checkId:'unit',path,sha256:closeoutSha(body),format:'vitest-json'}];f.closeout.pack.constructionEvidenceSha256=closeoutSha(JSON.stringify(f.closeout.evidence));f.closeout.save();
+ await assert.rejects(()=>requestFinal(f.api,901,head,{apply:true,closeoutPath:f.closeout.path}),/structured report digest is not bound/);assert.equal(f.state.writes.length,0);
+ f.closeout.evidence.checks[0].resultReports=[{format:'vitest-json',sha256:closeoutSha(body)}];f.closeout.pack.constructionEvidenceSha256=closeoutSha(JSON.stringify(f.closeout.evidence));f.closeout.save();
+ assert.equal((await requestFinal(f.api,901,head,{closeoutPath:f.closeout.path})).state,'plan');assert.equal(f.state.writes.length,0);
+});
