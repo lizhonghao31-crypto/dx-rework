@@ -5,6 +5,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {parseArgs} from 'node:util';
 import {pathToFileURL} from 'node:url';
+import {verifyFinalCloseout} from './final-closeout.mjs';
 import {REPOSITORY, FINAL_CHECK, LIGHT_CHECK, gateKind, finalRef, requireSha,
   trustedReview, reviewDecision, parseReceipt, assertRunBinding, assertReuseLineage, allowedBase} from './pr-gate-protocol.mjs';
 
@@ -177,7 +178,7 @@ async function existingRef(api, ref, head) {
   if (result.ref !== `refs/heads/${ref}` || result.object?.sha !== head) throw new Error('Existing request ref was rewritten or differs');
   return result;
 }
-export async function requestFinal(api, number, head, {apply = false, reviewPolicy} = {}) {
+export async function requestFinal(api, number, head, {apply = false, reviewPolicy, closeoutPath} = {}) {
   const snapshot = await inspect(api, number, head);
   const review = await reviewFor(api, snapshot, reviewPolicy);
   const light = await lightProof(api, snapshot.plan);
@@ -186,10 +187,11 @@ export async function requestFinal(api, number, head, {apply = false, reviewPoli
     if ((await inspect(api, number, head)).ref !== snapshot.ref) throw new Error('PR base/mode changed while inspecting the existing final request');
     return {...status, reviewDecision: review};
   }
+  const closeout = await verifyFinalCloseout(api,snapshot.plan,closeoutPath,review);
   const request = {ref: `refs/heads/${snapshot.ref}`, sha: head};
   const fresh = await inspect(api, number, head);
   if (fresh.ref !== snapshot.ref) throw new Error('PR base/mode changed before the final request');
-  if (!apply) return {state: 'plan', request, review: review.commentId ?? null, reviewDecision: review, lightRun: light.runId};
+  if (!apply) return {state: 'plan', request, closeout, review: review.commentId ?? null, reviewDecision: review, lightRun: light.runId};
   try { await api.request(`${prefix}/git/refs`, {method: 'POST', body: request}); }
   catch (error) {
     // Atomic create is the idempotency boundary. Never update, force, delete or
@@ -197,7 +199,7 @@ export async function requestFinal(api, number, head, {apply = false, reviewPoli
     if (error instanceof GitHubError && ![422].includes(error.status)) throw error;
     if (!await existingRef(api, snapshot.ref, head)) throw error;
   }
-  return {state: 'requested', ref: snapshot.ref, head, review: review.commentId ?? null, reviewDecision: review, lightRun: light.runId};
+  return {state: 'requested', ref: snapshot.ref, head, closeout, review: review.commentId ?? null, reviewDecision: review, lightRun: light.runId};
 }
 
 export async function verifyMerge(api, number, head, {reviewPolicy} = {}) {
@@ -253,14 +255,14 @@ export async function reviewStep(api, number, head, requestId, {now = Date.now()
 async function main() {
   if (process.env.GITHUB_ACTIONS === 'true') throw new Error('Use the read-free CI runtime, not operator credentials, inside Actions');
   const {values, positionals} = parseArgs({allowPositionals: true, options: {
-    pr: {type: 'string'}, head: {type: 'string'}, apply: {type: 'boolean', default: false},
+    pr: {type: 'string'}, head: {type: 'string'}, closeout: {type:'string'}, apply: {type: 'boolean', default: false},
     'request-id': {type: 'string'}, watch: {type: 'boolean', default: false},
     'review-retry-authorized': {type: 'boolean', default: false}, 'state-dir': {type: 'string'},
     'review-not-required': {type: 'boolean', default: false}, 'review-reason': {type: 'string'}, 'review-authorization': {type: 'string'},
   }});
   const api = new GitHub(), number = Number(values.pr), head = requireSha(values.head);
   const reviewPolicy = values['review-not-required'] ? {required: false, reason: values['review-reason'], authorization: values['review-authorization']} : undefined;
-  if (positionals[0] === 'request-final') console.log(JSON.stringify(await requestFinal(api, number, head, {apply: values.apply, reviewPolicy}), null, 2));
+  if (positionals[0] === 'request-final') console.log(JSON.stringify(await requestFinal(api, number, head, {apply: values.apply, reviewPolicy, closeoutPath:values.closeout}), null, 2));
   else if (positionals[0] === 'verify-merge') console.log(JSON.stringify(await verifyMerge(api, number, head, {reviewPolicy}), null, 2));
   else if (positionals[0] === 'watch-review') {
     if (values.apply && !values['review-retry-authorized']) throw new Error('Review retry requires the explicit standing authorization flag');

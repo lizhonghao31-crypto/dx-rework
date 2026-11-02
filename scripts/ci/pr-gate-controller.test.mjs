@@ -1,17 +1,21 @@
 import assert from 'node:assert/strict';
-import {test} from 'node:test';
+import {test,after} from 'node:test';
 import {mkdtemp,rm,readFile} from 'node:fs/promises';
 import {checkTimeSiteInventory} from '../acceptance/time-site-inventory.mjs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {GitHub,GitHubError,decodeGitHubResponse,requestFinal,verifyMerge,reviewStep} from './pr-gate-controller.mjs';
+import {GitHub,GitHubError,decodeGitHubResponse,requestFinal as guardedRequestFinal,verifyMerge,reviewStep} from './pr-gate-controller.mjs';
+import {closeoutFixture,disposeCloseoutFixtures} from './final-closeout.fixture.mjs';
+after(disposeCloseoutFixtures);
+const closeouts=new WeakMap();
+const requestFinal=(api,number,head,options={})=>guardedRequestFinal(api,number,head,{closeoutPath:closeouts.get(api)?.path,...options});
 import {REPOSITORY,REVIEW_BOT,FINAL_CHECK,LIGHT_CHECK,finalRef,RECEIPT_PREFIX} from './pr-gate-protocol.mjs';
 const head='a'.repeat(40),base='b'.repeat(40),baseRef='release/digital-production-v1',prefix=`/repos/${REPOSITORY}`;
 const plan={repository:REPOSITORY,pr:901,head,base,baseRef,kind:'full',phase:'final'};
 const summary=(status='completed',commit_sha=head)=>({id:12,user:{login:REVIEW_BOT},updated_at:'2026-10-27T17:00:00Z',body:`<!-- codex-review-state:v1 ${JSON.stringify({code_review:{status,commit_sha}})} -->`});
 const request={id:10,body:'@codex review',created_at:'2026-10-27T16:00:00Z'};
 function fixture(){
- const state={pr:{state:'open',title:'[FULL] bounded change',head:{sha:head},base:{sha:base,ref:baseRef,repo:{full_name:REPOSITORY}}},comments:[request,summary()],threads:[],ref:null,writes:[],reads:[],runs:{light:[run(101,'light')],final:[]},jobs:{},logs:{}};
+ const state={pr:{state:'open',title:'[FULL] bounded change',head:{sha:head},base:{sha:base,ref:baseRef,repo:{full_name:REPOSITORY}}},comments:[request,summary()],threads:[],inlineComments:[],ref:null,writes:[],reads:[],runs:{light:[run(101,'light')],final:[]},jobs:{},logs:{},closeout:closeoutFixture(plan)};
  function run(id,phase){return{id,run_attempt:1,head_sha:head,path:'.github/workflows/ci.yml',event:phase==='light'?'pull_request':'create',head_branch:finalRef(plan),status:'completed',conclusion:'success'};}
  function addProof(id,phase){const names=['title','checkout','head','policy',...(phase==='final'?['risk','install','audit','lint','types','build','tests','migration_lint','secrets']:[])];
   const receipt={version:1,...plan,phase,runId:id,attempt:1,jobStatus:'success',missing:[],checks:names.map(id=>({id,applicable:true,outcome:'success'}))};
@@ -21,12 +25,14 @@ function fixture(){
  addProof(101,'light');
  const api={pr:async()=>structuredClone(state.pr),comments:async()=>structuredClone(state.comments),pages:async(path,key)=>{
   state.reads.push(path);
+  if(path===`${prefix}/pulls/901/comments`)return structuredClone(state.inlineComments);
   if(path.includes('/jobs'))return structuredClone(state.jobs[Number(path.match(/runs\/(\d+)/)[1])]??[]);
   if(key==='workflow_runs')return structuredClone(path.includes('event=create')?state.runs.final:state.runs.light);
   throw new Error(`Unexpected pages ${path}`);
  },request:async(path,{method='GET',body}={})=>{
   if(method==='GET')state.reads.push(path);else state.writes.push({path,method,body});
   if(path==='/graphql')return {data:{repository:{pullRequest:{reviewThreads:{nodes:state.threads,pageInfo:{hasNextPage:false}}}}}};
+  if(path.includes('/contents/docs/engineering/construction-evidence.json'))return state.closeout.encoded();
   if(path.includes('/compare/'))return {status:'ahead',behind_by:0};
   if(path.includes('/logs'))return state.logs[Number(path.match(/jobs\/(\d+)/)[1])];
   if(path.includes('/git/ref/heads/')){if(!state.ref)throw new GitHubError(404,'Not Found');return structuredClone(state.ref);}
@@ -35,7 +41,7 @@ function fixture(){
   if(path.endsWith('/comments')&&method==='POST'){if(state.postError)throw state.postError;await new Promise(r=>setTimeout(r,5));const c={...request,id:20,created_at:'2026-10-27T16:15:01Z'};state.comments.push(c);return c;}
   throw new Error(`Unexpected API ${method} ${path}`);
  }};
- return{state,api,addFinal(){state.runs.final=[run(102,'final')];return addProof(102,'final');}};
+ closeouts.set(api,state.closeout);return{state,api,addFinal(){state.runs.final=[run(102,'final')];return addProof(102,'final');}};
 }
 test('final request defaults to read-only; explicit apply atomically creates one complete frozen-Head ref',async()=>{
  const{api,state}=fixture();const preview=await requestFinal(api,901,head);
@@ -118,6 +124,7 @@ function quickFixture(){
  const f=fixture();f.addFinal();f.state.pr.title='[QUICK] isolated documentation';f.state.comments=[];
  const ref=finalRef({...plan,kind:'quick'});f.state.ref={ref:`refs/heads/${ref}`,object:{sha:head}};f.state.runs.final[0].head_branch=ref;
  for(const id of Object.keys(f.state.logs))f.state.logs[id]=f.state.logs[id].replace('"kind":"full"','"kind":"quick"');
+ f.state.closeout.pack.kind='quick';f.state.closeout.pack.review={...noReview};f.state.closeout.save();
  return f;
 }
 test('authorized low-risk no-review decision works in final request and merge verification without a Codex summary',async()=>{
