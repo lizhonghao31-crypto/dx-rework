@@ -2,17 +2,17 @@
   "version": 1,
   "base": "972e9f095c28674c1d36f4b8b128115a25fcaf12",
   "risk": "full",
-  "sourceFingerprint": "12977fc37d4f8f7a7fbebb932c9dfe591478437fa12ded9f029fdabc40f8759d",
+  "sourceFingerprint": "92d8aec108bb4628644dbd996ddbbce1469089c30989c60996b4b15800af8f4a",
   "rules": [
     {
       "id": "operator-closeout",
       "rule": "Prescribed final request verifies exact candidate, actual reports, known findings and every current impact rule before any ref creation",
       "source": "2026-11-02 user requires actual executable final-launch closeout; parent approved minimal dual-branch operator-only patch before PR08",
       "writes": [
-        "scripts/ci/pr-gate-controller.mjs",
         "scripts/ci/final-closeout.fixture.mjs",
         "scripts/ci/final-closeout.mjs",
-        "scripts/ci/final-closeout.test.mjs"
+        "scripts/ci/final-closeout.test.mjs",
+        "scripts/ci/pr-gate-controller.mjs"
       ],
       "reads": [
         "scripts/ci/pr-gate-controller.mjs#requestFinal",
@@ -60,8 +60,8 @@
       "command": "[\"node\",\"scripts/test-preflight.mjs\"]",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "972e9f095c28674c1d36f4b8b128115a25fcaf12",
-      "sourceFingerprint": "12977fc37d4f8f7a7fbebb932c9dfe591478437fa12ded9f029fdabc40f8759d",
+      "testedHead": "90e2cc621b505ddb29f7d60d488694382f499a93",
+      "sourceFingerprint": "92d8aec108bb4628644dbd996ddbbce1469089c30989c60996b4b15800af8f4a",
       "inputPaths": [
         "scripts/ci",
         "AGENTS.md",
@@ -69,13 +69,13 @@
         "docs/governance/construction-evidence-v1.md",
         "docs/governance/review-first-final-head-20261027.md"
       ],
-      "inputFingerprint": "37f2006d0d9d6dd7317f1e5769e78c9f54e61d9b753a03d1372a1e1a406b5a2d",
+      "inputFingerprint": "ee53f786cbb0e27f58295a95a298c4544df8a9719c24f0b49215e103a306be7e",
       "context": "Actual local Node 22.23.4; native protocol tests only, no PostgreSQL or production operations; exact declared input digest recorded before/after; not a remote Full claim",
-      "startedAt": "2026-11-02T01:56:40.331Z",
-      "endedAt": "2026-11-02T01:56:43.178Z",
-      "log": "/workspace/dx-closeout-records/dx-closeout-main-20261102/native-protocol-1793584600331.log",
-      "logSha256": "7742fec63de494424a3dccee87574c4bd626ca6a2a425d953e6169e3cb34e64d",
-      "passed": 89,
+      "startedAt": "2026-11-02T02:04:07.469Z",
+      "endedAt": "2026-11-02T02:04:10.496Z",
+      "log": "/workspace/dx-closeout-records/dx-closeout-main-20261102/native-protocol-1793585047469.log",
+      "logSha256": "b84a5be32289890871e86a700b6c34d19d7111cda86e1f5a09a389fe667d3e0d",
+      "passed": 91,
       "failed": 0,
       "skipped": 0
     }

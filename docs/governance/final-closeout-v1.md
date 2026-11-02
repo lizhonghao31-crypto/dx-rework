@@ -22,7 +22,7 @@ JSON字段：
 |noFindingsReason|本批确无发现时的有界结论，不是省略Review|
 |reports|每个checkId提供path/sha256/format，或files数组（分组运行可有多个真实结果，合计数须一致）。读取真实普通文件及construction中原命令log，核实际摘要；同时解析原命令结果和TAP/Vitest JSON报告、总数和具体通过用例。重复结果、失败/全跳过/名称不匹配拒绝|
 
-报告不采用自填passed证明。TAP需真实`ok`用例及pass/fail/skip总数；Vitest JSON需success及真实passed assertion fullName。每项finding/scopeCheck引用其中具体通过名称，不支持“已检查”。check总数须匹配原construction记录。低风险纯规则/文案/素材自动测试不适用时，原记录必须给具体理由，可用`command-record`实际退出记录；该出口不能替代业务/权限测试。
+报告不采用自填passed证明。TAP需真实`ok`用例及pass/fail/skip总数；Vitest JSON需success及真实passed assertion fullName。原命令日志有用例名称时，报告的全部通过名称须与其逐一一致，不能仅总数相同。只有汇总数字的命令日志，必须在捕获该次执行时将结构化报告的`format/sha256`登记到同一check的`resultReports`，提交内固定摘要须与实际报告逐一一致；事后找一份同数量报告不能补证。每项finding/scopeCheck引用其中具体通过名称，不支持“已检查”。check总数须匹配原construction记录。低风险纯规则/文案/素材自动测试不适用时，原记录必须给具体理由，可用`command-record`实际退出记录；该出口不能替代业务/权限测试。
 
 缺记录、旧head/base、未闭合和有效只建一次均在原控制器入口测试，另有实际报告篡改、固定head记录替换、遗漏Review发现、全跳过反例。协议测试先行，不用业务Full调试协议。
 
