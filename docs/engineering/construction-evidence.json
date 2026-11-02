@@ -2,7 +2,7 @@
   "version": 1,
   "base": "3c12c6d3aa532d6b7783144d3bca49d47966483a",
   "risk": "full",
-  "sourceFingerprint": "778b4343fb0f2dd7b890da19cf8b37590a95065d9d604df9da4ba90c9afc19ef",
+  "sourceFingerprint": "2446dfffa25d9ee51fecde9b486a146f26a1826d36780ec2865c6865956c9cf0",
   "rules": [
     {
       "id": "exact-maintenance-plan",
@@ -90,6 +90,7 @@
         "scripts/run-business-chain-gate.mjs",
         "scripts/test-suite-plan.mjs",
         "scripts/ci/test-execution-contract.test.mjs",
+        "tests/unit/business-chain-schema-cleanup.test.ts",
         ".github/workflows/full-gate.yml"
       ],
       "reads": [
@@ -139,40 +140,40 @@
     {
       "id": "native-preflight",
       "kind": "tests",
-      "command": "[\"/tmp/dx-pmc-tools/node_modules/node/bin/node\", \"scripts/test-preflight.mjs\"]",
+      "command": "[\"/tmp/dx-pmc-tools/node_modules/node/bin/node\", \"--test\", \"scripts/ci/construction-evidence.test.mjs\", \"scripts/ci/final-closeout.test.mjs\", \"scripts/ci/fixture-prerequisites.test.mjs\", \"scripts/ci/gate-maintenance.test.mjs\", \"scripts/ci/governance-policy.test.mjs\", \"scripts/ci/light-reuse.test.mjs\", \"scripts/ci/owned-command.test.mjs\", \"scripts/ci/review-final-gate.test.mjs\", \"scripts/ci/test-execution-contract.test.mjs\"]",
       "status": "passed",
       "exitCode": 0,
-      "passed": 98,
+      "passed": 93,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "3c12c6d3aa532d6b7783144d3bca49d47966483a",
-      "sourceFingerprint": "778b4343fb0f2dd7b890da19cf8b37590a95065d9d604df9da4ba90c9afc19ef",
-      "startedAt": "2026-11-02T10:03:00.610521+00:00",
-      "endedAt": "2026-11-02T10:03:05.468228+00:00",
-      "log": "/tmp/dx-pmc-pr1-evidence/submitted-preflight.log",
-      "logSha256": "13195d77efc8bedec20b919ac7a1992a7225a6fc77c896fe7f2d037f71ac601e",
-      "context": "Node 22.22.2; canonical native concurrency 2; all database URLs cleared; actual protocol/resource/governance tests plus unchanged migration static lint."
+      "testedHead": "212c6fad3b220830c9eb5a43cc4892e42d42154c",
+      "sourceFingerprint": "2446dfffa25d9ee51fecde9b486a146f26a1826d36780ec2865c6865956c9cf0",
+      "startedAt": "2026-11-02T10:13:27.217438+00:00",
+      "endedAt": "2026-11-02T10:13:29.645313+00:00",
+      "log": "/tmp/dx-pmc-pr1-evidence/preinstall-native.log",
+      "logSha256": "b21c009ad802dd9fafcd3c5d4838f56b4a4b3115eceb4b576ce529d5184498b4",
+      "context": "Node 22.22.2; exact CI native protocol command before npm ci, fresh checkout without node_modules; both pg/vitest resolution were verified absent. Database URLs cleared; actual source fingerprints match the candidate. No CI hardware equivalence claimed."
     },
     {
       "id": "maintenance-unit",
       "kind": "tests",
-      "command": "[\"/tmp/dx-pmc-tools/node_modules/node/bin/node\", \"node_modules/vitest/vitest.mjs\", \"run\", \"tests/unit/main-maintenance-plan.test.ts\", \"tests/unit/business-chain-schema-cleanup.test.ts\", \"--reporter=verbose\", \"--reporter=json\", \"--outputFile.json=/tmp/dx-pmc-pr1-evidence/submitted-maintenance-unit-vitest.json\"]",
+      "command": "[\"/tmp/dx-pmc-tools/node_modules/node/bin/node\", \"node_modules/vitest/vitest.mjs\", \"run\", \"tests/unit/main-maintenance-plan.test.ts\", \"tests/unit/business-chain-schema-cleanup.test.ts\", \"--reporter=verbose\", \"--reporter=json\", \"--outputFile.json=/tmp/dx-pmc-pr1-evidence/postinstall-maintenance-unit-vitest.json\"]",
       "status": "passed",
       "exitCode": 0,
-      "passed": 126,
+      "passed": 131,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "3c12c6d3aa532d6b7783144d3bca49d47966483a",
-      "sourceFingerprint": "778b4343fb0f2dd7b890da19cf8b37590a95065d9d604df9da4ba90c9afc19ef",
-      "startedAt": "2026-11-02T10:03:05.605486+00:00",
-      "endedAt": "2026-11-02T10:03:15.118978+00:00",
-      "log": "/tmp/dx-pmc-pr1-evidence/submitted-maintenance-unit.log",
-      "logSha256": "5d5f7fd5fe70a0efb15f1d56de5e088b957b61d1c765441d9689dbed5fcf0c46",
+      "testedHead": "212c6fad3b220830c9eb5a43cc4892e42d42154c",
+      "sourceFingerprint": "2446dfffa25d9ee51fecde9b486a146f26a1826d36780ec2865c6865956c9cf0",
+      "startedAt": "2026-11-02T10:13:29.793362+00:00",
+      "endedAt": "2026-11-02T10:13:42.311706+00:00",
+      "log": "/tmp/dx-pmc-pr1-evidence/postinstall-maintenance-unit.log",
+      "logSha256": "ad098577d7a1c933bf223ec441cdcce31bf43eaf3e12e66b901012b82ac1a072",
       "context": "Node 22.22.2; canonical vitest.config.ts nonDatabase worker 1; actual plan coverage, exact object/permission refusal and resource gate regressions.",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "162b23592600b3cdd881d740ebaef9d30387f826e5ec0273bf318dbf82c747a8"
+          "sha256": "ceeae95d5338126ac65c785891ee2986f277ffa3e6661ffc1fdce391f48897e6"
         }
       ]
     },
@@ -542,10 +543,11 @@
           "sha256": "3883eaedfd11e2f7273bcf13aaede83912be84f0b1b5b5e6ea08ab46216b2399"
         }
       ],
-      "context": "Node 22.22.2/npm10.9.9/PG16.15, default max_locks_per_transaction=64; final-source 0232 targeted case only, original correctness worker 1 and 60000 ms budget. Full target identity/OID/marker matched before fresh public setup; all owned children exited and exact public cleanup passed. This is not the earlier 245-test canonical union or GitHub hardware equivalence."
+      "context": "Node 22.22.2/npm10.9.9/PG16.15, default max_locks_per_transaction=64; 0232 targeted case at captured source; unchanged declared inputs reused after dependency-phase-only test relocation, original correctness worker 1 and 60000 ms budget. Full target identity/OID/marker matched before fresh public setup; all owned children exited and exact public cleanup passed. This is not the earlier 245-test canonical union or GitHub hardware equivalence."
     }
   ],
   "validationNotes": {
+    "firstLightFailure": "Exact head 212c6fad3b220830c9eb5a43cc4892e42d42154c light run 41426731609/job125215022301 failed: five newly added native cases imported pg or vitest before npm ci. All five assertions were moved to the existing dependency-installed unit phase, not removed or skipped; exact native preinstall reproduction without either dependency and the postinstall unit group pass. No workflow order, worker or timeout change. Original remote failure log retained.",
     "earlierCanonicalPG16": "Before the final direct-CLI deletion, actual canonical PG16 union passed 17 suites/245 tests with 23 resources cleaned and same-execution receipt verified at source cad3202776ef40b1d78180eba38f44e93feafef7b042be531dbe45e86947f3e7. This remains earlier-version evidence, not a full final-source pass. Only the affected 0232 case was rerun at the final source on both PG13/PG16; final remote Full is pending.",
     "nonDatabaseSweep": "Actual original sweep: 397 files passed, 1 failed; 2159 tests passed, 1 timed out at the existing 5000 ms static-release case. Original log and failed JSON retained. The unchanged exact-base and candidate selected case subsequently each passed once at 4878.712/4994.451 ms with the original budget and 5 unselected cases each skipped; this does not rewrite the sweep as green or establish stable timing. Required remote Full remains pending.",
     "nonDatabaseLog": "/tmp/dx-pmc-pr1-evidence/non-database.log",
