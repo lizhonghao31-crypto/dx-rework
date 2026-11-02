@@ -47,6 +47,10 @@ export class DevelopmentTechnicalSettingsService{
   digitalForbidden();
  }
  async templates(actor:TrustedActorContext,customerCode?:string){return this.transaction(async db=>{await this.technical(db,actor);return {items:(await db.query(`SELECT DISTINCT ON(template_id) template_id AS "templateId",version,customer_code AS "customerCode",body,created_at AS "createdAt" FROM digital_development_technical_templates WHERE ($1::text IS NULL OR customer_code=$1) ORDER BY template_id,version DESC LIMIT 100`,[customerCode??null])).rows};});}
+ async templateVersion(actor:TrustedActorContext,templateId:string,version:number){return this.transaction(async db=>{
+  await this.technical(db,actor);
+  return (await db.query('SELECT template_id AS "templateId",version,customer_code AS "customerCode",body,created_at AS "createdAt" FROM digital_development_technical_templates WHERE template_id=$1 AND version=$2',[templateId,version])).rows[0]??digitalNotFound();
+ });}
  async saveTemplate(actor:TrustedActorContext,raw:unknown,key:string){const input=SaveTechnicalTemplateSchema.parse(raw);if(!this.enabled)digitalForbidden();if(!/^[A-Za-z0-9._:-]{1,128}$/.test(key))conflict('缺少操作标识');return this.transaction(async db=>{
   await this.technical(db,actor,true);
   const hash=createHash('sha256').update(JSON.stringify(input)).digest('hex'),command=`development-size-template:${input.templateId}`;

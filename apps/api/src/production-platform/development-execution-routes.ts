@@ -35,6 +35,7 @@ export function registerDevelopmentExecutionRoutes(app:FastifyInstance,dependenc
   app.post(`${settingsBase}/preview`,async request=>settings.preview(await actor(request),parse(DevelopmentCycleDraftSchema,request.body)));
   app.post(`${settingsBase}/publish`,async request=>settings.publish(await actor(request),parse(DevelopmentCyclePublishSchema,request.body),key(request)));
   app.get('/digital-production/technical-size-templates',async request=>settings.templates(await actor(request),parse(z.object({customerCode:z.string().trim().min(1).max(30).optional()}).strict(),request.query).customerCode));
+  app.get('/digital-production/technical-size-templates/:templateId/versions/:version',async(request,reply)=>{reply.header('cache-control','no-store');const params=parse(z.object({templateId:z.string().uuid(),version:z.coerce.number().int().positive().max(2147483647)}).strict(),request.params);return settings.templateVersion(await actor(request),params.templateId,params.version);});
   app.post('/digital-production/technical-size-templates',async request=>settings.saveTemplate(await actor(request),parse(SaveTechnicalTemplateSchema,request.body),key(request)));
   app.get(base,async request=>({...await service.read(await actor(request),id(request)),qrAvailable:Boolean(dependencies.developmentQrBase)}));
   app.put(`${base}/dispatch`,async request=>service.dispatch(await actor(request),id(request),parse(DevelopmentDispatchSchema,request.body),key(request)));

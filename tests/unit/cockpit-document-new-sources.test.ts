@@ -44,6 +44,18 @@ it('projects real readiness history, actual labels, withdrawn versions and priva
 it('retains source/preorder handover evidence before there is a formal order',async()=>{
  const data=await category({...order,orderId:null},'preparation',async()=>({resource:{kind:'source',id:sid},history:[{recordId:'handover',kind:'design_handover',version:1,valid:true,state:'ready',note:'TEST设计交资料',evidenceIds:['receipt']}]}),signal);expect(data.entries[0]!.label).toContain('设计交资料');expect(data.entries[0]!.files?.[0]?.path).toContain(`/sources/${sid}/production-readiness/attachments/receipt`);
 });
+it('retains every material revision of the same record with its own original evidence',async()=>{
+ const history=[{recordId:'same',version:1,kind:'fabric_receipt',valid:false,state:'partial',evidenceIds:['v1-file']},{recordId:'same',version:2,kind:'fabric_receipt',valid:true,state:'ready',evidenceIds:['v2-file']}];
+ const data=await loadCockpitDirectoryPages(order,'preparation',async()=>({orderId:oid,preparationId:null,facts:[],tasks:[],readiness:{orderId:oid,history},materials:{history:[]},fabric:{report:null,decision:null}}),signal);
+ expect(data.entries.map(e=>e.id)).toEqual(['material:same:1','material:same:2']);expect(data.entries.map(e=>e.files?.[0]?.id)).toEqual(['v1-file','v2-file']);expect(data.entries[0]?.label).toContain('v1');expect(data.entries[1]?.label).toContain('v2');
+});
+it('opens the exact adopted template version and never substitutes the latest',async()=>{
+ const artifactEntry={id:'artifact:a:2',label:'TEST成果',load:{kind:'technical_artifact',id:sid,version:2,round:'1',scopeRef:'整款',path:'original-artifact'}};
+ const detail=await entry(artifactEntry,async()=>({sourceId:sid,roundNumber:1,scopeRef:'整款',items:[{artifactSetId:'a',version:2,body:{pltAttachmentIds:[],consumptionRows:[],baseSizeTable:{sizes:[],measurements:[],templateRef:{id:'template',version:1}}}}]}),signal),template=detail.children![0]!;
+ expect(template.load?.id).toBe('template');expect(template.load?.path).toContain('/template/versions/1');
+ const load=async(version:number)=>({templateId:'template',version,body:{customerCode:'PD',name:'TEST模板',table:{baseSize:'M',unit:'cm',sizes:['M'],measurements:[{name:'胸围',values:[version===1?'48':'52']}],gradingNote:'TEST v'+version}}});
+ const old=await entry(template,async()=>load(1),signal);expect(old.children?.[0]?.note).toContain('M：48');await expect(entry(template,async()=>load(2),signal)).rejects.toThrow();
+});
 it('keeps bulk partial-work evidence and the current adopted round without claiming whole-order cutting',async()=>{
  const data=await category(order,'technical',async()=>({orderId:oid,preparationId:'prep',sourceRound:1,tasks:[],facts:[],readiness:{ranges:[{rangeId:'range',preparationId:'prep',kind:'纸样完成',version:1,lineIds:[line],complete:false,pendingMaterialIds:['accessory'],note:'先做范围',recordedAt:'2026-11-01T00:00:00Z',evidenceIds:['range-file'],basis:{technicalRevision:'frozen'}}]}}),signal);expect(data.entries[0]!.label).toContain('局部范围');expect(data.entries[0]!.note).toContain('PO-TEST');expect(data.entries[0]!.files?.[0]?.path).toContain('range-file');expect(data.note).toContain('不代表整单可开裁');
 });

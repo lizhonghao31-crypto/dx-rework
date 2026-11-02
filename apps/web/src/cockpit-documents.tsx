@@ -46,10 +46,14 @@ function Category({category,state,session,context,onChange,onNavigate,onRetryIde
  </details>;
 }
 function DocumentsForSnapshot({order,context,onChange,identity,onRefreshIdentity,identityError,waitingReason}:{order:OrderJourney;context:CockpitContext;onChange(patch:Partial<CockpitContext>):void;identity:{actorId:string;signature:string}|null;onRefreshIdentity():void;identityError:string;waitingReason:string}){
- const [session,setSession]=useState<CockpitDocumentSnapshot|null>(null),dialog=useRef<HTMLDialogElement>(null),body=useRef<HTMLDivElement>(null),directory=useRef<HTMLDivElement>(null),lastTrigger=useRef<HTMLElement|null>(null),closing=useRef(false),restoring=useRef(false),scrollTimer=useRef<ReturnType<typeof setTimeout>|undefined>(undefined);
+ const [ownedSession,setOwnedSession]=useState<{identity:typeof identity;snapshot:CockpitDocumentSnapshot}|null>(null),dialog=useRef<HTMLDialogElement>(null),body=useRef<HTMLDivElement>(null),directory=useRef<HTMLDivElement>(null),lastTrigger=useRef<HTMLElement|null>(null),closing=useRef(false),restoring=useRef(false),scrollTimer=useRef<ReturnType<typeof setTimeout>|undefined>(undefined);
+ // Every explicit reopen verifies the original sources again, including scope
+ // revocation with unchanged account roles. Never render the previous verified
+ // session between the new auth response and the source-read effect.
+ const session=ownedSession?.identity===identity?ownedSession.snapshot:null;
  const changeRef=useRef(onChange),contextRef=useRef(context);changeRef.current=onChange;contextRef.current=context;
  const open=context.documentView==='all';
- useEffect(()=>{if(!identity)return;const current=createCockpitDocumentSnapshot(order,read,()=>{const verified=cachedVerifiedSession();return Boolean(verified&&verified!=='denied'&&verified.user.id===identity.actorId&&verifiedSessionIdentity(verified)===identity.signature);});setSession(current);for(const c of COCKPIT_PRIORITY_DOCUMENTS)void current.load(c.key);return()=>current.dispose();},[identity?.signature]);
+ useEffect(()=>{if(!identity)return;const current=createCockpitDocumentSnapshot(order,read,()=>{const verified=cachedVerifiedSession();return Boolean(verified&&verified!=='denied'&&verified.user.id===identity.actorId&&verifiedSessionIdentity(verified)===identity.signature);});setOwnedSession({identity,snapshot:current});for(const c of COCKPIT_PRIORITY_DOCUMENTS)void current.load(c.key);return()=>current.dispose();},[identity]);
  const states=useSyncExternalStore(session?.subscribe??noSubscription,session?.getSnapshot??(()=>idleStates),()=>idleStates);
  useEffect(()=>{if(open&&session&&!waitingReason)session.start();},[open,session,waitingReason]);
  useEffect(()=>{
