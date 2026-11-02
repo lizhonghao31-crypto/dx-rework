@@ -1,374 +1,83 @@
 {
   "version": 1,
-  "base": "1de4bb07d24d4eb98913a7dcfc528ef984ebe359",
-  "sourceFingerprint": "e154ccc0f2b15382eb624dd1f4c7922981bf0cddb7c307808ae096cb65ac9a35",
+  "base": "972e9f095c28674c1d36f4b8b128115a25fcaf12",
+  "risk": "full",
+  "sourceFingerprint": "12977fc37d4f8f7a7fbebb932c9dfe591478437fa12ded9f029fdabc40f8759d",
   "rules": [
     {
-      "id": "policy",
-      "rule": "历史授权/旧阶段与长期规则分离，目标分支和当前授权成为事实源",
-      "source": "2026-11-01 用户批准双分支治理；见construction-efficiency-audit-20261101 E01-E24及当前失败补记",
+      "id": "operator-closeout",
+      "rule": "Prescribed final request verifies exact candidate, actual reports, known findings and every current impact rule before any ref creation",
+      "source": "2026-11-02 user requires actual executable final-launch closeout; parent approved minimal dual-branch operator-only patch before PR08",
+      "writes": [
+        "scripts/ci/pr-gate-controller.mjs",
+        "scripts/ci/final-closeout.fixture.mjs",
+        "scripts/ci/final-closeout.mjs",
+        "scripts/ci/final-closeout.test.mjs"
+      ],
+      "reads": [
+        "scripts/ci/pr-gate-controller.mjs#requestFinal",
+        "scripts/ci/construction-evidence.mjs#validateEvidence",
+        "scripts/ci/pr-gate-protocol.mjs#trustedReview"
+      ],
+      "oldTests": [
+        "scripts/ci/construction-evidence.test.mjs",
+        "scripts/ci/review-final-gate.test.mjs"
+      ],
+      "checks": [
+        "native-protocol"
+      ],
+      "initialization": "External frozen-candidate package is not committed and never changes its own Head; existing immutable final refs retain observation behavior; no database, user role, permission or business migration",
+      "dateAndPermission": "No new credentials, actor authentication, server protection or CI pipeline; real report bytes and fixed Head/base only. Does not claim all unknown defects or prevent manual ref creation.",
+      "expectation": "Missing or stale package, unresolved finding, changed/failed report, pinned-record mismatch or omitted Review finding rejects preview/apply and creates zero refs; actual complete evidence creates exactly one and existing observation needs no second launch"
+    },
+    {
+      "id": "long-term-entry",
+      "rule": "Root policy defines one final-launch owner and exact shared executable path without pretending all old windows update automatically",
+      "source": "2026-11-02 user requires actual executable final-launch closeout; parent approved minimal dual-branch operator-only patch before PR08",
       "writes": [
         "AGENTS.md"
       ],
       "reads": [
-        "docs/governance/chatgpt-codex-construction-workflow-v1.0.md",
-        "docs/governance/github-actions-usage-policy-v1.0.md"
+        "docs/governance/final-closeout-v1.md",
+        "docs/governance/review-first-final-head-20261027.md",
+        "docs/governance/construction-evidence-v1.md"
       ],
       "oldTests": [
         "scripts/ci/governance-policy.test.mjs"
       ],
       "checks": [
-        "native"
+        "native-protocol"
       ],
-      "initialization": "原文归档；样衣仅解释历史授权/环境，不删除生产cutover及Root安全条件",
-      "dateAndPermission": "不自动部署或赋真人权限；保留用户标准速度与Fast设置",
-      "expectation": "保留已有断言；正向实际办理通过，负向身份/上下文/清理/回执错误必须拒绝；对应原测试与命令记录逐项核验"
-    },
-    {
-      "id": "gate",
-      "rule": "Review-first、准确最终tuple与真实状态，不沿用单次Quick特批",
-      "source": "2026-11-01 用户批准双分支治理；见construction-efficiency-audit-20261101 E01-E24及当前失败补记",
-      "writes": [
-        ".github/workflows/ci.yml",
-        ".github/workflows/full-gate.yml",
-        "scripts/ci/ci-gate-runtime.mjs",
-        "scripts/ci/gate-maintenance.test.mjs",
-        "scripts/ci/pr-gate-controller.mjs",
-        "scripts/ci/pr-gate-protocol.mjs",
-        "scripts/ci/review-final-gate.test.mjs",
-        "scripts/ci/verify-actions-policy.mjs"
-      ],
-      "reads": [
-        "scripts/ci/pr-gate-controller.mjs",
-        "scripts/ci/ci-gate-runtime.mjs"
-      ],
-      "oldTests": [
-        "scripts/ci/review-final-gate.test.mjs",
-        "scripts/ci/gate-maintenance.test.mjs"
-      ],
-      "checks": [
-        "native",
-        "consumers"
-      ],
-      "initialization": "head/base/mode/run/job/attempt都绑定；最终ref只创建一次；旧例外直接拒绝",
-      "dateAndPermission": "只新增actions:read读取产物，保护和生产权限不改；不提交APPROVE",
-      "expectation": "保留已有断言；正向实际办理通过，负向身份/上下文/清理/回执错误必须拒绝；对应原测试与命令记录逐项核验"
-    },
-    {
-      "id": "reuse",
-      "rule": "同Head四项light证据和产物真实复用，其他上下文不复用",
-      "source": "2026-11-01 用户批准双分支治理；见construction-efficiency-audit-20261101 E01-E24及当前失败补记",
-      "writes": [
-        "scripts/ci/light-reuse.mjs",
-        "scripts/ci/light-reuse.test.mjs"
-      ],
-      "reads": [
-        "scripts/ci/ci-gate-runtime.mjs",
-        "scripts/ci/pr-gate-protocol.mjs"
-      ],
-      "oldTests": [
-        "scripts/ci/light-reuse.test.mjs"
-      ],
-      "checks": [
-        "native"
-      ],
-      "initialization": "源run实际成功、attempt、Node/npm/image/lock/env及文件摘要匹配；无可靠源时原命令fresh执行",
-      "dateAndPermission": "失败/skip/旧Head/不同base/腐坏文件/路径逃逸拒绝，不能用产物代替PG或恢复证据",
-      "expectation": "保留已有断言；正向实际办理通过，负向身份/上下文/清理/回执错误必须拒绝；对应原测试与命令记录逐项核验"
-    },
-    {
-      "id": "evidence",
-      "rule": "真实diff/旧消费者与当前源码绑定，测试结果与非测试命令分开",
-      "source": "2026-11-01 用户批准双分支治理；见construction-efficiency-audit-20261101 E01-E24及当前失败补记",
-      "writes": [
-        "scripts/ci/construction-evidence.mjs",
-        "scripts/ci/construction-evidence.test.mjs"
-      ],
-      "reads": [
-        "AGENTS.md",
-        "scripts/ci/ci-gate-runtime.mjs"
-      ],
-      "oldTests": [
-        "scripts/ci/construction-evidence.test.mjs"
-      ],
-      "checks": [
-        "native"
-      ],
-      "initialization": "记录实际命令、exit、测试数或command类型、前后相同指纹及日志hash；文档自引用不生成假head",
-      "dateAndPermission": "结构检查不宣称语义零遗漏；无记录/错误base/源码漂移/全skip必须拒绝",
-      "expectation": "保留已有断言；正向实际办理通过，负向身份/上下文/清理/回执错误必须拒绝；对应原测试与命令记录逐项核验"
-    },
-    {
-      "id": "execution",
-      "rule": "本地与CI显式工具/config/worker，受管中断不留孤儿任务",
-      "source": "2026-11-01 用户批准双分支治理；见construction-efficiency-audit-20261101 E01-E24及当前失败补记",
-      "writes": [
-        ".node-version",
-        "package.json",
-        "scripts/ci/full-gate-risk-map.mjs",
-        "scripts/ci/governance-policy.test.mjs",
-        "scripts/ci/owned-command.test.mjs",
-        "scripts/ci/test-execution-contract.test.mjs",
-        "scripts/ci/test-runtime-metadata.mjs",
-        "scripts/migration-lib.mjs",
-        "scripts/owned-command.mjs",
-        "scripts/run-business-chain-gate.mjs",
-        "scripts/test-execution-config.mjs",
-        "scripts/test-preflight.mjs",
-        "scripts/test-suite-plan.mjs",
-        "vitest.business-chain.config.ts",
-        "vitest.config.ts",
-        "vitest.postgres-immediate.config.ts"
-      ],
-      "reads": [
-        "scripts/test-suite-plan.mjs",
-        "scripts/run-business-chain-gate.mjs",
-        "scripts/owned-command.mjs"
-      ],
-      "oldTests": [
-        "scripts/ci/owned-command.test.mjs",
-        "scripts/ci/test-execution-contract.test.mjs"
-      ],
-      "checks": [
-        "native",
-        "consumers",
-        "isolated-full",
-        "runtime-immediate"
-      ],
-      "initialization": "普通PG1/长链2来自同一配置；已有严格测试时限不变；本地22.23.4与CI22.22.2差异显式记录",
-      "dateAndPermission": "中断父子孙退出后才清理/签证据；PID启动身份变化或未证退出拒绝；不扩大timeout",
-      "expectation": "保留已有断言；正向实际办理通过，负向身份/上下文/清理/回执错误必须拒绝；对应原测试与命令记录逐项核验"
-    },
-    {
-      "id": "resources",
-      "rule": "所有改动资源生产者与登记/清理共用严格所有权契约",
-      "source": "2026-11-01 用户批准双分支治理；见construction-efficiency-audit-20261101 E01-E24及当前失败补记",
-      "writes": [
-        "scripts/test-database-safety.mjs",
-        "scripts/test-resource-contract.mjs",
-        "scripts/test-resource-lifecycle.mjs",
-        "tests/helpers/owned-postgres-schema.ts",
-        "tests/helpers/supplier-fixture.ts",
-        "tests/integration/acceptance-role-session-postgres.test.ts",
-        "tests/integration/access-postgres.test.ts",
-        "tests/integration/digital-production-node-clock-postgres.test.ts",
-        "tests/integration/digital-production-root-postgres.test.ts",
-        "tests/integration/employee-access-lifecycle-postgres.test.ts",
-        "tests/integration/finance-wage-access-postgres.test.ts",
-        "tests/integration/full-business-chain-postgres.test.ts",
-        "tests/integration/member-module-policy-postgres.cases.ts",
-        "tests/integration/own-tail-responsibility-history-postgres.test.ts",
-        "tests/integration/pmc-readonly-postgres.test.ts",
-        "tests/integration/production-analysis-postgres.cases.ts",
-        "tests/integration/production-closure-postgres.test.ts",
-        "tests/integration/public-tools-postgres.test.ts",
-        "tests/integration/quality-basic-rework-postgres.test.ts",
-        "tests/integration/receiving-analysis-postgres.cases.ts",
-        "tests/integration/receiving-postgres.test.ts",
-        "tests/integration/rework-v2-n01-postgres.test.ts",
-        "tests/integration/rework-v2-process-worker-preassignment-postgres.test.ts",
-        "tests/integration/root-self-system-admin-postgres.test.ts",
-        "tests/integration/root-single-account-two-pass-postgres.test.ts",
-        "tests/integration/safe-migration-locks-postgres.test.ts",
-        "tests/integration/sample-analysis-postgres.cases.ts",
-        "tests/integration/sample-create-postgres.test.ts",
-        "tests/integration/sample-disposal-postgres.test.ts",
-        "tests/integration/sample-foundation-postgres.test.ts",
-        "tests/integration/sample-import-postgres.test.ts",
-        "tests/integration/sample-read-postgres.test.ts",
-        "tests/integration/sample-workflow-postgres.test.ts",
-        "tests/integration/sourcing-pr03-postgres.test.ts",
-        "tests/integration/supplier-maintenance-postgres.test.ts",
-        "tests/integration/supplier-onboarding-postgres.test.ts",
-        "tests/integration/temporary-special-proxy-postgres.test.ts",
-        "tests/integration/test-resource-contract-postgres.test.ts",
-        "tests/integration/wage-settlement-postgres.test.ts",
-        "tests/integration/work-analysis-postgres.cases.ts",
-        "tests/unit/business-chain-schema-cleanup.test.ts"
-      ],
-      "reads": [
-        "scripts/test-resource-contract.mjs",
-        "scripts/test-resource-lifecycle.mjs",
-        "scripts/run-business-chain-gate.mjs"
-      ],
-      "oldTests": [
-        "tests/unit/business-chain-schema-cleanup.test.ts",
-        "tests/integration/test-resource-contract-postgres.test.ts"
-      ],
-      "checks": [
-        "native",
-        "consumers",
-        "resource-targeted",
-        "isolated-full"
-      ],
-      "initialization": "低权限标记DB/OID及run精确manifest；受管并行重型schema交回；worker全退出父跨库串行清理；独立模式仍真实删除",
-      "dateAndPermission": "不变业务断言、Root/角色权限、质量和金额规则；错目标/身份/run拒绝；失败保留清理证据",
-      "expectation": "保留已有断言；正向实际办理通过，负向身份/上下文/清理/回执错误必须拒绝；对应原测试与命令记录逐项核验"
-    },
-    {
-      "id": "prerequisites",
-      "rule": "先核真实夹具前置，再进入长迁移/业务链",
-      "source": "2026-11-01 用户批准双分支治理；见construction-efficiency-audit-20261101 E01-E24及当前失败补记",
-      "writes": [
-        "scripts/ci/fixture-prerequisites.test.mjs",
-        "scripts/test-fixture-prerequisites.mjs"
-      ],
-      "reads": [
-        "scripts/run-business-chain-gate.mjs",
-        "scripts/test-fixture-prerequisites.mjs"
-      ],
-      "oldTests": [
-        "scripts/ci/fixture-prerequisites.test.mjs"
-      ],
-      "checks": [
-        "native"
-      ],
-      "initialization": "只读检查维护角色存在、membership及低权限属性；不能自动创建或授真实权限",
-      "dateAndPermission": "缺角色/不合法权限早拒绝；main不盲带release业务功能或数据库迁移",
-      "expectation": "保留已有断言；正向实际办理通过，负向身份/上下文/清理/回执错误必须拒绝；对应原测试与命令记录逐项核验"
+      "initialization": "External frozen-candidate package is not committed and never changes its own Head; existing immutable final refs retain observation behavior; no database, user role, permission or business migration",
+      "dateAndPermission": "No new credentials, actor authentication, server protection or CI pipeline; real report bytes and fixed Head/base only. Does not claim all unknown defects or prevent manual ref creation.",
+      "expectation": "Root references resolve on this branch; preserve branch-specific runbook; actual tests exercise missing/old/unclosed/valid controller paths rather than a self-labelled passed field"
     }
   ],
   "checks": [
     {
-      "id": "consumers",
-      "kind": "tests",
-      "command": "[\"node\",\"node_modules/vitest/vitest.mjs\",\"run\",\"tests/unit/full-gate-risk-map.test.ts\",\"tests/unit/business-chain-schema-cleanup.test.ts\"]",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "5e6767da4ca25042adf371387652c24aebd45482",
-      "sourceFingerprint": "e154ccc0f2b15382eb624dd1f4c7922981bf0cddb7c307808ae096cb65ac9a35",
-      "sourceState": "working tree including staged changes, exactly fingerprinted before and after command",
-      "context": "Local Node 22.23.4; owned isolated workspace/test database only, not a claim of CI hardware equivalence",
-      "startedAt": "2026-11-01T18:43:56.581Z",
-      "endedAt": "2026-11-01T18:43:58.136Z",
-      "logSha256": "6796df9f354e092ee7267fb227177a587efe995435983c1782649be06914d9dd",
-      "log": "/workspace/dx-governance-main-recorded-consumers-1793558636581.log",
-      "passed": 23,
-      "failed": 0,
-      "skipped": 0
-    },
-    {
-      "id": "isolated-full",
-      "kind": "tests",
-      "command": "[\"flock\",\"/workspace/dx-governance-local-pg-instance.lock\",\"taskset\",\"-c\",\"0,1\",\"node\",\"/workspace/dx-governance-cpu-benchmark.mjs\",\"--full-gate\"]",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "5e6767da4ca25042adf371387652c24aebd45482",
-      "sourceFingerprint": "e154ccc0f2b15382eb624dd1f4c7922981bf0cddb7c307808ae096cb65ac9a35",
-      "sourceState": "working tree including staged changes, exactly fingerprinted before and after command",
-      "context": "Local Node 22.23.4; owned isolated workspace/test database only, not a claim of CI hardware equivalence",
-      "startedAt": "2026-11-01T18:43:37.471Z",
-      "endedAt": "2026-11-01T18:44:27.064Z",
-      "logSha256": "2ef1a554ad410306a8702e300e6d7fe6f2a1d612133c3cd48de4a76ec15107da",
-      "log": "/workspace/dx-governance-main-recorded-isolated-full-1793558617471.log",
-      "passed": 35,
-      "failed": 0,
-      "skipped": 0
-    },
-    {
-      "id": "lint",
-      "kind": "command",
-      "command": "[\"npm\",\"run\",\"lint\"]",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "5e6767da4ca25042adf371387652c24aebd45482",
-      "sourceFingerprint": "e154ccc0f2b15382eb624dd1f4c7922981bf0cddb7c307808ae096cb65ac9a35",
-      "sourceState": "working tree including staged changes, exactly fingerprinted before and after command",
-      "context": "Local Node 22.23.4; owned isolated workspace/test database only, not a claim of CI hardware equivalence",
-      "startedAt": "2026-11-01T18:43:56.662Z",
-      "endedAt": "2026-11-01T18:44:12.881Z",
-      "logSha256": "dac45e9202dd0400da69a080ea51bda187f66d2c3344db6291f4d82e1077d00f",
-      "log": "/workspace/dx-governance-main-recorded-lint-1793558636663.log"
-    },
-    {
-      "id": "native",
+      "id": "native-protocol",
       "kind": "tests",
       "command": "[\"node\",\"scripts/test-preflight.mjs\"]",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "5e6767da4ca25042adf371387652c24aebd45482",
-      "sourceFingerprint": "e154ccc0f2b15382eb624dd1f4c7922981bf0cddb7c307808ae096cb65ac9a35",
-      "sourceState": "working tree including staged changes, exactly fingerprinted before and after command",
-      "context": "Local Node 22.23.4; owned isolated workspace/test database only, not a claim of CI hardware equivalence",
-      "startedAt": "2026-11-01T18:43:19.667Z",
-      "endedAt": "2026-11-01T18:43:22.294Z",
-      "logSha256": "992fa73f85b621ae11dd665f1f417df739488df026c1cec359cb55cbac38f822",
-      "log": "/workspace/dx-governance-main-recorded-native-1793558599667.log",
-      "passed": 81,
+      "testedHead": "972e9f095c28674c1d36f4b8b128115a25fcaf12",
+      "sourceFingerprint": "12977fc37d4f8f7a7fbebb932c9dfe591478437fa12ded9f029fdabc40f8759d",
+      "inputPaths": [
+        "scripts/ci",
+        "AGENTS.md",
+        "docs/governance/final-closeout-v1.md",
+        "docs/governance/construction-evidence-v1.md",
+        "docs/governance/review-first-final-head-20261027.md"
+      ],
+      "inputFingerprint": "37f2006d0d9d6dd7317f1e5769e78c9f54e61d9b753a03d1372a1e1a406b5a2d",
+      "context": "Actual local Node 22.23.4; native protocol tests only, no PostgreSQL or production operations; exact declared input digest recorded before/after; not a remote Full claim",
+      "startedAt": "2026-11-02T01:56:40.331Z",
+      "endedAt": "2026-11-02T01:56:43.178Z",
+      "log": "/workspace/dx-closeout-records/dx-closeout-main-20261102/native-protocol-1793584600331.log",
+      "logSha256": "7742fec63de494424a3dccee87574c4bd626ca6a2a425d953e6169e3cb34e64d",
+      "passed": 89,
       "failed": 0,
       "skipped": 0
-    },
-    {
-      "id": "resource-targeted",
-      "kind": "tests",
-      "command": "[\"flock\",\"/workspace/dx-governance-local-pg-instance.lock\",\"node\",\"scripts/run-business-chain-gate.mjs\",\"--full-gate\"]",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "5e6767da4ca25042adf371387652c24aebd45482",
-      "sourceFingerprint": "e154ccc0f2b15382eb624dd1f4c7922981bf0cddb7c307808ae096cb65ac9a35",
-      "sourceState": "working tree including staged changes, exactly fingerprinted before and after command",
-      "context": "Local Node 22.23.4; owned isolated workspace/test database only, not a claim of CI hardware equivalence",
-      "startedAt": "2026-11-01T18:44:28.980Z",
-      "endedAt": "2026-11-01T18:46:08.975Z",
-      "logSha256": "e3e6926421f047373f073ea3468ef0e59422d3d920331e7b7378fa36c7e00ce9",
-      "log": "/workspace/dx-governance-main-recorded-resource-targeted-1793558668980.log",
-      "passed": 32,
-      "failed": 0,
-      "skipped": 0,
-      "inputPaths": [
-        "apps",
-        "packages",
-        "tests",
-        "scripts/test-resource-contract.mjs",
-        "scripts/test-resource-lifecycle.mjs",
-        "scripts/test-database-safety.mjs",
-        "scripts/test-suite-plan.mjs",
-        "scripts/owned-command.mjs",
-        "scripts/test-fixture-prerequisites.mjs",
-        "scripts/test-execution-config.mjs",
-        "scripts/run-business-chain-gate.mjs",
-        "scripts/ci/test-runtime-metadata.mjs",
-        "scripts/ci/full-gate-risk-map.mjs",
-        "scripts/seed-base-migrations.sh",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts",
-        "package.json",
-        "package-lock.json",
-        ".node-version",
-        "scripts/migration-branches.json",
-        "scripts/migration-history-policy.mjs",
-        "scripts/migration-integration-check.mjs",
-        "scripts/migration-lib.mjs",
-        "scripts/migration-main-extensions.json"
-      ],
-      "inputFingerprint": "fbad8e9a4e128f7787d4f0402c267aa51b2f3b92df5af600aaa1c5ed181d0f57",
-      "scopeProvenance": "Scope derived while original full-source fingerprint still matched the measured command; before any following source change."
-    },
-    {
-      "id": "runtime-immediate",
-      "kind": "command",
-      "command": "[\"node\",\"scripts/ci/test-runtime-metadata.mjs\",\"--config\",\"vitest.postgres-immediate.config.ts\"]",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "5e6767da4ca25042adf371387652c24aebd45482",
-      "sourceFingerprint": "e154ccc0f2b15382eb624dd1f4c7922981bf0cddb7c307808ae096cb65ac9a35",
-      "sourceState": "working tree including staged changes, exactly fingerprinted before and after command",
-      "context": "Local Node 22.23.4; owned isolated workspace/test database only, not a claim of CI hardware equivalence",
-      "startedAt": "2026-11-01T18:43:56.581Z",
-      "endedAt": "2026-11-01T18:43:57.432Z",
-      "logSha256": "236529e8139a904b1df2a9d3988fe3b929ecd80e1ffa6e1325964ea0e4845dd7",
-      "log": "/workspace/dx-governance-main-recorded-runtime-immediate-1793558636581.log",
-      "inputPaths": [
-        "scripts/ci/test-runtime-metadata.mjs",
-        "scripts/test-execution-config.mjs",
-        "vitest.postgres-immediate.config.ts",
-        ".node-version",
-        "package.json",
-        "package-lock.json"
-      ],
-      "inputFingerprint": "1632a2d9bc47b27620dfbb163348351b3c630ca2559c83e71a0819812783c5c9",
-      "scopeProvenance": "Scope derived while original full-source fingerprint still matched the measured command; before any following source change."
     }
-  ],
-  "scope": "Local focused validation; never a replacement for precise final GitHub Gate or deployment acceptance"
+  ]
 }

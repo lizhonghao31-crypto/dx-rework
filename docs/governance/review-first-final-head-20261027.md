@@ -4,7 +4,7 @@
 
 ## 请求与核证
 
-`node scripts/ci/pr-gate-controller.mjs request-final --pr <N> --head <Head40>`只读核真实PR、当前目标tip、light和必要Review；在已有授权内加`--apply`创建唯一请求：
+`node scripts/ci/pr-gate-controller.mjs request-final --pr <N> --head <Head40> --closeout <外置收口包>`只读核真实PR、当前目标tip、light、必要Review及[本批收口包](final-closeout-v1.md)；preview/apply均在新建引用前校验包、固定Head的construction摘要和实际报告，已有授权内加`--apply`创建唯一请求：
 
 `gate/{quick|full}/{PR}/{Head40}/{base40}/{baseRefBase64url}`
 
