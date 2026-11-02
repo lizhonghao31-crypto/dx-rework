@@ -12,6 +12,7 @@ export function registerBulkPreparationRoutes(app:FastifyInstance,deps:DigitalId
  const key=(r:FastifyRequest)=>typeof r.headers['idempotency-key']==='string'?r.headers['idempotency-key']:'';
  const base='/digital-production/orders/:orderId/bulk-preparation';
  app.get('/digital-production/workspaces/bulk-pattern',async r=>service.workroom(await actor(r),parse(BulkWorkroomFilterSchema,r.query)));
+ app.get(`${base}/history`,async r=>service.documentHistory(await actor(r),id(r),parse(z.object({beforeId:z.string().uuid().optional()}).strict(),r.query).beforeId));
  app.get(base,async r=>service.read(await actor(r),id(r)));
  app.put(`${base}/dispatch`,async r=>service.dispatch(await actor(r),id(r),parse(BulkDispatchSchema,r.body),key(r)));
  app.post(`${base}/fabric-report`,async r=>service.reportFabric(await actor(r),id(r),parse(BulkFabricReportSchema,r.body),key(r)));

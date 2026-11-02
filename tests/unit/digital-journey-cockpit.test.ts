@@ -136,6 +136,6 @@ describe("R2 PR07 stage display scope", () => {
     const item=order([node("paper",{stage:"preparation",records:[record]})]);
     const html=renderToStaticMarkup(createElement(DigitalJourneyCockpit,{data:null,detail:item,context:context(),error:"",detailError:"",detailLoading:false,onChange(){},actions:null}));
     expect(html).not.toContain('class="journey-node-expanded"');expect(html).not.toContain('journey-preparation-reference');expect(html).not.toContain('本单资料');expect(html).toContain('class="cockpit-document-directory"');expect(html).not.toContain('订单进度 · 全单范围');expect(html).toContain('适用节点');
-    expect(html).toContain('样衣打板执行单');expect(html).toContain('回货与装箱资料');expect(html).toContain('尚未读取');expect(html).not.toContain('待判断');
+    expect(html).toContain('打板执行单');expect(html).toContain('真实回货与成衣QC');expect(html).toContain('装箱与数量差异');expect(html).toContain('查看全部');expect((html.match(/class="cockpit-document-priority-row"/g)??[])).toHaveLength(10);expect(html).toContain('读取中');expect(html).not.toContain('待判断');
   });
 });

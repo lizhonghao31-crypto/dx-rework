@@ -18,7 +18,7 @@ import {loadCockpitDocumentCategory,loadCockpitDocumentEntry,type CockpitDocumen
 import type {OrderJourney} from "@dx-rework/contracts/digital-production-journey";
 import { DigitalProductionNotificationService } from "../../apps/api/src/production-platform/notification-service.js";
 import { DevelopmentDocumentSchema, SaveDevelopmentSchema, type DevelopmentDocument } from "@dx-rework/contracts/digital-development";
-import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema,createOwnedPostgresSchema,releaseOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
 const run = databaseUrl ? describe : describe.skip;
@@ -30,7 +30,7 @@ run("P05 development forms PostgreSQL", () => {
   const actor=(id=designer,roles=["sample_designer"]):TrustedActorContext=>({actorId:id,actorRoles:roles,authorizationCapability:"pattern_room:orders:create",authorizationCapabilities:["pattern_room:orders:create","todo:view"],requestId:"P05"});
   const service=new DigitalProductionIdentityService(database,true), development=new DigitalDevelopmentService(database,true);
   beforeAll(async () => {
-    await admin.query(`CREATE SCHEMA ${schema}`);
+    await createOwnedPostgresSchema(admin,schema);
     for (const name of ["0001_platform_foundation.sql", "0002_dingtalk_identity_access.sql", "0004_public_tools_foundation.sql", "0216_digital_production_order_roots.sql", "0217_digital_production_node_clocks.sql"])
       await database.query(await readFile(new URL(`../../apps/api/migrations/${name}`, import.meta.url), "utf8"));
     // Existing-domain tables are represented only by referenced identity columns in this isolated fixture.
@@ -66,7 +66,7 @@ run("P05 development forms PostgreSQL", () => {
     await database.query(await readFile(new URL("../../apps/api/migrations/0222_digital_development_documents.sql", import.meta.url), "utf8"));
   });
 
-  afterAll(async()=>{await database.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();});
+  afterAll(async()=>{await database.end();try{await releaseOwnedPostgresSchema(admin,schema);}finally{await admin.end();}});
   const source=async()=> (await service.createSource(actor(),{developmentType:"头版",designStyleNo:`TEST-P05-${randomUUID()}`,temporaryStyleNo:null,customerCode:null},randomUUID())).sourceId;
   const draft=():DevelopmentDocument=>DevelopmentDocumentSchema.parse({documentFormatVersion:2,sizeQuantities:[null],template:"上衣",quantity:null,sampleSize:"",orderDate:null,returnDate:null,unit:"cm",sizes:["M"],measurements:[{name:"胸围",values:[""]}],interlining:"",placketInterlining:"",sewingThread:"",buttonholeThread:"",stitchDensity:"",washingIroning:"",packaging:"",formalSizes:"",casualSizes:"",mainLabel:false,mainLabelMethod:"",sizeLabel:false,careLabel:false,instructions:"",craft:"无",washing:"免洗",materials:[],files:[]});
   const ready=async()=>{
@@ -173,7 +173,7 @@ run("P05 development forms PostgreSQL", () => {
     document.customerOrderDraft={withOrder:true,stage:'formal',order};
     const saved=await development.save(actor(),id,{expectedVersion:0,document},randomUUID());await development.publish(actor(),id,saved.version,randomUUID());
     const original=structuredClone(order);
-    await expect(confirmationService.createOrder(actor(),DigitalOrderCreateSchema.parse(initialCustomerOrderInput(order)),randomUUID(),id)).rejects.toMatchObject({statusCode:400});
+    await expect(confirmationService.createOrder(actor(),DigitalOrderCreateSchema.parse(initialCustomerOrderInput(order)),randomUUID(),id)).rejects.toMatchObject(scenario==='future order date'?{statusCode:400}:{statusCode:409,code:'SHORT_LEAD_APPROVAL_REQUIRED'}); // Current approved 30-natural-day contract; invalid future order date remains validation400.
     order.orderDate='2026-11-01';order.lines[0]!.customerWarehouseArrivalDate=minimumInitialCustomerDate(now);
     const confirmed=await confirmationService.createOrder(actor(),DigitalOrderCreateSchema.parse(initialCustomerOrderInput(order)),randomUUID(),id);
     expect(confirmed.lines).toHaveLength(order.lines.length);expect(confirmed.lines[0]?.sizes[0]?.quantity).toBe(12);

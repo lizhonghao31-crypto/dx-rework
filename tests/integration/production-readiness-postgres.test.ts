@@ -1,3 +1,6 @@
+import {registerBulkPreparationRoutes} from '../../apps/api/src/production-platform/bulk-preparation-routes.js';
+import {registerOrderClosureRoutes} from '../../apps/api/src/production-platform/order-closure-routes.js';
+import {OrderClosureService} from '../../apps/api/src/production-platform/order-closure-service.js';
 import {DigitalProductionTaskService} from '../../apps/api/src/production-platform/task-service.js';
 import {DevelopmentExecutionService} from '../../apps/api/src/production-platform/development-execution-service.js';
 import {DevelopmentTechnicalService} from '../../apps/api/src/production-platform/development-technical-service.js';
@@ -257,6 +260,36 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await f.advance(scene,'2026-12-10T08:00:00Z');await f.runtime.run(scene,f.root,async()=>{const next=await replace('TEST S3 replaces explicitly applied S2, retains S1 window root');expect(next.preparationId).not.toBe(supplementalId);expect(next.tasks.find(t=>t.taskKind==='bulk_pattern')!.dueAt).toBe(due);const row=(await f.db.query('SELECT clock_origin_preparation_id,supplement_of_preparation_id FROM digital_bulk_preparations WHERE preparation_id=$1',[next.preparationId])).rows[0];expect(row).toMatchObject({clock_origin_preparation_id:supplementalId,supplement_of_preparation_id:ready.preparationId});await bulk.dispatch(f.root,ready.id,{expectedVersion:next.dispatch.version,patternWorkerId:f.people['pattern-room-worker']!.actorId,deliverPattern:true},randomUUID());for(const kind of ['纸样完成','唛架完成'] as const)await completeBulkRangeFixture(f.db,f.people['pattern-room-worker']!,ready.id,next.preparationId!,kind);});
    await f.advance(scene,'2026-12-10T10:00:00Z');await f.runtime.run(scene,f.root,async()=>{const next=await replace('TEST S4 is genuinely new work after S3 completed');expect(next.tasks.find(t=>t.taskKind==='bulk_pattern')!.dueAt).toBeNull();});
   }finally{await restoreDefault();}
+ });
+
+ it('reads original partial range evidence through the same private order attachment authority',async()=>{
+  const scene=await f.scene('2026-11-02T00:00:00Z');await f.runtime.run(scene,f.root,async()=>{
+   const ready=await f.bulkReady('无',undefined,1,f.sourcing,{stopBeforeCompletion:true}),worker=f.people['pattern-room-worker']!,resource={kind:'order' as const,id:ready.id};
+   const bytes=await sharp({create:{width:2,height:2,channels:3,background:'white'}}).png().toBuffer(),sha256=createHash('sha256').update(bytes).digest('hex');
+   const upload=await f.attachments.createUploadIntent(worker,{filename:'TEST original range evidence.png',mimeType:'image/png',sizeBytes:bytes.length,sha256});await f.storage.writeImmutable(upload.objectKey,bytes,{mimeType:'image/png',sha256});await f.attachments.finalize(worker,upload.attachmentId);
+   const state=await service.read(worker,resource);
+   await bulk.complete(worker,ready.id,{preparationId:ready.preparationId,kind:'纸样完成',expectedReadinessRevision:state.revision,range:{expectedVersion:0,lineIds:[state.lines[0]!.lineId],complete:false,pendingMaterialIds:[],note:'TEST actual partial work with original evidence',evidenceIds:[upload.attachmentId]}},randomUUID());
+   const read=await service.read(ready.primary,resource),range=read.ranges.at(-1)!;expect(range.evidenceIds).toEqual([upload.attachmentId]);expect(range.basis).toMatchObject({readinessRevision:state.revision,technicalRevision:state.technicalRevision});expect(range.complete).toBe(false);
+   await expect(f.attachments.createDownloadIntent(ready.primary,upload.attachmentId,()=>service.canDownload(ready.primary,resource,upload.attachmentId),'inline')).resolves.toHaveProperty('downloadUrl');
+   const other=await setup(),otherOrder=await order(other),otherResource={kind:'order' as const,id:otherOrder.productionOrderId};
+   expect(await service.canDownload(other.primary,otherResource,upload.attachmentId)).toBe(false);await expect(f.attachments.createDownloadIntent(other.primary,upload.attachmentId,()=>service.canDownload(other.primary,otherResource,upload.attachmentId),'inline')).rejects.toMatchObject({statusCode:403});
+   expect((await bulk.read(worker,ready.id)).facts.some(f=>f.kind==='纸样完成')).toBe(false);
+  });
+ });
+ it('pages actual fabric history through original GET authority and rejects another orders cursor',async()=>{
+  const scene=await f.scene('2026-11-02T00:00:00Z');await f.runtime.run(scene,f.root,async()=>{
+   const p=await setup(),created=await order(p),oid=created.productionOrderId,closure=new OrderClosureService(f.db);
+   let previous:string|null=null;for(let n=0;n<21;n++){
+    const state=await service.read(p.warehouse,{kind:'order',id:oid});await bulk.reportFabric(p.warehouse,oid,{expectedReportId:previous,expectedReceiptVersion:state.facts.find(m=>m.kind==='fabric_receipt')?.version??0,material:'TEST original reported fabric',arrivedAt:businessNow().toISOString(),inspectedAt:businessNow().toISOString(),result:'合格',note:`TEST actual report ${n}`},randomUUID());previous=(await bulk.read(p.warehouse,oid)).fabric!.report!.reportId;
+   }
+   const first=await bulk.documentHistory(p.primary,oid);expect(first.items).toHaveLength(20);expect(first.nextBeforeId).toBeTruthy();const second=await bulk.documentHistory(p.primary,oid,first.nextBeforeId!);expect(second.items).toHaveLength(1);expect(new Set([...first.items,...second.items].map(v=>v.eventId)).size).toBe(21);expect(second.nextBeforeId).toBeNull();
+   const other=await setup(),otherOrder=await order(other);await expect(bulk.documentHistory(f.root,otherOrder.productionOrderId,first.nextBeforeId!)).rejects.toMatchObject({statusCode:404});
+   const app=Fastify(),deps={service:identity,creationEnabled:true,authenticate:async(token:string|undefined)=>{if(token!=='primary')throw new ApplicationError('UNAUTHORIZED','TEST login required',401);return {id:p.primary.actorId,displayName:'TEST primary',businessRoles:p.primary.actorRoles,capabilities:['digital_production:view']};}};
+   app.setErrorHandler((error,_r,reply)=>{const e=error as ApplicationError;void reply.code(e.statusCode??500).send({code:e.code,message:e.message});});registerBulkPreparationRoutes(app,deps,bulk);registerOrderClosureRoutes(app,deps,closure);await app.ready();
+   try{const url=`/digital-production/orders/${oid}/bulk-preparation/history`,headers={cookie:'dx_rework_session=primary'};expect((await app.inject({method:'GET',url})).statusCode).toBe(401);const native=await app.inject({method:'GET',url,headers});expect(native.statusCode).toBe(200);expect(native.json().items.map((v:{eventId:string})=>v.eventId)).toEqual(first.items.map(v=>v.eventId));expect((await app.inject({method:'GET',url:url+'?kind=anything',headers})).statusCode).toBe(400);expect((await app.inject({method:'GET',url:`/digital-production/orders/${oid}/closure/history`,headers})).json()).toMatchObject({orderId:oid,family:'receipt_quality',items:[]});
+    await f.db.query('UPDATE identity_mappings SET employed=false WHERE user_id=$1',[p.primary.actorId]);expect((await app.inject({method:'GET',url,headers})).statusCode).toBe(404); // Same existence-hiding policy as the original bulk reader.
+   }finally{await f.db.query('UPDATE identity_mappings SET employed=true WHERE user_id=$1',[p.primary.actorId]);await app.close();}
+  });
  });
 
 });

@@ -5,8 +5,10 @@ import {cockpitContext,cockpitQuery} from "../../apps/web/src/digital-journey-co
 const sid="00000000-0000-4000-8000-000000000001",oid="00000000-0000-4000-8000-000000000002",caseId="00000000-0000-4000-8000-000000000003",roundId="00000000-0000-4000-8000-000000000004";
 const order:OrderJourney={id:sid,sourceId:sid,orderId:oid,designStyleNo:"TEST-DOC",temporaryStyleNo:null,customer:"TEST",category:null,designer:null,styleName:null,merchandisers:[],orderNumbers:[],createdAt:"2026-10-19T00:00:00Z",deliveryDate:null,selectedRound:2,adoptedRound:1,sourceVersion:3,instructionVersion:7,lines:[],links:[{domain:"sourcing",id:caseId,url:`/ui/sourcing/orders/${caseId}`,mode:"read",version:99,lineId:null}],stages:JOURNEY_STAGES.map(stage=>({...stage,state:"uncreated",nodes:[]})),progress:{development:null,bulk:null},hitReasons:[]};
 const signal=new AbortController().signal;
-it("keeps the approved eleven categories and preserves directory context without sending it to list queries",()=>{
- expect(COCKPIT_DOCUMENT_CATEGORIES.map(item=>item.key)).toEqual(["development","pattern","misc","order","budget","instruction","contract","preparation","cutting","factory","receiving"]);
+it("keeps the approved ten production priorities plus every original source category and preserves directory context without sending it to list queries",()=>{
+ expect(COCKPIT_DOCUMENT_CATEGORIES.slice(0,10).map(item=>item.key)).toEqual(['instruction','qc_progress','technical','preparation','cutting','factory','receiving','packing','contract','budget']);
+ for(const key of ['development','pattern','misc','order','budget','instruction','contract','preparation','cutting','factory','receiving'])expect(COCKPIT_DOCUMENT_CATEGORIES.some(c=>c.key===key)).toBe(true);
+ expect(new Set(COCKPIT_DOCUMENT_CATEGORIES.map(c=>c.key)).size).toBe(COCKPIT_DOCUMENT_CATEGORIES.length);
  const context=JourneyReturnContextSchema.parse({selected:sid,round:2,documentOpen:"contract|contract:doc1/return:2"});expect(cockpitContext(journeyReturnUrl(context).split("?")[1]!).documentOpen).toBe(context.documentOpen);expect(cockpitQuery(context)).not.toContain("documentOpen");
 });
 it("retains the real initial development document after revisions and reads only its original attachments",async()=>{

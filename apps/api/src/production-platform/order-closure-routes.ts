@@ -11,6 +11,7 @@ export function registerOrderClosureRoutes(app:FastifyInstance,dependencies:Digi
  const id=(request:FastifyRequest)=>parse(z.string().uuid(),(request.params as {orderId:unknown}).orderId);
  const base='/digital-production/orders/:orderId/closure';
  app.post(`${base}/quality`,async request=>service.recordQuality(await actor(request),id(request),parse(ReceiptQualitySchema,request.body),typeof request.headers['idempotency-key']==='string'?request.headers['idempotency-key']:''));
+ app.get(`${base}/history`,async request=>service.documentHistory(await actor(request),id(request),parse(z.object({beforeId:z.string().uuid().optional()}).strict(),request.query).beforeId));
  app.get(base,async request=>service.read(await actor(request),id(request)));
  app.post(base,async request=>service.close(await actor(request),id(request),parse(SpecialClosureSchema,request.body),typeof request.headers['idempotency-key']==='string'?request.headers['idempotency-key']:''));
 }

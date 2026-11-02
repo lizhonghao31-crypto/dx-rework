@@ -1,3 +1,4 @@
+import {quotationHistoryFromSearch} from './quotation-history-route.js';
 import {useEffect,useRef,useState} from 'react';
 import {Button,Surface} from '@dx-rework/ui';
 import {BudgetDocumentSchema,BUDGET_SECTIONS,calculateBudget,budgetDisplayAmount,type BudgetDocument,type BudgetRow} from '@dx-rework/contracts/digital-budget';
@@ -35,16 +36,17 @@ export function DigitalQuotationPage(){
  return <Surface><h1>报价协作</h1><p>显示最近100条当前有权的报价；更早报价可从原单进入。用量与价格由各自负责岗位填写。</p>{error&&<><p role="alert">{error}</p><Button onClick={()=>setRetry(v=>v+1)}>重试读取</Button></>}<DocumentTableScroll><table><thead><tr><th>设计编号</th><th>版本</th><th>状态</th><th>办理</th></tr></thead><tbody>{items.map(item=><tr key={item.resource.id}><td>{item.designStyleNo}</td><td>{item.version}</td><td>{item.status==='confirmed'?'客户已确认':'协作草稿'}</td><td><a href={quotationHref(item.resource)}>打开报价</a></td></tr>)}</tbody></table></DocumentTableScroll>{!items.length&&!error&&<p>暂无分配给自己的报价；设计可从原开发单或预算页建立。</p>}</Surface>;
 }
 export function DigitalQuotationPanel({resource}:{resource:QuotationResource}){
+ const [initialHistory]=useState(()=>quotationHistoryFromSearch(window.location.search,resource));
  const [sheet,setSheet]=useState<QuotationSheet|null>(null),[document,setDocument]=useState<BudgetDocument>(empty),[assignments,setAssignments]=useState<QuotationAssignment[]>([]);
  const [participants,setParticipants]=useState<Array<{id:string;name:string;role:string}>>([]),[rowInputs,setRowInputs]=useState<Record<string,{consumption?:string;unitPrice?:string}>>({});
  const [adoptions,setAdoptions]=useState<Record<string,string>>({});
  const [structureDirty,setStructureDirty]=useState(false),[editingRowId,setEditingRowId]=useState<string|null>(null),[confirmationDirty,setConfirmationDirty]=useState(false);
- const [error,setError]=useState(''),[busy,setBusy]=useState(false),[dirty,setDirty]=useState(false),[uncertain,setUncertain]=useState(false),[history,setHistory]=useState<number|undefined>(),[retry,setRetry]=useState(0);
+ const [error,setError]=useState(''),[busy,setBusy]=useState(false),[dirty,setDirty]=useState(false),[uncertain,setUncertain]=useState(false),[history,setHistory]=useState<number|undefined>(initialHistory.version),[retry,setRetry]=useState(0);
  const [confirmedTotal,setConfirmedTotal]=useState(''),[scope,setScope]=useState<'per_piece'|'order_total'>('per_piece'),[quantity,setQuantity]=useState(''),[taxBasis,setTaxBasis]=useState<'excludes_tax'|'includes_tax'>('excludes_tax'),[evidence,setEvidence]=useState(''),[confirmedDate,setConfirmedDate]=useState('');
  const writing=useRef(false),generation=useRef(0),operation=useRef<{path:string;method:string;body:unknown;key:string;startedAt:number}|null>(null),base=route(resource);
  const install=(value:QuotationSheet)=>{setSheet(value);setDocument(value.document??empty());setAssignments(value.assignments);setRowInputs({});setDirty(false);setStructureDirty(false);setEditingRowId(null);setConfirmationDirty(false);};
  useDigitalDetailNavigationGuard(dirty||confirmationDirty||uncertain,busy,writing,'报价有未保存或结果未确认的修改，离开不会撤销已发送的请求。确定离开？');
- useEffect(()=>{let live=true;const epoch=++generation.current;setSheet(null);setError('');setBusy(false);setDirty(false);setUncertain(false);operation.current=null;writing.current=false;void quotationRequest(`${base}${history?`?version=${history}`:''}`,resource).then(async value=>{if(!live||epoch!==generation.current)return;install(value);if(value.canStructure){try{const people=await digitalRequest<{items:typeof participants}>(`${base}/participants`);if(live&&epoch===generation.current)setParticipants(people.items);}catch(e){if(live)setError(e instanceof Error?e.message:'负责人列表读取失败，请重试');}}}).catch(e=>{if(live)setError(e.message);});return()=>{live=false;generation.current++;};},[base,history,retry]);
+ useEffect(()=>{if(initialHistory.error){setError(initialHistory.error);return;}let live=true;const epoch=++generation.current;setSheet(null);setError('');setBusy(false);setDirty(false);setUncertain(false);operation.current=null;writing.current=false;void quotationRequest(`${base}${history?`?version=${history}`:''}`,resource).then(async value=>{if(!live||epoch!==generation.current)return;install(value);if(value.canStructure){try{const people=await digitalRequest<{items:typeof participants}>(`${base}/participants`);if(live&&epoch===generation.current)setParticipants(people.items);}catch(e){if(live)setError(e instanceof Error?e.message:'负责人列表读取失败，请重试');}}}).catch(e=>{if(live)setError(e.message);});return()=>{live=false;generation.current++;};},[base,history,retry,initialHistory.error]);
  const mutate=async(path:string,method:string,body:unknown)=>{
   if(writing.current||uncertain)return;writing.current=true;setBusy(true);setError('');const epoch=generation.current;
   const op={path,method,body:JSON.parse(JSON.stringify(body)) as unknown,key:createClientRequestId(),startedAt:Date.now()};operation.current=op;
