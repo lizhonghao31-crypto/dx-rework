@@ -25,7 +25,7 @@ import {isDeepStrictEqual} from "node:util";
 import type { Pool, PoolClient } from "pg";
 import type { TrustedActorContext } from "../tools/repositories.js";
 import { ApplicationError } from "../platform/errors.js";
-import { DigitalProductionAccessPolicy, digitalForbidden, digitalNotFound, isDigitalLeader, isDigitalTechnicalManager } from "./access-policy.js";
+import { DigitalProductionAccessPolicy, digitalForbidden, digitalNotFound, isDigitalLeader, isDigitalManagementReader, isDigitalTechnicalManager } from "./access-policy.js";
 import { createDigitalTaskAccess, reassignDigitalTask, type DigitalTaskKind } from "./task-access-repository.js";
 import { digitalDeadline } from "@dx-rework/domain/digital-task-deadline";
 import { ProductionOrderNodeClockRepository } from "./node-clock-repository.js";
@@ -656,7 +656,7 @@ export class DigitalProductionTaskService {
     return tasks;
   }
   async list(actor: TrustedActorContext, page: number) {
-    const global = isDigitalLeader(actor) || isDigitalTechnicalManager(actor);
+    const global = isDigitalManagementReader(actor) || isDigitalTechnicalManager(actor);
     const result = await this.database.query(`SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id)
       LEFT JOIN digital_production_orders o ON o.production_order_id=a.production_order_id LEFT JOIN digital_production_sources s ON s.source_id=a.source_id
       WHERE t.node_key<>'factory_material_count' AND ($1::boolean OR a.assignee_id=$2 OR ($3::boolean AND (o.created_by=$2 OR s.created_by=$2)) OR ($4::boolean AND o.primary_merchandiser_id=$2)

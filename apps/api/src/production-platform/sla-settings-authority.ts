@@ -12,3 +12,11 @@ export async function assertSlaSettingsActor(db: Pick<PoolClient, 'query'>, acto
             return;
     digitalForbidden();
 }
+/** Settings/history reads only; manager/requester and preview keep their original authority. */
+export async function assertSlaSettingsReadActor(db: Pick<PoolClient, 'query'>, actor: TrustedActorContext) {
+    if (isRootActor(actor))
+        return;
+    if (actor.actorRoles.includes('pmc') && await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId, 'pmc'))
+        return;
+    await assertSlaSettingsActor(db, actor);
+}

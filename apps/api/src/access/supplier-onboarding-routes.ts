@@ -18,10 +18,11 @@ export function registerSupplierOnboardingRoutes(app: FastifyInstance, deps: Sup
     const user = await deps.authenticate(token);
     const root = await deps.root.isRootUser(user.id);
     const reviewer = root || user.businessRoles?.some(role => ["owner_group", "production_management"].includes(role));
-    const capability = `supplier_onboarding:${mode === "read" ? reviewer ? "approve" : "request" : mode}`;
+    const readonly = mode === "read" && user.businessRoles?.includes("pmc") && user.capabilities.includes("supplier_onboarding:read");
+    const capability = `supplier_onboarding:${readonly ? "read" : mode === "read" ? reviewer ? "approve" : "request" : mode}`;
     const requesting = capability === "supplier_onboarding:request";
     if ((requesting && reviewer) || (!root && (!user.capabilities.includes(capability)
-      || (requesting ? !user.businessRoles?.some(role => ["order_merchandiser", "embroidery_washing_merchandiser"].includes(role)) : !reviewer)))) {
+      || (requesting ? !user.businessRoles?.some(role => ["order_merchandiser", "embroidery_washing_merchandiser"].includes(role)) : !reviewer && !readonly)))) {
       throw new ApplicationError("FORBIDDEN", "当前账号没有此申请操作权限", 403);
     }
     return businessActor(deps.root, user, request.id, capability);

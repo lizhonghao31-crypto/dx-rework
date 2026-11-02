@@ -3,7 +3,7 @@ import type { PoolClient } from 'pg';
 import { DIGITAL_SLA_PARAMETERS, validateDigitalSlaValues, type DigitalSlaValues } from '@dx-rework/contracts/digital-sla';
 import type { TrustedActorContext } from '../tools/repositories.js';
 import { ApplicationError } from '../platform/errors.js';
-import { assertSlaSettingsActor } from './sla-settings-authority.js';
+import { assertSlaSettingsActor, assertSlaSettingsReadActor } from './sla-settings-authority.js';
 import { SlaPreviewTokens } from './sla-preview-token.js';
 import { SlaConfigurationRepository, SlaVersionConflict, SlaIdempotencyConflict } from './sla-configuration-repository.js';
 import { SlaConfigurationService } from './sla-configuration-service.js';
@@ -30,7 +30,7 @@ export class SlaSettingsService {
     private readonly tokens: SlaPreviewTokens;
     constructor(secret?: string) { this.tokens = new SlaPreviewTokens(secret); }
     async read(client: PoolClient, actor: TrustedActorContext, version?: number) {
-        await assertSlaSettingsActor(client, actor);
+        await assertSlaSettingsReadActor(client, actor);
         const repo = new SlaConfigurationRepository(client), current = await repo.current(version);
         if (version !== undefined && !current)
             throw new ApplicationError('NOT_FOUND', '标准版本不存在', 404);

@@ -4,7 +4,7 @@ import {randomUUID,createHash} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import type {DigitalAnalysisFilters,DigitalAnalysisNote,DigitalAnalysisResult} from '@dx-rework/contracts/digital-production-analysis';
 import type {TrustedActorContext} from '../tools/repositories.js';
-import {DigitalProductionAccessPolicy,isDigitalLeader,isDigitalTechnicalManager,digitalForbidden} from './access-policy.js';
+import {DigitalProductionAccessPolicy,isDigitalLeader,isDigitalManagementReader,isDigitalTechnicalManager,digitalForbidden} from './access-policy.js';
 import {assertIdentityActor} from './identity-service.js';
 import {assertBusinessExportAllowed} from '../access/export-authority.js';
 import {ApplicationError} from '../platform/errors.js';
@@ -91,7 +91,7 @@ export class DigitalAnalysisQuery{
   }));
   // Shared analysis is readable only when every referenced original task remains visible.
   const rawNotes=(await db.query(`SELECT a.id,u.display_name AS author,a.created_at AS "createdAt",a.after_state AS note FROM audit_events a JOIN app_users u ON u.id=a.actor_id
-    WHERE a.action='digital.analysis.recorded' AND (a.actor_id=$1 OR $2::boolean) ORDER BY a.created_at DESC,a.id DESC LIMIT 100`,[actor.actorId,isDigitalLeader(actor)||isDigitalTechnicalManager(actor)])).rows;
+    WHERE a.action='digital.analysis.recorded' AND (a.actor_id=$1 OR $2::boolean) ORDER BY a.created_at DESC,a.id DESC LIMIT 100`,[actor.actorId,isDigitalManagementReader(actor)||isDigitalTechnicalManager(actor)])).rows;
   const notes=[];
   for(const record of rawNotes){const note=record.note as DigitalAnalysisNote&{ruleVersion:string};let allowed=true;for(const id of note.taskIds)if(!await policy.allowed(actor,'task',id,'technical')){allowed=false;break;}if(allowed)notes.push({id:record.id,author:record.author,createdAt:iso(record.createdAt)!,...note});}
   return {ruleVersion:filters.scope?WORKSPACE_ANALYSIS_RULE_VERSION:ANALYSIS_RULE_VERSION,asOf,filters,canExport:this.exportAllowed(actor),canRecord:isDigitalLeader(actor)||isDigitalTechnicalManager(actor),page:filters.page,total:selectedRows.length,

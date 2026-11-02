@@ -307,6 +307,7 @@ const app = buildApp({
   },
   tools: {
     authenticate: (token) => auth.authenticate(token),
+    isRootUser: id => rootAuthority.isRootUser(id),
     attachments,
     exports: new ExportJobService(database),
     canDownloadBoundAttachment: async (actor, binding) => {

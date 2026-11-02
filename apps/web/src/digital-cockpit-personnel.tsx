@@ -7,15 +7,20 @@ import {digitalRequest} from "./digital-production-api.js";
 
 type Candidate={id:string;displayName:string;roles:string[]};
 type PersonnelDialog={kind:"customer";customers:DigitalCustomer[]}|{kind:"order";order:DigitalOrder};
-export function DigitalCockpitPersonnel({orderId,onChanged,showCustomer=true}:{orderId:string|null;onChanged():void;showCustomer?:boolean}){
+export function DigitalCockpitPersonnel({orderId,onChanged,showCustomer=true,readOnly=false}:{orderId:string|null;onChanged():void;showCustomer?:boolean;readOnly?:boolean}){
+  const [customerFacts,setCustomerFacts]=useState<DigitalCustomer[]|null>(null);
   const [access,setAccess]=useState<DigitalAccessOptions|null>(null),[dialog,setDialog]=useState<PersonnelDialog|null>(null);
   const [people,setPeople]=useState<Candidate[]>([]),[customerCode,setCustomerCode]=useState(""),[personId,setPersonId]=useState("");
   const [busy,setBusy]=useState(false),[error,setError]=useState("");const writing=useRef(false),currentOrder=useRef(orderId);currentOrder.current=orderId;
-  useEffect(()=>{let live=true;void digitalRequest<DigitalAccessOptions>("access/options").then(value=>{if(live)setAccess(value);}).catch(()=>undefined);return()=>{live=false;};},[]);
+  useEffect(()=>{if(readOnly)return;let live=true;void digitalRequest<DigitalAccessOptions>("access/options").then(value=>{if(live)setAccess(value);}).catch(()=>undefined);return()=>{live=false;};},[readOnly]);
+  useEffect(()=>{if(!readOnly||!showCustomer)return;let live=true;const controller=new AbortController();setCustomerFacts(null);setError('');
+    void digitalRequest<{customers:DigitalCustomer[]}>('options','GET',undefined,undefined,{signal:controller.signal}).then(value=>{if(live)setCustomerFacts(value.customers);}).catch(reason=>{if(live&&reason.name!=='AbortError')setError(reason instanceof Error?reason.message:'读取客户默认跟单失败');});
+    return()=>{live=false;controller.abort();};
+  },[readOnly,showCustomer]);
   // A changed selection closes the old order's form instead of sending its version to a new mother.
   useEffect(()=>{setDialog(null);setError("");},[orderId]);
   const open=async(kind:"customer"|"order")=>{
-    if(writing.current)return;writing.current=true;setBusy(true);setError("");
+    if(readOnly||writing.current)return;writing.current=true;setBusy(true);setError("");
     try{
       const current=await digitalRequest<DigitalAccessOptions>("access/options");setAccess(current);
       if(kind==="customer"&&!current.customers||kind==="order"&&(!current.manage||!orderId))throw new Error("当前岗位不能调整跟单");
@@ -27,7 +32,7 @@ export function DigitalCockpitPersonnel({orderId,onChanged,showCustomer=true}:{o
     }catch(reason){setError(reason instanceof Error?reason.message:"读取失败");}finally{writing.current=false;setBusy(false);}
   };
   const save=async()=>{
-    if(!dialog||writing.current)return;writing.current=true;setBusy(true);setError("");
+    if(readOnly||!dialog||writing.current)return;writing.current=true;setBusy(true);setError("");
     try{
       if(personId&&!people.some(person=>person.id===personId))throw new Error("请选择在职有效订单跟单；原人员可能已失效");
       if(dialog.kind==="customer"){
@@ -40,10 +45,11 @@ export function DigitalCockpitPersonnel({orderId,onChanged,showCustomer=true}:{o
     }catch(reason){setError(reason instanceof Error?reason.message:"保存失败");}finally{writing.current=false;setBusy(false);}
   };
   const invalidPerson=personId&&!people.some(person=>person.id===personId);
-  return <>{showCustomer&&access?.customers&&<Button variant="secondary" disabled={busy} onClick={()=>void open("customer")}>客户跟单配置</Button>}
-    {access?.manage&&orderId&&<Button variant="secondary" disabled={busy} onClick={()=>void open("order")}>调整主跟单</Button>}
+  return <>{readOnly&&showCustomer&&(customerFacts?customerFacts.length?<dl>{customerFacts.map(customer=><div key={customer.code}><dt>{customer.code}{customer.name&&customer.name!==customer.code?` · ${customer.name}`:''}</dt><dd>{customer.defaultMerchandiserId?customer.defaultMerchandiserName||'已指定（姓名未读取）':'未指定'}</dd></div>)}</dl>:<p>暂无已启用客户。</p>:!error&&<p role="status">正在读取客户默认跟单…</p>)}
+    {!readOnly&&showCustomer&&access?.customers&&<Button variant="secondary" disabled={busy} onClick={()=>void open("customer")}>客户跟单配置</Button>}
+    {!readOnly&&access?.manage&&orderId&&<Button variant="secondary" disabled={busy} onClick={()=>void open("order")}>调整主跟单</Button>}
     {error&&!dialog&&<small role="alert">{error}</small>}
-    {dialog&&<div className="digital-cockpit-dialog-backdrop"><section className="digital-cockpit-dialog digital-personnel-dialog" role="dialog" aria-modal="true" aria-label={dialog.kind==="customer"?"客户跟单配置":"调整主跟单"}>
+    {!readOnly&&dialog&&<div className="digital-cockpit-dialog-backdrop"><section className="digital-cockpit-dialog digital-personnel-dialog" role="dialog" aria-modal="true" aria-label={dialog.kind==="customer"?"客户跟单配置":"调整主跟单"}>
       <Button variant="secondary" disabled={busy} onClick={()=>{setDialog(null);setError("");}}>关闭</Button><h2>{dialog.kind==="customer"?"客户跟单配置":"调整主跟单"}</h2>
       <p>{dialog.kind==="customer"?"仅影响以后创建的母单，已有订单与任务不变。":"交接未完成的主跟单任务与合同办理权，保留历史记录与原时钟。"}</p>
       {error&&<p role="alert">{error}</p>}

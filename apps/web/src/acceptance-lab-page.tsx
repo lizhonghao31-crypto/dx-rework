@@ -256,11 +256,7 @@ export function AcceptanceLabPage() {
         setMatrixProgress(`${index + 1}/${ACCEPTANCE_ROLE_MATRIX.length} · ${expectation.alias}`);
         const identity = identities.find((candidate) => candidate.alias === expectation.alias);
         if (!identity) {
-          results.push({ alias: expectation.alias, requests, checks: [{
-            key: `${expectation.alias}:identity-missing`, category: "identity", label: "标准验收身份",
-            expected: "存在", actual: "缺失", verdict: "fail",
-            ruleId: "ACCEPTANCE-INFRASTRUCTURE", ruleStatus: "infrastructure",
-          }] });
+          results.push({ alias: expectation.alias, requests, checks: evaluateAcceptanceSnapshot(expectation, undefined, undefined) });
           continue;
         }
         const switched = await jsonRequest<{ user?: AuthorizedUser; error?: { message?: string } }>("acceptance/control/switch", {
@@ -278,7 +274,9 @@ export function AcceptanceLabPage() {
         const me = await jsonRequest<{ user?: AuthorizedUser }>("auth/me");
         requests.push({ method: "GET", path: "auth/me", expectedStatus: 200, actualStatus: me.status });
         if (me.status !== 200 || !me.body?.user) {
-          results.push({ alias: expectation.alias, requests, checks: [evaluateHttpProbe(expectation.alias, {
+          results.push({ alias: expectation.alias, requests, checks: me.status === 200
+            ? evaluateAcceptanceSnapshot(expectation, identity, undefined)
+            : [evaluateHttpProbe(expectation.alias, {
             id: "auth-me", label: "真实业务 Session", path: "auth/me", expectedStatus: 200,
             infrastructure: true,
           }, me.status)] });
@@ -297,6 +295,13 @@ export function AcceptanceLabPage() {
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "权限矩阵执行失败。");
     } finally {
+      for (const expectation of ACCEPTANCE_ROLE_MATRIX) {
+        if (!results.some(result => result.alias === expectation.alias)) results.push({
+          alias: expectation.alias, requests: [], checks: [evaluateHttpProbe(expectation.alias, {
+            id: "execution", label: "该身份权限检查", path: "auth/me", expectedStatus: 200, infrastructure: true,
+          }, null)],
+        });
+      }
       const completedAt = new Date().toISOString();
       setMatrixResults([...results]); setMatrixRunning(false); setMatrixProgress("");
       updateEvidence((report) => appendMatrixEvidence(report, {
@@ -462,7 +467,7 @@ export function AcceptanceLabPage() {
           const pending = result.checks.filter((entry) => entry.verdict === "pending");
           const summary = failed.length > 0
             ? `${failed.length} 项不一致`
-            : pending.length > 0 ? `${pending.length} 项标准待确认` : "通过";
+            : pending.length > 0 ? `${pending.length} 项标准待确认` : result.checks.length === 0 ? "未执行" : "通过";
           return <details key={result.alias} open={failed.length > 0 || pending.length > 0}><summary><strong>{result.alias}</strong><span>{summary}</span></summary>
             <div className="acceptance-matrix-checks">{result.checks.map((entry) => <div className={`acceptance-matrix-check is-${entry.verdict}`} key={entry.key}><span>{entry.label}</span><small>预期：{entry.expected} · 实际：{entry.actual}</small><small>规则：{ruleStatusLabel(entry)}</small></div>)}</div>
           </details>;

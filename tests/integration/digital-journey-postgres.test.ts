@@ -1,4 +1,5 @@
 import {AccessMasterDataService} from "../../apps/api/src/access/service.js";
+import {testExecutionConfig} from "../../scripts/test-execution-config.mjs";
 import {DigitalProductionNotificationService} from "../../apps/api/src/production-platform/notification-service.js";
 import {TodoService} from "../../apps/api/src/todos/service.js";
 import {SlaOrderService} from "../../apps/api/src/production-platform/sla-order-service.js";
@@ -12,19 +13,21 @@ import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import pg from "pg";
 import Fastify from "fastify";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { JourneyFilterSchema } from "@dx-rework/contracts/digital-production-journey";
 import { DigitalOrderCreateSchema,beijingCalendarDate,minimumInitialCustomerDate } from "@dx-rework/contracts/digital-production";
 import {addCalendarDays} from '@dx-rework/contracts/series-calendar';
 import { DigitalProductionIdentityService } from "../../apps/api/src/production-platform/identity-service.js";
 import { DigitalProductionTaskService } from "../../apps/api/src/production-platform/task-service.js";
 import { DigitalProductionAccessPolicy } from "../../apps/api/src/production-platform/access-policy.js";
+import { OrderClosureService } from "../../apps/api/src/production-platform/order-closure-service.js";
+import { SeriesPlanService } from "../../apps/api/src/production-platform/series-plan-service.js";
 import { selectJourneys } from "../../apps/api/src/production-platform/journey-projection.js";
 import { DigitalJourneyQuery } from "../../apps/api/src/production-platform/journey-query.js";
 import { developmentView, patternTasks, DevelopmentWorkspaceQuery } from "../../apps/api/src/production-platform/development-workspace-query.js";
 import { DevelopmentWorkspaceFilterSchema, PatternWorkspaceFilterSchema } from "@dx-rework/contracts/digital-development-workspace";
 import { registerDigitalIdentityRoutes } from "../../apps/api/src/production-platform/identity-routes.js";
-import { ownedPostgresSchema,createOwnedPostgresSchema,dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema,createOwnedPostgresSchema,releaseOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 import { ApplicationError } from "../../apps/api/src/platform/errors.js";
 import { RootAuthority } from "../../apps/api/src/access/root-authority.js";
@@ -34,8 +37,13 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
   const schema=ownedPostgresSchema("digital_journey");
   const admin=new pg.Pool({connectionString:databaseUrl});
   const db=new pg.Pool({connectionString:databaseUrl,options:`-c search_path=${schema}`});
-  const root=randomUUID(),designer=randomUUID(),stranger=randomUUID(),worker=randomUUID(),clerk=randomUUID(),tail=randomUUID(),merchandiser=randomUUID();
+  const root=randomUUID(),designer=randomUUID(),stranger=randomUUID(),worker=randomUUID(),clerk=randomUUID(),tail=randomUUID(),merchandiser=randomUUID(),pmc=randomUUID(),manager=randomUUID();
   const actor=(id=designer,roles=["sample_designer"]):TrustedActorContext=>({actorId:id,actorRoles:roles,authorizationCapability:"pattern_room:orders:create",authorizationCapabilities:["pattern_room:orders:create"],requestId:"TEST-v2-journey"});
+  const readActor=async(id:string):Promise<TrustedActorContext>=>{
+    const roles=(await db.query("SELECT role_code FROM user_role_assignments WHERE user_id=$1 AND revoked_at IS NULL",[id])).rows.map(row=>row.role_code as string);
+    const capabilities=(await db.query("SELECT DISTINCT capability FROM role_capabilities WHERE role_code=ANY($1::text[])",[roles])).rows.map(row=>row.capability as string);
+    return {...actor(id,roles),authorizationCapability:"pattern_room:orders:view",authorizationCapabilities:capabilities};
+  };
   // Formal confirmation and SLA enrollment share the real business clock. This
   // projection suite is not a short-lead exception fixture; its promises remain
   // safely beyond the same server calendar used for source-linked confirmation.
@@ -58,7 +66,7 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     await db.query("CREATE TABLE schema_migrations(version text PRIMARY KEY,checksum char(64) NOT NULL,applied_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP)");
     const serverVersion=Number((await db.query("SHOW server_version_num")).rows[0].server_version_num);
     for(const migration of manifest.migrations){const sql=await readFile(new URL(`../../apps/api/migrations/${migration.version}.sql`,import.meta.url),"utf8");await db.query(migrationExecutionSql({...migration,sql},serverVersion));await db.query("INSERT INTO schema_migrations(version,checksum) VALUES($1,$2)",[migration.version,migration.checksum]);}
-    for(const [id,role] of [[root,"owner_group"],[designer,"sample_designer"],[stranger,"sample_designer"],[worker,"pattern_room_worker"],[clerk,"development_clerk"],[tail,"pattern_room_tail_inspector"],[merchandiser,"order_merchandiser"]]){
+    for(const [id,role] of [[root,"owner_group"],[designer,"sample_designer"],[stranger,"sample_designer"],[worker,"pattern_room_worker"],[clerk,"development_clerk"],[tail,"pattern_room_tail_inspector"],[merchandiser,"order_merchandiser"],[pmc,"pmc"],[manager,"production_management"]]){
       await db.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,$2,true)",[id,`TEST-J ${role}`]);
       await db.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) VALUES($1,$2::uuid,'dingtalk','TEST',$2::text,$2::text,true,true,CURRENT_TIMESTAMP)",[randomUUID(),id]);
       await db.query("INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason) VALUES($1,$2,$3,$4,'TEST Journey fixture')",[randomUUID(),id,role,root]);
@@ -66,14 +74,25 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     await db.query("INSERT INTO owner_bootstrap_consumptions(singleton,user_id,provider_user_id,corp_id) VALUES(true,$1::uuid,$1::uuid::text,'TEST')",[root]);
     app.setErrorHandler((error,_request,reply)=>{const known=error as ApplicationError;reply.code(known.statusCode??500).send({error:{code:known.code,message:known.message}});});
     registerDigitalIdentityRoutes(app,{service:identity,journeys,taskService:tasks,root:new RootAuthority(db,"TEST",undefined),creationEnabled:true,authenticate:async token=>{
-      if(!token||![root,designer,stranger,merchandiser,worker,clerk,tail].includes(token))throw new ApplicationError("UNAUTHORIZED","请登录",401);
+      if(!token||![root,designer,stranger,merchandiser,worker,clerk,tail,pmc,manager].includes(token))throw new ApplicationError("UNAUTHORIZED","请登录",401);
       const roles=(await db.query("SELECT role_code FROM user_role_assignments WHERE user_id=$1 AND revoked_at IS NULL",[token])).rows.map(row=>row.role_code as string);
       const capabilities=(await db.query("SELECT DISTINCT capability FROM role_capabilities WHERE role_code=ANY($1::text[])",[roles])).rows.map(row=>row.capability as string);
       return {id:token,displayName:"TEST",businessRoles:roles,capabilities};
     }});
     await app.ready();
   },120000);
-  afterAll(async()=>{await app.close();await db.end();await dropOwnedPostgresSchema(admin,schema);await admin.end();});
+  let failedFixtureCase:string|null=null;
+  beforeEach(({task,signal,onTestFailed,onTestFinished,skip})=>{
+    if(failedFixtureCase!==null)skip(`Shared Journey fixture is invalid after "${failedFixtureCase}" failed or timed out; dependent business steps were not run.`);
+    // A timeout does not cancel the original promise. Do not start another
+    // business case against its shared state while that promise may still run.
+    const markFailed=()=>{failedFixtureCase??=task.name;};
+    signal.addEventListener("abort",markFailed,{once:true});
+    onTestFailed(markFailed);
+    onTestFinished(()=>signal.removeEventListener("abort",markFailed));
+    if(signal.aborted){markFailed();signal.throwIfAborted();}
+  });
+  afterAll(async()=>{await app.close();await db.end();await releaseOwnedPostgresSchema(admin,schema);await admin.end();});
   it("uses the original assignment, upstream and completion reasons in both management summary and detail",async()=>{
     const sourceId=(await identity.createSource(actor(),{developmentType:"头版",designStyleNo:"TEST-A02-BLOCKERS",temporaryStyleNo:null,customerCode:null},randomUUID())).sourceId;
     const routeId=randomUUID();
@@ -244,7 +263,8 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
   it("does not invent cutting or normal packing completion from a recorded special closure without actual cuts",async()=>{
     const order=await identity.createOrder(actor(),input("CLOSED-NO-CUT"),randomUUID());
     const auditId=randomUUID();
-    await db.query("INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason) VALUES($1,$2,'production_management',$2,'TEST historical closure director')",[randomUUID(),root]);
+    // The existing active owner/Root is authorized by migration 0260; do not
+    // assign a second singleton production_management role to this identity.
     // A trusted historical closure fixture exercises the read projection independently
     // of the current close command's production preconditions. All DB guards remain on.
     await db.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id) VALUES($1,'TEST-no-cut-closure',$2,'digital.order.special_close','digital_production_order',$3)",[auditId,root,order.productionOrderId]);
@@ -434,101 +454,129 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     const allowed=await app.inject({method:"GET",url:"/digital-production/workspaces/designer?search=TEST-J-WORKSPACE&view=ordered",headers:{cookie:`dx_rework_session=${designer}`}});
     expect(allowed.statusCode).toBe(200);expect(allowed.json().total).toBe(1);expect(allowed.headers["cache-control"]).toBe("no-store");
   });
-  it("paginates full authorized facts before hydrating only current-page tasks, and rechecks live roles",async()=>{
-    for(let index=0;index<25;index++){
-      const source=await identity.createSource(actor(),{developmentType:"头版",designStyleNo:`TEST-PR12-PAGE-${index}`,temporaryStyleNo:null,customerCode:null},randomUUID());
-      const routeId=randomUUID();
-      for(const kind of ["development_pattern","development_cutting"]){await createTask({resource:{kind:"source",id:source.sourceId},kind,routeId,routeVersion:1,occurrence:1,assigneeId:kind==='development_pattern'?worker:null});}
-    }
+  // Keep the original database steps and assertions in order. Each distinct
+  // read contract has its own timing; the original aggregate 120s cap remains.
+  describe("full authorized pagination and live-role boundaries",()=>{
     const normalize=(value:unknown)=>JSON.parse(JSON.stringify(value,(key,item)=>key==='asOf'||key==='overdueSeconds'?undefined:item));
-    for(const context of [actor(root,["root_superuser"]),actor(),actor(worker,["pattern_room_worker"]),actor(stranger)]){
-      const full=await journeys.list(context,JourneyFilterSchema.parse({search:'TEST-PR12-PAGE'}),true);
-      for(const patch of [{page:1},{page:2},{page:3},{page:2,risk:'unknown'},{page:1,state:'pending'},{page:1,kpi:'active'},{page:1,kpi:'blocked'}]){
-        const filter=JourneyFilterSchema.parse({search:'TEST-PR12-PAGE',...patch});
-        const reads=vi.spyOn(DigitalProductionTaskService.prototype,'read');
-        const paged=await journeys.list(context,filter);
-        const hydrated=reads.mock.calls.map(call=>call[1]);reads.mockRestore();
-        const expected=selectJourneys(full.items,filter,paged.asOf);
-        expect(normalize(paged)).toEqual(normalize({...expected,facets:full.facets,canManagePolicies:full.canManagePolicies}));
-        const pageTasks=paged.items.flatMap(item=>item.stages.flatMap(stage=>stage.nodes).filter(node=>node.records.some(record=>record.domain==='task'&&record.id===node.instanceId)).map(node=>node.instanceId));
-        expect(hydrated.every(id=>pageTasks.includes(id))).toBe(true);
-        expect(hydrated.length).toBeLessThanOrEqual(paged.items.length*2);
-        if(context.actorId===designer&&patch.page===2&&!('risk' in patch)){expect(paged.total).toBe(25);expect(paged.items).toHaveLength(10);}
-        if(context.actorId===designer&&patch.page===3){expect(paged.total).toBe(25);expect(paged.items).toHaveLength(0);}
-        if(context.actorId===stranger){expect(paged.total).toBe(0);}
-        if(context.actorId===worker){expect(paged.items.every(item=>item.developmentType===null&&item.requiredCompletionDate===null)).toBe(true);}
-        if(context.actorId===designer){expect(paged.items.every(item=>item.developmentType==='头版'&&item.requiredCompletionDate===null)).toBe(true);}
-      }
-    }
     const workspaces=new DevelopmentWorkspaceQuery(journeys);
-    for(const context of [actor(root,["root_superuser"]),actor(),actor(stranger)]){
-      const full=await journeys.list(context,JourneyFilterSchema.parse({search:'TEST-PR12-PAGE'}),true);
-      for(const patch of [{page:1},{page:2},{page:3},{page:2,view:'draft'},{view:'ordered'},{designer:'not-the-designer'}]){
-        const filter=DevelopmentWorkspaceFilterSchema.parse({search:'TEST-PR12-PAGE',...patch});
-        const all=full.items.filter(item=>!filter.designer||item.designer===filter.designer);
-        const filtered=all.filter(item=>filter.view==='all'||developmentView(item)===filter.view);
+    let aggregateStarted=0;
+    afterAll(()=>{
+      expect(aggregateStarted).toBeGreaterThan(0);
+      expect(performance.now()-aggregateStarted,"complete original pagination workload must remain within 120 seconds").toBeLessThan(120000);
+    });
+    it("paginates every authorized role before hydrating only current-page tasks",async()=>{
+      aggregateStarted=performance.now();
+      for(let index=0;index<25;index++){
+        const source=await identity.createSource(actor(),{developmentType:"头版",designStyleNo:`TEST-PR12-PAGE-${index}`,temporaryStyleNo:null,customerCode:null},randomUUID());
+        const routeId=randomUUID();
+        for(const kind of ["development_pattern","development_cutting"]){await createTask({resource:{kind:"source",id:source.sourceId},kind,routeId,routeVersion:1,occurrence:1,assigneeId:kind==='development_pattern'?worker:null});}
+      }
+      for(const context of [actor(root,["root_superuser"]),actor(),actor(worker,["pattern_room_worker"]),actor(stranger)]){
+        const full=await journeys.list(context,JourneyFilterSchema.parse({search:'TEST-PR12-PAGE'}),true);
+        for(const patch of [{page:1},{page:2},{page:3},{page:2,risk:'unknown'},{page:1,state:'pending'},{page:1,kpi:'active'},{page:1,kpi:'blocked'}]){
+          const filter=JourneyFilterSchema.parse({search:'TEST-PR12-PAGE',...patch});
+          const reads=vi.spyOn(DigitalProductionTaskService.prototype,'read');
+          let paged:Awaited<ReturnType<DigitalJourneyQuery["list"]>>,hydrated:string[];
+          try{
+            paged=await journeys.list(context,filter);
+            hydrated=reads.mock.calls.map(call=>call[1]);
+          }finally{reads.mockRestore();}
+          const expected=selectJourneys(full.items,filter,paged.asOf);
+          expect(normalize(paged)).toEqual(normalize({...expected,facets:full.facets,canManagePolicies:full.canManagePolicies}));
+          const pageTasks=paged.items.flatMap(item=>item.stages.flatMap(stage=>stage.nodes).filter(node=>node.records.some(record=>record.domain==='task'&&record.id===node.instanceId)).map(node=>node.instanceId));
+          expect(hydrated.every(id=>pageTasks.includes(id))).toBe(true);
+          expect(hydrated.length).toBeLessThanOrEqual(paged.items.length*2);
+          if(context.actorId===designer&&patch.page===2&&!('risk' in patch)){expect(paged.total).toBe(25);expect(paged.items).toHaveLength(10);}
+          if(context.actorId===designer&&patch.page===3){expect(paged.total).toBe(25);expect(paged.items).toHaveLength(0);}
+          if(context.actorId===stranger){expect(paged.total).toBe(0);}
+          if(context.actorId===worker){expect(paged.items.every(item=>item.developmentType===null&&item.requiredCompletionDate===null)).toBe(true);}
+          if(context.actorId===designer){expect(paged.items.every(item=>item.developmentType==='头版'&&item.requiredCompletionDate===null)).toBe(true);}
+        }
+      }
+    },testExecutionConfig.correctnessTimeoutMs);
+    it("preserves designer view filters and current-page hydration",async()=>{
+      for(const context of [actor(root,["root_superuser"]),actor(),actor(stranger)]){
+        const full=await journeys.list(context,JourneyFilterSchema.parse({search:'TEST-PR12-PAGE'}),true);
+        for(const patch of [{page:1},{page:2},{page:3},{page:2,view:'draft'},{view:'ordered'},{designer:'not-the-designer'}]){
+          const filter=DevelopmentWorkspaceFilterSchema.parse({search:'TEST-PR12-PAGE',...patch});
+          const all=full.items.filter(item=>!filter.designer||item.designer===filter.designer);
+          const filtered=all.filter(item=>filter.view==='all'||developmentView(item)===filter.view);
+          const reads=vi.spyOn(DigitalProductionTaskService.prototype,'read');
+          let result:Awaited<ReturnType<DevelopmentWorkspaceQuery["designer"]>>,hydrated:string[];
+          try{
+            result=await workspaces.designer(context,filter);
+            hydrated=reads.mock.calls.map(call=>call[1]);
+          }finally{reads.mockRestore();}
+          expect(result.total).toBe(filtered.length);expect(result.counts.all).toBe(all.length);
+          expect(result.items.map(item=>normalize(item.journey))).toEqual(filtered.slice((filter.page-1)*15,filter.page*15).map(normalize));
+          expect(hydrated.length).toBeLessThanOrEqual(result.items.length*2);
+        }
+      }
+    },testExecutionConfig.correctnessTimeoutMs);
+    it("matches mixed published, returned, closed and ordered pagination facts",async()=>{
+      // Compare mixed published/returned/closed/order fixtures created by the existing tests.
+      const context=actor(root,["root_superuser"]),full=await journeys.list(context,JourneyFilterSchema.parse({}),true);
+      for(const patch of [{page:1},{page:2},{risk:'blocked'},{risk:'overdue'},{state:'completed'},{kpi:'completed'},{node:'development_materials'}]){
+        const filter=JourneyFilterSchema.parse(patch),paged=await journeys.list(context,filter);
+        expect(normalize(paged)).toEqual(normalize({...selectJourneys(full.items,filter,paged.asOf),facets:full.facets,canManagePolicies:full.canManagePolicies}));
+      }
+    },testExecutionConfig.correctnessTimeoutMs);
+    it("preserves workroom card facts and completed ownership without executable hydration",async()=>{
+      // Workroom previews retain every business card fact without hydrating executable DTOs.
+      for(const offset of [0,1]){
+        const completedSource=await identity.createSource(actor(),{developmentType:"头版",designStyleNo:`TEST-PR05-COMPLETED-OWNER-${offset}`,temporaryStyleNo:null,customerCode:"PD"},randomUUID());
+        const completedTask=await createTask({resource:{kind:"source",id:completedSource.sourceId},kind:"development_pattern",routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:worker});
+        const instant=Date.now(),completedAt=new Date(instant).toISOString().replace('Z','100Z'),reassignedAt=new Date(instant+offset).toISOString().replace('Z','200Z');
+        await db.query("UPDATE digital_production_tasks SET state='completed',completed_at=$2,completed_quality='现场登记' WHERE task_id=$1",[completedTask.taskId,completedAt]);
+        await db.query("INSERT INTO digital_production_task_events(event_id,task_id,resource_kind,resource_id,event_kind,actor_id,occurred_at,recorded_at,time_quality) VALUES($1,$2,'source',$3,'completed',$4,$5,$5,'现场登记')",[randomUUID(),completedTask.taskId,completedSource.sourceId,worker,completedAt]);
+        // Imported audits can predate today's prohibition on ended-task reassignment.
+        // Same millisecond (different microseconds) must match rich JS Date semantics;
+        // an audit in the following millisecond restores the original completed owner.
+        await db.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,before_state,after_state,created_at) VALUES($1,'TEST historical owner audit',$2,'digital_task_reassigned','digital_task',$3,$4,$5,$6)",[randomUUID(),root,completedTask.taskId,JSON.stringify({assigneeId:worker}),JSON.stringify({assigneeId:null}),reassignedAt]);
+        await db.query("UPDATE digital_production_task_access SET assignee_id=NULL WHERE task_id=$1",[completedTask.taskId]);
+        const richNode=(await journeys.read(actor(root,["root_superuser"]),completedSource.sourceId)).stages.flatMap(stage=>stage.nodes).find(node=>node.instanceId===completedTask.taskId)!;
+        expect(richNode.owner).toEqual(offset?{id:worker,name:"TEST-J pattern_room_worker"}:null);
+      }
+      const cardFacts=(items:ReturnType<typeof patternTasks>)=>normalize(items.map(item=>({...item,node:{...item.node,assignmentHistory:[],records:item.node.records.map(record=>({...record,mode:'read'})),blockers:item.node.blockers.map(blocker=>({...blocker,record:{...blocker.record,mode:'read'}})).sort((a,b)=>a.key.localeCompare(b.key))}})));
+      for(const context of [actor(root,["root_superuser"]),actor(clerk,["development_clerk"]),actor(worker,["pattern_room_worker"]),actor(),actor(stranger)]){
+        const rich=await journeys.list(context,JourneyFilterSchema.parse({}),true);
         const reads=vi.spyOn(DigitalProductionTaskService.prototype,'read');
-        const result=await workspaces.designer(context,filter),hydrated=reads.mock.calls.map(call=>call[1]);reads.mockRestore();
-        expect(result.total).toBe(filtered.length);expect(result.counts.all).toBe(all.length);
-        expect(result.items.map(item=>normalize(item.journey))).toEqual(filtered.slice((filter.page-1)*15,filter.page*15).map(normalize));
-        expect(hydrated.length).toBeLessThanOrEqual(result.items.length*2);
+        let preview:Awaited<ReturnType<DigitalJourneyQuery["list"]>>;
+        try{
+          preview=await journeys.list(context,JourneyFilterSchema.parse({}),true,undefined,{details:false});
+          expect(reads).not.toHaveBeenCalled();
+        }finally{reads.mockRestore();}
+        expect(cardFacts(patternTasks(preview.items))).toEqual(cardFacts(patternTasks(rich.items)));
+        const reference=new DevelopmentWorkspaceQuery({list:async()=>rich} as unknown as DigitalJourneyQuery);
+        for(const patch of [{page:1},{page:2},{page:3},{search:'TEST-J pattern_room_worker',state:'all'},{search:'TEST-PR12-PAGE'},{lane:'pattern'},{risk:'blocked'},{state:'completed'}]){
+          const filter=PatternWorkspaceFilterSchema.parse({...patch,scope:context.actorId===root||context.actorId===clerk?'all':'mine'});
+          const expected=await reference.pattern(context,filter),actual=await workspaces.pattern(context,filter);
+          expect({...normalize(actual),items:cardFacts(actual.items),risks:cardFacts(actual.risks??[]),boardPreview:cardFacts(actual.boardPreview??[])}).toEqual({...normalize(expected),items:cardFacts(expected.items),risks:cardFacts(expected.risks??[]),boardPreview:cardFacts(expected.boardPreview??[])});
+        }
       }
-    }
-    // Compare mixed published/returned/closed/order fixtures created by the existing tests.
-    const context=actor(root,["root_superuser"]),full=await journeys.list(context,JourneyFilterSchema.parse({}),true);
-    for(const patch of [{page:1},{page:2},{risk:'blocked'},{risk:'overdue'},{state:'completed'},{kpi:'completed'},{node:'development_materials'}]){
-      const filter=JourneyFilterSchema.parse(patch),paged=await journeys.list(context,filter);
-      expect(normalize(paged)).toEqual(normalize({...selectJourneys(full.items,filter,paged.asOf),facets:full.facets,canManagePolicies:full.canManagePolicies}));
-    }
-    // Workroom previews retain every business card fact without hydrating executable DTOs.
-    for(const offset of [0,1]){
-      const completedSource=await identity.createSource(actor(),{developmentType:"头版",designStyleNo:`TEST-PR05-COMPLETED-OWNER-${offset}`,temporaryStyleNo:null,customerCode:"PD"},randomUUID());
-      const completedTask=await createTask({resource:{kind:"source",id:completedSource.sourceId},kind:"development_pattern",routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:worker});
-      const instant=Date.now(),completedAt=new Date(instant).toISOString().replace('Z','100Z'),reassignedAt=new Date(instant+offset).toISOString().replace('Z','200Z');
-      await db.query("UPDATE digital_production_tasks SET state='completed',completed_at=$2,completed_quality='现场登记' WHERE task_id=$1",[completedTask.taskId,completedAt]);
-      await db.query("INSERT INTO digital_production_task_events(event_id,task_id,resource_kind,resource_id,event_kind,actor_id,occurred_at,recorded_at,time_quality) VALUES($1,$2,'source',$3,'completed',$4,$5,$5,'现场登记')",[randomUUID(),completedTask.taskId,completedSource.sourceId,worker,completedAt]);
-      // Imported audits can predate today's prohibition on ended-task reassignment.
-      // Same millisecond (different microseconds) must match rich JS Date semantics;
-      // an audit in the following millisecond restores the original completed owner.
-      await db.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,before_state,after_state,created_at) VALUES($1,'TEST historical owner audit',$2,'digital_task_reassigned','digital_task',$3,$4,$5,$6)",[randomUUID(),root,completedTask.taskId,JSON.stringify({assigneeId:worker}),JSON.stringify({assigneeId:null}),reassignedAt]);
-      await db.query("UPDATE digital_production_task_access SET assignee_id=NULL WHERE task_id=$1",[completedTask.taskId]);
-      const richNode=(await journeys.read(actor(root,["root_superuser"]),completedSource.sourceId)).stages.flatMap(stage=>stage.nodes).find(node=>node.instanceId===completedTask.taskId)!;
-      expect(richNode.owner).toEqual(offset?{id:worker,name:"TEST-J pattern_room_worker"}:null);
-    }
-    const cardFacts=(items:ReturnType<typeof patternTasks>)=>normalize(items.map(item=>({...item,node:{...item.node,assignmentHistory:[],records:item.node.records.map(record=>({...record,mode:'read'})),blockers:item.node.blockers.map(blocker=>({...blocker,record:{...blocker.record,mode:'read'}})).sort((a,b)=>a.key.localeCompare(b.key))}})));
-    for(const context of [actor(root,["root_superuser"]),actor(clerk,["development_clerk"]),actor(worker,["pattern_room_worker"]),actor(),actor(stranger)]){
-      const rich=await journeys.list(context,JourneyFilterSchema.parse({}),true);
-      const reads=vi.spyOn(DigitalProductionTaskService.prototype,'read');
-      const preview=await journeys.list(context,JourneyFilterSchema.parse({}),true,undefined,{details:false});
-      expect(reads).not.toHaveBeenCalled();reads.mockRestore();
-      expect(cardFacts(patternTasks(preview.items))).toEqual(cardFacts(patternTasks(rich.items)));
-      const reference=new DevelopmentWorkspaceQuery({list:async()=>rich} as unknown as DigitalJourneyQuery);
-      for(const patch of [{page:1},{page:2},{page:3},{search:'TEST-J pattern_room_worker',state:'all'},{search:'TEST-PR12-PAGE'},{lane:'pattern'},{risk:'blocked'},{state:'completed'}]){
-        const filter=PatternWorkspaceFilterSchema.parse({...patch,scope:context.actorId===root||context.actorId===clerk?'all':'mine'});
-        const expected=await reference.pattern(context,filter),actual=await workspaces.pattern(context,filter);
-        expect({...normalize(actual),items:cardFacts(actual.items),risks:cardFacts(actual.risks??[]),boardPreview:cardFacts(actual.boardPreview??[])}).toEqual({...normalize(expected),items:cardFacts(expected.items),risks:cardFacts(expected.risks??[]),boardPreview:cardFacts(expected.boardPreview??[])});
-      }
-    }
-    const previewFilter=PatternWorkspaceFilterSchema.parse({scope:'mine',search:'TEST-PR12-PAGE'});
-    const lanePreview=await workspaces.pattern(actor(worker,["pattern_room_worker"]),previewFilter);
-    expect(lanePreview.total).toBe(25);expect(lanePreview.items).toHaveLength(15);
-    expect(lanePreview.counts.pattern).toBe(25);expect(lanePreview.boardPreview).toHaveLength(3);
-    expect(lanePreview.boardPreview?.every(task=>task.node.owner?.id===worker)).toBe(true);
-    const fullLaneSecond=await workspaces.pattern(actor(worker,["pattern_room_worker"]),{...previewFilter,lane:'pattern',page:2});
-    expect(fullLaneSecond.total).toBe(25);expect(fullLaneSecond.items).toHaveLength(10);
-    const workerContext=actor(worker,["pattern_room_worker"]);
-    const visibleBeforeRevocation=(await journeys.list(workerContext,JourneyFilterSchema.parse({search:'TEST-PR12-PAGE'}))).items[0]!;
-    expect(visibleBeforeRevocation).toBeDefined();
-    expect((await journeys.read(workerContext,visibleBeforeRevocation.id)).id).toBe(visibleBeforeRevocation.id);
-    const client=await db.connect();try{await client.query('BEGIN');
-      await client.query("INSERT INTO access_security_policy(policy_key,dingtalk_corp_id) VALUES('primary','TEST') ON CONFLICT DO NOTHING");
-      await client.query("SELECT set_config('dx_rework.role_revoke_event_id',$1,true),set_config('dx_rework.role_revoke_request_id','TEST-PR12-revoke',true)",[randomUUID()]);
-      await client.query("UPDATE user_role_assignments SET revoked_at=CURRENT_TIMESTAMP,revoked_by=$2,revoke_reason='TEST PR12 live role withdrawal' WHERE user_id=$1 AND role_code='pattern_room_worker' AND revoked_at IS NULL",[worker,root]);
-      await client.query('COMMIT');
-    }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
-    expect((await journeys.list(workerContext,JourneyFilterSchema.parse({search:'TEST-PR12-PAGE'}))).total).toBe(0);
-    await expect(journeys.read(workerContext,visibleBeforeRevocation.id)).rejects.toMatchObject({statusCode:404});
-  },120000);
+    },testExecutionConfig.correctnessTimeoutMs);
+    it("keeps lane pagination and rejects the same context after live-role revocation",async()=>{
+      const previewFilter=PatternWorkspaceFilterSchema.parse({scope:'mine',search:'TEST-PR12-PAGE'});
+      const lanePreview=await workspaces.pattern(actor(worker,["pattern_room_worker"]),previewFilter);
+      expect(lanePreview.total).toBe(25);expect(lanePreview.items).toHaveLength(15);
+      expect(lanePreview.counts.pattern).toBe(25);expect(lanePreview.boardPreview).toHaveLength(3);
+      expect(lanePreview.boardPreview?.every(task=>task.node.owner?.id===worker)).toBe(true);
+      const fullLaneSecond=await workspaces.pattern(actor(worker,["pattern_room_worker"]),{...previewFilter,lane:'pattern',page:2});
+      expect(fullLaneSecond.total).toBe(25);expect(fullLaneSecond.items).toHaveLength(10);
+      const workerContext=actor(worker,["pattern_room_worker"]);
+      const visibleBeforeRevocation=(await journeys.list(workerContext,JourneyFilterSchema.parse({search:'TEST-PR12-PAGE'}))).items[0]!;
+      expect(visibleBeforeRevocation).toBeDefined();
+      expect((await journeys.read(workerContext,visibleBeforeRevocation.id)).id).toBe(visibleBeforeRevocation.id);
+      const client=await db.connect();try{await client.query('BEGIN');
+        await client.query("INSERT INTO access_security_policy(policy_key,dingtalk_corp_id) VALUES('primary','TEST') ON CONFLICT DO NOTHING");
+        await client.query("SELECT set_config('dx_rework.role_revoke_event_id',$1,true),set_config('dx_rework.role_revoke_request_id','TEST-PR12-revoke',true)",[randomUUID()]);
+        await client.query("UPDATE user_role_assignments SET revoked_at=CURRENT_TIMESTAMP,revoked_by=$2,revoke_reason='TEST PR12 live role withdrawal' WHERE user_id=$1 AND role_code='pattern_room_worker' AND revoked_at IS NULL",[worker,root]);
+        await client.query('COMMIT');
+      }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
+      expect((await journeys.list(workerContext,JourneyFilterSchema.parse({search:'TEST-PR12-PAGE'}))).total).toBe(0);
+      await expect(journeys.read(workerContext,visibleBeforeRevocation.id)).rejects.toMatchObject({statusCode:404});
+    },testExecutionConfig.correctnessTimeoutMs);
+  });
 
   it("R2 board summary preserves complete task counts while avoiding downstream full-domain reads",async()=>{
     const source=await identity.createSource(actor(),{developmentType:"头版",designStyleNo:input("R2-PERF").designStyleNo,temporaryStyleNo:input("R2-PERF").temporaryStyleNo,customerCode:"PD"},randomUUID());
@@ -585,6 +633,16 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     const source=(await identity.createSource(actor(),{developmentType:'头版',designStyleNo:'TEST-SLA10-SOURCE',temporaryStyleNo:null,customerCode:null},randomUUID())).sourceId;
     await publishSource(source);
     const normal=await journeys.read(actor(),source,undefined,true);expect(normal.supervision?.status).toBe('planned');
+    const pmcActor=await readActor(pmc),managerActor=await readActor(manager),forms=new DigitalDevelopmentService(db,true);
+    const pmcSheet=await forms.read(pmcActor,source),managerSheet=await forms.read(managerActor,source);
+    expect(pmcSheet).toEqual(managerSheet);expect(pmcSheet.document!.files).toHaveLength(1);expect(pmcSheet.canEdit).toBe(false);
+    expect(await forms.canDownload(pmcActor,source,pmcSheet.document!.files[0]!.attachmentId)).toBe(true);
+    expect(await forms.canDownload(pmcActor,source,randomUUID())).toBe(false);
+    await expect(forms.authorizeUpload(pmcActor,source)).rejects.toMatchObject({statusCode:403});
+    const pmcSupervision=(await journeys.read(pmcActor,source,undefined,true)).supervision!,managerSupervision=(await journeys.read(managerActor,source,undefined,true)).supervision!;
+    expect(pmcSupervision).toMatchObject({status:'planned',originalRevision:managerSupervision.originalRevision,currentRevision:managerSupervision.currentRevision,coverage:managerSupervision.coverage});
+    expect(pmcSupervision.nodes.map(node=>[node.id,node.original,node.target,node.actualStart,node.actualEnd])).toEqual(managerSupervision.nodes.map(node=>[node.id,node.original,node.target,node.actualStart,node.actualEnd]));
+    expect(pmcSupervision.nodes.length).toBeGreaterThan(0);
     const observed=normal.supervision!.asOf,next=new Date(Date.parse(observed)+5*86400000).toISOString();
     const scoped={connect:db.connect.bind(db),query:db.query.bind(db)} as unknown as pg.Pool;
     installAcceptanceClockReader(scoped,{read:async()=>({now:next,scenarioId:null,revision:0}),nativeScenario:async()=>null});
@@ -611,5 +669,32 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     expect(await tasks.read(rootActor,f.taskId)).toEqual(snapshot);
     expect((await new DigitalProductionNotificationService(scoped).todos(actor(stranger,['sample_designer']))).some(t=>t.todoId===f.taskId)).toBe(false);
   });
+
+  it("reads one populated mother and its frozen SLA as PMC without taking management commands",async()=>{
+    // Add this mother after the legacy cases: their full-range projections run
+    // before search filtering and must retain their original fixture population.
+    const created=await identity.createOrder(actor(root,["root_superuser"]),{...input("PMC-READ"),primaryMerchandiserId:merchandiser},randomUUID()),id=created.productionOrderId;
+    const before=(await db.query("SELECT plan_json FROM digital_sla_plans WHERE production_order_id=$1 ORDER BY revision",[id])).rows;
+    const pmcActor=await readActor(pmc),managerActor=await readActor(manager);
+    expect(pmcActor.actorRoles).toEqual(['pmc']);expect(managerActor.actorRoles).toEqual(['production_management']);
+    expect(await identity.read(pmcActor,id)).toEqual(await identity.read(managerActor,id));
+    const pmcDetail=await journeys.read(pmcActor,id,undefined,true),managerDetail=await journeys.read(managerActor,id,undefined,true);
+    expect(pmcDetail.lines).toEqual(managerDetail.lines);expect(pmcDetail.lines).toHaveLength(2);
+    expect(pmcDetail.supervision).toMatchObject({status:'planned',originalRevision:managerDetail.supervision!.originalRevision,currentRevision:managerDetail.supervision!.currentRevision,coverage:managerDetail.supervision!.coverage});
+    // Each read observes its own business-clock instant; compare immutable plan
+    // and actual facts without equating a moving remaining-time forecast.
+    expect(pmcDetail.supervision!.nodes.map(node=>[node.id,node.original,node.target,node.actualStart,node.actualEnd])).toEqual(managerDetail.supervision!.nodes.map(node=>[node.id,node.original,node.target,node.actualStart,node.actualEnd]));
+    expect(pmcDetail.supervision!.nodes.length).toBeGreaterThan(0);
+    const pmcList=await journeys.list(pmcActor,JourneyFilterSchema.parse({scope:'production',search:'TEST-J-PMC-READ'}));
+    const managerList=await journeys.list(managerActor,JourneyFilterSchema.parse({scope:'production',search:'TEST-J-PMC-READ'}));
+    expect(pmcList.items.map(item=>item.id)).toEqual(managerList.items.map(item=>item.id));expect(pmcList.items).toHaveLength(1);
+    expect(pmcList.canManagePolicies).toBe(false);expect(managerList.canManagePolicies).toBe(true);
+    const series=new SeriesPlanService(db),closure=new OrderClosureService(db);
+    expect(await series.read(pmcActor,id)).toMatchObject({canEditSeries:false,canApply:false,canRequest:false});
+    expect(await series.read(managerActor,id)).toMatchObject({canApply:true,canRequest:true});
+    expect(await closure.read(pmcActor,id)).toMatchObject({canClose:false,canRecordQuality:false,canOpenReceiving:true,canOpenRework:true});
+    await expect(closure.close(pmcActor,id,{reason:'TEST pure PMC cannot close',expectedRevision:'a'.repeat(64)},randomUUID())).rejects.toMatchObject({statusCode:403});
+    expect((await db.query("SELECT plan_json FROM digital_sla_plans WHERE production_order_id=$1 ORDER BY revision",[id])).rows).toEqual(before);
+  },testExecutionConfig.correctnessTimeoutMs);
 
 });

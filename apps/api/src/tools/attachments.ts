@@ -1,3 +1,4 @@
+import { isPmcOnly } from "@dx-rework/contracts";
 import { createHash, randomUUID } from "node:crypto";
 import { readBudgetSourcing } from "../production-platform/budget-sourcing-adapter.js";
 import type { Pool, PoolClient } from "pg";
@@ -61,6 +62,7 @@ export class AttachmentService {
   uploadLimits(): { maxUploadBytes: number } { return { maxUploadBytes: this.options.maxUploadBytes }; }
 
   async copyDigitalBudgetImage(actor: TrustedActorContext, orderId: string, budgetVersion: number, sourceId: string): Promise<AttachmentResponse> {
+    if (isPmcOnly(actor.actorRoles)) throw new ApplicationError("FORBIDDEN", "PMC不能上传或确认附件", 403);
     const client = await this.pool.connect();
     let createdKey: string | null = null;
     try {
@@ -129,11 +131,13 @@ export class AttachmentService {
   }
 
   async createUploadIntent(actor: TrustedActorContext, input: CreateUploadIntent): Promise<UploadIntentResponse> {
+    if (isPmcOnly(actor.actorRoles)) throw new ApplicationError("FORBIDDEN", "PMC不能上传或确认附件", 403);
     this.validate(input);
     return this.createUploadIntentCore(actor,input);
   }
   /** Scoped PLT entry only. Generic /tools upload schema and MIME allowlist remain unchanged. */
   async createTechnicalPlotUploadIntent(actor:TrustedActorContext,sourceId:string,taskId:string,raw:unknown):Promise<UploadIntentResponse>{
+    if (isPmcOnly(actor.actorRoles)) throw new ApplicationError("FORBIDDEN", "PMC不能上传或确认附件", 403);
     const parsed=TechnicalPlotUploadSchema.safeParse(raw);
     if(!parsed.success)throw new ApplicationError('VALIDATION_ERROR','请上传有效.plt原件并保留文件校验信息',400);
     await this.assertTechnicalPlotTask(actor,sourceId,taskId);
@@ -208,6 +212,7 @@ export class AttachmentService {
   }
 
   async finalize(actor: TrustedActorContext, attachmentId: string): Promise<AttachmentResponse> {
+    if (isPmcOnly(actor.actorRoles)) throw new ApplicationError("FORBIDDEN", "PMC不能上传或确认附件", 403);
     const row = await this.owned(attachmentId, actor.actorId);
     if (row.status === "ready") return this.dto(row);
     if (row.status !== "pending") {

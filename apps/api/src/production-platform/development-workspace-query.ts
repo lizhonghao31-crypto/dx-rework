@@ -3,7 +3,7 @@ import { JourneyFilterSchema, type OrderJourney } from "@dx-rework/contracts/dig
 import { DEVELOPMENT_VIEWS, PATTERN_GROUPS, PATTERN_LANES, type DevelopmentView, type DevelopmentWorkspaceFilter, type DevelopmentWorkspaceResult, type PatternWorkspaceFilter, type PatternWorkspaceResult, type PatternWorkspaceTask } from "@dx-rework/contracts/digital-development-workspace";
 import type { TrustedActorContext } from "../tools/repositories.js";
 import { isRootActor } from "../access/business-authority.js";
-import { digitalForbidden } from "./access-policy.js";
+import { digitalForbidden, isDigitalManagementReader, isDigitalTechnicalManager } from "./access-policy.js";
 import {journeyMatchesSearch} from "./journey-projection.js";
 
 /** Display views only. The original publication, route and order facts remain authoritative. */
@@ -40,7 +40,7 @@ export class DevelopmentWorkspaceQuery {
     return {asOf: result.asOf, page: filter.page, pageSize: 15, total: filtered.length, counts, designers: [...new Set(facts.flatMap(item => item.designer ? [item.designer] : []))].sort(), customers: [...new Set(facts.flatMap(item => item.customer ? [item.customer] : []))].sort(), items: filtered.slice((filter.page - 1) * 15, filter.page * 15).map(item=>({...item,journey:details.get(item.journey.id)!}))};
   }
   async pattern(actor: TrustedActorContext, filter: PatternWorkspaceFilter): Promise<PatternWorkspaceResult> {
-    const manager=isRootActor(actor)||actor.actorRoles.some(role=>["owner_group","production_management","pattern_room_supervisor"].includes(role));
+    const manager=isDigitalManagementReader(actor)||isDigitalTechnicalManager(actor);
     const clerk=actor.actorRoles.includes("development_clerk");
     if(filter.scope!=="mine"&&!manager&&!clerk)digitalForbidden();
     if(filter.scope==="unassigned"&&!manager)digitalForbidden();

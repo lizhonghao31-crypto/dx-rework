@@ -30,7 +30,7 @@ export function canAccessProductionReporting(user: AuthorizedUser): boolean {
   return user.isRoot === true
     || (user.businessRoles?.includes("production_reporter") === true && user.capabilities.includes("production-reporting"))
     || (user.businessRoles?.includes("quality_control") === true && user.capabilities.includes("qc-production-progress"))
-    || (user.businessRoles?.some(role => ["owner_group", "production_management", "order_merchandiser"].includes(role)) === true && user.capabilities.includes("sourcing:view"));
+    || (user.businessRoles?.some(role => ["owner_group", "production_management", "pmc", "order_merchandiser"].includes(role)) === true && user.capabilities.includes("sourcing:view"));
 }
 
 export function canAccessProduction(user: AuthorizedUser): boolean {
@@ -38,7 +38,7 @@ export function canAccessProduction(user: AuthorizedUser): boolean {
     || (user.businessRoles?.some(role => ["finance_director", "finance_read"].includes(role)) === true && user.capabilities.includes("sourcing:view"));
 }
 
-export const DIGITAL_PRODUCTION_ROLES = ["sample_designer", "order_merchandiser", "production_management", "owner_group", "pattern_room_supervisor", "development_clerk", "pattern_room_tail_inspector", "pattern_room_worker", "quality_control", "embroidery_washing_merchandiser", "warehouse_receiver", "warehouse_supervisor", "cutting_worker"] as const;
+export const DIGITAL_PRODUCTION_ROLES = ["sample_designer", "order_merchandiser", "production_management", "pmc", "owner_group", "pattern_room_supervisor", "development_clerk", "pattern_room_tail_inspector", "pattern_room_worker", "quality_control", "embroidery_washing_merchandiser", "warehouse_receiver", "warehouse_supervisor", "cutting_worker"] as const;
 export function canAccessDigitalProduction(user: AuthorizedUser): boolean {
   return user.isRoot === true || user.businessRoles?.some(role => DIGITAL_PRODUCTION_ROLES.some(allowed => allowed === role)) === true;
 }

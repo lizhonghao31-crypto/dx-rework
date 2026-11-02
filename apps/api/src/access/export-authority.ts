@@ -4,6 +4,7 @@ import { ApplicationError } from "../platform/errors.js";
 export const BUSINESS_EXPORT_ROLE_ALLOWLIST = [
   "owner_group",
   "production_management",
+  "pmc",
   "finance_director",
 ] as const;
 

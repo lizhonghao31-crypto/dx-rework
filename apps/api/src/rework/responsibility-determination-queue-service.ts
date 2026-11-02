@@ -38,7 +38,9 @@ export class ResponsibilityDeterminationQueueService {
       "responsibility:confirm_high_multiplier",
     );
 
-    if (!hasDetermine && !hasTakeover && !hasConfirm) {
+    const pmcRead = actor.actorRoles.includes("pmc") && actorCapabilities.includes("external_responsibility:view")
+      && (await this.database.query<{allowed:boolean}>("SELECT responsibility_actor_has_direct_role($1,'external_responsibility:view',ARRAY['pmc']) allowed",[actor.actorId])).rows[0]?.allowed === true;
+    if (!hasDetermine && !hasTakeover && !hasConfirm && !pmcRead) {
       return { items: [] };
     }
 
@@ -99,7 +101,7 @@ export class ResponsibilityDeterminationQueueService {
        ) leaf ON true
        WHERE order_record.status='pending_responsibility_determination'
          AND (
-           ($2::boolean AND responsibility_can_determine(
+           $5::boolean OR ($2::boolean AND responsibility_can_determine(
              $1,
              order_record.rework_order_id
            ))
@@ -116,7 +118,7 @@ export class ResponsibilityDeterminationQueueService {
          )
        ORDER BY order_record.updated_at,order_record.rework_order_id
        LIMIT 200`,
-      [actor.actorId, hasDetermine, hasTakeover, hasConfirm],
+      [actor.actorId, hasDetermine, hasTakeover, hasConfirm, pmcRead],
     );
 
     return {

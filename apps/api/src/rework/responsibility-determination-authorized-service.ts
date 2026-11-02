@@ -482,7 +482,9 @@ export class AuthorizedResponsibilityDeterminationService {
     const pending = order.status === "pending_responsibility_determination";
     const pendingOwnerSignature = order.status === "pending_owner_signature";
     const root = isRootActor(actor);
-    const canView = root ||
+    const pmcRead = actor.actorRoles.includes("pmc") && caps.includes("external_responsibility:view")
+      && (await client.query<{allowed:boolean}>("SELECT responsibility_actor_has_direct_role($1,'external_responsibility:view',ARRAY['pmc']) allowed",[actor.actorId])).rows[0]?.allowed === true;
+    const canView = root || pmcRead ||
       (row.owner_read && (caps.includes("business:read_all") || caps.includes("responsibility:owner_sign"))) ||
       (caps.includes("rework:related_orders:view") &&
         (order.merchandiser_user_id === actor.actorId ||

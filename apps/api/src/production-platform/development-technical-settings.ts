@@ -5,7 +5,7 @@ import type {TrustedActorContext} from '../tools/repositories.js';
 import {isRootActor} from '../access/business-authority.js';
 import {businessNow} from '../acceptance-clock/business-time.js';
 import {ApplicationError} from '../platform/errors.js';
-import {assertSlaSettingsActor} from './sla-settings-authority.js';
+import {assertSlaSettingsActor,assertSlaSettingsReadActor} from './sla-settings-authority.js';
 import {DigitalProductionAccessPolicy,digitalForbidden,digitalNotFound} from './access-policy.js';
 import {SlaPreviewTokens} from './sla-preview-token.js';
 const conflict=(message:string):never=>{throw new ApplicationError('DEVELOPMENT_TECHNICAL_CONFLICT',message,409);};
@@ -22,7 +22,7 @@ export class DevelopmentTechnicalSettingsService{
   const row=(await db.query('SELECT * FROM digital_development_cycle_standards WHERE ($1::integer IS NULL OR version=$1) ORDER BY version DESC LIMIT 1',[version??null])).rows[0]??digitalNotFound();
   return {version:row.version as number,values:DevelopmentCycleValuesSchema.parse(row.values_json),scope:'new_sources' as const};
  }
- async read(actor:TrustedActorContext,version?:number){return this.transaction(async db=>{await assertSlaSettingsActor(db,actor);return {...await this.current(db,version),history:(await db.query('SELECT version,reason FROM digital_development_cycle_standards ORDER BY version DESC LIMIT 30')).rows};});}
+ async read(actor:TrustedActorContext,version?:number){return this.transaction(async db=>{await assertSlaSettingsReadActor(db,actor);return {...await this.current(db,version),history:(await db.query('SELECT version,reason FROM digital_development_cycle_standards ORDER BY version DESC LIMIT 30')).rows};});}
  async preview(actor:TrustedActorContext,raw:unknown){const input=DevelopmentCycleDraftSchema.parse(raw);return this.transaction(async db=>{
   await assertSlaSettingsActor(db,actor);const current=await this.current(db);if(current.version!==input.expectedVersion)conflict('现行开发周期已更新，请重新读取');
   const changes=(Object.keys(input.values) as Array<keyof typeof input.values>).filter(key=>input.values[key]!==current.values[key]).map(key=>({key,before:current.values[key],after:input.values[key]}));

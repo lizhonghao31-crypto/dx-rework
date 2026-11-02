@@ -1,3 +1,4 @@
+import { isPmcOnly, pmcEffectiveCapabilities } from "@dx-rework/contracts";
 import { effectiveMemberAuthorization, type BusinessModule } from "../access/member-module-policy.js";
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
@@ -304,13 +305,15 @@ export class PostgresAuthStore implements AuthStore {
        ORDER BY capability`,
       [userId, this.corporationId],
     );
-    const granted = capabilities.rows.map((row) => row.capability);
+    const roleCodes = roles.rows.map((row) => row.role_code);
+    const root = isPmcOnly(roleCodes) && (await queryable.query<{root:boolean}>("SELECT access_is_root_actor($1) AS root", [userId])).rows[0]?.root === true;
+    const granted = pmcEffectiveCapabilities(roleCodes, capabilities.rows.map((row) => row.capability), root);
     const effective = await effectiveMemberAuthorization(queryable, userId, granted);
     return {
       businessRoles: roles.rows.map((row) => row.role_code),
       capabilities: granted,
       effectiveWriteCapabilities: effective.capabilities,
-      readOnlyModules: effective.readOnlyModules,
+      readOnlyModules: isPmcOnly(roleCodes) && !root ? [...new Set<BusinessModule>([...effective.readOnlyModules, "rework", "sourcing"])] : effective.readOnlyModules,
     };
   }
 }

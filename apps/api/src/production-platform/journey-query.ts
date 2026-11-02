@@ -17,7 +17,7 @@ import {journeyTaskSummaries} from './journey-task-summary.js';
 import type { Pool, PoolClient } from "pg";
 import type { JourneyFilter, JourneyNode, JourneyRecord, JourneyState, OrderJourney } from "@dx-rework/contracts/digital-production-journey";
 import type { TrustedActorContext } from "../tools/repositories.js";
-import { DigitalProductionAccessPolicy, digitalForbidden, digitalNotFound, isDigitalLeader, isDigitalTechnicalManager } from "./access-policy.js";
+import { DigitalProductionAccessPolicy, digitalForbidden, digitalNotFound, isDigitalLeader, isDigitalManagementReader, isDigitalTechnicalManager } from "./access-policy.js";
 import { isRootActor } from "../access/business-authority.js";
 import { assertIdentityActor, digitalDateText } from "./identity-service.js";
 import { DigitalProductionTaskService } from "./task-service.js";
@@ -65,7 +65,7 @@ export class DigitalJourneyQuery {
     return result;
   }
   private async candidates(db:PoolClient,actor:TrustedActorContext,id:string|null=null,patternKinds:string[]|null=null):Promise<Candidate[]> {
-    const leader=isDigitalLeader(actor)||isDigitalTechnicalManager(actor);
+    const leader=isDigitalManagementReader(actor)||isDigitalTechnicalManager(actor);
     // Only current live roles and legitimate task assignments add scope. No style-string join.
     return (await db.query(`WITH live_roles AS (
       SELECT a.role_code FROM user_role_assignments a JOIN app_users u ON u.id=a.user_id
@@ -178,7 +178,7 @@ export class DigitalJourneyQuery {
     const sourceAccess=Boolean(sid&&await policy.allowed(actor,"source",sid,"technical"));
     const orderAccess=Boolean(oid&&await policy.allowed(actor,"order",oid,"technical"));
     // Order access through one assigned technical task must not expose its sibling task metadata.
-    const fullOrder=orderAccess&&(isDigitalLeader(actor)||isDigitalTechnicalManager(actor)
+    const fullOrder=orderAccess&&(isDigitalManagementReader(actor)||isDigitalTechnicalManager(actor)
       || actor.actorRoles.includes("sample_designer")&&order?.created_by===actor.actorId
       || actor.actorRoles.includes("order_merchandiser")&&order?.primary_merchandiser_id===actor.actorId
       || actor.actorRoles.includes("development_clerk"));
@@ -339,7 +339,7 @@ export class DigitalJourneyQuery {
       const sourcing=children.find(child=>child.module==="sourcing");
       // The original detail flow hides logically deleted cases, including approval history and URLs.
       const sourcingFields=sourcing&&sourcingAllowed?(await db.query("SELECT source.additional_merchandiser_user_id,source.style_name_snapshot,source.erp_order_no,current.status FROM sourcing_cases source JOIN current_sourcing_cases current USING(sourcing_case_id) WHERE source.sourcing_case_id=$1 AND source.deleted_at IS NULL",[sourcing.child_id])).rows[0]:null;
-      const closureAllowed=actor.actorRoles.some(role=>["root_superuser","owner_group","production_management","order_merchandiser","warehouse_receiver", "warehouse_supervisor","quality_control"].includes(role));
+      const closureAllowed=actor.actorRoles.some(role=>["root_superuser","owner_group","production_management","pmc","order_merchandiser","warehouse_receiver", "warehouse_supervisor","quality_control"].includes(role));
       const childLines=(await db.query("SELECT module,child_id,line_id FROM digital_production_child_lines WHERE production_order_id=$1 ORDER BY module,line_id,child_id",[oid])).rows;
       for(const child of children) {
         let url:string|null=null;
@@ -523,7 +523,7 @@ export class DigitalJourneyQuery {
     const cancelled=Boolean(!patternKinds&&lifecycle&&(await db.query("SELECT 1 FROM digital_production_resource_lifecycle WHERE resource_kind=$1 AND resource_id=$2 AND state='cancelled'",[lifecycle.kind,lifecycle.id])).rowCount);
     // Do not expand an assigned worker's single-task read scope to the whole SLA/PO history.
     if(supervision&&!patternKinds&&selectedRound===undefined){
-    const timingRoles=['production_management','owner_group','pattern_room_supervisor','development_clerk'];
+    const timingRoles=['production_management','owner_group','pmc','pattern_room_supervisor','development_clerk'];
     let liveTimingAuthority=isRootActor(actor);
     if(!liveTimingAuthority)for(const role of timingRoles)if(actor.actorRoles.includes(role)&&await policy.activeRole(actor.actorId,role)){liveTimingAuthority=true;break;}
     const ownSource=sourceAccess&&source?.created_by===actor.actorId&&actor.actorRoles.includes('sample_designer')&&await policy.activeRole(actor.actorId,'sample_designer');

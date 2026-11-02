@@ -11,6 +11,8 @@ import {exerciseDevelopmentSlaNative} from "../helpers/development-sla-native-fi
 import { exerciseRevisionApproval } from "./helpers/revision-approval-scenario.js";
 import { ownedPostgresSchema, createOwnedPostgresSchema, releaseOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { RootAuthority } from "../../apps/api/src/access/root-authority.js";
+import { businessActor } from "../../apps/api/src/access/business-authority.js";
+import { PostgresAuthStore } from "../../apps/api/src/auth/postgres-store.js";
 import { exerciseReceivingDifferenceAuthority } from "./helpers/receiving-difference-authority-scenario.js";
 import { WorkerAwareAccessMasterDataService } from "../../apps/api/src/access/worker-aware-access-service.js";
 import { exerciseWagePagination } from "./helpers/wage-pagination-scenario.js";
@@ -35,12 +37,13 @@ import { AttachmentService } from "../../apps/api/src/tools/attachments.js";
 import { registerTodoRoutes } from "../../apps/api/src/todos/routes.js";
 import { readFinanceNode } from "../../apps/api/src/reporting/finance-node-reader.js";
 import { FinanceNodeKeySchema } from "@dx-rework/contracts/reporting";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
 import {
   CreateResponsibilityDraftSchema,
   CreateWorkReportSchema,
+  PMC_READ_CAPABILITIES,
   ReviewProcessConfigurationSchema,
   SaveProcessConfigurationSchema,
   SubmitProcessConfigurationSchema,
@@ -178,6 +181,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     quantityWorker: randomUUID(),
     merchandiser: randomUUID(),
     production: randomUUID(),
+    pmc: randomUUID(),
     factoryPayables: randomUUID(),
     fabricPayables: randomUUID(),
     financeDirector: randomUUID(),
@@ -254,6 +258,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     ["production_management"],
     "responsibility:determine",
   );
+  const pmcReader = () => actor(ids.pmc, ["pmc"], "report:view", ...PMC_READ_CAPABILITIES);
   const factoryPayables = (capability: string) => actor(
     ids.factoryPayables,
     ["factory_payables"],
@@ -332,6 +337,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       [ids.quantityWorker, "计量乙", "worker"],
       [ids.merchandiser, "订单跟单", "order_merchandiser"],
       [ids.production, "生产管理", "production_management"],
+      [ids.pmc, "TEST PMC只读与独立多角色验收", "pmc"],
       [ids.factoryPayables, "加工厂应付", "factory_payables"],
       [ids.fabricPayables, "面料应付", "fabric_payables"],
       [ids.financeDirector, "财务总监", "finance_director"],
@@ -1486,6 +1492,16 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       calculationTotal: "180.00",
     });
     expect(n07Draft.value.determination!.processes).toHaveLength(2);
+    // Preserve #879's real pending-object assertions in this existing chain.
+    const pmcPending = await responsibility.get(pmcReader(), submitted.value.reworkOrderId);
+    expect(pmcPending.determination).toEqual(n07Draft.value.determination);
+    expect(pmcPending).toMatchObject({ canDetermine: false, canTakeover: false, canConfirmHighMultiplier: false, canOwnerSign: false });
+    const pmcQueue = await responsibility.listQueue(pmcReader());
+    expect(pmcQueue.items.find(row => row.reworkOrderId === submitted.value.reworkOrderId)).toMatchObject({ canDetermine: false, canTakeover: false, canConfirmHighMultiplier: false });
+    await expect(responsibility.saveDraft(pmcReader(), submitted.value.reworkOrderId, CreateResponsibilityDraftSchema.parse({
+      expectedOrderVersion: pmcPending.orderVersion, expectedCurrentDeterminationVersion: pmcPending.determination!.version,
+      handlerUserId: ids.production, tailInspectionCostBearer: "processing_factory", processes: n07Processes,
+    }), randomUUID())).rejects.toMatchObject({ statusCode: 403 });
     const workerResponsibility = n07Draft.value.determination!.processes.find(
       (process) => process.configurationItemId === approvedItem.configurationItemId,
     );
@@ -1604,7 +1620,14 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
         if(confirmation?.reviewedAt) expect(Date.parse(confirmation.reviewedAt)).toBeLessThanOrEqual(Date.parse(first.at));
         expect(original.entry.id).toBe(first.id);
       }
-      if(node==='responsibility'||node==='owner_signature') expect(historical.page?.responsibility?.determination).not.toBeNull();
+      if(node==='responsibility'||node==='owner_signature') {
+        expect(historical.page?.responsibility?.determination).not.toBeNull();
+        const pmcHistory = await businessDetail.history(pmcReader(), submitted.value.reworkOrderId, node);
+        expect(pmcHistory).toEqual(await businessDetail.history(production(), submitted.value.reworkOrderId, node));
+        expect(pmcHistory.page!.responsibility).toMatchObject({ canDetermine: false, canTakeover: false, canConfirmHighMultiplier: false, canOwnerSign: false });
+        await expect(businessDetail.history({ ...pmcReader(), authorizationCapabilities: [] }, submitted.value.reworkOrderId, node)).rejects.toMatchObject({ statusCode: 403 });
+        await expect(businessDetail.history(pmcReader(), submitted.value.reworkOrderId, node, randomUUID())).rejects.toMatchObject({ statusCode: 404 });
+      }
       if(node==='work_reporting') expect(historical.page?.workTasks?.tasks.length).toBeGreaterThan(0);
       expect(historical.fields.find(field => field.label === "订单数量")?.value).toBe("1000");
       expect(historical.fields.find(field => field.label === "整查费用承担方")?.value).toBe("processing_factory");
@@ -2416,14 +2439,14 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     registerManagementReportingRoutes(app, { service: reporting, exportService: exporter, authenticate: async () => ({ id: current.actorId, businessRoles: current.actorRoles, capabilities: ["wage:view", "wage:export", "wage:settlement_mark"] }) });
     const query = "from=2020-01-01&to=2099-12-31&wageSource=pattern_room&limit=500";
     try {
-      for (const [id, role] of [[ids.financeDirector, "finance_director"], [ids.financeRead, "finance_read"], [ids.monthClose, "wage_month_close_accountant"], [ids.patternRoot, "root_superuser"], [ids.ownerOne, "owner_group"], [ids.production, "production_management"]] as const) {
+      for (const [id, role] of [[ids.financeDirector, "finance_director"], [ids.financeRead, "finance_read"], [ids.monthClose, "wage_month_close_accountant"], [ids.patternRoot, "root_superuser"], [ids.ownerOne, "owner_group"], [ids.production, "production_management"], [ids.pmc, "pmc"]] as const) {
         current = financeWages(id, [role]);
         const report = await app.inject({ url: `/management/reports/wages?${query}` });
         expect(report.statusCode).toBe(200);
         const body = report.json(); expect(body.rows.length).toBeGreaterThan(0);
         for (const row of body.rows) {expect(row).not.toHaveProperty("attachments");expect(row).not.toHaveProperty("customer");expect(row).not.toHaveProperty("requestReason");}
         expect((await app.inject({ url: `/management/reports/wages/export.xlsx?${query}` })).statusCode).toBe(200);
-        expect((await app.inject({ url: `/management/wages/settlement-preview?${query}` })).statusCode).toBe(["owner_group", "production_management"].includes(role) ? 403 : 200);
+        expect((await app.inject({ url: `/management/wages/settlement-preview?${query}` })).statusCode).toBe(["owner_group", "production_management", "pmc"].includes(role) ? 403 : 200);
       }
       for (const [id, role] of [[ids.patternSupervisor, "pattern_room_supervisor"], [ids.patternDesigner, "sample_designer"], [ids.worker, "pattern_room_worker"], [ids.merchandiser, "order_merchandiser"]] as const) {
         current = financeWages(id, [role]);
@@ -3366,6 +3389,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     expect((await database.query("SELECT worker_reported_quantity::int AS worker,final_confirmed_quantity::int AS final FROM rework_tail_completion_quantities q JOIN rework_tail_completion_confirmations c USING(confirmation_id) WHERE c.rework_order_id=$1",[orderId])).rows).toEqual([{worker:100,final:100}]);
   });
 
+  // Four complete routes include historical rounds and tens of thousands of SQL calls.
   it("P07/P08 development routes preserve wages, final confirmation and exact native history",async()=>{
     await exerciseDevelopmentRoute(database,todoProjection,actor(ids.patternRoot,["root_superuser"],"pattern_room:orders:view"),ids.worker,workerPersonId,actor(ids.qc,["quality_control"],"digital_production:view"),ids.otherPatternWorker);
   },30000);
@@ -3374,7 +3398,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     await exerciseDevelopmentSlaNative(database,todoProjection,actor(ids.patternRoot,["root_superuser"],"pattern_room:orders:view"),ids.worker);
   },30000);
 
-  const returnedReportFixture = async () => {
+  const returnedReportFixture = async (primaryWorker = { actor: worker(), personId: workerPersonId }) => {
     const imageId = randomUUID(), receiptImageId = randomUUID(), styleNo = `TEST-RETURN-${randomUUID()}`;
     for (const [attachmentId, userId] of [[imageId, ids.qc], [receiptImageId, ids.receivingWarehouse]]) {
       await database.query(
@@ -3403,7 +3427,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     await workerPlan.save(tailAssign(), orderId, {
       expectedOrderVersion: saved.value.orderVersion, configurationId: saved.value.configuration!.configurationId,
       expectedConfigurationVersion: saved.value.configuration!.configurationVersion,
-      assignments: [{ configurationItemId: item.configurationItemId, memberIds: [workerPersonId, quantityWorkerPersonId] }],
+      assignments: [{ configurationItemId: item.configurationItemId, memberIds: [primaryWorker.personId, quantityWorkerPersonId] }],
     }, randomUUID());
     const queued = await configuration.submit(tailConfigure(), orderId, {
       expectedOrderVersion: saved.value.orderVersion, expectedConfigurationVersion: saved.value.configuration!.configurationVersion,
@@ -3413,9 +3437,9 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     }, randomUUID());
     await workerPlan.activateAfterIeApproval(orderId, approved.value.configuration!.configurationVersion, randomUUID());
     let listed = await work.list(tailAssign(), orderId);
-    const taskA = listed.tasks.find(task => task.members.some(member => member.personId === workerPersonId))!;
+    const taskA = listed.tasks.find(task => task.members.some(member => member.personId === primaryWorker.personId))!;
     const taskB = listed.tasks.find(task => task.members.some(member => member.personId === quantityWorkerPersonId))!;
-    const reportA = await work.submitReport(worker(), taskA.workTaskId, {
+    const reportA = await work.submitReport(primaryWorker.actor, taskA.workTaskId, {
       expectedOrderVersion: listed.orderVersion, actualQuantity: 8, completedAt: new Date().toISOString(),
     }, randomUUID());
     listed = await work.list(tailAssign(), orderId);
@@ -3429,15 +3453,76 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     ]);
     const review = await wholeOrder.get(tailAudit(), orderId);
     const rejected = await wholeOrder.rejectReport(tailAudit(), reportA.value.workReportId, {
-      expectedOrderVersion: review.orderVersion, rejectedPersonId: workerPersonId, reason: "甲实际完成七件，退回重报",
+      expectedOrderVersion: review.orderVersion, rejectedPersonId: primaryWorker.personId, reason: "甲实际完成七件，退回重报",
     }, randomUUID());
     const todo = (await database.query<{ todo_id: string; status: string; recipient_user_id: string }>(
       "SELECT todo_id,status,recipient_user_id FROM rework_todos WHERE dedupe_key=$1",
       [`work-report-return:${reportA.value.workReportId}`],
     )).rows[0]!;
-    expect(todo).toMatchObject({ status: "pending", recipient_user_id: ids.worker });
+    expect(todo).toMatchObject({ status: "pending", recipient_user_id: primaryWorker.actor.actorId });
     return { orderId, styleNo, taskA, taskB, reportA: reportA.value.workReportId, reportB: reportB.value.workReportId, version: rejected.value.orderVersion, todo };
   };
+
+  it("preserves a real PMC worker's own reporting authority and rejects foreign orders and the same session after worker revocation", async () => {
+    const root = actor(ids.patternRoot, ["root_superuser"], "access:admin");
+    const store = new PostgresAuthStore(database, "corp", `ding-${ids.patternRoot}`);
+    const rootAuthority = new RootAuthority(database, "corp", `ding-${ids.patternRoot}`);
+    const tokenHash = createHash("sha256").update(randomUUID()).digest("hex"), sessionId = randomUUID();
+    await store.createSession({ id: sessionId, tokenHash, userId: ids.pmc, expiresAt: new Date(Date.now() + 3_600_000), revokedAt: null });
+    const current = async () => {
+      const session = await store.findSession(tokenHash, new Date());
+      expect(session).toMatchObject({ id: sessionId, userId: ids.pmc, revokedAt: null });
+      return session!;
+    };
+    let assignmentId: string | undefined;
+    try {
+      expect((await current()).user.businessRoles).toEqual(["pmc"]);
+      assignmentId = (await access.assignRole(root, { userId: ids.pmc, roleCode: "worker", reason: "TEST isolated PMC worker authority" })).assignmentId;
+      const mixedSession = await current();
+      expect(mixedSession.user.businessRoles).toEqual(["pmc", "worker"]);
+      expect(mixedSession.user.capabilities).toEqual(expect.arrayContaining(["work:report", ...PMC_READ_CAPABILITIES]));
+      const mixed = await businessActor(rootAuthority, mixedSession.user, randomUUID(), "work:report");
+      const personId = (await access.createPerson(ownerMasterData(), { personType: "internal", appUserId: ids.pmc, displayName: "TEST PMC独立工人", aliases: [], reason: "TEST isolated mixed-role work assignment" })).personId;
+      const fixture = await returnedReportFixture({ actor: mixed, personId });
+      const foreign = await returnedReportFixture();
+      const input = { expectedOrderVersion: fixture.version, actualQuantity: 7, completedAt: new Date().toISOString() };
+      const facts = async () => Promise.all([
+        database.query("SELECT work_report_id,actual_quantity,resubmits_work_report_id FROM rework_work_reports WHERE rework_order_id=ANY($1::uuid[]) ORDER BY work_report_id", [[fixture.orderId, foreign.orderId]]),
+        database.query("SELECT rework_order_id,status,version FROM rework_orders WHERE rework_order_id=ANY($1::uuid[]) ORDER BY rework_order_id", [[fixture.orderId, foreign.orderId]]),
+        database.query("SELECT todo_id,status FROM rework_todos WHERE entity_id=ANY($1::text[]) ORDER BY todo_id", [[fixture.orderId, foreign.orderId]]),
+        database.query("SELECT event_id FROM operation_events WHERE entity_id=ANY($1::text[]) ORDER BY event_id", [[fixture.orderId, foreign.orderId]]),
+      ]).then(results => results.map(result => result.rows));
+      const before = await facts();
+      await expect(work.submitReport(mixed, fixture.taskB.workTaskId, input, randomUUID())).rejects.toMatchObject({ statusCode: 403 });
+      await expect(work.submitReportsBatch(mixed, fixture.orderId, { expectedOrderVersion: fixture.version, reports: [{ ...input, workTaskId: fixture.taskB.workTaskId }] }, randomUUID())).rejects.toMatchObject({ statusCode: 403 });
+      const foreignInput = { ...input, expectedOrderVersion: foreign.version };
+      await expect(work.submitReport(mixed, foreign.taskA.workTaskId, foreignInput, randomUUID())).rejects.toMatchObject({ statusCode: 403 });
+      await expect(work.submitReportsBatch(mixed, foreign.orderId, { expectedOrderVersion: foreign.version, reports: [{ ...foreignInput, workTaskId: foreign.taskA.workTaskId }] }, randomUUID())).rejects.toMatchObject({ statusCode: 403 });
+      expect(await facts()).toEqual(before);
+
+      await access.revokeRole(root, assignmentId, "TEST same-session removal of worker role");
+      assignmentId = undefined;
+      const pureSession = await current();
+      expect(pureSession.user.businessRoles).toEqual(["pmc"]);
+      expect(pureSession.user.capabilities).toEqual([...PMC_READ_CAPABILITIES].sort());
+      const pure = await businessActor(rootAuthority, pureSession.user, randomUUID(), "work:report");
+      await expect(work.submitReport(pure, fixture.taskA.workTaskId, input, randomUUID())).rejects.toMatchObject({ statusCode: 403 });
+      await expect(work.submitReportsBatch(pure, fixture.orderId, { expectedOrderVersion: fixture.version, reports: [{ ...input, workTaskId: fixture.taskA.workTaskId }] }, randomUUID())).rejects.toMatchObject({ statusCode: 403 });
+      expect(await facts()).toEqual(before);
+
+      assignmentId = (await access.assignRole(root, { userId: ids.pmc, roleCode: "worker", reason: "TEST restore separately authorized worker only" })).assignmentId;
+      const restored = await businessActor(rootAuthority, (await current()).user, randomUUID(), "work:report"), key = randomUUID();
+      const submitted = await work.submitReport(restored, fixture.taskA.workTaskId, input, key);
+      expect(submitted.value).toMatchObject({ actualQuantity: 7, groupAmount: null, memberShares: [{ personId, amount: 0 }] });
+      expect((await work.submitReport(restored, fixture.taskA.workTaskId, input, key)).reused).toBe(true);
+      expect((await database.query("SELECT actual_quantity::int quantity,resubmits_work_report_id FROM rework_work_reports WHERE work_report_id=$1", [submitted.value.workReportId])).rows).toEqual([{ quantity: 7, resubmits_work_report_id: fixture.reportA }]);
+      expect((await database.query("SELECT actual_quantity::int quantity FROM rework_work_reports WHERE work_report_id=$1", [fixture.reportB])).rows).toEqual([{ quantity: 2 }]);
+      expect((await database.query("SELECT status FROM rework_todos WHERE todo_id=$1", [fixture.todo.todo_id])).rows).toEqual([{ status: "completed" }]);
+    } finally {
+      if (assignmentId) await access.revokeRole(root, assignmentId, "TEST restore pure PMC fixture");
+      await store.revokeSession(tokenHash, new Date());
+    }
+  });
 
   it("returned-report lifecycle closes a real worker todo when single submission omits the optional old report ID", async () => {
     const fixture = await returnedReportFixture();
@@ -3621,6 +3706,29 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
 
   it('retired ERP history remains readable through native business detail without rewriting origins or audits',async()=>{
     await exerciseLegacyErpHistory(database,ids.merchandiser,actor(ids.patternRoot,['root_superuser'],'rework:view'),actor(ids.worker,['worker'],'work:report'));
+  });
+
+  it("gives PMC the manager's completed-order attachment and amount history without responsibility actions", async () => {
+    const orderId = (await database.query<{ rework_order_id: string }>("SELECT d.rework_order_id FROM rework_responsibility_determinations d JOIN rework_orders o USING(rework_order_id) WHERE d.stage='finalized' AND o.status<>'deleted' ORDER BY d.created_at LIMIT 1")).rows[0]!.rework_order_id;
+    const pmc = pmcReader(), manager = actor(ids.production, ["production_management"], "responsibility:determine", "external_responsibility:view", "report:view", "wage:view");
+    const pmcView = await businessDetail.get(pmc, orderId);
+    expect(pmcView).toEqual(await businessDetail.get(manager, orderId));
+    expect(pmcView.attachments.length).toBeGreaterThan(0);
+    const current = await responsibility.get(pmc, orderId);
+    expect(current.determination).toEqual((await responsibility.get(manager, orderId)).determination);
+    expect(current).toMatchObject({ canDetermine: false, canTakeover: false, canConfirmHighMultiplier: false, canOwnerSign: false });
+    const revision = await responsibility.revisions.get(pmc, orderId);
+    expect(revision.canReopen).toBe(false); expect(revision.history.length).toBeGreaterThan(0);
+    await expect(responsibility.revisions.reopen(pmc, orderId, { expectedOrderVersion: current.orderVersion, expectedDeterminationVersion: current.determination!.version, reason: "TEST PMC不能重开" }, randomUUID())).rejects.toMatchObject({ statusCode: 403 });
+    const binding = (await database.query<{ attachmentId: string; entityType: string; entityId: string; mimeType: string }>(
+      'SELECT attachment_id AS "attachmentId",entity_type AS "entityType",entity_id AS "entityId",mime_type AS "mimeType" FROM attachments WHERE entity_type=\'rework_order\' AND entity_id=$1 AND status=\'ready\' ORDER BY attachment_id LIMIT 1', [orderId],
+    )).rows[0]!;
+    expect(binding).toBeDefined();
+    expect(pmcView.attachments.map(file => file.attachmentId)).toContain(binding.attachmentId);
+    for (const reader of [pmc, manager]) {
+      expect(await businessDetail.canDownloadBoundAttachment(reader, binding)).toBe(true);
+      expect(await businessDetail.canDownloadBoundAttachment(reader, { ...binding, entityId: randomUUID() })).toBe(false);
+    }
   });
 
 });
