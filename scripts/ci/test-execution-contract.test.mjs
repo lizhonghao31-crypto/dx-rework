@@ -5,11 +5,56 @@ import {mkdtempSync,readFileSync,writeFileSync,rmSync,mkdirSync,cpSync,existsSyn
 import {tmpdir} from 'node:os';
 import {join,dirname} from 'node:path';
 import {postgresPlan,configForSuite,assertSuiteResults,assertExecutionReceipt,executionFingerprint,fullGatePostgresPlan,POSTGRES_CHAIN_TESTS,ROOT_AUDIT_TESTS} from '../test-suite-plan.mjs';
-import {ownedPostgresSchema,createOwnedPostgresSchema,readOwnedResources,SCHEMA_PREFIXES} from '../test-resource-contract.mjs';
+import {ownedPostgresSchema,createOwnedPostgresSchema,readOwnedResource,readOwnedResources,SCHEMA_PREFIXES,assertMainMaintenanceTarget} from '../test-resource-contract.mjs';
 import {classifyFullGatePaths,EXISTING_MAPPED_POSTGRES_TESTS} from './full-gate-risk-map.mjs';
 import {assertManagedSchemaCreation,resourceChangedPaths,checkResourceRegistration} from '../test-preflight.mjs';
 const identity={database:'dx_rework_ci',username:'dx_rework_test',databaseOid:'42',serverVersion:'160015',marker:'dx-rework-isolated-test-v1'};
 const context={head:'a'.repeat(40),base:'b'.repeat(40),runId:'12',attempt:'1',identities:{default:identity},node:'22.22.2'};
+const maintenanceIdentity={database:'dx_rework_main_0232_test',username:'dx_rework_test',marker:'dx-rework-isolated-test-v1',databaseOid:'43',serverVersion:'160015',port:'5432',address:'127.0.0.1',allowConnections:true,isTemplate:false,isSuperuser:false,canCreateDatabase:false,canCreateRole:false,canReplicate:false,canBypassRls:false};
+const maintenanceUrl='postgresql://dx_rework_test@127.0.0.1:5432/dx_rework_main_0232_test',maintenanceAdminUrl='postgresql://postgres@127.0.0.1:5432/dx_rework_main_0232_test';
+const maintenanceIdentities={default:{...identity,port:'5432',address:'127.0.0.1'},'main-maintenance':maintenanceIdentity};
+
+test('main maintenance target requires a distinct loopback database and the exact registered identity',()=>{
+ assert.doesNotThrow(()=>assertMainMaintenanceTarget(maintenanceUrl,maintenanceAdminUrl,maintenanceIdentities));
+ const rejected=[
+  [maintenanceUrl.replace('127.0.0.1','192.0.2.1'),maintenanceAdminUrl.replace('127.0.0.1','192.0.2.1'),maintenanceIdentities],
+  [maintenanceUrl.replace('dx_rework_main_0232_test','dx_rework_ci'),maintenanceAdminUrl.replace('dx_rework_main_0232_test','dx_rework_ci'),maintenanceIdentities],
+  [maintenanceUrl,maintenanceAdminUrl.replace(':5432',':5433'),maintenanceIdentities],
+  [maintenanceUrl,maintenanceAdminUrl.replace('dx_rework_main_0232_test','dx_rework_ci'),maintenanceIdentities],
+  [maintenanceUrl.replace('postgresql:','https:'),maintenanceAdminUrl,maintenanceIdentities],
+  [maintenanceUrl,maintenanceAdminUrl,{default:identity}],
+  ...[{database:'dx_rework_ci'},{username:'another_role'},{databaseOid:''},{marker:'unmarked'}].map(change=>[maintenanceUrl,maintenanceAdminUrl,{...maintenanceIdentities,'main-maintenance':{...maintenanceIdentity,...change}}]),
+  [maintenanceUrl,maintenanceAdminUrl,{...maintenanceIdentities,default:{...maintenanceIdentity,database:'dx_rework_ci'}}],
+ ];
+ for(const args of rejected)assert.throws(()=>assertMainMaintenanceTarget(...args),/TEST_MAINTENANCE_TARGET_REJECTED/);
+ assert.throws(()=>ownedPostgresSchema('resource_smoke','main-maintenance',{}),/TEST_RESOURCE_TARGET_REJECTED/);
+});
+
+
+
+
+
+test('main maintenance receipts cannot change run, target, public schema, kind, filename or live identity',()=>{
+ const dir=mkdtempSync(join(tmpdir(),'dx-maintenance-receipt-')),runId='1234abcd',name='main-maintenance-'+runId+'.json';
+ const receipt={version:1,kind:'main-maintenance-public',runId,schema:'public',databaseTarget:'main-maintenance',identity:maintenanceIdentity};
+ try{
+  writeFileSync(join(dir,name),JSON.stringify(receipt));assert.deepEqual(readOwnedResource(dir,name,runId,maintenanceIdentities),receipt);
+  for(const change of [{version:2},{runId:'ffffffff'},{schema:'resource_smoke_'+runId+'0'.repeat(24)},{databaseTarget:'default'},{kind:'postgres-schema'},{identity:{...maintenanceIdentity,databaseOid:'99'}}]){
+   writeFileSync(join(dir,name),JSON.stringify({...receipt,...change}));
+   assert.throws(()=>readOwnedResource(dir,name,runId,maintenanceIdentities),/TEST_RESOURCE_(?:MANIFEST_REJECTED|UNREGISTERED)/);
+  }
+  writeFileSync(join(dir,name),JSON.stringify(receipt));
+  assert.throws(()=>readOwnedResource(dir,name,'ffffffff',maintenanceIdentities),/TEST_RESOURCE_MANIFEST_REJECTED/);
+  assert.throws(()=>readOwnedResource(dir,name,runId,{...maintenanceIdentities,'main-maintenance':{...maintenanceIdentity,databaseOid:'99'}}),/TEST_RESOURCE_MANIFEST_REJECTED/);
+  const renamed='main-maintenance-ffffffff.json';writeFileSync(join(dir,renamed),JSON.stringify(receipt));
+  assert.throws(()=>readOwnedResource(dir,renamed,runId,maintenanceIdentities),/TEST_RESOURCE_MANIFEST_REJECTED/);
+  const schema='resource_smoke_'+runId+'0'.repeat(24),ordinaryName=schema+'.json';
+  writeFileSync(join(dir,ordinaryName),JSON.stringify({...receipt,kind:'postgres-schema',schema}));
+  assert.throws(()=>readOwnedResource(dir,ordinaryName,runId,maintenanceIdentities),/TEST_RESOURCE_(?:TARGET_REJECTED|MANIFEST_REJECTED)/);
+ }finally{rmSync(dir,{recursive:true,force:true});}
+});
+
+
 test('local and CI resolve one canonical union; long correctness uses finite config, ordinary/performance keeps defaults',()=>{
  const mapped=[POSTGRES_CHAIN_TESTS[0],POSTGRES_CHAIN_TESTS[0],'tests/integration/access-postgres.test.ts'];
  const plan=postgresPlan({mapped,chain:true});assert.equal(plan.filter(r=>r.path===mapped[0]).length,1);assert.deepEqual(plan.find(r=>r.path===mapped[0]).memberships,['mapped','chain']);assert.equal(plan.length,POSTGRES_CHAIN_TESTS.length+1);

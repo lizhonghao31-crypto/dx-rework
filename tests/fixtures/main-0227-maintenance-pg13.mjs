@@ -21,21 +21,24 @@ assert.equal((await db.query("select to_regclass('public.schema_migrations') exi
 const root=process.cwd(), scratch=mkdtempSync(join(tmpdir(),'main-maint-pg13-'));
 const version='0227_qc_other_craft', checksum='2b4ee5e688926de2d9195e762140fe80ef6dba2ccdaa0cae6575c321426b0748';
 const oldSha='c'.repeat(40), newSha='d'.repeat(40);
-const source=join(scratch,'prefix'), tool=join(scratch,'tools',newSha), state=join(scratch,'state'), runtime=join(scratch,'runtime'), bin=join(scratch,'bin');
+const source=join(scratch,'prefix'), candidate=join(scratch,'candidate'), tool=join(scratch,'tools',newSha), state=join(scratch,'state'), runtime=join(scratch,'runtime'), bin=join(scratch,'bin');
 const write=(p,s)=>{mkdirSync(join(p,'..'),{recursive:true});writeFileSync(p,s);};
 const executable=(name,body)=>writeFileSync(join(bin,name),body,{mode:0o755});
 const plans=JSON.parse(readFileSync('scripts/deploy/main-maintenance-plans.json','utf8'));
 const manifest=JSON.parse(readFileSync('apps/api/src/platform/migration-manifest.json','utf8'));
-const prefix={migrations:manifest.migrations.filter(m=>m.version<version)};
-write(join(source,'apps/api/src/platform/migration-manifest.json'),JSON.stringify(prefix));
-mkdirSync(join(source,'apps/api/migrations'),{recursive:true});
-for(const row of prefix.migrations) cpSync(`apps/api/migrations/${row.version}.sql`,join(source,`apps/api/migrations/${row.version}.sql`));
+const prefix={...manifest,migrations:manifest.migrations.filter(m=>m.version<version)};
+const target={...manifest,migrations:manifest.migrations.filter(m=>m.version<=version)};
+for(const [directory,selected] of [[source,prefix],[candidate,target]]) {
+  write(join(directory,'apps/api/src/platform/migration-manifest.json'),JSON.stringify(selected));
+  mkdirSync(join(directory,'apps/api/migrations'),{recursive:true});
+  for(const row of selected.migrations) cpSync(`apps/api/migrations/${row.version}.sql`,join(directory,`apps/api/migrations/${row.version}.sql`));
+}
 for(const name of ['deploy/check-main-maintenance-plan.mjs','migration-history-policy.mjs','migration-branches.json','migration-main-extensions.json']) {
   mkdirSync(join(tool,'scripts',name,'..'),{recursive:true}); cpSync(join(root,'scripts',name),join(tool,'scripts',name));
 }
 symlinkSync(join(root,'node_modules'),join(tool,'node_modules'));
 const planFile=join(tool,'scripts/deploy/main-maintenance-plans.json'); write(planFile,JSON.stringify(plans));
-const env={...process.env,DATABASE_URL:url.toString(),NODE_ENV:'test'};
+const env={...process.env,DATABASE_URL:url.toString(),NODE_ENV:'test',DX_REWORK_MIGRATIONS_DIR:join(candidate,'apps/api/migrations'),DX_REWORK_MIGRATION_MANIFEST:join(candidate,'apps/api/src/platform/migration-manifest.json')};
 const run=(script,args=[],extra={})=>spawnSync(process.execPath,[script,...args],{encoding:'utf8',env:{...env,...extra}});
 const checked=(result)=>{assert.equal(result.status,0,result.stderr||result.stdout);return result.stdout;};
 const history=async()=> (await db.query('select version,btrim(checksum) checksum,applied_at from schema_migrations order by version')).rows;
@@ -47,9 +50,9 @@ try {
   process.env.DX_REWORK_MIGRATIONS_DIR=join(source,'apps/api/migrations');
   process.env.DX_REWORK_MIGRATION_MANIFEST=join(source,'apps/api/src/platform/migration-manifest.json');
   const seeded=await applyMigrations(url.toString()); assert.equal(seeded.applied.length,prefix.migrations.length);
-  delete process.env.DX_REWORK_MIGRATIONS_DIR; delete process.env.DX_REWORK_MIGRATION_MANIFEST;
+  process.env.DX_REWORK_MIGRATIONS_DIR=env.DX_REWORK_MIGRATIONS_DIR; process.env.DX_REWORK_MIGRATION_MANIFEST=env.DX_REWORK_MIGRATION_MANIFEST;
   const before=await history(), beforeGuard=await guard();
-  checked(run(join(tool,'scripts/deploy/check-main-maintenance-plan.mjs'),[root]));
+  checked(run(join(tool,'scripts/deploy/check-main-maintenance-plan.mjs'),[candidate]));
   checks.push('restricted-role exact 0227 admission');
 
   for(const p of [state,bin,join(runtime,'locks'),join(scratch,'etc/nginx'),join(runtime,'frontend/releases',newSha)])mkdirSync(p,{recursive:true});
@@ -72,7 +75,7 @@ try {
     }
     if(name==='apply-main-maintenance.sh') {
       if(args[0]==='apply') await applyMigrations(process.env.DATABASE_URL);
-      else {const p=spawnSync(process.execPath,[${JSON.stringify(join(root,'scripts/deploy/database-state.mjs'))},'verify-current',args[1]===${JSON.stringify(oldSha)}?${JSON.stringify(join(source,'apps/api/src/platform/migration-manifest.json'))}:${JSON.stringify(join(root,'apps/api/src/platform/migration-manifest.json'))}],{env:process.env,encoding:'utf8'});process.stdout.write(p.stdout);process.stderr.write(p.stderr);process.exit(p.status);}
+      else {const p=spawnSync(process.execPath,[${JSON.stringify(join(root,'scripts/deploy/database-state.mjs'))},'verify-current',args[1]===${JSON.stringify(oldSha)}?${JSON.stringify(join(source,'apps/api/src/platform/migration-manifest.json'))}:${JSON.stringify(join(candidate,'apps/api/src/platform/migration-manifest.json'))}],{env:process.env,encoding:'utf8'});process.stdout.write(p.stdout);process.stderr.write(p.stderr);process.exit(p.status);}
     }
     if(name==='start-online-slot.sh'&&args[0]==='start') writeFileSync(state+'/served-sha',args[1]);
   `);
@@ -87,7 +90,7 @@ try {
   write(join(tool,'scripts/deploy/lib.sh'),'DX_ROOT="$DX_REWORK_ROOT"\ndie(){ echo "$*" >&2; exit 1; }; require_sha(){ [[ "$1" =~ ^[0-9a-f]{40}$ ]]; }; assert_root_node(){ :; }; safe_log(){ echo "$*"; }\n');
   const controller=join(tool,'scripts/deploy/update-main-maintenance.sh');
   write(controller,readFileSync('scripts/deploy/update-main-maintenance.sh','utf8').replaceAll('/opt/dx-rework-release-tools',join(scratch,'tools')).replaceAll('/opt/dx-rework-release-state',state).replaceAll('/opt/dx-rework',runtime).replaceAll('/etc/nginx/',join(scratch,'etc/nginx')+'/'));
-  const control=(phase,extra={})=>{write(join(state,'phase'),phase);return spawnSync('bash',[controller],{env:{...env,PATH:bin+':'+process.env.PATH,FIXTURE_SOURCE:root,...extra},encoding:'utf8'});};
+  const control=(phase,extra={})=>{write(join(state,'phase'),phase);return spawnSync('bash',[controller],{env:{...env,PATH:bin+':'+process.env.PATH,FIXTURE_SOURCE:candidate,...extra},encoding:'utf8'});};
   const untouched=async(result,message)=>{
     assert.notEqual(result.status,0);assert.match(result.stderr,new RegExp(message));
     assert.deepEqual(await history(),before);assert.equal(await guard(),beforeGuard);
@@ -98,7 +101,7 @@ try {
   write(planFile,JSON.stringify(plans.filter(p=>p.version!==version)));
   await untouched(control('completed'),'MIGRATION_PLAN_REQUIRED'); checks.push('old installed plan rejects before routing/stop');
   write(planFile,JSON.stringify(plans));
-  const drift=join(scratch,'drift');cpSync(join(root,'apps/api/src/platform'),join(drift,'apps/api/src/platform'),{recursive:true});
+  const drift=join(scratch,'drift');cpSync(join(candidate,'apps/api/src/platform'),join(drift,'apps/api/src/platform'),{recursive:true});
   write(join(drift,`apps/api/migrations/${version}.sql`),readFileSync(`apps/api/migrations/${version}.sql`,'utf8')+'\n');
   await untouched(control('completed',{FIXTURE_SOURCE:drift}),'fingerprint drift');checks.push('SQL drift rejects before routing/stop');
   const adminUser=(await admin.query('select current_user AS role_name')).rows[0].role_name;
