@@ -136,7 +136,11 @@ export function createCockpitDocumentSnapshot(order:OrderJourney,reader:CockpitD
    update(key,{phase:'error',denied,error:denied?'当前身份无权读取此类资料；未确认是否已创建。':status===404?'资料不存在或不在授权范围，无法确认是否已创建。':error instanceof Error?error.message:'目录读取失败，暂未确认原因；请重试，仍失败请管理员核对接口。',...(![401,403,404].includes(status??0)&&prior?{resume:prior}:{})});}
  };
  const loadEntry=async(entry:CockpitDocumentEntry,signal:AbortSignal)=>{
-  const value=await validated(tracked=>loadCockpitDocumentEntry(entry,tracked,signal));if(!live()||signal.aborted)throw cancelledDirectoryRead();
+  const loaded=await validated(tracked=>loadCockpitDocumentEntry(entry,tracked,signal));if(!live()||signal.aborted)throw cancelledDirectoryRead();
+  // A successful selected entry is complete. Legacy readers preserve their
+  // original descriptor with {...entry}; never feed that load back into the
+  // controlled Entry effect when publishing the searchable snapshot.
+  const value={...loaded,load:undefined};
   const key=entryKey(entry);if(key){loadedEntries.set(key,value);states=Object.fromEntries(Object.entries(states).map(([category,state])=>[category,state.data?{...state,data:{...state.data,entries:enrich(state.data.entries)}}:state])) as CockpitDirectoryStates;emit();}
   return value;
  };
