@@ -1,3 +1,5 @@
+import {CreateSupplierSchema} from '@dx-rework/contracts';
+import {nodeMaterialsFixture} from '../helpers/node-materials-fixture.js';
 import {MemberModuleBindingService} from '../../apps/api/src/access/member-module-binding-service.js';
 import {DigitalCockpitQuery} from '../../apps/api/src/production-platform/cockpit-query.js';
 import {qcProgressNotices} from '../../apps/api/src/production-platform/qc-progress-todos.js';
@@ -57,6 +59,21 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect((await service.read(qc,ready.id)).executions[0]!.records).toHaveLength(1);expect((await native.detail(qc,e.productionId,undefined,e.factoryDecisionId)).order.completedQuantity).toBe(4);
   });
  });
+ it('retains both factory scopes for one PO after a real remainder transfer instead of overwriting the original row',async()=>{
+  const ready=await dispatch(),native=new ProductionReportingService(f.db),initial=(await service.read(f.root,ready.id)).executions[0]!;
+  const root={...f.root,authorizationCapability:'production-reporting',authorizationCapabilities:[...(f.root.authorizationCapabilities??[]),'production-reporting','sourcing:view','sourcing:factory_change:request','sourcing:factory_change:verify','sourcing:owner:approve']};
+  await native.report(root,initial.productionId,{position:1,businessDate:beijingCalendarDate(businessNow()),quantity:4},randomUUID());
+  const supplier=await f.access.createSupplier(f.root,CreateSupplierSchema.parse({supplierCode:'TEST-P08-'+randomUUID().slice(0,6).toUpperCase(),supplierType:'factory',supplierName:'TEST转入工厂',address:'TEST',contractEntityName:'TEST factory',partyBRepresentative:'TEST',payeeName:'TEST',bankAccount:'TEST0001',bankName:'TEST',changeReason:'TEST真实余量转厂范围'}));
+  await f.sourcing.requestFactoryChange({...root,authorizationCapability:'sourcing:factory_change:request'},ready.caseId,{supplierId:supplier.supplierId,unitPrice:'12',changeReason:'TEST原厂4件保留，余6件转厂'},randomUUID());
+  const reader={...root,authorizationCapability:'sourcing:view'};let change=(await f.sourcing.getCurrentFactoryChange(reader,ready.caseId)).item!;
+  if(change.status==='pending_management'){await f.sourcing.decideFactoryChange({...root,authorizationCapability:'sourcing:factory_change:verify'},ready.caseId,change.factoryChangeRequestId,{decision:'approved',verificationReason:'TEST总监核实余量及新厂排期'},randomUUID());change=(await f.sourcing.getCurrentFactoryChange(reader,ready.caseId)).item!;}
+  if(change.status==='pending_owner')await f.sourcing.decideFactoryChange({...root,authorizationCapability:'sourcing:owner:approve'},ready.caseId,change.factoryChangeRequestId,{decision:'approved',verificationReason:'TEST老板批准真实余量和合同价格'},randomUUID());
+  let all=(await service.read(f.root,ready.id)).executions;expect(all).toHaveLength(2);const incoming=all.find(e=>e.factoryDecisionId!==initial.factoryDecisionId)!;expect(all.map(e=>e.lines[0]!.quantity).sort()).toEqual([4,6]);
+  await service.adopt(f.root,ready.id,{factoryDecisionId:incoming.factoryDecisionId,expectedScopeRevision:incoming.scopeRevision,reason:'TEST有权确认转入厂本范围监督'},randomUUID());
+  const current=(await service.read(qc,ready.id)).executions.find(e=>e.factoryDecisionId===incoming.factoryDecisionId)!;await service.submit(qc,ready.id,input(current));
+  all=(await service.read(f.root,ready.id)).executions;const result=await nodeMaterialsFixture(f.db,f.root,ready.id,'production_reporting'),rows=result.data.rows.filter(r=>r.id.startsWith('qc-'));
+  expect(rows).toHaveLength(2);expect(new Set(rows.map(r=>r.id)).size).toBe(2);expect(rows.find(r=>r.id.includes(incoming.factoryDecisionId!))?.state).toBe('present');expect(rows.find(r=>r.id.includes('-original-'))?.state).toBe('missing');expect(new Set(rows.map(r=>r.scope)).size).toBe(2);expect(all.map(e=>e.productionId)).toEqual([initial.productionId,initial.productionId]);
+ });
  it('requires exact assigned scope, rejects unauthorized replay, and does not grant another order of the same supplier',async()=>{
   const ready=await dispatch(),e=(await service.read(qc,ready.id)).executions[0]!,body=input(e),result=await service.submit(qc,ready.id,body);
   await expect(service.submit(ready.primary,ready.id,{...body,submissionId:randomUUID()})).rejects.toMatchObject({statusCode:403});
@@ -98,6 +115,9 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    let e=(await service.read(qc,ready.id)).executions[0]!;expect(e.lineClocks.every(l=>l.clock.state==='due')).toBe(true);
    await service.submit(qc,ready.id,input(e));e=(await service.read(qc,ready.id)).executions[0]!;
    expect(e.lineClocks[0]!.clock.state).toBe('not_due');expect(e.lineClocks[1]!.clock.state).toBe('due');expect(e.clock.state).toBe('due');
+   const projected=await nodeMaterialsFixture(f.db,f.root,ready.id,'production_reporting');
+   const a=projected.data.rows.find(r=>r.id===`qc-${e.productionId}-${e.factoryDecisionId??'original'}-${e.lines[0]!.lineId}`),b=projected.data.rows.find(r=>r.id===`qc-${e.productionId}-${e.factoryDecisionId??'original'}-${e.lines[1]!.lineId}`);
+   expect(a).toMatchObject({state:'present',role:'QC'});expect(b).toMatchObject({state:'missing',role:'QC'});expect(a?.reason).toContain('不代表成衣质检合格');expect(projected.data.rows.some(r=>/船样|到料清点|工厂到料/.test(r.label))).toBe(false);
   });
   await f.advance(scene,'2026-11-06T00:00:00Z');await f.runtime.run(scene,f.root,async()=>{
    let e=(await service.read(qc,ready.id)).executions[0]!;expect(e.lineClocks[1]!.clock.state).toBe('escalated');

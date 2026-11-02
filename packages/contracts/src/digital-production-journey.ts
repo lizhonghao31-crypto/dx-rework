@@ -49,6 +49,24 @@ export const JourneyFilterSchema = z.object({
 });
 export type JourneyFilter = z.infer<typeof JourneyFilterSchema>;
 export type JourneyRecord = { domain: string; id: string; url: string | null; mode: "read" | "handle"; version: number | null; lineId: string | null };
+/** Read-only, action-specific material evidence. It never grants or blocks an operation. */
+export type NodeMaterialState='missing'|'present'|'partial'|'effective'|'stale'|'unknown'|'not_applicable';
+export type NodeMaterial={
+ id:string;label:string;purpose:'input'|'output'|'reference';applicability:'required'|'optional'|'not_applicable';
+ state:NodeMaterialState;reason:string;versionLabel:string|null;scope:string;
+ role:string;owner:{id:string;name:string|null}|null;mine:boolean;
+ when:'now'|'later'|'waiting_other';expectedAt:string|null;expectedPrecision:JourneyNode['expectedPrecision'];
+ effect:'original_gate'|'information'|'reminder';records:JourneyRecord[];
+};
+export type NodeMaterials={
+ ruleVersion:'node-materials-v1';journeyId:string;instanceId:string;round:number|null;asOf:string;revision:string;
+ historical:boolean;coverage:'available'|'limited';notice:string;rows:NodeMaterial[];
+};
+export const NodeMaterialsQuerySchema=z.object({instanceId:z.string().trim().min(1).max(300),round:z.coerce.number().int().positive().max(10000).optional()}).strict();
+export const NodeMaterialsSchema=z.object({
+ ruleVersion:z.literal('node-materials-v1'),journeyId:z.uuid(),instanceId:z.string(),round:z.number().int().positive().nullable(),asOf:z.iso.datetime({offset:true}),revision:z.string().regex(/^[0-9a-f]{64}$/),historical:z.boolean(),coverage:z.enum(['available','limited']),notice:z.string(),
+ rows:z.array(z.object({id:z.string().min(1),label:z.string(),purpose:z.enum(['input','output','reference']),applicability:z.enum(['required','optional','not_applicable']),state:z.enum(['missing','present','partial','effective','stale','unknown','not_applicable']),reason:z.string(),versionLabel:z.string().nullable(),scope:z.string(),role:z.string(),owner:z.object({id:z.uuid(),name:z.string().nullable()}).nullable(),mine:z.boolean(),when:z.enum(['now','later','waiting_other']),expectedAt:z.string().nullable(),expectedPrecision:z.enum(['instant','date','missing','unavailable']),effect:z.enum(['original_gate','information','reminder']),records:z.array(z.object({domain:z.string(),id:z.string(),url:z.string().nullable(),mode:z.enum(['read','handle']),version:z.number().int().nullable(),lineId:z.string().nullable()}))})),
+});
 export type JourneyDocumentMetadata={created:{at:string|null;by:string|null};edited:{at:string|null;by:string|null};published:{at:string|null;by:string|null}};
 export type JourneyTiming = {
   /** Date ranges are estimates, never exact starts, deadlines or permission to receive. */
@@ -136,7 +154,7 @@ export type JourneyRiskHistory={eventId:string;nodeId:string;label:string;round:
 export const JourneyLogFilterSchema=z.object({cursor:z.string().min(1).max(2048).optional()}).strict();
 
 /** Stable, local-only return context. Consumers restore these values after domain handling. */
-export const JourneyReturnContextSchema = JourneyFilterSchema.safeExtend({ selected: z.string().uuid().optional(), flow: z.enum(["collapsed", "expanded"]).optional(), documentOpen:z.string().max(3000).optional(), documentView:z.literal('all').optional(), documentStage:z.enum(JOURNEY_STAGES.map(s=>s.key)).optional(), documentSearch:z.string().max(100).optional(), documentScroll:z.coerce.number().int().min(0).max(1000000).optional(), documentFocus:z.string().max(300).optional(), expanded: z.string().max(100).optional(), focus: z.string().max(100).optional(), row: z.string().max(100).optional(), round: z.coerce.number().int().positive().max(10000).optional() });
+export const JourneyReturnContextSchema = JourneyFilterSchema.safeExtend({ materialNode:z.string().max(500).optional(),materialView:z.literal('expanded').optional(),materialFilter:z.enum(['all','pending','effective','mine']).optional(),materialScroll:z.coerce.number().int().min(0).max(1000000).optional(),materialFocus:z.string().max(300).optional(),nodeView:z.enum(['all','completed','active','not_started','overdue']).optional(), selected: z.string().uuid().optional(), flow: z.enum(["collapsed", "expanded"]).optional(), documentOpen:z.string().max(3000).optional(), documentView:z.literal('all').optional(), documentStage:z.enum(JOURNEY_STAGES.map(s=>s.key)).optional(), documentSearch:z.string().max(100).optional(), documentScroll:z.coerce.number().int().min(0).max(1000000).optional(), documentFocus:z.string().max(300).optional(), expanded: z.string().max(100).optional(), focus: z.string().max(100).optional(), row: z.string().max(100).optional(), round: z.coerce.number().int().positive().max(10000).optional() });
 export function journeyReturnUrl(context: z.input<typeof JourneyReturnContextSchema>): string {
   const value = JourneyReturnContextSchema.parse(context);
   const params = new URLSearchParams();

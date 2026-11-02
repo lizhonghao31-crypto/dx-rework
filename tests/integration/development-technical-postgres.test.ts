@@ -1,3 +1,4 @@
+import {nodeMaterialsFixture} from '../helpers/node-materials-fixture.js';
 import Fastify from 'fastify';
 import {ApplicationError} from '../../apps/api/src/platform/errors.js';
 import {registerDevelopmentExecutionRoutes} from '../../apps/api/src/production-platform/development-execution-routes.js';
@@ -112,6 +113,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect((await technical.read(p.worker,p.sourceId)).effective?.state).toBe('effective');
   const next=await technical.recordComment(p.designer,p.sourceId,comment(2),randomUUID());expect(next.reviewTaskId).not.toBe(final.reviewTaskId);
   expect((await technical.read(p.worker,p.sourceId)).effective?.state).toBe('pending_review');
+  const projected=await nodeMaterialsFixture(f.db,f.root,p.sourceId,'development_size_review',next.reviewTaskId!);expect(projected.data.rows.find(r=>r.id==='technical-basis')).toMatchObject({state:'stale',versionLabel:expect.stringContaining('成果 v1')});
   const oldDue=(await tasks.read(f.root,next.reviewTaskId!)).dueAt;
   await tasks.reassign(f.root,next.reviewTaskId!,p.worker.actorId,randomUUID());
   expect((await tasks.read(p.worker,next.reviewTaskId!)).dueAt).toBe(oldDue);
