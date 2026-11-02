@@ -33,6 +33,7 @@ const VIEW_ROLES = new Set([
   "cutting_worker",
   "owner_group",
   "production_management",
+  "pmc",
   "order_merchandiser",
   "warehouse_supervisor",
 ]);
@@ -43,6 +44,7 @@ const BROAD_VIEW_ROLES = new Set([
   "cutting_worker",
   "owner_group",
   "production_management",
+  "pmc",
   "warehouse_supervisor",
 ]);
 const KEY_PATTERN = /^[A-Za-z0-9._:-]{8,128}$/;

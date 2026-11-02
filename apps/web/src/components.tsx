@@ -65,6 +65,7 @@ const ROLE_LABELS: Record<string, string> = {
   owner_group: "老板",
   system_admin: "系统管理员",
   production_management: "供应链总监",
+  pmc: "PMC",
   development_clerk: "开发文员",
   pattern_room_tail_inspector: "板房尾查",
   quality_control: "质检",
@@ -429,7 +430,7 @@ export function Shell({
     || technicalAdminAccess
     || (!isOwner && hasCapability("master_data:manage"));
 
-  const cockpitSettingsNavigation: NavigationEntry[] = currentUser && canAccessDigitalProduction(currentUser) && (isRoot || hasRole("owner_group") || hasRole("production_management")) ? [{name:"生产管理设置",description:"客户跟单与节点时效",href:"/ui/digital-cockpit?workspace=settings",activeKey:"digital-settings"}] : [];
+  const cockpitSettingsNavigation: NavigationEntry[] = currentUser && canAccessDigitalProduction(currentUser) && (isRoot || hasRole("owner_group") || hasRole("production_management") || hasRole("pmc")) ? [{name:"生产管理设置",description:"客户跟单与节点时效",href:"/ui/digital-cockpit?workspace=settings",activeKey:"digital-settings"}] : [];
   const globalNavigation: NavigationEntry[] = [];
   if (todoAccess) {
     globalNavigation.push({
@@ -574,7 +575,7 @@ export function Shell({
     ...(currentUser&&canAccessPatternRoomOrders(currentUser)?[{name:"打板/杂事历史看板",description:"旧打板、杂事与新开发已完成执行轮",href:"/ui/pattern-room/history",activeKey:"pattern-room-history"}]:[]),
     ...patternRoomNavigation.filter(entry => entry.href === "/ui/pattern-room/prices"),
   ];
-  const preparationNavigation: NavigationEntry[] = isRoot || ["sample_designer","order_merchandiser","pattern_room_worker","ie_reviewer","embroidery_washing_merchandiser","production_management","owner_group"].some(hasRole) ? [{name:"客户报价协作",description:"按分工填写用量与价格，记录客户确认",href:"/ui/digital-quotation"}] : [];
+  const preparationNavigation: NavigationEntry[] = isRoot || ["sample_designer","order_merchandiser","pattern_room_worker","ie_reviewer","embroidery_washing_merchandiser","production_management","pmc","owner_group"].some(hasRole) ? [{name:"客户报价协作",description:"按分工填写用量与价格，记录客户确认",href:"/ui/digital-quotation"}] : [];
   const factoryNavigation: NavigationEntry[] = digital ? [{ name: "裁后工艺与发厂", description: "工艺、QC与实际发厂", href: "/ui/digital-cockpit?stage=post_cutting&workspace=factory", activeKey: "digital-factory" }] : [];
   const navigation: NavigationEntry[] = [
     ...creationNavigation,

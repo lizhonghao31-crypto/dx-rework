@@ -3,7 +3,7 @@ import {SeriesSettings} from './series-settings.js';
 import {useEffect,useState} from 'react';
 import {PageHeader} from '@dx-rework/ui/production';
 import {JOURNEY_NODES} from '@dx-rework/contracts/digital-production-journey';
-import type {DigitalAccessOptions} from './digital-production-access-panel.js';
+import {canReadDigitalProductionSettings,type DigitalAccessOptions} from './digital-production-access-panel.js';
 import {DigitalCockpitPersonnel} from './digital-cockpit-personnel.js';
 import {digitalRequest} from './digital-production-api.js';
 import {SlaStandardEditor} from './sla-standard-editor.js';
@@ -15,8 +15,8 @@ export function CockpitProductionSettings(){
  return <div className="cockpit-settings"><PageHeader title="生产管理设置"/>
   {error&&<p role="alert">{error}</p>}
   {!access&&!error&&<p>正在读取设置…</p>}
-  {access&&!access.manage&&!access.customers&&<p>当前岗位无权访问生产管理设置。</p>}
-  {access?.customers&&<details className="cockpit-settings-node-section"><summary>客户默认跟单</summary><DigitalCockpitPersonnel orderId={null} onChanged={()=>undefined}/></details>}
-  {access?.manage&&<><SlaStandardEditor/><DevelopmentCycleSettings/><SeriesSettings/></>}
+  {access&&!canReadDigitalProductionSettings(access)&&!access.customers&&<p>当前岗位无权访问生产管理设置。</p>}
+  {(access?.customers||access?.roles?.includes('pmc'))&&<details className="cockpit-settings-node-section"><summary>客户默认跟单</summary><DigitalCockpitPersonnel orderId={null} readOnly={!access?.customers} onChanged={()=>undefined}/></details>}
+  {access&&canReadDigitalProductionSettings(access)&&<><SlaStandardEditor readOnly={!access.manage}/><DevelopmentCycleSettings readOnly={!access.manage}/><SeriesSettings readOnly={!access.manage}/></>}
  </div>;
 }

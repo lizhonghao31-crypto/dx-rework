@@ -4,6 +4,7 @@ import {
   ACCEPTANCE_ROLE_MATRIX,
   evaluateAcceptanceSnapshot,
   evaluateHttpProbe,
+  expectationForAlias,
 } from "../../apps/web/src/acceptance-matrix.js";
 
 const user = (
@@ -43,11 +44,64 @@ describe("acceptance authorization matrix", () => {
       "worker-a", "worker-b", "merchandiser", "embroidery-washing-merchandiser", "finance-read",
       "finance-director", "factory-payables", "embroidery-washing-payables", "fabric-payables",
       "wage-month-close-accountant", "system-admin", "production-reporter", "sample-designer",
-      "sample-admin", "sample-finance",
+      "sample-admin", "sample-finance", "pmc",
     ]);
     expect(aliases).not.toContain("sample-approver");
     expect(ACCEPTANCE_ROLE_MATRIX.some((entry) => entry.expectedRole === "tail_inspector")).toBe(false);
     expect(ACCEPTANCE_ROLE_MATRIX.some((entry) => entry.expectedRole === "administrative_clerk")).toBe(false);
+  });
+
+  it("uses the approved QC progress capability without inheriting reporter access", () => {
+    const entry = expectationForAlias("qc")!;
+    expect(entry.requiredCapabilities).toContain("qc-production-progress");
+    expect(entry.forbiddenCapabilities).toContain("production-reporting");
+    expect(entry.allowedModules).toContain("production");
+    expect(entry.forbiddenModules).not.toContain("production");
+    expect(entry.probes?.find(probe => probe.id === "production-dashboard")?.expectedStatus).toBe(200);
+    const identity = { alias: "qc", userId: "qc-id", roleCodes: ["quality_control"], capabilities: entry.requiredCapabilities! };
+    const granted = evaluateAcceptanceSnapshot(entry, identity, user("quality_control", entry.requiredCapabilities!, false, identity.userId));
+    expect(granted.find(check => check.key === "qc:module:production:allow")).toMatchObject({ verdict: "pass", ruleId: "PERM-ROLE-QC-PROGRESS-20261101" });
+    const oldOnly = evaluateAcceptanceSnapshot(entry, identity, user("quality_control", ["rework:initiate", "production-reporting"], false, identity.userId));
+    for (const suffix of ["cap:qc-production-progress:allow", "cap:production-reporting:deny", "module:production:allow"]) {
+      expect(oldOnly.find(check => check.key === `qc:${suffix}`)?.verdict).toBe("fail");
+    }
+  });
+
+  it("keeps PMC read expectations separate from legacy role expansion and denies business writes", () => {
+    const entry = expectationForAlias("pmc")!;
+    expect(entry.requiredCapabilities).toEqual(expect.arrayContaining(["sourcing:view", "tools:read", "pattern_room:orders:view", "pattern_room:prices:read", "supplier_onboarding:read", "todo:routing_exception_read"]));
+    expect(entry.forbiddenCapabilities).toEqual(expect.arrayContaining(["work:report", "tools:user", "production-reporting", "qc-production-progress", "sourcing:factory_change:request", "supplier_profile:write"]));
+    expect(entry.requiredCapabilities?.some(capability => entry.forbiddenCapabilities?.includes(capability))).toBe(false);
+    const checks = evaluateAcceptanceSnapshot(entry, { alias: "pmc", userId: "pmc-id", roleCodes: ["pmc"], capabilities: entry.requiredCapabilities! }, user("pmc", entry.requiredCapabilities!, false, "pmc-id"));
+    expect(checks.every(check => check.verdict === "pass")).toBe(true);
+    expect(checks.filter(check => check.ruleStatus !== "infrastructure").every(check => check.ruleId === "PERM-ROLE-PMC-20261031")).toBe(true);
+  });
+
+  it.each(["pmc", "qc", "worker-a"])("requires the exact user and a single role for pure %s evidence", alias => {
+    const entry = expectationForAlias(alias)!;
+    const identity = { alias, userId: `${alias}-id`, roleCodes: [entry.expectedRole], capabilities: entry.requiredCapabilities ?? [] };
+    const session = user(entry.expectedRole, identity.capabilities, false, identity.userId);
+    const clean = evaluateAcceptanceSnapshot(entry, identity, session);
+    expect(clean.filter(check => check.ruleStatus === "infrastructure").every(check => check.verdict === "pass")).toBe(true);
+    const polluted = evaluateAcceptanceSnapshot(entry, { ...identity, roleCodes: [entry.expectedRole, "owner_group"] }, { ...session, businessRoles: [entry.expectedRole, "owner_group"] });
+    expect(polluted.find(check => check.key === `${alias}:identity-role`)?.verdict).toBe("fail");
+    expect(polluted.find(check => check.key === `${alias}:session-role`)?.verdict).toBe("fail");
+    expect(evaluateAcceptanceSnapshot(entry, identity, { ...session, id: "different-real-user" }).find(check => check.key === `${alias}:session-user`)?.verdict).toBe("fail");
+  });
+
+  it("never records missing identity, absent auth/me user, empty IDs, unknown aliases or an unexecuted probe as passing", () => {
+    const entry = expectationForAlias("qc")!;
+    const identity = { alias: "qc", userId: "qc-id", roleCodes: ["quality_control"], capabilities: entry.requiredCapabilities! };
+    const session = user("quality_control", identity.capabilities, false, identity.userId);
+    for (const checks of [evaluateAcceptanceSnapshot(entry, undefined, session), evaluateAcceptanceSnapshot(entry, identity, undefined)]) {
+      expect(checks).toHaveLength(1);
+      expect(checks[0]).toMatchObject({ verdict: "fail", ruleStatus: "infrastructure" });
+    }
+    expect(evaluateAcceptanceSnapshot(entry, { ...identity, userId: "" }, { ...session, id: "" }).find(check => check.key === "qc:session-user")?.verdict).toBe("fail");
+    expect(evaluateAcceptanceSnapshot(entry, { ...identity, alias: "unknown" }, session).find(check => check.key === "qc:identity-alias")?.verdict).toBe("fail");
+    expect(expectationForAlias("unknown")).toBeUndefined();
+    expect(evaluateHttpProbe(entry, entry.probes![0]!, null)).toMatchObject({ actual: "未执行", verdict: "fail" });
+    expect(evaluateHttpProbe("unknown", { id: "unmapped", label: "unknown", path: "unknown", expectedStatus: 200 }, 200).verdict).toBe("pending");
   });
 
   it("explicitly binds every current business check to an approved rule", () => {

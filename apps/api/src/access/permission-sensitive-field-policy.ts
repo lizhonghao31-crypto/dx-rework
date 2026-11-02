@@ -2,6 +2,7 @@ const SUPPLIER_CONTACT_ROLES = new Set([
   "owner_group",
   "order_merchandiser",
   "production_management",
+  "pmc",
 ]);
 
 // Keep finance visibility on the roles already confirmed by the supplier-profile foundation.
@@ -10,6 +11,7 @@ const SUPPLIER_CONTRACT_ROLES = new Set([
   "owner_group",
   "order_merchandiser",
   "production_management",
+  "pmc",
   "factory_payables",
   "finance_director",
   "finance_read",
@@ -19,6 +21,7 @@ const SUPPLIER_PAYMENT_ROLES = new Set([
   "owner_group",
   "order_merchandiser",
   "production_management",
+  "pmc",
   "factory_payables",
   "finance_director",
   "finance_read",
@@ -29,6 +32,7 @@ const DAXING_PRICE_ROLES = new Set([
   "order_merchandiser",
   "ie_reviewer",
   "production_management",
+  "pmc",
 ]);
 
 const SUPPLIER_CONTACT_FIELDS = new Set(["contactPerson", "contactPhone", "address"]);

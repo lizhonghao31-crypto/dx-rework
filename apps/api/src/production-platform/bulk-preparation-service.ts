@@ -14,7 +14,7 @@ import type { BulkDispatch, BulkCompletion, BulkPreparationSheet, BulkWorkroomFi
 import type { InstructionDocument } from "@dx-rework/contracts/production-instruction";
 import type { TrustedActorContext } from "../tools/repositories.js";
 import { ApplicationError } from "../platform/errors.js";
-import { DigitalProductionAccessPolicy, digitalForbidden, digitalNotFound, isDigitalLeader, isDigitalTechnicalManager } from "./access-policy.js";
+import { DigitalProductionAccessPolicy, digitalForbidden, digitalNotFound, isDigitalLeader, isDigitalManagementReader, isDigitalTechnicalManager } from "./access-policy.js";
 import { DigitalProductionTaskService } from "./task-service.js";
 import { developmentDocumentRow } from "./development-round-repository.js";
 import { resolveDigitalChild } from "./child-link-repository.js";
@@ -125,7 +125,7 @@ export class BulkPreparationService {
   const policy=new DigitalProductionAccessPolicy(db);await policy.assert(actor,'order',id,'technical');const g=await this.gates(db,id),prep=await this.current(db,id,g);
   const tasks=prep?await this.tasks().readAuthorized(actor,(await this.routeTasks(db,prep.preparation_id)).map(t=>t.task_id),db):[];
   const terminal=g.terminal,canDispatchPattern=!terminal&&(isDigitalLeader(actor)||isDigitalTechnicalManager(actor)||actor.actorRoles.includes('development_clerk')),canDispatchWarehouse=!terminal&&isDigitalLeader(actor);
-  const canReadDispatch=isDigitalLeader(actor)||isDigitalTechnicalManager(actor)||actor.actorRoles.includes('development_clerk')||actor.actorRoles.includes('sample_designer')&&g.order.created_by===actor.actorId
+  const canReadDispatch=isDigitalManagementReader(actor)||isDigitalTechnicalManager(actor)||actor.actorRoles.includes('development_clerk')||actor.actorRoles.includes('sample_designer')&&g.order.created_by===actor.actorId
    ||actor.actorRoles.includes('order_merchandiser')&&g.order.primary_merchandiser_id===actor.actorId&&await policy.activeRole(actor.actorId,'order_merchandiser');
   const dispatchPerson=(person:string|null|undefined)=>person&&(canReadDispatch||tasks.some(task=>task.assigneeId===person))?person:null;
   const row=(await db.query("SELECT * FROM digital_bulk_dispatch WHERE production_order_id=$1",[id])).rows[0];
@@ -149,7 +149,7 @@ export class BulkPreparationService {
  async workroom(actor:TrustedActorContext,filter:BulkWorkroomFilter):Promise<BulkWorkroomResult>{
   const policy=new DigitalProductionAccessPolicy(this.database);
   const root=isRootActor(actor);
-  const managementRoles=['owner_group','production_management','pattern_room_supervisor','development_clerk'];
+  const managementRoles=['owner_group','production_management','pmc','pattern_room_supervisor','development_clerk'];
   let manager=root,worker=false;
   for(const role of managementRoles)if(actor.actorRoles.includes(role)&&await policy.activeRole(actor.actorId,role))manager=true;
   if(actor.actorRoles.includes('pattern_room_worker'))worker=await policy.activeRole(actor.actorId,'pattern_room_worker');

@@ -370,7 +370,7 @@ function AppRoutes() {
 
   const owner = { requiredRole: "owner_group" } as const;
 
-  if(path === "/ui/digital-quotation")return <AuthGate requiredAnyOf={["sample_designer","order_merchandiser","pattern_room_worker","ie_reviewer","embroidery_washing_merchandiser","production_management","owner_group"].map(requiredRole=>({requiredRole}))}>{page}</AuthGate>;
+  if(path === "/ui/digital-quotation")return <AuthGate requiredAnyOf={["sample_designer","order_merchandiser","pattern_room_worker","ie_reviewer","embroidery_washing_merchandiser","production_management","pmc","owner_group"].map(requiredRole=>({requiredRole}))}>{page}</AuthGate>;
   if(path === "/ui/digital-pattern-room")return <AuthGate requiredAnyOf={[...DIGITAL_PRODUCTION_ROLES.map(requiredRole=>({requiredRole})),...patternRoomOrderRequirements,...patternRoomPriceRequirements,...patternRoomCreateRequirements]}>{page}</AuthGate>;
   if (path === "/ui/digital-production" || path === "/ui/digital-cockpit" || path === "/ui/digital-analysis" || path === "/ui/digital-pattern-room") return <AuthGate requiredAnyOf={DIGITAL_PRODUCTION_ROLES.map(requiredRole => ({ requiredRole }))}>{page}</AuthGate>;
   if (path === "/ui/home") return <AuthGate>{page}</AuthGate>;
@@ -428,6 +428,7 @@ function AppRoutes() {
       { requiredRole: "quality_control", requiredCapability: "qc-production-progress" },
       { requiredRole: "owner_group", requiredCapability: "sourcing:view" },
       { requiredRole: "production_management", requiredCapability: "sourcing:view" },
+      { requiredRole: "pmc", requiredCapability: "sourcing:view" },
       { requiredRole: "order_merchandiser", requiredCapability: "sourcing:view" },
       { requiredRole: "finance_director", requiredCapability: "sourcing:view" },
       { requiredRole: "finance_read", requiredCapability: "sourcing:view" },
@@ -439,6 +440,7 @@ function AppRoutes() {
       { requiredRole: "quality_control", requiredCapability: "qc-production-progress" },
       { requiredRole: "owner_group", requiredCapability: "sourcing:view" },
       { requiredRole: "production_management", requiredCapability: "sourcing:view" },
+      { requiredRole: "pmc", requiredCapability: "sourcing:view" },
       { requiredRole: "order_merchandiser", requiredCapability: "sourcing:view" },
     ]}>{page}</AuthGate>;
   }
@@ -474,6 +476,7 @@ function AppRoutes() {
   }
   if (path === "/ui/responsibility") {
     return <AuthGate requiredAnyOf={[
+      { requiredRole: "pmc", requiredCapability: "external_responsibility:view" },
       owner,
       { requiredCapability: "responsibility:determine" },
       { requiredCapability: "responsibility:takeover" },

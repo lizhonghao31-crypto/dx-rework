@@ -3,6 +3,14 @@ import { memberWriteRouteModule } from "../../apps/api/src/access/member-module-
 import { moduleCanWrite } from "../../apps/web/src/member-module-policy.js";
 
 describe("member module read and action boundaries", () => {
+  it("keeps pure PMC read-only without stripping a genuine additional role or native Root", () => {
+    for (const module of ["rework", "sourcing"] as const) {
+      expect(moduleCanWrite({ businessRoles: ["pmc"] }, module)).toBe(false);
+      expect(moduleCanWrite({ businessRoles: ["pmc", "worker"] }, module)).toBe(true);
+      expect(moduleCanWrite({ businessRoles: ["pmc", "worker"], readOnlyModules: [module] }, module)).toBe(false);
+      expect(moduleCanWrite({ businessRoles: ["pmc"], isRoot: true, readOnlyModules: [module] }, module)).toBe(true);
+    }
+  });
   it("retains Root priority and default behavior, while the bound member cannot use either module", () => {
     const limited = { readOnlyModules: ["rework", "sourcing"] as const };
     expect(moduleCanWrite(limited, "rework")).toBe(false);

@@ -8,7 +8,7 @@ import { BulkPreparationService } from "./bulk-preparation-service.js";
 import type { Pool } from "pg";
 import type { CockpitResult, CockpitRow, CockpitStage } from "@dx-rework/contracts/digital-production-cockpit";
 import type { TrustedActorContext } from "../tools/repositories.js";
-import { DigitalProductionAccessPolicy, isDigitalLeader, isDigitalTechnicalManager } from "./access-policy.js";
+import { DigitalProductionAccessPolicy, isDigitalLeader, isDigitalManagementReader, isDigitalTechnicalManager } from "./access-policy.js";
 import { assertIdentityActor, digitalDateText } from "./identity-service.js";
 import { DigitalProductionTaskService } from "./task-service.js";
 import { readOrderPoDeliveryDates } from "./po-delivery-query.js";
@@ -63,7 +63,7 @@ SELECT o.production_order_id AS "orderId",s.source_id AS "sourceId",
       FROM digital_production_task_access a JOIN digital_production_tasks t USING(task_id)
       LEFT JOIN LATERAL(SELECT ${deadlineFields} FROM digital_production_deadline_revisions WHERE task_id=t.task_id ORDER BY revision_id DESC LIMIT 1) r ON true
       WHERE EXISTS(SELECT 1 FROM visible v WHERE v."${visibleColumn}"=a.${column})
-    ) SELECT totals.total,row_to_json(summary) AS summary,coalesce((SELECT json_agg(page) FROM page),'[]'::json) AS items FROM totals CROSS JOIN summary`,[input.stage,input.search,input.workload??"all",actor.actorId,actor.actorRoles,isDigitalLeader(actor),isDigitalTechnicalManager(actor),(input.page-1)*15])).rows[0];
+    ) SELECT totals.total,row_to_json(summary) AS summary,coalesce((SELECT json_agg(page) FROM page),'[]'::json) AS items FROM totals CROSS JOIN summary`,[input.stage,input.search,input.workload??"all",actor.actorId,actor.actorRoles,isDigitalManagementReader(actor),isDigitalTechnicalManager(actor),(input.page-1)*15])).rows[0];
     const summary=result.summary;
     const service = new DigitalProductionTaskService(db);
     const items: CockpitRow[] = [];

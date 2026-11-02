@@ -17,6 +17,8 @@ const summary = (r: Row): SupplierOnboardingSummary => ({ requestId: r.request_i
   supplierName: r.profile.supplierName, supplierType: r.profile.supplierType, status: r.status, version: r.current_version,
   supplierId: r.supplier_id, createdAt: r.created_at.toISOString(), updatedAt: r.updated_at.toISOString() });
 const reviewRole = (actor: TrustedActorContext) => actor.actorRoles.some(role => ["root_superuser", "owner_group", "production_management"].includes(role));
+const readRole = (actor: TrustedActorContext) => reviewRole(actor) || actor.actorRoles.includes("pmc");
+const readMode = (actor: TrustedActorContext) => actor.authorizationCapability === "supplier_onboarding:read" ? "read" : reviewRole(actor) ? "approve" : "request";
 const parse = <T>(schema: z.ZodType<T>, value: unknown): T => {
   const result = schema.safeParse(value);
   if (!result.success) throw new ApplicationError("VALIDATION_ERROR", result.error.issues[0]?.message ?? "请检查必填资料", 400);
@@ -41,27 +43,27 @@ export class SupplierOnboardingService {
     this.projection = new TodoProjectionService(this.todos);
     this.suppliers = new AccessMasterDataService(db, "");
   }
-  private async authorize(client: Pick<PoolClient, "query">, actor: TrustedActorContext, mode: "request" | "approve") {
+  private async authorize(client: Pick<PoolClient, "query">, actor: TrustedActorContext, mode: "request" | "approve" | "read") {
     try {
       const result = await client.query<{ roles: string[] }>("SELECT supplier_onboarding_authorized_roles($1,$2) roles", [actor.actorId, mode]);
       return { ...actor, actorRoles: result.rows[0]!.roles, authorizationCapability: `supplier_onboarding:${mode}` };
     } catch (error) { return translate(error); }
   }
   async list(actor: TrustedActorContext, scope: "mine" | "pending" | "all") {
-    const effective = await this.authorize(this.db, actor, reviewRole(actor) ? "approve" : "request");
-    const reviewer = reviewRole(effective);
+    const effective = await this.authorize(this.db, actor, readMode(actor));
+    const reviewer = readRole(effective);
     if (scope !== "mine" && !reviewer) throw new ApplicationError("FORBIDDEN", "只能查看本人的申请", 403);
     const result = await this.db.query<Row>(`${selection} WHERE ($1<>'mine' OR r.applicant_id=$2)
       AND ($1<>'pending' OR r.status='pending_approval') ORDER BY r.updated_at DESC,r.request_id`, [scope, actor.actorId]);
     return result.rows.map(summary);
   }
   async get(actor: TrustedActorContext, id: string): Promise<SupplierOnboardingDetail> {
-    const effective = await this.authorize(this.db, actor, reviewRole(actor) ? "approve" : "request");
-    const row = (await this.db.query<Row>(`${selection} WHERE r.request_id=$1 AND ($2 OR r.applicant_id=$3)`, [id, reviewRole(effective), actor.actorId])).rows[0];
+    const effective = await this.authorize(this.db, actor, readMode(actor));
+    const row = (await this.db.query<Row>(`${selection} WHERE r.request_id=$1 AND ($2 OR r.applicant_id=$3)`, [id, readRole(effective), actor.actorId])).rows[0];
     if (!row) throw new ApplicationError("NOT_FOUND", "申请不存在或不属于当前账号", 404);
     const versions = (await this.db.query<{ version: number; profile: SupplierOnboardingProfile; submitted_at: Date }>("SELECT version,profile,submitted_at FROM supplier_onboarding_request_versions WHERE request_id=$1 ORDER BY version", [id])).rows;
     const decisions = (await this.db.query<{ version: number; decision: "approved" | "returned"; reason: string | null; reviewer_name: string; decided_at: Date }>("SELECT version,decision,reason,reviewer_name,decided_at FROM supplier_onboarding_decisions WHERE request_id=$1 ORDER BY version", [id])).rows;
-    const check = reviewRole(effective) && row.status === "pending_approval"
+    const check = readRole(effective) && row.status === "pending_approval"
       ? (await this.db.query<{ formal_count: number; pending_count: number; checked_at: Date }>(`SELECT CURRENT_TIMESTAMP checked_at,
         (SELECT count(*)::int FROM current_supplier_catalog c WHERE c.supplier_type=$2
           AND normalize_supplier_name(c.supplier_name)=normalize_supplier_name($1)) formal_count,

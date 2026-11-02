@@ -1,194 +1,483 @@
 {
   "version": 1,
-  "base": "ec3ad91137d79dc82acc31573323c12acba1de08",
+  "base": "5e3b36f51706570debec412f6dce5a5152feae42",
+  "sourceFingerprint": "15f82fa95953b1d839ff5e1824fc22cf876912e38e71c2e151fe07a4ba47255c",
   "risk": "full",
-  "sourceFingerprint": "8d6f10ff9562cde39d169d175d222486fddd3ec47e93d9d1fb7ef5b4e35a1e55",
   "rules": [
     {
-      "id": "node-projection",
-      "rule": "Project authorized exact-node material inputs, outputs, original gates and actual versions without writes or new business gates",
-      "source": "User-approved PR08 and corrections; docs/engineering/new-flow-20261031-approved-plan.md PR08; native canonical rules retained",
+      "rule": "PMC 固定 23 项读取契约及真实身份装载；纯 PMC 不从伪造 capability 或委派取得业务写权限，真实多角色与原生 Root 保留原授权。",
+      "source": "docs/requirements/platform-permission-golden-source-v1.0.md：PERM-ROLE-PMC-20261031；docs/engineering/pmc-qc-release-readonly-20261102.md：固定读能力、HTTP/Lab 控制边界。选择性复用 main #879，release 既有迁移不改。",
       "writes": [
-        "apps/api/src/production-platform/identity-routes.ts",
-        "apps/api/src/production-platform/journey-query.ts",
-        "apps/api/src/production-platform/node-materials.ts",
-        "packages/contracts/src/digital-production-journey.ts",
-        "tests/helpers/node-materials-fixture.ts",
-        "tests/integration/production-readiness-postgres.test.ts",
-        "tests/integration/development-technical-postgres.test.ts",
-        "tests/integration/qc-progress-retirement-postgres.test.ts"
+        "apps/api/src/access/pmc-readonly-http.ts#registerPmcReadonlyHttpGuard",
+        "apps/api/src/app.ts#buildApp",
+        "apps/api/src/auth/postgres-store.ts#pmcEffectiveCapabilities",
+        "apps/web/src/member-module-policy.ts#moduleCanWrite",
+        "apps/web/src/platform-home-page.tsx",
+        "packages/contracts/src/business-display.ts",
+        "packages/contracts/src/index.ts#pmc-access",
+        "packages/contracts/src/pmc-access.ts#PMC_READ_CAPABILITIES",
+        "tests/integration/acceptance-role-session-postgres.test.ts",
+        "tests/unit/member-module-policy.test.ts",
+        "tests/unit/pmc-release-readonly-api.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/production-readiness-repository.ts#styleLabelCuttingReason",
-        "apps/api/src/production-platform/development-technical-service.ts",
-        "apps/api/src/production-platform/order-closure-service.ts",
-        "apps/api/src/production-platform/qc-production-progress-service.ts"
+        "apps/api/src/auth/service.ts",
+        "apps/api/src/access/root-authority.ts",
+        "apps/api/src/access/member-module-http.ts",
+        "apps/api/src/auth/acceptance-control-routes.ts",
+        "apps/web/src/auth.tsx",
+        "apps/web/src/member-module-policy.ts#currentModuleCanWrite",
+        "apps/api/src/tools/routes.ts#registerToolsRoutes",
+        "packages/contracts/src/pmc-access.ts#isPmcOnly"
+      ],
+      "oldTests": [
+        "tests/integration/auth.test.ts",
+        "tests/integration/acceptance-control-routes.test.ts",
+        "tests/unit/member-module-policy.test.ts",
+        "tests/unit/root-global-business-bypass.test.ts",
+        "tests/unit/root-ui-entry-contract.test.ts",
+        "tests/integration/acceptance-role-session-postgres.test.ts"
+      ],
+      "initialization": "PostgresAuthStore 从有效角色/能力装载真实 cookie；复用既有 0232 角色与固定 grant，不修改 SQL/manifest/员工任职。隔离 fixture 沿原 acceptance schema 生命周期；RootAuthority 核真实 Root，不把选择业务角色当 Root。",
+      "dateAndPermission": "不改业务时钟、历史事实或冻结标准。纯 PMC HTTP 禁写保持，GET/HEAD/OPTIONS、既有 auth、两条导出读取 POST 和精确 acceptance/control/start、switch、end 保留原独立守卫；不放行前缀、相邻路径、时钟控制或业务写。真实 PMC+worker 等沿原岗位授权。",
+      "expectation": "固定能力精确相等；请求 header/body 角色与注入写 grants 无效，纯 PMC 写在 handler 前拒绝。真实 session 与 SQL catalog 写拒绝有原日志，纯角色/混合角色/Root 分开证明。现场身份尚未盘点，fixture 不代表现场已配置。",
+      "checks": [
+        "permission-targeted-1",
+        "role-qc-pg16-2",
+        "build-1",
+        "typecheck-1",
+        "lint-restored"
+      ]
+    },
+    {
+      "rule": "PMC 接通已批准旧供应商、生产、返工、裁床、板房和工资读取，保持原字段、历史、附件实体及私有导出归属；读取不成为维护、审批、报价、责任办理或工资标记权限。",
+      "source": "docs/requirements/platform-permission-golden-source-v1.0.md：PERM-ROLE-PMC-20261031 与原供应商/财务规则；docs/engineering/pmc-qc-release-readonly-20261102.md：旧消费者及附件导出影响记录。",
+      "writes": [
+        "apps/api/src/access/export-authority.ts#BUSINESS_EXPORT_ROLE_ALLOWLIST",
+        "apps/api/src/access/permission-sensitive-field-policy.ts#redactPermissionSensitivePayload",
+        "apps/api/src/access/supplier-onboarding-routes.ts#registerSupplierOnboardingRoutes",
+        "apps/api/src/access/supplier-onboarding-service.ts#SupplierOnboardingService",
+        "apps/api/src/cutting/cutting-source-service.ts#BROAD_VIEW_ROLES",
+        "apps/api/src/pattern-room/order-authority.ts#canReadAllPatternTechnicalOrders",
+        "apps/api/src/rework/responsibility-determination-authorized-service.ts#pmcRead",
+        "apps/api/src/rework/responsibility-determination-queue-service.ts#pmcRead",
+        "apps/api/src/rework/responsibility-determination-routes.ts",
+        "apps/api/src/rework/rework-business-detail-service.ts#broadBusinessReader",
+        "apps/api/src/rework/rework-node-history.ts#canReadReworkHistoryNode",
+        "apps/api/src/server.ts#canDownloadBoundAttachment",
+        "apps/api/src/sourcing/production-reporting-service.ts#canReadProductionReporting",
+        "apps/api/src/sourcing/sourcing-production-service.ts#canReadOrders",
+        "apps/api/src/todos/routes.ts",
+        "apps/api/src/todos/service.ts#listRoutingExceptionsForActor",
+        "apps/api/src/tools/attachments.ts#AttachmentService",
+        "apps/api/src/tools/routes.ts#registerToolsRoutes",
+        "apps/web/src/App.tsx#AppRoutes",
+        "apps/web/src/platform-access.ts#todoModuleIdsForUser",
+        "apps/web/src/production-analysis-model.ts",
+        "apps/web/src/rework-detail-page.tsx",
+        "apps/web/src/supplier-center-page.tsx",
+        "apps/web/src/supplier-onboarding-model.ts#canReadSupplierApplications",
+        "apps/web/src/supplier-onboarding-page.tsx#SupplierApplicationList",
+        "packages/contracts/src/cutting.ts",
+        "packages/contracts/src/finance-access.ts",
+        "packages/contracts/src/pattern-orders.ts",
+        "packages/contracts/src/pattern-room.ts",
+        "tests/integration/full-business-chain-postgres.test.ts",
+        "tests/unit/cutting-source-contract.test.ts",
+        "tests/unit/supplier-onboarding-ui.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/tools/exports.ts#ExportJobService",
+        "apps/api/src/tools/attachments.ts#createDownloadIntent",
+        "apps/api/src/server.ts#canDownloadBoundAttachment",
+        "apps/api/src/pattern-room/order-routes.ts",
+        "apps/api/src/pattern-room/price-routes.ts",
+        "apps/api/src/access/supplier-onboarding-service.ts#readMode",
+        "apps/api/src/rework/rework-node-history.ts#readReworkNodeHistory",
+        "apps/web/src/supplier-onboarding-page.tsx#canApproveSupplier",
+        "apps/web/src/rework-detail-page.tsx#canSeeResponsibility",
+        "packages/contracts/src/finance-access.ts"
+      ],
+      "oldTests": [
+        "tests/unit/permission-sensitive-field-policy.test.ts",
+        "tests/unit/rework-business-detail-attachment-authorization.test.ts",
+        "tests/unit/supplier-onboarding-routes.test.ts",
+        "tests/unit/rework-detail-responsibility-access.test.ts",
+        "tests/unit/finance-wage-access.test.ts",
+        "tests/integration/finance-wage-access.test.ts",
+        "tests/integration/public-tools-routes.test.ts",
+        "tests/unit/production-analysis.test.ts",
+        "tests/unit/pattern-order-query.test.ts",
+        "tests/unit/cutting-source-contract.test.ts",
+        "tests/unit/supplier-onboarding-ui.test.ts",
+        "tests/integration/full-business-chain-postgres.test.ts"
+      ],
+      "initialization": "沿原 fixture 建真实供应商版本/审批、返工完成轮/工资和附件绑定，不重写历史。职责读取核 persisted direct PMC role；申请走原 SQL authorize(read) 及 snapshot。附件沿 ready/实体绑定/当前业务读取，export_job 精确 requester-owned。",
+      "dateAndPermission": "历史状态/名称/提交时刻绑定选定版本，原上海时区不改。纯 PMC 可看批准敏感字段但无创建、退回、批准、责任重开、upload/finalize；混合真实岗位保持原权。跨单附件、他人导出、财务写与工资标记不放开。",
+      "expectation": "真实 PMC/管理 cookie 读取同一非空申请、敏感字段及历史，委派写拒绝且事实不变；附件/私有导出正反例完整。旧普通角色拒绝矩阵保持。full-chain 两条新增 PMC 场景本身通过，但完整 full-chain-pg16-2 为 59/1/0，P07/P08 超时未闭合，不能称完整业务链通过。 The earlier entire chain result used an excluded 60s P07 budget and cannot attest the restored 30s suite; current original-budget full-chain is pending native final Gate, not represented by any passed local check here.",
+      "checks": [
+        "permission-targeted-1",
+        "role-qc-pg16-2",
+        "build-1",
+        "typecheck-1",
+        "lint-restored"
+      ]
+    },
+    {
+      "rule": "数字域 PMC 读取生产管理批准范围，leader/SLA 管理/series 申请采用/派工/结案/质检仍沿原写权限；真实 PMC+板房本人任务入口不因摘要 mode=read 丢失。",
+      "source": "docs/requirements/platform-permission-golden-source-v1.0.md：PERM-ROLE-PMC-20261031；docs/engineering/pmc-qc-release-readonly-20261102.md：SLA 读取、结案关联链接和多角色板房修复。",
+      "writes": [
+        "apps/api/src/production-platform/access-policy.ts#isDigitalManagementReader",
+        "apps/api/src/production-platform/access-service.ts#DigitalProductionAccessService",
+        "apps/api/src/production-platform/bulk-preparation-service.ts#BulkPreparationService",
+        "apps/api/src/production-platform/cockpit-query.ts#DigitalCockpitQuery",
+        "apps/api/src/production-platform/development-technical-settings.ts#DevelopmentTechnicalSettingsService",
+        "apps/api/src/production-platform/development-workspace-query.ts#DevelopmentWorkspaceQuery",
+        "apps/api/src/production-platform/identity-service.ts#DigitalProductionIdentityService",
+        "apps/api/src/production-platform/journey-query.ts#DigitalJourneyQuery",
+        "apps/api/src/production-platform/order-closure-service.ts#OrderClosureService",
+        "apps/api/src/production-platform/quotation-service.ts#DigitalQuotationService",
+        "apps/api/src/production-platform/reporting-query.ts#DigitalAnalysisQuery",
+        "apps/api/src/production-platform/series-plan-service.ts#SeriesPlanService",
+        "apps/api/src/production-platform/sla-settings-authority.ts#assertSlaSettingsReadActor",
+        "apps/api/src/production-platform/sla-settings-service.ts#SlaSettingsService",
+        "apps/api/src/production-platform/task-service.ts#DigitalProductionTaskService",
+        "apps/web/src/App.tsx#AppRoutes",
+        "apps/web/src/cockpit-production-settings.tsx",
+        "apps/web/src/components.tsx#cockpitSettingsNavigation",
+        "apps/web/src/development-cycle-settings.tsx",
+        "apps/web/src/digital-cockpit-page.tsx",
+        "apps/web/src/digital-cockpit-personnel.tsx",
+        "apps/web/src/digital-pattern-workspace.tsx",
+        "apps/web/src/digital-production-access-panel.tsx#pmcPatternTaskReadOnly",
+        "apps/web/src/series-settings.tsx",
+        "apps/web/src/sla-standard-editor.tsx",
+        "tests/integration/digital-journey-postgres.test.ts",
+        "tests/unit/digital-pmc-readonly-access.test.ts",
+        "tests/unit/digital-pmc-readonly-ui.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/access-policy.ts#isDigitalLeader",
+        "apps/api/src/production-platform/series-plan-routes.ts",
+        "apps/api/src/production-platform/sla-settings-authority.ts#assertSlaSettingsActor",
+        "apps/api/src/production-platform/production-readiness-service.ts",
+        "apps/api/src/production-platform/production-readiness-routes.ts",
+        "apps/api/src/production-platform/development-workspace-query.ts#pattern",
+        "apps/api/src/production-platform/journey-query.ts#timingRoles",
+        "apps/api/src/production-platform/journey-query.ts#closureAllowed",
+        "apps/web/src/production-readiness-panel.tsx",
+        "apps/web/src/digital-pattern-workspace.tsx",
+        "apps/web/src/digital-production-access-panel.tsx#canReadDigitalProductionSettings",
+        "apps/web/src/digital-cockpit-page.tsx#DigitalCockpitPage"
       ],
       "oldTests": [
         "tests/integration/digital-journey-postgres.test.ts",
-        "tests/integration/production-readiness-postgres.test.ts",
-        "tests/integration/development-technical-postgres.test.ts",
-        "tests/integration/qc-progress-retirement-postgres.test.ts"
+        "tests/integration/full-business-chain-postgres.test.ts",
+        "tests/integration/series-plan-routes.test.ts",
+        "tests/unit/digital-cockpit-progress.test.ts",
+        "tests/unit/business-chain-ui-contract.test.ts",
+        "tests/unit/root-global-business-bypass.test.ts",
+        "tests/unit/root-ui-entry-contract.test.ts"
       ],
+      "initialization": "使用原 source/order 身份、frozen SLA、Journey summary 和正式 task DTO。mock 仅服务投影不称 PG；Journey PG 专属 PMC/管理 fixture 复用原schema，去掉 Root 重复 singleton grant，保留 0260 原特例。legacy-unenrolled 不伪造计划或事实。",
+      "dateAndPermission": "不把 PMC 加入 isDigitalLeader；activeRole 撤权检查保留。预计/实际/完成和 revision 不改，纯 PMC canApply/canRequest/canClose/canRecordQuality/canManagePolicies 为 false。摘要 read 不当办理 flag；真实板房岗位本人保留原跳转，完整 DTO 核 taskId/assigneeId/requiredRole/canExecute，原详情权限最终负责。",
+      "expectation": "非空 closure 与管理 receiving/rework 精确链接、全单 timing 对照；PMC/撤权/普通工人负向齐备。设置现值/历史可见而写控件隐藏，真实管理仍编辑。326 覆盖 mock/SSR；完整 Journey 为 25/2/0，真实 PMC 冻结用例通过但 Root/设计师 HTTP 超时待闭合。generic digital_preparation 旧 gate 未改，实际 UI 用 dedicated readiness 路由，没有已证漏接就不扩权；不声称浏览器验收。 Current original-budget Journey suite and populated frozen SLA full database regression are pending native final Gate; the changed test source is linted, not claimed business-executed in this Work. No performance fixes or timeout expansion are authorized.",
       "checks": [
-        "batch-final-pg",
-        "batch-unit",
-        "batch-static"
-      ],
-      "initialization": "No migration, grants, source command, automatic adoption or business backfill. Current node auth precedes source reads; exact old/history versions remain read-only or explicitly unknown.",
-      "dateAndPermission": "Original plan/SLA/actual event semantics and source authorization retained; recipe GET is the same READ ONLY transaction. API error never becomes missing/ready; no clock or progress mutations.",
-      "expectation": "Actual representative source revisions, scope denials and no-write footprint match original services. Native PC page keeps one handling entry, folded first view and node/identity/return isolation with real failure/cancel recovery."
+        "permission-targeted-1",
+        "build-1",
+        "typecheck-1",
+        "lint-restored"
+      ]
     },
     {
-      "id": "node-view",
-      "rule": "Keep original shell and handling, exact folded title, per-node view state, private original links and actual source-form return without stale identity metadata",
-      "source": "User-approved PR08 and corrections; docs/engineering/new-flow-20261031-approved-plan.md PR08; native canonical rules retained",
+      "rule": "QC 消费者只承认 quality_control 加 qc-production-progress，不能继承 reporter；同 PO 多厂、照片、残留 scope、幂等和同 session 撤权维持原精确边界。",
+      "source": "docs/requirements/platform-permission-golden-source-v1.0.md：PERM-ROLE-QC-PROGRESS-20261101；docs/engineering/pmc-qc-release-readonly-20261102.md：双厂、首件照片和同 session 撤权 fixture 修正；生产 QC 流程未改。",
       "writes": [
-        "apps/web/src/cockpit-detail.tsx",
-        "apps/web/src/cockpit-node-rows.tsx",
-        "apps/web/src/digital-cockpit-page.tsx",
-        "apps/web/src/digital-journey-cockpit-model.ts",
-        "apps/web/src/node-materials-view.ts",
-        "apps/web/src/node-materials-panel.tsx",
-        "apps/web/src/node-materials.css",
-        "tests/unit/node-materials.test.ts",
-        "tests/fixtures/node-materials-page.tsx",
-        "tests/fixtures/node-materials-instruction.json",
-        "tests/acceptance/node-materials-browser.mjs"
+        "apps/web/src/acceptance-matrix.ts#evaluateAcceptanceSnapshot",
+        "apps/web/src/platform-modules.ts#canAccessProductionReporting",
+        "tests/integration/qc-progress-retirement-postgres.test.ts",
+        "tests/unit/acceptance-matrix.test.ts",
+        "tests/unit/platform-modules.test.ts"
       ],
       "reads": [
-        "apps/web/src/auth-session.ts",
-        "apps/web/src/digital-detail-route.ts",
-        "apps/web/src/cockpit-documents.tsx",
-        "apps/web/src/production-instruction-panel.tsx"
+        "apps/api/src/production-platform/qc-production-progress-service.ts",
+        "apps/api/src/production-platform/qc-production-progress-routes.ts",
+        "apps/api/src/production-platform/qc-progress-evidence.ts",
+        "apps/api/src/sourcing/production-reporting-service.ts#isProductionReporter",
+        "apps/web/src/qc-production-progress-panel.tsx",
+        "apps/web/src/App.tsx#qc-production-progress",
+        "apps/web/src/platform-modules.ts#canAccessProductionReporting",
+        "apps/web/src/acceptance-matrix.ts#ACCEPTANCE_ROLE_MATRIX"
       ],
       "oldTests": [
-        "tests/unit/cockpit-detail.test.ts",
-        "tests/unit/digital-journey-cockpit.test.ts",
-        "tests/unit/digital-detail-route.test.ts",
-        "tests/unit/cockpit-document-new-sources.test.ts",
-        "tests/unit/cockpit-document-directory.test.ts"
+        "tests/integration/qc-progress-retirement-postgres.test.ts",
+        "tests/unit/platform-modules.test.ts",
+        "tests/unit/acceptance-matrix.test.ts"
       ],
+      "initialization": "复用原隔离 schema 与独立低权限 clock 数据库。同 PO 双厂由 remainder transfer 得真实 factoryDecisionId；首次报量按本人/订单/厂单/scope 绑定真实照片，HTTP upload/finalize 后提交，不删除照片守卫。",
+      "dateAndPermission": "同一有效 cookie 撤 reporter 后只保留 QC 指定读取，随后撤 QC/离职拒绝；不以 Lab cookie 失效代替撤权。错单/错厂/照片/replay 拒绝，每 PO 时钟和质量独立事实不变。不新增 reporter、完工、发货、仓库改数或 Root 订正。",
+      "expectation": "QC 角色加精确能力才展示生产读取，旧 reporter/角色名不能替代；PMC、Root 和其它真实岗位保持原路径。PG16 两文件 17/0/0，其中 QC 完整 9 项通过，含双厂、同 cookie 撤权、照片 HTTP、幂等、时钟提醒与旧任务退休；不扩称全业务链或现场通过。",
       "checks": [
-        "batch-browser-02",
-        "batch-unit",
-        "batch-static"
-      ],
-      "initialization": "No migration, grants, source command, automatic adoption or business backfill. Current node auth precedes source reads; exact old/history versions remain read-only or explicitly unknown.",
-      "dateAndPermission": "Original plan/SLA/actual event semantics and source authorization retained; recipe GET is the same READ ONLY transaction. API error never becomes missing/ready; no clock or progress mutations.",
-      "expectation": "Actual representative source revisions, scope denials and no-write footprint match original services. Native PC page keeps one handling entry, folded first view and node/identity/return isolation with real failure/cancel recovery."
+        "permission-targeted-1",
+        "role-qc-pg16-2",
+        "build-1",
+        "typecheck-1",
+        "lint-restored"
+      ]
     },
     {
-      "id": "original-material-locator",
-      "rule": "Locate a missing material in the existing authorized form without duplicating upload, overwriting dirty state or bypassing readonly/write guards",
-      "source": "User-approved PR08 and corrections; docs/engineering/new-flow-20261031-approved-plan.md PR08; native canonical rules retained",
+      "rule": "纯角色验收绑定 exact userId 与唯一预期角色；缺身份、错别名、空 userId、未执行和污染 session 不得通过，真实多角色业务正向另测。",
+      "source": "AGENTS.md §4 第 4 条；docs/requirements/platform-permission-golden-source-v1.0.md PMC/QC 批准规则；docs/engineering/pmc-qc-release-readonly-20261102.md 的纯角色与现场边界。",
       "writes": [
-        "apps/web/src/production-readiness-panel.tsx",
-        "tests/acceptance/production-readiness-browser.mjs"
+        "apps/web/src/acceptance-lab-page.tsx#AcceptanceLabPage",
+        "apps/web/src/acceptance-matrix.ts#evaluateAcceptanceSnapshot",
+        "tests/integration/acceptance-role-session-postgres.test.ts",
+        "tests/unit/acceptance-matrix.test.ts"
       ],
       "reads": [
-        "apps/web/src/bulk-preparation-panel.tsx",
-        "apps/web/src/production-readiness-panel.tsx#choose",
-        "apps/web/src/production-readiness-panel.tsx#requestedKind",
-        "apps/web/src/use-digital-detail-navigation-guard.ts"
+        "scripts/acceptance/standard-identities.ts",
+        "scripts/acceptance/seed-role-users.ts",
+        "scripts/acceptance/authorization-guard.ts",
+        "apps/api/src/auth/acceptance-control-routes.ts",
+        "apps/web/src/acceptance-lab-page.tsx#evaluateAcceptanceSnapshot",
+        "apps/web/src/acceptance-matrix.ts#evaluateHttpProbe",
+        "apps/web/src/platform-modules.ts#accessiblePlatformModules"
       ],
       "oldTests": [
-        "tests/acceptance/production-readiness-browser.mjs",
-        "tests/unit/production-readiness-contract.test.ts"
+        "tests/unit/acceptance-matrix.test.ts",
+        "tests/integration/acceptance-control-routes.test.ts",
+        "tests/integration/acceptance-role-session-postgres.test.ts",
+        "tests/unit/root-ui-entry-contract.test.ts"
       ],
+      "initialization": "使用原登录链和专属隔离 PMC/QC/worker fixture；worker-b、standard-identities、seed、authorization-guard、旧 golden 不改。没有现场盘点不推断现场缺身份；不新增目录/长期凭据/批量赋权。",
+      "dateAndPermission": "每次证据核 alias、非空 userId、唯一期望 role 与 auth/me 一致。unknown 或未执行不能空结果通过；实际 PMC+worker 权限与纯 PMC 拒绝分开。撤权必须用同一有效 session 验当前岗位。",
+      "expectation": "纯 PMC/QC/worker-a 身份匹配，缺失/污染/错号/未执行拒绝；批准规则偏差直接 fail。真实 session 保留 Root/controller 独立和登录码重放拒绝。这里只有 JSON/SSR/隔离 PG，浏览器、现场身份和部署未执行。",
       "checks": [
-        "batch-native-ui",
-        "batch-unit",
-        "batch-static"
+        "permission-targeted-1",
+        "role-qc-pg16-2",
+        "build-1",
+        "typecheck-1",
+        "lint-restored"
+      ]
+    },
+    {
+      "rule": "AGENTS 两条新增规则要求角色迁移到应用消费者同批闭合，纯角色/真实多角色及同 session 撤权分别验；机械证据不代替主控语义审查，不削 Gate。",
+      "source": "AGENTS.md §4 第 4 条新增两句；docs/governance/construction-evidence-v1.md 与 docs/governance/final-closeout-v1.md。外置草稿只机械准备，不成为最终证据或新发布流程。",
+      "writes": [
+        "AGENTS.md#真实多角色业务权限与纯角色测试预期分别验证"
       ],
-      "initialization": "No migration, grants, source command, automatic adoption or business backfill. Current node auth precedes source reads; exact old/history versions remain read-only or explicitly unknown.",
-      "dateAndPermission": "Original plan/SLA/actual event semantics and source authorization retained; recipe GET is the same READ ONLY transaction. API error never becomes missing/ready; no clock or progress mutations.",
-      "expectation": "Actual representative source revisions, scope denials and no-write footprint match original services. Native PC page keeps one handling entry, folded first view and node/identity/return isolation with real failure/cancel recovery."
+      "reads": [
+        "AGENTS.md",
+        "scripts/ci/construction-evidence.mjs#validateEvidence",
+        "scripts/ci/final-closeout.mjs",
+        "scripts/test-preflight.mjs",
+        "scripts/acceptance/authorization-guard.ts"
+      ],
+      "oldTests": [
+        "scripts/ci/construction-evidence.test.mjs",
+        "scripts/ci/final-closeout.test.mjs",
+        "tests/unit/acceptance-matrix.test.ts",
+        "tests/integration/acceptance-role-session-postgres.test.ts"
+      ],
+      "initialization": "原生 preflight 在无 node_modules/包 dist 的源文件检出可跑。原图 golden 不替换；四张未变 PNG 缺失不冒充视觉验收。按真实 base/当前 source 生成证据，提交后主控新检出核验，外置 draft 不暂存、不造新 Head。",
+      "dateAndPermission": "真实 command/时间/日志/具体 passed 名称绑定源；输入复用仅逐字相同，旧全局 lint/native 不冒充当前。最终 Head/base/run 独立 Gate 由主控办理；无部署、现场赋权或旧 PR 操作。",
+      "expectation": "native-2 历史 152/0/0、lint-2 exit 0 均无 inputPaths 且全局源旧，只可历史。AGENTS 等待 native-final 的当前覆盖。326/17 行为例只能支持规则内容，不能替代无依赖原生入口。本 draft 有 pending，当前不可通过 validateEvidence 或用作 closeout。",
+      "checks": [
+        "permission-targeted-1",
+        "role-qc-pg16-2",
+        "lint-restored",
+        "native-restored"
+      ]
     }
   ],
   "checks": [
     {
-      "id": "batch-static",
-      "kind": "command",
-      "command": "[\"bash\",\"-c\",\"npm run typecheck && npm run lint && npm run test:preflight\"]",
+      "id": "permission-targeted-1",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run --reporter=default --reporter=json --outputFile=<permission-targeted-1.json> tests/unit/pmc-release-readonly-api.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/digital-pmc-readonly-ui.test.ts tests/unit/acceptance-matrix.test.ts tests/unit/member-module-policy.test.ts tests/unit/platform-modules.test.ts tests/unit/cutting-source-contract.test.ts tests/unit/supplier-onboarding-ui.test.ts tests/unit/permission-sensitive-field-policy.test.ts tests/unit/rework-business-detail-attachment-authorization.test.ts tests/unit/supplier-onboarding-routes.test.ts tests/unit/rework-detail-responsibility-access.test.ts tests/unit/production-analysis.test.ts tests/unit/pattern-order-query.test.ts tests/unit/public-tools.test.ts tests/unit/finance-wage-access.test.ts tests/unit/digital-cockpit-progress.test.ts tests/unit/business-chain-ui-contract.test.ts tests/unit/root-global-business-bypass.test.ts tests/unit/root-ui-entry-contract.test.ts tests/integration/auth.test.ts tests/integration/public-tools-routes.test.ts tests/integration/acceptance-control-routes.test.ts tests/integration/finance-wage-access.test.ts tests/integration/responsibility-determination-routes.test.ts tests/integration/series-plan-routes.test.ts",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "cdfc5bd2259b0e715c81a713461406763ea1e9b1",
-      "sourceFingerprint": "8d6f10ff9562cde39d169d175d222486fddd3ec47e93d9d1fb7ef5b4e35a1e55",
+      "passed": 326,
+      "failed": 0,
+      "skipped": 0,
+      "testedHead": "5e3b36f51706570debec412f6dce5a5152feae42",
+      "sourceFingerprint": "f0688f3afd0be09306496d33f012ecd257a294f23f1e0bf0bac257a9df8f4d65",
+      "context": "Local candidate worktree based on 5e3b36f51706570debec412f6dce5a5152feae42; Node 22.22.2/npm 10.9.9; no production or Acceptance runtime. Recovered unchanged from verified Library archive a2ad14d4d8d27b2ba9742bd8e94a3d2b8c8229d6d02be7934bd03237686de2b3; exact declared input hash reverified in Work. This is original execution, not a rerun on the new committed Head.",
+      "startedAt": "2026-11-02T12:06:21.051Z",
+      "endedAt": "2026-11-02T12:06:48.625Z",
+      "log": "/workspace/pmc-qc-handover-20261102/recovered-preserved/pmc-qc-release-preserved-20261102T151259Z/evidence/permission-targeted-1.log",
+      "logSha256": "a73288bbc18163022fb1cbcaecd72f98bf010fbca0ef246771a54439e62799fa",
       "inputPaths": [
         "apps",
         "packages",
-        "tests",
         "scripts",
+        "tests/helpers",
+        "tests/fixtures",
+        "tests/integration/helpers",
         "package.json",
         "package-lock.json",
         "tsconfig.base.json",
+        ".node-version",
         "vitest.config.ts",
         "vitest.business-chain.config.ts",
         "vitest.postgres-immediate.config.ts",
-        "eslint.config.js"
+        "tests/unit/pmc-release-readonly-api.test.ts",
+        "tests/unit/digital-pmc-readonly-access.test.ts",
+        "tests/unit/digital-pmc-readonly-ui.test.ts",
+        "tests/unit/acceptance-matrix.test.ts",
+        "tests/unit/member-module-policy.test.ts",
+        "tests/unit/platform-modules.test.ts",
+        "tests/unit/cutting-source-contract.test.ts",
+        "tests/unit/supplier-onboarding-ui.test.ts",
+        "tests/unit/permission-sensitive-field-policy.test.ts",
+        "tests/unit/rework-business-detail-attachment-authorization.test.ts",
+        "tests/unit/supplier-onboarding-routes.test.ts",
+        "tests/unit/rework-detail-responsibility-access.test.ts",
+        "tests/unit/production-analysis.test.ts",
+        "tests/unit/pattern-order-query.test.ts",
+        "tests/unit/public-tools.test.ts",
+        "tests/unit/finance-wage-access.test.ts",
+        "tests/unit/digital-cockpit-progress.test.ts",
+        "tests/unit/business-chain-ui-contract.test.ts",
+        "tests/unit/root-global-business-bypass.test.ts",
+        "tests/unit/root-ui-entry-contract.test.ts",
+        "tests/integration/auth.test.ts",
+        "tests/integration/public-tools-routes.test.ts",
+        "tests/integration/acceptance-control-routes.test.ts",
+        "tests/integration/finance-wage-access.test.ts",
+        "tests/integration/responsibility-determination-routes.test.ts",
+        "tests/integration/series-plan-routes.test.ts"
       ],
-      "inputFingerprint": "200f9a780f9e8afb713c9e3d81c88f46ce439fa16b08949804ca142949722334",
-      "sourceState": "Actual working candidate source/input fingerprints captured before command and declared inputs reverified after; testedHead is ancestor while git diff exists, not a claim of a committed tested Head",
-      "context": "Local Node 22.23.4; owned marked PG16 instance/low-privilege test role, explicit canonical workers; no claim of CI hardware equivalence or authenticated full-site acceptance",
-      "startedAt": "2026-11-02T03:32:15.991Z",
-      "endedAt": "2026-11-02T03:33:26.824Z",
-      "logSha256": "fba0e622929ada66221df00c9dfd1488948a94356c1886f8322a136a8b2def46",
-      "log": "/workspace/dx-p08-recorded-batch-static-1793590335991.log",
-      "resultReports": [],
-      "actualReportPaths": []
+      "inputFingerprint": "35c8d08f1b67d20304bac6780b201b0e23057d766576760323a15107b3b15862",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "c1a1a5f03c0557c89ccb3a7b6354981d8928ecf150c90e691e8d386691ae7e23",
+          "path": "/workspace/pmc-qc-handover-20261102/recovered-preserved/pmc-qc-release-preserved-20261102T151259Z/evidence/permission-targeted-1.json"
+        }
+      ]
     },
     {
-      "id": "batch-final-pg",
+      "id": "role-qc-pg16-2",
       "kind": "tests",
-      "command": "[\"flock\",\"/workspace/dx-governance-local-pg-instance.lock\",\"node\",\"/workspace/dx-p08-focused-postgres.mjs\"]",
+      "command": "NODE_ENV=test DX_REWORK_TEST_SUITE_KIND=postgres TEST_DATABASE_URL=<isolated 16 app role> node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=<role-qc-pg16-2.json> tests/integration/acceptance-role-session-postgres.test.ts tests/integration/qc-progress-retirement-postgres.test.ts",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "cdfc5bd2259b0e715c81a713461406763ea1e9b1",
-      "sourceFingerprint": "4acd11130dacbc202a5380c7724b4e32e8034d10be6206bfad4fcd73bc9b1ba0",
+      "passed": 17,
+      "failed": 0,
+      "skipped": 0,
+      "testedHead": "5e3b36f51706570debec412f6dce5a5152feae42",
+      "sourceFingerprint": "f0688f3afd0be09306496d33f012ecd257a294f23f1e0bf0bac257a9df8f4d65",
+      "context": "Local candidate worktree based on 5e3b36f51706570debec412f6dce5a5152feae42; Node 22.22.2/npm 10.9.9; no production or Acceptance runtime. PostgreSQL 16.15 local dedicated database; canonical config vitest.business-chain.config.ts; application role nonsuperuser with isolation marker; config worker limits do not imply same CI hardware. QC uses the separately safety-verified clock database; empty-string clock variable is not supplied. Recovered unchanged from verified Library archive a2ad14d4d8d27b2ba9742bd8e94a3d2b8c8229d6d02be7934bd03237686de2b3; exact declared input hash reverified in Work. This is original execution, not a rerun on the new committed Head.",
+      "startedAt": "2026-11-02T11:59:34.584Z",
+      "endedAt": "2026-11-02T12:02:01.365Z",
+      "log": "/workspace/pmc-qc-handover-20261102/recovered-preserved/pmc-qc-release-preserved-20261102T151259Z/evidence/role-qc-pg16-2.log",
+      "logSha256": "0da2a9a2edc720f82e032f4f0cddc1c379f9b047ff5b6176b37cda5326eb91fd",
       "inputPaths": [
         "apps/api",
         "packages",
-        "tests/helpers",
-        "tests/integration/production-readiness-postgres.test.ts",
-        "tests/integration/development-technical-postgres.test.ts",
-        "tests/integration/qc-progress-retirement-postgres.test.ts",
         "scripts",
+        "tests/helpers",
+        "tests/fixtures",
         "package.json",
         "package-lock.json",
         "tsconfig.base.json",
+        ".node-version",
         "vitest.config.ts",
         "vitest.business-chain.config.ts",
-        "vitest.postgres-immediate.config.ts"
+        "vitest.postgres-immediate.config.ts",
+        "tests/integration/acceptance-role-session-postgres.test.ts",
+        "tests/integration/qc-progress-retirement-postgres.test.ts"
       ],
-      "inputFingerprint": "e15e5ad84447455447c972bd4cf99a275db6c4542fbc279db56b918a82d6338c",
+      "inputFingerprint": "cfb4888be992b308f4080894c7f12e872b4d99868d1b2363e39d84fdb4391928",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "3e902090447838cdf43057b6b660fcd037b257caf85fc9b207fede76ea61488f",
+          "path": "/workspace/pmc-qc-handover-20261102/recovered-preserved/pmc-qc-release-preserved-20261102T151259Z/evidence/role-qc-pg16-2.json"
+        }
+      ]
+    },
+    {
+      "id": "build-1",
+      "kind": "command",
+      "command": "npm run build --workspaces --if-present",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "5e3b36f51706570debec412f6dce5a5152feae42",
+      "sourceFingerprint": "8ec986518326bc8dab9d843faad9c3fc6e83860fa7cf312cea5f45de29b78307",
+      "context": "Local candidate worktree based on 5e3b36f51706570debec412f6dce5a5152feae42; Node 22.22.2/npm 10.9.9; no production or Acceptance runtime. Recovered unchanged from verified Library archive a2ad14d4d8d27b2ba9742bd8e94a3d2b8c8229d6d02be7934bd03237686de2b3; exact declared input hash reverified in Work. This is original execution, not a rerun on the new committed Head.",
+      "startedAt": "2026-11-02T11:47:54.315Z",
+      "endedAt": "2026-11-02T11:48:36.545Z",
+      "log": "/workspace/pmc-qc-handover-20261102/recovered-preserved/pmc-qc-release-preserved-20261102T151259Z/evidence/build-1.log",
+      "logSha256": "3517c160e9b3ee197caaf63a75878bba7e969939ee3080ed4a58f215ebc5a1a6",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json",
+        ".node-version"
+      ],
+      "inputFingerprint": "652f4b243a4002d7efaf99dc04bbf4985c8609f3ffa871dc979065d55edb05a3"
+    },
+    {
+      "id": "typecheck-1",
+      "kind": "command",
+      "command": "npm run typecheck",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "5e3b36f51706570debec412f6dce5a5152feae42",
+      "sourceFingerprint": "8ec986518326bc8dab9d843faad9c3fc6e83860fa7cf312cea5f45de29b78307",
+      "context": "Local candidate worktree based on 5e3b36f51706570debec412f6dce5a5152feae42; Node 22.22.2/npm 10.9.9; no production or Acceptance runtime. Recovered unchanged from verified Library archive a2ad14d4d8d27b2ba9742bd8e94a3d2b8c8229d6d02be7934bd03237686de2b3; exact declared input hash reverified in Work. This is original execution, not a rerun on the new committed Head.",
+      "startedAt": "2026-11-02T11:49:10.758Z",
+      "endedAt": "2026-11-02T11:51:30.904Z",
+      "log": "/workspace/pmc-qc-handover-20261102/recovered-preserved/pmc-qc-release-preserved-20261102T151259Z/evidence/typecheck-1.log",
+      "logSha256": "aab2394698b94e564110a1e73155dad948660f07948047538a4ca45171bbf245",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json",
+        ".node-version"
+      ],
+      "inputFingerprint": "652f4b243a4002d7efaf99dc04bbf4985c8609f3ffa871dc979065d55edb05a3"
+    },
+    {
+      "id": "native-restored",
+      "kind": "tests",
+      "command": "[\"node\",\"scripts/test-preflight.mjs\"]",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "5e3b36f51706570debec412f6dce5a5152feae42",
+      "sourceFingerprint": "15f82fa95953b1d839ff5e1824fc22cf876912e38e71c2e151fe07a4ba47255c",
       "sourceState": "Actual working candidate source/input fingerprints captured before command and declared inputs reverified after; testedHead is ancestor while git diff exists, not a claim of a committed tested Head",
-      "context": "Local Node 22.23.4; owned marked PG16 instance/low-privilege test role, explicit canonical workers; no claim of CI hardware equivalence or authenticated full-site acceptance",
-      "startedAt": "2026-11-02T03:30:48.479Z",
-      "endedAt": "2026-11-02T03:32:33.809Z",
-      "logSha256": "2adf93e9dcfd74e7f36f3b0a59e606039987c851180600056850c4dc78d8e33b",
-      "log": "/workspace/dx-p08-recorded-batch-final-pg-1793590248480.log",
-      "passed": 47,
+      "context": "Local Node 22.23.4; local validation only; test configuration and any owned database are recorded separately; no claim of CI hardware equivalence or authenticated live-site acceptance Native preflight is whole-source structural/protocol verification including AGENTS; not proof of business semantics in every source file.",
+      "startedAt": "2026-11-02T16:10:44.288Z",
+      "endedAt": "2026-11-02T16:10:47.806Z",
+      "logSha256": "567b137bda2ed1d312a994c336d7b59cf6cd22cbcc7f72bb5db0034686e4b08a",
+      "log": "/workspace/pmc-qc-handover-20261102/recorded-native-restored-1793635844289.log",
+      "passed": 152,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
-          "format": "vitest-json",
-          "sha256": "3321d1e56ed9e484ce04b4b10f99b153e98fc383d86d6dcaffffcf1ac3df062c"
+          "format": "node-tap",
+          "path": "/workspace/pmc-qc-handover-20261102/recorded-native-restored-1793635844289.log",
+          "sha256": "567b137bda2ed1d312a994c336d7b59cf6cd22cbcc7f72bb5db0034686e4b08a"
         }
       ],
-      "actualReportPaths": [
-        "/workspace/dx-p08-batch-final-pg-vitest.business-chain.config.ts.json"
-      ]
+      "actualReportPaths": []
     },
     {
-      "id": "batch-unit",
-      "kind": "tests",
-      "command": "[\"node\",\"node_modules/vitest/vitest.mjs\",\"run\",\"tests/unit/node-materials.test.ts\",\"tests/unit/cockpit-detail.test.ts\",\"tests/unit/digital-journey-cockpit.test.ts\",\"tests/unit/digital-detail-route.test.ts\",\"tests/unit/cockpit-document-new-sources.test.ts\",\"tests/unit/cockpit-document-directory.test.ts\",\"tests/unit/digital-cockpit-progress.test.ts\",\"tests/unit/production-readiness-contract.test.ts\",\"--reporter=default\",\"--reporter=json\",\"--outputFile=/workspace/dx-p08-batch-unit.json\"]",
+      "id": "lint-restored",
+      "kind": "command",
+      "command": "[\"npm\",\"run\",\"lint\"]",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "cdfc5bd2259b0e715c81a713461406763ea1e9b1",
-      "sourceFingerprint": "8d6f10ff9562cde39d169d175d222486fddd3ec47e93d9d1fb7ef5b4e35a1e55",
+      "testedHead": "5e3b36f51706570debec412f6dce5a5152feae42",
+      "sourceFingerprint": "15f82fa95953b1d839ff5e1824fc22cf876912e38e71c2e151fe07a4ba47255c",
       "inputPaths": [
         "apps",
         "packages",
@@ -202,89 +491,26 @@
         "vitest.postgres-immediate.config.ts",
         "eslint.config.js"
       ],
-      "inputFingerprint": "200f9a780f9e8afb713c9e3d81c88f46ce439fa16b08949804ca142949722334",
+      "inputFingerprint": "abb8ccb147565802ba29a394a7f343fc216612ff3f7702f58236d5b7e3d03c5a",
       "sourceState": "Actual working candidate source/input fingerprints captured before command and declared inputs reverified after; testedHead is ancestor while git diff exists, not a claim of a committed tested Head",
-      "context": "Local Node 22.23.4; owned marked PG16 instance/low-privilege test role, explicit canonical workers; no claim of CI hardware equivalence or authenticated full-site acceptance",
-      "startedAt": "2026-11-02T03:32:15.937Z",
-      "endedAt": "2026-11-02T03:32:22.350Z",
-      "logSha256": "b6e01fb44a001cce11e63168f36639ef5d8abdbc4bc2a0c9de29c6e707ae2465",
-      "log": "/workspace/dx-p08-recorded-batch-unit-1793590335937.log",
-      "passed": 103,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "3e1f7fd0251a475fdfbb072bab76558d3f8e87b8c5b13cdb8f4f93520eadaf37"
-        }
-      ],
-      "actualReportPaths": [
-        "/workspace/dx-p08-batch-unit.json"
-      ]
-    },
-    {
-      "id": "batch-browser-02",
-      "kind": "tests",
-      "command": "[\"node\",\"tests/acceptance/node-materials-browser.mjs\"]",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "cdfc5bd2259b0e715c81a713461406763ea1e9b1",
-      "sourceFingerprint": "8d6f10ff9562cde39d169d175d222486fddd3ec47e93d9d1fb7ef5b4e35a1e55",
-      "inputPaths": [
-        "apps/web",
-        "packages/contracts",
-        "packages/ui",
-        "packages/config",
-        "packages/domain",
-        "tests/fixtures/node-materials-page.tsx",
-        "tests/fixtures/node-materials-instruction.json",
-        "tests/acceptance/node-materials-browser.mjs",
-        "package.json",
-        "package-lock.json",
-        "tsconfig.base.json"
-      ],
-      "inputFingerprint": "48e69aee83b57ebaacee69c46946ecd4bc126a0d9b15c65838f19aa11ef8bed3",
-      "sourceState": "Actual working candidate source/input fingerprints captured before command and declared inputs reverified after; testedHead is ancestor while git diff exists, not a claim of a committed tested Head",
-      "context": "Local Node 22.23.4; owned marked PG16 instance/low-privilege test role, explicit canonical workers; no claim of CI hardware equivalence or authenticated full-site acceptance",
-      "startedAt": "2026-11-02T03:31:26.565Z",
-      "endedAt": "2026-11-02T03:31:53.143Z",
-      "logSha256": "4654a5bfaf6d8b240157c84f468d713dfdcd5297eac887a0c24655d3d53545c8",
-      "log": "/workspace/dx-p08-recorded-batch-browser-02-1793590286565.log",
-      "passed": 24,
-      "failed": 0,
-      "skipped": 0,
+      "context": "Local Node 22.23.4; local validation only; test configuration and any owned database are recorded separately; no claim of CI hardware equivalence or authenticated live-site acceptance",
+      "startedAt": "2026-11-02T16:17:34.657Z",
+      "endedAt": "2026-11-02T16:17:59.217Z",
+      "logSha256": "dac45e9202dd0400da69a080ea51bda187f66d2c3344db6291f4d82e1077d00f",
+      "log": "/workspace/pmc-qc-handover-20261102/recorded-lint-restored-1793636254657.log",
       "resultReports": [],
       "actualReportPaths": []
+    }
+  ],
+  "coverageBoundary": "326 targeted permission tests + 17 genuine PG16 session/QC tests and build/types are original executions whose declared source inputs and report bytes were reverified; native 152 and lint are new Work executions. This record is not a claim of complete full-chain/Journey/non-DB suite, PG13, browser, or live Acceptance passing. Original failures and excluded-budget runs remain in the engineering record/archive; current final Gate is required and must report actual failures.",
+  "recoveredArchives": [
+    {
+      "id": "libfile_d276400fcd2c81918f858e8f00bacba5",
+      "sha256": "a2ad14d4d8d27b2ba9742bd8e94a3d2b8c8229d6d02be7934bd03237686de2b3"
     },
     {
-      "id": "batch-native-ui",
-      "kind": "tests",
-      "command": "[\"node\",\"tests/acceptance/production-readiness-browser.mjs\"]",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "cdfc5bd2259b0e715c81a713461406763ea1e9b1",
-      "sourceFingerprint": "8d6f10ff9562cde39d169d175d222486fddd3ec47e93d9d1fb7ef5b4e35a1e55",
-      "inputPaths": [
-        "apps/web",
-        "packages",
-        "tests/fixtures/production-readiness-ui.tsx",
-        "tests/acceptance/production-readiness-browser.mjs",
-        "package.json",
-        "package-lock.json",
-        "tsconfig.base.json"
-      ],
-      "inputFingerprint": "1ba7fa22e6f206c226f4d4a4ee78acb5216b3fbe9758fed6110a1cfaae4341c9",
-      "sourceState": "Actual working candidate source/input fingerprints captured before command and declared inputs reverified after; testedHead is ancestor while git diff exists, not a claim of a committed tested Head",
-      "context": "Local Node 22.23.4; owned marked PG16 instance/low-privilege test role, explicit canonical workers; no claim of CI hardware equivalence or authenticated full-site acceptance",
-      "startedAt": "2026-11-02T03:32:15.902Z",
-      "endedAt": "2026-11-02T03:32:34.463Z",
-      "logSha256": "d4583a97204d69b6a1aa4c08dc18e7c219fa87b200eca939122442042d2a674b",
-      "log": "/workspace/dx-p08-recorded-batch-native-ui-1793590335903.log",
-      "passed": 14,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [],
-      "actualReportPaths": []
+      "id": "libfile_6956878d09848191abaf9ea04dfa66ef",
+      "sha256": "2d0ab684a96ae036564471fc64b23c06726ef79af8aa5b46f28f2f3e3ac84641"
     }
   ]
 }

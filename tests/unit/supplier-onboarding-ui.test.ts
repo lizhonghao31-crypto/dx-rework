@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it } from "vitest";
-import { canApproveSupplier, canRequestSupplier, canAccessSupplierMaintenance, supplierApplicationDraft, supplierApplicationPayload, supplierApplicationVersion } from "../../apps/web/src/supplier-onboarding-model.js";
+import { canApproveSupplier, canReadSupplierApplications, canRequestSupplier, canAccessSupplierMaintenance, supplierApplicationDraft, supplierApplicationPayload, supplierApplicationVersion } from "../../apps/web/src/supplier-onboarding-model.js";
 import { SupplierApplicationList, SupplierApplicationSnapshot, SupplierDuplicateCheck } from "../../apps/web/src/supplier-onboarding-page.js";
 import { SupplierProfileForm } from "../../apps/web/src/supplier-profile-form.js";
 import { SupplierCenterNavigation } from "../../apps/web/src/supplier-center-page.js";
@@ -9,6 +9,31 @@ import type { AuthorizedUser } from "../../apps/web/src/auth.js";
 import type { SupplierOnboardingDetail, SupplierOnboardingProfile, SupplierOnboardingSummary } from "@dx-rework/contracts/supplier-onboarding";
 const user = (role: string, capabilities: string[]): AuthorizedUser => ({ id: "fixture", displayName: "用户", businessRoles: [role], capabilities });
 const profile: SupplierOnboardingProfile = { supplierName: "合成申请供应商", supplierType: "factory", active: true, notes: "测试备注", contactPerson: "测试联系人", contactPhone: "020-00000000", address: "合成地址", payeeName: "测试收款人", bankAccount: "001234567890", bankName: "测试银行", supportedCrafts: ["车缝", "整烫"], dailyCapacity: 1000 };
+it("shows PMC application facts and return navigation without offering approval or resubmission", () => {
+  const pmc = user("pmc", ["supplier_onboarding:read"]);
+  expect(canReadSupplierApplications(pmc)).toBe(true);
+  expect(canReadSupplierApplications(user("pmc", []))).toBe(false);
+  expect(canReadSupplierApplications(user("worker", ["supplier_onboarding:read"]))).toBe(false);
+  expect(canApproveSupplier(pmc)).toBe(false);
+  expect(canRequestSupplier(pmc)).toBe(false);
+  expect(canAccessSupplierMaintenance(pmc)).toBe(false);
+  const rows: SupplierOnboardingSummary[] = ["pending_approval", "returned"].map((status, index) => ({
+    requestId: `00000000-0000-4000-8000-00000000000${index}`, applicantId: "fixture", applicantName: "申请人",
+    supplierName: profile.supplierName, supplierType: "factory", status: status as SupplierOnboardingSummary["status"],
+    version: index + 1, supplierId: null, createdAt: "2026-09-12T08:00:00Z", updatedAt: "2026-09-12T08:00:00Z",
+  }));
+  const html = renderToStaticMarkup(createElement(SupplierApplicationList, {
+    items: rows, reviewer: true, canApprove: false, returnTo: "ui/suppliers/requests?status=returned&q=合成",
+  }));
+  expect(html).toContain("申请人");
+  expect(html.match(/>查看<\/a>/g)).toHaveLength(2);
+  expect(html).not.toContain(">审批</a>");
+  expect(html).not.toContain("查看并修改");
+  expect(html).toContain("returnTo=ui%2Fsuppliers%2Frequests%3Fstatus%3Dreturned%26q%3D");
+  const mixed = { ...pmc, businessRoles: ["pmc", "production_management"], capabilities: [...pmc.capabilities, "supplier_onboarding:approve", "supplier_profile:write"] };
+  expect(canApproveSupplier(mixed)).toBe(true);
+  expect(canAccessSupplierMaintenance(mixed)).toBe(true);
+});
 it("allows only the two applicant roles and prioritizes direct maintenance for mixed roles", () => {
   for (const role of ["order_merchandiser", "embroidery_washing_merchandiser"]) {
     const applicant = user(role, ["supplier_onboarding:request"]);

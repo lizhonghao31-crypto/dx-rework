@@ -9,7 +9,7 @@ import type { DigitalDelegationSchema, DigitalResourceKind } from "@dx-rework/co
 import type { TrustedActorContext } from "../tools/repositories.js";
 import { isRootActor } from "../access/business-authority.js";
 import { ApplicationError } from "../platform/errors.js";
-import { DigitalProductionAccessPolicy, digitalForbidden, digitalNotFound, isDigitalLeader, isDigitalTechnicalManager } from "./access-policy.js";
+import { DigitalProductionAccessPolicy, digitalForbidden, digitalNotFound, isDigitalLeader, isDigitalManagementReader, isDigitalTechnicalManager } from "./access-policy.js";
 
 const conflict = (message: string): never => { throw new ApplicationError("DIGITAL_PRODUCTION_CONFLICT", message, 409); };
 export class DigitalProductionAccessService {
@@ -52,8 +52,8 @@ export class DigitalProductionAccessService {
     return (await client.query("SELECT bool_and(todo_user_has_direct_role($1,'order_merchandiser',capability)) AS eligible FROM unnest($2::text[]) required(capability)",[userId,required])).rows[0]?.eligible===true;
   }
   async candidates(actor: TrustedActorContext) {
-    if (!isDigitalLeader(actor) && !isDigitalTechnicalManager(actor) && !actor.actorRoles.includes("sample_designer") && !actor.actorRoles.includes("development_clerk")) digitalForbidden();
-    const roles = isDigitalLeader(actor) || isDigitalTechnicalManager(actor) ? null : actor.actorRoles.includes("development_clerk") ? ["development_clerk", "pattern_room_worker", "pattern_room_tail_inspector"] : ["order_merchandiser", "pattern_room_worker"];
+    if (!isDigitalManagementReader(actor) && !isDigitalTechnicalManager(actor) && !actor.actorRoles.includes("sample_designer") && !actor.actorRoles.includes("development_clerk")) digitalForbidden();
+    const roles = isDigitalManagementReader(actor) || isDigitalTechnicalManager(actor) ? null : actor.actorRoles.includes("development_clerk") ? ["development_clerk", "pattern_room_worker", "pattern_room_tail_inspector"] : ["order_merchandiser", "pattern_room_worker"];
     const memberPolicy=await hasMemberModulePolicy(this.database) ? "AND member_module_can_write(u.id,'sourcing') AND todo_user_has_direct_role(u.id,'order_merchandiser','sourcing:contract:record')" : "";
     return (await this.database.query(`SELECT u.id,u.display_name AS "displayName",array_agg(DISTINCT a.role_code) AS roles
       FROM app_users u JOIN user_role_assignments a ON a.user_id=u.id AND a.revoked_at IS NULL

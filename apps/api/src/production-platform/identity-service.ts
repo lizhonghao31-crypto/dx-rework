@@ -17,7 +17,7 @@ import type { DigitalCustomer, DigitalOrder, DigitalOrderInput, DigitalSource, D
 import { isRootActor } from "../access/business-authority.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
 import { ApplicationError } from "../platform/errors.js";
-import { DigitalProductionAccessPolicy, isDigitalLeader, isDigitalTechnicalManager, digitalForbidden } from "./access-policy.js";
+import { DigitalProductionAccessPolicy, isDigitalLeader, isDigitalManagementReader, isDigitalTechnicalManager, digitalForbidden } from "./access-policy.js";
 import { ProductionOrderRootRepository } from "./order-root-repository.js";
 import {ensureQuotationBudget} from './quotation-budget-basis.js';
 
@@ -33,7 +33,7 @@ export const digitalDateText = (value: Date | string | null) => value instanceof
     }).format(value)
   : value;
 export function assertIdentityActor(actor: TrustedActorContext): void {
-  if (!isRootActor(actor) && !actor.actorRoles.some(role => ["sample_designer", "order_merchandiser", "owner_group", "production_management", "pattern_room_supervisor", "development_clerk", "pattern_room_tail_inspector", "pattern_room_worker", "quality_control", "embroidery_washing_merchandiser", "warehouse_receiver", "warehouse_supervisor", "cutting_worker"].includes(role))) digitalForbidden();
+  if (!isRootActor(actor) && !actor.actorRoles.some(role => ["pmc", "sample_designer", "order_merchandiser", "owner_group", "production_management", "pattern_room_supervisor", "development_clerk", "pattern_room_tail_inspector", "pattern_room_worker", "quality_control", "embroidery_washing_merchandiser", "warehouse_receiver", "warehouse_supervisor", "cutting_worker"].includes(role))) digitalForbidden();
 }
 const assertCreator = (actor: TrustedActorContext) => {
   if (!isRootActor(actor) && (!actor.actorRoles.includes("sample_designer") || !(actor.authorizationCapabilities ?? []).includes("pattern_room:orders:create"))) digitalForbidden();
@@ -106,7 +106,7 @@ export class DigitalProductionIdentityService {
       s.temporary_style_no AS "temporaryStyleNo",s.customer_code AS "customerCode",s.created_by AS "createdBy",s.created_at AS "createdAt",o.production_order_id AS "productionOrderId"
       FROM digital_production_sources s LEFT JOIN digital_production_orders o ON o.source_id=s.source_id
       WHERE ${readScope("source", "s")} AND ($3='' OR strpos(lower(s.design_style_no),lower($3))>0)
-      AND ($6::boolean OR NOT $6::boolean) ORDER BY s.created_at DESC,s.source_id DESC LIMIT 15 OFFSET $4`, [isDigitalLeader(actor) || isDigitalTechnicalManager(actor), actor.actorId, search, (page - 1) * 15, actor.actorRoles.includes("sample_designer"), actor.actorRoles.includes("order_merchandiser")]);
+      AND ($6::boolean OR NOT $6::boolean) ORDER BY s.created_at DESC,s.source_id DESC LIMIT 15 OFFSET $4`, [isDigitalManagementReader(actor) || isDigitalTechnicalManager(actor), actor.actorId, search, (page - 1) * 15, actor.actorRoles.includes("sample_designer"), actor.actorRoles.includes("order_merchandiser")]);
     return { items: result.rows, page };
   }
   // Shared preflight for callers that persist tool state before native creation.
@@ -272,7 +272,7 @@ export class DigitalProductionIdentityService {
       WHERE ${readScope("order", "o")} AND ($3='' OR strpos(lower(design_style_no),lower($3))>0 OR strpos(lower(coalesce(temporary_style_no,'')),lower($3))>0
         OR EXISTS(SELECT 1 FROM digital_production_po_lines l WHERE l.production_order_id=o.production_order_id AND
           (strpos(lower(coalesce(l.formal_style_no,'')),lower($3))>0 OR strpos(lower(coalesce(l.po_number,'')),lower($3))>0)))
-      ORDER BY created_at DESC,production_order_id DESC LIMIT 15 OFFSET $4`, [isDigitalLeader(actor) || isDigitalTechnicalManager(actor), actor.actorId, search, (page - 1) * 15, actor.actorRoles.includes("sample_designer"), actor.actorRoles.includes("order_merchandiser"), actor.actorRoles.includes("development_clerk") && await new DigitalProductionAccessPolicy(this.database).activeRole(actor.actorId,"development_clerk")]);
+      ORDER BY created_at DESC,production_order_id DESC LIMIT 15 OFFSET $4`, [isDigitalManagementReader(actor) || isDigitalTechnicalManager(actor), actor.actorId, search, (page - 1) * 15, actor.actorRoles.includes("sample_designer"), actor.actorRoles.includes("order_merchandiser"), actor.actorRoles.includes("development_clerk") && await new DigitalProductionAccessPolicy(this.database).activeRole(actor.actorId,"development_clerk")]);
     return { items: await Promise.all(rows.rows.map(row => this.readWith(this.database, actor, row.production_order_id))), page };
   }
   async correctNumbers(actor: TrustedActorContext, id: string, lineId: string, input: DigitalNumberCorrection, key: string): Promise<DigitalOrder> {

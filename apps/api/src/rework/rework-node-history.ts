@@ -43,7 +43,7 @@ export function canReadReworkHistoryNode(actor: TrustedActorContext, node: Finan
  if (['process_configuration','ie_review','task_assignment'].includes(node)) return role('tail_supervisor') && has('process:configure') || role('ie_reviewer') && has('process:review');
  if (node === 'work_reporting') return role('tail_supervisor') && has('work:assign','work:assignment_adjust') || role('worker') && has('work:report','tail_inspection:report') || role('tail_inspector') && has('tail_inspection:report') || has('work:report_for_worker');
  if (['whole_order_review','final_quantity_ie_review','quantity_adjustment'].includes(node)) return has('submission:audit','quantity:adjust','quantity:confirm','process:review');
- if (['responsibility','owner_signature'].includes(node)) return has('responsibility:determine','responsibility:takeover','responsibility:confirm_high_multiplier','responsibility:owner_sign','rework:related_orders:view');
+ if (['responsibility','owner_signature'].includes(node)) return (role('pmc') && has('external_responsibility:view')) || has('responsibility:determine','responsibility:takeover','responsibility:confirm_high_multiplier','responsibility:owner_sign','rework:related_orders:view');
  return false; // Scoped supplier ledgers retain their existing dedicated reader.
 }
 export async function readReworkNodeHistory(db: Pool, actor: TrustedActorContext, detail: ReworkBusinessDetail, node: FinanceNodeKey, entryId?: string): Promise<ReworkNodeHistory> {

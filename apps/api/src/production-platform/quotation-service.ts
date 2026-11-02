@@ -18,9 +18,10 @@ type PriceSource={actorId:string;role:string;version:number;recordedAt:string};
 type QuoteRow={quote_id:string;source_id:string|null;production_order_id:string|null;version:number;confirmed_version:number|null;document:BudgetDocument;assignments:QuotationAssignment[];consumption_sources:Record<string,QuotationConsumptionSource>;price_sources:Record<string,PriceSource>};
 const conflict=(message:string,code='QUOTATION_CONFLICT'):never=>{throw new ApplicationError(code,message,409);};
 const enabledRoles=['sample_designer','order_merchandiser','pattern_room_worker','ie_reviewer','embroidery_washing_merchandiser','owner_group','production_management'];
+const readRoles=[...enabledRoles,'pmc'];
 export class DigitalQuotationService{
  constructor(private readonly database:Pool,private readonly creationEnabled:boolean){}
- private async context(db:Database,actor:TrustedActorContext,resource:QuotationResource){
+ private async context(db:Database,actor:TrustedActorContext,resource:QuotationResource,readOnly=false){
   if(!await acceptanceIncludesNative(this.database,resource.id))digitalNotFound();
   await acceptanceBusinessContext()?.assertScope(resource);
   const row=(await db.query(resource.kind==='order'?'SELECT * FROM digital_production_orders WHERE production_order_id=$1':'SELECT * FROM digital_production_sources WHERE source_id=$1',[resource.id])).rows[0]??digitalNotFound();
@@ -28,16 +29,16 @@ export class DigitalQuotationService{
   const sourceId=resource.kind==='source'?resource.id:row.source_id??null,orderId=order?.production_order_id??null;
   const quote=(await db.query('SELECT * FROM digital_quotation_documents WHERE production_order_id=$1 OR ($2::uuid IS NOT NULL AND source_id=$2)',[orderId,sourceId])).rows[0] as QuoteRow|undefined;
   const roles=new Set<string>();
-  if(!isRootActor(actor))for(const role of enabledRoles)if(actor.actorRoles.includes(role)&&await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,role))roles.add(role);
+  if(!isRootActor(actor))for(const role of (readOnly?readRoles:enabledRoles))if(actor.actorRoles.includes(role)&&await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,role))roles.add(role);
   const designer=roles.has('sample_designer')&&row.created_by===actor.actorId;
   const merch=roles.has('order_merchandiser')&&order?.primary_merchandiser_id===actor.actorId;
-  const full=isRootActor(actor)||designer||merch||roles.has('owner_group')||roles.has('production_management');
+  const full=isRootActor(actor)||designer||merch||roles.has('owner_group')||roles.has('production_management')||roles.has('pmc');
   const ownRow=(quote?.assignments??[]).some(a=>a.technicalAssigneeId===actor.actorId&&roles.has('pattern_room_worker')||a.priceAssigneeId===actor.actorId&&roles.has(a.priceRole));
   if(!full&&!ownRow)digitalNotFound();
   return {row,orderId,sourceId,quote,roles,full,customerCode:order?.customer_code??row.customer_code??null,structure:isRootActor(actor)||designer,confirm:isRootActor(actor)||designer||merch};
  }
  async read(actor:TrustedActorContext,resource:QuotationResource,db:Database=this.database,version?:number):Promise<QuotationSheet>{
-  const c=await this.context(db,actor,resource),q=c.quote;
+  const c=await this.context(db,actor,resource,true),q=c.quote;
   const snapshot=version===undefined?null:(await db.query('SELECT * FROM digital_quotation_versions WHERE quote_id=$1 AND version=$2',[q?.quote_id,version])).rows[0]??digitalNotFound();
   const doc=(snapshot?.document??q?.document) as BudgetDocument|undefined;
   const assignments=(snapshot?.assignments??q?.assignments??[]) as QuotationAssignment[];
@@ -73,13 +74,13 @@ export class DigitalQuotationService{
    budget:{state:!c.orderId?'waiting_formal_order':!q?.confirmed_version?'waiting_confirmation':!budget?'waiting_confirmation':!budget.quote_id?'legacy_published':budget.quote_id===q.quote_id&&budget.quote_version===q.confirmed_version?'created':'review_required',version:budget?.version??null}};
  }
  async list(actor:TrustedActorContext){
-  const active=new Set<string>();if(!isRootActor(actor))for(const role of enabledRoles)if(actor.actorRoles.includes(role)&&await new DigitalProductionAccessPolicy(this.database).activeRole(actor.actorId,role))active.add(role);
+  const active=new Set<string>();if(!isRootActor(actor))for(const role of readRoles)if(actor.actorRoles.includes(role)&&await new DigitalProductionAccessPolicy(this.database).activeRole(actor.actorId,role))active.add(role);
   // Resource names are projected only after scope checks; no all-order directory.
   const rows=(await this.database.query(`SELECT q.source_id,q.production_order_id FROM digital_quotation_documents q
    WHERE $1::boolean OR EXISTS(SELECT 1 FROM jsonb_array_elements(q.assignments) a WHERE ($5::boolean AND a->>'technicalAssigneeId'=$2::text) OR (a->>'priceAssigneeId'=$2::text AND a->>'priceRole'=ANY($6::text[])))
    OR EXISTS(SELECT 1 FROM digital_production_orders o WHERE o.production_order_id=q.production_order_id AND (($3::boolean AND o.created_by=$2::uuid) OR ($4::boolean AND o.primary_merchandiser_id=$2::uuid)))
    OR ($3::boolean AND EXISTS(SELECT 1 FROM digital_production_sources s WHERE s.source_id=q.source_id AND s.created_by=$2::uuid))
-   ORDER BY q.updated_at DESC LIMIT 100`,[isRootActor(actor)||active.has('owner_group')||active.has('production_management'),actor.actorId,active.has('sample_designer'),active.has('order_merchandiser'),active.has('pattern_room_worker'),[...active].filter(r=>['sample_designer','ie_reviewer','embroidery_washing_merchandiser'].includes(r))])).rows;
+   ORDER BY q.updated_at DESC LIMIT 100`,[isRootActor(actor)||active.has('owner_group')||active.has('production_management')||active.has('pmc'),actor.actorId,active.has('sample_designer'),active.has('order_merchandiser'),active.has('pattern_room_worker'),[...active].filter(r=>['sample_designer','ie_reviewer','embroidery_washing_merchandiser'].includes(r))])).rows;
   const items=[];
   for(const row of rows){const resource:QuotationResource=row.production_order_id?{kind:'order',id:row.production_order_id}:{kind:'source',id:row.source_id};if(!await acceptanceIncludesNative(this.database,resource.id))continue;try{const sheet=await this.read(actor,resource);items.push({resource,designStyleNo:sheet.designStyleNo,customerCode:sheet.customerCode,version:sheet.version,status:sheet.status});}catch(error){if(!(error instanceof ApplicationError&&error.statusCode===404))throw error;}}
   return {items};

@@ -13,6 +13,7 @@ export * from "./contract-management.js";
 export * from "./sourcing-style-identity.js";
 export * from "./cutting.js";
 export * from "./warehouse-access.js";
+export * from "./pmc-access.js";
 export * from "./samples.js";
 export * from "./sample-read.js";
 export * from "./sample-create.js";

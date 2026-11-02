@@ -133,6 +133,7 @@ const ROLE_LABELS: Readonly<Record<string, string>> = {
   owner_group: "老板",
   system_admin: "系统管理员",
   production_management: "供应链总监",
+  pmc: "PMC",
   development_clerk: "开发文员",
   pattern_room_worker: "板房师傅",
   pattern_room_supervisor: "技术主管",

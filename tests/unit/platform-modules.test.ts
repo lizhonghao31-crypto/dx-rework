@@ -1,12 +1,14 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
+import { PMC_READ_CAPABILITIES } from "@dx-rework/contracts";
 
 import type { AuthorizedUser } from "../../apps/web/src/auth.js";
-import { landingTarget } from "../../apps/web/src/landing-target.js";
+import { frontlineLandingTarget, landingTarget } from "../../apps/web/src/landing-target.js";
 import {
   accessiblePlatformModules,
   canAccessSourcing,
   canAccessDigitalProduction,
+  canAccessProductionReporting,
   PLATFORM_MODULE_QUERY,
   platformLandingTarget,
   platformModuleHref,
@@ -39,6 +41,32 @@ describe("thin platform module routing", () => {
     const office = user(["quality_control"], ["todo:view", "rework:initiate"]);
     expect(platformLandingTarget(office)).toBe(landingTarget(office));
     expect(platformLandingTarget(user(["production_management"], ["todo:view", "sourcing:view"]))).toBe("ui/my-tasks");
+  });
+
+  it("requires both the QC role and its new progress capability without granting native reporter access", () => {
+    const qc = user(["quality_control"], ["todo:view", "rework:initiate", "qc-production-progress"]);
+    expect(canAccessProductionReporting(qc)).toBe(true);
+    expect(accessiblePlatformModules(qc).map(module => module.id)).toContain("production");
+    expect(canAccessProductionReporting(user(["quality_control"], ["production-reporting"]))).toBe(false);
+    expect(canAccessProductionReporting(user(["quality_control"], []))).toBe(false);
+    expect(canAccessProductionReporting(user(["worker"], ["qc-production-progress"]))).toBe(false);
+    expect(canAccessProductionReporting(user(["production_reporter"], ["production-reporting"]))).toBe(true);
+    expect(canAccessProductionReporting(user(["quality_control", "production_reporter"], ["production-reporting"]))).toBe(true);
+  });
+
+  it("exposes PMC read modules and keeps additional genuine worker permissions separate", () => {
+    const pmc = user(["pmc"], PMC_READ_CAPABILITIES);
+    expect(canAccessDigitalProduction(pmc)).toBe(true);
+    expect(canAccessProductionReporting(pmc)).toBe(true);
+    expect(accessiblePlatformModules(pmc).map(module => module.id)).toEqual([
+      "sourcing", "cutting", "suppliers", "production", "pattern_room", "finance", "rework", "digital",
+    ]);
+    expect(platformLandingTarget(pmc)).toBe("ui/my-tasks");
+    const combined = user(["pmc", "worker"], [...PMC_READ_CAPABILITIES, "work:report"]);
+    expect(accessiblePlatformModules(combined).map(module => module.id)).toEqual(accessiblePlatformModules(pmc).map(module => module.id));
+    expect(frontlineLandingTarget(combined)).toBe("ui/frontline/tasks?kind=worker");
+    expect(frontlineLandingTarget(pmc)).toBeNull();
+    expect(accessiblePlatformModules(user(["worker"], ["todo:view", "work:report"])).map(module => module.id)).toEqual(["rework"]);
   });
 
   it("exposes digital navigation only to existing authorized roles", () => {

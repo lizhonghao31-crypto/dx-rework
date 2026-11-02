@@ -7,6 +7,9 @@ import { ApplicationError } from "../platform/errors.js";
 
 type Database = Pick<Pool | PoolClient, "query">;
 export const isDigitalLeader = (actor: TrustedActorContext) => isRootActor(actor) || actor.actorRoles.some(role => ["owner_group", "production_management"].includes(role));
+// Read range only, from the authenticated server role snapshot. Never use this
+// predicate for assignment, execution, correction or other management commands.
+export const isDigitalManagementReader = (actor: TrustedActorContext) => isDigitalLeader(actor) || actor.actorRoles.includes("pmc");
 export const isDigitalTechnicalManager = (actor: TrustedActorContext) => actor.actorRoles.includes("pattern_room_supervisor");
 export const digitalForbidden = (): never => { throw new ApplicationError("FORBIDDEN", "无权访问该数字生产资料或执行此操作", 403); };
 export const digitalNotFound = (): never => { throw new ApplicationError("NOT_FOUND", "资料不存在或不在授权范围", 404); };
@@ -39,7 +42,7 @@ export class DigitalProductionAccessPolicy {
       if (purpose === "budget") return false;
       if (purpose === "execute") return await this.activeRole(actor.actorId, task.required_role)
         && task.assignee_id === actor.actorId;
-      return isDigitalLeader(actor) || isDigitalTechnicalManager(actor) || (actor.actorRoles.includes("development_clerk") && task.task_kind.startsWith("development_")) || (task.assignee_id === actor.actorId && await this.activeRole(actor.actorId, task.required_role))
+      return isDigitalManagementReader(actor) || isDigitalTechnicalManager(actor) || (actor.actorRoles.includes("development_clerk") && task.task_kind.startsWith("development_")) || (task.assignee_id === actor.actorId && await this.activeRole(actor.actorId, task.required_role))
         || await this.resourceAllowed(actor, task.production_order_id ? "order" : "source", task.production_order_id ?? task.source_id, "technical", false);
     }
     return this.resourceAllowed(actor, kind, id, purpose, true);
@@ -50,7 +53,7 @@ export class DigitalProductionAccessPolicy {
     const column = kind === "order" ? "production_order_id" : "source_id";
     const row = (await this.database.query(`SELECT * FROM ${table} WHERE ${column}=$1`, [id])).rows[0];
     if (!row) return false;
-    if (isDigitalLeader(actor)) return true;
+    if (isDigitalManagementReader(actor)) return true;
     if (purpose === "technical" && isDigitalTechnicalManager(actor)) return true;
     if(kind==="source"&&purpose==="technical"&&actor.actorRoles.includes("order_merchandiser")&&await this.activeRole(actor.actorId,"order_merchandiser")){
       if((await this.database.query("SELECT 1 FROM digital_production_orders WHERE source_id=$1 AND primary_merchandiser_id=$2",[id,actor.actorId])).rowCount)return true;

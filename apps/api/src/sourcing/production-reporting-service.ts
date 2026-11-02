@@ -23,7 +23,7 @@ export const isProductionReporter = (actor: TrustedActorContext) => isRoot(actor
   || (actor.actorRoles.includes("production_reporter") && (actor.authorizationCapabilities ?? [actor.authorizationCapability]).includes(CAP));
 const isQcReader=(actor:TrustedActorContext)=>actor.actorRoles.includes('quality_control')&&(actor.authorizationCapabilities??[actor.authorizationCapability]).includes(QC_PROGRESS_CAPABILITY);
 const manager = (actor: TrustedActorContext) => isRoot(actor) ||
-  (actor.actorRoles.some((role) => ["owner_group", "production_management", "finance_director", "finance_read"].includes(role))
+  (actor.actorRoles.some((role) => ["owner_group", "production_management", "pmc", "finance_director", "finance_read"].includes(role))
     && (actor.authorizationCapabilities ?? [actor.authorizationCapability]).includes("sourcing:view"));
 const canRead = (actor: TrustedActorContext) => manager(actor) || isProductionReporter(actor) || isQcReader(actor)
   || (actor.actorRoles.includes("order_merchandiser") && (actor.authorizationCapabilities ?? [actor.authorizationCapability]).includes("sourcing:view"));

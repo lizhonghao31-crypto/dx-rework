@@ -1,7 +1,8 @@
+import { PMC_READ_CAPABILITIES } from "@dx-rework/contracts";
 import type { AuthorizedUser } from "./auth.js";
 import { accessiblePlatformModules } from "./platform-modules.js";
 
-export type AcceptanceModuleId = "rework" | "sourcing" | "suppliers" | "production" | "samples" | "finance" | "pattern_room";
+export type AcceptanceModuleId = "rework" | "sourcing" | "suppliers" | "production" | "samples" | "finance" | "pattern_room" | "digital" | "cutting";
 export type AcceptanceMatrixVerdict = "pass" | "fail" | "pending";
 export type AcceptanceRuleStatus = "approved" | "pending" | "unmapped" | "infrastructure";
 
@@ -229,16 +230,19 @@ const EXISTING_ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
   {
     alias: "qc",
     expectedRole: "quality_control",
-    requiredCapabilities: ["rework:initiate"],
-    forbiddenCapabilities: ["sourcing:view", "sample:view_basic", "access:admin"],
-    allowedModules: ["rework"],
-    forbiddenModules: ["sourcing", "suppliers", "production", "samples"],
-    probes: [accessRolesDeny, sourcingDeny, suppliersDeny, productionDashboardDeny, samplesDeny],
+    requiredCapabilities: ["rework:initiate", "qc-production-progress"],
+    forbiddenCapabilities: ["sourcing:view", "sample:view_basic", "access:admin", "production-reporting"],
+    allowedModules: ["rework", "production"],
+    forbiddenModules: ["sourcing", "suppliers", "samples"],
+    probes: [accessRolesDeny, sourcingDeny, suppliersDeny, productionDashboardAllow, samplesDeny],
     ruleRefs: {
       ...approvedKeys("PERM-ROLE-QC-001", [
         "cap:rework:initiate:allow", "cap:sourcing:view:deny", "cap:sample:view_basic:deny", "cap:access:admin:deny",
-        "module:rework:allow", "module:sourcing:deny", "module:production:deny", "module:samples:deny",
-        "http:sourcing-list", "http:production-dashboard", "http:sample-list",
+        "module:rework:allow", "module:sourcing:deny", "module:samples:deny",
+        "http:sourcing-list", "http:sample-list",
+      ]),
+      ...approvedKeys("PERM-ROLE-QC-PROGRESS-20261101", [
+        "cap:qc-production-progress:allow", "cap:production-reporting:deny", "module:production:allow", "http:production-dashboard",
       ]),
       "module:suppliers:deny": approved("PERM-SUPPLIER-QC-001"),
       "http:supplier-list": approved("PERM-SUPPLIER-QC-001"),
@@ -557,7 +561,7 @@ const patternOrderRoles: Record<string, readonly string[]> = {
   "pattern_room:orders:cancel": ["sample_designer", "order_merchandiser", "pattern_room_supervisor"], "pattern_room:orders:cancel_fees": ["sample_designer"],
 };
 
-export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = EXISTING_ACCEPTANCE_ROLE_MATRIX.map(entry => {
+const LEGACY_ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = EXISTING_ACCEPTANCE_ROLE_MATRIX.map(entry => {
   const finance = ["root", "owner", "production-management", "finance-director", "finance-read", "wage-month-close-accountant"].includes(entry.alias);
   const mark = ["root", "finance-director", "finance-read", "wage-month-close-accountant"].includes(entry.alias);
   const readCaps = ["wage:view", "wage:export"];
@@ -639,6 +643,40 @@ export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = EXIS
     ruleRefs:{...entry.ruleRefs,...approvedKeys("PERM-RECEIVING-DIFFERENCE-20260916",[...required.map(cap=>`cap:${cap}:allow`),...forbidden.map(cap=>`cap:${cap}:deny`)])}};
 });
 
+const pmcForbiddenCapabilities = [
+  "access:admin", "tools:user", "work:report", "sourcing:inquiry:create", "sourcing:price:quote",
+  "sourcing:decision:record", "sourcing:owner:approve", "sourcing:finance:reconcile", "sourcing:factory_change:request",
+  "production-reporting", "qc-production-progress", "supplier_profile:write", "supplier_onboarding:request",
+  "supplier_onboarding:approve", "receiving:create", "receiving:resolve_difference", "receiving:packing_manage",
+  "pattern_room:orders:create", "pattern_room:orders:assign", "pattern_room:orders:complete", "pattern_room:prices:write",
+  "pattern_room:hourly:write", "wage:settlement_mark", "sample:view_basic",
+];
+const pmcModules: readonly AcceptanceModuleId[] = ["rework", "sourcing", "suppliers", "production", "finance", "pattern_room", "digital", "cutting"];
+const pmcProbes = [
+  accessRolesDeny, sourcingAllow, suppliersAllow, productionDashboardAllow, samplesDeny,
+  probe("digital-cockpit", "数字平台只读看板", "digital-production/cockpit?stage=bulk", 200),
+  probe("pattern-room-orders", "板房订单读取", "pattern-room/orders", 200),
+  probe("pattern-room-prices", "板房价格读取", "pattern-room/prices", 200),
+  probe("finance-wages", "工资查询", "management/reports/wages", 200),
+  probe("finance-wage-marker", "工资已结清权限", "management/wages/settlement-preview", 403),
+];
+
+// PMC has its own approved read contract; legacy role expansion must not turn its reads into denials.
+export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
+  ...LEGACY_ACCEPTANCE_ROLE_MATRIX,
+  {
+    alias: "pmc", expectedRole: "pmc", requiredCapabilities: PMC_READ_CAPABILITIES,
+    forbiddenCapabilities: pmcForbiddenCapabilities, allowedModules: pmcModules, forbiddenModules: ["samples"],
+    probes: pmcProbes,
+    ruleRefs: approvedKeys("PERM-ROLE-PMC-20261031", [
+      ...PMC_READ_CAPABILITIES.map(capability => `cap:${capability}:allow`),
+      ...pmcForbiddenCapabilities.map(capability => `cap:${capability}:deny`),
+      ...pmcModules.map(module => `module:${module}:allow`), "module:samples:deny",
+      ...pmcProbes.map(entry => `http:${entry.id}`),
+    ]),
+  },
+];
+
 
 const ruleFor = (expectation: AcceptanceRoleExpectation, key: string): AcceptanceRuleRef =>
   expectation.ruleRefs?.[key] ?? UNMAPPED_BUSINESS_RULE;
@@ -670,10 +708,16 @@ export function expectationForAlias(alias: string): AcceptanceRoleExpectation | 
 
 export function evaluateAcceptanceSnapshot(
   expectation: AcceptanceRoleExpectation,
-  identity: AcceptanceIdentitySnapshot,
-  user: AuthorizedUser,
+  identity: AcceptanceIdentitySnapshot | undefined,
+  user: AuthorizedUser | undefined,
 ): AcceptanceMatrixCheck[] {
   const checks: AcceptanceMatrixCheck[] = [];
+  if (!identity) return [check(`${expectation.alias}:identity-missing`, "identity", "标准验收身份", "存在", "缺失", false, ACCEPTANCE_INFRASTRUCTURE_RULE)];
+  if (!user) return [check(`${expectation.alias}:session-missing`, "session", "业务 Session 用户", identity.userId || "有效用户", "缺失", false, ACCEPTANCE_INFRASTRUCTURE_RULE)];
+  checks.push(check(
+    `${expectation.alias}:identity-alias`, "identity", "验收身份别名", expectation.alias, identity.alias || "缺失",
+    identity.alias === expectation.alias, ACCEPTANCE_INFRASTRUCTURE_RULE,
+  ));
   const identityRoles = [...identity.roleCodes].sort();
   const sessionRoles = [...(user.businessRoles ?? [])].sort();
   checks.push(check(
@@ -691,7 +735,7 @@ export function evaluateAcceptanceSnapshot(
     "业务 Session 用户",
     identity.userId,
     user.id,
-    user.id === identity.userId,
+    typeof user.id === "string" && user.id.trim().length > 0 && user.id === identity.userId,
     ACCEPTANCE_INFRASTRUCTURE_RULE,
   ));
   checks.push(check(
@@ -770,7 +814,7 @@ export function evaluateAcceptanceSnapshot(
 export function evaluateHttpProbe(
   expectationOrAlias: AcceptanceRoleExpectation | string,
   probeDefinition: AcceptanceHttpProbe,
-  actualStatus: number,
+  actualStatus: number | null,
 ): AcceptanceMatrixCheck {
   const alias = typeof expectationOrAlias === "string" ? expectationOrAlias : expectationOrAlias.alias;
   const rule = probeDefinition.infrastructure
@@ -783,7 +827,7 @@ export function evaluateHttpProbe(
     "http",
     probeDefinition.label,
     `HTTP ${probeDefinition.expectedStatus}`,
-    `HTTP ${actualStatus}`,
+    actualStatus === null ? "未执行" : `HTTP ${actualStatus}`,
     actualStatus === probeDefinition.expectedStatus,
     rule,
   );
