@@ -42,7 +42,7 @@ window.fetch=async(input,init)=>{
  if(path.endsWith('/access/options'))return send({manage:false,customers:false});
  if(path==='digital-production/journeys')return send({ruleVersion:'journey-v2.0',asOf:now,page:1,pageSize:15,total:2,scopeCounts:{production:2,development:0,cancelled:0},summary:{all:2,active:2,notStarted:0,dueSoon:0,overdue:0,blocked:0,completed:0},items:[frame,other]});
  if(path.startsWith('digital-production/journeys/'))return send(path.endsWith(id(11))?other:frame);
- const oid=path.match(/orders\/([^/]+)/)?.[1]??order,sid=path.match(/sources\/([^/]+)/)?.[1]??(oid===id(12)?id(11):source),line=oid===id(12)?id(15):id(5),round=Number(url.searchParams.get('roundNumber')??url.searchParams.get('round')??1),scope='整款';
+ const oid=path.match(/orders\/([^/]+)/)?.[1]??order,sid=path.match(/sources\/([^/]+)/)?.[1]??(oid===id(12)?id(11):source),line=oid===id(12)?id(15):id(5),round=Number(url.searchParams.get('roundNumber')??url.searchParams.get('round')??1),scope=url.searchParams.get('scopeRef')??'整款';
  if(path.endsWith('/series-plan'))return send({orderId:oid,sourceId:sid,serverToday:'2026-11-02',orderVersion:1,canApply:true,canRequest:true,canEditSeries:false,active:true,salesYear:2027,salesSeries:'P05',requiresColorMatching:true,profile:{customerCode:null,version:0,monthOffset:-2,shippingDay:null,suggestionDay:15,configured:false},current:null,history:[],facts:[],risks:[],pendingRequests:[],customerDates:[{lineId:line,poNumber:'TEST-PO-01',color:'藏蓝',date:'2027-03-15',version:1}]});
  control.active++;control.peak=Math.max(control.peak,control.active);try{
  await new Promise(r=>setTimeout(r,mode==='slow'?180:8));

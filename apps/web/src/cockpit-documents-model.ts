@@ -108,9 +108,11 @@ export async function loadCockpitDirectoryPages(order:OrderJourney,key:CockpitDo
  * run at once; category and version readers share it, without caching denials. */
 export function createCockpitDocumentSnapshot(order:OrderJourney,reader:CockpitDocumentReader,isCurrent:()=>boolean=()=>true){
  const snapshotOrder=structuredClone(order);
- const controller=new AbortController(),cache=new Map<string,Promise<unknown>>(),listeners=new Set<()=>void>(),queue:Array<{start:()=>void;reject:(reason:Error)=>void}>=[];
+ const controller=new AbortController(),cache=new Map<string,Promise<unknown>>(),loadedEntries=new Map<string,CockpitDocumentEntry>(),listeners=new Set<()=>void>(),queue:Array<{start:()=>void;reject:(reason:Error)=>void}>=[];
  let active=0,disposed=false,states=emptyCockpitDirectoryStates();
  const live=()=>!disposed&&!controller.signal.aborted&&isCurrent();
+ const entryKey=(entry:CockpitDocumentEntry)=>entry.load?JSON.stringify([entry.id,entry.load]):null;
+ const enrich=(entries:CockpitDocumentEntry[]):CockpitDocumentEntry[]=>entries.map(entry=>{const key=entryKey(entry),loaded=key?loadedEntries.get(key):undefined,current=loaded??entry;return current.children?{...current,children:enrich(current.children)}:current;});
  const emit=()=>{for(const listener of listeners)listener();};
  const update=(key:CockpitDocumentCategory,state:CockpitDirectoryState)=>{if(live()){states={...states,[key]:state};emit();}};
  const pump=()=>{while(live()&&active<3&&queue.length)queue.shift()!.start();};
@@ -129,10 +131,15 @@ export function createCockpitDocumentSnapshot(order:OrderJourney,reader:CockpitD
   const prior=more?states[key].data:states[key].resume;
   if(more&&!prior?.nextPage)return;
   update(key,{phase:'loading',...(prior?{data:prior}:{})});
-  try{const data=await validated(tracked=>loadCockpitDirectoryPages(snapshotOrder,key,tracked,controller.signal,3,prior));update(key,{phase:'ready',data});}
+  try{const data=await validated(tracked=>loadCockpitDirectoryPages(snapshotOrder,key,tracked,controller.signal,3,prior));update(key,{phase:'ready',data:{...data,entries:enrich(data.entries)}});}
   catch(error){if(!live()||(error as Error).name==='AbortError')return;const status=(error as {status?:number}).status,denied=status===401||status===403;
    update(key,{phase:'error',denied,error:denied?'当前身份无权读取此类资料；未确认是否已创建。':status===404?'资料不存在或不在授权范围，无法确认是否已创建。':error instanceof Error?error.message:'目录读取失败，暂未确认原因；请重试，仍失败请管理员核对接口。',...(![401,403,404].includes(status??0)&&prior?{resume:prior}:{})});}
  };
- return {read,load,loadEntry:(entry:CockpitDocumentEntry,signal:AbortSignal)=>validated(tracked=>loadCockpitDocumentEntry(entry,tracked,signal)),start:()=>{for(const category of COCKPIT_DOCUMENT_CATEGORIES)if(states[category.key].phase==='idle')void load(category.key);},getSnapshot:()=>states,subscribe:(listener:()=>void)=>{listeners.add(listener);return()=>{listeners.delete(listener);};},dispose:()=>{if(disposed)return;disposed=true;controller.abort();for(const job of queue.splice(0))job.reject(cancelledDirectoryRead());cache.clear();states=emptyCockpitDirectoryStates();emit();listeners.clear();}};
+ const loadEntry=async(entry:CockpitDocumentEntry,signal:AbortSignal)=>{
+  const value=await validated(tracked=>loadCockpitDocumentEntry(entry,tracked,signal));if(!live()||signal.aborted)throw cancelledDirectoryRead();
+  const key=entryKey(entry);if(key){loadedEntries.set(key,value);states=Object.fromEntries(Object.entries(states).map(([category,state])=>[category,state.data?{...state,data:{...state.data,entries:enrich(state.data.entries)}}:state])) as CockpitDirectoryStates;emit();}
+  return value;
+ };
+ return {read,load,loadEntry,start:()=>{for(const category of COCKPIT_DOCUMENT_CATEGORIES)if(states[category.key].phase==='idle')void load(category.key);},getSnapshot:()=>states,subscribe:(listener:()=>void)=>{listeners.add(listener);return()=>{listeners.delete(listener);};},dispose:()=>{if(disposed)return;disposed=true;controller.abort();for(const job of queue.splice(0))job.reject(cancelledDirectoryRead());cache.clear();loadedEntries.clear();states=emptyCockpitDirectoryStates();emit();listeners.clear();}};
 }
 export type CockpitDocumentSnapshot=ReturnType<typeof createCockpitDocumentSnapshot>;

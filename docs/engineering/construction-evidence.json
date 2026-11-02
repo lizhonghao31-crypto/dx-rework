@@ -2,7 +2,7 @@
   "version": 1,
   "base": "7ad6d990d523eb82eba5563981aa525156340633",
   "risk": "full",
-  "sourceFingerprint": "799e3769ec1c91e7730b10f174e0d99ae06e97c1f484599bdbe36cb012b1adfb",
+  "sourceFingerprint": "a0901c9ed9f6c318c387207107f912e008e692e2c3e50e00a8e8c2767ee6a11e",
   "rules": [
     {
       "rule": "Original domain read scope, cursor and exact adopted revision",
@@ -13,10 +13,10 @@
         "apps/api/src/production-platform/development-technical-service.ts",
         "apps/api/src/production-platform/order-closure-routes.ts",
         "apps/api/src/production-platform/order-closure-service.ts",
+        "apps/api/src/production-platform/order-document-history.ts",
         "apps/api/src/production-platform/production-readiness-service.ts",
         "apps/api/src/receiving/receiving-document-history.ts",
-        "packages/contracts/src/production-readiness.ts",
-        "apps/api/src/production-platform/order-document-history.ts"
+        "packages/contracts/src/production-readiness.ts"
       ],
       "reads": [
         "apps/api/src/production-platform/access-policy.ts",
@@ -41,18 +41,18 @@
     {
       "rule": "Ten fixed priority classes and twenty original categories cover twenty-six sources",
       "writes": [
-        "apps/web/src/cockpit-documents-model.ts",
-        "apps/web/src/cockpit-documents.css",
-        "apps/web/src/cockpit-documents.tsx",
-        "tests/unit/cockpit-document-directory.test.ts",
-        "tests/unit/cockpit-document-snapshot.test.ts",
         "apps/web/src/cockpit-document-catalog.ts",
         "apps/web/src/cockpit-document-data.ts",
         "apps/web/src/cockpit-document-presentation.ts",
         "apps/web/src/cockpit-documents-extended.ts",
+        "apps/web/src/cockpit-documents-model.ts",
         "apps/web/src/cockpit-documents-production.ts",
         "apps/web/src/cockpit-documents-technical.ts",
-        "tests/unit/cockpit-document-new-sources.test.ts"
+        "apps/web/src/cockpit-documents.css",
+        "apps/web/src/cockpit-documents.tsx",
+        "tests/unit/cockpit-document-directory.test.ts",
+        "tests/unit/cockpit-document-new-sources.test.ts",
+        "tests/unit/cockpit-document-snapshot.test.ts"
       ],
       "reads": [
         "apps/api/src/production-platform/qc-production-progress-service.ts",
@@ -81,9 +81,9 @@
         "apps/web/src/digital-cockpit-page.tsx",
         "apps/web/src/digital-journey-cockpit-model.ts",
         "apps/web/src/digital-quotation-panel.tsx",
+        "apps/web/src/quotation-history-route.ts",
         "packages/contracts/src/digital-production-journey.ts",
-        "tests/unit/digital-journey-cockpit.test.ts",
-        "apps/web/src/quotation-history-route.ts"
+        "tests/unit/digital-journey-cockpit.test.ts"
       ],
       "reads": [
         "apps/web/src/cockpit-detail.tsx",
@@ -111,12 +111,12 @@
       "rule": "Source fixture and old direct reader compatibility with real resource lifecycle",
       "writes": [
         "tests/acceptance/cockpit-document-snapshot-browser.mjs",
+        "tests/acceptance/cockpit-production-directory-browser.mjs",
+        "tests/fixtures/cockpit-document-production-page.tsx",
         "tests/fixtures/production-readiness-ui.tsx",
         "tests/integration/development-technical-postgres.test.ts",
         "tests/integration/digital-development-postgres.test.ts",
-        "tests/integration/production-readiness-postgres.test.ts",
-        "tests/acceptance/cockpit-production-directory-browser.mjs",
-        "tests/fixtures/cockpit-document-production-page.tsx"
+        "tests/integration/production-readiness-postgres.test.ts"
       ],
       "reads": [
         "scripts/test-suite-plan.mjs",
@@ -217,29 +217,32 @@
       "command": "[\"node\",\"node_modules/vitest/vitest.mjs\",\"run\",\"tests/unit/auth-session-entry.test.ts\",\"tests/unit/cockpit-detail.test.ts\",\"tests/unit/cockpit-document-directory.test.ts\",\"tests/unit/cockpit-document-new-sources.test.ts\",\"tests/unit/cockpit-document-snapshot.test.ts\",\"tests/unit/cockpit-home.test.ts\",\"tests/unit/digital-detail-route.test.ts\",\"tests/unit/digital-journey-cockpit.test.ts\"]",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "7ad6d990d523eb82eba5563981aa525156340633",
-      "sourceFingerprint": "799e3769ec1c91e7730b10f174e0d99ae06e97c1f484599bdbe36cb012b1adfb",
+      "testedHead": "b2ba335fa1d072fa68a5f77961ea8a38814347bc",
+      "sourceFingerprint": "a0901c9ed9f6c318c387207107f912e008e692e2c3e50e00a8e8c2767ee6a11e",
       "inputPaths": [
-        "apps",
+        "apps/web",
         "packages",
-        "tests",
-        "scripts",
+        "tests/unit/auth-session-entry.test.ts",
+        "tests/unit/cockpit-detail.test.ts",
+        "tests/unit/cockpit-document-directory.test.ts",
+        "tests/unit/cockpit-document-new-sources.test.ts",
+        "tests/unit/cockpit-document-snapshot.test.ts",
+        "tests/unit/cockpit-home.test.ts",
+        "tests/unit/digital-detail-route.test.ts",
+        "tests/unit/digital-journey-cockpit.test.ts",
         "package.json",
         "package-lock.json",
         "tsconfig.base.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts",
-        "vitest.postgres-immediate.config.ts",
-        "eslint.config.js"
+        "vitest.config.ts"
       ],
-      "inputFingerprint": "0ad9e820324e83c2289889db907e83cad1e86aea35f8a0dd21cf9e306028832a",
+      "inputFingerprint": "bdbbacf267b61b200dd1e8b8175dfd41478e25dd16bbaf433f7569a861ec06b9",
       "sourceState": "Actual working candidate source/input fingerprints captured before command and declared inputs reverified after; testedHead is ancestor while git diff exists, not a claim of a committed tested Head",
       "context": "Local Node 22.23.4; owned marked PG16 instance/low-privilege test role, explicit canonical workers; no claim of CI hardware equivalence or authenticated full-site acceptance",
-      "startedAt": "2026-11-02T00:57:39.853Z",
-      "endedAt": "2026-11-02T00:57:48.628Z",
-      "logSha256": "8c20adbffce8862b2a8e870c557f9eabdbc9887381eec2545838c205fb0c7df3",
-      "log": "/workspace/dx-p07-recorded-frozen-related-unit-1793581059853.log",
-      "passed": 137,
+      "startedAt": "2026-11-02T01:07:06.105Z",
+      "endedAt": "2026-11-02T01:07:13.390Z",
+      "logSha256": "8dddeea680cb657377aeb2ce87a16957059e382a0bf3490a6320e20f896b1cf2",
+      "log": "/workspace/dx-p07-recorded-frozen-related-unit-1793581626105.log",
+      "passed": 141,
       "failed": 0,
       "skipped": 0
     },
@@ -249,28 +252,25 @@
       "command": "[\"node\",\"tests/acceptance/cockpit-document-snapshot-browser.mjs\"]",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "7ad6d990d523eb82eba5563981aa525156340633",
-      "sourceFingerprint": "799e3769ec1c91e7730b10f174e0d99ae06e97c1f484599bdbe36cb012b1adfb",
+      "testedHead": "b2ba335fa1d072fa68a5f77961ea8a38814347bc",
+      "sourceFingerprint": "a0901c9ed9f6c318c387207107f912e008e692e2c3e50e00a8e8c2767ee6a11e",
       "inputPaths": [
-        "apps",
+        "apps/web",
         "packages",
-        "tests",
-        "scripts",
+        "tests/acceptance/cockpit-production-directory-browser.mjs",
+        "tests/acceptance/cockpit-document-snapshot-browser.mjs",
+        "tests/fixtures/cockpit-document-production-page.tsx",
         "package.json",
         "package-lock.json",
-        "tsconfig.base.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts",
-        "vitest.postgres-immediate.config.ts",
-        "eslint.config.js"
+        "tsconfig.base.json"
       ],
-      "inputFingerprint": "0ad9e820324e83c2289889db907e83cad1e86aea35f8a0dd21cf9e306028832a",
+      "inputFingerprint": "0cb250e0c90789eaffd7364b57b682bb68d91d512c85a53dad9d1e780178c2ed",
       "sourceState": "Actual working candidate source/input fingerprints captured before command and declared inputs reverified after; testedHead is ancestor while git diff exists, not a claim of a committed tested Head",
       "context": "Local Node 22.23.4; owned marked PG16 instance/low-privilege test role, explicit canonical workers; no claim of CI hardware equivalence or authenticated full-site acceptance",
-      "startedAt": "2026-11-02T00:57:39.971Z",
-      "endedAt": "2026-11-02T00:58:14.420Z",
+      "startedAt": "2026-11-02T01:07:06.078Z",
+      "endedAt": "2026-11-02T01:07:38.594Z",
       "logSha256": "67e83478f473b46c00d2f89235cc14ffd011d5bb701fdc71890645fac0928d00",
-      "log": "/workspace/dx-p07-recorded-frozen-browser-1793581059971.log"
+      "log": "/workspace/dx-p07-recorded-frozen-browser-1793581626078.log"
     },
     {
       "id": "frozen-lint",
@@ -278,8 +278,8 @@
       "command": "[\"npm\",\"run\",\"lint\"]",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "7ad6d990d523eb82eba5563981aa525156340633",
-      "sourceFingerprint": "799e3769ec1c91e7730b10f174e0d99ae06e97c1f484599bdbe36cb012b1adfb",
+      "testedHead": "b2ba335fa1d072fa68a5f77961ea8a38814347bc",
+      "sourceFingerprint": "a0901c9ed9f6c318c387207107f912e008e692e2c3e50e00a8e8c2767ee6a11e",
       "inputPaths": [
         "apps",
         "packages",
@@ -293,13 +293,13 @@
         "vitest.postgres-immediate.config.ts",
         "eslint.config.js"
       ],
-      "inputFingerprint": "0ad9e820324e83c2289889db907e83cad1e86aea35f8a0dd21cf9e306028832a",
+      "inputFingerprint": "99a854c2b6e750bc0f20758231bb6dd4ebabbe7d87cac7359d59a293744dfc03",
       "sourceState": "Actual working candidate source/input fingerprints captured before command and declared inputs reverified after; testedHead is ancestor while git diff exists, not a claim of a committed tested Head",
       "context": "Local Node 22.23.4; owned marked PG16 instance/low-privilege test role, explicit canonical workers; no claim of CI hardware equivalence or authenticated full-site acceptance",
-      "startedAt": "2026-11-02T00:57:39.878Z",
-      "endedAt": "2026-11-02T00:58:16.848Z",
+      "startedAt": "2026-11-02T01:07:06.171Z",
+      "endedAt": "2026-11-02T01:07:41.247Z",
       "logSha256": "dac45e9202dd0400da69a080ea51bda187f66d2c3344db6291f4d82e1077d00f",
-      "log": "/workspace/dx-p07-recorded-frozen-lint-1793581059879.log"
+      "log": "/workspace/dx-p07-recorded-frozen-lint-1793581626172.log"
     },
     {
       "id": "frozen-typecheck",
@@ -307,28 +307,22 @@
       "command": "[\"npm\",\"run\",\"typecheck\"]",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "7ad6d990d523eb82eba5563981aa525156340633",
-      "sourceFingerprint": "799e3769ec1c91e7730b10f174e0d99ae06e97c1f484599bdbe36cb012b1adfb",
+      "testedHead": "b2ba335fa1d072fa68a5f77961ea8a38814347bc",
+      "sourceFingerprint": "a0901c9ed9f6c318c387207107f912e008e692e2c3e50e00a8e8c2767ee6a11e",
       "inputPaths": [
         "apps",
         "packages",
-        "tests",
-        "scripts",
         "package.json",
         "package-lock.json",
-        "tsconfig.base.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts",
-        "vitest.postgres-immediate.config.ts",
-        "eslint.config.js"
+        "tsconfig.base.json"
       ],
-      "inputFingerprint": "0ad9e820324e83c2289889db907e83cad1e86aea35f8a0dd21cf9e306028832a",
+      "inputFingerprint": "4c42066058a8dc1ace17fc9472d0b97a5773f6660722fb630d3d4457e28d8164",
       "sourceState": "Actual working candidate source/input fingerprints captured before command and declared inputs reverified after; testedHead is ancestor while git diff exists, not a claim of a committed tested Head",
       "context": "Local Node 22.23.4; owned marked PG16 instance/low-privilege test role, explicit canonical workers; no claim of CI hardware equivalence or authenticated full-site acceptance",
-      "startedAt": "2026-11-02T00:57:39.879Z",
-      "endedAt": "2026-11-02T00:58:31.188Z",
+      "startedAt": "2026-11-02T01:07:06.113Z",
+      "endedAt": "2026-11-02T01:07:55.491Z",
       "logSha256": "17a1a9d0ac31b5d9d7936a4292ac25eb7c62c2b270726b898476448810a0f5c6",
-      "log": "/workspace/dx-p07-recorded-frozen-typecheck-1793581059879.log"
+      "log": "/workspace/dx-p07-recorded-frozen-typecheck-1793581626113.log"
     },
     {
       "id": "frozen-preflight",
@@ -336,8 +330,8 @@
       "command": "[\"npm\",\"run\",\"test:preflight\"]",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "7ad6d990d523eb82eba5563981aa525156340633",
-      "sourceFingerprint": "799e3769ec1c91e7730b10f174e0d99ae06e97c1f484599bdbe36cb012b1adfb",
+      "testedHead": "b2ba335fa1d072fa68a5f77961ea8a38814347bc",
+      "sourceFingerprint": "a0901c9ed9f6c318c387207107f912e008e692e2c3e50e00a8e8c2767ee6a11e",
       "inputPaths": [
         "apps",
         "packages",
@@ -351,14 +345,14 @@
         "vitest.postgres-immediate.config.ts",
         "eslint.config.js"
       ],
-      "inputFingerprint": "0ad9e820324e83c2289889db907e83cad1e86aea35f8a0dd21cf9e306028832a",
+      "inputFingerprint": "99a854c2b6e750bc0f20758231bb6dd4ebabbe7d87cac7359d59a293744dfc03",
       "sourceState": "Actual working candidate source/input fingerprints captured before command and declared inputs reverified after; testedHead is ancestor while git diff exists, not a claim of a committed tested Head",
       "context": "Local Node 22.23.4; owned marked PG16 instance/low-privilege test role, explicit canonical workers; no claim of CI hardware equivalence or authenticated full-site acceptance",
-      "startedAt": "2026-11-02T00:57:33.767Z",
-      "endedAt": "2026-11-02T00:57:36.936Z",
-      "logSha256": "76774339b12ce4132d18f0b377c9704adccef700ca226f2916b12bbe7c2efe6d",
-      "log": "/workspace/dx-p07-recorded-frozen-preflight-1793581053767.log"
+      "startedAt": "2026-11-02T01:07:41.457Z",
+      "endedAt": "2026-11-02T01:07:44.754Z",
+      "logSha256": "1ba4e2ed566bb73fa1259db6cc1b94936c8cc78a9fbd6d4629e9ebedbf5d72b8",
+      "log": "/workspace/dx-p07-recorded-frozen-preflight-1793581661457.log"
     }
   ],
-  "scopeNote": "Actual local fixed-input evidence, not final GitHub Gate. 70 source and20 original development PostgreSQL cases;137 units;18 synthetic original-parent browser scenarios. Runtime Node22.23.4/marked PG16 low privilege, bounded canonical runner. Broad lint/types/preflight are real exits. Exact per-check fingerprints allow unchanged API scope evidence, not cross-head final Gate reuse."
+  "scopeNote": "Actual local fixed-input evidence, not final GitHub Gate. 70 source and20 original development PostgreSQL cases;141 units;18 synthetic original-parent browser scenarios. Runtime Node22.23.4/marked PG16 low privilege, bounded canonical runner. Broad lint/types/preflight are real exits. Exact per-check fingerprints allow unchanged API scope evidence, not cross-head final Gate reuse."
 }

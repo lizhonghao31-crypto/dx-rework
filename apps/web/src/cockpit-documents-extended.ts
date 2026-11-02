@@ -15,7 +15,7 @@ export async function loadExtendedCockpitCategory(order:OrderJourney,key:Cockpit
 }
 export async function loadExtendedCockpitEntry(entry:CockpitDocumentEntry,read:CockpitDocumentReader,signal:AbortSignal){
  if(entry.load?.kind==='technical_directory'){
-  const data=await technicalDirectory({sourceId:entry.load.id,selectedRound:Number(entry.load.round)},read,signal);return {...entry,load:undefined,children:data.entries,note:data.note};
+  const data=await technicalDirectory({sourceId:entry.load.id,selectedRound:Number(entry.load.round)},read,signal,entry.load.scopeRef);return {...entry,load:undefined,children:data.entries,note:data.note};
  }
  return await loadTechnicalEntry(entry,read,signal)??await loadProductionEntry(entry,read,signal);
 }
