@@ -1,0 +1,125 @@
+{
+  "technicalSizeTable": null,
+  "metadata": {
+    "created": {
+      "at": null,
+      "by": null
+    },
+    "edited": {
+      "at": "2026-11-01T20:19:55.198Z",
+      "by": "[UAT] 订单跟单"
+    },
+    "published": {
+      "at": null,
+      "by": null
+    }
+  },
+  "order": {
+    "productionOrderId": "00000000-0000-4000-8000-000000000002",
+    "sourceId": "00000000-0000-4000-8000-000000000001",
+    "customerCode": "PD",
+    "productGroup": "男装",
+    "designStyleNo": "TEST-P08-原制单",
+    "temporaryStyleNo": null,
+    "orderDate": "2026-11-10",
+    "contractDeliveryDate": null,
+    "createdBy": "efd82b13-a34e-4205-b189-25c5a6bec235",
+    "createdAt": "2026-11-01T20:19:55.023Z",
+    "status": "development_linked",
+    "version": 3,
+    "primaryMerchandiserId": "ecb6adeb-3a36-476a-b3b6-fc0e47659e0c",
+    "workflowGeneration": "digital_production_v1",
+    "notificationPolicy": "IN_APP_ONLY",
+    "lines": [
+      {
+        "lineId": "ea3cf7cd-47bf-42ea-baa8-a6e2f4d55ade",
+        "poNumber": "TEST-ANCHOR-530fbbf8-58e9-492a-afe0-d269ad7d841e",
+        "formalStyleNo": "TEST-ANCHOR-530fbbf8-58e9-492a-afe0-d269ad7d841e",
+        "temporaryStyleNo": null,
+        "color": "黑",
+        "colorForeign": null,
+        "deliveryDate": "2027-03-01",
+        "customerWarehouseArrivalDate": "2027-03-01",
+        "factoryDeliveryDate": "2026-12-10",
+        "customerDateVersion": 1,
+        "factoryDateVersion": 1,
+        "customerDateSource": "initial_po",
+        "factoryDateSource": "approved_factory_change",
+        "sizes": [
+          {
+            "size": "M",
+            "quantity": 10
+          }
+        ],
+        "formalPoNo": "TEST-ANCHOR-530fbbf8-58e9-492a-afe0-d269ad7d841e",
+        "poIdentityConflict": false
+      }
+    ]
+  },
+  "currentOrderVersion": 3,
+  "currentDeliveryDate": null,
+  "document": {
+    "date": "2026-11-10",
+    "unit": "inch",
+    "sizes": [
+      "M"
+    ],
+    "images": [],
+    "season": "",
+    "fabrics": [],
+    "process": "",
+    "remarks": "",
+    "category": "上衣",
+    "comments": "",
+    "preshrink": "无需预缩",
+    "styleName": "TEST产前",
+    "fabricType": "",
+    "shipSample": "",
+    "accessories": [
+      {
+        "id": "c11454d8-104b-4fc7-af92-fab22a9e756b",
+        "name": "TEST纽扣",
+        "part": "门襟",
+        "group": "车缝",
+        "remarks": "",
+        "category": "扣",
+        "consumption": "1",
+        "garmentColors": "黑",
+        "materialColor": "黑",
+        "specification": "TEST"
+      }
+    ],
+    "composition": "",
+    "measurements": [
+      {
+        "id": "004c29ee-15af-4b7b-b065-3603aeec267d",
+        "name": "袖长",
+        "method": "平量",
+        "values": [
+          "6"
+        ],
+        "tolerance": "±1/4"
+      }
+    ],
+    "patternMaker": "",
+    "secondaryCraft": "无",
+    "sewingRequirements": "1、针距一英寸12针，线迹良好，不可有跳针断线，面线不可有明显接驳线迹。尺寸跟足尺寸表，控制在误差范围内；\n2、大货车缝线色及粗细需按样板配好，不接受色差，退线只接受退三针，不能有接线、断线、跳针问题；\n3、各部位缝合要平整，不能有褶皱、起拱或扭曲，压线要顺直，宽窄一致；\n4、整件完成不可有色差、污渍、断线、破洞，线头要清理干净，各部位整烫平服；注意门禁拉链不能起拱，不同码数拉链长度不同，扣子、钩扣需定好位再打，不能错位，扣子、钩扣需牢固，左右袋需对称，大小一致。"
+  },
+  "version": 1,
+  "publishedVersion": 1,
+  "isPublishedSnapshot": false,
+  "sourceRound": 1,
+  "latestSourceRound": 1,
+  "versions": [
+    1
+  ],
+  "canEdit": true,
+  "cutStarted": false,
+  "merchandiserName": "[UAT] 订单跟单",
+  "canRequestDate": true,
+  "canApproveDate": true,
+  "customerPoDates": [],
+  "dateRequests": [],
+  "printedBy": "[UAT] Root",
+  "sourceComparison": null
+}

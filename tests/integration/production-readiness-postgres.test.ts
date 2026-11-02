@@ -1,4 +1,8 @@
+import {ReceivingService} from '../../apps/api/src/receiving/receiving-service.js';
+import {registerDigitalIdentityRoutes} from '../../apps/api/src/production-platform/identity-routes.js';
+import {RootAuthority} from '../../apps/api/src/access/root-authority.js';
 import {registerBulkPreparationRoutes} from '../../apps/api/src/production-platform/bulk-preparation-routes.js';
+import {nodeMaterialsFixture,nodeMaterialsFootprint} from '../helpers/node-materials-fixture.js';
 import {registerOrderClosureRoutes} from '../../apps/api/src/production-platform/order-closure-routes.js';
 import {OrderClosureService} from '../../apps/api/src/production-platform/order-closure-service.js';
 import {DigitalProductionTaskService} from '../../apps/api/src/production-platform/task-service.js';
@@ -54,6 +58,41 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   return service.record(kind==='material_investment'?p.primary:p.warehouse,resource,{kind,scopeRef:'whole',expectedVersion:prior?.version??0,state,occurredAt:state==='unknown'?null:businessNow().toISOString(),note:'TEST actual native material record',quantities:kind==='material_investment'?[{lineId:null,materialId:p.document.materials[0]!.materialId,name:'TEST棉布',quantity:100,unit:'米'}]:[],evidenceIds:[],sourceDocumentVersion:null,recipientId:null},randomUUID());
  };
  const order=async(p:Awaited<ReturnType<typeof setup>>)=>identity.createOrder(p.designer,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:p.style,orderDate:beijingCalendarDate(businessNow()),primaryMerchandiserId:p.primary.actorId,lines:[{formalPoNo:`TEST-${randomUUID()}`,color:'黑',customerWarehouseArrivalDate:'2027-08-15',sizes:[{size:'M',quantity:10}]}]}),randomUUID(),p.sourceId);
+ it('projects real two-PO label shortages by scope and does not mutate tasks, plans, facts, reminders or windows',async()=>{
+  const scene=await f.scene('2026-11-02T00:00:00Z');await f.runtime.run(scene,f.root,async()=>{
+   const ready=await f.bulkReady('无',undefined,2,f.sourcing,{stopBeforeCompletion:true}),resource={kind:'order' as const,id:ready.id},state=await service.read(f.root,resource),prior=state.facts.find(r=>r.kind==='style_label_ready')!;
+   expect(state.lines).toHaveLength(2);
+   await service.record(f.people.warehouse!,resource,{kind:'style_label_ready',scopeRef:'whole',expectedVersion:prior.version,state:'ready',occurredAt:businessNow().toISOString(),note:'TEST A实物足量，B仅9枚；不按整单链接推断齐套',quantities:state.lines.map((line,i)=>({lineId:line.lineId,materialId:null,name:'TEST款号唛',quantity:i===0?line.orderQuantity:line.orderQuantity-1,unit:'枚'})),evidenceIds:[],sourceDocumentVersion:null,recipientId:null},randomUUID());
+   const before=await nodeMaterialsFootprint(f.db),projected=await nodeMaterialsFixture(f.db,f.root,ready.id,'cutting_gate');
+   expect(projected.data.rows.find(r=>r.id==='style-label-'+state.lines[0]!.lineId)?.state).toBe('effective');expect(projected.data.rows.find(r=>r.id==='style-label-'+state.lines[1]!.lineId)?.state).toBe('missing');
+   expect(await styleLabelCuttingReason(f.db,ready.id,[state.lines[0]!.lineId])).toBeNull();expect(await styleLabelCuttingReason(f.db,ready.id,[state.lines[1]!.lineId])).toContain('款号唛');
+   await projected.query.nodeMaterials(f.root,projected.order.id,projected.node.instanceId);expect(await nodeMaterialsFootprint(f.db)).toEqual(before);
+   await expect(projected.query.nodeMaterials(f.people['worker-a']!,projected.order.id,projected.node.instanceId)).rejects.toMatchObject({statusCode:403});
+   await expect(projected.query.nodeMaterials(f.root,projected.order.id,'foreign:'+randomUUID())).rejects.toMatchObject({statusCode:404});
+   await expect(projected.query.nodeMaterials(f.root,projected.order.id,'factory_material_count:0')).rejects.toMatchObject({statusCode:404});
+   const app=Fastify();app.setErrorHandler((error,_request,reply)=>{const e=error as ApplicationError;void reply.code(e.statusCode??500).send({error:{code:e.code,message:e.message}});});
+   registerDigitalIdentityRoutes(app,{service:identity,creationEnabled:false,journeys:projected.query,root:new RootAuthority(f.db,'TEST',undefined),authenticate:async token=>{if(!token)throw new ApplicationError('UNAUTHORIZED','TEST需登录',401);const roles=(await f.db.query('SELECT role_code FROM user_role_assignments WHERE user_id=$1 AND revoked_at IS NULL',[token])).rows.map(r=>r.role_code);const capabilities=(await f.db.query('SELECT DISTINCT capability FROM role_capabilities WHERE role_code=ANY($1::text[])',[roles])).rows.map(r=>r.capability);return {id:token,displayName:'TEST',businessRoles:roles,capabilities};}});
+   try{const path=`/digital-production/journeys/${projected.order.id}/node-materials`,headers={cookie:`dx_rework_session=${f.root.actorId}`};
+    expect((await app.inject({method:'GET',url:path+'?instanceId='+encodeURIComponent(projected.node.instanceId)})).statusCode).toBe(401);
+    const ok=await app.inject({method:'GET',url:path+'?instanceId='+encodeURIComponent(projected.node.instanceId),headers});expect(ok.statusCode).toBe(200);expect(ok.headers['cache-control']).toContain('no-store');expect(ok.json().rows.find((r:{id:string})=>r.id===projected.data.rows.find(r=>r.id.startsWith('style-label-'))!.id).state).toBe('effective');
+    expect((await app.inject({method:'GET',url:path+'?instanceId=foreign',headers})).statusCode).toBe(404);expect((await app.inject({method:'GET',url:path+'?instanceId=x&round=0',headers})).statusCode).toBe(400);
+    expect(await nodeMaterialsFootprint(f.db)).toEqual(before);
+   }finally{await app.close();}
+
+  });
+ });
+ it('keeps original legal packing independent of unfinished responsibility and finance in the new projection',async()=>{
+  const scene=await f.scene('2026-11-04T08:00:00Z');await f.runtime.run(scene,f.root,async()=>{
+   const work=await f.reworkReady(),root={...f.root,authorizationCapability:'receiving:packing_manage',authorizationCapabilities:[...(f.root.authorizationCapabilities??[]),'receiving:packing_manage']},receiving=new ReceivingService(f.db);
+   const batch=(await f.db.query('SELECT receiving_batch_id FROM receiving_receipts r JOIN digital_production_child_lines c ON c.child_id=r.receipt_id AND c.module=\'receiving\' WHERE c.production_order_id=$1',[work.ready.id])).rows[0].receiving_batch_id;
+   expect((await f.db.query('SELECT status FROM rework_orders WHERE rework_order_id=$1',[work.id])).rows[0].status).not.toBe('completed');
+   const row=(await receiving.board(beijingCalendarDate(businessNow()),work.ready.input.lineItems[0]!.styleNo!)).rows.find(r=>r.receivingBatchId===batch)!;expect(row).toBeDefined();
+   await receiving.recordPacking(root,{receivingBatchId:batch,expectedVersion:row.version,expectedPackingRevisionId:null,packingQuantity:10},randomUUID());
+   const projection=await nodeMaterialsFixture(f.db,f.root,work.ready.id,'packing');expect(projection.data.rows.some(r=>r.id.startsWith('packing-')&&r.state==='present')).toBe(true);
+   expect(projection.data.rows.some(r=>r.purpose==='input'&&/责任签字|财务|工资|老板签字/.test(r.label))).toBe(false);
+   expect((await f.db.query('SELECT status FROM rework_orders WHERE rework_order_id=$1',[work.id])).rows[0].status).not.toBe('completed');
+  });
+ });
  it('keeps preorder material work independent, reuses original receipts and bridges partial/unknown heads without fallback resurrection',async()=>{
   const p=await setup();expect(p.handover.orderId).toBeNull();
   await record(p,p.resource,'material_investment');await record(p,p.resource,'fabric_receipt','partial');
@@ -62,6 +101,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const after=await record(p,target,'fabric_receipt');const receipt=after.facts.find(f=>f.kind==='fabric_receipt')!;
   expect(receipt.resource).toEqual(p.resource);expect(receipt.version).toBe(2);expect(after.draftWindow.minutes).toBe(1440);
   await record(p,target,'fabric_receipt','unknown');facts=await readSeriesPlanFacts(f.db,id,p.sourceId,'PD');expect(facts.facts.some(x=>x.key==='fabric_receipt')).toBe(false);
+  const projected=await nodeMaterialsFixture(f.db,f.root,id,'production_instruction');expect(projected.data.rows.find(r=>r.id==='material-fabric_receipt')?.state).toBe('unknown');
   expect((await service.read(p.warehouse,target)).history.filter(x=>x.kind==='fabric_receipt')).toHaveLength(3);
   await expect(service.read(f.people['worker-a']!,target)).rejects.toMatchObject({statusCode:403});
   await expect(service.record(p.primary,target,{kind:'fabric_receipt',scopeRef:'whole',expectedVersion:3,state:'ready',occurredAt:businessNow().toISOString(),note:'TEST unauthorized',quantities:[],evidenceIds:[],sourceDocumentVersion:null,recipientId:null},randomUUID())).rejects.toMatchObject({statusCode:403});
@@ -84,6 +124,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const report=(await bulk.read(p.warehouse,id)).fabric!.report!;
    await bulk.decideFabric(f.root,id,{reportId:report.reportId,expectedDecisionId:null,allowUse:true,note:'TEST authorized quality decision'},randomUUID());
    const ready=await service.read(p.primary,{kind:'order',id});expect(ready.finalReasons).toEqual([]);expect((await preparationWindowTodos(f.db,p.primary)).filter(t=>t.entityId===id)).toHaveLength(1);expect(ready.finalWindow.startedAt).toBe('2026-11-02T06:00:00.000Z');expect(ready.finalWindow.dueAt).toBe('2026-11-03T06:00:00.000Z');
+   expect((await f.db.query('SELECT count(*)::int AS n FROM digital_budget_documents WHERE production_order_id=$1',[id])).rows[0].n).toBe(0);
+   const projected=await nodeMaterialsFixture(f.db,p.primary,id,'production_instruction');expect(projected.data.rows.find(r=>r.id==='instruction-prerequisites')?.state).toBe('effective');expect(projected.data.rows.some(r=>r.id==='budget'||r.label==='预算')).toBe(false);
    const published=await instruction.publish(p.primary,id,{expectedVersion:1,orderVersion,expectedReadinessRevision:ready.revision},randomUUID());expect(published.readiness?.finalWindow.status).toBe('completed_on_time');expect((await preparationWindowTodos(f.db,p.primary)).filter(t=>t.entityId===id)).toHaveLength(0);
    expect((await productionReadiness(f.db,id)).technical?.revision).toBe(ready.technicalRevision);
    const repeated=await service.deliver(p.primary,id,{instructionVersion:1,recipient:'TEST加工厂',occurredAt:businessNow().toISOString(),note:'TEST交付原版本',evidenceIds:[]},'TEST-native-delivery');
@@ -106,6 +148,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    // Simulate the client losing that response: after a fresh read, replay the immutable v0 body/key.
    expect((await bulk.read(f.root,ready.id)).readiness!.ranges.filter(r=>r.preparationId===ready.preparationId&&r.kind==='纸样完成')).toHaveLength(1);await bulk.complete(f.people['pattern-room-worker']!,ready.id,partial,key);expect((await bulk.read(f.root,ready.id)).readiness!.ranges.filter(r=>r.preparationId===ready.preparationId&&r.kind==='纸样完成')).toHaveLength(1);
    expect((await bulk.read(ready.primary,ready.id)).facts.some(x=>x.kind==='纸样完成')).toBe(false);expect((await preparationMaterialsTodos(f.db,f.people.warehouse!)).filter(t=>t.entityId===ready.id)).toHaveLength(1);
+   const projected=await nodeMaterialsFixture(f.db,f.root,ready.id,'bulk_pattern');expect(projected.data.rows.some(r=>r.id.startsWith('range-')&&r.state==='partial')).toBe(true);expect(projected.data.rows.find(r=>r.id==='material-accessories_ready')?.state).toBe('unknown');
    expect((await bulk.read(ready.primary,ready.id)).tasks.some(x=>x.taskKind==='bulk_cutting')).toBe(false);
    const pattern=sheet.tasks.find(t=>t.taskKind==='bulk_pattern')!;expect(pattern.dueAt).toBe('2026-11-12T00:00:00.000Z');
    await expect(completeBulkRangeFixture(f.db,f.people['pattern-room-worker']!,ready.id,ready.preparationId,'纸样完成')).rejects.toMatchObject({statusCode:409});

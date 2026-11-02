@@ -1,4 +1,5 @@
 import {readQcExecutionEvidence} from './qc-progress-evidence.js';
+import {readNodeMaterials} from './node-materials.js';
 import {styleLabelCuttingReason,preparationTestReasons} from './production-readiness-repository.js';
 import {seriesPlanJourney} from './series-plan-journey.js';
 import type {BusinessTime,BusinessTimeScope} from '@dx-rework/domain/business-clock';
@@ -109,6 +110,16 @@ export class DigitalJourneyQuery {
     assertBusinessExportAllowed(actor.actorRoles);
     const result=await this.list(actor,{...filter,page:1},true);
     return {ruleVersion:result.ruleVersion,asOf:result.asOf,total:result.total,summary:result.summary,items:result.items};
+  }
+  async nodeMaterials(actor:TrustedActorContext,id:string,instanceId:string,round?:number) {
+    assertIdentityActor(actor);
+    return this.snapshot(async(db,asOf)=>{
+      const row=(await this.candidates(db,actor,id))[0]??digitalNotFound();
+      const item=await this.project(db,actor,row,asOf,round,false,null,true,true);if(!item)return digitalNotFound();
+      const node=item.stages.flatMap(stage=>stage.nodes).find(n=>n.instanceId===instanceId);
+      if(!node||node.state==='unavailable')return digitalNotFound();
+      return readNodeMaterials(this.database,db,actor,item,node,asOf);
+    });
   }
   async read(actor:TrustedActorContext,id:string,round?:number,compact=false) {
     assertIdentityActor(actor);

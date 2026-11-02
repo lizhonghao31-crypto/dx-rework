@@ -11,9 +11,9 @@ export const cockpitNodeTone=(node:JourneyNode):Tone=>node.risks.includes("overd
 export const cockpitNodeStatus=(node:JourneyNode)=>node.state==="completed"?"已完成":node.state==="inherited"||node.state==="unavailable"?nodeStatus(node):journeyStateLabels[node.state]+(node.risks.includes("overdue")?" · 逾期":node.risks.includes("due_soon")?" · 临期":"");
 const recordLabels:Record<string,string>={task:"节点记录",development:"开发单",order:"订购信息",instruction:"大货制单",budget:"预算",sourcing:"外发审批 / 合同",cutting:"裁床实裁",receiving:"回货记录",closure:"回货与结案",production:"实际生产记录",preparation:"产前准备",rework:"返工记录",development_material:"面辅料记录"};
 export const cockpitRecordLabel=(record:JourneyRecord)=>recordLabels[record.domain]??"业务记录";
-export function CockpitRecordLink({record,context,children,disabled=false}:{record:JourneyRecord;context:CockpitContext;children:ReactNode;disabled?:boolean}){
+export function CockpitRecordLink({record,context,children,disabled=false,onNavigate}:{record:JourneyRecord;context:CockpitContext;children:ReactNode;disabled?:boolean;onNavigate?:()=>CockpitContext}){
   const href=record.url?journeyRecordHref(record.url,context,record.mode):"";
-  return href&&!disabled?<a href={urls.pageUrl(href)}>{children}</a>:<span className="journey-muted" aria-disabled="true">{disabled?children:"记录暂不可用"}</span>;
+  return href&&!disabled?<a href={urls.pageUrl(href)} onClick={event=>{if(onNavigate&&record.url)event.currentTarget.href=urls.pageUrl(journeyRecordHref(record.url,onNavigate(),record.mode));}}>{children}</a>:<span className="journey-muted" aria-disabled="true">{disabled?children:"记录暂不可用"}</span>;
 }
 export function CockpitNodeRows({nodes,selectedId,context,onSelect}:{nodes:JourneyNode[];selectedId:string|undefined;context:CockpitContext;asOf:string|undefined;onSelect:(node:JourneyNode)=>void}){
   return <NodeTable className="journey-node-table"><colgroup><col className="node-name"/><col className="node-owner"/><col className="node-status"/><col className="node-time"/><col className="node-time"/><col className="node-record"/></colgroup>

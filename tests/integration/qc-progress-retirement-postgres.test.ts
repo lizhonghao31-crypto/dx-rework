@@ -1,3 +1,4 @@
+import {nodeMaterialsFixture} from '../helpers/node-materials-fixture.js';
 import {MemberModuleBindingService} from '../../apps/api/src/access/member-module-binding-service.js';
 import {DigitalCockpitQuery} from '../../apps/api/src/production-platform/cockpit-query.js';
 import {qcProgressNotices} from '../../apps/api/src/production-platform/qc-progress-todos.js';
@@ -98,6 +99,9 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    let e=(await service.read(qc,ready.id)).executions[0]!;expect(e.lineClocks.every(l=>l.clock.state==='due')).toBe(true);
    await service.submit(qc,ready.id,input(e));e=(await service.read(qc,ready.id)).executions[0]!;
    expect(e.lineClocks[0]!.clock.state).toBe('not_due');expect(e.lineClocks[1]!.clock.state).toBe('due');expect(e.clock.state).toBe('due');
+   const projected=await nodeMaterialsFixture(f.db,f.root,ready.id,'production_reporting');
+   const a=projected.data.rows.find(r=>r.id===`qc-${e.productionId}-${e.lines[0]!.lineId}`),b=projected.data.rows.find(r=>r.id===`qc-${e.productionId}-${e.lines[1]!.lineId}`);
+   expect(a).toMatchObject({state:'present',role:'QC'});expect(b).toMatchObject({state:'missing',role:'QC'});expect(a?.reason).toContain('不代表成衣质检合格');expect(projected.data.rows.some(r=>/船样|到料清点|工厂到料/.test(r.label))).toBe(false);
   });
   await f.advance(scene,'2026-11-06T00:00:00Z');await f.runtime.run(scene,f.root,async()=>{
    let e=(await service.read(qc,ready.id)).executions[0]!;expect(e.lineClocks[1]!.clock.state).toBe('escalated');

@@ -5,7 +5,7 @@ import type {ProductionReadinessService} from './production-readiness-service.js
 import type { DigitalJourneyQuery } from "./journey-query.js";
 import { DevelopmentWorkspaceQuery } from "./development-workspace-query.js";
 import { DevelopmentWorkspaceFilterSchema, PatternWorkspaceFilterSchema } from "@dx-rework/contracts/digital-development-workspace";
-import { JourneyFilterSchema,JourneyLogFilterSchema } from "@dx-rework/contracts/digital-production-journey";
+import { JourneyFilterSchema,JourneyLogFilterSchema,NodeMaterialsQuerySchema } from "@dx-rework/contracts/digital-production-journey";
 import { registerDigitalAnalysisRoutes } from "./reporting-routes.js";
 import type { DigitalAnalysisQuery } from "./reporting-query.js";
 import type { DigitalCockpitQuery } from "./cockpit-query.js";
@@ -109,6 +109,10 @@ export function registerDigitalIdentityRoutes(app: FastifyInstance, dependencies
     app.get("/digital-production/workspaces/pattern", async request => workspaces.pattern(await actor(request), parse(PatternWorkspaceFilterSchema, request.query)));
     app.get("/digital-production/journeys", async request => dependencies.journeys!.list(await actor(request), parse(JourneyFilterSchema, request.query)));
     app.get("/digital-production/journeys/export", async request => dependencies.journeys!.export(await actor(request), parse(JourneyFilterSchema, request.query)));
+    app.get("/digital-production/journeys/:id/node-materials", async request => {
+      const query=parse(NodeMaterialsQuerySchema,request.query);
+      return dependencies.journeys!.nodeMaterials(await actor(request),id(request,"id"),query.instanceId,query.round);
+    });
     app.get("/digital-production/journeys/:id/logs", async request => {
       const query=parse(JourneyLogFilterSchema,request.query);
       return dependencies.journeys!.logs(await actor(request),id(request,"id"),query.cursor);

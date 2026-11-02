@@ -12,7 +12,7 @@ export function cockpitContext(search: string): CockpitContext {
   return parsed.success ? parsed.data : JourneyReturnContextSchema.parse({});
 }
 export function cockpitQuery(context: CockpitContext): string {
-  return new URLSearchParams(Object.entries(context).filter(([key, value]) => !["selected", "expanded", "focus", "row", "round", "flow", "documentOpen", "documentView", "documentStage", "documentSearch", "documentScroll", "documentFocus"].includes(key) && value !== undefined && value !== "").map(([key, value]) => [key, String(value)])).toString();
+  return new URLSearchParams(Object.entries(context).filter(([key, value]) => !["materialNode", "materialView", "materialFilter", "materialScroll", "materialFocus", "nodeView", "selected", "expanded", "focus", "row", "round", "flow", "documentOpen", "documentView", "documentStage", "documentSearch", "documentScroll", "documentFocus"].includes(key) && value !== undefined && value !== "").map(([key, value]) => [key, String(value)])).toString();
 }
 export function cockpitReturnPath(search: string): string | null {
   const candidate = new URLSearchParams(search).get("returnTo");

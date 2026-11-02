@@ -8,6 +8,7 @@ const input=JSON.parse(await readFile(process.env.PREPARATION_UI_INPUT,'utf8'));
 const {chromium}=await import(process.env.PLAYWRIGHT_IMPORT||'playwright');
 const out=await mkdtemp(join(tmpdir(),'dx-readiness-ui-')),evidence=process.env.PREPARATION_UI_EVIDENCE,results=[],errors=[];
 let browser,server,page;
+console.log('TAP version 13');
 const expectEnabled=async locator=>{await locator.waitFor();assert.equal(await locator.isEnabled(),true);};
 try{
  await build({configFile:false,esbuild:{jsx:'automatic'},define:{'import.meta.env.BASE_URL':'"/"','process.env.NODE_ENV':'"production"'},build:{outDir:out,lib:{entry:resolve('tests/fixtures/production-readiness-ui.tsx'),name:'PreparationUi',formats:['iife']}}});
@@ -17,8 +18,9 @@ try{
  browser=await chromium.launch({headless:true,executablePath:'/usr/bin/chromium',args:['--no-sandbox']});await mkdir(evidence,{recursive:true});
  for(const width of [1280,1440])for(const mode of (process.env.PREPARATION_UI_MODES?.split(',')??['normal','conflict','uncertain','refreshfail','readonly','instruction','range','loadfail','empty','parent-drafts','parent-range-uncertain','parent-writing','supplement'])){
   page=await browser.newPage({viewport:{width,height:900}});page.setDefaultTimeout(10000);page.on('pageerror',e=>errors.push(e.message));
-  await page.goto(`http://127.0.0.1:${server.address().port}/?mode=${mode}`);
-  if(mode==='supplement'){await page.getByText(/截止：未设置期限/).waitFor();const scope=page.locator('.preparation-range-action');await scope.locator('summary').first().click();await scope.getByText(/新补做未明确期限时显示未设置/).waitFor();
+  await page.goto(`http://127.0.0.1:${server.address().port}/?mode=${mode==='locator-readonly'?'readonly':mode}&materialKind=${mode.startsWith('locator-')?'style_label_ready':''}`);
+  if(mode.startsWith('locator-')){const details=page.locator('.preparation-readiness>details');await page.locator('[data-preparation-kind=style_label_ready]').waitFor();assert.notEqual(await details.getAttribute('open'),null);await page.waitForFunction(()=>document.activeElement?.closest('[data-preparation-kind]')?.getAttribute('data-preparation-kind')==='style_label_ready');assert.equal(await page.evaluate(()=>window.preparationRequests.length),0);if(mode==='locator-readonly')assert.equal(await details.locator('fieldset').count(),0);else await details.locator('fieldset legend').filter({hasText:'款号唛'}).waitFor();
+  }else if(mode==='supplement'){await page.getByText(/截止：未设置期限/).waitFor();const scope=page.locator('.preparation-range-action');await scope.locator('summary').first().click();await scope.getByText(/新补做未明确期限时显示未设置/).waitFor();
   }else if(mode.startsWith('parent-')){
    const detail=page.locator('.bulk-workroom-detail'),workspace=page.locator('.bulk-pattern-workspace'),materials=page.locator('.preparation-readiness>details'),scope=page.locator('.preparation-range-action');
    await materials.locator(':scope>summary').waitFor();await materials.locator(':scope>summary').click();
@@ -70,8 +72,8 @@ try{
    await details.locator(':scope>summary').click();
   }
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false,`${mode} ${width} overflow`);
-  await page.screenshot({path:join(evidence,`${mode}-${width}.png`),fullPage:true});results.push({mode,width,passed:true});await page.close();page=null;
+  await page.screenshot({path:join(evidence,`${mode}-${width}.png`),fullPage:true});results.push({mode,width,passed:true});console.log(`ok ${results.length} - original production readiness ${mode} ${width}`);await page.close();page=null;
  }
- assert.deepEqual(errors,[]);
+ assert.deepEqual(errors,[]);console.log(`1..${results.length}`);console.log(`# pass ${results.length}`);console.log('# fail 0');console.log('# skipped 0');
 }finally{await writeFile(join(evidence,'result.json'),JSON.stringify({results,errors,limits:['Actual existing React components; PostgreSQL-captured TEST response data and deterministic synthetic HTTP faults. Not authenticated full-site or live-business acceptance.']},null,2));await browser?.close();if(server)await new Promise(resolve=>server.close(resolve));await rm(out,{recursive:true,force:true});}
 console.log(JSON.stringify({cases:results.length,errors}));

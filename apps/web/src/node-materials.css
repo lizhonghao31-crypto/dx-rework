@@ -1,0 +1,22 @@
+.digital-journey-cockpit .node-materials {margin-top:12px;border-top:1px solid #e1e8f2;padding-top:8px;min-width:0}
+.digital-journey-cockpit .node-materials>summary {display:flex;align-items:center;gap:8px;flex-wrap:wrap;cursor:pointer;min-height:40px;list-style:none;font-size:14px}
+.digital-journey-cockpit .node-materials>summary::before {content:'▸';color:#48617f}
+.digital-journey-cockpit .node-materials[open]>summary::before {content:'▾'}
+.digital-journey-cockpit .node-materials>summary>span {font-size:13px;color:#7084a3;font-weight:400}
+.digital-journey-cockpit .node-materials :is(summary,button,a):focus-visible {outline:2px solid #2681fa;outline-offset:2px}
+.digital-journey-cockpit .node-materials-controls {display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+.digital-journey-cockpit .node-materials-controls button {font:inherit;min-height:36px;padding:5px 9px;border:1px solid #cbd7e7;border-radius:5px;background:white;color:#243c61;cursor:pointer}
+.digital-journey-cockpit .node-materials-controls button[aria-pressed=true] {background:#edf4ff;border-color:#0065ff;color:#0057dc}
+.digital-journey-cockpit .node-materials-list {max-height:360px;overflow:auto;overscroll-behavior:contain;padding:0 4px 4px 0}
+.digital-journey-cockpit .node-material-row {padding:10px 0;border-top:1px solid #e1e8f2;min-width:0;overflow-wrap:anywhere}
+.digital-journey-cockpit .node-material-heading {display:flex;gap:8px;align-items:start;justify-content:space-between}
+.digital-journey-cockpit .node-material-heading>.dx-badge {flex:none}
+.digital-journey-cockpit .node-material-scope,.digital-journey-cockpit .node-materials-notice {color:#7084a3;font-size:13px;line-height:1.5}
+.digital-journey-cockpit .node-material-row dl {display:grid;gap:4px;margin:6px 0}
+.digital-journey-cockpit .node-material-row dl>div {display:grid;grid-template-columns:3em minmax(0,1fr);gap:8px}
+.digital-journey-cockpit .node-material-row dt {color:#7084a3}
+.digital-journey-cockpit .node-material-row dd {margin:0}
+.digital-journey-cockpit .node-material-links {display:flex;flex-wrap:wrap;gap:8px}
+.digital-journey-cockpit .node-material-links a {display:inline-flex;min-height:36px;align-items:center;color:#0065ff}
+
+.digital-journey-cockpit .node-materials .node-material-row dd {font-size:14px;font-weight:400;line-height:1.5}

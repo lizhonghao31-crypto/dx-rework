@@ -15,7 +15,7 @@ export function DigitalCockpitPage(){
  const query=cockpitQuery(context),selectedId=context.selected??'';
  const viewContext=useMemo(()=>({...context,selected:selectedId||undefined}),[context,selectedId]);
  const changeContext=(patch:Partial<CockpitContext>,preserveSelection=false)=>{
-  const documentReset=!preserveSelection||patch.selected!==undefined&&patch.selected!==context.selected?{documentOpen:undefined,documentView:undefined,documentStage:undefined,documentSearch:undefined,documentScroll:undefined,documentFocus:undefined}:{};
+  const documentReset=!preserveSelection||Object.hasOwn(patch,'selected')&&patch.selected!==context.selected?{materialNode:undefined,materialView:undefined,materialFilter:undefined,materialScroll:undefined,materialFocus:undefined,nodeView:undefined,documentOpen:undefined,documentView:undefined,documentStage:undefined,documentSearch:undefined,documentScroll:undefined,documentFocus:undefined}:{};
   const parsed=JourneyReturnContextSchema.safeParse({...context,...patch,...documentReset,page:patch.page??(preserveSelection?context.page:1),...(!preserveSelection?{selected:undefined,expanded:undefined,focus:undefined,row:undefined,round:undefined}:{})});
   if(!parsed.success){setError(parsed.error.issues.map(issue=>issue.message).join('；'));return;}
   setError('');setContext(parsed.data);
