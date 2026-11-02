@@ -1,327 +1,85 @@
 {
   "version": 1,
-  "base": "7ad6d990d523eb82eba5563981aa525156340633",
+  "base": "4b73aae825841e884744e680bb07e6b23856c9d8",
   "risk": "full",
-  "sourceFingerprint": "3c64d51ae5621bb300c759c8729a8c6688275959b2eb13f1216141562e4ebcab",
+  "sourceFingerprint": "45a075dd7dcd7ba0e3aca042624be189271638e59dbd4e9330d99ab43eec14d2",
   "rules": [
     {
-      "rule": "Original domain read scope, cursor and exact adopted revision",
+      "id": "operator-closeout",
+      "rule": "Prescribed final request verifies exact candidate, actual reports, known findings and every current impact rule before any ref creation",
+      "source": "2026-11-02 user requires actual executable final-launch closeout; parent approved minimal dual-branch operator-only patch before PR08",
       "writes": [
-        "apps/api/src/production-platform/bulk-preparation-routes.ts",
-        "apps/api/src/production-platform/bulk-preparation-service.ts",
-        "apps/api/src/production-platform/development-execution-routes.ts",
-        "apps/api/src/production-platform/development-technical-service.ts",
-        "apps/api/src/production-platform/development-technical-settings.ts",
-        "apps/api/src/production-platform/order-closure-routes.ts",
-        "apps/api/src/production-platform/order-closure-service.ts",
-        "apps/api/src/production-platform/order-document-history.ts",
-        "apps/api/src/production-platform/production-readiness-service.ts",
-        "apps/api/src/receiving/receiving-document-history.ts",
-        "packages/contracts/src/production-readiness.ts"
+        "scripts/ci/final-closeout.fixture.mjs",
+        "scripts/ci/final-closeout.mjs",
+        "scripts/ci/final-closeout.test.mjs",
+        "scripts/ci/pr-gate-controller.mjs",
+        "scripts/ci/pr-gate-controller.test.mjs"
       ],
       "reads": [
-        "apps/api/src/production-platform/access-policy.ts",
-        "apps/api/src/production-platform/development-technical-repository.ts",
-        "apps/api/src/production-platform/production-readiness-repository.ts"
+        "scripts/ci/pr-gate-controller.mjs#requestFinal",
+        "scripts/ci/construction-evidence.mjs#validateEvidence",
+        "scripts/ci/pr-gate-protocol.mjs#trustedReview"
       ],
       "oldTests": [
-        "tests/integration/development-technical-postgres.test.ts",
-        "tests/integration/production-readiness-postgres.test.ts",
-        "tests/integration/receiving-postgres.test.ts"
+        "scripts/ci/construction-evidence.test.mjs",
+        "scripts/ci/review-final-gate.test.mjs",
+        "scripts/ci/pr-gate-controller.test.mjs"
       ],
       "checks": [
-        "final-sources-postgres",
-        "frozen-lint",
-        "frozen-typecheck"
+        "native-protocol"
       ],
-      "expectation": "Original authorization runs before cursor/record metadata. Exact source/child inheritance and adopted version, private range download ownership, paged current/history and receiving time precision remain original facts. No new write, role or migration.",
-      "source": "docs/engineering/new-flow-20261031-approved-plan.md PR07 / F.7 / UI / 26-source matrix; latest approved fixed ten and view-all decisions",
-      "initialization": "No new tables, migration or capability. Original facts and history stay immutable; registered isolated test fixtures and original actual base retained. Source-only and unknown history are never fabricated completed facts.",
-      "dateAndPermission": "Read-only original capability/scope and private download authorization. Adopted revision is not latest upload; receipt date-only stays date-only. Contract business clock and all original production/packing/quality gates unchanged."
+      "initialization": "External frozen-candidate package is not committed and never changes its own Head; existing immutable final refs retain observation behavior; no database, user role, permission or business migration",
+      "dateAndPermission": "No new credentials, actor authentication, server protection or CI pipeline; real report bytes and fixed Head/base only. Does not claim all unknown defects or prevent manual ref creation.",
+      "expectation": "Missing or stale package, unresolved finding, changed/failed report, pinned-record mismatch or omitted Review finding rejects preview/apply and creates zero refs; actual complete evidence creates exactly one and existing observation needs no second launch"
     },
     {
-      "rule": "Ten fixed priority classes and twenty original categories cover twenty-six sources",
+      "id": "long-term-entry",
+      "rule": "Root policy defines one final-launch owner and exact shared executable path without pretending all old windows update automatically",
+      "source": "2026-11-02 user requires actual executable final-launch closeout; parent approved minimal dual-branch operator-only patch before PR08",
       "writes": [
-        "apps/web/src/cockpit-document-catalog.ts",
-        "apps/web/src/cockpit-document-data.ts",
-        "apps/web/src/cockpit-document-presentation.ts",
-        "apps/web/src/cockpit-documents-extended.ts",
-        "apps/web/src/cockpit-documents-model.ts",
-        "apps/web/src/cockpit-documents-production.ts",
-        "apps/web/src/cockpit-documents-technical.ts",
-        "apps/web/src/cockpit-documents.css",
-        "apps/web/src/cockpit-documents.tsx",
-        "tests/unit/cockpit-document-directory.test.ts",
-        "tests/unit/cockpit-document-new-sources.test.ts",
-        "tests/unit/cockpit-document-snapshot.test.ts"
+        "AGENTS.md"
       ],
       "reads": [
-        "apps/api/src/production-platform/qc-production-progress-service.ts",
-        "apps/api/src/production-platform/factory-flow-service.ts",
-        "apps/api/src/rework/rework-business-detail-service.ts"
+        "docs/governance/final-closeout-v1.md",
+        "docs/governance/review-first-final-head-20261027.md",
+        "docs/governance/construction-evidence-v1.md"
       ],
       "oldTests": [
-        "tests/unit/cockpit-document-directory.test.ts",
-        "tests/unit/cockpit-document-snapshot.test.ts"
+        "scripts/ci/governance-policy.test.mjs"
       ],
       "checks": [
-        "frozen-related-unit",
-        "frozen-browser",
-        "frozen-lint",
-        "frozen-typecheck"
+        "native-protocol"
       ],
-      "expectation": "Actual original record metadata is distinct from a generic source link or a valid required material. Fixed ten category order, visible original scopes only, current adopted vs uploaded/history, source errors not missing; three shared GET slots; no file-byte eager download. Retired F02/F03 only in history.",
-      "source": "docs/engineering/new-flow-20261031-approved-plan.md PR07 / F.7 / UI / 26-source matrix; latest approved fixed ten and view-all decisions",
-      "initialization": "No new tables, migration or capability. Original facts and history stay immutable; registered isolated test fixtures and original actual base retained. Source-only and unknown history are never fabricated completed facts.",
-      "dateAndPermission": "Read-only original capability/scope and private download authorization. Adopted revision is not latest upload; receipt date-only stays date-only. Contract business clock and all original production/packing/quality gates unchanged."
-    },
-    {
-      "rule": "Actual parent page identity, version route and original navigation context",
-      "writes": [
-        "apps/web/src/auth-session.ts",
-        "apps/web/src/digital-cockpit-page.tsx",
-        "apps/web/src/digital-journey-cockpit-model.ts",
-        "apps/web/src/digital-quotation-panel.tsx",
-        "apps/web/src/quotation-history-route.ts",
-        "packages/contracts/src/digital-production-journey.ts",
-        "tests/unit/digital-journey-cockpit.test.ts"
-      ],
-      "reads": [
-        "apps/web/src/cockpit-detail.tsx",
-        "apps/web/src/cockpit-home.tsx",
-        "apps/web/src/cockpit-dialog-focus.ts",
-        "apps/api/src/production-platform/quotation-service.ts"
-      ],
-      "oldTests": [
-        "tests/unit/auth-session-entry.test.ts",
-        "tests/unit/digital-detail-route.test.ts",
-        "tests/unit/digital-journey-cockpit.test.ts"
-      ],
-      "checks": [
-        "frozen-related-unit",
-        "frozen-browser",
-        "frozen-typecheck",
-        "frozen-lint"
-      ],
-      "expectation": "Existing columns, header, stages, actions and planner drafts survive local directory operations. Real original quote history page returns exact search/open/scroll/focus; actual actor-role change destroys private cache; unsupported version never falls back to latest. No new backend state from view.",
-      "source": "docs/engineering/new-flow-20261031-approved-plan.md PR07 / F.7 / UI / 26-source matrix; latest approved fixed ten and view-all decisions",
-      "initialization": "No new tables, migration or capability. Original facts and history stay immutable; registered isolated test fixtures and original actual base retained. Source-only and unknown history are never fabricated completed facts.",
-      "dateAndPermission": "Read-only original capability/scope and private download authorization. Adopted revision is not latest upload; receipt date-only stays date-only. Contract business clock and all original production/packing/quality gates unchanged."
-    },
-    {
-      "rule": "Source fixture and old direct reader compatibility with real resource lifecycle",
-      "writes": [
-        "tests/acceptance/cockpit-document-snapshot-browser.mjs",
-        "tests/acceptance/cockpit-production-directory-browser.mjs",
-        "tests/fixtures/cockpit-document-production-page.tsx",
-        "tests/fixtures/production-readiness-ui.tsx",
-        "tests/integration/development-technical-postgres.test.ts",
-        "tests/integration/digital-development-postgres.test.ts",
-        "tests/integration/production-readiness-postgres.test.ts"
-      ],
-      "reads": [
-        "scripts/test-suite-plan.mjs",
-        "scripts/test-preflight.mjs",
-        "tests/helpers/owned-postgres-schema.ts",
-        "apps/api/src/production-platform/short-lead-service.ts"
-      ],
-      "oldTests": [
-        "tests/integration/digital-development-postgres.test.ts",
-        "tests/integration/development-technical-postgres.test.ts",
-        "tests/integration/production-readiness-postgres.test.ts"
-      ],
-      "checks": [
-        "final-sources-postgres",
-        "frozen-browser",
-        "frozen-related-unit",
-        "frozen-lint",
-        "frozen-typecheck",
-        "frozen-preflight"
-      ],
-      "expectation": "Original database and UI cases remain. Exact baseline reproduces legacy date expectation mismatch, only error expectation corrected to approved 409 SHORT_LEAD_APPROVAL_REQUIRED. Touched legacy schema now uses registered create/release lifecycle with real parent cleanup. Synthetic browser data labelled; no site acceptance claim.",
-      "source": "docs/engineering/new-flow-20261031-approved-plan.md PR07 / F.7 / UI / 26-source matrix; latest approved fixed ten and view-all decisions",
-      "initialization": "No new tables, migration or capability. Original facts and history stay immutable; registered isolated test fixtures and original actual base retained. Source-only and unknown history are never fabricated completed facts.",
-      "dateAndPermission": "Read-only original capability/scope and private download authorization. Adopted revision is not latest upload; receipt date-only stays date-only. Contract business clock and all original production/packing/quality gates unchanged."
+      "initialization": "External frozen-candidate package is not committed and never changes its own Head; existing immutable final refs retain observation behavior; no database, user role, permission or business migration",
+      "dateAndPermission": "No new credentials, actor authentication, server protection or CI pipeline; real report bytes and fixed Head/base only. Does not claim all unknown defects or prevent manual ref creation.",
+      "expectation": "Root references resolve on this branch; preserve branch-specific runbook; actual tests exercise missing/old/unclosed/valid controller paths rather than a self-labelled passed field"
     }
   ],
   "checks": [
     {
-      "id": "final-sources-postgres",
+      "id": "native-protocol",
       "kind": "tests",
-      "command": "[\"flock\",\"/workspace/dx-governance-local-pg-instance.lock\",\"node\",\"/workspace/dx-p07-focused-postgres.mjs\"]",
+      "command": "[\"node\",\"scripts/test-preflight.mjs\"]",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "e110b44fcabd6b8cd2236ab7f59ed99c16dc0d93",
-      "sourceFingerprint": "b2feea4c64508f7a89841c8fea3e3680effbbf1b86113d59166045663d7cec38",
+      "testedHead": "676a8f00264f011eda844c0b06e52c5e018706e6",
+      "sourceFingerprint": "45a075dd7dcd7ba0e3aca042624be189271638e59dbd4e9330d99ab43eec14d2",
       "inputPaths": [
-        "apps/api",
-        "packages/contracts",
-        "packages/domain",
-        "tests/integration/production-readiness-postgres.test.ts",
-        "tests/integration/development-technical-postgres.test.ts",
-        "tests/integration/receiving-postgres.test.ts",
-        "tests/integration/digital-development-postgres.test.ts",
-        "tests/helpers",
-        "scripts",
-        "package.json",
-        "package-lock.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts",
-        "vitest.postgres-immediate.config.ts"
+        "scripts/ci",
+        "AGENTS.md",
+        "docs/governance/final-closeout-v1.md",
+        "docs/governance/construction-evidence-v1.md",
+        "docs/governance/review-first-final-head-20261027.md"
       ],
-      "inputFingerprint": "c879b4843d60f81d22ed2492b8f79a5ec541b46c9b7bdbc0b151f4c54855bfed",
-      "sourceState": "Actual working candidate source/input fingerprints captured before command and declared inputs reverified after; testedHead is ancestor while git diff exists, not a claim of a committed tested Head",
-      "context": "Local Node 22.23.4; owned marked PG16 instance/low-privilege test role, explicit canonical workers; no claim of CI hardware equivalence or authenticated full-site acceptance",
-      "startedAt": "2026-11-02T01:13:11.886Z",
-      "endedAt": "2026-11-02T01:14:23.778Z",
-      "logSha256": "e69371d7c5aa795903cdf5bb76d6ba51fee2e1ec2b54de2869582c8c9dfde070",
-      "log": "/workspace/dx-p07-recorded-final-sources-postgres-1793581991886.log",
-      "passed": 91,
+      "inputFingerprint": "e1cd384e0b391c16919f6323c55e0dc7f832007a5ffffd430aaff034ccf5f006",
+      "context": "Actual local Node 22.23.4; native protocol tests only, no PostgreSQL or production operations; exact declared input digest recorded before/after; not a remote Full claim",
+      "startedAt": "2026-11-02T02:04:07.520Z",
+      "endedAt": "2026-11-02T02:04:10.950Z",
+      "log": "/workspace/dx-closeout-records/dx-closeout-release-20261102/native-protocol-1793585047520.log",
+      "logSha256": "7ffa4f1ff405eb0abd43a432e47ed55d6c023237d04ffa19db84fe60ba7fc3a4",
+      "passed": 152,
       "failed": 0,
       "skipped": 0
-    },
-    {
-      "id": "frozen-related-unit",
-      "kind": "tests",
-      "command": "[\"node\",\"node_modules/vitest/vitest.mjs\",\"run\",\"tests/unit/auth-session-entry.test.ts\",\"tests/unit/cockpit-detail.test.ts\",\"tests/unit/cockpit-document-directory.test.ts\",\"tests/unit/cockpit-document-new-sources.test.ts\",\"tests/unit/cockpit-document-snapshot.test.ts\",\"tests/unit/cockpit-home.test.ts\",\"tests/unit/digital-detail-route.test.ts\",\"tests/unit/digital-journey-cockpit.test.ts\"]",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "f9a38638fefc91b11071afd9424f72b4ff9fa587",
-      "sourceFingerprint": "3c64d51ae5621bb300c759c8729a8c6688275959b2eb13f1216141562e4ebcab",
-      "inputPaths": [
-        "apps/web",
-        "packages",
-        "tests/unit/auth-session-entry.test.ts",
-        "tests/unit/cockpit-detail.test.ts",
-        "tests/unit/cockpit-document-directory.test.ts",
-        "tests/unit/cockpit-document-new-sources.test.ts",
-        "tests/unit/cockpit-document-snapshot.test.ts",
-        "tests/unit/cockpit-home.test.ts",
-        "tests/unit/digital-detail-route.test.ts",
-        "tests/unit/digital-journey-cockpit.test.ts",
-        "package.json",
-        "package-lock.json",
-        "tsconfig.base.json",
-        "vitest.config.ts"
-      ],
-      "inputFingerprint": "49a1093a2ee2cebf30f5c41bbf0d05af3f7a9f2c60569e40fb96d3b029960379",
-      "sourceState": "Actual working candidate source/input fingerprints captured before command and declared inputs reverified after; testedHead is ancestor while git diff exists, not a claim of a committed tested Head",
-      "context": "Local Node 22.23.4; owned marked PG16 instance/low-privilege test role, explicit canonical workers; no claim of CI hardware equivalence or authenticated full-site acceptance",
-      "startedAt": "2026-11-02T01:26:10.099Z",
-      "endedAt": "2026-11-02T01:26:17.460Z",
-      "logSha256": "7d590e4184d19d2b4d80c3c17df6e5443d94a3a88cc637940d8f7198c15a6b3f",
-      "log": "/workspace/dx-p07-recorded-frozen-related-unit-1793582770099.log",
-      "passed": 144,
-      "failed": 0,
-      "skipped": 0
-    },
-    {
-      "id": "frozen-browser",
-      "kind": "command",
-      "command": "[\"node\",\"tests/acceptance/cockpit-document-snapshot-browser.mjs\"]",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "f9a38638fefc91b11071afd9424f72b4ff9fa587",
-      "sourceFingerprint": "3c64d51ae5621bb300c759c8729a8c6688275959b2eb13f1216141562e4ebcab",
-      "inputPaths": [
-        "apps/web",
-        "packages",
-        "tests/acceptance/cockpit-production-directory-browser.mjs",
-        "tests/acceptance/cockpit-document-snapshot-browser.mjs",
-        "tests/fixtures/cockpit-document-production-page.tsx",
-        "package.json",
-        "package-lock.json",
-        "tsconfig.base.json"
-      ],
-      "inputFingerprint": "56d1f4c224c3ba36113cfabd446ecb2773c6309e8d8880f67c418325d009a512",
-      "sourceState": "Actual working candidate source/input fingerprints captured before command and declared inputs reverified after; testedHead is ancestor while git diff exists, not a claim of a committed tested Head",
-      "context": "Local Node 22.23.4; owned marked PG16 instance/low-privilege test role, explicit canonical workers; no claim of CI hardware equivalence or authenticated full-site acceptance",
-      "startedAt": "2026-11-02T01:26:10.118Z",
-      "endedAt": "2026-11-02T01:26:48.349Z",
-      "logSha256": "38e9b032edebb5fb7589b3fe4df024fedd94ecc96df5d2c13f760aee84ec4cfa",
-      "log": "/workspace/dx-p07-recorded-frozen-browser-1793582770119.log"
-    },
-    {
-      "id": "frozen-lint",
-      "kind": "command",
-      "command": "[\"npm\",\"run\",\"lint\"]",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "f9a38638fefc91b11071afd9424f72b4ff9fa587",
-      "sourceFingerprint": "3c64d51ae5621bb300c759c8729a8c6688275959b2eb13f1216141562e4ebcab",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "tests",
-        "scripts",
-        "package.json",
-        "package-lock.json",
-        "tsconfig.base.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts",
-        "vitest.postgres-immediate.config.ts",
-        "eslint.config.js"
-      ],
-      "inputFingerprint": "0a0b6fca87155cfb8afddef41552f832043c19fcf4df2cc18bf38f23335c216e",
-      "sourceState": "Actual working candidate source/input fingerprints captured before command and declared inputs reverified after; testedHead is ancestor while git diff exists, not a claim of a committed tested Head",
-      "context": "Local Node 22.23.4; owned marked PG16 instance/low-privilege test role, explicit canonical workers; no claim of CI hardware equivalence or authenticated full-site acceptance",
-      "startedAt": "2026-11-02T01:26:10.163Z",
-      "endedAt": "2026-11-02T01:26:46.767Z",
-      "logSha256": "dac45e9202dd0400da69a080ea51bda187f66d2c3344db6291f4d82e1077d00f",
-      "log": "/workspace/dx-p07-recorded-frozen-lint-1793582770163.log"
-    },
-    {
-      "id": "frozen-typecheck",
-      "kind": "command",
-      "command": "[\"npm\",\"run\",\"typecheck\"]",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "f9a38638fefc91b11071afd9424f72b4ff9fa587",
-      "sourceFingerprint": "3c64d51ae5621bb300c759c8729a8c6688275959b2eb13f1216141562e4ebcab",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "package.json",
-        "package-lock.json",
-        "tsconfig.base.json"
-      ],
-      "inputFingerprint": "a98281e4879b7a2f0fa848420c1b018878e8a117481f685de35c30da545d37c2",
-      "sourceState": "Actual working candidate source/input fingerprints captured before command and declared inputs reverified after; testedHead is ancestor while git diff exists, not a claim of a committed tested Head",
-      "context": "Local Node 22.23.4; owned marked PG16 instance/low-privilege test role, explicit canonical workers; no claim of CI hardware equivalence or authenticated full-site acceptance",
-      "startedAt": "2026-11-02T01:26:10.143Z",
-      "endedAt": "2026-11-02T01:26:59.860Z",
-      "logSha256": "17a1a9d0ac31b5d9d7936a4292ac25eb7c62c2b270726b898476448810a0f5c6",
-      "log": "/workspace/dx-p07-recorded-frozen-typecheck-1793582770144.log"
-    },
-    {
-      "id": "frozen-preflight",
-      "kind": "command",
-      "command": "[\"npm\",\"run\",\"test:preflight\"]",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "f9a38638fefc91b11071afd9424f72b4ff9fa587",
-      "sourceFingerprint": "3c64d51ae5621bb300c759c8729a8c6688275959b2eb13f1216141562e4ebcab",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "tests",
-        "scripts",
-        "package.json",
-        "package-lock.json",
-        "tsconfig.base.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts",
-        "vitest.postgres-immediate.config.ts",
-        "eslint.config.js"
-      ],
-      "inputFingerprint": "0a0b6fca87155cfb8afddef41552f832043c19fcf4df2cc18bf38f23335c216e",
-      "sourceState": "Actual working candidate source/input fingerprints captured before command and declared inputs reverified after; testedHead is ancestor while git diff exists, not a claim of a committed tested Head",
-      "context": "Local Node 22.23.4; owned marked PG16 instance/low-privilege test role, explicit canonical workers; no claim of CI hardware equivalence or authenticated full-site acceptance",
-      "startedAt": "2026-11-02T01:26:46.997Z",
-      "endedAt": "2026-11-02T01:26:50.680Z",
-      "logSha256": "f27ff8065bace76f1ef2b196bc5f16ba59c7fdfc20983754a60fbd6bb115e194",
-      "log": "/workspace/dx-p07-recorded-frozen-preflight-1793582806998.log"
     }
-  ],
-  "scopeNote": "Actual local fixed-input evidence, not final GitHub Gate. 91 original source/development PostgreSQL cases;144 units;20 synthetic original-parent browser scenarios. Runtime Node22.23.4/marked PG16 low privilege, bounded canonical runner. Broad lint/types/preflight are real exits. Exact per-check fingerprints allow unchanged API scope evidence, not cross-head final Gate reuse."
+  ]
 }
