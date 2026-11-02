@@ -40,5 +40,5 @@ export type ProductionReadinessState={
  canDeliverInstruction:boolean;canAcknowledgeAdoption:boolean;canAdopt:boolean;adoptionAcknowledged:boolean;adoptionReason:string|null;
  finalReasons:string[];technicalRevision:string|null;draftWindow:PreparationWindow;finalWindow:PreparationWindow;
  instructionDeliveries:Array<{eventId:string;instructionVersion:number;recipient:string;occurredAt:string;note:string;evidenceIds:string[]}>;
- ranges:Array<{rangeId:string;preparationId:string;kind:string;version:number;lineIds:string[];complete:boolean;pendingMaterialIds:string[];note:string;recordedAt:string}>;
+ ranges:Array<{rangeId:string;preparationId:string;kind:string;version:number;lineIds:string[];complete:boolean;pendingMaterialIds:string[];note:string;recordedAt:string;evidenceIds:string[];basis:Record<string,unknown>}>;
 };

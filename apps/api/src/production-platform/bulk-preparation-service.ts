@@ -1,3 +1,4 @@
+import {orderDocumentHistory} from './order-document-history.js';
 import {bridgePreparationMaterials} from './preparation-series-bridge.js';
 import {ProductionReadinessService} from './production-readiness-service.js';
 import {preparationAdoption,preparationContext,preparationResponsibility,currentPreparationMaterial,appendPreparationMaterial} from './preparation-material-repository.js';
@@ -144,6 +145,7 @@ export class BulkPreparationService {
    dispatch:{version:row?.version??0,patternWorkerId:dispatchPerson(row?.pattern_worker_id),warehouseWorkerId:dispatchPerson(row?.warehouse_worker_id),cuttingWorkerId:dispatchPerson(row?.cutting_worker_id)},canDispatchPattern,canDispatchWarehouse,
    facts:prep?(await db.query('SELECT kind,recorded_at AS "recordedAt" FROM digital_bulk_preparation_facts WHERE preparation_id=$1 ORDER BY recorded_at',[prep.preparation_id])).rows:[],tasks};
  }
+ async documentHistory(actor:TrustedActorContext,id:string,beforeId?:string){return orderDocumentHistory(this.database,actor,id,'fabric',beforeId);}
  async workroom(actor:TrustedActorContext,filter:BulkWorkroomFilter):Promise<BulkWorkroomResult>{
   const policy=new DigitalProductionAccessPolicy(this.database);
   const root=isRootActor(actor);

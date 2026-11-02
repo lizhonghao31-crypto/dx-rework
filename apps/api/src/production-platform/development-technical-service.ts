@@ -361,13 +361,29 @@ export class DevelopmentTechnicalService {
    return {requestId:input.requestId,version};
   });
  }
- async history(actor:TrustedActorContext,sourceId:string,input:{roundNumber:number;scopeRef:string;kind:'artifacts'|'comments';beforeVersion?:number|undefined}){
+ async history(actor:TrustedActorContext,sourceId:string,input:{roundNumber:number;scopeRef:string;kind:'artifacts'|'comments';beforeVersion?:number|undefined;version?:number|undefined;view?:'directory'|undefined;adoptedArtifactId?:string|undefined}){
   const db=await this.database.connect();try{await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');await this.forms().read(actor,sourceId,db,input.roundNumber);await this.scope(db,sourceId,input.scopeRef);
    if(!await technicalEnrollment(db,sourceId))digitalNotFound();
-   const values=[sourceId,input.roundNumber,input.scopeRef,input.beforeVersion??null];
-   const rows=(await db.query(input.kind==='artifacts'?'SELECT * FROM digital_development_artifact_versions WHERE source_id=$1 AND round_number=$2 AND scope_ref=$3 AND ($4::integer IS NULL OR version<$4) ORDER BY version DESC LIMIT 21':'SELECT * FROM digital_development_final_comments WHERE source_id=$1 AND round_number=$2 AND scope_ref=$3 AND ($4::integer IS NULL OR version<$4) ORDER BY version DESC LIMIT 21',values)).rows;
-   const page=rows.slice(0,20),items=input.kind==='artifacts'?page.map(technicalArtifactDto):page.map(c=>({commentId:c.comment_id,version:c.version,isFinal:c.is_final,decision:c.decision,text:c.text_value,evidenceRefs:c.evidence_refs,evidenceNote:c.evidence_note,occurredAt:c.occurred_at?iso(c.occurred_at):null,recordedAt:iso(c.recorded_at)}));
-   await db.query('COMMIT');return {items,nextBeforeVersion:rows.length>20?page.at(-1)!.version:null};
+   if(input.adoptedArtifactId){
+    if(input.kind!=='artifacts'||input.version===undefined||input.beforeVersion!==undefined||input.view!==undefined)conflict('沿用成果只读取明确的已关联版本');
+    const inherited=(await db.query(`SELECT a.* FROM digital_development_artifact_inheritances i JOIN digital_development_artifact_versions a ON a.artifact_set_id=i.artifact_set_id AND a.version=i.artifact_version
+      WHERE i.source_id=$1 AND i.round_number=$2 AND i.scope_ref=$3 AND i.artifact_set_id=$4 AND i.artifact_version=$5`,[sourceId,input.roundNumber,input.scopeRef,input.adoptedArtifactId,input.version])).rows[0];
+    if(!inherited)digitalNotFound();await db.query('COMMIT');return {sourceId,roundNumber:input.roundNumber,scopeRef:input.scopeRef,items:[technicalArtifactDto(inherited)],nextBeforeVersion:null};
+   }
+   const values=[sourceId,input.roundNumber,input.scopeRef,input.beforeVersion??null,input.version??null];
+   const directory=input.view==='directory';
+   const selection=input.kind==='artifacts'?(directory?'v.artifact_set_id,v.version,v.source_id,v.round_number,v.scope_ref,v.task_id,v.document_version,v.status,v.created_by,v.created_at,u.display_name AS author_name':'v.*'):(directory?'v.comment_id,v.version,v.is_final,v.decision,v.occurred_at,v.recorded_at,q.task_id AS review_task_id,q.review_id,r.version AS review_result_version,r.decision AS review_decision,r.artifact_version AS review_artifact_version,r.note AS review_note':'v.*');
+   const table=input.kind==='artifacts'?'digital_development_artifact_versions':'digital_development_final_comments';
+   // Only fixed internal table/selection strings are interpolated; all resource/cursor inputs remain bound.
+   const joins=input.kind==='artifacts'?' LEFT JOIN app_users u ON u.id=v.created_by':' LEFT JOIN digital_development_size_review_requests q ON q.final_comment_id=v.comment_id LEFT JOIN digital_development_size_review_results r ON r.review_id=q.review_id';
+   const found=(await db.query(`SELECT ${selection} FROM ${table} v ${joins} WHERE v.source_id=$1 AND v.round_number=$2 AND v.scope_ref=$3 AND ($4::integer IS NULL OR v.version<$4) AND ($5::integer IS NULL OR v.version=$5) ORDER BY v.version DESC LIMIT 21`,values)).rows;
+   if(input.version!==undefined&&!found.length)digitalNotFound();
+   const page=found.slice(0,20),items=input.kind==='artifacts'?page.map(a=>directory?{artifactSetId:a.artifact_set_id,version:a.version,sourceId:a.source_id,roundNumber:a.round_number,scopeRef:a.scope_ref,taskId:a.task_id,documentVersion:a.document_version,status:a.status,createdByName:a.author_name??null,createdAt:iso(a.created_at)}:technicalArtifactDto(a)):page.map(c=>({commentId:c.comment_id,version:c.version,isFinal:c.is_final,decision:c.decision,...(directory?{reviewTaskId:c.review_task_id??null,review:c.review_task_id?{taskId:c.review_task_id,reviewId:c.review_id,completed:Boolean(c.review_result_version),decision:c.review_decision??null,artifactVersion:c.review_artifact_version??null,note:c.review_note??''}:null}:{text:c.text_value,evidenceRefs:c.evidence_refs,evidenceNote:c.evidence_note}),occurredAt:c.occurred_at?iso(c.occurred_at):null,recordedAt:iso(c.recorded_at)}));
+   const effective=directory?await effectiveTechnicalEvidence(db,sourceId,input.roundNumber,input.scopeRef):undefined;
+   const contextAvailable=directory?Boolean((await db.query('SELECT 1 FROM digital_development_preparation_basis WHERE source_id=$1 AND round_number=$2 UNION ALL SELECT 1 FROM digital_development_technical_material_decisions WHERE source_id=$1 AND round_number=$2 LIMIT 1',[sourceId,input.roundNumber])).rowCount):undefined;
+   const adoptedRow=directory&&effective?.artifactRef?(await db.query('SELECT a.artifact_set_id,a.version,a.source_id,a.round_number,a.scope_ref,a.task_id,a.document_version,a.status,a.created_at,u.display_name AS author_name FROM digital_development_artifact_versions a LEFT JOIN app_users u ON u.id=a.created_by WHERE a.artifact_set_id=$1 AND a.version=$2',[effective.artifactRef.id,effective.artifactRef.version])).rows[0]:null;
+   const adoptedArtifact=adoptedRow?{artifactSetId:adoptedRow.artifact_set_id,version:adoptedRow.version,sourceId:adoptedRow.source_id,roundNumber:adoptedRow.round_number,scopeRef:adoptedRow.scope_ref,taskId:adoptedRow.task_id,documentVersion:adoptedRow.document_version,status:adoptedRow.status,createdByName:adoptedRow.author_name??null,createdAt:iso(adoptedRow.created_at),viaSourceId:sourceId,viaRoundNumber:input.roundNumber}:null;
+   await db.query('COMMIT');return {sourceId,roundNumber:input.roundNumber,scopeRef:input.scopeRef,items,nextBeforeVersion:found.length>20?page.at(-1)!.version:null,...(directory?{effective,contextAvailable,adoptedArtifact}:{})};
   }catch(e){await db.query('ROLLBACK');throw e;}finally{db.release();}
  }
  async read(actor:TrustedActorContext,sourceId:string,round?:number,scope='整款',client?:PoolClient):Promise<DevelopmentTechnicalState>{

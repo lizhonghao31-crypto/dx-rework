@@ -1,3 +1,6 @@
+import Fastify from 'fastify';
+import {ApplicationError} from '../../apps/api/src/platform/errors.js';
+import {registerDevelopmentExecutionRoutes} from '../../apps/api/src/production-platform/development-execution-routes.js';
 import {DevelopmentRoundService} from '../../apps/api/src/production-platform/development-round-service.js';
 import {DigitalQuotationService} from '../../apps/api/src/production-platform/quotation-service.js';
 import {SlaConfigurationRepository} from '../../apps/api/src/production-platform/sla-configuration-repository.js';
@@ -314,4 +317,36 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
 
     });
  });
+ it('serves bounded technical directory metadata and exact historic bodies without a latest fallback',async()=>{
+  const p=await prepare(),first=await artifact(p),original=(await technical.read(p.worker,p.sourceId)).artifacts[0]!;
+  for(let version=1;version<=21;version++)await technical.saveArtifact(p.worker,p.sourceId,{taskId:p.paper.taskId,expectedDocumentVersion:p.documentVersion,expectedVersion:version,scopeRef:'整款',action:'save',body:{...original.body,note:`TEST directory draft ${version+1}`}},randomUUID());
+  const query={roundNumber:1,scopeRef:'整款',kind:'artifacts' as const,view:'directory' as const},page=await technical.history(p.worker,p.sourceId,query);
+  expect(page.items).toHaveLength(20);expect(page.nextBeforeVersion).toBe(3);expect(page.items.every(v=>!Object.hasOwn(v,'body'))).toBe(true);
+  expect(page.adoptedArtifact).toMatchObject({artifactSetId:first.artifactSetId,version:1,roundNumber:1});
+  const old=await technical.history(p.worker,p.sourceId,{...query,beforeVersion:page.nextBeforeVersion!});expect(old.items.map(v=>v.version)).toEqual([2,1]);expect(old.nextBeforeVersion).toBeNull();
+  const exact=await technical.history(p.worker,p.sourceId,{roundNumber:1,scopeRef:'整款',kind:'artifacts',version:1});expect(exact.items).toHaveLength(1);expect(exact.items[0]).toMatchObject({artifactSetId:first.artifactSetId,version:1,body:original.body});
+  await expect(technical.history(p.worker,p.sourceId,{...query,version:99999})).rejects.toMatchObject({statusCode:404});
+  await expect(technical.history(person('qc'),p.sourceId,query)).rejects.toMatchObject({statusCode:404}); // Original source reader deliberately hides inaccessible resource existence.
+  expect((await technical.read(p.worker,p.sourceId)).effective?.artifactRef).toEqual(page.effective?.artifactRef);
+  const app=Fastify(),deps={service:identity,creationEnabled:true,authenticate:async(token:string|undefined)=>{if(token!=='worker')throw new ApplicationError('UNAUTHORIZED','TEST login required',401);return {id:p.worker.actorId,displayName:'TEST paper worker',businessRoles:p.worker.actorRoles,capabilities:['digital_production:view']};}};
+  app.setErrorHandler((e,_r,reply)=>{const error=e as ApplicationError;void reply.code(error.statusCode??500).send({code:error.code,message:error.message});});registerDevelopmentExecutionRoutes(app,deps,execution,f.attachments);await app.ready();
+  try{const base=`/digital-production/sources/${p.sourceId}/execution/technical/history?roundNumber=1&kind=artifacts`,headers={cookie:'dx_rework_session=worker'};
+   expect((await app.inject({method:'GET',url:base+'&view=directory'})).statusCode).toBe(401);const metadata=await app.inject({method:'GET',url:base+'&view=directory',headers});expect(metadata.statusCode).toBe(200);expect(metadata.json().items.every((v:unknown)=>!Object.hasOwn(v as object,'body'))).toBe(true);
+   const original=await app.inject({method:'GET',url:base+'&version=1',headers});expect(original.statusCode).toBe(200);expect(original.json().items[0].body.pltAttachmentIds).toHaveLength(1);
+   expect((await app.inject({method:'GET',url:base+'&version=1&beforeVersion=2',headers})).statusCode).toBe(400);expect((await app.inject({method:'GET',url:base+'&version=2147483648',headers})).statusCode).toBe(400);
+   expect((await app.inject({method:'GET',url:base+`&version=1&adoptedArtifactId=${randomUUID()}`,headers})).statusCode).toBe(404);
+  }finally{await app.close();}
+
+ });
+
+ it('reads only the proven inherited artifact from the selected child round and rejects arbitrary artifact IDs',async()=>{
+  const p=await sampleToTail(),rounds=new DevelopmentRoundService(f.db,true),old=await forms.read(p.designer,p.sourceId);
+  const draft=await rounds.save(p.designer,p.sourceId,{expectedDraftVersion:0,revision:{basedOnRound:1,document:old.document!,origin:'内部发现',customerComment:'',internalProblem:'TEST仅重做车缝，技术成果仍可复用',explanation:'TEST原生复版继承',categories:['车缝'],affectedNodes:['车板'],outputKind:'整件样板'}},randomUUID());
+  await rounds.publish(p.designer,p.sourceId,{expectedDraftVersion:draft.draftVersion,basedOnRound:1},randomUUID());
+  const metadata=await technical.history(p.designer,p.sourceId,{roundNumber:2,scopeRef:'整款',kind:'artifacts',view:'directory'});expect(metadata.items).toEqual([]);expect(metadata.adoptedArtifact).toMatchObject({sourceId:p.sourceId,roundNumber:1,viaSourceId:p.sourceId,viaRoundNumber:2});
+  const inherited=metadata.adoptedArtifact!,detail=await technical.history(p.designer,p.sourceId,{roundNumber:2,scopeRef:'整款',kind:'artifacts',version:inherited.version,adoptedArtifactId:inherited.artifactSetId});expect(detail.items[0]).toMatchObject({roundNumber:1,artifactSetId:inherited.artifactSetId});expect(Object.hasOwn(detail.items[0]!,'body')).toBe(true);
+  await expect(technical.history(p.designer,p.sourceId,{roundNumber:2,scopeRef:'整款',kind:'artifacts',version:inherited.version,adoptedArtifactId:randomUUID()})).rejects.toMatchObject({statusCode:404});
+  const unchanged=await technical.history(p.designer,p.sourceId,{roundNumber:2,scopeRef:'整款',kind:'artifacts',view:'directory'});expect(unchanged.effective).toEqual(metadata.effective);
+ });
+
 });

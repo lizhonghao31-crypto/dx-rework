@@ -42,6 +42,11 @@ function identityFingerprint(result: SessionVerificationResult | undefined): str
     readonly:[...(user.readOnlyModules ?? [])].sort(),requestFailed:result.requestFailed});
 }
 
+/** Stable identity/role key for read caches; an unchanged revalidation does not discard valid data. */
+export function verifiedSessionIdentity(session:VerifiedSession|undefined):string{
+  return identityFingerprint(session===undefined?undefined:{session,requestFailed:false});
+}
+
 function readIdentity(): Promise<SessionVerificationResult> {
   const controller = new AbortController();
   return new Promise(resolve => {

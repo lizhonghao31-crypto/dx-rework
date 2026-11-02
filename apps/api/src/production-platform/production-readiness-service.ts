@@ -50,7 +50,7 @@ export class ProductionReadinessService{
    draftWindow:orderId?await preparationWindow(db,orderId,'draft'): {startedAt:null,dueAt:null,completedAt:null,minutes:null,reason:'正式单形成前保留真实投料及到仓记录',status:'waiting'},
    finalWindow:orderId?await preparationWindow(db,orderId,'final',readiness?.finalReasons):{startedAt:null,dueAt:null,completedAt:null,minutes:null,reason:null,status:'waiting'},
    instructionDeliveries:deliveries.map(r=>({eventId:r.event_id,instructionVersion:r.instruction_version,recipient:r.recipient,occurredAt:preparationIso(r.occurred_at)!,note:r.note,evidenceIds:r.evidence_ids})),
-   ranges:ranges.map(r=>({rangeId:r.range_id,preparationId:r.preparation_id,kind:r.kind,version:r.version,lineIds:r.line_ids,complete:r.complete,pendingMaterialIds:r.pending_material_ids,note:r.note,recordedAt:preparationIso(r.occurred_at)!}))};
+   ranges:ranges.map(r=>({rangeId:r.range_id,preparationId:r.preparation_id,kind:r.kind,version:r.version,lineIds:r.line_ids,complete:r.complete,pendingMaterialIds:r.pending_material_ids,note:r.note,recordedAt:preparationIso(r.occurred_at)!,evidenceIds:r.evidence_ids,basis:r.basis_json}))};
  }
  private async command(actor:TrustedActorContext,resource:PreparationResource,action:string,input:unknown,key:string,work:(db:PoolClient,a:Awaited<ReturnType<ProductionReadinessService['access']>>)=>Promise<void>){
   if(!/^[A-Za-z0-9._:-]{1,128}$/.test(key))conflict('缺少有效操作标识');
@@ -161,6 +161,8 @@ export class ProductionReadinessService{
  async canDownload(actor:TrustedActorContext,resource:PreparationResource,attachmentId:string){
   const a=await this.access(this.database,actor,resource);
   if(a.history.some(f=>f.evidenceIds.includes(attachmentId)))return true;
-  return a.context.orderId?Boolean((await this.database.query('SELECT 1 FROM digital_instruction_deliveries WHERE production_order_id=$1 AND $2=ANY(evidence_ids)',[a.context.orderId,attachmentId])).rowCount):false;
+  if(!a.context.orderId)return false;
+  return Boolean((await this.database.query(`SELECT 1 FROM digital_instruction_deliveries WHERE production_order_id=$1 AND $2=ANY(evidence_ids)
+   UNION ALL SELECT 1 FROM digital_bulk_work_ranges r JOIN digital_bulk_preparations p USING(preparation_id) WHERE p.production_order_id=$1 AND $2=ANY(r.evidence_ids)`,[a.context.orderId,attachmentId])).rowCount);
  }
 }

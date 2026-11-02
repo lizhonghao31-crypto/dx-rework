@@ -36,3 +36,27 @@
  .cockpit-document-category>summary,.cockpit-document-entry>summary{min-height:44px}
  .cockpit-document-file>a,.cockpit-document-file>span{white-space:normal;overflow-wrap:anywhere;min-height:44px}
 }
+/* The original detail columns, tokens and editors remain the host. */
+.cockpit-document-directory{max-height:none;overflow:visible}
+.cockpit-document-priority{max-height:clamp(190px,calc(100dvh - 580px),330px);overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable}
+.cockpit-document-priority-row{display:flex;align-items:center;gap:6px;width:100%;min-height:29px;border:0;border-bottom:1px solid #e5eaf1;background:transparent;text-align:left;color:#24364c}
+.cockpit-document-priority-row>span:first-child{flex:1;min-width:0;overflow-wrap:anywhere}
+.cockpit-document-priority-row small{color:#65758a;white-space:nowrap;font-size:12px}
+.cockpit-document-priority-row:focus-visible,.cockpit-documents-dialog :focus-visible{outline:2px solid #216be4;outline-offset:2px}
+.cockpit-document-chevron{color:#7182a0}
+.cockpit-document-footer{display:flex;justify-content:flex-end;padding-top:6px;border-top:1px solid #e5eaf1}
+.cockpit-documents-dialog{width:min(760px,calc(100vw - 32px));max-height:86dvh;max-width:none;box-sizing:border-box;border:1px solid #dce4ee;border-radius:10px;padding:18px;color:#24364c;background:#fff;font-size:14px;line-height:1.45;overflow:hidden}
+.cockpit-documents-dialog::backdrop{background:#14243670}
+.cockpit-documents-dialog[open]{display:flex;flex-direction:column}
+.cockpit-documents-dialog>header{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex:none}
+.cockpit-documents-dialog h2{font-size:18px;margin:0}.cockpit-documents-dialog header p{margin:4px 0 10px;color:#65758a;overflow-wrap:anywhere}
+.cockpit-documents-dialog button{font:inherit;cursor:pointer}.cockpit-documents-dialog>header>button{border:0;background:transparent;font-size:23px;line-height:1;padding:4px 8px}
+.cockpit-document-filters{display:grid;grid-template-columns:175px minmax(0,1fr);gap:12px;flex:none}
+.cockpit-document-filters label{display:grid;gap:4px;color:#65758a}.cockpit-document-filters input,.cockpit-document-filters select{min-width:0;width:100%;box-sizing:border-box;padding:7px;border:1px solid #dce4ee;border-radius:4px;font:inherit;color:#24364c;background:#fff}
+.cockpit-document-read-note{margin:8px 0;color:#65758a;flex:none;font-size:12px}
+.cockpit-document-modal-scroll{min-height:120px;max-height:54dvh;overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable}
+.cockpit-document-stage h3{font-size:14px;color:#45607e;padding:8px 6px;margin:8px 0 3px;background:#f2f5f9;border-radius:4px}
+.cockpit-document-stage:first-child h3{margin-top:0}.cockpit-document-node-name{font-size:12px;color:#65758a;margin:2px 0 5px}
+.cockpit-documents-dialog>footer{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:8px;padding-top:12px;flex:none}
+.cockpit-documents-dialog>footer>span{flex:1 1 260px;color:#65758a;font-size:12px}
+@media(max-width:800px){.cockpit-document-filters{grid-template-columns:1fr}.cockpit-documents-dialog{padding:12px;max-height:90dvh}.cockpit-document-priority-row{min-height:40px}.cockpit-document-priority{max-height:330px}}

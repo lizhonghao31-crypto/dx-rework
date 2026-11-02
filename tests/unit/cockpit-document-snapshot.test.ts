@@ -10,7 +10,11 @@ const metadata=(path:string):unknown=>{
  if(path.startsWith('pattern-room/related-orders'))return {items:[],nextPage:null};
  if(path.endsWith('/instruction'))return {order:{productionOrderId:oid},version:0,versions:[],document:null,dateRequests:[]};
  if(path.endsWith('/budget'))return {productionOrderId:oid,version:0,versions:[],document:null};
- if(path.endsWith('/bulk-preparation')||path.endsWith('/factory-flow'))return {orderId:oid,preparationId:null};
+ if(path.endsWith('/bulk-preparation'))return {orderId:oid,preparationId:null,facts:[],tasks:[],materials:{history:[]},fabric:{report:null,decision:null,usable:false}};
+ if(path.endsWith('/factory-flow'))return {orderId:oid,preparationId:null,facts:[],checks:[],shipSamples:[],productionInspectionHistory:[],productionChecks:[]};
+ if(path.endsWith('/qc-progress'))return {orderId:oid,executions:[],archivedExecutions:[]};
+ if(path.endsWith('/quotation'))return {quoteId:null,resource:{kind:path.includes('/sources/')?'source':'order',id:path.includes('/sources/')?sid:oid},version:0,versions:[],rows:[],fullCost:true};
+ if(path.includes('/technical/history'))return {sourceId:sid,roundNumber:1,scopeRef:'整款',items:[],nextBeforeVersion:null,effective:null,contextAvailable:false,adoptedArtifact:null};
  if(path.endsWith('/closure'))return {orderId:oid,lines:[],closed:null};
  if(path===`digital-production/orders/${oid}`)return {productionOrderId:oid,version:1,lines:[]};
  throw Error(`Unexpected original reader ${path}`);
@@ -18,7 +22,7 @@ const metadata=(path:string):unknown=>{
 const signal=()=>new AbortController().signal;
 const related=(page:number)=>`pattern-room/related-orders?sourceId=${sid}&orderId=${oid}&page=${page}`;
 const pause=()=>new Promise<void>(resolve=>setTimeout(resolve,1));
-it('preloads the eleven original categories with at most three GETs and shares original metadata without reading files',async()=>{
+it('preloads authorized source metadata with the original three-GET bound with at most three GETs and shares original metadata without reading files',async()=>{
  const calls:string[]=[];let active=0,peak=0;const read:CockpitDocumentReader=async path=>{calls.push(path);active++;peak=Math.max(peak,active);await pause();active--;return metadata(path);};
  const snapshot=createCockpitDocumentSnapshot(fixture(),read);await Promise.all(COCKPIT_DOCUMENT_CATEGORIES.map(({key})=>snapshot.load(key)));
  expect(peak).toBe(3);expect(calls.filter(path=>path.startsWith('pattern-room/related-orders'))).toHaveLength(1);expect(calls.filter(path=>path.endsWith('/instruction'))).toHaveLength(1);
@@ -88,5 +92,5 @@ it('validates development revision and contract collections including each entry
  for(const bad of [{contracts:null,versions:[]},{contracts:[],versions:[null]},{contracts:[{entryId:7,version:1}],versions:[]},{contracts:[],versions:[{revision:1,signedContractDocumentId:null,attachments:null}]}]){let invalid=true;const snapshot=createCockpitDocumentSnapshot(source,async()=>invalid?bad:{contracts:[],versions:[]});await snapshot.load('contract');expect(snapshot.getSnapshot().contract).toMatchObject({phase:'error'});invalid=false;await snapshot.load('contract');expect(snapshot.getSnapshot().contract.data?.state).toBe('missing');snapshot.dispose();}
 });
 it('drops a malformed late reply after switching orders without replacing the new valid existence result',async()=>{
- let release!:(value:unknown)=>void;const old=createCockpitDocumentSnapshot(fixture(),async()=>new Promise(resolve=>{release=resolve;}));const pending=old.load('pattern');old.dispose();const next=createCockpitDocumentSnapshot({...fixture(),sourceId:'next'},async()=>({items:[],nextPage:null}));await next.load('pattern');release({items:null,nextPage:null});await pending;expect(old.getSnapshot().pattern.phase).toBe('idle');expect(next.getSnapshot().pattern).toMatchObject({phase:'ready',data:{state:'missing'}});next.dispose();
+ let release!:(value:unknown)=>void;const old=createCockpitDocumentSnapshot(fixture(),async()=>new Promise(resolve=>{release=resolve;}));const pending=old.load('pattern');await pause();old.dispose();const next=createCockpitDocumentSnapshot({...fixture(),sourceId:'next'},async()=>({items:[],nextPage:null}));await next.load('pattern');release({items:null,nextPage:null});await pending;expect(old.getSnapshot().pattern.phase).toBe('idle');expect(next.getSnapshot().pattern).toMatchObject({phase:'ready',data:{state:'missing'}});next.dispose();
 });

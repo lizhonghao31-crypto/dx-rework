@@ -1,3 +1,4 @@
+import {orderDocumentHistory} from './order-document-history.js';
 import {ContextBusinessClock} from '../acceptance-clock/business-time.js';
 import {receivingForecast} from './receiving-forecast.js';
 import {receivingSpan} from './receiving-span.js';
@@ -22,6 +23,7 @@ export class OrderClosureService{
  constructor(private readonly database:Pool){}
  private async canClose(db:DB,actor:TrustedActorContext){if(actor.actorRoles.includes('root_superuser')&&(await db.query('SELECT access_is_root_actor($1) AS allowed',[actor.actorId])).rows[0]?.allowed)return true;const policy=new DigitalProductionAccessPolicy(db);for(const role of ['production_management','owner_group'])if(actor.actorRoles.includes(role)&&await policy.activeRole(actor.actorId,role))return true;return false;}
  async recordQuality(actor:TrustedActorContext,id:string,input:ReceiptQuality,key:string){return new GarmentQualityService(this.database).record(actor,id,input,key);}
+ async documentHistory(actor:TrustedActorContext,id:string,beforeId?:string){return orderDocumentHistory(this.database,actor,id,'receipt_quality',beforeId);}
  async read(actor:TrustedActorContext,id:string,db:DB=this.database):Promise<OrderClosureSheet>{
   await new DigitalProductionAccessPolicy(db).assert(actor,'order',id,'technical');
   const original=(await db.query(`SELECT p.*,(SELECT sum(quantity) FROM digital_production_po_sizes WHERE line_id=p.line_id) total_quantity,c.child_id AS cutting_id FROM digital_production_po_lines p LEFT JOIN digital_production_child_lines c ON c.production_order_id=p.production_order_id AND c.line_id=p.line_id AND c.module='cutting' WHERE p.production_order_id=$1 ORDER BY p.position`,[id])).rows;

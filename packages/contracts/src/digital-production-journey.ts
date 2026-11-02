@@ -136,7 +136,7 @@ export type JourneyRiskHistory={eventId:string;nodeId:string;label:string;round:
 export const JourneyLogFilterSchema=z.object({cursor:z.string().min(1).max(2048).optional()}).strict();
 
 /** Stable, local-only return context. Consumers restore these values after domain handling. */
-export const JourneyReturnContextSchema = JourneyFilterSchema.safeExtend({ selected: z.string().uuid().optional(), flow: z.enum(["collapsed", "expanded"]).optional(), documentOpen:z.string().max(3000).optional(), expanded: z.string().max(100).optional(), focus: z.string().max(100).optional(), row: z.string().max(100).optional(), round: z.coerce.number().int().positive().max(10000).optional() });
+export const JourneyReturnContextSchema = JourneyFilterSchema.safeExtend({ selected: z.string().uuid().optional(), flow: z.enum(["collapsed", "expanded"]).optional(), documentOpen:z.string().max(3000).optional(), documentView:z.literal('all').optional(), documentStage:z.enum(JOURNEY_STAGES.map(s=>s.key)).optional(), documentSearch:z.string().max(100).optional(), documentScroll:z.coerce.number().int().min(0).max(1000000).optional(), documentFocus:z.string().max(300).optional(), expanded: z.string().max(100).optional(), focus: z.string().max(100).optional(), row: z.string().max(100).optional(), round: z.coerce.number().int().positive().max(10000).optional() });
 export function journeyReturnUrl(context: z.input<typeof JourneyReturnContextSchema>): string {
   const value = JourneyReturnContextSchema.parse(context);
   const params = new URLSearchParams();

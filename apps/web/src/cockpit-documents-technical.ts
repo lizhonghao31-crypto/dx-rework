@@ -1,0 +1,55 @@
+import type {OrderJourney} from '@dx-rework/contracts/digital-production-journey';
+import {row,rows,str,num,strings,file,result,requireFields,checkedRows,check,textValue,positiveValue,nullableText,sameEntity,original,type Row,type CockpitDocumentEntry,type CockpitDocumentReader,type CockpitDocumentResult} from './cockpit-document-data.js';
+const scope='整款';
+const states:Record<string,string>={effective:'当前走货依据有效',pending_review:'待技术尺寸复核',pending_customer:'待客户最终批复',superseded:'原依据已变版',unknown:'适用依据待核'};
+const historyPath=(id:string,round:number,kind:'artifacts'|'comments',options:{cursor?:number;version?:number;directory?:boolean;adoptedArtifactId?:string}={})=>`digital-production/sources/${id}/execution/technical/history?${new URLSearchParams({roundNumber:String(round),scopeRef:scope,kind,...(options.cursor?{beforeVersion:String(options.cursor)}:{}),...(options.version?{version:String(options.version)}:{}),...(options.directory?{view:'directory'}:{}),...(options.adoptedArtifactId?{adoptedArtifactId:options.adoptedArtifactId}:{})})}`;
+const plotFile=(sid:string,id:string,name:string)=>file(id,name,`digital-production/sources/${sid}/development/attachments/${encodeURIComponent(id)}`);
+function artifactEntry(a:Row,sid:string,adopted=false):CockpitDocumentEntry{
+ check((a.sourceId===sid||a.viaSourceId===sid)&&positiveValue(a.version)&&positiveValue(a.roundNumber)&&textValue(a.artifactSetId));
+ const inherited=Boolean(a.viaSourceId===sid&&(a.sourceId!==sid||a.roundNumber!==a.viaRoundNumber)),readRound=inherited?num(a.viaRoundNumber):num(a.roundNumber);
+ return {id:`artifact:${a.artifactSetId}:${a.version}`,label:`${adopted?'本轮引用 · ':''}${inherited?'沿用原来源 ':''}第 ${a.roundNumber} 轮技术成果 v${a.version} · ${a.status==='published'?'已发布':'草稿'}`,at:str(a.createdAt),by:str(a.createdByName),note:adopted?'本轮引用与最近上传分别保留；展开查看本版 PLT、结构用量及尺寸表':`开发单据 v${a.documentVersion??'未核实'}`,url:a.taskId?`/ui/digital-production?task=${a.taskId}&taskView=read`:undefined,load:{kind:'technical_artifact',path:historyPath(sid,readRound,'artifacts',{version:num(a.version),...(inherited?{adoptedArtifactId:str(a.artifactSetId)}:{})}),id:sid,version:num(a.version),round:String(readRound),scopeRef:scope}};
+}
+function commentEntry(c:Row,sid:string,round:number):CockpitDocumentEntry{
+ check(positiveValue(c.version)&&textValue(c.commentId)&&typeof c.isFinal==='boolean');
+ return {id:`comment:${c.commentId}:${c.version}`,label:`${c.isFinal?'客户最终批复':'客户中间评语'} v${c.version} · ${c.decision==='approved'?'认可':'需修改'}`,at:str(c.occurredAt)||str(c.recordedAt),note:c.isFinal?'每次最终批复对应原技术复核记录':'中间沟通不触发最终尺寸复核',url:c.reviewTaskId?`/ui/digital-production?task=${c.reviewTaskId}&taskView=read`:original('development',sid,round),children:c.review?[{id:`review:${row(c.review).reviewId}`,label:row(c.review).completed?`技术尺寸复核 · ${row(c.review).decision==='reuse'?'明确沿用':'采用修改成果'} v${row(c.review).artifactVersion}`:'原尺寸复核任务',note:str(row(c.review).note),url:`/ui/digital-production?task=${row(c.review).taskId}&taskView=read`}]:[],load:{kind:'technical_comment',path:historyPath(sid,round,'comments',{version:num(c.version)}),id:sid,version:num(c.version),round:String(round),scopeRef:scope}};
+}
+function historyEntries(data:Row,sid:string,round:number,kind:'artifacts'|'comments'):CockpitDocumentEntry[]{
+ sameEntity(data,'sourceId',sid,'技术资料');check(data.roundNumber===round&&data.scopeRef===scope&&(data.nextBeforeVersion===null||positiveValue(data.nextBeforeVersion)));
+ const items=checkedRows(data.items),entries=items.map(a=>kind==='artifacts'?artifactEntry(a,sid):commentEntry(a,sid,round));
+ if(data.nextBeforeVersion)entries.push({id:`older:${kind}:${data.nextBeforeVersion}`,label:kind==='artifacts'?'读取更早技术成果':'读取更早客户评语',load:{kind:`technical_history_${kind}`,path:historyPath(sid,round,kind,{cursor:num(data.nextBeforeVersion),directory:true}),id:sid,round:String(round),cursor:num(data.nextBeforeVersion),scopeRef:scope}});
+ return entries;
+}
+export async function technicalDirectory(order:Pick<OrderJourney,'sourceId'|'selectedRound'>,read:CockpitDocumentReader,signal:AbortSignal):Promise<CockpitDocumentResult>{
+ const sid=order.sourceId;if(!sid)return {state:'not_applicable',entries:[]};const round=order.selectedRound??1;
+ const [artifacts,comments]=await Promise.all([read(historyPath(sid,round,'artifacts',{directory:true}),signal).then(row),read(historyPath(sid,round,'comments',{directory:true}),signal).then(row)]);
+ const entries=historyEntries(artifacts,sid,round,'artifacts'),adopted=row(artifacts.adoptedArtifact),effective=row(artifacts.effective);
+ if(adopted.artifactSetId){const item=artifactEntry(adopted,sid,true),index=entries.findIndex(e=>e.id===item.id);if(index<0)entries.unshift(item);else entries[index]=item;}
+ const commentItems=historyEntries(comments,sid,round,'comments');if(commentItems.length)entries.push({id:'comments',label:'客户评语与最终批复',children:commentItems});
+ if(artifacts.contextAvailable)entries.push({id:'technical-context',label:'首版/复版、面料缩率与技术适用依据',load:{kind:'technical_context',path:`digital-production/sources/${sid}/execution/technical?roundNumber=${round}`,id:sid,round:String(round)}});
+ return result(entries,states[str(effective.state)]??'原技术版本分别保留，资料存在不等同于有效；未采用新规则的历史资料仍从原开发单查看');
+}
+export async function quotationDirectory(order:OrderJourney,read:CockpitDocumentReader,signal:AbortSignal):Promise<CockpitDocumentResult>{
+ const kind=order.orderId?'order':'source',id=order.orderId??order.sourceId;if(!id)return {state:'not_applicable',entries:[]};
+ const base=`digital-production/${kind==='order'?'orders':'sources'}/${id}/quotation`,data=row(await read(base,signal)),resource=row(data.resource);
+ check(resource.kind===kind&&resource.id===id);requireFields(data,['quoteId','version','versions','rows','fullCost']);check(nullableText(data.quoteId)&&Number.isSafeInteger(data.version)&&num(data.version)>=0&&typeof data.fullCost==='boolean');checkedRows(data.rows);check(Array.isArray(data.versions)&&data.versions.every(positiveValue));
+ if(!data.quoteId)return result([]);
+ const versions=data.fullCost?data.versions as number[]:[],make=(version:number,historical:boolean):CockpitDocumentEntry=>({id:`quotation:${data.quoteId}:${version}`,label:`${historical?'客户确认版':'当前报价协作'} v${version}`,url:`/ui/digital-quotation?kind=${kind}&id=${id}${historical?`&quoteVersion=${version}`:''}`,note:historical?'历史客户确认金额与口径保留，不用内部 IE 价替代':'用量和价格沿原报价表分工',load:{kind:'quotation',path:base+(historical?`?version=${version}`:''),id,version,resourceKind:kind}});
+ const entries=versions.map(v=>make(v,true));if(!versions.includes(num(data.version)))entries.unshift(make(num(data.version),false));return result(entries);
+}
+export async function loadTechnicalEntry(entry:CockpitDocumentEntry,read:CockpitDocumentReader,signal:AbortSignal):Promise<CockpitDocumentEntry|undefined>{
+ const l=entry.load;if(!l||!['technical_artifact','technical_comment','technical_context','technical_history_artifacts','technical_history_comments','quotation'].includes(l.kind))return;
+ const data=row(await read(l.path,signal));
+ if(l.kind.startsWith('technical_history_'))return {...entry,children:historyEntries(data,l.id,Number(l.round),l.kind==='technical_history_artifacts'?'artifacts':'comments'),load:undefined};
+ if(l.kind==='quotation'){
+  const resource=row(data.resource);check(resource.id===l.id&&resource.kind===l.resourceKind&&data.version===l.version&&typeof data.fullCost==='boolean');checkedRows(data.rows);
+  const confirmation=row(data.confirmation),doc=row(data.fullCost?data.document:null);return {...entry,load:undefined,note:data.fullCost&&confirmation.customerConfirmedTotal?`客户确认${confirmation.amountScope==='order_total'?'整单':'每件'}金额 ${confirmation.customerConfirmedTotal} 元 · ${confirmation.taxBasis==='includes_tax'?'含税':'不含税'}；${str(confirmation.evidenceNote)}`:data.fullCost?'报价草稿，尚无本版客户确认依据':'仅展示原接口授权的负责明细；金额汇总不在当前权限内',children:rows(data.rows).map(r=>({id:str(r.rowId),label:[str(r.name),str(r.specification)].filter(Boolean).join(' · '),note:`单位 ${str(r.unit)} · 用量 ${r.consumption??'未授权'} · 价格 ${r.unitPrice??'未授权'}`})),files:strings(doc.imageAttachmentIds).map((id,i)=>file(id,`报价参考图片 ${i+1}`,null,'原报价不重复上传预算图片'))};
+ }
+ if(l.kind==='technical_context'){
+  check(data.roundNumber===Number(l.round)&&data.scopeRef===scope);const basis=row(data.preparationBasis),cycle=row(data.cycle),effective=row(data.effective);
+  return {...entry,load:undefined,note:[states[str(effective.state)],cycle.precisionReasons?strings(cycle.precisionReasons).join('；'):''].filter(Boolean).join('；'),children:[...(basis.version?[{id:'basis',label:`${basis.basis==='confirmed_repeat'?'已确认首版的复版依据':'全新开发依据'} v${basis.version}`,note:`面料${basis.finalFabric?'已定':'未定'} · 工艺${basis.finalCraft?'已定':'未定'}；${str(basis.note)}`,files:[...strings(basis.sampleEvidenceIds),...strings(basis.customerFabricEvidenceIds)].filter((v,i,a)=>a.indexOf(v)===i).map((id,i)=>plotFile(l.id,id,`原确认依据 ${i+1}`))}]:[]),...checkedRows(data.materialDecisions).map(m=>({id:`material:${m.materialId}`,label:`物料技术决定 v${m.version}`,note:`高温：${m.highTemperatureRequired===null?'待明确':m.highTemperatureRequired?'需要':'无需'}；${str(m.preshrinkMethod)}；经/纬缩率 ${m.warpShrinkPercent??'未记录'}/${m.weftShrinkPercent??'未记录'}%；${str(m.basis)}`,files:strings(m.supplierEvidenceIds).map((id,i)=>plotFile(l.id,id,`供应商原依据 ${i+1}`))})),...checkedRows(data.reviews).map(v=>({id:`review:${v.reviewId}`,label:`大货尺寸复核 · ${v.state==='completed'?v.decision==='reuse'?'明确沿用':'采用修改成果':v.state==='superseded'?'已被新批复取代':'待复核'}`,note:`最终批复 v${v.finalCommentVersion} · 技术成果 v${v.artifactVersion??'未采用'}；${str(v.note)}`,url:`/ui/digital-production?task=${v.taskId}&taskView=read`}))]};
+ }
+ sameEntity(data,'sourceId',l.id,'技术版本');check(data.roundNumber===Number(l.round)&&data.scopeRef===scope);const items=checkedRows(data.items),item=items.find(v=>v.version===l.version);if(!item)throw new Error('找不到所选技术历史版本，请从原单核对；不会回落到最新版本');
+ if(l.kind==='technical_comment'){check(entry.id===`comment:${item.commentId}:${item.version}`);return {...entry,load:undefined,note:[str(item.text),str(item.evidenceNote)].filter(Boolean).join('；'),files:strings(item.evidenceRefs).map((id,i)=>plotFile(l.id,id,`客户原确认依据 ${i+1}`))};}
+ check(entry.id===`artifact:${item.artifactSetId}:${item.version}`);const body=row(item.body),table=row(body.baseSizeTable);requireFields(body,['pltAttachmentIds','consumptionRows','baseSizeTable']);
+ return {...entry,load:undefined,note:`基码 ${str(table.baseSize)||'未填'} · 单位 ${str(table.unit)} · 跳码规则：${str(table.gradingNote)||'未记录'}${table.templateRef?` · 采用客户模板 v${row(table.templateRef).version}`:''}；${str(body.note)}`,files:strings(body.pltAttachmentIds).map((id,i)=>plotFile(l.id,id,`PLT纸样原件 ${i+1}`)),children:[...checkedRows(body.consumptionRows).map((c,i)=>({id:`consumption:${i}`,label:`结构单件用量 ${i+1}`,note:`${c.consumption??'未填'} ${str(c.unit)}`})),...checkedRows(table.measurements).map((m,i)=>({id:`measurement:${m.pointId??i}`,label:str(m.name),note:`${strings(table.sizes).map((size,n)=>`${size}：${strings(m.values)[n]??'未填'}`).join('；')} · 公差 ${str(m.tolerance)} · 量法 ${str(m.method)}`}))]};
+}
