@@ -89,7 +89,7 @@ export function accessModuleIdsForCapabilities(
 ): PlatformAccessModuleId[] {
   const modules = new Set<PlatformAccessModuleId>();
   for (const capability of capabilities) {
-    if (capability === "production-reporting") {
+    if (["production-reporting","qc-production-progress"].includes(capability)) {
       modules.add("production");
     } else if (capability.startsWith("sourcing:")) {
       modules.add("sourcing");
@@ -157,7 +157,7 @@ export function employeeHasAccessModule(
 const todoBaseModuleIdsForCapabilities = (capabilities: readonly string[]): TodoAccessModuleId[] => {
   const modules = new Set<TodoAccessModuleId>();
   for (const capability of capabilities) {
-    if (capability === "production-reporting") {
+    if (["production-reporting","qc-production-progress"].includes(capability)) {
       modules.add("production");
     } else if (capability.startsWith("sourcing:")) {
       modules.add("sourcing");

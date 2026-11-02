@@ -22,6 +22,9 @@ export function isProductionRiskRecipient(actor:TrustedActorContext,createdBy:st
  return root||isRootActor(actor)||(caps(actor).includes("sourcing:view")&&caps(actor).includes("todo:view")&&
   (actor.actorRoles.some(r=>r==="owner_group"||r==="production_management")||(actor.actorRoles.includes("order_merchandiser")&&actor.actorId===createdBy)));
 }
+/** QC freshness has its own48/72 routing; quantity alerts rank the remaining quantity risk. */
+export const productionAlertState=(fact:{progressState:string;quantityRiskState?:string}|undefined)=>fact?.quantityRiskState??fact?.progressState??'';
+export const productionAlertRank=(fact:{progressState:Parameters<typeof productionProgressRank>[0];quantityRiskState?:Parameters<typeof productionProgressRank>[0]})=>productionProgressRank(fact.quantityRiskState??fact.progressState);
 export function productionRiskKind(state:string):"behind"|"high_risk"|"stale"|null {
  return state==="behind"||state==="high_risk"||state==="stale"?state:null;
 }
@@ -69,13 +72,13 @@ export class ProductionClosureService {
   for(const order of result.rows){
    const key=order.factory_decision_id?`${order.production_order_id}:${order.factory_decision_id}`:order.production_order_id;
    const current=executions.get(key),previous=facts.get(order.production_order_id);
-   if(!current||(previous&&productionProgressRank(previous.progressState)<=productionProgressRank(current.progressState)))continue;
+   if(!current||(previous&&productionAlertRank(previous)<=productionAlertRank(current)))continue;
    orders.set(order.production_order_id,order);facts.set(order.production_order_id,current);
   }
   return {orders,facts,ids:selectedIds};
  }
  private async project(client:PoolClient,ids:string[],facts:Awaited<ReturnType<typeof readFactoryProductionProgressFacts>>) {
-  for(const id of ids){const kind=productionRiskKind(facts.get(id)?.progressState??"");
+  for(const id of ids){const kind=productionRiskKind(productionAlertState(facts.get(id)));
    await client.query(`UPDATE sourcing_production_alerts SET resolved_at=clock_timestamp() WHERE production_order_id=$1 AND resolved_at IS NULL AND kind IS DISTINCT FROM $2`,[id,kind]);
    if(kind)await client.query(`INSERT INTO sourcing_production_alerts(alert_id,production_order_id,kind) VALUES($1,$2,$3)
     ON CONFLICT(production_order_id) WHERE resolved_at IS NULL DO NOTHING`,[randomUUID(),id,kind]);

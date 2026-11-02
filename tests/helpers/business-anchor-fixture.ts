@@ -39,7 +39,7 @@ import {WorkReportingService} from '../../apps/api/src/rework/work-reporting-ser
 import {completeInspectionReport} from '../inspection-report-fixture.js';
 
 /** Full current schema and original supported UAT seeder; no trigger or clock guards disabled. */
-export async function businessAnchorFixture(url:string){
+export async function businessAnchorFixture(url:string,options?:{throughVersion?:string}){
  await assertTestDatabaseTarget(url);
  const databaseTarget=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL===url&&url!==process.env.TEST_DATABASE_URL?'acceptance-clock':undefined;
  const schema=ownedPostgresSchema('business_anchors',databaseTarget),admin=new pg.Pool({connectionString:url});
@@ -49,8 +49,9 @@ export async function businessAnchorFixture(url:string){
  try{
   const version=Number((await db.query('SHOW server_version_num')).rows[0].server_version_num);
   const manifest=JSON.parse(await readFile(new URL('../../apps/api/src/platform/migration-manifest.json',import.meta.url),'utf8'));
+  if(options?.throughVersion&&!manifest.migrations.some((row:{version:string})=>row.version===options.throughVersion))throw Error('Exact historical fixture migration required');
   await db.query('CREATE TABLE schema_migrations(version text PRIMARY KEY,checksum char(64) NOT NULL,applied_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP)');
-  for(const migration of manifest.migrations){const sql=await readFile(new URL(`../../apps/api/migrations/${migration.version}.sql`,import.meta.url),'utf8');await db.query(migrationExecutionSql({...migration,sql},version));await db.query('INSERT INTO schema_migrations(version,checksum) VALUES($1,$2)',[migration.version,migration.checksum]);}
+  for(const migration of manifest.migrations.filter((row:{version:string})=>!options?.throughVersion||row.version<=options.throughVersion)){const sql=await readFile(new URL(`../../apps/api/migrations/${migration.version}.sql`,import.meta.url),'utf8');await db.query(migrationExecutionSql({...migration,sql},version));await db.query('INSERT INTO schema_migrations(version,checksum) VALUES($1,$2)',[migration.version,migration.checksum]);}
   const scoped=new URL(url);scoped.searchParams.set('options',`-c search_path=${schema}`);
   const env={...process.env,DATABASE_URL:'',TEST_DATABASE_URL:url,NODE_ENV:'test',ACCEPTANCE_LAB_ENABLED:'true',ROOT_DINGTALK_USER_ID:'uat-root',DINGTALK_CORP_ID:'anchor-test',ACCEPTANCE_DATABASE_URL:scoped.toString()};
   await promisify(execFile)(process.execPath,['--import','tsx','scripts/acceptance/seed-role-users.ts'],{cwd:process.cwd(),env});

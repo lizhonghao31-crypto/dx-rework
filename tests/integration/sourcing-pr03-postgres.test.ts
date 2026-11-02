@@ -4562,7 +4562,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const partialPreparation=await bulk.read(primary,id);
     expect(partialPreparation.preshrink).toBe('需要预缩');
     expect(partialPreparation.tasks.find(t=>t.taskKind==='warehouse_preshrink')?.state).toBe('completed');
-    expect(partialProgress.progress).toEqual({applicable:8,completed:2});
+    expect(partialProgress.progress).toEqual({applicable:7,completed:2});
     const before=(await bulk.read(primary,id)).tasks.find(t=>t.taskKind.startsWith('bulk_cutting'))!;
     const identity=new DigitalProductionIdentityService(database,true,service),current=await identity.read(primary,id);
     const formal=`TEST-P12-${randomUUID().slice(0,8)}`;
@@ -4585,7 +4585,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       expect(afterSla.progress.stages.find(stage=>stage.stage===4)!.completed).toBe(1);
       if(mode==='outsourced'){expect(cuttingNode.actualStart).toBeNull();expect(cuttingNode.deadline.at).toBeNull();expect(cuttingNode.status).toBe('completed_unrated');}
     }
-    expect((await cockpit.list(primary,cockpitInput)).items.find(row=>row.orderId===id)!.progress).toEqual({applicable:8,completed:3});
+    expect((await cockpit.list(primary,cockpitInput)).items.find(row=>row.orderId===id)!.progress).toEqual({applicable:7,completed:3});
     expect((await database.query('SELECT 1 FROM digital_bulk_cutting_completions WHERE production_order_id=$1',[id])).rowCount).toBe(1);
     await cutting.correct({...root,authorizationCapability:'cutting:records:correct'},ids[0],{expectedVersion:1,pieceCount:4,actualCutCount:103,reason:'TEST真实实绩更正'},randomUUID());
     const final=await bulk.read(primary,id);expect(final.cutting.lines[0]).toMatchObject({orderQuantity:137,actualCutCount:103,pieceCount:4,corrected:true});
@@ -4806,7 +4806,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect((await tasks.read(qc,task.taskId)).state).toBe('completed');
     expect((await factoryProductionFacts(database,ready.id)).history).toHaveLength(2);
     expect((await notices.todos(qc)).some(t=>t.todoId===task.taskId)).toBe(false);
-    await expect(tasks.reassign(root,task.taskId,qc.actorId,randomUUID())).rejects.toBeDefined();
+    expect((await tasks.reassign(root,task.taskId,qc.actorId,randomUUID())).assigneeId).toBe(qc.actorId); // QC quality completion does not end ongoing production supervision.
   });
 
   it('SLA07 records ship samples before cutting with original permissions and immutable PO facts',async()=>{
@@ -5023,7 +5023,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const ids=(await database.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1 ORDER BY sourcing_line_position',[caseId])).rows.map(r=>r.cutting_order_id);
     for(const cuttingId of ids){const image=randomUUID();await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-P13-cut.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[image,`TEST/P13/${image}`,'c'.repeat(64),root.actorId]);await physicalCuttingLabelsFixture(database,root,cuttingId,100);await cutting.record({...root,authorizationCapability:'cutting:records:create'},cuttingId,{pieceCount:1,actualCutCount:100,attachmentIds:[image]},randomUUID());}
     let state=await flow.read(primary,id);expect(state).toMatchObject({allCut:true,secondaryCraft,dispatched:false,sampleTargetDate:'2026-11-10'});
-    expect(state.tasks.find(t=>t.taskKind==='factory_material_count')).toMatchObject({state:'pending',enteredAt:null,dueAt:null});
+    expect(state.tasks.some(t=>t.taskKind==='factory_material_count')).toBe(false);
     const instruction=new ProductionInstructionService(database,true),before=await instruction.read(primary,id);
     expect(before.cutStarted).toBe(true);
     const frozen=async()=>({
@@ -5091,13 +5091,10 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect(new Date((await database.query('SELECT dispatched_at FROM sourcing_production_orders WHERE sourcing_case_id=$1',[caseId])).rows[0].dispatched_at).toISOString()).toBe(dispatchedAt);
     expect((await database.query("SELECT count(*)::int n FROM digital_production_child_lines WHERE module='production' AND child_id=$1",[dispatched.productionId])).rows[0].n).toBe(2);
     expect((await database.query('SELECT 1 FROM receiving_receipts WHERE style_no=$1',[fixture.order.designStyleNo])).rowCount).toBe(0);
-    state=await flow.read(primary,id);expect(state.tasks.find(t=>t.taskKind==='factory_material_count')).toMatchObject({dueAt:null,enteredAt:null});
-    state=await flow.followup(primary,id,{expectedRevision:state.revision,kind:'工厂到料',occurredAt:null,trackingNumber:'',note:'TEST真实时间待确认'},randomUUID());expect(state.tasks.find(t=>t.taskKind==='factory_material_count')!.dueAt).toBeNull();
-    const arrival=new Date().toISOString();state=await flow.followup(primary,id,{expectedRevision:state.revision,kind:'工厂到料',occurredAt:arrival,trackingNumber:'',note:'TEST确认工厂已实际收到'},randomUUID());
-    expect(state.tasks.find(t=>t.taskKind==='factory_material_count')!.dueAt).toBe(new Date(new Date(arrival).getTime()+48*3600*1000).toISOString());
-    state=await flow.followup(primary,id,{expectedRevision:state.revision,kind:'到料清点',occurredAt:new Date().toISOString(),trackingNumber:'',note:'TEST面辅料清点齐备'},randomUUID());
+    state=await flow.read(primary,id);expect(state.tasks.some(t=>t.taskKind==='factory_material_count')).toBe(false);
+    for(const kind of ['工厂到料','到料清点'] as const)await expect(flow.followup(primary,id,{expectedRevision:state.revision,kind,occurredAt:null,trackingNumber:'',note:'TEST retired input'},randomUUID())).rejects.toMatchObject({statusCode:410});
     state=await flow.followup(primary,id,{expectedRevision:state.revision,kind:'船样寄出',occurredAt:new Date().toISOString(),trackingNumber:'TEST-SF-001',note:'TEST齐色船样已寄出'},randomUUID());
-    expect(state.tasks.filter(t=>['factory_material_count','bulk_ship_sample'].includes(t.taskKind)).every(t=>t.state==='completed')).toBe(true);
+    expect(state.tasks.filter(t=>t.taskKind==='bulk_ship_sample').every(t=>t.state==='completed')).toBe(true);
     expect((await database.query('SELECT 1 FROM sourcing_finance_reconciliations WHERE sourcing_case_id=$1',[caseId])).rowCount).toBe(0);
     const replacementId=randomUUID();await database.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'TEST新主跟单',true)",[replacementId]);await database.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) VALUES($1,$2::uuid,'dingtalk','corp',$2::text,$2::text,true,true,CURRENT_TIMESTAMP)",[randomUUID(),replacementId]);
     await database.query('ALTER TABLE user_role_assignments DISABLE TRIGGER user_role_assignments_guard_creation');try{await database.query("INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason) VALUES($1,$2,'order_merchandiser',$3,'TEST P13换主跟单')",[randomUUID(),replacementId,root.actorId]);}finally{await database.query('ALTER TABLE user_role_assignments ENABLE TRIGGER user_role_assignments_guard_creation');}
@@ -5655,12 +5652,12 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const taskClient=await database.connect();
     try{
       await taskClient.query("BEGIN");
-      for(const kind of ["bulk_cutting_external","factory_material_count","bulk_ship_sample","bulk_cutting","bulk_qc","warehouse_dispatch"] as const){
+      for(const kind of ["bulk_cutting_external","bulk_ship_sample","bulk_cutting","bulk_qc","warehouse_dispatch"] as const){
         if(kind==='bulk_ship_sample'){
           const existing=(await taskClient.query("SELECT task_id,assignee_id FROM digital_production_task_access WHERE production_order_id=$1 AND task_kind='bulk_ship_sample'",[id])).rows;
           expect(existing).toHaveLength(1);expect(existing[0].assignee_id).toBe(merchandiserId);taskIds.push(existing[0].task_id);continue;
         }
-        const task=await tasks.createWithClient(taskClient,rootActor(),{resource:{kind:"order",id},kind,routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:["bulk_cutting_external","factory_material_count","bulk_ship_sample"].includes(kind)?merchandiserId:null});taskIds.push(task.taskId);
+        const task=await tasks.createWithClient(taskClient,rootActor(),{resource:{kind:"order",id},kind,routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:["bulk_cutting_external","bulk_ship_sample"].includes(kind)?merchandiserId:null});taskIds.push(task.taskId);
       }
       await taskClient.query("COMMIT");
     }catch(error){await taskClient.query("ROLLBACK");throw error;}finally{taskClient.release();}
@@ -5686,7 +5683,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect((await originalTodoService.listForActor({...merchandiserActor(),authorizationCapability:"todo:view",authorizationCapabilities:["todo:view"]},{module:"sourcing",query:created.lineItems[0]!.styleNo??undefined})).todos.some(todo=>todo.todoId===correction.todo_id)).toBe(false);
     expect((await todoRows()).filter(row=>row.todo_id!==correction.todo_id)).toEqual(beforeCorrection.filter(row=>row.todo_id!==correction.todo_id));
     for(const before of priorTasks){const after=(await taskFacts()).find(row=>row.task_id===before.task_id)!;
-      expect(after).toEqual({...before,assignee_id:["sourcing_preparation","bulk_cutting_external","factory_material_count","bulk_ship_sample"].includes(before.task_kind)&&!["completed","cancelled"].includes(before.state)?next:before.assignee_id});}
+      expect(after).toEqual({...before,assignee_id:["sourcing_preparation","bulk_cutting_external","bulk_ship_sample"].includes(before.task_kind)&&!["completed","cancelled"].includes(before.state)?next:before.assignee_id});}
     expect((await database.query("SELECT * FROM digital_production_deadline_revisions WHERE task_id=ANY($1::uuid[]) ORDER BY revision_id",[taskIds])).rows).toEqual(priorRevisions);
     expect(await policy.allowed(merchandiserActor(),"order",id,"budget")).toBe(false);expect(await policy.allowed(nextActor,"order",id,"budget")).toBe(true);expect(await policy.allowed(secondActor,"order",id,"technical")).toBe(false);
     const correctionInput={gender:input.gender,styleName:input.styleName,deliveryDate:input.deliveryDate,estimatedCutPieceSendDate:input.estimatedCutPieceSendDate,attachmentIds:input.attachmentIds,lineItems:input.lineItems,expectedVersion:returned.version,reason:"TEST new current primary correction"};
@@ -5772,9 +5769,9 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const afterFinalTasks=await taskFacts();
     for(const prior of beforeFinalTasks){
       const after=afterFinalTasks.find(row=>row.task_id===prior.task_id)!;
-      expect(after).toEqual({...prior,assignee_id:["sourcing_preparation","bulk_cutting_external","factory_material_count","bulk_ship_sample"].includes(prior.task_kind)&&!["completed","cancelled"].includes(prior.state)?final:prior.assignee_id});
+      expect(after).toEqual({...prior,assignee_id:["sourcing_preparation","bulk_cutting_external","bulk_ship_sample"].includes(prior.task_kind)&&!["completed","cancelled"].includes(prior.state)?final:prior.assignee_id});
     }
-    expect(afterFinalTasks.filter(row=>["bulk_cutting_external","factory_material_count","bulk_ship_sample"].includes(row.task_kind)&&!["completed","cancelled"].includes(row.state)).every(row=>row.assignee_id===final)).toBe(true);
+    expect(afterFinalTasks.filter(row=>["bulk_cutting_external","bulk_ship_sample"].includes(row.task_kind)&&!["completed","cancelled"].includes(row.state)).every(row=>row.assignee_id===final)).toBe(true);
     for(const kind of ["transfer","price"] as const){
       const beforePrimary=(await identity.read(rootActor(),id)).primaryMerchandiserId!,target=beforePrimary===next?third:next;
       if(kind==="transfer")await currentService.requestFactoryChange(ownerActor(),caseId,{supplierId:replacementFactoryId,unitPrice:"5.25",changeReason:"TEST transfer current primary"},randomUUID());

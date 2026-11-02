@@ -108,7 +108,7 @@ export async function exerciseOrderClosure(db:Pool,sourcing:SourcingService,id:s
  expect(nodes.find(node=>node.key==='receipts')?.state).toBe('active');
  expect((await closure.read(primary,id)).closed).toEqual(sheet.closed);
  expect((await db.query('SELECT status FROM rework_orders WHERE rework_order_id=$1',[draft.value.reworkOrderId])).rows[0].status).toBe('draft');
- const flow=new FactoryFlowService(db),factory=await flow.read(primary,id);await expect(flow.followup(primary,id,{expectedRevision:factory.revision,kind:'工厂到料',occurredAt:null,note:'TEST结案后不得继续生产待办',trackingNumber:''},randomUUID())).rejects.toMatchObject({statusCode:409});
+ const flow=new FactoryFlowService(db),factory=await flow.read(primary,id);await expect(flow.followup(primary,id,{expectedRevision:factory.revision,kind:'工厂到料',occurredAt:null,note:'TEST退役旧写入口不因结案而复活',trackingNumber:''},randomUUID())).rejects.toMatchObject({statusCode:410});
  const board=(await receiving.board('2000-01-01','2999-12-31',order.lines[0]!.formalStyleNo!)).rows[0]!;
  await expect(receiving.correctReceipt({...warehouse,authorizationCapability:'receiving:correct'},created[0]!.repeat.receiptId,{expectedVersion:board.version,source:'jiashun',documentQuantity:50,actualQuantity:12,defectiveQuantity:0})).rejects.toMatchObject({statusCode:403});
  await receiving.correctReceipt({...root,authorizationCapability:'receiving:correct'},created[0]!.repeat.receiptId,{expectedVersion:board.version,source:'jiashun',documentQuantity:50,actualQuantity:12,defectiveQuantity:0});

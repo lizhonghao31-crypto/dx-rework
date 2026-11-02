@@ -29,6 +29,7 @@ export function canAccessSamples(user: AuthorizedUser): boolean {
 export function canAccessProductionReporting(user: AuthorizedUser): boolean {
   return user.isRoot === true
     || (user.businessRoles?.includes("production_reporter") === true && user.capabilities.includes("production-reporting"))
+    || (user.businessRoles?.includes("quality_control") === true && user.capabilities.includes("qc-production-progress"))
     || (user.businessRoles?.some(role => ["owner_group", "production_management", "order_merchandiser"].includes(role)) === true && user.capabilities.includes("sourcing:view"));
 }
 

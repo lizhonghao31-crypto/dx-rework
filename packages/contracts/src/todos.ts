@@ -19,6 +19,7 @@ export const TodoRouteDescriptorSchema = z.object({
     "digital_development_arrangement",
     "digital_production_instruction",
     "digital_bulk_preparation",
+    "digital_factory_progress",
     "sample_detail",
     "pattern_room_order",
     "supplier_onboarding",

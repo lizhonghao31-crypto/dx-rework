@@ -3,7 +3,8 @@ import type {SlaNodeFact} from '@dx-rework/domain/digital-sla-plan';
 type DB=Pick<Pool|PoolClient,'query'>;
 /** Original factory execution allocations define scope; inspections never add production or receipt quantity. */
 export async function factoryProductionScopes(db:DB,orderId:string){
- return (await db.query(`SELECT p.production_order_id,p.factory_decision_id,p.sourcing_decision_id,p.supplier_name_snapshot,p.dispatched_at,
+ return (await db.query(`SELECT p.production_order_id,p.factory_decision_id,p.sourcing_decision_id,p.supplier_id,p.supplier_name_snapshot,p.dispatched_at,line.position,line.completed_quantity,
+  (SELECT status FROM sourcing_production_transitions state WHERE state.production_order_id=p.production_order_id AND state.factory_decision_id IS NOT DISTINCT FROM p.factory_decision_id ORDER BY sequence DESC LIMIT 1) AS execution_status,
   map.line_id,line.quantity,po.po_number,po.color,po.factory_delivery_date::text AS target_date
   FROM digital_production_child_links link JOIN sourcing_production_factory_orders p ON p.production_order_id=link.child_id
   CROSS JOIN LATERAL sourcing_factory_execution_lines(p.production_order_id,p.sourcing_decision_id) line

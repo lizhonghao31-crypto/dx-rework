@@ -1139,6 +1139,10 @@
     {
       "version": "0270_production_readiness_materials",
       "checksum": "214566f2a63a79caa2c2fc024ee040ddd2b2a0dee05f26a617b45624f0ea2a6d"
+    },
+    {
+      "version": "0271_qc_production_progress",
+      "checksum": "cc03c853371ccdb7727564aaf332d7035143499f17a3ef15c44732e271b9d5b3"
     }
   ]
 }

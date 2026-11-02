@@ -67,6 +67,10 @@ export class DigitalProductionAccessPolicy {
         if(handover?.state==='ready'&&handover.body.recipientId===actor.actorId&&handover.body.sourceDocumentVersion===handover.document_version)return true;
       }
     }
+    if(kind==='order'&&purpose==='technical'&&includeTaskParticipation&&actor.actorRoles.includes('quality_control')&&await this.activeRole(actor.actorId,'quality_control')&&(await this.database.query("SELECT to_regclass('digital_qc_supervision_settings') AS relation")).rows[0]?.relation){
+      const lead=(await this.database.query('SELECT quality_lead_id FROM digital_qc_supervision_settings WHERE production_order_id=$1 ORDER BY version DESC LIMIT 1',[id])).rows[0];
+      if(lead?.quality_lead_id===actor.actorId)return true;
+    }
     const owns = actor.actorRoles.includes("sample_designer") && row.created_by === actor.actorId;
     const primary = kind === "order" && actor.actorRoles.includes("order_merchandiser") && row.primary_merchandiser_id === actor.actorId;
     if (owns || primary && await this.activeRole(actor.actorId,"order_merchandiser")) return true;
@@ -75,7 +79,7 @@ export class DigitalProductionAccessPolicy {
       // Necessary order documents do not grant metadata access to other tasks.
       if(!includeTaskParticipation)return false;
       const available=(await this.database.query("SELECT to_regclass('digital_bulk_preparations') AS relation")).rows[0]?.relation;
-      const tasks=available?(await this.database.query("SELECT a.task_id,a.assignee_id,a.required_role FROM digital_production_task_access a JOIN digital_production_tasks t USING(task_id) JOIN digital_bulk_preparations p ON p.preparation_id=t.route_instance_id AND p.production_order_id=a.production_order_id JOIN digital_instruction_documents effective ON effective.production_order_id=p.production_order_id AND effective.published_version=p.instruction_version WHERE a.production_order_id=$1 AND t.state<>'cancelled' AND p.source_round=COALESCE((SELECT max(round_number) FROM digital_development_rounds WHERE source_id=p.source_id),1) AND a.task_kind IN ('bulk_pattern','warehouse_preshrink','bulk_cutting','bulk_cutting_external','process_logistics','bulk_qc','factory_production_qc','warehouse_dispatch','factory_material_count','bulk_ship_sample')",[id])).rows:[];
+      const tasks=available?(await this.database.query("SELECT a.task_id,a.assignee_id,a.required_role FROM digital_production_task_access a JOIN digital_production_tasks t USING(task_id) JOIN digital_bulk_preparations p ON p.preparation_id=t.route_instance_id AND p.production_order_id=a.production_order_id JOIN digital_instruction_documents effective ON effective.production_order_id=p.production_order_id AND effective.published_version=p.instruction_version WHERE a.production_order_id=$1 AND t.state<>'cancelled' AND p.source_round=COALESCE((SELECT max(round_number) FROM digital_development_rounds WHERE source_id=p.source_id),1) AND a.task_kind IN ('bulk_pattern','warehouse_preshrink','bulk_cutting','bulk_cutting_external','process_logistics','bulk_qc','factory_production_qc','warehouse_dispatch','bulk_ship_sample')",[id])).rows:[];
       for(const task of tasks){
         if(task.assignee_id===actor.actorId&&await this.activeRole(actor.actorId,task.required_role))return true;
       }

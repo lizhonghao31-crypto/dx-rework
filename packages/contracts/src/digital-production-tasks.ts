@@ -10,6 +10,7 @@ export type DigitalTaskState = z.infer<typeof DigitalTaskStateSchema>;
 export type DigitalTimeQuality = z.infer<typeof DigitalTimeQualitySchema>;
 export type DigitalTaskBlocker = {condition:string;name:string;missing:string;responsibleRole:string;action:string|null;evidenceId:string|null;verified:boolean};
 export type DigitalTask = {
+  retiredRule?:string;
   /** Present only for a server-verified isolated Acceptance resource. */
   acceptanceBusinessNow?:string;
   deadlineExclusive?:boolean;

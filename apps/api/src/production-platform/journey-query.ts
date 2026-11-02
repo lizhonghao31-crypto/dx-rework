@@ -1,3 +1,4 @@
+import {readQcExecutionEvidence} from './qc-progress-evidence.js';
 import {styleLabelCuttingReason,preparationTestReasons} from './production-readiness-repository.js';
 import {seriesPlanJourney} from './series-plan-journey.js';
 import type {BusinessTime,BusinessTimeScope} from '@dx-rework/domain/business-clock';
@@ -25,7 +26,7 @@ import {savedDevelopmentRoute} from "./development-sla-enrollment.js";
 import { bulkCockpitProgress } from "./cockpit-progress.js";
 import { JOURNEY_NODES, journeyDefinition } from "./journey-catalog.js";
 import { journeyCompletion, journeyStages, selectJourneys } from "./journey-projection.js";
-import { canReadProductionReporting, productionVisibility, productionVisibilityArgs } from "../sourcing/production-reporting-service.js";
+import { canReadProductionReporting, productionVisibilityFor, productionVisibilityArgs } from "../sourcing/production-reporting-service.js";
 import type { DevelopmentDocument } from "@dx-rework/contracts/digital-development";
 import { journeyReworkHistoryUrl } from "./journey-rework-record.js";
 import { readOrderPoDeliveryDates } from "./po-delivery-query.js";
@@ -173,7 +174,7 @@ export class DigitalJourneyQuery {
     const tasks=(await db.query(`SELECT a.task_id,a.task_kind,a.source_id,a.production_order_id,a.assignee_id,a.required_role,t.route_version,t.occurrence,t.completed_quality,t.route_instance_id,t.state AS original_state,
       EXISTS(SELECT 1 FROM digital_production_task_events e WHERE e.task_id=t.task_id AND e.event_kind='material_returned') AS returned
       FROM digital_production_task_access a JOIN digital_production_tasks t USING(task_id)
-      WHERE a.source_id=$1 OR a.production_order_id=$2 ORDER BY t.route_version,t.created_at,t.task_id`,[sid,oid])).rows;
+      WHERE a.task_kind<>'factory_material_count' AND (a.source_id=$1 OR a.production_order_id=$2) ORDER BY t.route_version,t.created_at,t.task_id`,[sid,oid])).rows;
     const visibleTasks: typeof tasks=[];
     for(const task of tasks) {
       if(patternKinds&&!patternKinds.includes(task.task_kind))continue;
@@ -334,7 +335,7 @@ export class DigitalJourneyQuery {
         if(child.module==="sourcing"&&sourcingFields&&child.child_id===sourcing?.child_id)url=`/ui/sourcing/orders/${child.child_id}`;
         if(child.module==="cutting"&&(actor.actorRoles.includes("root_superuser")||(actor.authorizationCapabilities??[]).includes("cutting:orders:view")))url=`/ui/cutting/orders/${child.child_id}`;
         if(child.module==="production"&&canReadProductionReporting(actor)) {
-          const allowed=(await db.query(`SELECT production.production_order_id FROM sourcing_production_orders production JOIN sourcing_cases source_case USING(sourcing_case_id) WHERE production.production_order_id=$5 AND ${productionVisibility}`,[...productionVisibilityArgs(actor),child.child_id])).rowCount;
+          const allowed=(await db.query(`SELECT production.production_order_id FROM sourcing_production_orders production JOIN sourcing_cases source_case USING(sourcing_case_id) WHERE production.production_order_id=$5 AND ${productionVisibilityFor(actor)}`,[...productionVisibilityArgs(actor),child.child_id])).rowCount;
           if(allowed)url=`/ui/production-dashboard/${child.child_id}`;
         }
         if(child.module==="rework"&&closureAllowed)url=`/ui/tasks/${child.child_id}`;
@@ -440,9 +441,6 @@ export class DigitalJourneyQuery {
         // A finalized determination does not finish its responsibility handling or settle wages.
         if(determination)append("responsibility",rework.status==='completed'?"completed":rework.status==='cancelled'?"cancelled":"active",determination.determination_id,null,determination.handler_user_id,await journeyReworkHistoryUrl(db,actor,rework.reworkId,"responsibility",determination.determination_id,determination.operation_event_id));
       }
-      const factoryFacts=currentPrep?(await db.query("SELECT * FROM digital_factory_facts WHERE preparation_id=$1 ORDER BY sequence",[currentPrep])).rows:[];
-      const arrival=factoryFacts.find(fact=>fact.kind==="工厂到料");
-      setFact("factory_arrival",arrival?"completed":factoryFacts.some(fact=>fact.kind==="仓库实际发厂")?"pending":"uncreated",[record("factory",oid,`/ui/digital-production?factory=${oid}`,bulk.instructionVersion)],iso(arrival?.occurred_at),arrival?{id:arrival.actor_id,name:null}:null);
       if(gates.instruction&&gates.source) {
         const craft=gates.instruction.document.secondaryCraft==="沿用开发"?gates.source.document.craft:gates.instruction.document.secondaryCraft;
         if(craft==="无")for(const key of ["process_logistics","bulk_qc"])replace(key,emptyNode(key,"not_applicable"));
@@ -452,6 +450,12 @@ export class DigitalJourneyQuery {
         const transition=(await db.query("SELECT sourcing_factory_order_status($1) AS status,business_date::text,actor_id FROM sourcing_production_transitions WHERE production_order_id=$1 ORDER BY created_at DESC,production_transition_id DESC LIMIT 1",[native.child_id])).rows[0];
         // A business date has day precision only, so it is not invented as an exact completion timestamp.
         const value=setFact("production_reporting",transition?.status==="production_completed"||transition?.status==="shipped"?"completed":"active",[record("production",native.child_id,`/ui/production-dashboard/${native.child_id}`)]);
+        if((await db.query("SELECT to_regclass('digital_qc_tracking_starts') AS relation")).rows[0]?.relation){
+          const qcEvidence=await readQcExecutionEvidence(db,oid!,asOf);
+          const task=qcEvidence[0]?.group.task;
+          if(task?.assignee_id)value.owner={id:task.assignee_id,name:null};
+          value.records.unshift(record('factory',oid!,`/ui/digital-production?factory=${oid}&factoryAction=productionProgress`));
+        }
         if(value.state==="completed")value.risks.push("unknown");
       } else if(native) replace("production_reporting",emptyNode("production_reporting","unavailable"));
     }

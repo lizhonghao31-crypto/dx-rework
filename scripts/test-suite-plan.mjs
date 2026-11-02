@@ -16,6 +16,7 @@ export const STATIC_CHAIN_TESTS=Object.freeze([
   "tests/integration/acceptance-control-routes.test.ts"
 ]);
 export const POSTGRES_CHAIN_TESTS=Object.freeze([
+  "tests/integration/qc-progress-retirement-postgres.test.ts",
   "tests/integration/production-readiness-postgres.test.ts",
   "tests/integration/full-business-chain-postgres.test.ts",
   "tests/integration/customer-quotation-postgres.test.ts",

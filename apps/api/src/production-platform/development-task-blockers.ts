@@ -41,7 +41,7 @@ export async function developmentTaskBlockers(db:Pick<Pool,'query'>,task:{task_i
   const predecessors=(await db.query(`SELECT p.task_id,p.state,a.task_kind,a.required_role,
     (SELECT label FROM digital_production_deadline_policies WHERE node_key=p.node_key ORDER BY version DESC LIMIT 1) AS label
     FROM digital_production_task_dependencies d JOIN digital_production_tasks p ON p.task_id=d.predecessor_id
-    JOIN digital_production_task_access a ON a.task_id=p.task_id WHERE d.task_id=$1 AND p.state<>'completed'`,[task.task_id])).rows;
+    JOIN digital_production_task_access a ON a.task_id=p.task_id WHERE d.task_id=$1 AND p.state<>'completed' AND a.task_kind<>'factory_material_count'`,[task.task_id])).rows;
   for(const row of predecessors)add('predecessor',row.label??'上游工序',`${row.label??'上游工序'}${row.state==='cancelled'?'已取消，不能作为完成依据':'尚未完成'}`,row.required_role,`请该岗位从「我的待办」办理本单${row.label??'上游任务'}；已取消的上游由本单管理人员核对当前轮次`);
   if(task.source_id&&['development_pattern','development_cutting','development_sewing'].includes(task.task_kind)&&(await db.query("SELECT to_regclass('digital_development_execution_facts') AS relation")).rows[0]?.relation){
     const ready=await materialReadiness(db,task.source_id,task.route_version);

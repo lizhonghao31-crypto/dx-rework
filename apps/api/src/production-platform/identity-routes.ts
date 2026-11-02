@@ -1,3 +1,5 @@
+import {registerQcProductionProgressRoutes} from './qc-production-progress-routes.js';
+import type {QcProductionProgressService} from './qc-production-progress-service.js';
 import {registerProductionReadinessRoutes} from './production-readiness-routes.js';
 import type {ProductionReadinessService} from './production-readiness-service.js';
 import type { DigitalJourneyQuery } from "./journey-query.js";
@@ -56,7 +58,7 @@ export type DigitalIdentityDependencies = {
   instructionService?: ProductionInstructionService;
   bulkPreparationService?: BulkPreparationService;
   closureService?:OrderClosureService;
-  factoryFlowService?:FactoryFlowService;
+  factoryFlowService?:FactoryFlowService; qcProgress?:QcProductionProgressService;
   authenticate(token: string | undefined): Promise<AuthUser>; root?: RootAuthority;
   developmentQrBase?: string;
   developmentRounds?:DevelopmentRoundService;
@@ -74,6 +76,7 @@ const parse = <T>(schema: z.ZodType<T>, value: unknown): T => {
   return result.data;
 };
 export function registerDigitalIdentityRoutes(app: FastifyInstance, dependencies: DigitalIdentityDependencies): void {
+  if(dependencies.qcProgress&&dependencies.developmentAttachments)registerQcProductionProgressRoutes(app,dependencies,dependencies.qcProgress,dependencies.developmentAttachments);
   if(dependencies.readinessService&&dependencies.developmentAttachments)registerProductionReadinessRoutes(app,dependencies,dependencies.readinessService,dependencies.developmentAttachments);
   if(dependencies.seriesPlans&&dependencies.shortLead)registerSeriesPlanRoutes(app,dependencies,dependencies.seriesPlans,dependencies.shortLead);
   if(dependencies.quotationService)registerQuotationRoutes(app,dependencies,dependencies.quotationService);

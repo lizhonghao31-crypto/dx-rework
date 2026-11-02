@@ -1,0 +1,50 @@
+import {memberCanWriteModule} from '../access/member-module-policy.js';
+import {createHash} from 'node:crypto';
+import type {Pool,PoolClient} from 'pg';
+import type {TodoResponse,TodoRouteDescriptor} from '@dx-rework/contracts';
+import type {TrustedActorContext} from '../tools/repositories.js';
+import {acceptanceIncludesNative,ContextBusinessClock} from '../acceptance-clock/business-time.js';
+import {DigitalProductionAccessPolicy} from './access-policy.js';
+import {readQcExecutionEvidence} from './qc-progress-evidence.js';
+import {todoContentToken} from '../todos/content-reads.js';
+type DB=Pick<Pool|PoolClient,'query'>;
+export const qcNoticeId=(key:string)=>{const h=createHash('sha256').update(key).digest('hex');return `${h.slice(0,8)}-${h.slice(8,12)}-4${h.slice(13,16)}-a${h.slice(17,20)}-${h.slice(20,32)}`;};
+export type QcProgressNotice={key:string;orderId:string;taskId:string;title:string;recipients:string[];blockedReason:string|null;dueAt:string;createdAt:string;route:TodoRouteDescriptor;styleNo:string;supplierName:string;lineIds:string[]};
+/** Single source for current todos, server projection and delivery-time revalidation. */
+export async function qcProgressNotices(db:DB,people:TrustedActorContext[],onlyOrder?:string,database:Pool=db as Pool):Promise<QcProgressNotice[]>{
+ if(!(await db.query("SELECT to_regclass('digital_qc_tracking_starts') AS relation")).rows[0]?.relation)return [];
+ const orders=(await db.query(`SELECT o.production_order_id,o.primary_merchandiser_id,o.design_style_no,a.task_id,a.assignee_id FROM digital_production_orders o
+ JOIN digital_production_task_access a ON a.production_order_id=o.production_order_id AND a.task_kind='factory_production_qc'
+ JOIN digital_production_tasks t USING(task_id) WHERE t.state<>'cancelled' AND ($1::uuid IS NULL OR o.production_order_id=$1)
+ AND NOT EXISTS(SELECT 1 FROM digital_order_closures c WHERE c.production_order_id=o.production_order_id)
+ AND NOT EXISTS(SELECT 1 FROM digital_production_resource_lifecycle l WHERE (l.resource_kind='order' AND l.resource_id=o.production_order_id OR l.resource_kind='source' AND l.resource_id=o.source_id) AND l.state<>'active')`,[onlyOrder??null])).rows;
+ const result:QcProgressNotice[]=[],policy=new DigitalProductionAccessPolicy(db);
+ for(const order of orders){
+  if(!await acceptanceIncludesNative(database,order.task_id))continue;
+  const settings=(await db.query('SELECT quality_lead_id FROM digital_qc_supervision_settings WHERE production_order_id=$1 ORDER BY version DESC LIMIT 1',[order.production_order_id])).rows[0];
+  const time=await new ContextBusinessClock(database,db===database?undefined:db as PoolClient).read({kind:'order',id:order.production_order_id});
+  const eligible=async(id:string|null,role:string)=>{const person=people.find(p=>p.actorId===id&&p.actorRoles.includes(role));return person&&await memberCanWriteModule(db,person.actorId,'sourcing')&&await policy.activeRole(person.actorId,role)&&await policy.allowed(person,'order',order.production_order_id,'technical')?person.actorId:null;};
+  const qc=await eligible(order.assignee_id,'quality_control'),lead=await eligible(settings?.quality_lead_id??null,'quality_control'),primary=await eligible(order.primary_merchandiser_id,'order_merchandiser');
+  const managers:string[]=[];
+  for(const p of people)if(p.actorRoles.some(r=>['production_management','owner_group'].includes(r))&&await memberCanWriteModule(db,p.actorId,'sourcing')&&await policy.allowed(p,'order',order.production_order_id,'technical'))managers.push(p.actorId);
+  for(const evidence of await readQcExecutionEvidence(db,order.production_order_id,time.now)){
+   if(evidence.finished)continue;
+   for(const window of evidence.windows){const clock=window.clock;if(!clock.anchor||!clock.remindAt||!clock.escalateAt)continue;
+    const add=(suffix:string,title:string,recipients:string[],due:string,blockedReason:string|null=null)=>{
+     const key=`qc-progress:${evidence.tracking?.tracking_id}:${window.key}:${suffix}`,todoId=qcNoticeId(key);
+     result.push({key,orderId:order.production_order_id,taskId:order.task_id,title,recipients:[...new Set(recipients)],blockedReason,dueAt:due,createdAt:clock.anchor!,route:{routeName:'digital_factory_progress',entityId:order.production_order_id,todoId,...(evidence.group.rows[0].factory_decision_id?{factoryDecisionId:evidence.group.rows[0].factory_decision_id}:{})},styleNo:order.design_style_no,supplierName:evidence.group.rows[0].supplier_name_snapshot,lineIds:window.lineIds});
+    };
+    const escalated=clock.state==='escalated',due=['due','escalated'].includes(clock.state),escalation=[lead,primary].filter((id):id is string=>Boolean(id));
+    if(!qc)add('missing-qc','生产进度待指派QC',managers,clock.remindAt,'QC主办缺失或已失效；计时保留，请从原任务指派');
+    if(due&&qc&&!(escalated&&escalation.includes(qc)))add('48','QC生产进度已到48小时更新点',[qc],clock.remindAt);
+    if(escalated){if(escalation.length)add('72','生产进度72小时未更新，请跟进',escalation,clock.escalateAt);
+     if(!lead||!primary)add('missing-escalation','生产进度升级接收人待补齐',managers,clock.escalateAt,[!lead?'质检负责人未指定或失效':'',!primary?'主跟单缺失或失效':''].filter(Boolean).join('；'));
+    }
+   }
+  }
+ }
+ return result;
+}
+export function qcNoticesAsTodos(notices:QcProgressNotice[],actor:TrustedActorContext):TodoResponse[]{
+ return notices.filter(n=>n.recipients.includes(actor.actorId)).map(n=>({todoId:n.route.todoId,contentToken:todoContentToken([n.key,...n.lineIds]),taskTitle:n.title,todoType:n.blockedReason?'recipient_routing_exception':'business_action',category:'digital_qc_progress',sourceEventId:n.route.todoId,sourceAction:'digital_qc_progress',entityType:'digital_production_order',entityId:n.orderId,recipientUserId:actor.actorId,requiredRole:null,requiredCapability:null,route:n.route,policyKey:null,dueAt:n.dueAt,reminderCount:0,status:n.blockedReason?'blocked_recipient':'pending',blockedReason:n.blockedReason,orderContext:{reworkNo:null,orderNo:null,styleNo:n.styleNo,supplierName:n.supplierName,status:n.title,updatedAt:n.createdAt},unread:true,version:1,createdAt:n.createdAt,updatedAt:n.createdAt}));
+}
