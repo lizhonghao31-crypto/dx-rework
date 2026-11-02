@@ -2,7 +2,7 @@
   "version": 1,
   "base": "ec3ad91137d79dc82acc31573323c12acba1de08",
   "risk": "full",
-  "sourceFingerprint": "5dfcc7ebe9101051aae1d12ab52fe7623c9c686aaf706c34935125983cd9b9ae",
+  "sourceFingerprint": "8d6f10ff9562cde39d169d175d222486fddd3ec47e93d9d1fb7ef5b4e35a1e55",
   "rules": [
     {
       "id": "node-projection",
@@ -31,9 +31,9 @@
         "tests/integration/qc-progress-retirement-postgres.test.ts"
       ],
       "checks": [
-        "final-pg-01",
-        "final-unit",
-        "final-static"
+        "batch-final-pg",
+        "batch-unit",
+        "batch-static"
       ],
       "initialization": "No migration, grants, source command, automatic adoption or business backfill. Current node auth precedes source reads; exact old/history versions remain read-only or explicitly unknown.",
       "dateAndPermission": "Original plan/SLA/actual event semantics and source authorization retained; recipe GET is the same READ ONLY transaction. API error never becomes missing/ready; no clock or progress mutations.",
@@ -70,9 +70,9 @@
         "tests/unit/cockpit-document-directory.test.ts"
       ],
       "checks": [
-        "final-browser",
-        "final-unit",
-        "final-static"
+        "batch-browser-02",
+        "batch-unit",
+        "batch-static"
       ],
       "initialization": "No migration, grants, source command, automatic adoption or business backfill. Current node auth precedes source reads; exact old/history versions remain read-only or explicitly unknown.",
       "dateAndPermission": "Original plan/SLA/actual event semantics and source authorization retained; recipe GET is the same READ ONLY transaction. API error never becomes missing/ready; no clock or progress mutations.",
@@ -97,9 +97,9 @@
         "tests/unit/production-readiness-contract.test.ts"
       ],
       "checks": [
-        "native-ui-01",
-        "final-unit",
-        "final-static"
+        "batch-native-ui",
+        "batch-unit",
+        "batch-static"
       ],
       "initialization": "No migration, grants, source command, automatic adoption or business backfill. Current node auth precedes source reads; exact old/history versions remain read-only or explicitly unknown.",
       "dateAndPermission": "Original plan/SLA/actual event semantics and source authorization retained; recipe GET is the same READ ONLY transaction. API error never becomes missing/ready; no clock or progress mutations.",
@@ -108,13 +108,13 @@
   ],
   "checks": [
     {
-      "id": "final-static",
+      "id": "batch-static",
       "kind": "command",
       "command": "[\"bash\",\"-c\",\"npm run typecheck && npm run lint && npm run test:preflight\"]",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "ec3ad91137d79dc82acc31573323c12acba1de08",
-      "sourceFingerprint": "5dfcc7ebe9101051aae1d12ab52fe7623c9c686aaf706c34935125983cd9b9ae",
+      "testedHead": "cdfc5bd2259b0e715c81a713461406763ea1e9b1",
+      "sourceFingerprint": "8d6f10ff9562cde39d169d175d222486fddd3ec47e93d9d1fb7ef5b4e35a1e55",
       "inputPaths": [
         "apps",
         "packages",
@@ -128,70 +128,67 @@
         "vitest.postgres-immediate.config.ts",
         "eslint.config.js"
       ],
-      "inputFingerprint": "b8bfb04c5a2f5ae1b5d07533a29d2f577055f6297064c3bd8ef25fa8f2b12651",
+      "inputFingerprint": "200f9a780f9e8afb713c9e3d81c88f46ce439fa16b08949804ca142949722334",
       "sourceState": "Actual working candidate source/input fingerprints captured before command and declared inputs reverified after; testedHead is ancestor while git diff exists, not a claim of a committed tested Head",
       "context": "Local Node 22.23.4; owned marked PG16 instance/low-privilege test role, explicit canonical workers; no claim of CI hardware equivalence or authenticated full-site acceptance",
-      "startedAt": "2026-11-02T03:11:00.139Z",
-      "endedAt": "2026-11-02T03:12:06.619Z",
-      "logSha256": "d4dce9ffa1b593018ac48b021a2064b7d1d1b02c72bbf19cab3ca5213bdffe84",
-      "log": "/workspace/dx-p08-recorded-final-static-1793589060139.log",
+      "startedAt": "2026-11-02T03:32:15.991Z",
+      "endedAt": "2026-11-02T03:33:26.824Z",
+      "logSha256": "fba0e622929ada66221df00c9dfd1488948a94356c1886f8322a136a8b2def46",
+      "log": "/workspace/dx-p08-recorded-batch-static-1793590335991.log",
       "resultReports": [],
       "actualReportPaths": []
     },
     {
-      "id": "final-pg-01",
+      "id": "batch-final-pg",
       "kind": "tests",
       "command": "[\"flock\",\"/workspace/dx-governance-local-pg-instance.lock\",\"node\",\"/workspace/dx-p08-focused-postgres.mjs\"]",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "ec3ad91137d79dc82acc31573323c12acba1de08",
-      "sourceFingerprint": "5dfcc7ebe9101051aae1d12ab52fe7623c9c686aaf706c34935125983cd9b9ae",
+      "testedHead": "cdfc5bd2259b0e715c81a713461406763ea1e9b1",
+      "sourceFingerprint": "4acd11130dacbc202a5380c7724b4e32e8034d10be6206bfad4fcd73bc9b1ba0",
       "inputPaths": [
-        "apps",
+        "apps/api",
         "packages",
-        "tests",
+        "tests/helpers",
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/integration/development-technical-postgres.test.ts",
+        "tests/integration/qc-progress-retirement-postgres.test.ts",
         "scripts",
         "package.json",
         "package-lock.json",
         "tsconfig.base.json",
         "vitest.config.ts",
         "vitest.business-chain.config.ts",
-        "vitest.postgres-immediate.config.ts",
-        "eslint.config.js"
+        "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "b8bfb04c5a2f5ae1b5d07533a29d2f577055f6297064c3bd8ef25fa8f2b12651",
+      "inputFingerprint": "e15e5ad84447455447c972bd4cf99a275db6c4542fbc279db56b918a82d6338c",
       "sourceState": "Actual working candidate source/input fingerprints captured before command and declared inputs reverified after; testedHead is ancestor while git diff exists, not a claim of a committed tested Head",
       "context": "Local Node 22.23.4; owned marked PG16 instance/low-privilege test role, explicit canonical workers; no claim of CI hardware equivalence or authenticated full-site acceptance",
-      "startedAt": "2026-11-02T03:11:20.768Z",
-      "endedAt": "2026-11-02T03:14:29.685Z",
-      "logSha256": "1d8edc7391b66689d92554d0598eb7b5d47f3e87412e152812b303171d96deaa",
-      "log": "/workspace/dx-p08-recorded-final-pg-01-1793589080768.log",
-      "passed": 69,
+      "startedAt": "2026-11-02T03:30:48.479Z",
+      "endedAt": "2026-11-02T03:32:33.809Z",
+      "logSha256": "2adf93e9dcfd74e7f36f3b0a59e606039987c851180600056850c4dc78d8e33b",
+      "log": "/workspace/dx-p08-recorded-batch-final-pg-1793590248480.log",
+      "passed": 47,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "a80ca1564ee97b6f90340ed676088825c99de98d1d8b7a8f366534790b73a29f"
-        },
-        {
-          "format": "vitest-json",
-          "sha256": "9cbf6a0254cc26c600b1ce408ef3e2d890881fd6fd8d1fc0c5d4f58562bdc462"
+          "sha256": "3321d1e56ed9e484ce04b4b10f99b153e98fc383d86d6dcaffffcf1ac3df062c"
         }
       ],
       "actualReportPaths": [
-        "/workspace/dx-p08-final-pg-01-vitest.config.ts.json",
-        "/workspace/dx-p08-final-pg-01-vitest.business-chain.config.ts.json"
+        "/workspace/dx-p08-batch-final-pg-vitest.business-chain.config.ts.json"
       ]
     },
     {
-      "id": "final-unit",
+      "id": "batch-unit",
       "kind": "tests",
-      "command": "[\"node\",\"node_modules/vitest/vitest.mjs\",\"run\",\"tests/unit/node-materials.test.ts\",\"tests/unit/cockpit-detail.test.ts\",\"tests/unit/digital-journey-cockpit.test.ts\",\"tests/unit/digital-detail-route.test.ts\",\"tests/unit/cockpit-document-new-sources.test.ts\",\"tests/unit/cockpit-document-directory.test.ts\",\"tests/unit/digital-cockpit-progress.test.ts\",\"tests/unit/production-readiness-contract.test.ts\",\"--reporter=default\",\"--reporter=json\",\"--outputFile=/workspace/dx-p08-final-unit.json\"]",
+      "command": "[\"node\",\"node_modules/vitest/vitest.mjs\",\"run\",\"tests/unit/node-materials.test.ts\",\"tests/unit/cockpit-detail.test.ts\",\"tests/unit/digital-journey-cockpit.test.ts\",\"tests/unit/digital-detail-route.test.ts\",\"tests/unit/cockpit-document-new-sources.test.ts\",\"tests/unit/cockpit-document-directory.test.ts\",\"tests/unit/digital-cockpit-progress.test.ts\",\"tests/unit/production-readiness-contract.test.ts\",\"--reporter=default\",\"--reporter=json\",\"--outputFile=/workspace/dx-p08-batch-unit.json\"]",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "ec3ad91137d79dc82acc31573323c12acba1de08",
-      "sourceFingerprint": "5dfcc7ebe9101051aae1d12ab52fe7623c9c686aaf706c34935125983cd9b9ae",
+      "testedHead": "cdfc5bd2259b0e715c81a713461406763ea1e9b1",
+      "sourceFingerprint": "8d6f10ff9562cde39d169d175d222486fddd3ec47e93d9d1fb7ef5b4e35a1e55",
       "inputPaths": [
         "apps",
         "packages",
@@ -205,88 +202,84 @@
         "vitest.postgres-immediate.config.ts",
         "eslint.config.js"
       ],
-      "inputFingerprint": "b8bfb04c5a2f5ae1b5d07533a29d2f577055f6297064c3bd8ef25fa8f2b12651",
+      "inputFingerprint": "200f9a780f9e8afb713c9e3d81c88f46ce439fa16b08949804ca142949722334",
       "sourceState": "Actual working candidate source/input fingerprints captured before command and declared inputs reverified after; testedHead is ancestor while git diff exists, not a claim of a committed tested Head",
       "context": "Local Node 22.23.4; owned marked PG16 instance/low-privilege test role, explicit canonical workers; no claim of CI hardware equivalence or authenticated full-site acceptance",
-      "startedAt": "2026-11-02T03:12:43.697Z",
-      "endedAt": "2026-11-02T03:12:46.877Z",
-      "logSha256": "e3d652dc6cd66a079b54959f32dcf1967b3933ca9b92c1d48fa4404ba8fd117d",
-      "log": "/workspace/dx-p08-recorded-final-unit-1793589163697.log",
+      "startedAt": "2026-11-02T03:32:15.937Z",
+      "endedAt": "2026-11-02T03:32:22.350Z",
+      "logSha256": "b6e01fb44a001cce11e63168f36639ef5d8abdbc4bc2a0c9de29c6e707ae2465",
+      "log": "/workspace/dx-p08-recorded-batch-unit-1793590335937.log",
       "passed": 103,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "1519be0db2c760f5b25917929260dfc05488422f5f9d9686ed7cf69f73dbab95"
+          "sha256": "3e1f7fd0251a475fdfbb072bab76558d3f8e87b8c5b13cdb8f4f93520eadaf37"
         }
       ],
       "actualReportPaths": [
-        "/workspace/dx-p08-final-unit.json"
+        "/workspace/dx-p08-batch-unit.json"
       ]
     },
     {
-      "id": "final-browser",
+      "id": "batch-browser-02",
       "kind": "tests",
       "command": "[\"node\",\"tests/acceptance/node-materials-browser.mjs\"]",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "ec3ad91137d79dc82acc31573323c12acba1de08",
-      "sourceFingerprint": "5dfcc7ebe9101051aae1d12ab52fe7623c9c686aaf706c34935125983cd9b9ae",
+      "testedHead": "cdfc5bd2259b0e715c81a713461406763ea1e9b1",
+      "sourceFingerprint": "8d6f10ff9562cde39d169d175d222486fddd3ec47e93d9d1fb7ef5b4e35a1e55",
       "inputPaths": [
-        "apps",
-        "packages",
-        "tests",
-        "scripts",
+        "apps/web",
+        "packages/contracts",
+        "packages/ui",
+        "packages/config",
+        "packages/domain",
+        "tests/fixtures/node-materials-page.tsx",
+        "tests/fixtures/node-materials-instruction.json",
+        "tests/acceptance/node-materials-browser.mjs",
         "package.json",
         "package-lock.json",
-        "tsconfig.base.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts",
-        "vitest.postgres-immediate.config.ts",
-        "eslint.config.js"
+        "tsconfig.base.json"
       ],
-      "inputFingerprint": "b8bfb04c5a2f5ae1b5d07533a29d2f577055f6297064c3bd8ef25fa8f2b12651",
+      "inputFingerprint": "48e69aee83b57ebaacee69c46946ecd4bc126a0d9b15c65838f19aa11ef8bed3",
       "sourceState": "Actual working candidate source/input fingerprints captured before command and declared inputs reverified after; testedHead is ancestor while git diff exists, not a claim of a committed tested Head",
       "context": "Local Node 22.23.4; owned marked PG16 instance/low-privilege test role, explicit canonical workers; no claim of CI hardware equivalence or authenticated full-site acceptance",
-      "startedAt": "2026-11-02T03:13:15.014Z",
-      "endedAt": "2026-11-02T03:13:33.576Z",
-      "logSha256": "f99666dbc1c41328945cc2dfe44fe37fc97eb262084dbb266ad5393fc28bc9fe",
-      "log": "/workspace/dx-p08-recorded-final-browser-1793589195014.log",
-      "passed": 18,
+      "startedAt": "2026-11-02T03:31:26.565Z",
+      "endedAt": "2026-11-02T03:31:53.143Z",
+      "logSha256": "4654a5bfaf6d8b240157c84f468d713dfdcd5297eac887a0c24655d3d53545c8",
+      "log": "/workspace/dx-p08-recorded-batch-browser-02-1793590286565.log",
+      "passed": 24,
       "failed": 0,
       "skipped": 0,
       "resultReports": [],
       "actualReportPaths": []
     },
     {
-      "id": "native-ui-01",
+      "id": "batch-native-ui",
       "kind": "tests",
       "command": "[\"node\",\"tests/acceptance/production-readiness-browser.mjs\"]",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "ec3ad91137d79dc82acc31573323c12acba1de08",
-      "sourceFingerprint": "5dfcc7ebe9101051aae1d12ab52fe7623c9c686aaf706c34935125983cd9b9ae",
+      "testedHead": "cdfc5bd2259b0e715c81a713461406763ea1e9b1",
+      "sourceFingerprint": "8d6f10ff9562cde39d169d175d222486fddd3ec47e93d9d1fb7ef5b4e35a1e55",
       "inputPaths": [
-        "apps",
+        "apps/web",
         "packages",
-        "tests",
-        "scripts",
+        "tests/fixtures/production-readiness-ui.tsx",
+        "tests/acceptance/production-readiness-browser.mjs",
         "package.json",
         "package-lock.json",
-        "tsconfig.base.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts",
-        "vitest.postgres-immediate.config.ts",
-        "eslint.config.js"
+        "tsconfig.base.json"
       ],
-      "inputFingerprint": "b8bfb04c5a2f5ae1b5d07533a29d2f577055f6297064c3bd8ef25fa8f2b12651",
+      "inputFingerprint": "1ba7fa22e6f206c226f4d4a4ee78acb5216b3fbe9758fed6110a1cfaae4341c9",
       "sourceState": "Actual working candidate source/input fingerprints captured before command and declared inputs reverified after; testedHead is ancestor while git diff exists, not a claim of a committed tested Head",
       "context": "Local Node 22.23.4; owned marked PG16 instance/low-privilege test role, explicit canonical workers; no claim of CI hardware equivalence or authenticated full-site acceptance",
-      "startedAt": "2026-11-02T03:10:25.653Z",
-      "endedAt": "2026-11-02T03:10:36.667Z",
-      "logSha256": "443fc8648045add41e3ed58378c8b7629e53442d492fff2b483863eb6153da6c",
-      "log": "/workspace/dx-p08-recorded-native-ui-01-1793589025654.log",
+      "startedAt": "2026-11-02T03:32:15.902Z",
+      "endedAt": "2026-11-02T03:32:34.463Z",
+      "logSha256": "d4583a97204d69b6a1aa4c08dc18e7c219fa87b200eca939122442042d2a674b",
+      "log": "/workspace/dx-p08-recorded-batch-native-ui-1793590335903.log",
       "passed": 14,
       "failed": 0,
       "skipped": 0,

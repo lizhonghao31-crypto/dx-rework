@@ -10,6 +10,8 @@ import {DevelopmentTechnicalService} from './development-technical-service.js';
 import {ProductionInstructionService} from './production-instruction-service.js';
 import {DigitalBudgetService} from './budget-service.js';
 import {QcProductionProgressService} from './qc-production-progress-service.js';
+import {DigitalProductionAccessPolicy} from './access-policy.js';
+import {developmentDocumentRow} from './development-round-repository.js';
 import {OrderClosureService} from './order-closure-service.js';
 import {BulkPreparationService} from './bulk-preparation-service.js';
 
@@ -22,6 +24,7 @@ const record=(domain:string,id:string,url:string,version:number|null=null,lineId
 /** Bind only an already authorized Journey instance. No commands, adoption or source fallback writes. */
 export async function readNodeMaterials(pool:Pool,db:PoolClient,actor:TrustedActorContext,order:OrderJourney,node:JourneyNode,asOf:string):Promise<NodeMaterials>{
  const rows:NodeMaterial[]=[],notices:string[]=[],old=historical(node),key=node.key.replace(/^series_/,'');
+ let productionBasis:Awaited<ReturnType<typeof productionReadiness>>|null=null;
  const scope=node.subject??(node.round?`第 ${node.round} 轮`:'本节点范围');
  const add=(input:Partial<NodeMaterial>&Pick<NodeMaterial,'id'|'label'|'state'|'reason'>)=>{
   const owner=input.owner===undefined?node.owner:input.owner;
@@ -52,7 +55,7 @@ export async function readNodeMaterials(pool:Pool,db:PoolClient,actor:TrustedAct
      versionLabel:fact?`物料记录 v${fact.version}`:null,records:[record('preparation',resource.id,url+`&materialKind=${kind}`,fact?.version??null)]});
    }
    if(order.orderId){
-    const current=await productionReadiness(db,order.orderId);
+    const current=productionBasis=await productionReadiness(db,order.orderId);
     if(['production_instruction','warehouse_preshrink','cutting_gate','bulk_cutting'].includes(key))add({id:'fabric-quality',label:'验布及有效使用依据',purpose:'input',applicability:readiness.enrolled?'required':'optional',state:current.fabric.usable?'effective':current.fabric.report?'present':'unknown',reason:current.fabric.usable?'沿原验布/使用决定核验；不合格仍继续计时。':'尚无有效允许使用依据；历史报告存在不等于当前主料可用。',role:'仓管（验布资料）',owner:readiness.responsibility.warehouseWorkerId?{id:readiness.responsibility.warehouseWorkerId,name:null}:null,expectedAt:null,expectedPrecision:'missing',records:[record('preparation',order.orderId,url)]});
     if(key==='production_instruction'){
      const sheet=await new ProductionInstructionService(pool,false).read(actor,order.orderId,db);
@@ -69,19 +72,28 @@ export async function readNodeMaterials(pool:Pool,db:PoolClient,actor:TrustedAct
     if(['style_label_ready','cutting_gate','bulk_cutting'].includes(key))for(const line of order.lines){const why=await styleLabelCuttingReason(db,order.orderId,[line.id]),labelFact=readiness.facts.find(f=>f.kind==='style_label_ready'&&f.scopeRef==='whole');add({id:'style-label-'+line.id,label:'款号唛实物',purpose:'input',applicability:readiness.enrolled?'required':'optional',state:!readiness.enrolled?'unknown':why?'missing':'effective',reason:why??'本款色的整单准备量已具备；实际开裁仍按原单具体范围核验。',versionLabel:labelFact?`款号唛记录 v${labelFact.version}`:null,scope:`${line.po??'未补 PO'} · ${line.color}`,role:'仓管',owner:readiness.responsibility.warehouseWorkerId?{id:readiness.responsibility.warehouseWorkerId,name:null}:null,records:[record('preparation',order.orderId,url+'&materialKind=style_label_ready',null,line.id)]});}
    }
   }
-  if(technicallyRelevant.has(key)&&order.sourceId){
-   const round=key.startsWith('development_')?node.round??order.selectedRound??1:order.adoptedRound??order.selectedRound??1;
-   const technical=await new DevelopmentTechnicalService(pool,false).read(actor,order.sourceId,round,'整款',db),basis=technical.effective;
+  if(technicallyRelevant.has(key)&&order.sourceId&&await new DigitalProductionAccessPolicy(db).allowed(actor,'source',order.sourceId,'technical')){
+   const reviewTask=key==='development_size_review'?node.records.find(r=>r.domain==='task'):undefined;
+   const reviewScope=reviewTask?(await db.query('SELECT scope_ref FROM digital_development_size_review_requests WHERE task_id=$1 AND source_id=$2 AND round_number=$3',[reviewTask.id,order.sourceId,node.round])).rows[0]?.scope_ref as string|undefined:undefined;
+   if(key==='development_size_review'&&!reviewScope)add({id:'technical-basis',label:'本次客户最终评语与尺寸复核范围',purpose:'input',state:'unknown',reason:'尚无可核实的本次复核范围，不用整款结果代替。',role:'技术部纸样师',owner:node.owner,records:sourceRecords(node.records)});
+   else{
+   // Current bulk input truth follows the same current document as the native publish guard.
+   // A historical developer view or the last instruction's old round is not a new adoption.
+   const currentDocument=key.startsWith('development_')?null:order.orderId?(productionBasis??await productionReadiness(db,order.orderId)).document:await developmentDocumentRow(db,order.sourceId);
+   const round=key.startsWith('development_')?node.round??order.selectedRound??1:currentDocument?.round_number??1;
+   const technical=await new DevelopmentTechnicalService(pool,false).read(actor,order.sourceId,round,reviewScope??'整款',db),basis=technical.effective;
    const ref=basis?.artifactRef,artifact=ref?technical.artifacts.find(a=>a.artifactSetId===ref.id&&a.version===ref.version):undefined;
    const reviewer=technical.reviews.find(r=>r.reviewId===basis?.reviewRef?.id)?.assigneeId??null;
    const technicalUrl=`/ui/digital-production?development=${order.sourceId}&round=${round}`;
+   const technicalRefs=reviewTask?sourceRecords([reviewTask]):[record('development',order.sourceId,technicalUrl,artifact?.version??null)],reviewLine=reviewScope?.startsWith('po:')?order.lines.find(l=>l.id===reviewScope.slice(3)):undefined;
    const finalNeeded=key!=='development_pattern';
    const state=technical.enrolled?artifact?finalNeeded?basis?.state==='effective'?'effective':['pending_review','superseded'].includes(basis?.state??'')?'stale':'present':'present':'missing':'unknown';
    add({id:'technical-basis',label:finalNeeded?'客户最终评语与大货尺寸复核':'纸样三件套：PLT、结构用量、基码尺寸表',purpose:'input',applicability:technical.enrolled?'required':'optional',state,
-    reason:!technical.enrolled?'历史技术采用依据未完整留存，请查看原单。':!artifact?'本轮尚无已发布技术成果。':basis?.state==='effective'?'客户最终评语、本次尺寸复核和采用的技术版本一致。':finalNeeded&&['pending_review','superseded'].includes(basis?.state??'')?'原技术成果仍在；客户最终评语或技术依据已变化，旧版待本次复核。':finalNeeded?'已有技术成果，仍待原客户/技术流程确认。':'已有发布成果；纸样完成按原三件套校验，不以客户最终批复阻止先做纸样。',role:'技术部纸样师',owner:reviewer?{id:reviewer,name:null}:key==='development_pattern'?node.owner:null,versionLabel:artifact?`成果 v${artifact.version}${basis?.finalCommentRef?`／最终评语 v${basis.finalCommentRef.version}`:''}`:null,records:[record('development',order.sourceId,technicalUrl,artifact?.version??null)]});
+    reason:!technical.enrolled?'历史技术采用依据未完整留存，请查看原单。':!artifact?'该范围尚无已发布技术成果，请从本次原任务核对客户评语及复核。':basis?.state==='effective'?'客户最终评语、本次尺寸复核和采用的技术版本一致。':finalNeeded&&['pending_review','superseded'].includes(basis?.state??'')?'原技术成果仍在；客户最终评语或技术依据已变化，旧版待本次复核。':finalNeeded?'已有技术成果，仍待原客户/技术流程确认。':'已有发布成果；纸样完成按原三件套校验，不以客户最终批复阻止先做纸样。',role:'技术部纸样师',owner:reviewer?{id:reviewer,name:null}:['development_pattern','development_size_review'].includes(key)?node.owner:null,versionLabel:artifact?`成果 v${artifact.version}${basis?.finalCommentRef?`／最终评语 v${basis.finalCommentRef.version}`:''}`:basis?.finalCommentRef?`最终评语 v${basis.finalCommentRef.version}（该范围成果待核）`:null,scope:reviewScope?.startsWith('po:')?reviewLine?`${reviewLine.po??'未补 PO'} · ${reviewLine.color}`:'本次 PO 复核范围（款色信息按原权限查看）':scope,records:technicalRefs});
    if(key==='development_pattern'){
     const issues=artifact?technicalArtifactIssues(artifact.body):[];
     for(const [part,label,present] of [['plt','PLT纸样原件',Boolean(artifact?.body.pltAttachmentIds.length)],['consumption','结构单件用量',Boolean(artifact?.body.consumptionRows.length)],['sizes','本轮基码尺寸表',Boolean(artifact?.body.baseSizeTable.measurements.length)]] as const)add({id:'paper-'+part,label,purpose:'output',applicability:'required',state:!technical.enrolled?'unknown':!present?'missing':artifact?.status==='published'&&!issues.length?'present':'partial',reason:artifact?issues.join('；')||'已发布本轮三件套；实际完成与附件下载仍按原入口校验。':'创建开发单尺码可选填；纸样完成时由技术形成本轮三件套。',role:'技术部纸样师',owner:node.owner,versionLabel:artifact?`成果 v${artifact.version}`:null,records:[record('development',order.sourceId,technicalUrl,artifact?.version??null)]});
+   }
    }
   }
   if(key==='budget'&&order.orderId){const budget=await new DigitalBudgetService(pool,false).read(actor,order.orderId,db);add({id:'budget',label:'跟单预算及已采用报价版本',purpose:'output',applicability:'required',state:budget.status==='published'?!budget.sourcingCaseId&&budget.comparison?.state==='review_required'?'stale':'effective':budget.document?'present':'missing',reason:budget.comparison?.state==='review_required'?budget.comparison?.reason??'客户报价已有新确认版，请沿原预算入口复核。':budget.status==='published'?'原预算发布版可查看；预算用于选厂参考，执行价格以老板批准的合同为准。':'请在原预算页核对客户已确认报价与预算总额，再按原规则发布。',role:'订单跟单',owner:order.merchandisers[0]??null,versionLabel:budget.version?`预算 v${budget.version}`:null,records:[record('budget',order.orderId,`/ui/digital-production?budget=${order.orderId}${budget.status==='published'?`&budgetVersion=${budget.version}`:''}`,budget.version||null)]});}
@@ -91,10 +103,10 @@ export async function readNodeMaterials(pool:Pool,db:PoolClient,actor:TrustedAct
     const progress=execution.records.find(r=>r.kind==='progress'&&r.observations.some(o=>o.lineId===line.lineId));
     const clock=execution.lineClocks.find(l=>l.lineId===line.lineId)?.clock;
     const photos=progress?new Set(execution.records.filter(r=>r.recordId===progress.recordId||r.relatedProgressRecordId===progress.recordId).flatMap(r=>r.attachmentIds)).size:0;
-    add({id:`qc-${execution.productionId}-${line.lineId}`,label:'QC生产进度、适用产量与现场照片',purpose:'output',applicability:'required',state:progress?'present':clock?.state==='unknown'?'unknown':'missing',
+    add({id:`qc-${execution.productionId}-${execution.factoryDecisionId??'original'}-${line.lineId}`,label:'QC生产进度、适用产量与现场照片',purpose:'output',applicability:'required',state:progress?'present':clock?.state==='unknown'?'unknown':'missing',
      reason:(progress?`已有本款色进度及关联现场照片 ${photos} 张。`:'尚无本款色的有效进度，请由 QC 在原入口录入。')+(['due','escalated'].includes(clock?.state??'')?'原进度窗口已到更新时点。':'')+'照片不代替进度，进度与产量不代表成衣质检合格。',
-     role:'QC',owner:qc.qcUserId?{id:qc.qcUserId,name:qc.qcName}:null,scope:`${execution.supplierName} · ${line.poNumber??'未补 PO'} · ${line.color}`,expectedAt:clock?.remindAt??null,expectedPrecision:clock?.remindAt?'instant':'missing',versionLabel:progress?`进度记录 v${progress.revision}`:null,
-     records:sourceRecords(node.records).map(r=>({...r,lineId:line.lineId}))});
+     role:'QC',owner:qc.qcUserId?{id:qc.qcUserId,name:qc.qcName}:null,scope:`${execution.supplierName} · 厂单范围 ${qc.executions.indexOf(execution)+1} · ${line.quantity} 件 · ${line.poNumber??'未补 PO'} · ${line.color}`,expectedAt:clock?.remindAt??null,expectedPrecision:clock?.remindAt?'instant':'missing',versionLabel:progress?`进度记录 v${progress.revision}`:null,
+     records:sourceRecords(node.records).map(r=>({...r,lineId:line.lineId,url:r.domain==='factory'&&r.url?r.url+'&line='+line.lineId+(execution.factoryDecisionId?'&factoryDecisionId='+execution.factoryDecisionId:''):r.url}))});
    }
   }
   if(['receipts','receiving_inspection','packing','quantity_difference'].includes(key)&&order.orderId){

@@ -6,7 +6,7 @@ export async function nodeMaterialsFixture(db:Pool,actor:TrustedActorContext,id:
  const query=new DigitalJourneyQuery(db),order=await query.read(actor,id),nodes=order.stages.flatMap(s=>s.nodes);
  const node=nodes.find(n=>n.key===key&&(taskId?n.records.some(r=>r.domain==='task'&&r.id===taskId):n.current));
  if(!node)throw new Error(`TEST visible ${key} instance not found`);
- const data=NodeMaterialsSchema.parse(await query.nodeMaterials(actor,order.id,node.instanceId,order.selectedRound??undefined));
+ const data=NodeMaterialsSchema.parse(await query.nodeMaterials(actor,order.id,node.instanceId));
  return {data,order,node,query};
 }
 /** Compare the actual task/plan/fact/todo/risk footprint, not merely HTTP method. */

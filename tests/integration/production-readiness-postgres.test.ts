@@ -1,3 +1,6 @@
+import {DigitalProductionAccessPolicy} from '../../apps/api/src/production-platform/access-policy.js';
+import {DevelopmentRoundService} from '../../apps/api/src/production-platform/development-round-service.js';
+import {DigitalJourneyQuery} from '../../apps/api/src/production-platform/journey-query.js';
 import {ReceivingService} from '../../apps/api/src/receiving/receiving-service.js';
 import {registerDigitalIdentityRoutes} from '../../apps/api/src/production-platform/identity-routes.js';
 import {RootAuthority} from '../../apps/api/src/access/root-authority.js';
@@ -92,6 +95,31 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(projection.data.rows.some(r=>r.purpose==='input'&&/责任签字|财务|工资|老板签字/.test(r.label))).toBe(false);
    expect((await f.db.query('SELECT status FROM rework_orders WHERE rework_order_id=$1',[work.id])).rows[0].status).not.toBe('completed');
   });
+ });
+ it('uses current native bulk prerequisites when the last instruction and selected developer history still point to round1',async()=>{
+  const ready=await f.bulkReady('无',undefined,1,f.sourcing,{stopBeforeCompletion:true}),rounds=new DevelopmentRoundService(f.db,true),old=await forms.read(f.root,ready.sourceId);
+  const draft=await rounds.save(f.root,ready.sourceId,{expectedDraftVersion:0,revision:{basedOnRound:1,document:old.document!,origin:'内部发现',customerComment:'',internalProblem:'TEST新纸样待做，旧制单不能证明当前依据有效',explanation:'TEST当前大货资料与查看历史分离',categories:['版型'],affectedNodes:['纸样','裁板','车板'],outputKind:'整件样板'}},randomUUID());
+  await rounds.publish(f.root,ready.sourceId,{expectedDraftVersion:draft.draftVersion,basedOnRound:1},randomUUID());
+  const query=new DigitalJourneyQuery(f.db),history=await query.read(f.root,ready.id,1),node=history.stages.flatMap(s=>s.nodes).find(n=>n.key==='production_instruction'&&n.current)!;expect(history.selectedRound).toBe(1);expect(history.adoptedRound).toBe(1);
+  const native=await productionReadiness(f.db,ready.id);expect(native.document?.round_number).toBe(2);expect(native.finalReasons.length).toBeGreaterThan(0);
+  const projected=await query.nodeMaterials(f.root,history.id,node.instanceId,1),basis=projected.rows.find(r=>r.id==='technical-basis')!;
+  expect(basis.state).not.toBe('effective');expect(basis.records[0]!.url).toContain('round=2');expect(projected.rows.find(r=>r.id==='instruction-prerequisites')?.state).not.toBe('effective');
+ });
+ it('serves current materials to an assigned bulk worker without granting its linked development source or explicit history',async()=>{
+  const ready=await f.bulkReady('无',undefined,1,f.sourcing,{stopBeforeCompletion:true}),person=f.people['worker-a']!;
+  await f.access.assignRole(f.root,{userId:person.actorId,roleCode:'pattern_room_worker',reason:'TEST真实单单纸样分派，无开发源权限'});
+  const worker={...person,actorRoles:[...person.actorRoles,'pattern_room_worker']},task=(await bulk.read(f.root,ready.id)).tasks.find(t=>t.taskKind==='bulk_pattern')!;
+  await new DigitalProductionTaskService(f.db).reassign(f.root,task.taskId,worker.actorId,randomUUID());
+  const policy=new DigitalProductionAccessPolicy(f.db);expect(await policy.allowed(worker,'order',ready.id,'technical')).toBe(true);expect(await policy.allowed(worker,'source',ready.sourceId,'technical')).toBe(false);
+  const projected=await nodeMaterialsFixture(f.db,worker,ready.id,'bulk_pattern');expect(projected.order.selectedRound).toBe(1);expect(projected.data.rows.some(r=>r.id==='material-fabric_receipt')).toBe(true);expect(projected.data.rows.some(r=>r.id==='technical-basis'||r.records.some(v=>v.domain==='development'))).toBe(false);
+  await expect(projected.query.nodeMaterials(worker,projected.order.id,projected.node.instanceId,1)).rejects.toMatchObject({statusCode:404});
+ });
+ it('reads the selected PO review scope while whole-style technical evidence remains effective',async()=>{
+  const ready=await f.bulkReady('无',undefined,2,f.sourcing,{stopBeforeCompletion:true}),technical=new DevelopmentTechnicalService(f.db,true),whole=await technical.read(f.root,ready.sourceId),po=(await identity.read(f.root,ready.id)).lines[1]!,scopeRef='po:'+po.lineId;
+  expect(whole.effective?.state).toBe('effective');const final=await technical.recordComment(f.root,ready.sourceId,{roundNumber:1,scopeRef,expectedVersion:0,isFinal:true,decision:'changes_required',text:'TEST仅此PO客户最终评语要求复核',evidenceRefs:[],evidenceNote:'TEST实际PO最终评语',occurredAt:null},randomUUID());
+  expect((await technical.read(f.root,ready.sourceId,1,'整款')).effective?.state).toBe('effective');expect((await technical.read(f.root,ready.sourceId,1,scopeRef)).effective?.state).not.toBe('effective');
+  const projected=await nodeMaterialsFixture(f.db,f.root,ready.id,'development_size_review',final.reviewTaskId!),row=projected.data.rows.find(r=>r.id==='technical-basis')!;
+  expect(row.state).not.toBe('effective');expect(row.scope).toContain(po.poNumber!);expect(row.scope).toContain(po.color);expect(row.owner?.id).toBe(projected.node.owner?.id);expect(row.records[0]?.id).toBe(final.reviewTaskId);
  });
  it('keeps preorder material work independent, reuses original receipts and bridges partial/unknown heads without fallback resurrection',async()=>{
   const p=await setup();expect(p.handover.orderId).toBeNull();

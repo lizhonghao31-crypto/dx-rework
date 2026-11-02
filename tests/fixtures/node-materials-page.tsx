@@ -20,7 +20,7 @@ const frame:OrderJourney={id:source,sourceId:source,orderId:order,asOf:now,desig
 frame.seriesPlanVisible=true;
 frame.links=[{domain:'sourcing',id:id(40),url:'/ui/sourcing/orders/'+id(40),mode:'read',version:1,lineId:id(5)},{domain:'cutting',id:id(30),url:'/ui/cutting/orders/'+id(30),mode:'read',version:1,lineId:id(5)},{domain:'rework',id:id(50),url:'/ui/tasks/'+id(50),mode:'read',version:2,lineId:id(5)}];
 const other=structuredClone(frame);other.id=id(11);other.sourceId=id(11);other.orderId=id(12);other.designStyleNo='TEST-另一张订单';other.lines[0]!.id=id(15);other.lines[0]!.po='TEST-PO-OTHER';other.links=[];for(const stage of other.stages)for(const n of stage.nodes){n.instanceId+='-other';n.records=n.records.map(r=>({...r,id:id(12),url:'/ui/digital-production?instruction='+id(12)}));}
-const mode=new URLSearchParams(location.search).get('case')??sessionStorage.getItem('materialCase')??'normal',control={actor:person,requests:[] as Array<{path:string;method:string}>,unhandled:[] as string[],active:0,peak:0,failureReads:0,malformedUsed:false,resourceRevoked:false,materialReads:0,materialFailure:true,saved:false,sourceReads:0};sessionStorage.setItem('materialCase',mode);control.saved=sessionStorage.getItem('materialSaved')==='true';Object.assign(window,{directoryFixture:control});
+const mode=new URLSearchParams(location.search).get('case')??sessionStorage.getItem('materialCase')??'normal',control={actor:person,requests:[] as Array<{path:string;method:string}>,unhandled:[] as string[],active:0,peak:0,failureReads:0,malformedUsed:false,resourceRevoked:false,materialReads:0,materialFailure:true,saved:false,savedWrites:Number(sessionStorage.getItem('materialSavedWrites')??'0'),sourceReads:0};sessionStorage.setItem('materialCase',mode);control.saved=sessionStorage.getItem('materialSaved')==='true';Object.assign(window,{directoryFixture:control});
 if(mode==='empty'){frame.links=[];other.links=[];}
 const emptyBudget={fabricType:'针织',productCategory:'夹克',monthSeries:'P05',date:'2026-11-01',currency:'人民币',rows:[],freight:'',cm:'',salePrice:'',outsourcingScope:'',outsourcingUnitPrice:'',imageAttachmentIds:[]};
 const longName='TEST原凭证_'+('超长中文文件名'.repeat(18))+'.pdf';
@@ -43,25 +43,26 @@ window.fetch=async(input,init)=>{
 };
  if(path.endsWith('/node-materials')){
   control.materialReads++;
-  const instanceId=url.searchParams.get('instanceId')!,isB=instanceId.includes('bulk_pattern');
+  const requestedActor=control.actor,instanceId=url.searchParams.get('instanceId')!,isB=instanceId.includes('bulk_pattern');
   if(mode==='material-slow'&&!isB){await new Promise(r=>setTimeout(r,500));}
+  if(mode==='material-worker'&&url.searchParams.has('round'))return send({error:{message:'TEST无开发源权限不能指定轮次'}},404);
   if(control.resourceRevoked)return send({error:{message:'TEST当前无此订单资料权限'}},404);
-  if(mode==='material-failure'&&control.materialFailure){control.materialFailure=false;return send({error:{message:'TEST原资料暂时读取失败'}},503);}
+  if((mode==='material-failure'||mode==='material-refresh-failure'&&control.saved)&&control.materialFailure){control.materialFailure=false;return send({error:{message:'TEST原资料暂时读取失败'}},503);}
   if(mode==='material-malformed'&&control.materialFailure){control.materialFailure=false;return send({rows:[]});}
-  const rows=Array.from({length:mode==='material-empty'?0:20},(_,i)=>({id:'input-'+i,label:(isB?'B节点局部纸样':'A节点正式制单')+' · '+i+(i===19?'TEST超长原凭证文件名_'.repeat(14):''),purpose:i<2?'input':'reference',applicability:i===18?'not_applicable':'required',state:control.saved&&i===0?'effective':i===1?'stale':i===2?'unknown':i===18?'not_applicable':'missing',reason:i===1?'旧技术成果仍在，最终评语变版后待复核':'TEST本节点范围资料，不是整个阶段的全局门禁',versionLabel:i===1?'采用成果 v1／最终评语 v2':null,scope:'TEST-PO-01 · 藏蓝',role:i%2?'技术部纸样师':'订单跟单',owner:{id:person,name:i%2?'TEST纸样师':'TEST订单跟单'},mine:i%2===0,when:i===17?'later':i%2?'waiting_other':'now',expectedAt:'2026-11-03T08:00:00Z',expectedPrecision:'instant',effect:i===0?'original_gate':'information',records:[{domain:'instruction',id:order,url:'/ui/digital-production?instruction='+order,version:null,lineId:id(5),mode:'read'}]}));
-  return send({ruleVersion:'node-materials-v1',journeyId:source,instanceId,round:null,asOf:now,revision:'a'.repeat(64),historical:mode==='material-history',coverage:'available',notice:'TEST只读资料投影，原办理与权限保持',rows});
+  const rows=Array.from({length:mode==='material-empty'?0:20},(_,i)=>({id:'input-'+i,label:(mode==='material-slow'&&requestedActor!==control.actor?'TEST旧身份在途资料':isB?'B节点局部纸样':'A节点正式制单')+' · '+i+(i===19?'TEST超长原凭证文件名_'.repeat(14):''),purpose:i<2?'input':'reference',applicability:i===18?'not_applicable':'required',state:control.saved&&i===0?'effective':i===1?'stale':i===2?'unknown':i===18?'not_applicable':'missing',reason:i===1?'旧技术成果仍在，最终评语变版后待复核':'TEST本节点范围资料，不是整个阶段的全局门禁',versionLabel:i===1?'采用成果 v1／最终评语 v2':null,scope:'TEST-PO-01 · 藏蓝',role:i%2?'技术部纸样师':'订单跟单',owner:{id:person,name:i%2?'TEST纸样师':'TEST订单跟单'},mine:i%2===0,when:i===17?'later':i%2?'waiting_other':'now',expectedAt:'2026-11-03T08:00:00Z',expectedPrecision:'instant',effect:i===0?'original_gate':'information',records:[{domain:'instruction',id:order,url:'/ui/digital-production?instruction='+order,version:null,lineId:id(5),mode:'read'}]}));
+  return send({ruleVersion:'node-materials-v1',journeyId:source,instanceId,round:null,asOf:now,revision:(control.saved?'b':'a').repeat(64),historical:mode==='material-history',coverage:'available',notice:'TEST只读资料投影，原办理与权限保持',rows});
  }
  if(path.endsWith('/instruction')&&method==='PUT'){
   const payload=JSON.parse(String(init?.body));
   if(mode==='material-save-failure')return send({error:{message:'TEST保存失败，原输入保留'}},409);
-  control.saved=true;sessionStorage.setItem('materialSaved','true');instructionFixture.document=payload.document;instructionFixture.version++;sessionStorage.setItem('materialDocument',JSON.stringify(instructionFixture.document));return send(instructionFixture);
+  control.saved=true;control.savedWrites++;sessionStorage.setItem('materialSavedWrites',String(control.savedWrites));sessionStorage.setItem('materialSaved','true');instructionFixture.document=payload.document;instructionFixture.version++;sessionStorage.setItem('materialDocument',JSON.stringify(instructionFixture.document));return send(instructionFixture);
  }
  if(path.endsWith('/instruction')&&location.search.includes('instruction=')){
-  control.sourceReads++;const prior=sessionStorage.getItem('materialDocument');if(prior)instructionFixture.document=JSON.parse(prior);if(control.saved&&mode==='material-refresh-failure')return send({error:{message:'TEST保存后重读失败，不能据此认定齐全'}},503);
+  control.sourceReads++;const prior=sessionStorage.getItem('materialDocument');if(prior)instructionFixture.document=JSON.parse(prior);
   return send({...instructionFixture,isPublishedSnapshot:url.searchParams.has('version'),canEdit:!url.searchParams.has('version')});
  }
  if(method!=='GET'){control.unhandled.push('WRITE '+path);return send({error:{message:'TEST目录禁止写入'}},403);}
- if(path==='auth/me')return send({status:'authorized',user:{id:control.actor,displayName:control.actor===person?'TEST订单跟单':'TEST QC',isRoot:false,businessRoles:[control.actor===person?'order_merchandiser':'quality_control'],capabilities:['digital_production:view']}});
+ if(path==='auth/me')return send({status:'authorized',user:{id:control.actor,displayName:control.actor===person?'TEST订单跟单':'TEST QC',isRoot:false,businessRoles:[mode==='material-worker'?'pattern_room_worker':control.actor===person?'order_merchandiser':'quality_control'],capabilities:['digital_production:view']}});
  if(path.endsWith('/access/options'))return send({manage:false,customers:false});
  if(path==='digital-production/journeys')return send({ruleVersion:'journey-v2.0',asOf:now,page:1,pageSize:15,total:2,scopeCounts:{production:2,development:0,cancelled:0},summary:{all:2,active:2,notStarted:0,dueSoon:0,overdue:0,blocked:0,completed:0},items:[frame,other]});
  if(path.startsWith('digital-production/journeys/'))return send(path.endsWith(id(11))?other:frame);

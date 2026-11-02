@@ -18,12 +18,12 @@ export function NodeMaterialsPanel({order,node,control,busy=false}:{order:OrderJ
  const failure=error?.key===key&&error.identity===control.identity&&error.order===order?error.message:'';
  const loading=view.open&&!busy&&!shown&&!failure;
  useEffect(()=>{const turn=++serial.current,identity=sessionCacheVersion(),abort=new AbortController();setResult(null);setError(null);
-  if(view.open&&!busy){const query=new URLSearchParams({instanceId:node.instanceId,...(order.selectedRound?{round:String(order.selectedRound)}:{})});
+  if(view.open&&!busy&&control.identity){const query=new URLSearchParams({instanceId:node.instanceId,...(control.context.round?{round:String(control.context.round)}:{})});
    void digitalRequest<NodeMaterials>(`journeys/${order.id}/node-materials?${query}`,'GET',undefined,undefined,{signal:abort.signal}).then(data=>{
     if(turn!==serial.current||identity!==sessionCacheVersion())return;const parsed=NodeMaterialsSchema.safeParse(data);if(!parsed.success||parsed.data.journeyId!==order.id||parsed.data.instanceId!==node.instanceId)throw new Error('节点资料返回异常或范围已变化，请重新读取');setResult({key,identity:control.identity,order,data:parsed.data});
    }).catch(e=>{if(turn===serial.current&&e.name!=='AbortError')setError({key,identity:control.identity,order,message:e.message});});
   }return()=>{serial.current++;abort.abort();};
- },[order,node.instanceId,key,control.identity,view.open,retry,busy]);
+ },[order,node.instanceId,key,control.identity,control.context.round,view.open,retry,busy]);
  useEffect(()=>{
   if(!view.open||!shown||!body.current)return;const frame=requestAnimationFrame(()=>{if(body.current)body.current.scrollTop=view.scroll;});return()=>cancelAnimationFrame(frame);
  },[key,view.open,view.filter,Boolean(shown)]);
@@ -33,7 +33,7 @@ export function NodeMaterialsPanel({order,node,control,busy=false}:{order:OrderJ
   if(target){const frame=requestAnimationFrame(()=>target.focus({preventScroll:true}));restore.pending=false;return()=>cancelAnimationFrame(frame);}
  },[key,busy,shown,view.open]);
  const rows=filterNodeMaterials(shown?.rows??[],view.filter),pending=shown?.rows.filter(r=>r.applicability!=='not_applicable'&&!['effective','not_applicable'].includes(r.state)).length;
- return <details ref={panel} className="node-materials" open={view.open} onToggle={event=>{if(event.currentTarget.open!==view.open)control.update({open:event.currentTarget.open,focus:'summary'});}}>
+ return <details ref={panel} className="node-materials" data-material-revision={shown?.revision} open={view.open} onToggle={event=>{if(event.currentTarget.open!==view.open)control.update({open:event.currentTarget.open,focus:'summary'});}}>
   <summary data-material-focus="summary" aria-expanded={view.open}><strong>该节点所需材料一览</strong><span>{view.open?pending===undefined?'正在核对…':`待核对 ${pending} 项`:node.blockers.length?'有原流程前置待处理':'点击查看本节点资料'}</span></summary>
   {view.open&&<div className="node-materials-body">
    <div className="node-materials-controls" aria-label="材料筛选">{([['all','全部'],['pending','待处理'],['effective','已有效'],['mine','我的']] as const).map(([value,label])=><button type="button" data-material-focus={'filter-'+value} key={value} aria-pressed={view.filter===value} onClick={()=>control.update({filter:value,scroll:0,focus:'filter-'+value})}>{label}</button>)}<button type="button" onClick={()=>{setResult(null);setRetry(n=>n+1);}}>重新核对</button></div>
