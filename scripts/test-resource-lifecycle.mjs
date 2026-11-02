@@ -5,12 +5,13 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import pg from 'pg';
 import {assertTestDatabaseTarget} from './test-database-safety.mjs';
-import {readOwnedResources} from './test-resource-contract.mjs';
+import {readOwnedResources,assertMainMaintenanceTarget} from './test-resource-contract.mjs';
 
-export async function resourceContext(urls) {
+export async function resourceContext(urls,{maintenanceAdminUrl}={}) {
  const identities={};
  for(const [target,url]of Object.entries(urls))if(url)identities[target]=await assertTestDatabaseTarget(url);
- return {runId:randomUUID().replaceAll('-','').slice(0,8),dir:await mkdtemp(join(tmpdir(),'dx-test-resources-')),urls,identities};
+ if(urls['main-maintenance'])assertMainMaintenanceTarget(urls['main-maintenance'],maintenanceAdminUrl,identities);
+ return {runId:randomUUID().replaceAll('-','').slice(0,8),dir:await mkdtemp(join(tmpdir(),'dx-test-resources-')),urls,identities,maintenanceAdminUrl};
 }
 export function resourceEnvironment(context) {
  return {DX_REWORK_TEST_RUN_ID:context.runId,DX_REWORK_TEST_RESOURCE_MANIFEST_DIR:context.dir,DX_REWORK_TEST_RESOURCE_IDENTITIES:JSON.stringify(context.identities),DX_REWORK_TEST_SCHEMA_CLEANUP:'after-workers',DX_REWORK_TEST_EXECUTION_STATE:context.dir+'.process.json'};
@@ -21,10 +22,15 @@ export async function cleanupResources(context) {
  for(const target of new Set(resources.map(r=>r.databaseTarget))){
   const actual=await assertTestDatabaseTarget(context.urls[target]);
   if(JSON.stringify(actual)!==JSON.stringify(context.identities[target]))throw Error('TEST_RESOURCE_LIVE_IDENTITY_CHANGED');
+  if(target==='main-maintenance')assertMainMaintenanceTarget(context.urls[target],context.maintenanceAdminUrl,context.identities);
  }
  for(const target of new Set(resources.map(r=>r.databaseTarget))){
-  const pool=new pg.Pool({connectionString:context.urls[target],max:1});
+  const pool=new pg.Pool({connectionString:target==='main-maintenance'?context.maintenanceAdminUrl:context.urls[target],max:1});
   try{for(const r of resources.filter(r=>r.databaseTarget===target)){
+   if(target==='main-maintenance'){
+    const {rows:[identity]}=await pool.query("SELECT oid::text AS oid,shobj_description(oid,'pg_database') AS marker FROM pg_database WHERE datname=current_database()");
+    if(identity.oid!==r.identity.databaseOid||identity.marker!==r.identity.marker)throw Error('TEST_RESOURCE_LIVE_IDENTITY_CHANGED');
+   }
    const client=await pool.connect();
    try{await client.query('BEGIN');await client.query("SELECT pg_advisory_xact_lock(hashtextextended('test-owned-schema-teardown-v1',0))");await client.query(`DROP SCHEMA IF EXISTS "${r.schema}" CASCADE`);await client.query('COMMIT');}
    catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}

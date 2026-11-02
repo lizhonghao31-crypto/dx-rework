@@ -31,11 +31,12 @@ export const POSTGRES_CHAIN_TESTS=Object.freeze([
   "tests/integration/sample-disposal-postgres.test.ts",
   "tests/integration/sample-import-postgres.test.ts",
   "tests/integration/acceptance-role-session-postgres.test.ts",
+  "tests/integration/main-0232-maintenance-postgres.test.ts",
 ]);
 export const LONG_CORRECTNESS_TESTS=Object.freeze([...POSTGRES_CHAIN_TESTS,'tests/integration/rework-postgres.test.ts']);
 export const IMMEDIATE_DELETE_TESTS=Object.freeze(['tests/integration/rework-postgres.test.ts']);
 // The full business fixture is SQL-heavy and must not contend with another full migration/chain.
-export const ISOLATED_CORRECTNESS_TESTS=Object.freeze([...IMMEDIATE_DELETE_TESTS,'tests/integration/full-business-chain-postgres.test.ts']);
+export const ISOLATED_CORRECTNESS_TESTS=Object.freeze([...IMMEDIATE_DELETE_TESTS,'tests/integration/full-business-chain-postgres.test.ts','tests/integration/main-0232-maintenance-postgres.test.ts']);
 export const configForSuite=path=>ISOLATED_CORRECTNESS_TESTS.includes(path)?'vitest.postgres-immediate.config.ts':LONG_CORRECTNESS_TESTS.includes(path)?'vitest.business-chain.config.ts':'vitest.config.ts';
 export const postgresTestFiles=()=>readdirSync('tests/integration').filter(name=>name.endsWith('.test.ts')&&readFileSync('tests/integration/'+name,'utf8').includes('TEST_DATABASE_URL')).map(name=>'tests/integration/'+name).sort();
 export const ROOT_AUDIT_TESTS=Object.freeze(['tests/integration/root-self-system-admin-postgres.test.ts','tests/integration/supplier-onboarding-postgres.test.ts','tests/integration/supplier-maintenance-postgres.test.ts','tests/integration/quality-basic-rework-postgres.test.ts','tests/integration/wage-settlement-postgres.test.ts']);

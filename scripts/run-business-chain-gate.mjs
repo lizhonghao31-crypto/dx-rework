@@ -141,7 +141,9 @@ if(!hasDatabase&&process.argv.includes('--static-already-validated')){
 }else{
  const plan=declared?.plan??postgresPlan({mapped,chain});
  await assertFixturePrerequisites(databaseUrl,plan);
- const resources=await resourceContext({default:databaseUrl,...(process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL?{'acceptance-clock':process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL}:{})});
+ const maintenance=plan.some(s=>s.path==='tests/integration/main-0232-maintenance-postgres.test.ts');
+ if(maintenance&&(!process.env.MAIN_0232_TEST_DATABASE_URL||!process.env.MAIN_0232_TEST_ADMIN_DATABASE_URL))throw Error('MAIN_0232_DEDICATED_TEST_DATABASE_REQUIRED');
+ const resources=await resourceContext({default:databaseUrl,...(process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL?{'acceptance-clock':process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL}:{}),...(maintenance?{'main-maintenance':process.env.MAIN_0232_TEST_DATABASE_URL}:{})},{maintenanceAdminUrl:process.env.MAIN_0232_TEST_ADMIN_DATABASE_URL});
  let cleanupPassed=false;
  const context={head:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),base:process.env.BASE_SHA??null,runId:process.env.GITHUB_RUN_ID??null,attempt:process.env.GITHUB_RUN_ATTEMPT??null,identities:resources.identities,executionId:process.env.DX_REWORK_TEST_EXECUTION_ID??`${process.env.GITHUB_RUN_ID}/${process.env.GITHUB_RUN_ATTEMPT}`,node:process.versions.node,nodeEnv:'test',databaseUrlCleared:true};
  try{

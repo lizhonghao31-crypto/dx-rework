@@ -160,5 +160,26 @@
     "languages": ["plpgsql"],
     "onlineCompatible": false,
     "rollback": "restart-previous-only-if-entire-history-unchanged"
+  },
+  {
+    "version": "0232_pmc_readonly_role",
+    "checksum": "31d01d06ce698735c21b2e8b9ab5f2f1da29d2ceb0838a130320e32e2bbe6547",
+    "strategy": "quiesce-backup-transactional-ddl",
+    "tables": ["public.business_roles", "public.capability_catalog", "public.role_capabilities"],
+    "triggerTables": ["public.attachments"],
+    "schema": "public",
+    "functions": [
+      "public.access_authorized_actor_roles(uuid,text)",
+      "public.pattern_room_authorized_order_roles(uuid,text)",
+      "public.pattern_room_authorized_price_roles(uuid,text)",
+      "public.cutting_authorized_roles(uuid,text)",
+      "public.finance_authorized_wage_roles(uuid,text)",
+      "public.external_responsibility_can_view_all(uuid)",
+      "public.own_factory_approval_can_view(uuid,uuid)",
+      "public.supplier_onboarding_authorized_roles(uuid,text)"
+    ],
+    "languages": ["sql", "plpgsql"],
+    "onlineCompatible": false,
+    "rollback": "restart-previous-only-if-entire-history-unchanged"
   }
 ]
