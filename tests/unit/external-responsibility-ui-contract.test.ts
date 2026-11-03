@@ -7,7 +7,8 @@ describe("external responsibility UI contract", () => {
     expect(source).toContain("external-responsibilities/supplier-options");
     expect(source).toContain("external-responsibilities/temporary-suppliers");
     expect(source).not.toContain('apiUrl("master-data/suppliers")');
-    expect(source).toContain("if (response.status === 403) return [] as Supplier[];");
+    expect(source).toContain("loadResponsibilitySuppliers(");
+    expect(source).not.toContain("if (response.status === 403) return [] as Supplier[];");
   });
 
   it("records deductions using the Shanghai business date without asking finance to enter it", async () => {

@@ -1,0 +1,22 @@
+{
+  "record": {
+    "command": [
+      "/workspace/scratch/5c2f59f0b575/tooling/node_modules/node/bin/node",
+      "/workspace/scratch/5c2f59f0b575/tooling/node_modules/npm/bin/npm-cli.js",
+      "run",
+      "typecheck",
+      "--workspace",
+      "@dx-rework/web"
+    ],
+    "cwd": "/workspace/scratch/5c2f59f0b575/dx-b",
+    "startedAt": "2026-11-03T14:22:39.601940+00:00",
+    "endedAt": "2026-11-03T14:23:06.083606+00:00",
+    "elapsedSeconds": 26.482,
+    "exitCode": 0,
+    "logPath": "/workspace/scratch/5c2f59f0b575/verification-b/web-typecheck.log",
+    "logSha256": "ecfd698a25c1aa13340462e3f4e0704a61b4582415b4e129e2f740cf0c1e6179"
+  },
+  "originalLogText": "(node:5) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.\n(Use `node --trace-warnings ...` to show where the warning was created)\n\n> @dx-rework/web@0.1.0 typecheck\n> tsc --noEmit -p tsconfig.json\n\n",
+  "originalLogSha256": "ecfd698a25c1aa13340462e3f4e0704a61b4582415b4e129e2f740cf0c1e6179",
+  "encoding": "utf-8 JSON string preserves every original byte including final blank lines"
+}

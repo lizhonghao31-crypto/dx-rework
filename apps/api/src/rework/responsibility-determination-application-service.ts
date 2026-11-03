@@ -182,7 +182,7 @@ export class ResponsibilityDeterminationApplicationService {
     }>(
       `SELECT supplier_id,supplier_type,supplier_name
        FROM current_supplier_catalog
-       WHERE active=true
+       WHERE active=true AND supplier_type IN ('factory','embroidery_washing','fabric')
        ORDER BY supplier_type,supplier_name,supplier_id`,
     );
     return {
