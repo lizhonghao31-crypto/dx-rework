@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "c2c49369898b7f9943fb280342a56d9a98b0b30b",
-  "sourceFingerprint": "300c9c4a03f9ef1fc8ddb8fc196153dfedcb78f797b24623d56e88bd32df7bd3",
+  "sourceFingerprint": "d01a8c64e2ed50dabd20ec5dd38d5523aa24906ebba55dd152c42fb59ef53f6c",
   "risk": "full",
   "rules": [
     {
@@ -82,7 +82,9 @@
         "apps/api/src/production-platform/journey-task-summary.ts",
         "apps/api/src/production-platform/series-plan-service.ts",
         "apps/api/src/production-platform/sla-order-service.ts",
-        "packages/contracts/src/digital-sla.ts"
+        "packages/contracts/src/digital-sla.ts",
+        "tests/unit/digital-task-read-boundary.test.ts",
+        "tests/unit/digital-pmc-readonly-access.test.ts"
       ],
       "reads": [
         "apps/api/src/production-platform/bulk-preshrink-requirement.ts",
@@ -98,11 +100,13 @@
         "tests/unit/journey-projection-isolation.test.ts",
         "tests/unit/journey-snapshot-reads.test.ts",
         "tests/unit/journey-sla-supervision.test.ts",
-        "tests/integration/series-plan-routes.test.ts"
+        "tests/integration/series-plan-routes.test.ts",
+        "tests/unit/digital-task-read-boundary.test.ts",
+        "tests/unit/digital-pmc-readonly-access.test.ts"
       ],
       "initialization": "SLA只生成评价副本；实际已完成节点不隐藏；仅纠正精确退役任务从当前分母剔除；系列计划旧预览依据失效。",
       "dateAndPermission": "仅真实有效Root可办理指定旧单；原角色、验布许可、P0、时钟、期限及已完成历史保持；不操作现场/生产/Acceptance。",
-      "expectation": "相关旧非PG消费者155组内用例通过；真实PG投影/分母同源/旧token拒绝仍由Full确认。 Work补真实SlaOrderService.read的旧SLA事实残留正反例，当前prep有效结构化纠正才替代评价副本；这些PG断言仍须本次官方Full实际执行。",
+      "expectation": "相关旧非PG消费者155组内用例通过；真实PG投影/分母同源/旧token拒绝仍由Full确认。 Work补真实SlaOrderService.read的旧SLA事实残留正反例，当前prep有效结构化纠正才替代评价副本；这些PG断言仍须本次官方Full实际执行。 Full41663972950的11个失败均为这两个旧权限mock未识别纠正表只读查询；仅增加两条精确SQL处理，未知SQL与原所有允许/拒绝断言保留，当前17文件真实通过。",
       "checks": [
         "a-targeted-tests",
         "a-api-types",
@@ -165,22 +169,22 @@
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "command": "/workspace/.tooling/node22/node_modules/.bin/node node_modules/vitest/vitest.mjs run tests/unit/bulk-preshrink-requirement.test.ts tests/unit/bulk-preshrink-correction-read.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/digital-journey-projection.test.ts tests/unit/digital-journey-cockpit.test.ts tests/unit/journey-projection-isolation.test.ts tests/unit/journey-snapshot-reads.test.ts tests/unit/journey-sla-supervision.test.ts tests/unit/digital-sla-plan.test.ts tests/unit/series-plan-dates.test.ts tests/unit/sla-preview-token.test.ts tests/unit/acceptance-maintenance-generator.test.ts tests/unit/current-migration-manifest-checksum.test.ts tests/unit/migration-history.test.ts tests/integration/series-plan-routes.test.ts --reporter=verbose --reporter=json --outputFile.json=/workspace/a-896-gate-records/targeted-tests.json",
-      "testedHead": "dfa9c8990ab5cfb464ba91d8d22a15cbeba489b1",
-      "sourceFingerprint": "300c9c4a03f9ef1fc8ddb8fc196153dfedcb78f797b24623d56e88bd32df7bd3",
-      "startedAt": "2026-11-03T15:12:32.752473+00:00",
-      "endedAt": "2026-11-03T15:12:40.563951+00:00",
-      "log": "docs/engineering/verification-20261103/work-a-targeted-tests.log",
-      "logSha256": "b57f7a58a63777e783958d471245b47051a5caed93913a6de178ad08826f5c4e",
-      "context": "Work Node 22.23.4/npm 10.9.9, isolated local checkout of PR896; source fingerprint captured before and after this command. No PostgreSQL or field operation; PG regressions remain pending exact-head GitHub Full under this A+B-only arrangement.",
-      "passed": 155,
+      "command": "/workspace/.tooling/node22/node_modules/.bin/node node_modules/vitest/vitest.mjs run tests/unit/bulk-preshrink-requirement.test.ts tests/unit/bulk-preshrink-correction-read.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/digital-journey-projection.test.ts tests/unit/digital-journey-cockpit.test.ts tests/unit/journey-projection-isolation.test.ts tests/unit/journey-snapshot-reads.test.ts tests/unit/journey-sla-supervision.test.ts tests/unit/digital-sla-plan.test.ts tests/unit/series-plan-dates.test.ts tests/unit/sla-preview-token.test.ts tests/unit/acceptance-maintenance-generator.test.ts tests/unit/current-migration-manifest-checksum.test.ts tests/unit/migration-history.test.ts tests/integration/series-plan-routes.test.ts tests/unit/digital-task-read-boundary.test.ts tests/unit/digital-pmc-readonly-access.test.ts --reporter=verbose --reporter=json --outputFile.json=/workspace/a-896-old-consumer-records/targeted-tests.json",
+      "testedHead": "490ee738992b22ca55d8a4cefc737385396ba9eb",
+      "sourceFingerprint": "d01a8c64e2ed50dabd20ec5dd38d5523aa24906ebba55dd152c42fb59ef53f6c",
+      "startedAt": "2026-11-03T15:40:56.620779+00:00",
+      "endedAt": "2026-11-03T15:41:07.330736+00:00",
+      "log": "/workspace/a-896-old-consumer-records/targeted-tests.log",
+      "logSha256": "5623d00574764c816f8da298316750be5fc13eab4f82ff9e6b3acb746f00f58f",
+      "context": "Node22.23.4/npm10.9.9; amended A source before/after fingerprints identical; explicit native protocol concurrency2. Only strict old-test SQL mock entries changed since reviewed490ee738; product code unchanged. No local PG; exact-head Full must execute PG and later applicable stages.",
+      "passed": 217,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "path": "docs/engineering/verification-20261103/work-a-targeted-tests.json",
-          "sha256": "b57a225c9218b8a4eeb7870e2644e73b63c4b0c67e771a6c4bc27155f12a7c33"
+          "path": "/workspace/a-896-old-consumer-records/targeted-tests.json",
+          "sha256": "7e8b01e384a89eb14b219f62ac367d16d95d8c9b44f717a172151a467eec4b10"
         }
       ]
     },
@@ -190,27 +194,27 @@
       "status": "passed",
       "exitCode": 0,
       "command": "/workspace/.tooling/node22/node_modules/.bin/node node_modules/typescript/bin/tsc --noEmit -p apps/api/tsconfig.json",
-      "testedHead": "dfa9c8990ab5cfb464ba91d8d22a15cbeba489b1",
-      "sourceFingerprint": "300c9c4a03f9ef1fc8ddb8fc196153dfedcb78f797b24623d56e88bd32df7bd3",
-      "startedAt": "2026-11-03T15:12:32.752863+00:00",
-      "endedAt": "2026-11-03T15:12:44.304990+00:00",
-      "log": "docs/engineering/verification-20261103/work-a-api-types.log",
+      "testedHead": "490ee738992b22ca55d8a4cefc737385396ba9eb",
+      "sourceFingerprint": "d01a8c64e2ed50dabd20ec5dd38d5523aa24906ebba55dd152c42fb59ef53f6c",
+      "startedAt": "2026-11-03T15:40:56.621086+00:00",
+      "endedAt": "2026-11-03T15:41:08.922079+00:00",
+      "log": "/workspace/a-896-old-consumer-records/api-types.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "context": "Work Node 22.23.4/npm 10.9.9, isolated local checkout of PR896; source fingerprint captured before and after this command. No PostgreSQL or field operation; PG regressions remain pending exact-head GitHub Full under this A+B-only arrangement."
+      "context": "Node22.23.4/npm10.9.9; amended A source before/after fingerprints identical; explicit native protocol concurrency2. Only strict old-test SQL mock entries changed since reviewed490ee738; product code unchanged. No local PG; exact-head Full must execute PG and later applicable stages."
     },
     {
       "id": "a-eslint",
       "kind": "command",
       "status": "passed",
       "exitCode": 0,
-      "command": "/workspace/.tooling/node22/node_modules/.bin/node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/bulk-sla-evidence.ts apps/api/src/production-platform/sla-order-service.ts tests/integration/bulk-preshrink-correction-postgres.test.ts --max-warnings=0",
-      "testedHead": "dfa9c8990ab5cfb464ba91d8d22a15cbeba489b1",
-      "sourceFingerprint": "300c9c4a03f9ef1fc8ddb8fc196153dfedcb78f797b24623d56e88bd32df7bd3",
-      "startedAt": "2026-11-03T15:12:32.753170+00:00",
-      "endedAt": "2026-11-03T15:12:34.045961+00:00",
-      "log": "docs/engineering/verification-20261103/work-a-eslint.log",
+      "command": "/workspace/.tooling/node22/node_modules/.bin/node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/bulk-sla-evidence.ts apps/api/src/production-platform/sla-order-service.ts tests/integration/bulk-preshrink-correction-postgres.test.ts tests/unit/digital-task-read-boundary.test.ts tests/unit/digital-pmc-readonly-access.test.ts --max-warnings=0",
+      "testedHead": "490ee738992b22ca55d8a4cefc737385396ba9eb",
+      "sourceFingerprint": "d01a8c64e2ed50dabd20ec5dd38d5523aa24906ebba55dd152c42fb59ef53f6c",
+      "startedAt": "2026-11-03T15:40:56.621443+00:00",
+      "endedAt": "2026-11-03T15:40:58.054531+00:00",
+      "log": "/workspace/a-896-old-consumer-records/eslint.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "context": "Work Node 22.23.4/npm 10.9.9, isolated local checkout of PR896; source fingerprint captured before and after this command. No PostgreSQL or field operation; PG regressions remain pending exact-head GitHub Full under this A+B-only arrangement."
+      "context": "Node22.23.4/npm10.9.9; amended A source before/after fingerprints identical; explicit native protocol concurrency2. Only strict old-test SQL mock entries changed since reviewed490ee738; product code unchanged. No local PG; exact-head Full must execute PG and later applicable stages."
     },
     {
       "id": "a-migration-lint",
@@ -218,13 +222,13 @@
       "status": "passed",
       "exitCode": 0,
       "command": "/workspace/.tooling/node22/node_modules/.bin/node scripts/check-migrations.mjs",
-      "testedHead": "dfa9c8990ab5cfb464ba91d8d22a15cbeba489b1",
-      "sourceFingerprint": "300c9c4a03f9ef1fc8ddb8fc196153dfedcb78f797b24623d56e88bd32df7bd3",
-      "startedAt": "2026-11-03T15:14:24.653188+00:00",
-      "endedAt": "2026-11-03T15:14:24.869281+00:00",
-      "log": "docs/engineering/verification-20261103/work-a-migration-lint.log",
+      "testedHead": "490ee738992b22ca55d8a4cefc737385396ba9eb",
+      "sourceFingerprint": "d01a8c64e2ed50dabd20ec5dd38d5523aa24906ebba55dd152c42fb59ef53f6c",
+      "startedAt": "2026-11-03T15:42:40.645154+00:00",
+      "endedAt": "2026-11-03T15:42:40.874816+00:00",
+      "log": "/workspace/a-896-old-consumer-records/migration-lint.log",
       "logSha256": "534996a46842441c9e15ad47ee7184768eb02db96ee21b5fc23e7b2a7cc51399",
-      "context": "Work Node 22.23.4/npm 10.9.9, isolated local checkout of PR896; source fingerprint captured before and after this command. No PostgreSQL or field operation; PG regressions remain pending exact-head GitHub Full under this A+B-only arrangement."
+      "context": "Node22.23.4/npm10.9.9; amended A source before/after fingerprints identical; explicit native protocol concurrency2. Only strict old-test SQL mock entries changed since reviewed490ee738; product code unchanged. No local PG; exact-head Full must execute PG and later applicable stages."
     },
     {
       "id": "a-resource-registration",
@@ -232,13 +236,13 @@
       "status": "passed",
       "exitCode": 0,
       "command": "/workspace/.tooling/node22/node_modules/.bin/node --input-type=module -e 'import {checkResourceRegistration} from \"./scripts/test-preflight.mjs\";checkResourceRegistration();console.log(\"TEST_RESOURCE_REGISTRATION_PASSED\");'",
-      "testedHead": "dfa9c8990ab5cfb464ba91d8d22a15cbeba489b1",
-      "sourceFingerprint": "300c9c4a03f9ef1fc8ddb8fc196153dfedcb78f797b24623d56e88bd32df7bd3",
-      "startedAt": "2026-11-03T15:14:24.960467+00:00",
-      "endedAt": "2026-11-03T15:14:25.427375+00:00",
-      "log": "docs/engineering/verification-20261103/work-a-resource-registration.log",
+      "testedHead": "490ee738992b22ca55d8a4cefc737385396ba9eb",
+      "sourceFingerprint": "d01a8c64e2ed50dabd20ec5dd38d5523aa24906ebba55dd152c42fb59ef53f6c",
+      "startedAt": "2026-11-03T15:42:40.976983+00:00",
+      "endedAt": "2026-11-03T15:42:41.141142+00:00",
+      "log": "/workspace/a-896-old-consumer-records/resource-registration.log",
       "logSha256": "eb9b79530fa7744904f8496ef1c52119592f57296a4b244851b72da6ed27d69a",
-      "context": "Work Node 22.23.4/npm 10.9.9, isolated local checkout of PR896; source fingerprint captured before and after this command. No PostgreSQL or field operation; PG regressions remain pending exact-head GitHub Full under this A+B-only arrangement."
+      "context": "Node22.23.4/npm10.9.9; amended A source before/after fingerprints identical; explicit native protocol concurrency2. Only strict old-test SQL mock entries changed since reviewed490ee738; product code unchanged. No local PG; exact-head Full must execute PG and later applicable stages."
     },
     {
       "id": "a-secret-scan",
@@ -246,13 +250,13 @@
       "status": "passed",
       "exitCode": 0,
       "command": "/workspace/.tooling/node22/node_modules/.bin/node scripts/secret-scan.mjs --worktree",
-      "testedHead": "dfa9c8990ab5cfb464ba91d8d22a15cbeba489b1",
-      "sourceFingerprint": "300c9c4a03f9ef1fc8ddb8fc196153dfedcb78f797b24623d56e88bd32df7bd3",
-      "startedAt": "2026-11-03T15:14:25.515937+00:00",
-      "endedAt": "2026-11-03T15:14:26.202224+00:00",
-      "log": "docs/engineering/verification-20261103/work-a-secret-scan.log",
+      "testedHead": "490ee738992b22ca55d8a4cefc737385396ba9eb",
+      "sourceFingerprint": "d01a8c64e2ed50dabd20ec5dd38d5523aa24906ebba55dd152c42fb59ef53f6c",
+      "startedAt": "2026-11-03T15:42:41.239285+00:00",
+      "endedAt": "2026-11-03T15:42:41.899165+00:00",
+      "log": "/workspace/a-896-old-consumer-records/secret-scan.log",
       "logSha256": "e1dfa041688b50d44d86ff40fe8aa56557234186d6cc37fb95cd943eaae1c3ec",
-      "context": "Work Node 22.23.4/npm 10.9.9, isolated local checkout of PR896; source fingerprint captured before and after this command. No PostgreSQL or field operation; PG regressions remain pending exact-head GitHub Full under this A+B-only arrangement."
+      "context": "Node22.23.4/npm10.9.9; amended A source before/after fingerprints identical; explicit native protocol concurrency2. Only strict old-test SQL mock entries changed since reviewed490ee738; product code unchanged. No local PG; exact-head Full must execute PG and later applicable stages."
     },
     {
       "id": "a-diff-check",
@@ -260,37 +264,37 @@
       "status": "passed",
       "exitCode": 0,
       "command": "git diff --check",
-      "testedHead": "dfa9c8990ab5cfb464ba91d8d22a15cbeba489b1",
-      "sourceFingerprint": "300c9c4a03f9ef1fc8ddb8fc196153dfedcb78f797b24623d56e88bd32df7bd3",
-      "startedAt": "2026-11-03T15:14:26.294154+00:00",
-      "endedAt": "2026-11-03T15:14:26.676744+00:00",
-      "log": "docs/engineering/verification-20261103/work-a-diff-check.log",
+      "testedHead": "490ee738992b22ca55d8a4cefc737385396ba9eb",
+      "sourceFingerprint": "d01a8c64e2ed50dabd20ec5dd38d5523aa24906ebba55dd152c42fb59ef53f6c",
+      "startedAt": "2026-11-03T15:42:41.984842+00:00",
+      "endedAt": "2026-11-03T15:42:42.082569+00:00",
+      "log": "/workspace/a-896-old-consumer-records/diff-check.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "context": "Work Node 22.23.4/npm 10.9.9, isolated local checkout of PR896; source fingerprint captured before and after this command. No PostgreSQL or field operation; PG regressions remain pending exact-head GitHub Full under this A+B-only arrangement."
+      "context": "Node22.23.4/npm10.9.9; amended A source before/after fingerprints identical; explicit native protocol concurrency2. Only strict old-test SQL mock entries changed since reviewed490ee738; product code unchanged. No local PG; exact-head Full must execute PG and later applicable stages."
     },
     {
       "id": "a-protocol-tests",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "command": "/workspace/.tooling/node22/node_modules/.bin/node --test scripts/ci/*.test.mjs",
-      "testedHead": "dfa9c8990ab5cfb464ba91d8d22a15cbeba489b1",
-      "sourceFingerprint": "300c9c4a03f9ef1fc8ddb8fc196153dfedcb78f797b24623d56e88bd32df7bd3",
-      "startedAt": "2026-11-03 15:11:51.072621796 +0000",
-      "endedAt": "2026-11-03 15:11:53.124658577 +0000",
+      "command": "/workspace/.tooling/node22/node_modules/.bin/node --test --test-concurrency=2 scripts/ci/ci-gate-runtime.test.mjs scripts/ci/construction-evidence.test.mjs scripts/ci/final-closeout.test.mjs scripts/ci/fixture-prerequisites.test.mjs scripts/ci/gate-maintenance.test.mjs scripts/ci/governance-policy.test.mjs scripts/ci/light-reuse.test.mjs scripts/ci/owned-command.test.mjs scripts/ci/pr-gate-controller.test.mjs scripts/ci/pr-gate-protocol.test.mjs scripts/ci/review-final-gate.test.mjs scripts/ci/test-execution-contract.test.mjs",
+      "testedHead": "490ee738992b22ca55d8a4cefc737385396ba9eb",
+      "sourceFingerprint": "d01a8c64e2ed50dabd20ec5dd38d5523aa24906ebba55dd152c42fb59ef53f6c",
+      "startedAt": "2026-11-03T15:40:58.165435+00:00",
+      "endedAt": "2026-11-03T15:41:02.065701+00:00",
+      "log": "/workspace/a-896-old-consumer-records/protocol-tests.log",
+      "logSha256": "223ef19fa1ea6d536383ecb7c9cd6e6a99acf585f25621d83064b67c85097374",
+      "context": "Node22.23.4/npm10.9.9; amended A source before/after fingerprints identical; explicit native protocol concurrency2. Only strict old-test SQL mock entries changed since reviewed490ee738; product code unchanged. No local PG; exact-head Full must execute PG and later applicable stages.",
       "passed": 152,
       "failed": 0,
       "skipped": 0,
-      "log": "docs/engineering/verification-20261103/work-a-protocol-tests.tap",
-      "logSha256": "60cfce176ab1ff8a4a97a25f69acb6b3cb7c6a24103533b913d5ff5f30b64e01",
       "resultReports": [
         {
           "format": "node-tap",
-          "path": "docs/engineering/verification-20261103/work-a-protocol-tests.tap",
-          "sha256": "60cfce176ab1ff8a4a97a25f69acb6b3cb7c6a24103533b913d5ff5f30b64e01"
+          "path": "/workspace/a-896-old-consumer-records/protocol-tests.log",
+          "sha256": "223ef19fa1ea6d536383ecb7c9cd6e6a99acf585f25621d83064b67c85097374"
         }
-      ],
-      "context": "Actual native protocol run after inventory reconciliation, 152 passing assertions; start/end taken from original output-file birth/last-write timestamps. No source changes occurred during this run. Node22; native default concurrency was used for this local run, not claimed identical to CI two-worker scheduling. No CI or business PostgreSQL run."
+      ]
     }
   ],
   "pendingVerification": [
@@ -426,6 +430,165 @@
       "log": "docs/engineering/verification-20261103/a-diff-check.log",
       "context": "Node 22.22.2 / npm 10.9.9. Official fixed-head snapshot plus this incremental candidate; source bytes unchanged since these checks. Git objects were subsequently verified against original head/base. Documentation-only recording does not change sourceFingerprint. No database or field access.",
       "historicalBoundary": "Pro execution on the previous dfa9c899 source; retained without alteration, not claimed as passing the amended Work source."
+    },
+    {
+      "id": "a-targeted-tests",
+      "kind": "tests",
+      "status": "passed",
+      "exitCode": 0,
+      "command": "/workspace/.tooling/node22/node_modules/.bin/node node_modules/vitest/vitest.mjs run tests/unit/bulk-preshrink-requirement.test.ts tests/unit/bulk-preshrink-correction-read.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/digital-journey-projection.test.ts tests/unit/digital-journey-cockpit.test.ts tests/unit/journey-projection-isolation.test.ts tests/unit/journey-snapshot-reads.test.ts tests/unit/journey-sla-supervision.test.ts tests/unit/digital-sla-plan.test.ts tests/unit/series-plan-dates.test.ts tests/unit/sla-preview-token.test.ts tests/unit/acceptance-maintenance-generator.test.ts tests/unit/current-migration-manifest-checksum.test.ts tests/unit/migration-history.test.ts tests/integration/series-plan-routes.test.ts --reporter=verbose --reporter=json --outputFile.json=/workspace/a-896-gate-records/targeted-tests.json",
+      "testedHead": "dfa9c8990ab5cfb464ba91d8d22a15cbeba489b1",
+      "sourceFingerprint": "300c9c4a03f9ef1fc8ddb8fc196153dfedcb78f797b24623d56e88bd32df7bd3",
+      "startedAt": "2026-11-03T15:12:32.752473+00:00",
+      "endedAt": "2026-11-03T15:12:40.563951+00:00",
+      "log": "/workspace/a-896-gate-records/targeted-tests.log",
+      "logSha256": "b57f7a58a63777e783958d471245b47051a5caed93913a6de178ad08826f5c4e",
+      "context": "Work Node 22.23.4/npm 10.9.9, isolated local checkout of PR896; source fingerprint captured before and after this command. No PostgreSQL or field operation; PG regressions remain pending exact-head GitHub Full under this A+B-only arrangement.",
+      "passed": 155,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "path": "/workspace/a-896-gate-records/targeted-tests.json",
+          "sha256": "b57a225c9218b8a4eeb7870e2644e73b63c4b0c67e771a6c4bc27155f12a7c33"
+        }
+      ],
+      "historicalBoundary": "490ee738 execution retained unchanged outside the candidate. Does not replace validation of the subsequent strict-mock fixture changes."
+    },
+    {
+      "id": "a-api-types",
+      "kind": "command",
+      "status": "passed",
+      "exitCode": 0,
+      "command": "/workspace/.tooling/node22/node_modules/.bin/node node_modules/typescript/bin/tsc --noEmit -p apps/api/tsconfig.json",
+      "testedHead": "dfa9c8990ab5cfb464ba91d8d22a15cbeba489b1",
+      "sourceFingerprint": "300c9c4a03f9ef1fc8ddb8fc196153dfedcb78f797b24623d56e88bd32df7bd3",
+      "startedAt": "2026-11-03T15:12:32.752863+00:00",
+      "endedAt": "2026-11-03T15:12:44.304990+00:00",
+      "log": "/workspace/a-896-gate-records/api-types.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "context": "Work Node 22.23.4/npm 10.9.9, isolated local checkout of PR896; source fingerprint captured before and after this command. No PostgreSQL or field operation; PG regressions remain pending exact-head GitHub Full under this A+B-only arrangement.",
+      "historicalBoundary": "490ee738 execution retained unchanged outside the candidate. Does not replace validation of the subsequent strict-mock fixture changes."
+    },
+    {
+      "id": "a-eslint",
+      "kind": "command",
+      "status": "passed",
+      "exitCode": 0,
+      "command": "/workspace/.tooling/node22/node_modules/.bin/node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/bulk-sla-evidence.ts apps/api/src/production-platform/sla-order-service.ts tests/integration/bulk-preshrink-correction-postgres.test.ts --max-warnings=0",
+      "testedHead": "dfa9c8990ab5cfb464ba91d8d22a15cbeba489b1",
+      "sourceFingerprint": "300c9c4a03f9ef1fc8ddb8fc196153dfedcb78f797b24623d56e88bd32df7bd3",
+      "startedAt": "2026-11-03T15:12:32.753170+00:00",
+      "endedAt": "2026-11-03T15:12:34.045961+00:00",
+      "log": "/workspace/a-896-gate-records/eslint.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "context": "Work Node 22.23.4/npm 10.9.9, isolated local checkout of PR896; source fingerprint captured before and after this command. No PostgreSQL or field operation; PG regressions remain pending exact-head GitHub Full under this A+B-only arrangement.",
+      "historicalBoundary": "490ee738 execution retained unchanged outside the candidate. Does not replace validation of the subsequent strict-mock fixture changes."
+    },
+    {
+      "id": "a-migration-lint",
+      "kind": "command",
+      "status": "passed",
+      "exitCode": 0,
+      "command": "/workspace/.tooling/node22/node_modules/.bin/node scripts/check-migrations.mjs",
+      "testedHead": "dfa9c8990ab5cfb464ba91d8d22a15cbeba489b1",
+      "sourceFingerprint": "300c9c4a03f9ef1fc8ddb8fc196153dfedcb78f797b24623d56e88bd32df7bd3",
+      "startedAt": "2026-11-03T15:14:24.653188+00:00",
+      "endedAt": "2026-11-03T15:14:24.869281+00:00",
+      "log": "/workspace/a-896-gate-records/migration-lint.log",
+      "logSha256": "534996a46842441c9e15ad47ee7184768eb02db96ee21b5fc23e7b2a7cc51399",
+      "context": "Work Node 22.23.4/npm 10.9.9, isolated local checkout of PR896; source fingerprint captured before and after this command. No PostgreSQL or field operation; PG regressions remain pending exact-head GitHub Full under this A+B-only arrangement.",
+      "historicalBoundary": "490ee738 execution retained unchanged outside the candidate. Does not replace validation of the subsequent strict-mock fixture changes."
+    },
+    {
+      "id": "a-resource-registration",
+      "kind": "command",
+      "status": "passed",
+      "exitCode": 0,
+      "command": "/workspace/.tooling/node22/node_modules/.bin/node --input-type=module -e 'import {checkResourceRegistration} from \"./scripts/test-preflight.mjs\";checkResourceRegistration();console.log(\"TEST_RESOURCE_REGISTRATION_PASSED\");'",
+      "testedHead": "dfa9c8990ab5cfb464ba91d8d22a15cbeba489b1",
+      "sourceFingerprint": "300c9c4a03f9ef1fc8ddb8fc196153dfedcb78f797b24623d56e88bd32df7bd3",
+      "startedAt": "2026-11-03T15:14:24.960467+00:00",
+      "endedAt": "2026-11-03T15:14:25.427375+00:00",
+      "log": "/workspace/a-896-gate-records/resource-registration.log",
+      "logSha256": "eb9b79530fa7744904f8496ef1c52119592f57296a4b244851b72da6ed27d69a",
+      "context": "Work Node 22.23.4/npm 10.9.9, isolated local checkout of PR896; source fingerprint captured before and after this command. No PostgreSQL or field operation; PG regressions remain pending exact-head GitHub Full under this A+B-only arrangement.",
+      "historicalBoundary": "490ee738 execution retained unchanged outside the candidate. Does not replace validation of the subsequent strict-mock fixture changes."
+    },
+    {
+      "id": "a-secret-scan",
+      "kind": "command",
+      "status": "passed",
+      "exitCode": 0,
+      "command": "/workspace/.tooling/node22/node_modules/.bin/node scripts/secret-scan.mjs --worktree",
+      "testedHead": "dfa9c8990ab5cfb464ba91d8d22a15cbeba489b1",
+      "sourceFingerprint": "300c9c4a03f9ef1fc8ddb8fc196153dfedcb78f797b24623d56e88bd32df7bd3",
+      "startedAt": "2026-11-03T15:14:25.515937+00:00",
+      "endedAt": "2026-11-03T15:14:26.202224+00:00",
+      "log": "/workspace/a-896-gate-records/secret-scan.log",
+      "logSha256": "e1dfa041688b50d44d86ff40fe8aa56557234186d6cc37fb95cd943eaae1c3ec",
+      "context": "Work Node 22.23.4/npm 10.9.9, isolated local checkout of PR896; source fingerprint captured before and after this command. No PostgreSQL or field operation; PG regressions remain pending exact-head GitHub Full under this A+B-only arrangement.",
+      "historicalBoundary": "490ee738 execution retained unchanged outside the candidate. Does not replace validation of the subsequent strict-mock fixture changes."
+    },
+    {
+      "id": "a-diff-check",
+      "kind": "command",
+      "status": "passed",
+      "exitCode": 0,
+      "command": "git diff --check",
+      "testedHead": "dfa9c8990ab5cfb464ba91d8d22a15cbeba489b1",
+      "sourceFingerprint": "300c9c4a03f9ef1fc8ddb8fc196153dfedcb78f797b24623d56e88bd32df7bd3",
+      "startedAt": "2026-11-03T15:14:26.294154+00:00",
+      "endedAt": "2026-11-03T15:14:26.676744+00:00",
+      "log": "/workspace/a-896-gate-records/diff-check.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "context": "Work Node 22.23.4/npm 10.9.9, isolated local checkout of PR896; source fingerprint captured before and after this command. No PostgreSQL or field operation; PG regressions remain pending exact-head GitHub Full under this A+B-only arrangement.",
+      "historicalBoundary": "490ee738 execution retained unchanged outside the candidate. Does not replace validation of the subsequent strict-mock fixture changes."
+    },
+    {
+      "id": "a-protocol-tests",
+      "kind": "tests",
+      "status": "passed",
+      "exitCode": 0,
+      "command": "/workspace/.tooling/node22/node_modules/.bin/node --test scripts/ci/*.test.mjs",
+      "testedHead": "dfa9c8990ab5cfb464ba91d8d22a15cbeba489b1",
+      "sourceFingerprint": "300c9c4a03f9ef1fc8ddb8fc196153dfedcb78f797b24623d56e88bd32df7bd3",
+      "startedAt": "2026-11-03 15:11:51.072621796 +0000",
+      "endedAt": "2026-11-03 15:11:53.124658577 +0000",
+      "passed": 152,
+      "failed": 0,
+      "skipped": 0,
+      "log": "/workspace/a-896-gate-records/protocol-tests.tap",
+      "logSha256": "60cfce176ab1ff8a4a97a25f69acb6b3cb7c6a24103533b913d5ff5f30b64e01",
+      "resultReports": [
+        {
+          "format": "node-tap",
+          "path": "/workspace/a-896-gate-records/protocol-tests.tap",
+          "sha256": "60cfce176ab1ff8a4a97a25f69acb6b3cb7c6a24103533b913d5ff5f30b64e01"
+        }
+      ],
+      "context": "Actual native protocol run after inventory reconciliation, 152 passing assertions; start/end taken from original output-file birth/last-write timestamps. No source changes occurred during this run. Node22; native default concurrency was used for this local run, not claimed identical to CI two-worker scheduling. No CI or business PostgreSQL run.",
+      "historicalBoundary": "490ee738 execution retained unchanged outside the candidate. Does not replace validation of the subsequent strict-mock fixture changes."
+    }
+  ],
+  "gateHistory": [
+    {
+      "runId": 41663972950,
+      "workerJobId": 126014417285,
+      "finalJobId": 126021079299,
+      "head": "490ee738992b22ca55d8a4cefc737385396ba9eb",
+      "base": "c2c49369898b7f9943fb280342a56d9a98b0b30b",
+      "status": "failure",
+      "unitTests": {
+        "passed": 3127,
+        "failed": 11,
+        "skipped": 11
+      },
+      "reason": "Two strict permission mocks rejected the newly added correction-table read. PostgreSQL business suites and later applicable drills did not execute.",
+      "rawLog": "/workspace/a-896-gate-records/full-job-126014417285.log",
+      "rawLogSha256": "5bae81489082d21c3f901c0cec8a035405d4f91e7d2cce4ef3a392135295f127",
+      "lightReuse": "Context miss; fresh lint/typecheck/build/migration-lint ran, not verified reuse."
     }
   ]
 }

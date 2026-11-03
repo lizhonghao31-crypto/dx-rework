@@ -305,6 +305,8 @@ function linkedJourneyDatabase(roles: string[]) {
     completed_quality: '现场登记', route_instance_id: QUOTE, original_state: 'completed', returned: false,
   };
   return database(roles, (sql, values) => {
+    if (sql === "SELECT to_regclass('digital_bulk_preshrink_corrections') AS relation") return [{relation:'digital_bulk_preshrink_corrections'}];
+    if (sql === 'SELECT preshrink_task_id FROM digital_bulk_preshrink_corrections ORDER BY preshrink_task_id') return [];
     if (sql === 'SELECT CURRENT_TIMESTAMP AS as_of') return [{as_of: completedAt}];
     if (sql.startsWith('WITH live_roles AS (')) return [{source: null, order: mother}];
     if (sql.startsWith('SELECT * FROM digital_production_orders ')) return values[0] === ORDER ? [mother] : [];
