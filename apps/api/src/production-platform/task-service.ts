@@ -21,7 +21,7 @@ import {FactoryFlowService} from "./factory-flow-service.js";
 import type { DigitalTaskState, DigitalTimeQuality } from "@dx-rework/contracts/digital-production-tasks";
 import {savedDevelopmentRoute} from "./development-sla-enrollment.js";
 import { createHash, randomUUID } from "node:crypto";
-import {resolveBulkPreshrinkRequirement} from './bulk-preshrink-requirement.js';
+import {readBulkPreshrinkRequirement,retiredBulkPreshrinkTaskIds} from './bulk-preshrink-requirement.js';
 import {isDeepStrictEqual} from "node:util";
 import type { Pool, PoolClient } from "pg";
 import type { TrustedActorContext } from "../tools/repositories.js";
@@ -222,8 +222,8 @@ export class DigitalProductionTaskService {
     for (const prior of input.predecessors ?? []) await client.query("INSERT INTO digital_production_task_dependencies(task_id,predecessor_id) VALUES($1,$2)", [id, prior]);
     let activation=REQUIRED_ACTIVATION[input.kind]??[];
     if(input.resource.kind==='order'&&['bulk_pattern','warehouse_preshrink'].includes(input.kind)){
-      const prep=(await client.query('SELECT workflow_version,preshrink FROM digital_bulk_preparations WHERE preparation_id=$1 AND production_order_id=$2',[input.routeId,input.resource.id])).rows[0];
-      if(input.kind==='warehouse_preshrink'&&prep&&resolveBulkPreshrinkRequirement(prep)!=='需要预缩')fail('本制单未要求预缩，不能创建预缩任务');
+      const prep=(await client.query('SELECT preparation_id,workflow_version,preshrink FROM digital_bulk_preparations WHERE preparation_id=$1 AND production_order_id=$2',[input.routeId,input.resource.id])).rows[0];
+      if(input.kind==='warehouse_preshrink'&&prep&&(await readBulkPreshrinkRequirement(client,prep)).requirement!=='需要预缩')fail('本制单未要求预缩，不能创建预缩任务');
       if(prep?.workflow_version===2)activation=input.kind==='bulk_pattern'?['customer_confirmed']:['materials_ready'];
     }
     for (const condition of new Set([...activation, ...(input.conditions ?? []), "business_recorded" as const])) {
@@ -283,6 +283,10 @@ export class DigitalProductionTaskService {
       return this.command(client, actor, `task-complete:${id}`, key, input, async () => {
         const task = await this.task(client, id, true);
         if (task.state === "completed") return { taskId: id, state: "completed" };
+        if(task.task_kind==='warehouse_preshrink'){
+          const prep=(await client.query('SELECT preparation_id,preshrink FROM digital_bulk_preparations WHERE preparation_id=$1 AND production_order_id=$2',[task.route_instance_id,task.production_order_id])).rows[0];
+          if(prep&&(await readBulkPreshrinkRequirement(client,prep)).requirement!=='需要预缩')fail('当前有效制单要求无需预缩，不能补造预缩完成事实');
+        }
         await this.active(client, this.resource(task));
         if (task.state !== "ready" || !await this.conditionsReady(client, id, true)) {
           const blockers=await developmentTaskBlockers(client,task,false,true);
@@ -570,7 +574,7 @@ export class DigitalProductionTaskService {
     const canManage = isDigitalLeader(actor) || ((task.task_kind.startsWith("development_") || task.task_kind === "bulk_pattern") && (isDigitalTechnicalManager(actor) || actor.actorRoles.includes("development_clerk")));
     const canControl = isDigitalLeader(actor) || (resource.kind === "order" ? actor.actorRoles.includes("order_merchandiser") && parent.primary_merchandiser_id === actor.actorId : actor.actorRoles.includes("sample_designer") && parent.created_by === actor.actorId);
     const assignee = task.assignee_id ? (await db.query("SELECT display_name FROM app_users WHERE id=$1", [task.assignee_id])).rows[0]?.display_name ?? null : null;
-    let route = (await db.query("SELECT count(*)::int AS applicable,count(*) FILTER(WHERE state='completed')::int AS completed,count(*) FILTER(WHERE state='cancelled')::int AS cancelled FROM digital_production_tasks t WHERE route_instance_id=$1 AND node_key NOT IN ('factory_material_count','development_material_supply','development_craft_dispatch','development_sewing_transfer','development_washing_dispatch') AND NOT EXISTS(SELECT 1 FROM digital_production_task_events e WHERE e.task_id=t.task_id AND e.event_kind='material_returned')", [task.route_instance_id])).rows[0];
+    let route = (await db.query("SELECT count(*)::int AS applicable,count(*) FILTER(WHERE state='completed')::int AS completed,count(*) FILTER(WHERE state='cancelled')::int AS cancelled FROM digital_production_tasks t WHERE route_instance_id=$1 AND NOT(t.task_id=ANY($2::uuid[])) AND node_key NOT IN ('factory_material_count','development_material_supply','development_craft_dispatch','development_sewing_transfer','development_washing_dispatch') AND NOT EXISTS(SELECT 1 FROM digital_production_task_events e WHERE e.task_id=t.task_id AND e.event_kind='material_returned')", [task.route_instance_id,await retiredBulkPreshrinkTaskIds(db)])).rows[0];
     if(task.source_id&&(await db.query("SELECT to_regclass('digital_development_documents') AS relation")).rows[0]?.relation){
       const document=(await db.query("SELECT document FROM digital_development_documents WHERE source_id=$1 AND status='published'",[task.source_id])).rows[0];
       if(document){
@@ -629,6 +633,15 @@ export class DigitalProductionTaskService {
     if(task.task_kind==='development_patch')await this.setConditionWithClient(client,actor,id,'pattern_assignment_ready',true,undefined,'本次补做原执行段已实际派工');
     await this.refreshDevelopmentMaterialCondition(client,actor,id);
     await this.activate(client,actor,id,businessNow().toISOString(),'现场登记');
+  }
+  /** Internal scoped-correction adapter; its caller owns Root authorization and the transaction. */
+  async retirePreshrinkWithClient(client:PoolClient,actor:TrustedActorContext,orderId:string,preparationId:string,taskId:string,correctionId:string){
+    await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
+    const task=await this.task(client,taskId,true);
+    if(task.production_order_id!==orderId||task.route_instance_id!==preparationId||task.task_kind!=='warehouse_preshrink'||!['pending','ready','blocked'].includes(task.state)||task.completed_at)fail('指定预缩任务的归属或状态已变化');
+    if((await client.query("SELECT 1 FROM digital_production_task_events WHERE task_id=$1 AND event_kind='completed'",[taskId])).rowCount)fail('原预缩任务已有实际完成记录');
+    await client.query("UPDATE digital_production_tasks SET state='cancelled',blocked_reason='原制单v3明确无需预缩，受限纠正保留原任务历史',terminal_recorded_at=CURRENT_TIMESTAMP WHERE task_id=$1",[taskId]);
+    return this.event(client,actor,taskId,{kind:'order',id:orderId},'cancelled',businessNow().toISOString(),'现场登记',{reason:'scoped_preshrink_correction',preparationId,correctionId});
   }
   async supersedeBulkTasksWithClient(client:PoolClient,actor:TrustedActorContext,orderId:string){
     // Internal adapter only: the source/approval command already authorized its actor.

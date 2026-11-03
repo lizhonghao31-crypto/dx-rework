@@ -1,3 +1,4 @@
+import {retiredBulkPreshrinkTaskIds} from './bulk-preshrink-requirement.js';
 import type {BusinessTime} from '@dx-rework/domain/business-clock';
 import type {Pool,PoolClient} from 'pg';
 import {taskAssigneeBlocker,patternExecutionBlockers} from './development-task-blockers.js';
@@ -36,7 +37,7 @@ export async function journeyTaskSummaries(db:Pick<Pool|PoolClient,'query'>,ids:
     WHERE r.task_id=t.task_id ORDER BY r.revision_id DESC LIMIT 1)effective ON true
   LEFT JOIN LATERAL(SELECT version,sla_seconds,label FROM digital_production_deadline_policies WHERE node_key=a.task_kind ORDER BY version DESC LIMIT 1)policy ON true
   LEFT JOIN LATERAL(SELECT json_agg(json_build_object('node',CASE WHEN node_key='development_material_recheck' THEN 'development_materials' ELSE node_key END,'key',node_key,'state',state)) AS tasks
-    FROM digital_production_tasks prior WHERE prior.route_instance_id=t.route_instance_id
+    FROM digital_production_tasks prior WHERE prior.route_instance_id=t.route_instance_id AND NOT(prior.task_id=ANY($2::uuid[]))
     AND NOT EXISTS(SELECT 1 FROM digital_production_task_events event WHERE event.task_id=prior.task_id AND event.event_kind='material_returned'))route ON true
   LEFT JOIN digital_development_documents document ON document.source_id=a.source_id AND document.status='published'
   LEFT JOIN digital_development_rounds revision ON revision.source_id=a.source_id AND revision.round_number=t.route_version
@@ -52,7 +53,7 @@ export async function journeyTaskSummaries(db:Pick<Pool|PoolClient,'query'>,ids:
   -- Rich projection compares JS Dates, which retain milliseconds only.
   LEFT JOIN LATERAL(SELECT before_state FROM audit_events WHERE entity_type='digital_task' AND entity_id=t.task_id::text AND action='digital_task_reassigned' AND date_trunc('milliseconds',created_at)>date_trunc('milliseconds',completion.recorded_at) ORDER BY created_at,id LIMIT 1)later ON true
   LEFT JOIN app_users previous_owner ON previous_owner.id=(later.before_state->>'assigneeId')::uuid
-  WHERE t.task_id=ANY($1::uuid[])`,[ids])).rows;
+  WHERE t.task_id=ANY($1::uuid[])`,[ids,await retiredBulkPreshrinkTaskIds(db)])).rows;
  const result=new Map<string,SummaryTask>();
  for(const row of rows){
   const routeRows=row.route_tasks??[];

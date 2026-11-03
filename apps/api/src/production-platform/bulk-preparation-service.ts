@@ -1,5 +1,7 @@
 import {orderDocumentHistory} from './order-document-history.js';
-import {resolveBulkPreshrinkRequirement} from './bulk-preshrink-requirement.js';
+import type {RootAuthority} from '../access/root-authority.js';
+import {BulkPreshrinkCorrectionService} from './bulk-preshrink-correction-service.js';
+import {resolveBulkPreshrinkRequirement,readBulkPreshrinkRequirement} from './bulk-preshrink-requirement.js';
 import {bridgePreparationMaterials} from './preparation-series-bridge.js';
 import {ProductionReadinessService} from './production-readiness-service.js';
 import {preparationAdoption,preparationContext,preparationResponsibility,currentPreparationMaterial,appendPreparationMaterial} from './preparation-material-repository.js';
@@ -25,6 +27,7 @@ const fail=(message:string):never=>{throw new ApplicationError("BULK_PREPARATION
 const lock=(db:DB)=>db.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
 export class BulkPreparationService {
  constructor(private readonly database:Pool){}
+ scopedPreshrinkCorrection(root:RootAuthority){return new BulkPreshrinkCorrectionService(this.database,root);}
  private tasks(){return new DigitalProductionTaskService(this.database);}
  async gates(db:DB,id:string){
   const order=(await db.query("SELECT * FROM digital_production_orders WHERE production_order_id=$1",[id])).rows[0]??digitalNotFound();
@@ -105,13 +108,25 @@ export class BulkPreparationService {
    }
    if(resolveBulkPreshrinkRequirement(prep)==='无需预缩')await this.fact(db,actor,pid,'无需预缩',null);
   }
+  await this.syncPreparationTasks(db,actor,id,g,prep);
+ }
+ async syncCorrectedPreparation(db:PoolClient,actor:TrustedActorContext,id:string,preparationId:string,correctionId:string){
+  // A correction may converge the existing route only. It must never initialize
+  // preparation windows, create another prep or supersede unrelated tasks.
+  await lock(db);await db.query('SELECT production_order_id FROM digital_production_orders WHERE production_order_id=$1 FOR UPDATE',[id]);
+  const g=await this.gates(db,id),prep=await this.current(db,id,g);
+  if(!prep||prep.preparation_id!==preparationId||!(await db.query('SELECT 1 FROM digital_bulk_preshrink_corrections WHERE correction_id=$1 AND production_order_id=$2 AND preparation_id=$3',[correctionId,id,preparationId])).rowCount)fail('纠正依据已变化，不能同步其它准备');
+  await this.syncPreparationTasks(db,actor,id,g,prep);
+ }
+ private async syncPreparationTasks(db:PoolClient,actor:TrustedActorContext,id:string,g:Awaited<ReturnType<BulkPreparationService['gates']>>,prep:{preparation_id:string;instruction_version:number;preshrink:string}){
+  const effectivePreshrink=await readBulkPreshrinkRequirement(db,prep);
   const tasks=await this.routeTasks(db,prep.preparation_id);
   const pattern=tasks.find(t=>t.task_kind==='bulk_pattern'),preshrink=tasks.find(t=>t.task_kind==='warehouse_preshrink');
-  if(g.parallel&&preshrink&&!['completed','cancelled'].includes(preshrink.state)){
+  if(g.parallel&&effectivePreshrink.requirement==='需要预缩'&&preshrink&&!['completed','cancelled'].includes(preshrink.state)){
    const condition=(await db.query("SELECT satisfied FROM digital_production_task_conditions WHERE task_id=$1 AND condition_key='materials_ready'",[preshrink.task_id])).rows[0];
    if(condition&&condition.satisfied!==Boolean(g.fabric?.usable))await this.tasks().setConditionWithClient(db,actor,preshrink.task_id,'materials_ready',Boolean(g.fabric?.usable),g.fabric?.usableAt??null,'验布合格或授权继续使用；先处理未放行仍等待');
   }
-  if(!g.reasons.length&&pattern?.state==='completed'&&(resolveBulkPreshrinkRequirement(prep)==='无需预缩'||preshrink?.state==='completed')&&!tasks.some(t=>['bulk_cutting','bulk_cutting_external'].includes(t.task_kind))){
+  if(!g.reasons.length&&pattern?.state==='completed'&&(effectivePreshrink.requirement==='无需预缩'||preshrink?.state==='completed')&&!tasks.some(t=>['bulk_cutting','bulk_cutting_external'].includes(t.task_kind))){
    const dispatch=(await db.query("SELECT * FROM digital_bulk_dispatch WHERE production_order_id=$1",[id])).rows[0];
    const external=g.approval.cutting_process==='outsourced',kind=external?'bulk_cutting_external':'bulk_cutting';
    const task=await this.tasks().createWithClient(db,actor,{resource:{kind:'order',id},kind,routeId:prep.preparation_id,routeVersion:prep.instruction_version,occurrence:await this.nextOccurrence(db,id,kind),assigneeId:await this.validAssignee(db,external?g.order.primary_merchandiser_id:dispatch?.cutting_worker_id,external?'order_merchandiser':'cutting_worker')});
@@ -142,7 +157,7 @@ export class BulkPreparationService {
   const materialHistory=(await db.query("SELECT e.event_id,e.occurred_at,e.payload,u.display_name FROM digital_production_task_events e JOIN app_users u ON u.id=e.actor_id WHERE e.resource_kind='order' AND e.resource_id=$1 AND e.event_kind='bulk_materials_dispatched' ORDER BY e.recorded_at,e.event_id",[id])).rows;
   const materials={canDispatch:canReportFabric&&Boolean(g.approval)&&g.instructionValid,supplierId:g.approval?.supplier_id??null,supplierName:g.approval?.supplier_name_snapshot??null,instructionVersion:g.instruction?.version??null,items:(g.instruction?.document.accessories??[]).map((m:InstructionDocument['accessories'][number])=>({id:m.id,name:m.name,specification:m.specification,materialColor:m.materialColor,group:m.group})),history:materialHistory.map(e=>({eventId:e.event_id,occurredAt:new Date(e.occurred_at).toISOString(),operatorName:e.display_name,note:e.payload.note,items:e.payload.items}))};
   const uncutLines=cuttingRows.filter(r=>r.actualCutCount===null).map(r=>r.lineId as string);const physicalCuttingReasons=uncutLines.length?[...(await styleLabelCuttingReason(db,id,uncutLines)?[await styleLabelCuttingReason(db,id,uncutLines) as string]:[]),...await preparationTestReasons(db,id)]:[];
-  return {physicalCuttingReasons,...(await preparationAdoption(db,{kind:'order',id})?{readiness:await new ProductionReadinessService(this.database).read(actor,{kind:'order',id},db)}:{}),materials,...(g.fabric?{fabric:g.fabric}:{}),canReportFabric,canDecideFabric,reference,cutting:{mode:g.approval?.cutting_process??null,completed:cuttingRows.length>0&&cuttingRows.every(r=>r.actualCutCount!==null),lines:cuttingRows.map(r=>({...r,actualCutCount:r.actualCutCount===null?null:Number(r.actualCutCount),pieceCount:r.pieceCount===null?null:Number(r.pieceCount)})) as BulkPreparationSheet['cutting']['lines']},orderId:id,instructionVersion:g.instruction?.version??null,sourceRound:g.source?.round_number??null,adoptedRound:g.instruction?.source_round??null,customerConfirmed:g.customerConfirmed,ownerApproved:g.ownerApproved,instructionValid:g.instructionValid,reasons:g.reasons,preparationId:prep?.preparation_id??null,preshrink:resolveBulkPreshrinkRequirement(prep,g.instruction?.document),
+  return {physicalCuttingReasons,...(await preparationAdoption(db,{kind:'order',id})?{readiness:await new ProductionReadinessService(this.database).read(actor,{kind:'order',id},db)}:{}),materials,...(g.fabric?{fabric:g.fabric}:{}),canReportFabric,canDecideFabric,reference,cutting:{mode:g.approval?.cutting_process??null,completed:cuttingRows.length>0&&cuttingRows.every(r=>r.actualCutCount!==null),lines:cuttingRows.map(r=>({...r,actualCutCount:r.actualCutCount===null?null:Number(r.actualCutCount),pieceCount:r.pieceCount===null?null:Number(r.pieceCount)})) as BulkPreparationSheet['cutting']['lines']},orderId:id,instructionVersion:g.instruction?.version??null,sourceRound:g.source?.round_number??null,adoptedRound:g.instruction?.source_round??null,customerConfirmed:g.customerConfirmed,ownerApproved:g.ownerApproved,instructionValid:g.instructionValid,reasons:g.reasons,preparationId:prep?.preparation_id??null,preshrink:(await readBulkPreshrinkRequirement(db,prep,g.instruction?.document)).requirement,
    dispatch:{version:row?.version??0,patternWorkerId:dispatchPerson(row?.pattern_worker_id),warehouseWorkerId:dispatchPerson(row?.warehouse_worker_id),cuttingWorkerId:dispatchPerson(row?.cutting_worker_id)},canDispatchPattern,canDispatchWarehouse,
    facts:prep?(await db.query('SELECT kind,recorded_at AS "recordedAt" FROM digital_bulk_preparation_facts WHERE preparation_id=$1 ORDER BY recorded_at',[prep.preparation_id])).rows:[],tasks};
  }
@@ -267,7 +282,7 @@ export class BulkPreparationService {
   const g=await this.gates(db,id),prep=await this.current(db,id,g);if(!prep||prep.preparation_id!==input.preparationId)fail(g.reasons.join('；')||'技术版本已更新，不能沿用旧版完成');
   const tasks=await this.routeTasks(db,prep.preparation_id),task=tasks.find(t=>t.task_kind===(input.kind==='预缩完成'?'warehouse_preshrink':'bulk_pattern'));
   if(!task)fail('本路线不含此任务');await new DigitalProductionAccessPolicy(db).assert(actor,'task',task.task_id,'execute');
-  if(input.kind==='预缩完成'&&resolveBulkPreshrinkRequirement(prep)!=='需要预缩')fail('本制单未要求预缩，不能补造预缩完成事实');
+  if(input.kind==='预缩完成'&&(await readBulkPreshrinkRequirement(db,prep)).requirement!=='需要预缩')fail('本制单未要求预缩，不能补造预缩完成事实');
   if((await db.query('SELECT 1 FROM digital_bulk_preparation_facts WHERE preparation_id=$1 AND kind=$2',[prep.preparation_id,input.kind])).rowCount)return;
   const readiness=await productionReadiness(db,id);
   if(readiness.adoption){

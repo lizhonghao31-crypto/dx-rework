@@ -1,58 +1,56 @@
-# A：尊重制单预缩选择，保留历史事实
+# A：原 v3 预缩要求的受限纠正与统一读取
 
-## 范围与来源
+## 本轮边界与真实来源
 
-- 基线：`c2c49369898b7f9943fb280342a56d9a98b0b30b`，`release/digital-production-v1`。
-- 来源：2026-11-03 用户在本 Pro Chat 的 A 授权及补丁交接要求。用户指定旧母单 `c05e324b-53b9-4fc0-ba0f-65c27eb0a245` 的制单 v3、纸样黑色局部至全色、唛架及合并任务已完成。
-- 原 A 增补聊天链接未能读取；没有把其未知内容当作已经审阅的规范。本补丁只依据本窗口明确文字及仓库源码，协调方仍须补充该增补全文并核对。
-- 本轮用户最新授权由官方连接器按准确 base 原子提交到独立功能分支并创建草稿 PR；Work 读取同一精确 Head，使用仓库原控制器请求 gate。本窗口不手工造 gate ref、不自主 approve、不部署，不连接或修改生产、Acceptance、真实账号或订单。
+本轮从官方 GitHub 固定 head `36597942d20ec1ec81e709423b6ca7841ceb5d98` 的源码继续，只补未推内容，沿用 #896 及 `fix/preshrink-choice-20261103`。release 基线为 `c2c49369898b7f9943fb280342a56d9a98b0b30b`。没有取得原 Pro 的未推工作区、悬空提交或附件，也没有把本次快照称为原工作区恢复。
 
-## 已证实根因与实现
+依据为用户 2026-11-03 的明确 A/B 授权、独立审查交接和本仓库适用 AGENTS.md。保留原 PR 已完成的新 prep 选择、0272、SLA 评价副本及既有正控调整。用户指定原母单 `c05e324b-53b9-4fc0-ba0f-65c27eb0a245`，原制单 v3、纸样黑色局部至全色、唛架及合并任务已经完成；这些业务事实仍须由受限事务在实际执行前逐项核对，本轮没有访问现场数据确认它们。
 
-`BulkPreparationService.sync` 的新建字段原为 `g.parallel ? '需要预缩' : document.preshrink`，会覆盖 SLA 新路线制单明确的“无需预缩”。0256 的 `digital_bulk_workflow_version` CHECK 又要求 workflow 2 一定是“需要预缩”。两处共同使制单选择无法生效。
+只修改代码、测试和记录；不新建分支或 PR，不部署、不操作生产或 Acceptance、不自行 approve。用户已授权 A、B 各自通过必要检查后分别合入 release；此次收口先冻结各自 head、交协调方/Work 核对，再由原控制器各申请一次必要 Full。Acceptance 仍待 A/B 都完成后统一安排。
 
-1. `bulk-preshrink-requirement.ts` 统一解析：存在 prep 时取其冻结选择；尚无 prep 时取已发布制单；缺失/非法值保持未知，不把未知解释为免做。新 draft 不替换已发布依据，后续发布也不倒写旧 prep。
-2. 后继迁移 0272 只替换 workflow CHECK，保留 workflow 1 的批准快照要求、workflow 2 的 SLA 快照要求，以及原 preshrink 两值非空约束。无 UPDATE、批扫、触发器豁免或旧迁移修改。
-3. sync 按实际要求创建任务/“无需预缩”事实，汇合仍等待验布、老板批准、纸样唛架及现有前置；task 创建和完成命令拒绝对无需预缩 prep 补造预缩任务/完成事实。
-4. read、Journey（通过 bulk.read）、驾驶舱、系列计划取同一要求。系列计划预览依据增加 prep ID/要求，防止其变化后沿用旧预览。
-5. SLA 只投影当前适用性：无需预缩时不计该节点，裁剪仍依赖验布和纸样；不改 P0、历史计划、任务起止、到期时间。已有真实预缩完成（包括时间未知）继续保留，不因投影隐藏。36 小时参数不变；新参数展示名由“必做预缩”改为“预缩”。
+## 保留的原修复
 
-## 影响记录
+新建 prep 采用已发布制单明确的预缩选择，未知保持未知；新草稿不替换已发布依据。0272 只修正 workflow 2 的旧 CHECK，保留 SLA 快照及其它约束，不改 0256，不回写旧 prep、制单、任务或时钟。真正需要预缩的路线仍创建、办理并计入预缩。
 
-| 规则 | 写入入口 | 实际读取与旧消费者 | 初始化/历史边界 | 验证 |
-| --- | --- | --- | --- | --- |
-| 明确选择冻结 | bulk.sync / 0272 / migration manifest | bulk.read、Journey、cutting gate | 新 prep 采用已发布值；旧 prep、v3、历史事实不回写 | 新解析单测；现有 P11 四路线；新增 PG 冻结/幂等反例（待跑） |
-| 不生成免做实绩 | task.createWithClient / bulk.complete | task、todo、bulk workroom | 同原事务、订单锁、角色/订单权限和幂等，不增加公开豁免 | P11 none 断言无预缩任务/完成，拒绝补造；需要预缩正控保留（PG 待跑） |
-| 计划不伪造实际 | bulkSlaEvidence / bulkEvaluationPlan | SlaOrderService、Journey、驾驶舱、SeriesPlanService | 当前投影不更新 P0/冻结标准；未知实绩仍未知 | 36h 差值、验布阻断、完成未知时间、原计划不变单测；原 SLA/系列计划测试 |
-| 测试选择与实际动作一致 | bulk-preparation-fixture / business-anchor-fixture | sourcing / 原业务时钟套件 | none 夹具不再执行预缩；确实执行预缩的时钟夹具明确选择“需要预缩” | 保留旧权限、幂等、工资、实收与实裁断言；PG 全组由协调方补 |
+SLA 通过当前评价副本判断适用性，保留 P0、冻结标准、原实绩及未知时刻。36 小时参数没有改变；裁剪仍等待原验布许可、批准和纸样唛架条件。
 
-## 指定旧单的纠正路径：仅设计，未实现、未执行
+## 本轮新增的受限命令
 
-此补丁不会自动修正已被错误冻结为“需要预缩”的历史 prep。不能用发布 v4、重新派交、重建路线或回填完成时间来修正用户指定 v3。完整 A 增补未获前，不提供可执行历史修改脚本或普通业务豁免入口。
+原产前路由下新增 `preshrink-correction/preview` 与 `preshrink-correction/apply`；不增加普通业务按钮、批量入口、自动执行脚本或通用免预缩能力。
 
-后续如单独批准维护实现，应满足以下条件：
+- 仅允许上述固定母单、当前已发布 v3、原 workflow 2 的错误“需要预缩”prep；制单必须明确“无需预缩”，客户确认及技术依据仍有效，来源/轮次/SLA 快照必须一致。
+- 真实 Root 身份在事务锁内经 RootAuthority 核验有效账号、钉钉映射及在职状态；客户端角色字符串不构成授权。幂等回执读取前同样复核身份。
+- 目标结构化绑定 prep、原 v3、source/round、SLA snapshot、原纸样任务、纸样/唛架 fact、原 work-range ID/kind/version 和指定错误预缩 task。连续范围链须已有局部记录和全色完成；不能用另一单、另一轮、另一任务抵扣。
+- 沿用任务生命周期事务锁、母单行锁和精确任务锁；预览摘要包含制单指针、原业务事实/范围/PO、任务/事件/条件/依赖、时钟/期限、派工、准备窗口、物料及批准。apply 锁内重读，任何相关依据变化均拒绝旧预览。
+- 已暂停/取消/特殊结案、真实预缩 task/fact/event/clock 完成、已有实际开裁，或存在其它未完成预缩任务时拒绝纠正。
+- 单事务仅退役指定未完成预缩任务，追加“无需预缩”fact、取消事件和原 event intent、audit、纠正记录及范围关联、幂等回执。所有原 prep/v3/纸样唛架/范围、任务进入时刻、原时钟和期限保留；不伪造完成。
+- 纠正后的汇合只处理同一原 prep，经共享的原质量和批准门禁决定是否生成裁床待办。该路径不初始化准备窗口、不新建 prep、不调用整单批量取消。
+- 相同操作者、命令、key、payload 重放返回原回执；同 key 不同 payload 拒绝。任一阶段失败整笔回滚，不重复取消、事实、审计或通知意图。
 
-1. **精确目标与结构化证据。** 请求绑定唯一母单 ID、已发布 instruction version=3、prep ID、source ID/round、原 SLA snapshot ID，以及原纸样/唛架 fact ID、task ID、work-range ID/line IDs 和各自版本。通过 FK/ID/版本关联；不从备注、款号或自由文本推导范围。原制单 document 的预缩字段必须明确为“无需预缩”。黑色局部至全色的范围链必须与原任务和 prep 对应，不能用另一轮次完成抵扣。
-2. **预览与审计。** 只读预览列明上述全部预期值、将追加的纠正记录、待排除的未完成预缩任务和未改变的事实/时钟。执行需专门授权；记录原因、操作者、前后有效要求、精确证据引用及请求内容摘要。不得常驻普通办理按钮、按范围扫描或部署时自动执行。
-3. **锁与并发。** 沿用现有任务生命周期事务锁及母单行锁，锁定精确 prep 和受影响 task，事务内重新核对预览的版本/摘要。制单变版、范围变动、任务已完成/转轮、真实预缩或实裁出现时拒绝旧请求，不能扩大范围继续执行。
-4. **追加纠正，不覆盖历史。** 建议独立 append-only 纠正记录，通过结构化键关联原 v3/prep/facts/tasks。冻结 prep 原字段、v3 document、纸样/唛架事实、范围、P0 和 SLA 快照保留。只让统一有效要求解析器在显式已批准纠正记录存在时投影“无需预缩”。本次解析器尚不读取任何此类纠正记录。
-5. **任务处理与幂等。** 如确有错误创建且未完成的预缩任务，维护方案须明确追加取消/不适用的审计事件并保留原任务及全部时钟/历史；不得把它记成完成、删除任务或重开已完成合并任务。相同请求键和 payload 重放返回原结果，不重复记录或通知；同键不同 payload、跨母单/轮次/fact/task 一律拒绝；失败整笔回滚。
-6. **独立验收。** 精确 v3 正控、需要预缩反例、跨单/跨轮/错误 fact/task 反例、真实完成/实裁冲突、并发同键、事务中断、时钟和历史逐字段不变均须 PG 验证后，才能另行审批执行。此次不具备该维护实现或线上数据证据。
+0273 仅创建两张受限、只追加的关联表及验证触发器。固定订单/v3约束、FK、原事实归属、取消事件/intent/audit一致性和禁止 UPDATE/DELETE/TRUNCATE 均在数据库边界保留；没有自动修改旧历史。迁移 manifest 与后续迁移权限 inventory 同步列入 0272/0273。inventory 是源码元数据维护，不执行 Acceptance 更新。
 
-## 本地验证与未完成项
+## 统一有效要求与历史保留
 
-Node 22.22.2 / npm 10.9.9，复用已核锁文件依赖。当前检查和原日志摘要见同补丁的 `construction-evidence.json` 及交接包 `verification/`；测试入口和固定文件集合保存在交接包中。
+`readBulkPreshrinkRequirement` 只接受精确 prep 的受限纠正记录；任意独立“无需预缩”fact、后来草稿或发布值均不能覆盖原冻结选择。旧 schema 尚无纠正表时保留旧读取语义。
 
-已运行：四个内部包构建；相关 TS 真实 ESLint；仓库全工作区 typecheck；API 和 Web 构建；迁移静态 lint；9 个定向测试文件共 87 项（87 pass、0 fail、0 skip）；仓库 worktree secret scan。
+| 消费者 | 本轮行为 |
+| --- | --- |
+| sync / bulk.read | 同源读取有效要求；保留原质量许可与批准 |
+| bulk.complete / 旧 task.complete / task.create | 有效无需预缩时拒绝补造预缩任务或实绩 |
+| SLA 当前评价、驾驶舱、系列计划 | 同源适用性；系列计划预览加入 correction ID，使旧预览失效 |
+| Journey 明细与紧凑读取 | 只将未真实完成的纠正节点投影为不适用，保留实例、记录、时刻及历史 |
+| task 详情与 Journey task summary | 同一精确退役 ID 从任务分母排除；不把其它取消任务一概排除 |
 
-尚未运行：PG16/PG13 迁移实际执行、受影响 PostgreSQL suites、新增 PG 反例及完整数据库 Gate。PG16 二进制可运行，但本环境只能映射 UID 0，已拒绝低权限切换；未运行 initdb/server，未改走提权或其它数据库。静态 lint 与单测不代替 PG 结果。
+已完成的真实预缩仍保留，已完成合并任务不会重开。没有修改供应商、返工数量、工资、生产数据或任何旧迁移。
 
-协调方应按实际风险映射和仓库 canonical runner 运行 sourcing-pr03、production-readiness、series-plan/SLA 及受共享夹具影响的业务时钟组，并核完整文件通过/失败/跳过。保持原超时和断言，不拼接旧 Head 的成功结果。当前 construction evidence 只记录已执行本地检查；pendingVerification 明列 PG 未跑。PG 尚无通过回执，不能声称最终验收完成或据此合并。
+## 本轮真实检查与待验证项
 
-## 本轮 A+B 的 Full 复用与映射核对
+Node 22.22.2 / npm 10.9.9。记录以当前 `construction-evidence.json`、本轮原始日志与 Vitest JSON 为准，旧 head 的 87 项结果不作为本轮完成凭证。
 
-按实际 base→candidate 路径调用仓库 `classifyFullGatePaths` 和 `fullGatePostgresPlan`，`tests/integration/sourcing-pr03-postgres.test.ts` 已被 mapped 与 chain 同时选中，Set 去重后只执行一次，配置为 `vitest.business-chain.config.ts`。当前计划共 27 个 PG suite；完整风险标志、文件集合和配置见交接包 `verification/a-canonical-plan.json`。无需修改映射或 CI。
+已完成且不重复：依赖安装、四内部包构建；较早的全工作区类型检查通过后，只因本轮复核修正了 API 代码，再做最终 API 类型检查。最终必要定向结果为 15 个测试文件、155 passed / 0 failed / 0 skipped；API 类型检查、15 个相关文件的 ESLint、迁移静态 lint 均 exit 0。覆盖有效要求正反例、Journey/时效/系列计划旧消费者、Full 风险映射、迁移清单与静态权限 inventory。
 
-用户最新授权仅限本轮 A+B：由各自精确 Head 的原 GitHub Full Gate 执行隔离 PG16 与规定权限的 canonical 组，核实际日志/用例/通过失败跳过数、执行回执和 cleanup；相同输入与环境已有有效 Full 结果时，不再先后重复本地同组 PG。保留风险图要求的其他阶段，不把 A 的 Full 结果用于 B，不跳过必需门禁，不改变 30 分钟上限、测试超时或断言。此安排不写入 AGENTS.md。
+新增 `bulk-preshrink-correction-postgres.test.ts` 的五个实际数据库用例已能由 Vitest 发现，但未执行数据库：精确原 v3 + 无权/伪 Root/错误关联/过期依据 + 七阶段回滚 + 并发幂等；确需预缩正控；真实完成不可抹除；纠正不代替验布许可；已发布版本变化拒绝。列表发现或静态检查都不表示 PG 通过。
 
-本窗口已核官方 GitHub 连接器具有 tree/commit/new branch/PR 操作，本地原 gate controller CLI 所需 gh 未认证。用户已明确将两者分工：本 Chat 在完整 tree/parent/branch 回读一致后报告独立提交与草稿 PR；Work 只对同一精确 Head 使用原控制器请求 gate，无需重新传补丁或本地重复同组 PG。没有认证传输改造，不直接建 ci-final 引用，不自主 approve PR。实际远端提交 SHA、PR 与回执在提交外记录，不能用权限元数据声称已推送。若正式写入被拒，则停在真实结果并交完整附件；此安排仅适用于本轮 A+B。
+本环境未启动 PostgreSQL。按用户授权，各自精确最终 head 的 GitHub 官方 Full 使用仓库 canonical runner 执行所需 PG、权限及兼容检查；不得复用另一 PR 或旧 head 的结果。`business-anchors-clock-postgres.test.ts`、production-readiness、sourcing-pr03、新纠正 suite 及其共享 fixture 已进入规范风险映射；Journey PG13 等原有必要阶段继续保留。
+
+GitHub light、必要 Codex Review、协调方具体收口、原 controller 最终 Full 及其真实回执仍须逐项核验；本文件不称这些门禁已通过，也不授权执行实际旧单纠正。

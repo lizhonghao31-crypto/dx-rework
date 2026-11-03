@@ -1601,5 +1601,44 @@
       "guard_production_order_root_immutable"
     ],
     "sequences": []
+  },
+  "0272_bulk_preshrink_instruction_choice": {
+    "checksum": "de22f11faf29ec58c877278440ace0ec6852416f4a039125e822ddce7e1bd47f",
+    "tables": [
+      "digital_bulk_preparations"
+    ],
+    "functions": [],
+    "references": [],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": [],
+    "sequences": []
+  },
+  "0273_bulk_preshrink_scoped_correction": {
+    "checksum": "2e791df368bb48660b7970f6d6061edcb7598d8efc647be939cfe223d461a67a",
+    "tables": [],
+    "functions": [],
+    "references": [
+      "app_users",
+      "audit_events",
+      "digital_bulk_preparation_facts",
+      "digital_bulk_preparations",
+      "digital_bulk_work_ranges",
+      "digital_instruction_versions",
+      "digital_production_orders",
+      "digital_production_sources",
+      "digital_production_task_events",
+      "digital_production_tasks",
+      "digital_sla_order_snapshots"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [
+      "digital_bulk_preshrink_corrections",
+      "digital_bulk_preshrink_correction_ranges"
+    ],
+    "execute": [],
+    "sequences": []
   }
 }

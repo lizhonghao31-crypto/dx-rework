@@ -1,251 +1,267 @@
 {
   "version": 1,
   "base": "c2c49369898b7f9943fb280342a56d9a98b0b30b",
-  "sourceFingerprint": "178995034fe121020b2b6d4225d4fed03e519c16f1f1dd098ffe87f333fa07bf",
+  "sourceFingerprint": "b1bf5414aa590acc46497d994e157f5e76df2e6580a6910928c26da565528256",
   "risk": "full",
   "rules": [
     {
-      "rule": "新产前准备冻结已发布制单的明确预缩选择，不能由并行 SLA 路线强制改写。",
-      "source": "用户 2026-11-03 本 Chat A 授权；docs/engineering/preshrink-choice-20261103.md",
+      "rule": "保留原PR新prep采纳已发布预缩选择及真正需要预缩的正控，不回写旧0256。",
+      "source": "用户2026-11-03明确A授权与独立审查交接；docs/requirements/digital-sla-golden-source-20261023.md；docs/engineering/preshrink-choice-20261103.md",
       "writes": [
+        "apps/api/migrations/0272_bulk_preshrink_instruction_choice.sql",
         "apps/api/src/production-platform/bulk-preparation-service.ts",
         "apps/api/src/production-platform/bulk-preshrink-requirement.ts",
-        "apps/api/migrations/0272_bulk_preshrink_instruction_choice.sql",
-        "apps/api/src/platform/migration-manifest.json"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/journey-query.ts",
-        "apps/api/src/production-platform/production-instruction-service.ts",
-        "apps/api/src/production-platform/production-readiness-repository.ts"
-      ],
-      "oldTests": [
-        "tests/integration/sourcing-pr03-postgres.test.ts",
-        "tests/integration/production-readiness-postgres.test.ts"
-      ],
-      "initialization": "0272 只替换 CHECK；旧 prep、制单 v3、事实、任务和时钟不 UPDATE；原两值和快照约束保留。",
-      "dateAndPermission": "不更换时钟，不扩角色或跨单读取；仍用原事务、任务生命周期锁、母单锁和命令幂等。",
-      "expectation": "无需预缩新单可建立 workflow2 prep；需要预缩仍受原验布及完成前提；PG 反例未运行。",
-      "checks": [
-        "a-migration-lint",
-        "a-lint",
-        "a-types",
-        "a-targeted-tests"
-      ]
-    },
-    {
-      "rule": "无需预缩不得补造预缩任务/完成；真实执行预缩的旧时钟夹具须显式选择需要。",
-      "source": "用户 A 正反例/历史保护边界；实际 fixture 与 task consumer 核对。",
-      "writes": [
         "apps/api/src/production-platform/task-service.ts",
         "tests/helpers/bulk-preparation-fixture.ts",
-        "tests/helpers/business-anchor-fixture.ts"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/bulk-preparation-service.ts",
-        "apps/api/src/production-platform/bulk-task-timing.ts",
-        "apps/api/src/production-platform/access-policy.ts"
-      ],
-      "oldTests": [
+        "tests/helpers/business-anchor-fixture.ts",
         "tests/integration/sourcing-pr03-postgres.test.ts",
-        "tests/integration/business-anchors-clock-postgres.test.ts"
-      ],
-      "initialization": "none 场景不再假做预缩；需要预缩正控和所有权限、幂等、实裁断言继续保留。",
-      "dateAndPermission": "固定岗位、订单隔离、历史时钟和未知实际时间均沿用；不放宽预算或测试超时。",
-      "expectation": "none 无预缩任务/完成事实；真正需要预缩有 36h 任务；完整 PG 组待补。",
-      "checks": [
-        "a-lint",
-        "a-types",
-        "a-api-build"
-      ]
-    },
-    {
-      "rule": "当前 SLA 适用性读取尊重有效预缩要求，冻结 P0 和已完成实绩保留。",
-      "source": "用户 A SLA/历史事实/预计与实际分离约束。",
-      "writes": [
-        "apps/api/src/production-platform/bulk-sla-evidence.ts",
-        "apps/api/src/production-platform/sla-order-service.ts",
-        "packages/contracts/src/digital-sla.ts",
         "tests/unit/bulk-preshrink-requirement.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/sla-route.ts",
-        "apps/api/src/production-platform/sla-order-application.ts",
-        "apps/api/src/production-platform/bulk-task-timing.ts",
-        "packages/domain/src/digital-sla-plan.ts"
+        "apps/api/src/production-platform/bulk-preparation-service.ts",
+        "apps/api/src/production-platform/task-service.ts",
+        "apps/api/src/production-platform/bulk-sla-evidence.ts"
       ],
       "oldTests": [
-        "tests/unit/digital-sla-plan.test.ts",
-        "tests/unit/digital-sla-configuration.test.ts",
-        "tests/unit/journey-sla-supervision.test.ts"
+        "tests/unit/bulk-preshrink-requirement.test.ts",
+        "tests/integration/sourcing-pr03-postgres.test.ts",
+        "tests/integration/business-anchors-clock-postgres.test.ts"
       ],
-      "initialization": "原计划保持不变；只构造评估投影。已有完成与未知实绩保留，不填旧时钟或重新冻结。",
-      "dateAndPermission": "36h 参数不变；无需预缩仍保验布依赖；不伪造实际开工/结束。",
-      "expectation": "单测证明 36h 预计差值、原计划不变、完成未知时间保留和验布等待；87 项定向检查通过。",
+      "initialization": "仅新prep按已发布选择创建；旧prep只在结构化受限纠正存在时改变有效投影，原存储不动。",
+      "dateAndPermission": "仅真实有效Root可办理指定旧单；原角色、验布许可、P0、时钟、期限及已完成历史保持；不操作现场/生产/Acceptance。",
+      "expectation": "解析正反例已通过；原真实PG路线及共享时钟组待精确head官方Full。",
       "checks": [
-        "a-lint",
-        "a-types",
-        "a-api-build",
         "a-targeted-tests",
-        "a-web-build"
+        "a-api-types",
+        "a-eslint",
+        "a-migration-lint"
       ]
     },
     {
-      "rule": "驾驶舱、Journey 和系列计划消费同一冻结选择，预览绑定 prep 依据。",
-      "source": "用户 A sync/read/任务投影消费者统一解析要求。",
+      "rule": "指定原v3纠正必须绑定原prep/facts/ranges/task，锁内重核、单事务取消及审计、幂等重放。",
+      "source": "用户2026-11-03明确A授权与独立审查交接；docs/requirements/digital-sla-golden-source-20261023.md；docs/engineering/preshrink-choice-20261103.md",
       "writes": [
-        "apps/api/src/production-platform/cockpit-query.ts",
-        "apps/api/src/production-platform/series-plan-service.ts",
-        "tests/integration/sourcing-pr03-postgres.test.ts"
+        "apps/api/migrations/0273_bulk_preshrink_scoped_correction.sql",
+        "apps/api/src/platform/migration-manifest.json",
+        "apps/api/src/production-platform/bulk-preshrink-correction-service.ts",
+        "apps/api/src/production-platform/bulk-preparation-routes.ts",
+        "tests/helpers/bulk-preshrink-correction-fixture.ts",
+        "tests/integration/bulk-preshrink-correction-postgres.test.ts",
+        "tests/unit/bulk-preshrink-correction-read.test.ts",
+        "scripts/deploy/acceptance-migration-requirements.json"
       ],
       "reads": [
-        "apps/api/src/production-platform/cockpit-progress.ts",
-        "apps/api/src/production-platform/journey-query.ts",
-        "apps/api/src/production-platform/series-plan-facts.ts"
+        "apps/api/src/production-platform/bulk-preshrink-requirement.ts",
+        "apps/api/src/production-platform/bulk-preparation-service.ts",
+        "apps/api/src/production-platform/task-service.ts",
+        "apps/api/src/access/root-authority.ts"
       ],
       "oldTests": [
-        "tests/unit/digital-cockpit-progress.test.ts",
-        "tests/unit/series-plan-dates.test.ts",
-        "tests/integration/series-plan-routes.test.ts",
-        "tests/integration/series-plan-postgres.test.ts"
+        "tests/unit/bulk-preshrink-requirement.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/unit/acceptance-maintenance-generator.test.ts"
       ],
-      "initialization": "新草稿不改变已发布 prep；新增 PG 冻结反例核 prep/facts/tasks/events/P0/snapshots 一致。",
-      "dateAndPermission": "沿用原授权查询、自然日计划及冻结参数；不改客户日期/实收实裁条件。",
-      "expectation": "无需节点不计进度，计划保留验布；重复 sync 与未发布草稿不改冻结历史，PG 尚待执行。",
+      "initialization": "0273仅创建只追加关联与守卫，无历史DML；纠正汇合不新建prep/窗口或整单取消；真实完成/实裁不能抹除。",
+      "dateAndPermission": "仅真实有效Root可办理指定旧单；原角色、验布许可、P0、时钟、期限及已完成历史保持；不操作现场/生产/Acceptance。",
+      "expectation": "新有效读取/严格输入与迁移静态检查已通过；五个真实PG用例仅发现名称，事务回滚/并发/身份/质量/发布冲突需官方Full实测。",
       "checks": [
-        "a-lint",
-        "a-types",
-        "a-targeted-tests"
+        "a-targeted-tests",
+        "a-api-types",
+        "a-eslint",
+        "a-migration-lint",
+        "a-resource-registration"
+      ]
+    },
+    {
+      "rule": "sync/read/旧complete/SLA当前副本/Journey与任务分母统一使用有效要求，保原真实历史。",
+      "source": "用户2026-11-03明确A授权与独立审查交接；docs/requirements/digital-sla-golden-source-20261023.md；docs/engineering/preshrink-choice-20261103.md",
+      "writes": [
+        "apps/api/src/production-platform/bulk-sla-evidence.ts",
+        "apps/api/src/production-platform/cockpit-query.ts",
+        "apps/api/src/production-platform/journey-query.ts",
+        "apps/api/src/production-platform/journey-task-summary.ts",
+        "apps/api/src/production-platform/series-plan-service.ts",
+        "apps/api/src/production-platform/sla-order-service.ts",
+        "packages/contracts/src/digital-sla.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/bulk-preshrink-requirement.ts",
+        "apps/api/src/production-platform/task-service.ts",
+        "apps/api/src/production-platform/journey-query.ts",
+        "apps/api/src/production-platform/journey-task-summary.ts",
+        "apps/api/src/production-platform/sla-order-service.ts",
+        "apps/api/src/production-platform/series-plan-service.ts"
+      ],
+      "oldTests": [
+        "tests/unit/digital-sla-plan.test.ts",
+        "tests/unit/digital-journey-projection.test.ts",
+        "tests/unit/journey-projection-isolation.test.ts",
+        "tests/unit/journey-snapshot-reads.test.ts",
+        "tests/unit/journey-sla-supervision.test.ts",
+        "tests/integration/series-plan-routes.test.ts"
+      ],
+      "initialization": "SLA只生成评价副本；实际已完成节点不隐藏；仅纠正精确退役任务从当前分母剔除；系列计划旧预览依据失效。",
+      "dateAndPermission": "仅真实有效Root可办理指定旧单；原角色、验布许可、P0、时钟、期限及已完成历史保持；不操作现场/生产/Acceptance。",
+      "expectation": "相关旧非PG消费者155组内用例通过；真实PG投影/分母同源/旧token拒绝仍由Full确认。",
+      "checks": [
+        "a-targeted-tests",
+        "a-api-types",
+        "a-eslint"
+      ]
+    },
+    {
+      "rule": "实际消费共享fixture的PG suites必须进入规范风险映射，不以静态检查冒称数据库通过。",
+      "source": "用户2026-11-03明确A授权与独立审查交接；docs/requirements/digital-sla-golden-source-20261023.md；docs/engineering/preshrink-choice-20261103.md",
+      "writes": [
+        "scripts/ci/full-gate-risk-map.mjs",
+        "tests/unit/full-gate-risk-map.test.ts"
+      ],
+      "reads": [
+        "scripts/test-suite-plan.mjs",
+        "scripts/ci/full-gate-risk-map.mjs",
+        "tests/integration/business-anchors-clock-postgres.test.ts",
+        "tests/integration/bulk-preshrink-correction-postgres.test.ts"
+      ],
+      "oldTests": [
+        "tests/unit/full-gate-risk-map.test.ts",
+        "tests/unit/current-migration-manifest-checksum.test.ts"
+      ],
+      "initialization": "不改PG超时、资源协议或原门禁；新fixture沿原owned schema，迁移清单与权限inventory保持精确一致。",
+      "dateAndPermission": "仅真实有效Root可办理指定旧单；原角色、验布许可、P0、时钟、期限及已完成历史保持；不操作现场/生产/Acceptance。",
+      "expectation": "映射回归与资源注册通过；canonical Full须执行实际选定套件、PG13及迁移/权限阶段并核真实回执。",
+      "checks": [
+        "a-targeted-tests",
+        "a-resource-registration",
+        "a-migration-lint"
       ]
     }
   ],
   "checks": [
     {
-      "id": "a-migration-lint",
-      "kind": "command",
-      "status": "passed",
-      "exitCode": 0,
-      "startedAt": "2026-11-03T11:35:57.338044+00:00",
-      "endedAt": "2026-11-03T11:35:57.609912+00:00",
-      "sourceFingerprint": "178995034fe121020b2b6d4225d4fed03e519c16f1f1dd098ffe87f333fa07bf",
-      "testedHead": "c2c49369898b7f9943fb280342a56d9a98b0b30b",
-      "logSha256": "119507e622da36534025d5e974c31a1b280bad426be4a230eee6f39e4b1ad51d",
-      "context": "Node 22.22.2; npm 10.9.9; existing lockfile-matched dependencies; isolated local source; no database; base HEAD with uncommitted candidate, bound by sourceFingerprint; log in handoff ZIP verification/logs/a-migration-lint.log",
-      "command": "npm run db:migrate:lint",
-      "logPath": "verification/logs/a-migration-lint.log"
-    },
-    {
-      "id": "a-lint",
-      "kind": "command",
-      "status": "passed",
-      "exitCode": 0,
-      "startedAt": "2026-11-03T11:35:57.893026+00:00",
-      "endedAt": "2026-11-03T11:36:00.641975+00:00",
-      "sourceFingerprint": "178995034fe121020b2b6d4225d4fed03e519c16f1f1dd098ffe87f333fa07bf",
-      "testedHead": "c2c49369898b7f9943fb280342a56d9a98b0b30b",
-      "logSha256": "e95429b6f9f0fb51896edcd76b0c467977ef43819197b846ebd2a54470e0eb63",
-      "context": "Node 22.22.2; npm 10.9.9; existing lockfile-matched dependencies; isolated local source; no database; base HEAD with uncommitted candidate, bound by sourceFingerprint; log in handoff ZIP verification/logs/a-lint.log",
-      "command": "node node_modules/eslint/bin/eslint.js --max-warnings=0 apps/api/src/production-platform/bulk-preparation-service.ts apps/api/src/production-platform/bulk-preshrink-requirement.ts apps/api/src/production-platform/bulk-sla-evidence.ts apps/api/src/production-platform/cockpit-query.ts apps/api/src/production-platform/series-plan-service.ts apps/api/src/production-platform/sla-order-service.ts apps/api/src/production-platform/task-service.ts packages/contracts/src/digital-sla.ts tests/helpers/bulk-preparation-fixture.ts tests/helpers/business-anchor-fixture.ts tests/integration/sourcing-pr03-postgres.test.ts tests/unit/bulk-preshrink-requirement.test.ts",
-      "logPath": "verification/logs/a-lint.log"
-    },
-    {
-      "id": "a-types",
-      "kind": "command",
-      "status": "passed",
-      "exitCode": 0,
-      "startedAt": "2026-11-03T11:36:00.889644+00:00",
-      "endedAt": "2026-11-03T11:36:46.838656+00:00",
-      "sourceFingerprint": "178995034fe121020b2b6d4225d4fed03e519c16f1f1dd098ffe87f333fa07bf",
-      "testedHead": "c2c49369898b7f9943fb280342a56d9a98b0b30b",
-      "logSha256": "2ae2ecb6ce6ad2d267f8d8875e6ac08e2a6c47700be7ed53907ed000517b5198",
-      "context": "Node 22.22.2; npm 10.9.9; existing lockfile-matched dependencies; isolated local source; no database; base HEAD with uncommitted candidate, bound by sourceFingerprint; log in handoff ZIP verification/logs/a-types.log",
-      "command": "npm run typecheck",
-      "logPath": "verification/logs/a-types.log"
-    },
-    {
-      "id": "a-api-build",
-      "kind": "command",
-      "status": "passed",
-      "exitCode": 0,
-      "startedAt": "2026-11-03T11:36:47.164015+00:00",
-      "endedAt": "2026-11-03T11:37:01.767647+00:00",
-      "sourceFingerprint": "178995034fe121020b2b6d4225d4fed03e519c16f1f1dd098ffe87f333fa07bf",
-      "testedHead": "c2c49369898b7f9943fb280342a56d9a98b0b30b",
-      "logSha256": "8382b8c063b63f31822035aebca88802a15f7946cc09294661acf77feb9ea100",
-      "context": "Node 22.22.2; npm 10.9.9; existing lockfile-matched dependencies; isolated local source; no database; base HEAD with uncommitted candidate, bound by sourceFingerprint; log in handoff ZIP verification/logs/a-api-build.log",
-      "command": "npm run build --workspace @dx-rework/api",
-      "logPath": "verification/logs/a-api-build.log"
-    },
-    {
       "id": "a-targeted-tests",
       "kind": "tests",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-03T11:37:02.024831+00:00",
-      "endedAt": "2026-11-03T11:37:06.791092+00:00",
-      "sourceFingerprint": "178995034fe121020b2b6d4225d4fed03e519c16f1f1dd098ffe87f333fa07bf",
-      "testedHead": "c2c49369898b7f9943fb280342a56d9a98b0b30b",
-      "logSha256": "40c0d24c0cee7eaf4081dcf8c4665b87e95114ba1d2c86a48df9a5d06d153e34",
-      "context": "Node 22.22.2; npm 10.9.9; existing lockfile-matched dependencies; isolated local source; no database; base HEAD with uncommitted candidate, bound by sourceFingerprint; log in handoff ZIP verification/logs/a-targeted-tests.log",
-      "passed": 87,
+      "command": "/workspace/scratch/5c2f59f0b575/tooling/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/bulk-preshrink-requirement.test.ts tests/unit/bulk-preshrink-correction-read.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/digital-journey-projection.test.ts tests/unit/digital-journey-cockpit.test.ts tests/unit/journey-projection-isolation.test.ts tests/unit/journey-snapshot-reads.test.ts tests/unit/journey-sla-supervision.test.ts tests/unit/digital-sla-plan.test.ts tests/unit/series-plan-dates.test.ts tests/unit/sla-preview-token.test.ts tests/unit/acceptance-maintenance-generator.test.ts tests/unit/current-migration-manifest-checksum.test.ts tests/unit/migration-history.test.ts tests/integration/series-plan-routes.test.ts --reporter=default --reporter=json --outputFile=/workspace/scratch/5c2f59f0b575/verification-a/targeted-unit-attempt1.json",
+      "testedHead": "36597942d20ec1ec81e709423b6ca7841ceb5d98",
+      "sourceFingerprint": "b1bf5414aa590acc46497d994e157f5e76df2e6580a6910928c26da565528256",
+      "startedAt": "2026-11-03T14:30:44.199618+00:00",
+      "endedAt": "2026-11-03T14:30:53.797376+00:00",
+      "logSha256": "06b8bf6f4ab840427d21b1eba06ce756b62939cdfb692c4991695127535ff068",
+      "log": "docs/engineering/verification-20261103/a-targeted-unit-attempt1.log",
+      "context": "Node 22.22.2 / npm 10.9.9. Official fixed-head snapshot plus this incremental candidate; source bytes unchanged since these checks. Git objects were subsequently verified against original head/base. Documentation-only recording does not change sourceFingerprint. No database or field access.",
+      "passed": 155,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "9c3ee899a8616249fa046c4f0ab01bf3e3e37f2cb6a9f9266bff2475a1b170df",
-          "path": "verification/a-tests.json"
+          "sha256": "07840bd56617aa128a321a8a520e9e7472289a128c03396f9d822b19f5022c01",
+          "path": "docs/engineering/verification-20261103/a-targeted-tests.json"
         }
-      ],
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/bulk-preshrink-requirement.test.ts tests/unit/digital-sla-plan.test.ts tests/unit/digital-sla-configuration.test.ts tests/unit/digital-cockpit-progress.test.ts tests/unit/doc03-instruction-validation.test.ts tests/unit/series-plan-dates.test.ts tests/unit/journey-sla-supervision.test.ts tests/unit/current-migration-manifest-checksum.test.ts tests/integration/series-plan-routes.test.ts --reporter=verbose --reporter=json --outputFile.json=/workspace/scratch/6d3c65b5fd2c/runtime/ab-environment-probe-20261103/a-tests.json",
-      "logPath": "verification/logs/a-targeted-tests.log"
+      ]
+    },
+    {
+      "id": "a-api-types",
+      "kind": "command",
+      "status": "passed",
+      "exitCode": 0,
+      "command": "/workspace/scratch/5c2f59f0b575/tooling/node_modules/node/bin/node node_modules/typescript/bin/tsc --noEmit -p apps/api/tsconfig.json",
+      "testedHead": "36597942d20ec1ec81e709423b6ca7841ceb5d98",
+      "sourceFingerprint": "b1bf5414aa590acc46497d994e157f5e76df2e6580a6910928c26da565528256",
+      "startedAt": "2026-11-03T14:30:44.176381+00:00",
+      "endedAt": "2026-11-03T14:30:58.239240+00:00",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "log": "docs/engineering/verification-20261103/a-api-typecheck-final-source.log",
+      "context": "Node 22.22.2 / npm 10.9.9. Official fixed-head snapshot plus this incremental candidate; source bytes unchanged since these checks. Git objects were subsequently verified against original head/base. Documentation-only recording does not change sourceFingerprint. No database or field access."
+    },
+    {
+      "id": "a-eslint",
+      "kind": "command",
+      "status": "passed",
+      "exitCode": 0,
+      "command": "/workspace/scratch/5c2f59f0b575/tooling/node_modules/node/bin/node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/bulk-preshrink-correction-service.ts apps/api/src/production-platform/bulk-preshrink-requirement.ts apps/api/src/production-platform/bulk-preparation-service.ts apps/api/src/production-platform/bulk-preparation-routes.ts apps/api/src/production-platform/task-service.ts apps/api/src/production-platform/bulk-sla-evidence.ts apps/api/src/production-platform/cockpit-query.ts apps/api/src/production-platform/series-plan-service.ts apps/api/src/production-platform/journey-query.ts apps/api/src/production-platform/journey-task-summary.ts scripts/ci/full-gate-risk-map.mjs tests/unit/full-gate-risk-map.test.ts tests/unit/bulk-preshrink-correction-read.test.ts tests/helpers/bulk-preshrink-correction-fixture.ts tests/integration/bulk-preshrink-correction-postgres.test.ts --max-warnings=0",
+      "testedHead": "36597942d20ec1ec81e709423b6ca7841ceb5d98",
+      "sourceFingerprint": "b1bf5414aa590acc46497d994e157f5e76df2e6580a6910928c26da565528256",
+      "startedAt": "2026-11-03T14:31:12.990011+00:00",
+      "endedAt": "2026-11-03T14:31:15.341270+00:00",
+      "logSha256": "db12ad97221988bf346c55d06788e21a01bb6a683d69266bf732ed4d6d9763c8",
+      "log": "docs/engineering/verification-20261103/a-targeted-eslint.log",
+      "context": "Node 22.22.2 / npm 10.9.9. Official fixed-head snapshot plus this incremental candidate; source bytes unchanged since these checks. Git objects were subsequently verified against original head/base. Documentation-only recording does not change sourceFingerprint. No database or field access."
+    },
+    {
+      "id": "a-migration-lint",
+      "kind": "command",
+      "status": "passed",
+      "exitCode": 0,
+      "command": "/workspace/scratch/5c2f59f0b575/tooling/node_modules/node/bin/node scripts/check-migrations.mjs",
+      "testedHead": "36597942d20ec1ec81e709423b6ca7841ceb5d98",
+      "sourceFingerprint": "b1bf5414aa590acc46497d994e157f5e76df2e6580a6910928c26da565528256",
+      "startedAt": "2026-11-03T14:30:44.178922+00:00",
+      "endedAt": "2026-11-03T14:30:44.370852+00:00",
+      "logSha256": "5f66177539f55c1e03d0bb32dc943d344b7e33f6b01332f53cfec6a046cf3d09",
+      "log": "docs/engineering/verification-20261103/a-migration-lint.log",
+      "context": "Node 22.22.2 / npm 10.9.9. Official fixed-head snapshot plus this incremental candidate; source bytes unchanged since these checks. Git objects were subsequently verified against original head/base. Documentation-only recording does not change sourceFingerprint. No database or field access."
     },
     {
       "id": "a-secret-scan",
       "kind": "command",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-03T11:37:07.018413+00:00",
-      "endedAt": "2026-11-03T11:37:07.916591+00:00",
-      "sourceFingerprint": "178995034fe121020b2b6d4225d4fed03e519c16f1f1dd098ffe87f333fa07bf",
-      "testedHead": "c2c49369898b7f9943fb280342a56d9a98b0b30b",
-      "logSha256": "fb6f2433998adfcd80da1fbcbcf9edf0d36627b983f2f87bf5059522763591d5",
-      "context": "Node 22.22.2; npm 10.9.9; existing lockfile-matched dependencies; isolated local source; no database; base HEAD with uncommitted candidate, bound by sourceFingerprint; log in handoff ZIP verification/logs/a-secret-scan.log",
-      "command": "npm run secret:scan",
-      "logPath": "verification/logs/a-secret-scan.log"
+      "command": "/workspace/scratch/5c2f59f0b575/tooling/node_modules/node/bin/node scripts/secret-scan.mjs --worktree",
+      "testedHead": "36597942d20ec1ec81e709423b6ca7841ceb5d98",
+      "sourceFingerprint": "b1bf5414aa590acc46497d994e157f5e76df2e6580a6910928c26da565528256",
+      "startedAt": "2026-11-03T14:44:04.666380+00:00",
+      "endedAt": "2026-11-03T14:44:06.522996+00:00",
+      "logSha256": "db5dc5135908f41241aa6e6dd0a77c3ed032b0f54f013af07d5a2c34c90009be",
+      "log": "docs/engineering/verification-20261103/a-secret-scan.log",
+      "context": "Node 22.22.2 / npm 10.9.9. Official fixed-head snapshot plus this incremental candidate; source bytes unchanged since these checks. Git objects were subsequently verified against original head/base. Documentation-only recording does not change sourceFingerprint. No database or field access."
     },
     {
-      "id": "a-web-build",
+      "id": "a-resource-registration",
       "kind": "command",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-03T11:45:34.952739+00:00",
-      "endedAt": "2026-11-03T11:45:36.765893+00:00",
-      "sourceFingerprint": "178995034fe121020b2b6d4225d4fed03e519c16f1f1dd098ffe87f333fa07bf",
-      "testedHead": "c2c49369898b7f9943fb280342a56d9a98b0b30b",
-      "logSha256": "d337945bb8643f75204c4057db478b3a18aef309bc68696d77c08d42aa5873f1",
-      "context": "Node 22.22.2; npm 10.9.9; existing lockfile-matched dependencies; isolated local source; no database; base HEAD with uncommitted candidate, bound by sourceFingerprint; log in handoff ZIP verification/logs/a-web-web-build.log",
-      "command": "npm run build --workspace @dx-rework/web",
-      "logPath": "verification/logs/a-web-web-build.log"
+      "command": "/workspace/scratch/5c2f59f0b575/tooling/node_modules/node/bin/node --input-type=module -e 'import {checkResourceRegistration} from \"./scripts/test-preflight.mjs\";checkResourceRegistration();console.log(\"TEST_RESOURCE_REGISTRATION_PASSED\");'",
+      "testedHead": "36597942d20ec1ec81e709423b6ca7841ceb5d98",
+      "sourceFingerprint": "b1bf5414aa590acc46497d994e157f5e76df2e6580a6910928c26da565528256",
+      "startedAt": "2026-11-03T14:44:25.650891+00:00",
+      "endedAt": "2026-11-03T14:44:25.769797+00:00",
+      "logSha256": "621b6c62626727fd6ce2c2034aea68ce9e77eb2ab6d6f5a11ec6b55d8d3d192d",
+      "log": "docs/engineering/verification-20261103/a-resource-registration.log",
+      "context": "Node 22.22.2 / npm 10.9.9. Official fixed-head snapshot plus this incremental candidate; source bytes unchanged since these checks. Git objects were subsequently verified against original head/base. Documentation-only recording does not change sourceFingerprint. No database or field access."
+    },
+    {
+      "id": "a-diff-check",
+      "kind": "command",
+      "status": "passed",
+      "exitCode": 0,
+      "command": "git diff --check",
+      "testedHead": "36597942d20ec1ec81e709423b6ca7841ceb5d98",
+      "sourceFingerprint": "b1bf5414aa590acc46497d994e157f5e76df2e6580a6910928c26da565528256",
+      "startedAt": "2026-11-03T14:44:04.656602+00:00",
+      "endedAt": "2026-11-03T14:44:04.685015+00:00",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "log": "docs/engineering/verification-20261103/a-diff-check.log",
+      "context": "Node 22.22.2 / npm 10.9.9. Official fixed-head snapshot plus this incremental candidate; source bytes unchanged since these checks. Git objects were subsequently verified against original head/base. Documentation-only recording does not change sourceFingerprint. No database or field access."
+    }
+  ],
+  "pendingVerification": [
+    {
+      "id": "a-postgres-full",
+      "status": "not-run",
+      "reason": "No local isolated PostgreSQL was installed or started. Five new PG cases and mapped consumers require the official exact-head Full after coordinator review; names-only collection is not execution."
+    },
+    {
+      "id": "a-official-review-and-gate",
+      "status": "not-run",
+      "reason": "Latest user instruction: update existing PR only; do not request Full before coordinator independent final-head review and Work official controller."
     }
   ],
   "handoff": {
-    "status": "local-evidence-complete-pending-pr-full",
-    "databaseValidation": "pending-exact-head-full",
-    "authority": "User authorized official connector atomic commits and separate draft PRs for this A+B only. Work requests the existing gate controller on each exact Head; no self-approval or deployment.",
-    "scope": "This A+B batch only; no AGENTS.md change or general policy exception.",
-    "remoteWriteMethod": "Official GitHub GitData with base-tree, parent and branch readback; actual remote identities recorded outside the commit."
-  },
-  "pendingVerification": [
-    {
-      "id": "a-postgres",
-      "kind": "tests",
-      "status": "not-run",
-      "exitCode": null,
-      "command": "node scripts/run-business-chain-gate.mjs --full-gate (in the existing exact-Head GitHub Full Gate)",
-      "reason": "PG16 binaries are available, but the container only maps UID 0 and runuser was denied: cannot set groups: Operation not permitted. No initdb/server was started. PG13/16 database tests and final gate remain pending; no equivalent privilege route attempted.",
-      "testedHead": "c2c49369898b7f9943fb280342a56d9a98b0b30b",
-      "sourceFingerprint": "178995034fe121020b2b6d4225d4fed03e519c16f1f1dd098ffe87f333fa07bf",
-      "context": "Per user authorization limited to this A+B batch: no duplicate local PG run when the precise PR Head Full executes the same canonical suites on PG16 under the expected low-privilege role; actual run/job/receipt/cleanup still required."
-    }
-  ]
+    "status": "source-and-local-non-pg-complete-pending-independent-review",
+    "authority": "User authorizes updating original #896 branch without new branch/PR. No approval, deployment or production/Acceptance operations. User cancelled downloadable handoff package; actual current check logs/reports are pinned in this commit.",
+    "originalHead": "36597942d20ec1ec81e709423b6ca7841ceb5d98",
+    "remoteWriteMethod": "Official GitHub GitData based on original tree and parent, expected_sha lease with force=false, then readback exact head/tree."
+  }
 }

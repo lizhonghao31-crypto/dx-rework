@@ -1,0 +1,57 @@
+(node:5) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+ RUN  v4.1.10 /workspace/scratch/5c2f59f0b575/dx-a
+
+(node:40) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/unit/digital-sla-plan.test.ts (28 tests) 54ms
+(node:48) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/unit/digital-journey-cockpit.test.ts (16 tests) 94ms
+(node:56) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/unit/journey-sla-supervision.test.ts (11 tests) 34ms
+(node:64) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/unit/digital-journey-projection.test.ts (9 tests) 40ms
+(node:72) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/unit/full-gate-risk-map.test.ts (22 tests) 31ms
+(node:80) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/unit/journey-projection-isolation.test.ts (20 tests) 21ms
+(node:88) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/unit/series-plan-dates.test.ts (6 tests) 72ms
+(node:96) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/unit/bulk-preshrink-requirement.test.ts (11 tests) 47ms
+(node:104) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/unit/journey-snapshot-reads.test.ts (5 tests) 47ms
+(node:112) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/integration/series-plan-routes.test.ts (7 tests) 230ms
+(node:120) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/unit/bulk-preshrink-correction-read.test.ts (10 tests) 13ms
+(node:128) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/unit/acceptance-maintenance-generator.test.ts (2 tests) 102ms
+(node:137) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/unit/migration-history.test.ts (5 tests) 9ms
+(node:145) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/unit/sla-preview-token.test.ts (2 tests) 8ms
+(node:153) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/unit/current-migration-manifest-checksum.test.ts (1 test) 110ms
+
+ Test Files  15 passed (15)
+      Tests  155 passed (155)
+   Start at  23:30:44
+   Duration  9.06s (transform 3.13s, setup 0ms, import 5.81s, tests 913ms, environment 2ms)
+
+JSON report written to /workspace/scratch/5c2f59f0b575/verification-a/targeted-unit-attempt1.json

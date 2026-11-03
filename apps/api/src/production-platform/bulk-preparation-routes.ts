@@ -5,6 +5,7 @@ import { businessActor } from "../access/business-authority.js";
 import { ApplicationError } from "../platform/errors.js";
 import type { DigitalIdentityDependencies } from "./identity-routes.js";
 import type { BulkPreparationService } from "./bulk-preparation-service.js";
+import {PreshrinkCorrectionPreviewSchema,PreshrinkCorrectionApplySchema} from './bulk-preshrink-correction-service.js';
 export function registerBulkPreparationRoutes(app:FastifyInstance,deps:DigitalIdentityDependencies,service:BulkPreparationService){
  const parse=<T>(schema:z.ZodType<T>,value:unknown):T=>{const parsed=schema.safeParse(value);if(!parsed.success)throw new ApplicationError('VALIDATION_ERROR',parsed.error.issues[0]?.message??'请检查办理内容',400);return parsed.data;};
  const actor=async(r:FastifyRequest)=>businessActor(deps.root,await deps.authenticate(r.headers.cookie?.split(';').map(v=>v.trim()).find(v=>v.startsWith('dx_rework_session='))?.slice(18)),r.id,'digital_production:view');
@@ -19,4 +20,9 @@ export function registerBulkPreparationRoutes(app:FastifyInstance,deps:DigitalId
  app.post(`${base}/fabric-decision`,async r=>service.decideFabric(await actor(r),id(r),parse(BulkFabricDecisionSchema,r.body),key(r)));
  app.post(`${base}/materials-dispatch`,async r=>service.dispatchMaterials(await actor(r),id(r),parse(BulkMaterialsDispatchSchema,r.body),key(r)));
  app.post(`${base}/complete`,async r=>service.complete(await actor(r),id(r),parse(BulkCompletionSchema,r.body),key(r)));
+ if(deps.root){
+  const correction=service.scopedPreshrinkCorrection(deps.root);
+  app.post(`${base}/preshrink-correction/preview`,async r=>correction.preview(await actor(r),id(r),parse(PreshrinkCorrectionPreviewSchema,r.body)));
+  app.post(`${base}/preshrink-correction/apply`,async r=>correction.apply(await actor(r),id(r),parse(PreshrinkCorrectionApplySchema,r.body),key(r)));
+ }
 }

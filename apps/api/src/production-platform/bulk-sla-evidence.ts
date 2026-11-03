@@ -2,7 +2,7 @@ import {preparationAdoption} from './preparation-material-repository.js';
 import {preparationWindow} from './production-readiness-repository.js';
 import type {PoolClient} from 'pg';
 import type {SlaNodeFact,SlaPlan} from '@dx-rework/domain/digital-sla-plan';
-import {resolveBulkPreshrinkRequirement,type BulkPreshrinkRequirement} from './bulk-preshrink-requirement.js';
+import {readBulkPreshrinkRequirement,type BulkPreshrinkRequirement} from './bulk-preshrink-requirement.js';
 import {validateDigitalSlaSnapshot} from '@dx-rework/contracts/digital-sla';
 import {bulkFabricFacts} from './bulk-fabric-facts.js';
 import {bulkTaskTiming} from './bulk-task-timing.js';
@@ -22,7 +22,7 @@ export async function bulkSlaEvidence(db:Pick<PoolClient,'query'>,orderId:string
    JOIN digital_instruction_versions v ON v.production_order_id=d.production_order_id AND v.version=d.published_version
    LEFT JOIN digital_bulk_preparations p ON p.production_order_id=v.production_order_id AND p.instruction_version=v.version AND p.source_round=v.source_round
    WHERE d.production_order_id=$1`,[orderId])).rows[0];
- const preshrink=resolveBulkPreshrinkRequirement(basis?.preparation_id?basis:null,basis?.document);
+ const preshrink=(await readBulkPreshrinkRequirement(db,basis?.preparation_id?basis:null,basis?.document)).requirement;
  const prep=basis?.workflow_version===2?basis:null;
  const adoption=await preparationAdoption(db,{kind:'order',id:orderId});
  const retainLegacy=Boolean(adoption?.standards.retainedInstructionVersion&&prep?.instruction_version<=adoption.standards.retainedInstructionVersion);

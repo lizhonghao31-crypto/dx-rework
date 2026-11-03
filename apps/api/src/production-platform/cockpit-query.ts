@@ -1,5 +1,5 @@
 import {developmentReadTables} from "./development-amendment-repository.js";
-import {resolveBulkPreshrinkRequirement} from './bulk-preshrink-requirement.js';
+import {readBulkPreshrinkRequirement} from './bulk-preshrink-requirement.js';
 import {acceptanceClockReaderEnabled} from '../acceptance-clock/business-time.js';
 import {savedDevelopmentRoute} from "./development-sla-enrollment.js";
 import { DigitalDevelopmentService } from "./development-service.js";
@@ -103,7 +103,7 @@ SELECT o.production_order_id AS "orderId",s.source_id AS "sourceId",
           const cuttingProcess=preparation.cutting_process??(await new BulkPreparationService(db).gates(db,row.orderId)).approval?.cutting_process;
           const routeIds = new Set((await db.query("SELECT task_id FROM digital_production_tasks WHERE route_instance_id=$1 OR (route_instance_id=$2 AND node_key='bulk_ship_sample')",[preparation.preparation_id,row.orderId])).rows.map(t=>t.task_id));
           const closure = await new OrderClosureService(db).read(actor,row.orderId);
-          if(cuttingProcess)progress = bulkCockpitProgress({preshrink:resolveBulkPreshrinkRequirement(preparation)??'',secondaryCraft:preparation.document.secondaryCraft==='沿用开发'?preparation.source_document.craft:preparation.document.secondaryCraft,externalCutting:cuttingProcess==='outsourced',
+          if(cuttingProcess)progress = bulkCockpitProgress({preshrink:(await readBulkPreshrinkRequirement(db,preparation)).requirement??'',secondaryCraft:preparation.document.secondaryCraft==='沿用开发'?preparation.source_document.craft:preparation.document.secondaryCraft,externalCutting:cuttingProcess==='outsourced',
             tasks:tasks.filter(t=>routeIds.has(t.taskId)),specialClosed:Boolean(closure.closed),packed:closure.stage==='本期装箱完成',
             received:closure.lines.length>0&&closure.lines.every(l=>l.receiptCount>0&&l.actualQuantity>=l.orderedQuantity&&(l.actualQuantity===l.documentQuantity||Boolean(l.receivingResolution)))});
         }
