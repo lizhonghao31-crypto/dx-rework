@@ -1143,6 +1143,14 @@
     {
       "version": "0271_qc_production_progress",
       "checksum": "cc03c853371ccdb7727564aaf332d7035143499f17a3ef15c44732e271b9d5b3"
+    },
+    {
+      "version": "0272_bulk_preshrink_instruction_choice",
+      "checksum": "de22f11faf29ec58c877278440ace0ec6852416f4a039125e822ddce7e1bd47f"
+    },
+    {
+      "version": "0273_bulk_preshrink_scoped_correction",
+      "checksum": "2e791df368bb48660b7970f6d6061edcb7598d8efc647be939cfe223d461a67a"
     }
   ]
 }

@@ -30,6 +30,8 @@ function fixture(sla: "absent" | "unenrolled" | "frozen" = "absent") {
   const query = vi.fn(async (sql: string, params: unknown[] = []) => {
     let found: object[] = [];
     if (["SELECT to_regclass('digital_preparation_responsibilities') AS relation", "SELECT to_regclass('digital_preparation_material_versions') AS relation"].includes(sql)) found = [{relation:null}];
+    else if (sql === "SELECT to_regclass('digital_bulk_preshrink_corrections') AS relation") found = [{relation:'digital_bulk_preshrink_corrections'}];
+    else if (sql === 'SELECT preshrink_task_id FROM digital_bulk_preshrink_corrections ORDER BY preshrink_task_id') found = [];
     else if (sql === "SELECT to_regclass('digital_sla_configurations') AS relation") found = [{relation:sla==='absent'?null:'digital_sla_configurations'}];
     else if (sql === "SELECT to_regclass('digital_sla_order_snapshots') AS relation") found = [{relation:'digital_sla_order_snapshots'}];
     else if ((sql === 'SELECT * FROM digital_sla_order_snapshots WHERE production_order_id=$1 ORDER BY revision DESC LIMIT 1'||sql === 'SELECT * FROM digital_sla_order_snapshots WHERE production_order_id=$1 ORDER BY revision LIMIT 1')) {expect(params[0]).toBe(orderId);found=[];}

@@ -6,6 +6,13 @@ import { describe, expect, it } from "vitest";
 import { assertMappedPostgresTests, classifyFullGatePaths, POSTGRES_CASE_SUITES } from "../../scripts/ci/full-gate-risk-map.mjs";
 
 describe("Full Gate sensitive path mapping", () => {
+  it("maps changed bulk requirements and their shared clock fixture to all actual consumer suites",()=>{
+    for(const path of ['tests/helpers/business-anchor-fixture.ts','tests/helpers/bulk-preparation-fixture.ts','tests/helpers/bulk-preshrink-correction-fixture.ts','apps/api/src/production-platform/bulk-preshrink-correction-service.ts','apps/api/src/production-platform/bulk-sla-evidence.ts']){
+      const result=classifyFullGatePaths([path]);expect(result.businessChainSensitive).toBe(true);
+      for(const suite of ['business-anchors-clock','production-readiness','sourcing-pr03','bulk-preshrink-correction'])expect(result.mappedPostgresTests).toContain(`tests/integration/${suite}-postgres.test.ts`);
+      expect(()=>assertMappedPostgresTests(result.mappedPostgresTests)).not.toThrow();
+    }
+  });
   it("requires real PG13 Journey reads for query, route, contract and regression changes",()=>{
     for(const path of ["apps/api/src/production-platform/journey-log.ts","apps/api/src/production-platform/journey-query.ts","apps/api/src/production-platform/identity-routes.ts","packages/contracts/src/digital-production-journey.ts","tests/integration/digital-journey-postgres.test.ts","scripts/ci/journey-pg13-regression.mjs"]){
       const result=classifyFullGatePaths([path]);expect(result.journeyPg13Compat).toBe(true);expect(result.dbRequired).toBe(true);expect(result.mappedPostgresTests).toContain("tests/integration/digital-journey-postgres.test.ts");

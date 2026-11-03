@@ -390,7 +390,13 @@ export class DigitalJourneyQuery {
       gate.completionResult=gate.state==="completed"?"unknown":null;
       const prepFacts=currentPrep?(await db.query("SELECT kind FROM digital_bulk_preparation_facts WHERE preparation_id=$1",[currentPrep])).rows:[];
       const marker=prepFacts.some(fact=>fact.kind==="唛架完成");setFact("bulk_marker",marker?"completed":currentPrep?"pending":"uncreated",[record("preparation",oid,`/ui/digital-pattern-room?section=bulk&bulkOrder=${oid}`,bulk.instructionVersion)]);
-      if(bulk.preshrink==="无需预缩")replace("warehouse_preshrink",emptyNode("warehouse_preshrink","not_applicable"));
+      if(bulk.preshrink==="无需预缩"){
+        const current=baseNodes.filter(node=>node.key==='warehouse_preshrink'&&node.current);
+        if(!current.some(node=>node.state==='completed'||node.actualAt)){
+          if(current.length)for(const node of current){node.state='not_applicable';node.countsInProgress=false;node.blockers=[];node.risks=[];}
+          else replace('warehouse_preshrink',emptyNode('warehouse_preshrink','not_applicable'));
+        }
+      }
       const budgetAllowed=await policy.allowed(actor,"order",oid,"budget");
       if(budgetAllowed) {const budget=(await db.query("SELECT version,status,published_at FROM digital_budget_documents WHERE production_order_id=$1",[oid])).rows[0];setFact("budget",budget?.status==="published"?"completed":budget?"active":"uncreated",budget?[record("budget",oid,`/ui/digital-production?budget=${oid}${budget.status==="published"?`&budgetVersion=${budget.version}`:""}`,budget.version)]:[],iso(budget?.published_at));}
       else replace("budget",emptyNode("budget","unavailable"));

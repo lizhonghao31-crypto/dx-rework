@@ -121,6 +121,17 @@ export const classifyFullGatePaths = (inputPaths) => {
   let transferSensitive = false;
 
   for (const path of paths) {
+    if (path === 'tests/helpers/business-anchor-fixture.ts'
+      || path === 'tests/helpers/bulk-preparation-fixture.ts'
+      || path === 'tests/helpers/bulk-preshrink-correction-fixture.ts'
+      || /^apps\/api\/src\/production-platform\/(?:bulk-(?:preparation|preshrink|sla)[^/]*|task-service)\.ts$/.test(path)) {
+      businessChainSensitive = true;
+      domains.add('bulk-preshrink-consumers');
+      addAll(mappedTests, ['tests/integration/business-anchors-clock-postgres.test.ts',
+        'tests/integration/production-readiness-postgres.test.ts',
+        'tests/integration/sourcing-pr03-postgres.test.ts',
+        'tests/integration/bulk-preshrink-correction-postgres.test.ts']);
+    }
     if (/^apps\/api\/src\/production-platform\/journey[^/]*\.ts$/.test(path)
       || path === "apps/api/src/production-platform/identity-routes.ts"
       || path === "packages/contracts/src/digital-production-journey.ts"
