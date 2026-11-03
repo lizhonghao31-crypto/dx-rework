@@ -13,7 +13,7 @@ export function BulkPreparationRangeAction({sheet,busy,onSaved}:{sheet:BulkPrepa
  const writing=useRef(false),attempt=useRef(new SubmissionAttempt()),[saving,setSaving]=useState(false),[error,setError]=useState(''),[receipt,setReceipt]=useState('');
  const disabled=busy||saving||attempt.current.hasPending;
  const readiness=sheet.readiness;
- const prior=readiness?.ranges.filter(r=>r.preparationId===sheet.preparationId&&r.kind===kind).at(-1);
+ const prior=readiness?.ranges.filter(r=>r.preparationId===sheet.preparationId&&r.kind===kind).sort((a,b)=>b.version-a.version)[0];
  const same=(a:string[],b:string[])=>JSON.stringify([...a].sort())===JSON.stringify([...b].sort());
  const dirty=touched&&(!prior||prior.note!==note||prior.complete!==whole||!same(prior.lineIds,selected)||!same(prior.pendingMaterialIds,pending));
  useDigitalDetailNavigationGuard(dirty,disabled,writing,'本次准备范围尚未保存，确认离开？');
