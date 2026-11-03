@@ -17,6 +17,7 @@ import { ExternalEvidenceView } from "./external-evidence-view.js";
 import { ExternalEvidenceUploader } from "./external-evidence-uploader.js";
 import { readExternalResponsibilityResponse } from "./external-responsibility-response.js";
 import { SearchSelect } from "./search-select.js";
+import { loadResponsibilitySuppliers, responsibilitySupplierField, type ResponsibilitySupplierState } from "./responsibility-supplier-options.js";
 import { alertInApp, confirmInApp, promptInApp } from "./system-dialog.js";
 import "./external-responsibility.css";
 
@@ -104,67 +105,115 @@ export function ExternalResponsibilityPanel({
   onOrderChanged?: () => Promise<void>;
 }) {
   const [state, setState] = useState<State>({ kind: "loading" });
-  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [supplierState, setSupplierState] = useState<ResponsibilitySupplierState>({ kind: "idle" });
+  const suppliers = supplierState.kind === "ready" ? supplierState.items : [];
+  const supplierRequest = useRef<AbortController | null>(null);
+  const mainRequest = useRef<AbortController | null>(null);
+  const mainRequestGeneration = useRef(0);
+  const ledgerRetryGeneration = useRef(0);
+  const currentOrder = useRef(reworkOrderId);
+  currentOrder.current = reworkOrderId;
   const [selection, setSelection] = useState<Record<string, string>>({});
   const [temporarySupplierName, setTemporarySupplierName] = useState<Partial<Record<ResponsibilityType, string>>>({});
   const [processingOverrideReason, setProcessingOverrideReason] = useState("");
   const [moduleWritable, setModuleWritable] = useState(false);
   const readOnly = requestedReadOnly || !moduleWritable;
   const [message, setMessage] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [mutationBusy, setBusy] = useState(false);
+  const [ledgerRetryBusy, setLedgerRetryBusy] = useState(false);
+  const busy = mutationBusy || ledgerRetryBusy;
   const [amount, setAmount] = useState<Record<string, string>>({});
   const [attachments, setAttachments] = useState<Record<string, string[]>>({});
   const [uploadingCases, setUploadingCases] = useState<Record<string, boolean>>({});
   const pendingMutationKeys = useRef<Record<string, string>>({});
 
-  const load = async (): Promise<ExternalResponsibilityBatchResponse> => {
-    if (!reworkOrderId) return null;
-    setModuleWritable(await currentModuleCanWrite("rework"));
-    const response = await fetch(
-      apiUrl(`rework-orders/${reworkOrderId}/external-responsibilities`),
-      { credentials: "include", headers: { accept: "application/json" } },
+  const reloadSuppliers = async (orderId: string, generation: number): Promise<void> => {
+    if (currentOrder.current !== orderId || mainRequestGeneration.current !== generation) return;
+    supplierRequest.current?.abort();
+    const controller = new AbortController();
+    supplierRequest.current = controller;
+    setSupplierState({ kind: "loading" });
+    const loaded = await loadResponsibilitySuppliers(
+      apiUrl(`rework-orders/${orderId}/external-responsibilities/supplier-options`), controller.signal, "array",
     );
-    if (response.status === 403) {
-      setState({ kind: "hidden" });
-      return null;
-    }
-    if (!response.ok) throw new Error(await requestError(response));
-    const value = await readExternalResponsibilityResponse(response, ExternalResponsibilityBatchResponseSchema, "read");
-    setState({ kind: "ready", value });
-    return value;
+    if (controller.signal.aborted || supplierRequest.current !== controller
+      || currentOrder.current !== orderId || mainRequestGeneration.current !== generation) return;
+    setSupplierState(loaded);
   };
 
-  useEffect(() => {
-    if (!reworkOrderId) {
-      setState({ kind: "hidden" });
-      return;
-    }
+  const load = async (): Promise<ExternalResponsibilityBatchResponse> => {
+    if (!reworkOrderId) return null;
+    mainRequest.current?.abort();
+    supplierRequest.current?.abort();
     const controller = new AbortController();
-    void load().then(async (batch) => {
-      if (readOnly) return [] as Supplier[];
-      const hasUnassigned = batch?.items.some(
-        (item) => !batch.cases.some((entry) =>
+    const generation = ++mainRequestGeneration.current;
+    mainRequest.current = controller;
+    setSupplierState({ kind: "idle" });
+    const isCurrent = (): boolean => !controller.signal.aborted
+      && mainRequestGeneration.current === generation && currentOrder.current === reworkOrderId;
+    try {
+      const writable = await currentModuleCanWrite("rework");
+      if (!isCurrent()) return null;
+      const response = await fetch(
+        apiUrl(`rework-orders/${reworkOrderId}/external-responsibilities`),
+        { credentials: "include", signal: controller.signal, headers: { accept: "application/json" } },
+      );
+      if (!isCurrent()) return null;
+      if (response.status === 403) {
+        setState({ kind: "hidden" });
+        return null;
+      }
+      if (!response.ok) throw new Error(await requestError(response));
+      const value = await readExternalResponsibilityResponse(response, ExternalResponsibilityBatchResponseSchema, "read");
+      if (!isCurrent()) return null;
+      setModuleWritable(writable);
+      setState({ kind: "ready", value });
+      const hasUnassigned = value?.items.some(
+        (item) => !value.cases.some((entry) =>
           entry.items.some((mapped) => mapped.externalItemId === item.externalItemId),
         ),
       ) ?? false;
-      if (!batch || !hasUnassigned || batch.canAllocateSuppliers !== true) return [] as Supplier[];
-      const response = await fetch(
-        apiUrl(`rework-orders/${reworkOrderId}/external-responsibilities/supplier-options`),
-        { credentials: "include", signal: controller.signal, headers: { accept: "application/json" } },
-      );
-      if (response.status === 403) return [] as Supplier[];
-      if (!response.ok) throw new Error(await requestError(response));
-      return await response.json() as Supplier[];
-    }).then(setSuppliers).catch((error: unknown) => {
-      if (!(error instanceof DOMException && error.name === "AbortError")) {
+      if (!requestedReadOnly && writable && value?.canAllocateSuppliers === true && hasUnassigned) {
+        void reloadSuppliers(reworkOrderId, generation);
+      }
+      return value;
+    } catch (error: unknown) {
+      if (isCurrent()) throw error;
+      return null;
+    } finally {
+      if (mainRequest.current === controller) mainRequest.current = null;
+    }
+  };
+
+  const reloadLedger = async (): Promise<void> => {
+    const pending = load();
+    const generation = mainRequestGeneration.current;
+    try { await pending; } catch (error: unknown) {
+      if (mainRequestGeneration.current === generation && currentOrder.current === reworkOrderId) {
         setState({
           kind: "unavailable",
           message: error instanceof Error ? error.message : "扣款资料加载失败，请刷新重试。",
         });
       }
-    });
-    return () => controller.abort();
-  }, [readOnly, reworkOrderId]);
+    }
+  };
+
+  useEffect(() => {
+    // Only the abandoned read loses its busy state; an in-flight mutation keeps it.
+    setLedgerRetryBusy(false);
+    if (!reworkOrderId) {
+      setState({ kind: "hidden" });
+      return;
+    }
+    setState({ kind: "loading" });
+    void reloadLedger();
+    return () => {
+      ledgerRetryGeneration.current += 1;
+      mainRequestGeneration.current += 1;
+      mainRequest.current?.abort();
+      supplierRequest.current?.abort();
+    };
+  }, [requestedReadOnly, reworkOrderId]);
 
   const unassigned = useMemo(
     () => state.kind === "ready" && state.value
@@ -217,6 +266,7 @@ export function ExternalResponsibilityPanel({
   const createTemporarySupplier = async (
     item: NonNullable<ExternalResponsibilityBatchResponse>["items"][number],
   ): Promise<void> => {
+    if (busy || readOnly || supplierState.kind !== "ready") return;
     const supplierName = temporarySupplierName[item.responsibilityType]?.trim() ?? "";
     if (!supplierName) {
       const issue = `请先填写${responsibilityTypeLabel[item.responsibilityType]}名称。`;
@@ -246,17 +296,17 @@ export function ExternalResponsibilityPanel({
       );
       if (!createResponse.ok) throw new Error(await requestError(createResponse));
       const created = await createResponse.json() as Supplier;
-      const optionsResponse = await fetch(
+      const catalogState = await loadResponsibilitySuppliers(
         apiUrl(`rework-orders/${reworkOrderId}/external-responsibilities/supplier-options`),
-        { credentials: "include", headers: { accept: "application/json" } },
+        undefined, "array",
       );
-      if (!optionsResponse.ok) throw new Error(await requestError(optionsResponse));
-      const catalog = await optionsResponse.json() as Supplier[];
+      setSupplierState(catalogState);
+      if (catalogState.kind !== "ready") throw new Error(catalogState.kind === "error" || catalogState.kind === "forbidden" ? catalogState.message : "供应商名录尚未加载完成。");
+      const catalog = catalogState.items;
       if (!catalog.some((supplier) => supplier.supplierId === created.supplierId)) {
         throw new Error("供应商已新增，但未能重新读取可选名录，请刷新后重试。");
       }
       delete pendingMutationKeys.current[signature];
-      setSuppliers(catalog);
       setSelection((current) => ({ ...current, [item.externalItemId]: created.supplierId }));
       setTemporarySupplierName((current) => ({ ...current, [item.responsibilityType]: "" }));
       setMessage(`${supplierName} 已新增到供应商名录并自动选中。`);
@@ -268,7 +318,7 @@ export function ExternalResponsibilityPanel({
   };
 
   const allocate = async (): Promise<void> => {
-    if (state.kind !== "ready" || !state.value || busy) return;
+    if (state.kind !== "ready" || !state.value || busy || supplierState.kind !== "ready") return;
     const grouped = new Map<string, {
       responsibilityType: ResponsibilityType;
       supplierId: string;
@@ -549,8 +599,11 @@ export function ExternalResponsibilityPanel({
   if (state.kind === "hidden") return null;
   if (state.kind === "loading") return <Surface className="external-state">正在加载扣款台账…</Surface>;
   if (state.kind === "unavailable") return <Surface className="external-state">{state.message}<Button type="button" disabled={busy} onClick={() => {
-    setBusy(true);
-    void load().catch((error: unknown) => setState({ kind: "unavailable", message: error instanceof Error ? error.message : "扣款资料加载失败，请刷新重试。" })).finally(() => setBusy(false));
+    const generation = ++ledgerRetryGeneration.current;
+    setLedgerRetryBusy(true);
+    void reloadLedger().finally(() => {
+      if (ledgerRetryGeneration.current === generation) setLedgerRetryBusy(false);
+    });
   }}>刷新</Button></Surface>;
   if (!state.value) return <Surface className="external-state">无本类扣款事项。</Surface>;
 
@@ -560,7 +613,7 @@ export function ExternalResponsibilityPanel({
     ? allCases.filter((caseItem) => caseItem.caseId === focusCaseId)
     : allCases;
   const visibleUnassigned = readOnly || focusCaseId || batch.status !== "active" || batch.canAllocateSuppliers !== true ? [] : unassigned;
-  const supplierAllocationReady = visibleUnassigned.length > 0
+  const supplierAllocationReady = supplierState.kind === "ready" && visibleUnassigned.length > 0
     && visibleUnassigned.every((item) => Boolean(selection[item.externalItemId]));
 
   if (focusCaseId && visibleCases.length === 0) {
@@ -579,6 +632,13 @@ export function ExternalResponsibilityPanel({
 
     {visibleUnassigned.length > 0 && <section className="external-operation">
       <h3>待补充供应商</h3>
+      {supplierState.kind === "loading" && <p role="status">正在加载责任供应商…</p>}
+      {(supplierState.kind === "forbidden" || supplierState.kind === "error") && <div className="own-factory-approval-message" role="alert">
+        <p>{supplierState.message}</p>
+        {supplierState.kind === "error" && <Button disabled={busy} onClick={() => {
+          if (reworkOrderId) void reloadSuppliers(reworkOrderId, mainRequestGeneration.current);
+        }}>重试加载供应商</Button>}
+      </div>}
       {visibleUnassigned.map((item) => {
         const matchingSuppliers = suppliers.filter(
           (supplier) => supplier.supplierType === requiredSupplierType(item.responsibilityType),
@@ -589,13 +649,13 @@ export function ExternalResponsibilityPanel({
           <SearchSelect
             options={matchingSuppliers.map((supplier) => ({ value: supplier.supplierId, label: supplier.supplierName }))}
             value={selection[item.externalItemId] ?? ""}
-            placeholder={matchingSuppliers.length ? "输入供应商名称搜索" : "没有匹配类型的供应商"}
+            placeholder={supplierState.kind === "ready" ? (matchingSuppliers.length ? "输入供应商名称搜索" : "没有匹配类型的供应商") : responsibilitySupplierField(supplierState, matchingSuppliers.length).placeholder}
             emptyText="没有匹配的供应商"
             ariaLabel={`供应商 ${processName(item.processSnapshot)}`}
-            disabled={busy || matchingSuppliers.length === 0}
+            disabled={busy || supplierState.kind !== "ready" || matchingSuppliers.length === 0}
             onChange={(supplierId) => setSelection((current) => ({ ...current, [item.externalItemId]: supplierId }))}
           />
-          {matchingSuppliers.length === 0 && <div className="external-temporary-supplier">
+          {supplierState.kind === "ready" && matchingSuppliers.length === 0 && <div className="external-temporary-supplier">
             <InsetField
               label={`新增${responsibilityTypeLabel[item.responsibilityType]}名称`}
               value={temporarySupplierName[item.responsibilityType] ?? ""}
@@ -612,7 +672,7 @@ export function ExternalResponsibilityPanel({
         onChange={(event) => setProcessingOverrideReason(event.target.value)}
         placeholder="仅改选加工厂时填写"
       />}
-      <Button variant="primary" data-ready={supplierAllocationReady ? "true" : "false"} disabled={busy} onClick={() => void allocate()}>确认供应商</Button>
+      <Button variant="primary" data-ready={supplierAllocationReady ? "true" : "false"} disabled={busy || supplierState.kind !== "ready"} onClick={() => void allocate()}>确认供应商</Button>
     </section>}
 
     {visibleCases.length === 0 && visibleUnassigned.length === 0 && <StatusBadge tone="info">无本类扣款事项。</StatusBadge>}

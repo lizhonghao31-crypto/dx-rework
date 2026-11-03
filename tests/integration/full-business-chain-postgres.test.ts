@@ -67,6 +67,7 @@ import { ExternalResponsibilityApplicationService } from "../../apps/api/src/rew
 import { ProcessConfigurationService } from "../../apps/api/src/rework/process-configuration-service.js";
 import { ProcessWorkerPlanService } from "../../apps/api/src/rework/process-worker-plan-service.js";
 import { ResponsibilityDeterminationApplicationService } from "../../apps/api/src/rework/responsibility-determination-application-service.js";
+import {ResponsibilitySupplierOptionsResponseSchema} from '@dx-rework/contracts';
 import { ReworkBusinessDetailService } from "../../apps/api/src/rework/rework-business-detail-service.js";
 import { ReworkInitiationService } from "../../apps/api/src/rework/service.js";
 import { ReworkSupplyContextService } from "../../apps/api/src/rework/supply-context-service.js";
@@ -1374,6 +1375,29 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
         finalUnitPrice: 0.55,
       })],
     });
+
+    // N07 candidates must tolerate unrelated active catalog types without changing
+    // the current handler, settlement, wages or any native workflow history.
+    const candidateOrderId=submitted.value.reworkOrderId;
+    const candidateFootprint=async()=>({
+      order:(await database.query('SELECT * FROM rework_orders WHERE rework_order_id=$1',[candidateOrderId])).rows,
+      wages:(await database.query('SELECT w.* FROM rework_wage_items w WHERE rework_order_id=$1 ORDER BY to_jsonb(w)::text',[candidateOrderId])).rows,
+    });
+    const beforeCandidates=await candidateFootprint(),candidateClient=await database.connect();
+    try{
+      await candidateClient.query('BEGIN');
+      const other=await access.createSupplierWithClient(candidateClient,ownerMasterData(),{supplierCode:'TEST_N07_OTHER',supplierType:'other',supplierName:'TEST unrelated active supplier',active:true,changeReason:'TEST N07 isolated type control'});
+      const inactive=await access.createSupplierWithClient(candidateClient,ownerMasterData(),{supplierCode:'TEST_N07_INACTIVE',supplierType:'factory',supplierName:'TEST inactive factory',active:false,changeReason:'TEST N07 isolated active control'});
+      const candidates=new ResponsibilityDeterminationApplicationService(candidateClient as unknown as pg.Pool);
+      const options=ResponsibilitySupplierOptionsResponseSchema.parse(await candidates.listSupplierOptions(production(),candidateOrderId));
+      expect(options.items).toContainEqual(expect.objectContaining({supplierId:factorySupplierId,supplierType:'factory'}));
+      expect(options.items).toContainEqual(expect.objectContaining({supplierId:fabricSupplierId,supplierType:'fabric'}));
+      expect(options.items.some(s=>s.supplierId===other.supplierId||s.supplierId===inactive.supplierId)).toBe(false);
+      expect((await candidateClient.query('SELECT supplier_type,active FROM current_supplier_catalog WHERE supplier_id=$1',[other.supplierId])).rows).toEqual([{supplier_type:'other',active:true}]);
+      await expect(candidates.listSupplierOptions(qc(),candidateOrderId)).rejects.toMatchObject({statusCode:403});
+      await expect(candidates.listSupplierOptions(production(),randomUUID())).rejects.toMatchObject({statusCode:404});
+    }finally{await candidateClient.query('ROLLBACK');candidateClient.release();}
+    expect(await candidateFootprint()).toEqual(beforeCandidates);
 
     // N09 splits one process between two external responsible parties. Because
     // no own-factory share exists, finalization must skip owner confirmation.

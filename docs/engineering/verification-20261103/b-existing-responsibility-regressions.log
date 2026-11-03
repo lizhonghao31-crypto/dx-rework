@@ -1,0 +1,920 @@
+(node:5) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+ RUN  v4.1.10 /workspace/scratch/5c2f59f0b575/dx-b
+
+(node:40) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/integration/responsibility-determination-routes.test.ts > responsibility routes > lists the authorized responsibility queue with real order UUIDs 136ms
+ ✓ tests/integration/responsibility-determination-routes.test.ts > responsibility routes > serves the authorized GET response for the concrete order 10ms
+ ✓ tests/integration/responsibility-determination-routes.test.ts > responsibility routes > saves a draft with strict body parsing and idempotency 14ms
+ ✓ tests/integration/responsibility-determination-routes.test.ts > responsibility routes > finalizes the exact current determination version 9ms
+ ✓ tests/integration/responsibility-determination-routes.test.ts > responsibility routes > keeps supplier HTTP 403 failures distinct from a successful empty list 5ms
+ ✓ tests/integration/responsibility-determination-routes.test.ts > responsibility routes > keeps supplier HTTP 500 failures distinct from a successful empty list 4ms
+ ✓ tests/integration/responsibility-determination-routes.test.ts > responsibility routes > serializes only contract-valid N07 factory and material candidates 4ms
+ ✓ tests/integration/responsibility-determination-routes.test.ts > responsibility routes > lists suppliers in N07 and sends N08 agree or direct reject with an optimistic version 7ms
+ ✓ tests/integration/responsibility-determination-routes.test.ts > responsibility routes > transfers to the requested eligible handler 8ms
+ ✓ tests/integration/responsibility-determination-routes.test.ts > responsibility routes > uses the takeover capability for the owner takeover route 12ms
+ ✓ tests/integration/responsibility-determination-routes.test.ts > responsibility routes > uses the confirmation capability for a concrete determination 6ms
+ ✓ tests/integration/responsibility-determination-routes.test.ts > responsibility routes > rejects writes without an idempotency key: /rework-orders/2c0a3d0a-e059-4aac-9f53-29c62bc0c930/responsibility-determinations/drafts 7ms
+ ✓ tests/integration/responsibility-determination-routes.test.ts > responsibility routes > rejects writes without an idempotency key: /rework-orders/2c0a3d0a-e059-4aac-9f53-29c62bc0c930/responsibility-determinations/finalize 4ms
+ ✓ tests/integration/responsibility-determination-routes.test.ts > responsibility routes > rejects writes without an idempotency key: /rework-orders/2c0a3d0a-e059-4aac-9f53-29c62bc0c930/responsibility-determinations/transfer 5ms
+ ✓ tests/integration/responsibility-determination-routes.test.ts > responsibility routes > rejects writes without an idempotency key: /rework-orders/2c0a3d0a-e059-4aac-9f53-29c62bc0c930/responsibility-determinations/takeover 6ms
+ ✓ tests/integration/responsibility-determination-routes.test.ts > responsibility routes > rejects writes without an idempotency key: /responsibility-determinations/d5459b9e-0d61-4708-b439-6cecb8087546/high-multiplier-confirm 6ms
+ ✓ tests/integration/responsibility-determination-routes.test.ts > responsibility routes > rejects writes without an idempotency key: /rework-orders/2c0a3d0a-e059-4aac-9f53-29c62bc0c930/responsibility-owner-signature/approve 3ms
+ ✓ tests/integration/responsibility-determination-routes.test.ts > responsibility routes > rejects writes without an idempotency key: /rework-orders/2c0a3d0a-e059-4aac-9f53-29c62bc0c930/responsibility-owner-signature/reject 10ms
+ ✓ tests/integration/responsibility-determination-routes.test.ts > responsibility routes > rejects malformed order identifiers before calling the service 7ms
+ ✓ tests/integration/responsibility-determination-routes.test.ts > responsibility routes > rejects extra fields instead of silently accepting a wider command 5ms
+(node:48) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/integration/external-responsibility-routes.test.ts > external responsibility routes > uses exact server-authorized queue/detail, supplier options and actions 134ms
+ ✓ tests/integration/external-responsibility-routes.test.ts > external responsibility routes > rejects client-supplied money and malformed idempotent commands before service execution 19ms
+ ✓ tests/integration/external-responsibility-routes.test.ts > external responsibility routes > rejects unstructured responsibility revision requests 8ms
+(node:56) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/unit/responsibility-determination-web.test.ts > responsibility determination web integration > uses one N09 submit action while retaining backend takeover and transfer compatibility 6ms
+ ✓ tests/unit/responsibility-determination-web.test.ts > responsibility determination web integration > supports multiple responsibility parties whose shares total 100 percent 1ms
+ ✓ tests/unit/responsibility-determination-web.test.ts > responsibility determination web integration > batch-applies one responsibility to selected worker processes before the existing submit 1ms
+ ✓ tests/unit/responsibility-determination-web.test.ts > responsibility determination web integration > keeps the batch dialog keyboard-contained and restores focus 1ms
+ ✓ tests/unit/responsibility-determination-web.test.ts > responsibility determination web integration > treats the N01 tail bearer as an initial judgment that N07 confirms or explicitly changes 2ms
+ ✓ tests/unit/responsibility-determination-web.test.ts > responsibility determination web integration > does not hardcode responsibility money and labels the browser value as an estimate 1ms
+ ✓ tests/unit/responsibility-determination-web.test.ts > responsibility determination web integration > uses the real task URL UUID and permission fields for actions 1ms
+ ✓ tests/unit/responsibility-determination-web.test.ts > responsibility determination web integration > flattens large N07 containers while retaining the small responsibility cards 1ms
+ ✓ tests/unit/responsibility-determination-web.test.ts > responsibility determination web integration > keeps the responsibility workspace usable on narrow screens 1ms
+(node:68) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/unit/n07-n11-responsibility-settlement-contract.test.ts > N07–N11 responsibility settlement contract > keeps owner confirmation for own-factory responsibility and permits the external-only settlement path 2ms
+ ✓ tests/unit/n07-n11-responsibility-settlement-contract.test.ts > N07–N11 responsibility settlement contract > keeps the owner action versioned and rejects any multiplier mutation 2ms
+ ✓ tests/unit/n07-n11-responsibility-settlement-contract.test.ts > N07–N11 responsibility settlement contract > makes every new draft V2 and enforces party facts before server-only N09 materialization 4ms
+(node:80) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/unit/external-responsibility-allocation-service.test.ts > ExternalResponsibilityAllocationService > rejects an external processing factory without a reason for an own-factory order 5ms
+ ✓ tests/unit/external-responsibility-allocation-service.test.ts > ExternalResponsibilityAllocationService > persists the reason when an own-factory order selects an external factory 2ms
+(node:88) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/unit/external-responsibility-contracts-and-web.test.ts > PR-11 external responsibility contracts and mobile UI > rejects client money, duplicate coverage, invalid evidence, and unstructured revisions 9ms
+ ✓ tests/unit/external-responsibility-contracts-and-web.test.ts > PR-11 external responsibility contracts and mobile UI > uses real uploads, exact server ledger rules, stable idempotency, UUID routes, and simplified finance actions 4ms
+(node:100) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/unit/external-responsibility-entrypoints.test.ts > external deduction canonical runtime contracts > retains evidence, historical cases and denied capabilities through both package entrypoints 16ms
+ ✓ tests/unit/external-responsibility-entrypoints.test.ts > external deduction canonical runtime contracts > reads older responses without optional display fields without granting missing capabilities 1ms
+ ✓ tests/unit/external-responsibility-entrypoints.test.ts > external deduction canonical runtime contracts > checks real compiled root, compatibility and dedicated exports in a separate Node process 223ms
+ ✓ tests/unit/external-responsibility-entrypoints.test.ts > external deduction canonical runtime contracts > reports failed reads and successful writes with invalid replies differently, retaining request correlation 12ms
+(node:116) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/unit/responsibility-determination-application-service.test.ts > ResponsibilityDeterminationApplicationService > does not query supplier master data when N07 access is denied ({"status":"pending_responsibility_determination","permitted":false}) 4ms
+ ✓ tests/unit/responsibility-determination-application-service.test.ts > ResponsibilityDeterminationApplicationService > does not query supplier master data when N07 access is denied ({"status":"pending_owner_signature","permitted":true}) 2ms
+ ✓ tests/unit/responsibility-determination-application-service.test.ts > ResponsibilityDeterminationApplicationService > requires both an eligible handler and the existing responsibility capability 1ms
+ ✓ tests/unit/responsibility-determination-application-service.test.ts > ResponsibilityDeterminationApplicationService > does not enumerate suppliers for a missing or deleted order 1ms
+ ✓ tests/unit/responsibility-determination-application-service.test.ts > ResponsibilityDeterminationApplicationService > returns the normalized idempotency repository response without re-reading mutable state 3ms
+ ✓ tests/unit/responsibility-determination-application-service.test.ts > ResponsibilityDeterminationApplicationService > rejects zero-bps responsibility allocations before the amount engine 1ms
+(node:124) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/unit/rework-v2-pr06-responsibility-2.test.ts > PR-06 responsibility 2.0 > accepts multiple positive responsibility shares totaling 100 percent 8ms
+ ✓ tests/unit/rework-v2-pr06-responsibility-2.test.ts > PR-06 responsibility 2.0 > rejects incomplete totals, zero shares, and duplicate responsibility types 1ms
+ ✓ tests/unit/rework-v2-pr06-responsibility-2.test.ts > PR-06 responsibility 2.0 > routes own-factory responsibility and order revisions to owner confirmation 2ms
+ ✓ tests/unit/rework-v2-pr06-responsibility-2.test.ts > PR-06 responsibility 2.0 > excludes temporary-worker wage uplift from the responsibility base 1ms
+ ✓ tests/unit/rework-v2-pr06-responsibility-2.test.ts > PR-06 responsibility 2.0 > includes tail-check execution for either explicit cost bearer 1ms
+(node:136) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/unit/responsibility-supplier-options.test.ts > N07 supplier load states > keeps a contract-valid factory and the authenticated read-only request 10ms
+ ✓ tests/unit/responsibility-supplier-options.test.ts > N07 supplier load states > represents an actual successful empty catalog separately from failure 1ms
+ ✓ tests/unit/responsibility-supplier-options.test.ts > N07 supplier load states > represents HTTP 401 as no permission, not an empty catalog 1ms
+ ✓ tests/unit/responsibility-supplier-options.test.ts > N07 supplier load states > represents HTTP 403 as no permission, not an empty catalog 1ms
+ ✓ tests/unit/responsibility-supplier-options.test.ts > N07 supplier load states > represents HTTP 404 as a loading failure 0ms
+ ✓ tests/unit/responsibility-supplier-options.test.ts > N07 supplier load states > represents HTTP 500 as a loading failure 0ms
+ ✓ tests/unit/responsibility-supplier-options.test.ts > N07 supplier load states > represents HTTP 503 as a loading failure 0ms
+ ✓ tests/unit/responsibility-supplier-options.test.ts > N07 supplier load states > does not present network errors as no matching factory 0ms
+ ✓ tests/unit/responsibility-supplier-options.test.ts > N07 supplier load states > does not silently coerce the out-of-contract other supplier type into a factory or an empty list 1ms
+ ✓ tests/unit/responsibility-supplier-options.test.ts > N07 supplier load states > does not interpret a malformed body as an empty catalog 1ms
+ ✓ tests/unit/responsibility-supplier-options.test.ts > N07 supplier load states > disables loading selectors and distinguishes a ready type-specific empty result 1ms
+(node:144) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/unit/responsibility-finalize-usability.test.ts > N08 responsibility submission UX > submits current edits in one action without forcing a visible draft-save step 4ms
+ ✓ tests/unit/responsibility-finalize-usability.test.ts > N08 responsibility submission UX > records the current DingTalk user instead of asking the operator to select a responsibility handler 1ms
+ ✓ tests/unit/responsibility-finalize-usability.test.ts > N08 responsibility submission UX > lets an owner take over without entering a reason while preserving the existing audited takeover command 1ms
+ ✓ tests/unit/responsibility-finalize-usability.test.ts > N08 responsibility submission UX > keeps external supplier and multiplier prerequisites before the conditional handoff 2ms
+(node:156) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/unit/responsibility-rounding-reconciliation.test.ts > responsibility rounding reconciliation > keeps historical decisions immutable and records only bounded corrections 3ms
+ ✓ tests/unit/responsibility-rounding-reconciliation.test.ts > responsibility rounding reconciliation > applies the correction consistently to detail and management totals 1ms
+(node:168) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/unit/responsibility-amount-view.test.ts > responsibility production amount view > shows base work amounts with up to three decimals while final money stays at two 2ms
+(node:176) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/unit/external-direct-deduction-ui.test.ts > N10 external deduction UI > keeps the settlement view readable and gives finance only the core deduction actions 4ms
+ ✓ tests/unit/external-direct-deduction-ui.test.ts > N10 external deduction UI > auto-closes a fully deducted ledger while leaving a recovery action if close fails 1ms
+(node:188) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/unit/external-responsibility-ui-idempotency.test.ts > external responsibility UI safety > reuses idempotency keys for case and supplier-allocation retries 5ms
+ ✓ tests/unit/external-responsibility-ui-idempotency.test.ts > external responsibility UI safety > uses a structured responsibility-revision request instead of inferring responsibility from free text 1ms
+ ✓ tests/unit/external-responsibility-ui-idempotency.test.ts > external responsibility UI safety > auto-closes only after the amount reaches zero remaining and confirms rejudgment approval 2ms
+(node:200) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ × tests/unit/external-responsibility-ui-contract.test.ts > external responsibility UI contract > uses order-scoped supplier options instead of the generic master-data catalog 10ms
+   → expected 'import { currentModuleCanWrite } from…' to contain 'if (response.status === 403) return […'
+ ✓ tests/unit/external-responsibility-ui-contract.test.ts > external responsibility UI contract > records deductions using the Shanghai business date without asking finance to enter it 2ms
+(node:212) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/unit/responsibility-ui-idempotency.test.ts > N07 responsibility UI idempotency > reuses the same mutation key after an uncertain response and clears it only on success 4ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/unit/external-responsibility-ui-contract.test.ts > external responsibility UI contract > uses order-scoped supplier options instead of the generic master-data catalog
+AssertionError: expected 'import { currentModuleCanWrite } from…' to contain 'if (response.status === 403) return […'
+
+- Expected
++ Received
+
+- if (response.status === 403) return [] as Supplier[];
++ import { currentModuleCanWrite } from "./member-module-policy.js";
++ import {
++   ExternalResponsibilityBatchResponseSchema,
++   ExternalResponsibilityCaseResponseSchema,
++   type ExternalResponsibilityBatchResponse,
++   type ExternalResponsibilityCaseResponse,
++ } from "@dx-rework/contracts/external-responsibility";
++ import { fixedBusinessCurrency as formatBusinessCurrency } from "./fixed-business-currency.js";
++ import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
++ import { useEffect, useMemo, useRef, useState } from "react";
++
++ import { createWebUrls } from "../url-contract.js";
++ import { createClientRequestId } from "./client-request-id.js";
++ import { shanghaiBusinessDate } from "./business-date.js";
++ import { confirmDeductionException, deductionInputState } from "./external-deduction-confirmation.js";
++ import { ExternalEvidenceView } from "./external-evidence-view.js";
++ import { ExternalEvidenceUploader } from "./external-evidence-uploader.js";
++ import { readExternalResponsibilityResponse } from "./external-responsibility-response.js";
++ import { SearchSelect } from "./search-select.js";
++ import { loadResponsibilitySuppliers, responsibilitySupplierField, type ResponsibilitySupplierState } from "./responsibility-supplier-options.js";
++ import { alertInApp, confirmInApp, promptInApp } from "./system-dialog.js";
++ import "./external-responsibility.css";
++
++ const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
++
++ type State =
++   | { kind: "loading" }
++   | { kind: "hidden" }
++   | { kind: "ready"; value: ExternalResponsibilityBatchResponse }
++   | { kind: "unavailable"; message: string };
++ type Supplier = {
++   supplierId: string;
++   supplierType: "factory" | "embroidery_washing" | "fabric" | "other";
++   supplierName: string;
++ };
++ type CaseStatus = NonNullable<ExternalResponsibilityBatchResponse>["cases"][number]["status"];
++ type ResponsibilityType = NonNullable<ExternalResponsibilityBatchResponse>["items"][number]["responsibilityType"];
++ type DeductionEntryType = ExternalResponsibilityCaseResponse["deductions"][number]["entryType"];
++
++ const caseLabel: Record<CaseStatus, string> = {
++   pending_business_signoff: "待交财务",
++   pending_payables_confirmation: "待扣款",
++   deduction_follow_up: "扣款中",
++   pending_special_approval: "待财务总监特批",
++   returned: "资料退回",
++   pending_responsibility_revision: "待重判",
++   closed: "扣款完成",
++   superseded: "历史台账",
++ };
++
++ const responsibilityTypeLabel: Record<ResponsibilityType, string> = {
++   processing_factory: "加工厂",
++   embroidery_factory: "印绣花厂",
++   washing_factory: "洗水厂",
++   fabric_supplier: "面料供应商",
++ };
++
++ const deductionEntryLabel: Record<DeductionEntryType, string> = {
++   deduction: "扣款",
++   adjustment: "调整",
++   reversal: "冲销",
++ };
++
++ const processName = (snapshot: Record<string, unknown>): string => {
++   const value = snapshot.processName;
++   return typeof value === "string" && value.trim() ? value.trim() : "工序";
++ };
++
++ const requiredSupplierType = (type: ResponsibilityType): Supplier["supplierType"] =>
++   type === "processing_factory"
++     ? "factory"
++     : type === "fabric_supplier"
++       ? "fabric"
++       : "embroidery_washing";
++
++ const parseMoneyToCents = (value: string): bigint | null => {
++   const normalized = value.trim();
++   if (!/^\d+(?:\.\d{1,2})?$/.test(normalized)) return null;
++   const [whole = "0", fraction = ""] = normalized.split(".");
++   return BigInt(whole) * 100n + BigInt(fraction.padEnd(2, "0"));
++ };
++
++ const moneyFromCents = (value: bigint): string => `${value / 100n}.${(value % 100n).toString().padStart(2,"0")}`;
++
++ const requestError = async (response: Response): Promise<string> => {
++   try {
++     const body = await response.json() as { error?: { message?: string } };
++     return body.error?.message ?? "操作未完成，请稍后重试";
++   } catch {
++     return "操作未完成，请稍后重试";
++   }
++ };
++
++ export function ExternalResponsibilityPanel({
++   reworkOrderId,
++   focusCaseId,
++   readOnly: requestedReadOnly = false,
++   embedded = false,
++   onOrderChanged,
++ }: {
++   reworkOrderId: string | null;
++   focusCaseId?: string;
++   readOnly?: boolean;
++   embedded?: boolean;
++   onOrderChanged?: () => Promise<void>;
++ }) {
++   const [state, setState] = useState<State>({ kind: "loading" });
++   const [supplierState, setSupplierState] = useState<ResponsibilitySupplierState>({ kind: "idle" });
++   const suppliers = supplierState.kind === "ready" ? supplierState.items : [];
++   const supplierRequest = useRef<AbortController | null>(null);
++   const mainRequest = useRef<AbortController | null>(null);
++   const mainRequestGeneration = useRef(0);
++   const currentOrder = useRef(reworkOrderId);
++   currentOrder.current = reworkOrderId;
++   const [selection, setSelection] = useState<Record<string, string>>({});
++   const [temporarySupplierName, setTemporarySupplierName] = useState<Partial<Record<ResponsibilityType, string>>>({});
++   const [processingOverrideReason, setProcessingOverrideReason] = useState("");
++   const [moduleWritable, setModuleWritable] = useState(false);
++   const readOnly = requestedReadOnly || !moduleWritable;
++   const [message, setMessage] = useState("");
++   const [busy, setBusy] = useState(false);
++   const [amount, setAmount] = useState<Record<string, string>>({});
++   const [attachments, setAttachments] = useState<Record<string, string[]>>({});
++   const [uploadingCases, setUploadingCases] = useState<Record<string, boolean>>({});
++   const pendingMutationKeys = useRef<Record<string, string>>({});
++
++   const reloadSuppliers = async (orderId: string, generation: number): Promise<void> => {
++     if (currentOrder.current !== orderId || mainRequestGeneration.current !== generation) return;
++     supplierRequest.current?.abort();
++     const controller = new AbortController();
++     supplierRequest.current = controller;
++     setSupplierState({ kind: "loading" });
++     const loaded = await loadResponsibilitySuppliers(
++       apiUrl(`rework-orders/${orderId}/external-responsibilities/supplier-options`), controller.signal, "array",
++     );
++     if (controller.signal.aborted || supplierRequest.current !== controller
++       || currentOrder.current !== orderId || mainRequestGeneration.current !== generation) return;
++     setSupplierState(loaded);
++   };
++
++   const load = async (): Promise<ExternalResponsibilityBatchResponse> => {
++     if (!reworkOrderId) return null;
++     mainRequest.current?.abort();
++     supplierRequest.current?.abort();
++     const controller = new AbortController();
++     const generation = ++mainRequestGeneration.current;
++     mainRequest.current = controller;
++     setSupplierState({ kind: "idle" });
++     const isCurrent = (): boolean => !controller.signal.aborted
++       && mainRequestGeneration.current === generation && currentOrder.current === reworkOrderId;
++     try {
++       const writable = await currentModuleCanWrite("rework");
++       if (!isCurrent()) return null;
++       const response = await fetch(
++         apiUrl(`rework-orders/${reworkOrderId}/external-responsibilities`),
++         { credentials: "include", signal: controller.signal, headers: { accept: "application/json" } },
++       );
++       if (!isCurrent()) return null;
++       if (response.status === 403) {
++         setState({ kind: "hidden" });
++         return null;
++       }
++       if (!response.ok) throw new Error(await requestError(response));
++       const value = await readExternalResponsibilityResponse(response, ExternalResponsibilityBatchResponseSchema, "read");
++       if (!isCurrent()) return null;
++       setModuleWritable(writable);
++       setState({ kind: "ready", value });
++       const hasUnassigned = value?.items.some(
++         (item) => !value.cases.some((entry) =>
++           entry.items.some((mapped) => mapped.externalItemId === item.externalItemId),
++         ),
++       ) ?? false;
++       if (!requestedReadOnly && writable && value?.canAllocateSuppliers === true && hasUnassigned) {
++         void reloadSuppliers(reworkOrderId, generation);
++       }
++       return value;
++     } catch (error: unknown) {
++       if (isCurrent()) throw error;
++       return null;
++     } finally {
++       if (mainRequest.current === controller) mainRequest.current = null;
++     }
++   };
++
++   const reloadLedger = async (): Promise<void> => {
++     const pending = load();
++     const generation = mainRequestGeneration.current;
++     try { await pending; } catch (error: unknown) {
++       if (mainRequestGeneration.current === generation && currentOrder.current === reworkOrderId) {
++         setState({
++           kind: "unavailable",
++           message: error instanceof Error ? error.message : "扣款资料加载失败，请刷新重试。",
++         });
++       }
++     }
++   };
++
++   useEffect(() => {
++     if (!reworkOrderId) {
++       setState({ kind: "hidden" });
++       return;
++     }
++     setState({ kind: "loading" });
++     void reloadLedger();
++     return () => {
++       mainRequestGeneration.current += 1;
++       mainRequest.current?.abort();
++       supplierRequest.current?.abort();
++     };
++   }, [requestedReadOnly, reworkOrderId]);
++
++   const unassigned = useMemo(
++     () => state.kind === "ready" && state.value
++       ? state.value.items.filter(
++           (item) => !state.value!.cases.some((entry) =>
++             entry.items.some((mapped) => mapped.externalItemId === item.externalItemId),
++           ),
++         )
++       : [],
++     [state],
++   );
++
++   const mutationKey = (signature: string): string => {
++     const existing = pendingMutationKeys.current[signature];
++     if (existing) return existing;
++     const next = createClientRequestId();
++     pendingMutationKeys.current[signature] = next;
++     return next;
++   };
++
++   const send = async (
++     path: string,
++     body: unknown,
++   ): Promise<ExternalResponsibilityCaseResponse> => {
++     const signature = `case:${path}:${JSON.stringify(body)}`;
++     const response = await fetch(apiUrl(path), {
++       method: "POST",
++       credentials: "include",
++       headers: {
++         accept: "application/json",
++         "content-type": "application/json",
++         "idempotency-key": mutationKey(signature),
++       },
++       body: JSON.stringify(body),
++     });
++     if (!response.ok) throw new Error(await requestError(response));
++     const result = await readExternalResponsibilityResponse(response, ExternalResponsibilityCaseResponseSchema, "write");
++     delete pendingMutationKeys.current[signature];
++     return result;
++   };
++
++   const refresh = async (success: string): Promise<void> => {
++     setMessage(success);
++     let refreshed = true;
++     try { await load(); } catch { refreshed = false; }
++     try { await onOrderChanged?.(); } catch { refreshed = false; }
++     if (!refreshed) setMessage(`${success} 页面状态刷新失败，请刷新页面核对最新状态。`);
++   };
++
++   const createTemporarySupplier = async (
++     item: NonNullable<ExternalResponsibilityBatchResponse>["items"][number],
++   ): Promise<void> => {
++     if (busy || readOnly || supplierState.kind !== "ready") return;
++     const supplierName = temporarySupplierName[item.responsibilityType]?.trim() ?? "";
++     if (!supplierName) {
++       const issue = `请先填写${responsibilityTypeLabel[item.responsibilityType]}名称。`;
++       setMessage(issue);
++       await alertInApp(issue, { title: "供应商暂不能新增", confirmLabel: "知道了" });
++       return;
++     }
++     const supplierType = requiredSupplierType(item.responsibilityType);
++     const signature = `temporary-supplier:${reworkOrderId}:${supplierType}:${supplierName}`;
++     const idempotencyKey = pendingMutationKeys.current[signature] ?? createClientRequestId();
++     pendingMutationKeys.current[signature] = idempotencyKey;
++     setBusy(true);
++     setMessage("");
++     try {
++       const createResponse = await fetch(
++         apiUrl(`rework-orders/${reworkOrderId}/external-responsibilities/temporary-suppliers`),
++         {
++           method: "POST",
++           credentials: "include",
++           headers: {
++             accept: "application/json",
++             "content-type": "application/json",
++             "idempotency-key": idempotencyKey,
++           },
++           body: JSON.stringify({ supplierType, supplierName }),
++         },
++       );
++       if (!createResponse.ok) throw new Error(await requestError(createResponse));
++       const created = await createResponse.json() as Supplier;
++       const catalogState = await loadResponsibilitySuppliers(
++         apiUrl(`rework-orders/${reworkOrderId}/external-responsibilities/supplier-options`),
++         undefined, "array",
++       );
++       setSupplierState(catalogState);
++       if (catalogState.kind !== "ready") throw new Error(catalogState.kind === "error" || catalogState.kind === "forbidden" ? catalogState.message : "供应商名录尚未加载完成。");
++       const catalog = catalogState.items;
++       if (!catalog.some((supplier) => supplier.supplierId === created.supplierId)) {
++         throw new Error("供应商已新增，但未能重新读取可选名录，请刷新后重试。");
++       }
++       delete pendingMutationKeys.current[signature];
++       setSelection((current) => ({ ...current, [item.externalItemId]: created.supplierId }));
++       setTemporarySupplierName((current) => ({ ...current, [item.responsibilityType]: "" }));
++       setMessage(`${supplierName} 已新增到供应商名录并自动选中。`);
++     } catch (error: unknown) {
++       setMessage(error instanceof Error ? error.message : "新增供应商失败");
++     } finally {
++       setBusy(false);
++     }
++   };
++
++   const allocate = async (): Promise<void> => {
++     if (state.kind !== "ready" || !state.value || busy || supplierState.kind !== "ready") return;
++     const grouped = new Map<string, {
++       responsibilityType: ResponsibilityType;
++       supplierId: string;
++       externalItemIds: string[];
++       processingFactoryOverrideReason?: string;
++     }>();
++     for (const item of unassigned) {
++       const supplierId = selection[item.externalItemId];
++       if (!supplierId) {
++         const issue = "请为每个外部责任项目选择实际拟扣供应商。";
++         setMessage(issue);
++         await alertInApp(issue, { title: "供应商分配暂不能提交", confirmLabel: "知道了" });
++         return;
++       }
++       const key = `${item.responsibilityType}:${supplierId}`;
++       let current = grouped.get(key);
++       if (!current) {
++         current = { responsibilityType: item.responsibilityType, supplierId, externalItemIds: [] };
++         const reason = processingOverrideReason.trim();
++         if (item.responsibilityType === "processing_factory" && reason) {
++           current.processingFactoryOverrideReason = reason;
++         }
++         grouped.set(key, current);
++       }
++       current.externalItemIds.push(item.externalItemId);
++     }
++     const path = `external-responsibility-batches/${state.value.batchId}/allocate-suppliers`;
++     const body = { expectedBatchVersion: state.value.batchVersion, allocations: [...grouped.values()] };
++     const signature = `batch:${path}:${JSON.stringify(body)}`;
++     setBusy(true);
++     setMessage("");
++     try {
++       const response = await fetch(apiUrl(path), {
++         method: "POST",
++         credentials: "include",
++         headers: {
++           accept: "application/json",
++           "content-type": "application/json",
++           "idempotency-key": mutationKey(signature),
++         },
++         body: JSON.stringify(body),
++       });
++       if (!response.ok) throw new Error(await requestError(response));
++       const value = await readExternalResponsibilityResponse(response, ExternalResponsibilityBatchResponseSchema, "write");
++       delete pendingMutationKeys.current[signature];
++       setState({ kind: "ready", value });
++       setMessage("供应商已锁定，可进入扣款。 ");
++     } catch (error: unknown) {
++       setMessage(error instanceof Error ? error.message : "供应商分配失败");
++     } finally {
++       setBusy(false);
++     }
++   };
++
++   const closeFull = async (caseItem: ExternalResponsibilityCaseResponse): Promise<void> => {
++     const closed = await send(
++       `external-responsibility-cases/${caseItem.caseId}/close`,
++       {
++         expectedCaseVersion: caseItem.caseVersion,
++         result: "full",
++         evidenceAttachmentIds: [],
++       },
++     );
++     if (closed.status !== "closed") throw new Error("扣款已足额，但自动结案未完成");
++     setState((current) => current.kind === "ready" && current.value
++       ? { ...current, value: { ...current.value, cases: current.value.cases.map((entry) => entry.caseId === closed.caseId ? closed : entry) } }
++       : current);
++   };
++
++   const recordDeduction = async (caseItem: ExternalResponsibilityCaseResponse): Promise<void> => {
++     if (busy || readOnly || uploadingCases[caseItem.caseId] || !caseItem.canRecordDeduction) return;
++     const text = amount[caseItem.caseId]?.trim() ?? "";
++     const cents = parseMoneyToCents(text);
++     if (cents === null || cents <= 0n) {
++       const issue = "本次扣款金额必须大于 0，最多两位小数。";
++       setMessage(issue);
++       await alertInApp(issue, { title: "扣款暂不能提交", confirmLabel: "知道了" });
++       return;
++     }
++     const actualCents = parseMoneyToCents(caseItem.actualDeductedAmount);
++     const proposedCents = parseMoneyToCents(caseItem.proposedDeductionAmount);
++     if (actualCents === null || proposedCents === null) {
++       setMessage("扣款金额读取失败，请刷新后重试。");
++       return;
++     }
++     if (actualCents+cents>proposedCents) {
++       setMessage("累计扣款超出拟扣，请转财务总监特批。");
++       return;
++     }
++     const files = attachments[caseItem.caseId] ?? [];
++     setBusy(true);
++     setMessage("");
++     try {
++       const recorded = await send(
++         `external-responsibility-cases/${caseItem.caseId}/deductions`,
++         {
++           expectedCaseVersion: caseItem.caseVersion,
++           entryType: "deduction",
++           amount: text,
++           deductedOn: shanghaiBusinessDate(),
++           attachmentIds: files,
++         },
++       );
++       setState((current) => current.kind === "ready" && current.value
++         ? { ...current, value: { ...current.value, cases: current.value.cases.map((entry) => entry.caseId === recorded.caseId ? recorded : entry) } }
++         : current);
++       setAmount((current) => ({ ...current, [caseItem.caseId]: "" }));
++       setAttachments((current) => ({ ...current, [caseItem.caseId]: [] }));
++       if (recorded.remainingAmount === "0.00" && recorded.canClose) {
++         try {
++           await closeFull(recorded);
++           await refresh("本次扣款已记录，累计金额已达到应扣金额，扣款已自动完成。");
++         } catch {
++           await refresh("本次扣款已记录且已足额，但自动完成未成功，请点击“完成扣款”。");
++         }
++         return;
++       }
++       await refresh("本次扣款已记录，累计金额已更新。");
++     } catch (error: unknown) {
++       setMessage(error instanceof Error ? error.message : "扣款记录失败");
++     } finally {
++       setBusy(false);
++     }
++   };
++
++   const finishDeduction = async (caseItem: ExternalResponsibilityCaseResponse): Promise<void> => {
++     if (busy || caseItem.remainingAmount !== "0.00" || !caseItem.canClose) return;
++     setBusy(true);
++     setMessage("");
++     try {
++       await closeFull(caseItem);
++       await refresh("扣款已完成。");
++     } catch (error: unknown) {
++       setMessage(error instanceof Error ? error.message : "扣款完成失败");
++     } finally {
++       setBusy(false);
++     }
++   };
++
++   const requestSpecialApproval = async (caseItem: ExternalResponsibilityCaseResponse): Promise<void> => {
++     if (busy || readOnly || uploadingCases[caseItem.caseId]) return;
++     const text=amount[caseItem.caseId]?.trim()??"";
++     const hasAmount=text.length>0;
++     if (!caseItem.canRequestSpecialApproval && !caseItem.canRecordDeduction) return;
++     let reason: string | undefined;
++     if (hasAmount) {
++       const inputState=deductionInputState(text,caseItem.actualDeductedAmount,caseItem.proposedDeductionAmount);
++       if (!caseItem.canRecordDeduction || !inputState.valid) return;
++       const result=await confirmDeductionException({amount:parseMoneyToCents(text)!,actual:parseMoneyToCents(caseItem.actualDeductedAmount)!,proposed:parseMoneyToCents(caseItem.proposedDeductionAmount)!,forceSpecial:true},{confirmInApp,promptInApp,alertInApp});
++       if (result.kind!=="special") return;
++       reason=result.reason;
++     } else {
++       reason=(await promptInApp("请填写部分扣款或未扣的特批原因"))?.trim();
++       if (!reason || reason.length>500) return;
++     }
++     setBusy(true);
++     setMessage("");
++     try {
++       await send(`external-responsibility-cases/${caseItem.caseId}/special-approval-requests`, {
++         expectedCaseVersion:caseItem.caseVersion,
++         requestMode:hasAmount?"proposed_entry":"existing_ledger",
++         ...(hasAmount?{requestedAmount:text,deductedOn:shanghaiBusinessDate()}:{}),
++         reason,attachmentIds:attachments[caseItem.caseId]??[],
++       });
++       setAmount(current=>({...current,[caseItem.caseId]:""}));
++       setAttachments(current=>({...current,[caseItem.caseId]:[]}));
++       await refresh("已提交财务总监审批。");
++     } catch (error:unknown) {
++       setMessage(error instanceof Error?error.message:"扣款特批申请失败");
++     } finally {setBusy(false);}
++   };
++
++   const decideSpecialApproval = async (
++     caseItem: ExternalResponsibilityCaseResponse,
++     approved: boolean,
++   ): Promise<void> => {
++     if (busy || !caseItem.canDecideSpecialApproval || !caseItem.specialApproval) return;
++     const opinion = await promptInApp(approved ? "特批确认意见（可留空）" : "请输入退回原因");
++     if (opinion === null) return;
++     const reason = opinion.trim();
++     if (!approved && !reason) return;
++     setBusy(true);
++     setMessage("");
++     try {
++       await send(
++         `external-responsibility-cases/${caseItem.caseId}/special-approval/${approved ? "approve" : "return"}`,
++         {
++           expectedCaseVersion: caseItem.caseVersion,
++           expectedRequestVersion: caseItem.specialApproval.requestVersion,
++           reason: reason || undefined,
++         },
++       );
++       await refresh(approved ? "扣款特批已确认并关闭台账。" : "扣款特批已退回应付继续处理。");
++     } catch (error: unknown) {
++       setMessage(error instanceof Error ? error.message : "扣款特批处理失败");
++     } finally {
++       setBusy(false);
++     }
++   };
++
++   const requestRevision = async (caseItem: ExternalResponsibilityCaseResponse): Promise<void> => {
++     if (busy || !caseItem.canRequestRevision) return;
++     const reason = (await promptInApp("请输入重判责任原因"))?.trim() ?? "";
++     if (!reason) return;
++     const files = attachments[caseItem.caseId] ?? [];
++     setBusy(true);
++     setMessage("");
++     try {
++       await send(
++         `external-responsibility-cases/${caseItem.caseId}/revision-requests`,
++         {
++           expectedCaseVersion: caseItem.caseVersion,
++           requestedChange: {
++             kind: "other",
++             configurationItemIds: caseItem.items.map((item) => item.configurationItemId),
++             summary: reason,
++           },
++           reason,
++           attachmentIds: files,
++         },
++       );
++       setAttachments((current) => ({ ...current, [caseItem.caseId]: [] }));
++       await refresh("已申请重判责任。");
++     } catch (error: unknown) {
++       setMessage(error instanceof Error ? error.message : "重判责任申请失败");
++     } finally {
++       setBusy(false);
++     }
++   };
++
++   const decideRevision = async (
++     caseItem: ExternalResponsibilityCaseResponse,
++     approved: boolean,
++   ): Promise<void> => {
++     if (busy) return;
++     const pending = caseItem.revisionRequests.find((request) => request.status === "pending");
++     if (!pending) return;
++     if (approved && !(await confirmInApp("确认通过重判责任？通过后重新进入 N08 判责。"))) return;
++     setBusy(true);
++     setMessage("");
++     try {
++       await send(
++         `external-responsibility-revision-requests/${pending.revisionRequestId}/${approved ? "approve" : "reject"}`,
++         {
++           expectedCaseVersion: caseItem.caseVersion,
++           expectedRevisionVersion: pending.revisionVersion,
++         },
++       );
++       await refresh(approved ? "重判责任已通过，已重新进入 N08。" : "重判责任已驳回。");
++     } catch (error: unknown) {
++       setMessage(error instanceof Error ? error.message : "重判责任处理失败");
++     } finally {
++       setBusy(false);
++     }
++   };
++
++   const submitLegacyCase = async (caseItem: ExternalResponsibilityCaseResponse): Promise<void> => {
++     if (busy) return;
++     setBusy(true);
++     setMessage("");
++     try {
++       await send(
++         `external-responsibility-cases/${caseItem.caseId}/submit`,
++         {
++           expectedCaseVersion: caseItem.caseVersion,
++           attachmentIds: attachments[caseItem.caseId] ?? [],
++         },
++       );
++       setAttachments((current) => ({ ...current, [caseItem.caseId]: [] }));
++       await refresh("已交财务扣款。");
++     } catch (error: unknown) {
++       setMessage(error instanceof Error ? error.message : "提交财务失败");
++     } finally {
++       setBusy(false);
++     }
++   };
++
++   if (state.kind === "hidden") return null;
++   if (state.kind === "loading") return <Surface className="external-state">正在加载扣款台账…</Surface>;
++   if (state.kind === "unavailable") return <Surface className="external-state">{state.message}<Button type="button" disabled={busy} onClick={() => {
++     setBusy(true);
++     const pending = reloadLedger();
++     const generation = mainRequestGeneration.current;
++     void pending.finally(() => { if (mainRequestGeneration.current === generation) setBusy(false); });
++   }}>刷新</Button></Surface>;
++   if (!state.value) return <Surface className="external-state">无本类扣款事项。</Surface>;
++
++   const batch = state.value;
++   const allCases = [...batch.cases, ...(batch.historicalCases ?? [])];
++   const visibleCases = focusCaseId
++     ? allCases.filter((caseItem) => caseItem.caseId === focusCaseId)
++     : allCases;
++   const visibleUnassigned = readOnly || focusCaseId || batch.status !== "active" || batch.canAllocateSuppliers !== true ? [] : unassigned;
++   const supplierAllocationReady = supplierState.kind === "ready" && visibleUnassigned.length > 0
++     && visibleUnassigned.every((item) => Boolean(selection[item.externalItemId]));
++
++   if (focusCaseId && visibleCases.length === 0) {
++     return <Surface className="external-state">该供应商扣款任务不在当前有效台账中。</Surface>;
++   }
++
++   return <Surface className="external-responsibility-panel">
++     {!embedded && <div className="section-title">
++       <div>
++         <h2>{readOnly ? "责任结算台账" : "供应商扣款"}</h2>
++         <p>{readOnly ? "查看供应商实际扣款记录。" : "只记录本次扣款金额；系统自动累计，扣足后自动完成。"}</p>
++       </div>
++       <StatusBadge tone={batch.status === "active" ? "info" : "warning"}>{batch.status === "active" ? "当前台账" : "历史台账"}</StatusBadge>
++     </div>}
++     {message && <div className="own-factory-approval-message" role="status">{message}</div>}
++
++     {visibleUnassigned.length > 0 && <section className="external-operation">
++       <h3>待补充供应商</h3>
++       {supplierState.kind === "loading" && <p role="status">正在加载责任供应商…</p>}
++       {(supplierState.kind === "forbidden" || supplierState.kind === "error") && <div className="own-factory-approval-message" role="alert">
++         <p>{supplierState.message}</p>
++         {supplierState.kind === "error" && <Button disabled={busy} onClick={() => {
++           if (reworkOrderId) void reloadSuppliers(reworkOrderId, mainRequestGeneration.current);
++         }}>重试加载供应商</Button>}
++       </div>}
++       {visibleUnassigned.map((item) => {
++         const matchingSuppliers = suppliers.filter(
++           (supplier) => supplier.supplierType === requiredSupplierType(item.responsibilityType),
++         );
++         const temporaryNameReady = Boolean(temporarySupplierName[item.responsibilityType]?.trim());
++         return <div className="external-operation-grid" key={item.externalItemId}>
++           <span>{processName(item.processSnapshot)} · {responsibilityTypeLabel[item.responsibilityType]} · 应扣 {formatBusinessCurrency(item.proposedAmount)}</span>
++           <SearchSelect
++             options={matchingSuppliers.map((supplier) => ({ value: supplier.supplierId, label: supplier.supplierName }))}
++             value={selection[item.externalItemId] ?? ""}
++             placeholder={supplierState.kind === "ready" ? (matchingSuppliers.length ? "输入供应商名称搜索" : "没有匹配类型的供应商") : responsibilitySupplierField(supplierState, matchingSuppliers.length).placeholder}
++             emptyText="没有匹配的供应商"
++             ariaLabel={`供应商 ${processName(item.processSnapshot)}`}
++             disabled={busy || supplierState.kind !== "ready" || matchingSuppliers.length === 0}
++             onChange={(supplierId) => setSelection((current) => ({ ...current, [item.externalItemId]: supplierId }))}
++           />
++           {supplierState.kind === "ready" && matchingSuppliers.length === 0 && <div className="external-temporary-supplier">
++             <InsetField
++               label={`新增${responsibilityTypeLabel[item.responsibilityType]}名称`}
++               value={temporarySupplierName[item.responsibilityType] ?? ""}
++               disabled={busy}
++               onChange={(event) => setTemporarySupplierName((current) => ({ ...current, [item.responsibilityType]: event.target.value }))}
++             />
++             <Button data-ready={temporaryNameReady ? "true" : "false"} disabled={busy} onClick={() => void createTemporarySupplier(item)}>新增并选择</Button>
++           </div>}
++         </div>;
++       })}
++       {visibleUnassigned.some((item) => item.responsibilityType === "processing_factory") && <InsetField
++         label="加工厂改选原因"
++         value={processingOverrideReason}
++         onChange={(event) => setProcessingOverrideReason(event.target.value)}
++         placeholder="仅改选加工厂时填写"
++       />}
++       <Button variant="primary" data-ready={supplierAllocationReady ? "true" : "false"} disabled={busy || supplierState.kind !== "ready"} onClick={() => void allocate()}>确认供应商</Button>
++     </section>}
++
++     {visibleCases.length === 0 && visibleUnassigned.length === 0 && <StatusBadge tone="info">无本类扣款事项。</StatusBadge>}
++
++     <section className="external-case-list">
++       {visibleCases.map((caseItem) => {
++         const historical = caseItem.batchId !== batch.batchId || batch.status !== "active";
++         const caseReadOnly = readOnly || historical;
++         const evidence = attachments[caseItem.caseId] ?? [];
++         const inputState=deductionInputState(amount[caseItem.caseId]??"",caseItem.actualDeductedAmount,caseItem.proposedDeductionAmount);
++         const deductionReady=inputState.ordinary && !uploadingCases[caseItem.caseId];
++         const specialReady=!uploadingCases[caseItem.caseId] && (!(amount[caseItem.caseId]??"").trim() || inputState.valid);
++         const canRecordDeduction = !caseReadOnly && caseItem.canRecordDeduction;
++         const canRequestRevision = !caseReadOnly && caseItem.canRequestRevision;
++         const canApproveRevision = !caseReadOnly && caseItem.canApproveRevision;
++         const canRequestSpecialApproval = !caseReadOnly && (caseItem.canRequestSpecialApproval || caseItem.canRecordDeduction);
++         const canDecideSpecialApproval = !caseReadOnly && caseItem.canDecideSpecialApproval;
++         const canLegacySubmit = !caseReadOnly && caseItem.canSign;
++         const recoveryClose = !caseReadOnly && caseItem.canClose && caseItem.remainingAmount === "0.00";
++         const canAttachEvidence = canRecordDeduction || canRequestSpecialApproval || canRequestRevision || canLegacySubmit;
++         const pendingRevision = caseItem.revisionRequests.find((request) => request.status === "pending");
++         return <article className="external-case" key={caseItem.caseId}>
++           <div className="section-title">
++             <div><b>{caseItem.supplier.name}</b><p>{historical ? "历史台账" : caseLabel[caseItem.status]} · {responsibilityTypeLabel[caseItem.responsibilityType]}</p></div>
++             <StatusBadge tone={caseItem.status === "closed" ? "success" : caseItem.status === "pending_responsibility_revision" ? "warning" : "info"}>{historical ? "历史台账" : caseLabel[caseItem.status]}</StatusBadge>
++           </div>
++
++           <div className="external-finance-summary">
++             <div><span>应扣金额</span><strong>{formatBusinessCurrency(caseItem.proposedDeductionAmount)}</strong></div>
++             <div><span>累计已扣</span><strong>{formatBusinessCurrency(caseItem.actualDeductedAmount)}</strong></div>
++             <div><span>{caseItem.remainingAmount.startsWith("-") ? "超出拟扣" : "剩余"}</span><strong>{formatBusinessCurrency(caseItem.remainingAmount.replace(/^-/u,""))}</strong></div>
++           </div>
++
++           {!caseReadOnly && (canRecordDeduction || canRequestSpecialApproval || canDecideSpecialApproval || canRequestRevision || canLegacySubmit || recoveryClose || canApproveRevision) && <div className="external-finance-operation">
++             {canRecordDeduction && <InsetField
++               label="本次扣款金额"
++               inputMode="decimal"
++               value={amount[caseItem.caseId] ?? ""}
++               onChange={(event) => setAmount((current) => ({ ...current, [caseItem.caseId]: event.target.value }))}
++               placeholder="填写本次金额"
++             />}
++             {canAttachEvidence && <ExternalEvidenceUploader
++               scope={caseItem.caseId}
++               attachmentIds={evidence}
++               disabled={busy}
++               onChange={(value) => setAttachments((current) => ({ ...current, [caseItem.caseId]: value }))}
++               onMessage={setMessage}
++               onUploadingChange={value=>setUploadingCases(current=>({...current,[caseItem.caseId]:value}))}
++             />}
++             <div className="external-case-actions">
++               {canRecordDeduction && <Button variant="primary" data-ready={deductionReady ? "true" : "false"} disabled={busy || !deductionReady} onClick={() => void recordDeduction(caseItem)}>扣款</Button>}
++               {recoveryClose && <Button variant="primary" disabled={busy} onClick={() => void finishDeduction(caseItem)}>完成扣款</Button>}
++               {canRequestSpecialApproval && <Button disabled={busy || !specialReady} onClick={() => void requestSpecialApproval(caseItem)}>转财务总监特批</Button>}
++               {canDecideSpecialApproval && <>
++                 <Button variant="primary" disabled={busy} onClick={() => void decideSpecialApproval(caseItem, true)}>通过特批</Button>
++                 <Button disabled={busy} onClick={() => void decideSpecialApproval(caseItem, false)}>退回</Button>
++               </>}
++               {canRequestRevision && <Button disabled={busy} onClick={() => void requestRevision(caseItem)}>重判责任</Button>}
++               {canLegacySubmit && <Button disabled={busy} onClick={() => void submitLegacyCase(caseItem)}>交财务扣款</Button>}
++               {canApproveRevision && pendingRevision && <>
++                 <Button disabled={busy} onClick={() => void decideRevision(caseItem, true)}>通过重判</Button>
++                 <Button disabled={busy} onClick={() => void decideRevision(caseItem, false)}>驳回重判</Button>
++               </>}
++             </div>
++             {canRecordDeduction && inputState.over && <small role="status">累计超出拟扣 {formatBusinessCurrency(inputState.excess)}，请转财务总监特批。</small>}
++             {canRecordDeduction && !inputState.valid && amount[caseItem.caseId]?.trim() && <small role="status">请输入大于 0、最多两位小数的本次金额。</small>}
++           </div>}
++
++           {caseItem.deductions.length > 0 && <div className="external-ledger-list external-deduction-history">
++             <h4>{historical ? "历史台账扣款记录" : "扣款记录"}</h4>
++             {caseItem.deductions.map((entry) => <div key={entry.deductionEntryId}>
++               <span>{entry.deductedOn} · {deductionEntryLabel[entry.entryType]}</span>
++               <b>{formatBusinessCurrency(entry.amount)}</b>
++               <ExternalEvidenceView attachmentIds={entry.attachmentIds} files={caseItem.evidenceAttachments ?? []} />
++             </div>)}
++           </div>}
++
++           {(caseItem.specialApprovalHistory ?? (caseItem.specialApproval ? [caseItem.specialApproval] : [])).map(request => <div className="external-special-approval" key={request.requestId}>
++             <b>财务特批：{request.reason}</b>
++             {request.requestMode==="proposed_entry" ? <span>申请金额 {formatBusinessCurrency(request.requestedAmount??"0.00")}，批准后累计 {formatBusinessCurrency(moneyFromCents((parseMoneyToCents(request.actualDeductedAmount)??0n)+(parseMoneyToCents(request.requestedAmount??"0.00")??0n)))} · {request.decision?"总监处理结果如下":"待财务总监审批"}</span> : <span>申请时累计已扣 {formatBusinessCurrency(request.actualDeductedAmount)}，差额 {formatBusinessCurrency(request.remainingAmount)}</span>}
++             {request.decision && <span>结果：{request.decision.decision === "approved" ? "已确认（不可修改）" : "已退回"}</span>}
++             <ExternalEvidenceView attachmentIds={request.attachmentIds} files={caseItem.evidenceAttachments ?? []} />
++           </div>)}
++
++           {caseItem.closure && caseItem.closure.evidenceAttachmentIds.length > 0 && <div className="external-special-approval">
++             <b>结案凭证{caseItem.closure.reason ? `：${caseItem.closure.reason}` : ""}</b>
++             <ExternalEvidenceView attachmentIds={caseItem.closure.evidenceAttachmentIds} files={caseItem.evidenceAttachments ?? []} />
++           </div>}
++           {caseItem.followUps.filter(follow => follow.attachmentIds.length > 0).map(follow => <div className="external-special-approval" key={follow.followUpId}>
++             <b>跟进凭证：{follow.content}</b>
++             <ExternalEvidenceView attachmentIds={follow.attachmentIds} files={caseItem.evidenceAttachments ?? []} />
++           </div>)}
++
++           {caseItem.closure?.result === "full" && <StatusBadge tone="success">已足额扣款</StatusBadge>}
++           {caseItem.closure?.result === "over_deducted" && <StatusBadge tone="success">超额扣款已特批结案</StatusBadge>}
++           {caseItem.revisionRequests.filter((item) => item.seededDeterminationId).map((item) => (
++             <StatusBadge key={item.revisionRequestId} tone="success">已进入 N08 重新判责</StatusBadge>
++           ))}
++         </article>;
++       })}
++     </section>
++   </Surface>;
++ }
++
+
+ ❯ tests/unit/external-responsibility-ui-contract.test.ts:10:20
+      8|     expect(source).toContain("external-responsibilities/temporary-supp…
+      9|     expect(source).not.toContain('apiUrl("master-data/suppliers")');
+     10|     expect(source).toContain("if (response.status === 403) return [] a…
+       |                    ^
+     11|   });
+     12|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 16 passed (17)
+      Tests  1 failed | 79 passed (80)
+   Start at  23:34:44
+   Duration  8.83s (transform 2.55s, setup 0ms, import 5.40s, tests 835ms, environment 2ms)
+
+JSON report written to /workspace/scratch/5c2f59f0b575/verification-b/existing-responsibility-regressions.json

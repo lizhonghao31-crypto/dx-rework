@@ -1,292 +1,449 @@
 {
   "version": 1,
-  "base": "8ecfbb17b7f2b69905ae326642d1aea96b7bb0a7",
+  "base": "c2c49369898b7f9943fb280342a56d9a98b0b30b",
+  "sourceFingerprint": "32e606de67e5bf10bac430d2863ccfa4476cc8ef436150f507394debf8cee6b5",
   "risk": "full",
-  "sourceFingerprint": "2420c1b942ea282801d07d8a3c4e1c6b0362f49790f0a60e67858dfd9bac40b1",
   "rules": [
     {
-      "rule": "I：款号唛新增另一物料始终保留固定计件单位枚，保留黑PO明细及已裁数量，仅追加选择的白PO。",
-      "source": "docs/engineering/acceptance-readiness-ic-20261103.md；父转交现场I及docs/requirements/production-preparation-20261101.md原计件/范围/版本规则。",
+      "rule": "保留原PR的合法责任供应商候选过滤和原授权，不能把other或停用厂商纳入。",
+      "source": "用户2026-11-03 B独立审查授权；docs/engineering/n07-factory-candidates-20261103.md；原N07/N09责任处理规则与权限边界。",
       "writes": [
-        "apps/web/src/production-readiness-panel.tsx",
-        "tests/integration/production-readiness-postgres.test.ts",
-        "tests/fixtures/production-readiness-ui.tsx",
-        "tests/acceptance/production-readiness-browser.mjs"
+        "apps/api/src/rework/responsibility-determination-application-service.ts",
+        "tests/unit/responsibility-determination-application-service.test.ts",
+        "tests/integration/responsibility-determination-routes.test.ts",
+        "tests/integration/full-business-chain-postgres.test.ts"
       ],
       "reads": [
-        "packages/contracts/src/production-readiness.ts",
-        "apps/api/src/production-platform/production-readiness-service.ts",
-        "apps/api/src/production-platform/production-readiness-repository.ts",
-        "apps/web/src/bulk-preparation-panel.tsx"
+        "apps/api/src/rework/responsibility-determination-routes.ts",
+        "apps/web/src/responsibility-supplier-options.ts",
+        "apps/web/src/responsibility-determination-panel.tsx"
       ],
       "oldTests": [
-        "tests/unit/production-readiness-contract.test.ts",
-        "tests/integration/production-readiness-postgres.test.ts",
-        "tests/fixtures/production-readiness-ui.tsx",
-        "tests/acceptance/production-readiness-browser.mjs"
+        "tests/unit/responsibility-determination-application-service.test.ts",
+        "tests/integration/responsibility-determination-routes.test.ts"
       ],
-      "initialization": "原新建TEST订单、两真实PO和仓管角色；原合同、物料记录及实裁命令，不改现场账号/历史、不重seed现场。",
-      "dateAndPermission": "不改实际时间和计件守卫；非计件行原单位保持，仓管范围及expectedVersion仍校验，跟单不得代仓管写。",
-      "expectation": "黑PO实际已裁1在白PO追加后仍1；原行完整保留，两并发写一次成功一次409；只读/错误输入保留；新行默认只读枚，两宽均可保存。",
+      "initialization": "本轮后端代码未再改；原schema/active/type/订单能力保持，实际现场厂商根因未推断。",
+      "dateAndPermission": "不扩大角色或供应商权限、不改变主档、返工数量、工资、结算或既有历史；只保留原订单范围API与受控新增入口。",
+      "expectation": "既有应用/HTTP及金额回归的实际通过见priorVerification；首次旧源码断言失败明确保留并已单文件修正。真实业务/工资PG反例仍待Full，不拿新UI用例代称PG通过。 本次P2未改API或后端输入，仅重新检查Web编译及源码secret；此前业务结果保留其真实来源，PG仍留给精确head官方Full。",
       "checks": [
-        "pg-focused",
-        "browser-focused-v2",
-        "unit-contract",
-        "typecheck",
-        "lint-final",
-        "preflight"
+        "b-review-p2-web-typecheck",
+        "b-review-p2-secret-scan",
+        "b-work-closeout-tests"
       ]
     },
     {
-      "rule": "C：按当前preparation和成果kind的最大version选择范围；同业务时间和逆UUID不改变版本语义，保留所有历史、真实409和原48h时钟。",
-      "source": "docs/engineering/acceptance-readiness-ic-20261103.md；父转交现场C，原BulkPreparationService.complete最大version及production-preparation-20261101.md版本/时钟契约。",
+      "rule": "N07主加载跨A到B再到A、身份和权限迟到及卸载后，旧回包不得覆盖当前页面和草稿。",
+      "source": "用户2026-11-03 B独立审查授权；docs/engineering/n07-factory-candidates-20261103.md；原N07/N09责任处理规则与权限边界。",
       "writes": [
-        "apps/api/src/production-platform/production-readiness-service.ts",
-        "apps/web/src/production-readiness-range-action.tsx",
-        "tests/integration/production-readiness-postgres.test.ts",
-        "tests/fixtures/production-readiness-ui.tsx",
-        "tests/acceptance/production-readiness-browser.mjs"
+        "apps/web/src/responsibility-determination-panel.tsx",
+        "apps/web/src/responsibility-supplier-options.ts",
+        "tests/unit/responsibility-panels-component.test.ts",
+        "tests/unit/responsibility-supplier-options.test.ts",
+        "package.json",
+        "package-lock.json"
       ],
       "reads": [
-        "apps/api/src/production-platform/bulk-preparation-service.ts",
-        "apps/api/src/production-platform/preparation-todos.ts",
-        "apps/api/src/production-platform/production-readiness-repository.ts",
-        "apps/api/src/production-platform/node-materials.ts",
-        "tests/helpers/production-readiness-fixture.ts"
+        "apps/web/src/responsibility-determination-panel.tsx",
+        "apps/web/src/responsibility-supplier-options.ts",
+        "apps/web/src/auth.tsx",
+        "apps/web/src/member-module-policy.ts"
       ],
       "oldTests": [
-        "tests/integration/production-readiness-postgres.test.ts",
-        "tests/fixtures/production-readiness-ui.tsx",
-        "tests/acceptance/production-readiness-browser.mjs",
-        "tests/helpers/production-readiness-fixture.ts"
+        "tests/unit/responsibility-supplier-options.test.ts",
+        "tests/unit/responsibility-determination-web.test.ts"
       ],
-      "initialization": "同一原准备和真实任务构造固定UUID顺序相反的不可变既有范围；随后全部原服务命令，原286迁移/触发器不禁用，局部不写整项完成。",
-      "dateAndPermission": "不改发生时间、计时起点、截止或权限；类型和准备版本严格隔离，写端expectedVersion/readinessRevision和事务锁原样保留。",
-      "expectation": "同时间纸样1/2按版本读取；唛架1独立，前版v99不串当前；旧页及并发一条409，刷新后能完成，65h仍比原48h晚17h，所有版本可查。",
+      "initialization": "独立generation/AbortController及全部await后当前性核验；候选重试保留普通/批量草稿；仅添加精确jsdom开发测试依赖，原锁条目不升级。",
+      "dateAndPermission": "不扩大角色或供应商权限、不改变主档、返工数量、工资、结算或既有历史；只保留原订单范围API与受控新增入口。",
+      "expectation": "N07生产代码未改，原实际组件与回归结果按priorVerification原head保留。本次仅N09过滤运行，9项N07被过滤，不称N07新head已重新执行；Web类型检查覆盖当前代码。",
       "checks": [
-        "pg-focused",
-        "browser-focused-v2",
-        "typecheck",
-        "lint-final",
-        "preflight"
+        "b-review-p2-web-typecheck",
+        "b-review-p2-secret-scan",
+        "b-work-closeout-tests"
+      ]
+    },
+    {
+      "rule": "N09候选加载、无权、失败与真空分开，台账刷新恢复后必须重新读取候选，错误不得开放新增。 台账重试失效后释放自身忙态，不能永久锁住新视图或解除新请求/业务操作的忙态。",
+      "source": "用户2026-11-03 B独立审查授权；docs/engineering/n07-factory-candidates-20261103.md；原N07/N09责任处理规则与权限边界。 正式Codex Review https://github.com/lizhonghao31-crypto/dx-rework/pull/897#discussion_r4456496554，reviewedHead=beea4453821f3f4180650a8c5b380c067cdfcabc；用户明确授权仅B补修，A由Work独占。",
+      "writes": [
+        "apps/web/src/external-responsibility-panel.tsx",
+        "tests/unit/external-responsibility-ui-contract.test.ts",
+        "tests/unit/responsibility-panels-component.test.ts"
+      ],
+      "reads": [
+        "apps/web/src/external-responsibility-panel.tsx",
+        "apps/web/src/responsibility-supplier-options.ts",
+        "apps/api/src/rework/external-responsibility-routes.ts"
+      ],
+      "oldTests": [
+        "tests/unit/external-responsibility-ui-contract.test.ts",
+        "tests/unit/external-responsibility-ui-idempotency.test.ts",
+        "tests/integration/external-responsibility-routes.test.ts"
+      ],
+      "initialization": "沿原裸数组API严格解析；原台账403保持隐藏；只有成功且该类型确实空才有原受控新增；候选重试不重置选择/原因/扣款草稿。 ledgerRetryBusy与mutationBusy分离，独立retry generation控制finally；effect setup在空订单早退前只清retry，cleanup令token失效，不清业务草稿、附件或幂等键。",
+      "dateAndPermission": "不扩大角色或供应商权限、不改变主档、返工数量、工资、结算或既有历史；只保留原订单范围API与受控新增入口。",
+      "expectation": "在未修的beea生产组件上，切单/只读/空订单3项真实组件反例均失败；修后23项N09组件（7新增）及5项原UI契约/幂等共28通过、0失败，9项N07过滤。验证旧retry不释放新retry或allocation的busy、权限迟到、卸载、原草稿；不声称PG或全部业务mutation跨视图竞态已验证。",
+      "checks": [
+        "b-review-p2-targeted-tests",
+        "b-review-p2-eslint",
+        "b-review-p2-web-typecheck",
+        "b-review-p2-secret-scan",
+        "b-work-closeout-tests"
       ]
     }
   ],
   "checks": [
     {
-      "id": "pg-focused",
+      "id": "b-review-p2-targeted-tests",
       "kind": "tests",
-      "command": "[\"flock\",\"/workspace/ic-readiness-20261103/test-instance.lock\",\"node_modules/.bin/vitest\",\"run\",\"--config\",\"vitest.business-chain.config.ts\",\"tests/integration/production-readiness-postgres.test.ts\",\"-t\",\"preserves black PO|orders same-time|partial ordinary-order|rejects stale parallel edits\",\"--reporter=default\",\"--reporter=json\",\"--outputFile=/workspace/ic-readiness-20261103/pg-focused.json\"]",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "8ecfbb17b7f2b69905ae326642d1aea96b7bb0a7",
-      "sourceFingerprint": "032fc95c2beabc04d8635bc732da0728addc0bcfc177eed3cce0fb0291d935a4",
-      "inputPaths": [
-        "apps/api",
-        "packages",
-        "scripts",
-        "tests/helpers",
-        "tests/integration/production-readiness-postgres.test.ts",
-        "tests/inspection-report-fixture.ts",
-        "package.json",
-        "package-lock.json",
-        "tsconfig.base.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts"
-      ],
-      "inputFingerprint": "f6a550c9d663fdc727055ebceccb39bba45f9732a8320382000aa67c3f2d6d20",
-      "sourceState": "Actual working candidate source/input fingerprints captured before command and declared inputs reverified after; testedHead is ancestor while git diff exists, not a claim of a committed tested Head",
-      "context": "Local Node 22.23.4; local validation only; test configuration and any owned database are recorded separately; no claim of CI hardware equivalence or authenticated live-site acceptance Own local PostgreSQL16.15 container dx-ic-readiness-20261103, explicitly marked dx_rework_acceptance_clock_test; five unsafe cluster flags false, original 286 migrations and native seed/commands. 4 selected cases passed; 19 intentionally unselected. Owned fixture schema count0 after disposal. No live Acceptance access.",
-      "startedAt": "2026-11-03T10:01:39.356Z",
-      "endedAt": "2026-11-03T10:01:54.104Z",
-      "logSha256": "bdc0b88536dd02b98a38721372f4540c12772b861edc671454269f496dfffdc8",
-      "log": "/workspace/ic-readiness-20261103/recorded-pg-focused-1793700099356.log",
-      "passed": 4,
+      "command": "/workspace/scratch/5c2f59f0b575/tooling/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/responsibility-panels-component.test.ts tests/unit/external-responsibility-ui-contract.test.ts tests/unit/external-responsibility-ui-idempotency.test.ts -t 'N09 real external responsibility candidate states|external responsibility UI' --reporter=verbose --reporter=json --outputFile.json=/workspace/scratch/5c2f59f0b575/verification-b/review-p2-targeted-tests.json",
+      "testedHead": "beea4453821f3f4180650a8c5b380c067cdfcabc",
+      "sourceFingerprint": "32e606de67e5bf10bac430d2863ccfa4476cc8ef436150f507394debf8cee6b5",
+      "startedAt": "2026-11-03T15:27:40.474809+00:00",
+      "endedAt": "2026-11-03T15:27:45.727810+00:00",
+      "logSha256": "8ef5142607bcb0529fae29975f1997cc82eee79be9d44a558ba874845479b851",
+      "log": "/workspace/scratch/5c2f59f0b575/verification-b/review-p2-targeted-tests.log",
+      "context": "Node 22.22.2 / npm 10.9.9 / Vitest 4.1.10; vitest.config.ts and scripts/test-execution-config.mjs give nonDatabase maxWorkers=1. N09 tests, scoped ESLint and Web typecheck ran as three independent local commands; no PG or browser. Actual canonical fingerprints before and after this source verification batch match. This working-tree increment is based on testedHead; final commit verification is separate.",
+      "passed": 28,
       "failed": 0,
-      "skipped": 19,
+      "skipped": 9,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "de7159022c07d32070a714b35fdaa1df9dccacf80aa3948cf6b0c88c7ed14cf0",
-          "path": "/workspace/ic-readiness-20261103/pg-focused.json"
+          "sha256": "34e7e6f2ad9e88af2648e8f24cf89918c3576ff3212ab69bb22c2d407f610a3b",
+          "path": "/workspace/scratch/5c2f59f0b575/verification-b/review-p2-targeted-tests.json"
         }
       ],
-      "actualReportPaths": [
-        "/workspace/ic-readiness-20261103/pg-focused.json"
+      "filterExplanation": "All 23 N09 component cases (7 new + 16 existing) and 5 existing UI contract/idempotency cases ran. The 9 unchanged N07 cases were filtered, not executed or claimed as current passes."
+    },
+    {
+      "id": "b-review-p2-eslint",
+      "kind": "command",
+      "status": "passed",
+      "exitCode": 0,
+      "command": "/workspace/scratch/5c2f59f0b575/tooling/node_modules/node/bin/node node_modules/eslint/bin/eslint.js apps/web/src/external-responsibility-panel.tsx tests/unit/responsibility-panels-component.test.ts --max-warnings=0",
+      "testedHead": "beea4453821f3f4180650a8c5b380c067cdfcabc",
+      "sourceFingerprint": "32e606de67e5bf10bac430d2863ccfa4476cc8ef436150f507394debf8cee6b5",
+      "startedAt": "2026-11-03T15:27:40.497931+00:00",
+      "endedAt": "2026-11-03T15:27:42.822335+00:00",
+      "logSha256": "db12ad97221988bf346c55d06788e21a01bb6a683d69266bf732ed4d6d9763c8",
+      "log": "/workspace/scratch/5c2f59f0b575/verification-b/review-p2-eslint.log",
+      "context": "Node 22.22.2 / npm 10.9.9 / Vitest 4.1.10; vitest.config.ts and scripts/test-execution-config.mjs give nonDatabase maxWorkers=1. N09 tests, scoped ESLint and Web typecheck ran as three independent local commands; no PG or browser. Actual canonical fingerprints before and after this source verification batch match. This working-tree increment is based on testedHead; final commit verification is separate."
+    },
+    {
+      "id": "b-review-p2-web-typecheck",
+      "kind": "command",
+      "status": "passed",
+      "exitCode": 0,
+      "command": "/workspace/scratch/5c2f59f0b575/tooling/node_modules/node/bin/node /workspace/scratch/5c2f59f0b575/tooling/node_modules/npm/bin/npm-cli.js run typecheck --workspace @dx-rework/web",
+      "testedHead": "beea4453821f3f4180650a8c5b380c067cdfcabc",
+      "sourceFingerprint": "32e606de67e5bf10bac430d2863ccfa4476cc8ef436150f507394debf8cee6b5",
+      "startedAt": "2026-11-03T15:27:40.459473+00:00",
+      "endedAt": "2026-11-03T15:28:12.756383+00:00",
+      "logSha256": "ecfd698a25c1aa13340462e3f4e0704a61b4582415b4e129e2f740cf0c1e6179",
+      "log": "/workspace/scratch/5c2f59f0b575/verification-b/review-p2-web-typecheck.log",
+      "context": "Node 22.22.2 / npm 10.9.9 / Vitest 4.1.10; vitest.config.ts and scripts/test-execution-config.mjs give nonDatabase maxWorkers=1. N09 tests, scoped ESLint and Web typecheck ran as three independent local commands; no PG or browser. Actual canonical fingerprints before and after this source verification batch match. This working-tree increment is based on testedHead; final commit verification is separate."
+    },
+    {
+      "id": "b-review-p2-secret-scan",
+      "kind": "command",
+      "status": "passed",
+      "exitCode": 0,
+      "command": "/workspace/scratch/5c2f59f0b575/tooling/node_modules/node/bin/node scripts/secret-scan.mjs --worktree",
+      "testedHead": "beea4453821f3f4180650a8c5b380c067cdfcabc",
+      "sourceFingerprint": "32e606de67e5bf10bac430d2863ccfa4476cc8ef436150f507394debf8cee6b5",
+      "startedAt": "2026-11-03T15:29:44.033812+00:00",
+      "endedAt": "2026-11-03T15:29:44.896069+00:00",
+      "logSha256": "db5dc5135908f41241aa6e6dd0a77c3ed032b0f54f013af07d5a2c34c90009be",
+      "log": "/workspace/scratch/5c2f59f0b575/verification-b/review-p2-secret-scan.log",
+      "context": "Node 22.22.2 / npm 10.9.9 / Vitest 4.1.10; vitest.config.ts and scripts/test-execution-config.mjs give nonDatabase maxWorkers=1. N09 tests, scoped ESLint and Web typecheck ran as three independent local commands; no PG or browser. Actual canonical fingerprints before and after this source verification batch match. This working-tree increment is based on testedHead; final commit verification is separate."
+    },
+    {
+      "id": "b-work-closeout-tests",
+      "kind": "tests",
+      "status": "passed",
+      "exitCode": 0,
+      "command": "/workspace/.tooling/node22/node_modules/.bin/node node_modules/vitest/vitest.mjs run tests/unit/responsibility-panels-component.test.ts tests/unit/external-responsibility-ui-contract.test.ts tests/unit/external-responsibility-ui-idempotency.test.ts tests/unit/responsibility-determination-application-service.test.ts --reporter=verbose --reporter=json --outputFile.json=/workspace/b-897-gate-records/fd9a4699/work-closeout-tests.json",
+      "testedHead": "fd9a4699d1b72fb8960bb503a5206252ac2ef89d",
+      "sourceFingerprint": "32e606de67e5bf10bac430d2863ccfa4476cc8ef436150f507394debf8cee6b5",
+      "startedAt": "2026-11-03T15:55:28.720406+00:00",
+      "endedAt": "2026-11-03T15:55:31.766059+00:00",
+      "log": "/workspace/b-897-gate-records/fd9a4699/work-closeout-tests.log",
+      "logSha256": "32638611bc20fde657686894b159a9de055dfaa70343e268a108f24fcf30fff2",
+      "passed": 43,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "path": "/workspace/b-897-gate-records/fd9a4699/work-closeout-tests.json",
+          "sha256": "21f507d240ea837a0d8b6d6d3780cdc4071c81d890aa4f7fa1dc0f0221e2becb"
+        }
+      ],
+      "context": "Work Node22.23.4/npm10.9.9, exact fd9a4699 product/tests unchanged; before/after canonical source fingerprint identical to the committed record. Four directly relevant non-PG files only. Original Pro external reports were unavailable in Work, so this is the smallest executable replacement evidence for all three final-closeout rules. No local PG, browser/field test, whole-unit suite or CI was run."
+    }
+  ],
+  "sourceFingerprintObservations": [
+    {
+      "startedAt": "2026-11-03T15:27:09.649646+00:00",
+      "endedAt": "2026-11-03T15:27:09.780820+00:00",
+      "logSha256": "7c0219742e193cd4d8d99c1bdb9c2ccc2fb1ab2ab4451bfc5c9a9f8a3d358452",
+      "log": "/workspace/scratch/5c2f59f0b575/verification-b/review-p2-fingerprint-before.log",
+      "sourceFingerprint": "32e606de67e5bf10bac430d2863ccfa4476cc8ef436150f507394debf8cee6b5"
+    },
+    {
+      "startedAt": "2026-11-03T15:29:44.044352+00:00",
+      "endedAt": "2026-11-03T15:29:44.214634+00:00",
+      "logSha256": "7c0219742e193cd4d8d99c1bdb9c2ccc2fb1ab2ab4451bfc5c9a9f8a3d358452",
+      "log": "/workspace/scratch/5c2f59f0b575/verification-b/review-p2-fingerprint-after.log",
+      "sourceFingerprint": "32e606de67e5bf10bac430d2863ccfa4476cc8ef436150f507394debf8cee6b5"
+    },
+    {
+      "startedAt": "2026-11-03T15:31:24.804996+00:00",
+      "endedAt": "2026-11-03T15:31:24.935618+00:00",
+      "logSha256": "7c0219742e193cd4d8d99c1bdb9c2ccc2fb1ab2ab4451bfc5c9a9f8a3d358452",
+      "log": "/workspace/scratch/5c2f59f0b575/verification-b/review-p2-final-fingerprint.log",
+      "sourceFingerprint": "32e606de67e5bf10bac430d2863ccfa4476cc8ef436150f507394debf8cee6b5"
+    }
+  ],
+  "priorVerification": [
+    {
+      "name": "component-tests-first",
+      "command": "/workspace/scratch/5c2f59f0b575/tooling/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/responsibility-panels-component.test.ts --reporter=verbose --reporter=json --outputFile.json=/workspace/scratch/5c2f59f0b575/verification-b/component-tests-first.json",
+      "exitCode": 0,
+      "startedAt": "2026-11-03T14:22:27.956278+00:00",
+      "endedAt": "2026-11-03T14:22:30.687022+00:00",
+      "log": "docs/engineering/verification-20261103/b-component-tests-first.log",
+      "logSha256": "9aa6e287fd10b568efa1b1dab313891a451feb7a75300566124e252a16bbfbf9",
+      "evidenceBoundary": "Actual prior execution, retained unchanged. No execution-time global/input fingerprint was captured for this run; later font recovery/test additions mean it is supplemental evidence, not a canonical current-source check. Do not rewrite its result or re-run already successful cases solely to fill metadata.",
+      "passed": 23,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "3dcb5c6dba8cd34f813aee956a2c744a0e150e0b143c1aa6a07eb2e4647a5da5",
+          "path": "docs/engineering/verification-20261103/b-component-tests-first.json"
+        }
       ]
     },
     {
-      "id": "browser-focused-v2",
-      "kind": "tests",
-      "command": "[\"node\",\"tests/acceptance/production-readiness-browser.mjs\"]",
-      "status": "passed",
+      "name": "existing-responsibility-regressions",
+      "command": "/workspace/scratch/5c2f59f0b575/tooling/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/responsibility-supplier-options.test.ts tests/unit/responsibility-determination-web.test.ts tests/unit/responsibility-determination-application-service.test.ts tests/unit/responsibility-finalize-usability.test.ts tests/unit/responsibility-ui-idempotency.test.ts tests/unit/responsibility-amount-view.test.ts tests/unit/responsibility-rounding-reconciliation.test.ts tests/unit/external-responsibility-contracts-and-web.test.ts tests/unit/external-responsibility-ui-contract.test.ts tests/unit/external-responsibility-ui-idempotency.test.ts tests/unit/external-responsibility-entrypoints.test.ts tests/unit/external-responsibility-allocation-service.test.ts tests/unit/external-direct-deduction-ui.test.ts tests/unit/rework-v2-pr06-responsibility-2.test.ts tests/unit/n07-n11-responsibility-settlement-contract.test.ts tests/integration/responsibility-determination-routes.test.ts tests/integration/external-responsibility-routes.test.ts --reporter=verbose --reporter=json --outputFile.json=/workspace/scratch/5c2f59f0b575/verification-b/existing-responsibility-regressions.json",
+      "exitCode": 1,
+      "startedAt": "2026-11-03T14:34:43.784835+00:00",
+      "endedAt": "2026-11-03T14:34:53.138855+00:00",
+      "log": "docs/engineering/verification-20261103/b-existing-responsibility-regressions.log",
+      "logSha256": "85624cbaf1cf3040711698c1163c79151e2189f691dfef97069e4df37323f0de",
+      "evidenceBoundary": "Actual prior execution, retained unchanged. No execution-time global/input fingerprint was captured for this run; later font recovery/test additions mean it is supplemental evidence, not a canonical current-source check. Do not rewrite its result or re-run already successful cases solely to fill metadata.",
+      "passed": 79,
+      "failed": 1,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "2a07297eb9ff6f03494624fce1ec762d743f2399ca29ce547dc0a7a83fdcb07a",
+          "path": "docs/engineering/verification-20261103/b-existing-responsibility-regressions.json"
+        }
+      ]
+    },
+    {
+      "name": "existing-ui-contract-fixed",
+      "command": "/workspace/scratch/5c2f59f0b575/tooling/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/external-responsibility-ui-contract.test.ts --reporter=verbose --reporter=json --outputFile.json=/workspace/scratch/5c2f59f0b575/verification-b/existing-ui-contract-fixed.json",
       "exitCode": 0,
-      "testedHead": "8ecfbb17b7f2b69905ae326642d1aea96b7bb0a7",
-      "sourceFingerprint": "2420c1b942ea282801d07d8a3c4e1c6b0362f49790f0a60e67858dfd9bac40b1",
-      "inputPaths": [
-        "apps/web",
-        "packages",
-        "tests/fixtures/production-readiness-ui.tsx",
-        "tests/acceptance/production-readiness-browser.mjs",
-        "package.json",
-        "package-lock.json",
-        "tsconfig.base.json"
-      ],
-      "inputFingerprint": "b1fc116af7e47374d66fa690df85d07487b8d67d4cc21788882f3fb54736b31e",
-      "sourceState": "Actual working candidate source/input fingerprints captured before command and declared inputs reverified after; testedHead is ancestor while git diff exists, not a claim of a committed tested Head",
-      "context": "Local Node 22.23.4; local validation only; test configuration and any owned database are recorded separately; no claim of CI hardware equivalence or authenticated live-site acceptance Existing Chromium and Playwright, actual original React components with PostgreSQL-captured TEST data and synthetic HTTP faults; 7 scenarios x1280/1440=14. UI input SHA256 0ab5777c45440e4353e81a51ed9bb9336114b739a3c8469d8f7174f02433fccd. Not authenticated live-site acceptance. Six selected new success/conflict screenshots visually inspected, not every screenshot.",
-      "startedAt": "2026-11-03T10:06:22.524Z",
-      "endedAt": "2026-11-03T10:06:37.411Z",
-      "logSha256": "68ae5e7917cfbc04a1c248fcced1a05da8ad29cde15dec2ce857d7318d63eede",
-      "log": "/workspace/ic-readiness-20261103/recorded-browser-focused-v2-1793700382524.log",
-      "passed": 14,
+      "startedAt": "2026-11-03T14:37:21.811407+00:00",
+      "endedAt": "2026-11-03T14:37:22.550097+00:00",
+      "log": "docs/engineering/verification-20261103/b-existing-ui-contract-fixed.log",
+      "logSha256": "0816e0c236add44a75188f966cc3e10c7bf2f903ab09d701bd1ddf93887d060b",
+      "evidenceBoundary": "Actual prior execution, retained unchanged. No execution-time global/input fingerprint was captured for this run; later font recovery/test additions mean it is supplemental evidence, not a canonical current-source check. Do not rewrite its result or re-run already successful cases solely to fill metadata.",
+      "passed": 2,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
-          "format": "node-tap",
-          "path": "/workspace/ic-readiness-20261103/recorded-browser-focused-v2-1793700382524.log",
-          "sha256": "68ae5e7917cfbc04a1c248fcced1a05da8ad29cde15dec2ce857d7318d63eede"
+          "format": "vitest-json",
+          "sha256": "44a97d8fb550a402575fb440e62c6a9f6c243ac08288139eca814dcf01785304",
+          "path": "docs/engineering/verification-20261103/b-existing-ui-contract-fixed.json"
         }
-      ],
-      "actualReportPaths": []
+      ]
     },
     {
-      "id": "unit-contract",
-      "kind": "tests",
-      "command": "[\"node_modules/.bin/vitest\",\"run\",\"tests/unit/production-readiness-contract.test.ts\",\"--reporter=default\",\"--reporter=json\",\"--outputFile=/workspace/ic-readiness-20261103/unit-contract.json\"]",
-      "status": "passed",
+      "name": "web-typecheck",
+      "command": "/workspace/scratch/5c2f59f0b575/tooling/node_modules/node/bin/node /workspace/scratch/5c2f59f0b575/tooling/node_modules/npm/bin/npm-cli.js run typecheck --workspace @dx-rework/web",
       "exitCode": 0,
-      "testedHead": "8ecfbb17b7f2b69905ae326642d1aea96b7bb0a7",
-      "sourceFingerprint": "2420c1b942ea282801d07d8a3c4e1c6b0362f49790f0a60e67858dfd9bac40b1",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "tests",
-        "scripts",
-        "package.json",
-        "package-lock.json",
-        "tsconfig.base.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts",
-        "vitest.postgres-immediate.config.ts",
-        "eslint.config.js"
-      ],
-      "inputFingerprint": "60ab4b955a4e9cc9c09b48f072906a9d52c770eedbbe0bd3bcd21f18fb30a05e",
-      "sourceState": "Actual working candidate source/input fingerprints captured before command and declared inputs reverified after; testedHead is ancestor while git diff exists, not a claim of a committed tested Head",
-      "context": "Local Node 22.23.4; local validation only; test configuration and any owned database are recorded separately; no claim of CI hardware equivalence or authenticated live-site acceptance",
-      "startedAt": "2026-11-03T10:06:22.563Z",
-      "endedAt": "2026-11-03T10:06:23.281Z",
-      "logSha256": "1d6de4e2e65d272d5e3bae4f5d0ac7336098581de82a008721389fe31fbbaeed",
-      "log": "/workspace/ic-readiness-20261103/recorded-unit-contract-1793700382564.log",
-      "passed": 3,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [],
-      "actualReportPaths": []
+      "startedAt": "2026-11-03T14:22:39.601940+00:00",
+      "endedAt": "2026-11-03T14:23:06.083606+00:00",
+      "logSha256": "ecfd698a25c1aa13340462e3f4e0704a61b4582415b4e129e2f740cf0c1e6179",
+      "evidenceBoundary": "Actual prior execution, retained unchanged. No execution-time global/input fingerprint was captured for this run; later font recovery/test additions mean it is supplemental evidence, not a canonical current-source check. Do not rewrite its result or re-run already successful cases solely to fill metadata.",
+      "originalOutputArchive": "docs/engineering/verification-20261103/b-web-typecheck-original-output.json",
+      "originalOutputField": "originalLogText"
     },
     {
-      "id": "typecheck",
-      "kind": "command",
-      "command": "[\"npm\",\"run\",\"typecheck\"]",
-      "status": "passed",
+      "name": "targeted-eslint",
+      "command": "/workspace/scratch/5c2f59f0b575/tooling/node_modules/node/bin/node node_modules/eslint/bin/eslint.js apps/web/src/responsibility-determination-panel.tsx apps/web/src/external-responsibility-panel.tsx apps/web/src/responsibility-supplier-options.ts tests/unit/responsibility-panels-component.test.ts --max-warnings=0",
       "exitCode": 0,
-      "testedHead": "8ecfbb17b7f2b69905ae326642d1aea96b7bb0a7",
-      "sourceFingerprint": "2420c1b942ea282801d07d8a3c4e1c6b0362f49790f0a60e67858dfd9bac40b1",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "tests",
-        "scripts",
-        "package.json",
-        "package-lock.json",
-        "tsconfig.base.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts",
-        "vitest.postgres-immediate.config.ts",
-        "eslint.config.js"
-      ],
-      "inputFingerprint": "60ab4b955a4e9cc9c09b48f072906a9d52c770eedbbe0bd3bcd21f18fb30a05e",
-      "sourceState": "Actual working candidate source/input fingerprints captured before command and declared inputs reverified after; testedHead is ancestor while git diff exists, not a claim of a committed tested Head",
-      "context": "Local Node 22.23.4; local validation only; test configuration and any owned database are recorded separately; no claim of CI hardware equivalence or authenticated live-site acceptance",
-      "startedAt": "2026-11-03T10:06:22.574Z",
-      "endedAt": "2026-11-03T10:07:00.393Z",
-      "logSha256": "17a1a9d0ac31b5d9d7936a4292ac25eb7c62c2b270726b898476448810a0f5c6",
-      "log": "/workspace/ic-readiness-20261103/recorded-typecheck-1793700382575.log",
-      "resultReports": [],
-      "actualReportPaths": []
+      "startedAt": "2026-11-03T14:22:39.611879+00:00",
+      "endedAt": "2026-11-03T14:22:41.377340+00:00",
+      "log": "docs/engineering/verification-20261103/b-targeted-eslint.log",
+      "logSha256": "db12ad97221988bf346c55d06788e21a01bb6a683d69266bf732ed4d6d9763c8",
+      "evidenceBoundary": "Actual prior execution, retained unchanged. No execution-time global/input fingerprint was captured for this run; later font recovery/test additions mean it is supplemental evidence, not a canonical current-source check. Do not rewrite its result or re-run already successful cases solely to fill metadata."
     },
     {
-      "id": "lint-final",
-      "kind": "command",
-      "command": "[\"npm\",\"run\",\"lint\"]",
-      "status": "passed",
+      "name": "existing-ui-contract-eslint",
+      "command": "/workspace/scratch/5c2f59f0b575/tooling/node_modules/node/bin/node node_modules/eslint/bin/eslint.js tests/unit/external-responsibility-ui-contract.test.ts --max-warnings=0",
       "exitCode": 0,
-      "testedHead": "8ecfbb17b7f2b69905ae326642d1aea96b7bb0a7",
-      "sourceFingerprint": "2420c1b942ea282801d07d8a3c4e1c6b0362f49790f0a60e67858dfd9bac40b1",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "tests",
-        "scripts",
-        "package.json",
-        "package-lock.json",
-        "tsconfig.base.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts",
-        "vitest.postgres-immediate.config.ts",
-        "eslint.config.js"
-      ],
-      "inputFingerprint": "60ab4b955a4e9cc9c09b48f072906a9d52c770eedbbe0bd3bcd21f18fb30a05e",
-      "sourceState": "Actual working candidate source/input fingerprints captured before command and declared inputs reverified after; testedHead is ancestor while git diff exists, not a claim of a committed tested Head",
-      "context": "Local Node 22.23.4; local validation only; test configuration and any owned database are recorded separately; no claim of CI hardware equivalence or authenticated live-site acceptance",
-      "startedAt": "2026-11-03T10:08:56.156Z",
-      "endedAt": "2026-11-03T10:09:19.506Z",
-      "logSha256": "dac45e9202dd0400da69a080ea51bda187f66d2c3344db6291f4d82e1077d00f",
-      "log": "/workspace/ic-readiness-20261103/recorded-lint-final-1793700536156.log",
-      "resultReports": [],
-      "actualReportPaths": []
+      "startedAt": "2026-11-03T14:37:21.812096+00:00",
+      "endedAt": "2026-11-03T14:37:22.683544+00:00",
+      "log": "docs/engineering/verification-20261103/b-existing-ui-contract-eslint.log",
+      "logSha256": "db12ad97221988bf346c55d06788e21a01bb6a683d69266bf732ed4d6d9763c8",
+      "evidenceBoundary": "Actual prior execution, retained unchanged. No execution-time global/input fingerprint was captured for this run; later font recovery/test additions mean it is supplemental evidence, not a canonical current-source check. Do not rewrite its result or re-run already successful cases solely to fill metadata."
     },
     {
-      "id": "preflight",
-      "kind": "tests",
-      "command": "[\"node\",\"scripts/test-preflight.mjs\"]",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "8ecfbb17b7f2b69905ae326642d1aea96b7bb0a7",
-      "sourceFingerprint": "2420c1b942ea282801d07d8a3c4e1c6b0362f49790f0a60e67858dfd9bac40b1",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "tests",
-        "scripts",
-        "package.json",
-        "package-lock.json",
-        "tsconfig.base.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts",
-        "vitest.postgres-immediate.config.ts",
-        "eslint.config.js"
-      ],
-      "inputFingerprint": "60ab4b955a4e9cc9c09b48f072906a9d52c770eedbbe0bd3bcd21f18fb30a05e",
-      "sourceState": "Actual working candidate source/input fingerprints captured before command and declared inputs reverified after; testedHead is ancestor while git diff exists, not a claim of a committed tested Head",
-      "context": "Local Node 22.23.4; local validation only; test configuration and any owned database are recorded separately; no claim of CI hardware equivalence or authenticated live-site acceptance",
-      "startedAt": "2026-11-03T10:08:56.139Z",
-      "endedAt": "2026-11-03T10:08:59.467Z",
-      "logSha256": "e95a368de0984da90b1cc2db77dd6cd02143e153ac21431ccd1adbf54d943984",
-      "log": "/workspace/ic-readiness-20261103/recorded-preflight-1793700536139.log",
-      "passed": 152,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [
+      "name": "beea445-current-checks-before-review-p2",
+      "candidateHead": "beea4453821f3f4180650a8c5b380c067cdfcabc",
+      "sourceFingerprint": "22cfa5abc0c7ab431d28bc3b7357f3322a49cb709ed763d45c99c39ebac9651f",
+      "checks": [
         {
-          "format": "node-tap",
-          "path": "/workspace/ic-readiness-20261103/recorded-preflight-1793700536139.log",
-          "sha256": "e95a368de0984da90b1cc2db77dd6cd02143e153ac21431ccd1adbf54d943984"
+          "id": "b-current-component-cases",
+          "kind": "tests",
+          "status": "passed",
+          "exitCode": 0,
+          "command": "/workspace/scratch/5c2f59f0b575/tooling/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/responsibility-panels-component.test.ts -t 'delayed identity after details resolve|recovers a 503 ledger through refresh' --reporter=verbose --reporter=json --outputFile.json=/workspace/scratch/5c2f59f0b575/verification-b/component-additional-tests.json",
+          "testedHead": "a5938db04e635186acaa3f8a999ed917f56b6556",
+          "sourceFingerprint": "22cfa5abc0c7ab431d28bc3b7357f3322a49cb709ed763d45c99c39ebac9651f",
+          "startedAt": "2026-11-03T14:44:40.255863+00:00",
+          "endedAt": "2026-11-03T14:44:42.924475+00:00",
+          "logSha256": "f766ed6d6749680a89fa46beb81a8981868ce1ec78abdc9e20d5edd114e5171e",
+          "log": "docs/engineering/verification-20261103/b-component-additional-tests.log",
+          "context": "Node 22.22.2 / npm 10.9.9; retained B snapshot based on exact original PR head, current code and tests. Component additional cases and their lint were enclosed by actual canonical before/after identical fingerprints. No PostgreSQL, browser or field access. User forbids repeating already successful checks.",
+          "passed": 2,
+          "failed": 0,
+          "skipped": 23,
+          "resultReports": [
+            {
+              "format": "vitest-json",
+              "sha256": "d2d47c2b032753bb8867674b507e9e22b517a8da2423bb2cae508319e4a858c3",
+              "path": "docs/engineering/verification-20261103/b-component-additional-tests.json"
+            }
+          ],
+          "filterExplanation": "Only the two newly identified delayed-identity and ledger-refresh cases ran; original 23 were filtered by -t, not re-run and not represented as this run passing."
+        },
+        {
+          "id": "b-component-eslint",
+          "kind": "command",
+          "status": "passed",
+          "exitCode": 0,
+          "command": "/workspace/scratch/5c2f59f0b575/tooling/node_modules/node/bin/node node_modules/eslint/bin/eslint.js tests/unit/responsibility-panels-component.test.ts --max-warnings=0",
+          "testedHead": "a5938db04e635186acaa3f8a999ed917f56b6556",
+          "sourceFingerprint": "22cfa5abc0c7ab431d28bc3b7357f3322a49cb709ed763d45c99c39ebac9651f",
+          "startedAt": "2026-11-03T14:44:40.271803+00:00",
+          "endedAt": "2026-11-03T14:44:41.293032+00:00",
+          "logSha256": "db12ad97221988bf346c55d06788e21a01bb6a683d69266bf732ed4d6d9763c8",
+          "log": "docs/engineering/verification-20261103/b-component-additional-eslint.log",
+          "context": "Node 22.22.2 / npm 10.9.9; retained B snapshot based on exact original PR head, current code and tests. Component additional cases and their lint were enclosed by actual canonical before/after identical fingerprints. No PostgreSQL, browser or field access. User forbids repeating already successful checks."
+        },
+        {
+          "id": "b-secret-scan",
+          "kind": "command",
+          "status": "passed",
+          "exitCode": 0,
+          "command": "/workspace/scratch/5c2f59f0b575/tooling/node_modules/node/bin/node scripts/secret-scan.mjs --worktree",
+          "testedHead": "a5938db04e635186acaa3f8a999ed917f56b6556",
+          "sourceFingerprint": "22cfa5abc0c7ab431d28bc3b7357f3322a49cb709ed763d45c99c39ebac9651f",
+          "startedAt": "2026-11-03T14:46:01.552444+00:00",
+          "endedAt": "2026-11-03T14:46:02.427750+00:00",
+          "logSha256": "db5dc5135908f41241aa6e6dd0a77c3ed032b0f54f013af07d5a2c34c90009be",
+          "log": "docs/engineering/verification-20261103/b-secret-scan.log",
+          "context": "Node 22.22.2 / npm 10.9.9; retained B snapshot based on exact original PR head, current code and tests. Component additional cases and their lint were enclosed by actual canonical before/after identical fingerprints. No PostgreSQL, browser or field access. User forbids repeating already successful checks."
+        },
+        {
+          "id": "b-diff-check",
+          "kind": "command",
+          "status": "passed",
+          "exitCode": 0,
+          "command": "git diff --check",
+          "testedHead": "a5938db04e635186acaa3f8a999ed917f56b6556",
+          "sourceFingerprint": "22cfa5abc0c7ab431d28bc3b7357f3322a49cb709ed763d45c99c39ebac9651f",
+          "startedAt": "2026-11-03T14:46:03.045938+00:00",
+          "endedAt": "2026-11-03T14:46:03.060050+00:00",
+          "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "log": "docs/engineering/verification-20261103/b-diff-check.log",
+          "context": "Node 22.22.2 / npm 10.9.9; retained B snapshot based on exact original PR head, current code and tests. Component additional cases and their lint were enclosed by actual canonical before/after identical fingerprints. No PostgreSQL, browser or field access. User forbids repeating already successful checks."
         }
       ],
-      "actualReportPaths": []
+      "sourceFingerprintObservations": [
+        {
+          "startedAt": "2026-11-03T14:44:34.861257+00:00",
+          "endedAt": "2026-11-03T14:44:35.004075+00:00",
+          "log": "docs/engineering/verification-20261103/b-component-additional-fingerprint-before.log",
+          "logSha256": "cbf6a05b29aa93a23d7bfa35ab3631e91389e6fb9f72a97937ad49b916242745",
+          "sourceFingerprint": "22cfa5abc0c7ab431d28bc3b7357f3322a49cb709ed763d45c99c39ebac9651f"
+        },
+        {
+          "startedAt": "2026-11-03T14:44:46.432829+00:00",
+          "endedAt": "2026-11-03T14:44:46.575853+00:00",
+          "log": "docs/engineering/verification-20261103/b-component-additional-fingerprint-after.log",
+          "logSha256": "cbf6a05b29aa93a23d7bfa35ab3631e91389e6fb9f72a97937ad49b916242745",
+          "sourceFingerprint": "22cfa5abc0c7ab431d28bc3b7357f3322a49cb709ed763d45c99c39ebac9651f"
+        }
+      ],
+      "evidenceBoundary": "Original execution objects retained unchanged. P2 changes the source fingerprint; these are historical evidence, not current checks or cross-head Full reuse."
     }
   ],
-  "boundary": "Only I+C focused code/targeted checks and draft PR. No Review/final Gate, merge, deployment, live Acceptance/data operations, or A/B implementation. Browser initial selector timeout and superseded local commands remain external history, not counted as current passed checks."
+  "pendingVerification": [
+    {
+      "id": "b-postgres-full",
+      "status": "not-run",
+      "reason": "No local PostgreSQL executed. Existing exact-head PG candidate filtering, wage/history and mapped business suites remain for official Full after independent coordinator review."
+    },
+    {
+      "id": "b-browser",
+      "status": "not-run",
+      "reason": "Official Chromium download produced an invalid archive; stopped without alternative privilege/network route. Real React tests used jsdom, not browser interaction."
+    },
+    {
+      "id": "b-final-head-review-and-gate",
+      "status": "pending",
+      "reason": "Official Review on beea4453821f3f4180650a8c5b380c067cdfcabc produced the verified P2 above. This candidate fixes it with actual scoped checks; the discussion was not resolved and the fix was not claimed re-reviewed. Work retains final-head review/official Full responsibility; this Chat does not request or repeat Full, approve, merge, deploy or access field data."
+    }
+  ],
+  "handoff": {
+    "status": "review-p2-fixed-and-targeted-tested-pending-final-head-official-flow",
+    "originalHead": "a5938db04e635186acaa3f8a999ed917f56b6556",
+    "reviewedParentHead": "beea4453821f3f4180650a8c5b380c067cdfcabc",
+    "authority": "Latest user instruction authorizes only B #897 Review P2 follow-up in this Chat. A #896 is exclusively controlled by Work and must not be touched. Update only the existing B branch after required checks; no new branch/PR, resolve, approval, repeated Full, deployment or field/production/Acceptance access.",
+    "evidenceLimit": "Old committed logs and reports are preserved with their original provenance. P2 actual logs/reports remain outside the candidate per AGENTS section 4; exact paths and SHA256 values are recorded above. The original failed reproduction remains failed. No new head is claimed officially re-reviewed or Full-approved."
+  },
+  "reviewFollowup": {
+    "reviewedHead": "beea4453821f3f4180650a8c5b380c067cdfcabc",
+    "reviewId": 5754565588,
+    "commentId": 4456496554,
+    "commentUrl": "https://github.com/lizhonghao31-crypto/dx-rework/pull/897#discussion_r4456496554",
+    "findingVerified": true,
+    "status": "fixed-in-candidate-with-targeted-tests; thread not resolved; final-head review remains separate",
+    "reproduction": {
+      "testedHead": "beea4453821f3f4180650a8c5b380c067cdfcabc",
+      "productionSource": "unchanged reviewed N09 component; only new tests added",
+      "sourceFingerprint": "6a15108675e37272111613ce929f790066a803c8c43c46d22e8619ef0ae30236",
+      "command": "/workspace/scratch/5c2f59f0b575/tooling/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/responsibility-panels-component.test.ts -t 'releases an invalidated ledger retry' --reporter=verbose --reporter=json --outputFile.json=/workspace/scratch/5c2f59f0b575/verification-b/review-p2-red-reproduction.json",
+      "exitCode": 1,
+      "passed": 0,
+      "failed": 3,
+      "skipped": 29,
+      "startedAt": "2026-11-03T15:26:54.301458+00:00",
+      "endedAt": "2026-11-03T15:26:57.190600+00:00",
+      "log": "/workspace/scratch/5c2f59f0b575/verification-b/review-p2-red-reproduction.log",
+      "logSha256": "6d4b5595996b1c53b9833f6a47bbfcbaf19fc5703b99bdeb66ede3b7d355da3e",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "path": "/workspace/scratch/5c2f59f0b575/verification-b/review-p2-red-reproduction.json",
+          "sha256": "e51df3744f03820a0fee0a1d19b6986e51470b0b3436b066987c12f6f5b58853"
+        }
+      ]
+    },
+    "scopeBoundary": "N07 main reads, N09 permission/main/supplier reads and all busy consumers inspected. The old N07 applyResponse/runWrite and N09 send/refresh/mutation continuations are independent pre-existing mutation lifecycle paths; their cross-view behavior was not dynamically verified or refactored here. No claim that every asynchronous mutation race is closed."
+  },
+  "handoffCloseoutNote": "Evidence-only follow-up: no product/test/rule/controller changes. Existing local logs are not assumed shared between Chat and Work. Current43 exact-source cases provide actual readable report/log for the fixed Review finding and each existing rule. Product Review stays on beea4453; fd9a4699 is its fix and not claimed re-reviewed. Original Pro records retained without rewriting their results."
 }
