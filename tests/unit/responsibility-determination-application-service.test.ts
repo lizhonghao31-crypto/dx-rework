@@ -48,6 +48,30 @@ const storedResponse: ResponsibilityDeterminationResponse = {
 describe("ResponsibilityDeterminationApplicationService", () => {
   afterEach(() => vi.restoreAllMocks());
 
+  it.each([
+    {status:'pending_responsibility_determination',permitted:false},
+    {status:'pending_owner_signature',permitted:true},
+  ])('does not query supplier master data when N07 access is denied (%j)',async row=>{
+    const query=vi.fn().mockResolvedValue({rows:[row]});
+    const service=new ResponsibilityDeterminationApplicationService({query} as unknown as Pool);
+    await expect(service.listSupplierOptions(actor,storedResponse.reworkOrderId)).rejects.toMatchObject({statusCode:403});
+    expect(query).toHaveBeenCalledTimes(1);
+  });
+
+  it('requires both an eligible handler and the existing responsibility capability',async()=>{
+    const query=vi.fn().mockResolvedValue({rows:[{status:'pending_responsibility_determination',permitted:true}]});
+    const service=new ResponsibilityDeterminationApplicationService({query} as unknown as Pool);
+    await expect(service.listSupplierOptions({...actor,authorizationCapabilities:[]},storedResponse.reworkOrderId)).rejects.toMatchObject({statusCode:403});
+    expect(query).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not enumerate suppliers for a missing or deleted order',async()=>{
+    const query=vi.fn().mockResolvedValue({rows:[]});
+    const service=new ResponsibilityDeterminationApplicationService({query} as unknown as Pool);
+    await expect(service.listSupplierOptions(actor,storedResponse.reworkOrderId)).rejects.toMatchObject({statusCode:404});
+    expect(query).toHaveBeenCalledTimes(1);
+  });
+
   it("returns the normalized idempotency repository response without re-reading mutable state", async () => {
     const storedResult = { value: storedResponse, reused: true };
     const saveDraft = vi

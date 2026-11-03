@@ -6,6 +6,7 @@ import type { ResponsibilityQueueResponse } from "@dx-rework/contracts/responsib
 import { describe, expect, it, vi } from "vitest";
 
 import { buildApp } from "../../apps/api/src/app.js";
+import {ApplicationError} from '../../apps/api/src/platform/errors.js';
 
 const testConfig = loadConfig({
   NODE_ENV: "test",
@@ -228,6 +229,25 @@ describe("responsibility routes", () => {
     await app.close();
   });
 
+  it.each([403,500])('keeps supplier HTTP %s failures distinct from a successful empty list',async status=>{
+    const {app,service}=buildTestApp();
+    service.listSupplierOptions.mockRejectedValue(new ApplicationError(status===403?'FORBIDDEN':'INTERNAL_ERROR','TEST supplier lookup failed',status));
+    try{
+      const result=await app.inject({method:'GET',url:`/rework-orders/${orderId}/responsibility-determinations/supplier-options`});
+      expect(result.statusCode).toBe(status);expect(result.json()).not.toHaveProperty('items');
+    }finally{await app.close();}
+  });
+
+  it('serializes only contract-valid N07 factory and material candidates',async()=>{
+    const {app,service}=buildTestApp();
+    const items=[{supplierId:randomUUID(),supplierType:'factory',supplierName:'TEST correct isolated factory'},{supplierId:randomUUID(),supplierType:'fabric',supplierName:'TEST fabric'}];
+    service.listSupplierOptions.mockResolvedValue({items});
+    try{
+      const result=await app.inject({method:'GET',url:`/rework-orders/${orderId}/responsibility-determinations/supplier-options`});
+      expect(result.statusCode).toBe(200);expect(result.json()).toEqual({items});
+    }finally{await app.close();}
+  });
+
   it("lists suppliers in N07 and sends N08 agree or direct reject with an optimistic version", async () => {
     const { app, service } = buildTestApp();
     const suppliers = await app.inject({
@@ -235,6 +255,7 @@ describe("responsibility routes", () => {
       url: `/rework-orders/${orderId}/responsibility-determinations/supplier-options`,
     });
     expect(suppliers.statusCode).toBe(200);
+    expect(suppliers.json()).toEqual({items:[]});
     expect(service.listSupplierOptions).toHaveBeenCalledWith(
       expect.objectContaining({ authorizationCapability: "responsibility:determine" }),
       orderId,

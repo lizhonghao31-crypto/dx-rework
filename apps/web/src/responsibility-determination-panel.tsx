@@ -2,7 +2,6 @@ import { specialProcessLabel } from "@dx-rework/contracts";
 import { currentModuleCanWrite } from "./member-module-policy.js";
 import {
   ResponsibilityDeterminationResponseSchema,
-  ResponsibilitySupplierOptionsResponseSchema,
   type ResponsibilityDeterminationResponse,
   type ResponsibilityType,
   type TailInspectionCostBearer,
@@ -17,6 +16,7 @@ import { createClientRequestId } from "./client-request-id.js";
 import { verifySession } from "./auth.js";
 import { SearchSelect } from "./search-select.js";
 import { alertInApp, confirmInApp } from "./system-dialog.js";
+import {loadResponsibilitySuppliers,responsibilitySupplierField,type ResponsibilitySupplierState} from './responsibility-supplier-options.js';
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
 const responsibilityTypes: ReadonlyArray<{
@@ -30,11 +30,6 @@ const responsibilityTypes: ReadonlyArray<{
   { value: "washing_factory", label: "洗水厂承担", supplierType: "embroidery_washing" },
   { value: "fabric_supplier", label: "面料商承担", supplierType: "fabric" },
 ];
-type Supplier = Readonly<{
-  supplierId: string;
-  supplierType: "factory" | "embroidery_washing" | "fabric";
-  supplierName: string;
-}>;
 type AllocationForm = { responsibilityType: ResponsibilityType; sharePercent: string; multiplier: string; supplierId: string };
 type ProcessForm = { configurationItemId: string; processName: string; pricingUnit: "piece" | "hour"; executionKind: "worker" | "tail_inspection"; baseAmount: string; allocations: AllocationForm[] };
 
@@ -59,11 +54,7 @@ const requestCurrentUserId = async (): Promise<string> => {
   if (session === "denied" || session.status !== "authorized") throw new Error("无法读取当前登录用户");
   return session.user.id;
 };
-const requestSuppliers = async (orderId: string): Promise<Supplier[]> => {
-  const response = await fetch(apiUrl(`rework-orders/${orderId}/responsibility-determinations/supplier-options`), { credentials: "include", headers: { accept: "application/json" } });
-  if (!response.ok) throw new Error(await requestError(response));
-  return ResponsibilitySupplierOptionsResponseSchema.parse(await response.json()).items;
-};
+const requestSuppliers = (orderId:string,signal:AbortSignal) => loadResponsibilitySuppliers(apiUrl(`rework-orders/${orderId}/responsibility-determinations/supplier-options`),signal);
 const parsePercentToBps = (value: string): bigint | null => {
   if (value === "") return 0n;
   if (!/^\d{1,3}(?:\.\d{1,2})?$/.test(value)) return null;
@@ -210,7 +201,11 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
   const [selectedProcessIds, setSelectedProcessIds] = useState<string[]>([]);
   const [batchDialogOpen, setBatchDialogOpen] = useState(false);
   const [batchAllocations, setBatchAllocations] = useState<AllocationForm[]>(() => [defaultBatchAllocation()]);
-  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [supplierState,setSupplierState]=useState<ResponsibilitySupplierState>({kind:'idle'});
+  const suppliers=supplierState.kind==='ready'?supplierState.items:[];
+  const supplierRequest=useRef<AbortController|null>(null);
+  const supplierOrder=useRef(reworkOrderId);
+  supplierOrder.current=reworkOrderId;
   const [changeReason, setChangeReason] = useState("");
   const [currentUserId, setCurrentUserId] = useState("");
   const [message, setMessage] = useState(history ? "" : "正在加载责任判定…");
@@ -219,7 +214,23 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
   const batchDialogRef = useRef<HTMLDivElement | null>(null);
   const batchReturnFocusRef = useRef<HTMLElement | null>(null);
 
+  const reloadSuppliers=async(next:ResponsibilityDeterminationResponse):Promise<void>=>{
+    supplierRequest.current?.abort();
+    const controller=new AbortController();supplierRequest.current=controller;
+    setSupplierState({kind:'loading'});
+    const loaded=await requestSuppliers(next.reworkOrderId,controller.signal);
+    if(controller.signal.aborted||supplierOrder.current!==next.reworkOrderId)return;
+    setSupplierState(loaded);
+    if(loaded.kind==='ready'){
+      const preferredId=preferredProcessingFactoryId(next);
+      if(preferredId&&!loaded.items.some(supplier=>supplier.supplierId===preferredId)){
+        setProcesses(current=>current.map(process=>({...process,allocations:process.allocations.map(allocation=>
+          allocation.responsibilityType==='processing_factory'&&allocation.supplierId===preferredId?{...allocation,supplierId:''}:allocation)})));
+      }
+    }
+  };
   const applyResponse = (next: ResponsibilityDeterminationResponse): void => {
+    if(supplierOrder.current!==next.reworkOrderId)return;
     setResponse(next);
     setTailCostBearer(next.tailInspectionCostBearer);
     setTailBearerEditing(
@@ -234,20 +245,10 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
     setProcesses(formsFromResponse(next));
     setChangeReason(next.determination?.reason ?? "");
     if (canEditDetermination(next)) {
-      void requestSuppliers(next.reworkOrderId).then((items) => {
-        setSuppliers(items);
-        const preferredId = preferredProcessingFactoryId(next);
-        if (preferredId && !items.some((supplier) => supplier.supplierId === preferredId)) {
-          setProcesses((current) => current.map((process) => ({
-            ...process,
-            allocations: process.allocations.map((allocation) => allocation.responsibilityType === "processing_factory" && allocation.supplierId === preferredId
-              ? { ...allocation, supplierId: "" }
-              : allocation),
-          })));
-        }
-      }).catch(() => setSuppliers([]));
+      void reloadSuppliers(next);
     } else {
-      setSuppliers([]);
+      supplierRequest.current?.abort();
+      setSupplierState({kind:'idle'});
     }
   };
   const reload = async (): Promise<void> => {
@@ -268,6 +269,7 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
       return;
     }
     void reload().catch((error: unknown) => setMessage(error instanceof Error ? error.message : "责任判定加载失败"));
+    return ()=>supplierRequest.current?.abort();
   }, [reworkOrderId]);
   useEffect(() => {
     if (!batchDialogOpen) return;
@@ -518,6 +520,12 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
       <StatusBadge tone={ownerSigning || determination?.stage === "finalized" ? "success" : "warning"}>{statusText}</StatusBadge>
     </div>}
     {message && <p className="responsibility-message" role="status">{message}</p>}
+    {editable&&supplierState.kind==='loading'&&<p className="responsibility-message" role="status">正在加载责任供应商…</p>}
+    {editable&&(supplierState.kind==='error'||supplierState.kind==='forbidden')&&<div className="responsibility-message" role="alert">
+      <p>{supplierState.message}</p>
+      {supplierState.kind==='error'&&<Button disabled={Boolean(busyAction)} onClick={()=>{if(response)void reloadSuppliers(response);}}>重试加载供应商</Button>}
+    </div>}
+    {editable&&supplierState.kind==='ready'&&suppliers.length===0&&<p className="responsibility-message" role="status">当前没有可用的责任供应商。</p>}
 
     {response?.tailInspectionRequired ? <section className="responsibility-tail-review">
       <div className="responsibility-process__title">
@@ -582,7 +590,7 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
                 }}>{availableTypes.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></span></label>
                 <InsetField label="承担比例（%）" value={allocation.sharePercent} inputMode="decimal" disabled={Boolean(busyAction)} placeholder="例如 70" onChange={(event) => setAllocation(process.configurationItemId, allocationIndex, { sharePercent: event.target.value })} />
                 {isExternal(allocation.responsibilityType) ? <>
-                  <label className="dx-field"><span>责任供应商</span><span className="dx-field__control search-select-control"><SearchSelect options={supplierOptions.map((supplier) => ({ value: supplier.supplierId, label: supplier.supplierName }))} value={allocation.supplierId} placeholder={supplierOptions.length ? "选择供应商" : "没有可用供应商"} emptyText="没有匹配的供应商" onChange={(supplierId: string) => setAllocation(process.configurationItemId, allocationIndex, { supplierId })} /></span></label>
+                  <label className="dx-field"><span>责任供应商</span><span className="dx-field__control search-select-control"><SearchSelect options={supplierOptions.map((supplier) => ({ value: supplier.supplierId, label: supplier.supplierName }))} value={allocation.supplierId} {...responsibilitySupplierField(supplierState,supplierOptions.length)} disabled={Boolean(busyAction)||supplierState.kind!=='ready'} onChange={(supplierId: string) => setAllocation(process.configurationItemId, allocationIndex, { supplierId })} /></span></label>
                   <InsetField label="扣款倍率（最低 1.2）" value={allocation.multiplier} inputMode="decimal" disabled={Boolean(busyAction)} onChange={(event) => setAllocation(process.configurationItemId, allocationIndex, { multiplier: event.target.value })} />
                 </> : <div className="responsibility-party__fixed"><span>责任倍率</span><b>1.000×</b></div>}
                 <div className="responsibility-party__amount"><span>自动计算金额</span><strong>{estimatedAllocationAmount(process.baseAmount, allocation)}</strong></div>
@@ -620,7 +628,7 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
               }}>{availableTypes.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></span></label>
               <InsetField label="承担比例（%）" value={allocation.sharePercent} inputMode="decimal" placeholder="例如 100" onChange={(event) => setBatchAllocation(allocationIndex, { sharePercent: event.target.value })} />
               {isExternal(allocation.responsibilityType) ? <>
-                <label className="dx-field"><span>责任供应商</span><span className="dx-field__control search-select-control"><SearchSelect options={supplierOptions.map((supplier) => ({ value: supplier.supplierId, label: supplier.supplierName }))} value={allocation.supplierId} placeholder={supplierOptions.length ? "选择供应商" : "没有可用供应商"} emptyText="没有匹配的供应商" onChange={(supplierId: string) => setBatchAllocation(allocationIndex, { supplierId })} /></span></label>
+                <label className="dx-field"><span>责任供应商</span><span className="dx-field__control search-select-control"><SearchSelect options={supplierOptions.map((supplier) => ({ value: supplier.supplierId, label: supplier.supplierName }))} value={allocation.supplierId} {...responsibilitySupplierField(supplierState,supplierOptions.length)} disabled={Boolean(busyAction)||supplierState.kind!=='ready'} onChange={(supplierId: string) => setBatchAllocation(allocationIndex, { supplierId })} /></span></label>
                 <InsetField label="扣款倍率（最低 1.2）" value={allocation.multiplier} inputMode="decimal" onChange={(event) => setBatchAllocation(allocationIndex, { multiplier: event.target.value })} />
               </> : <div className="responsibility-party__fixed"><span>责任倍率</span><b>1.000×</b></div>}
               <Button disabled={batchAllocations.length === 1} onClick={() => setBatchAllocations((current) => current.filter((_, index) => index !== allocationIndex))}>移除</Button>
