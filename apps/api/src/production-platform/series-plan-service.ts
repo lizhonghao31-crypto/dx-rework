@@ -1,4 +1,5 @@
 import {createHash,randomUUID} from 'node:crypto';
+import {resolveBulkPreshrinkRequirement} from './bulk-preshrink-requirement.js';
 import {z} from 'zod';
 import type {Pool,PoolClient} from 'pg';
 import {SeriesProfileInputSchema,SeriesContextInputSchema,SeriesPreviewInputSchema,ApplySeriesPlanSchema,RequestSeriesPlanSchema,SeriesRequestDecisionSchema,SERIES_PLAN_RULE,
@@ -67,7 +68,10 @@ export class SeriesPlanService{
   const date=(key:string)=>milestones.find(m=>m.key===key)?.targetDate??null;
   for(const m of milestones)if(m.targetDate&&m.targetDate<beijingCalendarDate(new Date(time.now))&&!native.facts.some(f=>f.key===m.key&&f.scopeRef===m.scopeRef&&f.completed))risks.push({code:'PLANNED_NODE_PAST_DUE',tone:'warning',nodeId:m.id,message:`${m.label}计划截止 ${m.targetDate} 已过；原逾期事实不会因改期消除`});
   const slaRecord=(await db.query('SELECT snapshot_id,revision,parameters_json FROM digital_sla_order_snapshots WHERE production_order_id=$1 ORDER BY revision DESC LIMIT 1',[id])).rows[0],frozen=slaRecord?.parameters_json;
-  const instructionRecord=(await db.query('SELECT d.document,d.version,d.source_round FROM digital_instruction_documents h JOIN digital_instruction_versions d ON d.production_order_id=h.production_order_id AND d.version=h.published_version WHERE h.production_order_id=$1',[id])).rows[0],instruction=instructionRecord?.document;
+  const instructionRecord=(await db.query(`SELECT d.document,d.version,d.source_round,p.preparation_id,p.preshrink FROM digital_instruction_documents h
+   JOIN digital_instruction_versions d ON d.production_order_id=h.production_order_id AND d.version=h.published_version
+   LEFT JOIN digital_bulk_preparations p ON p.production_order_id=d.production_order_id AND p.instruction_version=d.version AND p.source_round=d.source_round
+   WHERE h.production_order_id=$1`,[id])).rows[0],instruction=instructionRecord?.document;
   const craft=instruction?.secondaryCraft&&instruction.secondaryCraft!=='沿用开发'?instruction.secondaryCraft:native.document?.document?.craft;
   const estimates:Record<string,number|null>={fabric_inspection:1440,fabric_preshrink:2160,size_review:1440,instruction:1440,pattern_marker:2880,cutting:1440,post_cut_craft:craft==='无'?0:['印花','绣花'].includes(craft)?5760:craft==='印绣花'?10080:null,post_cut_check:craft==='无'?0:2880,dispatch:1440,factory_production:null,return_logistics:2880,garment_qc:2880,packing:1440};
   const slaKeys:Record<string,string>={fabric_inspection:'fabric_inspection',fabric_preshrink:'warehouse_preshrink',pattern_marker:'bulk_pattern',cutting:'bulk_cutting',post_cut_craft:craft==='印花'?'bulk_printing':craft==='绣花'?'bulk_embroidery':'bulk_print_embroidery',post_cut_check:'bulk_qc',dispatch:'warehouse_dispatch',return_logistics:'return_logistics',garment_qc:'garment_qc',packing:'packing'};
@@ -85,7 +89,7 @@ export class SeriesPlanService{
   graph.push({id:'instruction_draft',label:'到仓后制单草稿协同目标',scopeRef:'whole',dependsOn:['fabric'],anchorDate:null,durationMinutes:1440,basis:'confirmed'});
   task('instruction','前提齐备后跟单正式制单',['fabric_inspection','size_review']);task('pattern_marker','纸样及唛架',['instruction']);
   // Missing auxiliaries do not stop unaffected paper work. Physical labels and auxiliaries precede cutting.
-  const preshrink=instruction?.preshrink,needsPreshrink=preshrink==='需要预缩';
+  const preshrink=resolveBulkPreshrinkRequirement(instructionRecord?.preparation_id?instructionRecord:null,instruction),needsPreshrink=preshrink==='需要预缩';
   if(needsPreshrink)task('fabric_preshrink','适用面料预缩',['fabric_inspection']);
   for(const line of lines){const scope=`po:${line.line_id}`,label=line.po_number??line.color;
    const cut=task('cutting',`${label} 开裁及实裁`,['pattern_marker','accessories','label',needsPreshrink?'fabric_preshrink':'fabric_inspection'],null,scope);
@@ -101,7 +105,7 @@ export class SeriesPlanService{
   for(const n of dependencies)if(n.lateMinutes)risks.push({code:'DEPENDENCY_LATE',tone:'danger',nodeId:n.id,message:`${n.label}按当前前提及计划工期预计晚于目标 ${Math.ceil(n.lateMinutes/1440)} 天；不自动压缩或平移客户日期`});
   if(input.plannedDurations.factory_production===undefined)risks.push({code:'FACTORY_CAPACITY_UNKNOWN',tone:'unknown',nodeId:null,message:'工厂生产计划工期尚未确认；按PO/批次并行展示前后依赖，不把未知产能当零天或承诺准期'});
   risks.push({code:'PLAN_ESTIMATE_SCOPE',tone:'warning',nodeId:null,message:'依赖图按当前适用路线估算，不代表产能承诺。各批需按真实可用及实裁范围办理；实际SLA仍按原起止事件独立计时'});
-  const sourceRevisionSet={rule:SERIES_PLAN_RULE,orderVersion:order.version,series:[order.sales_year,order.sales_series,order.requires_color_matching],profile,lines,nativeRef:{sourceId:order.source_id,documentVersion:native.document?.version??null,round:native.document?.round_number??null,technicalRevision:(native.revisions.technical as {revision?:string}|undefined)?.revision??null},factRefs:native.facts.map(f=>({key:f.key,scope:f.scopeRef,domain:f.sourceDomain,id:f.sourceRecordId,version:f.sourceVersion})),slaSnapshotRef:slaRecord?{id:slaRecord.snapshot_id,revision:slaRecord.revision}:null,instructionRef:instructionRecord?{version:instructionRecord.version,sourceRound:instructionRecord.source_round}:null,nativeFingerprint:hash(native.revisions),parameterFingerprint:hash(frozen??null),instructionFingerprint:hash(instruction??null),clock:{day:beijingCalendarDate(new Date(time.now)),scenarioId:time.scenarioId,revision:time.revision},planRevision:previous?.revision??0,input};
+  const sourceRevisionSet={rule:SERIES_PLAN_RULE,orderVersion:order.version,series:[order.sales_year,order.sales_series,order.requires_color_matching],profile,lines,nativeRef:{sourceId:order.source_id,documentVersion:native.document?.version??null,round:native.document?.round_number??null,technicalRevision:(native.revisions.technical as {revision?:string}|undefined)?.revision??null},factRefs:native.facts.map(f=>({key:f.key,scope:f.scopeRef,domain:f.sourceDomain,id:f.sourceRecordId,version:f.sourceVersion})),slaSnapshotRef:slaRecord?{id:slaRecord.snapshot_id,revision:slaRecord.revision}:null,instructionRef:instructionRecord?{version:instructionRecord.version,sourceRound:instructionRecord.source_round,preparationId:instructionRecord.preparation_id??null,preshrink}:null,nativeFingerprint:hash(native.revisions),parameterFingerprint:hash(frozen??null),instructionFingerprint:hash(instruction??null),clock:{day:beijingCalendarDate(new Date(time.now)),scenarioId:time.scenarioId,revision:time.revision},planRevision:previous?.revision??0,input};
   return {orderId:id,input,orderVersion:order.version,planRevision:previous?.revision??0,profile,candidateDate,basis,route,previewToken:this.tokens.issue(hash(sourceRevisionSet)),milestones,facts:native.facts,selectedNodeIds,risks,planningGraph:graph,dependencies,sourceRevisionSet};
  }
  async preview(actor:TrustedActorContext,id:string,raw:unknown){const input=parse(SeriesPreviewInputSchema,raw),db=await this.database.connect();try{await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ');const p=await this.prepare(db,actor,id,input);await db.query('COMMIT');return p;}catch(e){await db.query('ROLLBACK');throw e;}finally{db.release();}}

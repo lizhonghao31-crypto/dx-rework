@@ -21,6 +21,7 @@ import {FactoryFlowService} from "./factory-flow-service.js";
 import type { DigitalTaskState, DigitalTimeQuality } from "@dx-rework/contracts/digital-production-tasks";
 import {savedDevelopmentRoute} from "./development-sla-enrollment.js";
 import { createHash, randomUUID } from "node:crypto";
+import {resolveBulkPreshrinkRequirement} from './bulk-preshrink-requirement.js';
 import {isDeepStrictEqual} from "node:util";
 import type { Pool, PoolClient } from "pg";
 import type { TrustedActorContext } from "../tools/repositories.js";
@@ -221,7 +222,8 @@ export class DigitalProductionTaskService {
     for (const prior of input.predecessors ?? []) await client.query("INSERT INTO digital_production_task_dependencies(task_id,predecessor_id) VALUES($1,$2)", [id, prior]);
     let activation=REQUIRED_ACTIVATION[input.kind]??[];
     if(input.resource.kind==='order'&&['bulk_pattern','warehouse_preshrink'].includes(input.kind)){
-      const prep=(await client.query('SELECT workflow_version FROM digital_bulk_preparations WHERE preparation_id=$1 AND production_order_id=$2',[input.routeId,input.resource.id])).rows[0];
+      const prep=(await client.query('SELECT workflow_version,preshrink FROM digital_bulk_preparations WHERE preparation_id=$1 AND production_order_id=$2',[input.routeId,input.resource.id])).rows[0];
+      if(input.kind==='warehouse_preshrink'&&prep&&resolveBulkPreshrinkRequirement(prep)!=='需要预缩')fail('本制单未要求预缩，不能创建预缩任务');
       if(prep?.workflow_version===2)activation=input.kind==='bulk_pattern'?['customer_confirmed']:['materials_ready'];
     }
     for (const condition of new Set([...activation, ...(input.conditions ?? []), "business_recorded" as const])) {

@@ -18,6 +18,7 @@ import {BulkPreparationService} from '../../apps/api/src/production-platform/bul
 import {bulkFabricDecisionTodos} from "../../apps/api/src/production-platform/bulk-fabric-todos.js";
 import {todoDestination} from "../../packages/contracts/src/todo-destination.js";
 import {SlaOrderService} from "../../apps/api/src/production-platform/sla-order-service.js";
+import {SeriesPlanService} from "../../apps/api/src/production-platform/series-plan-service.js";
 import {minimumInitialCustomerDate} from "@dx-rework/contracts/digital-production";
 import { ApplicationError } from "../../apps/api/src/platform/errors.js";
 import { PostgresAuthStore } from "../../apps/api/src/auth/postgres-store.js";
@@ -4509,6 +4510,46 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await exerciseBulkPreparation(database,await budgetFixture(false,"TEST-P09","2026-11-20",mode==='none'),service,attachments,{primary:merchandiserActor(),manager:managerActor(),owner:ownerActor(),ie:ieActor(),root:rootActor()},factoryId,craftId("净色车缝"),mode,mode==='none'?{cuttingProcess:'in_house',stopAtReady:false,legacyDevelopment:true}:undefined);
   });
 
+  it('P11 freezes no-preshrink at publication and preserves facts, tasks and P0 across reads, sync and a different unpublished draft',async()=>{
+    const primary=merchandiserActor(),root=rootActor(),fixture=await budgetFixture();
+    const ready=(await exerciseBulkPreparation(database,fixture,service,attachments,{primary,manager:managerActor(),owner:ownerActor(),ie:ieActor(),root},factoryId,craftId('净色车缝'),'none',{cuttingProcess:'in_house',stopAtReady:true}))!;
+    const {id,bulk,instruction,preparationId}=ready;
+    const frozen=async()=>({
+      instructions:(await database.query('SELECT * FROM digital_instruction_versions WHERE production_order_id=$1 ORDER BY version',[id])).rows,
+      preparations:(await database.query('SELECT * FROM digital_bulk_preparations WHERE production_order_id=$1 ORDER BY preparation_id',[id])).rows,
+      facts:(await database.query('SELECT * FROM digital_bulk_preparation_facts WHERE preparation_id=$1 ORDER BY fact_id',[preparationId])).rows,
+      tasks:(await database.query('SELECT t.* FROM digital_production_tasks t WHERE route_instance_id=$1 ORDER BY task_id',[preparationId])).rows,
+      events:(await database.query('SELECT e.* FROM digital_production_task_events e JOIN digital_production_tasks t USING(task_id) WHERE t.route_instance_id=$1 ORDER BY event_id',[preparationId])).rows,
+      plans:(await database.query('SELECT * FROM digital_sla_plans WHERE production_order_id=$1 ORDER BY revision',[id])).rows,
+      snapshots:(await database.query('SELECT * FROM digital_sla_order_snapshots WHERE production_order_id=$1 ORDER BY revision',[id])).rows,
+    });
+    const before=await frozen();
+    expect(before.preparations).toHaveLength(1);
+    expect(before.preparations[0]).toMatchObject({workflow_version:2,preshrink:'无需预缩'});
+    expect(before.facts.filter(f=>f.kind==='无需预缩')).toHaveLength(1);
+    const read=await new SlaOrderService(database).read(root,id);
+    if(read.status!=='planned')throw Error('missing no-preshrink SLA plan');
+    expect(read.nodes.find(n=>n.id==='warehouse_preshrink')?.status).toBe('not_applicable');
+    expect(read.nodes.find(n=>n.id==='bulk_cutting')).toMatchObject({actualStart:null,actualEnd:null});
+    expect(read.current.plan.nodes.find(n=>n.id==='warehouse_preshrink')?.applicable).toBe('yes');
+    expect((await new DigitalJourneyQuery(database).read(root,id)).stages.flatMap(s=>s.nodes).find(n=>n.key==='warehouse_preshrink')?.state).toBe('not_applicable');
+    const current=await instruction.read(primary,id);
+    const plans=new SeriesPlanService(database,'TEST-preshrink-preview-not-live');
+    const preview=await plans.preview(root,id,{expectedOrderVersion:current.order.version,expectedPlanRevision:0});
+    expect(preview.sourceRevisionSet.instructionRef).toMatchObject({preparationId,preshrink:'无需预缩'});
+    expect(preview.planningGraph.some(n=>n.id==='fabric_preshrink')).toBe(false);
+    for(const node of preview.planningGraph.filter(n=>n.id.startsWith('cutting:')))expect(node.dependsOn).toContain('fabric_inspection');
+    await instruction.save(primary,id,{expectedVersion:current.version,orderVersion:current.order.version,document:{...current.document,preshrink:'需要预缩'}},randomUUID());
+    const client=await database.connect();
+    try{await client.query('BEGIN');await bulk.sync(client,root,id);await bulk.sync(client,root,id);await client.query('COMMIT');}
+    catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
+    expect(await bulk.read(root,id)).toMatchObject({preparationId,preshrink:'无需预缩'});
+    expect((await plans.preview(root,id,{expectedOrderVersion:current.order.version,expectedPlanRevision:0})).planningGraph).toEqual(preview.planningGraph);
+    expect(await frozen()).toEqual(before);
+    await expect(bulk.complete(root,id,{preparationId,kind:'预缩完成'},randomUUID())).rejects.toMatchObject({statusCode:409});
+    expect(await frozen()).toEqual(before);
+  });
+
   it("V2 hides deleted native sourcing decisions and dead record links from Journey",async()=>{
     const fixture=await budgetFixture(),root=rootActor();
     const ready=(await exerciseBulkPreparation(database,fixture,service,attachments,{primary:merchandiserActor(),manager:managerActor(),owner:ownerActor(),ie:ieActor(),root},factoryId,craftId("净色车缝"),'pattern-first',{cuttingProcess:'in_house',stopAtReady:true}))!;
@@ -4558,11 +4599,12 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect((await cockpit.list(recorder,cockpitInput)).items.some(row=>row.orderId===id)).toBe(true);
     const outsider={...fixture.designer,actorId:randomUUID()};
     expect((await cockpit.list(outsider,cockpitInput)).total).toBe(0);
-    expect(partialProgress.lines).toHaveLength(2);// Newly enrolled preparation includes the mandatory warehouse preshrink node.
+    expect(partialProgress.lines).toHaveLength(2);// This published instruction explicitly excludes preshrink.
     const partialPreparation=await bulk.read(primary,id);
-    expect(partialPreparation.preshrink).toBe('需要预缩');
-    expect(partialPreparation.tasks.find(t=>t.taskKind==='warehouse_preshrink')?.state).toBe('completed');
-    expect(partialProgress.progress).toEqual({applicable:7,completed:2});
+    expect(partialPreparation.preshrink).toBe('无需预缩');
+    expect(partialPreparation.tasks.some(t=>t.taskKind==='warehouse_preshrink')).toBe(false);
+    expect(partialPreparation.facts.some(f=>f.kind==='预缩完成')).toBe(false);
+    expect(partialProgress.progress).toEqual({applicable:6,completed:1});
     const before=(await bulk.read(primary,id)).tasks.find(t=>t.taskKind.startsWith('bulk_cutting'))!;
     const identity=new DigitalProductionIdentityService(database,true,service),current=await identity.read(primary,id);
     const formal=`TEST-P12-${randomUUID().slice(0,8)}`;
@@ -4585,7 +4627,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       expect(afterSla.progress.stages.find(stage=>stage.stage===4)!.completed).toBe(1);
       if(mode==='outsourced'){expect(cuttingNode.actualStart).toBeNull();expect(cuttingNode.deadline.at).toBeNull();expect(cuttingNode.status).toBe('completed_unrated');}
     }
-    expect((await cockpit.list(primary,cockpitInput)).items.find(row=>row.orderId===id)!.progress).toEqual({applicable:7,completed:3});
+    expect((await cockpit.list(primary,cockpitInput)).items.find(row=>row.orderId===id)!.progress).toEqual({applicable:6,completed:2});
     expect((await database.query('SELECT 1 FROM digital_bulk_cutting_completions WHERE production_order_id=$1',[id])).rowCount).toBe(1);
     await cutting.correct({...root,authorizationCapability:'cutting:records:correct'},ids[0],{expectedVersion:1,pieceCount:4,actualCutCount:103,reason:'TEST真实实绩更正'},randomUUID());
     const final=await bulk.read(primary,id);expect(final.cutting.lines[0]).toMatchObject({orderQuantity:137,actualCutCount:103,pieceCount:4,corrected:true});

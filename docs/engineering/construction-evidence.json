@@ -1,292 +1,251 @@
 {
   "version": 1,
-  "base": "8ecfbb17b7f2b69905ae326642d1aea96b7bb0a7",
+  "base": "c2c49369898b7f9943fb280342a56d9a98b0b30b",
+  "sourceFingerprint": "178995034fe121020b2b6d4225d4fed03e519c16f1f1dd098ffe87f333fa07bf",
   "risk": "full",
-  "sourceFingerprint": "2420c1b942ea282801d07d8a3c4e1c6b0362f49790f0a60e67858dfd9bac40b1",
   "rules": [
     {
-      "rule": "I：款号唛新增另一物料始终保留固定计件单位枚，保留黑PO明细及已裁数量，仅追加选择的白PO。",
-      "source": "docs/engineering/acceptance-readiness-ic-20261103.md；父转交现场I及docs/requirements/production-preparation-20261101.md原计件/范围/版本规则。",
+      "rule": "新产前准备冻结已发布制单的明确预缩选择，不能由并行 SLA 路线强制改写。",
+      "source": "用户 2026-11-03 本 Chat A 授权；docs/engineering/preshrink-choice-20261103.md",
       "writes": [
-        "apps/web/src/production-readiness-panel.tsx",
-        "tests/integration/production-readiness-postgres.test.ts",
-        "tests/fixtures/production-readiness-ui.tsx",
-        "tests/acceptance/production-readiness-browser.mjs"
+        "apps/api/src/production-platform/bulk-preparation-service.ts",
+        "apps/api/src/production-platform/bulk-preshrink-requirement.ts",
+        "apps/api/migrations/0272_bulk_preshrink_instruction_choice.sql",
+        "apps/api/src/platform/migration-manifest.json"
       ],
       "reads": [
-        "packages/contracts/src/production-readiness.ts",
-        "apps/api/src/production-platform/production-readiness-service.ts",
-        "apps/api/src/production-platform/production-readiness-repository.ts",
-        "apps/web/src/bulk-preparation-panel.tsx"
+        "apps/api/src/production-platform/journey-query.ts",
+        "apps/api/src/production-platform/production-instruction-service.ts",
+        "apps/api/src/production-platform/production-readiness-repository.ts"
       ],
       "oldTests": [
-        "tests/unit/production-readiness-contract.test.ts",
-        "tests/integration/production-readiness-postgres.test.ts",
-        "tests/fixtures/production-readiness-ui.tsx",
-        "tests/acceptance/production-readiness-browser.mjs"
+        "tests/integration/sourcing-pr03-postgres.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts"
       ],
-      "initialization": "原新建TEST订单、两真实PO和仓管角色；原合同、物料记录及实裁命令，不改现场账号/历史、不重seed现场。",
-      "dateAndPermission": "不改实际时间和计件守卫；非计件行原单位保持，仓管范围及expectedVersion仍校验，跟单不得代仓管写。",
-      "expectation": "黑PO实际已裁1在白PO追加后仍1；原行完整保留，两并发写一次成功一次409；只读/错误输入保留；新行默认只读枚，两宽均可保存。",
+      "initialization": "0272 只替换 CHECK；旧 prep、制单 v3、事实、任务和时钟不 UPDATE；原两值和快照约束保留。",
+      "dateAndPermission": "不更换时钟，不扩角色或跨单读取；仍用原事务、任务生命周期锁、母单锁和命令幂等。",
+      "expectation": "无需预缩新单可建立 workflow2 prep；需要预缩仍受原验布及完成前提；PG 反例未运行。",
       "checks": [
-        "pg-focused",
-        "browser-focused-v2",
-        "unit-contract",
-        "typecheck",
-        "lint-final",
-        "preflight"
+        "a-migration-lint",
+        "a-lint",
+        "a-types",
+        "a-targeted-tests"
       ]
     },
     {
-      "rule": "C：按当前preparation和成果kind的最大version选择范围；同业务时间和逆UUID不改变版本语义，保留所有历史、真实409和原48h时钟。",
-      "source": "docs/engineering/acceptance-readiness-ic-20261103.md；父转交现场C，原BulkPreparationService.complete最大version及production-preparation-20261101.md版本/时钟契约。",
+      "rule": "无需预缩不得补造预缩任务/完成；真实执行预缩的旧时钟夹具须显式选择需要。",
+      "source": "用户 A 正反例/历史保护边界；实际 fixture 与 task consumer 核对。",
       "writes": [
-        "apps/api/src/production-platform/production-readiness-service.ts",
-        "apps/web/src/production-readiness-range-action.tsx",
-        "tests/integration/production-readiness-postgres.test.ts",
-        "tests/fixtures/production-readiness-ui.tsx",
-        "tests/acceptance/production-readiness-browser.mjs"
+        "apps/api/src/production-platform/task-service.ts",
+        "tests/helpers/bulk-preparation-fixture.ts",
+        "tests/helpers/business-anchor-fixture.ts"
       ],
       "reads": [
         "apps/api/src/production-platform/bulk-preparation-service.ts",
-        "apps/api/src/production-platform/preparation-todos.ts",
-        "apps/api/src/production-platform/production-readiness-repository.ts",
-        "apps/api/src/production-platform/node-materials.ts",
-        "tests/helpers/production-readiness-fixture.ts"
+        "apps/api/src/production-platform/bulk-task-timing.ts",
+        "apps/api/src/production-platform/access-policy.ts"
       ],
       "oldTests": [
-        "tests/integration/production-readiness-postgres.test.ts",
-        "tests/fixtures/production-readiness-ui.tsx",
-        "tests/acceptance/production-readiness-browser.mjs",
-        "tests/helpers/production-readiness-fixture.ts"
+        "tests/integration/sourcing-pr03-postgres.test.ts",
+        "tests/integration/business-anchors-clock-postgres.test.ts"
       ],
-      "initialization": "同一原准备和真实任务构造固定UUID顺序相反的不可变既有范围；随后全部原服务命令，原286迁移/触发器不禁用，局部不写整项完成。",
-      "dateAndPermission": "不改发生时间、计时起点、截止或权限；类型和准备版本严格隔离，写端expectedVersion/readinessRevision和事务锁原样保留。",
-      "expectation": "同时间纸样1/2按版本读取；唛架1独立，前版v99不串当前；旧页及并发一条409，刷新后能完成，65h仍比原48h晚17h，所有版本可查。",
+      "initialization": "none 场景不再假做预缩；需要预缩正控和所有权限、幂等、实裁断言继续保留。",
+      "dateAndPermission": "固定岗位、订单隔离、历史时钟和未知实际时间均沿用；不放宽预算或测试超时。",
+      "expectation": "none 无预缩任务/完成事实；真正需要预缩有 36h 任务；完整 PG 组待补。",
       "checks": [
-        "pg-focused",
-        "browser-focused-v2",
-        "typecheck",
-        "lint-final",
-        "preflight"
+        "a-lint",
+        "a-types",
+        "a-api-build"
+      ]
+    },
+    {
+      "rule": "当前 SLA 适用性读取尊重有效预缩要求，冻结 P0 和已完成实绩保留。",
+      "source": "用户 A SLA/历史事实/预计与实际分离约束。",
+      "writes": [
+        "apps/api/src/production-platform/bulk-sla-evidence.ts",
+        "apps/api/src/production-platform/sla-order-service.ts",
+        "packages/contracts/src/digital-sla.ts",
+        "tests/unit/bulk-preshrink-requirement.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/sla-route.ts",
+        "apps/api/src/production-platform/sla-order-application.ts",
+        "apps/api/src/production-platform/bulk-task-timing.ts",
+        "packages/domain/src/digital-sla-plan.ts"
+      ],
+      "oldTests": [
+        "tests/unit/digital-sla-plan.test.ts",
+        "tests/unit/digital-sla-configuration.test.ts",
+        "tests/unit/journey-sla-supervision.test.ts"
+      ],
+      "initialization": "原计划保持不变；只构造评估投影。已有完成与未知实绩保留，不填旧时钟或重新冻结。",
+      "dateAndPermission": "36h 参数不变；无需预缩仍保验布依赖；不伪造实际开工/结束。",
+      "expectation": "单测证明 36h 预计差值、原计划不变、完成未知时间保留和验布等待；87 项定向检查通过。",
+      "checks": [
+        "a-lint",
+        "a-types",
+        "a-api-build",
+        "a-targeted-tests",
+        "a-web-build"
+      ]
+    },
+    {
+      "rule": "驾驶舱、Journey 和系列计划消费同一冻结选择，预览绑定 prep 依据。",
+      "source": "用户 A sync/read/任务投影消费者统一解析要求。",
+      "writes": [
+        "apps/api/src/production-platform/cockpit-query.ts",
+        "apps/api/src/production-platform/series-plan-service.ts",
+        "tests/integration/sourcing-pr03-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/cockpit-progress.ts",
+        "apps/api/src/production-platform/journey-query.ts",
+        "apps/api/src/production-platform/series-plan-facts.ts"
+      ],
+      "oldTests": [
+        "tests/unit/digital-cockpit-progress.test.ts",
+        "tests/unit/series-plan-dates.test.ts",
+        "tests/integration/series-plan-routes.test.ts",
+        "tests/integration/series-plan-postgres.test.ts"
+      ],
+      "initialization": "新草稿不改变已发布 prep；新增 PG 冻结反例核 prep/facts/tasks/events/P0/snapshots 一致。",
+      "dateAndPermission": "沿用原授权查询、自然日计划及冻结参数；不改客户日期/实收实裁条件。",
+      "expectation": "无需节点不计进度，计划保留验布；重复 sync 与未发布草稿不改冻结历史，PG 尚待执行。",
+      "checks": [
+        "a-lint",
+        "a-types",
+        "a-targeted-tests"
       ]
     }
   ],
   "checks": [
     {
-      "id": "pg-focused",
-      "kind": "tests",
-      "command": "[\"flock\",\"/workspace/ic-readiness-20261103/test-instance.lock\",\"node_modules/.bin/vitest\",\"run\",\"--config\",\"vitest.business-chain.config.ts\",\"tests/integration/production-readiness-postgres.test.ts\",\"-t\",\"preserves black PO|orders same-time|partial ordinary-order|rejects stale parallel edits\",\"--reporter=default\",\"--reporter=json\",\"--outputFile=/workspace/ic-readiness-20261103/pg-focused.json\"]",
+      "id": "a-migration-lint",
+      "kind": "command",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "8ecfbb17b7f2b69905ae326642d1aea96b7bb0a7",
-      "sourceFingerprint": "032fc95c2beabc04d8635bc732da0728addc0bcfc177eed3cce0fb0291d935a4",
-      "inputPaths": [
-        "apps/api",
-        "packages",
-        "scripts",
-        "tests/helpers",
-        "tests/integration/production-readiness-postgres.test.ts",
-        "tests/inspection-report-fixture.ts",
-        "package.json",
-        "package-lock.json",
-        "tsconfig.base.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts"
-      ],
-      "inputFingerprint": "f6a550c9d663fdc727055ebceccb39bba45f9732a8320382000aa67c3f2d6d20",
-      "sourceState": "Actual working candidate source/input fingerprints captured before command and declared inputs reverified after; testedHead is ancestor while git diff exists, not a claim of a committed tested Head",
-      "context": "Local Node 22.23.4; local validation only; test configuration and any owned database are recorded separately; no claim of CI hardware equivalence or authenticated live-site acceptance Own local PostgreSQL16.15 container dx-ic-readiness-20261103, explicitly marked dx_rework_acceptance_clock_test; five unsafe cluster flags false, original 286 migrations and native seed/commands. 4 selected cases passed; 19 intentionally unselected. Owned fixture schema count0 after disposal. No live Acceptance access.",
-      "startedAt": "2026-11-03T10:01:39.356Z",
-      "endedAt": "2026-11-03T10:01:54.104Z",
-      "logSha256": "bdc0b88536dd02b98a38721372f4540c12772b861edc671454269f496dfffdc8",
-      "log": "/workspace/ic-readiness-20261103/recorded-pg-focused-1793700099356.log",
-      "passed": 4,
+      "startedAt": "2026-11-03T11:35:57.338044+00:00",
+      "endedAt": "2026-11-03T11:35:57.609912+00:00",
+      "sourceFingerprint": "178995034fe121020b2b6d4225d4fed03e519c16f1f1dd098ffe87f333fa07bf",
+      "testedHead": "c2c49369898b7f9943fb280342a56d9a98b0b30b",
+      "logSha256": "119507e622da36534025d5e974c31a1b280bad426be4a230eee6f39e4b1ad51d",
+      "context": "Node 22.22.2; npm 10.9.9; existing lockfile-matched dependencies; isolated local source; no database; base HEAD with uncommitted candidate, bound by sourceFingerprint; log in handoff ZIP verification/logs/a-migration-lint.log",
+      "command": "npm run db:migrate:lint",
+      "logPath": "verification/logs/a-migration-lint.log"
+    },
+    {
+      "id": "a-lint",
+      "kind": "command",
+      "status": "passed",
+      "exitCode": 0,
+      "startedAt": "2026-11-03T11:35:57.893026+00:00",
+      "endedAt": "2026-11-03T11:36:00.641975+00:00",
+      "sourceFingerprint": "178995034fe121020b2b6d4225d4fed03e519c16f1f1dd098ffe87f333fa07bf",
+      "testedHead": "c2c49369898b7f9943fb280342a56d9a98b0b30b",
+      "logSha256": "e95429b6f9f0fb51896edcd76b0c467977ef43819197b846ebd2a54470e0eb63",
+      "context": "Node 22.22.2; npm 10.9.9; existing lockfile-matched dependencies; isolated local source; no database; base HEAD with uncommitted candidate, bound by sourceFingerprint; log in handoff ZIP verification/logs/a-lint.log",
+      "command": "node node_modules/eslint/bin/eslint.js --max-warnings=0 apps/api/src/production-platform/bulk-preparation-service.ts apps/api/src/production-platform/bulk-preshrink-requirement.ts apps/api/src/production-platform/bulk-sla-evidence.ts apps/api/src/production-platform/cockpit-query.ts apps/api/src/production-platform/series-plan-service.ts apps/api/src/production-platform/sla-order-service.ts apps/api/src/production-platform/task-service.ts packages/contracts/src/digital-sla.ts tests/helpers/bulk-preparation-fixture.ts tests/helpers/business-anchor-fixture.ts tests/integration/sourcing-pr03-postgres.test.ts tests/unit/bulk-preshrink-requirement.test.ts",
+      "logPath": "verification/logs/a-lint.log"
+    },
+    {
+      "id": "a-types",
+      "kind": "command",
+      "status": "passed",
+      "exitCode": 0,
+      "startedAt": "2026-11-03T11:36:00.889644+00:00",
+      "endedAt": "2026-11-03T11:36:46.838656+00:00",
+      "sourceFingerprint": "178995034fe121020b2b6d4225d4fed03e519c16f1f1dd098ffe87f333fa07bf",
+      "testedHead": "c2c49369898b7f9943fb280342a56d9a98b0b30b",
+      "logSha256": "2ae2ecb6ce6ad2d267f8d8875e6ac08e2a6c47700be7ed53907ed000517b5198",
+      "context": "Node 22.22.2; npm 10.9.9; existing lockfile-matched dependencies; isolated local source; no database; base HEAD with uncommitted candidate, bound by sourceFingerprint; log in handoff ZIP verification/logs/a-types.log",
+      "command": "npm run typecheck",
+      "logPath": "verification/logs/a-types.log"
+    },
+    {
+      "id": "a-api-build",
+      "kind": "command",
+      "status": "passed",
+      "exitCode": 0,
+      "startedAt": "2026-11-03T11:36:47.164015+00:00",
+      "endedAt": "2026-11-03T11:37:01.767647+00:00",
+      "sourceFingerprint": "178995034fe121020b2b6d4225d4fed03e519c16f1f1dd098ffe87f333fa07bf",
+      "testedHead": "c2c49369898b7f9943fb280342a56d9a98b0b30b",
+      "logSha256": "8382b8c063b63f31822035aebca88802a15f7946cc09294661acf77feb9ea100",
+      "context": "Node 22.22.2; npm 10.9.9; existing lockfile-matched dependencies; isolated local source; no database; base HEAD with uncommitted candidate, bound by sourceFingerprint; log in handoff ZIP verification/logs/a-api-build.log",
+      "command": "npm run build --workspace @dx-rework/api",
+      "logPath": "verification/logs/a-api-build.log"
+    },
+    {
+      "id": "a-targeted-tests",
+      "kind": "tests",
+      "status": "passed",
+      "exitCode": 0,
+      "startedAt": "2026-11-03T11:37:02.024831+00:00",
+      "endedAt": "2026-11-03T11:37:06.791092+00:00",
+      "sourceFingerprint": "178995034fe121020b2b6d4225d4fed03e519c16f1f1dd098ffe87f333fa07bf",
+      "testedHead": "c2c49369898b7f9943fb280342a56d9a98b0b30b",
+      "logSha256": "40c0d24c0cee7eaf4081dcf8c4665b87e95114ba1d2c86a48df9a5d06d153e34",
+      "context": "Node 22.22.2; npm 10.9.9; existing lockfile-matched dependencies; isolated local source; no database; base HEAD with uncommitted candidate, bound by sourceFingerprint; log in handoff ZIP verification/logs/a-targeted-tests.log",
+      "passed": 87,
       "failed": 0,
-      "skipped": 19,
+      "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "de7159022c07d32070a714b35fdaa1df9dccacf80aa3948cf6b0c88c7ed14cf0",
-          "path": "/workspace/ic-readiness-20261103/pg-focused.json"
+          "sha256": "9c3ee899a8616249fa046c4f0ab01bf3e3e37f2cb6a9f9266bff2475a1b170df",
+          "path": "verification/a-tests.json"
         }
       ],
-      "actualReportPaths": [
-        "/workspace/ic-readiness-20261103/pg-focused.json"
-      ]
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/bulk-preshrink-requirement.test.ts tests/unit/digital-sla-plan.test.ts tests/unit/digital-sla-configuration.test.ts tests/unit/digital-cockpit-progress.test.ts tests/unit/doc03-instruction-validation.test.ts tests/unit/series-plan-dates.test.ts tests/unit/journey-sla-supervision.test.ts tests/unit/current-migration-manifest-checksum.test.ts tests/integration/series-plan-routes.test.ts --reporter=verbose --reporter=json --outputFile.json=/workspace/scratch/6d3c65b5fd2c/runtime/ab-environment-probe-20261103/a-tests.json",
+      "logPath": "verification/logs/a-targeted-tests.log"
     },
     {
-      "id": "browser-focused-v2",
-      "kind": "tests",
-      "command": "[\"node\",\"tests/acceptance/production-readiness-browser.mjs\"]",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "8ecfbb17b7f2b69905ae326642d1aea96b7bb0a7",
-      "sourceFingerprint": "2420c1b942ea282801d07d8a3c4e1c6b0362f49790f0a60e67858dfd9bac40b1",
-      "inputPaths": [
-        "apps/web",
-        "packages",
-        "tests/fixtures/production-readiness-ui.tsx",
-        "tests/acceptance/production-readiness-browser.mjs",
-        "package.json",
-        "package-lock.json",
-        "tsconfig.base.json"
-      ],
-      "inputFingerprint": "b1fc116af7e47374d66fa690df85d07487b8d67d4cc21788882f3fb54736b31e",
-      "sourceState": "Actual working candidate source/input fingerprints captured before command and declared inputs reverified after; testedHead is ancestor while git diff exists, not a claim of a committed tested Head",
-      "context": "Local Node 22.23.4; local validation only; test configuration and any owned database are recorded separately; no claim of CI hardware equivalence or authenticated live-site acceptance Existing Chromium and Playwright, actual original React components with PostgreSQL-captured TEST data and synthetic HTTP faults; 7 scenarios x1280/1440=14. UI input SHA256 0ab5777c45440e4353e81a51ed9bb9336114b739a3c8469d8f7174f02433fccd. Not authenticated live-site acceptance. Six selected new success/conflict screenshots visually inspected, not every screenshot.",
-      "startedAt": "2026-11-03T10:06:22.524Z",
-      "endedAt": "2026-11-03T10:06:37.411Z",
-      "logSha256": "68ae5e7917cfbc04a1c248fcced1a05da8ad29cde15dec2ce857d7318d63eede",
-      "log": "/workspace/ic-readiness-20261103/recorded-browser-focused-v2-1793700382524.log",
-      "passed": 14,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [
-        {
-          "format": "node-tap",
-          "path": "/workspace/ic-readiness-20261103/recorded-browser-focused-v2-1793700382524.log",
-          "sha256": "68ae5e7917cfbc04a1c248fcced1a05da8ad29cde15dec2ce857d7318d63eede"
-        }
-      ],
-      "actualReportPaths": []
-    },
-    {
-      "id": "unit-contract",
-      "kind": "tests",
-      "command": "[\"node_modules/.bin/vitest\",\"run\",\"tests/unit/production-readiness-contract.test.ts\",\"--reporter=default\",\"--reporter=json\",\"--outputFile=/workspace/ic-readiness-20261103/unit-contract.json\"]",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "8ecfbb17b7f2b69905ae326642d1aea96b7bb0a7",
-      "sourceFingerprint": "2420c1b942ea282801d07d8a3c4e1c6b0362f49790f0a60e67858dfd9bac40b1",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "tests",
-        "scripts",
-        "package.json",
-        "package-lock.json",
-        "tsconfig.base.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts",
-        "vitest.postgres-immediate.config.ts",
-        "eslint.config.js"
-      ],
-      "inputFingerprint": "60ab4b955a4e9cc9c09b48f072906a9d52c770eedbbe0bd3bcd21f18fb30a05e",
-      "sourceState": "Actual working candidate source/input fingerprints captured before command and declared inputs reverified after; testedHead is ancestor while git diff exists, not a claim of a committed tested Head",
-      "context": "Local Node 22.23.4; local validation only; test configuration and any owned database are recorded separately; no claim of CI hardware equivalence or authenticated live-site acceptance",
-      "startedAt": "2026-11-03T10:06:22.563Z",
-      "endedAt": "2026-11-03T10:06:23.281Z",
-      "logSha256": "1d6de4e2e65d272d5e3bae4f5d0ac7336098581de82a008721389fe31fbbaeed",
-      "log": "/workspace/ic-readiness-20261103/recorded-unit-contract-1793700382564.log",
-      "passed": 3,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [],
-      "actualReportPaths": []
-    },
-    {
-      "id": "typecheck",
+      "id": "a-secret-scan",
       "kind": "command",
-      "command": "[\"npm\",\"run\",\"typecheck\"]",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "8ecfbb17b7f2b69905ae326642d1aea96b7bb0a7",
-      "sourceFingerprint": "2420c1b942ea282801d07d8a3c4e1c6b0362f49790f0a60e67858dfd9bac40b1",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "tests",
-        "scripts",
-        "package.json",
-        "package-lock.json",
-        "tsconfig.base.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts",
-        "vitest.postgres-immediate.config.ts",
-        "eslint.config.js"
-      ],
-      "inputFingerprint": "60ab4b955a4e9cc9c09b48f072906a9d52c770eedbbe0bd3bcd21f18fb30a05e",
-      "sourceState": "Actual working candidate source/input fingerprints captured before command and declared inputs reverified after; testedHead is ancestor while git diff exists, not a claim of a committed tested Head",
-      "context": "Local Node 22.23.4; local validation only; test configuration and any owned database are recorded separately; no claim of CI hardware equivalence or authenticated live-site acceptance",
-      "startedAt": "2026-11-03T10:06:22.574Z",
-      "endedAt": "2026-11-03T10:07:00.393Z",
-      "logSha256": "17a1a9d0ac31b5d9d7936a4292ac25eb7c62c2b270726b898476448810a0f5c6",
-      "log": "/workspace/ic-readiness-20261103/recorded-typecheck-1793700382575.log",
-      "resultReports": [],
-      "actualReportPaths": []
+      "startedAt": "2026-11-03T11:37:07.018413+00:00",
+      "endedAt": "2026-11-03T11:37:07.916591+00:00",
+      "sourceFingerprint": "178995034fe121020b2b6d4225d4fed03e519c16f1f1dd098ffe87f333fa07bf",
+      "testedHead": "c2c49369898b7f9943fb280342a56d9a98b0b30b",
+      "logSha256": "fb6f2433998adfcd80da1fbcbcf9edf0d36627b983f2f87bf5059522763591d5",
+      "context": "Node 22.22.2; npm 10.9.9; existing lockfile-matched dependencies; isolated local source; no database; base HEAD with uncommitted candidate, bound by sourceFingerprint; log in handoff ZIP verification/logs/a-secret-scan.log",
+      "command": "npm run secret:scan",
+      "logPath": "verification/logs/a-secret-scan.log"
     },
     {
-      "id": "lint-final",
+      "id": "a-web-build",
       "kind": "command",
-      "command": "[\"npm\",\"run\",\"lint\"]",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "8ecfbb17b7f2b69905ae326642d1aea96b7bb0a7",
-      "sourceFingerprint": "2420c1b942ea282801d07d8a3c4e1c6b0362f49790f0a60e67858dfd9bac40b1",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "tests",
-        "scripts",
-        "package.json",
-        "package-lock.json",
-        "tsconfig.base.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts",
-        "vitest.postgres-immediate.config.ts",
-        "eslint.config.js"
-      ],
-      "inputFingerprint": "60ab4b955a4e9cc9c09b48f072906a9d52c770eedbbe0bd3bcd21f18fb30a05e",
-      "sourceState": "Actual working candidate source/input fingerprints captured before command and declared inputs reverified after; testedHead is ancestor while git diff exists, not a claim of a committed tested Head",
-      "context": "Local Node 22.23.4; local validation only; test configuration and any owned database are recorded separately; no claim of CI hardware equivalence or authenticated live-site acceptance",
-      "startedAt": "2026-11-03T10:08:56.156Z",
-      "endedAt": "2026-11-03T10:09:19.506Z",
-      "logSha256": "dac45e9202dd0400da69a080ea51bda187f66d2c3344db6291f4d82e1077d00f",
-      "log": "/workspace/ic-readiness-20261103/recorded-lint-final-1793700536156.log",
-      "resultReports": [],
-      "actualReportPaths": []
-    },
-    {
-      "id": "preflight",
-      "kind": "tests",
-      "command": "[\"node\",\"scripts/test-preflight.mjs\"]",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "8ecfbb17b7f2b69905ae326642d1aea96b7bb0a7",
-      "sourceFingerprint": "2420c1b942ea282801d07d8a3c4e1c6b0362f49790f0a60e67858dfd9bac40b1",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "tests",
-        "scripts",
-        "package.json",
-        "package-lock.json",
-        "tsconfig.base.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts",
-        "vitest.postgres-immediate.config.ts",
-        "eslint.config.js"
-      ],
-      "inputFingerprint": "60ab4b955a4e9cc9c09b48f072906a9d52c770eedbbe0bd3bcd21f18fb30a05e",
-      "sourceState": "Actual working candidate source/input fingerprints captured before command and declared inputs reverified after; testedHead is ancestor while git diff exists, not a claim of a committed tested Head",
-      "context": "Local Node 22.23.4; local validation only; test configuration and any owned database are recorded separately; no claim of CI hardware equivalence or authenticated live-site acceptance",
-      "startedAt": "2026-11-03T10:08:56.139Z",
-      "endedAt": "2026-11-03T10:08:59.467Z",
-      "logSha256": "e95a368de0984da90b1cc2db77dd6cd02143e153ac21431ccd1adbf54d943984",
-      "log": "/workspace/ic-readiness-20261103/recorded-preflight-1793700536139.log",
-      "passed": 152,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [
-        {
-          "format": "node-tap",
-          "path": "/workspace/ic-readiness-20261103/recorded-preflight-1793700536139.log",
-          "sha256": "e95a368de0984da90b1cc2db77dd6cd02143e153ac21431ccd1adbf54d943984"
-        }
-      ],
-      "actualReportPaths": []
+      "startedAt": "2026-11-03T11:45:34.952739+00:00",
+      "endedAt": "2026-11-03T11:45:36.765893+00:00",
+      "sourceFingerprint": "178995034fe121020b2b6d4225d4fed03e519c16f1f1dd098ffe87f333fa07bf",
+      "testedHead": "c2c49369898b7f9943fb280342a56d9a98b0b30b",
+      "logSha256": "d337945bb8643f75204c4057db478b3a18aef309bc68696d77c08d42aa5873f1",
+      "context": "Node 22.22.2; npm 10.9.9; existing lockfile-matched dependencies; isolated local source; no database; base HEAD with uncommitted candidate, bound by sourceFingerprint; log in handoff ZIP verification/logs/a-web-web-build.log",
+      "command": "npm run build --workspace @dx-rework/web",
+      "logPath": "verification/logs/a-web-web-build.log"
     }
   ],
-  "boundary": "Only I+C focused code/targeted checks and draft PR. No Review/final Gate, merge, deployment, live Acceptance/data operations, or A/B implementation. Browser initial selector timeout and superseded local commands remain external history, not counted as current passed checks."
+  "handoff": {
+    "status": "local-evidence-complete-pending-pr-full",
+    "databaseValidation": "pending-exact-head-full",
+    "authority": "User authorized official connector atomic commits and separate draft PRs for this A+B only. Work requests the existing gate controller on each exact Head; no self-approval or deployment.",
+    "scope": "This A+B batch only; no AGENTS.md change or general policy exception.",
+    "remoteWriteMethod": "Official GitHub GitData with base-tree, parent and branch readback; actual remote identities recorded outside the commit."
+  },
+  "pendingVerification": [
+    {
+      "id": "a-postgres",
+      "kind": "tests",
+      "status": "not-run",
+      "exitCode": null,
+      "command": "node scripts/run-business-chain-gate.mjs --full-gate (in the existing exact-Head GitHub Full Gate)",
+      "reason": "PG16 binaries are available, but the container only maps UID 0 and runuser was denied: cannot set groups: Operation not permitted. No initdb/server was started. PG13/16 database tests and final gate remain pending; no equivalent privilege route attempted.",
+      "testedHead": "c2c49369898b7f9943fb280342a56d9a98b0b30b",
+      "sourceFingerprint": "178995034fe121020b2b6d4225d4fed03e519c16f1f1dd098ffe87f333fa07bf",
+      "context": "Per user authorization limited to this A+B batch: no duplicate local PG run when the precise PR Head Full executes the same canonical suites on PG16 under the expected low-privilege role; actual run/job/receipt/cleanup still required."
+    }
+  ]
 }

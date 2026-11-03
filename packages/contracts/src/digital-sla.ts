@@ -59,7 +59,7 @@ export const DIGITAL_SLA_PARAMETERS: readonly DigitalSlaParameter[] = Object.fre
   parameter("sourcing_selection", "生产管理选厂", 3, duration(120), "quote_completed", "factory_selected"),
   parameter("sourcing_approval", "老板审批", 3, duration(120), "factory_selected", "sourcing_decided"),
   parameter("fabric_inspection", "整单验布", 3, duration(1440), "whole_fabric_arrived", "fabric_inspection_completed"),
-  parameter("warehouse_preshrink", "必做预缩", 3, duration(2160), "fabric_usable", "preshrink_completed"),
+  parameter("warehouse_preshrink", "预缩", 3, duration(2160), "fabric_usable", "preshrink_completed"),
   parameter("bulk_cutting", "整单开裁", 4, duration(1440), "cutting_fabric_actually_received", "whole_cutting_completed"),
   parameter("bulk_printing", "大货印花", 5, duration(5760), "cut_craft_dispatched", "cut_craft_returned", "batch"),
   parameter("bulk_embroidery", "大货绣花", 5, duration(5760), "cut_craft_dispatched", "cut_craft_returned", "batch"),

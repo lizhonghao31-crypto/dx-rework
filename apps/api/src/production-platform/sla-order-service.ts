@@ -11,7 +11,7 @@ import {attachFactoryLogisticsRanges} from './factory-logistics-sla-projection.j
 import {ShipSampleService} from './ship-sample-service.js';
 import {shipSampleSlaEvidence} from './ship-sample-facts.js';
 import {factorySlaEvidence,factoryEvaluationPlan} from './factory-sla-evidence.js';
-import {bulkSlaEvidence} from "./bulk-sla-evidence.js";
+import {bulkSlaEvidence,bulkEvaluationPlan} from "./bulk-sla-evidence.js";
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import { resolveDigitalSlaSnapshot, validateDigitalSlaSnapshot } from "@dx-rework/contracts/digital-sla";
@@ -111,7 +111,7 @@ export class SlaOrderService {
       // explicitly unknown completion) must replace, not merge with, its obsolete copy.
       const facts = applyOrderCreationEvidence({ ...await repo.facts(orderId), ...development?.facts },
         await orderCreationSlaEvidence(client, orderId, history[0]!));
-      const bulk=await bulkSlaEvidence(client,orderId);
+      const {facts:bulk,preshrink}=await bulkSlaEvidence(client,orderId);
       // Publication proves the sheet's end, not a replacement for its original order-confirmation start.
       if(bulk.production_sheet?.evidence.startsWith('instruction:')&&facts.production_sheet?.startedAt)bulk.production_sheet.startedAt=facts.production_sheet.startedAt;
       const production=await factoryProductionFacts(client,orderId);
@@ -137,7 +137,8 @@ export class SlaOrderService {
           if(value&&'minutes' in value)fact.standardMinutes=value.minutes;
         }
       }
-      const evaluationPlan = reworkEvaluationPlan(developmentEvaluationPlan(factory?factoryEvaluationPlan(current.plan,factory.craftKey):current.plan, facts),rework.facts);
+      const bulkPlan=bulkEvaluationPlan(current.plan,preshrink,facts);
+      const evaluationPlan = reworkEvaluationPlan(developmentEvaluationPlan(factory?factoryEvaluationPlan(bulkPlan,factory.craftKey):bulkPlan, facts),rework.facts);
       const evaluated=evaluateSlaPlan(evaluationPlan,facts,time,options);
       // Display-only ranges must not enter strict before/after business comparisons.
       const nodes=options.mode==='read_projection'?attachFactoryLogisticsRanges(evaluated,evaluationPlan,
