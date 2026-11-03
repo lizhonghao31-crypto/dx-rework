@@ -1,0 +1,16 @@
+(node:5) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+ RUN  v4.1.10 /workspace/scratch/5c2f59f0b575/dx-b
+
+(node:40) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/unit/external-responsibility-ui-contract.test.ts > external responsibility UI contract > uses order-scoped supplier options instead of the generic master-data catalog 5ms
+ ✓ tests/unit/external-responsibility-ui-contract.test.ts > external responsibility UI contract > records deductions using the Shanghai business date without asking finance to enter it 1ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  23:37:22
+   Duration  202ms (transform 22ms, setup 0ms, import 39ms, tests 8ms, environment 0ms)
+
+JSON report written to /workspace/scratch/5c2f59f0b575/verification-b/existing-ui-contract-fixed.json

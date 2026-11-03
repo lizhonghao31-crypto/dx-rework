@@ -1,0 +1,37 @@
+(node:5) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+ RUN  v4.1.10 /workspace/scratch/5c2f59f0b575/dx-b
+
+(node:40) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/unit/responsibility-panels-component.test.ts > N07 real responsibility panel request lifecycle > keeps the latest A and its draft after A to B to A delayed main responses 87ms
+ ✓ tests/unit/responsibility-panels-component.test.ts > N07 real responsibility panel request lifecycle > ignores a late failure from the first A after returning to A 38ms
+ ✓ tests/unit/responsibility-panels-component.test.ts > N07 real responsibility panel request lifecycle > rechecks the generation after delayed module permission returns 23ms
+ ✓ tests/unit/responsibility-panels-component.test.ts > N07 real responsibility panel request lifecycle > aborts an unmounted main read and never starts its permission or supplier follow-up 4ms
+ ✓ tests/unit/responsibility-panels-component.test.ts > N07 real responsibility panel request lifecycle > does not start supplier reads after unmounting during permission resolution 3ms
+ ✓ tests/unit/responsibility-panels-component.test.ts > N07 real responsibility panel request lifecycle > retains ordinary and batch drafts when retrying a failed supplier lookup 180ms
+ ✓ tests/unit/responsibility-panels-component.test.ts > N07 real responsibility panel request lifecycle > aborts pending supplier reads on unmount and ignores their eventual response 11ms
+ ✓ tests/unit/responsibility-panels-component.test.ts > N07 real responsibility panel request lifecycle > still reports a current main-load failure 3ms
+ ✓ tests/unit/responsibility-panels-component.test.ts > N09 real external responsibility candidate states > shows loading until a successful empty array permits the original controlled add entry 27ms
+ ✓ tests/unit/responsibility-panels-component.test.ts > N09 real external responsibility candidate states > keeps supplier HTTP 401 distinct from a successful empty catalog 10ms
+ ✓ tests/unit/responsibility-panels-component.test.ts > N09 real external responsibility candidate states > keeps supplier HTTP 403 distinct from a successful empty catalog 10ms
+ ✓ tests/unit/responsibility-panels-component.test.ts > N09 real external responsibility candidate states > shows a retryable http failure without exposing an empty-catalog add action 10ms
+ ✓ tests/unit/responsibility-panels-component.test.ts > N09 real external responsibility candidate states > shows a retryable network failure without exposing an empty-catalog add action 11ms
+ ✓ tests/unit/responsibility-panels-component.test.ts > N09 real external responsibility candidate states > shows a retryable object failure without exposing an empty-catalog add action 9ms
+ ✓ tests/unit/responsibility-panels-component.test.ts > N09 real external responsibility candidate states > shows a retryable invalid-json failure without exposing an empty-catalog add action 10ms
+ ✓ tests/unit/responsibility-panels-component.test.ts > N09 real external responsibility candidate states > preserves selected suppliers, reasons and deduction drafts through failure and candidate-only retry 50ms
+ ✓ tests/unit/responsibility-panels-component.test.ts > N09 real external responsibility candidate states > ignores old A candidates after A to B to A 26ms
+ ✓ tests/unit/responsibility-panels-component.test.ts > N09 real external responsibility candidate states > ignores an old N09 main error after switching to a newer order 9ms
+ ✓ tests/unit/responsibility-panels-component.test.ts > N09 real external responsibility candidate states > aborts an unmounted N09 main request without starting later work 2ms
+ ✓ tests/unit/responsibility-panels-component.test.ts > N09 real external responsibility candidate states > aborts an unmounted N09 suppliers request without starting later work 8ms
+ ✓ tests/unit/responsibility-panels-component.test.ts > N09 real external responsibility candidate states > does not query candidates or expose creation for readonly views 5ms
+ ✓ tests/unit/responsibility-panels-component.test.ts > N09 real external responsibility candidate states > does not query candidates or expose creation for no-allocation views 6ms
+ ✓ tests/unit/responsibility-panels-component.test.ts > N09 real external responsibility candidate states > retains the original hidden ledger behavior when the ledger itself returns 403 2ms
+
+ Test Files  1 passed (1)
+      Tests  23 passed (23)
+   Start at  23:22:28
+   Duration  2.24s (transform 642ms, setup 0ms, import 959ms, tests 545ms, environment 572ms)
+
+JSON report written to /workspace/scratch/5c2f59f0b575/verification-b/component-tests-first.json

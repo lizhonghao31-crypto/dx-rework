@@ -6,12 +6,13 @@ export type ResponsibilitySupplierState =
  | {kind:'forbidden'|'error';message:string};
 
 /** Only a successful, contract-valid response can mean that no candidates exist. */
-export async function loadResponsibilitySuppliers(url:string,signal?:AbortSignal):Promise<ResponsibilitySupplierState>{
+export async function loadResponsibilitySuppliers(url:string,signal?:AbortSignal,shape:'items'|'array'='items'):Promise<ResponsibilitySupplierState>{
  try{
   const response=await fetch(url,{credentials:'include',headers:{accept:'application/json'},signal:signal??null});
   if(response.status===401||response.status===403)return {kind:'forbidden',message:'当前无权读取责任供应商，请核对登录状态及本单责任处理权限。'};
   if(!response.ok)return {kind:'error',message:'责任供应商加载失败，请重试。'};
-  const parsed=ResponsibilitySupplierOptionsResponseSchema.safeParse(await response.json());
+  const body:unknown=await response.json();
+  const parsed=ResponsibilitySupplierOptionsResponseSchema.safeParse(shape==='array'?{items:body}:body);
   if(!parsed.success)return {kind:'error',message:'责任供应商资料暂不可用，请重试；持续失败请联系管理员。'};
   return {kind:'ready',items:parsed.data.items};
  }catch{

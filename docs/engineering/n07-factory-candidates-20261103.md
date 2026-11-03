@@ -1,4 +1,42 @@
-# B：N07 责任供应商候选与加载状态
+# B：N07 / N09 责任供应商候选与加载竞态
+
+## 本轮接续的准确边界
+
+本轮从现有 PR #897 的固定 head `a5938db04e635186acaa3f8a999ed917f56b6556` 取得源码并补增量，目标分支仍为 `release/digital-production-v1`。原 Pro 的未推送工作区、悬空 commit 和原附件不可取得；没有声称恢复这些内容。保留该 head 已有的后端候选过滤、N07 候选状态及 PG 反例，只修独立审查发现的主加载竞态和 N09 候选错误状态。
+
+- **N07 主加载**：每次加载使用单调代次和独立 AbortController。详情、身份及异步权限解析完成后分别复核当前代次；A→B→A、迟到错误、旧权限回包及卸载后的结果均不能写回当前页面。候选重试只刷新候选，保留原普通及批量判责草稿。
+- **N09 候选**：沿用原订单范围 API 及能力判断，通过共享 helper 显式解析原裸数组响应。候选独立区分 loading / ready / forbidden / error；401/403、网络、HTTP 或格式错误不再变成真正空目录。错误可手动重试，保留选择、原因及扣款草稿；只有成功且该责任类型确实无候选时才显示原受控新增入口。原台账本身 403 时的隐藏行为保持不变。
+- **历史与权限**：不改供应商主档、角色、后端权限、已有候选筛选、返工数量、金额计算、工资或历史记录，不推断用户指定现场缺陷的根因。
+- **真实组件验证**：新增 `tests/unit/responsibility-panels-component.test.ts`，用 React 19.2.4 的 `createRoot` / `act` 挂载真实 N07/N09 组件和原控件，控制合成网络回包与权限回包的时间。不是以源码字符串断言替代组件行为；所有请求均为隔离夹具，没有现场请求或业务写入。
+- **依赖边界**：仅精确新增 `jsdom@30.1.3` devDependency；其 Node engine 支持本轮的 Node 22.22.2。比对原 lock 的全部既有非根条目，均未改变；仅增加该依赖及其必需依赖树。测试以文件级 jsdom 环境进入原 `tests/**/*.test.ts` 规范集合，没有新增测试框架、UI 库或 Vitest 配置。
+
+## 本轮实际验证记录
+
+环境为隔离 Node 22.22.2 / npm 10.9.9，Vitest 4.1.10。以下只代表本轮本地源码检查，不代表最终提交的正式 Review 或 Full Gate。原命令、UTC 时间、退出码、完整 stdout/stderr、日志 SHA256 及 Vitest JSON 保存在仓库外 `verification-b/`；首次失败记录保留。
+
+| 检查 | 实际结果 | 记录 |
+| --- | --- | --- |
+| 四个内部包 `build:packages` | exit 0 | `build-packages.record.json` / `.log` |
+| 真实 N07/N09 组件 | 23 pass / 0 fail / 0 skip，exit 0 | `component-tests-first.json` / `.record.json` / `.log` |
+| 定点补充身份迟到与台账刷新两个组件用例，仅 `-t` 过滤这两项 | 2 pass / 0 fail / 23 filtered（Vitest 原 JSON 记为 skipped），exit 0；该测试文件 ESLint 通过 | `component-additional-tests.json` / `.record.json` / `.log`；`component-additional-eslint.record.json` / `.log` |
+| Web 原生 typecheck | exit 0 | `web-typecheck.record.json` / `.log` |
+| 3 个变更源码及新组件测试的 ESLint | 0 warning，exit 0 | `targeted-eslint.record.json` / `.log` |
+| 既有候选、N07/N09、金额、舍入、幂等、应用服务及两份 HTTP 路由回归，17 文件 | 首轮 79 pass / 1 fail / 0 skip，exit 1 | `existing-responsibility-regressions.json` / `.record.json` / `.log` |
+| 仅修正上述旧 UI 契约后重跑该文件 | 2 pass / 0 fail / 0 skip，exit 0；该测试文件 ESLint 通过 | `existing-ui-contract-fixed.json` / `.record.json` / `.log`；`existing-ui-contract-eslint.record.json` / `.log` |
+
+唯一既有回归失败来自 `external-responsibility-ui-contract.test.ts` 强制源码包含 `if (response.status === 403) return [] as Supplier[];`，这正是本轮要求移除的错误语义。该测试保留订单范围候选、新增入口及业务日期约束，改为确认使用共享候选加载器并禁止上述吞 403 写法；真实挂载组件另直接验证 401/403 不显示空目录或新增入口。其余 16 文件 78 个用例已通过，相关源码输入未再改变，因此复用原通过记录，没有重跑全组。不能把首轮 17 文件命令写成一次全绿。
+
+组件用例覆盖 N07 的 A→B→A 迟到主响应与错误、权限 await 后失效、主请求/权限等待/候选期间卸载、普通和批量草稿重试，以及当前主加载失败；N09 覆盖 loading、401/403、HTTP/网络/对象形态/无效 JSON 失败、真实空数组、候选重试保留选择/原因/扣款草稿、A→B→A 旧候选、旧主加载错误、主请求与候选期间卸载、只读/无分配能力和台账 403。
+
+定点复核另补两个真实用例，没有改变生产代码：N07 详情先返回、并行身份读取迟到，经历 A→B→A 后仍保留当前工序、草稿及候选请求次数；用合法 `handlerUserId=null` 响应和完全隔离的草稿 payload 捕获验证仍使用当前身份，该 mock 立即返回 409，不调用任何服务或写业务数据。N09 台账初次 503 后点击原“刷新”，恢复台账即重新读取候选，候选回包前显示 loading 且无空目录新增入口，回包后能够选择供应商。
+
+这两个新增用例运行前后实际执行仓库 `scripts/ci/construction-evidence.mjs fingerprint`，分别采样于 2026-11-03 14:44:34.861–14:44:35.004 UTC 和 14:44:46.432–14:44:46.575 UTC，均为 `22cfa5abc0c7ab431d28bc3b7357f3322a49cb709ed763d45c99c39ebac9651f`。命令记录为 `component-additional-fingerprint-before` / `component-additional-fingerprint-after`。原 23 项源码另逐字保存在 `component-tests-first.source.ts`，原 JSON 和日志不变；不能把本次仅运行 2 项、过滤 23 项的原始 JSON 改述为单轮 25 项全绿。
+
+本轮未执行 PG suite 或浏览器交互，也未访问现场或生产。官方 Playwright Chromium 安装入口下载后解压失败，已停止排障；上述组件检查是 jsdom 中的真实 React 挂载测试，不能称为浏览器测试。PG、最终风险映射及其必要检查由协调方针对冻结后的精确 head 按仓库规则执行，不能引用下方旧 head 的 21-suite 计划代替本轮映射。没有更新 Acceptance，没有自主 approve、部署或合并。
+
+## 原 head 留存说明
+
+以下内容来自 `a5938db04e635186acaa3f8a999ed917f56b6556` 的既有工程说明，保留其业务依据、检查失败与边界，**并非本轮新运行的记录**。其中旧交接包路径、64 项测试、环境限制、21-suite 计划和当时分工均按旧记录理解；本轮只认上方明确列出的实际检查，最终 head / gate 证据由协调方统一记录。
 
 ## 独立基线与现场证据边界
 
@@ -30,7 +68,7 @@
 | 不把失败当真空 | responsibility-supplier-options helper、原 panel | 普通/批量 SearchSelect 与错误提示 | 无新存储；不修改既有保存/定稿/幂等键 | 网络、401/403、404/500/503、格式错误、空/非空与 loading 单测 |
 | 保留业务历史 | 无业务写入变更 | 原 N07/N08/N11、责任金额、舍入与工资链 | 用户指定现场数据未触碰 | 原责任金额/舍入/提交/幂等测试；PG 同事务反例核订单/工资不变，待跑 |
 
-## 固定检查与实际结果
+## 固定检查与实际结果（旧 head 历史）
 
 Node 22.22.2 / npm 10.9.9；使用仓库原脚本和依赖，不安装新测试框架。原始命令、退出码、时间、来源指纹和日志在交接包 `verification/`。
 
@@ -47,7 +85,7 @@ Node 22.22.2 / npm 10.9.9；使用仓库原脚本和依赖，不安装新测试�
 
 浏览器交互/现场请求验证未执行；本地通过的是加载模型、真实 Fastify 路由注入（服务隔离）、类型、构建和原 UI 接线测试。当前补丁不证明指定正确厂已在现场恢复可选。协调方如取得原始只读 HTTP/主档证据，应先判明请求失败、无权或真实空集；不得为了该现场单擅改供应商主档、放宽角色或重算历史数据。
 
-## 本轮 A+B 的 Full 复用与映射核对
+## 原 A+B 的 Full 复用与映射核对（旧 head 历史）
 
 按实际 base→candidate 路径调用仓库 `classifyFullGatePaths` 和 `fullGatePostgresPlan`，`tests/integration/full-business-chain-postgres.test.ts` 已被 mapped 与 chain 同时选中，Set 去重后只执行一次，配置为 `vitest.postgres-immediate.config.ts`。当前计划共 21 个 PG suite；完整风险标志、文件集合和配置见交接包 `verification/b-canonical-plan.json`。无需修改映射或 CI。
 

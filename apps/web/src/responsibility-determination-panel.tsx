@@ -206,6 +206,8 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
   const supplierRequest=useRef<AbortController|null>(null);
   const supplierOrder=useRef(reworkOrderId);
   supplierOrder.current=reworkOrderId;
+  const mainRequest = useRef<AbortController | null>(null);
+  const mainRequestGeneration = useRef(0);
   const [changeReason, setChangeReason] = useState("");
   const [currentUserId, setCurrentUserId] = useState("");
   const [message, setMessage] = useState(history ? "" : "正在加载责任判定…");
@@ -254,22 +256,41 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
   const reload = async (): Promise<void> => {
     if (history) { setMessage(""); return; }
     if (!reworkOrderId) return;
-    const [next, userId] = await Promise.all([
-      request(`rework-orders/${reworkOrderId}/responsibility-determination`),
-      requestCurrentUserId(),
-    ]);
-    setCurrentUserId(userId);
-    const writable = await currentModuleCanWrite("rework");
-    applyResponse(writable ? next : { ...next, canDetermine: false, canTakeover: false, canOwnerSign: false });
-    setMessage("");
+    mainRequest.current?.abort();
+    const controller = new AbortController();
+    const generation = ++mainRequestGeneration.current;
+    mainRequest.current = controller;
+    const isCurrent = (): boolean => !controller.signal.aborted
+      && mainRequestGeneration.current === generation
+      && supplierOrder.current === reworkOrderId;
+    try {
+      const [next, userId] = await Promise.all([
+        request(`rework-orders/${reworkOrderId}/responsibility-determination`, { signal: controller.signal }),
+        requestCurrentUserId(),
+      ]);
+      if (!isCurrent()) return;
+      const writable = await currentModuleCanWrite("rework");
+      if (!isCurrent()) return;
+      setCurrentUserId(userId);
+      applyResponse(writable ? next : { ...next, canDetermine: false, canTakeover: false, canOwnerSign: false });
+      setMessage("");
+    } catch (error: unknown) {
+      if (isCurrent()) setMessage(error instanceof Error ? error.message : "责任判定加载失败");
+    } finally {
+      if (mainRequest.current === controller) mainRequest.current = null;
+    }
   };
   useEffect(() => {
     if (!reworkOrderId) {
       setMessage("缺少有效的返工单编号，请从返工单详情进入责任处理。");
       return;
     }
-    void reload().catch((error: unknown) => setMessage(error instanceof Error ? error.message : "责任判定加载失败"));
-    return ()=>supplierRequest.current?.abort();
+    void reload();
+    return () => {
+      mainRequestGeneration.current += 1;
+      mainRequest.current?.abort();
+      supplierRequest.current?.abort();
+    };
   }, [reworkOrderId]);
   useEffect(() => {
     if (!batchDialogOpen) return;
