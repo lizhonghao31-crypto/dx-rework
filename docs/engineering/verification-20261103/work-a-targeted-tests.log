@@ -1,0 +1,165 @@
+
+ RUN  v4.1.10 /workspace/fix-a-896
+
+ ✓ tests/unit/digital-sla-plan.test.ts > complete SLA plan and frozen windows > keeps a supplemental unknown duration unknown instead of borrowing the original48h 3ms
+ ✓ tests/unit/digital-sla-plan.test.ts > complete SLA plan and frozen windows > keeps effective business completion when its actual time is unknown without inventing a downstream date 1ms
+ ✓ tests/unit/digital-sla-plan.test.ts > complete SLA plan and frozen windows > projects included start/end targets from the late actual parent window without changing P0 1ms
+ ✓ tests/unit/digital-sla-plan.test.ts > complete SLA plan and frozen windows > carries a rolling start through a not-yet-started parent to included handoffs 3ms
+ ✓ tests/unit/digital-sla-plan.test.ts > complete SLA plan and frozen windows > never presents a promised factory date as a forecast with unknown or late upstream work 1ms
+ ✓ tests/unit/digital-sla-plan.test.ts > complete SLA plan and frozen windows > uses a fresh factory estimate or actual completion, rejects upstream estimate conflicts, and preserves the promise 1ms
+ ✓ tests/unit/digital-sla-plan.test.ts > complete SLA plan and frozen windows > checks unstarted duration remaining estimates against the effective upstream window 1ms
+ ✓ tests/unit/digital-sla-plan.test.ts > complete SLA plan and frozen windows > checks unstarted estimate remaining estimates against the effective upstream window 1ms
+ ✓ tests/unit/digital-sla-plan.test.ts > complete SLA plan and frozen windows > checks unstarted order_date remaining estimates against the effective upstream window 1ms
+ ✓ tests/unit/digital-sla-plan.test.ts > complete SLA plan and frozen windows > checks unstarted unlimited remaining estimates against the effective upstream window 1ms
+ ✓ tests/unit/digital-sla-plan.test.ts > complete SLA plan and frozen windows > checks unstarted offset remaining estimates against the effective upstream window 1ms
+ ✓ tests/unit/digital-sla-plan.test.ts > complete SLA plan and frozen windows > checks unstarted included remaining estimates against the effective upstream window 0ms
+ ✓ tests/unit/digital-sla-plan.test.ts > complete SLA plan and frozen windows > checks explicit start anchors but never treats an offset reminder as an earliest production start 0ms
+ ✓ tests/unit/digital-sla-plan.test.ts > complete SLA plan and frozen windows > preserves 201 hours including four handoffs and two independent checks 12ms
+ ✓ tests/unit/digital-sla-plan.test.ts > complete SLA plan and frozen windows > takes the longest parallel preparation line, not the sum; no pricing dependency on pattern 4ms
+ ✓ tests/unit/digital-sla-plan.test.ts > complete SLA plan and frozen windows > never fabricates actual C from plan or preshrink and never restarts C after late patterns 7ms
+ ✓ tests/unit/digital-sla-plan.test.ts > complete SLA plan and frozen windows > keeps a failed fabric inspection hold separate from checking completion 2ms
+ ✓ tests/unit/digital-sla-plan.test.ts > complete SLA plan and frozen windows > adds an explicit stage buffer once per crossing path without changing actual responsibility windows 0ms
+ ✓ tests/unit/digital-sla-plan.test.ts > complete SLA plan and frozen windows > distinguishes Beijing calendar-day exclusive boundary from exact-time equality 1ms
+ ✓ tests/unit/digital-sla-plan.test.ts > complete SLA plan and frozen windows > uses 70% warning and retains already-completed lateness after ordinary delay 0ms
+ ✓ tests/unit/digital-sla-plan.test.ts > complete SLA plan and frozen windows > does not turn stale remaining estimates or overdue plan dates into fresh forecasts 0ms
+ ✓ tests/unit/digital-sla-plan.test.ts > complete SLA plan and frozen windows > rejects cycles, duplicate nodes/dependencies and counting an included target twice 0ms
+ ✓ tests/unit/digital-sla-plan.test.ts > complete SLA plan and frozen windows > never makes logistics estimate a hard deadline or ship sample a prerequisite 2ms
+ ✓ tests/unit/digital-sla-plan.test.ts > complete SLA plan and frozen windows > weights seven stages equally and never converts elapsed time or receiving completion to 100% 1ms
+ ✓ tests/unit/digital-sla-plan.test.ts > complete SLA plan and frozen windows > keeps the production clock real and rejects malformed scenario observations 0ms
+ ✓ tests/unit/digital-sla-plan.test.ts > native batch SLA aggregation > does not treat the first completed dispatch as whole-order completion or a known forecast 0ms
+ ✓ tests/unit/digital-sla-plan.test.ts > native batch SLA aggregation > uses earliest open deadline for risk and latest covered batch window for forecast, without moving P0 1ms
+ ✓ tests/unit/digital-sla-plan.test.ts > native batch SLA aggregation > keeps late batch history visible when the final batch meets its later target 0ms
+ ✓ tests/unit/digital-journey-cockpit.test.ts > formal Journey cockpit > preserves read intent on exact task links and blocks every write until explicit audit entry 8ms
+ ✓ tests/unit/digital-journey-cockpit.test.ts > formal Journey cockpit > round-trips filters, selection, exact round, expansion and focused node through original URLs 5ms
+ ✓ tests/unit/digital-journey-cockpit.test.ts > formal Journey cockpit > rejects external or malformed return contexts and keeps the retired bulk link usable 1ms
+ ✓ tests/unit/digital-journey-cockpit.test.ts > formal Journey cockpit > preserves an explicitly collapsed workflow through original-record return and reload 1ms
+ ✓ tests/unit/digital-journey-cockpit.test.ts > formal Journey cockpit > preserves date-only plans and does not invent a phase target from partial registration 22ms
+ ✓ tests/unit/digital-journey-cockpit.test.ts > formal Journey cockpit > keeps unverified/unknown completion, previous-round inheritance and whole-order completion distinct 1ms
+ ✓ tests/unit/digital-journey-cockpit.test.ts > formal Journey cockpit > opens a selected order without the unrelated overview and retains simultaneous original work 29ms
+ ✓ tests/unit/digital-journey-cockpit.test.ts > formal Journey cockpit > retains different historical destinations while grouping identical record references once 1ms
+ ✓ tests/unit/digital-journey-cockpit.test.ts > formal Journey cockpit > does not label complete mixed-precision targets as missing or invent a phase date 0ms
+ ✓ tests/unit/digital-journey-cockpit.test.ts > R2 PR07 stage display scope > defaults to real current work rather than the first lifecycle placeholder 1ms
+ ✓ tests/unit/digital-journey-cockpit.test.ts > R2 PR07 stage display scope > honors exact historic focus, explicit phase, round and all-phase requests 1ms
+ ✓ tests/unit/digital-journey-cockpit.test.ts > R2 PR07 stage display scope > keeps row expansion separate from the current task and can locate a historical row on entry 0ms
+ ✓ tests/unit/digital-journey-cockpit.test.ts > R2 PR07 stage display scope > hides only not-applicable nodes, preserves unfinished and inherited facts, and never mutates progress 1ms
+ ✓ tests/unit/digital-journey-cockpit.test.ts > R2 PR07 stage display scope > uses the applicable ending phase after completion even when later placeholders exist 0ms
+ ✓ tests/unit/digital-journey-cockpit.test.ts > R2 PR07 stage display scope > uses real blocking work and retains all simultaneous tasks 0ms
+ ✓ tests/unit/digital-journey-cockpit.test.ts > R2 PR07 stage display scope > removes only the added preparation block and exposes document directory in the existing region 10ms
+ ✓ tests/unit/journey-sla-supervision.test.ts > keeps known local overdue with missing customer/factory dates; filters original orders without hiding computable risk 21ms
+ ✓ tests/unit/journey-sla-supervision.test.ts > retains P0 while current standard and clock move, and business progress ignores elapsed time/receipt collection 1ms
+ ✓ tests/unit/journey-sla-supervision.test.ts > retains business completion with missing actual time; no new task/state or inferred C 1ms
+ ✓ tests/unit/journey-sla-supervision.test.ts > uses next Beijing midnight exclusively, and precise duration equality remains on time 1ms
+ ✓ tests/unit/journey-sla-supervision.test.ts > never turns logistics estimate or missing warning/start into a hard or normal SLA 0ms
+ ✓ tests/unit/journey-sla-supervision.test.ts > legacy supervision never manufactures P0 or task completion; cancelled orders do not enter local risk counts 1ms
+ ✓ tests/unit/journey-sla-supervision.test.ts > preserves outsourced cutting timing, while missing internal C stays a precision limit without new recording 1ms
+ ✓ tests/unit/journey-sla-supervision.test.ts > keeps PO aggregate risk without inventing a single target from several PO windows 1ms
+ ✓ tests/unit/journey-sla-supervision.test.ts > retains late completion history without counting an ended task as an in-progress overdue task 1ms
+ ✓ tests/unit/journey-sla-supervision.test.ts > distinguishes unknown batch windows from captured unlimited rule types 1ms
+ ✓ tests/unit/journey-sla-supervision.test.ts > does not turn a task chronology marked unknown into a normal todo merely because a warning exists 0ms
+ ✓ tests/unit/digital-journey-projection.test.ts > V2 Journey shared query semantics > defines exactly seven stable stages and all declared subflow keys once 2ms
+ ✓ tests/unit/digital-journey-projection.test.ts > V2 Journey shared query semantics > requires stage, state, node and risk to match the same current node 3ms
+ ✓ tests/unit/digital-journey-projection.test.ts > V2 Journey shared query semantics > counts one order for multiple overdue nodes and excludes history from current KPI 1ms
+ ✓ tests/unit/digital-journey-projection.test.ts > V2 Journey shared query semantics > explains node filters with the matching current nodes even when they have no risk 1ms
+ ✓ tests/unit/digital-journey-projection.test.ts > V2 Journey shared query semantics > preserves the business denominator and requires whole-order packing/closure 0ms
+ ✓ tests/unit/digital-journey-projection.test.ts > V2 Journey shared query semantics > uses the same permission-scoped filtered set for KPI, pagination and export 18ms
+ ✓ tests/unit/digital-journey-projection.test.ts > V2 Journey shared query semantics > filters current PO reminders by the same node and preserves original SLA, progress and export identity 1ms
+ ✓ tests/unit/digital-journey-projection.test.ts > V2 Journey shared query semantics > does not forge completion results from unknown, unverified or absent expected times 0ms
+ ✓ tests/unit/digital-journey-projection.test.ts > V2 Journey shared query semantics > round-trips return context and rejects foreign/unknown query keys 3ms
+ ✓ tests/unit/full-gate-risk-map.test.ts > Full Gate sensitive path mapping > maps changed bulk requirements and their shared clock fixture to all actual consumer suites 16ms
+ ✓ tests/unit/full-gate-risk-map.test.ts > Full Gate sensitive path mapping > requires real PG13 Journey reads for query, route, contract and regression changes 1ms
+ ✓ tests/unit/full-gate-risk-map.test.ts > Full Gate sensitive path mapping > maps apps/api/src/pattern-room/order-service.ts to pattern-room and real PostgreSQL coverage 0ms
+ ✓ tests/unit/full-gate-risk-map.test.ts > Full Gate sensitive path mapping > maps apps/api/src/access/service.ts to access and real PostgreSQL coverage 0ms
+ ✓ tests/unit/full-gate-risk-map.test.ts > Full Gate sensitive path mapping > maps apps/api/src/auth/service.ts to access and real PostgreSQL coverage 0ms
+ ✓ tests/unit/full-gate-risk-map.test.ts > Full Gate sensitive path mapping > maps apps/api/src/wages/wage-service.ts to wages and real PostgreSQL coverage 0ms
+ ✓ tests/unit/full-gate-risk-map.test.ts > Full Gate sensitive path mapping > maps apps/api/src/access/supplier-onboarding-service.ts to suppliers and real PostgreSQL coverage 0ms
+ ✓ tests/unit/full-gate-risk-map.test.ts > Full Gate sensitive path mapping > maps apps/api/src/tools/attachments.ts to tools and real PostgreSQL coverage 0ms
+ ✓ tests/unit/full-gate-risk-map.test.ts > Full Gate sensitive path mapping > maps apps/api/src/receiving/receiving-service.ts to receiving and real PostgreSQL coverage 0ms
+ ✓ tests/unit/full-gate-risk-map.test.ts > Full Gate sensitive path mapping > maps imported module tests/integration/receiving-analysis-postgres.cases.ts to runnable suite tests/integration/receiving-postgres.test.ts 1ms
+ ✓ tests/unit/full-gate-risk-map.test.ts > Full Gate sensitive path mapping > maps imported module tests/integration/work-analysis-postgres.cases.ts to runnable suite tests/integration/sourcing-pr03-postgres.test.ts 4ms
+ ✓ tests/unit/full-gate-risk-map.test.ts > Full Gate sensitive path mapping > maps imported module tests/integration/production-analysis-postgres.cases.ts to runnable suite tests/integration/production-closure-postgres.test.ts 1ms
+ ✓ tests/unit/full-gate-risk-map.test.ts > Full Gate sensitive path mapping > maps imported module tests/integration/sample-analysis-postgres.cases.ts to runnable suite tests/integration/sample-read-postgres.test.ts 0ms
+ ✓ tests/unit/full-gate-risk-map.test.ts > Full Gate sensitive path mapping > maps imported module tests/integration/member-module-policy-postgres.cases.ts to runnable suite tests/integration/full-business-chain-postgres.test.ts 1ms
+ ✓ tests/unit/full-gate-risk-map.test.ts > Full Gate sensitive path mapping > maps imported module tests/integration/own-tail-responsibility-history.cases.ts to runnable suite tests/integration/own-tail-responsibility-history-postgres.test.ts 0ms
+ ✓ tests/unit/full-gate-risk-map.test.ts > Full Gate sensitive path mapping > deduplicates a case module and its suite and rejects non-runnable entries 0ms
+ ✓ tests/unit/full-gate-risk-map.test.ts > Full Gate sensitive path mapping > fails closed for an unknown backend or shared-contract path 0ms
+ ✓ tests/unit/full-gate-risk-map.test.ts > Full Gate sensitive path mapping > keeps isolated web, CSS and documentation changes out of DB escalation 0ms
+ ✓ tests/unit/full-gate-risk-map.test.ts > Full Gate sensitive path mapping > maps access/auth through a discoverable PostgreSQL wrapper 0ms
+ ✓ tests/unit/full-gate-risk-map.test.ts > Full Gate sensitive path mapping > does not schedule a deleted PostgreSQL test path while still escalating the diff 0ms
+ ✓ tests/unit/full-gate-risk-map.test.ts > Full Gate sensitive path mapping > runs receiving analysis cases through the real receiving suite 0ms
+ ✓ tests/unit/full-gate-risk-map.test.ts > Full Gate sensitive path mapping > maps migration, deployment and changed PostgreSQL tests explicitly 1ms
+ ✓ tests/unit/journey-projection-isolation.test.ts > isolates a classified bad authorized projection without losing an independently provable overdue node 4ms
+ ✓ tests/unit/journey-projection-isolation.test.ts > retains strict calculation for commands and other default callers 1ms
+ ✓ tests/unit/journey-projection-isolation.test.ts > does not swallow data-access, permission or scope exceptions: Error: TEST database unavailable 1ms
+ ✓ tests/unit/journey-projection-isolation.test.ts > does not swallow data-access, permission or scope exceptions: ApplicationError: TEST permission 0ms
+ ✓ tests/unit/journey-projection-isolation.test.ts > does not swallow data-access, permission or scope exceptions: ApplicationError: TEST scope 0ms
+ ✓ tests/unit/journey-projection-isolation.test.ts > past observation retains invalid future facts as unavailable, never clamps or rewrites them 2ms
+ ✓ tests/unit/journey-projection-isolation.test.ts > current observation retains invalid future facts as unavailable, never clamps or rewrites them 1ms
+ ✓ tests/unit/journey-projection-isolation.test.ts > future observation retains invalid future facts as unavailable, never clamps or rewrites them 0ms
+ ✓ tests/unit/journey-projection-isolation.test.ts > ordinary observation retains invalid future facts as unavailable, never clamps or rewrites them 1ms
+ ✓ tests/unit/journey-projection-isolation.test.ts > isolates a bad batch node and propagates unknown forecasts without erasing an independent overdue node 1ms
+ ✓ tests/unit/journey-projection-isolation.test.ts > does not downgrade invalid-instant even when the same node has a classified chronology issue 0ms
+ ✓ tests/unit/journey-projection-isolation.test.ts > does not downgrade missing-evidence even when the same node has a classified chronology issue 0ms
+ ✓ tests/unit/journey-projection-isolation.test.ts > does not downgrade invalid-standard even when the same node has a classified chronology issue 0ms
+ ✓ tests/unit/journey-projection-isolation.test.ts > does not downgrade invalid-estimate even when the same node has a classified chronology issue 0ms
+ ✓ tests/unit/journey-projection-isolation.test.ts > does not downgrade invalid-plan even when the same node has a classified chronology issue 0ms
+ ✓ tests/unit/journey-projection-isolation.test.ts > never converts a reversed original task duration into zero minutes 0ms
+ ✓ tests/unit/journey-projection-isolation.test.ts > rates a date target at Beijing day-end %+i ms without inventing duration start 0ms
+ ✓ tests/unit/journey-projection-isolation.test.ts > rates a date target at Beijing day-end %+i ms without inventing duration start 0ms
+ ✓ tests/unit/journey-projection-isolation.test.ts > rates a date target at Beijing day-end %+i ms without inventing duration start 0ms
+ ✓ tests/unit/journey-projection-isolation.test.ts > preserves a separately proved overdue batch while marking a sibling batch chronology unavailable 0ms
+ ✓ tests/unit/series-plan-dates.test.ts > one plan anchor and natural-day AB template > reproduces the approved nonleap example and the expected leap-year shift 3ms
+ ✓ tests/unit/series-plan-dates.test.ts > one plan anchor and natural-day AB template > roundtrips every milestone in72series/route combinations with exact natural-day intervals 19ms
+ ✓ tests/unit/series-plan-dates.test.ts > one plan anchor and natural-day AB template > separates calendar-month shift from subtracting days; rejects overflow instead of fixing it silently 12ms
+ ✓ tests/unit/series-plan-dates.test.ts > one plan anchor and natural-day AB template > retains completed/running targets and does not manufacture a historical target for a newly adopted old node 1ms
+ ✓ tests/unit/series-plan-dates.test.ts > one plan anchor and natural-day AB template > does not accept a recorded audit timestamp as a missing actual occurrence 3ms
+ ✓ tests/unit/series-plan-dates.test.ts > one plan anchor and natural-day AB template > takes max at parallel merges, preserves batch independence and detects the five-day/default-eight-day conflict 1ms
+ ✓ tests/unit/bulk-preshrink-requirement.test.ts > bulk preshrink effective requirement > freezes the explicit published 需要预缩 choice for a new preparation 1ms
+ ✓ tests/unit/bulk-preshrink-requirement.test.ts > bulk preshrink effective requirement > freezes the explicit published 无需预缩 choice for a new preparation 0ms
+ ✓ tests/unit/bulk-preshrink-requirement.test.ts > bulk preshrink effective requirement > retains frozen 需要预缩 despite a later 无需预缩 document 0ms
+ ✓ tests/unit/bulk-preshrink-requirement.test.ts > bulk preshrink effective requirement > retains frozen 无需预缩 despite a later 需要预缩 document 0ms
+ ✓ tests/unit/bulk-preshrink-requirement.test.ts > bulk preshrink effective requirement > never turns missing or malformed frozen requirements into an implicit waiver 1ms
+ ✓ tests/unit/bulk-preshrink-requirement.test.ts > bulk preshrink effective requirement > excludes unneeded preshrink from the current projection without changing P0, the 36h standard or actual clocks 16ms
+ ✓ tests/unit/bulk-preshrink-requirement.test.ts > bulk preshrink effective requirement > keeps inspection as a cutting predecessor when no preshrink is required 4ms
+ ✓ tests/unit/bulk-preshrink-requirement.test.ts > bulk preshrink effective requirement > preserves required or unresolved routes (需要预缩) 2ms
+ ✓ tests/unit/bulk-preshrink-requirement.test.ts > bulk preshrink effective requirement > preserves required or unresolved routes (null) 3ms
+ ✓ tests/unit/bulk-preshrink-requirement.test.ts > bulk preshrink effective requirement > never hides an existing completion with facts {"businessCompleted":true} 8ms
+ ✓ tests/unit/bulk-preshrink-requirement.test.ts > bulk preshrink effective requirement > never hides an existing completion with facts {"completedAt":"2026-10-01T00:00:00.000Z"} 2ms
+ ✓ tests/unit/journey-snapshot-reads.test.ts > Journey read reuse stays inside its read-only snapshot > reuses identical SQL/parameters while returning independent rows and preserving dates 3ms
+ ✓ tests/unit/journey-snapshot-reads.test.ts > Journey read reuse stays inside its read-only snapshot > does not share authorization results across parameters or later snapshots 1ms
+ ✓ tests/unit/journey-snapshot-reads.test.ts > Journey read reuse stays inside its read-only snapshot > passes locks, volatile calls and query-config modes through and invalidates session context 1ms
+ ✓ tests/unit/journey-snapshot-reads.test.ts > Journey read reuse stays inside its read-only snapshot > invalidates earlier reads when a caught statement aborts the transaction 1ms
+ ✓ tests/unit/journey-snapshot-reads.test.ts > Journey read reuse stays inside its read-only snapshot > does not retain failures, binary/custom rows or oversized results 32ms
+ ✓ tests/integration/series-plan-routes.test.ts > series planning HTTP commands > rejects invalid preview before a database transaction 100ms
+ ✓ tests/integration/series-plan-routes.test.ts > series planning HTTP commands > rejects invalid apply before a database transaction 7ms
+ ✓ tests/integration/series-plan-routes.test.ts > series planning HTTP commands > rejects invalid requests before a database transaction 7ms
+ ✓ tests/integration/series-plan-routes.test.ts > series planning HTTP commands > rejects invalid context before a database transaction 14ms
+ ✓ tests/integration/series-plan-routes.test.ts > series planning HTTP commands > authenticates preview/read commands and rejects an invalid candidate month without writes 7ms
+ ✓ tests/integration/series-plan-routes.test.ts > series planning HTTP commands > honors the existing write-disable configuration before executing any planning/short approval command 5ms
+ ✓ tests/integration/series-plan-routes.test.ts > series planning HTTP commands > validates short-approval payloads before opening a transaction 6ms
+ ✓ tests/unit/bulk-preshrink-correction-read.test.ts > scoped preshrink correction read provenance > retains the frozen requirement when the successor correction table is absent 3ms
+ ✓ tests/unit/bulk-preshrink-correction-read.test.ts > scoped preshrink correction read provenance > does not treat a standalone no-preshrink fact or a later instruction as a correction 1ms
+ ✓ tests/unit/bulk-preshrink-correction-read.test.ts > scoped preshrink correction read provenance > returns the exact append-only correction and retired task without mutating the original prep 0ms
+ ✓ tests/unit/bulk-preshrink-correction-read.test.ts > scoped preshrink correction read provenance > does not overlay a correction on an unrelated or unknown original 无需预缩 1ms
+ ✓ tests/unit/bulk-preshrink-correction-read.test.ts > scoped preshrink correction read provenance > does not overlay a correction on an unrelated or unknown original undefined 0ms
+ ✓ tests/unit/bulk-preshrink-correction-read.test.ts > scoped preshrink correction read provenance > does not overlay a correction on an unrelated or unknown original null 0ms
+ ✓ tests/unit/bulk-preshrink-correction-read.test.ts > scoped preshrink correction read provenance > does not overlay a correction on an unrelated or unknown original invalid 0ms
+ ✓ tests/unit/bulk-preshrink-correction-read.test.ts > scoped preshrink correction read provenance > takes denominator exclusions from correction targets rather than all cancelled tasks 1ms
+ ✓ tests/unit/bulk-preshrink-correction-read.test.ts > scoped preshrink correction read provenance > preserves old-schema denominator behavior without a correction table 1ms
+ ✓ tests/unit/bulk-preshrink-correction-read.test.ts > scoped preshrink correction read provenance > rejects a bulk or unversioned correction request before any command runs 3ms
+ ✓ tests/unit/acceptance-maintenance-generator.test.ts > Acceptance owner maintenance generator > has exact permission inventories for every migration beyond shared history 4ms
+ ✓ tests/unit/acceptance-maintenance-generator.test.ts > Acceptance owner maintenance generator > pins the local live identity, drops privilege and checks history under the migration lock 88ms
+ ✓ tests/unit/migration-history.test.ts > applied migration history > accepts an exact prefix before pending Head migrations are applied 2ms
+ ✓ tests/unit/migration-history.test.ts > applied migration history > rejects checksum drift in an applied migration 0ms
+ ✓ tests/unit/migration-history.test.ts > applied migration history > rejects an applied migration removed from the Head manifest 0ms
+ ✓ tests/unit/migration-history.test.ts > applied migration history > rejects a gap or reorder in applied history 0ms
+ ✓ tests/unit/migration-history.test.ts > applied migration history > accepts both frozen source histories and rejects a bridge receipt missing either main prerequisite 4ms
+ ✓ tests/unit/sla-preview-token.test.ts > authenticates a preview, binding inputs and session signing identity 6ms
+ ✓ tests/unit/sla-preview-token.test.ts > expires by real audit time, rejects future previews, and preserves exact boundary 2ms
+ ✓ tests/unit/current-migration-manifest-checksum.test.ts > current migration manifest checksums > matches every versioned SQL file byte-for-byte 86ms
+
+ Test Files  15 passed (15)
+      Tests  155 passed (155)
+   Start at  15:12:33
+   Duration  7.27s (transform 2.61s, setup 0ms, import 4.83s, tests 708ms, environment 1ms)
+
+JSON report written to /workspace/a-896-gate-records/targeted-tests.json

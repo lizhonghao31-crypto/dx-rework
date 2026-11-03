@@ -11,6 +11,7 @@ import {DigitalCockpitQuery} from '../../apps/api/src/production-platform/cockpi
 import {SeriesPlanService} from '../../apps/api/src/production-platform/series-plan-service.js';
 import {productionReadiness} from '../../apps/api/src/production-platform/production-readiness-repository.js';
 import {businessNow} from '../../apps/api/src/acceptance-clock/business-time.js';
+import {SlaOrderService} from '../../apps/api/src/production-platform/sla-order-service.js';
 
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 type Fixture=Awaited<ReturnType<typeof bulkPreshrinkCorrectionFixture>>;
@@ -18,17 +19,31 @@ async function footprint(f:Fixture){
  const data:Record<string,unknown>={};
  for(const table of ['digital_bulk_preparations','digital_instruction_versions','digital_instruction_documents','digital_bulk_work_ranges','digital_bulk_preparation_facts',
   'digital_production_tasks','digital_production_task_events','digital_production_event_intents','digital_production_task_conditions','digital_production_task_dependencies',
-  'digital_production_deadline_revisions','production_order_node_clocks','digital_sla_order_snapshots','digital_sla_plans','audit_events','digital_production_commands',
+  'digital_production_deadline_revisions','production_order_node_clocks','digital_sla_order_snapshots','digital_sla_plans','digital_sla_node_facts','audit_events','digital_production_commands',
   'digital_bulk_preshrink_corrections','digital_bulk_preshrink_correction_ranges','digital_preparation_windows','digital_bulk_dispatch']){
   data[table]=(await f.db.query(`SELECT coalesce(jsonb_agg(row_data ORDER BY row_data::text),'[]'::jsonb) AS value FROM (SELECT to_jsonb(t) AS row_data FROM ${table} t) rows`)).rows[0].value;
  }
  return data;
 }
-const immutableTables=['digital_bulk_preparations','digital_instruction_versions','digital_instruction_documents','digital_bulk_work_ranges','digital_sla_order_snapshots','digital_sla_plans','digital_preparation_windows','digital_bulk_dispatch'] as const;
+const immutableTables=['digital_bulk_preparations','digital_instruction_versions','digital_instruction_documents','digital_bulk_work_ranges','digital_sla_order_snapshots','digital_sla_plans','digital_sla_node_facts','digital_preparation_windows','digital_bulk_dispatch'] as const;
+async function legacyPreshrinkObservation(f:Fixture){
+ const sla=new SlaOrderService(f.db),view=await sla.read(f.root,f.id);
+ if(view.status!=='planned')throw Error('TEST requires the original enrolled plan');
+ // Reproduce an append-only observation from the former implementation. The
+ // current command API has no generic fact writer and this is an owned schema.
+ await f.db.query(`INSERT INTO digital_sla_node_facts(fact_id,production_order_id,node_id,revision,plan_id,fact_json,business_time,created_by,reason,request_key)
+  VALUES($1,$2,'warehouse_preshrink',1,$3,$4,$5,$6,'TEST retained legacy SLA observation',$7)`,
+ [randomUUID(),f.id,view.current.planId,JSON.stringify({businessCompleted:true,completedAt:view.time.now,evidence:'TEST:obsolete-preshrink-observation'}),JSON.stringify(view.time),f.root.actorId,randomUUID()]);
+ return sla;
+}
 (url?describe:describe.skip)('scoped original-v3 preshrink correction (owned PostgreSQL schema)',()=>{
  it('binds original facts and ranges, rejects stale/unauthorized requests, rolls back every stage and replays atomically',async()=>{
   const f=await bulkPreshrinkCorrectionFixture(url!);
   try{
+   const sla=await legacyPreshrinkObservation(f),uncorrected=await sla.read(f.root,f.id);
+   if(uncorrected.status!=='planned')throw Error('TEST requires the original enrolled plan');
+   expect(uncorrected.evaluationPlan.nodes.find(n=>n.id==='warehouse_preshrink')?.applicable).toBe('yes');
+   expect(uncorrected.facts.warehouse_preshrink?.evidence).toBe(`task:${f.target.preshrinkTaskId}`);
    const initialFootprint=await footprint(f);
    const tasks=new DigitalProductionTaskService(f.db),initial=await f.service.preview(f.root,f.id,f.target);
    expect(initial.target.instructionVersion).toBe(3);expect(initial.target.ranges.map(r=>[r.kind,r.version])).toEqual(expect.arrayContaining([['唛架完成',1],['纸样完成',1],['纸样完成',2]]));expect(initial.target.ranges).toHaveLength(3);
@@ -77,6 +92,15 @@ const immutableTables=['digital_bulk_preparations','digital_instruction_versions
    expect(linked).toHaveLength(1);expect(linked[0]).toMatchObject({correction_id:result.correctionId,pattern_fact_id:preview.target.patternFactId,marker_fact_id:preview.target.markerFactId,event_kind:'cancelled',intent_kind:'cancelled',action:'digital_bulk_preshrink_corrected'});
    expect((await f.db.query('SELECT count(*)::int AS n FROM digital_bulk_preshrink_correction_ranges WHERE correction_id=$1',[result.correctionId])).rows[0].n).toBe(preview.target.ranges.length);
    expect((await f.bulk.read(f.root,f.id)).preshrink).toBe('无需预缩');expect((await bulkSlaEvidence(f.db,f.id)).preshrink).toBe('无需预缩');
+   const correctedSla=await sla.read(f.root,f.id);
+   if(correctedSla.status!=='planned')throw Error('TEST requires the original enrolled plan');
+   expect(correctedSla.facts.warehouse_preshrink).toBeUndefined();
+   expect(correctedSla.nodes.find(n=>n.id==='warehouse_preshrink')?.status).toBe('not_applicable');
+   expect(correctedSla.evaluationPlan.nodes.find(n=>n.id==='bulk_cutting')?.dependsOn).not.toContain('warehouse_preshrink');
+   expect(correctedSla.evaluationPlan.nodes.find(n=>n.id==='bulk_cutting')?.dependsOn).toContain('fabric_inspection');
+   expect(correctedSla.history).toEqual(uncorrected.history);
+   expect(correctedSla.facts.bulk_pattern).toEqual(uncorrected.facts.bulk_pattern);
+   const readBefore=await footprint(f);await sla.read(f.root,f.id);expect(await footprint(f)).toEqual(readBefore);
    const detail=await tasks.read(f.root,f.patternId),summary=(await journeyTaskSummaries(f.db,[f.patternId,f.target.preshrinkTaskId])).get(f.patternId)!;
    expect(summary.routeProgress).toEqual(detail.routeProgress);expect(detail.routeProgress.cancelled).toBe(0);
    const journey=await new DigitalJourneyQuery(f.db).read(f.root,f.id),node=journey.stages.flatMap(s=>s.nodes).find(n=>n.instanceId===f.target.preshrinkTaskId)!;
@@ -106,6 +130,10 @@ const immutableTables=['digital_bulk_preparations','digital_instruction_versions
    expect((await readBulkPreshrinkRequirement(f.db,prep)).requirement).toBe('需要预缩');
    await completeBulkRangeFixture(f.db,f.people.warehouse!,f.id,f.target.preparationId,'预缩完成');
    expect((await new DigitalProductionTaskService(f.db).read(f.root,f.target.preshrinkTaskId)).state).toBe('completed');
+   const view=await (await legacyPreshrinkObservation(f)).read(f.root,f.id);
+   if(view.status!=='planned')throw Error('TEST requires the original enrolled plan');
+   expect(view.evaluationPlan.nodes.find(n=>n.id==='warehouse_preshrink')?.applicable).toBe('yes');
+   expect(view.facts.warehouse_preshrink).toMatchObject({businessCompleted:true,evidence:`task:${f.target.preshrinkTaskId}`});
   }finally{await f.dispose();}
  },120000);
 
@@ -116,6 +144,24 @@ const immutableTables=['digital_bulk_preparations','digital_instruction_versions
    await completeBulkRangeFixture(f.db,f.people.warehouse!,f.id,f.target.preparationId,'预缩完成');
    const before=await footprint(f);
    await expect(f.service.apply(f.root,f.id,{target:preview.target,expectedFingerprint:preview.expectedFingerprint,reason:'TEST no actual erasure'},randomUUID())).rejects.toMatchObject({statusCode:409});
+   expect(await footprint(f)).toEqual(before);
+   const view=await (await legacyPreshrinkObservation(f)).read(f.root,f.id);
+   if(view.status!=='planned')throw Error('TEST requires the original enrolled plan');
+   expect(view.evaluationPlan.nodes.find(n=>n.id==='warehouse_preshrink')?.applicable).toBe('yes');
+   expect(view.facts.warehouse_preshrink).toMatchObject({businessCompleted:true,evidence:`task:${f.target.preshrinkTaskId}`});
+  }finally{await f.dispose();}
+ },120000);
+
+ it('does not treat a standalone no-preshrink fact as a structured correction in the actual SLA reader',async()=>{
+  const f=await bulkPreshrinkCorrectionFixture(url!);
+  try{
+   const sla=await legacyPreshrinkObservation(f);
+   await f.db.query("INSERT INTO digital_bulk_preparation_facts(fact_id,preparation_id,kind,actor_id) VALUES($1,$2,'无需预缩',$3)",[randomUUID(),f.target.preparationId,f.root.actorId]);
+   const before=await footprint(f),view=await sla.read(f.root,f.id);
+   if(view.status!=='planned')throw Error('TEST requires the original enrolled plan');
+   expect((await bulkSlaEvidence(f.db,f.id)).preshrinkCorrection).toBeNull();
+   expect(view.evaluationPlan.nodes.find(n=>n.id==='warehouse_preshrink')?.applicable).toBe('yes');
+   expect(view.facts.warehouse_preshrink?.evidence).toBe(`task:${f.target.preshrinkTaskId}`);
    expect(await footprint(f)).toEqual(before);
   }finally{await f.dispose();}
  },120000);

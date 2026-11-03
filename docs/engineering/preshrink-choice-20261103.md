@@ -54,3 +54,14 @@ Node 22.22.2 / npm 10.9.9。记录以当前 `construction-evidence.json`、本�
 本环境未启动 PostgreSQL。按用户授权，各自精确最终 head 的 GitHub 官方 Full 使用仓库 canonical runner 执行所需 PG、权限及兼容检查；不得复用另一 PR 或旧 head 的结果。`business-anchors-clock-postgres.test.ts`、production-readiness、sourcing-pr03、新纠正 suite 及其共享 fixture 已进入规范风险映射；Journey PG13 等原有必要阶段继续保留。
 
 GitHub light、必要 Codex Review、协调方具体收口、原 controller 最终 Full 及其真实回执仍须逐项核验；本文件不称这些门禁已通过，也不授权执行实际旧单纠正。
+
+<a id="work-sla-followup"></a>
+## Work 接手后的当前 SLA 副本与清单收口
+
+2026-11-03，明确释放 A 写入方后，从 `dfa9c8990ab5cfb464ba91d8d22a15cbeba489b1` 接续原分支。独立审查确认：SlaOrderService 先载入旧 SLA facts，取消任务又被原生读取过滤时，旧预缩完成副本仍可能保留并阻止当前路线排除预缩。修正让原生读取返回当前 prep 的结构化纠正身份；仅该身份成立时删除本次内存中的旧预缩副本，然后合并原生证据。数据库旧 facts、P0、原制单、真实成果、任务时钟及真正需要预缩的判断均不改写。
+
+原受限纠正 PG suite 现在包含六个用例。在原七阶段回滚/并发幂等用例中追加真实 `SlaOrderService.read`：先保留旧兼容观察并验证未纠正仍走原路线，合法纠正后预缩不适用、裁床仍依赖验布；原 SLA 历史、纸样/唛架和时钟不变，重复读取不写数据。另补孤立“无需预缩”fact 不构成结构化纠正；确需预缩和真实已完成分支继续验证原生证据优先。旧观察只在自有隔离测试 schema 通过旧兼容表追加，没有新业务事实写入口。
+
+light 的时间来源清单失败定位到四个实际变动文件：新增 preview/apply 路由、纠正服务 businessNow、系列计划依据指纹所在行，以及任务退役的真实审计/业务事件时间。核实际写入及消费者后仅刷新这四项，未改生成器、匹配规则或断言；未变条目逐项相等，原人工审查注记保留。terminal_recorded_at 继续真实审计时钟，取消事件继续原业务时钟。
+
+当前本地 Node 22.23.4 / npm 10.9.9：修改源码后的 15 个定向文件 155/0/0；CI 协议 152/0/0；API 类型检查和改动 TS 文件 lint 已通过。依赖安装首轮因默认 npm 缓存路径不存在失败，随后仅使用工作目录缓存完成安装，未修改依赖或用户运行设置。新增/修改 PG 用例尚未执行，由本次最终准确 head 的官方 Full 补验；不能把这些本地结果视作数据库或现场通过。当前命令、摘要及报告以 construction-evidence 为准，Pro 原 head 的日志作为历史补充保留。

@@ -111,7 +111,11 @@ export class SlaOrderService {
       // explicitly unknown completion) must replace, not merge with, its obsolete copy.
       const facts = applyOrderCreationEvidence({ ...await repo.facts(orderId), ...development?.facts },
         await orderCreationSlaEvidence(client, orderId, history[0]!));
-      const {facts:bulk,preshrink}=await bulkSlaEvidence(client,orderId);
+      const {facts:bulk,preshrink,preshrinkCorrection}=await bulkSlaEvidence(client,orderId);
+      // Only the current preparation's structured correction supersedes a legacy
+      // observation. Remove its evaluation copy, never the immutable saved fact.
+      // Native evidence is merged afterwards so real work retains its authority.
+      if(preshrinkCorrection)delete facts.warehouse_preshrink;
       // Publication proves the sheet's end, not a replacement for its original order-confirmation start.
       if(bulk.production_sheet?.evidence.startsWith('instruction:')&&facts.production_sheet?.startedAt)bulk.production_sheet.startedAt=facts.production_sheet.startedAt;
       const production=await factoryProductionFacts(client,orderId);

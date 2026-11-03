@@ -9,7 +9,7 @@ import {bulkTaskTiming} from './bulk-task-timing.js';
 /** Read native facts only. No new SLA fact copy and no guessed cutter receipt. */
 export async function bulkSlaEvidence(db:Pick<PoolClient,'query'>,orderId:string){
  const result:Record<string,SlaNodeFact>={};
- if(!(await db.query("SELECT to_regclass('digital_bulk_preparations') AS relation")).rows[0]?.relation)return {facts:result,preshrink:null};
+ if(!(await db.query("SELECT to_regclass('digital_bulk_preparations') AS relation")).rows[0]?.relation)return {facts:result,preshrink:null,preshrinkCorrection:null};
  const fabric=await bulkFabricFacts(db,orderId);
  if(fabric.report){
   const row=(await db.query('SELECT rule_version,parameters_json FROM digital_sla_order_snapshots WHERE snapshot_id::text=$1 AND production_order_id=$2',[fabric.report.snapshotId??null,orderId])).rows[0];
@@ -22,7 +22,9 @@ export async function bulkSlaEvidence(db:Pick<PoolClient,'query'>,orderId:string
    JOIN digital_instruction_versions v ON v.production_order_id=d.production_order_id AND v.version=d.published_version
    LEFT JOIN digital_bulk_preparations p ON p.production_order_id=v.production_order_id AND p.instruction_version=v.version AND p.source_round=v.source_round
    WHERE d.production_order_id=$1`,[orderId])).rows[0];
- const preshrink=(await readBulkPreshrinkRequirement(db,basis?.preparation_id?basis:null,basis?.document)).requirement;
+ const requirement=await readBulkPreshrinkRequirement(db,basis?.preparation_id?basis:null,basis?.document);
+ const preshrink=requirement.requirement;
+ const preshrinkCorrection=requirement.correctionId?{correctionId:requirement.correctionId,retiredTaskId:requirement.retiredTaskId}:null;
  const prep=basis?.workflow_version===2?basis:null;
  const adoption=await preparationAdoption(db,{kind:'order',id:orderId});
  const retainLegacy=Boolean(adoption?.standards.retainedInstructionVersion&&prep?.instruction_version<=adoption.standards.retainedInstructionVersion);
@@ -30,7 +32,7 @@ export async function bulkSlaEvidence(db:Pick<PoolClient,'query'>,orderId:string
   const completion=(await db.query("SELECT occurred_at FROM digital_preparation_instruction_events WHERE production_order_id=$1 AND kind='published' ORDER BY instruction_version LIMIT 1",[orderId])).rows[0];
   result.production_sheet={evidence:`preparation-window:${orderId}:final`,businessCompleted:Boolean(completion),standardMinutes:adoption.standards.finalMinutes,
    ...(window.startedAt?{startedAt:window.startedAt}:{}),...(completion?{completedAt:new Date(completion.occurred_at).toISOString()}:{})};}
- if(!prep)return {facts:result,preshrink};
+ if(!prep)return {facts:result,preshrink,preshrinkCorrection};
  if(!adoption||retainLegacy)result.production_sheet={evidence:`instruction:${orderId}:${prep.instruction_version}`,businessCompleted:true,completedAt:new Date(prep.published_at).toISOString()};
  const tasks=(await db.query(`SELECT t.*,a.task_kind,a.production_order_id FROM digital_production_tasks t
    JOIN digital_production_task_access a USING(task_id) WHERE t.route_instance_id=$1 AND a.production_order_id=$2 AND t.state<>'cancelled'`,[prep.preparation_id,orderId])).rows;
@@ -42,7 +44,7 @@ export async function bulkSlaEvidence(db:Pick<PoolClient,'query'>,orderId:string
    standardWarningPercent:timing.warningRatio*100,standardMinutes:timing.seconds!==null?timing.seconds/60:null,
    ...(task.task_kind==='warehouse_preshrink'&&!fabric.usable&&task.state!=='completed'?{waitingFor:{reason:'验布尚未合格或获准使用，预缩仍等待',source:`order:${orderId}:fabric`}}:{})};
  }
- return {facts:result,preshrink};
+ return {facts:result,preshrink,preshrinkCorrection};
 }
 
 /** Applicability is a read projection; the frozen plan and actual task clocks stay intact. */
