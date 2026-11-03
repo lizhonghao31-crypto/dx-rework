@@ -27,7 +27,8 @@
       "expectation": "既有应用/HTTP及金额回归的实际通过见priorVerification；首次旧源码断言失败明确保留并已单文件修正。真实业务/工资PG反例仍待Full，不拿新UI用例代称PG通过。 本次P2未改API或后端输入，仅重新检查Web编译及源码secret；此前业务结果保留其真实来源，PG仍留给精确head官方Full。",
       "checks": [
         "b-review-p2-web-typecheck",
-        "b-review-p2-secret-scan"
+        "b-review-p2-secret-scan",
+        "b-work-closeout-tests"
       ]
     },
     {
@@ -56,7 +57,8 @@
       "expectation": "N07生产代码未改，原实际组件与回归结果按priorVerification原head保留。本次仅N09过滤运行，9项N07被过滤，不称N07新head已重新执行；Web类型检查覆盖当前代码。",
       "checks": [
         "b-review-p2-web-typecheck",
-        "b-review-p2-secret-scan"
+        "b-review-p2-secret-scan",
+        "b-work-closeout-tests"
       ]
     },
     {
@@ -84,7 +86,8 @@
         "b-review-p2-targeted-tests",
         "b-review-p2-eslint",
         "b-review-p2-web-typecheck",
-        "b-review-p2-secret-scan"
+        "b-review-p2-secret-scan",
+        "b-work-closeout-tests"
       ]
     }
   ],
@@ -155,6 +158,30 @@
       "logSha256": "db5dc5135908f41241aa6e6dd0a77c3ed032b0f54f013af07d5a2c34c90009be",
       "log": "/workspace/scratch/5c2f59f0b575/verification-b/review-p2-secret-scan.log",
       "context": "Node 22.22.2 / npm 10.9.9 / Vitest 4.1.10; vitest.config.ts and scripts/test-execution-config.mjs give nonDatabase maxWorkers=1. N09 tests, scoped ESLint and Web typecheck ran as three independent local commands; no PG or browser. Actual canonical fingerprints before and after this source verification batch match. This working-tree increment is based on testedHead; final commit verification is separate."
+    },
+    {
+      "id": "b-work-closeout-tests",
+      "kind": "tests",
+      "status": "passed",
+      "exitCode": 0,
+      "command": "/workspace/.tooling/node22/node_modules/.bin/node node_modules/vitest/vitest.mjs run tests/unit/responsibility-panels-component.test.ts tests/unit/external-responsibility-ui-contract.test.ts tests/unit/external-responsibility-ui-idempotency.test.ts tests/unit/responsibility-determination-application-service.test.ts --reporter=verbose --reporter=json --outputFile.json=/workspace/b-897-gate-records/fd9a4699/work-closeout-tests.json",
+      "testedHead": "fd9a4699d1b72fb8960bb503a5206252ac2ef89d",
+      "sourceFingerprint": "32e606de67e5bf10bac430d2863ccfa4476cc8ef436150f507394debf8cee6b5",
+      "startedAt": "2026-11-03T15:55:28.720406+00:00",
+      "endedAt": "2026-11-03T15:55:31.766059+00:00",
+      "log": "/workspace/b-897-gate-records/fd9a4699/work-closeout-tests.log",
+      "logSha256": "32638611bc20fde657686894b159a9de055dfaa70343e268a108f24fcf30fff2",
+      "passed": 43,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "path": "/workspace/b-897-gate-records/fd9a4699/work-closeout-tests.json",
+          "sha256": "21f507d240ea837a0d8b6d6d3780cdc4071c81d890aa4f7fa1dc0f0221e2becb"
+        }
+      ],
+      "context": "Work Node22.23.4/npm10.9.9, exact fd9a4699 product/tests unchanged; before/after canonical source fingerprint identical to the committed record. Four directly relevant non-PG files only. Original Pro external reports were unavailable in Work, so this is the smallest executable replacement evidence for all three final-closeout rules. No local PG, browser/field test, whole-unit suite or CI was run."
     }
   ],
   "sourceFingerprintObservations": [
@@ -417,5 +444,6 @@
       ]
     },
     "scopeBoundary": "N07 main reads, N09 permission/main/supplier reads and all busy consumers inspected. The old N07 applyResponse/runWrite and N09 send/refresh/mutation continuations are independent pre-existing mutation lifecycle paths; their cross-view behavior was not dynamically verified or refactored here. No claim that every asynchronous mutation race is closed."
-  }
+  },
+  "handoffCloseoutNote": "Evidence-only follow-up: no product/test/rule/controller changes. Existing local logs are not assumed shared between Chat and Work. Current43 exact-source cases provide actual readable report/log for the fixed Review finding and each existing rule. Product Review stays on beea4453; fd9a4699 is its fix and not claimed re-reviewed. Original Pro records retained without rewriting their results."
 }
