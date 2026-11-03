@@ -110,6 +110,7 @@ export function ExternalResponsibilityPanel({
   const supplierRequest = useRef<AbortController | null>(null);
   const mainRequest = useRef<AbortController | null>(null);
   const mainRequestGeneration = useRef(0);
+  const ledgerRetryGeneration = useRef(0);
   const currentOrder = useRef(reworkOrderId);
   currentOrder.current = reworkOrderId;
   const [selection, setSelection] = useState<Record<string, string>>({});
@@ -118,7 +119,9 @@ export function ExternalResponsibilityPanel({
   const [moduleWritable, setModuleWritable] = useState(false);
   const readOnly = requestedReadOnly || !moduleWritable;
   const [message, setMessage] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [mutationBusy, setBusy] = useState(false);
+  const [ledgerRetryBusy, setLedgerRetryBusy] = useState(false);
+  const busy = mutationBusy || ledgerRetryBusy;
   const [amount, setAmount] = useState<Record<string, string>>({});
   const [attachments, setAttachments] = useState<Record<string, string[]>>({});
   const [uploadingCases, setUploadingCases] = useState<Record<string, boolean>>({});
@@ -196,6 +199,8 @@ export function ExternalResponsibilityPanel({
   };
 
   useEffect(() => {
+    // Only the abandoned read loses its busy state; an in-flight mutation keeps it.
+    setLedgerRetryBusy(false);
     if (!reworkOrderId) {
       setState({ kind: "hidden" });
       return;
@@ -203,6 +208,7 @@ export function ExternalResponsibilityPanel({
     setState({ kind: "loading" });
     void reloadLedger();
     return () => {
+      ledgerRetryGeneration.current += 1;
       mainRequestGeneration.current += 1;
       mainRequest.current?.abort();
       supplierRequest.current?.abort();
@@ -593,10 +599,11 @@ export function ExternalResponsibilityPanel({
   if (state.kind === "hidden") return null;
   if (state.kind === "loading") return <Surface className="external-state">正在加载扣款台账…</Surface>;
   if (state.kind === "unavailable") return <Surface className="external-state">{state.message}<Button type="button" disabled={busy} onClick={() => {
-    setBusy(true);
-    const pending = reloadLedger();
-    const generation = mainRequestGeneration.current;
-    void pending.finally(() => { if (mainRequestGeneration.current === generation) setBusy(false); });
+    const generation = ++ledgerRetryGeneration.current;
+    setLedgerRetryBusy(true);
+    void reloadLedger().finally(() => {
+      if (ledgerRetryGeneration.current === generation) setLedgerRetryBusy(false);
+    });
   }}>刷新</Button></Surface>;
   if (!state.value) return <Surface className="external-state">无本类扣款事项。</Surface>;
 

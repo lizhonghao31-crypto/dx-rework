@@ -79,7 +79,7 @@ const mainReads = () => reads.filter(({ url }) => !url.endsWith("/supplier-optio
 async function renderN07(orderId: string): Promise<void> {
   await act(async () => { root!.render(createElement(ResponsibilityDeterminationPanel, { reworkOrderId: orderId })); });
 }
-async function renderN09(orderId = orderA, readOnly = false): Promise<void> {
+async function renderN09(orderId: string | null = orderA, readOnly = false): Promise<void> {
   await act(async () => { root!.render(createElement(ExternalResponsibilityPanel, { reworkOrderId: orderId, readOnly })); });
 }
 async function unmount(): Promise<void> {
@@ -286,6 +286,152 @@ describe("N07 real responsibility panel request lifecycle", () => {
 });
 
 describe("N09 real external responsibility candidate states", () => {
+  it.each(["order", "readonly", "hidden"] as const)("releases an invalidated ledger retry after %s changes without losing drafts", async change => {
+    const abandoned = deferred<Response>();
+    let ledgerCalls = 0;
+    mockFetch(async url => {
+      if (url.endsWith("/supplier-options")) return json([candidate]);
+      ledgerCalls += 1;
+      if (ledgerCalls === 2) return json({ error: { message: "TEST 台账刷新失败" } }, 503);
+      if (ledgerCalls === 3) return abandoned.promise;
+      return json(ledger(url.includes(orderB) ? orderB : orderA, "TEST 当前可操作台账"));
+    });
+    await renderN09();
+    await click(container.querySelector<HTMLButtonElement>(".search-select__toggle")!);
+    await click(container.querySelector<HTMLButtonElement>('[role="option"]')!);
+    await fill(field("加工厂改选原因"), "TEST 重试前改选草稿");
+    await fill(field("本次扣款金额"), "2.50");
+    await renderN09(orderA, true);
+    await click(button("刷新"));
+    const oldSignal = mainReads().at(-1)!.init?.signal;
+    expect(button("刷新").disabled).toBe(true);
+
+    if (change === "order") await renderN09(orderB);
+    if (change === "hidden") {
+      await renderN09(null);
+      expect(container.childElementCount).toBe(0);
+    }
+    await renderN09(orderA);
+    expect(oldSignal?.aborted).toBe(true);
+    expect(container.querySelector<HTMLInputElement>('input[role="combobox"]')!.disabled).toBe(false);
+    expect(container.querySelector<HTMLInputElement>('input[role="combobox"]')!.value).toBe(candidate.supplierName);
+    expect(button("确认供应商").disabled).toBe(false);
+    expect(button("扣款").disabled).toBe(false);
+    expect(field("加工厂改选原因").value).toBe("TEST 重试前改选草稿");
+    expect(field("本次扣款金额").value).toBe("2.50");
+    await act(async () => {
+      if (change === "readonly") abandoned.reject(new Error("TEST 已失效重试错误"));
+      else abandoned.resolve(json(ledger(orderA, "TEST 已失效重试台账")));
+    });
+    expect(container.textContent).toContain("TEST 当前可操作台账");
+    expect(container.textContent).not.toContain("TEST 已失效重试");
+    expect(button("确认供应商").disabled).toBe(false);
+    expect(button("扣款").disabled).toBe(false);
+    expect(field("加工厂改选原因").value).toBe("TEST 重试前改选草稿");
+    expect(field("本次扣款金额").value).toBe("2.50");
+  });
+
+  it("keeps the current ledger retry busy when an abandoned retry finishes", async () => {
+    const abandoned = deferred<Response>();
+    const current = deferred<Response>();
+    let aReads = 0, bReads = 0;
+    mockFetch(async url => {
+      if (url.endsWith("/supplier-options")) return json([candidate]);
+      const count = url.includes(orderA) ? ++aReads : ++bReads;
+      if (count === 1) return json({ error: { message: "TEST 当前台账需重试" } }, 503);
+      return url.includes(orderA) ? abandoned.promise : current.promise;
+    });
+    await renderN09(orderA);
+    await click(button("刷新"));
+    await renderN09(orderB);
+    expect(button("刷新").disabled).toBe(false);
+    await click(button("刷新"));
+    expect(mainReads()).toHaveLength(4);
+    await act(async () => { abandoned.resolve(json(ledger(orderA, "TEST 旧台账"))); });
+    expect(button("刷新").disabled).toBe(true);
+    expect(container.textContent).not.toContain("TEST 旧台账");
+    expect(supplierReads()).toHaveLength(0);
+    await act(async () => { current.resolve(json(ledger(orderB, "TEST 本次台账"))); });
+    expect(container.textContent).toContain("TEST 本次台账");
+    expect(container.querySelector<HTMLInputElement>('input[role="combobox"]')!.disabled).toBe(false);
+    expect(button("确认供应商").disabled).toBe(false);
+  });
+
+  it("does not release a current allocation when an abandoned ledger retry finishes", async () => {
+    const abandoned = deferred<Response>();
+    const allocation = deferred<Response>();
+    let aReads = 0;
+    mockFetch(async url => {
+      if (url.endsWith("/supplier-options")) return json([candidate]);
+      if (url.includes(orderB)) return json(ledger(orderB));
+      return ++aReads === 1 ? json({ error: { message: "TEST 旧台账需重试" } }, 503) : abandoned.promise;
+    });
+    await renderN09(orderA);
+    await click(button("刷新"));
+    await renderN09(orderB);
+    expect(button("确认供应商").disabled).toBe(false);
+    await click(container.querySelector<HTMLButtonElement>(".search-select__toggle")!);
+    await click(container.querySelector<HTMLButtonElement>('[role="option"]')!);
+    await fill(field("加工厂改选原因"), "TEST 本次分配草稿");
+    await fill(field("本次扣款金额"), "2.50");
+    const readFetch = globalThis.fetch;
+    const writes: unknown[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method !== "POST") return readFetch(input, init);
+      expect(String(input)).toContain(`external-responsibility-batches/${id(24)}/allocate-suppliers`);
+      writes.push(JSON.parse(String(init.body)));
+      return allocation.promise;
+    }));
+    await click(button("确认供应商"));
+    expect(writes).toHaveLength(1);
+    expect(button("确认供应商").disabled).toBe(true);
+    expect(button("扣款").disabled).toBe(true);
+    await act(async () => { abandoned.resolve(json(ledger(orderA))); });
+    expect(button("确认供应商").disabled).toBe(true);
+    expect(button("扣款").disabled).toBe(true);
+    // This is an isolated synthetic write, rejected before any service or data access.
+    await act(async () => { allocation.resolve(json({ error: { message: "TEST 本次分配冲突" } }, 409)); });
+    expect(button("确认供应商").disabled).toBe(false);
+    expect(button("扣款").disabled).toBe(false);
+    expect(container.textContent).toContain("TEST 本次分配冲突");
+    expect(field("加工厂改选原因").value).toBe("TEST 本次分配草稿");
+    expect(field("本次扣款金额").value).toBe("2.50");
+  });
+
+  it("invalidates a ledger retry during delayed permission without starting stale reads", async () => {
+    const permission = deferred<boolean>();
+    ports.currentModuleCanWrite.mockResolvedValueOnce(true).mockImplementationOnce(() => permission.promise);
+    mockFetch(async url => url.endsWith("/supplier-options") ? json([candidate])
+      : url.includes(orderA) ? json({ error: { message: "TEST 台账需重试" } }, 503) : json(ledger(orderB)));
+    await renderN09(orderA);
+    await click(button("刷新"));
+    expect(mainReads()).toHaveLength(1);
+    await renderN09(orderB);
+    expect(container.querySelector<HTMLInputElement>('input[role="combobox"]')!.disabled).toBe(false);
+    expect(button("确认供应商").disabled).toBe(false);
+    const count = reads.length;
+    await act(async () => { permission.resolve(false); });
+    expect(reads).toHaveLength(count);
+    expect(button("确认供应商").disabled).toBe(false);
+  });
+
+  it("aborts an unmounted ledger retry and ignores its late failure", async () => {
+    const abandoned = deferred<Response>();
+    let calls = 0;
+    mockFetch(async () => ++calls === 1 ? json({ error: { message: "TEST 台账需重试" } }, 503) : abandoned.promise);
+    await renderN09();
+    await click(button("刷新"));
+    const signal = mainReads().at(-1)!.init?.signal;
+    expect(button("刷新").disabled).toBe(true);
+    const count = reads.length;
+    await unmount();
+    await act(async () => { abandoned.reject(new Error("TEST 卸载后重试失败")); });
+    expect(signal?.aborted).toBe(true);
+    expect(reads).toHaveLength(count);
+    expect(supplierReads()).toHaveLength(0);
+    expect(container.childElementCount).toBe(0);
+  });
+
   it("recovers a 503 ledger through refresh and starts candidate loading", async () => {
     const candidates = deferred<Response>();
     let ledgerCalls = 0;

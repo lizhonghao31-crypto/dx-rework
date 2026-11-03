@@ -1,5 +1,19 @@
 # B：N07 / N09 责任供应商候选与加载竞态
 
+## 正式 Review P2 补修（2026-11-03）
+
+- 来源：[正式 Codex Review discussion_r4456496554](https://github.com/lizhonghao31-crypto/dx-rework/pull/897#discussion_r4456496554)，审核 head 为 `beea4453821f3f4180650a8c5b380c067cdfcabc`；本次继续原 #897/原功能分支，目标 base 核为 `c2c49369898b7f9943fb280342a56d9a98b0b30b`。
+- 目标：台账错误后的延迟重试在切单、只读切换或卸载后失效，不得永久锁住当前页面；旧重试也不得释放新重试或正在进行的业务操作。只修 N09 请求状态归属，不更改金额、权限、主档、历史或 A 的任何内容。
+- 影响链：不可用状态的“刷新”入口 → `reloadLedger/load` 的 main generation → effect setup/cleanup → 供应商选择/分配、扣款及附件等原 `busy` 消费者。主读取、权限 await、候选读取均沿原当前性检查；重试 busy 须单独归属，不能在 effect 中无条件复位业务写操作的 busy。
+- 验证计划：先用真实组件重现既有阻断；补切单/只读/null、旧重试与新重试或分配并存、权限迟到、卸载及草稿保留；集中运行受影响 N09 组件与既有 UI 契约/幂等检查、Web 类型、定向 lint、secret scan 和 construction 证据校验。PG 及最终 Full 留给官方流程，本次不申请或重跑 Full，不将 discussion 直接标记解决。
+- 实际修复：增加独立 `ledgerRetryGeneration` / `ledgerRetryBusy`；原 `setBusy` 仅保留业务 mutation 状态，控件读取两者的 OR。新 setup 在空订单早退前只释放旧 retry；cleanup 使其 token 失效；旧 finally 只能释放仍属于自己的 retry。未清空选择、原因、扣款金额、附件或幂等键。
+- 复现：在尚未修改的审核版生产组件上只增加新用例，切单／只读／空订单 3 项均因控件仍 disabled 而失败，exit 1；29 项被过滤。保留 `review-p2-red-reproduction` 的原始 JSON 与日志，不改为通过。
+- 修复后：N09 23 项真实组件（7 新增＋16 既有）及 5 项既有 UI 契约／幂等用例合计 **28 pass / 0 fail / 9 filtered**，exit 0；过滤的 9 项是未改动的 N07 用例，没有重跑或冒称本次通过。新增回包重叠用例实际证明旧 retry 不能释放新 retry 或正在提交 allocation 的忙态；所有写请求均为立即由 mock 接管的合成数据，不访问服务或现场。
+- 定向 ESLint、Web 原生 typecheck、worktree secret scan 均 exit 0。Vitest 用仓库 `vitest.config.ts`，普通 worker 上限由 `scripts/test-execution-config.mjs` 解析为 1；测试、lint、typecheck 是三个互不写源码的本地并行命令，没有 PG。源码检查前后实际 canonical fingerprint 同为 `32e606de67e5bf10bac430d2863ccfa4476cc8ef436150f507394debf8cee6b5`。
+- 真实命令、UTC 起止、退出码、通过／失败／过滤数、日志与 JSON 摘要写入 `construction-evidence.json`。本轮原始记录留在仓库外 `/workspace/scratch/5c2f59f0b575/verification-b/review-p2-*`，按 AGENTS §4 不新增原始日志到候选提交；旧记录完整保留。当前定向报告 SHA256 见该结构化记录。
+- 旁路核查边界：已检查 N07 主读取、N09 权限／台账／候选读取及所有 busy 消费者。N07 `applyResponse/runWrite` 和 N09 `send/refresh` 等业务写后延续路径与原 `a5938db04e635186acaa3f8a999ed917f56b6556` 字节相同，其跨视图写回缺少统一 view token 属独立既有边界，本次未动态验证或扩为金融写链重构；因此本次结论限定为读取／retry 忙态，不能声称所有异步 mutation 竞态已经修完。
+- 正式 Review 的审核 SHA 与上述来源保留；本次不直接 resolve discussion，不宣称修复提交已重审或 Full 已通过。待集中检查及提交后沿原 `verify-change` 做新检出复验，由协调方按精确新 head 继续正式流程。
+
 ## 本轮接续的准确边界
 
 本轮从现有 PR #897 的固定 head `a5938db04e635186acaa3f8a999ed917f56b6556` 取得源码并补增量，目标分支仍为 `release/digital-production-v1`。原 Pro 的未推送工作区、悬空 commit 和原附件不可取得；没有声称恢复这些内容。保留该 head 已有的后端候选过滤、N07 候选状态及 PG 反例，只修独立审查发现的主加载竞态和 N09 候选错误状态。
