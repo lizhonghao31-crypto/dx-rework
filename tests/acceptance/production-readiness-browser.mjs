@@ -41,6 +41,23 @@ try{
     if(mode==='parent-writing')await page.evaluate(()=>window.resolvePreparationWrite());else await page.getByRole('button',{name:'使用原内容核对范围提交结果'}).click();await scope.getByRole('status').filter({hasText:'已保存实际准备范围'}).waitFor();
     assert.equal(await page.evaluate(()=>window.preparationWrites()),1);const requests=await page.evaluate(()=>window.preparationRequests.filter(r=>r.path.endsWith('/complete')));assert.equal(requests.length,mode==='parent-writing'?1:2);if(requests.length===2){assert.equal(requests[0].key,requests[1].key);assert.deepEqual(requests[0].body,requests[1].body);}assert.equal(await scope.getByText(/纸样完成 · 第1次/).count(),1);
    }
+  }else if(mode.startsWith('label-')){
+   const details=page.locator('.preparation-readiness>details');await details.locator(':scope>summary').click();
+   await details.locator('[data-preparation-kind=style_label_ready]').getByRole('button',{name:'追加订正'}).click();
+   const row=details.getByLabel('本次修改的物料明细'),unit=details.getByLabel('单位',{exact:true});
+   await row.selectOption('new');assert.equal(await unit.inputValue(),'枚');assert.equal(await unit.getAttribute('readonly'),'');
+   await row.selectOption('0');assert.equal(await details.getByLabel('物料名称',{exact:true}).inputValue(),'TEST黑PO款号唛');assert.equal(await unit.inputValue(),'枚');
+   await row.selectOption('new');await details.getByLabel('物料名称',{exact:true}).fill('TEST白PO款号唛');
+   const white=input.readiness.lines.find(l=>l.color==='白');await details.getByLabel('对应款色').selectOption(white.lineId);await details.getByLabel('实际数量',{exact:true}).fill(String(white.orderQuantity));await details.getByLabel('本次情况 / 订正原因').fill('TEST保留黑PO，追加白PO');
+   await details.getByRole('button',{name:'保存本项记录'}).click();
+   if(mode==='label-conflict'){await page.getByRole('alert').filter({hasText:'资料已更新'}).waitFor();assert.equal(await details.getByLabel('物料名称',{exact:true}).inputValue(),'TEST白PO款号唛');assert.equal(await unit.inputValue(),'枚');assert.equal(await page.evaluate(()=>window.preparationWrites()),0);}
+   else await page.getByRole('status').filter({hasText:'已保存原业务记录'}).waitFor();
+   const requests=await page.evaluate(()=>window.preparationRequests.filter(r=>r.path.includes('/materials')));assert.equal(requests.length,1);assert.equal(requests[0].body.quantities.length,2);assert.deepEqual(requests[0].body.quantities[0],await page.evaluate(()=>window.preparationOriginalLabels[0]));assert.equal(requests[0].body.quantities[1].lineId,white.lineId);assert.equal(requests[0].body.quantities[1].unit,'枚');
+  }else if(mode==='range-version'||mode==='range-conflict'){
+   const scope=page.locator('.preparation-range-action');await scope.locator(':scope>summary').click();await scope.getByLabel('本次已做范围及待补做说明').fill('TEST同时间乱序后按最大版本追加');await scope.getByRole('button',{name:'保存局部准备，不放行整单'}).click();
+   if(mode==='range-conflict'){await scope.getByRole('alert').filter({hasText:'资料已更新'}).waitFor();assert.equal(await scope.getByLabel('本次已做范围及待补做说明').inputValue(),'TEST同时间乱序后按最大版本追加');assert.equal(await page.evaluate(()=>window.preparationWrites()),0);}
+   else{await scope.getByRole('status').waitFor();await scope.getByLabel('成果').selectOption('唛架完成');await scope.getByLabel('本次已做范围及待补做说明').fill('TEST唛架版本独立');await scope.getByRole('button',{name:'保存局部准备，不放行整单'}).click();await page.waitForFunction(()=>window.preparationWrites()===2);}
+   const requests=await page.evaluate(()=>window.preparationRequests.filter(r=>r.path.endsWith('/complete')));assert.equal(requests[0].body.range.expectedVersion,2);assert.equal(requests[0].body.preparationId,input.bulk.preparationId);if(mode==='range-version'){assert.equal(requests.length,2);assert.equal(requests[1].body.kind,'唛架完成');assert.equal(requests[1].body.range.expectedVersion,1);}
   }else if(mode==='instruction'){
    await page.getByText('制单草稿 · 到仓后24小时',{exact:true}).waitFor();await page.getByRole('button',{name:'采用当前技术尺寸表'}).click();await page.getByText('未保存修改',{exact:true}).waitFor();
   }else if(mode==='loadfail'||mode==='empty'){

@@ -192,6 +192,49 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect((await f.db.query("SELECT count(*)::int AS n FROM digital_production_task_events WHERE task_id=$1 AND event_kind='completed'",[task.taskId])).rows[0].n).toBe(1);
   });
  });
+ it('preserves black PO labels and actual cutting while appending white PO labels, with a real stale-version conflict',async()=>{
+  const ready=await f.bulkReady('无',undefined,2),resource={kind:'order' as const,id:ready.id},warehouse=f.people.warehouse!;
+  const initial=await service.read(warehouse,resource),black=initial.lines.find(l=>l.color==='黑')!,white=initial.lines.find(l=>l.color==='白')!;
+  const blackRow={lineId:black.lineId,materialId:null,name:'TEST黑PO款号唛',quantity:black.orderQuantity,unit:'枚'};
+  const body={kind:'style_label_ready' as const,scopeRef:'whole',expectedVersion:initial.facts.find(x=>x.kind==='style_label_ready')!.version,state:'ready' as const,occurredAt:businessNow().toISOString(),note:'TEST原黑PO实物保留，白PO待追加',quantities:[blackRow],evidenceIds:[],sourceDocumentVersion:null,recipientId:null};
+  const first=await service.record(warehouse,resource,body,randomUUID()),version=first.facts.find(x=>x.kind==='style_label_ready')!.version;
+  const cutting=(await bulk.read(f.root,ready.id)).cutting.lines.find(l=>l.lineId===black.lineId)!;
+  const cutter={...f.people['cutting-worker']!,authorizationCapability:'cutting:records:create',authorizationCapabilities:['cutting:records:create']};
+  await ready.cutting.record(cutter,cutting.cuttingOrderId!,{pieceCount:1,actualCutCount:1,attachmentIds:[await f.image(cutter)]},randomUUID());
+  const appended={...body,expectedVersion:version,quantities:[blackRow,{lineId:white.lineId,materialId:null,name:'TEST白PO款号唛',quantity:white.orderQuantity,unit:'枚'}],note:'TEST只追加白PO，不覆盖黑PO'};
+  const results=await Promise.allSettled([service.record(warehouse,resource,appended,randomUUID()),service.record(warehouse,resource,appended,randomUUID())]);
+  expect(results.filter(x=>x.status==='fulfilled')).toHaveLength(1);expect((results.find(x=>x.status==='rejected') as PromiseRejectedResult).reason).toMatchObject({statusCode:409});
+  const state=await service.read(warehouse,resource),labels=state.facts.find(x=>x.kind==='style_label_ready')!;expect(labels.version).toBe(version+1);expect(labels.quantities).toEqual(appended.quantities);
+  expect(state.history.find(x=>x.kind==='style_label_ready'&&x.version===version)!.quantities).toEqual([blackRow]);
+  expect((await bulk.read(f.root,ready.id)).cutting.lines.find(l=>l.lineId===black.lineId)!.actualCutCount).toBe(1);
+  expect(await styleLabelCuttingReason(f.db,ready.id,[white.lineId],white.orderQuantity)).toBeNull();
+  await expect(service.record(ready.primary,resource,{...appended,expectedVersion:version+1},randomUUID())).rejects.toMatchObject({statusCode:403});
+ });
+ it('orders same-time reversed-UUID range history by preparation and kind version, keeps real old-page409 and the original48h clock',async()=>{
+  const scene=await f.scene('2026-11-10T00:00:00Z');let ready!:Awaited<ReturnType<typeof f.bulkReady>>,due='';
+  await f.runtime.run(scene,f.root,async()=>{
+   ready=await f.bulkReady('无',undefined,2,f.sourcing,{stopBeforeCompletion:true});const sheet=await bulk.read(f.root,ready.id),task=sheet.tasks.find(t=>t.taskKind==='bulk_pattern')!;due=task.dueAt!;
+   const state=await service.read(f.root,{kind:'order',id:ready.id}),lineIds=state.lines.map(l=>l.lineId);
+   // Deterministic existing immutable history: equal actual timestamps, v1 UUID > v2 UUID.
+   // No old row, clock, trigger, permission, or completion fact is rewritten.
+   for(const [id,kind,version] of [['ffffffff-ffff-4fff-8fff-fffffffffff1','纸样完成',1],['00000000-0000-4000-8000-000000000001','纸样完成',2],['00000000-0000-4000-8000-000000000002','唛架完成',1]] as const){
+    await f.db.query(`INSERT INTO digital_bulk_work_ranges(range_id,preparation_id,task_id,kind,version,line_ids,complete,pending_material_ids,note,evidence_ids,basis_json,actor_id,occurred_at) VALUES($1,$2,$3,$4,$5,$6,false,'{}',$7,'{}',$8,$9,$10)`,[id,ready.preparationId,task.taskId,kind,version,[lineIds[0]],'TEST已做局部 '+kind+' v'+version,JSON.stringify({readinessRevision:state.revision,technicalRevision:state.technicalRevision}),f.people['pattern-room-worker']!.actorId,businessNow().toISOString()]);
+   }
+   const current=await service.read(f.root,{kind:'order',id:ready.id});expect(current.ranges.filter(r=>r.preparationId===ready.preparationId&&r.kind==='纸样完成').map(r=>r.version)).toEqual([1,2]);expect(current.ranges.filter(r=>r.kind==='唛架完成').map(r=>r.version)).toEqual([1]);
+   if(process.env.PREPARATION_UI_INPUT)await writeFile(process.env.PREPARATION_UI_INPUT,JSON.stringify({bulk:await bulk.read(f.root,ready.id),instruction:await instruction.read(f.root,ready.id),readiness:current,people:Object.values(f.people).map(p=>({id:p.actorId,displayName:'TEST '+p.actorRoles[0],roles:p.actorRoles}))}));
+   const body={preparationId:ready.preparationId,kind:'纸样完成' as const,expectedReadinessRevision:current.revision,range:{expectedVersion:1,lineIds:[lineIds[0]!],complete:false,pendingMaterialIds:[],note:'TEST旧页不能覆盖',evidenceIds:[]}};
+   await expect(bulk.complete(f.people['pattern-room-worker']!,ready.id,body,randomUUID())).rejects.toMatchObject({statusCode:409});
+   const next={...body,range:{...body.range,expectedVersion:2,note:'TEST并发局部追加'}};
+   const attempts=await Promise.allSettled([bulk.complete(f.people['pattern-room-worker']!,ready.id,next,randomUUID()),bulk.complete(f.people['pattern-room-worker']!,ready.id,next,randomUUID())]);expect(attempts.filter(x=>x.status==='fulfilled')).toHaveLength(1);expect((attempts.find(x=>x.status==='rejected') as PromiseRejectedResult).reason).toMatchObject({statusCode:409});
+   expect((await bulk.read(f.root,ready.id)).facts.some(x=>x.kind==='纸样完成'||x.kind==='唛架完成')).toBe(false);
+  });
+  await f.advance(scene,'2026-11-12T17:00:00Z');await f.runtime.run(scene,f.root,async()=>{
+   for(const kind of ['纸样完成','唛架完成'] as const)await completeBulkRangeFixture(f.db,f.people['pattern-room-worker']!,ready.id,ready.preparationId,kind);
+   const sheet=await bulk.read(f.root,ready.id),task=sheet.tasks.find(t=>t.taskKind==='bulk_pattern')!;expect(task.dueAt).toBe(due);expect((Date.parse(task.completedAt!)-Date.parse(due))/3600000).toBe(17);
+   expect(sheet.readiness!.ranges.filter(r=>r.preparationId===ready.preparationId&&r.kind==='纸样完成').map(r=>r.version)).toEqual([1,2,3,4]);expect(sheet.readiness!.ranges.filter(r=>r.preparationId===ready.preparationId&&r.kind==='唛架完成').map(r=>r.version)).toEqual([1,2]);
+  });
+ });
+
  it('rejects stale parallel edits, cross-order material lines and cross-role replay, retaining immutable historical facts',async()=>{
   const p=await setup(),created=await order(p),resource={kind:'order' as const,id:created.productionOrderId};
   const command={kind:'fabric_receipt' as const,scopeRef:'whole',expectedVersion:0,state:'ready' as const,occurredAt:businessNow().toISOString(),note:'TEST concurrent actual receipt',quantities:[],evidenceIds:[],sourceDocumentVersion:null,recipientId:null};
