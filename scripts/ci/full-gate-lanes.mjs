@@ -1,7 +1,7 @@
 // Cross-runner transport, not cross-run test reuse or case-completeness proof.
 import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
-import {appendFileSync,existsSync,lstatSync,mkdirSync,readFileSync,readdirSync,writeFileSync} from 'node:fs';
+import {appendFileSync,existsSync,lstatSync,mkdirSync,readFileSync,readdirSync,writeFileSync,rmSync} from 'node:fs';
 import {dirname,join,resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {checkCatalog,currentPlan,scopeFor,scopeRequired} from './ci-gate-runtime.mjs';
@@ -39,6 +39,28 @@ function collectBuild(){
  for(const group of ['apps','packages'])for(const name of readdirSync(group).sort()){const path=group+'/'+name+'/dist';if(existsSync(path))walk(path);}
  if(!files.length)throw Error('FULL_BUILD_EMPTY');return files;
 }
+const buildDigest=files=>digest(JSON.stringify(files.map(({path,mode,sha256})=>({path,mode,sha256}))));
+// A rolling runner image is never an equivalent reuse context. Rebuild locally
+// only for a revision change within the same OS; all other inputs stay exact.
+export function laneBuildMode(source,current){
+ if(JSON.stringify(source)===JSON.stringify(current))return 'restored';
+ const {image:a,...s}=source,{image:b,...c}=current;
+ same(s,c,'build inputs');
+ if(!Array.isArray(a)||!Array.isArray(b)||a.length!==2||b.length!==2||!a.every(v=>typeof v==='string'&&v)||!b.every(v=>typeof v==='string'&&v)||a[0]!==b[0]||a[1]===b[1])throw Error('FULL_BUILD_IMAGE_REJECTED');
+ return 'rebuilt';
+}
+export function validateLaneBuild(proof,{id,buildHash,sourceContext,sourceFilesHash,currentContext,filesHash}){
+ if(!proof||proof.version!==1)throw Error('FULL_LOCAL_BUILD_PROOF_MISSING');
+ if(!sourceContext||sourceContext.head!==id.head||! /^[a-f0-9]{64}$/.test(sourceFilesHash??''))throw Error('FULL_BUILD_SOURCE_CONTEXT_MISSING');
+ same(proof.identity,id,'local build request');same(proof.sourceContext,sourceContext,'build source context');
+ if(proof.buildHash!==buildHash||! /^[a-f0-9]{64}$/.test(proof.filesHash??''))throw Error('FULL_LOCAL_BUILD_DIGEST_MISMATCH');
+ const mode=laneBuildMode(sourceContext,proof.context);
+ if(proof.mode!==mode)throw Error('FULL_LOCAL_BUILD_MODE_MISMATCH');
+ if(mode==='restored'&&proof.filesHash!==sourceFilesHash)throw Error('FULL_RESTORED_FILES_MISMATCH');
+ if(currentContext)same(proof.context,currentContext,'local build/test environment');
+ if(filesHash&&proof.filesHash!==filesHash)throw Error('FULL_LOCAL_BUILD_FILES_CHANGED');
+ return proof;
+}
 export function validateBuildFiles(files,tracked=new Set(git('ls-files').split('\n'))){
  if(!Array.isArray(files)||!files.length||files.length>10000)throw Error('FULL_BUILD_EMPTY_OR_OVERSIZED');
  let bytes=0;const seen=new Set();
@@ -62,13 +84,14 @@ export function validateNonDatabase(report,files){
  }
 }
 export function aggregate(needs,id,inputs,catalog=checkCatalog('full')){
- const combined={};let buildHash;
+ const combined={};let buildHash,sourceContext,sourceFilesHash;
  for(const lane of ['prepare','non-db','postgres']){
   const n=needs[lane];if(n?.result!=='success')throw Error('FULL_LANE_NOT_SUCCESS: '+lane);
   const r=JSON.parse(n.outputs?.record||'null');if(!r||r.version!==1||r.lane!==lane||r.status!=='success')throw Error('FULL_LANE_RECORD_MISSING: '+lane);
   same(r.identity,id,'lane identity');same(r.inputs,inputs,'lane plans');
-  if(lane==='prepare'){buildHash=n.outputs.bundle_hash;if(!/^[a-f0-9]{64}$/.test(buildHash??''))throw Error('FULL_BUILD_DIGEST_MISSING');}
+  if(lane==='prepare'){buildHash=n.outputs.bundle_hash;if(!/^[a-f0-9]{64}$/.test(buildHash??''))throw Error('FULL_BUILD_DIGEST_MISSING');sourceContext=r.build?.context;sourceFilesHash=r.build?.filesHash;}
   if(r.buildHash!==buildHash)throw Error('FULL_LANE_BUILD_MISMATCH');
+  validateLaneBuild(r.build,{id,buildHash,sourceContext,sourceFilesHash});
   const expected=catalog.filter(([key])=>owner(key)===lane);
   same(Object.keys(r.steps).sort(),expected.map(([key])=>key).sort(),'step partition');
   for(const [key,,kind]of expected){const step=r.steps[key];if(scopeRequired(kind,inputs.scope)&&step?.outcome!=='success')throw Error('FULL_LANE_CHECK_INCOMPLETE: '+key);if(['failure','cancelled'].includes(step?.outcome))throw Error('FULL_LANE_CHECK_FAILED: '+key);combined[key]=step;}
@@ -86,8 +109,23 @@ async function cli(){
   const bundle={version:1,identity:id,inputs,context:reuseContext(),builtAt:process.env.BUILD_TIME,files:collectBuild(),compatibility:existsSync(compatibility)?json(compatibility):null};
   validateBuildFiles(bundle.files);const raw=JSON.stringify(bundle);writeFileSync(file,raw);output('bundle_hash',digest(raw));
  }else if(command==='restore'){
-  const raw=readFileSync(file);const b=validateBundle(JSON.parse(raw),{id,inputs,context:reuseContext(),hash:process.env.FULL_GATE_BUNDLE_HASH,raw});
-  for(const f of b.files){mkdirSync(dirname(f.path),{recursive:true});writeFileSync(f.path,Buffer.from(f.content,'base64'),{mode:f.mode});}
+  const raw=readFileSync(file),parsed=JSON.parse(raw),context=reuseContext(),mode=laneBuildMode(parsed.context,context);
+  // Validate the entire original bundle even when its outputs cannot be reused.
+  const b=validateBundle(parsed,{id,inputs,context:mode==='restored'?context:parsed.context,hash:process.env.FULL_GATE_BUNDLE_HASH,raw});
+  const proofFile=join(temp,'full-lane-build.json');rmSync(proofFile,{force:true});
+  // Never mix stale output with either a fresh build or restored output.
+  const roots=new Set(b.files.map(f=>f.path.split('/').slice(0,3).join('/')));
+  for(const path of roots){safePath(path+'/entry');if(git('ls-files','--',path))throw Error('FULL_BUILD_TRACKED_ROOT');rmSync(path,{recursive:true,force:true});}
+  if(mode==='restored')for(const f of b.files){mkdirSync(dirname(f.path),{recursive:true});writeFileSync(f.path,Buffer.from(f.content,'base64'),{mode:f.mode});}
+  else {
+   console.log('FULL_BUILD_IMAGE_REVISION_CHANGED: rebuilding all workspaces in the consumer environment; shared outputs not restored');
+   execFileSync('npm',['run','build','--workspaces','--if-present'],{stdio:'inherit',env:{...process.env,BUILD_TIME:b.builtAt}});
+  }
+  same(reuseContext(),context,'environment after build');
+  const files=collectBuild();validateBuildFiles(files);
+  const proof={version:1,identity:id,buildHash:process.env.FULL_GATE_BUNDLE_HASH,sourceContext:b.context,context,mode,filesHash:buildDigest(files)};
+  validateLaneBuild(proof,{id,buildHash:proof.buildHash,sourceContext:b.context,sourceFilesHash:buildDigest(b.files),currentContext:context});
+  writeFileSync(proofFile,JSON.stringify(proof));console.log('FULL_LANE_BUILD_VERIFIED: '+JSON.stringify(proof));
   if(b.compatibility)writeFileSync(join(temp,'main-release-compat.json'),JSON.stringify(b.compatibility));
   for(const [key,value]of Object.entries({...inputs.environment,BUILD_TIME:b.builtAt})){if(typeof value!=='string'||value.includes('\n')||value.includes('\r'))throw Error('FULL_ENV_VALUE_REJECTED');appendFileSync(process.env.GITHUB_ENV,`${key}=${value}\n`);}
  }else if(command==='record'){
@@ -95,6 +133,12 @@ async function cli(){
   if(!['prepare','non-db','postgres'].includes(lane))throw Error('FULL_LANE_UNKNOWN');
   if(status==='success'&&git('status','--porcelain','--untracked-files=normal'))throw Error('FULL_LANE_WORKTREE_CHANGED');
   const record={version:1,lane,identity:id,inputs,status,buildHash:lane==='prepare'&&existsSync(file)?digest(readFileSync(file)):process.env.FULL_GATE_BUNDLE_HASH,steps:Object.fromEntries(checkCatalog('full').filter(([k])=>owner(k)===lane).map(([k])=>[k,steps[k]??{outcome:'not_run'}]))};
+  if(status==='success'){
+   const raw=readFileSync(file),parsed=JSON.parse(raw),context=reuseContext(),filesHash=buildDigest(collectBuild());
+   const b=validateBundle(parsed,{id,inputs,context:parsed.context,hash:record.buildHash,raw});
+   record.build=lane==='prepare'?{version:1,identity:id,buildHash:record.buildHash,sourceContext:b.context,context,mode:'restored',filesHash}:json(join(temp,'full-lane-build.json'));
+   validateLaneBuild(record.build,{id,buildHash:record.buildHash,sourceContext:b.context,sourceFilesHash:buildDigest(b.files),currentContext:context,filesHash});
+  }
   if(status==='success'&&lane==='non-db'){const report=join(temp,'non-db-results.json');validateNonDatabase(json(report),inputs.nonDatabase);record.evidenceHash=digest(readFileSync(report));}
   if(status==='success'&&lane==='postgres'&&inputs.postgres.status==='required'){
    const path=join(temp,'postgres-execution.json'),r=json(path);for(const [k,v]of Object.entries({head:id.head,base:id.base,runId:id.runId,attempt:id.attempt}))same(r.context?.[k],v,'PG '+k);

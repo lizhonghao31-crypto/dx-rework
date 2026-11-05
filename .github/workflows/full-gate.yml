@@ -30,7 +30,7 @@ jobs:
   prepare:
     name: Full Gate common preparation
     if: ${{ inputs.gate_kind == 'full' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     outputs:
       bundle_hash: ${{ steps.bundle.outputs.bundle_hash }}
@@ -207,7 +207,7 @@ jobs:
   non-db:
     name: Full Gate non-db
     needs: prepare
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     outputs:
       record: ${{ steps.lane.outputs.record }}
@@ -264,13 +264,14 @@ jobs:
             ${{ runner.temp }}/non-db-results.json
             ${{ runner.temp }}/postgres-execution.json
             ${{ runner.temp }}/full-lane-record.json
+            ${{ runner.temp }}/full-lane-build.json
           if-no-files-found: error
           retention-days: 7
 
   postgres:
     name: Full Gate postgres
     needs: prepare
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     outputs:
       record: ${{ steps.lane.outputs.record }}
@@ -498,6 +499,7 @@ jobs:
             ${{ runner.temp }}/non-db-results.json
             ${{ runner.temp }}/postgres-execution.json
             ${{ runner.temp }}/full-lane-record.json
+            ${{ runner.temp }}/full-lane-build.json
           if-no-files-found: error
           retention-days: 7
 
@@ -505,7 +507,7 @@ jobs:
     name: Full Gate exact Head
     needs: [prepare, non-db, postgres]
     if: ${{ always() && inputs.gate_kind == 'full' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 2
     outputs:
       receipt: ${{ steps.summary.outputs.receipt }}

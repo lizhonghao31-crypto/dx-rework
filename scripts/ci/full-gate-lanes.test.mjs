@@ -1,16 +1,18 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {readFileSync,writeFileSync,mkdirSync,mkdtempSync,rmSync,copyFileSync,symlinkSync} from 'node:fs';
+import {readFileSync,writeFileSync,mkdirSync,mkdtempSync,rmSync,copyFileSync,symlinkSync,existsSync} from 'node:fs';
 import {execFileSync} from 'node:child_process';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {finalRef} from './pr-gate-protocol.mjs';
-import {aggregate,owner,digest,validateBuildFiles,validateBundle,validateNonDatabase,identity} from './full-gate-lanes.mjs';
+import {aggregate,owner,digest,validateBuildFiles,validateBundle,validateNonDatabase,identity,laneBuildMode,validateLaneBuild} from './full-gate-lanes.mjs';
 import {checkCatalog,scopeRequired} from './ci-gate-runtime.mjs';
 const id={repository:'lizhonghao31-crypto/dx-rework',pr:1,head:'a'.repeat(40),base:'b'.repeat(40),baseRef:'release/digital-production-v1',kind:'full',runId:'1',attempt:'1'};
 const inputs={scope:{event:'create',final:'true',base:id.baseRef,db:'true',mapped:'test',journey:'true',migration:'true',business_chain:'true',deployment:'true',maintenance:'true',activation:'true',transfer:'true'},postgres:{status:'required',plan:[]}};
 const hash='c'.repeat(64),catalog=checkCatalog('full');
-function fixture(){return Object.fromEntries(['prepare','non-db','postgres'].map(lane=>[lane,{result:'success',outputs:{bundle_hash:hash,record:JSON.stringify({version:1,lane,identity:id,inputs,status:'success',buildHash:hash,evidenceHash:hash,cleanup:'passed',steps:Object.fromEntries(catalog.filter(([key])=>owner(key)===lane).map(([key])=>[key,{outcome:'success'}]))})}}]));}
+const context={head:id.head,node:'22.22.2',npm:'10.9.9',image:['ubuntu24','20261025.353.1']};
+const build={version:1,identity:id,buildHash:hash,sourceContext:context,context,mode:'restored',filesHash:hash};
+function fixture(){return Object.fromEntries(['prepare','non-db','postgres'].map(lane=>[lane,{result:'success',outputs:{bundle_hash:hash,record:JSON.stringify({version:1,lane,identity:id,inputs,status:'success',buildHash:hash,build,evidenceHash:hash,cleanup:'passed',steps:Object.fromEntries(catalog.filter(([key])=>owner(key)===lane).map(([key])=>[key,{outcome:'success'}]))})}}]));}
 function edit(needs,lane,fn){const r=JSON.parse(needs[lane].outputs.record);fn(r);needs[lane].outputs.record=JSON.stringify(r);}
 test('three complete matching lanes preserve every existing check including distinct PG versions and restore profiles',()=>{
  const steps=aggregate(fixture(),id,inputs);assert.deepEqual(Object.keys(steps).sort(),catalog.map(([k])=>k).sort());
@@ -77,5 +79,51 @@ test('real producer and fresh consumer round-trip identical build bytes; stale a
   rmSync(join(consumer,'apps/api/dist'),{recursive:true});symlinkSync(join(producer,'apps/api/dist'),join(consumer,'apps/api/dist'));
   assert.throws(()=>execFileSync(process.execPath,[script,'restore'],{cwd:consumer,env:{...env,FULL_GATE_BUNDLE_HASH:hash},stdio:'pipe'}));
   copyFileSync(join(temp,'full-inputs.json'),join(root,'retained-input.json'));
+ }finally{rmSync(root,{recursive:true,force:true});}
+});
+
+
+test('only a same-OS image revision can request a fresh lane build; other input drift rejects',()=>{
+ assert.equal(laneBuildMode(context,context),'restored');
+ assert.equal(laneBuildMode(context,{...context,image:['ubuntu24','20261101.360.1']}),'rebuilt');
+ for(const current of [{...context,image:['ubuntu26','new']},{...context,image:['ubuntu24','']},{...context,node:'24'},{...context,npm:'11'},{...context,inputsHash:'foreign'},{...context,head:'foreign'},{...context,arch:'arm64'}])assert.throws(()=>laneBuildMode(context,current));
+});
+test('aggregation requires authentic per-lane build provenance and rejects fake reuse across image revisions',()=>{
+ const n=fixture(),current={...context,image:['ubuntu24','20261101.360.1']};
+ edit(n,'non-db',r=>r.build={...build,mode:'rebuilt',context:current,filesHash:'e'.repeat(64)});
+ aggregate(n,id,inputs);
+ for(const change of [r=>delete r.build,r=>r.build.mode='restored',r=>r.build.sourceContext.node='24',r=>r.build.filesHash='',r=>r.build.identity.attempt='2']){const bad=structuredClone(n);edit(bad,'non-db',change);assert.throws(()=>aggregate(bad,id,inputs));}
+ const proof={...build,mode:'rebuilt',context:current,filesHash:'e'.repeat(64)},args={id,buildHash:hash,sourceContext:context,sourceFilesHash:hash,currentContext:current,filesHash:proof.filesHash};
+ validateLaneBuild(proof,args);
+ assert.throws(()=>validateLaneBuild(proof,{...args,currentContext:context}));
+ assert.throws(()=>validateLaneBuild(proof,{...args,filesHash:hash}));
+});
+test('different image revisions execute a real local workspace build; corrupt input and failed builds produce no proof',()=>{
+ const root=mkdtempSync(join(tmpdir(),'dx-full-rebuild-')),producer=join(root,'producer'),consumer=join(root,'consumer'),temp=join(root,'temp');
+ const script=resolve('scripts/ci/full-gate-lanes.mjs');
+ const git=(cwd,...args)=>execFileSync('git',args,{cwd,encoding:'utf8',stdio:'pipe'}).trim();
+ try{
+  mkdirSync(producer);mkdirSync(temp);for(const dir of ['tests/integration','apps/api','packages'])mkdirSync(join(producer,dir),{recursive:true});
+  writeFileSync(join(producer,'package-lock.json'),'{}');writeFileSync(join(producer,'.gitignore'),'dist/\n');
+  for(const dir of ['tests/integration','packages'])writeFileSync(join(producer,dir,'.keep'),'');
+  writeFileSync(join(producer,'package.json'),JSON.stringify({private:true,workspaces:['apps/api']}));
+  writeFileSync(join(producer,'apps/api/package.json'),JSON.stringify({name:'fixture',version:'1.0.0',scripts:{build:'node build.cjs'}}));
+  writeFileSync(join(producer,'apps/api/build.cjs'),"const fs=require('node:fs');if(process.env.BUILD_FIXTURE_FAIL)process.exit(7);fs.mkdirSync('dist',{recursive:true});fs.writeFileSync('dist/out.js','local-'+process.env.ImageVersion);");
+  git(producer,'init','-q');git(producer,'config','user.name','fixture');git(producer,'config','user.email','fixture@example.invalid');git(producer,'add','.');git(producer,'commit','-qm','fixture');
+  const head=git(producer,'rev-parse','HEAD'),ref=finalRef({kind:'full',pr:1,head,base:head,baseRef:'main'}),event=join(root,'event.json'),output=join(root,'output'),envfile=join(root,'env');
+  writeFileSync(event,JSON.stringify({ref,ref_type:'branch',repository:{full_name:id.repository}}));
+  const env={...process.env,GITHUB_REPOSITORY:id.repository,GITHUB_SHA:head,GITHUB_EVENT_NAME:'create',GITHUB_EVENT_PATH:event,GITHUB_RUN_ID:'91',GITHUB_RUN_ATTEMPT:'1',GITHUB_OUTPUT:output,GITHUB_ENV:envfile,RUNNER_TEMP:temp,NODE_ENV:'test',SERVICE_NAME:'dx-rework-api',BUILD_TIME:'2026-11-05T00:00:00Z',ImageOS:'ubuntu24',ImageVersion:'20261025.353.1'};
+  mkdirSync(join(producer,'apps/api/dist'));writeFileSync(join(producer,'apps/api/dist/out.js'),'foreign-shared-output');
+  execFileSync(process.execPath,[script,'bundle'],{cwd:producer,env,stdio:'pipe'});
+  const hash=readFileSync(output,'utf8').trim().split('=')[1],bundle=join(temp,'full-inputs.json'),original=readFileSync(bundle),proofFile=join(temp,'full-lane-build.json');
+  git(root,'clone','-q',producer,consumer);
+  const consumerEnv={...env,FULL_GATE_BUNDLE_HASH:hash,ImageVersion:'20261101.360.1'};
+  execFileSync(process.execPath,[script,'restore'],{cwd:consumer,env:consumerEnv,stdio:'pipe'});
+  assert.equal(readFileSync(join(consumer,'apps/api/dist/out.js'),'utf8'),'local-20261101.360.1');
+  const proof=JSON.parse(readFileSync(proofFile,'utf8'));assert.equal(proof.mode,'rebuilt');assert.equal(proof.context.image[1],consumerEnv.ImageVersion);
+  rmSync(proofFile);writeFileSync(bundle,Buffer.concat([original,Buffer.from(' ')]));
+  assert.throws(()=>execFileSync(process.execPath,[script,'restore'],{cwd:consumer,env:consumerEnv,stdio:'pipe'}));assert.equal(existsSync(proofFile),false);
+  writeFileSync(bundle,original);
+  assert.throws(()=>execFileSync(process.execPath,[script,'restore'],{cwd:consumer,env:{...consumerEnv,BUILD_FIXTURE_FAIL:'1'},stdio:'pipe'}));assert.equal(existsSync(proofFile),false);assert.equal(existsSync(join(consumer,'apps/api/dist/out.js')),false);
  }finally{rmSync(root,{recursive:true,force:true});}
 });
