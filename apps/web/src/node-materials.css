@@ -20,3 +20,18 @@
 .digital-journey-cockpit .node-material-links a {display:inline-flex;min-height:36px;align-items:center;color:#0065ff}
 
 .digital-journey-cockpit .node-materials .node-material-row dd {font-size:14px;font-weight:400;line-height:1.5}
+.digital-journey-cockpit .node-materials-trigger{display:flex;gap:10px;align-items:center;flex-wrap:wrap;min-height:40px;font:inherit;border:1px solid var(--production-border);border-radius:5px;background:#fff;color:var(--production-text);padding:7px 10px;cursor:pointer;text-align:left}
+.digital-journey-cockpit .node-materials-trigger>span{font-size:13px;color:var(--production-muted)}
+.digital-journey-cockpit .node-materials-trigger:disabled{opacity:.65;cursor:default}
+.digital-journey-cockpit .node-materials-dialog{width:min(900px,94vw);max-height:90dvh;border:1px solid var(--production-border);border-radius:8px;padding:16px;background:#fff;color:var(--production-text)}
+.digital-journey-cockpit .node-materials-dialog:not([open]){display:none}
+.digital-journey-cockpit .node-materials-dialog::backdrop{background:#14243b88}
+.digital-journey-cockpit .node-materials-dialog>header{display:flex;align-items:start;justify-content:space-between;gap:12px}
+.digital-journey-cockpit .node-materials-dialog h2{font-size:18px;margin:0 0 5px}
+.digital-journey-cockpit .node-materials-dialog h3{font-size:16px;margin:10px 0 4px}
+.digital-journey-cockpit .node-materials-dialog button{font:inherit;min-height:36px;border:1px solid var(--production-border);border-radius:5px;background:#fff;padding:6px 10px;cursor:pointer;color:var(--production-text)}
+.digital-journey-cockpit .node-materials-dialog button:disabled{opacity:.65;cursor:default}
+.digital-journey-cockpit .node-materials-dialog .node-materials-list{max-height:58dvh;overflow:auto;overscroll-behavior:contain}
+.digital-journey-cockpit .node-material-rule{background:var(--dx-v2-color-surface);padding:7px 9px;margin:7px 0;border-radius:4px}
+.digital-journey-cockpit .node-material-rule p{margin:0 0 5px}
+@media(max-width:650px){.digital-journey-cockpit .node-materials-dialog{padding:12px;font-size:16px}.digital-journey-cockpit .node-materials-dialog button{min-height:44px}}

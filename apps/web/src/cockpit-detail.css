@@ -1,4 +1,4 @@
-.digital-journey-cockpit .cockpit-detail {display:grid;gap:12px;font-size:14px;min-width:0}
+.digital-journey-cockpit .cockpit-detail {display:grid;grid-template-columns:minmax(0,1fr);gap:12px;font-size:14px;min-width:0}
 .digital-journey-cockpit .cockpit-detail h1 {display:flex;gap:12px;align-items:center;flex-wrap:wrap;font-size:25px;margin:0 0 8px}
 .digital-journey-cockpit .cockpit-detail h2 {font-size:16px;margin:0 0 8px}
 .digital-journey-cockpit .cockpit-detail p,.digital-journey-cockpit .cockpit-detail small {font-size:14px;line-height:1.4}
@@ -143,6 +143,54 @@
 
 .dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-detail .journey-node-table th:last-child{right:auto;box-shadow:none;z-index:2}
 .dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-detail .journey-node-table td:last-child:not([colspan]){position:static;right:auto;box-shadow:none;white-space:normal}
+
+/* M01 workspace: retain the existing shell/tokens; each column owns its height. */
+.dx-production-ui .digital-journey-cockpit .cockpit-detail .cockpit-detail-columns{grid-template-columns:minmax(0,2.1fr) minmax(280px,1fr);grid-template-rows:auto;align-items:start}
+.digital-journey-cockpit .cockpit-main-work,.digital-journey-cockpit .cockpit-side-work{display:flex;flex-direction:column;gap:10px;min-width:0}
+.digital-journey-cockpit .cockpit-main-work>.dx-production-panel,.digital-journey-cockpit .cockpit-side-work>.dx-production-panel{padding:12px;min-width:0;align-self:stretch}
+.digital-journey-cockpit .cockpit-detail .journey-activity-panel{width:100%;align-self:start}
+.digital-journey-cockpit .cockpit-detail>.journey-activity-panel{grid-area:auto}
+.digital-journey-cockpit .cockpit-detail .cockpit-detail-identity{grid-template-columns:70px minmax(0,1fr);gap:12px;padding:12px}
+.digital-journey-cockpit .cockpit-detail .cockpit-detail-photo{width:70px;height:92px}
+.digital-journey-cockpit .cockpit-detail h1{font-size:23px;margin:0}
+.digital-journey-cockpit .cockpit-identity-facts{gap:5px 16px;line-height:1.4}
+.digital-journey-cockpit .cockpit-detail .journey-po-order-facts{max-height:220px;overflow:auto;overscroll-behavior:contain}
+.digital-journey-cockpit .cockpit-detail .journey-po-order-facts :is(th,td){padding:6px 8px;font-size:14px}
+.dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-detail .journey-po-order-facts th,.dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-detail .journey-node-table th{background:var(--dx-v2-color-surface);color:var(--production-text)}
+.dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-detail .journey-po-order-facts tr:not(.is-focused) td:first-child:not(:focus-within){background:#fff;color:inherit}
+.digital-journey-cockpit .cockpit-detail .journey-po-order-facts :is(th,td):nth-child(3){text-align:right;font-variant-numeric:tabular-nums}
+.digital-journey-cockpit .cockpit-detail .cockpit-stages{grid-template-columns:repeat(7,minmax(128px,1fr));gap:6px}
+.digital-journey-cockpit .cockpit-detail .cockpit-stage-rings{width:42px;height:42px}
+.digital-journey-cockpit .cockpit-detail .cockpit-stage-check{right:-2px;bottom:0;width:16px;height:16px;font-size:11px;line-height:12px}
+.digital-journey-cockpit .cockpit-detail .cockpit-stage-select{min-height:90px;gap:4px}
+.digital-journey-cockpit .cockpit-detail .cockpit-stage-select>strong{font-size:14px}
+.digital-journey-cockpit .cockpit-stage-state{font-size:12px;line-height:1.3}
+.digital-journey-cockpit .cockpit-stage>details>summary{font-size:13px;min-height:32px;cursor:pointer;text-align:center;color:var(--production-text)}
+.digital-journey-cockpit .cockpit-stage-dates>div{white-space:normal;overflow-wrap:anywhere}
+.digital-journey-cockpit .cockpit-flow-panel>.journey-section-title{justify-content:center;text-align:center}
+.digital-journey-cockpit .cockpit-plan-area>summary{min-height:40px;cursor:pointer;font-weight:600;display:list-item}
+.digital-journey-cockpit .cockpit-detail .journey-node-panel>h2{text-align:center}
+.dx-production-ui .digital-journey-cockpit .cockpit-detail .journey-risk-panel{max-height:none;order:0}
+.dx-production-ui .digital-journey-cockpit .cockpit-detail .cockpit-risk-list{max-height:none;overflow:visible}
+.digital-journey-cockpit .cockpit-risk-list>details{padding:7px 0;border-bottom:1px solid var(--production-border)}
+.digital-journey-cockpit .cockpit-risk-list summary{cursor:pointer;min-height:36px;line-height:1.5;font-weight:600}
+.digital-journey-cockpit .cockpit-side-work .journey-documents-panel{order:1}
+.digital-journey-cockpit .cockpit-order-progress{padding:10px 12px}
+.digital-journey-cockpit .cockpit-business-progress{font-size:14px;line-height:1.45;overflow-wrap:anywhere}
+.digital-journey-cockpit .cockpit-business-meter{height:7px;max-width:480px;background:var(--dx-v2-color-surface);border-radius:5px;overflow:hidden;margin:4px 0 8px}
+.digital-journey-cockpit .cockpit-business-meter>i{display:block;height:100%;background:var(--production-primary)}
+.digital-journey-cockpit .cockpit-business-meter.is-plan>i{opacity:.65}
+.digital-journey-cockpit .cockpit-receipt-summary{padding:5px 0}
+.digital-journey-cockpit .cockpit-business-progress summary{min-height:32px;cursor:pointer}
+.digital-journey-cockpit .cockpit-order-people{padding:12px}
+.digital-journey-cockpit .cockpit-order-people h2{font-size:16px;margin:0 0 8px}
+@media(max-width:900px){
+ .dx-production-ui .digital-journey-cockpit .cockpit-detail .cockpit-detail-columns{grid-template-columns:minmax(0,1fr)}
+ .digital-journey-cockpit .cockpit-detail .cockpit-detail-identity{grid-template-columns:60px minmax(0,1fr)}
+ .digital-journey-cockpit .cockpit-detail .cockpit-detail-photo{width:60px;height:82px}
+ .digital-journey-cockpit .cockpit-detail .journey-po-order-facts :is(th,td){font-size:16px}
+ .digital-journey-cockpit .cockpit-business-progress{font-size:16px}
+}
 @media(max-width:800px){
  .digital-journey-cockpit .cockpit-detail .journey-node-table{min-width:592px}
  .digital-journey-cockpit .cockpit-detail .journey-node-table .node-time{width:112px}

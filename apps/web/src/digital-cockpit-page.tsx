@@ -1,33 +1,59 @@
-import { DigitalJourneyCockpit } from "./digital-journey-cockpit.js";
-import {DigitalCockpitPersonnel} from "./digital-cockpit-personnel.js";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { JourneyReturnContextSchema, journeyReturnUrl, type JourneyResult, type OrderJourney } from "@dx-rework/contracts/digital-production-journey";
-import { cockpitContext, cockpitQuery, type CockpitContext } from "./digital-journey-cockpit-model.js";
-import { createWebUrls } from "../url-contract.js";
-import { digitalRequest } from "./digital-production-api.js";
-import {canReadDigitalProductionSettings,type DigitalAccessOptions} from './digital-production-access-panel.js';
-import { Button } from "@dx-rework/ui";
-import "./production-command-center-view.css";
-import "./digital-cockpit.css";
-export {taskTimeProgress} from "./digital-cockpit-model.js";
+import {DigitalJourneyCockpit} from './digital-journey-cockpit.js';
+import {DigitalCockpitPersonnel} from './digital-cockpit-personnel.js';
+import {useCallback,useEffect,useLayoutEffect,useRef,useState} from 'react';
+import {JourneyReturnContextSchema,journeyReturnUrl} from '@dx-rework/contracts/digital-production-journey';
+import {cockpitContext,type CockpitContext} from './digital-journey-cockpit-model.js';
+import {createWebUrls} from '../url-contract.js';
+import {canLeaveInternalPage,registerInternalNavigationGuard} from './internal-navigation.js';
+import {useCockpitReads} from './cockpit-reads.js';
+import {verifySession} from './auth-session.js';
+import {cockpitViewPatch,rememberCockpitReading,rememberedCockpitView,restoreCockpitReading,reconcileCockpitAnchor,matchesCockpitReading} from './cockpit-reading-context.js';
+import {Button} from '@dx-rework/ui';
+import './production-command-center-view.css';
+import './digital-cockpit.css';
+export {taskTimeProgress} from './digital-cockpit-model.js';
+
 export function DigitalCockpitPage(){
- const [data,setData]=useState<JourneyResult|null>(null),[error,setError]=useState(''),[context,setContext]=useState<CockpitContext>(()=>({...cockpitContext(window.location.search),scope:cockpitContext(window.location.search).scope??"production"})),[refresh,setRefresh]=useState(0);
- const [detail,setDetail]=useState<OrderJourney|null>(null),[detailError,setDetailError]=useState(''),[detailLoading,setDetailLoading]=useState(false);
- const [access,setAccess]=useState<DigitalAccessOptions|null>(null);
- useEffect(()=>{let live=true;const controller=new AbortController();void digitalRequest<DigitalAccessOptions>('access/options','GET',undefined,undefined,{signal:controller.signal}).then(value=>{if(live)setAccess(value);}).catch(()=>{if(live)setAccess(null);});return()=>{live=false;controller.abort();};},[refresh]);
- const query=cockpitQuery(context),selectedId=context.selected??'';
- const viewContext=useMemo(()=>({...context,selected:selectedId||undefined}),[context,selectedId]);
+ const [context,setContext]=useState<CockpitContext>(()=>({...cockpitContext(window.location.search),scope:cockpitContext(window.location.search).scope??'production'})),[refresh,setRefresh]=useState(0),[contextError,setContextError]=useState(''),[notice,setNotice]=useState('');
+ const [searchDraft,setSearchDraft]=useState({value:context.search,pending:false});
+ const reads=useCockpitReads(context,refresh),root=useRef<HTMLDivElement>(null),navigation=useRef(0),previousIdentity=useRef(reads.identity),seeded=useRef(false),initial=useRef(context);
+ const ready=context.selected?Boolean(reads.detail)&&!reads.detailLoading:Boolean(reads.data)&&!['preparing','loading'].includes(reads.listPhase);
+ const restoreReading=Boolean(context.selected)&&matchesCockpitReading(reads.identity,context);
+ const latest=useRef({context,identity:reads.identity,ready,canonicalId:reads.detail?.id});latest.current={context,identity:reads.identity,ready,canonicalId:reads.detail?.id};
+ const remember=()=>{const current=latest.current;rememberCockpitReading(current.identity,current.context,root.current,current.ready);if(current.ready&&current.context.selected&&current.canonicalId&&current.context.selected!==current.canonicalId)rememberCockpitReading(current.identity,{...current.context,selected:current.canonicalId},root.current,true);};
  const changeContext=(patch:Partial<CockpitContext>,preserveSelection=false)=>{
-  const documentReset=!preserveSelection||Object.hasOwn(patch,'selected')&&patch.selected!==context.selected?{materialNode:undefined,materialView:undefined,materialFilter:undefined,materialScroll:undefined,materialFocus:undefined,nodeView:undefined,documentOpen:undefined,documentView:undefined,documentStage:undefined,documentSearch:undefined,documentScroll:undefined,documentFocus:undefined}:{};
-  const parsed=JourneyReturnContextSchema.safeParse({...context,...patch,...documentReset,page:patch.page??(preserveSelection?context.page:1),...(!preserveSelection?{selected:undefined,expanded:undefined,focus:undefined,row:undefined,round:undefined}:{})});
-  if(!parsed.success){setError(parsed.error.issues.map(issue=>issue.message).join('；'));return;}
-  setError('');setContext(parsed.data);
-  // Filter state changes only the query, preserving the shared router's history position.
-  window.history.replaceState(window.history.state,'',createWebUrls(import.meta.env.BASE_URL).pageUrl(journeyReturnUrl(parsed.data)));
+  const originIdentity=reads.identity,originOrder=context.selected;
+  void (async()=>{
+   if(originIdentity!==latest.current.identity||originOrder!==latest.current.context.selected)return;
+   const base=latest.current.context,target=preserveSelection?(Object.hasOwn(patch,'selected')?patch.selected:base.selected):undefined;
+   const switching=target!==base.selected,changingRound=Object.hasOwn(patch,'round')&&patch.round!==base.round,attempt=++navigation.current;
+   if((switching||changingRound)&&!await canLeaveInternalPage())return;
+   if(attempt!==navigation.current||originIdentity!==latest.current.identity||originOrder!==latest.current.context.selected)return;
+   remember();
+   const restored=switching?{...cockpitViewPatch({}),...rememberedCockpitView(reads.identity,target??'')}:{},input={...latest.current.context,...restored,...patch,selected:target,page:patch.page??(preserveSelection?latest.current.context.page:1)};
+   const parsed=JourneyReturnContextSchema.safeParse(input);
+   if(!parsed.success){setContextError(parsed.error.issues.map(issue=>issue.message).join('；'));return;}
+   setContextError('');if(switching)setNotice('');setContext(parsed.data);
+   window.history.replaceState(window.history.state,'',createWebUrls(import.meta.env.BASE_URL).pageUrl(journeyReturnUrl(parsed.data)));
+  })().catch(error=>setContextError(error instanceof Error?error.message:'切换失败，请重试'));
  };
- useEffect(()=>{let live=true;const controller=new AbortController();setData(null);setError('');if(selectedId)return()=>{live=false;controller.abort();};const timer=window.setTimeout(()=>{void digitalRequest<JourneyResult>('journeys?'+query,'GET',undefined,undefined,{signal:controller.signal}).then(value=>{if(live)setData(value);}).catch(e=>{if(live&&e.name!=='AbortError')setError(e.message);});},150);return()=>{live=false;controller.abort();window.clearTimeout(timer);};},[query,refresh,selectedId]);
- const detailKey=useRef('');
- useEffect(()=>{let live=true;const controller=new AbortController(),key=`${selectedId}:${context.round??'current'}`;const same=detailKey.current===key;setDetail(current=>same?current:null);detailKey.current=key;setDetailError('');setDetailLoading(Boolean(selectedId));if(selectedId)void digitalRequest<OrderJourney>('journeys/'+selectedId+'?view=cockpit'+(context.round?'&round='+context.round:''),'GET',undefined,undefined,{signal:controller.signal}).then(value=>{if(live)setDetail(value);}).catch(e=>{if(live&&e.name!=='AbortError')setDetailError(e.message);}).finally(()=>{if(live)setDetailLoading(false);});return()=>{live=false;controller.abort();};},[selectedId,context.round,refresh]);
- return <div className="digital-cockpit"><DigitalJourneyCockpit data={data} error={error} detail={detail} detailError={detailError} detailLoading={detailLoading} context={viewContext} onChange={changeContext} actions={<div className="pattern-actions"><Button variant="secondary" onClick={()=>setRefresh(x=>x+1)}>刷新数据</Button>{(data?.canManagePolicies||canReadDigitalProductionSettings(access))&&<a className="dx-button dx-button--secondary" href={createWebUrls(import.meta.env.BASE_URL).pageUrl("ui/digital-cockpit")+"?workspace=settings"}>生产管理设置</a>}<DigitalCockpitPersonnel showCustomer={false} orderId={detail?.orderId??null} onChanged={()=>setRefresh(x=>x+1)}/></div>}/>
- </div>;
+ useEffect(()=>{
+  if(previousIdentity.current&&previousIdentity.current!==reads.identity){++navigation.current;setContext(value=>({...value,...cockpitViewPatch({})}));setNotice('');}
+  previousIdentity.current=reads.identity;
+ },[reads.identity]);
+ useEffect(()=>{
+  if(seeded.current||!reads.identity)return;seeded.current=true;
+  const saved=rememberedCockpitView(reads.identity,initial.current.selected??''),explicit=Object.fromEntries(Object.entries(cockpitViewPatch(initial.current)).filter(([,value])=>value!==undefined)),next={...initial.current,...saved,...explicit};
+  setContext(next);window.history.replaceState(window.history.state,'',createWebUrls(import.meta.env.BASE_URL).pageUrl(journeyReturnUrl(next)));
+ },[reads.identity]);
+ useEffect(()=>registerInternalNavigationGuard(async()=>{remember();return true;}),[]);
+ useLayoutEffect(()=>()=>remember(),[]);
+ useLayoutEffect(()=>ready&&(!context.selected||restoreReading)?restoreCockpitReading(reads.identity,context.selected??'',root.current):undefined,[reads.identity,context.selected,ready]);
+ useEffect(()=>{
+  if(!reads.detail||reads.detailLoading)return;const patch=reconcileCockpitAnchor(reads.detail,context);
+  if(patch){const next={...context,...patch};setContext(next);window.history.replaceState(window.history.state,'',createWebUrls(import.meta.env.BASE_URL).pageUrl(journeyReturnUrl(next)));setNotice('原节点已变更，已定位到所属阶段');}
+ },[reads.detail,reads.detailLoading,context.focus,context.row,context.materialNode]);
+ const draftChanged=useCallback((value:string,pending:boolean)=>setSearchDraft(current=>current.value===value&&current.pending===pending?current:{value,pending}),[]);
+ const reload=()=>{remember();if(!reads.identity)void verifySession(true);setRefresh(value=>value+1);};
+ return <div ref={root} className="digital-cockpit" onFocusCapture={remember}>{notice&&<p role="status">{notice}</p>}<DigitalJourneyCockpit data={reads.data} error={contextError||reads.listError} detail={reads.detail} detailError={reads.detailError} detailLoading={reads.detailLoading} context={context} appliedContext={reads.applied} readPhase={reads.listPhase} searchDraft={searchDraft} onSearchDraft={draftChanged} onPlanCommitted={reload} restoreReading={restoreReading} onChange={changeContext} actions={<div className="pattern-actions"><Button variant="secondary" onClick={reload}>刷新数据</Button></div>} orderActions={reads.detail?.orderId?<DigitalCockpitPersonnel showCustomer={false} orderId={reads.detail.orderId} onChanged={reload}/>:null}/></div>;
 }

@@ -9,6 +9,7 @@ import instructionFixture from './node-materials-instruction.json';
 import {DigitalQuotationPage} from '../../apps/web/src/digital-quotation-panel.js';
 import {invalidateSession} from '../../apps/web/src/auth-session.js';
 import '@dx-rework/ui/tokens.css';import '@dx-rework/ui/components.css';
+import '@dx-rework/ui/production.css';import '../../apps/web/src/digital-journey-cockpit.css';
 import '../../apps/web/src/styles.css';import '../../apps/web/src/workflow-shell.css';import '../../apps/web/src/ui-polish.css';
 const id=(n:number)=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 const source=id(1),order=id(2),person=id(7),now='2026-11-02T08:00:00Z';
@@ -102,5 +103,5 @@ window.fetch=async(input,init)=>{
  control.unhandled.push(path+url.search);return send({error:{message:'TEST未提供此原读取'}},404);
  }finally{control.active--;}
 };
-function Fixture(){const sourceId=new URLSearchParams(location.search).get('instruction'),returnUrl=digitalDetailReturnUrl(new URLSearchParams(location.search).get('returnTo'),'/');return <><p style={{margin:'8px 16px',fontSize:13}}>TEST模拟数据 · 原页面组件及原办理入口 · 未部署</p><button type="button" onClick={()=>{control.actor=id(8);invalidateSession();}}>TEST切换QC身份</button>{sourceId?<ProductionInstructionPanel orderId={sourceId} onClose={async()=>{if(returnUrl&&await canLeaveInternalPage())location.assign(returnUrl);}}/>:location.pathname.includes('digital-quotation')?<DigitalQuotationPage/>:<DigitalCockpitPage/>}</>;}
+function Fixture(){const sourceId=new URLSearchParams(location.search).get('instruction'),returnUrl=digitalDetailReturnUrl(new URLSearchParams(location.search).get('returnTo'),'/');return <div className="dx-production-ui"><p style={{margin:'8px 16px',fontSize:13}}>TEST模拟数据 · 原页面组件及原办理入口 · 未部署</p><button type="button" onClick={()=>{control.actor=id(8);invalidateSession();}}>TEST切换QC身份</button>{sourceId?<ProductionInstructionPanel orderId={sourceId} onClose={async()=>{if(returnUrl&&await canLeaveInternalPage())location.assign(returnUrl);}}/>:location.pathname.includes('digital-quotation')?<DigitalQuotationPage/>:<DigitalCockpitPage/>}</div>;}
 createRoot(document.getElementById('root')!).render(<Fixture/>);
