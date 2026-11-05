@@ -265,6 +265,8 @@ jobs:
             ${{ runner.temp }}/postgres-execution.json
             ${{ runner.temp }}/full-lane-record.json
             ${{ runner.temp }}/full-lane-build.json
+            ${{ runner.temp }}/impact-shadow-plan.json
+            ${{ runner.temp }}/impact-shadow-observation.json
           if-no-files-found: error
           retention-days: 7
 
@@ -500,6 +502,7 @@ jobs:
             ${{ runner.temp }}/postgres-execution.json
             ${{ runner.temp }}/full-lane-record.json
             ${{ runner.temp }}/full-lane-build.json
+            ${{ runner.temp }}/impact-shadow-plan.json
           if-no-files-found: error
           retention-days: 7
 

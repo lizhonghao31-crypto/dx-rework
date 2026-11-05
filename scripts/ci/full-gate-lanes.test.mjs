@@ -70,9 +70,12 @@ test('real producer and fresh consumer round-trip identical build bytes; stale a
   const env={...process.env,GITHUB_REPOSITORY:id.repository,GITHUB_SHA:head,GITHUB_EVENT_NAME:'create',GITHUB_EVENT_PATH:event,GITHUB_RUN_ID:'91',GITHUB_RUN_ATTEMPT:'1',GITHUB_OUTPUT:output,GITHUB_ENV:envfile,RUNNER_TEMP:temp,NODE_ENV:'test',SERVICE_NAME:'dx-rework-api',BUILD_TIME:'2026-11-05T00:00:00Z'};
   mkdirSync(join(producer,'apps/api/dist'),{recursive:true});writeFileSync(join(producer,'apps/api/dist/out.js'),'export const value=42;');
   execFileSync(process.execPath,[script,'bundle'],{cwd:producer,env,stdio:'pipe'});
+  const shadow=JSON.parse(readFileSync(join(temp,'full-inputs.json'),'utf8')).shadow;
+  assert.equal(shadow.mode,'shadow-only');assert.equal(shadow.selectionApproved,false);assert.equal(shadow.executionChanged,false);
   const hash=readFileSync(output,'utf8').trim().split('=')[1];
   git(root,'clone','-q',producer,consumer); // dist is ignored: only the producer has build output.
   execFileSync(process.execPath,[script,'restore'],{cwd:consumer,env:{...env,FULL_GATE_BUNDLE_HASH:hash},stdio:'pipe'});
+  assert.deepEqual(JSON.parse(readFileSync(join(temp,'impact-shadow-plan.json'),'utf8')),shadow);
   assert.equal(readFileSync(join(consumer,'apps/api/dist/out.js'),'utf8'),'export const value=42;');
   assert.match(readFileSync(envfile,'utf8'),/DB_REQUIRED=false/);
   assert.throws(()=>execFileSync(process.execPath,[script,'restore'],{cwd:consumer,env:{...env,GITHUB_RUN_ATTEMPT:'2',FULL_GATE_BUNDLE_HASH:hash},stdio:'pipe'}));

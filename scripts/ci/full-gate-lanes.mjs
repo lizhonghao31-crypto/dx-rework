@@ -7,6 +7,8 @@ import {pathToFileURL} from 'node:url';
 import {checkCatalog,currentPlan,scopeFor,scopeRequired} from './ci-gate-runtime.mjs';
 import {reuseContext} from './light-reuse.mjs';
 import {fullGatePostgresPlan,postgresTestFiles,assertExecutionReceipt} from '../test-suite-plan.mjs';
+import {captureShadow,observeShadow} from './impact-shadow.mjs';
+import {createImpactShadow,loadShadowPolicy} from './impact-shadow-graph.mjs';
 
 export const digest=value=>createHash('sha256').update(value).digest('hex');
 const git=(...args)=>execFileSync('git',args,{encoding:'utf8'}).trim();
@@ -107,11 +109,15 @@ async function cli(){
  if(command==='bundle'){
   const compatibility=join(temp,'main-release-compat.json');
   const bundle={version:1,identity:id,inputs,context:reuseContext(),builtAt:process.env.BUILD_TIME,files:collectBuild(),compatibility:existsSync(compatibility)?json(compatibility):null};
+  bundle.shadow=await captureShadow(()=>createImpactShadow(id,inputs));
+  writeFileSync(join(temp,'impact-shadow-plan.json'),JSON.stringify(bundle.shadow));
+  console.log('IMPACT_SHADOW_PLAN: '+JSON.stringify({decision:bundle.shadow.decision,reason:bundle.shadow.reason,knownPlanGaps:bundle.shadow.knownPlanGaps,proposedExclusions:bundle.shadow.proposedExclusions?.length,selectionApproved:false}));
   validateBuildFiles(bundle.files);const raw=JSON.stringify(bundle);writeFileSync(file,raw);output('bundle_hash',digest(raw));
  }else if(command==='restore'){
   const raw=readFileSync(file),parsed=JSON.parse(raw),context=reuseContext(),mode=laneBuildMode(parsed.context,context);
   // Validate the entire original bundle even when its outputs cannot be reused.
   const b=validateBundle(parsed,{id,inputs,context:mode==='restored'?context:parsed.context,hash:process.env.FULL_GATE_BUNDLE_HASH,raw});
+  writeFileSync(join(temp,'impact-shadow-plan.json'),JSON.stringify(b.shadow??{mode:'shadow-only',status:'unverified',reason:'missing-shadow-manifest'}));
   const proofFile=join(temp,'full-lane-build.json');rmSync(proofFile,{force:true});
   // Never mix stale output with either a fresh build or restored output.
   const roots=new Set(b.files.map(f=>f.path.split('/').slice(0,3).join('/')));
@@ -133,6 +139,11 @@ async function cli(){
   if(!['prepare','non-db','postgres'].includes(lane))throw Error('FULL_LANE_UNKNOWN');
   if(status==='success'&&git('status','--porcelain','--untracked-files=normal'))throw Error('FULL_LANE_WORKTREE_CHANGED');
   const record={version:1,lane,identity:id,inputs,status,buildHash:lane==='prepare'&&existsSync(file)?digest(readFileSync(file)):process.env.FULL_GATE_BUNDLE_HASH,steps:Object.fromEntries(checkCatalog('full').filter(([k])=>owner(k)===lane).map(([k])=>[k,steps[k]??{outcome:'not_run'}]))};
+  if(lane==='non-db'){
+   const observation=await captureShadow(()=>observeShadow(json(file).shadow,{identity:id,inputs,policy:loadShadowPolicy(),report:json(join(temp,'non-db-results.json')),testOutcome:steps.tests?.outcome}));
+   writeFileSync(join(temp,'impact-shadow-observation.json'),JSON.stringify(observation));
+   console.log('IMPACT_SHADOW_OBSERVATION: '+JSON.stringify({status:observation.status,reason:observation.reason,knownPlanGaps:observation.knownPlanGaps,selectionApproved:false}));
+  }
   if(status==='success'){
    const raw=readFileSync(file),parsed=JSON.parse(raw),context=reuseContext(),filesHash=buildDigest(collectBuild());
    const b=validateBundle(parsed,{id,inputs,context:parsed.context,hash:record.buildHash,raw});

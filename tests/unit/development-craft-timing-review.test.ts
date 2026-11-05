@@ -56,13 +56,13 @@ describe('saved synthetic start compatibility',()=>{
 });
 describe('physical sewing receipt on saved routes',()=>{
  it.each([
-  {route:['development_craft_confirmation','development_sewing'],round:1,existing:false,receipt:true,next:'development_sewing'},
-  {route:['development_craft_confirmation','development_sewing'],round:2,existing:false,receipt:true,next:'development_sewing'},
-  {route:['development_craft_confirmation','development_sewing_transfer','development_sewing'],round:1,existing:false,receipt:true,next:'development_sewing'},
-  {route:['development_craft_confirmation','development_sewing_transfer','development_sewing'],round:1,existing:true,receipt:false,next:'development_sewing_transfer'},
-  {route:['development_craft_confirmation','development_confirmation'],round:1,existing:false,receipt:false,next:'development_confirmation'},
-  {route:['development_craft_confirmation','development_sewing_transfer','development_tail_check'],round:2,existing:false,receipt:false,next:'development_sewing_transfer'},
- ])('keeps the correct receipt boundary for $route round $round',async({route,round,existing,receipt,next})=>{
+  {caseId:'direct-first',route:['development_craft_confirmation','development_sewing'],round:1,existing:false,receipt:true,next:'development_sewing'},
+  {caseId:'direct-revision',route:['development_craft_confirmation','development_sewing'],round:2,existing:false,receipt:true,next:'development_sewing'},
+  {caseId:'bridge-new',route:['development_craft_confirmation','development_sewing_transfer','development_sewing'],round:1,existing:false,receipt:true,next:'development_sewing'},
+  {caseId:'bridge-existing',route:['development_craft_confirmation','development_sewing_transfer','development_sewing'],round:1,existing:true,receipt:false,next:'development_sewing_transfer'},
+  {caseId:'confirmation-only',route:['development_craft_confirmation','development_confirmation'],round:1,existing:false,receipt:false,next:'development_confirmation'},
+  {caseId:'tail-revision',route:['development_craft_confirmation','development_sewing_transfer','development_tail_check'],round:2,existing:false,receipt:false,next:'development_sewing_transfer'},
+ ])('keeps the correct receipt boundary for $caseId',async({route,round,existing,receipt,next})=>{
   const service=new DevelopmentRouteService({} as Pool);
   vi.spyOn(DigitalDevelopmentService.prototype,'read').mockResolvedValue({document:{craft:'印花',washing:'免洗'}} as never);
   vi.mocked(savedDevelopmentRoute).mockResolvedValue(route as never);
