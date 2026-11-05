@@ -5,6 +5,17 @@ import { describe, expect, it } from "vitest";
 
 import { assertMappedPostgresTests, classifyFullGatePaths, POSTGRES_CASE_SUITES } from "../../scripts/ci/full-gate-risk-map.mjs";
 
+it("requires Full and complete deployment checks for the lane executor alone", () => {
+  const result = classifyFullGatePaths(["scripts/ci/full-gate-lanes.mjs"]);
+  expect(result.highRisk).toBe(true);
+  expect(result.dbRequired).toBe(true);
+  expect(result.deploymentSensitive).toBe(true);
+  expect(result).toEqual(classifyFullGatePaths(["scripts/ci/ci-gate-runtime.mjs"]));
+  expect(result.maintenanceSensitive).toBe(true);
+  expect(result.activationSensitive).toBe(true);
+  expect(result.transferSensitive).toBe(true);
+});
+
 describe("Full Gate sensitive path mapping", () => {
   it("maps changed bulk requirements and their shared clock fixture to all actual consumer suites",()=>{
     for(const path of ['tests/helpers/business-anchor-fixture.ts','tests/helpers/bulk-preparation-fixture.ts','tests/helpers/bulk-preshrink-correction-fixture.ts','apps/api/src/production-platform/bulk-preshrink-correction-service.ts','apps/api/src/production-platform/bulk-sla-evidence.ts']){
