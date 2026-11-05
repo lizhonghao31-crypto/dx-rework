@@ -1,3 +1,6 @@
+import {OrderClosureService} from '../../apps/api/src/production-platform/order-closure-service.js';
+import {DigitalJourneyQuery} from '../../apps/api/src/production-platform/journey-query.js';
+import {WholeOrderReviewService} from '../../apps/api/src/rework/whole-order-review-service.js';
 import {randomUUID} from 'node:crypto';
 import {afterAll,beforeAll,describe,expect,it,vi} from 'vitest';
 import {businessAnchorFixture} from '../helpers/business-anchor-fixture.js';
@@ -22,6 +25,9 @@ const nativeIt=(name:string,action:()=>Promise<void>)=>it(name,action,60_000);
    const run=<T>(action:()=>Promise<T>)=>scene?f.runtime.run(scene,f.root,action):action();
    const ready=await run(()=>f.bulkReady(craft));
    await run(async()=>{
+    const journey=await new DigitalJourneyQuery(f.db).read(f.people.merchandiser!,ready.id,undefined,true);
+    expect(journey.businessProgress?.asOf).toBe(journey.supervision?.asOf);
+    if(scene)expect(journey.businessProgress?.asOf).toBe(initial);
     const preparationWindows=(await f.db.query('SELECT kind,started_at,minutes FROM digital_preparation_windows WHERE production_order_id=$1 ORDER BY kind',[ready.id])).rows;
     expect(preparationWindows).toHaveLength(2);for(const window of preparationWindows){expect(window.minutes).toBe(1440);if(scene)expect(window.started_at.toISOString()).toBe(initial);else expect(window.started_at.getTime()).toBeGreaterThanOrEqual(wall);}
     const budget=(await f.db.query(`SELECT t.completed_at,c.occurred_at FROM digital_budget_preparations p JOIN digital_production_tasks t USING(task_id) JOIN digital_production_task_conditions c ON c.task_id=t.task_id AND c.condition_key='business_recorded' WHERE p.production_order_id=$1`,[ready.id])).rows[0];
@@ -119,6 +125,21 @@ const nativeIt=(name:string,action:()=>Promise<void>)=>it(name,action,60_000);
   expect(await firstContractBusinessReady(f.db,ready!.id)).toEqual(first);
   expect((await f.db.query('SELECT is_first_for_case FROM sourcing_contract_business_ready_facts WHERE sourcing_case_id=$1 ORDER BY is_first_for_case DESC',[ready!.caseId])).rows.map(r=>r.is_first_for_case)).toEqual([true,false]);
   expect((await factoryBatchTiming(f.db,ready!.id))!.windows.find(w=>w.kind==='warehouse_dispatch')).toMatchObject({enteredAt:window.enteredAt,dueAt:window.dueAt});
+ });
+ nativeIt('P02-09: closure keeps original registered quantity separate from effective process reports and rejected history',async()=>{
+  const f=fixture,{ready,id,work,state,worker,own}=await f.reworkReady(),closure=new OrderClosureService(f.db);
+  const ownTask=state.tasks.find(task=>task.members.some(member=>member.personId===own))!;
+  const report=(await work.submitReport(worker,ownTask.workTaskId,{expectedOrderVersion:state.orderVersion,actualQuantity:1,completedAt:new Date().toISOString()},randomUUID())).value;
+  const row=(sheet:Awaited<ReturnType<typeof closure.read>>)=>sheet.lines.flatMap(line=>line.reworks).find(value=>value.reworkId===id)!;
+  const first=row(await closure.read(f.root,ready.id));
+  expect(first).toMatchObject({quantity:10,businessSummary:{kind:'qc_rework',processes:[{reportedQuantity:1,reportIds:[report.workReportId]}]}});
+  const other=state.tasks.find(task=>task.workTaskId!==ownTask.workTaskId)!,current=await work.list(f.root,id);
+  const otherReport=(await work.submitReport(worker,other.workTaskId,{expectedOrderVersion:current.orderVersion,actualQuantity:5,completedAt:new Date().toISOString()},randomUUID())).value;
+  const review=new WholeOrderReviewService(f.db),audit={...f.root,authorizationCapability:'submission:audit'};
+  const before=await review.get(audit,id);
+  await review.rejectReport(audit,report.workReportId,{expectedOrderVersion:before.orderVersion,rejectedPersonId:own,reason:'TEST P02 quantity evidence returned'},randomUUID());
+  expect(row(await closure.read(f.root,ready.id))).toMatchObject({quantity:10,businessSummary:{kind:'qc_rework',processes:[{reportedQuantity:5,reportIds:[otherReport.workReportId]}]}});
+  expect(Number((await f.db.query('SELECT actual_quantity FROM rework_work_reports WHERE work_report_id=$1',[report.workReportId])).rows[0].actual_quantity)).toBe(1);
  });
  for(const mode of ['past','present','future','ordinary'] as const)nativeIt(`${mode}: multi-capability batch reports keep occurrence time, authorization and atomic retry`,async()=>{
   const f=fixture,wall=Date.now(),at=new Date(wall+(mode==='past'?-7*86400000:mode==='future'?7*86400000:0)).toISOString(),scene=mode==='ordinary'?null:await f.scene(at);

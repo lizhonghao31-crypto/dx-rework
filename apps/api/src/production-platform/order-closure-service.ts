@@ -1,3 +1,4 @@
+import {readClosureWorkSummary} from './closure-work-summary.js';
 import {orderDocumentHistory} from './order-document-history.js';
 import {ContextBusinessClock} from '../acceptance-clock/business-time.js';
 import {receivingForecast} from './receiving-forecast.js';
@@ -10,7 +11,7 @@ import {ReworkBusinessDetailService} from "../rework/rework-business-detail-serv
 import {hasFinanceWageRole} from "@dx-rework/contracts/finance-access";
 import {createHash,randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
-import type {ClosureLine,OrderClosureSheet,SpecialClosure} from '@dx-rework/contracts/order-closure';
+import type {ClosureLine,ClosureWorkSummary,OrderClosureSheet,SpecialClosure} from '@dx-rework/contracts/order-closure';
 import type {TrustedActorContext} from '../tools/repositories.js';
 import {ApplicationError} from '../platform/errors.js';
 import {DigitalProductionAccessPolicy,digitalForbidden} from './access-policy.js';
@@ -43,7 +44,15 @@ export class OrderClosureService{
   const reworks=(await db.query(`SELECT l.line_id,r.*, (SELECT count(*)::int FROM rework_wage_items w WHERE w.rework_order_id=r.rework_order_id) wage_items FROM digital_production_child_lines l JOIN rework_orders r ON r.rework_order_id=l.child_id WHERE l.module='rework' AND l.production_order_id=$1 AND r.status<>'deleted' ORDER BY r.created_at,r.rework_order_id`,[id])).rows;
   const reworkAccess=new ReworkBusinessDetailService(this.database);
   const readable=new Map(await Promise.all(reworks.map(async r=>[r.rework_order_id,await reworkAccess.canViewExisting(actor,r,db)] as const)));
-  const lines:ClosureLine[]=original.map(r=>{const t=totals.find(t=>t.group_key===`cut:${r.cutting_id}`);return {lineId:r.line_id,poNumber:r.po_number,color:r.color,orderedQuantity:Number(r.total_quantity),cuttingId:r.cutting_id??null,receivingBatchId:t?.receiving_batch_id??null,actualQuantity:Number(t?.current_actual_quantity??0),documentQuantity:Number(t?.document_quantity??0),defectiveQuantity:Number(t?.current_defective_quantity??0),receiptCount:Number(t?.receipt_count??0),packingQuantity:t?.packing_quantity==null?null:Number(t.packing_quantity),packingRevisionId:t?.packing_revision_id??null,packingRecordedAt:t?.packing_recorded_at?new Date(t.packing_recorded_at).toISOString():null,receivingResolution:t?.receiving_resolution??null,packingResolution:t?.packing_resolution??null,receipts:receipts.filter(x=>x.line_id===r.line_id).map(x=>({receiptId:x.receipt_id,...receiptTime(x.received_at,x.after_state),actualQuantity:Number(x.actual_quantity),defectiveQuantity:Number(x.defective_quantity)})),reworks:reworks.filter(x=>x.line_id===r.line_id).map(x=>({reworkId:x.rework_order_id,canView:readable.get(x.rework_order_id)===true,reworkNo:x.rework_no,status:x.status,problem:[x.problem_part,x.problem_description].filter(Boolean).join('：'),quantity:x.rework_quantity,wageItemCount:x.wage_items}))};});
+  // Reuse the original detail permission before exposing business kind or
+  // effective per-process reports. Different processes are never added into a
+  // single garment quantity; rejected reports and replaced tasks stay history.
+  const summaries=new Map<string,ClosureWorkSummary>();
+  for(const rework of reworks){
+   if(readable.get(rework.rework_order_id)!==true||summaries.has(rework.rework_order_id)||!await reworkAccess.canViewExistingBusinessDetails(actor,rework,db))continue;
+   summaries.set(rework.rework_order_id,await readClosureWorkSummary(db,rework));
+  }
+  const lines:ClosureLine[]=original.map(r=>{const t=totals.find(t=>t.group_key===`cut:${r.cutting_id}`);return {lineId:r.line_id,poNumber:r.po_number,color:r.color,orderedQuantity:Number(r.total_quantity),cuttingId:r.cutting_id??null,receivingBatchId:t?.receiving_batch_id??null,actualQuantity:Number(t?.current_actual_quantity??0),documentQuantity:Number(t?.document_quantity??0),defectiveQuantity:Number(t?.current_defective_quantity??0),receiptCount:Number(t?.receipt_count??0),packingQuantity:t?.packing_quantity==null?null:Number(t.packing_quantity),packingRevisionId:t?.packing_revision_id??null,packingRecordedAt:t?.packing_recorded_at?new Date(t.packing_recorded_at).toISOString():null,receivingResolution:t?.receiving_resolution??null,packingResolution:t?.packing_resolution??null,receipts:receipts.filter(x=>x.line_id===r.line_id).map(x=>({receiptId:x.receipt_id,...receiptTime(x.received_at,x.after_state),actualQuantity:Number(x.actual_quantity),defectiveQuantity:Number(x.defective_quantity)})),reworks:reworks.filter(x=>x.line_id===r.line_id).map(x=>({reworkId:x.rework_order_id,canView:readable.get(x.rework_order_id)===true,reworkNo:x.rework_no,status:x.status,problem:[x.problem_part,x.problem_description].filter(Boolean).join('：'),quantity:x.rework_quantity,wageItemCount:x.wage_items,...(summaries.has(x.rework_order_id)?{businessSummary:summaries.get(x.rework_order_id)!}:{})}))};});
   const quality=await garmentQuality(db,id);
   const registered=new Set((await db.query("SELECT payload->>'receiptId' AS id FROM digital_production_task_events WHERE resource_kind='order' AND resource_id=$1 AND event_kind='garment_receipt_registered'",[id])).rows.map(r=>r.id));
   const outstanding:string[]=[];
@@ -54,7 +63,7 @@ export class OrderClosureService{
   for(const t of pending)outstanding.push(`待办 ${t.label}：${({pending:"未就绪",ready:"待办理",blocked:"阻断"} as Record<string,string>)[t.state]??"待核对"}`);
   const native=(await db.query("SELECT child_id FROM digital_production_child_links WHERE module='production' AND production_order_id=$1",[id])).rows[0];
   const closed=(await db.query('SELECT c.*,u.display_name FROM digital_order_closures c JOIN app_users u ON u.id=c.closed_by WHERE c.production_order_id=$1',[id])).rows[0];
-  const revisionLines=lines.map(l=>({...l,reworks:l.reworks.map(r=>Object.fromEntries(Object.entries(r).filter(([key])=>key!=='canView')))}));
+  const revisionLines=lines.map(l=>({...l,reworks:l.reworks.map(r=>Object.fromEntries(Object.entries(r).filter(([key])=>key!=='canView'&&key!=='businessSummary')))}));
   const revision=hash({lines:revisionLines,quality,pending,productionId:native?.child_id??null,closed:closed?.source_revision??null});
   const roles=actor.actorRoles;
   const collection=receivingSummary(lines),span=await receivingSpan(db,id,collection.expected,collection.received);

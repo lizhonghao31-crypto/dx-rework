@@ -35,6 +35,8 @@
 .digital-journey-cockpit .cockpit-stage-dates {display:grid;gap:5px;text-align:left;font-size:13px;color:#2d4460;margin-top:5px}
 .digital-journey-cockpit .cockpit-stage-dates>div {display:flex;gap:3px;white-space:nowrap}
 .digital-journey-cockpit .cockpit-stage-dates>div>span:first-child {color:#7084a3;flex:none}
+.digital-journey-cockpit .cockpit-stage-dates.has-business-dates>div {display:block;white-space:normal;overflow-wrap:anywhere}
+.digital-journey-cockpit .cockpit-stage-dates.has-business-dates>div>span+span {display:block}
 .digital-journey-cockpit .cockpit-detail-columns {grid-template-columns:minmax(0,2.65fr) minmax(0,1fr) minmax(0,1.2fr);grid-template-rows:auto auto;gap:10px;align-items:stretch}
 .digital-journey-cockpit .cockpit-detail-columns .journey-current-panel {grid-area:1/1}
 .digital-journey-cockpit .cockpit-detail-columns .journey-node-panel {grid-area:2/1}

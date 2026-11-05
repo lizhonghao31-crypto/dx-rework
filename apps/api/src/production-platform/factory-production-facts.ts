@@ -12,6 +12,19 @@ export async function factoryProductionScopes(db:DB,orderId:string){
   JOIN digital_production_po_lines po ON po.line_id=map.line_id AND po.production_order_id=link.production_order_id
   WHERE link.module='production' AND link.production_order_id=$1 AND line.quantity>0 ORDER BY p.factory_decision_id NULLS FIRST,po.position`,[orderId])).rows;
 }
+/** Completion's business date belongs to its factory scope. A later shipment
+ * or registration timestamp cannot replace that date. */
+export async function factoryProductionCompletion(db:DB,orderId:string){
+ const scopes=await factoryProductionScopes(db,orderId);
+ const transitions=(await db.query(`SELECT t.production_order_id,t.factory_decision_id,t.business_date::text,t.actor_id,u.display_name
+  FROM sourcing_production_transitions t JOIN app_users u ON u.id=t.actor_id
+  WHERE t.status='production_completed' AND EXISTS(SELECT 1 FROM digital_production_child_links l WHERE l.module='production' AND l.production_order_id=$1 AND l.child_id=t.production_order_id)`,[orderId])).rows;
+ const rows=scopes.map(scope=>({scope,transition:transitions.find(t=>t.production_order_id===scope.production_order_id&&t.factory_decision_id===scope.factory_decision_id)}));
+ const completed=rows.length>0&&rows.every(row=>['production_completed','shipped'].includes(row.scope.execution_status)&&row.transition);
+ const dates=rows.map(row=>row.transition?.business_date as string|undefined);
+ const operators=[...new Map(rows.flatMap(row=>row.transition?[[row.transition.actor_id,{id:row.transition.actor_id as string,name:row.transition.display_name as string|null}] as const]:[])).values()];
+ return {completed,actualDate:completed&&dates.every(Boolean)?(dates as string[]).sort().at(-1)!:null,operators};
+}
 export async function factoryProductionFacts(db:DB,orderId:string){
  const scopes=await factoryProductionScopes(db,orderId);
  const events=(await db.query(`SELECT e.*,u.display_name FROM digital_production_task_events e JOIN app_users u ON u.id=e.actor_id
@@ -23,6 +36,7 @@ export async function factoryProductionFacts(db:DB,orderId:string){
   return {productionId:scope.production_order_id as string,factoryDecisionId:scope.factory_decision_id as string|null,lineId:scope.line_id as string,
    supplierName:scope.supplier_name_snapshot as string,poNumber:scope.po_number as string|null,color:scope.color as string,quantity:Number(scope.quantity),targetDate:scope.target_date as string|null,
    inspected:!!first,completedAt:first?.occurred_at?new Date(first.occurred_at).toISOString():null,
+   completedQuality:first?.time_quality as string|undefined,completedBy:first?{id:first.actor_id as string,name:first.display_name as string|null}:null,
    result:check?.result as '合格'|'需处理'|undefined,problem:check?.problem as string|undefined,operator:last?.display_name as string|undefined,eventId:first?.event_id as string|undefined};
  });
  const facts:Record<string,SlaNodeFact>={};

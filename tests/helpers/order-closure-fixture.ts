@@ -54,7 +54,7 @@ export async function exerciseOrderClosure(db:Pool,sourcing:SourcingService,id:s
  }
  const rework=new ReworkInitiationService(db,'corp');const draft=await rework.createDraft({...qc,authorizationCapability:'rework:initiate',authorizationCapabilities:['rework:initiate']},{receivingBatchId:created[0]!.first.receivingBatchId,problemPart:'TEST领口',problemDescription:'TEST成衣检查问题',reworkQuantity:2},randomUUID());
  expect((await db.query("SELECT production_order_id FROM digital_production_child_links WHERE module='rework' AND child_id=$1",[draft.value.reworkOrderId])).rows[0].production_order_id).toBe(id);
- let sheet=await closure.read(primary,id);expect((await closure.read(root,id)).canClose).toBe(true);expect(sheet.lines[0]!.reworks[0]).toMatchObject({reworkId:draft.value.reworkOrderId,wageItemCount:0});expect(sheet.outstanding.some(x=>x.includes('未到足量'))).toBe(true);
+ let sheet=await closure.read(primary,id);expect((await closure.read(root,id)).canClose).toBe(true);expect(sheet.lines[0]!.reworks[0]).toMatchObject({reworkId:draft.value.reworkOrderId,wageItemCount:0});expect(sheet.outstanding.some(x=>x.includes('未到足量'))).toBe(true);expect(sheet.lines[0]!.reworks[0]!.businessSummary).toBeUndefined();expect((await closure.read(root,id)).lines[0]!.reworks[0]).toMatchObject({businessSummary:{kind:'qc_rework',processes:[]}});
  for(const actor of [primary,warehouse,qc])await expect(closure.close(actor,id,{reason:'TEST无权结案',expectedRevision:sheet.revision},randomUUID())).rejects.toMatchObject({statusCode:403});
  await expect(closure.close(manager,id,{reason:'TEST过期资料',expectedRevision:stale.revision},randomUUID())).rejects.toMatchObject({statusCode:409});
  if(process.env.TEST_DATABASE_URL!=='postgres://in-memory-only'){
@@ -66,7 +66,7 @@ export async function exerciseOrderClosure(db:Pool,sourcing:SourcingService,id:s
    const financeActor={...manager,authorizationCapabilities:[...(manager.authorizationCapabilities??[]),'rework:finance_orders:read']};
    const heldSheet=await new OrderClosureService(single).read(financeActor,id,client);
    expect(heldSheet.revision).toBe(sheet.revision);
-   expect(heldSheet.lines[0]!.reworks[0]!.canView).toBe(false);
+   expect(heldSheet.lines[0]!.reworks[0]!.canView).toBe(false);expect(heldSheet.lines[0]!.reworks[0]!.businessSummary).toBeUndefined();
    await client.query('ROLLBACK');
   }finally{client.release();await single.end();}
  }
@@ -93,7 +93,7 @@ export async function exerciseOrderClosure(db:Pool,sourcing:SourcingService,id:s
    const fresh=await closure.read(primary,id);expect(fresh.lines[0]!.actualQuantity).toBe(51);expect(fresh.lines[1]!.reworks).toHaveLength(1);expect(fresh.closed).toEqual(concurrent[0]!.closed);
   }finally{resume();readSpy.mockRestore();await Promise.allSettled([closing,repeated,...(correction?[correction]:[]),...(newRework?[newRework]:[])]);}
  }
- sheet=concurrent[0]!;expect(concurrent[1]!.closed).toEqual(sheet.closed);expect(sheet.stage).toBe('特殊结案');expect(sheet.lines.map(l=>({...l,reworks:l.reworks.map(r=>Object.fromEntries(Object.entries(r).filter(([key])=>key!=='canView')))}))).toEqual(JSON.parse(before).map((l:typeof sheet.lines[number])=>({...l,reworks:l.reworks.map(r=>Object.fromEntries(Object.entries(r).filter(([key])=>key!=='canView')))})));
+ sheet=concurrent[0]!;expect(concurrent[1]!.closed).toEqual(sheet.closed);expect(sheet.stage).toBe('特殊结案');expect(sheet.lines.map(l=>({...l,reworks:l.reworks.map(r=>Object.fromEntries(Object.entries(r).filter(([key])=>key!=='canView'&&key!=='businessSummary')))}))).toEqual(JSON.parse(before).map((l:typeof sheet.lines[number])=>({...l,reworks:l.reworks.map(r=>Object.fromEntries(Object.entries(r).filter(([key])=>key!=='canView'&&key!=='businessSummary')))})));
  expect(sheet.lines.flatMap(l=>l.reworks).every(r=>r.canView===true)).toBe(true);expect(sheet.closed!.outstanding.some(x=>x.includes('未完成'))).toBe(true);expect(sheet.shipmentStatus).toBe('按有效装箱记录');expect(sheet.customerReceiptStatus).toBe('未知');expect((await closure.close(manager,id,input,key)).closed).toEqual(sheet.closed);
  const dates=new PoCustomerDateService(db),closedDates=await dates.read(primary,id);
  expect(closedDates.canRequestDate).toBe(false);

@@ -1,4 +1,5 @@
-import {slaTargetLabel} from "./journey-sla-details.js";
+import {forecastBasisLabels} from './cockpit-business-dates.js';
+import {nodeTargetLabel,slaTargetLabel} from "./journey-sla-details.js";
 import {JOURNEY_STAGES,type JourneyNode,type JourneyResult,type OrderJourney} from "@dx-rework/contracts/digital-production-journey";
 import {StatusBadge} from "@dx-rework/ui";
 import {BusinessTable,Pagination} from "@dx-rework/ui/production";
@@ -23,7 +24,7 @@ function ActualProgress({order}:{order:OrderJourney}){
 function Task({node}:{node:JourneyNode}){
   const status=node.risks.includes("overdue")?"局部逾期":node.risks.includes("due_soon")?"即将到期":node.state==="blocked"?"受阻":node.state==="active"?"进行中":"等待前置";
   const blockers=node.blockers.map(blocker=>blocker.label).join("；");
-  return <><strong>{node.label}{node.owner?.name?` · ${node.owner.name}`:""}</strong><StatusBadge tone={node.risks.includes("overdue")?"danger":node.risks.includes("due_soon")?"warning":node.state==="active"?"info":"neutral"}>{status}</StatusBadge>{node.timing&&<small>{node.timing.forecast.at&&node.timing.forecast.at!==node.timing.target.at?`预计：${slaTargetLabel(node.timing.forecast)}`:`目标：${slaTargetLabel(node.timing.target)}`}</small>}{blockers&&<small className="cockpit-home-blocker" title={blockers}>{blockers}</small>}</>;
+  return <><strong>{node.label}{node.owner?.name?` · ${node.owner.name}`:""}</strong><StatusBadge tone={node.risks.includes("overdue")?"danger":node.risks.includes("due_soon")?"warning":node.state==="active"?"info":"neutral"}>{status}</StatusBadge>{node.expectedAt&&<small>原截止：{nodeTargetLabel(node)}</small>}{node.timing&&<small>{`预计：${node.timing.forecast.at?slaTargetLabel(node.timing.forecast):node.timing.forecast.reasons[0]??'预计依据尚未齐全'} · ${forecastBasisLabels[node.timing.forecastBasis]}`}</small>}{blockers&&<small className="cockpit-home-blocker" title={blockers}>{blockers}</small>}</>;
 }
 function DeliveryRisk({risk}:{risk:PoDeliveryRisk}){return <span className="cockpit-home-delivery-line">{risk.poNumber||"待补PO"} / {risk.color} · {poDeliveryKindLabels[risk.kind]} <time>{risk.date}</time> · <StatusBadge tone={risk.risk==="overdue"?"danger":"warning"}>{risk.risk==="overdue"?"约定日期已过":"今天到期"}</StatusBadge></span>;}
 export function CockpitHome({data,error,context,onChange}:{data:JourneyResult|null;error:string;context:CockpitContext;onChange:(patch:Partial<CockpitContext>,preserve?:boolean)=>void}){

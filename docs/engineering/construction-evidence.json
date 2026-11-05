@@ -1,274 +1,311 @@
 {
   "version": 1,
-  "base": "751c178f102b243b9febd13faad3dd2f90fc5a53",
-  "sourceFingerprint": "bf595a1fb921859821555f5cf8fecf70fda38a314d3d219f9518ad79e86944fb",
+  "base": "6e41869d76cbd883954c711c00ad465fbe930a2d",
+  "sourceFingerprint": "963844f84a563f467b7adc418bb4f41dcea9fa36ba4ff0629eac3fa202052c67",
   "risk": "full",
   "rules": [
     {
-      "source": "User explicit current Module01 construction/Review/merge authorization; Library M01-IMPLEMENT1.1.1 version2 and OPT1.3 version4; docs/requirements/cockpit-display-v1.0.md current increment.",
-      "initialization": "Additive optional read contract, no schema/seed or original business history mutation; fixture uses the existing registered low-privilege isolated PostgreSQL schema lifecycle.",
-      "dateAndPermission": "Use snapshot business asOf and Beijing date-only end-of-day, original source/order/task authorization before facts or aggregation; PMC no write/approval; Root special authority preserved.",
-      "expectation": "Current source-bound focused unit and real PostgreSQL tests, typecheck, lint and build pass; exact-head light/Review/final Full remain separate required stages.",
+      "source": "User authorized sequential Module01 construction, GitHub Codex Review, fixes and merge; Library M01-IMPLEMENT1.1.1 v2 section5 and OPT1.3 v4; docs/requirements/cockpit-display-v1.0.md P02 increment.",
+      "initialization": "Optional read fields and read adapters only; no migrations, seeds, original deadline rewrites or business mutations. Original low-privilege isolated-schema create/cleanup remains in use; old API fields retained.",
+      "dateAndPermission": "Original source/order/task authorization and full business-detail field gate retained; snapshot calendar and canonical trusted business clock retain their original semantics. New businessProgress/date evaluation shares observed.now with canonical SLA. Original date-only/exclusive vs exact instant boundaries remain distinct; no browser current-time calculation.",
+      "expectation": "Current source-bound unit/native PostgreSQL regression, original read permissions, compile/lint/build and bounded browser smoke pass; light, official Review and exact-head final Full remain separately required.",
       "checks": [
-        "m01-p01-unit-reviewfix",
-        "m01-p01-pg-reviewfix",
-        "m01-p01-native-gap",
-        "m01-p01-types-reviewfix",
-        "m01-p01-lint-reviewfix",
-        "m01-p01-build-reviewfix"
+        "m01-p02-unit-assembled",
+        "m01-p02-permission-assembled",
+        "m01-p02-pg-assembled",
+        "m01-p02-types-assembled",
+        "m01-p02-lint-assembled",
+        "m01-p02-build-assembled",
+        "m01-p02-secret-assembled",
+        "m01-p02-browser-assembled"
       ],
-      "rule": "Formal identity cannot promote external-request UUID; source/mother scope and unchanged original authorization remain authoritative.",
+      "rule": "Every batch keeps its original start, deadline, completion and frozen scope; original task D remains separate from canonical rolling forecast and date-only targets.",
       "writes": [
-        "apps/api/src/production-platform/journey-query.ts",
-        "packages/contracts/src/digital-production-journey.ts",
-        "tests/integration/digital-journey-postgres.test.ts"
+        "apps/api/src/production-platform/factory-sla-evidence.ts",
+        "apps/api/src/production-platform/journey-supervision.ts",
+        "apps/web/src/journey-sla-details.tsx",
+        "apps/web/src/cockpit-home.tsx",
+        "tests/unit/m01-time-consumers.test.ts",
+        "tests/unit/journey-projection-isolation.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/identity-service.ts",
-        "apps/api/src/production-platform/access-policy.ts",
-        "apps/api/src/production-platform/journey-query.ts"
+        "apps/api/src/production-platform/factory-batch-timing.ts",
+        "apps/api/src/production-platform/sla-order-service.ts",
+        "packages/domain/src/digital-sla-plan.ts",
+        "apps/web/src/cockpit-node-dates.tsx"
       ],
       "oldTests": [
-        "tests/integration/digital-journey-postgres.test.ts"
-      ]
-    },
-    {
-      "source": "User explicit current Module01 construction/Review/merge authorization; Library M01-IMPLEMENT1.1.1 version2 and OPT1.3 version4; docs/requirements/cockpit-display-v1.0.md current increment.",
-      "initialization": "Additive optional read contract, no schema/seed or original business history mutation; fixture uses the existing registered low-privilege isolated PostgreSQL schema lifecycle.",
-      "dateAndPermission": "Use snapshot business asOf and Beijing date-only end-of-day, original source/order/task authorization before facts or aggregation; PMC no write/approval; Root special authority preserved.",
-      "expectation": "Current source-bound focused unit and real PostgreSQL tests, typecheck, lint and build pass; exact-head light/Review/final Full remain separate required stages.",
-      "checks": [
-        "m01-p01-unit-reviewfix",
-        "m01-p01-pg-reviewfix",
-        "m01-p01-native-gap",
-        "m01-p01-types-reviewfix",
-        "m01-p01-lint-reviewfix",
-        "m01-p01-build-reviewfix"
-      ],
-      "rule": "New business denominator groups required execution coverage, not batch count, and keeps retired/missing/hidden requirements unknown; native samples and actual rework applicability do not rewrite tasks or wages.",
-      "writes": [
-        "apps/api/src/production-platform/journey-business-progress.ts",
-        "apps/api/src/production-platform/journey-material-successors.ts",
-        "packages/contracts/src/digital-production-journey.ts",
-        "tests/unit/journey-business-progress.test.ts"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/journey-display.ts",
-        "apps/api/src/production-platform/journey-query.ts",
-        "apps/api/src/production-platform/ship-sample-facts.ts",
-        "apps/api/src/production-platform/development-supply.ts"
-      ],
-      "oldTests": [
-        "tests/unit/cockpit-display-facts.test.ts",
-        "tests/unit/journey-projection-isolation.test.ts",
-        "tests/integration/digital-journey-postgres.test.ts"
-      ]
-    },
-    {
-      "source": "User explicit current Module01 construction/Review/merge authorization; Library M01-IMPLEMENT1.1.1 version2 and OPT1.3 version4; docs/requirements/cockpit-display-v1.0.md current increment.",
-      "initialization": "Additive optional read contract, no schema/seed or original business history mutation; fixture uses the existing registered low-privilege isolated PostgreSQL schema lifecycle.",
-      "dateAndPermission": "Use snapshot business asOf and Beijing date-only end-of-day, original source/order/task authorization before facts or aggregation; PMC no write/approval; Root special authority preserved.",
-      "expectation": "Current source-bound focused unit and real PostgreSQL tests, typecheck, lint and build pass; exact-head light/Review/final Full remain separate required stages.",
-      "checks": [
-        "m01-p01-unit-reviewfix",
-        "m01-p01-pg-reviewfix",
-        "m01-p01-native-gap",
-        "m01-p01-types-reviewfix",
-        "m01-p01-lint-reviewfix",
-        "m01-p01-build-reviewfix"
-      ],
-      "rule": "Only persisted adopted series-plan snapshots map to the same requirements; partial PO/date coverage and original retained adoption versions remain explicit, previews never become adoption.",
-      "writes": [
-        "apps/api/src/production-platform/journey-adopted-plan.ts",
-        "tests/unit/journey-business-progress.test.ts",
-        "tests/integration/digital-journey-postgres.test.ts"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/series-plan-service.ts",
-        "apps/api/src/production-platform/series-plan-journey.ts",
-        "packages/contracts/src/digital-series-plan.ts",
-        "apps/api/src/production-platform/journey-query.ts"
-      ],
-      "oldTests": [
-        "tests/integration/digital-journey-postgres.test.ts",
-        "tests/unit/cockpit-display-facts.test.ts"
-      ]
-    },
-    {
-      "source": "User explicit current Module01 construction/Review/merge authorization; Library M01-IMPLEMENT1.1.1 version2 and OPT1.3 version4; docs/requirements/cockpit-display-v1.0.md current increment.",
-      "initialization": "Additive optional read contract, no schema/seed or original business history mutation; fixture uses the existing registered low-privilege isolated PostgreSQL schema lifecycle.",
-      "dateAndPermission": "Use snapshot business asOf and Beijing date-only end-of-day, original source/order/task authorization before facts or aggregation; PMC no write/approval; Root special authority preserved.",
-      "expectation": "Current source-bound focused unit and real PostgreSQL tests, typecheck, lint and build pass; exact-head light/Review/final Full remain separate required stages.",
-      "checks": [
-        "m01-p01-unit-reviewfix",
-        "m01-p01-pg-reviewfix",
-        "m01-p01-native-gap",
-        "m01-p01-types-reviewfix",
-        "m01-p01-lint-reviewfix",
-        "m01-p01-build-reviewfix"
-      ],
-      "rule": "Cumulative receipts, valid receipt QC and packing remain separate; upward/downward quantity corrections expose quality gaps/conflicts and factory attribution requires precise native linkage.",
-      "writes": [
-        "apps/api/src/production-platform/journey-business-progress.ts",
-        "apps/api/src/production-platform/journey-query.ts",
-        "tests/unit/journey-business-progress.test.ts",
+        "tests/unit/journey-sla-supervision.test.ts",
+        "tests/unit/digital-sla-plan.test.ts",
+        "tests/unit/factory-logistics-sla-projection.test.ts",
         "tests/integration/sourcing-pr03-postgres.test.ts"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/order-closure-service.ts",
-        "apps/api/src/production-platform/garment-quality.ts",
-        "apps/api/src/sourcing/production-closure-service.ts",
-        "apps/web/src/cockpit-business-progress.tsx"
-      ],
-      "oldTests": [
-        "tests/integration/digital-journey-postgres.test.ts",
-        "tests/unit/journey-sla-supervision.test.ts"
       ]
     },
     {
-      "source": "User explicit current Module01 construction/Review/merge authorization; Library M01-IMPLEMENT1.1.1 version2 and OPT1.3 version4; docs/requirements/cockpit-display-v1.0.md current increment.",
-      "initialization": "Additive optional read contract, no schema/seed or original business history mutation; fixture uses the existing registered low-privilege isolated PostgreSQL schema lifecycle.",
-      "dateAndPermission": "Use snapshot business asOf and Beijing date-only end-of-day, original source/order/task authorization before facts or aggregation; PMC no write/approval; Root special authority preserved.",
-      "expectation": "Current source-bound focused unit and real PostgreSQL tests, typecheck, lint and build pass; exact-head light/Review/final Full remain separate required stages.",
+      "source": "User authorized sequential Module01 construction, GitHub Codex Review, fixes and merge; Library M01-IMPLEMENT1.1.1 v2 section5 and OPT1.3 v4; docs/requirements/cockpit-display-v1.0.md P02 increment.",
+      "initialization": "Optional read fields and read adapters only; no migrations, seeds, original deadline rewrites or business mutations. Original low-privilege isolated-schema create/cleanup remains in use; old API fields retained.",
+      "dateAndPermission": "Original source/order/task authorization and full business-detail field gate retained; snapshot calendar and canonical trusted business clock retain their original semantics. New businessProgress/date evaluation shares observed.now with canonical SLA. Original date-only/exclusive vs exact instant boundaries remain distinct; no browser current-time calculation.",
+      "expectation": "Current source-bound unit/native PostgreSQL regression, original read permissions, compile/lint/build and bounded browser smoke pass; light, official Review and exact-head final Full remain separately required.",
       "checks": [
-        "m01-p01-unit-reviewfix",
-        "m01-p01-pg-reviewfix",
-        "m01-p01-native-gap",
-        "m01-p01-types-reviewfix",
-        "m01-p01-lint-reviewfix",
-        "m01-p01-build-reviewfix"
+        "m01-p02-unit-assembled",
+        "m01-p02-permission-assembled",
+        "m01-p02-pg-assembled",
+        "m01-p02-types-assembled",
+        "m01-p02-lint-assembled",
+        "m01-p02-build-assembled",
+        "m01-p02-secret-assembled",
+        "m01-p02-browser-assembled"
       ],
-      "rule": "Cockpit actual/plan/quantity and stage displays consume the versioned common requirement model while legacy fields remain compatible and incomplete plan evidence is readable.",
+      "rule": "Whole/stage dates use the same effective requirements as n/m; full, partial and unavailable adoption, original inherited results, precision and canonical forecast bases remain separately identified.",
       "writes": [
+        "apps/api/src/production-platform/journey-progress-dates.ts",
+        "apps/api/src/production-platform/journey-adopted-plan.ts",
+        "apps/web/src/cockpit-business-dates.tsx",
         "apps/web/src/cockpit-business-progress.tsx",
-        "apps/web/src/cockpit-home.tsx",
         "apps/web/src/cockpit-detail.tsx",
-        "tests/unit/journey-business-progress.test.ts"
-      ],
-      "reads": [
-        "apps/web/src/digital-journey-cockpit-model.ts",
-        "apps/web/src/cockpit-home.tsx",
-        "apps/web/src/cockpit-detail.tsx",
-        "packages/contracts/src/digital-production-journey.ts"
-      ],
-      "oldTests": [
-        "tests/unit/cockpit-home.test.ts",
+        "apps/web/src/cockpit-detail.css",
+        "apps/web/src/cockpit-node-dates.tsx",
+        "tests/unit/journey-progress-dates.test.ts",
+        "tests/unit/journey-business-progress.test.ts",
         "tests/unit/cockpit-detail.test.ts",
         "tests/unit/digital-journey-cockpit.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/journey-business-progress.ts",
+        "apps/api/src/production-platform/series-plan-service.ts",
+        "apps/web/src/digital-journey-cockpit-model.ts",
+        "packages/contracts/src/digital-series-plan.ts"
+      ],
+      "oldTests": [
+        "tests/unit/journey-business-progress.test.ts",
+        "tests/unit/cockpit-detail.test.ts",
+        "tests/unit/digital-journey-cockpit.test.ts",
+        "tests/integration/digital-journey-postgres.test.ts"
+      ],
+      "newTests": [
+        "tests/unit/journey-progress-dates.test.ts",
+        "tests/unit/m01-time-consumers.test.ts"
+      ]
+    },
+    {
+      "source": "User authorized sequential Module01 construction, GitHub Codex Review, fixes and merge; Library M01-IMPLEMENT1.1.1 v2 section5 and OPT1.3 v4; docs/requirements/cockpit-display-v1.0.md P02 increment.",
+      "initialization": "Optional read fields and read adapters only; no migrations, seeds, original deadline rewrites or business mutations. Original low-privilege isolated-schema create/cleanup remains in use; old API fields retained.",
+      "dateAndPermission": "Original source/order/task authorization and full business-detail field gate retained; snapshot calendar and canonical trusted business clock retain their original semantics. New businessProgress/date evaluation shares observed.now with canonical SLA. Original date-only/exclusive vs exact instant boundaries remain distinct; no browser current-time calculation.",
+      "expectation": "Current source-bound unit/native PostgreSQL regression, original read permissions, compile/lint/build and bounded browser smoke pass; light, official Review and exact-head final Full remain separately required.",
+      "checks": [
+        "m01-p02-unit-assembled",
+        "m01-p02-permission-assembled",
+        "m01-p02-pg-assembled",
+        "m01-p02-types-assembled",
+        "m01-p02-lint-assembled",
+        "m01-p02-build-assembled",
+        "m01-p02-secret-assembled",
+        "m01-p02-browser-assembled"
+      ],
+      "rule": "Native factory inspection, quality result, original owner/paused task and production supervision terminal state are independent; production completion uses all current factory completion dates, never later shipment/registration.",
+      "writes": [
+        "apps/api/src/production-platform/journey-query.ts",
+        "apps/api/src/production-platform/factory-production-facts.ts",
+        "packages/contracts/src/digital-production-journey.ts",
+        "apps/web/src/cockpit-node-rows.tsx",
+        "tests/integration/sourcing-pr03-postgres.test.ts",
+        "tests/integration/business-anchors-clock-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/task-service.ts",
+        "apps/api/src/production-platform/qc-progress-evidence.ts",
+        "apps/api/src/production-platform/qc-production-progress-service.ts",
+        "apps/api/src/sourcing/production-reporting-service.ts"
+      ],
+      "oldTests": [
+        "tests/integration/digital-journey-postgres.test.ts",
+        "tests/integration/business-anchors-clock-postgres.test.ts",
+        "tests/integration/sourcing-pr03-postgres.test.ts",
+        "tests/unit/qc-progress-reminders.test.ts"
+      ]
+    },
+    {
+      "source": "User authorized sequential Module01 construction, GitHub Codex Review, fixes and merge; Library M01-IMPLEMENT1.1.1 v2 section5 and OPT1.3 v4; docs/requirements/cockpit-display-v1.0.md P02 increment.",
+      "initialization": "Optional read fields and read adapters only; no migrations, seeds, original deadline rewrites or business mutations. Original low-privilege isolated-schema create/cleanup remains in use; old API fields retained.",
+      "dateAndPermission": "Original source/order/task authorization and full business-detail field gate retained; snapshot calendar and canonical trusted business clock retain their original semantics. New businessProgress/date evaluation shares observed.now with canonical SLA. Original date-only/exclusive vs exact instant boundaries remain distinct; no browser current-time calculation.",
+      "expectation": "Current source-bound unit/native PostgreSQL regression, original read permissions, compile/lint/build and bounded browser smoke pass; light, official Review and exact-head final Full remain separately required.",
+      "checks": [
+        "m01-p02-unit-assembled",
+        "m01-p02-permission-assembled",
+        "m01-p02-pg-assembled",
+        "m01-p02-types-assembled",
+        "m01-p02-lint-assembled",
+        "m01-p02-build-assembled",
+        "m01-p02-secret-assembled",
+        "m01-p02-browser-assembled"
+      ],
+      "rule": "Closure distinguishes normal finishing from bad rework and original registered from effective per-process reports; rejected/replaced work is history, processes are not summed into garment quantity, added fields follow original full-detail authorization and do not change closure revision.",
+      "writes": [
+        "apps/api/src/production-platform/closure-work-summary.ts",
+        "apps/api/src/production-platform/order-closure-service.ts",
+        "apps/api/src/rework/rework-business-detail-service.ts",
+        "packages/contracts/src/order-closure.ts",
+        "apps/web/src/order-closure-panel.tsx",
+        "apps/web/src/document-feedback-projections.ts",
+        "tests/helpers/order-closure-fixture.ts",
+        "tests/integration/optional-tail-inspection-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/rework/work-reporting-service.ts",
+        "apps/api/src/rework/whole-order-review-service.ts",
+        "apps/api/src/rework/rework-business-detail-service.ts",
+        "apps/api/src/production-platform/order-closure-service.ts"
+      ],
+      "oldTests": [
+        "tests/integration/optional-tail-inspection-postgres.test.ts",
+        "tests/integration/sourcing-pr03-postgres.test.ts",
+        "tests/unit/rework-business-detail-attachment-authorization.test.ts"
+      ],
+      "newTests": [
+        "tests/unit/m01-time-consumers.test.ts",
+        "tests/integration/business-anchors-clock-postgres.test.ts"
       ]
     }
   ],
   "checks": [
     {
-      "id": "m01-p01-unit-reviewfix",
+      "id": "m01-p02-unit-assembled",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/journey-business-progress.test.ts tests/unit/cockpit-display-facts.test.ts tests/unit/cockpit-home.test.ts tests/unit/cockpit-detail.test.ts tests/unit/digital-journey-cockpit.test.ts tests/unit/digital-journey-projection.test.ts tests/unit/journey-sla-supervision.test.ts tests/unit/journey-projection-isolation.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-p01-unit-reviewfix.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/journey-progress-dates.test.ts tests/unit/journey-business-progress.test.ts tests/unit/journey-sla-supervision.test.ts tests/unit/cockpit-home.test.ts tests/unit/cockpit-detail.test.ts tests/unit/digital-journey-cockpit.test.ts tests/unit/digital-sla-plan.test.ts tests/unit/factory-logistics-sla-projection.test.ts tests/unit/qc-progress-reminders.test.ts tests/unit/m01-time-consumers.test.ts tests/unit/digital-journey-projection.test.ts tests/unit/journey-projection-isolation.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-p02-unit-assembled.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "7cedbd18e36eefad69036fe3754e02e219e9456c",
-      "sourceFingerprint": "bf595a1fb921859821555f5cf8fecf70fda38a314d3d219f9518ad79e86944fb",
-      "context": "Node v22.22.2; npm 10.9.9; canonical Vitest workers=1. Selected workspace only; no Acceptance or production access.",
-      "startedAt": "2026-11-05T17:52:45.050Z",
-      "endedAt": "2026-11-05T17:52:52.276Z",
-      "log": "/workspace/scratch/m01-p01-unit-reviewfix.log",
-      "logSha256": "24bc876ddb02f019be3ca2c6be40efb51708339359341461f1c73562a014af5d",
-      "passed": 96,
+      "testedHead": "6e41869d76cbd883954c711c00ad465fbe930a2d",
+      "sourceFingerprint": "963844f84a563f467b7adc418bb4f41dcea9fa36ba4ff0629eac3fa202052c67",
+      "context": "Node22.22.2/npm10.9.9; canonical Vitest worker limit1 per lane; bounded independent compiler/lint processes were concurrent. PG16.14 only on local marked database dx_m01_acceptance_test_dc924aaea2 oid694046, user dx_rework_test without cluster privileges. No production or existing Acceptance environment. ",
+      "startedAt": "2026-11-05T19:12:41.835Z",
+      "endedAt": "2026-11-05T19:12:46.575Z",
+      "log": "/workspace/scratch/m01-p02-unit-assembled.log",
+      "logSha256": "ecb6e760a58fd49adf6ceda61791309b157f57096352e1cda19eeb51302c16e8",
+      "passed": 141,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "239760847b16020eb5af1ef27d1ae111c33f9ca6c7f9e23e8dd26caf6825656c"
+          "sha256": "c56524a6c454776a9daac3bdf0bc6f47d2164a64afef13f4ae4c7afcf2fa3cda"
         }
       ]
     },
     {
-      "id": "m01-p01-pg-reviewfix",
+      "id": "m01-p02-permission-assembled",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/integration/digital-journey-postgres.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-p01-pg-reviewfix.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/rework-business-detail-attachment-authorization.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-p02-permission-assembled.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "7cedbd18e36eefad69036fe3754e02e219e9456c",
-      "sourceFingerprint": "bf595a1fb921859821555f5cf8fecf70fda38a314d3d219f9518ad79e86944fb",
-      "context": "Node v22.22.2; npm 10.9.9; canonical Vitest workers=1. Local PostgreSQL 16.14; marked dx_rework_ci / role dx_rework_test; non-superuser, no create database/role, no bypass RLS; original owned-schema creation and cleanup.",
-      "startedAt": "2026-11-05T17:52:45.057Z",
-      "endedAt": "2026-11-05T17:53:58.794Z",
-      "log": "/workspace/scratch/m01-p01-pg-reviewfix.log",
-      "logSha256": "a9d4c47b8dde9b99927334bb9c0c174dd4b13389141b4d875d3d12afdf1aad59",
-      "passed": 32,
+      "testedHead": "6e41869d76cbd883954c711c00ad465fbe930a2d",
+      "sourceFingerprint": "963844f84a563f467b7adc418bb4f41dcea9fa36ba4ff0629eac3fa202052c67",
+      "context": "Node22.22.2/npm10.9.9; canonical Vitest worker limit1 per lane; bounded independent compiler/lint processes were concurrent. PG16.14 only on local marked database dx_m01_acceptance_test_dc924aaea2 oid694046, user dx_rework_test without cluster privileges. No production or existing Acceptance environment. ",
+      "startedAt": "2026-11-05T19:13:51.012Z",
+      "endedAt": "2026-11-05T19:13:51.892Z",
+      "log": "/workspace/scratch/m01-p02-permission-assembled.log",
+      "logSha256": "e254fedefb313dbb936fdf71a8832e68a460582eba4ad4af378a3b72e0b3867b",
+      "passed": 4,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "d6662fe6a4244e10605e6019a05f2f5fbe14625bcf141a7c06043f0b519620d0"
+          "sha256": "17603654657fcbbe1f03ebddd5c09742cbc58e179dbbd121a7b21d9e5c1425b7"
         }
       ]
     },
     {
-      "id": "m01-p01-native-gap",
+      "id": "m01-p02-pg-assembled",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/integration/sourcing-pr03-postgres.test.ts -t \"P01-06 reads the native cumulative\" --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-p01-native-gap.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/integration/sourcing-pr03-postgres.test.ts tests/integration/business-anchors-clock-postgres.test.ts tests/integration/optional-tail-inspection-postgres.test.ts tests/integration/digital-journey-postgres.test.ts -t \"SLA06 dispatches released|SLA07 records factory|P13/P14 whole-order|P14 reads empty|native business occurrence anchors|optional tail inspection|V2 Journey\" --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-p02-pg-assembled.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "7cedbd18e36eefad69036fe3754e02e219e9456c",
-      "sourceFingerprint": "bf595a1fb921859821555f5cf8fecf70fda38a314d3d219f9518ad79e86944fb",
-      "context": "Node v22.22.2; npm 10.9.9; canonical Vitest workers=1. Local PostgreSQL 16.14; marked dx_rework_ci / role dx_rework_test; non-superuser, no create database/role, no bypass RLS; original owned-schema creation and cleanup.",
-      "startedAt": "2026-11-05T17:54:19.416Z",
-      "endedAt": "2026-11-05T17:54:26.446Z",
-      "log": "/workspace/scratch/m01-p01-native-gap.log",
-      "logSha256": "57c53a06dacda37a4ac369a3f3fc738f0b1a3eebaf681cc48eac61f743a302cd",
-      "passed": 1,
+      "testedHead": "6e41869d76cbd883954c711c00ad465fbe930a2d",
+      "sourceFingerprint": "963844f84a563f467b7adc418bb4f41dcea9fa36ba4ff0629eac3fa202052c67",
+      "context": "Node22.22.2/npm10.9.9; canonical Vitest worker limit1 per lane; bounded independent compiler/lint processes were concurrent. PG16.14 only on local marked database dx_m01_acceptance_test_dc924aaea2 oid694046, user dx_rework_test without cluster privileges. No production or existing Acceptance environment. The explicit name filter skips137 unrelated cases; full Journey, native clock and optional-tail suites plus selected factory/closure chains are actually executed.",
+      "startedAt": "2026-11-05T19:12:43.208Z",
+      "endedAt": "2026-11-05T19:14:53.057Z",
+      "log": "/workspace/scratch/m01-p02-pg-assembled.log",
+      "logSha256": "b0bff2c1bf118403853a96f42f9f6ebeb708ae1df4c84edaa264afbc76a97c41",
+      "passed": 63,
       "failed": 0,
-      "skipped": 141,
+      "skipped": 137,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "dacd96d6519e0d37656271c3376cac9504f60506fa7fa89c927ef92107f74c89"
+          "sha256": "9fed3e01cd8f09fa4e56a276d595f91360b3959dcabf792df73c04b6744c0d72"
         }
       ]
     },
     {
-      "id": "m01-p01-types-reviewfix",
+      "id": "m01-p02-types-assembled",
       "kind": "command",
       "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "7cedbd18e36eefad69036fe3754e02e219e9456c",
-      "sourceFingerprint": "bf595a1fb921859821555f5cf8fecf70fda38a314d3d219f9518ad79e86944fb",
-      "context": "Node v22.22.2; npm 10.9.9; canonical Vitest workers=1. Selected workspace only; no Acceptance or production access.",
-      "startedAt": "2026-11-05T17:52:45.047Z",
-      "endedAt": "2026-11-05T17:53:17.951Z",
-      "log": "/workspace/scratch/m01-p01-types-reviewfix.log",
+      "testedHead": "6e41869d76cbd883954c711c00ad465fbe930a2d",
+      "sourceFingerprint": "963844f84a563f467b7adc418bb4f41dcea9fa36ba4ff0629eac3fa202052c67",
+      "context": "Node22.22.2/npm10.9.9; canonical Vitest worker limit1 per lane; bounded independent compiler/lint processes were concurrent. PG16.14 only on local marked database dx_m01_acceptance_test_dc924aaea2 oid694046, user dx_rework_test without cluster privileges. No production or existing Acceptance environment. ",
+      "startedAt": "2026-11-05T19:14:04.589Z",
+      "endedAt": "2026-11-05T19:14:30.799Z",
+      "log": "/workspace/scratch/m01-p02-types-assembled.log",
       "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e"
     },
     {
-      "id": "m01-p01-lint-reviewfix",
+      "id": "m01-p02-lint-assembled",
       "kind": "command",
       "command": "npm run lint",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "7cedbd18e36eefad69036fe3754e02e219e9456c",
-      "sourceFingerprint": "bf595a1fb921859821555f5cf8fecf70fda38a314d3d219f9518ad79e86944fb",
-      "context": "Node v22.22.2; npm 10.9.9; canonical Vitest workers=1. Selected workspace only; no Acceptance or production access.",
-      "startedAt": "2026-11-05T17:52:45.052Z",
-      "endedAt": "2026-11-05T17:53:10.594Z",
-      "log": "/workspace/scratch/m01-p01-lint-reviewfix.log",
+      "testedHead": "6e41869d76cbd883954c711c00ad465fbe930a2d",
+      "sourceFingerprint": "963844f84a563f467b7adc418bb4f41dcea9fa36ba4ff0629eac3fa202052c67",
+      "context": "Node22.22.2/npm10.9.9; canonical Vitest worker limit1 per lane; bounded independent compiler/lint processes were concurrent. PG16.14 only on local marked database dx_m01_acceptance_test_dc924aaea2 oid694046, user dx_rework_test without cluster privileges. No production or existing Acceptance environment. ",
+      "startedAt": "2026-11-05T19:13:04.667Z",
+      "endedAt": "2026-11-05T19:13:28.163Z",
+      "log": "/workspace/scratch/m01-p02-lint-assembled.log",
       "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763"
     },
     {
-      "id": "m01-p01-build-reviewfix",
+      "id": "m01-p02-build-assembled",
       "kind": "command",
       "command": "npm run build --workspaces --if-present",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "7cedbd18e36eefad69036fe3754e02e219e9456c",
-      "sourceFingerprint": "bf595a1fb921859821555f5cf8fecf70fda38a314d3d219f9518ad79e86944fb",
-      "context": "Node v22.22.2; npm 10.9.9; canonical Vitest workers=1. Selected workspace only; no Acceptance or production access.",
-      "startedAt": "2026-11-05T17:53:45.845Z",
-      "endedAt": "2026-11-05T17:54:01.020Z",
-      "log": "/workspace/scratch/m01-p01-build-reviewfix.log",
-      "logSha256": "dd1c72677d8ff9687ddffb2a1b03766614e9e84a1b06c97b08eac2ca839c1e05"
+      "testedHead": "6e41869d76cbd883954c711c00ad465fbe930a2d",
+      "sourceFingerprint": "963844f84a563f467b7adc418bb4f41dcea9fa36ba4ff0629eac3fa202052c67",
+      "context": "Node22.22.2/npm10.9.9; canonical Vitest worker limit1 per lane; bounded independent compiler/lint processes were concurrent. PG16.14 only on local marked database dx_m01_acceptance_test_dc924aaea2 oid694046, user dx_rework_test without cluster privileges. No production or existing Acceptance environment. ",
+      "startedAt": "2026-11-05T19:13:04.673Z",
+      "endedAt": "2026-11-05T19:13:24.247Z",
+      "log": "/workspace/scratch/m01-p02-build-assembled.log",
+      "logSha256": "1ca44cd1a03cd4d0afee7ea55c38cc7ced3acffc6eca9b057795c5c78fbae95c"
+    },
+    {
+      "id": "m01-p02-secret-assembled",
+      "kind": "command",
+      "command": "npm run secret:scan",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "6e41869d76cbd883954c711c00ad465fbe930a2d",
+      "sourceFingerprint": "963844f84a563f467b7adc418bb4f41dcea9fa36ba4ff0629eac3fa202052c67",
+      "context": "Node22.22.2/npm10.9.9; canonical Vitest worker limit1 per lane; bounded independent compiler/lint processes were concurrent. PG16.14 only on local marked database dx_m01_acceptance_test_dc924aaea2 oid694046, user dx_rework_test without cluster privileges. No production or existing Acceptance environment. ",
+      "startedAt": "2026-11-05T19:14:28.817Z",
+      "endedAt": "2026-11-05T19:14:29.675Z",
+      "log": "/workspace/scratch/m01-p02-secret-assembled.log",
+      "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda"
+    },
+    {
+      "id": "m01-p02-browser-assembled",
+      "kind": "command",
+      "command": "node /workspace/scratch/m01-p02-ui/browser.mjs",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "6e41869d76cbd883954c711c00ad465fbe930a2d",
+      "sourceFingerprint": "963844f84a563f467b7adc418bb4f41dcea9fa36ba4ff0629eac3fa202052c67",
+      "context": "Node22.22.2/npm10.9.9; canonical Vitest worker limit1 per lane; bounded independent compiler/lint processes were concurrent. PG16.14 only on local marked database dx_m01_acceptance_test_dc924aaea2 oid694046, user dx_rework_test without cluster privileges. No production or existing Acceptance environment. ",
+      "startedAt": "2026-11-05T19:15:16.631Z",
+      "endedAt": "2026-11-05T19:15:18.591Z",
+      "log": "/workspace/scratch/m01-p02-browser-assembled.log",
+      "logSha256": "a5aa1e34f427c840705aa47816c64211f056b107b39ac037e2ee2ee7872bfc94"
     }
   ]
 }

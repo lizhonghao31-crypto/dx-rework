@@ -1,3 +1,4 @@
+import {readClosureWorkSummary} from '../../apps/api/src/production-platform/closure-work-summary.js';
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
@@ -306,6 +307,9 @@ runWithPostgres("optional tail inspection PostgreSQL closure", () => {
         complete: true,
       })],
     });
+    const closureSummary=await readClosureWorkSummary(database,(await database.query('SELECT rework_order_id,rework_kind FROM rework_orders WHERE rework_order_id=$1',[draft.value.reworkOrderId])).rows[0]);
+    expect(closureSummary).toMatchObject({kind,processes:[{configurationItemId:workerItem.configurationItemId,reportedQuantity:10}]});
+    expect(closureSummary.processes[0]!.reportIds.length).toBeGreaterThan(0);
     const confirmed = await review.approve(
       tailAudit(),
       draft.value.reworkOrderId,

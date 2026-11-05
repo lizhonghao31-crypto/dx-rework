@@ -20,7 +20,10 @@ export async function factorySlaEvidence(db:Pick<PoolClient,'query'>,orderId:str
    ...(done&&ends.length&&ends.every(Boolean)?{completedAt:new Date(Math.max(...ends.map(x=>Date.parse(x!)))).toISOString()}:{}),
   };
  }
- return {craftKey,facts,windows:timing.windows};
+ const windows=timing.windows.map(window=>({...window,lineIds:window.lineId?[window.lineId]
+  :window.kind==='bulk_qc'?timing.ledger.batches.find(batch=>batch.factId===window.key)?.rows.map(line=>line.lineId)??[]
+  :timing.ledger.pendingSends.find(send=>send.factId===window.key)?.rows.map(line=>line.lineId)??[]}));
+ return {craftKey,facts,windows};
 }
 export function factoryEvaluationPlan(plan:SlaPlan,craftKey:string|null){
  const copy=structuredClone(plan);

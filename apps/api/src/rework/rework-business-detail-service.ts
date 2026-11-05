@@ -892,6 +892,10 @@ export class ReworkBusinessDetailService {
     return this.canView(actor, row, true, database);
   }
 
+  async canViewExistingBusinessDetails(actor: TrustedActorContext, row: Pick<DetailRow, "rework_order_id" | "created_by" | "merchandiser_user_id" | "embroidery_merchandiser_user_id">, database: Pick<Pool | PoolClient, "query"> = this.database): Promise<boolean> {
+    return this.canView(actor, row, false, database);
+  }
+
   private async canView(actor: TrustedActorContext, row: Pick<DetailRow, "rework_order_id" | "created_by" | "merchandiser_user_id" | "embroidery_merchandiser_user_id">, includeFinance = true, database: Pick<Pool | PoolClient, "query"> = this.database): Promise<boolean> {
     if(includeFinance) {
       if (await canReadFinanceOrders(database,actor)) return true;

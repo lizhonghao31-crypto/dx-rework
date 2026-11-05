@@ -6,7 +6,7 @@ import {seriesPlanJourney} from './series-plan-journey.js';
 import type {BusinessTime,BusinessTimeScope} from '@dx-rework/domain/business-clock';
 import {readJourneySupervision} from "./journey-supervision.js";
 import {assertBusinessClockUnchanged,ContextBusinessClock} from '../acceptance-clock/business-time.js';
-import {factoryProductionFacts} from './factory-production-facts.js';
+import {factoryProductionFacts,factoryProductionCompletion} from './factory-production-facts.js';
 import {shipSampleFacts} from './ship-sample-facts.js';
 import {developmentReadTables} from "./development-amendment-repository.js";
 import {digitalConditionGuidance} from "@dx-rework/contracts/digital-production-tasks";
@@ -41,6 +41,7 @@ import type {JourneyAuthorizedTask} from "./journey-read-scope.js";
 import {journeyBusinessProgress,journeyBusinessQuantities,type RequirementEvidence} from './journey-business-progress.js';
 import {readJourneyAdoptedPlan} from './journey-adopted-plan.js';
 import {readMaterialSuccessors} from './journey-material-successors.js';
+import {journeyBusinessDates} from './journey-progress-dates.js';
 
 const iso = (value: Date|string|null|undefined) => value == null ? null : new Date(value).toISOString();
 type Candidate = { source: {development_type:string;source_id:string;created_by:string;design_style_no:string;temporary_style_no:string|null;customer_code:string|null;created_at:string}|null;
@@ -50,7 +51,7 @@ const taskUrl = (id:string) => `/ui/digital-production?task=${encodeURIComponent
 const developmentUrl = (id:string,round?:number) => `/ui/digital-production?development=${id}${round === undefined ? "" : `&round=${round}`}`;
 const emptyNode = (key:string,state:JourneyState,round:number|null=null):JourneyNode => {
   const definition=journeyDefinition(key)!;
-  return {key,instanceId:`${key}:${round??0}`,label:definition.label,stage:definition.stage,state,round,occurrence:null,current:true,unavailableReason:state==="unavailable"?"permission":null,owner:null,operator:null,assignmentHistory:[],expectedAt:null,expectedPrecision:state==="unavailable"?"unavailable":"missing",expectedKind:state==="unavailable"?"unavailable":"unset",actualAt:null,actualQuality:state==="unavailable"?"unavailable":"missing",enteredAt:null,sla:state==="unavailable"?"unavailable":state==="not_applicable"?"not_set":"not_started",completionResult:state==="completed"?"unknown":null,overdueSeconds:null,risks:[],blockers:[],records:[],inheritedFrom:null,countsInProgress:definition.count&&!["not_applicable","unavailable","inherited"].includes(state)};
+  return {key,instanceId:`${key}:${round??0}`,label:definition.label,stage:definition.stage,state,round,occurrence:null,current:true,ownerStatus:state==="unavailable"?"unavailable":"unknown",unavailableReason:state==="unavailable"?"permission":null,owner:null,operator:null,assignmentHistory:[],expectedAt:null,expectedPrecision:state==="unavailable"?"unavailable":"missing",expectedKind:state==="unavailable"?"unavailable":"unset",actualAt:null,actualQuality:state==="unavailable"?"unavailable":"missing",enteredAt:null,sla:state==="unavailable"?"unavailable":state==="not_applicable"?"not_set":"not_started",completionResult:state==="completed"?"unknown":null,overdueSeconds:null,risks:[],blockers:[],records:[],inheritedFrom:null,countsInProgress:definition.count&&!["not_applicable","unavailable","inherited"].includes(state)};
 };
 
 /** Additive query API. No writes, new lifecycle, quantities or wage materialization. */
@@ -231,7 +232,7 @@ export class DigitalJourneyQuery {
     });
     const replace=(key:string,node:JourneyNode)=>{const index=baseNodes.findIndex(value=>value.key===key);if(index>=0)baseNodes[index]=node;else baseNodes.push(node);};
     const setFact=(key:string,state:JourneyState,records:JourneyRecord[]=[],actualAt:string|null=null,owner:JourneyNode["owner"]=null)=>{
-      const node=emptyNode(key,state);node.records=records;node.actualAt=actualAt;node.actualQuality=actualAt?"verified":"missing";node.completionResult=state==="completed"?"unknown":null;node.owner=owner;node.operator=state==="completed"?owner:null;replace(key,node);return node;
+      const node=emptyNode(key,state);node.records=records;node.actualAt=actualAt;node.actualQuality=actualAt?"verified":"missing";node.completionResult=state==="completed"?"unknown":null;node.owner=owner;node.ownerStatus=owner?"assigned":"unknown";node.operator=state==="completed"?owner:null;replace(key,node);return node;
     };
     const chosenIdentity=orderAccess?order!:(source??order!);
     const creator=source?.created_by??order!.created_by;
@@ -274,6 +275,7 @@ export class DigitalJourneyQuery {
       let ownerId=task.assigneeId;
       if(done) { const later=summaryOnly||compact?taskSummary?.laterOwner?{before_state:taskSummary.laterOwner}:null:assignments.find(event=>new Date(event.created_at)>new Date(done.recorded_at));if(later)ownerId=later.before_state?.assigneeId??null; }
       node.owner=ownerId?{id:ownerId,name:ownerId===task.assigneeId?task.assigneeName:summaryOnly||compact?taskSummary?.previousOwnerName??null:(await db.query("SELECT display_name FROM app_users WHERE id=$1",[ownerId])).rows[0]?.display_name??null}:null;
+      node.ownerStatus=ownerId?'assigned':'unassigned';
       node.records=[{...record("task",task.taskId,taskUrl(task.taskId),task.routeVersion),mode:task.canExecute&&!["completed","cancelled"].includes(task.state)?"handle":"read"}];
       node.blockers=(task.unmetConditions??[]).filter(detail=>!['paused','manual_block','fabric_quality','development_document'].includes(detail.condition)&&!detail.condition.startsWith('materials_ready:')).map(detail=>({key:detail.condition,label:`${detail.missing}；负责岗位：${businessRoleLabel(detail.responsibleRole)}${detail.action?`；${detail.action}`:''}`,ownerId:null,record:node.records[0]!}));
       const completionKeys=summaryOnly?taskSummary?.completionKeys??[]:(await db.query("SELECT condition_key FROM digital_production_task_conditions WHERE task_id=$1 AND stage='completion' AND NOT satisfied",[task.taskId])).rows.map(row=>row.condition_key as string);
@@ -487,16 +489,17 @@ export class DigitalJourneyQuery {
       }
       const native=children.find(child=>child.module==="production");
       if(native&&links.some(link=>link.domain==="production"&&link.id===native.child_id)) {
-        const transition=(await db.query("SELECT sourcing_factory_order_status($1) AS status,business_date::text,actor_id FROM sourcing_production_transitions WHERE production_order_id=$1 ORDER BY created_at DESC,production_transition_id DESC LIMIT 1",[native.child_id])).rows[0];
-        // A business date has day precision only, so it is not invented as an exact completion timestamp.
-        const value=setFact("production_reporting",transition?.status==="production_completed"||transition?.status==="shipped"?"completed":"active",[record("production",native.child_id,`/ui/production-dashboard/${native.child_id}`)]);
+        const completion=await factoryProductionCompletion(db,oid!);
+        const value=setFact("production_reporting",completion.completed?"completed":"active",[record("production",native.child_id,`/ui/production-dashboard/${native.child_id}`)]);
+        value.actualDate=completion.actualDate;value.actualQuality=completion.actualDate?'unverified':'missing';
+        if(completion.completed){value.completionOperators=completion.operators;value.operator=completion.operators.length===1?completion.operators[0]!:null;}
         if((await db.query("SELECT to_regclass('digital_qc_tracking_starts') AS relation")).rows[0]?.relation){
           const qcEvidence=await readQcExecutionEvidence(db,oid!,asOf);
           const task=qcEvidence[0]?.group.task;
-          if(task?.assignee_id)value.owner={id:task.assignee_id,name:null};
+          if(task?.assignee_id){value.owner={id:task.assignee_id,name:null};value.ownerStatus="assigned";}
           value.records.unshift(record('factory',oid!,`/ui/digital-production?factory=${oid}&factoryAction=productionProgress`));
         }
-        if(value.state==="completed")value.risks.push("unknown");
+        if(value.state==="completed"&&!value.actualDate)value.risks.push("unknown");
       } else if(native) replace("production_reporting",emptyNode("production_reporting","unavailable"));
     }
     }
@@ -518,6 +521,10 @@ export class DigitalJourneyQuery {
         item.toName = item.to ? names.get(item.to) ?? null : null;
       }
     }
+    for(const node of baseNodes.filter(node=>node.state==='inherited'&&node.inheritedFrom&&node.progressApplicability==='applicable')){
+      const original=baseNodes.find(value=>value.instanceId===node.inheritedFrom!.taskId&&value.state==='completed');
+      node.inheritedResult={actualAt:original?.actualAt??null,quality:original?.actualQuality??'missing',adoptedAt:null,reason:'尚无独立的本轮采用完成时点；原成果时间不作本轮或本阶段完成时间'};
+    }
     // Mutated nodes remain in the shared base list; all seven stages are always returned.
     const poDeliveryDates=!patternKinds&&orderAccess&&oid?await readOrderPoDeliveryDates(db,oid,lines.map(line=>line.id)):[];
     const finalClosed=baseNodes.some(node=>node.current&&['packing','special_closure'].includes(node.key)&&node.state==='completed');
@@ -527,8 +534,24 @@ export class DigitalJourneyQuery {
     // Read only this boolean for an already authorized mother; retain all reporting visibility gates.
     const factoryQcState=!patternKinds&&orderAccess&&oid?await factoryProductionFacts(db,oid):null;
     const factoryFinished=Boolean(factoryQcState?.complete);
-    if(factoryQcState&&baseNodes.some(n=>n.key==='factory_production_qc'&&n.state!=='uncreated')){
-      setFact('factory_production_qc',factoryQcState.complete?'completed':'active',[record('factory',oid!,`/ui/digital-production?factory=${oid}&factoryAction=productionQc`)],factoryQcState.complete&&factoryQcState.checks.every(c=>c.completedAt)?new Date(Math.max(...factoryQcState.checks.map(c=>Date.parse(c.completedAt!)))).toISOString():null);
+    const qcNode=baseNodes.find(n=>n.current&&n.key==='factory_production_qc'&&!['uncreated','unavailable','not_applicable'].includes(n.state));
+    if(factoryQcState&&qcNode){
+      // Native inspection changes completion facts, never erases the original
+      // task identity, assignment, paused state or captured responsibility D.
+      qcNode.state=factoryQcState.complete?'completed':qcNode.state==='blocked'?'blocked':'active';
+      qcNode.actualAt=factoryQcState.complete&&factoryQcState.checks.every(c=>c.completedAt)?new Date(Math.max(...factoryQcState.checks.map(c=>Date.parse(c.completedAt!)))).toISOString():null;
+      qcNode.actualQuality=qcNode.actualAt?factoryQcState.checks.every(c=>['现场登记','已核实'].includes(c.completedQuality??''))?'verified':'unverified':'missing';
+      const operators=[...new Map(factoryQcState.checks.flatMap(check=>check.completedBy?[[check.completedBy.id,check.completedBy] as const]:[])).values()];
+      qcNode.completionOperators=factoryQcState.complete?operators:[];qcNode.operator=factoryQcState.complete&&operators.length===1?operators[0]!:null;
+      const completion=journeyCompletion(qcNode.expectedAt,qcNode.actualAt,qcNode.actualQuality==='verified');qcNode.completionResult=factoryQcState.complete?completion.result:null;qcNode.overdueSeconds=factoryQcState.complete?completion.overdueSeconds:null;
+      const nativeRecord=record('factory',oid!,`/ui/digital-production?factory=${oid}&factoryAction=productionQc`);
+      if(!qcNode.records.some(value=>value.domain===nativeRecord.domain&&value.url===nativeRecord.url))qcNode.records.push(nativeRecord);
+      if((await db.query("SELECT to_regclass('digital_qc_tracking_starts') AS relation")).rows[0]?.relation){
+        const evidence=await readQcExecutionEvidence(db,oid!,asOf,finalClosed||Boolean(terminal));
+        const windows=evidence.flatMap(scope=>scope.windows.map(window=>({scopeLabel:`${scope.group.rows[0]?.supplier_name_snapshot??'工厂名称尚未取得'} · `+window.lineIds.map(id=>{const line=lines.find(line=>line.id===id);return line?`PO ${line.po??'号码尚未取得'} · ${line.color}`:'PO范围依据尚未取得';}).join(' / '),state:window.clock.state,reason:window.clock.reason,anchor:window.clock.anchor,remindAt:window.clock.remindAt,escalateAt:window.clock.escalateAt})));
+        const ended=windows.filter(window=>window.state==='finished').length,unknown=windows.filter(window=>window.state==='unknown').length;
+        qcNode.productionSupervision={state:windows.length&&ended===windows.length?'ended':!windows.length||unknown===windows.length?'unknown':ended||unknown?'partial':'active',windows};
+      }
     }
     const samples=orderAccess&&oid?await shipSampleFacts(db,oid):[];
     const sampleSentLineIds=new Set(samples.flatMap(r=>r.lineIds));
@@ -572,7 +595,8 @@ export class DigitalJourneyQuery {
       const adopted=fullOrder&&oid?await readJourneyAdoptedPlan(db,oid,lines):oid?'unavailable' as const:null;
       const replacements=sourceAccess&&sid&&visibleTasks.some(task=>task.returned)
         ?await readMaterialSuccessors(db,sid,visibleTasks.map(task=>task.task_id)):[];
-      item.businessProgress=journeyBusinessProgress(item,asOf,adopted,businessQuantities,requirementEvidence,replacements);
+      item.businessProgress=journeyBusinessProgress(item,observed.now,adopted,businessQuantities,requirementEvidence,replacements);
+      item.businessProgress.dates=journeyBusinessDates(item);
     }
     this.authorizedTasks.set(item,visibleTasks.map(task=>({id:task.task_id,key:journeyDefinition(task.task_kind)?.key??task.task_kind,label:journeyDefinition(task.task_kind)?.label??"业务节点",round:task.route_version})));
     return item;
