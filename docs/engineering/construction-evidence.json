@@ -40,7 +40,10 @@
       "checks": [
         "dx-image-protocol",
         "dx-image-target",
-        "dx-image-lint"
+        "dx-image-lint",
+        "dx-image-shared",
+        "dx-image-full-non-db",
+        "dx-image-full-pg"
       ]
     }
   ],
@@ -102,6 +105,81 @@
       "sourceFingerprint": "c02346b1f4a48fe5f524eb25e474efdcdf8de69e2142dfce94c5c304dbe5dd66",
       "testedHead": "2c12544735436b2dd203256354512de991204bc8",
       "context": "After runner-image local-rebuild fix; actual current working source. Prior full-suite evidence remains historical until rerun."
+    },
+    {
+      "command": "python3 /tmp/dx-pr1-image-validation/prepare.py",
+      "exitCode": 0,
+      "startedAt": "2026-11-05T01:18:19.480415+00:00",
+      "endedAt": "2026-11-05T01:18:39.606596+00:00",
+      "logSha256": "504e9656354f378e8840fa8736f19e63112df239af48760c6dfba2a9db981372",
+      "logPath": "/tmp/dx-image-shared.log",
+      "log": "/tmp/dx-image-shared.log",
+      "id": "dx-image-shared",
+      "kind": "command",
+      "status": "passed",
+      "testedHead": "57c6d554b4f68ea9f24b8f7a2e12b9dda67bb547",
+      "sourceFingerprint": "c02346b1f4a48fe5f524eb25e474efdcdf8de69e2142dfce94c5c304dbe5dd66",
+      "context": "Image-drift fixed candidate; forced image metadata mismatch to exercise actual per-lane rebuild (not hosted image equivalence), Node22.22.2/npm10.9.9. Separate clean detached checkouts, verified shared build; same local 4 CPU host, not hosted Full. Canonical PG16 disposable low-privilege DB with actual cleanup; PG13 and recovery/history/package tails await official Full."
+    },
+    {
+      "command": "python3 /tmp/dx-pr1-image-validation/lane.py non-db",
+      "exitCode": 0,
+      "startedAt": "2026-11-05T01:18:52.175695+00:00",
+      "endedAt": "2026-11-05T01:23:15.428030+00:00",
+      "logSha256": "3fc976cfdf0ad2708b23b36ea6494774bf535261494542a241750577728020d3",
+      "logPath": "/tmp/dx-image-full-non-db.log",
+      "log": "/tmp/dx-image-full-non-db.log",
+      "id": "dx-image-full-non-db",
+      "kind": "tests",
+      "status": "passed",
+      "testedHead": "57c6d554b4f68ea9f24b8f7a2e12b9dda67bb547",
+      "sourceFingerprint": "c02346b1f4a48fe5f524eb25e474efdcdf8de69e2142dfce94c5c304dbe5dd66",
+      "context": "Image-drift fixed candidate; forced image metadata mismatch to exercise actual per-lane rebuild (not hosted image equivalence), Node22.22.2/npm10.9.9. Separate clean detached checkouts, verified shared build; same local 4 CPU host, not hosted Full. Canonical PG16 disposable low-privilege DB with actual cleanup; PG13 and recovery/history/package tails await official Full.",
+      "resultReports": [
+        {
+          "path": "/tmp/dx-pr1-image-validation/dx-image-full-non-db-report-0.json",
+          "format": "vitest-json",
+          "sha256": "69eb742d900859562d4f2cadf76e9979b2990602e7415899a471f84c85ac8966"
+        }
+      ],
+      "passed": 3189,
+      "failed": 0,
+      "skipped": 11
+    },
+    {
+      "command": "python3 /tmp/dx-pr1-image-validation/lane.py postgres",
+      "exitCode": 0,
+      "startedAt": "2026-11-05T01:18:53.758161+00:00",
+      "endedAt": "2026-11-05T01:24:42.539908+00:00",
+      "logSha256": "ee22f80905ddac0fcac8027e45b00b8999a3455045efbe3ec049e7478820cf96",
+      "logPath": "/tmp/dx-image-full-pg.log",
+      "log": "/tmp/dx-image-full-pg.log",
+      "id": "dx-image-full-pg",
+      "kind": "tests",
+      "status": "passed",
+      "testedHead": "57c6d554b4f68ea9f24b8f7a2e12b9dda67bb547",
+      "sourceFingerprint": "c02346b1f4a48fe5f524eb25e474efdcdf8de69e2142dfce94c5c304dbe5dd66",
+      "context": "Image-drift fixed candidate; forced image metadata mismatch to exercise actual per-lane rebuild (not hosted image equivalence), Node22.22.2/npm10.9.9. Separate clean detached checkouts, verified shared build; same local 4 CPU host, not hosted Full. Canonical PG16 disposable low-privilege DB with actual cleanup; PG13 and recovery/history/package tails await official Full.",
+      "resultReports": [
+        {
+          "path": "/tmp/dx-pr1-image-validation/dx-image-full-pg-report-0.json",
+          "format": "vitest-json",
+          "sha256": "4871afddfe35c4cdaa6f98f7222e08ee7f59939ff63cf5f7566ece595cb4eeda"
+        },
+        {
+          "path": "/tmp/dx-pr1-image-validation/dx-image-full-pg-report-1.json",
+          "format": "vitest-json",
+          "sha256": "7510b66c782e4233afa86049734d1517f69c9511440b43ad874c82e1ae01040c"
+        },
+        {
+          "path": "/tmp/dx-pr1-image-validation/dx-image-full-pg-report-2.json",
+          "format": "vitest-json",
+          "sha256": "d9a6a4ec06802b27274115476579a151a6978215de8f2d7a19738304d8a3c24e"
+        }
+      ],
+      "passed": 415,
+      "failed": 0,
+      "skipped": 0
     }
   ]
 }
