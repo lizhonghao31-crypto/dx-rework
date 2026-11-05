@@ -1,5 +1,12 @@
 import {nodeMaterialsFixture} from '../helpers/node-materials-fixture.js';
 import Fastify from 'fastify';
+import PDFDocument from 'pdfkit';
+import {mkdtemp,rm} from 'node:fs/promises';
+import {join} from 'node:path';
+import {tmpdir} from 'node:os';
+import {AttachmentService} from '../../apps/api/src/tools/attachments.js';
+import {AcceptanceObjectStorage,registerAcceptanceStorageRoutes} from '../../apps/api/src/tools/acceptance-storage.js';
+import {registerDevelopmentRoutes} from '../../apps/api/src/production-platform/development-routes.js';
 import {ApplicationError} from '../../apps/api/src/platform/errors.js';
 import {registerDevelopmentExecutionRoutes} from '../../apps/api/src/production-platform/development-execution-routes.js';
 import {DevelopmentRoundService} from '../../apps/api/src/production-platform/development-round-service.js';
@@ -354,12 +361,45 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   app.setErrorHandler((e,_r,reply)=>{const error=e as ApplicationError;void reply.code(error.statusCode??500).send({code:error.code,message:error.message});});registerDevelopmentExecutionRoutes(app,deps,execution,f.attachments);await app.ready();
   try{const url=`/digital-production/technical-size-templates/${templateId}/versions/1`,headers={cookie:'dx_rework_session=worker'},exact=await app.inject({method:'GET',url,headers});expect(exact.statusCode).toBe(200);expect(exact.headers['cache-control']).toBe('no-store');expect(exact.json().version).toBe(1);expect((await app.inject({method:'GET',url})).statusCode).toBe(401);expect((await app.inject({method:'GET',url,headers:{cookie:'dx_rework_session=designer'}})).statusCode).toBe(403);expect((await app.inject({method:'GET',url:url.replace('/versions/1','/versions/0'),headers})).statusCode).toBe(400);expect((await app.inject({method:'GET',url:url.replace('/versions/1','/versions/9999'),headers})).statusCode).toBe(404);}finally{await app.close();}
  });
+ it('P03-06: retrieves complete original PNG PDF and PLT bytes through native source authorization and private storage grants',async()=>{
+  const p=await prepare();await artifact(p);
+  const plotId=(await technical.read(p.worker,p.sourceId)).artifacts[0]!.body.pltAttachmentIds[0]!,imageId=(await forms.read(p.designer,p.sourceId)).document!.files.find(f=>f.kind==='款图')!.attachmentId;
+  const pdfBytes=await new Promise<Buffer>((resolve,reject)=>{const pdf=new PDFDocument(),chunks:Buffer[]=[];pdf.on('data',(chunk:Buffer)=>chunks.push(chunk));pdf.on('error',reject);pdf.on('end',()=>resolve(Buffer.concat(chunks)));pdf.text('TEST P03 complete original PDF');pdf.end();});
+  const pdfHash=createHash('sha256').update(pdfBytes).digest('hex'),intent=await f.attachments.createUploadIntent(p.designer,{filename:'TEST-original.pdf',mimeType:'application/pdf',sizeBytes:pdfBytes.length,sha256:pdfHash});
+  await execution.recordUploadPurpose(p.designer,p.sourceId,intent.attachmentId,'客户评语依据');await f.storage.writeImmutable(intent.objectKey,pdfBytes,{mimeType:'application/pdf',sha256:pdfHash});await f.attachments.finalize(p.designer,intent.attachmentId);
+  await technical.recordComment(p.designer,p.sourceId,{...comment(0,false),evidenceRefs:[intent.attachmentId]},randomUUID());
+  const directory=await mkdtemp(join(tmpdir(),'dx-p03-private-bytes-')),storage=new AcceptanceObjectStorage(directory,'http://test','TEST-private-byte-grants-not-live'),app=Fastify();
+  try{
+   for(const row of (await f.db.query('SELECT attachment_id,object_key,mime_type,sha256 FROM attachments WHERE attachment_id=ANY($1::uuid[])',[[imageId,intent.attachmentId,plotId]])).rows){const bytes=f.storage.objectBytes.get(row.object_key);expect(bytes).toBeDefined();await storage.writeImmutable(row.object_key,bytes!,{mimeType:row.mime_type,sha256:row.sha256});}
+   const attachments=new AttachmentService(f.db,storage,{prefix:'TEST',ttlSeconds:60,maxUploadBytes:1000000});
+   app.setErrorHandler((e,_r,reply)=>{const error=e as ApplicationError;void reply.code(error.statusCode??500).send({code:error.code,message:error.message});});
+   registerDevelopmentRoutes(app,{service:identity,creationEnabled:true,authenticate:async token=>{const who=token==='designer'?p.designer:token==='qc'?person('qc'):null;if(!who)throw new ApplicationError('UNAUTHORIZED','TEST login required',401);return {id:who.actorId,displayName:'TEST private source reader',businessRoles:who.actorRoles,capabilities:who.authorizationCapabilities!};}},forms,attachments);
+   registerAcceptanceStorageRoutes(app,storage);await app.ready();
+   for(const [id,mime] of [[imageId,'image/png'],[intent.attachmentId,'application/pdf'],[plotId,'application/octet-stream']] as const){
+    const path=`/digital-production/sources/${p.sourceId}/development/attachments/${id}`,response=await app.inject({method:'GET',url:path,headers:{cookie:'dx_rework_session=designer'}});expect(response.statusCode).toBe(302);
+    const target=new URL(response.headers.location!),download=await app.inject({method:'GET',url:target.pathname+target.search});expect(download.statusCode).toBe(200);expect(download.headers['content-type']).toContain(mime);expect(download.headers['cache-control']).toContain('no-store');
+    const original=(await f.db.query('SELECT object_key,sha256,size_bytes FROM attachments WHERE attachment_id=$1',[id])).rows[0];
+    expect(download.rawPayload.byteLength).toBe(Number(original.size_bytes));expect(createHash('sha256').update(download.rawPayload).digest('hex')).toBe(original.sha256);expect(download.rawPayload).toEqual(Buffer.from(f.storage.objectBytes.get(original.object_key)!));
+    if(mime==='application/pdf')expect(download.rawPayload.toString('latin1')).toContain('/Type /Catalog');
+    if(mime==='application/octet-stream')expect(download.rawPayload.toString()).toBe('IN;SP1;PU0,0;PD100,100;PU;SP0;');
+    expect((await app.inject({method:'GET',url:path})).statusCode).toBe(401);expect((await app.inject({method:'GET',url:path,headers:{cookie:'dx_rework_session=qc'}})).statusCode).toBe(404);
+   }
+  }finally{await app.close();await rm(directory,{recursive:true,force:true});}
+ });
  it('reads only the proven inherited artifact from the selected child round and rejects arbitrary artifact IDs',async()=>{
   const p=await sampleToTail(),rounds=new DevelopmentRoundService(f.db,true),old=await forms.read(p.designer,p.sourceId);
   const draft=await rounds.save(p.designer,p.sourceId,{expectedDraftVersion:0,revision:{basedOnRound:1,document:old.document!,origin:'内部发现',customerComment:'',internalProblem:'TEST仅重做车缝，技术成果仍可复用',explanation:'TEST原生复版继承',categories:['车缝'],affectedNodes:['车板'],outputKind:'整件样板'}},randomUUID());
   await rounds.publish(p.designer,p.sourceId,{expectedDraftVersion:draft.draftVersion,basedOnRound:1},randomUUID());
   const metadata=await technical.history(p.designer,p.sourceId,{roundNumber:2,scopeRef:'整款',kind:'artifacts',view:'directory'});expect(metadata.items).toEqual([]);expect(metadata.adoptedArtifact).toMatchObject({sourceId:p.sourceId,roundNumber:1,viaSourceId:p.sourceId,viaRoundNumber:2});
   const inherited=metadata.adoptedArtifact!,detail=await technical.history(p.designer,p.sourceId,{roundNumber:2,scopeRef:'整款',kind:'artifacts',version:inherited.version,adoptedArtifactId:inherited.artifactSetId});expect(detail.items[0]).toMatchObject({roundNumber:1,artifactSetId:inherited.artifactSetId});expect(Object.hasOwn(detail.items[0]!,'body')).toBe(true);
+  const directory=await technical.history(p.designer,p.sourceId,{roundNumber:2,scopeRef:'整款',kind:'artifacts',version:inherited.version,adoptedArtifactId:inherited.artifactSetId,view:'directory'});
+  const recorded=(await f.db.query('SELECT created_at FROM digital_development_artifact_inheritances WHERE source_id=$1 AND round_number=2 AND scope_ref=$2',[p.sourceId,'整款'])).rows[0];
+  expect(directory.items[0]).toMatchObject({artifactSetId:inherited.artifactSetId,version:inherited.version,roundNumber:1,viaSourceId:p.sourceId,viaRoundNumber:2,inheritedAt:new Date(recorded.created_at).toISOString()});expect(Object.hasOwn(directory.items[0]!,'body')).toBe(false);
+  expect(metadata.adoptedArtifact?.inheritedAt).toBe(new Date(recorded.created_at).toISOString());
+  await expect(technical.history(p.designer,p.sourceId,{roundNumber:2,scopeRef:'整款',kind:'artifacts',version:inherited.version,adoptedArtifactId:randomUUID(),view:'directory'})).rejects.toMatchObject({statusCode:404});
+  const app=Fastify();app.setErrorHandler((e,_r,reply)=>{const error=e as ApplicationError;void reply.code(error.statusCode??500).send({code:error.code,message:error.message});});
+  registerDevelopmentExecutionRoutes(app,{service:identity,creationEnabled:true,authenticate:async token=>{if(token!=='designer')throw new ApplicationError('UNAUTHORIZED','TEST login required',401);return {id:p.designer.actorId,displayName:'TEST original designer',businessRoles:p.designer.actorRoles,capabilities:['digital_production:view']};}},execution,f.attachments);await app.ready();
+  try{const path=`/digital-production/sources/${p.sourceId}/execution/technical/history?roundNumber=2&scopeRef=${encodeURIComponent('整款')}&kind=artifacts&version=${inherited.version}&adoptedArtifactId=${inherited.artifactSetId}&view=directory`,headers={cookie:'dx_rework_session=designer'},response=await app.inject({method:'GET',url:path,headers});expect(response.statusCode).toBe(200);expect(response.json().items[0].inheritedAt).toBe(new Date(recorded.created_at).toISOString());expect(Object.hasOwn(response.json().items[0],'body')).toBe(false);expect((await app.inject({method:'GET',url:path})).statusCode).toBe(401);expect((await app.inject({method:'GET',url:path.replace(inherited.artifactSetId,randomUUID()),headers})).statusCode).toBe(404);}finally{await app.close();}
   await expect(technical.history(p.designer,p.sourceId,{roundNumber:2,scopeRef:'整款',kind:'artifacts',version:inherited.version,adoptedArtifactId:randomUUID()})).rejects.toMatchObject({statusCode:404});
   const unchanged=await technical.history(p.designer,p.sourceId,{roundNumber:2,scopeRef:'整款',kind:'artifacts',view:'directory'});expect(unchanged.effective).toEqual(metadata.effective);
  });

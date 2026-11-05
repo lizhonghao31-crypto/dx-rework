@@ -58,7 +58,7 @@ it('rejects metadata for a different source or order without showing its entries
  const snapshot=createCockpitDocumentSnapshot(fixture(),read);await snapshot.load('development');await snapshot.load('budget');expect(snapshot.getSnapshot().development).toMatchObject({phase:'error',error:expect.stringContaining('本单不一致')});expect(snapshot.getSnapshot().budget.data).toBeUndefined();snapshot.dispose();
 });
 it('does not cache a historical-version fallback as the requested original',async()=>{
- let correct=false,count=0;const snapshot=createCockpitDocumentSnapshot(fixture(),async()=>{count++;return {version:correct?2:7,document:{images:[]}};});const entry={id:'published:2',label:'已发布 v2',load:{kind:'instruction',path:`digital-production/orders/${oid}/instruction?version=2`,id:oid,version:2}};
+ let correct=false,count=0;const snapshot=createCockpitDocumentSnapshot(fixture(),async()=>{count++;return {order:{productionOrderId:oid},version:correct?2:7,document:{images:[]}};});const entry={id:'published:2',label:'已发布 v2',load:{kind:'instruction',path:`digital-production/orders/${oid}/instruction?version=2`,id:oid,version:2}};
  await expect(snapshot.loadEntry(entry,signal())).rejects.toThrow('所选历史版本');correct=true;await expect(snapshot.loadEntry(entry,signal())).resolves.toMatchObject({id:'published:2'});expect(count).toBe(2);snapshot.dispose();
 });
 it('disposes queued and late replies on identity/snapshot change and never commits their data',async()=>{

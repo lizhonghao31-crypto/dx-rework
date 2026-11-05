@@ -15,7 +15,9 @@ export async function loadCockpitDocumentCategory(order:OrderJourney,key:Cockpit
   // The authorized reader requires the base document before returning a revision; the revisions table starts at round 2.
   requireFields(sheet,["sourceId","version","document"]);sameEntity(sheet,"sourceId",sid,"开发资料");requireFields(roundsResult,["rounds"]);check(integerValue(sheet.version)&&(sheet.document===null||objectValue(sheet.document))&&(sheet.roundNumber===undefined||positiveValue(sheet.roundNumber)));const rounds=checkedRows(roundsResult.rounds,item=>positiveValue(item.roundNumber)),numbers=[...new Set([...(sheet.document?[1]:[]),num(sheet.roundNumber)||1,...rounds.map(item=>num(item.roundNumber))])].filter(Boolean).sort((a,b)=>b-a);
   if(!sheet.document&&!rounds.length)return result([]);
-  return result(numbers.map(roundNumber=>{const metadata=rounds.find(item=>item.roundNumber===roundNumber);return {id:`round:${roundNumber}`,label:`第 ${roundNumber} 轮${roundNumber===sheet.roundNumber?` · 单据 v${sheet.version} · ${sheet.status==="published"?"已发布":"草稿"}`:""}`,url:original("development",sid,roundNumber),at:str(metadata?.publishedAt),load:{kind:"development",path:`digital-production/sources/${sid}/development?round=${roundNumber}`,id:sid,version:roundNumber}};}));
+  const entries:CockpitDocumentEntry[]=numbers.map(roundNumber=>{const metadata=rounds.find(item=>item.roundNumber===roundNumber);return {id:`round:${roundNumber}`,label:`第 ${roundNumber} 轮${roundNumber===sheet.roundNumber?` · 单据 v${sheet.version} · ${sheet.status==="published"?"已发布":"草稿"}`:""}`,url:original("development",sid,roundNumber),at:str(metadata?.publishedAt),load:{kind:"development",path:`digital-production/sources/${sid}/development?round=${roundNumber}`,id:sid,version:roundNumber}};});
+  if(roundsResult.draft!=null){const draft=row(roundsResult.draft),payload=row(draft.payload);check(positiveValue(draft.version)&&positiveValue(payload.basedOnRound));entries.unshift({id:`revision-draft:${draft.version}`,label:`尚未生效 · 开发复版草稿第 ${draft.version} 版`,note:`基于开发第 ${payload.basedOnRound} 轮，尚未发布为新轮；不替换已发布制单的采用资料。`,url:original('development',sid)});}
+  return result(entries,'开发轮次、开发单据版号与生产采用版分别保留；本类最新修改不自动成为生产依据。');
  }
  if(key==="pattern"||key==="misc"){
   if(!sid&&!oid)return na();const query=new URLSearchParams({...(sid?{sourceId:sid}:{}),...(oid?{orderId:oid}:{}),page:String(page)}),data=row(await read(`pattern-room/related-orders?${query}`,signal));
@@ -32,9 +34,11 @@ export async function loadCockpitDocumentCategory(order:OrderJourney,key:Cockpit
  if(key==="budget"||key==="instruction"){
   const path=`digital-production/orders/${oid}/${key}`,sheet=row(await read(path,signal));
   requireFields(sheet,["version","versions"]);sameEntity(key==="budget"?sheet:row(sheet.order),"productionOrderId",oid,key==="budget"?"预算资料":"制单资料");check(integerValue(sheet.version));const versions=checkedNumbers(sheet.versions),current=num(sheet.version);
-  const entries:CockpitDocumentEntry[]=versions.map(version=>({id:`published:${version}`,label:`已发布 v${version}`,url:original(key,oid,version),load:{kind:key,path:`${path}?version=${version}`,id:oid,version}}));
-  if(current&&!versions.includes(current))entries.unshift({id:`draft:${current}`,label:`当前草稿 v${current}`,url:original(key,oid),load:{kind:key,path,id:oid}});
-  return result(entries);
+  const knownPublished=key==='instruction'&&Object.hasOwn(sheet,'publishedVersion'),published=knownPublished?sheet.publishedVersion:null;
+  if(knownPublished)check(published===null||positiveValue(published)&&versions.includes(num(published)));
+  const entries:CockpitDocumentEntry[]=versions.map(version=>({id:`published:${version}`,label:knownPublished?`${version===published?'生产当前采用':'已发布历史'} · 大货制单第 ${version} 版`:`已发布 v${version}`,url:original(key,oid,version),load:{kind:key,path:`${path}?version=${version}`,id:oid,version}}));
+  if(current&&!versions.includes(current))entries.unshift({id:`draft:${current}`,label:knownPublished?`尚未生效 · 大货制单草稿第 ${current} 版`:`当前草稿 v${current}`,note:knownPublished?'草稿尚未发布，不替换原生产采用制单。':undefined,url:original(key,oid),load:{kind:key,path,id:oid,version:current}});
+  return result(entries,key==='instruction'?knownPublished?published?`生产当前采用制单第 ${published} 版；草稿和已发布历史分别保留，不能从最近保存版推定已生效。`:'尚无已发布制单；保存草稿不代表生产依据已生效。':'原接口未提供当前发布关联；已发布历史可读，不能据此猜当前采用版。':undefined);
  }
  if(key==="contract"){
   const sources=records(order,"sourcing");if(!sources.length)return {state:"unknown",entries:[],note:"暂无可读取的合同关联。"};
@@ -62,6 +66,7 @@ export async function loadCockpitDocumentEntry(entry:CockpitDocumentEntry,read:C
  }
  if(kind==="pattern"){if(data.orderId!==id||!rows(data.rounds).some(item=>item.roundId===round))throw new Error("找不到所选打板轮次，请返回原单核对");return {...entry,files:rows(data.attachments).filter(item=>item.roundId===round).map(item=>file(str(item.attachmentId),str(item.filename),item.active?`pattern-room/attachments/${item.attachmentId}/download?mode=preview`:null,item.active?undefined:"原件已停用")),note:data.canReadMaterials===false?"当前身份无权读取此轮制作资料。":undefined};}
  if(kind==="budget"||kind==="instruction"){
+  sameEntity(kind==='budget'?data:row(data.order),'productionOrderId',id,kind==='budget'?'预算历史':'制单历史');
   if(version&&num(data.version)!==version)throw new Error("找不到所选历史版本，请返回原单核对");
   const doc=row(data.document),files=kind==="budget"?strings(doc.imageAttachmentIds).map((attachmentId,index)=>file(attachmentId,`预算图片 ${index+1}`,`digital-production/orders/${id}/budget/attachments/${attachmentId}`)):rows(doc.images).map(image=>file(str(image.attachmentId),str(image.kind)||"制单原图",`digital-production/orders/${id}/instruction/attachments/${image.attachmentId}`));
   return {...entry,at:str(data.publishedAt),files,metadata:metadataFacts(data),note:kind==="instruction"?`采用开发第 ${data.sourceRound??"未核实"} 轮`:undefined};

@@ -1,401 +1,331 @@
 {
   "version": 1,
-  "base": "6e41869d76cbd883954c711c00ad465fbe930a2d",
-  "sourceFingerprint": "73a88f0ec0fe280f0eff59be4cfd56e95cde724004e07f169a522b8f7db7a260",
+  "base": "0ef40db82778027f628250f9c31b44a44543d303",
+  "sourceFingerprint": "14d4968ef42a14379e4561c074a89d373aa52e9e6b0449dc57e35f20ae287470",
   "risk": "full",
   "rules": [
     {
-      "source": "User authorized sequential Module01 construction, GitHub Codex Review, fixes and merge; Library M01-IMPLEMENT1.1.1 v2 section5 and OPT1.3 v4; docs/requirements/cockpit-display-v1.0.md P02 increment.",
-      "initialization": "Optional read fields and read adapters only; no migrations, seeds, original deadline rewrites or business mutations. Original low-privilege isolated-schema create/cleanup remains in use; old API fields retained.",
-      "dateAndPermission": "Original source/order/task authorization and full business-detail field gate retained; snapshot calendar and canonical trusted business clock retain their original semantics. New businessProgress/date evaluation shares observed.now with canonical SLA. Original date-only/exclusive vs exact instant boundaries remain distinct; no browser current-time calculation. Original task deadlineMode/date_target and deadlineExclusive are projected without synthesizing precision; actual duration task deadlines stay instant. Effective rework report quantity uses the original native latest-revision function, retaining active-task/nonrejected filters.",
-      "expectation": "Current source-bound unit/native PostgreSQL regression, original read permissions, compile/lint/build and bounded browser smoke pass; light, official Review and exact-head final Full remain separately required.",
+      "source": "User authorized sequential Module01 construction, fixes, GitHub Codex Review and merge; Library implementation1.1.1 v2 section6 and OPT1.3 v4; cockpit-display-v1.0.md P03 increment.",
+      "initialization": "Read-only compatible optional DTO fields and exact historical readers; no migration, seed, adoption, task, allocation, file or production mutation. Original task-owned low-privilege test schema resource create/release contract retained. Postcheck public-only and no remaining clients.",
+      "dateAndPermission": "Original order/source/current session permissions and private file grants retained independently; native original artifact.created_at, inheritance.created_at and instruction.published_at remain distinct. Missing source access returns no source/artifact descriptor. No new business clock, inferred adoption time or role.",
+      "expectation": "Source-bound unit, four full native suites, actual-base preflight, original browser directory/edit recovery, compiler/lint/build/secrets pass. Synthetic fixture and isolated byte checks do not close missing original N/C field acceptance. Light, official reviewedSHA and exact-head Full are separate future stages.",
       "checks": [
-        "m01-p02-unit-fullfix",
-        "m01-p02-pmc-fullfix",
-        "m01-p02-preflight-fullfix",
-        "m01-p02-types-fullfix",
-        "m01-p02-lint-fullfix",
-        "m01-p02-secret-fullfix-corrected",
-        "m01-p02-pg-finalfix",
-        "m01-p02-build-finalfix",
-        "m01-p02-browser-finalfix2"
+        "m01-p03-unit-final",
+        "m01-p03-native-final",
+        "m01-p03-preflight-final",
+        "m01-p03-browser-final",
+        "m01-p03-technical-browser-final",
+        "m01-p03-recovery-browser-final",
+        "m01-p03-types-final",
+        "m01-p03-lint-final",
+        "m01-p03-build-final",
+        "m01-p03-secret-final"
       ],
-      "rule": "Every batch keeps its original start, deadline, completion and frozen scope; original task D remains separate from canonical rolling forecast and date-only targets.",
+      "rule": "Published production references remain frozen independently of newer development eligibility, with exact source/instruction/artifact identities and no latest fallback.",
       "writes": [
-        "apps/api/src/production-platform/factory-sla-evidence.ts",
-        "apps/api/src/production-platform/journey-supervision.ts",
-        "apps/web/src/journey-sla-details.tsx",
-        "apps/web/src/cockpit-home.tsx",
-        "tests/unit/m01-time-consumers.test.ts",
-        "tests/unit/journey-projection-isolation.test.ts",
-        "tests/unit/journey-sla-supervision.test.ts"
+        "apps/api/src/production-platform/production-document-basis.ts",
+        "apps/api/src/production-platform/bulk-preparation-service.ts",
+        "packages/contracts/src/bulk-preparation.ts",
+        "apps/web/src/cockpit-documents-production.ts",
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/unit/m01-production-document-basis.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/factory-batch-timing.ts",
-        "apps/api/src/production-platform/sla-order-service.ts",
-        "packages/domain/src/digital-sla-plan.ts",
-        "apps/web/src/cockpit-node-dates.tsx"
+        "apps/api/src/production-platform/production-instruction-service.ts",
+        "apps/api/src/production-platform/preparation-material-repository.ts",
+        "apps/api/src/production-platform/access-policy.ts",
+        "apps/web/src/cockpit-documents.tsx"
       ],
       "oldTests": [
-        "tests/unit/journey-sla-supervision.test.ts",
-        "tests/unit/digital-sla-plan.test.ts",
-        "tests/unit/factory-logistics-sla-projection.test.ts",
-        "tests/integration/sourcing-pr03-postgres.test.ts"
-      ]
-    },
-    {
-      "source": "User authorized sequential Module01 construction, GitHub Codex Review, fixes and merge; Library M01-IMPLEMENT1.1.1 v2 section5 and OPT1.3 v4; docs/requirements/cockpit-display-v1.0.md P02 increment.",
-      "initialization": "Optional read fields and read adapters only; no migrations, seeds, original deadline rewrites or business mutations. Original low-privilege isolated-schema create/cleanup remains in use; old API fields retained.",
-      "dateAndPermission": "Original source/order/task authorization and full business-detail field gate retained; snapshot calendar and canonical trusted business clock retain their original semantics. New businessProgress/date evaluation shares observed.now with canonical SLA. Original date-only/exclusive vs exact instant boundaries remain distinct; no browser current-time calculation. Original task deadlineMode/date_target and deadlineExclusive are projected without synthesizing precision; actual duration task deadlines stay instant. Effective rework report quantity uses the original native latest-revision function, retaining active-task/nonrejected filters.",
-      "expectation": "Current source-bound unit/native PostgreSQL regression, original read permissions, compile/lint/build and bounded browser smoke pass; light, official Review and exact-head final Full remain separately required.",
-      "checks": [
-        "m01-p02-unit-fullfix",
-        "m01-p02-pmc-fullfix",
-        "m01-p02-preflight-fullfix",
-        "m01-p02-types-fullfix",
-        "m01-p02-lint-fullfix",
-        "m01-p02-secret-fullfix-corrected",
-        "m01-p02-pg-finalfix",
-        "m01-p02-build-finalfix",
-        "m01-p02-browser-finalfix2"
-      ],
-      "rule": "Whole/stage dates use the same effective requirements as n/m; full, partial and unavailable adoption, original inherited results, precision and canonical forecast bases remain separately identified.",
-      "writes": [
-        "apps/api/src/production-platform/journey-progress-dates.ts",
-        "apps/api/src/production-platform/journey-adopted-plan.ts",
-        "apps/web/src/cockpit-business-dates.tsx",
-        "apps/web/src/cockpit-business-progress.tsx",
-        "apps/web/src/cockpit-detail.tsx",
-        "apps/web/src/cockpit-detail.css",
-        "apps/web/src/cockpit-node-dates.tsx",
-        "tests/unit/journey-progress-dates.test.ts",
-        "tests/unit/journey-business-progress.test.ts",
-        "tests/unit/cockpit-detail.test.ts",
-        "tests/unit/digital-journey-cockpit.test.ts"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/journey-business-progress.ts",
-        "apps/api/src/production-platform/series-plan-service.ts",
-        "apps/web/src/digital-journey-cockpit-model.ts",
-        "packages/contracts/src/digital-series-plan.ts"
-      ],
-      "oldTests": [
-        "tests/unit/journey-business-progress.test.ts",
-        "tests/unit/cockpit-detail.test.ts",
-        "tests/unit/digital-journey-cockpit.test.ts",
-        "tests/integration/digital-journey-postgres.test.ts"
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/integration/price-reapplication-digital-dispatch-postgres.test.ts",
+        "tests/unit/digital-task-read-boundary.test.ts"
       ],
       "newTests": [
-        "tests/unit/journey-progress-dates.test.ts",
-        "tests/unit/m01-time-consumers.test.ts"
+        "tests/unit/m01-production-document-basis.test.ts"
       ]
     },
     {
-      "source": "User authorized sequential Module01 construction, GitHub Codex Review, fixes and merge; Library M01-IMPLEMENT1.1.1 v2 section5 and OPT1.3 v4; docs/requirements/cockpit-display-v1.0.md P02 increment.",
-      "initialization": "Optional read fields and read adapters only; no migrations, seeds, original deadline rewrites or business mutations. Original low-privilege isolated-schema create/cleanup remains in use; old API fields retained.",
-      "dateAndPermission": "Original source/order/task authorization and full business-detail field gate retained; snapshot calendar and canonical trusted business clock retain their original semantics. New businessProgress/date evaluation shares observed.now with canonical SLA. Original date-only/exclusive vs exact instant boundaries remain distinct; no browser current-time calculation. Original task deadlineMode/date_target and deadlineExclusive are projected without synthesizing precision; actual duration task deadlines stay instant. Effective rework report quantity uses the original native latest-revision function, retaining active-task/nonrejected filters.",
-      "expectation": "Current source-bound unit/native PostgreSQL regression, original read permissions, compile/lint/build and bounded browser smoke pass; light, official Review and exact-head final Full remain separately required.",
+      "source": "User authorized sequential Module01 construction, fixes, GitHub Codex Review and merge; Library implementation1.1.1 v2 section6 and OPT1.3 v4; cockpit-display-v1.0.md P03 increment.",
+      "initialization": "Read-only compatible optional DTO fields and exact historical readers; no migration, seed, adoption, task, allocation, file or production mutation. Original task-owned low-privilege test schema resource create/release contract retained. Postcheck public-only and no remaining clients.",
+      "dateAndPermission": "Original order/source/current session permissions and private file grants retained independently; native original artifact.created_at, inheritance.created_at and instruction.published_at remain distinct. Missing source access returns no source/artifact descriptor. No new business clock, inferred adoption time or role.",
+      "expectation": "Source-bound unit, four full native suites, actual-base preflight, original browser directory/edit recovery, compiler/lint/build/secrets pass. Synthetic fixture and isolated byte checks do not close missing original N/C field acceptance. Light, official reviewedSHA and exact-head Full are separate future stages.",
       "checks": [
-        "m01-p02-unit-fullfix",
-        "m01-p02-pmc-fullfix",
-        "m01-p02-preflight-fullfix",
-        "m01-p02-types-fullfix",
-        "m01-p02-lint-fullfix",
-        "m01-p02-secret-fullfix-corrected",
-        "m01-p02-pg-finalfix",
-        "m01-p02-build-finalfix",
-        "m01-p02-browser-finalfix2"
+        "m01-p03-unit-final",
+        "m01-p03-native-final",
+        "m01-p03-preflight-final",
+        "m01-p03-browser-final",
+        "m01-p03-technical-browser-final",
+        "m01-p03-recovery-browser-final",
+        "m01-p03-types-final",
+        "m01-p03-lint-final",
+        "m01-p03-build-final",
+        "m01-p03-secret-final"
       ],
-      "rule": "Native factory inspection, quality result, original owner/paused task and production supervision terminal state are independent; production completion uses all current factory completion dates, never later shipment/registration.",
+      "rule": "Proven inherited artifact directory metadata and original bytes preserve exact version and distinct origin/inheritance/publication times under independent original authority.",
       "writes": [
-        "apps/api/src/production-platform/journey-query.ts",
-        "apps/api/src/production-platform/factory-production-facts.ts",
-        "packages/contracts/src/digital-production-journey.ts",
-        "apps/web/src/cockpit-node-rows.tsx",
-        "tests/integration/sourcing-pr03-postgres.test.ts",
-        "tests/integration/business-anchors-clock-postgres.test.ts"
+        "apps/api/src/production-platform/development-execution-routes.ts",
+        "apps/api/src/production-platform/development-technical-service.ts",
+        "apps/web/src/cockpit-documents-technical.ts",
+        "apps/web/src/cockpit-document-data.ts",
+        "apps/web/src/cockpit-documents-extended.ts",
+        "tests/integration/development-technical-postgres.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/task-service.ts",
-        "apps/api/src/production-platform/qc-progress-evidence.ts",
+        "apps/api/src/production-platform/development-technical-repository.ts",
+        "apps/api/src/production-platform/development-service.ts",
+        "apps/api/src/tools/storage.ts"
+      ],
+      "oldTests": [
+        "tests/integration/development-technical-postgres.test.ts",
+        "tests/integration/development-technical-routes.test.ts",
+        "tests/unit/development-technical-contract.test.ts"
+      ]
+    },
+    {
+      "source": "User authorized sequential Module01 construction, fixes, GitHub Codex Review and merge; Library implementation1.1.1 v2 section6 and OPT1.3 v4; cockpit-display-v1.0.md P03 increment.",
+      "initialization": "Read-only compatible optional DTO fields and exact historical readers; no migration, seed, adoption, task, allocation, file or production mutation. Original task-owned low-privilege test schema resource create/release contract retained. Postcheck public-only and no remaining clients.",
+      "dateAndPermission": "Original order/source/current session permissions and private file grants retained independently; native original artifact.created_at, inheritance.created_at and instruction.published_at remain distinct. Missing source access returns no source/artifact descriptor. No new business clock, inferred adoption time or role.",
+      "expectation": "Source-bound unit, four full native suites, actual-base preflight, original browser directory/edit recovery, compiler/lint/build/secrets pass. Synthetic fixture and isolated byte checks do not close missing original N/C field acceptance. Light, official reviewedSHA and exact-head Full are separate future stages.",
+      "checks": [
+        "m01-p03-unit-final",
+        "m01-p03-native-final",
+        "m01-p03-preflight-final",
+        "m01-p03-browser-final",
+        "m01-p03-technical-browser-final",
+        "m01-p03-recovery-browser-final",
+        "m01-p03-types-final",
+        "m01-p03-lint-final",
+        "m01-p03-build-final",
+        "m01-p03-secret-final"
+      ],
+      "rule": "Native zero-share factories remain archived even without a tracking start or QC record; current execution, quantities, obligations and write guards are unchanged.",
+      "writes": [
         "apps/api/src/production-platform/qc-production-progress-service.ts",
-        "apps/api/src/sourcing/production-reporting-service.ts"
+        "packages/contracts/src/qc-production-progress.ts",
+        "apps/web/src/qc-production-progress-panel.tsx",
+        "tests/integration/qc-progress-retirement-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/sourcing/factory-transfer-service.ts",
+        "apps/api/src/production-platform/qc-progress-evidence.ts",
+        "apps/web/src/cockpit-documents-production.ts"
       ],
       "oldTests": [
-        "tests/integration/digital-journey-postgres.test.ts",
-        "tests/integration/business-anchors-clock-postgres.test.ts",
-        "tests/integration/sourcing-pr03-postgres.test.ts",
-        "tests/unit/qc-progress-reminders.test.ts"
+        "tests/integration/qc-progress-retirement-postgres.test.ts",
+        "tests/integration/price-reapplication-digital-dispatch-postgres.test.ts"
       ]
     },
     {
-      "source": "User authorized sequential Module01 construction, GitHub Codex Review, fixes and merge; Library M01-IMPLEMENT1.1.1 v2 section5 and OPT1.3 v4; docs/requirements/cockpit-display-v1.0.md P02 increment.",
-      "initialization": "Optional read fields and read adapters only; no migrations, seeds, original deadline rewrites or business mutations. Original low-privilege isolated-schema create/cleanup remains in use; old API fields retained. The changed optional-tail fixture and historical-image SQL fixture now create/release only through original owned-schema APIs; both are exercised and no production SQL/seed changes.",
-      "dateAndPermission": "Original source/order/task authorization and full business-detail field gate retained; snapshot calendar and canonical trusted business clock retain their original semantics. New businessProgress/date evaluation shares observed.now with canonical SLA. Original date-only/exclusive vs exact instant boundaries remain distinct; no browser current-time calculation. Original task deadlineMode/date_target and deadlineExclusive are projected without synthesizing precision; actual duration task deadlines stay instant. Effective rework report quantity uses the original native latest-revision function, retaining active-task/nonrejected filters.",
-      "expectation": "Current source-bound unit/native PostgreSQL regression, original read permissions, compile/lint/build and bounded browser smoke pass; light, official Review and exact-head final Full remain separately required.",
+      "source": "User authorized sequential Module01 construction, fixes, GitHub Codex Review and merge; Library implementation1.1.1 v2 section6 and OPT1.3 v4; cockpit-display-v1.0.md P03 increment.",
+      "initialization": "Read-only compatible optional DTO fields and exact historical readers; no migration, seed, adoption, task, allocation, file or production mutation. Original task-owned low-privilege test schema resource create/release contract retained. Postcheck public-only and no remaining clients.",
+      "dateAndPermission": "Original order/source/current session permissions and private file grants retained independently; native original artifact.created_at, inheritance.created_at and instruction.published_at remain distinct. Missing source access returns no source/artifact descriptor. No new business clock, inferred adoption time or role.",
+      "expectation": "Source-bound unit, four full native suites, actual-base preflight, original browser directory/edit recovery, compiler/lint/build/secrets pass. Synthetic fixture and isolated byte checks do not close missing original N/C field acceptance. Light, official reviewedSHA and exact-head Full are separate future stages.",
       "checks": [
-        "m01-p02-unit-fullfix",
-        "m01-p02-pmc-fullfix",
-        "m01-p02-preflight-fullfix",
-        "m01-p02-types-fullfix",
-        "m01-p02-lint-fullfix",
-        "m01-p02-secret-fullfix-corrected",
-        "m01-p02-pg-finalfix",
-        "m01-p02-build-finalfix",
-        "m01-p02-browser-finalfix2"
+        "m01-p03-unit-final",
+        "m01-p03-native-final",
+        "m01-p03-preflight-final",
+        "m01-p03-browser-final",
+        "m01-p03-technical-browser-final",
+        "m01-p03-recovery-browser-final",
+        "m01-p03-types-final",
+        "m01-p03-lint-final",
+        "m01-p03-build-final",
+        "m01-p03-secret-final"
       ],
-      "rule": "Closure distinguishes normal finishing from bad rework and original registered from effective per-process reports; rejected/replaced work is history, processes are not summed into garment quantity, added fields follow original full-detail authorization and do not change closure revision.",
+      "rule": "Real saved drafts, independently authorized categories, pinned version reads and original saved-attachment versus unsaved-input recovery remain distinct in existing components.",
       "writes": [
-        "apps/api/src/production-platform/closure-work-summary.ts",
-        "apps/api/src/production-platform/order-closure-service.ts",
-        "apps/api/src/rework/rework-business-detail-service.ts",
-        "packages/contracts/src/order-closure.ts",
-        "apps/web/src/order-closure-panel.tsx",
-        "apps/web/src/document-feedback-projections.ts",
-        "tests/helpers/order-closure-fixture.ts",
-        "tests/integration/optional-tail-inspection-postgres.test.ts",
-        "tests/unit/digital-pmc-readonly-access.test.ts"
+        "apps/web/src/cockpit-documents-model.ts",
+        "tests/unit/cockpit-document-directory.test.ts",
+        "tests/unit/cockpit-document-snapshot.test.ts",
+        "tests/fixtures/m01-production-directory.tsx",
+        "tests/acceptance/m01-production-directory-browser.mjs"
       ],
       "reads": [
-        "apps/api/src/rework/work-reporting-service.ts",
-        "apps/api/src/rework/whole-order-review-service.ts",
-        "apps/api/src/rework/rework-business-detail-service.ts",
-        "apps/api/src/production-platform/order-closure-service.ts"
+        "apps/web/src/cockpit-documents.tsx",
+        "apps/web/src/development-technical-workspace.tsx",
+        "apps/web/src/production-instruction-panel.tsx"
       ],
       "oldTests": [
-        "tests/integration/optional-tail-inspection-postgres.test.ts",
-        "tests/integration/sourcing-pr03-postgres.test.ts",
-        "tests/unit/rework-business-detail-attachment-authorization.test.ts",
-        "tests/unit/digital-pmc-readonly-access.test.ts#PMC closure reads retain native links without acquiring closure or QC authority"
+        "tests/unit/cockpit-document-new-sources.test.ts",
+        "tests/unit/cockpit-document-directory.test.ts",
+        "tests/unit/cockpit-document-snapshot.test.ts",
+        "tests/acceptance/development-technical-browser.mjs",
+        "tests/acceptance/document-recovery-feedback-browser.mjs"
       ],
       "newTests": [
-        "tests/unit/m01-time-consumers.test.ts",
-        "tests/integration/business-anchors-clock-postgres.test.ts"
+        "tests/unit/m01-production-document-basis.test.ts",
+        "tests/acceptance/m01-production-directory-browser.mjs"
       ]
     }
   ],
   "checks": [
     {
-      "id": "m01-p02-unit-fullfix",
+      "id": "m01-p03-unit-final",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/journey-progress-dates.test.ts tests/unit/journey-business-progress.test.ts tests/unit/journey-sla-supervision.test.ts tests/unit/cockpit-home.test.ts tests/unit/cockpit-detail.test.ts tests/unit/digital-journey-cockpit.test.ts tests/unit/digital-sla-plan.test.ts tests/unit/factory-logistics-sla-projection.test.ts tests/unit/qc-progress-reminders.test.ts tests/unit/m01-time-consumers.test.ts tests/unit/digital-journey-projection.test.ts tests/unit/journey-projection-isolation.test.ts tests/unit/rework-business-detail-attachment-authorization.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-p02-unit-fullfix.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/m01-production-document-basis.test.ts tests/unit/cockpit-document-directory.test.ts tests/unit/cockpit-document-new-sources.test.ts tests/unit/cockpit-document-snapshot.test.ts tests/unit/digital-task-read-boundary.test.ts tests/unit/development-technical-contract.test.ts tests/integration/development-technical-routes.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-p03-unit-final.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "258fe20b15699464c4d62797ed216cc695749f14",
-      "sourceFingerprint": "73a88f0ec0fe280f0eff59be4cfd56e95cde724004e07f169a522b8f7db7a260",
-      "context": "Current test-only native closure-summary SQL fixture correction after failed exact258 Full. Original role, revoked-role, unauthorized command and no-write assertions retained. Node22.22.2/npm10.9.9, Vitest worker1; exact BASE_SHA6e preflight nativeworker2. At most four independent bounded validation commands ran concurrently; no local PG suite ran during these commands. No production or Acceptance operation.",
-      "startedAt": "2026-11-05T20:11:23.703Z",
-      "endedAt": "2026-11-05T20:11:33.498Z",
-      "log": "/workspace/scratch/m01-p02-unit-fullfix.log",
-      "logSha256": "6381949afdf3b73870e5ce377840ff6a2ca48d02f1990cb9f9ee93c28dd90f1a",
-      "passed": 147,
+      "testedHead": "0ef40db82778027f628250f9c31b44a44543d303",
+      "sourceFingerprint": "14d4968ef42a14379e4561c074a89d373aa52e9e6b0449dc57e35f20ae287470",
+      "context": "Node22.22.2/npm10.9.9. Source frozen throughout checks; at most two task-level commands concurrent. Local Vitest default config uses explicit worker1 and original strict timing; preflight canonical worker2 and actual BASE_SHA=0ef40db82778027f628250f9c31b44a44543d303. Native PG16.14 on local marked dx_m01_acceptance_test_dc924aaea2 oid694046, low-privilege dx_rework_test; four full local suites, no name filtering. Remote Full uses original canonical plan/configs separately. Browser mode NODE_ENV=production, Chromium151.0.7922.173: original components and TEST synthetic HTTP, no live role acceptance or deployment. Browser checks are command records; their actual scenario summaries stay in original logs.",
+      "startedAt": "2026-11-05T21:05:04.783Z",
+      "endedAt": "2026-11-05T21:05:07.903Z",
+      "log": "/workspace/scratch/m01-p03-unit-final.log",
+      "logSha256": "6179d777c4765c250574bd6c11617ebdd11281ab7ad65ba2d5c59f4d7262a016",
+      "passed": 106,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "e5cd9371894e0afbf398af8263dcf9efdfb655e2741260a6b4167b3528a35184"
+          "sha256": "53fdec1954e6e891a4e364fb24c4c67352a99345ce65101ff8ae98f319c15149"
         }
       ]
     },
     {
-      "id": "m01-p02-pmc-fullfix",
+      "id": "m01-p03-native-final",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/digital-pmc-readonly-access.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-p02-pmc-fullfix.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/integration/qc-progress-retirement-postgres.test.ts tests/integration/production-readiness-postgres.test.ts tests/integration/development-technical-postgres.test.ts tests/integration/price-reapplication-digital-dispatch-postgres.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-p03-native-final.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "258fe20b15699464c4d62797ed216cc695749f14",
-      "sourceFingerprint": "73a88f0ec0fe280f0eff59be4cfd56e95cde724004e07f169a522b8f7db7a260",
-      "context": "Current test-only native closure-summary SQL fixture correction after failed exact258 Full. Original role, revoked-role, unauthorized command and no-write assertions retained. Node22.22.2/npm10.9.9, Vitest worker1; exact BASE_SHA6e preflight nativeworker2. At most four independent bounded validation commands ran concurrently; no local PG suite ran during these commands. No production or Acceptance operation.",
-      "startedAt": "2026-11-05T20:11:06.368Z",
-      "endedAt": "2026-11-05T20:11:07.994Z",
-      "log": "/workspace/scratch/m01-p02-pmc-fullfix.log",
-      "logSha256": "1a45d9e4fcba9a6830701174bae6a120cc4cf4935068fbcb8baec5f2256d1abe",
-      "passed": 40,
+      "testedHead": "0ef40db82778027f628250f9c31b44a44543d303",
+      "sourceFingerprint": "14d4968ef42a14379e4561c074a89d373aa52e9e6b0449dc57e35f20ae287470",
+      "context": "Node22.22.2/npm10.9.9. Source frozen throughout checks; at most two task-level commands concurrent. Local Vitest default config uses explicit worker1 and original strict timing; preflight canonical worker2 and actual BASE_SHA=0ef40db82778027f628250f9c31b44a44543d303. Native PG16.14 on local marked dx_m01_acceptance_test_dc924aaea2 oid694046, low-privilege dx_rework_test; four full local suites, no name filtering. Remote Full uses original canonical plan/configs separately. Browser mode NODE_ENV=production, Chromium151.0.7922.173: original components and TEST synthetic HTTP, no live role acceptance or deployment. Browser checks are command records; their actual scenario summaries stay in original logs.",
+      "startedAt": "2026-11-05T21:05:04.782Z",
+      "endedAt": "2026-11-05T21:06:34.693Z",
+      "log": "/workspace/scratch/m01-p03-native-final.log",
+      "logSha256": "675e5902fc4f69ee394dd77d20adf2275e0a45ecae3c4a6f2f7f2820005b08ec",
+      "passed": 60,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "edea2b5c41c5835c59c4c3dcfe37cdaa135c165895dda38a1e102c5f7dbef8f3"
+          "sha256": "2193ef5a73cd471aac9f0113b9de0bd1e357bb0773958841cccb947bee8da1fe"
         }
       ]
     },
     {
-      "id": "m01-p02-preflight-fullfix",
+      "id": "m01-p03-preflight-final",
       "kind": "tests",
       "command": "npm run test:preflight",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "258fe20b15699464c4d62797ed216cc695749f14",
-      "sourceFingerprint": "73a88f0ec0fe280f0eff59be4cfd56e95cde724004e07f169a522b8f7db7a260",
-      "context": "Current test-only native closure-summary SQL fixture correction after failed exact258 Full. Original role, revoked-role, unauthorized command and no-write assertions retained. Node22.22.2/npm10.9.9, Vitest worker1; exact BASE_SHA6e preflight nativeworker2. At most four independent bounded validation commands ran concurrently; no local PG suite ran during these commands. No production or Acceptance operation.",
-      "startedAt": "2026-11-05T20:11:23.701Z",
-      "endedAt": "2026-11-05T20:11:31.746Z",
-      "log": "/workspace/scratch/m01-p02-preflight-fullfix.log",
-      "logSha256": "da3a86b8600b0db8eda29372d7242ce33a7f5a94e88344aa452c354ab343a2d2",
+      "testedHead": "0ef40db82778027f628250f9c31b44a44543d303",
+      "sourceFingerprint": "14d4968ef42a14379e4561c074a89d373aa52e9e6b0449dc57e35f20ae287470",
+      "context": "Node22.22.2/npm10.9.9. Source frozen throughout checks; at most two task-level commands concurrent. Local Vitest default config uses explicit worker1 and original strict timing; preflight canonical worker2 and actual BASE_SHA=0ef40db82778027f628250f9c31b44a44543d303. Native PG16.14 on local marked dx_m01_acceptance_test_dc924aaea2 oid694046, low-privilege dx_rework_test; four full local suites, no name filtering. Remote Full uses original canonical plan/configs separately. Browser mode NODE_ENV=production, Chromium151.0.7922.173: original components and TEST synthetic HTTP, no live role acceptance or deployment. Browser checks are command records; their actual scenario summaries stay in original logs.",
+      "startedAt": "2026-11-05T21:06:44.086Z",
+      "endedAt": "2026-11-05T21:06:48.328Z",
+      "log": "/workspace/scratch/m01-p03-preflight-final.log",
+      "logSha256": "02109048d518554d7879727d1f4c7d6885e167130af944c856bc2ebb0f01c810",
       "passed": 240,
       "failed": 0,
-      "skipped": 0
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "node-tap",
+          "sha256": "02109048d518554d7879727d1f4c7d6885e167130af944c856bc2ebb0f01c810"
+        }
+      ]
     },
     {
-      "id": "m01-p02-types-fullfix",
+      "id": "m01-p03-browser-final",
+      "kind": "command",
+      "command": "node tests/acceptance/m01-production-directory-browser.mjs",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "0ef40db82778027f628250f9c31b44a44543d303",
+      "sourceFingerprint": "14d4968ef42a14379e4561c074a89d373aa52e9e6b0449dc57e35f20ae287470",
+      "context": "Node22.22.2/npm10.9.9. Source frozen throughout checks; at most two task-level commands concurrent. Local Vitest default config uses explicit worker1 and original strict timing; preflight canonical worker2 and actual BASE_SHA=0ef40db82778027f628250f9c31b44a44543d303. Native PG16.14 on local marked dx_m01_acceptance_test_dc924aaea2 oid694046, low-privilege dx_rework_test; four full local suites, no name filtering. Remote Full uses original canonical plan/configs separately. Browser mode NODE_ENV=production, Chromium151.0.7922.173: original components and TEST synthetic HTTP, no live role acceptance or deployment. Browser checks are command records; their actual scenario summaries stay in original logs.",
+      "startedAt": "2026-11-05T21:05:36.175Z",
+      "endedAt": "2026-11-05T21:05:41.701Z",
+      "log": "/workspace/scratch/m01-p03-browser-final.log",
+      "logSha256": "34e57c267affc6c2d74042e39bca55f7751ef2251c21068e11d9962c653c89e2"
+    },
+    {
+      "id": "m01-p03-technical-browser-final",
+      "kind": "command",
+      "command": "node tests/acceptance/development-technical-browser.mjs",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "0ef40db82778027f628250f9c31b44a44543d303",
+      "sourceFingerprint": "14d4968ef42a14379e4561c074a89d373aa52e9e6b0449dc57e35f20ae287470",
+      "context": "Node22.22.2/npm10.9.9. Source frozen throughout checks; at most two task-level commands concurrent. Local Vitest default config uses explicit worker1 and original strict timing; preflight canonical worker2 and actual BASE_SHA=0ef40db82778027f628250f9c31b44a44543d303. Native PG16.14 on local marked dx_m01_acceptance_test_dc924aaea2 oid694046, low-privilege dx_rework_test; four full local suites, no name filtering. Remote Full uses original canonical plan/configs separately. Browser mode NODE_ENV=production, Chromium151.0.7922.173: original components and TEST synthetic HTTP, no live role acceptance or deployment. Browser checks are command records; their actual scenario summaries stay in original logs.",
+      "startedAt": "2026-11-05T21:05:41.773Z",
+      "endedAt": "2026-11-05T21:05:50.039Z",
+      "log": "/workspace/scratch/m01-p03-technical-browser-final.log",
+      "logSha256": "28f4ac4e5323d5a79141d54bfe624f9c0d8f15a65ab380a22612a8fcd67bbcd7"
+    },
+    {
+      "id": "m01-p03-recovery-browser-final",
+      "kind": "command",
+      "command": "node tests/acceptance/document-recovery-feedback-browser.mjs",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "0ef40db82778027f628250f9c31b44a44543d303",
+      "sourceFingerprint": "14d4968ef42a14379e4561c074a89d373aa52e9e6b0449dc57e35f20ae287470",
+      "context": "Node22.22.2/npm10.9.9. Source frozen throughout checks; at most two task-level commands concurrent. Local Vitest default config uses explicit worker1 and original strict timing; preflight canonical worker2 and actual BASE_SHA=0ef40db82778027f628250f9c31b44a44543d303. Native PG16.14 on local marked dx_m01_acceptance_test_dc924aaea2 oid694046, low-privilege dx_rework_test; four full local suites, no name filtering. Remote Full uses original canonical plan/configs separately. Browser mode NODE_ENV=production, Chromium151.0.7922.173: original components and TEST synthetic HTTP, no live role acceptance or deployment. Browser checks are command records; their actual scenario summaries stay in original logs.",
+      "startedAt": "2026-11-05T21:05:50.116Z",
+      "endedAt": "2026-11-05T21:06:05.148Z",
+      "log": "/workspace/scratch/m01-p03-recovery-browser-final.log",
+      "logSha256": "e4a9b21fa6db4fd116737f6172bba0239525d68e858e674c566575dd7c87f09e"
+    },
+    {
+      "id": "m01-p03-types-final",
       "kind": "command",
       "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "258fe20b15699464c4d62797ed216cc695749f14",
-      "sourceFingerprint": "73a88f0ec0fe280f0eff59be4cfd56e95cde724004e07f169a522b8f7db7a260",
-      "context": "Current test-only native closure-summary SQL fixture correction after failed exact258 Full. Original role, revoked-role, unauthorized command and no-write assertions retained. Node22.22.2/npm10.9.9, Vitest worker1; exact BASE_SHA6e preflight nativeworker2. At most four independent bounded validation commands ran concurrently; no local PG suite ran during these commands. No production or Acceptance operation.",
-      "startedAt": "2026-11-05T20:11:23.696Z",
-      "endedAt": "2026-11-05T20:11:55.687Z",
-      "log": "/workspace/scratch/m01-p02-types-fullfix.log",
+      "testedHead": "0ef40db82778027f628250f9c31b44a44543d303",
+      "sourceFingerprint": "14d4968ef42a14379e4561c074a89d373aa52e9e6b0449dc57e35f20ae287470",
+      "context": "Node22.22.2/npm10.9.9. Source frozen throughout checks; at most two task-level commands concurrent. Local Vitest default config uses explicit worker1 and original strict timing; preflight canonical worker2 and actual BASE_SHA=0ef40db82778027f628250f9c31b44a44543d303. Native PG16.14 on local marked dx_m01_acceptance_test_dc924aaea2 oid694046, low-privilege dx_rework_test; four full local suites, no name filtering. Remote Full uses original canonical plan/configs separately. Browser mode NODE_ENV=production, Chromium151.0.7922.173: original components and TEST synthetic HTTP, no live role acceptance or deployment. Browser checks are command records; their actual scenario summaries stay in original logs.",
+      "startedAt": "2026-11-05T21:06:05.218Z",
+      "endedAt": "2026-11-05T21:06:31.951Z",
+      "log": "/workspace/scratch/m01-p03-types-final.log",
       "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e"
     },
     {
-      "id": "m01-p02-lint-fullfix",
+      "id": "m01-p03-lint-final",
       "kind": "command",
       "command": "npm run lint",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "258fe20b15699464c4d62797ed216cc695749f14",
-      "sourceFingerprint": "73a88f0ec0fe280f0eff59be4cfd56e95cde724004e07f169a522b8f7db7a260",
-      "context": "Current test-only native closure-summary SQL fixture correction after failed exact258 Full. Original role, revoked-role, unauthorized command and no-write assertions retained. Node22.22.2/npm10.9.9, Vitest worker1; exact BASE_SHA6e preflight nativeworker2. At most four independent bounded validation commands ran concurrently; no local PG suite ran during these commands. No production or Acceptance operation.",
-      "startedAt": "2026-11-05T20:11:23.705Z",
-      "endedAt": "2026-11-05T20:11:48.285Z",
-      "log": "/workspace/scratch/m01-p02-lint-fullfix.log",
+      "testedHead": "0ef40db82778027f628250f9c31b44a44543d303",
+      "sourceFingerprint": "14d4968ef42a14379e4561c074a89d373aa52e9e6b0449dc57e35f20ae287470",
+      "context": "Node22.22.2/npm10.9.9. Source frozen throughout checks; at most two task-level commands concurrent. Local Vitest default config uses explicit worker1 and original strict timing; preflight canonical worker2 and actual BASE_SHA=0ef40db82778027f628250f9c31b44a44543d303. Native PG16.14 on local marked dx_m01_acceptance_test_dc924aaea2 oid694046, low-privilege dx_rework_test; four full local suites, no name filtering. Remote Full uses original canonical plan/configs separately. Browser mode NODE_ENV=production, Chromium151.0.7922.173: original components and TEST synthetic HTTP, no live role acceptance or deployment. Browser checks are command records; their actual scenario summaries stay in original logs.",
+      "startedAt": "2026-11-05T21:06:32.024Z",
+      "endedAt": "2026-11-05T21:06:49.736Z",
+      "log": "/workspace/scratch/m01-p03-lint-final.log",
       "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763"
     },
     {
-      "id": "m01-p02-secret-fullfix-corrected",
-      "kind": "command",
-      "command": "npm run secret:scan",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "258fe20b15699464c4d62797ed216cc695749f14",
-      "sourceFingerprint": "73a88f0ec0fe280f0eff59be4cfd56e95cde724004e07f169a522b8f7db7a260",
-      "context": "Current test-only native closure-summary SQL fixture correction after failed exact258 Full. Original role, revoked-role, unauthorized command and no-write assertions retained. Node22.22.2/npm10.9.9, Vitest worker1; exact BASE_SHA6e preflight nativeworker2. At most four independent bounded validation commands ran concurrently; no local PG suite ran during these commands. No production or Acceptance operation.",
-      "startedAt": "2026-11-05T20:11:51.861Z",
-      "endedAt": "2026-11-05T20:11:52.532Z",
-      "log": "/workspace/scratch/m01-p02-secret-fullfix-corrected.log",
-      "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda"
-    },
-    {
-      "id": "m01-p02-pg-finalfix",
-      "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/integration/sourcing-pr03-postgres.test.ts tests/integration/business-anchors-clock-postgres.test.ts tests/integration/optional-tail-inspection-postgres.test.ts tests/integration/digital-journey-postgres.test.ts -t \"SLA06 dispatches released|SLA07 records factory|P13/P14 whole-order|P14 reads empty|native business occurrence anchors|optional tail inspection|V2 Journey|historical sourcing image download SQL scope\" --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-p02-pg-finalfix.json",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "93d8aaed08f88f7bad07cc8ad5196b0833ef3805",
-      "sourceFingerprint": "9a4c6fbba7ce505465351955d9efaf51dbfbdca456d70ed21d31851ae8d001be",
-      "context": "Node22.22.2/npm10.9.9. Current concentrated official Review corrections; source unchanged throughout each execution. PostgreSQL16.14 native tests use worker1 and exact local marked database dx_m01_acceptance_test_dc924aaea2/OID694046 with low-privilege dx_rework_test; preflight uses explicit BASE_SHA=6e41869d76cbd883954c711c00ad465fbe930a2d and native protocol worker2. No production or existing Acceptance scene operation. Scoped reuse captured at 2026-11-05T20:10:46.451Z while full original source still matched 9a4c6fbba7ce505465351955d9efaf51dbfbdca456d70ed21d31851ae8d001be. Entire app/domain/PG/helper/browser/config input unchanged; only the separately tested PMC unit SQL fixture changed. Original command/head/source/report preserved, not relabeled a new execution.",
-      "startedAt": "2026-11-05T19:47:40.337Z",
-      "endedAt": "2026-11-05T19:49:51.566Z",
-      "log": "/workspace/scratch/m01-p02-pg-finalfix.log",
-      "logSha256": "3f6c440948d8915c68738bbc913f19f951a1727b413482e5709ab78ea184c5af",
-      "passed": 67,
-      "failed": 0,
-      "skipped": 133,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "33510b9f56134329873cb32d42ed4d657988579802ed6579a0f39d51f05466f4"
-        }
-      ],
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "tests/integration",
-        "tests/helpers",
-        "tests/fixtures",
-        "tests/acceptance",
-        ".env.example",
-        ".gitattributes",
-        ".gitignore",
-        ".node-version",
-        ".nvmrc",
-        "eslint.config.js",
-        "package-lock.json",
-        "package.json",
-        "tsconfig.base.json",
-        "vitest.business-chain.config.ts",
-        "vitest.config.ts",
-        "vitest.postgres-immediate.config.ts"
-      ],
-      "inputFingerprint": "60a4948dd013b6492505f186f870b76e7f08639c4c076acb65760083c57596c0"
-    },
-    {
-      "id": "m01-p02-build-finalfix",
+      "id": "m01-p03-build-final",
       "kind": "command",
       "command": "npm run build --workspaces --if-present",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "93d8aaed08f88f7bad07cc8ad5196b0833ef3805",
-      "sourceFingerprint": "9a4c6fbba7ce505465351955d9efaf51dbfbdca456d70ed21d31851ae8d001be",
-      "context": "Node22.22.2/npm10.9.9. Current concentrated official Review corrections; source unchanged throughout each execution. PostgreSQL16.14 native tests use worker1 and exact local marked database dx_m01_acceptance_test_dc924aaea2/OID694046 with low-privilege dx_rework_test; preflight uses explicit BASE_SHA=6e41869d76cbd883954c711c00ad465fbe930a2d and native protocol worker2. No production or existing Acceptance scene operation. Scoped reuse captured at 2026-11-05T20:10:46.489Z while full original source still matched 9a4c6fbba7ce505465351955d9efaf51dbfbdca456d70ed21d31851ae8d001be. Entire app/domain/PG/helper/browser/config input unchanged; only the separately tested PMC unit SQL fixture changed. Original command/head/source/report preserved, not relabeled a new execution.",
-      "startedAt": "2026-11-05T19:47:41.812Z",
-      "endedAt": "2026-11-05T19:48:00.410Z",
-      "log": "/workspace/scratch/m01-p02-build-finalfix.log",
-      "logSha256": "7862e33c0f1c37e65ffa402d91ea2fbeca4c9a541ae93cf7cf292b3be9b766b7",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "tests/integration",
-        "tests/helpers",
-        "tests/fixtures",
-        "tests/acceptance",
-        ".env.example",
-        ".gitattributes",
-        ".gitignore",
-        ".node-version",
-        ".nvmrc",
-        "eslint.config.js",
-        "package-lock.json",
-        "package.json",
-        "tsconfig.base.json",
-        "vitest.business-chain.config.ts",
-        "vitest.config.ts",
-        "vitest.postgres-immediate.config.ts"
-      ],
-      "inputFingerprint": "60a4948dd013b6492505f186f870b76e7f08639c4c076acb65760083c57596c0"
+      "testedHead": "0ef40db82778027f628250f9c31b44a44543d303",
+      "sourceFingerprint": "14d4968ef42a14379e4561c074a89d373aa52e9e6b0449dc57e35f20ae287470",
+      "context": "Node22.22.2/npm10.9.9. Source frozen throughout checks; at most two task-level commands concurrent. Local Vitest default config uses explicit worker1 and original strict timing; preflight canonical worker2 and actual BASE_SHA=0ef40db82778027f628250f9c31b44a44543d303. Native PG16.14 on local marked dx_m01_acceptance_test_dc924aaea2 oid694046, low-privilege dx_rework_test; four full local suites, no name filtering. Remote Full uses original canonical plan/configs separately. Browser mode NODE_ENV=production, Chromium151.0.7922.173: original components and TEST synthetic HTTP, no live role acceptance or deployment. Browser checks are command records; their actual scenario summaries stay in original logs.",
+      "startedAt": "2026-11-05T21:06:49.801Z",
+      "endedAt": "2026-11-05T21:07:03.980Z",
+      "log": "/workspace/scratch/m01-p03-build-final.log",
+      "logSha256": "33897de2afe60cb8f0d222cfa89b3367b7d6132fa4ba6014f0956e8df86e676b"
     },
     {
-      "id": "m01-p02-browser-finalfix2",
+      "id": "m01-p03-secret-final",
       "kind": "command",
-      "command": "node /workspace/scratch/m01-p02-ui-finalfix/browser.mjs",
+      "command": "npm run secret:scan",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "93d8aaed08f88f7bad07cc8ad5196b0833ef3805",
-      "sourceFingerprint": "9a4c6fbba7ce505465351955d9efaf51dbfbdca456d70ed21d31851ae8d001be",
-      "context": "Node22.22.2/npm10.9.9. Current concentrated official Review corrections; source unchanged throughout each execution. PostgreSQL16.14 native tests use worker1 and exact local marked database dx_m01_acceptance_test_dc924aaea2/OID694046 with low-privilege dx_rework_test; preflight uses explicit BASE_SHA=6e41869d76cbd883954c711c00ad465fbe930a2d and native protocol worker2. No production or existing Acceptance scene operation. Scoped reuse captured at 2026-11-05T20:10:46.526Z while full original source still matched 9a4c6fbba7ce505465351955d9efaf51dbfbdca456d70ed21d31851ae8d001be. Entire app/domain/PG/helper/browser/config input unchanged; only the separately tested PMC unit SQL fixture changed. Original command/head/source/report preserved, not relabeled a new execution.",
-      "startedAt": "2026-11-05T19:51:08.975Z",
-      "endedAt": "2026-11-05T19:51:10.802Z",
-      "log": "/workspace/scratch/m01-p02-browser-finalfix2.log",
-      "logSha256": "7828f321262987421baff3038dc2040439ed9d8e0ab10a696da39e70418e1279",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "tests/integration",
-        "tests/helpers",
-        "tests/fixtures",
-        "tests/acceptance",
-        ".env.example",
-        ".gitattributes",
-        ".gitignore",
-        ".node-version",
-        ".nvmrc",
-        "eslint.config.js",
-        "package-lock.json",
-        "package.json",
-        "tsconfig.base.json",
-        "vitest.business-chain.config.ts",
-        "vitest.config.ts",
-        "vitest.postgres-immediate.config.ts"
-      ],
-      "inputFingerprint": "60a4948dd013b6492505f186f870b76e7f08639c4c076acb65760083c57596c0"
+      "testedHead": "0ef40db82778027f628250f9c31b44a44543d303",
+      "sourceFingerprint": "14d4968ef42a14379e4561c074a89d373aa52e9e6b0449dc57e35f20ae287470",
+      "context": "Node22.22.2/npm10.9.9. Source frozen throughout checks; at most two task-level commands concurrent. Local Vitest default config uses explicit worker1 and original strict timing; preflight canonical worker2 and actual BASE_SHA=0ef40db82778027f628250f9c31b44a44543d303. Native PG16.14 on local marked dx_m01_acceptance_test_dc924aaea2 oid694046, low-privilege dx_rework_test; four full local suites, no name filtering. Remote Full uses original canonical plan/configs separately. Browser mode NODE_ENV=production, Chromium151.0.7922.173: original components and TEST synthetic HTTP, no live role acceptance or deployment. Browser checks are command records; their actual scenario summaries stay in original logs.",
+      "startedAt": "2026-11-05T21:07:04.046Z",
+      "endedAt": "2026-11-05T21:07:04.632Z",
+      "log": "/workspace/scratch/m01-p03-secret-final.log",
+      "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda"
     }
   ]
 }

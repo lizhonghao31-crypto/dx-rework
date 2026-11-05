@@ -98,12 +98,21 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  });
  it('uses current native bulk prerequisites when the last instruction and selected developer history still point to round1',async()=>{
   const ready=await f.bulkReady('无',undefined,1,f.sourcing,{stopBeforeCompletion:true}),rounds=new DevelopmentRoundService(f.db,true),old=await forms.read(f.root,ready.sourceId);
+  const designer=f.people['sample-designer']!,before=await bulk.read(designer,ready.id);
+  expect(before.publishedBasis).toMatchObject({instructionVersion:1,sourceId:ready.sourceId,sourceRound:1,technicalBasisState:'recorded',technicalArtifact:{sourceId:ready.sourceId,roundNumber:1,version:1}});
   const draft=await rounds.save(f.root,ready.sourceId,{expectedDraftVersion:0,revision:{basedOnRound:1,document:old.document!,origin:'内部发现',customerComment:'',internalProblem:'TEST新纸样待做，旧制单不能证明当前依据有效',explanation:'TEST当前大货资料与查看历史分离',categories:['版型'],affectedNodes:['纸样','裁板','车板'],outputKind:'整件样板'}},randomUUID());
   await rounds.publish(f.root,ready.sourceId,{expectedDraftVersion:draft.draftVersion,basedOnRound:1},randomUUID());
   const query=new DigitalJourneyQuery(f.db),history=await query.read(f.root,ready.id,1),node=history.stages.flatMap(s=>s.nodes).find(n=>n.key==='production_instruction'&&n.current)!;expect(history.selectedRound).toBe(1);expect(history.adoptedRound).toBe(1);
   const native=await productionReadiness(f.db,ready.id);expect(native.document?.round_number).toBe(2);expect(native.finalReasons.length).toBeGreaterThan(0);
   const projected=await query.nodeMaterials(f.root,history.id,node.instanceId,1),basis=projected.rows.find(r=>r.id==='technical-basis')!;
   expect(basis.state).not.toBe('effective');expect(basis.records[0]!.url).toContain('round=2');expect(projected.rows.find(r=>r.id==='instruction-prerequisites')?.state).not.toBe('effective');
+  const after=await bulk.read(designer,ready.id);
+  expect(after.publishedBasis).toEqual(before.publishedBasis);expect(after.instructionValid).toBe(false);expect(after.preparationId).toBeNull();
+  // Current task references and every original readiness guard remain current;
+  // the separate frozen published basis is still independently readable.
+  expect(after.reference.instructionVersion).toBeNull();
+  const exact=await new DevelopmentTechnicalService(f.db,true).history(designer,ready.sourceId,{roundNumber:1,scopeRef:'整款',kind:'artifacts',version:after.publishedBasis!.technicalArtifact!.version,view:'directory'});
+  expect(exact.items[0]).toMatchObject({artifactSetId:after.publishedBasis!.technicalArtifact!.id,roundNumber:1,version:1});expect(Object.hasOwn(exact.items[0]!,'body')).toBe(false);
  });
  it('serves current materials to an assigned bulk worker without granting its linked development source or explicit history',async()=>{
   const ready=await f.bulkReady('无',undefined,1,f.sourcing,{stopBeforeCompletion:true}),person=f.people['worker-a']!;
@@ -111,6 +120,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const worker={...person,actorRoles:[...person.actorRoles,'pattern_room_worker']},task=(await bulk.read(f.root,ready.id)).tasks.find(t=>t.taskKind==='bulk_pattern')!;
   await new DigitalProductionTaskService(f.db).reassign(f.root,task.taskId,worker.actorId,randomUUID());
   const policy=new DigitalProductionAccessPolicy(f.db);expect(await policy.allowed(worker,'order',ready.id,'technical')).toBe(true);expect(await policy.allowed(worker,'source',ready.sourceId,'technical')).toBe(false);
+  expect((await bulk.read(worker,ready.id)).publishedBasis).toMatchObject({sourceId:null,technicalArtifact:null,technicalBasisState:'restricted'});
   const projected=await nodeMaterialsFixture(f.db,worker,ready.id,'bulk_pattern');expect(projected.order.selectedRound).toBe(1);expect(projected.data.rows.some(r=>r.id==='material-fabric_receipt')).toBe(true);expect(projected.data.rows.some(r=>r.id==='technical-basis'||r.records.some(v=>v.domain==='development'))).toBe(false);
   await expect(projected.query.nodeMaterials(worker,projected.order.id,projected.node.instanceId,1)).rejects.toMatchObject({statusCode:404});
  });
