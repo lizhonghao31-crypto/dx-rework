@@ -13,6 +13,7 @@ export type AdoptedRequirementPlan = {
   targets: ReadonlyMap<string, readonly JourneyRequirementTarget[]>;
 };
 export type RequirementEvidence = Map<string, {completed: boolean; applicability: 'applicable' | 'not_applicable' | 'unknown'; reason: string; instanceIds: string[]}>;
+export type RequirementReplacement = {retiredId: string; successorId: string};
 
 /** One requirement per business kind, covering every required execution instance.
  * The catalog supplies missing obligations, not the number of returned batches.
@@ -20,7 +21,7 @@ export type RequirementEvidence = Map<string, {completed: boolean; applicability
  */
 export function journeyBusinessProgress(order: OrderJourney, asOf: string,
   plan: AdoptedRequirementPlan | null | 'unavailable' = null,
-  quantities?: JourneyBusinessQuantities, evidence: RequirementEvidence = new Map()): JourneyBusinessProgress {
+  quantities?: JourneyBusinessQuantities, evidence: RequirementEvidence = new Map(), replacements: readonly RequirementReplacement[] = []): JourneyBusinessProgress {
   const allNodes = order.stages.flatMap(stage => stage.nodes).filter(node => !isJourneyPlanningNode(node));
   const nodes = allNodes.filter(node => node.current);
   const definitions = JOURNEY_NODES.filter(node => !node.planningOnly
@@ -32,9 +33,15 @@ export function journeyBusinessProgress(order: OrderJourney, asOf: string,
   const requirements: JourneyBusinessRequirement[] = [...keys].map(([key, definition]) => {
     const instances = nodes.filter(node => keyOf(node.key) === key);
     const applicable = instances.filter(node => node.state !== 'not_applicable' && node.progressApplicability !== 'not_applicable');
+    const reachesCurrent = (id: string, seen = new Set<string>()): boolean => {
+      if (seen.has(id)) return false;
+      if (applicable.some(node => node.instanceId === id)) return true;
+      const visited = new Set(seen).add(id);
+      return replacements.filter(link => link.retiredId === id).some(link => reachesCurrent(link.successorId, visited));
+    };
     const unresolvedRetired = applicable.length ? allNodes.filter(node => keyOf(node.key) === key && !node.current
       && node.round === order.adoptedRound && node.state !== 'not_applicable' && node.progressApplicability !== 'not_applicable'
-      && !instances.some(current => current.inheritedFrom?.taskId === node.instanceId)) : [];
+      && !instances.some(current => current.inheritedFrom?.taskId === node.instanceId) && !reachesCurrent(node.instanceId)) : [];
     const unknown = !instances.length || unresolvedRetired.length > 0 || applicable.some(node => node.state === 'unavailable' || node.progressApplicability === 'unknown');
     const applicability = unknown ? 'unknown' : applicable.length ? 'applicable' : 'not_applicable';
     const reasons = !instances.length ? [`尚未取得${definition.label}的适用要求及承接记录`]

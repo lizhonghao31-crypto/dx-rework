@@ -22,6 +22,8 @@ import { DigitalProductionTaskService } from "../../apps/api/src/production-plat
 import { DigitalProductionAccessPolicy } from "../../apps/api/src/production-platform/access-policy.js";
 import { OrderClosureService } from "../../apps/api/src/production-platform/order-closure-service.js";
 import { SeriesPlanService } from "../../apps/api/src/production-platform/series-plan-service.js";
+import {ProductionInstructionService} from '../../apps/api/src/production-platform/production-instruction-service.js';
+import {readMaterialSuccessors} from '../../apps/api/src/production-platform/journey-material-successors.js';
 import { selectJourneys } from "../../apps/api/src/production-platform/journey-projection.js";
 import { DigitalJourneyQuery } from "../../apps/api/src/production-platform/journey-query.js";
 import { developmentView, patternTasks, DevelopmentWorkspaceQuery } from "../../apps/api/src/production-platform/development-workspace-query.js";
@@ -314,6 +316,26 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     const recheck=await execution.resubmit(actor(),source.sourceId,supply.taskId,randomUUID()) as {taskId:string};
     await execution.saveMaterials(rootActor,source.sourceId,{taskId:recheck.taskId,expectedDocumentVersion:published.version,expectedVersion:1,entries:initialEntries.map(row=>({...row,physical:true,quantity:true,color:true,specification:true}))},randomUUID());
     await execution.check(rootActor,source.sourceId,{taskId:recheck.taskId,expectedVerificationVersion:2,result:"通过",note:"实际核验普通辅料和主布",items:[mainId,materialId].map(materialId=>({materialId,physical:true,quantity:true,color:true,specification:true}))},randomUUID());
+    const nativeIds=[published.taskId!,supply.taskId,recheck.taskId];
+    expect(await readMaterialSuccessors(db,source.sourceId,nativeIds)).toEqual([{retiredId:published.taskId,successorId:recheck.taskId}]);
+    expect(await readMaterialSuccessors(db,source.sourceId,[published.taskId!,recheck.taskId])).toEqual([]);
+    const mother=await identity.createOrder(actor(),{...input('MATERIAL-RECOVERED'),designStyleNo:'TEST-MATERIAL-PLAN',temporaryStyleNo:null},randomUUID(),source.sourceId);
+    const instructions=new ProductionInstructionService(db,true),seed=await instructions.read(rootActor,mother.productionOrderId);
+    const instructionDocument={...seed.document,styleName:'TEST已复核物料制单',category:'上衣',date:beijingCalendarDate(new Date()),preshrink:'无需预缩' as const,
+      measurements:seed.document.measurements.map(row=>({...row,values:seed.document.sizes.map(()=>'50')}))};
+    const instruction=await instructions.save(rootActor,mother.productionOrderId,{expectedVersion:0,orderVersion:mother.version,sourceRound:seed.sourceRound,document:instructionDocument},randomUUID());
+    // Owned-schema read fixture: an already-published instruction adopts this
+    // round. Current publishing requires a separate complete technical basis;
+    // that command and its guards are not under test or changed here.
+    await db.query(`INSERT INTO digital_instruction_versions(production_order_id,version,order_version,document,order_snapshot,source_round,published_by)
+      SELECT production_order_id,version,order_version,document,$2,source_round,$3 FROM digital_instruction_documents WHERE production_order_id=$1`,[mother.productionOrderId,JSON.stringify(mother),root]);
+    await db.query('UPDATE digital_instruction_documents SET published_version=version WHERE production_order_id=$1',[mother.productionOrderId]);
+    expect(instruction.sourceRound).toBe(1);
+    const recovered=await journeys.read(rootActor,mother.productionOrderId);
+    expect(recovered.adoptedRound).toBe(1);
+    expect(recovered.businessProgress!.requirements.find(row=>row.key==='development_materials')).toMatchObject({applicability:'applicable',completed:true});
+    expect(recovered.businessProgress!.stages.find(stage=>stage.key==='development')?.unknown).toBe(0);
+    expect(recovered.stages.flatMap(stage=>stage.nodes).find(row=>row.instanceId===recheck.taskId)?.inheritedFrom).toBeNull();
     expect(await node()).toMatchObject({state:"completed",actualAt:null,completionResult:"unknown"});
     const summary=await journeys.list(rootActor,JourneyFilterSchema.parse({search:"TEST-MATERIAL-PLAN"}),true,undefined,{details:false});
     expect(summary.items.find(item=>item.sourceId===source.sourceId)?.stages.flatMap(stage=>stage.nodes).find(item=>item.instanceId===`material:${materialId}:1`)?.state).toBe("completed");

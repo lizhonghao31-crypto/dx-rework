@@ -55,6 +55,18 @@ it('P01-08: unavailable scope never becomes completed or zero missing requiremen
   const order=fixture();node(order,'bulk_cutting').state='unavailable';
   expect(journeyBusinessProgress(order,asOf,'unavailable')).toMatchObject({unknown:1,ratio:null,plan:{status:'unavailable',covered:0,due:0}});
 });
+it('native material return chains reach the current same-kind recheck without cross-round inheritance',()=>{
+  const order=fixture(),first=node(order,'development_materials');first.current=false;first.round=1;
+  const middle={...first,instanceId:'returned-recheck',key:'development_material_recheck'};
+  const current={...middle,instanceId:'current-recheck',current:true,state:'completed' as const};
+  order.stages.find(stage=>stage.key==='development')!.nodes.push(middle,current);
+  const read=(links:Array<{retiredId:string;successorId:string}>)=>journeyBusinessProgress(order,asOf,null,undefined,new Map(),links).requirements.find(row=>row.key==='development_materials')!;
+  expect(read([])).toMatchObject({applicability:'unknown',completed:false});
+  expect(read([{retiredId:first.instanceId,successorId:middle.instanceId}])).toMatchObject({applicability:'unknown',completed:false});
+  expect(read([{retiredId:first.instanceId,successorId:middle.instanceId},{retiredId:middle.instanceId,successorId:current.instanceId}])).toMatchObject({applicability:'applicable',completed:true});
+  expect(read([{retiredId:first.instanceId,successorId:middle.instanceId},{retiredId:middle.instanceId,successorId:first.instanceId}])).toMatchObject({applicability:'unknown',completed:false});
+  expect(current.inheritedFrom).toBeNull();
+});
 it('P01-09/11: actual and adopted plan use the same nine requirements and compare identities, not just equal totals',()=>{
   const order=fixture();for(const key of [selected[0]!,selected[1]!,selected[5]!])node(order,key).state='completed';
   const result=journeyBusinessProgress(order,asOf,plan());

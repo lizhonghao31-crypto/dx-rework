@@ -40,6 +40,7 @@ import {readJourneyRiskHistory} from "./journey-risk-history.js";
 import type {JourneyAuthorizedTask} from "./journey-read-scope.js";
 import {journeyBusinessProgress,journeyBusinessQuantities,type RequirementEvidence} from './journey-business-progress.js';
 import {readJourneyAdoptedPlan} from './journey-adopted-plan.js';
+import {readMaterialSuccessors} from './journey-material-successors.js';
 
 const iso = (value: Date|string|null|undefined) => value == null ? null : new Date(value).toISOString();
 type Candidate = { source: {development_type:string;source_id:string;created_by:string;design_style_no:string;temporary_style_no:string|null;customer_code:string|null;created_at:string}|null;
@@ -569,7 +570,9 @@ export class DigitalJourneyQuery {
       // retained for legacy search, never promoted to a formal business number.
       item.identity={kind:item.orderId?'production':'development',businessNumber:null,reason:item.orderId?'尚未取得本单正式业务号与母单的可信映射':'开发资料视图；尚未取得可见的正式订单'};
       const adopted=fullOrder&&oid?await readJourneyAdoptedPlan(db,oid,lines):oid?'unavailable' as const:null;
-      item.businessProgress=journeyBusinessProgress(item,asOf,adopted,businessQuantities,requirementEvidence);
+      const replacements=sourceAccess&&sid&&visibleTasks.some(task=>task.returned)
+        ?await readMaterialSuccessors(db,sid,visibleTasks.map(task=>task.task_id)):[];
+      item.businessProgress=journeyBusinessProgress(item,asOf,adopted,businessQuantities,requirementEvidence,replacements);
     }
     this.authorizedTasks.set(item,visibleTasks.map(task=>({id:task.task_id,key:journeyDefinition(task.task_kind)?.key??task.task_kind,label:journeyDefinition(task.task_kind)?.label??"业务节点",round:task.route_version})));
     return item;
