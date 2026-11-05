@@ -246,7 +246,7 @@ jobs:
           DATABASE_URL: ''
           TEST_DATABASE_URL: ''
           ACCEPTANCE_CLOCK_TEST_DATABASE_URL: ''
-        run: node node_modules/vitest/vitest.mjs run --reporter=default --reporter=json --outputFile=${{ runner.temp }}/non-db-results.json
+        run: node scripts/ci/full-gate-lanes.mjs test-non-db
 
       - name: Record lane outcomes
         id: lane

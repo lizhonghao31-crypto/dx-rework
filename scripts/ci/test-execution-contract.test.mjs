@@ -5,7 +5,7 @@ import {mkdtempSync,readFileSync,writeFileSync,rmSync,mkdirSync,cpSync,existsSyn
 import {tmpdir} from 'node:os';
 import {join,dirname} from 'node:path';
 import {createHash} from 'node:crypto';
-import {postgresPlan,configForSuite,assertSuiteResults,assertExecutionReceipt,executionFingerprint,fullGatePostgresPlan,POSTGRES_CHAIN_TESTS,ROOT_AUDIT_TESTS} from '../test-suite-plan.mjs';
+import {postgresPlan,configForSuite,assertSuiteResults,assertExecutionReceipt,executionFingerprint,fullGatePostgresPlan,POSTGRES_CHAIN_TESTS,ROOT_AUDIT_TESTS,assertSourcingCases,postgresTestFiles} from '../test-suite-plan.mjs';
 import {ownedPostgresSchema,createOwnedPostgresSchema,readOwnedResources,SCHEMA_PREFIXES} from '../test-resource-contract.mjs';
 import {classifyFullGatePaths} from './full-gate-risk-map.mjs';
 import {worktreeSnapshot,inspectCompatibility} from '../check-main-release-compat.mjs';
@@ -13,6 +13,20 @@ import {assertManagedSchemaCreation,resourceChangedPaths} from '../test-prefligh
 import {reconcileTimeInventory} from '../acceptance/time-site-inventory.mjs';
 const identity={database:'dx_rework_ci',username:'dx_rework_test',databaseOid:'42',serverVersion:'160015',marker:'dx-rework-isolated-test-v1'};
 const context={head:'a'.repeat(40),base:'b'.repeat(40),runId:'12',attempt:'1',identities:{default:identity},node:'22.22.2'};
+test('both sourcing partitions remain mandatory in the canonical chain and excluded from non-DB discovery',()=>{
+ const inventory=JSON.parse(readFileSync('tests/fixtures/sourcing-case-inventory.json','utf8')),files=Object.keys(inventory.suites),plan=postgresPlan({chain:true});
+ assert.equal(files.length,2);
+ for(const file of files){assert.equal(plan.filter(s=>s.path===file).length,1);assert.equal(configForSuite(file),'vitest.business-chain.config.ts');assert.ok(postgresTestFiles().includes(file));}
+ for(const path of ['tests/helpers/sourcing-pr03-fixture.ts','tests/fixtures/sourcing-case-inventory.json',...files])assert.equal(classifyFullGatePaths([path]).businessChainSensitive,true);
+});
+test('reviewed sourcing identities reject one missing, duplicated, skipped, foreign or moved case despite matching totals',()=>{
+ const inventory=JSON.parse(readFileSync('tests/fixtures/sourcing-case-inventory.json','utf8')),files=Object.keys(inventory.suites);
+ const report={testResults:files.map(file=>({name:'/repo/'+file,assertionResults:inventory.suites[file].map(c=>({ancestorTitles:c.ancestors,title:c.title,status:'passed'}))}))};
+ assertSourcingCases(report,files,inventory);
+ const mutations=[r=>r.testResults[0].assertionResults.pop(),r=>r.testResults[0].assertionResults[1]=r.testResults[0].assertionResults[0],r=>r.testResults[0].assertionResults[0].status='skipped',r=>r.testResults[0].assertionResults[0].title='foreign',r=>r.testResults[1].assertionResults.push(r.testResults[0].assertionResults.pop()),r=>r.testResults.pop()];
+ for(const mutate of mutations){const bad=structuredClone(report);mutate(bad);assert.throws(()=>assertSourcingCases(bad,files,inventory),/SOURCING_CASE/);}
+ const bad=structuredClone(inventory);bad.suites[files[0]][1]=bad.suites[files[0]][0];assert.throws(()=>assertSourcingCases(report,files,bad),/DUPLICATE/);
+});
 test('local and CI resolve one canonical union; long correctness uses finite config, ordinary/performance keeps defaults',()=>{
  const mapped=[POSTGRES_CHAIN_TESTS[0],POSTGRES_CHAIN_TESTS[0],'tests/integration/access-postgres.test.ts'];
  const plan=postgresPlan({mapped,chain:true});assert.equal(plan.filter(r=>r.path===mapped[0]).length,1);assert.deepEqual(plan.find(r=>r.path===mapped[0]).memberships,['mapped','chain']);assert.equal(plan.length,POSTGRES_CHAIN_TESTS.length+1);

@@ -1,0 +1,865 @@
+{
+  "version": 1,
+  "sourceBaseline": "7e5fbbcebb06e5c5f4dd96e0e95defb5dbbcbf7e",
+  "suites": {
+    "tests/integration/sourcing-pr03-postgres.test.ts": [
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "adds one actionable merchandiser todo on approval and completes it on first return"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "allocates two files and 20 MB per contract version without rewriting signed history"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "allows Root fallback and does not let a recorded finance difference block dispatch"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "allows the responsible and second merchandiser to append 1+1 without granting another merchandiser access"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "anchors a pre-dispatch price decision as the real execution and transfers only its unreported remainder"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "appends a corrected template contract while retaining the original PDF and supplements"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "applies production-management same-factory prices without transfer side effects and keeps Root authority"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "applies transfer delivery with production or Root authority, preserves unchanged clients, and rejects forged or invalid dates"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "atomically returns two PDFs, preserves single-file history and guards readiness, limits and signed downloads"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "backfills a single pending contract todo for a historic approval and enqueues delivery once"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "backfills missing historical approved cutting tasks without duplicating existing or deleted sources"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "binds both authorized merchandisers to the effective transfer version, cancels old versions and completes only on current return"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "binds per-line pictures to the order and preserves them through a contract style revision"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "carries different row prices through review and freezes one immutable approval snapshot"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "checks formal/alternate duplicates, permits colors and audits confirmed repeat orders"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "covers approved orders without a date cutoff and backfills every missing historic monitor"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "creates an explicitly approved historical cycle with original microsecond precision only on apply"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "creates once, records an exact IE quote and advances the audited state"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "dispatches before finance, freezes all lines, and handles concurrent clicks without duplication"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "effective-quantity: holds a corrected price increase until owner approval and freezes its lines, crafts and delivery"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "effective-quantity: preserves an uncorrected finance-passed management price reduction"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "effective-quantity: rejects both the old quantity and a forged quantity without weakening audit guards"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "effective-quantity: rolls back a late transfer failure and retries the same key without duplicate effects"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "effective-quantity: transfers a corrected finance-passed order through the existing owner path"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "effective-quantity: transfers a corrected finance-passed order through the existing root path"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "enforces every factory-change initiator, price threshold and unlock boundary"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "enforces warehouse supervisor read-only cutting through HTTP, real grants and database authority while retaining receiving and mixed roles"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "enrolls an effective pre-approval transfer only after its real owner approval"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "freezes increased-price delivery proposals until owner approval, keeps rejected dates inactive and rejects changed contract bases"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "hides transfer uploads until the current PDF is ready and rejects all unfinished generation states"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "inherits the latest manual contract across a factory change without rewriting old documents or approvals"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "keeps approval successful when contract data is missing and freezes supplements"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "keeps historical finance and signed PDFs while Root edits an unreviewed transfer contract and finance reviews its new version"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "keeps one visible pending price request across tabs, reasons and requesters and closes all approval todos"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "keeps pending, returned, rejected and cancelled price requests from replacing effective prices"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "keeps real sourcing todos distinct across repeated owner rejection and merchandiser correction cycles"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "keeps reviewed PO history while an approved transfer activates only its frozen factory dates"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "keeps selected factory activity visible when another factory has more than twenty newer events"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "keeps subsequently supplemented photos out of the earlier node page"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "keeps unapplied template changes available after a manual edit and rejects forged template advancement"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "lets only Root append a complete contract-only edit, preserving approvals, PDFs, returns and supplier refresh inheritance"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "lets only Root logically delete without losing evidence or blocking ERP reuse"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "Mother PR05 hands over real digital correction and contract todos without rewriting history, secondary rights or task clocks"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "omits fully reported styles from incoming contracts and preserves each allocation through successive factory changes"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "permanently locks Root edits after finance difference, including drafts opened before reconciliation"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "permanently locks Root edits after finance match, including drafts opened before reconciliation"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "presents an exactly 20 MB return as read-only without consuming another slot or resetting the clock"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "preserves 27 synthetic legacy orders through reads, old ready replays and regeneration"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "preserves the previous dashboard risk when only the contract delivery date changes"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "preserves the Root-edited delivery date in price-only detail, list, approval and generated PDF while retaining historical reads"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "rechecks preview recipients and skips a concurrent signature without closing unrelated history"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "recovers an enrolled new transfer without using the historical allowlist"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "recovers missing transfer tasks explicitly with Root authorization, exact versions, atomic rollback and idempotency"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "recovers price PDF generation on the same approved request without applying it again"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "refreshes template-only, supplier-only and combined information without changing approvals or return facts"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "registers cutting roles and capabilities without assigning employees"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "rejects an undecodable contract picture before binding and permits correction with the same request key"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "rejects cutting mutations after the source sourcing case is logically deleted"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "rejects linked original pattern rework after real cutting before adding a round todo audit or wage"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "rejects out-of-range price totals before creating an approval request"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "rejects revised same-color aliases and cross-order collisions before contract regeneration"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "reopens financial review and creates one real finance todo when a fresh unreviewed revision was on a closed order"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "reports within assigned scope, corrects append-only, and completes then ships without finance"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "requires management reasons only above matching IE prices without offsetting other reductions"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "retains style-color reported quantities at the old factory and transfers only unfinished quantities with independent shipments receipts and finance"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "retains the first file when adding a second, with role and file ownership checks"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "returns an unapproved order for versioned correction and reapproval"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "reuses the transfer first-line comparison for multi-style prices and preserves dispatched/cutting facts"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "revises delayed style identities without changing approval money or production links"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "rolls back real sourcing todo completion and creation before retrying the same IE request"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "serializes a real concurrent return and explicit repair without a residual actionable todo"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "serializes concurrent approval callbacks and price approval against a transfer"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "serializes concurrent finance reconciliation and Root edits on the same order"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "serializes cumulative return slots and retries, combines size across submissions and preserves legacy excess files"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "serializes simultaneous cross-order style checks instead of accepting both silently"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "skips Shanghai Sundays for both deadline and elapsed hours"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "starts new lines without prices, records IE first, and keeps audited cutting details out of contracts"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "summarizes all filtered sourcing orders across pages, multi-colors, transfer history and read permissions"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "uses one stable business return cycle across regenerated PDF IDs and preserves legacy evidence"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "uses the actual transferred factory pilot for report-driven alerts and order-level risk todos"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "uses the same Shanghai Sunday-paused 48 hours at any database timezone"
+      },
+      {
+        "ancestors": [
+          "work analysis PostgreSQL facts"
+        ],
+        "title": "aggregates before 15-row pages and preserves archived missing initial facts"
+      },
+      {
+        "ancestors": [
+          "work analysis PostgreSQL facts"
+        ],
+        "title": "aggregates safe outcomes and only whitelisted changed field names, without sensitive values"
+      },
+      {
+        "ancestors": [
+          "work analysis PostgreSQL facts"
+        ],
+        "title": "does not expose sourcing without its separate permission and does not fabricate missing entry"
+      },
+      {
+        "ancestors": [
+          "work analysis PostgreSQL facts"
+        ],
+        "title": "has indexed diagnostic time and entity history paths with executable query plans"
+      },
+      {
+        "ancestors": [
+          "work analysis PostgreSQL facts"
+        ],
+        "title": "keeps finance independent and owner return history with exact entry/exit records"
+      },
+      {
+        "ancestors": [
+          "work analysis PostgreSQL facts"
+        ],
+        "title": "limits detailed quote work in PostgreSQL while retaining full-set counts on empty pages"
+      },
+      {
+        "ancestors": [
+          "work analysis PostgreSQL facts"
+        ],
+        "title": "preserves all price versions, quantities and four-decimal history; excludes transfer approvals"
+      },
+      {
+        "ancestors": [
+          "work analysis PostgreSQL facts"
+        ],
+        "title": "rejects mutation and unsafe fields at the new database boundary"
+      },
+      {
+        "ancestors": [
+          "work analysis PostgreSQL facts"
+        ],
+        "title": "supports outcome/date filtering while leaving absent historical failures explicitly empty"
+      },
+      {
+        "ancestors": [
+          "work analysis PostgreSQL facts"
+        ],
+        "title": "uses real actors and task members, searches related facts and does not reset entry on ordinary work reports"
+      }
+    ],
+    "tests/integration/sourcing-digital-flow-postgres.test.ts": [
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain",
+          "C05 terminal preassignment boundary"
+        ],
+        "title": "also rejects a cancelled source or order before preassignment without new commands, audits or wages"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain",
+          "C05 terminal preassignment boundary"
+        ],
+        "title": "keeps active preassignment insert/update/replay, denies unauthorized writes and rolls back an audit failure"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain",
+          "C05 terminal preassignment boundary"
+        ],
+        "title": "rejects closed-but-lifecycle-active preassignment and formal dispatch with closure as the only unmet gate, including a queued command"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain",
+          "P13/P14 whole-order 仓库主管 flow links native receiving and preserves closure facts"
+        ],
+        "title": "dispatches through native services and preserves original receiving and closure facts"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain",
+          "P13/P14 whole-order 仓库主管 flow links native receiving and preserves closure facts"
+        ],
+        "title": "keeps original cutting and QC gates before actual dispatch"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain",
+          "P13/P14 whole-order 印花 flow links native receiving and preserves closure facts"
+        ],
+        "title": "dispatches through native services and preserves original receiving and closure facts"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain",
+          "P13/P14 whole-order 印花 flow links native receiving and preserves closure facts"
+        ],
+        "title": "keeps original cutting and QC gates before actual dispatch"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain",
+          "P13/P14 whole-order 无 flow links native receiving and preserves closure facts"
+        ],
+        "title": "dispatches through native services and preserves original receiving and closure facts"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain",
+          "P13/P14 whole-order 无 flow links native receiving and preserves closure facts"
+        ],
+        "title": "keeps original cutting and QC gates before actual dispatch"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "analysis separates frozen development rounds from preparation and factory instruction versions"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "ERP V3-039 searches and displays the order customer when its development source has no customer"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "Mother PR03 freezes three PO factory promises and preserves original correction, contract, return and finance boundaries"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "P09 carries all PO quantities and owned image copies into exactly one original sourcing case"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "P09 preserves published budgets, rejects technical readers and stale or unauthorized writes"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "P10 keeps technical versions, units, date approval and budget boundaries independent"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "P11 freezes no-preshrink at publication and preserves facts, tasks and P0 across reads, sync and a different unpublished draft"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "P11 releases exactly one whole-order cutting task with concurrent preparation"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "P11 releases exactly one whole-order cutting task with none preparation"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "P11 releases exactly one whole-order cutting task with pattern-first preparation"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "P11 releases exactly one whole-order cutting task with preshrink-first preparation"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "P12 aggregates all original PO cutting facts and syncs numbers without restarting in_house"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "P12 aggregates all original PO cutting facts and syncs numbers without restarting outsourced"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "P14 reads empty receipt/packing facts before cutting for authorized users"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "P16 keeps a source-backed analysis and improvement loop inside scope and original export rights"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "R2 task document directory preserves independent budget rights and exact development round"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "receiving source regression keeps distinct PO receipts mapped and rejects cross-source repeats"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "SLA03 independent customer revision preserves the linked mother order and keeps worker access to its instruction"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "SLA04 binds original approval todos to frozen two-hour windows without resetting on return (owner)"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "SLA04 binds original approval todos to frozen two-hour windows without resetting on return (root)"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "SLA05 allows real technical preparation before pricing while preserving warehouse and cutting gates"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "SLA05 HTTP quality decisions preserve original failure, deduplicate retries and serialize competing decisions"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "SLA05 preserves a historical version-one route without retroactive fabric or preshrink gates"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "SLA06 dispatches released partial batches without losing failed QC, duplicating production, or over-sending"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "SLA06 keeps QC upload eligibility on returned batch A while later batch B is in transit"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "SLA06 retains historical whole-order dispatch without adopting batch facts or fake QC"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "SLA06 serializes Root cutting correction against stale partial dispatch and keeps the opened deadline"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "SLA07 preserves date-only deadline boundaries and duration constraints without inventing a start"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "SLA07 projects transferred factory scope as pending without erasing prior inspection history"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "SLA07 records factory inspection completion separately from quality and reporter status without a ship-sample gate"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "SLA07 records ship samples before cutting with original permissions and immutable PO facts"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "SLA08 accepts standalone historical receipt QC without borrowing an unrelated source lifecycle"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "SLA08 keeps collected, original packing and receipt corrections independent without a sample gate"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "SLA09 explicitly applies selected unfinished windows without changing P0, actual starts, completed targets or unselected parameter provenance"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "SLA09 HTTP routes enforce authentication, active role, typed inputs, signed previews and exact idempotent publication"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "SLA09 keeps sourcing work area, plan and original todo on the same explicitly applied window across the original return and correction flow"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "SLA09 publishes only new-order defaults with strict signed preview, original policy storage and active three-role permissions"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "SLA09 rejects an invalid partial included target as a known validation failure without opening another business gate"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "SLA09 rejects stale native facts and serializes concurrent commands without partial snapshots or changing business gates"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "synchronizes both digital PO aliases through the original approved sourcing revision without rewriting facts"
+      },
+      {
+        "ancestors": [
+          "sourcing PR03-PR05 PostgreSQL business chain"
+        ],
+        "title": "V2 hides deleted native sourcing decisions and dead record links from Journey"
+      }
+    ]
+  }
+}

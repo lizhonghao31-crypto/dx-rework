@@ -65,6 +65,7 @@ const isDeployment = (path) =>
   || path === "scripts/ci/full-gate-risk-map.mjs"
   || path === "scripts/ci/ci-gate-runtime.mjs"
   || path === "scripts/ci/full-gate-lanes.mjs"
+  || path === "scripts/ci/offline-deployment-plan.mjs"
   || path === "scripts/ci/pr-gate-protocol.mjs"
   || path === "scripts/ci/pr-gate-controller.mjs"
   || path === "scripts/ci/verify-actions-policy.mjs"
@@ -131,6 +132,7 @@ export const classifyFullGatePaths = (inputPaths) => {
       addAll(mappedTests, ['tests/integration/business-anchors-clock-postgres.test.ts',
         'tests/integration/production-readiness-postgres.test.ts',
         'tests/integration/sourcing-pr03-postgres.test.ts',
+        'tests/integration/sourcing-digital-flow-postgres.test.ts',
         'tests/integration/bulk-preshrink-correction-postgres.test.ts']);
     }
     if (/^apps\/api\/src\/production-platform\/journey[^/]*\.ts$/.test(path)
@@ -165,7 +167,7 @@ export const classifyFullGatePaths = (inputPaths) => {
       businessChainSensitive = true;
       domains.add("backend");
     }
-    if (["scripts/test-fixture-prerequisites.mjs","scripts/owned-command.mjs","scripts/test-execution-config.mjs","scripts/ci/test-runtime-metadata.mjs","scripts/run-business-chain-gate.mjs","scripts/test-suite-plan.mjs","scripts/test-resource-contract.mjs","scripts/test-resource-lifecycle.mjs","scripts/test-database-safety.mjs","scripts/test-preflight.mjs","tests/helpers/owned-postgres-schema.ts","vitest.config.ts","vitest.postgres-immediate.config.ts","vitest.business-chain.config.ts"].includes(path)) {
+    if (["scripts/test-fixture-prerequisites.mjs","scripts/owned-command.mjs","scripts/test-execution-config.mjs","scripts/ci/test-runtime-metadata.mjs","scripts/run-business-chain-gate.mjs","scripts/test-suite-plan.mjs","scripts/test-resource-contract.mjs","scripts/test-resource-lifecycle.mjs","scripts/test-database-safety.mjs","scripts/test-preflight.mjs","tests/helpers/owned-postgres-schema.ts","tests/fixtures/sourcing-case-inventory.json","vitest.config.ts","vitest.postgres-immediate.config.ts","vitest.business-chain.config.ts"].includes(path)) {
       businessChainSensitive = true;
       domains.add("business-chain");
     }

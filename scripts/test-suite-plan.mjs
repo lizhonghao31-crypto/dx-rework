@@ -28,6 +28,7 @@ export const POSTGRES_CHAIN_TESTS=Object.freeze([
   "tests/integration/rework-v2-n01-postgres.test.ts",
   "tests/integration/rework-v2-process-worker-preassignment-postgres.test.ts",
   "tests/integration/sourcing-pr03-postgres.test.ts",
+  "tests/integration/sourcing-digital-flow-postgres.test.ts",
   "tests/integration/production-closure-postgres.test.ts",
   "tests/integration/sample-foundation-postgres.test.ts",
   "tests/integration/sample-read-postgres.test.ts",
@@ -63,7 +64,21 @@ export function fullGatePostgresPlan(environment){
  return {status:'required',mapped,chain,plan};
 }
 export function executionFingerprint(context,plan) {
- return createHash('sha256').update(JSON.stringify({context,plan,configs:[...new Set(plan.map(s=>s.config))].sort().map(path=>[path,readFileSync(path,'utf8')]),runtime:readFileSync('scripts/test-execution-config.mjs','utf8'),executor:readFileSync('scripts/owned-command.mjs','utf8'),contract:readFileSync('scripts/test-resource-contract.mjs','utf8')})).digest('hex');
+ return createHash('sha256').update(JSON.stringify({context,plan,configs:[...new Set(plan.map(s=>s.config))].sort().map(path=>[path,readFileSync(path,'utf8')]),runtime:readFileSync('scripts/test-execution-config.mjs','utf8'),executor:readFileSync('scripts/owned-command.mjs','utf8'),contract:readFileSync('scripts/test-resource-contract.mjs','utf8'),sourcingCases:readFileSync(new URL('../tests/fixtures/sourcing-case-inventory.json',import.meta.url),'utf8')})).digest('hex');
+}
+const sourcingFiles=['tests/integration/sourcing-pr03-postgres.test.ts','tests/integration/sourcing-digital-flow-postgres.test.ts'];
+// Reviewed identities for this split only. Native JSON plus the original exit,
+// hook-error and cleanup checks; this is not a repository-wide E/D/R proof.
+export function assertSourcingCases(report,files,inventory=JSON.parse(readFileSync(new URL('../tests/fixtures/sourcing-case-inventory.json',import.meta.url),'utf8'))){
+ if(inventory?.version!==1||! /^[0-9a-f]{40}$/.test(inventory.sourceBaseline??'')||JSON.stringify(Object.keys(inventory.suites??{}).sort())!==JSON.stringify([...sourcingFiles].sort()))throw Error('SOURCING_CASE_INVENTORY_INVALID');
+ const key=(ancestors,title)=>{if(!Array.isArray(ancestors)||!ancestors.every(a=>typeof a==='string')||typeof title!=='string'||!title)throw Error('SOURCING_CASE_IDENTITY_INVALID');return JSON.stringify([ancestors,title]);};
+ for(const file of files.filter(f=>sourcingFiles.includes(f))){
+  const expected=inventory.suites[file];if(!Array.isArray(expected)||!expected.length)throw Error('SOURCING_CASE_INVENTORY_EMPTY');
+  const wanted=expected.map(c=>key(c.ancestors,c.title)).sort();if(new Set(wanted).size!==wanted.length)throw Error('SOURCING_CASE_INVENTORY_DUPLICATE');
+  const matches=report.testResults.filter(r=>r.name.endsWith('/'+file));if(matches.length!==1||!Array.isArray(matches[0].assertionResults))throw Error('SOURCING_CASE_REPORT_MISSING');
+  const actual=matches[0].assertionResults.map(c=>{if(c.status!=='passed')throw Error('SOURCING_CASE_NOT_PASSED: '+c.title);return key(c.ancestorTitles,c.title);}).sort();
+  if(JSON.stringify(actual)!==JSON.stringify(wanted))throw Error('SOURCING_CASE_SET_MISMATCH: '+file);
+ }
 }
 export function assertSuiteResults(report,files) {
  if(!Array.isArray(files)||files.length===0)throw Error('POSTGRES_EMPTY_PLAN_REJECTED');
@@ -73,6 +88,7 @@ export function assertSuiteResults(report,files) {
   if(matches.length!==1||matches[0].status!=='passed'||!matches[0].assertionResults.some(r=>r.status==='passed'))throw Error('Mapped PostgreSQL suite executed no passing tests: '+file);
  }
  if(report.testResults.length!==files.length)throw Error('POSTGRES_UNPLANNED_SUITE');
+ if(files.some(f=>sourcingFiles.includes(f)))assertSourcingCases(report,files);
 }
 export function assertExecutionReceipt(receipt,context,plan) {
  if(receipt.version!==1||receipt.status!=='passed'||receipt.cleanup!=='passed'||receipt.fingerprint!==executionFingerprint(context,plan)||JSON.stringify(receipt.context)!==JSON.stringify(context)||JSON.stringify(receipt.plan)!==JSON.stringify(plan))throw Error('POSTGRES_RECEIPT_CONTEXT_MISMATCH');

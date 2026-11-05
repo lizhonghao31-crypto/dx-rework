@@ -132,7 +132,10 @@ assert(stepBlock(full, 'Run mapped PostgreSQL sensitive-domain regressions').inc
 assert(stepBlock(full, 'Run PostgreSQL business chain for business, migration or deployment-sensitive changes').includes('--verify-receipt'), 'Chain must verify exact actual coverage instead of repeating suites');
 assert(full.includes("npm audit --omit=dev --audit-level=high"), "Full Gate must audit the production dependency graph");
 assert(full.includes("npm run secret:scan:full"), "Full Gate must scan complete Git history and first-party build artifacts");
-assert(stepBlock(full, "Full unit and integration suite without runtime DB escalation").includes("run: node node_modules/vitest/vitest.mjs run"), "Full Gate must execute the same complete Vitest suite without repeating npm pretest builds");
+assert(stepBlock(full, "Full unit and integration suite without runtime DB escalation").includes("run: node scripts/ci/full-gate-lanes.mjs test-non-db"), "Full Gate must execute the frozen non-DB plan without repeating npm pretest builds");
+const laneSource=await read('scripts/ci/full-gate-lanes.mjs');
+assert(laneSource.includes("validateNonDatabase(json(report),inputs.nonDatabase)"), "Non-DB results must match the complete frozen applicable file plan");
+assert(laneSource.includes("nonDatabaseArguments(inputs.offlineDeployment,"), "Only the bound offline-deployment applicability decision may change non-DB arguments");
 assert(!/^\s*run: npm test\s*$/m.test(full), "Full Gate must not rebuild packages through pretest");
 assert(!containsSecretsContext(quick), "Quick Gate must not receive repository or environment secrets");
 assert(!containsSecretsContext(full), "Full Gate must not receive repository or environment secrets");

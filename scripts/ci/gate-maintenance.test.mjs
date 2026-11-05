@@ -5,6 +5,7 @@ import { spawnSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {owner} from './full-gate-lanes.mjs';
+import {offlineDeploymentPlan,nonDatabaseArguments} from './offline-deployment-plan.mjs';
 
 const sources = Object.fromEntries(['quick','full'].map(mode => [mode, readFileSync(`.github/workflows/${mode === 'quick' ? 'ci' : 'full-gate'}.yml`, 'utf8')]));
 const worker = (text, id) => text.split(`\n  ${id}:\n`)[1].split(/\n {2}[a-zA-Z][\w-]*:\n/)[0];
@@ -70,9 +71,10 @@ test('web scope with no changed tests reports not applicable rather than tests p
   const result=summary('quick',steps,'success',{...scope('quick'),governance:'false',web:'true',maintenance:'false'});
   assert.equal(result.code,0);assert.match(result.text,/Run changed web unit tests \| 不适用/);
 });
-test('CI runs the original full Vitest command without changing local npm pretest or coverage',()=>{
+test('CI preserves the original full Vitest arguments for required/unknown deployment scope and local npm pretest',()=>{
   const pkg=JSON.parse(readFileSync('package.json','utf8'));assert.equal(pkg.scripts.test,'vitest run');assert.equal(pkg.scripts.pretest,'npm run build:packages');
-  assert.match(sources.full,/run: node node_modules\/vitest\/vitest.mjs run --reporter=default --reporter=json --outputFile=/);assert.doesNotMatch(workflow.full,/run: npm test/);
+  assert.match(sources.full,/run: node scripts\/ci\/full-gate-lanes.mjs test-non-db/);assert.doesNotMatch(workflow.full,/run: npm test/);
+  assert.deepEqual(nonDatabaseArguments(offlineDeploymentPlan([]),'result.json'),['node_modules/vitest/vitest.mjs','run','--reporter=default','--reporter=json','--outputFile=result.json']);
   assert.equal((sources.full.match(/run: node scripts\/ci\/light-reuse.mjs run build npm run build --workspaces --if-present/g)||[]).length,1);
 });
 const allowFiles=['.github/workflows/ci.yml','.github/workflows/full-gate.yml','scripts/ci/verify-actions-policy.mjs','scripts/ci/gate-maintenance.test.mjs','docs/governance/ci-event-cost-fix-20261023.md'];

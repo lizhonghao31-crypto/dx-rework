@@ -53,7 +53,7 @@ test('workflow dispatches both lanes only after one common bundle and aggregates
  const w=readFileSync('.github/workflows/full-gate.yml','utf8'),caller=readFileSync('.github/workflows/ci.yml','utf8');
  assert.equal((w.match(/needs: prepare/g)||[]).length,2);assert.match(w,/needs: \[prepare, non-db, postgres\]/);assert.match(w,/FULL_GATE_NEEDS: \$\{\{ toJSON\(needs\) \}\}/);
  assert.equal((w.match(/full-gate-lanes.mjs restore/g)||[]).length,2);assert.equal((w.match(/--full-gate\n/g)||[]).length,1);assert.doesNotMatch(w,/continue-on-error:|^ {4}concurrency:/m);
- assert.match(caller,/group: pr-gate-\$\{\{ needs.request.outputs.pr \}\}/);assert.match(w,/--reporter=json --outputFile=/);
+ assert.match(caller,/group: pr-gate-\$\{\{ needs.request.outputs.pr \}\}/);assert.match(w,/full-gate-lanes.mjs test-non-db/);
 });
 
 test('real producer and fresh consumer round-trip identical build bytes; stale attempt and symlink reject',()=>{

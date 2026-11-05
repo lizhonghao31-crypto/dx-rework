@@ -7,6 +7,7 @@ import {pathToFileURL} from 'node:url';
 import {checkCatalog,currentPlan,scopeFor,scopeRequired} from './ci-gate-runtime.mjs';
 import {reuseContext} from './light-reuse.mjs';
 import {fullGatePostgresPlan,postgresTestFiles,assertExecutionReceipt} from '../test-suite-plan.mjs';
+import {offlineDeploymentPlan,parseChangedPaths,nonDatabaseArguments} from './offline-deployment-plan.mjs';
 
 export const digest=value=>createHash('sha256').update(value).digest('hex');
 const git=(...args)=>execFileSync('git',args,{encoding:'utf8'}).trim();
@@ -20,9 +21,12 @@ export function expectedInputs(plan){
  const paths=git('diff','--name-only',plan.base,plan.head).split('\n').filter(Boolean);
  const scope=scopeFor(plan,paths);
  const environment={BASE_SHA:plan.base,...Object.fromEntries(Object.entries(flags).map(([k,v])=>[v,scope[k]]))};
+ const changes=execFileSync('git',['diff','--name-status','--no-renames','-z',plan.base,plan.head],{encoding:'utf8'});
+ const offlineDeployment=offlineDeploymentPlan(parseChangedPaths(changes));
  const excluded=new Set(postgresTestFiles());
+ if(!offlineDeployment.required)excluded.add(offlineDeployment.suite);
  const walk=dir=>readdirSync(dir,{withFileTypes:true}).flatMap(e=>e.isDirectory()?walk(dir+'/'+e.name):e.name.endsWith('.test.ts')?[dir+'/'+e.name]:[]);
- return {scope,environment,postgres:fullGatePostgresPlan(environment),nonDatabase:walk('tests').filter(p=>!excluded.has(p)).sort()};
+ return {scope,environment,postgres:fullGatePostgresPlan(environment),offlineDeployment,nonDatabase:walk('tests').filter(p=>!excluded.has(p)).sort()};
 }
 export function identity(plan,env=process.env){
  if(plan.kind!=='full'||plan.phase!=='final')throw Error('FULL_LANE_FINAL_REQUEST_REQUIRED');
@@ -128,6 +132,11 @@ async function cli(){
   writeFileSync(proofFile,JSON.stringify(proof));console.log('FULL_LANE_BUILD_VERIFIED: '+JSON.stringify(proof));
   if(b.compatibility)writeFileSync(join(temp,'main-release-compat.json'),JSON.stringify(b.compatibility));
   for(const [key,value]of Object.entries({...inputs.environment,BUILD_TIME:b.builtAt})){if(typeof value!=='string'||value.includes('\n')||value.includes('\r'))throw Error('FULL_ENV_VALUE_REJECTED');appendFileSync(process.env.GITHUB_ENV,`${key}=${value}\n`);}
+ }else if(command==='test-non-db'){
+  const raw=readFileSync(file),parsed=JSON.parse(raw);
+  validateBundle(parsed,{id,inputs,context:parsed.context,hash:process.env.FULL_GATE_BUNDLE_HASH,raw});
+  console.log('OFFLINE_DEPLOYMENT_PLAN: '+JSON.stringify(inputs.offlineDeployment));
+  execFileSync(process.execPath,nonDatabaseArguments(inputs.offlineDeployment,join(temp,'non-db-results.json')),{stdio:'inherit'});
  }else if(command==='record'){
   const lane=process.env.FULL_GATE_LANE,steps=JSON.parse(process.env.LANE_STEPS),status=process.env.LANE_STATUS;
   if(!['prepare','non-db','postgres'].includes(lane))throw Error('FULL_LANE_UNKNOWN');
@@ -154,6 +163,6 @@ async function cli(){
     ['## Full Gate 未通过','',error.message,'',...['prepare','non-db','postgres'].map(lane=>`- ${lane}: ${needs[lane]?.result??'missing'}`),'','失败、取消、缺少产物或清理未证均不签最终回执。',''].join('\n'));
    throw error;
   }
- }else throw Error('Expected bundle, restore, record or aggregate');
+ }else throw Error('Expected bundle, restore, test-non-db, record or aggregate');
 }
 if(import.meta.url===pathToFileURL(process.argv[1]??'').href)await cli();

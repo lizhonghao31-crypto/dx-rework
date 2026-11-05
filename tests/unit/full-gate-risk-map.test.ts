@@ -20,7 +20,7 @@ describe("Full Gate sensitive path mapping", () => {
   it("maps changed bulk requirements and their shared clock fixture to all actual consumer suites",()=>{
     for(const path of ['tests/helpers/business-anchor-fixture.ts','tests/helpers/bulk-preparation-fixture.ts','tests/helpers/bulk-preshrink-correction-fixture.ts','apps/api/src/production-platform/bulk-preshrink-correction-service.ts','apps/api/src/production-platform/bulk-sla-evidence.ts']){
       const result=classifyFullGatePaths([path]);expect(result.businessChainSensitive).toBe(true);
-      for(const suite of ['business-anchors-clock','production-readiness','sourcing-pr03','bulk-preshrink-correction'])expect(result.mappedPostgresTests).toContain(`tests/integration/${suite}-postgres.test.ts`);
+      for(const suite of ['business-anchors-clock','production-readiness','sourcing-pr03','sourcing-digital-flow','bulk-preshrink-correction'])expect(result.mappedPostgresTests).toContain(`tests/integration/${suite}-postgres.test.ts`);
       expect(()=>assertMappedPostgresTests(result.mappedPostgresTests)).not.toThrow();
     }
   });
