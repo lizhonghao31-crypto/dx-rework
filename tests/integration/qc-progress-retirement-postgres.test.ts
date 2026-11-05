@@ -93,6 +93,32 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   all=(await service.read(f.root,ready.id)).executions;const result=await nodeMaterialsFixture(f.db,f.root,ready.id,'production_reporting'),rows=result.data.rows.filter(r=>r.id.startsWith('qc-'));
   expect(rows).toHaveLength(2);expect(new Set(rows.map(r=>r.id)).size).toBe(2);expect(rows.find(r=>r.id.includes(incoming.factoryDecisionId!))?.state).toBe('present');expect(rows.find(r=>r.id.includes('-original-'))?.state).toBe('missing');expect(new Set(rows.map(r=>r.scope)).size).toBe(2);expect(all.map(e=>e.productionId)).toEqual([initial.productionId,initial.productionId]);
  });
+ it('P03-03: preserves zero-share zero-record factories including an untracked intermediate transfer without reviving current duties',async()=>{
+  const ready=await dispatch(),initial=(await service.read(qc,ready.id)).executions[0]!;
+  const root={...f.root,authorizationCapability:'sourcing:view',authorizationCapabilities:[...(f.root.authorizationCapabilities??[]),'production-reporting','sourcing:view','sourcing:factory_change:request','sourcing:factory_change:verify','sourcing:owner:approve']};
+  const transfer=async(name:string)=>{
+   const supplier=await f.access.createSupplier(f.root,CreateSupplierSchema.parse({supplierCode:'TEST-P03-'+randomUUID().slice(0,8).toUpperCase(),supplierType:'factory',supplierName:name,address:'TEST',contractEntityName:'TEST factory',partyBRepresentative:'TEST',payeeName:'TEST',bankAccount:'TEST0001',bankName:'TEST',changeReason:'TEST合法全余量转厂'}));
+   await f.sourcing.requestFactoryChange({...root,authorizationCapability:'sourcing:factory_change:request'},ready.caseId,{supplierId:supplier.supplierId,unitPrice:'12',changeReason:'TEST未生产，全部10件转入新厂'},randomUUID());
+   let change=(await f.sourcing.getCurrentFactoryChange(root,ready.caseId)).item!;
+   if(change.status==='pending_management'){await f.sourcing.decideFactoryChange({...root,authorizationCapability:'sourcing:factory_change:verify'},ready.caseId,change.factoryChangeRequestId,{decision:'approved',verificationReason:'TEST核实全余量与新厂排期'},randomUUID());change=(await f.sourcing.getCurrentFactoryChange(root,ready.caseId)).item!;}
+   if(change.status==='pending_owner')await f.sourcing.decideFactoryChange({...root,authorizationCapability:'sourcing:owner:approve'},ready.caseId,change.factoryChangeRequestId,{decision:'approved',verificationReason:'TEST批准真实转厂及合同价格'},randomUUID());
+   const current=(await service.read(qc,ready.id)).executions;expect(current).toHaveLength(1);return current[0]!;
+  };
+  const middle=await transfer('TEST中间厂（未开始监督）');
+  expect(middle.factoryDecisionId).not.toBe(initial.factoryDecisionId);expect(middle.trackingId).toBeNull();
+  const incoming=await transfer('TEST现承接厂');expect(incoming.lines.map(l=>l.quantity)).toEqual([10]);
+  const before=(await f.db.query('SELECT (SELECT count(*) FROM digital_qc_tracking_starts) tracking,(SELECT count(*) FROM digital_qc_progress_records) records,(SELECT count(*) FROM sourcing_production_reports) reports,(SELECT count(*) FROM digital_production_tasks) tasks,(SELECT count(*) FROM audit_events) audits')).rows[0];
+  const sheet=await service.read(qc,ready.id),again=await service.read(qc,ready.id);
+  expect(sheet.executions.map(e=>e.factoryDecisionId)).toEqual([incoming.factoryDecisionId]);expect(again.executions[0]!.scopeRevision).toBe(incoming.scopeRevision);
+  expect(sheet.archivedExecutions).toHaveLength(2);
+  for(const id of [initial.factoryDecisionId,middle.factoryDecisionId])expect(sheet.archivedExecutions?.find(e=>e.factoryDecisionId===id)).toMatchObject({productionId:initial.productionId,currentQuantity:0,records:[]});
+  expect((await f.db.query('SELECT count(*)::int n FROM digital_qc_tracking_starts WHERE native_production_id=$1 AND factory_decision_id=$2',[middle.productionId,middle.factoryDecisionId])).rows[0].n).toBe(0);
+  expect((await f.db.query('SELECT (SELECT count(*) FROM digital_qc_tracking_starts) tracking,(SELECT count(*) FROM digital_qc_progress_records) records,(SELECT count(*) FROM sourcing_production_reports) reports,(SELECT count(*) FROM digital_production_tasks) tasks,(SELECT count(*) FROM audit_events) audits')).rows[0]).toEqual(before);
+  await expect(service.submit(qc,ready.id,{...input(incoming,1),factoryDecisionId:initial.factoryDecisionId})).rejects.toMatchObject({code:'QC_PROGRESS_CONFLICT',statusCode:409});
+  await expect(service.adopt(f.root,ready.id,{factoryDecisionId:middle.factoryDecisionId,expectedScopeRevision:middle.scopeRevision,reason:'TEST不能恢复已退出旧厂监督'},randomUUID())).rejects.toMatchObject({code:'QC_PROGRESS_CONFLICT',statusCode:409});
+  const notices=await qcProgressNotices(f.db,Object.values(f.people),ready.id);expect(notices.every(n=>n.route.factoryDecisionId!==middle.factoryDecisionId)).toBe(true);
+  await expect(service.read(f.people['worker-a']!,ready.id)).rejects.toMatchObject({statusCode:404});
+ });
  it('requires exact assigned scope, rejects unauthorized replay, and does not grant another order of the same supplier',async()=>{
   const ready=await dispatch(),e=(await service.read(qc,ready.id)).executions[0]!,body=input(e),result=await service.submit(qc,ready.id,body);
   await expect(service.submit(ready.primary,ready.id,{...body,submissionId:randomUUID()})).rejects.toMatchObject({statusCode:403});

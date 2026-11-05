@@ -68,11 +68,17 @@ export class QcProductionProgressService{
     lines:group.rows.map(r=>({lineId:r.line_id,position:Number(r.position),poNumber:r.po_number??null,color:r.color,quantity:Number(r.quantity),completedQuantity:Number(r.completed_quantity??0)})),records:records.map(r=>this.mapRecord(r))});
   }
   const archivedExecutions=[];
-  const archives=(await db.query(`SELECT track.tracking_id,track.factory_decision_id,execution.supplier_name_snapshot FROM digital_qc_tracking_starts track
-   JOIN sourcing_production_factory_orders execution ON execution.production_order_id=track.native_production_id AND execution.factory_decision_id IS NOT DISTINCT FROM track.factory_decision_id WHERE track.production_order_id=$1`,[id])).rows;
-  for(const archive of archives){if(executions.some(e=>e.trackingId===archive.tracking_id))continue;
-   const records=(await db.query('SELECT * FROM digital_qc_progress_records WHERE tracking_id=$1 ORDER BY revision DESC',[archive.tracking_id])).rows;
-   if(records.length)archivedExecutions.push({factoryDecisionId:archive.factory_decision_id,supplierName:archive.supplier_name_snapshot,records:records.map(r=>this.mapRecord(r))});
+  // Native execution identity survives a complete remainder transfer, even
+  // before the old factory has a tracking start or its first QC observation.
+  const archives=(await db.query(`SELECT execution.production_order_id,execution.factory_decision_id,execution.supplier_name_snapshot,execution.quantity,track.tracking_id
+   FROM digital_production_child_links link JOIN sourcing_production_factory_orders execution ON execution.production_order_id=link.child_id
+   LEFT JOIN digital_qc_tracking_starts track ON track.production_order_id=link.production_order_id AND track.native_production_id=execution.production_order_id AND track.factory_decision_id IS NOT DISTINCT FROM execution.factory_decision_id
+   WHERE link.module='production' AND link.production_order_id=$1
+   ORDER BY execution.dispatched_at,execution.production_order_id,execution.factory_decision_id NULLS FIRST`,[id])).rows;
+  for(const archive of archives){if(executions.some(e=>e.productionId===archive.production_order_id&&e.factoryDecisionId===archive.factory_decision_id))continue;
+   const records=archive.tracking_id?(await db.query('SELECT * FROM digital_qc_progress_records WHERE tracking_id=$1 ORDER BY revision DESC',[archive.tracking_id])).rows:[];
+   const quantity=archive.quantity==null?null:Number(archive.quantity);
+   archivedExecutions.push({productionId:archive.production_order_id,factoryDecisionId:archive.factory_decision_id,supplierName:archive.supplier_name_snapshot,currentQuantity:quantity!==null&&Number.isSafeInteger(quantity)&&quantity>=0?quantity:null,records:records.map(r=>this.mapRecord(r))});
   }
   return {archivedExecutions,viewerId:actor.actorId,orderId:id,asOf:time.now,canManage:isDigitalLeader(actor)&&await memberCanWriteModule(db,actor.actorId,'sourcing'),canRecord:executions.some(e=>e.canRecord),paused:lifecycle.paused||lifecycle.closed,
    qcUserId:task?.assignee_id??null,qcName:task?.assignee_name??null,qualityLeadId:settings?.quality_lead_id??null,qualityLeadName:settings?.lead_name??null,settingsVersion:Number(settings?.version??0),executions};

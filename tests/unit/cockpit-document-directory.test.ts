@@ -26,7 +26,7 @@ it("binds two return revisions per contract document, independently of decision 
 });
 it("loads historical instruction versions on demand and refuses a latest-version fallback",async()=>{
  const requests:string[]=[],read:CockpitDocumentReader=async path=>{requests.push(path);return path.includes("?version=2")?{order:{productionOrderId:oid},version:2,sourceRound:1,document:{images:[{attachmentId:"OLD-PHOTO",kind:"款图"}]}}:{order:{productionOrderId:oid},version:7,versions:[7,2],document:{images:[{attachmentId:"LATEST-PHOTO",kind:"款图"}]}};};
- const data=await loadCockpitDocumentCategory(order,"instruction",read,signal);expect(requests).toHaveLength(1);const old=await loadCockpitDocumentEntry(data.entries[1]!,read,signal);expect(requests.at(-1)).toContain("version=2");expect(old.files?.[0]?.id).toBe("OLD-PHOTO");expect(JSON.stringify(old)).not.toContain("LATEST-PHOTO");await expect(loadCockpitDocumentEntry(data.entries[1]!,async()=>({version:7,document:{}}),signal)).rejects.toThrow("所选历史版本");
+ const data=await loadCockpitDocumentCategory(order,"instruction",read,signal);expect(requests).toHaveLength(1);const old=await loadCockpitDocumentEntry(data.entries[1]!,read,signal);expect(requests.at(-1)).toContain("version=2");expect(old.files?.[0]?.id).toBe("OLD-PHOTO");expect(JSON.stringify(old)).not.toContain("LATEST-PHOTO");await expect(loadCockpitDocumentEntry(data.entries[1]!,async()=>({order:{productionOrderId:oid},version:7,document:{}}),signal)).rejects.toThrow("所选历史版本");
 });
 it("does not turn denied budget metadata into missing or expose a directory entry",async()=>{
  const error=Object.assign(new Error("budget denied"),{status:403});await expect(loadCockpitDocumentCategory(order,"budget",async()=>{throw error;},signal)).rejects.toBe(error);

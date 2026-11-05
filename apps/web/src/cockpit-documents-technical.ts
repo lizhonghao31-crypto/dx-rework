@@ -6,7 +6,20 @@ const plotFile=(sid:string,id:string,name:string)=>file(id,name,`digital-product
 function artifactEntry(a:Row,sid:string,scope:string,adopted=false):CockpitDocumentEntry{
  check((a.sourceId===sid||a.viaSourceId===sid)&&positiveValue(a.version)&&positiveValue(a.roundNumber)&&textValue(a.artifactSetId));
  const inherited=Boolean(a.viaSourceId===sid&&(a.sourceId!==sid||a.roundNumber!==a.viaRoundNumber)),readRound=inherited?num(a.viaRoundNumber):num(a.roundNumber);
- return {id:`artifact:${a.artifactSetId}:${a.version}`,label:`${adopted?'本轮引用 · ':''}${inherited?'沿用原来源 ':''}第 ${a.roundNumber} 轮技术成果 v${a.version} · ${a.status==='published'?'已发布':'草稿'}`,at:str(a.createdAt),by:str(a.createdByName),note:adopted?'本轮引用与最近上传分别保留；展开查看本版 PLT、结构用量及尺寸表':`开发单据 v${a.documentVersion??'未核实'}`,url:a.taskId?`/ui/digital-production?task=${a.taskId}&taskView=read`:undefined,load:{kind:'technical_artifact',path:historyPath(sid,readRound,'artifacts',{version:num(a.version),scopeRef:scope,...(inherited?{adoptedArtifactId:str(a.artifactSetId)}:{})}),id:sid,version:num(a.version),round:String(readRound),scopeRef:scope}};
+ return {id:`artifact:${a.artifactSetId}:${a.version}`,label:`${adopted?'本轮引用 · ':''}${inherited?'沿用原来源 ':''}第 ${a.roundNumber} 轮技术成果 v${a.version} · ${a.status==='published'?'已发布':'草稿'}`,at:str(a.createdAt),by:str(a.createdByName),metadata:[{label:a.status==='published'?'原成果发布时间':'原成果保存时间',at:str(a.createdAt),by:str(a.createdByName)},...(inherited?[{label:'本轮沿用时间',at:str(a.inheritedAt),by:''}]:[])],note:`原成果对应开发单据 v${a.documentVersion??'未核实'}${adopted?'；本轮引用与最近上传分别保留，展开查看本版 PLT、结构用量及尺寸表':''}`,url:a.taskId?`/ui/digital-production?task=${a.taskId}&taskView=read`:undefined,load:{kind:'technical_artifact',path:historyPath(sid,readRound,'artifacts',{version:num(a.version),scopeRef:scope,...(inherited?{adoptedArtifactId:str(a.artifactSetId)}:{})}),id:sid,version:num(a.version),round:String(readRound),scopeRef:scope}};
+}
+/** Published instruction references are exact. Metadata and body each use the
+ * original source reader; neither a missing version nor a denial falls back. */
+export async function productionTechnicalDirectory(entry:CockpitDocumentEntry,read:CockpitDocumentReader,signal:AbortSignal):Promise<CockpitDocumentResult>{
+ const l=entry.load,ref=l?.productionArtifact;check(Boolean(l&&ref&&positiveValue(l.instructionVersion)));
+ const sid=l!.id,round=Number(l!.round),scope=l!.scopeRef??'整款',inherited=ref!.sourceId!==sid||ref!.roundNumber!==round;
+ const data=row(await read(historyPath(sid,round,'artifacts',{version:ref!.version,directory:true,scopeRef:scope,...(inherited?{adoptedArtifactId:ref!.id}:{})}),signal));
+ sameEntity(data,'sourceId',sid,'生产采用成果');check(data.roundNumber===round&&data.scopeRef===scope);
+ const found=checkedRows(data.items).find(a=>a.artifactSetId===ref!.id&&a.version===ref!.version);
+ if(!found)throw new Error('未读到制单所采用的精确成果版本；请核对原制单，不会替换为最新成果');
+ check(found.sourceId===ref!.sourceId&&found.roundNumber===ref!.roundNumber&&found.scopeRef===scope);
+ const item=artifactEntry(found,sid,scope,true);
+ return result([{...item,label:`制单第 ${l!.instructionVersion} 版采用 · ${item.label}`}],'本版已发布制单采用的原成果；较新开发资料和当前技术有效性在原开发分类分别核对，不能用新上传覆盖本版引用。');
 }
 function commentEntry(c:Row,sid:string,round:number,scope:string):CockpitDocumentEntry{
  check(positiveValue(c.version)&&textValue(c.commentId)&&typeof c.isFinal==='boolean');

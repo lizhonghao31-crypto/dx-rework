@@ -1,7 +1,7 @@
 import type {OrderJourney} from '@dx-rework/contracts/digital-production-journey';
 import type {CockpitDocumentCategory} from './cockpit-document-catalog.js';
 import type {CockpitDocumentEntry,CockpitDocumentReader,CockpitDocumentResult} from './cockpit-document-data.js';
-import {technicalDirectory,quotationDirectory,loadTechnicalEntry} from './cockpit-documents-technical.js';
+import {technicalDirectory,productionTechnicalDirectory,quotationDirectory,loadTechnicalEntry} from './cockpit-documents-technical.js';
 import {preparationDirectory,bulkTechnicalDirectory,qcDirectory,factoryDirectory,receivingDirectory,reworkDirectory,loadProductionEntry} from './cockpit-documents-production.js';
 export async function loadExtendedCockpitCategory(order:OrderJourney,key:CockpitDocumentCategory,read:CockpitDocumentReader,signal:AbortSignal):Promise<CockpitDocumentResult|undefined>{
  if(key==='development_technical')return technicalDirectory(order,read,signal);
@@ -15,7 +15,7 @@ export async function loadExtendedCockpitCategory(order:OrderJourney,key:Cockpit
 }
 export async function loadExtendedCockpitEntry(entry:CockpitDocumentEntry,read:CockpitDocumentReader,signal:AbortSignal){
  if(entry.load?.kind==='technical_directory'){
-  const data=await technicalDirectory({sourceId:entry.load.id,selectedRound:Number(entry.load.round)},read,signal,entry.load.scopeRef);return {...entry,load:undefined,children:data.entries,note:data.note};
+  const data=entry.load.productionArtifact?await productionTechnicalDirectory(entry,read,signal):await technicalDirectory({sourceId:entry.load.id,selectedRound:Number(entry.load.round)},read,signal,entry.load.scopeRef);return {...entry,load:undefined,children:data.entries,note:data.note};
  }
  return await loadTechnicalEntry(entry,read,signal)??await loadProductionEntry(entry,read,signal);
 }

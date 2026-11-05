@@ -1,7 +1,7 @@
 import type {OrderJourney} from "@dx-rework/contracts/digital-production-journey";
 export type CockpitDocumentFile={id:string;name:string;path:string|null;note?:string|undefined;at?:string|undefined;by?:string|undefined};
 export type CockpitDocumentMetadataFact={label:string;at:string;by:string};
-export type CockpitDocumentEntry={sourceOnly?:boolean;id:string;label:string;url?:string|undefined;note?:string|undefined;at?:string|undefined;by?:string|undefined;metadata?:CockpitDocumentMetadataFact[];files?:CockpitDocumentFile[];children?:CockpitDocumentEntry[];load?:{kind:string;path:string;id:string;version?:number|undefined;round?:string|undefined;cursor?:number|undefined;scopeRef?:string|undefined;resourceKind?:"order"|"source"|undefined}|undefined};
+export type CockpitDocumentEntry={sourceOnly?:boolean;id:string;label:string;url?:string|undefined;note?:string|undefined;at?:string|undefined;by?:string|undefined;metadata?:CockpitDocumentMetadataFact[];files?:CockpitDocumentFile[];children?:CockpitDocumentEntry[];load?:{kind:string;path:string;id:string;version?:number|undefined;round?:string|undefined;cursor?:number|undefined;scopeRef?:string|undefined;resourceKind?:"order"|"source"|undefined;productionArtifact?:{id:string;version:number;sourceId:string;roundNumber:number}|undefined;instructionVersion?:number|undefined}|undefined};
 export type CockpitDocumentResult={state:"created"|"missing"|"not_applicable"|"unknown";entries:CockpitDocumentEntry[];note?:string;nextPage?:number|null};
 export type CockpitDocumentReader=(path:string,signal:AbortSignal)=>Promise<unknown>;
 export type Row=Record<string,unknown>;
