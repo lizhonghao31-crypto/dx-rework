@@ -7,22 +7,19 @@ const detail=value=>typeof value==='string'&&value.trim().length>=20&&value.leng
 async function bytes(path,max=32*1024*1024){const stat=await lstat(path);if(!stat.isFile()||stat.isSymbolicLink()||stat.size>max)throw Error('regular bounded report required');return readFile(path);}
 function logTotals(body){
  const clean=body.replace(new RegExp(String.fromCharCode(27)+'\\[[0-?]*[ -/]*[@-~]','g'),'');
- if(/^# pass \d+$/m.test(clean))return closeoutReport(clean,'node-tap');
- if(clean.trimStart().startsWith('{')){
-  // A command may print complete JSON metadata lines before Vitest's text
-  // summaries. Only a whole JSON document is a JSON test report. Never turn
-  // a failed or truncated report into passing evidence via a later summary.
-  let document;
-  try{document=JSON.parse(clean);}catch{
-   for(const line of clean.trimStart().split('\n')){
-    const text=line.trim();if(!text)continue;
-    if(!text.startsWith('{')&&!text.startsWith('['))break;
-    let record;try{record=JSON.parse(text);}catch{throw Error('malformed JSON command log');}
-    if(!record||Array.isArray(record)||typeof record!=='object'||['testResults','numPassedTests','numFailedTests','numPendingTests'].some(key=>Object.hasOwn(record,key)))throw Error('malformed JSON test report');
-   }
-  }
-  if(document!==undefined)return closeoutReport(clean,'vitest-json');
+ // A whole JSON report is validated as such, including failed reports. For
+ // mixed logs, inspect every standalone JSON record before choosing a text
+ // format: banners, TAP or a passing summary must never hide contradictory
+ // report bytes elsewhere in the same log. Only complete metadata is allowed.
+ let document;
+ if(/^[{[]/.test(clean.trimStart()))try{document=JSON.parse(clean);}catch{/* mixed log or malformed record, checked below */}
+ if(document!==undefined)return closeoutReport(clean,'vitest-json');
+ for(const line of clean.split('\n')){
+  const text=line.trim();if(!text.startsWith('{')&&!text.startsWith('['))continue;
+  let record;try{record=JSON.parse(text);}catch{throw Error('malformed JSON command log');}
+  if(!record||Array.isArray(record)||typeof record!=='object'||['testResults','numPassedTests','numFailedTests','numPendingTests'].some(key=>Object.hasOwn(record,key)))throw Error('malformed JSON test report');
  }
+ if(/^# pass \d+$/m.test(clean))return closeoutReport(clean,'node-tap');
  const summaries=[...clean.matchAll(/^\s*Tests\s+([^\n]+)$/gm)].map(m=>m[1]);
  if(!summaries.length||/^\s*Test Files\s+[^\n]*\d+ failed/m.test(clean))throw Error('actual command log has no successful test result');
  const total=word=>summaries.reduce((sum,line)=>sum+Number(line.match(new RegExp('(\\d+) '+word))?.[1]??0),0);
