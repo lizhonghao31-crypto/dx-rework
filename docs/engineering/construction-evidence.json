@@ -40,7 +40,10 @@
       "checks": [
         "dx-review-protocol-fixed",
         "dx-review-target-fixed",
-        "dx-review-lint"
+        "dx-review-lint",
+        "dx-review-shared",
+        "dx-review-full-non-db",
+        "dx-review-full-pg"
       ]
     }
   ],
@@ -102,6 +105,81 @@
       "sourceFingerprint": "6d8051e4ff0cb82de17bee63b60f2edf827430da838c88c5a7fd0e885ae9783a",
       "testedHead": "05f97ef674d6d064ddfbcdc4298500cfe1b7d35f",
       "context": "After Review P1 risk-map registration fix; actual current working source. Prior full-suite evidence remains historical until rerun."
+    },
+    {
+      "command": "python3 /tmp/dx-pr1-review-validation/prepare.py",
+      "exitCode": 0,
+      "startedAt": "2026-11-05T00:48:00.750232+00:00",
+      "endedAt": "2026-11-05T00:48:21.163925+00:00",
+      "logSha256": "7d53d0e783f18b8e09401db4aafa49e4917cdba3f0db47e891d48ff6cc8f13eb",
+      "logPath": "/tmp/dx-review-shared.log",
+      "log": "/tmp/dx-review-shared.log",
+      "id": "dx-review-shared",
+      "kind": "command",
+      "status": "passed",
+      "testedHead": "b8e93c0b483dae20ac8117a7223b9074ad150c00",
+      "sourceFingerprint": "6d8051e4ff0cb82de17bee63b60f2edf827430da838c88c5a7fd0e885ae9783a",
+      "context": "Review P1 fixed candidate, Node22.22.2/npm10.9.9. Separate clean detached checkouts, verified shared build; same local 4 CPU host, not hosted Full. Canonical PG16 disposable low-privilege DB with actual cleanup; PG13 and recovery/history/package tails await official Full."
+    },
+    {
+      "command": "python3 /tmp/dx-pr1-review-validation/lane.py non-db",
+      "exitCode": 0,
+      "startedAt": "2026-11-05T00:48:26.173409+00:00",
+      "endedAt": "2026-11-05T00:52:29.567575+00:00",
+      "logSha256": "1481c24f8033ee09e42dc3f97ebc9cc66de4ae4ae1d09aea9cfcd739f6e4e9e1",
+      "logPath": "/tmp/dx-review-full-non-db.log",
+      "log": "/tmp/dx-review-full-non-db.log",
+      "id": "dx-review-full-non-db",
+      "kind": "tests",
+      "status": "passed",
+      "testedHead": "b8e93c0b483dae20ac8117a7223b9074ad150c00",
+      "sourceFingerprint": "6d8051e4ff0cb82de17bee63b60f2edf827430da838c88c5a7fd0e885ae9783a",
+      "context": "Review P1 fixed candidate, Node22.22.2/npm10.9.9. Separate clean detached checkouts, verified shared build; same local 4 CPU host, not hosted Full. Canonical PG16 disposable low-privilege DB with actual cleanup; PG13 and recovery/history/package tails await official Full.",
+      "resultReports": [
+        {
+          "path": "/tmp/dx-pr1-review-validation/dx-review-full-non-db-report-0.json",
+          "format": "vitest-json",
+          "sha256": "c1015db005951f74a3e17008416b4ce484695a18800dde5f457e085b951931dd"
+        }
+      ],
+      "passed": 3189,
+      "failed": 0,
+      "skipped": 11
+    },
+    {
+      "command": "python3 /tmp/dx-pr1-review-validation/lane.py postgres",
+      "exitCode": 0,
+      "startedAt": "2026-11-05T00:48:27.701680+00:00",
+      "endedAt": "2026-11-05T00:53:59.567243+00:00",
+      "logSha256": "4a6cb26affc5c37c26a8b22d948705bdf7fc50426c9438e4c0f2ad2cf304329f",
+      "logPath": "/tmp/dx-review-full-pg.log",
+      "log": "/tmp/dx-review-full-pg.log",
+      "id": "dx-review-full-pg",
+      "kind": "tests",
+      "status": "passed",
+      "testedHead": "b8e93c0b483dae20ac8117a7223b9074ad150c00",
+      "sourceFingerprint": "6d8051e4ff0cb82de17bee63b60f2edf827430da838c88c5a7fd0e885ae9783a",
+      "context": "Review P1 fixed candidate, Node22.22.2/npm10.9.9. Separate clean detached checkouts, verified shared build; same local 4 CPU host, not hosted Full. Canonical PG16 disposable low-privilege DB with actual cleanup; PG13 and recovery/history/package tails await official Full.",
+      "resultReports": [
+        {
+          "path": "/tmp/dx-pr1-review-validation/dx-review-full-pg-report-0.json",
+          "format": "vitest-json",
+          "sha256": "0ec2308a6ab89c8c536759384745fcacdbd4ac682b4a628960fa2b328b126b04"
+        },
+        {
+          "path": "/tmp/dx-pr1-review-validation/dx-review-full-pg-report-1.json",
+          "format": "vitest-json",
+          "sha256": "5af6ff3d0f9ee09b3e6ed02d3ea5eb927a516abdd716c5717f56783c91737a54"
+        },
+        {
+          "path": "/tmp/dx-pr1-review-validation/dx-review-full-pg-report-2.json",
+          "format": "vitest-json",
+          "sha256": "02d64b48ba2e9d0df6641eba9f98881b1f2f835e211a99c3900074c47f3b451f"
+        }
+      ],
+      "passed": 415,
+      "failed": 0,
+      "skipped": 0
     }
   ]
 }
