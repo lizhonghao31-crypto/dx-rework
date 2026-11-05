@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import {owner} from './full-gate-lanes.mjs';
 
 const sources = Object.fromEntries(['quick','full'].map(mode => [mode, readFileSync(`.github/workflows/${mode === 'quick' ? 'ci' : 'full-gate'}.yml`, 'utf8')]));
 const worker = (text, id) => text.split(`\n  ${id}:\n`)[1].split(/\n {2}[a-zA-Z][\w-]*:\n/)[0];
@@ -23,10 +24,12 @@ function summary(mode, steps, state='success', flags=scope(mode)) {
 test('both workflows use the same actual-outcome renderer and every step is catalogued once',()=>{
   assert.equal(renderer('quick'),renderer('full'));
   for(const mode of ['quick','full']) {
-    const ids=[...workflow[mode].matchAll(/^ {8}id: (\w+)$/gm)].map(match=>match[1]).filter(id=>id!=='summary');
-    assert.deepEqual(catalog(mode).map(row=>row[0]),ids);
+    const source=mode==='full'?['prepare','non-db','postgres'].map(id=>worker(sources.full,id)).join('\n'):workflow[mode];
+    const ids=[...source.matchAll(/^ {8}id: (\w+)$/gm)].map(match=>match[1]).filter(id=>!['summary','lane','bundle','bundle_upload'].includes(id));
+    assert.deepEqual(catalog(mode).map(row=>row[0]).sort(),ids.sort());
+    if(mode==='full')for(const [id]of catalog(mode))assert.match(worker(sources.full,owner(id)),new RegExp('id: '+id+'\\n'));
     assert.equal(new Set(ids).size,ids.length);
-    for(const [id,label] of catalog(mode)) assert.ok(workflow[mode].includes(`      - name: ${label}\n        id: ${id}`));
+    for(const [id,label] of catalog(mode)) assert.ok(source.includes(`      - name: ${label}\n        id: ${id}`));
   }
 });
 for(const mode of ['quick','full']) {
@@ -69,8 +72,8 @@ test('web scope with no changed tests reports not applicable rather than tests p
 });
 test('CI runs the original full Vitest command without changing local npm pretest or coverage',()=>{
   const pkg=JSON.parse(readFileSync('package.json','utf8'));assert.equal(pkg.scripts.test,'vitest run');assert.equal(pkg.scripts.pretest,'npm run build:packages');
-  assert.match(workflow.full,/run: node node_modules\/vitest\/vitest.mjs run\n/);assert.doesNotMatch(workflow.full,/run: npm test/);
-  assert.equal((workflow.full.match(/run: node scripts\/ci\/light-reuse.mjs run build npm run build --workspaces --if-present/g)||[]).length,1);
+  assert.match(sources.full,/run: node node_modules\/vitest\/vitest.mjs run --reporter=default --reporter=json --outputFile=/);assert.doesNotMatch(workflow.full,/run: npm test/);
+  assert.equal((sources.full.match(/run: node scripts\/ci\/light-reuse.mjs run build npm run build --workspaces --if-present/g)||[]).length,1);
 });
 const allowFiles=['.github/workflows/ci.yml','.github/workflows/full-gate.yml','scripts/ci/verify-actions-policy.mjs','scripts/ci/gate-maintenance.test.mjs','docs/governance/ci-event-cost-fix-20261023.md'];
 const approvedEnv={GITHUB_REPOSITORY:'lizhonghao31-crypto/dx-rework',HEAD_REPO:'lizhonghao31-crypto/dx-rework',GITHUB_HEAD_REF:'fix/ci-event-cost-summary',BASE_SHA:'cab8412cbd4d0141044f05cd71f2102e874b518f'};

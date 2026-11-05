@@ -26,3 +26,13 @@
 summary按实际outcome列成功、失败、取消、不适用及未执行。render/清理成功不等于Gate成功。操作者核证不是平台保护；未知服务器设置保持未知，不擅改required checks。用户明确接受某PR剩余风险而直接合并时，保留失败、未验范围和原文来源，绝不伪造Gate成功；该单次决定不扩大成长期豁免。
 
 Review服务恢复、连接器/CLI传输差异及有效授权按[协议](review-first-final-head-20261027.md)处理，不为无关平台波动重复跑全部业务检查。
+
+## 完整非DB与PG独立执行（PR1）
+
+Full由公共准备、完整非DB、完整PG和最终聚合组成。公共准备仍核准确请求、风险、现有light来源、构建与静态检查；两个测试job只依赖该准备job，各自从准确Head检出并锁定安装。共享构建快照绑定head/base/PR、run/attempt、源码树/锁文件、Node/npm、镜像及构建环境、构建时间、风险和规范文件计划；下载后核整个快照摘要与逐文件内容、路径及权限，再恢复，拒绝tracked覆盖与符号链接。PG初始迁移、角色与各版本/恢复演练继续在其自己的隔离环境内执行；它不接收非DB测试产生的文件或数据库。
+
+PG canonical普通/immediate/long顺序、worker、测试时限、mapped/chain/Root去重和cleanup规则保持。Full concurrency移到已完成事件选择的调用job，覆盖整个可复用工作流，避免兄弟job争用同一组而互相串行或取消。每个实际执行job有有限预算；最终聚合只有元数据操作。拆分后的各job预算不是原单worker总墙钟上限，不能把预算值当实测耗时。
+
+最终聚合要求所有job实际成功、独立lane回执同一请求/run/attempt/共享构建摘要、完整且无重叠的原检查分区；按原风险规则拒绝缺项、失败、取消和必需检查skip。PG沿用原receipt的计划/上下文/cleanup核验；原生非DB JSON及PG receipt（含原执行结果）分别留为artifact。上传或汇总失败也不签成功，之后的原最终认证继续校验完整tuple。
+
+证据边界：该改造保持执行命令、文件集合与业务断言，不建立第十六节建议的独立case期望目录。v1 PG receipt仍只证明文件计划、每文件至少一项通过和清理；不能宣称所有应有case已完整执行。非DB原有acceptance PG文件无TEST_DATABASE_URL时的11项skip仍单独披露，不升级为PG通过或新增豁免。PR2的选测、分片、case目录或重试复用另定范围。没有同范围实际运行数据前，不报告提速比例或费用下降。

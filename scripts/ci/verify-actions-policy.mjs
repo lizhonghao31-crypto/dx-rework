@@ -47,8 +47,12 @@ assert(JSON.stringify(branches) === JSON.stringify(["main", "release/digital-pro
 assert(quick.includes("timeout-minutes: 5"), "Quick Gate timeout must stay at 5 minutes");
 assert(countOccurrences(quick, 'timeout-minutes:') === 3 && countOccurrences(quick, 'timeout-minutes: 2') === 2,
   "Only two bounded request/certification metadata jobs may accompany the five-minute light/Quick worker");
-assert(countOccurrences(full,'timeout-minutes:')===1 && /^ {4}timeout-minutes: 30[ \t]*$/m.test(full),
-  "Full Gate must retain the explicitly approved finite 30-minute budget");
+assert(countOccurrences(full,'timeout-minutes:')===4 && (full.match(/^ {4}timeout-minutes: 30[ \t]*$/gm)||[]).length===3 && (full.match(/^ {4}timeout-minutes: 2[ \t]*$/gm)||[]).length===1,
+  "Full preparation and both complete lanes must retain finite 30-minute budgets; aggregation is bounded to two minutes");
+for(const [job,budget]of [['prepare',30],['non-db',30],['postgres',30],['full-validate',2]]) {
+  const block=full.split(`\n  ${job}:\n`)[1]?.split(/\n {2}[a-z][\w-]*:\n/)[0];
+  assert(block && new RegExp(`^ {4}timeout-minutes: ${budget}[ \\t]*$`,'m').test(block), `Full ${job} budget must be ${budget}`);
+}
 assert(/^ {2}workflow_call:/m.test(full) && !/^ {2}(pull_request|push|create|workflow_dispatch):/m.test(full),
   "Full Gate must be reusable-only; pushes and metadata must not allocate an expensive worker");
 for(const input of ['pr_number','head_sha','base_sha','base_ref','gate_kind']) {
@@ -71,7 +75,7 @@ assert(quick.includes("WORKER_RESULT:") && quick.includes("needs.full.result") &
 assert(quick.includes("uses: ./.github/workflows/full-gate.yml"), "Caller must select the existing full worker");
 assert(quick.includes("group: pr-gate-${{ github.event.pull_request.number || needs.request.outputs.pr || format('manual-{0}', github.ref) }}")
   && quick.includes("cancel-in-progress: ${{ github.event_name != 'create' }}")
-  && full.includes("group: pr-gate-${{ inputs.pr_number }}\n      cancel-in-progress: false"),
+  && quick.includes("group: pr-gate-${{ needs.request.outputs.pr }}\n      cancel-in-progress: false"),
   "A new PR Head must cancel stale work; duplicate explicit final requests must not cancel/restart it");
 for(const [name,source] of [["CI caller",quick],["Full worker",full]]) {
   assert(!/^concurrency:/m.test(source), `${name} must filter events before acquiring concurrency`);
@@ -79,7 +83,7 @@ for(const [name,source] of [["CI caller",quick],["Full worker",full]]) {
     `${name} allows only contents/read and artifact actions/read, never writes`);
   assert(!/contents: write|secrets: inherit/.test(source), `${name} must remain read-only`);
   assert(source.includes(name === "Full worker" ? "run: node scripts/test-preflight.mjs" : "node --test scripts/ci/*.test.mjs"), `${name} must execute protocol regressions`);
-  assert(source.includes("GATE_STEPS_JSON: ${{ toJSON(steps) }}") && source.includes("if: always()")
+  assert((source.includes("GATE_STEPS_JSON: ${{ toJSON(steps) }}") || name === "Full worker" && source.includes("GATE_STEPS_JSON: ${{ steps.aggregate.outputs.steps }}")) && source.includes("if: always()")
     && source.includes("ci-gate-runtime.mjs emit"), `${name} must retain actual interrupted/omitted-check reporting and structured evidence`);
   assert(!source.includes('Standard lint/typecheck/build/tests/migration-lint/secret-scan: completed'), `${name} must not claim unexecuted checks completed`);
 }
@@ -150,4 +154,9 @@ assert(release.includes("npm run secret:scan:full"), "manual release must rescan
 assert(!/^\s*pull_request:/m.test(governance), "standalone Governance must not auto-run on pull requests");
 assert(!/^\s*pull_request:/m.test(preview), "Preview must not auto-run on pull requests");
 
+assert(full.includes('needs: [prepare, non-db, postgres]') && full.includes('FULL_GATE_NEEDS: ${{ toJSON(needs) }}'), 'Full final result must depend on all three jobs');
+assert(countOccurrences(full, 'needs: prepare') === 2 && !full.includes('needs: non-db'), 'Complete non-DB and PG must be siblings');
+assert(!full.includes('continue-on-error:'), 'Required lanes may not suppress failures');
+assert(!/^ {4}concurrency:/m.test(full), 'Sibling lanes must not serialize or cancel each other');
+assert(countOccurrences(full, 'full-gate-lanes.mjs restore') === 2, 'Both lanes must verify shared inputs');
 console.log("ACTIONS_USAGE_POLICY_OK");

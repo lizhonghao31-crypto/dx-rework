@@ -51,11 +51,12 @@ for(const changes of [{base:{ref:{from:'main'}}},{title:{from:'[QUICK] old'}}])t
 test('new PR Head cancels stale work using the same job-level group; duplicate final events queue',()=>{
  const light=context(),fin=created();
  const group=c=>evaluate(expression(job(ci,'validate'),'group',6),c);
- assert.equal(`pr-gate-${light.github.event.pull_request.number}`,evaluate(expression(job(full,'full-validate'),'group',6),{inputs:{pr_number:901}}));
+ assert.equal(`pr-gate-${light.github.event.pull_request.number}`,evaluate(expression(job(ci,'full'),'group',6),{needs:{request:{outputs:{pr:901}}}}));
  assert.equal(group(light),group(fin));
  assert.equal(evaluate(expression(job(ci,'validate'),'cancel-in-progress',6),light),true);
  assert.equal(evaluate(expression(job(ci,'validate'),'cancel-in-progress',6),fin),false);
- assert.match(job(full,'full-validate'),/cancel-in-progress: false/);
+ assert.match(job(ci,'full'),/cancel-in-progress: false/);
+ assert.doesNotMatch(full,/^ {4}concurrency:/m);
  assert.doesNotMatch(ci,/^concurrency:/m);assert.doesNotMatch(full,/^concurrency:/m);
 });
 test('manual Quick cannot claim final approval',()=>{

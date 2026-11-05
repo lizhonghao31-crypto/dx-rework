@@ -27,23 +27,20 @@ permissions:
   actions: read
 
 jobs:
-  full-validate:
-    name: Full Gate exact Head
-    outputs:
-      receipt: ${{ steps.summary.outputs.receipt }}
+  prepare:
+    name: Full Gate common preparation
     if: ${{ inputs.gate_kind == 'full' }}
-    concurrency:
-      group: pr-gate-${{ inputs.pr_number }}
-      cancel-in-progress: false
     runs-on: ubuntu-latest
-    # User-authorized Full Gate ceiling; this changes the limit, not execution cost.
     timeout-minutes: 30
+    outputs:
+      bundle_hash: ${{ steps.bundle.outputs.bundle_hash }}
+      record: ${{ steps.lane.outputs.record }}
     env:
       BASE_SHA: ${{ inputs.base_sha }}
       NODE_ENV: test
       GIT_SHA: ${{ inputs.head_sha }}
       SERVICE_NAME: dx-rework-api
-
+      FULL_GATE_LANE: prepare
     steps:
       - name: Require explicit Full Gate title
         id: title
@@ -186,6 +183,126 @@ jobs:
         id: secrets
         run: npm run secret:scan:full
 
+      - name: Freeze shared build and exact plans
+        id: bundle
+        run: node scripts/ci/full-gate-lanes.mjs bundle
+
+      - name: Upload immutable shared inputs
+        id: bundle_upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-inputs-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/full-inputs.json
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Record lane outcomes
+        id: lane
+        if: always()
+        env:
+          LANE_STEPS: ${{ toJSON(steps) }}
+          LANE_STATUS: ${{ job.status }}
+        run: node scripts/ci/full-gate-lanes.mjs record
+
+  non-db:
+    name: Full Gate non-db
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      record: ${{ steps.lane.outputs.record }}
+    env:
+      BASE_SHA: ${{ inputs.base_sha }}
+      NODE_ENV: test
+      GIT_SHA: ${{ inputs.head_sha }}
+      SERVICE_NAME: dx-rework-api
+      FULL_GATE_LANE: non-db
+      FULL_GATE_BUNDLE_HASH: ${{ needs.prepare.outputs.bundle_hash }}
+    steps:
+      - name: Checkout isolated lane
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.head_sha }}
+          fetch-depth: 0
+      - name: Set up lane Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - name: Pin lane npm 10
+        run: npm install --global "$(node -p "require('./package.json').packageManager")" --no-audit --no-fund --prefer-offline
+      - name: Install lane dependencies
+        run: npm ci --no-audit --no-fund --prefer-offline
+      - name: Download immutable shared inputs
+        uses: actions/download-artifact@v4
+        with:
+          name: full-inputs-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}
+      - name: Verify and restore shared inputs
+        run: node scripts/ci/full-gate-lanes.mjs restore
+      - name: Full unit and integration suite without runtime DB escalation
+        id: tests
+        env:
+          DATABASE_URL: ''
+          TEST_DATABASE_URL: ''
+          ACCEPTANCE_CLOCK_TEST_DATABASE_URL: ''
+        run: node node_modules/vitest/vitest.mjs run --reporter=default --reporter=json --outputFile=${{ runner.temp }}/non-db-results.json
+
+      - name: Record lane outcomes
+        id: lane
+        if: always()
+        env:
+          LANE_STEPS: ${{ toJSON(steps) }}
+          LANE_STATUS: ${{ job.status }}
+        run: node scripts/ci/full-gate-lanes.mjs record
+      - name: Retain original lane evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-evidence-non-db-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/non-db-results.json
+            ${{ runner.temp }}/postgres-execution.json
+            ${{ runner.temp }}/full-lane-record.json
+          if-no-files-found: error
+          retention-days: 7
+
+  postgres:
+    name: Full Gate postgres
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      record: ${{ steps.lane.outputs.record }}
+    env:
+      BASE_SHA: ${{ inputs.base_sha }}
+      NODE_ENV: test
+      GIT_SHA: ${{ inputs.head_sha }}
+      SERVICE_NAME: dx-rework-api
+      FULL_GATE_LANE: postgres
+      FULL_GATE_BUNDLE_HASH: ${{ needs.prepare.outputs.bundle_hash }}
+    steps:
+      - name: Checkout isolated lane
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.head_sha }}
+          fetch-depth: 0
+      - name: Set up lane Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - name: Pin lane npm 10
+        run: npm install --global "$(node -p "require('./package.json').packageManager")" --no-audit --no-fund --prefer-offline
+      - name: Install lane dependencies
+        run: npm ci --no-audit --no-fund --prefer-offline
+      - name: Download immutable shared inputs
+        uses: actions/download-artifact@v4
+        with:
+          name: full-inputs-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}
+      - name: Verify and restore shared inputs
+        run: node scripts/ci/full-gate-lanes.mjs restore
       - name: Start isolated PostgreSQL only for DB-sensitive changes
         id: db_start
         if: env.DB_REQUIRED == 'true'
@@ -243,13 +360,6 @@ jobs:
         id: resource_smoke
         if: env.DB_REQUIRED == 'true'
         run: node scripts/test-preflight.mjs --database
-
-      - name: Full unit and integration suite without runtime DB escalation
-        id: tests
-        env:
-          TEST_DATABASE_URL: ''
-          ACCEPTANCE_CLOCK_TEST_DATABASE_URL: ''
-        run: node node_modules/vitest/vitest.mjs run
 
       - name: Run mapped PostgreSQL sensitive-domain regressions
         id: db_tests
@@ -372,18 +482,65 @@ jobs:
         run: docker rm -f dx-rework-full-gate-postgres >/dev/null 2>&1 || true
 
 
+      - name: Record lane outcomes
+        id: lane
+        if: always()
+        env:
+          LANE_STEPS: ${{ toJSON(steps) }}
+          LANE_STATUS: ${{ job.status }}
+        run: node scripts/ci/full-gate-lanes.mjs record
+      - name: Retain original lane evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-evidence-postgres-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/non-db-results.json
+            ${{ runner.temp }}/postgres-execution.json
+            ${{ runner.temp }}/full-lane-record.json
+          if-no-files-found: error
+          retention-days: 7
+
+  full-validate:
+    name: Full Gate exact Head
+    needs: [prepare, non-db, postgres]
+    if: ${{ always() && inputs.gate_kind == 'full' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      receipt: ${{ steps.summary.outputs.receipt }}
+    env:
+      BASE_SHA: ${{ inputs.base_sha }}
+      NODE_ENV: test
+      GIT_SHA: ${{ inputs.head_sha }}
+      SERVICE_NAME: dx-rework-api
+    steps:
+      - name: Checkout aggregate Head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.head_sha }}
+          fetch-depth: 0
+      - name: Set up aggregate Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - name: Verify complete lane results
+        id: aggregate
+        env:
+          FULL_GATE_NEEDS: ${{ toJSON(needs) }}
+        run: node scripts/ci/full-gate-lanes.mjs aggregate
+
       - name: Write actual gate summary
         id: summary
-        if: always()
+        if: always() && steps.aggregate.outcome == 'success'
         shell: bash
         env:
           GATE_KIND: full
-          GATE_PHASE: ${{ steps.protocol.outputs.phase }}
+          GATE_PHASE: final
           GATE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
           GATE_JOB_STATUS: ${{ job.status }}
-          GATE_STEPS_JSON: ${{ toJSON(steps) }}
-          GATE_SCOPE_JSON: >-
-            {"event": "${{ github.event_name }}", "final": "true", "base": "${{ inputs.base_ref }}", "db": "${{ env.DB_REQUIRED }}", "mapped": "${{ env.MAPPED_POSTGRES_TESTS }}", "journey": "${{ env.JOURNEY_PG13_COMPAT }}", "migration": "${{ env.MIGRATION_SENSITIVE }}", "business_chain": "${{ env.BUSINESS_CHAIN_SENSITIVE }}", "deployment": "${{ env.DEPLOYMENT_SENSITIVE }}", "maintenance": "${{ env.MAINTENANCE_SENSITIVE }}", "activation": "${{ env.ACTIVATION_SENSITIVE }}", "transfer": "${{ env.TRANSFER_SENSITIVE }}"}
+          GATE_STEPS_JSON: ${{ steps.aggregate.outputs.steps }}
+          GATE_SCOPE_JSON: ${{ steps.aggregate.outputs.scope }}
           GATE_CHECKS_JSON: >-
             [["title","Require explicit Full Gate title","always"],["checkout","Checkout exact PR Head","always"],["node","Set up Node 22","always"],["npm","Pin npm 10","always"],["head","Verify exact Head","always"],["protocol","Validate frozen request identity","always"],["reuse_select","Select successful same-Head light evidence","always"],["reuse_download","Download exact source light artifact","optional"],["reuse_restore","Verify source context and restore build outputs","optional"],["policy","Verify Actions usage policy","always"],["construction","Verify current change evidence","always"],["protocol_tests","Run CI protocol regression tests","always"],["risk","Classify Full Gate risk from exact PR diff","always"],["main_compat","Compare exact candidate with current remote main migration history","release"],["install","Install locked dependencies","always"],["runtime","Record actual toolchain and resolved test configuration","always"],["audit","Audit production dependency graph","always"],["lint","Lint","always"],["types","Typecheck","always"],["build","Build workspaces without deployment postbuild","always"],["migration_lint","Validate migration files statically","always"],["secrets","Scan repository history and first-party artifacts for secrets","always"],["db_start","Start isolated PostgreSQL only for DB-sensitive changes","db"],["db_seed","Seed database with base-revision migration history","db"],["db_migrate","Apply and validate exact Head migration history against PostgreSQL","db"],["resource_smoke","Validate database resource lifecycle before expensive suites","db"],["tests","Full unit and integration suite without runtime DB escalation","always"],["db_tests","Run mapped PostgreSQL sensitive-domain regressions","db"],["journey","Run PostgreSQL 13 Journey read compatibility","journey"],["root_audit","Run PostgreSQL Root audit control-boundary regressions for migration changes","migration"],["business_chain","Run PostgreSQL business chain for business, migration or deployment-sensitive changes","chain"],["backup","PostgreSQL backup and isolated restore drill","maintenance"],["acceptance_recovery","Acceptance low-privilege migration and backup recovery","maintenance"],["release_history","Main and existing release histories through low-privilege Acceptance maintenance","release_deployment"],["release_acceptance","PR-17 exact-head acceptance and lifecycle","activation"],["package","PR-17 package, runtime and relocation-safe transfer","transfer"],["db_stop","Stop isolated PostgreSQL","db"]]
         run: |

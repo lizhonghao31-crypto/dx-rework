@@ -379,6 +379,9 @@ jobs:
       contents: read
       actions: read
     name: Full Gate worker
+    concurrency:
+      group: pr-gate-${{ needs.request.outputs.pr }}
+      cancel-in-progress: false
     needs: request
     if: ${{ always() && github.event_name == 'create' && needs.request.result == 'success' && needs.request.outputs.kind == 'full' }}
     uses: ./.github/workflows/full-gate.yml
