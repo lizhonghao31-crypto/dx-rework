@@ -18,7 +18,7 @@ export const JOURNEY_NODES: ReadonlyArray<{key:string;label:string;stage:Journey
   {key:"product_development",label:"创建产品开发",stage:"creation",count:false},
   {key:"development_publish",label:"开发资料保存/发布",stage:"creation",count:false},
   {key:"order_information",label:"订购信息",stage:"creation",count:false},
-  ...Object.entries({development_materials:"核配",development_material_supply:"物料补齐",development_material_recheck:"物料复核",development_pattern:"纸样",development_size_review:"大货尺寸复核",development_positioning:"设计定位图",development_patch:"局部补做",development_patch_tail_check:"补做尾查",development_patch_confirmation:"补做设计确认",development_cutting:"裁板",development_craft_dispatch:"发工艺",development_printing:"印花",development_embroidery:"绣花",development_print_embroidery:"印绣花",development_craft_confirmation:"工艺确认",development_sewing_transfer:"派工/转交车板",development_sewing:"车板",development_washing_dispatch:"送洗",development_washing:"洗水",development_pre_wash_check:"洗前尺寸检查",development_tail_check:"尾查",development_confirmation:"设计确认",development_shipping:"寄样"}).map(([key,label])=>({key,label,stage:"development" as const,count:!["development_material_supply","development_craft_dispatch","development_sewing_transfer","development_washing_dispatch"].includes(key)})),
+  ...Object.entries({development_materials:"核配",development_material_supply:"物料补齐",development_material_recheck:"物料复核",development_pattern:"纸样",development_external_pattern:"外部纸样",development_size_review:"大货尺寸复核",development_positioning:"设计定位图",development_patch:"局部补做",development_patch_tail_check:"补做尾查",development_patch_confirmation:"补做设计确认",development_cutting:"裁板",development_craft_dispatch:"发工艺",development_printing:"印花",development_embroidery:"绣花",development_print_embroidery:"印绣花",development_craft_confirmation:"工艺确认",development_sewing_transfer:"派工/转交车板",development_sewing:"车板",development_washing_dispatch:"送洗",development_washing:"洗水",development_pre_wash_check:"洗前尺寸检查",development_tail_check:"尾查",development_confirmation:"设计确认",development_shipping:"寄样"}).map(([key,label])=>({key,label,stage:"development" as const,count:!["development_material_supply","development_craft_dispatch","development_sewing_transfer","development_washing_dispatch"].includes(key)})),
   ...Object.entries({customer_sample:"客户样板确认",budget:"预算",sourcing_preparation:"跟单发起外发",sourcing_ie:"IE报价",sourcing_director:"供应链总监确认",sourcing_owner:"老板批准",production_instruction:"大货制单",bulk_pattern:"大货纸样",bulk_marker:"唛架",warehouse_preshrink:"预缩/无需预缩",cutting_gate:"开裁条件汇合"}).map(([key,label])=>({key,label,stage:"preparation" as const,count:["bulk_pattern","warehouse_preshrink"].includes(key)})),
   {key:"bulk_cutting",label:"本厂/外厂整款开裁",stage:"cutting",count:true},
   ...Object.entries({process_logistics:"二次工艺收发",bulk_qc:"工艺QC/问题处理/复查",warehouse_dispatch:"仓库实际发加工厂"}).map(([key,label])=>({key,label,stage:"post_cutting" as const,count:true})),
@@ -110,6 +110,9 @@ export type JourneyNode = {
   countsInProgress: boolean; unavailableReason: "permission" | "fact_not_recorded" | null;
 };
 export type OrderJourney = {
+  /** Versioned business requirements; legacy display/progress remain compatible. */
+  businessProgress?: JourneyBusinessProgress;
+  identity?: { kind: 'development' | 'production'; businessNumber: string | null; reason: string | null };
   seriesPlanVisible?:boolean;
   display?: JourneyDisplay;
   supervision?:JourneySupervision;
@@ -133,6 +136,34 @@ export type OrderJourney = {
   stages: Array<{key:JourneyStageKey;label:string;state:JourneyState;nodes:JourneyNode[]}>;
   progress: { development: {applicable:number;completed:number} | null; bulk: {applicable:number;completed:number} | null };
   hitReasons: Array<{nodeId:string;nodeKey:string;stage:JourneyStageKey;risks:JourneyNode["risks"]}>;
+};
+export type JourneyRequirementTarget = {
+  source: 'series_plan'; planId: string; revision: number; scopeRef: string;
+  at: string; precision: 'instant' | 'date'; retainedFromRevision: number | null;
+};
+export type JourneyBusinessRequirement = {
+  id: string; key: string; label: string; stage: JourneyStageKey; scopeRef: string;
+  applicability: 'applicable' | 'not_applicable' | 'unknown';
+  completed: boolean; instanceIds: string[]; reasons: string[];
+  targets: JourneyRequirementTarget[];
+};
+export type JourneyBusinessQuantities = {
+  revision: string;
+  lines: Array<{lineId: string; demand: number; received: number; inspected: number | null;
+    qualified: number | null; packed: number | null; remainingReceipt: number; remainingShipment: number | null;
+    qualityGap: number | null; qualityConflict: boolean; factoryAttribution: 'known' | 'unknown'; reasons: string[]}>;
+  /** Native receipt links do not establish precise factory attribution. */
+  factoryAttribution: 'known' | 'unknown';
+};
+export type JourneyBusinessProgress = {
+  ruleVersion: 'journey-business-v1'; asOf: string;
+  requirements: JourneyBusinessRequirement[];
+  applicable: number; completed: number; unknown: number; ratio: number | null;
+  stages: Array<{key: JourneyStageKey; applicable: number; completed: number; unknown: number; ratio: number | null}>;
+  plan: {status: 'not_adopted' | 'complete' | 'partial' | 'unavailable';
+    planId: string | null; revision: number | null; covered: number; missing: number;
+    due: number; outstandingDue: string[]; reasons: string[]};
+  quantities?: JourneyBusinessQuantities;
 };
 export type JourneyResult = { ruleVersion: "journey-v2.0"; asOf: string; page: number; pageSize: 15; total: number; canManagePolicies?: boolean;
   facets?: { customers: string[]; categories: string[]; merchandisers: Array<{id:string;name:string|null}> };

@@ -1,243 +1,243 @@
 {
   "version": 1,
-  "base": "93a0d1e08b8bfd4b1e1711b6efe048aaeda7146a",
-  "sourceFingerprint": "d33ad8d2ecfabee98b5fc5afafaa1e1518b14344df33d1bf6c5bf89ac9fc255e",
+  "base": "751c178f102b243b9febd13faad3dd2f90fc5a53",
+  "sourceFingerprint": "003cc9ff93b2ed4032abc8ce1e9033cabbb5a9035843938beace265618a33275",
   "risk": "full",
   "rules": [
     {
-      "source": "用户2026-11-05同意当前release为真实base，检查通过后合入release；AGENTS.md；docs/engineering/acceptance-journey-diagnostic.md",
-      "initialization": "仅已验证Acceptance启动proof可创建诊断；默认无开关文件，不增加migration、业务查询、角色授权或历史回填。",
-      "dateAndPermission": "真实UTC截止不超过15分钟并以单调时钟兜底；保持原认证、Root、只读快照及模拟业务时钟语义。",
-      "expectation": "当前release定向测试、真实PG及预检通过；默认关闭，真实light/Review/FULL分别记录，现场兼容及部署不在本次执行。",
-      "rule": "诊断只在原Acceptance守卫通过且环境精确匹配后安装；开关有期限、绑定文件代次并且错误不能改变业务响应。",
-      "writes": [
-        "apps/api/src/platform/journey-diagnostic.ts",
-        "apps/api/src/app.ts",
-        "apps/api/src/server.ts",
-        "tests/unit/journey-diagnostic.test.ts"
-      ],
-      "reads": [
-        "apps/api/src/acceptance-clock/guard.ts",
-        "apps/api/src/app.ts",
-        "apps/api/src/server.ts"
-      ],
-      "oldTests": [
-        "tests/unit/acceptance-sla-clock.test.ts"
-      ],
+      "source": "User explicit current Module01 construction/Review/merge authorization; Library M01-IMPLEMENT1.1.1 version2 and OPT1.3 version4; docs/requirements/cockpit-display-v1.0.md current increment.",
+      "initialization": "Additive optional read contract, no schema/seed or original business history mutation; fixture uses the existing registered low-privilege isolated PostgreSQL schema lifecycle.",
+      "dateAndPermission": "Use snapshot business asOf and Beijing date-only end-of-day, original source/order/task authorization before facts or aggregation; PMC no write/approval; Root special authority preserved.",
+      "expectation": "Current source-bound focused unit and real PostgreSQL tests, typecheck, lint and build pass; exact-head light/Review/final Full remain separate required stages.",
       "checks": [
-        "diagnostic-unit",
-        "diagnostic-pg",
-        "diagnostic-api-types",
-        "diagnostic-api-build",
-        "diagnostic-lint"
-      ]
-    },
-    {
-      "source": "用户2026-11-05同意当前release为真实base，检查通过后合入release；AGENTS.md；docs/engineering/acceptance-journey-diagnostic.md",
-      "initialization": "仅已验证Acceptance启动proof可创建诊断；默认无开关文件，不增加migration、业务查询、角色授权或历史回填。",
-      "dateAndPermission": "真实UTC截止不超过15分钟并以单调时钟兜底；保持原认证、Root、只读快照及模拟业务时钟语义。",
-      "expectation": "当前release定向测试、真实PG及预检通过；默认关闭，真实light/Review/FULL分别记录，现场兼容及部署不在本次执行。",
-      "rule": "实际SQL调用与原缓存命中分开累计，callback恢复调用时上下文含undefined，排队及后台请求不重复或串计。",
+        "m01-p01-unit-frozen",
+        "m01-p01-pg-frozen",
+        "m01-p01-types-frozen",
+        "m01-p01-lint-frozen",
+        "m01-p01-build-frozen"
+      ],
+      "rule": "Formal identity cannot promote external-request UUID; source/mother scope and unchanged original authorization remain authoritative.",
       "writes": [
-        "apps/api/src/platform/journey-diagnostic.ts",
-        "apps/api/src/production-platform/journey-snapshot-reads.ts",
-        "tests/integration/journey-diagnostic-postgres.test.ts"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/journey-snapshot-reads.ts",
-        "apps/api/src/platform/database.ts"
-      ],
-      "oldTests": [
-        "tests/unit/journey-snapshot-reads.test.ts"
-      ],
-      "checks": [
-        "diagnostic-unit",
-        "diagnostic-pg",
-        "diagnostic-api-types"
-      ]
-    },
-    {
-      "source": "用户2026-11-05同意当前release为真实base，检查通过后合入release；AGENTS.md；docs/engineering/acceptance-journey-diagnostic.md",
-      "initialization": "仅已验证Acceptance启动proof可创建诊断；默认无开关文件，不增加migration、业务查询、角色授权或历史回填。",
-      "dateAndPermission": "真实UTC截止不超过15分钟并以单调时钟兜底；保持原认证、Root、只读快照及模拟业务时钟语义。",
-      "expectation": "当前release定向测试、真实PG及预检通过；默认关闭，真实light/Review/FULL分别记录，现场兼容及部署不在本次执行。",
-      "rule": "原列表认证、快照候选/投影/分页/详情、bulk/closure/SLA和clock阶段独立计时，原授权范围、事务和错误语义保持。",
-      "writes": [
-        "apps/api/src/production-platform/identity-routes.ts",
         "apps/api/src/production-platform/journey-query.ts",
-        "apps/api/src/acceptance-clock/hooks.ts"
+        "packages/contracts/src/digital-production-journey.ts",
+        "tests/integration/digital-journey-postgres.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/journey-supervision.ts",
-        "apps/api/src/production-platform/bulk-preparation-service.ts",
-        "apps/api/src/production-platform/order-closure-service.ts",
-        "apps/api/src/acceptance-clock/business-time.ts"
+        "apps/api/src/production-platform/identity-service.ts",
+        "apps/api/src/production-platform/access-policy.ts",
+        "apps/api/src/production-platform/journey-query.ts"
       ],
       "oldTests": [
-        "tests/unit/digital-journey-projection.test.ts",
+        "tests/integration/digital-journey-postgres.test.ts"
+      ]
+    },
+    {
+      "source": "User explicit current Module01 construction/Review/merge authorization; Library M01-IMPLEMENT1.1.1 version2 and OPT1.3 version4; docs/requirements/cockpit-display-v1.0.md current increment.",
+      "initialization": "Additive optional read contract, no schema/seed or original business history mutation; fixture uses the existing registered low-privilege isolated PostgreSQL schema lifecycle.",
+      "dateAndPermission": "Use snapshot business asOf and Beijing date-only end-of-day, original source/order/task authorization before facts or aggregation; PMC no write/approval; Root special authority preserved.",
+      "expectation": "Current source-bound focused unit and real PostgreSQL tests, typecheck, lint and build pass; exact-head light/Review/final Full remain separate required stages.",
+      "checks": [
+        "m01-p01-unit-frozen",
+        "m01-p01-pg-frozen",
+        "m01-p01-types-frozen",
+        "m01-p01-lint-frozen",
+        "m01-p01-build-frozen"
+      ],
+      "rule": "New business denominator groups required execution coverage, not batch count, and keeps retired/missing/hidden requirements unknown; native samples and actual rework applicability do not rewrite tasks or wages.",
+      "writes": [
+        "apps/api/src/production-platform/journey-business-progress.ts",
+        "packages/contracts/src/digital-production-journey.ts",
+        "tests/unit/journey-business-progress.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/journey-display.ts",
+        "apps/api/src/production-platform/journey-query.ts",
+        "apps/api/src/production-platform/ship-sample-facts.ts"
+      ],
+      "oldTests": [
+        "tests/unit/cockpit-display-facts.test.ts",
         "tests/unit/journey-projection-isolation.test.ts",
-        "tests/unit/acceptance-sla-clock.test.ts"
-      ],
-      "checks": [
-        "diagnostic-unit",
-        "diagnostic-pg",
-        "diagnostic-api-types"
+        "tests/integration/digital-journey-postgres.test.ts"
       ]
     },
     {
-      "source": "用户2026-11-05同意当前release为真实base，检查通过后合入release；AGENTS.md；docs/engineering/acceptance-journey-diagnostic.md",
-      "initialization": "仅已验证Acceptance启动proof可创建诊断；默认无开关文件，不增加migration、业务查询、角色授权或历史回填。",
-      "dateAndPermission": "真实UTC截止不超过15分钟并以单调时钟兜底；保持原认证、Root、只读快照及模拟业务时钟语义。",
-      "expectation": "当前release定向测试、真实PG及预检通过；默认关闭，真实light/Review/FULL分别记录，现场兼容及部署不在本次执行。",
-      "rule": "新增真实PG验证接入原canonical映射与Acceptance-clock资源契约，不放宽数据库守卫、worker或清理条件。",
+      "source": "User explicit current Module01 construction/Review/merge authorization; Library M01-IMPLEMENT1.1.1 version2 and OPT1.3 version4; docs/requirements/cockpit-display-v1.0.md current increment.",
+      "initialization": "Additive optional read contract, no schema/seed or original business history mutation; fixture uses the existing registered low-privilege isolated PostgreSQL schema lifecycle.",
+      "dateAndPermission": "Use snapshot business asOf and Beijing date-only end-of-day, original source/order/task authorization before facts or aggregation; PMC no write/approval; Root special authority preserved.",
+      "expectation": "Current source-bound focused unit and real PostgreSQL tests, typecheck, lint and build pass; exact-head light/Review/final Full remain separate required stages.",
+      "checks": [
+        "m01-p01-unit-frozen",
+        "m01-p01-pg-frozen",
+        "m01-p01-types-frozen",
+        "m01-p01-lint-frozen",
+        "m01-p01-build-frozen"
+      ],
+      "rule": "Only persisted adopted series-plan snapshots map to the same requirements; partial PO/date coverage and original retained adoption versions remain explicit, previews never become adoption.",
       "writes": [
-        "scripts/ci/full-gate-risk-map.mjs",
-        "tests/unit/full-gate-risk-map.test.ts",
-        "tests/integration/journey-diagnostic-postgres.test.ts"
+        "apps/api/src/production-platform/journey-adopted-plan.ts",
+        "tests/unit/journey-business-progress.test.ts",
+        "tests/integration/digital-journey-postgres.test.ts"
       ],
       "reads": [
-        "scripts/test-suite-plan.mjs",
-        "scripts/test-resource-contract.mjs",
-        "tests/helpers/owned-postgres-schema.ts"
+        "apps/api/src/production-platform/series-plan-service.ts",
+        "apps/api/src/production-platform/series-plan-journey.ts",
+        "packages/contracts/src/digital-series-plan.ts",
+        "apps/api/src/production-platform/journey-query.ts"
       ],
       "oldTests": [
-        "tests/unit/full-gate-risk-map.test.ts"
-      ],
-      "checks": [
-        "diagnostic-unit",
-        "diagnostic-pg",
-        "diagnostic-lint",
-        "diagnostic-protocol"
+        "tests/integration/digital-journey-postgres.test.ts",
+        "tests/unit/cockpit-display-facts.test.ts"
       ]
     },
     {
-      "rule": "按原入口刷新三处发生变化的时间源条目，保留未变人工注记；诊断只读取真实UTC期限与单调计时，不写业务锚点。",
-      "source": "本次诊断新增真实计时及原表达式包装；scripts/acceptance/time-site-inventory.mjs；docs/engineering/acceptance-journey-diagnostic.md",
-      "writes": [
-        "docs/engineering/acceptance-time-sites-20261027.json"
+      "source": "User explicit current Module01 construction/Review/merge authorization; Library M01-IMPLEMENT1.1.1 version2 and OPT1.3 version4; docs/requirements/cockpit-display-v1.0.md current increment.",
+      "initialization": "Additive optional read contract, no schema/seed or original business history mutation; fixture uses the existing registered low-privilege isolated PostgreSQL schema lifecycle.",
+      "dateAndPermission": "Use snapshot business asOf and Beijing date-only end-of-day, original source/order/task authorization before facts or aggregation; PMC no write/approval; Root special authority preserved.",
+      "expectation": "Current source-bound focused unit and real PostgreSQL tests, typecheck, lint and build pass; exact-head light/Review/final Full remain separate required stages.",
+      "checks": [
+        "m01-p01-unit-frozen",
+        "m01-p01-pg-frozen",
+        "m01-p01-types-frozen",
+        "m01-p01-lint-frozen",
+        "m01-p01-build-frozen"
       ],
-      "reads": [
-        "scripts/acceptance/time-site-inventory.mjs",
-        "apps/api/src/platform/journey-diagnostic.ts",
+      "rule": "Cumulative receipts, valid receipt QC and packing remain separate; upward/downward quantity corrections expose quality gaps/conflicts and factory attribution requires precise native linkage.",
+      "writes": [
+        "apps/api/src/production-platform/journey-business-progress.ts",
         "apps/api/src/production-platform/journey-query.ts",
-        "apps/api/src/production-platform/identity-routes.ts"
+        "tests/unit/journey-business-progress.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/order-closure-service.ts",
+        "apps/api/src/production-platform/garment-quality.ts",
+        "apps/api/src/sourcing/production-closure-service.ts",
+        "apps/web/src/cockpit-business-progress.tsx"
       ],
       "oldTests": [
-        "scripts/ci/pr-gate-controller.test.mjs"
-      ],
-      "initialization": "生成器对新增或表达式变化条目重新核实，原未变条目与既有人工semanticReview/evidence/status逐字保留。",
-      "dateAndPermission": "真实采样期限与业务时钟分离；不改变身份权限、审计日期、业务发生时间或SLA锚点。",
-      "expectation": "原checkTimeSiteInventory预检和所有240项原协议测试通过，原发生链的语义审查范围保留。",
+        "tests/integration/digital-journey-postgres.test.ts",
+        "tests/unit/journey-sla-supervision.test.ts"
+      ]
+    },
+    {
+      "source": "User explicit current Module01 construction/Review/merge authorization; Library M01-IMPLEMENT1.1.1 version2 and OPT1.3 version4; docs/requirements/cockpit-display-v1.0.md current increment.",
+      "initialization": "Additive optional read contract, no schema/seed or original business history mutation; fixture uses the existing registered low-privilege isolated PostgreSQL schema lifecycle.",
+      "dateAndPermission": "Use snapshot business asOf and Beijing date-only end-of-day, original source/order/task authorization before facts or aggregation; PMC no write/approval; Root special authority preserved.",
+      "expectation": "Current source-bound focused unit and real PostgreSQL tests, typecheck, lint and build pass; exact-head light/Review/final Full remain separate required stages.",
       "checks": [
-        "diagnostic-protocol"
+        "m01-p01-unit-frozen",
+        "m01-p01-pg-frozen",
+        "m01-p01-types-frozen",
+        "m01-p01-lint-frozen",
+        "m01-p01-build-frozen"
+      ],
+      "rule": "Cockpit actual/plan/quantity and stage displays consume the versioned common requirement model while legacy fields remain compatible and incomplete plan evidence is readable.",
+      "writes": [
+        "apps/web/src/cockpit-business-progress.tsx",
+        "apps/web/src/cockpit-home.tsx",
+        "apps/web/src/cockpit-detail.tsx",
+        "tests/unit/journey-business-progress.test.ts"
+      ],
+      "reads": [
+        "apps/web/src/digital-journey-cockpit-model.ts",
+        "apps/web/src/cockpit-home.tsx",
+        "apps/web/src/cockpit-detail.tsx",
+        "packages/contracts/src/digital-production-journey.ts"
+      ],
+      "oldTests": [
+        "tests/unit/cockpit-home.test.ts",
+        "tests/unit/cockpit-detail.test.ts",
+        "tests/unit/digital-journey-cockpit.test.ts"
       ]
     }
   ],
   "checks": [
     {
-      "id": "diagnostic-protocol",
+      "id": "m01-p01-unit-frozen",
       "kind": "tests",
-      "command": "node scripts/test-preflight.mjs",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/journey-business-progress.test.ts tests/unit/cockpit-display-facts.test.ts tests/unit/cockpit-home.test.ts tests/unit/cockpit-detail.test.ts tests/unit/digital-journey-cockpit.test.ts tests/unit/digital-journey-projection.test.ts tests/unit/journey-sla-supervision.test.ts tests/unit/journey-projection-isolation.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-p01-unit-frozen.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "93a0d1e08b8bfd4b1e1711b6efe048aaeda7146a",
-      "sourceFingerprint": "d33ad8d2ecfabee98b5fc5afafaa1e1518b14344df33d1bf6c5bf89ac9fc255e",
-      "context": "Actual release checkout /workspace/dx-journey-release at base HEAD 93a0d1e08b8bfd4b1e1711b6efe048aaeda7146a with the recorded candidate source fingerprint; Node22.22.2/npm10.9.9; canonical Vitest single worker and preflight native worker=2; PG16.15 marked low-privilege local test target where applicable; no ECS/production access.",
-      "startedAt": "2026-11-05T13:42:55.730Z",
-      "endedAt": "2026-11-05T13:42:59.114Z",
-      "log": "/workspace/journey-diagnostic-evidence/release/diagnostic-protocol.log",
-      "logSha256": "2bd9bd44a49bd3429f8e38982dc25cea8abf3e8fe33e8aef24ce0c07ebba1514",
-      "passed": 240,
-      "failed": 0,
-      "skipped": 0
-    },
-    {
-      "id": "diagnostic-unit",
-      "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/journey-diagnostic.test.ts tests/unit/journey-snapshot-reads.test.ts tests/unit/acceptance-sla-clock.test.ts tests/unit/journey-projection-isolation.test.ts tests/unit/digital-journey-projection.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=verbose --reporter=json --outputFile.json=/workspace/journey-diagnostic-evidence/release/unit.json",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "93a0d1e08b8bfd4b1e1711b6efe048aaeda7146a",
-      "sourceFingerprint": "d33ad8d2ecfabee98b5fc5afafaa1e1518b14344df33d1bf6c5bf89ac9fc255e",
-      "context": "Actual release checkout /workspace/dx-journey-release at base HEAD 93a0d1e08b8bfd4b1e1711b6efe048aaeda7146a with the recorded candidate source fingerprint; Node22.22.2/npm10.9.9; canonical Vitest single worker and preflight native worker=2; PG16.15 marked low-privilege local test target where applicable; no ECS/production access.",
-      "startedAt": "2026-11-05T13:42:59.189Z",
-      "endedAt": "2026-11-05T13:43:01.957Z",
-      "log": "/workspace/journey-diagnostic-evidence/release/diagnostic-unit.log",
-      "logSha256": "7cb87f0933c2f79764f7a5f8342a8df14d238c083fff2cce319d1841b946ee02",
-      "passed": 109,
+      "testedHead": "751c178f102b243b9febd13faad3dd2f90fc5a53",
+      "sourceFingerprint": "003cc9ff93b2ed4032abc8ce1e9033cabbb5a9035843938beace265618a33275",
+      "context": "Node v22.22.2; npm 10.9.9; canonical Vitest workers=1. Selected workspace only; no Acceptance or production access.",
+      "startedAt": "2026-11-05T17:13:55.879Z",
+      "endedAt": "2026-11-05T17:13:59.697Z",
+      "log": "/workspace/scratch/m01-p01-unit-frozen.log",
+      "logSha256": "0cbfcaace390ab1ac295645adb3fb5c40d41e25ef2e6bc7ece5540e86c10f737",
+      "passed": 93,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "0c246f023434c9c878b777d9747cc2700be4ddb828f22f97f9ca391299dc41c2"
+          "sha256": "aa2cd9da0ab834dc257e3890411acde4a247862ea2ee8073e344af9a87fa03b0"
         }
       ]
     },
     {
-      "id": "diagnostic-pg",
+      "id": "m01-p01-pg-frozen",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/integration/journey-diagnostic-postgres.test.ts --reporter=verbose --reporter=json --outputFile.json=/workspace/journey-diagnostic-evidence/release/postgres.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/integration/digital-journey-postgres.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-p01-pg-frozen.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "93a0d1e08b8bfd4b1e1711b6efe048aaeda7146a",
-      "sourceFingerprint": "d33ad8d2ecfabee98b5fc5afafaa1e1518b14344df33d1bf6c5bf89ac9fc255e",
-      "context": "Actual release checkout /workspace/dx-journey-release at base HEAD 93a0d1e08b8bfd4b1e1711b6efe048aaeda7146a with the recorded candidate source fingerprint; Node22.22.2/npm10.9.9; canonical Vitest single worker and preflight native worker=2; PG16.15 marked low-privilege local test target where applicable; no ECS/production access.",
-      "startedAt": "2026-11-05T13:43:02.034Z",
-      "endedAt": "2026-11-05T13:43:06.426Z",
-      "log": "/workspace/journey-diagnostic-evidence/release/diagnostic-pg.log",
-      "logSha256": "f1c3b0c1bc79541e803b73b925f0c32a384e5d5b01b134c40a4fd47765d5b23d",
-      "passed": 3,
+      "testedHead": "751c178f102b243b9febd13faad3dd2f90fc5a53",
+      "sourceFingerprint": "003cc9ff93b2ed4032abc8ce1e9033cabbb5a9035843938beace265618a33275",
+      "context": "Node v22.22.2; npm 10.9.9; canonical Vitest workers=1. Local PostgreSQL 16.14; marked dx_rework_ci / role dx_rework_test; non-superuser, no create database/role, no bypass RLS; original owned-schema creation and cleanup.",
+      "startedAt": "2026-11-05T17:14:03.758Z",
+      "endedAt": "2026-11-05T17:15:12.539Z",
+      "log": "/workspace/scratch/m01-p01-pg-frozen.log",
+      "logSha256": "35c49cc5c128660782e448c92f1022de5d4692d56f47111c062a3fc08a405cad",
+      "passed": 32,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "739319d80b8e0bda85e24644e3ed9803aeef99cae87e459b8dc97668f12801e3"
+          "sha256": "92c97c3b56c33fac8d6bcce0282bb28698133cf9dd6de76cb979ac3942043495"
         }
       ]
     },
     {
-      "id": "diagnostic-api-types",
+      "id": "m01-p01-types-frozen",
       "kind": "command",
-      "command": "node node_modules/typescript/bin/tsc --noEmit -p apps/api/tsconfig.json",
+      "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "93a0d1e08b8bfd4b1e1711b6efe048aaeda7146a",
-      "sourceFingerprint": "d33ad8d2ecfabee98b5fc5afafaa1e1518b14344df33d1bf6c5bf89ac9fc255e",
-      "context": "Actual release checkout /workspace/dx-journey-release at base HEAD 93a0d1e08b8bfd4b1e1711b6efe048aaeda7146a with the recorded candidate source fingerprint; Node22.22.2/npm10.9.9; canonical Vitest single worker and preflight native worker=2; PG16.15 marked low-privilege local test target where applicable; no ECS/production access.",
-      "startedAt": "2026-11-05T13:43:06.504Z",
-      "endedAt": "2026-11-05T13:43:13.555Z",
-      "log": "/workspace/journey-diagnostic-evidence/release/diagnostic-api-types.log",
-      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      "testedHead": "751c178f102b243b9febd13faad3dd2f90fc5a53",
+      "sourceFingerprint": "003cc9ff93b2ed4032abc8ce1e9033cabbb5a9035843938beace265618a33275",
+      "context": "Node v22.22.2; npm 10.9.9; canonical Vitest workers=1. Selected workspace only; no Acceptance or production access.",
+      "startedAt": "2026-11-05T17:14:24.316Z",
+      "endedAt": "2026-11-05T17:14:50.820Z",
+      "log": "/workspace/scratch/m01-p01-types-frozen.log",
+      "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e"
     },
     {
-      "id": "diagnostic-api-build",
+      "id": "m01-p01-lint-frozen",
       "kind": "command",
-      "command": "node node_modules/typescript/bin/tsc -p apps/api/tsconfig.json",
+      "command": "npm run lint",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "93a0d1e08b8bfd4b1e1711b6efe048aaeda7146a",
-      "sourceFingerprint": "d33ad8d2ecfabee98b5fc5afafaa1e1518b14344df33d1bf6c5bf89ac9fc255e",
-      "context": "Actual release checkout /workspace/dx-journey-release at base HEAD 93a0d1e08b8bfd4b1e1711b6efe048aaeda7146a with the recorded candidate source fingerprint; Node22.22.2/npm10.9.9; canonical Vitest single worker and preflight native worker=2; PG16.15 marked low-privilege local test target where applicable; no ECS/production access.",
-      "startedAt": "2026-11-05T13:43:13.629Z",
-      "endedAt": "2026-11-05T13:43:21.756Z",
-      "log": "/workspace/journey-diagnostic-evidence/release/diagnostic-api-build.log",
-      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      "testedHead": "751c178f102b243b9febd13faad3dd2f90fc5a53",
+      "sourceFingerprint": "003cc9ff93b2ed4032abc8ce1e9033cabbb5a9035843938beace265618a33275",
+      "context": "Node v22.22.2; npm 10.9.9; canonical Vitest workers=1. Selected workspace only; no Acceptance or production access.",
+      "startedAt": "2026-11-05T17:14:05.262Z",
+      "endedAt": "2026-11-05T17:14:24.242Z",
+      "log": "/workspace/scratch/m01-p01-lint-frozen.log",
+      "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763"
     },
     {
-      "id": "diagnostic-lint",
+      "id": "m01-p01-build-frozen",
       "kind": "command",
-      "command": "node node_modules/eslint/bin/eslint.js . --max-warnings=0",
+      "command": "npm run build --workspaces --if-present",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "93a0d1e08b8bfd4b1e1711b6efe048aaeda7146a",
-      "sourceFingerprint": "d33ad8d2ecfabee98b5fc5afafaa1e1518b14344df33d1bf6c5bf89ac9fc255e",
-      "context": "Actual release checkout /workspace/dx-journey-release at base HEAD 93a0d1e08b8bfd4b1e1711b6efe048aaeda7146a with the recorded candidate source fingerprint; Node22.22.2/npm10.9.9; canonical Vitest single worker and preflight native worker=2; PG16.15 marked low-privilege local test target where applicable; no ECS/production access.",
-      "startedAt": "2026-11-05T13:43:21.826Z",
-      "endedAt": "2026-11-05T13:43:37.352Z",
-      "log": "/workspace/journey-diagnostic-evidence/release/diagnostic-lint.log",
-      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      "testedHead": "751c178f102b243b9febd13faad3dd2f90fc5a53",
+      "sourceFingerprint": "003cc9ff93b2ed4032abc8ce1e9033cabbb5a9035843938beace265618a33275",
+      "context": "Node v22.22.2; npm 10.9.9; canonical Vitest workers=1. Selected workspace only; no Acceptance or production access.",
+      "startedAt": "2026-11-05T17:14:50.904Z",
+      "endedAt": "2026-11-05T17:15:06.718Z",
+      "log": "/workspace/scratch/m01-p01-build-frozen.log",
+      "logSha256": "0f1680122862791a2e87089132718cc403305b59770b971980f2d15ae26c4372"
     }
   ]
 }
