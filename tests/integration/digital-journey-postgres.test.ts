@@ -116,6 +116,18 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     }
     await expect(journeys.read(actor(stranger),sourceId,1)).rejects.toMatchObject({statusCode:404});
   });
+  it('P04 keeps a paused development task out of creation-stage risk counts through the native authorized list',async()=>{
+    const sourceId=(await identity.createSource(actor(),{developmentType:'头版',designStyleNo:'TEST-P04-STAGE-SCOPE',temporaryStyleNo:null,customerCode:null},randomUUID())).sourceId;
+    await createTask({resource:{kind:'source',id:sourceId},kind:'development_pattern',routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:worker});
+    await tasks.controlResource(actor(),{kind:'source',id:sourceId},'pause','TEST阶段风险范围，原业务暂停入口',randomUUID());
+    const base={scope:'development',search:'TEST-P04-STAGE-SCOPE'};
+    const all=await journeys.list(actor(),JourneyFilterSchema.parse(base));expect(all.total).toBe(1);expect(all.summary.blocked).toBe(1);
+    const creation=await journeys.list(actor(),JourneyFilterSchema.parse({...base,stage:'creation'}));expect(creation.total).toBe(1);expect(creation.summary.blocked).toBe(0);expect(creation.supervision).toMatchObject({overdue:0,dueSoon:0});
+    const filtered=await journeys.list(actor(),JourneyFilterSchema.parse({...base,stage:'creation',kpi:'blocked'}));expect(filtered.total).toBe(0);
+    const development=await journeys.list(actor(),JourneyFilterSchema.parse({...base,stage:'development',kpi:'blocked'}));expect(development.total).toBe(1);
+    const legacy=await journeys.list(actor(),JourneyFilterSchema.parse({search:base.search}));expect(legacy.summary.blocked).toBe(1);
+    await expect(journeys.list(actor(stranger),JourneyFilterSchema.parse(base))).resolves.toMatchObject({total:0});
+  });
   it("reads five real log events first and cursor-pages every scoped event without ties, new events or foreign cursors leaking",async()=>{
     const sourceId=(await identity.createSource(actor(),{developmentType:"头版",designStyleNo:"TEST-COCKPIT-LOG",temporaryStyleNo:null,customerCode:null},randomUUID())).sourceId;
     const task=await createTask({resource:{kind:"source",id:sourceId},kind:"development_materials",routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:clerk});

@@ -5,14 +5,14 @@ import {StatusBadge} from "@dx-rework/ui";
 import {BusinessTable,Pagination} from "@dx-rework/ui/production";
 import {CockpitPhoto} from "./cockpit-photo-preview.js";
 import {matchingPoDeliveryRisks,representativeCockpitNodes,type CockpitContext} from "./digital-journey-cockpit-model.js";
-import {poDeliveryKindLabels} from "./po-delivery-dates.js";
+import {poDeliveryKindLabels,PoOrderSummary} from "./po-delivery-dates.js";
 import type {PoDeliveryRisk} from "@dx-rework/contracts";
 import "./cockpit-home.css";
 import {CockpitBusinessProgress} from './cockpit-business-progress.js';
 
 const stateLabels={completed:"整单已完成",overdue:"逾期",due_soon:"临期",active:"进行中",not_started:"未启动",cancelled:"已取消"};
 function ActualProgress({order}:{order:OrderJourney}){
-  if(order.businessProgress)return <CockpitBusinessProgress order={order}/>;
+  if(order.businessProgress)return <CockpitBusinessProgress order={order} compact/>;
   const actual=order.display?.actualRatio;
   const stages=(order.display?.stages??[]).filter(stage=>order.orderId||stage.key==="development");
   return <div className="cockpit-double-progress" aria-label={order.orderId?"全单进度":"开发进度"}>
@@ -28,22 +28,20 @@ function Task({node}:{node:JourneyNode}){
 }
 function DeliveryRisk({risk}:{risk:PoDeliveryRisk}){return <span className="cockpit-home-delivery-line">{risk.poNumber||"待补PO"} / {risk.color} · {poDeliveryKindLabels[risk.kind]} <time>{risk.date}</time> · <StatusBadge tone={risk.risk==="overdue"?"danger":"warning"}>{risk.risk==="overdue"?"约定日期已过":"今天到期"}</StatusBadge></span>;}
 export function CockpitHome({data,error,context,onChange}:{data:JourneyResult|null;error:string;context:CockpitContext;onChange:(patch:Partial<CockpitContext>,preserve?:boolean)=>void}){
-  const enter=(order:OrderJourney,node?:JourneyNode)=>onChange({selected:order.id,round:undefined,expanded:node?.stage,focus:node?.instanceId,row:undefined},true);
+  const enter=(order:OrderJourney,node?:JourneyNode)=>onChange({selected:order.id,...(node?{round:undefined,expanded:node.stage,focus:node.instanceId,row:undefined}:context.stage?{round:undefined,expanded:context.stage,focus:undefined,row:undefined}:{})},true);
   return <section className="dx-production-panel journey-orders cockpit-home" aria-label="订单列表" aria-busy={!data&&!error}>
     <div className="journey-section-title"><h2>订单总览</h2><span>{data?`共 ${data.total} 个订单`:"正在读取…"}</span>{data&&<span>统计基准：{new Date(data.asOf).toLocaleString("zh-CN",{timeZone:"Asia/Shanghai",hour12:false})}</span>}</div>
     {data?.scopeCounts&&data.scopeCounts.cancelled>0&&<p className="journey-muted">已取消 {data.scopeCounts.cancelled} 单，不计入有效生产订单统计。</p>}
     <div className="cockpit-home-scroll" role="region" aria-label="订单列表，可横向滚动查看全部列" tabIndex={0}><BusinessTable>
       <thead><tr><th>款图</th><th>款号 / 订单号</th><th>客户 / 类型</th><th>PO 与日期</th><th>当前任务 / 风险</th><th>{context.scope==="development"?"进度（开发）":"进度（全单）"}</th><th>整单状态</th></tr></thead>
       <tbody>{data?.items.map(order=>{
-        const working=representativeCockpitNodes(order),node=working[0],display=order.display,earliest=display?.earliestShipmentDate;
-        const pos=(order.poDeliveryDates??[]).filter(line=>line.customerWarehouseArrivalDate===earliest);
-        const po=pos[0]??order.poDeliveryDates?.[0];
-        const deliveryRisks=matchingPoDeliveryRisks(order,{...context,kpi:"all"}).sort((a,b)=>(a.risk==="overdue"?0:1)-(b.risk==="overdue"?0:1)||a.date.localeCompare(b.date)||a.lineId.localeCompare(b.lineId)||a.kind.localeCompare(b.kind));
+        const working=representativeCockpitNodes(order,context),node=working[0],display=order.display;
+        const deliveryRisks=matchingPoDeliveryRisks(order,{...context,stage:undefined,node:undefined,state:undefined,kpi:"all"}).sort((a,b)=>(a.risk==="overdue"?0:1)-(b.risk==="overdue"?0:1)||a.date.localeCompare(b.date)||a.lineId.localeCompare(b.lineId)||a.kind.localeCompare(b.kind));
         return <tr key={order.id}>
           <td><CockpitPhoto src={order.styleImageUrl} label={order.designStyleNo} className="cockpit-home-photo"/></td>
           <td><button type="button" className="journey-order-select" onClick={()=>enter(order)}>{order.identity?.businessNumber??(order.identity?`开发参考：${order.designStyleNo}`:order.designStyleNo)}</button>{order.identity&&<small>{order.identity.reason}</small>}{!order.identity&&(order.orderNumbers.length>0||order.styleName)&&<small className="cockpit-home-identity-extra" tabIndex={0} title={[...order.orderNumbers,order.styleName].filter(Boolean).join(" · ")}>{[...order.orderNumbers,order.styleName].filter(Boolean).join(" · ")}</small>}<small>跟单：{order.merchandisers.map(person=>person.name??"姓名未登记").join(" / ")||"未指派"}</small></td>
           <td>{order.customer??"客户未登记"}<small>{order.orderId?"大货订单":"产品开发"}</small><small>订购量：{order.orderId?order.lines.length?order.lines.reduce((sum,line)=>sum+line.orderedQuantity,0).toLocaleString():"无可见数量":"未下单"}</small></td>
-          <td><strong>{po?.poNumber??"PO 待补"}{order.lines.length>1?`，另 ${order.lines.length-1} 个 PO`:""}</strong><small>出货日期：<span>{earliest??"未登记"}</span></small><small>加工厂交货日：<span>{po?.factoryDeliveryDate??"尚未生效"}</span></small>{display?.missingShipmentDates? <small>有 {display.missingShipmentDates} 个 PO 出货日期待补</small>:null}</td>
+          <td><PoOrderSummary order={order}/></td>
           <td>{display?.mainState==="completed"&&node&&<small className="cockpit-closed-node-context">整单已收口 · 保留的原节点状态</small>}{node?<button type="button" className="cockpit-home-task" onClick={()=>enter(order,node)}><Task node={node}/>{working.length>1&&<small>另 {working.length-1} 项 · 查看全部</small>}</button>:<span>{display?.mainState==="completed"?"已完成":display?"尚无可见在办节点":"暂无法读取节点"}</span>}{deliveryRisks.length>0&&<div className="cockpit-home-delivery"><DeliveryRisk risk={deliveryRisks[0]!}/>{deliveryRisks.length>1&&<details><summary>另 {deliveryRisks.length-1} 项交期风险</summary>{deliveryRisks.slice(1).map(risk=><DeliveryRisk key={`${risk.lineId}:${risk.kind}`} risk={risk}/>)}</details>}</div>}</td>
           <td><ActualProgress order={order}/></td><td>{display?<span className={`cockpit-order-state is-${display.mainState}`}>{stateLabels[display.mainState]}</span>:<span>暂无法读取订单状态</span>}</td>
         </tr>;

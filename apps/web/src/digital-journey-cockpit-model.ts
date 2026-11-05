@@ -1,4 +1,4 @@
-import { JOURNEY_NODES,JourneyReturnContextSchema, journeyReturnUrl, type JourneyNode, type JourneyRecord, type JourneyState, type OrderJourney } from "@dx-rework/contracts/digital-production-journey";
+import { JOURNEY_NODES,JourneyFilterSchema,JourneyReturnContextSchema, journeyReturnUrl, type JourneyNode, type JourneyRecord, type JourneyState, type OrderJourney } from "@dx-rework/contracts/digital-production-journey";
 
 export type CockpitContext = ReturnType<typeof JourneyReturnContextSchema.parse>;
 export const journeyStateLabels: Record<JourneyState, string> = { uncreated: "未启动", pending: "待前置", active: "进行中", blocked: "受阻", completed: "已完成", cancelled: "已取消", not_applicable: "不适用", unavailable: "无可见事实", inherited: "沿用前轮" };
@@ -11,8 +11,9 @@ export function cockpitContext(search: string): CockpitContext {
   const parsed = JourneyReturnContextSchema.safeParse(input);
   return parsed.success ? parsed.data : JourneyReturnContextSchema.parse({});
 }
+export const cockpitFilterPatch=(context:CockpitContext)=>Object.fromEntries(Object.entries(context).filter(([key])=>key in JourneyFilterSchema.shape)) as Partial<CockpitContext>;
 export function cockpitQuery(context: CockpitContext): string {
-  return new URLSearchParams(Object.entries(context).filter(([key, value]) => !["materialNode", "materialView", "materialFilter", "materialScroll", "materialFocus", "nodeView", "selected", "expanded", "focus", "row", "round", "flow", "documentOpen", "documentView", "documentStage", "documentSearch", "documentScroll", "documentFocus"].includes(key) && value !== undefined && value !== "").map(([key, value]) => [key, String(value)])).toString();
+  return new URLSearchParams(Object.entries(cockpitFilterPatch(context)).filter(([,value])=>value!==undefined&&value!=='').map(([key,value])=>[key,String(value)])).toString();
 }
 export function cockpitReturnPath(search: string): string | null {
   const candidate = new URLSearchParams(search).get("returnTo");
@@ -94,10 +95,10 @@ export function orderStatus(order: OrderJourney): string {
   return "未启动";
 }
 /** One compact representative; every parallel node remains reachable in the detail work area. */
-export function representativeCockpitNodes(order:OrderJourney):JourneyNode[]{
+export function representativeCockpitNodes(order:OrderJourney,filter:Partial<Pick<CockpitContext,'stage'|'node'|'state'|'risk'>>={}):JourneyNode[]{
   const stages=new Map(order.stages.map((stage,index)=>[stage.key,index]));
   const nodeOrder=new Map(JOURNEY_NODES.map((node,index)=>[node.key,index]));
-  const candidates=order.stages.flatMap(stage=>stage.nodes).filter(node=>node.current&&node.stage!=="creation"&&!["completed","cancelled","inherited","not_applicable","unavailable"].includes(node.state));
+  const candidates=order.stages.flatMap(stage=>stage.nodes).filter(node=>node.current&&node.stage!=="creation"&&!["completed","cancelled","inherited","not_applicable","unavailable"].includes(node.state)&&(!filter.stage||node.stage===filter.stage)&&(!filter.node||node.key===filter.node)&&(!filter.state||node.state===filter.state)&&(!filter.risk||node.risks.includes(filter.risk)));
   const working=candidates.filter(node=>["active","blocked"].includes(node.state)||node.risks.includes("overdue")||node.risks.includes("due_soon"));
   const rank=(node:JourneyNode)=>node.risks.includes("overdue")?0:node.risks.includes("due_soon")?1:2;
   const deadline=(node:JourneyNode)=>node.expectedAt?Date.parse(node.expectedPrecision==="date"?`${node.expectedAt}T00:00:00+08:00`:node.expectedAt):Infinity;

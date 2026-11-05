@@ -1,330 +1,369 @@
 {
   "version": 1,
-  "base": "0ef40db82778027f628250f9c31b44a44543d303",
-  "sourceFingerprint": "14d4968ef42a14379e4561c074a89d373aa52e9e6b0449dc57e35f20ae287470",
+  "base": "ee012e03c920a29fe88fc0d78868626794389d52",
+  "sourceFingerprint": "001bbf9cf0df8ce8f0be6ccad9e1f912553ac4acfced37603e0a2b2379200d31",
   "risk": "full",
   "rules": [
     {
-      "source": "User authorized sequential Module01 construction, fixes, GitHub Codex Review and merge; Library implementation1.1.1 v2 section6 and OPT1.3 v4; cockpit-display-v1.0.md P03 increment.",
-      "initialization": "Read-only compatible optional DTO fields and exact historical readers; no migration, seed, adoption, task, allocation, file or production mutation. Original task-owned low-privilege test schema resource create/release contract retained. Postcheck public-only and no remaining clients.",
-      "dateAndPermission": "Original order/source/current session permissions and private file grants retained independently; native original artifact.created_at, inheritance.created_at and instruction.published_at remain distinct. Missing source access returns no source/artifact descriptor. No new business clock, inferred adoption time or role.",
-      "expectation": "Source-bound unit, four full native suites, actual-base preflight, original browser directory/edit recovery, compiler/lint/build/secrets pass. Synthetic fixture and isolated byte checks do not close missing original N/C field acceptance. Light, official reviewedSHA and exact-head Full are separate future stages.",
-      "checks": [
-        "m01-p03-unit-final",
-        "m01-p03-native-final",
-        "m01-p03-preflight-final",
-        "m01-p03-browser-final",
-        "m01-p03-technical-browser-final",
-        "m01-p03-recovery-browser-final",
-        "m01-p03-types-final",
-        "m01-p03-lint-final",
-        "m01-p03-build-final",
-        "m01-p03-secret-final"
-      ],
-      "rule": "Published production references remain frozen independently of newer development eligibility, with exact source/instruction/artifact identities and no latest fallback.",
+      "rule": "P04-05/06/12: 每个列表/详情/材料资源独立代次；输入、请求、成功结果条件分开，失败和撤权不造空。",
+      "source": "Library implementation1.1.1 v2 §7.1.8/10及P04-05/06/12；OPT1.3 v4；docs/engineering/m01-p04-execution.md",
       "writes": [
-        "apps/api/src/production-platform/production-document-basis.ts",
-        "apps/api/src/production-platform/bulk-preparation-service.ts",
-        "packages/contracts/src/bulk-preparation.ts",
-        "apps/web/src/cockpit-documents-production.ts",
-        "tests/integration/production-readiness-postgres.test.ts",
-        "tests/unit/m01-production-document-basis.test.ts"
+        "apps/web/src/cockpit-reads.ts",
+        "apps/web/src/digital-cockpit-page.tsx",
+        "apps/web/src/digital-journey-cockpit-model.ts",
+        "apps/web/src/digital-journey-cockpit.tsx",
+        "apps/web/src/node-materials-panel.tsx",
+        "tests/unit/m01-cockpit-reads.test.ts",
+        "tests/fixtures/m01-cockpit-workspace.tsx",
+        "tests/acceptance/m01-cockpit-workspace-browser.mjs"
       ],
       "reads": [
-        "apps/api/src/production-platform/production-instruction-service.ts",
-        "apps/api/src/production-platform/preparation-material-repository.ts",
-        "apps/api/src/production-platform/access-policy.ts",
-        "apps/web/src/cockpit-documents.tsx"
+        "apps/web/src/digital-production-api.ts#digitalRequest",
+        "apps/web/src/auth-session.ts#registerSessionInvalidator",
+        "apps/web/src/use-live-search.ts#useLiveSearch",
+        "apps/web/src/cockpit-home.tsx#CockpitHome"
       ],
       "oldTests": [
-        "tests/integration/production-readiness-postgres.test.ts",
-        "tests/integration/price-reapplication-digital-dispatch-postgres.test.ts",
-        "tests/unit/digital-task-read-boundary.test.ts"
+        "tests/unit/digital-journey-cockpit.test.ts",
+        "tests/unit/session-revalidation.test.ts",
+        "tests/unit/node-materials.test.ts"
       ],
-      "newTests": [
-        "tests/unit/m01-production-document-basis.test.ts"
+      "initialization": "无SQL、角色seed或服务写入变化。身份未定/失败/无角色分名，失效后重核；各资源卸载、取消、重试、同键A1/B/A2及finally独立。",
+      "dateAndPermission": "使用原认证、请求错误和字段权限；401/403/404清私有结果，503保合法旧资料及旧时点，不自动补零或提升权限。",
+      "expectation": "列表/KPI/总数/分页/点击属于同次成功条件；晚到成功、失败和finally不能串对象或清当前busy；原中文组合和防抖保留。",
+      "checks": [
+        "unit",
+        "workspace",
+        "material",
+        "types",
+        "lint",
+        "build"
       ]
     },
     {
-      "source": "User authorized sequential Module01 construction, fixes, GitHub Codex Review and merge; Library implementation1.1.1 v2 section6 and OPT1.3 v4; cockpit-display-v1.0.md P03 increment.",
-      "initialization": "Read-only compatible optional DTO fields and exact historical readers; no migration, seed, adoption, task, allocation, file or production mutation. Original task-owned low-privilege test schema resource create/release contract retained. Postcheck public-only and no remaining clients.",
-      "dateAndPermission": "Original order/source/current session permissions and private file grants retained independently; native original artifact.created_at, inheritance.created_at and instruction.published_at remain distinct. Missing source access returns no source/artifact descriptor. No new business clock, inferred adoption time or role.",
-      "expectation": "Source-bound unit, four full native suites, actual-base preflight, original browser directory/edit recovery, compiler/lint/build/secrets pass. Synthetic fixture and isolated byte checks do not close missing original N/C field acceptance. Light, official reviewedSHA and exact-head Full are separate future stages.",
-      "checks": [
-        "m01-p03-unit-final",
-        "m01-p03-native-final",
-        "m01-p03-preflight-final",
-        "m01-p03-browser-final",
-        "m01-p03-technical-browser-final",
-        "m01-p03-recovery-browser-final",
-        "m01-p03-types-final",
-        "m01-p03-lint-final",
-        "m01-p03-build-final",
-        "m01-p03-secret-final"
-      ],
-      "rule": "Proven inherited artifact directory metadata and original bytes preserve exact version and distinct origin/inheritance/publication times under independent original authority.",
+      "rule": "P04-04/08: 身份与订单隔离的阅读偏好、阶段/节点/筛选/展开/内外滚动及焦点；保原草稿离开保护。",
+      "source": "Library implementation1.1.1 v2 §7.1.7/8与P04-04/08；现有AGENTS §3 UI与失败恢复。",
       "writes": [
-        "apps/api/src/production-platform/development-execution-routes.ts",
-        "apps/api/src/production-platform/development-technical-service.ts",
-        "apps/web/src/cockpit-documents-technical.ts",
-        "apps/web/src/cockpit-document-data.ts",
-        "apps/web/src/cockpit-documents-extended.ts",
-        "tests/integration/development-technical-postgres.test.ts"
+        "apps/web/src/cockpit-reading-context.ts",
+        "apps/web/src/node-materials-view.ts",
+        "apps/web/src/cockpit-node-rows.tsx"
       ],
       "reads": [
-        "apps/api/src/production-platform/development-technical-repository.ts",
-        "apps/api/src/production-platform/development-service.ts",
-        "apps/api/src/tools/storage.ts"
+        "apps/web/src/digital-cockpit-page.tsx#changeContext",
+        "apps/web/src/internal-navigation.ts#canLeaveInternalPage",
+        "apps/web/src/use-digital-detail-navigation-guard.ts#useDigitalDetailNavigationGuard",
+        "apps/web/src/cockpit-documents.tsx#CockpitDocuments"
       ],
       "oldTests": [
-        "tests/integration/development-technical-postgres.test.ts",
-        "tests/integration/development-technical-routes.test.ts",
-        "tests/unit/development-technical-contract.test.ts"
+        "tests/unit/node-materials.test.ts",
+        "tests/unit/internal-navigation-guard.test.ts"
+      ],
+      "initialization": "只保本标签页有界UI偏好，不缓存已读业务数据、附件链接、权限或草稿。原完整返回URL继续可用；身份失效清记忆；旧锚点消失只回所属阶段。",
+      "dateAndPermission": "阅读上下文不成为授权；每次显示的业务结果仍重新走原服务。未保存文案和在途写入继续由原全局内部导航guard保护。",
+      "expectation": "真实Page Q20PO/S2PO往返分别恢复筛选、展开、双滚动与焦点；失效节点只清锚点；真正未保存保取消，已保存附件不误报草稿。",
+      "checks": [
+        "unit",
+        "workspace",
+        "material",
+        "series"
       ]
     },
     {
-      "source": "User authorized sequential Module01 construction, fixes, GitHub Codex Review and merge; Library implementation1.1.1 v2 section6 and OPT1.3 v4; cockpit-display-v1.0.md P03 increment.",
-      "initialization": "Read-only compatible optional DTO fields and exact historical readers; no migration, seed, adoption, task, allocation, file or production mutation. Original task-owned low-privilege test schema resource create/release contract retained. Postcheck public-only and no remaining clients.",
-      "dateAndPermission": "Original order/source/current session permissions and private file grants retained independently; native original artifact.created_at, inheritance.created_at and instruction.published_at remain distinct. Missing source access returns no source/artifact descriptor. No new business clock, inferred adoption time or role.",
-      "expectation": "Source-bound unit, four full native suites, actual-base preflight, original browser directory/edit recovery, compiler/lint/build/secrets pass. Synthetic fixture and isolated byte checks do not close missing original N/C field acceptance. Light, official reviewedSHA and exact-head Full are separate future stages.",
-      "checks": [
-        "m01-p03-unit-final",
-        "m01-p03-native-final",
-        "m01-p03-preflight-final",
-        "m01-p03-browser-final",
-        "m01-p03-technical-browser-final",
-        "m01-p03-recovery-browser-final",
-        "m01-p03-types-final",
-        "m01-p03-lint-final",
-        "m01-p03-build-final",
-        "m01-p03-secret-final"
-      ],
-      "rule": "Native zero-share factories remain archived even without a tracking start or QC record; current execution, quantities, obligations and write guards are unchanged.",
+      "rule": "P04-01/02/09/11/13: 客户日期/自然PO/稳定ID排序；阶段风险与整单状态分名；原有效数量与工厂未知并列。",
+      "source": "Library implementation1.1.1 v2 §7.1.1/2/11及P04-02/09/13；P01/P02原生业务要求/日期/数量投影。",
       "writes": [
-        "apps/api/src/production-platform/qc-production-progress-service.ts",
-        "packages/contracts/src/qc-production-progress.ts",
-        "apps/web/src/qc-production-progress-panel.tsx",
-        "tests/integration/qc-progress-retirement-postgres.test.ts"
+        "apps/api/src/production-platform/journey-projection.ts",
+        "apps/web/src/cockpit-business-progress.tsx",
+        "apps/web/src/cockpit-home.tsx",
+        "apps/web/src/cockpit-home.css",
+        "apps/web/src/po-delivery-dates.tsx",
+        "tests/unit/m01-cockpit-workspace.test.ts",
+        "tests/integration/digital-journey-postgres.test.ts"
       ],
       "reads": [
-        "apps/api/src/sourcing/factory-transfer-service.ts",
-        "apps/api/src/production-platform/qc-progress-evidence.ts",
-        "apps/web/src/cockpit-documents-production.ts"
+        "apps/api/src/production-platform/journey-query.ts#selectJourneys",
+        "apps/api/src/production-platform/journey-business-progress.ts#journeyBusinessProgress",
+        "apps/web/src/cockpit-business-dates.tsx#BusinessDateFacts"
       ],
       "oldTests": [
-        "tests/integration/qc-progress-retirement-postgres.test.ts",
-        "tests/integration/price-reapplication-digital-dispatch-postgres.test.ts"
+        "tests/unit/po-delivery-dates.test.ts",
+        "tests/unit/cockpit-home.test.ts",
+        "tests/unit/journey-business-progress.test.ts",
+        "tests/integration/digital-journey-postgres.test.ts"
+      ],
+      "initialization": "无业务写入/迁移。原无scope消费者保留；selected scope节点计数排除其它阶段，关闭父单不复活blocked节点，整单客户日期与状态仍取原投影。",
+      "dateAndPermission": "最早客户日/工厂日独立来源与PO说明，不配错。实际、采用计划和预计继续按原native业务日与日终精度；未知归厂不指定一厂欠货。",
+      "expectation": "原生授权列表验证暂停开发任务不串创建阶段计数、越权列表为空且旧无scope维持；F首屏欠收2、归厂未知且实收/QC/装箱2保留。",
+      "checks": [
+        "unit",
+        "native",
+        "workspace",
+        "preflight"
       ]
     },
     {
-      "source": "User authorized sequential Module01 construction, fixes, GitHub Codex Review and merge; Library implementation1.1.1 v2 section6 and OPT1.3 v4; cockpit-display-v1.0.md P03 increment.",
-      "initialization": "Read-only compatible optional DTO fields and exact historical readers; no migration, seed, adoption, task, allocation, file or production mutation. Original task-owned low-privilege test schema resource create/release contract retained. Postcheck public-only and no remaining clients.",
-      "dateAndPermission": "Original order/source/current session permissions and private file grants retained independently; native original artifact.created_at, inheritance.created_at and instruction.published_at remain distinct. Missing source access returns no source/artifact descriptor. No new business clock, inferred adoption time or role.",
-      "expectation": "Source-bound unit, four full native suites, actual-base preflight, original browser directory/edit recovery, compiler/lint/build/secrets pass. Synthetic fixture and isolated byte checks do not close missing original N/C field acceptance. Light, official reviewedSHA and exact-head Full are separate future stages.",
-      "checks": [
-        "m01-p03-unit-final",
-        "m01-p03-native-final",
-        "m01-p03-preflight-final",
-        "m01-p03-browser-final",
-        "m01-p03-technical-browser-final",
-        "m01-p03-recovery-browser-final",
-        "m01-p03-types-final",
-        "m01-p03-lint-final",
-        "m01-p03-build-final",
-        "m01-p03-secret-final"
-      ],
-      "rule": "Real saved drafts, independently authorized categories, pinned version reads and original saved-attachment versus unsaved-input recovery remain distinct in existing components.",
+      "rule": "P04-03/07/10/11: 紧凑工作区、独立列高和整宽审计；材料原入口弹窗；完整原计划能力与版本/失败保存语义。",
+      "source": "Library implementation1.1.1 v2 §7.1.3–6/9及P04-01/03/07/10/11；仅局部布局认可，保既有外壳/色板。",
       "writes": [
-        "apps/web/src/cockpit-documents-model.ts",
-        "tests/unit/cockpit-document-directory.test.ts",
-        "tests/unit/cockpit-document-snapshot.test.ts",
-        "tests/fixtures/m01-production-directory.tsx",
-        "tests/acceptance/m01-production-directory-browser.mjs"
+        "apps/web/src/cockpit-detail.tsx",
+        "apps/web/src/cockpit-detail.css",
+        "apps/web/src/cockpit-detail-risks.tsx",
+        "apps/web/src/node-materials.css",
+        "apps/web/src/series-plan-panel.tsx",
+        "apps/web/src/series-plan-reading.tsx",
+        "tests/acceptance/node-materials-browser.mjs",
+        "tests/acceptance/series-plan-browser.mjs",
+        "tests/fixtures/node-materials-page.tsx",
+        "tests/fixtures/series-plan.tsx",
+        "tests/unit/m01-series-plan-reading.test.ts",
+        "docs/engineering/acceptance-time-sites-20261027.json"
       ],
       "reads": [
-        "apps/web/src/cockpit-documents.tsx",
-        "apps/web/src/development-technical-workspace.tsx",
-        "apps/web/src/production-instruction-panel.tsx"
+        "apps/web/src/cockpit-operation-log.tsx#CockpitOperationLog",
+        "apps/web/src/cockpit-documents.tsx#CockpitDocuments",
+        "apps/web/src/journey-sla-details.tsx#JourneySlaDetails",
+        "apps/web/src/digital-cockpit-personnel.tsx#DigitalCockpitPersonnel",
+        "apps/web/src/components.tsx"
       ],
       "oldTests": [
-        "tests/unit/cockpit-document-new-sources.test.ts",
-        "tests/unit/cockpit-document-directory.test.ts",
-        "tests/unit/cockpit-document-snapshot.test.ts",
-        "tests/acceptance/development-technical-browser.mjs",
-        "tests/acceptance/document-recovery-feedback-browser.mjs"
+        "tests/unit/cockpit-detail.test.ts",
+        "tests/unit/series-plan-dates.test.ts",
+        "tests/acceptance/node-materials-browser.mjs",
+        "tests/acceptance/series-plan-browser.mjs"
       ],
-      "newTests": [
-        "tests/unit/m01-production-document-basis.test.ts",
-        "tests/acceptance/m01-production-directory-browser.mjs"
+      "initialization": "原组件/原权限/原载荷/原幂等键保留；全局设置正常侧栏入口已核；每单跟单交接原组件保在下方。弹窗关闭无隐藏tabstop、回原焦点，不撑高卡片。",
+      "dateAndPermission": "原计划预览/采用/申请/历史仍分权可达；保存成功+刷新失败保成功、不重提交；历史版只读原存目标，缺历史实际快照明确未知，不能套今天实绩。两处扫描候选只为0..1显示ratio，未变时钟注记逐字保留。",
+      "expectation": "风险默认3条可全展，各组不相加；1280/1440/390/640 CSS宽度可达且同类表头token一致；旧固定审计grid-area已消除。版本标签/集合/日期/图条同步，部分目标不画完整条。",
+      "checks": [
+        "unit",
+        "workspace",
+        "series",
+        "material",
+        "preflight",
+        "types",
+        "lint",
+        "build",
+        "secret"
       ]
     }
   ],
   "checks": [
     {
-      "id": "m01-p03-unit-final",
+      "id": "unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/m01-production-document-basis.test.ts tests/unit/cockpit-document-directory.test.ts tests/unit/cockpit-document-new-sources.test.ts tests/unit/cockpit-document-snapshot.test.ts tests/unit/digital-task-read-boundary.test.ts tests/unit/development-technical-contract.test.ts tests/integration/development-technical-routes.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-p03-unit-final.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/series-plan-dates.test.ts tests/unit/digital-cockpit-time.test.ts tests/unit/cockpit-display-facts.test.ts tests/unit/cockpit-document-snapshot.test.ts tests/unit/m01-cockpit-reads.test.ts tests/unit/digital-journey-cockpit.test.ts tests/unit/cockpit-contract-directory-access.test.ts tests/unit/cockpit-detail.test.ts tests/unit/m01-series-plan-reading.test.ts tests/unit/po-delivery-dates.test.ts tests/unit/m01-cockpit-workspace.test.ts tests/unit/cockpit-document-directory.test.ts tests/unit/node-materials.test.ts tests/unit/journey-business-progress.test.ts tests/unit/digital-cockpit-progress.test.ts tests/unit/cockpit-home.test.ts tests/unit/cockpit-document-new-sources.test.ts tests/unit/internal-navigation-guard.test.ts tests/unit/session-revalidation.test.ts --maxWorkers=1 --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-p04-unit-final.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "0ef40db82778027f628250f9c31b44a44543d303",
-      "sourceFingerprint": "14d4968ef42a14379e4561c074a89d373aa52e9e6b0449dc57e35f20ae287470",
-      "context": "Node22.22.2/npm10.9.9. Source frozen throughout checks; at most two task-level commands concurrent. Local Vitest default config uses explicit worker1 and original strict timing; preflight canonical worker2 and actual BASE_SHA=0ef40db82778027f628250f9c31b44a44543d303. Native PG16.14 on local marked dx_m01_acceptance_test_dc924aaea2 oid694046, low-privilege dx_rework_test; four full local suites, no name filtering. Remote Full uses original canonical plan/configs separately. Browser mode NODE_ENV=production, Chromium151.0.7922.173: original components and TEST synthetic HTTP, no live role acceptance or deployment. Browser checks are command records; their actual scenario summaries stay in original logs.",
-      "startedAt": "2026-11-05T21:05:04.783Z",
-      "endedAt": "2026-11-05T21:05:07.903Z",
-      "log": "/workspace/scratch/m01-p03-unit-final.log",
-      "logSha256": "6179d777c4765c250574bd6c11617ebdd11281ab7ad65ba2d5c59f4d7262a016",
-      "passed": 106,
+      "passed": 175,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "53fdec1954e6e891a4e364fb24c4c67352a99345ce65101ff8ae98f319c15149"
+          "sha256": "52469e0975f109c22c34957e16c36b96cf1c88a679e1aec3ce4b8f0ae6466466"
         }
-      ]
+      ],
+      "testedHead": "ee012e03c920a29fe88fc0d78868626794389d52",
+      "sourceFingerprint": "001bbf9cf0df8ce8f0be6ccad9e1f912553ac4acfced37603e0a2b2379200d31",
+      "context": "Node22.22.2/npm10.9.9; original canonical test config; test workers 1; source-bound command and immutable original log.",
+      "startedAt": "2026-11-05T22:37:10.895Z",
+      "endedAt": "2026-11-05T22:37:16.484Z",
+      "log": "/workspace/scratch/m01-p04-unit-final.log",
+      "logSha256": "ff464b05be208cf6767c48f04b40b19e3d18168224c4ba689847140b8319c999"
     },
     {
-      "id": "m01-p03-native-final",
+      "id": "native",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/integration/qc-progress-retirement-postgres.test.ts tests/integration/production-readiness-postgres.test.ts tests/integration/development-technical-postgres.test.ts tests/integration/price-reapplication-digital-dispatch-postgres.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-p03-native-final.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/integration/digital-journey-postgres.test.ts --maxWorkers=1 --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-p04-native-draft.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "0ef40db82778027f628250f9c31b44a44543d303",
-      "sourceFingerprint": "14d4968ef42a14379e4561c074a89d373aa52e9e6b0449dc57e35f20ae287470",
-      "context": "Node22.22.2/npm10.9.9. Source frozen throughout checks; at most two task-level commands concurrent. Local Vitest default config uses explicit worker1 and original strict timing; preflight canonical worker2 and actual BASE_SHA=0ef40db82778027f628250f9c31b44a44543d303. Native PG16.14 on local marked dx_m01_acceptance_test_dc924aaea2 oid694046, low-privilege dx_rework_test; four full local suites, no name filtering. Remote Full uses original canonical plan/configs separately. Browser mode NODE_ENV=production, Chromium151.0.7922.173: original components and TEST synthetic HTTP, no live role acceptance or deployment. Browser checks are command records; their actual scenario summaries stay in original logs.",
-      "startedAt": "2026-11-05T21:05:04.782Z",
-      "endedAt": "2026-11-05T21:06:34.693Z",
-      "log": "/workspace/scratch/m01-p03-native-final.log",
-      "logSha256": "675e5902fc4f69ee394dd77d20adf2275e0a45ecae3c4a6f2f7f2820005b08ec",
-      "passed": 60,
+      "passed": 33,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "2193ef5a73cd471aac9f0113b9de0bd1e357bb0773958841cccb947bee8da1fe"
+          "sha256": "68d33f2fd1c49d7614f767dda1145b7558a3cd820e0b6287e3e3dff139e61c4a"
         }
-      ]
+      ],
+      "testedHead": "ee012e03c920a29fe88fc0d78868626794389d52",
+      "sourceFingerprint": "50bfe6a8940b0695e2ff82f09cd6f56a6ecfe886947d161595a52324726d3687",
+      "inputPaths": [
+        "apps/api",
+        "packages/contracts",
+        "packages/config",
+        "packages/domain",
+        "scripts",
+        "tests/integration",
+        "tests/helpers",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts",
+        "vitest.postgres-immediate.config.ts"
+      ],
+      "inputFingerprint": "579a342851ff6563edf120f84decd918a93b8390383ee222c327f352b4422ff4",
+      "context": "Node22.22.2/npm10.9.9; original Vitest PG worker1 on low privilege marked task-owned PostgreSQL16.14/OID694046. Complete exact backend/contract/config/test inputs captured before subsequent frontend-only changes; not PG13 or a final CI receipt. Cleanup verified public-only and no other clients.",
+      "startedAt": "2026-11-05T22:33:46.380Z",
+      "endedAt": "2026-11-05T22:34:42.963Z",
+      "log": "/workspace/scratch/m01-p04-native-draft.log",
+      "logSha256": "98486afd00a659e5ca3e1833cbfed39445e6655885c237717e3a13a0abca7658"
     },
     {
-      "id": "m01-p03-preflight-final",
+      "id": "workspace",
+      "kind": "tests",
+      "command": "node tests/acceptance/m01-cockpit-workspace-browser.mjs",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "node-tap",
+          "sha256": "e06e27fbe206a4cd3c47ecafcc351f12a124b6b13044b8595a28c3341f6da01f"
+        }
+      ],
+      "testedHead": "ee012e03c920a29fe88fc0d78868626794389d52",
+      "sourceFingerprint": "001bbf9cf0df8ce8f0be6ccad9e1f912553ac4acfced37603e0a2b2379200d31",
+      "context": "Node22.22.2/npm10.9.9; original canonical test config; test workers 1; one Chromium151 browser, Playwright-core1.56.1, real product components with labelled synthetic TEST HTTP; not live acceptance.",
+      "startedAt": "2026-11-05T22:37:46.532Z",
+      "endedAt": "2026-11-05T22:37:57.792Z",
+      "log": "/workspace/scratch/m01-p04-workspace-final.log",
+      "logSha256": "e06e27fbe206a4cd3c47ecafcc351f12a124b6b13044b8595a28c3341f6da01f"
+    },
+    {
+      "id": "series",
+      "kind": "tests",
+      "command": "node tests/acceptance/series-plan-browser.mjs",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "node-tap",
+          "sha256": "8eddf25590c6dee016b2d4342d0bbba5e2f52d30e36daabcd42e782857561b6b"
+        }
+      ],
+      "testedHead": "ee012e03c920a29fe88fc0d78868626794389d52",
+      "sourceFingerprint": "001bbf9cf0df8ce8f0be6ccad9e1f912553ac4acfced37603e0a2b2379200d31",
+      "context": "Node22.22.2/npm10.9.9; original canonical test config; test workers 1; one Chromium151 browser, Playwright-core1.56.1, real product components with labelled synthetic TEST HTTP; not live acceptance.",
+      "startedAt": "2026-11-05T22:37:57.859Z",
+      "endedAt": "2026-11-05T22:38:04.224Z",
+      "log": "/workspace/scratch/m01-p04-series-final.log",
+      "logSha256": "8eddf25590c6dee016b2d4342d0bbba5e2f52d30e36daabcd42e782857561b6b"
+    },
+    {
+      "id": "material",
+      "kind": "tests",
+      "command": "node tests/acceptance/node-materials-browser.mjs",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 24,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "node-tap",
+          "sha256": "4654a5bfaf6d8b240157c84f468d713dfdcd5297eac887a0c24655d3d53545c8"
+        }
+      ],
+      "testedHead": "ee012e03c920a29fe88fc0d78868626794389d52",
+      "sourceFingerprint": "001bbf9cf0df8ce8f0be6ccad9e1f912553ac4acfced37603e0a2b2379200d31",
+      "context": "Node22.22.2/npm10.9.9; original canonical test config; test workers 1; one Chromium151 browser, Playwright-core1.56.1, real product components with labelled synthetic TEST HTTP; not live acceptance.",
+      "startedAt": "2026-11-05T22:38:04.287Z",
+      "endedAt": "2026-11-05T22:38:24.084Z",
+      "log": "/workspace/scratch/m01-p04-material-final.log",
+      "logSha256": "4654a5bfaf6d8b240157c84f468d713dfdcd5297eac887a0c24655d3d53545c8"
+    },
+    {
+      "id": "preflight",
       "kind": "tests",
       "command": "npm run test:preflight",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "0ef40db82778027f628250f9c31b44a44543d303",
-      "sourceFingerprint": "14d4968ef42a14379e4561c074a89d373aa52e9e6b0449dc57e35f20ae287470",
-      "context": "Node22.22.2/npm10.9.9. Source frozen throughout checks; at most two task-level commands concurrent. Local Vitest default config uses explicit worker1 and original strict timing; preflight canonical worker2 and actual BASE_SHA=0ef40db82778027f628250f9c31b44a44543d303. Native PG16.14 on local marked dx_m01_acceptance_test_dc924aaea2 oid694046, low-privilege dx_rework_test; four full local suites, no name filtering. Remote Full uses original canonical plan/configs separately. Browser mode NODE_ENV=production, Chromium151.0.7922.173: original components and TEST synthetic HTTP, no live role acceptance or deployment. Browser checks are command records; their actual scenario summaries stay in original logs.",
-      "startedAt": "2026-11-05T21:06:44.086Z",
-      "endedAt": "2026-11-05T21:06:48.328Z",
-      "log": "/workspace/scratch/m01-p03-preflight-final.log",
-      "logSha256": "02109048d518554d7879727d1f4c7d6885e167130af944c856bc2ebb0f01c810",
       "passed": 240,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "node-tap",
-          "sha256": "02109048d518554d7879727d1f4c7d6885e167130af944c856bc2ebb0f01c810"
+          "sha256": "6d1638b3319ad7cf8d6d3c296666e8e280798792a609a540ff978cb7c42826c1"
         }
-      ]
+      ],
+      "testedHead": "ee012e03c920a29fe88fc0d78868626794389d52",
+      "sourceFingerprint": "001bbf9cf0df8ce8f0be6ccad9e1f912553ac4acfced37603e0a2b2379200d31",
+      "context": "Node22.22.2/npm10.9.9; original canonical test config; test workers 2; source-bound command and immutable original log.",
+      "startedAt": "2026-11-05T22:37:31.454Z",
+      "endedAt": "2026-11-05T22:37:38.664Z",
+      "log": "/workspace/scratch/m01-p04-preflight-final2.log",
+      "logSha256": "6d1638b3319ad7cf8d6d3c296666e8e280798792a609a540ff978cb7c42826c1"
     },
     {
-      "id": "m01-p03-browser-final",
-      "kind": "command",
-      "command": "node tests/acceptance/m01-production-directory-browser.mjs",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "0ef40db82778027f628250f9c31b44a44543d303",
-      "sourceFingerprint": "14d4968ef42a14379e4561c074a89d373aa52e9e6b0449dc57e35f20ae287470",
-      "context": "Node22.22.2/npm10.9.9. Source frozen throughout checks; at most two task-level commands concurrent. Local Vitest default config uses explicit worker1 and original strict timing; preflight canonical worker2 and actual BASE_SHA=0ef40db82778027f628250f9c31b44a44543d303. Native PG16.14 on local marked dx_m01_acceptance_test_dc924aaea2 oid694046, low-privilege dx_rework_test; four full local suites, no name filtering. Remote Full uses original canonical plan/configs separately. Browser mode NODE_ENV=production, Chromium151.0.7922.173: original components and TEST synthetic HTTP, no live role acceptance or deployment. Browser checks are command records; their actual scenario summaries stay in original logs.",
-      "startedAt": "2026-11-05T21:05:36.175Z",
-      "endedAt": "2026-11-05T21:05:41.701Z",
-      "log": "/workspace/scratch/m01-p03-browser-final.log",
-      "logSha256": "34e57c267affc6c2d74042e39bca55f7751ef2251c21068e11d9962c653c89e2"
-    },
-    {
-      "id": "m01-p03-technical-browser-final",
-      "kind": "command",
-      "command": "node tests/acceptance/development-technical-browser.mjs",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "0ef40db82778027f628250f9c31b44a44543d303",
-      "sourceFingerprint": "14d4968ef42a14379e4561c074a89d373aa52e9e6b0449dc57e35f20ae287470",
-      "context": "Node22.22.2/npm10.9.9. Source frozen throughout checks; at most two task-level commands concurrent. Local Vitest default config uses explicit worker1 and original strict timing; preflight canonical worker2 and actual BASE_SHA=0ef40db82778027f628250f9c31b44a44543d303. Native PG16.14 on local marked dx_m01_acceptance_test_dc924aaea2 oid694046, low-privilege dx_rework_test; four full local suites, no name filtering. Remote Full uses original canonical plan/configs separately. Browser mode NODE_ENV=production, Chromium151.0.7922.173: original components and TEST synthetic HTTP, no live role acceptance or deployment. Browser checks are command records; their actual scenario summaries stay in original logs.",
-      "startedAt": "2026-11-05T21:05:41.773Z",
-      "endedAt": "2026-11-05T21:05:50.039Z",
-      "log": "/workspace/scratch/m01-p03-technical-browser-final.log",
-      "logSha256": "28f4ac4e5323d5a79141d54bfe624f9c0d8f15a65ab380a22612a8fcd67bbcd7"
-    },
-    {
-      "id": "m01-p03-recovery-browser-final",
-      "kind": "command",
-      "command": "node tests/acceptance/document-recovery-feedback-browser.mjs",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "0ef40db82778027f628250f9c31b44a44543d303",
-      "sourceFingerprint": "14d4968ef42a14379e4561c074a89d373aa52e9e6b0449dc57e35f20ae287470",
-      "context": "Node22.22.2/npm10.9.9. Source frozen throughout checks; at most two task-level commands concurrent. Local Vitest default config uses explicit worker1 and original strict timing; preflight canonical worker2 and actual BASE_SHA=0ef40db82778027f628250f9c31b44a44543d303. Native PG16.14 on local marked dx_m01_acceptance_test_dc924aaea2 oid694046, low-privilege dx_rework_test; four full local suites, no name filtering. Remote Full uses original canonical plan/configs separately. Browser mode NODE_ENV=production, Chromium151.0.7922.173: original components and TEST synthetic HTTP, no live role acceptance or deployment. Browser checks are command records; their actual scenario summaries stay in original logs.",
-      "startedAt": "2026-11-05T21:05:50.116Z",
-      "endedAt": "2026-11-05T21:06:05.148Z",
-      "log": "/workspace/scratch/m01-p03-recovery-browser-final.log",
-      "logSha256": "e4a9b21fa6db4fd116737f6172bba0239525d68e858e674c566575dd7c87f09e"
-    },
-    {
-      "id": "m01-p03-types-final",
+      "id": "types",
       "kind": "command",
       "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "0ef40db82778027f628250f9c31b44a44543d303",
-      "sourceFingerprint": "14d4968ef42a14379e4561c074a89d373aa52e9e6b0449dc57e35f20ae287470",
-      "context": "Node22.22.2/npm10.9.9. Source frozen throughout checks; at most two task-level commands concurrent. Local Vitest default config uses explicit worker1 and original strict timing; preflight canonical worker2 and actual BASE_SHA=0ef40db82778027f628250f9c31b44a44543d303. Native PG16.14 on local marked dx_m01_acceptance_test_dc924aaea2 oid694046, low-privilege dx_rework_test; four full local suites, no name filtering. Remote Full uses original canonical plan/configs separately. Browser mode NODE_ENV=production, Chromium151.0.7922.173: original components and TEST synthetic HTTP, no live role acceptance or deployment. Browser checks are command records; their actual scenario summaries stay in original logs.",
-      "startedAt": "2026-11-05T21:06:05.218Z",
-      "endedAt": "2026-11-05T21:06:31.951Z",
-      "log": "/workspace/scratch/m01-p03-types-final.log",
+      "testedHead": "ee012e03c920a29fe88fc0d78868626794389d52",
+      "sourceFingerprint": "d83b4421ea4d93cb26e9bf2c3fa8aa48b5ccba4315453c8d4bcfca52dad7b4fc",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json"
+      ],
+      "inputFingerprint": "a688daad22fb39253b6b60616a7680cc36c3d2a8193edf6d39409d9fc10f6731",
+      "context": "Node22.22.2/npm10.9.9 original workspace tsc; complete apps/packages/config/lock inputs captured while original successful full fingerprint still matched, before browser-driver logging-only edits.",
+      "startedAt": "2026-11-05T22:35:41.595Z",
+      "endedAt": "2026-11-05T22:36:11.581Z",
+      "log": "/workspace/scratch/m01-p04-types-final.log",
       "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e"
     },
     {
-      "id": "m01-p03-lint-final",
+      "id": "lint",
       "kind": "command",
       "command": "npm run lint",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "0ef40db82778027f628250f9c31b44a44543d303",
-      "sourceFingerprint": "14d4968ef42a14379e4561c074a89d373aa52e9e6b0449dc57e35f20ae287470",
-      "context": "Node22.22.2/npm10.9.9. Source frozen throughout checks; at most two task-level commands concurrent. Local Vitest default config uses explicit worker1 and original strict timing; preflight canonical worker2 and actual BASE_SHA=0ef40db82778027f628250f9c31b44a44543d303. Native PG16.14 on local marked dx_m01_acceptance_test_dc924aaea2 oid694046, low-privilege dx_rework_test; four full local suites, no name filtering. Remote Full uses original canonical plan/configs separately. Browser mode NODE_ENV=production, Chromium151.0.7922.173: original components and TEST synthetic HTTP, no live role acceptance or deployment. Browser checks are command records; their actual scenario summaries stay in original logs.",
-      "startedAt": "2026-11-05T21:06:32.024Z",
-      "endedAt": "2026-11-05T21:06:49.736Z",
-      "log": "/workspace/scratch/m01-p03-lint-final.log",
+      "testedHead": "ee012e03c920a29fe88fc0d78868626794389d52",
+      "sourceFingerprint": "001bbf9cf0df8ce8f0be6ccad9e1f912553ac4acfced37603e0a2b2379200d31",
+      "context": "Node22.22.2/npm10.9.9; original workspace command; source-bound command and immutable original log.",
+      "startedAt": "2026-11-05T22:37:31.458Z",
+      "endedAt": "2026-11-05T22:37:55.250Z",
+      "log": "/workspace/scratch/m01-p04-lint-final2.log",
       "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763"
     },
     {
-      "id": "m01-p03-build-final",
+      "id": "build",
       "kind": "command",
       "command": "npm run build --workspaces --if-present",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "0ef40db82778027f628250f9c31b44a44543d303",
-      "sourceFingerprint": "14d4968ef42a14379e4561c074a89d373aa52e9e6b0449dc57e35f20ae287470",
-      "context": "Node22.22.2/npm10.9.9. Source frozen throughout checks; at most two task-level commands concurrent. Local Vitest default config uses explicit worker1 and original strict timing; preflight canonical worker2 and actual BASE_SHA=0ef40db82778027f628250f9c31b44a44543d303. Native PG16.14 on local marked dx_m01_acceptance_test_dc924aaea2 oid694046, low-privilege dx_rework_test; four full local suites, no name filtering. Remote Full uses original canonical plan/configs separately. Browser mode NODE_ENV=production, Chromium151.0.7922.173: original components and TEST synthetic HTTP, no live role acceptance or deployment. Browser checks are command records; their actual scenario summaries stay in original logs.",
-      "startedAt": "2026-11-05T21:06:49.801Z",
-      "endedAt": "2026-11-05T21:07:03.980Z",
-      "log": "/workspace/scratch/m01-p03-build-final.log",
-      "logSha256": "33897de2afe60cb8f0d222cfa89b3367b7d6132fa4ba6014f0956e8df86e676b"
+      "testedHead": "ee012e03c920a29fe88fc0d78868626794389d52",
+      "sourceFingerprint": "001bbf9cf0df8ce8f0be6ccad9e1f912553ac4acfced37603e0a2b2379200d31",
+      "context": "Node22.22.2/npm10.9.9; original workspace command; source-bound command and immutable original log.",
+      "startedAt": "2026-11-05T22:37:31.462Z",
+      "endedAt": "2026-11-05T22:37:50.501Z",
+      "log": "/workspace/scratch/m01-p04-build-final.log",
+      "logSha256": "d8dc1af85a38753e9e509f0f839fe221b8690f3a03d79d6f781d7d997b45e6d5"
     },
     {
-      "id": "m01-p03-secret-final",
+      "id": "secret",
       "kind": "command",
       "command": "npm run secret:scan",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "0ef40db82778027f628250f9c31b44a44543d303",
-      "sourceFingerprint": "14d4968ef42a14379e4561c074a89d373aa52e9e6b0449dc57e35f20ae287470",
-      "context": "Node22.22.2/npm10.9.9. Source frozen throughout checks; at most two task-level commands concurrent. Local Vitest default config uses explicit worker1 and original strict timing; preflight canonical worker2 and actual BASE_SHA=0ef40db82778027f628250f9c31b44a44543d303. Native PG16.14 on local marked dx_m01_acceptance_test_dc924aaea2 oid694046, low-privilege dx_rework_test; four full local suites, no name filtering. Remote Full uses original canonical plan/configs separately. Browser mode NODE_ENV=production, Chromium151.0.7922.173: original components and TEST synthetic HTTP, no live role acceptance or deployment. Browser checks are command records; their actual scenario summaries stay in original logs.",
-      "startedAt": "2026-11-05T21:07:04.046Z",
-      "endedAt": "2026-11-05T21:07:04.632Z",
-      "log": "/workspace/scratch/m01-p03-secret-final.log",
+      "testedHead": "ee012e03c920a29fe88fc0d78868626794389d52",
+      "sourceFingerprint": "001bbf9cf0df8ce8f0be6ccad9e1f912553ac4acfced37603e0a2b2379200d31",
+      "context": "Node22.22.2/npm10.9.9; original workspace command; source-bound command and immutable original log.",
+      "startedAt": "2026-11-05T22:37:48.100Z",
+      "endedAt": "2026-11-05T22:37:49.110Z",
+      "log": "/workspace/scratch/m01-p04-secret-final.log",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda"
     }
   ]
