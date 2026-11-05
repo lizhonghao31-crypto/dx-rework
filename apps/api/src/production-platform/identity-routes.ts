@@ -1,3 +1,4 @@
+import {journeyMeasure} from '../platform/journey-diagnostic.js';
 import {registerQcProductionProgressRoutes} from './qc-production-progress-routes.js';
 import type {QcProductionProgressService} from './qc-production-progress-service.js';
 import {registerProductionReadinessRoutes} from './production-readiness-routes.js';
@@ -107,7 +108,7 @@ export function registerDigitalIdentityRoutes(app: FastifyInstance, dependencies
     const workspaces = new DevelopmentWorkspaceQuery(dependencies.journeys);
     app.get("/digital-production/workspaces/designer", async request => workspaces.designer(await actor(request), parse(DevelopmentWorkspaceFilterSchema, request.query)));
     app.get("/digital-production/workspaces/pattern", async request => workspaces.pattern(await actor(request), parse(PatternWorkspaceFilterSchema, request.query)));
-    app.get("/digital-production/journeys", async request => dependencies.journeys!.list(await actor(request), parse(JourneyFilterSchema, request.query)));
+    app.get("/digital-production/journeys", async request => dependencies.journeys!.list(await journeyMeasure('route_auth',()=>actor(request)), parse(JourneyFilterSchema, request.query)));
     app.get("/digital-production/journeys/export", async request => dependencies.journeys!.export(await actor(request), parse(JourneyFilterSchema, request.query)));
     app.get("/digital-production/journeys/:id/node-materials", async request => {
       const query=parse(NodeMaterialsQuerySchema,request.query);

@@ -1,3 +1,4 @@
+import {journeyMeasure,journeySpan,journeyCandidateCount} from '../platform/journey-diagnostic.js';
 import {readQcExecutionEvidence} from './qc-progress-evidence.js';
 import {readNodeMaterials} from './node-materials.js';
 import {styleLabelCuttingReason,preparationTestReasons} from './production-readiness-repository.js';
@@ -61,7 +62,7 @@ export class DigitalJourneyQuery {
       const asOf=iso((await db.query("SELECT CURRENT_TIMESTAMP AS as_of")).rows[0].as_of)!;
       result=await work(reads,asOf);await db.query("COMMIT");
     } catch(error) { await db.query("ROLLBACK");throw error; } finally {this.observations.delete(reads);db.release();}
-    for(const {scope,time} of observations.values())await assertBusinessClockUnchanged(new ContextBusinessClock(this.database),scope,time);
+    for(const {scope,time} of observations.values())await journeyMeasure('clock_postcheck',()=>assertBusinessClockUnchanged(new ContextBusinessClock(this.database),scope,time));
     return result;
   }
   private async candidates(db:PoolClient,actor:TrustedActorContext,id:string|null=null,patternKinds:string[]|null=null):Promise<Candidate[]> {
@@ -91,16 +92,19 @@ export class DigitalJourneyQuery {
       const summaryOnly=options.details===false||!exportAll||Boolean(selectPage);
       const items:OrderJourney[]=[],candidates=new Map<string,Candidate>();
       const patternKinds=options.patternBusiness?PATTERN_GROUPS.flatMap(group=>[...group.nodes]).filter(kind=>options.patternBusiness==="all"||(options.patternBusiness==="bulk"?kind==="bulk_pattern":kind!=="bulk_pattern")):null;
-      for(const row of await this.candidates(db,actor,null,patternKinds)) { const item=await this.project(db,actor,row,asOf,undefined,summaryOnly,patternKinds,false,Boolean(filter.scope));if(item){items.push(item);candidates.set(item.id,row);} }
+      const rows=await journeyMeasure('candidates',()=>this.candidates(db,actor,null,patternKinds));journeyCandidateCount(rows.length);
+      for(const row of rows) { const item=await journeyMeasure('summary_projection',()=>this.project(db,actor,row,asOf,undefined,summaryOnly,patternKinds,false,Boolean(filter.scope)));if(item){items.push(item);candidates.set(item.id,row);} }
+      const endFilter=journeySpan('filter_page');
       const facets = {
         customers: [...new Set(items.map(item=>item.customer).filter((value):value is string=>Boolean(value)))].sort(),
         categories: [...new Set(items.map(item=>item.category).filter((value):value is string=>Boolean(value)))].sort(),
         merchandisers: [...new Map(items.flatMap(item=>item.merchandisers).map(person=>[person.id,person])).values()],
       };
       const result=selectJourneys(items,filter,asOf,!exportAll);
+      endFilter();
       if(summaryOnly&&options.details!==false&&!filter.scope){
         const details:OrderJourney[]=[];
-        for(const summary of selectPage?selectPage(result.items):result.items){const detail=await this.project(db,actor,candidates.get(summary.id)!,asOf);if(detail)details.push({...detail,hitReasons:summary.hitReasons});}
+        for(const summary of selectPage?selectPage(result.items):result.items){const detail=await journeyMeasure('detail_projection',()=>this.project(db,actor,candidates.get(summary.id)!,asOf));if(detail)details.push({...detail,hitReasons:summary.hitReasons});}
         result.items=details;
       }
       return {...result,canManagePolicies:isDigitalLeader(actor),facets};
@@ -170,7 +174,7 @@ export class DigitalJourneyQuery {
     const sid=source?.source_id??null,oid=order?.production_order_id??null;
     // Projection time is business time; the outer audit-log snapshot remains real.
     const scope:BusinessTimeScope=oid?{kind:'order',id:oid}:{kind:'source',id:sid!};
-    const observed=await new ContextBusinessClock(this.database,db).read(scope);
+    const observed=await journeyMeasure('clock_read',()=>new ContextBusinessClock(this.database,db).read(scope));
     if(observed.scenarioId)this.observations.get(db)?.set(`${scope.kind}:${scope.id}`,{scope,time:observed});
     if(observed.scenarioId)asOf=observed.now;
     const attached=Boolean(sid&&oid&&(await db.query("SELECT 1 FROM audit_events WHERE entity_type='digital_production' AND entity_id=$1 AND action='digital_source_attached' AND after_state->>'sourceId'=$2 LIMIT 1",[oid,sid])).rowCount);
@@ -365,8 +369,8 @@ export class DigitalJourneyQuery {
         if(sourcingFields.additional_merchandiser_user_id)merchandisers.push({id:sourcingFields.additional_merchandiser_user_id,name:(await db.query("SELECT display_name FROM app_users WHERE id=$1",[sourcingFields.additional_merchandiser_user_id])).rows[0]?.display_name??null});
       }
       if(!patternKinds){
-      const bulk=await new BulkPreparationService(this.database).read(actor,oid,db);
-      const gates=await new BulkPreparationService(this.database).gates(db,oid);
+      const bulk=await journeyMeasure('bulk',()=>new BulkPreparationService(this.database).read(actor,oid,db));
+      const gates=await journeyMeasure('bulk',()=>new BulkPreparationService(this.database).gates(db,oid));
       const bulkUrl=`/ui/digital-production?bulk=${oid}`;
       setFact("customer_sample",bulk.customerConfirmed?"completed":"pending",sid?[record("development",sid,developmentUrl(sid,gates.source?bulk.sourceRound??round??1:currentDocument?round??1:undefined),bulk.sourceRound)]:[]);
       setFact("production_instruction",bulk.instructionValid?"completed":"pending",instruction?[record("instruction",oid,`/ui/digital-production?instruction=${oid}&instructionVersion=${instruction.version}`,instruction.version)]:[],iso(instruction?.published_at),instruction?.published_by?{id:instruction.published_by,name:null}:null);
@@ -427,7 +431,7 @@ export class DigitalJourneyQuery {
           ownerNode.blockers.push({key:"original_owner_rejected",label:ownerDecision.decision_reason,ownerId:null,record:ownerRecord});
         }
       }
-      const closure=await new OrderClosureService(this.database).read(actor,oid,db);
+      const closure=await journeyMeasure('closure',()=>new OrderClosureService(this.database).read(actor,oid,db));
       const closureRecord=record("closure",oid,`/ui/digital-production?closure=${oid}`);
       const received=closure.collection?.status==='已收齐';
       setFact("receipts",received?"completed":closure.lines.some(line=>line.receiptCount>0)?"active":"uncreated",[closureRecord]);
@@ -536,7 +540,7 @@ export class DigitalJourneyQuery {
     const ownOrder=order?.created_by===actor.actorId&&actor.actorRoles.includes('sample_designer')&&await policy.activeRole(actor.actorId,'sample_designer')
       ||order?.primary_merchandiser_id===actor.actorId&&actor.actorRoles.includes('order_merchandiser')&&await policy.activeRole(actor.actorId,'order_merchandiser');
     if(fullOrder&&(liveTimingAuthority||ownOrder)||!oid&&sourceAccess&&(liveTimingAuthority||ownSource))
-      await readJourneySupervision(this.database,db,actor,item,observed,visibleTasks.some(task=>task.task_kind==='bulk_cutting_external'));
+      await journeyMeasure('sla',()=>readJourneySupervision(this.database,db,actor,item,observed,visibleTasks.some(task=>task.task_kind==='bulk_cutting_external')));
     else item.supervision={asOf:observed.now,status:'limited',originalRevision:null,currentRevision:null,nodes:[],coverage:[{key:'scope',message:'仅有本岗位节点权限，整单SLA未计入；已授权节点照常监督'}],customerReminderDate:null};
     }
     item.display=journeyDisplay(item,asOf,{cancelled,closedAt:baseNodes.find(node=>node.current&&node.key==='special_closure'&&node.state==='completed')?.actualAt??null});

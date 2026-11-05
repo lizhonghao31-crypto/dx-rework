@@ -1,3 +1,4 @@
+import type {JourneyDiagnostic} from './platform/journey-diagnostic.js';
 import { publicErrorMessage } from "./platform/public-error-message.js";
 import {registerAcceptanceClockRoutes} from './acceptance-clock/routes.js';
 import type {AcceptanceClockRuntime} from './acceptance-clock/runtime.js';
@@ -64,6 +65,7 @@ import { registerAdminConsoleRoutes, type AdminConsoleHttpDependencies } from ".
 
 export type AppDependencies = Readonly<{
   config: AppConfig;
+  journeyDiagnostic?: JourneyDiagnostic;
   checkDatabase: () => Promise<void>;
   getAppliedSchemaHistory: () => Promise<AppliedSchemaState[] | null>;
   auth?: AuthService;
@@ -145,6 +147,8 @@ export function buildApp(dependencies: AppDependencies): FastifyInstance {
       return typeof incoming === "string" && SAFE_REQUEST_ID.test(incoming) ? incoming : randomUUID();
     },
   });
+
+  dependencies.journeyDiagnostic?.register(app);
 
   registerBrowserMutationOriginGuard(app, new URL(config.dingtalk.qrRedirectUri).origin);
 

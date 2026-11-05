@@ -1,383 +1,243 @@
 {
   "version": 1,
-  "base": "7e5fbbcebb06e5c5f4dd96e0e95defb5dbbcbf7e",
-  "sourceFingerprint": "e2ff7360076f5d4c49f5306fcb7dd0f81884b2680795d04afd54c8942c857268",
+  "base": "93a0d1e08b8bfd4b1e1711b6efe048aaeda7146a",
+  "sourceFingerprint": "d33ad8d2ecfabee98b5fc5afafaa1e1518b14344df33d1bf6c5bf89ac9fc255e",
   "risk": "full",
   "rules": [
     {
-      "rule": "Shadow data may propose exclusions but never filters actual Full, alters scope, approval, original lane evidence or cleanup.",
-      "source": "Parent delegation 2026-11-05: first-stage shadow only, preserve PR899, no extra Full/merge/deploy; Library dx-ci-regression-study.md v2 sections 6/14/16; AGENTS.md.",
+      "source": "用户2026-11-05同意当前release为真实base，检查通过后合入release；AGENTS.md；docs/engineering/acceptance-journey-diagnostic.md",
+      "initialization": "仅已验证Acceptance启动proof可创建诊断；默认无开关文件，不增加migration、业务查询、角色授权或历史回填。",
+      "dateAndPermission": "真实UTC截止不超过15分钟并以单调时钟兜底；保持原认证、Root、只读快照及模拟业务时钟语义。",
+      "expectation": "当前release定向测试、真实PG及预检通过；默认关闭，真实light/Review/FULL分别记录，现场兼容及部署不在本次执行。",
+      "rule": "诊断只在原Acceptance守卫通过且环境精确匹配后安装；开关有期限、绑定文件代次并且错误不能改变业务响应。",
       "writes": [
-        ".github/workflows/full-gate.yml",
-        "scripts/ci/full-gate-lanes.mjs",
-        "scripts/ci/full-gate-lanes.test.mjs",
-        "scripts/ci/full-gate-risk-map.mjs"
+        "apps/api/src/platform/journey-diagnostic.ts",
+        "apps/api/src/app.ts",
+        "apps/api/src/server.ts",
+        "tests/unit/journey-diagnostic.test.ts"
       ],
       "reads": [
-        "scripts/ci/ci-gate-runtime.mjs",
-        "scripts/ci/light-reuse.mjs",
-        "scripts/test-suite-plan.mjs",
-        "scripts/run-business-chain-gate.mjs",
-        "scripts/ci/impact-shadow.mjs"
+        "apps/api/src/acceptance-clock/guard.ts",
+        "apps/api/src/app.ts",
+        "apps/api/src/server.ts"
       ],
       "oldTests": [
-        "scripts/ci/full-gate-lanes.test.mjs",
-        "tests/unit/full-gate-risk-map.test.ts",
-        "tests/unit/unified-gate-budget.test.ts"
+        "tests/unit/acceptance-sla-clock.test.ts"
       ],
-      "initialization": "Original lane bundle, test commands, expectedInputs, aggregation, native validator and canonical configs remain unchanged. Shadow exceptions remain unverified diagnostics. Fixture lifecycle correction uses the existing managed API in the dedicated fixture rule.",
-      "dateAndPermission": "No production, real business data or deployment. Read repository source and isolated synthetic graph/transport fixtures. Original business dates and authorization remain.",
-      "expectation": "Original expectedInputs/aggregate/validateNonDatabase and canonical configs are byte-identical. Shadow is hash-bound in the original package and only archived/logged. Failures, missing lanes and cleanup still reject. Governance files themselves require broad Full risk.",
       "checks": [
-        "fix3-protocol",
-        "fix3-target",
-        "fix3-probe-v3",
-        "fix3-static"
+        "diagnostic-unit",
+        "diagnostic-pg",
+        "diagnostic-api-types",
+        "diagnostic-api-build",
+        "diagnostic-lint"
       ]
     },
     {
-      "rule": "Bounded source-reviewed expected catalog is independent of derived graph and passing output; unknown/shared/base drift falls back and known PG omissions remain visible.",
-      "source": "User priority is avoiding unrelated tests without reducing necessary coverage; parent requests finite shadow pilot, independent obligations and missing-edge/parameter/delete/rename/malformed negative controls; Library v2 section16.",
+      "source": "用户2026-11-05同意当前release为真实base，检查通过后合入release；AGENTS.md；docs/engineering/acceptance-journey-diagnostic.md",
+      "initialization": "仅已验证Acceptance启动proof可创建诊断；默认无开关文件，不增加migration、业务查询、角色授权或历史回填。",
+      "dateAndPermission": "真实UTC截止不超过15分钟并以单调时钟兜底；保持原认证、Root、只读快照及模拟业务时钟语义。",
+      "expectation": "当前release定向测试、真实PG及预检通过；默认关闭，真实light/Review/FULL分别记录，现场兼容及部署不在本次执行。",
+      "rule": "实际SQL调用与原缓存命中分开累计，callback恢复调用时上下文含undefined，排队及后台请求不重复或串计。",
       "writes": [
-        "scripts/ci/impact-shadow.mjs",
-        "scripts/ci/impact-shadow-graph.mjs",
-        "scripts/ci/impact-shadow-policy.json",
-        "scripts/ci/impact-shadow.test.mjs",
-        "tests/unit/impact-shadow-graph.test.ts",
-        "scripts/ci/impact-shadow-binding.mjs",
-        "scripts/ci/impact-shadow-binding.test.mjs"
+        "apps/api/src/platform/journey-diagnostic.ts",
+        "apps/api/src/production-platform/journey-snapshot-reads.ts",
+        "tests/integration/journey-diagnostic-postgres.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/development-document-format.ts",
-        "apps/api/src/production-platform/development-service.ts",
-        "apps/api/src/production-platform/development-round-service.ts",
-        "apps/api/src/production-platform/development-execution-service.ts",
-        "apps/api/src/production-platform/development-amendment-service.ts",
-        "apps/api/src/pattern-room/order-service.ts",
-        "tests/integration/development-amendment-postgres.test.ts",
-        "vitest.config.ts"
+        "apps/api/src/production-platform/journey-snapshot-reads.ts",
+        "apps/api/src/platform/database.ts"
       ],
       "oldTests": [
-        "tests/unit/development-size-quantities.test.ts",
-        "tests/unit/development-craft-timing-review.test.ts",
-        "scripts/ci/full-gate-lanes.test.mjs"
+        "tests/unit/journey-snapshot-reads.test.ts"
       ],
-      "initialization": "Five direct services and the known PG consumer are audited and pinned. PG shadow candidate still copies the original canonical plan exactly; authoritative risk mapping now adds the existing amendment suite for reviewed source inputs. Removing this independent obligation from the plan is still diagnosed. No selection is activated. Exact historical-base equality is replaced by an ancestor anchor plus base/head reviewed Git blob/mode fingerprints. The complete canonical policy body is rehashed while self-binding metadata is excluded. Root-only future PRs work after deployment and policy-refresh merges; shared base-side drift still falls back.",
-      "dateAndPermission": "18 existing declarations cover quantities, frozen dates, legacy correction and physical receipt. Source analysis does not stand in for low-privilege PG, migrations, history, roles, callbacks or assertion execution.",
-      "expectation": "Every reviewed edge deletion, parameter omission/duplicate/same-count replacement, unsupported declaration, empty family, A/D/R/T/unknown/shared/invalid diff and source/base/tool version drift rejects or falls back. The real root plan now includes the known PG obligation; an omitted-plan negative control still reports it. No global E/D/R or safe-selection claim.",
       "checks": [
-        "fix3-protocol",
-        "fix3-target",
-        "fix3-probe-v3",
-        "fix3-static",
-        "fix3-pg"
+        "diagnostic-unit",
+        "diagnostic-pg",
+        "diagnostic-api-types"
       ]
     },
     {
-      "rule": "Preserve every existing receipt parameter and assertion while disambiguating native test identity.",
-      "source": "Parent requests parameter-instance negative controls; source inspection found two of six saved-route rows shared a display name. Stable row identity is necessary for the bounded independent catalog.",
+      "source": "用户2026-11-05同意当前release为真实base，检查通过后合入release；AGENTS.md；docs/engineering/acceptance-journey-diagnostic.md",
+      "initialization": "仅已验证Acceptance启动proof可创建诊断；默认无开关文件，不增加migration、业务查询、角色授权或历史回填。",
+      "dateAndPermission": "真实UTC截止不超过15分钟并以单调时钟兜底；保持原认证、Root、只读快照及模拟业务时钟语义。",
+      "expectation": "当前release定向测试、真实PG及预检通过；默认关闭，真实light/Review/FULL分别记录，现场兼容及部署不在本次执行。",
+      "rule": "原列表认证、快照候选/投影/分页/详情、bulk/closure/SLA和clock阶段独立计时，原授权范围、事务和错误语义保持。",
       "writes": [
-        "tests/unit/development-craft-timing-review.test.ts"
+        "apps/api/src/production-platform/identity-routes.ts",
+        "apps/api/src/production-platform/journey-query.ts",
+        "apps/api/src/acceptance-clock/hooks.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/development-service.ts",
-        "apps/api/src/production-platform/development-route-service.ts",
-        "scripts/ci/impact-shadow-policy.json"
+        "apps/api/src/production-platform/journey-supervision.ts",
+        "apps/api/src/production-platform/bulk-preparation-service.ts",
+        "apps/api/src/production-platform/order-closure-service.ts",
+        "apps/api/src/acceptance-clock/business-time.ts"
       ],
       "oldTests": [
-        "tests/unit/development-craft-timing-review.test.ts",
-        "tests/unit/development-size-quantities.test.ts"
+        "tests/unit/digital-journey-projection.test.ts",
+        "tests/unit/journey-projection-isolation.test.ts",
+        "tests/unit/acceptance-sla-clock.test.ts"
       ],
-      "initialization": "Only six caseId fields and the parameter title change. The original fixture, mock initialization, input combinations, assertions, order and business implementations are retained. Locked Vitest object display includes single quotes around caseId; collector and independently stored native titles now match exactly. No fuzzy normalization or merged identities.",
-      "dateAndPermission": "Original Beijing frozen-date and physical receipt semantics are unchanged. No real identities or roles are modified.",
-      "expectation": "Removing six identity fields and restoring the old title remains byte-identical to baseline. All18 original business unit cases pass in the current raw report, with exact file/ancestor/native title comparison. Omission, duplicate and same-count title substitution are detected. This local partial report does not claim a whole Full observation.",
       "checks": [
-        "fix3-target",
-        "fix3-probe-v3",
-        "fix3-protocol",
-        "fix3-static"
+        "diagnostic-unit",
+        "diagnostic-pg",
+        "diagnostic-api-types"
       ]
     },
     {
-      "rule": "A source-only correction or shared-format change must select its existing amendment PG regression even when that regression file itself is unchanged.",
-      "source": "Parent delegation authorizes minimal CI governance correction after read-only reproduction on release7e5fbbce, PR899f7507d80 and shadow55e9a7c0. Existing business/permission assertions remain authoritative.",
+      "source": "用户2026-11-05同意当前release为真实base，检查通过后合入release；AGENTS.md；docs/engineering/acceptance-journey-diagnostic.md",
+      "initialization": "仅已验证Acceptance启动proof可创建诊断；默认无开关文件，不增加migration、业务查询、角色授权或历史回填。",
+      "dateAndPermission": "真实UTC截止不超过15分钟并以单调时钟兜底；保持原认证、Root、只读快照及模拟业务时钟语义。",
+      "expectation": "当前release定向测试、真实PG及预检通过；默认关闭，真实light/Review/FULL分别记录，现场兼容及部署不在本次执行。",
+      "rule": "新增真实PG验证接入原canonical映射与Acceptance-clock资源契约，不放宽数据库守卫、worker或清理条件。",
       "writes": [
         "scripts/ci/full-gate-risk-map.mjs",
         "tests/unit/full-gate-risk-map.test.ts",
-        "tests/unit/impact-shadow-graph.test.ts"
+        "tests/integration/journey-diagnostic-postgres.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/development-document-format.ts",
-        "apps/api/src/production-platform/development-amendment-service.ts",
-        "apps/api/src/production-platform/development-amendment-repository.ts",
-        "apps/api/src/production-platform/development-routes.ts",
-        "apps/api/src/production-platform/development-service.ts",
-        "apps/api/src/production-platform/development-supply.ts",
-        "apps/api/src/production-platform/development-material-reopen.ts",
-        "apps/api/src/production-platform/development-material-verification.ts",
-        "apps/api/src/production-platform/development-material-readiness.ts",
-        "apps/api/src/production-platform/development-route-service.ts",
-        "apps/api/src/pattern-room/order-service.ts",
-        "packages/contracts/src/digital-development.ts",
-        "packages/contracts/src/digital-development-amendments.ts",
-        "scripts/test-suite-plan.mjs"
-      ],
-      "oldTests": [
-        "tests/unit/full-gate-risk-map.test.ts",
-        "tests/integration/development-amendment-postgres.test.ts"
-      ],
-      "initialization": "22 reviewed exact source inputs cover correction adapters, persistence, material prerequisites, route/round consumers, policy and contracts. The unchanged canonical union and suite config are reused, not an unconditional chain expansion. Source-only root plan has 22 suites; this candidate also changes the actual PG fixture, so its eventual Full will naturally include that suite.",
-      "dateAndPermission": "No business implementation, role, date guard, concurrency, timeout or production data changes. Related and unrelated mappings are distinguished; unknown/shared fallback retains the original chain and makes no all-PG completeness claim.",
-      "expectation": "Independent source-only cases cover all 22 reviewed inputs; actual amendment-service relative domain imports guard newly missing edges. Root+service+contract+suite duplicates schedule the suite once. Unrelated paths omit this extra suite; unknown/shared and migration unions retain every original required entry. Shadow missing-obligation control remains effective.",
-      "checks": [
-        "fix3-target",
-        "fix3-protocol",
-        "fix3-probe-v3",
-        "fix3-static",
-        "fix3-pg"
-      ]
-    },
-    {
-      "rule": "Restoring a dormant PG regression requires a schema-valid fixture and managed creation/cleanup while preserving every original business test body.",
-      "source": "The first real low-privilege PG execution failed21/passed4 before business assertions because the existing helper supplied two counts with zero size columns. Source inspection also found an obsolete auxiliary enum; current contracts, not relaxed guards, determine valid fixture shape.",
-      "writes": [
-        "tests/integration/development-amendment-postgres.test.ts",
-        "scripts/ci/impact-shadow-policy.json"
-      ],
-      "reads": [
-        "apps/web/src/digital-development-editing.ts",
-        "packages/contracts/src/digital-development.ts",
-        "tests/helpers/owned-postgres-schema.ts",
+        "scripts/test-suite-plan.mjs",
         "scripts/test-resource-contract.mjs",
-        "scripts/test-resource-lifecycle.mjs",
-        "scripts/run-business-chain-gate.mjs"
+        "tests/helpers/owned-postgres-schema.ts"
       ],
       "oldTests": [
-        "tests/integration/development-amendment-postgres.test.ts",
-        "scripts/ci/test-execution-contract.test.mjs"
+        "tests/unit/full-gate-risk-map.test.ts"
       ],
-      "initialization": "Only common fixture construction is corrected: M/L columns and aligned measurement arrays, current ordinary-auxiliary enum and a schema-validity precondition. Raw schema CREATE/DROP are replaced with existing createOwnedPostgresSchema/releaseOwnedPostgresSchema. Original historical pre0248 bootstrap/migration order is retained; schema handoff is followed by exact parent cleanup.",
-      "dateAndPermission": "All 25 original it/it.each blocks compare byte-for-byte with55e9a7c0 and every current native title passes. Real authentication, Root semantics, unauthorized/stale rejection, rollback, idempotency and frozen-data assertions are unchanged. No app/contracts implementation was edited.",
-      "expectation": "Fresh marked PG16.15 and non-superuser role execute all25 with zero failures/skips. Original assertion blocks and parameter family are preserved. Failure cleanup smoke and final schema cleanup pass; exact Docker container removal is verified. Policy source pin is updated to the reviewed fixture without removing the independent PG obligation.",
       "checks": [
-        "fix3-pg",
-        "fix3-target",
-        "fix3-protocol",
-        "fix3-probe-v3",
-        "fix3-static"
+        "diagnostic-unit",
+        "diagnostic-pg",
+        "diagnostic-lint",
+        "diagnostic-protocol"
       ]
     },
     {
-      "rule": "Successful mixed PG initialization logs must parse without allowing failed or truncated JSON reports to hide behind banners, text summaries or TAP.",
-      "source": "Parent authorizes exact minimal port of the already verified PR899f7507d80 closeout fix and negative controls after read-only reproduction of successful-PG false rejection and banner-separated failure acceptance.",
+      "rule": "按原入口刷新三处发生变化的时间源条目，保留未变人工注记；诊断只读取真实UTC期限与单调计时，不写业务锚点。",
+      "source": "本次诊断新增真实计时及原表达式包装；scripts/acceptance/time-site-inventory.mjs；docs/engineering/acceptance-journey-diagnostic.md",
       "writes": [
-        "scripts/ci/final-closeout.mjs",
-        "scripts/ci/final-closeout.test.mjs"
+        "docs/engineering/acceptance-time-sites-20261027.json"
       ],
       "reads": [
-        "scripts/ci/pr-gate-controller.mjs",
-        "scripts/ci/pr-gate-protocol.mjs",
-        "scripts/ci/final-closeout.fixture.mjs",
-        "docs/governance/final-closeout-v1.md"
+        "scripts/acceptance/time-site-inventory.mjs",
+        "apps/api/src/platform/journey-diagnostic.ts",
+        "apps/api/src/production-platform/journey-query.ts",
+        "apps/api/src/production-platform/identity-routes.ts"
       ],
       "oldTests": [
-        "scripts/ci/final-closeout.test.mjs"
+        "scripts/ci/pr-gate-controller.test.mjs"
       ],
-      "initialization": "Exact two-file copy from f7507d804ce2bd7d9e8ecbb5612ece749587000a. No sourcing split, offline deployment selector or other PR899 changes are included. Parse the complete JSON document as native evidence, otherwise scan all standalone JSON lines before selecting text/TAP. No original log bytes are rewritten.",
-      "dateAndPermission": "No production data, business implementation, fixtures, roles, schema, worker limits or actual test commands changed in this port. Negative preview/apply requests in the tests use an in-memory API with zero real GitHub calls.",
-      "expectation": "All 15 closeout cases pass within the240-case native protocol. Missing structured-report binding and inconsistent totals still reject. Failed/truncated records before/after banners or summaries, and before TAP, reject with zero mock ref POSTs. The unmodified real successful PG25 log parses correctly; eight additional pure-parser layouts reject. No remote Gate requested and no safe-selection claim.",
+      "initialization": "生成器对新增或表达式变化条目重新核实，原未变条目与既有人工semanticReview/evidence/status逐字保留。",
+      "dateAndPermission": "真实采样期限与业务时钟分离；不改变身份权限、审计日期、业务发生时间或SLA锚点。",
+      "expectation": "原checkTimeSiteInventory预检和所有240项原协议测试通过，原发生链的语义审查范围保留。",
       "checks": [
-        "fix3-protocol",
-        "fix3-closeout",
-        "fix3-static"
-      ]
-    },
-    {
-      "rule": "A reviewed policy survives deployment and policy-refresh merges without accepting policy-body or shared-input drift.",
-      "source": "Parent concrete blocker and authorized concentrated fix 2026-11-05; real Git lifecycle reproduction retained separately; AGENTS.md sections3-5.",
-      "writes": [
-        "scripts/ci/impact-shadow-binding.mjs",
-        "scripts/ci/impact-shadow-binding.test.mjs",
-        "scripts/ci/impact-shadow.mjs",
-        "scripts/ci/impact-shadow-graph.mjs",
-        "scripts/ci/impact-shadow-policy.json",
-        "scripts/ci/impact-shadow.test.mjs",
-        "scripts/ci/full-gate-risk-map.mjs"
-      ],
-      "reads": [
-        "scripts/ci/full-gate-lanes.mjs#expectedInputs",
-        "scripts/ci/construction-evidence.mjs#sourceFingerprint",
-        "scripts/ci/ci-gate-runtime.mjs#scopeFor",
-        "scripts/test-suite-plan.mjs#fullGatePostgresPlan",
-        "docs/engineering/ci-impact-shadow.md"
-      ],
-      "oldTests": [
-        "scripts/ci/impact-shadow.test.mjs",
-        "tests/unit/impact-shadow-graph.test.ts",
-        "scripts/ci/full-gate-lanes.test.mjs"
-      ],
-      "initialization": "Generator hashes staged reviewed regular Git blobs and modes, ancestor anchor and canonical policy rules; excludes only mutable pilot root, raw self-bound policy and current construction metadata. No reviewer authentication claim. Clean checkout and ancestor of both actual base/head required. The actual repository fixture clone performs both real merges and subsequent committed source-only PRs using production expectedInputs/createImpactShadow, not a mocked binding proof.",
-      "dateAndPermission": "No runtime business date, roles, production data, migration or resource behavior changed. Local Git fixtures use isolated private refs only; shadow data has no execution or approval authority.",
-      "expectation": "Both post-merge future PRs form candidates; eight real production required-edge deletions reject. Shared contract/dependency/config/policy-body drift, deletion and rename fall back with actual Full plan unchanged. Native Git tests additionally reject unrelated ancestry, malformed input, unsupported symlink, unstaged/staged/untracked changes, and requirement-document drift. Input stamping is deterministic and preserves policy body.",
-      "checks": [
-        "fix3-protocol",
-        "fix3-target",
-        "fix3-probe-v3",
-        "fix3-static"
-      ]
-    },
-    {
-      "rule": "Keep the full repository audit within its explicit test budget and compare parameter display against actual locked Vitest identities.",
-      "source": "GitHub Codex Review5784196409 on e82251dcbc1b56ac52693779eeb9e8c8f9b13ea3, P2 comment4479906285 measured6551ms audit/8536ms isolated test; executor native-report mismatch and parent authorized concentrated fix.",
-      "writes": [
-        "tests/unit/impact-shadow-graph.test.ts",
-        "scripts/ci/impact-shadow-graph.mjs",
-        "scripts/ci/impact-shadow-policy.json"
-      ],
-      "reads": [
-        "package-lock.json",
-        "vitest.config.ts",
-        "scripts/test-execution-config.mjs",
-        "tests/unit/development-craft-timing-review.test.ts",
-        "tests/unit/development-size-quantities.test.ts"
-      ],
-      "oldTests": [
-        "tests/unit/impact-shadow-graph.test.ts",
-        "tests/unit/development-craft-timing-review.test.ts",
-        "tests/unit/development-size-quantities.test.ts"
-      ],
-      "initialization": "Only the full-repository AST test has15000ms bounded timeout; measured slower Review exceeded the previous5000ms default. All scans/assertions retained. Global/business timeouts and canonical workers unchanged. Two real Vitest object parameters compare getCurrentTest().name with AST-collected title; independently reviewed18 native obligations are matched exactly against the unmodified current targeted report.",
-      "dateAndPermission": "No business fixtures, roles, dates, worker limits or tool versions changed. Quotes are preserved in native identities; escaped/long unsupported identifiers fail closed rather than being normalized.",
-      "expectation": "85 targeted cases pass, including14 graph cases and18 original business cases. Native omission, duplicate and same-count substitution produce gaps; full-run completeness remains false for a partial report. Original source inputs/assertions/order remain identical after identity metadata removed. This fixes collection validity without activating selection or claiming final Head independently reviewed.",
-      "checks": [
-        "fix3-target",
-        "fix3-probe-v3",
-        "fix3-protocol",
-        "fix3-static"
+        "diagnostic-protocol"
       ]
     }
   ],
   "checks": [
     {
-      "id": "fix3-protocol",
+      "id": "diagnostic-protocol",
       "kind": "tests",
       "command": "node scripts/test-preflight.mjs",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-05T12:05:44.264Z",
-      "endedAt": "2026-11-05T12:05:48.877Z",
-      "testedHead": "e82251dcbc1b56ac52693779eeb9e8c8f9b13ea3",
-      "sourceFingerprint": "e2ff7360076f5d4c49f5306fcb7dd0f81884b2680795d04afd54c8942c857268",
-      "logPath": "/tmp/dx-shadow-validation/fix3-protocol.log",
-      "log": "/tmp/dx-shadow-validation/fix3-protocol.log",
-      "logSha256": "1aa1bfd25eb7b93e0d8efbb047006794e21f784871b2d6323a2cd0cbe3d850b3",
-      "context": "Node 22.22.2/npm 10.9.9, Vitest 4.1.10/TypeScript 5.9.3, local managed 4 CPU host; canonical workers unchanged. This is local evidence, not hosted Full. Source fingerprint stable before/after: true",
+      "testedHead": "93a0d1e08b8bfd4b1e1711b6efe048aaeda7146a",
+      "sourceFingerprint": "d33ad8d2ecfabee98b5fc5afafaa1e1518b14344df33d1bf6c5bf89ac9fc255e",
+      "context": "Local isolated checkout of pinned Acceptance 894b299; Node 22.22.2/npm 10.9.9; canonical Vitest single worker; PG16.15 marked low-privilege local test target when applicable; no ECS or production access.",
+      "startedAt": "2026-11-05T13:42:55.730Z",
+      "endedAt": "2026-11-05T13:42:59.114Z",
+      "log": "/workspace/journey-diagnostic-evidence/release/diagnostic-protocol.log",
+      "logSha256": "2bd9bd44a49bd3429f8e38982dc25cea8abf3e8fe33e8aef24ce0c07ebba1514",
       "passed": 240,
       "failed": 0,
       "skipped": 0
     },
     {
-      "id": "fix3-target",
+      "id": "diagnostic-unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/full-gate-risk-map.test.ts tests/unit/impact-shadow-graph.test.ts tests/unit/development-craft-timing-review.test.ts tests/unit/development-size-quantities.test.ts --reporter=default --reporter=json --outputFile=/tmp/dx-shadow-validation/fix3-target.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/journey-diagnostic.test.ts tests/unit/journey-snapshot-reads.test.ts tests/unit/acceptance-sla-clock.test.ts tests/unit/journey-projection-isolation.test.ts tests/unit/digital-journey-projection.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=verbose --reporter=json --outputFile.json=/workspace/journey-diagnostic-evidence/release/unit.json",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-05T12:02:25.110Z",
-      "endedAt": "2026-11-05T12:02:30.078Z",
-      "testedHead": "e82251dcbc1b56ac52693779eeb9e8c8f9b13ea3",
-      "sourceFingerprint": "e2ff7360076f5d4c49f5306fcb7dd0f81884b2680795d04afd54c8942c857268",
-      "logPath": "/tmp/dx-shadow-validation/fix3-target.log",
-      "log": "/tmp/dx-shadow-validation/fix3-target.log",
-      "logSha256": "1ae9471e4eac99f728185e9fbfc5f52381d2941dab4e9e97b51ef93093a73b23",
-      "context": "Node 22.22.2/npm 10.9.9, Vitest 4.1.10/TypeScript 5.9.3, local managed 4 CPU host; canonical workers unchanged. This is local evidence, not hosted Full. Source fingerprint stable before/after: true",
-      "passed": 85,
+      "testedHead": "93a0d1e08b8bfd4b1e1711b6efe048aaeda7146a",
+      "sourceFingerprint": "d33ad8d2ecfabee98b5fc5afafaa1e1518b14344df33d1bf6c5bf89ac9fc255e",
+      "context": "Local isolated checkout of pinned Acceptance 894b299; Node 22.22.2/npm 10.9.9; canonical Vitest single worker; PG16.15 marked low-privilege local test target when applicable; no ECS or production access.",
+      "startedAt": "2026-11-05T13:42:59.189Z",
+      "endedAt": "2026-11-05T13:43:01.957Z",
+      "log": "/workspace/journey-diagnostic-evidence/release/diagnostic-unit.log",
+      "logSha256": "7cb87f0933c2f79764f7a5f8342a8df14d238c083fff2cce319d1841b946ee02",
+      "passed": 109,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "path": "/tmp/dx-shadow-validation/fix3-target.json",
-          "sha256": "c7940fa83fdc36c9c1b8c5106d696f72058550a9b5178174062cbf1574089a6c"
+          "sha256": "0c246f023434c9c878b777d9747cc2700be4ddb828f22f97f9ca391299dc41c2"
         }
       ]
     },
     {
-      "id": "fix3-pg",
+      "id": "diagnostic-pg",
       "kind": "tests",
-      "command": "node /tmp/dx-three-fixes-validation/pg.mjs",
+      "command": "node node_modules/vitest/vitest.mjs run tests/integration/journey-diagnostic-postgres.test.ts --reporter=verbose --reporter=json --outputFile.json=/workspace/journey-diagnostic-evidence/release/postgres.json",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-05T12:07:03.924Z",
-      "endedAt": "2026-11-05T12:07:22.779Z",
-      "testedHead": "e82251dcbc1b56ac52693779eeb9e8c8f9b13ea3",
-      "sourceFingerprint": "e2ff7360076f5d4c49f5306fcb7dd0f81884b2680795d04afd54c8942c857268",
-      "logPath": "/tmp/dx-shadow-validation/fix3-pg.log",
-      "log": "/tmp/dx-shadow-validation/fix3-pg.log",
-      "logSha256": "90d1a76ad9ce3fcb8d76c6ad1fa77943413b52f5eae7a928f1924c6a384a8e74",
-      "context": "Node 22.22.2/npm 10.9.9, Vitest 4.1.10/TypeScript 5.9.3, local managed 4 CPU host; canonical workers unchanged. This is local evidence, not hosted Full. Source fingerprint stable before/after: true Fresh marked PG16.15 database; non-superuser without create-role/create-database/bypass-RLS. Existing canonical mapped runner executes the original25 assertion bodies once with chain=false/ordinaryPGworker1. Exact managed schema cleanup and disposable container removal verified. Not complete canonical PG, hosted Full, PG13 or production evidence.",
-      "passed": 25,
+      "testedHead": "93a0d1e08b8bfd4b1e1711b6efe048aaeda7146a",
+      "sourceFingerprint": "d33ad8d2ecfabee98b5fc5afafaa1e1518b14344df33d1bf6c5bf89ac9fc255e",
+      "context": "Local isolated checkout of pinned Acceptance 894b299; Node 22.22.2/npm 10.9.9; canonical Vitest single worker; PG16.15 marked low-privilege local test target when applicable; no ECS or production access.",
+      "startedAt": "2026-11-05T13:43:02.034Z",
+      "endedAt": "2026-11-05T13:43:06.426Z",
+      "log": "/workspace/journey-diagnostic-evidence/release/diagnostic-pg.log",
+      "logSha256": "f1c3b0c1bc79541e803b73b925f0c32a384e5d5b01b134c40a4fd47765d5b23d",
+      "passed": 3,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "path": "/tmp/dx-three-fixes-validation/final-native.json",
-          "sha256": "138523782e4952f3f9b628335aa8eb3644496796a129c00ac6b957bb29370158"
+          "sha256": "739319d80b8e0bda85e24644e3ed9803aeef99cae87e459b8dc97668f12801e3"
         }
       ]
     },
     {
-      "id": "fix3-probe-v3",
+      "id": "diagnostic-api-types",
       "kind": "command",
-      "command": "node /tmp/dx-three-fixes-validation/probe.mjs",
+      "command": "node node_modules/typescript/bin/tsc --noEmit -p apps/api/tsconfig.json",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-05T12:08:07.638Z",
-      "endedAt": "2026-11-05T12:08:14.713Z",
-      "testedHead": "e82251dcbc1b56ac52693779eeb9e8c8f9b13ea3",
-      "sourceFingerprint": "e2ff7360076f5d4c49f5306fcb7dd0f81884b2680795d04afd54c8942c857268",
-      "logPath": "/tmp/dx-shadow-validation/fix3-probe-v3.log",
-      "log": "/tmp/dx-shadow-validation/fix3-probe-v3.log",
-      "logSha256": "ef38812903c71d37fa9db936987503f87fb2f0fdb048d96524744d1853d2de0a",
-      "context": "Node 22.22.2/npm 10.9.9, Vitest 4.1.10/TypeScript 5.9.3, local managed 4 CPU host; canonical workers unchanged. This is local evidence, not hosted Full. Source fingerprint stable before/after: true"
+      "testedHead": "93a0d1e08b8bfd4b1e1711b6efe048aaeda7146a",
+      "sourceFingerprint": "d33ad8d2ecfabee98b5fc5afafaa1e1518b14344df33d1bf6c5bf89ac9fc255e",
+      "context": "Local isolated checkout of pinned Acceptance 894b299; Node 22.22.2/npm 10.9.9; canonical Vitest single worker; PG16.15 marked low-privilege local test target when applicable; no ECS or production access.",
+      "startedAt": "2026-11-05T13:43:06.504Z",
+      "endedAt": "2026-11-05T13:43:13.555Z",
+      "log": "/workspace/journey-diagnostic-evidence/release/diagnostic-api-types.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     {
-      "id": "fix3-closeout",
+      "id": "diagnostic-api-build",
       "kind": "command",
-      "command": "node /tmp/dx-three-fixes-validation/closeout-probe.mjs",
+      "command": "node node_modules/typescript/bin/tsc -p apps/api/tsconfig.json",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-05T12:09:08.743Z",
-      "endedAt": "2026-11-05T12:09:09.016Z",
-      "testedHead": "e82251dcbc1b56ac52693779eeb9e8c8f9b13ea3",
-      "sourceFingerprint": "e2ff7360076f5d4c49f5306fcb7dd0f81884b2680795d04afd54c8942c857268",
-      "logPath": "/tmp/dx-shadow-validation/fix3-closeout.log",
-      "log": "/tmp/dx-shadow-validation/fix3-closeout.log",
-      "logSha256": "19f16437a38ac01f2b9ea1332a664fa44a4e516582841971e2250659604006c4",
-      "context": "Node 22.22.2/npm 10.9.9, Vitest 4.1.10/TypeScript 5.9.3, local managed 4 CPU host; canonical workers unchanged. This is local evidence, not hosted Full. Source fingerprint stable before/after: true"
+      "testedHead": "93a0d1e08b8bfd4b1e1711b6efe048aaeda7146a",
+      "sourceFingerprint": "d33ad8d2ecfabee98b5fc5afafaa1e1518b14344df33d1bf6c5bf89ac9fc255e",
+      "context": "Local isolated checkout of pinned Acceptance 894b299; Node 22.22.2/npm 10.9.9; canonical Vitest single worker; PG16.15 marked low-privilege local test target when applicable; no ECS or production access.",
+      "startedAt": "2026-11-05T13:43:13.629Z",
+      "endedAt": "2026-11-05T13:43:21.756Z",
+      "log": "/workspace/journey-diagnostic-evidence/release/diagnostic-api-build.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     {
-      "id": "fix3-static",
+      "id": "diagnostic-lint",
       "kind": "command",
-      "command": "npm run lint && npm run typecheck && git diff --check && git diff --cached --check",
+      "command": "node node_modules/eslint/bin/eslint.js . --max-warnings=0",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-05T12:05:44.254Z",
-      "endedAt": "2026-11-05T12:06:27.500Z",
-      "testedHead": "e82251dcbc1b56ac52693779eeb9e8c8f9b13ea3",
-      "sourceFingerprint": "e2ff7360076f5d4c49f5306fcb7dd0f81884b2680795d04afd54c8942c857268",
-      "logPath": "/tmp/dx-shadow-validation/fix3-static.log",
-      "log": "/tmp/dx-shadow-validation/fix3-static.log",
-      "logSha256": "22a262b7e7d5ae10e9bd600112ec58f1a92d51a6147dafd10f40ef30f8824a2a",
-      "context": "Node 22.22.2/npm 10.9.9, Vitest 4.1.10/TypeScript 5.9.3, local managed 4 CPU host; canonical workers unchanged. This is local evidence, not hosted Full. Source fingerprint stable before/after: true"
+      "testedHead": "93a0d1e08b8bfd4b1e1711b6efe048aaeda7146a",
+      "sourceFingerprint": "d33ad8d2ecfabee98b5fc5afafaa1e1518b14344df33d1bf6c5bf89ac9fc255e",
+      "context": "Local isolated checkout of pinned Acceptance 894b299; Node 22.22.2/npm 10.9.9; canonical Vitest single worker; PG16.15 marked low-privilege local test target when applicable; no ECS or production access.",
+      "startedAt": "2026-11-05T13:43:21.826Z",
+      "endedAt": "2026-11-05T13:43:37.352Z",
+      "log": "/workspace/journey-diagnostic-evidence/release/diagnostic-lint.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     }
-  ],
-  "limitations": [
-    "PR900 remains separate from PR899; no merge/deployment authorization. Concentrated fixes are to be pushed to the same PR after local freeze. Actual GitHub Review SHA is e82251dc; repaired final Head will not be described as re-reviewed.",
-    "Current source:240 native protocol cases,85 targeted Vitest cases,25 original isolated PG cases, real full-repository Git lifecycle/native identity/parity probe, closeout parser probe, lint/typecheck. All logs/reports bind this final source fingerprint; none are spliced across versions. No current complete local nonDB/canonicalPG or hosted Full approval claim.",
-    "Only diagnostic shadow proposals; actual Full commands, authority, original validators, configurations, workers and complete required inputs remain unchanged. Root-only PG mapping adds the known missing regression; unknown/shared fallback is the original chain, not all PG.",
-    "Native results cannot prove arbitrary loops/assertions or global E/D/R completeness. Review-input fingerprint is equality/ancestry evidence, not reviewer authentication. Broad unrelated tracked source/document changes conservatively require reviewed rebinding.",
-    "Original PG4pass/21fail and old lifecycle failure remain retained. Two development-only full-repository probe harness failures also remain: unignored node_modules symlink added a path, then an over-narrow expected count ignored conservative consumers. Corrected fixture/probe passed without production source changes; no failed run is reported as passing.",
-    "No extra hosted Full for shadow. Formal final request waits for the parent batch-specific conclusion, then binds exact frozen head/base/fingerprint. PR899 shared files must be reconciled separately if later integrated."
   ]
 }
