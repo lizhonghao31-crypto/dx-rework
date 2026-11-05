@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "6e41869d76cbd883954c711c00ad465fbe930a2d",
-  "sourceFingerprint": "963844f84a563f467b7adc418bb4f41dcea9fa36ba4ff0629eac3fa202052c67",
+  "sourceFingerprint": "d543a1ecd64f444c85d9aa12ea7731578a867416faed9c406159df5915715f06",
   "risk": "full",
   "rules": [
     {
@@ -12,13 +12,14 @@
       "checks": [
         "m01-p02-unit-assembled",
         "m01-p02-permission-assembled",
-        "m01-p02-pg-assembled",
         "m01-p02-types-assembled",
-        "m01-p02-lint-assembled",
         "m01-p02-build-assembled",
-        "m01-p02-secret-assembled",
         "m01-p02-browser-assembled",
-        "m01-p02-preflight-recordfix"
+        "m01-p02-pg-resourcefix",
+        "m01-p02-history-resourcefix",
+        "m01-p02-preflight-resourcefix",
+        "m01-p02-lint-resourcefix",
+        "m01-p02-secret-resourcefix"
       ],
       "rule": "Every batch keeps its original start, deadline, completion and frozen scope; original task D remains separate from canonical rolling forecast and date-only targets.",
       "writes": [
@@ -50,12 +51,14 @@
       "checks": [
         "m01-p02-unit-assembled",
         "m01-p02-permission-assembled",
-        "m01-p02-pg-assembled",
         "m01-p02-types-assembled",
-        "m01-p02-lint-assembled",
         "m01-p02-build-assembled",
-        "m01-p02-secret-assembled",
-        "m01-p02-browser-assembled"
+        "m01-p02-browser-assembled",
+        "m01-p02-pg-resourcefix",
+        "m01-p02-history-resourcefix",
+        "m01-p02-preflight-resourcefix",
+        "m01-p02-lint-resourcefix",
+        "m01-p02-secret-resourcefix"
       ],
       "rule": "Whole/stage dates use the same effective requirements as n/m; full, partial and unavailable adoption, original inherited results, precision and canonical forecast bases remain separately identified.",
       "writes": [
@@ -96,13 +99,14 @@
       "checks": [
         "m01-p02-unit-assembled",
         "m01-p02-permission-assembled",
-        "m01-p02-pg-assembled",
         "m01-p02-types-assembled",
-        "m01-p02-lint-assembled",
         "m01-p02-build-assembled",
-        "m01-p02-secret-assembled",
         "m01-p02-browser-assembled",
-        "m01-p02-preflight-recordfix"
+        "m01-p02-pg-resourcefix",
+        "m01-p02-history-resourcefix",
+        "m01-p02-preflight-resourcefix",
+        "m01-p02-lint-resourcefix",
+        "m01-p02-secret-resourcefix"
       ],
       "rule": "Native factory inspection, quality result, original owner/paused task and production supervision terminal state are independent; production completion uses all current factory completion dates, never later shipment/registration.",
       "writes": [
@@ -128,18 +132,20 @@
     },
     {
       "source": "User authorized sequential Module01 construction, GitHub Codex Review, fixes and merge; Library M01-IMPLEMENT1.1.1 v2 section5 and OPT1.3 v4; docs/requirements/cockpit-display-v1.0.md P02 increment.",
-      "initialization": "Optional read fields and read adapters only; no migrations, seeds, original deadline rewrites or business mutations. Original low-privilege isolated-schema create/cleanup remains in use; old API fields retained.",
+      "initialization": "Optional read fields and read adapters only; no migrations, seeds, original deadline rewrites or business mutations. Original low-privilege isolated-schema create/cleanup remains in use; old API fields retained. The changed optional-tail fixture and historical-image SQL fixture now create/release only through original owned-schema APIs; both are exercised and no production SQL/seed changes.",
       "dateAndPermission": "Original source/order/task authorization and full business-detail field gate retained; snapshot calendar and canonical trusted business clock retain their original semantics. New businessProgress/date evaluation shares observed.now with canonical SLA. Original date-only/exclusive vs exact instant boundaries remain distinct; no browser current-time calculation.",
       "expectation": "Current source-bound unit/native PostgreSQL regression, original read permissions, compile/lint/build and bounded browser smoke pass; light, official Review and exact-head final Full remain separately required.",
       "checks": [
         "m01-p02-unit-assembled",
         "m01-p02-permission-assembled",
-        "m01-p02-pg-assembled",
         "m01-p02-types-assembled",
-        "m01-p02-lint-assembled",
         "m01-p02-build-assembled",
-        "m01-p02-secret-assembled",
-        "m01-p02-browser-assembled"
+        "m01-p02-browser-assembled",
+        "m01-p02-pg-resourcefix",
+        "m01-p02-history-resourcefix",
+        "m01-p02-preflight-resourcefix",
+        "m01-p02-lint-resourcefix",
+        "m01-p02-secret-resourcefix"
       ],
       "rule": "Closure distinguishes normal finishing from bad rework and original registered from effective per-process reports; rejected/replaced work is history, processes are not summed into garment quantity, added fields follow original full-detail authorization and do not change closure revision.",
       "writes": [
@@ -178,7 +184,7 @@
       "exitCode": 0,
       "testedHead": "6e41869d76cbd883954c711c00ad465fbe930a2d",
       "sourceFingerprint": "963844f84a563f467b7adc418bb4f41dcea9fa36ba4ff0629eac3fa202052c67",
-      "context": "Node22.22.2/npm10.9.9; canonical Vitest worker limit1 per lane; bounded independent compiler/lint processes were concurrent. PG16.14 only on local marked database dx_m01_acceptance_test_dc924aaea2 oid694046, user dx_rework_test without cluster privileges. No production or existing Acceptance environment. ",
+      "context": "Node22.22.2/npm10.9.9; canonical Vitest worker limit1 per lane; bounded independent compiler/lint processes were concurrent. PG16.14 only on local marked database dx_m01_acceptance_test_dc924aaea2 oid694046, user dx_rework_test without cluster privileges. No production or existing Acceptance environment.  Unchanged explicit input scope captured at 2026-11-05T19:24:24.257Z while the complete original source still matched; only the unrelated optional-tail integration lifecycle changed afterward. Original source fingerprint and logs are retained.",
       "startedAt": "2026-11-05T19:12:41.835Z",
       "endedAt": "2026-11-05T19:12:46.575Z",
       "log": "/workspace/scratch/m01-p02-unit-assembled.log",
@@ -191,7 +197,24 @@
           "format": "vitest-json",
           "sha256": "c56524a6c454776a9daac3bdf0bc6f47d2164a64afef13f4ae4c7afcf2fa3cda"
         }
-      ]
+      ],
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests/unit",
+        "tests/helpers",
+        "tests/fixtures",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts",
+        "vitest.postgres-immediate.config.ts",
+        "eslint.config.js",
+        ".node-version"
+      ],
+      "inputFingerprint": "b0de7144fe1df2aebfb7cc358bbc6714bbcc9eac2e4eee10c06d9736cc860984"
     },
     {
       "id": "m01-p02-permission-assembled",
@@ -201,7 +224,7 @@
       "exitCode": 0,
       "testedHead": "6e41869d76cbd883954c711c00ad465fbe930a2d",
       "sourceFingerprint": "963844f84a563f467b7adc418bb4f41dcea9fa36ba4ff0629eac3fa202052c67",
-      "context": "Node22.22.2/npm10.9.9; canonical Vitest worker limit1 per lane; bounded independent compiler/lint processes were concurrent. PG16.14 only on local marked database dx_m01_acceptance_test_dc924aaea2 oid694046, user dx_rework_test without cluster privileges. No production or existing Acceptance environment. ",
+      "context": "Node22.22.2/npm10.9.9; canonical Vitest worker limit1 per lane; bounded independent compiler/lint processes were concurrent. PG16.14 only on local marked database dx_m01_acceptance_test_dc924aaea2 oid694046, user dx_rework_test without cluster privileges. No production or existing Acceptance environment.  Unchanged explicit input scope captured at 2026-11-05T19:24:24.257Z while the complete original source still matched; only the unrelated optional-tail integration lifecycle changed afterward. Original source fingerprint and logs are retained.",
       "startedAt": "2026-11-05T19:13:51.012Z",
       "endedAt": "2026-11-05T19:13:51.892Z",
       "log": "/workspace/scratch/m01-p02-permission-assembled.log",
@@ -214,30 +237,24 @@
           "format": "vitest-json",
           "sha256": "17603654657fcbbe1f03ebddd5c09742cbc58e179dbbd121a7b21d9e5c1425b7"
         }
-      ]
-    },
-    {
-      "id": "m01-p02-pg-assembled",
-      "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/integration/sourcing-pr03-postgres.test.ts tests/integration/business-anchors-clock-postgres.test.ts tests/integration/optional-tail-inspection-postgres.test.ts tests/integration/digital-journey-postgres.test.ts -t \"SLA06 dispatches released|SLA07 records factory|P13/P14 whole-order|P14 reads empty|native business occurrence anchors|optional tail inspection|V2 Journey\" --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-p02-pg-assembled.json",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "6e41869d76cbd883954c711c00ad465fbe930a2d",
-      "sourceFingerprint": "963844f84a563f467b7adc418bb4f41dcea9fa36ba4ff0629eac3fa202052c67",
-      "context": "Node22.22.2/npm10.9.9; canonical Vitest worker limit1 per lane; bounded independent compiler/lint processes were concurrent. PG16.14 only on local marked database dx_m01_acceptance_test_dc924aaea2 oid694046, user dx_rework_test without cluster privileges. No production or existing Acceptance environment. The explicit name filter skips137 unrelated cases; full Journey, native clock and optional-tail suites plus selected factory/closure chains are actually executed.",
-      "startedAt": "2026-11-05T19:12:43.208Z",
-      "endedAt": "2026-11-05T19:14:53.057Z",
-      "log": "/workspace/scratch/m01-p02-pg-assembled.log",
-      "logSha256": "b0bff2c1bf118403853a96f42f9f6ebeb708ae1df4c84edaa264afbc76a97c41",
-      "passed": 63,
-      "failed": 0,
-      "skipped": 137,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "9fed3e01cd8f09fa4e56a276d595f91360b3959dcabf792df73c04b6744c0d72"
-        }
-      ]
+      ],
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests/unit",
+        "tests/helpers",
+        "tests/fixtures",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts",
+        "vitest.postgres-immediate.config.ts",
+        "eslint.config.js",
+        ".node-version"
+      ],
+      "inputFingerprint": "b0de7144fe1df2aebfb7cc358bbc6714bbcc9eac2e4eee10c06d9736cc860984"
     },
     {
       "id": "m01-p02-types-assembled",
@@ -247,25 +264,28 @@
       "exitCode": 0,
       "testedHead": "6e41869d76cbd883954c711c00ad465fbe930a2d",
       "sourceFingerprint": "963844f84a563f467b7adc418bb4f41dcea9fa36ba4ff0629eac3fa202052c67",
-      "context": "Node22.22.2/npm10.9.9; canonical Vitest worker limit1 per lane; bounded independent compiler/lint processes were concurrent. PG16.14 only on local marked database dx_m01_acceptance_test_dc924aaea2 oid694046, user dx_rework_test without cluster privileges. No production or existing Acceptance environment. ",
+      "context": "Node22.22.2/npm10.9.9; canonical Vitest worker limit1 per lane; bounded independent compiler/lint processes were concurrent. PG16.14 only on local marked database dx_m01_acceptance_test_dc924aaea2 oid694046, user dx_rework_test without cluster privileges. No production or existing Acceptance environment.  Unchanged explicit input scope captured at 2026-11-05T19:24:24.257Z while the complete original source still matched; only the unrelated optional-tail integration lifecycle changed afterward. Original source fingerprint and logs are retained.",
       "startedAt": "2026-11-05T19:14:04.589Z",
       "endedAt": "2026-11-05T19:14:30.799Z",
       "log": "/workspace/scratch/m01-p02-types-assembled.log",
-      "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e"
-    },
-    {
-      "id": "m01-p02-lint-assembled",
-      "kind": "command",
-      "command": "npm run lint",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "6e41869d76cbd883954c711c00ad465fbe930a2d",
-      "sourceFingerprint": "963844f84a563f467b7adc418bb4f41dcea9fa36ba4ff0629eac3fa202052c67",
-      "context": "Node22.22.2/npm10.9.9; canonical Vitest worker limit1 per lane; bounded independent compiler/lint processes were concurrent. PG16.14 only on local marked database dx_m01_acceptance_test_dc924aaea2 oid694046, user dx_rework_test without cluster privileges. No production or existing Acceptance environment. ",
-      "startedAt": "2026-11-05T19:13:04.667Z",
-      "endedAt": "2026-11-05T19:13:28.163Z",
-      "log": "/workspace/scratch/m01-p02-lint-assembled.log",
-      "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763"
+      "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests/unit",
+        "tests/helpers",
+        "tests/fixtures",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts",
+        "vitest.postgres-immediate.config.ts",
+        "eslint.config.js",
+        ".node-version"
+      ],
+      "inputFingerprint": "b0de7144fe1df2aebfb7cc358bbc6714bbcc9eac2e4eee10c06d9736cc860984"
     },
     {
       "id": "m01-p02-build-assembled",
@@ -275,25 +295,28 @@
       "exitCode": 0,
       "testedHead": "6e41869d76cbd883954c711c00ad465fbe930a2d",
       "sourceFingerprint": "963844f84a563f467b7adc418bb4f41dcea9fa36ba4ff0629eac3fa202052c67",
-      "context": "Node22.22.2/npm10.9.9; canonical Vitest worker limit1 per lane; bounded independent compiler/lint processes were concurrent. PG16.14 only on local marked database dx_m01_acceptance_test_dc924aaea2 oid694046, user dx_rework_test without cluster privileges. No production or existing Acceptance environment. ",
+      "context": "Node22.22.2/npm10.9.9; canonical Vitest worker limit1 per lane; bounded independent compiler/lint processes were concurrent. PG16.14 only on local marked database dx_m01_acceptance_test_dc924aaea2 oid694046, user dx_rework_test without cluster privileges. No production or existing Acceptance environment.  Unchanged explicit input scope captured at 2026-11-05T19:24:24.257Z while the complete original source still matched; only the unrelated optional-tail integration lifecycle changed afterward. Original source fingerprint and logs are retained.",
       "startedAt": "2026-11-05T19:13:04.673Z",
       "endedAt": "2026-11-05T19:13:24.247Z",
       "log": "/workspace/scratch/m01-p02-build-assembled.log",
-      "logSha256": "1ca44cd1a03cd4d0afee7ea55c38cc7ced3acffc6eca9b057795c5c78fbae95c"
-    },
-    {
-      "id": "m01-p02-secret-assembled",
-      "kind": "command",
-      "command": "npm run secret:scan",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "6e41869d76cbd883954c711c00ad465fbe930a2d",
-      "sourceFingerprint": "963844f84a563f467b7adc418bb4f41dcea9fa36ba4ff0629eac3fa202052c67",
-      "context": "Node22.22.2/npm10.9.9; canonical Vitest worker limit1 per lane; bounded independent compiler/lint processes were concurrent. PG16.14 only on local marked database dx_m01_acceptance_test_dc924aaea2 oid694046, user dx_rework_test without cluster privileges. No production or existing Acceptance environment. ",
-      "startedAt": "2026-11-05T19:14:28.817Z",
-      "endedAt": "2026-11-05T19:14:29.675Z",
-      "log": "/workspace/scratch/m01-p02-secret-assembled.log",
-      "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda"
+      "logSha256": "1ca44cd1a03cd4d0afee7ea55c38cc7ced3acffc6eca9b057795c5c78fbae95c",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests/unit",
+        "tests/helpers",
+        "tests/fixtures",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts",
+        "vitest.postgres-immediate.config.ts",
+        "eslint.config.js",
+        ".node-version"
+      ],
+      "inputFingerprint": "b0de7144fe1df2aebfb7cc358bbc6714bbcc9eac2e4eee10c06d9736cc860984"
     },
     {
       "id": "m01-p02-browser-assembled",
@@ -303,28 +326,119 @@
       "exitCode": 0,
       "testedHead": "6e41869d76cbd883954c711c00ad465fbe930a2d",
       "sourceFingerprint": "963844f84a563f467b7adc418bb4f41dcea9fa36ba4ff0629eac3fa202052c67",
-      "context": "Node22.22.2/npm10.9.9; canonical Vitest worker limit1 per lane; bounded independent compiler/lint processes were concurrent. PG16.14 only on local marked database dx_m01_acceptance_test_dc924aaea2 oid694046, user dx_rework_test without cluster privileges. No production or existing Acceptance environment. ",
+      "context": "Node22.22.2/npm10.9.9; canonical Vitest worker limit1 per lane; bounded independent compiler/lint processes were concurrent. PG16.14 only on local marked database dx_m01_acceptance_test_dc924aaea2 oid694046, user dx_rework_test without cluster privileges. No production or existing Acceptance environment.  Unchanged explicit input scope captured at 2026-11-05T19:24:24.257Z while the complete original source still matched; only the unrelated optional-tail integration lifecycle changed afterward. Original source fingerprint and logs are retained.",
       "startedAt": "2026-11-05T19:15:16.631Z",
       "endedAt": "2026-11-05T19:15:18.591Z",
       "log": "/workspace/scratch/m01-p02-browser-assembled.log",
-      "logSha256": "a5aa1e34f427c840705aa47816c64211f056b107b39ac037e2ee2ee7872bfc94"
+      "logSha256": "a5aa1e34f427c840705aa47816c64211f056b107b39ac037e2ee2ee7872bfc94",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests/unit",
+        "tests/helpers",
+        "tests/fixtures",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts",
+        "vitest.postgres-immediate.config.ts",
+        "eslint.config.js",
+        ".node-version"
+      ],
+      "inputFingerprint": "b0de7144fe1df2aebfb7cc358bbc6714bbcc9eac2e4eee10c06d9736cc860984"
     },
     {
-      "id": "m01-p02-preflight-recordfix",
-      "command": "npm run test:preflight",
-      "exitCode": 0,
-      "testedHead": "cea65ed1e7219c067f35b649d3d4f209498641ed",
-      "sourceFingerprint": "963844f84a563f467b7adc418bb4f41dcea9fa36ba4ff0629eac3fa202052c67",
-      "startedAt": "2026-11-05T19:20:46.130Z",
-      "endedAt": "2026-11-05T19:20:49.838Z",
-      "log": "/workspace/scratch/m01-p02-preflight-recordfix.log",
-      "logSha256": "e5d6996c76b76015827d5e5ee8fecae5c167fcca28e8b03f3c5a6b1ef93c9ba6",
+      "id": "m01-p02-pg-resourcefix",
       "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run tests/integration/sourcing-pr03-postgres.test.ts tests/integration/business-anchors-clock-postgres.test.ts tests/integration/optional-tail-inspection-postgres.test.ts tests/integration/digital-journey-postgres.test.ts -t \"SLA06 dispatches released|SLA07 records factory|P13/P14 whole-order|P14 reads empty|native business occurrence anchors|optional tail inspection|V2 Journey\" --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-p02-pg-resourcefix.json",
       "status": "passed",
+      "exitCode": 0,
+      "testedHead": "1916329bb14942daee46fb8d02576b969148be22",
+      "sourceFingerprint": "d543a1ecd64f444c85d9aa12ea7731578a867416faed9c406159df5915715f06",
+      "context": "Node22.22.2/npm10.9.9; Vitest PostgreSQL worker1 on local marked PG16.14 database dx_m01_acceptance_test_dc924aaea2 oid694046, low-privilege dx_rework_test. Preflight uses native protocol worker2 and explicit BASE_SHA=6e41869d76cbd883954c711c00ad465fbe930a2d; no production or existing Acceptance scene. Both optional-tail schema lifecycles now use the original registered create/release API.",
+      "startedAt": "2026-11-05T19:24:44.663Z",
+      "endedAt": "2026-11-05T19:26:42.455Z",
+      "log": "/workspace/scratch/m01-p02-pg-resourcefix.log",
+      "logSha256": "0bff94fa7bfab1a0b4b11b3d2038c21f93023bff62492997a6194170b73088be",
+      "passed": 63,
+      "failed": 0,
+      "skipped": 137,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "659482228b94a373e4cd6290df588f486e4e9108079e67d31bdce8d4205ff021"
+        }
+      ]
+    },
+    {
+      "id": "m01-p02-history-resourcefix",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run tests/integration/optional-tail-inspection-postgres.test.ts -t \"historical sourcing image download SQL scope\" --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-p02-history-resourcefix.json",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "1916329bb14942daee46fb8d02576b969148be22",
+      "sourceFingerprint": "d543a1ecd64f444c85d9aa12ea7731578a867416faed9c406159df5915715f06",
+      "context": "Node22.22.2/npm10.9.9; Vitest PostgreSQL worker1 on local marked PG16.14 database dx_m01_acceptance_test_dc924aaea2 oid694046, low-privilege dx_rework_test. Preflight uses native protocol worker2 and explicit BASE_SHA=6e41869d76cbd883954c711c00ad465fbe930a2d; no production or existing Acceptance scene. Both optional-tail schema lifecycles now use the original registered create/release API.",
+      "startedAt": "2026-11-05T19:27:06.504Z",
+      "endedAt": "2026-11-05T19:27:07.359Z",
+      "log": "/workspace/scratch/m01-p02-history-resourcefix.log",
+      "logSha256": "72dde5323bc494c10f871ef22ea63964310a28400c9991ec681e308ad84fc13a",
+      "passed": 4,
+      "failed": 0,
+      "skipped": 2,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "154ba4748030333d637c2d3b259ecbd0c243fa4c13b07990239197587f108668"
+        }
+      ]
+    },
+    {
+      "id": "m01-p02-preflight-resourcefix",
+      "kind": "tests",
+      "command": "npm run test:preflight",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "1916329bb14942daee46fb8d02576b969148be22",
+      "sourceFingerprint": "d543a1ecd64f444c85d9aa12ea7731578a867416faed9c406159df5915715f06",
+      "context": "Node22.22.2/npm10.9.9; Vitest PostgreSQL worker1 on local marked PG16.14 database dx_m01_acceptance_test_dc924aaea2 oid694046, low-privilege dx_rework_test. Preflight uses native protocol worker2 and explicit BASE_SHA=6e41869d76cbd883954c711c00ad465fbe930a2d; no production or existing Acceptance scene. Both optional-tail schema lifecycles now use the original registered create/release API.",
+      "startedAt": "2026-11-05T19:24:43.282Z",
+      "endedAt": "2026-11-05T19:24:47.165Z",
+      "log": "/workspace/scratch/m01-p02-preflight-resourcefix.log",
+      "logSha256": "d8de618c4f588826f9663055983aacd037eb006dc198c8195a1cfe304e0c396f",
       "passed": 240,
       "failed": 0,
-      "skipped": 0,
-      "context": "Node22.22.2/npm10.9.9; original npm run test:preflight including 240 real Node TAP protocol tests and static migration checks. No PostgreSQL replay; code/source fingerprint unchanged. Only two time-site inventory entries reconciled, preserving all unrelated and prior diagnostic annotations."
+      "skipped": 0
+    },
+    {
+      "id": "m01-p02-lint-resourcefix",
+      "kind": "command",
+      "command": "npm run lint",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "1916329bb14942daee46fb8d02576b969148be22",
+      "sourceFingerprint": "d543a1ecd64f444c85d9aa12ea7731578a867416faed9c406159df5915715f06",
+      "context": "Node22.22.2/npm10.9.9; Vitest PostgreSQL worker1 on local marked PG16.14 database dx_m01_acceptance_test_dc924aaea2 oid694046, low-privilege dx_rework_test. Preflight uses native protocol worker2 and explicit BASE_SHA=6e41869d76cbd883954c711c00ad465fbe930a2d; no production or existing Acceptance scene. Both optional-tail schema lifecycles now use the original registered create/release API.",
+      "startedAt": "2026-11-05T19:24:46.044Z",
+      "endedAt": "2026-11-05T19:25:04.440Z",
+      "log": "/workspace/scratch/m01-p02-lint-resourcefix.log",
+      "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763"
+    },
+    {
+      "id": "m01-p02-secret-resourcefix",
+      "kind": "command",
+      "command": "npm run secret:scan",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "1916329bb14942daee46fb8d02576b969148be22",
+      "sourceFingerprint": "d543a1ecd64f444c85d9aa12ea7731578a867416faed9c406159df5915715f06",
+      "context": "Node22.22.2/npm10.9.9; Vitest PostgreSQL worker1 on local marked PG16.14 database dx_m01_acceptance_test_dc924aaea2 oid694046, low-privilege dx_rework_test. Preflight uses native protocol worker2 and explicit BASE_SHA=6e41869d76cbd883954c711c00ad465fbe930a2d; no production or existing Acceptance scene. Both optional-tail schema lifecycles now use the original registered create/release API.",
+      "startedAt": "2026-11-05T19:25:29.692Z",
+      "endedAt": "2026-11-05T19:25:30.318Z",
+      "log": "/workspace/scratch/m01-p02-secret-resourcefix.log",
+      "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda"
     }
   ]
 }

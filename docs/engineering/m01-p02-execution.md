@@ -27,9 +27,9 @@ M三原D、N原现场采用时点、B/F/EMB原逐对象量/质量/工资及F原�
 
 本次最终本地结果见下文；light、Review、最终Full、合并、部署和业务试用分别记录。
 
-## 冻结前定点完整性核验与实际本地结果
+## 首次组装的定点完整性核验与本地结果（历史）
 
-最终源码指纹：`963844f84a563f467b7adc418bb4f41dcea9fa36ba4ff0629eac3fa202052c67`。被测 git HEAD 为上述实际 base，测试的是尚未提交的本轮工作树；每条命令前后指纹一致，提交后须在全新检出验证同一源码及记录。原始日志与 Vitest JSON 保留于执行环境私有 scratch，摘要已固定在当前 construction-evidence；没有将旧版本通过冒充本版通过。
+首次组装源码指纹：`963844f84a563f467b7adc418bb4f41dcea9fa36ba4ff0629eac3fa202052c67`。被测 git HEAD 为上述实际 base，测试的是尚未提交的本轮工作树；每条命令前后指纹一致，提交后须在全新检出验证同一源码及记录。原始日志与 Vitest JSON 保留于执行环境私有 scratch，摘要已固定在当前 construction-evidence；没有将旧版本通过冒充本版通过。
 
 | 检查ID | 命令 | 实际结果 | 日志 SHA256 |
 |---|---|---|---|
@@ -57,3 +57,26 @@ M三原D、N采用时点及B/F/EMB原件仍须逐对象受控试用。技术反�
 首个候选 cea65ed1 的 light run42092631108 / job127474377558 在 protocol_tests 失败：时间来源候选发生改变，但原清单未同步。变更证据校验已通过，后续安装、lint、types、build未执行，不能据此称light通过；没有开启Review或最终Full。
 
 按原 `scripts/acceptance/time-site-inventory.mjs --write` 更新的实际差异仅 journey-query 与 journey-supervision 两项。审阅本次出现/消费者链后补其语义说明，保留旧有效业务、诊断注记及所有其他条目，不扩大忽略、不改脚本或检查标准。原 `npm run test:preflight` 新执行240/240通过、0失败、0跳过；日志SHA256 `e5d6996c76b76015827d5e5ee8fecae5c167fcca28e8b03f3c5a6b1ef93c9ba6`，详见当前记录第9项。源码指纹仍为963844f84a563f467b7adc418bb4f41dcea9fa36ba4ff0629eac3fa202052c67，本次仅文档和证据修复，未重复业务PG。
+
+## 测试资源闭环修复与当前结果
+
+当前源码指纹：`d543a1ecd64f444c85d9aa12ea7731578a867416faed9c406159df5915715f06`。实际base保持不变，应用代码与首次组装一致，只有被扩充的 optional-tail 集成夹具迁入原资源登记/释放API（两个schema入口）。这是对现行资源规则的补齐，不放宽注册检查。
+
+先前的协议预检是在HEAD工作树运行；追加显式 `BASE_SHA=6e41869d76cbd883954c711c00ad465fbe930a2d` 的适用预检发现该旧夹具直接创建schema。修复后原预检240/240通过，实际原生protocol worker为2；Vitest PG worker为1。以准确base检查的失败不记通过，旧light通过也不批准修复后的Head。
+
+未受影响的unit141、附件权限4、type/build和浏览器结果按仓库支持的明确inputPaths复用：2026-11-05T19:24:24.257Z捕获时完整原963844f8源码仍匹配原成功执行，输入摘要 `b0de7144fe1df2aebfb7cc358bbc6714bbcc9eac2e4eee10c06d9736cc860984`；最终这些输入逐字未变。旧命令、来源指纹、原始日志均保留，未改称为新Head执行。数据库组合、历史图片SQL范围、lint、secrets及适用base预检均重新执行。
+
+| 当前检查ID | 实际结果 | 原始日志SHA256 |
+|---|---|---|
+| m01-p02-unit-assembled | 141 passed / 0 failed / 0 skipped（明确未变输入复用） | `ecb6e760a58fd49adf6ceda61791309b157f57096352e1cda19eeb51302c16e8` |
+| m01-p02-permission-assembled | 4 passed / 0 failed / 0 skipped（明确未变输入复用） | `e254fedefb313dbb936fdf71a8832e68a460582eba4ad4af378a3b72e0b3867b` |
+| m01-p02-types-assembled | exit 0（明确未变输入复用） | `2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e` |
+| m01-p02-build-assembled | exit 0（明确未变输入复用） | `1ca44cd1a03cd4d0afee7ea55c38cc7ced3acffc6eca9b057795c5c78fbae95c` |
+| m01-p02-browser-assembled | exit 0（明确未变输入复用） | `a5aa1e34f427c840705aa47816c64211f056b107b39ac037e2ee2ee7872bfc94` |
+| m01-p02-pg-resourcefix | 63 passed / 0 failed / 137 skipped | `0bff94fa7bfab1a0b4b11b3d2038c21f93023bff62492997a6194170b73088be` |
+| m01-p02-history-resourcefix | 4 passed / 0 failed / 2 skipped | `72dde5323bc494c10f871ef22ea63964310a28400c9991ec681e308ad84fc13a` |
+| m01-p02-preflight-resourcefix | 240 passed / 0 failed / 0 skipped | `d8de618c4f588826f9663055983aacd037eb006dc198c8195a1cfe304e0c396f` |
+| m01-p02-lint-resourcefix | exit 0 | `fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763` |
+| m01-p02-secret-resourcefix | exit 0 | `e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda` |
+
+PG组合63通过与历史SQL范围4通过为各自真实命令结果，按名称过滤的skip分别保留，不将skip累加成未经验证的唯一用例数量。原完整current construction记录4条规则、10项检查给出具体命令、起止时点、来源、日志和报告摘要；本段不代替最终light、独立Review、Full与合并。

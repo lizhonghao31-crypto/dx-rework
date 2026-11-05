@@ -10,7 +10,7 @@ import {
 } from "@dx-rework/contracts";
 import pg from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema,createOwnedPostgresSchema,releaseOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { ApplicationError } from "../../apps/api/src/platform/errors.js";
 
 import { AccessMasterDataService } from "../../apps/api/src/access/service.js";
@@ -61,7 +61,7 @@ const inspectionReport = {
 };
 
 runWithPostgres("optional tail inspection PostgreSQL closure", () => {
-  const schema = `optional_tail_${randomUUID().replaceAll("-", "")}`;
+  const schema = ownedPostgresSchema("optional_tail");
   const adminPool = new Pool({ connectionString: databaseUrl! });
   const database = new Pool({
     connectionString: databaseUrl!,
@@ -107,7 +107,7 @@ runWithPostgres("optional tail inspection PostgreSQL closure", () => {
   const worker = () => actor(ids.worker, ["worker"], "work:report");
 
   beforeAll(async () => {
-    await adminPool.query(`CREATE SCHEMA ${schema}`);
+    await createOwnedPostgresSchema(adminPool,schema);
     const manifest = JSON.parse(await readFile(
       new URL("../../apps/api/src/platform/migration-manifest.json", import.meta.url),
       "utf8",
@@ -175,7 +175,7 @@ runWithPostgres("optional tail inspection PostgreSQL closure", () => {
 
   afterAll(async () => {
     await database.end();
-    await adminPool.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
+    await releaseOwnedPostgresSchema(adminPool,schema);
     await adminPool.end();
   });
 
@@ -428,7 +428,7 @@ runWithPostgres('historical sourcing image download SQL scope',()=>{
   beforeEach(()=>{get.mockClear();vi.spyOn(service,'get').mockImplementation(get);});
   const binding=(attachmentId:string)=>({entityType:'sourcing_case',entityId:source,attachmentId,mimeType:'image/png'});
   beforeAll(async()=>{
-    await admin.query(`CREATE SCHEMA ${schema}`);
+    await createOwnedPostgresSchema(admin,schema);
     // Native projection SQL and the real historical line function; order authorization remains the existing get boundary.
     await db.query(`CREATE TABLE rework_orders(rework_order_id uuid,source_receiving_batch_id uuid,rework_kind text,status text);
       CREATE TABLE receiving_batches(receiving_batch_id uuid,cutting_order_id uuid);
@@ -448,7 +448,7 @@ runWithPostgres('historical sourcing image download SQL scope',()=>{
     await db.query("INSERT INTO operation_events VALUES($1,'rework_order',$2,'rework.finishing.draft.create',$3,'2026-09-02'),($4,'rework_order',$2,'rework.finishing.submit',$5,'2026-09-03')",[randomUUID(),order,{receivingBatchId:batch,version:1},randomUUID(),{version:2}]);
     await db.query("INSERT INTO sourcing_case_corrections VALUES($1,1,'2026-09-05',$2,NULL,NULL,'TEST historical correction')",[source,JSON.stringify([{styleNo:'TEST历史行',imageAttachmentId:replacement},{styleNo:'TEST兄弟行',imageAttachmentId:sibling}])]);
   });
-  afterAll(async()=>{await db.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();});
+  afterAll(async()=>{await db.end();await releaseOwnedPostgresSchema(admin,schema);await admin.end();});
   it('opens the prior audited image without sourcing view capability',async()=>{
     expect(viewer.authorizationCapabilities).not.toContain('sourcing:view');
     expect((await db.query('SELECT image_attachment_id FROM current_sourcing_case_lines WHERE position=1')).rows[0].image_attachment_id).toBe(replacement);
