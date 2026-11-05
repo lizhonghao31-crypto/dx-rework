@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type {QcProgressClock} from './qc-production-progress.js';
 import type { PoDeliveryDate,PoDeliveryRisk } from "./po-delivery-dates.js";
 import type {FactoryReturnLogisticsWindow} from './factory-flow.js';
 
@@ -69,6 +70,9 @@ export const NodeMaterialsSchema=z.object({
 });
 export type JourneyDocumentMetadata={created:{at:string|null;by:string|null};edited:{at:string|null;by:string|null};published:{at:string|null;by:string|null}};
 export type JourneyTiming = {
+  /** Original native windows remain individually readable after their aggregate closes. */
+  windows?: Array<{evidence:string;scopeLabel:string;startedAt:string|null;deadline:string|null;warningAt:string|null;completedAt:string|null;complete:boolean;snapshotId?:string|null}>;
+  coverageComplete?:boolean;
   /** Date ranges are estimates, never exact starts, deadlines or permission to receive. */
   logisticsWindows?:FactoryReturnLogisticsWindow[];
   id:string;label:string;stage:JourneyStageKey;kind:string;
@@ -93,9 +97,13 @@ export type JourneyNode = {
   key: string; instanceId: string; label: string; stage: JourneyStageKey; state: JourneyState;
   round: number | null; occurrence: number | null; current: boolean;
   owner: { id: string; name: string | null } | null;
+  ownerStatus?:'assigned'|'unassigned'|'unknown'|'unavailable';
   operator: { id: string; name: string | null } | null;
+  completionOperators?:Array<{id:string;name:string|null}>;
+  productionSupervision?:{state:'ended'|'active'|'partial'|'unknown';windows:Array<{scopeLabel:string;state:QcProgressClock['state'];reason:string|null;anchor:string|null;remindAt:string|null;escalateAt:string|null}>};
   assignmentHistory: Array<{ at: string; actorId: string; from: string | null; to: string | null; actorName?: string | null; fromName?: string | null; toName?: string | null }>;
   expectedAt: string | null; expectedKind: "sla" | "plan" | "unset" | "unavailable";
+  deadlineMode?:'duration'|'date_target'|'unlimited';deadlineExclusive?:boolean;
   /** Plan dates retain their original date-only precision; no midnight is invented. */
   expectedPrecision: "instant" | "date" | "missing" | "unavailable";
   subject?: string;
@@ -107,6 +115,7 @@ export type JourneyNode = {
   risks: Array<"overdue" | "due_soon" | "blocked" | "unknown">;
   blockers: Array<{ key: string; label: string; ownerId: string | null; record: JourneyRecord | null }>;
   records: JourneyRecord[]; inheritedFrom: { taskId: string; round: number } | null;
+  inheritedResult?:{actualAt:string|null;quality:JourneyNode['actualQuality'];adoptedAt:null;reason:string};
   countsInProgress: boolean; unavailableReason: "permission" | "fact_not_recorded" | null;
 };
 export type OrderJourney = {
@@ -164,6 +173,17 @@ export type JourneyBusinessProgress = {
     planId: string | null; revision: number | null; covered: number; missing: number;
     due: number; outstandingDue: string[]; reasons: string[]};
   quantities?: JourneyBusinessQuantities;
+  dates?: {asOf:string;overall:JourneyBusinessDateGroup;stages:Array<{key:JourneyStageKey}&JourneyBusinessDateGroup>};
+};
+export type JourneyBusinessDate = {
+  at:string|null;precision:'instant'|'date'|'unknown';quality:'verified'|'recorded'|'unknown';
+  status:'complete'|'partial'|'unknown'|'incomplete'|'not_applicable';covered:number;total:number;reasons:string[];
+  coveredAt?:{at:string;precision:'instant'|'date'};
+};
+export type JourneyBusinessDateGroup = {
+  actual:JourneyBusinessDate;
+  adoptedPlan:JourneyBusinessDate&{planId:string|null;revision:number|null;sourcePlans:Array<{planId:string;revision:number}>};
+  forecast:JourneyBusinessDate&{bases:Array<'actual'|'remaining_estimate'|'standard_window'|'sla_plan'>};
 };
 export type JourneyResult = { ruleVersion: "journey-v2.0"; asOf: string; page: number; pageSize: 15; total: number; canManagePolicies?: boolean;
   facets?: { customers: string[]; categories: string[]; merchandisers: Array<{id:string;name:string|null}> };

@@ -100,6 +100,12 @@ it('an adopted dependency covering only one of two PO scopes cannot supply a who
   expect(adoptedJourneyTargets(current,[current],['one','two']).targets.has('bulk_cutting')).toBe(false);
   expect(adoptedJourneyTargets(current,[current],['one']).targets.get('bulk_cutting')).toHaveLength(1);
 });
+it('P02-11: one invalid original PO timestamp cannot leave a complete target for the other PO',()=>{
+  const current={planId:'V2',snapshot:{...snapshot(2),dependencies:[{id:'cutting:po:one',scopeRef:'po:one',basis:'confirmed',endAt:'2026-11-05T08:00:00'},{id:'cutting:po:two',scopeRef:'po:two',basis:'confirmed',endAt:asOf}] as SeriesPlanSnapshot['dependencies']}};
+  expect(adoptedJourneyTargets(current,[current],['one','two']).targets.has('bulk_cutting')).toBe(false);
+  current.snapshot.dependencies![0]!.endAt='2026-11-05T08:00:00+08:00';
+  expect(adoptedJourneyTargets(current,[current],['one','two']).targets.get('bulk_cutting')).toHaveLength(2);
+});
 function closure(received:number,covered:number,packed:number,demand=received):OrderClosureSheet{return {revision:'closure-v1',lines:[{lineId:'PO-WHITE',orderedQuantity:demand,actualQuantity:received,packingQuantity:packed}],quality:[{receiptId:'receipt-1',lineId:'PO-WHITE',quantity:covered,inspected:true,qualifiedQuantity:covered}]} as unknown as OrderClosureSheet;}
 it('P01-06: I cumulative 1→2 with one inspected receipt and packing 2 retains the quality gap despite quantity completion',()=>{
   const quantities=journeyBusinessQuantities(closure(2,1,2));expect(quantities.lines[0]).toMatchObject({received:2,inspected:1,qualityGap:1,packed:2,remainingShipment:0});

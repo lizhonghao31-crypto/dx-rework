@@ -32,6 +32,10 @@ export function adoptedJourneyTargets(current: SavedPlan, history: readonly Save
     // Partial PO coverage must not masquerade as a complete whole-order target.
     if (!rows.length || rows.some(row => !row?.endAt || row.basis === 'unknown')) continue;
     for (const row of rows) add(key, row!.endAt!, 'instant', row!.scopeRef);
+    // A scope can have an invalid original timestamp independently of
+    // other PO scopes. Keep this requirement uncovered rather than using the
+    // remaining date as a complete whole-order target.
+    if(targets.get(key)?.length!==rows.length)targets.delete(key);
   }
   return {planId: current.planId, revision: plan.revision, targets};
 }

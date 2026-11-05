@@ -12,7 +12,7 @@ function fixture():OrderJourney{
 const render=(o:OrderJourney,busy=false)=>renderToStaticMarkup(createElement(CockpitDetail,{order:o,context:JourneyReturnContextSchema.parse({selected:id,scope:"production",focus:task}),asOf:"2026-10-19T00:00:00Z",actions:null,busy,onChange(){}}));
 it('shows an actual day as a day in both detail and node rows, without an invented midnight or 08:00',()=>{
   const o=fixture(),n=o.stages[1]!.nodes[0]!;n.actualDate='2026-10-17';n.actualAt=null;n.state='completed';
-  const html=render(o);expect(html).toContain('<dt>实际完成：</dt><dd>2026-10-17</dd>');expect(html).toContain('<span>2026-10-17</span>');expect(html).not.toContain('2026/10/17 08:00');expect(html).not.toContain('2026-10-17T00:00');
+  const html=render(o);expect(html).toContain('<dt>实际完成：</dt><dd>2026-10-17<small>原完成记录，时间待核</small></dd>');expect(html).toContain('<span>2026-10-17</span>');expect(html).not.toContain('2026/10/17 08:00');expect(html).not.toContain('2026-10-17T00:00');
 });
 it("renders seven double rings with only two date rows, risk color and no invented time ratio",()=>{
   const html=render(fixture());

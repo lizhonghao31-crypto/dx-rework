@@ -73,3 +73,33 @@ it('distinguishes unknown batch windows from captured unlimited rule types',()=>
 it('does not turn a task chronology marked unknown into a normal todo merely because a warning exists',()=>{
  const result=todoSlaTiming({enteredAt:'2026-10-21T00:00:00.000Z',dueAt:'2026-10-22T00:00:00.000Z',warningAt:'2026-10-21T12:00:00.000Z',asOf:'2026-10-20T00:00:00.000Z'});expect(result.status).toBe('unknown');expect(result.elapsedSeconds).toBeNull();
 });
+
+it('P02-04: preserves a frozen 72h plan and reads the actual 24h instruction window without catalogue replacement',()=>{
+ const original=plan();Object.assign(original.nodes[0]!,{id:'production_sheet',parameterKey:'production_sheet',stage:3,minutes:4320});
+ const start='2026-10-19T00:00:00.000Z';
+ for(const [minutes,expected] of [[1440,'2026-10-20T00:00:00.000Z'],[4320,'2026-10-22T00:00:00.000Z']] as const){
+  const o=order(),facts={production_sheet:{startedAt:start,standardMinutes:minutes,evidence:`TEST original frozen instruction window ${minutes}`}};
+  attachJourneySupervision(o,original,original,evaluateSlaPlan(original,facts,time),time,{original:1,current:1},false,{facts});
+  expect(o.supervision!.nodes[0]!.target.at).toBe(expected);
+  expect(o.supervision!.nodes[0]!.original.at).toBe('2026-10-22T00:00:00.000Z');
+  expect(o.stages.flatMap(stage=>stage.nodes).find(node=>node.key==='production_instruction')!.expectedAt).toBe(expected);
+ }
+ expect(original.nodes[0]!.minutes).toBe(4320);
+});
+
+it('P02-05: both original sourcing 2h windows keep independent D and agree with todo timing at D minus1ms, D and D plus1ms',()=>{
+ const p=plan(),base=p.nodes[0]!;
+ p.nodes=[{...base,id:'sourcing_selection',parameterKey:'sourcing_selection',stage:3},{...base,id:'sourcing_approval',parameterKey:'sourcing_approval',stage:3}];
+ const facts={sourcing_selection:{startedAt:'2026-10-19T00:00:00.000Z',evidence:'TEST actual factory selection'},sourcing_approval:{startedAt:'2026-10-19T03:00:00.000Z',evidence:'TEST actual owner approval'}};
+ for(const [id,key,deadline,warning] of [['sourcing_selection','sourcing_director','2026-10-19T02:00:00.000Z','2026-10-19T01:24:00.000Z'],['sourcing_approval','sourcing_owner','2026-10-19T05:00:00.000Z','2026-10-19T04:24:00.000Z']] as const)for(const offset of [-1,0,1]){
+  const observed={...time,now:new Date(Date.parse(deadline)+offset).toISOString()},o=order();
+  const visibleFacts=Date.parse(observed.now)<Date.parse(facts.sourcing_approval.startedAt)?{sourcing_selection:facts.sourcing_selection}:facts;
+  const evaluations=evaluateSlaPlan(p,visibleFacts,observed),row=evaluations.find(node=>node.id===id)!;
+  attachJourneySupervision(o,p,p,evaluations,observed,{original:1,current:1},false,{facts:visibleFacts});
+  const native=o.stages.flatMap(stage=>stage.nodes).find(node=>node.key===key)!;
+  const todo=todoSlaTiming({dueAt:deadline,warningAt:warning,enteredAt:facts[id].startedAt,asOf:observed.now});
+  expect(native.expectedAt).toBe(deadline);expect(row.deadline.at).toBe(deadline);
+  expect(todo.status).toBe(offset>0?'overdue':'warning');expect(row.status).toBe(todo.status);
+  expect(native.risks.includes('overdue')).toBe(offset>0);
+ }
+});

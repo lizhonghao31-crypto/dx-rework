@@ -4669,11 +4669,30 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const task=(await flow.read(root,ready.id)).tasks.find(t=>t.taskKind==='factory_production_qc')!,qc=ready.people.quality_control!;
     await new DigitalProductionTaskService(database).reassign(root,task.taskId,qc.actorId,randomUUID());
     state=await flow.read(qc,ready.id);expect(state.canProductionQc).toBe(true);
+    const journey=new DigitalJourneyQuery(database),taskService=new DigitalProductionTaskService(database);
+    const nativeTask=await taskService.read(qc,task.taskId);
+    const sampleTask=(await flow.read(root,ready.id)).tasks.find(value=>value.taskKind==='bulk_ship_sample')!;
+    const originalSample=await taskService.read(primary,sampleTask.taskId);
+    expect(originalSample).toMatchObject({deadlineMode:'date_target',deadlineExclusive:true});expect(originalSample.dueAt).not.toBeNull();
+    for(const compact of [false,true]){
+      const sample=(await journey.read(primary,ready.id,undefined,compact)).stages.flatMap(stage=>stage.nodes).find(node=>node.instanceId===sampleTask.taskId)!;
+      expect(sample).toMatchObject({expectedAt:originalSample.dueAt,expectedPrecision:'date',deadlineMode:'date_target',deadlineExclusive:true});
+    }
+
+    const currentQc=(value:Awaited<ReturnType<typeof journey.read>>)=>value.stages.flatMap(stage=>stage.nodes).find(node=>node.key==='factory_production_qc'&&node.current)!;
+    expect(currentQc(await journey.read(primary,ready.id))).toMatchObject({instanceId:task.taskId,owner:{id:qc.actorId},ownerStatus:'assigned',expectedAt:nativeTask.dueAt});
+    await taskService.controlResource(root,{kind:'order',id:ready.id},'pause','TEST P02 paused task consumer',randomUUID());
+    expect(currentQc(await journey.read(primary,ready.id))).toMatchObject({state:'blocked',owner:{id:qc.actorId},expectedAt:nativeTask.dueAt});
+    await taskService.controlResource(root,{kind:'order',id:ready.id},'resume','TEST P02 resume original task',randomUUID());
+    state=await flow.read(qc,ready.id);
+
     const input={expectedRevision:state.revision,factoryDecisionId:null,occurredAt:new Date().toISOString(),note:'TEST检查完但质量需处理',checks:state.productionChecks!.map(c=>({lineId:c.lineId,result:'需处理' as const,problem:'TEST缝线问题'}))};
     await expect(flow.productionQc(ready.people.warehouse_receiver!,ready.id,input,randomUUID())).rejects.toMatchObject({statusCode:403});
     const key=randomUUID();state=await flow.productionQc(qc,ready.id,input,key);await flow.productionQc(qc,ready.id,input,key);
     expect(state.productionChecks!.every(c=>c.inspected&&c.result==='需处理')).toBe(true);
     expect((await factoryProductionFacts(database,ready.id)).complete).toBe(true);
+    expect(currentQc(await journey.read(primary,ready.id))).toMatchObject({instanceId:task.taskId,state:'completed',owner:{id:qc.actorId},operator:{id:qc.actorId},expectedAt:nativeTask.dueAt,completionOperators:[{id:qc.actorId}]});
+
     expect(state.tasks.find(t=>t.taskKind==='factory_production_qc')?.state).toBe('completed');
     expect((await database.query('SELECT sourcing_factory_order_status($1) AS status',[state.productionId])).rows[0].status).toBe('in_production');
     expect((await database.query("SELECT count(*)::int n FROM digital_production_task_events WHERE resource_id=$1 AND event_kind='factory_garment_qc'",[ready.id])).rows[0].n).toBe(1);
@@ -4686,6 +4705,15 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     for(const line of detail.order.lines)await reporting.report(root,state.productionId!,{position:line.position,businessDate:day,quantity:line.quantity},randomUUID());
     await reporting.execute(root,state.productionId!,'complete',{businessDate:day,confirmed:true},randomUUID());
     await reporting.execute(root,state.productionId!,'ship',{businessDate:day,confirmed:true},randomUUID());
+    const endedJourney=await journey.read(primary,ready.id,undefined,true);
+    expect(endedJourney.businessProgress?.asOf).toBe(endedJourney.supervision?.asOf);
+    if(process.env.M01_P02_JOURNEY_UI_INPUT)await writeFile(process.env.M01_P02_JOURNEY_UI_INPUT,JSON.stringify({detail:endedJourney,factory:state}));
+    const endedQc=currentQc(endedJourney);
+    expect(endedQc.productionSupervision?.state).toBe('ended');
+    expect(endedQc.productionSupervision?.windows.every(window=>window.state==='finished'&&window.remindAt===null&&window.escalateAt===null)).toBe(true);
+    expect((await factoryProductionFacts(database,ready.id)).checks.every(check=>check.result==='需处理')).toBe(true);
+    expect(endedJourney.stages.flatMap(stage=>stage.nodes).find(node=>node.key==='production_reporting')).toMatchObject({state:'completed',actualAt:null,actualDate:day,actualQuality:'unverified',operator:{id:root.actorId}});
+
     const logistics=await factoryReturnLogistics(database,ready.id,new Date(Date.now()+4*86400000));
     expect(logistics[0]).toMatchObject({dispatchPrecision:'date',actualDispatchedAt:null,shippedOn:day,estimatedMinutes:2880,estimateExpired:true,firstReceivedAt:null});
     expect(Date.parse(logistics[0]!.arrivalRange!.toExclusive)-Date.parse(logistics[0]!.arrivalRange!.fromInclusive)).toBe(86400000);
@@ -5075,6 +5103,18 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     }finally{await app.close();}
     state=results[0]!;
     expect(state.batchWindows!.find(w=>w.kind==='bulk_qc')!.minutes).toBe(2880);expect(state.batchWindows!.find(w=>w.kind==='warehouse_dispatch')!.minutes).toBe(1440);expect(state.batchWindows!.find(w=>w.kind==='process_logistics')!.minutes).toBe(5760);expect(state.dispatched).toBe(false);expect(state.productionId).toBeTruthy();expect(state.batchTotals![0]!.sent).toBe(20);expect(state.facts.find(f=>f.kind==='仓库实际发厂')!.payload.releaseCheckIds).toEqual([{lineId:first[0]!.lineId,checkId:state.checks.filter(c=>c.returnFactId===returnFactId).at(-1)!.checkId}]);
+
+    const windowJourney=await new DigitalJourneyQuery(database).read(primary,id,undefined,true);
+    expect(windowJourney.businessProgress?.asOf).toBe(windowJourney.supervision?.asOf);
+    const originalKinds={process_logistics:'bulk_printing',bulk_qc:'bulk_qc',warehouse_dispatch:'warehouse_dispatch'};
+    for(const [kind,key] of Object.entries(originalKinds)){
+      const original=state.batchWindows!.filter(window=>window.kind===kind);
+      expect(original.length).toBeGreaterThan(0);
+      const projected=windowJourney.supervision!.nodes.find(node=>node.id===key)!.windows!;
+      expect(projected).toHaveLength(original.length);
+      for(const window of original)expect(projected.find(row=>row.evidence===window.evidence)).toMatchObject({startedAt:window.enteredAt,deadline:window.dueAt,completedAt:window.completedAt,complete:window.complete,snapshotId:window.snapshotId});
+      expect(projected.every(window=>window.scopeLabel.includes('PO '))).toBe(true);
+    }
     const partialSla=await new SlaOrderService(database).read(root,id);expect(partialSla.status).toBe('planned');if(partialSla.status==='planned'){expect(partialSla.nodes.find(n=>n.id==='warehouse_dispatch')!.actualEnd).toBeNull();expect(partialSla.factory!.facts.warehouse_dispatch!.businessCompleted).toBe(false);}
     expect((await database.query("SELECT count(*)::int n FROM digital_factory_facts WHERE preparation_id=$1 AND kind='仓库实际发厂'",[state.preparationId])).rows[0].n).toBe(1);
     await expect(flow.dispatch(warehouse,id,{...partial,expectedRevision:state.revision,lines:[{lineId:first[0]!.lineId,quantity:21}]},randomUUID())).rejects.toMatchObject({statusCode:409});

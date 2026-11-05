@@ -227,8 +227,16 @@ function closureDatabase(roles: string[]) {
     if (sql.startsWith('SELECT l.line_id,r.*, (SELECT count(*)::int FROM rework_wage_items')) return [{
       line_id: ROW, rework_order_id: REWORK, rework_no: 'TEST-PMC-RW', status: 'completed',
       created_by: OTHER, merchandiser_user_id: OTHER, embroidery_merchandiser_user_id: null,
-      problem_part: '袖口', problem_description: '返修', rework_quantity: 1, wage_items: 2,
+      problem_part: '袖口', problem_description: '返修', rework_quantity: 1, wage_items: 2, rework_kind: 'qc_rework',
     }];
+    // The optional closure summary reads through the same original full-detail
+    // permission. Model that SELECT without masking unexpected SQL or writes.
+    if (sql.startsWith('SELECT item.configuration_item_id,item.process_name,item.execution_kind,')) {
+      expect(values).toEqual([REWORK]);
+      expect(sql).toContain('sum(rework_work_report_effective_quantity(report.work_report_id))');
+      expect(sql).toContain("configuration.status='approved'");
+      return [{configuration_item_id: ROW, process_name: 'TEST修补', execution_kind: 'inhouse', reported_quantity: '1', report_ids: [RECEIPT]}];
+    }
     if (sql.startsWith('SELECT l.line_id,r.receipt_id,r.receiving_batch_id')) return [{
       line_id: ROW, receipt_id: RECEIPT, receiving_batch_id: BATCH, cutting_order_id: TASK,
       received_at: receivedAt, after_state: {}, quantity: '3', quantity_version: RECEIPT,
@@ -265,7 +273,8 @@ describe('PMC closure reads retain native links without acquiring closure or QC 
       collection: {expected: 10, received: 3, remaining: 7},
       lines: [{lineId: ROW, receivingBatchId: BATCH,
         receipts: [{receiptId: RECEIPT, actualQuantity: 3, defectiveQuantity: 1}],
-        reworks: [{reworkId: REWORK, canView: true, status: 'completed', quantity: 1, wageItemCount: 2}]}],
+        reworks: [{reworkId: REWORK, canView: true, status: 'completed', quantity: 1, wageItemCount: 2,
+          businessSummary: {kind: 'qc_rework', processes: [{configurationItemId: ROW, reportedQuantity: 1, reportIds: [RECEIPT]}]}}]}],
     });
     await expect(new OrderClosureService(pmcDb.pool).read(actor('pmc'), OTHER)).rejects.toMatchObject({statusCode: 404});
     expect(pmcDb.query.mock.calls.some(([sql]) => /^(INSERT|UPDATE|DELETE)\b/.test(sql))).toBe(false);

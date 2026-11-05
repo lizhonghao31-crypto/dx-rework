@@ -14,7 +14,7 @@ vi.mock('../../apps/api/src/production-platform/development-sla-evidence.js',asy
 import {readJourneySupervision} from '../../apps/api/src/production-platform/journey-supervision.js';
 const time={now:'2026-10-20T00:00:00.000Z',scenarioId:null,revision:0};
 const actor={actorId:'TEST-root',actorRoles:['root_superuser'],authorizationCapability:'digital_production:view',requestId:'TEST-projection-request'};
-const item=()=>({id:'TEST-source',sourceId:'TEST-source',orderId:null,stages:[{nodes:['development_pattern','development_sewing'].map(key=>({key,current:true,state:'active',risks:[]}))}]} as unknown as OrderJourney);
+const item=()=>({id:'TEST-source',sourceId:'TEST-source',orderId:null,lines:[],stages:[{nodes:['development_pattern','development_sewing'].map(key=>({key,current:true,state:'active',risks:[]}))}]} as unknown as OrderJourney);
 beforeEach(()=>{
  fixture.error=null;fixture.plan={nodes:['development_pattern','development_sewing'].map(id=>({id,label:id,stage:2,parameterKey:id,kind:'duration',minutes:120,offsetDays:null,applicable:'yes',countsProgress:true,dependsOn:[],anchorKey:'published',targetKey:null,includedIn:null,includedPosition:'start'})),anchors:{published:{precision:'instant',value:'2026-10-19T00:00:00.000Z',source:'TEST original native publication'}},warningPercent:70,stageBufferMinutes:0};
  fixture.facts={development_pattern:{startedAt:'2026-10-19T02:00:00.000Z',completedAt:'2026-10-19T01:00:00.000Z',evidence:'TEST old inconsistent fact'},development_sewing:{startedAt:'2026-10-19T00:00:00.000Z',evidence:'TEST valid independent fact'}};
