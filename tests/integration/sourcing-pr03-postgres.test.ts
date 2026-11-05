@@ -4786,6 +4786,44 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect(closed.closed).not.toBeNull();expect(closed.collection!.status).toBe('待收齐');expect(closed.lines[0]!.packingRevisionId).toBe(corrected.lines[0]!.packingRevisionId);
   });
 
+  it('P01-06 reads the native cumulative 1-to-2 correction, receipt QC1, packing2 and closure without hiding the quality gap',async()=>{
+    const root=rootActor(),primary=merchandiserActor(),flow=new FactoryFlowService(database);
+    const fixture=await budgetFixture(false,'TEST-P01-QUALITY-GAP');
+    const ready=(await exerciseBulkPreparation(database,fixture,service,attachments,{primary,manager:managerActor(),owner:ownerActor(),ie:ieActor(),root},factoryId,craftId('净色车缝'),'none',{cuttingProcess:'in_house',stopAtReady:true,secondaryCraft:'无'}))!;
+    for(const row of (await database.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[ready.caseId])).rows){
+      await physicalCuttingLabelsFixture(database,root,row.cutting_order_id,100);
+      await ready.cutting.record({...root,authorizationCapability:'cutting:records:create'},row.cutting_order_id,{pieceCount:1,actualCutCount:100,attachmentIds:[await readyCuttingSheet(root.actorId)]},randomUUID());
+    }
+    const state=await flow.read(ready.people.warehouse_receiver!,ready.id);
+    await flow.dispatch(ready.people.warehouse_receiver!,ready.id,{expectedRevision:state.revision,supplierId:factoryId,occurredAt:new Date().toISOString(),note:'TEST原生数量缺口读取夹具'},randomUUID());
+    await database.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) SELECT $1,$2::uuid,'dingtalk','corp',$2::text,$2::text,true,true,CURRENT_TIMESTAMP WHERE NOT EXISTS(SELECT 1 FROM identity_mappings WHERE user_id=$2)",[randomUUID(),root.actorId]);
+    await database.query("INSERT INTO owner_bootstrap_consumptions(singleton,user_id,provider_user_id,corp_id) SELECT true,$1,i.provider_user_id,i.corp_id FROM identity_mappings i WHERE i.user_id=$1 AND i.active LIMIT 1 ON CONFLICT DO NOTHING",[root.actorId]);
+    const closure=new OrderClosureService(database),identity=new DigitalProductionIdentityService(database,true,service);
+    let order=await identity.read(primary,ready.id);
+    const white=order.lines.find(line=>line.color==='白')!;
+    order=await identity.correctNumbers(primary,ready.id,white.lineId,{expectedVersion:order.version,formalStyleNo:`TEST-P01-WHITE-${randomUUID().slice(0,8)}`},randomUUID());
+    const line=(await closure.read(root,ready.id)).lines.find(value=>value.lineId===white.lineId)!;
+    const receiver={...root,authorizationCapability:'receiving:create'};
+    const receipt=await receiving.create(receiver,{cuttingOrderId:line.cuttingId!,documentQuantity:2,actualQuantity:1,defectiveQuantity:0,attachmentIds:[await readyCuttingSheet(root.actorId)]},randomUUID());
+    const style=order.lines.find(value=>value.lineId===white.lineId)!.formalStyleNo!;
+    const before=(await receiving.board('2000-01-01','2999-12-31',style)).rows[0]!;
+    await receiving.correctBatch({...root,authorizationCapability:'receiving:correct'},before.receivingBatchId,{expectedVersion:before.version,styleNo:style,documentQuantity:2,actualQuantity:2,defectiveQuantity:0});
+    let sheet=await closure.read(root,ready.id);
+    const quality=sheet.quality!.find(value=>value.receiptId===receipt.value.receiptId)!;
+    expect(quality.quantity).toBe(1); // Batch cumulative correction never rewrites this receipt.
+    await closure.recordQuality(root,ready.id,{receiptId:quality.receiptId,quantityVersion:quality.quantityVersion,occurredAt:new Date().toISOString(),qualifiedQuantity:1,problem:''},randomUUID());
+    const corrected=(await receiving.board('2000-01-01','2999-12-31',style)).rows[0]!;
+    await receiving.recordPacking({...root,authorizationCapability:'receiving:packing_manage'},{receivingBatchId:corrected.receivingBatchId,expectedVersion:corrected.version,expectedPackingRevisionId:null,packingQuantity:2},randomUUID());
+    sheet=await closure.read(root,ready.id);
+    await closure.close(ownerActor(),ready.id,{reason:'TEST历史允许特殊结案仍保留数量与质量缺口',expectedRevision:sheet.revision},randomUUID());
+    const original=(await database.query('SELECT actual_quantity FROM receiving_receipts WHERE receipt_id=$1',[receipt.value.receiptId])).rows[0];
+    expect(Number(original.actual_quantity)).toBe(1);
+    const query=new DigitalJourneyQuery(database),projected=await query.read(root,ready.id);
+    expect(projected.businessProgress!.quantities!.lines.find(value=>value.lineId===white.lineId)).toMatchObject({received:2,inspected:1,qualified:1,packed:2,qualityGap:1,factoryAttribution:'unknown'});
+    expect(projected.businessProgress!.requirements.find(value=>value.key==='receiving_inspection')).toMatchObject({completed:false,applicability:'applicable'});
+    expect(projected.stages.flatMap(stage=>stage.nodes).find(value=>value.key==='special_closure')).toMatchObject({state:'completed'});
+  });
+
   it('SLA08 accepts standalone historical receipt QC without borrowing an unrelated source lifecycle',async()=>{
     const fixture=await budgetFixture(false,'TEST-SLA08-STANDALONE'),root=rootActor(),id=fixture.order.productionOrderId;
     expect((await database.query('SELECT source_id FROM digital_production_orders WHERE production_order_id=$1',[id])).rows[0].source_id).toBeNull();

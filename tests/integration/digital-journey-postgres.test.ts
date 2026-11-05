@@ -22,6 +22,8 @@ import { DigitalProductionTaskService } from "../../apps/api/src/production-plat
 import { DigitalProductionAccessPolicy } from "../../apps/api/src/production-platform/access-policy.js";
 import { OrderClosureService } from "../../apps/api/src/production-platform/order-closure-service.js";
 import { SeriesPlanService } from "../../apps/api/src/production-platform/series-plan-service.js";
+import {ProductionInstructionService} from '../../apps/api/src/production-platform/production-instruction-service.js';
+import {readMaterialSuccessors} from '../../apps/api/src/production-platform/journey-material-successors.js';
 import { selectJourneys } from "../../apps/api/src/production-platform/journey-projection.js";
 import { DigitalJourneyQuery } from "../../apps/api/src/production-platform/journey-query.js";
 import { developmentView, patternTasks, DevelopmentWorkspaceQuery } from "../../apps/api/src/production-platform/development-workspace-query.js";
@@ -314,6 +316,26 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     const recheck=await execution.resubmit(actor(),source.sourceId,supply.taskId,randomUUID()) as {taskId:string};
     await execution.saveMaterials(rootActor,source.sourceId,{taskId:recheck.taskId,expectedDocumentVersion:published.version,expectedVersion:1,entries:initialEntries.map(row=>({...row,physical:true,quantity:true,color:true,specification:true}))},randomUUID());
     await execution.check(rootActor,source.sourceId,{taskId:recheck.taskId,expectedVerificationVersion:2,result:"通过",note:"实际核验普通辅料和主布",items:[mainId,materialId].map(materialId=>({materialId,physical:true,quantity:true,color:true,specification:true}))},randomUUID());
+    const nativeIds=[published.taskId!,supply.taskId,recheck.taskId];
+    expect(await readMaterialSuccessors(db,source.sourceId,nativeIds)).toEqual([{retiredId:published.taskId,successorId:recheck.taskId}]);
+    expect(await readMaterialSuccessors(db,source.sourceId,[published.taskId!,recheck.taskId])).toEqual([]);
+    const mother=await identity.createOrder(actor(),{...input('MATERIAL-RECOVERED'),designStyleNo:'TEST-MATERIAL-PLAN',temporaryStyleNo:null},randomUUID(),source.sourceId);
+    const instructions=new ProductionInstructionService(db,true),seed=await instructions.read(rootActor,mother.productionOrderId);
+    const instructionDocument={...seed.document,styleName:'TEST已复核物料制单',category:'上衣',date:beijingCalendarDate(new Date()),preshrink:'无需预缩' as const,
+      measurements:seed.document.measurements.map(row=>({...row,values:seed.document.sizes.map(()=>'50')}))};
+    const instruction=await instructions.save(rootActor,mother.productionOrderId,{expectedVersion:0,orderVersion:mother.version,sourceRound:seed.sourceRound,document:instructionDocument},randomUUID());
+    // Owned-schema read fixture: an already-published instruction adopts this
+    // round. Current publishing requires a separate complete technical basis;
+    // that command and its guards are not under test or changed here.
+    await db.query(`INSERT INTO digital_instruction_versions(production_order_id,version,order_version,document,order_snapshot,source_round,published_by)
+      SELECT production_order_id,version,order_version,document,$2,source_round,$3 FROM digital_instruction_documents WHERE production_order_id=$1`,[mother.productionOrderId,JSON.stringify(mother),root]);
+    await db.query('UPDATE digital_instruction_documents SET published_version=version WHERE production_order_id=$1',[mother.productionOrderId]);
+    expect(instruction.sourceRound).toBe(1);
+    const recovered=await journeys.read(rootActor,mother.productionOrderId);
+    expect(recovered.adoptedRound).toBe(1);
+    expect(recovered.businessProgress!.requirements.find(row=>row.key==='development_materials')).toMatchObject({applicability:'applicable',completed:true});
+    expect(recovered.businessProgress!.stages.find(stage=>stage.key==='development')?.unknown).toBe(0);
+    expect(recovered.stages.flatMap(stage=>stage.nodes).find(row=>row.instanceId===recheck.taskId)?.inheritedFrom).toBeNull();
     expect(await node()).toMatchObject({state:"completed",actualAt:null,completionResult:"unknown"});
     const summary=await journeys.list(rootActor,JourneyFilterSchema.parse({search:"TEST-MATERIAL-PLAN"}),true,undefined,{details:false});
     expect(summary.items.find(item=>item.sourceId===source.sourceId)?.stages.flatMap(stage=>stage.nodes).find(item=>item.instanceId===`material:${materialId}:1`)?.state).toBe("completed");
@@ -678,7 +700,13 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     const pmcActor=await readActor(pmc),managerActor=await readActor(manager);
     expect(pmcActor.actorRoles).toEqual(['pmc']);expect(managerActor.actorRoles).toEqual(['production_management']);
     expect(await identity.read(pmcActor,id)).toEqual(await identity.read(managerActor,id));
+    const readOnlyBefore=(await db.query("SELECT (SELECT count(*) FROM digital_production_tasks) AS tasks,(SELECT count(*) FROM audit_events) AS audits,(SELECT count(*) FROM digital_production_commands) AS commands")).rows;
     const pmcDetail=await journeys.read(pmcActor,id,undefined,true),managerDetail=await journeys.read(managerActor,id,undefined,true);
+    expect(pmcDetail.identity).toEqual({kind:'production',businessNumber:null,reason:'尚未取得本单正式业务号与母单的可信映射'});
+    expect(pmcDetail.businessProgress).toMatchObject({ruleVersion:'journey-business-v1',plan:{status:'not_adopted',planId:null,revision:null},quantities:{factoryAttribution:'unknown'}});
+    expect(pmcDetail.businessProgress!.requirements).toEqual(managerDetail.businessProgress!.requirements);
+    expect(pmcDetail.businessProgress!.quantities).toEqual(managerDetail.businessProgress!.quantities);
+    expect((await db.query("SELECT (SELECT count(*) FROM digital_production_tasks) AS tasks,(SELECT count(*) FROM audit_events) AS audits,(SELECT count(*) FROM digital_production_commands) AS commands")).rows).toEqual(readOnlyBefore);
     expect(pmcDetail.lines).toEqual(managerDetail.lines);expect(pmcDetail.lines).toHaveLength(2);
     expect(pmcDetail.supervision).toMatchObject({status:'planned',originalRevision:managerDetail.supervision!.originalRevision,currentRevision:managerDetail.supervision!.currentRevision,coverage:managerDetail.supervision!.coverage});
     // Each read observes its own business-clock instant; compare immutable plan
@@ -697,4 +725,28 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     expect((await db.query("SELECT plan_json FROM digital_sla_plans WHERE production_order_id=$1 ORDER BY revision",[id])).rows).toEqual(before);
   },testExecutionConfig.correctnessTimeoutMs);
 
+  it('P01 adopted-plan reads ignore previews and bind each new version while keeping original business facts',async()=>{
+    const rootActor=actor(root,['root_superuser']),pmcActor=await readActor(pmc),managerActor=await readActor(manager);
+    const order=await identity.createOrder(rootActor,input('M01-PLAN'),randomUUID()),id=order.productionOrderId;
+    const series=new SeriesPlanService(db),state=await series.read(rootActor,id);
+    const changed=await series.context(rootActor,id,{expectedOrderVersion:state.orderVersion,salesYear:2027,salesSeries:'P01',requiresColorMatching:false,reason:'TEST 只读采用映射夹具'},randomUUID());
+    const raw={expectedOrderVersion:changed.orderVersion,expectedPlanRevision:0,plannedShippingDate:addCalendarDays(minimumInitialCustomerDate(new Date()),30),selectedNodeIds:null,plannedDurations:{}};
+    const preview=await series.preview(managerActor,id,raw);
+    const before=await journeys.read(pmcActor,id,undefined,true);
+    expect(before.businessProgress!.plan.status).toBe('not_adopted');
+    await series.apply(managerActor,id,{...raw,previewToken:preview.previewToken,reason:'TEST 正常采用首版计划',acceptSuggestedDate:false},randomUUID());
+    const adopted=await journeys.read(pmcActor,id,undefined,true);
+    expect(adopted.businessProgress!.plan).toMatchObject({status:'partial',revision:1});
+    expect(adopted.businessProgress!.plan.planId).toBeTruthy();
+    expect(adopted.businessProgress!.completed).toBe(before.businessProgress!.completed);
+    expect(adopted.businessProgress!.applicable).toBe(before.businessProgress!.applicable);
+    const next={...raw,expectedPlanRevision:1,plannedShippingDate:addCalendarDays(raw.plannedShippingDate,1)};
+    const preview2=await series.preview(managerActor,id,next);
+    expect((await journeys.read(pmcActor,id,undefined,true)).businessProgress!.plan.revision).toBe(1);
+    await series.apply(managerActor,id,{...next,previewToken:preview2.previewToken,reason:'TEST 正常采用第二版计划',acceptSuggestedDate:false},randomUUID());
+    const second=await journeys.read(pmcActor,id,undefined,true);
+    expect(second.businessProgress!.plan.revision).toBe(2);expect(second.businessProgress!.plan.planId).not.toBe(adopted.businessProgress!.plan.planId);
+    expect(second.businessProgress!.completed).toBe(before.businessProgress!.completed);
+    await expect(journeys.read(actor(stranger),id,undefined,true)).rejects.toMatchObject({statusCode:404});
+  },testExecutionConfig.correctnessTimeoutMs);
 });

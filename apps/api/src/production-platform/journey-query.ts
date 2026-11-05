@@ -38,6 +38,9 @@ import {journeyDisplay} from "./journey-display.js";
 import {readJourneyLog} from "./journey-log.js";
 import {readJourneyRiskHistory} from "./journey-risk-history.js";
 import type {JourneyAuthorizedTask} from "./journey-read-scope.js";
+import {journeyBusinessProgress,journeyBusinessQuantities,type RequirementEvidence} from './journey-business-progress.js';
+import {readJourneyAdoptedPlan} from './journey-adopted-plan.js';
+import {readMaterialSuccessors} from './journey-material-successors.js';
 
 const iso = (value: Date|string|null|undefined) => value == null ? null : new Date(value).toISOString();
 type Candidate = { source: {development_type:string;source_id:string;created_by:string;design_style_no:string;temporary_style_no:string|null;customer_code:string|null;created_at:string}|null;
@@ -132,6 +135,8 @@ export class DigitalJourneyQuery {
       const item=await this.project(db,actor,row,asOf,round,false,null,compact,compact);if(!item)return digitalNotFound();
       const current=round===undefined?item:await this.project(db,actor,row,asOf,undefined,true,null,false,compact);
       if(current){
+        if(current.businessProgress)item.businessProgress=current.businessProgress;
+        if(current.identity)item.identity=current.identity;
         if(current.display)item.display=current.display;
         if(current.supervision)item.supervision=current.supervision;
         if(compact)item.flowStages=current.stages.map(stage=>({...stage,nodes:stage.nodes.filter(node=>node.current)}));
@@ -329,6 +334,8 @@ export class DigitalJourneyQuery {
     }
     // Future and applicable nodes stay visible; historical instances do not disappear after revision.
     const progress:OrderJourney["progress"]={development:null,bulk:null};
+    let businessQuantities:ReturnType<typeof journeyBusinessQuantities>|undefined;
+    const requirementEvidence:RequirementEvidence=new Map();
     const devTask=taskDtos.find(task=>task.sourceId===sid&&task.routeVersion===round);
     if(sourceAccess&&document?.status==="published"&&devTask)progress.development={applicable:devTask.routeProgress.applicable,completed:devTask.routeProgress.completed};
     const lines=orderAccess&&oid?(await db.query(`SELECT l.line_id AS id,l.po_number AS po,l.color,l.formal_style_no AS "formalStyleNo",l.temporary_style_no AS "temporaryStyleNo",coalesce(sum(s.quantity),0)::int AS "orderedQuantity"
@@ -432,6 +439,18 @@ export class DigitalJourneyQuery {
         }
       }
       const closure=await journeyMeasure('closure',()=>new OrderClosureService(this.database).read(actor,oid,db));
+      const receiptIds=closure.lines.flatMap(line=>line.receipts.map(receipt=>receipt.receiptId));
+      const attributed=receiptIds.length?(await db.query<{receipt_id:string}>(`SELECT link.receipt_id
+        FROM sourcing_production_receipt_links link JOIN sourcing_production_orders production USING(production_order_id)
+        JOIN sourcing_decisions decision ON decision.sourcing_decision_id=coalesce(link.factory_decision_id,production.sourcing_decision_id)
+        JOIN digital_production_child_links native ON native.module='production' AND native.child_id=link.production_order_id AND native.production_order_id=$1
+        WHERE link.receipt_id=ANY($2::uuid[]) AND decision.supplier_id IS NOT NULL`,[oid,receiptIds])).rows:[];
+      businessQuantities=journeyBusinessQuantities(closure,new Set(attributed.map(row=>row.receipt_id)));
+      const reworks=closure.lines.flatMap(line=>line.reworks);
+      if(!reworks.length)for(const key of ['rework','rework_review','responsibility'])requirementEvidence.set(key,{applicability:'not_applicable',completed:false,reason:'本单原记录中没有适用的做尾或返工业务',instanceIds:[]});
+      else {
+        requirementEvidence.set('rework',{applicability:'applicable',completed:reworks.every(value=>value.status==='completed'),reason:'按本单全部有效做尾或返工记录核对，不含工资是否结清',instanceIds:reworks.map(value=>value.reworkId)});
+      }
       const closureRecord=record("closure",oid,`/ui/digital-production?closure=${oid}`);
       const received=closure.collection?.status==='已收齐';
       setFact("receipts",received?"completed":closure.lines.some(line=>line.receiptCount>0)?"active":"uncreated",[closureRecord]);
@@ -511,7 +530,9 @@ export class DigitalJourneyQuery {
     if(factoryQcState&&baseNodes.some(n=>n.key==='factory_production_qc'&&n.state!=='uncreated')){
       setFact('factory_production_qc',factoryQcState.complete?'completed':'active',[record('factory',oid!,`/ui/digital-production?factory=${oid}&factoryAction=productionQc`)],factoryQcState.complete&&factoryQcState.checks.every(c=>c.completedAt)?new Date(Math.max(...factoryQcState.checks.map(c=>Date.parse(c.completedAt!)))).toISOString():null);
     }
-    const sampleSentLineIds=orderAccess&&oid?new Set((await shipSampleFacts(db,oid)).flatMap(r=>r.lineIds)):new Set<string>();
+    const samples=orderAccess&&oid?await shipSampleFacts(db,oid):[];
+    const sampleSentLineIds=new Set(samples.flatMap(r=>r.lineIds));
+    if(fullOrder&&lines.length&&lines.every(line=>sampleSentLineIds.has(line.id)))requirementEvidence.set('bulk_ship_sample',{applicability:'applicable',completed:true,reason:'本单全部PO已有原生船样寄出记录；原任务和历史状态保留',instanceIds:samples.map(sample=>sample.eventId)});
     const deliveryRisks=poDeliveryRisks(poDeliveryDates,promiseDay,{finished:finalClosed||Boolean(terminal),factoryFinished,sampleFinished:baseNodes.some(node=>node.current&&node.key==='bulk_ship_sample'&&node.state==='completed')}).filter(r=>r.kind!=='sample'||!sampleSentLineIds.has(r.lineId));
     const sourceImage=!patternKinds&&sourceAccess?currentDocument?.document?.files?.find((file:{kind:string})=>file.kind==='款图'):null;
     const instructionImages=!patternKinds&&!sourceImage&&orderAccess?(await db.query(`SELECT v.document->'images' AS images FROM digital_instruction_documents d JOIN digital_instruction_versions v ON v.production_order_id=d.production_order_id AND v.version=d.published_version WHERE d.production_order_id=$1`,[oid])).rows[0]?.images:null;
@@ -544,6 +565,15 @@ export class DigitalJourneyQuery {
     else item.supervision={asOf:observed.now,status:'limited',originalRevision:null,currentRevision:null,nodes:[],coverage:[{key:'scope',message:'仅有本岗位节点权限，整单SLA未计入；已授权节点照常监督'}],customerReminderDate:null};
     }
     item.display=journeyDisplay(item,asOf,{cancelled,closedAt:baseNodes.find(node=>node.current&&node.key==='special_closure'&&node.state==='completed')?.actualAt??null});
+    if(!patternKinds){
+      // The original ERP-labelled value can be an external request UUID. It is
+      // retained for legacy search, never promoted to a formal business number.
+      item.identity={kind:item.orderId?'production':'development',businessNumber:null,reason:item.orderId?'尚未取得本单正式业务号与母单的可信映射':'开发资料视图；尚未取得可见的正式订单'};
+      const adopted=fullOrder&&oid?await readJourneyAdoptedPlan(db,oid,lines):oid?'unavailable' as const:null;
+      const replacements=sourceAccess&&sid&&visibleTasks.some(task=>task.returned)
+        ?await readMaterialSuccessors(db,sid,visibleTasks.map(task=>task.task_id)):[];
+      item.businessProgress=journeyBusinessProgress(item,asOf,adopted,businessQuantities,requirementEvidence,replacements);
+    }
     this.authorizedTasks.set(item,visibleTasks.map(task=>({id:task.task_id,key:journeyDefinition(task.task_kind)?.key??task.task_kind,label:journeyDefinition(task.task_kind)?.label??"业务节点",round:task.route_version})));
     return item;
   }

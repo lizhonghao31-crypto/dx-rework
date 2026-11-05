@@ -7,9 +7,11 @@ import {matchingPoDeliveryRisks,representativeCockpitNodes,type CockpitContext} 
 import {poDeliveryKindLabels} from "./po-delivery-dates.js";
 import type {PoDeliveryRisk} from "@dx-rework/contracts";
 import "./cockpit-home.css";
+import {CockpitBusinessProgress} from './cockpit-business-progress.js';
 
 const stateLabels={completed:"整单已完成",overdue:"逾期",due_soon:"临期",active:"进行中",not_started:"未启动",cancelled:"已取消"};
 function ActualProgress({order}:{order:OrderJourney}){
+  if(order.businessProgress)return <CockpitBusinessProgress order={order}/>;
   const actual=order.display?.actualRatio;
   const stages=(order.display?.stages??[]).filter(stage=>order.orderId||stage.key==="development");
   return <div className="cockpit-double-progress" aria-label={order.orderId?"全单进度":"开发进度"}>
@@ -38,7 +40,7 @@ export function CockpitHome({data,error,context,onChange}:{data:JourneyResult|nu
         const deliveryRisks=matchingPoDeliveryRisks(order,{...context,kpi:"all"}).sort((a,b)=>(a.risk==="overdue"?0:1)-(b.risk==="overdue"?0:1)||a.date.localeCompare(b.date)||a.lineId.localeCompare(b.lineId)||a.kind.localeCompare(b.kind));
         return <tr key={order.id}>
           <td><CockpitPhoto src={order.styleImageUrl} label={order.designStyleNo} className="cockpit-home-photo"/></td>
-          <td><button type="button" className="journey-order-select" onClick={()=>enter(order)}>{order.designStyleNo}</button>{(order.orderNumbers.length>0||order.styleName)&&<small className="cockpit-home-identity-extra" tabIndex={0} title={[...order.orderNumbers,order.styleName].filter(Boolean).join(" · ")}>{[...order.orderNumbers,order.styleName].filter(Boolean).join(" · ")}</small>}<small>跟单：{order.merchandisers.map(person=>person.name??"姓名未登记").join(" / ")||"未指派"}</small></td>
+          <td><button type="button" className="journey-order-select" onClick={()=>enter(order)}>{order.identity?.businessNumber??(order.identity?`开发参考：${order.designStyleNo}`:order.designStyleNo)}</button>{order.identity&&<small>{order.identity.reason}</small>}{!order.identity&&(order.orderNumbers.length>0||order.styleName)&&<small className="cockpit-home-identity-extra" tabIndex={0} title={[...order.orderNumbers,order.styleName].filter(Boolean).join(" · ")}>{[...order.orderNumbers,order.styleName].filter(Boolean).join(" · ")}</small>}<small>跟单：{order.merchandisers.map(person=>person.name??"姓名未登记").join(" / ")||"未指派"}</small></td>
           <td>{order.customer??"客户未登记"}<small>{order.orderId?"大货订单":"产品开发"}</small><small>订购量：{order.orderId?order.lines.length?order.lines.reduce((sum,line)=>sum+line.orderedQuantity,0).toLocaleString():"无可见数量":"未下单"}</small></td>
           <td><strong>{po?.poNumber??"PO 待补"}{order.lines.length>1?`，另 ${order.lines.length-1} 个 PO`:""}</strong><small>出货日期：<span>{earliest??"未登记"}</span></small><small>加工厂交货日：<span>{po?.factoryDeliveryDate??"尚未生效"}</span></small>{display?.missingShipmentDates? <small>有 {display.missingShipmentDates} 个 PO 出货日期待补</small>:null}</td>
           <td>{display?.mainState==="completed"&&node&&<small className="cockpit-closed-node-context">整单已收口 · 保留的原节点状态</small>}{node?<button type="button" className="cockpit-home-task" onClick={()=>enter(order,node)}><Task node={node}/>{working.length>1&&<small>另 {working.length-1} 项 · 查看全部</small>}</button>:<span>{display?.mainState==="completed"?"已完成":display?"尚无可见在办节点":"暂无法读取节点"}</span>}{deliveryRisks.length>0&&<div className="cockpit-home-delivery"><DeliveryRisk risk={deliveryRisks[0]!}/>{deliveryRisks.length>1&&<details><summary>另 {deliveryRisks.length-1} 项交期风险</summary>{deliveryRisks.slice(1).map(risk=><DeliveryRisk key={`${risk.lineId}:${risk.kind}`} risk={risk}/>)}</details>}</div>}</td>
