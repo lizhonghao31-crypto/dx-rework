@@ -68,3 +68,27 @@ test('a names-free command summary needs structured result bytes pinned by that 
  f.closeout.evidence.checks[0].resultReports=[{format:'vitest-json',sha256:closeoutSha(body)}];f.closeout.pack.constructionEvidenceSha256=closeoutSha(JSON.stringify(f.closeout.evidence));f.closeout.save();
  assert.equal((await requestFinal(f.api,901,head,{closeoutPath:f.closeout.path})).state,'plan');assert.equal(f.state.writes.length,0);
 });
+test('JSON initialization lines before Vitest summaries require the same pinned reports and exact totals',async()=>{
+ const f=setup(),summary='{"status":"ok","database":"synthetic-test"}\n{"success":true,"applied":[]}\n\n RUN v4\n Tests  1 passed (1)\n';
+ const body=JSON.stringify({success:true,numPassedTests:1,numFailedTests:0,numPendingTests:0,testResults:[{assertionResults:[{status:'passed',fullName:f.closeout.name}]}]}),path=f.closeout.dir+'/vitest.json';writeFileSync(path,body);
+ writeFileSync(f.closeout.log,summary);f.closeout.evidence.checks[0].logSha256=closeoutSha(summary);
+ f.closeout.pack.reports=[{checkId:'unit',path,sha256:closeoutSha(body),format:'vitest-json'}];
+ const save=()=>{f.closeout.pack.constructionEvidenceSha256=closeoutSha(JSON.stringify(f.closeout.evidence));f.closeout.save();};save();
+ await assert.rejects(()=>requestFinal(f.api,901,head,{apply:true,closeoutPath:f.closeout.path}),/structured report digest is not bound/);assert.equal(f.state.writes.length,0);
+ f.closeout.evidence.checks[0].resultReports=[{format:'vitest-json',sha256:closeoutSha(body)}];save();
+ assert.equal((await requestFinal(f.api,901,head,{closeoutPath:f.closeout.path})).state,'plan');
+ const wrong=summary.replace('1 passed','2 passed');writeFileSync(f.closeout.log,wrong);f.closeout.evidence.checks[0].logSha256=closeoutSha(wrong);save();
+ await assert.rejects(()=>requestFinal(f.api,901,head,{apply:true,closeoutPath:f.closeout.path}),/actual test\/log counts differ/);assert.equal(f.state.writes.length,0);
+});
+test('failed or truncated JSON test reports cannot fall through to a passing text summary',async()=>{
+ for(const log of [
+  '{"success":false,"numPassedTests":0,"numFailedTests":1,"testResults":[],"summary":" Tests 1 passed (1)"}',
+  '{"success":false,"numPassedTests":0,"numFailedTests":1,"testResults":[]}\n Tests 1 passed (1)\n',
+  '{"testResults":[\n Tests 1 passed (1)\n',
+  '{"status":"ok"}\n Test Files 1 failed\n Tests 1 passed (1)\n',
+  '{"status":"ok"}\n Tests 1 passed | 1 failed (2)\n'
+ ]){
+  const f=setup();writeFileSync(f.closeout.log,log);f.closeout.evidence.checks[0].logSha256=closeoutSha(log);f.closeout.pack.constructionEvidenceSha256=closeoutSha(JSON.stringify(f.closeout.evidence));f.closeout.save();
+  await assert.rejects(()=>requestFinal(f.api,901,head,{apply:true,closeoutPath:f.closeout.path}),/FINAL_CLOSEOUT_REJECTED/);assert.equal(f.state.writes.length,0);
+ }
+});

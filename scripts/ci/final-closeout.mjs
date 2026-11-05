@@ -8,7 +8,17 @@ async function bytes(path,max=32*1024*1024){const stat=await lstat(path);if(!sta
 function logTotals(body){
  const clean=body.replace(new RegExp(String.fromCharCode(27)+'\\[[0-?]*[ -/]*[@-~]','g'),'');
  if(/^# pass \d+$/m.test(clean))return closeoutReport(clean,'node-tap');
- if(clean.trimStart().startsWith('{'))return closeoutReport(clean,'vitest-json');
+ if(clean.trimStart().startsWith('{')){
+  // A command may print complete JSON metadata lines before Vitest's text
+  // summaries. Only a whole JSON document is a JSON test report. Never turn
+  // a failed or truncated report into passing evidence via a later summary.
+  let document;
+  try{document=JSON.parse(clean);}catch{
+   let first;try{first=JSON.parse(clean.trimStart().split('\n',1)[0]);}catch{throw Error('malformed JSON command log');}
+   if(!first||Array.isArray(first)||typeof first!=='object'||['testResults','numPassedTests','numFailedTests','numPendingTests'].some(key=>Object.hasOwn(first,key)))throw Error('malformed JSON test report');
+  }
+  if(document!==undefined)return closeoutReport(clean,'vitest-json');
+ }
  const summaries=[...clean.matchAll(/^\s*Tests\s+([^\n]+)$/gm)].map(m=>m[1]);
  if(!summaries.length||/^\s*Test Files\s+[^\n]*\d+ failed/m.test(clean))throw Error('actual command log has no successful test result');
  const total=word=>summaries.reduce((sum,line)=>sum+Number(line.match(new RegExp('(\\d+) '+word))?.[1]??0),0);
