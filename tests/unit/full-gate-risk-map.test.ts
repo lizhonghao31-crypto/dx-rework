@@ -4,6 +4,60 @@ import { basename } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { assertMappedPostgresTests, classifyFullGatePaths, POSTGRES_CASE_SUITES } from "../../scripts/ci/full-gate-risk-map.mjs";
+import {fullGatePostgresPlan,POSTGRES_CHAIN_TESTS} from '../../scripts/test-suite-plan.mjs';
+
+const amendmentSuite='tests/integration/development-amendment-postgres.test.ts';
+const amendmentPlan=(paths:string[])=>{
+ const r=classifyFullGatePaths(paths);
+ return fullGatePostgresPlan({BASE_SHA:'7e5fbbcebb06e5c5f4dd96e0e95defb5dbbcbf7e',DB_REQUIRED:String(r.dbRequired),BUSINESS_CHAIN_SENSITIVE:String(r.businessChainSensitive),MIGRATION_SENSITIVE:String(r.migrationSensitive),DEPLOYMENT_SENSITIVE:String(r.deploymentSensitive),MAPPED_POSTGRES_TESTS:r.mappedPostgresTests.join(',')});
+};
+
+describe('same-round correction source-only PG coverage',()=>{
+ it.each([
+  'apps/api/src/production-platform/development-document-format.ts',
+  'apps/api/src/production-platform/development-amendment-service.ts',
+  'packages/contracts/src/digital-development.ts',
+  'packages/contracts/src/digital-development-amendments.ts',
+  'apps/api/src/production-platform/development-routes.ts',
+  'apps/api/src/production-platform/development-service.ts',
+  'apps/api/src/production-platform/development-amendment-repository.ts',
+  'apps/api/src/production-platform/development-supply.ts',
+  'apps/api/src/production-platform/development-material-reopen.ts',
+  'apps/api/src/production-platform/development-material-verification.ts',
+  'apps/api/src/production-platform/development-material-readiness.ts',
+  'apps/api/src/production-platform/development-material-check-rules.ts',
+  'apps/api/src/production-platform/development-execution-service.ts',
+  'apps/api/src/production-platform/development-execution-routes.ts',
+  'apps/api/src/production-platform/development-round-repository.ts',
+  'apps/api/src/production-platform/development-round-service.ts',
+  'apps/api/src/production-platform/development-route-service.ts',
+  'apps/api/src/production-platform/development-route.ts',
+  'apps/api/src/production-platform/access-policy.ts',
+  'apps/api/src/pattern-room/order-service.ts',
+  'packages/contracts/src/digital-development-execution.ts',
+  'packages/contracts/src/pattern-orders.ts',
+ ])('selects unchanged real correction regression for %s alone',path=>{
+  const risk=classifyFullGatePaths([path]),plan=amendmentPlan([path]);expect(risk.highRisk).toBe(true);expect(risk.mappedPostgresTests).toContain(amendmentSuite);expect(()=>assertMappedPostgresTests(risk.mappedPostgresTests)).not.toThrow();
+  expect(plan.plan.map(s=>s.path)).toEqual([...POSTGRES_CHAIN_TESTS,amendmentSuite].sort());
+  expect(plan.plan.find(s=>s.path===amendmentSuite)?.config).toBe('vitest.config.ts');
+ });
+ it('guards the actual amendment-service domain imports against a newly omitted direct dependency',()=>{
+  const source=readFileSync('apps/api/src/production-platform/development-amendment-service.ts','utf8');
+  const dependencies=[...source.matchAll(/from ["']\.\/(development-[^"']+)\.js["']/g)].map(m=>'apps/api/src/production-platform/'+m[1]+'.ts');
+  expect(dependencies.length).toBeGreaterThanOrEqual(5);
+  for(const path of dependencies)expect(classifyFullGatePaths([path]).mappedPostgresTests).toContain(amendmentSuite);
+ });
+ it('keeps one real suite when source, contract, its test and duplicates are changed together',()=>{
+  const paths=['apps/api/src/production-platform/development-document-format.ts','apps/api/src/production-platform/development-amendment-service.ts','packages/contracts/src/digital-development.ts',amendmentSuite,amendmentSuite],plan=amendmentPlan(paths);
+  expect(plan.plan.filter(s=>s.path===amendmentSuite)).toHaveLength(1);expect(plan.plan.map(s=>s.path)).toEqual([...POSTGRES_CHAIN_TESTS,amendmentSuite].sort());expect(POSTGRES_CHAIN_TESTS).not.toContain(amendmentSuite);
+ });
+ it.each(['apps/web/src/example-page.tsx','docs/governance/example.md','apps/api/src/wages/wage-service.ts','apps/api/src/production-platform/bulk-preparation-service.ts','apps/api/src/production-platform/development-technical-service.ts'])('does not add correction PG to unrelated path %s',path=>{expect(classifyFullGatePaths([path]).mappedPostgresTests).not.toContain(amendmentSuite);});
+ it('preserves unknown/shared fallback and all original chain entries without pretending the chain is every PG suite',()=>{
+  for(const path of ['apps/api/src/new-domain/unclassified-service.ts','packages/contracts/src/new-sensitive-contract.ts','vitest.config.ts','apps/api/src/production-platform/development-future-service.ts']){const risk=classifyFullGatePaths([path]),plan=amendmentPlan([path]);expect(risk.highRisk).toBe(true);expect(risk.businessChainSensitive).toBe(true);expect(plan.plan.map(s=>s.path)).toEqual([...POSTGRES_CHAIN_TESTS].sort());}
+  const combined=amendmentPlan(['apps/api/src/production-platform/development-document-format.ts','apps/api/src/new-domain/unclassified-service.ts','apps/api/migrations/9999_test.sql']);
+  for(const path of [...POSTGRES_CHAIN_TESTS,amendmentSuite,'tests/integration/migration-compatibility-postgres.test.ts'])expect(combined.plan.map(s=>s.path)).toContain(path);
+ });
+});
 
 it("requires Full and complete deployment checks for the lane executor alone", () => {
   const result = classifyFullGatePaths(["scripts/ci/full-gate-lanes.mjs"]);

@@ -15,7 +15,7 @@ import {randomUUID} from "node:crypto";
 import {readFile} from "node:fs/promises";
 import pg from "pg";
 import {beforeAll,afterAll,describe,it,expect} from "vitest";
-import {ownedPostgresSchema} from "../helpers/owned-postgres-schema.js";
+import {ownedPostgresSchema,createOwnedPostgresSchema,releaseOwnedPostgresSchema} from "../helpers/owned-postgres-schema.js";
 import {initialDevelopmentDocument} from "../../apps/web/src/digital-development-editing.js";
 import {DigitalProductionIdentityService} from "../../apps/api/src/production-platform/identity-service.js";
 import {DigitalDevelopmentService} from "../../apps/api/src/production-platform/development-service.js";
@@ -34,7 +34,7 @@ const url=process.env.TEST_DATABASE_URL;
  const employees=new EmployeeAccessService(db,"TEST",new AccessMasterDataService(db,"TEST"),undefined as never,undefined as never,{enabled:false,dingtalkUserId:undefined,secret:undefined},`TEST-${ids.root}`);
  const forms=new DigitalDevelopmentService(db,true),execution=new DevelopmentExecutionService(db,true),amendments=new DevelopmentAmendmentService(db,true),identity=new DigitalProductionIdentityService(db,true),tasks=new DigitalProductionTaskService(db),notices=new DigitalProductionNotificationService(db);
  beforeAll(async()=>{
-  await admin.query(`CREATE SCHEMA ${schema}`);await db.query("CREATE TABLE schema_migrations(version text PRIMARY KEY,checksum char(64) NOT NULL,applied_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP)");
+  await createOwnedPostgresSchema(admin,schema);await db.query("CREATE TABLE schema_migrations(version text PRIMARY KEY,checksum char(64) NOT NULL,applied_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP)");
   const manifest=JSON.parse(await readFile(new URL("../../apps/api/src/platform/migration-manifest.json",import.meta.url),"utf8"));
   for(const row of manifest.migrations.filter((row:{version:string})=>row.version!=="0248_development_document_amendments")){await db.query(await readFile(new URL(`../../apps/api/migrations/${row.version}.sql`,import.meta.url),"utf8"));await db.query("INSERT INTO schema_migrations(version,checksum) VALUES($1,$2)",[row.version,row.checksum]);}
   // Test-only identity bootstrap, before organization policy. All tested commands use actual service authorization.
@@ -45,7 +45,7 @@ const url=process.env.TEST_DATABASE_URL;
   const amendmentMigration=manifest.migrations.find((row:{version:string})=>row.version==="0248_development_document_amendments");
   await db.query(await readFile(new URL(`../../apps/api/migrations/${amendmentMigration.version}.sql`,import.meta.url),"utf8"));await db.query("INSERT INTO schema_migrations(version,checksum) VALUES($1,$2)",[amendmentMigration.version,amendmentMigration.checksum]);
  },60000);
- afterAll(async()=>{await db.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();});
+ afterAll(async()=>{try{await db.end();await releaseOwnedPostgresSchema(admin,schema);}finally{await admin.end();}});
  let legacyReturns:Array<Awaited<ReturnType<typeof prepareLegacyReturn>>>=[];
  const prepareLegacyReturn=async()=>{
   const source=await identity.createSource(actor("designer"),{designStyleNo:`TEST-LEGACY-${randomUUID()}`,temporaryStyleNo:null,customerCode:null,developmentType:"头版"},randomUUID()),sourceId=source.sourceId,materialId=randomUUID(),attachmentId=randomUUID();
@@ -63,7 +63,9 @@ const url=process.env.TEST_DATABASE_URL;
   const source=await identity.createSource(actor("designer"),{designStyleNo:`TEST-P02-${randomUUID()}`,temporaryStyleNo:null,customerCode:null,developmentType:"头版"},randomUUID()),sourceId=source.sourceId,materialId=randomUUID(),attachmentId=randomUUID();
   await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST.png','image/png',1,$3,$4,'ready',CURRENT_TIMESTAMP)",[attachmentId,`TEST/${attachmentId}`,"a".repeat(64),ids.designer]);
   const order={customerCode:withOrder?"TEST":"",productGroup:"男装" as const,designStyleNo:(await forms.read(actor("designer"),sourceId)).designStyleNo,temporaryStyleNo:null,primaryMerchandiserId:null,orderDate:new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date()),contractDeliveryDate:null,lines:[{formalPoNo:withOrder?"TEST-G1-PO":null,customerWarehouseArrivalDate:withOrder?"2099-12-31":null,poNumber:null,formalStyleNo:null,temporaryStyleNo:null,color:withOrder?"TEST黑":"",colorForeign:null,deliveryDate:null,sizes:[{size:withOrder?"M":"",quantity:withOrder?"100":""}]}]};
-  const document={...initialDevelopmentDocument(),...(withOrder===undefined?{}:{customerOrderDraft:{withOrder,order}}),quantity:withOrder===undefined?1:2,sizeQuantities:withOrder===undefined?[1,0]:[1,1],sampleSize:"M",orderDate:null,materials:[...(withAux?[{materialId:randomUUID(),category:"主布" as const,label:"TEST主布",name:"TEST棉布",specification:"40支",quantity:"1",color:"黑",width:"",weight:"",composition:"",supplier:"",consumption:"",requiredThisRound:true,available:true,expectedDate:null}]:[]),{materialId,category:withAux?"辅料" as const:"主布" as const,...(withAux?{auxiliaryKind:"普通" as const}:{}),label:withAux?"TEST辅料":"TEST主布",name:"TEST棉布",specification:"40支",quantity:"1",color:"黑",width:"",weight:"",composition:"",supplier:"",consumption:"",requiredThisRound:false,available:!missing,expectedDate:withAux&&missing?"2026-11-01":null}],files:[{attachmentId,kind:"款图" as const}]};
+  const initial=initialDevelopmentDocument(),sizes=["M","L"];
+  const document={...initial,...(withOrder===undefined?{}:{customerOrderDraft:{withOrder,order}}),sizes,measurements:initial.measurements.map(row=>({...row,values:sizes.map(()=>"")})),quantity:withOrder===undefined?1:2,sizeQuantities:withOrder===undefined?[1,0]:[1,1],sampleSize:"M",orderDate:null,materials:[...(withAux?[{materialId:randomUUID(),category:"主布" as const,label:"TEST主布",name:"TEST棉布",specification:"40支",quantity:"1",color:"黑",width:"",weight:"",composition:"",supplier:"",consumption:"",requiredThisRound:true,available:true,expectedDate:null}]:[]),{materialId,category:withAux?"辅料" as const:"主布" as const,...(withAux?{auxiliaryKind:"普通辅料" as const}:{}),label:withAux?"TEST辅料":"TEST主布",name:"TEST棉布",specification:"40支",quantity:"1",color:"黑",width:"",weight:"",composition:"",supplier:"",consumption:"",requiredThisRound:false,available:!missing,expectedDate:withAux&&missing?"2026-11-01":null}],files:[{attachmentId,kind:"款图" as const}]};
+  expect(DevelopmentDocumentSchema.safeParse(document).success).toBe(true);
   const saved=await forms.save(actor("designer"),sourceId,{expectedVersion:0,document},randomUUID()),sheet=await forms.publish(actor("designer"),sourceId,saved.version,randomUUID()),checkTask=sheet.taskId!;
   const issues:DevelopmentReturnIssue[]=[{materialId,field,...(need?{need}:{}),reason:`TEST ${field}需核实`}];if(missing&&field!=="physical")issues.push({materialId,field:"physical",reason:"TEST实物未到"});
   const entry={materialId,usage:"use" as const,physical:!missing,quantity:field!=="quantity",color:field!=="color",specification:field!=="specification",note:"",confirmedWith:""};

@@ -59,7 +59,7 @@
     "apps/api/package.json": "0dbfd5f1dd926ba2cbb4fada9438078a17c2d4d1bd8fd838e3efafa74b7cb9dd",
     "apps/web/package.json": "dc1dffa2564beddd7376d96c8ebf1df9b73eaf37431a3f503148a5e3aef7b5c5",
     "apps/api/src/production-platform/development-amendment-service.ts": "876ed5a97612092ea73b83997b163585572160668386c4288864e7f3945b492c",
-    "tests/integration/development-amendment-postgres.test.ts": "ab3864a90ce04e09936a0fc4ec87bdfae3fa4947172a4aeee51b090b69fb4278"
+    "tests/integration/development-amendment-postgres.test.ts": "20a6f0ad057fe48f6e60c3ee80d2174130547000ff036fcfe2c6e1eec071cfea"
   },
   "expectedCases": [
     {

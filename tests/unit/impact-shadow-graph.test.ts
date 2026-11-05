@@ -5,6 +5,8 @@ import {dirname,join} from 'node:path';
 import {describe,it,expect} from 'vitest';
 import {auditShadowGraph,loadShadowPolicy} from '../../scripts/ci/impact-shadow-graph.mjs';
 import {hash,proposeShadow} from '../../scripts/ci/impact-shadow.mjs';
+import {classifyFullGatePaths} from '../../scripts/ci/full-gate-risk-map.mjs';
+import {fullGatePostgresPlan} from '../../scripts/test-suite-plan.mjs';
 
 const pilot='apps/api/src/pilot.ts',suite='tests/unit/pilot.test.ts';
 async function fixture(testSource:string,rootSource='export const value=1;',extra:Record<string,string>={}){
@@ -43,8 +45,10 @@ describe('bounded impact shadow graph',()=>{
  it.each(["export const value=process.env.X;","export const value=await import('./dynamic.js');","export const value=globalThis.value;"])('does not propose a pure entry with runtime globals or loaders %s',async source=>{const a=await fixture("it('case',()=>{});",source);expect(a.graph.unsupported.length).toBeGreaterThan(0);});
  it('matches the separately source-reviewed real 18-case catalog and rejects a deleted consumer edge',async()=>{
   const policy=loadShadowPolicy(),audit=await auditShadowGraph(process.cwd(),policy);
-  const input={identity:{head:'a'.repeat(40),base:policy.reviewedBase},inputs:{nonDatabase:[...new Set(policy.expectedCases.map(c=>c.file)),'tests/unit/impact-shadow-graph.test.ts'],postgres:{status:'required',plan:[{profile:'retain-original-canonical'}]}},changes:[{status:'M',path:policy.root}],policy,...audit,toolchain:{node:process.versions.node,vitest:'4.1.10',typescript:'5.9.3'}};
-  expect(audit.graph.unsupported).toEqual([]);expect(audit.declarations).toHaveLength(18);expect(proposeShadow(input).decision).toBe('candidate');expect(proposeShadow(input).knownPlanGaps).toEqual(policy.requiredPostgresFiles);
+  const risk=classifyFullGatePaths([policy.root]),postgres=fullGatePostgresPlan({BASE_SHA:policy.reviewedBase,DB_REQUIRED:String(risk.dbRequired),BUSINESS_CHAIN_SENSITIVE:String(risk.businessChainSensitive),MIGRATION_SENSITIVE:String(risk.migrationSensitive),DEPLOYMENT_SENSITIVE:String(risk.deploymentSensitive),MAPPED_POSTGRES_TESTS:risk.mappedPostgresTests.join(',')});
+  const input={identity:{head:'a'.repeat(40),base:policy.reviewedBase},inputs:{nonDatabase:[...new Set(policy.expectedCases.map(c=>c.file)),'tests/unit/impact-shadow-graph.test.ts'],postgres},changes:[{status:'M',path:policy.root}],policy,...audit,toolchain:{node:process.versions.node,vitest:'4.1.10',typescript:'5.9.3'}};
+  expect(audit.graph.unsupported).toEqual([]);expect(audit.declarations).toHaveLength(18);expect(proposeShadow(input).decision).toBe('candidate');expect(proposeShadow(input).knownPlanGaps).toEqual([]);
+  const omitted={...input,inputs:{...input.inputs,postgres:{...postgres,plan:postgres.plan.filter(s=>!policy.requiredPostgresFiles.includes(s.path))}}};expect(proposeShadow(omitted).knownPlanGaps).toEqual(policy.requiredPostgresFiles);
   for(const edge of policy.requiredEdges){input.graph={...audit.graph,edges:audit.graph.edges.filter(e=>JSON.stringify(e)!==JSON.stringify(edge))};expect(proposeShadow(input).reason).toBe('missing-reviewed-consumer-edge');}
  });
 });
