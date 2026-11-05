@@ -14,8 +14,12 @@ function logTotals(body){
   // a failed or truncated report into passing evidence via a later summary.
   let document;
   try{document=JSON.parse(clean);}catch{
-   let first;try{first=JSON.parse(clean.trimStart().split('\n',1)[0]);}catch{throw Error('malformed JSON command log');}
-   if(!first||Array.isArray(first)||typeof first!=='object'||['testResults','numPassedTests','numFailedTests','numPendingTests'].some(key=>Object.hasOwn(first,key)))throw Error('malformed JSON test report');
+   for(const line of clean.trimStart().split('\n')){
+    const text=line.trim();if(!text)continue;
+    if(!text.startsWith('{')&&!text.startsWith('['))break;
+    let record;try{record=JSON.parse(text);}catch{throw Error('malformed JSON command log');}
+    if(!record||Array.isArray(record)||typeof record!=='object'||['testResults','numPassedTests','numFailedTests','numPendingTests'].some(key=>Object.hasOwn(record,key)))throw Error('malformed JSON test report');
+   }
   }
   if(document!==undefined)return closeoutReport(clean,'vitest-json');
  }

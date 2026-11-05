@@ -92,3 +92,13 @@ test('failed or truncated JSON test reports cannot fall through to a passing tex
   await assert.rejects(()=>requestFinal(f.api,901,head,{apply:true,closeoutPath:f.closeout.path}),/FINAL_CLOSEOUT_REJECTED/);assert.equal(f.state.writes.length,0);
  }
 });
+test('later failed or malformed JSON records cannot hide behind valid initialization metadata and a pinned passing report',async()=>{
+ for(const record of ['{"success":false,"numFailedTests":1,"testResults":[]}','{"testResults":[','{"metadata":','{"testResults":[]}','[invalid']){
+  const f=setup(),log='{"status":"ok"}\n'+record+'\n Tests 1 passed (1)\n';
+  const body=JSON.stringify({success:true,numPassedTests:1,numFailedTests:0,numPendingTests:0,testResults:[{assertionResults:[{status:'passed',fullName:f.closeout.name}]}]}),path=f.closeout.dir+'/vitest.json';writeFileSync(path,body);
+  writeFileSync(f.closeout.log,log);f.closeout.evidence.checks[0].logSha256=closeoutSha(log);f.closeout.evidence.checks[0].resultReports=[{format:'vitest-json',sha256:closeoutSha(body)}];
+  f.closeout.pack.reports=[{checkId:'unit',path,sha256:closeoutSha(body),format:'vitest-json'}];f.closeout.pack.constructionEvidenceSha256=closeoutSha(JSON.stringify(f.closeout.evidence));f.closeout.save();
+  for(const apply of [false,true])await assert.rejects(()=>requestFinal(f.api,901,head,{apply,closeoutPath:f.closeout.path}),/malformed JSON (test report|command log)/);
+  assert.equal(f.state.writes.length,0);
+ }
+});
