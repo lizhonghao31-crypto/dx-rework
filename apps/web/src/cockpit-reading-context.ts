@@ -12,6 +12,12 @@ registerSessionInvalidator(()=>views.clear());
 const stamp=(identity:string,id:string)=>identity+'|'+(id||'overview');
 export const cockpitViewPatch=(context:Partial<CockpitContext>)=>Object.fromEntries(keys.map(key=>[key,context[key]])) as Partial<CockpitContext>;
 export function rememberedCockpitView(identity:string,id:string):Partial<CockpitContext>{return identity?{...views.get(stamp(identity,id))?.view}:{};}
+/** A saved reading position takes priority only for the same anchor. An
+ * explicit new node link must still reveal its requested node. */
+export function matchesCockpitReading(identity:string,context:CockpitContext){
+ const saved=views.get(stamp(identity,context.selected??''));
+ return Boolean(identity&&saved?.scrolls.some(item=>item.selector==='.journey-node-viewport')&&(['focus','row','round','expanded','nodeView'] as const).every(key=>(saved.view[key]??(key==='nodeView'?'all':undefined))===(context[key]??(key==='nodeView'?'all':undefined))));
+}
 const point=(element:Element)=>({left:element.scrollLeft,top:element.scrollTop});
 const ancestors=(root:HTMLElement)=>{const result:HTMLElement[]=[];for(let item=root.parentElement;item;item=item.parentElement)result.push(item);return result;};
 const scrollSelectors=['.journey-node-viewport','.journey-po-order-facts','.cockpit-home-scroll','.cockpit-risk-list','.cockpit-related-documents','.node-materials-list','.cockpit-document-modal-scroll'];

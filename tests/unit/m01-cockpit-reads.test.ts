@@ -33,6 +33,7 @@ it('detail objects never paint under a different selected order or round, includ
  await render({selected:'S'});expect(current.detail).toBeNull();await render({selected:'Q'});expect(current.detail).toBeNull();await reply(3,{...q,sourceVersion:2});await reply(2,{id:'S',stages:[]});expect(current.detail?.sourceVersion).toBe(2);
  await render({},true);await reply(4,{error:{message:'TEST detail unavailable'}},503);expect(current.detail?.sourceVersion).toBe(2);expect(current.detailError).toContain('服务暂时不可用');
  await render({round:2});expect(current.detail).toBeNull();await reply(5,{id:'S',stages:[]});expect(current.detail).toBeNull();expect(current.detailError).toContain('所选对象');
+ await render({},true);await reply(6,{...q,selectedRound:1});expect(current.detail).toBeNull();expect(current.detailError).toContain('所选开发轮次');await render({},true);await reply(7,{...q,selectedRound:2});expect(current.detail?.selectedRound).toBe(2);expect(current.detailError).toBe('');
 });
 it('identity tightening discards previous private data and rejects late responses from the former identity',async()=>{
  await reply(0,list('private-old'));await render({},true);actor='TEST-readonly-new';await act(async()=>{await refreshSession();});expect(current.data).toBeNull();expect(pending).toHaveLength(3);

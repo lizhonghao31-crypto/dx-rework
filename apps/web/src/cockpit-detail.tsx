@@ -41,13 +41,14 @@ function StageRing({stage,index,fact,dates,selected,onSelect}:{stage:OrderJourne
 function revealNode(id:string){
   const row=document.getElementById(`journey-node-${id}`),viewport=row?.closest<HTMLElement>(".journey-node-viewport");if(!row||!viewport)return;const target=row.getBoundingClientRect(),bounds=viewport.getBoundingClientRect(),header=viewport.querySelector("thead")?.getBoundingClientRect().height??0;if(target.top<bounds.top+header||target.bottom>bounds.bottom)viewport.scrollTop+=target.top-bounds.top-header;
 }
-export function CockpitDetail({order,context,onChange,asOf,actions,busy=false,onPlanCommitted}:{order:OrderJourney;context:CockpitContext;onChange:(patch:Partial<CockpitContext>)=>void;asOf:string|undefined;actions:ReactNode;busy?:boolean;onPlanCommitted?:(()=>void)|undefined}){
+export function CockpitDetail({order,context,onChange,asOf,actions,busy=false,onPlanCommitted,restoreReading=false}:{order:OrderJourney;context:CockpitContext;onChange:(patch:Partial<CockpitContext>)=>void;asOf:string|undefined;actions:ReactNode;busy?:boolean;onPlanCommitted?:(()=>void)|undefined;restoreReading?:boolean}){
   const [nodeFilter,setNodeFilter]=useState(context.nodeView??"all");
   useEffect(()=>setNodeFilter(context.nodeView??"all"),[order.id,context.nodeView]);
   const nodes=order.stages.flatMap(stage=>stage.nodes),selection=journeyDetailSelection(order,context),selected=selection.selected;
   const materials=useNodeMaterialsView(order,selected??null,context,onChange);
   const revealedRow=useRef<HTMLElement|null>(null);
-  useEffect(()=>{const id=context.row??context.focus;if(!id){revealedRow.current=null;return;}const frame=requestAnimationFrame(()=>{const row=document.getElementById(`journey-node-${id}`);if(row&&row!==revealedRow.current){revealNode(id);revealedRow.current=row;}});return()=>cancelAnimationFrame(frame);},[order,context.focus,context.row,context.expanded,nodeFilter]);
+  const readSnapshot=useRef<OrderJourney|null>(null);
+  useEffect(()=>{const restoring=restoreReading&&readSnapshot.current!==order;readSnapshot.current=order;const id=context.row??context.focus;if(!id){revealedRow.current=null;return;}if(restoring){revealedRow.current=document.getElementById(`journey-node-${id}`);return;}const frame=requestAnimationFrame(()=>{const row=document.getElementById(`journey-node-${id}`);if(row&&row!==revealedRow.current){revealNode(id);revealedRow.current=row;}});return()=>cancelAnimationFrame(frame);},[order,context.focus,context.row,context.expanded,nodeFilter,restoreReading]);
   const rounds=[...new Set(nodes.filter(node=>node.stage==="development"&&node.round).map(node=>node.round!))].sort((a,b)=>b-a);
   const focus=(node:JourneyNode,fromRisk=false)=>{setNodeFilter("all");onChange({nodeView:'all',expanded:node.stage,focus:node.instanceId,row:node.instanceId,...(fromRisk?{round:node.stage==="development"?node.round??undefined:undefined}:{})});requestAnimationFrame(()=>revealNode(node.instanceId));};
   const matches=(node:JourneyNode,key:string)=>key==="all"||key==="completed"&&["completed","inherited"].includes(node.state)||key==="active"&&["active","blocked"].includes(node.state)||key==="not_started"&&["uncreated","pending"].includes(node.state)||key==="overdue"&&node.risks.includes("overdue");

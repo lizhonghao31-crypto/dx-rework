@@ -39,6 +39,7 @@ export function useCockpitReads(context:CockpitContext,refresh:number){
   setDetail(previous=>({identity,key:detailKey,busy:true,data:previous?.identity===identity&&previous.key===detailKey?previous.data:null,error:''}));
   void digitalRequest<OrderJourney>('journeys/'+selected+'?view=cockpit'+(context.round?'&round='+context.round:''),'GET',undefined,undefined,{signal:controller.signal}).then(value=>{
    if(!live())return;if(!value||![value.id,value.orderId,value.sourceId].includes(selected)||!Array.isArray(value.stages))throw new DigitalRequestError('订单详情与所选对象不一致，请重新读取',null,'INVALID_RESPONSE');
+   if(context.round!==undefined&&value.selectedRound!==context.round)throw new DigitalRequestError('订单详情与所选开发轮次不一致，请重新读取',null,'INVALID_RESPONSE');
    setDetail({identity,key:detailKey,busy:false,data:value,error:''});
   }).catch(error=>{if(!live()||error?.name==='AbortError')return;setDetail(previous=>({identity,key:detailKey,busy:false,data:!denied(error)&&previous?.identity===identity&&previous.key===detailKey?previous.data:null,error:message(error)}));
   }).finally(()=>{if(live())setDetail(previous=>previous?.identity===identity&&previous.key===detailKey?{...previous,busy:false}:previous);});

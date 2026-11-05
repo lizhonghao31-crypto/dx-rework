@@ -7,7 +7,7 @@ import {createWebUrls} from '../url-contract.js';
 import {canLeaveInternalPage,registerInternalNavigationGuard} from './internal-navigation.js';
 import {useCockpitReads} from './cockpit-reads.js';
 import {verifySession} from './auth-session.js';
-import {cockpitViewPatch,rememberCockpitReading,rememberedCockpitView,restoreCockpitReading,reconcileCockpitAnchor} from './cockpit-reading-context.js';
+import {cockpitViewPatch,rememberCockpitReading,rememberedCockpitView,restoreCockpitReading,reconcileCockpitAnchor,matchesCockpitReading} from './cockpit-reading-context.js';
 import {Button} from '@dx-rework/ui';
 import './production-command-center-view.css';
 import './digital-cockpit.css';
@@ -18,8 +18,9 @@ export function DigitalCockpitPage(){
  const [searchDraft,setSearchDraft]=useState({value:context.search,pending:false});
  const reads=useCockpitReads(context,refresh),root=useRef<HTMLDivElement>(null),navigation=useRef(0),previousIdentity=useRef(reads.identity),seeded=useRef(false),initial=useRef(context);
  const ready=context.selected?Boolean(reads.detail)&&!reads.detailLoading:Boolean(reads.data)&&!['preparing','loading'].includes(reads.listPhase);
- const latest=useRef({context,identity:reads.identity,ready});latest.current={context,identity:reads.identity,ready};
- const remember=()=>{const current=latest.current;rememberCockpitReading(current.identity,current.context,root.current,current.ready);};
+ const restoreReading=Boolean(context.selected)&&matchesCockpitReading(reads.identity,context);
+ const latest=useRef({context,identity:reads.identity,ready,canonicalId:reads.detail?.id});latest.current={context,identity:reads.identity,ready,canonicalId:reads.detail?.id};
+ const remember=()=>{const current=latest.current;rememberCockpitReading(current.identity,current.context,root.current,current.ready);if(current.ready&&current.context.selected&&current.canonicalId&&current.context.selected!==current.canonicalId)rememberCockpitReading(current.identity,{...current.context,selected:current.canonicalId},root.current,true);};
  const changeContext=(patch:Partial<CockpitContext>,preserveSelection=false)=>{
   const originIdentity=reads.identity,originOrder=context.selected;
   void (async()=>{
@@ -47,12 +48,12 @@ export function DigitalCockpitPage(){
  },[reads.identity]);
  useEffect(()=>registerInternalNavigationGuard(async()=>{remember();return true;}),[]);
  useLayoutEffect(()=>()=>remember(),[]);
- useLayoutEffect(()=>ready?restoreCockpitReading(reads.identity,context.selected??'',root.current):undefined,[reads.identity,context.selected,ready]);
+ useLayoutEffect(()=>ready&&(!context.selected||restoreReading)?restoreCockpitReading(reads.identity,context.selected??'',root.current):undefined,[reads.identity,context.selected,ready]);
  useEffect(()=>{
   if(!reads.detail||reads.detailLoading)return;const patch=reconcileCockpitAnchor(reads.detail,context);
   if(patch){const next={...context,...patch};setContext(next);window.history.replaceState(window.history.state,'',createWebUrls(import.meta.env.BASE_URL).pageUrl(journeyReturnUrl(next)));setNotice('原节点已变更，已定位到所属阶段');}
  },[reads.detail,reads.detailLoading,context.focus,context.row,context.materialNode]);
  const draftChanged=useCallback((value:string,pending:boolean)=>setSearchDraft(current=>current.value===value&&current.pending===pending?current:{value,pending}),[]);
  const reload=()=>{remember();if(!reads.identity)void verifySession(true);setRefresh(value=>value+1);};
- return <div ref={root} className="digital-cockpit" onFocusCapture={remember}>{notice&&<p role="status">{notice}</p>}<DigitalJourneyCockpit data={reads.data} error={contextError||reads.listError} detail={reads.detail} detailError={reads.detailError} detailLoading={reads.detailLoading} context={context} appliedContext={reads.applied} readPhase={reads.listPhase} searchDraft={searchDraft} onSearchDraft={draftChanged} onPlanCommitted={reload} onChange={changeContext} actions={<div className="pattern-actions"><Button variant="secondary" onClick={reload}>刷新数据</Button></div>} orderActions={reads.detail?.orderId?<DigitalCockpitPersonnel showCustomer={false} orderId={reads.detail.orderId} onChanged={reload}/>:null}/></div>;
+ return <div ref={root} className="digital-cockpit" onFocusCapture={remember}>{notice&&<p role="status">{notice}</p>}<DigitalJourneyCockpit data={reads.data} error={contextError||reads.listError} detail={reads.detail} detailError={reads.detailError} detailLoading={reads.detailLoading} context={context} appliedContext={reads.applied} readPhase={reads.listPhase} searchDraft={searchDraft} onSearchDraft={draftChanged} onPlanCommitted={reload} restoreReading={restoreReading} onChange={changeContext} actions={<div className="pattern-actions"><Button variant="secondary" onClick={reload}>刷新数据</Button></div>} orderActions={reads.detail?.orderId?<DigitalCockpitPersonnel showCustomer={false} orderId={reads.detail.orderId} onChanged={reload}/>:null}/></div>;
 }

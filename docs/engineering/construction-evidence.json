@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "ee012e03c920a29fe88fc0d78868626794389d52",
-  "sourceFingerprint": "001bbf9cf0df8ce8f0be6ccad9e1f912553ac4acfced37603e0a2b2379200d31",
+  "sourceFingerprint": "ef41043ad92c473e3a5e3a43294c6f4c0da4d18dee449145d1724e9bbe2a5318",
   "risk": "full",
   "rules": [
     {
@@ -30,7 +30,7 @@
       ],
       "initialization": "无SQL、角色seed或服务写入变化。身份未定/失败/无角色分名，失效后重核；各资源卸载、取消、重试、同键A1/B/A2及finally独立。",
       "dateAndPermission": "使用原认证、请求错误和字段权限；401/403/404清私有结果，503保合法旧资料及旧时点，不自动补零或提升权限。",
-      "expectation": "列表/KPI/总数/分页/点击属于同次成功条件；晚到成功、失败和finally不能串对象或清当前busy；原中文组合和防抖保留。",
+      "expectation": "列表/KPI/总数/分页/点击属于同次成功条件；晚到成功、失败和finally不能串对象或清当前busy；原中文组合和防抖保留。 指定开发轮次也须与返回selectedRound一致。",
       "checks": [
         "unit",
         "workspace",
@@ -46,7 +46,8 @@
       "writes": [
         "apps/web/src/cockpit-reading-context.ts",
         "apps/web/src/node-materials-view.ts",
-        "apps/web/src/cockpit-node-rows.tsx"
+        "apps/web/src/cockpit-node-rows.tsx",
+        "tests/unit/m01-cockpit-reading-context.test.ts"
       ],
       "reads": [
         "apps/web/src/digital-cockpit-page.tsx#changeContext",
@@ -60,7 +61,7 @@
       ],
       "initialization": "只保本标签页有界UI偏好，不缓存已读业务数据、附件链接、权限或草稿。原完整返回URL继续可用；身份失效清记忆；旧锚点消失只回所属阶段。",
       "dateAndPermission": "阅读上下文不成为授权；每次显示的业务结果仍重新走原服务。未保存文案和在途写入继续由原全局内部导航guard保护。",
-      "expectation": "真实Page Q20PO/S2PO往返分别恢复筛选、展开、双滚动与焦点；失效节点只清锚点；真正未保存保取消，已保存附件不误报草稿。",
+      "expectation": "真实Page Q20PO/S2PO往返分别恢复筛选、展开、双滚动与焦点；失效节点只清锚点；真正未保存保取消，已保存附件不误报草稿。 原订单ID与标准源ID返回接续；同锚点阅读恢复优先于自动节点定位，明确新节点/新阶段入口仍定位其请求目标。",
       "checks": [
         "unit",
         "workspace",
@@ -151,25 +152,25 @@
     {
       "id": "unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/series-plan-dates.test.ts tests/unit/digital-cockpit-time.test.ts tests/unit/cockpit-display-facts.test.ts tests/unit/cockpit-document-snapshot.test.ts tests/unit/m01-cockpit-reads.test.ts tests/unit/digital-journey-cockpit.test.ts tests/unit/cockpit-contract-directory-access.test.ts tests/unit/cockpit-detail.test.ts tests/unit/m01-series-plan-reading.test.ts tests/unit/po-delivery-dates.test.ts tests/unit/m01-cockpit-workspace.test.ts tests/unit/cockpit-document-directory.test.ts tests/unit/node-materials.test.ts tests/unit/journey-business-progress.test.ts tests/unit/digital-cockpit-progress.test.ts tests/unit/cockpit-home.test.ts tests/unit/cockpit-document-new-sources.test.ts tests/unit/internal-navigation-guard.test.ts tests/unit/session-revalidation.test.ts --maxWorkers=1 --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-p04-unit-final.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/series-plan-dates.test.ts tests/unit/digital-cockpit-time.test.ts tests/unit/cockpit-display-facts.test.ts tests/unit/cockpit-document-snapshot.test.ts tests/unit/m01-cockpit-reads.test.ts tests/unit/digital-journey-cockpit.test.ts tests/unit/cockpit-contract-directory-access.test.ts tests/unit/cockpit-detail.test.ts tests/unit/m01-series-plan-reading.test.ts tests/unit/po-delivery-dates.test.ts tests/unit/m01-cockpit-workspace.test.ts tests/unit/cockpit-document-directory.test.ts tests/unit/node-materials.test.ts tests/unit/journey-business-progress.test.ts tests/unit/digital-cockpit-progress.test.ts tests/unit/cockpit-home.test.ts tests/unit/cockpit-document-new-sources.test.ts tests/unit/internal-navigation-guard.test.ts tests/unit/session-revalidation.test.ts tests/unit/m01-cockpit-reading-context.test.ts --maxWorkers=1 --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-p04-unit-final6.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 175,
+      "passed": 178,
       "failed": 0,
       "skipped": 0,
+      "testedHead": "af6e28d8b2f772fd3b71604cb0fa5630fa38cb14",
+      "sourceFingerprint": "ef41043ad92c473e3a5e3a43294c6f4c0da4d18dee449145d1724e9bbe2a5318",
+      "context": "Node22.22.2/npm10.9.9; canonical or original real-component test command, bounded worker 1; actual source-bound metadata and original immutable log. Complete captured input ranges, when present, remain byte-identical after unit-fixture-only UUID correction.",
+      "startedAt": "2026-11-05T22:54:14.555Z",
+      "endedAt": "2026-11-05T22:54:21.712Z",
+      "log": "/workspace/scratch/m01-p04-unit-final6.log",
+      "logSha256": "6710532a1e5eca7b6f2f5319f7dd51fc10e3deacbd9aed14ec44e1f2c6674787",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "52469e0975f109c22c34957e16c36b96cf1c88a679e1aec3ce4b8f0ae6466466"
+          "sha256": "c9a8a4205cd88bd59e4ab5ed95b2aa0ccc0780d268381b4b98c356560e889741"
         }
-      ],
-      "testedHead": "ee012e03c920a29fe88fc0d78868626794389d52",
-      "sourceFingerprint": "001bbf9cf0df8ce8f0be6ccad9e1f912553ac4acfced37603e0a2b2379200d31",
-      "context": "Node22.22.2/npm10.9.9; original canonical test config; test workers 1; source-bound command and immutable original log.",
-      "startedAt": "2026-11-05T22:37:10.895Z",
-      "endedAt": "2026-11-05T22:37:16.484Z",
-      "log": "/workspace/scratch/m01-p04-unit-final.log",
-      "logSha256": "ff464b05be208cf6767c48f04b40b19e3d18168224c4ba689847140b8319c999"
+      ]
     },
     {
       "id": "native",
@@ -180,14 +181,13 @@
       "passed": 33,
       "failed": 0,
       "skipped": 0,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "68d33f2fd1c49d7614f767dda1145b7558a3cd820e0b6287e3e3dff139e61c4a"
-        }
-      ],
       "testedHead": "ee012e03c920a29fe88fc0d78868626794389d52",
       "sourceFingerprint": "50bfe6a8940b0695e2ff82f09cd6f56a6ecfe886947d161595a52324726d3687",
+      "context": "Node22.22.2/npm10.9.9; original Vitest PG worker1 on low privilege marked task-owned PostgreSQL16.14/OID694046. Complete exact backend/contract/config/test inputs captured before subsequent frontend-only changes; not PG13 or a final CI receipt. Cleanup verified public-only and no other clients.",
+      "startedAt": "2026-11-05T22:33:46.380Z",
+      "endedAt": "2026-11-05T22:34:42.963Z",
+      "log": "/workspace/scratch/m01-p04-native-draft.log",
+      "logSha256": "98486afd00a659e5ca3e1833cbfed39445e6655885c237717e3a13a0abca7658",
       "inputPaths": [
         "apps/api",
         "packages/contracts",
@@ -204,11 +204,12 @@
         "vitest.postgres-immediate.config.ts"
       ],
       "inputFingerprint": "579a342851ff6563edf120f84decd918a93b8390383ee222c327f352b4422ff4",
-      "context": "Node22.22.2/npm10.9.9; original Vitest PG worker1 on low privilege marked task-owned PostgreSQL16.14/OID694046. Complete exact backend/contract/config/test inputs captured before subsequent frontend-only changes; not PG13 or a final CI receipt. Cleanup verified public-only and no other clients.",
-      "startedAt": "2026-11-05T22:33:46.380Z",
-      "endedAt": "2026-11-05T22:34:42.963Z",
-      "log": "/workspace/scratch/m01-p04-native-draft.log",
-      "logSha256": "98486afd00a659e5ca3e1833cbfed39445e6655885c237717e3a13a0abca7658"
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "68d33f2fd1c49d7614f767dda1145b7558a3cd820e0b6287e3e3dff139e61c4a"
+        }
+      ]
     },
     {
       "id": "workspace",
@@ -216,22 +217,34 @@
       "command": "node tests/acceptance/m01-cockpit-workspace-browser.mjs",
       "status": "passed",
       "exitCode": 0,
-      "passed": 10,
+      "passed": 11,
       "failed": 0,
       "skipped": 0,
+      "testedHead": "af6e28d8b2f772fd3b71604cb0fa5630fa38cb14",
+      "sourceFingerprint": "9cdfd3a234e131821cd3d44137202096904b7073f5c8db5dbb52878190a3b88e",
+      "context": "Node22.22.2/npm10.9.9; canonical or original real-component test command, bounded worker 1; one Chromium151 browser and Playwright-core1.56.1; labelled synthetic TEST HTTP, not live acceptance.",
+      "startedAt": "2026-11-05T22:51:49.694Z",
+      "endedAt": "2026-11-05T22:52:08.623Z",
+      "log": "/workspace/scratch/m01-p04-workspace-final5.log",
+      "logSha256": "4520491f49da5b6a5158a6c09448dbc653926fcccc72bb4a3f91af802d5dc620",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests/acceptance",
+        "tests/fixtures",
+        "tests/helpers",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json"
+      ],
+      "inputFingerprint": "383398b1696dcf694d6db5d15dec4aae53f246e7a649fcce5dfedcab9c28b673",
       "resultReports": [
         {
           "format": "node-tap",
-          "sha256": "e06e27fbe206a4cd3c47ecafcc351f12a124b6b13044b8595a28c3341f6da01f"
+          "sha256": "4520491f49da5b6a5158a6c09448dbc653926fcccc72bb4a3f91af802d5dc620"
         }
-      ],
-      "testedHead": "ee012e03c920a29fe88fc0d78868626794389d52",
-      "sourceFingerprint": "001bbf9cf0df8ce8f0be6ccad9e1f912553ac4acfced37603e0a2b2379200d31",
-      "context": "Node22.22.2/npm10.9.9; original canonical test config; test workers 1; one Chromium151 browser, Playwright-core1.56.1, real product components with labelled synthetic TEST HTTP; not live acceptance.",
-      "startedAt": "2026-11-05T22:37:46.532Z",
-      "endedAt": "2026-11-05T22:37:57.792Z",
-      "log": "/workspace/scratch/m01-p04-workspace-final.log",
-      "logSha256": "e06e27fbe206a4cd3c47ecafcc351f12a124b6b13044b8595a28c3341f6da01f"
+      ]
     },
     {
       "id": "series",
@@ -242,19 +255,31 @@
       "passed": 8,
       "failed": 0,
       "skipped": 0,
+      "testedHead": "af6e28d8b2f772fd3b71604cb0fa5630fa38cb14",
+      "sourceFingerprint": "9cdfd3a234e131821cd3d44137202096904b7073f5c8db5dbb52878190a3b88e",
+      "context": "Node22.22.2/npm10.9.9; canonical or original real-component test command, bounded worker 1; one Chromium151 browser and Playwright-core1.56.1; labelled synthetic TEST HTTP, not live acceptance.",
+      "startedAt": "2026-11-05T22:52:08.745Z",
+      "endedAt": "2026-11-05T22:52:19.275Z",
+      "log": "/workspace/scratch/m01-p04-series-final5.log",
+      "logSha256": "11a34589070668c83aad2f471257959418b0c72ffb17e316249186cf02241e77",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests/acceptance",
+        "tests/fixtures",
+        "tests/helpers",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json"
+      ],
+      "inputFingerprint": "383398b1696dcf694d6db5d15dec4aae53f246e7a649fcce5dfedcab9c28b673",
       "resultReports": [
         {
           "format": "node-tap",
-          "sha256": "8eddf25590c6dee016b2d4342d0bbba5e2f52d30e36daabcd42e782857561b6b"
+          "sha256": "11a34589070668c83aad2f471257959418b0c72ffb17e316249186cf02241e77"
         }
-      ],
-      "testedHead": "ee012e03c920a29fe88fc0d78868626794389d52",
-      "sourceFingerprint": "001bbf9cf0df8ce8f0be6ccad9e1f912553ac4acfced37603e0a2b2379200d31",
-      "context": "Node22.22.2/npm10.9.9; original canonical test config; test workers 1; one Chromium151 browser, Playwright-core1.56.1, real product components with labelled synthetic TEST HTTP; not live acceptance.",
-      "startedAt": "2026-11-05T22:37:57.859Z",
-      "endedAt": "2026-11-05T22:38:04.224Z",
-      "log": "/workspace/scratch/m01-p04-series-final.log",
-      "logSha256": "8eddf25590c6dee016b2d4342d0bbba5e2f52d30e36daabcd42e782857561b6b"
+      ]
     },
     {
       "id": "material",
@@ -265,19 +290,31 @@
       "passed": 24,
       "failed": 0,
       "skipped": 0,
+      "testedHead": "af6e28d8b2f772fd3b71604cb0fa5630fa38cb14",
+      "sourceFingerprint": "9cdfd3a234e131821cd3d44137202096904b7073f5c8db5dbb52878190a3b88e",
+      "context": "Node22.22.2/npm10.9.9; canonical or original real-component test command, bounded worker 1; one Chromium151 browser and Playwright-core1.56.1; labelled synthetic TEST HTTP, not live acceptance.",
+      "startedAt": "2026-11-05T22:52:19.368Z",
+      "endedAt": "2026-11-05T22:52:46.582Z",
+      "log": "/workspace/scratch/m01-p04-material-final5.log",
+      "logSha256": "4654a5bfaf6d8b240157c84f468d713dfdcd5297eac887a0c24655d3d53545c8",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests/acceptance",
+        "tests/fixtures",
+        "tests/helpers",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json"
+      ],
+      "inputFingerprint": "383398b1696dcf694d6db5d15dec4aae53f246e7a649fcce5dfedcab9c28b673",
       "resultReports": [
         {
           "format": "node-tap",
           "sha256": "4654a5bfaf6d8b240157c84f468d713dfdcd5297eac887a0c24655d3d53545c8"
         }
-      ],
-      "testedHead": "ee012e03c920a29fe88fc0d78868626794389d52",
-      "sourceFingerprint": "001bbf9cf0df8ce8f0be6ccad9e1f912553ac4acfced37603e0a2b2379200d31",
-      "context": "Node22.22.2/npm10.9.9; original canonical test config; test workers 1; one Chromium151 browser, Playwright-core1.56.1, real product components with labelled synthetic TEST HTTP; not live acceptance.",
-      "startedAt": "2026-11-05T22:38:04.287Z",
-      "endedAt": "2026-11-05T22:38:24.084Z",
-      "log": "/workspace/scratch/m01-p04-material-final.log",
-      "logSha256": "4654a5bfaf6d8b240157c84f468d713dfdcd5297eac887a0c24655d3d53545c8"
+      ]
     },
     {
       "id": "preflight",
@@ -288,19 +325,19 @@
       "passed": 240,
       "failed": 0,
       "skipped": 0,
+      "testedHead": "af6e28d8b2f772fd3b71604cb0fa5630fa38cb14",
+      "sourceFingerprint": "ef41043ad92c473e3a5e3a43294c6f4c0da4d18dee449145d1724e9bbe2a5318",
+      "context": "Node22.22.2/npm10.9.9; canonical or original real-component test command, bounded worker 2; actual source-bound metadata and original immutable log. Complete captured input ranges, when present, remain byte-identical after unit-fixture-only UUID correction.",
+      "startedAt": "2026-11-05T22:54:14.559Z",
+      "endedAt": "2026-11-05T22:54:18.718Z",
+      "log": "/workspace/scratch/m01-p04-preflight-final6.log",
+      "logSha256": "3dd23f43e408f02de7544eb3e8a01b6b719474175138a56770a3c212374091da",
       "resultReports": [
         {
           "format": "node-tap",
-          "sha256": "6d1638b3319ad7cf8d6d3c296666e8e280798792a609a540ff978cb7c42826c1"
+          "sha256": "3dd23f43e408f02de7544eb3e8a01b6b719474175138a56770a3c212374091da"
         }
-      ],
-      "testedHead": "ee012e03c920a29fe88fc0d78868626794389d52",
-      "sourceFingerprint": "001bbf9cf0df8ce8f0be6ccad9e1f912553ac4acfced37603e0a2b2379200d31",
-      "context": "Node22.22.2/npm10.9.9; original canonical test config; test workers 2; source-bound command and immutable original log.",
-      "startedAt": "2026-11-05T22:37:31.454Z",
-      "endedAt": "2026-11-05T22:37:38.664Z",
-      "log": "/workspace/scratch/m01-p04-preflight-final2.log",
-      "logSha256": "6d1638b3319ad7cf8d6d3c296666e8e280798792a609a540ff978cb7c42826c1"
+      ]
     },
     {
       "id": "types",
@@ -308,8 +345,13 @@
       "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "ee012e03c920a29fe88fc0d78868626794389d52",
-      "sourceFingerprint": "d83b4421ea4d93cb26e9bf2c3fa8aa48b5ccba4315453c8d4bcfca52dad7b4fc",
+      "testedHead": "af6e28d8b2f772fd3b71604cb0fa5630fa38cb14",
+      "sourceFingerprint": "9cdfd3a234e131821cd3d44137202096904b7073f5c8db5dbb52878190a3b88e",
+      "context": "Node22.22.2/npm10.9.9; original workspace command; actual source-bound metadata and original immutable log. Complete captured input ranges, when present, remain byte-identical after unit-fixture-only UUID correction.",
+      "startedAt": "2026-11-05T22:51:49.675Z",
+      "endedAt": "2026-11-05T22:52:31.992Z",
+      "log": "/workspace/scratch/m01-p04-types-final5.log",
+      "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e",
       "inputPaths": [
         "apps",
         "packages",
@@ -317,12 +359,7 @@
         "package-lock.json",
         "tsconfig.base.json"
       ],
-      "inputFingerprint": "a688daad22fb39253b6b60616a7680cc36c3d2a8193edf6d39409d9fc10f6731",
-      "context": "Node22.22.2/npm10.9.9 original workspace tsc; complete apps/packages/config/lock inputs captured while original successful full fingerprint still matched, before browser-driver logging-only edits.",
-      "startedAt": "2026-11-05T22:35:41.595Z",
-      "endedAt": "2026-11-05T22:36:11.581Z",
-      "log": "/workspace/scratch/m01-p04-types-final.log",
-      "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e"
+      "inputFingerprint": "08f82feb9bfa526829fcb9f137782e6cf6e90575f9eca345652f733b0c76ffab"
     },
     {
       "id": "lint",
@@ -330,12 +367,12 @@
       "command": "npm run lint",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "ee012e03c920a29fe88fc0d78868626794389d52",
-      "sourceFingerprint": "001bbf9cf0df8ce8f0be6ccad9e1f912553ac4acfced37603e0a2b2379200d31",
-      "context": "Node22.22.2/npm10.9.9; original workspace command; source-bound command and immutable original log.",
-      "startedAt": "2026-11-05T22:37:31.458Z",
-      "endedAt": "2026-11-05T22:37:55.250Z",
-      "log": "/workspace/scratch/m01-p04-lint-final2.log",
+      "testedHead": "af6e28d8b2f772fd3b71604cb0fa5630fa38cb14",
+      "sourceFingerprint": "ef41043ad92c473e3a5e3a43294c6f4c0da4d18dee449145d1724e9bbe2a5318",
+      "context": "Node22.22.2/npm10.9.9; original workspace command; actual source-bound metadata and original immutable log. Complete captured input ranges, when present, remain byte-identical after unit-fixture-only UUID correction.",
+      "startedAt": "2026-11-05T22:54:18.794Z",
+      "endedAt": "2026-11-05T22:54:35.396Z",
+      "log": "/workspace/scratch/m01-p04-lint-final6.log",
       "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763"
     },
     {
@@ -344,13 +381,22 @@
       "command": "npm run build --workspaces --if-present",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "ee012e03c920a29fe88fc0d78868626794389d52",
-      "sourceFingerprint": "001bbf9cf0df8ce8f0be6ccad9e1f912553ac4acfced37603e0a2b2379200d31",
-      "context": "Node22.22.2/npm10.9.9; original workspace command; source-bound command and immutable original log.",
-      "startedAt": "2026-11-05T22:37:31.462Z",
-      "endedAt": "2026-11-05T22:37:50.501Z",
-      "log": "/workspace/scratch/m01-p04-build-final.log",
-      "logSha256": "d8dc1af85a38753e9e509f0f839fe221b8690f3a03d79d6f781d7d997b45e6d5"
+      "testedHead": "af6e28d8b2f772fd3b71604cb0fa5630fa38cb14",
+      "sourceFingerprint": "9cdfd3a234e131821cd3d44137202096904b7073f5c8db5dbb52878190a3b88e",
+      "context": "Node22.22.2/npm10.9.9; original workspace command; actual source-bound metadata and original immutable log. Complete captured input ranges, when present, remain byte-identical after unit-fixture-only UUID correction.",
+      "startedAt": "2026-11-05T22:52:27.695Z",
+      "endedAt": "2026-11-05T22:52:46.590Z",
+      "log": "/workspace/scratch/m01-p04-build-final5.log",
+      "logSha256": "f626abba89841f5a9b3b6aec634ee67b6daf79d9477946d0a88f97a49b3262f7",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json"
+      ],
+      "inputFingerprint": "ac2149bbfb594467079dff1e5539c8584a5f262cc67c1fa3e2de13c6921d6418"
     },
     {
       "id": "secret",
@@ -358,12 +404,12 @@
       "command": "npm run secret:scan",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "ee012e03c920a29fe88fc0d78868626794389d52",
-      "sourceFingerprint": "001bbf9cf0df8ce8f0be6ccad9e1f912553ac4acfced37603e0a2b2379200d31",
-      "context": "Node22.22.2/npm10.9.9; original workspace command; source-bound command and immutable original log.",
-      "startedAt": "2026-11-05T22:37:48.100Z",
-      "endedAt": "2026-11-05T22:37:49.110Z",
-      "log": "/workspace/scratch/m01-p04-secret-final.log",
+      "testedHead": "af6e28d8b2f772fd3b71604cb0fa5630fa38cb14",
+      "sourceFingerprint": "ef41043ad92c473e3a5e3a43294c6f4c0da4d18dee449145d1724e9bbe2a5318",
+      "context": "Node22.22.2/npm10.9.9; original workspace command; actual source-bound metadata and original immutable log. Complete captured input ranges, when present, remain byte-identical after unit-fixture-only UUID correction.",
+      "startedAt": "2026-11-05T22:54:35.462Z",
+      "endedAt": "2026-11-05T22:54:36.038Z",
+      "log": "/workspace/scratch/m01-p04-secret-final6.log",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda"
     }
   ]
