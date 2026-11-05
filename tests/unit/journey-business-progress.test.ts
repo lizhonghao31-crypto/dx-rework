@@ -33,6 +33,24 @@ it('P01-04: a retired execution without a current replacement leaves the require
   expect(result).toMatchObject({applicable:8,unknown:1,ratio:null});
   expect(result.requirements.find(row=>row.key==='bulk_cutting')?.reasons[0]).toContain('承接记录');
 });
+it('P01-03: a completed sibling cannot hide the specific PO and factory that still must finish',()=>{
+  const order=fixture(),first=node(order,'process_logistics');first.state='completed';first.subject='黑PO · 甲厂';
+  order.stages.find(stage=>stage.key==='post_cutting')!.nodes.push({...first,instanceId:'white-factory',subject:'白PO · 乙厂',state:'active'});
+  const requirement=journeyBusinessProgress(order,asOf).requirements.find(row=>row.key==='process_logistics')!;
+  expect(requirement.completed).toBe(false);expect(requirement.reasons).toContain('尚待白PO · 乙厂完成');
+});
+it('P01-04: retiring one same-round scope cannot disappear behind a completed sibling without explicit inheritance',()=>{
+  const order=fixture(),first=node(order,'process_logistics');first.state='completed';first.round=1;
+  const stage=order.stages.find(stage=>stage.key==='post_cutting')!;
+  stage.nodes.push({...first,instanceId:'retired-white',subject:'白PO · 乙厂',current:false,state:'active'});
+  const requirement=()=>journeyBusinessProgress(order,asOf).requirements.find(row=>row.key==='process_logistics')!;
+  expect(requirement()).toMatchObject({applicability:'unknown',completed:false});
+  expect(requirement().reasons).toContain('白PO · 乙厂退役后的有效承接范围尚未核实');
+  first.state='inherited';first.inheritedFrom={taskId:'retired-white',round:1};
+  expect(requirement()).toMatchObject({applicability:'applicable',completed:true});
+  first.state='not_applicable';first.progressApplicability='not_applicable';first.inheritedFrom=null;
+  expect(requirement()).toMatchObject({applicability:'not_applicable',completed:false});
+});
 it('P01-08: unavailable scope never becomes completed or zero missing requirements',()=>{
   const order=fixture();node(order,'bulk_cutting').state='unavailable';
   expect(journeyBusinessProgress(order,asOf,'unavailable')).toMatchObject({unknown:1,ratio:null,plan:{status:'unavailable',covered:0,due:0}});

@@ -21,7 +21,8 @@ export type RequirementEvidence = Map<string, {completed: boolean; applicability
 export function journeyBusinessProgress(order: OrderJourney, asOf: string,
   plan: AdoptedRequirementPlan | null | 'unavailable' = null,
   quantities?: JourneyBusinessQuantities, evidence: RequirementEvidence = new Map()): JourneyBusinessProgress {
-  const nodes = order.stages.flatMap(stage => stage.nodes).filter(node => node.current && !isJourneyPlanningNode(node));
+  const allNodes = order.stages.flatMap(stage => stage.nodes).filter(node => !isJourneyPlanningNode(node));
+  const nodes = allNodes.filter(node => node.current);
   const definitions = JOURNEY_NODES.filter(node => !node.planningOnly
     && (order.orderId || node.stage === 'development')
     && (node.stage !== 'creation' || node.key === 'order_information'));
@@ -31,10 +32,15 @@ export function journeyBusinessProgress(order: OrderJourney, asOf: string,
   const requirements: JourneyBusinessRequirement[] = [...keys].map(([key, definition]) => {
     const instances = nodes.filter(node => keyOf(node.key) === key);
     const applicable = instances.filter(node => node.state !== 'not_applicable' && node.progressApplicability !== 'not_applicable');
-    const unknown = !instances.length || applicable.some(node => node.state === 'unavailable' || node.progressApplicability === 'unknown');
+    const unresolvedRetired = applicable.length ? allNodes.filter(node => keyOf(node.key) === key && !node.current
+      && node.round === order.adoptedRound && node.state !== 'not_applicable' && node.progressApplicability !== 'not_applicable'
+      && !instances.some(current => current.inheritedFrom?.taskId === node.instanceId)) : [];
+    const unknown = !instances.length || unresolvedRetired.length > 0 || applicable.some(node => node.state === 'unavailable' || node.progressApplicability === 'unknown');
     const applicability = unknown ? 'unknown' : applicable.length ? 'applicable' : 'not_applicable';
     const reasons = !instances.length ? [`尚未取得${definition.label}的适用要求及承接记录`]
       : unknown ? [`${definition.label}的适用范围或读取依据尚未齐全`] : [];
+    reasons.push(...unresolvedRetired.map(node => `${node.subject ?? node.label}退役后的有效承接范围尚未核实`));
+    if (!unknown) reasons.push(...applicable.filter(node => !completed(node) && node.subject).map(node => `尚待${node.subject}完成`));
     const fact = evidence.get(key);
     const isCompleted = applicability === 'applicable' && applicable.every(completed);
     return {id: `${key}:whole`, key, label: definition.label, stage: definition.stage, scopeRef: 'whole',

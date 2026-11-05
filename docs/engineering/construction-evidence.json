@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "751c178f102b243b9febd13faad3dd2f90fc5a53",
-  "sourceFingerprint": "003cc9ff93b2ed4032abc8ce1e9033cabbb5a9035843938beace265618a33275",
+  "sourceFingerprint": "1324ea3d28bae63cac5830bf0d55ba057e9d18fdb70df507580525bc2a90121e",
   "risk": "full",
   "rules": [
     {
@@ -10,11 +10,12 @@
       "dateAndPermission": "Use snapshot business asOf and Beijing date-only end-of-day, original source/order/task authorization before facts or aggregation; PMC no write/approval; Root special authority preserved.",
       "expectation": "Current source-bound focused unit and real PostgreSQL tests, typecheck, lint and build pass; exact-head light/Review/final Full remain separate required stages.",
       "checks": [
-        "m01-p01-unit-frozen",
-        "m01-p01-pg-frozen",
-        "m01-p01-types-frozen",
-        "m01-p01-lint-frozen",
-        "m01-p01-build-frozen"
+        "m01-p01-unit-final",
+        "m01-p01-pg-final",
+        "m01-p01-native-gap",
+        "m01-p01-types-final",
+        "m01-p01-lint-final",
+        "m01-p01-build-final"
       ],
       "rule": "Formal identity cannot promote external-request UUID; source/mother scope and unchanged original authorization remain authoritative.",
       "writes": [
@@ -37,11 +38,12 @@
       "dateAndPermission": "Use snapshot business asOf and Beijing date-only end-of-day, original source/order/task authorization before facts or aggregation; PMC no write/approval; Root special authority preserved.",
       "expectation": "Current source-bound focused unit and real PostgreSQL tests, typecheck, lint and build pass; exact-head light/Review/final Full remain separate required stages.",
       "checks": [
-        "m01-p01-unit-frozen",
-        "m01-p01-pg-frozen",
-        "m01-p01-types-frozen",
-        "m01-p01-lint-frozen",
-        "m01-p01-build-frozen"
+        "m01-p01-unit-final",
+        "m01-p01-pg-final",
+        "m01-p01-native-gap",
+        "m01-p01-types-final",
+        "m01-p01-lint-final",
+        "m01-p01-build-final"
       ],
       "rule": "New business denominator groups required execution coverage, not batch count, and keeps retired/missing/hidden requirements unknown; native samples and actual rework applicability do not rewrite tasks or wages.",
       "writes": [
@@ -66,11 +68,12 @@
       "dateAndPermission": "Use snapshot business asOf and Beijing date-only end-of-day, original source/order/task authorization before facts or aggregation; PMC no write/approval; Root special authority preserved.",
       "expectation": "Current source-bound focused unit and real PostgreSQL tests, typecheck, lint and build pass; exact-head light/Review/final Full remain separate required stages.",
       "checks": [
-        "m01-p01-unit-frozen",
-        "m01-p01-pg-frozen",
-        "m01-p01-types-frozen",
-        "m01-p01-lint-frozen",
-        "m01-p01-build-frozen"
+        "m01-p01-unit-final",
+        "m01-p01-pg-final",
+        "m01-p01-native-gap",
+        "m01-p01-types-final",
+        "m01-p01-lint-final",
+        "m01-p01-build-final"
       ],
       "rule": "Only persisted adopted series-plan snapshots map to the same requirements; partial PO/date coverage and original retained adoption versions remain explicit, previews never become adoption.",
       "writes": [
@@ -95,17 +98,19 @@
       "dateAndPermission": "Use snapshot business asOf and Beijing date-only end-of-day, original source/order/task authorization before facts or aggregation; PMC no write/approval; Root special authority preserved.",
       "expectation": "Current source-bound focused unit and real PostgreSQL tests, typecheck, lint and build pass; exact-head light/Review/final Full remain separate required stages.",
       "checks": [
-        "m01-p01-unit-frozen",
-        "m01-p01-pg-frozen",
-        "m01-p01-types-frozen",
-        "m01-p01-lint-frozen",
-        "m01-p01-build-frozen"
+        "m01-p01-unit-final",
+        "m01-p01-pg-final",
+        "m01-p01-native-gap",
+        "m01-p01-types-final",
+        "m01-p01-lint-final",
+        "m01-p01-build-final"
       ],
       "rule": "Cumulative receipts, valid receipt QC and packing remain separate; upward/downward quantity corrections expose quality gaps/conflicts and factory attribution requires precise native linkage.",
       "writes": [
         "apps/api/src/production-platform/journey-business-progress.ts",
         "apps/api/src/production-platform/journey-query.ts",
-        "tests/unit/journey-business-progress.test.ts"
+        "tests/unit/journey-business-progress.test.ts",
+        "tests/integration/sourcing-pr03-postgres.test.ts"
       ],
       "reads": [
         "apps/api/src/production-platform/order-closure-service.ts",
@@ -124,11 +129,12 @@
       "dateAndPermission": "Use snapshot business asOf and Beijing date-only end-of-day, original source/order/task authorization before facts or aggregation; PMC no write/approval; Root special authority preserved.",
       "expectation": "Current source-bound focused unit and real PostgreSQL tests, typecheck, lint and build pass; exact-head light/Review/final Full remain separate required stages.",
       "checks": [
-        "m01-p01-unit-frozen",
-        "m01-p01-pg-frozen",
-        "m01-p01-types-frozen",
-        "m01-p01-lint-frozen",
-        "m01-p01-build-frozen"
+        "m01-p01-unit-final",
+        "m01-p01-pg-final",
+        "m01-p01-native-gap",
+        "m01-p01-types-final",
+        "m01-p01-lint-final",
+        "m01-p01-build-final"
       ],
       "rule": "Cockpit actual/plan/quantity and stage displays consume the versioned common requirement model while legacy fields remain compatible and incomplete plan evidence is readable.",
       "writes": [
@@ -152,92 +158,115 @@
   ],
   "checks": [
     {
-      "id": "m01-p01-unit-frozen",
+      "id": "m01-p01-unit-final",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/journey-business-progress.test.ts tests/unit/cockpit-display-facts.test.ts tests/unit/cockpit-home.test.ts tests/unit/cockpit-detail.test.ts tests/unit/digital-journey-cockpit.test.ts tests/unit/digital-journey-projection.test.ts tests/unit/journey-sla-supervision.test.ts tests/unit/journey-projection-isolation.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-p01-unit-frozen.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/journey-business-progress.test.ts tests/unit/cockpit-display-facts.test.ts tests/unit/cockpit-home.test.ts tests/unit/cockpit-detail.test.ts tests/unit/digital-journey-cockpit.test.ts tests/unit/digital-journey-projection.test.ts tests/unit/journey-sla-supervision.test.ts tests/unit/journey-projection-isolation.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-p01-unit-final.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "751c178f102b243b9febd13faad3dd2f90fc5a53",
-      "sourceFingerprint": "003cc9ff93b2ed4032abc8ce1e9033cabbb5a9035843938beace265618a33275",
+      "testedHead": "4d3aba210a5bbdcd7ae3d444c36c57a3ba0ed0f3",
+      "sourceFingerprint": "1324ea3d28bae63cac5830bf0d55ba057e9d18fdb70df507580525bc2a90121e",
       "context": "Node v22.22.2; npm 10.9.9; canonical Vitest workers=1. Selected workspace only; no Acceptance or production access.",
-      "startedAt": "2026-11-05T17:13:55.879Z",
-      "endedAt": "2026-11-05T17:13:59.697Z",
-      "log": "/workspace/scratch/m01-p01-unit-frozen.log",
-      "logSha256": "0cbfcaace390ab1ac295645adb3fb5c40d41e25ef2e6bc7ece5540e86c10f737",
-      "passed": 93,
+      "startedAt": "2026-11-05T17:34:33.818Z",
+      "endedAt": "2026-11-05T17:34:36.732Z",
+      "log": "/workspace/scratch/m01-p01-unit-final.log",
+      "logSha256": "45842ba321200fbc6708255b18ca8d8b737a72fb15a5b127a15aee3cd76fe8a2",
+      "passed": 95,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "aa2cd9da0ab834dc257e3890411acde4a247862ea2ee8073e344af9a87fa03b0"
+          "sha256": "0486573bfb419ab7771fa135faa57c5cb3951ea440b5ffb1218de064cde5dde3"
         }
       ]
     },
     {
-      "id": "m01-p01-pg-frozen",
+      "id": "m01-p01-pg-final",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/integration/digital-journey-postgres.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-p01-pg-frozen.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/integration/digital-journey-postgres.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-p01-pg-final.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "751c178f102b243b9febd13faad3dd2f90fc5a53",
-      "sourceFingerprint": "003cc9ff93b2ed4032abc8ce1e9033cabbb5a9035843938beace265618a33275",
+      "testedHead": "4d3aba210a5bbdcd7ae3d444c36c57a3ba0ed0f3",
+      "sourceFingerprint": "1324ea3d28bae63cac5830bf0d55ba057e9d18fdb70df507580525bc2a90121e",
       "context": "Node v22.22.2; npm 10.9.9; canonical Vitest workers=1. Local PostgreSQL 16.14; marked dx_rework_ci / role dx_rework_test; non-superuser, no create database/role, no bypass RLS; original owned-schema creation and cleanup.",
-      "startedAt": "2026-11-05T17:14:03.758Z",
-      "endedAt": "2026-11-05T17:15:12.539Z",
-      "log": "/workspace/scratch/m01-p01-pg-frozen.log",
-      "logSha256": "35c49cc5c128660782e448c92f1022de5d4692d56f47111c062a3fc08a405cad",
+      "startedAt": "2026-11-05T17:35:20.219Z",
+      "endedAt": "2026-11-05T17:36:15.319Z",
+      "log": "/workspace/scratch/m01-p01-pg-final.log",
+      "logSha256": "e2fce0071cd59e4a30e3c06bb88acf24b8ed66c1e90362ad96d63f2aeebe4c86",
       "passed": 32,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "92c97c3b56c33fac8d6bcce0282bb28698133cf9dd6de76cb979ac3942043495"
+          "sha256": "353d379b21927be68f9de2aabc87ec8084aeda9b9e82033b14082e019ea63412"
         }
       ]
     },
     {
-      "id": "m01-p01-types-frozen",
+      "id": "m01-p01-native-gap",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run tests/integration/sourcing-pr03-postgres.test.ts -t \"P01-06 reads the native cumulative\" --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-p01-native-gap.json",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "4d3aba210a5bbdcd7ae3d444c36c57a3ba0ed0f3",
+      "sourceFingerprint": "1324ea3d28bae63cac5830bf0d55ba057e9d18fdb70df507580525bc2a90121e",
+      "context": "Node v22.22.2; npm 10.9.9; canonical Vitest workers=1. Local PostgreSQL 16.14; marked dx_rework_ci / role dx_rework_test; non-superuser, no create database/role, no bypass RLS; original owned-schema creation and cleanup.",
+      "startedAt": "2026-11-05T17:34:45.434Z",
+      "endedAt": "2026-11-05T17:35:00.808Z",
+      "log": "/workspace/scratch/m01-p01-native-gap.log",
+      "logSha256": "bd2e54aa7853ee6e3aab37dd796903e5006eb9801da5bcc54868e8c8cc714cd9",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 141,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "85c0adbda8ffe2fb08a2ce64dfe242c82a57e889fdfdaebecee31fc4f0fc9925"
+        }
+      ]
+    },
+    {
+      "id": "m01-p01-types-final",
       "kind": "command",
       "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "751c178f102b243b9febd13faad3dd2f90fc5a53",
-      "sourceFingerprint": "003cc9ff93b2ed4032abc8ce1e9033cabbb5a9035843938beace265618a33275",
+      "testedHead": "4d3aba210a5bbdcd7ae3d444c36c57a3ba0ed0f3",
+      "sourceFingerprint": "1324ea3d28bae63cac5830bf0d55ba057e9d18fdb70df507580525bc2a90121e",
       "context": "Node v22.22.2; npm 10.9.9; canonical Vitest workers=1. Selected workspace only; no Acceptance or production access.",
-      "startedAt": "2026-11-05T17:14:24.316Z",
-      "endedAt": "2026-11-05T17:14:50.820Z",
-      "log": "/workspace/scratch/m01-p01-types-frozen.log",
+      "startedAt": "2026-11-05T17:34:45.432Z",
+      "endedAt": "2026-11-05T17:35:14.855Z",
+      "log": "/workspace/scratch/m01-p01-types-final.log",
       "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e"
     },
     {
-      "id": "m01-p01-lint-frozen",
+      "id": "m01-p01-lint-final",
       "kind": "command",
       "command": "npm run lint",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "751c178f102b243b9febd13faad3dd2f90fc5a53",
-      "sourceFingerprint": "003cc9ff93b2ed4032abc8ce1e9033cabbb5a9035843938beace265618a33275",
+      "testedHead": "4d3aba210a5bbdcd7ae3d444c36c57a3ba0ed0f3",
+      "sourceFingerprint": "1324ea3d28bae63cac5830bf0d55ba057e9d18fdb70df507580525bc2a90121e",
       "context": "Node v22.22.2; npm 10.9.9; canonical Vitest workers=1. Selected workspace only; no Acceptance or production access.",
-      "startedAt": "2026-11-05T17:14:05.262Z",
-      "endedAt": "2026-11-05T17:14:24.242Z",
-      "log": "/workspace/scratch/m01-p01-lint-frozen.log",
+      "startedAt": "2026-11-05T17:34:45.432Z",
+      "endedAt": "2026-11-05T17:35:08.114Z",
+      "log": "/workspace/scratch/m01-p01-lint-final.log",
       "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763"
     },
     {
-      "id": "m01-p01-build-frozen",
+      "id": "m01-p01-build-final",
       "kind": "command",
       "command": "npm run build --workspaces --if-present",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "751c178f102b243b9febd13faad3dd2f90fc5a53",
-      "sourceFingerprint": "003cc9ff93b2ed4032abc8ce1e9033cabbb5a9035843938beace265618a33275",
+      "testedHead": "4d3aba210a5bbdcd7ae3d444c36c57a3ba0ed0f3",
+      "sourceFingerprint": "1324ea3d28bae63cac5830bf0d55ba057e9d18fdb70df507580525bc2a90121e",
       "context": "Node v22.22.2; npm 10.9.9; canonical Vitest workers=1. Selected workspace only; no Acceptance or production access.",
-      "startedAt": "2026-11-05T17:14:50.904Z",
-      "endedAt": "2026-11-05T17:15:06.718Z",
-      "log": "/workspace/scratch/m01-p01-build-frozen.log",
-      "logSha256": "0f1680122862791a2e87089132718cc403305b59770b971980f2d15ae26c4372"
+      "startedAt": "2026-11-05T17:35:37.052Z",
+      "endedAt": "2026-11-05T17:35:52.018Z",
+      "log": "/workspace/scratch/m01-p01-build-final.log",
+      "logSha256": "5e1272b396df2615c4e657ff7d3ab8c28e992400fd50a2f7f2402c0961913f21"
     }
   ]
 }
