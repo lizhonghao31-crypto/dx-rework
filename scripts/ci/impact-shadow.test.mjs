@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {readFileSync} from 'node:fs';
-import {hash,caseKey,parseShadowChanges,proposeShadow,observeShadow,captureShadow} from './impact-shadow.mjs';
+import {hash,caseKey,policyRulesHash,parseShadowChanges,proposeShadow,observeShadow,captureShadow} from './impact-shadow.mjs';
 import {classifyFullGatePaths} from './full-gate-risk-map.mjs';
 import {validateNonDatabase} from './full-gate-lanes.mjs';
 
@@ -9,8 +9,9 @@ const root='apps/api/src/pilot.ts',service='apps/api/src/service.ts',direct='tes
 function fixture(){
  const expectedCases=[{file:direct,ancestors:['family'],title:'first',rowKey:'one',parameterHash:hash({caseId:'one',amount:1})},{file:indirect,ancestors:['family'],title:'second',rowKey:'two',parameterHash:hash({caseId:'two',amount:2})}];
  const edges=[[direct,root],[service,root],[indirect,service]];
- return {identity:{head:'a'.repeat(40),base:'b'.repeat(40),runId:'1',attempt:'1'},inputs:{nonDatabase:[direct,indirect,other],postgres:{status:'required',plan:[{path:'tests/integration/canonical-postgres.test.ts',profile:'pg16-lowpriv'}]}},changes:[{status:'M',path:root}],policy:{version:1,root,reviewedBase:'b'.repeat(40),rootImports:['./dependency.js'],requiredEdges:edges,pinnedSources:{[service]:'pin'},expectedCases,toolchain:{nodeMajor:22,vitest:'4.1.10',typescript:'5.9.3'}},graph:{rootImports:['./dependency.js'],edges,conservativeConsumers:[],unsupported:[]},declarations:structuredClone(expectedCases),sourceHashes:{[service]:'pin'},toolchain:{node:'22.22.2',vitest:'4.1.10',typescript:'5.9.3'}};
+ return reviewed({identity:{head:'a'.repeat(40),base:'b'.repeat(40),runId:'1',attempt:'1'},inputs:{nonDatabase:[direct,indirect,other],postgres:{status:'required',plan:[{path:'tests/integration/canonical-postgres.test.ts',profile:'pg16-lowpriv'}]}},changes:[{status:'M',path:root}],policy:{version:1,root,binding:{version:1,anchor:'b'.repeat(40),inputsHash:'d'.repeat(64)},rootImports:['./dependency.js'],requiredEdges:structuredClone(edges),pinnedSources:{[service]:'pin'},expectedCases,toolchain:{nodeMajor:22,vitest:'4.1.10',typescript:'5.9.3'}},graph:{rootImports:['./dependency.js'],edges,conservativeConsumers:[],unsupported:[]},declarations:structuredClone(expectedCases),sourceHashes:{[service]:'pin'},toolchain:{node:'22.22.2',vitest:'4.1.10',typescript:'5.9.3'}});
 }
+function reviewed(f){f.binding={version:1,status:'matched',base:f.identity.base,head:f.identity.head,anchor:f.policy.binding.anchor,baseInputsHash:f.policy.binding.inputsHash,headInputsHash:f.policy.binding.inputsHash,policyRulesHash:policyRulesHash(f.policy)};return f;}
 function report(f){return {success:true,numFailedTests:0,numFailedTestSuites:0,testResults:f.inputs.nonDatabase.map(file=>({name:'/checkout/'+file,status:'passed',assertionResults:f.policy.expectedCases.filter(c=>c.file===file).map(c=>({ancestorTitles:c.ancestors,title:c.title,status:'passed'})).concat(file===other?[{ancestorTitles:[],title:'unrelated case',status:'passed'}]:[])}))};}
 function observe(f,manifest=proposeShadow(f),r=report(f),extra={}){return observeShadow(manifest,{identity:f.identity,inputs:f.inputs,policy:f.policy,report:r,testOutcome:'success',...extra});}
 function fallback(f,reason){const r=proposeShadow(f);assert.equal(r.decision,'fallback');if(reason)assert.equal(r.reason,reason);assert.deepEqual(r.candidate,r.actualExecution);assert.deepEqual(r.proposedExclusions,[]);assert.equal(r.selectionApproved,false);}
@@ -23,13 +24,13 @@ test('independent edge catalog rejects a missing edge even if conservative trave
  const f=fixture();f.graph.edges=f.graph.edges.filter(e=>e[0]!==service);f.graph.conservativeConsumers=[indirect];fallback(f,'missing-reviewed-consumer-edge');
 });
 test('a known PG consumer absent from the original plan is a gap even with a complete green non-DB report',()=>{
- const f=fixture(),required='tests/integration/legacy-correction-postgres.test.ts';f.policy.requiredPostgresFiles=[required];const m=proposeShadow(f);assert.equal(m.decision,'candidate');assert.deepEqual(m.knownPlanGaps,[required]);assert.deepEqual(m.candidate.postgres,f.inputs.postgres);const o=observe(f,m);assert.equal(o.fullRunComplete,true);assert.equal(o.status,'gap');assert.deepEqual(o.knownPlanGaps,[required]);assert.equal(o.selectionApproved,false);
+ const f=fixture(),required='tests/integration/legacy-correction-postgres.test.ts';f.policy.requiredPostgresFiles=[required];reviewed(f);const m=proposeShadow(f);assert.equal(m.decision,'candidate');assert.deepEqual(m.knownPlanGaps,[required]);assert.deepEqual(m.candidate.postgres,f.inputs.postgres);const o=observe(f,m);assert.equal(o.fullRunComplete,true);assert.equal(o.status,'gap');assert.deepEqual(o.knownPlanGaps,[required]);assert.equal(o.selectionApproved,false);
 });
 test('unknown runtime readers and their unchanged consumers are conservatively included',()=>{
  const f=fixture();f.graph.conservativeConsumers=['apps/api/src/reader.ts'];f.graph.edges.push([other,'apps/api/src/reader.ts']);assert.deepEqual(proposeShadow(f).candidate.nonDatabase,f.inputs.nonDatabase);
 });
 for(const [label,mutate]of [
- ['missing row',f=>f.declarations.pop()],['same-count parameter substitution',f=>f.declarations[1].parameterHash=hash({caseId:'two',amount:999})],['duplicate row',f=>f.declarations.push(f.declarations[0])],['empty family',f=>f.declarations=[]],['source drift',f=>f.sourceHashes[service]='changed'],['unknown import',f=>f.graph.rootImports.push('new-package')],['unsupported graph',f=>f.graph.unsupported.push('parse-error')],['version drift',f=>f.toolchain.vitest='next'],['unreviewed baseline',f=>f.identity.base='c'.repeat(40)],['missing expected file',f=>f.inputs.nonDatabase=f.inputs.nonDatabase.filter(p=>p!==direct)],['duplicate expected identity',f=>f.policy.expectedCases.push(f.policy.expectedCases[0])],
+ ['missing row',f=>f.declarations.pop()],['same-count parameter substitution',f=>f.declarations[1].parameterHash=hash({caseId:'two',amount:999})],['duplicate row',f=>f.declarations.push(f.declarations[0])],['empty family',f=>f.declarations=[]],['source drift',f=>f.sourceHashes[service]='changed'],['unknown import',f=>f.graph.rootImports.push('new-package')],['unsupported graph',f=>f.graph.unsupported.push('parse-error')],['version drift',f=>f.toolchain.vitest='next'],['binding identity mismatch',f=>f.identity.base='c'.repeat(40)],['missing binding',f=>delete f.binding],['policy body drift',f=>f.policy.source='unreviewed policy replacement'],['binding digest drift',f=>f.binding.headInputsHash='e'.repeat(64)],['missing expected file',f=>f.inputs.nonDatabase=f.inputs.nonDatabase.filter(p=>p!==direct)],['duplicate expected identity',f=>f.policy.expectedCases.push(f.policy.expectedCases[0])],
 ])test('falls back for '+label,()=>{const f=fixture();mutate(f);fallback(f);});
 for(const [status,path]of [['M','unknown/file.ts'],['M','package-lock.json'],['M','vitest.config.ts'],['A',root],['D',root],['R100',root],['T',root],['M','../escape'],['M','/absolute'],['M','a\\b'],['M','bad\npath']])test(`complete fallback for ${status} ${JSON.stringify(path)}`,()=>{const f=fixture();f.changes=[{status,path}];fallback(f);});
 test('strict NUL changes reject malformed, duplicate and rename records without guessing',()=>{
@@ -66,7 +67,7 @@ test('malformed candidate cannot claim evidence, and native file times remain ex
  const r=report(f);r.testResults[0].startTime=100;r.testResults[0].endTime=150;const o=observe(f,m,r);assert.equal(o.fileTimings[0].durationMs,50);assert.equal(o.fileTimings[2].durationMs,null);assert.equal(o.fileTimings[2].proposed,'excluded');assert.equal(o.selectionApproved,false);
 });
 test('shadow files alone require the same broad Full risk as the lane executor',()=>{
- for(const path of ['scripts/ci/impact-shadow.mjs','scripts/ci/impact-shadow-graph.mjs','scripts/ci/impact-shadow-policy.json'])assert.deepEqual(classifyFullGatePaths([path]),classifyFullGatePaths(['scripts/ci/full-gate-lanes.mjs']));
+ for(const path of ['scripts/ci/impact-shadow.mjs','scripts/ci/impact-shadow-graph.mjs','scripts/ci/impact-shadow-binding.mjs','scripts/ci/impact-shadow-policy.json'])assert.deepEqual(classifyFullGatePaths([path]),classifyFullGatePaths(['scripts/ci/full-gate-lanes.mjs']));
 });
 test('workflow only archives shadow output and still invokes the complete original Vitest command',()=>{
  const w=readFileSync('.github/workflows/full-gate.yml','utf8'),lanes=readFileSync('scripts/ci/full-gate-lanes.mjs','utf8');

@@ -175,7 +175,7 @@
       "ancestors": [
         "physical sewing receipt on saved routes"
       ],
-      "title": "keeps the correct receipt boundary for direct-first",
+      "title": "keeps the correct receipt boundary for 'direct-first'",
       "rowKey": "direct-first",
       "parameterHash": "3420408d27076adcba59ee3a46ccd95d42ef0ba8fc0c5b23e20f6761c8068b7f"
     },
@@ -184,7 +184,7 @@
       "ancestors": [
         "physical sewing receipt on saved routes"
       ],
-      "title": "keeps the correct receipt boundary for direct-revision",
+      "title": "keeps the correct receipt boundary for 'direct-revision'",
       "rowKey": "direct-revision",
       "parameterHash": "98c07517fa08bd4a91e777c9241d20ffe6c60e9788c1bcf3902272c5ff72e343"
     },
@@ -193,7 +193,7 @@
       "ancestors": [
         "physical sewing receipt on saved routes"
       ],
-      "title": "keeps the correct receipt boundary for bridge-new",
+      "title": "keeps the correct receipt boundary for 'bridge-new'",
       "rowKey": "bridge-new",
       "parameterHash": "6ce1b7259f5297d6794c007ba91dee2c0c0a92b21969e7190c4c64ae1dc066d4"
     },
@@ -202,7 +202,7 @@
       "ancestors": [
         "physical sewing receipt on saved routes"
       ],
-      "title": "keeps the correct receipt boundary for bridge-existing",
+      "title": "keeps the correct receipt boundary for 'bridge-existing'",
       "rowKey": "bridge-existing",
       "parameterHash": "9df773de0c297fec00742940414e44388c41e73f2247db17f3c98f9e53886ae6"
     },
@@ -211,7 +211,7 @@
       "ancestors": [
         "physical sewing receipt on saved routes"
       ],
-      "title": "keeps the correct receipt boundary for confirmation-only",
+      "title": "keeps the correct receipt boundary for 'confirmation-only'",
       "rowKey": "confirmation-only",
       "parameterHash": "2088e7a003eded6f059af2350d324718f7c83346e968ab1f05f63343f2153a54"
     },
@@ -220,7 +220,7 @@
       "ancestors": [
         "physical sewing receipt on saved routes"
       ],
-      "title": "keeps the correct receipt boundary for tail-revision",
+      "title": "keeps the correct receipt boundary for 'tail-revision'",
       "rowKey": "tail-revision",
       "parameterHash": "055653952f04c2c076161a031b5a23242e66c1e46960f016128a929d857269ec"
     }
@@ -230,8 +230,12 @@
     "vitest": "4.1.10",
     "typescript": "5.9.3"
   },
-  "reviewedBase": "7e5fbbcebb06e5c5f4dd96e0e95defb5dbbcbf7e",
   "requiredPostgresFiles": [
     "tests/integration/development-amendment-postgres.test.ts"
-  ]
+  ],
+  "binding": {
+    "version": 1,
+    "anchor": "7e5fbbcebb06e5c5f4dd96e0e95defb5dbbcbf7e",
+    "inputsHash": "d04dd996f42a11581dbe7436e764cb8a6e1f472ea5067505082b43a7e9f71f50"
+  }
 }

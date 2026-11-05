@@ -2,6 +2,7 @@ import {readFileSync,existsSync} from 'node:fs';
 import {resolve,relative,dirname} from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {hash,proposeShadow,parseShadowChanges} from './impact-shadow.mjs';
+import {verifyShadowBinding} from './impact-shadow-binding.mjs';
 const portable=p=>p.replaceAll('\\','/');
 export function loadShadowPolicy(){return JSON.parse(readFileSync(new URL('./impact-shadow-policy.json',import.meta.url),'utf8'));}
 export async function auditShadowGraph(root,policy){
@@ -61,7 +62,10 @@ export async function auditShadowGraph(root,policy){
      if(name==='describe'){if(rows)throw Error('Unsupported parameterized describe');visit(body,[...ancestors,title.text]);return;}
      for(const row of rows??[undefined]){
       let rendered=title.text,rowKey=null,parameterHash=null;
-      if(row!==undefined){rowKey=typeof row==='string'?row:row.caseId;if(typeof rowKey!=='string'||!rowKey)throw Error('Explicit parameter identity required');parameterHash=hash(row);rendered=typeof row==='string'?rendered.replace('%s',row):rendered.replace('$caseId',row.caseId);if(/%[sdifjo#]|\$\w/.test(rendered))throw Error('Ambiguous parameter display');}
+      if(row!==undefined){rowKey=typeof row==='string'?row:row.caseId;if(typeof rowKey!=='string'||!rowKey)throw Error('Explicit parameter identity required');parameterHash=hash(row);
+       if(typeof row==='string')rendered=rendered.replace('%s',row);
+       else{if(!/^[a-z][a-z0-9-]{0,31}$/.test(rowKey))throw Error('Unsupported parameter display identity');rendered=rendered.replace('$caseId',"'"+rowKey+"'");}
+       if(/%[sdifjo#]|\$\w/.test(rendered))throw Error('Ambiguous parameter display');}
       declarations.push({file,ancestors,title:rendered,rowKey,parameterHash});
      }return;
     }
@@ -75,6 +79,8 @@ export async function createImpactShadow(identity,inputs,{root=process.cwd(),pol
  const changed=changes??parseShadowChanges(execFileSync('git',['-C',root,'diff','--name-status','--no-renames','-z',identity.base,identity.head],{encoding:'utf8'}));
  const toolchain={node:process.versions.node,vitest:JSON.parse(readFileSync(resolve(root,'node_modules/vitest/package.json'))).version,typescript:JSON.parse(readFileSync(resolve(root,'node_modules/typescript/package.json'))).version};
  if(!Array.isArray(changed)||!changed.length||changed.some(c=>c?.status!=='M'||c.path!==policy.root))return proposeShadow({identity,inputs,changes:changed,policy,graph:{},declarations:[],sourceHashes:{},toolchain});
+ const binding=verifyShadowBinding(root,identity,policy);
+ if(binding.status!=='matched')return proposeShadow({identity,inputs,changes:changed,policy,binding,graph:{},declarations:[],sourceHashes:{},toolchain});
  const audit=await auditShadowGraph(root,policy);
- return proposeShadow({identity,inputs,changes:changed,policy,...audit,toolchain});
+ return proposeShadow({identity,inputs,changes:changed,policy,binding,...audit,toolchain});
 }

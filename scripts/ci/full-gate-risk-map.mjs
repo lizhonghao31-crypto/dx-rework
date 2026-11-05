@@ -67,6 +67,7 @@ const isDeployment = (path) =>
   || path === "scripts/ci/full-gate-lanes.mjs"
   || path === "scripts/ci/impact-shadow.mjs"
   || path === "scripts/ci/impact-shadow-graph.mjs"
+  || path === "scripts/ci/impact-shadow-binding.mjs"
   || path === "scripts/ci/impact-shadow-policy.json"
   || path === "scripts/ci/pr-gate-protocol.mjs"
   || path === "scripts/ci/pr-gate-controller.mjs"
