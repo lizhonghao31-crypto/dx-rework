@@ -65,6 +65,10 @@ const isDeployment = (path) =>
   || path === "scripts/ci/full-gate-risk-map.mjs"
   || path === "scripts/ci/ci-gate-runtime.mjs"
   || path === "scripts/ci/full-gate-lanes.mjs"
+  || path === "scripts/ci/impact-shadow.mjs"
+  || path === "scripts/ci/impact-shadow-graph.mjs"
+  || path === "scripts/ci/impact-shadow-binding.mjs"
+  || path === "scripts/ci/impact-shadow-policy.json"
   || path === "scripts/ci/pr-gate-protocol.mjs"
   || path === "scripts/ci/pr-gate-controller.mjs"
   || path === "scripts/ci/verify-actions-policy.mjs"
@@ -104,6 +108,34 @@ const matchesPatternRoom = (path) =>
   path.startsWith("apps/api/src/pattern-room/")
   || /^packages\/contracts\/src\/pattern/.test(path);
 
+// Reviewed P02/P03 correction inputs, including HTTP adapters, effective reads,
+// returned-material prerequisites and the long generated pattern-size consumer.
+// A generic backend fallback remains the existing chain; it is not every PG suite.
+const DEVELOPMENT_AMENDMENT_INPUTS = new Set([
+  "apps/api/src/production-platform/development-document-format.ts",
+  "apps/api/src/production-platform/development-amendment-service.ts",
+  "apps/api/src/production-platform/development-amendment-repository.ts",
+  "apps/api/src/production-platform/development-service.ts",
+  "apps/api/src/production-platform/development-routes.ts",
+  "apps/api/src/production-platform/development-execution-service.ts",
+  "apps/api/src/production-platform/development-execution-routes.ts",
+  "apps/api/src/production-platform/development-supply.ts",
+  "apps/api/src/production-platform/development-material-reopen.ts",
+  "apps/api/src/production-platform/development-material-verification.ts",
+  "apps/api/src/production-platform/development-material-readiness.ts",
+  "apps/api/src/production-platform/development-material-check-rules.ts",
+  "apps/api/src/production-platform/development-round-repository.ts",
+  "apps/api/src/production-platform/development-round-service.ts",
+  "apps/api/src/production-platform/development-route-service.ts",
+  "apps/api/src/production-platform/development-route.ts",
+  "apps/api/src/production-platform/access-policy.ts",
+  "apps/api/src/pattern-room/order-service.ts",
+  "packages/contracts/src/digital-development.ts",
+  "packages/contracts/src/digital-development-amendments.ts",
+  "packages/contracts/src/digital-development-execution.ts",
+  "packages/contracts/src/pattern-orders.ts",
+]);
+
 const addAll = (target, values) => {
   for (const value of values) target.add(value);
 };
@@ -122,6 +154,11 @@ export const classifyFullGatePaths = (inputPaths) => {
   let transferSensitive = false;
 
   for (const path of paths) {
+    if (DEVELOPMENT_AMENDMENT_INPUTS.has(path)) {
+      businessChainSensitive = true;
+      domains.add("development-amendment");
+      mappedTests.add("tests/integration/development-amendment-postgres.test.ts");
+    }
     if (path === 'tests/helpers/business-anchor-fixture.ts'
       || path === 'tests/helpers/bulk-preparation-fixture.ts'
       || path === 'tests/helpers/bulk-preshrink-correction-fixture.ts'

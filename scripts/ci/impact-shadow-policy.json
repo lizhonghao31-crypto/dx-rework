@@ -1,0 +1,241 @@
+{
+  "version": 1,
+  "stage": "shadow-only",
+  "root": "apps/api/src/production-platform/development-document-format.ts",
+  "rootImports": [
+    "../platform/errors.js",
+    "@dx-rework/contracts/digital-development",
+    "@dx-rework/contracts/digital-production"
+  ],
+  "source": "Source-reviewed candidate independent expected declarations; not generated from collected or passing results. Library dx-ci-regression-study.md v2 sections 6/14/16. Existing per-size/frozen-date and physical receipt tests remain authoritative.",
+  "requiredEdges": [
+    [
+      "apps/api/src/production-platform/development-service.ts",
+      "apps/api/src/production-platform/development-document-format.ts"
+    ],
+    [
+      "apps/api/src/production-platform/development-round-service.ts",
+      "apps/api/src/production-platform/development-document-format.ts"
+    ],
+    [
+      "apps/api/src/production-platform/development-execution-service.ts",
+      "apps/api/src/production-platform/development-document-format.ts"
+    ],
+    [
+      "apps/api/src/pattern-room/order-service.ts",
+      "apps/api/src/production-platform/development-document-format.ts"
+    ],
+    [
+      "tests/unit/development-size-quantities.test.ts",
+      "apps/api/src/production-platform/development-document-format.ts"
+    ],
+    [
+      "tests/unit/development-craft-timing-review.test.ts",
+      "apps/api/src/production-platform/development-service.ts"
+    ],
+    [
+      "apps/api/src/production-platform/development-amendment-service.ts",
+      "apps/api/src/production-platform/development-document-format.ts"
+    ],
+    [
+      "tests/integration/development-amendment-postgres.test.ts",
+      "apps/api/src/production-platform/development-amendment-service.ts"
+    ]
+  ],
+  "pinnedSources": {
+    "apps/api/src/production-platform/development-service.ts": "03abdbf988e8ba99cd9adf7412097756d139c6cff1d59b0c470c06b2e28ae068",
+    "apps/api/src/production-platform/development-round-service.ts": "d23e31cad20ca1d40d2b7fe2c1183249ea018401b4e4200afefc66a15fa35178",
+    "apps/api/src/production-platform/development-execution-service.ts": "66773e33fec882d22645d2ed99edb4d59422a493c75b57ff5c7415b77dce8a78",
+    "apps/api/src/pattern-room/order-service.ts": "d0b82569979632d4263bc51b523e0a3201ba2d1e80a66e850355cdfc1a0b9531",
+    "tests/unit/development-size-quantities.test.ts": "f3faa61b57645bf235c9ffb8be4a3e74cfe6f8434db83ab46fae32944d4782d5",
+    "tests/unit/development-craft-timing-review.test.ts": "2f820b864ea1e91f06a8e29bff8bd8b9a0bd8198788b86d2079cd4d4a4e61274",
+    "package-lock.json": "0565b5b9ffdd7c86dad016418f6c470c37613a4bf532e5f858aadb70fa3e780c",
+    "tsconfig.base.json": "d75ac8e139f1f296e3c0de4e684435c5f276d599c94256027e14030eaf255bc1",
+    "vitest.config.ts": "6db6aec8c6da48df75da1d9f6a6a355cfb666cb96666e0058505b6afe5bd4871",
+    "packages/contracts/package.json": "02fb21c159271ca8aa88202fd946d56f9e1a6ad9458a1fc0216072e236e475d5",
+    "packages/config/package.json": "4766bac73d6bf67fecafbd43d8dc0035ed8136937dd5635cc8a50612232202ec",
+    "packages/domain/package.json": "16295ad3a8c6196cf13737ecb7929b17e4cce1fc3615cf753900cfe85e090aed",
+    "packages/ui/package.json": "4613d8cdd3e15c6ea9ede3f55d3042cd2c18e568afb18f924974ce35c3d61e67",
+    "apps/api/package.json": "0dbfd5f1dd926ba2cbb4fada9438078a17c2d4d1bd8fd838e3efafa74b7cb9dd",
+    "apps/web/package.json": "dc1dffa2564beddd7376d96c8ebf1df9b73eaf37431a3f503148a5e3aef7b5c5",
+    "apps/api/src/production-platform/development-amendment-service.ts": "876ed5a97612092ea73b83997b163585572160668386c4288864e7f3945b492c",
+    "tests/integration/development-amendment-postgres.test.ts": "20a6f0ad057fe48f6e60c3ee80d2174130547000ff036fcfe2c6e1eec071cfea"
+  },
+  "expectedCases": [
+    {
+      "file": "tests/unit/development-size-quantities.test.ts",
+      "ancestors": [
+        "P03 per-size making quantities and frozen development date"
+      ],
+      "title": "uses one size matrix for making and keeps PO order quantities independent",
+      "rowKey": null,
+      "parameterHash": null
+    },
+    {
+      "file": "tests/unit/development-size-quantities.test.ts",
+      "ancestors": [
+        "P03 per-size making quantities and frozen development date"
+      ],
+      "title": "allows blank draft values but refuses blank, all-zero, mismatch, downgrade and invalid numeric publication",
+      "rowKey": null,
+      "parameterHash": null
+    },
+    {
+      "file": "tests/unit/development-size-quantities.test.ts",
+      "ancestors": [
+        "P03 per-size making quantities and frozen development date"
+      ],
+      "title": "moves/removes the same column atomically, retaining zero and technical fractions",
+      "rowKey": null,
+      "parameterHash": null
+    },
+    {
+      "file": "tests/unit/development-size-quantities.test.ts",
+      "ancestors": [
+        "P03 per-size making quantities and frozen development date"
+      ],
+      "title": "obtains first date from server createdAt in Beijing and never trusts a client date or later clock",
+      "rowKey": null,
+      "parameterHash": null
+    },
+    {
+      "file": "tests/unit/development-size-quantities.test.ts",
+      "ancestors": [
+        "P03 per-size making quantities and frozen development date"
+      ],
+      "title": "upgrades an old draft explicitly but permits legacy correction only with unchanged server-frozen making facts",
+      "rowKey": null,
+      "parameterHash": null
+    },
+    {
+      "file": "tests/unit/development-size-quantities.test.ts",
+      "ancestors": [
+        "P03 per-size making quantities and frozen development date"
+      ],
+      "title": "requires explicit automatic-round upgrades with a matching basis and never mutates frozen making facts",
+      "rowKey": null,
+      "parameterHash": null
+    },
+    {
+      "file": "tests/unit/development-size-quantities.test.ts",
+      "ancestors": [
+        "P03 per-size making quantities and frozen development date"
+      ],
+      "title": "keeps standalone free text at 200 while linked update transport preserves a generated summary",
+      "rowKey": null,
+      "parameterHash": null
+    },
+    {
+      "file": "tests/unit/development-size-quantities.test.ts",
+      "ancestors": [
+        "P03 per-size making quantities and frozen development date"
+      ],
+      "title": "prints the same positive making summary and zero columns without substituting PO counts",
+      "rowKey": null,
+      "parameterHash": null
+    },
+    {
+      "file": "tests/unit/development-craft-timing-review.test.ts",
+      "ancestors": [
+        "native craft confirmation timing"
+      ],
+      "title": "uses the actual 印花 return, never the scheduled tail window",
+      "rowKey": "印花",
+      "parameterHash": "cec9814cdb9631c624ac3067f4527e5a6bb36dcc97564d469d9c91e8b786904a"
+    },
+    {
+      "file": "tests/unit/development-craft-timing-review.test.ts",
+      "ancestors": [
+        "native craft confirmation timing"
+      ],
+      "title": "uses the actual 绣花 return, never the scheduled tail window",
+      "rowKey": "绣花",
+      "parameterHash": "9263c73d09cd4e3dbc464b995987063f784438cd3003c46dda1027088a3ccbf4"
+    },
+    {
+      "file": "tests/unit/development-craft-timing-review.test.ts",
+      "ancestors": [
+        "native craft confirmation timing"
+      ],
+      "title": "uses the actual 印绣花 return, never the scheduled tail window",
+      "rowKey": "印绣花",
+      "parameterHash": "5c152f6cd72517a5bbb49d2727989aba2d30e70c3731a8e117d62f27cf77881f"
+    },
+    {
+      "file": "tests/unit/development-craft-timing-review.test.ts",
+      "ancestors": [
+        "saved synthetic start compatibility"
+      ],
+      "title": "reads an early completed return after the old planned start without changing P0 or persisted history",
+      "rowKey": null,
+      "parameterHash": null
+    },
+    {
+      "file": "tests/unit/development-craft-timing-review.test.ts",
+      "ancestors": [
+        "physical sewing receipt on saved routes"
+      ],
+      "title": "keeps the correct receipt boundary for 'direct-first'",
+      "rowKey": "direct-first",
+      "parameterHash": "3420408d27076adcba59ee3a46ccd95d42ef0ba8fc0c5b23e20f6761c8068b7f"
+    },
+    {
+      "file": "tests/unit/development-craft-timing-review.test.ts",
+      "ancestors": [
+        "physical sewing receipt on saved routes"
+      ],
+      "title": "keeps the correct receipt boundary for 'direct-revision'",
+      "rowKey": "direct-revision",
+      "parameterHash": "98c07517fa08bd4a91e777c9241d20ffe6c60e9788c1bcf3902272c5ff72e343"
+    },
+    {
+      "file": "tests/unit/development-craft-timing-review.test.ts",
+      "ancestors": [
+        "physical sewing receipt on saved routes"
+      ],
+      "title": "keeps the correct receipt boundary for 'bridge-new'",
+      "rowKey": "bridge-new",
+      "parameterHash": "6ce1b7259f5297d6794c007ba91dee2c0c0a92b21969e7190c4c64ae1dc066d4"
+    },
+    {
+      "file": "tests/unit/development-craft-timing-review.test.ts",
+      "ancestors": [
+        "physical sewing receipt on saved routes"
+      ],
+      "title": "keeps the correct receipt boundary for 'bridge-existing'",
+      "rowKey": "bridge-existing",
+      "parameterHash": "9df773de0c297fec00742940414e44388c41e73f2247db17f3c98f9e53886ae6"
+    },
+    {
+      "file": "tests/unit/development-craft-timing-review.test.ts",
+      "ancestors": [
+        "physical sewing receipt on saved routes"
+      ],
+      "title": "keeps the correct receipt boundary for 'confirmation-only'",
+      "rowKey": "confirmation-only",
+      "parameterHash": "2088e7a003eded6f059af2350d324718f7c83346e968ab1f05f63343f2153a54"
+    },
+    {
+      "file": "tests/unit/development-craft-timing-review.test.ts",
+      "ancestors": [
+        "physical sewing receipt on saved routes"
+      ],
+      "title": "keeps the correct receipt boundary for 'tail-revision'",
+      "rowKey": "tail-revision",
+      "parameterHash": "055653952f04c2c076161a031b5a23242e66c1e46960f016128a929d857269ec"
+    }
+  ],
+  "toolchain": {
+    "nodeMajor": 22,
+    "vitest": "4.1.10",
+    "typescript": "5.9.3"
+  },
+  "requiredPostgresFiles": [
+    "tests/integration/development-amendment-postgres.test.ts"
+  ],
+  "binding": {
+    "version": 1,
+    "anchor": "7e5fbbcebb06e5c5f4dd96e0e95defb5dbbcbf7e",
+    "inputsHash": "d04dd996f42a11581dbe7436e764cb8a6e1f472ea5067505082b43a7e9f71f50"
+  }
+}

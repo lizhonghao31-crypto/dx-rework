@@ -1,185 +1,383 @@
 {
   "version": 1,
-  "base": "894b299fe487cd4b3b0a3c8421445f07a53d5a6a",
-  "sourceFingerprint": "c02346b1f4a48fe5f524eb25e474efdcdf8de69e2142dfce94c5c304dbe5dd66",
+  "base": "7e5fbbcebb06e5c5f4dd96e0e95defb5dbbcbf7e",
+  "sourceFingerprint": "e2ff7360076f5d4c49f5306fcb7dd0f81884b2680795d04afd54c8942c857268",
   "risk": "full",
   "rules": [
     {
-      "rule": "PR1 preserves complete non-DB and canonical PG scope while separating runner scheduling and requiring complete aggregation.",
-      "source": "User-approved PR1 and dx-ci-regression-study.md version 2, sections 8, 11 and 16; parent delegation 2026-11-05.",
+      "rule": "Shadow data may propose exclusions but never filters actual Full, alters scope, approval, original lane evidence or cleanup.",
+      "source": "Parent delegation 2026-11-05: first-stage shadow only, preserve PR899, no extra Full/merge/deploy; Library dx-ci-regression-study.md v2 sections 6/14/16; AGENTS.md.",
       "writes": [
-        ".github/workflows/ci.yml",
         ".github/workflows/full-gate.yml",
         "scripts/ci/full-gate-lanes.mjs",
         "scripts/ci/full-gate-lanes.test.mjs",
-        "scripts/ci/verify-actions-policy.mjs",
-        "scripts/ci/review-final-gate.test.mjs",
-        "scripts/ci/gate-maintenance.test.mjs",
-        "scripts/ci/full-gate-risk-map.mjs",
-        "tests/unit/full-gate-risk-map.test.ts"
+        "scripts/ci/full-gate-risk-map.mjs"
       ],
       "reads": [
         "scripts/ci/ci-gate-runtime.mjs",
         "scripts/ci/light-reuse.mjs",
-        "scripts/ci/pr-gate-protocol.mjs",
         "scripts/test-suite-plan.mjs",
         "scripts/run-business-chain-gate.mjs",
-        "scripts/test-resource-lifecycle.mjs",
-        "vitest.config.ts",
-        "scripts/seed-base-migrations.sh"
+        "scripts/ci/impact-shadow.mjs"
       ],
       "oldTests": [
-        "scripts/ci/review-final-gate.test.mjs",
-        "scripts/ci/gate-maintenance.test.mjs",
-        "scripts/ci/test-execution-contract.test.mjs",
+        "scripts/ci/full-gate-lanes.test.mjs",
+        "tests/unit/full-gate-risk-map.test.ts",
         "tests/unit/unified-gate-budget.test.ts"
       ],
-      "initialization": "All lanes verify common source identity and inputs. Identical environment restores verified outputs; same OS image revision drift rebuilds all workspaces locally with actual context and output proof. Other input changes reject. Original PG init, role, cleanup and version/history/restore requirements remain.",
-      "dateAndPermission": "No production or Acceptance access. Synthetic build-transfer fixtures and protocol reports only; original low-privilege roles, finite test timeouts and canonical worker limits unchanged.",
-      "expectation": "Missing/cancelled/failed lanes, wrong head/base/run/attempt, changed plans/build bytes, empty results, unauthorized paths and failed cleanup reject aggregation. Existing file-level evidence does not prove an independent case expectation set.",
+      "initialization": "Original lane bundle, test commands, expectedInputs, aggregation, native validator and canonical configs remain unchanged. Shadow exceptions remain unverified diagnostics. Fixture lifecycle correction uses the existing managed API in the dedicated fixture rule.",
+      "dateAndPermission": "No production, real business data or deployment. Read repository source and isolated synthetic graph/transport fixtures. Original business dates and authorization remain.",
+      "expectation": "Original expectedInputs/aggregate/validateNonDatabase and canonical configs are byte-identical. Shadow is hash-bound in the original package and only archived/logged. Failures, missing lanes and cleanup still reject. Governance files themselves require broad Full risk.",
       "checks": [
-        "dx-image-protocol",
-        "dx-image-target",
-        "dx-image-lint",
-        "dx-image-shared",
-        "dx-image-full-non-db",
-        "dx-image-full-pg"
+        "fix3-protocol",
+        "fix3-target",
+        "fix3-probe-v3",
+        "fix3-static"
+      ]
+    },
+    {
+      "rule": "Bounded source-reviewed expected catalog is independent of derived graph and passing output; unknown/shared/base drift falls back and known PG omissions remain visible.",
+      "source": "User priority is avoiding unrelated tests without reducing necessary coverage; parent requests finite shadow pilot, independent obligations and missing-edge/parameter/delete/rename/malformed negative controls; Library v2 section16.",
+      "writes": [
+        "scripts/ci/impact-shadow.mjs",
+        "scripts/ci/impact-shadow-graph.mjs",
+        "scripts/ci/impact-shadow-policy.json",
+        "scripts/ci/impact-shadow.test.mjs",
+        "tests/unit/impact-shadow-graph.test.ts",
+        "scripts/ci/impact-shadow-binding.mjs",
+        "scripts/ci/impact-shadow-binding.test.mjs"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/development-document-format.ts",
+        "apps/api/src/production-platform/development-service.ts",
+        "apps/api/src/production-platform/development-round-service.ts",
+        "apps/api/src/production-platform/development-execution-service.ts",
+        "apps/api/src/production-platform/development-amendment-service.ts",
+        "apps/api/src/pattern-room/order-service.ts",
+        "tests/integration/development-amendment-postgres.test.ts",
+        "vitest.config.ts"
+      ],
+      "oldTests": [
+        "tests/unit/development-size-quantities.test.ts",
+        "tests/unit/development-craft-timing-review.test.ts",
+        "scripts/ci/full-gate-lanes.test.mjs"
+      ],
+      "initialization": "Five direct services and the known PG consumer are audited and pinned. PG shadow candidate still copies the original canonical plan exactly; authoritative risk mapping now adds the existing amendment suite for reviewed source inputs. Removing this independent obligation from the plan is still diagnosed. No selection is activated. Exact historical-base equality is replaced by an ancestor anchor plus base/head reviewed Git blob/mode fingerprints. The complete canonical policy body is rehashed while self-binding metadata is excluded. Root-only future PRs work after deployment and policy-refresh merges; shared base-side drift still falls back.",
+      "dateAndPermission": "18 existing declarations cover quantities, frozen dates, legacy correction and physical receipt. Source analysis does not stand in for low-privilege PG, migrations, history, roles, callbacks or assertion execution.",
+      "expectation": "Every reviewed edge deletion, parameter omission/duplicate/same-count replacement, unsupported declaration, empty family, A/D/R/T/unknown/shared/invalid diff and source/base/tool version drift rejects or falls back. The real root plan now includes the known PG obligation; an omitted-plan negative control still reports it. No global E/D/R or safe-selection claim.",
+      "checks": [
+        "fix3-protocol",
+        "fix3-target",
+        "fix3-probe-v3",
+        "fix3-static",
+        "fix3-pg"
+      ]
+    },
+    {
+      "rule": "Preserve every existing receipt parameter and assertion while disambiguating native test identity.",
+      "source": "Parent requests parameter-instance negative controls; source inspection found two of six saved-route rows shared a display name. Stable row identity is necessary for the bounded independent catalog.",
+      "writes": [
+        "tests/unit/development-craft-timing-review.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/development-service.ts",
+        "apps/api/src/production-platform/development-route-service.ts",
+        "scripts/ci/impact-shadow-policy.json"
+      ],
+      "oldTests": [
+        "tests/unit/development-craft-timing-review.test.ts",
+        "tests/unit/development-size-quantities.test.ts"
+      ],
+      "initialization": "Only six caseId fields and the parameter title change. The original fixture, mock initialization, input combinations, assertions, order and business implementations are retained. Locked Vitest object display includes single quotes around caseId; collector and independently stored native titles now match exactly. No fuzzy normalization or merged identities.",
+      "dateAndPermission": "Original Beijing frozen-date and physical receipt semantics are unchanged. No real identities or roles are modified.",
+      "expectation": "Removing six identity fields and restoring the old title remains byte-identical to baseline. All18 original business unit cases pass in the current raw report, with exact file/ancestor/native title comparison. Omission, duplicate and same-count title substitution are detected. This local partial report does not claim a whole Full observation.",
+      "checks": [
+        "fix3-target",
+        "fix3-probe-v3",
+        "fix3-protocol",
+        "fix3-static"
+      ]
+    },
+    {
+      "rule": "A source-only correction or shared-format change must select its existing amendment PG regression even when that regression file itself is unchanged.",
+      "source": "Parent delegation authorizes minimal CI governance correction after read-only reproduction on release7e5fbbce, PR899f7507d80 and shadow55e9a7c0. Existing business/permission assertions remain authoritative.",
+      "writes": [
+        "scripts/ci/full-gate-risk-map.mjs",
+        "tests/unit/full-gate-risk-map.test.ts",
+        "tests/unit/impact-shadow-graph.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/development-document-format.ts",
+        "apps/api/src/production-platform/development-amendment-service.ts",
+        "apps/api/src/production-platform/development-amendment-repository.ts",
+        "apps/api/src/production-platform/development-routes.ts",
+        "apps/api/src/production-platform/development-service.ts",
+        "apps/api/src/production-platform/development-supply.ts",
+        "apps/api/src/production-platform/development-material-reopen.ts",
+        "apps/api/src/production-platform/development-material-verification.ts",
+        "apps/api/src/production-platform/development-material-readiness.ts",
+        "apps/api/src/production-platform/development-route-service.ts",
+        "apps/api/src/pattern-room/order-service.ts",
+        "packages/contracts/src/digital-development.ts",
+        "packages/contracts/src/digital-development-amendments.ts",
+        "scripts/test-suite-plan.mjs"
+      ],
+      "oldTests": [
+        "tests/unit/full-gate-risk-map.test.ts",
+        "tests/integration/development-amendment-postgres.test.ts"
+      ],
+      "initialization": "22 reviewed exact source inputs cover correction adapters, persistence, material prerequisites, route/round consumers, policy and contracts. The unchanged canonical union and suite config are reused, not an unconditional chain expansion. Source-only root plan has 22 suites; this candidate also changes the actual PG fixture, so its eventual Full will naturally include that suite.",
+      "dateAndPermission": "No business implementation, role, date guard, concurrency, timeout or production data changes. Related and unrelated mappings are distinguished; unknown/shared fallback retains the original chain and makes no all-PG completeness claim.",
+      "expectation": "Independent source-only cases cover all 22 reviewed inputs; actual amendment-service relative domain imports guard newly missing edges. Root+service+contract+suite duplicates schedule the suite once. Unrelated paths omit this extra suite; unknown/shared and migration unions retain every original required entry. Shadow missing-obligation control remains effective.",
+      "checks": [
+        "fix3-target",
+        "fix3-protocol",
+        "fix3-probe-v3",
+        "fix3-static",
+        "fix3-pg"
+      ]
+    },
+    {
+      "rule": "Restoring a dormant PG regression requires a schema-valid fixture and managed creation/cleanup while preserving every original business test body.",
+      "source": "The first real low-privilege PG execution failed21/passed4 before business assertions because the existing helper supplied two counts with zero size columns. Source inspection also found an obsolete auxiliary enum; current contracts, not relaxed guards, determine valid fixture shape.",
+      "writes": [
+        "tests/integration/development-amendment-postgres.test.ts",
+        "scripts/ci/impact-shadow-policy.json"
+      ],
+      "reads": [
+        "apps/web/src/digital-development-editing.ts",
+        "packages/contracts/src/digital-development.ts",
+        "tests/helpers/owned-postgres-schema.ts",
+        "scripts/test-resource-contract.mjs",
+        "scripts/test-resource-lifecycle.mjs",
+        "scripts/run-business-chain-gate.mjs"
+      ],
+      "oldTests": [
+        "tests/integration/development-amendment-postgres.test.ts",
+        "scripts/ci/test-execution-contract.test.mjs"
+      ],
+      "initialization": "Only common fixture construction is corrected: M/L columns and aligned measurement arrays, current ordinary-auxiliary enum and a schema-validity precondition. Raw schema CREATE/DROP are replaced with existing createOwnedPostgresSchema/releaseOwnedPostgresSchema. Original historical pre0248 bootstrap/migration order is retained; schema handoff is followed by exact parent cleanup.",
+      "dateAndPermission": "All 25 original it/it.each blocks compare byte-for-byte with55e9a7c0 and every current native title passes. Real authentication, Root semantics, unauthorized/stale rejection, rollback, idempotency and frozen-data assertions are unchanged. No app/contracts implementation was edited.",
+      "expectation": "Fresh marked PG16.15 and non-superuser role execute all25 with zero failures/skips. Original assertion blocks and parameter family are preserved. Failure cleanup smoke and final schema cleanup pass; exact Docker container removal is verified. Policy source pin is updated to the reviewed fixture without removing the independent PG obligation.",
+      "checks": [
+        "fix3-pg",
+        "fix3-target",
+        "fix3-protocol",
+        "fix3-probe-v3",
+        "fix3-static"
+      ]
+    },
+    {
+      "rule": "Successful mixed PG initialization logs must parse without allowing failed or truncated JSON reports to hide behind banners, text summaries or TAP.",
+      "source": "Parent authorizes exact minimal port of the already verified PR899f7507d80 closeout fix and negative controls after read-only reproduction of successful-PG false rejection and banner-separated failure acceptance.",
+      "writes": [
+        "scripts/ci/final-closeout.mjs",
+        "scripts/ci/final-closeout.test.mjs"
+      ],
+      "reads": [
+        "scripts/ci/pr-gate-controller.mjs",
+        "scripts/ci/pr-gate-protocol.mjs",
+        "scripts/ci/final-closeout.fixture.mjs",
+        "docs/governance/final-closeout-v1.md"
+      ],
+      "oldTests": [
+        "scripts/ci/final-closeout.test.mjs"
+      ],
+      "initialization": "Exact two-file copy from f7507d804ce2bd7d9e8ecbb5612ece749587000a. No sourcing split, offline deployment selector or other PR899 changes are included. Parse the complete JSON document as native evidence, otherwise scan all standalone JSON lines before selecting text/TAP. No original log bytes are rewritten.",
+      "dateAndPermission": "No production data, business implementation, fixtures, roles, schema, worker limits or actual test commands changed in this port. Negative preview/apply requests in the tests use an in-memory API with zero real GitHub calls.",
+      "expectation": "All 15 closeout cases pass within the240-case native protocol. Missing structured-report binding and inconsistent totals still reject. Failed/truncated records before/after banners or summaries, and before TAP, reject with zero mock ref POSTs. The unmodified real successful PG25 log parses correctly; eight additional pure-parser layouts reject. No remote Gate requested and no safe-selection claim.",
+      "checks": [
+        "fix3-protocol",
+        "fix3-closeout",
+        "fix3-static"
+      ]
+    },
+    {
+      "rule": "A reviewed policy survives deployment and policy-refresh merges without accepting policy-body or shared-input drift.",
+      "source": "Parent concrete blocker and authorized concentrated fix 2026-11-05; real Git lifecycle reproduction retained separately; AGENTS.md sections3-5.",
+      "writes": [
+        "scripts/ci/impact-shadow-binding.mjs",
+        "scripts/ci/impact-shadow-binding.test.mjs",
+        "scripts/ci/impact-shadow.mjs",
+        "scripts/ci/impact-shadow-graph.mjs",
+        "scripts/ci/impact-shadow-policy.json",
+        "scripts/ci/impact-shadow.test.mjs",
+        "scripts/ci/full-gate-risk-map.mjs"
+      ],
+      "reads": [
+        "scripts/ci/full-gate-lanes.mjs#expectedInputs",
+        "scripts/ci/construction-evidence.mjs#sourceFingerprint",
+        "scripts/ci/ci-gate-runtime.mjs#scopeFor",
+        "scripts/test-suite-plan.mjs#fullGatePostgresPlan",
+        "docs/engineering/ci-impact-shadow.md"
+      ],
+      "oldTests": [
+        "scripts/ci/impact-shadow.test.mjs",
+        "tests/unit/impact-shadow-graph.test.ts",
+        "scripts/ci/full-gate-lanes.test.mjs"
+      ],
+      "initialization": "Generator hashes staged reviewed regular Git blobs and modes, ancestor anchor and canonical policy rules; excludes only mutable pilot root, raw self-bound policy and current construction metadata. No reviewer authentication claim. Clean checkout and ancestor of both actual base/head required. The actual repository fixture clone performs both real merges and subsequent committed source-only PRs using production expectedInputs/createImpactShadow, not a mocked binding proof.",
+      "dateAndPermission": "No runtime business date, roles, production data, migration or resource behavior changed. Local Git fixtures use isolated private refs only; shadow data has no execution or approval authority.",
+      "expectation": "Both post-merge future PRs form candidates; eight real production required-edge deletions reject. Shared contract/dependency/config/policy-body drift, deletion and rename fall back with actual Full plan unchanged. Native Git tests additionally reject unrelated ancestry, malformed input, unsupported symlink, unstaged/staged/untracked changes, and requirement-document drift. Input stamping is deterministic and preserves policy body.",
+      "checks": [
+        "fix3-protocol",
+        "fix3-target",
+        "fix3-probe-v3",
+        "fix3-static"
+      ]
+    },
+    {
+      "rule": "Keep the full repository audit within its explicit test budget and compare parameter display against actual locked Vitest identities.",
+      "source": "GitHub Codex Review5784196409 on e82251dcbc1b56ac52693779eeb9e8c8f9b13ea3, P2 comment4479906285 measured6551ms audit/8536ms isolated test; executor native-report mismatch and parent authorized concentrated fix.",
+      "writes": [
+        "tests/unit/impact-shadow-graph.test.ts",
+        "scripts/ci/impact-shadow-graph.mjs",
+        "scripts/ci/impact-shadow-policy.json"
+      ],
+      "reads": [
+        "package-lock.json",
+        "vitest.config.ts",
+        "scripts/test-execution-config.mjs",
+        "tests/unit/development-craft-timing-review.test.ts",
+        "tests/unit/development-size-quantities.test.ts"
+      ],
+      "oldTests": [
+        "tests/unit/impact-shadow-graph.test.ts",
+        "tests/unit/development-craft-timing-review.test.ts",
+        "tests/unit/development-size-quantities.test.ts"
+      ],
+      "initialization": "Only the full-repository AST test has15000ms bounded timeout; measured slower Review exceeded the previous5000ms default. All scans/assertions retained. Global/business timeouts and canonical workers unchanged. Two real Vitest object parameters compare getCurrentTest().name with AST-collected title; independently reviewed18 native obligations are matched exactly against the unmodified current targeted report.",
+      "dateAndPermission": "No business fixtures, roles, dates, worker limits or tool versions changed. Quotes are preserved in native identities; escaped/long unsupported identifiers fail closed rather than being normalized.",
+      "expectation": "85 targeted cases pass, including14 graph cases and18 original business cases. Native omission, duplicate and same-count substitution produce gaps; full-run completeness remains false for a partial report. Original source inputs/assertions/order remain identical after identity metadata removed. This fixes collection validity without activating selection or claiming final Head independently reviewed.",
+      "checks": [
+        "fix3-target",
+        "fix3-probe-v3",
+        "fix3-protocol",
+        "fix3-static"
       ]
     }
   ],
   "checks": [
     {
-      "command": "node scripts/test-preflight.mjs",
-      "exitCode": 0,
-      "startedAt": "2026-11-05T01:16:58.071179+00:00",
-      "endedAt": "2026-11-05T01:17:01.086999+00:00",
-      "logSha256": "c400a08fe6204ac9eec069c055cfe5375f23633884086b0344a6c630df3dd13b",
-      "logPath": "/tmp/dx-image-protocol.log",
-      "log": "/tmp/dx-image-protocol.log",
-      "id": "dx-image-protocol",
+      "id": "fix3-protocol",
       "kind": "tests",
+      "command": "node scripts/test-preflight.mjs",
       "status": "passed",
-      "sourceFingerprint": "c02346b1f4a48fe5f524eb25e474efdcdf8de69e2142dfce94c5c304dbe5dd66",
-      "testedHead": "2c12544735436b2dd203256354512de991204bc8",
-      "context": "After runner-image local-rebuild fix; actual current working source. Prior full-suite evidence remains historical until rerun.",
-      "passed": 183,
+      "exitCode": 0,
+      "startedAt": "2026-11-05T12:05:44.264Z",
+      "endedAt": "2026-11-05T12:05:48.877Z",
+      "testedHead": "e82251dcbc1b56ac52693779eeb9e8c8f9b13ea3",
+      "sourceFingerprint": "e2ff7360076f5d4c49f5306fcb7dd0f81884b2680795d04afd54c8942c857268",
+      "logPath": "/tmp/dx-shadow-validation/fix3-protocol.log",
+      "log": "/tmp/dx-shadow-validation/fix3-protocol.log",
+      "logSha256": "1aa1bfd25eb7b93e0d8efbb047006794e21f784871b2d6323a2cd0cbe3d850b3",
+      "context": "Node 22.22.2/npm 10.9.9, Vitest 4.1.10/TypeScript 5.9.3, local managed 4 CPU host; canonical workers unchanged. This is local evidence, not hosted Full. Source fingerprint stable before/after: true",
+      "passed": 240,
       "failed": 0,
       "skipped": 0
     },
     {
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/full-gate-risk-map.test.ts tests/unit/unified-gate-budget.test.ts --reporter=default --reporter=json --outputFile=/tmp/dx-image-target.json",
-      "exitCode": 0,
-      "startedAt": "2026-11-05T01:17:30.157893+00:00",
-      "endedAt": "2026-11-05T01:17:30.959125+00:00",
-      "logSha256": "6c7e171c052821cff162b34e6682e1f401aee7fa59818d306640426719b3dded",
-      "logPath": "/tmp/dx-image-target.log",
-      "log": "/tmp/dx-image-target.log",
-      "id": "dx-image-target",
+      "id": "fix3-target",
       "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/full-gate-risk-map.test.ts tests/unit/impact-shadow-graph.test.ts tests/unit/development-craft-timing-review.test.ts tests/unit/development-size-quantities.test.ts --reporter=default --reporter=json --outputFile=/tmp/dx-shadow-validation/fix3-target.json",
       "status": "passed",
-      "sourceFingerprint": "c02346b1f4a48fe5f524eb25e474efdcdf8de69e2142dfce94c5c304dbe5dd66",
-      "testedHead": "2c12544735436b2dd203256354512de991204bc8",
-      "context": "After runner-image local-rebuild fix; actual current working source. Prior full-suite evidence remains historical until rerun.",
+      "exitCode": 0,
+      "startedAt": "2026-11-05T12:02:25.110Z",
+      "endedAt": "2026-11-05T12:02:30.078Z",
+      "testedHead": "e82251dcbc1b56ac52693779eeb9e8c8f9b13ea3",
+      "sourceFingerprint": "e2ff7360076f5d4c49f5306fcb7dd0f81884b2680795d04afd54c8942c857268",
+      "logPath": "/tmp/dx-shadow-validation/fix3-target.log",
+      "log": "/tmp/dx-shadow-validation/fix3-target.log",
+      "logSha256": "1ae9471e4eac99f728185e9fbfc5f52381d2941dab4e9e97b51ef93093a73b23",
+      "context": "Node 22.22.2/npm 10.9.9, Vitest 4.1.10/TypeScript 5.9.3, local managed 4 CPU host; canonical workers unchanged. This is local evidence, not hosted Full. Source fingerprint stable before/after: true",
+      "passed": 85,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "path": "/tmp/dx-shadow-validation/fix3-target.json",
+          "sha256": "c7940fa83fdc36c9c1b8c5106d696f72058550a9b5178174062cbf1574089a6c"
+        }
+      ]
+    },
+    {
+      "id": "fix3-pg",
+      "kind": "tests",
+      "command": "node /tmp/dx-three-fixes-validation/pg.mjs",
+      "status": "passed",
+      "exitCode": 0,
+      "startedAt": "2026-11-05T12:07:03.924Z",
+      "endedAt": "2026-11-05T12:07:22.779Z",
+      "testedHead": "e82251dcbc1b56ac52693779eeb9e8c8f9b13ea3",
+      "sourceFingerprint": "e2ff7360076f5d4c49f5306fcb7dd0f81884b2680795d04afd54c8942c857268",
+      "logPath": "/tmp/dx-shadow-validation/fix3-pg.log",
+      "log": "/tmp/dx-shadow-validation/fix3-pg.log",
+      "logSha256": "90d1a76ad9ce3fcb8d76c6ad1fa77943413b52f5eae7a928f1924c6a384a8e74",
+      "context": "Node 22.22.2/npm 10.9.9, Vitest 4.1.10/TypeScript 5.9.3, local managed 4 CPU host; canonical workers unchanged. This is local evidence, not hosted Full. Source fingerprint stable before/after: true Fresh marked PG16.15 database; non-superuser without create-role/create-database/bypass-RLS. Existing canonical mapped runner executes the original25 assertion bodies once with chain=false/ordinaryPGworker1. Exact managed schema cleanup and disposable container removal verified. Not complete canonical PG, hosted Full, PG13 or production evidence.",
       "passed": 25,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
-          "path": "/tmp/dx-image-target.json",
           "format": "vitest-json",
-          "sha256": "1cae1ef4563f7bb5370b571598fe41d19aa1eadbd0a0bc389c750162313c3ba4"
+          "path": "/tmp/dx-three-fixes-validation/final-native.json",
+          "sha256": "138523782e4952f3f9b628335aa8eb3644496796a129c00ac6b957bb29370158"
         }
       ]
     },
     {
-      "command": "node node_modules/eslint/bin/eslint.js scripts/ci/full-gate-lanes.mjs scripts/ci/full-gate-lanes.test.mjs",
-      "exitCode": 0,
-      "startedAt": "2026-11-05T01:17:29.684817+00:00",
-      "endedAt": "2026-11-05T01:17:30.138213+00:00",
-      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "logPath": "/tmp/dx-image-lint.log",
-      "log": "/tmp/dx-image-lint.log",
-      "id": "dx-image-lint",
+      "id": "fix3-probe-v3",
       "kind": "command",
+      "command": "node /tmp/dx-three-fixes-validation/probe.mjs",
       "status": "passed",
-      "sourceFingerprint": "c02346b1f4a48fe5f524eb25e474efdcdf8de69e2142dfce94c5c304dbe5dd66",
-      "testedHead": "2c12544735436b2dd203256354512de991204bc8",
-      "context": "After runner-image local-rebuild fix; actual current working source. Prior full-suite evidence remains historical until rerun."
+      "exitCode": 0,
+      "startedAt": "2026-11-05T12:08:07.638Z",
+      "endedAt": "2026-11-05T12:08:14.713Z",
+      "testedHead": "e82251dcbc1b56ac52693779eeb9e8c8f9b13ea3",
+      "sourceFingerprint": "e2ff7360076f5d4c49f5306fcb7dd0f81884b2680795d04afd54c8942c857268",
+      "logPath": "/tmp/dx-shadow-validation/fix3-probe-v3.log",
+      "log": "/tmp/dx-shadow-validation/fix3-probe-v3.log",
+      "logSha256": "ef38812903c71d37fa9db936987503f87fb2f0fdb048d96524744d1853d2de0a",
+      "context": "Node 22.22.2/npm 10.9.9, Vitest 4.1.10/TypeScript 5.9.3, local managed 4 CPU host; canonical workers unchanged. This is local evidence, not hosted Full. Source fingerprint stable before/after: true"
     },
     {
-      "command": "python3 /tmp/dx-pr1-image-validation/prepare.py",
-      "exitCode": 0,
-      "startedAt": "2026-11-05T01:18:19.480415+00:00",
-      "endedAt": "2026-11-05T01:18:39.606596+00:00",
-      "logSha256": "504e9656354f378e8840fa8736f19e63112df239af48760c6dfba2a9db981372",
-      "logPath": "/tmp/dx-image-shared.log",
-      "log": "/tmp/dx-image-shared.log",
-      "id": "dx-image-shared",
+      "id": "fix3-closeout",
       "kind": "command",
+      "command": "node /tmp/dx-three-fixes-validation/closeout-probe.mjs",
       "status": "passed",
-      "testedHead": "57c6d554b4f68ea9f24b8f7a2e12b9dda67bb547",
-      "sourceFingerprint": "c02346b1f4a48fe5f524eb25e474efdcdf8de69e2142dfce94c5c304dbe5dd66",
-      "context": "Image-drift fixed candidate; forced image metadata mismatch to exercise actual per-lane rebuild (not hosted image equivalence), Node22.22.2/npm10.9.9. Separate clean detached checkouts, verified shared build; same local 4 CPU host, not hosted Full. Canonical PG16 disposable low-privilege DB with actual cleanup; PG13 and recovery/history/package tails await official Full."
+      "exitCode": 0,
+      "startedAt": "2026-11-05T12:09:08.743Z",
+      "endedAt": "2026-11-05T12:09:09.016Z",
+      "testedHead": "e82251dcbc1b56ac52693779eeb9e8c8f9b13ea3",
+      "sourceFingerprint": "e2ff7360076f5d4c49f5306fcb7dd0f81884b2680795d04afd54c8942c857268",
+      "logPath": "/tmp/dx-shadow-validation/fix3-closeout.log",
+      "log": "/tmp/dx-shadow-validation/fix3-closeout.log",
+      "logSha256": "19f16437a38ac01f2b9ea1332a664fa44a4e516582841971e2250659604006c4",
+      "context": "Node 22.22.2/npm 10.9.9, Vitest 4.1.10/TypeScript 5.9.3, local managed 4 CPU host; canonical workers unchanged. This is local evidence, not hosted Full. Source fingerprint stable before/after: true"
     },
     {
-      "command": "python3 /tmp/dx-pr1-image-validation/lane.py non-db",
-      "exitCode": 0,
-      "startedAt": "2026-11-05T01:18:52.175695+00:00",
-      "endedAt": "2026-11-05T01:23:15.428030+00:00",
-      "logSha256": "3fc976cfdf0ad2708b23b36ea6494774bf535261494542a241750577728020d3",
-      "logPath": "/tmp/dx-image-full-non-db.log",
-      "log": "/tmp/dx-image-full-non-db.log",
-      "id": "dx-image-full-non-db",
-      "kind": "tests",
+      "id": "fix3-static",
+      "kind": "command",
+      "command": "npm run lint && npm run typecheck && git diff --check && git diff --cached --check",
       "status": "passed",
-      "testedHead": "57c6d554b4f68ea9f24b8f7a2e12b9dda67bb547",
-      "sourceFingerprint": "c02346b1f4a48fe5f524eb25e474efdcdf8de69e2142dfce94c5c304dbe5dd66",
-      "context": "Image-drift fixed candidate; forced image metadata mismatch to exercise actual per-lane rebuild (not hosted image equivalence), Node22.22.2/npm10.9.9. Separate clean detached checkouts, verified shared build; same local 4 CPU host, not hosted Full. Canonical PG16 disposable low-privilege DB with actual cleanup; PG13 and recovery/history/package tails await official Full.",
-      "resultReports": [
-        {
-          "path": "/tmp/dx-pr1-image-validation/dx-image-full-non-db-report-0.json",
-          "format": "vitest-json",
-          "sha256": "69eb742d900859562d4f2cadf76e9979b2990602e7415899a471f84c85ac8966"
-        }
-      ],
-      "passed": 3189,
-      "failed": 0,
-      "skipped": 11
-    },
-    {
-      "command": "python3 /tmp/dx-pr1-image-validation/lane.py postgres",
       "exitCode": 0,
-      "startedAt": "2026-11-05T01:18:53.758161+00:00",
-      "endedAt": "2026-11-05T01:24:42.539908+00:00",
-      "logSha256": "ee22f80905ddac0fcac8027e45b00b8999a3455045efbe3ec049e7478820cf96",
-      "logPath": "/tmp/dx-image-full-pg.log",
-      "log": "/tmp/dx-image-full-pg.log",
-      "id": "dx-image-full-pg",
-      "kind": "tests",
-      "status": "passed",
-      "testedHead": "57c6d554b4f68ea9f24b8f7a2e12b9dda67bb547",
-      "sourceFingerprint": "c02346b1f4a48fe5f524eb25e474efdcdf8de69e2142dfce94c5c304dbe5dd66",
-      "context": "Image-drift fixed candidate; forced image metadata mismatch to exercise actual per-lane rebuild (not hosted image equivalence), Node22.22.2/npm10.9.9. Separate clean detached checkouts, verified shared build; same local 4 CPU host, not hosted Full. Canonical PG16 disposable low-privilege DB with actual cleanup; PG13 and recovery/history/package tails await official Full.",
-      "resultReports": [
-        {
-          "path": "/tmp/dx-pr1-image-validation/dx-image-full-pg-report-0.json",
-          "format": "vitest-json",
-          "sha256": "4871afddfe35c4cdaa6f98f7222e08ee7f59939ff63cf5f7566ece595cb4eeda"
-        },
-        {
-          "path": "/tmp/dx-pr1-image-validation/dx-image-full-pg-report-1.json",
-          "format": "vitest-json",
-          "sha256": "7510b66c782e4233afa86049734d1517f69c9511440b43ad874c82e1ae01040c"
-        },
-        {
-          "path": "/tmp/dx-pr1-image-validation/dx-image-full-pg-report-2.json",
-          "format": "vitest-json",
-          "sha256": "d9a6a4ec06802b27274115476579a151a6978215de8f2d7a19738304d8a3c24e"
-        }
-      ],
-      "passed": 415,
-      "failed": 0,
-      "skipped": 0
+      "startedAt": "2026-11-05T12:05:44.254Z",
+      "endedAt": "2026-11-05T12:06:27.500Z",
+      "testedHead": "e82251dcbc1b56ac52693779eeb9e8c8f9b13ea3",
+      "sourceFingerprint": "e2ff7360076f5d4c49f5306fcb7dd0f81884b2680795d04afd54c8942c857268",
+      "logPath": "/tmp/dx-shadow-validation/fix3-static.log",
+      "log": "/tmp/dx-shadow-validation/fix3-static.log",
+      "logSha256": "22a262b7e7d5ae10e9bd600112ec58f1a92d51a6147dafd10f40ef30f8824a2a",
+      "context": "Node 22.22.2/npm 10.9.9, Vitest 4.1.10/TypeScript 5.9.3, local managed 4 CPU host; canonical workers unchanged. This is local evidence, not hosted Full. Source fingerprint stable before/after: true"
     }
+  ],
+  "limitations": [
+    "PR900 remains separate from PR899; no merge/deployment authorization. Concentrated fixes are to be pushed to the same PR after local freeze. Actual GitHub Review SHA is e82251dc; repaired final Head will not be described as re-reviewed.",
+    "Current source:240 native protocol cases,85 targeted Vitest cases,25 original isolated PG cases, real full-repository Git lifecycle/native identity/parity probe, closeout parser probe, lint/typecheck. All logs/reports bind this final source fingerprint; none are spliced across versions. No current complete local nonDB/canonicalPG or hosted Full approval claim.",
+    "Only diagnostic shadow proposals; actual Full commands, authority, original validators, configurations, workers and complete required inputs remain unchanged. Root-only PG mapping adds the known missing regression; unknown/shared fallback is the original chain, not all PG.",
+    "Native results cannot prove arbitrary loops/assertions or global E/D/R completeness. Review-input fingerprint is equality/ancestry evidence, not reviewer authentication. Broad unrelated tracked source/document changes conservatively require reviewed rebinding.",
+    "Original PG4pass/21fail and old lifecycle failure remain retained. Two development-only full-repository probe harness failures also remain: unignored node_modules symlink added a path, then an over-narrow expected count ignored conservative consumers. Corrected fixture/probe passed without production source changes; no failed run is reported as passing.",
+    "No extra hosted Full for shadow. Formal final request waits for the parent batch-specific conclusion, then binds exact frozen head/base/fingerprint. PR899 shared files must be reconciled separately if later integrated."
   ]
 }

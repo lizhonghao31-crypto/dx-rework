@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test,after} from 'node:test';
-import {writeFileSync} from 'node:fs';
+import {readFileSync,writeFileSync} from 'node:fs';
 import {requestFinal,GitHubError} from './pr-gate-controller.mjs';
 import {closeoutReport} from './final-closeout.mjs';
 import {closeoutFixture,disposeCloseoutFixtures,closeoutSha} from './final-closeout.fixture.mjs';
@@ -66,5 +66,65 @@ test('a names-free command summary needs structured result bytes pinned by that 
  f.closeout.pack.reports=[{checkId:'unit',path,sha256:closeoutSha(body),format:'vitest-json'}];f.closeout.pack.constructionEvidenceSha256=closeoutSha(JSON.stringify(f.closeout.evidence));f.closeout.save();
  await assert.rejects(()=>requestFinal(f.api,901,head,{apply:true,closeoutPath:f.closeout.path}),/structured report digest is not bound/);assert.equal(f.state.writes.length,0);
  f.closeout.evidence.checks[0].resultReports=[{format:'vitest-json',sha256:closeoutSha(body)}];f.closeout.pack.constructionEvidenceSha256=closeoutSha(JSON.stringify(f.closeout.evidence));f.closeout.save();
+ assert.equal((await requestFinal(f.api,901,head,{closeoutPath:f.closeout.path})).state,'plan');assert.equal(f.state.writes.length,0);
+});
+test('JSON initialization lines before Vitest summaries require the same pinned reports and exact totals',async()=>{
+ const f=setup(),summary='{"status":"ok","database":"synthetic-test"}\n{"success":true,"applied":[]}\n\n RUN v4\n Tests  1 passed (1)\n';
+ const body=JSON.stringify({success:true,numPassedTests:1,numFailedTests:0,numPendingTests:0,testResults:[{assertionResults:[{status:'passed',fullName:f.closeout.name}]}]}),path=f.closeout.dir+'/vitest.json';writeFileSync(path,body);
+ writeFileSync(f.closeout.log,summary);f.closeout.evidence.checks[0].logSha256=closeoutSha(summary);
+ f.closeout.pack.reports=[{checkId:'unit',path,sha256:closeoutSha(body),format:'vitest-json'}];
+ const save=()=>{f.closeout.pack.constructionEvidenceSha256=closeoutSha(JSON.stringify(f.closeout.evidence));f.closeout.save();};save();
+ await assert.rejects(()=>requestFinal(f.api,901,head,{apply:true,closeoutPath:f.closeout.path}),/structured report digest is not bound/);assert.equal(f.state.writes.length,0);
+ f.closeout.evidence.checks[0].resultReports=[{format:'vitest-json',sha256:closeoutSha(body)}];save();
+ assert.equal((await requestFinal(f.api,901,head,{closeoutPath:f.closeout.path})).state,'plan');
+ const wrong=summary.replace('1 passed','2 passed');writeFileSync(f.closeout.log,wrong);f.closeout.evidence.checks[0].logSha256=closeoutSha(wrong);save();
+ await assert.rejects(()=>requestFinal(f.api,901,head,{apply:true,closeoutPath:f.closeout.path}),/actual test\/log counts differ/);assert.equal(f.state.writes.length,0);
+});
+test('failed or truncated JSON test reports cannot fall through to a passing text summary',async()=>{
+ for(const log of [
+  '{"success":false,"numPassedTests":0,"numFailedTests":1,"testResults":[],"summary":" Tests 1 passed (1)"}',
+  '{"success":false,"numPassedTests":0,"numFailedTests":1,"testResults":[]}\n Tests 1 passed (1)\n',
+  '{"testResults":[\n Tests 1 passed (1)\n',
+  '{"status":"ok"}\n Test Files 1 failed\n Tests 1 passed (1)\n',
+  '{"status":"ok"}\n Tests 1 passed | 1 failed (2)\n'
+ ]){
+  const f=setup();writeFileSync(f.closeout.log,log);f.closeout.evidence.checks[0].logSha256=closeoutSha(log);f.closeout.pack.constructionEvidenceSha256=closeoutSha(JSON.stringify(f.closeout.evidence));f.closeout.save();
+  await assert.rejects(()=>requestFinal(f.api,901,head,{apply:true,closeoutPath:f.closeout.path}),/FINAL_CLOSEOUT_REJECTED/);assert.equal(f.state.writes.length,0);
+ }
+});
+test('later failed or malformed JSON records cannot hide behind valid initialization metadata and a pinned passing report',async()=>{
+ for(const record of ['{"success":false,"numFailedTests":1,"testResults":[]}','{"testResults":[','{"metadata":','{"testResults":[]}','[invalid']){
+  const f=setup(),log='{"status":"ok"}\n'+record+'\n Tests 1 passed (1)\n';
+  const body=JSON.stringify({success:true,numPassedTests:1,numFailedTests:0,numPendingTests:0,testResults:[{assertionResults:[{status:'passed',fullName:f.closeout.name}]}]}),path=f.closeout.dir+'/vitest.json';writeFileSync(path,body);
+  writeFileSync(f.closeout.log,log);f.closeout.evidence.checks[0].logSha256=closeoutSha(log);f.closeout.evidence.checks[0].resultReports=[{format:'vitest-json',sha256:closeoutSha(body)}];
+  f.closeout.pack.reports=[{checkId:'unit',path,sha256:closeoutSha(body),format:'vitest-json'}];f.closeout.pack.constructionEvidenceSha256=closeoutSha(JSON.stringify(f.closeout.evidence));f.closeout.save();
+  for(const apply of [false,true])await assert.rejects(()=>requestFinal(f.api,901,head,{apply,closeoutPath:f.closeout.path}),/malformed JSON (test report|command log)/);
+  assert.equal(f.state.writes.length,0);
+ }
+});
+test('banners and passing text or TAP summaries cannot hide failed or truncated JSON reports anywhere in the log',async()=>{
+ for(const record of ['{"success":false,"numFailedTests":1,"testResults":[]}','{"testResults":[']){
+  for(const layout of ['metadata-first','banner-first','after-summary','tap']){
+   const f=setup(),metadata='{"status":"ok"}\n',banner=' RUN v4\n',summary=' Tests 1 passed (1)\n';
+   const log=layout==='tap'?metadata+banner+record+'\n'+readFileSync(f.closeout.log,'utf8'):
+    layout==='after-summary'?metadata+banner+summary+record+'\n':
+    (layout==='banner-first'?banner+metadata:metadata+banner)+record+'\n'+summary;
+   if(layout!=='tap'){
+    const body=JSON.stringify({success:true,numPassedTests:1,numFailedTests:0,numPendingTests:0,testResults:[{assertionResults:[{status:'passed',fullName:f.closeout.name}]}]}),path=f.closeout.dir+'/vitest.json';writeFileSync(path,body);
+    f.closeout.evidence.checks[0].resultReports=[{format:'vitest-json',sha256:closeoutSha(body)}];f.closeout.pack.reports=[{checkId:'unit',path,sha256:closeoutSha(body),format:'vitest-json'}];
+   }
+   writeFileSync(f.closeout.log,log);f.closeout.evidence.checks[0].logSha256=closeoutSha(log);
+   if(layout==='tap')f.closeout.pack.reports[0].sha256=closeoutSha(log);
+   f.closeout.pack.constructionEvidenceSha256=closeoutSha(JSON.stringify(f.closeout.evidence));f.closeout.save();
+   for(const apply of [false,true])await assert.rejects(()=>requestFinal(f.api,901,head,{apply,closeoutPath:f.closeout.path}),/malformed JSON (test report|command log)/);
+   assert.equal(f.state.writes.length,0);
+  }
+ }
+});
+test('complete metadata interleaved with banners remains valid with a pinned passing Vitest report',async()=>{
+ const f=setup(),log=' RUN v4\n{"status":"ok"}\ninitialization finished\n{"suite":"synthetic","status":"completed"}\n Tests 1 passed (1)\n';
+ const body=JSON.stringify({success:true,numPassedTests:1,numFailedTests:0,numPendingTests:0,testResults:[{assertionResults:[{status:'passed',fullName:f.closeout.name}]}]}),path=f.closeout.dir+'/vitest.json';writeFileSync(path,body);
+ writeFileSync(f.closeout.log,log);f.closeout.evidence.checks[0].logSha256=closeoutSha(log);f.closeout.evidence.checks[0].resultReports=[{format:'vitest-json',sha256:closeoutSha(body)}];
+ f.closeout.pack.reports=[{checkId:'unit',path,sha256:closeoutSha(body),format:'vitest-json'}];f.closeout.pack.constructionEvidenceSha256=closeoutSha(JSON.stringify(f.closeout.evidence));f.closeout.save();
  assert.equal((await requestFinal(f.api,901,head,{closeoutPath:f.closeout.path})).state,'plan');assert.equal(f.state.writes.length,0);
 });
