@@ -64,6 +64,7 @@ const isDeployment = (path) =>
   || path.startsWith(".github/workflows/")
   || path === "scripts/ci/full-gate-risk-map.mjs"
   || path === "scripts/ci/ci-gate-runtime.mjs"
+  || path === "scripts/ci/full-gate-lanes.mjs"
   || path === "scripts/ci/pr-gate-protocol.mjs"
   || path === "scripts/ci/pr-gate-controller.mjs"
   || path === "scripts/ci/verify-actions-policy.mjs"

@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "894b299fe487cd4b3b0a3c8421445f07a53d5a6a",
-  "sourceFingerprint": "319671792704a040da5ab559cafb434c2f56df1b0678e04b9f9e5498ae364f51",
+  "sourceFingerprint": "6d8051e4ff0cb82de17bee63b60f2edf827430da838c88c5a7fd0e885ae9783a",
   "risk": "full",
   "rules": [
     {
@@ -14,7 +14,9 @@
         "scripts/ci/full-gate-lanes.test.mjs",
         "scripts/ci/verify-actions-policy.mjs",
         "scripts/ci/review-final-gate.test.mjs",
-        "scripts/ci/gate-maintenance.test.mjs"
+        "scripts/ci/gate-maintenance.test.mjs",
+        "scripts/ci/full-gate-risk-map.mjs",
+        "tests/unit/full-gate-risk-map.test.ts"
       ],
       "reads": [
         "scripts/ci/ci-gate-runtime.mjs",
@@ -36,14 +38,9 @@
       "dateAndPermission": "No production or Acceptance access. Synthetic build-transfer fixtures and protocol reports only; original low-privilege roles, finite test timeouts and canonical worker limits unchanged.",
       "expectation": "Missing/cancelled/failed lanes, wrong head/base/run/attempt, changed plans/build bytes, empty results, unauthorized paths and failed cleanup reject aggregation. Existing file-level evidence does not prove an independent case expectation set.",
       "checks": [
-        "dx-protocol-final",
-        "dx-lint-final",
-        "dx-policy-final",
-        "dx-budget-final",
-        "dx-shared-preparation",
-        "dx-actionlint-supported",
-        "dx-final-non-db",
-        "dx-final-postgres"
+        "dx-review-protocol-fixed",
+        "dx-review-target-fixed",
+        "dx-review-lint"
       ]
     }
   ],
@@ -51,158 +48,60 @@
     {
       "command": "node scripts/test-preflight.mjs",
       "exitCode": 0,
-      "startedAt": "2026-11-05T00:20:38.356156+00:00",
-      "endedAt": "2026-11-05T00:20:40.775495+00:00",
-      "logSha256": "90c157953836151434599a5bac77eb3921dae03c262c32c1f61356c36b963ab1",
-      "logPath": "/tmp/dx-protocol-final.log",
-      "id": "dx-protocol-final",
+      "startedAt": "2026-11-05T00:47:47.018482+00:00",
+      "endedAt": "2026-11-05T00:47:49.349565+00:00",
+      "logSha256": "06b72251ed5c5d1ee6251370f4e899a811238e2d40ae20f167c029e886b9f9e2",
+      "logPath": "/tmp/dx-review-protocol-fixed.log",
+      "log": "/tmp/dx-review-protocol-fixed.log",
+      "id": "dx-review-protocol-fixed",
       "kind": "tests",
       "status": "passed",
-      "testedHead": "894b299fe487cd4b3b0a3c8421445f07a53d5a6a",
-      "sourceFingerprint": "319671792704a040da5ab559cafb434c2f56df1b0678e04b9f9e5498ae364f51",
-      "context": "Local Node 22.22.2 / npm 10.9.9; isolated synthetic protocol fixtures; no remote CI or production.",
+      "sourceFingerprint": "6d8051e4ff0cb82de17bee63b60f2edf827430da838c88c5a7fd0e885ae9783a",
+      "testedHead": "05f97ef674d6d064ddfbcdc4298500cfe1b7d35f",
+      "context": "After Review P1 risk-map registration fix; actual current working source. Prior full-suite evidence remains historical until rerun.",
       "passed": 180,
       "failed": 0,
-      "skipped": 0,
-      "log": "/tmp/dx-protocol-final.log"
+      "skipped": 0
     },
     {
-      "command": "node node_modules/eslint/bin/eslint.js scripts/ci/full-gate-lanes.mjs scripts/ci/full-gate-lanes.test.mjs scripts/ci/verify-actions-policy.mjs scripts/ci/gate-maintenance.test.mjs scripts/ci/review-final-gate.test.mjs",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/full-gate-risk-map.test.ts tests/unit/unified-gate-budget.test.ts --reporter=default --reporter=json --outputFile=/tmp/dx-review-target-fixed.json",
       "exitCode": 0,
-      "startedAt": "2026-11-05T00:20:40.795200+00:00",
-      "endedAt": "2026-11-05T00:20:41.339251+00:00",
-      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "logPath": "/tmp/dx-lint-final.log",
-      "id": "dx-lint-final",
-      "kind": "command",
-      "status": "passed",
-      "testedHead": "894b299fe487cd4b3b0a3c8421445f07a53d5a6a",
-      "sourceFingerprint": "319671792704a040da5ab559cafb434c2f56df1b0678e04b9f9e5498ae364f51",
-      "context": "Local Node 22.22.2 / npm 10.9.9; isolated synthetic protocol fixtures; no remote CI or production.",
-      "log": "/tmp/dx-lint-final.log"
-    },
-    {
-      "command": "node scripts/ci/verify-actions-policy.mjs",
-      "exitCode": 0,
-      "startedAt": "2026-11-05T00:20:41.358245+00:00",
-      "endedAt": "2026-11-05T00:20:41.376165+00:00",
-      "logSha256": "c0153a744a422c030f99059e529aa2066d7153ecc058ddcd2355699dbdaf0079",
-      "logPath": "/tmp/dx-policy-final.log",
-      "id": "dx-policy-final",
-      "kind": "command",
-      "status": "passed",
-      "testedHead": "894b299fe487cd4b3b0a3c8421445f07a53d5a6a",
-      "sourceFingerprint": "319671792704a040da5ab559cafb434c2f56df1b0678e04b9f9e5498ae364f51",
-      "context": "Local Node 22.22.2 / npm 10.9.9; isolated synthetic protocol fixtures; no remote CI or production.",
-      "log": "/tmp/dx-policy-final.log"
-    },
-    {
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/unified-gate-budget.test.ts --reporter=default --reporter=json --outputFile=/tmp/dx-budget-final.json",
-      "exitCode": 0,
-      "startedAt": "2026-11-05T00:19:58.705882+00:00",
-      "endedAt": "2026-11-05T00:19:59.332879+00:00",
-      "logSha256": "86a5544d9181e7146fd0998b1007cd48bee9b8c0d47801d243792ae2cf8f42a9",
-      "logPath": "/tmp/dx-budget-final.log",
-      "id": "dx-budget-final",
+      "startedAt": "2026-11-05T00:47:29.193855+00:00",
+      "endedAt": "2026-11-05T00:47:29.917960+00:00",
+      "logSha256": "c1ccb5f3b9121ca112292f34c874816a55bca74b46e2b783e070de43257cbbe4",
+      "logPath": "/tmp/dx-review-target-fixed.log",
+      "log": "/tmp/dx-review-target-fixed.log",
+      "id": "dx-review-target-fixed",
       "kind": "tests",
       "status": "passed",
-      "testedHead": "894b299fe487cd4b3b0a3c8421445f07a53d5a6a",
-      "sourceFingerprint": "319671792704a040da5ab559cafb434c2f56df1b0678e04b9f9e5498ae364f51",
-      "context": "Local Node 22.22.2 / npm 10.9.9; isolated synthetic protocol fixtures; no remote CI or production.",
-      "passed": 2,
+      "sourceFingerprint": "6d8051e4ff0cb82de17bee63b60f2edf827430da838c88c5a7fd0e885ae9783a",
+      "testedHead": "05f97ef674d6d064ddfbcdc4298500cfe1b7d35f",
+      "context": "After Review P1 risk-map registration fix; actual current working source. Prior full-suite evidence remains historical until rerun.",
+      "passed": 25,
       "failed": 0,
       "skipped": 0,
-      "log": "/tmp/dx-budget-final.log"
-    },
-    {
-      "command": "python3 /tmp/dx-pr1-validation/prepare.py",
-      "exitCode": 0,
-      "startedAt": "2026-11-05T00:22:55.459656+00:00",
-      "endedAt": "2026-11-05T00:23:14.441665+00:00",
-      "logSha256": "6cb845f0966e5e9e9b4b7ac1fc671cad62b855b980991ba55ebddffca3e64744",
-      "logPath": "/tmp/dx-shared-preparation.log",
-      "id": "dx-shared-preparation",
-      "kind": "command",
-      "status": "passed",
-      "testedHead": "71a37a04e65bd3fccabcdcf387c690ef5bda789b",
-      "sourceFingerprint": "319671792704a040da5ab559cafb434c2f56df1b0678e04b9f9e5498ae364f51",
-      "context": "Exact candidate workspace build plus common artifact; Node22.22.2/npm10.9.9; local synthetic run identity, not GitHub Gate.",
-      "log": "/tmp/dx-shared-preparation.log"
-    },
-    {
-      "command": "/tmp/dx-actionlint/actionlint -shellcheck= -pyflakes= -ignore input \"artifact-ids\" is not defined in action \"actions/download-artifact@v4\" .github/workflows/full-gate.yml .github/workflows/ci.yml",
-      "exitCode": 0,
-      "startedAt": "2026-11-05T00:25:22.000844+00:00",
-      "endedAt": "2026-11-05T00:25:22.005277+00:00",
-      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "logPath": "/tmp/dx-actionlint-supported.log",
-      "id": "dx-actionlint-supported",
-      "kind": "command",
-      "status": "passed",
-      "testedHead": "71a37a04e65bd3fccabcdcf387c690ef5bda789b",
-      "sourceFingerprint": "319671792704a040da5ab559cafb434c2f56df1b0678e04b9f9e5498ae364f51",
-      "context": "Actionlint1.7.7; only pre-existing artifact-ids schema mismatch filtered, reproduced on 894b299f baseline; shell syntax separately parsed.",
-      "log": "/tmp/dx-actionlint-supported.log"
-    },
-    {
-      "command": "python3 /tmp/dx-pr1-validation/lane.py non-db",
-      "exitCode": 0,
-      "startedAt": "2026-11-05T00:23:55.780997+00:00",
-      "endedAt": "2026-11-05T00:27:52.827289+00:00",
-      "logSha256": "1a6c3bb9414f21fa610eedacba285dbcc835006b7f045d81b2255a03c96de2ea",
-      "logPath": "/tmp/dx-final-non-db.log",
-      "id": "dx-final-non-db",
-      "kind": "tests",
-      "status": "passed",
-      "testedHead": "71a37a04e65bd3fccabcdcf387c690ef5bda789b",
-      "sourceFingerprint": "319671792704a040da5ab559cafb434c2f56df1b0678e04b9f9e5498ae364f51",
-      "context": "Fresh detached candidate checkout, locked install, verified common build restore; full non-DB command; Node22.22.2/npm10.9.9; local 4-CPU host, fixed canonical worker1.",
       "resultReports": [
         {
+          "path": "/tmp/dx-review-target-fixed.json",
           "format": "vitest-json",
-          "sha256": "657ba6cb2eb4cccfca2fbf52ce22163290ea9832a43c036131b722575a3b1ff8",
-          "path": "/tmp/dx-pr1-validation/dx-final-non-db-report-0.json"
+          "sha256": "64dba9e363145533993849bebf992844f6d4c3ac0ece4b2b9a5dd28757d48b95"
         }
-      ],
-      "passed": 3188,
-      "failed": 0,
-      "skipped": 11,
-      "log": "/tmp/dx-final-non-db.log"
+      ]
     },
     {
-      "command": "python3 /tmp/dx-pr1-validation/lane.py postgres",
+      "command": "node node_modules/eslint/bin/eslint.js scripts/ci/full-gate-risk-map.mjs tests/unit/full-gate-risk-map.test.ts",
       "exitCode": 0,
-      "startedAt": "2026-11-05T00:23:55.787694+00:00",
-      "endedAt": "2026-11-05T00:30:10.508942+00:00",
-      "logSha256": "6b53abd4d3a71fd3aedfbef2bc853ec9ed83fa3afd1c221a067c2856dcf84ea0",
-      "logPath": "/tmp/dx-final-postgres.log",
-      "id": "dx-final-postgres",
-      "kind": "tests",
+      "startedAt": "2026-11-05T00:47:30.340104+00:00",
+      "endedAt": "2026-11-05T00:47:30.809390+00:00",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "logPath": "/tmp/dx-review-lint.log",
+      "log": "/tmp/dx-review-lint.log",
+      "id": "dx-review-lint",
+      "kind": "command",
       "status": "passed",
-      "testedHead": "71a37a04e65bd3fccabcdcf387c690ef5bda789b",
-      "sourceFingerprint": "319671792704a040da5ab559cafb434c2f56df1b0678e04b9f9e5498ae364f51",
-      "context": "Separate detached candidate checkout and disposable loopback PostgreSQL16 container with NOSUPERUSER/NOCREATEDB/NOCREATEROLE/NOREPLICATION/NOBYPASSRLS test role and marked databases. Full canonical plan, original worker1/1/2, base seed, migration check, resource smoke, execution receipt verification and container absence verification. Local synthetic run identity, not official Gate; no version/restore tail claim.",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "91bb52afe42671c1e3ecd3900dea67e7a2521c41b32c8d32b1fdd9c18a824d15",
-          "path": "/tmp/dx-pr1-validation/dx-final-postgres-report-0.json"
-        },
-        {
-          "format": "vitest-json",
-          "sha256": "7476c2abc34d89a4e54298aea743ca1d611f7c8516ed88ff1d4e47d59af02021",
-          "path": "/tmp/dx-pr1-validation/dx-final-postgres-report-1.json"
-        },
-        {
-          "format": "vitest-json",
-          "sha256": "6f08590d125a7971b58ca288372161a95dc140731d6fb62fbdb5ec1499fb3efe",
-          "path": "/tmp/dx-pr1-validation/dx-final-postgres-report-2.json"
-        }
-      ],
-      "passed": 415,
-      "failed": 0,
-      "skipped": 0,
-      "log": "/tmp/dx-final-postgres.log"
+      "sourceFingerprint": "6d8051e4ff0cb82de17bee63b60f2edf827430da838c88c5a7fd0e885ae9783a",
+      "testedHead": "05f97ef674d6d064ddfbcdc4298500cfe1b7d35f",
+      "context": "After Review P1 risk-map registration fix; actual current working source. Prior full-suite evidence remains historical until rerun."
     }
   ]
 }
