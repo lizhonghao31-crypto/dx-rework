@@ -103,6 +103,7 @@ export type JourneyNode = {
   productionSupervision?:{state:'ended'|'active'|'partial'|'unknown';windows:Array<{scopeLabel:string;state:QcProgressClock['state'];reason:string|null;anchor:string|null;remindAt:string|null;escalateAt:string|null}>};
   assignmentHistory: Array<{ at: string; actorId: string; from: string | null; to: string | null; actorName?: string | null; fromName?: string | null; toName?: string | null }>;
   expectedAt: string | null; expectedKind: "sla" | "plan" | "unset" | "unavailable";
+  deadlineMode?:'duration'|'date_target'|'unlimited';deadlineExclusive?:boolean;
   /** Plan dates retain their original date-only precision; no midnight is invented. */
   expectedPrecision: "instant" | "date" | "missing" | "unavailable";
   subject?: string;

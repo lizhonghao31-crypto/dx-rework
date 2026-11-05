@@ -260,7 +260,9 @@ export class DigitalJourneyQuery {
       const task=summaryOnly?summaries!.get(raw.task_id)!:await taskService.read(actor,raw.task_id,db);taskDtos.push(task);
       const state:JourneyState=task.paused&&!["completed","cancelled"].includes(task.state)?"blocked":task.state==="ready"?"active":task.state;
       const node=emptyNode(definition.key,state,task.routeVersion);node.instanceId=task.taskId;node.occurrence=task.occurrence;
-      node.expectedAt=task.dueAt;node.expectedPrecision=task.dueAt?"instant":"missing";node.expectedKind=task.dueAt?"sla":"unset";node.enteredAt=task.enteredAt;
+      node.expectedAt=task.dueAt;node.expectedPrecision=task.dueAt?task.deadlineMode==='date_target'?'date':'instant':"missing";node.expectedKind=task.dueAt?"sla":"unset";node.enteredAt=task.enteredAt;
+      if(task.deadlineMode!==undefined)node.deadlineMode=task.deadlineMode;
+      if(task.deadlineExclusive!==undefined)node.deadlineExclusive=task.deadlineExclusive;
       node.sla=task.slaHours===null?"not_set":["completed","cancelled"].includes(state)?"finished":task.enteredAt?"running":"not_started";
       node.current=raw.source_id?task.routeVersion===round&&!raw.returned:raw.task_kind==="sourcing_preparation"?task.state!=="cancelled":raw.route_instance_id===currentPrep;
       node.actualAt=task.completedAt;node.actualQuality=raw.completed_quality==="现场登记"||raw.completed_quality==="已核实"?"verified":raw.completed_quality==="补报未核实"?"unverified":"missing";

@@ -5,10 +5,10 @@ export function slaTargetLabel(value:JourneyTiming['target']){
  if(value.exclusive)return new Date(Date.parse(value.at)-1).toLocaleDateString('zh-CN',{timeZone:'Asia/Shanghai'})+' 当天结束';
  return journeyTime(value.at);
 }
-type NodeDeadline=Pick<JourneyNode,'expectedAt'|'expectedKind'|'expectedPrecision'|'records'|'instanceId'|'timing'>;
+type NodeDeadline=Pick<JourneyNode,'expectedAt'|'expectedKind'|'expectedPrecision'|'records'|'instanceId'|'timing'|'deadlineMode'|'deadlineExclusive'>;
 export const hasOriginalTaskDeadline=(node:NodeDeadline)=>Boolean(node.expectedAt&&node.expectedKind==='sla'&&node.records.some(record=>record.domain==='task'&&record.id===node.instanceId));
-export const hasDateOnlyTarget=(node:NodeDeadline)=>Boolean(!hasOriginalTaskDeadline(node)&&node.timing?.target.exclusive&&node.expectedAt===node.timing.target.at);
-export const nodeTargetLabel=(node:NodeDeadline)=>hasDateOnlyTarget(node)?slaTargetLabel(node.timing!.target):journeyTime(node.expectedAt,node.expectedPrecision,'尚无可信截止');
+export const hasDateOnlyTarget=(node:NodeDeadline)=>Boolean(hasOriginalTaskDeadline(node)?node.deadlineMode==='date_target'&&node.deadlineExclusive===true:node.timing?.target.exclusive&&node.expectedAt===node.timing.target.at);
+export const nodeTargetLabel=(node:NodeDeadline)=>hasDateOnlyTarget(node)?slaTargetLabel({at:node.expectedAt,exclusive:true,reasons:[]}):journeyTime(node.expectedAt,node.expectedPrecision,'尚无可信截止');
 const basis={actual:'实际完成',remaining_estimate:'有效剩余工时预计',standard_window:'原责任窗口',plan:'计划推算（非开工许可）',unknown:'缺少预计依据'};
 const statuses={not_applicable:'不适用',unknown:'时效未知',not_started:'未启动',running:'进行中',warning:'临期',overdue:'逾期',completed_on_time:'按时完成',completed_late:'超期完成',completed_unrated:'业务已完成，时效待核'};
 export function JourneyTimingWindows({timing}:{timing:JourneyTiming}){

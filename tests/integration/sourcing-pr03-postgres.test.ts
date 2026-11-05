@@ -4671,6 +4671,14 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     state=await flow.read(qc,ready.id);expect(state.canProductionQc).toBe(true);
     const journey=new DigitalJourneyQuery(database),taskService=new DigitalProductionTaskService(database);
     const nativeTask=await taskService.read(qc,task.taskId);
+    const sampleTask=(await flow.read(root,ready.id)).tasks.find(value=>value.taskKind==='bulk_ship_sample')!;
+    const originalSample=await taskService.read(primary,sampleTask.taskId);
+    expect(originalSample).toMatchObject({deadlineMode:'date_target',deadlineExclusive:true});expect(originalSample.dueAt).not.toBeNull();
+    for(const compact of [false,true]){
+      const sample=(await journey.read(primary,ready.id,undefined,compact)).stages.flatMap(stage=>stage.nodes).find(node=>node.instanceId===sampleTask.taskId)!;
+      expect(sample).toMatchObject({expectedAt:originalSample.dueAt,expectedPrecision:'date',deadlineMode:'date_target',deadlineExclusive:true});
+    }
+
     const currentQc=(value:Awaited<ReturnType<typeof journey.read>>)=>value.stages.flatMap(stage=>stage.nodes).find(node=>node.key==='factory_production_qc'&&node.current)!;
     expect(currentQc(await journey.read(primary,ready.id))).toMatchObject({instanceId:task.taskId,owner:{id:qc.actorId},ownerStatus:'assigned',expectedAt:nativeTask.dueAt});
     await taskService.controlResource(root,{kind:'order',id:ready.id},'pause','TEST P02 paused task consumer',randomUUID());

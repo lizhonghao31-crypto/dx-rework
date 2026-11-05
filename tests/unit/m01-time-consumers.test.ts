@@ -28,7 +28,10 @@ it('P02-11/13: partial dates retain their coverage, plan sources and Beijing dat
  const node:Parameters<typeof nodeTargetLabel>[0]={instanceId:'TEST node',expectedAt:at,expectedKind:'sla',expectedPrecision:'instant',records:[],timing};
  expect(nodeTargetLabel(node)).toContain('2026/11/10 当天结束');
  node.records=[{domain:'task',id:node.instanceId,url:null,mode:'read',version:null,lineId:null}];
+ node.deadlineMode='duration';node.deadlineExclusive=false;
  expect(nodeTargetLabel(node)).toContain('2026/11/11 00:00');expect(nodeTargetLabel(node)).not.toContain('当天结束');
+ node.deadlineMode='date_target';node.deadlineExclusive=true;
+ expect(nodeTargetLabel(node)).toContain('2026/11/10 当天结束');
 });
 
 it('P02-09: normal finishing, original registered quantity and effective process quantity are distinct',()=>{

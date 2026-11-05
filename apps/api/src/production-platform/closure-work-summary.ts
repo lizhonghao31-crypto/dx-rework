@@ -3,7 +3,7 @@ import type {ClosureWorkSummary} from '@dx-rework/contracts/order-closure';
 /** Internal projection: callers must establish original full business-detail access. */
 export async function readClosureWorkSummary(db:Pick<Pool|PoolClient,'query'>,rework:{rework_order_id:string;rework_kind:string}):Promise<ClosureWorkSummary>{
  const processes=(await db.query(`SELECT item.configuration_item_id,item.process_name,item.execution_kind,
-    sum(report.actual_quantity) AS reported_quantity,
+    sum(rework_work_report_effective_quantity(report.work_report_id)) AS reported_quantity,
     coalesce(array_agg(report.work_report_id ORDER BY report.work_report_id) FILTER(WHERE report.work_report_id IS NOT NULL),'{}'::uuid[]) AS report_ids
     FROM rework_process_configurations configuration JOIN rework_process_configuration_items item USING(configuration_id)
     LEFT JOIN rework_work_tasks task ON task.configuration_item_id=item.configuration_item_id AND task.rework_order_id=configuration.rework_order_id AND task.status='active'

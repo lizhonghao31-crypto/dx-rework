@@ -80,3 +80,29 @@ M三原D、N采用时点及B/F/EMB原件仍须逐对象受控试用。技术反�
 | m01-p02-secret-resourcefix | exit 0 | `e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda` |
 
 PG组合63通过与历史SQL范围4通过为各自真实命令结果，按名称过滤的skip分别保留，不将skip累加成未经验证的唯一用例数量。原完整current construction记录4条规则、10项检查给出具体命令、起止时点、来源、日志和报告摘要；本段不代替最终light、独立Review、Full与合并。
+
+## 官方 Review 集中修复后的当前候选
+
+官方 Codex Review 完成于已推送的93d8aaed，明确发现两条P2，均成立：
+
+- [4485154574](https://github.com/lizhonghao31-crypto/dx-rework/pull/903#discussion_r4485154574)：工序摘要原取actual_quantity，漏掉原生有效数量修订。现改用 `rework_work_report_effective_quantity`，生效任务、approved工序和未驳回过滤不变。真实链测试原5不改，原生修订3再4、同key重试、原单有效总量一致、驳回另1后有效量4；没有调整原核量/工资写入。
+- [4485154584](https://github.com/lizhonghao31-crypto/dx-rework/pull/903#discussion_r4485154584)：原任务中真实date_target不等于瞬时D。Journey现在沿原完整/summary任务DTO传递deadlineMode/deadlineExclusive及date精度；首页、节点表、详情统一使用原北京日终显示，真实duration继续保时刻。真实船样任务完整/compact读取与UI反例分别验证。
+
+另补明确旧72h/实际24h窗口保留和两个独立2h待办D−1ms/D/D+1ms消费者反例，不改原领域守卫。最初2h夹具把尚未发生的后继起点带入更早观察，被原领域guard拒绝；只修夹具按观察可见事实构造，未放宽future-event守卫。新增date_target候选按原时间来源生成器核3项，原业务、node-material与诊断注记保留。
+
+当前应用/测试全量来源指纹：`9a4c6fbba7ce505465351955d9efaf51dbfbdca456d70ed21d31851ae8d001be`。下表全部重新执行于同一最终工作树，前后未变；本版不以旧963/d543的通过替代当前修复检查。Review SHA与后续修复提交须分别记录，不冒称修复提交已独立重审。
+
+| 当前检查ID | 实际结果 | 日志SHA256 |
+|---|---|---|
+| m01-p02-unit-finalfix | 147 passed / 0 failed / 0 skipped | `56a6eefe703f53b3a2fe20e88d728082c972b400a212db108e12c5454127b7ce` |
+| m01-p02-pg-finalfix | 67 passed / 0 failed / 133 skipped | `3f6c440948d8915c68738bbc913f19f951a1727b413482e5709ab78ea184c5af` |
+| m01-p02-preflight-finalfix | 240 passed / 0 failed / 0 skipped | `79fa801c88e2142fa964fc789de08485a50e068a4c15d54f886a9b39ddb60726` |
+| m01-p02-types-finalfix | exit 0 | `2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e` |
+| m01-p02-lint-finalfix | exit 0 | `fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763` |
+| m01-p02-build-finalfix | exit 0 | `7862e33c0f1c37e65ffa402d91ea2fbeca4c9a541ae93cf7cf292b3be9b766b7` |
+| m01-p02-secret-finalfix | exit 0 | `e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda` |
+| m01-p02-browser-finalfix2 | exit 0 | `7828f321262987421baff3038dc2040439ed9d8e0ab10a696da39e70418e1279` |
+
+修复版原生主跟单浏览器输入SHA256 `af4c7d7b0cefe057be9021d9cdd253e5e9719d39173fc68e1f4f360d590cd89a`，1440/390均验证原日期型任务行“当天结束”及无body/阶段列溢出。该样本真实船样任务属于原历史行；不把它强改当前，不以这个浏览器样本声称真实首页当前任务状态归属已验。原记录不变，当前/历史归属问题与未取得的现场原件另保留边界。第一次浏览器断言错误地选择current占位行，改为选择原date_target任务，未修改业务帧或应用状态。原93d8输入/截图保留，修复版证据写入独立ui-finalfix目录。
+
+本地数据库在修复重验后再次核实：专属标记/OID/低权限身份相符、只剩public、其他客户连接0。当前原始日志及结果报告与construction各check摘要一致。最终新Head仍须light、解决两条真实Review线程、原外置包preview/apply、Full与准确回执后方可合并；没有部署或改现有Acceptance现场。
