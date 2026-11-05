@@ -71,6 +71,11 @@ it("requires Full and complete deployment checks for the lane executor alone", (
 });
 
 describe("Full Gate sensitive path mapping", () => {
+  it('maps diagnostic startup, request hooks and snapshot changes to the real driver regression',()=>{
+    for(const path of ['apps/api/src/platform/journey-diagnostic.ts','apps/api/src/server.ts','apps/api/src/app.ts','apps/api/src/acceptance-clock/hooks.ts','apps/api/src/production-platform/journey-snapshot-reads.ts','tests/unit/journey-diagnostic.test.ts']) {
+      const result=classifyFullGatePaths([path]);expect(result.dbRequired).toBe(true);expect(result.mappedPostgresTests).toContain('tests/integration/journey-diagnostic-postgres.test.ts');
+    }
+  });
   it("maps changed bulk requirements and their shared clock fixture to all actual consumer suites",()=>{
     for(const path of ['tests/helpers/business-anchor-fixture.ts','tests/helpers/bulk-preparation-fixture.ts','tests/helpers/bulk-preshrink-correction-fixture.ts','apps/api/src/production-platform/bulk-preshrink-correction-service.ts','apps/api/src/production-platform/bulk-sla-evidence.ts']){
       const result=classifyFullGatePaths([path]);expect(result.businessChainSensitive).toBe(true);

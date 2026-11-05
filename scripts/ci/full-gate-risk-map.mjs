@@ -159,6 +159,14 @@ export const classifyFullGatePaths = (inputPaths) => {
       domains.add("development-amendment");
       mappedTests.add("tests/integration/development-amendment-postgres.test.ts");
     }
+    if (path === 'apps/api/src/platform/journey-diagnostic.ts'
+      || path === 'apps/api/src/app.ts' || path === 'apps/api/src/server.ts'
+      || path === 'apps/api/src/acceptance-clock/hooks.ts'
+      || /^apps\/api\/src\/production-platform\/(?:journey[^/]*|identity-routes)\.ts$/.test(path)
+      || path === 'tests/unit/journey-diagnostic.test.ts'
+      || path === 'tests/integration/journey-diagnostic-postgres.test.ts') {
+      mappedTests.add('tests/integration/journey-diagnostic-postgres.test.ts');
+    }
     if (path === 'tests/helpers/business-anchor-fixture.ts'
       || path === 'tests/helpers/bulk-preparation-fixture.ts'
       || path === 'tests/helpers/bulk-preshrink-correction-fixture.ts'

@@ -1,3 +1,4 @@
+import {journeySpan} from '../platform/journey-diagnostic.js';
 import type {FastifyInstance,FastifyRequest} from 'fastify';
 import type {AuthService} from '../auth/service.js';
 import type {RootAuthority} from '../access/root-authority.js';
@@ -22,6 +23,8 @@ export function registerAcceptanceClockHooks(app:FastifyInstance,runtime:Accepta
  app.addHook('preHandler',(request,reply,done)=>{
   const path=request.routeOptions.url??request.url;
   if(path.startsWith('/acceptance/')||!/^\/(?:digital-production|sourcing|production-reporting|cutting|receiving|rework|work-|pattern-room)/.test(path)){done();return;}
+  const endClock=journeySpan('clock_prehandler');
+  const finishClock=(error?:Error)=>{endClock();done(error);};
   const resolve=async()=>{
    await auth.authenticate(acceptanceCookie(request,'dx_rework_session'));
    const claimed=request.headers['x-acceptance-scenario'];
@@ -37,7 +40,7 @@ export function registerAcceptanceClockHooks(app:FastifyInstance,runtime:Accepta
    return {id,actor};
   };
   void resolve().then(async value=>{
-   if(!value){done();return;}
+   if(!value){finishClock();return;}
    await runtime.repository.withLock(value.id,async()=>{
     if(reply.raw.destroyed)return;
     const context=await runtime.context(await runtime.repository.row(value.id));
@@ -46,10 +49,10 @@ export function registerAcceptanceClockHooks(app:FastifyInstance,runtime:Accepta
      const release=()=>{if(!finished){finished=true;finish();}};
      sessions.set(request,{scenarioId:value.id,finish:release,actor:value.actor});
      reply.raw.once('close',release);
-     try{withAcceptanceBusinessTime(context,done);}catch(error){reject(error);}
+     try{withAcceptanceBusinessTime(context,finishClock);}catch(error){reject(error);}
     });
    });
-  }).catch(error=>{if(!reply.sent)done(error);});
+  }).catch(error=>{endClock();if(!reply.sent)done(error);});
  });
  app.addHook('onSend',async(request,reply,payload)=>{
   const session=sessions.get(request);

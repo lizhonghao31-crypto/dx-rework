@@ -1,3 +1,4 @@
+import {journeyCacheHit} from '../platform/journey-diagnostic.js';
 import type { PoolClient, QueryResult } from "pg";
 
 const MAX_BYTES = 4 * 1024 * 1024;
@@ -27,7 +28,7 @@ export function reuseJourneySnapshotReads(client: PoolClient): PoolClient {
       clear(); return Reflect.apply(client.query, client, args);
     }
     const key = `${text}\u0000${JSON.stringify(values)}`, hit = cache.get(key);
-    if (hit) { cache.delete(key); cache.set(key, hit); return Promise.resolve(copy(hit.result)); }
+    if (hit) { journeyCacheHit(); cache.delete(key); cache.set(key, hit); return Promise.resolve(copy(hit.result)); }
     const started = generation;
     return (Reflect.apply(client.query, client, args) as Promise<QueryResult>).then(result => {
       if (started !== generation || result.rows.length > 128 || !plainRows(result.rows)) return result;
