@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "6e41869d76cbd883954c711c00ad465fbe930a2d",
-  "sourceFingerprint": "9a4c6fbba7ce505465351955d9efaf51dbfbdca456d70ed21d31851ae8d001be",
+  "sourceFingerprint": "73a88f0ec0fe280f0eff59be4cfd56e95cde724004e07f169a522b8f7db7a260",
   "risk": "full",
   "rules": [
     {
@@ -10,13 +10,14 @@
       "dateAndPermission": "Original source/order/task authorization and full business-detail field gate retained; snapshot calendar and canonical trusted business clock retain their original semantics. New businessProgress/date evaluation shares observed.now with canonical SLA. Original date-only/exclusive vs exact instant boundaries remain distinct; no browser current-time calculation. Original task deadlineMode/date_target and deadlineExclusive are projected without synthesizing precision; actual duration task deadlines stay instant. Effective rework report quantity uses the original native latest-revision function, retaining active-task/nonrejected filters.",
       "expectation": "Current source-bound unit/native PostgreSQL regression, original read permissions, compile/lint/build and bounded browser smoke pass; light, official Review and exact-head final Full remain separately required.",
       "checks": [
-        "m01-p02-unit-finalfix",
+        "m01-p02-unit-fullfix",
+        "m01-p02-pmc-fullfix",
+        "m01-p02-preflight-fullfix",
+        "m01-p02-types-fullfix",
+        "m01-p02-lint-fullfix",
+        "m01-p02-secret-fullfix-corrected",
         "m01-p02-pg-finalfix",
-        "m01-p02-preflight-finalfix",
-        "m01-p02-types-finalfix",
-        "m01-p02-lint-finalfix",
         "m01-p02-build-finalfix",
-        "m01-p02-secret-finalfix",
         "m01-p02-browser-finalfix2"
       ],
       "rule": "Every batch keeps its original start, deadline, completion and frozen scope; original task D remains separate from canonical rolling forecast and date-only targets.",
@@ -48,13 +49,14 @@
       "dateAndPermission": "Original source/order/task authorization and full business-detail field gate retained; snapshot calendar and canonical trusted business clock retain their original semantics. New businessProgress/date evaluation shares observed.now with canonical SLA. Original date-only/exclusive vs exact instant boundaries remain distinct; no browser current-time calculation. Original task deadlineMode/date_target and deadlineExclusive are projected without synthesizing precision; actual duration task deadlines stay instant. Effective rework report quantity uses the original native latest-revision function, retaining active-task/nonrejected filters.",
       "expectation": "Current source-bound unit/native PostgreSQL regression, original read permissions, compile/lint/build and bounded browser smoke pass; light, official Review and exact-head final Full remain separately required.",
       "checks": [
-        "m01-p02-unit-finalfix",
+        "m01-p02-unit-fullfix",
+        "m01-p02-pmc-fullfix",
+        "m01-p02-preflight-fullfix",
+        "m01-p02-types-fullfix",
+        "m01-p02-lint-fullfix",
+        "m01-p02-secret-fullfix-corrected",
         "m01-p02-pg-finalfix",
-        "m01-p02-preflight-finalfix",
-        "m01-p02-types-finalfix",
-        "m01-p02-lint-finalfix",
         "m01-p02-build-finalfix",
-        "m01-p02-secret-finalfix",
         "m01-p02-browser-finalfix2"
       ],
       "rule": "Whole/stage dates use the same effective requirements as n/m; full, partial and unavailable adoption, original inherited results, precision and canonical forecast bases remain separately identified.",
@@ -94,13 +96,14 @@
       "dateAndPermission": "Original source/order/task authorization and full business-detail field gate retained; snapshot calendar and canonical trusted business clock retain their original semantics. New businessProgress/date evaluation shares observed.now with canonical SLA. Original date-only/exclusive vs exact instant boundaries remain distinct; no browser current-time calculation. Original task deadlineMode/date_target and deadlineExclusive are projected without synthesizing precision; actual duration task deadlines stay instant. Effective rework report quantity uses the original native latest-revision function, retaining active-task/nonrejected filters.",
       "expectation": "Current source-bound unit/native PostgreSQL regression, original read permissions, compile/lint/build and bounded browser smoke pass; light, official Review and exact-head final Full remain separately required.",
       "checks": [
-        "m01-p02-unit-finalfix",
+        "m01-p02-unit-fullfix",
+        "m01-p02-pmc-fullfix",
+        "m01-p02-preflight-fullfix",
+        "m01-p02-types-fullfix",
+        "m01-p02-lint-fullfix",
+        "m01-p02-secret-fullfix-corrected",
         "m01-p02-pg-finalfix",
-        "m01-p02-preflight-finalfix",
-        "m01-p02-types-finalfix",
-        "m01-p02-lint-finalfix",
         "m01-p02-build-finalfix",
-        "m01-p02-secret-finalfix",
         "m01-p02-browser-finalfix2"
       ],
       "rule": "Native factory inspection, quality result, original owner/paused task and production supervision terminal state are independent; production completion uses all current factory completion dates, never later shipment/registration.",
@@ -131,13 +134,14 @@
       "dateAndPermission": "Original source/order/task authorization and full business-detail field gate retained; snapshot calendar and canonical trusted business clock retain their original semantics. New businessProgress/date evaluation shares observed.now with canonical SLA. Original date-only/exclusive vs exact instant boundaries remain distinct; no browser current-time calculation. Original task deadlineMode/date_target and deadlineExclusive are projected without synthesizing precision; actual duration task deadlines stay instant. Effective rework report quantity uses the original native latest-revision function, retaining active-task/nonrejected filters.",
       "expectation": "Current source-bound unit/native PostgreSQL regression, original read permissions, compile/lint/build and bounded browser smoke pass; light, official Review and exact-head final Full remain separately required.",
       "checks": [
-        "m01-p02-unit-finalfix",
+        "m01-p02-unit-fullfix",
+        "m01-p02-pmc-fullfix",
+        "m01-p02-preflight-fullfix",
+        "m01-p02-types-fullfix",
+        "m01-p02-lint-fullfix",
+        "m01-p02-secret-fullfix-corrected",
         "m01-p02-pg-finalfix",
-        "m01-p02-preflight-finalfix",
-        "m01-p02-types-finalfix",
-        "m01-p02-lint-finalfix",
         "m01-p02-build-finalfix",
-        "m01-p02-secret-finalfix",
         "m01-p02-browser-finalfix2"
       ],
       "rule": "Closure distinguishes normal finishing from bad rework and original registered from effective per-process reports; rejected/replaced work is history, processes are not summed into garment quantity, added fields follow original full-detail authorization and do not change closure revision.",
@@ -149,7 +153,8 @@
         "apps/web/src/order-closure-panel.tsx",
         "apps/web/src/document-feedback-projections.ts",
         "tests/helpers/order-closure-fixture.ts",
-        "tests/integration/optional-tail-inspection-postgres.test.ts"
+        "tests/integration/optional-tail-inspection-postgres.test.ts",
+        "tests/unit/digital-pmc-readonly-access.test.ts"
       ],
       "reads": [
         "apps/api/src/rework/work-reporting-service.ts",
@@ -160,7 +165,8 @@
       "oldTests": [
         "tests/integration/optional-tail-inspection-postgres.test.ts",
         "tests/integration/sourcing-pr03-postgres.test.ts",
-        "tests/unit/rework-business-detail-attachment-authorization.test.ts"
+        "tests/unit/rework-business-detail-attachment-authorization.test.ts",
+        "tests/unit/digital-pmc-readonly-access.test.ts#PMC closure reads retain native links without acquiring closure or QC authority"
       ],
       "newTests": [
         "tests/unit/m01-time-consumers.test.ts",
@@ -170,27 +176,109 @@
   ],
   "checks": [
     {
-      "id": "m01-p02-unit-finalfix",
+      "id": "m01-p02-unit-fullfix",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/journey-progress-dates.test.ts tests/unit/journey-business-progress.test.ts tests/unit/journey-sla-supervision.test.ts tests/unit/cockpit-home.test.ts tests/unit/cockpit-detail.test.ts tests/unit/digital-journey-cockpit.test.ts tests/unit/digital-sla-plan.test.ts tests/unit/factory-logistics-sla-projection.test.ts tests/unit/qc-progress-reminders.test.ts tests/unit/m01-time-consumers.test.ts tests/unit/digital-journey-projection.test.ts tests/unit/journey-projection-isolation.test.ts tests/unit/rework-business-detail-attachment-authorization.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-p02-unit-finalfix.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/journey-progress-dates.test.ts tests/unit/journey-business-progress.test.ts tests/unit/journey-sla-supervision.test.ts tests/unit/cockpit-home.test.ts tests/unit/cockpit-detail.test.ts tests/unit/digital-journey-cockpit.test.ts tests/unit/digital-sla-plan.test.ts tests/unit/factory-logistics-sla-projection.test.ts tests/unit/qc-progress-reminders.test.ts tests/unit/m01-time-consumers.test.ts tests/unit/digital-journey-projection.test.ts tests/unit/journey-projection-isolation.test.ts tests/unit/rework-business-detail-attachment-authorization.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-p02-unit-fullfix.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "93d8aaed08f88f7bad07cc8ad5196b0833ef3805",
-      "sourceFingerprint": "9a4c6fbba7ce505465351955d9efaf51dbfbdca456d70ed21d31851ae8d001be",
-      "context": "Node22.22.2/npm10.9.9. Current concentrated official Review corrections; source unchanged throughout each execution. PostgreSQL16.14 native tests use worker1 and exact local marked database dx_m01_acceptance_test_dc924aaea2/OID694046 with low-privilege dx_rework_test; preflight uses explicit BASE_SHA=6e41869d76cbd883954c711c00ad465fbe930a2d and native protocol worker2. No production or existing Acceptance scene operation.",
-      "startedAt": "2026-11-05T19:46:18.300Z",
-      "endedAt": "2026-11-05T19:46:22.854Z",
-      "log": "/workspace/scratch/m01-p02-unit-finalfix.log",
-      "logSha256": "56a6eefe703f53b3a2fe20e88d728082c972b400a212db108e12c5454127b7ce",
+      "testedHead": "258fe20b15699464c4d62797ed216cc695749f14",
+      "sourceFingerprint": "73a88f0ec0fe280f0eff59be4cfd56e95cde724004e07f169a522b8f7db7a260",
+      "context": "Current test-only native closure-summary SQL fixture correction after failed exact258 Full. Original role, revoked-role, unauthorized command and no-write assertions retained. Node22.22.2/npm10.9.9, Vitest worker1; exact BASE_SHA6e preflight nativeworker2. At most four independent bounded validation commands ran concurrently; no local PG suite ran during these commands. No production or Acceptance operation.",
+      "startedAt": "2026-11-05T20:11:23.703Z",
+      "endedAt": "2026-11-05T20:11:33.498Z",
+      "log": "/workspace/scratch/m01-p02-unit-fullfix.log",
+      "logSha256": "6381949afdf3b73870e5ce377840ff6a2ca48d02f1990cb9f9ee93c28dd90f1a",
       "passed": 147,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "4e6345733ede5e50dc619832563d8a8473c723dc172be178d11a334e9ec02402"
+          "sha256": "e5cd9371894e0afbf398af8263dcf9efdfb655e2741260a6b4167b3528a35184"
         }
       ]
+    },
+    {
+      "id": "m01-p02-pmc-fullfix",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/digital-pmc-readonly-access.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-p02-pmc-fullfix.json",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "258fe20b15699464c4d62797ed216cc695749f14",
+      "sourceFingerprint": "73a88f0ec0fe280f0eff59be4cfd56e95cde724004e07f169a522b8f7db7a260",
+      "context": "Current test-only native closure-summary SQL fixture correction after failed exact258 Full. Original role, revoked-role, unauthorized command and no-write assertions retained. Node22.22.2/npm10.9.9, Vitest worker1; exact BASE_SHA6e preflight nativeworker2. At most four independent bounded validation commands ran concurrently; no local PG suite ran during these commands. No production or Acceptance operation.",
+      "startedAt": "2026-11-05T20:11:06.368Z",
+      "endedAt": "2026-11-05T20:11:07.994Z",
+      "log": "/workspace/scratch/m01-p02-pmc-fullfix.log",
+      "logSha256": "1a45d9e4fcba9a6830701174bae6a120cc4cf4935068fbcb8baec5f2256d1abe",
+      "passed": 40,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "edea2b5c41c5835c59c4c3dcfe37cdaa135c165895dda38a1e102c5f7dbef8f3"
+        }
+      ]
+    },
+    {
+      "id": "m01-p02-preflight-fullfix",
+      "kind": "tests",
+      "command": "npm run test:preflight",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "258fe20b15699464c4d62797ed216cc695749f14",
+      "sourceFingerprint": "73a88f0ec0fe280f0eff59be4cfd56e95cde724004e07f169a522b8f7db7a260",
+      "context": "Current test-only native closure-summary SQL fixture correction after failed exact258 Full. Original role, revoked-role, unauthorized command and no-write assertions retained. Node22.22.2/npm10.9.9, Vitest worker1; exact BASE_SHA6e preflight nativeworker2. At most four independent bounded validation commands ran concurrently; no local PG suite ran during these commands. No production or Acceptance operation.",
+      "startedAt": "2026-11-05T20:11:23.701Z",
+      "endedAt": "2026-11-05T20:11:31.746Z",
+      "log": "/workspace/scratch/m01-p02-preflight-fullfix.log",
+      "logSha256": "da3a86b8600b0db8eda29372d7242ce33a7f5a94e88344aa452c354ab343a2d2",
+      "passed": 240,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "id": "m01-p02-types-fullfix",
+      "kind": "command",
+      "command": "npm run typecheck",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "258fe20b15699464c4d62797ed216cc695749f14",
+      "sourceFingerprint": "73a88f0ec0fe280f0eff59be4cfd56e95cde724004e07f169a522b8f7db7a260",
+      "context": "Current test-only native closure-summary SQL fixture correction after failed exact258 Full. Original role, revoked-role, unauthorized command and no-write assertions retained. Node22.22.2/npm10.9.9, Vitest worker1; exact BASE_SHA6e preflight nativeworker2. At most four independent bounded validation commands ran concurrently; no local PG suite ran during these commands. No production or Acceptance operation.",
+      "startedAt": "2026-11-05T20:11:23.696Z",
+      "endedAt": "2026-11-05T20:11:55.687Z",
+      "log": "/workspace/scratch/m01-p02-types-fullfix.log",
+      "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e"
+    },
+    {
+      "id": "m01-p02-lint-fullfix",
+      "kind": "command",
+      "command": "npm run lint",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "258fe20b15699464c4d62797ed216cc695749f14",
+      "sourceFingerprint": "73a88f0ec0fe280f0eff59be4cfd56e95cde724004e07f169a522b8f7db7a260",
+      "context": "Current test-only native closure-summary SQL fixture correction after failed exact258 Full. Original role, revoked-role, unauthorized command and no-write assertions retained. Node22.22.2/npm10.9.9, Vitest worker1; exact BASE_SHA6e preflight nativeworker2. At most four independent bounded validation commands ran concurrently; no local PG suite ran during these commands. No production or Acceptance operation.",
+      "startedAt": "2026-11-05T20:11:23.705Z",
+      "endedAt": "2026-11-05T20:11:48.285Z",
+      "log": "/workspace/scratch/m01-p02-lint-fullfix.log",
+      "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763"
+    },
+    {
+      "id": "m01-p02-secret-fullfix-corrected",
+      "kind": "command",
+      "command": "npm run secret:scan",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "258fe20b15699464c4d62797ed216cc695749f14",
+      "sourceFingerprint": "73a88f0ec0fe280f0eff59be4cfd56e95cde724004e07f169a522b8f7db7a260",
+      "context": "Current test-only native closure-summary SQL fixture correction after failed exact258 Full. Original role, revoked-role, unauthorized command and no-write assertions retained. Node22.22.2/npm10.9.9, Vitest worker1; exact BASE_SHA6e preflight nativeworker2. At most four independent bounded validation commands ran concurrently; no local PG suite ran during these commands. No production or Acceptance operation.",
+      "startedAt": "2026-11-05T20:11:51.861Z",
+      "endedAt": "2026-11-05T20:11:52.532Z",
+      "log": "/workspace/scratch/m01-p02-secret-fullfix-corrected.log",
+      "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda"
     },
     {
       "id": "m01-p02-pg-finalfix",
@@ -200,7 +288,7 @@
       "exitCode": 0,
       "testedHead": "93d8aaed08f88f7bad07cc8ad5196b0833ef3805",
       "sourceFingerprint": "9a4c6fbba7ce505465351955d9efaf51dbfbdca456d70ed21d31851ae8d001be",
-      "context": "Node22.22.2/npm10.9.9. Current concentrated official Review corrections; source unchanged throughout each execution. PostgreSQL16.14 native tests use worker1 and exact local marked database dx_m01_acceptance_test_dc924aaea2/OID694046 with low-privilege dx_rework_test; preflight uses explicit BASE_SHA=6e41869d76cbd883954c711c00ad465fbe930a2d and native protocol worker2. No production or existing Acceptance scene operation.",
+      "context": "Node22.22.2/npm10.9.9. Current concentrated official Review corrections; source unchanged throughout each execution. PostgreSQL16.14 native tests use worker1 and exact local marked database dx_m01_acceptance_test_dc924aaea2/OID694046 with low-privilege dx_rework_test; preflight uses explicit BASE_SHA=6e41869d76cbd883954c711c00ad465fbe930a2d and native protocol worker2. No production or existing Acceptance scene operation. Scoped reuse captured at 2026-11-05T20:10:46.451Z while full original source still matched 9a4c6fbba7ce505465351955d9efaf51dbfbdca456d70ed21d31851ae8d001be. Entire app/domain/PG/helper/browser/config input unchanged; only the separately tested PMC unit SQL fixture changed. Original command/head/source/report preserved, not relabeled a new execution.",
       "startedAt": "2026-11-05T19:47:40.337Z",
       "endedAt": "2026-11-05T19:49:51.566Z",
       "log": "/workspace/scratch/m01-p02-pg-finalfix.log",
@@ -213,52 +301,29 @@
           "format": "vitest-json",
           "sha256": "33510b9f56134329873cb32d42ed4d657988579802ed6579a0f39d51f05466f4"
         }
-      ]
-    },
-    {
-      "id": "m01-p02-preflight-finalfix",
-      "kind": "tests",
-      "command": "npm run test:preflight",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "93d8aaed08f88f7bad07cc8ad5196b0833ef3805",
-      "sourceFingerprint": "9a4c6fbba7ce505465351955d9efaf51dbfbdca456d70ed21d31851ae8d001be",
-      "context": "Node22.22.2/npm10.9.9. Current concentrated official Review corrections; source unchanged throughout each execution. PostgreSQL16.14 native tests use worker1 and exact local marked database dx_m01_acceptance_test_dc924aaea2/OID694046 with low-privilege dx_rework_test; preflight uses explicit BASE_SHA=6e41869d76cbd883954c711c00ad465fbe930a2d and native protocol worker2. No production or existing Acceptance scene operation.",
-      "startedAt": "2026-11-05T19:46:17.284Z",
-      "endedAt": "2026-11-05T19:46:21.105Z",
-      "log": "/workspace/scratch/m01-p02-preflight-finalfix.log",
-      "logSha256": "79fa801c88e2142fa964fc789de08485a50e068a4c15d54f886a9b39ddb60726",
-      "passed": 240,
-      "failed": 0,
-      "skipped": 0
-    },
-    {
-      "id": "m01-p02-types-finalfix",
-      "kind": "command",
-      "command": "npm run typecheck",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "93d8aaed08f88f7bad07cc8ad5196b0833ef3805",
-      "sourceFingerprint": "9a4c6fbba7ce505465351955d9efaf51dbfbdca456d70ed21d31851ae8d001be",
-      "context": "Node22.22.2/npm10.9.9. Current concentrated official Review corrections; source unchanged throughout each execution. PostgreSQL16.14 native tests use worker1 and exact local marked database dx_m01_acceptance_test_dc924aaea2/OID694046 with low-privilege dx_rework_test; preflight uses explicit BASE_SHA=6e41869d76cbd883954c711c00ad465fbe930a2d and native protocol worker2. No production or existing Acceptance scene operation.",
-      "startedAt": "2026-11-05T19:49:24.985Z",
-      "endedAt": "2026-11-05T19:49:52.104Z",
-      "log": "/workspace/scratch/m01-p02-types-finalfix.log",
-      "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e"
-    },
-    {
-      "id": "m01-p02-lint-finalfix",
-      "kind": "command",
-      "command": "npm run lint",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "93d8aaed08f88f7bad07cc8ad5196b0833ef3805",
-      "sourceFingerprint": "9a4c6fbba7ce505465351955d9efaf51dbfbdca456d70ed21d31851ae8d001be",
-      "context": "Node22.22.2/npm10.9.9. Current concentrated official Review corrections; source unchanged throughout each execution. PostgreSQL16.14 native tests use worker1 and exact local marked database dx_m01_acceptance_test_dc924aaea2/OID694046 with low-privilege dx_rework_test; preflight uses explicit BASE_SHA=6e41869d76cbd883954c711c00ad465fbe930a2d and native protocol worker2. No production or existing Acceptance scene operation.",
-      "startedAt": "2026-11-05T19:47:41.813Z",
-      "endedAt": "2026-11-05T19:48:04.535Z",
-      "log": "/workspace/scratch/m01-p02-lint-finalfix.log",
-      "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763"
+      ],
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests/integration",
+        "tests/helpers",
+        "tests/fixtures",
+        "tests/acceptance",
+        ".env.example",
+        ".gitattributes",
+        ".gitignore",
+        ".node-version",
+        ".nvmrc",
+        "eslint.config.js",
+        "package-lock.json",
+        "package.json",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "vitest.postgres-immediate.config.ts"
+      ],
+      "inputFingerprint": "60a4948dd013b6492505f186f870b76e7f08639c4c076acb65760083c57596c0"
     },
     {
       "id": "m01-p02-build-finalfix",
@@ -268,25 +333,33 @@
       "exitCode": 0,
       "testedHead": "93d8aaed08f88f7bad07cc8ad5196b0833ef3805",
       "sourceFingerprint": "9a4c6fbba7ce505465351955d9efaf51dbfbdca456d70ed21d31851ae8d001be",
-      "context": "Node22.22.2/npm10.9.9. Current concentrated official Review corrections; source unchanged throughout each execution. PostgreSQL16.14 native tests use worker1 and exact local marked database dx_m01_acceptance_test_dc924aaea2/OID694046 with low-privilege dx_rework_test; preflight uses explicit BASE_SHA=6e41869d76cbd883954c711c00ad465fbe930a2d and native protocol worker2. No production or existing Acceptance scene operation.",
+      "context": "Node22.22.2/npm10.9.9. Current concentrated official Review corrections; source unchanged throughout each execution. PostgreSQL16.14 native tests use worker1 and exact local marked database dx_m01_acceptance_test_dc924aaea2/OID694046 with low-privilege dx_rework_test; preflight uses explicit BASE_SHA=6e41869d76cbd883954c711c00ad465fbe930a2d and native protocol worker2. No production or existing Acceptance scene operation. Scoped reuse captured at 2026-11-05T20:10:46.489Z while full original source still matched 9a4c6fbba7ce505465351955d9efaf51dbfbdca456d70ed21d31851ae8d001be. Entire app/domain/PG/helper/browser/config input unchanged; only the separately tested PMC unit SQL fixture changed. Original command/head/source/report preserved, not relabeled a new execution.",
       "startedAt": "2026-11-05T19:47:41.812Z",
       "endedAt": "2026-11-05T19:48:00.410Z",
       "log": "/workspace/scratch/m01-p02-build-finalfix.log",
-      "logSha256": "7862e33c0f1c37e65ffa402d91ea2fbeca4c9a541ae93cf7cf292b3be9b766b7"
-    },
-    {
-      "id": "m01-p02-secret-finalfix",
-      "kind": "command",
-      "command": "npm run secret:scan",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "93d8aaed08f88f7bad07cc8ad5196b0833ef3805",
-      "sourceFingerprint": "9a4c6fbba7ce505465351955d9efaf51dbfbdca456d70ed21d31851ae8d001be",
-      "context": "Node22.22.2/npm10.9.9. Current concentrated official Review corrections; source unchanged throughout each execution. PostgreSQL16.14 native tests use worker1 and exact local marked database dx_m01_acceptance_test_dc924aaea2/OID694046 with low-privilege dx_rework_test; preflight uses explicit BASE_SHA=6e41869d76cbd883954c711c00ad465fbe930a2d and native protocol worker2. No production or existing Acceptance scene operation.",
-      "startedAt": "2026-11-05T19:49:25.005Z",
-      "endedAt": "2026-11-05T19:49:26.050Z",
-      "log": "/workspace/scratch/m01-p02-secret-finalfix.log",
-      "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda"
+      "logSha256": "7862e33c0f1c37e65ffa402d91ea2fbeca4c9a541ae93cf7cf292b3be9b766b7",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests/integration",
+        "tests/helpers",
+        "tests/fixtures",
+        "tests/acceptance",
+        ".env.example",
+        ".gitattributes",
+        ".gitignore",
+        ".node-version",
+        ".nvmrc",
+        "eslint.config.js",
+        "package-lock.json",
+        "package.json",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "vitest.postgres-immediate.config.ts"
+      ],
+      "inputFingerprint": "60a4948dd013b6492505f186f870b76e7f08639c4c076acb65760083c57596c0"
     },
     {
       "id": "m01-p02-browser-finalfix2",
@@ -296,11 +369,33 @@
       "exitCode": 0,
       "testedHead": "93d8aaed08f88f7bad07cc8ad5196b0833ef3805",
       "sourceFingerprint": "9a4c6fbba7ce505465351955d9efaf51dbfbdca456d70ed21d31851ae8d001be",
-      "context": "Node22.22.2/npm10.9.9. Current concentrated official Review corrections; source unchanged throughout each execution. PostgreSQL16.14 native tests use worker1 and exact local marked database dx_m01_acceptance_test_dc924aaea2/OID694046 with low-privilege dx_rework_test; preflight uses explicit BASE_SHA=6e41869d76cbd883954c711c00ad465fbe930a2d and native protocol worker2. No production or existing Acceptance scene operation.",
+      "context": "Node22.22.2/npm10.9.9. Current concentrated official Review corrections; source unchanged throughout each execution. PostgreSQL16.14 native tests use worker1 and exact local marked database dx_m01_acceptance_test_dc924aaea2/OID694046 with low-privilege dx_rework_test; preflight uses explicit BASE_SHA=6e41869d76cbd883954c711c00ad465fbe930a2d and native protocol worker2. No production or existing Acceptance scene operation. Scoped reuse captured at 2026-11-05T20:10:46.526Z while full original source still matched 9a4c6fbba7ce505465351955d9efaf51dbfbdca456d70ed21d31851ae8d001be. Entire app/domain/PG/helper/browser/config input unchanged; only the separately tested PMC unit SQL fixture changed. Original command/head/source/report preserved, not relabeled a new execution.",
       "startedAt": "2026-11-05T19:51:08.975Z",
       "endedAt": "2026-11-05T19:51:10.802Z",
       "log": "/workspace/scratch/m01-p02-browser-finalfix2.log",
-      "logSha256": "7828f321262987421baff3038dc2040439ed9d8e0ab10a696da39e70418e1279"
+      "logSha256": "7828f321262987421baff3038dc2040439ed9d8e0ab10a696da39e70418e1279",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests/integration",
+        "tests/helpers",
+        "tests/fixtures",
+        "tests/acceptance",
+        ".env.example",
+        ".gitattributes",
+        ".gitignore",
+        ".node-version",
+        ".nvmrc",
+        "eslint.config.js",
+        "package-lock.json",
+        "package.json",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "vitest.postgres-immediate.config.ts"
+      ],
+      "inputFingerprint": "60a4948dd013b6492505f186f870b76e7f08639c4c076acb65760083c57596c0"
     }
   ]
 }
