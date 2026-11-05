@@ -17,7 +17,8 @@
         "m01-p02-lint-assembled",
         "m01-p02-build-assembled",
         "m01-p02-secret-assembled",
-        "m01-p02-browser-assembled"
+        "m01-p02-browser-assembled",
+        "m01-p02-preflight-recordfix"
       ],
       "rule": "Every batch keeps its original start, deadline, completion and frozen scope; original task D remains separate from canonical rolling forecast and date-only targets.",
       "writes": [
@@ -100,7 +101,8 @@
         "m01-p02-lint-assembled",
         "m01-p02-build-assembled",
         "m01-p02-secret-assembled",
-        "m01-p02-browser-assembled"
+        "m01-p02-browser-assembled",
+        "m01-p02-preflight-recordfix"
       ],
       "rule": "Native factory inspection, quality result, original owner/paused task and production supervision terminal state are independent; production completion uses all current factory completion dates, never later shipment/registration.",
       "writes": [
@@ -306,6 +308,23 @@
       "endedAt": "2026-11-05T19:15:18.591Z",
       "log": "/workspace/scratch/m01-p02-browser-assembled.log",
       "logSha256": "a5aa1e34f427c840705aa47816c64211f056b107b39ac037e2ee2ee7872bfc94"
+    },
+    {
+      "id": "m01-p02-preflight-recordfix",
+      "command": "npm run test:preflight",
+      "exitCode": 0,
+      "testedHead": "cea65ed1e7219c067f35b649d3d4f209498641ed",
+      "sourceFingerprint": "963844f84a563f467b7adc418bb4f41dcea9fa36ba4ff0629eac3fa202052c67",
+      "startedAt": "2026-11-05T19:20:46.130Z",
+      "endedAt": "2026-11-05T19:20:49.838Z",
+      "log": "/workspace/scratch/m01-p02-preflight-recordfix.log",
+      "logSha256": "e5d6996c76b76015827d5e5ee8fecae5c167fcca28e8b03f3c5a6b1ef93c9ba6",
+      "kind": "tests",
+      "status": "passed",
+      "passed": 240,
+      "failed": 0,
+      "skipped": 0,
+      "context": "Node22.22.2/npm10.9.9; original npm run test:preflight including 240 real Node TAP protocol tests and static migration checks. No PostgreSQL replay; code/source fingerprint unchanged. Only two time-site inventory entries reconciled, preserving all unrelated and prior diagnostic annotations."
     }
   ]
 }
