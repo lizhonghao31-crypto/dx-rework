@@ -1,3 +1,4 @@
+import {ShortLeadWorkspace} from './short-lead-workspace.js';
 import {AcceptanceClockPanel} from './acceptance-clock-panel.js';
 import {TodoReadBoundary} from './todo-content-read.js';
 import {DevelopmentArrangementPage} from "./development-arrangement-page.js";
@@ -139,6 +140,7 @@ function DigitalProductionPageContent() {
   switch (route.kind) {
     case "landing": detail = <LegacyLanding />; break;
     case "invalid": detail = <><Button onClick={() => void closeDetail()}>返回</Button><p role="alert">{route.message}</p></>; break;
+    case "shortLead": detail = <ShortLeadWorkspace key={route.id} sourceId={route.id} onClose={()=>void closeDetail()}/>; break;
     case "closure": detail = <OrderClosurePanel orderId={route.id} onClose={() => void closeDetail()} />; break;
     case "factory": detail = <FactoryFlowPanel orderId={route.id} onClose={() => void closeDetail()} />; break;
     case "bulk": detail = <BulkPreparationPanel orderId={route.id} onClose={() => void closeDetail()} />; break;

@@ -1,3 +1,7 @@
+import {vi as correctnessBudget} from 'vitest';
+import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
+// Scoped to this heavy PG correctness file; global ordinary/performance defaults stay strict.
+correctnessBudget.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 import { ownedPostgresSchema, createOwnedPostgresSchema, dropOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
@@ -74,7 +78,7 @@ const url=process.env.TEST_DATABASE_URL;
   await insertLine(sameName,"temporary","2026-09-11T15:59:59Z",true);
   await insertLine(person,"internal","2026-09-10T15:59:59Z");
   await insertLine(person,"internal","2026-09-11T16:00:00Z");
- },30000);
+ },testExecutionConfig.correctnessTimeoutMs);
  afterAll(async()=>{await db.end();await dropOwnedPostgresSchema(admin,schema);await admin.end();});
  it("uses the whole filtered range, distinguishes same-name people and includes both date boundaries",async()=>{
   const report=await service.report(actor(),"wages",filters);

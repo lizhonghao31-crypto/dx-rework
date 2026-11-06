@@ -1,3 +1,7 @@
+import {vi as correctnessBudget} from 'vitest';
+import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
+// Scoped to this heavy PG correctness file; global ordinary/performance defaults stay strict.
+correctnessBudget.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 import {OrderClosureService} from '../../apps/api/src/production-platform/order-closure-service.js';
 import {DigitalJourneyQuery} from '../../apps/api/src/production-platform/journey-query.js';
 import {WholeOrderReviewService} from '../../apps/api/src/rework/whole-order-review-service.js';
@@ -13,7 +17,7 @@ import {CreateSupplierSchema} from '@dx-rework/contracts';
 import pg from 'pg';
 
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
-const nativeIt=(name:string,action:()=>Promise<void>)=>it(name,action,60_000);
+const nativeIt=(name:string,action:()=>Promise<void>)=>it(name,action,testExecutionConfig.correctnessTimeoutMs);
 (url?describe:describe.skip)('native business occurrence anchors with all SQL guards',()=>{
  let fixture:Awaited<ReturnType<typeof businessAnchorFixture>>;
  beforeAll(async()=>{fixture=await businessAnchorFixture(url!);},120000);

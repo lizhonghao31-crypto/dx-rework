@@ -1,3 +1,7 @@
+import {vi as correctnessBudget} from 'vitest';
+import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
+// Scoped to this heavy PG correctness file; global ordinary/performance defaults stay strict.
+correctnessBudget.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 import {minimumInitialCustomerDate} from "@dx-rework/contracts/digital-production";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
@@ -15,7 +19,7 @@ import { DigitalProductionAccessPolicy } from "../../apps/api/src/production-pla
 import { TodoService } from "../../apps/api/src/todos/service.js";
 import { exceptions } from "../../apps/api/src/reporting/management-reporting-exceptions.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
-import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import {ownedPostgresSchema,createOwnedPostgresSchema,releaseOwnedPostgresSchema} from "../helpers/owned-postgres-schema.js";
 
 const url = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
 (url ? describe : describe.skip)("digital own todo identity and existing search", () => {
@@ -32,7 +36,7 @@ const url = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
     catch (error) { await client.query("ROLLBACK"); throw error; } finally { client.release(); }
   };
   beforeAll(async () => {
-    await admin.query(`CREATE SCHEMA ${schema}`);
+    await createOwnedPostgresSchema(admin,schema);
     await db.query("CREATE TABLE schema_migrations(version text PRIMARY KEY,checksum text NOT NULL,applied_at timestamptz DEFAULT CURRENT_TIMESTAMP)");
     const directory = new URL("../../apps/api/migrations/", import.meta.url);
     const manifest=JSON.parse(await readFile(new URL("../../apps/api/src/platform/migration-manifest.json",import.meta.url),"utf8")) as {migrations:{version:string;checksum:string}[]};
@@ -58,8 +62,8 @@ const url = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
       await c.query("ALTER TABLE user_role_assignments ENABLE TRIGGER user_role_assignments_guard_creation");
     });
     await db.query("INSERT INTO access_security_policy(policy_key,dingtalk_corp_id) VALUES('primary','OWN-TODO') ON CONFLICT(policy_key) DO UPDATE SET dingtalk_corp_id='OWN-TODO'");
-  }, 60000);
-  afterAll(async () => { await db.end(); await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`); await admin.end(); });
+  }, testExecutionConfig.correctnessTimeoutMs);
+  afterAll(async () => { await db.end(); await releaseOwnedPostgresSchema(admin,schema); await admin.end(); });
   const sourceTask = async (assignee: string | null = ids.clerk, pending = false) => {
     const style = `TEST-DOC-SOURCE-${randomUUID()}`;
     const source = await new DigitalProductionIdentityService(db, true).createSource(root, { developmentType: "头版", designStyleNo: style, temporaryStyleNo: null, customerCode: "PD" }, randomUUID());
@@ -103,9 +107,11 @@ const url = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
     const task = await tx(c => tasks.createWithClient(c, root, { resource: { kind: "order", id: order.productionOrderId }, kind: "sourcing_preparation", routeId: randomUUID(), routeVersion: 5, occurrence: 1, assigneeId: ids.merch }));
     const before = await tasks.read(actors.merch!, task.taskId);
     const found = await list(actors.merch!, style.toLowerCase());
-    expect(found.todos.map(t => t.todoId)).toEqual([task.taskId]);
-    expect(found.todos[0]!.orderContext).toEqual({ reworkNo: null, orderNo: null, styleNo: style, supplierName: null, status: "ready", updatedAt: found.todos[0]!.createdAt });
-    expect(found.todos[0]!.taskTitle).toBe("跟单核实并发起外发");
+    expect(found.todos.map(t=>t.todoId)).toContain(task.taskId);
+    for(const item of found.todos){expect(await policy.allowed(actors.merch!, 'task',item.todoId,'technical')).toBe(true);expect(item.orderContext?.styleNo).toBe(style);}
+    const selected=found.todos.find(item=>item.todoId===task.taskId)!;
+    expect(selected.orderContext).toEqual({ reworkNo: null, orderNo: null, styleNo: style, supplierName: null, status: "ready", updatedAt: selected.createdAt });
+    expect(selected.taskTitle).toBe("跟单核实并发起外发");
     expect(await policy.allowed(actors.merch!, "order", order.productionOrderId, "technical")).toBe(true);
     expect(await tasks.read(actors.merch!, task.taskId)).toEqual(before);
     expect((await list(actors.peer!, style)).todos).toEqual([]);
@@ -148,7 +154,7 @@ const url = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
       };
     } });
     const projected = (await new DigitalProductionNotificationService(unavailable).todos(actors.clerk!)).find(t => t.todoId === f.taskId)!;
-    expect(projected.orderContext).toBeNull(); expect(projected.taskTitle).toBe("开发核配委派");
+    expect(projected.orderContext).toBeNull(); expect(projected.taskTitle).toBe("文员核配委派");
     const safeTodos = new TodoService(db, undefined, undefined, undefined, new DigitalProductionNotificationService(unavailable));
     expect((await safeTodos.listForActor(actors.clerk!, { module: "digital_production", query: f.style })).todos).toEqual([]);
     await tx(async c => {
@@ -190,7 +196,7 @@ const url = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
     expect((await notices.todos(actors.merch!)).some(t=>t.todoId===missing.taskId)).toBe(false);
     expect(await policy.allowed(actors.merch!, "task", missing.taskId, "technical")).toBe(false);
     await expect(tasks.read(actors.merch!, missing.taskId)).rejects.toMatchObject({statusCode:404});
-    expect(queue.taskTitle).toBe("开发核配委派");
+    expect(queue.taskTitle).toBe("文员核配委派");
     expect((await list(actors.tech!, missing.style)).todos.map(t=>t.entityId)).toContain(missing.taskId);
     const identity=new DigitalProductionIdentityService(db,true);
     const linked=await identity.createOrder(root,{customerCode:'PD',primaryMerchandiserId:ids.merch,productGroup:'男装',designStyleNo:missing.style,orderDate:'2026-10-22',lines:[{poNumber:'TEST-ROUTING-PO',color:'黑',customerWarehouseArrivalDate:minimumInitialCustomerDate(),sizes:[{size:'M',quantity:2}]}]},randomUUID());

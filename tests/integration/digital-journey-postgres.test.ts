@@ -1,5 +1,8 @@
+import {vi as correctnessBudget} from 'vitest';
+import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
+// Scoped to this heavy PG correctness file; global ordinary/performance defaults stay strict.
+correctnessBudget.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 import {AccessMasterDataService} from "../../apps/api/src/access/service.js";
-import {testExecutionConfig} from "../../scripts/test-execution-config.mjs";
 import {DigitalProductionNotificationService} from "../../apps/api/src/production-platform/notification-service.js";
 import {TodoService} from "../../apps/api/src/todos/service.js";
 import {SlaOrderService} from "../../apps/api/src/production-platform/sla-order-service.js";
@@ -237,7 +240,7 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     expect(all.sort()).toEqual(expected);
     await expect(journeys.logs(actor(stranger),order.productionOrderId)).rejects.toMatchObject({statusCode:404});
   });
-  it("allows Root JSON all-match export but rejects an ordinary merchandiser with legitimate list access",{timeout:60_000},async()=>{
+  it("allows Root JSON all-match export but rejects an ordinary merchandiser with legitimate list access",{timeout:testExecutionConfig.correctnessTimeoutMs},async()=>{
     const search="TEST-J-EXPORT-SCOPE";
     for(let index=0;index<21;index++)await identity.createOrder(actor(root,["root_superuser"]),{...input(`EXPORT-SCOPE-${index}`),primaryMerchandiserId:merchandiser},randomUUID());
     const before=(await db.query("SELECT (SELECT count(*) FROM digital_production_tasks)::int tasks,(SELECT count(*) FROM rework_wage_items)::int wages")).rows[0];

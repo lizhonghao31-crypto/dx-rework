@@ -1,3 +1,7 @@
+import {vi as correctnessBudget} from 'vitest';
+import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
+// Scoped to this heavy PG correctness file; global ordinary/performance defaults stay strict.
+correctnessBudget.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 import {minimumInitialCustomerDate} from "@dx-rework/contracts/digital-production";
 import { DigitalProductionTaskService } from "../../apps/api/src/production-platform/task-service.js";
 import { TodoListResponseSchema } from "@dx-rework/contracts";
@@ -34,7 +38,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
     await database.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) VALUES($1,$2,'dingtalk','P04',$2::uuid::text,$2::uuid::text,true,true,CURRENT_TIMESTAMP)",[randomUUID(),user]);
     await database.query("INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason) VALUES($1,$2,'order_merchandiser',$2,'TEST')",[randomUUID(),user]);
     await database.query("INSERT INTO access_security_policy(policy_key,dingtalk_corp_id) VALUES('primary','P04') ON CONFLICT(policy_key) DO UPDATE SET dingtalk_corp_id='P04'");
-  },60000);
+  },testExecutionConfig.correctnessTimeoutMs);
   afterAll(async()=>{await database.end();await releaseOwnedPostgresSchema(admin,schema);await admin.end();});
   const create=async(digital:boolean,linkAfter=false)=>{
     const child=randomUUID(),source=randomUUID(),requestId=randomUUID();

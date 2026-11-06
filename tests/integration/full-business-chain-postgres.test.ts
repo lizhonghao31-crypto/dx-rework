@@ -1,3 +1,7 @@
+import {vi as correctnessBudget} from 'vitest';
+import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
+// Scoped to this heavy PG correctness file; global ordinary/performance defaults stay strict.
+correctnessBudget.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 import {exerciseLegacyErpHistory} from "../helpers/legacy-erp-history-fixture.js";
 import {exerciseAttachmentRecovery} from "../helpers/attachment-recovery-fixture.js";
 import {createHistoricalPatternFixture} from "../helpers/historical-pattern-fixture.js";
@@ -1069,7 +1073,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
 
   // Also invoked by the mapped-PostgreSQL gate with the default Vitest config.
   // Keep the existing business-chain 60s budget for this multi-step scenario.
-  it("carries one real order from N01 through N11 without losing cross-node facts", { timeout: 60_000 }, async () => {
+  it("carries one real order from N01 through N11 without losing cross-node facts", { timeout: testExecutionConfig.correctnessTimeoutMs }, async () => {
     // N01 - QC initiates one order with the business total quantity.
     const initialImageId = randomUUID();
     await database.query(
@@ -2393,7 +2397,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
 
   // Also invoked by the mapped-PostgreSQL gate with the default Vitest config.
   // Keep the existing business-chain 60s budget for this multi-step scenario.
-  it("opens ordinary work with 501 exact wage IDs, real-person grouping, cross-month release and late unpaid rework", { timeout: 60_000 }, async () => {
+  it("opens ordinary work with 501 exact wage IDs, real-person grouping, cross-month release and late unpaid rework", { timeout: testExecutionConfig.correctnessTimeoutMs }, async () => {
     // Isolated scale fixture: real create/assign/complete/handoff; 500 historical segments are synthesized below.
     // It validates a large release and financial scope, not 501 claimed UI orders or production records.
     const service = new PatternRoomOrderService(database, todoProjection);
@@ -2457,7 +2461,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
 
   // Also invoked by the mapped-PostgreSQL gate with the default Vitest config.
   // Keep the existing business-chain 60s budget for this multi-step scenario.
-  it("enforces real finance roles on unified HTTP report, settlement and XLSX with only minimal wage basis", { timeout: 60_000 }, async () => {
+  it("enforces real finance roles on unified HTTP report, settlement and XLSX with only minimal wage basis", { timeout: testExecutionConfig.correctnessTimeoutMs }, async () => {
     const reporting = new ManagementReportingService(database), exporter = new ReportExportService(reporting, database, "pr06-http-verification");
     let current = financeWages(); const app = Fastify();
     registerManagementReportingRoutes(app, { service: reporting, exportService: exporter, authenticate: async () => ({ id: current.actorId, businessRoles: current.actorRoles, capabilities: ["wage:view", "wage:export", "wage:settlement_mark"] }) });
@@ -3416,11 +3420,11 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
   // Four complete routes include historical rounds and tens of thousands of SQL calls.
   it("P07/P08 development routes preserve wages, final confirmation and exact native history",async()=>{
     await exerciseDevelopmentRoute(database,todoProjection,actor(ids.patternRoot,["root_superuser"],"pattern_room:orders:view"),ids.worker,workerPersonId,actor(ids.qc,["quality_control"],"digital_production:view"),ids.otherPatternWorker);
-  },30000);
+  },testExecutionConfig.correctnessTimeoutMs);
 
   it("SLA03 enrolled development completes the native chain with fixed cutting and independent inspections", async()=>{
     await exerciseDevelopmentSlaNative(database,todoProjection,actor(ids.patternRoot,["root_superuser"],"pattern_room:orders:view"),ids.worker);
-  },30000);
+  },testExecutionConfig.correctnessTimeoutMs);
 
   const returnedReportFixture = async (primaryWorker = { actor: worker(), personId: workerPersonId }) => {
     const imageId = randomUUID(), receiptImageId = randomUUID(), styleNo = `TEST-RETURN-${randomUUID()}`;
@@ -3590,7 +3594,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
   it("P05 linked execution transfer keeps segments, digital assignment and todos atomic",async()=>{await exerciseDevelopmentRoute(database,todoProjection,actor(ids.patternRoot,["root_superuser"],"pattern_room:orders:view"),ids.worker,workerPersonId,actor(ids.qc,["quality_control"],"digital_production:view"),ids.otherPatternWorker,undefined,true);});
   it("P05 native transfer preserves another arrangement manager and Root self-work authority",async()=>{await exerciseDevelopmentRoute(database,todoProjection,actor(ids.patternRoot,["root_superuser"],"pattern_room:orders:view"),ids.worker,workerPersonId,actor(ids.qc,["quality_control"],"digital_production:view"),ids.otherPatternWorker,undefined,"authority");});
   it("P03 legacy tail return collects new-round counts without rewriting frozen data",async()=>{await exerciseDevelopmentRoute(database,todoProjection,actor(ids.patternRoot,["root_superuser"],"pattern_room:orders:view"),ids.worker,workerPersonId,actor(ids.qc,["quality_control"],"digital_production:view"),ids.otherPatternWorker,"tail");});
-  it("P03 legacy linked rework collects new-round counts atomically",async()=>{await exerciseDevelopmentRoute(database,todoProjection,actor(ids.patternRoot,["root_superuser"],"pattern_room:orders:view"),ids.worker,workerPersonId,actor(ids.qc,["quality_control"],"digital_production:view"),ids.otherPatternWorker,"native");},15_000);
+  it("P03 legacy linked rework collects new-round counts atomically",async()=>{await exerciseDevelopmentRoute(database,todoProjection,actor(ids.patternRoot,["root_superuser"],"pattern_room:orders:view"),ids.worker,workerPersonId,actor(ids.qc,["quality_control"],"digital_production:view"),ids.otherPatternWorker,"native");},testExecutionConfig.correctnessTimeoutMs);
 
   it("returned-report lifecycle resolves repeated batch resubmission and leaves another order's return todo pending", async () => {
     const fixture = await returnedReportFixture(), unrelated = await returnedReportFixture();

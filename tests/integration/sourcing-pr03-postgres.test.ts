@@ -1,3 +1,7 @@
+import {vi as correctnessBudget} from 'vitest';
+import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
+// Scoped to this heavy PG correctness file; global ordinary/performance defaults stay strict.
+correctnessBudget.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 import {physicalCuttingLabelsFixture} from '../helpers/production-readiness-fixture.js';
 import {ProductionReadinessService} from '../../apps/api/src/production-platform/production-readiness-service.js';
 import {historicalDigitalOrder} from '../helpers/historical-digital-order-fixture.js';
@@ -4425,7 +4429,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
 
       stageStatus='completed';
     }finally {process.stdout.write(JSON.stringify({suite:'sourcing-pr03-postgres',phase:'fixture_c05_ms',ms:Math.round(performance.now()-stageStart),status:stageStatus})+'\n');}}
-},20000);
+},testExecutionConfig.correctnessTimeoutMs);
     it("keeps active preassignment insert/update/replay, denies unauthorized writes and rolls back an audit failure",async()=>{
       const sheet=await ready.bulk.read(clerk,ready.id);key=randomUUID();body={expectedVersion:sheet.dispatch.version,patternWorkerId:ready.people.pattern_room_worker!.actorId,deliverPattern:false};
       const response=await request(clerk,body,key);expect(response.statusCode).toBe(200);const saved=response.json();expect(saved.dispatch.version).toBe(body.expectedVersion+1);
@@ -6629,7 +6633,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       SELECT sourcing_approval_snapshot_id,sourcing_case_id,operation_event_id,'business',operation_event_id FROM sourcing_approval_snapshots WHERE sourcing_approval_snapshot_id=$1`,[(await database.query("SELECT sourcing_approval_snapshot_id FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1",[doc.sourcingContractDocumentId])).rows[0].sourcing_approval_snapshot_id])).rejects.toMatchObject({code:"42501"});
     await service.requestFactoryChange(managerActor(),first,{supplierId:factoryId,unitPrice:"15.5",changeReason:"TEST-future-real-action"},randomUUID());
     expect((await database.query("SELECT * FROM sourcing_contract_return_cycles WHERE sourcing_case_id=ANY($1::uuid[])",[ids])).rows).toHaveLength(1);
-  },60_000);
+  },testExecutionConfig.correctnessTimeoutMs);
 
   it("uses the same Shanghai Sunday-paused 48 hours at any database timezone",async()=>{
     const client=await database.connect();

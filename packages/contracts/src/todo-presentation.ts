@@ -16,6 +16,7 @@ export const todoRouteTaskLabels: Readonly<Record<TodoResponse["route"]["routeNa
   digital_bulk_preparation: "办理产前准备",
   digital_development_arrangement: "安排本轮师傅",
   digital_development: "查看开发单",
+  digital_short_lead: "办理短交期正式单特批",
   digital_production_task: "办理数字生产任务",
   production_detail: "查看生产风险",
   sample_detail: "处理样衣事项",
@@ -31,7 +32,7 @@ export const todoTaskHeadingOverrides: Readonly<Record<string, string>> = {
 };
 
 export const todoTaskTitle = (todo: Pick<TodoResponse, "route" | "category" | "taskTitle">): string =>
-  todo.route.routeName === "digital_production_task" && todo.taskTitle
+  ["digital_production_task","digital_short_lead"].includes(todo.route.routeName) && todo.taskTitle
     ? todo.taskTitle
     : todoTaskHeadingOverrides[todo.category] ?? todoRouteTaskLabels[todo.route.routeName];
 
@@ -54,6 +55,8 @@ export type TodoPresentation = Readonly<{
 }>;
 
 const catalog: Readonly<Record<string, TodoPresentation>> = {
+  digital_short_lead_approval:{title:"审批短交期正式单特批",action:"核对本次客户、PO、数量、约定日期和申请理由；批准后仍须原设计师正式确认。"},
+  digital_short_lead_confirmation:{title:"回原单继续正式确认",action:"核对本单批准状态，在原来源继续发布和正式确认；不要新建另一来源。"},
   sourcing_price_contract_return:{title:"调价合同待签回",action:"请下载当前调价合同，签署后回传对应版本。下载不会完成待办。"},
   sourcing_price_owner_approve:{title:"价格重新申请待审批",action:"请核对当前价格基准和重新申请价格。"},
   sourcing_transfer_contract_return: { title: "转厂合同待签回", action: "请下载当前转厂合同，签署后回传对应版本。下载不会完成待办。" },

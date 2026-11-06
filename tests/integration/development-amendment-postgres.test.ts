@@ -1,3 +1,7 @@
+import {vi as correctnessBudget} from 'vitest';
+import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
+// Scoped to this heavy PG correctness file; global ordinary/performance defaults stay strict.
+correctnessBudget.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 import {TodoProjectionService} from "../../apps/api/src/todos/projection-service.js";
 import {TodoService} from "../../apps/api/src/todos/service.js";
 import {PatternRoomOrderService} from "../../apps/api/src/pattern-room/order-service.js";
@@ -44,7 +48,7 @@ const url=process.env.TEST_DATABASE_URL;
   legacyReturns=[await prepareLegacyReturn(),await prepareLegacyReturn(),await prepareLegacyReturn()];
   const amendmentMigration=manifest.migrations.find((row:{version:string})=>row.version==="0248_development_document_amendments");
   await db.query(await readFile(new URL(`../../apps/api/migrations/${amendmentMigration.version}.sql`,import.meta.url),"utf8"));await db.query("INSERT INTO schema_migrations(version,checksum) VALUES($1,$2)",[amendmentMigration.version,amendmentMigration.checksum]);
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
  afterAll(async()=>{try{await db.end();await releaseOwnedPostgresSchema(admin,schema);}finally{await admin.end();}});
  let legacyReturns:Array<Awaited<ReturnType<typeof prepareLegacyReturn>>>=[];
  const prepareLegacyReturn=async()=>{

@@ -11,7 +11,7 @@ import { createWebUrls } from "../url-contract.js";
 import {documentCategories,documentChapterIds,documentVersionKeys,isCurrentDocumentVersion,readDocumentKind,readDocumentVersion,taskTabLabels} from './digital-detail-context.js';
 import {factoryTaskTarget} from './factory-task-target.js';
 
-const domains = ["closure", "factory", "bulk", "instruction", "budget", "arrangement", "development", "task", "order"] as const;
+const domains = ["closure", "factory", "bulk", "instruction", "budget", "arrangement", "development", "task", "order", "shortLead"] as const;
 type Domain = typeof domains[number];
 const versions: Partial<Record<Domain, string>> = { instruction: "instructionVersion", budget: "budgetVersion", development: "round", arrangement: "round" };
 export type DigitalDetailRoute = { kind: "landing" } | { kind: "invalid"; message: string } | { kind: Domain; id: string; version?: number };

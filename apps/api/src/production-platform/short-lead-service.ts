@@ -1,7 +1,7 @@
 import {createHash,randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
-import {ShortLeadRequestSchema,ShortLeadDecisionSchema,type ShortLeadRequest,type ShortLeadState} from '@dx-rework/contracts/short-commitment';
-import {formalCommitmentFacts,customerOrderDateError,beijingCalendarDate,minimumInitialCustomerDate} from '@dx-rework/contracts/digital-production';
+import {ShortLeadRequestSchema,ShortLeadDecisionSchema,shortLeadFactChanges,type ShortLeadRequest,type ShortLeadState} from '@dx-rework/contracts/short-commitment';
+import {formalCommitmentFacts,DigitalOrderCreateSchema,initialCustomerOrderInput,customerOrderDateError,beijingCalendarDate,minimumInitialCustomerDate} from '@dx-rework/contracts/digital-production';
 import {isCalendarDate} from '@dx-rework/contracts/series-calendar';
 import {isRootActor} from '../access/business-authority.js';
 import {ApplicationError} from '../platform/errors.js';
@@ -65,10 +65,10 @@ export class ShortLeadService{
    WHERE ($1::uuid IS NULL OR r.source_id=$1) AND ($2::boolean OR r.requested_by=$3)
    AND coalesce(r.business_time->>'scenarioId','')=coalesce($4::text,'') ORDER BY r.recorded_at DESC,r.request_id DESC LIMIT 100`,[sourceId,canApprove,actor.actorId,time.scenarioId])).rows:[];
   const visible=rows.filter(r=>(r.business_time?.scenarioId??null)===time.scenarioId);
-  const requests:ShortLeadRequest[]=await Promise.all(visible.map(async r=>({requestId:r.request_id,sourceId:r.source_id,customerCode:r.customer_code,designStyleNo:r.design_style_no,
+  const requests:ShortLeadRequest[]=await Promise.all(visible.map(async r=>{const sheet=r.source_id?await developmentDocumentRow(this.database,r.source_id):null;let changes:string[]=[];try{const draft=sheet?.document?.customerOrderDraft;if(draft?.withOrder)changes=shortLeadFactChanges(formalCommitmentFacts(r.order_facts),formalCommitmentFacts(DigitalOrderCreateSchema.parse(initialCustomerOrderInput(draft.order))));}catch{/* An incomplete current draft has no complete customer facts to compare. */}if(sheet&&shortLeadDocumentHash(sheet.document)!==r.source_document_fingerprint&&!changes.length)changes=['开发资料完整内容指纹已改变；原申请未保存逐字段技术快照，请回原单核对'];return {sourceDocumentVersion:r.source_document_version??null,currentDocumentVersion:sheet?.version??null,changes,requestId:r.request_id,sourceId:r.source_id,customerCode:r.customer_code,designStyleNo:r.design_style_no,
    order:r.order_facts,facts:formalCommitmentFacts(r.order_facts),commitmentDay:r.day,minimumNormalDate:r.minimum,reason:r.reason,
    requestedBy:r.requested_by,requesterName:r.requester_name,requestedAt:dtoDate(r.recorded_at),consumedOrderId:r.consumed_order_id??null,
-   staleReason:r.consumed_order_id?null:await shortLeadStaleReason(this.database,r),decision:r.approved===null?null:{approved:r.approved,reason:r.decision_reason,decidedBy:r.decided_by,deciderName:r.decider_name,authority:r.authority,decidedAt:dtoDate(r.decided_at)}})));
+   staleReason:r.consumed_order_id?null:await shortLeadStaleReason(this.database,r),decision:r.approved===null?null:{approved:r.approved,reason:r.decision_reason,decidedBy:r.decided_by,deciderName:r.decider_name,authority:r.authority,decidedAt:dtoDate(r.decided_at)}};}));
   const now=new Date(time.now);return {canApprove,canRequest,serverToday:beijingCalendarDate(now),minimumNormalDate:minimumInitialCustomerDate(now),requests};
  }
  async request(actor:TrustedActorContext,sourceId:string|null,raw:unknown,key:string){

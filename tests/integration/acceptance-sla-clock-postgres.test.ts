@@ -1,3 +1,7 @@
+import {vi as correctnessBudget} from 'vitest';
+import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
+// Scoped to this heavy PG correctness file; global ordinary/performance defaults stay strict.
+correctnessBudget.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 import {exerciseAcceptanceSourcingApproval} from '../helpers/acceptance-sourcing-approval-fixture.js';
 import {digitalTaskTiming} from '@dx-rework/domain/digital-task-deadline';
 import {DigitalCockpitQuery} from '../../apps/api/src/production-platform/cockpit-query.js';
@@ -37,7 +41,7 @@ import pg from 'pg';
 import {afterAll,beforeAll,describe,expect,it,vi} from 'vitest';
 import {migrationExecutionSql} from '../../scripts/deploy/migration-execution-compatibility.mjs';
 import {assertTestDatabaseTarget} from '../../scripts/test-database-safety.mjs';
-import {ownedPostgresSchema} from '../helpers/owned-postgres-schema.js';
+import {ownedPostgresSchema,createOwnedPostgresSchema,releaseOwnedPostgresSchema} from '../helpers/owned-postgres-schema.js';
 import {verifyAcceptanceClockServer} from '../../apps/api/src/acceptance-clock/guard.js';
 import {AcceptanceClockRuntime} from '../../apps/api/src/acceptance-clock/runtime.js';
 import {businessNow,ContextBusinessClock,registerAcceptanceCreated} from '../../apps/api/src/acceptance-clock/business-time.js';
@@ -48,14 +52,14 @@ import type {TrustedActorContext} from '../../apps/api/src/tools/repositories.js
 
 const databaseUrl=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (databaseUrl?describe:describe.skip)('isolated Acceptance SLA business clock',()=>{
- const schema=ownedPostgresSchema('acceptance_clock'),admin=new pg.Pool({connectionString:databaseUrl}),db=new pg.Pool({connectionString:databaseUrl,options:`-c search_path=${schema}`});
+ const schema=ownedPostgresSchema('business_anchors',process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL?'acceptance-clock':'default'),admin=new pg.Pool({connectionString:databaseUrl}),db=new pg.Pool({connectionString:databaseUrl,options:`-c search_path=${schema}`});
  const rootId=randomUUID(),designerId=randomUUID(),realId=randomUUID(),workerId=randomUUID(),clerkId=randomUUID(),corp='clock-test',secret='TEST-only-clock-secret-'.repeat(3);
  const actor=(id=rootId):TrustedActorContext=>({actorId:id,actorRoles:id===rootId?['root_superuser','owner_group']:['sample_designer'],authorizationCapability:'digital_production:view',authorizationCapabilities:['digital_production:view','pattern_room:orders:create'],requestId:randomUUID()});
  const environment={NODE_ENV:'test',ACCEPTANCE_LAB_ENABLED:'true',DINGTALK_CORP_ID:corp,ROOT_DINGTALK_USER_ID:'uat-root'};
  let runtime:AcceptanceClockRuntime;
  beforeAll(async()=>{
   await assertTestDatabaseTarget(databaseUrl);
-  await admin.query(`CREATE SCHEMA ${schema}`);
+  await createOwnedPostgresSchema(admin,schema);
   const manifest=JSON.parse(await readFile(new URL('../../apps/api/src/platform/migration-manifest.json',import.meta.url),'utf8')) as {migrations:Array<{version:string;checksum:string}>};
   const serverVersion=Number((await db.query('SHOW server_version_num')).rows[0].server_version_num);
   await db.query('CREATE TABLE schema_migrations(version text PRIMARY KEY,checksum char(64) NOT NULL,applied_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP)');
@@ -70,7 +74,7 @@ const databaseUrl=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TE
   await new WorkerAwareAccessMasterDataService(db,corp).ensureOrganizationPolicy();
   runtime=new AcceptanceClockRuntime(db,await verifyAcceptanceClockServer(db,databaseUrl!,environment),secret,true);
  },120000);
- afterAll(async()=>{await db.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();});
+ afterAll(async()=>{await db.end();await releaseOwnedPostgresSchema(admin,schema);await admin.end();});
  it('refuses disabled/production runtime and forged runtime proofs without querying business data',async()=>{
   await expect(verifyAcceptanceClockServer(db,databaseUrl!,{...environment,NODE_ENV:'production'})).rejects.toThrow(/refuses/);
   expect(()=>new AcceptanceClockRuntime(db,{} as never,secret,true)).toThrow(/verified/);
@@ -280,7 +284,7 @@ const databaseUrl=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TE
   expect(detail.attachments.some(file=>file.attachmentId===lateFile)).toBe(false);
   expect((await runtime.run(scene.scenarioId,actor(),()=>native.get(actor(),linked.order_id))).attachments.some(file=>file.attachmentId===lateFile)).toBe(true);
 
- },30000);
+ },testExecutionConfig.correctnessTimeoutMs);
 
  it('retains the original frozen source when confirming a mother and creates an independent same-scene revision',async()=>{
   const row=(await db.query("SELECT s.source_id,s.design_style_no,m.scenario_id FROM digital_production_sources s JOIN acceptance_sla_clock_resources m ON m.resource_kind='source' AND m.resource_id=s.source_id JOIN digital_development_documents d USING(source_id) WHERE d.status='published' ORDER BY s.created_at DESC LIMIT 1")).rows[0];
@@ -344,7 +348,7 @@ const databaseUrl=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TE
    await runtime.create(actor(),input);
    expect(await forms.read(actor(),copied.sourceId)).toMatchObject({version:edited.version,document:{instructions:'TEST后续编辑必须保留'}});
   }
- },15000);
+ },testExecutionConfig.correctnessTimeoutMs);
 
  it('persists scan failure without rolling back time and recovers interrupted scans without duplicate effects',async()=>{
   const scene=await runtime.create(actor(),{name:'TEST-failed-scan',requestKey:randomUUID()}),control=new AcceptanceClockControlService(runtime),at=new Date(Date.parse(scene.now)+1800000).toISOString(),key=randomUUID();
@@ -382,7 +386,7 @@ const databaseUrl=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TE
   const audits=(await db.query(`SELECT e.recorded_at FROM digital_production_task_events e
    JOIN acceptance_sla_clock_resources r ON r.resource_id=e.resource_id AND r.resource_kind=e.resource_kind WHERE r.scenario_id=$1`,[scene.scenarioId])).rows;
   expect(audits.length).toBeGreaterThan(0);expect(audits.every(r=>Math.abs(r.recorded_at.getTime()-Date.now())<60000)).toBe(true);
- },30000);
+ },testExecutionConfig.correctnessTimeoutMs);
  it('keeps ordinary source receipt, activation and completion on real time without scenario registration',async()=>{
   const before=new Date(),tasks=new DigitalProductionTaskService(db);
   const source=await new DigitalProductionIdentityService(db,true).createSource(actor(),{developmentType:'头版',designStyleNo:`TEST-ordinary-clock-${randomUUID()}`,temporaryStyleNo:null,customerCode:null},randomUUID());
@@ -399,9 +403,9 @@ const databaseUrl=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TE
   const row=(await db.query('SELECT entered_at,completed_at FROM digital_production_tasks WHERE task_id=$1',[taskId!])).rows[0];
   expect(row.entered_at.getTime()).toBeGreaterThanOrEqual(before.getTime());expect(row.completed_at.getTime()).toBeGreaterThanOrEqual(row.entered_at.getTime());expect(row.completed_at.getTime()).toBeLessThanOrEqual(Date.now());
   expect((await db.query("SELECT 1 FROM acceptance_sla_clock_resources WHERE resource_kind='source' AND resource_id=$1",[source.sourceId])).rowCount).toBe(0);
- },30000);
+ },testExecutionConfig.correctnessTimeoutMs);
 
- it.each(['scene-change','scene-same','scene-rollback','ordinary'] as const)('preserves clock scope through native owner factory-date approval and customer-date approval (%s)',async mode=>{await exerciseAcceptanceSourcingApproval(db,runtime,actor(),corp,mode);},30000);
+ it.each(['scene-change','scene-same','scene-rollback','ordinary'] as const)('preserves clock scope through native owner factory-date approval and customer-date approval (%s)',async mode=>{await exerciseAcceptanceSourcingApproval(db,runtime,actor(),corp,mode);},testExecutionConfig.correctnessTimeoutMs);
 
  (process.env.ACCEPTANCE_CLOCK_BROWSER_URL?it:it.skip)('runs the original browser detail and persisted clock through real isolated HTTP services',async()=>{
   const auth=new AuthService(new AcceptanceDingTalkProvider(db,corp,secret),new PostgresAuthStore(db,corp,'uat-root'),corp,3600000,secret),root=new RootAuthority(db,corp,'uat-root');
@@ -414,6 +418,6 @@ const databaseUrl=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TE
    const result=await promisify(execFile)(process.execPath,['tests/acceptance/acceptance-sla-clock-live-browser.mjs'],{cwd:process.cwd(),env:{...process.env,CLOCK_CONTROL_TOKEN:control,CLOCK_BUSINESS_TOKEN:login.token,CLOCK_SOURCE_ID:scene.sourceIds[0]!},timeout:30000});
    process.stdout.write(result.stdout);
   }finally{await app.close();}
- },45000);
+ },testExecutionConfig.correctnessTimeoutMs);
 
 });

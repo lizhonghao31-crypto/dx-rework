@@ -1,3 +1,8 @@
+import {vi as correctnessBudget} from 'vitest';
+import {ownedPostgresSchema,createOwnedPostgresSchema,releaseOwnedPostgresSchema} from '../helpers/owned-postgres-schema.js';
+import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
+// Scoped to this heavy PG correctness file; global ordinary/performance defaults stay strict.
+correctnessBudget.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import pg from "pg";
@@ -6,19 +11,19 @@ import { PostgresAuthStore } from "../../apps/api/src/auth/postgres-store.js";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 (databaseUrl ? describe : describe.skip)("atomic identity session revocation", () => {
-  const schema = `auth_revoke_${randomUUID().replaceAll("-", "")}`;
+  const schema = ownedPostgresSchema('auth_revoke');
   const admin = new pg.Pool({ connectionString: databaseUrl });
   const database = new pg.Pool({ connectionString: databaseUrl, options: `-c search_path=${schema}` });
   beforeAll(async () => {
-    await admin.query(`CREATE SCHEMA ${schema}`);
+    await createOwnedPostgresSchema(admin,schema);
     const manifest = JSON.parse(await readFile(new URL("../../apps/api/src/platform/migration-manifest.json", import.meta.url), "utf8")) as { migrations: { version: string; checksum: string }[] };
     await database.query("CREATE TABLE schema_migrations(version text PRIMARY KEY, checksum text NOT NULL, applied_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP)");
     for (const migration of manifest.migrations) {
       await database.query(await readFile(new URL(`../../apps/api/migrations/${migration.version}.sql`, import.meta.url), "utf8"));
       await database.query("INSERT INTO schema_migrations(version,checksum) VALUES($1,$2)", [migration.version, migration.checksum]);
     }
-  }, 60_000);
-  afterAll(async () => { await database.end(); await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`); await admin.end(); });
+  }, testExecutionConfig.correctnessTimeoutMs);
+  afterAll(async () => { await database.end(); await releaseOwnedPostgresSchema(admin,schema); await admin.end(); });
   it("revokes every old token with missing membership and permits a new login after restoration", async () => {
     const store = new PostgresAuthStore(database, "corp", "root-fixture");
     const member = { corpId: "corp", userId: "root-fixture", unionId: "root-union", displayName: "fixture", active: true, employed: true };

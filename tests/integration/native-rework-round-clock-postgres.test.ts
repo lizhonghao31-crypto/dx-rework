@@ -1,3 +1,7 @@
+import {vi as correctnessBudget} from 'vitest';
+import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
+// Scoped to this heavy PG correctness file; global ordinary/performance defaults stay strict.
+correctnessBudget.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 import {randomUUID} from 'node:crypto';
 import {writeFile} from 'node:fs/promises';
 import {afterAll,beforeAll,describe,expect,it} from 'vitest';
@@ -56,8 +60,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect((await f.db.query('SELECT count(*)::int n FROM digital_development_rounds WHERE source_id=$1',[sourceId])).rows[0].n).toBe(index);
    await run(()=>arrangeTestRound(f.db,execution,f.root,sourceId,worker.actorId));
    order=await native.get(f.root,orderId);order=await run(()=>native.assign(f.root,orderId,{version:order.version,roundId:order.currentRoundId,personId:person,amount:'0'},randomUUID()));
-   const current=async(kind:string)=>(await execution.read(f.root,sourceId)).tasks.find(t=>t.routeVersion===index+1&&t.taskKind===kind)!;
-   const route=async(kind:string)=>{const task=await current(kind),actor=kind==='development_sewing'?worker:f.root;return run(async()=>execution.route(actor,sourceId,{taskId:task.taskId,result:'通过',note:'TEST native round completion',craftExecution:null,nextAssigneeId:null,sentDate:null,trackingNo:null,...(['development_sewing','development_tail_check'].includes(kind)?{attachmentIds:[await taskResult(f.db,execution,actor,sourceId,task.taskId,kind==='development_sewing'?'车板成果':'尾查照片')]}:{})},randomUUID()));};
+   const current=async(kind:string)=>(await run(()=>execution.read(f.root,sourceId))).tasks.find(t=>t.routeVersion===index+1&&t.taskKind===kind)!;
+   const route=async(kind:string)=>{const task=await current(kind),actor=kind==='development_sewing'?worker:f.root;return run(async()=>execution.route(actor,sourceId,{taskId:task.taskId,result:'通过',note:'TEST native round completion',craftExecution:null,nextAssigneeId:null,sentDate:null,trackingNo:null,...(kind==='development_tail_check'?{measurements:[{name:'胸围',values:['50']}]}:{}),...(['development_sewing','development_tail_check'].includes(kind)?{attachmentIds:[await taskResult(f.db,execution,actor,sourceId,task.taskId,kind==='development_sewing'?'车板成果':'尾查照片')]}:{})},randomUUID()));};
    if((await current('development_sewing_transfer'))?.state==='ready')await route('development_sewing_transfer');
    const waiting=await current('development_sewing');
    if(waiting.state==='pending')await run(()=>new DigitalProductionTaskService(f.db).handover(worker,waiting.taskId,{note:'TEST actual receipt'},randomUUID()));
@@ -72,5 +76,5 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const detail=await native.get(f.root,orderId,{round:round.id,node:'completed'});expect(detail.attachments.map(file=>file.attachmentId).sort()).toEqual([...round.files].sort());expect(detail.historicalView).toMatchObject({missingFacts:false});expect(Object.values(detail.actions).every(value=>!value)).toBe(true);if(scene)expect(detail.rounds[0]!.completedAt).toBe(at);frames.push({mode,index,detail});
   }
   expect((await f.db.query('SELECT to_jsonb(d) AS snapshot FROM digital_development_documents d WHERE source_id=$1',[sourceId])).rows[0]).toEqual(original);
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
 });

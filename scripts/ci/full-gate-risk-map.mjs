@@ -154,6 +154,14 @@ export const classifyFullGatePaths = (inputPaths) => {
   let transferSensitive = false;
 
   for (const path of paths) {
+    if (/^apps\/web\/src\/(?:short-lead-(?:panel|workspace)|digital-development-(?:create-form|editing)|digital-detail-route|digital-production-page|todo-content-read|series-settings)\.tsx?$/.test(path)
+      || /^apps\/api\/src\/production-platform\/(?:short-lead-[^/]+|identity-service|access-policy|notification-service)\.ts$/.test(path)
+      || /^apps\/api\/src\/(?:auth|todos)\//.test(path)
+      || /^packages\/contracts\/src\/(?:short-commitment|todo[^/]*)\.ts$/.test(path)
+      || ['tests/acceptance/m01-short-lead-native-browser.ts','tests/fixtures/m01-short-lead-native-ui.tsx','scripts/ci/prepare-settings-browser.mjs'].includes(path)) {
+      mappedTests.add('tests/integration/m01-short-lead-native-browser-postgres.test.ts');
+      mappedTests.add('tests/integration/series-plan-postgres.test.ts');
+    }
     if (/^apps\/web\/src\/(?:sla-|development-cycle-settings|cockpit-production-settings|digital-cockpit-personnel|series-settings|series-plan-panel|auth-session)/.test(path)
       || /^apps\/api\/src\/production-platform\/(?:sla-|development-technical-service)/.test(path)
       || path.startsWith('apps/api/src/auth/')

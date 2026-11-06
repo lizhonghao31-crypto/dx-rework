@@ -1,3 +1,7 @@
+import {vi as correctnessBudget} from 'vitest';
+import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
+// Scoped to this heavy PG correctness file; global ordinary/performance defaults stay strict.
+correctnessBudget.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 import { ownedPostgresSchema, createOwnedPostgresSchema, releaseOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import "./production-analysis-postgres.cases.js";
 import { ProductionDashboardService } from "../../apps/api/src/sourcing/production-dashboard-service.js";
@@ -83,7 +87,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
     VALUES(true,$1,$2,'corp')`,[user,`ding-${user}`]);
   craftId=(await access.ensureCrafts(root("master_data:manage"),{craftNames:["车缝＋线＋包装，回厂装箱＋一程运费"]}))[0]!.craftId;
   for(let i=1;i<=3;i++)factories.push((await access.createSupplier(root("supplier_profile:write"),CreateSupplierSchema.parse({supplierCode:`SSP09-${i}`,supplierType:"factory",supplierName:`试点厂${i}`,active:true,changeReason:"SSP09合成验收数据",address:`试点路${i}号`,contractEntityName:`试点厂${i}有限公司`,partyBRepresentative:"试点代表",payeeName:"试点收款人",bankAccount:`62220${i}`,bankName:"测试银行"}))).supplierId);
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
  afterAll(async()=>{await database.end();await releaseOwnedPostgresSchema(admin,schema);await admin.end();});
  const readyCuttingSheet=async(uploadedBy:string)=>{const attachmentId=randomUUID();await database.query(
   `INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at)
@@ -181,7 +185,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   expect((await closure.expected(receiver())).items.some(s=>s.productionOrderId===order.productionOrderId)).toBe(false);
   expect((await closure.receiptSummary(root(),order.productionOrderId)).shipment?.receipts).toHaveLength(2);
   expect((await database.query("SELECT 1 FROM sourcing_finance_reconciliations")).rowCount).toBe(0);
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
  it("auto-links shipped pilot receipts from the selected cutting order without a second production picker",async()=>{
   const order=await create(factories[1]!,"AUTO-LINK");
   await closure.setPilot(root(),{supplierId:factories[1],enabled:true});
@@ -215,7 +219,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   expect(board.rows.find(row=>row.styleNo==="SSP09-AUTO-LINK-A")).toMatchObject({
     actualCutCount:20,receiptCount:2,cuttingRecordedBy:"SSP09跟单",
   });
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
 
  it("keeps same-style cutting orders in separate receiving batches and repeat options",async()=>{
   const firstOrder=await create(factories[1]!,"SAMECUT-1");
@@ -274,7 +278,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   expect(sharedRows.map(row=>row.actualCutCount).sort((a,b)=>(a??0)-(b??0))).toEqual([20,21]);
   expect(sharedRows.every(row=>row.cuttingRecordedBy==="SSP09跟单")).toBe(true);
   expect(sharedRows.every(row=>row.cuttingRecordedAt!==null)).toBe(true);
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
 
  it("packs red 40 and blue 60 independently for the same style and serializes first packing within each cutting group",async()=>{
   const orders=[await create(factories[1]!,"PACK-RED",40),await create(factories[2]!,"PACK-BLUE",60)];
@@ -315,7 +319,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   const correction=await strictReceiving.recordPacking(root("receiving:packing_manage"),{...await input(1),packingQuantity:59},randomUUID());
   expect(correction.value.packingQuantity).toBe(59);
   expect((await strictReceiving.board(today(),today(),styleNo)).rows.find(row=>row.receivingBatchId===receipts[0]!.receivingBatchId)?.packingQuantity).toBe(40);
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
 
  it("keeps backfilled receipts before shipment unlinked instead of rolling them back",async()=>{
   const order=await create(factories[1]!,"BACKFILL-LINK");
@@ -338,7 +342,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
     "SELECT 1 FROM sourcing_production_receipt_links WHERE receipt_id=$1",
     [receipt.value.receiptId],
   )).rowCount).toBe(0);
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
 
  it("excludes only the confirmed production object with Root audit, version protection and replay",async()=>{
   const order=await create(factories[0]!,"EXCLUDE"),id=order.productionOrderId;
@@ -376,7 +380,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   await sourcing.deleteByRoot(root("sourcing:delete"),ordinary.sourcingCaseId,randomUUID());
   expect((await production.get(root(),ordinary.productionOrderId)).sourceCaseArchived).toBe(true);
   expect((await dashboard.list(root())).items.some(o=>o.order.productionOrderId===ordinary.productionOrderId)).toBe(true);
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
 
  it("preserves shipment and receipt links through style corrections before and after shipping",async()=>{
   const order=await create(factories[2]!,"STYLELINK"),oldStyle=order.firstStyleNo;
