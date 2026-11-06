@@ -431,6 +431,7 @@ export function Shell({
     || (!isOwner && hasCapability("master_data:manage"));
 
   const cockpitSettingsNavigation: NavigationEntry[] = currentUser && canAccessDigitalProduction(currentUser) && (isRoot || hasRole("owner_group") || hasRole("production_management") || hasRole("pmc")) ? [{name:"生产管理设置",description:"客户跟单与节点时效",href:"/ui/digital-cockpit?workspace=settings",activeKey:"digital-settings"}] : [];
+  const cockpitNavigation:NavigationEntry[]=[...cockpitSettingsNavigation,...(currentUser&&canAccessDigitalProduction(currentUser)?[isRoot||hasCapability('report:view')?{name:'生产数据沙盘',description:'当前数量、期间与人员分析',href:'/ui/digital-analysis?view=production',activeKey:'digital-analysis'}:{name:'板房数据沙盘',description:'原授权开发与板房分析',href:'/ui/digital-analysis',activeKey:'digital-analysis'}]:[])];
   const globalNavigation: NavigationEntry[] = [];
   if (todoAccess) {
     globalNavigation.push({
@@ -440,7 +441,7 @@ export function Shell({
     });
   }
   if (currentUser && canAccessDigitalProduction(currentUser)) globalNavigation.push(
-    {name:"生产管理座舱",description:"查看数字开发与大货双进度",href:"/ui/digital-cockpit",...(cockpitSettingsNavigation.length?{children:cockpitSettingsNavigation}:{})},
+    {name:"生产管理座舱",description:"查看数字开发与大货双进度",href:"/ui/digital-cockpit",...(cockpitNavigation.length?{children:cockpitNavigation}:{})},
   );
   if (currentUser && canAccessProduction(currentUser)) {
     globalNavigation.push({
@@ -571,8 +572,6 @@ export function Shell({
   const developmentNavigation: NavigationEntry[] = [
     ...(currentUser&&canManageAuxiliaryCatalog(currentUser)?[{name:"共享辅料目录",description:"新增、改名、合并重复项及停用",href:"/ui/auxiliary-catalog"}]:[]),
     ...((digital || patternRoomNavigation.length) ? [{ name: "板房管理台", description: "岗位办理、独立打板与杂事", href: digital ? "/ui/digital-pattern-room" : "/ui/digital-pattern-room?section=legacy", activeKey: "digital-pattern" }] : []),
-    ...(digital ? [{ name: "板房数据沙盘", description: "同源分析与改进记录", href: "/ui/digital-analysis" }] : []),
-    ...(currentUser&&digital&&(isRoot||hasCapability('report:view'))?[{name:'当前生产数量',description:'按完整授权范围核对数量、工厂与原记录',href:'/ui/digital-analysis?view=production'}]:[]),
     ...(currentUser&&canAccessPatternRoomOrders(currentUser)?[{name:"打板/杂事历史看板",description:"旧打板、杂事与新开发已完成执行轮",href:"/ui/pattern-room/history",activeKey:"pattern-room-history"}]:[]),
     ...patternRoomNavigation.filter(entry => entry.href === "/ui/pattern-room/prices"),
   ];
