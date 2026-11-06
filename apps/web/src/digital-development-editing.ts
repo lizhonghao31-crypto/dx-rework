@@ -44,3 +44,7 @@ export function moveDevelopmentSize(document:DevelopmentDocument,from:number,to:
  if(from<0||to<0||from>=document.sizes.length||to>=document.sizes.length)return document;
  return {...document,sizes:move(document.sizes),...(document.sizeQuantities?{sizeQuantities:move(document.sizeQuantities)}:{}),measurements:document.measurements.map(row=>({...row,values:move(row.values)}))};
 }
+
+/** JSONB may return object keys in a different order. Compare every document field; arrays retain their business order. */
+const canonicalDevelopmentDocument=(value:unknown):unknown=>Array.isArray(value)?value.map(canonicalDevelopmentDocument):value&&typeof value==='object'?Object.fromEntries(Object.entries(value).sort(([a],[b])=>a<b?-1:a>b?1:0).map(([key,item])=>[key,canonicalDevelopmentDocument(item)])):value;
+export const sameDevelopmentDocument=(before:DevelopmentDocument|null,after:DevelopmentDocument)=>JSON.stringify(canonicalDevelopmentDocument(before))===JSON.stringify(canonicalDevelopmentDocument(after));

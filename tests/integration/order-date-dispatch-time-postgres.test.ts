@@ -1,3 +1,7 @@
+import {vi as correctnessBudget} from 'vitest';
+import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
+// Scoped to this heavy PG correctness file; global ordinary/performance defaults stay strict.
+correctnessBudget.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 import {randomUUID} from 'node:crypto';
 import Fastify from 'fastify';
 import {afterAll,beforeAll,describe,expect,it} from 'vitest';
@@ -51,7 +55,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const replay=await app.inject({method:'POST',url:endpoint,headers:{'idempotency-key':key},payload});expect(replay.statusCode).toBe(200);expect(replay.json().productionOrderId).toBe(order.productionOrderId);
    expect((await f.db.query('SELECT order_date::text AS date FROM digital_production_orders WHERE production_order_id=$1',[order.productionOrderId])).rows[0].date).toBe(calendar.serverToday);
   }finally{await app.close();}
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
  it('scoped options cross the Beijing midnight by 1ms without changing a saved source or using another scene',async()=>{
   const scene=await f.scene('2026-12-10T15:59:59.999Z'),p=await source(scene),otherScene=await f.scene('2026-12-20T01:00:00.000Z'),ordinary=await source(null),app=appFor(f.people['sample-designer']!);
   const before=(await f.db.query('SELECT to_jsonb(s) AS source FROM digital_production_sources s WHERE source_id=$1',[p.sourceId])).rows[0];
@@ -64,7 +68,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    }
    expect((await f.db.query('SELECT to_jsonb(s) AS source FROM digital_production_sources s WHERE source_id=$1',[p.sourceId])).rows[0]).toEqual(before);
   }finally{await app.close();}
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
  it('source-scoped calendar retains source permission and rejects malformed scope',async()=>{
   const scene=await f.scene('2026-12-10T01:00:00Z'),p=await source(scene),app=appFor(f.people.warehouse!);
   try{
@@ -72,7 +76,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const denied=await app.inject({url:`/digital-production/options?sourceId=${p.sourceId}`});expect(denied.statusCode).toBe(404);expect(denied.json().serverToday).toBeUndefined();
    const invalid=await app.inject({url:'/digital-production/options?sourceId=not-an-id'});expect(invalid.statusCode).toBe(400);
   }finally{await app.close();}
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
  const cutReady=async(scene:string|null)=>{
   const action=async()=>{
    const p=await f.bulkReady('无'),row=(await f.db.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[p.caseId])).rows[0];
@@ -93,7 +97,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const replay=await app.inject({method:'POST',url:endpoint,headers:{'idempotency-key':key},payload});expect(replay.statusCode).toBe(200);expect(replay.json<FactoryFlowSheet>().facts.find(row=>row.kind==='仓库实际发厂')!.occurredAt).toBe(fact.occurredAt);
    expect((await f.db.query("SELECT count(*)::int n FROM digital_factory_facts WHERE preparation_id=$1 AND kind='仓库实际发厂'",[p.preparationId])).rows[0].n).toBe(1);
   }finally{await app.close();}
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
  it('manual millisecond lower/upper bounds remain exact, and failure rolls back before a valid same-key request',async()=>{
   const at='2026-12-10T11:56:17.915Z',scene=await f.scene(at),p=await cutReady(scene),app=appFor(f.people.warehouse!),state=await new FactoryFlowService(f.db).read(f.root,p.id),endpoint=`/digital-production/orders/${p.id}/factory-flow/dispatch`,key=randomUUID();
   const payload={expectedRevision:state.revision,supplierId:f.supplierId,note:'TEST exact boundary'};
@@ -102,7 +106,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const explicitNull=await app.inject({method:'POST',url:endpoint,headers:{'idempotency-key':key},payload:{...payload,occurredAt:null}});expect(explicitNull.statusCode).toBe(400);
    const valid=await app.inject({method:'POST',url:endpoint,headers:{'idempotency-key':key},payload:{...payload,occurredAt:at}});expect(valid.statusCode,valid.body).toBe(200);expect(valid.json<FactoryFlowSheet>().facts.find(row=>row.kind==='仓库实际发厂')!.occurredAt).toBe(at);
   }finally{await app.close();}
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
  it('manual time strictly after the lower bound and equal to the current upper bound remains valid',async()=>{
   const scene=await f.scene('2026-12-10T11:56:17.915Z'),p=await cutReady(scene),app=appFor(f.people.warehouse!);
   await f.advance(scene,'2026-12-10T11:56:17.916Z');
@@ -110,7 +114,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const state=await new FactoryFlowService(f.db).read(f.root,p.id),response=await app.inject({method:'POST',url:`/digital-production/orders/${p.id}/factory-flow/dispatch`,headers:{'idempotency-key':randomUUID()},payload:{expectedRevision:state.revision,supplierId:f.supplierId,occurredAt:'2026-12-10T11:56:17.916Z',note:'TEST after lower and at upper'}});
    expect(response.statusCode,response.body).toBe(200);
   }finally{await app.close();}
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
  for(const sameKey of [true,false])it(`${sameKey?'same':'distinct'}-key concurrent default dispatch retains role/scope/version guards and one fact`,async()=>{
   const scene=await f.scene('2026-12-10T11:56:17.915Z'),other=await f.scene('2026-12-20T01:00:00Z'),p=await cutReady(scene),app=appFor(f.people.warehouse!),wrongRole=appFor(f.people.merchandiser!);
   try{
@@ -123,5 +127,5 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(new Set(successful.map(fact=>fact.factId)).size).toBe(1);expect(successful[0]!.occurredAt).toBe('2026-12-10T11:56:17.915Z');
    expect((await f.db.query("SELECT count(*)::int n FROM digital_factory_facts WHERE preparation_id=$1 AND kind='仓库实际发厂'",[p.preparationId])).rows[0].n).toBe(1);
   }finally{await app.close();await wrongRole.close();}
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
 });

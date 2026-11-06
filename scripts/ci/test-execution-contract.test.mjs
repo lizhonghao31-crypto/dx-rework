@@ -12,6 +12,7 @@ import {worktreeSnapshot,inspectCompatibility} from '../check-main-release-compa
 import {assertManagedSchemaCreation,resourceChangedPaths} from '../test-preflight.mjs';
 import {settingsBrowserRequired} from './prepare-settings-browser.mjs';
 import {reconcileTimeInventory} from '../acceptance/time-site-inventory.mjs';
+import {testExecutionConfig} from '../test-execution-config.mjs';
 const identity={database:'dx_rework_ci',username:'dx_rework_test',databaseOid:'42',serverVersion:'160015',marker:'dx-rework-isolated-test-v1'};
 const context={head:'a'.repeat(40),base:'b'.repeat(40),runId:'12',attempt:'1',identities:{default:identity},node:'22.22.2'};
 test('local and CI resolve one canonical union; long correctness uses finite config, ordinary/performance keeps defaults',()=>{
@@ -136,8 +137,15 @@ test('SQL-heavy full business fixture is isolated while other long suites remain
  const plan=postgresPlan({mapped:[full],chain:true});
  assert.equal(plan.filter(row=>row.path===full).length,1);assert.equal(configForSuite(full),'vitest.postgres-immediate.config.ts');
  assert.equal(configForSuite(peer),'vitest.business-chain.config.ts');
- const source=readFileSync(full,'utf8');assert.ok(source.includes('timeout: 60_000'));
+ const source=readFileSync(full,'utf8');assert.ok(source.includes('timeout: testExecutionConfig.correctnessTimeoutMs'));
  const config=readFileSync('vitest.business-chain.config.ts','utf8');assert.ok(config.includes('testExecutionConfig.workers.longCorrectness'));
+});
+test('shared correctness allowance is100seconds while strict defaults and finite process cleanup remain separate',()=>{
+ assert.equal(testExecutionConfig.correctnessTimeoutMs,100000);assert.deepEqual(testExecutionConfig.workers,{nonDatabase:1,postgres:1,longCorrectness:2});
+ for(const file of ['vitest.business-chain.config.ts','vitest.postgres-immediate.config.ts']){const source=readFileSync(file,'utf8');assert.ok(source.includes('testTimeout:testExecutionConfig.correctnessTimeoutMs')||source.includes('testTimeout: testExecutionConfig.correctnessTimeoutMs'));assert.ok(source.includes('hookTimeout:testExecutionConfig.correctnessTimeoutMs')||source.includes('hookTimeout: testExecutionConfig.correctnessTimeoutMs'));}
+ assert.doesNotMatch(readFileSync('vitest.config.ts','utf8'),/testTimeout|hookTimeout/);
+ for(const file of ['acceptance-sla-clock-postgres.test.ts','digital-journey-postgres.test.ts','full-business-chain-postgres.test.ts']){const source=readFileSync('tests/integration/'+file,'utf8');assert.ok(source.includes('correctnessBudget.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs})'),file);}
+ const owner=readFileSync('scripts/owned-command.mjs','utf8');assert.ok(owner.includes("signalGroup(pid,'SIGKILL')"));assert.ok(owner.includes('OWNED_COMMAND_CHILDREN_STILL_RUNNING'));const workflow=readFileSync('.github/workflows/full-gate.yml','utf8');assert.ok(workflow.includes('timeout-minutes: 30'));assert.match(workflow.split('\n  postgres:\n')[1].split('\n  full-validate:\n')[0],/^ {4}timeout-minutes: 60$/m);
 });
 
 test('settings browser uses the original canonical PG plan with an installed browser only when required',()=>{
@@ -146,4 +154,13 @@ test('settings browser uses the original canonical PG plan with an installed bro
  assert.equal(configForSuite(file),'vitest.business-chain.config.ts');
  const environment={BASE_SHA:'a'.repeat(40),DB_REQUIRED:'true',BUSINESS_CHAIN_SENSITIVE:'false',MIGRATION_SENSITIVE:'false',DEPLOYMENT_SENSITIVE:'false',MAPPED_POSTGRES_TESTS:file};assert.equal(settingsBrowserRequired(environment),true);assert.equal(settingsBrowserRequired({...environment,MAPPED_POSTGRES_TESTS:POSTGRES_CHAIN_TESTS[0]}),false);assert.equal(settingsBrowserRequired({...environment,DB_REQUIRED:'false',MAPPED_POSTGRES_TESTS:''}),false);assert.throws(()=>settingsBrowserRequired({...environment,BASE_SHA:''}));
  const workflow=readFileSync('.github/workflows/full-gate.yml','utf8');assert.ok(workflow.includes('run: node scripts/ci/prepare-settings-browser.mjs'));assert.ok(workflow.includes('M01_SETTINGS_NATIVE_EVIDENCE:'));assert.ok(readFileSync(file,'utf8').includes('TEST_DATABASE_URL'));assert.ok(readFileSync(file,'utf8').includes('runNativeSettingsBrowser'));
+});
+
+
+test('short lead browser joins the original finite canonical plan and conditional Chromium preparation',()=>{
+ const file='tests/integration/m01-short-lead-native-browser-postgres.test.ts';
+ for(const path of ['apps/web/src/short-lead-panel.tsx','apps/web/src/short-lead-workspace.tsx','apps/web/src/digital-development-create-form.tsx','apps/api/src/production-platform/short-lead-todos.ts','apps/api/src/production-platform/short-lead-service.ts','packages/contracts/src/short-commitment.ts','tests/acceptance/m01-short-lead-native-browser.ts','tests/fixtures/m01-short-lead-native-ui.tsx'])assert.ok(classifyFullGatePaths([path]).mappedPostgresTests.includes(file),path);
+ assert.equal(configForSuite(file),'vitest.business-chain.config.ts');
+ const environment={BASE_SHA:'a'.repeat(40),DB_REQUIRED:'true',BUSINESS_CHAIN_SENSITIVE:'false',MIGRATION_SENSITIVE:'false',DEPLOYMENT_SENSITIVE:'false',MAPPED_POSTGRES_TESTS:file};assert.equal(settingsBrowserRequired(environment),true);assert.equal(settingsBrowserRequired({...environment,MAPPED_POSTGRES_TESTS:POSTGRES_CHAIN_TESTS[0]}),false);
+ assert.ok(readFileSync(file,'utf8').includes('runNativeShortLeadBrowser'));assert.ok(readFileSync(file,'utf8').includes('TEST_DATABASE_URL'));assert.ok(readFileSync(file,'utf8').includes('M01_SETTINGS_NATIVE_EVIDENCE'));
 });

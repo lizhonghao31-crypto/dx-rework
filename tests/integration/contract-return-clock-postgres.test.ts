@@ -1,3 +1,7 @@
+import {vi as correctnessBudget} from 'vitest';
+import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
+// Scoped to this heavy PG correctness file; global ordinary/performance defaults stay strict.
+correctnessBudget.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 import {randomUUID} from 'node:crypto';
 import {afterAll,beforeAll,describe,expect,it} from 'vitest';
 import {vi} from 'vitest';
@@ -30,7 +34,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect(result.contractGeneratedAt).toBe(start);expect(result.contractReturnTimeQuality).toBe(scene?'business_projection':undefined);
   const due=(await f.db.query('SELECT sourcing_contract_return_add_hours($1::timestamptz,48) AS due',[start])).rows[0].due.toISOString();
   expect(result.contractReturnDueAt).toBe(due);expect(result.contractReturnStatus).toBe('pending');
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
  it('uses the frozen business instant for the effective return and retains the real upload audit',async()=>{
   const at=new Date(Date.now()+5*86400000).toISOString(),scene=await f.scene(at),ready=await f.runtime.run(scene,f.root,()=>f.bulkReady('无'));
   const actor={...f.root,authorizationCapability:'sourcing:contract:record'},file=await f.image(actor);
@@ -38,7 +42,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect(result.contractReturnedAt).toBe(at);expect(result.contractReturnStatus).toBe('returned_on_time');
   const audit=(await f.db.query('SELECT submitted_at FROM sourcing_contract_return_submissions WHERE sourcing_case_id=$1',[ready.caseId])).rows[0].submitted_at;
   expect(Math.abs(audit.getTime()-Date.now())).toBeLessThan(60000);expect(audit.toISOString()).not.toBe(at);
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
 
  it('freezes the first effective endpoint through same-key, different-key and concurrent retries',async()=>{
   const at='2026-11-06T02:00:00.000Z',p=await prepare(at),service=new SourcingContractReturnService(f.db),file=await f.image(uploader()),key=randomUUID();
@@ -51,7 +55,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect((await f.db.query('SELECT count(*)::int AS n FROM sourcing_contract_return_business_facts WHERE sourcing_case_id=$1',[p.caseId])).rows[0].n).toBe(2);
   expect((await f.db.query('SELECT count(*)::int AS n FROM sourcing_contract_return_submissions WHERE sourcing_case_id=$1',[p.caseId])).rows[0].n).toBe(2);
   await expect(service.submit(uploader(),p.caseId,[await f.image(uploader())],randomUUID())).rejects.toMatchObject({statusCode:409});
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
  for(const [start,due] of [
   ['2026-11-06T02:00:00.000Z','2026-11-09T02:00:00.000Z'],
   ['2026-11-07T16:00:00.000Z','2026-11-10T16:00:00.000Z'],
@@ -63,7 +67,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   await f.advance(p.scene,new Date(Date.parse(due)-1).toISOString());expect((await get(p.caseId)).contractReturnStatus).toBe('pending');
   await f.advance(p.scene,due);expect((await get(p.caseId)).contractReturnStatus).toBe('pending');
   await f.advance(p.scene,new Date(Date.parse(due)+1).toISOString());expect((await get(p.caseId)).contractReturnStatus).toBe('overdue_pending');
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
  it('permits the original first return before PDF, then starts once on actual successful ready',async()=>{
   const scene=await f.scene('2026-11-01T02:00:00.000Z'),hold=vi.spyOn(f.contracts,'generateIfReady').mockResolvedValue({item:null});
   let p:Awaited<ReturnType<typeof f.bulkReady>>;try{p=await f.runtime.run(scene,f.root,()=>f.bulkReady('无'));}finally{hold.mockRestore();}
@@ -72,7 +76,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   await f.advance(scene,'2026-11-02T02:00:00.000Z');await f.contracts.generateIfReady(f.root,p.caseId);
   const ready=await get(p.caseId);expect(ready.contractGeneratedAt).toBe('2026-11-02T02:00:00.000Z');expect(ready.contractReturnedAt).toBe(first.contractReturnedAt);
   await f.advance(scene,'2026-11-03T02:00:00.000Z');await f.contracts.generateIfReady(f.root,p.caseId);expect((await get(p.caseId)).contractReturnDueAt).toBe(ready.contractReturnDueAt);
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
  it('keeps per-order observations and list filters consistent across scenes and ordinary orders',async()=>{
   const a=await prepare('2026-10-20T02:00:00.000Z'),b=await prepare('2026-11-20T02:00:00.000Z');
   await f.advance(a.scene,'2026-10-23T02:00:00.000Z');
@@ -85,7 +89,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const list=await service.listCases(reader(),style,'all',1,{contractReturn:status});expect(list.items.map(i=>i.sourcingCaseId)).toContain(id);expect(list.totalCount).toBe(list.items.length);
    const wrong=await service.listCases(reader(),style,'all',1,{contractReturn:status==='pending'?'overdue_pending':'pending'});expect(wrong.items.map(i=>i.sourcingCaseId)).not.toContain(id);
   }
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
  it('rejects missing readers, another scene, mixed ordinary scope and invalid current evidence without falling back',async()=>{
   const p=await prepare('2026-11-01T02:00:00.000Z'),other=await f.scene('2026-11-02T02:00:00.000Z'),ordinary=await f.bulkReady('无'),unverified=new pg.Pool({...f.db.options});
   try{await expect(new SourcingContractReturnService(unverified).get(reader(),p.caseId)).rejects.toMatchObject({code:'ACCEPTANCE_ISOLATION'});
@@ -96,7 +100,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const current=await f.runtime.repository.row(p.scene),time={now:current.business_now.toISOString(),scenarioId:p.scene,revision:current.version};
   expect((await f.db.query('SELECT sourcing_contract_return_clock_evidence($1,$2) AS ok',[p.scene,time])).rows[0].ok).toBe(true);
   for(const invalid of [{...time,revision:999},{...time,now:'2026-11-01T02:00:00.001Z'},{...time,scenarioId:other},{...time,now:'garbage'},{...time,revision:-1}])expect((await f.db.query('SELECT sourcing_contract_return_clock_evidence($1,$2) AS ok',[p.scene,invalid])).rows[0].ok).toBe(false);
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
  it('rolls back files, requests, monitor, new evidence and event if a later original todo write fails',async()=>{
   const p=await prepare('2026-11-01T02:00:00.000Z'),file=await f.image(uploader()),key=randomUUID(),todos=new TodoProjectionService(new TodoService(f.db));
   vi.spyOn(todos,'completeOpenByDedupePrefix').mockRejectedValue(new Error('TEST failure after business fact'));
@@ -107,7 +111,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect((await f.db.query('SELECT entity_type,entity_id FROM attachments WHERE attachment_id=$1',[file])).rows[0]).toMatchObject({entity_type:null,entity_id:null});
   expect((await get(p.caseId)).contractReturnedAt).toBeNull();
   expect((await new SourcingContractReturnService(f.db).submit(uploader(),p.caseId,[file],key)).contractReturnedAt).toBe('2026-11-01T02:00:00.000Z');
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
 
  // Model a newly imported pre-0265 writer in this isolated fixture. No old row or immutable fact is edited/deleted.
  const legacyUpload=async(caseId:string,evidence?:unknown)=>{
@@ -131,7 +135,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const style=(await f.db.query('SELECT style_no FROM sourcing_cases WHERE sourcing_case_id=$1',[p.caseId])).rows[0].style_no;
   expect((await f.sourcing.listCases(reader(),style,'all',1,{contractReturn:'all'})).items.map(i=>i.sourcingCaseId)).toContain(p.caseId);
   for(const status of ['pending','returned_on_time','overdue_pending','returned_late','all_overdue'] as const)expect((await f.sourcing.listCases(reader(),style,'all',1,{contractReturn:status})).items.map(i=>i.sourcingCaseId)).not.toContain(p.caseId);
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
  it('projects only an exact old event with original scene revision and never writes during reads',async()=>{
   const p=await prepare('2026-11-01T02:00:00.000Z'),row=await f.runtime.repository.row(p.scene),time={now:row.business_now.toISOString(),scenarioId:p.scene,revision:row.version};
   await legacyUpload(p.caseId,time);await f.advance(p.scene,'2026-11-03T02:00:00.000Z');
@@ -141,7 +145,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const original=(await f.db.query("SELECT after_state FROM operation_events WHERE action='sourcing.contract_return.upload' AND entity_id=$1",[p.caseId])).rows[0].after_state;
   const client=await f.db.connect();try{await new OperationEventRepository().append(client,uploader(),{action:'sourcing.contract_return.upload',entityType:'sourcing_case',entityId:p.caseId,after:original});}finally{client.release();}
   const ambiguous=await get(p.caseId);expect(ambiguous.contractReturnTimeQuality).toBe('unknown');expect(ambiguous.contractReturnedAt).toBeNull();expect(ambiguous.attachments).toHaveLength(1);
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
  it('keeps a pre-0263 ready PDF as unknown in a scene while retaining its actual audit and eligibility',async()=>{
   const scene=await f.scene('2026-11-01T02:00:00.000Z'),hold=vi.spyOn(f.contracts,'generateIfReady').mockResolvedValue({item:null});
   let p:Awaited<ReturnType<typeof f.bulkReady>>;try{p=await f.runtime.run(scene,f.root,()=>f.bulkReady('无'));}finally{hold.mockRestore();}
@@ -151,7 +155,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const before=(await f.db.query('SELECT * FROM sourcing_contract_return_monitors WHERE sourcing_case_id=$1',[p.caseId])).rows[0];
   expect(await get(p.caseId)).toMatchObject({contractReturnMonitoring:true,contractReturnTimeQuality:'unknown',contractReturnStatus:null,contractGeneratedAt:null,contractReturnDueAt:null,canUpload:true});
   expect((await f.db.query('SELECT * FROM sourcing_contract_return_monitors WHERE sourcing_case_id=$1',[p.caseId])).rows[0]).toEqual(before);
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
  it('starts an independent price re-sign cycle on its first ready and does not count previous version files',async()=>{
   const p=await prepare('2026-11-01T02:00:00.000Z'),service=new SourcingContractReturnService(f.db),old=await service.submit(uploader(),p.caseId,[await f.image(uploader())],randomUUID());
   const first=(await f.contracts.getCurrent(f.root,p.caseId)).item!;
@@ -165,7 +169,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   await expect(service.submit(uploader(),p.caseId,[await f.image(uploader())],randomUUID(),first.sourcingContractDocumentId)).rejects.toMatchObject({statusCode:409});
   const signed=await service.submit(uploader(),p.caseId,[await f.image(uploader())],randomUUID(),current.sourcingContractDocumentId);expect(signed.contractReturnedAt).toBe('2026-11-04T02:00:00.000Z');
   expect((await f.db.query('SELECT contract_returned_at FROM sourcing_contract_return_monitors WHERE sourcing_case_id=$1',[p.caseId])).rows[0].contract_returned_at.toISOString()).not.toBe(signed.contractReturnedAt);
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
  it('does not restart first or cycle anchors for information revisions and repeated ready/download reads',async()=>{
   const p=await prepare('2026-11-01T02:00:00.000Z'),before=await get(p.caseId),management=f.contracts.management,template=(await management.templates(f.root)).item;
   await management.saveTemplate(f.root,{expectedVersion:template.templateVersion,templateName:template.templateName,partyAName:template.partyAName,partyAAddress:template.partyAAddress,signingPlace:template.signingPlace,terms:{...template.terms,logistics:template.terms.logistics+' TEST clock nonrestart'}},randomUUID());
@@ -173,5 +177,5 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect(await management.refreshInformation(f.root,p.caseId,preview,key)).toBe(doc);await f.contracts.generateIfReady(f.root,p.caseId,doc);await f.contracts.getCurrent(f.root,p.caseId,doc);
   const after=await get(p.caseId);expect(after.contractGeneratedAt).toBe(before.contractGeneratedAt);expect(after.contractReturnDueAt).toBe(before.contractReturnDueAt);
   expect((await f.db.query('SELECT count(*)::int AS n FROM sourcing_contract_business_ready_facts WHERE sourcing_case_id=$1 AND is_first_for_case',[p.caseId])).rows[0].n).toBe(1);
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
 });

@@ -1,3 +1,7 @@
+import {vi as correctnessBudget} from 'vitest';
+import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
+// Scoped to this heavy PG correctness file; global ordinary/performance defaults stay strict.
+correctnessBudget.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 import { createHash, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
@@ -14,7 +18,7 @@ import { WholeOrderReviewService } from "../../apps/api/src/rework/whole-order-r
 import { WorkReportingService } from "../../apps/api/src/rework/work-reporting-service.js";
 import { OperationEventRepository, type TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 import { completeInspectionReport } from "../inspection-report-fixture.js";
-import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import {ownedPostgresSchema,createOwnedPostgresSchema,releaseOwnedPostgresSchema} from "../helpers/owned-postgres-schema.js";
 import {assertTestDatabaseTarget} from '../../scripts/test-database-safety.mjs';
 import {applyMigrations} from '../../scripts/migration-lib.mjs';
 import {migrationExecutionSql} from '../../scripts/deploy/migration-execution-compatibility.mjs';
@@ -39,6 +43,7 @@ run("temporary special-process proxy reporting through main230, hotfix and compl
   let workerPersonId: string;
   let hotfixSql: string;
   let historyBefore: unknown[];
+  let releaseManifest:Array<{version:string;checksum:string}>;
   let upgraded = false;
   let scopedUrl:string;
 
@@ -66,14 +71,14 @@ run("temporary special-process proxy reporting through main230, hotfix and compl
   beforeAll(async () => {
     await assertTestDatabaseTarget(databaseUrl!);
     const scoped=new URL(databaseUrl!);scoped.searchParams.set('options',`-c search_path=${schema}`);scopedUrl=scoped.toString();
-    await admin.query(`CREATE SCHEMA ${schema}`);
+    await createOwnedPostgresSchema(admin,schema);
     const identity = (await database.query("SELECT rolsuper,rolbypassrls,rolcreatedb,rolcreaterole FROM pg_roles WHERE rolname=current_user")).rows[0];
     expect(Object.values(identity)).toEqual([false, false, false, false]);
     const manifest = JSON.parse(await readFile(new URL("../../apps/api/src/platform/migration-manifest.json", import.meta.url), "utf8")) as { migrations: Array<{ version: string; checksum: string }> };
-    expect(manifest.migrations).toHaveLength(279);expect(manifest.migrations.at(-1)?.version).toBe('0265_contract_return_business_time');
+    releaseManifest=manifest.migrations;expect(new Set(releaseManifest.map(row=>row.version)).size).toBe(releaseManifest.length);expect(releaseManifest.some(row=>row.version===migrationVersion)).toBe(true);
     const branches=JSON.parse(await readFile('scripts/migration-branches.json','utf8')),extensions=JSON.parse(await readFile('scripts/migration-main-extensions.json','utf8')) as Array<{version:string}>;
     const mainNames=new Set([...branches.main,...extensions].map((row:{version:string})=>row.version));
-    const main230=manifest.migrations.filter(row=>row.version!==migrationVersion&&(Number(row.version.slice(0,4))<=217||mainNames.has(row.version)));
+    const main230=manifest.migrations.filter(row=>row.version!==migrationVersion&&(Number(row.version.slice(0,4))<=217||mainNames.has(row.version)&&Number(row.version.slice(0,4))<=230));
     expect(main230).toHaveLength(230);expect(main230.at(-1)?.version).toBe('0230_sourcing_factory_change_current_quantity');
     await database.query("CREATE TABLE schema_migrations(version text PRIMARY KEY,checksum char(64) NOT NULL,applied_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP)");
     for (const migration of manifest.migrations) {
@@ -103,11 +108,11 @@ run("temporary special-process proxy reporting through main230, hotfix and compl
     await access.assignRole(await root("access:admin"), { userId: ids.owner, roleCode: "order_merchandiser", reason: "isolated order merchandiser" });
     const people = await access.listPeople({ includeInactive: true });
     workerPersonId = people.find(p => p.appUserId === ids.worker)!.personId;
-  }, 60_000);
+  }, testExecutionConfig.correctnessTimeoutMs);
 
   afterAll(async () => {
     await database.end();
-    await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
+    await releaseOwnedPostgresSchema(admin,schema);
     await admin.end();
   });
 
@@ -195,9 +200,9 @@ run("temporary special-process proxy reporting through main230, hotfix and compl
     // Upgrade the genuine main231 state, including successful reports, through
     // every release migration before the remaining original security cases.
     const beforeIntegration=(await database.query('SELECT version,checksum,applied_at::text AS applied_at FROM schema_migrations ORDER BY version')).rows;
-    const result=await applyMigrations(scopedUrl);expect(result.currentVersion).toBe('0265_contract_return_business_time');
+    const result=await applyMigrations(scopedUrl);expect(result.currentVersion).toBe(releaseManifest.at(-1)!.version);
     const integrated=(await database.query('SELECT version,checksum,applied_at::text AS applied_at FROM schema_migrations ORDER BY version')).rows;
-    expect(integrated).toHaveLength(279);for(const row of beforeIntegration)expect(integrated.find(r=>r.version===row.version)).toEqual(row);
+    expect(integrated.map(row=>({version:row.version,checksum:row.checksum}))).toEqual(releaseManifest);for(const row of beforeIntegration)expect(integrated.find(r=>r.version===row.version)).toEqual(row);
     expect(await facts(f.id)).toEqual(committed);await effectiveGuard();expect((await applyMigrations(scopedUrl)).applied).toEqual([]);upgraded=true;
   });
 

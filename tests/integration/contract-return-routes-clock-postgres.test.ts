@@ -1,3 +1,7 @@
+import {vi as correctnessBudget} from 'vitest';
+import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
+// Scoped to this heavy PG correctness file; global ordinary/performance defaults stay strict.
+correctnessBudget.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 import {randomUUID} from 'node:crypto';
 import Fastify from 'fastify';
 import {afterAll,beforeAll,describe,expect,it} from 'vitest';
@@ -28,7 +32,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const retry=await app.inject(input);expect(retry.statusCode,retry.body).toBe(200);expect(retry.json()).toEqual(first.json());
    const audit=(await f.db.query('SELECT submitted_at,submitted_by FROM sourcing_contract_return_submissions WHERE sourcing_case_id=$1',[p.caseId])).rows[0];expect(audit.submitted_by).toBe(f.people.owner!.actorId);expect(Math.abs(audit.submitted_at.getTime()-Date.now())).toBeLessThan(60000);
   }finally{await app.close();}
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
  it('rejects a foreign scenario header and a scene/ordinary mixed request before business writes',async()=>{
   const scene=await f.scene('2026-11-01T02:00:00.000Z'),other=await f.scene('2026-11-02T02:00:00.000Z'),p=await f.runtime.run(scene,f.root,()=>f.bulkReady('无')),ordinary=await f.bulkReady('无'),app=appFor();
   try{for(const [id,claimed] of [[p.caseId,other],[ordinary.caseId,scene]]){
@@ -36,5 +40,5 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(response.statusCode,response.body).toBe(409);
    expect((await f.db.query('SELECT count(*)::int AS n FROM sourcing_contract_return_submissions WHERE sourcing_case_id=$1',[id])).rows[0].n).toBe(0);
   }}finally{await app.close();}
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
 });

@@ -1,10 +1,14 @@
+import {vi as correctnessBudget} from 'vitest';
+import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
+// Scoped to this heavy PG correctness file; global ordinary/performance defaults stay strict.
+correctnessBudget.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 import {randomUUID} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
 import pg from 'pg';
 import Fastify from 'fastify';
 import {createWebUrls,rewriteApiProxyPath} from '../../apps/web/url-contract.js';
 import {beforeAll,afterAll,describe,it,expect} from 'vitest';
-import {ownedPostgresSchema} from '../helpers/owned-postgres-schema.js';
+import {ownedPostgresSchema,createOwnedPostgresSchema,releaseOwnedPostgresSchema} from '../helpers/owned-postgres-schema.js';
 import {AuxiliaryCatalogService,validateAuxiliaryReferences} from '../../apps/api/src/access/auxiliary-catalog-service.js';
 import {registerAuxiliaryCatalogRoutes} from '../../apps/api/src/access/auxiliary-catalog-routes.js';
 import {RootAuthority} from '../../apps/api/src/access/root-authority.js';
@@ -25,14 +29,14 @@ const url=process.env.TEST_DATABASE_URL;
  const value=(name='TEST-'+randomUUID(),specification='TEST规格',supplier='TEST供应方')=>({name,specification,supplier,auxiliaryKind:'扁机' as const});
  const list=(q='',includeInactive=false,page=1,who=actor())=>service.list(who,AuxiliaryQuerySchema.parse({q,includeInactive:String(includeInactive),page}));
  beforeAll(async()=>{
-  await admin.query(`CREATE SCHEMA ${schema}`);await db.query('CREATE TABLE schema_migrations(version text PRIMARY KEY,checksum char(64) NOT NULL,applied_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP)');
+  await createOwnedPostgresSchema(admin,schema);await db.query('CREATE TABLE schema_migrations(version text PRIMARY KEY,checksum char(64) NOT NULL,applied_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP)');
   const manifest=JSON.parse(await readFile(new URL('../../apps/api/src/platform/migration-manifest.json',import.meta.url),'utf8'));
   for(const row of manifest.migrations){await db.query(await readFile(new URL(`../../apps/api/migrations/${row.version}.sql`,import.meta.url),'utf8'));await db.query('INSERT INTO schema_migrations(version,checksum) VALUES($1,$2)',[row.version,row.checksum]);}
   // Synthetic identity/role bootstrap only. Business commands below use persisted roles and RootAuthority.
   for(const role of roles){const id=ids.get(role)!;await db.query('INSERT INTO app_users(id,display_name,enabled) VALUES($1,$2,true)',[id,`TEST ${role}`]);await db.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) VALUES($1,$2,'dingtalk','TEST',$3,$3,true,true,CURRENT_TIMESTAMP)",[randomUUID(),id,`TEST-${id}`]);if(role!=='root_superuser')await db.query("INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason) VALUES($1,$2,$3,$2,'P06 TEST identity bootstrap')",[randomUUID(),id,role]);}
   await db.query("INSERT INTO owner_bootstrap_consumptions(singleton,user_id,provider_user_id,corp_id) VALUES(true,$1,$2,'TEST')",[ids.get('root_superuser'),`TEST-${ids.get('root_superuser')}`]);await new AccessMasterDataService(db,'TEST').ensureOrganizationPolicy();
- },60000);
- afterAll(async()=>{await db.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();});
+ },testExecutionConfig.correctnessTimeoutMs);
+ afterAll(async()=>{await db.end();await releaseOwnedPostgresSchema(admin,schema);await admin.end();});
  it('allows exactly the five authorized identities to perform all four operations, without approval or extra capabilities',async()=>{
   for(const role of [...AUXILIARY_CATALOG_ROLES,'root_superuser']){const who=actor(role),first=await service.create(who,value(),randomUUID()),other=await service.create(who,value(),randomUUID());
    const renamed=await service.rename(who,first.id,{expectedVersion:first.version,name:first.name+'改名',reason:'TEST改名'},randomUUID());expect(renamed.version).toBe(2);
@@ -73,7 +77,7 @@ const url=process.env.TEST_DATABASE_URL;
  it('preserves real order snapshots after rename/merge/disable and refuses new stale or invented references',async()=>{
   const entry=await service.create(actor(),value(),randomUUID()),source=await identity.createSource(actor(),{designStyleNo:'TEST-P06-'+randomUUID(),temporaryStyleNo:null,customerCode:null,developmentType:'头版'},randomUUID()),file=randomUUID();
   await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST.png','image/png',1,$3,$4,'ready',CURRENT_TIMESTAMP)",[file,`TEST-P06/${file}`,'a'.repeat(64),actor().actorId]);
-  const document={...initialDevelopmentDocument(),quantity:1,sizeQuantities:[1,0],materials:[{materialId:randomUUID(),category:'辅料' as const,label:'TEST辅料',auxiliaryKind:entry.auxiliaryKind,auxiliaryCatalog:{id:entry.id,version:entry.version},name:entry.name,supplier:entry.supplier,specification:entry.specification,width:'',weight:'',composition:'',consumption:'',color:'',quantity:'1',requiredThisRound:true,available:false,expectedDate:'2026-12-01'}],files:[{attachmentId:file,kind:'款图' as const}]};
+  const document={...initialDevelopmentDocument(),quantity:1,sizes:['M','L'],sampleSize:'M',sizeQuantities:[1,0],measurements:initialDevelopmentDocument().measurements.map(row=>({...row,values:['50','50']})),materials:[{materialId:randomUUID(),category:'辅料' as const,label:'TEST辅料',auxiliaryKind:entry.auxiliaryKind,auxiliaryCatalog:{id:entry.id,version:entry.version},name:entry.name,supplier:entry.supplier,specification:entry.specification,width:'',weight:'',composition:'',consumption:'',color:'',quantity:'1',requiredThisRound:true,available:false,expectedDate:'2026-12-01'}],files:[{attachmentId:file,kind:'款图' as const}]};
   const saved=await forms.save(actor(),source.sourceId,{expectedVersion:0,document},randomUUID()),published=await forms.publish(actor(),source.sourceId,saved.version,randomUUID());
   const draftSource=await identity.createSource(actor(),{designStyleNo:'TEST-P06-'+randomUUID(),temporaryStyleNo:null,customerCode:null,developmentType:'头版'},randomUUID());
   const draft=await forms.save(actor(),draftSource.sourceId,{expectedVersion:0,document:{...document,files:[]}},randomUUID());
@@ -117,7 +121,7 @@ const url=process.env.TEST_DATABASE_URL;
   const gate=await db.connect(),sync=await db.connect();let writing:Promise<AuxiliaryItem>|undefined,changing:Promise<unknown>|undefined;
   try{await gate.query('BEGIN');const gatePid=Number((await gate.query('SELECT pg_backend_pid() pid')).rows[0].pid);await gate.query("SELECT pg_advisory_xact_lock(hashtextextended('shared-auxiliary-catalog-v1',0))");writing=service.create(root,value(),randomUUID());await blocked(gatePid);await sync.query('BEGIN');const pid=Number((await sync.query('SELECT pg_backend_pid() pid')).rows[0].pid);changing=sync.query('UPDATE app_users SET display_name=display_name WHERE id=$1',[rootId]);await blocked(0,pid);await gate.query('COMMIT');await writing;await changing;await sync.query('COMMIT');expect(await rootAuthority.isRootUser(rootId)).toBe(true);
   }finally{await gate.query('ROLLBACK');await sync.query('ROLLBACK');await writing?.catch(()=>undefined);await changing?.catch(()=>undefined);gate.release();sync.release();}
- },15000);
+ },testExecutionConfig.correctnessTimeoutMs);
  it('exposes the same schemas and persisted authorization through real Fastify routes; no restore command',async()=>{
   const app=Fastify();app.setErrorHandler((error,_request,reply)=>{const e=error as Error&{statusCode?:number};void reply.status(e.statusCode??500).send({error:{message:e.message}});});
   registerAuxiliaryCatalogRoutes(app,{root:rootAuthority,service,authenticate:async token=>{const who=token==='clerk'?actor('development_clerk'):actor();return {id:who.actorId,businessRoles:who.actorRoles,capabilities:who.authorizationCapabilities} as AuthUser;}});

@@ -1,3 +1,7 @@
+import {vi as correctnessBudget} from 'vitest';
+import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
+// Scoped to this heavy PG correctness file; global ordinary/performance defaults stay strict.
+correctnessBudget.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 import {randomUUID} from 'node:crypto';
 import {afterAll,beforeAll,describe,expect,it,vi} from 'vitest';
 import {businessAnchorFixture} from '../helpers/business-anchor-fixture.js';
@@ -54,7 +58,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(await immutable(p.caseId)).toEqual(before);
    expect(first.sheet.batchTotals![0]!.sent).toBe(4);
   });
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
  for(const price of ['6','4'])it(`effective price ${price} retains valid approval, original IE/owner history, and remaining dispatch`,async()=>{
   const p=await prepare();await f.runtime.run(p.scene,f.root,()=>dispatch(p.id,4));
   const before=await immutable(p.caseId),anchor=await firstContractBusinessReady(f.db,p.id);
@@ -90,7 +94,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect((await f.db.query("SELECT count(*)::int n FROM digital_production_child_links WHERE production_order_id=$1 AND module='production'",[p.id])).rows[0].n).toBe(1);
    expect((await f.db.query("SELECT count(*)::int n FROM digital_factory_facts f JOIN digital_factory_routes r USING(preparation_id) WHERE r.production_order_id=$1 AND f.kind='仓库实际发厂'",[p.id])).rows[0].n).toBe(2);
   });
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
  it('equal price is a no-op and the original approval, contract and remaining dispatch remain valid',async()=>{
   const p=await prepare();await f.runtime.run(p.scene,f.root,async()=>{
    await dispatch(p.id,4);const before=await immutable(p.caseId),contract=(await f.contracts.getCurrent(f.root,p.caseId)).item!;
@@ -98,7 +102,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect((await f.contracts.getCurrent(f.root,p.caseId)).item!.sourcingContractDocumentId).toBe(contract.sourcingContractDocumentId);
    expect((await dispatch(p.id,6)).sheet.dispatched).toBe(true);expect(await immutable(p.caseId)).toEqual(before);
   });
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
  it('two distinct-key remaining dispatches at one revision commit only once after approved repricing',async()=>{
   const p=await prepare();await f.runtime.run(p.scene,f.root,async()=>{
    await dispatch(p.id,4);const pending=(await request(p.caseId,'6'))!;
@@ -111,7 +115,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(results.find(result=>result.status==='rejected')).toMatchObject({reason:{statusCode:409}});
    expect((await flow.read(warehouse(),p.id)).batchTotals![0]!.sent).toBe(10);
   });
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
  it('a ready price contract before first physical dispatch creates exactly one production execution',async()=>{
   const p=await prepare();await f.runtime.run(p.scene,f.root,async()=>{
    await request(p.caseId,'4');const current=(await f.contracts.getCurrent(f.root,p.caseId)).item!;
@@ -119,7 +123,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(rows[0]!.production.sourcing_contract_document_id).toBe(current.sourcingContractDocumentId);
    expect(Date.parse(rows[0]!.production.dispatched_at)).toBe(businessNow().getTime());
   });
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
  it('contract-not-ready and a mid-dispatch failure leave all original facts and receipts intact; same key can retry',async()=>{
   const p=await prepare();await f.runtime.run(p.scene,f.root,async()=>{
    await dispatch(p.id,4);const before=await immutable(p.caseId),flow=new FactoryFlowService(f.db);
@@ -137,7 +141,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect((await flow.dispatch(warehouse(),p.id,input,key)).batchTotals![0]!.sent).toBe(10);
    expect(await immutable(p.caseId)).toEqual(before);
   });
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
  it('successive effective prices keep the original manufacturing approval history and one execution',async()=>{
   const p=await prepare();await f.runtime.run(p.scene,f.root,async()=>{
    await dispatch(p.id,4);const before=await immutable(p.caseId),query=new DigitalJourneyQuery(f.db),history=await query.read(f.root,p.id);
@@ -153,5 +157,5 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect((await f.contracts.getCurrent(f.root,p.caseId)).item!.contractVersion).toBe(4);
    expect((await dispatch(p.id,6)).sheet.dispatched).toBe(true);expect(await immutable(p.caseId)).toEqual(before);
   });
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
 });

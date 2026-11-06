@@ -1,3 +1,7 @@
+import {vi as correctnessBudget} from 'vitest';
+import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
+// Scoped to this heavy PG correctness file; global ordinary/performance defaults stay strict.
+correctnessBudget.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -15,7 +19,7 @@ async function finishContext(context:Parameters<typeof cleanupResources>[0],pool
 
 const url=process.env.TEST_DATABASE_URL;
 (url?describe:describe.skip)('test resource ownership against actual PostgreSQL',()=>{
- it('cleans a real failing child before expensive suites',async()=>{await resourceSmoke(url!);},15000);
+ it('cleans a real failing child before expensive suites',async()=>{await resourceSmoke(url!);},testExecutionConfig.correctnessTimeoutMs);
  it('rejects wrong run, identity and an unlabelled database before DROP, retaining the owned schema',async()=>{
   const context=await resourceContext({default:url!}),env=resourceEnvironment(context),schema=ownedPostgresSchema('resource_smoke','default',env),pool=new pg.Pool({connectionString:url});
   try{
@@ -63,7 +67,7 @@ const url=process.env.TEST_DATABASE_URL;
    await cleanupResources(context);
    for(const r of resources)expect((await pools[r.databaseTarget as keyof typeof pools].query('SELECT 1 FROM pg_namespace WHERE nspname=$1',[r.schema])).rowCount).toBe(0);
   }finally{await finishContext(context,Object.values(pools));}
- },15000);
+ },testExecutionConfig.correctnessTimeoutMs);
  it('immediately deletes outside managed runner mode and refuses a different handoff owner',async()=>{
   const context=await resourceContext({default:url!}),env={...resourceEnvironment(context),TEST_DATABASE_URL:url!},schema=ownedPostgresSchema('resource_smoke','default',env),pool=new pg.Pool({connectionString:url});
   try{

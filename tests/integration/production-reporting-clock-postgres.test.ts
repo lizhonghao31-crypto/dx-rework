@@ -1,3 +1,7 @@
+import {vi as correctnessBudget} from 'vitest';
+import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
+// Scoped to this heavy PG correctness file; global ordinary/performance defaults stay strict.
+correctnessBudget.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 import {randomUUID} from 'node:crypto';
 import {afterAll,beforeAll,describe,expect,it,vi} from 'vitest';
 import {businessAnchorFixture} from '../helpers/business-anchor-fixture.js';
@@ -44,7 +48,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  it('accepts the original future scenario date through the native reporting command',async()=>{
   const result=await f.runtime.run(scene,f.root,()=>new ProductionReportingService(f.db).report(f.root,id,{position:1,businessDate:date,quantity:1},randomUUID()));
   expect(result.value.history[0]).toMatchObject({businessDate:date,quantity:1});
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
  it('independently accepts a matching current-transaction event at the SQL date boundary',async()=>{
   await f.runtime.run(scene,f.root,async()=>{
    const client=await f.db.connect();
@@ -56,7 +60,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     expect((await client.query('SELECT business_date::text FROM sourcing_production_reports WHERE report_id=$1',[reportId])).rows[0].business_date).toBe(date);
    }finally{await client.query('ROLLBACK');client.release();}
   });
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
  for(const mode of ['past','present','future','ordinary'] as const)it(`${mode}: report, append correction, completion and shipment retain dates, guards and real audits`,async()=>{
   const at=new Date(Date.now()+(mode==='past'?-7*86400000:mode==='future'?7*86400000:0)).toISOString(),sceneId=mode==='ordinary'?null:await f.scene(at),p=await prepare(sceneId);
   const service=new ProductionReportingService(f.db),reporter={...f.people['production-reporter']!,authorizationCapability:'production-reporting',authorizationCapabilities:['production-reporting']};
@@ -96,7 +100,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    for(const audit of audits)expect(Math.abs(audit.created_at.getTime()-Date.now())).toBeLessThan(60000);
   });
   if(sceneId)expect((await service.detail(f.root,p.productionId)).asOf).toBe(at); // verified reader without ALS
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
  it('uses Beijing date at midnight ±1ms and keeps another scene and ordinary orders isolated',async()=>{
   const sceneId=await f.scene('2026-11-05T15:59:59.999Z'),p=await prepare(sceneId),service=new ProductionReportingService(f.db);
   expect((await service.detail(f.root,p.productionId)).businessToday).toBe('2026-11-05');
@@ -110,7 +114,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   await expect(p.run(()=>service.detail(f.root,ordinary.productionId))).rejects.toMatchObject({code:'ACCEPTANCE_CLOCK_CONFLICT'});
   const [first,second]=await Promise.all([p.run(()=>service.detail(f.root,p.productionId)),other.run(()=>service.detail(f.root,other.productionId))]);
   expect(first.businessToday).toBe('2026-11-06');expect(second.businessToday).toBe('2026-11-08');
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
  it('resolves reporting HTTP detail and writes through the original production id without a scene header',async()=>{
   const secret=f.runtime.secret,corp='anchor-test',auth=new AuthService(new AcceptanceDingTalkProvider(f.db,corp,secret),new PostgresAuthStore(f.db,corp,'uat-root'),corp,3600000,secret),root=new RootAuthority(f.db,corp,'uat-root');
   const control=await auth.beginAcceptanceControl(mintAcceptanceControlCode(secret)),login=await auth.switchAcceptanceIdentity(control,'root'),cookie=`dx_acceptance_control=${control}; dx_rework_session=${login.token}`;
@@ -123,7 +127,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const global=await app.inject({method:'GET',url:'/production-reporting',headers:{cookie,'x-acceptance-scenario':scene}});expect(global.statusCode).toBe(409);
    expect((await app.inject({method:'GET',url:`/production-reporting/${id}`})).statusCode).toBe(401);
   }finally{await app.close();}
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
  it('replays an actual legacy success receipt without inventing fresh metadata or repeating its write',async()=>{
   const service=new ProductionReportingService(f.db),original=service.detail.bind(service),key=randomUUID(),input={position:1,businessDate:date,quantity:1};
   // Reproduce the previous response encoder through the real transaction and receipt repository.
@@ -138,7 +142,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   try{const response=await app.inject({method:'POST',url:`/production-reporting/${id}/reports`,headers:{'idempotency-key':key},payload:input});expect(response.statusCode,response.body).toBe(200);expect(response.json()).toEqual(first!.value);}finally{await app.close();}
   expect((await service.detail(f.root,id)).businessToday).toBe(date);
   expect((await f.db.query('SELECT count(*)::int AS n FROM sourcing_production_reports WHERE report_id=$1',[first!.value.history[0]!.reportId])).rows[0].n).toBe(1);
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
  for(const mode of ['past','future','ordinary'] as const)it(`${mode}: a transferred execution uses its own approved business day while retaining real transfer cutoffs`,async()=>{
   const at=new Date(Date.now()+(mode==='past'?-6*86400000:6*86400000)).toISOString(),sceneId=mode==='ordinary'?null:await f.scene(at),p=await prepare(sceneId),service=new ProductionReportingService(f.db);
   const supplier=await f.access.createSupplier(f.root,CreateSupplierSchema.parse({supplierCode:`TEST-${randomUUID().slice(0,8).toUpperCase()}`,supplierType:'factory',supplierName:`TEST next factory ${mode}`,address:'TEST',contractEntityName:'TEST factory',partyBRepresentative:'TEST',payeeName:'TEST',bankAccount:'TEST0002',bankName:'TEST',changeReason:'TEST original native transfer'}));
@@ -158,7 +162,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await service.execute(f.root,p.productionId,'complete',{factoryDecisionId,businessDate:day,confirmed:true},randomUUID());
    expect((await service.execute(f.root,p.productionId,'ship',{factoryDecisionId,businessDate:day,confirmed:true},randomUUID())).value.shipment).toMatchObject({shippedOn:day,recordedQuantity:8});
   });
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
  it('refuses an unverified reader and independently requires an active UAT operation actor in SQL',async()=>{
   const unverified=new pg.Pool({...f.db.options});
   try{await expect(new ProductionReportingService(unverified).detail(f.root,id)).rejects.toMatchObject({code:'ACCEPTANCE_ISOLATION'});}finally{await unverified.end();}
@@ -169,7 +173,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     const reportId=randomUUID(),event=await new OperationEventRepository().append(client,f.root,{action:'sourcing.production.report',entityType:'sourcing_production_report',entityId:reportId,after:{factoryDecisionId:null,productionOrderId:id,rootReportId:reportId,revision:1,position:1,businessDate:date,quantity:1,acceptanceClock:time}});
     await expect(client.query('SELECT sourcing_production_business_date($1,$2)',[id,event])).rejects.toThrow('Production calendar requires');
    }finally{await client.query('ROLLBACK');client.release();}
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
  it('preserves report, completion, shipment and correction lower bounds after multiple business days',async()=>{
   const sceneId=await f.scene('2026-11-12T10:00:00.000Z'),p=await prepare(sceneId),service=new ProductionReportingService(f.db);
   await f.advance(sceneId,'2026-11-13T10:00:00.000Z');
@@ -184,7 +188,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await expect(service.correct(f.root,p.productionId,original.rootReportId,{expectedReportId:original.reportId,businessDate:'2026-11-14',quantity:2,reason:'TEST cannot move beyond completion'},randomUUID())).rejects.toMatchObject({statusCode:400});
    await service.execute(f.root,p.productionId,'ship',{businessDate:'2026-11-14',confirmed:true},randomUUID());
   });
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
  it('serializes same-key concurrent reports and preserves the original receipt after scene advancement',async()=>{
   const sceneId=await f.scene('2026-11-09T10:00:00.000Z'),p=await prepare(sceneId),service=new ProductionReportingService(f.db),key=randomUUID(),input={position:1,businessDate:p.day,quantity:2};
   const results=await Promise.all([p.run(()=>service.report(f.root,p.productionId,input,key)),p.run(()=>service.report(f.root,p.productionId,input,key))]);
@@ -193,7 +197,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const replay=await p.run(()=>service.report(f.root,p.productionId,input,key));expect(replay.value).toEqual(results[0]!.value);
   expect((await service.detail(f.root,p.productionId)).businessToday).toBe('2026-11-10');
   expect((await f.db.query('SELECT count(*)::int AS n FROM sourcing_production_reports WHERE production_order_id=$1',[p.productionId])).rows[0].n).toBe(1);
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
  it('rejects missing, wrong-scene, stale-version and false-time SQL claims independently of API and GUCs',async()=>{
   const sceneRow=await f.runtime.repository.row(scene),time={now:sceneRow.business_now.toISOString(),scenarioId:scene,revision:sceneRow.version};
   for(const bad of [null,{...time,scenarioId:randomUUID()},{...time,revision:time.revision+1},{...time,now:new Date(Date.parse(time.now)+86400000).toISOString()}]){
@@ -209,7 +213,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await client.query('BEGIN');await expect(client.query(`INSERT INTO sourcing_production_reports(report_id,root_report_id,revision,production_order_id,position,business_date,quantity,actor_id,actor_name,operation_event_id)
     SELECT $1,$1,1,$2,1,$3,1,id,display_name,$5 FROM app_users WHERE id=$4`,[reportId,id,date,f.root.actorId,event])).rejects.toThrow('Production calendar requires');
   }finally{await client.query('ROLLBACK');client.release();}
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
  for(const kind of ['report','correct','complete','ship'] as const)it(`rolls back the whole ${kind} transaction and retries the identical key`,async()=>{
   const sceneId=await f.scene(new Date(Date.now()+5*86400000).toISOString()),p=await prepare(sceneId),service=new ProductionReportingService(f.db);
   await p.run(async()=>{
@@ -225,5 +229,5 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(await snapshot()).toEqual(before);
    await action();expect((await action()).reused).toBe(true);
   });
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
 });

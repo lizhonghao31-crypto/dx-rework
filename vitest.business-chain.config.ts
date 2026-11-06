@@ -5,7 +5,7 @@ export default defineConfig({
   test: {
     environment: "node",
     env: { DATABASE_URL: "" },
-    // Explicit bounded parallelism; no test selection or timeout relaxation.
+    // Bounded parallelism and the shared user-approved correctness allowance.
     maxWorkers: testExecutionConfig.workers.longCorrectness,
     include: ["tests/**/*.test.ts"],
     clearMocks: true,

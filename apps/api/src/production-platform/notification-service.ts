@@ -1,3 +1,4 @@
+import {shortLeadTodos} from './short-lead-todos.js';
 import {qcProgressNotices,qcNoticesAsTodos} from './qc-progress-todos.js';
 import {preparationWindowTodos,preparationMaterialsTodos,preparationSupplement} from './preparation-todos.js';
 import {effectiveSourcingDueSql} from './sla-sourcing-deadline-sql.js';
@@ -184,6 +185,7 @@ export class DigitalProductionNotificationService {
     const tasks=(await this.database.query<Task>(`${TASKS} WHERE ${ACTIVE} ORDER BY d.due_at NULLS LAST,t.created_at,t.task_id`)).rows;
     const unified=await arrangementsAvailable(this.database);
     const result:TodoResponse[]=unified?[...await arrangementTodos(this.database,actor),...await fabricDecisionTodos(this.database,actor)]:[];
+    result.push(...await shortLeadTodos(this.database,actor));
     result.push(...await preparationWindowTodos(this.database,actor),...await preparationMaterialsTodos(this.database,actor),...await bulkFabricDecisionTodos(this.database,actor),...await factoryProductionQcTodos(this.database,actor,new ContextBusinessClock(this.database)),...await garmentQualityTodos(this.database,actor,new ContextBusinessClock(this.database)));
     result.push(...qcNoticesAsTodos(await qcProgressNotices(this.database,people),actor));
     for(const task of tasks){

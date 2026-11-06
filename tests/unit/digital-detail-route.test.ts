@@ -5,7 +5,7 @@ import { canAttachHistoricalSource, digitalDetailClosePath, digitalDetailReturnU
 const id = "b92e6815-5892-4c51-b3c9-5e70ddbd1546", other = "65566477-088c-418d-8ba2-a655394759b4";
 const user = (roles: string[], capabilities: string[] = [], isRoot = false) => ({ id, displayName: "TEST", businessRoles: roles, capabilities, isRoot });
 describe("legacy digital detail compatibility", () => {
-  it.each(["closure", "factory", "bulk", "instruction", "budget", "arrangement", "development", "task", "order"])("opens exact %s without a homepage", kind => {
+  it.each(["closure", "factory", "bulk", "instruction", "budget", "arrangement", "development", "task", "order", "shortLead"])("opens exact %s without a homepage", kind => {
     expect(digitalDetailRoute(`?${kind}=${id}`)).toEqual({ kind, id });
   });
   it("keeps domain precedence and closes compound links to their original remaining detail", () => {
@@ -15,6 +15,8 @@ describe("legacy digital detail compatibility", () => {
     expect(closed.startsWith("/acceptance/ui/digital-production?")).toBe(true);
     expect(digitalDetailRoute(new URL(closed, "https://local.invalid").search)).toEqual({ kind: "budget", id });
     expect(closed).toContain("taskView=read");
+    expect(digitalDetailRoute(`?order=${id}&shortLead=${other}`)).toEqual({kind:"order",id});
+    expect(digitalDetailRoute(`?shortLead=${id}&shortLead=${other}`).kind).toBe("invalid");
     expect(digitalDetailRoute(`?closure=${id}&budget=invalid`)).toEqual({ kind: "closure", id });
   });
   it.each([["instruction", "instructionVersion"], ["budget", "budgetVersion"], ["development", "round"], ["arrangement", "round"]])("preserves %s history and rejects malformed history", (kind, version) => {

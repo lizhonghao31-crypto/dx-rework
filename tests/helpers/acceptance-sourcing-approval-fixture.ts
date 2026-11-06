@@ -55,14 +55,14 @@ export async function exerciseAcceptanceSourcingApproval(db:Pool,runtime:Accepta
  const storage=new FakeObjectStorage(),attachments=new AttachmentService(db,storage,{prefix:'TEST',ttlSeconds:60,maxUploadBytes:1000000});
  const service=new SourcingService(db,undefined,undefined,new TodoProjectionService(new TodoService(db)),new SourcingContractService(db,attachments));
  const scene=mode==='ordinary'?null:await runtime.create(root,{name:`TEST-owner-${mode}`,requestKey:randomUUID()});
- if(scene)for(let step=0;step<5;step++)await runtime.run(scene.scenarioId,root,()=>runtime.repository.change(scene.scenarioId,root.actorId,{expectedVersion:scene.version+step,requestKey:randomUUID(),at:new Date(Date.parse('2026-11-01T09:57:06.915Z')-4+step).toISOString()}));
+ if(scene)for(let step=0;step<5;step++)await runtime.run(scene.scenarioId,root,()=>runtime.repository.change(scene.scenarioId,root.actorId,{expectedVersion:scene.version+step,requestKey:randomUUID(),at:new Date(Date.parse(scene.now)+1+step).toISOString()}));
  const run=<T>(action:()=>Promise<T>)=>scene?runtime.run(scene.scenarioId,root,action):action();
  return run(async()=>{
   const identity=new DigitalProductionIdentityService(db,true),forms=new DigitalDevelopmentService(db,true),source=scene?{sourceId:scene.sourceIds[0]!}:await identity.createSource(root,{developmentType:'头版',designStyleNo:`TEST-owner-${suffix}`,temporaryStyleNo:null,customerCode:null},randomUUID());
   const bytes=await sharp({create:{width:2,height:2,channels:3,background:'white'}}).png().toBuffer(),imageId=randomUUID(),objectKey=`TEST-owner/${imageId}`,sha256=createHash('sha256').update(bytes).digest('hex');
   await storage.writeImmutable(objectKey,bytes,{mimeType:'image/png',sha256});
   await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST.png','image/png',$3,$4,$5,'ready',CURRENT_TIMESTAMP)",[imageId,objectKey,bytes.length,sha256,root.actorId]);
-  const document={...initialDevelopmentDocument(),quantity:1,sizeQuantities:[1,0],sampleSize:'M',materials:[{materialId:randomUUID(),category:'主布' as const,label:'TEST主布',name:'TEST棉',specification:'40支',quantity:'1',color:'黑',width:'',weight:'',composition:'',supplier:'',consumption:'',requiredThisRound:true,available:true,expectedDate:null}],files:[{attachmentId:imageId,kind:'款图' as const}]};
+  const document={...initialDevelopmentDocument(),quantity:1,sizes:['M','L'],sizeQuantities:[1,0],sampleSize:'M',measurements:initialDevelopmentDocument().measurements.map(row=>({...row,values:['50','50']})),materials:[{materialId:randomUUID(),category:'主布' as const,label:'TEST主布',name:'TEST棉',specification:'40支',quantity:'1',color:'黑',width:'',weight:'',composition:'',supplier:'',consumption:'',requiredThisRound:true,available:true,expectedDate:null}],files:[{attachmentId:imageId,kind:'款图' as const}]};
   const saved=await forms.save(root,source.sourceId,{expectedVersion:0,document},randomUUID());await forms.publish(root,source.sourceId,saved.version,randomUUID());
   const sourceRow=await forms.read(root,source.sourceId),order=await identity.createOrder(root,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:sourceRow.designStyleNo,orderDate:beijingCalendarDate(businessNow()),primaryMerchandiserId:people.merch!.actorId,lines:[{color:'黑',customerWarehouseArrivalDate:'2027-03-01',sizes:[{size:'M',quantity:10}]}]}),randomUUID(),source.sourceId),id=order.productionOrderId;
   const budgetImageId=randomUUID(),budgetObjectKey=`TEST-owner-budget/${budgetImageId}`;
@@ -103,7 +103,7 @@ export async function exerciseAcceptanceSourcingApproval(db:Pool,runtime:Accepta
   const retry=await service.decideOwner(people.owner!,caseId,{decision:'approved'},key);expect(retry.value).toEqual(outcome.value);expect(retry.reused).toBe(true);
   const after=await snapshot();expect(after).toMatchObject({seq:4,owners:1,snapshots:1,dates:1,lines:1,receipts:1,approval_events:1});
   let plan=(await db.query('SELECT business_time FROM digital_sla_plans WHERE production_order_id=$1 ORDER BY revision DESC LIMIT 1',[id])).rows[0].business_time;
-  expect(plan.scenarioId).toBe(scene?.scenarioId??null);if(scene){expect(plan.now).toBe('2026-11-01T09:57:06.915Z');expect(plan.revision).toBe(6);}
+  expect(plan.scenarioId).toBe(scene?.scenarioId??null);if(scene){expect(plan.now).toBe(new Date(Date.parse(scene.now)+5).toISOString());expect(plan.revision).toBe(6);}
   const frozenBefore=(await db.query('SELECT snapshot_id FROM digital_sla_plans WHERE production_order_id=$1 ORDER BY revision LIMIT 1',[id])).rows[0].snapshot_id;
   const customerDates=new PoCustomerDateService(db),currentOrder=await identity.read(people.merch!,id);
   const customer=await customerDates.read(people.merch!,id),line=customer.customerPoDates[0]!;
@@ -111,7 +111,7 @@ export async function exerciseAcceptanceSourcingApproval(db:Pool,runtime:Accepta
   await customerDates.decide(people.owner!,id,request.requestId,true,randomUUID());
   const latest=(await db.query('SELECT business_time,snapshot_id FROM digital_sla_plans WHERE production_order_id=$1 ORDER BY revision DESC LIMIT 1',[id])).rows[0];
   expect(latest.snapshot_id).toBe(frozenBefore);plan=latest.business_time;
-  expect(plan.scenarioId).toBe(scene?.scenarioId??null);if(scene){expect(plan.now).toBe('2026-11-01T09:57:06.915Z');expect(plan.revision).toBe(6);}
+  expect(plan.scenarioId).toBe(scene?.scenarioId??null);if(scene){expect(plan.now).toBe(new Date(Date.parse(scene.now)+5).toISOString());expect(plan.revision).toBe(6);}
   expect((await customerDates.read(people.owner!,id)).customerPoDates[0]!.date).toBe('2027-04-01');
   if(scene)expect((await db.query("SELECT count(*)::int n FROM message_outbox WHERE topic='todo.delivery'")).rows[0].n).toBe(outboxBefore);
 

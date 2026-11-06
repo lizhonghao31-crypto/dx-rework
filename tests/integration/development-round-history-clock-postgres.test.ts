@@ -1,3 +1,7 @@
+import {vi as correctnessBudget} from 'vitest';
+import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
+// Scoped to this heavy PG correctness file; global ordinary/performance defaults stay strict.
+correctnessBudget.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 import {randomUUID} from 'node:crypto';
 import {afterAll,beforeAll,describe,expect,it} from 'vitest';
 import {DevelopmentDocumentSchema} from '@dx-rework/contracts/digital-development';
@@ -39,7 +43,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const audit=(await f.db.query("SELECT created_at FROM audit_events WHERE entity_id=$1 AND action='development_round_published' AND after_state->>'roundNumber'=$2",[p.sourceId,String(basedOnRound+1)])).rows[0];
    if(scene)expect(row.published_at.toISOString()).toBe(at);else {expect(row.published_at.getTime()).toBeGreaterThanOrEqual(before);expect(row.published_at.getTime()).toBeLessThanOrEqual(after);}
    expect(audit.created_at.getTime()).toBeGreaterThanOrEqual(before-1000);expect(audit.created_at.getTime()).toBeLessThanOrEqual(after+1000);expect(row.document.quantity).toBe(1);
-   const tasks=(await new DevelopmentExecutionService(f.db,true).read(f.root,p.sourceId)).tasks.filter(task=>task.routeVersion===basedOnRound+1&&task.state==='ready');
+   const tasks=(await run(()=>new DevelopmentExecutionService(f.db,true).read(f.root,p.sourceId))).tasks.filter(task=>task.routeVersion===basedOnRound+1&&task.state==='ready');
    expect(tasks.length).toBeGreaterThan(0);for(const task of tasks){
     if(scene&&task.enteredAt)expect(task.enteredAt).toBe(row.published_at.toISOString());
     if(!task.enteredAt){expect(task.timeQuality).toBe('缺失');expect(task.dueAt).toBeNull();}
@@ -48,7 +52,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await run(()=>rounds.publish(f.root,p.sourceId,input,key));expect((await f.db.query('SELECT count(*)::int n FROM digital_development_rounds WHERE source_id=$1 AND round_number=$2',[p.sourceId,basedOnRound+1])).rows[0].n).toBe(1);
   }
   expect((await f.db.query('SELECT to_jsonb(d) AS value FROM digital_development_documents d WHERE source_id=$1',[p.sourceId])).rows[0].value).toEqual(original);
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
  for(const mode of ['past','current','future','ordinary'] as const)it(`${mode}: inherited objects retain all three round histories without later binding or wage pollution`,async()=>{
   const {at,scene,run}=await context(mode),native=new PatternRoomOrderService(f.db,new TodoProjectionService(new TodoService(f.db)),{ordersEnabled:true});
   const price=(await f.db.query("SELECT price_id,version FROM pattern_room_prices WHERE kind='category' AND enabled AND amount IS NOT NULL LIMIT 1")).rows[0];
@@ -68,7 +72,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   for(const round of expected){const history=await native.get(f.root,order.orderId,{round:round.id,node:'completed'});expect(history.attachments.map(file=>file.attachmentId).sort()).toEqual([...round.files].sort());expect(history.historicalView).toMatchObject({missingFacts:false});expect(Object.values(history.actions).every(value=>!value)).toBe(true);expect((await f.db.query('SELECT to_jsonb(s) AS snapshot FROM pattern_room_segments s WHERE round_id=$1 ORDER BY segment_id',[round.id])).rows).toEqual(round.wages);}
   expect(JSON.stringify((await f.db.query('SELECT to_jsonb(b) AS snapshot FROM pattern_room_attachment_bindings b WHERE order_id=$1 ORDER BY round_id,attachment_id',[order.orderId])).rows)).toBe(snapshot);
   await expect(native.get(f.people['worker-b']!,order.orderId,{round:expected[0]!.id,node:'completed'})).rejects.toMatchObject({statusCode:403});
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
  for(const sameKey of [true,false])it(`${sameKey?'same':'distinct'}-key concurrent publication appends once; later clock observation never restarts the saved anchor`,async()=>{
   const {at,scene,run}=await context('past'),p=await run(source),service=new DevelopmentRoundService(f.db,true),sheet=await p.forms.read(f.root,p.sourceId);
   const revision:DevelopmentRevision={basedOnRound:1,document:sheet.document!,origin:'内部发现',customerComment:'',internalProblem:'TEST concurrent seam',explanation:'TEST serialized original command',categories:['车缝'],affectedNodes:['车板'],outputKind:'整件样板'};
@@ -78,5 +82,5 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const rows=(await f.db.query('SELECT published_at FROM digital_development_rounds WHERE source_id=$1',[p.sourceId])).rows;expect(rows).toHaveLength(1);expect(rows[0].published_at.toISOString()).toBe(at);
   const snapshot=async()=>JSON.stringify((await f.db.query('SELECT to_jsonb(t) AS snapshot,(SELECT jsonb_agg(to_jsonb(r) ORDER BY revision_id) FROM digital_production_deadline_revisions r WHERE r.task_id=t.task_id) AS revisions FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 ORDER BY t.task_id',[p.sourceId])).rows);
   const before=await snapshot();await f.advance(scene!,new Date(Date.parse(at)+1000).toISOString());const winner=outcomes.findIndex(result=>result.status==='fulfilled');await run(()=>service.publish(f.root,p.sourceId,input,keys[winner]!));expect(await snapshot()).toBe(before);
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
 });

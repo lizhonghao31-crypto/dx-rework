@@ -1,3 +1,4 @@
+import {acceptanceBusinessContext} from '../../apps/api/src/acceptance-clock/business-time.js';
 import {publishedTechnicalFixture} from './development-technical-fixture.js';
 import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
@@ -61,7 +62,7 @@ export async function exerciseDevelopmentSlaNative(db: Pool, todos: TodoProjecti
     };
     if (craft !== "无") {
       const position=await task('development_positioning'),technical=execution.technicalEvidenceService(),group=(await technical.read(root,sourceId)).artifacts.find(a=>a.status==='published')!;
-      if(position.state!=='ready'){const designer=(await db.query("SELECT user_id FROM user_role_assignments WHERE role_code='sample_designer' AND revoked_at IS NULL LIMIT 1")).rows[0].user_id;await new DigitalProductionTaskService(db).reassign(root,position.taskId,designer,randomUUID());}
+      if(position.state!=='ready'){const candidates=(await db.query("SELECT a.user_id FROM user_role_assignments a JOIN app_users u ON u.id=a.user_id WHERE a.role_code='sample_designer' AND a.revoked_at IS NULL AND u.enabled ORDER BY a.user_id")).rows;const context=acceptanceBusinessContext();let designer:string|undefined;for(const candidate of candidates)if(!context||await context.acceptsActor(candidate.user_id)){designer=candidate.user_id;break;}if(!designer)throw Error("TEST fixture has no eligible original designer in this scene");await new DigitalProductionTaskService(db).reassign(root,position.taskId,designer,randomUUID());}
       await technical.completePosition(root,sourceId,{taskId:position.taskId,artifactSetId:group.artifactSetId,artifactVersion:group.version,attachmentIds:[await taskResult(db,execution,root,sourceId,position.taskId,'定位图')],note:'TEST本轮定位依据'},randomUUID());
       await route("development_craft_dispatch");
       const kind = craft === "印花" ? "development_printing" : craft === "绣花" ? "development_embroidery" : "development_print_embroidery";

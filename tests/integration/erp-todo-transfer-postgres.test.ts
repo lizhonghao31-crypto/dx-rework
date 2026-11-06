@@ -1,3 +1,7 @@
+import {vi as correctnessBudget} from 'vitest';
+import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
+// Scoped to this heavy PG correctness file; global ordinary/performance defaults stay strict.
+correctnessBudget.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 import Fastify from 'fastify';
 import {registerDigitalAccessRoutes} from '../../apps/api/src/production-platform/access-routes.js';
 import {DigitalProductionIdentityService} from '../../apps/api/src/production-platform/identity-service.js';
@@ -6,7 +10,7 @@ import {readFile} from 'node:fs/promises';
 import pg from 'pg';
 import {beforeAll,afterAll,describe,it,expect} from 'vitest';
 import {migrationExecutionSql} from '../../scripts/deploy/migration-execution-compatibility.mjs';
-import {ownedPostgresSchema} from '../helpers/owned-postgres-schema.js';
+import {ownedPostgresSchema,createOwnedPostgresSchema,releaseOwnedPostgresSchema} from '../helpers/owned-postgres-schema.js';
 import {TodoService} from '../../apps/api/src/todos/service.js';
 import {DigitalProductionAccessService} from '../../apps/api/src/production-platform/access-service.js';
 import type {TrustedActorContext} from '../../apps/api/src/tools/repositories.js';
@@ -16,15 +20,15 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
  const ids={actor:randomUUID(),manager:randomUUID(),peer:randomUUID(),former:randomUUID(),replacement:randomUUID(),unmapped:randomUUID()};
  const actors:Record<string,TrustedActorContext>={};const service=new TodoService(db),access=new DigitalProductionAccessService(db);
  beforeAll(async()=>{
-  await admin.query(`CREATE SCHEMA ${schema}`);await db.query('CREATE TABLE schema_migrations(version text PRIMARY KEY,checksum text NOT NULL,applied_at timestamptz DEFAULT CURRENT_TIMESTAMP)');
+  await createOwnedPostgresSchema(admin,schema);await db.query('CREATE TABLE schema_migrations(version text PRIMARY KEY,checksum text NOT NULL,applied_at timestamptz DEFAULT CURRENT_TIMESTAMP)');
   const manifest=JSON.parse(await readFile(new URL('../../apps/api/src/platform/migration-manifest.json',import.meta.url),'utf8')) as {migrations:{version:string;checksum:string}[]};const version=Number((await db.query('SHOW server_version_num')).rows[0].server_version_num);
   for(const migration of manifest.migrations){const sql=await readFile(new URL(`../../apps/api/migrations/${migration.version}.sql`,import.meta.url),'utf8');const client=await db.connect();try{await client.query('BEGIN');await client.query(migrationExecutionSql({...migration,sql},version));await client.query('INSERT INTO schema_migrations(version,checksum) VALUES($1,$2)',[migration.version,migration.checksum]);await client.query('COMMIT');}catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}}
   const c=await db.connect();try{await c.query('BEGIN');await c.query('ALTER TABLE user_role_assignments DISABLE TRIGGER user_role_assignments_guard_creation');
    for(const [name,roles] of [['actor',['pattern_room_worker']],['manager',['production_management']],['peer',['pattern_room_worker']],['former',[]],['replacement',['tail_supervisor']],['unmapped',['pattern_room_worker']]] as const){const id=ids[name];await c.query('INSERT INTO app_users(id,display_name,enabled) VALUES($1,$2,$3)',[id,`TEST ${name}`,name!=='former']);if(name!=='unmapped')await c.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) VALUES($1,$2,'dingtalk','ERP-TODO-TRANSFER',$2::uuid::text,$2::uuid::text,true,true,CURRENT_TIMESTAMP)",[randomUUID(),id]);for(const role of roles)await c.query("INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason) VALUES($1,$2,$3,$4,'TEST owned schema fixture')",[randomUUID(),id,role,ids.actor]);const caps=(await c.query('SELECT DISTINCT capability FROM role_capabilities WHERE role_code=ANY($1::text[])',[roles])).rows.map(row=>row.capability as string);actors[name]={actorId:id,actorRoles:[...roles],authorizationCapability:'todo:view',authorizationCapabilities:caps,requestId:randomUUID()};}
    await c.query('ALTER TABLE user_role_assignments ENABLE TRIGGER user_role_assignments_guard_creation');await c.query('COMMIT');}catch(error){await c.query('ROLLBACK');throw error;}finally{c.release();}
   await db.query("INSERT INTO access_security_policy(policy_key,dingtalk_corp_id) VALUES('primary','ERP-TODO-TRANSFER') ON CONFLICT(policy_key) DO UPDATE SET dingtalk_corp_id='ERP-TODO-TRANSFER'");
- },60000);
- afterAll(async()=>{await db.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();});
+ },testExecutionConfig.correctnessTimeoutMs);
+ afterAll(async()=>{await db.end();await releaseOwnedPostgresSchema(admin,schema);await admin.end();});
  it('uses existing readable candidates and only the assigned manager can transfer to an eligible recipient without replacing the original todo or clock',async()=>{
   const actor=actors.replacement!,managerView=actors.manager!,manager={...managerView,authorizationCapability:'todo:routing_exception_manage'},peer={...actors.peer!,authorizationCapability:'todo:routing_exception_manage'};expect(manager.authorizationCapabilities).toContain('todo:routing_exception_manage');expect(manager.authorizationCapabilities).not.toContain('digital_production:view');
   const people=await access.candidates(manager);expect(people.map(p=>p.id)).toContain(ids.replacement);expect(people.map(p=>p.id)).not.toContain(ids.former);expect(people.map(p=>p.id)).not.toContain(ids.unmapped);

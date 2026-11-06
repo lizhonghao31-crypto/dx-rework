@@ -1,10 +1,14 @@
+import {vi as correctnessBudget} from 'vitest';
+import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
+// Scoped to this heavy PG correctness file; global ordinary/performance defaults stay strict.
+correctnessBudget.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 import {randomUUID} from "node:crypto";
 import {execFile} from "node:child_process";
 import {readFile} from "node:fs/promises";
 import {promisify} from "node:util";
 import pg from "pg";
 import {describe,it,expect} from "vitest";
-import {ownedPostgresSchema} from "../helpers/owned-postgres-schema.js";
+import {ownedPostgresSchema,createOwnedPostgresSchema,releaseOwnedPostgresSchema} from "../helpers/owned-postgres-schema.js";
 import {migrationExecutionSql} from "../../scripts/deploy/migration-execution-compatibility.mjs";
 import {assertTestDatabaseTarget} from "../../scripts/test-database-safety.mjs";
 import {EmployeeAccessService} from "../../apps/api/src/access/employee-access-service.js";
@@ -15,9 +19,9 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
 const tables=['app_users','identity_mappings','user_role_assignments','user_capabilities','delegated_authorizations','business_people','access_security_policy','owner_bootstrap_consumptions','business_roles','role_capabilities','auth_sessions','employee_directory_profiles','business_person_aliases','operation_events'];
 async function fixture(run:(f:{db:pg.Pool;env:NodeJS.ProcessEnv;id:string;root:TrustedActorContext;old:string;access:AccessMasterDataService;employees:EmployeeAccessService;args:string[];snapshot:(omitTarget?:boolean)=>Promise<unknown>;target:(options?:{corpId?:string;unionId?:string;providerId?:string})=>Promise<void>})=>Promise<void>, options:{rootUnionId?:string}={}){
  await assertTestDatabaseTarget(url);
- const schema=ownedPostgresSchema('acceptance_cutting'),admin=new pg.Pool({connectionString:url}),db=new pg.Pool({connectionString:url,options:`-c search_path=${schema}`});
+ const schema=ownedPostgresSchema('business_anchors',process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL?'acceptance-clock':'default'),admin=new pg.Pool({connectionString:url}),db=new pg.Pool({connectionString:url,options:`-c search_path=${schema}`});
  try{
-  await admin.query(`CREATE SCHEMA ${schema}`);
+  await createOwnedPostgresSchema(admin,schema);
   const manifest=JSON.parse(await readFile(new URL('../../apps/api/src/platform/migration-manifest.json',import.meta.url),'utf8')) as {migrations:Array<{version:string;checksum:string}>};
   const version=Number((await db.query('SHOW server_version_num')).rows[0].server_version_num);
   await db.query('CREATE TABLE schema_migrations(version text PRIMARY KEY,checksum char(64) NOT NULL,applied_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP)');
@@ -48,7 +52,7 @@ async function fixture(run:(f:{db:pg.Pool;env:NodeJS.ProcessEnv;id:string;root:T
    await db.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) VALUES($1,$2,'dingtalk',$3,$4,$5,true,true,CURRENT_TIMESTAMP)",[randomUUID(),id,mapping.corpId??corp,mapping.providerId??'uat-cutting-worker',mapping.unionId??'uat-union-cutting-worker']);
   };
   await run({db,env,id,root,old,access,employees,args:['--apply',`--expected-user-id=${id}`],snapshot,target});
- }finally{await db.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();}
+ }finally{await db.end();await releaseOwnedPostgresSchema(admin,schema);await admin.end();}
 }
 (url?describe:describe.skip)('single fixed Acceptance cutting-worker fixture with original PostgreSQL guards',()=>{
  it('checks without writes; creates only one pinned identity and role, serializes repeats, leaves every old field and person unchanged',async()=>fixture(async f=>{
@@ -60,13 +64,13 @@ async function fixture(run:(f:{db:pg.Pool;env:NodeJS.ProcessEnv;id:string;root:T
   expect((await f.db.query('SELECT provider_user_id,union_id,corp_id FROM identity_mappings WHERE user_id=$1',[f.id])).rows).toEqual([{provider_user_id:'uat-cutting-worker',union_id:'uat-union-cutting-worker',corp_id:f.env.DINGTALK_CORP_ID}]);
   expect((await f.db.query("SELECT action FROM operation_events WHERE after_state->>'userId'=$1 OR entity_type='app_user' AND entity_id=$1 ORDER BY action",[f.id])).rows.map(r=>r.action)).toEqual(['acceptance.cutting_worker.created','access.role.assign']);
   const stable=await f.snapshot();expect(await maintainAcceptanceCuttingWorker(f.db,f.env,f.args)).toMatchObject({created:false,grantedRole:false});expect(await f.snapshot()).toEqual(stable);
- }),60000);
+ }),testExecutionConfig.correctnessTimeoutMs);
  it('adds only the missing original role to the pinned clean identity without refreshing its user or identity fields',async()=>fixture(async f=>{
   await f.target();const before=await f.db.query('SELECT to_jsonb(u) AS u,to_jsonb(i) AS i FROM app_users u JOIN identity_mappings i ON i.user_id=u.id WHERE u.id=$1',[f.id]);
   expect(await maintainAcceptanceCuttingWorker(f.db,f.env,[])).toMatchObject({status:'missing_role',applied:false});
   expect(await maintainAcceptanceCuttingWorker(f.db,f.env,f.args)).toMatchObject({created:false,grantedRole:true,status:'ready'});
   expect((await f.db.query('SELECT to_jsonb(u) AS u,to_jsonb(i) AS i FROM app_users u JOIN identity_mappings i ON i.user_id=u.id WHERE u.id=$1',[f.id])).rows).toEqual(before.rows);
- }),60000);
+ }),testExecutionConfig.correctnessTimeoutMs);
  it.each(['disabled','wrong-union','wrong-corp','wrong-alias','direct-capability','extra-role','person'] as const)('refuses abnormal existing target %s without repairing or writing any data',async kind=>fixture(async f=>{
   await f.target(kind==='wrong-union'?{unionId:'wrong'}:kind==='wrong-corp'?{corpId:'wrong'}:kind==='wrong-alias'?{providerId:'uat-other'}:{});
   if(kind==='disabled')await f.employees.disableAccess(f.root,f.id,'TEST target disabled before fixture');
@@ -74,15 +78,15 @@ async function fixture(run:(f:{db:pg.Pool;env:NodeJS.ProcessEnv;id:string;root:T
   if(kind==='extra-role')await f.access.assignRole(f.root,{userId:f.id,roleCode:'quality_control',reason:'TEST dirty target'});
   if(kind==='person')await f.access.createPerson({...f.root,authorizationCapability:'master_data:manage'},{personType:'internal',appUserId:f.id,displayName:'TEST unexpected person',aliases:[],reason:'TEST existing person conflict'});
   const before=await f.snapshot();await expect(maintainAcceptanceCuttingWorker(f.db,f.env,f.args)).rejects.toThrow();expect(await f.snapshot()).toEqual(before);
- }),60000);
+ }),testExecutionConfig.correctnessTimeoutMs);
  it('refuses expected-ID collisions, corporation/Root conflicts and production configuration before any data writes',async()=>fixture(async f=>{
   for(const env of [{...f.env,NODE_ENV:'production'},{...f.env,DINGTALK_CORP_ID:'wrong'},{...f.env,ACCEPTANCE_DATABASE_URL:'postgresql://localhost/production'}]){const before=await f.snapshot();await expect(maintainAcceptanceCuttingWorker(f.db,env,f.args)).rejects.toThrow();expect(await f.snapshot()).toEqual(before);}
   const before=await f.snapshot();await expect(maintainAcceptanceCuttingWorker(f.db,f.env,['--apply',`--expected-user-id=${f.old}`])).rejects.toThrow('existing account');expect(await f.snapshot()).toEqual(before);
   await f.target();const pinned=await f.snapshot();await expect(maintainAcceptanceCuttingWorker(f.db,f.env,['--apply',`--expected-user-id=${randomUUID()}`])).rejects.toThrow('expected distinct user ID');expect(await f.snapshot()).toEqual(pinned);
- }),60000);
+ }),testExecutionConfig.correctnessTimeoutMs);
  it('rejects an existing Root with a wrong UAT union marker without attempting to repair it',async()=>fixture(async f=>{
   const before=await f.snapshot();await expect(maintainAcceptanceCuttingWorker(f.db,f.env,f.args)).rejects.toThrow('UAT identity');expect(await f.snapshot()).toEqual(before);
- },{rootUnionId:'broken-root'}),60000);
+ },{rootUnionId:'broken-root'}),testExecutionConfig.correctnessTimeoutMs);
  it('leaves unrelated multi-role worker-b untouched while single-target checks and creation succeed, but the original full seeder still refuses it',async()=>fixture(async f=>{
   const workerB=randomUUID();
   await f.db.query("INSERT INTO app_users(id,display_name,enabled,manual_access_disabled) VALUES($1,'TEST preserved worker-b',true,false)",[workerB]);
@@ -92,7 +96,7 @@ async function fixture(run:(f:{db:pg.Pool;env:NodeJS.ProcessEnv;id:string;root:T
   await f.db.query("INSERT INTO auth_sessions(id,token_hash,user_id,expires_at) VALUES($1,$2,$3,CURRENT_TIMESTAMP+INTERVAL '1 day')",[randomUUID(),`TEST-preserved-session-${randomUUID()}`,workerB]);
   await f.access.createDelegation({...f.root,authorizationCapability:'delegation:manage'},{grantorUserId:workerB,granteeUserId:f.old,capability:'pattern_room:orders:view',scopeType:'global',validFrom:new Date(Date.now()+86400000).toISOString(),validUntil:new Date(Date.now()+2*86400000).toISOString(),reason:'TEST preserve unrelated future delegation'});
   const before=await f.snapshot(),schema=(await f.db.query('SELECT current_schema() AS name')).rows[0].name as string;
-  expect(schema).toMatch(/^acceptance_cutting_[a-f0-9]+$/);
+  expect(schema).toMatch(/^business_anchors_[a-f0-9]+$/);
   const seedUrl=new URL(f.env.ACCEPTANCE_DATABASE_URL!);
   seedUrl.searchParams.set('options',`${seedUrl.searchParams.get('options')??''} -c search_path=${schema}`.trim());
   const fullSeed=()=>promisify(execFile)(process.execPath,['--import','tsx','scripts/acceptance/seed-role-users.ts'],{cwd:new URL('../../',import.meta.url),env:{...process.env,...f.env,ACCEPTANCE_DATABASE_URL:seedUrl.toString()},timeout:20000});
@@ -106,25 +110,25 @@ async function fixture(run:(f:{db:pg.Pool;env:NodeJS.ProcessEnv;id:string;root:T
   const stable=await f.snapshot();expect(await maintainAcceptanceCuttingWorker(f.db,f.env,['--check',`--expected-user-id=${f.id}`])).toMatchObject({status:'ready',applied:false});
   expect(await maintainAcceptanceCuttingWorker(f.db,f.env,f.args)).toMatchObject({created:false,grantedRole:false});expect(await f.snapshot()).toEqual(stable);
   await expect(fullSeed()).rejects.toMatchObject(seedRefusal);expect(await f.snapshot()).toEqual(stable);
- }),60000);
+ }),testExecutionConfig.correctnessTimeoutMs);
  it('rejects an unrevoked future delegation on the target with all original data untouched',async()=>fixture(async f=>{
   await f.target();await f.access.assignRole(f.root,{userId:f.id,roleCode:'cutting_worker',reason:'TEST target standard role'});
   await f.access.createDelegation({...f.root,authorizationCapability:'delegation:manage'},{grantorUserId:f.old,granteeUserId:f.id,capability:'pattern_room:orders:view',scopeType:'global',validFrom:new Date(Date.now()+86400000).toISOString(),validUntil:new Date(Date.now()+2*86400000).toISOString(),reason:'TEST future delegation must block'});
   const before=await f.snapshot();await expect(maintainAcceptanceCuttingWorker(f.db,f.env,f.args)).rejects.toThrow('unrevoked delegations');expect(await f.snapshot()).toEqual(before);
- }),60000);
+ }),testExecutionConfig.correctnessTimeoutMs);
  it('rejects outgoing delegation from the fixed cutting target without changing the target or any older identity',async()=>fixture(async f=>{
   await f.target();await f.access.assignRole(f.root,{userId:f.id,roleCode:'cutting_worker',reason:'TEST target standard role'});
   await f.access.createDelegation({...f.root,authorizationCapability:'delegation:manage'},{grantorUserId:f.id,granteeUserId:f.old,capability:'cutting:records:create',scopeType:'global',validFrom:new Date(Date.now()+86400000).toISOString(),validUntil:new Date(Date.now()+2*86400000).toISOString(),reason:'TEST target outgoing delegation must block'});
   const before=await f.snapshot();await expect(maintainAcceptanceCuttingWorker(f.db,f.env,f.args)).rejects.toThrow('outgoing delegations');expect(await f.snapshot()).toEqual(before);
- }),60000);
+ }),testExecutionConfig.correctnessTimeoutMs);
  it('rejects a real non-Acceptance connected database before any business or identity queries can write',async()=>fixture(async f=>{
   const other=new URL(url!);other.pathname='/dx_rework_ci';const nonAcceptance=new pg.Pool({connectionString:other.toString()});
   const before=await f.snapshot();try{await expect(maintainAcceptanceCuttingWorker(nonAcceptance,f.env,f.args)).rejects.toThrow('refused connected database');}finally{await nonAcceptance.end();}expect(await f.snapshot()).toEqual(before);
- }),60000);
+ }),testExecutionConfig.correctnessTimeoutMs);
  it('rolls back new user, mapping and audit if the guarded role writer fails; retry remains one audited grant',async()=>fixture(async f=>{
   await f.db.query("CREATE FUNCTION fixture_reject_cutting_grant() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.role_code='cutting_worker' THEN RAISE EXCEPTION 'TEST guarded role failure'; END IF; RETURN NEW; END $$; CREATE TRIGGER zz_fixture_reject_cutting_grant BEFORE INSERT ON user_role_assignments FOR EACH ROW EXECUTE FUNCTION fixture_reject_cutting_grant()");
   const before=await f.snapshot();await expect(maintainAcceptanceCuttingWorker(f.db,f.env,f.args)).rejects.toThrow('TEST guarded role failure');expect(await f.snapshot()).toEqual(before);
   await f.db.query('DROP TRIGGER zz_fixture_reject_cutting_grant ON user_role_assignments; DROP FUNCTION fixture_reject_cutting_grant()');
   expect(await maintainAcceptanceCuttingWorker(f.db,f.env,f.args)).toMatchObject({created:true,grantedRole:true,status:'ready'});
- }),60000);
+ }),testExecutionConfig.correctnessTimeoutMs);
 });

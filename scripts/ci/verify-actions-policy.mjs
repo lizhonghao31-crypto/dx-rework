@@ -47,9 +47,9 @@ assert(JSON.stringify(branches) === JSON.stringify(["main", "release/digital-pro
 assert(quick.includes("timeout-minutes: 5"), "Quick Gate timeout must stay at 5 minutes");
 assert(countOccurrences(quick, 'timeout-minutes:') === 3 && countOccurrences(quick, 'timeout-minutes: 2') === 2,
   "Only two bounded request/certification metadata jobs may accompany the five-minute light/Quick worker");
-assert(countOccurrences(full,'timeout-minutes:')===4 && (full.match(/^ {4}timeout-minutes: 30[ \t]*$/gm)||[]).length===3 && (full.match(/^ {4}timeout-minutes: 2[ \t]*$/gm)||[]).length===1,
-  "Full preparation and both complete lanes must retain finite 30-minute budgets; aggregation is bounded to two minutes");
-for(const [job,budget]of [['prepare',30],['non-db',30],['postgres',30],['full-validate',2]]) {
+assert(countOccurrences(full,'timeout-minutes:')===4 && (full.match(/^ {4}timeout-minutes: 30[ \t]*$/gm)||[]).length===2 && (full.match(/^ {4}timeout-minutes: 60[ \t]*$/gm)||[]).length===1 && (full.match(/^ {4}timeout-minutes: 2[ \t]*$/gm)||[]).length===1,
+  "Full preparation/non-DB remain30minutes; expanded PG lane is bounded to60minutes, aggregation to2minutes");
+for(const [job,budget]of [['prepare',30],['non-db',30],['postgres',60],['full-validate',2]]) {
   const block=full.split(`\n  ${job}:\n`)[1]?.split(/\n {2}[a-z][\w-]*:\n/)[0];
   assert(block && new RegExp(`^ {4}timeout-minutes: ${budget}[ \\t]*$`,'m').test(block), `Full ${job} budget must be ${budget}`);
 }

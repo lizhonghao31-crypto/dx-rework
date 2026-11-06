@@ -1,3 +1,7 @@
+import {vi as correctnessBudget} from 'vitest';
+import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
+// Scoped to this heavy PG correctness file; global ordinary/performance defaults stay strict.
+correctnessBudget.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 import {SlaCalculationService} from '../../apps/api/src/production-platform/sla-calculation-service.js';
 import {randomUUID} from 'node:crypto';
 import {writeFile} from 'node:fs/promises';
@@ -105,7 +109,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect(node.status).not.toMatch(/overdue|completed_on_time|completed_late/);expect(await nativeSnapshot()).toEqual(snapshot);
   if(ctx.scene)expect(result.detail.supervision!.asOf).toBe(at);else expect(Math.abs(Date.parse(result.detail.supervision!.asOf)-Date.now())).toBeLessThan(60000);
   orders.push({id:r.id,scene:ctx.scene,day:r.day,at});
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
  it('uses each scene at the exclusive range boundary ±1ms; advancing time never creates a receipt or hard overdue',async()=>{
   const ctx=await context('2026-12-06T15:59:59.999Z'),r=await prepare(ctx.run);await ctx.run(()=>ship(r));
   const original=await reads(r.id,'Sunday date before boundary'),window=original.factory.returnLogistics![0]!,end=Date.parse(window.arrivalRange!.toExclusive),snapshot=await nativeSnapshot();
@@ -118,7 +122,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   await expect(f.runtime.run(ctx.scene!,f.root,()=>new SlaOrderService(f.db).read(f.root,orders[0]!.id))).rejects.toMatchObject({code:'ACCEPTANCE_CLOCK_CONFLICT'});
   const list=await new DigitalJourneyQuery(f.db).list(f.root,JourneyFilterSchema.parse({scope:'production'}));
   for(const order of orders){const item=list.items.find(i=>i.orderId===order.id)!;expect(item.supervision!.nodes.find(n=>n.id.startsWith('return_logistics:'))!.logisticsWindows![0]!.shippedOn).toBe(order.day);if(order.scene)expect(item.supervision!.asOf).toBe(order.at);}
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
  it('keeps native factory transfer executions and two PO allocations separate',async()=>{
   const ctx=await context('2026-11-24T09:00:00.000Z'),r=await prepare(ctx.run,2),reports=new ProductionReportingService(f.db);
   const supplier=await f.access.createSupplier(f.root,CreateSupplierSchema.parse({supplierCode:`TEST-${randomUUID().slice(0,8).toUpperCase()}`,supplierType:'factory',supplierName:'TEST separate logistics factory',address:'TEST',contractEntityName:'TEST',partyBRepresentative:'TEST',payeeName:'TEST',bankAccount:'TEST0002',bankName:'TEST',changeReason:'TEST native factory scopes'}));
@@ -135,7 +139,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const first=result.sla.nodes!.find(n=>n.id===`return_logistics:${lines[0].line_id}`)!,second=result.sla.nodes!.find(n=>n.id===`return_logistics:${lines[1].line_id}`)!;
   expect(first.logisticsWindows).toHaveLength(2);expect(first.logisticsWindows!.map(w=>w.factoryDecisionId)).toEqual([null,decision!]);expect(second.logisticsWindows).toHaveLength(1);expect(second.logisticsWindows![0]!.factoryDecisionId).toBe(decision!);
   expect(first.logisticsWindows![0]!.shippedOn).toBe('2026-11-24');expect(second.logisticsWindows![0]!.shippedOn).toBe('2026-11-25');
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
  it('retains received logistics ranges through explicit standard application and later clock observations',async()=>{
   const ctx=await context('2026-11-20T09:00:00.000Z'),r=await prepare(ctx.run);await ctx.run(()=>ship(r));
   await f.advance(ctx.scene!,'2026-11-21T09:00:00.000Z');
@@ -146,14 +150,14 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect((await reads(r.id,'global standard only')).factory.returnLogistics![0]).toEqual(window);
   await ctx.run(async()=>{const service=new SlaOrderApplicationService(f.db,'TEST-only-logistics-preview-'.repeat(3)),input={orderId:r.id,configurationVersion:version!,parameterKeys:['return_logistics'],reason:'TEST completed window retained'},preview=await service.preview(f.root,input);await service.apply(f.root,{...input,previewToken:preview.token},randomUUID());});
   await f.advance(ctx.scene!,'2026-12-20T09:00:00.000Z');const after=await reads(r.id,'received retained after application');expect(after.factory.returnLogistics![0]).toEqual(window);expect(after.sla.nodes!.find(n=>n.id.startsWith('return_logistics:'))!.logisticsWindows).toEqual([window]);expect(await nativeSnapshot()).toEqual(snapshot);
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
  it('does not expose order logistics to an unrelated worker or manufacture missing shipment evidence',async()=>{
   const ctx=await context('2026-11-18T09:00:00.000Z'),r=await prepare(ctx.run);
   await expect(new SlaOrderService(f.db).read(f.people['worker-b']!,r.id)).rejects.toMatchObject({statusCode:404});
   await expect(new DigitalJourneyQuery(f.db).list(f.people['worker-b']!,JourneyFilterSchema.parse({scope:'production'}))).rejects.toMatchObject({statusCode:403});
   const result=await reads(r.id,'missing shipment evidence');
   expect(result.factory.returnLogistics).toEqual([]);for(const node of result.sla.nodes!.filter(n=>n.id.startsWith('return_logistics:'))){expect(node.logisticsWindows).toBeUndefined();expect(node.actualStart).toBeNull();expect(node.forecast.at).toBeNull();}
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
  it('presentation-only logistics cannot manufacture an application change when every selected node is completed',async()=>{
   const ctx=await context('2026-11-18T09:00:00.000Z'),r=await prepare(ctx.run,1,true);await ctx.run(()=>ship(r));
   const before=await new SlaOrderService(f.db).read(f.root,r.id);expect(before.facts!.sourcing_ie!.businessCompleted).toBe(true);expect(before.nodes!.find(n=>n.id.startsWith('return_logistics:'))!.logisticsWindows).toHaveLength(1);
@@ -165,7 +169,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await expect(service.apply(f.root,{...input,previewToken:'TEST-no-issued-preview'},randomUUID())).rejects.toMatchObject({statusCode:409,message:'所选节点均已完成或不适用，没有未完成节点可调整'});
   });
   const after=await new SlaOrderService(f.db).read(f.root,r.id);expect(after.current).toMatchObject({revision,snapshotId:snapshot});expect(after.history).toEqual(before.history);expect(after.applications).toEqual(before.applications);expect(await nativeSnapshot()).toEqual(native);expect(await applicationSnapshot()).toEqual(state);
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
  it('a legitimate unfinished duration adjustment excludes unrelated logistics presentation and still applies normally',async()=>{
   const ctx=await context('2026-11-18T09:00:00.000Z'),r=await prepare(ctx.run,1,true);await ctx.run(()=>ship(r));
   const before=await new SlaOrderService(f.db).read(f.root,r.id),window=before.nodes!.find(n=>n.id.startsWith('return_logistics:'))!.logisticsWindows,configuration=await publishAdjustment('garment_inspection');
@@ -174,5 +178,5 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const applied=await service.apply(f.root,{...input,previewToken:preview.token},randomUUID());expect(applied.changedNodes).toBe(preview.changes.length);
   });
   const after=await new SlaOrderService(f.db).read(f.root,r.id);expect(after.current!.revision).toBe(before.current!.revision+1);expect(after.current!.plan.nodes.find(n=>n.parameterKey==='garment_inspection')!.minutes).toBe(configuration.minutes);expect(after.nodes!.find(n=>n.id.startsWith('return_logistics:'))!.logisticsWindows).toEqual(window);expect(after.facts!.sourcing_ie).toMatchObject(before.facts!.sourcing_ie!);
- },60000);
+ },testExecutionConfig.correctnessTimeoutMs);
 });
