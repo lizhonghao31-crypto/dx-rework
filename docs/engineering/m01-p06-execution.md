@@ -31,7 +31,7 @@ P06 已 fetch 核实该实际引用，并在候选与合并树完全相同的前
 
 ## 实际验证与证据边界
 
-修复后的当前源码指纹 `2752b8cbf02a4730f7f86e68fa0a4ef5a7a07e6d7bfbae14675de9d0a3076c30`，实际远端基线在检查后再次fetch为 `f2cc977bbd7efce09dc2d0c5e7a51aac05608c6e`。Node22.22.2/npm10.9.9，PG16.14低权限标记隔离库，原owned schema契约；一个DB套件组或原生浏览器夹具运行，其它静态/单位验证有界并行。原preflight2worker，其它单worker；没有改canonical timeout、worker、角色seed或安全守卫。
+当前全局源码指纹 `fe8c5e4f0cc5beb718f0501c9237ea768a84145a8c46bcf693c5e082ecc67e46`，实际远端基线在检查后再次fetch为 `f2cc977bbd7efce09dc2d0c5e7a51aac05608c6e`。Node22.22.2/npm10.9.9，PG16.14低权限标记隔离库，原owned schema契约；一个DB套件组或原生浏览器夹具运行，其它静态/单位验证有界并行。原preflight2worker，其它单worker；没有改canonical timeout、worker、角色seed或安全守卫。
 
 | 实际检查 | 结果与覆盖 |
 |---|---|
@@ -44,7 +44,7 @@ P06 已 fetch 核实该实际引用，并在候选与合并树完全相同的前
 | 原浏览器消费者 | 1440/390两尺寸通过；完整App设置入口、发布、批量同类型、无权、冲突、部分在途失败、未知恢复与无横向溢出 |
 | 静态工作区命令 | lint、全workspace类型检查、全workspace构建、secret scan均exit0；不触发root部署或DB postbuild |
 
-实际日志、命令、起止时间、报告字节摘要在当前construction-evidence及私有 `m01-p06-*-final2.*`。原生浏览器采用真实React组件、原Fastify路由/服务及有安全标记低权限PG；使用原AuthService、PostgresAuthStore和原登录/auth-me路由签发并验证专属测试会话，含原成员复核及角色/能力重载；仅外部钉钉提供方用原AcceptanceDingTalkProvider替代，不连接真实钉钉。网络故障适配仅在原命令实际提交后控制回执丢失，未改变业务断言。另一个原浏览器suite明确是TEST模拟传输，不能代替原生结果。普通PG与技术PG采用真实任务库，原生浏览器也精确释放自己所建schema；结束后的身份核对无残留schema、无其它连接。
+实际日志、命令、起止时间、报告字节摘要在当前construction-evidence及私有 `m01-p06-*-final2.*` 及 `m01-p06-browser-final3.*`。原生浏览器采用真实React组件、原Fastify路由/服务及有安全标记低权限PG；使用原AuthService、PostgresAuthStore和原登录/auth-me路由签发并验证专属测试会话，含原成员复核及角色/能力重载；仅外部钉钉提供方用原AcceptanceDingTalkProvider替代，不连接真实钉钉。网络故障适配仅在原命令实际提交后控制回执丢失，未改变业务断言。另一个原浏览器suite明确是TEST模拟传输，不能代替原生结果。普通PG与技术PG采用真实任务库，原生浏览器也精确释放自己所建schema；结束后的身份核对无残留schema、无其它连接。
 
 早期扩展失败留在原日志：新增客户默认B验证后，后续通用fixture仍显式使用旧默认A被原权限守卫拒绝；已通过原setCustomerDefault恢复专属夹具默认后再创建后续fixture。守卫未放宽。另一次撤权令专属纯PMC账号失去全部角色而被原流程停用；后续反例明确保留一个无设置权限的设计角色并断言同一有效cookie、账号enabled且auth/me授权，设置仍403。早期失败不作为24项通过证据。
 
@@ -65,4 +65,10 @@ P06 已 fetch 核实该实际引用，并在候选与合并树完全相同的前
 
 集中修复中还查明：只读演算POST被客户端当作写操作，误使并行GET失效；现仅该已存在只读接口按读取语义处理，实际HTTP POST和严格请求体不变。真实发布及身份变化仍拒绝过期演算，原请求复用/反馈回归通过。另两个早期补验失败分别是等待父级筛选状态尚未渲染，以及故障注入标志误作用于统一重试GET，均已定位修正夹具；未放宽产品断言。
 
-当前11项检查均来自同一源码指纹、实际base和真实日志，静态索引完整性及全新检出仍将在提交后核验；最终Full必须绑定修复后的准确Head，旧P05或首次P06结果不替代。CI浏览器下载准备尚须在最终Full实际执行，本地使用显式已安装Chromium151，未把本地系统浏览器当作CI已准备证据。
+当前记录全局绑定最终源码，11项检查绑定实际base、真实日志及明确输入，静态索引完整性及全新检出仍将在提交后核验；最终Full必须绑定修复后的准确Head，旧P05或首次P06结果不替代。CI浏览器下载准备尚须在最终Full实际执行，本地使用显式已安装Chromium151，未把本地系统浏览器当作CI已准备证据。
+
+### 收口日志格式修复与有界证据复用
+
+原`request-final --closeout`只读preview对56576f69拒绝：`report browser: malformed JSON test report`。原因是原浏览器CLI在真实TAP通过后还向stdout打印JSON数组元数据；原校验器不能把它当合法报告。没有创建最终引用，未修改校验器或忽略该检查。只移除这项多余stdout，原results.json证据文件、全部断言、截图与行为不变；该浏览器流程final3重新执行，两尺寸通过，原日志SHA及实际来源已更新。
+
+按AGENTS及construction-evidence的明确输入规则，在修改该日志脚本之前（2026-11-06T02:39:59.742Z），完整源码仍逐字匹配final2的2752b8cb时，捕获其余10项真实成功检查的全部源码/配置/测试输入。147个明确路径覆盖除这个独立浏览器CLI以外的全部原源码；输入指纹99d624bd7abf6b8c45c28707d40e8257c87aab793bf6cd9f35d29ec81f4f685b在日志修改后仍一致。各check保留原testedHead、sourceFingerprint、日志、报告摘要，并附inputPaths/inputFingerprint/capture时间；没有冒称原测试在新Head重新执行。浏览器final3绑定当前全局源码。原索引验证逐项核当前输入，GitHub最终light/Full仍须准确新Head，不跨Head复用Gate。

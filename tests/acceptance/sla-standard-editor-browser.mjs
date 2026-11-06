@@ -60,5 +60,5 @@ try{
   done(`original settings component publication, batch type, scope denial, conflict, partial/unknown apply, shell and overflow width${width}`);
   results.push({width,fullAppSettingsEntry:true,publication:true,batchSameType:true,readonly:true,stalePreview:true,partialApplication:true,unknownRetry:true,overflow:false});await page.close();
  }
- assert.deepEqual(errors,[]);await writeFile(join(evidence,'results.json'),JSON.stringify(results,null,2));console.log(JSON.stringify(results));console.log(`# tests ${passed.length}\n# pass ${passed.length}\n# fail 0\n# skipped 0`);
+ assert.deepEqual(errors,[]);await writeFile(join(evidence,'results.json'),JSON.stringify(results,null,2));console.log(`# tests ${passed.length}\n# pass ${passed.length}\n# fail 0\n# skipped 0`);
 }finally{await browser?.close();if(server)await new Promise(resolve=>server.close(resolve));await rm(out,{recursive:true,force:true});}
