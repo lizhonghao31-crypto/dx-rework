@@ -51,6 +51,8 @@ export type CalculationNode={
  completedAt?:CalculationAnchor;
  waitingFor?:string;
  independent?:boolean;
+ /** The receiving node's original frozen cross-stage buffer in a combined graph. */
+ stageBufferMinutes?:number;
  exclusion?:{knownMs:number|null;reasons:string[]};
  estimateRange?:CalculationEstimateRange;
 };

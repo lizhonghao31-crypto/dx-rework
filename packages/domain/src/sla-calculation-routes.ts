@@ -11,6 +11,7 @@ export type CalculationRouteInput={
  routeKinds?:string[];inheritedKinds?:string[];outputKind?:string;
  native?:Record<string,{startedAt?:string;completedAt?:string;minutes?:number|null;evidence:string;waitingFor?:string}>;
  requireContractReady?:boolean;
+ shipSampleLines?:{lineId:string;label:string}[];
 };
 const catalog=new Map(DIGITAL_SLA_PARAMETERS.map(row=>[row.key,row]));
 /** Code-owned route fragments. Selection never switches off native quality or execution guards. */
@@ -127,14 +128,15 @@ function buildWholeCalculationRoute(input:CalculationRouteInput):CalculationGrap
 
 /** Native instance fragments retain their own frozen standards, scope and actual batch identities. */
 export function combineWholeCalculationRoutes(input:CalculationRouteInput,fragments:CalculationGraph[]):CalculationGraph{
- const graph:CalculationGraph={...fragments[0]!,nodes:fragments.flatMap((g,i)=>g.nodes.map(n=>i===4?{...n,independent:true}:n)),anchors:Object.assign({},...fragments.map(g=>g.anchors)),endIds:[],startIds:[],rangeLabel:'适用全流程',startLabel:'订单、开发及生产各原生起点',endLabel:'适用任务完成与合格装箱（即本系统出货）'};
- const add=(key:string,dependsOn:string[]=[])=>{
-  const row=catalog.get(key)!,value=input.values[key]!,native=input.native?.[key];
+ const productionBuffer=input.values.stage_buffer?.kind==='buffer'?input.values.stage_buffer.minutes:0;
+ const graph:CalculationGraph={...fragments[0]!,stageBufferMinutes:productionBuffer,nodes:fragments.flatMap((g,i)=>g.nodes.map(n=>({...n,stageBufferMinutes:n.stageBufferMinutes??g.stageBufferMinutes,...(i===4?{independent:true}:{})}))),anchors:Object.assign({},...fragments.map(g=>g.anchors)),endIds:[],startIds:[],rangeLabel:'适用全流程',startLabel:'订单、开发及生产各原生起点',endLabel:'适用任务完成与合格装箱（即本系统出货）'};
+ const add=(key:string,dependsOn:string[]=[],scope?:{id:string;label:string})=>{
+  const row=catalog.get(key)!,value=input.values[key]!,id=scope?.id??key,native=input.native?.[id];
   if(value.kind==='ratio'||value.kind==='buffer')throw Error('全局策略不是流程节点');
-  const anchorKey=native?.startedAt?`native:${key}:start`:row.startsAt;
+  const anchorKey=native?.startedAt?`native:${id}:start`:row.startsAt;
   if(native?.startedAt)graph.anchors[anchorKey]={precision:'instant',value:native.startedAt,source:native.evidence};
-  const completion=native?.completedAt?{precision:'instant' as const,value:native.completedAt,source:native.evidence}:graph.anchors[row.endsAt];
-  const node:CalculationNode={id:key,label:row.label,stage:row.stage,parameterKey:key,applicable:'yes',countsProgress:false,kind:value.kind,minutes:'minutes'in value?value.minutes:null,offsetDays:'days'in value?value.days:null,dependsOn:native?.startedAt?[]:dependsOn,anchorKey:dependsOn.length&&!native?.startedAt?null:anchorKey,targetKey:null,includedIn:null,includedPosition:'start',calendar:'continuous',source:native?.evidence??input.unifiedSource,binding:{group:'unified',key},...(completion?{completedAt:completion}:{}),...(native?.waitingFor?{waitingFor:native.waitingFor}:{})};
+  const completion=native?.completedAt?{precision:'instant' as const,value:native.completedAt,source:native.evidence}:scope?undefined:graph.anchors[row.endsAt];
+  const node:CalculationNode={id,label:scope?`${scope.label} · ${row.label}`:row.label,stage:row.stage,parameterKey:key,applicable:'yes',countsProgress:false,kind:value.kind,minutes:'minutes'in value?value.minutes:null,offsetDays:'days'in value?value.days:null,dependsOn:native?.startedAt?[]:dependsOn,anchorKey:dependsOn.length&&!native?.startedAt?null:anchorKey,targetKey:null,includedIn:null,includedPosition:'start',calendar:'continuous',source:native?.evidence??input.unifiedSource,binding:{group:'unified',key},stageBufferMinutes:productionBuffer,...(completion?{completedAt:completion}:{}),...(native?.waitingFor?{waitingFor:native.waitingFor}:{})};
   if(native?.minutes!==undefined&&['duration','estimate'].includes(node.kind)){node.minutes=native.minutes;if(native.minutes===null){node.kind='unlimited';node.binding=null;}}
   graph.nodes.push(node);return node;
  };
@@ -150,9 +152,10 @@ export function combineWholeCalculationRoutes(input:CalculationRouteInput,fragme
   const nativeStart=graph.observationMode==='instance'&&craft.anchorKey&&graph.anchors[craft.anchorKey]?.precision==='instant';
   if(!nativeStart)craft.dependsOn.push('bulk_cutting');
  }
- for(const key of ['warehouse_accessories','ship_sample','receiving_span'])add(key);
+ for(const key of ['warehouse_accessories','receiving_span'])add(key);
+ const samples=input.shipSampleLines?input.shipSampleLines.map(line=>add('ship_sample',[],{id:`ship_sample:${line.lineId}`,label:line.label})): [add('ship_sample')];
  // Independent contract/reminder/estimate windows remain visible but never become a newly invented gate.
- graph.endIds=[...new Set([...fragments.slice(0,4).flatMap(g=>g.endIds),'order_creation','customer_confirmation','development_accessories','development_shipping','budget','sourcing_approval','bulk_cutting','warehouse_accessories','ship_sample','receiving_span',...graph.nodes.filter(n=>n.parameterKey==='factory_finished'||n.parameterKey==='garment_inspection').map(n=>n.id)])];
+ graph.endIds=[...new Set([...fragments.slice(0,4).flatMap(g=>g.endIds),'order_creation','customer_confirmation','development_accessories','development_shipping','budget','sourcing_approval','bulk_cutting','warehouse_accessories',...samples.map(n=>n.id),'receiving_span',...graph.nodes.filter(n=>n.parameterKey==='factory_finished'||n.parameterKey==='garment_inspection').map(n=>n.id)])];
  graph.startIds=graph.nodes.filter(n=>!n.independent&&!n.includedIn&&!n.dependsOn.length&&!['offset','order_date'].includes(n.kind)).map(n=>n.id);
  return graph;
 }

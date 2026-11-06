@@ -3,7 +3,7 @@ import {digitalSlaDefaults} from '../../packages/contracts/src/digital-sla.js';
 import {DEVELOPMENT_CYCLE_DEFAULTS} from '../../packages/contracts/src/digital-development-technical.js';
 import {SLA_REFERENCE_KEYS,SlaCalculationPreviewSchema,type CalculationGraph,type CalculationNode,type SlaCalculationConditions} from '../../packages/contracts/src/sla-calculation.js';
 import {calculateSlaPreview,calculationDraftGraph,addCalculationMinutes,SlaCalculationInputError} from '../../packages/domain/src/sla-calculation.js';
-import {buildSlaCalculationRoute,type CalculationRouteInput} from '../../packages/domain/src/sla-calculation-routes.js';
+import {buildSlaCalculationRoute,combineWholeCalculationRoutes,type CalculationRouteInput} from '../../packages/domain/src/sla-calculation-routes.js';
 import {calculateSlaPlan} from '../../packages/domain/src/digital-sla-plan.js';
 import {slaCalculationDigest} from '../../apps/api/src/production-platform/sla-calculation-service.js';
 import {calculateDevelopmentCycle} from '../../packages/domain/src/development-cycle.js';
@@ -17,6 +17,21 @@ const row=(r:ReturnType<typeof calculateSlaPreview>,id:string)=>r.rows.find(n=>n
 const conditions:SlaCalculationConditions={craft:'none',craftExecution:'internal',pattern:'internal',washing:'none',preshrink:'yes',preparation:'adopted',developmentMode:'normal',rework:'no'};
 const route=(range:CalculationRouteInput['range'],extra:Partial<CalculationRouteInput>={})=>buildSlaCalculationRoute({range,conditions,values:digitalSlaDefaults(),unifiedSource:'TEST named v7 values, not a live snapshot',development:{...DEVELOPMENT_CYCLE_DEFAULTS},developmentSource:'TEST independent v1',anchors:{development_published:anchor(),instruction_published:anchor(),whole_fabric_arrived:anchor(),cut_craft_dispatched:anchor(),sourcing_decided:anchor()},...extra});
 describe('M01 shared standard-window calculation',()=>{
+ it('R2-03: mixed development and production freezes keep their own cross-stage buffers until an explicit buffer draft',()=>{
+  const values=digitalSlaDefaults();values.stage_buffer={kind:'buffer',minutes:180};
+  const input:CalculationRouteInput={range:'whole',conditions:{...conditions,craft:'printing'},values,unifiedSource:'TEST frozen order',development:{...DEVELOPMENT_CYCLE_DEFAULTS},developmentSource:'TEST frozen source',anchors:Object.fromEntries(SLA_REFERENCE_KEYS.filter(k=>k!=='whole_cutting_completed').map(key=>[key,anchor()]))};
+  const dev=route('development',{values:{...values,stage_buffer:{kind:'buffer',minutes:6}}}),parts=[dev,...(['preparation','bulk_craft','delivery','contract'] as const).map(range=>buildSlaCalculationRoute({...input,range}))],p=combineWholeCalculationRoutes(input,parts),r=calculateSlaPreview(p);
+  expect(p.nodes.find(n=>n.parameterKey==='development_pattern')!.stageBufferMinutes).toBe(6);
+  expect(row(r,'bulk_cutting').start.at).toBe(at(63));expect(row(r,'bulk_printing').start.at).toBe(at(90));
+  const current={unified:values,development:{...DEVELOPMENT_CYCLE_DEFAULTS}};expect(calculateSlaPreview(calculationDraftGraph(p,current,current))).toEqual(r);
+  const draft={...current,unified:{...values,stage_buffer:{kind:'buffer' as const,minutes:60}}},changed=calculationDraftGraph(p,current,draft);
+  expect(changed.nodes.every(n=>n.stageBufferMinutes===60)).toBe(true);expect(row(calculateSlaPreview(changed),'bulk_cutting').start.at).toBe(at(61));expect(p.nodes.find(n=>n.parameterKey==='development_pattern')!.stageBufferMinutes).toBe(6);
+ });
+ it('R2-03: selected PO ship samples consume only their own native completion and never a sibling or generic completion',()=>{
+  const extra={observationMode:'instance' as const,shipSampleLines:[{lineId:'A',label:'PO A'},{lineId:'B',label:'PO B'}],native:{'ship_sample:A':{completedAt:at(10),evidence:'TEST actual A sent'},ship_sample:{completedAt:at(20),evidence:'TEST unrelated generic'}}},p=route('whole',extra),r=calculateSlaPreview(p);
+  expect(row(r,'ship_sample:A')).toMatchObject({basis:'actual',end:{at:at(10)},source:'TEST actual A sent'});expect(row(r,'ship_sample:B').end.at).toBeNull();expect(r.rows.some(n=>n.id==='ship_sample')).toBe(false);expect(p.endIds).toEqual(expect.arrayContaining(['ship_sample:A','ship_sample:B']));
+  const one=calculateSlaPreview(route('whole',{...extra,shipSampleLines:[extra.shipSampleLines[0]!]}));expect(one.rows.filter(n=>n.id.startsWith('ship_sample:')).map(n=>n.id)).toEqual(['ship_sample:A']);expect(one.overall.missing.join(' ')).not.toContain('PO B');
+ });
  it('R2-03: whole flow covers all seven stages without calling a selected development fragment the total',()=>{
   const p=route('whole',{conditions:{...conditions,craft:'printing'}}),r=calculateSlaPreview(p);
   expect(r.rangeLabel).toBe('适用全流程');expect(r.stages.map(s=>s.stage)).toEqual([1,2,3,4,5,6,7]);expect(r.rows.some(n=>n.id==='garment_packing')).toBe(true);expect(r.rows.some(n=>n.id==='order_creation')).toBe(true);

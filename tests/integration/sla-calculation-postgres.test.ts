@@ -2,6 +2,7 @@ import {randomUUID} from 'node:crypto';
 import Fastify from 'fastify';
 import {beforeAll,afterAll,describe,it,expect} from 'vitest';
 import {businessAnchorFixture} from '../helpers/business-anchor-fixture.js';
+import {SlaOrderApplicationService} from '../../apps/api/src/production-platform/sla-order-application.js';
 import {SlaCalculationService} from '../../apps/api/src/production-platform/sla-calculation-service.js';
 import {DigitalProductionIdentityService} from '../../apps/api/src/production-platform/identity-service.js';
 import {DigitalDevelopmentService} from '../../apps/api/src/production-platform/development-service.js';
@@ -122,6 +123,24 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   state=await flow.qc(f.root,ready.id,{expectedRevision:state.revision,returnFactId:returned,checks:[{lineId,result:'合格',problem:'',treatment:'',attachmentIds:[]}],note:'TEST original QC complete'},randomUUID());
   const completed=await service.preview(f.root,{selection:selected});expect(completed.current.rows.find(n=>n.id.endsWith('/bulk_qc'))).toMatchObject({basis:'actual',end:{at:'2026-11-02T00:00:00.000Z'}});expect(completed.current.rows.some(n=>n.label.includes('待回'))).toBe(false);
  }));
+ it('R2-03: whole flow reads native partial and complete ship sample facts for the exact selected PO',async()=>run(async()=>{
+  const ready=await f.bulkReady('无',undefined,2),flow=new FactoryFlowService(f.db);let state=await flow.read(f.root,ready.id);const [a,b]=state.lines.map(line=>line.lineId);
+  state=await flow.followup(f.root,ready.id,{expectedRevision:state.revision,kind:'船样寄出',lineIds:[a!],occurredAt:'2026-11-02T00:00:00Z',trackingNumber:'TEST-R2-SAMPLE-A',note:'TEST original partial PO sample'},randomUUID());
+  const before=await count(),selection={mode:'instance' as const,range:'whole' as const,kind:'order' as const,id:ready.id},all=await service.preview(f.root,{selection}),one=await service.preview(f.root,{selection:{...selection,poLineId:a}});
+  expect(all.current.rows.find(n=>n.id===`ship_sample:${a}`)).toMatchObject({basis:'actual',end:{at:'2026-11-02T00:00:00.000Z'}});expect(all.current.rows.find(n=>n.id===`ship_sample:${b}`)!.end.at).toBeNull();expect(all.current.rows.some(n=>n.id==='ship_sample')).toBe(false);expect(one.current.rows.filter(n=>n.id.startsWith('ship_sample:')).map(n=>n.id)).toEqual([`ship_sample:${a}`]);expect(one.current.rows.find(n=>n.id.startsWith('ship_sample:'))!.end).toEqual(all.current.rows.find(n=>n.id===`ship_sample:${a}`)!.end);expect(await count()).toEqual(before);
+  await flow.followup(f.root,ready.id,{expectedRevision:state.revision,kind:'船样寄出',lineIds:[b!],occurredAt:'2026-11-02T00:00:00Z',trackingNumber:'TEST-R2-SAMPLE-B',note:'TEST original remaining PO sample'},randomUUID());
+  const completed=await service.preview(f.root,{selection});expect(completed.current.rows.filter(n=>n.id.startsWith('ship_sample:')).every(n=>n.basis==='actual'&&n.end.at==='2026-11-02T00:00:00.000Z')).toBe(true);
+ }));
+ it('R2-03: whole flow preserves separately frozen source and production buffers without a draft edit',async()=>{
+  const settings=new DigitalProductionTaskService(f.db),initial=await settings.slaSettings(f.root),publish=async(minutes:number)=>{const current=await settings.slaSettings(f.root),input={expectedVersion:current.version,values:{...current.values,stage_buffer:{kind:'buffer' as const,minutes}},reason:'TEST separate source/order frozen buffer'},preview=await settings.previewSlaSettings(f.root,input);await settings.publishSlaSettings(f.root,{...input,previewToken:preview.token},randomUUID());};
+  try{
+   await publish(6);const ownScene=await f.scene('2026-11-02T00:00:00Z'),ownRun=<T,>(fn:()=>Promise<T>)=>f.runtime.run(ownScene,f.root,fn),sourceId=await ownRun(()=>createSource()),source=(await f.db.query('SELECT design_style_no FROM digital_production_sources WHERE source_id=$1',[sourceId])).rows[0];await publish(180);
+   const made=await ownRun(()=>identity.createOrder(f.root,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:source.design_style_no,orderDate:'2026-11-02',primaryMerchandiserId:f.people.merchandiser!.actorId,lines:[{formalPoNo:'TEST-BUFFER-PO',color:'黑',customerWarehouseArrivalDate:'2027-08-15',sizes:[{size:'M',quantity:1}]}]}),randomUUID(),sourceId));
+   const application=new SlaOrderApplicationService(f.db),selection={orderId:made.productionOrderId,configurationVersion:(await settings.slaSettings(f.root)).version,parameterKeys:['stage_buffer'],reason:'TEST explicit order-only newer buffer application'},preview=await ownRun(()=>application.preview(f.root,selection));await ownRun(()=>application.apply(f.root,{...selection,previewToken:preview.token},randomUUID()));
+   const result=await ownRun(()=>service.preview(f.root,{selection:{mode:'instance',range:'whole',kind:'order',id:made.productionOrderId}}));
+   expect(result.context.graph.nodes.find(n=>n.id==='development/development_pattern')!.stageBufferMinutes).toBe(6);expect(result.context.graph.nodes.find(n=>n.id==='bulk_cutting')!.stageBufferMinutes).toBe(180);expect(result.context.graph.nodes.find(n=>n.id==='preparation/bulk_pattern')!.stageBufferMinutes).toBe(180);expect(result.draft).toEqual(result.current);
+  }finally{const current=await settings.slaSettings(f.root);if(JSON.stringify(current.values)!==JSON.stringify(initial.values)){const input={expectedVersion:current.version,values:initial.values,reason:'TEST restore initial defaults after distinct frozen buffer scene'},preview=await settings.previewSlaSettings(f.root,input);await settings.publishSlaSettings(f.root,{...input,previewToken:preview.token},randomUUID());}}
+ });
  it('fresh settings authority allows PMC read while worker/designer/system-admin remain denied',async()=>{
   expect((await service.preview(pmc,example())).current.overall.spanMs).toBe(80.5*3600000);
   for(const key of ['pattern-room-worker','sample-designer','system-admin'])await expect(service.preview(f.people[key]!,example())).rejects.toMatchObject({statusCode:403});
