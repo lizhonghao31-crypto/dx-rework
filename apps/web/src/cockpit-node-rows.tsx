@@ -1,6 +1,6 @@
 import type {ReactNode} from "react";
 import {CockpitDate} from "./cockpit-date.js";
-import {hasDateOnlyTarget,nodeTargetLabel} from './journey-sla-details.js';
+import {hasDateOnlyTarget,hasOriginalTaskDeadline,nodeTargetLabel} from './journey-sla-details.js';
 import {StatusBadge,type Tone} from "@dx-rework/ui";
 import {NodeTable} from "@dx-rework/ui/production";
 import type {JourneyNode,JourneyRecord} from "@dx-rework/contracts/digital-production-journey";
@@ -27,7 +27,7 @@ export function CockpitNodeRows({nodes,selectedId,context,onSelect}:{nodes:Journ
       return <tr key={node.instanceId} id={`journey-node-${node.instanceId}`} className={selectedId===node.instanceId?"is-focused":undefined}>
         <td><button type="button" className="journey-node-toggle" data-cockpit-focus={'node:'+node.instanceId} aria-pressed={selectedId===node.instanceId} onClick={()=>onSelect(node)}>{node.label}</button><small>{node.subject||(node.round?<span className="cockpit-node-round">{`第 ${node.round} 轮`}</span>:"")}{!node.current?<span className="cockpit-node-round"> · 历史</span>:null}</small></td>
         <td title={cockpitPerson(node.owner,node.ownerStatus)}>{cockpitPerson(node.owner,node.ownerStatus)}</td><td><StatusBadge tone={cockpitNodeTone(node)}>{cockpitNodeStatus(node).split(" · ").map((part,index)=><span className="cockpit-state-part" key={index}>{`${index?" · ":""}${part}`}</span>)}</StatusBadge>{node.productionSupervision?.state==='ended'&&<small>生产监督已结束，查看原记录</small>}</td>
-        <td>{node.state==="not_applicable"?"不适用":node.state==="unavailable"?"无可见时间":hasDateOnlyTarget(node)?nodeTargetLabel(node):<CockpitDate value={node.expectedAt} precision={node.expectedPrecision} stacked/>}</td>
+        <td>{node.state==="not_applicable"?"不适用":node.state==="unavailable"?"无可见时间":node.nativeWindows?.length?<>{nodeTargetLabel(node)}{hasOriginalTaskDeadline(node)&&<small>原任务截止：{hasDateOnlyTarget(node)?nodeTargetLabel({...node,nativeWindows:undefined}):<CockpitDate value={node.expectedAt} precision={node.expectedPrecision} stacked/>}</small>}</>:hasDateOnlyTarget(node)?nodeTargetLabel(node):<CockpitDate value={node.expectedAt} precision={node.expectedPrecision} stacked/>}</td>
         <td>{node.state==="not_applicable"?"不适用":<CockpitDate value={node.actualDate??node.actualAt} precision={node.actualDate?"date":"instant"} missing={node.state==="completed"?"完成时间待核实":"—"} stacked/>}{(node.actualAt||node.actualDate)&&node.actualQuality!=="verified"&&<small>待核实</small>}</td>
         <td>{historical&&node.records.length===1?<CockpitRecordLink record={{...node.records[0]!,mode:"read"}} context={context}>查看记录</CockpitRecordLink>:historical&&node.records.length>1?<details><summary>查看记录（{node.records.length}）</summary>{node.records.map((record,index)=><CockpitRecordLink key={record.domain+record.id+index} record={{...record,mode:"read"}} context={context}>{cockpitRecordLabel(record)}{record.version?` · v${record.version}`:""}</CockpitRecordLink>)}</details>:<span className="journey-muted">{node.state==="unavailable"?node.unavailableReason==="permission"?"无权限查看":"尚无原事实":historical?"尚无记录":"选择节点"}</span>}</td>
       </tr>;

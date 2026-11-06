@@ -5,6 +5,7 @@ import {JOURNEY_STAGES,JourneyReturnContextSchema,type JourneyNode,type OrderJou
 import {CockpitDetail} from "../../apps/web/src/cockpit-detail.js";
 import {CockpitNodeDates} from '../../apps/web/src/cockpit-node-dates.js';
 import {nodeTargetLabel} from '../../apps/web/src/journey-sla-details.js';
+import {CockpitNodeRows} from '../../apps/web/src/cockpit-node-rows.js';
 const id="00000000-0000-4000-8000-000000000001",task="00000000-0000-4000-8000-000000000002",old="00000000-0000-4000-8000-000000000003";
 function fixture():OrderJourney{
   const node=(key:string,patch:Partial<JourneyNode>={}):JourneyNode=>({key,instanceId:key,label:key,stage:"development",state:"active",current:true,round:1,occurrence:1,owner:{id,name:"TEST责任人"},operator:null,assignmentHistory:[],expectedAt:"2026-10-01",expectedKind:"plan",expectedPrecision:"date",actualAt:null,actualQuality:"missing",enteredAt:null,sla:"not_set",completionResult:null,overdueSeconds:null,risks:[],blockers:[],records:[],inheritedFrom:null,countsInProgress:true,unavailableReason:null,...patch});
@@ -12,6 +13,16 @@ function fixture():OrderJourney{
   return {id,sourceId:id,orderId:id,designStyleNo:"TEST-DETAIL",temporaryStyleNo:null,customer:"PD",category:"上衣",designer:null,styleName:null,merchandisers:[],orderNumbers:[],createdAt:"2026-10-19T00:00:00Z",deliveryDate:null,selectedRound:1,adoptedRound:1,sourceVersion:1,instructionVersion:1,lines:[],links:[],stages:JOURNEY_STAGES.map(stage=>({...stage,state:"pending",nodes:stage.key==="development"?[current,completed]:[]})),progress:{development:{completed:8,applicable:10},bulk:null},hitReasons:[],display:{ruleVersion:"cockpit-display-v1",mainState:"active",earliestShipmentDate:null,missingShipmentDates:0,closedAt:null,actualRatio:.5,actualLabel:"50.0%",awaitingClosure:false,timeRatio:null,timeLabel:"时间规则待完善",stages:JOURNEY_STAGES.map(stage=>({key:stage.key,ratio:.5,applicable:2,completed:1,notApplicable:false,risk:stage.key==="development"?"overdue":"normal"}))},currentRiskNodes:[],currentDeliveryRisks:[],riskHistory:[],operationLog:{items:[],nextCursor:null,asOf:"2026-10-19T00:00:00Z",coverage:["节点事件"]}};
 }
 const render=(o:OrderJourney,busy=false)=>renderToStaticMarkup(createElement(CockpitDetail,{order:o,context:JourneyReturnContextSchema.parse({selected:id,scope:"production",focus:task}),asOf:"2026-10-19T00:00:00Z",actions:null,busy,onChange(){}}));
+it('R2-02 Review: node table exposes an original batch deadline when the generic task deadline is missing',()=>{
+ const n=fixture().stages[1]!.nodes[0]!;n.expectedAt=null;n.expectedKind='unset';n.nativeWindows=[{evidence:'TEST-native-D',scopeLabel:'PO TEST',startedAt:null,deadline:'2026-11-12T03:35:00Z',warningAt:null,completedAt:null,complete:false}];
+ const html=renderToStaticMarkup(createElement(CockpitNodeRows,{nodes:[n],context:JourneyReturnContextSchema.parse({selected:id}),selectedId:undefined,asOf:undefined,onSelect(){}}));
+ expect(html).toContain('2026/11/12 11:35:00');expect(html).not.toContain('未登记');expect(html).not.toContain('原任务截止');
+});
+it('R2-02 Review: node table marks multiple original batches and retains the separate original task date boundary',()=>{
+ const n=fixture().stages[1]!.nodes[0]!;n.expectedAt='2030-01-01T16:00:00Z';n.expectedKind='sla';n.deadlineMode='date_target';n.deadlineExclusive=true;n.nativeWindows=['A','B'].map(evidence=>({evidence,scopeLabel:'PO TEST-'+evidence,startedAt:null,deadline:'2026-11-12T03:35:00Z',warningAt:null,completedAt:null,complete:false}));
+ const html=renderToStaticMarkup(createElement(CockpitNodeRows,{nodes:[n],context:JourneyReturnContextSchema.parse({selected:id}),selectedId:undefined,asOf:undefined,onSelect(){}}));
+ expect(html).toContain('各批原截止见节点');expect(html).toContain('原任务截止：2030/1/1 当天结束');expect(html).not.toContain('2030/1/2');
+});
 it('R2-02: native completed batch deadlines remain directly readable without replacing them with a generic task date',()=>{
  const o=fixture(),n=o.stages[1]!.nodes[0]!;n.expectedAt='2030-01-01T00:00:00Z';n.expectedPrecision='instant';n.expectedKind='sla';n.nativeWindows=[{evidence:'TEST-source-fact',scopeLabel:'PO TEST-ORIGINAL · 黑',startedAt:'2026-11-02T00:00:00Z',deadline:'2026-11-03T00:00:00Z',warningAt:null,completedAt:'2026-11-02T00:01:00Z',complete:true,snapshotId:'TEST-private-snapshot'}];
  const before=structuredClone(n),html=renderToStaticMarkup(createElement(CockpitNodeDates,{node:n,order:o}));
