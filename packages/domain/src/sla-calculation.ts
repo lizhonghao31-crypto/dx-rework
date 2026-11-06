@@ -45,6 +45,10 @@ const span=(start:CalculationTime,end:CalculationTime)=>start.at&&end.at&&at(end
 export function calculateSlaPreview(graph:CalculationGraph):SlaCalculationResult{
  if(!graph.endIds.length||new Set(graph.endIds).size!==graph.endIds.length)throw Error('必须明确唯一的演算终点集合');
  for(const n of graph.nodes)if(['duration','included','estimate'].includes(n.kind)&&!isSlaDurationMinutes(n.minutes))throw new SlaCalculationInputError(`${n.parameterKey}.minutes`,`${n.label}：时长须为合法的正数并保留毫秒精度`);
+ for(const parent of graph.nodes){
+  const children=graph.nodes.filter(n=>n.includedIn===parent.id&&n.applicable!=='no');
+  if(children.reduce((sum,n)=>sum+n.minutes!,0)>(parent.minutes??0))throw new SlaCalculationInputError(`${parent.parameterKey}.minutes`,`${parent.label}：本实例保留的内含目标合计超过草稿父窗口，请核对父窗口与原冻结目标`);
+ }
  const ordered=orderedSlaNodes(graph),definitions=new Map(graph.nodes.map(n=>[n.id,n]));
  for(const id of graph.endIds)if(!definitions.has(id))throw Error('演算终点不在本条路线');
  for(const id of graph.startIds??[])if(!definitions.has(id))throw Error('演算起点不在本条路线');

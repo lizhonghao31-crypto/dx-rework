@@ -2,7 +2,7 @@
 
 ## 施工目标与边界
 
-依据完整施工方案 `dx-m01-implement-v1.1.1.md` §8（含 §8.6 首批真实路线矩阵）及 M01-OPT1.3。用户已授权本轮施工、正式 GitHub Codex Review 和合并，按一个 PR 完成后再开始下一个的顺序推进。P04 #905 已合并，实际远端 `release/digital-production-v1` 基线为 `7bc97df926a4a3d2b626bbbe440260d9b4104fd9`，工作分支 `m01/p05`。
+依据完整施工方案 `dx-m01-implement-v1.1.1.md` §8（含 §8.6 首批真实路线矩阵）及 M01-OPT1.3。用户已授权本轮施工、正式 GitHub Codex Review 和合并，按顺序检查和合并 PR；用户后续明确允许等待 Gate 时在隔离工作树准备后续项，后续 PR 必须在前项合并后同步实际基线并复核受影响结果。P04 #905 已合并，实际远端 `release/digital-production-v1` 基线为 `7bc97df926a4a3d2b626bbbe440260d9b4104fd9`，工作分支 `m01/p05`。
 
 本 PR 交付共享纯计算、代码拥有的路线适配、独立 strict 只读接口和技术验证。P06 交付设置页面完整交互。风险为 FULL：涉及时效计算、上下文权限与现有发布接口兼容。允许增量代码、隔离测试、Review、修复和合并；禁止部署、ECS 重启、生产或真实业务数据变更，以及操作独立 Acceptance 诊断现场。
 
@@ -39,16 +39,28 @@
 
 ## 本地冻结候选实际结果
 
-本轮最终源码指纹 `55dfc75f2fed04dee5dbdb77919d2f829b99dbf170bd3a55915f7754d9602eca`。实际工具链 Node 22.22.2 / npm 10.9.9；PG 16.14，低权限标记隔离库 `dx_m01_acceptance_test_dc924aaea2`、OID 694046。每个 PG 组合串行、单 worker；原技术/产前长套件沿 canonical `vitest.business-chain.config.ts`，普通 PG 沿原 `vitest.config.ts`。非 DB 单测单 worker，原 preflight 两 worker；静态工作区命令串行，与一个 PG 组合并行，未更改原时间预算。
+本轮最终源码指纹 `934b62a310be6f0edced80c01a46932487a81b66fd5f269be30dec97d82a2d41`。实际工具链 Node 22.22.2 / npm 10.9.9；PG 16.14，低权限标记隔离库 `dx_m01_acceptance_test_dc924aaea2`、OID 694046。每个 PG 组合串行、单 worker；原技术/产前长套件沿 canonical `vitest.business-chain.config.ts`，普通 PG 沿原 `vitest.config.ts`。非 DB 单测单 worker，原 preflight 两 worker；静态工作区命令串行，与一个 PG 组合并行，未更改原时间预算。
 
 | 检查 | 实际命令及结果 |
 |---|---|
-| 领域/原消费者单元 | `vitest run tests/unit/sla-calculation.test.ts tests/unit/digital-sla-plan.test.ts tests/unit/development-cycle.test.ts tests/unit/digital-sla-configuration.test.ts tests/unit/development-material-readiness.test.ts tests/unit/production-readiness-contract.test.ts tests/unit/development-technical-contract.test.ts --maxWorkers=1`：7 文件，127 通过，0 失败，0 跳过 |
-| 普通真实 PG | `vitest run tests/integration/sla-calculation-postgres.test.ts tests/integration/digital-sla-configuration-postgres.test.ts tests/integration/digital-sla-plan-postgres.test.ts tests/integration/development-sla-enrollment-postgres.test.ts tests/integration/factory-logistics-cockpit-postgres.test.ts --maxWorkers=1`：5 文件，63 通过，0 失败，0 跳过 |
+| 领域/原消费者单元 | `vitest run tests/unit/sla-calculation.test.ts tests/unit/factory-production-facts.test.ts tests/unit/digital-sla-plan.test.ts tests/unit/development-cycle.test.ts tests/unit/digital-sla-configuration.test.ts tests/unit/development-material-readiness.test.ts tests/unit/production-readiness-contract.test.ts tests/unit/development-technical-contract.test.ts --maxWorkers=1`：8 文件，132 通过，0 失败，0 跳过 |
+| 普通真实 PG | `vitest run tests/integration/sla-calculation-postgres.test.ts tests/integration/digital-sla-configuration-postgres.test.ts tests/integration/digital-sla-plan-postgres.test.ts tests/integration/development-sla-enrollment-postgres.test.ts tests/integration/factory-logistics-cockpit-postgres.test.ts --maxWorkers=1`：5 文件，64 通过，0 失败，0 跳过 |
 | 原生技术/产前 | `vitest run tests/integration/development-technical-postgres.test.ts tests/integration/production-readiness-postgres.test.ts --config vitest.business-chain.config.ts --maxWorkers=1`：2 文件，42 通过，0 失败，0 跳过 |
 | 原预检 | `npm run test:preflight`：240 通过，0 失败，0 跳过；原静态迁移检查通过 |
 | 工作区 | `npm run lint`、`npm run typecheck`、`npm run build --workspaces --if-present`、`npm run secret:scan` 均实际 exit 0；未调用根 postbuild 的业务/部署入口 |
 
-每条提交内 construction 记录绑定此次 source、命令、起止时间、原日志 SHA256 及本次 Vitest JSON/TAP 摘要。原始结果在任务私有目录 `m01-p05-*-final4.*`；PG 身份及完成后资源核对见私有 `m01-p05-db-postcheck.json`，无残留测试 schema、无其它连接。旧 final2/final3 及早期失败日志保留为各自版本证据，不替代当前 final4。
+每条提交内 construction 记录绑定此次 source、命令、起止时间、原日志 SHA256 及本次 Vitest JSON/TAP 摘要。原始结果在任务私有目录 `m01-p05-*-final6.*`；PG 身份及完成后资源核对见私有 `m01-p05-db-postcheck.json`，无残留测试 schema、无其它连接。旧 final2/final3/final4/final5 及早期失败日志保留为各自版本证据，不替代当前 final6。
 
-收口补验已覆盖具体字段定位、原 HTTP 合法发布、相同幂等 key 的准确重试，以及旧母单冻结值不变。读取与试算本身仍由数据库 read-only 事务约束。GitHub light、必要 Codex Review、最终 Full 和合并尚待实际执行；本地结果不签这些阶段，也不签 P06 的完整页面体验或现场业务验收。
+收口补验已覆盖具体字段定位、原 HTTP 合法发布、相同幂等 key 的准确重试，以及旧母单冻结值不变。读取与试算本身仍由数据库 read-only 事务约束。原候选 74f6bbf 的 light 已通过；官方 Codex Review 在该 SHA 完成并提出三条 P2。以下集中修复已完成本地定向验证，最终候选仍须对应 light、实际线程闭合及最终 Full；这些待执行阶段不签通过，也不签 P06 的完整页面体验或现场业务验收。
+
+
+## 官方 Review 与集中修复
+
+正式 Review 请求 6673008424（2026-11-06T00:14:35Z），完成回执 6673013493（00:18:24Z），实际审核 SHA 为 `74f6bbf3a560ea9ae740c861db1506891cd1f878`。本段记录该审核之后的真实修复范围，不把旧审核回执声称为修复后 Head 已重审。
+
+- [4487619579](https://github.com/lizhonghao31-crypto/dx-rework/pull/906#discussion_r4487619579)：交付起点改读 `factoryProductionCompletion` 的原生生产完成状态与业务日期；新增可选 PO 范围，原全部 PO 消费者默认行为保留。原工厂业务链真实先登记质检，断言不能打开生产完成起点，再通过原 report/complete/ship 命令验证日期精度与出货不改该日期；单元反例覆盖另一 PO 未完成不能污染所选 PO，默认全单仍未知。
+- [4487619590](https://github.com/lizhonghao31-crypto/dx-rework/pull/906#discussion_r4487619590)：两独立窗口分别接 `preparationWindow` 的原开始、冻结分钟和真实完成记录；尚未建立窗口明确等待，不从当前 readiness 重开。原到仓订正事务真实使当前就绪失效，但计算中已捕获的草稿／正式窗口逐项保持原值。
+- [4487619598](https://github.com/lizhonghao31-crypto/dx-rework/pull/906#discussion_r4487619598)：按当前已发布制单版与采用记录 `retainedInstructionVersion` 判断保留历史；原生历史采用反例继续列 4320 分钟旧制单和原完成时刻，不生成两新窗，原快照与窗口表不变。
+- 执行者补验：全局合法的新草稿父窗口可能不兼容旧实例冻结的内含目标。共享试算返回父参数具名 `SlaCalculationInputError`，只读接口只把该草稿输入错误转为400；原拓扑与服务器错误不被吞掉。真实HTTP反例先合法发布两个60分钟内含目标并创建原生来源，再合法发布当前30分钟目标；90分钟草稿对旧来源返回具体字段400，而同一新单标准仍可沿原预览/发布合法发布，旧来源冻结不改。没有新增全局发布门槛。
+
+补验夹具第一次在虚拟时钟内发布全局标准被原守卫正确拒绝；第二次使用固定旧版本的场景创建来源未形成所需反例。最终改为在该隔离库的普通原生业务上下文创建来源，真实冻结刚发布的标准，未修改时钟守卫或手改冻结事实。私有早期失败与定点报告保留；最终 final6 完整组合全部通过，不把单用例筛选产生的跳过计入最终覆盖。

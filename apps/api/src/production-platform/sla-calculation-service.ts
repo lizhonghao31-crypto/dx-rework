@@ -3,7 +3,7 @@ import type {Pool,PoolClient} from 'pg';
 import {DIGITAL_SLA_PARAMETERS,validateDigitalSlaSnapshot,validateDigitalSlaValues,type DigitalSlaValues} from '@dx-rework/contracts/digital-sla';
 import {DevelopmentCycleValuesSchema} from '@dx-rework/contracts/digital-development-technical';
 import {SlaCalculationPreviewSchema,SLA_CALCULATOR_VERSION,SLA_CALENDAR_VERSION,SLA_CALCULATION_ROUTE_VERSION,type CalculationAnchor,type CalculationGraph,type CalculationNode,type SlaCalculationContext,type SlaCalculationPreview,type SlaCalculationPreviewInput,type SlaCalculationSelection} from '@dx-rework/contracts/sla-calculation';
-import {calculateSlaPreview,calculationDraftGraph} from '@dx-rework/domain/sla-calculation';
+import {calculateSlaPreview,calculationDraftGraph,SlaCalculationInputError} from '@dx-rework/domain/sla-calculation';
 import {buildSlaCalculationRoute,type CalculationRouteInput} from '@dx-rework/domain/sla-calculation-routes';
 import type {SlaNodeFact} from '@dx-rework/domain/digital-sla-plan';
 import type {BusinessTime} from '@dx-rework/domain/business-clock';
@@ -24,6 +24,7 @@ import {productionReadiness,preparationWindow} from './production-readiness-repo
 import {SlaOrderService} from './sla-order-service.js';
 import {firstContractBusinessReady} from './contract-business-ready.js';
 import {factoryBatchTiming} from './factory-batch-timing.js';
+import {factoryProductionCompletion} from './factory-production-facts.js';
 
 const iso=(value:Date|string|null|undefined)=>value?new Date(value).toISOString():null;
 const canonical=(value:unknown):unknown=>value instanceof Date?value.toISOString():Array.isArray(value)?value.map(canonical):value&&typeof value==='object'?Object.fromEntries(Object.entries(value).sort(([a],[b])=>a.localeCompare(b,'en')).map(([key,v])=>[key,canonical(v)])):value;
@@ -79,7 +80,9 @@ export class SlaCalculationService{
  private calculate(context:SlaCalculationContext,input:SlaCalculationPreviewInput,values:DigitalSlaValues):SlaCalculationPreview{
   const draftValues={unified:values,development:input.development?.values??context.development.values};
   const graph=calculationDraftGraph(context.graph,{unified:context.unified.values,development:context.development.values},draftValues);
-  const current=calculateSlaPreview(context.graph),draft=calculateSlaPreview(graph),contextDigest=slaCalculationDigest(context);
+  const current=calculateSlaPreview(context.graph),contextDigest=slaCalculationDigest(context);
+  let draft:ReturnType<typeof calculateSlaPreview>;
+  try{draft=calculateSlaPreview(graph);}catch(error){if(error instanceof SlaCalculationInputError)throw new ApplicationError('VALIDATION_ERROR',`${error.message}（${error.field}）`,400);throw error;}
   return {context,contextDigest,contextChanged:input.checkContextDigest!==undefined&&input.checkContextDigest!==contextDigest,current,draft,
    differences:{overallMs:current.overall.spanMs!==null&&draft.overall.spanMs!==null?draft.overall.spanMs-current.overall.spanMs:null,
     stages:draft.stages.map(s=>{const before=current.stages.find(b=>b.stage===s.stage);return {stage:s.stage,spanMs:s.spanMs!==null&&before?.spanMs!==null&&before?.spanMs!==undefined?s.spanMs-before.spanMs:null};}),
@@ -161,14 +164,16 @@ export class SlaCalculationService{
   }else context.limitations.push(read.reason);
   const document=order.source_id?await developmentDocumentRow(db,order.source_id):null;
   conditions.craft=selection.range==='bulk_craft'?(read.status==='planned'&&read.factory?read.factory.craftKey===null?'none':read.factory.craftKey==='bulk_printing'?'printing':read.factory.craftKey==='bulk_embroidery'?'embroidery':'print_embroidery':'unknown'):craft(document?.document.craft);
-  const adoption=await preparationAdoption(db,{kind:'order',id:selection.id});conditions.preparation=adoption?'adopted':'legacy';
+  const instruction=(await db.query('SELECT v.version,v.published_at,v.source_round,v.document FROM digital_instruction_documents d JOIN digital_instruction_versions v ON v.production_order_id=d.production_order_id AND v.version=d.published_version WHERE d.production_order_id=$1',[selection.id])).rows[0];
+  const adoption=await preparationAdoption(db,{kind:'order',id:selection.id});
+  const retainLegacy=Boolean(adoption?.standards.retainedInstructionVersion&&instruction?.version<=adoption.standards.retainedInstructionVersion);
+  conditions.preparation=adoption&&!retainLegacy?'adopted':'legacy';
   const readiness=selection.range==='preparation'?await productionReadiness(db,selection.id):null;
   const facts=read.status==='planned'?read.facts:{};
   const preshrink=read.status==='planned'?read.evaluationPlan.nodes.find(n=>n.id==='warehouse_preshrink'):null;
   conditions.preshrink=preshrink?.applicable==='no'?'no':preshrink?.applicable==='yes'?'yes':'unknown';
   if(readiness?.receiptAt)anchors.whole_fabric_arrived=instant(readiness.receiptAt,'原生主料实际到仓');
   if(readiness?.readyAt)anchors.final_preparation_ready=instant(readiness.readyAt,`原生正式制单就绪:${readiness.revision}`);
-  const instruction=(await db.query('SELECT v.version,v.published_at,v.source_round,v.document FROM digital_instruction_documents d JOIN digital_instruction_versions v ON v.production_order_id=d.production_order_id AND v.version=d.published_version WHERE d.production_order_id=$1',[selection.id])).rows[0];
   if(instruction?.published_at)anchors.instruction_published=instant(iso(instruction.published_at)!,`instruction:${selection.id}:v${instruction.version}`);
   if(facts.sourcing_approval?.completedAt)anchors.sourcing_decided=instant(facts.sourcing_approval.completedAt,facts.sourcing_approval.evidence);
   if(facts.bulk_cutting?.completedAt)anchors.whole_cutting_completed=instant(facts.bulk_cutting.completedAt,facts.bulk_cutting.evidence);
@@ -193,15 +198,26 @@ export class SlaCalculationService{
    const selected=lines.filter(l=>!selection.poLineId||l.line_id===selection.poLineId),graphs:CalculationGraph[]=[];
    for(const line of selected){const refs={...anchors};if(line.factory_date)refs.factory_delivery_date={precision:'date',value:line.factory_date,source:`PO:${line.line_id}:工厂交货约定`};if(line.customer_date)refs.customer_shipping_date={precision:'date',value:line.customer_date,source:`PO:${line.line_id}:客户交货约定`};
     const ownNative:NonNullable<CalculationRouteInput['native']>={};for(const key of ['garment_inspection','garment_packing','garment_rework']){const fact=facts[`${key}:${line.line_id}`];if(fact)ownNative[key]=nativeFact(fact);}
-    const produced=facts[`factory_production:${line.line_id}`];if(produced?.completedAt)refs.factory_production_finished=instant(produced.completedAt,produced.evidence);
+    const produced=await factoryProductionCompletion(db,selection.id,[line.line_id]);
+    if(produced.actualDate)refs.factory_production_finished={precision:'date',value:produced.actualDate,source:`PO:${line.line_id}:原厂单生产完成业务日期`};
     const packing=facts[`garment_packing:${line.line_id}`];if(packing?.startedAt)refs.original_packing_conditions_ready=instant(packing.startedAt,packing.evidence);
     if(packing?.batchCoverageComplete===false){ownNative.garment_packing={...ownNative.garment_packing,evidence:packing.evidence,waitingFor:'本 PO 仍有未覆盖数量，不能用首批装箱窗口代表全单'};}
     const ownRework=read.status==='planned'?read.rework.windows.filter(w=>w.lineId===line.line_id):[];
     const g=make(refs,{native:ownNative,conditions:{...conditions,rework:ownRework.length?'yes':'no'}});this.appendNativeWindows(g,read,line.line_id);graphs.push(this.prefix(g,line.line_id,`PO ${line.po_number??'号码待核'} · ${line.color}`));
    }
-   context.graph=this.mergeGraphs(graphs,context.graph);context.bindings.poLines=selected;
+    context.graph=this.mergeGraphs(graphs,context.graph);context.bindings.poLines=selected;
   }else if(selection.batchId&&selection.range!=='bulk_craft')throw new ApplicationError('VALIDATION_ERROR','所选演算范围不接受工艺批次',400);
-  if(selection.range==='preparation'){const draft=await preparationWindow(db,selection.id,'draft'),final=await preparationWindow(db,selection.id,'final');context.bindings.preparation={adoption,readinessRevision:readiness?.revision??null,finalReasons:readiness?.finalReasons??[],draft,final,instruction};if(readiness?.finalReasons.length)context.limitations.push(...readiness.finalReasons);}
+  if(selection.range==='preparation'){
+   const draft=await preparationWindow(db,selection.id,'draft'),final=await preparationWindow(db,selection.id,'final');
+   if(conditions.preparation==='adopted')for(const [kind,window]of [['draft',draft],['final',final]] as const){
+    const node=context.graph.nodes.find(n=>n.id===`preparation_${kind}`)!,key=`preparation-window:${selection.id}:${kind}`;
+    node.anchorKey=key;node.source=`原独立制单${kind==='draft'?'草稿':'正式'}窗口 · ${adoption!.adoption_id}`;
+    if(window.startedAt){context.graph.anchors[key]=instant(window.startedAt,node.source);node.minutes=window.minutes;}
+    else node.waitingFor=window.reason??'尚未建立可信的原制单窗口，不以当前就绪时间重新起算';
+    if(window.completedAt)node.completedAt=instant(window.completedAt,`${node.source}:原办理事实`);
+   }
+   context.bindings.preparation={adoption,retainLegacy,readinessRevision:readiness?.revision??null,finalReasons:readiness?.finalReasons??[],draft,final,instruction};if(readiness?.finalReasons.length)context.limitations.push(...readiness.finalReasons);
+  }
   context.identity={kind:'order',id:selection.id,sourceId:order.source_id??null,orderId:selection.id,round:instruction?.source_round??null,label:`${order.design_style_no} · ${selection.poLineId?'所选 PO':'本单适用范围'}`};
   context.bindings.orderIdentity={orderId:selection.id,sourceId:order.source_id??null,sourceVersion:document?.version??null,instructionVersion:instruction?.version??null,poLines:lines,adoption};
  }

@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "7bc97df926a4a3d2b626bbbe440260d9b4104fd9",
-  "sourceFingerprint": "55dfc75f2fed04dee5dbdb77919d2f829b99dbf170bd3a55915f7754d9602eca",
+  "sourceFingerprint": "934b62a310be6f0edced80c01a46932487a81b66fd5f269be30dec97d82a2d41",
   "risk": "full",
   "rules": [
     {
@@ -48,6 +48,9 @@
         "tests/integration/sla-calculation-postgres.test.ts",
         "tests/integration/development-technical-postgres.test.ts",
         "tests/integration/factory-logistics-cockpit-postgres.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts",
+        "apps/api/src/production-platform/factory-production-facts.ts",
+        "tests/unit/factory-production-facts.test.ts",
         "tests/helpers/business-anchor-fixture.ts"
       ],
       "reads": [
@@ -56,6 +59,8 @@
         "apps/api/src/production-platform/development-round-repository.ts#developmentDocumentRow",
         "apps/api/src/production-platform/development-material-readiness.ts#materialReadiness",
         "apps/api/src/production-platform/production-readiness-repository.ts#productionReadiness",
+        "apps/api/src/production-platform/production-readiness-repository.ts#preparationWindow",
+        "apps/api/src/production-platform/factory-production-facts.ts#factoryProductionCompletion",
         "apps/api/src/production-platform/sla-order-service.ts#SlaOrderService",
         "apps/api/src/production-platform/factory-batch-timing.ts#factoryBatchTiming",
         "apps/api/src/production-platform/contract-business-ready.ts#firstContractBusinessReady"
@@ -68,7 +73,7 @@
       ],
       "initialization": "只复用现有低权限标记隔离库及 ownedPostgresSchema/create/release helper；原fixture允许原生绣花/印绣参数，未修改业务守卫、角色seed或固定历史。局部补做未知时长保未知，尾查读原本次冻结30min。",
       "dateAndPermission": "合同/财务不追加生产48h；原发厂确实需要的合同首ready作为独立就绪证据，回签保持原独立监控。外发排除复用原可信区间并集；收到时间被原更正为未知时不恢复旧凭证时间。不同批/PO/厂份额与物流日期范围不混用。",
-      "expectation": "原生EMB/COMPOSITE/外纸样、双PO三工艺发出/回收/QC、局部补做/合法复版/成果沿用、每份最终评语、外发进行中/恢复及物流原范围均有实际验证；读取前后业务表不变。",
+      "expectation": "原生EMB/COMPOSITE/外纸样、双PO三工艺发出/回收/QC、局部补做/合法复版/成果沿用、每份最终评语、外发进行中/恢复及物流原范围均有实际验证；读取前后业务表不变；官方Review三条P2以提前质检/真实完成日期、到仓订正不重置冻结双窗、在途采用保留旧72的原生回归闭环；冻结内含冲突返回定位到父窗口的400，新单合法发布不加门槛。",
       "checks": [
         "native",
         "technical",
@@ -150,53 +155,53 @@
     {
       "id": "unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/sla-calculation.test.ts tests/unit/digital-sla-plan.test.ts tests/unit/development-cycle.test.ts tests/unit/digital-sla-configuration.test.ts tests/unit/development-material-readiness.test.ts tests/unit/production-readiness-contract.test.ts tests/unit/development-technical-contract.test.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile=/workspace/scratch/m01-p05-unit-final4.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/sla-calculation.test.ts tests/unit/factory-production-facts.test.ts tests/unit/digital-sla-plan.test.ts tests/unit/development-cycle.test.ts tests/unit/digital-sla-configuration.test.ts tests/unit/development-material-readiness.test.ts tests/unit/production-readiness-contract.test.ts tests/unit/development-technical-contract.test.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile=/workspace/scratch/m01-p05-unit-final6.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 127,
+      "passed": 132,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "fbc94658829ccfab42b88da6feb8657d8fbcee1987086d6d42cd7fe94a7d77f0"
+          "sha256": "edf6db068d0eaa2f621c65a971d9424a9657a437e7908af584b91c09a0b673db"
         }
       ],
-      "testedHead": "7bc97df926a4a3d2b626bbbe440260d9b4104fd9",
-      "sourceFingerprint": "55dfc75f2fed04dee5dbdb77919d2f829b99dbf170bd3a55915f7754d9602eca",
+      "testedHead": "74f6bbf3a560ea9ae740c861db1506891cd1f878",
+      "sourceFingerprint": "934b62a310be6f0edced80c01a46932487a81b66fd5f269be30dec97d82a2d41",
       "context": "Node22.22.2/npm10.9.9; NODE_ENV=test; resolved command worker 1. Pure/unit and existing contract consumers; no runtime DB. Raw actual log and JSON/TAP report retained privately.",
-      "startedAt": "2026-11-06T00:06:26.464Z",
-      "endedAt": "2026-11-06T00:06:29.030Z",
-      "log": "/workspace/scratch/m01-p05-unit-final4.log",
-      "logSha256": "8c62de4d19fb6b4f5276b762cfc4945b346568fdb72564ce7d4f7a612e6a150f"
+      "startedAt": "2026-11-06T00:34:15.536Z",
+      "endedAt": "2026-11-06T00:34:17.656Z",
+      "log": "/workspace/scratch/m01-p05-unit-final6.log",
+      "logSha256": "af4704513e2dbbb2012f49c55853ccb2f92f93f8064a40eda13627a2fcc9a760"
     },
     {
       "id": "native",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/integration/sla-calculation-postgres.test.ts tests/integration/digital-sla-configuration-postgres.test.ts tests/integration/digital-sla-plan-postgres.test.ts tests/integration/development-sla-enrollment-postgres.test.ts tests/integration/factory-logistics-cockpit-postgres.test.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile=/workspace/scratch/m01-p05-native-final4.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/integration/sla-calculation-postgres.test.ts tests/integration/digital-sla-configuration-postgres.test.ts tests/integration/digital-sla-plan-postgres.test.ts tests/integration/development-sla-enrollment-postgres.test.ts tests/integration/factory-logistics-cockpit-postgres.test.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile=/workspace/scratch/m01-p05-native-final6.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 63,
+      "passed": 64,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "8c52e2570123abc16de3d898f59d3253d1d49d0a0d8c93b948f724d69b1b891b"
+          "sha256": "a95a0008894103ec07e5fc077f64e63e0cae658a7cefb64777ea1e8c554b2c8a"
         }
       ],
-      "testedHead": "7bc97df926a4a3d2b626bbbe440260d9b4104fd9",
-      "sourceFingerprint": "55dfc75f2fed04dee5dbdb77919d2f829b99dbf170bd3a55915f7754d9602eca",
+      "testedHead": "74f6bbf3a560ea9ae740c861db1506891cd1f878",
+      "sourceFingerprint": "934b62a310be6f0edced80c01a46932487a81b66fd5f269be30dec97d82a2d41",
       "context": "Node22.22.2/npm10.9.9; NODE_ENV=test; resolved command worker 1. Original low-privilege marked task-owned PG16 database dx_m01_acceptance_test_dc924aaea2 OID694046; native helpers and exact owned-schema create/release contracts. One database suite group at a time; no live business data. Raw actual log and JSON/TAP report retained privately.",
-      "startedAt": "2026-11-06T00:06:51.456Z",
-      "endedAt": "2026-11-06T00:07:46.222Z",
-      "log": "/workspace/scratch/m01-p05-native-final4.log",
-      "logSha256": "4ab88d0b1e2ec2439537e63ce353f68d6fa8dd166956c7c2d690fa75e9b93807"
+      "startedAt": "2026-11-06T00:34:25.284Z",
+      "endedAt": "2026-11-06T00:35:18.369Z",
+      "log": "/workspace/scratch/m01-p05-native-final6.log",
+      "logSha256": "9aa22ffac79e96ede3017a26e2461068b67f0119e2b9a95c164e45c448e9fd85"
     },
     {
       "id": "technical",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/integration/development-technical-postgres.test.ts tests/integration/production-readiness-postgres.test.ts --config vitest.business-chain.config.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile=/workspace/scratch/m01-p05-technical-final4.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/integration/development-technical-postgres.test.ts tests/integration/production-readiness-postgres.test.ts --config vitest.business-chain.config.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile=/workspace/scratch/m01-p05-technical-final6.json",
       "status": "passed",
       "exitCode": 0,
       "passed": 42,
@@ -205,16 +210,16 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "9983569467c1634d149ea9a788d4e6e17f71da790c88b8cfdb9d0e7ce5a3530c"
+          "sha256": "14168a70dd0a91015ac2f62c24c8d1097401e958f210c4872f6587258f59c45e"
         }
       ],
-      "testedHead": "7bc97df926a4a3d2b626bbbe440260d9b4104fd9",
-      "sourceFingerprint": "55dfc75f2fed04dee5dbdb77919d2f829b99dbf170bd3a55915f7754d9602eca",
+      "testedHead": "74f6bbf3a560ea9ae740c861db1506891cd1f878",
+      "sourceFingerprint": "934b62a310be6f0edced80c01a46932487a81b66fd5f269be30dec97d82a2d41",
       "context": "Node22.22.2/npm10.9.9; NODE_ENV=test; resolved command worker 1. Original low-privilege marked task-owned PG16 database dx_m01_acceptance_test_dc924aaea2 OID694046; native helpers and exact owned-schema create/release contracts. One database suite group at a time; no live business data. Raw actual log and JSON/TAP report retained privately.",
-      "startedAt": "2026-11-06T00:07:46.317Z",
-      "endedAt": "2026-11-06T00:08:23.952Z",
-      "log": "/workspace/scratch/m01-p05-technical-final4.log",
-      "logSha256": "ef4c255122acd3f818f35d8f9b556b36cf3e16cc610f0259d677f4ac0f3af96f"
+      "startedAt": "2026-11-06T00:35:18.458Z",
+      "endedAt": "2026-11-06T00:35:57.069Z",
+      "log": "/workspace/scratch/m01-p05-technical-final6.log",
+      "logSha256": "ba4fd1c7ef778d7163e91bbb9daaaadafe370a8c291aa40d08ada01026e1716b"
     },
     {
       "id": "preflight",
@@ -228,16 +233,16 @@
       "resultReports": [
         {
           "format": "node-tap",
-          "sha256": "39b7f1bfb5498b283b1709b9a277e28413f3f5a28b0a21aa77b5a410304acc35"
+          "sha256": "3511110e3d7646317c4305a1e3f1425a0782f8f6adc8b59da97d3f7d792d021e"
         }
       ],
-      "testedHead": "7bc97df926a4a3d2b626bbbe440260d9b4104fd9",
-      "sourceFingerprint": "55dfc75f2fed04dee5dbdb77919d2f829b99dbf170bd3a55915f7754d9602eca",
+      "testedHead": "74f6bbf3a560ea9ae740c861db1506891cd1f878",
+      "sourceFingerprint": "934b62a310be6f0edced80c01a46932487a81b66fd5f269be30dec97d82a2d41",
       "context": "Node22.22.2/npm10.9.9; NODE_ENV=test; resolved command worker 2. Original 2-worker preflight and original static migration validation; no runtime DB. Raw actual log and JSON/TAP report retained privately.",
-      "startedAt": "2026-11-06T00:06:51.456Z",
-      "endedAt": "2026-11-06T00:06:55.760Z",
-      "log": "/workspace/scratch/m01-p05-preflight-final4.log",
-      "logSha256": "39b7f1bfb5498b283b1709b9a277e28413f3f5a28b0a21aa77b5a410304acc35"
+      "startedAt": "2026-11-06T00:34:25.284Z",
+      "endedAt": "2026-11-06T00:34:29.660Z",
+      "log": "/workspace/scratch/m01-p05-preflight-final6.log",
+      "logSha256": "3511110e3d7646317c4305a1e3f1425a0782f8f6adc8b59da97d3f7d792d021e"
     },
     {
       "id": "lint",
@@ -245,12 +250,12 @@
       "command": "npm run lint",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "7bc97df926a4a3d2b626bbbe440260d9b4104fd9",
-      "sourceFingerprint": "55dfc75f2fed04dee5dbdb77919d2f829b99dbf170bd3a55915f7754d9602eca",
+      "testedHead": "74f6bbf3a560ea9ae740c861db1506891cd1f878",
+      "sourceFingerprint": "934b62a310be6f0edced80c01a46932487a81b66fd5f269be30dec97d82a2d41",
       "context": "Node22.22.2/npm10.9.9; NODE_ENV=test; resolved command worker 1. Original workspace command; build excludes root deployment/DB postbuild. Raw actual log and JSON/TAP report retained privately.",
-      "startedAt": "2026-11-06T00:06:55.839Z",
-      "endedAt": "2026-11-06T00:07:14.241Z",
-      "log": "/workspace/scratch/m01-p05-lint-final4.log",
+      "startedAt": "2026-11-06T00:34:29.753Z",
+      "endedAt": "2026-11-06T00:34:48.253Z",
+      "log": "/workspace/scratch/m01-p05-lint-final6.log",
       "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763"
     },
     {
@@ -259,12 +264,12 @@
       "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "7bc97df926a4a3d2b626bbbe440260d9b4104fd9",
-      "sourceFingerprint": "55dfc75f2fed04dee5dbdb77919d2f829b99dbf170bd3a55915f7754d9602eca",
+      "testedHead": "74f6bbf3a560ea9ae740c861db1506891cd1f878",
+      "sourceFingerprint": "934b62a310be6f0edced80c01a46932487a81b66fd5f269be30dec97d82a2d41",
       "context": "Node22.22.2/npm10.9.9; NODE_ENV=test; resolved command worker 1. Original workspace command; build excludes root deployment/DB postbuild. Raw actual log and JSON/TAP report retained privately.",
-      "startedAt": "2026-11-06T00:07:14.310Z",
-      "endedAt": "2026-11-06T00:07:41.483Z",
-      "log": "/workspace/scratch/m01-p05-types-final4.log",
+      "startedAt": "2026-11-06T00:34:48.321Z",
+      "endedAt": "2026-11-06T00:35:15.740Z",
+      "log": "/workspace/scratch/m01-p05-types-final6.log",
       "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e"
     },
     {
@@ -273,13 +278,13 @@
       "command": "npm run build --workspaces --if-present",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "7bc97df926a4a3d2b626bbbe440260d9b4104fd9",
-      "sourceFingerprint": "55dfc75f2fed04dee5dbdb77919d2f829b99dbf170bd3a55915f7754d9602eca",
+      "testedHead": "74f6bbf3a560ea9ae740c861db1506891cd1f878",
+      "sourceFingerprint": "934b62a310be6f0edced80c01a46932487a81b66fd5f269be30dec97d82a2d41",
       "context": "Node22.22.2/npm10.9.9; NODE_ENV=test; resolved command worker 1. Original workspace command; build excludes root deployment/DB postbuild. Raw actual log and JSON/TAP report retained privately.",
-      "startedAt": "2026-11-06T00:07:41.549Z",
-      "endedAt": "2026-11-06T00:07:57.153Z",
-      "log": "/workspace/scratch/m01-p05-build-final4.log",
-      "logSha256": "9d84637e38b7ff8ed4774d8f3b83d3ad18aa5f8010addf142d6db6d2af3e707c"
+      "startedAt": "2026-11-06T00:35:15.819Z",
+      "endedAt": "2026-11-06T00:35:31.258Z",
+      "log": "/workspace/scratch/m01-p05-build-final6.log",
+      "logSha256": "8cf61ab9da92ec4b1d7f0d258b7cfc1ff4329a49b09da7a890428f18fe02818d"
     },
     {
       "id": "secret",
@@ -287,12 +292,12 @@
       "command": "npm run secret:scan",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "7bc97df926a4a3d2b626bbbe440260d9b4104fd9",
-      "sourceFingerprint": "55dfc75f2fed04dee5dbdb77919d2f829b99dbf170bd3a55915f7754d9602eca",
+      "testedHead": "74f6bbf3a560ea9ae740c861db1506891cd1f878",
+      "sourceFingerprint": "934b62a310be6f0edced80c01a46932487a81b66fd5f269be30dec97d82a2d41",
       "context": "Node22.22.2/npm10.9.9; NODE_ENV=test; resolved command worker 1. Original workspace command; build excludes root deployment/DB postbuild. Raw actual log and JSON/TAP report retained privately.",
-      "startedAt": "2026-11-06T00:07:57.229Z",
-      "endedAt": "2026-11-06T00:07:57.973Z",
-      "log": "/workspace/scratch/m01-p05-secret-final4.log",
+      "startedAt": "2026-11-06T00:35:31.330Z",
+      "endedAt": "2026-11-06T00:35:31.954Z",
+      "log": "/workspace/scratch/m01-p05-secret-final6.log",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda"
     }
   ]

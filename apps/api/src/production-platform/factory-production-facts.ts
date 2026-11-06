@@ -14,8 +14,8 @@ export async function factoryProductionScopes(db:DB,orderId:string){
 }
 /** Completion's business date belongs to its factory scope. A later shipment
  * or registration timestamp cannot replace that date. */
-export async function factoryProductionCompletion(db:DB,orderId:string){
- const scopes=await factoryProductionScopes(db,orderId);
+export async function factoryProductionCompletion(db:DB,orderId:string,lineIds?:readonly string[]){
+ const scopes=(await factoryProductionScopes(db,orderId)).filter(scope=>!lineIds||lineIds.includes(scope.line_id));
  const transitions=(await db.query(`SELECT t.production_order_id,t.factory_decision_id,t.business_date::text,t.actor_id,u.display_name
   FROM sourcing_production_transitions t JOIN app_users u ON u.id=t.actor_id
   WHERE t.status='production_completed' AND EXISTS(SELECT 1 FROM digital_production_child_links l WHERE l.module='production' AND l.production_order_id=$1 AND l.child_id=t.production_order_id)`,[orderId])).rows;

@@ -37,6 +37,11 @@ describe('M01 shared standard-window calculation',()=>{
   const p=graph([node('parent',5760),node('out',30,{kind:'included',includedIn:'parent',anchorKey:null}),node('back',30,{kind:'included',includedIn:'parent',includedPosition:'end',anchorKey:null})],['parent']);
   const r=calculateSlaPreview(p);expect(r.overall.spanMs).toBe(96*hour);expect(row(r,'out').end.at).toBe(at(.5));expect(row(r,'back').start.at).toBe(at(95.5));expect(row(r,'back').end.at).toBe(at(96));
  });
+ it('identifies the parent field when retained included targets no longer fit a hypothetical parent',()=>{
+  const p=graph([node('printing',90,{label:'开发印花',parameterKey:'development_printing'}),node('out',60,{kind:'included',includedIn:'printing',anchorKey:null}),node('back',60,{kind:'included',includedIn:'printing',anchorKey:null})],['printing']);
+  expect(()=>calculateSlaPreview(p)).toThrow(SlaCalculationInputError);
+  try{calculateSlaPreview(p);}catch(error){expect(error).toMatchObject({field:'development_printing.minutes',message:expect.stringContaining('开发印花')});}
+ });
  it('E5 stage spans overlap and are never summed into the overall result',()=>{
   const p=graph([node('a',240),node('b',2880,{stage:2,dependsOn:['a'],anchorKey:null}),node('c',1440,{dependsOn:['a'],anchorKey:null}),node('d',120,{stage:3,dependsOn:['b','c'],anchorKey:null})]);
   const r=calculateSlaPreview(p);expect(r.stages.map(s=>s.spanMs)).toEqual([28*hour,48*hour,2*hour]);expect(r.overall.spanMs).toBe(54*hour);

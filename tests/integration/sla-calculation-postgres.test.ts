@@ -140,6 +140,23 @@ const url=process.env.TEST_DATABASE_URL;
   await expect(service.preview(f.root,{...example(),development:{expectedVersion:read.version,values}})).rejects.toMatchObject({statusCode:409});
   const saved=await run(()=>service.preview(f.root,instance()));expect(saved.current.rows.find(n=>n.id==='development_cycle')!.minutes).toBe(7*1440);
  });
+ it('reports an instance-frozen included-window conflict as field-specific HTTP 400 without blocking a legal new-order standard',async()=>{
+  const settings=new DigitalProductionTaskService(f.db),publish=async(values:Awaited<ReturnType<typeof settings.slaSettings>>['values'],reason:string)=>{
+   const current=await settings.slaSettings(f.root),input={expectedVersion:current.version,values,reason},preview=await settings.previewSlaSettings(f.root,input);
+   return settings.publishSlaSettings(f.root,{...input,previewToken:preview.token},randomUUID());
+  };
+  const initial=await settings.slaSettings(f.root),frozenValues=structuredClone(initial.values);
+  frozenValues.development_craft_dispatch={kind:'included',minutes:60};frozenValues.development_craft_return={kind:'included',minutes:60};
+  await publish(frozenValues,'TEST new sources freeze two native sixty-minute included targets');
+  const sourceId=await createSource('印花'),currentValues=structuredClone(frozenValues);
+  currentValues.development_craft_dispatch={kind:'included',minutes:30};currentValues.development_craft_return={kind:'included',minutes:30};
+  await publish(currentValues,'TEST current new-order targets differ from the already frozen source');
+  const current=await settings.slaSettings(f.root),values=structuredClone(current.values);values.development_printing={kind:'duration',minutes:90};
+  const before=await count(),response=await app.inject({method:'POST',url:'/digital-production/sla-settings/calculation-preview',headers:{cookie:`dx_rework_session=${f.root.actorId}`},payload:{selection:instance(sourceId).selection,unified:{expectedVersion:current.version,values}}});
+  expect(response.statusCode,response.body).toBe(400);expect(response.json().error.message).toContain('development_printing.minutes');expect(response.json().error.message).toContain('内含目标');expect(await count()).toEqual(before);
+  await expect(publish(values,'TEST ninety minutes remains legal for new sources with two thirty-minute targets')).resolves.toMatchObject({version:current.version+1,existingOrdersChanged:0});
+  const source=await service.preview(f.root,instance(sourceId));expect(source.current.rows.find(n=>n.id==='development_craft_dispatch')!.minutes).toBe(60);expect(source.current.rows.find(n=>n.id==='development_printing')!.minutes).toBe(frozenValues.development_printing.minutes);
+ });
  it('same valid actor/session cannot retain settings context after its dedicated PMC role is revoked',async()=>{
   const original=await service.preview(pmc,example()),root={...f.root,authorizationCapability:'access:admin',authorizationCapabilities:['access:admin']};await f.access.revokeRole(root,assignmentId,'TEST dedicated role revocation; no Lab identity switch');
   await expect(service.preview(pmc,{...example(),checkContextDigest:original.contextDigest})).rejects.toMatchObject({statusCode:403});
