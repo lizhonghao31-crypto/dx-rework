@@ -13,6 +13,7 @@ const iso=(value:Date|string|null|undefined)=>value==null?null:new Date(value).t
 type SummaryTask=DigitalTask&{completionKeys:string[];completion:{actor_id:string;actor_name:string;recorded_at:string}|null;laterOwner:{assigneeId:string|null}|null;previousOwnerName:string|null};
 export async function journeyTaskSummaries(db:Pick<Pool|PoolClient,'query'>,ids:string[],time?:BusinessTime):Promise<Map<string,SummaryTask>>{
  if(!ids.length)return new Map();
+ // Rich projection compares JS Dates, which retain milliseconds only. Keep that note outside SQL.
  const rows=(await db.query(`SELECT t.*,a.source_id,a.production_order_id,a.task_kind,a.assignee_id,a.required_role,
    owner.display_name AS assignee_name,life.state='paused' AS paused,
    effective.due_at,effective.warning_at,effective.entered_at AS sla_entered_at,effective.sla_basis,effective.deadline_kind,coalesce(effective.version,policy.version) AS policy_version,
@@ -50,7 +51,6 @@ export async function journeyTaskSummaries(db:Pick<Pool|PoolClient,'query'>,ids:
     WHERE dependency.task_id=t.task_id AND prior.state<>'completed')predecessors ON true
   LEFT JOIN LATERAL(SELECT jsonb_build_object('actor_id',e.actor_id,'actor_name',u.display_name,'recorded_at',e.recorded_at) AS event,e.recorded_at
     FROM digital_production_task_events e JOIN app_users u ON u.id=e.actor_id WHERE e.task_id=t.task_id AND e.event_kind='completed' ORDER BY e.recorded_at DESC,e.event_id DESC LIMIT 1)completion ON true
-  -- Rich projection compares JS Dates, which retain milliseconds only.
   LEFT JOIN LATERAL(SELECT before_state FROM audit_events WHERE entity_type='digital_task' AND entity_id=t.task_id::text AND action='digital_task_reassigned' AND date_trunc('milliseconds',created_at)>date_trunc('milliseconds',completion.recorded_at) ORDER BY created_at,id LIMIT 1)later ON true
   LEFT JOIN app_users previous_owner ON previous_owner.id=(later.before_state->>'assigneeId')::uuid
   WHERE t.task_id=ANY($1::uuid[])`,[ids,await retiredBulkPreshrinkTaskIds(db)])).rows;
