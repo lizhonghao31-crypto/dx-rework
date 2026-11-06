@@ -196,3 +196,10 @@ describe("Full Gate sensitive path mapping", () => {
     expect(test.dbRequired).toBe(true);
   });
 });
+
+
+it('maps current-production immutable-result, permission, material and aggregate consumers into the original PostgreSQL suite',()=>{
+ const suite='tests/integration/m01-production-statistics-postgres.test.ts';
+ for(const path of ['apps/api/src/production-platform/production-statistics-query.ts','apps/api/src/production-platform/production-statistics-materials.ts','apps/api/src/production-platform/production-statistics-projection.ts','apps/api/src/production-platform/analysis-result-store.ts','apps/api/src/production-platform/reporting-query.ts','apps/api/src/production-platform/reporting-routes.ts','apps/api/src/production-platform/factory-production-facts.ts','packages/contracts/src/production-statistics.ts','packages/contracts/src/digital-production-analysis.ts','packages/domain/src/production-statistics.ts'])expect(classifyFullGatePaths([path]).mappedPostgresTests).toContain(suite);
+ for(const path of ['apps/api/src/production-platform/reporting-query.ts','apps/api/src/production-platform/reporting-routes.ts','packages/contracts/src/digital-production-analysis.ts','tests/helpers/business-anchor-fixture.ts'])expect(classifyFullGatePaths([path]).mappedPostgresTests).toContain('tests/integration/time-reading-clock-postgres.test.ts');
+});

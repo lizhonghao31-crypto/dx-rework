@@ -2,7 +2,7 @@ import type {Pool,PoolClient} from 'pg';
 import type {SlaNodeFact} from '@dx-rework/domain/digital-sla-plan';
 type DB=Pick<Pool|PoolClient,'query'>;
 /** Original factory execution allocations define scope; inspections never add production or receipt quantity. */
-export async function factoryProductionScopes(db:DB,orderId:string){
+export async function factoryProductionScopes(db:DB,orderId:string,options:{includeZero?:boolean}={}){
  return (await db.query(`SELECT p.production_order_id,p.factory_decision_id,p.sourcing_decision_id,p.supplier_id,p.supplier_name_snapshot,p.dispatched_at,line.position,line.completed_quantity,
   (SELECT status FROM sourcing_production_transitions state WHERE state.production_order_id=p.production_order_id AND state.factory_decision_id IS NOT DISTINCT FROM p.factory_decision_id ORDER BY sequence DESC LIMIT 1) AS execution_status,
   map.line_id,line.quantity,po.po_number,po.color,po.factory_delivery_date::text AS target_date
@@ -10,7 +10,7 @@ export async function factoryProductionScopes(db:DB,orderId:string){
   CROSS JOIN LATERAL sourcing_factory_execution_lines(p.production_order_id,p.sourcing_decision_id) line
   JOIN digital_production_child_lines map ON map.module='production' AND map.child_id=p.production_order_id AND map.child_line_key=line.position::text
   JOIN digital_production_po_lines po ON po.line_id=map.line_id AND po.production_order_id=link.production_order_id
-  WHERE link.module='production' AND link.production_order_id=$1 AND line.quantity>0 ORDER BY p.factory_decision_id NULLS FIRST,po.position`,[orderId])).rows;
+  WHERE link.module='production' AND link.production_order_id=$1 ${options.includeZero?'':'AND line.quantity>0'} ORDER BY p.factory_decision_id NULLS FIRST,po.position`,[orderId])).rows;
 }
 /** Completion's business date belongs to its factory scope. A later shipment
  * or registration timestamp cannot replace that date. */

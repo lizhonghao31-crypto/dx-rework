@@ -1640,5 +1640,22 @@
     ],
     "execute": [],
     "sequences": []
+  },
+  "0274_production_analysis_results": {
+    "checksum": "e1959ee9a29226808fe891b1903bb4c55facc3270abee8f21b01c58cfb1514fc",
+    "tables": [],
+    "functions": [
+      "guard_digital_analysis_result_update"
+    ],
+    "references": [
+      "app_users"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [
+      "digital_production_analysis_results"
+    ],
+    "execute": [],
+    "sequences": []
   }
 }

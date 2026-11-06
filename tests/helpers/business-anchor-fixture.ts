@@ -83,11 +83,11 @@ export async function businessAnchorFixture(url:string,options?:{throughVersion?
    }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
   };
   const advance=async(id:string,at:string)=>runtime.run(id,root,async()=>{const row=await runtime.repository.row(id);await runtime.repository.change(id,root.actorId,{expectedVersion:row.version,requestKey:randomUUID(),at});});
-  const bulkReady=async(secondaryCraft:'无'|'印花'|'绣花'|'印绣花',beforeCreate?:(input:Parameters<SourcingService['createCase']>[1],key:string,primary:TrustedActorContext)=>Promise<void>,poCount=1,sourcingCommands=sourcing,options?:{stopBeforeCompletion?:boolean;accessory?:boolean})=>{
-   const designer=people['sample-designer']!,primary=people.merchandiser!,manager=people['production-management']!,owner=people.owner!,ie=people.ie!;
+  const bulkReady=async(secondaryCraft:'无'|'印花'|'绣花'|'印绣花',beforeCreate?:(input:Parameters<SourcingService['createCase']>[1],key:string,primary:TrustedActorContext)=>Promise<void>,poCount=1,sourcingCommands=sourcing,options?:{stopBeforeCompletion?:boolean;accessory?:boolean;quantity?:number;primaryActor?:TrustedActorContext;designerActor?:TrustedActorContext})=>{
+   const designer=options?.designerActor??people['sample-designer']!,primary=options?.primaryActor??people.merchandiser!,manager=people['production-management']!,owner=people.owner!,ie=people.ie!;
    const identity=new DigitalProductionIdentityService(db,true),forms=new DigitalDevelopmentService(db,true),bulk=new BulkPreparationService(db),instruction=new ProductionInstructionService(db,true),budget=new DigitalBudgetService(db,true);
    const style=`TEST-ANCHOR-${randomUUID()}`;
-   const order=await identity.createOrder(designer,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:style,orderDate:beijingCalendarDate(businessNow()),primaryMerchandiserId:primary.actorId,lines:Array.from({length:poCount},(_,index)=>({formalPoNo:poCount===1?style:`${style}-${index+1}`,color:index?'白':'黑',customerWarehouseArrivalDate:'2027-03-01',sizes:[{size:'M',quantity:10}]}))}),randomUUID());
+   const order=await identity.createOrder(designer,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:style,orderDate:beijingCalendarDate(businessNow()),primaryMerchandiserId:primary.actorId,lines:Array.from({length:poCount},(_,index)=>({formalPoNo:poCount===1?style:`${style}-${index+1}`,color:index?'白':'黑',customerWarehouseArrivalDate:'2027-03-01',sizes:[{size:'M',quantity:options?.quantity??10}]}))}),randomUUID());
    const id=order.productionOrderId,source=await identity.createSource(designer,{developmentType:'头版',designStyleNo:style,temporaryStyleNo:null,customerCode:'PD'},randomUUID());
    await identity.attachSource(designer,id,source.sourceId,randomUUID());
    const photo=await image(designer);
