@@ -1,6 +1,6 @@
 import {z} from 'zod';
 import {PRODUCTION_STATISTICS_DRILLS,PRODUCTION_GROUPINGS} from './production-statistics.js';
-const queryList=<T extends z.ZodType>(schema:T)=>z.preprocess(value=>{if(typeof value!=='string')return value;try{return JSON.parse(value);}catch{return value;}},z.array(schema).min(1).max(50).refine(value=>new Set(value).size===value.length)).optional();
+const queryList=<T extends z.ZodType>(schema:T,min=1)=>z.preprocess(value=>{if(typeof value!=='string')return value;try{return JSON.parse(value);}catch{return value;}},z.array(schema).min(min).max(50).refine(value=>new Set(value).size===value.length)).optional();
 export const DigitalAnalysisFilterSchema=z.object({
  from:z.iso.date(),to:z.iso.date(),customer:z.string().trim().max(100).default(''),category:z.string().trim().max(100).default(''),
  role:z.string().trim().max(100).default(''),designer:z.string().uuid().optional(),page:z.coerce.number().int().min(1).max(100000).default(1),
@@ -13,12 +13,13 @@ export const DigitalAnalysisFilterSchema=z.object({
  lineId:z.string().uuid().optional(),salesYear:z.coerce.number().int().min(1000).max(9999).optional(),salesSeries:z.string().regex(/^P(0[1-9]|1[0-2])$/).optional(),
  primaryMerchandiserId:z.string().uuid().optional(),secondaryMerchandiserId:z.string().uuid().optional(),
  drillLineId:z.string().uuid().optional(),drillOrderId:z.string().uuid().optional(),drillFactoryId:z.string().uuid().optional(),drillMetric:z.enum(PRODUCTION_STATISTICS_DRILLS).optional(),
- drillFactories:queryList(z.union([z.string().uuid(),z.enum(['unknown','uncovered','none'])])),drillCustomers:queryList(z.string().trim().min(1).max(100)),drillStages:queryList(z.string().trim().min(1).max(100)),groupBy:queryList(z.enum(PRODUCTION_GROUPINGS)),
+ drillFactories:queryList(z.union([z.string().uuid(),z.enum(['unknown','uncovered','none'])])),drillCustomers:queryList(z.string().trim().min(1).max(100)),drillStages:queryList(z.string().trim().min(1).max(100)),drillStageFactories:queryList(z.union([z.string().uuid(),z.enum(['unknown','uncovered','none'])]),0),groupBy:queryList(z.enum(PRODUCTION_GROUPINGS)),
 }).strict().refine(value=>value.to>=value.from,'结束日期不能早于开始日期')
  .superRefine((value,context)=>{
-  const productionOnly=['snapshotId','factoryId','lineId','salesYear','salesSeries','primaryMerchandiserId','secondaryMerchandiserId','drillLineId','drillOrderId','drillFactoryId','drillMetric','drillFactories','drillCustomers','drillStages','groupBy'] as const;
+  const productionOnly=['snapshotId','factoryId','lineId','salesYear','salesSeries','primaryMerchandiserId','secondaryMerchandiserId','drillLineId','drillOrderId','drillFactoryId','drillMetric','drillFactories','drillCustomers','drillStages','drillStageFactories','groupBy'] as const;
   if(value.view!=='production'&&productionOnly.some(key=>value[key]!==undefined))context.addIssue({code:'custom',message:'这些筛选仅用于当前生产查询'});
   if(value.view==='production'&&(value.role||value.node||value.origin||value.cycle||value.assigneeId||value.metric&&value.metric!=='all'||value.scope&&value.scope!=='snapshot'))context.addIssue({code:'custom',message:'当前生产查询不混用任务岗位或期间筛选'});
+  if(value.drillStageFactories!==undefined&&!value.drillStages)context.addIssue({code:'custom',message:'节点范围只随节点分组下钻使用'});
   if(value.groupBy&&value.groupBy.length>3)context.addIssue({code:'custom',message:'分组最多三层'});
  });
 export const DigitalAnalysisNoteSchema=z.object({filters:DigitalAnalysisFilterSchema,conclusion:z.string().trim().min(1).max(2000),action:z.string().trim().min(1).max(2000),observeAt:z.iso.datetime({offset:true}),taskIds:z.array(z.string().uuid()).min(1).max(50)}).strict();

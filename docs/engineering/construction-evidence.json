@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "b2b2c495fa043502760d431e81dc41d847e483c1",
-  "sourceFingerprint": "f60da1366dbf2020c955ed1b6ae8f249f85c0866b55cc6da992379e79e6d2ec5",
+  "sourceFingerprint": "aaa6fcbacca64c4724b80c1ac3bb20179a47952392df9cefbbffe225f66c8284",
   "risk": "full",
   "rules": [
     {
@@ -22,7 +22,7 @@
       ],
       "initialization": "不新建业务表或补历史；基于保存原未折叠事实和asOf，母单完成沿全适用兄弟PO。分组最多3层/1000组，超范围明确拒绝，不截组装完整。归厂未知、尚未覆盖、无当前份额分别列；厂/并行节点涉及数不可加。",
       "dateAndPermission": "每次保存结果/下钻/导出沿原实时角色/对象核权，真正源条件仍绑定hash，只有展示筛选可同S0重组。阶段限定实际厂批次/整单PO背景，不把乙节点认到甲。",
-      "expectation": "16PO的32件及16个完整组在分页前；60/100承接与背景、F全局2/两厂未知、I特殊结案检查缺口保持。新多选、JSON精确回环、母单未完兄弟及父组先行均有真实或纯函数反例。",
+      "expectation": "16PO的32件及16个完整组在分页前；60/100承接与背景、F全局2/两厂未知、I特殊结案检查缺口保持。新多选、JSON精确回环、母单未完兄弟及父组先行均有真实或纯函数反例；Review4491441526的无节点/多厂/次序/二次下钻沿同谓词保节点上下文，原生逐组HTTP核同S0。",
       "oldTests": [
         "tests/integration/m01-production-statistics-postgres.test.ts",
         "tests/integration/time-reading-clock-postgres.test.ts"
@@ -52,7 +52,7 @@
       ],
       "initialization": "不保存永久授权数据；仅列/组偏好及同一标签页有限返回配置。原壳tokens与组件保留，默认汇总按需展开、长列表有界显示；不替换旧沙盘。",
       "dateAndPermission": "请求代次、条件、真实身份共同拒A1/B/A2迟回；参数键规范比较不依赖对象插入顺序。失败保S0旧条件/asOf并明确，403清旧数据/下载，15分钟过期整体重取；wall仅查询/返回生命周期，不改业务SLA。",
-      "expectation": "原生真实A/B/A、初读失败/刷新失败、旧缓存过期、PMC同cookie撤权、完整空与品类缺映射原记录入口、390px及键盘焦点通过；源和展示条件分名。",
+      "expectation": "原生真实A/B/A、初读失败/刷新失败、旧缓存过期、PMC同cookie撤权、完整空与品类缺映射原记录入口、390px及键盘焦点通过；源和展示条件分名；失败新条件后点旧卡用S0原条件，原生反例保32件。",
       "oldTests": [
         "tests/unit/digital-development-workspace.test.ts",
         "tests/unit/platform-modules.test.ts"
@@ -116,7 +116,7 @@
       ],
       "initialization": "只追加完整分组/具体缺件工作表和准确多选/组顺序说明；首三数量工作表仍兼容原消费者。不加工资/成本/扣款字段，不将普通做尾当不良。",
       "dateAndPermission": "原导出白名单及当前核权不变，按同S0/asOf/watermark全量。缺业务发生日不拿登记补时，问题发生/发现/登记/解决和复发分开；未标准分类保待归类，不从自由文本归责。",
-      "expectation": "全16PO页外/分组与同版Excel、F未知池和I质量、真正撤权旧下载403、有效发出/本项要求与原单位及原事件展开核对，原数量表/报工订正/累计实收回归保通过。",
+      "expectation": "全16PO页外/分组与同版Excel、单/多选工厂在API和Excel一致限定、F未知池和I质量、真正撤权旧下载403、有效发出/本项要求与原单位及原事件展开核对，原数量表/报工订正/累计实收回归保通过。",
       "oldTests": [
         "tests/integration/m01-production-statistics-postgres.test.ts",
         "tests/integration/time-reading-clock-postgres.test.ts"
@@ -181,7 +181,7 @@
       ],
       "initialization": "真实base→当前差异生成28套件计划，新suite属原long正确性并触发锁定Chromium安装；原工人数/100秒/既有更大预算保留。P07未提交报告传输修复不进入本PR。",
       "dateAndPermission": "时间增量4路径，原451条逐字保留，总455；Math.min仅路径/页码，不当期限；真实wall仅缓存/导航TTL，业务观察始终原asOf。旧失败28入口不签最终通过，最终CI仍需完整计划及原后续项。",
-      "expectation": "原preflight243、完整non-DB3418/11既有skip、类型/构建/lint/secret同当前来源退出0；实际受影响原生组合77，最终GitHub精确Head门禁另绑，不拼不同head或未测结果。",
+      "expectation": "原preflight243、完整non-DB3420/11既有skip、类型/构建/lint/secret同当前来源退出0；实际受影响原生组合77，最终GitHub精确Head门禁另绑，不拼不同head或未测结果。",
       "oldTests": [
         "tests/unit/full-gate-risk-map.test.ts"
       ],
@@ -200,7 +200,7 @@
     {
       "id": "targeted-native",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/m01-current-production-native-browser-postgres.test.ts tests/integration/m01-production-statistics-postgres.test.ts tests/integration/time-reading-clock-postgres.test.ts tests/integration/m01-settings-native-browser-postgres.test.ts tests/integration/m01-short-lead-native-browser-postgres.test.ts --maxWorkers=2 --reporter=default --reporter=json --outputFile=/workspace/scratch/m01-p09-targeted-container-baseb2-final2.json",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/m01-current-production-native-browser-postgres.test.ts tests/integration/m01-production-statistics-postgres.test.ts tests/integration/time-reading-clock-postgres.test.ts tests/integration/m01-settings-native-browser-postgres.test.ts tests/integration/m01-short-lead-native-browser-postgres.test.ts --maxWorkers=2 --reporter=default --reporter=json --outputFile=/workspace/scratch/m01-p09-review-targeted-managed1.json",
       "status": "passed",
       "exitCode": 0,
       "passed": 77,
@@ -209,38 +209,38 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "34a73831291650294841474d523a9bca3954b8d6febeccd08d7d282fe0f93921"
+          "sha256": "f64dedaa073da90c50f726d3b4ddceb12b06d1ee4c2c11ad257718261678f624"
         }
       ],
-      "testedHead": "b2b2c495fa043502760d431e81dc41d847e483c1",
-      "sourceFingerprint": "f60da1366dbf2020c955ed1b6ae8f249f85c0866b55cc6da992379e79e6d2ec5",
-      "startedAt": "2026-11-06T10:16:34.690Z",
-      "endedAt": "2026-11-06T10:17:52.652Z",
-      "log": "/workspace/scratch/m01-p09-targeted-container-baseb2-final2.log",
-      "logSha256": "8405cfc83d1c6918007b124d32d6c73bbb747b4b10882069e52a78dbbbd8a13f",
-      "context": "Actual P08 squashb2b2c495 assembled P09, original long Vitest config and2workers/100-second correctness. Five affected original PG suites77 tests, pinned original Playwright1.56.1 Chromium141.0.7390.37, original AuthService/PostgresAuthStore/routes and native fixture commands; only external DingTalk and named transport failures are TEST adapters. Exact CI PG16-alpine digest aa6cb33cf4c19c765cefcf48d96176258800870a9a1e930ad126200f9d825139 (actual16.15), separate marked low-privilege default/clock databases, original owned resource disposal; Node/PG affinity0,1 and PG2CPU/2GiB. This is a targeted5-suite run, not the complete28-suite canonical plan; actual final CI remains separate. Host/IO and whole App/human acceptance are not claimed equivalent."
+      "testedHead": "98e667e50bd51c65b99a5c7095ac1ca1338d7960",
+      "sourceFingerprint": "aaa6fcbacca64c4724b80c1ac3bb20179a47952392df9cefbbffe225f66c8284",
+      "startedAt": "2026-11-06T10:54:53.201Z",
+      "endedAt": "2026-11-06T10:56:13.612Z",
+      "log": "/workspace/scratch/m01-p09-review-targeted-managed1.log",
+      "logSha256": "92b71c21c1a2eeaba9ad2b99525fa1dc6682679393a7fa53622e90f52512df58",
+      "context": "Actual P08 squashb2b2c495 assembled P09, original long Vitest config and2workers/100-second correctness. Five affected original PG suites77 tests, pinned original Playwright1.56.1 Chromium141.0.7390.37, original AuthService/PostgresAuthStore/routes and native fixture commands; only external DingTalk and named transport failures are TEST adapters. Exact CI PG16-alpine digest aa6cb33cf4c19c765cefcf48d96176258800870a9a1e930ad126200f9d825139 (actual16.15), separate marked low-privilege default/clock databases, original owned-command process-group exit and after-workers resource cleanup; Node/PG affinity0,1 and PG2CPU/2GiB. This is a targeted5-suite run, not the complete28-suite canonical plan; actual final CI remains separate; previous direct-immediate5-suite run had76 pass/1 connection-acquire failure and the standalone original16-suite diagnostic passed; this run explicitly uses the original managed cleanup context, without asserting an unproven root cause. Host/IO and whole App/human acceptance are not claimed equivalent."
     },
     {
       "id": "full-nondb",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --maxWorkers=2 --reporter=default --reporter=json --outputFile=/workspace/scratch/m01-p09-full-nondb-baseb2-final3.json",
+      "command": "node node_modules/vitest/vitest.mjs run --maxWorkers=2 --reporter=default --reporter=json --outputFile=/workspace/scratch/m01-p09-review-nondb-final1.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 3418,
+      "passed": 3420,
       "failed": 0,
       "skipped": 11,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "82253bec79efd3c8c1765707dc00f207d3fe4db83fb57bf21fdfe02794de68c2"
+          "sha256": "4ee88800da4df51e5ce970ed656026c8e61529436019b9e208efd72e36242142"
         }
       ],
-      "testedHead": "b2b2c495fa043502760d431e81dc41d847e483c1",
-      "sourceFingerprint": "f60da1366dbf2020c955ed1b6ae8f249f85c0866b55cc6da992379e79e6d2ec5",
-      "startedAt": "2026-11-06T10:10:29.756Z",
-      "endedAt": "2026-11-06T10:13:13.050Z",
-      "log": "/workspace/scratch/m01-p09-full-nondb-baseb2-final3.log",
-      "logSha256": "e3a7c93295a7f176d3ff232726055998e8c5b3b35384675f43b658db956f12d4",
+      "testedHead": "98e667e50bd51c65b99a5c7095ac1ca1338d7960",
+      "sourceFingerprint": "aaa6fcbacca64c4724b80c1ac3bb20179a47952392df9cefbbffe225f66c8284",
+      "startedAt": "2026-11-06T10:49:30.360Z",
+      "endedAt": "2026-11-06T10:52:28.725Z",
+      "log": "/workspace/scratch/m01-p09-review-nondb-final1.log",
+      "logSha256": "331763ec8edea5114d80e88e1b2404a7e61253dd97477289242ec833be16ff13",
       "context": "Actual P08 squashb2b2c495, current assembled source fingerprint before/after unchanged; Node22.22.2/npm10.9.9, original repository command and raw log plus structured test report digests. Full non-DB has11 existing optional skips; build is workspace-only without root deployment postbuild; no deployment, production or independent Acceptance diagnostics."
     },
     {
@@ -255,15 +255,15 @@
       "resultReports": [
         {
           "format": "node-tap",
-          "sha256": "78400d9b2c66f97ba5bb02c6f6d7783f5b4647bcda1e28a43bb4a264cb026a18"
+          "sha256": "e98cde394ee27ab505af614fb542637695ef7d1e12a384401c771007f855ed69"
         }
       ],
-      "testedHead": "b2b2c495fa043502760d431e81dc41d847e483c1",
-      "sourceFingerprint": "f60da1366dbf2020c955ed1b6ae8f249f85c0866b55cc6da992379e79e6d2ec5",
-      "startedAt": "2026-11-06T10:11:20.785Z",
-      "endedAt": "2026-11-06T10:11:32.929Z",
-      "log": "/workspace/scratch/m01-p09-preflight-baseb2-final3.log",
-      "logSha256": "78400d9b2c66f97ba5bb02c6f6d7783f5b4647bcda1e28a43bb4a264cb026a18",
+      "testedHead": "98e667e50bd51c65b99a5c7095ac1ca1338d7960",
+      "sourceFingerprint": "aaa6fcbacca64c4724b80c1ac3bb20179a47952392df9cefbbffe225f66c8284",
+      "startedAt": "2026-11-06T10:49:30.365Z",
+      "endedAt": "2026-11-06T10:49:38.351Z",
+      "log": "/workspace/scratch/m01-p09-review-preflight-final1.log",
+      "logSha256": "e98cde394ee27ab505af614fb542637695ef7d1e12a384401c771007f855ed69",
       "context": "Actual P08 squashb2b2c495, current assembled source fingerprint before/after unchanged; Node22.22.2/npm10.9.9, original repository command and raw log plus structured test report digests. Full non-DB has11 existing optional skips; build is workspace-only without root deployment postbuild; no deployment, production or independent Acceptance diagnostics."
     },
     {
@@ -272,11 +272,11 @@
       "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "b2b2c495fa043502760d431e81dc41d847e483c1",
-      "sourceFingerprint": "f60da1366dbf2020c955ed1b6ae8f249f85c0866b55cc6da992379e79e6d2ec5",
-      "startedAt": "2026-11-06T10:11:20.802Z",
-      "endedAt": "2026-11-06T10:12:05.963Z",
-      "log": "/workspace/scratch/m01-p09-types-baseb2-final3.log",
+      "testedHead": "98e667e50bd51c65b99a5c7095ac1ca1338d7960",
+      "sourceFingerprint": "aaa6fcbacca64c4724b80c1ac3bb20179a47952392df9cefbbffe225f66c8284",
+      "startedAt": "2026-11-06T10:49:38.438Z",
+      "endedAt": "2026-11-06T10:50:23.704Z",
+      "log": "/workspace/scratch/m01-p09-review-types-final1.log",
       "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e",
       "context": "Actual P08 squashb2b2c495, current assembled source fingerprint before/after unchanged; Node22.22.2/npm10.9.9, original repository command and raw log plus structured test report digests. Full non-DB has11 existing optional skips; build is workspace-only without root deployment postbuild; no deployment, production or independent Acceptance diagnostics."
     },
@@ -286,12 +286,12 @@
       "command": "npm run build --workspaces --if-present",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "b2b2c495fa043502760d431e81dc41d847e483c1",
-      "sourceFingerprint": "f60da1366dbf2020c955ed1b6ae8f249f85c0866b55cc6da992379e79e6d2ec5",
-      "startedAt": "2026-11-06T10:16:36.062Z",
-      "endedAt": "2026-11-06T10:16:54.763Z",
-      "log": "/workspace/scratch/m01-p09-build-baseb2-final3.log",
-      "logSha256": "76a3563b1fb201b1cdef2b2dbe260fc9d2b906aaaaeefcc230d791cc5ea3a52f",
+      "testedHead": "98e667e50bd51c65b99a5c7095ac1ca1338d7960",
+      "sourceFingerprint": "aaa6fcbacca64c4724b80c1ac3bb20179a47952392df9cefbbffe225f66c8284",
+      "startedAt": "2026-11-06T10:48:05.694Z",
+      "endedAt": "2026-11-06T10:48:21.387Z",
+      "log": "/workspace/scratch/m01-p09-review-build-final1.log",
+      "logSha256": "1f51aaf825fbef2a331e347a032e5f41d693cf3c8cfbee8677e43917307e9bd4",
       "context": "Actual P08 squashb2b2c495, current assembled source fingerprint before/after unchanged; Node22.22.2/npm10.9.9, original repository command and raw log plus structured test report digests. Full non-DB has11 existing optional skips; build is workspace-only without root deployment postbuild; no deployment, production or independent Acceptance diagnostics."
     },
     {
@@ -300,11 +300,11 @@
       "command": "npm run lint",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "b2b2c495fa043502760d431e81dc41d847e483c1",
-      "sourceFingerprint": "f60da1366dbf2020c955ed1b6ae8f249f85c0866b55cc6da992379e79e6d2ec5",
-      "startedAt": "2026-11-06T10:11:20.768Z",
-      "endedAt": "2026-11-06T10:11:57.493Z",
-      "log": "/workspace/scratch/m01-p09-lint-baseb2-final3.log",
+      "testedHead": "98e667e50bd51c65b99a5c7095ac1ca1338d7960",
+      "sourceFingerprint": "aaa6fcbacca64c4724b80c1ac3bb20179a47952392df9cefbbffe225f66c8284",
+      "startedAt": "2026-11-06T10:50:23.832Z",
+      "endedAt": "2026-11-06T10:50:55.751Z",
+      "log": "/workspace/scratch/m01-p09-review-lint-final1.log",
       "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763",
       "context": "Actual P08 squashb2b2c495, current assembled source fingerprint before/after unchanged; Node22.22.2/npm10.9.9, original repository command and raw log plus structured test report digests. Full non-DB has11 existing optional skips; build is workspace-only without root deployment postbuild; no deployment, production or independent Acceptance diagnostics."
     },
@@ -314,11 +314,11 @@
       "command": "npm run secret:scan",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "b2b2c495fa043502760d431e81dc41d847e483c1",
-      "sourceFingerprint": "f60da1366dbf2020c955ed1b6ae8f249f85c0866b55cc6da992379e79e6d2ec5",
-      "startedAt": "2026-11-06T10:16:37.445Z",
-      "endedAt": "2026-11-06T10:16:38.663Z",
-      "log": "/workspace/scratch/m01-p09-secret-baseb2-final3.log",
+      "testedHead": "98e667e50bd51c65b99a5c7095ac1ca1338d7960",
+      "sourceFingerprint": "aaa6fcbacca64c4724b80c1ac3bb20179a47952392df9cefbbffe225f66c8284",
+      "startedAt": "2026-11-06T10:50:55.850Z",
+      "endedAt": "2026-11-06T10:50:56.626Z",
+      "log": "/workspace/scratch/m01-p09-review-secret-final1.log",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda",
       "context": "Actual P08 squashb2b2c495, current assembled source fingerprint before/after unchanged; Node22.22.2/npm10.9.9, original repository command and raw log plus structured test report digests. Full non-DB has11 existing optional skips; build is workspace-only without root deployment postbuild; no deployment, production or independent Acceptance diagnostics."
     }
