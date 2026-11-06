@@ -12,16 +12,27 @@ function fixture(kind,path,run) {
  try {
   git('init','-q');git('config','user.email','fixture@example.invalid');git('config','user.name','Isolated fixture');
   writeFileSync(join(root,'initial'),'base');git('add','.');git('commit','-qm','base');const base=git('rev-parse','HEAD');
-  mkdirSync(join(root,path,'..'),{recursive:true});writeFileSync(join(root,path),'change');git('add','.');git('commit','-qm','candidate');const head=git('rev-parse','HEAD');
+  const paths=Array.isArray(path)?path:[path];for(const p of paths){mkdirSync(join(root,p,'..'),{recursive:true});writeFileSync(join(root,p),'change');}git('add','.');git('commit','-qm','candidate');const head=git('rev-parse','HEAD');
   const plan={kind,pr:901,head,base,baseRef:'release/digital-production-v1',phase:'final',repository:REPOSITORY};
   const event=join(root,'event.json'),output=join(root,'output');writeFileSync(event,JSON.stringify({repository:{full_name:REPOSITORY},ref_type:'branch',ref:finalRef(plan)}));
-  const scope=scopeFor(plan,[path]),catalog=checkCatalog(kind);
+  const scope=scopeFor(plan,paths),catalog=checkCatalog(kind);
   const steps=Object.fromEntries(catalog.map(([id,,tag])=>[id,{outcome:scopeRequired(tag,scope)?'success':'skipped'}]));
   const env={GITHUB_EVENT_NAME:'create',GITHUB_REPOSITORY:REPOSITORY,GITHUB_EVENT_PATH:event,GITHUB_SHA:head,GITHUB_RUN_ID:'801',GITHUB_RUN_ATTEMPT:'1',GITHUB_OUTPUT:output,GATE_SCOPE_JSON:JSON.stringify(scope),GATE_CHECKS_JSON:JSON.stringify(catalog),GATE_STEPS_JSON:JSON.stringify(steps),GATE_JOB_STATUS:'success'};
   process.chdir(root);return run({plan,scope,steps,catalog,env,event,output});
  }finally{process.chdir(cwd);rmSync(root,{recursive:true,force:true});}
 }
 const quiet=fn=>{const print=console.log;console.log=()=>{};try{return fn();}finally{console.log=print;}};
+test('real final certification recomputes mixed business SQL, inventory and mapping scope without faking drill passes',()=>fixture('full',['apps/api/migrations/9999_business.sql','apps/api/src/platform/migration-manifest.json','scripts/deploy/acceptance-migration-requirements.json','scripts/migration-branches.json','scripts/migration-main-extensions.json','scripts/ci/full-gate-risk-map.mjs','scripts/test-suite-plan.mjs'],({env,steps})=>{
+ const receipt=quiet(()=>emitReceipt(env));
+ for(const id of ['backup','acceptance_recovery','release_history','release_acceptance','package'])assert.deepEqual(receipt.checks.find(c=>c.id===id),{id,applicable:false,outcome:'skipped',execution:'executed'});
+ assert.equal(quiet(()=>certifyFinal({...env,WORKER_RESULT:'success',WORKER_RECEIPT:JSON.stringify(receipt)})).head,receipt.head);
+ for(const id of ['db_migrate','root_audit','business_chain'])for(const outcome of ['skipped','failure','cancelled'])assert.throws(()=>quiet(()=>emitReceipt({...env,GATE_STEPS_JSON:JSON.stringify({...steps,[id]:{outcome}})})),/Gate incomplete/);
+ const forged={...receipt,scope:{...receipt.scope,maintenance:'true'}};assert.throws(()=>quiet(()=>certifyFinal({...env,WORKER_RESULT:'success',WORKER_RECEIPT:JSON.stringify(forged)})),/scope maintenance differs/);
+}));
+test('real final certification still rejects skipped recovery for migration tooling',()=>fixture('full','scripts/migrate.mjs',({env,steps})=>{
+ const receipt=quiet(()=>emitReceipt(env));assert.equal(receipt.checks.find(c=>c.id==='acceptance_recovery').applicable,true);
+ for(const id of ['backup','acceptance_recovery','release_history'])assert.throws(()=>quiet(()=>emitReceipt({...env,GATE_STEPS_JSON:JSON.stringify({...steps,[id]:{outcome:'skipped'}})})),/Gate incomplete/);
+}));
 for(const [kind,path]of [['full','.github/workflows/example.yml'],['quick','docs/governance/example.md']])test(`actual ${kind} checkout, diff, worker output and GitHub result certify successfully`,()=>fixture(kind,path,({plan,env,output})=>{
  assert.equal(resolveEvent(env).head,plan.head);assert.match(readFileSync(output,'utf8'),/phase=final/);
  const receipt=quiet(()=>emitReceipt(env));assert.equal(receipt.head,plan.head);
