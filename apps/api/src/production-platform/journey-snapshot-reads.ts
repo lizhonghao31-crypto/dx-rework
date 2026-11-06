@@ -4,6 +4,36 @@ import type { PoolClient, QueryResult } from "pg";
 const MAX_BYTES = 4 * 1024 * 1024;
 const MAX_ENTRIES = 1024;
 const unsafeRead = /\bFOR\s+(?:KEY\s+SHARE|SHARE|NO\s+KEY\s+UPDATE|UPDATE)\b|\b(insert|update|delete|merge|lock|copy|call|set|reset)\b|\b(nextval|setval|set_config|pg_(?:try_)?advisory_\w+|clock_timestamp|statement_timestamp|timeofday|random|gen_random_uuid|pg_sleep)\s*\(/i;
+/** Inspect SQL tokens, not business text such as 'receiving.batch.merge'.
+ * Stay conservative for syntax this small scanner does not interpret. The
+ * original SQL and parameters always go to pg unchanged. */
+const readTokens = (statement: string): string | null => {
+  if (/--|\/\*|\\|\$(?:[a-z_][a-z_0-9]*)?\$/i.test(statement)) return null;
+  let tokens = "";
+  for (let index = 0; index < statement.length; index++) {
+    const character = statement[index]!;
+    if (character === '"') {
+      let identifier = "", closed = false;
+      while (++index < statement.length) {
+        if (statement[index] !== '"') { identifier += statement[index]; continue; }
+        if (statement[index + 1] === '"') { identifier += '"'; index++; continue; }
+        closed = true; break;
+      }
+      if (!closed) return null;
+      tokens += ` ${identifier} `; continue;
+    }
+    if (character !== "'") { tokens += character; continue; }
+    tokens += "''";
+    let closed = false;
+    while (++index < statement.length) {
+      if (statement[index] !== "'") continue;
+      if (statement[index + 1] === "'") { index++; continue; }
+      closed = true; break;
+    }
+    if (!closed) return null;
+  }
+  return tokens;
+};
 const scalar = (value: unknown): boolean => value === null || typeof value === "string" || typeof value === "boolean" || typeof value === "number" && Number.isFinite(value) || Array.isArray(value) && value.every(scalar);
 const plainRows = (value: unknown): boolean => value === null || typeof value !== "object" || value instanceof Date
   || Array.isArray(value) && value.every(plainRows)
@@ -22,7 +52,8 @@ export function reuseJourneySnapshotReads(client: PoolClient): PoolClient {
   const query = (...args: unknown[]) => {
     const text = args[0], values = args[1] ?? [];
     const statement = typeof text === "string" ? text.trim().replace(/;\s*$/, "") : "";
-    if (!/^(SELECT|WITH)\b/i.test(statement) || unsafeRead.test(statement) || statement.includes(";")
+    const tokens = readTokens(statement);
+    if (!/^(SELECT|WITH)\b/i.test(statement) || tokens === null || unsafeRead.test(tokens) || statement.includes(";")
       || args.length > 2 || !Array.isArray(values) || !values.every(scalar)) {
       // Also invalidate on session-context changes or unsupported query modes.
       clear(); return Reflect.apply(client.query, client, args);

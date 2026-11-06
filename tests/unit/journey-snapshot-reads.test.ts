@@ -3,6 +3,40 @@ import { describe, expect, it, vi } from "vitest";
 import { reuseJourneySnapshotReads } from "../../apps/api/src/production-platform/journey-snapshot-reads.js";
 const result = (rows: unknown[]) => ({ command: "SELECT", rowCount: rows.length, oid: 0, fields: [], rows });
 describe("Journey read reuse stays inside its read-only snapshot", () => {
+  it("keeps earlier reads when a business action literal contains merge or update", async () => {
+    const query = vi.fn(async () => result([{ note: "TEST unchanged" }]));
+    const db = reuseJourneySnapshotReads({ query } as unknown as PoolClient);
+    const sql = "WITH receipt AS (SELECT CASE WHEN action='receiving.batch.merge' THEN 1 ELSE 0 END FROM events) SELECT 'it''s an update',* FROM receipt";
+    await db.query("SELECT previous"); await db.query(sql); await db.query(sql); await db.query("SELECT previous");
+    expect(query).toHaveBeenCalledTimes(2); expect(query.mock.calls.map(call => call[0])).toEqual(["SELECT previous", sql]);
+  });
+  it("still passes actual writes, locks and volatile calls outside literals through unchanged", async () => {
+    const query = vi.fn(async () => result([{ ok: true }]));
+    const db = reuseJourneySnapshotReads({ query } as unknown as PoolClient);
+    for (const sql of ["WITH x AS (DELETE FROM t WHERE note='merge' RETURNING *) SELECT * FROM x", "SELECT 'safe' FROM t FOR UPDATE", "SELECT set_config('safe','merge',true)", "SELECT 'merge',random()", "SELECT 'safe' FOR NO KEY UPDATE"]) {
+      await db.query("SELECT previous"); await db.query(sql); await db.query(sql); await db.query("SELECT previous");
+    }
+    expect(query.mock.calls.filter(call => call[0] === "SELECT previous")).toHaveLength(6);
+    expect(query).toHaveBeenCalledTimes(16);
+  });
+  it("does not interpret comments, escape strings, dollar quotes or broken quoting as a reusable read", async () => {
+    const query = vi.fn(async () => result([{ ok: true }]));
+    const db = reuseJourneySnapshotReads({ query } as unknown as PoolClient);
+    for (const sql of ["SELECT 1 --' comment\n FOR UPDATE --'", "SELECT /* ' */ 1 FOR SHARE /* ' */", String.raw`SELECT E'it\'s merge'`, "SELECT $$it's merge$$", "SELECT $body$it's merge$body$", "SELECT 'unterminated", "SELECT ';' AS note"]) {
+      await db.query(sql); await db.query(sql);
+    }
+    expect(query).toHaveBeenCalledTimes(14);
+  });
+  it("does not let quotes inside identifiers hide a later lock or volatile call", async () => {
+    const query = vi.fn(async () => result([{ ok: true }]));
+    const db = reuseJourneySnapshotReads({ query } as unknown as PoolClient);
+    for (const sql of [`SELECT "first'name", random(), "second'name" FROM t`, `SELECT "a'b",'safe' FROM t FOR UPDATE`, `SELECT "random"()`, `SELECT "broken`]) {
+      await db.query(sql); await db.query(sql);
+    }
+    const safe = `SELECT 'receiving.batch.merge' AS "business' action", 'it''s retained' AS "double""quote"`;
+    await db.query(safe); await db.query(safe);
+    expect(query).toHaveBeenCalledTimes(9);
+  });
   it("reuses identical SQL/parameters while returning independent rows and preserving dates", async () => {
     const query = vi.fn(async () => result([{ name: "TEST", at: new Date("2026-10-15T00:00:00Z"), nested: { value: 1 } }]));
     const db = reuseJourneySnapshotReads({ query } as unknown as PoolClient);

@@ -1,243 +1,204 @@
 {
   "version": 1,
-  "base": "bb7aa5337470c1cce8b12c4458e48a4dab93f67c",
-  "sourceFingerprint": "b745aa28c3ff3254e856cb09426ca12588e6d7c3051950592107443f2f37a40d",
+  "base": "91b61ecc5969679543a522749f9a347710ebd8a8",
+  "sourceFingerprint": "a0fadd95d9235f5a1de7c349937506709564981b306d4218277a78824fd71564",
   "risk": "full",
   "rules": [
     {
-      "rule": "原主办接续、当前负荷、截止时主办和实际提交分别呈现，不从创建者/当前人/Root代办猜旧责任。",
-      "source": "Full Library dx-m01-implement-v1.1.1 §14 P11-01–07; M01-OPT1.3; approved permission golden source; docs/engineering/m01-p11-execution.md",
+      "rule": "原收货动作字符串中的merge不是SQL写入，已证重复读取只在同一只读事务内减少。",
+      "source": "Full Library dx-m01-implement-v1.1.1 §15 P12; OPT1.3; latest explicit local diagnostic-data instruction; docs/engineering/m01-p12-execution.md",
       "writes": [
-        "packages/contracts/package.json",
-        "packages/domain/package.json",
-        "packages/contracts/src/production-collaboration.ts",
-        "packages/domain/src/production-collaboration.ts",
-        "apps/api/src/production-platform/production-collaboration-source.ts"
+        "apps/api/src/production-platform/journey-snapshot-reads.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/task-service.ts",
-        "apps/api/src/production-platform/task-access-repository.ts",
+        "apps/api/src/production-platform/journey-query.ts",
+        "apps/api/src/receiving/receiving-service.ts",
+        "apps/api/src/production-platform/order-closure-service.ts"
+      ],
+      "initialization": "原版10次profile均231物理SQL/41重复binding，定位原receiving.batch.merge字面量误触guard而清缓存。只在判断前识别普通单引号及双引号标识符，原SQL/参数原样交pg；不变SQL返回及数据、不新增SQL/索引/迁移/永久缓存。",
+      "dateAndPermission": "缓存仍限单actor的REPEATABLE READ READ ONLY snapshot、原4MiB/1024项/128行和独立rows复制；无跨请求/用户/对象/scene/asOf共享。不前置分页、不删全部授权筛选风险/KPI。",
+      "expectation": "真实原收货CTE与前一事实各只执行一次，发生SQL错误后真实25P02不被缓存遮蔽。冻结同数据ABBA20次结果/全表指纹一致，SQL232降200，两组方向一致；保首次/慢值，不能冒现场提速保证。",
+      "oldTests": [
+        "tests/unit/journey-snapshot-reads.test.ts",
+        "tests/integration/digital-journey-postgres.test.ts"
+      ],
+      "checks": [
+        "mapped-pg",
+        "clock-pg",
+        "full-nondb",
+        "preflight",
+        "types",
+        "build",
+        "lint",
+        "secret",
+        "pg13",
+        "comparison"
+      ]
+    },
+    {
+      "rule": "真实DML、锁、易变函数、模式/参数/会话变化和失败事务继续走原驱动并失效。",
+      "source": "Full Library dx-m01-implement-v1.1.1 §15 P12; OPT1.3; latest explicit local diagnostic-data instruction; docs/engineering/m01-p12-execution.md",
+      "writes": [
+        "tests/unit/journey-snapshot-reads.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/platform/journey-diagnostic.ts",
         "apps/api/src/production-platform/access-policy.ts"
       ],
-      "initialization": "无迁移/回填/新业务状态。原task-service.correctTime及reporting-metrics.taskAnalysis/production-period-sources现有有效完成列为同一权威，不按更正登记排序猜完成，也不把更正人当提交人。原reassigned发生与quality、notification_sequence和前后主办审计逐项核；缺原初始值/链只限历史期间，保当前主办与真实经办。原无时限/缺截止/尚未到期分别说明，不预定未来截止主办。",
-      "dateAndPermission": "原业务发生与真实登记不互替，原本次有效D主办不是过错。所有人员和问题仅来自本次先授权PO/任务，不显示无权人数。格式异常旧人员引用不导致任意UUID查询。",
-      "expectation": "真实原标准在新场景前发布一天目标，A在D前负责、B在D后接手、Root后来完成：B负荷/主办、A截止主办、Root提交及接续均保原值，不自动归错。缺链/冲突保待核。完成有效时间/quality沿原task列订正投影，已知更正、明确未知均反映到页面同源和Excel；原提交人与原登记不变，原更正人不算完成经办。",
+      "initialization": "词法识别仅供现有固定SQL的保守读复用判断，不称完整SQL解析器。单引号双写正确处理，双引号内单引号不吞后续真实锁/随机函数；quoted random也保守拒绝。注释/反斜线/dollar quote/未闭合引号不理解就不复用。",
+      "dateAndPermission": "原真实volatile/锁/多语句/config调用与非标量参数仍失效；会话SET和语句失败清缓存，身份参数与后来snapshot不共享，binary/custom/超大结果不留存。诊断仍默认关闭、原窗口/并发/10次进程上限及匿名语义。",
+      "expectation": "原9项缓存单元含merge字面量、双引号特殊名、原写/锁/volatile与模糊语法、旧上下文/失败/复制边界通过；原诊断单元与真实PG callback/queued/rollback/关闭开启body一致，不用mock代真实PG。",
       "oldTests": [
-        "tests/unit/m01-production-collaboration.test.ts",
-        "tests/integration/m01-production-statistics-postgres.test.ts"
+        "tests/unit/journey-diagnostic.test.ts",
+        "tests/integration/journey-diagnostic-postgres.test.ts"
       ],
       "checks": [
-        "targeted-native",
-        "affected-nondb",
+        "mapped-pg",
+        "clock-pg",
+        "full-nondb",
         "preflight",
         "types",
         "build",
         "lint",
-        "secret"
+        "secret",
+        "pg13",
+        "comparison"
       ]
     },
     {
-      "rule": "人员历史按需接同一授权保存结果，管理读取和普通PO读取分开，来源不直接泄漏。",
-      "source": "Full Library dx-m01-implement-v1.1.1 §14 P11-01–07; M01-OPT1.3; approved permission golden source; docs/engineering/m01-p11-execution.md",
+      "rule": "减少读重复不改变权限、整集合筛选、原事实/时钟及关键下游。",
+      "source": "Full Library dx-m01-implement-v1.1.1 §15 P12; OPT1.3; latest explicit local diagnostic-data instruction; docs/engineering/m01-p12-execution.md",
       "writes": [
-        "packages/contracts/src/digital-production-analysis.ts",
-        "packages/contracts/src/production-statistics.ts",
-        "apps/api/src/production-platform/analysis-result-store.ts",
-        "apps/api/src/production-platform/production-statistics-query.ts"
+        "tests/integration/journey-diagnostic-postgres.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/reporting-routes.ts",
-        "apps/api/src/auth/service.ts",
-        "apps/api/src/auth/postgres-store.ts"
+        "apps/api/src/production-platform/journey-supervision.ts",
+        "apps/api/src/production-platform/identity-routes.ts",
+        "apps/api/src/acceptance-clock/business-time.ts",
+        "apps/api/src/auth/service.ts"
       ],
-      "initialization": "原当前/期间默认不额外加载人员，collaboration源条件绑hash、水位/asOf和原15分钟有界缓存；筛选归属未知保已知人员子集限制，不把空子集当完整零；页面/下钻/导出均从同S0投影，分页只切PO明细。",
-      "dateAndPermission": "仅原数字管理读取（含PMC）/技术管理范围，原report:view及对象权限仍先核。权限实时三处核验、旧会话撤权清数据/导出；只读/导出不增写能力或永久授权。",
-      "expectation": "专属真实多角色普通PO读取成功、人员读取403；空已知筛选子集保scopeUnknown，不当完整零，不能拿缺report:view的更早拒绝冒人员验证；真实PMC同有效cookie撤权后data/export403，私有collaborationSources不在响应。",
+      "initialization": "新原生PG反例进既有套件，不新建角色/业务写入口或数据回填。原正式两PO/独立源/旧版本/计划采用/完成历史沿原fixtures；benchmark含真实有效数量订正与原质量覆盖缺口。",
+      "dateAndPermission": "管理/PMC/本人任务/无权对照同范围，原完整分页后仅当前页详情、root导出与普通拒绝保留。真实AuthService签名会话与纯PMC读/写拒绝另测，benchmark TEST auth不冒权限证据。各自scene、无ALS满池、COMMIT后clock修订fresh校验保原值。",
+      "expectation": "mapped37和clock/session21原案例通过、4资源精确清理；原DB历史、read-only并发、PMC职责、同一合法时钟前后原target/history/quantity不被重写。可选未明原采用令牌拒绝单列保待查，不删断言、不放宽令牌、不算那轮全过。",
       "oldTests": [
-        "tests/integration/m01-production-statistics-postgres.test.ts",
-        "tests/integration/time-reading-clock-postgres.test.ts"
+        "tests/integration/time-reading-clock-postgres.test.ts",
+        "tests/integration/acceptance-role-session-postgres.test.ts",
+        "tests/integration/factory-logistics-cockpit-postgres.test.ts"
       ],
       "checks": [
-        "targeted-native",
-        "affected-nondb",
+        "mapped-pg",
+        "clock-pg",
+        "full-nondb",
         "preflight",
         "types",
         "build",
         "lint",
-        "secret"
+        "secret",
+        "pg13",
+        "comparison"
       ]
     },
     {
-      "rule": "四栏业务文案沿原壳、组件、原任务/PO入口，涉及问题与确认过错分名。",
-      "source": "Full Library dx-m01-implement-v1.1.1 §14 P11-01–07; M01-OPT1.3; approved permission golden source; docs/engineering/m01-p11-execution.md",
+      "rule": "当前base/diff、原canonical与PG13真实工具链验证绑定，最终Review/Full只认准确head。",
+      "source": "Full Library dx-m01-implement-v1.1.1 §15 P12; OPT1.3; latest explicit local diagnostic-data instruction; docs/engineering/m01-p12-execution.md",
       "writes": [
-        "apps/web/src/current-production-context.ts",
-        "apps/web/src/current-production-page.tsx",
-        "apps/web/src/production-collaboration-panel.tsx",
-        "tests/unit/m01-production-collaboration-panel.test.ts"
+        "docs/engineering/m01-p12-execution.md"
       ],
       "reads": [
-        "apps/web/src/current-production-po-dialog.tsx",
-        "apps/web/src/components.tsx",
-        "packages/ui/src/production.tsx"
-      ],
-      "initialization": "不建人员榜/业务写入口，按原对象保当前与历史标签，任务、汇总及无人员问题分别按15项展开；任一列表超限都可继续，不能把16项原问题永久藏一项。负责人接续与提交者分别展示，角色/节点用原业务名称。",
-      "dateAndPermission": "本次可见对象的原历史不混作期间产出排名，原请求代次/身份/返回和P10筛选未知保留。原任务打开只读，人员名不带手机号/隐私。",
-      "expectation": "真实原组件390px无整页溢出、四栏标题及同版Excel、同session撤权清UI通过；保原P09/10完整原生矩阵。不将TEST截图冒真人岗位理解验收。",
-      "oldTests": [
-        "tests/integration/m01-production-statistics-postgres.test.ts",
-        "tests/integration/time-reading-clock-postgres.test.ts"
-      ],
-      "checks": [
-        "targeted-native",
-        "affected-nondb",
-        "preflight",
-        "types",
-        "build",
-        "lint",
-        "secret"
-      ]
-    },
-    {
-      "rule": "原问题ID去重、涉及任务分母和未核人员关联分开；无可核个人决定不给个人责任率。",
-      "source": "Full Library dx-m01-implement-v1.1.1 §14 P11-01–07; M01-OPT1.3; approved permission golden source; docs/engineering/m01-p11-execution.md",
-      "writes": [
-        "apps/api/src/production-platform/production-collaboration-export.ts",
-        "apps/api/src/production-platform/reporting-query.ts"
-      ],
-      "reads": [
-        "apps/api/src/rework/responsibility-determination-authorized-service.ts",
-        "apps/api/src/rework/responsibility-determination-service.ts",
-        "packages/domain/src/production-statistics.ts"
-      ],
-      "initialization": "原N07责任种类为公司/供应商，财务person_id分摊不自动当个人过错。无对应原个人决定，只停个人责任率/榜，不读取无权决定或金额，不新增认责/工资记录。",
-      "dateAndPermission": "多人涉及不可加作全局问题数，未核人员的质量缺口等沿同一授权完整result.problems保全局及原母单入口，避免多PO未在当前页而无法打开。缺完整排查母体不给问题率；实际次数/涉及任务/可见关联任务分名。等待沿原并集及覆盖，不当工时或扣正式SLA。",
-      "expectation": "原2问题/1任务/3可比任务领域反例为1/3而非2/3，缺覆盖率null；原阻断/解除/复发真实ID去重。原全局问题不因无法归人消失；同版完整导出不加敏感字段，旧未选人员模式数量sheet顺序保留。",
-      "oldTests": [
-        "tests/unit/m01-production-collaboration.test.ts",
-        "tests/unit/m01-production-statistics.test.ts",
-        "tests/integration/m01-production-statistics-postgres.test.ts"
-      ],
-      "checks": [
-        "targeted-native",
-        "affected-nondb",
-        "preflight",
-        "types",
-        "build",
-        "lint",
-        "secret"
-      ]
-    },
-    {
-      "rule": "真实内部适配器、角色、时钟及浏览器组合验证语义和安全收尾，修复不删旧场景。",
-      "source": "Full Library dx-m01-implement-v1.1.1 §14 P11-01–07; M01-OPT1.3; approved permission golden source; docs/engineering/m01-p11-execution.md",
-      "writes": [
-        "tests/unit/m01-production-collaboration.test.ts",
-        "tests/integration/m01-production-collaboration-postgres.test.ts",
-        "tests/integration/m01-production-collaboration-native-browser-postgres.test.ts",
-        "tests/acceptance/m01-current-production-native-browser.ts"
-      ],
-      "reads": [
-        "tests/helpers/business-anchor-fixture.ts",
-        "scripts/test-resource-contract.mjs",
-        "scripts/test-resource-lifecycle.mjs"
-      ],
-      "initialization": "专属低权标记库，原标准/固定任务适配器/改派/反馈/完成生成事实。内部任务适配器只证明原任务契约，不冒实际成衣QC原件。原PMC浏览器使用真实认证，只外部DingTalk适配。",
-      "dateAndPermission": "原当前11、期间4和人员2场景及各清理保留；Review后追加真实经理known/unknown完成订正与原提交人/登记/旧S0/新Excel反例，以及16个无人员问题的真实React逐项展开，逐项yield、有界100秒/已有更大预算。P10真实多版本/缺归属/满池回归保留，失败manifest由原runner在所有worker退出后精确清理。",
-      "expectation": "当前实际合并基线重新验证7套受影响PG组合和受影响non-DB，完整普通计划留本次最终CI；准备候选58通过不冒最终。早期临期比例/角色夹具失败保留，只改原调用/专属fixture，不放宽业务守卫。",
-      "oldTests": [
-        "tests/integration/m01-production-statistics-postgres.test.ts",
-        "tests/integration/time-reading-clock-postgres.test.ts"
-      ],
-      "checks": [
-        "targeted-native",
-        "affected-nondb",
-        "preflight",
-        "types",
-        "build",
-        "lint",
-        "secret"
-      ]
-    },
-    {
-      "rule": "新增人员原生套件纳原canonical计划和浏览器安装，时间清单增量保人工注记。",
-      "source": "Full Library dx-m01-implement-v1.1.1 §14 P11-01–07; M01-OPT1.3; approved permission golden source; docs/engineering/m01-p11-execution.md",
-      "writes": [
-        "tests/unit/full-gate-risk-map.test.ts",
-        "scripts/test-suite-plan.mjs",
-        "scripts/ci/prepare-settings-browser.mjs",
         "scripts/ci/full-gate-risk-map.mjs",
-        "docs/engineering/acceptance-time-sites-20261027.json",
-        "docs/engineering/m01-p11-execution.md"
+        "scripts/test-suite-plan.mjs",
+        "scripts/ci/journey-pg13-regression.mjs"
       ],
-      "reads": [
-        "scripts/run-business-chain-gate.mjs",
-        "scripts/test-execution-config.mjs",
-        "scripts/acceptance/time-site-inventory.mjs"
-      ],
-      "initialization": "实际base→全部新增/修改路径计算风险和suite并集，不手降flags。原锁定Chromium/原worker及资源契约不改，P07 CI治理保持隔离。",
-      "dateAndPermission": "仅新增1时间源候选路径，459旧人工条目保留；date_target只是原截止类型判别，不新造业务时点/截止。业务发生与记录时钟始终分开。",
-      "expectation": "预检、类型、workspace构建、lint/secret和真实报告与来源绑定，暂存后及新鲜提交verify-change。最终GitHub light/一次正式Review及冻结Head Full另记，不用旧head或未测回执。",
+      "initialization": "无CI治理、规则豁免或新测试平台；真实4源/记录改动算风险，原23套canonical与Journey PG13路径保留。原PG13脚本带临时资源caps透明执行，低权限真实130023/33及准确ID删除回执。",
+      "dateAndPermission": "Node22.22.2/npm10.9.9与原workers/100秒或更大既有值，实际本地CPU/内存显式记录，不宣称宿主CI等效。没有新日期/SLA写入或时间清单生成器变更，不重生无关清单。",
+      "expectation": "完整nonDB3451/0/11既有skip，preflight243，类型/workspace build/lint/secret退出0；独立PG13原入口33通过并精确清理，所有报告/日志/来源固定。暂存与新鲜checkoutverify-change，随后一次正式Codex Review/最终同Head Full和expectedHead正常合并另记。",
       "oldTests": [
-        "tests/unit/full-gate-risk-map.test.ts"
+        "tests/unit/journey-snapshot-reads.test.ts",
+        "tests/integration/digital-journey-postgres.test.ts"
       ],
       "checks": [
-        "targeted-native",
-        "affected-nondb",
+        "mapped-pg",
+        "clock-pg",
+        "full-nondb",
         "preflight",
         "types",
         "build",
         "lint",
-        "secret"
+        "secret",
+        "pg13",
+        "comparison"
       ]
     }
   ],
   "checks": [
     {
-      "id": "targeted-native",
+      "id": "mapped-pg",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/m01-current-production-native-browser-postgres.test.ts tests/integration/m01-production-statistics-postgres.test.ts tests/integration/time-reading-clock-postgres.test.ts tests/integration/m01-production-period-native-browser-postgres.test.ts tests/integration/m01-production-period-postgres.test.ts tests/integration/m01-production-collaboration-postgres.test.ts tests/integration/m01-production-collaboration-native-browser-postgres.test.ts --maxWorkers=2 --reporter=default --reporter=json --outputFile=/workspace/scratch/m01-p11-reviewed-targeted1.json",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.config.ts tests/integration/digital-journey-postgres.test.ts tests/integration/journey-diagnostic-postgres.test.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile=/workspace/scratch/m01-p12-final-pg-mapped1.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 59,
+      "passed": 37,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "e5e32576b937c65d18f36479794c33eb3028d05e4b4c5db3af69c353e00c8d63"
+          "sha256": "999192628a154b5257d580641cdc8e784b78c4ca18ed8162796bcc02149947a9"
         }
       ],
-      "testedHead": "83f05dae705c6ffea878cbc00fecf0a009f01e3f",
-      "sourceFingerprint": "b745aa28c3ff3254e856cb09426ca12588e6d7c3051950592107443f2f37a40d",
-      "startedAt": "2026-11-06T13:55:20.063Z",
-      "endedAt": "2026-11-06T13:56:33.397Z",
-      "log": "/workspace/scratch/m01-p11-reviewed-targeted1.log",
-      "logSha256": "d023180b37ae15a37b666e87573208852b09ad295fbc3b10cf28d21a9672ea6a",
-      "context": "Actual P10 merged squash and current assembled P11 source, original managed7-suite targeted PG/browser run with original owned-command exit and after-workers exact cleanup. Node22.22.2/npm10.9.9, original2workers and100-second correctness, pinned Playwright1.56.1/Chromium141.0.7390.37, CI PG16-alpine exact digest aa6cb33cf4c19c765cefcf48d96176258800870a9a1e930ad126200f9d825139 actual16.15, separate marked low-privilege default/clock databases, PG2CPU/2GiB and affinity0,1. Original fixed task adapter, policy publication, reassignment/feedback/completion and real AuthService/PostgresAuthStore with same valid PMC cookie revocation; only external DingTalk/explicit transport faults are TEST adapters. Concentrated official Review fixes are checked on assembled current source over the actual merged P10; earlier source reports are not reused as final; not the whole canonical plan or host/IO/whole-App/human acceptance."
+      "testedHead": "91b61ecc5969679543a522749f9a347710ebd8a8",
+      "sourceFingerprint": "a0fadd95d9235f5a1de7c349937506709564981b306d4218277a78824fd71564",
+      "startedAt": "2026-11-06T15:02:50.686Z",
+      "endedAt": "2026-11-06T15:04:15.993Z",
+      "log": "/workspace/scratch/m01-p12-final-pg-mapped1.log",
+      "logSha256": "568d1f0426045f5f334b6e7fb95a5294052a106b9b7460916ecd89bfb354e58f",
+      "context": "Actual merged P11 base91b61ecc assembled current P12 source; original command and raw result/log digests, Node22.22.2/npm10.9.9 and actual source before/after unchanged. No deployment or real data. Original ordinary canonical config1worker with2 exact resources; original owned process groups verified exited, original after-workers cleanup verified. Same owned pinned PG16-alpine aa6cb33cf4c19c765cefcf48d96176258800870a9a1e930ad126200f9d825139 actual16.15, low-privilege marked default and Acceptance-clock databases and exact identities/OIDs. PG2CPU/2GiB/affinity0,1; not host/IO equivalence or full canonical plan. Optional factory-logistics original apply-token refusal retained separately as unexplained; not included as a passing test in this check."
     },
     {
-      "id": "affected-nondb",
+      "id": "clock-pg",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/m01-production-collaboration.test.ts tests/unit/m01-production-collaboration-panel.test.ts tests/unit/m01-current-production-workspace.test.ts tests/unit/m01-production-statistics.test.ts tests/unit/m01-production-period.test.ts tests/unit/digital-analysis-metrics.test.ts tests/unit/reporting-contracts-workbook-and-web.test.ts tests/unit/workflow-analysis-model.test.ts tests/unit/platform-permission-navigation-hub.test.ts tests/unit/digital-pmc-readonly-ui.test.ts tests/unit/full-gate-risk-map.test.ts tests/integration/management-reporting-routes.test.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile=/workspace/scratch/m01-p11-reviewed-nondb1.json",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/time-reading-clock-postgres.test.ts tests/integration/acceptance-role-session-postgres.test.ts --maxWorkers=2 --reporter=default --reporter=json --outputFile=/workspace/scratch/m01-p12-final-pg-clock1.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 182,
+      "passed": 21,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "e0f20bcc5ed3f569c78b1c66dc351752106a8158b282cde86926a1913dde0d2c"
+          "sha256": "ea507d46e7b0e5033a7c99973ccd7ec9b060c1ca3c5a1a16fefd3ca1f681b1d8"
         }
       ],
-      "testedHead": "83f05dae705c6ffea878cbc00fecf0a009f01e3f",
-      "sourceFingerprint": "b745aa28c3ff3254e856cb09426ca12588e6d7c3051950592107443f2f37a40d",
-      "startedAt": "2026-11-06T13:55:11.401Z",
-      "endedAt": "2026-11-06T13:55:16.765Z",
-      "log": "/workspace/scratch/m01-p11-reviewed-nondb1.log",
-      "logSha256": "e414854125a897fd16299608a0d677b8ec70512aadad012c04a579f009f49f01",
-      "context": "Actual P10 merged squash current-source original command with raw log/structured report digests; source before/after unchanged. Node22.22.2/npm10.9.9; affected ordinary non-DB suites1worker (explicit files in command, not the complete ordinary plan), preflight original command, types/workspace-only build/lint/secret without deployment postbuild. Static/non-DB explicit empty DB URLs; CPU/actual workers recorded in original metadata. Existing optional skips are reported, not passing tests. No production, independent diagnostic scene or deployment."
+      "testedHead": "91b61ecc5969679543a522749f9a347710ebd8a8",
+      "sourceFingerprint": "a0fadd95d9235f5a1de7c349937506709564981b306d4218277a78824fd71564",
+      "startedAt": "2026-11-06T15:04:16.130Z",
+      "endedAt": "2026-11-06T15:04:28.428Z",
+      "log": "/workspace/scratch/m01-p12-final-pg-clock1.log",
+      "logSha256": "093d718c8e3f0afd28479c248d7f75846683ed3215ecf12bbaa6101db19cdf6d",
+      "context": "Actual merged P11 base91b61ecc assembled current P12 source; original command and raw result/log digests, Node22.22.2/npm10.9.9 and actual source before/after unchanged. No deployment or real data. Original business-chain config2workers with2 exact resources; original owned process groups verified exited, original after-workers cleanup verified. Same owned pinned PG16-alpine aa6cb33cf4c19c765cefcf48d96176258800870a9a1e930ad126200f9d825139 actual16.15, low-privilege marked default and Acceptance-clock databases and exact identities/OIDs. PG2CPU/2GiB/affinity0,1; not host/IO equivalence or full canonical plan. Optional factory-logistics original apply-token refusal retained separately as unexplained; not included as a passing test in this check."
+    },
+    {
+      "id": "full-nondb",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run --maxWorkers=1 --reporter=default --reporter=json --outputFile=/workspace/scratch/m01-p12-final-nondb1.json",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 3451,
+      "failed": 0,
+      "skipped": 11,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "b2fe616fbd0f3cd7246a1c75ce68500b02bb0f2f4a9da91e63034db4c7299742"
+        }
+      ],
+      "testedHead": "91b61ecc5969679543a522749f9a347710ebd8a8",
+      "sourceFingerprint": "a0fadd95d9235f5a1de7c349937506709564981b306d4218277a78824fd71564",
+      "startedAt": "2026-11-06T14:49:35.331Z",
+      "endedAt": "2026-11-06T14:53:45.926Z",
+      "log": "/workspace/scratch/m01-p12-final-nondb1.log",
+      "logSha256": "7b264508af4d3a07f01d0198c859153b04209fc673d706cbd32a0acb2cec20ab",
+      "context": "Actual merged P11 base91b61ecc assembled current P12 source; original command and raw result/log digests, Node22.22.2/npm10.9.9 and actual source before/after unchanged. No deployment or real data. Original complete non-DB plan1worker with empty runtime DB URLs, or original preflight/types/workspace build/lint/secret command on2,3 affinity. No root postbuild business-chain invocation. Existing11 optional skips are not passing tests. Not full App/human/onsite acceptance."
     },
     {
       "id": "preflight",
@@ -251,16 +212,16 @@
       "resultReports": [
         {
           "format": "node-tap",
-          "sha256": "3bd8bffbf16d623990820cb8079cc4c72874f51dec7c7b32523b7c329b0105c8"
+          "sha256": "bf5c69975dc6cabe2686d503a60b55f82ec194f4f86c1cc4beb5ce472fffe5da"
         }
       ],
-      "testedHead": "83f05dae705c6ffea878cbc00fecf0a009f01e3f",
-      "sourceFingerprint": "b745aa28c3ff3254e856cb09426ca12588e6d7c3051950592107443f2f37a40d",
-      "startedAt": "2026-11-06T13:55:32.188Z",
-      "endedAt": "2026-11-06T13:55:37.631Z",
-      "log": "/workspace/scratch/m01-p11-reviewed-preflight1.log",
-      "logSha256": "3bd8bffbf16d623990820cb8079cc4c72874f51dec7c7b32523b7c329b0105c8",
-      "context": "Actual P10 merged squash current-source original command with raw log/structured report digests; source before/after unchanged. Node22.22.2/npm10.9.9; affected ordinary non-DB suites1worker (explicit files in command, not the complete ordinary plan), preflight original command, types/workspace-only build/lint/secret without deployment postbuild. Static/non-DB explicit empty DB URLs; CPU/actual workers recorded in original metadata. Existing optional skips are reported, not passing tests. No production, independent diagnostic scene or deployment."
+      "testedHead": "91b61ecc5969679543a522749f9a347710ebd8a8",
+      "sourceFingerprint": "a0fadd95d9235f5a1de7c349937506709564981b306d4218277a78824fd71564",
+      "startedAt": "2026-11-06T14:54:54.805Z",
+      "endedAt": "2026-11-06T14:55:00.113Z",
+      "log": "/workspace/scratch/m01-p12-final-preflight1.log",
+      "logSha256": "bf5c69975dc6cabe2686d503a60b55f82ec194f4f86c1cc4beb5ce472fffe5da",
+      "context": "Actual merged P11 base91b61ecc assembled current P12 source; original command and raw result/log digests, Node22.22.2/npm10.9.9 and actual source before/after unchanged. No deployment or real data. Original complete non-DB plan1worker with empty runtime DB URLs, or original preflight/types/workspace build/lint/secret command on2,3 affinity. No root postbuild business-chain invocation. Existing11 optional skips are not passing tests. Not full App/human/onsite acceptance."
     },
     {
       "id": "types",
@@ -268,13 +229,13 @@
       "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "83f05dae705c6ffea878cbc00fecf0a009f01e3f",
-      "sourceFingerprint": "b745aa28c3ff3254e856cb09426ca12588e6d7c3051950592107443f2f37a40d",
-      "startedAt": "2026-11-06T13:55:37.733Z",
-      "endedAt": "2026-11-06T13:56:11.379Z",
-      "log": "/workspace/scratch/m01-p11-reviewed-types1.log",
+      "testedHead": "91b61ecc5969679543a522749f9a347710ebd8a8",
+      "sourceFingerprint": "a0fadd95d9235f5a1de7c349937506709564981b306d4218277a78824fd71564",
+      "startedAt": "2026-11-06T14:55:00.204Z",
+      "endedAt": "2026-11-06T14:55:31.700Z",
+      "log": "/workspace/scratch/m01-p12-final-types1.log",
       "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e",
-      "context": "Actual P10 merged squash current-source original command with raw log/structured report digests; source before/after unchanged. Node22.22.2/npm10.9.9; affected ordinary non-DB suites1worker (explicit files in command, not the complete ordinary plan), preflight original command, types/workspace-only build/lint/secret without deployment postbuild. Static/non-DB explicit empty DB URLs; CPU/actual workers recorded in original metadata. Existing optional skips are reported, not passing tests. No production, independent diagnostic scene or deployment."
+      "context": "Actual merged P11 base91b61ecc assembled current P12 source; original command and raw result/log digests, Node22.22.2/npm10.9.9 and actual source before/after unchanged. No deployment or real data. Original complete non-DB plan1worker with empty runtime DB URLs, or original preflight/types/workspace build/lint/secret command on2,3 affinity. No root postbuild business-chain invocation. Existing11 optional skips are not passing tests. Not full App/human/onsite acceptance."
     },
     {
       "id": "build",
@@ -282,13 +243,13 @@
       "command": "npm run build --workspaces --if-present",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "83f05dae705c6ffea878cbc00fecf0a009f01e3f",
-      "sourceFingerprint": "b745aa28c3ff3254e856cb09426ca12588e6d7c3051950592107443f2f37a40d",
-      "startedAt": "2026-11-06T13:56:11.455Z",
-      "endedAt": "2026-11-06T13:56:31.808Z",
-      "log": "/workspace/scratch/m01-p11-reviewed-build1.log",
-      "logSha256": "e8c2347d0ea38072668eb425bab22c54e3a23fefce0dfe4afd21ee565c18c713",
-      "context": "Actual P10 merged squash current-source original command with raw log/structured report digests; source before/after unchanged. Node22.22.2/npm10.9.9; affected ordinary non-DB suites1worker (explicit files in command, not the complete ordinary plan), preflight original command, types/workspace-only build/lint/secret without deployment postbuild. Static/non-DB explicit empty DB URLs; CPU/actual workers recorded in original metadata. Existing optional skips are reported, not passing tests. No production, independent diagnostic scene or deployment."
+      "testedHead": "91b61ecc5969679543a522749f9a347710ebd8a8",
+      "sourceFingerprint": "a0fadd95d9235f5a1de7c349937506709564981b306d4218277a78824fd71564",
+      "startedAt": "2026-11-06T14:55:31.795Z",
+      "endedAt": "2026-11-06T14:55:49.907Z",
+      "log": "/workspace/scratch/m01-p12-final-build1.log",
+      "logSha256": "ed0112012aa434932c1b0047de3eea0f0ba5ff8a80e60c9ff3145d2b97eaee85",
+      "context": "Actual merged P11 base91b61ecc assembled current P12 source; original command and raw result/log digests, Node22.22.2/npm10.9.9 and actual source before/after unchanged. No deployment or real data. Original complete non-DB plan1worker with empty runtime DB URLs, or original preflight/types/workspace build/lint/secret command on2,3 affinity. No root postbuild business-chain invocation. Existing11 optional skips are not passing tests. Not full App/human/onsite acceptance."
     },
     {
       "id": "lint",
@@ -296,13 +257,13 @@
       "command": "npm run lint",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "83f05dae705c6ffea878cbc00fecf0a009f01e3f",
-      "sourceFingerprint": "b745aa28c3ff3254e856cb09426ca12588e6d7c3051950592107443f2f37a40d",
-      "startedAt": "2026-11-06T13:56:31.888Z",
-      "endedAt": "2026-11-06T13:56:52.722Z",
-      "log": "/workspace/scratch/m01-p11-reviewed-lint1.log",
+      "testedHead": "91b61ecc5969679543a522749f9a347710ebd8a8",
+      "sourceFingerprint": "a0fadd95d9235f5a1de7c349937506709564981b306d4218277a78824fd71564",
+      "startedAt": "2026-11-06T14:55:49.992Z",
+      "endedAt": "2026-11-06T14:56:10.680Z",
+      "log": "/workspace/scratch/m01-p12-final-lint1.log",
       "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763",
-      "context": "Actual P10 merged squash current-source original command with raw log/structured report digests; source before/after unchanged. Node22.22.2/npm10.9.9; affected ordinary non-DB suites1worker (explicit files in command, not the complete ordinary plan), preflight original command, types/workspace-only build/lint/secret without deployment postbuild. Static/non-DB explicit empty DB URLs; CPU/actual workers recorded in original metadata. Existing optional skips are reported, not passing tests. No production, independent diagnostic scene or deployment."
+      "context": "Actual merged P11 base91b61ecc assembled current P12 source; original command and raw result/log digests, Node22.22.2/npm10.9.9 and actual source before/after unchanged. No deployment or real data. Original complete non-DB plan1worker with empty runtime DB URLs, or original preflight/types/workspace build/lint/secret command on2,3 affinity. No root postbuild business-chain invocation. Existing11 optional skips are not passing tests. Not full App/human/onsite acceptance."
     },
     {
       "id": "secret",
@@ -310,13 +271,41 @@
       "command": "npm run secret:scan",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "83f05dae705c6ffea878cbc00fecf0a009f01e3f",
-      "sourceFingerprint": "b745aa28c3ff3254e856cb09426ca12588e6d7c3051950592107443f2f37a40d",
-      "startedAt": "2026-11-06T13:56:52.801Z",
-      "endedAt": "2026-11-06T13:56:53.401Z",
-      "log": "/workspace/scratch/m01-p11-reviewed-secret1.log",
+      "testedHead": "91b61ecc5969679543a522749f9a347710ebd8a8",
+      "sourceFingerprint": "a0fadd95d9235f5a1de7c349937506709564981b306d4218277a78824fd71564",
+      "startedAt": "2026-11-06T14:56:10.764Z",
+      "endedAt": "2026-11-06T14:56:11.379Z",
+      "log": "/workspace/scratch/m01-p12-final-secret1.log",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda",
-      "context": "Actual P10 merged squash current-source original command with raw log/structured report digests; source before/after unchanged. Node22.22.2/npm10.9.9; affected ordinary non-DB suites1worker (explicit files in command, not the complete ordinary plan), preflight original command, types/workspace-only build/lint/secret without deployment postbuild. Static/non-DB explicit empty DB URLs; CPU/actual workers recorded in original metadata. Existing optional skips are reported, not passing tests. No production, independent diagnostic scene or deployment."
+      "context": "Actual merged P11 base91b61ecc assembled current P12 source; original command and raw result/log digests, Node22.22.2/npm10.9.9 and actual source before/after unchanged. No deployment or real data. Original complete non-DB plan1worker with empty runtime DB URLs, or original preflight/types/workspace build/lint/secret command on2,3 affinity. No root postbuild business-chain invocation. Existing11 optional skips are not passing tests. Not full App/human/onsite acceptance."
+    },
+    {
+      "id": "pg13",
+      "kind": "command",
+      "command": "node /workspace/scratch/m01-p12-pg13-bounded.mjs",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "91b61ecc5969679543a522749f9a347710ebd8a8",
+      "sourceFingerprint": "a0fadd95d9235f5a1de7c349937506709564981b306d4218277a78824fd71564",
+      "startedAt": "2026-11-06T15:04:28.519Z",
+      "endedAt": "2026-11-06T15:05:33.795Z",
+      "log": "/workspace/scratch/m01-p12-final-pg13-1.log",
+      "logSha256": "c4633f97a61febd34804332ca55e2d7f697be4e0e495dc4a5eaee00d56a5dbcd",
+      "context": "Actual merged P11 base91b61ecc assembled current P12 source; original command and raw result/log digests, Node22.22.2/npm10.9.9 and actual source before/after unchanged. No deployment or real data. Original journey-pg13-regression.mjs unchanged. Private transparent adapter only caps its exact owned Docker run2CPU/2GiB/affinity0,1; original non-superuser marked database, original Vitest --maxWorkers2 on1suite and all assertions/finally retained. Outer generic metadata workers1 is orchestration, not a claim to change original runner setting. Actual130023/33 passed in raw log; exact container absence verified. Resource proof sha256 afc98c23c2131ad5e05ea3eda92c04c1a84b64cbdabbf68aa1e9724b34bd9999."
+    },
+    {
+      "id": "comparison",
+      "kind": "command",
+      "command": "/usr/bin/timeout --signal=TERM --kill-after=10s 240s /workspace/.dx-cloud/toolchain/node_modules/node/bin/node --import tsx /workspace/scratch/m01-p12-controlled-pair1.mts",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "91b61ecc5969679543a522749f9a347710ebd8a8",
+      "sourceFingerprint": "a0fadd95d9235f5a1de7c349937506709564981b306d4218277a78824fd71564",
+      "startedAt": "2026-11-06T14:45:20.288Z",
+      "endedAt": "2026-11-06T14:45:33.626Z",
+      "log": "/workspace/scratch/m01-p12-controlled1.log",
+      "logSha256": "9f9a6664a8359bf6ab4cf4bb7743137d6b5bbf7c791c936f3bf12c743388e637",
+      "context": "Actual merged P11 base91b61ecc assembled current P12 source; original command and raw result/log digests, Node22.22.2/npm10.9.9 and actual source before/after unchanged. No deployment or real data. Four serial fresh-process original route/diagnostic reads in ABBA order,5 serial samples each. Baseline exact5fb tree verified equal actual91 merge; same database, legitimate frozen scene/revision/time, actor, objects, filters, all-table data fingerprint after each run and all20 business-result hashes. SQL232 to200 each; group medians139.176 to118.577ms and136.096 to111.170ms. Only asOf and supervision.requestId observation metadata normalized; actual body/targets/quantities/roles/versions retained. TEST auth adapter is not signed-session evidence. Nested stages are not summed; local mechanism/timing only, no Mac/network/paint/deployed Acceptance claim. Raw result sha256 4c84b8d61085ce529f7cdf8decb4055529d8e6fb904263303df023a44c0b3371, parent harness 112414c47fe0d8af2161560e733bb01368d88661c615a31820fbffd7abd0f069, worker 84467fdc11706250a9ad835ca973eee9c7cede361ce85c2edfc416ef4776db6c."
     }
   ]
 }
