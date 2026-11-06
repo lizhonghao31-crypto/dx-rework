@@ -5,7 +5,7 @@ import {JOURNEY_STAGES,JourneyFilterSchema,JourneyReturnContextSchema,type Journ
 import {selectJourneys} from '../../apps/api/src/production-platform/journey-projection.js';
 import {representativeCockpitNodes} from '../../apps/web/src/digital-journey-cockpit-model.js';
 import {PoOrderSummary,sortedCockpitPoLines} from '../../apps/web/src/po-delivery-dates.js';
-import {CockpitReceiptSummary} from '../../apps/web/src/cockpit-business-progress.js';
+import {CockpitBusinessProgress,CockpitReceiptSummary} from '../../apps/web/src/cockpit-business-progress.js';
 const id='00000000-0000-4000-8000-000000000001';
 const node=(key:string,stage:JourneyNode['stage'],patch:Partial<JourneyNode>={}):JourneyNode=>({key,instanceId:key,label:key,stage,state:'active',current:true,round:null,occurrence:1,owner:null,operator:null,assignmentHistory:[],expectedAt:null,expectedKind:'unset',expectedPrecision:'missing',actualAt:null,actualQuality:'missing',enteredAt:null,sla:'not_set',completionResult:null,overdueSeconds:null,risks:[],blockers:[],records:[],inheritedFrom:null,countsInProgress:true,unavailableReason:null,...patch});
 function fixture():OrderJourney{
@@ -38,4 +38,12 @@ it('P04-13: shows the native whole receipt shortage beside unknown factory attri
  order.businessProgress={ruleVersion:'journey-business-v1',asOf:'2026-11-05T00:00:00Z',requirements:[],applicable:4,completed:2,unknown:0,ratio:.5,stages:[],plan:{status:'not_adopted',planId:null,revision:null,covered:0,missing:4,due:0,outstandingDue:[],reasons:[]},quantities:{revision:'TEST',factoryAttribution:'unknown',lines:[{lineId:'F',demand:4,received:2,inspected:2,qualified:2,packed:2,remainingReceipt:2,remainingShipment:2,qualityGap:0,qualityConflict:false,factoryAttribution:'unknown',reasons:['TEST原收货未能逐厂对应']}]}};
  const before=structuredClone(order.businessProgress.quantities),html=renderToStaticMarkup(createElement(CockpitReceiptSummary,{order}));expect(html).toContain('全单还差实收2件');expect(html).toContain('已收2件尚不能确认来自哪家工厂');expect(html).toContain('原收货记录');expect(order.businessProgress.quantities).toEqual(before);
  order.lines.push({...order.lines[0]!,id:'hidden'});expect(renderToStaticMarkup(createElement(CockpitReceiptSummary,{order}))).toContain('当前可见范围还差实收2件');
+});
+
+it('R2-01: removes requirement and adopted-version disclosures while retaining actual quantities and unknown progress',()=>{
+ const order=fixture();order.lines=[{id:'F',po:'TEST-F',color:'黑',formalStyleNo:null,temporaryStyleNo:null,orderedQuantity:4}];
+ order.businessProgress={ruleVersion:'journey-business-v1',asOf:'2026-11-05T00:00:00Z',requirements:[{id:'TEST-requirement',key:'rework',label:'TEST逐项依据原文',stage:'receiving',scopeRef:'F',applicability:'unknown',completed:false,instanceIds:[],reasons:['TEST不应转移的依据'],targets:[{source:'series_plan',planId:'TEST-plan',revision:9,scopeRef:'F',at:'2026-12-18',precision:'date',retainedFromRevision:8}]}],applicable:4,completed:2,unknown:1,ratio:null,stages:[],plan:{status:'not_adopted',planId:null,revision:null,covered:0,missing:4,due:0,outstandingDue:[],reasons:[]},quantities:{revision:'TEST',factoryAttribution:'unknown',lines:[{lineId:'F',demand:4,received:2,inspected:2,qualified:2,packed:2,remainingReceipt:2,remainingShipment:2,qualityGap:0,qualityConflict:false,factoryAttribution:'unknown',reasons:[]}]}};
+ const before=structuredClone(order),full=renderToStaticMarkup(createElement(CockpitBusinessProgress,{order})),compact=renderToStaticMarkup(createElement(CockpitBusinessProgress,{order,compact:true}));
+ for(const html of [full,compact]){for(const removed of ['查看进度依据与采用版本','TEST逐项依据原文','TEST不应转移的依据','2026-12-18'])expect(html).not.toContain(removed);expect(html).toContain('还差实收2件');expect(html).not.toContain('role="progressbar"');}
+ expect(full).toContain('到仓质检覆盖2件，装箱2件');expect(full).toContain('另1项依据未齐');expect(compact).toContain('2件工厂归属待核');expect(compact).not.toContain('订单实际数量');expect(order).toEqual(before);
 });

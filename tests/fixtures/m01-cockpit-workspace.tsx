@@ -24,6 +24,11 @@ function richOrder(value:OrderJourney):OrderJourney{
  order.riskHistory=[];order.currentDeliveryRisks=[];
  order.operationLog={asOf:order.asOf!,items:[{id:prefix+'-audit',at:'2026-11-02T08:00:00Z',actor:{id:id(7),name:'TEST跟单'},object:'本单原记录',action:'查看用测试记录'}],nextCursor:null};
  if(control.shape==='deleted')prep.nodes=prep.nodes.filter(node=>node.instanceId!=='TEST-Q-extra-1');
+ if(control.shape==='dense'){
+  order.lines.forEach(line=>{line.po+='-TEST已有超长业务编号'.repeat(5);});
+  order.poDeliveryDates.forEach(date=>{date.poNumber=order.lines.find(line=>line.id===date.lineId)!.po;});
+  order.businessProgress={ruleVersion:'journey-business-v1',asOf:order.asOf!,requirements:Array.from({length:29},(_,index)=>({id:'TEST-requirement-'+index,key:'TEST-key',label:'TEST不再展示的逐项依据',stage:'development',scopeRef:'TEST',applicability:index<25?'applicable':'unknown',completed:index<5,instanceIds:[],reasons:['TEST不得迁移到弹窗的依据'],targets:[]})),applicable:25,completed:5,unknown:4,ratio:null,stages:[],plan:{status:'not_adopted',planId:null,revision:null,covered:0,missing:29,due:0,outstandingDue:[],reasons:[]},quantities:{revision:'TEST-dense',factoryAttribution:'known',lines:order.lines.map(line=>({lineId:line.id,demand:line.orderedQuantity,received:0,inspected:0,qualified:0,packed:null,remainingReceipt:line.orderedQuantity,remainingShipment:line.orderedQuantity,qualityGap:0,qualityConflict:false,factoryAttribution:'known',reasons:[]}))}};
+ }
  if(control.shape==='F'){
   order.lines=order.lines.slice(0,1);order.poDeliveryDates=order.poDeliveryDates.slice(0,1);
   order.businessProgress={ruleVersion:'journey-business-v1',asOf:order.asOf!,requirements:[],applicable:4,completed:2,unknown:0,ratio:.5,stages:[],plan:{status:'not_adopted',planId:null,revision:null,covered:0,missing:4,due:0,outstandingDue:[],reasons:[]},quantities:{revision:'TEST-F',factoryAttribution:'unknown',lines:[{lineId:order.lines[0]!.id,demand:4,received:2,inspected:2,qualified:2,packed:2,remainingReceipt:2,remainingShipment:2,qualityGap:0,qualityConflict:false,factoryAttribution:'unknown',reasons:['TEST逐厂实收未留对应凭证']}]}};
