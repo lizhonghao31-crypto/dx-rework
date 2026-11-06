@@ -72,3 +72,19 @@ P06 已 fetch 核实该实际引用，并在候选与合并树完全相同的前
 原`request-final --closeout`只读preview对56576f69拒绝：`report browser: malformed JSON test report`。原因是原浏览器CLI在真实TAP通过后还向stdout打印JSON数组元数据；原校验器不能把它当合法报告。没有创建最终引用，未修改校验器或忽略该检查。只移除这项多余stdout，原results.json证据文件、全部断言、截图与行为不变；该浏览器流程final3重新执行，两尺寸通过，原日志SHA及实际来源已更新。
 
 按AGENTS及construction-evidence的明确输入规则，在修改该日志脚本之前（2026-11-06T02:39:59.742Z），完整源码仍逐字匹配final2的2752b8cb时，捕获其余10项真实成功检查的全部源码/配置/测试输入。147个明确路径覆盖除这个独立浏览器CLI以外的全部原源码；输入指纹99d624bd7abf6b8c45c28707d40e8257c87aab793bf6cd9f35d29ec81f4f685b在日志修改后仍一致。各check保留原testedHead、sourceFingerprint、日志、报告摘要，并附inputPaths/inputFingerprint/capture时间；没有冒称原测试在新Head重新执行。浏览器final3绑定当前全局源码。原索引验证逐项核当前输入，GitHub最终light/Full仍须准确新Head，不跨Head复用Gate。
+
+
+## Full 旧消费者补齐（2026-11-06，收口第四组）
+
+精确旧候选01e912fd的Full42153000546在non-db发现4条旧PMC页面断言不再对应新UI：提醒仍要求旧空格排版，经理仍要求行内数字框，系列仍要求旧月份句式。读取完整原日志后，没有删除权限检查或放宽业务守卫：只读页保留现行/历史、明确选通用提醒节点并核十天值，增加不得出现“调整”入口；经理保留调整弹窗、批量选择、历史复制、预览发布及在途原入口。独立开发和系列只读/经理分别验证。37项测试已通过。该旧Full的PG及最终状态按实际另记，不能批准修复后来源。
+
+当前源码指纹57fa33c6454ad6dbb175bacb3e23bf631fb47832807f4dc391082db04fd0ac1f，仅增加上述原消费者断言修复。此轮所有本地检查重新执行，以final4实际metadata/原日志为凭，不再沿用final2输入范围复用。完整non-db为3376通过、0失败、11个原可选跳过；与165项定向及37项PMC子集重合，不相加。preflight241、lint/typecheck/workspace build/secret和两尺寸旧浏览器均已通过。原生PG/浏览器与canonical入口继续按同一来源重验，完成后更新construction-evidence，再提交并以新Head独立light/Full。
+
+
+### 同版本原生浏览器复现与局部修复
+
+Full42153000546的PG已失败：其余套件和清理按原日志保留，新canonical浏览器停在客户默认跟单候选选择后的保存点击。CI锁定Chromium141.0.7390.37/build1194；此前本地显式Chromium151未复现，不能据其通过抹掉CI失败。在本地以同一锁定Headless Shell141及原认证/隔离PG实际复现：已选候选仍作为option覆盖保存按钮，12秒点击超时，未强点或增加超时。
+
+局部将客户及主跟单字段改为显式label/htmlFor与输入id关联，避免把候选按钮嵌入隐式label；原SearchableSelect实现、候选、权限、保存命令、颜色和业务文字未改。原矩阵新增选择后listbox确实消失、aria-expanded=false、保存按钮真实命中点未遮挡的断言。同版本141完整24项已通过。以上为客户弹窗机制修复，不涉及P07/O现场根因。
+
+最终以final5重新绑定此修复后的源码：本地native和canonical使用锁定Headless Shell141；旧全App浏览器仍显式Chromium151。此前final4完整non-db3376/0/11及37项权限通过为中间证据，新的Full只会在最终提交、fresh verify-change与light通过后申请；旧Full准确记录为失败，不作为批准。

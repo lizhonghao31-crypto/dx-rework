@@ -124,17 +124,19 @@ describe('PMC digital read entry preserves original write flags', () => {
 
 describe('loaded settings render values and history without PMC write controls', () => {
   it('renders SLA values, current/history reads, and no draft, preview, publish or existing-order application', () => {
-    const html = renderLoaded(slaEditor.SlaStandardEditor, [sla, sla.values], true);
+    const html = renderLoaded(slaEditor.SlaStandardEditor, [sla, sla.values, 0], true);
     expect(html).toContain('读取现行标准');
     expect(html).toContain('查看历史标准');
     expect(html).toContain('TEST historical');
-    expect(html).toContain('提前 10 天');
-    for (const text of ['type="number"', 'type="checkbox"', '调整原因', '复制到草稿', '预览新单标准', '确认发布新单标准', 'TEST existing order application']) expect(html).not.toContain(text);
+    expect(html).toContain('data-sla-node="ship_sample_advance"');
+    expect(html).toContain('提前10天');
+    for (const text of ['aria-label="调整', 'type="number"', 'type="checkbox"', '调整原因', '复制到草稿', '预览新单标准', '确认发布新单标准', 'TEST existing order application']) expect(html).not.toContain(text);
   });
 
   it('keeps original SLA editing and order application for an authorized manager', () => {
     const html = renderLoaded(slaEditor.SlaStandardEditor, [sla, sla.values], false);
-    expect(html).toContain('type="number"');
+    expect(html).toContain('aria-label="调整预缩"');
+    expect(html).not.toContain('type="number"'); // Values are edited in the native dialog after opening.
     expect(html).toContain('type="checkbox"');
     expect(html).toContain('复制该版本到草稿');
     expect(html).toContain('预览新单标准');
@@ -147,12 +149,13 @@ describe('loaded settings render values and history without PMC write controls',
     expect(html).toContain('选择历史开发周期标准');
     expect(html).toContain('TEST historical');
     expect(html).toContain('重新读取开发周期标准');
-    for (const text of ['type="number"', '调整原因', '预览开发周期变化', '确认发布新开发标准', '核对并重试原发布']) expect(html).not.toContain(text);
+    for (const text of ['aria-label="调整', 'type="number"', '调整原因', '预览开发周期变化', '确认发布新开发标准', '核对并重试原发布']) expect(html).not.toContain(text);
   });
 
   it('retains the original development-cycle editor for an authorized manager', () => {
     const html = renderLoaded(developmentCycle.DevelopmentCycleSettings, [cycle, cycle.values], false);
-    expect(html).toContain('type="number"');
+    expect(html).toContain('aria-label="调整正常内部周期（自然日）"');
+    expect(html).not.toContain('type="number"'); // The four existing values retain their dialog editors.
     expect(html).toContain('调整原因');
     expect(html).toContain('预览开发周期变化');
   });
@@ -162,7 +165,7 @@ describe('loaded settings render values and history without PMC write controls',
     const html = renderLoaded(seriesSettings.SeriesSettings, [rows], true);
     expect(html).toContain('TEST-PD');
     expect(html).toContain('TEST adopted default');
-    expect(html).toContain('上架月-2个月 / 15日');
+    expect(html).toContain('提前2个月 · 15日（已发布固定日）');
     for (const text of ['<input', '<textarea', '发布新默认']) expect(html).not.toContain(text);
     const manager = renderLoaded(seriesSettings.SeriesSettings, [rows], false);
     expect(manager).toContain('系列月份偏移');

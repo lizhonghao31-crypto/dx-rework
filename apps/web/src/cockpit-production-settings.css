@@ -102,7 +102,7 @@
 .sla-node-card-actions{display:grid;align-content:center;gap:4px}
 .sla-node-edit-dialog footer,.digital-personnel-dialog footer{display:flex;justify-content:flex-end;gap:10px;margin-top:20px;flex-wrap:wrap}
 .digital-personnel-dialog{padding:22px}.digital-personnel-dialog form{margin-top:16px}
-.digital-personnel-dialog label{display:grid;gap:7px}
+.digital-personnel-dialog label,.digital-personnel-dialog .digital-personnel-field{display:grid;gap:7px}
 .sla-settings-workspace .cockpit-policy-cards>li{scroll-margin-top:180px}
 .sla-node-edit-dialog .sla-value-input{display:flex;flex-wrap:wrap}.sla-node-edit-dialog .sla-value-input input{flex:1}
 @media(max-width:600px){.sla-calculation-summary{top:4px;padding:12px;gap:5px;font-size:14px}.sla-calculation-summary strong{width:100%}.sla-calculation-details[open]{max-height:42dvh}.sla-calculation-controls label{width:100%}.sla-calculation-panel input,.sla-calculation-panel select,.sla-node-edit-dialog input{min-height:44px}.digital-personnel-dialog{padding:18px}.sla-calculation-panel>p{font-size:14px}}
