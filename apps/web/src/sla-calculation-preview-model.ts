@@ -30,3 +30,5 @@ export function settingsCalculation(context:SlaCalculationContext,unified:SlaDra
  throw Error('本次草稿仍有无法归属的演算输入，请核对具体节点');
 }
 export function calculationSpanLabel(ms:number|null,format:(minutes:number)=>string){return ms===null?'尚不能确定':format(ms/60000);}
+
+export type SlaStageTiming={stage:number;currentMs:number|null;draftMs:number|null;partial:boolean};

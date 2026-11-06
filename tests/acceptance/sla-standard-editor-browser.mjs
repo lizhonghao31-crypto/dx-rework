@@ -13,7 +13,7 @@ async function editNode(page,label,value,unit){
  await dialog.getByLabel(label+'数值',{exact:true}).fill(value);
  await dialog.getByRole('button',{name:'暂存到本次草稿',exact:true}).click();
 }
-async function ready(page){try{await page.locator('.sla-calculation-summary').filter({hasText:'开发本轮标准窗口'}).waitFor();}catch(error){console.log('TEST settings read failure',await page.locator('body').innerText(),await page.evaluate(()=>window.slaReads));throw error;}}
+async function ready(page){try{await page.locator('.sla-calculation-summary').filter({hasText:'适用全流程'}).waitFor();}catch(error){console.log('TEST settings read failure',await page.locator('body').innerText(),await page.evaluate(()=>window.slaReads));throw error;}}
 
 const {chromium}=await import(process.env.PLAYWRIGHT_IMPORT||'playwright');
 const out=await mkdtemp(join(tmpdir(),'dx-sla-settings-ui-')),evidence=process.env.SLA_SETTINGS_UI_EVIDENCE,results=[],errors=[];
@@ -25,7 +25,7 @@ try{
  const names=await readdir(out),js=await readFile(join(out,names.find(n=>n.endsWith('.js'))),'utf8'),css=await readFile(join(out,names.find(n=>n.endsWith('.css'))),'utf8');
  const html=`<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css}</style><div id="root"></div><script>window.factoryInput=${JSON.stringify(input).replace(/</g,'\\u003c')};${js.replace(/<\/script/gi,'<\\/script')}</script></html>`;
  server=createServer((_req,res)=>{res.setHeader('content-type','text/html;charset=utf-8');res.end(html);});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
- browser=await chromium.launch({headless:true,executablePath:'/usr/bin/chromium',args:['--no-sandbox']});await mkdir(evidence,{recursive:true});
+ browser=await chromium.launch({headless:true,executablePath:process.env.PLAYWRIGHT_EXECUTABLE_PATH||'/usr/bin/chromium',args:['--no-sandbox']});await mkdir(evidence,{recursive:true});
  for(const width of [1440,390]){
   const page=await browser.newPage({viewport:{width,height:960}});page.setDefaultTimeout(10000);page.on('pageerror',e=>errors.push(e.message));
   const base=`http://127.0.0.1:${server.address().port}/`;

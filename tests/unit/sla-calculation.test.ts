@@ -1,7 +1,7 @@
 import {describe,it,expect} from 'vitest';
 import {digitalSlaDefaults} from '../../packages/contracts/src/digital-sla.js';
 import {DEVELOPMENT_CYCLE_DEFAULTS} from '../../packages/contracts/src/digital-development-technical.js';
-import {SlaCalculationPreviewSchema,type CalculationGraph,type CalculationNode,type SlaCalculationConditions} from '../../packages/contracts/src/sla-calculation.js';
+import {SLA_REFERENCE_KEYS,SlaCalculationPreviewSchema,type CalculationGraph,type CalculationNode,type SlaCalculationConditions} from '../../packages/contracts/src/sla-calculation.js';
 import {calculateSlaPreview,calculationDraftGraph,addCalculationMinutes,SlaCalculationInputError} from '../../packages/domain/src/sla-calculation.js';
 import {buildSlaCalculationRoute,type CalculationRouteInput} from '../../packages/domain/src/sla-calculation-routes.js';
 import {calculateSlaPlan} from '../../packages/domain/src/digital-sla-plan.js';
@@ -17,6 +17,27 @@ const row=(r:ReturnType<typeof calculateSlaPreview>,id:string)=>r.rows.find(n=>n
 const conditions:SlaCalculationConditions={craft:'none',craftExecution:'internal',pattern:'internal',washing:'none',preshrink:'yes',preparation:'adopted',developmentMode:'normal',rework:'no'};
 const route=(range:CalculationRouteInput['range'],extra:Partial<CalculationRouteInput>={})=>buildSlaCalculationRoute({range,conditions,values:digitalSlaDefaults(),unifiedSource:'TEST named v7 values, not a live snapshot',development:{...DEVELOPMENT_CYCLE_DEFAULTS},developmentSource:'TEST independent v1',anchors:{development_published:anchor(),instruction_published:anchor(),whole_fabric_arrived:anchor(),cut_craft_dispatched:anchor(),sourcing_decided:anchor()},...extra});
 describe('M01 shared standard-window calculation',()=>{
+ it('R2-03: whole flow covers all seven stages without calling a selected development fragment the total',()=>{
+  const p=route('whole',{conditions:{...conditions,craft:'printing'}}),r=calculateSlaPreview(p);
+  expect(r.rangeLabel).toBe('适用全流程');expect(r.stages.map(s=>s.stage)).toEqual([1,2,3,4,5,6,7]);expect(r.rows.some(n=>n.id==='garment_packing')).toBe(true);expect(r.rows.some(n=>n.id==='order_creation')).toBe(true);
+  expect(r.overall.spanMs).toBeNull();expect(r.overall.status).toBe('partial');expect(r.overall.missing.join(' ')).toContain('依据');expect(r.rows.find(n=>n.id==='development_pattern')!.minutes).toBe(2880);
+ });
+ it('R2-03: complete explicit full-flow references use the real paper/fabric merge and serial cutting/craft path, with included windows counted once',()=>{
+  const values=digitalSlaDefaults(),anchors={...Object.fromEntries(SLA_REFERENCE_KEYS.map(key=>[key,anchor()])),accessories_available:anchor(84),accessories_dispatched:anchor(84)},p=route('whole',{conditions:{...conditions,craft:'printing'},anchors:Object.fromEntries(Object.entries(anchors).filter(([key])=>key!=='whole_cutting_completed'))}),r=calculateSlaPreview(p);
+  // Paper48h parallel fabric24h+preshrink36h =>60h; cutting24h+craft96h+QC48h+dispatch24h =>252h.
+  expect(r.overall.spanMs).toBe(252*hour);expect(r.overall.determiningNodes).toEqual(expect.arrayContaining(['fabric_inspection','warehouse_preshrink','bulk_cutting','bulk_printing','bulk_qc','warehouse_dispatch']));
+  expect(r.stages.find(s=>s.stage===5)!.spanMs).toBe(168*hour);expect(row(r,'development_craft_dispatch').minutes).toBe(30);
+  const next=structuredClone(values);next.bulk_qc={kind:'duration',minutes:2160};const changed=calculateSlaPreview(calculationDraftGraph(p,{unified:values,development:{...DEVELOPMENT_CYCLE_DEFAULTS}},{unified:next,development:{...DEVELOPMENT_CYCLE_DEFAULTS}}));
+  expect(changed.overall.spanMs).toBe(240*hour);expect(changed.stages.find(s=>s.stage===5)!.spanMs).toBe(156*hour);expect(row(changed,'bulk_qc').minutes).toBe(2160);expect(row(changed,'contract_return').independent).toBe(true);expect(p.nodes.find(n=>n.id==='bulk_qc')!.minutes).toBe(2880);
+ });
+ it('R2-03: original started partial-batch clocks survive unknown whole-order prerequisites in the full flow',()=>{
+  const p=route('whole',{observationMode:'instance',anchors:{},conditions:{...conditions,craft:'printing'},native:{bulk_cutting:{startedAt:at(8),evidence:'TEST original actual cutting start'},bulk_printing:{startedAt:at(10),evidence:'TEST original partial batch dispatched'}}}),r=calculateSlaPreview(p);
+  expect(row(r,'bulk_cutting').start.at).toBe(at(8));expect(row(r,'bulk_cutting').end.at).toBe(at(32));expect(row(r,'bulk_printing').start.at).toBe(at(10));expect(row(r,'bulk_printing').end.at).toBe(at(106));expect(r.overall.spanMs).toBeNull();expect(row(r,'bulk_pattern').end.at).toBeNull();
+ });
+ it('R2-03: an unconfirmed optional branch or missing actual packing prerequisite keeps the full total unknown',()=>{
+  const anchors=Object.fromEntries(SLA_REFERENCE_KEYS.map(key=>[key,anchor()]));delete anchors.original_packing_conditions_ready;
+  const p=route('whole',{anchors,conditions:{...conditions,preshrink:'unknown'}}),r=calculateSlaPreview(p);expect(r.overall.spanMs).toBeNull();expect(row(r,'warehouse_preshrink').end.at).toBeNull();expect(row(r,'garment_packing').end.at).toBeNull();expect(row(r,'development_pattern').end.at).not.toBeNull();
+ });
  it('reuses legacy topology validation and leaves the original continuous calculator unchanged',()=>{
   const p=graph([node('a',240),node('b',2880,{anchorKey:null,dependsOn:['a']}),node('c',120,{anchorKey:null,dependsOn:['b']})]);
   expect(calculateSlaPlan(p).at(-1)!.end.at).toBe(at(54));

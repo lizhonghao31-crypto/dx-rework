@@ -24,7 +24,7 @@
 .cockpit-policy-stages button[aria-pressed=true] .cockpit-policy-stage-ring b,.cockpit-policy-stages button[aria-pressed=true]>strong{color:#0878ff}
 .cockpit-policy-stages button>strong{font-size:14px;font-weight:600;line-height:1.4;text-align:center}
 .cockpit-policy-stages button>small{font-size:14px;color:#7d8ca6;white-space:nowrap}
-.cockpit-policy-cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;list-style:none;padding:0;margin:0}
+.cockpit-policy-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:10px;list-style:none;padding:0;margin:0}
 .cockpit-policy-cards>li{display:flex;align-items:center;gap:9px;min-width:0;border:1px solid #e0eafa;border-radius:7px;padding:13px 11px;background:#fff}
 .cockpit-policy-card-icon{flex:0 0 30px;display:grid;place-items:center;height:36px;color:#0878ff;background:#eef5ff;border-radius:8px}
 .cockpit-policy-card-icon svg{height:23px;width:23px;stroke:currentColor;stroke-width:1.6;fill:none;stroke-linecap:round;stroke-linejoin:round}
@@ -48,8 +48,8 @@
 .cockpit-policy-dialog [role=alert],.cockpit-settings [role=alert]{color:#b42335}
 .cockpit-policy-dialog [role=alert]{border-radius:6px;background:#fff1f2;padding:9px 11px;line-height:1.5}
 .cockpit-settings [role=status]{color:#12634e}
-@media(min-width:1500px){.cockpit-policy-cards{grid-template-columns:repeat(5,minmax(0,1fr))}}
-@media(max-width:1150px){.cockpit-policy-cards{grid-template-columns:repeat(3,minmax(0,1fr))}}
+
+
 @media(max-width:800px){
  .cockpit-settings,.cockpit-policy-dialog{font-size:16px}
  .cockpit-settings{padding:12px}
@@ -90,7 +90,7 @@
 .sla-calculation-details{background:#fff;border:1px solid #dfebfa;border-radius:9px;padding:12px 16px;margin-top:8px}
 .sla-calculation-summary{display:flex;flex-wrap:wrap;align-items:center;gap:8px 20px;line-height:1.5}
 .sla-calculation-summary strong{color:#26384c}.sla-calculation-summary>span{color:#0878ff}
-.sla-calculation-details[open]{max-height:45dvh;overflow:auto;overscroll-behavior:contain;padding-right:5px}
+.sla-calculation-options>summary{cursor:pointer;color:#485c7b}.sla-calculation-details>p{color:#65758a;font-size:13px}
 .sla-calculation-details>summary{cursor:pointer;margin-top:8px;color:#485c7b}
 .sla-calculation-controls{display:flex;flex-wrap:wrap;gap:12px;margin:12px 0}
 .sla-calculation-controls label,.sla-node-edit-dialog label{display:grid;gap:6px;max-width:100%;min-width:0}
@@ -99,12 +99,14 @@
 .sla-calculation-table table{border-collapse:collapse;min-width:620px;width:100%;line-height:1.6;text-align:left}
 .sla-calculation-table th,.sla-calculation-table td{border-bottom:1px solid #dfebfa;padding:10px 12px;vertical-align:top}
 .sla-calculation-table small{display:block;font-size:13px;font-weight:400;color:#65758a;overflow-wrap:anywhere}
-.sla-node-card-actions{display:grid;align-content:center;gap:4px}
+.cockpit-policy-cards>li>.sla-node-card-actions{display:grid;align-content:center;gap:4px;flex:0 0 auto}
 .sla-node-edit-dialog footer,.digital-personnel-dialog footer{display:flex;justify-content:flex-end;gap:10px;margin-top:20px;flex-wrap:wrap}
 .digital-personnel-dialog{padding:22px}.digital-personnel-dialog form{margin-top:16px}
 .digital-personnel-dialog label,.digital-personnel-dialog .digital-personnel-field{display:grid;gap:7px}
 .sla-settings-workspace .cockpit-policy-cards>li{scroll-margin-top:180px}
 .sla-node-edit-dialog .sla-value-input{display:flex;flex-wrap:wrap}.sla-node-edit-dialog .sla-value-input input{flex:1}
-@media(max-width:600px){.sla-calculation-summary{top:4px;padding:12px;gap:5px;font-size:14px}.sla-calculation-summary strong{width:100%}.sla-calculation-details[open]{max-height:42dvh}.sla-calculation-controls label{width:100%}.sla-calculation-panel input,.sla-calculation-panel select,.sla-node-edit-dialog input{min-height:44px}.digital-personnel-dialog{padding:18px}.sla-calculation-panel>p{font-size:14px}}
+@media(max-width:600px){.sla-calculation-summary{top:4px;padding:12px;gap:5px;font-size:14px}.sla-calculation-summary strong{width:100%}.sla-calculation-controls label{width:100%}.sla-calculation-panel input,.sla-calculation-panel select,.sla-node-edit-dialog input{min-height:44px}.digital-personnel-dialog{padding:18px}.sla-calculation-panel>p{font-size:14px}}
 
 .sla-settings-workspace button,.sla-settings-workspace input,.sla-settings-workspace select,.sla-settings-workspace summary{scroll-margin-block-start:180px}
+
+.cockpit-policy-stages .sla-stage-time-item{min-width:0}.cockpit-policy-stages .sla-stage-time-item small{white-space:normal;line-height:1.4;overflow-wrap:anywhere}

@@ -4,8 +4,8 @@ import {DevelopmentCycleValuesSchema,type DevelopmentCycleValues} from './digita
 
 export const SLA_CALCULATOR_VERSION='m01-calculation-1' as const;
 export const SLA_CALENDAR_VERSION='beijing-sunday-0207-v1' as const;
-export const SLA_CALCULATION_ROUTE_VERSION='m01-routes-1' as const;
-export const SlaCalculationRangeSchema=z.enum(['development','preparation','bulk_craft','delivery','contract']);
+export const SLA_CALCULATION_ROUTE_VERSION='m01-routes-2' as const;
+export const SlaCalculationRangeSchema=z.enum(['whole','development','preparation','bulk_craft','delivery','contract']);
 const anchor=z.discriminatedUnion('precision',[
  z.object({precision:z.literal('instant'),value:z.iso.datetime({offset:true}),source:z.string().trim().min(1).max(300)}).strict(),
  z.object({precision:z.literal('date'),value:z.iso.date(),source:z.string().trim().min(1).max(300)}).strict(),
@@ -26,7 +26,7 @@ export const SlaCalculationConditionsSchema=z.object({
 }).strict();
 export type SlaCalculationConditions=z.infer<typeof SlaCalculationConditionsSchema>;
 // A reference is an explicit example input, never an instance fact or an arbitrary graph.
-export const SLA_REFERENCE_KEYS=['development_published','external_pattern_requested','customer_order_confirmed','instruction_published','whole_fabric_arrived','final_preparation_ready','cut_craft_dispatched','whole_cutting_completed','sourcing_decided','factory_production_finished','factory_return_dispatched','garment_arrived','garment_qc_completed','rework_assignments_confirmed','round_actual_work_completed','original_packing_conditions_ready','contract_pdf_ready','factory_delivery_date','customer_shipping_date','final_comment_recorded'] as const;
+export const SLA_REFERENCE_KEYS=['development_published','external_pattern_requested','customer_order_confirmed','instruction_published','whole_fabric_arrived','final_preparation_ready','cut_craft_dispatched','whole_cutting_completed','sourcing_decided','factory_production_finished','factory_return_dispatched','garment_arrived','garment_qc_completed','rework_assignments_confirmed','round_actual_work_completed','original_packing_conditions_ready','contract_pdf_ready','factory_delivery_date','customer_shipping_date','final_comment_recorded','source_published','order_created','accessories_requested','clerk_accessories_received','sample_available','sample_sent','budget_created','merchandiser_final_published','sourcing_accepted','cutting_fabric_actually_received','accessories_available','accessories_dispatched','ship_sample_available_before_production','ship_sample_sent','first_effective_receipt','effective_receipts_reach_quantity'] as const;
 const references=z.partialRecord(z.enum(SLA_REFERENCE_KEYS),anchor).refine(v=>Object.keys(v).length<=SLA_REFERENCE_KEYS.length);
 export const SlaCalculationSelectionSchema=z.discriminatedUnion('mode',[
  z.object({mode:z.literal('example'),range:SlaCalculationRangeSchema,conditions:SlaCalculationConditionsSchema,references}).strict(),
