@@ -1,7 +1,7 @@
 import type {StatisticsTime,StatisticsWindow,StatisticsWindowResult} from './production-statistics.js';
 
 /** Read-only historical facts. Evidence/registration time never fills occurrence. */
-export type ProductionPeriod={from:string;to:string};
+export type ProductionPeriod={from:string;to:string;cutoffAt?:string};
 export type ProductionPeriodEvent={id:string;rootId:string;revision:number;orderId:string;lineId:string|null;kind:string;label?:string;category?:string|null;unknownReason?:string;sourceQuantity?:number|null;wholeOrderPoCount?:number;quantity:number|null;unit:string;occurred:StatisticsTime;recordedAt:string|null;effective:boolean;factoryId:string|null;factoryScopeVersion:string|null;sourceRefs:string[]};
 export type ProductionPromiseVersion={scopeId:string;version:number;promiseId:string;orderId:string;lineId:string|null;kind:'customer'|'factory'|'node';ruleVersion?:string;category?:string|null;assessmentUnknown?:string[];deadline:string;deadlinePrecision:'date'|'instant';deadlineExclusive:boolean;effective:StatisticsTime;recordedAt:string;sourceRefs:string[]};
 export type ProductionCompletion={scopeId:string;factVersion:string;occurred:StatisticsTime;recordedAt:string|null;sourceRefs:string[]};
