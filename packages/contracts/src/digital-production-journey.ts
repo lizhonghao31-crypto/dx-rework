@@ -92,6 +92,10 @@ export type JourneyNode = {
   planningOnly?:boolean;
   responsibilityRole?:string;
   timing?:JourneyTiming;
+  /** Several original PO/batch targets stay distinct; never choose one as the whole node deadline. */
+  timings?:JourneyTiming[];
+  /** Native factory batch D/C remain readable even when the generic task has no D. */
+  nativeWindows?:JourneyTiming['windows'];
   /** Read-only applicability evidence; unknown never supplies a progress denominator. */
   progressApplicability?: "applicable" | "not_applicable" | "unknown";
   key: string; instanceId: string; label: string; stage: JourneyStageKey; state: JourneyState;

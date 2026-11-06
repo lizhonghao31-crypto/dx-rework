@@ -107,6 +107,11 @@
 .digital-journey-cockpit[data-view="overview"] .cockpit-home .dx-production-table th:last-child{width:100px}
 .digital-journey-cockpit .cockpit-po-summary.is-compact>div>strong{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .digital-journey-cockpit .cockpit-po-summary.is-compact>div>strong:focus{display:block;outline:2px solid #a6caff;outline-offset:2px}
+@media(min-width:901px){
+ .digital-journey-cockpit[data-view="overview"] .journey-filters{display:grid;grid-template-columns:minmax(140px,1.6fr) repeat(4,minmax(0,1fr)) max-content max-content;gap:8px;align-items:end}
+ .digital-journey-cockpit[data-view="overview"] .journey-filters label,.digital-journey-cockpit[data-view="overview"] .journey-filters .journey-search{min-width:0}
+ .digital-journey-cockpit[data-view="overview"] .journey-more-filters{grid-column:1/-1}
+}
 @media(max-width:800px){
  .digital-journey-cockpit .cockpit-home .cockpit-business-progress>strong,.digital-journey-cockpit .cockpit-home .cockpit-receipt-summary,.digital-journey-cockpit .cockpit-read-status{font-size:16px}
  .digital-journey-cockpit[data-view="overview"] .cockpit-home .dx-production-table{min-width:720px}

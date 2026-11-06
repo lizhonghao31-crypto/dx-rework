@@ -23,7 +23,7 @@ export async function factorySlaEvidence(db:Pick<PoolClient,'query'>,orderId:str
  const windows=timing.windows.map(window=>({...window,lineIds:window.lineId?[window.lineId]
   :window.kind==='bulk_qc'?timing.ledger.batches.find(batch=>batch.factId===window.key)?.rows.map(line=>line.lineId)??[]
   :timing.ledger.pendingSends.find(send=>send.factId===window.key)?.rows.map(line=>line.lineId)??[]}));
- return {craftKey,facts,windows};
+ return {preparationId:timing.preparationId,craftKey,facts,windows};
 }
 export function factoryEvaluationPlan(plan:SlaPlan,craftKey:string|null){
  const copy=structuredClone(plan);

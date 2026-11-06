@@ -1,37 +1,45 @@
 {
   "version": 1,
-  "base": "9dc3ce4799ba78fb1837b4d91b4a09540afc8582",
-  "sourceFingerprint": "214fa699ae0ec6e0f35ebb8a9b83b01ac6ac9d715f6eeea178b09934de0c08c6",
-  "risk": "quick",
+  "base": "292a305b4e49303a864e597f2abb082deccb15c4",
+  "sourceFingerprint": "ff0cb4a91f745bb33fe31d93af3e8ca16afb01a7e77be68883bab016f2b53d65",
+  "risk": "full",
   "rules": [
     {
-      "rule": "彻底删除逐项依据与采用版本展开内容，压缩首页订单行并删除两个冗长摘要。",
-      "source": "2026-11-07 delegated user-approved Pro final six-PR plan Library libfile_03324d3f87988191ac25001808369cd7 and all nine originals actually read/viewed; latest audited overrides. docs/engineering/m01-r2-p01-execution.md",
+      "rule": "可信已有编号不自动生成，不将UUID冒业务号；PO同义值不重复，多原期限按明确范围显示。",
+      "source": "2026-11-07 user-authorized Pro six-PR plan Library libfile_03324d3f87988191ac25001808369cd7, nine originals viewed, audited amendments and later explicit parent findings about PR01 actual-page whitespace. docs/engineering/m01-r2-p02-execution.md",
       "writes": [
-        "apps/web/src/cockpit-business-progress.tsx",
-        "apps/web/src/cockpit-home.tsx",
-        "apps/web/src/cockpit-home.css",
+        "apps/api/src/production-platform/journey-supervision.ts",
+        "apps/api/src/production-platform/journey-factory-deadlines.ts",
+        "apps/api/src/production-platform/factory-sla-evidence.ts",
+        "tests/unit/journey-factory-deadlines.test.ts",
+        "apps/web/src/journey-sla-details.tsx",
+        "apps/web/src/cockpit-node-dates.tsx",
         "apps/web/src/po-delivery-dates.tsx",
-        "apps/web/src/digital-journey-cockpit.tsx",
+        "packages/contracts/src/digital-production-journey.ts",
+        "tests/unit/journey-sla-supervision.test.ts",
+        "tests/unit/cockpit-detail.test.ts",
         "tests/unit/m01-cockpit-workspace.test.ts"
       ],
       "reads": [
-        "apps/web/src/cockpit-detail.tsx",
-        "apps/web/src/digital-cockpit-page.tsx",
-        "apps/web/src/cockpit-business-dates.tsx"
+        "apps/api/src/production-platform/identity-service.ts",
+        "apps/api/src/production-platform/journey-query.ts",
+        "apps/web/src/journey-sla-details.tsx",
+        "packages/contracts/src/digital-production.ts",
+        "apps/web/src/digital-development-create-form.tsx"
       ],
       "oldTests": [
-        "tests/unit/cockpit-home.test.ts",
+        "tests/unit/journey-sla-supervision.test.ts",
         "tests/unit/m01-cockpit-workspace.test.ts",
         "tests/unit/po-delivery-dates.test.ts",
-        "tests/unit/journey-business-progress.test.ts"
+        "tests/unit/journey-progress-dates.test.ts"
       ],
-      "initialization": "不初始化或回填业务数据。完整PO与实收/质检/装箱明细保留原详情，紧凑首页保留真实进度、未知范围和欠收；旧整单日期摘要无PO关联时继续准确标注。",
-      "dateAndPermission": "未知不填100%，不以款号/UUID伪造业务编号。后台事实/采用版本/审计、SLA日期来源与授权范围不改；M/F真实映射独立PR02核实。",
-      "expectation": "长20PO在1165不横向溢出，前2个简明PO及其余数量，详情20行可达；逐项依据文字在DOM及弹窗完全不存在；原搜索竞态/IME/失败/分页条件归属保留。",
+      "initialization": "设计业务ID与技术UUID按原schema/创建表单核查；不增编号生成或迁移，不回填历史。旧PO同义字段按原digitalPoKey去重，合法不同款号仍保留。",
+      "dateAndPermission": "仅授权原记录lineId参与PO关联；多范围时分别保留targets，不取首条成整单硬D。原任务D优先、北京日期型日终/瞬时边界/未知与物流预计原规则不改；M精确source/mother已从原体验资料定位，当前源JSON与时区未读得；历史值仅定位，不冒称现场逐源核验。原批次D/C从factorySlaEvidence原窗口独立读取，按真实任务/种类/preparation/完整可见PO绑定，通用任务D及整单SLA计划均不替代；summaryOnly不加读取。",
+      "expectation": "原生24含工艺发出→回仓→QC→发厂完成后，常规/compact座舱与原FactoryFlow.read逐条D/C一致且无业务写入；错route/目录槽/不可见兄弟PO拒配。原PO目标不因多匹配消失，明确PO只取本范围，聚合不造单值；日期型不误成次日、物流不作硬截止。实际SSR与原生浏览器多期限反例通过，后端全量统计/权限保持。",
       "checks": [
         "preflight",
         "unit",
+        "pgcurrent",
         "browser",
         "types",
         "build",
@@ -40,35 +48,65 @@
       ]
     },
     {
-      "rule": "七阶段日期直接可见，原分区紧凑对齐，正常未提交不展示为业务阻断。",
-      "source": "2026-11-07 delegated user-approved Pro final six-PR plan Library libfile_03324d3f87988191ac25001808369cd7 and all nine originals actually read/viewed; latest audited overrides. docs/engineering/m01-r2-p01-execution.md",
+      "rule": "真实返工、复核和责任实例只替换其同轮无记录占位，不覆盖其它对象或历史。",
+      "source": "2026-11-07 user-authorized Pro six-PR plan Library libfile_03324d3f87988191ac25001808369cd7, nine originals viewed, audited amendments and later explicit parent findings about PR01 actual-page whitespace. docs/engineering/m01-r2-p02-execution.md",
       "writes": [
-        "apps/web/src/cockpit-detail.tsx",
-        "apps/web/src/cockpit-detail.css",
-        "apps/web/src/cockpit-detail-risks.tsx",
-        "apps/web/src/cockpit-node-rows.tsx",
-        "tests/unit/cockpit-home.test.ts",
-        "tests/fixtures/m01-cockpit-workspace.tsx",
-        "tests/acceptance/m01-cockpit-workspace-browser.mjs"
+        "apps/api/src/production-platform/journey-projection.ts",
+        "apps/api/src/production-platform/journey-query.ts",
+        "tests/unit/journey-instance-replacement.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts"
       ],
       "reads": [
+        "apps/api/src/production-platform/order-closure-service.ts",
+        "apps/api/src/production-platform/journey-catalog.ts",
+        "apps/api/src/production-platform/journey-business-progress.ts",
+        "apps/web/src/cockpit-node-rows.tsx"
+      ],
+      "oldTests": [
+        "tests/unit/digital-journey-projection.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts"
+      ],
+      "initialization": "只替换当前数组中的无原记录uncreated/unavailable目录槽；真实对象id、round、状态和原链接保留。历史真实记录或别轮占位不按同key粗合并。",
+      "dateAndPermission": "不写原返工/核量/判责/工资/装箱状态，不新增复检或完成前置。Root特例及真实处理状态不变；本地原生TEST链不冒充用户两张具体异常原单已核验。",
+      "expectation": "单位测试覆盖不同对象/历史轮次/有源记录反例；原生已有合法装箱且责任未完的真实TEST链中返工对象可见、rework:0不残留，原业务状态不被投影改写。",
+      "checks": [
+        "preflight",
+        "unit",
+        "pgcurrent",
+        "browser",
+        "types",
+        "build",
+        "lint",
+        "secret"
+      ]
+    },
+    {
+      "rule": "已发布原件与当前新版待批分开，原冻结版本可查而现行发布守卫保持。",
+      "source": "2026-11-07 user-authorized Pro six-PR plan Library libfile_03324d3f87988191ac25001808369cd7, nine originals viewed, audited amendments and later explicit parent findings about PR01 actual-page whitespace. docs/engineering/m01-r2-p02-execution.md",
+      "writes": [
+        "apps/api/src/production-platform/node-materials.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/production-readiness-repository.ts",
+        "apps/api/src/production-platform/production-document-basis.ts",
+        "apps/api/src/production-platform/production-instruction-service.ts",
+        "apps/web/src/node-materials-view.ts",
         "apps/web/src/node-materials-panel.tsx",
-        "apps/web/src/cockpit-documents.tsx",
-        "apps/web/src/cockpit-operation-log.tsx",
-        "apps/web/src/digital-journey-cockpit-model.ts"
+        "apps/web/src/cockpit-documents-technical.ts"
       ],
       "oldTests": [
-        "tests/unit/cockpit-detail.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/unit/cockpit-document-new-sources.test.ts",
         "tests/unit/node-materials.test.ts",
-        "tests/unit/cockpit-document-directory.test.ts",
-        "tests/acceptance/m01-cockpit-workspace-browser.mjs"
+        "tests/unit/digital-pmc-readonly-access.test.ts"
       ],
-      "initialization": "沿用原组件/材料弹窗和记录链接，无新共享UI组件库或全局外壳改造。原多PO/长名称、无/多风险和旧F欠收样本均复用。",
-      "dateAndPermission": "阶段实际/预计依据仍来自已有事实；未知待核且不补时间。completion提示只从展示过滤，后端状态/canExecute/真正依赖阻断及材料授权不改变。",
-      "expectation": "1165/1280/1440七阶段同排，日期可见；390/640可操作无页面溢出。状态与原办理链接同行，网格对齐，材料筛选/20行/关闭焦点和跨单返回滚动保留。",
+      "initialization": "已发布原件有效仅指该原件，版本链接固定instructionVersion。开发资料推进或新批复未有效不能抹掉原件；原publishedBasis精确旧artifact引用继续保留。",
+      "dateAndPermission": "当前productionReadiness、instructionValid、技术批复、尺寸复核、发布/附件权限不改，不修改任何审批结果。无原始采用样本现场JSON的部分保持未现场验证，不从TEST夹具反推现场通过。",
+      "expectation": "原生round1已采用/round2当前未就绪并存：原件v1有效可读，当前技术与发布前提仍未有效、instructionValid=false，冻结basis及精确原成果不变；避免把有效原件降为present后列入待处理。",
       "checks": [
         "preflight",
         "unit",
+        "pgcurrent",
         "browser",
         "types",
         "build",
@@ -77,31 +115,35 @@
       ]
     },
     {
-      "rule": "移除详情调整跟单入口，保留客户默认设置及真实读取失败/撤权界限，同步批准UI标准和候选时间清单。",
-      "source": "2026-11-07 delegated user-approved Pro final six-PR plan Library libfile_03324d3f87988191ac25001808369cd7 and all nine originals actually read/viewed; latest audited overrides. docs/engineering/m01-r2-p01-execution.md",
+      "rule": "按完整页面实际发现修正大块留白和1165筛选，保留真实流程日期、材料及返回。",
+      "source": "2026-11-07 user-authorized Pro six-PR plan Library libfile_03324d3f87988191ac25001808369cd7, nine originals viewed, audited amendments and later explicit parent findings about PR01 actual-page whitespace. docs/engineering/m01-r2-p02-execution.md",
       "writes": [
-        "apps/web/src/digital-cockpit-page.tsx",
+        "apps/web/src/cockpit-detail.css",
+        "apps/web/src/cockpit-home.css",
+        "tests/acceptance/m01-cockpit-workspace-browser.mjs",
+        "tests/fixtures/m01-cockpit-workspace.tsx",
         "docs/requirements/rework-ui-golden-source-v1.0.md",
-        "docs/engineering/acceptance-time-sites-20261027.json",
-        "docs/engineering/m01-r2-p01-execution.md"
+        "docs/engineering/m01-r2-p02-execution.md"
       ],
       "reads": [
-        "apps/web/src/digital-cockpit-personnel.tsx",
-        "apps/web/src/cockpit-reads.ts",
-        "apps/web/src/digital-journey-cockpit.tsx"
+        "apps/web/src/cockpit-detail.tsx",
+        "apps/web/src/digital-journey-cockpit.tsx",
+        "apps/web/src/components.tsx",
+        "apps/web/src/App.tsx",
+        "apps/web/src/cockpit-documents.tsx"
       ],
       "oldTests": [
-        "tests/unit/digital-journey-cockpit.test.ts",
-        "tests/unit/digital-cockpit-time.test.ts",
-        "tests/unit/m01-time-consumers.test.ts",
-        "scripts/ci/pr-gate-controller.test.mjs"
+        "tests/acceptance/m01-cockpit-workspace-browser.mjs",
+        "tests/unit/cockpit-detail.test.ts",
+        "tests/unit/m01-cockpit-workspace.test.ts"
       ],
-      "initialization": "基线独立在办节点及重复详情设置已不存在，仅删当前详情跟单调整装配。现有客户默认人员设置和后端合法能力保留；所有TEST数据不写现场。",
-      "dateAndPermission": "真实server身份/权限未修改，浏览器HTTP403测试仅证明客户端清理，不冒充同会话真实AuthService撤权。候选时间清单只更新同一显示ratio clamp源码行hash，其他人工语义逐字保留。",
-      "expectation": "原身份读取/失败/忙态及材料资源403清空继续有效；正式Review一次，最终Quick仅在实际diff低风险判定、准确head/base及正式回执满足后顺序合并。",
+      "initialization": "PR01实际合并base292a已同步，最小CSS修正从独立工作区带入，未叠PR或更改全局Shell。旧底部钉齐几何断言改为真实风险到记录间距/单据无人工空档。",
+      "dateAndPermission": "原浏览器fixture只用明确TEST响应，不冒充现场AuthService、数据或权限已验。手机、IME/失败/403/返回等原覆盖不删；无改业务SLA、全局超时或真实入口逻辑。",
+      "expectation": "14个原生浏览器用例全过，额外实际完整App/AuthGate/Shell/ProductionWorkspace四视图无页面溢出；1440风险到操作记录10px、1165单据footer间隙0，更多/重置同顶。视觉截图只证明所示TEST布局，M事实现场仍独立。",
       "checks": [
         "preflight",
         "unit",
+        "pgcurrent",
         "browser",
         "types",
         "build",
@@ -123,62 +165,108 @@
       "resultReports": [
         {
           "format": "node-tap",
-          "sha256": "3ae6e11292ca3c865f297a10f951130f4f6fd35c7e2eb750c802b0ae19851285"
+          "sha256": "67e19a6de7c35a3cfe0e06129414bcf087cf303b8aaf97be89277544bd0fa2dc"
         }
       ],
-      "testedHead": "9dc3ce4799ba78fb1837b4d91b4a09540afc8582",
-      "sourceFingerprint": "214fa699ae0ec6e0f35ebb8a9b83b01ac6ac9d715f6eeea178b09934de0c08c6",
-      "startedAt": "2026-11-06T19:12:42.965Z",
-      "endedAt": "2026-11-06T19:12:48.564Z",
-      "log": "/workspace/scratch/m01-r2-p01-preflight.log",
-      "logSha256": "3ae6e11292ca3c865f297a10f951130f4f6fd35c7e2eb750c802b0ae19851285",
-      "context": "Node22.22.2/npm10.9.9, explicit existing worker limits; local affinity bounded by taskset; no runtime DB/onsite access. Preflight native concurrency2, ordinary Vitest worker1; browser Playwright-core1.56.1/Chromium141 pinned executable. Original Page/React components with synthetic TEST HTTP data and desktop sidebar/padding geometry. No live Shell, native-server authorization, M source-date validation, or deployment claim. Native browser13 cases retain all original race/403/material/return scenarios; no business SLA or permission logic changed."
+      "testedHead": "292a305b4e49303a864e597f2abb082deccb15c4",
+      "sourceFingerprint": "ff0cb4a91f745bb33fe31d93af3e8ca16afb01a7e77be68883bab016f2b53d65",
+      "startedAt": "2026-11-06T20:01:00.287Z",
+      "endedAt": "2026-11-06T20:01:05.961Z",
+      "log": "/workspace/scratch/m01-r2-p02-preflight.log",
+      "logSha256": "67e19a6de7c35a3cfe0e06129414bcf087cf303b8aaf97be89277544bd0fa2dc",
+      "context": "Node22.22.2/npm10.9.9; local Node affinity2,3; actual fresh isolated marked PG16.15 low-privilege dx_rework_test, PG cpuset0,1 CPU2/memory2GiB; sequential two selected PG suites with postgres-immediate config worker1 and existing100s correctness/hook budgets. This is bounded local correctness proof, not CI hardware or onsite equivalence. Final PG proof is the affected production-readiness24 including three completed original factory windows, after the published-original correction; earlier combined56 are historical and are not passed as current. Default and acceptance-clock database identities rechecked, both have zero test schemas and other clients. Browser uses Playwright-core1.56.1/Chromium141 pinned binary with explicit TEST HTTP/auth, not onsite. Additional original complete App/Shell screenshots cover1165/1440 home/detail; no production/Acceptance data, deployment or real permission changes."
     },
     {
       "id": "unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/cockpit-home.test.ts tests/unit/cockpit-detail.test.ts tests/unit/m01-cockpit-workspace.test.ts tests/unit/digital-journey-cockpit.test.ts tests/unit/cockpit-document-new-sources.test.ts tests/unit/cockpit-document-directory.test.ts tests/unit/po-delivery-dates.test.ts tests/unit/node-materials.test.ts tests/unit/digital-cockpit-time.test.ts tests/unit/m01-time-consumers.test.ts tests/unit/journey-business-progress.test.ts tests/unit/g3-host-readability.test.ts --reporter=default --reporter=json --outputFile=/workspace/scratch/m01-r2-p01-unit.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/journey-factory-deadlines.test.ts tests/unit/journey-instance-replacement.test.ts tests/unit/journey-sla-supervision.test.ts tests/unit/cockpit-detail.test.ts tests/unit/m01-cockpit-workspace.test.ts tests/unit/po-delivery-dates.test.ts tests/unit/node-materials.test.ts tests/unit/digital-journey-projection.test.ts tests/unit/journey-business-progress.test.ts tests/unit/journey-progress-dates.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/cockpit-document-new-sources.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-r2-p02-unit.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 109,
+      "passed": 146,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "6f2740fae102621fd6890988527ccd7c65e4a9871104410ca8b5d591693b7e99"
+          "sha256": "d7ed1478532915999496262445777a442fbbd158849b1a72c39494217ca98c9d"
         }
       ],
-      "testedHead": "9dc3ce4799ba78fb1837b4d91b4a09540afc8582",
-      "sourceFingerprint": "214fa699ae0ec6e0f35ebb8a9b83b01ac6ac9d715f6eeea178b09934de0c08c6",
-      "startedAt": "2026-11-06T19:12:48.621Z",
-      "endedAt": "2026-11-06T19:12:52.587Z",
-      "log": "/workspace/scratch/m01-r2-p01-unit.log",
-      "logSha256": "a583a2cf453ff9bc7ff945645f6ca217fba78e2e1aa8f2ad7d173d4d0f016ddd",
-      "context": "Node22.22.2/npm10.9.9, explicit existing worker limits; local affinity bounded by taskset; no runtime DB/onsite access. Preflight native concurrency2, ordinary Vitest worker1; browser Playwright-core1.56.1/Chromium141 pinned executable. Original Page/React components with synthetic TEST HTTP data and desktop sidebar/padding geometry. No live Shell, native-server authorization, M source-date validation, or deployment claim. Native browser13 cases retain all original race/403/material/return scenarios; no business SLA or permission logic changed."
+      "testedHead": "292a305b4e49303a864e597f2abb082deccb15c4",
+      "sourceFingerprint": "ff0cb4a91f745bb33fe31d93af3e8ca16afb01a7e77be68883bab016f2b53d65",
+      "startedAt": "2026-11-06T20:00:55.650Z",
+      "endedAt": "2026-11-06T20:01:00.225Z",
+      "log": "/workspace/scratch/m01-r2-p02-unit.log",
+      "logSha256": "7efb7d8fb595039fce69ceda5da798cba320dad2e7c8a97ad820937d31709b48",
+      "context": "Node22.22.2/npm10.9.9; local Node affinity2,3; actual fresh isolated marked PG16.15 low-privilege dx_rework_test, PG cpuset0,1 CPU2/memory2GiB; sequential two selected PG suites with postgres-immediate config worker1 and existing100s correctness/hook budgets. This is bounded local correctness proof, not CI hardware or onsite equivalence. Final PG proof is the affected production-readiness24 including three completed original factory windows, after the published-original correction; earlier combined56 are historical and are not passed as current. Default and acceptance-clock database identities rechecked, both have zero test schemas and other clients. Browser uses Playwright-core1.56.1/Chromium141 pinned binary with explicit TEST HTTP/auth, not onsite. Additional original complete App/Shell screenshots cover1165/1440 home/detail; no production/Acceptance data, deployment or real permission changes."
+    },
+    {
+      "id": "pgcurrent",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.postgres-immediate.config.ts --maxWorkers=1 tests/integration/production-readiness-postgres.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-r2-p02-pgcurrent.json",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 24,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "8f27c749366c8d3ebfa8e2b8793d11bf1ebf3fee1f36911cafe8e6565e90d593"
+        }
+      ],
+      "testedHead": "292a305b4e49303a864e597f2abb082deccb15c4",
+      "sourceFingerprint": "fccd0aa1cfcd11a97b0c3b6074e2f1738a0fcaf822366c58d53b38c99746a551",
+      "inputPaths": [
+        "apps/api",
+        "packages",
+        "scripts",
+        "tests/helpers",
+        "tests/integration/production-readiness-postgres.test.ts",
+        "package.json",
+        "package-lock.json",
+        "vitest.postgres-immediate.config.ts",
+        "tsconfig.base.json"
+      ],
+      "inputFingerprint": "e4c4c1b10e8e8ebd123e57b9dd862011ee4877b74d0307b80ca8bcf6a558da2e",
+      "startedAt": "2026-11-06T19:57:10.289Z",
+      "endedAt": "2026-11-06T19:57:44.178Z",
+      "log": "/workspace/scratch/m01-r2-p02-pgcurrent.log",
+      "logSha256": "4fbc3bf900c66dd46556a803dbd18475a2742ea7537e9f46811b12f8689acc05",
+      "context": "Node22.22.2/npm10.9.9; local Node affinity2,3; actual fresh isolated marked PG16.15 low-privilege dx_rework_test, PG cpuset0,1 CPU2/memory2GiB; sequential two selected PG suites with postgres-immediate config worker1 and existing100s correctness/hook budgets. This is bounded local correctness proof, not CI hardware or onsite equivalence. Final PG proof is the affected production-readiness24 including three completed original factory windows, after the published-original correction; earlier combined56 are historical and are not passed as current. Default and acceptance-clock database identities rechecked, both have zero test schemas and other clients. Browser uses Playwright-core1.56.1/Chromium141 pinned binary with explicit TEST HTTP/auth, not onsite. Additional original complete App/Shell screenshots cover1165/1440 home/detail; no production/Acceptance data, deployment or real permission changes."
     },
     {
       "id": "browser",
       "kind": "tests",
-      "command": "PLAYWRIGHT_IMPORT=/workspace/scratch/m01-browser-tools/node_modules/playwright-core/index.mjs PLAYWRIGHT_EXECUTABLE_PATH=/workspace/scratch/m01-p06-ci-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell M01_WORKSPACE_EVIDENCE=/workspace/scratch/m01-r2-p01-browser-evidence node tests/acceptance/m01-cockpit-workspace-browser.mjs",
+      "command": "PLAYWRIGHT_IMPORT=/workspace/scratch/m01-browser-tools/node_modules/playwright-core/index.mjs PLAYWRIGHT_EXECUTABLE_PATH=/workspace/scratch/m01-p06-ci-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell M01_WORKSPACE_EVIDENCE=/workspace/scratch/m01-r2-p02-browser-final-evidence node tests/acceptance/m01-cockpit-workspace-browser.mjs",
       "status": "passed",
       "exitCode": 0,
-      "passed": 13,
+      "passed": 14,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "node-tap",
-          "sha256": "8f263ddfd9f4ac70c8023af68f8ff158e91aaf312da32db029e228de9af6ce2d"
+          "sha256": "26051e9ae7685f142c8e63059a88425c8fad0b8319d43a499707b112da53cc5a"
         }
       ],
-      "testedHead": "9dc3ce4799ba78fb1837b4d91b4a09540afc8582",
-      "sourceFingerprint": "214fa699ae0ec6e0f35ebb8a9b83b01ac6ac9d715f6eeea178b09934de0c08c6",
-      "startedAt": "2026-11-06T19:11:45.584Z",
-      "endedAt": "2026-11-06T19:11:55.764Z",
-      "log": "/workspace/scratch/m01-r2-p01-browser.log",
-      "logSha256": "8f263ddfd9f4ac70c8023af68f8ff158e91aaf312da32db029e228de9af6ce2d",
-      "context": "Node22.22.2/npm10.9.9, explicit existing worker limits; local affinity bounded by taskset; no runtime DB/onsite access. Preflight native concurrency2, ordinary Vitest worker1; browser Playwright-core1.56.1/Chromium141 pinned executable. Original Page/React components with synthetic TEST HTTP data and desktop sidebar/padding geometry. No live Shell, native-server authorization, M source-date validation, or deployment claim. Native browser13 cases retain all original race/403/material/return scenarios; no business SLA or permission logic changed."
+      "testedHead": "292a305b4e49303a864e597f2abb082deccb15c4",
+      "sourceFingerprint": "15917caa28ed13dd3a626f493c60f71d096c0d320e72f5cd6ff7f365e1a6f826",
+      "inputPaths": [
+        "apps/web",
+        "packages",
+        "tests/fixtures",
+        "tests/acceptance/m01-cockpit-workspace-browser.mjs",
+        "tests/acceptance/node-materials-browser.mjs",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json"
+      ],
+      "inputFingerprint": "c7e5ecaa28d775e8149f92ec0d2a7ef5ad38b3902c3ab10ab6f792946c4e1b12",
+      "startedAt": "2026-11-06T19:59:05.364Z",
+      "endedAt": "2026-11-06T19:59:17.306Z",
+      "log": "/workspace/scratch/m01-r2-p02-browser.log",
+      "logSha256": "26051e9ae7685f142c8e63059a88425c8fad0b8319d43a499707b112da53cc5a",
+      "context": "Node22.22.2/npm10.9.9; local Node affinity2,3; actual fresh isolated marked PG16.15 low-privilege dx_rework_test, PG cpuset0,1 CPU2/memory2GiB; sequential two selected PG suites with postgres-immediate config worker1 and existing100s correctness/hook budgets. This is bounded local correctness proof, not CI hardware or onsite equivalence. Final PG proof is the affected production-readiness24 including three completed original factory windows, after the published-original correction; earlier combined56 are historical and are not passed as current. Default and acceptance-clock database identities rechecked, both have zero test schemas and other clients. Browser uses Playwright-core1.56.1/Chromium141 pinned binary with explicit TEST HTTP/auth, not onsite. Additional original complete App/Shell screenshots cover1165/1440 home/detail; no production/Acceptance data, deployment or real permission changes."
     },
     {
       "id": "types",
@@ -186,13 +274,13 @@
       "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "9dc3ce4799ba78fb1837b4d91b4a09540afc8582",
-      "sourceFingerprint": "214fa699ae0ec6e0f35ebb8a9b83b01ac6ac9d715f6eeea178b09934de0c08c6",
-      "startedAt": "2026-11-06T19:12:52.626Z",
-      "endedAt": "2026-11-06T19:13:23.452Z",
-      "log": "/workspace/scratch/m01-r2-p01-types.log",
+      "testedHead": "292a305b4e49303a864e597f2abb082deccb15c4",
+      "sourceFingerprint": "ff0cb4a91f745bb33fe31d93af3e8ca16afb01a7e77be68883bab016f2b53d65",
+      "startedAt": "2026-11-06T20:01:06.001Z",
+      "endedAt": "2026-11-06T20:01:36.219Z",
+      "log": "/workspace/scratch/m01-r2-p02-types.log",
       "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e",
-      "context": "Node22.22.2/npm10.9.9, explicit existing worker limits; local affinity bounded by taskset; no runtime DB/onsite access. Preflight native concurrency2, ordinary Vitest worker1; browser Playwright-core1.56.1/Chromium141 pinned executable. Original Page/React components with synthetic TEST HTTP data and desktop sidebar/padding geometry. No live Shell, native-server authorization, M source-date validation, or deployment claim. Native browser13 cases retain all original race/403/material/return scenarios; no business SLA or permission logic changed."
+      "context": "Node22.22.2/npm10.9.9; local Node affinity2,3; actual fresh isolated marked PG16.15 low-privilege dx_rework_test, PG cpuset0,1 CPU2/memory2GiB; sequential two selected PG suites with postgres-immediate config worker1 and existing100s correctness/hook budgets. This is bounded local correctness proof, not CI hardware or onsite equivalence. Final PG proof is the affected production-readiness24 including three completed original factory windows, after the published-original correction; earlier combined56 are historical and are not passed as current. Default and acceptance-clock database identities rechecked, both have zero test schemas and other clients. Browser uses Playwright-core1.56.1/Chromium141 pinned binary with explicit TEST HTTP/auth, not onsite. Additional original complete App/Shell screenshots cover1165/1440 home/detail; no production/Acceptance data, deployment or real permission changes."
     },
     {
       "id": "build",
@@ -200,13 +288,13 @@
       "command": "npm run build --workspaces --if-present",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "9dc3ce4799ba78fb1837b4d91b4a09540afc8582",
-      "sourceFingerprint": "214fa699ae0ec6e0f35ebb8a9b83b01ac6ac9d715f6eeea178b09934de0c08c6",
-      "startedAt": "2026-11-06T19:13:23.497Z",
-      "endedAt": "2026-11-06T19:13:41.922Z",
-      "log": "/workspace/scratch/m01-r2-p01-build.log",
-      "logSha256": "408fcfa8df5afdd2c187b795bd1532fc582a59b9bdd99e80e94f157dc6f77669",
-      "context": "Node22.22.2/npm10.9.9, explicit existing worker limits; local affinity bounded by taskset; no runtime DB/onsite access. Preflight native concurrency2, ordinary Vitest worker1; browser Playwright-core1.56.1/Chromium141 pinned executable. Original Page/React components with synthetic TEST HTTP data and desktop sidebar/padding geometry. No live Shell, native-server authorization, M source-date validation, or deployment claim. Native browser13 cases retain all original race/403/material/return scenarios; no business SLA or permission logic changed."
+      "testedHead": "292a305b4e49303a864e597f2abb082deccb15c4",
+      "sourceFingerprint": "ff0cb4a91f745bb33fe31d93af3e8ca16afb01a7e77be68883bab016f2b53d65",
+      "startedAt": "2026-11-06T20:01:36.256Z",
+      "endedAt": "2026-11-06T20:01:55.315Z",
+      "log": "/workspace/scratch/m01-r2-p02-build.log",
+      "logSha256": "5e225c88a6b297cd7553def92a2f1153c3bc78b15e3412b9927fcae5ea89590e",
+      "context": "Node22.22.2/npm10.9.9; local Node affinity2,3; actual fresh isolated marked PG16.15 low-privilege dx_rework_test, PG cpuset0,1 CPU2/memory2GiB; sequential two selected PG suites with postgres-immediate config worker1 and existing100s correctness/hook budgets. This is bounded local correctness proof, not CI hardware or onsite equivalence. Final PG proof is the affected production-readiness24 including three completed original factory windows, after the published-original correction; earlier combined56 are historical and are not passed as current. Default and acceptance-clock database identities rechecked, both have zero test schemas and other clients. Browser uses Playwright-core1.56.1/Chromium141 pinned binary with explicit TEST HTTP/auth, not onsite. Additional original complete App/Shell screenshots cover1165/1440 home/detail; no production/Acceptance data, deployment or real permission changes."
     },
     {
       "id": "lint",
@@ -214,13 +302,13 @@
       "command": "npm run lint",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "9dc3ce4799ba78fb1837b4d91b4a09540afc8582",
-      "sourceFingerprint": "214fa699ae0ec6e0f35ebb8a9b83b01ac6ac9d715f6eeea178b09934de0c08c6",
-      "startedAt": "2026-11-06T19:13:41.962Z",
-      "endedAt": "2026-11-06T19:14:03.097Z",
-      "log": "/workspace/scratch/m01-r2-p01-lint.log",
+      "testedHead": "292a305b4e49303a864e597f2abb082deccb15c4",
+      "sourceFingerprint": "ff0cb4a91f745bb33fe31d93af3e8ca16afb01a7e77be68883bab016f2b53d65",
+      "startedAt": "2026-11-06T20:01:55.358Z",
+      "endedAt": "2026-11-06T20:02:18.971Z",
+      "log": "/workspace/scratch/m01-r2-p02-lint.log",
       "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763",
-      "context": "Node22.22.2/npm10.9.9, explicit existing worker limits; local affinity bounded by taskset; no runtime DB/onsite access. Preflight native concurrency2, ordinary Vitest worker1; browser Playwright-core1.56.1/Chromium141 pinned executable. Original Page/React components with synthetic TEST HTTP data and desktop sidebar/padding geometry. No live Shell, native-server authorization, M source-date validation, or deployment claim. Native browser13 cases retain all original race/403/material/return scenarios; no business SLA or permission logic changed."
+      "context": "Node22.22.2/npm10.9.9; local Node affinity2,3; actual fresh isolated marked PG16.15 low-privilege dx_rework_test, PG cpuset0,1 CPU2/memory2GiB; sequential two selected PG suites with postgres-immediate config worker1 and existing100s correctness/hook budgets. This is bounded local correctness proof, not CI hardware or onsite equivalence. Final PG proof is the affected production-readiness24 including three completed original factory windows, after the published-original correction; earlier combined56 are historical and are not passed as current. Default and acceptance-clock database identities rechecked, both have zero test schemas and other clients. Browser uses Playwright-core1.56.1/Chromium141 pinned binary with explicit TEST HTTP/auth, not onsite. Additional original complete App/Shell screenshots cover1165/1440 home/detail; no production/Acceptance data, deployment or real permission changes."
     },
     {
       "id": "secret",
@@ -228,13 +316,13 @@
       "command": "npm run secret:scan",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "9dc3ce4799ba78fb1837b4d91b4a09540afc8582",
-      "sourceFingerprint": "214fa699ae0ec6e0f35ebb8a9b83b01ac6ac9d715f6eeea178b09934de0c08c6",
-      "startedAt": "2026-11-06T19:14:03.136Z",
-      "endedAt": "2026-11-06T19:14:03.736Z",
-      "log": "/workspace/scratch/m01-r2-p01-secret.log",
+      "testedHead": "292a305b4e49303a864e597f2abb082deccb15c4",
+      "sourceFingerprint": "ff0cb4a91f745bb33fe31d93af3e8ca16afb01a7e77be68883bab016f2b53d65",
+      "startedAt": "2026-11-06T20:02:19.010Z",
+      "endedAt": "2026-11-06T20:02:19.559Z",
+      "log": "/workspace/scratch/m01-r2-p02-secret.log",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda",
-      "context": "Node22.22.2/npm10.9.9, explicit existing worker limits; local affinity bounded by taskset; no runtime DB/onsite access. Preflight native concurrency2, ordinary Vitest worker1; browser Playwright-core1.56.1/Chromium141 pinned executable. Original Page/React components with synthetic TEST HTTP data and desktop sidebar/padding geometry. No live Shell, native-server authorization, M source-date validation, or deployment claim. Native browser13 cases retain all original race/403/material/return scenarios; no business SLA or permission logic changed."
+      "context": "Node22.22.2/npm10.9.9; local Node affinity2,3; actual fresh isolated marked PG16.15 low-privilege dx_rework_test, PG cpuset0,1 CPU2/memory2GiB; sequential two selected PG suites with postgres-immediate config worker1 and existing100s correctness/hook budgets. This is bounded local correctness proof, not CI hardware or onsite equivalence. Final PG proof is the affected production-readiness24 including three completed original factory windows, after the published-original correction; earlier combined56 are historical and are not passed as current. Default and acceptance-clock database identities rechecked, both have zero test schemas and other clients. Browser uses Playwright-core1.56.1/Chromium141 pinned binary with explicit TEST HTTP/auth, not onsite. Additional original complete App/Shell screenshots cover1165/1440 home/detail; no production/Acceptance data, deployment or real permission changes."
     }
   ]
 }

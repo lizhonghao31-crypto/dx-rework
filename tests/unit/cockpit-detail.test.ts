@@ -3,6 +3,8 @@ import {renderToStaticMarkup} from "react-dom/server";
 import {expect,it} from "vitest";
 import {JOURNEY_STAGES,JourneyReturnContextSchema,type JourneyNode,type OrderJourney} from "@dx-rework/contracts/digital-production-journey";
 import {CockpitDetail} from "../../apps/web/src/cockpit-detail.js";
+import {CockpitNodeDates} from '../../apps/web/src/cockpit-node-dates.js';
+import {nodeTargetLabel} from '../../apps/web/src/journey-sla-details.js';
 const id="00000000-0000-4000-8000-000000000001",task="00000000-0000-4000-8000-000000000002",old="00000000-0000-4000-8000-000000000003";
 function fixture():OrderJourney{
   const node=(key:string,patch:Partial<JourneyNode>={}):JourneyNode=>({key,instanceId:key,label:key,stage:"development",state:"active",current:true,round:1,occurrence:1,owner:{id,name:"TEST责任人"},operator:null,assignmentHistory:[],expectedAt:"2026-10-01",expectedKind:"plan",expectedPrecision:"date",actualAt:null,actualQuality:"missing",enteredAt:null,sla:"not_set",completionResult:null,overdueSeconds:null,risks:[],blockers:[],records:[],inheritedFrom:null,countsInProgress:true,unavailableReason:null,...patch});
@@ -10,6 +12,20 @@ function fixture():OrderJourney{
   return {id,sourceId:id,orderId:id,designStyleNo:"TEST-DETAIL",temporaryStyleNo:null,customer:"PD",category:"上衣",designer:null,styleName:null,merchandisers:[],orderNumbers:[],createdAt:"2026-10-19T00:00:00Z",deliveryDate:null,selectedRound:1,adoptedRound:1,sourceVersion:1,instructionVersion:1,lines:[],links:[],stages:JOURNEY_STAGES.map(stage=>({...stage,state:"pending",nodes:stage.key==="development"?[current,completed]:[]})),progress:{development:{completed:8,applicable:10},bulk:null},hitReasons:[],display:{ruleVersion:"cockpit-display-v1",mainState:"active",earliestShipmentDate:null,missingShipmentDates:0,closedAt:null,actualRatio:.5,actualLabel:"50.0%",awaitingClosure:false,timeRatio:null,timeLabel:"时间规则待完善",stages:JOURNEY_STAGES.map(stage=>({key:stage.key,ratio:.5,applicable:2,completed:1,notApplicable:false,risk:stage.key==="development"?"overdue":"normal"}))},currentRiskNodes:[],currentDeliveryRisks:[],riskHistory:[],operationLog:{items:[],nextCursor:null,asOf:"2026-10-19T00:00:00Z",coverage:["节点事件"]}};
 }
 const render=(o:OrderJourney,busy=false)=>renderToStaticMarkup(createElement(CockpitDetail,{order:o,context:JourneyReturnContextSchema.parse({selected:id,scope:"production",focus:task}),asOf:"2026-10-19T00:00:00Z",actions:null,busy,onChange(){}}));
+it('R2-02: native completed batch deadlines remain directly readable without replacing them with a generic task date',()=>{
+ const o=fixture(),n=o.stages[1]!.nodes[0]!;n.expectedAt='2030-01-01T00:00:00Z';n.expectedPrecision='instant';n.expectedKind='sla';n.nativeWindows=[{evidence:'TEST-source-fact',scopeLabel:'PO TEST-ORIGINAL · 黑',startedAt:'2026-11-02T00:00:00Z',deadline:'2026-11-03T00:00:00Z',warningAt:null,completedAt:'2026-11-02T00:01:00Z',complete:true,snapshotId:'TEST-private-snapshot'}];
+ const before=structuredClone(n),html=renderToStaticMarkup(createElement(CockpitNodeDates,{node:n,order:o}));
+ expect(nodeTargetLabel(n)).toBe('2026/11/3 08:00:00');expect(html).toContain('原批次时限');expect(html).toContain('原截止 2026/11/3 08:00');expect(html).toContain('已完成 2026/11/2 08:01');expect(html).not.toContain('TEST-private-snapshot');expect(html).toContain('2030/1/1 08:00');expect(n).toEqual(before);
+ n.expectedAt=null;const noGeneric=renderToStaticMarkup(createElement(CockpitNodeDates,{node:n,order:o}));expect(noGeneric).toContain('原截止 2026/11/3 08:00');expect(noGeneric).not.toContain('尚无可信截止');
+});
+it('R2-02: directly shows every original PO target with its date boundary and never presents a logistics estimate as a hard deadline',()=>{
+ const o=fixture(),n=o.stages[1]!.nodes[0]!;n.expectedAt=null;n.expectedKind='unset';n.records=[];o.lines=['A','B'].map(id=>({id,po:'TEST-PO-'+id,color:id,formalStyleNo:null,temporaryStyleNo:null,orderedQuantity:1}));
+ const target=(at:string|null,exclusive=false)=>({at,exclusive,reasons:[]});
+ const template={label:'原工厂交期',stage:'production' as const,kind:'order_date',status:'not_started' as const,actualStart:null,actualEnd:null,target:target(null),forecast:target(null),forecastBasis:'unknown' as const,original:target(null),current:target(null)};
+ n.timings=[{...template,id:'factory_production:A',target:target('2026-11-09T16:00:00.000Z',true)},{...template,id:'factory_production:B',target:target('2026-11-11T08:00:00.000Z')},{...template,id:'process_logistics:A',kind:'estimate',label:'原物流预计',forecast:target('2026-11-12T08:00:00.000Z')}];
+ const before=structuredClone(n),html=renderToStaticMarkup(createElement(CockpitNodeDates,{node:n,order:o}));
+ expect(html).toContain('PO TEST-PO-A · A原截止');expect(html).toContain('2026/11/9 当天结束');expect(html).toContain('PO TEST-PO-B · B原截止');expect(html).toContain('2026/11/11 16:00');expect(html).toContain('物流预计：');expect(html).toContain('（仅预计）');expect(html).not.toContain('尚无可信截止');expect(n).toEqual(before);
+});
 it('shows an actual day as a day in both detail and node rows, without an invented midnight or 08:00',()=>{
   const o=fixture(),n=o.stages[1]!.nodes[0]!;n.actualDate='2026-10-17';n.actualAt=null;n.state='completed';
   const html=render(o);expect(html).toContain('<dt>实际完成：</dt><dd>2026-10-17<small>原完成记录，时间待核</small></dd>');expect(html).toContain('<span>2026-10-17</span>');expect(html).not.toContain('2026/10/17 08:00');expect(html).not.toContain('2026-10-17T00:00');

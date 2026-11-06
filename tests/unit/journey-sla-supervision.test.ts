@@ -52,6 +52,18 @@ it('keeps PO aggregate risk without inventing a single target from several PO wi
  const o=order(),p=plan('order_date');p.nodes=[1,2].map(i=>({...p.nodes[0]!,id:`factory_production:PO${i}`,parameterKey:'factory_production',stage:6,targetKey:`target${i}`}));p.anchors.target1={precision:'date',value:'2026-10-19',source:'native'};p.anchors.target2={precision:'date',value:'2026-10-21',source:'native'};
  attachJourneySupervision(o,p,p,evaluateSlaPlan(p,{},time),time,{original:1,current:1});const raw=o.stages.flatMap(s=>s.nodes).find(n=>n.key==='factory_production_qc')!;
  expect(raw.risks).toContain('overdue');expect(raw.timing).toBeUndefined();expect(raw.expectedAt).toBeNull();
+  expect(raw.timings?.map(t=>[t.id,t.target.at])).toEqual(o.supervision!.nodes.map(t=>[t.id,t.target.at]));
+});
+
+it('R2-02: binds an explicit record PO to its own original target rather than discarding multiple matches or choosing the first',()=>{
+ const o=order(),p=plan('order_date');o.lines=[{...o.lines[0]!,id:'lineA',po:'PO-A'},{...o.lines[0]!,id:'lineB',po:'PO-B'}];
+ p.nodes=['lineA','lineB'].map(id=>({...p.nodes[0]!,id:'factory_production:'+id,parameterKey:'factory_production',stage:6,targetKey:id}));
+ p.anchors.lineA={precision:'date',value:'2026-10-19',source:'TEST-original-PO-A'};p.anchors.lineB={precision:'date',value:'2026-10-21',source:'TEST-original-PO-B'};
+ const node=o.stages.flatMap(s=>s.nodes).find(n=>n.key==='factory_production_qc')!;
+ node.records=[{domain:'production',id:'TEST-original-factory-record',url:null,version:null,lineId:'lineB',mode:'read'}];
+ attachJourneySupervision(o,p,p,evaluateSlaPlan(p,{},time),time,{original:1,current:1});
+ expect(node.timing?.id).toBe('factory_production:lineB');expect(node.expectedAt).toBe('2026-10-21T16:00:00.000Z');expect(node.risks).not.toContain('overdue');
+ expect(o.supervision?.nodes).toHaveLength(2);expect(slaTargetLabel(node.timing!.target)).toContain('2026/10/21');
 });
 
 it('retains late completion history without counting an ended task as an in-progress overdue task',()=>{

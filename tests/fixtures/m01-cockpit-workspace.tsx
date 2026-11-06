@@ -23,6 +23,11 @@ function richOrder(value:OrderJourney):OrderJourney{
  order.currentRiskNodes=prep.nodes.filter(node=>node.risks.length);order.currentRiskNodes.push({...structuredClone(template),instanceId:prefix+'-production-risk',label:'TEST其他阶段生产逾期',stage:'production',state:'blocked',risks:['overdue','blocked']});
  order.riskHistory=[];order.currentDeliveryRisks=[];
  order.operationLog={asOf:order.asOf!,items:[{id:prefix+'-audit',at:'2026-11-02T08:00:00Z',actor:{id:id(7),name:'TEST跟单'},object:'本单原记录',action:'查看用测试记录'}],nextCursor:null};
+ if(control.shape==='scoped-deadlines'){
+  const node=order.stages.flatMap(stage=>stage.nodes).find(node=>node.key==='production_instruction')!;
+  node.expectedAt=null;node.expectedPrecision='missing';node.expectedKind='unset';delete node.timing;
+  node.timings=order.lines.slice(0,2).map((line,index)=>{const point={at:index?'2026-11-16T04:00:00.000Z':'2026-11-14T16:00:00.000Z',exclusive:index===0,reasons:[]};return {id:'production_sheet:'+line.id,label:'TEST原范围截止',stage:'preparation',kind:'order_date',status:'not_started',actualStart:null,actualEnd:null,target:point,forecast:point,forecastBasis:'plan',original:point,current:point};});
+ }
  if(control.shape==='deleted')prep.nodes=prep.nodes.filter(node=>node.instanceId!=='TEST-Q-extra-1');
  if(control.shape==='dense'){
   order.lines.forEach(line=>{line.po+='-TEST已有超长业务编号'.repeat(5);});

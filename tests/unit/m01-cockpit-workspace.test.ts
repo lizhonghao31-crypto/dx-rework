@@ -4,9 +4,14 @@ import {expect,it} from 'vitest';
 import {JOURNEY_STAGES,JourneyFilterSchema,JourneyReturnContextSchema,type JourneyNode,type OrderJourney} from '@dx-rework/contracts/digital-production-journey';
 import {selectJourneys} from '../../apps/api/src/production-platform/journey-projection.js';
 import {representativeCockpitNodes} from '../../apps/web/src/digital-journey-cockpit-model.js';
-import {PoOrderSummary,sortedCockpitPoLines} from '../../apps/web/src/po-delivery-dates.js';
+import {PoOrderFacts,PoOrderSummary,sortedCockpitPoLines} from '../../apps/web/src/po-delivery-dates.js';
 import {CockpitBusinessProgress,CockpitReceiptSummary} from '../../apps/web/src/cockpit-business-progress.js';
 const id='00000000-0000-4000-8000-000000000001';
+it('R2-02: displays one trusted formal PO alias once while retaining a different existing style and missing PO state',()=>{
+ const order=fixture();order.orderId=id;order.lines=[{id:'A',po:'TEST-PO-A',color:'黑',formalStyleNo:'test-po-a',temporaryStyleNo:null,orderedQuantity:1},{id:'B',po:'TEST-PO-B',color:'白',formalStyleNo:'TEST-STYLE-B',temporaryStyleNo:null,orderedQuantity:2},{id:'C',po:null,color:'红',formalStyleNo:null,temporaryStyleNo:null,orderedQuantity:3}];
+ const before=structuredClone(order),html=renderToStaticMarkup(createElement(PoOrderFacts,{order}));
+ expect(html).toContain('>TEST-PO-A</td>');expect(html).not.toContain('TEST-PO-A /');expect(html).toContain('TEST-PO-B / TEST-STYLE-B');expect(html).toContain('待补PO');expect(html).not.toContain(id);expect(order).toEqual(before);
+});
 const node=(key:string,stage:JourneyNode['stage'],patch:Partial<JourneyNode>={}):JourneyNode=>({key,instanceId:key,label:key,stage,state:'active',current:true,round:null,occurrence:1,owner:null,operator:null,assignmentHistory:[],expectedAt:null,expectedKind:'unset',expectedPrecision:'missing',actualAt:null,actualQuality:'missing',enteredAt:null,sla:'not_set',completionResult:null,overdueSeconds:null,risks:[],blockers:[],records:[],inheritedFrom:null,countsInProgress:true,unavailableReason:null,...patch});
 function fixture():OrderJourney{
  const nodes=[node('prep','preparation'),node('factory','production',{state:'blocked',risks:['overdue','blocked']})];
