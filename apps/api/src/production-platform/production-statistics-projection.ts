@@ -1,5 +1,6 @@
 import {currentProductionStatistics} from '@dx-rework/domain/production-statistics';
 import type {ProductionStatisticsFilters,StatisticsCurrentResult,StatisticsMetric,StatisticsPo,StatisticsPoResult} from '@dx-rework/contracts/production-statistics';
+import {productionFacetMatches,productionFactorySelected} from './production-statistics-dimensions.js';
 
 /** Mother completion is assessed over all its applicable POs, even when only one
  * of them belongs to the displayed subset. Incomplete siblings cannot disappear. */
@@ -14,6 +15,7 @@ export function productionResultProjection(source:StatisticsCurrentResult,filter
  const metric=filters.drillMetric??'all',active=(row:StatisticsPoResult)=>row.line.lifecycle!=='cancelled'&&!row.line.specialClosure;
  const matches=(row:StatisticsPoResult)=>{
   if(filters.drillLineId&&row.line.lineId!==filters.drillLineId||filters.drillOrderId&&row.line.orderId!==filters.drillOrderId||filters.drillFactoryId&&!row.line.allocations.some(scope=>scope.current&&scope.quantity>0&&scope.factoryId===filters.drillFactoryId))return false;
+  if(!productionFacetMatches(row,filters))return false;
   switch(metric){
    case 'backlog':return active(row)&&row.remaining!==0;
    case 'next-seven':return active(row)&&row.remaining!==0&&row.line.customerDate!==null&&row.line.customerDate>=source.sevenDayWindow.fromInclusive&&row.line.customerDate<source.sevenDayWindow.toExclusive;
@@ -31,9 +33,9 @@ export function productionResultProjection(source:StatisticsCurrentResult,filter
  const ids=new Set(source.rows.filter(matches).map(row=>row.line.lineId));
  // A displayed row has already collapsed duplicate versions. Retain the original
  // authorized inputs so a slice cannot turn a proven contradiction into certainty.
- const projected=metric==='all'&&!filters.drillLineId&&!filters.drillOrderId&&!filters.drillFactoryId?source:currentProductionStatistics(inputs.filter(row=>ids.has(row.lineId)),source.asOf,source.businessDate);
+ const projected=metric==='all'&&!filters.drillLineId&&!filters.drillOrderId&&!filters.drillFactoryId&&!filters.drillFactories&&!filters.drillCustomers&&!filters.drillStages?source:currentProductionStatistics(inputs.filter(row=>ids.has(row.lineId)),source.asOf,source.businessDate);
  if(projected!==source)projected.metrics.completedOrders=scopedMotherCompletion(motherCompletion,projected.rows);
  if(projected!==source){const externalUnknown=source.unknown.filter(reason=>reason.key==='filter-dimension');if(externalUnknown.length){projected.unknown.push(...externalUnknown);for(const item of Object.values(projected.metrics)){item.value=null;item.unknown.push(...externalUnknown);}}}
- const factoryId=filters.drillFactoryId??filters.factoryId;
- return factoryId?{...projected,factories:projected.factories.filter(factory=>factory.factoryId===factoryId),materials:projected.materials.filter(material=>material.requirement.factoryId===factoryId),workload:projected.workload.filter(item=>item.factoryId===null||item.factoryId===factoryId)}:projected;
+ const constrained=Boolean(filters.drillFactoryId||filters.factoryId||filters.drillFactories);
+ return constrained?{...projected,factories:projected.factories.filter(factory=>productionFactorySelected(factory.factoryId,filters)),materials:projected.materials.filter(material=>productionFactorySelected(material.requirement.factoryId,filters)),workload:projected.workload.filter(item=>item.factoryId===null||productionFactorySelected(item.factoryId,filters))}:projected;
 }

@@ -1,96 +1,34 @@
 {
   "version": 1,
-  "base": "8b1de5dbe1d2452a57680766ec00945f4a562a64",
-  "sourceFingerprint": "11d5c418c7a4e61452d61b127619ae1d413346bde3bd6b6b5141e3936a4eb5b0",
+  "base": "b2b2c495fa043502760d431e81dc41d847e483c1",
+  "sourceFingerprint": "aaa6fcbacca64c4724b80c1ac3bb20179a47952392df9cefbbffe225f66c8284",
   "risk": "full",
   "rules": [
     {
-      "rule": "按稳定母单/PO和原有效数量版统计需求、累计实收、到仓检查、装箱与逐PO待出货；普通完成、取消、特殊结案及质量状态分别列。",
-      "source": "Full Library dx-m01-implement-v1.1.1 v2 §11 P08-01–16; M01-OPT1.3 v4 §8/10.2–10.4; docs/engineering/m01-p08-execution.md",
+      "rule": "同一完整授权保存事实派生同维OR/跨维AND筛选、可调顺序分组及全量集合，分页后只切明细，保P08整母单完成结论。",
+      "source": "Full Library dx-m01-implement-v1.1.1 v2 §12 P09-01–12; M01-OPT1.3 v4; docs/engineering/m01-p09-execution.md",
       "writes": [
         "packages/contracts/src/production-statistics.ts",
-        "packages/domain/src/production-statistics.ts",
-        "tests/unit/m01-production-statistics.test.ts"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/order-closure-service.ts",
-        "apps/api/src/receiving/receiving-analysis.ts",
-        "apps/api/src/production-platform/garment-quality.ts",
-        "apps/api/src/rework/rework-business-detail-service.ts"
-      ],
-      "oldTests": [
-        "tests/integration/receiving-postgres.test.ts",
-        "tests/integration/production-closure-postgres.test.ts",
-        "tests/integration/quality-basic-rework-postgres.test.ts"
-      ],
-      "initialization": "不建数量账/ERP导入，不改原业务状态。逐PO先max(需求-有效装箱,0)再聚合，超量另列；有效累计不再加旧receipt。重复/矛盾版本保未知；取消排除集合分别用母单/PO/问题原ID，不能混单位。",
-      "dateAndPermission": "统一北京业务观察和七日半开窗口；缺客户日单列。到仓QC按原receipt数量版，不由工厂QC或closed补齐。完成/未完时长用可信进入/完成，不用createdAt；等待只保原可证并集，不改正式SLA。",
-      "expectation": "领域F全局未知池一次、I累计2/原收货1/QC1/装2缺口1、部分承接60/100、零旧厂、超量不抵另一PO、完成10h/未完12h/等待3h均可复算。Review反例的两PO先装1个：下钻/直接PO筛选/导出母单完成0，第二PO装齐后新S1为1、旧S0仍0；原生I及有效返工报工1改3加5等于8而原登记仍1，不造跨轮独立不良件或首次通过率。",
-      "checks": [
-        "full-nondb",
-        "canonical",
-        "preflight",
-        "types",
-        "build",
-        "lint",
-        "secret"
-      ]
-    },
-    {
-      "rule": "工厂份额及发料沿原批准/执行/转厂与需求、单位、有效版本读取；全局未知不分摊成工厂欠量，独立已知承接量不被客户装箱范围未知抹掉。",
-      "source": "Full Library dx-m01-implement-v1.1.1 v2 §11 P08-01–16; M01-OPT1.3 v4 §8/10.2–10.4; docs/engineering/m01-p08-execution.md",
-      "writes": [
-        "apps/api/src/production-platform/factory-production-facts.ts",
-        "apps/api/src/production-platform/production-statistics-materials.ts"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/factory-flow-service.ts",
-        "apps/api/src/production-platform/bulk-preparation-service.ts",
-        "apps/api/src/sourcing/factory-transfer-service.ts",
-        "apps/api/src/sourcing/sourcing-service.ts"
-      ],
-      "oldTests": [
-        "tests/integration/bulk-preshrink-correction-postgres.test.ts",
-        "tests/integration/sourcing-pr03-postgres.test.ts"
-      ],
-      "initialization": "原factoryProductionScopes默认行为不变，仅本读取显式includeZero留历史；转厂老0不加当前分母。并行准备批准未冻结时只沿原execution不可变快照，不查最新猜历史；原批准/执行行到数字PO映射有缺件时不签完整份额。",
-      "dateAndPermission": "辅料自由文本不是数值BOM，按原单位保有效已知发出量和未核业务时点；裁片按原本PO/厂范围分母。首批/最近/发齐分别取证，变版或历史缺件不签旧发齐时刻。厂责任终点及适用交货版未核继续具体说明，不将客户待装箱当本厂欠交，不关闭D29。",
-      "expectation": "原生裁片30/50/20依次30、80、100并保首/近/齐；辅料粒单位无分母仍保数量和原未核时点。原真实C全转厂旧0新1、当前负荷仅新厂、默认旧消费者仍只当前1件。未完整映射及部分装箱/批准重叠只限制相关指标，已证承接60保留。",
-      "checks": [
-        "canonical",
-        "full-nondb",
-        "preflight",
-        "types",
-        "build",
-        "lint"
-      ]
-    },
-    {
-      "rule": "先核原身份、有效角色/实际能力及对象/字段权限后聚合；每次旧结果、下钻和导出重验，沿原导出白名单，不因多角色放大或泄漏同厂他人资料。",
-      "source": "Full Library dx-m01-implement-v1.1.1 v2 §11 P08-01–16; M01-OPT1.3 v4 §8/10.2–10.4; docs/engineering/m01-p08-execution.md",
-      "writes": [
+        "packages/contracts/src/digital-production-analysis.ts",
         "apps/api/src/production-platform/production-statistics-query.ts",
-        "tests/helpers/business-anchor-fixture.ts",
-        "tests/integration/m01-production-statistics-postgres.test.ts"
+        "apps/api/src/production-platform/production-statistics-projection.ts",
+        "apps/api/src/production-platform/production-statistics-dimensions.ts",
+        "apps/api/src/production-platform/production-statistics-groups.ts"
       ],
       "reads": [
-        "apps/api/src/auth/service.ts",
-        "apps/api/src/auth/postgres-store.ts",
-        "apps/api/src/auth/routes.ts",
-        "apps/api/src/access/business-authority.ts",
-        "apps/api/src/access/export-authority.ts",
+        "apps/api/src/production-platform/analysis-result-store.ts",
+        "packages/domain/src/production-statistics.ts",
         "apps/api/src/production-platform/access-policy.ts"
       ],
+      "initialization": "不新建业务表或补历史；基于保存原未折叠事实和asOf，母单完成沿全适用兄弟PO。分组最多3层/1000组，超范围明确拒绝，不截组装完整。归厂未知、尚未覆盖、无当前份额分别列；厂/并行节点涉及数不可加。",
+      "dateAndPermission": "每次保存结果/下钻/导出沿原实时角色/对象核权，真正源条件仍绑定hash，只有展示筛选可同S0重组。阶段限定实际厂批次/整单PO背景，不把乙节点认到甲。",
+      "expectation": "16PO的32件及16个完整组在分页前；60/100承接与背景、F全局2/两厂未知、I特殊结案检查缺口保持。新多选、JSON精确回环、母单未完兄弟及父组先行均有真实或纯函数反例；Review4491441526的无节点/多厂/次序/二次下钻沿同谓词保节点上下文，原生逐组HTTP核同S0。",
       "oldTests": [
-        "tests/integration/time-reading-clock-postgres.test.ts",
-        "tests/integration/series-plan-postgres.test.ts",
-        "tests/integration/sourcing-pr03-postgres.test.ts"
+        "tests/integration/m01-production-statistics-postgres.test.ts",
+        "tests/integration/time-reading-clock-postgres.test.ts"
       ],
-      "initialization": "authorizationCapability只表示请求操作，不授予能力；实际授权与当前role_capabilities相交。TEST专属身份由原AccessService真实赋权；纯角色旧fixture不改。bulkReady仅新增可选数量/设计/主跟单，原默认10及原纯身份保留。",
-      "dateAndPermission": "原AuthService真实有效会话撤实际scope/PMC后auth/me仍有效而旧结果/导出403或409。无权不返回额外人数/未知桶泄存在；Root原特例保原DB核验。品牌/品类/年/P/设计主责用原业务字段，Root创建不猜设计归属，未知只限相应筛选范围。",
-      "expectation": "原同厂两真实母单、多角色重叠只本人一单；实际普通工人无report:view403；PMC可读并全量导出、撤权同cookie拒绝。HTTP与PG、旧S0、跨实例、敏感字段对照真实执行，无价格/工资新列或业务task events。",
       "checks": [
-        "canonical",
+        "targeted-native",
         "full-nondb",
         "preflight",
         "types",
@@ -100,66 +38,27 @@
       ]
     },
     {
-      "rule": "跨请求保存实际完整派生结果及原未折叠授权事实，绑定原用户、筛选、权限、口径和水位；有限生命周期、容量及过期整组重读，不存ID后回填现值。",
-      "source": "Full Library dx-m01-implement-v1.1.1 v2 §11 P08-01–16; M01-OPT1.3 v4 §8/10.2–10.4; docs/engineering/m01-p08-execution.md",
+      "rule": "原分析工作区交当前积压、全部/普通完成/取消/特殊、四卡和完整来源质量/缺件入口，当前已应用条件与旧结果身份始终准确。",
+      "source": "Full Library dx-m01-implement-v1.1.1 v2 §12 P09-01–12; M01-OPT1.3 v4; docs/engineering/m01-p09-execution.md",
       "writes": [
-        "apps/api/migrations/0274_production_analysis_results.sql",
-        "apps/api/src/platform/migration-manifest.json",
-        "scripts/deploy/acceptance-migration-requirements.json",
-        "apps/api/src/production-platform/analysis-result-store.ts"
+        "apps/web/src/current-production-page.tsx",
+        "apps/web/src/current-production-context.ts",
+        "apps/web/src/current-production.css"
       ],
       "reads": [
-        "scripts/migration-lib.mjs",
-        "scripts/check-migrations.mjs",
-        "scripts/deploy/prepare-acceptance-migration.py",
-        "scripts/test-database-safety.mjs"
+        "apps/web/src/digital-production-api.ts",
+        "apps/web/src/auth-session.ts",
+        "packages/ui/src/production.tsx"
       ],
+      "initialization": "不保存永久授权数据；仅列/组偏好及同一标签页有限返回配置。原壳tokens与组件保留，默认汇总按需展开、长列表有界显示；不替换旧沙盘。",
+      "dateAndPermission": "请求代次、条件、真实身份共同拒A1/B/A2迟回；参数键规范比较不依赖对象插入顺序。失败保S0旧条件/asOf并明确，403清旧数据/下载，15分钟过期整体重取；wall仅查询/返回生命周期，不改业务SLA。",
+      "expectation": "原生真实A/B/A、初读失败/刷新失败、旧缓存过期、PMC同cookie撤权、完整空与品类缺映射原记录入口、390px及键盘焦点通过；源和展示条件分名；失败新条件后点旧卡用S0原条件，原生反例保32件。",
       "oldTests": [
-        "tests/integration/migration-compatibility-postgres.test.ts",
-        "tests/integration/acceptance-maintenance-postgres.test.ts"
+        "tests/unit/digital-development-workspace.test.ts",
+        "tests/unit/platform-modules.test.ts"
       ],
-      "initialization": "在真实288条/0273尾版追加0274，仅派生结果表/索引及immutable UPDATE触发器，原SQL和历史ledger不改、不回填业务。5MiB单结果同时核PG实际JSONB字节；15分钟、每人8、全局128/64MiB自有缓存用原库锁和有限淘汰，不删业务事实。",
-      "dateAndPermission": "缓存created/expires用同一真实wall-clock观测，不用Acceptance业务时钟；过期、原筛选变化或原权限变化明确409/403，不补历史。原未折叠输入只在受限缓存保存供同版推导，不额外暴露为HTTP字段；全局/字节上限无压力饱和实测宣称。",
-      "expectation": "原低权限新鲜基线→追加0274、原ACL/迁移/恢复检查；实际UPDATE55000、TTL900、旧筛选409、9次只留8及淘汰409；精确TEST插入故障后保原完整S0且finally去测试触发器。PG13原维护路径验证追加SQL及权限，不以静态checksum冒运行通过。",
       "checks": [
-        "canonical",
-        "pg13-maintenance",
-        "db-seed",
-        "db-migrations",
-        "resource-smoke",
-        "preflight",
-        "types",
-        "build",
-        "lint",
-        "secret"
-      ]
-    },
-    {
-      "rule": "在原analysis接口内支持当前生产、同版分页、母单/PO/工厂/指标集合下钻及同版完整导出，真实源筛选改变须新查询；不增重复业务入口或notes写入。",
-      "source": "Full Library dx-m01-implement-v1.1.1 v2 §11 P08-01–16; M01-OPT1.3 v4 §8/10.2–10.4; docs/engineering/m01-p08-execution.md",
-      "writes": [
-        "apps/api/src/production-platform/production-statistics-projection.ts",
-        "apps/api/src/production-platform/production-statistics-export.ts",
-        "apps/api/src/production-platform/reporting-query.ts",
-        "apps/api/src/production-platform/reporting-routes.ts",
-        "packages/contracts/src/digital-production-analysis.ts",
-        "packages/contracts/package.json",
-        "packages/domain/package.json"
-      ],
-      "reads": [
-        "apps/api/src/reporting/xlsx-workbook.ts",
-        "packages/contracts/src/business-display.ts",
-        "apps/api/src/production-platform/reporting-metrics.ts"
-      ],
-      "oldTests": [
-        "tests/integration/time-reading-clock-postgres.test.ts",
-        "tests/unit/digital-development-workspace.test.ts"
-      ],
-      "initialization": "view=production复用原GET/export，notes明确只读拒绝；真实条件保原hash，只将显式drill字段与page作为同版展示切片。原未折叠事实保冲突版本，下钻不能将已知矛盾变确定；保存完整母单适用PO的完成结论，不因完成项/PO/工厂筛选隐藏未完兄弟PO后把整单判成已装齐；保持原asOf/watermark和完整basis，原角色重新核权。",
-      "dateAndPermission": "保存前只读repeatable-read完整授权集合，读取后复核原业务钟和权限。S0下钻不join当前值，导出只用同一保存值；原开始/结束筛选、维度及份额/口径/水位和未知进入导出，范围变化不复用旧标题。",
-      "expectation": "原16PO在15行分页下总量32不变，同S0下钻一PO为2而basis仍32；改真正lineId绑定拒绝。同一原装箱40→50后，S0下钻/跨实例/XLSX40/60，S1为50/50。I即使特殊结案且装齐仍能独立打开质量缺口。",
-      "checks": [
-        "canonical",
+        "targeted-native",
         "full-nondb",
         "preflight",
         "types",
@@ -169,123 +68,180 @@
       ]
     },
     {
-      "rule": "保旧板房分析视图及返回链接的原筛选/日期/页码与严格目标校验；本PR不更换系统外观，P09在同一原工作区继续接消费者。",
-      "source": "Full Library dx-m01-implement-v1.1.1 v2 §11 P08-01–16; M01-OPT1.3 v4 §8/10.2–10.4; docs/engineering/m01-p08-execution.md",
+      "rule": "PO同版明细、原业务入口和返回后的整组重读接原导航与权限；当前生产入口同时要求原数字岗位与report:view，旧四分析视图保留。",
+      "source": "Full Library dx-m01-implement-v1.1.1 v2 §12 P09-01–12; M01-OPT1.3 v4; docs/engineering/m01-p09-execution.md",
       "writes": [
-        "apps/web/src/development-workspace-return.tsx",
-        "apps/web/src/digital-analysis-workspace-model.ts",
-        "tests/unit/digital-development-workspace.test.ts"
-      ],
-      "reads": [
+        "apps/web/src/current-production-po-dialog.tsx",
+        "apps/web/src/App.tsx",
+        "apps/web/src/components.tsx",
         "apps/web/src/digital-analysis-page.tsx",
-        "apps/web/src/digital-detail-route.ts",
-        "apps/web/url-contract.ts"
+        "apps/web/src/digital-production-page.tsx",
+        "apps/web/src/development-workspace-return.tsx",
+        "apps/web/src/garment-quality-form.tsx"
       ],
+      "reads": [
+        "apps/web/src/digital-detail-route.ts",
+        "apps/web/src/order-closure-panel.tsx",
+        "apps/api/src/production-platform/garment-quality.ts",
+        "apps/api/src/production-platform/order-closure-routes.ts"
+      ],
+      "initialization": "仅在原详情增加明确安全返回目标；不新建出货/派工/认责入口。实际质检表单沿原发厂输入支持秒/毫秒，保分钟兼容、不默认捏造业务完成。",
+      "dateAndPermission": "回原业务页链接保源筛选/分组/PO/页码但不带S0；仅同原会话/精确目标/15分钟返回偏好恢复滚动/焦点/展开。服务器质检不得早于到仓/晚于现在的原守卫不放宽；Root例外与旧语义不变。",
+      "expectation": "原质检页面实际HTTP200后返回，新S1覆盖2而旧S0仍0，原筛选/PO/分组保留；外部/重复/嵌套非法返回仍拒。原纯角色未改；真实普通工人不发分析请求，Root合法原办理保留。",
       "oldTests": [
+        "tests/integration/m01-settings-native-browser-postgres.test.ts",
+        "tests/integration/m01-short-lead-native-browser-postgres.test.ts",
         "tests/unit/digital-development-workspace.test.ts"
       ],
-      "initialization": "UI view与API production字段分开校验，避免新shape.view让旧四视图的条件回退为空。保重复/嵌套/外部目标拒绝，旧原业务文字/颜色/导航不改。新当前统计的完整界面和浏览器体验在P09，不将本API原生HTTP测试冒视觉验收。",
-      "dateAndPermission": "原日期顺序检查仍在；旧视图不能带production-only snapshot冒合法返回；正常旧timing/customer/page仍完整保留。返回只影响浏览导航，不赋写权限或更改业务日期。",
-      "expectation": "实际原上下文roundtrip保日期、客户、page3及timing视图；安全返回反例、旧类型及工作区构建通过，旧分析HTTP/时钟在原套件继续通过。",
       "checks": [
+        "targeted-native",
         "full-nondb",
-        "canonical",
         "preflight",
         "types",
         "build",
-        "lint"
+        "lint",
+        "secret"
       ]
     },
     {
-      "rule": "新统计及实际受影响旧消费者进入原canonical并集；所有证据绑定真实P07合并基线和当前完整来源，时钟清单只改五处并保447条人工记录。",
-      "source": "AGENTS.md §3–5; Full Library dx-m01-implement-v1.1.1 v2 §11 P08-01–16; M01-OPT1.3 v4 §8/10.2–10.4; docs/engineering/m01-p08-execution.md",
+      "rule": "卡表、工厂份额、物料分母/业务时间、原问题和完整XLSX都沿同一保存事实，不只导当前页或抹掉未知。",
+      "source": "Full Library dx-m01-implement-v1.1.1 v2 §12 P09-01–12; M01-OPT1.3 v4; docs/engineering/m01-p09-execution.md",
+      "writes": [
+        "apps/api/src/production-platform/reporting-query.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/production-statistics-export.ts",
+        "apps/api/src/reporting/xlsx-workbook.ts",
+        "apps/api/src/access/export-authority.ts"
+      ],
+      "initialization": "只追加完整分组/具体缺件工作表和准确多选/组顺序说明；首三数量工作表仍兼容原消费者。不加工资/成本/扣款字段，不将普通做尾当不良。",
+      "dateAndPermission": "原导出白名单及当前核权不变，按同S0/asOf/watermark全量。缺业务发生日不拿登记补时，问题发生/发现/登记/解决和复发分开；未标准分类保待归类，不从自由文本归责。",
+      "expectation": "全16PO页外/分组与同版Excel、单/多选工厂在API和Excel一致限定、F未知池和I质量、真正撤权旧下载403、有效发出/本项要求与原单位及原事件展开核对，原数量表/报工订正/累计实收回归保通过。",
+      "oldTests": [
+        "tests/integration/m01-production-statistics-postgres.test.ts",
+        "tests/integration/time-reading-clock-postgres.test.ts"
+      ],
+      "checks": [
+        "targeted-native",
+        "full-nondb",
+        "preflight",
+        "types",
+        "build",
+        "lint",
+        "secret"
+      ]
+    },
+    {
+      "rule": "新增原生验证用真实认证、原业务命令和隔离标记数据库，保原设置/短交期/统计旧消费者与真实资源收尾。",
+      "source": "Full Library dx-m01-implement-v1.1.1 v2 §12 P09-01–12; M01-OPT1.3 v4; docs/engineering/m01-p09-execution.md",
+      "writes": [
+        "tests/acceptance/m01-current-production-native-browser.ts",
+        "tests/fixtures/m01-current-production-native-ui.tsx",
+        "tests/integration/m01-current-production-native-browser-postgres.test.ts",
+        "tests/unit/m01-current-production-workspace.test.ts"
+      ],
+      "reads": [
+        "tests/helpers/business-anchor-fixture.ts",
+        "apps/api/src/auth/service.ts",
+        "apps/api/src/auth/postgres-store.ts",
+        "scripts/test-resource-contract.mjs",
+        "scripts/test-resource-lifecycle.mjs"
+      ],
+      "initialization": "F通过原报工2/剩余2审批转厂和收货装箱，I通过原累计更正/QC1/装2及特殊结案。专属真实角色用原AccessService，不篡改纯角色或伪造会话；只模拟外部DingTalk和具名传输失败。",
+      "dateAndPermission": "实际CI同版Chrome/PG、2worker与有限100秒；场景逐项yield/清理保留，不包整组短超时，不因等待失败删覆盖。池满10请求仍在原回归，未放宽3秒连接边界；独立诊断现场不操作。",
+      "expectation": "当前来源5套件77全通过，含新矩阵12与完整收尾、旧设置25/短交期11/统计16/时钟13。全部过程保失败历史/真实start/end/source；新PNG仅TEST原生组件，未冒整App真人试用或性能根因证明。",
+      "oldTests": [
+        "tests/integration/m01-settings-native-browser-postgres.test.ts",
+        "tests/integration/m01-short-lead-native-browser-postgres.test.ts"
+      ],
+      "checks": [
+        "targeted-native",
+        "full-nondb",
+        "preflight",
+        "types",
+        "build",
+        "lint",
+        "secret"
+      ]
+    },
+    {
+      "rule": "新增浏览器场景纳原canonical plan与精确条件安装；时间源清单仅增量核验并保原人工注记，无额外CI治理扩包。",
+      "source": "Full Library dx-m01-implement-v1.1.1 v2 §12 P09-01–12; M01-OPT1.3 v4; docs/engineering/m01-p09-execution.md",
       "writes": [
         "scripts/test-suite-plan.mjs",
+        "scripts/ci/prepare-settings-browser.mjs",
         "scripts/ci/full-gate-risk-map.mjs",
-        "tests/unit/full-gate-risk-map.test.ts"
+        "docs/engineering/acceptance-time-sites-20261027.json",
+        "docs/engineering/m01-p09-execution.md"
       ],
       "reads": [
         "scripts/run-business-chain-gate.mjs",
-        "scripts/test-resource-contract.mjs",
-        "scripts/test-resource-lifecycle.mjs",
         "scripts/test-execution-config.mjs",
-        "scripts/acceptance/time-site-inventory.mjs",
-        "docs/engineering/acceptance-time-sites-20261027.json"
+        "scripts/acceptance/time-site-inventory.mjs"
       ],
+      "initialization": "真实base→当前差异生成28套件计划，新suite属原long正确性并触发锁定Chromium安装；原工人数/100秒/既有更大预算保留。P07未提交报告传输修复不进入本PR。",
+      "dateAndPermission": "时间增量4路径，原451条逐字保留，总455；Math.min仅路径/页码，不当期限；真实wall仅缓存/导航TTL，业务观察始终原asOf。旧失败28入口不签最终通过，最终CI仍需完整计划及原后续项。",
+      "expectation": "原preflight243、完整non-DB3420/11既有skip、类型/构建/lint/secret同当前来源退出0；实际受影响原生组合77，最终GitHub精确Head门禁另绑，不拼不同head或未测结果。",
       "oldTests": [
-        "tests/integration/time-reading-clock-postgres.test.ts",
-        "tests/integration/production-readiness-postgres.test.ts",
-        "tests/integration/series-plan-postgres.test.ts"
+        "tests/unit/full-gate-risk-map.test.ts"
       ],
-      "initialization": "保P07注册并加P08长正确性入口，中央100秒及原更大预算不降，普通/性能及原worker限制不变；旧reporting/schema/helper消费者显式映射time-reading。实际32唯一套件一次执行原三配置，不将mapped/chain/Root或准备Head结果重复计数。",
-      "dateAndPermission": "新增cache wall仅生命周期，业务观察/北京日期/可信窗口仍原时钟；5路径语义逐项核，447未变注记与P07ShortLead新增说明保留。自有新Docker库/角色/资源，精确manifest收尾；独立诊断现场不操作，未知旧schema不清。",
-      "expectation": "原preflight、全non-DB、类型/构建/lint/secret及32-suite真实结果全部具备原报告/时间/来源与清理后才收口。之前126a4738准备结果、P07用户要求合并的失败汇总状态分别保留，不写成P08最终通过。",
       "checks": [
-        "canonical",
+        "targeted-native",
         "full-nondb",
         "preflight",
         "types",
         "build",
         "lint",
-        "secret",
-        "resource-smoke"
+        "secret"
       ]
     }
   ],
   "checks": [
     {
-      "id": "full-nondb",
+      "id": "targeted-native",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --maxWorkers=2 --reporter=json --outputFile=/workspace/scratch/m01-p08-full-nondb-review1.json",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/m01-current-production-native-browser-postgres.test.ts tests/integration/m01-production-statistics-postgres.test.ts tests/integration/time-reading-clock-postgres.test.ts tests/integration/m01-settings-native-browser-postgres.test.ts tests/integration/m01-short-lead-native-browser-postgres.test.ts --maxWorkers=2 --reporter=default --reporter=json --outputFile=/workspace/scratch/m01-p09-review-targeted-managed1.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 3408,
-      "failed": 0,
-      "skipped": 11,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "e570ec57769760e6dc0c811e12ea94380a8a4544e4ce1534a6fe421ad7fe6f90"
-        }
-      ],
-      "testedHead": "d3d7245ef15ce7287c2c63b2c4919770364f6af0",
-      "sourceFingerprint": "11d5c418c7a4e61452d61b127619ae1d413346bde3bd6b6b5141e3936a4eb5b0",
-      "startedAt": "2026-11-06T08:51:41.145Z",
-      "endedAt": "2026-11-06T08:54:20.276Z",
-      "log": "/workspace/scratch/m01-p08-full-nondb-review1.log",
-      "logSha256": "9834bc4879b94f8840846836dc25ea903e8e0aa02836bc434abe1be3668880cc",
-      "context": "Fresh actual P07 squash8b1de5db assembled source, Node22.22.2/npm10.9.9, repository original command. Explicit local source fingerprint and actual start/end/head retained. Non-DB includes11 existing optional skips; preflight is original Node protocol entry. Native PG16 cases are part of canonical, not added again as independent cases. Build is the original npm run build including its original static postbuild; no deployment; final GitHub head evidence remains separate."
-    },
-    {
-      "id": "canonical",
-      "kind": "tests",
-      "command": "node scripts/run-business-chain-gate.mjs --full-gate",
-      "status": "passed",
-      "exitCode": 0,
-      "passed": 500,
+      "passed": 77,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "9e7db4d791d06c78301a92cfe0cfdd13e77310bb5b5cfab44f09826fda268428"
-        },
-        {
-          "format": "vitest-json",
-          "sha256": "1b1af42400fa12d7fdef81021e95c232e83ef5a26dd03c6d4d66186fd4003f09"
-        },
-        {
-          "format": "vitest-json",
-          "sha256": "ba60d8a33850b860c536e1387c3b68454943bd75c5e424490df7644e5220e684"
+          "sha256": "f64dedaa073da90c50f726d3b4ddceb12b06d1ee4c2c11ad257718261678f624"
         }
       ],
-      "testedHead": "d3d7245ef15ce7287c2c63b2c4919770364f6af0",
-      "sourceFingerprint": "11d5c418c7a4e61452d61b127619ae1d413346bde3bd6b6b5141e3936a4eb5b0",
-      "startedAt": "2026-11-06T08:53:16.902Z",
-      "endedAt": "2026-11-06T09:00:52.859Z",
-      "log": "/workspace/scratch/m01-p08-canonical-container-review1.log",
-      "logSha256": "3190ab40659bd1e0ff61838cf7e10940f9f19e6c3027c2e5b872d740676e085d",
-      "context": "Fresh actual P07 squash8b1de5db assembled P08 source, original --full-gate32-suite union and original ordinary/isolated/long configs, workers1/1/2. Node22.22.2/npm10.9.9, exact CI PG16-alpine digest aa6cb33cf4c19c765cefcf48d96176258800870a9a1e930ad126200f9d825139 (actual16.15), marked separate low-privilege default/clock databases and original owned resource lifecycle. PG cpuset0,1/2CPU/2GiB and Node affinity0,1; host/IO/whole CI hardware not equivalent. No browser suite is in this P08 plan, so native means original AuthService/PostgresAuthStore/auth routes/Fastify authenticated HTTP plus real PG, not a browser claim. Dedicated actual multi-role and same-valid-session revoke fixtures; only external DingTalk and named cache-insert fault are TEST adapters. No production or independent diagnostic scene used."
+      "testedHead": "98e667e50bd51c65b99a5c7095ac1ca1338d7960",
+      "sourceFingerprint": "aaa6fcbacca64c4724b80c1ac3bb20179a47952392df9cefbbffe225f66c8284",
+      "startedAt": "2026-11-06T10:54:53.201Z",
+      "endedAt": "2026-11-06T10:56:13.612Z",
+      "log": "/workspace/scratch/m01-p09-review-targeted-managed1.log",
+      "logSha256": "92b71c21c1a2eeaba9ad2b99525fa1dc6682679393a7fa53622e90f52512df58",
+      "context": "Actual P08 squashb2b2c495 assembled P09, original long Vitest config and2workers/100-second correctness. Five affected original PG suites77 tests, pinned original Playwright1.56.1 Chromium141.0.7390.37, original AuthService/PostgresAuthStore/routes and native fixture commands; only external DingTalk and named transport failures are TEST adapters. Exact CI PG16-alpine digest aa6cb33cf4c19c765cefcf48d96176258800870a9a1e930ad126200f9d825139 (actual16.15), separate marked low-privilege default/clock databases, original owned-command process-group exit and after-workers resource cleanup; Node/PG affinity0,1 and PG2CPU/2GiB. This is a targeted5-suite run, not the complete28-suite canonical plan; actual final CI remains separate; previous direct-immediate5-suite run had76 pass/1 connection-acquire failure and the standalone original16-suite diagnostic passed; this run explicitly uses the original managed cleanup context, without asserting an unproven root cause. Host/IO and whole App/human acceptance are not claimed equivalent."
+    },
+    {
+      "id": "full-nondb",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run --maxWorkers=2 --reporter=default --reporter=json --outputFile=/workspace/scratch/m01-p09-review-nondb-final1.json",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 3420,
+      "failed": 0,
+      "skipped": 11,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "4ee88800da4df51e5ce970ed656026c8e61529436019b9e208efd72e36242142"
+        }
+      ],
+      "testedHead": "98e667e50bd51c65b99a5c7095ac1ca1338d7960",
+      "sourceFingerprint": "aaa6fcbacca64c4724b80c1ac3bb20179a47952392df9cefbbffe225f66c8284",
+      "startedAt": "2026-11-06T10:49:30.360Z",
+      "endedAt": "2026-11-06T10:52:28.725Z",
+      "log": "/workspace/scratch/m01-p09-review-nondb-final1.log",
+      "logSha256": "331763ec8edea5114d80e88e1b2404a7e61253dd97477289242ec833be16ff13",
+      "context": "Actual P08 squashb2b2c495, current assembled source fingerprint before/after unchanged; Node22.22.2/npm10.9.9, original repository command and raw log plus structured test report digests. Full non-DB has11 existing optional skips; build is workspace-only without root deployment postbuild; no deployment, production or independent Acceptance diagnostics."
     },
     {
       "id": "preflight",
@@ -299,30 +255,16 @@
       "resultReports": [
         {
           "format": "node-tap",
-          "sha256": "426cbdbbb1190edfa8e4af12a52ae987907b6f872b272ea234760550a05bd5e7"
+          "sha256": "e98cde394ee27ab505af614fb542637695ef7d1e12a384401c771007f855ed69"
         }
       ],
-      "testedHead": "d3d7245ef15ce7287c2c63b2c4919770364f6af0",
-      "sourceFingerprint": "11d5c418c7a4e61452d61b127619ae1d413346bde3bd6b6b5141e3936a4eb5b0",
-      "startedAt": "2026-11-06T08:52:04.012Z",
-      "endedAt": "2026-11-06T08:52:13.880Z",
-      "log": "/workspace/scratch/m01-p08-preflight-review1.log",
-      "logSha256": "426cbdbbb1190edfa8e4af12a52ae987907b6f872b272ea234760550a05bd5e7",
-      "context": "Fresh actual P07 squash8b1de5db assembled source, Node22.22.2/npm10.9.9, repository original command. Explicit local source fingerprint and actual start/end/head retained. Non-DB includes11 existing optional skips; preflight is original Node protocol entry. Native PG16 cases are part of canonical, not added again as independent cases. Build is the original npm run build including its original static postbuild; no deployment; final GitHub head evidence remains separate."
-    },
-    {
-      "id": "lint",
-      "kind": "command",
-      "command": "npm run lint",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "d3d7245ef15ce7287c2c63b2c4919770364f6af0",
-      "sourceFingerprint": "11d5c418c7a4e61452d61b127619ae1d413346bde3bd6b6b5141e3936a4eb5b0",
-      "startedAt": "2026-11-06T08:52:05.384Z",
-      "endedAt": "2026-11-06T08:52:32.194Z",
-      "log": "/workspace/scratch/m01-p08-lint-review1.log",
-      "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763",
-      "context": "Fresh actual P07 squash8b1de5db assembled source, Node22.22.2/npm10.9.9, repository original command. Explicit local source fingerprint and actual start/end/head retained. Non-DB includes11 existing optional skips; preflight is original Node protocol entry. Native PG16 cases are part of canonical, not added again as independent cases. Build is the original npm run build including its original static postbuild; no deployment; final GitHub head evidence remains separate."
+      "testedHead": "98e667e50bd51c65b99a5c7095ac1ca1338d7960",
+      "sourceFingerprint": "aaa6fcbacca64c4724b80c1ac3bb20179a47952392df9cefbbffe225f66c8284",
+      "startedAt": "2026-11-06T10:49:30.365Z",
+      "endedAt": "2026-11-06T10:49:38.351Z",
+      "log": "/workspace/scratch/m01-p09-review-preflight-final1.log",
+      "logSha256": "e98cde394ee27ab505af614fb542637695ef7d1e12a384401c771007f855ed69",
+      "context": "Actual P08 squashb2b2c495, current assembled source fingerprint before/after unchanged; Node22.22.2/npm10.9.9, original repository command and raw log plus structured test report digests. Full non-DB has11 existing optional skips; build is workspace-only without root deployment postbuild; no deployment, production or independent Acceptance diagnostics."
     },
     {
       "id": "types",
@@ -330,27 +272,41 @@
       "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "d3d7245ef15ce7287c2c63b2c4919770364f6af0",
-      "sourceFingerprint": "11d5c418c7a4e61452d61b127619ae1d413346bde3bd6b6b5141e3936a4eb5b0",
-      "startedAt": "2026-11-06T08:51:42.522Z",
-      "endedAt": "2026-11-06T08:52:20.711Z",
-      "log": "/workspace/scratch/m01-p08-types-review1.log",
+      "testedHead": "98e667e50bd51c65b99a5c7095ac1ca1338d7960",
+      "sourceFingerprint": "aaa6fcbacca64c4724b80c1ac3bb20179a47952392df9cefbbffe225f66c8284",
+      "startedAt": "2026-11-06T10:49:38.438Z",
+      "endedAt": "2026-11-06T10:50:23.704Z",
+      "log": "/workspace/scratch/m01-p09-review-types-final1.log",
       "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e",
-      "context": "Fresh actual P07 squash8b1de5db assembled source, Node22.22.2/npm10.9.9, repository original command. Explicit local source fingerprint and actual start/end/head retained. Non-DB includes11 existing optional skips; preflight is original Node protocol entry. Native PG16 cases are part of canonical, not added again as independent cases. Build is the original npm run build including its original static postbuild; no deployment; final GitHub head evidence remains separate."
+      "context": "Actual P08 squashb2b2c495, current assembled source fingerprint before/after unchanged; Node22.22.2/npm10.9.9, original repository command and raw log plus structured test report digests. Full non-DB has11 existing optional skips; build is workspace-only without root deployment postbuild; no deployment, production or independent Acceptance diagnostics."
     },
     {
       "id": "build",
       "kind": "command",
-      "command": "npm run build",
+      "command": "npm run build --workspaces --if-present",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "d3d7245ef15ce7287c2c63b2c4919770364f6af0",
-      "sourceFingerprint": "11d5c418c7a4e61452d61b127619ae1d413346bde3bd6b6b5141e3936a4eb5b0",
-      "startedAt": "2026-11-06T08:49:46.735Z",
-      "endedAt": "2026-11-06T08:50:07.739Z",
-      "log": "/workspace/scratch/m01-p08-build-review1.log",
-      "logSha256": "3db5aedd3cc76253d95b00fc0d5101b78382e4159cf7f088f9d2af4ede0fa821",
-      "context": "Fresh actual P07 squash8b1de5db assembled source, Node22.22.2/npm10.9.9, repository original command. Explicit local source fingerprint and actual start/end/head retained. Non-DB includes11 existing optional skips; preflight is original Node protocol entry. Native PG16 cases are part of canonical, not added again as independent cases. Build is the original npm run build including its original static postbuild; no deployment; final GitHub head evidence remains separate."
+      "testedHead": "98e667e50bd51c65b99a5c7095ac1ca1338d7960",
+      "sourceFingerprint": "aaa6fcbacca64c4724b80c1ac3bb20179a47952392df9cefbbffe225f66c8284",
+      "startedAt": "2026-11-06T10:48:05.694Z",
+      "endedAt": "2026-11-06T10:48:21.387Z",
+      "log": "/workspace/scratch/m01-p09-review-build-final1.log",
+      "logSha256": "1f51aaf825fbef2a331e347a032e5f41d693cf3c8cfbee8677e43917307e9bd4",
+      "context": "Actual P08 squashb2b2c495, current assembled source fingerprint before/after unchanged; Node22.22.2/npm10.9.9, original repository command and raw log plus structured test report digests. Full non-DB has11 existing optional skips; build is workspace-only without root deployment postbuild; no deployment, production or independent Acceptance diagnostics."
+    },
+    {
+      "id": "lint",
+      "kind": "command",
+      "command": "npm run lint",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "98e667e50bd51c65b99a5c7095ac1ca1338d7960",
+      "sourceFingerprint": "aaa6fcbacca64c4724b80c1ac3bb20179a47952392df9cefbbffe225f66c8284",
+      "startedAt": "2026-11-06T10:50:23.832Z",
+      "endedAt": "2026-11-06T10:50:55.751Z",
+      "log": "/workspace/scratch/m01-p09-review-lint-final1.log",
+      "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763",
+      "context": "Actual P08 squashb2b2c495, current assembled source fingerprint before/after unchanged; Node22.22.2/npm10.9.9, original repository command and raw log plus structured test report digests. Full non-DB has11 existing optional skips; build is workspace-only without root deployment postbuild; no deployment, production or independent Acceptance diagnostics."
     },
     {
       "id": "secret",
@@ -358,69 +314,13 @@
       "command": "npm run secret:scan",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "d3d7245ef15ce7287c2c63b2c4919770364f6af0",
-      "sourceFingerprint": "11d5c418c7a4e61452d61b127619ae1d413346bde3bd6b6b5141e3936a4eb5b0",
-      "startedAt": "2026-11-06T08:54:33.874Z",
-      "endedAt": "2026-11-06T08:54:34.491Z",
-      "log": "/workspace/scratch/m01-p08-secret-review1.log",
+      "testedHead": "98e667e50bd51c65b99a5c7095ac1ca1338d7960",
+      "sourceFingerprint": "aaa6fcbacca64c4724b80c1ac3bb20179a47952392df9cefbbffe225f66c8284",
+      "startedAt": "2026-11-06T10:50:55.850Z",
+      "endedAt": "2026-11-06T10:50:56.626Z",
+      "log": "/workspace/scratch/m01-p09-review-secret-final1.log",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda",
-      "context": "Fresh actual P07 squash8b1de5db assembled source, Node22.22.2/npm10.9.9, repository original command. Explicit local source fingerprint and actual start/end/head retained. Non-DB includes11 existing optional skips; preflight is original Node protocol entry. Native PG16 cases are part of canonical, not added again as independent cases. Build is the original npm run build including its original static postbuild; no deployment; final GitHub head evidence remains separate."
-    },
-    {
-      "id": "db-seed",
-      "kind": "command",
-      "command": "bash scripts/seed-base-migrations.sh",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "d3d7245ef15ce7287c2c63b2c4919770364f6af0",
-      "sourceFingerprint": "11d5c418c7a4e61452d61b127619ae1d413346bde3bd6b6b5141e3936a4eb5b0",
-      "startedAt": "2026-11-06T08:53:13.096Z",
-      "endedAt": "2026-11-06T08:53:15.832Z",
-      "log": "/workspace/scratch/m01-p08-container-seed-review1.log",
-      "logSha256": "8d99739d96ec10401cf6e5fc19bcea07a95b8d58652443c90481e80799733ae7",
-      "context": "Fresh actual P07 squash8b1de5db assembled source, Node22.22.2/npm10.9.9, repository original command. Explicit local source fingerprint and actual start/end/head retained. Non-DB includes11 existing optional skips; preflight is original Node protocol entry. Native PG16 cases are part of canonical, not added again as independent cases. Build is the original npm run build including its original static postbuild; no deployment; final GitHub head evidence remains separate."
-    },
-    {
-      "id": "db-migrations",
-      "kind": "command",
-      "command": "npm run db:migrate:check",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "d3d7245ef15ce7287c2c63b2c4919770364f6af0",
-      "sourceFingerprint": "11d5c418c7a4e61452d61b127619ae1d413346bde3bd6b6b5141e3936a4eb5b0",
-      "startedAt": "2026-11-06T08:53:15.910Z",
-      "endedAt": "2026-11-06T08:53:16.492Z",
-      "log": "/workspace/scratch/m01-p08-container-migrations-review1.log",
-      "logSha256": "edbc059c46f61d2fd0bcbff106e5c8b5e41e8407d541460c33d6d4dbbe8c6b10",
-      "context": "Fresh actual P07 squash8b1de5db assembled source, Node22.22.2/npm10.9.9, repository original command. Explicit local source fingerprint and actual start/end/head retained. Non-DB includes11 existing optional skips; preflight is original Node protocol entry. Native PG16 cases are part of canonical, not added again as independent cases. Build is the original npm run build including its original static postbuild; no deployment; final GitHub head evidence remains separate."
-    },
-    {
-      "id": "resource-smoke",
-      "kind": "command",
-      "command": "node scripts/test-preflight.mjs --database",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "d3d7245ef15ce7287c2c63b2c4919770364f6af0",
-      "sourceFingerprint": "11d5c418c7a4e61452d61b127619ae1d413346bde3bd6b6b5141e3936a4eb5b0",
-      "startedAt": "2026-11-06T08:53:16.575Z",
-      "endedAt": "2026-11-06T08:53:16.815Z",
-      "log": "/workspace/scratch/m01-p08-container-resource-smoke-review1.log",
-      "logSha256": "73a8236a10b1ff957f75fc8260561256935442d120b9758e70ad6302991b7c4f",
-      "context": "Fresh actual P07 squash8b1de5db assembled source, Node22.22.2/npm10.9.9, repository original command. Explicit local source fingerprint and actual start/end/head retained. Non-DB includes11 existing optional skips; preflight is original Node protocol entry. Native PG16 cases are part of canonical, not added again as independent cases. Build is the original npm run build including its original static postbuild; no deployment; final GitHub head evidence remains separate."
-    },
-    {
-      "id": "pg13-maintenance",
-      "kind": "command",
-      "command": "node scripts/ci/acceptance-maintenance-drill.mjs 13",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "d3d7245ef15ce7287c2c63b2c4919770364f6af0",
-      "sourceFingerprint": "11d5c418c7a4e61452d61b127619ae1d413346bde3bd6b6b5141e3936a4eb5b0",
-      "startedAt": "2026-11-06T09:02:07.520Z",
-      "endedAt": "2026-11-06T09:02:38.883Z",
-      "log": "/workspace/scratch/m01-p08-maintenance-pg13-review1.log",
-      "logSha256": "758c45ba03bda58db0d5d66ead15684930b47cb04faeef15f17b1597f00a73af",
-      "context": "Original acceptance-maintenance-drill.mjs13 in a separately owned local Docker PG13.23 fixture, original owner/application/legacy permissions, current append-only migration/grant inventory and backup/recovery path. Actual raw output, not the parent PG16 identity, establishes the tested PG13 profile. No production or live Acceptance database touched."
+      "context": "Actual P08 squashb2b2c495, current assembled source fingerprint before/after unchanged; Node22.22.2/npm10.9.9, original repository command and raw log plus structured test report digests. Full non-DB has11 existing optional skips; build is workspace-only without root deployment postbuild; no deployment, production or independent Acceptance diagnostics."
     }
   ]
 }

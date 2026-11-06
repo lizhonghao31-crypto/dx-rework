@@ -1,7 +1,7 @@
 import {spawnSync} from 'node:child_process';
 import {pathToFileURL} from 'node:url';
 import {fullGatePostgresPlan} from '../test-suite-plan.mjs';
-const nativeBrowserSuites=new Set(['tests/integration/m01-settings-native-browser-postgres.test.ts','tests/integration/m01-short-lead-native-browser-postgres.test.ts']);
+const nativeBrowserSuites=new Set(['tests/integration/m01-settings-native-browser-postgres.test.ts','tests/integration/m01-short-lead-native-browser-postgres.test.ts','tests/integration/m01-current-production-native-browser-postgres.test.ts']);
 export const settingsBrowserRequired=environment=>fullGatePostgresPlan(environment).plan?.some(suite=>nativeBrowserSuites.has(suite.path))??false;
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  if(!settingsBrowserRequired(process.env))console.log('SETTINGS_BROWSER_NOT_APPLICABLE: exact canonical plan has no browser suite');

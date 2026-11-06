@@ -572,6 +572,7 @@ export function Shell({
     ...(currentUser&&canManageAuxiliaryCatalog(currentUser)?[{name:"共享辅料目录",description:"新增、改名、合并重复项及停用",href:"/ui/auxiliary-catalog"}]:[]),
     ...((digital || patternRoomNavigation.length) ? [{ name: "板房管理台", description: "岗位办理、独立打板与杂事", href: digital ? "/ui/digital-pattern-room" : "/ui/digital-pattern-room?section=legacy", activeKey: "digital-pattern" }] : []),
     ...(digital ? [{ name: "板房数据沙盘", description: "同源分析与改进记录", href: "/ui/digital-analysis" }] : []),
+    ...(currentUser&&digital&&(isRoot||hasCapability('report:view'))?[{name:'当前生产数量',description:'按完整授权范围核对数量、工厂与原记录',href:'/ui/digital-analysis?view=production'}]:[]),
     ...(currentUser&&canAccessPatternRoomOrders(currentUser)?[{name:"打板/杂事历史看板",description:"旧打板、杂事与新开发已完成执行轮",href:"/ui/pattern-room/history",activeKey:"pattern-room-history"}]:[]),
     ...patternRoomNavigation.filter(entry => entry.href === "/ui/pattern-room/prices"),
   ];
