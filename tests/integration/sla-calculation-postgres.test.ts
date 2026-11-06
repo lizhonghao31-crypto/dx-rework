@@ -19,7 +19,7 @@ import type {SlaCalculationConditions,SlaCalculationPreviewInput} from '../../pa
 import {addCalculationMinutes} from '../../packages/domain/src/sla-calculation.js';
 import type {TrustedActorContext} from '../../apps/api/src/tools/repositories.js';
 
-const url=process.env.TEST_DATABASE_URL;
+const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (url?describe:describe.skip)('M01 calculation native read-only service and original HTTP contracts',()=>{
  let f:Awaited<ReturnType<typeof businessAnchorFixture>>,service:SlaCalculationService,identity:DigitalProductionIdentityService,forms:DigitalDevelopmentService,scene:string,sourceA:string,sourceB:string,orderId:string,pmc:TrustedActorContext,assignmentId:string;
  let createSource:(craft?:'无'|'印花'|'绣花'|'印绣花')=>Promise<string>;

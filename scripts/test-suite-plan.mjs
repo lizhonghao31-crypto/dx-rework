@@ -38,7 +38,7 @@ export const POSTGRES_CHAIN_TESTS=Object.freeze([
   "tests/integration/acceptance-role-session-postgres.test.ts",
   "tests/integration/acceptance-worker-people-postgres.test.ts"
 ]);
-export const LONG_CORRECTNESS_TESTS=Object.freeze([...POSTGRES_CHAIN_TESTS,'tests/integration/rework-postgres.test.ts','tests/integration/development-technical-postgres.test.ts']);
+export const LONG_CORRECTNESS_TESTS=Object.freeze([...POSTGRES_CHAIN_TESTS,'tests/integration/rework-postgres.test.ts','tests/integration/development-technical-postgres.test.ts','tests/integration/sla-calculation-postgres.test.ts']);
 export const IMMEDIATE_DELETE_TESTS=Object.freeze(['tests/integration/rework-postgres.test.ts']);
 // The full business fixture is SQL-heavy and must not contend with another full migration/chain.
 export const ISOLATED_CORRECTNESS_TESTS=Object.freeze([...IMMEDIATE_DELETE_TESTS,'tests/integration/full-business-chain-postgres.test.ts']);

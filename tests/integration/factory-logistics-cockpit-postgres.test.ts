@@ -41,6 +41,14 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const productionId=(await f.db.query('SELECT production_order_id FROM sourcing_production_orders WHERE sourcing_case_id=$1',[r.caseId])).rows[0].production_order_id as string;
   return {...r,productionId,cuts,day:beijingCalendarDate(businessNow())};
  });
+ let sundayScene:string,sundayReady:Awaited<ReturnType<typeof prepare>>;
+ beforeAll(async()=>{sundayScene=await f.scene('2026-12-06T05:00:00.000Z');sundayReady=await prepare(work=>f.runtime.run(sundayScene,f.root,work));},120000);
+ it('does not treat earlier native factory QC as production completion',async()=>f.runtime.run(sundayScene,f.root,async()=>{
+  const factory=new FactoryFlowService(f.db),dispatched=await factory.read(f.root,sundayReady.id),lineId=dispatched.batchTotals![0]!.lineId;
+  await factory.productionQc(f.root,sundayReady.id,{expectedRevision:dispatched.revision,factoryDecisionId:null,occurredAt:businessNow().toISOString(),checks:[{lineId,result:'合格',problem:''}],note:'TEST QC before native production completion'},randomUUID());
+  const before=await new SlaCalculationService(f.db).preview(f.root,{selection:{mode:'instance',kind:'order',id:sundayReady.id,range:'delivery'}});
+  expect(before.context.graph.anchors[`${lineId}/factory_production_finished`]).toBeUndefined();expect(before.current.rows.find(n=>n.id===`${lineId}/factory_finished`)!.end.at).toBeNull();
+ }));
  const ship=async(r:{productionId:string;day:string},factoryDecisionId:string|null=null,quantities=[10])=>{
   const reports=new ProductionReportingService(f.db);
   for(const [index,quantity] of quantities.entries())if(quantity)await reports.report(f.root,r.productionId,{position:index+1,factoryDecisionId,businessDate:r.day,quantity},randomUUID());
@@ -66,30 +74,16 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const rows=[];for(const table of ['digital_sla_order_snapshots','digital_sla_plans','digital_sla_node_facts','digital_production_task_events','digital_production_commands','digital_production_tasks','digital_production_deadline_revisions'])rows.push((await f.db.query(`SELECT coalesce(jsonb_agg(to_jsonb(r) ORDER BY to_jsonb(r)::text),'[]') AS snapshot FROM ${table} r`)).rows[0].snapshot);return rows;
  };
  it('preserves the Sunday shipped date and frozen 48-hour range without an actual midnight or receipt deadline',async()=>{
-  const scene=await f.scene('2026-12-06T05:00:00.000Z');
-  const ready=await f.runtime.run(scene,f.root,async()=>{
-   const r=await f.bulkReady('无'),cut=(await f.db.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[r.caseId])).rows[0];
-   const cutter={...f.people['cutting-worker']!,authorizationCapability:'cutting:records:create',authorizationCapabilities:['cutting:records:create']};
-   await r.cutting.record(cutter,cut.cutting_order_id,{pieceCount:1,actualCutCount:10,attachmentIds:[await f.image(cutter)]},randomUUID());
-   const factory=new FactoryFlowService(f.db),state=await factory.read(f.root,r.id);
-   await factory.dispatch(f.people.warehouse!,r.id,{expectedRevision:state.revision,occurredAt:businessNow().toISOString(),supplierId:f.supplierId,note:'TEST date-only logistics'},randomUUID());
-   const productionId=(await f.db.query('SELECT production_order_id FROM sourcing_production_orders WHERE sourcing_case_id=$1',[r.caseId])).rows[0].production_order_id as string;
+  const ready=sundayReady,lineId=(await f.db.query('SELECT line_id FROM digital_production_po_lines WHERE production_order_id=$1',[ready.id])).rows[0].line_id as string;
+  let completedAnchor:unknown;
+  await f.runtime.run(sundayScene,f.root,async()=>{
    const reports=new ProductionReportingService(f.db),day=beijingCalendarDate(businessNow());
-   const dispatched=await factory.read(f.root,r.id),lineId=dispatched.batchTotals![0]!.lineId;
-   await factory.productionQc(f.root,r.id,{expectedRevision:dispatched.revision,factoryDecisionId:null,occurredAt:businessNow().toISOString(),checks:[{lineId,result:'合格',problem:''}],note:'TEST QC before native production completion'},randomUUID());
-   const selection={mode:'instance' as const,kind:'order' as const,id:r.id,range:'delivery' as const};
-   const beforeCompletion=await new SlaCalculationService(f.db).preview(f.root,{selection});
-   expect(beforeCompletion.context.graph.anchors[`${lineId}/factory_production_finished`]).toBeUndefined();
-   expect(beforeCompletion.current.rows.find(n=>n.id===`${lineId}/factory_finished`)!.end.at).toBeNull();
-   await reports.report(f.root,productionId,{position:1,businessDate:day,quantity:10},randomUUID());
-   await reports.execute(f.root,productionId,'complete',{businessDate:day,confirmed:true},randomUUID());
-   const completed=await new SlaCalculationService(f.db).preview(f.root,{selection});
-   expect(completed.context.graph.anchors[`${lineId}/factory_production_finished`]).toMatchObject({precision:'date',value:'2026-12-06'});
-   expect(completed.current.rows.find(n=>n.id===`${lineId}/factory_finished`)!.end.at).toBeNull();
-   await reports.execute(f.root,productionId,'ship',{businessDate:day,confirmed:true},randomUUID());
-   const shipped=await new SlaCalculationService(f.db).preview(f.root,{selection});
-   expect(shipped.context.graph.anchors[`${lineId}/factory_production_finished`]).toEqual(completed.context.graph.anchors[`${lineId}/factory_production_finished`]);
-   return {...r,productionId};
+   await reports.report(f.root,ready.productionId,{position:1,businessDate:day,quantity:10},randomUUID());
+   await reports.execute(f.root,ready.productionId,'complete',{businessDate:day,confirmed:true},randomUUID());
+   const completed=await new SlaCalculationService(f.db).preview(f.root,{selection:{mode:'instance',kind:'order',id:ready.id,range:'delivery'}});
+   completedAnchor=completed.context.graph.anchors[`${lineId}/factory_production_finished`];
+   expect(completedAnchor).toMatchObject({precision:'date',value:'2026-12-06'});expect(completed.current.rows.find(n=>n.id===`${lineId}/factory_finished`)!.end.at).toBeNull();
+   await reports.execute(f.root,ready.productionId,'ship',{businessDate:day,confirmed:true},randomUUID());
   });
   const factory=await new FactoryFlowService(f.db).read(f.root,ready.id),expected=factory.returnLogistics![0]!;
   expect(expected).toMatchObject({shippedOn:'2026-12-06',dispatchPrecision:'date',actualDispatchedAt:null,estimatedMinutes:2880,arrivalRange:{fromInclusive:'2026-12-07T16:00:00.000Z',toExclusive:'2026-12-08T16:00:00.000Z'}});
@@ -99,7 +93,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect(detail.supervision!.nodes.find(n=>n.id===id)).toMatchObject({logisticsWindows:[expected]});
   expect(list.items.find(o=>o.orderId===ready.id)!.supervision!.nodes.find(n=>n.id===id)).toMatchObject({logisticsWindows:[expected]});
   expect(node.status).not.toMatch(/overdue|completed_on_time|completed_late/);
-  const calculation=await new SlaCalculationService(f.db).preview(f.root,{selection:{mode:'instance',kind:'order',id:ready.id,range:'delivery'}}),estimate=calculation.current.rows.find(n=>n.id.endsWith('/native-logistics:0'))!;expect(estimate.estimateRange).toMatchObject({...expected.arrivalRange!,shippedOn:expected.shippedOn,actualDispatchedAt:null});expect(estimate.start.at).toBeNull();expect(estimate.end.at).toBeNull();expect(calculation.current.overall.spanMs).toBeNull();
+  const calculation=await new SlaCalculationService(f.db).preview(f.root,{selection:{mode:'instance',kind:'order',id:ready.id,range:'delivery'}}),estimate=calculation.current.rows.find(n=>n.id.endsWith('/native-logistics:0'))!;expect(estimate.estimateRange).toMatchObject({...expected.arrivalRange!,shippedOn:expected.shippedOn,actualDispatchedAt:null});expect(estimate.start.at).toBeNull();expect(estimate.end.at).toBeNull();expect(calculation.current.overall.spanMs).toBeNull();expect(calculation.context.graph.anchors[`${lineId}/factory_production_finished`]).toEqual(completedAnchor);
  });
  for(const mode of ['past','current','future','ordinary'] as const)it(`${mode}: native ranges match factory, list and detail; exact facts and read-only state do not change`,async()=>{
   const at=new Date(Date.now()+(mode==='past'?-7:mode==='future'?7:0)*86400000).toISOString(),ctx=await context(mode==='ordinary'?null:at),r=await prepare(ctx.run);

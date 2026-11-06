@@ -39,17 +39,17 @@
 
 ## 本地冻结候选实际结果
 
-本轮最终源码指纹 `934b62a310be6f0edced80c01a46932487a81b66fd5f269be30dec97d82a2d41`。实际工具链 Node 22.22.2 / npm 10.9.9；PG 16.14，低权限标记隔离库 `dx_m01_acceptance_test_dc924aaea2`、OID 694046。每个 PG 组合串行、单 worker；原技术/产前长套件沿 canonical `vitest.business-chain.config.ts`，普通 PG 沿原 `vitest.config.ts`。非 DB 单测单 worker，原 preflight 两 worker；静态工作区命令串行，与一个 PG 组合并行，未更改原时间预算。
+本轮最终源码指纹 `17e0ad67253620d4eb4c8ff8295b750d90dbeb3cb792d2384ee323fd7c80da09`。实际工具链 Node 22.22.2 / npm 10.9.9；PG 16.14，低权限标记隔离库 `dx_m01_acceptance_test_dc924aaea2`、OID 694046。每个 PG 组合串行、单 worker；原技术/产前长套件沿 canonical `vitest.business-chain.config.ts`，普通 PG 沿原 `vitest.config.ts`。非 DB 单测单 worker，原 preflight 两 worker；静态工作区命令串行，与一个 PG 组合并行，未更改原时间预算。
 
 | 检查 | 实际命令及结果 |
 |---|---|
-| 领域/原消费者单元 | `vitest run tests/unit/sla-calculation.test.ts tests/unit/factory-production-facts.test.ts tests/unit/digital-sla-plan.test.ts tests/unit/development-cycle.test.ts tests/unit/digital-sla-configuration.test.ts tests/unit/development-material-readiness.test.ts tests/unit/production-readiness-contract.test.ts tests/unit/development-technical-contract.test.ts --maxWorkers=1`：8 文件，132 通过，0 失败，0 跳过 |
-| 普通真实 PG | `vitest run tests/integration/sla-calculation-postgres.test.ts tests/integration/digital-sla-configuration-postgres.test.ts tests/integration/digital-sla-plan-postgres.test.ts tests/integration/development-sla-enrollment-postgres.test.ts tests/integration/factory-logistics-cockpit-postgres.test.ts --maxWorkers=1`：5 文件，64 通过，0 失败，0 跳过 |
-| 原生技术/产前 | `vitest run tests/integration/development-technical-postgres.test.ts tests/integration/production-readiness-postgres.test.ts --config vitest.business-chain.config.ts --maxWorkers=1`：2 文件，42 通过，0 失败，0 跳过 |
+| 领域/原消费者单元 | `vitest run tests/unit/sla-calculation.test.ts tests/unit/factory-production-facts.test.ts tests/unit/impact-shadow-graph.test.ts tests/unit/digital-sla-plan.test.ts tests/unit/development-cycle.test.ts tests/unit/digital-sla-configuration.test.ts tests/unit/development-material-readiness.test.ts tests/unit/production-readiness-contract.test.ts tests/unit/development-technical-contract.test.ts --maxWorkers=1`：9 文件，146 通过，0 失败，0 跳过 |
+| 普通真实 PG | `vitest run tests/integration/digital-sla-configuration-postgres.test.ts tests/integration/digital-sla-plan-postgres.test.ts tests/integration/development-sla-enrollment-postgres.test.ts tests/integration/factory-logistics-cockpit-postgres.test.ts --maxWorkers=1`：4 文件，44 通过，0 失败，0 跳过 |
+| 原生技术/产前 | `vitest run tests/integration/sla-calculation-postgres.test.ts tests/integration/development-technical-postgres.test.ts tests/integration/production-readiness-postgres.test.ts --config vitest.business-chain.config.ts --maxWorkers=1`：3 文件，63 通过，0 失败，0 跳过 |
 | 原预检 | `npm run test:preflight`：240 通过，0 失败，0 跳过；原静态迁移检查通过 |
 | 工作区 | `npm run lint`、`npm run typecheck`、`npm run build --workspaces --if-present`、`npm run secret:scan` 均实际 exit 0；未调用根 postbuild 的业务/部署入口 |
 
-每条提交内 construction 记录绑定此次 source、命令、起止时间、原日志 SHA256 及本次 Vitest JSON/TAP 摘要。原始结果在任务私有目录 `m01-p05-*-final6.*`；PG 身份及完成后资源核对见私有 `m01-p05-db-postcheck.json`，无残留测试 schema、无其它连接。旧 final2/final3/final4/final5 及早期失败日志保留为各自版本证据，不替代当前 final6。
+每条提交内 construction 记录绑定此次 source、命令、起止时间、原日志 SHA256 及本次 Vitest JSON/TAP 摘要。原始结果在任务私有目录 `m01-p05-*-final7.*`；PG 身份及完成后资源核对见私有 `m01-p05-db-postcheck.json`，无残留测试 schema、无其它连接。旧 final2/final3/final4/final5/final6 及早期失败日志保留为各自版本证据，不替代当前 final7。
 
 收口补验已覆盖具体字段定位、原 HTTP 合法发布、相同幂等 key 的准确重试，以及旧母单冻结值不变。读取与试算本身仍由数据库 read-only 事务约束。原候选 74f6bbf 的 light 已通过；官方 Codex Review 在该 SHA 完成并提出三条 P2。以下集中修复已完成本地定向验证，最终候选仍须对应 light、实际线程闭合及最终 Full；这些待执行阶段不签通过，也不签 P06 的完整页面体验或现场业务验收。
 
@@ -63,4 +63,15 @@
 - [4487619598](https://github.com/lizhonghao31-crypto/dx-rework/pull/906#discussion_r4487619598)：按当前已发布制单版与采用记录 `retainedInstructionVersion` 判断保留历史；原生历史采用反例继续列 4320 分钟旧制单和原完成时刻，不生成两新窗，原快照与窗口表不变。
 - 执行者补验：全局合法的新草稿父窗口可能不兼容旧实例冻结的内含目标。共享试算返回父参数具名 `SlaCalculationInputError`，只读接口只把该草稿输入错误转为400；原拓扑与服务器错误不被吞掉。真实HTTP反例先合法发布两个60分钟内含目标并创建原生来源，再合法发布当前30分钟目标；90分钟草稿对旧来源返回具体字段400，而同一新单标准仍可沿原预览/发布合法发布，旧来源冻结不改。没有新增全局发布门槛。
 
-补验夹具第一次在虚拟时钟内发布全局标准被原守卫正确拒绝；第二次使用固定旧版本的场景创建来源未形成所需反例。最终改为在该隔离库的普通原生业务上下文创建来源，真实冻结刚发布的标准，未修改时钟守卫或手改冻结事实。私有早期失败与定点报告保留；最终 final6 完整组合全部通过，不把单用例筛选产生的跳过计入最终覆盖。
+补验夹具第一次在虚拟时钟内发布全局标准被原守卫正确拒绝；第二次使用固定旧版本的场景创建来源未形成所需反例。最终改为在该隔离库的普通原生业务上下文创建来源，真实冻结刚发布的标准，未修改时钟守卫或手改冻结事实。私有早期失败与定点报告保留；最终 final7 完整组合全部通过，不把单用例筛选产生的跳过计入最终覆盖。
+
+
+## 最终 Full 首次失败与实际修复
+
+`35502019d14f6548a5ad847f298ec06b8840395e` 的 Full `42138904492` attempt1 未通过。完整日志保存在私有 `m01-p05-full-attempt1-{non-db,postgres}.log`；不取消、删除或重标该不可变失败。非DB共有3363通过、1失败、11跳过；原生PG组存在初始化失败和1个用例超时，21项因初始化未执行，不能算覆盖。
+
+1. 新 `sla-calculation-postgres` 漏沿原 `ACCEPTANCE_CLOCK_TEST_DATABASE_URL` 优先选择，CI选到普通 `dx_rework_ci` 被原 seeder 名称守卫拒绝。本地单库测试没有暴露该差异。修复仅沿原生同类套件读取顺序，未改 seeder、名称、标记、权限或清理守卫；并在 canonical `LONG_CORRECTNESS_TESTS` 将本新增全当前schema原生链分类到既有正确性配置，未改全局worker/timeout。最终技术组使用真实任务隔离时钟库，同时把普通 `TEST_DATABASE_URL` 指向本地不可连接的port1诱饵；63项全部通过，证明没有偷偷落回普通库。
+2. 工厂 Sunday 旧单例在加入先质检、三次全上下文读取后于CI5000ms超时。把原创建／裁片／发厂准备移入专属原生初始化，拆成“质检不能代替生产完成”与“Sunday原日期／物流范围”两个具名断言步骤；去除多余的一次全上下文读取，原单例预算和业务断言保留。最终12项工厂回归通过，原创建、report/complete/ship、装箱／物流读取消费者未放宽。
+3. 新共享包导出使原影子选测的固定 `packages/contracts/package.json`／`packages/domain/package.json` 指纹漂移，生产协议正确退回全量；旧真实catalog测试却仍硬签candidate。测试现在保留18项声明、所有必需消费者边，并在固定来源漂移时明确断言full fallback、全执行计划、空排除、未批准选测和未改实际执行。无漂移时的candidate／删边／缺PG覆盖断言保留；原影子策略、固定摘要及批准binding均未重写。14项真实／合成图测试和原preflight均通过。
+
+以上集中修复后 final7 的146单元、44普通PG、63技术／产前、240预检全部0失败0跳过，lint/types/build/secret均exit0。最终PG身份OID694046、低权限、原标记及无残留schema／连接重新核实。实际远端Head的新light、最终Full及合并仍须另核；此前35的失败不冒作通过。P06并行准备未改变本PR候选或施工授权边界。
