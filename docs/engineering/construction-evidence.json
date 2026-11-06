@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "49b395000a8b8361a624be1ee103b191eb1e5d67",
-  "sourceFingerprint": "c0f78f43c51f750f797a4457826a4e11bee57361330da035d040ae2b608d438f",
+  "sourceFingerprint": "fb46fa5ed45097a37fbb7f21ba8002e407dca36a06c485bfa5d6041103677b58",
   "risk": "full",
   "rules": [
     {
@@ -66,7 +66,7 @@
       ],
       "initialization": "分析规则明确标v2；旧已存原事实/版本不回写，仍经同一source重算并显示两个cutoffAt，原from/to保留。未知等待/精度不填0。",
       "dateAndPermission": "cutoff按实际已过毫秒；瞬时含/日期独占截止保留，截止后才生效版本不改前队列。完成发生晚于真实asOf仍异常；历史cutoff之后的完成不能倒填之前按期，未完成保留分母。",
-      "expectation": "单位验证同一时刻+08/Z、半日基期后续事件排除、日期精度未知、晚生效/未来截止不移分母；原生June10T00北京时间对May同长截止分别Jun9/May9T16Z，原队列1/0及各自UI下钻正确，原补录与跨月边界保留。",
+      "expectation": "单位验证同一时刻+08/Z、半日基期后续事件排除、日期精度未知、晚生效/未来截止不移分母；正式Review追加零跨度两期起点、各自有效截止经过天数（午夜/半日/短月）、短月独占结束显示及同版导出反例；原生June10T00北京时间对May同长截止分别Jun9/May9T16Z，原队列1/0及各自UI下钻正确，原补录与跨月边界保留。",
       "checks": [
         "preflight",
         "unit",
@@ -129,15 +129,15 @@
       "resultReports": [
         {
           "format": "node-tap",
-          "sha256": "4780963b321deb4545ec141939f98fb39201f96ecfc942f69853f8fb22406a65"
+          "sha256": "7b3e3d33fd2ce3215af2a9c6b19b7835c3e2f4996cd4adea8c4504ebb5d10566"
         }
       ],
-      "testedHead": "49b395000a8b8361a624be1ee103b191eb1e5d67",
-      "sourceFingerprint": "c0f78f43c51f750f797a4457826a4e11bee57361330da035d040ae2b608d438f",
-      "startedAt": "2026-11-06T22:26:25.007Z",
-      "endedAt": "2026-11-06T22:26:30.907Z",
+      "testedHead": "978d6f9b290311f379f06c2b9b26e77551d24b1c",
+      "sourceFingerprint": "fb46fa5ed45097a37fbb7f21ba8002e407dca36a06c485bfa5d6041103677b58",
+      "startedAt": "2026-11-06T22:42:55.540Z",
+      "endedAt": "2026-11-06T22:43:01.416Z",
       "log": "/workspace/scratch/m01-r2-p05-preflight.log",
-      "logSha256": "4780963b321deb4545ec141939f98fb39201f96ecfc942f69853f8fb22406a65",
+      "logSha256": "7b3e3d33fd2ce3215af2a9c6b19b7835c3e2f4996cd4adea8c4504ebb5d10566",
       "context": "Node22.22.2/npm10.9.9; local Node affinity2,3; actual fresh isolated marked PG16.15 low-privilege dx_rework_test, PG cpuset0,1 CPU2/memory2GiB; two selected PG calculation/native-browser suites with canonical business-chain config worker2 and existing100s correctness/hook budgets. This is bounded local correctness proof, not CI hardware or onsite equivalence. Retained sources reproject through original live permission checks; real AuthService signed Root/PMC and same-valid-session revocation. Native dates use guarded original business clock and original PO request/approval/assignment/completion commands, not rewritten business history. Local native TEST facts and elapsed-time analyses do not certify onsite coverage or personal responsibility."
     },
     {
@@ -146,21 +146,21 @@
       "command": "node node_modules/vitest/vitest.mjs run tests/unit/m01-production-collaboration.test.ts tests/unit/m01-production-collaboration-panel.test.ts tests/unit/m01-collaboration-workload.test.ts tests/unit/m01-production-period.test.ts tests/unit/m01-production-period-panel.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-r2-p05-unit.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 34,
+      "passed": 37,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "11c161d415d13e96c53b9fa52cd89e9fc222efaa509899c1e80be9822bc15a8a"
+          "sha256": "1576ec6fab0a180cb9a878a2f82ca9e351c42142bd2adcfa006f5f8a524163c9"
         }
       ],
-      "testedHead": "49b395000a8b8361a624be1ee103b191eb1e5d67",
-      "sourceFingerprint": "c0f78f43c51f750f797a4457826a4e11bee57361330da035d040ae2b608d438f",
-      "startedAt": "2026-11-06T22:27:20.600Z",
-      "endedAt": "2026-11-06T22:27:23.639Z",
+      "testedHead": "978d6f9b290311f379f06c2b9b26e77551d24b1c",
+      "sourceFingerprint": "fb46fa5ed45097a37fbb7f21ba8002e407dca36a06c485bfa5d6041103677b58",
+      "startedAt": "2026-11-06T22:43:51.161Z",
+      "endedAt": "2026-11-06T22:43:54.221Z",
       "log": "/workspace/scratch/m01-r2-p05-unit.log",
-      "logSha256": "fa204a92220f38361d9ff2c2f1391bbef8743c8bf6e792e61f9243489978fb6d",
+      "logSha256": "06f3b1cd4ca0a6dd2c1a6e469126971cef25b9ace49b756e92e3234dece10c01",
       "context": "Node22.22.2/npm10.9.9; local Node affinity2,3; actual fresh isolated marked PG16.15 low-privilege dx_rework_test, PG cpuset0,1 CPU2/memory2GiB; two selected PG calculation/native-browser suites with canonical business-chain config worker2 and existing100s correctness/hook budgets. This is bounded local correctness proof, not CI hardware or onsite equivalence. Retained sources reproject through original live permission checks; real AuthService signed Root/PMC and same-valid-session revocation. Native dates use guarded original business clock and original PO request/approval/assignment/completion commands, not rewritten business history. Local native TEST facts and elapsed-time analyses do not certify onsite coverage or personal responsibility."
     },
     {
@@ -175,15 +175,15 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "dde83bfb3865fc3dd89fc6583964705bf4404bc357956ffd545c2042da1cfe53"
+          "sha256": "1a19d910163ec01cc8694ad9a8dba495904c30e3af5711e46a7c75f203a591bb"
         }
       ],
-      "testedHead": "49b395000a8b8361a624be1ee103b191eb1e5d67",
-      "sourceFingerprint": "c0f78f43c51f750f797a4457826a4e11bee57361330da035d040ae2b608d438f",
-      "startedAt": "2026-11-06T22:27:23.676Z",
-      "endedAt": "2026-11-06T22:28:06.122Z",
+      "testedHead": "978d6f9b290311f379f06c2b9b26e77551d24b1c",
+      "sourceFingerprint": "fb46fa5ed45097a37fbb7f21ba8002e407dca36a06c485bfa5d6041103677b58",
+      "startedAt": "2026-11-06T22:43:54.261Z",
+      "endedAt": "2026-11-06T22:44:36.471Z",
       "log": "/workspace/scratch/m01-r2-p05-pgcurrent.log",
-      "logSha256": "96f5fdef671a42e25f5ab2111830052aba6a50f8213ed157b0c1549b22cbad58",
+      "logSha256": "917787a3de404ebe1357aba6b254a575ec6510d24841df125b4b95e9c1b5b20e",
       "context": "Node22.22.2/npm10.9.9; local Node affinity2,3; actual fresh isolated marked PG16.15 low-privilege dx_rework_test, PG cpuset0,1 CPU2/memory2GiB; two selected PG calculation/native-browser suites with canonical business-chain config worker2 and existing100s correctness/hook budgets. This is bounded local correctness proof, not CI hardware or onsite equivalence. Retained sources reproject through original live permission checks; real AuthService signed Root/PMC and same-valid-session revocation. Native dates use guarded original business clock and original PO request/approval/assignment/completion commands, not rewritten business history. Local native TEST facts and elapsed-time analyses do not certify onsite coverage or personal responsibility."
     },
     {
@@ -192,10 +192,10 @@
       "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "49b395000a8b8361a624be1ee103b191eb1e5d67",
-      "sourceFingerprint": "c0f78f43c51f750f797a4457826a4e11bee57361330da035d040ae2b608d438f",
-      "startedAt": "2026-11-06T22:26:30.944Z",
-      "endedAt": "2026-11-06T22:27:02.003Z",
+      "testedHead": "978d6f9b290311f379f06c2b9b26e77551d24b1c",
+      "sourceFingerprint": "fb46fa5ed45097a37fbb7f21ba8002e407dca36a06c485bfa5d6041103677b58",
+      "startedAt": "2026-11-06T22:43:01.455Z",
+      "endedAt": "2026-11-06T22:43:32.907Z",
       "log": "/workspace/scratch/m01-r2-p05-types.log",
       "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e",
       "context": "Node22.22.2/npm10.9.9; local Node affinity2,3; actual fresh isolated marked PG16.15 low-privilege dx_rework_test, PG cpuset0,1 CPU2/memory2GiB; two selected PG calculation/native-browser suites with canonical business-chain config worker2 and existing100s correctness/hook budgets. This is bounded local correctness proof, not CI hardware or onsite equivalence. Retained sources reproject through original live permission checks; real AuthService signed Root/PMC and same-valid-session revocation. Native dates use guarded original business clock and original PO request/approval/assignment/completion commands, not rewritten business history. Local native TEST facts and elapsed-time analyses do not certify onsite coverage or personal responsibility."
@@ -206,12 +206,12 @@
       "command": "npm run build --workspaces --if-present",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "49b395000a8b8361a624be1ee103b191eb1e5d67",
-      "sourceFingerprint": "c0f78f43c51f750f797a4457826a4e11bee57361330da035d040ae2b608d438f",
-      "startedAt": "2026-11-06T22:27:02.044Z",
-      "endedAt": "2026-11-06T22:27:20.557Z",
+      "testedHead": "978d6f9b290311f379f06c2b9b26e77551d24b1c",
+      "sourceFingerprint": "fb46fa5ed45097a37fbb7f21ba8002e407dca36a06c485bfa5d6041103677b58",
+      "startedAt": "2026-11-06T22:43:32.950Z",
+      "endedAt": "2026-11-06T22:43:51.120Z",
       "log": "/workspace/scratch/m01-r2-p05-build.log",
-      "logSha256": "8d720c31c19e2bcada1a61e055095ebdd02fa41b4083a61bbab38b0eae28e5d1",
+      "logSha256": "33d823bf86ea14caa8a8360572d9552ccf4ca96643973e7f300bf4c48421f63a",
       "context": "Node22.22.2/npm10.9.9; local Node affinity2,3; actual fresh isolated marked PG16.15 low-privilege dx_rework_test, PG cpuset0,1 CPU2/memory2GiB; two selected PG calculation/native-browser suites with canonical business-chain config worker2 and existing100s correctness/hook budgets. This is bounded local correctness proof, not CI hardware or onsite equivalence. Retained sources reproject through original live permission checks; real AuthService signed Root/PMC and same-valid-session revocation. Native dates use guarded original business clock and original PO request/approval/assignment/completion commands, not rewritten business history. Local native TEST facts and elapsed-time analyses do not certify onsite coverage or personal responsibility."
     },
     {
@@ -220,10 +220,10 @@
       "command": "npm run lint",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "49b395000a8b8361a624be1ee103b191eb1e5d67",
-      "sourceFingerprint": "c0f78f43c51f750f797a4457826a4e11bee57361330da035d040ae2b608d438f",
-      "startedAt": "2026-11-06T22:26:03.761Z",
-      "endedAt": "2026-11-06T22:26:24.960Z",
+      "testedHead": "978d6f9b290311f379f06c2b9b26e77551d24b1c",
+      "sourceFingerprint": "fb46fa5ed45097a37fbb7f21ba8002e407dca36a06c485bfa5d6041103677b58",
+      "startedAt": "2026-11-06T22:42:34.433Z",
+      "endedAt": "2026-11-06T22:42:55.482Z",
       "log": "/workspace/scratch/m01-r2-p05-lint.log",
       "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763",
       "context": "Node22.22.2/npm10.9.9; local Node affinity2,3; actual fresh isolated marked PG16.15 low-privilege dx_rework_test, PG cpuset0,1 CPU2/memory2GiB; two selected PG calculation/native-browser suites with canonical business-chain config worker2 and existing100s correctness/hook budgets. This is bounded local correctness proof, not CI hardware or onsite equivalence. Retained sources reproject through original live permission checks; real AuthService signed Root/PMC and same-valid-session revocation. Native dates use guarded original business clock and original PO request/approval/assignment/completion commands, not rewritten business history. Local native TEST facts and elapsed-time analyses do not certify onsite coverage or personal responsibility."
@@ -234,10 +234,10 @@
       "command": "npm run secret:scan",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "49b395000a8b8361a624be1ee103b191eb1e5d67",
-      "sourceFingerprint": "c0f78f43c51f750f797a4457826a4e11bee57361330da035d040ae2b608d438f",
-      "startedAt": "2026-11-06T22:28:06.166Z",
-      "endedAt": "2026-11-06T22:28:06.751Z",
+      "testedHead": "978d6f9b290311f379f06c2b9b26e77551d24b1c",
+      "sourceFingerprint": "fb46fa5ed45097a37fbb7f21ba8002e407dca36a06c485bfa5d6041103677b58",
+      "startedAt": "2026-11-06T22:44:36.514Z",
+      "endedAt": "2026-11-06T22:44:37.057Z",
       "log": "/workspace/scratch/m01-r2-p05-secret.log",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda",
       "context": "Node22.22.2/npm10.9.9; local Node affinity2,3; actual fresh isolated marked PG16.15 low-privilege dx_rework_test, PG cpuset0,1 CPU2/memory2GiB; two selected PG calculation/native-browser suites with canonical business-chain config worker2 and existing100s correctness/hook budgets. This is bounded local correctness proof, not CI hardware or onsite equivalence. Retained sources reproject through original live permission checks; real AuthService signed Root/PMC and same-valid-session revocation. Native dates use guarded original business clock and original PO request/approval/assignment/completion commands, not rewritten business history. Local native TEST facts and elapsed-time analyses do not certify onsite coverage or personal responsibility."

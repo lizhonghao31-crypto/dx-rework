@@ -68,8 +68,10 @@ export function productionDueQueue(promises:ProductionPromiseVersion[],completio
 /** Comparison metadata never turns an incomplete/changed-rule series into a
  * performance conclusion. Rates are returned as percentage-point changes. */
 export function productionPeriodComparison(current:ProductionPeriod,baseline:ProductionPeriod,asOf:string,currentValue:number|null,baselineValue:number|null,options:{rate?:boolean;currentRule:string;baselineRule:string}):ProductionPeriodComparison{
- const c=range(current),b=range(baseline),now=instant(asOf),today=beijingCalendarDate(new Date(now)),days=(period:ProductionPeriod)=>calendarDaysBetween(period.from,period.to)+1,elapsed=(period:ProductionPeriod)=>Math.max(0,Math.min(days(period),calendarDaysBetween(period.from,today)+1));
- const currentDays=days(current),baselineDays=days(baseline),currentElapsedDays=elapsed(current),baselineElapsedDays=elapsed(baseline),complete=now>=c.end&&now>=b.end&&c.cutoff===null&&b.cutoff===null,equalElapsed=Math.max(0,Math.min(now,c.cutoff??c.end,c.end)-c.start)===Math.max(0,Math.min(now,b.cutoff??b.end,b.end)-b.start),ruleChanged=options.currentRule!==options.baselineRule,reason:string[]=[];
+ const c=range(current),b=range(baseline),now=instant(asOf),days=(period:ProductionPeriod)=>calendarDaysBetween(period.from,period.to)+1;
+ // Count days touched by the effective half-open coverage; zero duration remains zero.
+ const elapsed=(bounds:ReturnType<typeof range>)=>Math.ceil(Math.max(0,Math.min(now,bounds.cutoff??bounds.end,bounds.end)-bounds.start)/86400000);
+ const currentDays=days(current),baselineDays=days(baseline),currentElapsedDays=elapsed(c),baselineElapsedDays=elapsed(b),complete=now>=c.end&&now>=b.end&&c.cutoff===null&&b.cutoff===null,equalElapsed=Math.max(0,Math.min(now,c.cutoff??c.end,c.end)-c.start)===Math.max(0,Math.min(now,b.cutoff??b.end,b.end)-b.start),ruleChanged=options.currentRule!==options.baselineRule,reason:string[]=[];
  if(!complete)reason.push('至少一个期间尚未完整经过，按已展示的业务时刻截止比较，不能冒充完整期间');if(!equalElapsed)reason.push('两期已经过时长不同');if(ruleChanged)reason.push('两期评价规则或适用版本构成不同，差异不能直接归作表现变化');if(currentValue===null||baselineValue===null)reason.push('存在未知或无分母，不能用0替代');
  const valid=currentValue!==null&&baselineValue!==null&&Number.isFinite(currentValue)&&Number.isFinite(baselineValue),difference=valid?currentValue!-baselineValue!:null,zeroBaseline=valid&&baselineValue===0&&currentValue!==0;
  return {current,baseline,currentDays,baselineDays,currentElapsedDays,baselineElapsedDays,complete,equalElapsed,ruleChanged,difference,percentChange:valid&&!options.rate&&baselineValue!==0?difference!/baselineValue!*100:null,percentagePoints:valid&&options.rate?difference!*100:null,zeroBaseline,reason};
@@ -78,7 +80,6 @@ export function previousProductionPeriod(current:ProductionPeriod):ProductionPer
 /** Both periods end at the same physical elapsed duration in Beijing, including the partial current day. */
 export function sameElapsedProductionPeriods(current:ProductionPeriod,baseline:ProductionPeriod,asOf:string):{current:ProductionPeriod;baseline:ProductionPeriod}|null{
  const c=range(current),b=range(baseline),now=instant(asOf),elapsed=Math.max(0,Math.min(c.end-c.start,b.end-b.start,now-c.start,now-b.start));
- if(!elapsed)return null;
  const clipped=(period:ProductionPeriod,bounds:ReturnType<typeof range>):ProductionPeriod=>elapsed>=bounds.end-bounds.start?{from:period.from,to:period.to}:{from:period.from,to:period.to,cutoffAt:new Date(bounds.start+elapsed).toISOString()};
  return {current:clipped(current,c),baseline:clipped(baseline,b)};
 }
