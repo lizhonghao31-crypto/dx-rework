@@ -1,5 +1,4 @@
 import {DigitalJourneyCockpit} from './digital-journey-cockpit.js';
-import {DigitalCockpitPersonnel} from './digital-cockpit-personnel.js';
 import {useCallback,useEffect,useLayoutEffect,useRef,useState} from 'react';
 import {JourneyReturnContextSchema,journeyReturnUrl} from '@dx-rework/contracts/digital-production-journey';
 import {cockpitContext,type CockpitContext} from './digital-journey-cockpit-model.js';
@@ -55,5 +54,5 @@ export function DigitalCockpitPage(){
  },[reads.detail,reads.detailLoading,context.focus,context.row,context.materialNode]);
  const draftChanged=useCallback((value:string,pending:boolean)=>setSearchDraft(current=>current.value===value&&current.pending===pending?current:{value,pending}),[]);
  const reload=()=>{remember();if(!reads.identity)void verifySession(true);setRefresh(value=>value+1);};
- return <div ref={root} className="digital-cockpit" onFocusCapture={remember}>{notice&&<p role="status">{notice}</p>}<DigitalJourneyCockpit data={reads.data} error={contextError||reads.listError} detail={reads.detail} detailError={reads.detailError} detailLoading={reads.detailLoading} context={context} appliedContext={reads.applied} readPhase={reads.listPhase} searchDraft={searchDraft} onSearchDraft={draftChanged} onPlanCommitted={reload} restoreReading={restoreReading} onChange={changeContext} actions={<div className="pattern-actions"><Button variant="secondary" onClick={reload}>刷新数据</Button></div>} orderActions={reads.detail?.orderId?<DigitalCockpitPersonnel showCustomer={false} orderId={reads.detail.orderId} onChanged={reload}/>:null}/></div>;
+ return <div ref={root} className="digital-cockpit" onFocusCapture={remember}>{notice&&<p role="status">{notice}</p>}<DigitalJourneyCockpit data={reads.data} error={contextError||reads.listError} detail={reads.detail} detailError={reads.detailError} detailLoading={reads.detailLoading} context={context} appliedContext={reads.applied} readPhase={reads.listPhase} searchDraft={searchDraft} onSearchDraft={draftChanged} onPlanCommitted={reload} restoreReading={restoreReading} onChange={changeContext} actions={<div className="pattern-actions"><Button variant="secondary" onClick={reload}>刷新数据</Button></div>}/></div>;
 }

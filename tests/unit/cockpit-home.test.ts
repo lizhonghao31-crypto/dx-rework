@@ -21,12 +21,12 @@ it("keeps a real zero distinct from unavailable progress and uses the server's m
   const html=renderToStaticMarkup(createElement(CockpitHome,{data:{ruleVersion:"journey-v2.0",asOf:"2026-10-19T00:00:00Z",page:1,pageSize:15,total:1,summary:{all:1,active:1,dueSoon:0,overdue:0,blocked:0,completed:0},items:[o]},error:"",context:JourneyReturnContextSchema.parse({scope:"production"}),onChange(){}}));
   expect(html).toContain("0.0%");expect(html).toContain("cockpit-order-state is-active");expect(html).toContain("局部逾期");expect(html).toContain("2026-11-30");expect(html).toContain("未上传款图");
 });
-it("shows known stage facts and retained original risks without turning closure into 100 percent",()=>{
+it("keeps unknown completion and retained original risks without turning closure into 100 percent",()=>{
   const o=order([node("original-work",{risks:["overdue"]})]);
   o.display={ruleVersion:"cockpit-display-v1",mainState:"completed",earliestShipmentDate:null,missingShipmentDates:0,closedAt:null,actualRatio:null,actualLabel:"回货与装箱资料待核",awaitingClosure:false,stages:[{key:"creation",ratio:1,applicable:1,completed:1,notApplicable:false,risk:"normal"},{key:"receiving",ratio:null,applicable:null,completed:null,notApplicable:false,risk:"unknown"}],timeRatio:null,timeLabel:"时间规则待完善"};
   const html=renderToStaticMarkup(createElement(CockpitHome,{data:{ruleVersion:"journey-v2.0",asOf:"2026-10-19T00:00:00Z",page:1,pageSize:15,total:1,summary:{all:1,active:0,dueSoon:0,overdue:0,blocked:0,completed:1},items:[o]},error:"",context:JourneyReturnContextSchema.parse({scope:"production"}),onChange(){}}));
   expect(html).toContain("整单已收口 · 保留的原节点状态");expect(html).toContain("original-work");expect(html).toContain("局部逾期");
-  expect(html).toContain("回货与装箱资料待核");expect(html).toContain("100%");expect(html).not.toContain("100.0%");
+  expect(html).toContain("回货与装箱资料待核");expect(html).not.toContain("100%");expect(html).not.toContain("100.0%");
   expect(o.display.actualRatio).toBeNull();
 });
 it("keeps independent factory/sample risks and concrete blockers visible without changing the mother state",()=>{
@@ -38,4 +38,10 @@ it("keeps independent factory/sample risks and concrete blockers visible without
   expect(html).toContain("交接单尚未确认");o.stages[1]!.nodes[0]!.blockers=[];o.stages[1]!.nodes[0]!.state="active";const ordinary=render(JourneyReturnContextSchema.parse({scope:"production"}));expect(ordinary).toContain("约定日期已过");expect(ordinary).toContain("cockpit-order-state is-active");
   o.display.mainState="due_soon";const dueMother=render(JourneyReturnContextSchema.parse({scope:"production",kpi:"due_soon"}));expect(dueMother).toContain("约定日期已过");expect(dueMother).toContain("cockpit-order-state is-due_soon");
   const filtered=render(JourneyReturnContextSchema.parse({scope:"production",risk:"due_soon"}));expect(filtered).not.toContain("约定日期已过");expect(filtered).toContain("船样目标日");
+});
+
+it('R2-01: pending result submission is not presented as a blocker and actual blockers stay visible',()=>{
+ const o=order([node('work',{blockers:[{key:'completion:submitted',label:'完成办理前：本次结果尚未提交',ownerId:null,record:null},{key:'materials',label:'本轮主布尚未齐料',ownerId:null,record:null}]})]);
+ const before=structuredClone(o),html=renderToStaticMarkup(createElement(CockpitHome,{data:{ruleVersion:'journey-v2.0',asOf:'2026-10-19T00:00:00Z',page:1,pageSize:15,total:1,summary:{all:1,active:1,dueSoon:0,overdue:0,blocked:0,completed:0},items:[o]},error:'',context:JourneyReturnContextSchema.parse({scope:'production'}),onChange(){}}));
+ expect(html).not.toContain('完成办理前');expect(html).toContain('本轮主布尚未齐料');expect(html).toContain('进行中');expect(o).toEqual(before);
 });

@@ -10,15 +10,16 @@ export function sortedCockpitPoLines(order:OrderJourney){
  return [...order.lines].sort((a,b)=>(dates.get(a.id)||'\uffff').localeCompare(dates.get(b.id)||'\uffff')||poNaturalOrder.compare(a.po??'',b.po??'')||a.id.localeCompare(b.id));
 }
 /** Two independent date summaries; a customer-first PO never supplies a made-up factory pairing. */
-export function PoOrderSummary({order}:{order:OrderJourney}){
+export function PoOrderSummary({order,compact=false}:{order:OrderJourney;compact?:boolean}){
  const lines=sortedCockpitPoLines(order),dates=(order.poDeliveryDates??[]).filter(date=>lines.some(line=>line.id===date.lineId));
- const earliest=(kind:'customerWarehouseArrivalDate'|'factoryDeliveryDate')=>{
+ const earliest=(kind:'customerWarehouseArrivalDate'|'factoryDeliveryDate',withPo=true)=>{
   const at=dates.map(date=>date[kind]).filter((value):value is string=>Boolean(value)).sort()[0];
-  return at?`${at} · ${dates.filter(date=>date[kind]===at).map(date=>date.poNumber||'PO待补').join('、')}`:null;
+  return at?at+(withPo?` · ${dates.filter(date=>date[kind]===at).map(date=>date.poNumber||'PO待补').join('、')}`:''):null;
  };
- const row=(line:OrderJourney['lines'][number])=><div key={line.id}><strong>{line.po||'PO待补'} · {line.color}</strong><small>{line.orderedQuantity.toLocaleString()}件 · {customerPoDateLabel} {dates.find(date=>date.lineId===line.id)?.customerWarehouseArrivalDate??'未登记'}</small></div>;
- return <div className="cockpit-po-summary">{lines.slice(0,2).map(row)}{lines.length>2&&<details data-cockpit-disclosure="po-extra"><summary>查看其余{lines.length-2}个PO</summary>{lines.slice(2).map(row)}</details>}{!lines.length&&<strong>PO关联待核</strong>}
-  <small>最早{customerPoDateLabel}：{earliest('customerWarehouseArrivalDate')??(order.display?.earliestShipmentDate?`${order.display.earliestShipmentDate}（原整单摘要，PO关联待核）`:'未登记')}</small><small>最早加工厂交货日：{earliest('factoryDeliveryDate')??'未登记'}</small>
+ const row=(line:OrderJourney['lines'][number])=><div key={line.id}><strong tabIndex={compact?0:undefined} title={compact?`${line.po||'PO待补'} · ${line.color}`:undefined}>{line.po||'PO待补'} · {line.color}</strong><small>{line.orderedQuantity.toLocaleString()}件 · {compact?'出货':customerPoDateLabel} {dates.find(date=>date.lineId===line.id)?.customerWarehouseArrivalDate??'未登记'}</small></div>;
+ return <div className={'cockpit-po-summary'+(compact?' is-compact':'')}>{lines.slice(0,2).map(row)}{lines.length>2&&(compact?<small>另{lines.length-2}个PO，进入订单查看</small>:<details data-cockpit-disclosure="po-extra"><summary>查看其余{lines.length-2}个PO</summary>{lines.slice(2).map(row)}</details>)}{!lines.length&&<strong>PO关联待核</strong>}
+  {!compact&&<small>最早{customerPoDateLabel}：{earliest('customerWarehouseArrivalDate')??(order.display?.earliestShipmentDate?`${order.display.earliestShipmentDate}（原整单摘要，PO关联待核）`:'未登记')}</small>}<small>最早加工厂交货日：{earliest('factoryDeliveryDate',!compact)??'未登记'}</small>
+  {compact&&!earliest('customerWarehouseArrivalDate')&&order.display?.earliestShipmentDate&&<small>{customerPoDateLabel}：{order.display.earliestShipmentDate}（原整单摘要）</small>}
   {lines.some(line=>!dates.find(date=>date.lineId===line.id)?.customerWarehouseArrivalDate)&&<small>另有{lines.filter(line=>!dates.find(date=>date.lineId===line.id)?.customerWarehouseArrivalDate).length}个PO出货日期待补</small>}
  </div>;
 }

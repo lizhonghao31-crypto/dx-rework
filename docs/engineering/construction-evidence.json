@@ -1,32 +1,38 @@
 {
   "version": 1,
-  "base": "0e2692e39f0d000a566ed025947528fba324e87e",
-  "sourceFingerprint": "b930abbd46f25d7d88f45058a988b348113f64b8a4c0477476b96867ac6f54d0",
-  "risk": "full",
+  "base": "9dc3ce4799ba78fb1837b4d91b4a09540afc8582",
+  "sourceFingerprint": "214fa699ae0ec6e0f35ebb8a9b83b01ac6ac9d715f6eeea178b09934de0c08c6",
+  "risk": "quick",
   "rules": [
     {
-      "rule": "普通业务 SQL、迁移清单及共享测试映射不再自动触发历史迁移、备份和恢复模拟。",
-      "source": "2026-11-06 explicit user approval to cancel mandatory per-business-PR simulated migration/recovery and preserve tool-change/pre-release checks; latest Acceptance completion delegation authorizes normal merge. docs/engineering/operational-drill-scope-execution.md",
+      "rule": "彻底删除逐项依据与采用版本展开内容，压缩首页订单行并删除两个冗长摘要。",
+      "source": "2026-11-07 delegated user-approved Pro final six-PR plan Library libfile_03324d3f87988191ac25001808369cd7 and all nine originals actually read/viewed; latest audited overrides. docs/engineering/m01-r2-p01-execution.md",
       "writes": [
-        "scripts/ci/full-gate-risk-map.mjs",
-        "tests/unit/full-gate-risk-map.test.ts"
+        "apps/web/src/cockpit-business-progress.tsx",
+        "apps/web/src/cockpit-home.tsx",
+        "apps/web/src/cockpit-home.css",
+        "apps/web/src/po-delivery-dates.tsx",
+        "apps/web/src/digital-journey-cockpit.tsx",
+        "tests/unit/m01-cockpit-workspace.test.ts"
       ],
       "reads": [
-        "scripts/test-suite-plan.mjs",
-        "scripts/ci/ci-gate-runtime.mjs",
-        "scripts/ci/full-gate-lanes.mjs",
-        ".github/workflows/full-gate.yml"
+        "apps/web/src/cockpit-detail.tsx",
+        "apps/web/src/digital-cockpit-page.tsx",
+        "apps/web/src/cockpit-business-dates.tsx"
       ],
       "oldTests": [
-        "tests/unit/full-gate-risk-map.test.ts",
-        "scripts/ci/test-execution-contract.test.mjs"
+        "tests/unit/cockpit-home.test.ts",
+        "tests/unit/m01-cockpit-workspace.test.ts",
+        "tests/unit/po-delivery-dates.test.ts",
+        "tests/unit/journey-business-progress.test.ts"
       ],
-      "initialization": "四类迁移清单仍属迁移敏感；普通 SQL 仍在新鲜真实隔离库应用，Root/业务链和静态清单校验不取消。只移除自动附加历史矩阵及运维模拟；保留原套件及原显式入口。",
-      "dateAndPermission": "没有生产/Acceptance现场、数据、角色、备份或部署脚本变化；迁移工具及未知部署执行器仍保守选择恢复，激活和传输保留原有明确范围。",
-      "expectation": "单路径、混合SQL+全部清单+测试映射、逆序重复、真实工具正例、未知执行器、原领域映射通过。共享门禁仍要求FULL及真实业务链，不降为Quick。",
+      "initialization": "不初始化或回填业务数据。完整PO与实收/质检/装箱明细保留原详情，紧凑首页保留真实进度、未知范围和欠收；旧整单日期摘要无PO关联时继续准确标注。",
+      "dateAndPermission": "未知不填100%，不以款号/UUID伪造业务编号。后台事实/采用版本/审计、SLA日期来源与授权范围不改；M/F真实映射独立PR02核实。",
+      "expectation": "长20PO在1165不横向溢出，前2个简明PO及其余数量，详情20行可达；逐项依据文字在DOM及弹窗完全不存在；原搜索竞态/IME/失败/分页条件归属保留。",
       "checks": [
         "preflight",
         "unit",
+        "browser",
         "types",
         "build",
         "lint",
@@ -34,31 +40,36 @@
       ]
     },
     {
-      "rule": "CLI、canonical计划、summary和原生最终认证必须对模拟演练范围保持一致。",
-      "source": "2026-11-06 explicit user approval to cancel mandatory per-business-PR simulated migration/recovery and preserve tool-change/pre-release checks; latest Acceptance completion delegation authorizes normal merge. docs/engineering/operational-drill-scope-execution.md",
+      "rule": "七阶段日期直接可见，原分区紧凑对齐，正常未提交不展示为业务阻断。",
+      "source": "2026-11-07 delegated user-approved Pro final six-PR plan Library libfile_03324d3f87988191ac25001808369cd7 and all nine originals actually read/viewed; latest audited overrides. docs/engineering/m01-r2-p01-execution.md",
       "writes": [
-        "scripts/ci/gate-maintenance.test.mjs",
-        "scripts/ci/ci-gate-runtime.test.mjs",
-        "scripts/ci/test-execution-contract.test.mjs"
+        "apps/web/src/cockpit-detail.tsx",
+        "apps/web/src/cockpit-detail.css",
+        "apps/web/src/cockpit-detail-risks.tsx",
+        "apps/web/src/cockpit-node-rows.tsx",
+        "tests/unit/cockpit-home.test.ts",
+        "tests/fixtures/m01-cockpit-workspace.tsx",
+        "tests/acceptance/m01-cockpit-workspace-browser.mjs"
       ],
       "reads": [
-        "scripts/ci/ci-gate-runtime.mjs",
-        "scripts/ci/pr-gate-protocol.mjs",
-        "scripts/ci/full-gate-lanes.mjs",
-        ".github/workflows/ci.yml",
-        ".github/workflows/full-gate.yml"
+        "apps/web/src/node-materials-panel.tsx",
+        "apps/web/src/cockpit-documents.tsx",
+        "apps/web/src/cockpit-operation-log.tsx",
+        "apps/web/src/digital-journey-cockpit-model.ts"
       ],
       "oldTests": [
-        "scripts/ci/gate-maintenance.test.mjs",
-        "scripts/ci/ci-gate-runtime.test.mjs",
-        "scripts/ci/test-execution-contract.test.mjs"
+        "tests/unit/cockpit-detail.test.ts",
+        "tests/unit/node-materials.test.ts",
+        "tests/unit/cockpit-document-directory.test.ts",
+        "tests/acceptance/m01-cockpit-workspace-browser.mjs"
       ],
-      "initialization": "用原fixture真实git提交/diff/准确head/base及原emitReceipt/certifyFinal入口验证；不新增执行路径、权限或变绿跳过。原summary renderer一致性、未知范围和失败拒绝继续测试。",
-      "dateAndPermission": "被取消的是模拟历史升级/运维演练适用性，不是DB初始化/Root/权限检查；工具变化时仍必需的恢复被skip必须拒绝。未改现场发布安全要求。",
-      "expectation": "普通混合变化的运维步骤applicable=false/outcome=skipped，实际迁移/Root/业务链missing/failure/cancelled均拒绝；伪造maintenance scope拒绝；工具变化缺恢复拒绝，CLI/runtime/summary同源。",
+      "initialization": "沿用原组件/材料弹窗和记录链接，无新共享UI组件库或全局外壳改造。原多PO/长名称、无/多风险和旧F欠收样本均复用。",
+      "dateAndPermission": "阶段实际/预计依据仍来自已有事实；未知待核且不补时间。completion提示只从展示过滤，后端状态/canExecute/真正依赖阻断及材料授权不改变。",
+      "expectation": "1165/1280/1440七阶段同排，日期可见；390/640可操作无页面溢出。状态与原办理链接同行，网格对齐，材料筛选/20行/关闭焦点和跨单返回滚动保留。",
       "checks": [
         "preflight",
         "unit",
+        "browser",
         "types",
         "build",
         "lint",
@@ -66,27 +77,32 @@
       ]
     },
     {
-      "rule": "批准范围写入项目长期政策，准确区分日常PR检查与现场发布。",
-      "source": "2026-11-06 explicit user approval to cancel mandatory per-business-PR simulated migration/recovery and preserve tool-change/pre-release checks; latest Acceptance completion delegation authorizes normal merge. docs/engineering/operational-drill-scope-execution.md",
+      "rule": "移除详情调整跟单入口，保留客户默认设置及真实读取失败/撤权界限，同步批准UI标准和候选时间清单。",
+      "source": "2026-11-07 delegated user-approved Pro final six-PR plan Library libfile_03324d3f87988191ac25001808369cd7 and all nine originals actually read/viewed; latest audited overrides. docs/engineering/m01-r2-p01-execution.md",
       "writes": [
-        "AGENTS.md",
-        "docs/governance/github-actions-usage-policy-v1.0.md",
-        "docs/engineering/operational-drill-scope-execution.md"
+        "apps/web/src/digital-cockpit-page.tsx",
+        "docs/requirements/rework-ui-golden-source-v1.0.md",
+        "docs/engineering/acceptance-time-sites-20261027.json",
+        "docs/engineering/m01-r2-p01-execution.md"
       ],
       "reads": [
-        "scripts/ci/full-gate-risk-map.mjs",
-        "docs/operations/acceptance-lab-runbook-v1.0.md"
+        "apps/web/src/digital-cockpit-personnel.tsx",
+        "apps/web/src/cockpit-reads.ts",
+        "apps/web/src/digital-journey-cockpit.tsx"
       ],
       "oldTests": [
-        "scripts/ci/governance-policy.test.mjs",
-        "scripts/ci/gate-maintenance.test.mjs"
+        "tests/unit/digital-journey-cockpit.test.ts",
+        "tests/unit/digital-cockpit-time.test.ts",
+        "tests/unit/m01-time-consumers.test.ts",
+        "scripts/ci/pr-gate-controller.test.mjs"
       ],
-      "initialization": "实际远端base0e2692e3已复核；独立分支按FULL，一轮正式Codex Review及最终精确head回执后按授权合并。Acceptance更新完成前没有合并或改变release。",
-      "dateAndPermission": "不改实际部署前现场诊断/权限/备份/恢复；无新定时任务、现场写操作、部署或生产数据。普通SQL含清单/映射不能误触原全套演练。",
-      "expectation": "原治理预检及定向矩阵通过，类型/build/lint/secret真实退出0；各阶段及不适用分别记录，最终Full与合并尚待准确回执。",
+      "initialization": "基线独立在办节点及重复详情设置已不存在，仅删当前详情跟单调整装配。现有客户默认人员设置和后端合法能力保留；所有TEST数据不写现场。",
+      "dateAndPermission": "真实server身份/权限未修改，浏览器HTTP403测试仅证明客户端清理，不冒充同会话真实AuthService撤权。候选时间清单只更新同一显示ratio clamp源码行hash，其他人工语义逐字保留。",
+      "expectation": "原身份读取/失败/忙态及材料资源403清空继续有效；正式Review一次，最终Quick仅在实际diff低风险判定、准确head/base及正式回执满足后顺序合并。",
       "checks": [
         "preflight",
         "unit",
+        "browser",
         "types",
         "build",
         "lint",
@@ -107,39 +123,62 @@
       "resultReports": [
         {
           "format": "node-tap",
-          "sha256": "540d830f58e379c3ff19ca32353a202182186da8cd88f0a46f91447c88b989c6"
+          "sha256": "3ae6e11292ca3c865f297a10f951130f4f6fd35c7e2eb750c802b0ae19851285"
         }
       ],
-      "testedHead": "0e2692e39f0d000a566ed025947528fba324e87e",
-      "sourceFingerprint": "b930abbd46f25d7d88f45058a988b348113f64b8a4c0477476b96867ac6f54d0",
-      "startedAt": "2026-11-06T16:14:19.434Z",
-      "endedAt": "2026-11-06T16:14:24.988Z",
-      "log": "/workspace/scratch/ci-drill-scope-preflight.log",
-      "logSha256": "540d830f58e379c3ff19ca32353a202182186da8cd88f0a46f91447c88b989c6",
-      "context": "Node22.22.2/npm10.9.9, explicit existing worker limits; local affinity bounded by taskset; no runtime DB/onsite access. Actual preflight native concurrency2, targeted Vitest ordinary worker1. New gate selection only; no local DB simulation required or claimed; original Full CI will independently run its real selected DB plan. First preflight failures from obsolete recovery expectation and new summary-label/exit-code assertions retained privately, corrected without weakening execution guards."
+      "testedHead": "9dc3ce4799ba78fb1837b4d91b4a09540afc8582",
+      "sourceFingerprint": "214fa699ae0ec6e0f35ebb8a9b83b01ac6ac9d715f6eeea178b09934de0c08c6",
+      "startedAt": "2026-11-06T19:12:42.965Z",
+      "endedAt": "2026-11-06T19:12:48.564Z",
+      "log": "/workspace/scratch/m01-r2-p01-preflight.log",
+      "logSha256": "3ae6e11292ca3c865f297a10f951130f4f6fd35c7e2eb750c802b0ae19851285",
+      "context": "Node22.22.2/npm10.9.9, explicit existing worker limits; local affinity bounded by taskset; no runtime DB/onsite access. Preflight native concurrency2, ordinary Vitest worker1; browser Playwright-core1.56.1/Chromium141 pinned executable. Original Page/React components with synthetic TEST HTTP data and desktop sidebar/padding geometry. No live Shell, native-server authorization, M source-date validation, or deployment claim. Native browser13 cases retain all original race/403/material/return scenarios; no business SLA or permission logic changed."
     },
     {
       "id": "unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/full-gate-risk-map.test.ts --reporter=default --reporter=json --outputFile=/workspace/scratch/ci-drill-scope-unit.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/cockpit-home.test.ts tests/unit/cockpit-detail.test.ts tests/unit/m01-cockpit-workspace.test.ts tests/unit/digital-journey-cockpit.test.ts tests/unit/cockpit-document-new-sources.test.ts tests/unit/cockpit-document-directory.test.ts tests/unit/po-delivery-dates.test.ts tests/unit/node-materials.test.ts tests/unit/digital-cockpit-time.test.ts tests/unit/m01-time-consumers.test.ts tests/unit/journey-business-progress.test.ts tests/unit/g3-host-readability.test.ts --reporter=default --reporter=json --outputFile=/workspace/scratch/m01-r2-p01-unit.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 56,
+      "passed": 109,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "fdcb4ab3ee1c736a9f78e8bd6728e884109fe5744016b6685332c1ed0ff0aaea"
+          "sha256": "6f2740fae102621fd6890988527ccd7c65e4a9871104410ca8b5d591693b7e99"
         }
       ],
-      "testedHead": "0e2692e39f0d000a566ed025947528fba324e87e",
-      "sourceFingerprint": "b930abbd46f25d7d88f45058a988b348113f64b8a4c0477476b96867ac6f54d0",
-      "startedAt": "2026-11-06T16:14:25.028Z",
-      "endedAt": "2026-11-06T16:14:25.476Z",
-      "log": "/workspace/scratch/ci-drill-scope-unit.log",
-      "logSha256": "736a24da828d632656776da10ce387910dff934605e06fd271b728856fda70b2",
-      "context": "Node22.22.2/npm10.9.9, explicit existing worker limits; local affinity bounded by taskset; no runtime DB/onsite access. Actual preflight native concurrency2, targeted Vitest ordinary worker1. New gate selection only; no local DB simulation required or claimed; original Full CI will independently run its real selected DB plan. First preflight failures from obsolete recovery expectation and new summary-label/exit-code assertions retained privately, corrected without weakening execution guards."
+      "testedHead": "9dc3ce4799ba78fb1837b4d91b4a09540afc8582",
+      "sourceFingerprint": "214fa699ae0ec6e0f35ebb8a9b83b01ac6ac9d715f6eeea178b09934de0c08c6",
+      "startedAt": "2026-11-06T19:12:48.621Z",
+      "endedAt": "2026-11-06T19:12:52.587Z",
+      "log": "/workspace/scratch/m01-r2-p01-unit.log",
+      "logSha256": "a583a2cf453ff9bc7ff945645f6ca217fba78e2e1aa8f2ad7d173d4d0f016ddd",
+      "context": "Node22.22.2/npm10.9.9, explicit existing worker limits; local affinity bounded by taskset; no runtime DB/onsite access. Preflight native concurrency2, ordinary Vitest worker1; browser Playwright-core1.56.1/Chromium141 pinned executable. Original Page/React components with synthetic TEST HTTP data and desktop sidebar/padding geometry. No live Shell, native-server authorization, M source-date validation, or deployment claim. Native browser13 cases retain all original race/403/material/return scenarios; no business SLA or permission logic changed."
+    },
+    {
+      "id": "browser",
+      "kind": "tests",
+      "command": "PLAYWRIGHT_IMPORT=/workspace/scratch/m01-browser-tools/node_modules/playwright-core/index.mjs PLAYWRIGHT_EXECUTABLE_PATH=/workspace/scratch/m01-p06-ci-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell M01_WORKSPACE_EVIDENCE=/workspace/scratch/m01-r2-p01-browser-evidence node tests/acceptance/m01-cockpit-workspace-browser.mjs",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 13,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "node-tap",
+          "sha256": "8f263ddfd9f4ac70c8023af68f8ff158e91aaf312da32db029e228de9af6ce2d"
+        }
+      ],
+      "testedHead": "9dc3ce4799ba78fb1837b4d91b4a09540afc8582",
+      "sourceFingerprint": "214fa699ae0ec6e0f35ebb8a9b83b01ac6ac9d715f6eeea178b09934de0c08c6",
+      "startedAt": "2026-11-06T19:11:45.584Z",
+      "endedAt": "2026-11-06T19:11:55.764Z",
+      "log": "/workspace/scratch/m01-r2-p01-browser.log",
+      "logSha256": "8f263ddfd9f4ac70c8023af68f8ff158e91aaf312da32db029e228de9af6ce2d",
+      "context": "Node22.22.2/npm10.9.9, explicit existing worker limits; local affinity bounded by taskset; no runtime DB/onsite access. Preflight native concurrency2, ordinary Vitest worker1; browser Playwright-core1.56.1/Chromium141 pinned executable. Original Page/React components with synthetic TEST HTTP data and desktop sidebar/padding geometry. No live Shell, native-server authorization, M source-date validation, or deployment claim. Native browser13 cases retain all original race/403/material/return scenarios; no business SLA or permission logic changed."
     },
     {
       "id": "types",
@@ -147,13 +186,13 @@
       "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "0e2692e39f0d000a566ed025947528fba324e87e",
-      "sourceFingerprint": "b930abbd46f25d7d88f45058a988b348113f64b8a4c0477476b96867ac6f54d0",
-      "startedAt": "2026-11-06T16:14:19.438Z",
-      "endedAt": "2026-11-06T16:14:50.921Z",
-      "log": "/workspace/scratch/ci-drill-scope-types.log",
+      "testedHead": "9dc3ce4799ba78fb1837b4d91b4a09540afc8582",
+      "sourceFingerprint": "214fa699ae0ec6e0f35ebb8a9b83b01ac6ac9d715f6eeea178b09934de0c08c6",
+      "startedAt": "2026-11-06T19:12:52.626Z",
+      "endedAt": "2026-11-06T19:13:23.452Z",
+      "log": "/workspace/scratch/m01-r2-p01-types.log",
       "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e",
-      "context": "Node22.22.2/npm10.9.9, explicit existing worker limits; local affinity bounded by taskset; no runtime DB/onsite access. Actual preflight native concurrency2, targeted Vitest ordinary worker1. New gate selection only; no local DB simulation required or claimed; original Full CI will independently run its real selected DB plan. First preflight failures from obsolete recovery expectation and new summary-label/exit-code assertions retained privately, corrected without weakening execution guards."
+      "context": "Node22.22.2/npm10.9.9, explicit existing worker limits; local affinity bounded by taskset; no runtime DB/onsite access. Preflight native concurrency2, ordinary Vitest worker1; browser Playwright-core1.56.1/Chromium141 pinned executable. Original Page/React components with synthetic TEST HTTP data and desktop sidebar/padding geometry. No live Shell, native-server authorization, M source-date validation, or deployment claim. Native browser13 cases retain all original race/403/material/return scenarios; no business SLA or permission logic changed."
     },
     {
       "id": "build",
@@ -161,13 +200,13 @@
       "command": "npm run build --workspaces --if-present",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "0e2692e39f0d000a566ed025947528fba324e87e",
-      "sourceFingerprint": "b930abbd46f25d7d88f45058a988b348113f64b8a4c0477476b96867ac6f54d0",
-      "startedAt": "2026-11-06T16:14:50.976Z",
-      "endedAt": "2026-11-06T16:15:09.999Z",
-      "log": "/workspace/scratch/ci-drill-scope-build.log",
-      "logSha256": "3077cc53ce59c6fc4ed0bfa6af28f7ba1dbdb1c435ab3cac700562ce11703959",
-      "context": "Node22.22.2/npm10.9.9, explicit existing worker limits; local affinity bounded by taskset; no runtime DB/onsite access. Actual preflight native concurrency2, targeted Vitest ordinary worker1. New gate selection only; no local DB simulation required or claimed; original Full CI will independently run its real selected DB plan. First preflight failures from obsolete recovery expectation and new summary-label/exit-code assertions retained privately, corrected without weakening execution guards."
+      "testedHead": "9dc3ce4799ba78fb1837b4d91b4a09540afc8582",
+      "sourceFingerprint": "214fa699ae0ec6e0f35ebb8a9b83b01ac6ac9d715f6eeea178b09934de0c08c6",
+      "startedAt": "2026-11-06T19:13:23.497Z",
+      "endedAt": "2026-11-06T19:13:41.922Z",
+      "log": "/workspace/scratch/m01-r2-p01-build.log",
+      "logSha256": "408fcfa8df5afdd2c187b795bd1532fc582a59b9bdd99e80e94f157dc6f77669",
+      "context": "Node22.22.2/npm10.9.9, explicit existing worker limits; local affinity bounded by taskset; no runtime DB/onsite access. Preflight native concurrency2, ordinary Vitest worker1; browser Playwright-core1.56.1/Chromium141 pinned executable. Original Page/React components with synthetic TEST HTTP data and desktop sidebar/padding geometry. No live Shell, native-server authorization, M source-date validation, or deployment claim. Native browser13 cases retain all original race/403/material/return scenarios; no business SLA or permission logic changed."
     },
     {
       "id": "lint",
@@ -175,13 +214,13 @@
       "command": "npm run lint",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "0e2692e39f0d000a566ed025947528fba324e87e",
-      "sourceFingerprint": "b930abbd46f25d7d88f45058a988b348113f64b8a4c0477476b96867ac6f54d0",
-      "startedAt": "2026-11-06T16:15:10.040Z",
-      "endedAt": "2026-11-06T16:15:31.323Z",
-      "log": "/workspace/scratch/ci-drill-scope-lint.log",
+      "testedHead": "9dc3ce4799ba78fb1837b4d91b4a09540afc8582",
+      "sourceFingerprint": "214fa699ae0ec6e0f35ebb8a9b83b01ac6ac9d715f6eeea178b09934de0c08c6",
+      "startedAt": "2026-11-06T19:13:41.962Z",
+      "endedAt": "2026-11-06T19:14:03.097Z",
+      "log": "/workspace/scratch/m01-r2-p01-lint.log",
       "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763",
-      "context": "Node22.22.2/npm10.9.9, explicit existing worker limits; local affinity bounded by taskset; no runtime DB/onsite access. Actual preflight native concurrency2, targeted Vitest ordinary worker1. New gate selection only; no local DB simulation required or claimed; original Full CI will independently run its real selected DB plan. First preflight failures from obsolete recovery expectation and new summary-label/exit-code assertions retained privately, corrected without weakening execution guards."
+      "context": "Node22.22.2/npm10.9.9, explicit existing worker limits; local affinity bounded by taskset; no runtime DB/onsite access. Preflight native concurrency2, ordinary Vitest worker1; browser Playwright-core1.56.1/Chromium141 pinned executable. Original Page/React components with synthetic TEST HTTP data and desktop sidebar/padding geometry. No live Shell, native-server authorization, M source-date validation, or deployment claim. Native browser13 cases retain all original race/403/material/return scenarios; no business SLA or permission logic changed."
     },
     {
       "id": "secret",
@@ -189,13 +228,13 @@
       "command": "npm run secret:scan",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "0e2692e39f0d000a566ed025947528fba324e87e",
-      "sourceFingerprint": "b930abbd46f25d7d88f45058a988b348113f64b8a4c0477476b96867ac6f54d0",
-      "startedAt": "2026-11-06T16:15:31.366Z",
-      "endedAt": "2026-11-06T16:15:31.934Z",
-      "log": "/workspace/scratch/ci-drill-scope-secret.log",
+      "testedHead": "9dc3ce4799ba78fb1837b4d91b4a09540afc8582",
+      "sourceFingerprint": "214fa699ae0ec6e0f35ebb8a9b83b01ac6ac9d715f6eeea178b09934de0c08c6",
+      "startedAt": "2026-11-06T19:14:03.136Z",
+      "endedAt": "2026-11-06T19:14:03.736Z",
+      "log": "/workspace/scratch/m01-r2-p01-secret.log",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda",
-      "context": "Node22.22.2/npm10.9.9, explicit existing worker limits; local affinity bounded by taskset; no runtime DB/onsite access. Actual preflight native concurrency2, targeted Vitest ordinary worker1. New gate selection only; no local DB simulation required or claimed; original Full CI will independently run its real selected DB plan. First preflight failures from obsolete recovery expectation and new summary-label/exit-code assertions retained privately, corrected without weakening execution guards."
+      "context": "Node22.22.2/npm10.9.9, explicit existing worker limits; local affinity bounded by taskset; no runtime DB/onsite access. Preflight native concurrency2, ordinary Vitest worker1; browser Playwright-core1.56.1/Chromium141 pinned executable. Original Page/React components with synthetic TEST HTTP data and desktop sidebar/padding geometry. No live Shell, native-server authorization, M source-date validation, or deployment claim. Native browser13 cases retain all original race/403/material/return scenarios; no business SLA or permission logic changed."
     }
   ]
 }
