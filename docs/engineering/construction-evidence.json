@@ -1,40 +1,35 @@
 {
   "version": 1,
-  "base": "dd2699ff2f2f58bba53a8e401d59cd28058b684f",
-  "sourceFingerprint": "83c167c0d49515d256a54c469ce6ff98f662f555361dccf52be4a3d5f3c2ef0e",
+  "base": "49b395000a8b8361a624be1ee103b191eb1e5d67",
+  "sourceFingerprint": "fb46fa5ed45097a37fbb7f21ba8002e407dca36a06c485bfa5d6041103677b58",
   "risk": "full",
   "rules": [
     {
-      "rule": "生产沙盘在原生产管理座舱下为单一二级入口；原有已授权旧板房读取仍可用，不扩大角色或直达路由权限。",
-      "source": "User-approved Pro PR04/audited exact KPI and menu instructions, all nine original screenshots viewed; docs/engineering/m01-r2-p04-execution.md",
+      "rule": "期间本期、对比期、差额直接可见，各期数值下钻自己的原有效事件和承诺；数量原单位、比例百分点，零分母不造增长。",
+      "source": "Approved Pro PR05 libfile_03324d3f87988191ac25001808369cd7 and later audited node/person objective-load directives; docs/engineering/m01-r2-p05-execution.md",
       "writes": [
-        "apps/web/src/cockpit-home.tsx",
-        "apps/web/src/cockpit-home.css",
-        "apps/web/src/App.tsx",
-        "apps/web/src/components.tsx",
-        "apps/web/src/digital-analysis-page.tsx",
-        "tests/fixtures/m01-current-production-native-ui.tsx",
-        "tests/acceptance/m01-current-production-native-browser.ts",
-        "docs/requirements/business-analysis-limited-ui-golden-source-v1.0.md",
-        "docs/engineering/m01-r2-p04-execution.md"
+        "apps/web/src/production-period-panel.tsx",
+        "apps/api/src/production-platform/production-period-export.ts",
+        "tests/unit/m01-production-period-panel.test.ts",
+        "docs/engineering/m01-r2-p05-execution.md",
+        "docs/requirements/business-analysis-limited-ui-golden-source-v1.0.md"
       ],
       "reads": [
-        "apps/web/src/auth.tsx",
-        "apps/api/src/production-platform/access-policy.ts",
-        "apps/api/src/production-platform/reporting-routes.ts",
         "apps/api/src/production-platform/production-statistics-query.ts",
-        "apps/web/src/current-production-page.tsx"
+        "apps/api/src/production-platform/production-statistics-projection.ts",
+        "apps/api/src/production-platform/production-period-events.ts",
+        "apps/api/src/production-platform/production-period-promises.ts",
+        "apps/api/src/production-platform/production-period-sources.ts",
+        "apps/api/src/reporting/xlsx-workbook.ts"
       ],
       "oldTests": [
-        "tests/unit/v2-workspace-navigation.test.ts",
-        "tests/unit/digital-pmc-readonly-ui.test.ts",
-        "tests/integration/m01-current-production-native-browser-postgres.test.ts",
-        "tests/integration/m01-production-period-native-browser-postgres.test.ts",
-        "tests/integration/m01-production-collaboration-native-browser-postgres.test.ts"
+        "tests/unit/m01-production-period-panel.test.ts",
+        "tests/integration/m01-production-period-postgres.test.ts",
+        "tests/integration/m01-production-period-native-browser-postgres.test.ts"
       ],
-      "initialization": "不迁移数据或变更能力；Root/report:view入口与原生产路由守卫对齐，未有report:view的原数字角色保留旧板房入口。移动菜单及active项、原URL保留；首页任务标题/状态同行，过长任务/PO提示按需完整展开，交期日期直接可见，无大块空白凑齐。",
-      "dateAndPermission": "完整App/Shell原生测试使用实际AuthService与原角色、正常反馈、同有效会话撤权；拒绝工人获取名字/菜单/直接页面，仍有角色时cookie不变且导出403。",
-      "expectation": "真实完整1165页面只有一个正确嵌套沙盘入口并选中；原16PO全量、移动/键盘、失败恢复/异步、原生期间与协作读取、下载和撤权场景不丢。",
+      "initialization": "不新增写接口；原只读授权source/snapshot再投影。比较及节点经过明细合入原工作表，新增节点负荷一表后总数仍在原20表上限，不删旧表或放宽上限。",
+      "dateAndPermission": "保留当时工厂、原有效量/订正、原生发生及登记、合法承诺版与权限范围；每次换响应/撤权清除旧私有明细，不以当前事件代基期。",
+      "expectation": "当前10/基期4/差6及150%、由0新增、独立PO下钻与同版导出ID、原发生时间/改期/未完分母、真实有效PMC会话撤权通过；未来/未知或筛选归属未核不当完整零。",
       "checks": [
         "preflight",
         "unit",
@@ -46,29 +41,70 @@
       ]
     },
     {
-      "rule": "四卡直接显示客户待出货件数、未来7天应出货未齐、已过客户交期未齐、当前受阻订单数，逐PO有效需求减有效装箱、客户交期，明确件/单。",
-      "source": "User-approved Pro PR04/audited exact KPI and menu instructions, all nine original screenshots viewed; docs/engineering/m01-r2-p04-execution.md",
+      "rule": "未结束期间按同一北京时间相同已过时长比较，保留原请求日期及各自cutoff；日期精度跨cutoff待核，不用整天代半天。",
+      "source": "Approved Pro PR05 libfile_03324d3f87988191ac25001808369cd7 and later audited node/person objective-load directives; docs/engineering/m01-r2-p05-execution.md",
       "writes": [
-        "apps/web/src/current-production-context.ts",
-        "apps/web/src/current-production-page.tsx",
+        "docs/engineering/acceptance-time-sites-20261027.json",
+        "packages/contracts/src/production-period.ts",
+        "packages/domain/src/production-period.ts",
+        "apps/api/src/production-platform/production-period-projection.ts",
+        "tests/unit/m01-production-period.test.ts",
         "tests/acceptance/m01-current-production-native-browser.ts"
       ],
       "reads": [
-        "packages/contracts/src/production-statistics.ts",
+        "packages/contracts/src/series-calendar.ts",
         "packages/domain/src/production-statistics.ts",
-        "apps/api/src/production-platform/production-statistics-query.ts",
-        "apps/api/src/production-platform/production-statistics-projection.ts",
-        "apps/api/src/production-platform/production-statistics-export.ts"
+        "apps/api/src/production-platform/po-customer-date-service.ts",
+        "apps/api/src/acceptance-clock/business-time.ts",
+        "apps/api/src/production-platform/production-period-promises.ts",
+        "apps/api/src/production-platform/production-statistics-query.ts"
       ],
       "oldTests": [
-        "tests/unit/m01-production-statistics.test.ts",
-        "tests/unit/m01-current-production-workspace.test.ts",
-        "tests/integration/m01-production-statistics-postgres.test.ts",
-        "tests/integration/m01-current-production-native-browser-postgres.test.ts"
+        "tests/unit/m01-production-period.test.ts",
+        "tests/integration/m01-production-period-postgres.test.ts",
+        "tests/integration/m01-production-period-native-browser-postgres.test.ts"
       ],
-      "initialization": "数量原事实与后台计算不改；仅纠正第四卡消费blockedOrders而非blockedPos，显示单而后台母单单位不变。装箱仍是本系统出货，无重复入口。",
-      "dateAndPermission": "保留原北京时间交期边界、有效修正、全量授权快照、排序/分页/筛选、下钻和导出。未知归厂/品类/有效需求不充0；现场F精确当前数据缺口单独记录，不拿TEST认定已查清现场首个排除条件。",
-      "expectation": "真实命令阻断两PO同母单→1单卡片/2PO下钻、待出货4件；16PO全量统计与同版导出、母单部分完成不被下钻过滤误判、F类全局2件未知归厂池及特殊结案后的I质量差异均保留。",
+      "initialization": "分析规则明确标v2；旧已存原事实/版本不回写，仍经同一source重算并显示两个cutoffAt，原from/to保留。未知等待/精度不填0。",
+      "dateAndPermission": "cutoff按实际已过毫秒；瞬时含/日期独占截止保留，截止后才生效版本不改前队列。完成发生晚于真实asOf仍异常；历史cutoff之后的完成不能倒填之前按期，未完成保留分母。",
+      "expectation": "单位验证同一时刻+08/Z、半日基期后续事件排除、日期精度未知、晚生效/未来截止不移分母；正式Review追加零跨度两期起点、各自有效截止经过天数（午夜/半日/短月）、短月独占结束显示及同版导出反例；原生June10T00北京时间对May同长截止分别Jun9/May9T16Z，原队列1/0及各自UI下钻正确，原补录与跨月边界保留。",
+      "checks": [
+        "preflight",
+        "unit",
+        "pgcurrent",
+        "types",
+        "build",
+        "lint",
+        "secret"
+      ]
+    },
+    {
+      "rule": "节点/人员客观负荷和同类逾期排序沿当前原主办；真实办理经过含等待，不等于净工时，参与不等于责任。",
+      "source": "Approved Pro PR05 libfile_03324d3f87988191ac25001808369cd7 and later audited node/person objective-load directives; docs/engineering/m01-r2-p05-execution.md",
+      "writes": [
+        "packages/contracts/src/production-collaboration.ts",
+        "apps/api/src/production-platform/production-collaboration-source.ts",
+        "apps/api/src/production-platform/production-collaboration-export.ts",
+        "apps/web/src/production-collaboration-panel.tsx",
+        "tests/unit/m01-collaboration-workload.test.ts",
+        "tests/unit/m01-production-collaboration-panel.test.ts",
+        "tests/integration/m01-production-collaboration-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/task-service.ts",
+        "packages/domain/src/production-collaboration.ts",
+        "apps/api/src/production-platform/production-period-sources.ts",
+        "apps/api/src/production-platform/production-statistics-query.ts",
+        "apps/api/src/production-platform/access-policy.ts"
+      ],
+      "oldTests": [
+        "tests/unit/m01-production-collaboration.test.ts",
+        "tests/unit/m01-collaboration-workload.test.ts",
+        "tests/integration/m01-production-collaboration-postgres.test.ts",
+        "tests/integration/m01-production-collaboration-native-browser-postgres.test.ts"
+      ],
+      "initialization": "当前全授权任务ID去重再排序/限显示；已存source旧summary不借用，重新计算node/person集合。无工资、责任决定、派工或权限变更。",
+      "dateAndPermission": "原当前主办、历史主办、截止时主办与实际提交人分开。日期独占/瞬时含边界及无期限保持；不跨岗位/节点排名，未分派和缺历史显式保留；已核周期仅实际起止，未知/未完不混入平均。",
+      "expectation": "原真实A到B改派→Root完成与订正、B负荷卸载、旧经办不负当前债；第17名之后最高逾期前置/精确3任务下钻、未知/未分派/角色过滤和有效会话撤权保留；8h与16h窗口均值12h，部分等待不擅扣，原节点明细/同版导出一致。",
       "checks": [
         "preflight",
         "unit",
@@ -93,62 +129,62 @@
       "resultReports": [
         {
           "format": "node-tap",
-          "sha256": "8e5a98700cdda5324c93b3bc2c882cd33b520026ddecfff7dee78bf5dbbc1266"
+          "sha256": "7b3e3d33fd2ce3215af2a9c6b19b7835c3e2f4996cd4adea8c4504ebb5d10566"
         }
       ],
-      "testedHead": "dd2699ff2f2f58bba53a8e401d59cd28058b684f",
-      "sourceFingerprint": "83c167c0d49515d256a54c469ce6ff98f662f555361dccf52be4a3d5f3c2ef0e",
-      "startedAt": "2026-11-06T21:58:08.795Z",
-      "endedAt": "2026-11-06T21:58:14.513Z",
-      "log": "/workspace/scratch/m01-r2-p04-preflight.log",
-      "logSha256": "8e5a98700cdda5324c93b3bc2c882cd33b520026ddecfff7dee78bf5dbbc1266",
-      "context": "Node22.22.2/npm10.9.9; local Node affinity2,3; actual fresh isolated marked PG16.15 low-privilege dx_rework_test, PG cpuset0,1 CPU2/memory2GiB; two selected PG calculation/native-browser suites with canonical business-chain config worker2 and existing100s correctness/hook budgets. This is bounded local correctness proof, not CI hardware or onsite equivalence. Original AuthService/PostgresAuthStore and valid sessions, original native business feedback/packing/snapshot/export. TEST full App/Shell is not current onsite evidence. Shared browser fixture changes retain native current/period/collaboration matrices."
+      "testedHead": "978d6f9b290311f379f06c2b9b26e77551d24b1c",
+      "sourceFingerprint": "fb46fa5ed45097a37fbb7f21ba8002e407dca36a06c485bfa5d6041103677b58",
+      "startedAt": "2026-11-06T22:42:55.540Z",
+      "endedAt": "2026-11-06T22:43:01.416Z",
+      "log": "/workspace/scratch/m01-r2-p05-preflight.log",
+      "logSha256": "7b3e3d33fd2ce3215af2a9c6b19b7835c3e2f4996cd4adea8c4504ebb5d10566",
+      "context": "Node22.22.2/npm10.9.9; local Node affinity2,3; actual fresh isolated marked PG16.15 low-privilege dx_rework_test, PG cpuset0,1 CPU2/memory2GiB; two selected PG calculation/native-browser suites with canonical business-chain config worker2 and existing100s correctness/hook budgets. This is bounded local correctness proof, not CI hardware or onsite equivalence. Retained sources reproject through original live permission checks; real AuthService signed Root/PMC and same-valid-session revocation. Native dates use guarded original business clock and original PO request/approval/assignment/completion commands, not rewritten business history. Local native TEST facts and elapsed-time analyses do not certify onsite coverage or personal responsibility."
     },
     {
       "id": "unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/m01-production-statistics.test.ts tests/unit/m01-current-production-workspace.test.ts tests/unit/v2-workspace-navigation.test.ts tests/unit/digital-pmc-readonly-ui.test.ts tests/unit/cockpit-detail.test.ts tests/unit/m01-cockpit-workspace.test.ts tests/unit/po-delivery-dates.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-r2-p04-unit.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/m01-production-collaboration.test.ts tests/unit/m01-production-collaboration-panel.test.ts tests/unit/m01-collaboration-workload.test.ts tests/unit/m01-production-period.test.ts tests/unit/m01-production-period-panel.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-r2-p05-unit.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 100,
+      "passed": 37,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "5ee49698465f21171078206ac908806bc570f9180357ef7370ca8fc5d053659a"
+          "sha256": "1576ec6fab0a180cb9a878a2f82ca9e351c42142bd2adcfa006f5f8a524163c9"
         }
       ],
-      "testedHead": "dd2699ff2f2f58bba53a8e401d59cd28058b684f",
-      "sourceFingerprint": "83c167c0d49515d256a54c469ce6ff98f662f555361dccf52be4a3d5f3c2ef0e",
-      "startedAt": "2026-11-06T21:57:13.768Z",
-      "endedAt": "2026-11-06T21:57:16.759Z",
-      "log": "/workspace/scratch/m01-r2-p04-unit.log",
-      "logSha256": "8cd981b9647ea4bca66012b6a571bcca86347a24d35c0ede972c7d42ca9c92ac",
-      "context": "Node22.22.2/npm10.9.9; local Node affinity2,3; actual fresh isolated marked PG16.15 low-privilege dx_rework_test, PG cpuset0,1 CPU2/memory2GiB; two selected PG calculation/native-browser suites with canonical business-chain config worker2 and existing100s correctness/hook budgets. This is bounded local correctness proof, not CI hardware or onsite equivalence. Original AuthService/PostgresAuthStore and valid sessions, original native business feedback/packing/snapshot/export. TEST full App/Shell is not current onsite evidence. Shared browser fixture changes retain native current/period/collaboration matrices."
+      "testedHead": "978d6f9b290311f379f06c2b9b26e77551d24b1c",
+      "sourceFingerprint": "fb46fa5ed45097a37fbb7f21ba8002e407dca36a06c485bfa5d6041103677b58",
+      "startedAt": "2026-11-06T22:43:51.161Z",
+      "endedAt": "2026-11-06T22:43:54.221Z",
+      "log": "/workspace/scratch/m01-r2-p05-unit.log",
+      "logSha256": "06f3b1cd4ca0a6dd2c1a6e469126971cef25b9ace49b756e92e3234dece10c01",
+      "context": "Node22.22.2/npm10.9.9; local Node affinity2,3; actual fresh isolated marked PG16.15 low-privilege dx_rework_test, PG cpuset0,1 CPU2/memory2GiB; two selected PG calculation/native-browser suites with canonical business-chain config worker2 and existing100s correctness/hook budgets. This is bounded local correctness proof, not CI hardware or onsite equivalence. Retained sources reproject through original live permission checks; real AuthService signed Root/PMC and same-valid-session revocation. Native dates use guarded original business clock and original PO request/approval/assignment/completion commands, not rewritten business history. Local native TEST facts and elapsed-time analyses do not certify onsite coverage or personal responsibility."
     },
     {
       "id": "pgcurrent",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers=2 tests/integration/m01-production-statistics-postgres.test.ts tests/integration/m01-current-production-native-browser-postgres.test.ts tests/integration/m01-production-period-native-browser-postgres.test.ts tests/integration/m01-production-collaboration-native-browser-postgres.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-r2-p04-pgcurrent.json",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers=2 tests/integration/m01-production-collaboration-postgres.test.ts tests/integration/m01-production-collaboration-native-browser-postgres.test.ts tests/integration/m01-production-period-postgres.test.ts tests/integration/m01-production-period-native-browser-postgres.test.ts tests/integration/m01-current-production-native-browser-postgres.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-r2-p05-pgcurrent.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 38,
+      "passed": 31,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "f8c6ed33ee592599ac6ba3a6deb5b44d19d3d394ecde2b837f3ad58438d6ad63"
+          "sha256": "1a19d910163ec01cc8694ad9a8dba495904c30e3af5711e46a7c75f203a591bb"
         }
       ],
-      "testedHead": "dd2699ff2f2f58bba53a8e401d59cd28058b684f",
-      "sourceFingerprint": "83c167c0d49515d256a54c469ce6ff98f662f555361dccf52be4a3d5f3c2ef0e",
-      "startedAt": "2026-11-06T21:57:16.800Z",
-      "endedAt": "2026-11-06T21:58:08.753Z",
-      "log": "/workspace/scratch/m01-r2-p04-pgcurrent.log",
-      "logSha256": "39f551094573d99de5c74709640b6e7ebcef5d4ce5bc0fd2b5577960cee4a9a0",
-      "context": "Node22.22.2/npm10.9.9; local Node affinity2,3; actual fresh isolated marked PG16.15 low-privilege dx_rework_test, PG cpuset0,1 CPU2/memory2GiB; two selected PG calculation/native-browser suites with canonical business-chain config worker2 and existing100s correctness/hook budgets. This is bounded local correctness proof, not CI hardware or onsite equivalence. Original AuthService/PostgresAuthStore and valid sessions, original native business feedback/packing/snapshot/export. TEST full App/Shell is not current onsite evidence. Shared browser fixture changes retain native current/period/collaboration matrices."
+      "testedHead": "978d6f9b290311f379f06c2b9b26e77551d24b1c",
+      "sourceFingerprint": "fb46fa5ed45097a37fbb7f21ba8002e407dca36a06c485bfa5d6041103677b58",
+      "startedAt": "2026-11-06T22:43:54.261Z",
+      "endedAt": "2026-11-06T22:44:36.471Z",
+      "log": "/workspace/scratch/m01-r2-p05-pgcurrent.log",
+      "logSha256": "917787a3de404ebe1357aba6b254a575ec6510d24841df125b4b95e9c1b5b20e",
+      "context": "Node22.22.2/npm10.9.9; local Node affinity2,3; actual fresh isolated marked PG16.15 low-privilege dx_rework_test, PG cpuset0,1 CPU2/memory2GiB; two selected PG calculation/native-browser suites with canonical business-chain config worker2 and existing100s correctness/hook budgets. This is bounded local correctness proof, not CI hardware or onsite equivalence. Retained sources reproject through original live permission checks; real AuthService signed Root/PMC and same-valid-session revocation. Native dates use guarded original business clock and original PO request/approval/assignment/completion commands, not rewritten business history. Local native TEST facts and elapsed-time analyses do not certify onsite coverage or personal responsibility."
     },
     {
       "id": "types",
@@ -156,13 +192,13 @@
       "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "dd2699ff2f2f58bba53a8e401d59cd28058b684f",
-      "sourceFingerprint": "83c167c0d49515d256a54c469ce6ff98f662f555361dccf52be4a3d5f3c2ef0e",
-      "startedAt": "2026-11-06T21:56:25.034Z",
-      "endedAt": "2026-11-06T21:56:55.904Z",
-      "log": "/workspace/scratch/m01-r2-p04-types.log",
+      "testedHead": "978d6f9b290311f379f06c2b9b26e77551d24b1c",
+      "sourceFingerprint": "fb46fa5ed45097a37fbb7f21ba8002e407dca36a06c485bfa5d6041103677b58",
+      "startedAt": "2026-11-06T22:43:01.455Z",
+      "endedAt": "2026-11-06T22:43:32.907Z",
+      "log": "/workspace/scratch/m01-r2-p05-types.log",
       "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e",
-      "context": "Node22.22.2/npm10.9.9; local Node affinity2,3; actual fresh isolated marked PG16.15 low-privilege dx_rework_test, PG cpuset0,1 CPU2/memory2GiB; two selected PG calculation/native-browser suites with canonical business-chain config worker2 and existing100s correctness/hook budgets. This is bounded local correctness proof, not CI hardware or onsite equivalence. Original AuthService/PostgresAuthStore and valid sessions, original native business feedback/packing/snapshot/export. TEST full App/Shell is not current onsite evidence. Shared browser fixture changes retain native current/period/collaboration matrices."
+      "context": "Node22.22.2/npm10.9.9; local Node affinity2,3; actual fresh isolated marked PG16.15 low-privilege dx_rework_test, PG cpuset0,1 CPU2/memory2GiB; two selected PG calculation/native-browser suites with canonical business-chain config worker2 and existing100s correctness/hook budgets. This is bounded local correctness proof, not CI hardware or onsite equivalence. Retained sources reproject through original live permission checks; real AuthService signed Root/PMC and same-valid-session revocation. Native dates use guarded original business clock and original PO request/approval/assignment/completion commands, not rewritten business history. Local native TEST facts and elapsed-time analyses do not certify onsite coverage or personal responsibility."
     },
     {
       "id": "build",
@@ -170,13 +206,13 @@
       "command": "npm run build --workspaces --if-present",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "dd2699ff2f2f58bba53a8e401d59cd28058b684f",
-      "sourceFingerprint": "83c167c0d49515d256a54c469ce6ff98f662f555361dccf52be4a3d5f3c2ef0e",
-      "startedAt": "2026-11-06T21:56:55.957Z",
-      "endedAt": "2026-11-06T21:57:13.729Z",
-      "log": "/workspace/scratch/m01-r2-p04-build.log",
-      "logSha256": "9303e256a1f7e66c79aedde80a1946e12cb789dae32b2613f68f095fb665381b",
-      "context": "Node22.22.2/npm10.9.9; local Node affinity2,3; actual fresh isolated marked PG16.15 low-privilege dx_rework_test, PG cpuset0,1 CPU2/memory2GiB; two selected PG calculation/native-browser suites with canonical business-chain config worker2 and existing100s correctness/hook budgets. This is bounded local correctness proof, not CI hardware or onsite equivalence. Original AuthService/PostgresAuthStore and valid sessions, original native business feedback/packing/snapshot/export. TEST full App/Shell is not current onsite evidence. Shared browser fixture changes retain native current/period/collaboration matrices."
+      "testedHead": "978d6f9b290311f379f06c2b9b26e77551d24b1c",
+      "sourceFingerprint": "fb46fa5ed45097a37fbb7f21ba8002e407dca36a06c485bfa5d6041103677b58",
+      "startedAt": "2026-11-06T22:43:32.950Z",
+      "endedAt": "2026-11-06T22:43:51.120Z",
+      "log": "/workspace/scratch/m01-r2-p05-build.log",
+      "logSha256": "33d823bf86ea14caa8a8360572d9552ccf4ca96643973e7f300bf4c48421f63a",
+      "context": "Node22.22.2/npm10.9.9; local Node affinity2,3; actual fresh isolated marked PG16.15 low-privilege dx_rework_test, PG cpuset0,1 CPU2/memory2GiB; two selected PG calculation/native-browser suites with canonical business-chain config worker2 and existing100s correctness/hook budgets. This is bounded local correctness proof, not CI hardware or onsite equivalence. Retained sources reproject through original live permission checks; real AuthService signed Root/PMC and same-valid-session revocation. Native dates use guarded original business clock and original PO request/approval/assignment/completion commands, not rewritten business history. Local native TEST facts and elapsed-time analyses do not certify onsite coverage or personal responsibility."
     },
     {
       "id": "lint",
@@ -184,13 +220,13 @@
       "command": "npm run lint",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "dd2699ff2f2f58bba53a8e401d59cd28058b684f",
-      "sourceFingerprint": "83c167c0d49515d256a54c469ce6ff98f662f555361dccf52be4a3d5f3c2ef0e",
-      "startedAt": "2026-11-06T21:58:14.551Z",
-      "endedAt": "2026-11-06T21:58:36.872Z",
-      "log": "/workspace/scratch/m01-r2-p04-lint.log",
+      "testedHead": "978d6f9b290311f379f06c2b9b26e77551d24b1c",
+      "sourceFingerprint": "fb46fa5ed45097a37fbb7f21ba8002e407dca36a06c485bfa5d6041103677b58",
+      "startedAt": "2026-11-06T22:42:34.433Z",
+      "endedAt": "2026-11-06T22:42:55.482Z",
+      "log": "/workspace/scratch/m01-r2-p05-lint.log",
       "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763",
-      "context": "Node22.22.2/npm10.9.9; local Node affinity2,3; actual fresh isolated marked PG16.15 low-privilege dx_rework_test, PG cpuset0,1 CPU2/memory2GiB; two selected PG calculation/native-browser suites with canonical business-chain config worker2 and existing100s correctness/hook budgets. This is bounded local correctness proof, not CI hardware or onsite equivalence. Original AuthService/PostgresAuthStore and valid sessions, original native business feedback/packing/snapshot/export. TEST full App/Shell is not current onsite evidence. Shared browser fixture changes retain native current/period/collaboration matrices."
+      "context": "Node22.22.2/npm10.9.9; local Node affinity2,3; actual fresh isolated marked PG16.15 low-privilege dx_rework_test, PG cpuset0,1 CPU2/memory2GiB; two selected PG calculation/native-browser suites with canonical business-chain config worker2 and existing100s correctness/hook budgets. This is bounded local correctness proof, not CI hardware or onsite equivalence. Retained sources reproject through original live permission checks; real AuthService signed Root/PMC and same-valid-session revocation. Native dates use guarded original business clock and original PO request/approval/assignment/completion commands, not rewritten business history. Local native TEST facts and elapsed-time analyses do not certify onsite coverage or personal responsibility."
     },
     {
       "id": "secret",
@@ -198,13 +234,13 @@
       "command": "npm run secret:scan",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "dd2699ff2f2f58bba53a8e401d59cd28058b684f",
-      "sourceFingerprint": "83c167c0d49515d256a54c469ce6ff98f662f555361dccf52be4a3d5f3c2ef0e",
-      "startedAt": "2026-11-06T21:58:36.914Z",
-      "endedAt": "2026-11-06T21:58:37.628Z",
-      "log": "/workspace/scratch/m01-r2-p04-secret.log",
+      "testedHead": "978d6f9b290311f379f06c2b9b26e77551d24b1c",
+      "sourceFingerprint": "fb46fa5ed45097a37fbb7f21ba8002e407dca36a06c485bfa5d6041103677b58",
+      "startedAt": "2026-11-06T22:44:36.514Z",
+      "endedAt": "2026-11-06T22:44:37.057Z",
+      "log": "/workspace/scratch/m01-r2-p05-secret.log",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda",
-      "context": "Node22.22.2/npm10.9.9; local Node affinity2,3; actual fresh isolated marked PG16.15 low-privilege dx_rework_test, PG cpuset0,1 CPU2/memory2GiB; two selected PG calculation/native-browser suites with canonical business-chain config worker2 and existing100s correctness/hook budgets. This is bounded local correctness proof, not CI hardware or onsite equivalence. Original AuthService/PostgresAuthStore and valid sessions, original native business feedback/packing/snapshot/export. TEST full App/Shell is not current onsite evidence. Shared browser fixture changes retain native current/period/collaboration matrices."
+      "context": "Node22.22.2/npm10.9.9; local Node affinity2,3; actual fresh isolated marked PG16.15 low-privilege dx_rework_test, PG cpuset0,1 CPU2/memory2GiB; two selected PG calculation/native-browser suites with canonical business-chain config worker2 and existing100s correctness/hook budgets. This is bounded local correctness proof, not CI hardware or onsite equivalence. Retained sources reproject through original live permission checks; real AuthService signed Root/PMC and same-valid-session revocation. Native dates use guarded original business clock and original PO request/approval/assignment/completion commands, not rewritten business history. Local native TEST facts and elapsed-time analyses do not certify onsite coverage or personal responsibility."
     }
   ]
 }
