@@ -4,7 +4,7 @@ import {DIGITAL_SLA_PARAMETERS,validateDigitalSlaSnapshot,validateDigitalSlaValu
 import {DevelopmentCycleValuesSchema} from '@dx-rework/contracts/digital-development-technical';
 import {SlaCalculationPreviewSchema,SLA_CALCULATOR_VERSION,SLA_CALENDAR_VERSION,SLA_CALCULATION_ROUTE_VERSION,type CalculationAnchor,type CalculationGraph,type CalculationNode,type SlaCalculationContext,type SlaCalculationPreview,type SlaCalculationPreviewInput,type SlaCalculationSelection} from '@dx-rework/contracts/sla-calculation';
 import {calculateSlaPreview,calculationDraftGraph,SlaCalculationInputError} from '@dx-rework/domain/sla-calculation';
-import {buildSlaCalculationRoute,type CalculationRouteInput} from '@dx-rework/domain/sla-calculation-routes';
+import {buildSlaCalculationRoute,combineWholeCalculationRoutes,type CalculationRouteInput} from '@dx-rework/domain/sla-calculation-routes';
 import type {SlaNodeFact} from '@dx-rework/domain/digital-sla-plan';
 import type {BusinessTime} from '@dx-rework/domain/business-clock';
 import type {TrustedActorContext} from '../tools/repositories.js';
@@ -25,6 +25,7 @@ import {SlaOrderService} from './sla-order-service.js';
 import {firstContractBusinessReady} from './contract-business-ready.js';
 import {factoryBatchTiming} from './factory-batch-timing.js';
 import {factoryProductionCompletion} from './factory-production-facts.js';
+import {shipSampleSlaEvidence} from './ship-sample-facts.js';
 
 const iso=(value:Date|string|null|undefined)=>value?new Date(value).toISOString():null;
 const canonical=(value:unknown):unknown=>value instanceof Date?value.toISOString():Array.isArray(value)?value.map(canonical):value&&typeof value==='object'?Object.fromEntries(Object.entries(value).sort(([a],[b])=>a.localeCompare(b,'en')).map(([key,v])=>[key,canonical(v)])):value;
@@ -67,7 +68,8 @@ export class SlaCalculationService{
     await new DigitalProductionAccessPolicy(db).assert(actor,selection.kind,selection.id,'technical');
     observed=await new ContextBusinessClock(this.database,db).read({kind:selection.kind,id:selection.id});
     context.bindings.clock={scenarioId:observed.scenarioId,revision:observed.revision,...(observed.scenarioId?{now:observed.now}:{})};
-    if(selection.range==='development')await this.developmentContext(db,context,selection,observed);
+    if(selection.range==='whole')await this.wholeContext(db,actor,context,selection,observed);
+    else if(selection.range==='development')await this.developmentContext(db,context,selection,observed);
     else await this.orderContext(db,actor,context,selection,observed);
     context.limitations.push('实例按原采用与冻结规则读取；本次改值仅作未发布假设，不改变实例标准、事实或原执行许可');
    }
@@ -88,6 +90,35 @@ export class SlaCalculationService{
     stages:draft.stages.map(s=>{const before=current.stages.find(b=>b.stage===s.stage);return {stage:s.stage,spanMs:s.spanMs!==null&&before?.spanMs!==null&&before?.spanMs!==undefined?s.spanMs-before.spanMs:null};}),
     nodes:draft.rows.map(n=>{const before=current.rows.find(b=>b.id===n.id);return {id:n.id,endMs:n.end.at&&before?.end.at?Date.parse(n.end.at)-Date.parse(before.end.at):null};})},
    calculationReceipt:{purpose:'read_only_calculation',contextDigest,valuesDigest:slaCalculationDigest(draftValues),resultDigest:slaCalculationDigest(draft),calculatorVersion:SLA_CALCULATOR_VERSION,calendarVersion:SLA_CALENDAR_VERSION,status:draft.overall.status}};
+ }
+ private async wholeContext(db:PoolClient,actor:TrustedActorContext,context:SlaCalculationContext,selection:Extract<SlaCalculationSelection,{mode:'instance'}>,time:BusinessTime){
+  if(selection.kind!=='order'||selection.round!==undefined||selection.batchId)throw new ApplicationError('VALIDATION_ERROR','全流程请带入母单及可选PO；开发轮次或单一工艺批次请在对应范围查看',400);
+  const parts:CalculationGraph[]=[],bindings:Record<string,unknown>={},limitations:string[]=[];
+  let orderContext:SlaCalculationContext|undefined;
+  const mother=(await db.query('SELECT source_id FROM digital_production_orders WHERE production_order_id=$1',[selection.id])).rows[0]??digitalNotFound();
+  for(const range of ['development','preparation','bulk_craft','delivery','contract'] as const){
+   const child=structuredClone(context),own={...selection,range};child.selection=own;
+   // Development is source/round scoped, even when the mother order is narrowed to one PO.
+   if(range==='development'){
+    delete own.poLineId;
+    if(mother.source_id)await this.developmentContext(db,child,own,time);
+    else{child.graph=buildSlaCalculationRoute({observationMode:'instance',range,conditions:emptyConditions(),values:context.unified.values,unifiedSource:'开发来源未关联，仅保留未知窗口',development:context.development.values,developmentSource:'开发独立标准参考，未冒充历史冻结',anchors:{}});child.limitations.push('本单没有关联开发来源，开发事实与冻结规则待核；其它原生生产范围继续显示');child.bindings.development={status:'source_unavailable'};}
+   }
+   else await this.orderContext(db,actor,child,own,time);
+   parts.push(this.prefix(child.graph,range,''));bindings[range]=child.bindings;limitations.push(...child.limitations);if(range==='preparation')orderContext=child;
+  }
+  const planned=await new SlaOrderService(this.database,{read:async()=>time}).readWithClient(actor,selection.id,db,{mode:'read_projection'}),facts=planned.status==='planned'?planned.facts:await shipSampleSlaEvidence(db,selection.id),native=Object.fromEntries(Object.entries(facts).map(([key,f])=>[key,nativeFact(f)]));
+  const values=structuredClone(context.unified.values);
+  // Extra original catalogue windows use the same order freeze, never the current default when a plan exists.
+  if(planned.status==='planned'){
+   const snapshot=(await db.query('SELECT rule_version,parameters_json FROM digital_sla_order_snapshots WHERE snapshot_id=$1 AND production_order_id=$2',[planned.current.snapshotId,selection.id])).rows[0]??digitalNotFound();
+   Object.assign(values,Object.fromEntries(Object.entries(validateDigitalSlaSnapshot({ruleVersion:snapshot.rule_version,parameters:snapshot.parameters_json}).parameters).map(([key,p])=>[key,p.value])));
+  }
+  const input:CalculationRouteInput={observationMode:'instance',range:'whole',conditions:emptyConditions(),values,unifiedSource:planned.status==='planned'?`本单冻结 ${planned.current.snapshotId}`:'历史实例 · 现行参考',development:context.development.values,developmentSource:`开发独立标准 v${context.development.version}`,anchors:{},native};
+  const lines=(await db.query('SELECT line_id,COALESCE(formal_style_no,po_number) AS po_number,color FROM digital_production_po_lines WHERE production_order_id=$1 ORDER BY position',[selection.id])).rows;
+  input.shipSampleLines=lines.filter(line=>!selection.poLineId||line.line_id===selection.poLineId).map(line=>({lineId:line.line_id,label:`PO ${line.po_number??'号码待核'} · ${line.color}`}));
+  const fabric=parts[1]!.nodes.find(n=>n.parameterKey==='warehouse_preshrink');input.conditions.preshrink=fabric?.applicable==='no'||!fabric?'no':fabric.applicable==='yes'?'yes':'unknown';
+  context.graph=combineWholeCalculationRoutes(input,parts);context.identity=orderContext!.identity;context.bindings.whole=bindings;context.limitations=[...new Set([...limitations,'全流程保留各原起点与未知等待；独立监督及预计不替代执行许可'])];
  }
  private async developmentContext(db:PoolClient,context:SlaCalculationContext,selection:Extract<SlaCalculationSelection,{mode:'instance'}>,time:BusinessTime){
   if(selection.poLineId||selection.batchId)throw new ApplicationError('VALIDATION_ERROR','开发本轮演算不接收大货 PO 或批次范围',400);
@@ -224,7 +255,7 @@ export class SlaCalculationService{
  private prefix(graph:CalculationGraph,prefix:string,label:string):CalculationGraph{
   const id=(v:string)=>`${prefix}/${v}`,copy=structuredClone(graph);
   copy.anchors=Object.fromEntries(Object.entries(copy.anchors).map(([key,value])=>[id(key),value]));
-  copy.nodes=copy.nodes.map(n=>({...n,id:id(n.id),label:`${label} · ${n.label}`,dependsOn:n.dependsOn.map(id),anchorKey:n.anchorKey?id(n.anchorKey):null,targetKey:n.targetKey?id(n.targetKey):null,includedIn:n.includedIn?id(n.includedIn):null}));copy.endIds=copy.endIds.map(id);if(copy.startIds)copy.startIds=copy.startIds.map(id);return copy;
+  copy.nodes=copy.nodes.map(n=>({...n,id:id(n.id),label:label?`${label} · ${n.label}`:n.label,dependsOn:n.dependsOn.map(id),anchorKey:n.anchorKey?id(n.anchorKey):null,targetKey:n.targetKey?id(n.targetKey):null,includedIn:n.includedIn?id(n.includedIn):null}));copy.endIds=copy.endIds.map(id);if(copy.startIds)copy.startIds=copy.startIds.map(id);return copy;
  }
  private mergeGraphs(graphs:CalculationGraph[],base:CalculationGraph):CalculationGraph{return graphs.length?{...base,nodes:graphs.flatMap(g=>g.nodes),anchors:Object.assign({},...graphs.map(g=>g.anchors)),endIds:graphs.flatMap(g=>g.endIds),startIds:graphs.flatMap(g=>g.startIds??[])}:base;}
  private batchGraphs(context:SlaCalculationContext,selection:Extract<SlaCalculationSelection,{mode:'instance'}>,read:Extract<Awaited<ReturnType<SlaOrderService['readWithClient']>>,{status:'planned'}>,make:(anchors:Record<string,CalculationAnchor>,overrides?:Partial<CalculationRouteInput>)=>CalculationGraph,anchors:Record<string,CalculationAnchor>,timing:Awaited<ReturnType<typeof factoryBatchTiming>>){

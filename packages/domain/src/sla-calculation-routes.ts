@@ -11,10 +11,12 @@ export type CalculationRouteInput={
  routeKinds?:string[];inheritedKinds?:string[];outputKind?:string;
  native?:Record<string,{startedAt?:string;completedAt?:string;minutes?:number|null;evidence:string;waitingFor?:string}>;
  requireContractReady?:boolean;
+ shipSampleLines?:{lineId:string;label:string}[];
 };
 const catalog=new Map(DIGITAL_SLA_PARAMETERS.map(row=>[row.key,row]));
 /** Code-owned route fragments. Selection never switches off native quality or execution guards. */
 export function buildSlaCalculationRoute(input:CalculationRouteInput):CalculationGraph{
+ if(input.range==='whole')return buildWholeCalculationRoute(input);
  const nodes:CalculationNode[]=[],anchors=structuredClone(input.anchors),c=input.conditions;
  const graph:CalculationGraph={observationMode:input.observationMode??'example',nodes,anchors,warningPercent:input.values.warning_ratio?.kind==='ratio'?input.values.warning_ratio.percent:70,stageBufferMinutes:input.values.stage_buffer?.kind==='buffer'?input.values.stage_buffer.minutes:0,endIds:[],rangeLabel:'',startLabel:'',endLabel:''};
  const add=(key:string,options:Partial<CalculationNode>={})=>{
@@ -115,5 +117,45 @@ export function buildSlaCalculationRoute(input:CalculationRouteInput):Calculatio
   graph.rangeLabel='合同首次回签独立业务日历';graph.startLabel='首份成功就绪的合同 PDF';graph.endLabel='首次有效回签';
   nodes.push({id:'contract_return',label:'合同回签48业务小时（北京周日不计）',stage:3,parameterKey:'contract_return',applicable:'yes',countsProgress:false,kind:'duration',minutes:2880,offsetDays:null,dependsOn:[],anchorKey:'contract_pdf_ready',targetKey:null,includedIn:null,includedPosition:'start',calendar:'beijing_sunday_excluded',source:'合同原业务规则 · 0207/0265',binding:null});graph.endIds=['contract_return'];
  }
+ return graph;
+}
+
+/** All applicable native windows share their original anchors. Event waits are never inferred as zero. */
+function buildWholeCalculationRoute(input:CalculationRouteInput):CalculationGraph{
+ const fragments=(['development','preparation','bulk_craft','delivery','contract'] as const).map(range=>buildSlaCalculationRoute({...input,range}));
+ return combineWholeCalculationRoutes(input,fragments);
+}
+
+/** Native instance fragments retain their own frozen standards, scope and actual batch identities. */
+export function combineWholeCalculationRoutes(input:CalculationRouteInput,fragments:CalculationGraph[]):CalculationGraph{
+ const productionBuffer=input.values.stage_buffer?.kind==='buffer'?input.values.stage_buffer.minutes:0;
+ const graph:CalculationGraph={...fragments[0]!,stageBufferMinutes:productionBuffer,nodes:fragments.flatMap((g,i)=>g.nodes.map(n=>({...n,stageBufferMinutes:n.stageBufferMinutes??g.stageBufferMinutes,...(i===4?{independent:true}:{})}))),anchors:Object.assign({},...fragments.map(g=>g.anchors)),endIds:[],startIds:[],rangeLabel:'适用全流程',startLabel:'订单、开发及生产各原生起点',endLabel:'适用任务完成与合格装箱（即本系统出货）'};
+ const add=(key:string,dependsOn:string[]=[],scope?:{id:string;label:string})=>{
+  const row=catalog.get(key)!,value=input.values[key]!,id=scope?.id??key,native=input.native?.[id];
+  if(value.kind==='ratio'||value.kind==='buffer')throw Error('全局策略不是流程节点');
+  const anchorKey=native?.startedAt?`native:${id}:start`:row.startsAt;
+  if(native?.startedAt)graph.anchors[anchorKey]={precision:'instant',value:native.startedAt,source:native.evidence};
+  const completion=native?.completedAt?{precision:'instant' as const,value:native.completedAt,source:native.evidence}:scope?undefined:graph.anchors[row.endsAt];
+  const node:CalculationNode={id,label:scope?`${scope.label} · ${row.label}`:row.label,stage:row.stage,parameterKey:key,applicable:'yes',countsProgress:false,kind:value.kind,minutes:'minutes'in value?value.minutes:null,offsetDays:'days'in value?value.days:null,dependsOn:native?.startedAt?[]:dependsOn,anchorKey:dependsOn.length&&!native?.startedAt?null:anchorKey,targetKey:null,includedIn:null,includedPosition:'start',calendar:'continuous',source:native?.evidence??input.unifiedSource,binding:{group:'unified',key},stageBufferMinutes:productionBuffer,...(completion?{completedAt:completion}:{}),...(native?.waitingFor?{waitingFor:native.waitingFor}:{})};
+  if(native?.minutes!==undefined&&['duration','estimate'].includes(node.kind)){node.minutes=native.minutes;if(native.minutes===null){node.kind='unlimited';node.binding=null;}}
+  graph.nodes.push(node);return node;
+ };
+ add('order_creation');add('customer_confirmation',['order_creation']);
+ for(const key of ['development_accessories','development_shipping','budget'])add(key);
+ add('sourcing_ie');add('sourcing_selection',['sourcing_ie']);add('sourcing_approval',['sourcing_selection']);
+ // Existing planned handoff: paper and the applicable fabric branch must both finish before cutting.
+ const cutting=add('bulk_cutting',graph.nodes.filter(n=>n.parameterKey==='bulk_pattern'||n.parameterKey===(input.conditions.preshrink==='no'?'fabric_inspection':'warehouse_preshrink')).map(n=>n.id));
+ // Actual receipt is a separate execution prerequisite; absence is unknown, not an instantaneous transfer.
+ if(!input.native?.bulk_cutting?.startedAt)cutting.anchorKey='cutting_fabric_actually_received';
+ for(const craft of graph.nodes.filter(n=>n.id.endsWith('cutting_complete')||['bulk_printing','bulk_embroidery','bulk_print_embroidery'].includes(n.parameterKey))){
+  // A real partial batch can start before the rest of the whole-order cutting closes.
+  const nativeStart=graph.observationMode==='instance'&&craft.anchorKey&&graph.anchors[craft.anchorKey]?.precision==='instant';
+  if(!nativeStart)craft.dependsOn.push('bulk_cutting');
+ }
+ for(const key of ['warehouse_accessories','receiving_span'])add(key);
+ const samples=input.shipSampleLines?input.shipSampleLines.map(line=>add('ship_sample',[],{id:`ship_sample:${line.lineId}`,label:line.label})): [add('ship_sample')];
+ // Independent contract/reminder/estimate windows remain visible but never become a newly invented gate.
+ graph.endIds=[...new Set([...fragments.slice(0,4).flatMap(g=>g.endIds),'order_creation','customer_confirmation','development_accessories','development_shipping','budget','sourcing_approval','bulk_cutting','warehouse_accessories',...samples.map(n=>n.id),'receiving_span',...graph.nodes.filter(n=>n.parameterKey==='factory_finished'||n.parameterKey==='garment_inspection').map(n=>n.id)])];
+ graph.startIds=graph.nodes.filter(n=>!n.independent&&!n.includedIn&&!n.dependsOn.length&&!['offset','order_date'].includes(n.kind)).map(n=>n.id);
  return graph;
 }

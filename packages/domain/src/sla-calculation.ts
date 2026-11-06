@@ -61,7 +61,7 @@ export function calculateSlaPreview(graph:CalculationGraph):SlaCalculationResult
   if(n.applicable!=='yes'){
    start=end=unknown(n.applicable==='no'?`${n.label}不适用`:`${n.label}适用条件尚未确认`);basis='unknown';
   }else{
-   const candidates=n.dependsOn.map(id=>({id,time:plus(rows.get(id)!.end,definitions.get(id)!.stage===n.stage?0:graph.stageBufferMinutes)}));
+   const candidates=n.dependsOn.map(id=>({id,time:plus(rows.get(id)!.end,definitions.get(id)!.stage===n.stage?0:n.stageBufferMinutes??graph.stageBufferMinutes)}));
    if(n.anchorKey)candidates.push({id:`anchor:${n.anchorKey}`,time:startAnchor(graph.anchors[n.anchorKey],n.anchorKey)});
    start=maximum(candidates.map(c=>c.time),`${n.label}缺少可信起点`);
    if(start.at)determiningPredecessors=candidates.filter(c=>c.time.at&&at(c.time)===at(start)).map(c=>c.id).sort();
@@ -136,7 +136,10 @@ export function calculationDraftGraph(graph:CalculationGraph,current:{unified:Di
   }
  }
  const buffer=draft.unified.stage_buffer,warning=draft.unified.warning_ratio;
- if(buffer?.kind==='buffer'&&JSON.stringify(buffer)!==JSON.stringify(current.unified.stage_buffer))result.stageBufferMinutes=buffer.minutes;
+ if(buffer?.kind==='buffer'&&JSON.stringify(buffer)!==JSON.stringify(current.unified.stage_buffer)){
+  result.stageBufferMinutes=buffer.minutes;
+  for(const node of result.nodes)if(node.stageBufferMinutes!==undefined)node.stageBufferMinutes=buffer.minutes;
+ }
  if(warning?.kind==='ratio'&&JSON.stringify(warning)!==JSON.stringify(current.unified.warning_ratio))result.warningPercent=warning.percent;
  return result;
 }
