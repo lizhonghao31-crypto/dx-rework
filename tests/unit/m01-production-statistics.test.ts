@@ -39,6 +39,15 @@ describe('M01 current production quantity, scope and verified time contracts',()
  it('P08-11 counts whole applicable mother completeness separately from PO, cancellation and special closure',()=>{
   const first=po({demand:1,packing:1}),second=po({lineId:'p2',demand:1});let r=calculate([first,second]);expect([r.metrics.completedPos.value,r.metrics.completedOrders.value]).toEqual([1,0]);r=calculate([first,{...second,packing:1}]);expect([r.metrics.completedPos.value,r.metrics.completedOrders.value]).toEqual([2,1]);r=calculate([po({orderId:'cancelled',lifecycle:'cancelled'}),po({orderId:'special',lineId:'special',specialClosure:true})]);expect([r.metrics.cancelledOrders.value,r.metrics.specialClosureOrders.value,r.metrics.completedOrders.value]).toEqual([1,1,0]);
  });
+ it('retains the whole mother completion assessment when a saved completed-PO or individual-PO slice hides unfinished siblings',()=>{
+  const inputs=[po({demand:1,packing:1}),po({lineId:'p2',demand:1,packing:0})],source=calculate(inputs),before=structuredClone(source),filters={from:day,to:day,customer:'',category:'',page:1,view:'production' as const};
+  for(const drill of [{drillMetric:'completed' as const},{drillLineId:'p1'}]){
+   const slice=productionResultProjection(source,{...filters,...drill},inputs);expect(slice.rows.map(row=>row.line.lineId)).toEqual(['p1']);expect([slice.metrics.completedPos.value,slice.metrics.completedOrders.value]).toEqual([1,0]);
+  }
+  expect(source).toEqual(before);
+  const completeInputs=inputs.map(row=>({...row,packing:1})),complete=calculate(completeInputs);expect(productionResultProjection(complete,{...filters,drillLineId:'p1'},completeInputs).metrics.completedOrders.value).toBe(1);
+  const unknownInputs=[inputs[0]!,{...inputs[1]!,packing:null}],unknown=calculate(unknownInputs);expect(productionResultProjection(unknown,{...filters,drillLineId:'p1'},unknownInputs).metrics.completedOrders.value).toBeNull();
+ });
  it('P08-12 retains60 approved of100, ignores unapproved shares and denominator stays the actual60-piece requirement',()=>{
   const before=calculate([po({allocations:[allocation('a',60)]})]);expect(before.metrics.unallocated.value).toBe(40);expect(before.factories[0]!.allocated).toBe(60);expect(before.factories[0]!.involvedPoDemand).toBe(100);expect(calculate([po({allocations:[allocation('a',60),allocation('b',40)]})]).metrics.unallocated.value).toBe(0);
   const requirement:StatisticsMaterialRequirement={requirementId:'cut60',scopeVersion:'v1',lineId:'p1',factoryId:'a',kind:'裁片',unit:'件',required:60,applicability:'required',eventsComplete:true,events:[{id:'sent30',scopeVersion:'v1',effectiveQuantity:30,time:time('2026-11-01T00:00:00Z'),sourceRefs:[]}],sourceRefs:[]};expect([materialStatistics(requirement).state,materialStatistics(requirement).effectiveQuantity,materialStatistics(requirement).requirement.required]).toEqual(['partial',30,60]);

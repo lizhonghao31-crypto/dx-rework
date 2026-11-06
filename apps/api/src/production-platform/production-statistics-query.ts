@@ -2,7 +2,7 @@ import {createHash} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {beijingCalendarDate} from '@dx-rework/contracts/digital-production';
 import type {DigitalAnalysisFilters} from '@dx-rework/contracts/digital-production-analysis';
-import type {ProductionStatisticsFilters,ProductionStatisticsResponse,StatisticsPo,StatisticsProblem,StatisticsTime,StatisticsWindow,StatisticsWorkload} from '@dx-rework/contracts/production-statistics';
+import type {ProductionStatisticsFilters,ProductionStatisticsResponse,StatisticsMetric,StatisticsPo,StatisticsProblem,StatisticsTime,StatisticsWindow,StatisticsWorkload} from '@dx-rework/contracts/production-statistics';
 import {currentProductionStatistics} from '@dx-rework/domain/production-statistics';
 import type {TrustedActorContext} from '../tools/repositories.js';
 import {isRootActor} from '../access/business-authority.js';
@@ -20,7 +20,7 @@ import {retiredBulkPreshrinkTaskIds} from './bulk-preshrink-requirement.js';
 import {taskAnalysis,type AnalysisTask} from './reporting-metrics.js';
 import {ReworkBusinessDetailService} from '../rework/rework-business-detail-service.js';
 import {productionMaterialFacts} from './production-statistics-materials.js';
-import {productionResultProjection} from './production-statistics-projection.js';
+import {productionResultProjection,scopedMotherCompletion} from './production-statistics-projection.js';
 
 const hash=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const none=():StatisticsTime=>({at:null,date:null,precision:'unknown',quality:'unknown',sourceRefs:[]});
@@ -90,9 +90,11 @@ export class ProductionStatisticsQuery{
 
    if(selected.length>5000)throw new ApplicationError('ANALYSIS_RANGE_TOO_LARGE','授权结果超过本次可保存范围，请缩小筛选',409);
    const full=currentProductionStatistics(selected,observation.now,beijingCalendarDate(new Date(observation.now)));
+   const selectedOrders=new Set(selected.map(row=>row.orderId)),motherScope=rows.filter(row=>selectedOrders.has(row.orderId)),motherCompletion=motherScope.length===selected.length?full.metrics.completedOrders:currentProductionStatistics(motherScope,observation.now,full.businessDate).metrics.completedOrders;
+   full.metrics.completedOrders=scopedMotherCompletion(motherCompletion,full.rows);
    if(missingDimension.length){const unknown=missingDimension.map(row=>({key:'filter-dimension',orderId:row.orderId,lineId:row.lineId,reason:'已授权对象的筛选维度缺可信映射：'+dimensionTests(row).filter(test=>test.actual===null).map(test=>({category:'品类',salesYear:'销售年度',salesSeries:'P系列',primaryMerchandiser:'主跟单',designer:'设计主责'}[test.key]??test.key)).join('、')+'；不能假定不属于本次筛选',sourceRefs:row.quantitySourceRefs}));full.unknown.push(...unknown);for(const metric of Object.values(full.metrics)){metric.value=null;metric.unknown.push(...unknown);}}
    if(applied.factoryId){full.factories=full.factories.filter(factory=>factory.factoryId===applied.factoryId);full.materials=full.materials.filter(material=>material.requirement.factoryId===applied.factoryId);full.workload=full.workload.filter(item=>item.factoryId===null||item.factoryId===applied.factoryId);}const permissionHash=await this.permission(db,live,[...selected,...missingDimension].map(row=>row.orderId),full.windows.map(row=>row.window.id),full.reworks.map(row=>row.reworkId));
-   return {permissionHash,payload:{projectionInputs:selected,watermark:hash(full),filters:applied,canExport:this.exportAllowed(live),total:full.rows.length,result:full,dimensions:[{key:'customer',available:true,reason:'原订单客户代码；未把客户自动映射为品牌'},{key:'category',available:true,reason:'原当前有效已发布制单品类，缺件仍保留全局数量'},{key:'designer',available:true,reason:'原开发归属加创建时设计角色证据；Root创建未猜设计主责'},{key:'secondaryMerchandiser',available:isRootActor(live)||(live.authorizationCapabilities??[]).includes('sourcing:view'),reason:'沿原外发读取权限及第二跟单字段'}],limitations:['本次为当前生产完整读取，不按创建月份剔除旧积压。','各工厂涉及母单/PO及全PO背景需求不可跨厂相加。','未知归厂只限制相关厂指标；装箱为本系统出货，不代客户签收。','未核历史范围不能提供严格首次合格率或全周期等待覆盖。']}};
+   return {permissionHash,payload:{projectionInputs:selected,motherCompletion,watermark:hash(full),filters:applied,canExport:this.exportAllowed(live),total:full.rows.length,result:full,dimensions:[{key:'customer',available:true,reason:'原订单客户代码；未把客户自动映射为品牌'},{key:'category',available:true,reason:'原当前有效已发布制单品类，缺件仍保留全局数量'},{key:'designer',available:true,reason:'原开发归属加创建时设计角色证据；Root创建未猜设计主责'},{key:'secondaryMerchandiser',available:isRootActor(live)||(live.authorizationCapabilities??[]).includes('sourcing:view'),reason:'沿原外发读取权限及第二跟单字段'}],limitations:['本次为当前生产完整读取，不按创建月份剔除旧积压。','各工厂涉及母单/PO及全PO背景需求不可跨厂相加。','未知归厂只限制相关厂指标；装箱为本系统出货，不代客户签收。','未核历史范围不能提供严格首次合格率或全周期等待覆盖。']}};
   });
   for(const {id,time} of observed)await assertBusinessClockUnchanged(clock,{kind:'order',id},time);
   const currentPermission=await this.read(async db=>this.permission(db,await this.liveActor(db,actor),[...result.payload.result.rows.map(row=>row.line.orderId),...result.payload.result.unknown.map(row=>row.orderId)],result.payload.result.windows.map(row=>row.window.id),result.payload.result.reworks.map(row=>row.reworkId)));
@@ -100,8 +102,8 @@ export class ProductionStatisticsQuery{
   const saved=await this.store.save(actor.actorId,key,result.permissionHash,result.payload);
   return this.page({...result.payload,...saved,freshness:'current'},filters.page,exportAll);
  }
- private page(value:Omit<ProductionStatisticsResponse,'page'|'pageSize'|'basis'>&{projectionInputs:StatisticsPo[]},page:number,exportAll:boolean):ProductionStatisticsResponse{
-  const {projectionInputs,...publicValue}=value,result=productionResultProjection(value.result,value.filters,projectionInputs);
+ private page(value:Omit<ProductionStatisticsResponse,'page'|'pageSize'|'basis'>&{projectionInputs:StatisticsPo[];motherCompletion:StatisticsMetric},page:number,exportAll:boolean):ProductionStatisticsResponse{
+  const {projectionInputs,motherCompletion,...publicValue}=value,result=productionResultProjection(value.result,value.filters,projectionInputs,motherCompletion);
   return {...publicValue,basis:{total:value.result.rows.length,metrics:value.result.metrics,unknown:value.result.unknown},total:result.rows.length,page,pageSize:15,result:{...result,rows:exportAll?result.rows:result.rows.slice((page-1)*15,page*15)}};
  }
  private async orderRows(db:PoolClient,actor:TrustedActorContext,order:StatisticsOrder):Promise<StatisticsPo[]>{

@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "8b1de5dbe1d2452a57680766ec00945f4a562a64",
-  "sourceFingerprint": "5ffaa1f652aa6f6ba901d6493b6bd99bad97abdf39c7c23e30317d316815f9a1",
+  "sourceFingerprint": "11d5c418c7a4e61452d61b127619ae1d413346bde3bd6b6b5141e3936a4eb5b0",
   "risk": "full",
   "rules": [
     {
@@ -25,7 +25,7 @@
       ],
       "initialization": "不建数量账/ERP导入，不改原业务状态。逐PO先max(需求-有效装箱,0)再聚合，超量另列；有效累计不再加旧receipt。重复/矛盾版本保未知；取消排除集合分别用母单/PO/问题原ID，不能混单位。",
       "dateAndPermission": "统一北京业务观察和七日半开窗口；缺客户日单列。到仓QC按原receipt数量版，不由工厂QC或closed补齐。完成/未完时长用可信进入/完成，不用createdAt；等待只保原可证并集，不改正式SLA。",
-      "expectation": "领域F全局未知池一次、I累计2/原收货1/QC1/装2缺口1、部分承接60/100、零旧厂、超量不抵另一PO、完成10h/未完12h/等待3h均可复算。原生I及有效返工报工1改3加5等于8而原登记仍1，不造跨轮独立不良件或首次通过率。",
+      "expectation": "领域F全局未知池一次、I累计2/原收货1/QC1/装2缺口1、部分承接60/100、零旧厂、超量不抵另一PO、完成10h/未完12h/等待3h均可复算。Review反例的两PO先装1个：下钻/直接PO筛选/导出母单完成0，第二PO装齐后新S1为1、旧S0仍0；原生I及有效返工报工1改3加5等于8而原登记仍1，不造跨轮独立不良件或首次通过率。",
       "checks": [
         "full-nondb",
         "canonical",
@@ -155,7 +155,7 @@
         "tests/integration/time-reading-clock-postgres.test.ts",
         "tests/unit/digital-development-workspace.test.ts"
       ],
-      "initialization": "view=production复用原GET/export，notes明确只读拒绝；真实条件保原hash，只将显式drill字段与page作为同版展示切片。原未折叠事实保冲突版本，下钻不能将已知矛盾变确定；保持原asOf/watermark和完整basis，原角色重新核权。",
+      "initialization": "view=production复用原GET/export，notes明确只读拒绝；真实条件保原hash，只将显式drill字段与page作为同版展示切片。原未折叠事实保冲突版本，下钻不能将已知矛盾变确定；保存完整母单适用PO的完成结论，不因完成项/PO/工厂筛选隐藏未完兄弟PO后把整单判成已装齐；保持原asOf/watermark和完整basis，原角色重新核权。",
       "dateAndPermission": "保存前只读repeatable-read完整授权集合，读取后复核原业务钟和权限。S0下钻不join当前值，导出只用同一保存值；原开始/结束筛选、维度及份额/口径/水位和未知进入导出，范围变化不复用旧标题。",
       "expectation": "原16PO在15行分页下总量32不变，同S0下钻一PO为2而basis仍32；改真正lineId绑定拒绝。同一原装箱40→50后，S0下钻/跨实例/XLSX40/60，S1为50/50。I即使特殊结案且装齐仍能独立打开质量缺口。",
       "checks": [
@@ -236,25 +236,25 @@
     {
       "id": "full-nondb",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --maxWorkers=1 --reporter=default --reporter=json --outputFile=/workspace/scratch/m01-p08-full-nondb-base8b.json",
+      "command": "node node_modules/vitest/vitest.mjs run --maxWorkers=2 --reporter=json --outputFile=/workspace/scratch/m01-p08-full-nondb-review1.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 3407,
+      "passed": 3408,
       "failed": 0,
       "skipped": 11,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "765a18c9ef5d48ca24ebb29f15fa5b9d4005a1e7738e75450ab7043ee39c7406"
+          "sha256": "e570ec57769760e6dc0c811e12ea94380a8a4544e4ce1534a6fe421ad7fe6f90"
         }
       ],
-      "testedHead": "8b1de5dbe1d2452a57680766ec00945f4a562a64",
-      "sourceFingerprint": "5ffaa1f652aa6f6ba901d6493b6bd99bad97abdf39c7c23e30317d316815f9a1",
-      "startedAt": "2026-11-06T08:06:44.592Z",
-      "endedAt": "2026-11-06T08:10:57.510Z",
-      "log": "/workspace/scratch/m01-p08-full-nondb-base8b.log",
-      "logSha256": "271aec130dd4a3cbf42db9fc2b514a138d18aad4f332c12eb4906b1949c0b8cc",
-      "context": "Fresh actual P07 squash8b1de5db assembled source, Node22.22.2/npm10.9.9, repository original command. Explicit local source fingerprint and actual start/end/head retained. Non-DB includes11 existing optional skips; preflight is original Node protocol entry. Native PG15 cases are part of canonical, not added again as independent cases. Build is workspace-only, without root deployment/postbuild; final GitHub head evidence remains separate."
+      "testedHead": "d3d7245ef15ce7287c2c63b2c4919770364f6af0",
+      "sourceFingerprint": "11d5c418c7a4e61452d61b127619ae1d413346bde3bd6b6b5141e3936a4eb5b0",
+      "startedAt": "2026-11-06T08:51:41.145Z",
+      "endedAt": "2026-11-06T08:54:20.276Z",
+      "log": "/workspace/scratch/m01-p08-full-nondb-review1.log",
+      "logSha256": "9834bc4879b94f8840846836dc25ea903e8e0aa02836bc434abe1be3668880cc",
+      "context": "Fresh actual P07 squash8b1de5db assembled source, Node22.22.2/npm10.9.9, repository original command. Explicit local source fingerprint and actual start/end/head retained. Non-DB includes11 existing optional skips; preflight is original Node protocol entry. Native PG16 cases are part of canonical, not added again as independent cases. Build is the original npm run build including its original static postbuild; no deployment; final GitHub head evidence remains separate."
     },
     {
       "id": "canonical",
@@ -262,29 +262,29 @@
       "command": "node scripts/run-business-chain-gate.mjs --full-gate",
       "status": "passed",
       "exitCode": 0,
-      "passed": 499,
+      "passed": 500,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "8693930382dfb95f68b3767fec38ba436b954a87575c8a38480503e932c09410"
+          "sha256": "9e7db4d791d06c78301a92cfe0cfdd13e77310bb5b5cfab44f09826fda268428"
         },
         {
           "format": "vitest-json",
-          "sha256": "0537c17f169717ce28d019d99bd39c852eb1bfcf5b8d7daf8624e85984a58c07"
+          "sha256": "1b1af42400fa12d7fdef81021e95c232e83ef5a26dd03c6d4d66186fd4003f09"
         },
         {
           "format": "vitest-json",
-          "sha256": "17d2a5003cc9ec699d6730de2b4e5b43843347db6a757b118c3489a3c245514d"
+          "sha256": "ba60d8a33850b860c536e1387c3b68454943bd75c5e424490df7644e5220e684"
         }
       ],
-      "testedHead": "8b1de5dbe1d2452a57680766ec00945f4a562a64",
-      "sourceFingerprint": "5ffaa1f652aa6f6ba901d6493b6bd99bad97abdf39c7c23e30317d316815f9a1",
-      "startedAt": "2026-11-06T08:06:46.564Z",
-      "endedAt": "2026-11-06T08:14:25.644Z",
-      "log": "/workspace/scratch/m01-p08-canonical-container-base8b.log",
-      "logSha256": "6577afcfab7928a27b50e541481f7b64171a094574cda7e6c41ea568ff874227",
+      "testedHead": "d3d7245ef15ce7287c2c63b2c4919770364f6af0",
+      "sourceFingerprint": "11d5c418c7a4e61452d61b127619ae1d413346bde3bd6b6b5141e3936a4eb5b0",
+      "startedAt": "2026-11-06T08:53:16.902Z",
+      "endedAt": "2026-11-06T09:00:52.859Z",
+      "log": "/workspace/scratch/m01-p08-canonical-container-review1.log",
+      "logSha256": "3190ab40659bd1e0ff61838cf7e10940f9f19e6c3027c2e5b872d740676e085d",
       "context": "Fresh actual P07 squash8b1de5db assembled P08 source, original --full-gate32-suite union and original ordinary/isolated/long configs, workers1/1/2. Node22.22.2/npm10.9.9, exact CI PG16-alpine digest aa6cb33cf4c19c765cefcf48d96176258800870a9a1e930ad126200f9d825139 (actual16.15), marked separate low-privilege default/clock databases and original owned resource lifecycle. PG cpuset0,1/2CPU/2GiB and Node affinity0,1; host/IO/whole CI hardware not equivalent. No browser suite is in this P08 plan, so native means original AuthService/PostgresAuthStore/auth routes/Fastify authenticated HTTP plus real PG, not a browser claim. Dedicated actual multi-role and same-valid-session revoke fixtures; only external DingTalk and named cache-insert fault are TEST adapters. No production or independent diagnostic scene used."
     },
     {
@@ -299,16 +299,16 @@
       "resultReports": [
         {
           "format": "node-tap",
-          "sha256": "b50b1a4ea4515deb00f56a776b4cd52cc4820d3b80bb959e9cc85b9ea9e634ea"
+          "sha256": "426cbdbbb1190edfa8e4af12a52ae987907b6f872b272ea234760550a05bd5e7"
         }
       ],
-      "testedHead": "8b1de5dbe1d2452a57680766ec00945f4a562a64",
-      "sourceFingerprint": "5ffaa1f652aa6f6ba901d6493b6bd99bad97abdf39c7c23e30317d316815f9a1",
-      "startedAt": "2026-11-06T08:11:35.321Z",
-      "endedAt": "2026-11-06T08:11:43.545Z",
-      "log": "/workspace/scratch/m01-p08-preflight-base8b-final.log",
-      "logSha256": "b50b1a4ea4515deb00f56a776b4cd52cc4820d3b80bb959e9cc85b9ea9e634ea",
-      "context": "Fresh actual P07 squash8b1de5db assembled source, Node22.22.2/npm10.9.9, repository original command. Explicit local source fingerprint and actual start/end/head retained. Non-DB includes11 existing optional skips; preflight is original Node protocol entry. Native PG15 cases are part of canonical, not added again as independent cases. Build is workspace-only, without root deployment/postbuild; final GitHub head evidence remains separate."
+      "testedHead": "d3d7245ef15ce7287c2c63b2c4919770364f6af0",
+      "sourceFingerprint": "11d5c418c7a4e61452d61b127619ae1d413346bde3bd6b6b5141e3936a4eb5b0",
+      "startedAt": "2026-11-06T08:52:04.012Z",
+      "endedAt": "2026-11-06T08:52:13.880Z",
+      "log": "/workspace/scratch/m01-p08-preflight-review1.log",
+      "logSha256": "426cbdbbb1190edfa8e4af12a52ae987907b6f872b272ea234760550a05bd5e7",
+      "context": "Fresh actual P07 squash8b1de5db assembled source, Node22.22.2/npm10.9.9, repository original command. Explicit local source fingerprint and actual start/end/head retained. Non-DB includes11 existing optional skips; preflight is original Node protocol entry. Native PG16 cases are part of canonical, not added again as independent cases. Build is the original npm run build including its original static postbuild; no deployment; final GitHub head evidence remains separate."
     },
     {
       "id": "lint",
@@ -316,13 +316,13 @@
       "command": "npm run lint",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "8b1de5dbe1d2452a57680766ec00945f4a562a64",
-      "sourceFingerprint": "5ffaa1f652aa6f6ba901d6493b6bd99bad97abdf39c7c23e30317d316815f9a1",
-      "startedAt": "2026-11-06T08:04:24.698Z",
-      "endedAt": "2026-11-06T08:04:46.235Z",
-      "log": "/workspace/scratch/m01-p08-lint-base8b-final.log",
+      "testedHead": "d3d7245ef15ce7287c2c63b2c4919770364f6af0",
+      "sourceFingerprint": "11d5c418c7a4e61452d61b127619ae1d413346bde3bd6b6b5141e3936a4eb5b0",
+      "startedAt": "2026-11-06T08:52:05.384Z",
+      "endedAt": "2026-11-06T08:52:32.194Z",
+      "log": "/workspace/scratch/m01-p08-lint-review1.log",
       "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763",
-      "context": "Fresh actual P07 squash8b1de5db assembled source, Node22.22.2/npm10.9.9, repository original command. Explicit local source fingerprint and actual start/end/head retained. Non-DB includes11 existing optional skips; preflight is original Node protocol entry. Native PG15 cases are part of canonical, not added again as independent cases. Build is workspace-only, without root deployment/postbuild; final GitHub head evidence remains separate."
+      "context": "Fresh actual P07 squash8b1de5db assembled source, Node22.22.2/npm10.9.9, repository original command. Explicit local source fingerprint and actual start/end/head retained. Non-DB includes11 existing optional skips; preflight is original Node protocol entry. Native PG16 cases are part of canonical, not added again as independent cases. Build is the original npm run build including its original static postbuild; no deployment; final GitHub head evidence remains separate."
     },
     {
       "id": "types",
@@ -330,27 +330,27 @@
       "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "8b1de5dbe1d2452a57680766ec00945f4a562a64",
-      "sourceFingerprint": "5ffaa1f652aa6f6ba901d6493b6bd99bad97abdf39c7c23e30317d316815f9a1",
-      "startedAt": "2026-11-06T08:06:45.972Z",
-      "endedAt": "2026-11-06T08:07:38.312Z",
-      "log": "/workspace/scratch/m01-p08-types-base8b-final.log",
+      "testedHead": "d3d7245ef15ce7287c2c63b2c4919770364f6af0",
+      "sourceFingerprint": "11d5c418c7a4e61452d61b127619ae1d413346bde3bd6b6b5141e3936a4eb5b0",
+      "startedAt": "2026-11-06T08:51:42.522Z",
+      "endedAt": "2026-11-06T08:52:20.711Z",
+      "log": "/workspace/scratch/m01-p08-types-review1.log",
       "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e",
-      "context": "Fresh actual P07 squash8b1de5db assembled source, Node22.22.2/npm10.9.9, repository original command. Explicit local source fingerprint and actual start/end/head retained. Non-DB includes11 existing optional skips; preflight is original Node protocol entry. Native PG15 cases are part of canonical, not added again as independent cases. Build is workspace-only, without root deployment/postbuild; final GitHub head evidence remains separate."
+      "context": "Fresh actual P07 squash8b1de5db assembled source, Node22.22.2/npm10.9.9, repository original command. Explicit local source fingerprint and actual start/end/head retained. Non-DB includes11 existing optional skips; preflight is original Node protocol entry. Native PG16 cases are part of canonical, not added again as independent cases. Build is the original npm run build including its original static postbuild; no deployment; final GitHub head evidence remains separate."
     },
     {
       "id": "build",
       "kind": "command",
-      "command": "npm run build --workspaces --if-present",
+      "command": "npm run build",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "8b1de5dbe1d2452a57680766ec00945f4a562a64",
-      "sourceFingerprint": "5ffaa1f652aa6f6ba901d6493b6bd99bad97abdf39c7c23e30317d316815f9a1",
-      "startedAt": "2026-11-06T08:04:23.321Z",
-      "endedAt": "2026-11-06T08:04:42.762Z",
-      "log": "/workspace/scratch/m01-p08-build-base8b-final.log",
-      "logSha256": "0f18b17ff0eabc262db7de19d71f7dfa80ff2d5b8c0136a59e42fcc313d0536e",
-      "context": "Fresh actual P07 squash8b1de5db assembled source, Node22.22.2/npm10.9.9, repository original command. Explicit local source fingerprint and actual start/end/head retained. Non-DB includes11 existing optional skips; preflight is original Node protocol entry. Native PG15 cases are part of canonical, not added again as independent cases. Build is workspace-only, without root deployment/postbuild; final GitHub head evidence remains separate."
+      "testedHead": "d3d7245ef15ce7287c2c63b2c4919770364f6af0",
+      "sourceFingerprint": "11d5c418c7a4e61452d61b127619ae1d413346bde3bd6b6b5141e3936a4eb5b0",
+      "startedAt": "2026-11-06T08:49:46.735Z",
+      "endedAt": "2026-11-06T08:50:07.739Z",
+      "log": "/workspace/scratch/m01-p08-build-review1.log",
+      "logSha256": "3db5aedd3cc76253d95b00fc0d5101b78382e4159cf7f088f9d2af4ede0fa821",
+      "context": "Fresh actual P07 squash8b1de5db assembled source, Node22.22.2/npm10.9.9, repository original command. Explicit local source fingerprint and actual start/end/head retained. Non-DB includes11 existing optional skips; preflight is original Node protocol entry. Native PG16 cases are part of canonical, not added again as independent cases. Build is the original npm run build including its original static postbuild; no deployment; final GitHub head evidence remains separate."
     },
     {
       "id": "secret",
@@ -358,13 +358,13 @@
       "command": "npm run secret:scan",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "8b1de5dbe1d2452a57680766ec00945f4a562a64",
-      "sourceFingerprint": "5ffaa1f652aa6f6ba901d6493b6bd99bad97abdf39c7c23e30317d316815f9a1",
-      "startedAt": "2026-11-06T08:11:36.781Z",
-      "endedAt": "2026-11-06T08:11:38.857Z",
-      "log": "/workspace/scratch/m01-p08-secret-base8b-final.log",
+      "testedHead": "d3d7245ef15ce7287c2c63b2c4919770364f6af0",
+      "sourceFingerprint": "11d5c418c7a4e61452d61b127619ae1d413346bde3bd6b6b5141e3936a4eb5b0",
+      "startedAt": "2026-11-06T08:54:33.874Z",
+      "endedAt": "2026-11-06T08:54:34.491Z",
+      "log": "/workspace/scratch/m01-p08-secret-review1.log",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda",
-      "context": "Fresh actual P07 squash8b1de5db assembled source, Node22.22.2/npm10.9.9, repository original command. Explicit local source fingerprint and actual start/end/head retained. Non-DB includes11 existing optional skips; preflight is original Node protocol entry. Native PG15 cases are part of canonical, not added again as independent cases. Build is workspace-only, without root deployment/postbuild; final GitHub head evidence remains separate."
+      "context": "Fresh actual P07 squash8b1de5db assembled source, Node22.22.2/npm10.9.9, repository original command. Explicit local source fingerprint and actual start/end/head retained. Non-DB includes11 existing optional skips; preflight is original Node protocol entry. Native PG16 cases are part of canonical, not added again as independent cases. Build is the original npm run build including its original static postbuild; no deployment; final GitHub head evidence remains separate."
     },
     {
       "id": "db-seed",
@@ -372,13 +372,13 @@
       "command": "bash scripts/seed-base-migrations.sh",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "8b1de5dbe1d2452a57680766ec00945f4a562a64",
-      "sourceFingerprint": "5ffaa1f652aa6f6ba901d6493b6bd99bad97abdf39c7c23e30317d316815f9a1",
-      "startedAt": "2026-11-06T08:06:43.262Z",
-      "endedAt": "2026-11-06T08:06:45.538Z",
-      "log": "/workspace/scratch/m01-p08-container-seed-base8b.log",
+      "testedHead": "d3d7245ef15ce7287c2c63b2c4919770364f6af0",
+      "sourceFingerprint": "11d5c418c7a4e61452d61b127619ae1d413346bde3bd6b6b5141e3936a4eb5b0",
+      "startedAt": "2026-11-06T08:53:13.096Z",
+      "endedAt": "2026-11-06T08:53:15.832Z",
+      "log": "/workspace/scratch/m01-p08-container-seed-review1.log",
       "logSha256": "8d99739d96ec10401cf6e5fc19bcea07a95b8d58652443c90481e80799733ae7",
-      "context": "Fresh actual P07 squash8b1de5db assembled source, Node22.22.2/npm10.9.9, repository original command. Explicit local source fingerprint and actual start/end/head retained. Non-DB includes11 existing optional skips; preflight is original Node protocol entry. Native PG15 cases are part of canonical, not added again as independent cases. Build is workspace-only, without root deployment/postbuild; final GitHub head evidence remains separate."
+      "context": "Fresh actual P07 squash8b1de5db assembled source, Node22.22.2/npm10.9.9, repository original command. Explicit local source fingerprint and actual start/end/head retained. Non-DB includes11 existing optional skips; preflight is original Node protocol entry. Native PG16 cases are part of canonical, not added again as independent cases. Build is the original npm run build including its original static postbuild; no deployment; final GitHub head evidence remains separate."
     },
     {
       "id": "db-migrations",
@@ -386,13 +386,13 @@
       "command": "npm run db:migrate:check",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "8b1de5dbe1d2452a57680766ec00945f4a562a64",
-      "sourceFingerprint": "5ffaa1f652aa6f6ba901d6493b6bd99bad97abdf39c7c23e30317d316815f9a1",
-      "startedAt": "2026-11-06T08:06:45.619Z",
-      "endedAt": "2026-11-06T08:06:46.162Z",
-      "log": "/workspace/scratch/m01-p08-container-migrations-base8b.log",
+      "testedHead": "d3d7245ef15ce7287c2c63b2c4919770364f6af0",
+      "sourceFingerprint": "11d5c418c7a4e61452d61b127619ae1d413346bde3bd6b6b5141e3936a4eb5b0",
+      "startedAt": "2026-11-06T08:53:15.910Z",
+      "endedAt": "2026-11-06T08:53:16.492Z",
+      "log": "/workspace/scratch/m01-p08-container-migrations-review1.log",
       "logSha256": "edbc059c46f61d2fd0bcbff106e5c8b5e41e8407d541460c33d6d4dbbe8c6b10",
-      "context": "Fresh actual P07 squash8b1de5db assembled source, Node22.22.2/npm10.9.9, repository original command. Explicit local source fingerprint and actual start/end/head retained. Non-DB includes11 existing optional skips; preflight is original Node protocol entry. Native PG15 cases are part of canonical, not added again as independent cases. Build is workspace-only, without root deployment/postbuild; final GitHub head evidence remains separate."
+      "context": "Fresh actual P07 squash8b1de5db assembled source, Node22.22.2/npm10.9.9, repository original command. Explicit local source fingerprint and actual start/end/head retained. Non-DB includes11 existing optional skips; preflight is original Node protocol entry. Native PG16 cases are part of canonical, not added again as independent cases. Build is the original npm run build including its original static postbuild; no deployment; final GitHub head evidence remains separate."
     },
     {
       "id": "resource-smoke",
@@ -400,13 +400,13 @@
       "command": "node scripts/test-preflight.mjs --database",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "8b1de5dbe1d2452a57680766ec00945f4a562a64",
-      "sourceFingerprint": "5ffaa1f652aa6f6ba901d6493b6bd99bad97abdf39c7c23e30317d316815f9a1",
-      "startedAt": "2026-11-06T08:06:46.251Z",
-      "endedAt": "2026-11-06T08:06:46.472Z",
-      "log": "/workspace/scratch/m01-p08-container-resource-smoke-base8b.log",
-      "logSha256": "b537407af1257c2705ddac25773c569b752f1ff6afb08a7f11f26b05d3a54af0",
-      "context": "Fresh actual P07 squash8b1de5db assembled source, Node22.22.2/npm10.9.9, repository original command. Explicit local source fingerprint and actual start/end/head retained. Non-DB includes11 existing optional skips; preflight is original Node protocol entry. Native PG15 cases are part of canonical, not added again as independent cases. Build is workspace-only, without root deployment/postbuild; final GitHub head evidence remains separate."
+      "testedHead": "d3d7245ef15ce7287c2c63b2c4919770364f6af0",
+      "sourceFingerprint": "11d5c418c7a4e61452d61b127619ae1d413346bde3bd6b6b5141e3936a4eb5b0",
+      "startedAt": "2026-11-06T08:53:16.575Z",
+      "endedAt": "2026-11-06T08:53:16.815Z",
+      "log": "/workspace/scratch/m01-p08-container-resource-smoke-review1.log",
+      "logSha256": "73a8236a10b1ff957f75fc8260561256935442d120b9758e70ad6302991b7c4f",
+      "context": "Fresh actual P07 squash8b1de5db assembled source, Node22.22.2/npm10.9.9, repository original command. Explicit local source fingerprint and actual start/end/head retained. Non-DB includes11 existing optional skips; preflight is original Node protocol entry. Native PG16 cases are part of canonical, not added again as independent cases. Build is the original npm run build including its original static postbuild; no deployment; final GitHub head evidence remains separate."
     },
     {
       "id": "pg13-maintenance",
@@ -414,11 +414,11 @@
       "command": "node scripts/ci/acceptance-maintenance-drill.mjs 13",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "8b1de5dbe1d2452a57680766ec00945f4a562a64",
-      "sourceFingerprint": "5ffaa1f652aa6f6ba901d6493b6bd99bad97abdf39c7c23e30317d316815f9a1",
-      "startedAt": "2026-11-06T08:19:43.566Z",
-      "endedAt": "2026-11-06T08:20:39.545Z",
-      "log": "/workspace/scratch/m01-p08-maintenance-pg13-base8b.log",
+      "testedHead": "d3d7245ef15ce7287c2c63b2c4919770364f6af0",
+      "sourceFingerprint": "11d5c418c7a4e61452d61b127619ae1d413346bde3bd6b6b5141e3936a4eb5b0",
+      "startedAt": "2026-11-06T09:02:07.520Z",
+      "endedAt": "2026-11-06T09:02:38.883Z",
+      "log": "/workspace/scratch/m01-p08-maintenance-pg13-review1.log",
       "logSha256": "758c45ba03bda58db0d5d66ead15684930b47cb04faeef15f17b1597f00a73af",
       "context": "Original acceptance-maintenance-drill.mjs13 in a separately owned local Docker PG13.23 fixture, original owner/application/legacy permissions, current append-only migration/grant inventory and backup/recovery path. Actual raw output, not the parent PG16 identity, establishes the tested PG13 profile. No production or live Acceptance database touched."
     }
