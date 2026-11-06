@@ -162,6 +162,13 @@ export const classifyFullGatePaths = (inputPaths) => {
       mappedTests.add('tests/integration/m01-short-lead-native-browser-postgres.test.ts');
       mappedTests.add('tests/integration/series-plan-postgres.test.ts');
     }
+    if (/^apps\/api\/src\/production-platform\/(?:production-statistics[^/]*|analysis-result-store|reporting-query|reporting-routes|factory-production-facts)\.ts$/.test(path)
+      || ['packages/contracts/src/production-statistics.ts','packages/contracts/src/digital-production-analysis.ts','packages/domain/src/production-statistics.ts','tests/integration/m01-production-statistics-postgres.test.ts'].includes(path)) {
+      mappedTests.add('tests/integration/m01-production-statistics-postgres.test.ts');
+    }
+    if (['apps/api/src/production-platform/reporting-query.ts','apps/api/src/production-platform/reporting-routes.ts','packages/contracts/src/digital-production-analysis.ts','tests/helpers/business-anchor-fixture.ts'].includes(path)) {
+      mappedTests.add('tests/integration/time-reading-clock-postgres.test.ts');
+    }
     if (/^apps\/web\/src\/(?:sla-|development-cycle-settings|cockpit-production-settings|digital-cockpit-personnel|series-settings|series-plan-panel|auth-session)/.test(path)
       || /^apps\/api\/src\/production-platform\/(?:sla-|development-technical-service)/.test(path)
       || path.startsWith('apps/api/src/auth/')

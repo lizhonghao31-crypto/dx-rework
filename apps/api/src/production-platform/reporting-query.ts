@@ -12,11 +12,14 @@ import {buildWorkbook,type WorkbookCell} from '../reporting/xlsx-workbook.js';
 import {ANALYSIS_RULE_VERSION,taskAnalysis,summarizeAnalysis,type AnalysisTask} from './reporting-metrics.js';
 import {workspaceAnalysisRows,analysisWorkspaceOverview,WORKSPACE_ANALYSIS_RULE_VERSION} from './analysis-workspace-metrics.js';
 import {materialReadiness} from './development-material-readiness.js';
+import {ProductionStatisticsQuery} from './production-statistics-query.js';
+import {productionEvidenceSheets} from './production-statistics-export.js';
 const iso=(value:Date|string|null)=>value===null?null:new Date(value).toISOString();
 const range=(filters:DigitalAnalysisFilters)=>({from:new Date(`${filters.from}T00:00:00+08:00`).toISOString(),to:new Date(Date.parse(`${filters.to}T00:00:00+08:00`)+86400000).toISOString()});
 export class DigitalAnalysisQuery{
  private readonly observations=new WeakMap<PoolClient,Map<string,{scope:BusinessTimeScope;time:BusinessTime}>>();
  constructor(private readonly database:Pool){}
+ async production(actor:TrustedActorContext,filters:DigitalAnalysisFilters){return new ProductionStatisticsQuery(this.database).list(actor,filters);}
  private exportAllowed(actor:TrustedActorContext){try{assertBusinessExportAllowed(actor.actorRoles,'report:export');return isDigitalLeader(actor)&&actor.actorRoles.includes('root_superuser')||Boolean(actor.authorizationCapabilities?.includes('report:view'));}catch{return false;}}
  private async snapshot(db:PoolClient,actor:TrustedActorContext,filters:DigitalAnalysisFilters){
   assertIdentityActor(actor);const window=range(filters),asOf=new Date().toISOString();
@@ -107,6 +110,22 @@ export class DigitalAnalysisQuery{
  async list(actor:TrustedActorContext,filters:DigitalAnalysisFilters):Promise<DigitalAnalysisResult>{return this.read(async db=>{const all=await this.snapshot(db,actor,filters);return {...all,rows:all.rows.slice((filters.page-1)*15,filters.page*15)};});}
  async export(actor:TrustedActorContext,filters:DigitalAnalysisFilters){
   if(!this.exportAllowed(actor))digitalForbidden();
+  if(filters.view==='production'){
+   if(!filters.snapshotId)throw new ApplicationError('ANALYSIS_RESULT_REQUIRED','请先读取完整查询结果，再导出该版结果',409);
+   const result=await new ProductionStatisticsQuery(this.database).list(actor,filters,true);
+   if(!result.canExport)digitalForbidden();
+   const value=(number:number|null)=>number===null?'未知':number;
+   const labels:Record<string,string>={orders:'母单数',pos:'PO数',demand:'涉及PO总需求',received:'有效实收',qualityCovered:'到仓质量检查覆盖',qualified:'到仓合格',qualityMissing:'到仓检查覆盖缺口',packed:'装箱出货',remaining:'涉及PO的客户待出货',excess:'超量装箱',completedOrders:'已装齐母单',completedPos:'已装齐PO',unallocated:'未覆盖选厂量',duePos:'客户约定已过且未装齐PO',dueQuantity:'客户约定已过的待出货量',nextSevenPos:'未来七日应出货未齐PO',nextSevenQuantity:'未来七日应出货未齐量',missingCustomerDatePos:'客户约定日期缺件PO',blockedPos:'当前明确阻断涉及PO',blockedOrders:'当前明确阻断涉及母单',currentProblems:'当前独立问题数',cancelledOrders:'已取消母单',specialClosureOrders:'特殊结案母单'};
+   const filterLabels:Record<string,string>={from:'日期自',to:'日期至',customer:'客户',category:'品类',page:'原页码',view:'查询内容',factoryId:'工厂范围',lineId:'PO范围',salesYear:'销售年度',salesSeries:'P系列',primaryMerchandiserId:'主跟单',secondaryMerchandiserId:'第二跟单',designer:'设计主责',drillLineId:'同版下钻PO',drillOrderId:'同版下钻母单',drillFactoryId:'同版下钻工厂',drillMetric:'同版下钻指标'};
+   const kindLabels={received:'有效实收',qualified:'到仓合格',packed:'装箱出货'};
+   const content=await buildWorkbook([{name:'范围与口径',rows:[['查询结果',result.snapshotId],['业务观察',result.result.asOf],['生成',result.createdAt],['有效至',result.expiresAt],['结果状态',result.freshness==='current'?'本次完整读取':'已保存查询结果，以原观察时点为准'],['口径版',result.result.ruleVersion],['数据水位',result.watermark],['完整读取PO数',result.basis.total],['本次下钻PO数',result.total],...Object.entries(result.filters).filter(([,value])=>value!==undefined&&value!=='').map(([key,value])=>[filterLabels[key]??'已应用条件',key==='drillMetric'?({all:'全部有权范围',backlog:'当前在产未装齐','next-seven':'未来七日应出货未齐','past-due':'已过客户交期未齐',blocked:'原明确阻断涉及范围','quality-gap':'到仓检查覆盖缺口',unknown:'具体缺件范围',unallocated:'选厂未覆盖或范围待核',completed:'普通数量已完成',cancelled:'已取消',special:'特殊结案'}[String(value)]??'指标待核'):value==='production'?'当前生产':String(value)]),...result.limitations.map(line=>['说明',line])]},
+    {name:'数量汇总',rows:[['指标','完整值','已核范围值','单位','具体未知'],...Object.entries(result.result.metrics).map(([key,metric])=>[labels[key]??key,value(metric.value),metric.knownValue,metric.unit,metric.unknown.map(item=>item.reason).join('；')])]},
+    {name:'PO明细',rows:[['母单','PO实体','PO','颜色','客户','销售年','P系列','需求','有效实收','到仓检查覆盖','合格','质量缺口','装箱出货','客户待出货','超量','未覆盖选厂','客户约定','数量完成','质量完整','业务有效性','特殊结案','具体未知'],...result.result.rows.map(row=>[row.line.orderId,row.line.lineId,row.line.poNumber??'',row.line.color,row.line.customerCode,row.line.salesYear??'',row.line.salesSeries??'',value(row.line.demand),value(row.line.received),value(row.qualityCovered),value(row.qualified),value(row.qualityMissing),value(row.line.packing),value(row.remaining),value(row.excess),value(row.unallocated),row.line.customerDate??'',row.quantityComplete===null?'未知':row.quantityComplete?'已装齐':'未装齐',row.qualityComplete===null?'未知':row.qualityComplete?'完整':'存在缺口',({active:'正常生产',paused:'已暂停',cancelled:'已取消',unknown:'有效性待核'}[row.line.lifecycle]),row.line.specialClosure?'是':'否',row.unknown.map(item=>item.reason).join('；')])]},
+    {name:'工厂范围',rows:[['工厂','本厂承接','涉及PO总需求（不可加）','涉及PO客户待出货（非本厂欠交）','本厂已核归属实收','本厂真实实收','本厂真实装箱','本厂欠交','未知原因'],...result.result.factories.map(factory=>[factory.factoryName,value(factory.allocated),value(factory.involvedPoDemand),value(factory.involvedPoCustomerRemaining),factory.knownAttributed.received,value(factory.actual.received),value(factory.actual.packed),value(factory.remaining),[factory.excludedReason,...factory.attributionUnknown.map(item=>item.reason)].filter(Boolean).join('；')])]},
+    ...productionEvidenceSheets(result),
+    {name:'未知归厂池',rows:[['母单','PO实体','指标','数量（全局一次）','说明'],...result.result.unattributed.map(pool=>[pool.orderId,pool.lineId,kindLabels[pool.kind],value(pool.quantity),pool.reason])]}]);
+   await this.database.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1::uuid,$2,$3,'digital.analysis.exported','digital_analysis',$1::text,$4)",[randomUUID(),actor.requestId,actor.actorId,JSON.stringify({snapshotId:result.snapshotId,filters:result.filters,ruleVersion:result.result.ruleVersion,rowCount:result.total,watermark:result.watermark})]);return content;
+  }
   const result=await this.read(db=>this.snapshot(db,actor,filters));
   const rows:WorkbookCell[][]=[['任务','来源','母单','款号','客户','品类','岗位','当前主办','开发轮次','制单版本','节点','状态','进入','完成','时间质量','期限','SLA版本','按期纳入','排除原因','办理秒数','已知等待秒数','等待缺失数','业务观察时刻'],
     ...result.rows.map(r=>[r.taskId,r.sourceId??'',r.orderId??'',r.styleNo,r.customer,r.category,r.requiredRole,r.assigneeName??'',r.sourceRound??'',r.instructionVersion??'',r.label,r.state,r.enteredAt??'',r.completedAt??'',`${r.enteredQuality}/${r.completedQuality}`,r.dueAt??'',r.policyVersion??'',r.slaIncluded?'是':'否',r.exclusion??'',r.handlingSeconds??'',r.waitingSeconds,r.unknownWaiting,r.businessTime?.now??''])];
@@ -115,6 +134,7 @@ export class DigitalAnalysisQuery{
   return content;
  }
  async record(actor:TrustedActorContext,note:DigitalAnalysisNote,key:string){
+  if(note.filters.view==='production')throw new ApplicationError('VALIDATION_ERROR','当前生产查询结果只读；原任务分析记录请在原任务分析范围办理',400);
   if(!isDigitalLeader(actor)&&!isDigitalTechnicalManager(actor))digitalForbidden();
   if(!/^[A-Za-z0-9._:-]{1,128}$/.test(key))throw new ApplicationError('VALIDATION_ERROR','缺少操作标识',400);
   const snapshot=await this.read(db=>this.snapshot(db,actor,note.filters));

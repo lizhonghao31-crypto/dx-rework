@@ -6,6 +6,7 @@ import { DevelopmentWorkspaceQuery, developmentView, patternTasks } from "../../
 import type { DigitalJourneyQuery } from "../../apps/api/src/production-platform/journey-query.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 import { developmentWorkspaceReturnUrl } from "../../apps/web/src/development-workspace-return.js";
+import {initialAnalysisContext,analysisContextQuery} from '../../apps/web/src/digital-analysis-workspace-model.js';
 
 const node = (key: string, state: JourneyNode["state"] = "active", patch: Partial<JourneyNode> = {}): JourneyNode => {
   const definition = JOURNEY_NODES.find(node => node.key === key)!;
@@ -113,7 +114,14 @@ describe("development workspaces preserve original business facts", () => {
     expect(developmentWorkspaceReturnUrl("/ui/digital-production?workspace=designer&view=ordered&page=2")).toContain("view=ordered");
     expect(developmentWorkspaceReturnUrl(`/ui/digital-production?workspace=designer&selected=${task}&designer=TEST&startDate=2026-10-01`)).toContain(`selected=${task}`);
     expect(developmentWorkspaceReturnUrl(`/ui/digital-pattern-room?lane=craft&task=${task}&taskView=correct`)).toContain("lane=craft");
+    expect(developmentWorkspaceReturnUrl('/ui/digital-analysis?from=2026-11-01&to=2026-11-05&view=timing&page=2')).toContain('view=timing');
+    expect(developmentWorkspaceReturnUrl('/ui/digital-analysis?from=2026-11-05&to=2026-11-01&view=timing')).toBeNull();
+    expect(developmentWorkspaceReturnUrl(`/ui/digital-analysis?from=2026-11-01&to=2026-11-05&view=timing&snapshotId=${task}`)).toBeNull();
     for (const value of ["//evil.invalid/ui/digital-pattern-room", "javascript:alert(1)", "/ui/digital-production?workspace=designer&returnTo=/ui/orders", "/ui/digital-pattern-room?page=1&page=2", "/ui/digital-pattern-room?task=bad", "/ui/digital-pattern-room#script"]) expect(developmentWorkspaceReturnUrl(value)).toBeNull();
+  });
+  it('preserves the original sandbox view, dates, customer and page when production-only API filters are added',()=>{
+    const original=initialAnalysisContext('?view=timing&from=2026-10-01&to=2026-10-31&customer=TEST-PD&page=3&scope=completed','2026-11-06','2026-11-01');expect(original).toMatchObject({view:'timing',filters:{from:'2026-10-01',to:'2026-10-31',customer:'TEST-PD',page:3,scope:'completed'}});
+    expect(initialAnalysisContext('?'+analysisContextQuery(original.filters,original.view),'2026-11-06','2026-11-01')).toEqual(original);
   });
   it("filters designers before totals/paging and preserves authorized facets and date semantics", async () => {
     const items = [journey([], {designer:"甲"}), journey([], {designer:"乙"})];
