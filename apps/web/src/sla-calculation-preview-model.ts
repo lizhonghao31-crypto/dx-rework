@@ -6,7 +6,7 @@ import type {SlaDraftSnapshot} from './sla-settings-draft.js';
 
 /** Invalid text has no numeric value. Only its actual dependent branches become unknown. */
 export function settingsCalculation(context:SlaCalculationContext,unified:SlaDraftSnapshot<DigitalSlaValues>|null,development:SlaDraftSnapshot<DevelopmentCycleValues>|null){
- const graph=calculationDraftGraph(context.graph,{unified:context.unified.values,development:context.development.values},{unified:unified?.values??context.unified.values,development:development?.values??context.development.values});
+ const graph=calculationDraftGraph(context.graph,{unified:unified?.current??context.unified.values,development:development?.current??context.development.values},{unified:unified?.values??context.unified.values,development:development?.values??context.development.values});
  const errors=new Map<string,string>(),masked=new Set<string>();
  const mask=(ids:string[],message:string)=>{
   const group=new Set(ids);

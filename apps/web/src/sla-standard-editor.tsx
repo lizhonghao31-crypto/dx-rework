@@ -1,7 +1,7 @@
 import { slaParameterHints } from './sla-parameter-hints.js';
 import { confirmInApp } from './system-dialog.js';
 import { SlaOrderApplicationPanel } from './sla-order-application-panel.js';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@dx-rework/ui';
 import { JOURNEY_STAGES } from '@dx-rework/contracts/digital-production-journey';
 import { DIGITAL_SLA_PARAMETERS, digitalSlaDefaults, validateDigitalSlaValues, type DigitalSlaValue, type DigitalSlaValues } from '@dx-rework/contracts/digital-sla';
@@ -34,7 +34,7 @@ type Preview = {
 const batchGroup = (key: string, value: DigitalSlaValue) => ['development_pre_wash_check', 'development_tail_check'].includes(key) ? 'independent_inspection' : value.kind;
 const editable = (v: DigitalSlaValue) => !['unlimited', 'order_date'].includes(v.kind);
 export const slaValueLabel = readableSlaValue;
-export function SlaStandardEditor({readOnly=false,onDraftSnapshot,beforePreview,independentRules,calculationSummary,onAuthorityChanged}:{readOnly?:boolean;onDraftSnapshot?(snapshot:SlaDraftSnapshot<DigitalSlaValues>):void;beforePreview?():Promise<boolean>;independentRules?:ReactNode|((query:string)=>ReactNode);calculationSummary?:string;onAuthorityChanged?():void}={}) {
+export function SlaStandardEditor({readOnly=false,onDraftSnapshot,beforePreview,onFilterChange,onInitialReadSettled,calculationSummary,onAuthorityChanged}:{readOnly?:boolean;onDraftSnapshot?(snapshot:SlaDraftSnapshot<DigitalSlaValues>):void;beforePreview?():Promise<boolean>;onFilterChange?(stage:number,query:string):void;onInitialReadSettled?():void;calculationSummary?:string;onAuthorityChanged?():void}={}) {
     const [current, setCurrent] = useState<Standard | null>(null), [values, setValues] = useState<DigitalSlaValues>({}), [stage, setStage] = useState(3), [query, setQuery] = useState(''), [selected, setSelected] = useState<string[]>([]), [reason, setReason] = useState(''), [preview, setPreview] = useState<Preview | null>(null), [error, setError] = useState(''), [notice, setNotice] = useState(''), [busy, setBusy] = useState(false), [uncertain, setUncertain] = useState(false), [orderPending, setOrderPending] = useState(false), [historyVersion, setHistoryVersion] = useState('');
     const [viewVersion,setViewVersion]=useState<number|null>(null);
     const [fieldErrors,setFieldErrors]=useState<Record<string,string>>({}),[editKey,setEditKey]=useState<string|null>(null),[publishedVersion,setPublishedVersion]=useState<number|null>(null),[conflict,setConflict]=useState(false);
@@ -55,7 +55,8 @@ export function SlaStandardEditor({readOnly=false,onDraftSnapshot,beforePreview,
         setSelected([]);
     } };
     useEffect(() => { live.current = true; void load().catch(e => { if (live.current)
-        setError(e.message); }); return () => { live.current = false; }; }, []);
+        setError(e.message); }).finally(()=>{if(live.current)onInitialReadSettled?.();}); return () => { live.current = false; }; }, []);
+    useEffect(()=>{onFilterChange?.(stage,query);},[stage,query,onFilterChange]);
     const dirty = !readOnly && !!current && (JSON.stringify(current.values) !== JSON.stringify(values)||Object.keys(fieldErrors).length>0);
     useDigitalDetailNavigationGuard(dirty&&publishedVersion===null||uncertain,busy,active,'时效草稿尚未发布或原提交结果尚未确认，仍要离开？');
     useEffect(()=>{if(current)onDraftSnapshot?.({version:current.version,current:current.values,values,errors,publishedVersion,readOnly,resultUnknown:uncertain});},[current,values,errors,publishedVersion,readOnly,uncertain,onDraftSnapshot]);
@@ -123,7 +124,7 @@ export function SlaStandardEditor({readOnly=false,onDraftSnapshot,beforePreview,
         }
     };
     if (!current)
-        return <section className="cockpit-settings-node-section">{error ? <p role="alert">{error}</p> : <p>正在读取时效标准…</p>}</section>;
+        return <section className="cockpit-settings-node-section">{error ? <><p role="alert">{error}</p><Button disabled={busy} onClick={()=>{setBusy(true);void load().then(()=>setError('')).catch(error=>setError(error.message)).finally(()=>{if(live.current)setBusy(false);});}}>重试读取统一标准</Button></> : <p>正在读取时效标准…</p>}</section>;
     const rows = DIGITAL_SLA_PARAMETERS.filter(p => query ? p.label.includes(query) : stage === 0 ? p.stage === 0 || ['ship_sample_advance', 'order_shipping_reminder'].includes(p.key) : p.stage === stage), chosen = DIGITAL_SLA_PARAMETERS.filter(p => selected.includes(p.key)), first = chosen[0], batchValid = !!first && chosen.every(p => batchGroup(p.key, values[p.key]!) === batchGroup(first.key, values[first.key]!));
     const disabled = busy || uncertain || orderPending || publishedVersion!==null;
     return <section className="cockpit-settings-node-section" aria-label="统一时效标准">
@@ -146,7 +147,6 @@ export function SlaStandardEditor({readOnly=false,onDraftSnapshot,beforePreview,
   {!readOnly && chosen.length > 0 && <div className="sla-standard-toolbar"><span>已选 {chosen.length} 项</span>{chosen.length > 1 && <Button variant="secondary" disabled={disabled || !batchValid} onClick={() => { if (!first)
         return; setValues(v => ({ ...v, ...Object.fromEntries(chosen.map(p => [p.key, { ...v[first.key]! }])) })); setPreview(null); }}>统一为“{first?.label}”的数值</Button>}<Button variant="secondary" onClick={() => setSelected([])}>清空选择</Button>{!batchValid && <small>只可统一同一种时效，不混算提前量、工时与物流预计。</small>}</div>}
   <ul className="cockpit-policy-cards">{rows.map(p=><li key={p.key} data-sla-node={p.key}>{!readOnly&&<input type="checkbox" aria-label={`选择${p.label}参与批量调整`} disabled={disabled||!editable(values[p.key]!)} checked={selected.includes(p.key)} onChange={e=>setSelected(keys=>e.target.checked?[...keys,p.key]:keys.filter(key=>key!==p.key))}/>}<div><h3>{p.label}</h3><strong>{slaValueLabel(values[p.key]!)}</strong>{JSON.stringify(values[p.key])!==JSON.stringify(current.values[p.key])&&<small>现行 {slaValueLabel(current.values[p.key]!)} → 本次草稿</small>}<small>{p.defaultValue.kind==='included'?'已计入父窗口，不另加工时':p.defaultValue.kind==='estimate'?'仅预计，不是收货硬截止':p.defaultValue.kind==='offset'?'提醒提前量，不加工时':p.defaultValue.kind==='order_date'?'原约定日期':p.defaultValue.kind==='unlimited'?'等待原事件，不填0小时':'统一版本化标准'} · v{readOnly?viewVersion??current.version:current.version}</small>{errors[p.key]&&<small role="alert">{errors[p.key]}</small>}</div><div className="sla-node-card-actions"><Button variant="secondary" disabled={disabled} aria-label={`${readOnly?'查看':'调整'}${p.label}`} onClick={()=>{editOriginal.current=structuredClone(values[p.key]!);setEditKey(p.key);}}>{readOnly?'查看':'调整'}</Button>{!readOnly&&(JSON.stringify(values[p.key])!==JSON.stringify(current.values[p.key])||fieldErrors[p.key])&&<Button variant="secondary" disabled={disabled} aria-label={`撤销${p.label}修改`} onClick={()=>change(p.key,current.values[p.key]!)}>撤销</Button>}</div></li>)}</ul>
-  <div hidden={stage!==2&&!query}>{typeof independentRules==='function'?independentRules(query):independentRules}</div>
 
   {!rows.length && <p>统一标准中没有匹配节点。</p>}
   <details className="sla-settings-help"><summary>计算规则与历史</summary><p>连续自然时间，包含正常等待。内含项目不重复相加；阶段时长由适用路径计算，串行相加、并行取最长。这里不能关闭业务条件。日期目标按北京时间当天结束；具体时刻按原精度判断。</p>{!readOnly&&<p>选择跨阶段的同类节点，可统一使用其中一项数值；提前量、临期比例、预计物流不混算。未知实际时间保持未知。</p>}<details><summary>当前节点起止口径</summary><ul>{rows.map(p => <li key={p.key}><strong>{p.label}</strong>：{slaParameterHints[p.key]}</li>)}</ul></details>{!readOnly&&<><Button variant="secondary" disabled={disabled} onClick={() => { setValues(digitalSlaDefaults()); setPreview(null); }}>把初始标准复制到草稿</Button><p>复制不会直接发布，也不改历史实际或已有订单。</p></>}<label>历史标准 <select aria-label="选择历史标准" disabled={disabled} value={historyVersion} onChange={e => setHistoryVersion(e.target.value)}><option value="">选择已发布版本</option>{current.history.map(h => <option key={h.version} value={h.version}>v{h.version} · {h.reason}</option>)}</select></label> <Button variant="secondary" disabled={disabled || !historyVersion} onClick={() => { void (async () => { if (active.current)

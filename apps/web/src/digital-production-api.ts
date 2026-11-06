@@ -14,7 +14,7 @@ registerSessionInvalidator(invalidate);
 /** Only concurrent task/candidate reads are shared. No settled data, budget,
  * attachment link, write or identity survives in this request map. */
 export async function digitalRequest<T>(path: string, method = "GET", body?: unknown, key?: string,options?:{signal?:AbortSignal}): Promise<T> {
-  const reading=isReadRequest(method);
+  const reading=isReadRequest(method)||(method==='POST'&&path==='sla-settings/calculation-preview');
   if(!reading)invalidate();
   const identity=sessionCacheVersion(),revision=generation;
   const cacheKey=`${identity}:${revision}:${path}`;
@@ -23,8 +23,8 @@ export async function digitalRequest<T>(path: string, method = "GET", body?: unk
   if(hit)return structuredClone(await hit) as T;
   const request=(async()=>{
     const response=await feedbackFetch(urls.apiUrl(`digital-production/${path}`),{method,credentials:'include',cache:'no-store',
-      headers:{'content-type':'application/json',...(key?{'idempotency-key':key}:{})},...(body===undefined?{}:{body:JSON.stringify(body)}),...(reading&&options?.signal?{signal:options.signal}:{})}).catch(error=>{if(error?.name==='AbortError')throw error;throw new DigitalRequestError(error.message,null);});
-    const value=await feedbackJson(response,method,value=>value,(message,code,status)=>{const id=response.headers?.get('x-request-id');return new DigitalRequestError(id&&/^[\w.:-]{1,128}$/.test(id)?`${message}（请求编号：${id}）`:message,status,code);});
+      headers:{'content-type':'application/json',...(key?{'idempotency-key':key}:{})},...(body===undefined?{}:{body:JSON.stringify(body)}),...(reading&&options?.signal?{signal:options.signal}:{})}).catch(error=>{if(error?.name==='AbortError')throw error;throw new DigitalRequestError(reading&&!isReadRequest(method)?'本次只读演算读取失败，请重新读取':error.message,null);});
+    const value=await feedbackJson(response,reading?'GET':method,value=>value,(message,code,status)=>{const id=response.headers?.get('x-request-id');return new DigitalRequestError(id&&/^[\w.:-]{1,128}$/.test(id)?`${message}（请求编号：${id}）`:message,status,code);});
     if(!reading)invalidate();
     if(reading&&(identity!==sessionCacheVersion()||revision!==generation))throw new Error('读取条件已变化，请重试刷新');
     return value;

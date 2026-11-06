@@ -1,8 +1,8 @@
 {
   "version": 1,
   "base": "f2cc977bbd7efce09dc2d0c5e7a51aac05608c6e",
-  "sourceFingerprint": "d1b5b261767474ee3745ec1ea3f870c5fe2681aee27cd56cb2c2473404491605",
-  "risk": "quick",
+  "sourceFingerprint": "2752b8cbf02a4730f7f86e68fa0a4ef5a7a07e6d7bfbae14675de9d0a3076c30",
+  "risk": "full",
   "rules": [
     {
       "rule": "本地节点草稿即时给节点、阶段和整体的实际路径对比；49项完整可达，未知/内含/日期/独立监督不重复加总，保留输入及毫秒精度。",
@@ -35,6 +35,7 @@
       "checks": [
         "unit",
         "native-browser",
+        "canonical",
         "browser",
         "preflight",
         "lint",
@@ -143,7 +144,7 @@
       ],
       "initialization": "页面先经原认证后才挂载受权内容，拒绝后重取原角色能力，身份失效清私有草稿/实例。专属夹具使用原assignRole/revokeRole，不改旧seed账号。测试使用原ownedPostgresSchema创建/登记/释放；无未知资源清理。",
       "dateAndPermission": "纯PMC可读不可写；撤权反例为同一有效专属会话且保留无设置权限设计角色，用户未被停用仍403。旧A1成功/失败/finally均不能覆盖新A2。无生产数据、ECS、部署、真人赋权或独立Acceptance现场动作。",
-      "expectation": "原生PMC只读与同会话撤权、A1/B/A2迟回隔离和原full-App设置入口通过；原preflight240、135相关单测、65原PG回归、23原生浏览器和两尺寸原浏览器流程全部真实执行。时间清单匹配，无生成器/人工注记变化。",
+      "expectation": "原生PMC只读与同会话撤权、A1/B/A2迟回隔离和原full-App设置入口通过；原preflight241、165相关单测、65原PG回归、24原生浏览器和两尺寸原浏览器流程全部真实执行。时间清单匹配，无生成器/人工注记变化。",
       "checks": [
         "native-browser",
         "browser",
@@ -156,36 +157,87 @@
         "build",
         "secret"
       ]
+    },
+    {
+      "rule": "正式Review四项集中修复：只叠加实际编辑字段、独立标准读取失败恢复、原认证链同会话撤权、原生浏览器进入canonical Full；只读演算不误使并行读取失效。",
+      "source": "GitHub #907 official Codex Review at 55d21f804f4d5dbc527100cea984fd9838ce9cca, discussion_r4488300018/30/36/42; AGENTS.md §3–5; docs/engineering/m01-p06-execution.md",
+      "writes": [
+        "apps/web/src/digital-production-api.ts",
+        "tests/unit/digital-request-reuse.test.ts",
+        "tests/integration/m01-settings-native-browser-postgres.test.ts",
+        "scripts/ci/prepare-settings-browser.mjs",
+        "scripts/ci/full-gate-risk-map.mjs",
+        "scripts/ci/full-gate-lanes.mjs",
+        "scripts/ci/test-execution-contract.test.mjs",
+        "scripts/test-suite-plan.mjs",
+        ".github/workflows/full-gate.yml",
+        "package.json",
+        "package-lock.json",
+        "tests/acceptance/m01-settings-native-browser.ts",
+        "tests/unit/m01-settings-preview.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/auth/service.ts#AuthService",
+        "apps/api/src/auth/postgres-store.ts#PostgresAuthStore",
+        "apps/api/src/auth/routes.ts#registerAuthRoutes",
+        "apps/api/src/auth/acceptance-provider.ts#AcceptanceDingTalkProvider",
+        "scripts/ci/ci-gate-runtime.mjs#checkCatalog",
+        "scripts/test-suite-plan.mjs#fullGatePostgresPlan",
+        "scripts/test-resource-contract.mjs",
+        "tests/helpers/business-anchor-fixture.ts#businessAnchorFixture"
+      ],
+      "oldTests": [
+        "tests/unit/digital-request-reuse.test.ts",
+        "tests/unit/request-response-feedback.test.ts",
+        "scripts/ci/test-execution-contract.test.mjs",
+        "tests/integration/digital-sla-configuration-postgres.test.ts"
+      ],
+      "initialization": "原认证服务签发真实测试会话并重读会话/角色/能力/组织状态；不再用UUID作会话或伪造auth/me。原生矩阵export供新可发现PG套件调用，沿原canonical正确性配置、实际库身份和owned schema create/release。仅精确计划需要该套件时安装锁定playwright-core1.56.1的Chromium；原Full有限预算、read-only权限、请求tuple、资源清理和后续安全演练保留。",
+      "dateAndPermission": "反例为同一原AuthService有效会话，撤PMC后保无设置权限设计角色，账号仍enabled、会话未撤销、auth/me仍授权而设置403。只读calculation-preview POST保持实际wire方法及strict body，仅客户端不执行写失效；真实发布/身份变化仍使在途演算失效。",
+      "expectation": "旧48/服务器36未改字段不覆盖新上下文或冻结实例；统一首次503时开发能发布，后续草稿在统一重读成功后保留；真实原认证撤权通过。新canonical Vitest PG入口实际运行24项矩阵，单套件1通过且24内部断言完整；精确敏感路径映射、浏览器按需准备和原CI协议preflight通过。",
+      "checks": [
+        "unit",
+        "preflight",
+        "canonical",
+        "native-browser",
+        "browser",
+        "pg",
+        "technical",
+        "lint",
+        "types",
+        "build",
+        "secret"
+      ]
     }
   ],
   "checks": [
     {
       "id": "unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/m01-settings-preview.test.ts tests/unit/sla-calculation.test.ts tests/unit/digital-sla-configuration.test.ts tests/unit/digital-sla-plan.test.ts tests/unit/series-plan-dates.test.ts tests/unit/sla-parameter-hints.test.ts tests/unit/development-technical-contract.test.ts tests/unit/business-chain-ui-contract.test.ts tests/unit/m01-series-plan-reading.test.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile=/workspace/scratch/m01-p06-unit-final1.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/m01-settings-preview.test.ts tests/unit/sla-calculation.test.ts tests/unit/digital-sla-configuration.test.ts tests/unit/digital-sla-plan.test.ts tests/unit/series-plan-dates.test.ts tests/unit/sla-parameter-hints.test.ts tests/unit/development-technical-contract.test.ts tests/unit/business-chain-ui-contract.test.ts tests/unit/m01-series-plan-reading.test.ts tests/unit/digital-request-reuse.test.ts tests/unit/request-response-feedback.test.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile=/workspace/scratch/m01-p06-unit-final2.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 135,
+      "passed": 165,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "e208a10a8c387fa0246632ced231efd15d81e24ccc35f0d3a4b70e1f765fb5c2"
+          "sha256": "fa3f7eb6f9e2018c947b53153b3c3304f9b38dfe981b72c3773e626132720328"
         }
       ],
-      "testedHead": "f2cc977bbd7efce09dc2d0c5e7a51aac05608c6e",
-      "sourceFingerprint": "d1b5b261767474ee3745ec1ea3f870c5fe2681aee27cd56cb2c2473404491605",
+      "testedHead": "55d21f804f4d5dbc527100cea984fd9838ce9cca",
+      "sourceFingerprint": "2752b8cbf02a4730f7f86e68fa0a4ef5a7a07e6d7bfbae14675de9d0a3076c30",
       "context": "Node22.22.2/npm10.9.9; NODE_ENV=test; command workers=1. Original canonical workspace/preflight/unit entry. Unit cases enter the existing Vitest discovery. No new test runner, global timeout or worker policy. Build uses workspaces without a root deployment or DB postbuild. Actual raw logs and structured reports remain in the task private directory.",
-      "startedAt": "2026-11-06T02:00:06.801Z",
-      "endedAt": "2026-11-06T02:00:10.386Z",
-      "log": "/workspace/scratch/m01-p06-unit-final1.log",
-      "logSha256": "b67d9e6458066ab33da17b7e1d79825588215bbfd6314100b3061bbf9f7c97be"
+      "startedAt": "2026-11-06T02:27:36.133Z",
+      "endedAt": "2026-11-06T02:27:40.753Z",
+      "log": "/workspace/scratch/m01-p06-unit-final2.log",
+      "logSha256": "dde27cd6fda20ed871880e8f08302924766e1f6f81ab9977fc111f41a8504dd2"
     },
     {
       "id": "pg",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/integration/digital-sla-configuration-postgres.test.ts tests/integration/digital-sla-plan-postgres.test.ts tests/integration/development-sla-enrollment-postgres.test.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile=/workspace/scratch/m01-p06-pg-final1.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/integration/digital-sla-configuration-postgres.test.ts tests/integration/digital-sla-plan-postgres.test.ts tests/integration/development-sla-enrollment-postgres.test.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile=/workspace/scratch/m01-p06-pg-final2.json",
       "status": "passed",
       "exitCode": 0,
       "passed": 32,
@@ -194,21 +246,21 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "fe15292e9e7dfdb363bc986dd6638ba37658015a559e09353afd5469af1b5623"
+          "sha256": "b2f1b3d3a655df4ce2dad6e54b19710439616a7e2c85a0994ee87e5ad70889e8"
         }
       ],
-      "testedHead": "f2cc977bbd7efce09dc2d0c5e7a51aac05608c6e",
-      "sourceFingerprint": "d1b5b261767474ee3745ec1ea3f870c5fe2681aee27cd56cb2c2473404491605",
+      "testedHead": "55d21f804f4d5dbc527100cea984fd9838ce9cca",
+      "sourceFingerprint": "2752b8cbf02a4730f7f86e68fa0a4ef5a7a07e6d7bfbae14675de9d0a3076c30",
       "context": "Node22.22.2/npm10.9.9; NODE_ENV=test; command workers=1. Original discovered canonical PostgreSQL suites, existing configuration and owned resource helper; marked low-privilege PG16.14 database dx_m01_acceptance_test_dc924aaea2/OID694046. One DB suite group at a time; exact cleanup verified. Actual raw logs and structured reports remain in the task private directory.",
-      "startedAt": "2026-11-06T01:58:55.259Z",
-      "endedAt": "2026-11-06T01:58:59.886Z",
-      "log": "/workspace/scratch/m01-p06-pg-final1.log",
-      "logSha256": "7eab273b676152609eee376d4faad0d9fcc641feb038089420c35f17026d21a3"
+      "startedAt": "2026-11-06T02:28:39.638Z",
+      "endedAt": "2026-11-06T02:28:46.305Z",
+      "log": "/workspace/scratch/m01-p06-pg-final2.log",
+      "logSha256": "3031713ef569535070394140ceb9f4fd7ef5af095b2995cec4afe58099b3887a"
     },
     {
       "id": "technical",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/integration/development-technical-postgres.test.ts tests/integration/series-plan-postgres.test.ts --config vitest.business-chain.config.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile=/workspace/scratch/m01-p06-technical-final1.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/integration/development-technical-postgres.test.ts tests/integration/series-plan-postgres.test.ts --config vitest.business-chain.config.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile=/workspace/scratch/m01-p06-technical-final2.json",
       "status": "passed",
       "exitCode": 0,
       "passed": 33,
@@ -217,16 +269,16 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "61a41a785385650fa2611ddf429891debdb470beb25470df7bc4e0c96f6e3737"
+          "sha256": "520dd9eb55bf9636cebb8d10dd7421fd10be9b715b5d344301a1513160de9269"
         }
       ],
-      "testedHead": "f2cc977bbd7efce09dc2d0c5e7a51aac05608c6e",
-      "sourceFingerprint": "d1b5b261767474ee3745ec1ea3f870c5fe2681aee27cd56cb2c2473404491605",
+      "testedHead": "55d21f804f4d5dbc527100cea984fd9838ce9cca",
+      "sourceFingerprint": "2752b8cbf02a4730f7f86e68fa0a4ef5a7a07e6d7bfbae14675de9d0a3076c30",
       "context": "Node22.22.2/npm10.9.9; NODE_ENV=test; command workers=1. Original discovered canonical PostgreSQL suites, existing configuration and owned resource helper; marked low-privilege PG16.14 database dx_m01_acceptance_test_dc924aaea2/OID694046. One DB suite group at a time; exact cleanup verified. Actual raw logs and structured reports remain in the task private directory.",
-      "startedAt": "2026-11-06T01:58:59.960Z",
-      "endedAt": "2026-11-06T01:59:25.228Z",
-      "log": "/workspace/scratch/m01-p06-technical-final1.log",
-      "logSha256": "4179c9038ce10595a9d6d1a527773c87c7cc8921198b76b4d7eee1116098fea3"
+      "startedAt": "2026-11-06T02:28:46.392Z",
+      "endedAt": "2026-11-06T02:29:11.224Z",
+      "log": "/workspace/scratch/m01-p06-technical-final2.log",
+      "logSha256": "6c45abe4080f15217e0ad7a1bf766b06601dc2dbb54067df882a39a185ad8b72"
     },
     {
       "id": "native-browser",
@@ -234,22 +286,45 @@
       "command": "node --import tsx tests/acceptance/m01-settings-native-browser.ts",
       "status": "passed",
       "exitCode": 0,
-      "passed": 23,
+      "passed": 24,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "node-tap",
-          "sha256": "1a2d7dba001e5ecce756c129474b6fa2390a66ce24346b7d7fd5853ef0f7d60c"
+          "sha256": "21ad288bfbda944a4c7f8110c0b9d859cc6a9cd9b8612225353fb7d693f9739c"
         }
       ],
-      "testedHead": "f2cc977bbd7efce09dc2d0c5e7a51aac05608c6e",
-      "sourceFingerprint": "d1b5b261767474ee3745ec1ea3f870c5fe2681aee27cd56cb2c2473404491605",
-      "context": "Node22.22.2/npm10.9.9; NODE_ENV=test; command workers=1. Original React components, Fastify route registration/services and owned marked low-privilege PG16.14 database dx_m01_acceptance_test_dc924aaea2/OID694046. Original active identity/role/capability database rows; localhost TEST auth delivery is not a DingTalk session. Explicit committed-response loss only. Real Chromium151/Playwright-core1.56.1, 1440/390/720px. No production data. Actual raw logs and structured reports remain in the task private directory.",
-      "startedAt": "2026-11-06T01:58:05.722Z",
-      "endedAt": "2026-11-06T01:58:26.241Z",
-      "log": "/workspace/scratch/m01-p06-native-browser-final1.log",
-      "logSha256": "1a2d7dba001e5ecce756c129474b6fa2390a66ce24346b7d7fd5853ef0f7d60c"
+      "testedHead": "55d21f804f4d5dbc527100cea984fd9838ce9cca",
+      "sourceFingerprint": "2752b8cbf02a4730f7f86e68fa0a4ef5a7a07e6d7bfbae14675de9d0a3076c30",
+      "context": "Node22.22.2/npm10.9.9; NODE_ENV=test; command workers=1. Original React components, Fastify route registration/services and owned marked low-privilege PG16.14 database dx_m01_acceptance_test_dc924aaea2/OID694046. Original active identity/role/capability database rows; Original AuthService/PostgresAuthStore and original login/auth/me routes validate test sessions; only AcceptanceDingTalkProvider supplies external identity data, without a live DingTalk connection. Explicit committed-response loss only. Real Chromium151/Playwright-core1.56.1, 1440/390/720px. No production data. Actual raw logs and structured reports remain in the task private directory.",
+      "startedAt": "2026-11-06T02:27:33.502Z",
+      "endedAt": "2026-11-06T02:28:03.141Z",
+      "log": "/workspace/scratch/m01-p06-native-browser-final2.log",
+      "logSha256": "21ad288bfbda944a4c7f8110c0b9d859cc6a9cd9b8612225353fb7d693f9739c"
+    },
+    {
+      "id": "canonical",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run tests/integration/m01-settings-native-browser-postgres.test.ts --config vitest.business-chain.config.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile=/workspace/scratch/m01-p06-canonical-final2.json",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "53e3c31721ef5cfab60b1842e55d908c0c8d3613a4b15dece344c7da4324ead0"
+        }
+      ],
+      "testedHead": "55d21f804f4d5dbc527100cea984fd9838ce9cca",
+      "sourceFingerprint": "2752b8cbf02a4730f7f86e68fa0a4ef5a7a07e6d7bfbae14675de9d0a3076c30",
+      "context": "Node22.22.2/npm10.9.9; NODE_ENV=test; command workers=1. Original discovered canonical PostgreSQL suites, existing configuration and owned resource helper; marked low-privilege PG16.14 database dx_m01_acceptance_test_dc924aaea2/OID694046. One DB suite group at a time; exact cleanup verified. Actual raw logs and structured reports remain in the task private directory.",
+      "startedAt": "2026-11-06T02:28:03.218Z",
+      "endedAt": "2026-11-06T02:28:39.546Z",
+      "log": "/workspace/scratch/m01-p06-canonical-final2.log",
+      "logSha256": "afd8811689a6c274628392dfd8ff2eca440055a27a2b7a4380cee739f202978f"
     },
     {
       "id": "browser",
@@ -263,16 +338,16 @@
       "resultReports": [
         {
           "format": "node-tap",
-          "sha256": "7131c8d515290794a1ed955f67cffc40a8165258edca864eabed3b422dba8b1b"
+          "sha256": "3b4b82a9d4812887df6190ffeb5d8892e704afe68df6643c8d281318c8b08f81"
         }
       ],
-      "testedHead": "f2cc977bbd7efce09dc2d0c5e7a51aac05608c6e",
-      "sourceFingerprint": "d1b5b261767474ee3745ec1ea3f870c5fe2681aee27cd56cb2c2473404491605",
+      "testedHead": "55d21f804f4d5dbc527100cea984fd9838ce9cca",
+      "sourceFingerprint": "2752b8cbf02a4730f7f86e68fa0a4ef5a7a07e6d7bfbae14675de9d0a3076c30",
       "context": "Node22.22.2/npm10.9.9; NODE_ENV=production; command workers=1. Original full-App/React components with clearly labelled TEST transport adapters; real Chromium151/Playwright-core1.56.1 1440/390px. This transport suite is not native API/PG proof. Actual raw logs and structured reports remain in the task private directory.",
-      "startedAt": "2026-11-06T02:00:06.801Z",
-      "endedAt": "2026-11-06T02:00:15.407Z",
-      "log": "/workspace/scratch/m01-p06-browser-final1.log",
-      "logSha256": "7131c8d515290794a1ed955f67cffc40a8165258edca864eabed3b422dba8b1b"
+      "startedAt": "2026-11-06T02:28:54.961Z",
+      "endedAt": "2026-11-06T02:29:04.212Z",
+      "log": "/workspace/scratch/m01-p06-browser-final2.log",
+      "logSha256": "3b4b82a9d4812887df6190ffeb5d8892e704afe68df6643c8d281318c8b08f81"
     },
     {
       "id": "preflight",
@@ -280,22 +355,22 @@
       "command": "npm run test:preflight",
       "status": "passed",
       "exitCode": 0,
-      "passed": 240,
+      "passed": 241,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "node-tap",
-          "sha256": "7b639e0e74cdb4ae28aba7dc043f743b9f6209bc2f9f32509d7f6e3c927f0762"
+          "sha256": "92b2694e92769eda16d51804e5f9f5b1e21e614d857f76df4a04ec50c3ed8883"
         }
       ],
-      "testedHead": "f2cc977bbd7efce09dc2d0c5e7a51aac05608c6e",
-      "sourceFingerprint": "d1b5b261767474ee3745ec1ea3f870c5fe2681aee27cd56cb2c2473404491605",
+      "testedHead": "55d21f804f4d5dbc527100cea984fd9838ce9cca",
+      "sourceFingerprint": "2752b8cbf02a4730f7f86e68fa0a4ef5a7a07e6d7bfbae14675de9d0a3076c30",
       "context": "Node22.22.2/npm10.9.9; NODE_ENV=test; command workers=2. Original canonical workspace/preflight/unit entry. Unit cases enter the existing Vitest discovery. No new test runner, global timeout or worker policy. Build uses workspaces without a root deployment or DB postbuild. Actual raw logs and structured reports remain in the task private directory.",
-      "startedAt": "2026-11-06T01:58:16.393Z",
-      "endedAt": "2026-11-06T01:58:21.273Z",
-      "log": "/workspace/scratch/m01-p06-preflight-final1.log",
-      "logSha256": "7b639e0e74cdb4ae28aba7dc043f743b9f6209bc2f9f32509d7f6e3c927f0762"
+      "startedAt": "2026-11-06T02:27:31.989Z",
+      "endedAt": "2026-11-06T02:27:36.067Z",
+      "log": "/workspace/scratch/m01-p06-preflight-final2.log",
+      "logSha256": "92b2694e92769eda16d51804e5f9f5b1e21e614d857f76df4a04ec50c3ed8883"
     },
     {
       "id": "lint",
@@ -303,12 +378,12 @@
       "command": "npm run lint",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "f2cc977bbd7efce09dc2d0c5e7a51aac05608c6e",
-      "sourceFingerprint": "d1b5b261767474ee3745ec1ea3f870c5fe2681aee27cd56cb2c2473404491605",
+      "testedHead": "55d21f804f4d5dbc527100cea984fd9838ce9cca",
+      "sourceFingerprint": "2752b8cbf02a4730f7f86e68fa0a4ef5a7a07e6d7bfbae14675de9d0a3076c30",
       "context": "Node22.22.2/npm10.9.9; NODE_ENV=test; command workers=1. Original canonical workspace/preflight/unit entry. Unit cases enter the existing Vitest discovery. No new test runner, global timeout or worker policy. Build uses workspaces without a root deployment or DB postbuild. Actual raw logs and structured reports remain in the task private directory.",
-      "startedAt": "2026-11-06T01:58:42.491Z",
-      "endedAt": "2026-11-06T01:58:59.533Z",
-      "log": "/workspace/scratch/m01-p06-lint-final1.log",
+      "startedAt": "2026-11-06T02:27:40.835Z",
+      "endedAt": "2026-11-06T02:28:02.908Z",
+      "log": "/workspace/scratch/m01-p06-lint-final2.log",
       "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763"
     },
     {
@@ -317,12 +392,12 @@
       "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "f2cc977bbd7efce09dc2d0c5e7a51aac05608c6e",
-      "sourceFingerprint": "d1b5b261767474ee3745ec1ea3f870c5fe2681aee27cd56cb2c2473404491605",
+      "testedHead": "55d21f804f4d5dbc527100cea984fd9838ce9cca",
+      "sourceFingerprint": "2752b8cbf02a4730f7f86e68fa0a4ef5a7a07e6d7bfbae14675de9d0a3076c30",
       "context": "Node22.22.2/npm10.9.9; NODE_ENV=test; command workers=1. Original canonical workspace/preflight/unit entry. Unit cases enter the existing Vitest discovery. No new test runner, global timeout or worker policy. Build uses workspaces without a root deployment or DB postbuild. Actual raw logs and structured reports remain in the task private directory.",
-      "startedAt": "2026-11-06T01:58:59.603Z",
-      "endedAt": "2026-11-06T01:59:27.081Z",
-      "log": "/workspace/scratch/m01-p06-types-final1.log",
+      "startedAt": "2026-11-06T02:28:02.982Z",
+      "endedAt": "2026-11-06T02:28:35.268Z",
+      "log": "/workspace/scratch/m01-p06-types-final2.log",
       "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e"
     },
     {
@@ -331,13 +406,13 @@
       "command": "npm run build --workspaces --if-present",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "f2cc977bbd7efce09dc2d0c5e7a51aac05608c6e",
-      "sourceFingerprint": "d1b5b261767474ee3745ec1ea3f870c5fe2681aee27cd56cb2c2473404491605",
+      "testedHead": "55d21f804f4d5dbc527100cea984fd9838ce9cca",
+      "sourceFingerprint": "2752b8cbf02a4730f7f86e68fa0a4ef5a7a07e6d7bfbae14675de9d0a3076c30",
       "context": "Node22.22.2/npm10.9.9; NODE_ENV=test; command workers=1. Original canonical workspace/preflight/unit entry. Unit cases enter the existing Vitest discovery. No new test runner, global timeout or worker policy. Build uses workspaces without a root deployment or DB postbuild. Actual raw logs and structured reports remain in the task private directory.",
-      "startedAt": "2026-11-06T01:59:27.150Z",
-      "endedAt": "2026-11-06T01:59:41.673Z",
-      "log": "/workspace/scratch/m01-p06-build-final1.log",
-      "logSha256": "653123795890e350dc1c4803dd795476de3aaaff01443938f9baf653da25ea1d"
+      "startedAt": "2026-11-06T02:28:35.357Z",
+      "endedAt": "2026-11-06T02:28:54.157Z",
+      "log": "/workspace/scratch/m01-p06-build-final2.log",
+      "logSha256": "95d7c6c9aa697b8bc0e3625f1d96f761fad2d8e73a3e00e8cba2d58c3a9755fc"
     },
     {
       "id": "secret",
@@ -345,12 +420,12 @@
       "command": "npm run secret:scan",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "f2cc977bbd7efce09dc2d0c5e7a51aac05608c6e",
-      "sourceFingerprint": "d1b5b261767474ee3745ec1ea3f870c5fe2681aee27cd56cb2c2473404491605",
+      "testedHead": "55d21f804f4d5dbc527100cea984fd9838ce9cca",
+      "sourceFingerprint": "2752b8cbf02a4730f7f86e68fa0a4ef5a7a07e6d7bfbae14675de9d0a3076c30",
       "context": "Node22.22.2/npm10.9.9; NODE_ENV=test; command workers=1. Original canonical workspace/preflight/unit entry. Unit cases enter the existing Vitest discovery. No new test runner, global timeout or worker policy. Build uses workspaces without a root deployment or DB postbuild. Actual raw logs and structured reports remain in the task private directory.",
-      "startedAt": "2026-11-06T01:59:41.738Z",
-      "endedAt": "2026-11-06T01:59:42.333Z",
-      "log": "/workspace/scratch/m01-p06-secret-final1.log",
+      "startedAt": "2026-11-06T02:28:54.237Z",
+      "endedAt": "2026-11-06T02:28:54.895Z",
+      "log": "/workspace/scratch/m01-p06-secret-final2.log",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda"
     }
   ]

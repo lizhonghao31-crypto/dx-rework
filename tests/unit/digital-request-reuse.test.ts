@@ -42,3 +42,10 @@ it.each(['access/candidates?purpose=technical','tasks/00000000-0000-4000-8000-00
  expect(fetcher).toHaveBeenCalledTimes(3);
  reading.resolve(reply({state:'before-commit'}));await rejected;
 });
+
+it('read-only calculation POST keeps concurrent settings reads valid while retaining its actual wire method and body',async()=>{
+ const pending=deferred(),fetcher=vi.fn().mockReturnValueOnce(pending.promise).mockResolvedValue(reply({calculated:true}));vi.stubGlobal('fetch',fetcher);const {digitalRequest}=await import('../../apps/web/src/digital-production-api.js');const reading=digitalRequest('series-profiles'),body={selection:{mode:'TEST'}};expect(await digitalRequest('sla-settings/calculation-preview','POST',body)).toEqual({calculated:true});pending.resolve(reply({profiles:[]}));expect(await reading).toEqual({profiles:[]});expect(fetcher.mock.calls[1]?.[1]).toMatchObject({method:'POST',body:JSON.stringify(body)});
+});
+it.each(['session','write'])('still rejects a pending read-only calculation after %s changes',async(change)=>{
+ const pending=deferred(),fetcher=vi.fn().mockReturnValueOnce(pending.promise).mockResolvedValue(reply({saved:true}));vi.stubGlobal('fetch',fetcher);const {digitalRequest}=await import('../../apps/web/src/digital-production-api.js');const prior=digitalRequest('sla-settings/calculation-preview','POST',{}),rejected=expect(prior).rejects.toThrow('读取条件已变化');if(change==='session')(await import('../../apps/web/src/auth-session.js')).invalidateSession();else await digitalRequest('sla-settings/publish','POST',{},'TEST-key');pending.resolve(reply({calculated:true}));await rejected;
+});

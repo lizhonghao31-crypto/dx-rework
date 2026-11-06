@@ -12,6 +12,12 @@ const context=(range:'preparation'|'development'='preparation'):SlaCalculationCo
 };
 const draft=(c:SlaCalculationContext):SlaDraftSnapshot<typeof c.unified.values>=>({version:c.unified.version,current:c.unified.values,values:structuredClone(c.unified.values),errors:{},publishedVersion:null,readOnly:false});
 describe('M01 real settings draft model',()=>{
+ it('overlays only fields changed from the editor baseline after the server publishes a newer unified or development standard',()=>{
+  const older=context('development'),snapshot=draft(older),development={version:1,current:{...DEVELOPMENT_CYCLE_DEFAULTS},values:{...DEVELOPMENT_CYCLE_DEFAULTS},errors:{},publishedVersion:null,readOnly:false};
+  const newer=context('development');newer.unified.version=8;newer.unified.values.development_pattern={kind:'duration',minutes:2160};newer.development.version=2;newer.development.values={...DEVELOPMENT_CYCLE_DEFAULTS,normalDays:9};newer.graph=buildSlaCalculationRoute({range:'development',conditions:{craft:'printing',craftExecution:'internal',pattern:'internal',washing:'none',preshrink:'yes',preparation:'adopted',developmentMode:'normal',rework:'no'},anchors:newer.graph.anchors,values:newer.unified.values,development:newer.development.values,unifiedSource:'TEST newer standard',developmentSource:'TEST newer cycle'});
+  snapshot.values.development_tail_check={kind:'duration',minutes:15};const result=settingsCalculation(newer,snapshot,development);expect(result.result.rows.find(row=>row.id==='development_pattern')!.minutes).toBe(2160);expect(result.result.rows.find(row=>row.id==='development_cycle')!.minutes).toBe(9*1440);expect(result.result.rows.find(row=>row.id==='development_tail_check')!.minutes).toBe(15);
+  const frozen=newer.graph.nodes.find(node=>node.id==='development_pattern')!;frozen.minutes=3000;frozen.source='TEST actual old instance freeze';expect(settingsCalculation(newer,snapshot,development).result.rows.find(row=>row.id==='development_pattern')!.minutes).toBe(3000);
+ });
  it('keeps empty and intermediate text invalid while zero buffer remains a real permitted zero',()=>{
   for(const text of ['',' ','-','.','1e'])expect(slaInputValue(text,'minutes',{kind:'duration',minutes:60})).toMatchObject({value:null,error:expect.any(String)});
   expect(slaInputValue('0','minutes',{kind:'buffer',minutes:5})).toMatchObject({value:{kind:'buffer',minutes:0},error:null});expect(slaInputValue('0','hours',{kind:'duration',minutes:60}).value).toBeNull();
