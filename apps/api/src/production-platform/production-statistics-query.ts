@@ -1,3 +1,5 @@
+import type {ProductionCollaboration} from '@dx-rework/contracts/production-collaboration';
+import {productionCollaborationSource,productionCollaborationProjection} from './production-collaboration-source.js';
 import type {ProductionPeriodSources} from '@dx-rework/contracts/production-period';
 import {productionPeriodSources} from './production-period-sources.js';
 import {productionPeriodProjection} from './production-period-projection.js';
@@ -12,7 +14,7 @@ import {isRootActor} from '../access/business-authority.js';
 import {assertBusinessExportAllowed} from '../access/export-authority.js';
 import {ApplicationError} from '../platform/errors.js';
 import {acceptanceBusinessContext,acceptanceIncludesNative,assertBusinessClockUnchanged,ContextBusinessClock,observedBusinessTime} from '../acceptance-clock/business-time.js';
-import {DigitalProductionAccessPolicy,digitalForbidden} from './access-policy.js';
+import {isDigitalManagementReader,isDigitalTechnicalManager,DigitalProductionAccessPolicy,digitalForbidden} from './access-policy.js';
 import {assertIdentityActor} from './identity-service.js';
 import {AnalysisResultStore} from './analysis-result-store.js';
 import {OrderClosureService} from './order-closure-service.js';
@@ -31,20 +33,21 @@ const hash=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).d
 const none=():StatisticsTime=>({at:null,date:null,precision:'unknown',quality:'unknown',sourceRefs:[]});
 const at=(value:Date|string|null|undefined,ref:string,trusted=true):StatisticsTime=>value?{at:new Date(value).toISOString(),date:null,precision:'instant',quality:trusted?'verified':'unverified',sourceRefs:[ref]}:none();
 const sorted=(ids:readonly string[])=>[...new Set(ids)].sort();
-const currentFilters=(filters:DigitalAnalysisFilters):ProductionStatisticsFilters=>({from:filters.from,to:filters.to,customer:filters.customer,category:filters.category,page:filters.page,view:'production',...Object.fromEntries(['timeMode','compareFrom','compareTo','compareElapsed','factoryId','lineId','salesYear','salesSeries','primaryMerchandiserId','secondaryMerchandiserId','designer','drillLineId','drillOrderId','drillFactoryId','drillMetric','drillFactories','drillCustomers','drillStages','drillStageFactories','groupBy'].filter(key=>filters[key as keyof DigitalAnalysisFilters]!==undefined).map(key=>[key,filters[key as keyof DigitalAnalysisFilters]]))});
+const currentFilters=(filters:DigitalAnalysisFilters):ProductionStatisticsFilters=>({from:filters.from,to:filters.to,customer:filters.customer,category:filters.category,page:filters.page,view:'production',...Object.fromEntries(['collaboration','timeMode','compareFrom','compareTo','compareElapsed','factoryId','lineId','salesYear','salesSeries','primaryMerchandiserId','secondaryMerchandiserId','designer','drillLineId','drillOrderId','drillFactoryId','drillMetric','drillFactories','drillCustomers','drillStages','drillStageFactories','groupBy'].filter(key=>filters[key as keyof DigitalAnalysisFilters]!==undefined).map(key=>[key,filters[key as keyof DigitalAnalysisFilters]]))});
 const filterHash=(filters:ProductionStatisticsFilters)=>hash(Object.fromEntries(Object.entries(filters).filter(([key])=>!['page','snapshotId','drillLineId','drillOrderId','drillFactoryId','drillMetric','drillFactories','drillCustomers','drillStages','drillStageFactories','groupBy'].includes(key))));
 type StatisticsOrder={production_order_id:string;source_id:string|null;version:number|string;customer_code:string;design_style_no:string;product_group:string;sales_year:number|null;sales_series:string|null;primary_merchandiser_id:string|null;verified_designer:string|null};
 /** An adapter of the original analysis surface, never a second business ledger. */
 export class ProductionStatisticsQuery{
  private readonly store:AnalysisResultStore;
  constructor(private readonly database:Pool){this.store=new AnalysisResultStore(database);}
- private async liveActor(db:PoolClient,actor:TrustedActorContext){
+ private async liveActor(db:PoolClient,actor:TrustedActorContext,collaboration=false){
   assertIdentityActor(actor);const policy=new DigitalProductionAccessPolicy(db),roles:string[]=[];
   for(const role of actor.actorRoles)if(role==='root_superuser'?isRootActor(actor)&&(await db.query('SELECT access_is_root_actor($1) AS allowed',[actor.actorId])).rows[0]?.allowed:await policy.activeRole(actor.actorId,role))roles.push(role);
   const currentCapabilities=new Set<string>((await db.query('SELECT DISTINCT capability FROM role_capabilities WHERE role_code=ANY($1::text[])',[roles])).rows.map(row=>row.capability));
   const live={...actor,actorRoles:roles,authorizationCapabilities:isRootActor({...actor,actorRoles:roles})?(actor.authorizationCapabilities??[]):(actor.authorizationCapabilities??[]).filter(capability=>currentCapabilities.has(capability))};assertIdentityActor(live);
   // authorizationCapability names the requested operation; it does not grant it.
   if(!isRootActor(live)&&!live.authorizationCapabilities?.includes('report:view'))digitalForbidden();
+  if(collaboration&&!isDigitalManagementReader(live)&&!isDigitalTechnicalManager(live))digitalForbidden();
   return live;
  }
  private exportAllowed(actor:TrustedActorContext){try{assertBusinessExportAllowed(actor.actorRoles,'report:export');return isRootActor(actor)||(actor.authorizationCapabilities??[]).includes('report:view');}catch{return false;}}
@@ -61,12 +64,12 @@ export class ProductionStatisticsQuery{
   const applied=currentFilters(filters),key=filterHash(applied);
   if(filters.page>1&&!filters.snapshotId)throw new ApplicationError('ANALYSIS_RESULT_REQUIRED','请先整体读取结果，再按同版结果翻页',409);
   if(filters.snapshotId){
-   const stored=await this.store.load(filters.snapshotId,actor.actorId,key,payload=>this.read(async db=>this.permission(db,await this.liveActor(db,actor),[...payload.result.rows.map(row=>row.line.orderId),...payload.result.unknown.map(row=>row.orderId)],[...payload.result.windows.map(row=>row.window.id),...payload.periodSources?.taskIds??[]],payload.result.reworks.map(row=>row.reworkId))));
+   const stored=await this.store.load(filters.snapshotId,actor.actorId,key,payload=>this.read(async db=>this.permission(db,await this.liveActor(db,actor,applied.collaboration),[...payload.result.rows.map(row=>row.line.orderId),...payload.result.unknown.map(row=>row.orderId)],[...payload.result.windows.map(row=>row.window.id),...payload.periodSources?.taskIds??[]],payload.result.reworks.map(row=>row.reworkId))));
    return this.page({...stored,filters:applied,freshness:'previous-query'},filters.page,exportAll);
   }
   const observation=observedBusinessTime(),clock=new ContextBusinessClock(this.database),observed:Array<{id:string;time:Awaited<ReturnType<ContextBusinessClock['read']>>}>=[];
   const result=await this.read(async db=>{
-   const live=await this.liveActor(db,actor),policy=new DigitalProductionAccessPolicy(db),orders=[];
+   const live=await this.liveActor(db,actor,applied.collaboration),policy=new DigitalProductionAccessPolicy(db),orders=[];
    if(applied.secondaryMerchandiserId&&!isRootActor(live)&&!(live.authorizationCapabilities??[]).includes('sourcing:view'))digitalForbidden();
    // No creation-period cut: old unfinished production stays in the current set.
    const candidates=(await db.query<StatisticsOrder>(`SELECT o.*,s.created_by AS source_creator,s.created_at AS source_created_at,
@@ -104,19 +107,20 @@ export class ProductionStatisticsQuery{
     periodSources={scopeUnknown:missingDimension.map(row=>({orderId:row.orderId,lineId:row.lineId,customerCode:row.customerCode,reason:'已授权PO的筛选归属未核：'+dimensionTests(row).filter(test=>test.actual===null).map(test=>({salesYear:'销售年度',salesSeries:'P系列',primaryMerchandiser:'主跟单',designer:'设计主责'}[test.key]??test.key)).join('、')+'；可能遗漏期间发生与到期义务，不能当完整零或完整比例',sourceRefs:row.quantitySourceRefs})),taskIds:[],unknownDue:[],windows:[],events:[],promises:[],completions:[],limitations:[]};
     for(const orderId of new Set(selected.map(row=>row.orderId))){const facts=await productionPeriodSources(db,orderId,selected.filter(row=>row.orderId===orderId),live);periodSources.taskIds!.push(...facts.taskIds??[]);periodSources.windows!.push(...facts.windows??[]);periodSources.unknownDue!.push(...facts.unknownDue??[]);for(const key of ['events','promises','completions','limitations'] as const)(periodSources[key] as unknown[]).push(...facts[key]);}
    }
+   const collaborationSources=applied.collaboration?await productionCollaborationSource(db,selected,full.windows,full.asOf,full.problems,full.unknown):undefined;
    const permissionHash=await this.permission(db,live,[...selected,...missingDimension].map(row=>row.orderId),[...full.windows.map(row=>row.window.id),...periodSources?.taskIds??[]],full.reworks.map(row=>row.reworkId));
-   return {permissionHash,payload:{...(periodSources?{periodSources}:{}),projectionInputs:selected,motherCompletion,watermark:hash(periodSources?{full,periodSources}:full),filters:applied,canExport:this.exportAllowed(live),total:full.rows.length,result:full,dimensions:[{key:'customer',available:true,reason:'原订单客户代码；未把客户自动映射为品牌'},{key:'category',available:true,reason:'原当前有效已发布制单品类，缺件仍保留全局数量'},{key:'designer',available:true,reason:'原开发归属加创建时设计角色证据；Root创建未猜设计主责'},{key:'secondaryMerchandiser',available:isRootActor(live)||(live.authorizationCapabilities??[]).includes('sourcing:view'),reason:'沿原外发读取权限及第二跟单字段'}],limitations:['本次为当前生产完整读取，不按创建月份剔除旧积压。','各工厂涉及母单/PO及全PO背景需求不可跨厂相加。','未知归厂只限制相关厂指标；装箱为本系统出货，不代客户签收。','未核历史范围不能提供严格首次合格率或全周期等待覆盖。']}};
+   return {permissionHash,payload:{canReadCollaboration:isDigitalManagementReader(live)||isDigitalTechnicalManager(live),...(collaborationSources?{collaborationSources}:{}),...(periodSources?{periodSources}:{}),projectionInputs:selected,motherCompletion,watermark:hash(collaborationSources?{full,periodSources,collaborationSources}:periodSources?{full,periodSources}:full),filters:applied,canExport:this.exportAllowed(live),total:full.rows.length,result:full,dimensions:[{key:'customer',available:true,reason:'原订单客户代码；未把客户自动映射为品牌'},{key:'category',available:true,reason:'原当前有效已发布制单品类，缺件仍保留全局数量'},{key:'designer',available:true,reason:'原开发归属加创建时设计角色证据；Root创建未猜设计主责'},{key:'secondaryMerchandiser',available:isRootActor(live)||(live.authorizationCapabilities??[]).includes('sourcing:view'),reason:'沿原外发读取权限及第二跟单字段'}],limitations:['本次为当前生产完整读取，不按创建月份剔除旧积压。','各工厂涉及母单/PO及全PO背景需求不可跨厂相加。','未知归厂只限制相关厂指标；装箱为本系统出货，不代客户签收。','未核历史范围不能提供严格首次合格率或全周期等待覆盖。']}};
   });
   for(const {id,time} of observed)await assertBusinessClockUnchanged(clock,{kind:'order',id},time);
-  const currentPermission=await this.read(async db=>this.permission(db,await this.liveActor(db,actor),[...result.payload.result.rows.map(row=>row.line.orderId),...result.payload.result.unknown.map(row=>row.orderId)],[...result.payload.result.windows.map(row=>row.window.id),...result.payload.periodSources?.taskIds??[]],result.payload.result.reworks.map(row=>row.reworkId)));
+  const currentPermission=await this.read(async db=>this.permission(db,await this.liveActor(db,actor,applied.collaboration),[...result.payload.result.rows.map(row=>row.line.orderId),...result.payload.result.unknown.map(row=>row.orderId)],[...result.payload.result.windows.map(row=>row.window.id),...result.payload.periodSources?.taskIds??[]],result.payload.result.reworks.map(row=>row.reworkId)));
   if(currentPermission!==result.permissionHash)throw new ApplicationError('ANALYSIS_PERMISSION_CHANGED','读取期间授权范围已变化，请重新读取',409);
   const saved=await this.store.save(actor.actorId,key,result.permissionHash,result.payload);
   return this.page({...result.payload,...saved,freshness:'current'},filters.page,exportAll);
  }
- private page(value:Omit<ProductionStatisticsResponse,'page'|'pageSize'|'basis'>&{projectionInputs:StatisticsPo[];motherCompletion:StatisticsMetric;periodSources?:ProductionPeriodSources},page:number,exportAll:boolean):ProductionStatisticsResponse{
-  const {projectionInputs,motherCompletion,periodSources,...publicValue}=value,projectionFilters=periodSources?{...Object.fromEntries(Object.entries(value.filters).filter(([key])=>!['factoryId','drillFactoryId','drillFactories'].includes(key))),drillMetric:'all'} as ProductionStatisticsFilters:value.filters,result=productionResultProjection(value.result,projectionFilters,projectionInputs,motherCompletion),groups=periodSources?[]:productionGroups(result,projectionInputs,motherCompletion,value.filters.groupBy??['factory','customer','stage'],value.filters),facets=productionFacets(value.result,periodSources?undefined:value.filters.factoryId);
+ private page(value:Omit<ProductionStatisticsResponse,'page'|'pageSize'|'basis'>&{projectionInputs:StatisticsPo[];motherCompletion:StatisticsMetric;periodSources?:ProductionPeriodSources;collaborationSources?:ProductionCollaboration},page:number,exportAll:boolean):ProductionStatisticsResponse{
+  const {projectionInputs,motherCompletion,periodSources,collaborationSources,...publicValue}=value,projectionFilters=periodSources?{...Object.fromEntries(Object.entries(value.filters).filter(([key])=>!['factoryId','drillFactoryId','drillFactories'].includes(key))),drillMetric:'all'} as ProductionStatisticsFilters:value.filters,result=productionResultProjection(value.result,projectionFilters,projectionInputs,motherCompletion),groups=periodSources?[]:productionGroups(result,projectionInputs,motherCompletion,value.filters.groupBy??['factory','customer','stage'],value.filters),facets=productionFacets(value.result,periodSources?undefined:value.filters.factoryId);
   if(periodSources){const factoryNames=new Map(projectionInputs.flatMap(row=>row.allocations.map(scope=>[scope.factoryId,scope.factoryName] as const)));facets.factory=[...new Set(periodSources.events.map(event=>event.factoryId??'unknown'))].map(key=>({key,label:key==='unknown'?'历史事件归厂待核':factoryNames.get(key)??'原事件工厂'}));}
-  return {...publicValue,...periodSources?{period:productionPeriodProjection(periodSources,value.filters,result.rows.map(row=>row.line),result.asOf)}:{},groups,facets,basis:{total:value.result.rows.length,metrics:value.result.metrics,unknown:value.result.unknown},total:result.rows.length,page,pageSize:15,result:{...result,rows:exportAll?result.rows:result.rows.slice((page-1)*15,page*15)}};
+  return {...publicValue,...collaborationSources?{collaboration:productionCollaborationProjection(collaborationSources,result.windows.map(value=>value.window.id),result.rows.map(row=>row.line),value.filters)}:{},...periodSources?{period:productionPeriodProjection(periodSources,value.filters,result.rows.map(row=>row.line),result.asOf)}:{},groups,facets,basis:{total:value.result.rows.length,metrics:value.result.metrics,unknown:value.result.unknown},total:result.rows.length,page,pageSize:15,result:{...result,rows:exportAll?result.rows:result.rows.slice((page-1)*15,page*15)}};
  }
  private async orderRows(db:PoolClient,actor:TrustedActorContext,order:StatisticsOrder):Promise<StatisticsPo[]>{
   const id=order.production_order_id as string,policy=new DigitalProductionAccessPolicy(db),closure=await new OrderClosureService(this.database).read(actor,id,db),gates=await new BulkPreparationService(this.database).gates(db,id);
