@@ -36,6 +36,19 @@ type ReadRows = (sql: string, values: unknown[]) => Record<string, unknown>[] | 
 function database(activeRoles: string[], readRows: ReadRows) {
   const query = vi.fn(async (raw: string, values: unknown[] = []) => {
     const sql = raw.replace(/\s+/g, ' ').trim();
+    // Model the native batching envelope while evaluating only the original
+    // strict per-object SELECT fixtures. Unknown SQL still fails this regression.
+    const batch = sql.match(/^SELECT requested\.ordinal AS "__dx_journey_batch_index",facts\.\* FROM unnest\(\$1::(?:uuid|text)\[\]\) WITH ORDINALITY AS requested\(id,ordinal\) CROSS JOIN LATERAL \(SELECT original\.\*,row_number\(\) OVER \(\) AS "__dx_journey_row_index" FROM \((.+)\) AS original\) AS facts ORDER BY requested\.ordinal,facts\."__dx_journey_row_index"$/);
+    if (batch) {
+      if (!Array.isArray(values[0]) || values[0].some(id => typeof id !== 'string')) throw Error('Invalid permission fixture batch scope');
+      const original = batch[1]!.replace(/\brequested\.id\b/g, '$1'), rows = values[0].flatMap((id, index) => {
+        const facts = readRows(original, [id]);
+        if (facts === undefined) throw Error(`Unexpected original SELECT in permission batch: ${original}`);
+        return facts.map((fact, row) => ({__dx_journey_batch_index: index + 1, ...fact, __dx_journey_row_index: row + 1}));
+      });
+      const fields = [...new Set(['__dx_journey_batch_index', ...rows.flatMap(row => Object.keys(row)), '__dx_journey_row_index'])].map(name => ({name}));
+      return {rows, rowCount: rows.length, fields};
+    }
     let rows: Record<string, unknown>[] | undefined;
     if (/^(BEGIN|COMMIT|ROLLBACK)\b/.test(sql) || sql.startsWith('SELECT pg_advisory_xact_lock(')) rows = [];
     else if (sql.startsWith('SELECT 1 FROM app_users u') && sql.includes('user_role_assignments')) {
@@ -372,6 +385,7 @@ describe('PMC Journey linked records and timing remain read projections', () => 
     const read = async (role: string) => {
       const db = linkedJourneyDatabase([role]);
       const result = await new DigitalJourneyQuery(db.pool).list(actor(role), JourneyFilterSchema.parse({search: 'TEST-PMC-READ'}), true, undefined, {details: false, patternBusiness: 'bulk'});
+      expect(db.query.mock.calls.some(([sql]) => sql.startsWith('SELECT requested.ordinal AS "__dx_journey_batch_index"'))).toBe(true);
       expect(db.query.mock.calls.some(([sql]) => /^(INSERT|UPDATE|DELETE)\b/.test(sql))).toBe(false);
       return result;
     };
