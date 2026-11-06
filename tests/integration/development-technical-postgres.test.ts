@@ -14,6 +14,7 @@ import {DigitalQuotationService} from '../../apps/api/src/production-platform/qu
 import {SlaConfigurationRepository} from '../../apps/api/src/production-platform/sla-configuration-repository.js';
 import {developmentSlaPlan} from '../../apps/api/src/production-platform/development-sla-enrollment.js';
 import {SlaOrderService} from '../../apps/api/src/production-platform/sla-order-service.js';
+import {SlaCalculationService} from '../../apps/api/src/production-platform/sla-calculation-service.js';
 import {ContextBusinessClock,businessNow} from '../../apps/api/src/acceptance-clock/business-time.js';
 import {DigitalOrderCreateSchema,beijingCalendarDate} from '@dx-rework/contracts/digital-production';
 import {randomUUID,createHash} from 'node:crypto';
@@ -119,6 +120,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   await technical.completeReview(p.worker,p.sourceId,input,key);await technical.completeReview(p.worker,p.sourceId,input,key);
   expect((await technical.read(p.worker,p.sourceId)).effective?.state).toBe('effective');
   const next=await technical.recordComment(p.designer,p.sourceId,comment(2),randomUUID());expect(next.reviewTaskId).not.toBe(final.reviewTaskId);
+  const calculation=await new SlaCalculationService(f.db).preview(f.root,{selection:{mode:'instance',kind:'source',id:p.sourceId,range:'development'}});
+  const reviewWindows=calculation.current.rows.filter(row=>row.id.startsWith('final-comment:'));expect(reviewWindows).toHaveLength(2);expect(reviewWindows.every(row=>row.minutes===1440&&row.independent)).toBe(true);expect(reviewWindows.find(row=>row.source.includes(final.reviewTaskId!))!.basis).toBe('actual');expect(reviewWindows.find(row=>row.source.includes(next.reviewTaskId!))!.basis).toBe('standard');
   expect((await technical.read(p.worker,p.sourceId)).effective?.state).toBe('pending_review');
   const projected=await nodeMaterialsFixture(f.db,f.root,p.sourceId,'development_size_review',next.reviewTaskId!);expect(projected.data.rows.find(r=>r.id==='technical-basis')).toMatchObject({state:'stale',versionLabel:expect.stringContaining('成果 v1')});
   const oldDue=(await tasks.read(f.root,next.reviewTaskId!)).dueAt;
@@ -180,11 +183,13 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const workerPerson=recipient==='root'?(await f.access.createPerson({...f.root,authorizationCapability:'master_data:manage'},{personType:'internal',appUserId:f.root.actorId,displayName:'TEST Root补片本人',aliases:[],reason:'TEST native Root self-work'})).personId:(await f.db.query('SELECT person_id FROM business_people WHERE app_user_id=$1',[p.worker.actorId])).rows[0].person_id;
   order=await native.assign(f.root,order.orderId,{roundId:order.currentRoundId,version:order.version,personId:workerPerson,amount:'3'},randomUUID());
   const patch=(await execution.read(executor,p.sourceId)).tasks.find(t=>t.taskKind==='development_patch')!;expect(patch.state).toBe('ready');
+  const pendingCalculation=await new SlaCalculationService(f.db).preview(f.root,{selection:{mode:'instance',kind:'source',id:p.sourceId,range:'development'}});expect(pendingCalculation.current.rows.find(row=>row.id===`patch-task:${patch.taskId}`)).toMatchObject({kind:'unlimited',minutes:null});
   if(recipient==='root')expect((await f.db.query("SELECT count(*)::int n FROM user_role_assignments WHERE user_id=$1 AND role_code='pattern_room_worker' AND revoked_at IS NULL",[f.root.actorId])).rows[0].n).toBe(0);
   await expect(tasks.reassign(f.root,patch.taskId,p.worker.actorId,randomUUID())).rejects.toMatchObject({statusCode:409});
   const workPhoto=await f.image(executor);await execution.recordUploadPurpose(executor,p.sourceId,workPhoto,'补做成果',patch.taskId);
   await technical.completePatch(executor,p.sourceId,{taskId:patch.taskId,note:'TEST实际新增补片完成',attachmentIds:[workPhoto]},randomUUID());
   const tail=(await execution.read(f.root,p.sourceId)).tasks.find(t=>t.taskKind==='development_patch_tail_check')!,tailPhoto=await f.image(f.root);await execution.recordUploadPurpose(f.root,p.sourceId,tailPhoto,'尾查照片',tail.taskId);
+  const tailCalculation=await new SlaCalculationService(f.db).preview(f.root,{selection:{mode:'instance',kind:'source',id:p.sourceId,range:'development'}});expect(tailCalculation.current.rows.find(row=>row.id===`patch-task:${tail.taskId}`)).toMatchObject({kind:'duration',minutes:30});
   await technical.completePatch(f.root,p.sourceId,{taskId:tail.taskId,note:'TEST补做尾查合格',attachmentIds:[tailPhoto],measurements:[{name:'胸围',values:['48']}]},randomUUID());
   expect((await f.db.query('SELECT count(*)::int n FROM pattern_room_segments WHERE round_id=$1 AND wage_eligible_at IS NOT NULL',[order.currentRoundId])).rows[0].n).toBe(0);
   const confirmation=(await execution.read(p.designer,p.sourceId)).tasks.find(t=>t.taskKind==='development_patch_confirmation')!;
@@ -213,6 +218,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const issue=(await technical.read(f.root,p.sourceId)).patches[0]!;
   await technical.decidePatch(f.root,p.sourceId,{issueId:issue.issueId,expectedVersion:1,decision:'new_round',making:{expectedDocumentVersion:p.documentVersion,quantities:[1]},reusableArtifacts:false,reason:'TEST技术主管判定关键成果需要重做'},randomUUID());
   expect((await forms.read(f.root,p.sourceId)).roundNumber).toBe(2);
+  const calculation=await new SlaCalculationService(f.db).preview(f.root,{selection:{mode:'instance',kind:'source',id:p.sourceId,range:'development',round:2}});expect(calculation.context.identity.round).toBe(2);expect(calculation.context.limitations.join(' ')).toContain('不重走首版全段');
   const order=await native.get(f.root,issue.nativeOrderId!);expect(order.status).toBe('pending_assignment');
   expect((await f.db.query('SELECT agreed_amount FROM pattern_room_rounds WHERE round_id=$1',[order.currentRoundId])).rows[0].agreed_amount).toBeNull();
   expect((await f.db.query('SELECT count(*)::int n FROM digital_development_cycle_rounds WHERE source_id=$1',[p.sourceId])).rows[0].n).toBe(2);
@@ -223,11 +229,12 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const supervisor=person('pattern-room-supervisor');
   await f.advance(scene,'2026-10-24T01:00:00Z');await f.runtime.run(scene,f.root,async()=>{request=await execution.externalPattern(supervisor,p.sourceId,{action:'request',roundNumber:1,note:'TEST真实发出请求'},randomUUID());expect((await technical.read(f.root,p.sourceId)).cycle?.state).toBe('unrated');});
   await f.advance(scene,'2026-10-24T01:15:00Z');await f.runtime.run(scene,f.root,async()=>{await technical.externalPaperInterval(supervisor,p.sourceId,{requestId:request.requestId,expectedVersion:0,departedAt:businessNow().toISOString(),note:'TEST实际将原件交外部处理'},randomUUID());});
-  await f.advance(scene,'2026-10-24T02:15:00Z');await f.runtime.run(scene,f.root,async()=>{const cycle=(await technical.read(f.root,p.sourceId)).cycle!;expect(cycle.excludedSeconds).toBe(3600);expect(cycle.internalSeconds).toBe(4500);});
+  await f.advance(scene,'2026-10-24T02:15:00Z');await f.runtime.run(scene,f.root,async()=>{const cycle=(await technical.read(f.root,p.sourceId)).cycle!;expect(cycle.excludedSeconds).toBe(3600);expect(cycle.internalSeconds).toBe(4500);const calculation=await new SlaCalculationService(f.db).preview(f.root,{selection:{mode:'instance',kind:'source',id:p.sourceId,range:'development'}});expect(calculation.current.rows.find(row=>row.id==='development_cycle')!.end.at).toBeNull();});
   await f.advance(scene,'2026-10-24T02:45:00Z');await f.runtime.run(scene,f.root,async()=>{const image=await f.image(supervisor);await execution.recordUploadPurpose(supervisor,p.sourceId,image,'外部纸样');await execution.externalPattern(supervisor,p.sourceId,{action:'receive',requestId:request.requestId,note:'TEST实际收到',attachmentIds:[image]},randomUUID());});
   await f.advance(scene,'2026-10-24T03:00:00Z');await f.runtime.run(scene,f.root,async()=>{const cycle=(await technical.read(f.root,p.sourceId)).cycle!;expect(cycle.excludedSeconds).toBe(5400);expect(cycle.internalSeconds).toBe(5400);
+   const calculation=await new SlaCalculationService(f.db).preview(f.root,{selection:{mode:'instance',kind:'source',id:p.sourceId,range:'development'}});expect(calculation.current.rows.find(row=>row.id==='development_cycle')!.end.at).toBe(cycle.dueAt);
    const event=(await f.db.query("SELECT event_id FROM digital_production_task_events WHERE task_id=$1 AND event_kind='completed' ORDER BY recorded_at DESC LIMIT 1",[request.taskId])).rows[0];
-   await tasks.correctTime(f.root,request.taskId,{eventId:event.event_id,occurredAt:null,reason:'TEST收到时间暂不能核实'},randomUUID());expect((await technical.read(f.root,p.sourceId)).cycle?.state).toBe('unrated');
+   await tasks.correctTime(f.root,request.taskId,{eventId:event.event_id,occurredAt:null,reason:'TEST收到时间暂不能核实'},randomUUID());expect((await technical.read(f.root,p.sourceId)).cycle?.state).toBe('unrated');const unknownCalculation=await new SlaCalculationService(f.db).preview(f.root,{selection:{mode:'instance',kind:'source',id:p.sourceId,range:'development'}});expect(unknownCalculation.current.rows.find(row=>row.id===`external-pattern:${request.requestId}`)!.end.at).toBeNull();
    await tasks.correctTime(f.root,request.taskId,{eventId:event.event_id,occurredAt:'2026-10-24T02:45:00Z',reason:'TEST实际收到已核实'},randomUUID());expect((await technical.read(f.root,p.sourceId)).cycle?.excludedSeconds).toBe(5400);
    const correction={requestId:request.requestId,expectedVersion:1,departedAt:'2026-10-24T01:45:00Z',note:'TEST主管核实首次交出时间录错，保留原v1'};
    await expect(technical.externalPaperInterval(p.worker,p.sourceId,correction,randomUUID())).rejects.toMatchObject({statusCode:403});
@@ -391,6 +398,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const draft=await rounds.save(p.designer,p.sourceId,{expectedDraftVersion:0,revision:{basedOnRound:1,document:old.document!,origin:'内部发现',customerComment:'',internalProblem:'TEST仅重做车缝，技术成果仍可复用',explanation:'TEST原生复版继承',categories:['车缝'],affectedNodes:['车板'],outputKind:'整件样板'}},randomUUID());
   await rounds.publish(p.designer,p.sourceId,{expectedDraftVersion:draft.draftVersion,basedOnRound:1},randomUUID());
   const metadata=await technical.history(p.designer,p.sourceId,{roundNumber:2,scopeRef:'整款',kind:'artifacts',view:'directory'});expect(metadata.items).toEqual([]);expect(metadata.adoptedArtifact).toMatchObject({sourceId:p.sourceId,roundNumber:1,viaSourceId:p.sourceId,viaRoundNumber:2});
+  const calculation=await new SlaCalculationService(f.db).preview(f.root,{selection:{mode:'instance',kind:'source',id:p.sourceId,range:'development',round:2}});expect(calculation.context.identity.round).toBe(2);expect(calculation.current.rows.some(row=>row.id==='development_pattern')).toBe(false);expect(calculation.current.rows.some(row=>row.id==='development_sewing')).toBe(true);
   const inherited=metadata.adoptedArtifact!,detail=await technical.history(p.designer,p.sourceId,{roundNumber:2,scopeRef:'整款',kind:'artifacts',version:inherited.version,adoptedArtifactId:inherited.artifactSetId});expect(detail.items[0]).toMatchObject({roundNumber:1,artifactSetId:inherited.artifactSetId});expect(Object.hasOwn(detail.items[0]!,'body')).toBe(true);
   const directory=await technical.history(p.designer,p.sourceId,{roundNumber:2,scopeRef:'整款',kind:'artifacts',version:inherited.version,adoptedArtifactId:inherited.artifactSetId,view:'directory'});
   const recorded=(await f.db.query('SELECT created_at FROM digital_development_artifact_inheritances WHERE source_id=$1 AND round_number=2 AND scope_ref=$2',[p.sourceId,'整款'])).rows[0];

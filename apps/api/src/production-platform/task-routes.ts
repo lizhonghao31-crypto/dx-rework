@@ -38,6 +38,7 @@ export function registerDigitalTaskRoutes(app: FastifyInstance, dependencies: Di
   app.post('/digital-production/sla-settings/orders/preview',async request=>service.previewSlaOrder(await actor(request),parse(orderSelection,request.body)));
   app.post('/digital-production/sla-settings/orders/apply',async request=>service.applySlaOrder(await actor(request),parse(orderSelection.extend({previewToken:z.string().max(512).regex(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/)}),request.body),parse(z.string().uuid(),key(request))));
   app.get('/digital-production/sla-settings',async request=>service.slaSettings(await actor(request),parse(z.object({version:z.coerce.number().int().positive().optional()}).strict(),request.query).version));
+  app.post('/digital-production/sla-settings/calculation-preview',async request=>service.slaCalculationPreview(await actor(request),request.body));
   app.post('/digital-production/sla-settings/preview',async request=>service.previewSlaSettings(await actor(request),parse(standardDraft,request.body)));
   app.post('/digital-production/sla-settings/publish',async request=>service.publishSlaSettings(await actor(request),parse(standardDraft.extend({previewToken:z.string().max(512).regex(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/)}),request.body),parse(z.string().uuid(),key(request))));
   app.get("/digital-production/deadline-policies", async request => service.policies(await actor(request)));

@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./sla-calculation-routes": { "types": "./src/sla-calculation-routes.ts", "import": "./dist/sla-calculation-routes.js" },
+    "./sla-calculation": { "types": "./src/sla-calculation.ts", "import": "./dist/sla-calculation.js" },
     "./series-plan": { "types": "./src/series-plan.ts", "import": "./dist/series-plan.js" },
     "./development-cycle": { "types": "./src/development-cycle.ts", "import": "./dist/development-cycle.js" },
     "./business-clock": { "types": "./src/business-clock.ts", "import": "./dist/business-clock.js" },

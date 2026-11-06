@@ -50,14 +50,22 @@ describe('bounded impact shadow graph',()=>{
   "describe.each(['a'])('family %s',()=>{it('case',()=>{});});",
  ])('rejects unsupported or ambiguous declaration %s',async source=>{await expect(fixture(source)).rejects.toThrow();});
  it.each(["export const value=process.env.X;","export const value=await import('./dynamic.js');","export const value=globalThis.value;"])('does not propose a pure entry with runtime globals or loaders %s',async source=>{const a=await fixture("it('case',()=>{});",source);expect(a.graph.unsupported.length).toBeGreaterThan(0);});
- it('matches the separately source-reviewed real 18-case catalog and rejects a deleted consumer edge',async()=>{
+ it('preserves the reviewed 18-case declarations and full fallback when pinned inputs drift',async()=>{
   const policy=loadShadowPolicy(),audit=await auditShadowGraph(process.cwd(),policy);
   const identity={head:'a'.repeat(40),base:policy.binding.anchor};
   const risk=classifyFullGatePaths([policy.root]),postgres=fullGatePostgresPlan({BASE_SHA:identity.base,DB_REQUIRED:String(risk.dbRequired),BUSINESS_CHAIN_SENSITIVE:String(risk.businessChainSensitive),MIGRATION_SENSITIVE:String(risk.migrationSensitive),DEPLOYMENT_SENSITIVE:String(risk.deploymentSensitive),MAPPED_POSTGRES_TESTS:risk.mappedPostgresTests.join(',')});
   // Graph-only assertions use a synthetic binding; real Git proof lives in binding.test.mjs.
   const binding={version:1,status:'matched',...identity,anchor:policy.binding.anchor,baseInputsHash:policy.binding.inputsHash,headInputsHash:policy.binding.inputsHash,policyRulesHash:policyRulesHash(policy)};
   const input={identity,inputs:{nonDatabase:[...new Set(policy.expectedCases.map(c=>c.file)),'tests/unit/impact-shadow-graph.test.ts'],postgres},changes:[{status:'M',path:policy.root}],policy,binding,...audit,toolchain:{node:process.versions.node,vitest:'4.1.10',typescript:'5.9.3'}};
-  expect(audit.graph.unsupported).toEqual([]);expect(audit.declarations).toHaveLength(18);expect(proposeShadow(input).decision).toBe('candidate');expect(proposeShadow(input).knownPlanGaps).toEqual([]);
+  expect(audit.graph.unsupported).toEqual([]);expect(audit.declarations).toHaveLength(18);
+  expect(audit.graph.edges).toEqual(expect.arrayContaining(policy.requiredEdges));
+  const drifted=Object.entries(policy.pinnedSources).filter(([path,expected])=>audit.sourceHashes[path]!==expected).map(([path])=>path),proposal=proposeShadow(input);
+  if(drifted.length){
+   expect(proposal.decision).toBe('fallback');expect(proposal.reason).toBe('reviewed-input-drift');expect(proposal.details).toEqual([drifted[0]]);
+   expect(proposal.actualExecution).toEqual({nonDatabase:input.inputs.nonDatabase,postgres});expect(proposal.candidate).toEqual(proposal.actualExecution);expect(proposal.proposedExclusions).toEqual([]);expect(proposal.selectionApproved).toBe(false);expect(proposal.executionChanged).toBe(false);
+   return; // Unreviewed source pins must never be blessed as a new selection policy by a business PR.
+  }
+  expect(proposal.decision).toBe('candidate');expect(proposal.knownPlanGaps).toEqual([]);
   const omitted={...input,inputs:{...input.inputs,postgres:{...postgres,plan:postgres.plan.filter(s=>!policy.requiredPostgresFiles.includes(s.path))}}};expect(proposeShadow(omitted).knownPlanGaps).toEqual(policy.requiredPostgresFiles);
   for(const edge of policy.requiredEdges){input.graph={...audit.graph,edges:audit.graph.edges.filter(e=>JSON.stringify(e)!==JSON.stringify(edge))};expect(proposeShadow(input).reason).toBe('missing-reviewed-consumer-edge');}
  },15_000); // Review measured 6.55s audit / 8.54s isolated test; only this repository scan gets the bounded budget.

@@ -16,6 +16,7 @@ import {SlaConfigurationService} from '../../apps/api/src/production-platform/sl
 import {SlaConfigurationRepository} from '../../apps/api/src/production-platform/sla-configuration-repository.js';
 import {historicalDigitalOrder} from '../helpers/historical-digital-order-fixture.js';
 import {SlaOrderService} from '../../apps/api/src/production-platform/sla-order-service.js';
+import {SlaCalculationService} from '../../apps/api/src/production-platform/sla-calculation-service.js';
 import Fastify from 'fastify';
 import sharp from 'sharp';
 import {createHash} from 'node:crypto';
@@ -317,6 +318,10 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const after=await sla.read(f.root,id);expect(after.status).toBe('planned');if(after.status!=='planned')throw Error('missing retained SLA');expect(after.facts.production_sheet).toEqual(before.facts.production_sheet);
   expect((await f.db.query('SELECT * FROM digital_sla_order_snapshots WHERE production_order_id=$1 ORDER BY revision',[id])).rows).toEqual(snapshots);
   expect((await f.db.query('SELECT count(*)::int AS n FROM digital_preparation_windows WHERE production_order_id=$1',[id])).rows[0].n).toBe(0);
+  const calculation=await new SlaCalculationService(f.db).preview(f.root,{selection:{mode:'instance',kind:'order',id,range:'preparation'}});
+  expect(calculation.context.bindings.preparation).toMatchObject({retainLegacy:true});
+  expect(calculation.current.rows.find(n=>n.id==='production_sheet')).toMatchObject({minutes:4320,basis:'actual',end:{at:before.facts.production_sheet!.completedAt}});
+  expect(calculation.current.rows.some(n=>['preparation_draft','preparation_final'].includes(n.id))).toBe(false);
   expect((await bulk.read(f.root,id)).instructionValid).toBe(true);
  });
 
@@ -348,8 +353,15 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const ready=await f.bulkReady('无',undefined,1,f.sourcing,{stopBeforeCompletion:true}),resource={kind:'order' as const,id:ready.id};
   const before=await bulk.read(f.root,ready.id);expect(before.tasks.find(t=>t.taskKind==='warehouse_preshrink')!.state).toBe('ready');
   const current=await service.read(f.root,resource),receipt=current.facts.find(x=>x.kind==='fabric_receipt');
+  const selection={mode:'instance' as const,kind:'order' as const,id:ready.id,range:'preparation' as const},calculator=new SlaCalculationService(f.db),calculatedBefore=await calculator.preview(f.root,{selection});
+  const windows=calculatedBefore.current.rows.filter(n=>n.id==='preparation_draft'||n.id==='preparation_final');
+  expect(windows).toHaveLength(2);expect(windows.every(n=>n.start.at!==null)).toBe(true);
+  expect(windows.find(n=>n.id==='preparation_final')!.basis).toBe('actual');
   await service.record(f.people.warehouse!,resource,{kind:'fabric_receipt',scopeRef:'whole',expectedVersion:receipt?.version??0,state:'unknown',occurredAt:null,note:'TEST receipt corrected to unknown after earlier release',quantities:[],evidenceIds:[],sourceDocumentVersion:null,recipientId:null},randomUUID());
   const after=await bulk.read(f.root,ready.id);expect(after.fabric!.usable).toBe(false);expect(after.tasks.find(t=>t.taskKind==='warehouse_preshrink')!.state).not.toBe('ready');
+  const calculatedAfter=await calculator.preview(f.root,{selection});
+  expect(calculatedAfter.current.rows.filter(n=>n.id==='preparation_draft'||n.id==='preparation_final')).toEqual(windows);
+  expect(calculatedAfter.contextDigest).not.toBe(calculatedBefore.contextDigest);
   await expect(completeBulkRangeFixture(f.db,f.people.warehouse!,ready.id,ready.preparationId,'预缩完成')).rejects.toMatchObject({statusCode:409});
   expect((await bulk.read(f.root,ready.id)).facts.some(x=>x.kind==='预缩完成')).toBe(false);expect((await bulk.read(f.root,ready.id)).tasks.some(t=>t.taskKind==='bulk_cutting')).toBe(false);
  });
