@@ -154,6 +154,13 @@ export const classifyFullGatePaths = (inputPaths) => {
   let transferSensitive = false;
 
   for (const path of paths) {
+    if (/^apps\/web\/src\/(?:sla-|development-cycle-settings|cockpit-production-settings|digital-cockpit-personnel|series-settings|series-plan-panel|auth-session)/.test(path)
+      || /^apps\/api\/src\/production-platform\/(?:sla-|development-technical-service)/.test(path)
+      || path.startsWith('apps/api/src/auth/')
+      || ['apps/web/src/digital-production-api.ts','tests/acceptance/m01-settings-native-browser.ts','tests/fixtures/m01-settings-native-ui.tsx','scripts/ci/prepare-settings-browser.mjs'].includes(path)) {
+      mappedTests.add('tests/integration/m01-settings-native-browser-postgres.test.ts');
+      domains.add('settings-native-browser');
+    }
     if (DEVELOPMENT_AMENDMENT_INPUTS.has(path)) {
       businessChainSensitive = true;
       domains.add("development-amendment");

@@ -263,6 +263,7 @@ jobs:
           path: |
             ${{ runner.temp }}/non-db-results.json
             ${{ runner.temp }}/postgres-execution.json
+            ${{ runner.temp }}/m01-settings-native/
             ${{ runner.temp }}/full-lane-record.json
             ${{ runner.temp }}/full-lane-build.json
             ${{ runner.temp }}/impact-shadow-plan.json
@@ -364,12 +365,18 @@ jobs:
         if: env.DB_REQUIRED == 'true'
         run: node scripts/test-preflight.mjs --database
 
+      - name: Prepare native settings browser for exact plan
+        id: settings_browser
+        if: env.DB_REQUIRED == 'true'
+        run: node scripts/ci/prepare-settings-browser.mjs
+
       - name: Run mapped PostgreSQL sensitive-domain regressions
         id: db_tests
         if: env.DB_REQUIRED == 'true'
         env:
           BASE_SHA: ${{ inputs.base_sha }}
           DX_REWORK_POSTGRES_RECEIPT: ${{ runner.temp }}/postgres-execution.json
+          M01_SETTINGS_NATIVE_EVIDENCE: ${{ runner.temp }}/m01-settings-native
         run: node scripts/run-business-chain-gate.mjs --full-gate
         # Mapped PostgreSQL suite executed no passing tests is a hard error in the shared runner.
 
@@ -384,6 +391,7 @@ jobs:
         env:
           BASE_SHA: ${{ inputs.base_sha }}
           DX_REWORK_POSTGRES_RECEIPT: ${{ runner.temp }}/postgres-execution.json
+          M01_SETTINGS_NATIVE_EVIDENCE: ${{ runner.temp }}/m01-settings-native
         run: node scripts/run-business-chain-gate.mjs --full-gate --verify-receipt
 
       - name: Run PostgreSQL business chain for business, migration or deployment-sensitive changes
@@ -392,6 +400,7 @@ jobs:
         env:
           BASE_SHA: ${{ inputs.base_sha }}
           DX_REWORK_POSTGRES_RECEIPT: ${{ runner.temp }}/postgres-execution.json
+          M01_SETTINGS_NATIVE_EVIDENCE: ${{ runner.temp }}/m01-settings-native
         run: node scripts/run-business-chain-gate.mjs --full-gate --verify-receipt
 
       - name: PostgreSQL backup and isolated restore drill
@@ -500,6 +509,7 @@ jobs:
           path: |
             ${{ runner.temp }}/non-db-results.json
             ${{ runner.temp }}/postgres-execution.json
+            ${{ runner.temp }}/m01-settings-native/
             ${{ runner.temp }}/full-lane-record.json
             ${{ runner.temp }}/full-lane-build.json
             ${{ runner.temp }}/impact-shadow-plan.json
@@ -547,7 +557,7 @@ jobs:
           GATE_STEPS_JSON: ${{ steps.aggregate.outputs.steps }}
           GATE_SCOPE_JSON: ${{ steps.aggregate.outputs.scope }}
           GATE_CHECKS_JSON: >-
-            [["title","Require explicit Full Gate title","always"],["checkout","Checkout exact PR Head","always"],["node","Set up Node 22","always"],["npm","Pin npm 10","always"],["head","Verify exact Head","always"],["protocol","Validate frozen request identity","always"],["reuse_select","Select successful same-Head light evidence","always"],["reuse_download","Download exact source light artifact","optional"],["reuse_restore","Verify source context and restore build outputs","optional"],["policy","Verify Actions usage policy","always"],["construction","Verify current change evidence","always"],["protocol_tests","Run CI protocol regression tests","always"],["risk","Classify Full Gate risk from exact PR diff","always"],["main_compat","Compare exact candidate with current remote main migration history","release"],["install","Install locked dependencies","always"],["runtime","Record actual toolchain and resolved test configuration","always"],["audit","Audit production dependency graph","always"],["lint","Lint","always"],["types","Typecheck","always"],["build","Build workspaces without deployment postbuild","always"],["migration_lint","Validate migration files statically","always"],["secrets","Scan repository history and first-party artifacts for secrets","always"],["db_start","Start isolated PostgreSQL only for DB-sensitive changes","db"],["db_seed","Seed database with base-revision migration history","db"],["db_migrate","Apply and validate exact Head migration history against PostgreSQL","db"],["resource_smoke","Validate database resource lifecycle before expensive suites","db"],["tests","Full unit and integration suite without runtime DB escalation","always"],["db_tests","Run mapped PostgreSQL sensitive-domain regressions","db"],["journey","Run PostgreSQL 13 Journey read compatibility","journey"],["root_audit","Run PostgreSQL Root audit control-boundary regressions for migration changes","migration"],["business_chain","Run PostgreSQL business chain for business, migration or deployment-sensitive changes","chain"],["backup","PostgreSQL backup and isolated restore drill","maintenance"],["acceptance_recovery","Acceptance low-privilege migration and backup recovery","maintenance"],["release_history","Main and existing release histories through low-privilege Acceptance maintenance","release_deployment"],["release_acceptance","PR-17 exact-head acceptance and lifecycle","activation"],["package","PR-17 package, runtime and relocation-safe transfer","transfer"],["db_stop","Stop isolated PostgreSQL","db"]]
+            [["title","Require explicit Full Gate title","always"],["checkout","Checkout exact PR Head","always"],["node","Set up Node 22","always"],["npm","Pin npm 10","always"],["head","Verify exact Head","always"],["protocol","Validate frozen request identity","always"],["reuse_select","Select successful same-Head light evidence","always"],["reuse_download","Download exact source light artifact","optional"],["reuse_restore","Verify source context and restore build outputs","optional"],["policy","Verify Actions usage policy","always"],["construction","Verify current change evidence","always"],["protocol_tests","Run CI protocol regression tests","always"],["risk","Classify Full Gate risk from exact PR diff","always"],["main_compat","Compare exact candidate with current remote main migration history","release"],["install","Install locked dependencies","always"],["runtime","Record actual toolchain and resolved test configuration","always"],["audit","Audit production dependency graph","always"],["lint","Lint","always"],["types","Typecheck","always"],["build","Build workspaces without deployment postbuild","always"],["migration_lint","Validate migration files statically","always"],["secrets","Scan repository history and first-party artifacts for secrets","always"],["db_start","Start isolated PostgreSQL only for DB-sensitive changes","db"],["db_seed","Seed database with base-revision migration history","db"],["db_migrate","Apply and validate exact Head migration history against PostgreSQL","db"],["resource_smoke","Validate database resource lifecycle before expensive suites","db"],["tests","Full unit and integration suite without runtime DB escalation","always"],["settings_browser","Prepare native settings browser for exact plan","db"],["db_tests","Run mapped PostgreSQL sensitive-domain regressions","db"],["journey","Run PostgreSQL 13 Journey read compatibility","journey"],["root_audit","Run PostgreSQL Root audit control-boundary regressions for migration changes","migration"],["business_chain","Run PostgreSQL business chain for business, migration or deployment-sensitive changes","chain"],["backup","PostgreSQL backup and isolated restore drill","maintenance"],["acceptance_recovery","Acceptance low-privilege migration and backup recovery","maintenance"],["release_history","Main and existing release histories through low-privilege Acceptance maintenance","release_deployment"],["release_acceptance","PR-17 exact-head acceptance and lifecycle","activation"],["package","PR-17 package, runtime and relocation-safe transfer","transfer"],["db_stop","Stop isolated PostgreSQL","db"]]
         run: |
           node <<'GATE_SUMMARY_JS'
           const fs = require('node:fs');

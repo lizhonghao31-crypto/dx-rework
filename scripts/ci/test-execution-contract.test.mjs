@@ -10,6 +10,7 @@ import {ownedPostgresSchema,createOwnedPostgresSchema,readOwnedResources,SCHEMA_
 import {classifyFullGatePaths} from './full-gate-risk-map.mjs';
 import {worktreeSnapshot,inspectCompatibility} from '../check-main-release-compat.mjs';
 import {assertManagedSchemaCreation,resourceChangedPaths} from '../test-preflight.mjs';
+import {settingsBrowserRequired} from './prepare-settings-browser.mjs';
 import {reconcileTimeInventory} from '../acceptance/time-site-inventory.mjs';
 const identity={database:'dx_rework_ci',username:'dx_rework_test',databaseOid:'42',serverVersion:'160015',marker:'dx-rework-isolated-test-v1'};
 const context={head:'a'.repeat(40),base:'b'.repeat(40),runId:'12',attempt:'1',identities:{default:identity},node:'22.22.2'};
@@ -137,4 +138,12 @@ test('SQL-heavy full business fixture is isolated while other long suites remain
  assert.equal(configForSuite(peer),'vitest.business-chain.config.ts');
  const source=readFileSync(full,'utf8');assert.ok(source.includes('timeout: 60_000'));
  const config=readFileSync('vitest.business-chain.config.ts','utf8');assert.ok(config.includes('testExecutionConfig.workers.longCorrectness'));
+});
+
+test('settings browser uses the original canonical PG plan with an installed browser only when required',()=>{
+ const file='tests/integration/m01-settings-native-browser-postgres.test.ts';
+ for(const path of ['apps/web/src/sla-calculation-preview-model.ts','apps/web/src/sla-standard-editor.tsx','apps/web/src/sla-settings-workspace.tsx','apps/web/src/development-cycle-settings.tsx','tests/acceptance/m01-settings-native-browser.ts','tests/fixtures/m01-settings-native-ui.tsx']){const scope=classifyFullGatePaths([path]);assert.equal(scope.dbRequired,true,path);assert.ok(scope.mappedPostgresTests.includes(file),path);}
+ assert.equal(configForSuite(file),'vitest.business-chain.config.ts');
+ const environment={BASE_SHA:'a'.repeat(40),DB_REQUIRED:'true',BUSINESS_CHAIN_SENSITIVE:'false',MIGRATION_SENSITIVE:'false',DEPLOYMENT_SENSITIVE:'false',MAPPED_POSTGRES_TESTS:file};assert.equal(settingsBrowserRequired(environment),true);assert.equal(settingsBrowserRequired({...environment,MAPPED_POSTGRES_TESTS:POSTGRES_CHAIN_TESTS[0]}),false);assert.equal(settingsBrowserRequired({...environment,DB_REQUIRED:'false',MAPPED_POSTGRES_TESTS:''}),false);assert.throws(()=>settingsBrowserRequired({...environment,BASE_SHA:''}));
+ const workflow=readFileSync('.github/workflows/full-gate.yml','utf8');assert.ok(workflow.includes('run: node scripts/ci/prepare-settings-browser.mjs'));assert.ok(workflow.includes('M01_SETTINGS_NATIVE_EVIDENCE:'));assert.ok(readFileSync(file,'utf8').includes('TEST_DATABASE_URL'));assert.ok(readFileSync(file,'utf8').includes('runNativeSettingsBrowser'));
 });
