@@ -88,3 +88,17 @@ Full42153000546的PG已失败：其余套件和清理按原日志保留，新can
 局部将客户及主跟单字段改为显式label/htmlFor与输入id关联，避免把候选按钮嵌入隐式label；原SearchableSelect实现、候选、权限、保存命令、颜色和业务文字未改。原矩阵新增选择后listbox确实消失、aria-expanded=false、保存按钮真实命中点未遮挡的断言。同版本141完整24项已通过。以上为客户弹窗机制修复，不涉及P07/O现场根因。
 
 最终以final5重新绑定此修复后的源码：本地native和canonical使用锁定Headless Shell141；旧全App浏览器仍显式Chromium151。此前final4完整non-db3376/0/11及37项权限通过为中间证据，新的Full只会在最终提交、fresh verify-change与light通过后申请；旧Full准确记录为失败，不作为批准。
+
+### 集中核验：原生矩阵执行边界（final6）
+
+Full42156620577准确对应126a4738：non-db成功；PG中的原生矩阵已逐项通过第1–19场景，然后整组Vitest包装达到60000ms，PG失败。该次不是此前客户候选保存点击问题，不能当偶发重跑，也不能把前19项当完整矩阵通过。原配置longCorrectness为2个worker，所有24个浏览器场景却合在单个`it`，共同消耗同一60秒；这是本次可证的测试组织边界，不能据此认定线上业务性能原因。
+
+保留全部24场景的操作、权限、同会话真实撤权、保存、原幂等命令恢复及数据库断言。原执行函数改为async generator，每个原场景完成才yield，canonical入口`describe.sequential`按固定原列表逐项`next`并校对对象及顺序，最后一项核完整列表并执行原finally。24个场景和完整性/清理项分别报告耗时及失败，均继续受原60秒边界约束；未完成迭代由afterAll调用return，原CLI显式完整drain。没有改全局超时、worker、权限、资源登记协议或业务源码。已查全部调用方：原CLI、canonical入口及原执行契约静态消费者均闭合。
+
+final6源码指纹af4e86886c99a602ba197969c9797ffb661158936f49d055933c82964c68d083。集中验证使用Node22.22.2/npm10.9.9及CI锁定Chromium141.0.7390.37/build1194。原`run-business-chain-gate.mjs --full-gate`对明确选取的6个受影响PG套件执行原配置：ordinary worker1、long-correctness worker2、60000ms；90通过、0失败、0跳过，原资源回执确认6份登记资源全部清理。原矩阵24场景+完成检查25项均在该组合中通过；原CLI完整24项另通过，覆盖重合不相加。节点及其浏览器子进程继承CPU affinity0–1，未限制PostgreSQL宿主，也不宣称等同GitHub硬件。最慢场景含初始化约5.42秒，整组执行约33.15秒；逐项耗时保留在原JSON报告，不隐藏以后单场景性能异常。
+
+另以原迭代器完成首场景后中途return，核原finally真实收尾；本轮最后只读PG核查于2026-11-06T03:56:21.028Z确认标记库OID694046、低权限角色、无遗留schema及其他连接。preflight241、lint、secret均在final6源码通过。03:47的单套件25项验证仅作中间证据，最终同版浏览器及资源组合以03:54的原runner和03:55的CLI证据为准。
+
+修改两个PG浏览器执行文件之前，03:45:51.643Z已捕获其余2374个完整源码/配置/旧测试输入，指纹9b6b7e47e826aa0c8cb06bd5318312613322d2c12e7d6125b86bc324c0d12ad0仍一致。7项未受影响本地检查保留final5原testedHead、sourceFingerprint、原日志和报告，并按inputPaths明确复用；不重复跑无关完整non-db，也不冒称在新Head重新执行。受影响浏览器和canonical实际重验，最终GitHub light/Full仍绑定新Head，旧两次Full失败均不能批准合并。
+
+同类入口排查：P07未提交准备中的9场景也使用单包装，已按同样方式拆分，独立验证及实际合并基线仍归P07，不纳入本PR通过声明。仓库其他既有可选浏览器入口不是本轮新增或修改的24/9场景包装；既有条件、权限及执行边界保持。此轮未发现其他已知未闭合调用方。剩余验证为最终提交的fresh检出、自动light和准确Head的Full；现场性能、部署及人工岗位试用仍未验证。
