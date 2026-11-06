@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "292a305b4e49303a864e597f2abb082deccb15c4",
-  "sourceFingerprint": "3b2bb7aaf30680c35242b172f7ac703739381d25842509fdc2745948682c6d76",
+  "sourceFingerprint": "629f563e64c32b57c2487963addb3705b16baeca6ba8c380c5e1e8d4e45bc134",
   "risk": "full",
   "rules": [
     {
@@ -18,6 +18,7 @@
         "apps/web/src/po-delivery-dates.tsx",
         "packages/contracts/src/digital-production-journey.ts",
         "tests/unit/journey-sla-supervision.test.ts",
+        "tests/unit/journey-projection-isolation.test.ts",
         "tests/unit/cockpit-detail.test.ts",
         "tests/unit/m01-cockpit-workspace.test.ts"
       ],
@@ -166,38 +167,38 @@
       "resultReports": [
         {
           "format": "node-tap",
-          "sha256": "b16dee2502add9dd576629fbb9d2f33fa2e99084d6c67594f2d3c379b1e6c9a4"
+          "sha256": "a580304fe28c6dbac0ef7f016bdf3dc08e73a9336fe966542d2266d240065a65"
         }
       ],
-      "testedHead": "42cc43fbe57b2906257a5f54a17a2006334f4663",
-      "sourceFingerprint": "3b2bb7aaf30680c35242b172f7ac703739381d25842509fdc2745948682c6d76",
-      "startedAt": "2026-11-06T20:14:33.968Z",
-      "endedAt": "2026-11-06T20:14:48.034Z",
+      "testedHead": "b24fb2330813009ef321030419d33762d65469bf",
+      "sourceFingerprint": "629f563e64c32b57c2487963addb3705b16baeca6ba8c380c5e1e8d4e45bc134",
+      "startedAt": "2026-11-06T20:31:01.832Z",
+      "endedAt": "2026-11-06T20:31:07.591Z",
       "log": "/workspace/scratch/m01-r2-p02-preflight.log",
-      "logSha256": "b16dee2502add9dd576629fbb9d2f33fa2e99084d6c67594f2d3c379b1e6c9a4",
+      "logSha256": "a580304fe28c6dbac0ef7f016bdf3dc08e73a9336fe966542d2266d240065a65",
       "context": "Node22.22.2/npm10.9.9; local Node affinity2,3; actual fresh isolated marked PG16.15 low-privilege dx_rework_test, PG cpuset0,1 CPU2/memory2GiB; sequential two selected PG suites with postgres-immediate config worker1 and existing100s correctness/hook budgets. This is bounded local correctness proof, not CI hardware or onsite equivalence. Final PG proof is the affected production-readiness24 including three completed original factory windows, after the published-original correction; earlier combined56 are historical and are not passed as current. Default and acceptance-clock database identities rechecked, both have zero test schemas and other clients. Review P2 r4497090470 fixed in the actual node-table target consumer; unit148/browser15 include missing generic D, multiple native windows and separate date-only task D. Original reviewed42cc is not claimed to cover the repair commit. Browser uses Playwright-core1.56.1/Chromium141 pinned binary with explicit TEST HTTP/auth, not onsite. Additional original complete App/Shell screenshots cover1165/1440 home/detail; no production/Acceptance data, deployment or real permission changes."
     },
     {
       "id": "unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/journey-factory-deadlines.test.ts tests/unit/journey-instance-replacement.test.ts tests/unit/journey-sla-supervision.test.ts tests/unit/cockpit-detail.test.ts tests/unit/m01-cockpit-workspace.test.ts tests/unit/po-delivery-dates.test.ts tests/unit/node-materials.test.ts tests/unit/digital-journey-projection.test.ts tests/unit/journey-business-progress.test.ts tests/unit/journey-progress-dates.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/cockpit-document-new-sources.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-r2-p02-unit.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/journey-projection-isolation.test.ts tests/unit/journey-factory-deadlines.test.ts tests/unit/journey-instance-replacement.test.ts tests/unit/journey-sla-supervision.test.ts tests/unit/cockpit-detail.test.ts tests/unit/m01-cockpit-workspace.test.ts tests/unit/po-delivery-dates.test.ts tests/unit/node-materials.test.ts tests/unit/digital-journey-projection.test.ts tests/unit/journey-business-progress.test.ts tests/unit/journey-progress-dates.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/cockpit-document-new-sources.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-r2-p02-unit.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 148,
+      "passed": 168,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "d237304c4cfd63b7620b241a82473a4a6b0404bdf0ec6820779e0c851b5f9f56"
+          "sha256": "3f1a396ba601d91f9546b55ed6f8ccde1be36b9ac0444c0369241b38e5e94a78"
         }
       ],
-      "testedHead": "42cc43fbe57b2906257a5f54a17a2006334f4663",
-      "sourceFingerprint": "3b2bb7aaf30680c35242b172f7ac703739381d25842509fdc2745948682c6d76",
-      "startedAt": "2026-11-06T20:13:18.123Z",
-      "endedAt": "2026-11-06T20:13:22.477Z",
+      "testedHead": "b24fb2330813009ef321030419d33762d65469bf",
+      "sourceFingerprint": "629f563e64c32b57c2487963addb3705b16baeca6ba8c380c5e1e8d4e45bc134",
+      "startedAt": "2026-11-06T20:30:36.808Z",
+      "endedAt": "2026-11-06T20:30:41.570Z",
       "log": "/workspace/scratch/m01-r2-p02-unit.log",
-      "logSha256": "5a2043c9ce2a121fe177ed49410e312df61782df6fe42fad788f735ec82589ae",
+      "logSha256": "ab5cdcfb530f0b0572905943a6731e1170212e8893954a624b8fc1c6f3517a17",
       "context": "Node22.22.2/npm10.9.9; local Node affinity2,3; actual fresh isolated marked PG16.15 low-privilege dx_rework_test, PG cpuset0,1 CPU2/memory2GiB; sequential two selected PG suites with postgres-immediate config worker1 and existing100s correctness/hook budgets. This is bounded local correctness proof, not CI hardware or onsite equivalence. Final PG proof is the affected production-readiness24 including three completed original factory windows, after the published-original correction; earlier combined56 are historical and are not passed as current. Default and acceptance-clock database identities rechecked, both have zero test schemas and other clients. Review P2 r4497090470 fixed in the actual node-table target consumer; unit148/browser15 include missing generic D, multiple native windows and separate date-only task D. Original reviewed42cc is not claimed to cover the repair commit. Browser uses Playwright-core1.56.1/Chromium141 pinned binary with explicit TEST HTTP/auth, not onsite. Additional original complete App/Shell screenshots cover1165/1440 home/detail; no production/Acceptance data, deployment or real permission changes."
     },
     {
@@ -252,6 +253,17 @@
       ],
       "testedHead": "42cc43fbe57b2906257a5f54a17a2006334f4663",
       "sourceFingerprint": "3b2bb7aaf30680c35242b172f7ac703739381d25842509fdc2745948682c6d76",
+      "inputPaths": [
+        "apps/web",
+        "packages",
+        "tests/acceptance/m01-cockpit-workspace-browser.mjs",
+        "tests/fixtures",
+        "scripts",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json"
+      ],
+      "inputFingerprint": "5d4c7969b30888eef7976f15e4bc553cb8ca44778b9d3a4445b71c1b372f26ef",
       "startedAt": "2026-11-06T20:14:54.405Z",
       "endedAt": "2026-11-06T20:15:06.906Z",
       "log": "/workspace/scratch/m01-r2-p02-browser.log",
@@ -266,6 +278,14 @@
       "exitCode": 0,
       "testedHead": "42cc43fbe57b2906257a5f54a17a2006334f4663",
       "sourceFingerprint": "3b2bb7aaf30680c35242b172f7ac703739381d25842509fdc2745948682c6d76",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json"
+      ],
+      "inputFingerprint": "c38cbd009ae3183394defceb08287bf3f63322ff7beeef092978fd05527598ad",
       "startedAt": "2026-11-06T20:13:22.518Z",
       "endedAt": "2026-11-06T20:13:54.394Z",
       "log": "/workspace/scratch/m01-r2-p02-types.log",
@@ -280,6 +300,14 @@
       "exitCode": 0,
       "testedHead": "42cc43fbe57b2906257a5f54a17a2006334f4663",
       "sourceFingerprint": "3b2bb7aaf30680c35242b172f7ac703739381d25842509fdc2745948682c6d76",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json"
+      ],
+      "inputFingerprint": "c38cbd009ae3183394defceb08287bf3f63322ff7beeef092978fd05527598ad",
       "startedAt": "2026-11-06T20:13:54.436Z",
       "endedAt": "2026-11-06T20:14:16.992Z",
       "log": "/workspace/scratch/m01-r2-p02-build.log",
@@ -292,10 +320,10 @@
       "command": "npm run lint",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "42cc43fbe57b2906257a5f54a17a2006334f4663",
-      "sourceFingerprint": "3b2bb7aaf30680c35242b172f7ac703739381d25842509fdc2745948682c6d76",
-      "startedAt": "2026-11-06T20:14:17.075Z",
-      "endedAt": "2026-11-06T20:14:53.716Z",
+      "testedHead": "b24fb2330813009ef321030419d33762d65469bf",
+      "sourceFingerprint": "629f563e64c32b57c2487963addb3705b16baeca6ba8c380c5e1e8d4e45bc134",
+      "startedAt": "2026-11-06T20:30:41.626Z",
+      "endedAt": "2026-11-06T20:31:01.787Z",
       "log": "/workspace/scratch/m01-r2-p02-lint.log",
       "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763",
       "context": "Node22.22.2/npm10.9.9; local Node affinity2,3; actual fresh isolated marked PG16.15 low-privilege dx_rework_test, PG cpuset0,1 CPU2/memory2GiB; sequential two selected PG suites with postgres-immediate config worker1 and existing100s correctness/hook budgets. This is bounded local correctness proof, not CI hardware or onsite equivalence. Final PG proof is the affected production-readiness24 including three completed original factory windows, after the published-original correction; earlier combined56 are historical and are not passed as current. Default and acceptance-clock database identities rechecked, both have zero test schemas and other clients. Review P2 r4497090470 fixed in the actual node-table target consumer; unit148/browser15 include missing generic D, multiple native windows and separate date-only task D. Original reviewed42cc is not claimed to cover the repair commit. Browser uses Playwright-core1.56.1/Chromium141 pinned binary with explicit TEST HTTP/auth, not onsite. Additional original complete App/Shell screenshots cover1165/1440 home/detail; no production/Acceptance data, deployment or real permission changes."
@@ -306,10 +334,10 @@
       "command": "npm run secret:scan",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "42cc43fbe57b2906257a5f54a17a2006334f4663",
-      "sourceFingerprint": "3b2bb7aaf30680c35242b172f7ac703739381d25842509fdc2745948682c6d76",
-      "startedAt": "2026-11-06T20:14:53.758Z",
-      "endedAt": "2026-11-06T20:14:54.367Z",
+      "testedHead": "b24fb2330813009ef321030419d33762d65469bf",
+      "sourceFingerprint": "629f563e64c32b57c2487963addb3705b16baeca6ba8c380c5e1e8d4e45bc134",
+      "startedAt": "2026-11-06T20:31:13.775Z",
+      "endedAt": "2026-11-06T20:31:14.472Z",
       "log": "/workspace/scratch/m01-r2-p02-secret.log",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda",
       "context": "Node22.22.2/npm10.9.9; local Node affinity2,3; actual fresh isolated marked PG16.15 low-privilege dx_rework_test, PG cpuset0,1 CPU2/memory2GiB; sequential two selected PG suites with postgres-immediate config worker1 and existing100s correctness/hook budgets. This is bounded local correctness proof, not CI hardware or onsite equivalence. Final PG proof is the affected production-readiness24 including three completed original factory windows, after the published-original correction; earlier combined56 are historical and are not passed as current. Default and acceptance-clock database identities rechecked, both have zero test schemas and other clients. Review P2 r4497090470 fixed in the actual node-table target consumer; unit148/browser15 include missing generic D, multiple native windows and separate date-only task D. Original reviewed42cc is not claimed to cover the repair commit. Browser uses Playwright-core1.56.1/Chromium141 pinned binary with explicit TEST HTTP/auth, not onsite. Additional original complete App/Shell screenshots cover1165/1440 home/detail; no production/Acceptance data, deployment or real permission changes."
