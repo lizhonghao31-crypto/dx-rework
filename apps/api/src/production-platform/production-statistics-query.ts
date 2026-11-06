@@ -49,7 +49,7 @@ export class ProductionStatisticsQuery{
  }
  private exportAllowed(actor:TrustedActorContext){try{assertBusinessExportAllowed(actor.actorRoles,'report:export');return isRootActor(actor)||(actor.authorizationCapabilities??[]).includes('report:view');}catch{return false;}}
  private async permission(db:PoolClient,actor:TrustedActorContext,orderIds:string[],taskIds:string[],reworkIds:string[]=[]){
-  const policy=new DigitalProductionAccessPolicy(db);for(const id of sorted(orderIds))if(!await acceptanceIncludesNative(this.database,id)||!await policy.allowed(actor,'order',id,'technical'))digitalForbidden();
+  const policy=new DigitalProductionAccessPolicy(db);for(const id of sorted(orderIds))if(!await acceptanceIncludesNative(this.database,id,db)||!await policy.allowed(actor,'order',id,'technical'))digitalForbidden();
   for(const id of sorted(taskIds))if(!await policy.allowed(actor,'task',id,'technical'))digitalForbidden();
   const detail=new ReworkBusinessDetailService(this.database);for(const id of sorted(reworkIds)){const row=(await db.query("SELECT * FROM rework_orders WHERE rework_order_id=$1",[id])).rows[0];if(!row||!await detail.canViewExisting(actor,row,db)||!await detail.canViewExistingBusinessDetails(actor,row,db))digitalForbidden();}
   return hash({actorId:actor.actorId,roles:sorted(actor.actorRoles),capabilities:sorted([...(actor.authorizationCapabilities??[]),actor.authorizationCapability??'']),orders:sorted(orderIds),tasks:sorted(taskIds),reworks:sorted(reworkIds),scene:acceptanceBusinessContext()?.scenarioId??null,canExport:this.exportAllowed(actor)});
@@ -73,7 +73,7 @@ export class ProductionStatisticsQuery{
     CASE WHEN s.source_id IS NOT NULL AND NOT access_is_root_actor(s.created_by) AND EXISTS(SELECT 1 FROM user_role_assignments a
      WHERE a.user_id=s.created_by AND a.role_code='sample_designer' AND a.granted_at<=s.created_at AND(a.revoked_at IS NULL OR a.revoked_at>s.created_at)) THEN s.created_by END AS verified_designer
     FROM digital_production_orders o LEFT JOIN digital_production_sources s USING(source_id) ORDER BY o.production_order_id`)).rows;
-   for(const order of candidates)if(await acceptanceIncludesNative(this.database,order.production_order_id)&&await policy.allowed(live,'order',order.production_order_id,'technical')){
+   for(const order of candidates)if(await acceptanceIncludesNative(this.database,order.production_order_id,db)&&await policy.allowed(live,'order',order.production_order_id,'technical')){
     if(applied.customer&&order.customer_code!==applied.customer)continue;
     orders.push(order);
    }

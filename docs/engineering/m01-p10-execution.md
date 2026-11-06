@@ -10,8 +10,12 @@ U8长期封存/显式更正版未另行批准，无新增长期存储或迁移�
 
 复用原壳、tokens、BusinessTable、原PO/任务入口。比较支持上期、去年/自选、同经过天数，分子/分母/覆盖/规则并列；0基期不除零、无分母不写0%，比例差用百分点。API/XLSX同S0。当前模式、原数量工作表顺序保留，期间sheet仅期间模式追加。原生截图为TEST，不代表真人/整App验收。
 
-最终本地来源指纹 `289c6066dceaa2c22b4958bead628ac38eda63c1b1f57bdd57123e96c719167d`：受影响5套真实PG/浏览器49通过、0失败/跳过，精确5资源清理完成；完整non-DB3438通过/11既有可选跳过；preflight243、类型、workspace构建、lint、secret退出0。命令、时间、日志/报告摘要见同批construction-evidence。Node22.22.2/npm10.9.9、原2worker长测试配置/100秒正确性、CI锁定Playwright1.56.1/Chromium141与PG16-alpine精确镜像（实际16.15）、低权标记default/clock库；CPU0,1/PG2GiB。宿主IO、整App及现场不声称等效。390px截图已查看，原PO焦点往返和无整页横向溢出通过。
+最终本地来源指纹 `c8c61cd4e1faed5f6c5b79b29162b701f467d49b7e5e5d1d572243458dd92870`：受影响5套真实PG/浏览器50通过、0失败/跳过，精确5资源清理完成；完整non-DB3439通过/11既有可选跳过；preflight243、类型、workspace构建、lint、secret退出0。命令、时间、日志/报告摘要见同批construction-evidence。Node22.22.2/npm10.9.9、原2worker长测试配置/100秒正确性、CI锁定Playwright1.56.1/Chromium141与PG16-alpine精确镜像（实际16.15）、低权标记default/clock库；CPU0,1/PG2GiB。宿主IO、整App及现场不声称等效。390px截图已查看，原PO焦点往返和无整页横向溢出通过。
 
 早期准备基于P08/P09候选，不作为最终基线证据。曾有默认库命名守卫拒绝、缺标准配置、N05修正夹具未先完成全部工序等失败，原日志保留，只修夹具/原调用顺序，未放宽业务守卫。最终guarded scene及原业务命令重验前后改期、原甲30在当前甲0保留、原1+5订正为3+5=8；不把早期缺guard验证冒称原生。
 
 新增套件进入原canonical plan与精确浏览器安装条件。时间清单只增4路径，455旧人工条目保留，总459。P07未提交报告传输治理不在本PR。最终GitHub light、正式Review、冻结Head Full和合并另绑真实tuple，本地通过不冒充CI或部署。
+
+首次light在typecheck失败：新类型入口指dist，本地已构建掩盖干净检出缺声明。修为相邻入口的src后，用无dist新检出先typecheck再build，均通过。一次后续组合48/1为满池场景二次借连接超时：原场景nativeScenario查验在统计事务持连接时又向同池取连接。只给原查验增可选原事务参数并在本统计两处传入，普通/跨场景拒绝语义及原3秒池边界不变。新增原生禁止嵌套Pool.query反例、原10并发和同场景/跨场景回归；最终50通过/精确5资源清理，不将此前48/1称通过。
+
+最后仅PG套件类型import语法清理（inline import改import type）影响lint；50项PG与类型/构建/lint按新指纹复验。完整non-DB3439/11、预检243和secret沿机械核验的未变输入范围复用，保原被测来源67475da1、原日志/报告与inputFingerprint，明确排除普通计划本已不执行的该PG套件；不复用旧Head的CI批准。

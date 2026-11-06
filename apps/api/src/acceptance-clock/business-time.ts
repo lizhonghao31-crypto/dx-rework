@@ -11,16 +11,16 @@ export type AcceptanceBusinessContext=Readonly<{
  registerCreated:(db:PoolClient,scope:BusinessTimeScope,actorId:string,auditEventId:string)=>Promise<void>;
 }>;
 const contexts=new AsyncLocalStorage<AcceptanceBusinessContext>();
-type ClockReader=Readonly<{read:(scope:BusinessTimeScope,transaction?:PoolClient)=>Promise<BusinessTime|null>;nativeScenario:(id:string)=>Promise<string|null>}>;
+type ClockReader=Readonly<{read:(scope:BusinessTimeScope,transaction?:PoolClient)=>Promise<BusinessTime|null>;nativeScenario:(id:string,transaction?:PoolClient)=>Promise<string|null>}>;
 const readers=new WeakMap<object,ClockReader>();
 /** Called once by the boot-verified runtime, not by a public configuration endpoint. */
 export function installAcceptanceClockReader(database:Pool,reader:ClockReader){readers.set(database,reader);}
 export const acceptanceClockReaderEnabled=(database:object)=>readers.has(database);
-export async function acceptanceNativeScenario(database:object,id:string){return readers.get(database)?.nativeScenario(id)??null;}
+export async function acceptanceNativeScenario(database:object,id:string,transaction?:PoolClient){return readers.get(database)?.nativeScenario(id,transaction)??null;}
 /** Schedulers must never process another scene using the current scene's time. */
-export async function acceptanceIncludesNative(database:object,id:string):Promise<boolean>{
+export async function acceptanceIncludesNative(database:object,id:string,transaction?:PoolClient):Promise<boolean>{
  if(!readers.has(database))return true;
- const scene=await acceptanceNativeScenario(database,id),current=contexts.getStore();
+ const scene=await acceptanceNativeScenario(database,id,transaction),current=contexts.getStore();
  return current?scene===current.scenarioId:scene===null;
 }
 export const acceptanceBusinessContext=()=>contexts.getStore();
