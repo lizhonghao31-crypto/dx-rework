@@ -1,3 +1,4 @@
+import {SlaCalculationService} from './sla-calculation-service.js';
 import {assertCurrentFactoryTask,isRetiredFactoryTask,FACTORY_RECEIPT_RETIREMENT} from './retired-factory-nodes.js';
 import {SlaSettingsService,type StandardDraft} from './sla-settings-service.js';
 import {SlaOrderApplicationService} from './sla-order-application.js';
@@ -455,6 +456,7 @@ export class DigitalProductionTaskService {
   async slaSettings(actor:TrustedActorContext,version?:number){
     return this.transaction(client=>new SlaSettingsService(this.previewSecret).read(client,actor,version));
   }
+  async slaCalculationPreview(actor:TrustedActorContext,input:unknown){return new SlaCalculationService(this.database).preview(actor,input);}
   async previewSlaSettings(actor:TrustedActorContext,input:StandardDraft){
     return this.transaction(client=>new SlaSettingsService(this.previewSecret).preview(client,actor,input));
   }

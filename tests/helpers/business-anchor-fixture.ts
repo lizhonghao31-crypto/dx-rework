@@ -83,7 +83,7 @@ export async function businessAnchorFixture(url:string,options?:{throughVersion?
    }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
   };
   const advance=async(id:string,at:string)=>runtime.run(id,root,async()=>{const row=await runtime.repository.row(id);await runtime.repository.change(id,root.actorId,{expectedVersion:row.version,requestKey:randomUUID(),at});});
-  const bulkReady=async(secondaryCraft:'无'|'印花',beforeCreate?:(input:Parameters<SourcingService['createCase']>[1],key:string,primary:TrustedActorContext)=>Promise<void>,poCount=1,sourcingCommands=sourcing,options?:{stopBeforeCompletion?:boolean;accessory?:boolean})=>{
+  const bulkReady=async(secondaryCraft:'无'|'印花'|'绣花'|'印绣花',beforeCreate?:(input:Parameters<SourcingService['createCase']>[1],key:string,primary:TrustedActorContext)=>Promise<void>,poCount=1,sourcingCommands=sourcing,options?:{stopBeforeCompletion?:boolean;accessory?:boolean})=>{
    const designer=people['sample-designer']!,primary=people.merchandiser!,manager=people['production-management']!,owner=people.owner!,ie=people.ie!;
    const identity=new DigitalProductionIdentityService(db,true),forms=new DigitalDevelopmentService(db,true),bulk=new BulkPreparationService(db),instruction=new ProductionInstructionService(db,true),budget=new DigitalBudgetService(db,true);
    const style=`TEST-ANCHOR-${randomUUID()}`;

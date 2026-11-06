@@ -1,3 +1,4 @@
+import {SlaCalculationService} from '../../apps/api/src/production-platform/sla-calculation-service.js';
 import {randomUUID} from 'node:crypto';
 import {writeFile} from 'node:fs/promises';
 import {afterAll,beforeAll,describe,expect,it} from 'vitest';
@@ -87,6 +88,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect(detail.supervision!.nodes.find(n=>n.id===id)).toMatchObject({logisticsWindows:[expected]});
   expect(list.items.find(o=>o.orderId===ready.id)!.supervision!.nodes.find(n=>n.id===id)).toMatchObject({logisticsWindows:[expected]});
   expect(node.status).not.toMatch(/overdue|completed_on_time|completed_late/);
+  const calculation=await new SlaCalculationService(f.db).preview(f.root,{selection:{mode:'instance',kind:'order',id:ready.id,range:'delivery'}}),estimate=calculation.current.rows.find(n=>n.id.endsWith('/native-logistics:0'))!;expect(estimate.estimateRange).toMatchObject({...expected.arrivalRange!,shippedOn:expected.shippedOn,actualDispatchedAt:null});expect(estimate.start.at).toBeNull();expect(estimate.end.at).toBeNull();expect(calculation.current.overall.spanMs).toBeNull();
  });
  for(const mode of ['past','current','future','ordinary'] as const)it(`${mode}: native ranges match factory, list and detail; exact facts and read-only state do not change`,async()=>{
   const at=new Date(Date.now()+(mode==='past'?-7:mode==='future'?7:0)*86400000).toISOString(),ctx=await context(mode==='ordinary'?null:at),r=await prepare(ctx.run);
