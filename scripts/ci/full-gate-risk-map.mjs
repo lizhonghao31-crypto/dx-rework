@@ -152,6 +152,7 @@ export const classifyFullGatePaths = (inputPaths) => {
   let maintenanceSensitive = false;
   let activationSensitive = false;
   let transferSensitive = false;
+  if(paths.some(path=>/production-period|m01-production-period/.test(path))){mappedTests.add('tests/integration/m01-production-period-postgres.test.ts');mappedTests.add('tests/integration/m01-production-period-native-browser-postgres.test.ts');domains.add('production-period');}
   if(paths.some(path=>/^(?:apps\/web\/src\/current-production|apps\/api\/src\/production-platform\/production-statistics-(?:groups|dimensions)|tests\/(?:acceptance|fixtures|integration)\/m01-current-production)/.test(path))){mappedTests.add('tests/integration/m01-current-production-native-browser-postgres.test.ts');domains.add('current-production-browser');}
 
 

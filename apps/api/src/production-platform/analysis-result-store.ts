@@ -1,9 +1,10 @@
+import type {ProductionPeriodSources} from '@dx-rework/contracts/production-period';
 import {randomUUID} from 'node:crypto';
 import type {Pool} from 'pg';
 import type {ProductionStatisticsResponse,StatisticsMetric,StatisticsPo} from '@dx-rework/contracts/production-statistics';
 import {ApplicationError} from '../platform/errors.js';
 
-type StoredPayload=Omit<ProductionStatisticsResponse,'snapshotId'|'createdAt'|'expiresAt'|'freshness'|'page'|'pageSize'|'basis'>&{projectionInputs:StatisticsPo[];motherCompletion:StatisticsMetric};
+type StoredPayload= {periodSources?:ProductionPeriodSources}&Omit<ProductionStatisticsResponse,'snapshotId'|'createdAt'|'expiresAt'|'freshness'|'page'|'pageSize'|'basis'>&{projectionInputs:StatisticsPo[];motherCompletion:StatisticsMetric};
 const gone=():never=>{throw new ApplicationError('ANALYSIS_RESULT_EXPIRED','查询结果已过期或不再符合当前授权，请整体刷新',409);};
 /** Shared PG storage, bounded and disposable. Payload contains the actual result, not only IDs. */
 export class AnalysisResultStore{
