@@ -1,151 +1,156 @@
 {
   "version": 1,
-  "base": "7bc97df926a4a3d2b626bbbe440260d9b4104fd9",
-  "sourceFingerprint": "17e0ad67253620d4eb4c8ff8295b750d90dbeb3cb792d2384ee323fd7c80da09",
-  "risk": "full",
+  "base": "f2cc977bbd7efce09dc2d0c5e7a51aac05608c6e",
+  "sourceFingerprint": "d1b5b261767474ee3745ec1ea3f870c5fe2681aee27cd56cb2c2473404491605",
+  "risk": "quick",
   "rules": [
     {
-      "rule": "共享标准窗口演算：串行/并行/内含、同长决定路径、阶段重叠、未知与日期目标、毫秒精度及北京周日业务日历；原计算入口兼容。",
-      "source": "Library implementation1.1.1 v2 §8.1–8.6/P05-01–14; OPT1.3 v4; docs/engineering/m01-p05-execution.md",
+      "rule": "本地节点草稿即时给节点、阶段和整体的实际路径对比；49项完整可达，未知/内含/日期/独立监督不重复加总，保留输入及毫秒精度。",
+      "source": "Library dx-m01-implement-v1.1.1 v2 §9.1–9.5/P06-01–14 and §8.6; OPT1.3 v4; docs/engineering/m01-p06-execution.md",
       "writes": [
-        "packages/contracts/src/sla-calculation.ts",
-        "packages/domain/src/sla-calculation.ts",
-        "packages/domain/src/sla-calculation-routes.ts",
-        "packages/contracts/package.json",
-        "packages/domain/package.json",
-        "tests/unit/sla-calculation.test.ts"
+        "apps/web/src/sla-settings-draft.ts",
+        "apps/web/src/sla-calculation-preview-model.ts",
+        "apps/web/src/sla-calculation-preview.tsx",
+        "apps/web/src/sla-node-edit-dialog.tsx",
+        "apps/web/src/cockpit-production-settings.css",
+        "apps/web/package.json",
+        "package-lock.json",
+        "tests/unit/m01-settings-preview.test.ts"
       ],
       "reads": [
-        "packages/domain/src/digital-sla-plan.ts#orderedSlaNodes",
-        "packages/domain/src/digital-sla-plan.ts#slaAnchorTime",
-        "packages/domain/src/development-cycle.ts#calculateDevelopmentCycle",
-        "packages/contracts/src/digital-sla.ts#isSlaDurationMinutes",
-        "apps/api/migrations/0207_sourcing_contract_return_monitor.sql"
+        "packages/domain/src/sla-calculation.ts#calculationDraftGraph",
+        "packages/domain/src/sla-calculation.ts#calculateSlaPreview",
+        "packages/contracts/src/sla-calculation.ts",
+        "apps/web/src/journey-sla-details.tsx#slaTargetLabel",
+        "apps/web/src/cockpit-dialog-focus.ts#trapCockpitDialogFocus"
       ],
       "oldTests": [
+        "tests/unit/sla-calculation.test.ts",
         "tests/unit/digital-sla-plan.test.ts",
-        "tests/unit/development-cycle.test.ts",
-        "tests/unit/digital-sla-configuration.test.ts",
-        "tests/integration/digital-sla-plan-postgres.test.ts"
+        "tests/unit/sla-parameter-hints.test.ts"
       ],
-      "initialization": "无迁移与默认值重写；新增独立导出，原 calculateSlaPlan/evaluateSlaPlan 调用与输出保持。日期/提醒不冒加工时长；历史冻结值不因现行草稿未修改而被覆盖。",
-      "dateAndPermission": "只有明确可信时刻可前推；日期精度保留为目标/区间，未知不填0或今天；合同与原SQL在周日、跨年、闰日、毫秒边界差分。图由代码拥有，客户端不能改依赖或质量守卫。",
-      "expectation": "E1–E12及P05-13/14真实自动用例；R1 80.5→68.5h，R2 60→48→48h及决定路径切换，R3 168/240→156/228h；原28项SLA计划回归保留。",
+      "initialization": "不迁移或重写配置；现行版初始化本地草稿。新增web依赖只引用仓库已有同版本domain包，锁文件对应一个workspace链接，无升级。读取P05原服务上下文，改草稿不写配置/事实/任务。",
+      "dateAndPermission": "明确参考时刻按北京时间解释，不默认今天；日期截止沿原exclusive目标显示。实际采用/冻结从原服务读取，缺件保已知分支，不承诺产能或实际交付。",
+      "expectation": "原组件＋原共享服务R1 80.5→68.5、R2 60→48→48、R3 168/240→156/228h宽窄屏均实际通过；45+4可达、空值不转0、3/6毫秒及撤销恢复；轻量固定条不挡编辑按钮。",
       "checks": [
         "unit",
-        "native",
-        "technical",
+        "native-browser",
+        "browser",
         "preflight",
+        "lint",
         "types",
         "build"
       ]
     },
     {
-      "rule": "实例上下文读取真实采用/冻结/来源/轮次/物料/批与PO范围；新双24、旧72、开发7/5及每份最终评语复核独立；已知段与精度缺件分名。",
-      "source": "Library implementation1.1.1 v2 §8.1–8.6/P05-01–14; OPT1.3 v4; docs/engineering/m01-p05-execution.md",
+      "rule": "统一45项与开发独立四项各自保留版本、token、幂等与作用范围；草稿、预览、发布成功、未知及在途逐单应用状态各自准确。",
+      "source": "Library dx-m01-implement-v1.1.1 v2 §9.1–9.5/P06-01–14 and §8.6; OPT1.3 v4; docs/engineering/m01-p06-execution.md",
       "writes": [
-        "apps/api/src/production-platform/sla-calculation-service.ts",
-        "tests/integration/sla-calculation-postgres.test.ts",
-        "tests/integration/development-technical-postgres.test.ts",
-        "tests/integration/factory-logistics-cockpit-postgres.test.ts",
-        "tests/integration/production-readiness-postgres.test.ts",
-        "apps/api/src/production-platform/factory-production-facts.ts",
-        "tests/unit/factory-production-facts.test.ts",
-        "tests/helpers/business-anchor-fixture.ts"
+        "apps/web/src/sla-standard-editor.tsx",
+        "apps/web/src/development-cycle-settings.tsx",
+        "apps/web/src/sla-settings-workspace.tsx",
+        "tests/acceptance/sla-standard-editor-browser.mjs",
+        "tests/fixtures/sla-standard-editor-ui.tsx",
+        "tests/acceptance/m01-settings-native-browser.ts",
+        "tests/fixtures/m01-settings-native-ui.tsx"
       ],
       "reads": [
-        "apps/api/src/production-platform/development-task-timing.ts#developmentTaskTiming",
-        "apps/api/src/production-platform/development-cycle-evidence.ts#developmentCycleEvidence",
-        "apps/api/src/production-platform/development-round-repository.ts#developmentDocumentRow",
-        "apps/api/src/production-platform/development-material-readiness.ts#materialReadiness",
-        "apps/api/src/production-platform/production-readiness-repository.ts#productionReadiness",
-        "apps/api/src/production-platform/production-readiness-repository.ts#preparationWindow",
-        "apps/api/src/production-platform/factory-production-facts.ts#factoryProductionCompletion",
-        "apps/api/src/production-platform/sla-order-service.ts#SlaOrderService",
-        "apps/api/src/production-platform/factory-batch-timing.ts#factoryBatchTiming",
-        "apps/api/src/production-platform/contract-business-ready.ts#firstContractBusinessReady"
-      ],
-      "oldTests": [
-        "tests/integration/development-technical-postgres.test.ts",
-        "tests/integration/production-readiness-postgres.test.ts",
-        "tests/integration/development-sla-enrollment-postgres.test.ts",
-        "tests/integration/factory-logistics-cockpit-postgres.test.ts"
-      ],
-      "initialization": "只复用现有低权限标记隔离库及 ownedPostgresSchema/create/release helper；原fixture允许原生绣花/印绣参数，未修改业务守卫、角色seed或固定历史。局部补做未知时长保未知，尾查读原本次冻结30min。",
-      "dateAndPermission": "合同/财务不追加生产48h；原发厂确实需要的合同首ready作为独立就绪证据，回签保持原独立监控。外发排除复用原可信区间并集；收到时间被原更正为未知时不恢复旧凭证时间。不同批/PO/厂份额与物流日期范围不混用。",
-      "expectation": "原生EMB/COMPOSITE/外纸样、双PO三工艺发出/回收/QC、局部补做/合法复版/成果沿用、每份最终评语、外发进行中/恢复及物流原范围均有实际验证；读取前后业务表不变；官方Review三条P2以提前质检/真实完成日期、到仓订正不重置冻结双窗、在途采用保留旧72的原生回归闭环；冻结内含冲突返回定位到父窗口的400，新单合法发布不加门槛。",
-      "checks": [
-        "native",
-        "technical",
-        "unit",
-        "types",
-        "lint"
-      ]
-    },
-    {
-      "rule": "新增 calculation-preview 独立 strict 只读接口与 calculationReceipt；实时设置读取权/实例原范围、版本/身份/事实/scene绑定，原发布与在途应用不能互换回执。",
-      "source": "Library implementation1.1.1 v2 §8.1–8.6/P05-01–14; OPT1.3 v4; docs/engineering/m01-p05-execution.md",
-      "writes": [
         "apps/api/src/production-platform/task-routes.ts",
-        "apps/api/src/production-platform/task-service.ts",
-        "apps/api/src/production-platform/sla-calculation-service.ts",
-        "tests/integration/sla-calculation-postgres.test.ts"
-      ],
-      "reads": [
         "apps/api/src/production-platform/sla-settings-service.ts#SlaSettingsService",
-        "apps/api/src/production-platform/sla-settings-authority.ts#assertSlaSettingsReadActor",
-        "apps/api/src/production-platform/access-policy.ts#DigitalProductionAccessPolicy",
-        "apps/api/src/acceptance-clock/business-time.ts#ContextBusinessClock",
-        "apps/api/src/acceptance-clock/business-time.ts#assertBusinessClockUnchanged",
-        "apps/api/src/access/business-authority.ts#businessActor"
+        "apps/api/src/production-platform/development-technical-service.ts",
+        "apps/api/src/production-platform/sla-order-application.ts#SlaOrderApplicationService",
+        "apps/web/src/sla-order-application-panel.tsx#SlaOrderApplicationPanel",
+        "apps/web/src/use-digital-detail-navigation-guard.ts"
       ],
       "oldTests": [
         "tests/integration/digital-sla-configuration-postgres.test.ts",
-        "tests/integration/development-technical-postgres.test.ts",
-        "tests/unit/digital-sla-configuration.test.ts"
+        "tests/integration/digital-sla-plan-postgres.test.ts",
+        "tests/integration/development-sla-enrollment-postgres.test.ts",
+        "tests/integration/development-technical-postgres.test.ts"
       ],
-      "initialization": "没有配置/任务/事实/审计/通知写入、发布旁路或新权限。每次请求认证actor，数据库REPEATABLE READ READ ONLY；原StandardDraft仍只收expectedVersion/values/reason，原preview/publish和orders/apply保持自己的token/幂等/权限。",
-      "dateAndPermission": "PMC仅保合法只读；设计/板房普通/系统管理员不能借新接口取得设置读取权。专用PMC有效身份在同一会话撤权后拒绝，不借Lab切身份。缺事件只限制计算，不成为新发布门槛。",
-      "expectation": "匿名/伪身份/伪事实/任意图/伪总计与额外原strict字段拒绝；计算回执不能发布/apply；A→B→A无串单，真实物料/独立版本变化使上下文变化，旧expectedVersion拒绝。",
+      "initialization": "原API、数据库schema、seed、角色和发布事务完全保留。两个编辑器保持独立expectedVersion/previewToken/幂等键。统一scope=new_orders/changed=0、开发scope=new_sources/changed=0；指定在途仍独立preview/apply，开发四项不接该命令。",
+      "dateAndPermission": "计算上下文与发布token分别失效。缺日期不新增全局发布门槛。未知沿原key/body核对，确认已发布但GET失败保版本并禁止另发。409保我的变更并并列新现行。旧轮冻结、原节点起点及历史不被普通发布改写。",
+      "expectation": "原生失响应重放只有一个版本；已发布读取失败只重读；双标准独立发布、两编辑者冲突、两在途单一单失响应仅该单重试并各一次应用；原consumer PG与旧页面mock部分失败/未知流程通过。",
       "checks": [
-        "native",
-        "unit",
+        "native-browser",
+        "browser",
+        "pg",
         "technical",
-        "types",
+        "unit",
+        "preflight",
         "lint",
-        "secret"
+        "types",
+        "build"
       ]
     },
     {
-      "rule": "当前新增入口纳入原时间候选清单，保留未变条目人工语义注记与原canonical测试/资源/构建协议。",
-      "source": "AGENTS.md §3–5; docs/engineering/construction-evidence-v1.md; docs/engineering/final-closeout-v1.md",
+      "rule": "客户默认跟单与系列规则保持原真实作用范围，弹窗业务名/代码可辨；计划建议、接受与正式采用不混淆，日期不自动夹到月底。",
+      "source": "Library dx-m01-implement-v1.1.1 v2 §9.1–9.5/P06-01–14 and §8.6; OPT1.3 v4; docs/engineering/m01-p06-execution.md",
       "writes": [
-        "scripts/test-suite-plan.mjs",
-        "tests/unit/impact-shadow-graph.test.ts",
-        "docs/engineering/acceptance-time-sites-20261027.json",
-        "tests/helpers/business-anchor-fixture.ts",
-        "packages/contracts/package.json",
-        "packages/domain/package.json"
+        "apps/web/src/digital-cockpit-personnel.tsx",
+        "apps/web/src/series-settings.tsx",
+        "tests/acceptance/m01-settings-native-browser.ts",
+        "tests/fixtures/m01-settings-native-ui.tsx"
       ],
       "reads": [
-        "scripts/acceptance/time-site-inventory.mjs#reconcileTimeInventory",
-        "scripts/test-suite-plan.mjs#postgresTestFiles",
-        "scripts/test-resource-contract.mjs",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts"
+        "apps/api/src/production-platform/access-service.ts#setCustomerDefault",
+        "apps/api/src/production-platform/identity-service.ts#createOrder",
+        "apps/api/src/production-platform/series-plan-service.ts#SeriesPlanService",
+        "apps/web/src/series-plan-panel.tsx#SeriesPlanPanel",
+        "apps/web/src/search-select.tsx"
       ],
       "oldTests": [
-        "tests/unit/digital-sla-configuration.test.ts",
-        "tests/integration/production-readiness-postgres.test.ts"
+        "tests/integration/series-plan-postgres.test.ts",
+        "tests/unit/series-plan-dates.test.ts",
+        "tests/unit/m01-series-plan-reading.test.ts"
       ],
-      "initialization": "原时间清单生成器仅在实际新增route/BusinessClock输入变化时对齐；未变条目及其人工注记逐字保留。新PG文件按原发现和全门禁风险映射纳入；原生虚拟时钟套件优先选已标记的ACCEPTANCE_CLOCK_TEST_DATABASE_URL并沿既有长正确性配置，未修改全局worker或timeout。工厂新增复核拆成初始化及两个具名步骤，原5秒单例预算保留。影子选测因新包导出导致固定来源漂移时保持全量fallback，未更新批准策略或删除原18项及消费者边守卫；共享fixture仅拓宽已有原生工艺枚举类型。",
-      "dateAndPermission": "时间清单不自动证明语义通过；仅本PR新增纯试算与原时钟读入口作具名核验。无生产数据、部署、ECS或独立Acceptance现场操作。",
-      "expectation": "影子选测固定来源漂移的完整回退反例通过；原preflight240项、lint/type/build/secret真实退出成功；日志绑定当前源码。原canonical PG角色/库身份和清理契约保持，合并前使用准确Head/base的Review与Full。",
+      "initialization": "默认跟单原候选范围和保存接口不改，当前母单改单能力保留；全局系列输入从实际非默认已发布行初始化。P07未完成前保留旧短交期入口。原已采用计划不追改，不写客户/工厂承诺。",
+      "dateAndPermission": "原生客户默认仅用于以后新建母单；原母单主跟单不变。提前月份和固定日未配置说明准确；跨年、客户覆盖、二月非法日与旧预览失效均走原计划服务。",
+      "expectation": "客户弹窗标题关闭同行、原候选业务名和代码、默认B只影响新母单；现行-3/20正确初始化；P01/2027建议2026-11-15四态；客户P03/-1/30拒绝二月30，改20推算2月20，改候选废弃旧预览且不改原计划/客户约定。",
       "checks": [
-        "preflight",
-        "native",
+        "native-browser",
         "technical",
         "unit",
+        "browser",
+        "lint",
+        "types",
+        "build"
+      ]
+    },
+    {
+      "rule": "设置查看/编辑分离，身份与迟到响应隔离；保原系统入口和外观，必要测试资源与原canonical验证协议不变。",
+      "source": "AGENTS.md §3–5; docs/requirements/platform-permission-golden-source-v1.0.md; docs/requirements/rework-ui-golden-source-v1.0.md; Library dx-m01-implement-v1.1.1 v2 §9.1–9.5/P06-01–14 and §8.6; OPT1.3 v4; docs/engineering/m01-p06-execution.md",
+      "writes": [
+        "apps/web/src/cockpit-production-settings.tsx",
+        "apps/web/src/sla-calculation-preview.tsx",
+        "apps/web/src/sla-settings-workspace.tsx",
+        "tests/acceptance/m01-settings-native-browser.ts",
+        "tests/fixtures/sla-standard-editor-ui.tsx"
+      ],
+      "reads": [
+        "apps/web/src/auth-session.ts#registerSessionInvalidator",
+        "apps/web/src/auth.tsx#verifySession",
+        "apps/web/src/digital-production-api.ts#digitalRequest",
+        "apps/web/src/digital-production-access-panel.tsx#canReadDigitalProductionSettings",
+        "apps/api/src/production-platform/sla-settings-authority.ts#assertSlaSettingsReadActor",
+        "scripts/test-suite-plan.mjs",
+        "scripts/test-resource-contract.mjs"
+      ],
+      "oldTests": [
+        "tests/unit/business-chain-ui-contract.test.ts",
+        "tests/unit/development-technical-contract.test.ts",
+        "tests/integration/digital-sla-configuration-postgres.test.ts"
+      ],
+      "initialization": "页面先经原认证后才挂载受权内容，拒绝后重取原角色能力，身份失效清私有草稿/实例。专属夹具使用原assignRole/revokeRole，不改旧seed账号。测试使用原ownedPostgresSchema创建/登记/释放；无未知资源清理。",
+      "dateAndPermission": "纯PMC可读不可写；撤权反例为同一有效专属会话且保留无设置权限设计角色，用户未被停用仍403。旧A1成功/失败/finally均不能覆盖新A2。无生产数据、ECS、部署、真人赋权或独立Acceptance现场动作。",
+      "expectation": "原生PMC只读与同会话撤权、A1/B/A2迟回隔离和原full-App设置入口通过；原preflight240、135相关单测、65原PG回归、23原生浏览器和两尺寸原浏览器流程全部真实执行。时间清单匹配，无生成器/人工注记变化。",
+      "checks": [
+        "native-browser",
+        "browser",
+        "unit",
+        "pg",
+        "technical",
+        "preflight",
         "lint",
         "types",
         "build",
@@ -157,71 +162,117 @@
     {
       "id": "unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/sla-calculation.test.ts tests/unit/factory-production-facts.test.ts tests/unit/impact-shadow-graph.test.ts tests/unit/digital-sla-plan.test.ts tests/unit/development-cycle.test.ts tests/unit/digital-sla-configuration.test.ts tests/unit/development-material-readiness.test.ts tests/unit/production-readiness-contract.test.ts tests/unit/development-technical-contract.test.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile=/workspace/scratch/m01-p05-unit-final7.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/m01-settings-preview.test.ts tests/unit/sla-calculation.test.ts tests/unit/digital-sla-configuration.test.ts tests/unit/digital-sla-plan.test.ts tests/unit/series-plan-dates.test.ts tests/unit/sla-parameter-hints.test.ts tests/unit/development-technical-contract.test.ts tests/unit/business-chain-ui-contract.test.ts tests/unit/m01-series-plan-reading.test.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile=/workspace/scratch/m01-p06-unit-final1.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 146,
+      "passed": 135,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "dea32a903822af93d620a349e7a9cb4024c3056eba951f6b03f8e8f7b2b49151"
+          "sha256": "e208a10a8c387fa0246632ced231efd15d81e24ccc35f0d3a4b70e1f765fb5c2"
         }
       ],
-      "testedHead": "35502019d14f6548a5ad847f298ec06b8840395e",
-      "sourceFingerprint": "17e0ad67253620d4eb4c8ff8295b750d90dbeb3cb792d2384ee323fd7c80da09",
-      "context": "Node22.22.2/npm10.9.9; NODE_ENV=test; resolved command worker 1. Pure/unit and existing contract consumers; no runtime DB. Raw actual log and JSON/TAP report retained privately.",
-      "startedAt": "2026-11-06T00:57:50.771Z",
-      "endedAt": "2026-11-06T00:57:55.969Z",
-      "log": "/workspace/scratch/m01-p05-unit-final7.log",
-      "logSha256": "350c420b40e10099f5ab578715fb3513b4943a139a01e4382d52303a4541e991"
+      "testedHead": "f2cc977bbd7efce09dc2d0c5e7a51aac05608c6e",
+      "sourceFingerprint": "d1b5b261767474ee3745ec1ea3f870c5fe2681aee27cd56cb2c2473404491605",
+      "context": "Node22.22.2/npm10.9.9; NODE_ENV=test; command workers=1. Original canonical workspace/preflight/unit entry. Unit cases enter the existing Vitest discovery. No new test runner, global timeout or worker policy. Build uses workspaces without a root deployment or DB postbuild. Actual raw logs and structured reports remain in the task private directory.",
+      "startedAt": "2026-11-06T02:00:06.801Z",
+      "endedAt": "2026-11-06T02:00:10.386Z",
+      "log": "/workspace/scratch/m01-p06-unit-final1.log",
+      "logSha256": "b67d9e6458066ab33da17b7e1d79825588215bbfd6314100b3061bbf9f7c97be"
     },
     {
-      "id": "native",
+      "id": "pg",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/integration/digital-sla-configuration-postgres.test.ts tests/integration/digital-sla-plan-postgres.test.ts tests/integration/development-sla-enrollment-postgres.test.ts tests/integration/factory-logistics-cockpit-postgres.test.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile=/workspace/scratch/m01-p05-native-final7.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/integration/digital-sla-configuration-postgres.test.ts tests/integration/digital-sla-plan-postgres.test.ts tests/integration/development-sla-enrollment-postgres.test.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile=/workspace/scratch/m01-p06-pg-final1.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 44,
+      "passed": 32,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "54cd47f22a6533c2bd1e867065137bdd539dbf7f77e0613b069c649dfc0f4168"
+          "sha256": "fe15292e9e7dfdb363bc986dd6638ba37658015a559e09353afd5469af1b5623"
         }
       ],
-      "testedHead": "35502019d14f6548a5ad847f298ec06b8840395e",
-      "sourceFingerprint": "17e0ad67253620d4eb4c8ff8295b750d90dbeb3cb792d2384ee323fd7c80da09",
-      "context": "Node22.22.2/npm10.9.9; NODE_ENV=test; resolved command worker 1. Original low-privilege marked task-owned PG16 database dx_m01_acceptance_test_dc924aaea2 OID694046; technical group explicitly selects ACCEPTANCE_CLOCK_TEST_DATABASE_URL while TEST_DATABASE_URL is an unreachable port1 default-db decoy, ordinary group uses original default target; native helpers and exact owned-schema create/release contracts. One database suite group at a time; no live business data. Raw actual log and JSON/TAP report retained privately.",
-      "startedAt": "2026-11-06T00:58:11.076Z",
-      "endedAt": "2026-11-06T00:58:53.841Z",
-      "log": "/workspace/scratch/m01-p05-native-final7.log",
-      "logSha256": "2e8bed638c769a6d5fac03ab8d1bb20f874cf102076a996bf95249e6a86349ac"
+      "testedHead": "f2cc977bbd7efce09dc2d0c5e7a51aac05608c6e",
+      "sourceFingerprint": "d1b5b261767474ee3745ec1ea3f870c5fe2681aee27cd56cb2c2473404491605",
+      "context": "Node22.22.2/npm10.9.9; NODE_ENV=test; command workers=1. Original discovered canonical PostgreSQL suites, existing configuration and owned resource helper; marked low-privilege PG16.14 database dx_m01_acceptance_test_dc924aaea2/OID694046. One DB suite group at a time; exact cleanup verified. Actual raw logs and structured reports remain in the task private directory.",
+      "startedAt": "2026-11-06T01:58:55.259Z",
+      "endedAt": "2026-11-06T01:58:59.886Z",
+      "log": "/workspace/scratch/m01-p06-pg-final1.log",
+      "logSha256": "7eab273b676152609eee376d4faad0d9fcc641feb038089420c35f17026d21a3"
     },
     {
       "id": "technical",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/integration/sla-calculation-postgres.test.ts tests/integration/development-technical-postgres.test.ts tests/integration/production-readiness-postgres.test.ts --config vitest.business-chain.config.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile=/workspace/scratch/m01-p05-technical-final7.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/integration/development-technical-postgres.test.ts tests/integration/series-plan-postgres.test.ts --config vitest.business-chain.config.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile=/workspace/scratch/m01-p06-technical-final1.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 63,
+      "passed": 33,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "d33e41e858375f7ea764561bda60601a88cea38767e6c43af22038c8b9176b7b"
+          "sha256": "61a41a785385650fa2611ddf429891debdb470beb25470df7bc4e0c96f6e3737"
         }
       ],
-      "testedHead": "35502019d14f6548a5ad847f298ec06b8840395e",
-      "sourceFingerprint": "17e0ad67253620d4eb4c8ff8295b750d90dbeb3cb792d2384ee323fd7c80da09",
-      "context": "Node22.22.2/npm10.9.9; NODE_ENV=test; resolved command worker 1. Original low-privilege marked task-owned PG16 database dx_m01_acceptance_test_dc924aaea2 OID694046; technical group explicitly selects ACCEPTANCE_CLOCK_TEST_DATABASE_URL while TEST_DATABASE_URL is an unreachable port1 default-db decoy, ordinary group uses original default target; native helpers and exact owned-schema create/release contracts. One database suite group at a time; no live business data. Raw actual log and JSON/TAP report retained privately.",
-      "startedAt": "2026-11-06T00:58:53.907Z",
-      "endedAt": "2026-11-06T00:59:46.319Z",
-      "log": "/workspace/scratch/m01-p05-technical-final7.log",
-      "logSha256": "065b6611718e8bb8adc87fb13ce4c56b342994a7d3e3028bdb308b31f105bdce"
+      "testedHead": "f2cc977bbd7efce09dc2d0c5e7a51aac05608c6e",
+      "sourceFingerprint": "d1b5b261767474ee3745ec1ea3f870c5fe2681aee27cd56cb2c2473404491605",
+      "context": "Node22.22.2/npm10.9.9; NODE_ENV=test; command workers=1. Original discovered canonical PostgreSQL suites, existing configuration and owned resource helper; marked low-privilege PG16.14 database dx_m01_acceptance_test_dc924aaea2/OID694046. One DB suite group at a time; exact cleanup verified. Actual raw logs and structured reports remain in the task private directory.",
+      "startedAt": "2026-11-06T01:58:59.960Z",
+      "endedAt": "2026-11-06T01:59:25.228Z",
+      "log": "/workspace/scratch/m01-p06-technical-final1.log",
+      "logSha256": "4179c9038ce10595a9d6d1a527773c87c7cc8921198b76b4d7eee1116098fea3"
+    },
+    {
+      "id": "native-browser",
+      "kind": "tests",
+      "command": "node --import tsx tests/acceptance/m01-settings-native-browser.ts",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 23,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "node-tap",
+          "sha256": "1a2d7dba001e5ecce756c129474b6fa2390a66ce24346b7d7fd5853ef0f7d60c"
+        }
+      ],
+      "testedHead": "f2cc977bbd7efce09dc2d0c5e7a51aac05608c6e",
+      "sourceFingerprint": "d1b5b261767474ee3745ec1ea3f870c5fe2681aee27cd56cb2c2473404491605",
+      "context": "Node22.22.2/npm10.9.9; NODE_ENV=test; command workers=1. Original React components, Fastify route registration/services and owned marked low-privilege PG16.14 database dx_m01_acceptance_test_dc924aaea2/OID694046. Original active identity/role/capability database rows; localhost TEST auth delivery is not a DingTalk session. Explicit committed-response loss only. Real Chromium151/Playwright-core1.56.1, 1440/390/720px. No production data. Actual raw logs and structured reports remain in the task private directory.",
+      "startedAt": "2026-11-06T01:58:05.722Z",
+      "endedAt": "2026-11-06T01:58:26.241Z",
+      "log": "/workspace/scratch/m01-p06-native-browser-final1.log",
+      "logSha256": "1a2d7dba001e5ecce756c129474b6fa2390a66ce24346b7d7fd5853ef0f7d60c"
+    },
+    {
+      "id": "browser",
+      "kind": "tests",
+      "command": "node tests/acceptance/sla-standard-editor-browser.mjs",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "node-tap",
+          "sha256": "7131c8d515290794a1ed955f67cffc40a8165258edca864eabed3b422dba8b1b"
+        }
+      ],
+      "testedHead": "f2cc977bbd7efce09dc2d0c5e7a51aac05608c6e",
+      "sourceFingerprint": "d1b5b261767474ee3745ec1ea3f870c5fe2681aee27cd56cb2c2473404491605",
+      "context": "Node22.22.2/npm10.9.9; NODE_ENV=production; command workers=1. Original full-App/React components with clearly labelled TEST transport adapters; real Chromium151/Playwright-core1.56.1 1440/390px. This transport suite is not native API/PG proof. Actual raw logs and structured reports remain in the task private directory.",
+      "startedAt": "2026-11-06T02:00:06.801Z",
+      "endedAt": "2026-11-06T02:00:15.407Z",
+      "log": "/workspace/scratch/m01-p06-browser-final1.log",
+      "logSha256": "7131c8d515290794a1ed955f67cffc40a8165258edca864eabed3b422dba8b1b"
     },
     {
       "id": "preflight",
@@ -235,16 +286,16 @@
       "resultReports": [
         {
           "format": "node-tap",
-          "sha256": "dde895fd5dbca0bb973972c960788a9f1be31919f2f217daf6704076e43690a0"
+          "sha256": "7b639e0e74cdb4ae28aba7dc043f743b9f6209bc2f9f32509d7f6e3c927f0762"
         }
       ],
-      "testedHead": "35502019d14f6548a5ad847f298ec06b8840395e",
-      "sourceFingerprint": "17e0ad67253620d4eb4c8ff8295b750d90dbeb3cb792d2384ee323fd7c80da09",
-      "context": "Node22.22.2/npm10.9.9; NODE_ENV=test; resolved command worker 2. Original 2-worker preflight and original static migration validation; no runtime DB. Raw actual log and JSON/TAP report retained privately.",
-      "startedAt": "2026-11-06T00:58:11.078Z",
-      "endedAt": "2026-11-06T00:58:15.259Z",
-      "log": "/workspace/scratch/m01-p05-preflight-final7.log",
-      "logSha256": "dde895fd5dbca0bb973972c960788a9f1be31919f2f217daf6704076e43690a0"
+      "testedHead": "f2cc977bbd7efce09dc2d0c5e7a51aac05608c6e",
+      "sourceFingerprint": "d1b5b261767474ee3745ec1ea3f870c5fe2681aee27cd56cb2c2473404491605",
+      "context": "Node22.22.2/npm10.9.9; NODE_ENV=test; command workers=2. Original canonical workspace/preflight/unit entry. Unit cases enter the existing Vitest discovery. No new test runner, global timeout or worker policy. Build uses workspaces without a root deployment or DB postbuild. Actual raw logs and structured reports remain in the task private directory.",
+      "startedAt": "2026-11-06T01:58:16.393Z",
+      "endedAt": "2026-11-06T01:58:21.273Z",
+      "log": "/workspace/scratch/m01-p06-preflight-final1.log",
+      "logSha256": "7b639e0e74cdb4ae28aba7dc043f743b9f6209bc2f9f32509d7f6e3c927f0762"
     },
     {
       "id": "lint",
@@ -252,12 +303,12 @@
       "command": "npm run lint",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "35502019d14f6548a5ad847f298ec06b8840395e",
-      "sourceFingerprint": "17e0ad67253620d4eb4c8ff8295b750d90dbeb3cb792d2384ee323fd7c80da09",
-      "context": "Node22.22.2/npm10.9.9; NODE_ENV=test; resolved command worker 1. Original workspace command; build excludes root deployment/DB postbuild. Raw actual log and JSON/TAP report retained privately.",
-      "startedAt": "2026-11-06T00:58:15.333Z",
-      "endedAt": "2026-11-06T00:58:33.963Z",
-      "log": "/workspace/scratch/m01-p05-lint-final7.log",
+      "testedHead": "f2cc977bbd7efce09dc2d0c5e7a51aac05608c6e",
+      "sourceFingerprint": "d1b5b261767474ee3745ec1ea3f870c5fe2681aee27cd56cb2c2473404491605",
+      "context": "Node22.22.2/npm10.9.9; NODE_ENV=test; command workers=1. Original canonical workspace/preflight/unit entry. Unit cases enter the existing Vitest discovery. No new test runner, global timeout or worker policy. Build uses workspaces without a root deployment or DB postbuild. Actual raw logs and structured reports remain in the task private directory.",
+      "startedAt": "2026-11-06T01:58:42.491Z",
+      "endedAt": "2026-11-06T01:58:59.533Z",
+      "log": "/workspace/scratch/m01-p06-lint-final1.log",
       "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763"
     },
     {
@@ -266,12 +317,12 @@
       "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "35502019d14f6548a5ad847f298ec06b8840395e",
-      "sourceFingerprint": "17e0ad67253620d4eb4c8ff8295b750d90dbeb3cb792d2384ee323fd7c80da09",
-      "context": "Node22.22.2/npm10.9.9; NODE_ENV=test; resolved command worker 1. Original workspace command; build excludes root deployment/DB postbuild. Raw actual log and JSON/TAP report retained privately.",
-      "startedAt": "2026-11-06T00:58:34.044Z",
-      "endedAt": "2026-11-06T00:59:01.200Z",
-      "log": "/workspace/scratch/m01-p05-types-final7.log",
+      "testedHead": "f2cc977bbd7efce09dc2d0c5e7a51aac05608c6e",
+      "sourceFingerprint": "d1b5b261767474ee3745ec1ea3f870c5fe2681aee27cd56cb2c2473404491605",
+      "context": "Node22.22.2/npm10.9.9; NODE_ENV=test; command workers=1. Original canonical workspace/preflight/unit entry. Unit cases enter the existing Vitest discovery. No new test runner, global timeout or worker policy. Build uses workspaces without a root deployment or DB postbuild. Actual raw logs and structured reports remain in the task private directory.",
+      "startedAt": "2026-11-06T01:58:59.603Z",
+      "endedAt": "2026-11-06T01:59:27.081Z",
+      "log": "/workspace/scratch/m01-p06-types-final1.log",
       "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e"
     },
     {
@@ -280,13 +331,13 @@
       "command": "npm run build --workspaces --if-present",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "35502019d14f6548a5ad847f298ec06b8840395e",
-      "sourceFingerprint": "17e0ad67253620d4eb4c8ff8295b750d90dbeb3cb792d2384ee323fd7c80da09",
-      "context": "Node22.22.2/npm10.9.9; NODE_ENV=test; resolved command worker 1. Original workspace command; build excludes root deployment/DB postbuild. Raw actual log and JSON/TAP report retained privately.",
-      "startedAt": "2026-11-06T00:59:01.303Z",
-      "endedAt": "2026-11-06T00:59:19.155Z",
-      "log": "/workspace/scratch/m01-p05-build-final7.log",
-      "logSha256": "22389043a62ac31b6ae2f71bdcb5421ec4808191318df9b474d99e6ab9387cf4"
+      "testedHead": "f2cc977bbd7efce09dc2d0c5e7a51aac05608c6e",
+      "sourceFingerprint": "d1b5b261767474ee3745ec1ea3f870c5fe2681aee27cd56cb2c2473404491605",
+      "context": "Node22.22.2/npm10.9.9; NODE_ENV=test; command workers=1. Original canonical workspace/preflight/unit entry. Unit cases enter the existing Vitest discovery. No new test runner, global timeout or worker policy. Build uses workspaces without a root deployment or DB postbuild. Actual raw logs and structured reports remain in the task private directory.",
+      "startedAt": "2026-11-06T01:59:27.150Z",
+      "endedAt": "2026-11-06T01:59:41.673Z",
+      "log": "/workspace/scratch/m01-p06-build-final1.log",
+      "logSha256": "653123795890e350dc1c4803dd795476de3aaaff01443938f9baf653da25ea1d"
     },
     {
       "id": "secret",
@@ -294,12 +345,12 @@
       "command": "npm run secret:scan",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "35502019d14f6548a5ad847f298ec06b8840395e",
-      "sourceFingerprint": "17e0ad67253620d4eb4c8ff8295b750d90dbeb3cb792d2384ee323fd7c80da09",
-      "context": "Node22.22.2/npm10.9.9; NODE_ENV=test; resolved command worker 1. Original workspace command; build excludes root deployment/DB postbuild. Raw actual log and JSON/TAP report retained privately.",
-      "startedAt": "2026-11-06T00:59:19.229Z",
-      "endedAt": "2026-11-06T00:59:19.869Z",
-      "log": "/workspace/scratch/m01-p05-secret-final7.log",
+      "testedHead": "f2cc977bbd7efce09dc2d0c5e7a51aac05608c6e",
+      "sourceFingerprint": "d1b5b261767474ee3745ec1ea3f870c5fe2681aee27cd56cb2c2473404491605",
+      "context": "Node22.22.2/npm10.9.9; NODE_ENV=test; command workers=1. Original canonical workspace/preflight/unit entry. Unit cases enter the existing Vitest discovery. No new test runner, global timeout or worker policy. Build uses workspaces without a root deployment or DB postbuild. Actual raw logs and structured reports remain in the task private directory.",
+      "startedAt": "2026-11-06T01:59:41.738Z",
+      "endedAt": "2026-11-06T01:59:42.333Z",
+      "log": "/workspace/scratch/m01-p06-secret-final1.log",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda"
     }
   ]
