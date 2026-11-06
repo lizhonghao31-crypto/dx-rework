@@ -1,3 +1,4 @@
+import type {PoolClient} from 'pg';
 import {randomUUID} from 'node:crypto';
 import {unzipSync} from 'fflate';
 import Fastify from 'fastify';
@@ -191,6 +192,14 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const resolved=(await query.production(f.root,{...filters(),lineId})).result.problems.find(row=>row.id===first.id)!;expect(resolved.state).toBe('resolved');expect(resolved.resolved.at).not.toBeNull();
   await tasks.feedback(f.root,task.task_id,'TEST next independent block',true,randomUUID());
   const result=await query.production(f.root,{...filters(),lineId}),episodes=result.result.problems.filter(row=>row.kind==='原任务明确阻断');expect(episodes).toHaveLength(2);expect(episodes.find(row=>row.state==='current')).toMatchObject({recurrenceOf:first.id,reasonCode:null});expect(result.result.metrics.currentProblems.value).toBe(1);
+ });
+ it('does not borrow another pool connection for scene isolation inside an owned original statistics transaction',async()=>{
+  const made=await make('NO-NESTED',f.people.merchandiser!.actorId),original=f.db.query.bind(f.db),connections=new Set<unknown>(),connect=f.db.connect.bind(f.db);
+  const track=(client:PoolClient,release:PoolClient['release'])=>{connections.add(client);const done=(...args:Parameters<typeof release>)=>{connections.delete(client);return release(...args);};client.release=done;return done;};
+  const connectSpy=vi.spyOn(f.db,'connect').mockImplementation(((callback?: (error:Error|null,client:PoolClient,release:PoolClient['release'])=>void)=>{if(callback)return connect((error,client,release)=>callback(error,client,error?release:track(client,release)));return connect().then(client=>{track(client,client.release.bind(client));return client;});}) as typeof f.db.connect);
+  const querySpy=vi.spyOn(f.db,'query').mockImplementation(((...args:unknown[])=>{if(connections.size)throw Error('Original statistics tried to borrow from its pool while holding a transaction');return (original as (...args:unknown[])=>unknown)(...args);}) as typeof f.db.query);
+  try{const first=await query.production(f.root,{...filters(),lineId:made.lines[0]!.lineId});expect(first.result.metrics.demand.value).toBe(100);expect((await query.production(f.root,{...filters(),lineId:made.lines[0]!.lineId,snapshotId:first.snapshotId})).watermark).toBe(first.watermark);}
+  finally{querySpy.mockRestore();connectSpy.mockRestore();}
  });
  it('completes simultaneous original authenticated reads at the configured pool limit with separate authorized results',async()=>{
   const user=await dedicated(['finance_read','order_merchandiser']),made=await make('CONCURRENT',user.actorId),cookie=await login(user.actorId),responses=await Promise.all(Array.from({length:f.db.options.max??10},()=>app.inject({url:path({lineId:made.lines[0]!.lineId}),headers:{cookie}})));

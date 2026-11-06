@@ -1,3 +1,6 @@
+import type {ProductionPeriodSources} from '@dx-rework/contracts/production-period';
+import {productionPeriodSources} from './production-period-sources.js';
+import {productionPeriodProjection} from './production-period-projection.js';
 import {createHash} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {beijingCalendarDate} from '@dx-rework/contracts/digital-production';
@@ -28,7 +31,7 @@ const hash=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).d
 const none=():StatisticsTime=>({at:null,date:null,precision:'unknown',quality:'unknown',sourceRefs:[]});
 const at=(value:Date|string|null|undefined,ref:string,trusted=true):StatisticsTime=>value?{at:new Date(value).toISOString(),date:null,precision:'instant',quality:trusted?'verified':'unverified',sourceRefs:[ref]}:none();
 const sorted=(ids:readonly string[])=>[...new Set(ids)].sort();
-const currentFilters=(filters:DigitalAnalysisFilters):ProductionStatisticsFilters=>({from:filters.from,to:filters.to,customer:filters.customer,category:filters.category,page:filters.page,view:'production',...Object.fromEntries(['factoryId','lineId','salesYear','salesSeries','primaryMerchandiserId','secondaryMerchandiserId','designer','drillLineId','drillOrderId','drillFactoryId','drillMetric','drillFactories','drillCustomers','drillStages','drillStageFactories','groupBy'].filter(key=>filters[key as keyof DigitalAnalysisFilters]!==undefined).map(key=>[key,filters[key as keyof DigitalAnalysisFilters]]))});
+const currentFilters=(filters:DigitalAnalysisFilters):ProductionStatisticsFilters=>({from:filters.from,to:filters.to,customer:filters.customer,category:filters.category,page:filters.page,view:'production',...Object.fromEntries(['timeMode','compareFrom','compareTo','compareElapsed','factoryId','lineId','salesYear','salesSeries','primaryMerchandiserId','secondaryMerchandiserId','designer','drillLineId','drillOrderId','drillFactoryId','drillMetric','drillFactories','drillCustomers','drillStages','drillStageFactories','groupBy'].filter(key=>filters[key as keyof DigitalAnalysisFilters]!==undefined).map(key=>[key,filters[key as keyof DigitalAnalysisFilters]]))});
 const filterHash=(filters:ProductionStatisticsFilters)=>hash(Object.fromEntries(Object.entries(filters).filter(([key])=>!['page','snapshotId','drillLineId','drillOrderId','drillFactoryId','drillMetric','drillFactories','drillCustomers','drillStages','drillStageFactories','groupBy'].includes(key))));
 type StatisticsOrder={production_order_id:string;source_id:string|null;version:number|string;customer_code:string;design_style_no:string;product_group:string;sales_year:number|null;sales_series:string|null;primary_merchandiser_id:string|null;verified_designer:string|null};
 /** An adapter of the original analysis surface, never a second business ledger. */
@@ -46,7 +49,7 @@ export class ProductionStatisticsQuery{
  }
  private exportAllowed(actor:TrustedActorContext){try{assertBusinessExportAllowed(actor.actorRoles,'report:export');return isRootActor(actor)||(actor.authorizationCapabilities??[]).includes('report:view');}catch{return false;}}
  private async permission(db:PoolClient,actor:TrustedActorContext,orderIds:string[],taskIds:string[],reworkIds:string[]=[]){
-  const policy=new DigitalProductionAccessPolicy(db);for(const id of sorted(orderIds))if(!await acceptanceIncludesNative(this.database,id)||!await policy.allowed(actor,'order',id,'technical'))digitalForbidden();
+  const policy=new DigitalProductionAccessPolicy(db);for(const id of sorted(orderIds))if(!await acceptanceIncludesNative(this.database,id,db)||!await policy.allowed(actor,'order',id,'technical'))digitalForbidden();
   for(const id of sorted(taskIds))if(!await policy.allowed(actor,'task',id,'technical'))digitalForbidden();
   const detail=new ReworkBusinessDetailService(this.database);for(const id of sorted(reworkIds)){const row=(await db.query("SELECT * FROM rework_orders WHERE rework_order_id=$1",[id])).rows[0];if(!row||!await detail.canViewExisting(actor,row,db)||!await detail.canViewExistingBusinessDetails(actor,row,db))digitalForbidden();}
   return hash({actorId:actor.actorId,roles:sorted(actor.actorRoles),capabilities:sorted([...(actor.authorizationCapabilities??[]),actor.authorizationCapability??'']),orders:sorted(orderIds),tasks:sorted(taskIds),reworks:sorted(reworkIds),scene:acceptanceBusinessContext()?.scenarioId??null,canExport:this.exportAllowed(actor)});
@@ -58,7 +61,7 @@ export class ProductionStatisticsQuery{
   const applied=currentFilters(filters),key=filterHash(applied);
   if(filters.page>1&&!filters.snapshotId)throw new ApplicationError('ANALYSIS_RESULT_REQUIRED','请先整体读取结果，再按同版结果翻页',409);
   if(filters.snapshotId){
-   const stored=await this.store.load(filters.snapshotId,actor.actorId,key,payload=>this.read(async db=>this.permission(db,await this.liveActor(db,actor),[...payload.result.rows.map(row=>row.line.orderId),...payload.result.unknown.map(row=>row.orderId)],payload.result.windows.map(row=>row.window.id),payload.result.reworks.map(row=>row.reworkId))));
+   const stored=await this.store.load(filters.snapshotId,actor.actorId,key,payload=>this.read(async db=>this.permission(db,await this.liveActor(db,actor),[...payload.result.rows.map(row=>row.line.orderId),...payload.result.unknown.map(row=>row.orderId)],[...payload.result.windows.map(row=>row.window.id),...payload.periodSources?.taskIds??[]],payload.result.reworks.map(row=>row.reworkId))));
    return this.page({...stored,filters:applied,freshness:'previous-query'},filters.page,exportAll);
   }
   const observation=observedBusinessTime(),clock=new ContextBusinessClock(this.database),observed:Array<{id:string;time:Awaited<ReturnType<ContextBusinessClock['read']>>}>=[];
@@ -70,7 +73,7 @@ export class ProductionStatisticsQuery{
     CASE WHEN s.source_id IS NOT NULL AND NOT access_is_root_actor(s.created_by) AND EXISTS(SELECT 1 FROM user_role_assignments a
      WHERE a.user_id=s.created_by AND a.role_code='sample_designer' AND a.granted_at<=s.created_at AND(a.revoked_at IS NULL OR a.revoked_at>s.created_at)) THEN s.created_by END AS verified_designer
     FROM digital_production_orders o LEFT JOIN digital_production_sources s USING(source_id) ORDER BY o.production_order_id`)).rows;
-   for(const order of candidates)if(await acceptanceIncludesNative(this.database,order.production_order_id)&&await policy.allowed(live,'order',order.production_order_id,'technical')){
+   for(const order of candidates)if(await acceptanceIncludesNative(this.database,order.production_order_id,db)&&await policy.allowed(live,'order',order.production_order_id,'technical')){
     if(applied.customer&&order.customer_code!==applied.customer)continue;
     orders.push(order);
    }
@@ -80,13 +83,13 @@ export class ProductionStatisticsQuery{
     observed.push({id:order.production_order_id,time});rows.push(...await this.orderRows(db,live,order));
    }
    const dimensionTests=(row:StatisticsPo)=>[
-    ...applied.category?[{key:'category',expected:applied.category,actual:row.category??null}]:[],
+    ...applied.category&&(!applied.timeMode||applied.timeMode==='current')?[{key:'category',expected:applied.category,actual:row.category??null}]:[],
     ...applied.salesYear?[{key:'salesYear',expected:applied.salesYear,actual:row.salesYear}]:[],
     ...applied.salesSeries?[{key:'salesSeries',expected:applied.salesSeries,actual:row.salesSeries}]:[],
     ...applied.primaryMerchandiserId?[{key:'primaryMerchandiser',expected:applied.primaryMerchandiserId,actual:row.primaryMerchandiserId}]:[],
     ...applied.designer?[{key:'designer',expected:applied.designer,actual:row.designerId}]:[],
    ];
-   const rangeRows=rows.filter(row=>(!applied.lineId||row.lineId===applied.lineId)&&(!applied.secondaryMerchandiserId||row.secondaryMerchandiserIds.includes(applied.secondaryMerchandiserId))&&(!applied.factoryId||row.allocations.some(scope=>scope.current&&scope.quantity>0&&scope.factoryId===applied.factoryId)));
+   const rangeRows=rows.filter(row=>(!applied.lineId||row.lineId===applied.lineId)&&(!applied.secondaryMerchandiserId||row.secondaryMerchandiserIds.includes(applied.secondaryMerchandiserId))&&(applied.timeMode&&applied.timeMode!=='current'||!applied.factoryId||row.allocations.some(scope=>scope.current&&scope.quantity>0&&scope.factoryId===applied.factoryId)));
    const missingDimension=rangeRows.filter(row=>dimensionTests(row).some(test=>test.actual===null)&&dimensionTests(row).every(test=>test.actual===null||test.actual===test.expected));
    const selected=rangeRows.filter(row=>dimensionTests(row).every(test=>test.actual===test.expected));
 
@@ -95,18 +98,25 @@ export class ProductionStatisticsQuery{
    const selectedOrders=new Set(selected.map(row=>row.orderId)),motherScope=rows.filter(row=>selectedOrders.has(row.orderId)),motherCompletion=motherScope.length===selected.length?full.metrics.completedOrders:currentProductionStatistics(motherScope,observation.now,full.businessDate).metrics.completedOrders;
    full.metrics.completedOrders=scopedMotherCompletion(motherCompletion,full.rows);
    if(missingDimension.length){const unknown=missingDimension.map(row=>({key:'filter-dimension',orderId:row.orderId,lineId:row.lineId,reason:'已授权对象的筛选维度缺可信映射：'+dimensionTests(row).filter(test=>test.actual===null).map(test=>({category:'品类',salesYear:'销售年度',salesSeries:'P系列',primaryMerchandiser:'主跟单',designer:'设计主责'}[test.key]??test.key)).join('、')+'；不能假定不属于本次筛选',sourceRefs:row.quantitySourceRefs}));full.unknown.push(...unknown);for(const metric of Object.values(full.metrics)){metric.value=null;metric.unknown.push(...unknown);}}
-   if(applied.factoryId){full.factories=full.factories.filter(factory=>factory.factoryId===applied.factoryId);full.materials=full.materials.filter(material=>material.requirement.factoryId===applied.factoryId);full.workload=full.workload.filter(item=>item.factoryId===null||item.factoryId===applied.factoryId);}const permissionHash=await this.permission(db,live,[...selected,...missingDimension].map(row=>row.orderId),full.windows.map(row=>row.window.id),full.reworks.map(row=>row.reworkId));
-   return {permissionHash,payload:{projectionInputs:selected,motherCompletion,watermark:hash(full),filters:applied,canExport:this.exportAllowed(live),total:full.rows.length,result:full,dimensions:[{key:'customer',available:true,reason:'原订单客户代码；未把客户自动映射为品牌'},{key:'category',available:true,reason:'原当前有效已发布制单品类，缺件仍保留全局数量'},{key:'designer',available:true,reason:'原开发归属加创建时设计角色证据；Root创建未猜设计主责'},{key:'secondaryMerchandiser',available:isRootActor(live)||(live.authorizationCapabilities??[]).includes('sourcing:view'),reason:'沿原外发读取权限及第二跟单字段'}],limitations:['本次为当前生产完整读取，不按创建月份剔除旧积压。','各工厂涉及母单/PO及全PO背景需求不可跨厂相加。','未知归厂只限制相关厂指标；装箱为本系统出货，不代客户签收。','未核历史范围不能提供严格首次合格率或全周期等待覆盖。']}};
+   if(applied.factoryId&&(!applied.timeMode||applied.timeMode==='current')){full.factories=full.factories.filter(factory=>factory.factoryId===applied.factoryId);full.materials=full.materials.filter(material=>material.requirement.factoryId===applied.factoryId);full.workload=full.workload.filter(item=>item.factoryId===null||item.factoryId===applied.factoryId);}
+   let periodSources:ProductionPeriodSources|undefined;
+   if(applied.timeMode&&applied.timeMode!=='current'){
+    periodSources={scopeUnknown:missingDimension.map(row=>({orderId:row.orderId,lineId:row.lineId,customerCode:row.customerCode,reason:'已授权PO的筛选归属未核：'+dimensionTests(row).filter(test=>test.actual===null).map(test=>({salesYear:'销售年度',salesSeries:'P系列',primaryMerchandiser:'主跟单',designer:'设计主责'}[test.key]??test.key)).join('、')+'；可能遗漏期间发生与到期义务，不能当完整零或完整比例',sourceRefs:row.quantitySourceRefs})),taskIds:[],unknownDue:[],windows:[],events:[],promises:[],completions:[],limitations:[]};
+    for(const orderId of new Set(selected.map(row=>row.orderId))){const facts=await productionPeriodSources(db,orderId,selected.filter(row=>row.orderId===orderId),live);periodSources.taskIds!.push(...facts.taskIds??[]);periodSources.windows!.push(...facts.windows??[]);periodSources.unknownDue!.push(...facts.unknownDue??[]);for(const key of ['events','promises','completions','limitations'] as const)(periodSources[key] as unknown[]).push(...facts[key]);}
+   }
+   const permissionHash=await this.permission(db,live,[...selected,...missingDimension].map(row=>row.orderId),[...full.windows.map(row=>row.window.id),...periodSources?.taskIds??[]],full.reworks.map(row=>row.reworkId));
+   return {permissionHash,payload:{...(periodSources?{periodSources}:{}),projectionInputs:selected,motherCompletion,watermark:hash(periodSources?{full,periodSources}:full),filters:applied,canExport:this.exportAllowed(live),total:full.rows.length,result:full,dimensions:[{key:'customer',available:true,reason:'原订单客户代码；未把客户自动映射为品牌'},{key:'category',available:true,reason:'原当前有效已发布制单品类，缺件仍保留全局数量'},{key:'designer',available:true,reason:'原开发归属加创建时设计角色证据；Root创建未猜设计主责'},{key:'secondaryMerchandiser',available:isRootActor(live)||(live.authorizationCapabilities??[]).includes('sourcing:view'),reason:'沿原外发读取权限及第二跟单字段'}],limitations:['本次为当前生产完整读取，不按创建月份剔除旧积压。','各工厂涉及母单/PO及全PO背景需求不可跨厂相加。','未知归厂只限制相关厂指标；装箱为本系统出货，不代客户签收。','未核历史范围不能提供严格首次合格率或全周期等待覆盖。']}};
   });
   for(const {id,time} of observed)await assertBusinessClockUnchanged(clock,{kind:'order',id},time);
-  const currentPermission=await this.read(async db=>this.permission(db,await this.liveActor(db,actor),[...result.payload.result.rows.map(row=>row.line.orderId),...result.payload.result.unknown.map(row=>row.orderId)],result.payload.result.windows.map(row=>row.window.id),result.payload.result.reworks.map(row=>row.reworkId)));
+  const currentPermission=await this.read(async db=>this.permission(db,await this.liveActor(db,actor),[...result.payload.result.rows.map(row=>row.line.orderId),...result.payload.result.unknown.map(row=>row.orderId)],[...result.payload.result.windows.map(row=>row.window.id),...result.payload.periodSources?.taskIds??[]],result.payload.result.reworks.map(row=>row.reworkId)));
   if(currentPermission!==result.permissionHash)throw new ApplicationError('ANALYSIS_PERMISSION_CHANGED','读取期间授权范围已变化，请重新读取',409);
   const saved=await this.store.save(actor.actorId,key,result.permissionHash,result.payload);
   return this.page({...result.payload,...saved,freshness:'current'},filters.page,exportAll);
  }
- private page(value:Omit<ProductionStatisticsResponse,'page'|'pageSize'|'basis'>&{projectionInputs:StatisticsPo[];motherCompletion:StatisticsMetric},page:number,exportAll:boolean):ProductionStatisticsResponse{
-  const {projectionInputs,motherCompletion,...publicValue}=value,result=productionResultProjection(value.result,value.filters,projectionInputs,motherCompletion),groups=productionGroups(result,projectionInputs,motherCompletion,value.filters.groupBy??['factory','customer','stage'],value.filters),facets=productionFacets(value.result,value.filters.factoryId);
-  return {...publicValue,groups,facets,basis:{total:value.result.rows.length,metrics:value.result.metrics,unknown:value.result.unknown},total:result.rows.length,page,pageSize:15,result:{...result,rows:exportAll?result.rows:result.rows.slice((page-1)*15,page*15)}};
+ private page(value:Omit<ProductionStatisticsResponse,'page'|'pageSize'|'basis'>&{projectionInputs:StatisticsPo[];motherCompletion:StatisticsMetric;periodSources?:ProductionPeriodSources},page:number,exportAll:boolean):ProductionStatisticsResponse{
+  const {projectionInputs,motherCompletion,periodSources,...publicValue}=value,projectionFilters=periodSources?{...Object.fromEntries(Object.entries(value.filters).filter(([key])=>!['factoryId','drillFactoryId','drillFactories'].includes(key))),drillMetric:'all'} as ProductionStatisticsFilters:value.filters,result=productionResultProjection(value.result,projectionFilters,projectionInputs,motherCompletion),groups=periodSources?[]:productionGroups(result,projectionInputs,motherCompletion,value.filters.groupBy??['factory','customer','stage'],value.filters),facets=productionFacets(value.result,periodSources?undefined:value.filters.factoryId);
+  if(periodSources){const factoryNames=new Map(projectionInputs.flatMap(row=>row.allocations.map(scope=>[scope.factoryId,scope.factoryName] as const)));facets.factory=[...new Set(periodSources.events.map(event=>event.factoryId??'unknown'))].map(key=>({key,label:key==='unknown'?'历史事件归厂待核':factoryNames.get(key)??'原事件工厂'}));}
+  return {...publicValue,...periodSources?{period:productionPeriodProjection(periodSources,value.filters,result.rows.map(row=>row.line),result.asOf)}:{},groups,facets,basis:{total:value.result.rows.length,metrics:value.result.metrics,unknown:value.result.unknown},total:result.rows.length,page,pageSize:15,result:{...result,rows:exportAll?result.rows:result.rows.slice((page-1)*15,page*15)}};
  }
  private async orderRows(db:PoolClient,actor:TrustedActorContext,order:StatisticsOrder):Promise<StatisticsPo[]>{
   const id=order.production_order_id as string,policy=new DigitalProductionAccessPolicy(db),closure=await new OrderClosureService(this.database).read(actor,id,db),gates=await new BulkPreparationService(this.database).gates(db,id);

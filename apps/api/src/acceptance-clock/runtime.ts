@@ -18,7 +18,7 @@ export class AcceptanceClockRuntime{
   this.repository=new AcceptanceClockRepository(database);
   installAcceptanceClockReader(database,{
    read:async(scope,transaction)=>{this.assertEnabled();const result=(await (transaction??database).query(`SELECT s.* FROM acceptance_sla_clock_resources r JOIN acceptance_sla_clock_scenarios s USING(scenario_id) WHERE r.resource_kind=$1 AND r.resource_id=$2`,[scope.kind,scope.id])).rows[0] as ClockRow|undefined;return result?{now:result.business_now.toISOString(),scenarioId:result.scenario_id,revision:result.version}:null;},
-   nativeScenario:async id=>{this.assertEnabled();const ids=[...new Set((await clockRoots(database,id)).map(r=>r.scenarioId).filter((v):v is string=>Boolean(v)))];if(ids.length>1)clockConflict('原业务关联跨测试场景，不能使用测试时间');return ids[0]??null;}
+   nativeScenario:async(id,transaction)=>{this.assertEnabled();const ids=[...new Set((await clockRoots(transaction??database,id)).map(r=>r.scenarioId).filter((v):v is string=>Boolean(v)))];if(ids.length>1)clockConflict('原业务关联跨测试场景，不能使用测试时间');return ids[0]??null;}
   });
  }
  assertEnabled(){assertAcceptanceServerProof(this.database,this.proof);}

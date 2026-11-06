@@ -9,16 +9,19 @@ export const DigitalAnalysisFilterSchema=z.object({
  metric:z.enum(['all','shipping','active','pending','unassigned','blocked','overdue','sla','late','measurable','materials','handover','other_wait','missing','unverified','waiting','unknown_wait']).optional(),
  cycle:z.enum(['under_day','one_three','three_seven','over_week']).optional(),
  node:z.string().trim().max(100).optional(),origin:z.enum(['客户新增要求','未达原要求','内部发现']).optional(),
- view:z.literal('production').optional(),snapshotId:z.string().uuid().optional(),factoryId:z.string().uuid().optional(),
+ view:z.literal('production').optional(),timeMode:z.enum(['current','output','due']).optional(),compareFrom:z.iso.date().optional(),compareTo:z.iso.date().optional(),compareElapsed:z.preprocess(value=>value==='true'?true:value==='false'?false:value,z.boolean()).optional(),snapshotId:z.string().uuid().optional(),factoryId:z.string().uuid().optional(),
  lineId:z.string().uuid().optional(),salesYear:z.coerce.number().int().min(1000).max(9999).optional(),salesSeries:z.string().regex(/^P(0[1-9]|1[0-2])$/).optional(),
  primaryMerchandiserId:z.string().uuid().optional(),secondaryMerchandiserId:z.string().uuid().optional(),
  drillLineId:z.string().uuid().optional(),drillOrderId:z.string().uuid().optional(),drillFactoryId:z.string().uuid().optional(),drillMetric:z.enum(PRODUCTION_STATISTICS_DRILLS).optional(),
  drillFactories:queryList(z.union([z.string().uuid(),z.enum(['unknown','uncovered','none'])])),drillCustomers:queryList(z.string().trim().min(1).max(100)),drillStages:queryList(z.string().trim().min(1).max(100)),drillStageFactories:queryList(z.union([z.string().uuid(),z.enum(['unknown','uncovered','none'])]),0),groupBy:queryList(z.enum(PRODUCTION_GROUPINGS)),
 }).strict().refine(value=>value.to>=value.from,'结束日期不能早于开始日期')
  .superRefine((value,context)=>{
-  const productionOnly=['snapshotId','factoryId','lineId','salesYear','salesSeries','primaryMerchandiserId','secondaryMerchandiserId','drillLineId','drillOrderId','drillFactoryId','drillMetric','drillFactories','drillCustomers','drillStages','drillStageFactories','groupBy'] as const;
+  const productionOnly=['timeMode','compareFrom','compareTo','compareElapsed','snapshotId','factoryId','lineId','salesYear','salesSeries','primaryMerchandiserId','secondaryMerchandiserId','drillLineId','drillOrderId','drillFactoryId','drillMetric','drillFactories','drillCustomers','drillStages','drillStageFactories','groupBy'] as const;
   if(value.view!=='production'&&productionOnly.some(key=>value[key]!==undefined))context.addIssue({code:'custom',message:'这些筛选仅用于当前生产查询'});
   if(value.view==='production'&&(value.role||value.node||value.origin||value.cycle||value.assigneeId||value.metric&&value.metric!=='all'||value.scope&&value.scope!=='snapshot'))context.addIssue({code:'custom',message:'当前生产查询不混用任务岗位或期间筛选'});
+  if(value.timeMode==='due'&&(value.factoryId||value.drillFactoryId||value.drillFactories))context.addIssue({code:'custom',message:'到期履约未核完整历史工厂责任范围，请清除工厂筛选；期间发料/报工仍可按原事件工厂查询'});
+  if(value.timeMode&&value.timeMode!=='current'&&(value.drillStages||value.drillStageFactories))context.addIssue({code:'custom',message:'期间统计不能用当前活动节点代替历史节点范围，请清除当前节点筛选'});
+  if(Boolean(value.compareFrom)!==Boolean(value.compareTo)||value.compareFrom&&value.compareTo&&value.compareTo<value.compareFrom)context.addIssue({code:'custom',message:'比较期间须同时填写有效的起止日'});
   if(value.drillStageFactories!==undefined&&!value.drillStages)context.addIssue({code:'custom',message:'节点范围只随节点分组下钻使用'});
   if(value.groupBy&&value.groupBy.length>3)context.addIssue({code:'custom',message:'分组最多三层'});
  });

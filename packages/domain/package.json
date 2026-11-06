@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./production-period": { "types": "./src/production-period.ts", "import": "./dist/production-period.js" },
     "./production-statistics": { "types": "./src/production-statistics.ts", "import": "./dist/production-statistics.js" },
     "./sla-calculation-routes": { "types": "./src/sla-calculation-routes.ts", "import": "./dist/sla-calculation-routes.js" },
     "./sla-calculation": { "types": "./src/sla-calculation.ts", "import": "./dist/sla-calculation.js" },
