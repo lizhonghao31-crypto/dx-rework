@@ -20,14 +20,16 @@ import {retiredBulkPreshrinkTaskIds} from './bulk-preshrink-requirement.js';
 import {taskAnalysis,type AnalysisTask} from './reporting-metrics.js';
 import {ReworkBusinessDetailService} from '../rework/rework-business-detail-service.js';
 import {productionMaterialFacts} from './production-statistics-materials.js';
+import {productionGroups} from './production-statistics-groups.js';
+import {productionFacets} from './production-statistics-dimensions.js';
 import {productionResultProjection,scopedMotherCompletion} from './production-statistics-projection.js';
 
 const hash=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const none=():StatisticsTime=>({at:null,date:null,precision:'unknown',quality:'unknown',sourceRefs:[]});
 const at=(value:Date|string|null|undefined,ref:string,trusted=true):StatisticsTime=>value?{at:new Date(value).toISOString(),date:null,precision:'instant',quality:trusted?'verified':'unverified',sourceRefs:[ref]}:none();
 const sorted=(ids:readonly string[])=>[...new Set(ids)].sort();
-const currentFilters=(filters:DigitalAnalysisFilters):ProductionStatisticsFilters=>({from:filters.from,to:filters.to,customer:filters.customer,category:filters.category,page:filters.page,view:'production',...Object.fromEntries(['factoryId','lineId','salesYear','salesSeries','primaryMerchandiserId','secondaryMerchandiserId','designer','drillLineId','drillOrderId','drillFactoryId','drillMetric'].filter(key=>filters[key as keyof DigitalAnalysisFilters]!==undefined).map(key=>[key,filters[key as keyof DigitalAnalysisFilters]]))});
-const filterHash=(filters:ProductionStatisticsFilters)=>hash(Object.fromEntries(Object.entries(filters).filter(([key])=>!['page','snapshotId','drillLineId','drillOrderId','drillFactoryId','drillMetric'].includes(key))));
+const currentFilters=(filters:DigitalAnalysisFilters):ProductionStatisticsFilters=>({from:filters.from,to:filters.to,customer:filters.customer,category:filters.category,page:filters.page,view:'production',...Object.fromEntries(['factoryId','lineId','salesYear','salesSeries','primaryMerchandiserId','secondaryMerchandiserId','designer','drillLineId','drillOrderId','drillFactoryId','drillMetric','drillFactories','drillCustomers','drillStages','groupBy'].filter(key=>filters[key as keyof DigitalAnalysisFilters]!==undefined).map(key=>[key,filters[key as keyof DigitalAnalysisFilters]]))});
+const filterHash=(filters:ProductionStatisticsFilters)=>hash(Object.fromEntries(Object.entries(filters).filter(([key])=>!['page','snapshotId','drillLineId','drillOrderId','drillFactoryId','drillMetric','drillFactories','drillCustomers','drillStages','groupBy'].includes(key))));
 type StatisticsOrder={production_order_id:string;source_id:string|null;version:number|string;customer_code:string;design_style_no:string;product_group:string;sales_year:number|null;sales_series:string|null;primary_merchandiser_id:string|null;verified_designer:string|null};
 /** An adapter of the original analysis surface, never a second business ledger. */
 export class ProductionStatisticsQuery{
@@ -103,8 +105,8 @@ export class ProductionStatisticsQuery{
   return this.page({...result.payload,...saved,freshness:'current'},filters.page,exportAll);
  }
  private page(value:Omit<ProductionStatisticsResponse,'page'|'pageSize'|'basis'>&{projectionInputs:StatisticsPo[];motherCompletion:StatisticsMetric},page:number,exportAll:boolean):ProductionStatisticsResponse{
-  const {projectionInputs,motherCompletion,...publicValue}=value,result=productionResultProjection(value.result,value.filters,projectionInputs,motherCompletion);
-  return {...publicValue,basis:{total:value.result.rows.length,metrics:value.result.metrics,unknown:value.result.unknown},total:result.rows.length,page,pageSize:15,result:{...result,rows:exportAll?result.rows:result.rows.slice((page-1)*15,page*15)}};
+  const {projectionInputs,motherCompletion,...publicValue}=value,result=productionResultProjection(value.result,value.filters,projectionInputs,motherCompletion),groups=productionGroups(result,projectionInputs,motherCompletion,value.filters.groupBy??['factory','customer','stage'],value.filters),facets=productionFacets(value.result);
+  return {...publicValue,groups,facets,basis:{total:value.result.rows.length,metrics:value.result.metrics,unknown:value.result.unknown},total:result.rows.length,page,pageSize:15,result:{...result,rows:exportAll?result.rows:result.rows.slice((page-1)*15,page*15)}};
  }
  private async orderRows(db:PoolClient,actor:TrustedActorContext,order:StatisticsOrder):Promise<StatisticsPo[]>{
   const id=order.production_order_id as string,policy=new DigitalProductionAccessPolicy(db),closure=await new OrderClosureService(this.database).read(actor,id,db),gates=await new BulkPreparationService(this.database).gates(db,id);

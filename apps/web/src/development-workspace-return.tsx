@@ -23,6 +23,10 @@ export function developmentWorkspaceReturnUrl(value: string | null, base: string
     const query = Object.fromEntries(url.searchParams);
     const {view:analysisView,...analysisFilters}=query;
     if (url.pathname === urls.pageUrl('ui/digital-analysis') && z.enum(['output','timing','waiting','quality']).safeParse(analysisView).success && DigitalAnalysisFilterSchema.safeParse(analysisFilters).success) return url.pathname + url.search;
+    if(url.pathname===urls.pageUrl('ui/digital-analysis')&&analysisView==='production'){
+      const {drawer,group,...productionFilters}=query;
+      if(DigitalAnalysisFilterSchema.safeParse(productionFilters).success&&z.object({drawer:z.string().uuid().optional(),group:z.enum(['factory','customer','stage']).optional()}).strict().safeParse({drawer,group}).success)return url.pathname+url.search;
+    }
     if (url.pathname === urls.pageUrl("ui/digital-pattern-room") && PatternWorkspaceFilterSchema.safeExtend({section:z.enum(["development","bulk"]).optional(),bulkOrder:z.string().uuid().optional(),task: z.string().uuid().optional(), taskView: z.enum(["read","handle","correct"]).optional(),taskTab:z.enum(Object.keys(taskTabLabels) as [keyof typeof taskTabLabels,...Array<keyof typeof taskTabLabels>]).optional(),documentCategory:z.enum(documentCategories).optional(),documentChapter:z.enum(documentChapterIds).optional(),documentKind:z.enum(["development","instruction","budget"]).optional(),round:z.union([z.literal("current"),z.coerce.number().int().positive().max(Number.MAX_SAFE_INTEGER)]).optional(),instructionVersion:z.union([z.literal("current"),z.coerce.number().int().positive().max(Number.MAX_SAFE_INTEGER)]).optional(),budgetVersion:z.union([z.literal("current"),z.coerce.number().int().positive().max(Number.MAX_SAFE_INTEGER)]).optional()}).safeParse(query).success) return url.pathname + url.search;
     if (url.pathname === urls.pageUrl("ui/digital-production")) {
       const designer=designerReturnSchema.safeParse(query);
@@ -36,5 +40,12 @@ export function DevelopmentWorkspaceReturn() {
   if(["development","instruction","budget","task","bulk"].some(kind=>query.has(kind)))return null;
   if(query.get("workbench")==="sample"&&query.has("task"))return null;
   const target = developmentWorkspaceReturnUrl(query.get("returnTo"));
-  return target ? <a className="dx-button dx-button--secondary" href={target}>{target.startsWith(createWebUrls(import.meta.env.BASE_URL).pageUrl('ui/digital-analysis'))?'返回板房沙盘':'返回开发工作台'}</a> : null;
+  return target ? <a className="dx-button dx-button--secondary" href={target}>{target.startsWith(createWebUrls(import.meta.env.BASE_URL).pageUrl('ui/digital-analysis'))?(new URL(target,'https://local.invalid').searchParams.get('view')==='production'?'返回当前生产数量':'返回板房沙盘'):'返回开发工作台'}</a> : null;
+}
+
+/** Direct current-production drill returns keep a visible destination on every
+ * original business detail, including task and preparation workbenches. */
+export function CurrentProductionReturn(){
+ const target=developmentWorkspaceReturnUrl(new URLSearchParams(window.location.search).get('returnTo'));
+ return target&&new URL(target,'https://local.invalid').searchParams.get('view')==='production'?<a className="dx-button dx-button--secondary" href={target}>返回当前生产数量</a>:null;
 }

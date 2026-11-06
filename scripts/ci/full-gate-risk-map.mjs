@@ -152,6 +152,8 @@ export const classifyFullGatePaths = (inputPaths) => {
   let maintenanceSensitive = false;
   let activationSensitive = false;
   let transferSensitive = false;
+  if(paths.some(path=>/^(?:apps\/web\/src\/current-production|apps\/api\/src\/production-platform\/production-statistics-(?:groups|dimensions)|tests\/(?:acceptance|fixtures|integration)\/m01-current-production)/.test(path))){mappedTests.add('tests/integration/m01-current-production-native-browser-postgres.test.ts');domains.add('current-production-browser');}
+
 
   for (const path of paths) {
     if (/^apps\/web\/src\/(?:short-lead-(?:panel|workspace)|digital-development-(?:create-form|editing)|digital-detail-route|digital-production-page|todo-content-read|series-settings)\.tsx?$/.test(path)

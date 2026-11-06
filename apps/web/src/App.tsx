@@ -290,7 +290,7 @@ function AppRoutes() {
   const sourcingOrderMatch = path.match(/^\/ui\/sourcing\/orders\/([0-9a-f-]{36})$/i);
   const cuttingOrderMatch = path.match(/^\/ui\/cutting\/orders\/([0-9a-f-]{36})$/i);
   let page;
-  if (path === "/ui/digital-analysis") page = <Shell active="板房数据沙盘" appearance="digital"><ProductionWorkspace><DigitalAnalysisPage navigation={navigation} /></ProductionWorkspace></Shell>;
+  if (path === "/ui/digital-analysis") page = <Shell active={new URLSearchParams(navigation.search).get('view')==='production'?'当前生产数量':'板房数据沙盘'} appearance="digital"><ProductionWorkspace><DigitalAnalysisPage navigation={navigation} /></ProductionWorkspace></Shell>;
   else if (path === "/ui/digital-cockpit") page = <Shell active="生产管理座舱" appearance="digital"><ProductionWorkspace>{new URLSearchParams(search).get("workspace")==="settings" ? <CockpitProductionSettings/> : ["pattern","preparation"].includes(new URLSearchParams(search).get("workspace")??"") ? <DigitalPatternWorkspace key={search}/> : ["factory"].includes(new URLSearchParams(search).get("workspace") ?? "") ? <DigitalProductionWorkspace key={search} kind={new URLSearchParams(search).get("workspace") === "factory" ? "factory" : "preparation"}/> : <DigitalCockpitPage key={search} />}</ProductionWorkspace></Shell>;
   else if(path === "/ui/digital-quotation") page = <Shell active="客户报价协作" appearance="digital"><ProductionWorkspace><DigitalQuotationPage key={search}/></ProductionWorkspace></Shell>;
   else if (path === "/ui/digital-production") page = <Shell active="开发与大货办理" appearance="digital"><ProductionWorkspace>{new URLSearchParams(search).get("workspace") === "designer" ? <DigitalDesignerWorkspace key={search}/> : <><DevelopmentWorkspaceReturn/><DigitalProductionPage key={search} /></>}</ProductionWorkspace></Shell>;
@@ -372,6 +372,7 @@ function AppRoutes() {
 
   if(path === "/ui/digital-quotation")return <AuthGate requiredAnyOf={["sample_designer","order_merchandiser","pattern_room_worker","ie_reviewer","embroidery_washing_merchandiser","production_management","pmc","owner_group"].map(requiredRole=>({requiredRole}))}>{page}</AuthGate>;
   if(path === "/ui/digital-pattern-room")return <AuthGate requiredAnyOf={[...DIGITAL_PRODUCTION_ROLES.map(requiredRole=>({requiredRole})),...patternRoomOrderRequirements,...patternRoomPriceRequirements,...patternRoomCreateRequirements]}>{page}</AuthGate>;
+  if(path==='/ui/digital-analysis'&&new URLSearchParams(navigation.search).get('view')==='production')return <AuthGate requiredAnyOf={DIGITAL_PRODUCTION_ROLES.map(requiredRole=>({requiredRole,requiredCapability:'report:view'}))}>{page}</AuthGate>;
   if (path === "/ui/digital-production" || path === "/ui/digital-cockpit" || path === "/ui/digital-analysis" || path === "/ui/digital-pattern-room") return <AuthGate requiredAnyOf={DIGITAL_PRODUCTION_ROLES.map(requiredRole => ({ requiredRole }))}>{page}</AuthGate>;
   if (path === "/ui/home") return <AuthGate>{page}</AuthGate>;
   if (path.startsWith("/ui/samples")) {

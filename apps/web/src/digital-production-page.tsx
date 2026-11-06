@@ -1,4 +1,5 @@
 import {ShortLeadWorkspace} from './short-lead-workspace.js';
+import {CurrentProductionReturn} from './development-workspace-return.js';
 import {AcceptanceClockPanel} from './acceptance-clock-panel.js';
 import {TodoReadBoundary} from './todo-content-read.js';
 import {DevelopmentArrangementPage} from "./development-arrangement-page.js";
@@ -151,5 +152,5 @@ function DigitalProductionPageContent() {
     case "development": detail = <OrderDocumentContainer key={`development:${route.id}:${route.version}`} initial={{kind:"development",id:route.id,version:route.version}} onClose={() => void closeDetail()} />; break;
     case "task": detail = <TaskDetail id={route.id} />; break;
   }
-  return <div className="pattern-orders digital-production">{route.kind!=="landing"&&route.kind!=="invalid"&&<AcceptanceClockPanel resourceId={route.id}/>}{detail}</div>;
+  return <div className="pattern-orders digital-production"><CurrentProductionReturn/>{route.kind!=="landing"&&route.kind!=="invalid"&&<AcceptanceClockPanel resourceId={route.id}/>}{detail}</div>;
 }
