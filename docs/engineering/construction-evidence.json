@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "3a4d158795bd26bc0814bc28cf007fd908f3d9ac",
-  "sourceFingerprint": "a156dc59a40bf781a5a24f1a47ed7c1c60a906f06dd52b043fbd3bd29e6244bf",
+  "sourceFingerprint": "6ad4153a9e56dd18ce93b80dc99f1cc3e8295c42b0acc690569e97a7815a0b63",
   "risk": "full",
   "rules": [
     {
@@ -56,7 +56,7 @@
         "tests/integration/series-plan-postgres.test.ts"
       ],
       "initialization": "服务仅添加现行版本及已核业务差异的读取元数据；未核技术指纹变化说明完整来源，不猜字段。单申请原因、source/session generation和read turn独立，原审批接口/幂等/审计保留。",
-      "dateAndPermission": "原正常老板或Root决定；生产管理不获得批准入口。原A1/B/A2失败/finally不能覆盖A2；真正撤老板角色时保同一有效会话及无审批设计角色，不能拿Lab切换充当撤权。",
+      "dateAndPermission": "原正常老板或Root决定；普通老板不得批准或驳回本人申请，待办/本份按钮与原服务拒绝一致，Root原自办特例保留；生产管理不获得批准入口。原A1/B/A2失败/finally不能覆盖A2；真正撤老板角色时保同一有效会话及无审批设计角色，不能拿Lab切换充当撤权。",
       "expectation": "原生宽窄屏A/B原因隔离，老板成功后GET503保成功，原A1迟回不串新对象；原AuthService同有效专属会话撤权、auth/me仍授权但决定403/404且无decision行。",
       "checks": [
         "canonical",
@@ -172,9 +172,9 @@
         "tests/unit/full-gate-risk-map.test.ts",
         "tests/integration/m01-settings-native-browser-postgres.test.ts"
       ],
-      "initialization": "仅精确计划命中新旧原生套件才按需准备锁定playwright-core1.56.1 Chromium；原workflow artifact自有子目录。9个场景顺序yield加完整列表/清理检查，CLI完整drain，未完成由afterAll return；沿用户最新100秒正确性余量、保原两worker及共享资源契约。原时间清单只对受影响ShortLeadService读取DTO行做原协议更新，447个无关人工注记保留。",
+      "initialization": "仅精确计划命中新旧原生套件才按需准备锁定playwright-core1.56.1 Chromium；原workflow artifact自有子目录。原9场景加本轮真实多角色自批反例共10场景顺序yield加完整列表/清理检查，CLI完整drain，未完成由afterAll return；沿用户最新100秒正确性余量、保原两worker及共享资源契约。原时间清单只对受影响ShortLeadService读取DTO行做原协议更新，447个无关人工注记保留。",
       "dateAndPermission": "原AuthService/PostgresAuthStore实际会话；外部DingTalk及具名HTTP丢失为TEST适配。原 guarded HTTP Acceptance时钟仅自有隔离场景，未知真实时点不靠mock业务时钟冒证据。所有PG由原owned schema创建/登记/释放，不清未知资源。",
-      "expectation": "实际P06基线的原settings25+short-lead10+series23及所有本次预算改动套件进入同一原canonical组合，原CLI9/0/0，原preflight243；完整非DB及类型/构建/静态/secret真实完成。关键保存、撤权、幂等、回滚和清理覆盖不因超时减少。",
+      "expectation": "实际P06基线的原settings25+short-lead11+series25及所有本次预算改动套件进入同一原canonical组合，原CLI10/0/0，原preflight243；完整非DB及类型/构建/静态/secret真实完成。关键保存、撤权、幂等、回滚和清理覆盖不因超时减少。",
       "checks": [
         "canonical",
         "native-cli",
@@ -287,7 +287,7 @@
     {
       "id": "full-nondb",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --maxWorkers=1 --reporter=default --reporter=json --outputFile=/workspace/scratch/m01-p07-full-nondb-final3.json",
+      "command": "node node_modules/vitest/vitest.mjs run --maxWorkers=1 --reporter=default --reporter=json --outputFile=/workspace/scratch/m01-p07-full-nondb-final4.json",
       "status": "passed",
       "exitCode": 0,
       "passed": 3380,
@@ -296,16 +296,16 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "867f849e8bfc7e5c8d9096a945bc6366a3b2502138ba5c795ea792cf0707b873"
+          "sha256": "e46007cc62400cafa718c73813251be038f4b85ea743729d0a2a383b06903224"
         }
       ],
-      "testedHead": "3a4d158795bd26bc0814bc28cf007fd908f3d9ac",
-      "sourceFingerprint": "a156dc59a40bf781a5a24f1a47ed7c1c60a906f06dd52b043fbd3bd29e6244bf",
+      "testedHead": "49dd666cec92fe539ee5d1846a19681fa20facc7",
+      "sourceFingerprint": "6ad4153a9e56dd18ce93b80dc99f1cc3e8295c42b0acc690569e97a7815a0b63",
       "context": "Fresh P07 assembled-source execution on actual P06 squash merge3a4d1587, Node22.22.2/npm10.9.9. No candidate-head/nonancestor local proof reused. Original full non-DB worker1 and11 pre-existing optional skips; original canonical requested34 and resolved37 unique suites, ordinary/isolated worker1 and long-correctness worker2; shared correctness100000ms; existing larger120/240-second overrides retained, actual Chromium141.0.7390.37/build1194 and marked low-privilege PG16.14 default OID16387 and acceptance-clock OID694046 with original exact owned resource lifecycle. CPU affinity of test processes is recorded separately and is not PostgreSQL/host or CI hardware equivalence. The P07 native short-lead cases use original AuthService/PostgresAuthStore/auth routes, normal owner/designer/MyTodosPage and same-valid-session actual native revocation; in that native fixture only external DingTalk and named transport faults are TEST adapters. Existing unrelated integration suites retain their own actual test contexts, not relabeled as this native session. Native CLI and canonical overlap, never additive. No deployment, production data or O-scene unique-root-cause claim.",
-      "startedAt": "2026-11-06T05:00:54.053Z",
-      "endedAt": "2026-11-06T05:05:06.301Z",
-      "log": "/workspace/scratch/m01-p07-full-nondb-final3.log",
-      "logSha256": "1cbdfffe7f3a03e13e5ca7732a0ce945f24ad2fdefe040329efbd5928732bd0f"
+      "startedAt": "2026-11-06T05:30:59.366Z",
+      "endedAt": "2026-11-06T05:35:13.133Z",
+      "log": "/workspace/scratch/m01-p07-full-nondb-final4.log",
+      "logSha256": "0c605a13c5edae7b275f1822f6e71b3c63c70eebb9e7696edeee98fc97f57003"
     },
     {
       "id": "canonical",
@@ -313,30 +313,30 @@
       "command": "node scripts/run-business-chain-gate.mjs --full-gate",
       "status": "passed",
       "exitCode": 0,
-      "passed": 602,
+      "passed": 605,
       "failed": 0,
       "skipped": 1,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "4e711672bb5dc326843510a1bf59dce82b019b7207f992b2a40e017110b1d93e"
+          "sha256": "33c78c6ca2a7f6fc14684ea273310cdb540cbba00ba7268a844a966b48a96dc4"
         },
         {
           "format": "vitest-json",
-          "sha256": "9bfdf31ef4bf6000cc97febcc18add6105ef3c91d426c0ff7d3173510d731407"
+          "sha256": "0b71db454bdc1a44239fd278e2eae4e6c9c279018288c85ff5520079462589cf"
         },
         {
           "format": "vitest-json",
-          "sha256": "c8f2ad2ffcda0061cd4660a3c5e5994a63fcf2c81c47a82b7f9574d52f602cbe"
+          "sha256": "b72dec479f386166c9b1b3955e6c022abdfe595f36fcead09115a4377ade1ce6"
         }
       ],
-      "testedHead": "3a4d158795bd26bc0814bc28cf007fd908f3d9ac",
-      "sourceFingerprint": "a156dc59a40bf781a5a24f1a47ed7c1c60a906f06dd52b043fbd3bd29e6244bf",
+      "testedHead": "49dd666cec92fe539ee5d1846a19681fa20facc7",
+      "sourceFingerprint": "6ad4153a9e56dd18ce93b80dc99f1cc3e8295c42b0acc690569e97a7815a0b63",
       "context": "Fresh P07 assembled-source execution on actual P06 squash merge3a4d1587, Node22.22.2/npm10.9.9. No candidate-head/nonancestor local proof reused. Original full non-DB worker1 and11 pre-existing optional skips; original canonical requested34 and resolved37 unique suites, ordinary/isolated worker1 and long-correctness worker2; shared correctness100000ms; existing larger120/240-second overrides retained, actual Chromium141.0.7390.37/build1194 and marked low-privilege PG16.14 default OID16387 and acceptance-clock OID694046 with original exact owned resource lifecycle. CPU affinity of test processes is recorded separately and is not PostgreSQL/host or CI hardware equivalence. The P07 native short-lead cases use original AuthService/PostgresAuthStore/auth routes, normal owner/designer/MyTodosPage and same-valid-session actual native revocation; in that native fixture only external DingTalk and named transport faults are TEST adapters. Existing unrelated integration suites retain their own actual test contexts, not relabeled as this native session. Native CLI and canonical overlap, never additive. No deployment, production data or O-scene unique-root-cause claim.",
-      "startedAt": "2026-11-06T05:00:52.671Z",
-      "endedAt": "2026-11-06T05:10:05.834Z",
-      "log": "/workspace/scratch/m01-p07-canonical-final3.log",
-      "logSha256": "94d8370a7d50f82882e86372cbb2f2bca840050e1d9a418900041e7b50fb92e0"
+      "startedAt": "2026-11-06T05:30:57.993Z",
+      "endedAt": "2026-11-06T05:40:07.831Z",
+      "log": "/workspace/scratch/m01-p07-canonical-final4.log",
+      "logSha256": "ac0a29647d1e3e0f5e213d6a8e83fd417953be9ffb2537f787f0bf085d37f4f2"
     },
     {
       "id": "native-cli",
@@ -344,22 +344,22 @@
       "command": "node --import tsx tests/acceptance/m01-short-lead-native-browser.ts",
       "status": "passed",
       "exitCode": 0,
-      "passed": 9,
+      "passed": 10,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "node-tap",
-          "sha256": "942b70289e0df4fe33bccc2e4dc00852ea036d15b669809b741d962edb6416de"
+          "sha256": "394ea907c12ff43696056aa045a911f0d072e4c7a8f7b4e71578825bf7b71649"
         }
       ],
-      "testedHead": "3a4d158795bd26bc0814bc28cf007fd908f3d9ac",
-      "sourceFingerprint": "a156dc59a40bf781a5a24f1a47ed7c1c60a906f06dd52b043fbd3bd29e6244bf",
+      "testedHead": "49dd666cec92fe539ee5d1846a19681fa20facc7",
+      "sourceFingerprint": "6ad4153a9e56dd18ce93b80dc99f1cc3e8295c42b0acc690569e97a7815a0b63",
       "context": "Fresh P07 assembled-source execution on actual P06 squash merge3a4d1587, Node22.22.2/npm10.9.9. No candidate-head/nonancestor local proof reused. Original full non-DB worker1 and11 pre-existing optional skips; original canonical requested34 and resolved37 unique suites, ordinary/isolated worker1 and long-correctness worker2; shared correctness100000ms; existing larger120/240-second overrides retained, actual Chromium141.0.7390.37/build1194 and marked low-privilege PG16.14 default OID16387 and acceptance-clock OID694046 with original exact owned resource lifecycle. CPU affinity of test processes is recorded separately and is not PostgreSQL/host or CI hardware equivalence. The P07 native short-lead cases use original AuthService/PostgresAuthStore/auth routes, normal owner/designer/MyTodosPage and same-valid-session actual native revocation; in that native fixture only external DingTalk and named transport faults are TEST adapters. Existing unrelated integration suites retain their own actual test contexts, not relabeled as this native session. Native CLI and canonical overlap, never additive. No deployment, production data or O-scene unique-root-cause claim.",
-      "startedAt": "2026-11-06T05:17:44.909Z",
-      "endedAt": "2026-11-06T05:17:58.964Z",
-      "log": "/workspace/scratch/m01-p07-native-cli-final3.log",
-      "logSha256": "942b70289e0df4fe33bccc2e4dc00852ea036d15b669809b741d962edb6416de"
+      "startedAt": "2026-11-06T05:29:54.424Z",
+      "endedAt": "2026-11-06T05:30:09.807Z",
+      "log": "/workspace/scratch/m01-p07-review-native-fix1.log",
+      "logSha256": "394ea907c12ff43696056aa045a911f0d072e4c7a8f7b4e71578825bf7b71649"
     },
     {
       "id": "preflight",
@@ -373,16 +373,16 @@
       "resultReports": [
         {
           "format": "node-tap",
-          "sha256": "3d7226fa50a83682ccc30957627a3e01d91e35a8e0daba534b7a3ed89e662704"
+          "sha256": "e0e9192cb3ab372015965e4fa6c50a87dd398f1106cf9a395c32e022f005b4db"
         }
       ],
-      "testedHead": "3a4d158795bd26bc0814bc28cf007fd908f3d9ac",
-      "sourceFingerprint": "a156dc59a40bf781a5a24f1a47ed7c1c60a906f06dd52b043fbd3bd29e6244bf",
+      "testedHead": "49dd666cec92fe539ee5d1846a19681fa20facc7",
+      "sourceFingerprint": "6ad4153a9e56dd18ce93b80dc99f1cc3e8295c42b0acc690569e97a7815a0b63",
       "context": "Fresh P07 assembled-source execution on actual P06 squash merge3a4d1587, Node22.22.2/npm10.9.9. No candidate-head/nonancestor local proof reused. Original full non-DB worker1 and11 pre-existing optional skips; original canonical requested34 and resolved37 unique suites, ordinary/isolated worker1 and long-correctness worker2; shared correctness100000ms; existing larger120/240-second overrides retained, actual Chromium141.0.7390.37/build1194 and marked low-privilege PG16.14 default OID16387 and acceptance-clock OID694046 with original exact owned resource lifecycle. CPU affinity of test processes is recorded separately and is not PostgreSQL/host or CI hardware equivalence. The P07 native short-lead cases use original AuthService/PostgresAuthStore/auth routes, normal owner/designer/MyTodosPage and same-valid-session actual native revocation; in that native fixture only external DingTalk and named transport faults are TEST adapters. Existing unrelated integration suites retain their own actual test contexts, not relabeled as this native session. Native CLI and canonical overlap, never additive. No deployment, production data or O-scene unique-root-cause claim.",
-      "startedAt": "2026-11-06T05:05:06.381Z",
-      "endedAt": "2026-11-06T05:05:11.056Z",
-      "log": "/workspace/scratch/m01-p07-preflight-final3.log",
-      "logSha256": "3d7226fa50a83682ccc30957627a3e01d91e35a8e0daba534b7a3ed89e662704"
+      "startedAt": "2026-11-06T05:35:13.205Z",
+      "endedAt": "2026-11-06T05:35:17.980Z",
+      "log": "/workspace/scratch/m01-p07-preflight-final4.log",
+      "logSha256": "e0e9192cb3ab372015965e4fa6c50a87dd398f1106cf9a395c32e022f005b4db"
     },
     {
       "id": "lint",
@@ -390,12 +390,12 @@
       "command": "npm run lint",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "3a4d158795bd26bc0814bc28cf007fd908f3d9ac",
-      "sourceFingerprint": "a156dc59a40bf781a5a24f1a47ed7c1c60a906f06dd52b043fbd3bd29e6244bf",
+      "testedHead": "49dd666cec92fe539ee5d1846a19681fa20facc7",
+      "sourceFingerprint": "6ad4153a9e56dd18ce93b80dc99f1cc3e8295c42b0acc690569e97a7815a0b63",
       "context": "Fresh P07 assembled-source execution on actual P06 squash merge3a4d1587, Node22.22.2/npm10.9.9. No candidate-head/nonancestor local proof reused. Original full non-DB worker1 and11 pre-existing optional skips; original canonical requested34 and resolved37 unique suites, ordinary/isolated worker1 and long-correctness worker2; shared correctness100000ms; existing larger120/240-second overrides retained, actual Chromium141.0.7390.37/build1194 and marked low-privilege PG16.14 default OID16387 and acceptance-clock OID694046 with original exact owned resource lifecycle. CPU affinity of test processes is recorded separately and is not PostgreSQL/host or CI hardware equivalence. The P07 native short-lead cases use original AuthService/PostgresAuthStore/auth routes, normal owner/designer/MyTodosPage and same-valid-session actual native revocation; in that native fixture only external DingTalk and named transport faults are TEST adapters. Existing unrelated integration suites retain their own actual test contexts, not relabeled as this native session. Native CLI and canonical overlap, never additive. No deployment, production data or O-scene unique-root-cause claim.",
-      "startedAt": "2026-11-06T05:05:11.163Z",
-      "endedAt": "2026-11-06T05:05:33.380Z",
-      "log": "/workspace/scratch/m01-p07-lint-final3.log",
+      "startedAt": "2026-11-06T05:35:18.069Z",
+      "endedAt": "2026-11-06T05:35:38.516Z",
+      "log": "/workspace/scratch/m01-p07-lint-final4.log",
       "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763"
     },
     {
@@ -404,12 +404,12 @@
       "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "3a4d158795bd26bc0814bc28cf007fd908f3d9ac",
-      "sourceFingerprint": "a156dc59a40bf781a5a24f1a47ed7c1c60a906f06dd52b043fbd3bd29e6244bf",
+      "testedHead": "49dd666cec92fe539ee5d1846a19681fa20facc7",
+      "sourceFingerprint": "6ad4153a9e56dd18ce93b80dc99f1cc3e8295c42b0acc690569e97a7815a0b63",
       "context": "Fresh P07 assembled-source execution on actual P06 squash merge3a4d1587, Node22.22.2/npm10.9.9. No candidate-head/nonancestor local proof reused. Original full non-DB worker1 and11 pre-existing optional skips; original canonical requested34 and resolved37 unique suites, ordinary/isolated worker1 and long-correctness worker2; shared correctness100000ms; existing larger120/240-second overrides retained, actual Chromium141.0.7390.37/build1194 and marked low-privilege PG16.14 default OID16387 and acceptance-clock OID694046 with original exact owned resource lifecycle. CPU affinity of test processes is recorded separately and is not PostgreSQL/host or CI hardware equivalence. The P07 native short-lead cases use original AuthService/PostgresAuthStore/auth routes, normal owner/designer/MyTodosPage and same-valid-session actual native revocation; in that native fixture only external DingTalk and named transport faults are TEST adapters. Existing unrelated integration suites retain their own actual test contexts, not relabeled as this native session. Native CLI and canonical overlap, never additive. No deployment, production data or O-scene unique-root-cause claim.",
-      "startedAt": "2026-11-06T05:05:33.456Z",
-      "endedAt": "2026-11-06T05:06:05.150Z",
-      "log": "/workspace/scratch/m01-p07-types-final3.log",
+      "startedAt": "2026-11-06T05:35:38.587Z",
+      "endedAt": "2026-11-06T05:36:11.100Z",
+      "log": "/workspace/scratch/m01-p07-types-final4.log",
       "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e"
     },
     {
@@ -418,13 +418,13 @@
       "command": "npm run build --workspaces --if-present",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "3a4d158795bd26bc0814bc28cf007fd908f3d9ac",
-      "sourceFingerprint": "a156dc59a40bf781a5a24f1a47ed7c1c60a906f06dd52b043fbd3bd29e6244bf",
+      "testedHead": "49dd666cec92fe539ee5d1846a19681fa20facc7",
+      "sourceFingerprint": "6ad4153a9e56dd18ce93b80dc99f1cc3e8295c42b0acc690569e97a7815a0b63",
       "context": "Fresh P07 assembled-source execution on actual P06 squash merge3a4d1587, Node22.22.2/npm10.9.9. No candidate-head/nonancestor local proof reused. Original full non-DB worker1 and11 pre-existing optional skips; original canonical requested34 and resolved37 unique suites, ordinary/isolated worker1 and long-correctness worker2; shared correctness100000ms; existing larger120/240-second overrides retained, actual Chromium141.0.7390.37/build1194 and marked low-privilege PG16.14 default OID16387 and acceptance-clock OID694046 with original exact owned resource lifecycle. CPU affinity of test processes is recorded separately and is not PostgreSQL/host or CI hardware equivalence. The P07 native short-lead cases use original AuthService/PostgresAuthStore/auth routes, normal owner/designer/MyTodosPage and same-valid-session actual native revocation; in that native fixture only external DingTalk and named transport faults are TEST adapters. Existing unrelated integration suites retain their own actual test contexts, not relabeled as this native session. Native CLI and canonical overlap, never additive. No deployment, production data or O-scene unique-root-cause claim.",
-      "startedAt": "2026-11-06T05:06:05.225Z",
-      "endedAt": "2026-11-06T05:06:23.686Z",
-      "log": "/workspace/scratch/m01-p07-build-final3.log",
-      "logSha256": "5efc102865c3129628ed5e6b488d5428d4f0b4defbdeb7b0b62cb2d3bf052bd0"
+      "startedAt": "2026-11-06T05:36:11.171Z",
+      "endedAt": "2026-11-06T05:36:30.498Z",
+      "log": "/workspace/scratch/m01-p07-build-final4.log",
+      "logSha256": "72bcd3eb2e3aa997d2f69bdd59b5db81cda11720d839d0f5f157db2d0b979c59"
     },
     {
       "id": "secret",
@@ -432,12 +432,12 @@
       "command": "npm run secret:scan",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "3a4d158795bd26bc0814bc28cf007fd908f3d9ac",
-      "sourceFingerprint": "a156dc59a40bf781a5a24f1a47ed7c1c60a906f06dd52b043fbd3bd29e6244bf",
+      "testedHead": "49dd666cec92fe539ee5d1846a19681fa20facc7",
+      "sourceFingerprint": "6ad4153a9e56dd18ce93b80dc99f1cc3e8295c42b0acc690569e97a7815a0b63",
       "context": "Fresh P07 assembled-source execution on actual P06 squash merge3a4d1587, Node22.22.2/npm10.9.9. No candidate-head/nonancestor local proof reused. Original full non-DB worker1 and11 pre-existing optional skips; original canonical requested34 and resolved37 unique suites, ordinary/isolated worker1 and long-correctness worker2; shared correctness100000ms; existing larger120/240-second overrides retained, actual Chromium141.0.7390.37/build1194 and marked low-privilege PG16.14 default OID16387 and acceptance-clock OID694046 with original exact owned resource lifecycle. CPU affinity of test processes is recorded separately and is not PostgreSQL/host or CI hardware equivalence. The P07 native short-lead cases use original AuthService/PostgresAuthStore/auth routes, normal owner/designer/MyTodosPage and same-valid-session actual native revocation; in that native fixture only external DingTalk and named transport faults are TEST adapters. Existing unrelated integration suites retain their own actual test contexts, not relabeled as this native session. Native CLI and canonical overlap, never additive. No deployment, production data or O-scene unique-root-cause claim.",
-      "startedAt": "2026-11-06T05:06:23.766Z",
-      "endedAt": "2026-11-06T05:06:24.270Z",
-      "log": "/workspace/scratch/m01-p07-secret-final3.log",
+      "startedAt": "2026-11-06T05:36:30.578Z",
+      "endedAt": "2026-11-06T05:36:31.126Z",
+      "log": "/workspace/scratch/m01-p07-secret-final4.log",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda"
     }
   ]
