@@ -56,19 +56,21 @@ describe('same-round correction source-only PG coverage',()=>{
  it('preserves unknown/shared fallback and all original chain entries without pretending the chain is every PG suite',()=>{
   for(const path of ['apps/api/src/new-domain/unclassified-service.ts','packages/contracts/src/new-sensitive-contract.ts','vitest.config.ts','apps/api/src/production-platform/development-future-service.ts']){const risk=classifyFullGatePaths([path]),plan=amendmentPlan([path]);expect(risk.highRisk).toBe(true);expect(risk.businessChainSensitive).toBe(true);expect(plan.plan.map(s=>s.path)).toEqual([...POSTGRES_CHAIN_TESTS].sort());}
   const combined=amendmentPlan(['apps/api/src/production-platform/development-document-format.ts','apps/api/src/new-domain/unclassified-service.ts','apps/api/migrations/9999_test.sql']);
-  for(const path of [...POSTGRES_CHAIN_TESTS,amendmentSuite,'tests/integration/migration-compatibility-postgres.test.ts'])expect(combined.plan.map(s=>s.path)).toContain(path);
+  for(const path of [...POSTGRES_CHAIN_TESTS,amendmentSuite])expect(combined.plan.map(s=>s.path)).toContain(path);
+  expect(combined.plan.map(s=>s.path)).not.toContain('tests/integration/migration-compatibility-postgres.test.ts');
  });
 });
 
-it("requires Full and complete deployment checks for the lane executor alone", () => {
+it("requires Full and the real DB chain without operational drills for shared lane code", () => {
   const result = classifyFullGatePaths(["scripts/ci/full-gate-lanes.mjs"]);
   expect(result.highRisk).toBe(true);
   expect(result.dbRequired).toBe(true);
   expect(result.deploymentSensitive).toBe(true);
   expect(result).toEqual(classifyFullGatePaths(["scripts/ci/ci-gate-runtime.mjs"]));
-  expect(result.maintenanceSensitive).toBe(true);
-  expect(result.activationSensitive).toBe(true);
-  expect(result.transferSensitive).toBe(true);
+  expect(result.maintenanceSensitive).toBe(false);
+  expect(result.activationSensitive).toBe(false);
+  expect(result.transferSensitive).toBe(false);
+  expect(amendmentPlan(['scripts/ci/full-gate-lanes.mjs']).plan.map(s=>s.path)).toEqual([...POSTGRES_CHAIN_TESTS].sort());
 });
 
 describe("Full Gate sensitive path mapping", () => {
@@ -173,7 +175,8 @@ describe("Full Gate sensitive path mapping", () => {
     const migration = classifyFullGatePaths(["apps/api/migrations/9999_test.sql"]);
     expect(migration.migrationSensitive).toBe(true);
     expect(migration.dbRequired).toBe(true);
-    expect(migration.mappedPostgresTests).toContain("tests/integration/migration-compatibility-postgres.test.ts");
+    expect(migration.mappedPostgresTests).not.toContain("tests/integration/migration-compatibility-postgres.test.ts");
+    expect(migration.maintenanceSensitive).toBe(false);
 
     const deployment = classifyFullGatePaths([".github/workflows/full-gate.yml"]);
     expect(deployment.deploymentSensitive).toBe(true);
@@ -182,12 +185,13 @@ describe("Full Gate sensitive path mapping", () => {
     expect(classifyFullGatePaths(["scripts/ci/acceptance-maintenance-drill.mjs"]).deploymentSensitive).toBe(true);
     for(const path of ["scripts/ci/ci-gate-runtime.mjs","scripts/ci/pr-gate-protocol.mjs","scripts/ci/pr-gate-controller.mjs","scripts/ci/verify-actions-policy.mjs","scripts/check-main-release-compat.mjs","scripts/ci/main-release-history-drill.mjs","docs/operations/g1-acceptance-compat-update.sh"])expect(classifyFullGatePaths([path]).deploymentSensitive).toBe(true);
     expect(deployment.mappedPostgresTests).toContain("tests/integration/migration-compatibility-postgres.test.ts");
-    for (const path of ["scripts/migration-lib.mjs", "scripts/migration-history-policy.mjs", "scripts/migration-branches.json", "scripts/migration-main-extensions.json", "scripts/check-migration-export.mjs"]) {
+    for (const path of ["scripts/migration-lib.mjs", "scripts/migration-history-policy.mjs", "scripts/check-migration-export.mjs"]) {
       const result = classifyFullGatePaths([path]);
       expect(result.migrationSensitive).toBe(true);
       expect(result.highRisk).toBe(true);
       expect(result.dbRequired).toBe(true);
       expect(result.mappedPostgresTests).toContain("tests/integration/migration-compatibility-postgres.test.ts");
+      expect(result.maintenanceSensitive).toBe(true);
     }
 
     const changedTest = "tests/integration/supplier-onboarding-postgres.test.ts";

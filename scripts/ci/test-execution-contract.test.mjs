@@ -51,8 +51,9 @@ test('one resource registry admits every created prefix and binds exact run, tar
   const r=resources[0],path=join(dir,r.schema+'.json');writeFileSync(path,JSON.stringify({...r,databaseTarget:'arbitrary'}));assert.throws(()=>readOwnedResources(dir,'1234abcd',{default:identity}));
  }finally{rmSync(dir,{recursive:true,force:true});}
 });
-test('migration inventory retains real upgrade/ACL/recovery without unrelated activation or transfer; unknown deploy logic stays conservative',()=>{
- for(const path of ['apps/api/migrations/9999_new.sql','scripts/deploy/acceptance-migration-requirements.json']){const r=classifyFullGatePaths([path]);assert.ok(r.migrationSensitive&&r.maintenanceSensitive&&r.businessChainSensitive);assert.equal(r.activationSensitive,false);assert.equal(r.transferSensitive,false);}
+test('migration inventory retains real DB/ACL checks without simulated recovery; tools and unknown deploy logic retain recovery',()=>{
+ for(const path of ['apps/api/migrations/9999_new.sql','scripts/deploy/acceptance-migration-requirements.json']){const r=classifyFullGatePaths([path]);assert.ok(r.migrationSensitive&&r.dbRequired&&r.businessChainSensitive);assert.equal(r.maintenanceSensitive,false);assert.equal(r.activationSensitive,false);assert.equal(r.transferSensitive,false);}
+ for(const path of ['scripts/migrate.mjs','scripts/migration-history-policy.mjs']){const r=classifyFullGatePaths([path]);assert.ok(r.migrationSensitive&&r.maintenanceSensitive&&r.businessChainSensitive);}
  for(const path of ['scripts/deploy/update-acceptance-local.sh','scripts/deploy/unknown-new-executor.sh','.github/workflows/full-gate.yml']){const r=classifyFullGatePaths([path]);assert.ok(r.maintenanceSensitive&&r.activationSensitive&&r.transferSensitive);}
  assert.equal(classifyFullGatePaths(['scripts/deploy/package-release.sh']).maintenanceSensitive,false);
  assert.equal(classifyFullGatePaths(['scripts/deploy/activate-release.sh']).activationSensitive,true);

@@ -51,6 +51,36 @@ const isMigration = (path) =>
     "scripts/check-migrations.mjs",
   ].includes(path);
 
+// Shared gate selection/receipt code still requires Full and the real DB chain.
+// It does not itself migrate, back up, activate or transfer a release.
+const SHARED_GATE_INPUTS = new Set([
+  ".github/workflows/ci.yml",
+  "scripts/ci/full-gate-risk-map.mjs",
+  "scripts/ci/ci-gate-runtime.mjs",
+  "scripts/ci/full-gate-lanes.mjs",
+  "scripts/ci/impact-shadow.mjs",
+  "scripts/ci/impact-shadow-graph.mjs",
+  "scripts/ci/impact-shadow-binding.mjs",
+  "scripts/ci/impact-shadow-policy.json",
+  "scripts/ci/pr-gate-protocol.mjs",
+  "scripts/ci/pr-gate-controller.mjs",
+  "scripts/ci/verify-actions-policy.mjs",
+  "scripts/ci/light-reuse.mjs",
+  "scripts/ci/construction-evidence.mjs",
+]);
+
+// Business migrations and their inventories are validated and applied to the
+// fresh test DB. Historical upgrade/recovery simulations are tool-change or
+// explicit pre-release checks, rather than a requirement for each business PR.
+const isMigrationTool = (path) => isMigration(path)
+  && !path.startsWith("apps/api/migrations/")
+  && ![
+    "apps/api/src/platform/migration-manifest.json",
+    "scripts/deploy/acceptance-migration-requirements.json",
+    "scripts/migration-branches.json",
+    "scripts/migration-main-extensions.json",
+  ].includes(path);
+
 const isDeployment = (path) =>
   (path.startsWith("scripts/deploy/") && path !== "scripts/deploy/acceptance-migration-requirements.json" && !path.startsWith("scripts/deploy/migration-execution-compatibility."))
   || path === "scripts/dx-acceptance.sh"
@@ -62,18 +92,7 @@ const isDeployment = (path) =>
   || path === "scripts/restore-postgres.sh"
   || path.startsWith("infra/")
   || path.startsWith(".github/workflows/")
-  || path === "scripts/ci/full-gate-risk-map.mjs"
-  || path === "scripts/ci/ci-gate-runtime.mjs"
-  || path === "scripts/ci/full-gate-lanes.mjs"
-  || path === "scripts/ci/impact-shadow.mjs"
-  || path === "scripts/ci/impact-shadow-graph.mjs"
-  || path === "scripts/ci/impact-shadow-binding.mjs"
-  || path === "scripts/ci/impact-shadow-policy.json"
-  || path === "scripts/ci/pr-gate-protocol.mjs"
-  || path === "scripts/ci/pr-gate-controller.mjs"
-  || path === "scripts/ci/verify-actions-policy.mjs"
-  || path === "scripts/ci/light-reuse.mjs"
-  || path === "scripts/ci/construction-evidence.mjs";
+  || SHARED_GATE_INPUTS.has(path);
 
 const isBackendOrContract = (path) =>
   path.startsWith("apps/api/src/") || path.startsWith("packages/contracts/src/");
@@ -219,18 +238,23 @@ export const classifyFullGatePaths = (inputPaths) => {
       migrationSensitive = true;
       businessChainSensitive = true;
       domains.add("migration");
-      mappedTests.add("tests/integration/migration-compatibility-postgres.test.ts");
+      if (isMigrationTool(path)) {
+        maintenanceSensitive = true;
+        mappedTests.add("tests/integration/migration-compatibility-postgres.test.ts");
+      }
     }
     if (isDeployment(path)) {
       deploymentSensitive = true;
       const activationOnly = /^scripts\/deploy\/(?:activate-release|commit-online-generation|start-online-slot|save-online-processes|render-online-nginx|nginx-workers|drain-nginx-workers|static-release)\./.test(path);
       const transferOnly = /^scripts\/deploy\/(?:package-release|create-transfer-bundle|verify-runtime|build-release|dependency-bins|prepare-build-dependencies)\./.test(path);
-      maintenanceSensitive ||= !activationOnly && !transferOnly;
-      activationSensitive ||= !transferOnly;
-      transferSensitive ||= !activationOnly;
       domains.add("deployment");
-      mappedTests.add("tests/integration/migration-compatibility-postgres.test.ts");
-      mappedTests.add("tests/integration/acceptance-maintenance-postgres.test.ts");
+      if (!SHARED_GATE_INPUTS.has(path)) {
+        maintenanceSensitive ||= !activationOnly && !transferOnly;
+        activationSensitive ||= !transferOnly;
+        transferSensitive ||= !activationOnly;
+        mappedTests.add("tests/integration/migration-compatibility-postgres.test.ts");
+        mappedTests.add("tests/integration/acceptance-maintenance-postgres.test.ts");
+      }
     }
     if (isBackendOrContract(path)) {
       // Unknown backend/contract paths fail closed into the real PostgreSQL chain.
@@ -287,7 +311,6 @@ export const classifyFullGatePaths = (inputPaths) => {
     }
   }
 
-  maintenanceSensitive ||= migrationSensitive;
   const tests = [...mappedTests].sort();
   const dbRequired = migrationSensitive
     || receivingSensitive

@@ -1,4 +1,4 @@
-# GitHub Actions 执行政策 V3
+# GitHub Actions 执行政策 V4
 
 长期规则见[AGENTS §4–5](../../AGENTS.md)。本文件说明实现边界；历史单次授权、分组发布与旧预算不再作为默认规则。
 
@@ -16,6 +16,10 @@
 产物逐文件校验内容、路径和权限，禁止跳目录、覆盖tracked源码、符号链接或未验证内容。源缺失/不适用/环境变化会执行真实原检查；损坏产物与伪造来源拒绝。每个采用项保存源run/job/attempt与指纹，最终核证还要与当前已核light对照。不是把skipped同名检查变绿，不跨Head复用；完整历史secret扫描、生产依赖审计、业务测试、DB/恢复保持各自语义，不拿light替代。
 
 ## 受管PostgreSQL
+
+2026-11-06 用户批准调整模拟演练的适用范围：普通业务 SQL、migration-manifest、acceptance-migration-requirements 及随附测试映射不再自动选择历史升级矩阵、Acceptance 维护及备份/恢复演练。静态迁移校验、新鲜隔离测试库的真实迁移、业务链和 Root 检查继续按原风险执行。共享门禁选择/回执代码仍要求 FULL，但不因维护映射而附加运维演练；实际 Full 运维工作流、未知部署执行器保守覆盖。
+
+修改迁移执行/历史政策、备份/恢复工具或实际部署执行器时，仍由风险映射选择原相应演练。发布前可按实际风险使用保留的 migration-compatibility-postgres 套件及 acceptance-maintenance-drill/main-release-history-drill 等原入口，在受管隔离环境运行；本次不创建定时任务或自动现场操作。CI 不适用步骤报告为不适用，不能称已通过。此调整不修改实际部署前现场诊断、权限核查、备份或失败恢复要求。
 
 本分支 canonical plan 和资源契约规定文件集合、配置、真实DB身份、共享注册与精确清理。mapped/chain/Root同上下文并集只执行一次；不同版本或恢复环境不得复用。参数由共享执行配置维护，记录实际解析值，不能靠机器核数默认。
 
