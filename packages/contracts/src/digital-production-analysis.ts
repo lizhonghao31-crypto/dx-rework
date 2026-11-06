@@ -19,6 +19,7 @@ export const DigitalAnalysisFilterSchema=z.object({
   const productionOnly=['timeMode','compareFrom','compareTo','compareElapsed','snapshotId','factoryId','lineId','salesYear','salesSeries','primaryMerchandiserId','secondaryMerchandiserId','drillLineId','drillOrderId','drillFactoryId','drillMetric','drillFactories','drillCustomers','drillStages','drillStageFactories','groupBy'] as const;
   if(value.view!=='production'&&productionOnly.some(key=>value[key]!==undefined))context.addIssue({code:'custom',message:'这些筛选仅用于当前生产查询'});
   if(value.view==='production'&&(value.role||value.node||value.origin||value.cycle||value.assigneeId||value.metric&&value.metric!=='all'||value.scope&&value.scope!=='snapshot'))context.addIssue({code:'custom',message:'当前生产查询不混用任务岗位或期间筛选'});
+  if(value.timeMode==='due'&&(value.factoryId||value.drillFactoryId||value.drillFactories))context.addIssue({code:'custom',message:'到期履约未核完整历史工厂责任范围，请清除工厂筛选；期间发料/报工仍可按原事件工厂查询'});
   if(value.timeMode&&value.timeMode!=='current'&&(value.drillStages||value.drillStageFactories))context.addIssue({code:'custom',message:'期间统计不能用当前活动节点代替历史节点范围，请清除当前节点筛选'});
   if(Boolean(value.compareFrom)!==Boolean(value.compareTo)||value.compareFrom&&value.compareTo&&value.compareTo<value.compareFrom)context.addIssue({code:'custom',message:'比较期间须同时填写有效的起止日'});
   if(value.drillStageFactories!==undefined&&!value.drillStages)context.addIssue({code:'custom',message:'节点范围只随节点分组下钻使用'});
