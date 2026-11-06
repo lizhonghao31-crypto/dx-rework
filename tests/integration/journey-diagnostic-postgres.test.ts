@@ -13,6 +13,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createJourneyDiagnostic, journeyMeasure } from '../../apps/api/src/platform/journey-diagnostic.js';
 import { verifyAcceptanceClockServer } from '../../apps/api/src/acceptance-clock/guard.js';
 import { reuseJourneySnapshotReads } from '../../apps/api/src/production-platform/journey-snapshot-reads.js';
+import {DIGITAL_RECEIVING_BASE_SQL} from '../../apps/api/src/receiving/receiving-service.js';
 import { ownedPostgresSchema, createOwnedPostgresSchema, releaseOwnedPostgresSchema } from '../helpers/owned-postgres-schema.js';
 
 // Use the canonical Acceptance-clock target: the ordinary CI database is deliberately not an Acceptance database.
@@ -55,6 +56,22 @@ const url = process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL;
     await app.ready();
   });
   afterAll(async () => { await app.close(); await pool.end(); if (created) await releaseOwnedPostgresSchema(admin, schema); await admin.end(); });
+  it('reuses the original receiving merge-literal CTE without clearing prior facts, and never hides an aborted transaction',async()=>{
+    const client=await pool.connect(),original=client.query,seen:string[]=[];
+    client.query=function(this:pg.PoolClient,...args:unknown[]){if(typeof args[0]==='string')seen.push(args[0]);return Reflect.apply(original,this,args);} as typeof client.query;
+    try{
+      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      const reads=reuseJourneySnapshotReads(client),sql=DIGITAL_RECEIVING_BASE_SQL+' SELECT count(*)::int AS total FROM style_totals',parameters=['2000-01-01','2999-12-31','#',[]];
+      expect(sql).toContain("'receiving.batch.merge'");
+      expect((await reads.query('SELECT 7 AS value')).rows[0].value).toBe(7);
+      const first=await reads.query(sql,parameters);expect(first.rows[0].total).toBe(0);
+      expect((await reads.query(sql,parameters)).rows).toEqual(first.rows);
+      expect((await reads.query('SELECT 7 AS value')).rows[0].value).toBe(7);
+      expect(seen.filter(text=>text===sql)).toHaveLength(1);expect(seen.filter(text=>text==='SELECT 7 AS value')).toHaveLength(1);
+      await expect(reads.query('SELECT 1/0')).rejects.toMatchObject({code:'22012'});
+      await expect(reads.query('SELECT 7 AS value')).rejects.toMatchObject({code:'25P02'});
+    }finally{client.query=original;await client.query('ROLLBACK');client.release();}
+  });
   it('counts physical driver calls once across pool/client callbacks, cache hits, rollback and post-release queries', async () => {
     const response = await app.inject('/digital-production/journeys');
     expect(response.statusCode).toBe(200); expect(response.json()).toEqual({ value: 1 });
