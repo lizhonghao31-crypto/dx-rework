@@ -104,3 +104,24 @@ final2原runner按34个请求套件自动补入3个Root审计（supplier mainten
 final4集中结果：来源6ad4153a9e56dd18ce93b80dc99f1cc3e8295c42b0acc690569e97a7815a0b63前后未变，testedHead49dd666cec92fe539ee5d1846a19681fa20facc7。原canonical37个唯一套件605通过/0失败/1原外部live URL条件跳过；原runner本run0557c031精确59资源已逐项确认删除。完整non-db3380通过/0失败/11原可选跳过；preflight243通过；lint、typecheck、build、secret scan均exit0。原CLI10项在同一完整来源下已执行通过，以原review-native-fix1的实际开始/结束/日志保留，不虚构另一次运行。上述均为本地最终候选验证，准确head的GitHub light/Full仍须实际完成。
 
 集中核查本轮短交期待办、读取、面板与decide全部审批/申请人谓词：服务实际角色校验与decide原自批拒绝保留；global canApprove只表示有老板角色，每份canDecide才决定待办/本份按钮。确认待办仍要求实际设计角色及本人原申请且已批准，不因老板身份串入他人确认或使结束项复活。后续实际Review回执、最终head、Full及合并另记，不把旧49dd666c审查冒修复提交重审。
+
+
+### Full42170247233实际外层超时与后续修复
+
+最终e1c695e6的light42169878759/job127734944035成功，外置包9eacc4c1经原request-final preview/apply逐字核定后创建一次原不可变引用。Full42170247233/attempt1的common127736220016和non-db127736606283成功；PG127736606249在05:46:35开始、06:16:55结束，状态cancelled，Full聚合及Final失败，不能合并。日志SHA60c0f03bdf7273525fd6858201a6f0a728cc704fd21cc158fbd75aab081f1ef3保留。
+
+原公共风险输入确认为mapped36、chain true、deployment true，原准确head计划解析53个唯一PG套件（普通30、isolated1、long22）。原本地受影响组合37通过不等于53通过。CI普通30套件327通过/0失败/1原条件跳过，墙钟1245.57秒；隔离1套件60通过，154.52秒。最后22套件组仅部分结束，最后完成series25的时间06:16:37，06:16:50出现operation canceled。总计可核完成36个文件、501通过/1跳过，剩余17文件、整组收尾与后续兼容/恢复阶段未完成，不能签PG通过。日志未出现100秒单用例超时或断言失败，仍持续输出，结合原PG job有限30分钟与实际30分15秒停止，支持外层总预算不足；本窗口未取消或重跑。当前连接器不支持check-run annotations，未据此声称取得取消人或额外审计原因。
+
+依用户最新要求核整条外层边界，最小调整仅PG完整lane为有限60分钟，common/non-db仍30、聚合2、light5及元数据2不变；policy仍精确核4个job各自预算，非取消检查。原test/hook100秒、保留120/240等更大覆盖、业务SLA/性能断言、worker1/2、进程组SIGTERM/SIGKILL和原精确清理不变。PG前两组已用23分20秒，22套件长组及清理、PG13/恢复/实际适用的既有演练仍需预算，故不把外层仅提高到略超已失败30分钟。
+
+改动前06:23:27.387Z在6ad4153a源码捕获明确2379文件/108输入scope（仅排除本轮3个CI预算/协议文件），摘要b06a261038cc2227f6df321942340c9aabb8cd226d6d5542f5ee655262c61dae。只对确不依赖这3文件的原types/build/nativeCLI本地结果保原来源复用；不会跨head复用GitHub Gate。新最终候选先按原完整53计划集中验证、协议/受影响检查与真实资源收尾，并核后续外层阶段；未完成不再申请Full。
+
+### final5完整计划及预算修复预验
+
+新源码7489116e1fa474921ae5bd563cbf6e321826a7fa326f2e0c76d27f4a5dd4ce22在全部新命令前后未变。原`--full-gate`入口按真实已发布风险输入解析53个唯一套件、原三配置执行：776通过/0失败/1原可选live URL条件跳过，原精确登记资源清理通过；06:32:57.831Z至06:46:35.020Z，用时13分37秒。并非再跑37套件冒完整计划。单独原PG13 Journey兼容入口亦通过，实际版本130023，自有子容器由原finally删除。
+
+完整non-DB3380通过/0失败/11既有跳过、原preflight243通过，lint与secret scan成功。types/build/原生CLI10项仅按编辑前捕获且未变化的明确输入复用，原49dd666c testedHead、时点、日志和6ad4153a来源保留，不改写为本次重跑。construction-evidence区分当前完整来源与inputFingerprint复用，新增第7条外层预算规则。
+
+本次完整数据库预验使用与CI同一不可变PG16-alpine镜像aa6cb33cf4c19c765cefcf48d96176258800870a9a1e930ad126200f9d825139，实际16.15，原低权限CI测试及NoLogin夹具角色、标记明确的独立default/clock库。Node与浏览器affinity0,1、PG cpuset0,1/2CPU/2GiB；不声称宿主IO/整机与GitHub硬件等效。起初旧共享服务器缺原夹具角色被守卫拒绝，未修改共享角色或绕过守卫，转用全自有容器。结束核default/clock自有schema均为0后，按记录的完整container ID、名称、创建标签删除该唯一容器及卷；不清未知旧资源。
+
+原失败Full42170247233永久保留失败。新最终提交仍须准确head的正式light及Full全部步骤完成，未在本地重跑的原恢复/发布包演练由正式Full按真实适用条件执行。没有部署、ECS操作或真实业务数据变更。
