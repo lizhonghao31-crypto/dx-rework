@@ -1,6 +1,14 @@
 import { JOURNEY_STAGES, isJourneyPlanningNode, type JourneyFilter, type JourneyNode, type JourneyResult, type OrderJourney, type JourneyState } from "@dx-rework/contracts/digital-production-journey";
 import {compareCockpitOrders,journeyDisplay} from "./journey-display.js";
 
+/** A real instance replaces only its own round's empty catalogue slot. */
+export function appendJourneyInstance(nodes:JourneyNode[],node:JourneyNode){
+  const index=nodes.findIndex(value=>value.key===node.key&&value.round===node.round
+    &&value.instanceId===`${value.key}:${value.round??0}`&&value.records.length===0
+    &&['uncreated','unavailable'].includes(value.state));
+  if(index>=0)nodes.splice(index,1,node);else nodes.push(node);
+}
+
 export function journeyCompletion(expected:string|null,actual:string|null,verified:boolean) {
   if (!expected || !actual || !verified) return { result:"unknown" as const, overdueSeconds:null };
   const difference=(Date.parse(actual)-Date.parse(expected))/1000;

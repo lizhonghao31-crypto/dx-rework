@@ -194,12 +194,12 @@
 }
 
 /* One shared grid aligns the original working, records and risk areas. */
-.dx-production-ui .digital-journey-cockpit .cockpit-detail .cockpit-detail-columns{grid-template-columns:minmax(0,2fr) minmax(240px,1fr);grid-template-areas:"current risk" "nodes documents" "log log";grid-template-rows:auto auto auto;align-items:stretch}
+.dx-production-ui .digital-journey-cockpit .cockpit-detail .cockpit-detail-columns{grid-template-columns:minmax(0,2fr) minmax(240px,1fr);grid-template-areas:"current risk" "nodes documents" "log log";grid-template-rows:auto auto auto;align-items:start}
 .digital-journey-cockpit .cockpit-detail-columns .journey-current-panel{grid-area:current}
 .digital-journey-cockpit .cockpit-detail-columns .journey-node-panel{grid-area:nodes;display:flex;flex-direction:column;min-height:0}
 .digital-journey-cockpit .cockpit-detail-columns .journey-risk-panel{grid-area:risk}
-.dx-production-ui .digital-journey-cockpit .cockpit-detail-columns .journey-documents-panel{grid-area:documents;min-height:0;display:flex;flex-direction:column}
-.dx-production-ui .digital-journey-cockpit .cockpit-detail-columns .journey-activity-panel{grid-area:log;align-self:end;min-width:0}
+.dx-production-ui .digital-journey-cockpit .cockpit-detail-columns .journey-documents-panel{grid-area:documents;min-height:0;display:flex;flex-direction:column;align-self:start}
+.dx-production-ui .digital-journey-cockpit .cockpit-detail-columns .journey-activity-panel{grid-area:log;align-self:start;min-width:0}
 .digital-journey-cockpit .cockpit-detail .journey-node-viewport{flex:1;min-height:240px}
 .digital-journey-cockpit .journey-documents-panel .cockpit-document-directory{display:flex;flex-direction:column;flex:1;min-height:0}
 .digital-journey-cockpit .journey-documents-panel .cockpit-document-priority{flex:1;min-height:0;max-height:50dvh;overflow:auto}

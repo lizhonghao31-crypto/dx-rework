@@ -36,9 +36,12 @@ export function attachJourneySupervision(item:OrderJourney,plan:SlaPlan|null,ori
  item.supervision={assessment:nodes.some(n=>n.assessmentIssue)?'partially_unavailable':'complete',asOf:time.now,status:plan?'planned':'legacy_unenrolled',originalRevision:revisions.original,currentRevision:revisions.current,nodes:timing,coverage,customerReminderDate:reminder};
  for(const stage of item.stages)for(const node of stage.nodes){
   if(!node.current)continue;
-  const matches=timing.filter(t=>journeyTimingKey(t.id)===node.key);
+  const lineIds=new Set(node.records.flatMap(record=>record.lineId?[record.lineId]:[]));
+  const matches=timing.filter(t=>journeyTimingKey(t.id)===node.key&&(!lineIds.size
+   ||!item.lines.some(line=>line.id===t.id.split(':')[1])||lineIds.has(t.id.split(':')[1]!)));
   // Multiple PO/batch windows share the existing aggregate's risk, never invent a single aggregate target.
   if(!matches.length)continue;
+  if(matches.length>1)node.timings=matches;
   if(matches.length===1){const t=matches[0]!;node.timing=t;
    const originalTaskTarget=node.expectedKind==='sla'&&node.expectedAt&&node.records.some(record=>record.domain==='task'&&record.id===node.instanceId);
    if(!originalTaskTarget&&!(['estimate','included'].includes(t.kind)&&!t.target.at)){

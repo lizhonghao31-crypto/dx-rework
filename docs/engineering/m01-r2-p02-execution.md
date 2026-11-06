@@ -1,0 +1,31 @@
+# 模块01第二轮 PR02：可信标识与原事实映射
+
+用户已授权自主施工、检查、一次正式Codex Review及按序合并，不部署、不改现场真实数据。完整Pro六PR方案及九张原图已读取/查看，最新审核修正优先。当前独立工作分支m01/r2-p02，准备基线为实际release 9dc3ce4799ba78fb1837b4d91b4a09540afc8582；PR01 #915检查期间并行修改独立API投影与针对性测试，合并PR01后须同步实际合并基线再验证/提交。
+
+影响链：方案PR02及截图中的未启动/已完成矛盾→JourneyQuery原返工/复核/责任记录、原SLA匹配、已有身份与采用资料读取→原列表/详情/进度/风险/历史/材料读取→无业务ID生成或历史回填，保留对象与轮次→真实调用链及最小反例、必要原生PG与UI消费者回归。事实映射属于核心读取，拟FULL，按最终diff确认。
+
+开工核查：原返工集合直接push真实记录，未像复核/责任记录替换rework:0占位；拟仅替换同key同round的无源记录占位，保留其它业务对象/不同轮次历史。多个PO的SLA匹配只在唯一匹配时挂单值timing；不能随意取第一条或把多PO截止聚为一个硬目标，需要沿真实范围补完整读取。身份表production_order_id/source_id是技术UUID，design_style_no是原创建表单的设计业务ID，PO已有正式款号同义字段有明确校验；sourcing.erp_order_no可能是外部请求UUID，不能晋升正式订单ID。自动生成ID继续留设计模块。
+
+M三个原源截止、两张返工异常原单和采用资料待批样本的现场原始JSON/确切对象ID尚未随截图提供；本地反例不能冒充现场逐项对照。先查历史和原写入，再修可证实通用缺陷；未取得的现场子项单独保留，不编造规则或源数据。其它独立项继续施工。
+
+后续原体验资料已定位M：TEST-SLA-68832f19，搜索TEST-V2-M-PRINT-BULK-PO1，source70c97b23-f5f4-4a52-90e6-c7d603785f8f、mother5e59dd84-b7b6-4db5-a8e9-2fe799add2d1。父窗口补充历史源页面：印花目标2026-11-12 03:35、裁后回仓总查11-14 03:36、仓库发裁片11-13 03:36，三者实际均11-12 03:36；原文本时区和当前值仍须原记录核准。本环境无可用Acceptance读取通道，不将历史显示值当作当前事实或写入夹具冒充现场。
+
+沿此线索补齐真正原批次读取：factoryBatchTiming保存的是preparation及原事件/各批冻结窗口，通用任务D和是否取得整单SLA投影并不等同于这些原批次D。新增只读nativeWindows仅绑定同一preparation、真实任务实例/节点种类和完整可见PO范围；不向目录占位或其它轮次、他单装日期，不改通用任务D。详情和原节点表直接显示原批次D/C，保留后台snapshot/evidence而不把技术标识堆进正文；不把未知源时刻补成0。summaryOnly的全候选汇总不添加本次读取。
+
+原生新增TEST链由原创建、实裁、工艺发出/回仓、QC及仓库发厂服务形成三个已完成批次，再用原FactoryFlow.read的batchWindows逐条对比常规和compact座舱。未启用整单supervision的常规读取也取得相同D/C；读取前后原业务表footprint逐字相同。当前受影响原生24项通过；通用D为空仍保留源D、错preparation/目录槽/不可见兄弟PO拒配及日期正文不暴露snapshot另有单位/SSR反例。该证明不能替代M现场当前值复验。
+
+PR01 #915已按原最终Quick成功合并，实际release为292a305b4e49303a864e597f2abb082deccb15c4，当前分支已在保留独立未提交修改的条件下fast-forward到该准确基线。后续验证和construction记录以此基线为准，不采用旧9dc回执作为本PR最终通过。
+
+实现：`appendJourneyInstance`仅用无原记录、同key同round的uncreated/unavailable目录占位，真实返工/复核/责任实例替换该槽，其他对象和历史轮次不被覆盖；原业务状态和记录不改。`attachJourneySupervision`沿授权记录的lineId匹配原PO时效；多范围保留timings而不随意取首个截止或造整单单值。详情直接显示各范围原期限，日期型仍按北京日终，物流仍明确仅预计。原任务自己的D继续优先，未改canonical计算/起点/规则或权限。
+
+编号核查：原创建表单“设计款号/业务ID”对应design_style_no，技术UUID不当业务号。正式款号、formalStyleNo、poNumber已有同义校验；详情按原ASCII归一键去掉同值机械重复，不生成ID，不回填源数据，不把外部ERP请求号标成正式订单ID。PR01已去掉统一“开发参考”回退长文，本PR保持该已有行为。
+
+已采用与待批分开：已发布制单原件仍按自身发布版显示有效，链接固定instructionVersion；当前新版发布前提继续由productionReadiness/技术批复/尺寸复核等原守卫决定，不把原件有效误当成当前新版可发布。原生测试保留“旧制单采用round1、新资料round2未有效”的反例，核publishedBasis冻结引用不变、精确旧成果可读取，当前instructionValid=false和前提未就绪继续成立；没有改审批结论或发布权限。
+
+用户随后对PR01实际完整截图指出空白，已按新增明确指令在独立工作区最小修正后并入本PR：取消操作记录align-self:end及单据卡强制拉伸，保留共享网格顶端自然排列；1165筛选使用局部网格，更多/重置同行。原生浏览器改成验证实际卡片间距和单据底部无人工空档，不再用底部钉齐当作视觉通过。原完整App/AuthGate/Shell/ProductionWorkspace与生产CSS的1165/1440首页/详情四视图中，1440风险到操作记录间距10px、1165单据内容到footer间距0、筛选按钮同顶；TEST身份/HTTP数据仍非现场验收。
+
+验证历史准确保留：首次双原生PG套件56/0/0通过，随后定点复核发现原件由effective降为present仍会被客户端列入待处理，故修正已发布原件为effective；该旧56不冒称覆盖后续状态语义。修正后的受影响production-readiness原生23/0/0已通过，继续验证原当前发布守卫和冻结版本；其它必要检查由同批construction记录绑定最终源码。失败的空工作区Vitest启动（未装依赖/未build packages）不是业务失败或通过；安装锁定依赖及build后才执行实际测试。已使用隔离有标记低权限PG16.15；原schema创建/清理与连接核查保留，不涉及Acceptance现场或生产。
+
+正式Review在42cc43f提出P2 r4497090470：详情已有nativeWindows，但节点表仍直接读空expectedAt。已补实际CockpitNodeRows消费端，单批直接显示原D、多批标明见各批节点，另保留原任务D及日期型当天结束边界；新增2个SSR反例及真实浏览器表格/详情一致场景。Review后仅此最小UI接线和测试，无API/PG规则增量；原生24仍以相同输入指纹复用，不冒称重新执行或修复头获独立重审。父级独立复审已确认三项留白/按钮问题修复；首页行高/内部滚动可发现性按后续相关改动优化，不拉空卡、不以次要占位截断拖住本PR。
+
+Full42287586011非数据库仅一项失败：旧journey-projection-isolation夹具以unknown强转缺失records。真实emptyNode及所有setFact/任务/外部实例均保留records数组；本次只补完整合法JourneyNode并以satisfies约束，保留坏时序隔离、独立逾期及权限/DB异常拒绝断言，不在产品里吞缺省异常。已将该旧套件加入本地受影响组合；原在途PG按真实结果保留，不冒称修复后版本已通过。

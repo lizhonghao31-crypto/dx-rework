@@ -1,6 +1,7 @@
 import { customerPoDateLabel } from "./digital-workspace-copy.js";
 import { earliestFactoryPo,poDateSummary,type PoDeliveryDate,type PoDeliveryRisk } from "@dx-rework/contracts";
 import type {OrderJourney} from "@dx-rework/contracts/digital-production-journey";
+import {digitalPoKey} from '@dx-rework/contracts/digital-production';
 import "./po-delivery-dates.css";
 
 export const poDeliveryKindLabels={factory:"加工厂交货日",customer:customerPoDateLabel,sample:"船样目标日"};
@@ -41,5 +42,5 @@ export function PoDateDetails({lines,finished=false}:{lines:readonly PoDeliveryD
 
 export function PoOrderFacts({order}:{order:OrderJourney}) {
   if(!order.orderId)return null;
-  return <div className="po-date-scroll journey-po-order-facts" tabIndex={0} aria-label="实际下单与逐PO交期"><table><thead><tr><th>PO / 款号</th><th>颜色</th><th>下单数量</th><th>{customerPoDateLabel}</th><th>加工厂交货日</th></tr></thead><tbody>{sortedCockpitPoLines(order).map(line=>{const dates=order.poDeliveryDates?.find(item=>item.lineId===line.id);return <tr key={line.id} id={`po-date-${line.id}`}><td data-label="PO / 款号">{line.po||"待补PO"} / {line.formalStyleNo||line.temporaryStyleNo||order.designStyleNo}</td><td data-label="颜色">{line.color}</td><td data-label="下单数量">{line.orderedQuantity.toLocaleString()}</td><td data-label={customerPoDateLabel}>{dates?.customerWarehouseArrivalDate||"未登记"}</td><td data-label="加工厂交货日">{dates?.factoryDeliveryDate||"未登记"}</td></tr>;})}</tbody></table></div>;
+  return <div className="po-date-scroll journey-po-order-facts" tabIndex={0} aria-label="实际下单与逐PO交期"><table><thead><tr><th>PO / 款号</th><th>颜色</th><th>下单数量</th><th>{customerPoDateLabel}</th><th>加工厂交货日</th></tr></thead><tbody>{sortedCockpitPoLines(order).map(line=>{const dates=order.poDeliveryDates?.find(item=>item.lineId===line.id),po=line.po||'待补PO',style=line.formalStyleNo||line.temporaryStyleNo||order.designStyleNo;return <tr key={line.id} id={`po-date-${line.id}`}><td data-label="PO / 款号">{po}{digitalPoKey(po)!==digitalPoKey(style)&&` / ${style}`}</td><td data-label="颜色">{line.color}</td><td data-label="下单数量">{line.orderedQuantity.toLocaleString()}</td><td data-label={customerPoDateLabel}>{dates?.customerWarehouseArrivalDate||"未登记"}</td><td data-label="加工厂交货日">{dates?.factoryDeliveryDate||"未登记"}</td></tr>;})}</tbody></table></div>;
 }

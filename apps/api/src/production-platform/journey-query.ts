@@ -27,7 +27,7 @@ import { OrderClosureService } from "./order-closure-service.js";
 import {savedDevelopmentRoute} from "./development-sla-enrollment.js";
 import { bulkCockpitProgress } from "./cockpit-progress.js";
 import { JOURNEY_NODES, journeyDefinition } from "./journey-catalog.js";
-import { journeyCompletion, journeyStages, selectJourneys } from "./journey-projection.js";
+import { appendJourneyInstance, journeyCompletion, journeyStages, selectJourneys } from "./journey-projection.js";
 import { canReadProductionReporting, productionVisibilityFor, productionVisibilityArgs } from "../sourcing/production-reporting-service.js";
 import type { DevelopmentDocument } from "@dx-rework/contracts/digital-development";
 import { journeyReworkHistoryUrl } from "./journey-rework-record.js";
@@ -41,6 +41,8 @@ import type {JourneyAuthorizedTask} from "./journey-read-scope.js";
 import {journeyBusinessProgress,journeyBusinessQuantities,type RequirementEvidence} from './journey-business-progress.js';
 import {readJourneyAdoptedPlan} from './journey-adopted-plan.js';
 import {readMaterialSuccessors} from './journey-material-successors.js';
+import {factorySlaEvidence} from './factory-sla-evidence.js';
+import {attachJourneyFactoryDeadlines} from './journey-factory-deadlines.js';
 import {journeyBusinessDates} from './journey-progress-dates.js';
 
 const iso = (value: Date|string|null|undefined) => value == null ? null : new Date(value).toISOString();
@@ -465,7 +467,7 @@ export class DigitalJourneyQuery {
         setFact("special_closure","completed",[closureRecord],closure.closed.closedAt,{id:original.closed_by,name:closure.closed.closedBy});
       }
       else replace("special_closure",emptyNode("special_closure","not_applicable"));
-      for(const line of closure.lines)for(const rework of line.reworks){const node=emptyNode("rework",rework.status==="completed"?"completed":rework.status==="cancelled"?"cancelled":"active");node.instanceId=rework.reworkId;node.records=[{...record("rework",rework.reworkId,closure.canOpenRework?`/ui/tasks/${rework.reworkId}`:null),lineId:line.lineId}];baseNodes.push(node);}
+      for(const line of closure.lines)for(const rework of line.reworks){const node=emptyNode("rework",rework.status==="completed"?"completed":rework.status==="cancelled"?"cancelled":"active");node.instanceId=rework.reworkId;node.records=[{...record("rework",rework.reworkId,closure.canOpenRework?`/ui/tasks/${rework.reworkId}`:null),lineId:line.lineId}];appendJourneyInstance(baseNodes,node);}
       if(currentPrep&&gates.instruction&&gates.source)progress.bulk=bulkCockpitProgress({preshrink:bulk.preshrink??"",secondaryCraft:gates.instruction.document.secondaryCraft==="沿用开发"?gates.source.document.craft:gates.instruction.document.secondaryCraft,externalCutting:gates.approval?.cutting_process==="outsourced",tasks:taskDtos.filter(task=>{const raw=visibleTasks.find(item=>item.task_id===task.taskId);return raw?.route_instance_id===currentPrep||(task.taskKind==='bulk_ship_sample'&&raw?.route_instance_id===oid);}),received,packed:closure.stage==="本期装箱完成",specialClosed:Boolean(closure.closed)});
       for(const key of ["receiving_inspection","rework_review","responsibility"]) {const node=emptyNode(key,"unavailable");node.unavailableReason="fact_not_recorded";replace(key,node);}
       const arrivalChecks=closure.quality?.filter(q=>q.quantity>0)??[];
@@ -475,8 +477,7 @@ export class DigitalJourneyQuery {
         const append=(key:string,state:JourneyState,id:string,actualAt:string|null,ownerId:string|null,recordUrl:string|null)=>{
           const node=emptyNode(key,state);node.instanceId=id;node.actualAt=actualAt;node.actualQuality=actualAt?"verified":"missing";
           node.owner=ownerId?{id:ownerId,name:null}:null;node.operator=state==="completed"&&actualAt?node.owner:null;node.records=[{...record("rework",rework.reworkId,recordUrl),lineId:line.lineId}];
-          const placeholder=baseNodes.find(value=>value.key===key&&value.instanceId===`${key}:0`);
-          if(placeholder)replace(key,node);else baseNodes.push(node);
+          appendJourneyInstance(baseNodes,node);
         };
         const reviewed=(await db.query("SELECT order_review_id,reviewed_by,reviewed_at FROM rework_order_reviews WHERE rework_order_id=$1",[rework.reworkId])).rows[0];
         if(reviewed)append("rework_review","completed",reviewed.order_review_id,iso(reviewed.reviewed_at),reviewed.reviewed_by,await journeyReworkHistoryUrl(db,actor,rework.reworkId,["whole_order_review","final_quantity_ie_review"],reviewed.order_review_id));
@@ -573,6 +574,10 @@ export class DigitalJourneyQuery {
       else node.progressApplicability="applicable";
     }
     if(!patternKinds&&fullOrder&&oid){const planned=await seriesPlanJourney(db,oid,promiseDay,Boolean(terminal));for(const n of planned){const existing=baseNodes.findIndex(v=>v.key===n.key);if(existing>=0)baseNodes[existing]=n;else baseNodes.push(n);}}
+    if(!summaryOnly&&fullOrder&&oid&&visibleTasks.some(task=>['process_logistics','bulk_qc','warehouse_dispatch'].includes(task.task_kind))){
+      const factory=await factorySlaEvidence(db,oid);
+      if(factory)attachJourneyFactoryDeadlines(baseNodes,visibleTasks,factory,lines);
+    }
     const stages=journeyStages(baseNodes);
     const item:OrderJourney={seriesPlanVisible:Boolean(!patternKinds&&fullOrder&&oid),asOf,styleImageUrl,developmentType:sourceAccess?source?.development_type??null:null,requiredCompletionDate:sourceAccess?currentDocument?.document?.returnDate??null:null,id:canonicalId,sourceId:sid,orderId:orderAccess?oid:null,designStyleNo:chosenIdentity.design_style_no,temporaryStyleNo:chosenIdentity.temporary_style_no,customer:chosenIdentity.customer_code,category:currentDocument?.document.template??(orderAccess?order?.product_group:null)??null,styleName,designer,merchandisers,orderNumbers,createdAt:iso(sourceAccess?source!.created_at:orderAccess?order!.created_at:(source?.created_at??order!.created_at))!,deliveryDate:orderAccess?digitalDateText(order?.contract_delivery_date??null):null,poDeliveryDates,deliveryRisks,selectedRound:round,adoptedRound:instruction?.source_round??null,sourceVersion:currentDocument?.version??currentDocument?.document_version??null,instructionVersion:instruction?.version??null,lines,links,stages,progress,hitReasons:[]};
     const lifecycle=oid&&orderAccess?{kind:"order",id:oid}:!oid&&sid&&sourceAccess?{kind:"source",id:sid}:null;

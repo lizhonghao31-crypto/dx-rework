@@ -1,4 +1,5 @@
 import {DigitalProductionAccessPolicy} from '../../apps/api/src/production-platform/access-policy.js';
+import {FactoryFlowService} from '../../apps/api/src/production-platform/factory-flow-service.js';
 import {DevelopmentRoundService} from '../../apps/api/src/production-platform/development-round-service.js';
 import {DigitalJourneyQuery} from '../../apps/api/src/production-platform/journey-query.js';
 import {ReceivingService} from '../../apps/api/src/receiving/receiving-service.js';
@@ -94,6 +95,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await receiving.recordPacking(root,{receivingBatchId:batch,expectedVersion:row.version,expectedPackingRevisionId:null,packingQuantity:10},randomUUID());
    const projection=await nodeMaterialsFixture(f.db,f.root,work.ready.id,'packing');expect(projection.data.rows.some(r=>r.id.startsWith('packing-')&&r.state==='present')).toBe(true);
    expect(projection.data.rows.some(r=>r.purpose==='input'&&/责任签字|财务|工资|老板签字/.test(r.label))).toBe(false);
+   const journey=await new DigitalJourneyQuery(f.db).read(f.root,work.ready.id),reworks=journey.stages.flatMap(s=>s.nodes).filter(n=>n.key==='rework');
+   expect(reworks.some(n=>n.instanceId===work.id)).toBe(true);expect(reworks.some(n=>n.instanceId==='rework:0'&&n.state==='uncreated')).toBe(false);
    expect((await f.db.query('SELECT status FROM rework_orders WHERE rework_order_id=$1',[work.id])).rows[0].status).not.toBe('completed');
   });
  });
@@ -107,6 +110,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const native=await productionReadiness(f.db,ready.id);expect(native.document?.round_number).toBe(2);expect(native.finalReasons.length).toBeGreaterThan(0);
   const projected=await query.nodeMaterials(f.root,history.id,node.instanceId,1),basis=projected.rows.find(r=>r.id==='technical-basis')!;
   expect(basis.state).not.toBe('effective');expect(basis.records[0]!.url).toContain('round=2');expect(projected.rows.find(r=>r.id==='instruction-prerequisites')?.state).not.toBe('effective');
+  const original=projected.rows.find(r=>r.id==='instruction-output')!;
+  expect(original).toMatchObject({state:'effective',versionLabel:'已发布 v1'});expect(original.reason).toContain('原件仍保留');expect(original.records[0]!.url).toContain('instructionVersion=1');
   const after=await bulk.read(designer,ready.id);
   expect(after.publishedBasis).toEqual(before.publishedBasis);expect(after.instructionValid).toBe(false);expect(after.preparationId).toBeNull();
   // Current task references and every original readiness guard remain current;
@@ -114,6 +119,27 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect(after.reference.instructionVersion).toBeNull();
   const exact=await new DevelopmentTechnicalService(f.db,true).history(designer,ready.sourceId,{roundNumber:1,scopeRef:'整款',kind:'artifacts',version:after.publishedBasis!.technicalArtifact!.version,view:'directory'});
   expect(exact.items[0]).toMatchObject({artifactSetId:after.publishedBasis!.technicalArtifact!.id,roundNumber:1,version:1});expect(Object.hasOwn(exact.items[0]!,'body')).toBe(false);
+ });
+ it('R2-02: completed print, post-cutting QC and warehouse batches keep the exact source D/C without relying on an enrolled-plan projection',async()=>{
+  const scene=await f.scene('2026-11-02T08:00:00Z');await f.runtime.run(scene,f.root,async()=>{
+   const ready=await f.bulkReady('印花'),flow=new FactoryFlowService(f.db),tasks=new DigitalProductionTaskService(f.db),cutter={...f.people['cutting-worker']!,authorizationCapability:'cutting:records:create',authorizationCapabilities:['cutting:records:create']};
+   const cuts=(await f.db.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1 ORDER BY sourcing_line_position',[ready.caseId])).rows;
+   for(const cut of cuts)await ready.cutting.record(cutter,cut.cutting_order_id,{pieceCount:1,actualCutCount:10,attachmentIds:[await f.image(cutter)]},randomUUID());
+   let source=await flow.read(f.root,ready.id);
+   for(const [kind,role]of [['process_logistics','embroidery_washing_merchandiser'],['bulk_qc','quality_control']] as const){const person=Object.values(f.people).find(person=>person.actorRoles.includes(role))!;await tasks.reassign(f.root,source.tasks.find(t=>t.taskKind===kind)!.taskId,person.actorId,randomUUID());}
+   source=await flow.read(f.root,ready.id);source=await flow.logistics(f.root,ready.id,{expectedRevision:source.revision,kind:'工艺发出',occurredAt:businessNow().toISOString(),supplier:'TEST原印花厂',note:'TEST native scope'},randomUUID());
+   await f.advance(scene,'2026-11-02T08:01:00Z');
+   source=await flow.logistics(f.root,ready.id,{expectedRevision:source.revision,kind:'工艺回仓',occurredAt:businessNow().toISOString(),supplier:'TEST原印花厂',note:'TEST original return'},randomUUID());
+   source=await flow.qc(f.root,ready.id,{expectedRevision:source.revision,checks:source.lines.map(line=>({lineId:line.lineId,result:'合格',problem:'',treatment:'',attachmentIds:[]})),note:'TEST原裁后QC'},randomUUID());
+   source=await flow.dispatch(f.root,ready.id,{expectedRevision:source.revision,occurredAt:businessNow().toISOString(),supplierId:f.supplierId,note:'TEST原仓库发裁片'},randomUUID());
+   const before=await nodeMaterialsFootprint(f.db),journey=await new DigitalJourneyQuery(f.db).read(f.root,ready.id),compact=await new DigitalJourneyQuery(f.db).read(f.root,ready.id,undefined,true);
+   expect(journey.supervision).toBeUndefined();
+   for(const key of ['process_logistics','bulk_qc','warehouse_dispatch']){
+    const originals=source.batchWindows!.filter(w=>w.kind===key);expect(originals.length).toBeGreaterThan(0);expect(originals.every(w=>w.complete&&w.dueAt&&w.completedAt)).toBe(true);
+    for(const result of [journey,compact]){const node=result.stages.flatMap(stage=>stage.nodes).find(n=>n.key===key&&n.current)!;expect(node.nativeWindows?.map(w=>[w.evidence,w.deadline,w.completedAt])).toEqual(originals.map(w=>[w.evidence,w.dueAt,w.completedAt]));}
+   }
+   expect(await nodeMaterialsFootprint(f.db)).toEqual(before);
+  });
  });
  it('serves current materials to an assigned bulk worker without granting its linked development source or explicit history',async()=>{
   const ready=await f.bulkReady('无',undefined,1,f.sourcing,{stopBeforeCompletion:true}),person=f.people['worker-a']!;

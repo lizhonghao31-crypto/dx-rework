@@ -5,14 +5,14 @@ export function slaTargetLabel(value:JourneyTiming['target']){
  if(value.exclusive)return new Date(Date.parse(value.at)-1).toLocaleDateString('zh-CN',{timeZone:'Asia/Shanghai'})+' 当天结束';
  return journeyTime(value.at);
 }
-type NodeDeadline=Pick<JourneyNode,'expectedAt'|'expectedKind'|'expectedPrecision'|'records'|'instanceId'|'timing'|'deadlineMode'|'deadlineExclusive'>;
+type NodeDeadline=Pick<JourneyNode,'expectedAt'|'expectedKind'|'expectedPrecision'|'records'|'instanceId'|'timing'|'deadlineMode'|'deadlineExclusive'|'nativeWindows'>;
 export const hasOriginalTaskDeadline=(node:NodeDeadline)=>Boolean(node.expectedAt&&node.expectedKind==='sla'&&node.records.some(record=>record.domain==='task'&&record.id===node.instanceId));
 export const hasDateOnlyTarget=(node:NodeDeadline)=>Boolean(hasOriginalTaskDeadline(node)?node.deadlineMode==='date_target'&&node.deadlineExclusive===true:node.timing?.target.exclusive&&node.expectedAt===node.timing.target.at);
-export const nodeTargetLabel=(node:NodeDeadline)=>hasDateOnlyTarget(node)?slaTargetLabel({at:node.expectedAt,exclusive:true,reasons:[]}):journeyTime(node.expectedAt,node.expectedPrecision,'尚无可信截止');
+export const nodeTargetLabel=(node:NodeDeadline)=>node.nativeWindows?.length?node.nativeWindows.length===1?journeyTime(node.nativeWindows[0]!.deadline,'instant','本批无可信截止'):'各批原截止见节点':hasDateOnlyTarget(node)?slaTargetLabel({at:node.expectedAt,exclusive:true,reasons:[]}):journeyTime(node.expectedAt,node.expectedPrecision,'尚无可信截止');
 const basis={actual:'实际完成',remaining_estimate:'有效剩余工时预计',standard_window:'原责任窗口',plan:'计划推算（非开工许可）',unknown:'缺少预计依据'};
 const statuses={not_applicable:'不适用',unknown:'时效未知',not_started:'未启动',running:'进行中',warning:'临期',overdue:'逾期',completed_on_time:'按时完成',completed_late:'超期完成',completed_unrated:'业务已完成，时效待核'};
-export function JourneyTimingWindows({timing}:{timing:JourneyTiming}){
- return <>{timing.windows?.map(window=><small key={window.evidence}>{window.scopeLabel} · 原开始 {journeyTime(window.startedAt,'instant','尚未取得')} · 原截止 {journeyTime(window.deadline,'instant','本批无可信截止')} · {window.complete?'已完成':'尚未完成'}{window.completedAt?` ${journeyTime(window.completedAt)}`:''}{window.snapshotId?` · 冻结规则 ${window.snapshotId}`:''}</small>)}</>;
+export function JourneyTimingWindows({timing,showSnapshot=true}:{timing:Pick<JourneyTiming,'windows'>;showSnapshot?:boolean}){
+ return <>{timing.windows?.map(window=><small key={window.evidence}>{window.scopeLabel} · 原开始 {journeyTime(window.startedAt,'instant','尚未取得')} · 原截止 {journeyTime(window.deadline,'instant','本批无可信截止')} · {window.complete?'已完成':'尚未完成'}{window.completedAt?` ${journeyTime(window.completedAt)}`:''}{showSnapshot&&window.snapshotId?` · 冻结规则 ${window.snapshotId}`:''}</small>)}</>;
 }
 const rangeBoundary=(at:string)=>new Date(Date.parse(at)+8*3600000).toISOString().replace('T',' ').replace(/\.000Z$/,'').replace(/Z$/,'');
 export function logisticsRangeLabel(range:{fromInclusive:string;toExclusive:string}){
