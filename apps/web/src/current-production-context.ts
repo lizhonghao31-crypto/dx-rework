@@ -2,7 +2,7 @@ import {z} from 'zod';
 import {DigitalAnalysisFilterSchema} from '@dx-rework/contracts/digital-production-analysis';
 import type {ProductionStatisticsFilters,StatisticsMetric,StatisticsCurrentResult,ProductionStatisticsGroup} from '@dx-rework/contracts/production-statistics';
 
-export const productionMetricLabels={all:'全部有权范围',backlog:'当前在产未装齐','next-seven':'未来七日应出货未齐','past-due':'已过客户交期未齐',blocked:'原明确阻断涉及范围','quality-gap':'到仓检查覆盖缺口',unknown:'具体缺件范围',unallocated:'选厂未覆盖或范围待核',completed:'普通数量已完成',cancelled:'已取消',special:'特殊结案'} as const;
+export const productionMetricLabels={all:'全部有权范围',backlog:'客户待出货','next-seven':'未来7天应出货未齐','past-due':'已过客户交期未齐',blocked:'原明确阻断涉及范围','quality-gap':'到仓检查覆盖缺口',unknown:'具体缺件范围',unallocated:'选厂未覆盖或范围待核',completed:'普通数量已完成',cancelled:'已取消',special:'特殊结案'} as const;
 export const productionColumns=[['po','PO / 颜色'],['customer','客户'],['demand','需求'],['received','有效实收'],['quality','到仓检查覆盖'],['packed','装箱出货'],['remaining','客户待出货'],['customerDate','客户约定'],['unallocated','选厂未覆盖'],['materials','发料状态']] as const;
 export type ProductionColumn=typeof productionColumns[number][0];
 export const productionGroupings=[['factory','工厂'],['customer','客户'],['stage','当前节点']] as const;
@@ -35,7 +35,7 @@ export function productionReturnQuery(filters:ProductionStatisticsFilters,contex
  // navigation preferences, never splice fresh business facts into an old result.
  const current=Object.fromEntries(Object.entries(filters).filter(([key])=>key!=='snapshotId')) as ProductionStatisticsFilters,query=new URLSearchParams(productionQuery(current));for(const [key,value]of Object.entries(context))if(value!==undefined)query.set(key,value);return query.toString();
 }
-export function productionMetricText(metric:StatisticsMetric){return metric.value===null?`待核（已知${metric.knownValue}${metric.unit}）`:`${metric.value}${metric.unit}`;}
+export function productionMetricText(metric:StatisticsMetric,displayUnit:string=metric.unit){return metric.value===null?`待核（已知${metric.knownValue}${displayUnit}）`:`${metric.value}${displayUnit}`;}
 
 export function productionAttributionPools(rows:StatisticsCurrentResult['unattributed']){
  return (['received','qualified','packed'] as const).map(kind=>{const items=rows.filter(item=>item.kind===kind),known=items.reduce((sum,item)=>sum+(item.quantity??0),0),unknown=items.filter(item=>item.quantity===null).length;return {kind,items,known,quantity:unknown?null:known,unknown};}).filter(pool=>pool.items.length>0);

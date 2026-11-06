@@ -116,3 +116,12 @@
  .digital-journey-cockpit .cockpit-home .cockpit-business-progress>strong,.digital-journey-cockpit .cockpit-home .cockpit-receipt-summary,.digital-journey-cockpit .cockpit-read-status{font-size:16px}
  .digital-journey-cockpit[data-view="overview"] .cockpit-home .dx-production-table{min-width:720px}
 }
+
+.cockpit-home .cockpit-home-task-heading{display:flex;flex-wrap:wrap;align-items:flex-start;gap:3px 5px;min-width:0}
+.cockpit-home .cockpit-home-task-heading>strong{flex:1 1 120px;min-width:min(100%,120px);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.cockpit-home .cockpit-home-task-heading>.dx-badge{flex:none}
+.cockpit-home .cockpit-home-forecast{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.cockpit-home-task:focus .cockpit-home-task-heading>strong,.cockpit-home-task:hover .cockpit-home-task-heading>strong,.cockpit-home-task:focus .cockpit-home-forecast,.cockpit-home-task:hover .cockpit-home-forecast{display:block}
+.cockpit-home .cockpit-home-risk-po{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cockpit-home .cockpit-home-risk-po:focus{white-space:normal;overflow-wrap:anywhere;outline:2px solid #a6caff;outline-offset:2px}
+.cockpit-home .cockpit-home-delivery-line time{white-space:nowrap}
