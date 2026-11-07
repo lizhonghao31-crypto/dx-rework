@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 import type { Pool } from "pg";
+import { DEFAULT_SESSION_TTL_SECONDS } from "@dx-rework/config";
 
 import {
   AcceptanceControlAuthority,
@@ -108,6 +109,7 @@ export class AcceptanceDingTalkProvider extends OfficialDingTalkProvider {
     private readonly acceptanceCorporationId: string,
     private readonly acceptanceSecret: string,
     private readonly acceptanceNow: () => number = Date.now,
+    acceptanceSessionTtlSeconds = DEFAULT_SESSION_TTL_SECONDS,
   ) {
     super({
       corpId: acceptanceCorporationId,
@@ -125,6 +127,7 @@ export class AcceptanceDingTalkProvider extends OfficialDingTalkProvider {
       acceptanceCorporationId,
       acceptanceSecret,
       acceptanceNow,
+      acceptanceSessionTtlSeconds,
     );
   }
 
@@ -132,8 +135,16 @@ export class AcceptanceDingTalkProvider extends OfficialDingTalkProvider {
     return this.control.begin(code);
   }
 
-  assertAcceptanceControl(token: string | undefined): void {
-    this.control.assertControl(token);
+  assertAcceptanceControl(token: string | undefined): Promise<void> {
+    return this.control.assertControl(token);
+  }
+
+  bindAcceptanceBusinessSession(token: string | undefined, businessTokenHash: string): Promise<void> {
+    return this.control.bindBusinessSession(token, businessTokenHash);
+  }
+
+  assertAcceptanceBusinessSession(businessTokenHash: string): Promise<void> {
+    return this.control.assertBusinessSession(businessTokenHash);
   }
 
   listAcceptanceIdentities(token: string | undefined): Promise<readonly AcceptanceControlIdentity[]> {

@@ -25,10 +25,13 @@ export class AuthDeniedError extends Error {
 }
 
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
+const ACCEPTANCE_BUSINESS_TOKEN_PREFIX = "uat.";
 
 type AcceptanceControllableProvider = DingTalkProvider & Readonly<{
   beginAcceptanceControl: (code: string) => Promise<string>;
-  assertAcceptanceControl: (token: string | undefined) => void;
+  assertAcceptanceControl: (token: string | undefined) => void | Promise<void>;
+  bindAcceptanceBusinessSession: (token: string | undefined, businessTokenHash: string) => Promise<void>;
+  assertAcceptanceBusinessSession: (businessTokenHash: string) => Promise<void>;
   listAcceptanceIdentities: (token: string | undefined) => Promise<readonly AcceptanceControlIdentity[]>;
   issueAcceptanceLoginCode: (token: string | undefined, alias: string) => Promise<string>;
   endAcceptanceControl: (token: string | undefined) => Promise<void>;
@@ -38,6 +41,8 @@ const isAcceptanceControllableProvider = (provider: DingTalkProvider): provider 
   const candidate = provider as Partial<AcceptanceControllableProvider>;
   return typeof candidate.beginAcceptanceControl === "function"
     && typeof candidate.assertAcceptanceControl === "function"
+    && typeof candidate.bindAcceptanceBusinessSession === "function"
+    && typeof candidate.assertAcceptanceBusinessSession === "function"
     && typeof candidate.listAcceptanceIdentities === "function"
     && typeof candidate.issueAcceptanceLoginCode === "function"
     && typeof candidate.endAcceptanceControl === "function";
@@ -123,6 +128,7 @@ export class AuthService {
   async switchAcceptanceIdentity(
     controlToken: string | undefined,
     alias: string,
+    previousBusinessToken?: string,
   ): Promise<{ token: string; user: AuthUser }> {
     const provider = this.acceptanceProvider();
     let loginCode: string;
@@ -131,9 +137,13 @@ export class AuthService {
     } catch {
       throw new AuthDeniedError("ACCEPTANCE_IDENTITY_UNAVAILABLE", "验收身份不存在、不可用或控制会话已失效");
     }
-    const result = await this.loginMobile(loginCode);
+    const result = await this.loginAdmission(async readMember => {
+      await this.store.cleanupExpiredAuthArtifacts(this.now());
+      return this.completeCode(loginCode, () => this.provider.exchangeMobileCode(loginCode), readMember, true);
+    });
     try {
-      provider.assertAcceptanceControl(controlToken);
+      await provider.bindAcceptanceBusinessSession(controlToken, this.hashSession(result.token));
+      await this.logout(previousBusinessToken);
     } catch {
       await this.logout(result.token);
       throw new AuthDeniedError("ACCEPTANCE_CONTROL_REQUIRED", "验收控制会话已失效，未保留新业务会话");
@@ -144,9 +154,11 @@ export class AuthService {
   async endAcceptanceControl(
     controlToken: string | undefined,
     businessToken: string | undefined,
+    allowExpiredControl = false,
   ): Promise<void> {
     const provider = this.acceptanceProvider();
     try {
+      if (!allowExpiredControl) await provider.assertAcceptanceControl(controlToken);
       await provider.endAcceptanceControl(controlToken);
     } catch {
       throw new AuthDeniedError("ACCEPTANCE_CONTROL_REQUIRED", "验收控制会话已失效");
@@ -186,6 +198,14 @@ export class AuthService {
       if (!token) throw new AuthDeniedError("AUTH_REQUIRED", "请先通过钉钉登录");
       const record = await this.store.findSession(this.hashSession(token), this.now());
       if (!record) throw new AuthDeniedError("SESSION_INVALID", "登录已失效，请重新登录");
+      if (token.startsWith(ACCEPTANCE_BUSINESS_TOKEN_PREFIX)) {
+        try {
+          await this.acceptanceProvider().assertAcceptanceBusinessSession(this.hashSession(token));
+        } catch {
+          await this.logout(token);
+          throw new AuthDeniedError("SESSION_INVALID", "验收登录已失效，请重新验证");
+        }
+      }
       if (!record.identity.active || !record.identity.employed) {
         await this.store.deactivateIdentity(record.user.id, this.now());
         throw new AuthDeniedError("SESSION_INVALID", "登录已失效，请重新登录");
@@ -193,6 +213,13 @@ export class AuthService {
       await this.revalidate(record.user.id, record.identity);
       const current = await this.store.findSession(this.hashSession(token), this.now());
       if (!current) throw new AuthDeniedError("SESSION_INVALID", "登录已失效，请重新登录");
+      if (token.startsWith(ACCEPTANCE_BUSINESS_TOKEN_PREFIX)) {
+        try { await this.acceptanceProvider().assertAcceptanceBusinessSession(this.hashSession(token)); }
+        catch {
+          await this.logout(token);
+          throw new AuthDeniedError("SESSION_INVALID", "验收登录已失效，请重新验证");
+        }
+      }
       return current.user;
     } finally { this.protectedRequests -= 1; }
   }
@@ -201,7 +228,7 @@ export class AuthService {
     if (token) await this.store.revokeSession(this.hashSession(token), this.now());
   }
 
-  private async completeCode(code: string, exchange: () => Promise<DingTalkIdentity>, readMember: (identity: DingTalkIdentity) => Promise<OrganizationMember | null>): Promise<{ token: string; user: AuthUser }> {
+  private async completeCode(code: string, exchange: () => Promise<DingTalkIdentity>, readMember: (identity: DingTalkIdentity) => Promise<OrganizationMember | null>, acceptanceControlled = false): Promise<{ token: string; user: AuthUser }> {
     if (!code || !(await this.store.consumeCode(hash(code), new Date(this.now().getTime() + 10 * 60_000)))) {
       throw new AuthDeniedError("CODE_REPLAYED", "临时登录凭证无效或已使用");
     }
@@ -211,7 +238,7 @@ export class AuthService {
     const user = await this.store.upsertIdentity(member);
     if (!member.employed) throw new AuthDeniedError("NOT_EMPLOYED", "账号不属于在职人员");
     if (!member.active) throw new AuthDeniedError("ACCOUNT_DISABLED", "账号已停用");
-    const token = randomBytes(32).toString("base64url");
+    const token = `${acceptanceControlled ? ACCEPTANCE_BUSINESS_TOKEN_PREFIX : ""}${randomBytes(32).toString("base64url")}`;
     await this.store.createSession({ id: randomUUID(), tokenHash: this.hashSession(token), userId: user.id, expiresAt: new Date(this.now().getTime() + this.sessionTtlMs), revokedAt: null });
     return { token, user };
   }

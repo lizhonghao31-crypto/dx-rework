@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
-import { registerAcceptanceControlRoutes } from "./acceptance-control-routes.js";
+import { CONTROL_COOKIE, registerAcceptanceControlRoutes } from "./acceptance-control-routes.js";
 import { AuthDeniedError, type AuthService } from "./service.js";
 
 const COOKIE = "dx_rework_session";
@@ -109,8 +109,14 @@ export function registerAuthRoutes(app: FastifyInstance, auth: AuthService, opti
     };
   });
   app.post("/auth/logout", async (request, reply) => {
+    const clearBusiness = `${COOKIE}=; Path=${cookiePath}; HttpOnly; SameSite=Lax; Max-Age=0${secureCookie ? "; Secure" : ""}`;
+    if (auth.acceptanceControlAvailable()) {
+      await auth.endAcceptanceControl(cookieToken(request, CONTROL_COOKIE), cookieToken(request), true);
+      const clearControl = `${CONTROL_COOKIE}=; Path=${cookiePath}; HttpOnly; SameSite=Strict; Max-Age=0${secureCookie ? "; Secure" : ""}`;
+      return reply.header("set-cookie", [clearControl, clearBusiness]).code(204).send();
+    }
     await auth.logout(cookieToken(request));
-    return reply.header("set-cookie", `${COOKIE}=; Path=${cookiePath}; HttpOnly; SameSite=Lax; Max-Age=0${secureCookie ? "; Secure" : ""}`).code(204).send();
+    return reply.header("set-cookie", clearBusiness).code(204).send();
   });
   app.get("/protected", async (request, reply) => {
     const user = await auth.authenticate(cookieToken(request));

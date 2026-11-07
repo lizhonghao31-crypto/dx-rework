@@ -36,6 +36,12 @@ const create = (available: boolean, secureCookie = false) => {
 };
 
 describe("acceptance control routes", () => {
+  it("passes only the requesting browser's old business token to a successful role switch", async () => {
+    const { app, auth } = create(true);
+    const response = await app.inject({ method: "POST", url: "/acceptance/control/switch", headers: { cookie: "dx_acceptance_control=control-token; dx_rework_session=this-browser" }, payload: { alias: "worker-a" } });
+    expect(response.statusCode).toBe(200);
+    expect(auth.switchAcceptanceIdentity).toHaveBeenCalledWith("control-token", "worker-a", "this-browser");
+  });
   it("does not register any control endpoint for the official provider", async () => {
     const { app } = create(false); await app.ready();
     expect((await app.inject({ method: "GET", url: "/acceptance/control/status" })).statusCode).toBe(404);
@@ -57,7 +63,7 @@ describe("acceptance control routes", () => {
     expect(switched.statusCode).toBe(200);
     expect(switched.headers["set-cookie"]).toContain("dx_rework_session=business-token");
     expect(switched.headers["set-cookie"]).not.toContain("dx_acceptance_control=");
-    expect(auth.switchAcceptanceIdentity).toHaveBeenCalledWith("control-token", "worker-a");
+    expect(auth.switchAcceptanceIdentity).toHaveBeenCalledWith("control-token", "worker-a", undefined);
 
     const ended = await app.inject({ method: "POST", url: "/acceptance/control/end", headers: { cookie: `${controlCookie}; dx_rework_session=business-token` } });
     expect(ended.statusCode).toBe(204);

@@ -1657,5 +1657,18 @@
     ],
     "execute": [],
     "sequences": []
+  },
+  "0275_acceptance_control_sessions": {
+    "checksum": "ccd793e5801fcd61010eaf83f8143e0640490879d643bcd7e7625e346db7fafc",
+    "tables": [],
+    "functions": [],
+    "references": [],
+    "insert": [],
+    "update": [],
+    "creates": [
+      "acceptance_control_sessions"
+    ],
+    "execute": [],
+    "sequences": []
   }
 }

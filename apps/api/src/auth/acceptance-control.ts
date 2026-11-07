@@ -1,13 +1,12 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 import type { Pool } from "pg";
+import { DEFAULT_SESSION_TTL_SECONDS, MAX_ACCEPTANCE_SESSION_TTL_SECONDS } from "@dx-rework/config";
 
 import { DingTalkProtocolError } from "./provider.js";
 
 const ALIAS_PATTERN = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 const CONTROL_CODE_TTL_MS = 5 * 60_000;
-const CONTROL_SESSION_TTL_MS = 8 * 60 * 60_000;
-const MAX_CONTROL_SESSIONS = 32;
 const RETIRED_ACCEPTANCE_ALIASES = new Set([
   "administrative-clerk",
   "sample-approver",
@@ -103,48 +102,59 @@ const readControlCode = (code: string, secret: string, now: number): ControlCode
 };
 
 export class AcceptanceControlAuthority {
-  private readonly sessions = new Map<string, number>();
-  private loginSequence = 0;
-
   constructor(
     private readonly database: Pick<Pool, "query">,
     private readonly corporationId: string,
     private readonly secret: string,
     private readonly now: () => number = Date.now,
+    private readonly sessionTtlSeconds = DEFAULT_SESSION_TTL_SECONDS,
   ) {
     if (secret.length < 32) throw new DingTalkProtocolError("Acceptance lab secret is too short");
+    if (!Number.isInteger(sessionTtlSeconds) || sessionTtlSeconds < 300 || sessionTtlSeconds > MAX_ACCEPTANCE_SESSION_TTL_SECONDS) {
+      throw new DingTalkProtocolError("Acceptance session lifetime is invalid");
+    }
   }
 
   async begin(code: string): Promise<string> {
-    this.cleanup();
-    const payload = readControlCode(code, this.secret, this.now());
+    const now = this.now();
+    const payload = readControlCode(code, this.secret, now);
+    // Expired controllers cannot have a live bound business session: binding clamps its expiry.
+    await this.database.query("DELETE FROM acceptance_control_sessions WHERE corp_id=$1 AND expires_at<=$2", [this.corporationId, new Date(now)]);
+    const token = randomBytes(32).toString("base64url");
     const consumed = await this.database.query(
-      "INSERT INTO auth_consumed_codes(code_hash,expires_at) VALUES($1,$2) ON CONFLICT DO NOTHING",
-      [hash(`acceptance-control:${code}`), new Date(payload.expiresAt)],
+      `WITH consumed AS (
+         INSERT INTO auth_consumed_codes(code_hash,expires_at) VALUES($1,$2)
+         ON CONFLICT DO NOTHING RETURNING code_hash
+       )
+       INSERT INTO acceptance_control_sessions(token_hash,corp_id,authority_hash,created_at,expires_at)
+       SELECT $3,$4,$5,$6,$7 FROM consumed`,
+      [hash(`acceptance-control:${code}`), new Date(payload.expiresAt), this.tokenHash(token),
+        this.corporationId, this.authorityHash(), new Date(now), new Date(now + this.sessionTtlSeconds * 1000)],
     );
     if (consumed.rowCount !== 1) {
       throw new DingTalkProtocolError("Acceptance control code has already been used");
     }
-    if (this.sessions.size >= MAX_CONTROL_SESSIONS) {
-      const oldest = this.sessions.keys().next().value as string | undefined;
-      if (oldest) this.sessions.delete(oldest);
-    }
-    const token = randomBytes(32).toString("base64url");
-    this.sessions.set(hash(token), this.now() + CONTROL_SESSION_TTL_MS);
     return token;
   }
 
-  assertControl(token: string | undefined): void {
-    this.cleanup();
-    if (!token || !this.sessions.has(hash(token))) {
+  async assertControl(token: string | undefined): Promise<void> {
+    if (!token || !/^[A-Za-z0-9_-]{43}$/.test(token)) {
+      throw new DingTalkProtocolError("Acceptance control session is required");
+    }
+    const result = await this.database.query(
+      `SELECT token_hash FROM acceptance_control_sessions
+       WHERE token_hash=$1 AND corp_id=$2 AND authority_hash=$3 AND revoked_at IS NULL AND expires_at>$4`,
+      [this.tokenHash(token), this.corporationId, this.authorityHash(), new Date(this.now())],
+    );
+    if (result.rowCount !== 1) {
       throw new DingTalkProtocolError("Acceptance control session is required");
     }
   }
 
   async listIdentities(token: string | undefined): Promise<readonly AcceptanceControlIdentity[]> {
-    this.assertControl(token);
+    await this.assertControl(token);
     const result = await this.database.query<IdentityRow>(
-      `SELECT i.user_id,i.provider_user_id,u.display_name,i.active,i.employed,
+      `SELECT i.user_id,i.provider_user_id,u.display_name,(i.active AND u.enabled) AS active,i.employed,
               COALESCE(array_agg(DISTINCT ura.role_code ORDER BY ura.role_code)
                 FILTER (WHERE ura.role_code IS NOT NULL),'{}'::text[]) role_codes,
               COALESCE(array_agg(DISTINCT rc.capability ORDER BY rc.capability)
@@ -156,7 +166,7 @@ export class AcceptanceControlAuthority {
        WHERE i.provider='dingtalk' AND i.corp_id=$1
          AND i.provider_user_id LIKE 'uat-%'
          AND i.union_id LIKE 'uat-union-%'
-       GROUP BY i.user_id,i.provider_user_id,u.display_name,i.active,i.employed
+       GROUP BY i.user_id,i.provider_user_id,u.display_name,i.active,i.employed,u.enabled
        ORDER BY i.provider_user_id`,
       [this.corporationId],
     );
@@ -174,16 +184,13 @@ export class AcceptanceControlAuthority {
   }
 
   async issueLoginCode(token: string | undefined, alias: string): Promise<string> {
-    this.assertControl(token);
     const normalized = normalizeAlias(alias);
     const identities = await this.listIdentities(token);
     if (!identities.some((identity) => identity.alias === normalized && identity.active && identity.employed)) {
       throw new DingTalkProtocolError("Acceptance identity is unavailable");
     }
-    await this.revokeBusinessSessions();
-    this.loginSequence = (this.loginSequence + 1) % 1_000;
-    const expiresAt = this.now() + 5 * 60_000 + this.loginSequence;
-    const payload = Buffer.from(JSON.stringify({ alias: normalized, expiresAt }), "utf8").toString("base64url");
+    const expiresAt = this.now() + 5 * 60_000;
+    const payload = Buffer.from(JSON.stringify({ alias: normalized, expiresAt, nonce: randomBytes(16).toString("base64url") }), "utf8").toString("base64url");
     const loginSignature = createHmac("sha256", this.secret)
       .update(`dx-acceptance:${payload}`)
       .digest("hex");
@@ -191,28 +198,65 @@ export class AcceptanceControlAuthority {
   }
 
   async end(token: string | undefined): Promise<void> {
-    this.assertControl(token);
-    await this.revokeBusinessSessions();
-    this.sessions.delete(hash(token!));
-  }
-
-  private async revokeBusinessSessions(): Promise<void> {
+    if (!token || !/^[A-Za-z0-9_-]{43}$/.test(token)) return;
     await this.database.query(
-      `UPDATE auth_sessions session
-       SET revoked_at=$1
-       FROM identity_mappings identity
-       WHERE session.user_id=identity.user_id
-         AND identity.provider='dingtalk'
-         AND identity.corp_id=$2
-         AND identity.provider_user_id LIKE 'uat-%'
-         AND identity.union_id LIKE 'uat-union-%'
-         AND session.revoked_at IS NULL`,
-      [new Date(this.now()), this.corporationId],
+      `WITH ended AS (
+         UPDATE acceptance_control_sessions SET revoked_at=COALESCE(revoked_at,$4)
+         WHERE token_hash=$1 AND corp_id=$2 AND authority_hash=$3 RETURNING business_token_hash
+       )
+       UPDATE auth_sessions session SET revoked_at=COALESCE(session.revoked_at,$4)
+       FROM ended WHERE session.token_hash=ended.business_token_hash`,
+      [this.tokenHash(token), this.corporationId, this.authorityHash(), new Date(this.now())],
     );
   }
 
-  private cleanup(): void {
-    const now = this.now();
-    for (const [key, expiresAt] of this.sessions) if (expiresAt <= now) this.sessions.delete(key);
+  async bindBusinessSession(token: string | undefined, businessTokenHash: string): Promise<void> {
+    if (!token || !/^[A-Za-z0-9_-]{43}$/.test(token) || !/^[0-9a-f]{64}$/.test(businessTokenHash)) {
+      throw new DingTalkProtocolError("Acceptance control session is required");
+    }
+    // Lock the controller before reading its current pointer. Switch/end across processes
+    // serialize on this row, rather than revoking other browsers or racing a stale snapshot.
+    const result = await this.database.query(
+      `WITH controller AS MATERIALIZED (
+         SELECT token_hash,business_token_hash,expires_at FROM acceptance_control_sessions
+         WHERE token_hash=$1 AND corp_id=$2 AND authority_hash=$3 AND revoked_at IS NULL AND expires_at>$4
+         FOR UPDATE
+       ), new_session AS (
+         UPDATE auth_sessions session SET expires_at=LEAST(session.expires_at,controller.expires_at)
+         FROM controller,identity_mappings identity,app_users app_user
+         WHERE session.token_hash=$5 AND session.revoked_at IS NULL AND session.expires_at>$4
+           AND identity.user_id=session.user_id AND app_user.id=session.user_id AND app_user.enabled
+           AND identity.provider='dingtalk' AND identity.corp_id=$2
+           AND identity.provider_user_id LIKE 'uat-%' AND identity.union_id LIKE 'uat-union-%'
+           AND identity.active AND identity.employed
+         RETURNING session.token_hash
+       ), revoked_previous AS (
+         UPDATE auth_sessions session SET revoked_at=$4 FROM controller,new_session
+         WHERE session.token_hash=controller.business_token_hash AND session.token_hash<>new_session.token_hash
+           AND session.revoked_at IS NULL RETURNING session.id
+       )
+       UPDATE acceptance_control_sessions target SET business_token_hash=new_session.token_hash
+       FROM controller,new_session WHERE target.token_hash=controller.token_hash
+       RETURNING target.token_hash`,
+      [this.tokenHash(token), this.corporationId, this.authorityHash(), new Date(this.now()), businessTokenHash],
+    );
+    if (result.rowCount !== 1) throw new DingTalkProtocolError("Acceptance control session is required");
+  }
+
+  async assertBusinessSession(businessTokenHash: string): Promise<void> {
+    const result = await this.database.query(
+      `SELECT token_hash FROM acceptance_control_sessions
+       WHERE business_token_hash=$1 AND corp_id=$2 AND authority_hash=$3 AND revoked_at IS NULL AND expires_at>$4`,
+      [businessTokenHash, this.corporationId, this.authorityHash(), new Date(this.now())],
+    );
+    if (result.rowCount !== 1) throw new DingTalkProtocolError("Acceptance control session is required");
+  }
+
+  private tokenHash(token: string): string {
+    return createHmac("sha256", this.secret).update(`dx-acceptance-session:${this.corporationId}:${token}`).digest("hex");
+  }
+
+  private authorityHash(): string {
+    return createHmac("sha256", this.secret).update(`dx-acceptance-authority:${this.corporationId}`).digest("hex");
   }
 }

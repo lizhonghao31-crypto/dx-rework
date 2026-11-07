@@ -15,6 +15,17 @@ const validEnvironment = {
 };
 
 describe("loadConfig", () => {
+  it("allows at most 30 days only after explicitly configuring the isolated Acceptance lab", () => {
+    const lab = { ...validEnvironment, ROOT_DINGTALK_USER_ID: "uat-root", ACCEPTANCE_LAB_ENABLED: "true", ACCEPTANCE_LAB_SECRET: "TEST-acceptance-dedicated-secret-at-least-32-characters" };
+    expect(loadConfig(lab).sessionTtlSeconds).toBe(28800);
+    expect(loadConfig({ ...lab, SESSION_TTL_SECONDS: "2592000" }).sessionTtlSeconds).toBe(2592000);
+    expect(() => loadConfig({ ...lab, SESSION_TTL_SECONDS: "2592001" })).toThrow(ConfigurationError);
+    expect(() => loadConfig({ ...validEnvironment, SESSION_TTL_SECONDS: "2592000" })).toThrow(/isolated test Acceptance/);
+    expect(() => loadConfig({ ...lab, NODE_ENV: "development", SESSION_TTL_SECONDS: "2592000" })).toThrow(ConfigurationError);
+    expect(() => loadConfig({ ...lab, NODE_ENV: "production", SESSION_TTL_SECONDS: "2592000" })).toThrow(ConfigurationError);
+    expect(loadConfig({ ...validEnvironment, SESSION_TTL_SECONDS: "86400" }).sessionTtlSeconds).toBe(86400);
+    expect(() => loadConfig({ ...validEnvironment, SESSION_TTL_SECONDS: "86401" })).toThrow(ConfigurationError);
+  });
   it("keeps digital production disabled by default and separates new creation from existing work", () => {
     expect(loadConfig(validEnvironment).digitalProduction).toEqual({ enabled: false, creationEnabled: false });
     expect(loadConfig({ ...validEnvironment, DIGITAL_PRODUCTION_ENABLED: "true" }).digitalProduction)
