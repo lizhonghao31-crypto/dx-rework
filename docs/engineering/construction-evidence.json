@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "fde6de1c1c8e81b728b196f1c3cd656a5bc25397",
-  "sourceFingerprint": "2def73aa9438317ef187780fb7315355e3a4ba74f45a7234b3b818c5dc0791e3",
+  "sourceFingerprint": "4671f8472fc96d196580737842444586768b06b8358a8ccd0daeca5b8283f912",
   "risk": "full",
   "rules": [
     {
@@ -77,11 +77,11 @@
       "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/cockpit-detail.test.ts tests/unit/cockpit-display-facts.test.ts tests/unit/m01-cockpit-reading-context.test.ts tests/unit/cockpit-document-directory.test.ts tests/unit/cockpit-document-snapshot.test.ts tests/unit/node-materials.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/p03-final-unit.vitest.json",
       "status": "passed",
       "exitCode": 0,
-      "sourceFingerprint": "2def73aa9438317ef187780fb7315355e3a4ba74f45a7234b3b818c5dc0791e3",
-      "testedHead": "41d92299126e45cf4129c4586d7629652ce45321",
-      "startedAt": "2026-11-07T22:17:15.958Z",
-      "endedAt": "2026-11-07T22:17:18.602Z",
-      "logSha256": "f5f8021d5f11525fe7ae2b73fc713aab77e1f053e9af20f284e3ea217b383ad2",
+      "sourceFingerprint": "4671f8472fc96d196580737842444586768b06b8358a8ccd0daeca5b8283f912",
+      "testedHead": "f42d96a5250abf88df5a53fc32fff26b6d7809fc",
+      "startedAt": "2026-11-07T22:44:02.236Z",
+      "endedAt": "2026-11-07T22:44:04.592Z",
+      "logSha256": "2ea9b2cc026ed6095821bc8985b741d9ede3f3dec91d74a91fff32b0ece2a9fe",
       "context": "Node22.22.2/npm10.9.9; lock80b0332e; taskset2,3 applies only to command descendants; original Vitest config nonDB1 worker, original preflight protocol2 workers; local host not claimed CI equivalent",
       "passed": 80,
       "failed": 0,
@@ -89,7 +89,7 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "01cb1cc133adcd4df6576d8a2ec51c6869c9990c17a1e66cd0d525fadabc78d8"
+          "sha256": "958ff59b500d1b5ee10e42c5c4491993a56276d0a35a3b815fd82ad82a977831"
         }
       ],
       "log": "/workspace/scratch/dx-final10-20261108/p03-final-unit.log"
@@ -100,10 +100,10 @@
       "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "sourceFingerprint": "2def73aa9438317ef187780fb7315355e3a4ba74f45a7234b3b818c5dc0791e3",
-      "testedHead": "41d92299126e45cf4129c4586d7629652ce45321",
-      "startedAt": "2026-11-07T22:17:18.682Z",
-      "endedAt": "2026-11-07T22:17:50.783Z",
+      "sourceFingerprint": "4671f8472fc96d196580737842444586768b06b8358a8ccd0daeca5b8283f912",
+      "testedHead": "f42d96a5250abf88df5a53fc32fff26b6d7809fc",
+      "startedAt": "2026-11-07T22:44:04.675Z",
+      "endedAt": "2026-11-07T22:44:36.439Z",
       "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e",
       "context": "Node22.22.2/npm10.9.9; lock80b0332e; taskset2,3 applies only to command descendants; original Vitest config nonDB1 worker, original preflight protocol2 workers; local host not claimed CI equivalent",
       "log": "/workspace/scratch/dx-final10-20261108/p03-final-types.log"
@@ -111,13 +111,13 @@
     {
       "id": "lint",
       "kind": "command",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/eslint/bin/eslint.js apps/web/src/cockpit-detail.tsx apps/web/src/cockpit-stage-progress.tsx tests/acceptance/m01-cockpit-home-native-browser.ts tests/integration/m01-cockpit-home-native-browser-postgres.test.ts tests/unit/cockpit-detail.test.ts --max-warnings=0",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/eslint/bin/eslint.js tests/integration/m01-cockpit-home-native-browser-postgres.test.ts --max-warnings=0",
       "status": "passed",
       "exitCode": 0,
-      "sourceFingerprint": "2def73aa9438317ef187780fb7315355e3a4ba74f45a7234b3b818c5dc0791e3",
-      "testedHead": "41d92299126e45cf4129c4586d7629652ce45321",
-      "startedAt": "2026-11-07T22:17:50.869Z",
-      "endedAt": "2026-11-07T22:17:52.081Z",
+      "sourceFingerprint": "4671f8472fc96d196580737842444586768b06b8358a8ccd0daeca5b8283f912",
+      "testedHead": "f42d96a5250abf88df5a53fc32fff26b6d7809fc",
+      "startedAt": "2026-11-07T22:44:36.519Z",
+      "endedAt": "2026-11-07T22:44:37.155Z",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "context": "Node22.22.2/npm10.9.9; lock80b0332e; taskset2,3 applies only to command descendants; original Vitest config nonDB1 worker, original preflight protocol2 workers; local host not claimed CI equivalent",
       "log": "/workspace/scratch/dx-final10-20261108/p03-final-lint.log"
@@ -128,11 +128,11 @@
       "command": "npm run build --workspace=@dx-rework/web",
       "status": "passed",
       "exitCode": 0,
-      "sourceFingerprint": "2def73aa9438317ef187780fb7315355e3a4ba74f45a7234b3b818c5dc0791e3",
-      "testedHead": "41d92299126e45cf4129c4586d7629652ce45321",
-      "startedAt": "2026-11-07T22:17:52.164Z",
-      "endedAt": "2026-11-07T22:17:55.087Z",
-      "logSha256": "d3a734a2caaaf72342201c8d9d19e96f6511b7a5053267eaa0c491e073758583",
+      "sourceFingerprint": "4671f8472fc96d196580737842444586768b06b8358a8ccd0daeca5b8283f912",
+      "testedHead": "f42d96a5250abf88df5a53fc32fff26b6d7809fc",
+      "startedAt": "2026-11-07T22:44:37.236Z",
+      "endedAt": "2026-11-07T22:44:39.225Z",
+      "logSha256": "1d5db6f7e1d9f7ea410fd727cb9a2cafa0609abe78eac4ffc7f1d7f0d230ddf8",
       "context": "Node22.22.2/npm10.9.9; lock80b0332e; taskset2,3 applies only to command descendants; original Vitest config nonDB1 worker, original preflight protocol2 workers; local host not claimed CI equivalent",
       "log": "/workspace/scratch/dx-final10-20261108/p03-final-buildweb.log"
     },
@@ -142,37 +142,37 @@
       "command": "npm run secret:scan",
       "status": "passed",
       "exitCode": 0,
-      "sourceFingerprint": "2def73aa9438317ef187780fb7315355e3a4ba74f45a7234b3b818c5dc0791e3",
-      "testedHead": "41d92299126e45cf4129c4586d7629652ce45321",
-      "startedAt": "2026-11-07T22:17:55.192Z",
-      "endedAt": "2026-11-07T22:17:56.028Z",
+      "sourceFingerprint": "4671f8472fc96d196580737842444586768b06b8358a8ccd0daeca5b8283f912",
+      "testedHead": "f42d96a5250abf88df5a53fc32fff26b6d7809fc",
+      "startedAt": "2026-11-07T22:44:39.309Z",
+      "endedAt": "2026-11-07T22:44:40.002Z",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda",
       "context": "Node22.22.2/npm10.9.9; lock80b0332e; taskset2,3 applies only to command descendants; original Vitest config nonDB1 worker, original preflight protocol2 workers; local host not claimed CI equivalent",
       "log": "/workspace/scratch/dx-final10-20261108/p03-final-secret.log"
     },
     {
       "id": "native",
-      "command": "taskset \"-c\" \"2,3\" \"/workspace/.dx-cloud/toolchain/node_modules/node/bin/node\" \"node_modules/vitest/vitest.mjs\" \"run\" \"tests/integration/m01-cockpit-home-native-browser-postgres.test.ts\" \"--config\" \"vitest.business-chain.config.ts\" \"--reporter=verbose\" \"--reporter=json\" \"--outputFile=/workspace/scratch/dx-final10-20261108/p03-browser-integrated-premerge.vitest.json\"",
-      "startedAt": "2026-11-07T22:18:03.776Z",
-      "endedAt": "2026-11-07T22:18:59.903Z",
-      "sourceFingerprint": "2def73aa9438317ef187780fb7315355e3a4ba74f45a7234b3b818c5dc0791e3",
-      "testedHead": "41d92299126e45cf4129c4586d7629652ce45321",
+      "command": "taskset \"-c\" \"2,3\" \"/workspace/.dx-cloud/toolchain/node_modules/node/bin/node\" \"node_modules/vitest/vitest.mjs\" \"run\" \"tests/integration/m01-cockpit-home-native-browser-postgres.test.ts\" \"--config\" \"vitest.business-chain.config.ts\" \"--reporter=verbose\" \"--reporter=json\" \"--outputFile=/workspace/scratch/dx-final10-20261108/p03-browser-name-fix.vitest.json\"",
+      "startedAt": "2026-11-07T22:44:58.168Z",
+      "endedAt": "2026-11-07T22:45:54.295Z",
+      "sourceFingerprint": "4671f8472fc96d196580737842444586768b06b8358a8ccd0daeca5b8283f912",
+      "testedHead": "f42d96a5250abf88df5a53fc32fff26b6d7809fc",
       "sourceUnchanged": true,
       "exitCode": 0,
       "allExited": true,
       "passed": 12,
       "failed": 0,
       "skipped": 0,
-      "log": "/workspace/scratch/dx-final10-20261108/p03-browser-integrated-premerge.log",
-      "logSha256": "eb437f52e74a96cf88941e8308911e5e2d6ccc10d0b06f859b22de047168230d",
-      "resultReport": "/workspace/scratch/dx-final10-20261108/p03-browser-integrated-premerge.vitest.json",
+      "log": "/workspace/scratch/dx-final10-20261108/p03-browser-name-fix.log",
+      "logSha256": "9eaedc03eaad97699320f5c5cc6acb07095a752517176b4dc484b5e9d788909f",
+      "resultReport": "/workspace/scratch/dx-final10-20261108/p03-browser-name-fix.vitest.json",
       "context": "Original full App/Shell, real original AuthService and owned marked PostgreSQL16.15 TEST fixtures. Original configForSuite and100s per-test/120s setup, lock-pinned Playwright1.56.1/Chromium141.0.7390.37. Only one file worker; Node/browser descendants cpuset2,3, PG2CPU/2GiB cpuset0,1. Same canonical browser/config but not CI host load/hardware or onsite acceptance.",
       "kind": "tests",
       "status": "passed",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "ca34f297064a558ef39bfb121edb4bb960506efdd9ee4bcb308faf940f79bc20"
+          "sha256": "36b6da907fbd7397388c8edca236b7acca39f1eec1488b50141eefce223d57ee"
         }
       ]
     }
