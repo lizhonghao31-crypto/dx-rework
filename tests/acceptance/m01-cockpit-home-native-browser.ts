@@ -1,3 +1,16 @@
+import {DigitalProductionNotificationService} from '../../apps/api/src/production-platform/notification-service.js';
+import {DevelopmentRoundService} from '../../apps/api/src/production-platform/development-round-service.js';
+import {DigitalQuotationService} from '../../apps/api/src/production-platform/quotation-service.js';
+import {OrderClosureService} from '../../apps/api/src/production-platform/order-closure-service.js';
+import {FactoryFlowService} from '../../apps/api/src/production-platform/factory-flow-service.js';
+import {QcProductionProgressService} from '../../apps/api/src/production-platform/qc-production-progress-service.js';
+import {DigitalProductionTaskService} from '../../apps/api/src/production-platform/task-service.js';
+import {DigitalProductionAccessService} from '../../apps/api/src/production-platform/access-service.js';
+import {DigitalDevelopmentService} from '../../apps/api/src/production-platform/development-service.js';
+import {DevelopmentExecutionService} from '../../apps/api/src/production-platform/development-execution-service.js';
+import {DigitalBudgetService} from '../../apps/api/src/production-platform/budget-service.js';
+import {ProductionInstructionService} from '../../apps/api/src/production-platform/production-instruction-service.js';
+import {BulkPreparationService} from '../../apps/api/src/production-platform/bulk-preparation-service.js';
 import assert from 'node:assert/strict';
 import {randomUUID,createHash} from 'node:crypto';
 import {mkdtemp,readFile,readdir,rm,mkdir,writeFile} from 'node:fs/promises';
@@ -34,7 +47,7 @@ export async function cockpitHomeBrowser({databaseUrl,evidence,executablePath}:{
   f=await businessAnchorFixture(databaseUrl);const fixture=f,db=f.db,identity=new DigitalProductionIdentityService(db,true),secret='TEST original home browser signed authentication '.repeat(3),root=new RootAuthority(db,'anchor-test','uat-root'),auth=new AuthService(new AcceptanceDingTalkProvider(db,'anchor-test',secret),new PostgresAuthStore(db,'anchor-test','uat-root'),'anchor-test',3600000,secret);
   registerAuthRoutes(app,auth,{secureCookie:false,ttlSeconds:3600,appBasePath:'/',corpId:'anchor-test',mobileClientId:'TEST',webClientId:'TEST',qrRedirectUri:'https://acceptance.invalid/auth/qr/callback',isRootUser:id=>root.isRootUser(id)});
   app.setErrorHandler((error,_request,reply)=>{const value=error as ApplicationError;void reply.code(error instanceof AuthDeniedError?401:value.statusCode??500).send({error:{code:value.code,message:value.message}});});
-  registerDigitalIdentityRoutes(app,{service:identity,creationEnabled:true,root,authenticate:token=>auth.authenticate(token),journeys:new DigitalJourneyQuery(db)});
+  registerDigitalIdentityRoutes(app,{service:identity,creationEnabled:true,root,authenticate:token=>auth.authenticate(token),qcProgress:new QcProductionProgressService(db),factoryFlowService:new FactoryFlowService(db),closureService:new OrderClosureService(db),quotationService:new DigitalQuotationService(db,true),developmentRounds:new DevelopmentRoundService(db,true),notificationService:new DigitalProductionNotificationService(db),taskService:new DigitalProductionTaskService(db),accessService:new DigitalProductionAccessService(db),developmentService:new DigitalDevelopmentService(db,true),developmentExecution:new DevelopmentExecutionService(db,true),developmentAttachments:f.attachments,budgetService:new DigitalBudgetService(db,true),instructionService:new ProductionInstructionService(db,true),bulkPreparationService:new BulkPreparationService(db),journeys:new DigitalJourneyQuery(db)});
   // The unrelated navigation badge is a labelled TEST adapter, still authenticated.
   app.get('/todos/mine/indicator',async(request,reply)=>{const token=request.headers.cookie?.split(';').map(v=>v.trim()).find(v=>v.startsWith('dx_rework_session='))?.slice(18),user=await auth.authenticate(token);reply.header('x-dx-rework-actor-id',user.id);return {pendingCount:0,unreadCount:0};});
   const prefix='TEST-R3-HOME-',scene=await f.scene('2026-08-01T00:00:00Z'),orders:string[]=[];
