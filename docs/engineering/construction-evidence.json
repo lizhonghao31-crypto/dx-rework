@@ -1,37 +1,70 @@
 {
   "version": 1,
-  "base": "becb16847ca2f6a0d6a7f5beb783a33cce19c7bc",
-  "sourceFingerprint": "342cfffb6311dd13245d2d9c4a4eb6f34c5cffaa278a961d86eb7f7260afee14",
+  "base": "3a8c8cd6e40e45755d7028efe9aa6ef84c865f08",
+  "sourceFingerprint": "959bfbbba814b953095e3f476ca5425d8bb61bf17fccf7b7231d79214ab37d95",
   "risk": "full",
   "rules": [
     {
-      "rule": "统一只读双进度：适用大阶段均分，阶段内有效要求均分；保留原n/m、PO、继承、替代和结案证据。",
-      "source": "User approved third-round PR01 in DX_M01_round3_approved_UI_construction_plan_20261107.md and 2026-11-07 parent instructions: only PR01, stop for user acceptance; no deployment or onsite data/config changes. docs/engineering/m01-r3-p01-execution.md",
+      "rule": "Seven KPI and category drill use the same distinct complete basic-filter authorized order set before pagination.",
+      "source": "User accepted PR01 with ok; latest parent delegation authorizes #922 merge then PR02 homepage only, stop for user acceptance without auto merge/start PR03/deploy. Approved full Pro plan and actual homepage image Library libfile_fde3_f-3a313ed0b0cc8191999ad539ded4ba5f_c8d3bf5d609c8191bce6411a30e94d44. docs/engineering/m01-r3-p02-execution.md",
       "writes": [
-        "apps/api/src/production-platform/journey-visual-progress.ts",
+        "apps/api/src/production-platform/journey-projection.ts",
         "packages/contracts/src/digital-production-journey.ts",
-        "tests/unit/journey-visual-progress.test.ts"
+        "tests/unit/cockpit-display-facts.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/journey-business-progress.ts",
-        "apps/api/src/production-platform/journey-progress-dates.ts",
+        "apps/api/src/production-platform/journey-query.ts",
+        "apps/api/src/production-platform/journey-supervision.ts",
         "apps/api/src/production-platform/journey-display.ts",
+        "apps/api/src/production-platform/access-policy.ts"
+      ],
+      "oldTests": [
+        "tests/unit/digital-journey-projection.test.ts",
+        "tests/unit/journey-projection-isolation.test.ts",
+        "tests/integration/digital-journey-postgres.test.ts"
+      ],
+      "initialization": "Additive optional timingMissing and unchanged seven allowed category keys. No migration, historic rewrite or new query. Canonical id dedup precedes sort/count/page. Original closed-order count policy permits fact_time only; drill now shares the same predicate.",
+      "dateAndPermission": "Original AuthService/live scope, Root exception and full candidate reads retained. Basic search/customer/merch/category/stage/node/risk/date conditions remain; overlapping categories count one mother in KPI and independently in categories; legacy unscoped lists unchanged.",
+      "expectation": "32 distinct mothers plus duplicate and unrelated/source counterexamples, all seven category counts, 31-item15+15+1 pagination, closed fact_time and original native Root/designer/task-limited, live-revoke, original-query no-write cases pass.",
+      "checks": [
+        "preflight",
+        "unit",
+        "native",
+        "types",
+        "build",
+        "lint",
+        "secret"
+      ]
+    },
+    {
+      "rule": "Approved compact homepage consumes shared visual ratios and dates, trusted business ID and original quantity facts without flat-count fallback.",
+      "source": "User accepted PR01 with ok; latest parent delegation authorizes #922 merge then PR02 homepage only, stop for user acceptance without auto merge/start PR03/deploy. Approved full Pro plan and actual homepage image Library libfile_fde3_f-3a313ed0b0cc8191999ad539ded4ba5f_c8d3bf5d609c8191bce6411a30e94d44. docs/engineering/m01-r3-p02-execution.md",
+      "writes": [
+        "apps/web/src/cockpit-home.tsx",
+        "apps/web/src/cockpit-home-progress.tsx",
+        "apps/web/src/cockpit-home.css",
+        "tests/unit/cockpit-home.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/journey-visual-progress.ts",
+        "apps/web/src/cockpit-date.tsx",
+        "apps/web/src/cockpit-photo-preview.tsx",
+        "apps/web/src/po-delivery-dates.tsx",
         "apps/web/src/cockpit-business-progress.tsx"
       ],
       "oldTests": [
-        "tests/unit/journey-business-progress.test.ts",
-        "tests/unit/journey-instance-replacement.test.ts",
-        "tests/unit/digital-journey-projection.test.ts"
+        "tests/unit/journey-visual-progress.test.ts",
+        "tests/unit/m01-cockpit-workspace.test.ts",
+        "tests/unit/digital-cockpit-progress.test.ts",
+        "tests/unit/cockpit-detail.test.ts"
       ],
-      "initialization": "Additive optional visualProgress only; no migration or historic rewrite. Original requirement instance IDs and applicability remain the evidence source; source-only progress excludes bulk shares. Legacy UI and n/m stay compatible until approved later UI PRs.",
-      "dateAndPermission": "Unknown and not-applicable are distinct; no permission expansion or fake completion/zero. Stage risk copies original display; whole mainState remains independent and unchanged, no any-overdue-node aggregate rule.",
-      "expectation": "Hand-calculated unequal stage/requirement weights, seven applicable shares, unknown and N/A, source-only, inherited facts, split PO sibling counterexample and closed-with-incomplete facts pass; projection is pure and preserves original display.",
+      "initialization": "Only overview components and namespace styles change. Original full detail and legacy business progress remain independent. No fallback to old display/flat n/m ratios, no business ID generation, UUID promotion, invented photo, clock or SLA changes.",
+      "dateAndPermission": "Unknown, actual0 and actual100 remain distinct; incomplete rounds below100. Expected/actual source dates preserve precision. Positive native visible receipt debt is labelled whole/visible range only when quantity rows support it; whole state remains original mainState irrespective of local risk.",
+      "expectation": "70.8 versus flat80,0/99.9/100/unknown, date-only, old risk/closed facts, complete versus partial quantity scope and invalid debt pass. Full original App screenshots at1165/1366/1584 and390 show original Shell, seven KPI, seven columns, centered quantity, compact long/multi-PO rows and native F debt2.",
       "checks": [
         "preflight",
         "unit",
         "native",
-        "clock",
-        "cost",
         "types",
         "build",
         "lint",
@@ -39,105 +72,75 @@
       ]
     },
     {
-      "rule": "自然时间和原预计/实际精度同源；可信业务时钟包括scenarioId为空的已安装reader。",
-      "source": "User approved third-round PR01 in DX_M01_round3_approved_UI_construction_plan_20261107.md and 2026-11-07 parent instructions: only PR01, stop for user acceptance; no deployment or onsite data/config changes. docs/engineering/m01-r3-p01-execution.md",
+      "rule": "Risk modal and missing-time category navigation retain original facts, filters, page, focus and live authorization through the existing request lifecycle.",
+      "source": "User accepted PR01 with ok; latest parent delegation authorizes #922 merge then PR02 homepage only, stop for user acceptance without auto merge/start PR03/deploy. Approved full Pro plan and actual homepage image Library libfile_fde3_f-3a313ed0b0cc8191999ad539ded4ba5f_c8d3bf5d609c8191bce6411a30e94d44. docs/engineering/m01-r3-p02-execution.md",
       "writes": [
-        "apps/api/src/production-platform/journey-query.ts",
-        "apps/api/src/acceptance-clock/business-time.ts",
-        "tests/unit/acceptance-clock-transaction-reader.test.ts",
-        "tests/integration/digital-journey-postgres.test.ts",
-        "docs/engineering/acceptance-time-sites-20261027.json"
+        "apps/web/src/cockpit-home-dialog.tsx",
+        "apps/web/src/cockpit-home-risks.tsx",
+        "apps/web/src/cockpit-timing-coverage.tsx",
+        "apps/web/src/digital-journey-cockpit.tsx"
       ],
       "reads": [
-        "apps/api/src/acceptance-clock/business-time.ts",
-        "apps/api/src/production-platform/journey-progress-dates.ts",
-        "apps/api/src/production-platform/journey-supervision.ts",
+        "apps/web/src/cockpit-reads.ts",
+        "apps/web/src/auth-session.ts",
+        "apps/web/src/cockpit-reading-context.ts",
+        "apps/web/src/cockpit-dialog-focus.ts",
+        "apps/web/src/digital-cockpit-page.tsx",
+        "apps/web/src/cockpit-node-rows.tsx"
+      ],
+      "oldTests": [
+        "tests/unit/m01-cockpit-reads.test.ts",
+        "tests/unit/m01-cockpit-reading-context.test.ts",
+        "tests/unit/digital-journey-cockpit.test.ts",
+        "tests/unit/digital-pmc-readonly-ui.test.ts"
+      ],
+      "initialization": "Reuse native dialog/focus trap and original useCockpitReads independent generations/identity invalidation. No response cache or fake auth. Main snapshot guard closes obsolete dialogs; category pages are independent UI state. Standard KPI/status changes clear obsolete legacy missing selector, so their full-range counts match corresponding lists.",
+      "dateAndPermission": "First show seven categories, then original authorized paginated reads;0/permission unavailable/read error are distinct. Source risk node/blocker and all PO date/type rows remain in modal without hover growth. Main search/IME/original advanced scopes and detail return retained; exact valid dedicated PMC session is revoked using original AccessService, not Lab role switch.",
+      "expectation": "Original browser covers every positive category/zero-disabled categories,31-order full paging, risk open/close no row growth and restored keyboard focus, category→detail→same page2/customer/search, original F receipt gap,503 retry and same signed-session live PMC revocation. Ordinary KPI clears legacy category selection in real full App.",
+      "checks": [
+        "preflight",
+        "unit",
+        "native",
+        "types",
+        "build",
+        "lint",
+        "secret"
+      ]
+    },
+    {
+      "rule": "New original browser coverage joins canonical plan with bounded setup/cases/cleanup and only changed numeric time inventory entries.",
+      "source": "User accepted PR01 with ok; latest parent delegation authorizes #922 merge then PR02 homepage only, stop for user acceptance without auto merge/start PR03/deploy. Approved full Pro plan and actual homepage image Library libfile_fde3_f-3a313ed0b0cc8191999ad539ded4ba5f_c8d3bf5d609c8191bce6411a30e94d44. docs/engineering/m01-r3-p02-execution.md",
+      "writes": [
+        "tests/acceptance/m01-cockpit-home-native-browser.ts",
+        "tests/fixtures/m01-cockpit-home-native-ui.tsx",
+        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts",
+        "scripts/ci/full-gate-risk-map.mjs",
+        "scripts/ci/prepare-settings-browser.mjs",
+        "scripts/test-suite-plan.mjs",
+        "tests/unit/full-gate-risk-map.test.ts",
+        "docs/engineering/acceptance-time-sites-20261027.json",
+        "docs/requirements/business-analysis-limited-ui-golden-source-v1.0.md",
+        "docs/requirements/rework-ui-golden-source-v1.0.md",
+        "docs/engineering/m01-r3-p02-execution.md"
+      ],
+      "reads": [
+        "scripts/test-execution-config.mjs",
+        "vitest.business-chain.config.ts",
+        "tests/helpers/business-anchor-fixture.ts",
+        "tests/helpers/owned-postgres-schema.ts",
         "scripts/acceptance/time-site-inventory.mjs"
       ],
       "oldTests": [
-        "tests/unit/journey-progress-dates.test.ts",
-        "tests/unit/journey-factory-deadlines.test.ts",
-        "tests/unit/journey-sla-supervision.test.ts",
-        "tests/integration/digital-journey-postgres.test.ts"
-      ],
-      "initialization": "Only an optional ContextBusinessClock.read fallback is added; existing callers with no argument preserve their original real-time default. Context scope validation and actual reader results retain precedence. Generator unchanged. Reconcile exactly modified clock/query and new pure ratio source entries; retain all unrelated manual time annotations and require generator stability. Existing scenario postcheck, transaction and rollback preserved.",
-      "dateAndPermission": "Ordinary orders with no reader or a reader returning null share SQL snapshot asOf; installed readers retain returned trusted time even with null scenarioId. Natural elapsed time includes Sunday; date-only, invalid/reversed boundaries, missing current entry and historical/planning entries cannot synthesize instants. No SLA calendar or security/audit clock change.",
-      "expectation": "Natural time bounds, exact forecast/actual reuse, stale snapshot rejection, actual unscoped-reader multi-order SQL snapshot, original native SLA10 future clock, original mixed-scene and saturated-pool/post-COMMIT guards, original factory/task date precision and read-only evidence pass; M mappings are unchanged, not claimed reverified onsite.",
-      "checks": [
-        "preflight",
-        "unit",
-        "native",
-        "clock",
-        "cost",
-        "types",
-        "build",
-        "lint",
-        "secret"
-      ]
-    },
-    {
-      "rule": "首页list与详情read共用相同比例和事实；原授权、全量分页、历史轮与可信编号边界不变。",
-      "source": "User approved third-round PR01 in DX_M01_round3_approved_UI_construction_plan_20261107.md and 2026-11-07 parent instructions: only PR01, stop for user acceptance; no deployment or onsite data/config changes. docs/engineering/m01-r3-p01-execution.md",
-      "writes": [
-        "apps/api/src/production-platform/journey-query.ts",
-        "tests/integration/digital-journey-postgres.test.ts"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/access-policy.ts",
-        "apps/api/src/production-platform/journey-snapshot-reads.ts",
-        "apps/api/src/production-platform/journey-projection.ts",
-        "apps/api/src/production-platform/identity-service.ts",
-        "apps/api/src/production-platform/identity-routes.ts"
-      ],
-      "oldTests": [
-        "tests/integration/digital-journey-postgres.test.ts",
-        "tests/integration/journey-diagnostic-postgres.test.ts",
-        "tests/integration/m01-journey-performance-postgres.test.ts",
-        "tests/unit/journey-projection-isolation.test.ts"
-      ],
-      "initialization": "No new DB query/write in pure projection. Historical detail retains current effective progress while preserving selected history records. Existing identity reason/null is retained: no trusted business-number mapping exists in current API and ERP-labeled UUID is not promoted; business ID generation excluded.",
-      "dateAndPermission": "Original live role and object-scope paths retained. List whole-order and detail stage ranges may differ in numbers/colors. Existing full candidate statistics, sort, page and P0 remain intact; native data is dedicated isolated TEST schema, never live accounts or orders.",
-      "expectation": "Original authorized HTTP list/detail visual ratios agree; original role denial/revocation, unauthorized export, all-match pagination, historical rounds and concurrent read-only checks pass. Original88-order current-version batch correctness test passes without onsite speed claim.",
-      "checks": [
-        "preflight",
-        "unit",
-        "native",
-        "clock",
-        "cost",
-        "types",
-        "build",
-        "lint",
-        "secret"
-      ]
-    },
-    {
-      "rule": "记录已批准口径、当前PR边界与未证N个案；新增测试进入原canonical配置，不以模拟证明现场。",
-      "source": "User approved third-round PR01 in DX_M01_round3_approved_UI_construction_plan_20261107.md and 2026-11-07 parent instructions: only PR01, stop for user acceptance; no deployment or onsite data/config changes. docs/engineering/m01-r3-p01-execution.md",
-      "writes": [
-        "docs/requirements/business-analysis-limited-ui-golden-source-v1.0.md",
-        "docs/engineering/m01-r3-p01-execution.md",
-        "tests/unit/journey-visual-progress.test.ts"
-      ],
-      "reads": [
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts",
-        "scripts/ci/full-gate-risk-map.mjs",
-        "scripts/test-suite-plan.mjs",
-        "scripts/test-execution-config.mjs"
-      ],
-      "oldTests": [
         "tests/unit/full-gate-risk-map.test.ts",
-        "tests/unit/journey-projection-isolation.test.ts"
+        "tests/integration/digital-journey-postgres.test.ts"
       ],
-      "initialization": "Original default unit glob includes new unit; Journey query/contracts select existing native PG and PG13 compatibility and current-version cost regression. Existing100s correctness/hooks, own low-privilege marker identity and precise suite cleanup remain; no new browser suite or full-node time audit.",
-      "dateAndPermission": "Only PR01 data contracts implemented. No PR02–05, UI style or deployment/onsite writes. N current order ID/full34 raw rows/11 effective-task proofs remain locally unavailable; no fabricated completion audit or claim of onsite root cause.",
-      "expectation": "Original preflight, focused unit/native/clock/cost suites, types/build/lint and secret scan pass on one frozen source; accurate tested base/source fingerprints and result hashes retained. Necessary remote Review/final Gate must follow, then stop for user acceptance without auto merge.",
+      "initialization": "Registered existing business_anchors ownership and marker guard only; original migrations/TEST native business commands, signed AuthService/PostgresAuthStore. Seven separate100s cases and120s setup keep failures located; one finally cleanup closes browser/server/Fastify/schema. Conditional lock-pinned Chromium preparation and exact risk map select the new suite once. No job timeout or business/performance boundary change.",
+      "dateAndPermission": "No onsite account/config/database operation; original fixture names explicitly TEST. Full App is local, not synthetic Shell or onsite acceptance. Numeric Math.min candidate moves from old home fallback to new display-only component; every unrelated inventory entry/manual annotation preserved. N source proofs still unavailable, extra all-node audit paused. #921 and PR01 untouched.",
+      "expectation": "Original preflight, focused old/new unit, same canonical two-worker native old/new suites, types/build/lint/secret pass on this frozen source with actual metadata and cleanup. Independent Review and exact-tuple final Full still required before user acceptance; do not auto merge PR02 or begin PR03.",
       "checks": [
         "preflight",
         "unit",
         "native",
-        "clock",
-        "cost",
         "types",
         "build",
         "lint",
@@ -149,7 +152,7 @@
     {
       "id": "preflight",
       "kind": "tests",
-      "command": "node scripts/test-preflight.mjs",
+      "command": "npm run test:preflight",
       "status": "passed",
       "exitCode": 0,
       "passed": 249,
@@ -158,108 +161,62 @@
       "resultReports": [
         {
           "format": "node-tap",
-          "sha256": "ad78529b79229d9216677d3dfd72f333405acf14cf349e29298dcd52ab6a8b8a"
+          "sha256": "11ba98657acdfe1c4a55f975330e532fe9b3ff854dc86a8ae443f7747a532bb0"
         }
       ],
-      "testedHead": "daad60735d5c6ec7f21604b464c948b479c4d75a",
-      "sourceFingerprint": "342cfffb6311dd13245d2d9c4a4eb6f34c5cffaa278a961d86eb7f7260afee14",
-      "startedAt": "2026-11-07T10:09:38.539Z",
-      "endedAt": "2026-11-07T10:09:44.556Z",
-      "log": "/workspace/scratch/m01-r3-p01-fix-clock-preflight.log",
-      "logSha256": "ad78529b79229d9216677d3dfd72f333405acf14cf349e29298dcd52ab6a8b8a",
-      "context": "Node22.22.2/npm10.9.9 under Nodeaffinity2,3; actual command/config shown, DATABASE_URL/TEST_DATABASE_URL/ACCEPTANCE_CLOCK_TEST_DATABASE_URL all empty. Ordinary Vitest unit workers1; NodeTAP preflight owns its separately reported protocol worker bound; no database or onsite operation."
+      "testedHead": "3a8c8cd6e40e45755d7028efe9aa6ef84c865f08",
+      "sourceFingerprint": "959bfbbba814b953095e3f476ca5425d8bb61bf17fccf7b7231d79214ab37d95",
+      "startedAt": "2026-11-07T11:37:34.919Z",
+      "endedAt": "2026-11-07T11:37:41.015Z",
+      "log": "/workspace/scratch/m01-r3-p02-preflight.log",
+      "logSha256": "11ba98657acdfe1c4a55f975330e532fe9b3ff854dc86a8ae443f7747a532bb0",
+      "context": "Node22.22.2/npm10.9.9, Node and browser descendant affinity2,3; database env empty; original bounded config and focused suites; preflight owns original protocol workers; no onsite operation."
     },
     {
       "id": "unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/journey-visual-progress.test.ts tests/unit/journey-business-progress.test.ts tests/unit/journey-progress-dates.test.ts tests/unit/journey-instance-replacement.test.ts tests/unit/journey-factory-deadlines.test.ts tests/unit/journey-sla-supervision.test.ts tests/unit/digital-journey-projection.test.ts tests/unit/journey-projection-isolation.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/acceptance-clock-transaction-reader.test.ts tests/unit/acceptance-sla-clock.test.ts tests/unit/business-time-write-contract.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-r3-p01-fix-clock-unit.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/cockpit-home.test.ts tests/unit/cockpit-display-facts.test.ts tests/unit/digital-journey-cockpit.test.ts tests/unit/digital-journey-projection.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/m01-cockpit-workspace.test.ts tests/unit/m01-cockpit-reads.test.ts tests/unit/m01-cockpit-reading-context.test.ts tests/unit/digital-cockpit-progress.test.ts tests/unit/digital-cockpit-time.test.ts tests/unit/journey-projection-isolation.test.ts tests/unit/journey-visual-progress.test.ts tests/unit/journey-business-progress.test.ts tests/unit/journey-progress-dates.test.ts tests/unit/digital-pmc-readonly-ui.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-r3-p02-unit.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 157,
+      "passed": 220,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "4bd449c051d8e9336bd7a8f33cd85cc5927f9b5037248ba3ecc2a4f878f26c81"
+          "sha256": "b83419f83d36b88cba93ef9ebbe0697beec41bb3ca86d9b5f6cd2b50c6f72b9a"
         }
       ],
-      "testedHead": "daad60735d5c6ec7f21604b464c948b479c4d75a",
-      "sourceFingerprint": "342cfffb6311dd13245d2d9c4a4eb6f34c5cffaa278a961d86eb7f7260afee14",
-      "startedAt": "2026-11-07T10:09:44.615Z",
-      "endedAt": "2026-11-07T10:09:50.273Z",
-      "log": "/workspace/scratch/m01-r3-p01-fix-clock-unit.log",
-      "logSha256": "7ae67bb5160ada859229041f5a12b318c4c24ab9ac453d88376ac84da9a76abf",
-      "context": "Node22.22.2/npm10.9.9 under Nodeaffinity2,3; actual command/config shown, DATABASE_URL/TEST_DATABASE_URL/ACCEPTANCE_CLOCK_TEST_DATABASE_URL all empty. Ordinary Vitest unit workers1; NodeTAP preflight owns its separately reported protocol worker bound; no database or onsite operation."
+      "testedHead": "3a8c8cd6e40e45755d7028efe9aa6ef84c865f08",
+      "sourceFingerprint": "959bfbbba814b953095e3f476ca5425d8bb61bf17fccf7b7231d79214ab37d95",
+      "startedAt": "2026-11-07T11:37:41.098Z",
+      "endedAt": "2026-11-07T11:37:46.950Z",
+      "log": "/workspace/scratch/m01-r3-p02-unit.log",
+      "logSha256": "f1fde7155d13ec0d0f3a2abd47ee6db36bcba0e3a03b1494a749095990d5afbd",
+      "context": "Node22.22.2/npm10.9.9, Node and browser descendant affinity2,3; database env empty; original bounded config and focused suites; preflight owns original protocol workers; no onsite operation."
     },
     {
       "id": "native",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers=2 tests/integration/digital-journey-postgres.test.ts tests/integration/journey-diagnostic-postgres.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-r3-p01-fix-clock-native.json",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers=2 tests/integration/m01-cockpit-home-native-browser-postgres.test.ts tests/integration/digital-journey-postgres.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-r3-p02-native.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 37,
+      "passed": 40,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "5b3e1f6789c137eb149182198f61ebe452f5829e5792dd294555653ad457258d"
+          "sha256": "fbda169d0b4e9f39962b7b522ae78be407ab419712ff317878f74619565cfc66"
         }
       ],
-      "testedHead": "daad60735d5c6ec7f21604b464c948b479c4d75a",
-      "sourceFingerprint": "342cfffb6311dd13245d2d9c4a4eb6f34c5cffaa278a961d86eb7f7260afee14",
-      "startedAt": "2026-11-07T10:09:50.319Z",
-      "endedAt": "2026-11-07T10:10:50.165Z",
-      "log": "/workspace/scratch/m01-r3-p01-fix-clock-native.log",
-      "logSha256": "74b6ef81a2644a25664c5febdd49da7407f616e4ad3828daa4bb0848f61f67d4",
-      "context": "Actual original canonical business-chain config; two workers, original native Journey/SLA/role/HTTP query regressions; Node22.22.2/npm10.9.9 Nodeaffinity2,3, own marked low-privilege PG16.15 cpuset0,1 CPU2/memory2GiB; original100s correctness/hooks and existing cost-case budget. Not CI hardware or onsite equivalence."
-    },
-    {
-      "id": "clock",
-      "kind": "tests",
-      "command": "DX_REWORK_TEST_SUITE_KIND=postgres node node_modules/vitest/vitest.mjs run tests/integration/time-reading-clock-postgres.test.ts --maxWorkers=1 --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-r3-p01-fix-clock-clock.json",
-      "status": "passed",
-      "exitCode": 0,
-      "passed": 13,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "c933aff6360cf8177d753dd73b00128ab296353839913a9364d8dfe17325cc57"
-        }
-      ],
-      "testedHead": "daad60735d5c6ec7f21604b464c948b479c4d75a",
-      "sourceFingerprint": "342cfffb6311dd13245d2d9c4a4eb6f34c5cffaa278a961d86eb7f7260afee14",
-      "startedAt": "2026-11-07T10:10:50.201Z",
-      "endedAt": "2026-11-07T10:10:59.748Z",
-      "log": "/workspace/scratch/m01-r3-p01-fix-clock-clock.log",
-      "logSha256": "798e1892ccf75d24a54f3ef8fc40fed31c0cf6956021b177325d4de8ffccce0d",
-      "context": "Actual original canonical vitest.config.ts in PostgreSQL mode with original per-file100s budget; one worker, original mixed-scene/ordinary observations, pool saturation, no-ALS post-COMMIT guard and date precision; Node22.22.2/npm10.9.9 Nodeaffinity2,3, own marked low-privilege PG16.15 cpuset0,1 CPU2/memory2GiB; original100s correctness/hooks and existing cost-case budget. Not CI hardware or onsite equivalence."
-    },
-    {
-      "id": "cost",
-      "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers=1 tests/integration/m01-journey-performance-postgres.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-r3-p01-fix-clock-cost.json",
-      "status": "passed",
-      "exitCode": 0,
-      "passed": 1,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "6239ce66224ac07f376f763bc11b1b36bbd64db62138e8e6d80e82ae99a8d9a9"
-        }
-      ],
-      "testedHead": "daad60735d5c6ec7f21604b464c948b479c4d75a",
-      "sourceFingerprint": "342cfffb6311dd13245d2d9c4a4eb6f34c5cffaa278a961d86eb7f7260afee14",
-      "startedAt": "2026-11-07T10:10:59.789Z",
-      "endedAt": "2026-11-07T10:11:34.863Z",
-      "log": "/workspace/scratch/m01-r3-p01-fix-clock-cost.log",
-      "logSha256": "37c666ae805c681400762ac66fa6dddda080905df3e3c5cab2d151fa547f05b9",
-      "context": "Actual original canonical business-chain config; one worker, isolated original88-order/current-version cost/authority correctness, no paired baseline or onsite improvement claim; Node22.22.2/npm10.9.9 Nodeaffinity2,3, own marked low-privilege PG16.15 cpuset0,1 CPU2/memory2GiB; original100s correctness/hooks and existing cost-case budget. Not CI hardware or onsite equivalence."
+      "testedHead": "3a8c8cd6e40e45755d7028efe9aa6ef84c865f08",
+      "sourceFingerprint": "959bfbbba814b953095e3f476ca5425d8bb61bf17fccf7b7231d79214ab37d95",
+      "startedAt": "2026-11-07T11:37:47.032Z",
+      "endedAt": "2026-11-07T11:38:53.478Z",
+      "log": "/workspace/scratch/m01-r3-p02-native.log",
+      "logSha256": "001147dc27fe6fd6d0cf1af3dfbb4eecd47c5102dfc6a18f4a042c70e0645475",
+      "context": "Node22.22.2/npm10.9.9, Node and browser descendant affinity2,3; original business-chain config, two workers, original100s test/hooks with explicit120s setup; own low-privilege marked PG16.15 cpuset0,1 CPU2 memory2GiB, lock-pinned Chromium141.0.7390.37 Playwright1.56.1; original AuthService and full App TEST fixtures, no site writes. Same canonical config/browser, not CI hardware/load or onsite equivalence."
     },
     {
       "id": "types",
@@ -267,13 +224,13 @@
       "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "daad60735d5c6ec7f21604b464c948b479c4d75a",
-      "sourceFingerprint": "342cfffb6311dd13245d2d9c4a4eb6f34c5cffaa278a961d86eb7f7260afee14",
-      "startedAt": "2026-11-07T10:11:34.902Z",
-      "endedAt": "2026-11-07T10:12:06.818Z",
-      "log": "/workspace/scratch/m01-r3-p01-fix-clock-types.log",
+      "testedHead": "3a8c8cd6e40e45755d7028efe9aa6ef84c865f08",
+      "sourceFingerprint": "959bfbbba814b953095e3f476ca5425d8bb61bf17fccf7b7231d79214ab37d95",
+      "startedAt": "2026-11-07T11:38:53.557Z",
+      "endedAt": "2026-11-07T11:39:25.814Z",
+      "log": "/workspace/scratch/m01-r3-p02-types.log",
       "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e",
-      "context": "Node22.22.2/npm10.9.9 under Nodeaffinity2,3; actual command/config shown, DATABASE_URL/TEST_DATABASE_URL/ACCEPTANCE_CLOCK_TEST_DATABASE_URL all empty. Ordinary Vitest unit workers1; NodeTAP preflight owns its separately reported protocol worker bound; no database or onsite operation."
+      "context": "Node22.22.2/npm10.9.9, Node and browser descendant affinity2,3; database env empty; original bounded config and focused suites; preflight owns original protocol workers; no onsite operation."
     },
     {
       "id": "build",
@@ -281,13 +238,13 @@
       "command": "npm run build --workspaces --if-present",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "daad60735d5c6ec7f21604b464c948b479c4d75a",
-      "sourceFingerprint": "342cfffb6311dd13245d2d9c4a4eb6f34c5cffaa278a961d86eb7f7260afee14",
-      "startedAt": "2026-11-07T10:12:06.857Z",
-      "endedAt": "2026-11-07T10:12:25.565Z",
-      "log": "/workspace/scratch/m01-r3-p01-fix-clock-build.log",
-      "logSha256": "c02660c238634b09e9d09c2f8a8aa861e9c6cbf10f256283ea6fac7c83adc351",
-      "context": "Node22.22.2/npm10.9.9 under Nodeaffinity2,3; actual command/config shown, DATABASE_URL/TEST_DATABASE_URL/ACCEPTANCE_CLOCK_TEST_DATABASE_URL all empty. Ordinary Vitest unit workers1; NodeTAP preflight owns its separately reported protocol worker bound; no database or onsite operation."
+      "testedHead": "3a8c8cd6e40e45755d7028efe9aa6ef84c865f08",
+      "sourceFingerprint": "959bfbbba814b953095e3f476ca5425d8bb61bf17fccf7b7231d79214ab37d95",
+      "startedAt": "2026-11-07T11:39:25.898Z",
+      "endedAt": "2026-11-07T11:39:44.702Z",
+      "log": "/workspace/scratch/m01-r3-p02-build.log",
+      "logSha256": "db81844837e7077c130453fb40b98e893bb36bc3c52bf720511ea6401c20291f",
+      "context": "Node22.22.2/npm10.9.9, Node and browser descendant affinity2,3; database env empty; original bounded config and focused suites; preflight owns original protocol workers; no onsite operation."
     },
     {
       "id": "lint",
@@ -295,13 +252,13 @@
       "command": "npm run lint",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "daad60735d5c6ec7f21604b464c948b479c4d75a",
-      "sourceFingerprint": "342cfffb6311dd13245d2d9c4a4eb6f34c5cffaa278a961d86eb7f7260afee14",
-      "startedAt": "2026-11-07T10:12:25.602Z",
-      "endedAt": "2026-11-07T10:12:46.854Z",
-      "log": "/workspace/scratch/m01-r3-p01-fix-clock-lint.log",
+      "testedHead": "3a8c8cd6e40e45755d7028efe9aa6ef84c865f08",
+      "sourceFingerprint": "959bfbbba814b953095e3f476ca5425d8bb61bf17fccf7b7231d79214ab37d95",
+      "startedAt": "2026-11-07T11:39:44.781Z",
+      "endedAt": "2026-11-07T11:40:05.638Z",
+      "log": "/workspace/scratch/m01-r3-p02-lint.log",
       "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763",
-      "context": "Node22.22.2/npm10.9.9 under Nodeaffinity2,3; actual command/config shown, DATABASE_URL/TEST_DATABASE_URL/ACCEPTANCE_CLOCK_TEST_DATABASE_URL all empty. Ordinary Vitest unit workers1; NodeTAP preflight owns its separately reported protocol worker bound; no database or onsite operation."
+      "context": "Node22.22.2/npm10.9.9, Node and browser descendant affinity2,3; database env empty; original bounded config and focused suites; preflight owns original protocol workers; no onsite operation."
     },
     {
       "id": "secret",
@@ -309,13 +266,13 @@
       "command": "npm run secret:scan",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "daad60735d5c6ec7f21604b464c948b479c4d75a",
-      "sourceFingerprint": "342cfffb6311dd13245d2d9c4a4eb6f34c5cffaa278a961d86eb7f7260afee14",
-      "startedAt": "2026-11-07T10:12:46.894Z",
-      "endedAt": "2026-11-07T10:12:47.400Z",
-      "log": "/workspace/scratch/m01-r3-p01-fix-clock-secret.log",
+      "testedHead": "3a8c8cd6e40e45755d7028efe9aa6ef84c865f08",
+      "sourceFingerprint": "959bfbbba814b953095e3f476ca5425d8bb61bf17fccf7b7231d79214ab37d95",
+      "startedAt": "2026-11-07T11:40:05.715Z",
+      "endedAt": "2026-11-07T11:40:06.268Z",
+      "log": "/workspace/scratch/m01-r3-p02-secret.log",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda",
-      "context": "Node22.22.2/npm10.9.9 under Nodeaffinity2,3; actual command/config shown, DATABASE_URL/TEST_DATABASE_URL/ACCEPTANCE_CLOCK_TEST_DATABASE_URL all empty. Ordinary Vitest unit workers1; NodeTAP preflight owns its separately reported protocol worker bound; no database or onsite operation."
+      "context": "Node22.22.2/npm10.9.9, Node and browser descendant affinity2,3; database env empty; original bounded config and focused suites; preflight owns original protocol workers; no onsite operation."
     }
   ]
 }

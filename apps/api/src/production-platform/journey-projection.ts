@@ -1,4 +1,4 @@
-import { JOURNEY_STAGES, isJourneyPlanningNode, type JourneyFilter, type JourneyNode, type JourneyResult, type OrderJourney, type JourneyState } from "@dx-rework/contracts/digital-production-journey";
+import { JOURNEY_COVERAGE_KEYS, JOURNEY_STAGES, isJourneyPlanningNode, type JourneyCoverage, type JourneyFilter, type JourneyNode, type JourneyResult, type OrderJourney, type JourneyState } from "@dx-rework/contracts/digital-production-journey";
 import {compareCockpitOrders,journeyDisplay} from "./journey-display.js";
 
 /** A real instance replaces only its own round's empty catalogue slot. */
@@ -54,19 +54,24 @@ export function selectJourneys(items:OrderJourney[],filter:JourneyFilter,asOf:st
 }
 
 function selectCockpitJourneys(items:OrderJourney[],filter:JourneyFilter,asOf:string,paginate:boolean):JourneyResult {
-  const base=selectJourneys(items,{...filter,scope:undefined,kpi:"all",page:1,missing:undefined},asOf,false).items
+  const seen=new Set<string>();
+  const base=selectJourneys(items,{...filter,scope:undefined,kpi:"all",page:1,missing:undefined},asOf,false).items.filter(item=>{
+    if(seen.has(item.id))return false;seen.add(item.id);return true;
+  })
     .map(item=>({...item,display:item.display??journeyDisplay(item,asOf)}));
   const scopeCounts={production:base.filter(item=>item.orderId&&item.display.mainState!=="cancelled").length,development:base.filter(item=>!item.orderId).length,cancelled:base.filter(item=>item.display.mainState==="cancelled").length};
   const scoped=base.filter(item=>filter.scope==="development"?!item.orderId:Boolean(item.orderId)&&item.display.mainState!=="cancelled").sort(compareCockpitOrders);
   const scopeNodes=(item:OrderJourney)=>nodesOf(item).filter(node=>(!filter.stage||node.stage===filter.stage)&&(!filter.node||node.key===filter.node)&&(!filter.state||node.state===filter.state)&&(!filter.risk||node.risks.includes(filter.risk)));
   const blocked=(item:typeof scoped[number])=>!['completed','cancelled'].includes(item.display.mainState)&&scopeNodes(item).some(node=>node.state==='blocked');
   const count=(state:NonNullable<OrderJourney["display"]>["mainState"])=>scoped.filter(item=>item.display.mainState===state).length;
-  const summary={all:scoped.length,active:count("active"),notStarted:count("not_started"),dueSoon:count("due_soon"),overdue:count("overdue"),completed:count("completed"),blocked:scoped.filter(blocked).length};
-  const coverageKeys=["customer_date","factory_date","fabric_date","cutting_time","plan","scope","fact_time"] as const;
+  // Keep original closed-order coverage policy, and use it for both counts and
+  // drill-down. Overlapping categories still count one mother in the KPI.
+  const missing=(item:OrderJourney,key:JourneyCoverage['key'])=>(key==='fact_time'||!['completed','cancelled'].includes(item.display!.mainState))&&Boolean(item.supervision?.coverage.some(c=>c.key===key));
+  const summary={all:scoped.length,active:count("active"),notStarted:count("not_started"),dueSoon:count("due_soon"),overdue:count("overdue"),completed:count("completed"),blocked:scoped.filter(blocked).length,timingMissing:scoped.filter(item=>JOURNEY_COVERAGE_KEYS.some(key=>missing(item,key))).length};
   const active=scoped.filter(item=>!["completed","cancelled"].includes(item.display.mainState));
   const inProgress=(item:OrderJourney)=>scopeNodes(item).filter(n=>!["completed","inherited","cancelled","not_applicable","unavailable"].includes(n.state));
   const supervision={overdue:active.filter(item=>inProgress(item).some(n=>n.risks.includes("overdue"))).length,dueSoon:active.filter(item=>inProgress(item).some(n=>n.risks.includes("due_soon"))).length,
-    coverage:coverageKeys.flatMap(key=>{const affected=(key==='fact_time'?scoped:active).filter(item=>item.supervision?.coverage.some(c=>c.key===key));return affected.length?[{key,orders:affected.length,message:affected[0]!.supervision!.coverage.find(c=>c.key===key)!.message}]:[];})};
-  const filtered=scoped.filter(item=>(!filter.missing||item.supervision?.coverage.some(c=>c.key===filter.missing))&&(filter.kpi==="all"||filter.kpi==="blocked"&&blocked(item)||item.display.mainState===filter.kpi));
+    coverage:JOURNEY_COVERAGE_KEYS.flatMap(key=>{const affected=scoped.filter(item=>missing(item,key));return affected.length?[{key,orders:affected.length,message:affected[0]!.supervision!.coverage.find(c=>c.key===key)!.message}]:[];})};
+  const filtered=scoped.filter(item=>(!filter.missing||missing(item,filter.missing))&&(filter.kpi==="all"||filter.kpi==="blocked"&&blocked(item)||item.display.mainState===filter.kpi));
   return {ruleVersion:"journey-v2.0",asOf,page:filter.page,pageSize:15,total:filtered.length,summary,supervision,scopeCounts,items:paginate?filtered.slice((filter.page-1)*15,filter.page*15):filtered};
 }

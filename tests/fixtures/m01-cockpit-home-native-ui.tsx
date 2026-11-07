@@ -1,0 +1,12 @@
+import {App} from '../../apps/web/src/App.js';
+import {createRoot} from 'react-dom/client';
+import '../../packages/ui/src/tokens.css';
+import '../../packages/ui/src/components.css';
+import '../../apps/web/src/styles.css';
+import '../../apps/web/src/workflow-shell.css';
+import '../../apps/web/src/dialog-visual-system.css';
+import '../../apps/web/src/workflow-state-visual.css';
+import '../../apps/web/src/responsibility-determination.css';
+import '../../apps/web/src/ui-polish.css';
+import '../../apps/web/src/scoped-select-arrow.css';
+createRoot(document.getElementById('root')!).render(<App/>);
