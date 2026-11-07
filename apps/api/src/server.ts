@@ -135,6 +135,8 @@ const dingtalkProvider = config.acceptanceLab.enabled
       database,
       config.dingtalk.corpId,
       config.acceptanceLab.secret!,
+      Date.now,
+      config.sessionTtlSeconds,
     )
   : new OfficialDingTalkProvider(config.dingtalk);
 const auth = new AuthService(

@@ -5,6 +5,19 @@ import { describe, expect, it } from "vitest";
 
 import { assertMappedPostgresTests, classifyFullGatePaths, POSTGRES_CASE_SUITES } from "../../scripts/ci/full-gate-risk-map.mjs";
 import {configForSuite,fullGatePostgresPlan,POSTGRES_CHAIN_TESTS} from '../../scripts/test-suite-plan.mjs';
+import {settingsBrowserRequired} from '../../scripts/ci/prepare-settings-browser.mjs';
+
+it('keeps native persistent-session and Chromium coverage in the exact auth/config plan', () => {
+  const suite='tests/integration/acceptance-session-retention-postgres.test.ts';
+  for(const path of ['apps/api/src/auth/service.ts','apps/api/src/auth/acceptance-control.ts','packages/config/src/index.ts',suite]) {
+    const risk=classifyFullGatePaths([path]);
+    expect(risk.mappedPostgresTests).toContain(suite);
+    expect(configForSuite(suite)).toBe('vitest.business-chain.config.ts');
+    const env={DB_REQUIRED:'true',BASE_SHA:'a'.repeat(40),BUSINESS_CHAIN_SENSITIVE:'false',MIGRATION_SENSITIVE:'false',DEPLOYMENT_SENSITIVE:'false',MAPPED_POSTGRES_TESTS:suite};
+    expect(settingsBrowserRequired(env)).toBe(true);
+  }
+  expect(classifyFullGatePaths(['apps/api/src/wages/wage-service.ts']).mappedPostgresTests).not.toContain(suite);
+});
 
 const amendmentSuite='tests/integration/development-amendment-postgres.test.ts';
 const amendmentPlan=(paths:string[])=>{

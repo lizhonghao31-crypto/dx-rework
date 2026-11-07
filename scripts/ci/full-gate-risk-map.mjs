@@ -171,6 +171,10 @@ export const classifyFullGatePaths = (inputPaths) => {
   let maintenanceSensitive = false;
   let activationSensitive = false;
   let transferSensitive = false;
+  if (paths.some(path => path.startsWith('apps/api/src/auth/') || path === 'packages/config/src/index.ts' || path === 'tests/integration/acceptance-session-retention-postgres.test.ts')) {
+    mappedTests.add('tests/integration/acceptance-session-retention-postgres.test.ts');
+    domains.add('acceptance-session-retention');
+  }
   if(paths.some(path=>['apps/api/src/production-platform/journey-query.ts','apps/api/src/production-platform/journey-snapshot-reads.ts','apps/api/src/production-platform/journey-snapshot-batches.ts','apps/api/src/production-platform/journey-batch-templates.ts','apps/api/src/production-platform/journey-task-summary.ts','tests/integration/m01-journey-performance-postgres.test.ts'].includes(path))){mappedTests.add('tests/integration/m01-journey-performance-postgres.test.ts');domains.add('journey-request-batches');}
   if(paths.some(path=>['tests/acceptance/m01-current-production-native-browser.ts','tests/fixtures/m01-current-production-native-ui.tsx'].includes(path))){for(const suite of ['m01-current-production','m01-production-period','m01-production-collaboration'])mappedTests.add('tests/integration/'+suite+'-native-browser-postgres.test.ts');domains.add('shared-production-browser');}
   if(paths.some(path=>/production-collaboration|m01-production-collaboration/.test(path))){mappedTests.add('tests/integration/m01-production-collaboration-postgres.test.ts');mappedTests.add('tests/integration/m01-production-collaboration-native-browser-postgres.test.ts');domains.add('production-collaboration');}

@@ -60,6 +60,8 @@ class RacingAcceptanceProvider implements DingTalkProvider {
 
   async beginAcceptanceControl() { this.controlActive = true; return "control"; }
   assertAcceptanceControl() { if (!this.controlActive) throw new Error("control ended"); }
+  async bindAcceptanceBusinessSession() { this.assertAcceptanceControl(); }
+  async assertAcceptanceBusinessSession() { this.assertAcceptanceControl(); }
   async listAcceptanceIdentities() { return []; }
   async issueAcceptanceLoginCode() {
     this.assertAcceptanceControl();

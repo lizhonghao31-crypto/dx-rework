@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 
 import type { AuthService } from "./service.js";
 
-const CONTROL_COOKIE = "dx_acceptance_control";
+export const CONTROL_COOKIE = "dx_acceptance_control";
 const BUSINESS_COOKIE = "dx_rework_session";
 
 const cookieToken = (request: FastifyRequest, name: string): string | undefined =>
@@ -24,7 +24,7 @@ export function registerAcceptanceControlRoutes(
   options: AcceptanceControlRouteOptions,
 ): void {
   const controlCookie = (token: string) =>
-    `${CONTROL_COOKIE}=${token}; Path=${options.appBasePath}; HttpOnly; SameSite=Strict; Max-Age=28800${options.secureCookie ? "; Secure" : ""}`;
+    `${CONTROL_COOKIE}=${token}; Path=${options.appBasePath}; HttpOnly; SameSite=Strict; Max-Age=${options.ttlSeconds}${options.secureCookie ? "; Secure" : ""}`;
   const businessCookie = (token: string) =>
     `${BUSINESS_COOKIE}=${token}; Path=${options.appBasePath}; HttpOnly; SameSite=Lax; Max-Age=${options.ttlSeconds}${options.secureCookie ? "; Secure" : ""}`;
   const clearControl = `${CONTROL_COOKIE}=; Path=${options.appBasePath}; HttpOnly; SameSite=Strict; Max-Age=0${options.secureCookie ? "; Secure" : ""}`;
@@ -44,6 +44,7 @@ export function registerAcceptanceControlRoutes(
     const result = await auth.switchAcceptanceIdentity(
       cookieToken(request, CONTROL_COOKIE),
       request.body?.alias ?? "",
+      cookieToken(request, BUSINESS_COOKIE),
     );
     return reply.header("set-cookie", businessCookie(result.token)).send({
       status: result.user.capabilities.length ? "authorized" : "no_role",

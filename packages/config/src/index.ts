@@ -1,5 +1,8 @@
 import { z } from "zod";
 
+export const DEFAULT_SESSION_TTL_SECONDS = 28800;
+export const MAX_ACCEPTANCE_SESSION_TTL_SECONDS = 30 * 24 * 60 * 60;
+
 const PostgreSqlUrlSchema = z.string().min(1).refine(
   (value) => {
     try {
@@ -38,7 +41,7 @@ const EnvironmentSchema = z
     APP_BASE_PATH: z.string().regex(/^\/(?!\/)[^?#\\]*$/).refine((value) => !value.includes("//"), "must not contain empty path segments").default("/"),
     SESSION_SECRET: z.string().min(32),
     SESSION_COOKIE_SECURE: z.enum(["true", "false"]).optional(),
-    SESSION_TTL_SECONDS: z.coerce.number().int().min(300).max(86400).default(28800),
+    SESSION_TTL_SECONDS: z.coerce.number().int().min(300).max(MAX_ACCEPTANCE_SESSION_TTL_SECONDS).default(DEFAULT_SESSION_TTL_SECONDS),
     ROOT_DINGTALK_USER_ID: z.string().trim().min(1).max(200).optional(),
     OWNER_BOOTSTRAP_DINGTALK_USER_ID: z.string().trim().min(1).max(200).optional(),
     OWNER_BOOTSTRAP_SECRET: z.string().min(32).max(1024).optional(),
@@ -85,6 +88,9 @@ const EnvironmentSchema = z
       context.addIssue({ code: "custom", path: ["SESSION_COOKIE_SECURE"], message: "HTTPS and production require Secure session cookies" });
     }
     const acceptanceEnabled = environment.ACCEPTANCE_LAB_ENABLED === "true";
+    if (environment.SESSION_TTL_SECONDS > 86400 && !(acceptanceEnabled && environment.NODE_ENV === "test")) {
+      context.addIssue({ code: "custom", path: ["SESSION_TTL_SECONDS"], message: "sessions longer than 24 hours require the isolated test Acceptance lab" });
+    }
     if (acceptanceEnabled && environment.NODE_ENV !== "test") {
       context.addIssue({
         code: "custom",
