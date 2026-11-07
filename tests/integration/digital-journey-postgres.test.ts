@@ -463,10 +463,29 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
       expect(response.statusCode,response.body).toBe(200);
       expect(response.headers['cache-control']).toBe('no-store');
       expect(response.json()).toMatchObject({display:{ruleVersion:'cockpit-display-v1'},operationLog:{items:expect.any(Array)}});
+      const body=response.json();
+      expect(body.visualProgress).toMatchObject({ruleVersion:'journey-visual-v1',asOf:body.asOf});
+      expect(body.businessProgress.asOf).toBe(body.asOf);
+      expect(body.visualProgress.expected).toEqual(body.businessProgress.dates.overall.forecast);
+      expect(body.visualProgress.actual).toEqual(body.businessProgress.dates.overall.actual);
     }
     const list=await app.inject({url:'/digital-production/journeys?scope=production&search=ROOT-HTTP',headers});
     expect(list.statusCode,list.body).toBe(200);expect(list.json().items).toHaveLength(2);
     expect(list.json().items.every((item:{display?:unknown})=>item.display)).toBe(true);
+    for(const item of list.json().items){
+      const detail=await app.inject({url:`/digital-production/journeys/${item.id}?view=cockpit`,headers});
+      expect(detail.statusCode).toBe(200);
+      expect(detail.json().visualProgress.actualRatio).toBe(item.visualProgress.actualRatio);
+      expect(detail.json().visualProgress.stages.map((stage:{key:string;actualRatio:number|null})=>[stage.key,stage.actualRatio]))
+        .toEqual(item.visualProgress.stages.map((stage:{key:string;actualRatio:number|null})=>[stage.key,stage.actualRatio]));
+    }
+    const ordinaryPool={connect:db.connect.bind(db),query:db.query.bind(db)} as unknown as pg.Pool;
+    installAcceptanceClockReader(ordinaryPool,{read:async()=>null,nativeScenario:async()=>null});
+    const ordinary=await new DigitalJourneyQuery(ordinaryPool).list(actor(root,['root_superuser']),JourneyFilterSchema.parse({scope:'production',search:'ROOT-HTTP'}));
+    expect(ordinary.items).toHaveLength(2);
+    for(const item of ordinary.items){
+      expect(item.asOf).toBe(ordinary.asOf);expect(item.businessProgress?.asOf).toBe(ordinary.asOf);expect(item.visualProgress?.asOf).toBe(ordinary.asOf);
+    }
   });
   it("validates read routes and preserves no-store and permission rejection",async()=>{
     const order=await identity.createOrder(actor(),input("HTTP"),randomUUID());
@@ -685,6 +704,7 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     installAcceptanceClockReader(scoped,{read:async()=>({now:next,scenarioId:null,revision:0}),nativeScenario:async()=>null});
     const later=await new DigitalJourneyQuery(scoped).read(actor(),source,undefined,true);
     expect(later.supervision?.asOf).toBe(next);expect(later.display?.actualRatio).toEqual(normal.display?.actualRatio);
+    expect(later.asOf).toBe(next);expect(later.businessProgress?.asOf).toBe(next);expect(later.visualProgress?.asOf).toBe(next);
     const first=normal.supervision!.nodes.find(n=>n.id==='development_materials')!,second=later.supervision!.nodes.find(n=>n.id==='development_materials')!;
     expect(second.original).toEqual(first.original);expect(second.target).toEqual(first.target);expect(second.status).toBe('overdue');
     expect(later.stages.flatMap(s=>s.nodes).find(n=>n.key==='development_materials')!.state).toEqual(normal.stages.flatMap(s=>s.nodes).find(n=>n.key==='development_materials')!.state);

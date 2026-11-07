@@ -44,6 +44,7 @@ import {readMaterialSuccessors} from './journey-material-successors.js';
 import {factorySlaEvidence} from './factory-sla-evidence.js';
 import {attachJourneyFactoryDeadlines} from './journey-factory-deadlines.js';
 import {journeyBusinessDates} from './journey-progress-dates.js';
+import {journeyVisualProgress} from './journey-visual-progress.js';
 
 const iso = (value: Date|string|null|undefined) => value == null ? null : new Date(value).toISOString();
 type Candidate = { source: {development_type:string;source_id:string;created_by:string;design_style_no:string;temporary_style_no:string|null;customer_code:string|null;created_at:string}|null;
@@ -142,6 +143,7 @@ export class DigitalJourneyQuery {
       const current=round===undefined?item:await this.project(db,actor,row,asOf,undefined,true,null,false,compact);
       if(current){
         if(current.businessProgress)item.businessProgress=current.businessProgress;
+        if(current.visualProgress)item.visualProgress=current.visualProgress;
         if(current.identity)item.identity=current.identity;
         if(current.display)item.display=current.display;
         if(current.supervision)item.supervision=current.supervision;
@@ -185,9 +187,11 @@ export class DigitalJourneyQuery {
     const sid=source?.source_id??null,oid=order?.production_order_id??null;
     // Projection time is business time; the outer audit-log snapshot remains real.
     const scope:BusinessTimeScope=oid?{kind:'order',id:oid}:{kind:'source',id:sid!};
-    const observed=await journeyMeasure('clock_read',()=>new ContextBusinessClock(this.database,db).read(scope));
+    // Use SQL snapshot time only as the ordinary fallback. Guarded context and
+    // actual reader results (including null scenario IDs) retain precedence.
+    const observed=await journeyMeasure('clock_read',()=>new ContextBusinessClock(this.database,db).read(scope,()=>new Date(asOf)));
     if(observed.scenarioId)this.observations.get(db)?.set(`${scope.kind}:${scope.id}`,{scope,time:observed});
-    if(observed.scenarioId)asOf=observed.now;
+    asOf=observed.now;
     const attached=Boolean(sid&&oid&&(await db.query("SELECT 1 FROM audit_events WHERE entity_type='digital_production' AND entity_id=$1 AND action='digital_source_attached' AND after_state->>'sourceId'=$2 LIMIT 1",[oid,sid])).rowCount);
     const canonicalId=attached?oid!:(sid??oid!);
     const sourceAccess=Boolean(sid&&await policy.allowed(actor,"source",sid,"technical"));
@@ -607,6 +611,7 @@ export class DigitalJourneyQuery {
         ?await readMaterialSuccessors(db,sid,visibleTasks.map(task=>task.task_id)):[];
       item.businessProgress=journeyBusinessProgress(item,observed.now,adopted,businessQuantities,requirementEvidence,replacements);
       item.businessProgress.dates=journeyBusinessDates(item);
+      item.visualProgress=journeyVisualProgress(item,asOf);
     }
     this.authorizedTasks.set(item,visibleTasks.map(task=>({id:task.task_id,key:journeyDefinition(task.task_kind)?.key??task.task_kind,label:journeyDefinition(task.task_kind)?.label??"业务节点",round:task.route_version})));
     return item;

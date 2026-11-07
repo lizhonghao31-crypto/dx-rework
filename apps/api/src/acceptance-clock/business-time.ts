@@ -38,10 +38,10 @@ export class ContextBusinessClock implements BusinessClock{
  /** Pass only the caller's existing transaction from this same guarded pool. */
  constructor(private readonly database?:Pool,private readonly transaction?:PoolClient){}
  withTransaction(transaction:PoolClient){return new ContextBusinessClock(this.database,transaction);}
- async read(scope:BusinessTimeScope):Promise<BusinessTime>{
+ async read(scope:BusinessTimeScope,fallback?:()=>Date):Promise<BusinessTime>{
   const context=contexts.getStore();
   if(context){await context.assertScope(scope);return observedBusinessTime();}
-  return this.database?await readers.get(this.database)?.read(scope,this.transaction)??observedBusinessTime():observedBusinessTime();
+  return this.database?await readers.get(this.database)?.read(scope,this.transaction)??observedBusinessTime(fallback):observedBusinessTime(fallback);
  }
 }
 export async function registerAcceptanceCreated(db:PoolClient,scope:BusinessTimeScope,actorId:string,eventId:string){

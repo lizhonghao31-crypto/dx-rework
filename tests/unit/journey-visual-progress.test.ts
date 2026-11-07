@@ -1,0 +1,130 @@
+import { expect, it } from 'vitest';
+import { JOURNEY_NODES, type JourneyBusinessDate, type JourneyNode, type OrderJourney } from '@dx-rework/contracts/digital-production-journey';
+import { journeyStages } from '../../apps/api/src/production-platform/journey-projection.js';
+import { journeyBusinessProgress } from '../../apps/api/src/production-platform/journey-business-progress.js';
+import { journeyBusinessDates } from '../../apps/api/src/production-platform/journey-progress-dates.js';
+import { journeyVisualProgress, naturalTimeRatio } from '../../apps/api/src/production-platform/journey-visual-progress.js';
+import { journeyDisplay } from '../../apps/api/src/production-platform/journey-display.js';
+
+const now = '2026-11-08T00:00:00.000Z', start = '2026-11-07T00:00:00.000Z', end = '2026-11-09T00:00:00.000Z';
+const selected = ['order_information', 'development_materials', 'development_pattern', 'bulk_cutting', 'receipts', 'receiving_inspection', 'packing'];
+function fixture(keys = selected): OrderJourney {
+  const nodes: JourneyNode[] = JOURNEY_NODES.map(definition => ({ ...definition, instanceId: definition.key,
+    state: keys.includes(definition.key) ? 'active' : 'not_applicable', current: true, round: 1, occurrence: null,
+    owner: null, operator: null, assignmentHistory: [], expectedAt: null, expectedKind: 'unset', expectedPrecision: 'missing',
+    actualAt: null, actualQuality: 'missing', enteredAt: keys.includes(definition.key) ? start : null,
+    sla: 'not_started', completionResult: null, overdueSeconds: null, risks: [], blockers: [], records: [], inheritedFrom: null,
+    countsInProgress: false, unavailableReason: null, progressApplicability: keys.includes(definition.key) ? 'applicable' : 'not_applicable' }));
+  return { id: 'TEST-mother', sourceId: 'TEST-source', orderId: 'TEST-mother', designStyleNo: 'TEST-visual', temporaryStyleNo: null,
+    customer: 'TEST', category: null, designer: null, styleName: null, merchandisers: [], orderNumbers: [], createdAt: start,
+    deliveryDate: null, selectedRound: 1, adoptedRound: 1, sourceVersion: 1, instructionVersion: 1, lines: [], links: [],
+    stages: journeyStages(nodes), progress: { development: null, bulk: null }, hitReasons: [] };
+}
+const nodes = (order: OrderJourney) => order.stages.flatMap(stage => stage.nodes);
+const node = (order: OrderJourney, key: string) => nodes(order).find(value => value.key === key)!;
+const progress = (order: OrderJourney) => { order.businessProgress = journeyBusinessProgress(order, now); order.businessProgress.dates = journeyBusinessDates(order); return journeyVisualProgress(order, now); };
+const date = (at = end): JourneyBusinessDate => ({ at, precision: 'instant', quality: 'recorded', status: 'complete', covered: 1, total: 1, reasons: [] });
+
+it('R3 actual shares weight applicable stages equally before their effective small nodes, retaining independent n/m', () => {
+  const order = fixture();
+  for (const key of ['order_information', 'development_materials', 'bulk_cutting', 'receipts']) node(order, key).state = 'completed';
+  const result = progress(order);
+  expect(order.businessProgress).toMatchObject({ applicable: 7, completed: 4, ratio: 4 / 7 });
+  expect(result).toMatchObject({ applicableStages: 4, completedStages: 2, unknownStages: 0, actualRatio: (1 + 1 / 2 + 1 + 1 / 3) / 4 });
+  expect(result.stages.find(stage => stage.key === 'receiving')?.actualRatio).toBe(1 / 3);
+  expect(result.stages.find(stage => stage.key === 'preparation')).toMatchObject({ applicability: 'not_applicable', actualRatio: null });
+});
+
+it('R3 all seven applicable stages keep seven shares rather than one flat node count', () => {
+  const order = fixture(['order_information', 'development_pattern', 'bulk_pattern', 'bulk_cutting', 'warehouse_dispatch', 'production_reporting', 'packing']);
+  for (const key of ['order_information', 'development_pattern', 'bulk_pattern']) node(order, key).state = 'completed';
+  expect(progress(order)).toMatchObject({ applicableStages: 7, completedStages: 3, actualRatio: 3 / 7 });
+});
+
+it('R3 business closure does not force still-incomplete effective requirements to 100 percent', () => {
+  const order = fixture(['development_pattern', 'packing']); node(order, 'packing').state = 'completed';
+  order.display = journeyDisplay(order, now);
+  expect(order.display.mainState).toBe('completed');
+  expect(progress(order).actualRatio).toBe(0.5);
+  expect(order.businessProgress).toMatchObject({ applicable: 2, completed: 1 });
+});
+
+it('R3 an overdue stage retains its own risk without changing the existing whole-order state', () => {
+  const order = fixture(['bulk_cutting']); node(order, 'bulk_cutting').risks = ['overdue'];
+  order.display = journeyDisplay(order, now);
+  const before = JSON.stringify(order.display), result = progress(order);
+  expect(result.stages.find(stage => stage.key === 'cutting')?.risk).toBe('overdue');
+  expect(order.display.mainState).toBe('active');
+  expect(JSON.stringify(order.display)).toBe(before);
+});
+
+it('R3 splitting a PO/batch obligation cannot add shares or hide an unfinished sibling', () => {
+  const order = fixture(['process_logistics', 'bulk_qc']);
+  const first = node(order, 'process_logistics'); first.state = 'completed';
+  const stage = order.stages.find(stage => stage.key === 'post_cutting')!;
+  expect(progress(order).actualRatio).toBe(0.5);
+  for (let i = 0; i < 9; i++) stage.nodes.push({ ...first, instanceId: `scope-${i}` });
+  expect(progress(order).actualRatio).toBe(0.5);
+  stage.nodes.at(-1)!.state = 'active';
+  expect(progress(order).actualRatio).toBe(0);
+});
+
+it('R3 unknown applicability and a missing catalog scope never disappear as not-applicable or complete', () => {
+  const order = fixture(); node(order, 'bulk_cutting').current = false;
+  expect(progress(order)).toMatchObject({ actualRatio: null, unknownStages: 1 });
+  const other = fixture(); node(other, 'packing').state = 'unavailable';
+  expect(progress(other).stages.find(stage => stage.key === 'receiving')).toMatchObject({ applicability: 'unknown', actualRatio: null });
+  expect(progress(fixture([]))).toMatchObject({ actualRatio: null, applicableStages: 0 });
+});
+
+it('R3 source-only development cannot obtain completed shares from bulk stages', () => {
+  const order = fixture(); order.orderId = null; node(order, 'development_materials').state = 'completed';
+  expect(progress(order)).toMatchObject({ applicableStages: 1, actualRatio: 0.5 });
+  expect(progress(order).stages.find(stage => stage.key === 'creation')?.actualRatio).toBeNull();
+});
+
+it('R3 inherited completion uses original effective evidence without inventing a current adoption date', () => {
+  const order = fixture(['development_pattern']), current = node(order, 'development_pattern');
+  current.state = 'inherited'; current.inheritedFrom = { taskId: 'original-result', round: 1 }; current.enteredAt = null;
+  order.stages.find(stage => stage.key === 'development')!.nodes.push({ ...current, instanceId: 'original-result', current: false,
+    state: 'completed', enteredAt: '2026-10-01T00:00:00.000Z', actualAt: '2026-10-02T00:00:00.000Z', actualQuality: 'verified', inheritedFrom: null });
+  const result = progress(order);
+  expect(result.actualRatio).toBe(1);
+  expect(result.startedAt).toBeNull(); expect(result.actual.at).toBeNull(); expect(result.timeRatio).toBeNull();
+});
+
+it('R3 natural elapsed time includes Sunday and remains bounded before, within and after a reliable window', () => {
+  expect(naturalTimeRatio(start, date(), '2026-11-06T00:00:00.000Z')).toBe(0);
+  expect(naturalTimeRatio(start, date(), now)).toBe(0.5);
+  expect(naturalTimeRatio(start, date(), '2026-11-10T00:00:00.000Z')).toBe(1);
+  expect(naturalTimeRatio(start, date(start), now)).toBeNull();
+  expect(naturalTimeRatio(start, date('2026-11-06T00:00:00.000Z'), now)).toBeNull();
+  expect(naturalTimeRatio(start, { ...date(), at: '2026-11-09', precision: 'date' }, now)).toBeNull();
+  expect(naturalTimeRatio(start, date('2026-11-09T00:00:00'), now)).toBeNull();
+});
+
+it('R3 two visual ratios reuse the same snapshot and existing forecast/actual dates without substituting the plan or deadline', () => {
+  const order = fixture(['bulk_cutting']); progress(order);
+  const dates = order.businessProgress!.dates!;
+  dates.overall.forecast = { ...date(), bases: ['standard_window'] };
+  dates.stages.find(stage => stage.key === 'cutting')!.forecast = { ...date(), bases: ['standard_window'] };
+  const before = JSON.stringify(order), result = journeyVisualProgress(order, now);
+  expect(result).toMatchObject({ timeRatio: 0.5, actualRatio: 0, startedAt: start, expected: { at: end } });
+  expect(result.stages.find(stage => stage.key === 'cutting')?.timeRatio).toBe(0.5);
+  expect(JSON.stringify(order)).toBe(before);
+  dates.overall.forecast = { ...dates.overall.forecast, at: null, status: 'unknown' };
+  dates.overall.adoptedPlan = { ...dates.overall.adoptedPlan, ...date() };
+  node(order, 'bulk_cutting').expectedAt = end;
+  expect(journeyVisualProgress(order, now)).toMatchObject({ timeRatio: null, expected: { at: null } });
+  order.businessProgress!.asOf = '2026-11-07T23:59:59.000Z';
+  expect(journeyVisualProgress(order, now)).toMatchObject({ actualRatio: null, timeRatio: null });
+});
+
+it('R3 missing effective entry times and historical/planning records cannot fabricate a start', () => {
+  const order = fixture(['bulk_cutting']), current = node(order, 'bulk_cutting'); progress(order);
+  order.businessProgress!.dates!.overall.forecast = { ...date(), bases: ['standard_window'] };
+  current.enteredAt = null;
+  order.stages.find(stage => stage.key === 'cutting')!.nodes.push({ ...current, instanceId: 'old-round', current: false, enteredAt: start });
+  const plan = nodes(order).find(node => node.planningOnly)!; plan.enteredAt = start;
+  expect(journeyVisualProgress(order, now)).toMatchObject({ startedAt: null, timeRatio: null });
+});
