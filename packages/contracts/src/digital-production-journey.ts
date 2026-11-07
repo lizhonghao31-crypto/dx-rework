@@ -123,6 +123,8 @@ export type JourneyNode = {
   countsInProgress: boolean; unavailableReason: "permission" | "fact_not_recorded" | null;
 };
 export type OrderJourney = {
+  /** Shared UI ratios. Business-requirement counts and legacy workspace ratios remain separate. */
+  visualProgress?: JourneyVisualProgress;
   /** Versioned business requirements; legacy display/progress remain compatible. */
   businessProgress?: JourneyBusinessProgress;
   identity?: { kind: 'development' | 'production'; businessNumber: string | null; reason: string | null };
@@ -188,6 +190,22 @@ export type JourneyBusinessDateGroup = {
   actual:JourneyBusinessDate;
   adoptedPlan:JourneyBusinessDate&{planId:string|null;revision:number|null;sourcePlans:Array<{planId:string;revision:number}>};
   forecast:JourneyBusinessDate&{bases:Array<'actual'|'remaining_estimate'|'standard_window'|'sla_plan'>};
+};
+
+export type JourneyVisualStage = {
+  key: JourneyStageKey;
+  applicability: 'applicable' | 'not_applicable' | 'unknown';
+  applicable: number; completed: number; unknown: number;
+  actualRatio: number | null; timeRatio: number | null; startedAt: string | null;
+  expected: JourneyBusinessDate; actual: JourneyBusinessDate;
+  risk: 'overdue' | 'due_soon' | 'normal' | 'unknown';
+};
+export type JourneyVisualProgress = {
+  ruleVersion: 'journey-visual-v1'; asOf: string;
+  actualRatio: number | null; timeRatio: number | null; startedAt: string | null;
+  applicableStages: number; completedStages: number; unknownStages: number;
+  expected: JourneyBusinessDate; actual: JourneyBusinessDate;
+  stages: JourneyVisualStage[];
 };
 export type JourneyResult = { ruleVersion: "journey-v2.0"; asOf: string; page: number; pageSize: 15; total: number; canManagePolicies?: boolean;
   facets?: { customers: string[]; categories: string[]; merchandisers: Array<{id:string;name:string|null}> };
