@@ -99,8 +99,41 @@ it('R3 natural elapsed time includes Sunday and remains bounded before, within a
   expect(naturalTimeRatio(start, date(), '2026-11-10T00:00:00.000Z')).toBe(1);
   expect(naturalTimeRatio(start, date(start), now)).toBeNull();
   expect(naturalTimeRatio(start, date('2026-11-06T00:00:00.000Z'), now)).toBeNull();
-  expect(naturalTimeRatio(start, { ...date(), at: '2026-11-09', precision: 'date' }, now)).toBeNull();
+  expect(naturalTimeRatio(start, { ...date(), at: '2026-11-09', precision: 'date' }, now)).toBe(0.375);
   expect(naturalTimeRatio(start, date('2026-11-09T00:00:00'), now)).toBeNull();
+});
+
+it('Final10 uses a legitimate date forecast at Beijing day-end, including Sunday, without inventing an event instant', () => {
+  const expected: JourneyBusinessDate = { ...date(), at: '2026-11-08', precision: 'date' };
+  const before = structuredClone(expected);
+  // Saturday 08:00 to Monday 00:00 Beijing is forty natural hours.
+  expect(naturalTimeRatio(start, expected, now)).toBe(24 / 40);
+  expect(naturalTimeRatio(start, expected, '2026-11-08T15:59:59.999Z')).toBeCloseTo(1 - 1 / (40 * 3600_000));
+  expect(naturalTimeRatio(start, expected, '2026-11-08T16:00:00.000Z')).toBe(1);
+  expect(expected).toEqual(before);
+});
+
+it.each(['2026-02-29', '2026-11-31', '2026-11-08T00:00:00.000Z'])('Final10 keeps an invalid calendar forecast %s unknown', at => {
+  expect(naturalTimeRatio(start, { ...date(), at, precision: 'date' }, now)).toBeNull();
+});
+
+it('Final10 does not invent a date-only start or promote partial/unknown dates into a reliable window', () => {
+  const expected: JourneyBusinessDate = { ...date(), at: '2026-11-08', precision: 'date' };
+  expect(naturalTimeRatio('2026-11-07', expected, now)).toBeNull();
+  expect(naturalTimeRatio(null, expected, now)).toBeNull();
+  expect(naturalTimeRatio(start, { ...expected, status: 'partial' }, now)).toBeNull();
+  expect(naturalTimeRatio(start, { ...expected, status: 'unknown' }, now)).toBeNull();
+});
+
+it('Final10 list and detail visual projection keep the same date forecast and independent actual progress', () => {
+  const order = fixture(['bulk_cutting']); progress(order);
+  const expected: JourneyBusinessDate = { ...date(), at: '2026-11-08', precision: 'date', bases: ['standard_window'] };
+  order.businessProgress!.dates!.overall.forecast = structuredClone(expected);
+  order.businessProgress!.dates!.stages.find(stage => stage.key === 'cutting')!.forecast = structuredClone(expected);
+  const before = structuredClone(order), visual = journeyVisualProgress(order, now);
+  expect(visual).toMatchObject({ timeRatio: 24 / 40, actualRatio: 0, expected });
+  expect(visual.stages.find(stage => stage.key === 'cutting')).toMatchObject({ timeRatio: 24 / 40, actualRatio: 0, expected });
+  expect(order).toEqual(before);
 });
 
 it('R3 two visual ratios reuse the same snapshot and existing forecast/actual dates without substituting the plan or deadline', () => {

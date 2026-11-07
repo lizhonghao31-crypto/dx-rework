@@ -43,6 +43,23 @@ it('legacy supervision never manufactures P0 or task completion; cancelled order
  const o=order();attachJourneySupervision(o,null,null,[],time,{original:null,current:null});expect(o.supervision?.nodes).toEqual([]);expect(o.supervision?.coverage.some(c=>c.key==='plan')).toBe(true);
  o.display=journeyDisplay(o,now,{cancelled:true});expect(selectJourneys([o],JourneyFilterSchema.parse({scope:'production'}),now).supervision?.overdue).toBe(0);
 });
+
+it('Final10 legacy supervision retains authorized native observations without creating targets or overwriting task evidence',()=>{
+ const o=order(),current=o.stages.flatMap(stage=>stage.nodes).find(node=>node.key==='development_pattern')!;
+ current.state='completed';current.actualAt='2026-10-19T02:00:00.000Z';current.actualQuality='verified';
+ const hidden=o.stages.flatMap(stage=>stage.nodes).find(node=>node.key==='budget')!;hidden.state='unavailable';
+ const original=structuredClone(current);
+ attachJourneySupervision(o,null,null,[],time,{original:null,current:null},false,{facts:{
+  development_pattern:{evidence:'task:TEST-effective-pattern',startedAt:'2026-10-19T00:00:00.000Z',completedAt:current.actualAt,businessCompleted:true},
+  receiving_span:{evidence:'native-receipts:TEST-corrected',businessCompleted:true},
+  budget:{evidence:'TEST-not-authorized',completedAt:current.actualAt},
+ }});
+ expect(o.supervision).toMatchObject({status:'legacy_unenrolled',originalRevision:null,currentRevision:null,nodes:[],customerReminderDate:null,
+  nativeFacts:[{id:'development_pattern',sourceRef:'task:TEST-effective-pattern',startedAt:'2026-10-19T00:00:00.000Z',completedAt:current.actualAt,businessCompleted:true},
+   {id:'receiving_span',sourceRef:'native-receipts:TEST-corrected',startedAt:null,completedAt:null,businessCompleted:true}]});
+ expect(current).toEqual(original);
+ expect(o.supervision!.nativeFacts!.some(fact=>fact.id==='budget')).toBe(false);
+});
 it('preserves outsourced cutting timing, while missing internal C stays a precision limit without new recording',()=>{
  const p=plan();Object.assign(p.nodes[0]!,{id:'bulk_cutting',parameterKey:'bulk_cutting',stage:4});const o=order();
  attachJourneySupervision(o,p,p,evaluateSlaPlan(p,{},time),time,{original:1,current:1},true);expect(o.supervision!.nodes).toEqual([]);expect(o.supervision!.coverage.some(c=>c.key==='cutting_time')).toBe(false);

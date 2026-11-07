@@ -7,6 +7,27 @@ import { developmentSlaPlan } from "./development-sla-enrollment.js";
 type DB = Pick<PoolClient, "query">;
 const iso = (value: Date | string) => new Date(value).toISOString();
 
+/** A legacy source may have real tasks without a saved SLA model. Read their
+ * current native instances, never fabricate a plan target or collapse attempts.
+ * The caller has already authorized the whole source's timing evidence.
+ */
+export async function developmentNativeFacts(db: DB, sourceId: string, time: BusinessTime): Promise<Record<string, SlaNodeFact>> {
+  const rows = (await db.query(`SELECT t.task_id,t.state,t.entered_at,t.entered_quality,t.completed_at,t.completed_quality,a.task_kind,
+      EXISTS(SELECT 1 FROM digital_production_task_events e WHERE e.task_id=t.task_id AND e.event_kind='material_returned') AS returned,
+      EXISTS(SELECT 1 FROM digital_development_route_facts f WHERE f.task_id=t.task_id AND f.kind='尾查退回') AS rejected
+    FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id)
+    WHERE a.source_id=$1 AND t.route_version=coalesce((SELECT max(round_number) FROM digital_development_rounds WHERE source_id=$1),1)
+    ORDER BY t.created_at,t.task_id`, [sourceId])).rows;
+  return Object.fromEntries(rows.map(row => {
+    const complete = row.state === 'completed' && !row.returned && !row.rejected;
+    const trusted = (at: Date | string | null, quality: string) => at && ['现场登记', '已核实'].includes(quality)
+      && Date.parse(iso(at)) <= Date.parse(time.now);
+    return [`${row.task_kind}:task:${row.task_id}`, { evidence: `task:${row.task_id}`, businessCompleted: complete,
+      ...(trusted(row.entered_at, row.entered_quality) ? { startedAt: iso(row.entered_at) } : {}),
+      ...(complete && trusted(row.completed_at, row.completed_quality) ? { completedAt: iso(row.completed_at) } : {}) }];
+  }));
+}
+
 /** Original source/round evidence remains authoritative after conversion to a mother order.
  * This reader neither invents history nor changes P0. Correction rounds remain separate records.
  */

@@ -1,191 +1,230 @@
 {
   "version": 1,
-  "base": "0fabc0cc3bad06799791283f5d5d3bbda6f6bc37",
-  "sourceFingerprint": "d243302af7df880bd792291e2dbf20c876b31be5c2c7b0773cd77fe4720ad001",
+  "base": "3f96edb0f92afdd0667487e8c156904209f274b5",
+  "sourceFingerprint": "13acbfd1540fb485f9cdc0d17ccb1533c56a3bb416c42a17200921bb243d966a",
   "risk": "full",
   "rules": [
     {
-      "rule": "Approved compact original settings preserve all real nodes, seven graphical stages, sales defaults and original customer/access entry.",
-      "source": "2026-11-07 approved third-round Pro plan and actual final settings image ERP节点设置界面优化.png. User accepted PR02 and said 通过，继续3-4推送 合并. Settings after actual PR03 merge, preserve924 capacity and921 session. No deployment/PR05. docs/engineering/m01-r3-p04-execution.md",
+      "rule": "Merge native observations only into the same current instance; omission preserves evidence, correction/revocation clears it and current siblings remain independent.",
+      "source": "Approved Final10 Version2 pinned Library file_000000009f4c81fbaa74ab5bfebbf489 sections2/4 and active user construction/Review/serial merge authority. See docs/engineering/m01-final10-p01-execution.md; user deploys, no real-data mutations.",
       "writes": [
-        "apps/web/src/cockpit-production-settings.css",
-        "apps/web/src/cockpit-production-settings.tsx",
-        "apps/web/src/sla-settings-workspace.tsx",
-        "apps/web/src/sla-standard-editor.tsx",
-        "apps/web/src/development-cycle-settings.tsx",
-        "apps/web/src/series-settings.tsx",
-        "tests/unit/digital-pmc-readonly-ui.test.ts"
+        "apps/api/src/production-platform/journey-node-fact.ts",
+        "apps/api/src/production-platform/journey-query.ts",
+        "tests/unit/journey-node-fact.test.ts",
+        "tests/integration/digital-journey-postgres.test.ts"
       ],
       "reads": [
-        "apps/web/src/digital-cockpit-personnel.tsx",
-        "apps/web/src/sla-node-edit-dialog.tsx",
-        "apps/web/src/sla-settings-draft.ts",
-        "apps/web/src/sla-order-application-panel.tsx",
-        "apps/web/src/auth-session.ts"
+        "apps/api/src/production-platform/journey-business-progress.ts",
+        "apps/api/src/production-platform/journey-progress-dates.ts",
+        "apps/api/src/production-platform/journey-factory-deadlines.ts",
+        "apps/api/src/production-platform/task-service.ts",
+        "apps/web/src/cockpit-node-rows.tsx"
       ],
       "oldTests": [
-        "tests/unit/digital-pmc-readonly-ui.test.ts",
-        "tests/integration/m01-settings-native-browser-postgres.test.ts"
+        "tests/unit/journey-instance-replacement.test.ts",
+        "tests/unit/journey-business-progress.test.ts",
+        "tests/unit/journey-progress-dates.test.ts",
+        "tests/integration/digital-journey-postgres.test.ts"
       ],
-      "initialization": "All original45 unified and four independent settings remain reachable with actual values and units; no mock image constants, schema or default business values change. Selected stage defaults2. Low-frequency versions/conditions/history/inflight controls fold; dirty/error/uncertain independent panel opens. Visible original cancel restores draft without write.",
-      "dateAndPermission": "Original live access refresh/Root/PMC readonly/designer denial and session invalidation unchanged. Customer-only writer keeps entry. Original expectedVersion, preview/publish, frozen old sources, uncertain same-key/body recovery, conflicts and independent standards retained. Removed only explanatory shortlead paragraph from settings, no original approval feature.",
-      "expectation": "Original25 native cases retained plus full-App no-anchor and completeness wrapper27; three1165/1366/1584 screenshots, all49 settings, exact signed-session PMC revoke, manager editor, original customer/series save and publish/conflict/recovery paths pass. SSR partial24h clearly marked 部分待核 rather than false complete.",
+      "initialization": "No schema or historical rewrite. Preserve original authorized task set separately from native presentation records; do not append a phantom aggregate for several current PO/attempt instances.",
+      "dateAndPermission": "Exact instance/round/currentness; original Root and live role/field scopes, source/material replacement and immutable task-event corrections retained. Missing actual is not assigned current time.",
+      "expectation": "Task-first/fact-first, omitted/explicit null, corrected instant replacing old date, cross-round and retired records, two current sourcing attempts, logs/cursors and original owner/start/target remain correct.",
       "checks": [
-        "preflight",
         "unit",
-        "native",
+        "journey",
+        "technical",
         "types",
-        "build",
-        "lint",
-        "secret"
+        "buildapi"
       ]
     },
     {
-      "rule": "Symbolic standard windows use the original dependency DAG without fabricating anchors, waiting durations or business SLA dates.",
-      "source": "2026-11-07 approved third-round Pro plan and actual final settings image ERP节点设置界面优化.png. User accepted PR02 and said 通过，继续3-4推送 合并. Settings after actual PR03 merge, preserve924 capacity and921 session. No deployment/PR05. docs/engineering/m01-r3-p04-execution.md",
+      "rule": "A legacy mother without an adopted plan still returns authorized native work; no target, forecast or evaluation is fabricated.",
+      "source": "Approved Final10 Version2 pinned Library file_000000009f4c81fbaa74ab5bfebbf489 sections2/4 and active user construction/Review/serial merge authority. See docs/engineering/m01-final10-p01-execution.md; user deploys, no real-data mutations.",
       "writes": [
-        "packages/domain/src/sla-relative-calculation.ts",
-        "packages/domain/src/sla-calculation.ts",
-        "apps/web/src/sla-calculation-preview-model.ts",
-        "apps/web/src/sla-calculation-preview.tsx",
-        "tests/unit/sla-relative-calculation.test.ts",
-        "tests/unit/m01-settings-preview.test.ts"
+        "apps/api/src/production-platform/sla-order-service.ts",
+        "apps/api/src/production-platform/development-sla-evidence.ts",
+        "apps/api/src/production-platform/journey-supervision.ts",
+        "packages/contracts/src/digital-production-journey.ts",
+        "tests/unit/journey-sla-supervision.test.ts",
+        "tests/unit/digital-pmc-readonly-access.test.ts"
       ],
       "reads": [
+        "apps/api/src/production-platform/access-policy.ts",
+        "apps/api/src/production-platform/development-sla-enrollment.ts",
+        "apps/api/src/production-platform/factory-sla-evidence.ts",
+        "apps/api/src/production-platform/bulk-sla-evidence.ts",
+        "apps/api/src/production-platform/packing-sla-evidence.ts",
+        "apps/api/src/production-platform/rework-sla-evidence.ts",
+        "apps/api/src/production-platform/order-closure-service.ts"
+      ],
+      "oldTests": [
+        "tests/unit/journey-sla-supervision.test.ts",
+        "tests/unit/journey-projection-isolation.test.ts",
+        "tests/unit/digital-pmc-readonly-access.test.ts",
+        "tests/unit/development-craft-timing-review.test.ts",
+        "tests/integration/digital-journey-postgres.test.ts"
+      ],
+      "initialization": "Native TEST legacy fixture has no mother P0, including a source which has an independent SLA plan but a genuine task with no SLA window. Original real lowpriv initialization and exact fixture cleanup remain.",
+      "dateAndPermission": "Original full timing authority decides access; limited viewers gain nothing. Native facts are labelled sla_observation so cumulative packing registration is not promoted to a physical completion. Original task D retained by authorized task IDs, not presentation records.",
+      "expectation": "Legacy returns facts with no evaluationPlan/nodes or plan creation; same source task actual persists; original permission allow/deny and no mutation assertions stay. Classified timing inconsistencies remain isolated while unexpected DB/auth/scope errors propagate.",
+      "checks": [
+        "unit",
+        "journey",
+        "technical",
+        "anchors",
+        "types"
+      ]
+    },
+    {
+      "rule": "Capture new original customer confirmation occurrence and read exact current native customer and preparation facts without synthesizing old missing times.",
+      "source": "Approved Final10 Version2 pinned Library file_000000009f4c81fbaa74ab5bfebbf489 sections2/4 and active user construction/Review/serial merge authority. See docs/engineering/m01-final10-p01-execution.md; user deploys, no real-data mutations.",
+      "writes": [
+        "apps/api/src/production-platform/development-execution-service.ts",
+        "apps/api/src/production-platform/bulk-preparation-service.ts",
+        "tests/integration/digital-development-execution-postgres.test.ts",
+        "tests/integration/development-technical-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/development-technical-service.ts",
+        "apps/api/src/production-platform/development-technical-repository.ts",
+        "apps/api/src/production-platform/bulk-preparation-service.ts",
+        "apps/api/src/production-platform/journey-query.ts",
+        "tests/helpers/owned-postgres-schema.ts"
+      ],
+      "oldTests": [
+        "tests/integration/digital-development-execution-postgres.test.ts",
+        "tests/integration/development-technical-postgres.test.ts",
+        "tests/integration/business-anchors-clock-postgres.test.ts"
+      ],
+      "initialization": "Original route fact command records businessNow once in immutable payload, with no extra form. Existing minimal execution fixture now uses its original registered schema create/release helper; no guard disabled.",
+      "dateAndPermission": "Current route validation, original edit rights, customer/technical gates and command idempotency remain. Technical reference occurrence remains unverified and separate from review/recording time; source round and exact final-comment revision bind the read.",
+      "expectation": "Both original confirmation and approved technical routes pass native PG: first occurrence/duplicates/stale round/unauthorized/historical missing payload, effective explicit comment then pending new reference then effective without occurrence. Marker uses only current preparation facts whose original writer records business occurrence.",
+      "checks": [
+        "execution",
+        "technical",
+        "journey",
+        "anchors",
+        "unit",
+        "preflight"
+      ]
+    },
+    {
+      "rule": "Keep legitimate date precision and use continuous natural time for date forecasts while retaining original SLA calendars, partial coverage and native factory deadlines.",
+      "source": "Approved Final10 Version2 pinned Library file_000000009f4c81fbaa74ab5bfebbf489 sections2/4 and active user construction/Review/serial merge authority. See docs/engineering/m01-final10-p01-execution.md; user deploys, no real-data mutations.",
+      "writes": [
+        "apps/api/src/production-platform/journey-visual-progress.ts",
+        "apps/api/src/production-platform/receiving-span.ts",
+        "packages/contracts/src/order-closure.ts",
+        "tests/unit/journey-visual-progress.test.ts",
+        "tests/unit/receiving-span.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/journey-progress-dates.ts",
+        "apps/api/src/production-platform/journey-business-progress.ts",
+        "apps/api/src/production-platform/receiving-summary.ts",
+        "apps/api/src/production-platform/journey-factory-deadlines.ts",
         "packages/domain/src/digital-sla-plan.ts",
-        "packages/domain/src/sla-calculation-routes.ts",
-        "packages/contracts/src/sla-calculation.ts",
-        "apps/web/src/sla-settings-draft.ts",
-        "apps/api/src/production-platform/sla-calculation-service.ts"
+        "apps/web/src/cockpit-stage-progress.tsx",
+        "apps/web/src/cockpit-home-progress.tsx"
       ],
       "oldTests": [
-        "tests/unit/sla-calculation.test.ts",
-        "tests/unit/m01-settings-preview.test.ts",
-        "tests/unit/digital-sla-plan.test.ts",
-        "tests/unit/digital-sla-configuration.test.ts",
-        "tests/integration/m01-settings-native-browser-postgres.test.ts"
+        "tests/unit/journey-visual-progress.test.ts",
+        "tests/unit/journey-progress-dates.test.ts",
+        "tests/unit/journey-factory-deadlines.test.ts",
+        "tests/unit/receiving-summary.test.ts",
+        "tests/unit/receiving-span.test.ts",
+        "tests/integration/business-anchors-clock-postgres.test.ts"
       ],
-      "initialization": "Pure additional named export only, original absolute calculator unchanged. Example mode only overlays derivable symbolic durations; instance mode keeps original absolute/frozen result. Serial adds, same-origin fork uses longest branch, cross-stage original buffer once, included work not added twice, independent/no branches excluded. New module follows source types already exported, no dist-only pre-build entry.",
-      "dateAndPermission": "Different true anchors, unlimited waits, unknown applicability/prerequisite, exclusions and Sunday-dependent wall elapsed remain unknown. Longest fully calculable contiguous segment is separately labelled 可算路径, never replaced for total or asserted lower bound. Existing absolute numeric partial flags remain visible. No clock/date rewrite, new backend data/config write, unbounded duration, weekday invention or business SLA change.",
-      "expectation": "Pure tests cover serial/fork critical and noncritical edits/included/independent/nonapplicable/unknown/event waits/calendars/pernode buffer/invalid endpoint and sums. Real native graph development route80.5h no craft versus176.5h printing, no-anchor edit68.5h and cancel80.5h without request write, original R1/R2/R3 fixed and frozen instance boundaries pass.",
+      "initialization": "Version visual-v2 with v1 compatible contract; only per-request snapshot cache exists, no persistent Journey output to rebuild. Receiving date-only crossing preserves original audit precision; quantity semantics unchanged.",
+      "dateAndPermission": "Beijing exclusive day boundary only computes lawful forecasts, never actual midnight. Untrusted start, partial/invalid dates, inherited/unknown/hidden scopes stay unknown; task SLA calendar and native process/QC/dispatch deadlines remain.",
+      "expectation": "Date/instant/invalid-day and Sunday ratios, before/after window, current scope all instances, partial actual coverage, corrections never turn registration into physical collection; factory three native windows remain source-bound. Old source v1 consumers retain compatible fields.",
       "checks": [
-        "preflight",
         "unit",
-        "native",
+        "journey",
+        "technical",
+        "anchors",
         "types",
-        "build",
-        "lint",
-        "secret"
+        "buildapi"
       ]
     },
     {
-      "rule": "Original native browser and original SLA PostgreSQL consumers remain canonical, bounded and truthfully isolated.",
-      "source": "2026-11-07 approved third-round Pro plan and actual final settings image ERP节点设置界面优化.png. User accepted PR02 and said 通过，继续3-4推送 合并. Settings after actual PR03 merge, preserve924 capacity and921 session. No deployment/PR05. docs/engineering/m01-r3-p04-execution.md",
+      "rule": "Persist current approved practical construction boundaries and preserve reviewed time-source annotations with original gates and honest evidence.",
+      "source": "Approved Final10 Version2 pinned Library file_000000009f4c81fbaa74ab5bfebbf489 sections2/4 and active user construction/Review/serial merge authority. See docs/engineering/m01-final10-p01-execution.md; user deploys, no real-data mutations.",
       "writes": [
-        "tests/acceptance/m01-settings-native-browser.ts",
-        "tests/fixtures/m01-settings-native-ui.tsx",
-        "scripts/ci/full-gate-risk-map.mjs",
-        "tests/unit/full-gate-risk-map.test.ts",
-        "docs/requirements/rework-ui-golden-source-v1.0.md",
+        "AGENTS.md",
         "docs/requirements/business-analysis-limited-ui-golden-source-v1.0.md",
-        "docs/engineering/m01-r3-p04-execution.md"
+        "docs/engineering/acceptance-time-sites-20261027.json",
+        "docs/engineering/m01-final10-p01-execution.md"
       ],
       "reads": [
-        "scripts/test-suite-plan.mjs",
-        "scripts/test-execution-config.mjs",
-        "vitest.business-chain.config.ts",
-        "tests/helpers/owned-postgres-schema.ts",
-        "apps/web/src/App.tsx",
-        "apps/api/src/auth/service.ts"
+        "docs/governance/construction-evidence-v1.md",
+        "docs/governance/review-first-final-head-20261027.md",
+        "scripts/acceptance/time-site-inventory.mjs",
+        "scripts/ci/pr-gate-controller.mjs",
+        "scripts/test-execution-config.mjs"
       ],
       "oldTests": [
-        "tests/unit/full-gate-risk-map.test.ts",
-        "tests/integration/m01-settings-native-browser-postgres.test.ts",
-        "tests/integration/sla-calculation-postgres.test.ts"
+        "scripts/ci/pr-gate-controller.test.mjs",
+        "scripts/ci/construction-evidence.test.mjs",
+        "scripts/ci/final-closeout.test.mjs"
       ],
-      "initialization": "Original AuthService/PostgresAuthStore and native fixture routes retained; complete App branch renders real App once without synthetic nested Shell. TEST unrelated todo badge is authenticated; proxy preserves original actor response header to avoid legitimate identity-recheck loop. This is fixture transport repair, not product auth relaxation.",
-      "dateAndPermission": "Owned low-privilege marked PG16.15 CPU2 RAM2GiB; Node22.22.2/npm10.9.9, lock-pinned Chromium141 and Playwright1.56.1; canonical maxWorkers2 actual one test-file worker/sequential cases. Original100s cases/120s setup/cleanup and finally resource close remain. Source baseline retains924 and921. No onsite acceptance/deploy/production data/security config change.",
-      "expectation": "Original preflight, focused old/new223 units and27 native cases revalidated on the actual combined source after PR03 merge; final counts/evidence below bind this assembled candidate. Types/build/lint/secret also require current fingerprint, not inherited green. Actual final remote Review/Gate tuple is independently verified after push; old cancelled924Full never used as passed.",
+      "initialization": "Read pinned Version2 and all10 images. Leave prior PR05 worktree/schema untouched. Refresh only three actually changed time-inventory entries through original reconciliation and retain prior semantic notes; no operational deployment.",
+      "dateAndPermission": "User permits construction/PR/Review/serial merges, not ECS or real data changes. No safety/gate weakening, SLA timeouts or business threshold changes; no report-format-only retesting of unchanged proven inputs.",
+      "expectation": "Original preflight249 tests and inventory guard pass; relevant checks bind actual source or captured unchanged input scopes. N/F/B/C/M onsite audit exports unavailable are recorded as unverified; TEST results are not called live acceptance.",
       "checks": [
         "preflight",
         "unit",
-        "native",
-        "types",
-        "build",
-        "lint",
         "secret"
       ]
     }
   ],
   "checks": [
     {
-      "id": "preflight",
-      "kind": "tests",
-      "command": "npm run test:preflight",
-      "status": "passed",
-      "exitCode": 0,
-      "passed": 249,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [
-        {
-          "format": "node-tap",
-          "sha256": "3e9209f9471c6671894e9f3d25d622af61c065081b341b45aab12f6ee73c151d"
-        }
-      ],
-      "testedHead": "206cc837a5be6a52223302bbf945906ba3c965ef",
-      "sourceFingerprint": "d243302af7df880bd792291e2dbf20c876b31be5c2c7b0773cd77fe4720ad001",
-      "startedAt": "2026-11-07T14:42:07.443Z",
-      "endedAt": "2026-11-07T14:42:13.795Z",
-      "log": "/workspace/scratch/m01-r3-p04-final-preflight.log",
-      "logSha256": "3e9209f9471c6671894e9f3d25d622af61c065081b341b45aab12f6ee73c151d",
-      "context": "Node22.22.2/npm10.9.9; Node/browser descendants pinnedCPUs2,3; original lock and canonical configs. Database env empty; focused unchanged old consumers plus new original tests; no onsite or remote Gate operation."
-    },
-    {
       "id": "unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/sla-relative-calculation.test.ts tests/unit/m01-settings-preview.test.ts tests/unit/digital-pmc-readonly-ui.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/sla-calculation.test.ts tests/unit/digital-sla-plan.test.ts tests/unit/digital-sla-configuration.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-r3-p04-final-unit.json",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/journey-node-fact.test.ts tests/unit/journey-sla-supervision.test.ts tests/unit/journey-projection-isolation.test.ts tests/unit/journey-progress-dates.test.ts tests/unit/journey-business-progress.test.ts tests/unit/journey-visual-progress.test.ts tests/unit/journey-factory-deadlines.test.ts tests/unit/receiving-span.test.ts tests/unit/receiving-summary.test.ts tests/unit/development-craft-timing-review.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/cockpit-display-facts.test.ts tests/unit/journey-instance-replacement.test.ts tests/unit/journey-snapshot-reads.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/final-unit.vitest.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 223,
+      "sourceFingerprint": "fec8322d5d87bf3c5ff9050d244ca382b83b6b9fcecc458db7e975f6bcf72ae9",
+      "testedHead": "3f96edb0f92afdd0667487e8c156904209f274b5",
+      "startedAt": "2026-11-07T19:51:45.735Z",
+      "endedAt": "2026-11-07T19:51:51.387Z",
+      "logSha256": "17e3a0e24a3d1193605c3be0e70dfab217686c9d22fe64dd47bc9212eb537568",
+      "context": "Node22.22.2/npm10.9.9; lock80b0332e; taskset2,3 applies only to command descendants; original Vitest config nonDB1 worker, original preflight protocol2 workers; local host not claimed CI equivalent",
+      "passed": 169,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "30d21fa333cf1bb6be427fecd36532cec26a5d325cc6603742ddbc7ba5e94158"
+          "sha256": "962f6e5373111ed0ba386e8542d5396047f4cfa55cc2fb3899cb3d6535d55474"
         }
       ],
-      "testedHead": "206cc837a5be6a52223302bbf945906ba3c965ef",
-      "sourceFingerprint": "d243302af7df880bd792291e2dbf20c876b31be5c2c7b0773cd77fe4720ad001",
-      "startedAt": "2026-11-07T14:42:13.878Z",
-      "endedAt": "2026-11-07T14:42:16.691Z",
-      "log": "/workspace/scratch/m01-r3-p04-final-unit.log",
-      "logSha256": "a23f6d33751cf2a5bb5227cd66e639b49364098392c6bacc95726e475ba7f790",
-      "context": "Node22.22.2/npm10.9.9; Node/browser descendants pinnedCPUs2,3; original lock and canonical configs. Database env empty; focused unchanged old consumers plus new original tests; no onsite or remote Gate operation."
-    },
-    {
-      "id": "native",
-      "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers=2 tests/integration/m01-settings-native-browser-postgres.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-r3-p04-final-native.json",
-      "status": "passed",
-      "exitCode": 0,
-      "passed": 27,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "fba6e3484c7dfe8438116316c27afb756880105da058b395f38e90fa8251bb86"
-        }
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests/helpers",
+        "tests/unit",
+        "tests/fixtures",
+        "tests/acceptance",
+        ".env.example",
+        ".gitattributes",
+        ".gitignore",
+        ".node-version",
+        ".nvmrc",
+        "AGENTS.md",
+        "eslint.config.js",
+        "package-lock.json",
+        "package.json",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "vitest.postgres-immediate.config.ts",
+        "tests/inspection-report-fixture.ts"
       ],
-      "testedHead": "206cc837a5be6a52223302bbf945906ba3c965ef",
-      "sourceFingerprint": "d243302af7df880bd792291e2dbf20c876b31be5c2c7b0773cd77fe4720ad001",
-      "startedAt": "2026-11-07T14:43:09.853Z",
-      "endedAt": "2026-11-07T14:43:44.447Z",
-      "log": "/workspace/scratch/m01-r3-p04-final-native.log",
-      "logSha256": "b37ec73886ee7ec5a355228e8a93931d6a647262d7c612517e43342a29f73522",
-      "context": "Node22.22.2/npm10.9.9; Node/browser descendants pinnedCPUs2,3; original lock and canonical configs. Original100s test/hooks and120s setup; maxWorkers2 configured, one native test file/sequential cases (one actual worker), no parallel heavy schema. Owned marked low-privilege PG16.15 CPU2 cpuset0,1 RAM2GiB and Playwright1.56.1 Chromium141.0.7390.37. Original AuthService/PostgresAuthStore/native services; local TEST full App pages, not onsite or CI hardware/load equivalence."
+      "inputFingerprint": "8e1b103547f76abe7dbd5d602980f878488f8c22c95837255473c8c10159cabe",
+      "log": "/workspace/scratch/dx-final10-20261108/final-unit.log"
     },
     {
       "id": "types",
@@ -193,41 +232,82 @@
       "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "206cc837a5be6a52223302bbf945906ba3c965ef",
-      "sourceFingerprint": "d243302af7df880bd792291e2dbf20c876b31be5c2c7b0773cd77fe4720ad001",
-      "startedAt": "2026-11-07T14:42:16.772Z",
-      "endedAt": "2026-11-07T14:42:50.711Z",
-      "log": "/workspace/scratch/m01-r3-p04-final-types.log",
+      "sourceFingerprint": "fec8322d5d87bf3c5ff9050d244ca382b83b6b9fcecc458db7e975f6bcf72ae9",
+      "testedHead": "3f96edb0f92afdd0667487e8c156904209f274b5",
+      "startedAt": "2026-11-07T19:51:51.481Z",
+      "endedAt": "2026-11-07T19:52:23.499Z",
       "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e",
-      "context": "Node22.22.2/npm10.9.9; Node/browser descendants pinnedCPUs2,3; original lock and canonical configs. Database env empty; focused unchanged old consumers plus new original tests; no onsite or remote Gate operation."
+      "context": "Node22.22.2/npm10.9.9; lock80b0332e; taskset2,3 applies only to command descendants; original Vitest config nonDB1 worker, original preflight protocol2 workers; local host not claimed CI equivalent",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests/helpers",
+        "tests/unit",
+        "tests/fixtures",
+        "tests/acceptance",
+        ".env.example",
+        ".gitattributes",
+        ".gitignore",
+        ".node-version",
+        ".nvmrc",
+        "AGENTS.md",
+        "eslint.config.js",
+        "package-lock.json",
+        "package.json",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "vitest.postgres-immediate.config.ts",
+        "tests/inspection-report-fixture.ts"
+      ],
+      "inputFingerprint": "8e1b103547f76abe7dbd5d602980f878488f8c22c95837255473c8c10159cabe",
+      "log": "/workspace/scratch/dx-final10-20261108/final-types.log"
     },
     {
-      "id": "build",
+      "id": "buildapi",
       "kind": "command",
-      "command": "npm run build --workspaces --if-present",
+      "command": "npm run build --workspace=@dx-rework/api",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "206cc837a5be6a52223302bbf945906ba3c965ef",
-      "sourceFingerprint": "d243302af7df880bd792291e2dbf20c876b31be5c2c7b0773cd77fe4720ad001",
-      "startedAt": "2026-11-07T14:42:50.794Z",
-      "endedAt": "2026-11-07T14:43:09.769Z",
-      "log": "/workspace/scratch/m01-r3-p04-final-build.log",
-      "logSha256": "77f7fa6bf8a2df1de72b8f7fc3d01c8aaecaf56fc1ef7a549ab0a0f087701f57",
-      "context": "Node22.22.2/npm10.9.9; Node/browser descendants pinnedCPUs2,3; original lock and canonical configs. Database env empty; focused unchanged old consumers plus new original tests; no onsite or remote Gate operation."
+      "sourceFingerprint": "13acbfd1540fb485f9cdc0d17ccb1533c56a3bb416c42a17200921bb243d966a",
+      "testedHead": "3f96edb0f92afdd0667487e8c156904209f274b5",
+      "startedAt": "2026-11-07T19:55:45.477Z",
+      "endedAt": "2026-11-07T19:55:57.240Z",
+      "logSha256": "8dd8c96364991c28227c467fbbb326a32e6737fddfa4e2d355be3ef6dd8512fe",
+      "context": "Node22.22.2/npm10.9.9; lock80b0332e; taskset2,3 applies only to command descendants; original Vitest config nonDB1 worker, original preflight protocol2 workers; local host not claimed CI equivalent",
+      "log": "/workspace/scratch/dx-final10-20261108/final-buildapi.log"
     },
     {
       "id": "lint",
       "kind": "command",
-      "command": "npm run lint",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/journey-node-fact.ts tests/unit/journey-node-fact.test.ts apps/api/src/production-platform/bulk-preparation-service.ts apps/api/src/production-platform/development-execution-service.ts apps/api/src/production-platform/development-sla-evidence.ts apps/api/src/production-platform/journey-query.ts apps/api/src/production-platform/journey-supervision.ts apps/api/src/production-platform/journey-visual-progress.ts apps/api/src/production-platform/receiving-span.ts apps/api/src/production-platform/sla-order-service.ts packages/contracts/src/digital-production-journey.ts packages/contracts/src/order-closure.ts tests/integration/development-technical-postgres.test.ts tests/integration/digital-development-execution-postgres.test.ts tests/integration/digital-journey-postgres.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/journey-sla-supervision.test.ts tests/unit/journey-visual-progress.test.ts tests/unit/receiving-span.test.ts --max-warnings=0",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "206cc837a5be6a52223302bbf945906ba3c965ef",
-      "sourceFingerprint": "d243302af7df880bd792291e2dbf20c876b31be5c2c7b0773cd77fe4720ad001",
-      "startedAt": "2026-11-07T14:43:44.523Z",
-      "endedAt": "2026-11-07T14:44:06.023Z",
-      "log": "/workspace/scratch/m01-r3-p04-final-lint.log",
-      "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763",
-      "context": "Node22.22.2/npm10.9.9; Node/browser descendants pinnedCPUs2,3; original lock and canonical configs. Database env empty; focused unchanged old consumers plus new original tests; no onsite or remote Gate operation."
+      "sourceFingerprint": "13acbfd1540fb485f9cdc0d17ccb1533c56a3bb416c42a17200921bb243d966a",
+      "testedHead": "3f96edb0f92afdd0667487e8c156904209f274b5",
+      "startedAt": "2026-11-07T19:53:09.384Z",
+      "endedAt": "2026-11-07T19:53:11.436Z",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "context": "Node22.22.2/npm10.9.9; lock80b0332e; taskset2,3 applies only to command descendants; original Vitest config nonDB1 worker, original preflight protocol2 workers; local host not claimed CI equivalent",
+      "log": "/workspace/scratch/dx-final10-20261108/final-lint.log"
+    },
+    {
+      "id": "preflight",
+      "kind": "tests",
+      "command": "npm run test:preflight",
+      "status": "passed",
+      "exitCode": 0,
+      "sourceFingerprint": "13acbfd1540fb485f9cdc0d17ccb1533c56a3bb416c42a17200921bb243d966a",
+      "testedHead": "3f96edb0f92afdd0667487e8c156904209f274b5",
+      "startedAt": "2026-11-07T19:53:11.537Z",
+      "endedAt": "2026-11-07T19:53:19.087Z",
+      "logSha256": "4098f7c00650f4ce6f752d2fecc984b0cc9aba6b0ba130382df8156ef4a316bf",
+      "context": "Node22.22.2/npm10.9.9; lock80b0332e; taskset2,3 applies only to command descendants; original Vitest config nonDB1 worker, original preflight protocol2 workers; local host not claimed CI equivalent",
+      "passed": 249,
+      "failed": 0,
+      "skipped": 0,
+      "log": "/workspace/scratch/dx-final10-20261108/final-preflight.log"
     },
     {
       "id": "secret",
@@ -235,13 +315,105 @@
       "command": "npm run secret:scan",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "206cc837a5be6a52223302bbf945906ba3c965ef",
-      "sourceFingerprint": "d243302af7df880bd792291e2dbf20c876b31be5c2c7b0773cd77fe4720ad001",
-      "startedAt": "2026-11-07T14:44:06.102Z",
-      "endedAt": "2026-11-07T14:44:06.625Z",
-      "log": "/workspace/scratch/m01-r3-p04-final-secret.log",
+      "sourceFingerprint": "13acbfd1540fb485f9cdc0d17ccb1533c56a3bb416c42a17200921bb243d966a",
+      "testedHead": "3f96edb0f92afdd0667487e8c156904209f274b5",
+      "startedAt": "2026-11-07T19:53:19.164Z",
+      "endedAt": "2026-11-07T19:53:20.080Z",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda",
-      "context": "Node22.22.2/npm10.9.9; Node/browser descendants pinnedCPUs2,3; original lock and canonical configs. Database env empty; focused unchanged old consumers plus new original tests; no onsite or remote Gate operation."
+      "context": "Node22.22.2/npm10.9.9; lock80b0332e; taskset2,3 applies only to command descendants; original Vitest config nonDB1 worker, original preflight protocol2 workers; local host not claimed CI equivalent",
+      "log": "/workspace/scratch/dx-final10-20261108/final-secret.log"
+    },
+    {
+      "id": "journey",
+      "kind": "tests",
+      "command": "NODE_ENV=test DX_REWORK_TEST_SUITE_KIND=postgres taskset -c 2,3 node node_modules/vitest/vitest.mjs run tests/integration/digital-journey-postgres.test.ts --config vitest.config.ts",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 34,
+      "failed": 0,
+      "skipped": 0,
+      "testedHead": "3f96edb0f92afdd0667487e8c156904209f274b5",
+      "sourceFingerprint": "13acbfd1540fb485f9cdc0d17ccb1533c56a3bb416c42a17200921bb243d966a",
+      "startedAt": "2026-11-07T19:53:07.928Z",
+      "endedAt": "2026-11-07T19:54:10.233Z",
+      "log": "/workspace/scratch/dx-final10-20261108/journey-pg.log",
+      "logSha256": "79e4428b7103d14a93726a76ff811032b0f4bdce60859ca1e57bca2edc63b031",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "48ca41f6c576769b80d6e23ed7aa89357e2f047900865e84bb26026e83f577bc"
+        }
+      ],
+      "context": "Actual assembled worktree on stated base; Node22.22.2/npm10.9.9 lock80b0332e; PG16.15 marked low-privilege owned loopback TEST databases, ordinary CI db for journey/execution, separate clock TEST db for technical/anchors. Original configForSuite, 1 active file worker, Node taskset2,3 only; PG container2CPU/2GiB; no claim host/CI hardware equivalent; exact run-owned schemas released and all process groups exited."
+    },
+    {
+      "id": "execution",
+      "kind": "tests",
+      "command": "NODE_ENV=test DX_REWORK_TEST_SUITE_KIND=postgres taskset -c 2,3 node node_modules/vitest/vitest.mjs run tests/integration/digital-development-execution-postgres.test.ts --config vitest.config.ts",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 19,
+      "failed": 0,
+      "skipped": 0,
+      "testedHead": "3f96edb0f92afdd0667487e8c156904209f274b5",
+      "sourceFingerprint": "13acbfd1540fb485f9cdc0d17ccb1533c56a3bb416c42a17200921bb243d966a",
+      "startedAt": "2026-11-07T19:54:10.374Z",
+      "endedAt": "2026-11-07T19:54:15.083Z",
+      "log": "/workspace/scratch/dx-final10-20261108/execution-native.log",
+      "logSha256": "e53d9f54b30cb6332b1988e3dfdba70ec6a643932db591ba49421679561abfc5",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "ff54b486f0ef4349c6fee0fc9ae947ac5720df7853d4af74c9a2027a1cf12068"
+        }
+      ],
+      "context": "Actual assembled worktree on stated base; Node22.22.2/npm10.9.9 lock80b0332e; PG16.15 marked low-privilege owned loopback TEST databases, ordinary CI db for journey/execution, separate clock TEST db for technical/anchors. Original configForSuite, 1 active file worker, Node taskset2,3 only; PG container2CPU/2GiB; no claim host/CI hardware equivalent; exact run-owned schemas released and all process groups exited."
+    },
+    {
+      "id": "technical",
+      "kind": "tests",
+      "command": "NODE_ENV=test DX_REWORK_TEST_SUITE_KIND=postgres taskset -c 2,3 node node_modules/vitest/vitest.mjs run tests/integration/development-technical-postgres.test.ts --config vitest.business-chain.config.ts",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 20,
+      "failed": 0,
+      "skipped": 0,
+      "testedHead": "3f96edb0f92afdd0667487e8c156904209f274b5",
+      "sourceFingerprint": "13acbfd1540fb485f9cdc0d17ccb1533c56a3bb416c42a17200921bb243d966a",
+      "startedAt": "2026-11-07T19:54:15.232Z",
+      "endedAt": "2026-11-07T19:54:34.950Z",
+      "log": "/workspace/scratch/dx-final10-20261108/technical-native.log",
+      "logSha256": "809bba56ff6144475af8791c658b3957b06525fac21f9c40ec01806558b8d7f5",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "02018cf09f71e0d8d5f651a3323b79bb807feac0d7bd41f0972746bb045458c7"
+        }
+      ],
+      "context": "Actual assembled worktree on stated base; Node22.22.2/npm10.9.9 lock80b0332e; PG16.15 marked low-privilege owned loopback TEST databases, ordinary CI db for journey/execution, separate clock TEST db for technical/anchors. Original configForSuite, 1 active file worker, Node taskset2,3 only; PG container2CPU/2GiB; no claim host/CI hardware equivalent; exact run-owned schemas released and all process groups exited."
+    },
+    {
+      "id": "anchors",
+      "kind": "tests",
+      "command": "NODE_ENV=test DX_REWORK_TEST_SUITE_KIND=postgres taskset -c 2,3 node node_modules/vitest/vitest.mjs run tests/integration/business-anchors-clock-postgres.test.ts --config vitest.config.ts",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 20,
+      "failed": 0,
+      "skipped": 0,
+      "testedHead": "3f96edb0f92afdd0667487e8c156904209f274b5",
+      "sourceFingerprint": "13acbfd1540fb485f9cdc0d17ccb1533c56a3bb416c42a17200921bb243d966a",
+      "startedAt": "2026-11-07T19:55:44.050Z",
+      "endedAt": "2026-11-07T19:56:40.903Z",
+      "log": "/workspace/scratch/dx-final10-20261108/anchors-native.log",
+      "logSha256": "fa067456a599f7ea414873af3f80cce2fd8db528e2c38a0236b990e5ba6d3f04",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "3bee203ad0a7275af7bb0822779c75c746d4f1af8e21370bf8490ce328d7acbd"
+        }
+      ],
+      "context": "Actual assembled worktree on stated base; Node22.22.2/npm10.9.9 lock80b0332e; PG16.15 marked low-privilege owned loopback TEST databases, ordinary CI db for journey/execution, separate clock TEST db for technical/anchors. Original configForSuite, 1 active file worker, Node taskset2,3 only; PG container2CPU/2GiB; no claim host/CI hardware equivalent; exact run-owned schemas released and all process groups exited."
     }
   ]
 }

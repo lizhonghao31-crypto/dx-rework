@@ -374,8 +374,9 @@ export class DevelopmentExecutionService {
     return this.command(actor,sourceId,"customer-sample",key,input,async db=>{
       if(await technicalEnrollment(db,sourceId))fail('请在本单“客户最终评语”登记并发起尺寸复核；历史确认入口不能跳过新复核');
       const sheet=await this.forms().read(actor,sourceId,db);if(!sheet.canEdit)digitalForbidden();
+      if((sheet.roundNumber??1)!==input.routeVersion)fail('开发轮次已更新，请刷新当前轮次后确认客户样板');
       if(!(await db.query("SELECT 1 FROM digital_development_route_facts WHERE source_id=$1 AND route_version=$2 AND kind='最终设计确认'",[sourceId,input.routeVersion])).rowCount)fail("请先完成该轮样板的最终设计确认");
-      const factId=randomUUID();await db.query("INSERT INTO digital_development_route_facts(fact_id,source_id,route_version,kind,payload,actor_id) VALUES($1,$2,$3,'客户样板确认',$4,$5) ON CONFLICT DO NOTHING",[factId,sourceId,input.routeVersion,JSON.stringify(input),actor.actorId]);
+      const factId=randomUUID();await db.query("INSERT INTO digital_development_route_facts(fact_id,source_id,route_version,kind,payload,actor_id) VALUES($1,$2,$3,'客户样板确认',$4,$5) ON CONFLICT DO NOTHING",[factId,sourceId,input.routeVersion,JSON.stringify({...input,actualCompletedAt:businessNow().toISOString(),timeQuality:'现场登记'}),actor.actorId]);
       await new BulkPreparationService(this.database).syncSource(db,actor,sourceId);
       return {sourceId,routeVersion:input.routeVersion,customerSampleConfirmed:true};
     });

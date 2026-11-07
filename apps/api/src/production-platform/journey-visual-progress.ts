@@ -3,6 +3,7 @@ import {
   type JourneyBusinessDate, type JourneyBusinessRequirement, type JourneyNode,
   type JourneyVisualProgress, type OrderJourney,
 } from '@dx-rework/contracts/digital-production-journey';
+import { slaDateBoundary } from '@dx-rework/domain/digital-sla-plan';
 
 const instant = (at: string | null | undefined): number | null => {
   if (!at || !/T.*(?:Z|[+-]\d{2}:\d{2})$/.test(at)) return null;
@@ -15,10 +16,27 @@ const copyDate = (date: JourneyBusinessDate | undefined): JourneyBusinessDate =>
   ? { ...date, reasons: [...date.reasons], ...(date.coveredAt ? { coveredAt: { ...date.coveredAt } } : {}) }
   : unknownDate();
 
-/** A date-only observation is still a day, not an invented midnight instant. */
+/** A forecast day has the existing Beijing exclusive boundary for calculation.
+ * Keep its original date/precision for display; it is never an actual event.
+ */
+function forecastBoundary(expected: JourneyBusinessDate): number | null {
+  if (expected.status !== 'complete') return null;
+  if (expected.precision === 'instant') return instant(expected.at);
+  if (expected.precision !== 'date' || !expected.at) return null;
+  try {
+    return instant(slaDateBoundary(expected.at).at);
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Invalid SLA calendar date') return null;
+    throw error;
+  }
+}
+
+/** Natural elapsed time is independent from each node's business SLA calendar.
+ * A date-only start without an approved calculation boundary remains unknown.
+ */
 export function naturalTimeRatio(start: string | null, expected: JourneyBusinessDate, asOf: string): number | null {
   const from = instant(start), now = instant(asOf);
-  const until = expected.status === 'complete' && expected.precision === 'instant' ? instant(expected.at) : null;
+  const until = forecastBoundary(expected);
   if (from === null || until === null || now === null || until <= from) return null;
   return Math.max(0, Math.min(1, (now - from) / (until - from)));
 }
@@ -84,7 +102,7 @@ export function journeyVisualProgress(order: OrderJourney, asOf: string): Journe
   const unknownStages = stages.filter(stage => stage.applicability === 'unknown').length;
   const expected = copyDate(dates?.overall.forecast), actual = copyDate(dates?.overall.actual);
   const startedAt = observed && !unknownStages ? recordedStart(rows, nodes, asOf) : null;
-  return { ruleVersion: 'journey-visual-v1', asOf,
+  return { ruleVersion: 'journey-visual-v2', asOf,
     actualRatio: unknownStages || !applicable.length ? null : applicable.reduce((sum, stage) => sum + stage.actualRatio!, 0) / applicable.length,
     timeRatio: naturalTimeRatio(startedAt, expected, asOf), startedAt,
     applicableStages: applicable.length, completedStages: applicable.filter(stage => stage.actualRatio === 1).length, unknownStages,

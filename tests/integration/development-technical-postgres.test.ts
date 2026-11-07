@@ -25,6 +25,7 @@ import {DigitalDevelopmentService} from '../../apps/api/src/production-platform/
 import {DevelopmentExecutionService} from '../../apps/api/src/production-platform/development-execution-service.js';
 import type {DevelopmentTechnicalService} from '../../apps/api/src/production-platform/development-technical-service.js';
 import {DigitalProductionTaskService} from '../../apps/api/src/production-platform/task-service.js';
+import {DigitalJourneyQuery} from '../../apps/api/src/production-platform/journey-query.js';
 import {PatternRoomOrderService} from '../../apps/api/src/pattern-room/order-service.js';
 import {PatternRoomPriceService} from '../../apps/api/src/pattern-room/price-service.js';
 import {RootAwareTodoProjectionService} from '../../apps/api/src/todos/root-aware-projection-service.js';
@@ -137,6 +138,23 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect(state.effective?.finalCommentRef).toEqual({id:final.commentId,version:1});
   await technical.completeReview(p.worker,p.sourceId,{taskId:final.reviewTaskId!,expectedReviewVersion:1,finalCommentId:final.commentId,finalCommentVersion:1,decision:'reuse',artifactSetId:published.artifactSetId,artifactVersion:published.version,note:'TEST current final remains actionable'},randomUUID());
   expect((await technical.read(p.worker,p.sourceId)).effective?.state).toBe('effective');
+ });
+ it('Final10 projects explicit customer occurrence through the effective technical reference and clears it when that reference changes',async()=>{
+  const scene=await f.scene('2026-10-20T12:00:00.000Z');
+  await f.runtime.run(scene,f.root,async()=>{
+   const p=await prepare(),published=await artifact(p),occurredAt='2026-10-20T10:00:00.000Z';
+   const first=await technical.recordComment(p.designer,p.sourceId,{...comment(),occurredAt},randomUUID());
+   const review=async(final:typeof first)=>technical.completeReview(p.worker,p.sourceId,{taskId:final.reviewTaskId!,expectedReviewVersion:1,finalCommentId:final.commentId,finalCommentVersion:final.version,decision:'reuse',artifactSetId:published.artifactSetId,artifactVersion:published.version,note:'TEST explicit original technical review'},randomUUID());
+   await review(first);
+   const style=(await f.db.query('SELECT design_style_no FROM digital_production_sources WHERE source_id=$1',[p.sourceId])).rows[0].design_style_no;
+   const order=await identity.createOrder(f.root,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:style,temporaryStyleNo:null,orderDate:'2026-10-20',lines:[{poNumber:'TEST-CUSTOMER-OCCURRENCE',color:'黑',sizes:[{size:'M',quantity:10}],deliveryDate:'2027-03-01'}]}),randomUUID(),p.sourceId);
+   const journey=new DigitalJourneyQuery(f.db),read=async()=>(await journey.read(f.root,order.productionOrderId,undefined,true)).stages.flatMap(stage=>stage.nodes).find(node=>node.key==='customer_sample'&&node.current)!;
+   expect(await read()).toMatchObject({state:'completed',actualAt:occurredAt,actualQuality:'unverified',completionResult:'unknown'});
+   const next=await technical.recordComment(p.designer,p.sourceId,comment(1),randomUUID());
+   expect(await read()).toMatchObject({state:'pending',actualAt:null,actualQuality:'missing'});
+   await review(next);
+   expect(await read()).toMatchObject({state:'completed',actualAt:null,actualQuality:'missing'});
+  });
  });
  it('adopts only an explicitly selected same-source same-unit technical usage; confirmation remains frozen',async()=>{
   const p=await prepare(),published=await artifact(p),quotes=new DigitalQuotationService(f.db,true),resource={kind:'source' as const,id:p.sourceId},rowId=randomUUID();

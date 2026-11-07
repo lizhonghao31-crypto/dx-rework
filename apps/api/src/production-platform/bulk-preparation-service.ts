@@ -35,7 +35,8 @@ export class BulkPreparationService {
   const source=order.source_id?await developmentDocumentRow(db,order.source_id):null;
   const instruction=(await db.query(`SELECT v.* FROM digital_instruction_documents d JOIN digital_instruction_versions v ON v.production_order_id=d.production_order_id AND v.version=d.published_version WHERE d.production_order_id=$1`,[id])).rows[0];
   const technical=source&&await technicalEnrollment(db,order.source_id)?await effectiveTechnicalEvidence(db,order.source_id,source.round_number,'整款',order.customer_code):null;
-  const customerConfirmed=technical?technical.state==='effective':Boolean(source?.status==='published'&&(await db.query("SELECT 1 FROM digital_development_route_facts WHERE source_id=$1 AND route_version=$2 AND kind='客户样板确认'",[order.source_id,source.round_number])).rowCount);
+  const customerSampleFact=!technical&&source?.status==='published'?(await db.query("SELECT fact_id,payload,actor_id FROM digital_development_route_facts WHERE source_id=$1 AND route_version=$2 AND kind='客户样板确认'",[order.source_id,source.round_number])).rows[0]??null:null;
+  const customerConfirmed=technical?technical.state==='effective':Boolean(customerSampleFact);
   const sourcing=(await db.query("SELECT s.* FROM digital_production_child_links l JOIN sourcing_cases s ON s.sourcing_case_id=l.child_id WHERE l.module='sourcing' AND l.production_order_id=$1",[id])).rows[0];
   let approval;
   if(sourcing){
@@ -65,7 +66,7 @@ export class BulkPreparationService {
   if(!ownerApproved)commercialReasons.push('当前选厂方案尚无有效老板批准：请主跟单在本单原外发选厂页核对当前方案，由老板按原审批流程办理');
   if(!instructionValid)reasons.push('当前大货制单未发布、与开发轮次不符或缺预缩选择：请主跟单在本单大货制单核对当前资料及预缩要求后发布');
   if(lifecycle.some(r=>r.state!=='active'))reasons.push('母单或开发来源已暂停/取消');
-  return {order,source,instruction,approval,customerConfirmed,ownerApproved,instructionValid,parallel,snapshotId:snapshot?.snapshot_id??null,technicalReasons:[...reasons,...(parallel?[]:commercialReasons)],reasons:[...reasons,...commercialReasons,...(parallel&&!fabric?.usable?['验布尚未合格或获准使用，请在原产前准备办理验布及质量决定']:[])],fabric,terminal:closed||lifecycle.some(r=>r.state!=='active')};
+  return {order,source,instruction,approval,customerConfirmed,customerSampleFact,technical,ownerApproved,instructionValid,parallel,snapshotId:snapshot?.snapshot_id??null,technicalReasons:[...reasons,...(parallel?[]:commercialReasons)],reasons:[...reasons,...commercialReasons,...(parallel&&!fabric?.usable?['验布尚未合格或获准使用，请在原产前准备办理验布及质量决定']:[])],fabric,terminal:closed||lifecycle.some(r=>r.state!=='active')};
  }
  private async current(db:DB,id:string,g:Awaited<ReturnType<BulkPreparationService['gates']>>){
   if(g.technicalReasons.length)return null;

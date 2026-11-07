@@ -12,7 +12,7 @@ import { DigitalProductionTaskService } from "../../apps/api/src/production-plat
 import { DigitalProductionIdentityService } from "../../apps/api/src/production-platform/identity-service.js";
 import { DigitalDevelopmentService } from "../../apps/api/src/production-platform/development-service.js";
 import { DevelopmentDocumentSchema, type DevelopmentDocument } from "@dx-rework/contracts/digital-development";
-import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema, createOwnedPostgresSchema, releaseOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
 const run = databaseUrl ? describe : describe.skip;
@@ -25,7 +25,7 @@ run("P06 development execution PostgreSQL", () => {
   const execution=new DevelopmentExecutionService(database,true), tasks=new DigitalProductionTaskService(database);
   const service=new DigitalProductionIdentityService(database,true), development=new DigitalDevelopmentService(database,true);
   beforeAll(async () => {
-    await admin.query(`CREATE SCHEMA ${schema}`);
+    await createOwnedPostgresSchema(admin,schema);
     for (const name of ["0001_platform_foundation.sql", "0002_dingtalk_identity_access.sql", "0004_public_tools_foundation.sql", "0216_digital_production_order_roots.sql", "0217_digital_production_node_clocks.sql"])
       await database.query(await readFile(new URL(`../../apps/api/migrations/${name}`, import.meta.url), "utf8"));
     // Existing-domain tables are represented only by referenced identity columns in this isolated fixture.
@@ -65,7 +65,7 @@ run("P06 development execution PostgreSQL", () => {
     await database.query("INSERT INTO user_role_assignments(user_id,role_code) VALUES($1,'development_clerk'),($2,'pattern_room_worker')",[root,other]);
   });
 
-  afterAll(async()=>{await database.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();});
+  afterAll(async()=>{await database.end();await releaseOwnedPostgresSchema(admin,schema);await admin.end();});
   const source=async()=> (await service.createSource(actor(),{developmentType:"头版",designStyleNo:`TEST-P05-${randomUUID()}`,temporaryStyleNo:null,customerCode:null},randomUUID())).sourceId;
   const draft=():DevelopmentDocument=>DevelopmentDocumentSchema.parse({documentFormatVersion:2,sizeQuantities:[null],template:"上衣",quantity:null,sampleSize:"",orderDate:null,returnDate:null,unit:"cm",sizes:["M"],measurements:[{name:"胸围",values:[""]}],interlining:"",placketInterlining:"",sewingThread:"",buttonholeThread:"",stitchDensity:"",washingIroning:"",packaging:"",formalSizes:"",casualSizes:"",mainLabel:false,mainLabelMethod:"",sizeLabel:false,careLabel:false,instructions:"",craft:"无",washing:"免洗",materials:[],files:[]});
   const ready=async()=>{
@@ -84,6 +84,27 @@ run("P06 development execution PostgreSQL", () => {
     return {id,materialId,taskId:sheet.taskId!,version:sheet.version};
   };
   const checks=(materialId:string,physical=true)=>[{materialId,physical,quantity:true,color:true,specification:true}];
+  it('Final10 customer confirmation captures its original occurrence once, rejects stale rounds and never fills old missing times',async()=>{
+    const current=await prepare(),confirmation={routeVersion:1,note:'TEST actual customer confirmation'},key=randomUUID();
+    await database.query("INSERT INTO digital_development_route_facts(fact_id,source_id,route_version,kind,payload,actor_id) VALUES($1,$2,1,'最终设计确认','{}',$3)",[randomUUID(),current.id,designer]);
+    const started=Date.now();
+    await execution.customerSample(actor(),current.id,confirmation,key);
+    const read=async(id=current.id)=>(await database.query("SELECT payload FROM digital_development_route_facts WHERE source_id=$1 AND route_version=1 AND kind='客户样板确认'",[id])).rows;
+    const first=await read();expect(first).toHaveLength(1);
+    expect(first[0].payload).toMatchObject({note:confirmation.note,timeQuality:'现场登记'});
+    expect(Date.parse(first[0].payload.actualCompletedAt)).toBeGreaterThanOrEqual(started);
+    expect(Date.parse(first[0].payload.actualCompletedAt)).toBeLessThanOrEqual(Date.now());
+    await execution.customerSample(actor(),current.id,confirmation,key);
+    await execution.customerSample(actor(),current.id,confirmation,randomUUID());
+    expect(await read()).toEqual(first);
+    await expect(execution.customerSample(actor(),current.id,{...confirmation,routeVersion:2},randomUUID())).rejects.toThrow('开发轮次已更新');
+    await expect(execution.customerSample(actor(other),current.id,confirmation,randomUUID())).rejects.toMatchObject({statusCode:404});
+    const legacy=await prepare();
+    for(const kind of ['最终设计确认','客户样板确认'])await database.query("INSERT INTO digital_development_route_facts(fact_id,source_id,route_version,kind,payload,actor_id) VALUES($1,$2,1,$3,$4,$5)",[randomUUID(),legacy.id,kind,JSON.stringify({note:'TEST historical time never recorded'}),designer]);
+    await execution.customerSample(actor(),legacy.id,confirmation,randomUUID());
+    expect((await read(legacy.id))[0].payload).toEqual({note:'TEST historical time never recorded'});
+  });
+
   it("R2 requires exact-task paper results even without craft and preserves the task on rejection",async()=>{
     const {id,taskId,materialId}=await prepare();await execution.check(clerk(),id,{taskId,result:'通过',note:'',items:checks(materialId)},randomUUID());
     const paper=(await execution.read(worker(),id)).tasks.find(t=>t.taskKind==='development_pattern')!;

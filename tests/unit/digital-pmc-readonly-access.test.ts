@@ -373,6 +373,7 @@ function sourceJourneyDatabase(roles: string[]) {
       || sql.startsWith('SELECT * FROM digital_development_effective_rounds ')
       || sql.startsWith('SELECT * FROM digital_preparation_responsibilities ')
       || sql.startsWith('SELECT * FROM digital_development_sla_plans ')
+      || sql.startsWith("SELECT t.task_id,t.state,t.entered_at,t.entered_quality,t.completed_at,t.completed_quality,a.task_kind,") && values[0] === SOURCE
       || sql.startsWith('SELECT DISTINCT ON(node_key) ')
       || sql.startsWith('SELECT 1 FROM digital_production_resource_lifecycle ')
       || sql.startsWith('WITH authorized_events AS (')) return [];
