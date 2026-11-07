@@ -1,152 +1,78 @@
 {
   "version": 1,
-  "base": "3a8c8cd6e40e45755d7028efe9aa6ef84c865f08",
-  "sourceFingerprint": "9b1c711e32f984fcf437479bd876821aa960e7cb4cb846f072db31e8ab2edf3f",
+  "base": "e3595325a35f876aa0d24ac59800749beb7958dd",
+  "sourceFingerprint": "de092dfee2ac7eb3e6b902ccbeffcd7f6eaf1aa9c2880a18b448fd7fa92abf26",
   "risk": "full",
   "rules": [
     {
-      "rule": "Seven KPI and category drill use the same distinct complete basic-filter authorized order set before pagination.",
-      "source": "User accepted PR01 with ok; latest parent delegation authorizes #922 merge then PR02 homepage only, stop for user acceptance without auto merge/start PR03/deploy. Approved full Pro plan and actual homepage image Library libfile_fde3_f-3a313ed0b0cc8191999ad539ded4ba5f_c8d3bf5d609c8191bce6411a30e94d44. docs/engineering/m01-r3-p02-execution.md",
+      "source": "2026-11-07 user asks to fix the 20.97GiB download budget rejection instead of clearing ECS; parent authorizes independent deployment-capacity PR, Review and merge. No onsite/deploy; PR03/04 local only. docs/engineering/acceptance-capacity-stage-budget-20261107.md",
       "writes": [
-        "apps/api/src/production-platform/journey-projection.ts",
-        "packages/contracts/src/digital-production-journey.ts",
-        "tests/unit/cockpit-display-facts.test.ts"
+        "scripts/deploy/acceptance-capacity.py",
+        "tests/integration/acceptance-capacity.test.py",
+        "tests/unit/acceptance-capacity.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/journey-query.ts",
-        "apps/api/src/production-platform/journey-supervision.ts",
-        "apps/api/src/production-platform/journey-display.ts",
-        "apps/api/src/production-platform/access-policy.ts"
+        "scripts/dx-acceptance.sh#capacity_check",
+        "scripts/deploy/fetch-update-source.sh",
+        "scripts/deploy/acceptance-update-flow.sh#acceptance_update_flow",
+        "scripts/deploy/update-acceptance-local.sh",
+        "scripts/deploy/inspect-acceptance-storage.py"
       ],
       "oldTests": [
-        "tests/unit/digital-journey-projection.test.ts",
-        "tests/unit/journey-projection-isolation.test.ts",
-        "tests/integration/digital-journey-postgres.test.ts"
+        "tests/unit/acceptance-capacity.test.ts",
+        "tests/unit/acceptance-update-flow.test.ts",
+        "tests/unit/acceptance-storage.test.ts",
+        "tests/unit/acceptance-update-policy.test.ts",
+        "tests/unit/acceptance-update-verification.test.ts",
+        "tests/integration/acceptance-deployment-contract.test.ts"
       ],
-      "initialization": "Additive optional timingMissing and unchanged seven allowed category keys. No migration, historic rewrite or new query. Canonical id dedup precedes sort/count/page. Original closed-order count policy permits fact_time only; drill now shares the same predicate.",
-      "dateAndPermission": "Original AuthService/live scope, Root exception and full candidate reads retained. Basic search/customer/merch/category/stage/node/risk/date conditions remain; overlapping categories count one mother in KPI and independently in categories; legacy unscoped lists unchanged.",
-      "expectation": "32 distinct mothers plus duplicate and unrelated/source counterexamples, all seven category counts, 31-item15+15+1 pagination, closed fact_time and original native Root/designer/task-limited, live-revoke, original-query no-write cases pass.",
       "checks": [
         "preflight",
         "unit",
-        "native",
         "types",
         "build",
         "lint",
         "secret"
-      ]
+      ],
+      "rule": "Budget only overlapping allocations before the next mandatory fresh free-space check; never waive later build, backup or stop capacity.",
+      "initialization": "No schema/config/production/Acceptance-data write. Fetch subprocess removes its own Git store on EXIT before prepare. Archive still includes current Git occupation in actual available; expired allocations are not added to later heavy work. Installed old tool refuses executable-policy refresh, explicit install required.",
+      "dateAndPermission": "Pinned Acceptance database identity, all storage path/metric validation and readonly peer collection retained at download/archive. Build/backup/stop rewrite, backup, WAL, logs, operating margin and fail-before-stop dispatch remain unchanged; no capacity bypass or cleanup.",
+      "expectation": "Sixteen actual Python boundary tests plus original shell dispatch with real estimator: download/archive succeeds then build, backup or stop insufficient reports refusal before any stop/apply/activate effect. Old production/runtime isolation, verified history recovery and original update semantics pass."
     },
     {
-      "rule": "Approved compact homepage consumes shared visual ratios and dates, trusted business ID and original quantity facts without flat-count fallback.",
-      "source": "User accepted PR01 with ok; latest parent delegation authorizes #922 merge then PR02 homepage only, stop for user acceptance without auto merge/start PR03/deploy. Approved full Pro plan and actual homepage image Library libfile_fde3_f-3a313ed0b0cc8191999ad539ded4ba5f_c8d3bf5d609c8191bce6411a30e94d44. docs/engineering/m01-r3-p02-execution.md",
+      "source": "2026-11-07 user asks to fix the 20.97GiB download budget rejection instead of clearing ECS; parent authorizes independent deployment-capacity PR, Review and merge. No onsite/deploy; PR03/04 local only. docs/engineering/acceptance-capacity-stage-budget-20261107.md",
       "writes": [
-        "apps/web/src/cockpit-home.tsx",
-        "apps/web/src/cockpit-home-progress.tsx",
-        "apps/web/src/cockpit-home.css",
-        "tests/unit/cockpit-home.test.ts"
+        "scripts/deploy/acceptance-capacity.py",
+        "tests/integration/acceptance-capacity.test.py",
+        "tests/unit/acceptance-capacity.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/journey-visual-progress.ts",
-        "apps/web/src/cockpit-date.tsx",
-        "apps/web/src/journey-sla-details.tsx",
-        "apps/web/src/cockpit-photo-preview.tsx",
-        "apps/web/src/po-delivery-dates.tsx",
-        "apps/web/src/cockpit-business-progress.tsx"
+        "scripts/dx-acceptance.sh#capacity_check",
+        "scripts/deploy/fetch-update-source.sh",
+        "scripts/deploy/acceptance-update-flow.sh#acceptance_update_flow",
+        "scripts/deploy/update-acceptance-local.sh",
+        "scripts/deploy/inspect-acceptance-storage.py"
       ],
       "oldTests": [
-        "tests/unit/journey-visual-progress.test.ts",
-        "tests/unit/m01-cockpit-workspace.test.ts",
-        "tests/unit/digital-cockpit-progress.test.ts",
-        "tests/unit/cockpit-detail.test.ts"
+        "tests/unit/acceptance-capacity.test.ts",
+        "tests/unit/acceptance-update-flow.test.ts",
+        "tests/unit/acceptance-storage.test.ts",
+        "tests/unit/acceptance-update-policy.test.ts",
+        "tests/unit/acceptance-update-verification.test.ts",
+        "tests/integration/acceptance-deployment-contract.test.ts"
       ],
-      "initialization": "Only overview components and namespace styles change. Original full detail and legacy business progress remain independent. Original task date-target exclusive and native-window precedence use the original nodeTargetLabel formatter in both row and modal. No fallback to old display/flat n/m ratios, no business ID generation, UUID promotion, invented photo, clock or SLA changes.",
-      "dateAndPermission": "Unknown, actual0 and actual100 remain distinct; incomplete rounds below100. Expected/actual source dates preserve precision. Positive native visible receipt debt is labelled whole/visible range only when quantity rows support it; whole state remains original mainState irrespective of local risk.",
-      "expectation": "70.8 versus flat80,0/99.9/100/unknown, date-only native task exclusive boundaries and original batch deadline precedence, old risk/closed facts, complete versus partial quantity scope and invalid debt pass. Full original App screenshots at1165/1366/1584 and390 show original Shell, seven KPI, seven columns, centered quantity, compact long/multi-PO rows and native F debt2.",
       "checks": [
         "preflight",
         "unit",
-        "native",
         "types",
         "build",
         "lint",
         "secret"
-      ]
-    },
-    {
-      "rule": "Risk modal and missing-time category navigation retain original facts, filters, page, focus and live authorization through the existing request lifecycle.",
-      "source": "User accepted PR01 with ok; latest parent delegation authorizes #922 merge then PR02 homepage only, stop for user acceptance without auto merge/start PR03/deploy. Approved full Pro plan and actual homepage image Library libfile_fde3_f-3a313ed0b0cc8191999ad539ded4ba5f_c8d3bf5d609c8191bce6411a30e94d44. docs/engineering/m01-r3-p02-execution.md",
-      "writes": [
-        "apps/web/src/cockpit-home-dialog.tsx",
-        "apps/web/src/cockpit-home-risks.tsx",
-        "apps/web/src/cockpit-timing-coverage.tsx",
-        "apps/web/src/digital-journey-cockpit.tsx"
       ],
-      "reads": [
-        "apps/web/src/cockpit-reads.ts",
-        "apps/web/src/auth-session.ts",
-        "apps/web/src/cockpit-reading-context.ts",
-        "apps/web/src/cockpit-dialog-focus.ts",
-        "apps/web/src/digital-cockpit-page.tsx",
-        "apps/web/src/cockpit-node-rows.tsx"
-      ],
-      "oldTests": [
-        "tests/unit/m01-cockpit-reads.test.ts",
-        "tests/unit/m01-cockpit-reading-context.test.ts",
-        "tests/unit/digital-journey-cockpit.test.ts",
-        "tests/unit/digital-pmc-readonly-ui.test.ts"
-      ],
-      "initialization": "Reuse native dialog/focus trap and original useCockpitReads independent generations/identity invalidation. No response cache or fake auth. Planning-node completion exclusion remains confined to existing progress projection; all authorized planning risks stay in the risk modal. Main snapshot guard closes obsolete dialogs; category pages are independent UI state. Standard KPI/status changes clear obsolete legacy missing selector, so their full-range counts match corresponding lists.",
-      "dateAndPermission": "First show seven categories, then original authorized paginated reads;0/permission unavailable/read error are distinct. Source risk node/blocker, existing planning-node risk and all PO date/type rows remain in modal without hover growth. Main search/IME/original advanced scopes and detail return retained; exact valid dedicated PMC session is revoked using original AccessService, not Lab role switch.",
-      "expectation": "Original browser covers every positive category/zero-disabled categories,31-order full paging, risk open/close no row growth and restored keyboard focus, category→detail→same page2/customer/search, original F receipt gap,503 retry and same signed-session live PMC revocation. Ordinary KPI clears legacy category selection in real full App.",
-      "checks": [
-        "preflight",
-        "unit",
-        "native",
-        "types",
-        "build",
-        "lint",
-        "secret"
-      ]
-    },
-    {
-      "rule": "New original browser coverage joins canonical plan with bounded setup/cases/cleanup and only changed numeric time inventory entries.",
-      "source": "User accepted PR01 with ok; latest parent delegation authorizes #922 merge then PR02 homepage only, stop for user acceptance without auto merge/start PR03/deploy. Approved full Pro plan and actual homepage image Library libfile_fde3_f-3a313ed0b0cc8191999ad539ded4ba5f_c8d3bf5d609c8191bce6411a30e94d44. docs/engineering/m01-r3-p02-execution.md",
-      "writes": [
-        "tests/acceptance/m01-cockpit-home-native-browser.ts",
-        "tests/fixtures/m01-cockpit-home-native-ui.tsx",
-        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts",
-        "scripts/ci/full-gate-risk-map.mjs",
-        "scripts/ci/prepare-settings-browser.mjs",
-        "scripts/test-suite-plan.mjs",
-        "tests/unit/full-gate-risk-map.test.ts",
-        "docs/engineering/acceptance-time-sites-20261027.json",
-        "docs/requirements/business-analysis-limited-ui-golden-source-v1.0.md",
-        "docs/requirements/rework-ui-golden-source-v1.0.md",
-        "docs/engineering/m01-r3-p02-execution.md"
-      ],
-      "reads": [
-        "scripts/test-execution-config.mjs",
-        "vitest.business-chain.config.ts",
-        "tests/helpers/business-anchor-fixture.ts",
-        "tests/helpers/owned-postgres-schema.ts",
-        "scripts/acceptance/time-site-inventory.mjs"
-      ],
-      "oldTests": [
-        "tests/unit/full-gate-risk-map.test.ts",
-        "tests/integration/digital-journey-postgres.test.ts"
-      ],
-      "initialization": "Registered existing business_anchors ownership and marker guard only; original migrations/TEST native business commands, signed AuthService/PostgresAuthStore. Seven separate100s cases and120s setup keep failures located; one finally cleanup closes browser/server/Fastify/schema. Conditional lock-pinned Chromium preparation and exact risk map select the new suite once. No job timeout or business/performance boundary change.",
-      "dateAndPermission": "No onsite account/config/database operation; original fixture names explicitly TEST. Full App is local, not synthetic Shell or onsite acceptance. Numeric Math.min candidate moves from old home fallback to new display-only component; every unrelated inventory entry/manual annotation preserved. N source proofs still unavailable, extra all-node audit paused. #921 and PR01 untouched.",
-      "expectation": "Original preflight, focused old/new unit, same canonical two-worker native old/new suites, types/build/lint/secret pass on this frozen source with actual metadata and cleanup. Independent Review and exact-tuple final Full still required before user acceptance; do not auto merge PR02 or begin PR03.",
-      "checks": [
-        "preflight",
-        "unit",
-        "native",
-        "types",
-        "build",
-        "lint",
-        "secret"
-      ]
+      "rule": "A nonempty installed matching Acceptance or production lock provides dependency sizing evidence with 50percent margin, never implicit permission to reuse dependencies.",
+      "initialization": "Both current dependency roots are measured. Exactly matching package-lock bytes and positive installed size are required, maximum matching size selected; floor512MiB. Missing/changed/no installed match keeps floor2GiB. Actual locked npm install, immutable tools, existing release and backup retention remain unchanged.",
+      "dateAndPermission": "Read existing local lock/size only; no site credentials, account/config change, install, cleanup or deployment performed. Original worker build checks and production locks remain authoritative.",
+      "expectation": "Old production lock plus matching Acceptance400MiB measures600MiB. Unknown and missing target lock retain2GiB; original updater and deployment contract tests pass. This is local estimation correctness, not a claim of exact现场 capacity or deployment success."
     }
   ],
   "checks": [
@@ -162,62 +88,39 @@
       "resultReports": [
         {
           "format": "node-tap",
-          "sha256": "2cc45bb0d027d5c35527d3f325a1635e14755022c11dee1e822a1023e2ab854b"
+          "sha256": "340be144d0e613872940fc14dbef182d8e16a4c4814a145e19a031b4511c5a6f"
         }
       ],
-      "testedHead": "cac5cdc912fba9d54d90e6dba644990d0e53e083",
-      "sourceFingerprint": "9b1c711e32f984fcf437479bd876821aa960e7cb4cb846f072db31e8ab2edf3f",
-      "startedAt": "2026-11-07T11:52:42.312Z",
-      "endedAt": "2026-11-07T11:52:48.542Z",
-      "log": "/workspace/scratch/m01-r3-p02-preflight.log",
-      "logSha256": "2cc45bb0d027d5c35527d3f325a1635e14755022c11dee1e822a1023e2ab854b",
-      "context": "Node22.22.2/npm10.9.9, Node and browser descendant affinity2,3; database env empty; original bounded config and focused suites; preflight owns original protocol workers; no onsite operation."
+      "testedHead": "e3595325a35f876aa0d24ac59800749beb7958dd",
+      "sourceFingerprint": "de092dfee2ac7eb3e6b902ccbeffcd7f6eaf1aa9c2880a18b448fd7fa92abf26",
+      "startedAt": "2026-11-07T13:05:46.082Z",
+      "endedAt": "2026-11-07T13:05:52.015Z",
+      "log": "/workspace/scratch/m01-capacity-preflight.log",
+      "logSha256": "340be144d0e613872940fc14dbef182d8e16a4c4814a145e19a031b4511c5a6f",
+      "context": "Node22.22.2/npm10.9.9; original bounded canonical config; focused real Python capacity/storage and original shell dispatch/flow with TEST metrics and substituted privileged effect only; no onsite/DB/deployment operation, unrelated business Full not locally repeated."
     },
     {
       "id": "unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/cockpit-home.test.ts tests/unit/cockpit-detail.test.ts tests/unit/cockpit-display-facts.test.ts tests/unit/digital-journey-cockpit.test.ts tests/unit/digital-journey-projection.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/m01-cockpit-workspace.test.ts tests/unit/m01-cockpit-reads.test.ts tests/unit/m01-cockpit-reading-context.test.ts tests/unit/digital-cockpit-progress.test.ts tests/unit/digital-cockpit-time.test.ts tests/unit/journey-projection-isolation.test.ts tests/unit/journey-visual-progress.test.ts tests/unit/journey-business-progress.test.ts tests/unit/journey-progress-dates.test.ts tests/unit/digital-pmc-readonly-ui.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-r3-p02-unit.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/acceptance-capacity.test.ts tests/unit/acceptance-update-flow.test.ts tests/unit/acceptance-storage.test.ts tests/unit/acceptance-update-policy.test.ts tests/unit/acceptance-update-verification.test.ts tests/unit/acceptance-runtime-path.test.ts tests/unit/acceptance-server-guard.test.ts tests/integration/acceptance-deployment-contract.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-capacity-unit.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 234,
+      "passed": 56,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "cd89da61ba8b0a4e624638d854ab3d78aba6812df1799ac93559c427ce3c7c6e"
+          "sha256": "b61aa38bae05ac56ea5255318cb9da8576b3a3723a321b8fb0c2f60bd43f1814"
         }
       ],
-      "testedHead": "cac5cdc912fba9d54d90e6dba644990d0e53e083",
-      "sourceFingerprint": "9b1c711e32f984fcf437479bd876821aa960e7cb4cb846f072db31e8ab2edf3f",
-      "startedAt": "2026-11-07T11:52:48.620Z",
-      "endedAt": "2026-11-07T11:52:55.489Z",
-      "log": "/workspace/scratch/m01-r3-p02-unit.log",
-      "logSha256": "cb2795cc89b2c7e723b446d3ee70b6c21ef476ab0086cc75f47ecbbed094a6dc",
-      "context": "Node22.22.2/npm10.9.9, Node and browser descendant affinity2,3; database env empty; original bounded config and focused suites; preflight owns original protocol workers; no onsite operation."
-    },
-    {
-      "id": "native",
-      "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers=2 tests/integration/m01-cockpit-home-native-browser-postgres.test.ts tests/integration/digital-journey-postgres.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-r3-p02-native.json",
-      "status": "passed",
-      "exitCode": 0,
-      "passed": 40,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "fa2e372c3419eb5448955fe7beaab5b0e68bf9d935b6870f23beb62754649ab7"
-        }
-      ],
-      "testedHead": "cac5cdc912fba9d54d90e6dba644990d0e53e083",
-      "sourceFingerprint": "9b1c711e32f984fcf437479bd876821aa960e7cb4cb846f072db31e8ab2edf3f",
-      "startedAt": "2026-11-07T11:52:55.568Z",
-      "endedAt": "2026-11-07T11:54:01.213Z",
-      "log": "/workspace/scratch/m01-r3-p02-native.log",
-      "logSha256": "52ae41d12d083d56547b193cc84c891fb35a9d4bd0a0760aee375ae7ff3c4ce2",
-      "context": "Node22.22.2/npm10.9.9, Node and browser descendant affinity2,3; original business-chain config, two workers, original100s test/hooks with explicit120s setup; own low-privilege marked PG16.15 cpuset0,1 CPU2 memory2GiB, lock-pinned Chromium141.0.7390.37 Playwright1.56.1; original AuthService and full App TEST fixtures, no site writes. Same canonical config/browser, not CI hardware/load or onsite equivalence."
+      "testedHead": "e3595325a35f876aa0d24ac59800749beb7958dd",
+      "sourceFingerprint": "de092dfee2ac7eb3e6b902ccbeffcd7f6eaf1aa9c2880a18b448fd7fa92abf26",
+      "startedAt": "2026-11-07T13:05:52.090Z",
+      "endedAt": "2026-11-07T13:05:53.785Z",
+      "log": "/workspace/scratch/m01-capacity-unit.log",
+      "logSha256": "33586f79624155a13f14f743e0d37475daaa196a311bf3dbb5ddffb88ccd0137",
+      "context": "Node22.22.2/npm10.9.9; original bounded canonical config; focused real Python capacity/storage and original shell dispatch/flow with TEST metrics and substituted privileged effect only; no onsite/DB/deployment operation, unrelated business Full not locally repeated."
     },
     {
       "id": "types",
@@ -225,13 +128,13 @@
       "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "cac5cdc912fba9d54d90e6dba644990d0e53e083",
-      "sourceFingerprint": "9b1c711e32f984fcf437479bd876821aa960e7cb4cb846f072db31e8ab2edf3f",
-      "startedAt": "2026-11-07T11:54:01.296Z",
-      "endedAt": "2026-11-07T11:54:32.233Z",
-      "log": "/workspace/scratch/m01-r3-p02-types.log",
+      "testedHead": "e3595325a35f876aa0d24ac59800749beb7958dd",
+      "sourceFingerprint": "de092dfee2ac7eb3e6b902ccbeffcd7f6eaf1aa9c2880a18b448fd7fa92abf26",
+      "startedAt": "2026-11-07T13:05:53.856Z",
+      "endedAt": "2026-11-07T13:06:21.442Z",
+      "log": "/workspace/scratch/m01-capacity-types.log",
       "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e",
-      "context": "Node22.22.2/npm10.9.9, Node and browser descendant affinity2,3; database env empty; original bounded config and focused suites; preflight owns original protocol workers; no onsite operation."
+      "context": "Node22.22.2/npm10.9.9; original bounded canonical config; focused real Python capacity/storage and original shell dispatch/flow with TEST metrics and substituted privileged effect only; no onsite/DB/deployment operation, unrelated business Full not locally repeated."
     },
     {
       "id": "build",
@@ -239,13 +142,13 @@
       "command": "npm run build --workspaces --if-present",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "cac5cdc912fba9d54d90e6dba644990d0e53e083",
-      "sourceFingerprint": "9b1c711e32f984fcf437479bd876821aa960e7cb4cb846f072db31e8ab2edf3f",
-      "startedAt": "2026-11-07T11:54:32.309Z",
-      "endedAt": "2026-11-07T11:54:51.261Z",
-      "log": "/workspace/scratch/m01-r3-p02-build.log",
-      "logSha256": "3eda7d3e74bf7b2f0da22db9410053a4155b1e894c9f276cec7a3b6311dde4cd",
-      "context": "Node22.22.2/npm10.9.9, Node and browser descendant affinity2,3; database env empty; original bounded config and focused suites; preflight owns original protocol workers; no onsite operation."
+      "testedHead": "e3595325a35f876aa0d24ac59800749beb7958dd",
+      "sourceFingerprint": "de092dfee2ac7eb3e6b902ccbeffcd7f6eaf1aa9c2880a18b448fd7fa92abf26",
+      "startedAt": "2026-11-07T13:06:21.526Z",
+      "endedAt": "2026-11-07T13:06:37.765Z",
+      "log": "/workspace/scratch/m01-capacity-build.log",
+      "logSha256": "917a3874c76a82b9f4e94a60e9f3ce0114e2b8711a59a374ea06068fe4615bb4",
+      "context": "Node22.22.2/npm10.9.9; original bounded canonical config; focused real Python capacity/storage and original shell dispatch/flow with TEST metrics and substituted privileged effect only; no onsite/DB/deployment operation, unrelated business Full not locally repeated."
     },
     {
       "id": "lint",
@@ -253,13 +156,13 @@
       "command": "npm run lint",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "cac5cdc912fba9d54d90e6dba644990d0e53e083",
-      "sourceFingerprint": "9b1c711e32f984fcf437479bd876821aa960e7cb4cb846f072db31e8ab2edf3f",
-      "startedAt": "2026-11-07T11:54:51.347Z",
-      "endedAt": "2026-11-07T11:55:12.968Z",
-      "log": "/workspace/scratch/m01-r3-p02-lint.log",
+      "testedHead": "e3595325a35f876aa0d24ac59800749beb7958dd",
+      "sourceFingerprint": "de092dfee2ac7eb3e6b902ccbeffcd7f6eaf1aa9c2880a18b448fd7fa92abf26",
+      "startedAt": "2026-11-07T13:06:37.838Z",
+      "endedAt": "2026-11-07T13:06:56.224Z",
+      "log": "/workspace/scratch/m01-capacity-lint.log",
       "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763",
-      "context": "Node22.22.2/npm10.9.9, Node and browser descendant affinity2,3; database env empty; original bounded config and focused suites; preflight owns original protocol workers; no onsite operation."
+      "context": "Node22.22.2/npm10.9.9; original bounded canonical config; focused real Python capacity/storage and original shell dispatch/flow with TEST metrics and substituted privileged effect only; no onsite/DB/deployment operation, unrelated business Full not locally repeated."
     },
     {
       "id": "secret",
@@ -267,13 +170,13 @@
       "command": "npm run secret:scan",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "cac5cdc912fba9d54d90e6dba644990d0e53e083",
-      "sourceFingerprint": "9b1c711e32f984fcf437479bd876821aa960e7cb4cb846f072db31e8ab2edf3f",
-      "startedAt": "2026-11-07T11:55:13.044Z",
-      "endedAt": "2026-11-07T11:55:13.578Z",
-      "log": "/workspace/scratch/m01-r3-p02-secret.log",
+      "testedHead": "e3595325a35f876aa0d24ac59800749beb7958dd",
+      "sourceFingerprint": "de092dfee2ac7eb3e6b902ccbeffcd7f6eaf1aa9c2880a18b448fd7fa92abf26",
+      "startedAt": "2026-11-07T13:06:56.298Z",
+      "endedAt": "2026-11-07T13:06:56.876Z",
+      "log": "/workspace/scratch/m01-capacity-secret.log",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda",
-      "context": "Node22.22.2/npm10.9.9, Node and browser descendant affinity2,3; database env empty; original bounded config and focused suites; preflight owns original protocol workers; no onsite operation."
+      "context": "Node22.22.2/npm10.9.9; original bounded canonical config; focused real Python capacity/storage and original shell dispatch/flow with TEST metrics and substituted privileged effect only; no onsite/DB/deployment operation, unrelated business Full not locally repeated."
     }
   ]
 }
