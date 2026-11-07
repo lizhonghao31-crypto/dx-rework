@@ -6,6 +6,7 @@ import {journeyRiskLabels,matchingPoDeliveryRisks,type CockpitContext} from './d
 import {poDeliveryKindLabels} from './po-delivery-dates.js';
 import {CockpitDate} from './cockpit-date.js';
 import {CockpitHomeDialog} from './cockpit-home-dialog.js';
+import {cockpitReceiptGap} from './cockpit-home-progress.js';
 
 export function cockpitHomeRisks(order:OrderJourney,context:CockpitContext){
  const nodes=[...new Map(order.stages.flatMap(stage=>stage.nodes).filter(node=>node.current&&!['completed','inherited','cancelled','not_applicable','unavailable'].includes(node.state)&&(!context.stage||node.stage===context.stage)&&(!context.node||node.key===context.node)&&(!context.state||node.state===context.state)&&(!context.risk||node.risks.includes(context.risk))&&(node.risks.length>0||node.state==='blocked'||cockpitVisibleBlockers(node).length>0)).map(node=>[node.instanceId,node])).values()];
@@ -16,9 +17,13 @@ export function cockpitHomeRisks(order:OrderJourney,context:CockpitContext){
 }
 
 export function CockpitHomeRisks({order,context,onClose,onNode,onOrder}:{order:OrderJourney;context:CockpitContext;onClose:()=>void;onNode:(node:JourneyNode)=>void;onOrder:()=>void}){
- const risks=cockpitHomeRisks(order,context);
+ const risks=cockpitHomeRisks(order,context),gap=cockpitReceiptGap(order),receiptNode=order.stages.flatMap(stage=>stage.nodes).find(node=>node.current&&node.key==='receipts'&&node.state!=='unavailable');
  return <CockpitHomeDialog title="风险明细" onClose={onClose}>
   <p className="cockpit-home-dialog-order">{order.designStyleNo}</p>
+  {gap&&gap.gap>0&&<section aria-label="回货差额"><h3>{gap.full?'':'可见范围'}回货欠收 {gap.gap.toLocaleString()}件</h3>{order.businessProgress!.quantities!.lines.filter(line=>line.remainingReceipt>0).map(line=>{
+   const po=order.lines.find(value=>value.id===line.lineId);
+   return <article className="cockpit-home-risk-entry" key={line.lineId}><strong>{po?.po||'PO待补'} / {po?.color||'颜色待核'}</strong><p>应收 {line.demand.toLocaleString()}件 · 已收 {line.received.toLocaleString()}件 · 欠收 {line.remainingReceipt.toLocaleString()}件</p><button type="button" className="journey-text-action" onClick={()=>receiptNode?onNode(receiptNode):onOrder()}>{receiptNode?'查看回货节点':'查看订单详情'}</button></article>;
+  })}</section>}
   {risks.nodes.length>0&&<section aria-label="节点风险"><h3>{order.display?.mainState==='completed'?'已收口订单保留的节点风险':'节点风险'}</h3>{risks.nodes.map(node=><article className="cockpit-home-risk-entry" key={node.instanceId}>
    <div><strong>{node.label}</strong><StatusBadge tone={node.risks.includes('overdue')?'danger':node.risks.includes('due_soon')?'warning':'neutral'}>{node.risks.map(key=>journeyRiskLabels[key]).join(' / ')||'受阻'}</StatusBadge></div>
    <p>{node.owner?.name??'负责人未指派'} · 截止 {node.nativeWindows?.length||hasDateOnlyTarget(node)?nodeTargetLabel(node):<CockpitDate value={node.expectedAt} precision={node.expectedPrecision} missing="—"/>}</p>
