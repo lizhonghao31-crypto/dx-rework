@@ -1,7 +1,7 @@
 import type {DigitalSlaValues} from '@dx-rework/contracts/digital-sla';
 import type {DevelopmentCycleValues} from '@dx-rework/contracts/digital-development-technical';
-import type {SlaCalculationContext} from '@dx-rework/contracts/sla-calculation';
-import {calculationDraftGraph,calculateSlaPreview,SlaCalculationInputError} from '@dx-rework/domain/sla-calculation';
+import type {CalculationGraph,SlaCalculationContext,SlaCalculationResult} from '@dx-rework/contracts/sla-calculation';
+import {calculationDraftGraph,calculateSlaPreview,calculateRelativeSlaSummary,SlaCalculationInputError} from '@dx-rework/domain/sla-calculation';
 import type {SlaDraftSnapshot} from './sla-settings-draft.js';
 
 /** Invalid text has no numeric value. Only its actual dependent branches become unknown. */
@@ -31,4 +31,14 @@ export function settingsCalculation(context:SlaCalculationContext,unified:SlaDra
 }
 export function calculationSpanLabel(ms:number|null,format:(minutes:number)=>string){return ms===null?'尚不能确定':format(ms/60000);}
 
-export type SlaStageTiming={stage:number;currentMs:number|null;draftMs:number|null;partial:boolean};
+export type SlaStageTiming={stage:number;currentMs:number|null;draftMs:number|null;partial:boolean;currentKnownPathMs?:number|null;draftKnownPathMs?:number|null};
+
+/** A standard window can be known without a calendar timestamp. Instance
+ * observations retain the original absolute/frozen result and missing facts. */
+export function settingsStandardTimes(graph:CalculationGraph,result:SlaCalculationResult){
+ const relative=graph.observationMode==='example'?calculateRelativeSlaSummary(graph):null;
+ return {overallMs:result.overall.spanMs??relative?.overall.spanMs??null,knownPathMs:relative?.overall.knownPathMs??null,stages:Array.from({length:7},(_,i)=>i+1).map(stage=>{
+  const absolute=result.stages.find(row=>row.stage===stage),standard=relative?.stages.find(row=>row.stage===stage);
+  return {stage,knownPathMs:standard?.knownPathMs??null,spanMs:absolute?.spanMs??standard?.spanMs??null,partial:absolute?.spanMs!==null&&absolute?.spanMs!==undefined?absolute.partial:standard?.partial??true};
+ })};
+}

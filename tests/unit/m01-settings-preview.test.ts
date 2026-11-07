@@ -3,7 +3,7 @@ import {digitalSlaDefaults} from '@dx-rework/contracts/digital-sla';
 import {DEVELOPMENT_CYCLE_DEFAULTS} from '@dx-rework/contracts/digital-development-technical';
 import type {SlaCalculationContext} from '@dx-rework/contracts/sla-calculation';
 import {buildSlaCalculationRoute} from '@dx-rework/domain/sla-calculation-routes';
-import {settingsCalculation} from '../../apps/web/src/sla-calculation-preview-model.js';
+import {settingsCalculation,settingsStandardTimes} from '../../apps/web/src/sla-calculation-preview-model.js';
 import {readableSlaMinutes,slaInputValue,slaDraftErrors,developmentDraftErrors,type SlaDraftSnapshot} from '../../apps/web/src/sla-settings-draft.js';
 const origin='2026-11-02T00:00:00.000Z',reference={precision:'instant' as const,value:origin,source:'TEST explicit reference, no live snapshot'};
 const context=(range:'preparation'|'development'='preparation'):SlaCalculationContext=>{
@@ -47,4 +47,16 @@ describe('M01 real settings draft model',()=>{
  it('never fills a missing example reference with today or reports an independent completed total',()=>{
   const c=context();c.graph.anchors={};const result=settingsCalculation(c,draft(c),null);expect(result.result.overall.spanMs).toBeNull();expect(result.result.overall.start.at).toBeNull();expect(result.result.rows.every(n=>!n.start.at&&!n.end.at)).toBe(true);
  });
+});
+
+it('R3-04 displays genuine relative standard paths without inventing an absolute start, total or live instance facts',()=>{
+ const c=context('development');c.graph.anchors={};const before=structuredClone(c.graph),calculated=settingsCalculation(c,draft(c),null),display=settingsStandardTimes(calculated.graph,calculated.result);
+ expect(calculated.result.overall.start.at).toBeNull();expect(calculated.result.overall.end.at).toBeNull();// Original printing route: clerk4 + pattern48 + cutting4 + craft96 + sewing24 + tail0.5 hours.
+ expect(display.overallMs).toBe(176.5*3600000);expect(display.stages.find(row=>row.stage===2)?.spanMs).toBe(176.5*3600000);expect(c.graph).toEqual(before);
+ c.graph.observationMode='instance';const frozen=settingsCalculation(c,draft(c),null),instance=settingsStandardTimes(frozen.graph,frozen.result);expect(instance.overallMs).toBeNull();expect(instance.knownPathMs).toBeNull();expect(instance.stages.every(stage=>stage.spanMs===null)).toBe(true);
+});
+it('R3-04 whole standard view retains unknown actual-event gates but directly displays its calculable development path',()=>{
+ const c=context('development'),conditions=c.selection.mode==='example'?c.selection.conditions:null;if(!conditions)throw Error('TEST original example required');
+ c.graph=buildSlaCalculationRoute({range:'whole',conditions,anchors:{},values:c.unified.values,development:c.development.values,unifiedSource:'TEST actual existing defaults',developmentSource:'TEST actual existing independent defaults'});
+ const raw=settingsCalculation(c,draft(c),null),view=settingsStandardTimes(raw.graph,raw.result);expect(view.overallMs).toBeNull();expect(view.knownPathMs).toBeGreaterThan(0);expect(view.stages.find(stage=>stage.stage===2)).toMatchObject({spanMs:null,partial:true,knownPathMs:expect.any(Number)});expect(Object.keys(c.graph.anchors)).toEqual([]);expect(raw.result.rows.every(row=>row.start.at===null&&row.end.at===null)).toBe(true);
 });

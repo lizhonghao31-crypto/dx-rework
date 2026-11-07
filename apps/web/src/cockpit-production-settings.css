@@ -110,3 +110,58 @@
 .sla-settings-workspace button,.sla-settings-workspace input,.sla-settings-workspace select,.sla-settings-workspace summary{scroll-margin-block-start:180px}
 
 .cockpit-policy-stages .sla-stage-time-item{min-width:0}.cockpit-policy-stages .sla-stage-time-item small{white-space:normal;line-height:1.4;overflow-wrap:anywhere}
+
+/* R3 approved settings: original graphical navigation and actual draft values. */
+.cockpit-settings{max-width:none;padding:16px 20px;font-size:14px}
+.sla-settings-workspace{display:flex;flex-direction:column;gap:0}
+.sla-settings-workspace>.sla-standard-editor{order:1}
+.sla-settings-workspace>div[hidden]{display:none}
+.sla-settings-workspace>div:not([hidden]){order:2}
+.sla-standard-editor{display:contents}
+.sla-stage-selector{order:1}
+.sla-stage-nodes{order:2}
+.sla-calculation-summary{position:static;display:flex;justify-content:space-between;align-items:center;box-shadow:none;margin-top:0;padding:10px 14px;min-height:50px}
+.sla-overall-time{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px;margin-left:auto;font-size:17px}
+.sla-overall-time>span{font-weight:700;color:#26384c}
+.sla-overall-time>small{font-size:13px;color:#a0640d}
+.sla-calculation-details{order:4;font-size:14px;margin-top:12px}
+.sla-calculation-details>summary,.sla-settings-tools>summary{cursor:pointer;color:#53677f}
+.sla-calculation-options{margin-top:16px}
+.sla-stage-selector{padding:14px 12px 16px}
+.cockpit-policy-stages{grid-template-columns:repeat(7,minmax(0,1fr));min-width:0;gap:8px}
+.cockpit-policy-stage-ring{width:58px;height:58px}
+.cockpit-policy-stage-ring svg circle:first-child{r:33;stroke-width:3}
+.cockpit-policy-stage-ring svg circle:last-child{r:27;stroke-width:2}
+.cockpit-policy-stages li:not(:last-child)::after{top:29px;left:calc(50% + 32px);right:calc(-50% + 32px)}
+.cockpit-policy-stages button>strong{font-size:16px;min-height:1.4em}
+.cockpit-policy-stages button>small{font-size:14px;line-height:1.5;min-height:1.5em}
+.sla-selected-stage-title{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:0 0 16px}
+.sla-selected-stage-title h2{border-left:4px solid #0878ff;padding-left:9px;margin:0;font-size:20px}
+.sla-selected-stage-title>strong{font-size:16px;line-height:1.5;flex-shrink:0}
+.sla-settings-tools{margin:8px 0 12px;font-size:13px}
+.sla-standard-version{color:#7182a0;margin-top:12px}
+.cockpit-policy-cards{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.cockpit-policy-cards>li{padding:12px;min-height:78px}
+.cockpit-policy-cards h3{font-size:16px;font-weight:650}
+.cockpit-policy-cards li>div>strong{font-size:15px;color:#334b6f;font-weight:500}
+.cockpit-policy-cards li>input[type=checkbox]{width:14px;height:14px;flex-shrink:0}
+.sla-stage-nodes>.sla-settings-help{font-size:13px;margin:12px 0}
+.sla-publish-controls{display:flex;align-items:end;gap:12px;flex-wrap:wrap;margin-top:14px}
+.sla-publish-controls .sla-change-reason{margin:0;flex:1;min-width:180px}
+.sla-publish-controls>.dx-button{flex-shrink:0}
+.cockpit-customer-readonly{position:relative}
+.cockpit-customer-readonly>summary{cursor:pointer;font-weight:600;color:#334b6f}
+.cockpit-customer-readonly[open]>dl{position:absolute;top:100%;left:0;min-width:250px;max-height:50vh;overflow:auto;z-index:10;background:white;border:1px solid #dfebfa;padding:16px;box-shadow:0 6px 20px #102b5c22}
+@media(max-width:1100px){.cockpit-policy-stages button>strong{font-size:14px}.cockpit-policy-stage-ring{width:52px;height:52px}.cockpit-policy-stages li:not(:last-child)::after{top:26px}.cockpit-policy-cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:800px){.cockpit-settings{padding:12px;font-size:16px}.cockpit-policy-stages{min-width:700px}.sla-selected-stage-title{align-items:start;flex-wrap:wrap}.sla-settings-tools,.sla-stage-nodes>.sla-settings-help{font-size:14px}}
+@media(max-width:600px){.cockpit-policy-cards{grid-template-columns:minmax(0,1fr)}.sla-overall-time{font-size:16px}.sla-calculation-summary{gap:12px}}
+.cockpit-settings .sla-stage-nodes:has(.sla-settings-tools:not([open])) .cockpit-policy-cards input[type=checkbox]{display:none}
+.cockpit-settings .cockpit-policy-cards .cockpit-policy-card-icon{flex:0 0 30px}
+.cockpit-settings .cockpit-policy-cards .cockpit-policy-card-icon .navigation-icon{width:22px;height:22px}
+.cockpit-settings .cockpit-policy-cards.is-secondary{grid-template-columns:repeat(6,minmax(0,1fr));border-top:1px solid #e0eafa;margin-top:14px;padding-top:12px;gap:8px}
+.cockpit-settings .cockpit-policy-cards.is-secondary>li{display:flex;flex-direction:column;justify-content:space-between;text-align:center;gap:4px;border:0;border-right:1px solid #e0eafa;border-radius:0;min-height:0;padding:4px 6px}
+.cockpit-settings .cockpit-policy-cards.is-secondary .cockpit-policy-card-icon,.cockpit-settings .cockpit-policy-cards.is-secondary small:not([role=alert]){display:none}
+.cockpit-settings .cockpit-policy-cards.is-secondary h3{font-size:14px;margin-bottom:4px}
+.cockpit-settings .cockpit-policy-cards.is-secondary .sla-node-card-actions{display:flex;flex-wrap:wrap;justify-content:center}
+@media(max-width:1100px){.cockpit-settings .cockpit-policy-cards.is-secondary{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:600px){.cockpit-settings .cockpit-policy-cards.is-secondary{grid-template-columns:repeat(2,minmax(0,1fr))}.cockpit-settings .cockpit-policy-cards.is-secondary h3{font-size:16px}}

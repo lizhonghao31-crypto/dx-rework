@@ -134,7 +134,7 @@ describe('loaded settings render values and history without PMC write controls',
   });
 
   it('keeps original SLA editing and order application for an authorized manager', () => {
-    const html = renderLoaded(slaEditor.SlaStandardEditor, [sla, sla.values], false);
+    const html = renderLoaded(slaEditor.SlaStandardEditor, [sla, sla.values, 3], false);
     expect(html).toContain('aria-label="调整预缩"');
     expect(html).not.toContain('type="number"'); // Values are edited in the native dialog after opening.
     expect(html).toContain('type="checkbox"');
@@ -171,4 +171,10 @@ describe('loaded settings render values and history without PMC write controls',
     expect(manager).toContain('系列月份偏移');
     expect(manager).toContain('发布新默认');
   });
+});
+
+it('R3-04 keeps an original partial stage duration visibly qualified instead of presenting it as a complete stage',()=>{
+ state.seeds=[sla,sla.values,3];
+ const html=renderToStaticMarkup(createElement(slaEditor.SlaStandardEditor,{readOnly:true,stageTimes:[{stage:3,currentMs:86400000,draftMs:86400000,partial:true}]}));
+ expect(html).toContain('1天（部分待核）');expect(html).toContain('本阶段用时 1天（部分待核）');expect(html).not.toContain('type="checkbox"');expect(html).not.toContain('确认发布新单标准');
 });
