@@ -13,7 +13,7 @@ export function CockpitStageProgress({stage,index,fact,selected,onSelect,tooltip
  const tone=!fact||fact.applicability!=='applicable'||fact.risk==='unknown'?'neutral':fact.risk==='overdue'?'danger':fact.risk==='due_soon'?'warning':started?'success':'neutral';
  const tip=`cockpit-stage-progress-${stage.key}`;
  return <div className={`cockpit-stage${selected?' is-selected':''} is-${tone}`}>
-  <button type="button" className={"cockpit-stage-select"+(tooltipOpen?" is-progress-open":"")} aria-pressed={selected} data-cockpit-focus={'stage:'+stage.key} aria-label={`${stage.label}节点明细`} aria-describedby={tip} onClick={onSelect} onMouseEnter={onTooltipOpen} onMouseLeave={onTooltipClose} onFocus={onTooltipOpen} onBlur={onTooltipClose} onKeyDown={event=>{if(event.key==='Escape')onTooltipClose();}}>
+  <button type="button" className={"cockpit-stage-select"+(tooltipOpen?" is-progress-open":"")} aria-pressed={selected} data-cockpit-focus={'stage:'+stage.key} aria-label={`${stage.label}节点明细`} aria-describedby={tip} onClick={onSelect} onMouseEnter={onTooltipOpen} onMouseLeave={event=>{if(event.currentTarget!==event.currentTarget.ownerDocument.activeElement)onTooltipClose();}} onFocus={onTooltipOpen} onBlur={event=>{if(!event.currentTarget.matches(':hover'))onTooltipClose();}} onKeyDown={event=>{if(event.key==='Escape')onTooltipClose();}}>
    <span className="cockpit-stage-rings"><svg viewBox="0 0 104 104" aria-hidden="true">
     <circle cx="52" cy="52" r="46" className="cockpit-stage-track is-time" fill="none" strokeWidth="6"/>
     <circle cx="52" cy="52" r="35" className="cockpit-stage-track is-actual" fill="none" strokeWidth="7"/>

@@ -81,6 +81,14 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    // authenticated native IDs, commands, permissions and dates are retained.
    await page.route('**/api/digital-production/journeys/*',async route=>{const response=await route.fetch();expect(response.status()).toBe(200);const value=await response.json();expect(value.visualProgress?.stages).toHaveLength(7);await route.fulfill({response,json:{...value,visualProgress:{...value.visualProgress,stages:value.visualProgress.stages.map((stage:Record<string,unknown>,index:number)=>index<4?{...stage,timeRatio:pairs[index]![0],actualRatio:pairs[index]![1]}:stage)}}});});
    await page.locator('.journey-orders tbody tr').first().locator('.journey-order-select').click();await page.locator('[data-view="order"][aria-busy="false"]').waitFor();
+   const firstTrigger=page.locator('.cockpit-stage-select').first(),firstTip=page.locator('.cockpit-stage').first().getByRole('tooltip');
+   await page.locator('.cockpit-detail-toolbar').click();await firstTrigger.hover();await firstTip.waitFor({state:'visible'});await page.mouse.move(0,0);expect(await firstTip.isVisible()).toBe(false);
+   await firstTrigger.hover();await firstTrigger.focus();await firstTip.waitFor({state:'visible'});
+   await page.mouse.move(0,0);expect(await firstTrigger.evaluate(el=>el===document.activeElement)).toBe(true);await firstTip.waitFor({state:'visible'});
+   await page.keyboard.press('Escape');expect(await firstTip.isVisible()).toBe(false);expect(await firstTrigger.evaluate(el=>el===document.activeElement)).toBe(true);
+   // Calling focus() again on the same element does not dispatch focus. Escape
+   // dismissal stays closed until a real departure and return.
+   await firstTrigger.focus();expect(await firstTip.isVisible()).toBe(false);await page.keyboard.press('Tab');await firstTrigger.focus();await firstTip.waitFor({state:'visible'});await page.keyboard.press('Tab');expect(await firstTip.isVisible()).toBe(false);
    for(const [index,pair]of pairs.entries()){
     const stage=page.locator('.cockpit-stage').nth(index);for(const [kind,ratio]of [['time',pair[0]],['actual',pair[1]]] as const){const arc=stage.locator('.cockpit-stage-arc.is-'+kind);expect(await arc.count()).toBe(ratio===null||ratio===0?0:1);if(ratio!==null&&ratio>0)expect(await arc.getAttribute('stroke-dasharray')).toBe(`${ratio*100} 100`);}
     await stage.locator('.cockpit-stage-select').focus();const tip=stage.getByRole('tooltip');await tip.waitFor({state:'visible'});expect((await tip.innerText()).replace(/\s+/g,' ')).toContain('时间进度 '+(pair[0]===null?'—':`${pair[0]*100}%`));expect((await tip.innerText()).replace(/\s+/g,' ')).toContain('实际进度 '+(pair[1]===null?'—':`${pair[1]*100}%`));await page.keyboard.press('Escape');expect(await tip.isVisible()).toBe(false);
