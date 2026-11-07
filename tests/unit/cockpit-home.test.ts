@@ -5,7 +5,7 @@ import {JOURNEY_STAGES,JourneyReturnContextSchema,type JourneyNode,type OrderJou
 import {CockpitHome} from "../../apps/web/src/cockpit-home.js";
 import {representativeCockpitNodes} from "../../apps/web/src/digital-journey-cockpit-model.js";
 import {CockpitHomeRisks,cockpitHomeRisks} from '../../apps/web/src/cockpit-home-risks.js';
-import {CockpitHomeProgress} from '../../apps/web/src/cockpit-home-progress.js';
+import {CockpitHomeProgress,cockpitReceiptGap} from '../../apps/web/src/cockpit-home-progress.js';
 const node=(id:string,patch:Partial<JourneyNode>={}):JourneyNode=>({key:id,instanceId:id,label:id,stage:"development",state:"active",current:true,round:1,occurrence:1,owner:null,operator:null,assignmentHistory:[],expectedAt:null,expectedKind:"unset",expectedPrecision:"missing",actualAt:null,actualQuality:"missing",enteredAt:null,sla:"not_started",completionResult:null,overdueSeconds:null,risks:[],blockers:[],records:[],inheritedFrom:null,countsInProgress:true,unavailableReason:null,...patch});
 const order=(nodes:JourneyNode[]):OrderJourney=>({id:"00000000-0000-4000-8000-000000000001",sourceId:null,orderId:"00000000-0000-4000-8000-000000000001",designStyleNo:"TEST-HOME",temporaryStyleNo:null,customer:"PD",category:"上衣",designer:null,styleName:null,merchandisers:[],orderNumbers:["TEST-ORDER"],createdAt:"2026-10-19T00:00:00Z",deliveryDate:null,selectedRound:1,adoptedRound:null,sourceVersion:1,instructionVersion:null,lines:[],links:[],stages:JOURNEY_STAGES.map(stage=>({...stage,state:"pending",nodes:nodes.filter(node=>node.stage===stage.key)})),progress:{development:{completed:8,applicable:10},bulk:null},hitReasons:[]});
 const missingDate=()=>({at:null,precision:'unknown' as const,quality:'unknown' as const,status:'unknown' as const,covered:0,total:0,reasons:[]});
@@ -32,9 +32,11 @@ it('consumes only the shared visual projection, keeps partial progress below 100
  o.visualProgress=visual(null);expect(render()).not.toContain('aria-valuenow=');
  o.lines=[{id:'line1',po:'TEST-PO',color:'蓝',orderedQuantity:4,formalStyleNo:null,temporaryStyleNo:null}];
  o.businessProgress={ruleVersion:'journey-business-v1',asOf:'2026-10-19T00:00:00Z',requirements:[],applicable:0,completed:0,unknown:0,ratio:null,stages:[],plan:{status:'not_adopted',planId:null,revision:null,covered:0,missing:0,due:0,outstandingDue:[],reasons:[]},quantities:{revision:'TEST',factoryAttribution:'unknown',lines:[{lineId:'line1',demand:4,received:2,packed:2,inspected:null,qualified:null,remainingReceipt:2,remainingShipment:2,qualityGap:null,qualityConflict:false,factoryAttribution:'unknown',reasons:[]}]}};
- expect(render()).toContain('欠收 2件');expect(render()).not.toContain('可见范围欠收');
- o.lines.push({...o.lines[0]!,id:'line2'});expect(render()).toContain('可见范围欠收 2件');
- o.businessProgress!.quantities!.lines[0]!.remainingReceipt=NaN;expect(render()).not.toContain('欠收');
+ expect(render()).not.toContain('欠收');expect(home(o)).toContain('欠收 2件');expect(home(o)).not.toContain('可见范围欠收');
+ o.lines.push({...o.lines[0]!,id:'line2'});expect(home(o)).toContain('可见范围欠收 2件');
+ o.businessProgress!.quantities!.lines[0]!.remainingReceipt=NaN;expect(home(o)).not.toContain('欠收');
+ o.businessProgress!.quantities!.lines[0]!.remainingReceipt=2;o.businessProgress!.quantities!.lines.push({...o.businessProgress!.quantities!.lines[0]!});expect(cockpitReceiptGap(o)).toBeNull();
+ o.businessProgress!.quantities!.lines.splice(1);o.businessProgress!.quantities!.lines[0]!.lineId='unreadable-line';expect(cockpitReceiptGap(o)).toBeNull();
 });
 it("chooses the earliest unresolved risk and retains every parallel current node",()=>{
   const o=order([node("later",{risks:["overdue"],expectedAt:"2026-10-18T12:00:00Z"}),node("earlier",{risks:["overdue"],expectedAt:"2026-10-18T08:00:00Z"}),node("due",{risks:["due_soon"],expectedAt:"2026-10-19T08:00:00Z"}),node("old",{current:false,risks:["overdue"]}),node("done",{state:"completed",risks:["overdue"]})]);
@@ -44,7 +46,8 @@ it("chooses the earliest unresolved risk and retains every parallel current node
 it("renders seven compact columns and never substitutes old 80% for unavailable display facts",()=>{
   const o=order([node("work")]);o.styleImageUrl="/TEST.png";
   const html=renderToStaticMarkup(createElement(CockpitHome,{data:{ruleVersion:"journey-v2.0",asOf:"2026-10-19T00:00:00Z",page:1,pageSize:15,total:1,summary:{all:1,active:1,dueSoon:0,overdue:0,blocked:0,completed:0},items:[o]},error:"",context:JourneyReturnContextSchema.parse({scope:"production"}),onChange(){}}));
-  expect(html.match(/<th>/g)).toHaveLength(7);expect(html).not.toContain("时间规则待完善");expect(html).toContain("<span>时间</span>");expect(html).toContain('aria-label="整单实际进度"');expect(html).not.toContain('aria-valuenow=');expect(html).toContain("预览TEST-HOME款图");expect(html).not.toContain("80%");expect(html).not.toContain("<small>0%</small>");expect(html).not.toContain(">详情<");expect(html).toContain('订单ID：—');
+  expect(html.match(/<th(?:\s|>)/g)).toHaveLength(7);expect(html).not.toContain("时间规则待完善");expect(html).toContain('aria-label="整单时间进度"');expect(html).toContain('aria-label="整单实际进度"');expect(html).not.toContain('aria-valuenow=');expect(html).toContain("预览TEST-HOME款图");expect(html).not.toContain("80%");expect(html).not.toContain("<small>0%</small>");expect(html).not.toContain(">详情<");expect(html).toContain('订单ID：—');
+  expect(html.indexOf('预计完成')).toBeLessThan(html.indexOf('data-progress-kind="time"'));expect(html.indexOf('data-progress-kind="time"')).toBeLessThan(html.indexOf('实际完成'));expect(html.indexOf('实际完成')).toBeLessThan(html.indexOf('data-progress-kind="actual"'));
 });
 it("keeps a real zero distinct from unavailable progress and uses the server's main state",()=>{
   const o=order([node("local-risk",{risks:["overdue"]})]);o.display={ruleVersion:"cockpit-display-v1",mainState:"active",earliestShipmentDate:"2026-11-30",missingShipmentDates:0,closedAt:null,actualRatio:0,actualLabel:"0.0%",awaitingClosure:false,stages:[],timeRatio:null,timeLabel:"时间规则待完善"};
