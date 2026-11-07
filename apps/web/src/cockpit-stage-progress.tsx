@@ -10,7 +10,7 @@ function StageDate({value}:{value:JourneyBusinessDate|undefined}){
 export function CockpitStageProgress({stage,index,fact,selected,onSelect,tooltipOpen,onTooltipOpen,onTooltipClose}:{stage:OrderJourney['stages'][number];index:number;fact:JourneyVisualStage|undefined;selected:boolean;onSelect:()=>void;tooltipOpen:boolean;onTooltipOpen:()=>void;onTooltipClose:()=>void}){
  const time=cockpitStagePercentage(fact?.timeRatio),actual=cockpitStagePercentage(fact?.actualRatio);
  const started=Boolean(fact?.startedAt)||known(fact?.actualRatio)&&fact.actualRatio>0;
- const tone=!fact||fact.applicability!=='applicable'||fact.risk==='unknown'||!started?'neutral':fact.risk==='overdue'?'danger':fact.risk==='due_soon'?'warning':'success';
+ const tone=!fact||fact.applicability!=='applicable'||fact.risk==='unknown'?'neutral':fact.risk==='overdue'?'danger':fact.risk==='due_soon'?'warning':started?'success':'neutral';
  const tip=`cockpit-stage-progress-${stage.key}`;
  return <div className={`cockpit-stage${selected?' is-selected':''} is-${tone}`}>
   <button type="button" className="cockpit-stage-select" aria-pressed={selected} data-cockpit-focus={'stage:'+stage.key} aria-label={`${stage.label}节点明细`} aria-describedby={tip} onClick={onSelect} onMouseEnter={onTooltipOpen} onMouseLeave={onTooltipClose} onFocus={onTooltipOpen} onBlur={onTooltipClose} onKeyDown={event=>{if(event.key==='Escape')onTooltipClose();}}>

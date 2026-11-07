@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "cc7e5540de1f544201e68d6134cacf9d509c48e6",
-  "sourceFingerprint": "d5fdf94afc84a965d79a22bcc25572282c6fa8acebbb270b9f47c4e15a422c03",
+  "sourceFingerprint": "05005fdd54b5897daf26bea3626b815d71363f964b53ee58afc3c21557031714",
   "risk": "full",
   "rules": [
     {
@@ -130,7 +130,7 @@
       ],
       "initialization": "Same original owned TEST schema marker/migrations/native command fixture; seven prior scenes retained plus two detail scenes. One suite100s cases/120s setup; canonical maxWorkers2, actual one worker/serial cases. All cleanup in original finally.",
       "dateAndPermission": "No data/config/role/deployment operations onsite. Node22.22.2/npm10.9.9, lock-pinned Playwright1.56.1/Chromium141.0.7390.37, owned low-privilege PG16.15 CPU2 RAM2GiB; Node taskset is not CI/site equivalence. Only two inventory entries changed for moved numeric display helper; every unrelated annotation retained.",
-      "expectation": "249preflight,176focused units,9native cases pass, plus types/build/lint/secret exit0 on exact frozen fingerprint. Current official Review and exact-head applicable final Gate run after assembled push; prior924/923 evidence does not approve this source.",
+      "expectation": "249preflight,180focused units,9native cases pass, plus types/build/lint/secret exit0 on exact frozen fingerprint. Current official Review and exact-head applicable final Gate run after assembled push; prior924/923 evidence does not approve this source.",
       "checks": [
         "preflight",
         "unit",
@@ -155,15 +155,15 @@
       "resultReports": [
         {
           "format": "node-tap",
-          "sha256": "61bfd580ecfd6b3f2a3d23e58d40f344966c0add1a786cbef74ddf68f9d53760"
+          "sha256": "54ce4167e4359c05221e7b8f8af76fc37c0c5b213d1177a8e5518b5d385c1d5f"
         }
       ],
-      "testedHead": "cc7e5540de1f544201e68d6134cacf9d509c48e6",
-      "sourceFingerprint": "d5fdf94afc84a965d79a22bcc25572282c6fa8acebbb270b9f47c4e15a422c03",
-      "startedAt": "2026-11-07T13:53:10.852Z",
-      "endedAt": "2026-11-07T13:53:17.257Z",
+      "testedHead": "82ec715ea9b7e66da101436506c941610c73b6e5",
+      "sourceFingerprint": "05005fdd54b5897daf26bea3626b815d71363f964b53ee58afc3c21557031714",
+      "startedAt": "2026-11-07T14:16:33.577Z",
+      "endedAt": "2026-11-07T14:16:39.840Z",
       "log": "/workspace/scratch/m01-r3-p03-final-preflight.log",
-      "logSha256": "61bfd580ecfd6b3f2a3d23e58d40f344966c0add1a786cbef74ddf68f9d53760",
+      "logSha256": "54ce4167e4359c05221e7b8f8af76fc37c0c5b213d1177a8e5518b5d385c1d5f",
       "context": "Node22.22.2/npm10.9.9; Node/browser descendants pinnedCPUs2,3; original lock and canonical configs. Database env empty; focused unchanged old consumers plus new original tests; no onsite or remote Gate operation."
     },
     {
@@ -172,21 +172,21 @@
       "command": "node node_modules/vitest/vitest.mjs run tests/unit/cockpit-detail.test.ts tests/unit/m01-cockpit-workspace.test.ts tests/unit/cockpit-document-directory.test.ts tests/unit/cockpit-document-snapshot.test.ts tests/unit/cockpit-document-new-sources.test.ts tests/unit/m01-production-document-basis.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/m01-cockpit-reading-context.test.ts tests/unit/digital-journey-cockpit.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-r3-p03-final-unit.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 176,
+      "passed": 180,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "afe7f51f2a2b44e039a50d9c70ef65a69730fc8722b79b038a26c7cc9a29cc57"
+          "sha256": "381da73c3a4f1c0fcd4ac4ce78e03ad2a46b086c1976feec29c9015dba4ed67a"
         }
       ],
-      "testedHead": "cc7e5540de1f544201e68d6134cacf9d509c48e6",
-      "sourceFingerprint": "d5fdf94afc84a965d79a22bcc25572282c6fa8acebbb270b9f47c4e15a422c03",
-      "startedAt": "2026-11-07T13:53:17.336Z",
-      "endedAt": "2026-11-07T13:53:20.258Z",
+      "testedHead": "82ec715ea9b7e66da101436506c941610c73b6e5",
+      "sourceFingerprint": "05005fdd54b5897daf26bea3626b815d71363f964b53ee58afc3c21557031714",
+      "startedAt": "2026-11-07T14:16:39.919Z",
+      "endedAt": "2026-11-07T14:16:42.808Z",
       "log": "/workspace/scratch/m01-r3-p03-final-unit.log",
-      "logSha256": "4f77eaf33690aa16b47d4496cadbffbdab22dfe00676696ed13080fd3aa4ff57",
+      "logSha256": "573b1b5baa4633fef11058dc03a4768e0952d395a6854ceb7c5f18438a0336a8",
       "context": "Node22.22.2/npm10.9.9; Node/browser descendants pinnedCPUs2,3; original lock and canonical configs. Database env empty; focused unchanged old consumers plus new original tests; no onsite or remote Gate operation."
     },
     {
@@ -201,16 +201,42 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "1bd5befd18959c7d9d101d48a3a5effee53331116b7e466fa1134b2107f83a72"
+          "sha256": "142698bdfecfe737b722e99acaced82da0c550e0e02be98771ebe9eb096cabc0"
         }
       ],
-      "testedHead": "cc7e5540de1f544201e68d6134cacf9d509c48e6",
-      "sourceFingerprint": "d5fdf94afc84a965d79a22bcc25572282c6fa8acebbb270b9f47c4e15a422c03",
-      "startedAt": "2026-11-07T13:54:11.540Z",
-      "endedAt": "2026-11-07T13:54:54.940Z",
+      "testedHead": "82ec715ea9b7e66da101436506c941610c73b6e5",
+      "sourceFingerprint": "6597086e379e46af652a3efd8b59debab6adda0abb87ce87bc48f4acdeeb4b70",
+      "inputPaths": [
+        ".env.example",
+        ".gitattributes",
+        ".github",
+        ".gitignore",
+        ".node-version",
+        ".nvmrc",
+        "AGENTS.md",
+        "README.md",
+        "apps",
+        "eslint.config.js",
+        "infra",
+        "package-lock.json",
+        "package.json",
+        "packages",
+        "scripts",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "vitest.postgres-immediate.config.ts",
+        "tests/acceptance",
+        "tests/integration",
+        "tests/fixtures",
+        "tests/helpers"
+      ],
+      "inputFingerprint": "6658a5b636e862d923e01d1e4a7780f912fde605aee236393d81033116c061b1",
+      "startedAt": "2026-11-07T14:14:18.457Z",
+      "endedAt": "2026-11-07T14:15:01.277Z",
       "log": "/workspace/scratch/m01-r3-p03-final-native.log",
-      "logSha256": "f91c3a564d33aaf02362c7cd3937c07bbb566ef6610b193d71069dad44bd705a",
-      "context": "Node22.22.2/npm10.9.9; Node/browser descendants pinnedCPUs2,3; original lock and canonical configs. Original100s test/hooks and120s setup; maxWorkers2 configured, one native test file/sequential cases (one actual worker), no parallel heavy schema. Owned marked low-privilege PG16.15 CPU2 cpuset0,1 RAM2GiB and Playwright1.56.1 Chromium141.0.7390.37. Original AuthService/PostgresAuthStore/native services; local TEST full App pages, not onsite or CI hardware/load equivalence."
+      "logSha256": "792813ec065d6bd71dbd3c0613d8403055eb4578052d62da50e575e4e56ce2cb",
+      "context": "Node22.22.2/npm10.9.9; Node/browser descendants pinnedCPUs2,3; original lock and canonical configs. Original100s test/hooks and120s setup; maxWorkers2 configured, one native test file/sequential cases (one actual worker), no parallel heavy schema. Owned marked low-privilege PG16.15 CPU2 cpuset0,1 RAM2GiB and Playwright1.56.1 Chromium141.0.7390.37. Original AuthService/PostgresAuthStore/native services; local TEST full App pages, not onsite or CI hardware/load equivalence. Scope captured after exact reconstruction of the original measured full source fingerprint; the sole excluded later change removes an unnecessary escape in a unit-test RegExp. Unit/preflight/lint/secret rerun on final corrected source; workspace src type/build and original native inputs remain byte identical."
     },
     {
       "id": "types",
@@ -218,13 +244,39 @@
       "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "cc7e5540de1f544201e68d6134cacf9d509c48e6",
-      "sourceFingerprint": "d5fdf94afc84a965d79a22bcc25572282c6fa8acebbb270b9f47c4e15a422c03",
-      "startedAt": "2026-11-07T13:53:20.340Z",
-      "endedAt": "2026-11-07T13:53:52.742Z",
+      "testedHead": "82ec715ea9b7e66da101436506c941610c73b6e5",
+      "sourceFingerprint": "6597086e379e46af652a3efd8b59debab6adda0abb87ce87bc48f4acdeeb4b70",
+      "inputPaths": [
+        ".env.example",
+        ".gitattributes",
+        ".github",
+        ".gitignore",
+        ".node-version",
+        ".nvmrc",
+        "AGENTS.md",
+        "README.md",
+        "apps",
+        "eslint.config.js",
+        "infra",
+        "package-lock.json",
+        "package.json",
+        "packages",
+        "scripts",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "vitest.postgres-immediate.config.ts",
+        "tests/acceptance",
+        "tests/integration",
+        "tests/fixtures",
+        "tests/helpers"
+      ],
+      "inputFingerprint": "6658a5b636e862d923e01d1e4a7780f912fde605aee236393d81033116c061b1",
+      "startedAt": "2026-11-07T14:13:26.790Z",
+      "endedAt": "2026-11-07T14:13:59.272Z",
       "log": "/workspace/scratch/m01-r3-p03-final-types.log",
       "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e",
-      "context": "Node22.22.2/npm10.9.9; Node/browser descendants pinnedCPUs2,3; original lock and canonical configs. Database env empty; focused unchanged old consumers plus new original tests; no onsite or remote Gate operation."
+      "context": "Node22.22.2/npm10.9.9; Node/browser descendants pinnedCPUs2,3; original lock and canonical configs. Database env empty; focused unchanged old consumers plus new original tests; no onsite or remote Gate operation. Scope captured after exact reconstruction of the original measured full source fingerprint; the sole excluded later change removes an unnecessary escape in a unit-test RegExp. Unit/preflight/lint/secret rerun on final corrected source; workspace src type/build and original native inputs remain byte identical."
     },
     {
       "id": "build",
@@ -232,13 +284,39 @@
       "command": "npm run build --workspaces --if-present",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "cc7e5540de1f544201e68d6134cacf9d509c48e6",
-      "sourceFingerprint": "d5fdf94afc84a965d79a22bcc25572282c6fa8acebbb270b9f47c4e15a422c03",
-      "startedAt": "2026-11-07T13:53:52.818Z",
-      "endedAt": "2026-11-07T13:54:11.455Z",
+      "testedHead": "82ec715ea9b7e66da101436506c941610c73b6e5",
+      "sourceFingerprint": "6597086e379e46af652a3efd8b59debab6adda0abb87ce87bc48f4acdeeb4b70",
+      "inputPaths": [
+        ".env.example",
+        ".gitattributes",
+        ".github",
+        ".gitignore",
+        ".node-version",
+        ".nvmrc",
+        "AGENTS.md",
+        "README.md",
+        "apps",
+        "eslint.config.js",
+        "infra",
+        "package-lock.json",
+        "package.json",
+        "packages",
+        "scripts",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "vitest.postgres-immediate.config.ts",
+        "tests/acceptance",
+        "tests/integration",
+        "tests/fixtures",
+        "tests/helpers"
+      ],
+      "inputFingerprint": "6658a5b636e862d923e01d1e4a7780f912fde605aee236393d81033116c061b1",
+      "startedAt": "2026-11-07T14:13:59.351Z",
+      "endedAt": "2026-11-07T14:14:18.377Z",
       "log": "/workspace/scratch/m01-r3-p03-final-build.log",
-      "logSha256": "84dc0ea908aa07f81605ef6ecc252c05e3e1772935c41217c0e480c236feae03",
-      "context": "Node22.22.2/npm10.9.9; Node/browser descendants pinnedCPUs2,3; original lock and canonical configs. Database env empty; focused unchanged old consumers plus new original tests; no onsite or remote Gate operation."
+      "logSha256": "82955f21061216434578e4b656e37d27758766c25c6e783d693b7b3eec412b81",
+      "context": "Node22.22.2/npm10.9.9; Node/browser descendants pinnedCPUs2,3; original lock and canonical configs. Database env empty; focused unchanged old consumers plus new original tests; no onsite or remote Gate operation. Scope captured after exact reconstruction of the original measured full source fingerprint; the sole excluded later change removes an unnecessary escape in a unit-test RegExp. Unit/preflight/lint/secret rerun on final corrected source; workspace src type/build and original native inputs remain byte identical."
     },
     {
       "id": "lint",
@@ -246,10 +324,10 @@
       "command": "npm run lint",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "cc7e5540de1f544201e68d6134cacf9d509c48e6",
-      "sourceFingerprint": "d5fdf94afc84a965d79a22bcc25572282c6fa8acebbb270b9f47c4e15a422c03",
-      "startedAt": "2026-11-07T13:54:55.017Z",
-      "endedAt": "2026-11-07T13:55:16.690Z",
+      "testedHead": "82ec715ea9b7e66da101436506c941610c73b6e5",
+      "sourceFingerprint": "05005fdd54b5897daf26bea3626b815d71363f964b53ee58afc3c21557031714",
+      "startedAt": "2026-11-07T14:16:42.888Z",
+      "endedAt": "2026-11-07T14:17:05.031Z",
       "log": "/workspace/scratch/m01-r3-p03-final-lint.log",
       "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763",
       "context": "Node22.22.2/npm10.9.9; Node/browser descendants pinnedCPUs2,3; original lock and canonical configs. Database env empty; focused unchanged old consumers plus new original tests; no onsite or remote Gate operation."
@@ -260,10 +338,10 @@
       "command": "npm run secret:scan",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "cc7e5540de1f544201e68d6134cacf9d509c48e6",
-      "sourceFingerprint": "d5fdf94afc84a965d79a22bcc25572282c6fa8acebbb270b9f47c4e15a422c03",
-      "startedAt": "2026-11-07T13:55:16.768Z",
-      "endedAt": "2026-11-07T13:55:17.388Z",
+      "testedHead": "82ec715ea9b7e66da101436506c941610c73b6e5",
+      "sourceFingerprint": "05005fdd54b5897daf26bea3626b815d71363f964b53ee58afc3c21557031714",
+      "startedAt": "2026-11-07T14:17:05.116Z",
+      "endedAt": "2026-11-07T14:17:05.704Z",
       "log": "/workspace/scratch/m01-r3-p03-final-secret.log",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda",
       "context": "Node22.22.2/npm10.9.9; Node/browser descendants pinnedCPUs2,3; original lock and canonical configs. Database env empty; focused unchanged old consumers plus new original tests; no onsite or remote Gate operation."

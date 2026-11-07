@@ -12,10 +12,14 @@
 |五区共线、同排上下对齐且紧凑|当前节点/风险上行；全部节点/单据/日志下行，共享三列；内部视口与底部操作|保留原办理、材料与风险/单据原权限、上下文/历史；不靠空卡/巨大min-height|短中长三组合、多PO、节点/记录分页、弹窗不撑卡与返回原阅读位置|
 |删除指定冗长展示、保留真实状态|详情独立进度、计划与时效、重复结束语及依据入口；可信ID/居中数量/单据状态|后台计算与记录保留，不把无权/失败/加载当未填写，不重写历史或生成业务号|全渲染树/源码检索、原组件与原认证浏览器、原权限及加载失败状态|
 
-最终源码已完成本地定向检查：249项preflight、176项原有/新增unit及9项原生浏览器场景均通过、无失败/跳过；全工作区typecheck、build、lint和secret:scan退出码均0。来源为`/workspace/scratch/m01-r3-p03-final-{preflight,unit,native,types,build,lint,secret}.metadata.json`，均核对实际源码指纹一致与日志摘要，不拿旧PR或旧草稿结果当当前通过。
+最终源码已完成本地定向检查：249项preflight、180项原有/新增unit及9项原生浏览器场景均通过、无失败/跳过；全工作区typecheck、build、lint和secret:scan退出码均0。来源为`/workspace/scratch/m01-r3-p03-final-{preflight,unit,native,types,build,lint,secret}.metadata.json`，核对源码或明确输入指纹一致与日志摘要，不拿旧PR或旧草稿结果当当前通过。
 
-完整原生App/Shell使用自建TEST订单、原认证和原业务服务；1165/1366/1584三宽的七阶段、五卡边界、单据/日志底部对齐、键盘提示及多PO均有浏览器断言。原F反例：需求4、实收2、装箱2，显示欠2；风险/材料/单据/日志弹窗保持文档坐标布局并恢复焦点。截图保留在`/workspace/scratch/m01-r3-p03-final-native-screens/m01-cockpit-home-ea8c76b1-6622-4e1d-b532-e65034dec9c3/`。这是本地原生TEST页面，不是现场业务验收；图片/二进制及若干非本项服务未挂载时仍显示真实读取错误，不冒称已读取现场单据。
+完整原生App/Shell使用自建TEST订单、原认证和原业务服务；1165/1366/1584三宽的七阶段、五卡边界、单据/日志底部对齐、键盘提示及多PO均有浏览器断言。原F反例：需求4、实收2、装箱2，显示欠2；风险/材料/单据/日志弹窗保持文档坐标布局并恢复焦点。截图保留在`/workspace/scratch/m01-r3-p03-final-native-screens/m01-cockpit-home-66ea1063-93ec-4836-a3f8-3c1996a9905b/`。这是本地原生TEST页面，不是现场业务验收；图片/二进制及若干非本项服务未挂载时仍显示真实读取错误，不冒称已读取现场单据。
 
 Node22.22.2/npm10.9.9、Playwright1.56.1/Chromium141.0.7390.37；业务链原配置maxWorkers2，实际一个测试文件/一个worker、场景串行；测试与浏览器子进程taskset至CPU2,3。独占带安全标记低权限PG16.15容器CPU2/cpuset0,1/RAM2GiB。该限制不等于CI整机或现场负载。原100秒单项和120秒初始化/清理预算保留，未改业务SLA。
 
 草稿阶段的重复tooltip与F入口选择错误已修，未将旧失败算作通过。完整diff和调用方已另做有界自检，未冒充正式GitHub Codex Review。推送后执行本候选的Light、必要Review和适用最终Gate；本地通过不等于远端Gate、合并或部署完成。N个案缺原始证据与暂停的全节点时间专项不在本项宣布完成；M原主座舱截止映射未改。
+
+正式Codex Review覆盖82ec715ea9b7e66da101436506c941610c73b6e5，提出P2讨论4502068641：共享事实已知逾期/临期但阶段起点未知时不应被中性未开始覆盖。已核原visual projection与display独立来源，修正颜色优先级，新增逾期/临期/正常/未知四反例：起点与时间比例保持null、实际0，无伪造圆弧。最终source-bound检查重新执行，旧82ec检查不用于修复后版本；未冒称修复提交已经正式重审。
+
+新增回归的RegExp多余转义被lint指出后，仅修测试语法；preflight/unit/lint/secret重跑通过。type/build/native原测试源码精确复原后校验完整指纹一致，再记录明确输入范围（工作区源码、脚本、原native/helpers/fixtures/integration及根配置，排除未进入这些命令的unit源码）；恢复最终测试修正后该输入仍逐字一致，按现行规则复用。该记录不把lint失败或旧完整指纹冒充最终通过，也不授权跨Head复用GitHub Gate。

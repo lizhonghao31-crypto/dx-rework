@@ -69,3 +69,8 @@ it.each([[0,'0%',false],[.364,'36.4%',true],[1,'100%',true],[null,'—',false]] 
  const o=fixture();o.visualProgress!.stages=o.visualProgress!.stages.map(stage=>({...stage,actualRatio:ratio,timeRatio:ratio}));o.display!.mainState='completed';
  const html=render(o);expect(html).toContain(`实际进度 <b>${label}</b>`);expect(html.includes('cockpit-stage-arc')).toBe(arc);expect(html).not.toContain('80%');if(ratio!==1)expect(html).not.toContain('>✓</text>');
 });
+
+it.each([['overdue','danger'],['due_soon','warning'],['normal','neutral'],['unknown','neutral']] as const)('R3-03 Review preserves known %s with no verified stage start or completed work', (risk,tone)=>{
+ const o=fixture();o.visualProgress!.stages=o.visualProgress!.stages.map(stage=>({...stage,risk,startedAt:null,actualRatio:0,timeRatio:null}));
+ const html=render(o);expect(html.match(new RegExp(`class="cockpit-stage[^"]* is-${tone}"`,'g'))).toHaveLength(7);expect(html.match(/计划进度 <b>—/g)).toHaveLength(7);expect(html.match(/实际进度 <b>0%/g)).toHaveLength(7);expect(html).not.toContain('cockpit-stage-arc');
+});
