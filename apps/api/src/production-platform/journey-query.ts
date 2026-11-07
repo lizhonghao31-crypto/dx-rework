@@ -5,7 +5,7 @@ import {styleLabelCuttingReason,preparationTestReasons} from './production-readi
 import {seriesPlanJourney} from './series-plan-journey.js';
 import type {BusinessTime,BusinessTimeScope} from '@dx-rework/domain/business-clock';
 import {readJourneySupervision} from "./journey-supervision.js";
-import {acceptanceClockReaderEnabled,assertBusinessClockUnchanged,ContextBusinessClock} from '../acceptance-clock/business-time.js';
+import {assertBusinessClockUnchanged,ContextBusinessClock} from '../acceptance-clock/business-time.js';
 import {factoryProductionFacts,factoryProductionCompletion} from './factory-production-facts.js';
 import {shipSampleFacts} from './ship-sample-facts.js';
 import {developmentReadTables} from "./development-amendment-repository.js";
@@ -187,10 +187,9 @@ export class DigitalJourneyQuery {
     const sid=source?.source_id??null,oid=order?.production_order_id??null;
     // Projection time is business time; the outer audit-log snapshot remains real.
     const scope:BusinessTimeScope=oid?{kind:'order',id:oid}:{kind:'source',id:sid!};
-    const clockObservation=await journeyMeasure('clock_read',()=>new ContextBusinessClock(this.database,db).read(scope));
-    // Ordinary orders share this transaction's observation point. A guarded
-    // reader may return a trusted time without a scenario ID; preserve it too.
-    const observed=clockObservation.scenarioId||acceptanceClockReaderEnabled(this.database)?clockObservation:{...clockObservation,now:asOf};
+    // Use SQL snapshot time only as the ordinary fallback. Guarded context and
+    // actual reader results (including null scenario IDs) retain precedence.
+    const observed=await journeyMeasure('clock_read',()=>new ContextBusinessClock(this.database,db).read(scope,()=>new Date(asOf)));
     if(observed.scenarioId)this.observations.get(db)?.set(`${scope.kind}:${scope.id}`,{scope,time:observed});
     asOf=observed.now;
     const attached=Boolean(sid&&oid&&(await db.query("SELECT 1 FROM audit_events WHERE entity_type='digital_production' AND entity_id=$1 AND action='digital_source_attached' AND after_state->>'sourceId'=$2 LIMIT 1",[oid,sid])).rowCount);

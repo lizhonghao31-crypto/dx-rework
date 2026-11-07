@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "becb16847ca2f6a0d6a7f5beb783a33cce19c7bc",
-  "sourceFingerprint": "e495080b6c484fccac12bd1ef4b1cee98087bd08dcb38f59a62f885a2c91202a",
+  "sourceFingerprint": "342cfffb6311dd13245d2d9c4a4eb6f34c5cffaa278a961d86eb7f7260afee14",
   "risk": "full",
   "rules": [
     {
@@ -30,6 +30,7 @@
         "preflight",
         "unit",
         "native",
+        "clock",
         "cost",
         "types",
         "build",
@@ -42,6 +43,8 @@
       "source": "User approved third-round PR01 in DX_M01_round3_approved_UI_construction_plan_20261107.md and 2026-11-07 parent instructions: only PR01, stop for user acceptance; no deployment or onsite data/config changes. docs/engineering/m01-r3-p01-execution.md",
       "writes": [
         "apps/api/src/production-platform/journey-query.ts",
+        "apps/api/src/acceptance-clock/business-time.ts",
+        "tests/unit/acceptance-clock-transaction-reader.test.ts",
         "tests/integration/digital-journey-postgres.test.ts",
         "docs/engineering/acceptance-time-sites-20261027.json"
       ],
@@ -57,13 +60,14 @@
         "tests/unit/journey-sla-supervision.test.ts",
         "tests/integration/digital-journey-postgres.test.ts"
       ],
-      "initialization": "No clock module or generator change. Reconcile exactly modified query and new pure ratio source entries; retain all unrelated manual time annotations and require generator stability. Existing scenario postcheck, transaction and rollback preserved.",
-      "dateAndPermission": "Ordinary no-reader orders share SQL snapshot asOf; installed readers retain returned trusted time even with null scenarioId. Natural elapsed time includes Sunday; date-only, invalid/reversed boundaries, missing current entry and historical/planning entries cannot synthesize instants. No SLA calendar or security/audit clock change.",
-      "expectation": "Natural time bounds, exact forecast/actual reuse, stale snapshot rejection, original native SLA10 future clock, original factory/task date precision and read-only evidence pass; M mappings are unchanged, not claimed reverified onsite.",
+      "initialization": "Only an optional ContextBusinessClock.read fallback is added; existing callers with no argument preserve their original real-time default. Context scope validation and actual reader results retain precedence. Generator unchanged. Reconcile exactly modified clock/query and new pure ratio source entries; retain all unrelated manual time annotations and require generator stability. Existing scenario postcheck, transaction and rollback preserved.",
+      "dateAndPermission": "Ordinary orders with no reader or a reader returning null share SQL snapshot asOf; installed readers retain returned trusted time even with null scenarioId. Natural elapsed time includes Sunday; date-only, invalid/reversed boundaries, missing current entry and historical/planning entries cannot synthesize instants. No SLA calendar or security/audit clock change.",
+      "expectation": "Natural time bounds, exact forecast/actual reuse, stale snapshot rejection, actual unscoped-reader multi-order SQL snapshot, original native SLA10 future clock, original mixed-scene and saturated-pool/post-COMMIT guards, original factory/task date precision and read-only evidence pass; M mappings are unchanged, not claimed reverified onsite.",
       "checks": [
         "preflight",
         "unit",
         "native",
+        "clock",
         "cost",
         "types",
         "build",
@@ -98,6 +102,7 @@
         "preflight",
         "unit",
         "native",
+        "clock",
         "cost",
         "types",
         "build",
@@ -126,11 +131,12 @@
       ],
       "initialization": "Original default unit glob includes new unit; Journey query/contracts select existing native PG and PG13 compatibility and current-version cost regression. Existing100s correctness/hooks, own low-privilege marker identity and precise suite cleanup remain; no new browser suite or full-node time audit.",
       "dateAndPermission": "Only PR01 data contracts implemented. No PR02–05, UI style or deployment/onsite writes. N current order ID/full34 raw rows/11 effective-task proofs remain locally unavailable; no fabricated completion audit or claim of onsite root cause.",
-      "expectation": "Original preflight, focused unit/native/cost suites, types/build/lint and secret scan pass on one frozen source; accurate tested base/source fingerprints and result hashes retained. Necessary remote Review/final Gate must follow, then stop for user acceptance without auto merge.",
+      "expectation": "Original preflight, focused unit/native/clock/cost suites, types/build/lint and secret scan pass on one frozen source; accurate tested base/source fingerprints and result hashes retained. Necessary remote Review/final Gate must follow, then stop for user acceptance without auto merge.",
       "checks": [
         "preflight",
         "unit",
         "native",
+        "clock",
         "cost",
         "types",
         "build",
@@ -152,44 +158,44 @@
       "resultReports": [
         {
           "format": "node-tap",
-          "sha256": "ba008485bcf4f0d2e5af77d22692946a40a37735e8544eb1e8bc79b8964e486c"
+          "sha256": "ad78529b79229d9216677d3dfd72f333405acf14cf349e29298dcd52ab6a8b8a"
         }
       ],
-      "testedHead": "becb16847ca2f6a0d6a7f5beb783a33cce19c7bc",
-      "sourceFingerprint": "e495080b6c484fccac12bd1ef4b1cee98087bd08dcb38f59a62f885a2c91202a",
-      "startedAt": "2026-11-07T09:42:03.622Z",
-      "endedAt": "2026-11-07T09:42:09.565Z",
-      "log": "/workspace/scratch/m01-r3-p01-preflight.log",
-      "logSha256": "ba008485bcf4f0d2e5af77d22692946a40a37735e8544eb1e8bc79b8964e486c",
+      "testedHead": "daad60735d5c6ec7f21604b464c948b479c4d75a",
+      "sourceFingerprint": "342cfffb6311dd13245d2d9c4a4eb6f34c5cffaa278a961d86eb7f7260afee14",
+      "startedAt": "2026-11-07T10:09:38.539Z",
+      "endedAt": "2026-11-07T10:09:44.556Z",
+      "log": "/workspace/scratch/m01-r3-p01-fix-clock-preflight.log",
+      "logSha256": "ad78529b79229d9216677d3dfd72f333405acf14cf349e29298dcd52ab6a8b8a",
       "context": "Node22.22.2/npm10.9.9 under Nodeaffinity2,3; actual command/config shown, DATABASE_URL/TEST_DATABASE_URL/ACCEPTANCE_CLOCK_TEST_DATABASE_URL all empty. Ordinary Vitest unit workers1; NodeTAP preflight owns its separately reported protocol worker bound; no database or onsite operation."
     },
     {
       "id": "unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/journey-visual-progress.test.ts tests/unit/journey-business-progress.test.ts tests/unit/journey-progress-dates.test.ts tests/unit/journey-instance-replacement.test.ts tests/unit/journey-factory-deadlines.test.ts tests/unit/journey-sla-supervision.test.ts tests/unit/digital-journey-projection.test.ts tests/unit/journey-projection-isolation.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-r3-p01-unit.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/journey-visual-progress.test.ts tests/unit/journey-business-progress.test.ts tests/unit/journey-progress-dates.test.ts tests/unit/journey-instance-replacement.test.ts tests/unit/journey-factory-deadlines.test.ts tests/unit/journey-sla-supervision.test.ts tests/unit/digital-journey-projection.test.ts tests/unit/journey-projection-isolation.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/acceptance-clock-transaction-reader.test.ts tests/unit/acceptance-sla-clock.test.ts tests/unit/business-time-write-contract.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-r3-p01-fix-clock-unit.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 143,
+      "passed": 157,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "e243459583046887c77db50bc1e70bceaa8008bd02a754f8ca8fc03778562c1c"
+          "sha256": "4bd449c051d8e9336bd7a8f33cd85cc5927f9b5037248ba3ecc2a4f878f26c81"
         }
       ],
-      "testedHead": "becb16847ca2f6a0d6a7f5beb783a33cce19c7bc",
-      "sourceFingerprint": "e495080b6c484fccac12bd1ef4b1cee98087bd08dcb38f59a62f885a2c91202a",
-      "startedAt": "2026-11-07T09:42:09.621Z",
-      "endedAt": "2026-11-07T09:42:12.834Z",
-      "log": "/workspace/scratch/m01-r3-p01-unit.log",
-      "logSha256": "b45abde91f278015e2cf0437b2e8f3ea9505b50cf61c134a2981ae1bfee4ee9c",
+      "testedHead": "daad60735d5c6ec7f21604b464c948b479c4d75a",
+      "sourceFingerprint": "342cfffb6311dd13245d2d9c4a4eb6f34c5cffaa278a961d86eb7f7260afee14",
+      "startedAt": "2026-11-07T10:09:44.615Z",
+      "endedAt": "2026-11-07T10:09:50.273Z",
+      "log": "/workspace/scratch/m01-r3-p01-fix-clock-unit.log",
+      "logSha256": "7ae67bb5160ada859229041f5a12b318c4c24ab9ac453d88376ac84da9a76abf",
       "context": "Node22.22.2/npm10.9.9 under Nodeaffinity2,3; actual command/config shown, DATABASE_URL/TEST_DATABASE_URL/ACCEPTANCE_CLOCK_TEST_DATABASE_URL all empty. Ordinary Vitest unit workers1; NodeTAP preflight owns its separately reported protocol worker bound; no database or onsite operation."
     },
     {
       "id": "native",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers=2 tests/integration/digital-journey-postgres.test.ts tests/integration/journey-diagnostic-postgres.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-r3-p01-native.json",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers=2 tests/integration/digital-journey-postgres.test.ts tests/integration/journey-diagnostic-postgres.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-r3-p01-fix-clock-native.json",
       "status": "passed",
       "exitCode": 0,
       "passed": 37,
@@ -198,21 +204,44 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "bb0262273bd8465ede6a14533f732cefe9752b2d136e5071af8f89b292b3ab17"
+          "sha256": "5b3e1f6789c137eb149182198f61ebe452f5829e5792dd294555653ad457258d"
         }
       ],
-      "testedHead": "becb16847ca2f6a0d6a7f5beb783a33cce19c7bc",
-      "sourceFingerprint": "e495080b6c484fccac12bd1ef4b1cee98087bd08dcb38f59a62f885a2c91202a",
-      "startedAt": "2026-11-07T09:42:12.871Z",
-      "endedAt": "2026-11-07T09:43:09.519Z",
-      "log": "/workspace/scratch/m01-r3-p01-native.log",
-      "logSha256": "ba59918f26a39e900234cf19569d4d6780c75a1e061ea4b83f6a76993ad557da",
+      "testedHead": "daad60735d5c6ec7f21604b464c948b479c4d75a",
+      "sourceFingerprint": "342cfffb6311dd13245d2d9c4a4eb6f34c5cffaa278a961d86eb7f7260afee14",
+      "startedAt": "2026-11-07T10:09:50.319Z",
+      "endedAt": "2026-11-07T10:10:50.165Z",
+      "log": "/workspace/scratch/m01-r3-p01-fix-clock-native.log",
+      "logSha256": "74b6ef81a2644a25664c5febdd49da7407f616e4ad3828daa4bb0848f61f67d4",
       "context": "Actual original canonical business-chain config; two workers, original native Journey/SLA/role/HTTP query regressions; Node22.22.2/npm10.9.9 Nodeaffinity2,3, own marked low-privilege PG16.15 cpuset0,1 CPU2/memory2GiB; original100s correctness/hooks and existing cost-case budget. Not CI hardware or onsite equivalence."
+    },
+    {
+      "id": "clock",
+      "kind": "tests",
+      "command": "DX_REWORK_TEST_SUITE_KIND=postgres node node_modules/vitest/vitest.mjs run tests/integration/time-reading-clock-postgres.test.ts --maxWorkers=1 --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-r3-p01-fix-clock-clock.json",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 13,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "c933aff6360cf8177d753dd73b00128ab296353839913a9364d8dfe17325cc57"
+        }
+      ],
+      "testedHead": "daad60735d5c6ec7f21604b464c948b479c4d75a",
+      "sourceFingerprint": "342cfffb6311dd13245d2d9c4a4eb6f34c5cffaa278a961d86eb7f7260afee14",
+      "startedAt": "2026-11-07T10:10:50.201Z",
+      "endedAt": "2026-11-07T10:10:59.748Z",
+      "log": "/workspace/scratch/m01-r3-p01-fix-clock-clock.log",
+      "logSha256": "798e1892ccf75d24a54f3ef8fc40fed31c0cf6956021b177325d4de8ffccce0d",
+      "context": "Actual original canonical vitest.config.ts in PostgreSQL mode with original per-file100s budget; one worker, original mixed-scene/ordinary observations, pool saturation, no-ALS post-COMMIT guard and date precision; Node22.22.2/npm10.9.9 Nodeaffinity2,3, own marked low-privilege PG16.15 cpuset0,1 CPU2/memory2GiB; original100s correctness/hooks and existing cost-case budget. Not CI hardware or onsite equivalence."
     },
     {
       "id": "cost",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers=1 tests/integration/m01-journey-performance-postgres.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-r3-p01-cost.json",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers=1 tests/integration/m01-journey-performance-postgres.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-r3-p01-fix-clock-cost.json",
       "status": "passed",
       "exitCode": 0,
       "passed": 1,
@@ -221,15 +250,15 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "1039d6c113507c4bf46aba2aebaff913d32ed7546941d30f0454d6ca655ec4e7"
+          "sha256": "6239ce66224ac07f376f763bc11b1b36bbd64db62138e8e6d80e82ae99a8d9a9"
         }
       ],
-      "testedHead": "becb16847ca2f6a0d6a7f5beb783a33cce19c7bc",
-      "sourceFingerprint": "e495080b6c484fccac12bd1ef4b1cee98087bd08dcb38f59a62f885a2c91202a",
-      "startedAt": "2026-11-07T09:43:09.570Z",
-      "endedAt": "2026-11-07T09:43:45.752Z",
-      "log": "/workspace/scratch/m01-r3-p01-cost.log",
-      "logSha256": "44384490664af9c25e7640c801be83c086d721c1911bfd68327f00626243eb7e",
+      "testedHead": "daad60735d5c6ec7f21604b464c948b479c4d75a",
+      "sourceFingerprint": "342cfffb6311dd13245d2d9c4a4eb6f34c5cffaa278a961d86eb7f7260afee14",
+      "startedAt": "2026-11-07T10:10:59.789Z",
+      "endedAt": "2026-11-07T10:11:34.863Z",
+      "log": "/workspace/scratch/m01-r3-p01-fix-clock-cost.log",
+      "logSha256": "37c666ae805c681400762ac66fa6dddda080905df3e3c5cab2d151fa547f05b9",
       "context": "Actual original canonical business-chain config; one worker, isolated original88-order/current-version cost/authority correctness, no paired baseline or onsite improvement claim; Node22.22.2/npm10.9.9 Nodeaffinity2,3, own marked low-privilege PG16.15 cpuset0,1 CPU2/memory2GiB; original100s correctness/hooks and existing cost-case budget. Not CI hardware or onsite equivalence."
     },
     {
@@ -238,11 +267,11 @@
       "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "becb16847ca2f6a0d6a7f5beb783a33cce19c7bc",
-      "sourceFingerprint": "e495080b6c484fccac12bd1ef4b1cee98087bd08dcb38f59a62f885a2c91202a",
-      "startedAt": "2026-11-07T09:43:45.795Z",
-      "endedAt": "2026-11-07T09:44:17.158Z",
-      "log": "/workspace/scratch/m01-r3-p01-types.log",
+      "testedHead": "daad60735d5c6ec7f21604b464c948b479c4d75a",
+      "sourceFingerprint": "342cfffb6311dd13245d2d9c4a4eb6f34c5cffaa278a961d86eb7f7260afee14",
+      "startedAt": "2026-11-07T10:11:34.902Z",
+      "endedAt": "2026-11-07T10:12:06.818Z",
+      "log": "/workspace/scratch/m01-r3-p01-fix-clock-types.log",
       "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e",
       "context": "Node22.22.2/npm10.9.9 under Nodeaffinity2,3; actual command/config shown, DATABASE_URL/TEST_DATABASE_URL/ACCEPTANCE_CLOCK_TEST_DATABASE_URL all empty. Ordinary Vitest unit workers1; NodeTAP preflight owns its separately reported protocol worker bound; no database or onsite operation."
     },
@@ -252,12 +281,12 @@
       "command": "npm run build --workspaces --if-present",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "becb16847ca2f6a0d6a7f5beb783a33cce19c7bc",
-      "sourceFingerprint": "e495080b6c484fccac12bd1ef4b1cee98087bd08dcb38f59a62f885a2c91202a",
-      "startedAt": "2026-11-07T09:44:17.198Z",
-      "endedAt": "2026-11-07T09:44:35.963Z",
-      "log": "/workspace/scratch/m01-r3-p01-build.log",
-      "logSha256": "236a51df6a17e875f25699ada720dbfd2e5e3c7781fbdd9b55cdc19604b39cbb",
+      "testedHead": "daad60735d5c6ec7f21604b464c948b479c4d75a",
+      "sourceFingerprint": "342cfffb6311dd13245d2d9c4a4eb6f34c5cffaa278a961d86eb7f7260afee14",
+      "startedAt": "2026-11-07T10:12:06.857Z",
+      "endedAt": "2026-11-07T10:12:25.565Z",
+      "log": "/workspace/scratch/m01-r3-p01-fix-clock-build.log",
+      "logSha256": "c02660c238634b09e9d09c2f8a8aa861e9c6cbf10f256283ea6fac7c83adc351",
       "context": "Node22.22.2/npm10.9.9 under Nodeaffinity2,3; actual command/config shown, DATABASE_URL/TEST_DATABASE_URL/ACCEPTANCE_CLOCK_TEST_DATABASE_URL all empty. Ordinary Vitest unit workers1; NodeTAP preflight owns its separately reported protocol worker bound; no database or onsite operation."
     },
     {
@@ -266,11 +295,11 @@
       "command": "npm run lint",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "becb16847ca2f6a0d6a7f5beb783a33cce19c7bc",
-      "sourceFingerprint": "e495080b6c484fccac12bd1ef4b1cee98087bd08dcb38f59a62f885a2c91202a",
-      "startedAt": "2026-11-07T09:44:36.006Z",
-      "endedAt": "2026-11-07T09:44:57.915Z",
-      "log": "/workspace/scratch/m01-r3-p01-lint.log",
+      "testedHead": "daad60735d5c6ec7f21604b464c948b479c4d75a",
+      "sourceFingerprint": "342cfffb6311dd13245d2d9c4a4eb6f34c5cffaa278a961d86eb7f7260afee14",
+      "startedAt": "2026-11-07T10:12:25.602Z",
+      "endedAt": "2026-11-07T10:12:46.854Z",
+      "log": "/workspace/scratch/m01-r3-p01-fix-clock-lint.log",
       "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763",
       "context": "Node22.22.2/npm10.9.9 under Nodeaffinity2,3; actual command/config shown, DATABASE_URL/TEST_DATABASE_URL/ACCEPTANCE_CLOCK_TEST_DATABASE_URL all empty. Ordinary Vitest unit workers1; NodeTAP preflight owns its separately reported protocol worker bound; no database or onsite operation."
     },
@@ -280,11 +309,11 @@
       "command": "npm run secret:scan",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "becb16847ca2f6a0d6a7f5beb783a33cce19c7bc",
-      "sourceFingerprint": "e495080b6c484fccac12bd1ef4b1cee98087bd08dcb38f59a62f885a2c91202a",
-      "startedAt": "2026-11-07T09:44:57.953Z",
-      "endedAt": "2026-11-07T09:44:58.477Z",
-      "log": "/workspace/scratch/m01-r3-p01-secret.log",
+      "testedHead": "daad60735d5c6ec7f21604b464c948b479c4d75a",
+      "sourceFingerprint": "342cfffb6311dd13245d2d9c4a4eb6f34c5cffaa278a961d86eb7f7260afee14",
+      "startedAt": "2026-11-07T10:12:46.894Z",
+      "endedAt": "2026-11-07T10:12:47.400Z",
+      "log": "/workspace/scratch/m01-r3-p01-fix-clock-secret.log",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda",
       "context": "Node22.22.2/npm10.9.9 under Nodeaffinity2,3; actual command/config shown, DATABASE_URL/TEST_DATABASE_URL/ACCEPTANCE_CLOCK_TEST_DATABASE_URL all empty. Ordinary Vitest unit workers1; NodeTAP preflight owns its separately reported protocol worker bound; no database or onsite operation."
     }

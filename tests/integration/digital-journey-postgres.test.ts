@@ -479,6 +479,13 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
       expect(detail.json().visualProgress.stages.map((stage:{key:string;actualRatio:number|null})=>[stage.key,stage.actualRatio]))
         .toEqual(item.visualProgress.stages.map((stage:{key:string;actualRatio:number|null})=>[stage.key,stage.actualRatio]));
     }
+    const ordinaryPool={connect:db.connect.bind(db),query:db.query.bind(db)} as unknown as pg.Pool;
+    installAcceptanceClockReader(ordinaryPool,{read:async()=>null,nativeScenario:async()=>null});
+    const ordinary=await new DigitalJourneyQuery(ordinaryPool).list(actor(root,['root_superuser']),JourneyFilterSchema.parse({scope:'production',search:'ROOT-HTTP'}));
+    expect(ordinary.items).toHaveLength(2);
+    for(const item of ordinary.items){
+      expect(item.asOf).toBe(ordinary.asOf);expect(item.businessProgress?.asOf).toBe(ordinary.asOf);expect(item.visualProgress?.asOf).toBe(ordinary.asOf);
+    }
   });
   it("validates read routes and preserves no-store and permission rejection",async()=>{
     const order=await identity.createOrder(actor(),input("HTTP"),randomUUID());
