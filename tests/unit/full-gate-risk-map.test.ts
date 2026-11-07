@@ -240,3 +240,8 @@ describe('M01 measured Journey batches stay on the original native gate',()=>{
   expect(configForSuite(suite)).toBe('vitest.business-chain.config.ts');
  });
 });
+
+it('R3-04 relative standard calculator remains in the original native settings and original SLA PostgreSQL plan',()=>{
+ for(const path of ['packages/domain/src/sla-relative-calculation.ts','packages/domain/src/sla-calculation.ts']){const tests=classifyFullGatePaths([path]).mappedPostgresTests;expect(tests).toContain('tests/integration/m01-settings-native-browser-postgres.test.ts');expect(tests).toContain('tests/integration/sla-calculation-postgres.test.ts');}
+ expect(configForSuite('tests/integration/m01-settings-native-browser-postgres.test.ts')).toBe('vitest.business-chain.config.ts');
+});

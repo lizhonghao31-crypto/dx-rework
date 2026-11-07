@@ -1,3 +1,4 @@
+import {App} from '../../apps/web/src/App.js';
 import {createRoot} from 'react-dom/client';
 import {CockpitProductionSettings} from '../../apps/web/src/cockpit-production-settings.js';
 import {SeriesPlanPanel} from '../../apps/web/src/series-plan-panel.js';
@@ -8,5 +9,7 @@ import '../../apps/web/src/workflow-shell.css';
 import '../../apps/web/src/dialog-visual-system.css';
 import '../../apps/web/src/workflow-state-visual.css';
 import '../../apps/web/src/ui-polish.css';
+import '../../apps/web/src/responsibility-determination.css';
+import '../../apps/web/src/scoped-select-arrow.css';
 const query=new URLSearchParams(location.search),orderId=query.get('order');
-createRoot(document.getElementById('root')!).render(<main className="dx-production-ui"><p>TEST 隔离数据库与原生接口验证</p>{query.get('panel')==='series'&&orderId?<SeriesPlanPanel orderId={orderId}/>:<CockpitProductionSettings/>}</main>);
+createRoot(document.getElementById('root')!).render(query.get('fullApp')==='1'?<App/>:<main className="dx-production-ui"><p>TEST 隔离数据库与原生接口验证</p>{query.get('panel')==='series'&&orderId?<SeriesPlanPanel orderId={orderId}/>:<CockpitProductionSettings/>}</main>);

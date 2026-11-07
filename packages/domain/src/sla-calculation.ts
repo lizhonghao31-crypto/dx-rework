@@ -2,6 +2,7 @@ import {isSlaDurationMinutes,type DigitalSlaValues} from '@dx-rework/contracts/d
 import type {DevelopmentCycleValues} from '@dx-rework/contracts/digital-development-technical';
 import {CalculationAnchorSchema,SLA_CALCULATOR_VERSION,SLA_CALENDAR_VERSION,type CalculationAnchor,type CalculationGraph,type CalculationNode,type CalculationRow,type CalculationTime,type SlaCalculationResult} from '@dx-rework/contracts/sla-calculation';
 import {orderedSlaNodes,slaAnchorTime} from './digital-sla-plan.js';
+export {calculateRelativeSlaSummary,type RelativeSlaSummary} from './sla-relative-calculation.js';
 
 const MINUTE=60000,BEIJING=8*60*MINUTE;
 export class SlaCalculationInputError extends Error{
