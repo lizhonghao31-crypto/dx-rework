@@ -45,7 +45,7 @@ it('shows an actual day as a day in both detail and node rows, without an invent
 });
 it("renders seven double rings with only two date rows, risk color and no invented time ratio",()=>{
   const html=render(fixture());
-  expect(html.match(/class="cockpit-stage-rings"/g)).toHaveLength(7);expect(html.match(/class="cockpit-stage-dates"/g)).toHaveLength(7);
+  expect(html).not.toContain("节点全流程一览");expect(html.match(/class="cockpit-stage-rings"/g)).toHaveLength(7);expect(html.match(/class="cockpit-stage-dates"/g)).toHaveLength(7);
   expect(html).toContain('is-danger');expect(html).toContain('stroke-dasharray="50 100"');expect(html).not.toContain("时间规则待完善");expect(html).toContain("实际进度");expect(html).not.toContain("计划与时效");expect(html).not.toContain("含逾期");expect(html).not.toContain("时间100%");expect(html).not.toContain("订单进度 · 全单范围");
 });
 it("keeps exactly one handling link above the full node table, with completed records read-only",()=>{
@@ -60,7 +60,7 @@ it("uses current flow dates independently of the selected older node and does no
 });
 it("shows unavailable new facts rather than falling back to old 80% or the selected round's risks",()=>{
   const o=fixture();delete o.visualProgress;delete o.display;delete o.currentRiskNodes;delete o.currentDeliveryRisks;delete o.riskHistory;delete o.operationLog;
-  const html=render(o);expect(html).not.toContain("cockpit-stage-arc");expect(html.match(/计划进度 <b>—/g)).toHaveLength(7);expect(html).toContain("当前风险资料暂不可用");expect(html).toContain("操作记录暂不可用");expect(html).not.toContain("80%");
+  const html=render(o);expect(html).not.toContain("cockpit-stage-arc");expect(html.match(/时间进度 <b>—/g)).toHaveLength(7);expect(html).toContain("当前风险资料暂不可用");expect(html).toContain("操作记录暂不可用");expect(html).not.toContain("80%");
 });
 
 it.each([['rework','/ui/tasks/'],['production','/ui/production-dashboard/'],['sourcing','/ui/sourcing/orders/']])("keeps the original %s node record reachable when excluded from the directory",(domain,path)=>{const o=fixture();o.stages[1]!.nodes[0]!.records=[{domain,id:task,url:path+task,mode:"read",version:null,lineId:null}];const html=render(o);expect(html).toContain(path+task);expect(html).toContain("查看节点记录");expect(html).not.toContain("进入该节点办理");expect(html).not.toContain("当前身份暂不可办理");});
@@ -70,7 +70,12 @@ it.each([[0,'0%',false],[.364,'36.4%',true],[1,'100%',true],[null,'—',false]] 
  const html=render(o);expect(html).toContain(`实际进度 <b>${label}</b>`);expect(html.includes('cockpit-stage-arc')).toBe(arc);expect(html).not.toContain('80%');if(ratio!==1)expect(html).not.toContain('>✓</text>');
 });
 
+it.each([[.4,.8],[1,.6]])('Final10 renders independent time %s and actual %s arcs without rounding either to completion', (time,actual)=>{
+ const o=fixture();o.visualProgress!.stages=o.visualProgress!.stages.map(stage=>({...stage,timeRatio:time!,actualRatio:actual!}));
+ const html=render(o);expect(html.match(new RegExp(`class="cockpit-stage-arc is-time"[^>]*stroke-dasharray="${time!*100} 100"`,'g'))).toHaveLength(7);expect(html.match(new RegExp(`class="cockpit-stage-arc is-actual"[^>]*stroke-dasharray="${actual!*100} 100"`,'g'))).toHaveLength(7);expect(html).not.toContain('>✓</text>');
+});
+
 it.each([['overdue','danger'],['due_soon','warning'],['normal','neutral'],['unknown','neutral']] as const)('R3-03 Review preserves known %s with no verified stage start or completed work', (risk,tone)=>{
  const o=fixture();o.visualProgress!.stages=o.visualProgress!.stages.map(stage=>({...stage,risk,startedAt:null,actualRatio:0,timeRatio:null}));
- const html=render(o);expect(html.match(new RegExp(`class="cockpit-stage[^"]* is-${tone}"`,'g'))).toHaveLength(7);expect(html.match(/计划进度 <b>—/g)).toHaveLength(7);expect(html.match(/实际进度 <b>0%/g)).toHaveLength(7);expect(html).not.toContain('cockpit-stage-arc');
+ const html=render(o);expect(html.match(new RegExp(`class="cockpit-stage[^"]* is-${tone}"`,'g'))).toHaveLength(7);expect(html.match(/时间进度 <b>—/g)).toHaveLength(7);expect(html.match(/实际进度 <b>0%/g)).toHaveLength(7);expect(html).not.toContain('cockpit-stage-arc');
 });
