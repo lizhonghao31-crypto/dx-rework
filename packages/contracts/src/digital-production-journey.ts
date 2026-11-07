@@ -126,7 +126,7 @@ export type JourneyNode = {
   risks: Array<"overdue" | "due_soon" | "blocked" | "unknown">;
   blockers: Array<{ key: string; label: string; ownerId: string | null; record: JourneyRecord | null }>;
   records: JourneyRecord[]; inheritedFrom: { taskId: string; round: number } | null;
-  inheritedResult?:{actualAt:string|null;quality:JourneyNode['actualQuality'];adoptedAt:null;reason:string};
+  inheritedResult?:{actualAt:string|null;quality:JourneyNode['actualQuality'];adoptedAt:string|null;adoptedRound?:number;adoptionSourceRef?:string;reason:string};
   countsInProgress: boolean; unavailableReason: "permission" | "fact_not_recorded" | null;
 };
 export type OrderJourney = {

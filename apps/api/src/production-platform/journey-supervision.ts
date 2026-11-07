@@ -9,6 +9,7 @@ import type {BusinessTime} from '@dx-rework/domain/business-clock';
 import {SlaOrderService} from './sla-order-service.js';
 import {developmentSlaPlan} from './development-sla-enrollment.js';
 import {developmentEvaluationPlan,developmentNativeFacts,developmentSlaEvidence} from './development-sla-evidence.js';
+import {attachJourneyNativeTimes} from './journey-native-times.js';
 
 const aliases:Record<string,string>={production_sheet:'production_instruction',sourcing_selection:'sourcing_director',sourcing_approval:'sourcing_owner',development_craft_return:'development_craft_confirmation',external_pattern:'development_external_pattern',bulk_printing:'process_logistics',bulk_embroidery:'process_logistics',bulk_print_embroidery:'process_logistics',factory_production:'factory_production_qc',ship_sample_advance:'bulk_ship_sample',garment_inspection:'receiving_inspection',garment_rework:'rework',garment_packing:'packing',receiving_span:'receipts'};
 export const journeyTimingKey=(id:string)=>aliases[id.split(':')[0]!]??id.split(':')[0]!;
@@ -62,6 +63,7 @@ export function attachJourneySupervision(item:OrderJourney,plan:SlaPlan|null,ori
 }
 export async function readJourneySupervision(database:Pool,db:PoolClient,actor:TrustedActorContext,item:OrderJourney,time:BusinessTime,external=false,authorizedTaskIds?:ReadonlySet<string>){
  if(item.orderId){const read=await new SlaOrderService(database,{read:async()=>time}).readWithClient(actor,item.orderId,db,{mode:"read_projection"});
+  attachJourneyNativeTimes(item,{orderId:read.receiving.orderId,rework:read.rework.windows,receiving:read.receiving.receivingSpan},read.time.now);
   if(read.status==='planned'){
    const labels=new Map<string,{scopeLabel:string;snapshotId?:string|null}>();
    const scope=(ids:string[])=>ids.length?ids.map(id=>{const line=item.lines.find(line=>line.id===id);return line?`PO ${line.po??'号码尚未取得'} · ${line.color}`:'PO范围依据尚未取得';}).join(' / '):'本批PO范围依据尚未取得';

@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "3f96edb0f92afdd0667487e8c156904209f274b5",
-  "sourceFingerprint": "13acbfd1540fb485f9cdc0d17ccb1533c56a3bb416c42a17200921bb243d966a",
+  "sourceFingerprint": "5d70193fd3bdbf8eafda024f0f0e56686f655324472c6ae698cc6041ba30947e",
   "risk": "full",
   "rules": [
     {
@@ -82,7 +82,8 @@
         "apps/api/src/production-platform/development-execution-service.ts",
         "apps/api/src/production-platform/bulk-preparation-service.ts",
         "tests/integration/digital-development-execution-postgres.test.ts",
-        "tests/integration/development-technical-postgres.test.ts"
+        "tests/integration/development-technical-postgres.test.ts",
+        "tests/integration/business-anchors-clock-postgres.test.ts"
       ],
       "reads": [
         "apps/api/src/production-platform/development-technical-service.ts",
@@ -113,9 +114,14 @@
       "source": "Approved Final10 Version2 pinned Library file_000000009f4c81fbaa74ab5bfebbf489 sections2/4 and active user construction/Review/serial merge authority. See docs/engineering/m01-final10-p01-execution.md; user deploys, no real-data mutations.",
       "writes": [
         "apps/api/src/production-platform/journey-visual-progress.ts",
+        "apps/api/src/production-platform/journey-progress-dates.ts",
+        "apps/api/src/production-platform/journey-native-times.ts",
         "apps/api/src/production-platform/receiving-span.ts",
         "packages/contracts/src/order-closure.ts",
+        "apps/web/src/cockpit-node-dates.tsx",
         "tests/unit/journey-visual-progress.test.ts",
+        "tests/unit/journey-progress-dates.test.ts",
+        "tests/unit/journey-native-times.test.ts",
         "tests/unit/receiving-span.test.ts"
       ],
       "reads": [
@@ -137,7 +143,7 @@
       ],
       "initialization": "Version visual-v2 with v1 compatible contract; only per-request snapshot cache exists, no persistent Journey output to rebuild. Receiving date-only crossing preserves original audit precision; quantity semantics unchanged.",
       "dateAndPermission": "Beijing exclusive day boundary only computes lawful forecasts, never actual midnight. Untrusted start, partial/invalid dates, inherited/unknown/hidden scopes stay unknown; task SLA calendar and native process/QC/dispatch deadlines remain.",
-      "expectation": "Date/instant/invalid-day and Sunday ratios, before/after window, current scope all instances, partial actual coverage, corrections never turn registration into physical collection; factory three native windows remain source-bound. Old source v1 consumers retain compatible fields.",
+      "expectation": "Date/instant/Sunday and end-only completed milestones retain a proven current scope start without synthesizing node entry. Canonical remaining forecasts may bound already-completed missing-time work, while actual dates remain unknown; all-completed missing times cannot use asOf. Effective inherited round publication is current adoption, never original physical work. Exact current reworkId/lineId windows map accepted worker reports, with no closure/wage substitution. First effective receipt instant only, date-only no invented start; marker pause preserves native completion; factory three source windows remain unchanged.",
       "checks": [
         "unit",
         "journey",
@@ -182,48 +188,24 @@
     {
       "id": "unit",
       "kind": "tests",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/journey-node-fact.test.ts tests/unit/journey-sla-supervision.test.ts tests/unit/journey-projection-isolation.test.ts tests/unit/journey-progress-dates.test.ts tests/unit/journey-business-progress.test.ts tests/unit/journey-visual-progress.test.ts tests/unit/journey-factory-deadlines.test.ts tests/unit/receiving-span.test.ts tests/unit/receiving-summary.test.ts tests/unit/development-craft-timing-review.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/cockpit-display-facts.test.ts tests/unit/journey-instance-replacement.test.ts tests/unit/journey-snapshot-reads.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/final-unit.vitest.json",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/journey-node-fact.test.ts tests/unit/journey-native-times.test.ts tests/unit/journey-sla-supervision.test.ts tests/unit/journey-projection-isolation.test.ts tests/unit/journey-progress-dates.test.ts tests/unit/journey-business-progress.test.ts tests/unit/journey-visual-progress.test.ts tests/unit/journey-factory-deadlines.test.ts tests/unit/receiving-span.test.ts tests/unit/receiving-summary.test.ts tests/unit/development-craft-timing-review.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/cockpit-display-facts.test.ts tests/unit/journey-instance-replacement.test.ts tests/unit/journey-snapshot-reads.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/final-unit.vitest.json",
       "status": "passed",
       "exitCode": 0,
-      "sourceFingerprint": "fec8322d5d87bf3c5ff9050d244ca382b83b6b9fcecc458db7e975f6bcf72ae9",
-      "testedHead": "3f96edb0f92afdd0667487e8c156904209f274b5",
-      "startedAt": "2026-11-07T19:51:45.735Z",
-      "endedAt": "2026-11-07T19:51:51.387Z",
-      "logSha256": "17e3a0e24a3d1193605c3be0e70dfab217686c9d22fe64dd47bc9212eb537568",
+      "sourceFingerprint": "5d70193fd3bdbf8eafda024f0f0e56686f655324472c6ae698cc6041ba30947e",
+      "testedHead": "7326da754f311c7f70aaf79a19a45f2fb20ae8b8",
+      "startedAt": "2026-11-07T20:42:05.942Z",
+      "endedAt": "2026-11-07T20:42:11.703Z",
+      "logSha256": "f3e1bf64aaba0f4b2b0a456fda1a156f9b301d3b975ae5cce5c0552a7ecd14c2",
       "context": "Node22.22.2/npm10.9.9; lock80b0332e; taskset2,3 applies only to command descendants; original Vitest config nonDB1 worker, original preflight protocol2 workers; local host not claimed CI equivalent",
-      "passed": 169,
+      "passed": 182,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "962f6e5373111ed0ba386e8542d5396047f4cfa55cc2fb3899cb3d6535d55474"
+          "sha256": "8cf45ff565173d147a1747f389ce3488a22edac3c966d41ad543ed52702bb552"
         }
       ],
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "tests/helpers",
-        "tests/unit",
-        "tests/fixtures",
-        "tests/acceptance",
-        ".env.example",
-        ".gitattributes",
-        ".gitignore",
-        ".node-version",
-        ".nvmrc",
-        "AGENTS.md",
-        "eslint.config.js",
-        "package-lock.json",
-        "package.json",
-        "tsconfig.base.json",
-        "vitest.business-chain.config.ts",
-        "vitest.config.ts",
-        "vitest.postgres-immediate.config.ts",
-        "tests/inspection-report-fixture.ts"
-      ],
-      "inputFingerprint": "8e1b103547f76abe7dbd5d602980f878488f8c22c95837255473c8c10159cabe",
       "log": "/workspace/scratch/dx-final10-20261108/final-unit.log"
     },
     {
@@ -232,36 +214,12 @@
       "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "sourceFingerprint": "fec8322d5d87bf3c5ff9050d244ca382b83b6b9fcecc458db7e975f6bcf72ae9",
-      "testedHead": "3f96edb0f92afdd0667487e8c156904209f274b5",
-      "startedAt": "2026-11-07T19:51:51.481Z",
-      "endedAt": "2026-11-07T19:52:23.499Z",
+      "sourceFingerprint": "5d70193fd3bdbf8eafda024f0f0e56686f655324472c6ae698cc6041ba30947e",
+      "testedHead": "7326da754f311c7f70aaf79a19a45f2fb20ae8b8",
+      "startedAt": "2026-11-07T20:42:11.799Z",
+      "endedAt": "2026-11-07T20:42:47.199Z",
       "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e",
       "context": "Node22.22.2/npm10.9.9; lock80b0332e; taskset2,3 applies only to command descendants; original Vitest config nonDB1 worker, original preflight protocol2 workers; local host not claimed CI equivalent",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "tests/helpers",
-        "tests/unit",
-        "tests/fixtures",
-        "tests/acceptance",
-        ".env.example",
-        ".gitattributes",
-        ".gitignore",
-        ".node-version",
-        ".nvmrc",
-        "AGENTS.md",
-        "eslint.config.js",
-        "package-lock.json",
-        "package.json",
-        "tsconfig.base.json",
-        "vitest.business-chain.config.ts",
-        "vitest.config.ts",
-        "vitest.postgres-immediate.config.ts",
-        "tests/inspection-report-fixture.ts"
-      ],
-      "inputFingerprint": "8e1b103547f76abe7dbd5d602980f878488f8c22c95837255473c8c10159cabe",
       "log": "/workspace/scratch/dx-final10-20261108/final-types.log"
     },
     {
@@ -270,10 +228,10 @@
       "command": "npm run build --workspace=@dx-rework/api",
       "status": "passed",
       "exitCode": 0,
-      "sourceFingerprint": "13acbfd1540fb485f9cdc0d17ccb1533c56a3bb416c42a17200921bb243d966a",
-      "testedHead": "3f96edb0f92afdd0667487e8c156904209f274b5",
-      "startedAt": "2026-11-07T19:55:45.477Z",
-      "endedAt": "2026-11-07T19:55:57.240Z",
+      "sourceFingerprint": "5d70193fd3bdbf8eafda024f0f0e56686f655324472c6ae698cc6041ba30947e",
+      "testedHead": "7326da754f311c7f70aaf79a19a45f2fb20ae8b8",
+      "startedAt": "2026-11-07T20:41:53.122Z",
+      "endedAt": "2026-11-07T20:42:05.860Z",
       "logSha256": "8dd8c96364991c28227c467fbbb326a32e6737fddfa4e2d355be3ef6dd8512fe",
       "context": "Node22.22.2/npm10.9.9; lock80b0332e; taskset2,3 applies only to command descendants; original Vitest config nonDB1 worker, original preflight protocol2 workers; local host not claimed CI equivalent",
       "log": "/workspace/scratch/dx-final10-20261108/final-buildapi.log"
@@ -281,13 +239,13 @@
     {
       "id": "lint",
       "kind": "command",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/journey-node-fact.ts tests/unit/journey-node-fact.test.ts apps/api/src/production-platform/bulk-preparation-service.ts apps/api/src/production-platform/development-execution-service.ts apps/api/src/production-platform/development-sla-evidence.ts apps/api/src/production-platform/journey-query.ts apps/api/src/production-platform/journey-supervision.ts apps/api/src/production-platform/journey-visual-progress.ts apps/api/src/production-platform/receiving-span.ts apps/api/src/production-platform/sla-order-service.ts packages/contracts/src/digital-production-journey.ts packages/contracts/src/order-closure.ts tests/integration/development-technical-postgres.test.ts tests/integration/digital-development-execution-postgres.test.ts tests/integration/digital-journey-postgres.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/journey-sla-supervision.test.ts tests/unit/journey-visual-progress.test.ts tests/unit/receiving-span.test.ts --max-warnings=0",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/journey-native-times.ts tests/unit/journey-native-times.test.ts apps/api/src/production-platform/journey-progress-dates.ts apps/api/src/production-platform/journey-query.ts apps/api/src/production-platform/journey-supervision.ts apps/api/src/production-platform/journey-visual-progress.ts apps/web/src/cockpit-node-dates.tsx packages/contracts/src/digital-production-journey.ts tests/integration/business-anchors-clock-postgres.test.ts tests/integration/development-technical-postgres.test.ts tests/unit/journey-progress-dates.test.ts tests/unit/journey-visual-progress.test.ts --max-warnings=0",
       "status": "passed",
       "exitCode": 0,
-      "sourceFingerprint": "13acbfd1540fb485f9cdc0d17ccb1533c56a3bb416c42a17200921bb243d966a",
-      "testedHead": "3f96edb0f92afdd0667487e8c156904209f274b5",
-      "startedAt": "2026-11-07T19:53:09.384Z",
-      "endedAt": "2026-11-07T19:53:11.436Z",
+      "sourceFingerprint": "5d70193fd3bdbf8eafda024f0f0e56686f655324472c6ae698cc6041ba30947e",
+      "testedHead": "7326da754f311c7f70aaf79a19a45f2fb20ae8b8",
+      "startedAt": "2026-11-07T20:42:47.275Z",
+      "endedAt": "2026-11-07T20:42:48.692Z",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "context": "Node22.22.2/npm10.9.9; lock80b0332e; taskset2,3 applies only to command descendants; original Vitest config nonDB1 worker, original preflight protocol2 workers; local host not claimed CI equivalent",
       "log": "/workspace/scratch/dx-final10-20261108/final-lint.log"
@@ -298,11 +256,11 @@
       "command": "npm run test:preflight",
       "status": "passed",
       "exitCode": 0,
-      "sourceFingerprint": "13acbfd1540fb485f9cdc0d17ccb1533c56a3bb416c42a17200921bb243d966a",
-      "testedHead": "3f96edb0f92afdd0667487e8c156904209f274b5",
-      "startedAt": "2026-11-07T19:53:11.537Z",
-      "endedAt": "2026-11-07T19:53:19.087Z",
-      "logSha256": "4098f7c00650f4ce6f752d2fecc984b0cc9aba6b0ba130382df8156ef4a316bf",
+      "sourceFingerprint": "5d70193fd3bdbf8eafda024f0f0e56686f655324472c6ae698cc6041ba30947e",
+      "testedHead": "7326da754f311c7f70aaf79a19a45f2fb20ae8b8",
+      "startedAt": "2026-11-07T20:42:48.782Z",
+      "endedAt": "2026-11-07T20:42:56.139Z",
+      "logSha256": "18fe044306c237fd22772cd85ee70b4c987a295878e507a2e72f0b8b7e6af0f9",
       "context": "Node22.22.2/npm10.9.9; lock80b0332e; taskset2,3 applies only to command descendants; original Vitest config nonDB1 worker, original preflight protocol2 workers; local host not claimed CI equivalent",
       "passed": 249,
       "failed": 0,
@@ -315,10 +273,10 @@
       "command": "npm run secret:scan",
       "status": "passed",
       "exitCode": 0,
-      "sourceFingerprint": "13acbfd1540fb485f9cdc0d17ccb1533c56a3bb416c42a17200921bb243d966a",
-      "testedHead": "3f96edb0f92afdd0667487e8c156904209f274b5",
-      "startedAt": "2026-11-07T19:53:19.164Z",
-      "endedAt": "2026-11-07T19:53:20.080Z",
+      "sourceFingerprint": "5d70193fd3bdbf8eafda024f0f0e56686f655324472c6ae698cc6041ba30947e",
+      "testedHead": "7326da754f311c7f70aaf79a19a45f2fb20ae8b8",
+      "startedAt": "2026-11-07T20:42:56.237Z",
+      "endedAt": "2026-11-07T20:42:56.903Z",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda",
       "context": "Node22.22.2/npm10.9.9; lock80b0332e; taskset2,3 applies only to command descendants; original Vitest config nonDB1 worker, original preflight protocol2 workers; local host not claimed CI equivalent",
       "log": "/workspace/scratch/dx-final10-20261108/final-secret.log"
@@ -332,16 +290,16 @@
       "passed": 34,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "3f96edb0f92afdd0667487e8c156904209f274b5",
-      "sourceFingerprint": "13acbfd1540fb485f9cdc0d17ccb1533c56a3bb416c42a17200921bb243d966a",
-      "startedAt": "2026-11-07T19:53:07.928Z",
-      "endedAt": "2026-11-07T19:54:10.233Z",
+      "testedHead": "7326da754f311c7f70aaf79a19a45f2fb20ae8b8",
+      "sourceFingerprint": "5d70193fd3bdbf8eafda024f0f0e56686f655324472c6ae698cc6041ba30947e",
+      "startedAt": "2026-11-07T20:41:54.381Z",
+      "endedAt": "2026-11-07T20:43:15.783Z",
       "log": "/workspace/scratch/dx-final10-20261108/journey-pg.log",
-      "logSha256": "79e4428b7103d14a93726a76ff811032b0f4bdce60859ca1e57bca2edc63b031",
+      "logSha256": "5ef3e91d7c726c8ffb20547f754572afdb73817663d7537a33efc8a542242814",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "48ca41f6c576769b80d6e23ed7aa89357e2f047900865e84bb26026e83f577bc"
+          "sha256": "f107e33f6350ec1f9720e218788b1fe8b7406248b32cc573dae74004a8cc55ce"
         }
       ],
       "context": "Actual assembled worktree on stated base; Node22.22.2/npm10.9.9 lock80b0332e; PG16.15 marked low-privilege owned loopback TEST databases, ordinary CI db for journey/execution, separate clock TEST db for technical/anchors. Original configForSuite, 1 active file worker, Node taskset2,3 only; PG container2CPU/2GiB; no claim host/CI hardware equivalent; exact run-owned schemas released and all process groups exited."
@@ -355,16 +313,16 @@
       "passed": 19,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "3f96edb0f92afdd0667487e8c156904209f274b5",
-      "sourceFingerprint": "13acbfd1540fb485f9cdc0d17ccb1533c56a3bb416c42a17200921bb243d966a",
-      "startedAt": "2026-11-07T19:54:10.374Z",
-      "endedAt": "2026-11-07T19:54:15.083Z",
+      "testedHead": "7326da754f311c7f70aaf79a19a45f2fb20ae8b8",
+      "sourceFingerprint": "5d70193fd3bdbf8eafda024f0f0e56686f655324472c6ae698cc6041ba30947e",
+      "startedAt": "2026-11-07T20:43:15.938Z",
+      "endedAt": "2026-11-07T20:43:20.488Z",
       "log": "/workspace/scratch/dx-final10-20261108/execution-native.log",
-      "logSha256": "e53d9f54b30cb6332b1988e3dfdba70ec6a643932db591ba49421679561abfc5",
+      "logSha256": "b0903688869d3d471b5ae917c8beeaefcadefa3224030e3e8475beceb75fefdb",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "ff54b486f0ef4349c6fee0fc9ae947ac5720df7853d4af74c9a2027a1cf12068"
+          "sha256": "af2a6e20d58fb6e35d3e7ffe8d4d0c5232d7dc3221c39c36520758712faae3bb"
         }
       ],
       "context": "Actual assembled worktree on stated base; Node22.22.2/npm10.9.9 lock80b0332e; PG16.15 marked low-privilege owned loopback TEST databases, ordinary CI db for journey/execution, separate clock TEST db for technical/anchors. Original configForSuite, 1 active file worker, Node taskset2,3 only; PG container2CPU/2GiB; no claim host/CI hardware equivalent; exact run-owned schemas released and all process groups exited."
@@ -378,16 +336,16 @@
       "passed": 20,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "3f96edb0f92afdd0667487e8c156904209f274b5",
-      "sourceFingerprint": "13acbfd1540fb485f9cdc0d17ccb1533c56a3bb416c42a17200921bb243d966a",
-      "startedAt": "2026-11-07T19:54:15.232Z",
-      "endedAt": "2026-11-07T19:54:34.950Z",
+      "testedHead": "7326da754f311c7f70aaf79a19a45f2fb20ae8b8",
+      "sourceFingerprint": "5d70193fd3bdbf8eafda024f0f0e56686f655324472c6ae698cc6041ba30947e",
+      "startedAt": "2026-11-07T20:43:20.642Z",
+      "endedAt": "2026-11-07T20:43:40.597Z",
       "log": "/workspace/scratch/dx-final10-20261108/technical-native.log",
-      "logSha256": "809bba56ff6144475af8791c658b3957b06525fac21f9c40ec01806558b8d7f5",
+      "logSha256": "c87f7ae519ff6e90abed1843bbfbca6dce6df98262fc5810e7b9a4a601bbf316",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "02018cf09f71e0d8d5f651a3323b79bb807feac0d7bd41f0972746bb045458c7"
+          "sha256": "dd8acdd7f85e73983094570b9015f60699a601aa3c783d776d05479a6bf86f07"
         }
       ],
       "context": "Actual assembled worktree on stated base; Node22.22.2/npm10.9.9 lock80b0332e; PG16.15 marked low-privilege owned loopback TEST databases, ordinary CI db for journey/execution, separate clock TEST db for technical/anchors. Original configForSuite, 1 active file worker, Node taskset2,3 only; PG container2CPU/2GiB; no claim host/CI hardware equivalent; exact run-owned schemas released and all process groups exited."
@@ -401,16 +359,16 @@
       "passed": 20,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "3f96edb0f92afdd0667487e8c156904209f274b5",
-      "sourceFingerprint": "13acbfd1540fb485f9cdc0d17ccb1533c56a3bb416c42a17200921bb243d966a",
-      "startedAt": "2026-11-07T19:55:44.050Z",
-      "endedAt": "2026-11-07T19:56:40.903Z",
+      "testedHead": "7326da754f311c7f70aaf79a19a45f2fb20ae8b8",
+      "sourceFingerprint": "5d70193fd3bdbf8eafda024f0f0e56686f655324472c6ae698cc6041ba30947e",
+      "startedAt": "2026-11-07T20:43:40.748Z",
+      "endedAt": "2026-11-07T20:44:33.670Z",
       "log": "/workspace/scratch/dx-final10-20261108/anchors-native.log",
-      "logSha256": "fa067456a599f7ea414873af3f80cce2fd8db528e2c38a0236b990e5ba6d3f04",
+      "logSha256": "548f35023d81c6505a363ed48edff911cd5f1bc35c1078beb6854ed27c38a813",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "3bee203ad0a7275af7bb0822779c75c746d4f1af8e21370bf8490ce328d7acbd"
+          "sha256": "42e3892cdfb3cbe1bf2f44f44e5a38351a348a341a115e5f0646ab853e7891ab"
         }
       ],
       "context": "Actual assembled worktree on stated base; Node22.22.2/npm10.9.9 lock80b0332e; PG16.15 marked low-privilege owned loopback TEST databases, ordinary CI db for journey/execution, separate clock TEST db for technical/anchors. Original configForSuite, 1 active file worker, Node taskset2,3 only; PG container2CPU/2GiB; no claim host/CI hardware equivalent; exact run-owned schemas released and all process groups exited."

@@ -14,7 +14,7 @@
 | 无母单首版计划 | 原开发任务、bulk/factory/rework/garment/receiving/packing evidence；关联开发有独立计划也不代表母单已采用 | `SlaOrderService` 先读取原生来源，仍返回legacy_unenrolled；开发无SLA窗口的任务以原实例单独保留。监督仅附带有权节点的`nativeFacts`，timeRole=sla_observation明确不是物理出货承诺；不生成计划、D或SLA评价。 |
 | 客户样板原确认：source+本轮，实际确认 | 历史route fact若从未存发生时间，仅有recorded_at不作实绩；新原确认操作同事务写payload.actualCompletedAt/timeQuality现场登记 | 原权限、准入和幂等不变；当前轮校验避免旧轮提交，新key重复也不重写第一次发生。旧payload缺时继续未知。Journey只取当前轮有效原事件。 |
 | 客户最终评语+技术生效：source+轮+整款+客户+精确finalCommentRef | 技术生效只证明准入；精确评语`occurred_at`证明登记的客户发生时间，不使用review完成或recorded_at | 只沿effectiveTechnicalEvidence当前引用取值；显式occurred_at按recorded/unverified保留，不假作核实及时率。新评语待复核时清原完成；新生效评语没发生时间仍保持缺时。 |
-| 唛架：当前preparation+fact | `BulkPreparationService.fact`原同步操作显式写businessNow到recorded_at；公开read已有同fact recordedAt | 从当前bulk.facts取“唛架完成”，不再只SELECT kind；前一preparation不混入本轮。原局部范围未完成时不写整单fact，原唯一约束及重复办理不变。 |
+| 唛架：当前preparation+fact | `BulkPreparationService.fact`原同步操作显式写businessNow到recorded_at；公开read已有同fact recordedAt | 按当前有效preparation直接读取“唛架完成”及发生时间；办理资格不抹掉暂停/特批结案前的已完成事实，前一preparation不混入本轮。原局部范围未完成时不写整单fact，原唯一约束及重复办理不变。 |
 | 回货收齐：原母单数量规则、有效收货/更正/删除 | `receivingSpan`原操作回放；可信collectedAt，或原补录receivedDate仅date精度 | 新保留collectedDate，不填午夜或更正提交时刻；更正后才跨线和历史映射不完整仍未知。保留原receivingSummary母单数量口径及PO差异，不擅改该领域业务规则。 |
 | 装箱：有效PO累计装箱修订 | `packingRevisionId/packingQuantity/packingRecordedAt`及原操作事件 | 已核recordedAt为保存/修订边界，不能无条件作实际物理发生。保留有效数量与原SLA适用性；Journey不编实际出货时间。原修订不足量后状态回退，不新增出货入口。 |
 | 工艺/总查/发裁片：preparation+批次+lineIds | 原factoryBatchTiming的enteredAt/dueAt/completedAt/evidence/snapshotId | 保留`nativeWindows`三种责任截止，不写成forecast；现有单位测试核三项和错轮/不可见兄弟PO，原业务锚点PG为相关回归。历史M现场源ID本轮未提供，不冒称现场已重验。 |
@@ -41,7 +41,7 @@
 
 未部署、未改Acceptance或生产真实订单；本PR未改大布局、设置或日历。最终远端Review、Gate、合并以准确HEAD/base回执记录，旧失败/跳过不写成通过。
 
-## 当前组装候选的本地结果
+## 首次提交7326da75的本地结果（保留历史）
 
 源码指纹 `13acbfd1540fb485f9cdc0d17ccb1533c56a3bb416c42a17200921bb243d966a`，实际base仍为 `3f96edb0f92afdd0667487e8c156904209f274b5`。未改源码的类型及单元输入在变更前捕获范围指纹，后续仅测试夹具断言改变，按原协议复用，没有把旧远端Gate拼入新候选。
 
@@ -60,3 +60,21 @@
 最后复核加强了两个真实边界：多当前实例不附加假聚合节点；新瞬时订正不能被旧date字段优先遮蔽。新增合并单元反例及原真实外发任务/游标用例的双实例断言通过。双实例夹具曾误从仅返回taskId的创建回执取state，已改为读取原TaskService状态，业务断言保留。
 
 所有自有进程组均已退出，各新建schema沿原精确契约释放。保留旧PR05 schema；不清理未知资源。提交后在全新检出复验，随后远端light/Review/最终Full分别核准确回执；当前表格不代表这些远端阶段已经完成。
+
+## Review与主控核查后的集中修复
+
+正式Codex Review覆盖7326da75，提出P2 `4503540207`：办理资格会让暂停/特批结案后的read.preparation为空，不等于原唛架事实消失。现改为按当前有效preparation直接读取原fact及其business发生时间，与是否还准继续办理无关。原生普通无工艺订单已通过“完成→暂停→读取状态/时间不丢→恢复”，未放宽暂停写权限。
+
+主控另指出的三个缺口均在本P01接通，不推给首页/详情或性能：
+
+- 完成的目录里程碑/数量汇总没有独立task enteredAt，不能擦掉别的可信当前范围起点。视觉读取保留真实任务缺进入时间的未知保护；仅有里程碑结束、日期型起点、无任何可信起点或已证完成早于候选起点，仍未知，不写入假enteredAt。
+- 原生`digital_development_rounds.published_at`由原publish命令以businessNow写入，并原子记录本轮inherited映射；这是本轮采用事件，已精确带round与sourceRef返回。旧成果完工仍独立，不作为本轮重新作业。`journey-progress-dates`按已证当前采用点汇总，旧轮/未来/缺引用仍未知；原节点日期组件仅增加已核采用日期的显示，无布局变更。
+- `reworkSlaEvidence.windows`已有有效worker reports完工及原派工起点；新的`attachJourneyNativeTimes`精确匹配当前reworkId、lineId和原记录，不把同PO兄弟返工、工资或责任结算混入。只有原业务已completed且所需有效窗口完整才给当前节点完成；活动业务不强行结案，失效/撤销/未来证据不复活旧时间。时间按登记质量保留，不擅作“已核实”。原收货首笔有效瞬间接作本范围进入；仅日期仍不造午夜。
+
+前瞻预计与历史实际分开：已有可信的剩余范围forecast在本次asOf之后，能够界定已经完成但缺精确发生时刻的过去要求；它们不再无条件拖空未来终点。没有未完成范围的有效forecast时，已完成缺时不能填asOf，也不能生成整单实际完成日。当前阶段/整单范围和原SLA业务日历、合法依赖/预测失效/权限仍沿原引擎；反例使用“已满足汇合门禁＋真实开裁任务运行”的合法组合，不用互相矛盾的业务状态或注入一个假预测掩盖缺口。
+
+开裁汇合逐项核过：现有开裁任务created事件只证明任务形成，未覆盖后来独立的款标/测试条件；不将它或实裁完工冒充全条件汇合的精确完成时刻。装箱原字段仍是累计数量登记/修订边界，没有独立可信物理发生值；保留真实数量与未知实绩。其它返工没有当前有效worker窗口或独立完成事件时，逐该实例缺证，不以所有返工都缺时概括。N/F/B/C/M现场源ID仍是另项尚缺材料，不能与这些已核源码漏接混淆。
+
+本轮最终源码指纹 `5d70193fd3bdbf8eafda024f0f0e56686f655324472c6ae698cc6041ba30947e`。182项相关单元、249项预检、全workspace类型、API构建、eslint与secret检查通过；四套完整原生数据库回归93项通过（Journey34、开发办理19、技术20、业务锚点20），全部0失败、0跳过，测试时源码未改变、各进程组已退出。此前类型断言修正的JavaScript字节等价证明与23项定向结果仅保留为历史中间记录；最后加入“已完成却含未来/矛盾实际日期不得算完整预计”的两个反例后，按真实逻辑变化重新完成上述最终影响范围验证，不将旧来源拼作当前结果。原命令、配置、实际数据库身份、资源边界与原始报告摘要逐项写入construction-evidence。
+
+首页P02仅隔离本地准备，未push/开PR；须在本P01真实合并后同步基线。P02/P03消费本P01共享日期与比例；P04/P05设置/应用与PERF01/03摘要切换保留这次时间事实和新鲜度边界。部署与现场验收仍由后续明确步骤执行，本线程未部署或改真实数据。

@@ -4,6 +4,7 @@ import {
   type JourneyVisualProgress, type OrderJourney,
 } from '@dx-rework/contracts/digital-production-journey';
 import { slaDateBoundary } from '@dx-rework/domain/digital-sla-plan';
+import { journeyActualPoint } from './journey-progress-dates.js';
 
 const instant = (at: string | null | undefined): number | null => {
   if (!at || !/T.*(?:Z|[+-]\d{2}:\d{2})$/.test(at)) return null;
@@ -42,7 +43,7 @@ export function naturalTimeRatio(start: string | null, expected: JourneyBusiness
 }
 
 /** Only effective current execution entries establish a start. Creation's exact
- * native creation event is its own start; inherited completion is not adoption.
+ * event is its own start; an old inherited work end is not current adoption.
  * Missing starts on an already-started scope cannot be replaced with updatedAt,
  * a sibling completion, an old round or the observation time.
  */
@@ -55,6 +56,7 @@ function recordedStart(rows: JourneyBusinessRequirement[], nodes: JourneyNode[],
   const now = instant(asOf);
   if (now === null) return null;
   const starts: number[] = [];
+  const milestoneUpperBounds: number[] = [];
   for (const node of current) {
     const creation = node.stage === 'creation' && ['order_information', 'product_development'].includes(node.key)
       && node.actualQuality === 'verified' ? node.actualAt : null;
@@ -62,9 +64,22 @@ function recordedStart(rows: JourneyBusinessRequirement[], nodes: JourneyNode[],
     if (at !== null) {
       if (at > now) return null;
       starts.push(at);
-    } else if (node.enteredAt || ['active', 'blocked', 'completed', 'inherited', 'cancelled'].includes(node.state)) return null;
+    } else {
+      if (node.enteredAt) return null;
+      const completion = journeyActualPoint(node, asOf);
+      if (node.state === 'inherited' && completion?.precision === 'instant') starts.push(Date.parse(completion.at));
+      // Native milestones and quantity aggregates have no separate task-entry
+      // event. Their effective completion does not erase an independent
+      // known scope start, nor become a fabricated enteredAt for that node.
+      else if (node.state === 'completed' && node.occurrence === null
+        && node.instanceId === `${node.key}:${node.round ?? 0}`) {
+        if (completion) milestoneUpperBounds.push(completion.precision === 'instant' ? Date.parse(completion.at)
+          : Date.parse(slaDateBoundary(completion.at).at!) - 1); // comparison bound only, never an actual event
+      } else if (['active', 'blocked', 'completed', 'inherited', 'cancelled'].includes(node.state)) return null;
+    }
   }
-  return starts.length ? new Date(Math.min(...starts)).toISOString() : null;
+  const first = starts.length ? Math.min(...starts) : null;
+  return first !== null && milestoneUpperBounds.every(end => end >= first) ? new Date(first).toISOString() : null;
 }
 
 /** Versioned presentation only. Reuses the original one-kind/every-effective-

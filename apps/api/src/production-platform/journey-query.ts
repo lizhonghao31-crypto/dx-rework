@@ -272,7 +272,7 @@ export class DigitalJourneyQuery {
       for(const [key,reference] of Object.entries(inherited) as Array<[string,{taskId:string;roundNumber:number}]>) {
         if(!journeyDefinition(key))continue;
         const value=emptyNode(key,"inherited",round);value.inheritedFrom={taskId:reference.taskId,round:reference.roundNumber};
-        value.progressApplicability=visibleTasks.some(task=>task.task_id===reference.taskId&&task.source_id===sid&&task.route_version===reference.roundNumber&&task.original_state==="completed")?"applicable":"unknown";
+        value.progressApplicability=visibleTasks.some(task=>task.task_id===reference.taskId&&task.source_id===sid&&task.route_version===reference.roundNumber&&task.original_state==="completed"&&!task.returned)?"applicable":"unknown";
         // Source-scoped permission covers source task history, but never an arbitrary inherited identity.
         if(visibleTasks.some(task=>task.task_id===reference.taskId))value.records=[record("task",reference.taskId,taskUrl(reference.taskId),reference.roundNumber)];
         replace(key,value);
@@ -453,8 +453,8 @@ export class DigitalJourneyQuery {
       gate.completionResult=gate.state==="completed"?"unknown":null;
       // The original synchronous completion command records businessNow in this
       // fact (not database ingestion time), scoped to the current preparation.
-      const marker=bulk.preparationId===currentPrep?bulk.facts.find(fact=>fact.kind==='唛架完成'):undefined;
-      setFact("bulk_marker",marker?"completed":currentPrep?"pending":"uncreated",[record("preparation",oid,`/ui/digital-pattern-room?section=bulk&bulkOrder=${oid}`,bulk.instructionVersion)],iso(marker?.recordedAt));
+      const marker=currentPrep?(await db.query("SELECT fact_id,recorded_at FROM digital_bulk_preparation_facts WHERE preparation_id=$1 AND kind='唛架完成'",[currentPrep])).rows[0]:null;
+      setFact("bulk_marker",marker?"completed":currentPrep?"pending":"uncreated",[record("preparation",oid,`/ui/digital-pattern-room?section=bulk&bulkOrder=${oid}`,bulk.instructionVersion)],iso(marker?.recorded_at));
       if(bulk.preshrink==="无需预缩"){
         const current=baseNodes.filter(node=>node.key==='warehouse_preshrink'&&node.current);
         if(!current.some(node=>node.state==='completed'||node.actualAt)){
@@ -575,7 +575,13 @@ export class DigitalJourneyQuery {
     }
     for(const node of baseNodes.filter(node=>node.state==='inherited'&&node.inheritedFrom&&node.progressApplicability==='applicable')){
       const original=baseNodes.find(value=>value.instanceId===node.inheritedFrom!.taskId&&value.state==='completed');
-      node.inheritedResult={actualAt:original?.actualAt??null,quality:original?.actualQuality??'missing',adoptedAt:null,reason:'尚无独立的本轮采用完成时点；原成果时间不作本轮或本阶段完成时间'};
+      // The immutable round publication atomically adopted the listed original
+      // result. Its business timestamp is adoption, not that result's work end.
+      const adoptedAt=round&&round>1&&currentDocument?.round_number===round?iso(currentDocument.published_at):null;
+      const valid=adoptedAt&&Date.parse(adoptedAt)<=Date.parse(asOf);
+      node.inheritedResult={actualAt:original?.actualAt??null,quality:original?.actualQuality??'missing',adoptedAt:valid?adoptedAt:null,
+        ...(valid?{adoptedRound:round!,adoptionSourceRef:`development-round:${sid}:${round}`} : {}),
+        reason:valid?'本轮发布时沿用原成果；不是本轮重新作业完工':'尚无独立的本轮采用完成时点；原成果时间不作本轮或本阶段完成时间'};
     }
     // Mutated nodes remain in the shared base list; all seven stages are always returned.
     const poDeliveryDates=!patternKinds&&orderAccess&&oid?await readOrderPoDeliveryDates(db,oid,lines.map(line=>line.id)):[];

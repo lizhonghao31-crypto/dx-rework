@@ -17,7 +17,13 @@ function latest(points:Point[]):Point|null{
  if(exact&&(!dates.length||dates.every(point=>Date.parse(exact.at)>=end(point.at))))return {...exact,quality};
  return {at:points.map(point=>point.precision==='date'?point.at:day(point.at)).sort().at(-1)!,precision:'date',quality};
 }
-function actualPoint(node:JourneyNode,asOf:string):Point|null{
+export function journeyActualPoint(node:JourneyNode,asOf:string):Point|null{
+ if(node.state==='inherited'){
+  const adoption=node.inheritedResult;
+  return node.inheritedFrom&&node.progressApplicability!=='unknown'&&adoption?.adoptionSourceRef&&adoption.adoptedRound===node.round
+   &&adoption.adoptedAt&&instant(adoption.adoptedAt)&&Date.parse(adoption.adoptedAt)<=Date.parse(asOf)
+   ?{at:adoption.adoptedAt,precision:'instant',quality:'recorded'}:null;
+ }
  if(node.state!=='completed'||node.actualQuality==='missing'||node.actualQuality==='unavailable')return null;
  if(node.timing?.assessmentIssue)return null;
  if(node.actualDate&&isCalendarDate(node.actualDate))return node.actualDate>day(asOf)||node.enteredAt&&instant(node.enteredAt)&&node.actualDate<day(node.enteredAt)?null:{at:node.actualDate,precision:'date',quality:node.actualQuality==='verified'?'verified':'recorded'};
@@ -40,7 +46,7 @@ export function journeyBusinessDates(order:OrderJourney):NonNullable<NonNullable
   const rows=input.filter(row=>row.applicability!=='not_applicable'),total=rows.length;
   const plans:Point[]=[],actuals:Point[]=[],forecasts:Point[]=[],bases=new Set<JourneyBusinessDateGroup['forecast']['bases'][number]>();
   const planReasons:string[]=[],actualReasons:string[]=[],forecastReasons:string[]=[];
-  let planned=0,actual=0,forecast=0;
+  let planned=0,actual=0,forecast=0,completedWithoutTime=0,pendingForecasts=0;
   for(const row of rows){
    const nodes=allNodes.filter(node=>row.instanceIds.includes(node.instanceId));
    const matching=timings.filter(timing=>journeyTimingKey(timing.id)===row.key);
@@ -51,14 +57,19 @@ export function journeyBusinessDates(order:OrderJourney):NonNullable<NonNullable
    if(targetPoints.length&&targetPoints.every(point=>point!==null)){planned++;plans.push(latest(targetPoints as Point[])!);}else planReasons.push(`${row.label}尚无完整对应的已采用计划日期`);
    let completedPoint:Point|null=null;
    if(row.completed){
-    if(nodes.some(node=>node.state==='inherited'))actualReasons.push(`${row.label}沿用原成果，本轮采用完成时间尚未取得，原成果时间不作本轮完成时间`);
-    else if(nodes.length===row.instanceIds.length&&nodes.length){const points=nodes.map(node=>actualPoint(node,progress.asOf));if(points.every(point=>point!==null))completedPoint=latest(points as Point[]);}
+    if(nodes.some(node=>node.state==='inherited'&&!journeyActualPoint(node,progress.asOf)))actualReasons.push(`${row.label}沿用原成果，本轮采用完成时间尚未取得，原成果时间不作本轮完成时间`);
+    else if(nodes.length===row.instanceIds.length&&nodes.length){const points=nodes.map(node=>journeyActualPoint(node,progress.asOf));if(points.every(point=>point!==null))completedPoint=latest(points as Point[]);}
     else if(!nodes.length&&matching.length&&(row.instanceIds.length===1&&matching.length===1||matching.every(timing=>timing.coverageComplete===true))&&matching.every(timing=>!timing.assessmentIssue&&timing.status.startsWith('completed')&&timing.actualEnd&&instant(timing.actualEnd)&&Date.parse(timing.actualEnd)<=Date.parse(progress.asOf)))completedPoint=latest(matching.map(timing=>({at:timing.actualEnd!,precision:'instant',quality:'recorded'})));
     if(completedPoint){actual++;actuals.push(completedPoint);}else if(!nodes.some(node=>node.state==='inherited'))actualReasons.push(`${row.label}业务已完成，尚无完整对应的实际完成时间`);
    }
    if(completedPoint){forecast++;forecasts.push(completedPoint);bases.add('actual');continue;}
    if(nodes.some(node=>node.state==='inherited')){forecastReasons.push(`${row.label}缺少本轮采用时间，不能以原成果时间推算`);continue;}
-   if(row.completed){forecastReasons.push(`${row.label}已完成但实际时间尚未取得`);continue;}
+   if(row.completed){
+    const contradictory=nodes.some(node=>node.timing?.assessmentIssue||Boolean((node.actualAt||node.actualDate)&&!journeyActualPoint(node,progress.asOf)))
+     ||matching.some(timing=>timing.assessmentIssue);
+    if(!contradictory)completedWithoutTime++;
+    forecastReasons.push(`${row.label}${contradictory?'的实际时间依据不一致，尚不能纳入完整预计':'已完成但实际时间尚未取得'}`);continue;
+   }
    if(!order.supervision||order.supervision.status==='limited'){forecastReasons.push(`${row.label}：${order.supervision?.status==='limited'?'当前岗位权限未包含本单整段时效依据':'尚未取得本次完整时效读取，请从本单座舱查看'}`);continue;}
    if(Date.parse(order.supervision.asOf)!==Date.parse(progress.asOf)){forecastReasons.push(`${row.label}的时效读取与本次业务快照时点不一致，请刷新`);continue;}
    if(matching.some(timing=>timing.forecastBasis==='actual'||timing.status.startsWith('completed'))){forecastReasons.push(`${row.label}原时效完成记录尚未覆盖当前未完成范围`);continue;}
@@ -72,9 +83,15 @@ export function journeyBusinessDates(order:OrderJourney):NonNullable<NonNullable
    if(points.some(point=>!point)||matching.some(timing=>timing.forecastBasis==='unknown'||timing.forecast.at&&Date.parse(timing.forecast.at)<Date.parse(progress.asOf))){
     forecastReasons.push(...matching.flatMap(timing=>timing.forecast.reasons.length?timing.forecast.reasons.map(reason=>`${row.label}：${reason}`):[`${row.label}的预计依据尚未齐全或已失效`]));continue;
    }
-   forecast++;forecasts.push(latest(points as Point[])!);
+   forecast++;pendingForecasts++;forecasts.push(latest(points as Point[])!);
    for(const timing of matching)bases.add(timing.forecastBasis==='plan'?'sla_plan':timing.forecastBasis as 'actual'|'remaining_estimate'|'standard_window');
   }
+  // Every completed native requirement precedes this observation even when its
+  // precise occurrence is missing. A valid remaining-scope forecast is at/after
+  // asOf and bounds that past work. It may establish the future endpoint without
+  // inventing any past actual time. With no remaining forecast, unknown completed
+  // dates still cannot become an overall completion or an asOf timestamp.
+  if(pendingForecasts)forecast+=completedWithoutTime;
   const actualIncomplete=rows.some(row=>row.applicability==='applicable'&&!row.completed);
   const actualDate=withPoint({...base(total),covered:actual,status:!total?'not_applicable':actualIncomplete?'incomplete':actual===total?'complete':'unknown',reasons:actualReasons},latest(actuals),!actualIncomplete&&actual===total);
   const planAvailable=progress.plan.status==='complete'||progress.plan.status==='partial';
