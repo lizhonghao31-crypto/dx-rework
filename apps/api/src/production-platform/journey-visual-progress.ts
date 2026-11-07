@@ -3,6 +3,8 @@ import {
   type JourneyBusinessDate, type JourneyBusinessRequirement, type JourneyNode,
   type JourneyVisualProgress, type OrderJourney,
 } from '@dx-rework/contracts/digital-production-journey';
+import { slaDateBoundary } from '@dx-rework/domain/digital-sla-plan';
+import { journeyActualPoint } from './journey-progress-dates.js';
 
 const instant = (at: string | null | undefined): number | null => {
   if (!at || !/T.*(?:Z|[+-]\d{2}:\d{2})$/.test(at)) return null;
@@ -15,16 +17,33 @@ const copyDate = (date: JourneyBusinessDate | undefined): JourneyBusinessDate =>
   ? { ...date, reasons: [...date.reasons], ...(date.coveredAt ? { coveredAt: { ...date.coveredAt } } : {}) }
   : unknownDate();
 
-/** A date-only observation is still a day, not an invented midnight instant. */
+/** A forecast day has the existing Beijing exclusive boundary for calculation.
+ * Keep its original date/precision for display; it is never an actual event.
+ */
+function forecastBoundary(expected: JourneyBusinessDate): number | null {
+  if (expected.status !== 'complete') return null;
+  if (expected.precision === 'instant') return instant(expected.at);
+  if (expected.precision !== 'date' || !expected.at) return null;
+  try {
+    return instant(slaDateBoundary(expected.at).at);
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Invalid SLA calendar date') return null;
+    throw error;
+  }
+}
+
+/** Natural elapsed time is independent from each node's business SLA calendar.
+ * A date-only start without an approved calculation boundary remains unknown.
+ */
 export function naturalTimeRatio(start: string | null, expected: JourneyBusinessDate, asOf: string): number | null {
   const from = instant(start), now = instant(asOf);
-  const until = expected.status === 'complete' && expected.precision === 'instant' ? instant(expected.at) : null;
+  const until = forecastBoundary(expected);
   if (from === null || until === null || now === null || until <= from) return null;
   return Math.max(0, Math.min(1, (now - from) / (until - from)));
 }
 
 /** Only effective current execution entries establish a start. Creation's exact
- * native creation event is its own start; inherited completion is not adoption.
+ * event is its own start; an old inherited work end is not current adoption.
  * Missing starts on an already-started scope cannot be replaced with updatedAt,
  * a sibling completion, an old round or the observation time.
  */
@@ -37,6 +56,7 @@ function recordedStart(rows: JourneyBusinessRequirement[], nodes: JourneyNode[],
   const now = instant(asOf);
   if (now === null) return null;
   const starts: number[] = [];
+  const milestoneUpperBounds: number[] = [];
   for (const node of current) {
     const creation = node.stage === 'creation' && ['order_information', 'product_development'].includes(node.key)
       && node.actualQuality === 'verified' ? node.actualAt : null;
@@ -44,9 +64,22 @@ function recordedStart(rows: JourneyBusinessRequirement[], nodes: JourneyNode[],
     if (at !== null) {
       if (at > now) return null;
       starts.push(at);
-    } else if (node.enteredAt || ['active', 'blocked', 'completed', 'inherited', 'cancelled'].includes(node.state)) return null;
+    } else {
+      if (node.enteredAt) return null;
+      const completion = journeyActualPoint(node, asOf);
+      if (node.state === 'inherited' && completion?.precision === 'instant') starts.push(Date.parse(completion.at));
+      // Native milestones and quantity aggregates have no separate task-entry
+      // event. Their effective completion does not erase an independent
+      // known scope start, nor become a fabricated enteredAt for that node.
+      else if (node.state === 'completed' && node.occurrence === null
+        && node.instanceId === `${node.key}:${node.round ?? 0}`) {
+        if (completion) milestoneUpperBounds.push(completion.precision === 'instant' ? Date.parse(completion.at)
+          : Date.parse(slaDateBoundary(completion.at).at!) - 1); // comparison bound only, never an actual event
+      } else if (['active', 'blocked', 'completed', 'inherited', 'cancelled'].includes(node.state)) return null;
+    }
   }
-  return starts.length ? new Date(Math.min(...starts)).toISOString() : null;
+  const first = starts.length ? Math.min(...starts) : null;
+  return first !== null && milestoneUpperBounds.every(end => end >= first) ? new Date(first).toISOString() : null;
 }
 
 /** Versioned presentation only. Reuses the original one-kind/every-effective-
@@ -84,7 +117,7 @@ export function journeyVisualProgress(order: OrderJourney, asOf: string): Journe
   const unknownStages = stages.filter(stage => stage.applicability === 'unknown').length;
   const expected = copyDate(dates?.overall.forecast), actual = copyDate(dates?.overall.actual);
   const startedAt = observed && !unknownStages ? recordedStart(rows, nodes, asOf) : null;
-  return { ruleVersion: 'journey-visual-v1', asOf,
+  return { ruleVersion: 'journey-visual-v2', asOf,
     actualRatio: unknownStages || !applicable.length ? null : applicable.reduce((sum, stage) => sum + stage.actualRatio!, 0) / applicable.length,
     timeRatio: naturalTimeRatio(startedAt, expected, asOf), startedAt,
     applicableStages: applicable.length, completedStages: applicable.filter(stage => stage.actualRatio === 1).length, unknownStages,

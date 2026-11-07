@@ -32,6 +32,14 @@ const nativeIt=(name:string,action:()=>Promise<void>)=>it(name,action,testExecut
     const journey=await new DigitalJourneyQuery(f.db).read(f.people.merchandiser!,ready.id,undefined,true);
     expect(journey.businessProgress?.asOf).toBe(journey.supervision?.asOf);
     if(scene)expect(journey.businessProgress?.asOf).toBe(initial);
+    if(mode==='ordinary'&&craft==='无'){
+     const marker=(await f.db.query("SELECT recorded_at FROM digital_bulk_preparation_facts WHERE preparation_id=$1 AND kind='唛架完成'",[ready.preparationId])).rows[0];
+     const sourceTime=new Date(marker.recorded_at).toISOString(),tasks=new DigitalProductionTaskService(f.db);
+     expect(journey.stages.flatMap(stage=>stage.nodes).find(node=>node.key==='bulk_marker'&&node.current)).toMatchObject({state:'completed',actualAt:sourceTime});
+     await tasks.controlResource(f.root,{kind:'order',id:ready.id},'pause','TEST pause cannot erase marker occurrence',randomUUID());
+     try{const paused=await new DigitalJourneyQuery(f.db).read(f.people.merchandiser!,ready.id,undefined,true);expect(paused.stages.flatMap(stage=>stage.nodes).find(node=>node.key==='bulk_marker'&&node.current)).toMatchObject({state:'completed',actualAt:sourceTime});}
+     finally{await tasks.controlResource(f.root,{kind:'order',id:ready.id},'resume','TEST return original execution',randomUUID());}
+    }
     const preparationWindows=(await f.db.query('SELECT kind,started_at,minutes FROM digital_preparation_windows WHERE production_order_id=$1 ORDER BY kind',[ready.id])).rows;
     expect(preparationWindows).toHaveLength(2);for(const window of preparationWindows){expect(window.minutes).toBe(1440);if(scene)expect(window.started_at.toISOString()).toBe(initial);else expect(window.started_at.getTime()).toBeGreaterThanOrEqual(wall);}
     const budget=(await f.db.query(`SELECT t.completed_at,c.occurred_at FROM digital_budget_preparations p JOIN digital_production_tasks t USING(task_id) JOIN digital_production_task_conditions c ON c.task_id=t.task_id AND c.condition_key='business_recorded' WHERE p.production_order_id=$1`,[ready.id])).rows[0];

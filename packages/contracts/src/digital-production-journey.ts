@@ -88,7 +88,13 @@ export type JourneyTiming = {
   current:{at:string|null;exclusive:boolean;reasons:string[]};
 };
 export type JourneyCoverage = {key:typeof JOURNEY_COVERAGE_KEYS[number];message:string};
-export type JourneySupervision = {assessment?:"complete"|"partially_unavailable";requestId?:string;asOf:string;status:"planned"|"legacy_unenrolled"|"limited";originalRevision:number|null;currentRevision:number|null;nodes:JourneyTiming[];coverage:JourneyCoverage[];customerReminderDate:string|null};
+/** Native observations remain readable without inventing an adopted SLA plan.
+ * These references do not grant applicability, a deadline, forecast or rating.
+ */
+/** Original SLA adapter observations. A registration boundary (e.g. cumulative
+ * packing) is not automatically a physical completion or shipment timestamp. */
+export type JourneyNativeFact = {id:string;sourceRef:string;timeRole:'sla_observation';startedAt:string|null;completedAt:string|null;businessCompleted:boolean|null};
+export type JourneySupervision = {assessment?:"complete"|"partially_unavailable";requestId?:string;asOf:string;status:"planned"|"legacy_unenrolled"|"limited";originalRevision:number|null;currentRevision:number|null;nodes:JourneyTiming[];nativeFacts?:JourneyNativeFact[];coverage:JourneyCoverage[];customerReminderDate:string|null};
 export type JourneyNode = {
   planningOnly?:boolean;
   responsibilityRole?:string;
@@ -120,7 +126,7 @@ export type JourneyNode = {
   risks: Array<"overdue" | "due_soon" | "blocked" | "unknown">;
   blockers: Array<{ key: string; label: string; ownerId: string | null; record: JourneyRecord | null }>;
   records: JourneyRecord[]; inheritedFrom: { taskId: string; round: number } | null;
-  inheritedResult?:{actualAt:string|null;quality:JourneyNode['actualQuality'];adoptedAt:null;reason:string};
+  inheritedResult?:{actualAt:string|null;quality:JourneyNode['actualQuality'];adoptedAt:string|null;adoptedRound?:number;adoptionSourceRef?:string;reason:string};
   countsInProgress: boolean; unavailableReason: "permission" | "fact_not_recorded" | null;
 };
 export type OrderJourney = {
@@ -202,7 +208,7 @@ export type JourneyVisualStage = {
   risk: 'overdue' | 'due_soon' | 'normal' | 'unknown';
 };
 export type JourneyVisualProgress = {
-  ruleVersion: 'journey-visual-v1'; asOf: string;
+  ruleVersion: 'journey-visual-v1' | 'journey-visual-v2'; asOf: string;
   actualRatio: number | null; timeRatio: number | null; startedAt: string | null;
   applicableStages: number; completedStages: number; unknownStages: number;
   expected: JourneyBusinessDate; actual: JourneyBusinessDate;

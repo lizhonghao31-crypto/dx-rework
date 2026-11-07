@@ -231,6 +231,8 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     }catch(error){await seed.query("ROLLBACK");throw error;}finally{seed.release();}
     const replaced=await journeys.read(rootActor,order.productionOrderId,undefined,true);
     expect(replaced.stages.flatMap(stage=>stage.nodes).find(node=>node.key==='sourcing_preparation')?.records.map(record=>record.domain)).toEqual(['sourcing']);
+    expect(replaced.stages.flatMap(stage=>stage.nodes).find(node=>node.key==='sourcing_preparation')).toMatchObject({instanceId:task.taskId,
+      enteredAt:'2026-10-01T00:00:00.000Z',actualAt:'2026-10-01T12:00:00.000Z',actualQuality:'verified',owner:{id:merchandiser}});
     expect(replaced.riskHistory?.some(item=>item.eventId===completed)).toBe(true);
     const seen=first.items.map(item=>item.id);let cursor=first.nextCursor;
     while(cursor){const page=await journeys.logs(rootActor,order.productionOrderId,cursor);expect(page.asOf).toBe(first.asOf);seen.push(...page.items.map(item=>item.id));cursor=page.nextCursor;}
@@ -239,6 +241,13 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     while(cursor){const page=await journeys.logs(rootActor,order.productionOrderId,cursor);all.push(...page.items.map(item=>item.id));cursor=page.nextCursor;}
     expect(all.sort()).toEqual(expected);
     await expect(journeys.logs(actor(stranger),order.productionOrderId)).rejects.toMatchObject({statusCode:404});
+    const sibling=await createTask({resource:{kind:'order',id:order.productionOrderId},kind:'sourcing_preparation',routeId:randomUUID(),routeVersion:1,occurrence:2,assigneeId:merchandiser});
+    const instances=(await journeys.read(rootActor,order.productionOrderId,undefined,true)).stages.flatMap(stage=>stage.nodes).filter(node=>node.key==='sourcing_preparation'&&node.current);
+    expect(instances).toHaveLength(2);
+    expect(instances.map(node=>node.instanceId).sort()).toEqual([task.taskId,sibling.taskId].sort());
+    expect(instances.find(node=>node.instanceId===task.taskId)).toMatchObject({state:'completed',actualAt:'2026-10-01T12:00:00.000Z'});
+    const originalSibling=await tasks.read(rootActor,sibling.taskId);
+    expect(instances.find(node=>node.instanceId===sibling.taskId)).toMatchObject({state:originalSibling.state==='ready'?'active':originalSibling.state,actualAt:null});
   });
   it("allows Root JSON all-match export but rejects an ordinary merchandiser with legitimate list access",{timeout:testExecutionConfig.correctnessTimeoutMs},async()=>{
     const search="TEST-J-EXPORT-SCOPE";
@@ -464,7 +473,7 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
       expect(response.headers['cache-control']).toBe('no-store');
       expect(response.json()).toMatchObject({display:{ruleVersion:'cockpit-display-v1'},operationLog:{items:expect.any(Array)}});
       const body=response.json();
-      expect(body.visualProgress).toMatchObject({ruleVersion:'journey-visual-v1',asOf:body.asOf});
+      expect(body.visualProgress).toMatchObject({ruleVersion:'journey-visual-v2',asOf:body.asOf});
       expect(body.businessProgress.asOf).toBe(body.asOf);
       expect(body.visualProgress.expected).toEqual(body.businessProgress.dates.overall.forecast);
       expect(body.visualProgress.actual).toEqual(body.businessProgress.dates.overall.actual);
@@ -783,5 +792,33 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     expect(second.businessProgress!.plan.revision).toBe(2);expect(second.businessProgress!.plan.planId).not.toBe(adopted.businessProgress!.plan.planId);
     expect(second.businessProgress!.completed).toBe(before.businessProgress!.completed);
     await expect(journeys.read(actor(stranger),id,undefined,true)).rejects.toMatchObject({statusCode:404});
+  },testExecutionConfig.correctnessTimeoutMs);
+
+  it('Final10 reads native task and receiving evidence for an unenrolled legacy mother without creating a plan',async()=>{
+    // Synthetic historical fixture in this run's owned TEST schema only. Its
+    // absence of P0 is real, not a mocked repository or deleted immutable plan.
+    const source=await identity.createSource(actor(),{developmentType:'头版',designStyleNo:'TEST-FINAL10-LEGACY-NATIVE',temporaryStyleNo:null,customerCode:'PD'},randomUUID());
+    const id=randomUUID(),lineId=randomUUID(),rootActor=actor(root,['root_superuser']);
+    await db.query("INSERT INTO production_order_roots(production_order_id,workflow_generation,created_by) VALUES($1,'digital_production_v1',$2)",[id,designer]);
+    await db.query("INSERT INTO digital_production_orders(production_order_id,source_id,customer_code,product_group,design_style_no,order_date,created_by,creation_hash) VALUES($1,$2,'PD','男装','TEST-FINAL10-LEGACY-NATIVE',$3,$4,repeat('a',64))",[id,source.sourceId,beijingCalendarDate(new Date()),designer]);
+    await db.query("INSERT INTO digital_production_po_lines(line_id,production_order_id,position,po_number,color) VALUES($1,$2,1,'TEST-LEGACY-PO','黑')",[lineId,id]);
+    await db.query("INSERT INTO digital_production_po_sizes(line_id,size,quantity) VALUES($1,'M',10)",[lineId]);
+    const task=await createTask({resource:{kind:'source',id:source.sourceId},kind:'development_shipping',routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:designer});
+    const entered=new Date(Date.now()-3600_000).toISOString(),completed=new Date(Date.now()-1800_000).toISOString();
+    await db.query("UPDATE digital_production_tasks SET state='completed',entered_at=$2,completed_at=$3,entered_quality='现场登记',completed_quality='已核实' WHERE task_id=$1",[task.taskId,entered,completed]);
+    await db.query("INSERT INTO digital_production_task_events(event_id,task_id,event_kind,actor_id,occurred_at,time_quality) VALUES($1,$2,'completed',$3,$4,'已核实')",[randomUUID(),task.taskId,designer,completed]);
+    const before=(await db.query('SELECT count(*)::int AS n FROM digital_sla_plans WHERE production_order_id=$1',[id])).rows[0].n;
+    expect(before).toBe(0);
+    const read=await new SlaOrderService(db).read(rootActor,id);
+    expect(read.status).toBe('legacy_unenrolled');
+    expect(read.facts.receiving_span).toMatchObject({businessCompleted:false});
+    expect(read.facts[`development_shipping:task:${task.taskId}`]).toMatchObject({businessCompleted:true,startedAt:entered,completedAt:completed});
+    expect(read).not.toHaveProperty('evaluationPlan');expect(read).not.toHaveProperty('nodes');
+    const detail=await journeys.read(rootActor,id,undefined,true),native=detail.stages.flatMap(stage=>stage.nodes).find(node=>node.instanceId===task.taskId)!;
+    expect(native).toMatchObject({current:true,state:'completed',actualAt:completed,actualQuality:'verified',enteredAt:entered});
+    expect(detail.supervision).toMatchObject({status:'legacy_unenrolled',originalRevision:null,currentRevision:null,nodes:[]});
+    expect(detail.supervision!.nativeFacts).toEqual(expect.arrayContaining([expect.objectContaining({id:'receiving_span',completedAt:null,businessCompleted:false})]));
+    await expect(journeys.read(actor(stranger),id,undefined,true)).rejects.toMatchObject({statusCode:404});
+    expect((await db.query('SELECT count(*)::int AS n FROM digital_sla_plans WHERE production_order_id=$1',[id])).rows[0].n).toBe(before);
   },testExecutionConfig.correctnessTimeoutMs);
 });

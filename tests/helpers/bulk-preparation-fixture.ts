@@ -215,8 +215,11 @@ export async function exerciseBulkPreparation(db:Pool,fixture:{order:DigitalOrde
   expect((await forms.read(designer,source.sourceId,undefined,1)).document!.orderDate).toBe(publishedDevelopment.document!.orderDate);
   await expect(instruction.read(worker,id)).rejects.toMatchObject({statusCode:404});
   expect((await bulk.read(primary,id))).toMatchObject({customerConfirmed:false,instructionValid:false,preparationId:null});
-  await confirmTechnicalSample(db,actors.root,source.sourceId,worker.actorId,1);
+  // A newly published round must reject a fresh command for the previous round,
+  // not silently accept it while leaving the current release unconfirmed.
+  await expect(confirmTechnicalSample(db,actors.root,source.sourceId,worker.actorId,1)).rejects.toThrow('开发轮次已更新');
   expect((await bulk.read(primary,id)).customerConfirmed).toBe(false);
+  expect((await db.query("SELECT 1 FROM digital_development_route_facts WHERE source_id=$1 AND route_version=2 AND kind='客户样板确认'",[source.sourceId])).rowCount).toBe(0);
   await instruction.save(primary,id,{expectedVersion:2,orderVersion:order.version,document:{...doc,comments:'TEST核对第二轮开发'}},randomUUID());
   const unreviewed=await instruction.read(primary,id);expect(unreviewed.sourceRound).toBe(1);expect(unreviewed.latestSourceRound).toBe(2);expect(unreviewed.document.comments).toBe('TEST核对第二轮开发');
   await expect(instruction.publish(primary,id,{expectedVersion:3,orderVersion:order.version},randomUUID())).rejects.toMatchObject({statusCode:409});

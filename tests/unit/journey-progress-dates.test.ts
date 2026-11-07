@@ -5,6 +5,7 @@ import {journeyStages} from '../../apps/api/src/production-platform/journey-proj
 import {journeyBusinessProgress,type AdoptedRequirementPlan} from '../../apps/api/src/production-platform/journey-business-progress.js';
 import {journeyBusinessDates} from '../../apps/api/src/production-platform/journey-progress-dates.js';
 import {attachJourneySupervision} from '../../apps/api/src/production-platform/journey-supervision.js';
+import {journeyVisualProgress} from '../../apps/api/src/production-platform/journey-visual-progress.js';
 
 const now='2026-11-05T00:00:00.000Z',time={now,scenarioId:null,revision:0};
 function fixture(keys=['bulk_pattern','bulk_cutting']):OrderJourney{
@@ -14,9 +15,9 @@ function fixture(keys=['bulk_pattern','bulk_cutting']):OrderJourney{
 const node=(order:OrderJourney,key:string)=>order.stages.flatMap(stage=>stage.nodes).find(node=>node.key===key)!;
 const adopt=(keys=['bulk_pattern','bulk_cutting'],revision=1,date='2026-11-10'):AdoptedRequirementPlan=>({planId:`adopted-${revision}`,revision,targets:new Map(keys.map(key=>[key,[{source:'series_plan' as const,planId:`adopted-${revision}`,revision,scopeRef:'whole',at:date,precision:'date' as const,retainedFromRevision:null}]]))});
 const read=(order:OrderJourney,plan:AdoptedRequirementPlan|null=null)=>{order.businessProgress=journeyBusinessProgress(order,now,plan);return journeyBusinessDates(order);};
-function supervise(order:OrderJourney,fact:SlaNodeFact|undefined){
- const plan:SlaPlan={nodes:[{id:'bulk_pattern',label:'大货纸样',stage:3,parameterKey:'bulk_pattern',kind:'duration',minutes:120,offsetDays:null,applicable:'yes',countsProgress:true,dependsOn:[],anchorKey:'publication',targetKey:null,includedIn:null,includedPosition:'start'}],anchors:{publication:{precision:'instant',value:now,source:'TEST native publication'}},warningPercent:70,stageBufferMinutes:0};
- const facts=fact?{bulk_pattern:fact}:{};
+function supervise(order:OrderJourney,fact:SlaNodeFact|undefined,key='bulk_pattern'){
+ const plan:SlaPlan={nodes:[{id:key,label:key,stage:key==='bulk_cutting'?4:3,parameterKey:key,kind:'duration',minutes:120,offsetDays:null,applicable:'yes',countsProgress:true,dependsOn:[],anchorKey:'publication',targetKey:null,includedIn:null,includedPosition:'start'}],anchors:{publication:{precision:'instant',value:now,source:'TEST native publication'}},warningPercent:70,stageBufferMinutes:0};
+ const facts=fact?{[key]:fact}:{};
  attachJourneySupervision(order,plan,plan,evaluateSlaPlan(plan,facts,time,{mode:'read_projection'}),time,{original:1,current:1},false,{facts});
  return plan;
 }
@@ -43,6 +44,38 @@ it('P02-03: inherited original completion is not a new-round adoption or phase c
  expect(result.overall.actual).toMatchObject({status:'unknown',at:null});
  expect(result.overall.actual.reasons.join('；')).toContain('本轮采用完成时间尚未取得');
  expect(old.actualAt).toBe('2026-11-01T00:00:00.000Z');
+});
+
+it('Final10 an explicit effective round adoption supplies this-round completion without copying original work time',()=>{
+ const order=fixture(['development_pattern']),current=node(order,'development_pattern');
+ order.adoptedRound=2;order.selectedRound=2;current.round=2;current.state='inherited';current.inheritedFrom={taskId:'TEST-original',round:1};
+ current.inheritedResult={actualAt:'2026-11-01T00:00:00Z',quality:'verified',adoptedAt:'2026-11-04T06:00:00Z',adoptedRound:2,adoptionSourceRef:'development-round:source:2',reason:'本轮发布时沿用'};
+ expect(read(order).overall.actual).toMatchObject({status:'complete',at:'2026-11-04T06:00:00Z',precision:'instant',quality:'recorded'});
+ expect(current.actualAt).toBeNull();expect(current.enteredAt).toBeNull();
+ current.inheritedResult.adoptedRound=1;expect(read(order).overall.actual.at).toBeNull();
+ current.inheritedResult.adoptedRound=2;current.inheritedResult.adoptedAt='2026-11-06T00:00:00Z';expect(read(order).overall.actual.at).toBeNull();
+});
+
+it('Final10 real completed gate and running native task retain a whole forecast and visual window without manufacturing a gate event',()=>{
+ const order=fixture(['bulk_cutting','cutting_gate']),gate=node(order,'cutting_gate'),task=node(order,'bulk_cutting');
+ gate.state='completed';gate.instanceId='cutting_gate:0';gate.round=null;
+ task.enteredAt='2026-11-04T23:00:00.000Z';task.occurrence=1;
+ supervise(order,{startedAt:task.enteredAt,evidence:'TEST original active cutting'},'bulk_cutting');
+ const dates=read(order);order.businessProgress!.dates=dates;
+ expect(dates.overall.forecast).toMatchObject({status:'complete',at:'2026-11-05T01:00:00.000Z',covered:2,total:2,bases:['standard_window']});
+ expect(dates.overall.actual).toMatchObject({status:'incomplete',at:null});
+ expect(journeyVisualProgress(order,now)).toMatchObject({startedAt:task.enteredAt,timeRatio:.5,actualRatio:.5});
+ expect(gate).toMatchObject({state:'completed',actualAt:null,enteredAt:null});
+ task.state='completed';task.actualAt=null;task.actualQuality='missing';
+ expect(read(order).overall.forecast.at).toBeNull();
+});
+
+it.each(['instant','date'])('Final10 a contradictory completed %s cannot masquerade as a merely missing past timestamp',precision=>{
+ const order=fixture(['bulk_cutting','cutting_gate']),gate=node(order,'cutting_gate'),task=node(order,'bulk_cutting');
+ gate.state='completed';gate.instanceId='cutting_gate:0';gate.round=null;gate.actualQuality='verified';
+ if(precision==='date')gate.actualDate='2026-11-06';else gate.actualAt='2026-11-06T00:00:00Z';
+ task.enteredAt='2026-11-04T23:00:00.000Z';supervise(order,{startedAt:task.enteredAt,evidence:'TEST original current task'},'bulk_cutting');
+ expect(read(order).overall.forecast).toMatchObject({status:'partial',at:null,covered:1,total:2});
 });
 
 it('P02-11: partial adoption retains a covered-range date without promoting it to a whole-order target',()=>{

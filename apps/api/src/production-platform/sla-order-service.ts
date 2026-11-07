@@ -25,7 +25,7 @@ import { SlaPlanRepository } from "./sla-plan-repository.js";
 import { buildOrderSlaRoute, type SlaRouteSelection } from "./sla-route.js";
 import { developmentDocumentRow } from "./development-round-repository.js";
 import { developmentSlaPlan } from "./development-sla-enrollment.js";
-import { developmentEvaluationPlan, developmentSlaEvidence } from "./development-sla-evidence.js";
+import { developmentEvaluationPlan, developmentNativeFacts, developmentSlaEvidence } from "./development-sla-evidence.js";
 import { applyOrderCreationEvidence, orderCreationSlaEvidence } from "./sla-order-evidence.js";
 
 /** Creation and reads reuse order authorization; there is no generic event/date edit endpoint. */
@@ -103,14 +103,14 @@ export class SlaOrderService {
       const repo = new SlaPlanRepository(client), time = validateBusinessTime(await (this.clock instanceof ContextBusinessClock?this.clock.withTransaction(client):this.clock).read({ kind: "order", id: orderId }));
       const history = await repo.available() ? await repo.plans(orderId) : [];
       const current = history.at(-1);
-      if (!current) { return { status: "legacy_unenrolled" as const, time, reason: "此历史订单未建立首版计划，未补造历史时间" }; }
-      if (current.time.scenarioId !== time.scenarioId) throw new Error("SLA clock scope mismatch");
+      if (current && current.time.scenarioId !== time.scenarioId) throw new Error("SLA clock scope mismatch");
       const sourceId = (await client.query("SELECT source_id FROM digital_production_orders WHERE production_order_id=$1", [orderId])).rows[0]?.source_id;
       const development = sourceId ? await developmentSlaEvidence(client, sourceId, time) : null;
       // Legacy SLA observations are fallback only. A corrected native fact (including an
       // explicitly unknown completion) must replace, not merge with, its obsolete copy.
-      const facts = applyOrderCreationEvidence({ ...await repo.facts(orderId), ...development?.facts },
-        await orderCreationSlaEvidence(client, orderId, history[0]!));
+      const facts = applyOrderCreationEvidence({ ...(current?await repo.facts(orderId):{}),
+        ...(sourceId && (!current || !development) ? await developmentNativeFacts(client,sourceId,time) : {}), ...development?.facts },
+        history[0]?await orderCreationSlaEvidence(client, orderId, history[0]):{});
       const {facts:bulk,preshrink,preshrinkCorrection}=await bulkSlaEvidence(client,orderId);
       // Only the current preparation's structured correction supersedes a legacy
       // observation. Remove its evaluation copy, never the immutable saved fact.
@@ -127,6 +127,11 @@ export class SlaOrderService {
        ...(span?.firstEffectiveReceipt?.receivedAt?{startedAt:span.firstEffectiveReceipt.receivedAt}:{}),...(span?.collectedAt?{completedAt:span.collectedAt}:{})};
       const packing=packingSlaEvidence(receiving);Object.assign(facts,packing.facts);
       const rework=await reworkSlaEvidence(client,orderId);Object.assign(facts,rework.facts);
+      // No adopted plan means no synthetic target/evaluation, not no native work.
+      // Keep the same authorized snapshot and original evidence adapters.
+      if (!current) return { status: 'legacy_unenrolled' as const, time,
+        reason: '此历史订单未建立首版计划，未补造历史时间',
+        facts, development, factory, rework, garments, receiving, packing };
       const applications=await slaApplications(client,orderId);
       if(applications.length){
         const originalSnapshot=await new SlaConfigurationRepository(client).orderSnapshot(orderId,1);

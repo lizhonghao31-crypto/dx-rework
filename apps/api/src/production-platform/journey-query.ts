@@ -45,6 +45,7 @@ import {factorySlaEvidence} from './factory-sla-evidence.js';
 import {attachJourneyFactoryDeadlines} from './journey-factory-deadlines.js';
 import {journeyBusinessDates} from './journey-progress-dates.js';
 import {journeyVisualProgress} from './journey-visual-progress.js';
+import {journeyNodeFactTarget,mergeJourneyNodeFact} from './journey-node-fact.js';
 
 const iso = (value: Date|string|null|undefined) => value == null ? null : new Date(value).toISOString();
 type Candidate = { source: {development_type:string;source_id:string;created_by:string;design_style_no:string;temporary_style_no:string|null;customer_code:string|null;created_at:string}|null;
@@ -240,8 +241,27 @@ export class DigitalJourneyQuery {
       return node;
     });
     const replace=(key:string,node:JourneyNode)=>{const index=baseNodes.findIndex(value=>value.key===key);if(index>=0)baseNodes[index]=node;else baseNodes.push(node);};
-    const setFact=(key:string,state:JourneyState,records:JourneyRecord[]=[],actualAt:string|null=null,owner:JourneyNode["owner"]=null)=>{
-      const node=emptyNode(key,state);node.records=records;node.actualAt=actualAt;node.actualQuality=actualAt?"verified":"missing";node.completionResult=state==="completed"?"unknown":null;node.owner=owner;node.ownerStatus=owner?"assigned":"unknown";node.operator=state==="completed"?owner:null;replace(key,node);return node;
+    const setFact=(key:string,state:JourneyState,records:JourneyRecord[]=[],actualAt?:string|null,owner?:JourneyNode["owner"])=>{
+      const current=baseNodes.filter(node=>node.key===key&&node.current);
+      // A kind-level fact cannot choose one of several real PO/round instances.
+      // Keep those instances; only an unambiguous current instance or its own
+      // catalogue slot may receive this observation.
+      const factRound=journeyDefinition(key)?.stage==='development'?round:null;
+      const previous=journeyNodeFactTarget(baseNodes,key,factRound);
+      const basis=previous??emptyNode(key,state,factRound);
+      const node=mergeJourneyNodeFact(basis,{key,instanceId:basis.instanceId,round:basis.round,current:true,state,
+        // Presentation records keep their original native entry. The separate
+        // authorized-task set already retains task history and log access.
+        records,actualAt,
+        countsInProgress:journeyDefinition(key)!.count&&!['not_applicable','unavailable','inherited'].includes(state),
+        sla:state==='not_applicable'?'not_set':basis.sla==='not_set'||basis.sla==='unavailable'?basis.sla:state==='completed'?'finished':basis.enteredAt?'running':'not_started',
+        ...(actualAt!==undefined?{actualQuality:actualAt?'verified':'missing'}:{}),
+        ...(owner!==undefined?{owner,ownerStatus:owner?'assigned':'unassigned',...(state==='completed'?{operator:owner}:{})}:{}),
+      })!;
+      if(state==='completed'&&actualAt!==undefined){const completion=journeyCompletion(node.expectedAt,node.actualAt,node.actualQuality==='verified');node.completionResult=completion.result;node.overdueSeconds=completion.overdueSeconds;}
+      const index=previous?baseNodes.indexOf(previous):-1;
+      if(index>=0)baseNodes[index]=node;else if(current.length<=1)baseNodes.push(node);
+      return node;
     };
     const chosenIdentity=orderAccess?order!:(source??order!);
     const creator=source?.created_by??order!.created_by;
@@ -252,7 +272,7 @@ export class DigitalJourneyQuery {
       for(const [key,reference] of Object.entries(inherited) as Array<[string,{taskId:string;roundNumber:number}]>) {
         if(!journeyDefinition(key))continue;
         const value=emptyNode(key,"inherited",round);value.inheritedFrom={taskId:reference.taskId,round:reference.roundNumber};
-        value.progressApplicability=visibleTasks.some(task=>task.task_id===reference.taskId&&task.source_id===sid&&task.route_version===reference.roundNumber&&task.original_state==="completed")?"applicable":"unknown";
+        value.progressApplicability=visibleTasks.some(task=>task.task_id===reference.taskId&&task.source_id===sid&&task.route_version===reference.roundNumber&&task.original_state==="completed"&&!task.returned)?"applicable":"unknown";
         // Source-scoped permission covers source task history, but never an arbitrary inherited identity.
         if(visibleTasks.some(task=>task.task_id===reference.taskId))value.records=[record("task",reference.taskId,taskUrl(reference.taskId),reference.roundNumber)];
         replace(key,value);
@@ -392,7 +412,26 @@ export class DigitalJourneyQuery {
       const bulk=await journeyMeasure('bulk',()=>new BulkPreparationService(this.database).read(actor,oid,db));
       const gates=await journeyMeasure('bulk',()=>new BulkPreparationService(this.database).gates(db,oid));
       const bulkUrl=`/ui/digital-production?bulk=${oid}`;
-      setFact("customer_sample",bulk.customerConfirmed?"completed":"pending",sid?[record("development",sid,developmentUrl(sid,gates.source?bulk.sourceRound??round??1:currentDocument?round??1:undefined),bulk.sourceRound)]:[]);
+      const confirmation=gates.customerSampleFact?.payload;
+      let confirmationTime=confirmation&&['现场登记','已核实'].includes(confirmation.timeQuality)&&typeof confirmation.actualCompletedAt==='string'
+        &&/T.*(?:Z|[+-]\d{2}:\d{2})$/.test(confirmation.actualCompletedAt)&&Number.isFinite(Date.parse(confirmation.actualCompletedAt))
+        &&Date.parse(confirmation.actualCompletedAt)<=Date.parse(asOf)?iso(confirmation.actualCompletedAt):null;
+      let confirmationOperator=gates.customerSampleFact?.actor_id as string|undefined;
+      let confirmationQuality:JourneyNode['actualQuality']='verified';
+      if(bulk.customerConfirmed&&gates.technical?.finalCommentRef&&sid&&gates.source){
+        // Technical effectiveness permits the route, while the customer's own
+        // explicit occurrence (not review/recording time) proves confirmation.
+        const comment=(await db.query(`SELECT comment_id,occurred_at,recorded_by FROM digital_development_final_comments
+          WHERE source_id=$1 AND round_number=$2 AND comment_id=$3 AND version=$4 AND scope_ref='整款' AND is_final AND decision='approved'`,
+          [sid,gates.source.round_number,gates.technical.finalCommentRef.id,gates.technical.finalCommentRef.version])).rows[0];
+        if(comment?.occurred_at&&Date.parse(iso(comment.occurred_at)!)<=Date.parse(asOf)){
+          confirmationTime=iso(comment.occurred_at);confirmationOperator=comment.recorded_by;confirmationQuality='unverified';
+        }
+      }
+      // Technical readiness is a valid alternate gate, not a timestamp of the
+      // separate customer-confirmation event. Old payloads remain time-unknown.
+      const customerSample=setFact("customer_sample",bulk.customerConfirmed?"completed":"pending",sid?[record("development",sid,developmentUrl(sid,gates.source?bulk.sourceRound??round??1:currentDocument?round??1:undefined),bulk.sourceRound)]:[],bulk.customerConfirmed?confirmationTime:null);
+      if(confirmationTime){customerSample.actualQuality=confirmationQuality;if(confirmationQuality!=='verified'){customerSample.completionResult='unknown';customerSample.overdueSeconds=null;}if(confirmationOperator)customerSample.operator={id:confirmationOperator,name:null};}
       setFact("production_instruction",bulk.instructionValid?"completed":"pending",instruction?[record("instruction",oid,`/ui/digital-production?instruction=${oid}&instructionVersion=${instruction.version}`,instruction.version)]:[],iso(instruction?.published_at),instruction?.published_by?{id:instruction.published_by,name:null}:null);
       const gate=setFact("cutting_gate",bulk.reasons.length?"pending":bulk.tasks.some(task=>["bulk_cutting","bulk_cutting_external"].includes(task.taskKind))?"completed":"pending",[record("preparation",oid,bulkUrl,bulk.instructionVersion)]);
       gate.blockers=bulk.reasons.map((label,index)=>({key:`domain_gate_${index}`,label,ownerId:null,record:gate.records[0]!}));
@@ -412,8 +451,10 @@ export class DigitalJourneyQuery {
         gate.blockers=[];
       }
       gate.completionResult=gate.state==="completed"?"unknown":null;
-      const prepFacts=currentPrep?(await db.query("SELECT kind FROM digital_bulk_preparation_facts WHERE preparation_id=$1",[currentPrep])).rows:[];
-      const marker=prepFacts.some(fact=>fact.kind==="唛架完成");setFact("bulk_marker",marker?"completed":currentPrep?"pending":"uncreated",[record("preparation",oid,`/ui/digital-pattern-room?section=bulk&bulkOrder=${oid}`,bulk.instructionVersion)]);
+      // The original synchronous completion command records businessNow in this
+      // fact (not database ingestion time), scoped to the current preparation.
+      const marker=currentPrep?(await db.query("SELECT fact_id,recorded_at FROM digital_bulk_preparation_facts WHERE preparation_id=$1 AND kind='唛架完成'",[currentPrep])).rows[0]:null;
+      setFact("bulk_marker",marker?"completed":currentPrep?"pending":"uncreated",[record("preparation",oid,`/ui/digital-pattern-room?section=bulk&bulkOrder=${oid}`,bulk.instructionVersion)],iso(marker?.recorded_at));
       if(bulk.preshrink==="无需预缩"){
         const current=baseNodes.filter(node=>node.key==='warehouse_preshrink'&&node.current);
         if(!current.some(node=>node.state==='completed'||node.actualAt)){
@@ -466,7 +507,8 @@ export class DigitalJourneyQuery {
       }
       const closureRecord=record("closure",oid,`/ui/digital-production?closure=${oid}`);
       const received=closure.collection?.status==='已收齐';
-      setFact("receipts",received?"completed":closure.lines.some(line=>line.receiptCount>0)?"active":"uncreated",[closureRecord]);
+      const receiptNode=setFact("receipts",received?"completed":closure.lines.some(line=>line.receiptCount>0)?"active":"uncreated",[closureRecord],received?closure.receivingSpan?.collectedAt??null:null);
+      if(received&&!receiptNode.actualAt&&closure.receivingSpan?.collectedDate){receiptNode.actualDate=closure.receivingSpan.collectedDate;receiptNode.actualQuality='verified';}
       setFact("packing",closure.stage==="本期装箱完成"?"completed":closure.lines.some(line=>line.packingRevisionId)?"active":"uncreated",[closureRecord]);
       setFact("quantity_difference",closure.lines.some(line=>line.receiptCount>0&&line.actualQuantity!==line.documentQuantity&&!line.receivingResolution||line.packingQuantity!==null&&line.packingQuantity!==line.actualQuantity&&!line.packingResolution)?"pending":"not_applicable",[closureRecord]);
       if(closure.closed) {
@@ -533,7 +575,13 @@ export class DigitalJourneyQuery {
     }
     for(const node of baseNodes.filter(node=>node.state==='inherited'&&node.inheritedFrom&&node.progressApplicability==='applicable')){
       const original=baseNodes.find(value=>value.instanceId===node.inheritedFrom!.taskId&&value.state==='completed');
-      node.inheritedResult={actualAt:original?.actualAt??null,quality:original?.actualQuality??'missing',adoptedAt:null,reason:'尚无独立的本轮采用完成时点；原成果时间不作本轮或本阶段完成时间'};
+      // The immutable round publication atomically adopted the listed original
+      // result. Its business timestamp is adoption, not that result's work end.
+      const adoptedAt=round&&round>1&&currentDocument?.round_number===round?iso(currentDocument.published_at):null;
+      const valid=adoptedAt&&Date.parse(adoptedAt)<=Date.parse(asOf);
+      node.inheritedResult={actualAt:original?.actualAt??null,quality:original?.actualQuality??'missing',adoptedAt:valid?adoptedAt:null,
+        ...(valid?{adoptedRound:round!,adoptionSourceRef:`development-round:${sid}:${round}`} : {}),
+        reason:valid?'本轮发布时沿用原成果；不是本轮重新作业完工':'尚无独立的本轮采用完成时点；原成果时间不作本轮或本阶段完成时间'};
     }
     // Mutated nodes remain in the shared base list; all seven stages are always returned.
     const poDeliveryDates=!patternKinds&&orderAccess&&oid?await readOrderPoDeliveryDates(db,oid,lines.map(line=>line.id)):[];
@@ -598,7 +646,7 @@ export class DigitalJourneyQuery {
     const ownOrder=order?.created_by===actor.actorId&&actor.actorRoles.includes('sample_designer')&&await policy.activeRole(actor.actorId,'sample_designer')
       ||order?.primary_merchandiser_id===actor.actorId&&actor.actorRoles.includes('order_merchandiser')&&await policy.activeRole(actor.actorId,'order_merchandiser');
     if(fullOrder&&(liveTimingAuthority||ownOrder)||!oid&&sourceAccess&&(liveTimingAuthority||ownSource))
-      await journeyMeasure('sla',()=>readJourneySupervision(this.database,db,actor,item,observed,visibleTasks.some(task=>task.task_kind==='bulk_cutting_external')));
+      await journeyMeasure('sla',()=>readJourneySupervision(this.database,db,actor,item,observed,visibleTasks.some(task=>task.task_kind==='bulk_cutting_external'),new Set(visibleTasks.map(task=>task.task_id))));
     else item.supervision={asOf:observed.now,status:'limited',originalRevision:null,currentRevision:null,nodes:[],coverage:[{key:'scope',message:'仅有本岗位节点权限，整单SLA未计入；已授权节点照常监督'}],customerReminderDate:null};
     }
     item.display=journeyDisplay(item,asOf,{cancelled,closedAt:baseNodes.find(node=>node.current&&node.key==='special_closure'&&node.state==='completed')?.actualAt??null});

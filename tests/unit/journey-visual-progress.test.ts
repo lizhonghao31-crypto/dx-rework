@@ -99,8 +99,69 @@ it('R3 natural elapsed time includes Sunday and remains bounded before, within a
   expect(naturalTimeRatio(start, date(), '2026-11-10T00:00:00.000Z')).toBe(1);
   expect(naturalTimeRatio(start, date(start), now)).toBeNull();
   expect(naturalTimeRatio(start, date('2026-11-06T00:00:00.000Z'), now)).toBeNull();
-  expect(naturalTimeRatio(start, { ...date(), at: '2026-11-09', precision: 'date' }, now)).toBeNull();
+  expect(naturalTimeRatio(start, { ...date(), at: '2026-11-09', precision: 'date' }, now)).toBe(0.375);
   expect(naturalTimeRatio(start, date('2026-11-09T00:00:00'), now)).toBeNull();
+});
+
+it('Final10 uses a legitimate date forecast at Beijing day-end, including Sunday, without inventing an event instant', () => {
+  const expected: JourneyBusinessDate = { ...date(), at: '2026-11-08', precision: 'date' };
+  const before = structuredClone(expected);
+  // Saturday 08:00 to Monday 00:00 Beijing is forty natural hours.
+  expect(naturalTimeRatio(start, expected, now)).toBe(24 / 40);
+  expect(naturalTimeRatio(start, expected, '2026-11-08T15:59:59.999Z')).toBeCloseTo(1 - 1 / (40 * 3600_000));
+  expect(naturalTimeRatio(start, expected, '2026-11-08T16:00:00.000Z')).toBe(1);
+  expect(expected).toEqual(before);
+});
+
+it.each(['2026-02-29', '2026-11-31', '2026-11-08T00:00:00.000Z'])('Final10 keeps an invalid calendar forecast %s unknown', at => {
+  expect(naturalTimeRatio(start, { ...date(), at, precision: 'date' }, now)).toBeNull();
+});
+
+it('Final10 does not invent a date-only start or promote partial/unknown dates into a reliable window', () => {
+  const expected: JourneyBusinessDate = { ...date(), at: '2026-11-08', precision: 'date' };
+  expect(naturalTimeRatio('2026-11-07', expected, now)).toBeNull();
+  expect(naturalTimeRatio(null, expected, now)).toBeNull();
+  expect(naturalTimeRatio(start, { ...expected, status: 'partial' }, now)).toBeNull();
+  expect(naturalTimeRatio(start, { ...expected, status: 'unknown' }, now)).toBeNull();
+});
+
+it('Final10 list and detail visual projection keep the same date forecast and independent actual progress', () => {
+  const order = fixture(['bulk_cutting']); progress(order);
+  const expected: JourneyBusinessDate = { ...date(), at: '2026-11-08', precision: 'date', bases: ['standard_window'] };
+  order.businessProgress!.dates!.overall.forecast = structuredClone(expected);
+  order.businessProgress!.dates!.stages.find(stage => stage.key === 'cutting')!.forecast = structuredClone(expected);
+  const before = structuredClone(order), visual = journeyVisualProgress(order, now);
+  expect(visual).toMatchObject({ timeRatio: 24 / 40, actualRatio: 0, expected });
+  expect(visual.stages.find(stage => stage.key === 'cutting')).toMatchObject({ timeRatio: 24 / 40, actualRatio: 0, expected });
+  expect(order).toEqual(before);
+});
+
+it('Final10 completed native milestones without task entry cannot erase a known effective scope start', () => {
+  const order=fixture(['order_information','customer_sample','bulk_marker','receipts','rework']);
+  const creation=node(order,'order_information');creation.state='completed';creation.enteredAt=null;creation.actualAt=start;creation.actualQuality='verified';
+  node(order,'rework').enteredAt=new Date(Date.parse(start)+4*3600_000).toISOString();
+  for(const [key,offset]of [['customer_sample',1],['bulk_marker',2],['receipts',3]] as const){
+    const value=node(order,key);value.instanceId=`${key}:0`;value.round=null;value.enteredAt=null;value.state='completed';
+    value.actualQuality='verified';value.actualAt=new Date(Date.parse(start)+offset*3600_000).toISOString();
+    if(key==='receipts'){value.actualDate='2026-11-07';value.actualAt=null;}
+  }
+  const initial=progress(order),forecast={...date(),covered:5,total:5,bases:['standard_window' as const]};
+  order.businessProgress!.dates!.overall.forecast=forecast;
+  const result=journeyVisualProgress(order,now);
+  expect(result).toMatchObject({startedAt:start,timeRatio:.5,actualRatio:initial.actualRatio});
+  expect(result.stages.find(stage=>stage.key==='preparation')!.startedAt).toBeNull();
+  for(const key of ['customer_sample','bulk_marker','receipts'])expect(node(order,key).enteredAt).toBeNull();
+});
+
+it('Final10 a completed milestone alone or a real task missing entry does not invent an execution start', () => {
+  const order=fixture(['customer_sample']),value=node(order,'customer_sample');
+  value.instanceId='customer_sample:0';value.round=null;value.enteredAt=null;value.state='completed';value.actualQuality='verified';value.actualAt=start;
+  progress(order);order.businessProgress!.dates!.overall.forecast={...date(),bases:['actual']};
+  expect(journeyVisualProgress(order,now).startedAt).toBeNull();
+  const taskOrder=fixture(['bulk_pattern','bulk_marker']),task=node(taskOrder,'bulk_marker');
+  task.instanceId='TEST-real-marker-task';task.occurrence=1;task.enteredAt=null;task.state='completed';task.actualQuality='verified';task.actualAt=start;
+  progress(taskOrder);taskOrder.businessProgress!.dates!.overall.forecast={...date(),bases:['standard_window']};
+  expect(journeyVisualProgress(taskOrder,now).startedAt).toBeNull();
 });
 
 it('R3 two visual ratios reuse the same snapshot and existing forecast/actual dates without substituting the plan or deadline', () => {
