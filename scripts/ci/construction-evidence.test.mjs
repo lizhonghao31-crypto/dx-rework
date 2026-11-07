@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';import {test} from 'node:test';
-import {mkdtempSync,mkdirSync,writeFileSync,rmSync}from'node:fs';import{tmpdir}from'node:os';import{join}from'node:path';import{execFileSync}from'node:child_process';
+import {mkdtempSync,mkdirSync,readFileSync,writeFileSync,rmSync}from'node:fs';import{tmpdir}from'node:os';import{join}from'node:path';import{execFileSync}from'node:child_process';
 import{sourceFingerprint,validateEvidence,inputFingerprint,assertCandidateIndex}from'./construction-evidence.mjs';
 function fixture(work){const cwd=mkdtempSync(join(tmpdir(),'dx-evidence-')),git=(...a)=>execFileSync('git',['-C',cwd,...a],{encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim();try{
  git('init','-q');git('config','user.name','TEST');git('config','user.email','test@example.invalid');writeFileSync(join(cwd,'source.mjs'),'export const original=1;');writeFileSync(join(cwd,'existing.test.mjs'),'// Existing consumer coverage');git('add','.');git('commit','-qm','base');const base=git('rev-parse','HEAD');writeFileSync(join(cwd,'source.mjs'),'export const original=2;');
@@ -37,6 +37,23 @@ test('a real shallow CI clone rejects missing ancestry; complete history proves 
   assert.throws(()=>validateEvidence(record,{cwd:clone,base}),/NOT_ANCESTOR/);
   execFileSync('git',['-C',clone,'fetch','--quiet','--unshallow','origin'],{stdio:['ignore','pipe','pipe']});
   assert.equal(validateEvidence(record,{cwd:clone,base}).checks,1);
+ }finally{rmSync(container,{recursive:true,force:true});}
+}));
+
+test('actual CI base fetch preserves pre-base test ancestry after a complete checkout',()=>fixture(({cwd,git})=>{
+ git('add','.');git('commit','-qm','original measured source');const tested=git('rev-parse','HEAD');
+ writeFileSync(join(cwd,'later.txt'),'integration base');git('add','.');git('commit','-qm','integration base');const base=git('rev-parse','HEAD');
+ writeFileSync(join(cwd,'later.txt'),'homepage candidate');git('add','.');git('commit','-qm','homepage candidate');
+ const container=mkdtempSync(join(tmpdir(),'dx-ci-base-history-')),clone=join(container,'clone'),workflow=readFileSync(new URL('../../.github/workflows/ci.yml',import.meta.url),'utf8');
+ try{
+  execFileSync('git',['clone','--quiet','file://'+cwd,clone],{stdio:['ignore','pipe','pipe']});
+  const run=(...args)=>execFileSync('git',['-C',clone,...args],{stdio:['ignore','pipe','pipe']});
+  const fetch=workflow.split('\n').find(line=>line.includes('git fetch')&&line.includes('${BASE_SHA}'));
+  assert.ok(fetch,'actual CI base fetch must be present');
+  execFileSync('bash',['-c',fetch.trim()],{cwd:clone,env:{...process.env,BASE_SHA:base},stdio:['ignore','pipe','pipe']});
+  assert.doesNotThrow(()=>run('merge-base','--is-ancestor',tested,'HEAD'));
+  run('fetch','--quiet','--no-tags','--depth=1','origin',base);
+  assert.throws(()=>run('merge-base','--is-ancestor',tested,'HEAD'),'old shallow fetch really cuts otherwise valid ancestry');
  }finally{rmSync(container,{recursive:true,force:true});}
 }));
 

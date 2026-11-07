@@ -26,3 +26,9 @@
 本PR只有首页展示和相关原测试适配；回退这批UI不撤销P01时间事实修复。详情共享Grid、七环、设置、日历及性能接口按后续授权工作包推进，不夹入首页补丁。P01已按准确最终回执合并为f74cbc4b580a0b653ca362f9834fbdee8832e08d（Full42416198019，最终job128541334169，attempt1），合并树与2bc18fed候选一致；本分支已同步该实际基线。之后须提交、干净检出、适用Review/Gate，未部署。
 
 基线同步只带入上游旧轮次测试夹具修正，首页/真实App测试不导入该helper；修前已捕获不含该helper的未变输入范围，91单元/10浏览器及类型/lint/web构建保留实际旧被测来源并按inputFingerprint复用。新当前源码指纹7a57ad2d3017a01586d20d6d7521213fbfce15f660aff8df964da6ad4f98b00a；secret扫描会读取该helper，已在实际f74基线重新执行并通过。不将此复用称为新head远端Gate通过。
+
+## 首次Light的真实祖先链修复
+
+PR #928 首次Light42418626690在业务检查前因`EVIDENCE_TESTED_HEAD_NOT_ANCESTOR`失败。测试真实来源20d2de6b是f74合并基线的祖先；CI虽先以fetch-depth0完整检出，随后获取实际base时又使用`git fetch --depth=1`，将base标成浅边界并剪断可见祖先链。仅移除这次fetch的depth参数，不改祖先校验、不重写原testedHead。
+
+新增回归使用真实本地Git历史，执行实际workflow中的fetch，确认原被测提交仍为祖先；再执行旧depth1命令，确认旧问题确会重现。原“真正浅检出必须拒绝”反例保留。修后canonical preflight250项及secret扫描均exit0，所有受管子进程已退出。首页91单元、10完整App浏览器及类型/lint/web构建输入未变，修前捕获排除仅该CI文件、其协议测试及上游旧轮helper的更窄输入指纹，保留原来源复用，没有因记录失败重跑业务套件。干净检出、远端Light和最终Gate按实际结果另记。
