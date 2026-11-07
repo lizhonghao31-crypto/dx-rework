@@ -1,3 +1,4 @@
+import {hasDateOnlyTarget,nodeTargetLabel} from './journey-sla-details.js';
 import {useEffect,useState} from 'react';
 import {type JourneyNode,type JourneyResult,type OrderJourney} from '@dx-rework/contracts/digital-production-journey';
 import {StatusBadge} from '@dx-rework/ui';
@@ -14,7 +15,7 @@ import './cockpit-home.css';
 const stateLabels={completed:'整单已完成',overdue:'逾期',due_soon:'临期',active:'进行中',not_started:'未启动',cancelled:'已取消'};
 function Task({node}:{node:JourneyNode}){
  const status=node.risks.includes('overdue')?'逾期':node.risks.includes('due_soon')?'临期':node.state==='blocked'?'受阻':node.state==='active'?'进行中':'等待前置';
- return <><strong>{node.label}</strong><small>{node.owner?.name??'负责人未指派'}</small><StatusBadge tone={node.risks.includes('overdue')?'danger':node.risks.includes('due_soon')?'warning':node.state==='active'?'info':'neutral'}>{status}</StatusBadge><small>截止 <CockpitDate value={node.expectedAt} precision={node.expectedPrecision} missing="—"/></small>{cockpitVisibleBlockers(node).slice(0,1).map(blocker=><small className="cockpit-home-blocker" key={blocker.key} title={blocker.label}>{blocker.label}</small>)}</>;
+ return <><strong>{node.label}</strong><small>{node.owner?.name??'负责人未指派'}</small><StatusBadge tone={node.risks.includes('overdue')?'danger':node.risks.includes('due_soon')?'warning':node.state==='active'?'info':'neutral'}>{status}</StatusBadge><small>截止 {node.nativeWindows?.length||hasDateOnlyTarget(node)?nodeTargetLabel(node):<CockpitDate value={node.expectedAt} precision={node.expectedPrecision} missing="—"/>}</small>{cockpitVisibleBlockers(node).slice(0,1).map(blocker=><small className="cockpit-home-blocker" key={blocker.key} title={blocker.label}>{blocker.label}</small>)}</>;
 }
 function HomePos({order,onOpen}:{order:OrderJourney;onOpen:()=>void}){
  const lines=sortedCockpitPoLines(order);

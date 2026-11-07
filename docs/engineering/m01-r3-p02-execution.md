@@ -15,22 +15,31 @@
 
 本地检查已完成；远端light、正式Review和最终Full在提交后进行，本记录不提前填远端通过。
 
-## 本地冻结验证
+## 本地冻结验证（Review集中修复后）
 
-来源指纹 `959bfbbba814b953095e3f476ca5425d8bb61bf17fccf7b7231d79214ab37d95`，实际测试父Head/base为 `3a8c8cd6e40e45755d7028efe9aa6ef84c865f08`。Node22.22.2/npm10.9.9，Node/浏览器后代affinity2,3；PG16.15为本任务复用的带标记低权限隔离实例，cpuset0,1、2CPU/2GiB。原canonical business-chain配置两worker，浏览器Playwright1.56.1锁定Chromium141.0.7390.37，测试/hook100秒、独立setup120秒。与CI配置和浏览器一致，宿主硬件及其它负载不等效；本地完整App截图是原认证和TEST业务对象，非现场Acceptance页面。
+来源指纹 `9b1c711e32f984fcf437479bd876821aa960e7cb4cb846f072db31e8ab2edf3f`，实际测试父Head `cac5cdc912fba9d54d90e6dba644990d0e53e083`，集成base仍 `3a8c8cd6e40e45755d7028efe9aa6ef84c865f08`。Node22.22.2/npm10.9.9，Node/浏览器后代affinity2,3；低权限带标记PG16.15 cpuset0,1、2CPU/2GiB，原business-chain配置2worker，锁定Playwright1.56.1/Chromium141.0.7390.37；独立测试/hook100秒、setup120秒。与CI配置/浏览器一致，宿主硬件和并行负载不等效。
 
-|检查|命令及结果|凭证|
+|检查|命令及结果|原凭证|
 |---|---|---|
-|preflight|`npm run test:preflight`；exit0，249通过/0失败/0跳过|`/workspace/scratch/m01-r3-p02-preflight.log` SHA256 `11ba98657acdfe1c4a55f975330e532fe9b3ff854dc86a8ae443f7747a532bb0`|
-|unit|`node node_modules/vitest/vitest.mjs run tests/unit/cockpit-home.test.ts tests/unit/cockpit-display-facts.test.ts tests/unit/digital-journey-cockpit.test.ts tests/unit/digital-journey-projection.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/m01-cockpit-workspace.test.ts tests/unit/m01-cockpit-reads.test.ts tests/unit/m01-cockpit-reading-context.test.ts tests/unit/digital-cockpit-progress.test.ts tests/unit/digital-cockpit-time.test.ts tests/unit/journey-projection-isolation.test.ts tests/unit/journey-visual-progress.test.ts tests/unit/journey-business-progress.test.ts tests/unit/journey-progress-dates.test.ts tests/unit/digital-pmc-readonly-ui.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-r3-p02-unit.json`；exit0，220通过/0失败/0跳过|`/workspace/scratch/m01-r3-p02-unit.log` SHA256 `f1fde7155d13ec0d0f3a2abd47ee6db36bcba0e3a03b1494a749095990d5afbd`|
-|native|`node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers=2 tests/integration/m01-cockpit-home-native-browser-postgres.test.ts tests/integration/digital-journey-postgres.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-r3-p02-native.json`；exit0，40通过/0失败/0跳过|`/workspace/scratch/m01-r3-p02-native.log` SHA256 `001147dc27fe6fd6d0cf1af3dfbb4eecd47c5102dfc6a18f4a042c70e0645475`|
+|preflight|`npm run test:preflight`；exit0，249通过/0失败/0跳过|`/workspace/scratch/m01-r3-p02-preflight.log` SHA256 `2cc45bb0d027d5c35527d3f325a1635e14755022c11dee1e822a1023e2ab854b`|
+|unit|`node node_modules/vitest/vitest.mjs run tests/unit/cockpit-home.test.ts tests/unit/cockpit-detail.test.ts tests/unit/cockpit-display-facts.test.ts tests/unit/digital-journey-cockpit.test.ts tests/unit/digital-journey-projection.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/m01-cockpit-workspace.test.ts tests/unit/m01-cockpit-reads.test.ts tests/unit/m01-cockpit-reading-context.test.ts tests/unit/digital-cockpit-progress.test.ts tests/unit/digital-cockpit-time.test.ts tests/unit/journey-projection-isolation.test.ts tests/unit/journey-visual-progress.test.ts tests/unit/journey-business-progress.test.ts tests/unit/journey-progress-dates.test.ts tests/unit/digital-pmc-readonly-ui.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-r3-p02-unit.json`；exit0，234通过/0失败/0跳过|`/workspace/scratch/m01-r3-p02-unit.log` SHA256 `cb2795cc89b2c7e723b446d3ee70b6c21ef476ab0086cc75f47ecbbed094a6dc`|
+|native|`node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers=2 tests/integration/m01-cockpit-home-native-browser-postgres.test.ts tests/integration/digital-journey-postgres.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-r3-p02-native.json`；exit0，40通过/0失败/0跳过|`/workspace/scratch/m01-r3-p02-native.log` SHA256 `52ae41d12d083d56547b193cc84c891fb35a9d4bd0a0760aee375ae7ff3c4ce2`|
 |types|`npm run typecheck`；exit0|`/workspace/scratch/m01-r3-p02-types.log` SHA256 `2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e`|
-|build|`npm run build --workspaces --if-present`；exit0|`/workspace/scratch/m01-r3-p02-build.log` SHA256 `db81844837e7077c130453fb40b98e893bb36bc3c52bf720511ea6401c20291f`|
+|build|`npm run build --workspaces --if-present`；exit0|`/workspace/scratch/m01-r3-p02-build.log` SHA256 `3eda7d3e74bf7b2f0da22db9410053a4155b1e894c9f276cec7a3b6311dde4cd`|
 |lint|`npm run lint`；exit0|`/workspace/scratch/m01-r3-p02-lint.log` SHA256 `fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763`|
 |secret|`npm run secret:scan`；exit0|`/workspace/scratch/m01-r3-p02-secret.log` SHA256 `e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda`|
 
-本地浏览器7场景及原Journey33场景共40项；原真实认证撤销PMC后同一有效会话仍保留finance_read、订单事实不再返回。31单跨页、七类计数、闭单及重复反例、风险弹窗/键盘焦点、返回原page2/customer/search、原生F欠收2、失败重试均通过。三个桌面宽度和390手机截图已实际逐图查看；普通双PO行高不超过190px，数量居中，打开/关闭风险不改变原行高。TEST样本无款图时保留真实缺图，不捏造图片。
+原完整App浏览器7场景＋原Journey33场景共40项。三个桌面宽度1165/1366/1584及390手机截图实际查看，双PO行高≤190px、数量居中、风险开关及悬停不扩行；真实原命令F欠收2、31单跨页/七类、返回原page2/customer/search、失败重试和原AuthService同有效会话真实PMC撤权均通过。截图是本地TEST，不冒充现场Acceptance；F测试宿主未挂载附件二进制路由，款图加载失败不作现场图片结论，其它无款图订单保留原缺图状态。隔离库后核两个库schema0/其它连接0，凭证 `/workspace/scratch/m01-r3-p02-db-postcheck.json`。
 
-集中复核另发现普通KPI/状态切换会保留旧missing条件，与该KPI完整统计不一致；已清除旧选择并加入原完整App反例。初次预检发现时间候选索引的旧百分比来源移动：只移除已删除的home旧数值候选并增加新的纯数值显示Math.min候选，未触及其它手工注记或重开全节点时间专项。草稿原生夹具颜色重复和严格查询多余view字段已按原契约修复，未放宽业务守卫；旧回退/旧行内摘要断言改为双条与弹窗事实断言，原权限和风险覆盖保留。最终来源全部检查完成后未再改源码。
+集中消费者核查修复普通KPI/状态切换残留missing筛选的问题；原所有真实风险/权限断言保留。候选索引仅随旧百分比来源删除、新纯数值Math.min显示来源增加而精确调整，未改其它手工注记，未重开全节点时间专项。草稿夹具重复颜色/严格查询多余字段按原契约修正，未放宽业务守卫。
 
-隔离库最终身份/标记/低权限复核通过，两个库残留schema0、其它连接0，凭证 `/workspace/scratch/m01-r3-p02-db-postcheck.json`。完整diff与消费者定点复核已完成：变更只涉及首页、统计投影及必要原生验证接入，后台SLA、M已接通截止、#921和PR01不变；N现场凭证缺口仍未声称解决。最终Gate前沿原协议绑定实际提交、base、审查与原报告；完成后等待用户验收，不自动合并或开始PR03。
+## 正式Review与本次增量
+
+一轮GitHub Codex Review覆盖 `cac5cdc912fba9d54d90e6dba644990d0e53e083`，回执 https://github.com/lizhonghao31-crypto/dx-rework/pull/923#pullrequestreview-5812005371 。两项P2均成立并集中修复：
+
+- https://github.com/lizhonghao31-crypto/dx-rework/pull/923#discussion_r4501570191 ：行和风险弹窗的原日期型排他任务/原批次截止复用既有hasDateOnlyTarget/nodeTargetLabel，不再把次日零点ISO当作目标日。新增两处目标日与原批次优先级反例，原详情日期套件一起验证。
+- https://github.com/lizhonghao31-crypto/dx-rework/pull/923#discussion_r4501570194 ：保留所有已授权的当前系列计划节点风险及只含计划风险时的入口，进度排除规则不变；新增全数/阶段筛选/已完成排除/源对象和进度不变反例。
+
+执行者另做本次小增量完整diff/原formatter/series-plan-journey调用方复核，最终来源重新通过上表全部检查；不声称修复提交获得第二次正式Review。必要远端light和原协议最终Full绑定修复后实际Head，旧版本结果不冒充最终通过。
+
+本批保留#921和PR01，未改后台SLA、M已正确截止、全局Shell/详情/设置。N现场原凭证仍未取得，不声称已解决；不部署、不改现场数据，不自动合并PR02或开始PR03，完成检查后交用户验收。

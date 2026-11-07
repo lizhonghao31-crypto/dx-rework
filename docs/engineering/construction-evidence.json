@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "3a8c8cd6e40e45755d7028efe9aa6ef84c865f08",
-  "sourceFingerprint": "959bfbbba814b953095e3f476ca5425d8bb61bf17fccf7b7231d79214ab37d95",
+  "sourceFingerprint": "9b1c711e32f984fcf437479bd876821aa960e7cb4cb846f072db31e8ab2edf3f",
   "risk": "full",
   "rules": [
     {
@@ -48,6 +48,7 @@
       "reads": [
         "apps/api/src/production-platform/journey-visual-progress.ts",
         "apps/web/src/cockpit-date.tsx",
+        "apps/web/src/journey-sla-details.tsx",
         "apps/web/src/cockpit-photo-preview.tsx",
         "apps/web/src/po-delivery-dates.tsx",
         "apps/web/src/cockpit-business-progress.tsx"
@@ -58,9 +59,9 @@
         "tests/unit/digital-cockpit-progress.test.ts",
         "tests/unit/cockpit-detail.test.ts"
       ],
-      "initialization": "Only overview components and namespace styles change. Original full detail and legacy business progress remain independent. No fallback to old display/flat n/m ratios, no business ID generation, UUID promotion, invented photo, clock or SLA changes.",
+      "initialization": "Only overview components and namespace styles change. Original full detail and legacy business progress remain independent. Original task date-target exclusive and native-window precedence use the original nodeTargetLabel formatter in both row and modal. No fallback to old display/flat n/m ratios, no business ID generation, UUID promotion, invented photo, clock or SLA changes.",
       "dateAndPermission": "Unknown, actual0 and actual100 remain distinct; incomplete rounds below100. Expected/actual source dates preserve precision. Positive native visible receipt debt is labelled whole/visible range only when quantity rows support it; whole state remains original mainState irrespective of local risk.",
-      "expectation": "70.8 versus flat80,0/99.9/100/unknown, date-only, old risk/closed facts, complete versus partial quantity scope and invalid debt pass. Full original App screenshots at1165/1366/1584 and390 show original Shell, seven KPI, seven columns, centered quantity, compact long/multi-PO rows and native F debt2.",
+      "expectation": "70.8 versus flat80,0/99.9/100/unknown, date-only native task exclusive boundaries and original batch deadline precedence, old risk/closed facts, complete versus partial quantity scope and invalid debt pass. Full original App screenshots at1165/1366/1584 and390 show original Shell, seven KPI, seven columns, centered quantity, compact long/multi-PO rows and native F debt2.",
       "checks": [
         "preflight",
         "unit",
@@ -94,8 +95,8 @@
         "tests/unit/digital-journey-cockpit.test.ts",
         "tests/unit/digital-pmc-readonly-ui.test.ts"
       ],
-      "initialization": "Reuse native dialog/focus trap and original useCockpitReads independent generations/identity invalidation. No response cache or fake auth. Main snapshot guard closes obsolete dialogs; category pages are independent UI state. Standard KPI/status changes clear obsolete legacy missing selector, so their full-range counts match corresponding lists.",
-      "dateAndPermission": "First show seven categories, then original authorized paginated reads;0/permission unavailable/read error are distinct. Source risk node/blocker and all PO date/type rows remain in modal without hover growth. Main search/IME/original advanced scopes and detail return retained; exact valid dedicated PMC session is revoked using original AccessService, not Lab role switch.",
+      "initialization": "Reuse native dialog/focus trap and original useCockpitReads independent generations/identity invalidation. No response cache or fake auth. Planning-node completion exclusion remains confined to existing progress projection; all authorized planning risks stay in the risk modal. Main snapshot guard closes obsolete dialogs; category pages are independent UI state. Standard KPI/status changes clear obsolete legacy missing selector, so their full-range counts match corresponding lists.",
+      "dateAndPermission": "First show seven categories, then original authorized paginated reads;0/permission unavailable/read error are distinct. Source risk node/blocker, existing planning-node risk and all PO date/type rows remain in modal without hover growth. Main search/IME/original advanced scopes and detail return retained; exact valid dedicated PMC session is revoked using original AccessService, not Lab role switch.",
       "expectation": "Original browser covers every positive category/zero-disabled categories,31-order full paging, risk open/close no row growth and restored keyboard focus, category→detail→same page2/customer/search, original F receipt gap,503 retry and same signed-session live PMC revocation. Ordinary KPI clears legacy category selection in real full App.",
       "checks": [
         "preflight",
@@ -161,38 +162,38 @@
       "resultReports": [
         {
           "format": "node-tap",
-          "sha256": "11ba98657acdfe1c4a55f975330e532fe9b3ff854dc86a8ae443f7747a532bb0"
+          "sha256": "2cc45bb0d027d5c35527d3f325a1635e14755022c11dee1e822a1023e2ab854b"
         }
       ],
-      "testedHead": "3a8c8cd6e40e45755d7028efe9aa6ef84c865f08",
-      "sourceFingerprint": "959bfbbba814b953095e3f476ca5425d8bb61bf17fccf7b7231d79214ab37d95",
-      "startedAt": "2026-11-07T11:37:34.919Z",
-      "endedAt": "2026-11-07T11:37:41.015Z",
+      "testedHead": "cac5cdc912fba9d54d90e6dba644990d0e53e083",
+      "sourceFingerprint": "9b1c711e32f984fcf437479bd876821aa960e7cb4cb846f072db31e8ab2edf3f",
+      "startedAt": "2026-11-07T11:52:42.312Z",
+      "endedAt": "2026-11-07T11:52:48.542Z",
       "log": "/workspace/scratch/m01-r3-p02-preflight.log",
-      "logSha256": "11ba98657acdfe1c4a55f975330e532fe9b3ff854dc86a8ae443f7747a532bb0",
+      "logSha256": "2cc45bb0d027d5c35527d3f325a1635e14755022c11dee1e822a1023e2ab854b",
       "context": "Node22.22.2/npm10.9.9, Node and browser descendant affinity2,3; database env empty; original bounded config and focused suites; preflight owns original protocol workers; no onsite operation."
     },
     {
       "id": "unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/cockpit-home.test.ts tests/unit/cockpit-display-facts.test.ts tests/unit/digital-journey-cockpit.test.ts tests/unit/digital-journey-projection.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/m01-cockpit-workspace.test.ts tests/unit/m01-cockpit-reads.test.ts tests/unit/m01-cockpit-reading-context.test.ts tests/unit/digital-cockpit-progress.test.ts tests/unit/digital-cockpit-time.test.ts tests/unit/journey-projection-isolation.test.ts tests/unit/journey-visual-progress.test.ts tests/unit/journey-business-progress.test.ts tests/unit/journey-progress-dates.test.ts tests/unit/digital-pmc-readonly-ui.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-r3-p02-unit.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/cockpit-home.test.ts tests/unit/cockpit-detail.test.ts tests/unit/cockpit-display-facts.test.ts tests/unit/digital-journey-cockpit.test.ts tests/unit/digital-journey-projection.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/m01-cockpit-workspace.test.ts tests/unit/m01-cockpit-reads.test.ts tests/unit/m01-cockpit-reading-context.test.ts tests/unit/digital-cockpit-progress.test.ts tests/unit/digital-cockpit-time.test.ts tests/unit/journey-projection-isolation.test.ts tests/unit/journey-visual-progress.test.ts tests/unit/journey-business-progress.test.ts tests/unit/journey-progress-dates.test.ts tests/unit/digital-pmc-readonly-ui.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-r3-p02-unit.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 220,
+      "passed": 234,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "b83419f83d36b88cba93ef9ebbe0697beec41bb3ca86d9b5f6cd2b50c6f72b9a"
+          "sha256": "cd89da61ba8b0a4e624638d854ab3d78aba6812df1799ac93559c427ce3c7c6e"
         }
       ],
-      "testedHead": "3a8c8cd6e40e45755d7028efe9aa6ef84c865f08",
-      "sourceFingerprint": "959bfbbba814b953095e3f476ca5425d8bb61bf17fccf7b7231d79214ab37d95",
-      "startedAt": "2026-11-07T11:37:41.098Z",
-      "endedAt": "2026-11-07T11:37:46.950Z",
+      "testedHead": "cac5cdc912fba9d54d90e6dba644990d0e53e083",
+      "sourceFingerprint": "9b1c711e32f984fcf437479bd876821aa960e7cb4cb846f072db31e8ab2edf3f",
+      "startedAt": "2026-11-07T11:52:48.620Z",
+      "endedAt": "2026-11-07T11:52:55.489Z",
       "log": "/workspace/scratch/m01-r3-p02-unit.log",
-      "logSha256": "f1fde7155d13ec0d0f3a2abd47ee6db36bcba0e3a03b1494a749095990d5afbd",
+      "logSha256": "cb2795cc89b2c7e723b446d3ee70b6c21ef476ab0086cc75f47ecbbed094a6dc",
       "context": "Node22.22.2/npm10.9.9, Node and browser descendant affinity2,3; database env empty; original bounded config and focused suites; preflight owns original protocol workers; no onsite operation."
     },
     {
@@ -207,15 +208,15 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "fbda169d0b4e9f39962b7b522ae78be407ab419712ff317878f74619565cfc66"
+          "sha256": "fa2e372c3419eb5448955fe7beaab5b0e68bf9d935b6870f23beb62754649ab7"
         }
       ],
-      "testedHead": "3a8c8cd6e40e45755d7028efe9aa6ef84c865f08",
-      "sourceFingerprint": "959bfbbba814b953095e3f476ca5425d8bb61bf17fccf7b7231d79214ab37d95",
-      "startedAt": "2026-11-07T11:37:47.032Z",
-      "endedAt": "2026-11-07T11:38:53.478Z",
+      "testedHead": "cac5cdc912fba9d54d90e6dba644990d0e53e083",
+      "sourceFingerprint": "9b1c711e32f984fcf437479bd876821aa960e7cb4cb846f072db31e8ab2edf3f",
+      "startedAt": "2026-11-07T11:52:55.568Z",
+      "endedAt": "2026-11-07T11:54:01.213Z",
       "log": "/workspace/scratch/m01-r3-p02-native.log",
-      "logSha256": "001147dc27fe6fd6d0cf1af3dfbb4eecd47c5102dfc6a18f4a042c70e0645475",
+      "logSha256": "52ae41d12d083d56547b193cc84c891fb35a9d4bd0a0760aee375ae7ff3c4ce2",
       "context": "Node22.22.2/npm10.9.9, Node and browser descendant affinity2,3; original business-chain config, two workers, original100s test/hooks with explicit120s setup; own low-privilege marked PG16.15 cpuset0,1 CPU2 memory2GiB, lock-pinned Chromium141.0.7390.37 Playwright1.56.1; original AuthService and full App TEST fixtures, no site writes. Same canonical config/browser, not CI hardware/load or onsite equivalence."
     },
     {
@@ -224,10 +225,10 @@
       "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "3a8c8cd6e40e45755d7028efe9aa6ef84c865f08",
-      "sourceFingerprint": "959bfbbba814b953095e3f476ca5425d8bb61bf17fccf7b7231d79214ab37d95",
-      "startedAt": "2026-11-07T11:38:53.557Z",
-      "endedAt": "2026-11-07T11:39:25.814Z",
+      "testedHead": "cac5cdc912fba9d54d90e6dba644990d0e53e083",
+      "sourceFingerprint": "9b1c711e32f984fcf437479bd876821aa960e7cb4cb846f072db31e8ab2edf3f",
+      "startedAt": "2026-11-07T11:54:01.296Z",
+      "endedAt": "2026-11-07T11:54:32.233Z",
       "log": "/workspace/scratch/m01-r3-p02-types.log",
       "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e",
       "context": "Node22.22.2/npm10.9.9, Node and browser descendant affinity2,3; database env empty; original bounded config and focused suites; preflight owns original protocol workers; no onsite operation."
@@ -238,12 +239,12 @@
       "command": "npm run build --workspaces --if-present",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "3a8c8cd6e40e45755d7028efe9aa6ef84c865f08",
-      "sourceFingerprint": "959bfbbba814b953095e3f476ca5425d8bb61bf17fccf7b7231d79214ab37d95",
-      "startedAt": "2026-11-07T11:39:25.898Z",
-      "endedAt": "2026-11-07T11:39:44.702Z",
+      "testedHead": "cac5cdc912fba9d54d90e6dba644990d0e53e083",
+      "sourceFingerprint": "9b1c711e32f984fcf437479bd876821aa960e7cb4cb846f072db31e8ab2edf3f",
+      "startedAt": "2026-11-07T11:54:32.309Z",
+      "endedAt": "2026-11-07T11:54:51.261Z",
       "log": "/workspace/scratch/m01-r3-p02-build.log",
-      "logSha256": "db81844837e7077c130453fb40b98e893bb36bc3c52bf720511ea6401c20291f",
+      "logSha256": "3eda7d3e74bf7b2f0da22db9410053a4155b1e894c9f276cec7a3b6311dde4cd",
       "context": "Node22.22.2/npm10.9.9, Node and browser descendant affinity2,3; database env empty; original bounded config and focused suites; preflight owns original protocol workers; no onsite operation."
     },
     {
@@ -252,10 +253,10 @@
       "command": "npm run lint",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "3a8c8cd6e40e45755d7028efe9aa6ef84c865f08",
-      "sourceFingerprint": "959bfbbba814b953095e3f476ca5425d8bb61bf17fccf7b7231d79214ab37d95",
-      "startedAt": "2026-11-07T11:39:44.781Z",
-      "endedAt": "2026-11-07T11:40:05.638Z",
+      "testedHead": "cac5cdc912fba9d54d90e6dba644990d0e53e083",
+      "sourceFingerprint": "9b1c711e32f984fcf437479bd876821aa960e7cb4cb846f072db31e8ab2edf3f",
+      "startedAt": "2026-11-07T11:54:51.347Z",
+      "endedAt": "2026-11-07T11:55:12.968Z",
       "log": "/workspace/scratch/m01-r3-p02-lint.log",
       "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763",
       "context": "Node22.22.2/npm10.9.9, Node and browser descendant affinity2,3; database env empty; original bounded config and focused suites; preflight owns original protocol workers; no onsite operation."
@@ -266,10 +267,10 @@
       "command": "npm run secret:scan",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "3a8c8cd6e40e45755d7028efe9aa6ef84c865f08",
-      "sourceFingerprint": "959bfbbba814b953095e3f476ca5425d8bb61bf17fccf7b7231d79214ab37d95",
-      "startedAt": "2026-11-07T11:40:05.715Z",
-      "endedAt": "2026-11-07T11:40:06.268Z",
+      "testedHead": "cac5cdc912fba9d54d90e6dba644990d0e53e083",
+      "sourceFingerprint": "9b1c711e32f984fcf437479bd876821aa960e7cb4cb846f072db31e8ab2edf3f",
+      "startedAt": "2026-11-07T11:55:13.044Z",
+      "endedAt": "2026-11-07T11:55:13.578Z",
       "log": "/workspace/scratch/m01-r3-p02-secret.log",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda",
       "context": "Node22.22.2/npm10.9.9, Node and browser descendant affinity2,3; database env empty; original bounded config and focused suites; preflight owns original protocol workers; no onsite operation."
