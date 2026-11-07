@@ -28,9 +28,10 @@ export function CockpitOperationLog({order}:{order:OrderJourney}){
     }catch(failure){if(live.current&&!controller.signal.aborted)setError(failure instanceof Error?failure.message:"操作记录读取失败");}
     finally{if(request.current===controller){loading.current=false;if(live.current&&!controller.signal.aborted)setBusy(false);}}
   };
-  return <section className="dx-production-panel journey-activity-panel"><div className="journey-section-title"><h2>操作记录</h2>{summary&&<button type="button" className="journey-text-action" ref={trigger} onClick={()=>{setPage(summary);setError("");setOpen(true);}}>查看更多</button>}</div>
-    <ol className="cockpit-log-summary">{summary?.items.map(item=><li key={item.id}><CockpitDate value={item.at}/><span title={item.actor?.name??"姓名未登记"} tabIndex={0}>{item.actor?.name??"姓名未登记"}</span><strong>{item.object} · {item.action}</strong></li>)}</ol>
+  return <section className="dx-production-panel journey-activity-panel"><div className="journey-section-title"><h2>操作记录</h2></div>
+    <ol className="cockpit-log-summary">{summary?.items.slice(0,3).map(item=><li key={item.id}><CockpitDate value={item.at}/><span title={item.actor?.name??"姓名未登记"} tabIndex={0}>{item.actor?.name??"姓名未登记"}</span><strong>{item.object} · {item.action}</strong></li>)}</ol>
     {!summary?<p className="journey-muted">操作记录暂不可用。</p>:!summary.items.length?<p className="journey-muted">暂无可查节点操作记录。</p>:null}
+    <footer className="cockpit-log-summary-footer">{summary&&<button type="button" className="journey-text-action" ref={trigger} onClick={()=>{setPage(summary);setError("");setOpen(true);}}>查看更多</button>}</footer>
     <dialog ref={dialog} className="cockpit-log-dialog" aria-label="操作记录" onClose={()=>{live.current=false;request.current?.abort();loading.current=false;setBusy(false);setOpen(false);}} onKeyDown={trapCockpitDialogFocus}>
       <header><div><h2>操作记录</h2><p>订单：{order.designStyleNo}</p></div><button type="button" autoFocus aria-label="关闭操作记录" onClick={()=>dialog.current?.close()}>×</button></header>
       <p className="journey-muted">节点事件与改派记录；其他业务操作请查看对应单据。</p>

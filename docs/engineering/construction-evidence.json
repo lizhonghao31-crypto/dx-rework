@@ -1,78 +1,145 @@
 {
   "version": 1,
-  "base": "e3595325a35f876aa0d24ac59800749beb7958dd",
-  "sourceFingerprint": "de092dfee2ac7eb3e6b902ccbeffcd7f6eaf1aa9c2880a18b448fd7fa92abf26",
+  "base": "cc7e5540de1f544201e68d6134cacf9d509c48e6",
+  "sourceFingerprint": "05005fdd54b5897daf26bea3626b815d71363f964b53ee58afc3c21557031714",
   "risk": "full",
   "rules": [
     {
-      "source": "2026-11-07 user asks to fix the 20.97GiB download budget rejection instead of clearing ECS; parent authorizes independent deployment-capacity PR, Review and merge. No onsite/deploy; PR03/04 local only. docs/engineering/acceptance-capacity-stage-budget-20261107.md",
+      "rule": "Use shared seven-stage visual facts for dynamic blue/actual-risk concentric rings, preserve original complete date precision and trusted identity.",
+      "source": "2026-11-07 approved third-round Pro plan and actual final detail image 达兴ERP订单七阶段流程.png; user accepted PR02 and said 通过，继续3-4推送 合并. PR03 detail first, PR04 synchronizes actual merge; no deploy/PR05. docs/engineering/m01-r3-p03-execution.md",
       "writes": [
-        "scripts/deploy/acceptance-capacity.py",
-        "tests/integration/acceptance-capacity.test.py",
-        "tests/unit/acceptance-capacity.test.ts"
+        "apps/web/src/cockpit-stage-progress.tsx",
+        "apps/web/src/cockpit-detail.tsx",
+        "tests/unit/cockpit-detail.test.ts"
       ],
       "reads": [
-        "scripts/dx-acceptance.sh#capacity_check",
-        "scripts/deploy/fetch-update-source.sh",
-        "scripts/deploy/acceptance-update-flow.sh#acceptance_update_flow",
-        "scripts/deploy/update-acceptance-local.sh",
-        "scripts/deploy/inspect-acceptance-storage.py"
+        "apps/web/src/cockpit-home-progress.tsx",
+        "apps/api/src/production-platform/journey-visual-progress.ts",
+        "apps/web/src/cockpit-date.tsx",
+        "apps/web/src/cockpit-node-dates.tsx",
+        "apps/web/src/journey-sla-details.tsx",
+        "apps/web/src/digital-journey-cockpit-model.ts"
       ],
       "oldTests": [
-        "tests/unit/acceptance-capacity.test.ts",
-        "tests/unit/acceptance-update-flow.test.ts",
-        "tests/unit/acceptance-storage.test.ts",
-        "tests/unit/acceptance-update-policy.test.ts",
-        "tests/unit/acceptance-update-verification.test.ts",
-        "tests/integration/acceptance-deployment-contract.test.ts"
+        "tests/unit/cockpit-detail.test.ts",
+        "tests/unit/digital-journey-cockpit.test.ts",
+        "tests/unit/m01-cockpit-workspace.test.ts"
       ],
+      "initialization": "Presentation only, additive optional visual fields remain optional. Missing projection stays unknown; no old flat ratio fallback or closure-forced100. Unknown/0/incomplete/exact1 remain distinct. One controlled tooltip follows latest mouse/keyboard interaction and Escape.",
+      "dateAndPermission": "Original native batch deadline/task exclusive date-only formatter retained. No clock/SLA/source facts/permissions/new ID generation. Trusted identity businessNumber or dash, never UUID. Homepage and detail share PR01 semantics with corresponding order/stage scope.",
+      "expectation": "Focused old/new SSR tests validate0,36.4,100,unknown and existing batch/native date mappings. Actual full App desktop native cases verify seven rings, one keyboard tooltip, no overlap, Escape, trusted missing ID and removed independent progress/plan displays.",
       "checks": [
         "preflight",
         "unit",
+        "native",
         "types",
         "build",
         "lint",
         "secret"
-      ],
-      "rule": "Budget only overlapping allocations before the next mandatory fresh free-space check; never waive later build, backup or stop capacity.",
-      "initialization": "No schema/config/production/Acceptance-data write. Fetch subprocess removes its own Git store on EXIT before prepare. Archive still includes current Git occupation in actual available; expired allocations are not added to later heavy work. Installed old tool refuses executable-policy refresh, explicit install required.",
-      "dateAndPermission": "Pinned Acceptance database identity, all storage path/metric validation and readonly peer collection retained at download/archive. Build/backup/stop rewrite, backup, WAL, logs, operating margin and fail-before-stop dispatch remain unchanged; no capacity bypass or cleanup.",
-      "expectation": "Sixteen actual Python boundary tests plus original shell dispatch with real estimator: download/archive succeeds then build, backup or stop insufficient reports refusal before any stop/apply/activate effect. Old production/runtime isolation, verified history recovery and original update semantics pass."
+      ]
     },
     {
-      "source": "2026-11-07 user asks to fix the 20.97GiB download budget rejection instead of clearing ECS; parent authorizes independent deployment-capacity PR, Review and merge. No onsite/deploy; PR03/04 local only. docs/engineering/acceptance-capacity-stage-budget-20261107.md",
+      "rule": "Approved compact five-card shared layout and all risk/receipt facts remain usable through native modal and original node entry.",
+      "source": "2026-11-07 approved third-round Pro plan and actual final detail image 达兴ERP订单七阶段流程.png; user accepted PR02 and said 通过，继续3-4推送 合并. PR03 detail first, PR04 synchronizes actual merge; no deploy/PR05. docs/engineering/m01-r3-p03-execution.md",
       "writes": [
-        "scripts/deploy/acceptance-capacity.py",
-        "tests/integration/acceptance-capacity.test.py",
-        "tests/unit/acceptance-capacity.test.ts"
+        "apps/web/src/cockpit-detail.css",
+        "apps/web/src/cockpit-detail-risks.tsx",
+        "apps/web/src/node-materials-panel.tsx"
       ],
       "reads": [
-        "scripts/dx-acceptance.sh#capacity_check",
-        "scripts/deploy/fetch-update-source.sh",
-        "scripts/deploy/acceptance-update-flow.sh#acceptance_update_flow",
-        "scripts/deploy/update-acceptance-local.sh",
-        "scripts/deploy/inspect-acceptance-storage.py"
+        "apps/web/src/cockpit-home-dialog.tsx",
+        "apps/web/src/cockpit-reading-context.ts",
+        "apps/web/src/cockpit-node-rows.tsx",
+        "apps/web/src/cockpit-dialog-focus.ts",
+        "apps/web/src/digital-journey-cockpit.tsx"
       ],
       "oldTests": [
-        "tests/unit/acceptance-capacity.test.ts",
-        "tests/unit/acceptance-update-flow.test.ts",
-        "tests/unit/acceptance-storage.test.ts",
-        "tests/unit/acceptance-update-policy.test.ts",
-        "tests/unit/acceptance-update-verification.test.ts",
-        "tests/integration/acceptance-deployment-contract.test.ts"
+        "tests/unit/cockpit-detail.test.ts",
+        "tests/unit/m01-cockpit-workspace.test.ts",
+        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts"
       ],
+      "initialization": "Current/risk row and node/doc/log row share grid boundaries, bounded scroll areas and compact content, not oversized filler. CurrentRiskNodes remains authoritative, summary truncation never removes full modal data. Existing details/records/material requests retained.",
+      "dateAndPermission": "Receipt shortfall is original reconciled remainingReceipt for visible PO lines, not packing/factory quantities. Root/native scope and risk ordering retained. N evidence unavailable and full-node time audit paused; M main cockpit original source mappings preserved. No onsite write.",
+      "expectation": "Three1165/1366/1584 complete original Shell/App widths verify exact edges, no page horizontal overflow and bounded heights. Original F demand4/received2/packed2 shows debt2; modal open/close keeps document-coordinate geometry and restores focus, full risk/PO/log data stays accessible.",
       "checks": [
         "preflight",
         "unit",
+        "native",
         "types",
         "build",
         "lint",
         "secret"
+      ]
+    },
+    {
+      "rule": "Related documents show truthful filled status and footer actions without changing authentication, scope, pagination or failure handling.",
+      "source": "2026-11-07 approved third-round Pro plan and actual final detail image 达兴ERP订单七阶段流程.png; user accepted PR02 and said 通过，继续3-4推送 合并. PR03 detail first, PR04 synchronizes actual merge; no deploy/PR05. docs/engineering/m01-r3-p03-execution.md",
+      "writes": [
+        "apps/web/src/cockpit-documents.tsx",
+        "apps/web/src/cockpit-operation-log.tsx"
       ],
-      "rule": "A nonempty installed matching Acceptance or production lock provides dependency sizing evidence with 50percent margin, never implicit permission to reuse dependencies.",
-      "initialization": "Both current dependency roots are measured. Exactly matching package-lock bytes and positive installed size are required, maximum matching size selected; floor512MiB. Missing/changed/no installed match keeps floor2GiB. Actual locked npm install, immutable tools, existing release and backup retention remain unchanged.",
-      "dateAndPermission": "Read existing local lock/size only; no site credentials, account/config change, install, cleanup or deployment performed. Original worker build checks and production locks remain authoritative.",
-      "expectation": "Old production lock plus matching Acceptance400MiB measures600MiB. Unknown and missing target lock retain2GiB; original updater and deployment contract tests pass. This is local estimation correctness, not a claim of exact现场 capacity or deployment success."
+      "reads": [
+        "apps/web/src/cockpit-documents-model.ts",
+        "apps/web/src/cockpit-document-data.ts",
+        "apps/web/src/auth-session.ts",
+        "apps/web/src/cockpit-dialog-focus.ts"
+      ],
+      "oldTests": [
+        "tests/unit/cockpit-document-directory.test.ts",
+        "tests/unit/cockpit-document-snapshot.test.ts",
+        "tests/unit/cockpit-document-new-sources.test.ts",
+        "tests/unit/m01-production-document-basis.test.ts",
+        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts"
+      ],
+      "initialization": "Original loaded created state alone becomes checked 已填写; original missing becomes 未填写. Loading/error/unknown/denied/nonapplicable are never promoted to missing. Only first three log summary records; original full modal and cursor paging remain.",
+      "dateAndPermission": "Original snapshot identity invalidation/generation/abort/focus guards retained; no frontend authorization substitution or API change. Fixture genuinely mounts original document services for TEST data; unavailable photo/binary/sourcing fixture routes remain explicit errors, not claims of onsite document availability.",
+      "expectation": "Original document permission/snapshot/rollback and homepage signed-session revoke cases retained; full App checks document/log/material modal geometry, footer line equality, original read state and log continuation.",
+      "checks": [
+        "preflight",
+        "unit",
+        "native",
+        "types",
+        "build",
+        "lint",
+        "secret"
+      ]
+    },
+    {
+      "rule": "Expanded original native coverage enters canonical map and preserves all unrelated numeric inventory annotations.",
+      "source": "2026-11-07 approved third-round Pro plan and actual final detail image 达兴ERP订单七阶段流程.png; user accepted PR02 and said 通过，继续3-4推送 合并. PR03 detail first, PR04 synchronizes actual merge; no deploy/PR05. docs/engineering/m01-r3-p03-execution.md",
+      "writes": [
+        "tests/acceptance/m01-cockpit-home-native-browser.ts",
+        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts",
+        "scripts/ci/full-gate-risk-map.mjs",
+        "tests/unit/full-gate-risk-map.test.ts",
+        "docs/engineering/acceptance-time-sites-20261027.json",
+        "docs/requirements/rework-ui-golden-source-v1.0.md",
+        "docs/requirements/business-analysis-limited-ui-golden-source-v1.0.md",
+        "docs/engineering/m01-r3-p03-execution.md"
+      ],
+      "reads": [
+        "scripts/test-suite-plan.mjs",
+        "scripts/test-execution-config.mjs",
+        "vitest.business-chain.config.ts",
+        "tests/helpers/owned-postgres-schema.ts",
+        "scripts/acceptance/time-site-inventory.mjs"
+      ],
+      "oldTests": [
+        "tests/unit/full-gate-risk-map.test.ts",
+        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts"
+      ],
+      "initialization": "Same original owned TEST schema marker/migrations/native command fixture; seven prior scenes retained plus two detail scenes. One suite100s cases/120s setup; canonical maxWorkers2, actual one worker/serial cases. All cleanup in original finally.",
+      "dateAndPermission": "No data/config/role/deployment operations onsite. Node22.22.2/npm10.9.9, lock-pinned Playwright1.56.1/Chromium141.0.7390.37, owned low-privilege PG16.15 CPU2 RAM2GiB; Node taskset is not CI/site equivalence. Only two inventory entries changed for moved numeric display helper; every unrelated annotation retained.",
+      "expectation": "249preflight,180focused units,9native cases pass, plus types/build/lint/secret exit0 on exact frozen fingerprint. Current official Review and exact-head applicable final Gate run after assembled push; prior924/923 evidence does not approve this source.",
+      "checks": [
+        "preflight",
+        "unit",
+        "native",
+        "types",
+        "build",
+        "lint",
+        "secret"
+      ]
     }
   ],
   "checks": [
@@ -88,39 +155,88 @@
       "resultReports": [
         {
           "format": "node-tap",
-          "sha256": "340be144d0e613872940fc14dbef182d8e16a4c4814a145e19a031b4511c5a6f"
+          "sha256": "54ce4167e4359c05221e7b8f8af76fc37c0c5b213d1177a8e5518b5d385c1d5f"
         }
       ],
-      "testedHead": "e3595325a35f876aa0d24ac59800749beb7958dd",
-      "sourceFingerprint": "de092dfee2ac7eb3e6b902ccbeffcd7f6eaf1aa9c2880a18b448fd7fa92abf26",
-      "startedAt": "2026-11-07T13:05:46.082Z",
-      "endedAt": "2026-11-07T13:05:52.015Z",
-      "log": "/workspace/scratch/m01-capacity-preflight.log",
-      "logSha256": "340be144d0e613872940fc14dbef182d8e16a4c4814a145e19a031b4511c5a6f",
-      "context": "Node22.22.2/npm10.9.9; original bounded canonical config; focused real Python capacity/storage and original shell dispatch/flow with TEST metrics and substituted privileged effect only; no onsite/DB/deployment operation, unrelated business Full not locally repeated."
+      "testedHead": "82ec715ea9b7e66da101436506c941610c73b6e5",
+      "sourceFingerprint": "05005fdd54b5897daf26bea3626b815d71363f964b53ee58afc3c21557031714",
+      "startedAt": "2026-11-07T14:16:33.577Z",
+      "endedAt": "2026-11-07T14:16:39.840Z",
+      "log": "/workspace/scratch/m01-r3-p03-final-preflight.log",
+      "logSha256": "54ce4167e4359c05221e7b8f8af76fc37c0c5b213d1177a8e5518b5d385c1d5f",
+      "context": "Node22.22.2/npm10.9.9; Node/browser descendants pinnedCPUs2,3; original lock and canonical configs. Database env empty; focused unchanged old consumers plus new original tests; no onsite or remote Gate operation."
     },
     {
       "id": "unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/acceptance-capacity.test.ts tests/unit/acceptance-update-flow.test.ts tests/unit/acceptance-storage.test.ts tests/unit/acceptance-update-policy.test.ts tests/unit/acceptance-update-verification.test.ts tests/unit/acceptance-runtime-path.test.ts tests/unit/acceptance-server-guard.test.ts tests/integration/acceptance-deployment-contract.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-capacity-unit.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/cockpit-detail.test.ts tests/unit/m01-cockpit-workspace.test.ts tests/unit/cockpit-document-directory.test.ts tests/unit/cockpit-document-snapshot.test.ts tests/unit/cockpit-document-new-sources.test.ts tests/unit/m01-production-document-basis.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/m01-cockpit-reading-context.test.ts tests/unit/digital-journey-cockpit.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-r3-p03-final-unit.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 56,
+      "passed": 180,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "b61aa38bae05ac56ea5255318cb9da8576b3a3723a321b8fb0c2f60bd43f1814"
+          "sha256": "381da73c3a4f1c0fcd4ac4ce78e03ad2a46b086c1976feec29c9015dba4ed67a"
         }
       ],
-      "testedHead": "e3595325a35f876aa0d24ac59800749beb7958dd",
-      "sourceFingerprint": "de092dfee2ac7eb3e6b902ccbeffcd7f6eaf1aa9c2880a18b448fd7fa92abf26",
-      "startedAt": "2026-11-07T13:05:52.090Z",
-      "endedAt": "2026-11-07T13:05:53.785Z",
-      "log": "/workspace/scratch/m01-capacity-unit.log",
-      "logSha256": "33586f79624155a13f14f743e0d37475daaa196a311bf3dbb5ddffb88ccd0137",
-      "context": "Node22.22.2/npm10.9.9; original bounded canonical config; focused real Python capacity/storage and original shell dispatch/flow with TEST metrics and substituted privileged effect only; no onsite/DB/deployment operation, unrelated business Full not locally repeated."
+      "testedHead": "82ec715ea9b7e66da101436506c941610c73b6e5",
+      "sourceFingerprint": "05005fdd54b5897daf26bea3626b815d71363f964b53ee58afc3c21557031714",
+      "startedAt": "2026-11-07T14:16:39.919Z",
+      "endedAt": "2026-11-07T14:16:42.808Z",
+      "log": "/workspace/scratch/m01-r3-p03-final-unit.log",
+      "logSha256": "573b1b5baa4633fef11058dc03a4768e0952d395a6854ceb7c5f18438a0336a8",
+      "context": "Node22.22.2/npm10.9.9; Node/browser descendants pinnedCPUs2,3; original lock and canonical configs. Database env empty; focused unchanged old consumers plus new original tests; no onsite or remote Gate operation."
+    },
+    {
+      "id": "native",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers=2 tests/integration/m01-cockpit-home-native-browser-postgres.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-r3-p03-final-native.json",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "142698bdfecfe737b722e99acaced82da0c550e0e02be98771ebe9eb096cabc0"
+        }
+      ],
+      "testedHead": "82ec715ea9b7e66da101436506c941610c73b6e5",
+      "sourceFingerprint": "6597086e379e46af652a3efd8b59debab6adda0abb87ce87bc48f4acdeeb4b70",
+      "inputPaths": [
+        ".env.example",
+        ".gitattributes",
+        ".github",
+        ".gitignore",
+        ".node-version",
+        ".nvmrc",
+        "AGENTS.md",
+        "README.md",
+        "apps",
+        "eslint.config.js",
+        "infra",
+        "package-lock.json",
+        "package.json",
+        "packages",
+        "scripts",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "vitest.postgres-immediate.config.ts",
+        "tests/acceptance",
+        "tests/integration",
+        "tests/fixtures",
+        "tests/helpers"
+      ],
+      "inputFingerprint": "6658a5b636e862d923e01d1e4a7780f912fde605aee236393d81033116c061b1",
+      "startedAt": "2026-11-07T14:14:18.457Z",
+      "endedAt": "2026-11-07T14:15:01.277Z",
+      "log": "/workspace/scratch/m01-r3-p03-final-native.log",
+      "logSha256": "792813ec065d6bd71dbd3c0613d8403055eb4578052d62da50e575e4e56ce2cb",
+      "context": "Node22.22.2/npm10.9.9; Node/browser descendants pinnedCPUs2,3; original lock and canonical configs. Original100s test/hooks and120s setup; maxWorkers2 configured, one native test file/sequential cases (one actual worker), no parallel heavy schema. Owned marked low-privilege PG16.15 CPU2 cpuset0,1 RAM2GiB and Playwright1.56.1 Chromium141.0.7390.37. Original AuthService/PostgresAuthStore/native services; local TEST full App pages, not onsite or CI hardware/load equivalence. Scope captured after exact reconstruction of the original measured full source fingerprint; the sole excluded later change removes an unnecessary escape in a unit-test RegExp. Unit/preflight/lint/secret rerun on final corrected source; workspace src type/build and original native inputs remain byte identical."
     },
     {
       "id": "types",
@@ -128,13 +244,39 @@
       "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "e3595325a35f876aa0d24ac59800749beb7958dd",
-      "sourceFingerprint": "de092dfee2ac7eb3e6b902ccbeffcd7f6eaf1aa9c2880a18b448fd7fa92abf26",
-      "startedAt": "2026-11-07T13:05:53.856Z",
-      "endedAt": "2026-11-07T13:06:21.442Z",
-      "log": "/workspace/scratch/m01-capacity-types.log",
+      "testedHead": "82ec715ea9b7e66da101436506c941610c73b6e5",
+      "sourceFingerprint": "6597086e379e46af652a3efd8b59debab6adda0abb87ce87bc48f4acdeeb4b70",
+      "inputPaths": [
+        ".env.example",
+        ".gitattributes",
+        ".github",
+        ".gitignore",
+        ".node-version",
+        ".nvmrc",
+        "AGENTS.md",
+        "README.md",
+        "apps",
+        "eslint.config.js",
+        "infra",
+        "package-lock.json",
+        "package.json",
+        "packages",
+        "scripts",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "vitest.postgres-immediate.config.ts",
+        "tests/acceptance",
+        "tests/integration",
+        "tests/fixtures",
+        "tests/helpers"
+      ],
+      "inputFingerprint": "6658a5b636e862d923e01d1e4a7780f912fde605aee236393d81033116c061b1",
+      "startedAt": "2026-11-07T14:13:26.790Z",
+      "endedAt": "2026-11-07T14:13:59.272Z",
+      "log": "/workspace/scratch/m01-r3-p03-final-types.log",
       "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e",
-      "context": "Node22.22.2/npm10.9.9; original bounded canonical config; focused real Python capacity/storage and original shell dispatch/flow with TEST metrics and substituted privileged effect only; no onsite/DB/deployment operation, unrelated business Full not locally repeated."
+      "context": "Node22.22.2/npm10.9.9; Node/browser descendants pinnedCPUs2,3; original lock and canonical configs. Database env empty; focused unchanged old consumers plus new original tests; no onsite or remote Gate operation. Scope captured after exact reconstruction of the original measured full source fingerprint; the sole excluded later change removes an unnecessary escape in a unit-test RegExp. Unit/preflight/lint/secret rerun on final corrected source; workspace src type/build and original native inputs remain byte identical."
     },
     {
       "id": "build",
@@ -142,13 +284,39 @@
       "command": "npm run build --workspaces --if-present",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "e3595325a35f876aa0d24ac59800749beb7958dd",
-      "sourceFingerprint": "de092dfee2ac7eb3e6b902ccbeffcd7f6eaf1aa9c2880a18b448fd7fa92abf26",
-      "startedAt": "2026-11-07T13:06:21.526Z",
-      "endedAt": "2026-11-07T13:06:37.765Z",
-      "log": "/workspace/scratch/m01-capacity-build.log",
-      "logSha256": "917a3874c76a82b9f4e94a60e9f3ce0114e2b8711a59a374ea06068fe4615bb4",
-      "context": "Node22.22.2/npm10.9.9; original bounded canonical config; focused real Python capacity/storage and original shell dispatch/flow with TEST metrics and substituted privileged effect only; no onsite/DB/deployment operation, unrelated business Full not locally repeated."
+      "testedHead": "82ec715ea9b7e66da101436506c941610c73b6e5",
+      "sourceFingerprint": "6597086e379e46af652a3efd8b59debab6adda0abb87ce87bc48f4acdeeb4b70",
+      "inputPaths": [
+        ".env.example",
+        ".gitattributes",
+        ".github",
+        ".gitignore",
+        ".node-version",
+        ".nvmrc",
+        "AGENTS.md",
+        "README.md",
+        "apps",
+        "eslint.config.js",
+        "infra",
+        "package-lock.json",
+        "package.json",
+        "packages",
+        "scripts",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "vitest.postgres-immediate.config.ts",
+        "tests/acceptance",
+        "tests/integration",
+        "tests/fixtures",
+        "tests/helpers"
+      ],
+      "inputFingerprint": "6658a5b636e862d923e01d1e4a7780f912fde605aee236393d81033116c061b1",
+      "startedAt": "2026-11-07T14:13:59.351Z",
+      "endedAt": "2026-11-07T14:14:18.377Z",
+      "log": "/workspace/scratch/m01-r3-p03-final-build.log",
+      "logSha256": "82955f21061216434578e4b656e37d27758766c25c6e783d693b7b3eec412b81",
+      "context": "Node22.22.2/npm10.9.9; Node/browser descendants pinnedCPUs2,3; original lock and canonical configs. Database env empty; focused unchanged old consumers plus new original tests; no onsite or remote Gate operation. Scope captured after exact reconstruction of the original measured full source fingerprint; the sole excluded later change removes an unnecessary escape in a unit-test RegExp. Unit/preflight/lint/secret rerun on final corrected source; workspace src type/build and original native inputs remain byte identical."
     },
     {
       "id": "lint",
@@ -156,13 +324,13 @@
       "command": "npm run lint",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "e3595325a35f876aa0d24ac59800749beb7958dd",
-      "sourceFingerprint": "de092dfee2ac7eb3e6b902ccbeffcd7f6eaf1aa9c2880a18b448fd7fa92abf26",
-      "startedAt": "2026-11-07T13:06:37.838Z",
-      "endedAt": "2026-11-07T13:06:56.224Z",
-      "log": "/workspace/scratch/m01-capacity-lint.log",
+      "testedHead": "82ec715ea9b7e66da101436506c941610c73b6e5",
+      "sourceFingerprint": "05005fdd54b5897daf26bea3626b815d71363f964b53ee58afc3c21557031714",
+      "startedAt": "2026-11-07T14:16:42.888Z",
+      "endedAt": "2026-11-07T14:17:05.031Z",
+      "log": "/workspace/scratch/m01-r3-p03-final-lint.log",
       "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763",
-      "context": "Node22.22.2/npm10.9.9; original bounded canonical config; focused real Python capacity/storage and original shell dispatch/flow with TEST metrics and substituted privileged effect only; no onsite/DB/deployment operation, unrelated business Full not locally repeated."
+      "context": "Node22.22.2/npm10.9.9; Node/browser descendants pinnedCPUs2,3; original lock and canonical configs. Database env empty; focused unchanged old consumers plus new original tests; no onsite or remote Gate operation."
     },
     {
       "id": "secret",
@@ -170,13 +338,13 @@
       "command": "npm run secret:scan",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "e3595325a35f876aa0d24ac59800749beb7958dd",
-      "sourceFingerprint": "de092dfee2ac7eb3e6b902ccbeffcd7f6eaf1aa9c2880a18b448fd7fa92abf26",
-      "startedAt": "2026-11-07T13:06:56.298Z",
-      "endedAt": "2026-11-07T13:06:56.876Z",
-      "log": "/workspace/scratch/m01-capacity-secret.log",
+      "testedHead": "82ec715ea9b7e66da101436506c941610c73b6e5",
+      "sourceFingerprint": "05005fdd54b5897daf26bea3626b815d71363f964b53ee58afc3c21557031714",
+      "startedAt": "2026-11-07T14:17:05.116Z",
+      "endedAt": "2026-11-07T14:17:05.704Z",
+      "log": "/workspace/scratch/m01-r3-p03-final-secret.log",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda",
-      "context": "Node22.22.2/npm10.9.9; original bounded canonical config; focused real Python capacity/storage and original shell dispatch/flow with TEST metrics and substituted privileged effect only; no onsite/DB/deployment operation, unrelated business Full not locally repeated."
+      "context": "Node22.22.2/npm10.9.9; Node/browser descendants pinnedCPUs2,3; original lock and canonical configs. Database env empty; focused unchanged old consumers plus new original tests; no onsite or remote Gate operation."
     }
   ]
 }
