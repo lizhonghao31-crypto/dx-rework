@@ -9,7 +9,7 @@ import {settingsBrowserRequired} from '../../scripts/ci/prepare-settings-browser
 
 it('keeps the original homepage browser and shared correctness budget in the exact home projection plan',()=>{
  const suite='tests/integration/m01-cockpit-home-native-browser-postgres.test.ts';
- for(const path of ['apps/web/src/cockpit-home.tsx','apps/web/src/cockpit-home-progress.tsx','apps/web/src/cockpit-home-dialog.tsx','apps/web/src/cockpit-timing-coverage.tsx','apps/web/src/digital-journey-cockpit.tsx','apps/api/src/production-platform/journey-projection.ts','packages/contracts/src/digital-production-journey.ts','tests/acceptance/m01-cockpit-home-native-browser.ts','tests/fixtures/m01-cockpit-home-native-ui.tsx',suite]){
+ for(const path of ['apps/web/src/cockpit-home.tsx','apps/web/src/cockpit-detail.tsx','apps/web/src/cockpit-detail.css','apps/web/src/cockpit-detail-risks.tsx','apps/web/src/cockpit-stage-progress.tsx','apps/web/src/cockpit-documents.tsx','apps/web/src/cockpit-operation-log.tsx','apps/web/src/node-materials-panel.tsx','apps/web/src/cockpit-home-progress.tsx','apps/web/src/cockpit-home-dialog.tsx','apps/web/src/cockpit-timing-coverage.tsx','apps/web/src/digital-journey-cockpit.tsx','apps/api/src/production-platform/journey-projection.ts','packages/contracts/src/digital-production-journey.ts','tests/acceptance/m01-cockpit-home-native-browser.ts','tests/fixtures/m01-cockpit-home-native-ui.tsx',suite]){
   expect(classifyFullGatePaths([path]).mappedPostgresTests).toContain(suite);
  }
  expect(configForSuite(suite)).toBe('vitest.business-chain.config.ts');

@@ -171,7 +171,7 @@ export const classifyFullGatePaths = (inputPaths) => {
   let maintenanceSensitive = false;
   let activationSensitive = false;
   let transferSensitive = false;
-  if(paths.some(path=>/^apps\/web\/src\/(?:cockpit-home(?:-[^/]*)?|cockpit-timing-coverage|digital-journey-cockpit)\.(?:tsx?|css)$/.test(path)||['apps/api/src/production-platform/journey-projection.ts','packages/contracts/src/digital-production-journey.ts','tests/acceptance/m01-cockpit-home-native-browser.ts','tests/fixtures/m01-cockpit-home-native-ui.tsx','tests/integration/m01-cockpit-home-native-browser-postgres.test.ts'].includes(path))){mappedTests.add('tests/integration/m01-cockpit-home-native-browser-postgres.test.ts');domains.add('cockpit-home-browser');}
+  if(paths.some(path=>/^apps\/web\/src\/(?:cockpit-home(?:-[^/]*)?|cockpit-detail(?:-[^/]*)?|cockpit-stage-progress|cockpit-documents|cockpit-operation-log|node-materials-panel|cockpit-timing-coverage|digital-journey-cockpit)\.(?:tsx?|css)$/.test(path)||['apps/api/src/production-platform/journey-projection.ts','packages/contracts/src/digital-production-journey.ts','tests/acceptance/m01-cockpit-home-native-browser.ts','tests/fixtures/m01-cockpit-home-native-ui.tsx','tests/integration/m01-cockpit-home-native-browser-postgres.test.ts'].includes(path))){mappedTests.add('tests/integration/m01-cockpit-home-native-browser-postgres.test.ts');domains.add('cockpit-home-browser');}
   if (paths.some(path => path.startsWith('apps/api/src/auth/') || path === 'packages/config/src/index.ts' || path === 'tests/integration/acceptance-session-retention-postgres.test.ts')) {
     mappedTests.add('tests/integration/acceptance-session-retention-postgres.test.ts');
     domains.add('acceptance-session-retention');

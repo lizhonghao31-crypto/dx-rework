@@ -1,3 +1,4 @@
+import {NavigationIcon} from './navigation-icons.js';
 import {Button} from '@dx-rework/ui';
 import {cachedVerifiedSession,verifySession,refreshSession,verifiedSessionIdentity,registerSessionInvalidator} from './auth-session.js';
 import {useEffect,useMemo,useRef,useState,useSyncExternalStore} from 'react';
@@ -33,7 +34,7 @@ function Entry({entry,context,path,openPaths,onToggle,readEntry,onNavigate}:{onN
 const documentIdentityListeners=new Set<()=>void>();registerSessionInvalidator(()=>{for(const listener of documentIdentityListeners)listener();});
 let fallbackSnapshotSequence=0;
 const idleStates=emptyCockpitDirectoryStates(),noSubscription=()=>()=>undefined;
-const stateLabel=(state:CockpitDirectoryState,waiting:string)=>state.phase==='error'?'读取失败':waiting?'读取中':state.phase==='idle'||state.phase==='loading'?'读取中':state.data?({created:'有记录',missing:'尚无记录',not_applicable:'不适用',unknown:'待核实'} as const)[state.data.state]:'尚未读取';
+const stateLabel=(state:CockpitDirectoryState,waiting:string)=>state.phase==='error'?'读取失败':waiting?'读取中':state.phase==='idle'||state.phase==='loading'?'读取中':state.data?({created:'已填写',missing:'未填写',not_applicable:'不适用',unknown:'待核实'} as const)[state.data.state]:'尚未读取';
 type CategoryDefinition=typeof COCKPIT_DOCUMENT_CATEGORIES[number];
 function Category({category,state,session,context,onChange,onNavigate,onRetryIdentity,waitingReason,query}:{category:CategoryDefinition;state:CockpitDirectoryState;session:CockpitDocumentSnapshot|null;context:CockpitContext;onChange(patch:Partial<CockpitContext>):void;onNavigate(path:string):CockpitContext;onRetryIdentity():void;waitingReason:string;query:string}){
  const paths=(context.documentOpen??'').split('|').filter(Boolean),open=paths.includes(category.key),data=waitingReason?undefined:state.data,busy=state.phase==='loading'||Boolean(waitingReason);
@@ -69,7 +70,7 @@ function DocumentsForSnapshot({order,context,onChange,identity,onRefreshIdentity
  const visible=COCKPIT_DOCUMENT_CATEGORIES.filter(c=>!states[c.key].denied&&states[c.key].data?.state!=='not_applicable');
  const displayState=(key:CockpitDocumentCategory):CockpitDirectoryState=>identityError?{phase:'error',error:identityError}:states[key];
  return <div className="cockpit-document-directory" role="region" aria-label="本单相关单据" ref={directory}>
-  <div className="cockpit-document-priority" role="region" aria-label="生产常用单据" tabIndex={0}>{COCKPIT_PRIORITY_DOCUMENTS.filter(c=>visible.some(v=>v.key===c.key)).map(c=>{const state=displayState(c.key);return <button className="cockpit-document-priority-row" data-category={c.key} data-read-state={state.phase} data-state={state.data?.state??'unknown'} type="button" key={c.key} onClick={event=>openAll(c,event.currentTarget)}><span>{c.label}</span><small>{stateLabel(state,waitingReason)}</small><span className="cockpit-document-chevron" aria-hidden="true">›</span></button>;})}</div>
+  <div className="cockpit-document-priority" role="region" aria-label="生产常用单据" tabIndex={0}>{COCKPIT_PRIORITY_DOCUMENTS.filter(c=>visible.some(v=>v.key===c.key)).map(c=>{const state=displayState(c.key);return <button className="cockpit-document-priority-row" data-category={c.key} data-read-state={state.phase} data-state={state.data?.state??'unknown'} type="button" key={c.key} onClick={event=>openAll(c,event.currentTarget)}><span>{c.label}</span><span className="cockpit-document-fill-status" data-filled={!waitingReason&&state.phase==='ready'&&state.data?.state==='created'}>{!waitingReason&&state.phase==='ready'&&state.data?.state==='created'?<NavigationIcon name="CircleCheck"/>:<span className="cockpit-document-empty-icon" aria-hidden>○</span>}<span>{stateLabel(state,waitingReason)}</span></span></button>;})}</div>
   {identityError&&<p role="alert">{identityError}</p>}
   <footer className="cockpit-document-footer"><button type="button" className="journey-text-action cockpit-document-open-all" data-document-trigger onClick={event=>openAll(undefined,event.currentTarget)}>查看全部</button></footer>
   <dialog ref={dialog} className="cockpit-documents-dialog" aria-label="全部相关单据" onKeyDown={trapCockpitDialogFocus} onCancel={event=>{event.preventDefault();closeAll();}} onClose={()=>{if(!dialog.current?.open&&!closing.current)changeRef.current({documentView:undefined});}}>

@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "base": "cc7e5540de1f544201e68d6134cacf9d509c48e6",
-  "sourceFingerprint": "eea8813bf3c4c7fb6961e0a134a263dfe906c10da0c3929fd0464068c4e5e548",
+  "base": "0fabc0cc3bad06799791283f5d5d3bbda6f6bc37",
+  "sourceFingerprint": "d243302af7df880bd792291e2dbf20c876b31be5c2c7b0773cd77fe4720ad001",
   "risk": "full",
   "rules": [
     {
@@ -105,7 +105,7 @@
       ],
       "initialization": "Original AuthService/PostgresAuthStore and native fixture routes retained; complete App branch renders real App once without synthetic nested Shell. TEST unrelated todo badge is authenticated; proxy preserves original actor response header to avoid legitimate identity-recheck loop. This is fixture transport repair, not product auth relaxation.",
       "dateAndPermission": "Owned low-privilege marked PG16.15 CPU2 RAM2GiB; Node22.22.2/npm10.9.9, lock-pinned Chromium141 and Playwright1.56.1; canonical maxWorkers2 actual one test-file worker/sequential cases. Original100s cases/120s setup/cleanup and finally resource close remain. Source baseline retains924 and921. No onsite acceptance/deploy/production data/security config change.",
-      "expectation": "Original preflight, focused old/new223 units and27 native cases passed on prior cc7 preparation; final counts/evidence below bind the actual assembled candidate after PR03 sync. Types/build/lint/secret also require current fingerprint, not inherited green. Actual final remote Review/Gate tuple is independently verified after push; old cancelled924Full never used as passed.",
+      "expectation": "Original preflight, focused old/new223 units and27 native cases revalidated on the actual combined source after PR03 merge; final counts/evidence below bind this assembled candidate. Types/build/lint/secret also require current fingerprint, not inherited green. Actual final remote Review/Gate tuple is independently verified after push; old cancelled924Full never used as passed.",
       "checks": [
         "preflight",
         "unit",
@@ -130,15 +130,15 @@
       "resultReports": [
         {
           "format": "node-tap",
-          "sha256": "9dd1452a3f4f5a845a94be19fb69a8f6df1535ab92f30f06fdef67228835cbb1"
+          "sha256": "3e9209f9471c6671894e9f3d25d622af61c065081b341b45aab12f6ee73c151d"
         }
       ],
-      "testedHead": "cc7e5540de1f544201e68d6134cacf9d509c48e6",
-      "sourceFingerprint": "eea8813bf3c4c7fb6961e0a134a263dfe906c10da0c3929fd0464068c4e5e548",
-      "startedAt": "2026-11-07T14:02:13.712Z",
-      "endedAt": "2026-11-07T14:02:20.092Z",
+      "testedHead": "206cc837a5be6a52223302bbf945906ba3c965ef",
+      "sourceFingerprint": "d243302af7df880bd792291e2dbf20c876b31be5c2c7b0773cd77fe4720ad001",
+      "startedAt": "2026-11-07T14:42:07.443Z",
+      "endedAt": "2026-11-07T14:42:13.795Z",
       "log": "/workspace/scratch/m01-r3-p04-final-preflight.log",
-      "logSha256": "9dd1452a3f4f5a845a94be19fb69a8f6df1535ab92f30f06fdef67228835cbb1",
+      "logSha256": "3e9209f9471c6671894e9f3d25d622af61c065081b341b45aab12f6ee73c151d",
       "context": "Node22.22.2/npm10.9.9; Node/browser descendants pinnedCPUs2,3; original lock and canonical configs. Database env empty; focused unchanged old consumers plus new original tests; no onsite or remote Gate operation."
     },
     {
@@ -153,15 +153,15 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "feb1c4a425c4f56c6eeb623b859a275fd1c32cf34369b24b34ad563630113a59"
+          "sha256": "30d21fa333cf1bb6be427fecd36532cec26a5d325cc6603742ddbc7ba5e94158"
         }
       ],
-      "testedHead": "cc7e5540de1f544201e68d6134cacf9d509c48e6",
-      "sourceFingerprint": "eea8813bf3c4c7fb6961e0a134a263dfe906c10da0c3929fd0464068c4e5e548",
-      "startedAt": "2026-11-07T14:02:20.172Z",
-      "endedAt": "2026-11-07T14:02:23.063Z",
+      "testedHead": "206cc837a5be6a52223302bbf945906ba3c965ef",
+      "sourceFingerprint": "d243302af7df880bd792291e2dbf20c876b31be5c2c7b0773cd77fe4720ad001",
+      "startedAt": "2026-11-07T14:42:13.878Z",
+      "endedAt": "2026-11-07T14:42:16.691Z",
       "log": "/workspace/scratch/m01-r3-p04-final-unit.log",
-      "logSha256": "ceeeac711a125994ffe39dde37421cc2bce29db4b75dc0ca8fd6316e0a8c44fc",
+      "logSha256": "a23f6d33751cf2a5bb5227cd66e639b49364098392c6bacc95726e475ba7f790",
       "context": "Node22.22.2/npm10.9.9; Node/browser descendants pinnedCPUs2,3; original lock and canonical configs. Database env empty; focused unchanged old consumers plus new original tests; no onsite or remote Gate operation."
     },
     {
@@ -176,15 +176,15 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "d53c1b8c51e605b2e4d018e77c97e761e713b239a8d34c7e1bb5266a80ba6f4f"
+          "sha256": "fba6e3484c7dfe8438116316c27afb756880105da058b395f38e90fa8251bb86"
         }
       ],
-      "testedHead": "cc7e5540de1f544201e68d6134cacf9d509c48e6",
-      "sourceFingerprint": "eea8813bf3c4c7fb6961e0a134a263dfe906c10da0c3929fd0464068c4e5e548",
-      "startedAt": "2026-11-07T14:03:14.414Z",
-      "endedAt": "2026-11-07T14:03:48.723Z",
+      "testedHead": "206cc837a5be6a52223302bbf945906ba3c965ef",
+      "sourceFingerprint": "d243302af7df880bd792291e2dbf20c876b31be5c2c7b0773cd77fe4720ad001",
+      "startedAt": "2026-11-07T14:43:09.853Z",
+      "endedAt": "2026-11-07T14:43:44.447Z",
       "log": "/workspace/scratch/m01-r3-p04-final-native.log",
-      "logSha256": "070fe5167714f3bacb5fde3215b1cdbd57873cf0d9c5b05a4d3e0f1d3cb2cffa",
+      "logSha256": "b37ec73886ee7ec5a355228e8a93931d6a647262d7c612517e43342a29f73522",
       "context": "Node22.22.2/npm10.9.9; Node/browser descendants pinnedCPUs2,3; original lock and canonical configs. Original100s test/hooks and120s setup; maxWorkers2 configured, one native test file/sequential cases (one actual worker), no parallel heavy schema. Owned marked low-privilege PG16.15 CPU2 cpuset0,1 RAM2GiB and Playwright1.56.1 Chromium141.0.7390.37. Original AuthService/PostgresAuthStore/native services; local TEST full App pages, not onsite or CI hardware/load equivalence."
     },
     {
@@ -193,10 +193,10 @@
       "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "cc7e5540de1f544201e68d6134cacf9d509c48e6",
-      "sourceFingerprint": "eea8813bf3c4c7fb6961e0a134a263dfe906c10da0c3929fd0464068c4e5e548",
-      "startedAt": "2026-11-07T14:02:23.149Z",
-      "endedAt": "2026-11-07T14:02:55.363Z",
+      "testedHead": "206cc837a5be6a52223302bbf945906ba3c965ef",
+      "sourceFingerprint": "d243302af7df880bd792291e2dbf20c876b31be5c2c7b0773cd77fe4720ad001",
+      "startedAt": "2026-11-07T14:42:16.772Z",
+      "endedAt": "2026-11-07T14:42:50.711Z",
       "log": "/workspace/scratch/m01-r3-p04-final-types.log",
       "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e",
       "context": "Node22.22.2/npm10.9.9; Node/browser descendants pinnedCPUs2,3; original lock and canonical configs. Database env empty; focused unchanged old consumers plus new original tests; no onsite or remote Gate operation."
@@ -207,12 +207,12 @@
       "command": "npm run build --workspaces --if-present",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "cc7e5540de1f544201e68d6134cacf9d509c48e6",
-      "sourceFingerprint": "eea8813bf3c4c7fb6961e0a134a263dfe906c10da0c3929fd0464068c4e5e548",
-      "startedAt": "2026-11-07T14:02:55.446Z",
-      "endedAt": "2026-11-07T14:03:14.336Z",
+      "testedHead": "206cc837a5be6a52223302bbf945906ba3c965ef",
+      "sourceFingerprint": "d243302af7df880bd792291e2dbf20c876b31be5c2c7b0773cd77fe4720ad001",
+      "startedAt": "2026-11-07T14:42:50.794Z",
+      "endedAt": "2026-11-07T14:43:09.769Z",
       "log": "/workspace/scratch/m01-r3-p04-final-build.log",
-      "logSha256": "dfb29b21dc86aafcd32fc5814750ed31b350ed09b869336ac549938e7d4bd0ac",
+      "logSha256": "77f7fa6bf8a2df1de72b8f7fc3d01c8aaecaf56fc1ef7a549ab0a0f087701f57",
       "context": "Node22.22.2/npm10.9.9; Node/browser descendants pinnedCPUs2,3; original lock and canonical configs. Database env empty; focused unchanged old consumers plus new original tests; no onsite or remote Gate operation."
     },
     {
@@ -221,10 +221,10 @@
       "command": "npm run lint",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "cc7e5540de1f544201e68d6134cacf9d509c48e6",
-      "sourceFingerprint": "eea8813bf3c4c7fb6961e0a134a263dfe906c10da0c3929fd0464068c4e5e548",
-      "startedAt": "2026-11-07T14:03:48.804Z",
-      "endedAt": "2026-11-07T14:04:09.819Z",
+      "testedHead": "206cc837a5be6a52223302bbf945906ba3c965ef",
+      "sourceFingerprint": "d243302af7df880bd792291e2dbf20c876b31be5c2c7b0773cd77fe4720ad001",
+      "startedAt": "2026-11-07T14:43:44.523Z",
+      "endedAt": "2026-11-07T14:44:06.023Z",
       "log": "/workspace/scratch/m01-r3-p04-final-lint.log",
       "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763",
       "context": "Node22.22.2/npm10.9.9; Node/browser descendants pinnedCPUs2,3; original lock and canonical configs. Database env empty; focused unchanged old consumers plus new original tests; no onsite or remote Gate operation."
@@ -235,10 +235,10 @@
       "command": "npm run secret:scan",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "cc7e5540de1f544201e68d6134cacf9d509c48e6",
-      "sourceFingerprint": "eea8813bf3c4c7fb6961e0a134a263dfe906c10da0c3929fd0464068c4e5e548",
-      "startedAt": "2026-11-07T14:04:09.896Z",
-      "endedAt": "2026-11-07T14:04:10.505Z",
+      "testedHead": "206cc837a5be6a52223302bbf945906ba3c965ef",
+      "sourceFingerprint": "d243302af7df880bd792291e2dbf20c876b31be5c2c7b0773cd77fe4720ad001",
+      "startedAt": "2026-11-07T14:44:06.102Z",
+      "endedAt": "2026-11-07T14:44:06.625Z",
       "log": "/workspace/scratch/m01-r3-p04-final-secret.log",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda",
       "context": "Node22.22.2/npm10.9.9; Node/browser descendants pinnedCPUs2,3; original lock and canonical configs. Database env empty; focused unchanged old consumers plus new original tests; no onsite or remote Gate operation."
