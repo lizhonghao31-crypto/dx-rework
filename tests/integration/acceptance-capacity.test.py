@@ -97,10 +97,58 @@ class CapacityTests(unittest.TestCase):
                 names = [row['name'] for row in rows]
                 self.assertEqual('independent full Git object store' in names, phase in ('download', 'diagnose-download'))
                 self.assertEqual('authenticated source Git fetch metadata' in names, phase in ('download', 'diagnose-download'))
-                self.assertEqual('build source/dependencies/output' in names, phase in ('download', 'archive', 'build'))
-                self.assertEqual('new consistent backup temporary set' in names, phase in ('download', 'archive', 'build', 'backup'))
+                self.assertEqual('build source/dependencies/output' in names, phase == 'build')
+                self.assertEqual('new consistent backup temporary set' in names, phase in ('build', 'backup'))
             with self.assertRaises(ValueError):
                 capacity.components('build', '/missing-source', '/missing-tool')
+
+    def test_matching_acceptance_lock_uses_measured_dependencies_not_old_production_lock(self):
+        data = {'database': 'dx_rework_acceptance', 'databaseBytes': 100, 'maxWalBytes': 200,
+                'dataPaths': ['/data'], 'walPath': '/wal', 'logPath': '/logs'}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            repository, acceptance, tool = root / 'repo', root / 'acceptance', root / 'tool'
+            for path in (repository, acceptance / 'current', tool):
+                path.mkdir(parents=True)
+            (repository / 'package-lock.json').write_text('old production')
+            (acceptance / 'current/package-lock.json').write_text('same accepted lock')
+            (tool / 'package-lock.json').write_text('same accepted lock')
+            def size(path, excluded=()):
+                return 400 * capacity.MIB if str(path).endswith('/node_modules') else 0
+            with patch.object(capacity, 'ROOT', str(acceptance)), patch.object(capacity, 'REPOSITORY', str(repository)), patch.object(capacity, 'tree_bytes', side_effect=size):
+                rows = capacity.components('build', str(tool), str(tool), data)
+                cache = next(row for row in rows if row['name'] == 'npm locked-package cache')
+                self.assertEqual(cache['bytesPerFilesystem'], 600 * capacity.MIB)
+                (tool / 'package-lock.json').write_text('new unknown lock')
+                rows = capacity.components('build', str(tool), str(tool), data)
+                cache = next(row for row in rows if row['name'] == 'npm locked-package cache')
+                self.assertEqual(cache['bytesPerFilesystem'], 2 * capacity.GIB)
+                (tool / 'package-lock.json').unlink()
+                rows = capacity.components('build', str(tool), str(tool), data)
+                cache = next(row for row in rows if row['name'] == 'npm locked-package cache')
+                self.assertEqual(cache['bytesPerFilesystem'], 2 * capacity.GIB)
+
+    def test_download_does_not_add_expired_git_store_to_build_and_database_budget(self):
+        data = {'database': 'dx_rework_acceptance', 'databaseBytes': 100, 'maxWalBytes': 200,
+                'dataPaths': ['/data'], 'walPath': '/wal', 'logPath': '/logs'}
+        with patch.object(capacity, 'tree_bytes', return_value=0), patch.object(capacity, 'git_bytes', return_value=0):
+            download = capacity.components('download', '/missing', '/missing', data)
+            archive = capacity.components('archive', '/missing', '/missing', data)
+            build = capacity.components('build', '/missing', '/missing', data)
+        names = lambda rows: {row['name'] for row in rows}
+        self.assertNotIn('database rewrite per data filesystem', names(download))
+        self.assertNotIn('database rewrite per data filesystem', names(archive))
+        self.assertNotIn('independent full Git object store', names(build))
+        for name in ('database rewrite per data filesystem', 'WAL growth and retained segments', 'new consistent backup temporary set'):
+            self.assertIn(name, names(build))
+        available = 6 * capacity.GIB
+        probe = lambda path: dict(self.probe(path), available=available)
+        self.assertEqual(capacity.plan(download, probe)[0]['shortfallBytes'], 0)
+        self.assertGreater(capacity.plan(build, probe)[0]['shortfallBytes'], 0)
+        for phase in ('download', 'archive'):
+            for key, value in (('database', 'dx_rework'), ('databaseBytes', None), ('dataPaths', []), ('walPath', 'relative'), ('logPath', None)):
+                with self.assertRaises(ValueError):
+                    capacity.components(phase, '/missing', '/missing', dict(data, **{key: value}))
 
     def test_frontend_and_exact_target_paths_have_their_own_filesystem_charge(self):
         data = {'database': 'dx_rework_acceptance', 'databaseBytes': 100, 'maxWalBytes': 200,

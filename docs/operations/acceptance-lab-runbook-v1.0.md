@@ -101,7 +101,7 @@ TODO_TIMING_ENABLED=false
 
 角色报告同时输出实际 `server_version_num` 和成员角色的 `member_rolinherit`。PostgreSQL 16 以前不存在逐条成员关系的 `inherit_option/set_option`；对应报告值为 `not_applicable`，不能解释为 false。有效继承与所有者能力仍使用服务器真实 `pg_has_role(...,'USAGE')` 判断。README 的标准环境要求仍为 PostgreSQL 16；本工具已有 PG15/16 真实诊断、迁移及备份恢复回归，本轮另以实际 PG13.23/16.15 和 Python3.6.15 验证固定存储查询、原维护与隔离恢复；不表示已支持所有其它早期版本。现场缺少 PG16 catalog 列只能证明该列不可用，不能仅凭客户端路径或此错误断言服务器就是 PG15。
 
-每个实际挂载分别按剩余工作预留源码/独立 Git 对象库与认证源码库 fetch 增量、工具 staging、锁依赖/缓存/解压临时集、build/candidate/API release/前端 release、在线备份临时集、数据重写、WAL 与日志余量；现存旧代和备份占用不抵扣。逐卷记录 available/required/shortfall 与真实探针路径，任一卷不足在对应重操作前拒绝；不自动删备份、清历史或扩盘。估算不是空间预留，也不能保证并发写入不耗尽余量；后续阶段仍需复核，精确公式见 [PR6 工程记录](../engineering/acceptance-delivery-capacity-pr6-20261027.md)。原备份后至少256MiB/本库大小的停服前检查继续保留。
+每个实际挂载分别按本阶段至下一次强制容量重查的实际并存用量预算。下载/解包仅预留源码、独立Git对象库与认证源码库fetch增量及可能的工具staging；Git子进程退出后临时库已删除，主控在构建前重新测量可用空间，不能把先前临时库再与后续构建、备份、数据库写入预算同时相加。构建阶段继续覆盖锁依赖/缓存/解压临时集、build/candidate/API release/前端release、在线备份临时集、数据重写、WAL与日志余量；备份前、停服前继续各自重查。生产或Acceptance现有安装与目标lock完全匹配且非空时可按该安装实测依赖大小加50%估算，最低512MiB；无匹配保留2GiB底线，此证据不改变worker实际依赖安装/复用校验。现存旧代和备份占用不抵扣。逐卷记录 available/required/shortfall 与真实探针路径，任一卷不足在对应重操作前拒绝；不自动删备份、清历史或扩盘。估算不是空间预留，也不能保证并发写入不耗尽余量；后续阶段仍需复核，精确公式见 [PR6 工程记录](../engineering/acceptance-delivery-capacity-pr6-20261027.md)。原备份后至少256MiB/本库大小的停服前检查继续保留。
 
 备份在停进程前完成；它是在线一致性快照，不承诺包含其后的业务写入。迁移历史相同、PM2 当前 stopped，均不能证明备份后没有业务写入或期间未重启；因此新版不自动复用旧进程留下的备份凭据。每次确有更新的调用只备份一次，已是同候选且 schema current、运行验收健康的调用只验证、不重启、不备份。若此前激活失败后候选已停止，同SHA重试核验候选/配置/完整schema后仅重新激活该候选，不重跑迁移或备份，不切回旧代码。保留所有既有备份。额外记录对象 owner/ACL 供恢复核对；现有 dump 使用 `--no-owner --no-acl`，并不自动重建原授权。
 

@@ -87,11 +87,22 @@ def components(phase, source, tool, storage=None, tree_file=None, target_sha=Non
     source_size = max(128 * MIB, 2 * (exact_tree_bytes(tree_file) if tree_file else
                       max(tree_bytes(source, ('.git', 'node_modules', 'dist', '.acceptance-preflight')),
                           tree_bytes(tool, ('.git', 'node_modules', 'dist')))))
-    dependency_size = max(512 * MIB, (3 * max(tree_bytes(Path(REPOSITORY) / 'node_modules'),
-                          tree_bytes(Path(ROOT) / 'current/node_modules')) + 1) // 2)
-    baseline, target = Path(REPOSITORY) / 'package-lock.json', Path(tool) / 'package-lock.json'
-    if not baseline.is_file() or not target.is_file() or baseline.read_bytes() != target.read_bytes():
-        dependency_size = max(2 * GIB, dependency_size)
+    dependency_roots = (Path(REPOSITORY), Path(ROOT) / 'current')
+    dependency_sizes = [tree_bytes(root / 'node_modules') for root in dependency_roots]
+    target = Path(tool) / 'package-lock.json'
+    matched_sizes = []
+    if target.is_file():
+        target_lock = target.read_bytes()
+        for root, measured in zip(dependency_roots, dependency_sizes):
+            baseline = root / 'package-lock.json'
+            if measured > 0 and baseline.is_file() and baseline.read_bytes() == target_lock:
+                matched_sizes.append(measured)
+    # A matching installed Acceptance lock is sizing evidence even when the
+    # production checkout is older. This does not authorize dependency reuse:
+    # the worker still performs its own locked install/validation.
+    measured = max(matched_sizes or dependency_sizes)
+    dependency_size = max(512 * MIB if matched_sizes else 2 * GIB,
+                          (3 * measured + 1) // 2)
     output_size = max(256 * MIB, 2 * (tree_bytes(Path(ROOT) / 'current/apps/api/dist') +
                                      tree_bytes(Path(ROOT) / 'frontend/current')))
     items = []
@@ -115,7 +126,7 @@ def components(phase, source, tool, storage=None, tree_file=None, target_sha=Non
         return items
     if phase in ('download', 'archive'):
         add('possible immutable data-only tool staging', TOOLS, 2 * source_size)
-    if phase in ('download', 'archive', 'build'):
+    if phase == 'build':
         add('build source/dependencies/output', build, source_size + dependency_size + output_size)
         add('candidate bundle staging', candidate, source_size + dependency_size + output_size)
         add('installed API release with old generation retained', release, source_size + dependency_size + output_size)
@@ -129,6 +140,15 @@ def components(phase, source, tool, storage=None, tree_file=None, target_sha=Non
     paths = storage.get('dataPaths')
     if not isinstance(paths, list) or not paths or any(not isinstance(path, str) or not os.path.isabs(path) for path in paths):
         raise ValueError('Invalid database storage paths')
+    # The fetch subprocess removes its Git store before returning. A fresh
+    # build check measures free space before allocating builds or touching DB.
+    # Archive covers extraction/tool refresh until that next check; allocations
+    # already present on disk are accounted for by the live available probe.
+    if phase in ('download', 'archive'):
+        for key in ('walPath', 'logPath'):
+            if not isinstance(storage.get(key), str) or not os.path.isabs(storage[key]):
+                raise ValueError('Invalid PostgreSQL storage path: ' + key)
+        return items
     if phase != 'stop':
         add('new consistent backup temporary set', Path(ROOT) / 'backups/postgres', 2 * size + 256 * MIB)
     items.append({'name': 'database rewrite per data filesystem', 'paths': paths, 'bytesPerFilesystem': 2 * size + 256 * MIB})
