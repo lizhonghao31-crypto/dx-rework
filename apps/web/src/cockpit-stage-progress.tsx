@@ -13,7 +13,7 @@ export function CockpitStageProgress({stage,index,fact,selected,onSelect,tooltip
  const tone=!fact||fact.applicability!=='applicable'||fact.risk==='unknown'?'neutral':fact.risk==='overdue'?'danger':fact.risk==='due_soon'?'warning':started?'success':'neutral';
  const tip=`cockpit-stage-progress-${stage.key}`;
  return <div className={`cockpit-stage${selected?' is-selected':''} is-${tone}`}>
-  <button type="button" className="cockpit-stage-select" aria-pressed={selected} data-cockpit-focus={'stage:'+stage.key} aria-label={`${stage.label}节点明细`} aria-describedby={tip} onClick={onSelect} onMouseEnter={onTooltipOpen} onMouseLeave={onTooltipClose} onFocus={onTooltipOpen} onBlur={onTooltipClose} onKeyDown={event=>{if(event.key==='Escape')onTooltipClose();}}>
+  <button type="button" className={"cockpit-stage-select"+(tooltipOpen?" is-progress-open":"")} aria-pressed={selected} data-cockpit-focus={'stage:'+stage.key} aria-label={`${stage.label}节点明细`} aria-describedby={tip} onClick={onSelect} onMouseEnter={onTooltipOpen} onMouseLeave={onTooltipClose} onFocus={onTooltipOpen} onBlur={onTooltipClose} onKeyDown={event=>{if(event.key==='Escape')onTooltipClose();}}>
    <span className="cockpit-stage-rings"><svg viewBox="0 0 104 104" aria-hidden="true">
     <circle cx="52" cy="52" r="46" className="cockpit-stage-track is-time" fill="none" strokeWidth="6"/>
     <circle cx="52" cy="52" r="35" className="cockpit-stage-track is-actual" fill="none" strokeWidth="7"/>
@@ -21,7 +21,7 @@ export function CockpitStageProgress({stage,index,fact,selected,onSelect,tooltip
     {known(fact?.actualRatio)&&fact.actualRatio>0&&<circle cx="52" cy="52" r="35" className="cockpit-stage-arc is-actual" fill="none" strokeWidth="7" pathLength="100" strokeDasharray={`${fact.actualRatio*100} 100`} transform="rotate(-90 52 52)"/>}
     <text x="52" y="62" textAnchor="middle" fontSize="30" fontWeight="700">{fact?.actualRatio===1&&fact.applicability==='applicable'?'✓':index+1}</text>
    </svg></span><strong>{stage.label}</strong>
-   <span id={tip} role="tooltip" className={'cockpit-stage-tooltip'+(tooltipOpen?' is-open':'')}><span>计划进度 <b>{time}</b></span><span>实际进度 <b>{actual}</b></span></span>
+   <span id={tip} role="tooltip" className={'cockpit-stage-tooltip'+(tooltipOpen?' is-open':'')}><span>时间进度 <b>{time}</b></span><span>实际进度 <b>{actual}</b></span></span>
   </button>
   <div className="cockpit-stage-dates" aria-label={`${stage.label}日期`}><div><span>预计完成</span><StageDate value={fact?.expected}/></div><div><span>实际完成</span><StageDate value={fact?.actual}/></div></div>
  </div>;

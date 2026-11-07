@@ -58,21 +58,53 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const {context,page}=await h.open();try{await page.route('**/api/digital-production/journeys?**',async route=>{if(new URL(route.request().url()).searchParams.has('missing'))await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{code:'TEST_HOME_TRANSPORT',message:'TEST category read failed'}})});else await route.continue();});await page.getByRole('button',{name:/时效待补充/}).first().click();await page.locator('.cockpit-coverage-categories button:enabled').first().click();const dialog=page.getByRole('dialog');await dialog.getByRole('alert').waitFor();expect(await dialog.innerText()).not.toContain('当前条件下没有对应订单');expect(await dialog.locator('.cockpit-coverage-order-list').count()).toBe(0);await page.unroute('**/api/digital-production/journeys?**');await dialog.getByRole('button',{name:'重新读取',exact:true}).click();await coverageReady(page);expect(await dialog.locator('.cockpit-coverage-order-list li').count()).toBeGreaterThan(0);await page.keyboard.press('Escape');await homeReady(page);
   }finally{await context.close();}
  });
- it('R3-03 real full App keeps seven projected rings, original dates and all five card edges aligned at desktop widths',async()=>{
+ it('Final10 real full App keeps compact seven rings, native dates and both shared grid alignments',async()=>{
   const {context,page}=await h.open(undefined,{search:h.prefix+'01'});try{
    await page.locator('.journey-orders tbody tr').first().locator('.journey-order-select').click();await page.locator('[data-view="order"][aria-busy="false"]').waitFor();
-   for(const width of [1165,1366,1584]){
+   for(const width of [1165,1280,1366,1440,1920]){
     await page.setViewportSize({width,height:1003});const stages=page.locator('.cockpit-stage');expect(await stages.count()).toBe(7);
     const geometry=await page.evaluate(()=>{const box=(selector:string)=>{const r=document.querySelector(selector)!.getBoundingClientRect();return {x:r.x,y:r.y,right:r.right,bottom:r.bottom,width:r.width,height:r.height};};return {body:document.documentElement.scrollWidth,inner:innerWidth,flow:box('.cockpit-flow-scroll'),stages:[...document.querySelectorAll('.cockpit-stage')].map(el=>{const r=el.getBoundingClientRect();return {x:r.x,right:r.right,top:r.top,dates:el.querySelector('.cockpit-stage-dates')!.getBoundingClientRect().bottom};}),current:box('.journey-current-panel'),risk:box('.journey-risk-panel'),nodes:box('.journey-node-panel'),docs:box('.journey-documents-panel'),log:box('.journey-activity-panel'),docsFooter:box('.cockpit-document-footer'),logFooter:box('.cockpit-log-summary-footer')};});
     expect(geometry.body).toBeLessThanOrEqual(geometry.inner+1);expect(new Set(geometry.stages.map(s=>Math.round(s.top))).size).toBe(1);expect(geometry.stages[6]!.right).toBeLessThanOrEqual(geometry.flow.right+1);
     for(const [a,b]of [[geometry.current.x,geometry.nodes.x],[geometry.risk.x,geometry.docs.x],[geometry.risk.right,geometry.log.right],[geometry.current.y,geometry.risk.y],[geometry.current.bottom,geometry.risk.bottom],[geometry.nodes.y,geometry.docs.y],[geometry.docs.y,geometry.log.y],[geometry.nodes.bottom,geometry.docs.bottom],[geometry.docs.bottom,geometry.log.bottom],[geometry.docsFooter.bottom,geometry.logFooter.bottom]])expect(Math.abs(a-b)).toBeLessThanOrEqual(1);
-    expect(geometry.current.height).toBeLessThanOrEqual(233);expect(geometry.log.height).toBeLessThanOrEqual(321);
+    expect(await page.locator('.cockpit-flow-panel h2').count()).toBe(0);const metadata=await page.locator('.cockpit-identity-facts>div').evaluateAll(fields=>fields.map(field=>({label:field.querySelector('dt')!.getBoundingClientRect().left,value:field.querySelector('dd')!.getBoundingClientRect().left})));expect(metadata).toHaveLength(6);for(let col=0;col<3;col++){expect(Math.abs(metadata[col]!.label-metadata[col+3]!.label)).toBeLessThanOrEqual(1);expect(Math.abs(metadata[col]!.value-metadata[col+3]!.value)).toBeLessThanOrEqual(1);}expect(geometry.current.height).toBeLessThanOrEqual(233);expect(geometry.log.height).toBeLessThanOrEqual(321);
     const tipStage=stages.nth(2),trigger=tipStage.locator('.cockpit-stage-select');await trigger.focus();await page.keyboard.press('Tab');await trigger.focus();await tipStage.getByRole('tooltip').waitFor({state:'visible'});
-    const overlap=await page.evaluate(()=>{const tip=document.querySelector('.cockpit-stage:nth-child(3) [role=tooltip]')!.getBoundingClientRect();return ['.cockpit-flow-panel h2','.cockpit-stage:nth-child(3) svg','.cockpit-stage:nth-child(3) .cockpit-stage-dates'].some(selector=>{const r=document.querySelector(selector)!.getBoundingClientRect();return tip.left<r.right&&tip.right>r.left&&tip.top<r.bottom&&tip.bottom>r.top;});});expect(overlap).toBe(false);expect(await page.getByRole('tooltip').filter({visible:true}).count()).toBe(1);
+    const overlap=await page.evaluate(()=>{const tip=document.querySelector('.cockpit-stage:nth-child(3) [role=tooltip]')!.getBoundingClientRect();return ['.journey-po-order-facts','.cockpit-stage:nth-child(3) svg','.cockpit-stage:nth-child(3) .cockpit-stage-dates'].some(selector=>{const r=document.querySelector(selector)!.getBoundingClientRect();return tip.left<r.right&&tip.right>r.left&&tip.top<r.bottom&&tip.bottom>r.top;});});expect(overlap).toBe(false);expect(await page.getByRole('tooltip').filter({visible:true}).count()).toBe(1);
     await page.screenshot({path:join(h.evidence,`full-detail-multi-PO-${width}.png`),fullPage:true});await page.keyboard.press('Escape');expect(await tipStage.getByRole('tooltip').isVisible()).toBe(false);await page.locator('.cockpit-detail-toolbar').click();
    }
    const body=await page.locator('.cockpit-detail').innerText();for(const text of ['计划与时效','订单进度 · 全单范围','查看进度依据与采用版本','该节点已结束'])expect(body).not.toContain(text);expect(body).toContain('订单ID：—');expect(h.errors).toEqual([]);
   }finally{await context.close();}
+ });
+ it('Final10 labelled shared-projection fixture renders independent zero, partial, full and unknown rings in the real full App',async()=>{
+  const pairs=[[0,0],[.4,.8],[1,.6],[null,null]] as const;
+  const {context,page}=await h.open(undefined,{search:h.prefix+'01'});try{
+   // Only the returned visual projection is a labelled rendering fixture here;
+   // authenticated native IDs, commands, permissions and dates are retained.
+   await page.route('**/api/digital-production/journeys/*',async route=>{const response=await route.fetch();expect(response.status()).toBe(200);const value=await response.json();expect(value.visualProgress?.stages).toHaveLength(7);await route.fulfill({response,json:{...value,visualProgress:{...value.visualProgress,stages:value.visualProgress.stages.map((stage:Record<string,unknown>,index:number)=>index<4?{...stage,timeRatio:pairs[index]![0],actualRatio:pairs[index]![1]}:stage)}}});});
+   await page.locator('.journey-orders tbody tr').first().locator('.journey-order-select').click();await page.locator('[data-view="order"][aria-busy="false"]').waitFor();
+   for(const [index,pair]of pairs.entries()){
+    const stage=page.locator('.cockpit-stage').nth(index);for(const [kind,ratio]of [['time',pair[0]],['actual',pair[1]]] as const){const arc=stage.locator('.cockpit-stage-arc.is-'+kind);expect(await arc.count()).toBe(ratio===null||ratio===0?0:1);if(ratio!==null&&ratio>0)expect(await arc.getAttribute('stroke-dasharray')).toBe(`${ratio*100} 100`);}
+    await stage.locator('.cockpit-stage-select').focus();const tip=stage.getByRole('tooltip');await tip.waitFor({state:'visible'});expect((await tip.innerText()).replace(/\s+/g,' ')).toContain('时间进度 '+(pair[0]===null?'—':`${pair[0]*100}%`));expect((await tip.innerText()).replace(/\s+/g,' ')).toContain('实际进度 '+(pair[1]===null?'—':`${pair[1]*100}%`));await page.keyboard.press('Escape');expect(await tip.isVisible()).toBe(false);
+   }
+  }finally{await context.close();}
+ });
+ it('Final10 full App keeps long metadata labels and values on shared columns at normal and 125-percent CSS viewport/DPR conditions',async()=>{
+  // Labelled response fixture stresses layout only: native identifiers, auth,
+  // business quantities, node facts, dates and versions are not replaced.
+  for(const scale of [1,1.25]){
+   const {context,page}=await h.open(undefined,{search:h.prefix+'01'},1165,scale);try{
+    await page.route('**/api/digital-production/journeys/*',async route=>{const response=await route.fetch();expect(response.status()).toBe(200);const value=await response.json();await route.fulfill({response,json:{...value,customer:'TEST-长客户名称用于资料列对齐检查-'.repeat(2),merchandisers:value.merchandisers.map((person:{name:string|null})=>({...person,name:'TEST-长跟单姓名用于字段自然换行检查'}))}});});
+    await page.locator('.journey-orders tbody tr').first().locator('.journey-order-select').click();await page.locator('[data-view="order"][aria-busy="false"]').waitFor();
+    for(const width of [1165,1280,1366,1440,1920]){
+     await page.setViewportSize({width:Math.round(width/scale),height:Math.round(1003/scale)});
+     const layout=await page.evaluate(()=>({width:innerWidth,body:document.documentElement.scrollWidth,dpr:devicePixelRatio,fields:[...document.querySelectorAll('.cockpit-identity-facts>div')].map(field=>{const outer=field.getBoundingClientRect(),label=field.querySelector('dt')!.getBoundingClientRect(),value=field.querySelector('dd')!.getBoundingClientRect();return {label:label.left,value:value.left,right:value.right,outerRight:outer.right,overflow:field.scrollWidth>field.clientWidth+1};})}));
+     expect(layout.dpr).toBe(scale);expect(layout.body).toBeLessThanOrEqual(layout.width+1);expect(layout.fields).toHaveLength(6);
+     for(let col=0;col<3;col++){expect(Math.abs(layout.fields[col]!.label-layout.fields[col+3]!.label)).toBeLessThanOrEqual(1);expect(Math.abs(layout.fields[col]!.value-layout.fields[col+3]!.value)).toBeLessThanOrEqual(1);}
+     for(const field of layout.fields){expect(field.right).toBeLessThanOrEqual(field.outerRight+1);expect(field.overflow).toBe(false);}
+     const cards=await page.locator('.cockpit-detail-columns>.dx-production-panel').evaluateAll(elements=>elements.map(el=>{const r=el.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom};}));const [current,nodes,risk,docs,log]=cards;for(const [a,b]of [[current!.left,nodes!.left],[current!.top,risk!.top],[current!.bottom,risk!.bottom],[risk!.left,docs!.left],[risk!.right,log!.right],[nodes!.top,docs!.top],[docs!.top,log!.top],[nodes!.bottom,docs!.bottom],[docs!.bottom,log!.bottom]])expect(Math.abs(a-b)).toBeLessThanOrEqual(1);
+     await page.screenshot({path:join(h.evidence,`long-metadata-physical-${width}-scale-${scale}.png`),fullPage:true});
+    }
+   }finally{await context.close();}
+  }
  });
  it('R3-03 original physical F receipt debt, material/risk/directory/log dialogs retain card geometry and return focus',async()=>{
   const {context,page}=await h.open(undefined,{search:h.shortage.designStyleNo});try{
