@@ -7,6 +7,16 @@ import { assertMappedPostgresTests, classifyFullGatePaths, POSTGRES_CASE_SUITES 
 import {configForSuite,fullGatePostgresPlan,POSTGRES_CHAIN_TESTS} from '../../scripts/test-suite-plan.mjs';
 import {settingsBrowserRequired} from '../../scripts/ci/prepare-settings-browser.mjs';
 
+it('keeps the original homepage browser and shared correctness budget in the exact home projection plan',()=>{
+ const suite='tests/integration/m01-cockpit-home-native-browser-postgres.test.ts';
+ for(const path of ['apps/web/src/cockpit-home.tsx','apps/web/src/cockpit-home-progress.tsx','apps/web/src/cockpit-home-dialog.tsx','apps/web/src/cockpit-timing-coverage.tsx','apps/web/src/digital-journey-cockpit.tsx','apps/api/src/production-platform/journey-projection.ts','packages/contracts/src/digital-production-journey.ts','tests/acceptance/m01-cockpit-home-native-browser.ts','tests/fixtures/m01-cockpit-home-native-ui.tsx',suite]){
+  expect(classifyFullGatePaths([path]).mappedPostgresTests).toContain(suite);
+ }
+ expect(configForSuite(suite)).toBe('vitest.business-chain.config.ts');
+ expect(settingsBrowserRequired({DB_REQUIRED:'true',BASE_SHA:'a'.repeat(40),BUSINESS_CHAIN_SENSITIVE:'false',MIGRATION_SENSITIVE:'false',DEPLOYMENT_SENSITIVE:'false',MAPPED_POSTGRES_TESTS:suite})).toBe(true);
+ expect(classifyFullGatePaths(['apps/web/src/receiving-page.tsx']).mappedPostgresTests).not.toContain(suite);
+});
+
 it('keeps native persistent-session and Chromium coverage in the exact auth/config plan', () => {
   const suite='tests/integration/acceptance-session-retention-postgres.test.ts';
   for(const path of ['apps/api/src/auth/service.ts','apps/api/src/auth/acceptance-control.ts','packages/config/src/index.ts',suite]) {

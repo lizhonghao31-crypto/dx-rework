@@ -1,5 +1,5 @@
 import {expect,it} from "vitest";
-import {JOURNEY_NODES,JourneyFilterSchema,type JourneyNode,type OrderJourney} from "@dx-rework/contracts/digital-production-journey";
+import {JOURNEY_COVERAGE_KEYS,JOURNEY_NODES,JourneyFilterSchema,type JourneyNode,type OrderJourney} from "@dx-rework/contracts/digital-production-journey";
 import {journeyDisplay,progressLabel} from "../../apps/api/src/production-platform/journey-display.js";
 import {journeyStages,selectJourneys} from "../../apps/api/src/production-platform/journey-projection.js";
 import {parseJourneyLogCursor} from "../../apps/api/src/production-platform/journey-log.js";
@@ -76,4 +76,32 @@ it("rejects a cross-order, cross-user, future or malformed event cursor",()=>{
   const encode=(patch:object={})=>Buffer.from(JSON.stringify({v:1,order:"A",actor:"user",asOf,at:"2026-10-19T12:00:00.000001Z",id:"task:00000000-0000-4000-8000-000000000001",...patch})).toString("base64url");
   expect(parseJourneyLogCursor(encode(),"A",asOf,"user").order).toBe("A");
   for(const value of [encode({order:"B"}),encode({actor:"another"}),encode({asOf:"2027-01-01T00:00:00Z"}),"broken"])expect(()=>parseJourneyLogCursor(value,"A",asOf,"user")).toThrow();
+});
+
+it('R3 missing-time KPI and every category drill share distinct full-range orders across pages and original filters',()=>{
+ const merchandiser='00000000-0000-4000-8000-000000000099';
+ const orders=Array.from({length:32},(_,i)=>{
+  const o=date(order('TEST-'+String(i).padStart(2,'0')),'2026-10-20');o.category='上衣';o.merchandisers=[{id:merchandiser,name:'TEST跟单'}];
+  o.supervision={asOf,status:'legacy_unenrolled',originalRevision:null,currentRevision:null,nodes:[],customerReminderDate:null,coverage:[{key:'factory_date',message:'TEST原工厂日期缺项'},{key:JOURNEY_COVERAGE_KEYS[i%7]!,message:'TEST原分类'},{key:'factory_date',message:'TEST重复原证据'}]};
+  if(i===31){nodes(o).find(n=>n.key==='packing')!.state='completed';o.supervision.coverage.push({key:'fact_time',message:'TEST已收口原事实矛盾'});}
+  return o;
+ });
+ const other=date(order('TEST-other'),'2026-10-20');other.customer='PE';const source={...orders[0]!,id:'TEST-source',orderId:null};
+ const input=[...orders,orders[0]!,other,source],before=JSON.stringify(input),filter=JourneyFilterSchema.parse({scope:'production',search:'TEST-',customer:'PD',category:'上衣',merchandiserId:merchandiser,stage:'preparation'});
+ const result=selectJourneys(input,filter,asOf);expect(result.summary).toMatchObject({all:32,timingMissing:32,completed:1});expect(result.total).toBe(32);
+ for(const key of JOURNEY_COVERAGE_KEYS){
+  const count=result.supervision!.coverage.find(row=>row.key===key)?.orders??0,all=selectJourneys(input,{...filter,missing:key},asOf,false);
+  expect(all.total,key).toBe(count);expect(new Set(all.items.map(o=>o.id)).size,key).toBe(count);
+ }
+ const pages=[1,2,3].flatMap(page=>selectJourneys(input,{...filter,missing:'factory_date',page},asOf).items.map(o=>o.id));
+ expect(pages).toHaveLength(31);expect(new Set(pages).size).toBe(31);expect(pages).not.toContain(orders[31]!.id);expect(JSON.stringify(input)).toBe(before);
+});
+
+it('R3 closed coverage is counted and reachable only for original fact-time contradictions',()=>{
+ const closed=date(order('TEST-closed'),'2026-10-19');nodes(closed).find(n=>n.key==='packing')!.state='completed';
+ closed.supervision={asOf,status:'legacy_unenrolled',originalRevision:null,currentRevision:null,nodes:[],customerReminderDate:null,coverage:[{key:'customer_date',message:'TEST旧缺项'},{key:'fact_time',message:'TEST原实际时间矛盾'}]};
+ const filter=JourneyFilterSchema.parse({scope:'production'}),result=selectJourneys([closed],filter,asOf);
+ expect(result.summary.timingMissing).toBe(1);expect(result.supervision!.coverage).toEqual([{key:'fact_time',orders:1,message:'TEST原实际时间矛盾'}]);
+ expect(selectJourneys([closed],{...filter,missing:'customer_date'},asOf).total).toBe(0);expect(selectJourneys([closed],{...filter,missing:'fact_time'},asOf).total).toBe(1);
+ closed.supervision.coverage=closed.supervision.coverage.filter(row=>row.key!=='fact_time');expect(selectJourneys([closed],filter,asOf).summary.timingMissing).toBe(0);
 });

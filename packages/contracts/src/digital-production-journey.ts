@@ -31,6 +31,7 @@ export const JourneyStateSchema = z.enum(["uncreated", "pending", "active", "blo
 /** Plan rows can display deadlines/actual references without becoming execution shares or lifecycle gates. */
 export const isJourneyPlanningNode=(node:{key:string;planningOnly?:boolean})=>Boolean(node.planningOnly||JOURNEY_NODES.find(d=>d.key===node.key)?.planningOnly);
 export type JourneyState = z.infer<typeof JourneyStateSchema>;
+export const JOURNEY_COVERAGE_KEYS = ['customer_date','factory_date','fabric_date','cutting_time','plan','scope','fact_time'] as const;
 export const JourneyFilterSchema = z.object({
   page: z.coerce.number().int().min(1).max(100000).default(1),
   scope: z.enum(["production", "development"]).optional(),
@@ -42,7 +43,7 @@ export const JourneyFilterSchema = z.object({
   node: z.string().trim().max(100).refine(value=>JOURNEY_NODES.some(node=>node.key===value),"未知流程节点").optional(),
   state: JourneyStateSchema.optional(),
   risk: z.enum(["overdue", "due_soon", "blocked", "unknown"]).optional(),
-  missing: z.enum(["customer_date", "factory_date", "fabric_date", "cutting_time", "plan", "scope", "fact_time"]).optional(),
+  missing: z.enum(JOURNEY_COVERAGE_KEYS).optional(),
   kpi: z.enum(["all", "active", "not_started", "due_soon", "overdue", "blocked", "completed"]).default("all"),
   startDate: z.iso.date().optional(), endDate: z.iso.date().optional(),
 }).strict().superRefine((value, context) => {
@@ -86,7 +87,7 @@ export type JourneyTiming = {
   original:{at:string|null;exclusive:boolean;reasons:string[]};
   current:{at:string|null;exclusive:boolean;reasons:string[]};
 };
-export type JourneyCoverage = {key:"customer_date"|"factory_date"|"fabric_date"|"cutting_time"|"plan"|"scope"|"fact_time";message:string};
+export type JourneyCoverage = {key:typeof JOURNEY_COVERAGE_KEYS[number];message:string};
 export type JourneySupervision = {assessment?:"complete"|"partially_unavailable";requestId?:string;asOf:string;status:"planned"|"legacy_unenrolled"|"limited";originalRevision:number|null;currentRevision:number|null;nodes:JourneyTiming[];coverage:JourneyCoverage[];customerReminderDate:string|null};
 export type JourneyNode = {
   planningOnly?:boolean;
@@ -209,7 +210,7 @@ export type JourneyVisualProgress = {
 };
 export type JourneyResult = { ruleVersion: "journey-v2.0"; asOf: string; page: number; pageSize: 15; total: number; canManagePolicies?: boolean;
   facets?: { customers: string[]; categories: string[]; merchandisers: Array<{id:string;name:string|null}> };
-  summary: {all:number;active:number;dueSoon:number;overdue:number;blocked:number;completed:number;notStarted?:number};
+  summary: {all:number;active:number;dueSoon:number;overdue:number;blocked:number;completed:number;notStarted?:number;timingMissing?:number};
   supervision?:{overdue:number;dueSoon:number;coverage:Array<{key:JourneyCoverage["key"];orders:number;message:string}>};
   scopeCounts?: {production:number;development:number;cancelled:number}; items: OrderJourney[] };
 
