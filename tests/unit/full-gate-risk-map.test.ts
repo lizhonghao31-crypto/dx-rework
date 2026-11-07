@@ -4,7 +4,7 @@ import { basename } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { assertMappedPostgresTests, classifyFullGatePaths, POSTGRES_CASE_SUITES } from "../../scripts/ci/full-gate-risk-map.mjs";
-import {fullGatePostgresPlan,POSTGRES_CHAIN_TESTS} from '../../scripts/test-suite-plan.mjs';
+import {configForSuite,fullGatePostgresPlan,POSTGRES_CHAIN_TESTS} from '../../scripts/test-suite-plan.mjs';
 
 const amendmentSuite='tests/integration/development-amendment-postgres.test.ts';
 const amendmentPlan=(paths:string[])=>{
@@ -209,3 +209,11 @@ it('maps current-production immutable-result, permission, material and aggregate
 });
 
 it('keeps all three original browser modes in the canonical plan when their shared runner or fixture changes',()=>{for(const path of ['tests/acceptance/m01-current-production-native-browser.ts','tests/fixtures/m01-current-production-native-ui.tsx']){const plan=amendmentPlan([path]).plan.map(row=>row.path);for(const suite of ['m01-current-production','m01-production-period','m01-production-collaboration'])expect(plan).toContain('tests/integration/'+suite+'-native-browser-postgres.test.ts');}});
+
+describe('M01 measured Journey batches stay on the original native gate',()=>{
+ it('maps each actual batching consumer and its suite to the100s canonical correctness configuration',()=>{
+  const suite='tests/integration/m01-journey-performance-postgres.test.ts';
+  for(const path of ['apps/api/src/production-platform/journey-query.ts','apps/api/src/production-platform/journey-snapshot-reads.ts','apps/api/src/production-platform/journey-snapshot-batches.ts','apps/api/src/production-platform/journey-batch-templates.ts','apps/api/src/production-platform/journey-task-summary.ts',suite]){const scope=classifyFullGatePaths([path]);expect(scope.dbRequired).toBe(true);expect(scope.mappedPostgresTests).toContain(suite);}
+  expect(configForSuite(suite)).toBe('vitest.business-chain.config.ts');
+ });
+});

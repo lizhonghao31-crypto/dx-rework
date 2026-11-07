@@ -13,7 +13,7 @@ import {digitalConditionGuidance} from "@dx-rework/contracts/digital-production-
 import {businessRoleLabel} from "@dx-rework/contracts/business-display";
 import {PATTERN_GROUPS} from "@dx-rework/contracts/digital-development-workspace";
 import {materialReadiness} from "./development-material-readiness.js";
-import {reuseJourneySnapshotReads} from "./journey-snapshot-reads.js";
+import {reuseJourneySnapshotReads,prepareJourneySnapshotBatches} from "./journey-snapshot-reads.js";
 import {journeyTaskSummaries} from './journey-task-summary.js';
 import type { Pool, PoolClient } from "pg";
 import type { JourneyFilter, JourneyNode, JourneyRecord, JourneyState, OrderJourney } from "@dx-rework/contracts/digital-production-journey";
@@ -99,6 +99,9 @@ export class DigitalJourneyQuery {
       const items:OrderJourney[]=[],candidates=new Map<string,Candidate>();
       const patternKinds=options.patternBusiness?PATTERN_GROUPS.flatMap(group=>[...group.nodes]).filter(kind=>options.patternBusiness==="all"||(options.patternBusiness==="bulk"?kind==="bulk_pattern":kind!=="bulk_pattern")):null;
       const rows=await journeyMeasure('candidates',()=>this.candidates(db,actor,null,patternKinds));journeyCandidateCount(rows.length);
+      // The original management policy grants the full read range for these exact candidates.
+      // Assigned/technical partial readers retain their original per-object path.
+      if(isDigitalManagementReader(actor))prepareJourneySnapshotBatches(db,rows.flatMap(row=>row.order?[row.order.production_order_id]:[]));
       for(const row of rows) { const item=await journeyMeasure('summary_projection',()=>this.project(db,actor,row,asOf,undefined,summaryOnly,patternKinds,false,Boolean(filter.scope)));if(item){items.push(item);candidates.set(item.id,row);} }
       const endFilter=journeySpan('filter_page');
       const facets = {

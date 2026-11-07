@@ -1,8 +1,12 @@
 import {journeyCacheHit} from '../platform/journey-diagnostic.js';
+import {journeySnapshotBatches} from './journey-snapshot-batches.js';
 import type { PoolClient, QueryResult } from "pg";
 
 const MAX_BYTES = 4 * 1024 * 1024;
 const MAX_ENTRIES = 1024;
+const batchScopes=new WeakMap<PoolClient,ReturnType<typeof journeySnapshotBatches>>();
+/** The caller supplies only candidates with its original full management read range. */
+export function prepareJourneySnapshotBatches(client:PoolClient,orderIds:readonly string[]):void{batchScopes.get(client)?.scope(orderIds);}
 const unsafeRead = /\bFOR\s+(?:KEY\s+SHARE|SHARE|NO\s+KEY\s+UPDATE|UPDATE)\b|\b(insert|update|delete|merge|lock|copy|call|set|reset)\b|\b(nextval|setval|set_config|pg_(?:try_)?advisory_\w+|clock_timestamp|statement_timestamp|timeofday|random|gen_random_uuid|pg_sleep)\s*\(/i;
 /** Inspect SQL tokens, not business text such as 'receiving.batch.merge'.
  * Stay conservative for syntax this small scanner does not interpret. The
@@ -45,9 +49,10 @@ const copy = (result: QueryResult): QueryResult => Object.assign(Object.create(O
  * decisions; reuse identical reads rather than re-reading their immutable facts.
  */
 export function reuseJourneySnapshotReads(client: PoolClient): PoolClient {
+  const batches=journeySnapshotBatches(client);
   const cache = new Map<string, { result: QueryResult; bytes: number }>();
   let retained = 0, generation = 0;
-  const clear = () => { cache.clear(); retained = 0; generation++; };
+  const clear = () => { cache.clear(); batches.clear(); retained = 0; generation++; };
   const remove = (key: string) => { retained -= cache.get(key)?.bytes ?? 0; cache.delete(key); };
   const query = (...args: unknown[]) => {
     const text = args[0], values = args[1] ?? [];
@@ -61,7 +66,10 @@ export function reuseJourneySnapshotReads(client: PoolClient): PoolClient {
     const key = `${text}\u0000${JSON.stringify(values)}`, hit = cache.get(key);
     if (hit) { journeyCacheHit(); cache.delete(key); cache.set(key, hit); return Promise.resolve(copy(hit.result)); }
     const started = generation;
-    return (Reflect.apply(client.query, client, args) as Promise<QueryResult>).then(result => {
+    let requested:Promise<QueryResult>;
+    try{requested=batches.read(text as string,values)??Reflect.apply(client.query, client, args) as Promise<QueryResult>;}
+    catch(error){clear();throw error;}
+    return requested.then(result => {
       if (started !== generation || result.rows.length > 128 || !plainRows(result.rows)) return result;
       let bytes: number;
       try { bytes = Buffer.byteLength(key) + Buffer.byteLength(JSON.stringify([result.rows, result.fields])); }
@@ -77,9 +85,10 @@ export function reuseJourneySnapshotReads(client: PoolClient): PoolClient {
       clear(); throw error;
     });
   };
-  return new Proxy(client, { get(target, key) {
+  const proxy=new Proxy(client, { get(target, key) {
     if (key === "query") return query;
     const value = Reflect.get(target, key, target);
     return typeof value === "function" ? value.bind(target) : value;
   } });
+  batchScopes.set(proxy,batches);return proxy;
 }

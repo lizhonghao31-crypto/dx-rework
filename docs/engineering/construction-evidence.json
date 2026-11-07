@@ -1,39 +1,40 @@
 {
   "version": 1,
-  "base": "49b395000a8b8361a624be1ee103b191eb1e5d67",
-  "sourceFingerprint": "fb46fa5ed45097a37fbb7f21ba8002e407dca36a06c485bfa5d6041103677b58",
+  "base": "a81d578e481d0aa54b10d9bcff63ee182d1e3d80",
+  "sourceFingerprint": "eb02244c027c27c15a41c656fb603371b7188eaec3947b73d54013a4561185af",
   "risk": "full",
   "rules": [
     {
-      "rule": "期间本期、对比期、差额直接可见，各期数值下钻自己的原有效事件和承诺；数量原单位、比例百分点，零分母不造增长。",
-      "source": "Approved Pro PR05 libfile_03324d3f87988191ac25001808369cd7 and later audited node/person objective-load directives; docs/engineering/m01-r2-p05-execution.md",
+      "rule": "以真实逐单重复查询证据做同请求、同只读事务内有界批量和复用；未知SQL形态仍走原驱动。",
+      "source": "Approved Pro PR06 libfile_03324d3f87988191ac25001808369cd7 and audited actual88-candidate performance requirement; docs/engineering/m01-r2-p06-execution.md",
       "writes": [
-        "apps/web/src/production-period-panel.tsx",
-        "apps/api/src/production-platform/production-period-export.ts",
-        "tests/unit/m01-production-period-panel.test.ts",
-        "docs/engineering/m01-r2-p05-execution.md",
-        "docs/requirements/business-analysis-limited-ui-golden-source-v1.0.md"
+        "apps/api/src/production-platform/journey-snapshot-reads.ts",
+        "apps/api/src/production-platform/journey-snapshot-batches.ts",
+        "apps/api/src/production-platform/journey-batch-templates.ts",
+        "apps/api/src/production-platform/journey-task-summary.ts",
+        "tests/unit/journey-snapshot-batches.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/production-statistics-query.ts",
-        "apps/api/src/production-platform/production-statistics-projection.ts",
-        "apps/api/src/production-platform/production-period-events.ts",
-        "apps/api/src/production-platform/production-period-promises.ts",
-        "apps/api/src/production-platform/production-period-sources.ts",
-        "apps/api/src/reporting/xlsx-workbook.ts"
+        "apps/api/src/production-platform/journey-query.ts",
+        "apps/api/src/production-platform/factory-production-facts.ts",
+        "apps/api/src/production-platform/factory-return-logistics.ts",
+        "apps/api/src/production-platform/order-closure-service.ts",
+        "apps/api/src/platform/journey-diagnostic.ts"
       ],
       "oldTests": [
-        "tests/unit/m01-production-period-panel.test.ts",
-        "tests/integration/m01-production-period-postgres.test.ts",
-        "tests/integration/m01-production-period-native-browser-postgres.test.ts"
+        "tests/unit/journey-snapshot-reads.test.ts",
+        "tests/unit/journey-diagnostic.test.ts",
+        "tests/integration/journey-diagnostic-postgres.test.ts"
       ],
-      "initialization": "不新增写接口；原只读授权source/snapshot再投影。比较及节点经过明细合入原工作表，新增节点负荷一表后总数仍在原20表上限，不删旧表或放宽上限。",
-      "dateAndPermission": "保留当时工厂、原有效量/订正、原生发生及登记、合法承诺版与权限范围；每次换响应/撤权清除旧私有明细，不以当前事件代基期。",
-      "expectation": "当前10/基期4/差6及150%、由0新增、独立PO下钻与同版导出ID、原发生时间/改期/未完分母、真实有效PMC会话撤权通过；未来/未知或筛选归属未核不当完整零。",
+      "initialization": "没有业务写入或迁移。仅新的snapshot proxy有WeakMap批量范围；42个实际原SELECT逐字节SHA形态、单UUID/审计文本ID、32对象/4MiB/128组；旧4MiB/1024条复用保留，均只属当前事务。",
+      "dateAndPermission": "原有SQL毫秒截断比较不变，只移出解释注释以免误清缓存；未知模板、特殊类型/列名冲突/无法编码回原驱动，写/会话上下文变化清空全部，原查询异常传播并禁止旧命中掩盖失败。",
+      "expectation": "原PG立即入队顺序与随后上下文变化、Dates、行序/空对象、PG字段元信息、32上限、独立副本、未知/越权ID、独立请求、SET ROLE失效、事务错误、Buffer/BigInt/私有列碰撞通过；实际驱动物理SQL计数与缓存命中分别保留。",
       "checks": [
         "preflight",
         "unit",
         "pgcurrent",
+        "pgperformance",
+        "paired-statistics",
         "types",
         "build",
         "lint",
@@ -41,36 +42,38 @@
       ]
     },
     {
-      "rule": "未结束期间按同一北京时间相同已过时长比较，保留原请求日期及各自cutoff；日期精度跨cutoff待核，不用整天代半天。",
-      "source": "Approved Pro PR05 libfile_03324d3f87988191ac25001808369cd7 and later audited node/person objective-load directives; docs/engineering/m01-r2-p05-execution.md",
+      "rule": "管理读取只在原完整候选范围批量，不改变权限、完整汇总、排序分页、细筛、导出、节点事实或SLA。",
+      "source": "Approved Pro PR06 libfile_03324d3f87988191ac25001808369cd7 and audited actual88-candidate performance requirement; docs/engineering/m01-r2-p06-execution.md",
       "writes": [
-        "docs/engineering/acceptance-time-sites-20261027.json",
-        "packages/contracts/src/production-period.ts",
-        "packages/domain/src/production-period.ts",
-        "apps/api/src/production-platform/production-period-projection.ts",
-        "tests/unit/m01-production-period.test.ts",
-        "tests/acceptance/m01-current-production-native-browser.ts"
+        "apps/api/src/production-platform/journey-query.ts",
+        "tests/unit/digital-pmc-readonly-access.test.ts"
       ],
       "reads": [
-        "packages/contracts/src/series-calendar.ts",
-        "packages/domain/src/production-statistics.ts",
-        "apps/api/src/production-platform/po-customer-date-service.ts",
-        "apps/api/src/acceptance-clock/business-time.ts",
-        "apps/api/src/production-platform/production-period-promises.ts",
-        "apps/api/src/production-platform/production-statistics-query.ts"
+        "apps/api/src/production-platform/access-policy.ts",
+        "apps/api/src/production-platform/identity-routes.ts",
+        "apps/api/src/auth/service.ts",
+        "apps/api/src/auth/postgres-store.ts",
+        "apps/api/src/production-platform/journey-supervision.ts",
+        "apps/api/src/production-platform/journey-business-progress.ts"
       ],
       "oldTests": [
-        "tests/unit/m01-production-period.test.ts",
-        "tests/integration/m01-production-period-postgres.test.ts",
-        "tests/integration/m01-production-period-native-browser-postgres.test.ts"
+        "tests/unit/digital-pmc-readonly-access.test.ts",
+        "tests/unit/digital-pmc-readonly-ui.test.ts",
+        "tests/integration/digital-journey-postgres.test.ts",
+        "tests/unit/journey-projection-isolation.test.ts",
+        "tests/unit/journey-progress-dates.test.ts",
+        "tests/unit/journey-business-progress.test.ts",
+        "tests/unit/journey-factory-deadlines.test.ts"
       ],
-      "initialization": "分析规则明确标v2；旧已存原事实/版本不回写，仍经同一source重算并显示两个cutoffAt，原from/to保留。未知等待/精度不填0。",
-      "dateAndPermission": "cutoff按实际已过毫秒；瞬时含/日期独占截止保留，截止后才生效版本不改前队列。完成发生晚于真实asOf仍异常；历史cutoff之后的完成不能倒填之前按期，未完成保留分母。",
-      "expectation": "单位验证同一时刻+08/Z、半日基期后续事件排除、日期精度未知、晚生效/未来截止不移分母；正式Review追加零跨度两期起点、各自有效截止经过天数（午夜/半日/短月）、短月独占结束显示及同版导出反例；原生June10T00北京时间对May同长截止分别Jun9/May9T16Z，原队列1/0及各自UI下钻正确，原补录与跨月边界保留。",
+      "initialization": "prepare仅在原candidates读取后且原isDigitalManagementReader成立，给真实候选母单ID。既有PMC权限替身仅适配原始批量外层，仍严格逐对象调用原SELECT模型，未知SQL拒绝；原全部权限断言保留，并补PMC和管理者均实际走批量路径断言。仅分派/技术部分读者保留原对象读取路径；不增加入口、不借用Root替代纯角色、无跨请求或跨用户缓存。",
+      "dateAndPermission": "原单用户REPEATABLE READ READ ONLY、原角色/范围/Root例外及冻结业务时钟后校验保持。所有候选仍汇总后筛选分页，不能只读首页或关SLA。",
+      "expectation": "原88母单含16PO长尾和3原工艺流程，页2不重叠但完整summary一致；细筛1、导出88、混入仅开发源后89及完整导出；真实专属PMC/跟单/部分工人、原有效同会话撤PMC仍有finance_read且不能见旧对象；原PG回归及基线完整HTTP响应一致（仅asOf易变字段剔除）。",
       "checks": [
         "preflight",
         "unit",
         "pgcurrent",
+        "pgperformance",
+        "paired-statistics",
         "types",
         "build",
         "lint",
@@ -78,37 +81,35 @@
       ]
     },
     {
-      "rule": "节点/人员客观负荷和同类逾期排序沿当前原主办；真实办理经过含等待，不等于净工时，参与不等于责任。",
-      "source": "Approved Pro PR05 libfile_03324d3f87988191ac25001808369cd7 and later audited node/person objective-load directives; docs/engineering/m01-r2-p05-execution.md",
+      "rule": "先锁预算再测同条件成对改善，正常canonical检查持续覆盖，少量样本最大值不冒总体P95。",
+      "source": "Approved Pro PR06 libfile_03324d3f87988191ac25001808369cd7 and audited actual88-candidate performance requirement; docs/engineering/m01-r2-p06-execution.md",
       "writes": [
-        "packages/contracts/src/production-collaboration.ts",
-        "apps/api/src/production-platform/production-collaboration-source.ts",
-        "apps/api/src/production-platform/production-collaboration-export.ts",
-        "apps/web/src/production-collaboration-panel.tsx",
-        "tests/unit/m01-collaboration-workload.test.ts",
-        "tests/unit/m01-production-collaboration-panel.test.ts",
-        "tests/integration/m01-production-collaboration-postgres.test.ts"
+        "tests/integration/m01-journey-performance-postgres.test.ts",
+        "scripts/test-suite-plan.mjs",
+        "scripts/ci/full-gate-risk-map.mjs",
+        "tests/unit/full-gate-risk-map.test.ts",
+        "docs/engineering/m01-r2-p06-execution.md"
       ],
       "reads": [
-        "apps/api/src/production-platform/task-service.ts",
-        "packages/domain/src/production-collaboration.ts",
-        "apps/api/src/production-platform/production-period-sources.ts",
-        "apps/api/src/production-platform/production-statistics-query.ts",
-        "apps/api/src/production-platform/access-policy.ts"
+        "scripts/test-execution-config.mjs",
+        "vitest.business-chain.config.ts",
+        "scripts/ci/full-gate-risk-map.mjs",
+        "apps/api/src/platform/journey-diagnostic.ts"
       ],
       "oldTests": [
-        "tests/unit/m01-production-collaboration.test.ts",
-        "tests/unit/m01-collaboration-workload.test.ts",
-        "tests/integration/m01-production-collaboration-postgres.test.ts",
-        "tests/integration/m01-production-collaboration-native-browser-postgres.test.ts"
+        "tests/unit/full-gate-risk-map.test.ts",
+        "tests/integration/digital-journey-postgres.test.ts",
+        "tests/integration/journey-diagnostic-postgres.test.ts"
       ],
-      "initialization": "当前全授权任务ID去重再排序/限显示；已存source旧summary不借用，重新计算node/person集合。无工资、责任决定、派工或权限变更。",
-      "dateAndPermission": "原当前主办、历史主办、截止时主办与实际提交人分开。日期独占/瞬时含边界及无期限保持；不跨岗位/节点排名，未分派和缺历史显式保留；已核周期仅实际起止，未知/未完不混入平均。",
-      "expectation": "原真实A到B改派→Root完成与订正、B负荷卸载、旧经办不负当前债；第17名之后最高逾期前置/精确3任务下钻、未知/未分派/角色过滤和有效会话撤权保留；8h与16h窗口均值12h，部分等待不擅扣，原节点明细/同版导出一致。",
+      "initialization": "沿已有风险映射和LONG_CORRECTNESS_TESTS加入唯一原生套件，保留canonical100秒默认，新88候选原生用例按实测87.24秒双实现矩阵留120秒外包装；原Full/PG13/业务链及清理保留；不另造门禁或重复日常迁移恢复治理。",
+      "dateAndPermission": "原诊断calls.sql为真实驱动物理调用，cache_hits另计，测量不改业务SLA；运行于带标记低权限隔离TEST PG16.15，CPU界限明确，不称CI硬件或现场等效。",
+      "expectation": "原生确定性SQL预算至少减50%（不高于3926），相同实际PR05合并前后完整响应相等；成对重复测量p50至少减30%、样本尾至少减25%。7次只记sampleMaximum；另100对交错先后、双边关闭诊断、保原始序列和第95顺序统计，不称现场总体P95。现场原始成对请求/过滤器/运行SHA缺失仍明确，部署与现场复测由用户负责。",
       "checks": [
         "preflight",
         "unit",
         "pgcurrent",
+        "pgperformance",
+        "paired-statistics",
         "types",
         "build",
         "lint",
@@ -129,21 +130,44 @@
       "resultReports": [
         {
           "format": "node-tap",
-          "sha256": "7b3e3d33fd2ce3215af2a9c6b19b7835c3e2f4996cd4adea8c4504ebb5d10566"
+          "sha256": "10de02794fea945065a8774a1f29b51fc3660948ce0d23d741d21f31dc6ecc81"
         }
       ],
-      "testedHead": "978d6f9b290311f379f06c2b9b26e77551d24b1c",
-      "sourceFingerprint": "fb46fa5ed45097a37fbb7f21ba8002e407dca36a06c485bfa5d6041103677b58",
-      "startedAt": "2026-11-06T22:42:55.540Z",
-      "endedAt": "2026-11-06T22:43:01.416Z",
-      "log": "/workspace/scratch/m01-r2-p05-preflight.log",
-      "logSha256": "7b3e3d33fd2ce3215af2a9c6b19b7835c3e2f4996cd4adea8c4504ebb5d10566",
-      "context": "Node22.22.2/npm10.9.9; local Node affinity2,3; actual fresh isolated marked PG16.15 low-privilege dx_rework_test, PG cpuset0,1 CPU2/memory2GiB; two selected PG calculation/native-browser suites with canonical business-chain config worker2 and existing100s correctness/hook budgets. This is bounded local correctness proof, not CI hardware or onsite equivalence. Retained sources reproject through original live permission checks; real AuthService signed Root/PMC and same-valid-session revocation. Native dates use guarded original business clock and original PO request/approval/assignment/completion commands, not rewritten business history. Local native TEST facts and elapsed-time analyses do not certify onsite coverage or personal responsibility."
+      "testedHead": "8c60e9dc6738570bbbe71f2f041923fff03f6bac",
+      "sourceFingerprint": "eb02244c027c27c15a41c656fb603371b7188eaec3947b73d54013a4561185af",
+      "startedAt": "2026-11-06T23:52:48.566Z",
+      "endedAt": "2026-11-06T23:52:54.643Z",
+      "log": "/workspace/scratch/m01-r2-p06-repair-preflight.log",
+      "logSha256": "10de02794fea945065a8774a1f29b51fc3660948ce0d23d741d21f31dc6ecc81",
+      "context": "Node22.22.2/npm10.9.9; local Node affinity2,3; actual fresh isolated marked PG16.15 low-privilege dx_rework_test, PG cpuset0,1 CPU2/memory2GiB; two affected original Journey PostgreSQL compatibility suites, with the88-order native performance suite separately run once without competing local tests with canonical business-chain config worker2 and existing100s correctness/hook budgets. This is bounded local correctness proof, not CI hardware or onsite equivalence. Original Journey single-actor readonly snapshot, full candidate projection and exact original auth paths preserved; real AuthService signed Root/PMC/assigned and partial readers, same-valid-session revocation and no cross-user/request caching. Local marked TEST fixtures and empirical repeated-request performance do not certify onsite results."
     },
     {
       "id": "unit",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/m01-production-collaboration.test.ts tests/unit/m01-production-collaboration-panel.test.ts tests/unit/m01-collaboration-workload.test.ts tests/unit/m01-production-period.test.ts tests/unit/m01-production-period-panel.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-r2-p05-unit.json",
+      "command": "node node_modules/vitest/vitest.mjs run --reporter=default --reporter=json --outputFile=/workspace/scratch/m01-r2-p06-repair-unit.json",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 3494,
+      "failed": 0,
+      "skipped": 11,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "3377a49ffce9280bdf51a29ad3e0c387720b5ebf9bfbfdb5cf2ba8d6c71e5648"
+        }
+      ],
+      "testedHead": "8c60e9dc6738570bbbe71f2f041923fff03f6bac",
+      "sourceFingerprint": "eb02244c027c27c15a41c656fb603371b7188eaec3947b73d54013a4561185af",
+      "startedAt": "2026-11-06T23:52:54.683Z",
+      "endedAt": "2026-11-06T23:57:03.851Z",
+      "log": "/workspace/scratch/m01-r2-p06-repair-unit.log",
+      "logSha256": "93508b9832f9bfc6df79b918db8167561c62f3a17e6bc5880e12667acd3c4cd9",
+      "context": "Actual repair check: original CI non-DB Vitest command, database URLs all empty,3494passed/11 unchanged expected skips, Node22.22.2/npm10.9.9 and Node affinity2cores; generic original fixture-host context follows, not a claim that this non-DB command used PostgreSQL. Node22.22.2/npm10.9.9; local Node affinity2,3; actual fresh isolated marked PG16.15 low-privilege dx_rework_test, PG cpuset0,1 CPU2/memory2GiB; two affected original Journey PostgreSQL compatibility suites, with the88-order native performance suite separately run once without competing local tests with canonical business-chain config worker2 and existing100s correctness/hook budgets. This is bounded local correctness proof, not CI hardware or onsite equivalence. Original Journey single-actor readonly snapshot, full candidate projection and exact original auth paths preserved; real AuthService signed Root/PMC/assigned and partial readers, same-valid-session revocation and no cross-user/request caching. Local marked TEST fixtures and empirical repeated-request performance do not certify onsite results."
+    },
+    {
+      "id": "pgcurrent",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers=2 tests/integration/journey-diagnostic-postgres.test.ts tests/integration/digital-journey-postgres.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-r2-p06-pgcurrent.json",
       "status": "passed",
       "exitCode": 0,
       "passed": 37,
@@ -152,39 +176,140 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "1576ec6fab0a180cb9a878a2f82ca9e351c42142bd2adcfa006f5f8a524163c9"
+          "sha256": "e90a2ec96b8f3f74a57d14a5fe249fabe5608fea84b8ff2e4e640e84be539262"
         }
       ],
-      "testedHead": "978d6f9b290311f379f06c2b9b26e77551d24b1c",
-      "sourceFingerprint": "fb46fa5ed45097a37fbb7f21ba8002e407dca36a06c485bfa5d6041103677b58",
-      "startedAt": "2026-11-06T22:43:51.161Z",
-      "endedAt": "2026-11-06T22:43:54.221Z",
-      "log": "/workspace/scratch/m01-r2-p05-unit.log",
-      "logSha256": "06f3b1cd4ca0a6dd2c1a6e469126971cef25b9ace49b756e92e3234dece10c01",
-      "context": "Node22.22.2/npm10.9.9; local Node affinity2,3; actual fresh isolated marked PG16.15 low-privilege dx_rework_test, PG cpuset0,1 CPU2/memory2GiB; two selected PG calculation/native-browser suites with canonical business-chain config worker2 and existing100s correctness/hook budgets. This is bounded local correctness proof, not CI hardware or onsite equivalence. Retained sources reproject through original live permission checks; real AuthService signed Root/PMC and same-valid-session revocation. Native dates use guarded original business clock and original PO request/approval/assignment/completion commands, not rewritten business history. Local native TEST facts and elapsed-time analyses do not certify onsite coverage or personal responsibility."
+      "testedHead": "a81d578e481d0aa54b10d9bcff63ee182d1e3d80",
+      "sourceFingerprint": "6a22ba433c52cb66fc8b93fd3bf3848af8e485a11447adfcfa38584a2ea2dcd1",
+      "inputPaths": [
+        ".env.example",
+        ".gitattributes",
+        ".github",
+        ".gitignore",
+        ".node-version",
+        ".nvmrc",
+        "AGENTS.md",
+        "apps",
+        "eslint.config.js",
+        "infra",
+        "package-lock.json",
+        "package.json",
+        "packages",
+        "scripts",
+        "tests/acceptance",
+        "tests/fixtures",
+        "tests/helpers",
+        "tests/inspection-report-fixture.ts",
+        "tests/integration",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "vitest.postgres-immediate.config.ts"
+      ],
+      "inputFingerprint": "7495dbc4fa5df6dc4aa1b05d5f8bb6237e870a712ab383b564e835ea5f8dd325",
+      "startedAt": "2026-11-06T23:13:57.533Z",
+      "endedAt": "2026-11-06T23:14:55.027Z",
+      "log": "/workspace/scratch/m01-r2-p06-pgcurrent.log",
+      "logSha256": "bd7f36cbc8ff070be272887aba3a89f7f7aa35046fc8338b5ebc7a1c042507bb",
+      "context": "Node22.22.2/npm10.9.9; local Node affinity2,3; actual fresh isolated marked PG16.15 low-privilege dx_rework_test, PG cpuset0,1 CPU2/memory2GiB; two affected original Journey PostgreSQL compatibility suites, with the88-order native performance suite separately run once without competing local tests with canonical business-chain config worker2 and existing100s correctness/hook budgets. This is bounded local correctness proof, not CI hardware or onsite equivalence. VERIFIED LOCAL REUSE: before fixing the isolated unit SQL double, original whole-source6a22 still matched these actual results; conservative all runtime/configuration/dependencies/PG/native fixture input scope was hashed and remains identical. Original testedHead/sourceFingerprint/log bytes are retained. Changed unit permission model is separately verified by current full non-DB Vitest command.  Original Journey single-actor readonly snapshot, full candidate projection and exact original auth paths preserved; real AuthService signed Root/PMC/assigned and partial readers, same-valid-session revocation and no cross-user/request caching. Local marked TEST fixtures and empirical repeated-request performance do not certify onsite results."
     },
     {
-      "id": "pgcurrent",
+      "id": "pgperformance",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers=2 tests/integration/m01-production-collaboration-postgres.test.ts tests/integration/m01-production-collaboration-native-browser-postgres.test.ts tests/integration/m01-production-period-postgres.test.ts tests/integration/m01-production-period-native-browser-postgres.test.ts tests/integration/m01-current-production-native-browser-postgres.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-r2-p05-pgcurrent.json",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts --maxWorkers=2 tests/integration/m01-journey-performance-postgres.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-r2-p06-final-native-tests.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 31,
+      "passed": 1,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "1a19d910163ec01cc8694ad9a8dba495904c30e3af5711e46a7c75f203a591bb"
+          "sha256": "b69847a803db9293dea0ff20c5f773c8f79bd6d291aac34beb4c7f08ae96eb26"
         }
       ],
-      "testedHead": "978d6f9b290311f379f06c2b9b26e77551d24b1c",
-      "sourceFingerprint": "fb46fa5ed45097a37fbb7f21ba8002e407dca36a06c485bfa5d6041103677b58",
-      "startedAt": "2026-11-06T22:43:54.261Z",
-      "endedAt": "2026-11-06T22:44:36.471Z",
-      "log": "/workspace/scratch/m01-r2-p05-pgcurrent.log",
-      "logSha256": "917787a3de404ebe1357aba6b254a575ec6510d24841df125b4b95e9c1b5b20e",
-      "context": "Node22.22.2/npm10.9.9; local Node affinity2,3; actual fresh isolated marked PG16.15 low-privilege dx_rework_test, PG cpuset0,1 CPU2/memory2GiB; two selected PG calculation/native-browser suites with canonical business-chain config worker2 and existing100s correctness/hook budgets. This is bounded local correctness proof, not CI hardware or onsite equivalence. Retained sources reproject through original live permission checks; real AuthService signed Root/PMC and same-valid-session revocation. Native dates use guarded original business clock and original PO request/approval/assignment/completion commands, not rewritten business history. Local native TEST facts and elapsed-time analyses do not certify onsite coverage or personal responsibility."
+      "testedHead": "a81d578e481d0aa54b10d9bcff63ee182d1e3d80",
+      "sourceFingerprint": "6a22ba433c52cb66fc8b93fd3bf3848af8e485a11447adfcfa38584a2ea2dcd1",
+      "inputPaths": [
+        ".env.example",
+        ".gitattributes",
+        ".github",
+        ".gitignore",
+        ".node-version",
+        ".nvmrc",
+        "AGENTS.md",
+        "apps",
+        "eslint.config.js",
+        "infra",
+        "package-lock.json",
+        "package.json",
+        "packages",
+        "scripts",
+        "tests/acceptance",
+        "tests/fixtures",
+        "tests/helpers",
+        "tests/inspection-report-fixture.ts",
+        "tests/integration",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "vitest.postgres-immediate.config.ts"
+      ],
+      "inputFingerprint": "7495dbc4fa5df6dc4aa1b05d5f8bb6237e870a712ab383b564e835ea5f8dd325",
+      "startedAt": "2026-11-06T23:15:20.964Z",
+      "endedAt": "2026-11-06T23:16:49.196Z",
+      "log": "/workspace/scratch/m01-r2-p06-final-native.log",
+      "logSha256": "3626eba1192da5f61b4878ec4269826cd2865be6ca832df7dfb4cfd7b353e370",
+      "context": "Actual same owned marked low-privilege PG16.15 with PostgreSQL CPU0,1/two cores/2GiB, Node CPU2,3/two cores, original native auth and guarded fixed business clock. Both implementations share unchanged modules from actual baseline checkout; only three baseline implementation imports rewritten as recorded in git-show provenance. Diagnostics disabled for both100-pair elapsed series; native validation separately records physical driverSQL on both executions and original diagnostic calls.sql/cache_hits. Local TEST model, not onsite network or population guarantee. VERIFIED LOCAL REUSE: before fixing the isolated unit SQL double, original whole-source6a22 still matched these actual results; conservative all runtime/configuration/dependencies/PG/native fixture input scope was hashed and remains identical. Original testedHead/sourceFingerprint/log bytes are retained. Changed unit permission model is separately verified by current full non-DB Vitest command.  Original Journey single-actor readonly snapshot, full candidate projection and exact original auth paths preserved; real AuthService signed Root/PMC/assigned and partial readers, same-valid-session revocation and no cross-user/request caching. Local marked TEST fixtures and empirical repeated-request performance do not certify onsite results."
+    },
+    {
+      "id": "paired-statistics",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run --config /workspace/scratch/m01-r2-p06-statistics.config.mts --maxWorkers=1 --reporter=verbose --reporter=json --outputFile=/workspace/scratch/m01-r2-p06-final-statistics-tests.json",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "1249a6aaf8f8cb59c3d1946166733dd8f5882a5e5989c621b3fc7fa3e5784072"
+        }
+      ],
+      "testedHead": "a81d578e481d0aa54b10d9bcff63ee182d1e3d80",
+      "sourceFingerprint": "6a22ba433c52cb66fc8b93fd3bf3848af8e485a11447adfcfa38584a2ea2dcd1",
+      "inputPaths": [
+        ".env.example",
+        ".gitattributes",
+        ".github",
+        ".gitignore",
+        ".node-version",
+        ".nvmrc",
+        "AGENTS.md",
+        "apps",
+        "eslint.config.js",
+        "infra",
+        "package-lock.json",
+        "package.json",
+        "packages",
+        "scripts",
+        "tests/acceptance",
+        "tests/fixtures",
+        "tests/helpers",
+        "tests/inspection-report-fixture.ts",
+        "tests/integration",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "vitest.postgres-immediate.config.ts"
+      ],
+      "inputFingerprint": "7495dbc4fa5df6dc4aa1b05d5f8bb6237e870a712ab383b564e835ea5f8dd325",
+      "startedAt": "2026-11-06T23:16:49.268Z",
+      "endedAt": "2026-11-06T23:24:40.150Z",
+      "log": "/workspace/scratch/m01-r2-p06-final-statistics.log",
+      "logSha256": "83bef13ed47d7561400ee43b97c44049dfbe031e4c56c8efabf68305e15fa935",
+      "context": "Actual same owned marked low-privilege PG16.15 with PostgreSQL CPU0,1/two cores/2GiB, Node CPU2,3/two cores, original native auth and guarded fixed business clock. Both implementations share unchanged modules from actual baseline checkout; only three baseline implementation imports rewritten as recorded in git-show provenance. Diagnostics disabled for both100-pair elapsed series; native validation separately records physical driverSQL on both executions and original diagnostic calls.sql/cache_hits. Local TEST model, not onsite network or population guarantee. VERIFIED LOCAL REUSE: before fixing the isolated unit SQL double, original whole-source6a22 still matched these actual results; conservative all runtime/configuration/dependencies/PG/native fixture input scope was hashed and remains identical. Original testedHead/sourceFingerprint/log bytes are retained. Changed unit permission model is separately verified by current full non-DB Vitest command.  Original Journey single-actor readonly snapshot, full candidate projection and exact original auth paths preserved; real AuthService signed Root/PMC/assigned and partial readers, same-valid-session revocation and no cross-user/request caching. Local marked TEST fixtures and empirical repeated-request performance do not certify onsite results."
     },
     {
       "id": "types",
@@ -192,13 +317,39 @@
       "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "978d6f9b290311f379f06c2b9b26e77551d24b1c",
-      "sourceFingerprint": "fb46fa5ed45097a37fbb7f21ba8002e407dca36a06c485bfa5d6041103677b58",
-      "startedAt": "2026-11-06T22:43:01.455Z",
-      "endedAt": "2026-11-06T22:43:32.907Z",
-      "log": "/workspace/scratch/m01-r2-p05-types.log",
+      "testedHead": "a81d578e481d0aa54b10d9bcff63ee182d1e3d80",
+      "sourceFingerprint": "6a22ba433c52cb66fc8b93fd3bf3848af8e485a11447adfcfa38584a2ea2dcd1",
+      "inputPaths": [
+        ".env.example",
+        ".gitattributes",
+        ".github",
+        ".gitignore",
+        ".node-version",
+        ".nvmrc",
+        "AGENTS.md",
+        "apps",
+        "eslint.config.js",
+        "infra",
+        "package-lock.json",
+        "package.json",
+        "packages",
+        "scripts",
+        "tests/acceptance",
+        "tests/fixtures",
+        "tests/helpers",
+        "tests/inspection-report-fixture.ts",
+        "tests/integration",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "vitest.postgres-immediate.config.ts"
+      ],
+      "inputFingerprint": "7495dbc4fa5df6dc4aa1b05d5f8bb6237e870a712ab383b564e835ea5f8dd325",
+      "startedAt": "2026-11-06T23:13:03.700Z",
+      "endedAt": "2026-11-06T23:13:34.633Z",
+      "log": "/workspace/scratch/m01-r2-p06-types.log",
       "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e",
-      "context": "Node22.22.2/npm10.9.9; local Node affinity2,3; actual fresh isolated marked PG16.15 low-privilege dx_rework_test, PG cpuset0,1 CPU2/memory2GiB; two selected PG calculation/native-browser suites with canonical business-chain config worker2 and existing100s correctness/hook budgets. This is bounded local correctness proof, not CI hardware or onsite equivalence. Retained sources reproject through original live permission checks; real AuthService signed Root/PMC and same-valid-session revocation. Native dates use guarded original business clock and original PO request/approval/assignment/completion commands, not rewritten business history. Local native TEST facts and elapsed-time analyses do not certify onsite coverage or personal responsibility."
+      "context": "Node22.22.2/npm10.9.9; local Node affinity2,3; actual fresh isolated marked PG16.15 low-privilege dx_rework_test, PG cpuset0,1 CPU2/memory2GiB; two affected original Journey PostgreSQL compatibility suites, with the88-order native performance suite separately run once without competing local tests with canonical business-chain config worker2 and existing100s correctness/hook budgets. This is bounded local correctness proof, not CI hardware or onsite equivalence. VERIFIED LOCAL REUSE: before fixing the isolated unit SQL double, original whole-source6a22 still matched these actual results; conservative all runtime/configuration/dependencies/PG/native fixture input scope was hashed and remains identical. Original testedHead/sourceFingerprint/log bytes are retained. Changed unit permission model is separately verified by current full non-DB Vitest command.  Original Journey single-actor readonly snapshot, full candidate projection and exact original auth paths preserved; real AuthService signed Root/PMC/assigned and partial readers, same-valid-session revocation and no cross-user/request caching. Local marked TEST fixtures and empirical repeated-request performance do not certify onsite results."
     },
     {
       "id": "build",
@@ -206,13 +357,39 @@
       "command": "npm run build --workspaces --if-present",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "978d6f9b290311f379f06c2b9b26e77551d24b1c",
-      "sourceFingerprint": "fb46fa5ed45097a37fbb7f21ba8002e407dca36a06c485bfa5d6041103677b58",
-      "startedAt": "2026-11-06T22:43:32.950Z",
-      "endedAt": "2026-11-06T22:43:51.120Z",
-      "log": "/workspace/scratch/m01-r2-p05-build.log",
-      "logSha256": "33d823bf86ea14caa8a8360572d9552ccf4ca96643973e7f300bf4c48421f63a",
-      "context": "Node22.22.2/npm10.9.9; local Node affinity2,3; actual fresh isolated marked PG16.15 low-privilege dx_rework_test, PG cpuset0,1 CPU2/memory2GiB; two selected PG calculation/native-browser suites with canonical business-chain config worker2 and existing100s correctness/hook budgets. This is bounded local correctness proof, not CI hardware or onsite equivalence. Retained sources reproject through original live permission checks; real AuthService signed Root/PMC and same-valid-session revocation. Native dates use guarded original business clock and original PO request/approval/assignment/completion commands, not rewritten business history. Local native TEST facts and elapsed-time analyses do not certify onsite coverage or personal responsibility."
+      "testedHead": "a81d578e481d0aa54b10d9bcff63ee182d1e3d80",
+      "sourceFingerprint": "6a22ba433c52cb66fc8b93fd3bf3848af8e485a11447adfcfa38584a2ea2dcd1",
+      "inputPaths": [
+        ".env.example",
+        ".gitattributes",
+        ".github",
+        ".gitignore",
+        ".node-version",
+        ".nvmrc",
+        "AGENTS.md",
+        "apps",
+        "eslint.config.js",
+        "infra",
+        "package-lock.json",
+        "package.json",
+        "packages",
+        "scripts",
+        "tests/acceptance",
+        "tests/fixtures",
+        "tests/helpers",
+        "tests/inspection-report-fixture.ts",
+        "tests/integration",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "vitest.postgres-immediate.config.ts"
+      ],
+      "inputFingerprint": "7495dbc4fa5df6dc4aa1b05d5f8bb6237e870a712ab383b564e835ea5f8dd325",
+      "startedAt": "2026-11-06T23:13:34.676Z",
+      "endedAt": "2026-11-06T23:13:53.885Z",
+      "log": "/workspace/scratch/m01-r2-p06-build.log",
+      "logSha256": "b02c2aad60fdf3223d868026ef8ef2a784da48b0494837bab61385f3bc36d757",
+      "context": "Node22.22.2/npm10.9.9; local Node affinity2,3; actual fresh isolated marked PG16.15 low-privilege dx_rework_test, PG cpuset0,1 CPU2/memory2GiB; two affected original Journey PostgreSQL compatibility suites, with the88-order native performance suite separately run once without competing local tests with canonical business-chain config worker2 and existing100s correctness/hook budgets. This is bounded local correctness proof, not CI hardware or onsite equivalence. VERIFIED LOCAL REUSE: before fixing the isolated unit SQL double, original whole-source6a22 still matched these actual results; conservative all runtime/configuration/dependencies/PG/native fixture input scope was hashed and remains identical. Original testedHead/sourceFingerprint/log bytes are retained. Changed unit permission model is separately verified by current full non-DB Vitest command.  Original Journey single-actor readonly snapshot, full candidate projection and exact original auth paths preserved; real AuthService signed Root/PMC/assigned and partial readers, same-valid-session revocation and no cross-user/request caching. Local marked TEST fixtures and empirical repeated-request performance do not certify onsite results."
     },
     {
       "id": "lint",
@@ -220,13 +397,13 @@
       "command": "npm run lint",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "978d6f9b290311f379f06c2b9b26e77551d24b1c",
-      "sourceFingerprint": "fb46fa5ed45097a37fbb7f21ba8002e407dca36a06c485bfa5d6041103677b58",
-      "startedAt": "2026-11-06T22:42:34.433Z",
-      "endedAt": "2026-11-06T22:42:55.482Z",
-      "log": "/workspace/scratch/m01-r2-p05-lint.log",
+      "testedHead": "8c60e9dc6738570bbbe71f2f041923fff03f6bac",
+      "sourceFingerprint": "eb02244c027c27c15a41c656fb603371b7188eaec3947b73d54013a4561185af",
+      "startedAt": "2026-11-06T23:52:26.770Z",
+      "endedAt": "2026-11-06T23:52:48.509Z",
+      "log": "/workspace/scratch/m01-r2-p06-repair-lint.log",
       "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763",
-      "context": "Node22.22.2/npm10.9.9; local Node affinity2,3; actual fresh isolated marked PG16.15 low-privilege dx_rework_test, PG cpuset0,1 CPU2/memory2GiB; two selected PG calculation/native-browser suites with canonical business-chain config worker2 and existing100s correctness/hook budgets. This is bounded local correctness proof, not CI hardware or onsite equivalence. Retained sources reproject through original live permission checks; real AuthService signed Root/PMC and same-valid-session revocation. Native dates use guarded original business clock and original PO request/approval/assignment/completion commands, not rewritten business history. Local native TEST facts and elapsed-time analyses do not certify onsite coverage or personal responsibility."
+      "context": "Node22.22.2/npm10.9.9; local Node affinity2,3; actual fresh isolated marked PG16.15 low-privilege dx_rework_test, PG cpuset0,1 CPU2/memory2GiB; two affected original Journey PostgreSQL compatibility suites, with the88-order native performance suite separately run once without competing local tests with canonical business-chain config worker2 and existing100s correctness/hook budgets. This is bounded local correctness proof, not CI hardware or onsite equivalence. Original Journey single-actor readonly snapshot, full candidate projection and exact original auth paths preserved; real AuthService signed Root/PMC/assigned and partial readers, same-valid-session revocation and no cross-user/request caching. Local marked TEST fixtures and empirical repeated-request performance do not certify onsite results."
     },
     {
       "id": "secret",
@@ -234,13 +411,13 @@
       "command": "npm run secret:scan",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "978d6f9b290311f379f06c2b9b26e77551d24b1c",
-      "sourceFingerprint": "fb46fa5ed45097a37fbb7f21ba8002e407dca36a06c485bfa5d6041103677b58",
-      "startedAt": "2026-11-06T22:44:36.514Z",
-      "endedAt": "2026-11-06T22:44:37.057Z",
-      "log": "/workspace/scratch/m01-r2-p05-secret.log",
+      "testedHead": "8c60e9dc6738570bbbe71f2f041923fff03f6bac",
+      "sourceFingerprint": "eb02244c027c27c15a41c656fb603371b7188eaec3947b73d54013a4561185af",
+      "startedAt": "2026-11-06T23:57:03.897Z",
+      "endedAt": "2026-11-06T23:57:04.475Z",
+      "log": "/workspace/scratch/m01-r2-p06-repair-secret.log",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda",
-      "context": "Node22.22.2/npm10.9.9; local Node affinity2,3; actual fresh isolated marked PG16.15 low-privilege dx_rework_test, PG cpuset0,1 CPU2/memory2GiB; two selected PG calculation/native-browser suites with canonical business-chain config worker2 and existing100s correctness/hook budgets. This is bounded local correctness proof, not CI hardware or onsite equivalence. Retained sources reproject through original live permission checks; real AuthService signed Root/PMC and same-valid-session revocation. Native dates use guarded original business clock and original PO request/approval/assignment/completion commands, not rewritten business history. Local native TEST facts and elapsed-time analyses do not certify onsite coverage or personal responsibility."
+      "context": "Node22.22.2/npm10.9.9; local Node affinity2,3; actual fresh isolated marked PG16.15 low-privilege dx_rework_test, PG cpuset0,1 CPU2/memory2GiB; two affected original Journey PostgreSQL compatibility suites, with the88-order native performance suite separately run once without competing local tests with canonical business-chain config worker2 and existing100s correctness/hook budgets. This is bounded local correctness proof, not CI hardware or onsite equivalence. Original Journey single-actor readonly snapshot, full candidate projection and exact original auth paths preserved; real AuthService signed Root/PMC/assigned and partial readers, same-valid-session revocation and no cross-user/request caching. Local marked TEST fixtures and empirical repeated-request performance do not certify onsite results."
     }
   ]
 }
