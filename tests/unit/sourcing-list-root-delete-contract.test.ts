@@ -22,10 +22,12 @@ describe("sourcing list parity and Root logical deletion", () => {
 
   it("keeps broad search coverage while hiding deleted cases from every mutation", async () => {
     const service = await readFile("apps/api/src/sourcing/sourcing-service.ts", "utf8");
-    expect(service).toContain("creator_user.display_name ILIKE");
-    expect(service).toContain("decision_row.supplier_name_snapshot ILIKE");
-    expect(service).toContain("decision_row.supplier_code_snapshot ILIKE");
-    expect(service).toContain("case_view.process_description ILIKE");
+    const reads=await readFile("apps/api/src/sourcing/sourcing-case-read.ts","utf8");
+    expect(service).toContain("return readSourcingCaseList(this.database,actor");
+    expect(reads).toContain("creator_user.display_name ILIKE");
+    expect(reads).toContain("decision_row.supplier_name_snapshot ILIKE");
+    expect(reads).toContain("decision_row.supplier_code_snapshot ILIKE");
+    expect(reads).toContain("case_view.process_description ILIKE");
     expect(service.match(/source_case\.deleted_at IS NULL/g)?.length ?? 0).toBeGreaterThanOrEqual(8);
     expect(service).toContain("async correctBudgetPrice(");
     expect(service).toContain("cancelOpenByDedupePrefix(");

@@ -17,7 +17,8 @@ describe("sourcing PC form and owner approval finish", () => {
     expect(service).not.toContain("input.processDescription");
     expect(service).toContain("const selectedCrafts");
     expect(service).toContain("JSON.stringify(selectedCrafts)");
-    expect(service).toContain("COALESCE(decision_row.crafts,crafts_row.crafts)");
+    expect(service).toContain("return readSourcingCaseList(this.database,actor");
+    expect(await readFile("apps/api/src/sourcing/sourcing-case-read.ts","utf8")).toContain("COALESCE(decision_row.crafts,crafts_row.crafts)");
     expect(migration).toContain("ADD COLUMN process_items text[]");
     expect(migration).toContain("sourcing_case.process_description");
     expect(migration).toContain("WHERE sourcing_case.deleted_at IS NULL");
