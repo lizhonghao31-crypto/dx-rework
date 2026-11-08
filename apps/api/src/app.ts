@@ -32,6 +32,7 @@ import type { AppliedSchemaState } from "./platform/database.js";
 import { ApplicationError } from "./platform/errors.js";
 import { registerAuthRoutes } from "./auth/routes.js";
 import type { AuthService } from "./auth/service.js";
+import { authenticateForRequest } from "./auth/request-identity-context.js";
 import { AuthDeniedError } from "./auth/service.js";
 import { EXPECTED_SCHEMA_VERSION, migrationHistoriesMatch } from "./platform/schema-version.js";
 import { registerToolsRoutes, type ToolsHttpDependencies } from "./tools/routes.js";
@@ -162,8 +163,9 @@ export function buildApp(dependencies: AppDependencies): FastifyInstance {
   }
 
   if (dependencies.auth) {
-    registerMemberModuleHttpGuard(app, token => dependencies.auth!.authenticate(token));
-    registerPmcReadonlyHttpGuard(app, token => dependencies.auth!.authenticate(token), id => dependencies.access?.root.isRootUser(id) ?? Promise.resolve(false));
+    registerMemberModuleHttpGuard(app, (token, context) => dependencies.auth!.authenticate(token, context));
+    registerPmcReadonlyHttpGuard(app, (token, context) => dependencies.auth!.authenticate(token, context), id => dependencies.access?.root.isRootUser(id) ?? Promise.resolve(false));
+    app.addHook("onResponse", async request => { dependencies.auth!.releaseRequestIdentity(request); });
   }
 
   if (dependencies.operationDiagnostics) registerOperationDiagnostics(app,dependencies.operationDiagnostics);
@@ -183,7 +185,7 @@ export function buildApp(dependencies: AppDependencies): FastifyInstance {
         || path.startsWith("/sourcing/");
       if (!sensitiveResponse || reply.statusCode >= 400) return payload;
 
-      const user = await dependencies.access!.authenticate(permissionCookieToken(request.headers.cookie));
+      const user = await authenticateForRequest(dependencies.access!.authenticate, permissionCookieToken(request.headers.cookie), request, "response");
       const isRoot = await dependencies.access!.root.isRootUser(user.id);
       return redactPermissionSensitivePayload(path, payload, user.businessRoles ?? [], isRoot);
     });

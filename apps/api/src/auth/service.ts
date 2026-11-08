@@ -2,6 +2,7 @@ import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from
 
 import type { AcceptanceControlIdentity } from "./acceptance-control.js";
 import type { DingTalkIdentity, DingTalkProvider, OrganizationMember } from "./provider.js";
+import type { RequestIdentityContext } from "./request-identity-context.js";
 
 export type AuthUser = Readonly<{ id: string; displayName: string; capabilities: readonly string[]; businessRoles?: readonly string[]; effectiveWriteCapabilities?: readonly string[]; readOnlyModules?: readonly ("rework" | "sourcing")[] }>;
 export type SessionRecord = Readonly<{ id: string; tokenHash: string; userId: string; expiresAt: Date; revokedAt: Date | null }>;
@@ -53,6 +54,9 @@ export class AuthService {
   private protectedRequests = 0;
   private loginReservations = 0;
   private readonly memberRequests = new Map<string, { promise: Promise<OrganizationMember | null>; waiters: number }>();
+  // Weak keys are the actual server request, never request IDs, users or tokens.
+  // Store only the external proof's binding; every call reloads local authority.
+  private readonly requestProofs = new WeakMap<object, { binding: string; phase: "admission" | "handler" }>();
 
   private async publicAdmission<T>(operation: () => Promise<T>): Promise<T> {
     if (this.publicRequests >= 16) throw new AuthDeniedError("AUTH_BUSY", "登录服务繁忙，请稍后重试");
@@ -191,7 +195,7 @@ export class AuthService {
     });
   }
 
-  async authenticate(token: string | undefined): Promise<AuthUser> {
+  async authenticate(token: string | undefined, context?: RequestIdentityContext): Promise<AuthUser> {
     if (this.protectedRequests >= 64) throw new AuthDeniedError("AUTH_BUSY", "身份校验繁忙，请稍后重试");
     this.protectedRequests += 1;
     try {
@@ -210,7 +214,17 @@ export class AuthService {
         await this.store.deactivateIdentity(record.user.id, this.now());
         throw new AuthDeniedError("SESSION_INVALID", "登录已失效，请重新登录");
       }
-      await this.revalidate(record.user.id, record.identity);
+      const binding = JSON.stringify([this.corpId, record.id, record.tokenHash, record.userId, record.identity.corpId, record.identity.userId, record.identity.unionId]);
+      const proof = context && this.requestProofs.get(context.request);
+      // Entering the handler is a new authorization phase: the final online
+      // check occurs immediately before its ordinary DB command. A completed
+      // handler proof may then be used only for local response authorization.
+      const reusable = !context?.fresh && proof?.binding === binding && (context!.phase === proof.phase
+        || context!.phase === "response" && proof.phase === "handler");
+      if (!reusable) {
+        if (context) this.requestProofs.delete(context.request);
+        await this.revalidate(record.user.id, record.identity);
+      }
       const current = await this.store.findSession(this.hashSession(token), this.now());
       if (!current) throw new AuthDeniedError("SESSION_INVALID", "登录已失效，请重新登录");
       if (token.startsWith(ACCEPTANCE_BUSINESS_TOKEN_PREFIX)) {
@@ -220,9 +234,19 @@ export class AuthService {
           throw new AuthDeniedError("SESSION_INVALID", "验收登录已失效，请重新验证");
         }
       }
+      if (context) {
+        const currentBinding = JSON.stringify([this.corpId, current.id, current.tokenHash, current.userId, current.identity.corpId, current.identity.userId, current.identity.unionId]);
+        if (currentBinding !== binding) throw new AuthDeniedError("SESSION_INVALID", "登录身份已变更，请重新登录");
+        if (!reusable && context.phase !== "response") this.requestProofs.set(context.request, { binding, phase: context.phase });
+      }
       return current.user;
+    } catch (error) {
+      if (context) this.requestProofs.delete(context.request);
+      throw error;
     } finally { this.protectedRequests -= 1; }
   }
+
+  releaseRequestIdentity(request: object): void { this.requestProofs.delete(request); }
 
   async logout(token: string | undefined): Promise<void> {
     if (token) await this.store.revokeSession(this.hashSession(token), this.now());

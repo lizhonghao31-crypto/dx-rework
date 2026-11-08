@@ -1,10 +1,11 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { loadConfig } from "@dx-rework/config";
 
 import { buildApp } from "../../apps/api/src/app.js";
 import type { DingTalkIdentity, DingTalkProvider, OrganizationMember } from "../../apps/api/src/auth/provider.js";
 import { AuthService, stableEqual, type AuthStore, type AuthUser, type QrChallenge, type SessionRecord } from "../../apps/api/src/auth/service.js";
+import { requestIdentityPilot } from "../../apps/api/src/auth/request-identity-context.js";
 
 const config = loadConfig({ NODE_ENV: "test", DATABASE_URL: "postgresql://test:test@localhost/test", DINGTALK_CORP_ID: "corp-a", DINGTALK_H5_APP_KEY: "key", DINGTALK_H5_APP_SECRET: "secret", DINGTALK_WEB_CLIENT_ID: "qr", DINGTALK_WEB_CLIENT_SECRET: "web-secret", DINGTALK_QR_REDIRECT_URI: "https://example.test/callback", APP_BASE_PATH: "/rework/", SESSION_SECRET: "a-test-secret-that-is-longer-than-32-characters" });
 const apps: FastifyInstance[] = [];
@@ -203,4 +204,75 @@ it("releases anonymous directory reservations when QR validation fails before ex
   const auth = new AuthService(new FakeProvider(member()), new MemoryStore(), "corp-a", 60_000, config.sessionSecret);
   for (let index = 0; index < 40; index += 1) await expect(auth.loginQr(`bad-${index}`, "missing", "wrong")).rejects.toMatchObject({ code: "INVALID_QR_STATE" });
   await expect(auth.loginMobile("after-invalid-qr")).resolves.toHaveProperty("token");
+});
+
+describe("request-owned external identity proof with current local authority", () => {
+  it("shares admission proof, refreshes for the command phase, and performs only local response checks", async () => {
+    const provider = new FakeProvider(member()), store = new MemoryStore();
+    const auth = new AuthService(provider, store, "corp-a", 60_000, config.sessionSecret), login = await auth.loginMobile("phase");
+    const request = {}, admission = { request, phase: "admission" as const }, handler = { request, phase: "handler" as const };
+    await auth.authenticate(login.token, admission); await auth.authenticate(login.token, admission);
+    expect(provider.organizationQueries).toBe(2); // login + one admission lookup
+    await auth.authenticate(login.token, handler);
+    expect(provider.organizationQueries).toBe(3); // final online check before command
+    provider.organizationError = new Error("TEST provider unavailable after command");
+    await expect(auth.authenticate(login.token, { request, phase: "response" })).resolves.toMatchObject({ id: login.user.id });
+    expect(provider.organizationQueries).toBe(3);
+    await expect(auth.authenticate(login.token, { request, phase: "handler", fresh: true })).rejects.toThrow("TEST provider unavailable");
+    auth.releaseRequestIdentity(request);
+    await expect(auth.authenticate(login.token, handler)).rejects.toThrow("TEST provider unavailable");
+  });
+
+  it("never shares settled proof between requests even with the same client request ID", async () => {
+    const provider = new FakeProvider(member()), auth = new AuthService(provider, new MemoryStore(), "corp-a", 60_000, config.sessionSecret);
+    const login = await auth.loginMobile("same-id");
+    await auth.authenticate(login.token, { request: { id: "forged-same-id" }, phase: "handler" });
+    provider.organizationError = new Error("TEST new request must be online");
+    await expect(auth.authenticate(login.token, { request: { id: "forged-same-id" }, phase: "handler" })).rejects.toThrow("TEST new request must be online");
+    expect(provider.organizationQueries).toBe(3);
+  });
+
+  it("does not retain a failed proof or reuse a proof for another session", async () => {
+    const provider = new FakeProvider(member()), auth = new AuthService(provider, new MemoryStore(), "corp-a", 60_000, config.sessionSecret);
+    const first = await auth.loginMobile("session-first"), second = await auth.loginMobile("session-second"), request = {};
+    provider.organizationError = new Error("TEST first lookup failed");
+    await expect(auth.authenticate(first.token, { request, phase: "handler" })).rejects.toThrow("TEST first lookup failed");
+    provider.organizationError = null;
+    await auth.authenticate(first.token, { request, phase: "handler" });
+    provider.organizationError = new Error("TEST switched session must be online");
+    await expect(auth.authenticate(second.token, { request, phase: "response" })).rejects.toThrow("TEST switched session must be online");
+    expect(provider.organizationQueries).toBe(5);
+  });
+
+  it("reloads roles without upserting old member data and rejects a locally logged-out session", async () => {
+    const provider = new FakeProvider(member()), store = new MemoryStore(), auth = new AuthService(provider, store, "corp-a", 60_000, config.sessionSecret);
+    const login = await auth.loginMobile("local-authority"), request = {};
+    await auth.authenticate(login.token, { request, phase: "handler" });
+    const upsert = vi.spyOn(store, "upsertIdentity");
+    store.users.set("corp-a:union-role-user", { ...login.user, businessRoles: ["warehouse_receiver"], capabilities: [] });
+    await expect(auth.authenticate(login.token, { request, phase: "response" })).resolves.toMatchObject({ businessRoles: ["warehouse_receiver"], capabilities: [] });
+    expect(upsert).not.toHaveBeenCalled();
+    await auth.logout(login.token);
+    await expect(auth.authenticate(login.token, { request, phase: "response" })).rejects.toMatchObject({ code: "SESSION_INVALID" });
+  });
+
+  it("uses the approved last-check window only in this phase, then detects external departure on the next request", async () => {
+    const provider = new FakeProvider(member()), auth = new AuthService(provider, new MemoryStore(), "corp-a", 60_000, config.sessionSecret);
+    const login = await auth.loginMobile("external-window"), request = {};
+    await auth.authenticate(login.token, { request, phase: "handler" });
+    provider.member = member({ active: false, employed: false });
+    await expect(auth.authenticate(login.token, { request, phase: "response" })).resolves.toHaveProperty("id", login.user.id);
+    await expect(auth.authenticate(login.token, { request: {}, phase: "handler" })).rejects.toMatchObject({ code: "SESSION_INVALID" });
+  });
+
+  it("keeps remote-file workflows, downloads, exports, Lab and non-pilot domains on their original fresh path", () => {
+    for (const [method, path] of [
+      ["POST", "/sourcing/cases"], ["POST", "/sourcing/cases/TEST/owner-decisions"], ["POST", "/sourcing/cases/TEST/contract/refresh"],
+      ["POST", "/sourcing/cases/TEST/styles"], ["GET", "/sourcing/cases/TEST/contract"], ["GET", "/master-data/suppliers/import/template.xlsx"],
+      ["POST", "/tools/exports"], ["GET", "/tools/attachments/TEST/preview"], ["POST", "/acceptance/control/switch"], ["GET", "/master-data/people-page"],
+    ]) expect(requestIdentityPilot(method!, path!)).toBe(false);
+    expect(requestIdentityPilot("POST", "/sourcing/cases/TEST/ie-quotes")).toBe(true);
+    expect(requestIdentityPilot("GET", "/sourcing/cases/TEST/history/ie")).toBe(true);
+    expect(requestIdentityPilot("POST", "/master-data/suppliers/TEST/versions")).toBe(true);
+  });
 });

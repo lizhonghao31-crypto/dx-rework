@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import type { AuthUser } from "../auth/service.js";
+import { authenticateForRequest, type RequestAuthenticator } from "../auth/request-identity-context.js";
 import { ApplicationError } from "../platform/errors.js";
 
 export function memberWriteRouteModule(method: string, path: string): "rework" | "sourcing" | null {
@@ -11,12 +11,12 @@ export function memberWriteRouteModule(method: string, path: string): "rework" |
   return null;
 }
 
-export function registerMemberModuleHttpGuard(app: FastifyInstance, authenticate: (token: string | undefined) => Promise<AuthUser>): void {
+export function registerMemberModuleHttpGuard(app: FastifyInstance, authenticate: RequestAuthenticator): void {
   app.addHook("preHandler", async request => {
     const module = memberWriteRouteModule(request.method, request.routeOptions.url ?? request.url.split("?")[0]!);
     if (!module) return;
     const token = request.headers.cookie?.split(";").map(value => value.trim()).find(value => value.startsWith("dx_rework_session="))?.slice("dx_rework_session=".length);
-    const user = await authenticate(token);
+    const user = await authenticateForRequest(authenticate, token, request, "admission");
     // Auth resolves policy from stable IDs on every request; Root never receives this restriction.
     if (user.readOnlyModules?.includes(module)) throw new ApplicationError("FORBIDDEN", "当前账号在此业务模块仅可查看", 403);
   });

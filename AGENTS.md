@@ -21,6 +21,8 @@
 |UI|`docs/requirements/rework-ui-golden-source-v1.0.md`|
 |分析与局部UI|`docs/requirements/business-analysis-limited-ui-golden-source-v1.0.md`|
 
+已落地职责入口见 [业务模块边界](docs/architecture/business-module-boundaries.md)。触及相应职责时沿实际入口维护；未迁出部分保持现有边界。例外在原 PR 说明原因、成本、风险与回退，不新增架构总门禁。
+
 ## 2. 执行与授权
 
 - 沿用当前任务明确的执行者；独立 Review 不等于委派编码。Review 发现由执行者核验修复，不自动换执行者或工具。
