@@ -12,14 +12,14 @@ import './cockpit-production-settings.css';
 export const cockpitPolicyStage=(key:string)=>JOURNEY_NODES.find(node=>node.key===(key==="bulk_cutting_external"?"bulk_cutting":key==="production_sheet"?"production_instruction":key))?.stage??"other";
 export function CockpitProductionSettings(){
  const [access,setAccess]=useState<DigitalAccessOptions|null>(null),[error,setError]=useState('');
- const [revision,setRevision]=useState(0);
+ const [revision,setRevision]=useState(0),[historyOpen,setHistoryOpen]=useState(false);
  const refreshAuthority=()=>{setAccess(null);setRevision(value=>value+1);};
  useEffect(()=>registerSessionInvalidator(refreshAuthority),[]);
  useEffect(()=>{const controller=new AbortController();setAccess(null);setError('');void(async()=>{const session=revision?(await refreshSessionResult()).session:await verifySession();if(controller.signal.aborted)return;if(session==='denied')throw Error('登录状态尚未确认，请重新登录后读取设置');const value=await digitalRequest<DigitalAccessOptions>('access/options','GET',undefined,undefined,{signal:controller.signal});if(!controller.signal.aborted)setAccess(value);})().catch(e=>{if(!controller.signal.aborted&&e.name!=='AbortError')setError(e.message);});return()=>controller.abort();},[revision]);
- return <div className="cockpit-settings"><PageHeader title="生产管理设置"/>
+ return <div className="cockpit-settings">{!historyOpen&&<PageHeader title="生产管理设置"/>}
   {error&&<p role="alert">{error}</p>}
   {!access&&!error&&<p>正在读取设置…</p>}
   {access&&!canReadDigitalProductionSettings(access)&&!access.customers&&<p>当前岗位无权访问生产管理设置。</p>}
-  {access&&canReadDigitalProductionSettings(access)?<><SlaSettingsWorkspace customerControl={access.customers?<DigitalCockpitPersonnel orderId={null} onChanged={()=>undefined}/>:access.roles?.includes('pmc')?<DigitalCockpitPersonnel orderId={null} readOnly onChanged={()=>undefined}/>:undefined} readOnly={!access.manage} onAuthorityChanged={refreshAuthority}/><SeriesSettings readOnly={!access.manage}/></>:access?.customers&&<div className="cockpit-settings-node-section"><DigitalCockpitPersonnel orderId={null} onChanged={()=>undefined}/></div>}
+  {access&&canReadDigitalProductionSettings(access)?<><SlaSettingsWorkspace onHistoryChange={setHistoryOpen} customerControl={access.customers?<DigitalCockpitPersonnel orderId={null} onChanged={()=>undefined}/>:access.roles?.includes('pmc')?<DigitalCockpitPersonnel orderId={null} readOnly onChanged={()=>undefined}/>:undefined} readOnly={!access.manage} onAuthorityChanged={refreshAuthority}/><div hidden={historyOpen}><SeriesSettings readOnly={!access.manage}/></div></>:access?.customers&&<div className="cockpit-settings-node-section"><DigitalCockpitPersonnel orderId={null} onChanged={()=>undefined}/></div>}
  </div>;
 }

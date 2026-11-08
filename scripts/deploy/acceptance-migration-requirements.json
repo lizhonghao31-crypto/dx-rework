@@ -1687,5 +1687,20 @@
       "guard_production_order_root_immutable"
     ],
     "sequences": []
+  },
+  "0277_sla_draft_source_version": {
+    "checksum": "3e4f96e66fdf6377dc1c9478f1f4c94907d3de432af0da67ed6d14c9eec8a7e9",
+    "tables": [
+      "digital_sla_settings_drafts"
+    ],
+    "functions": [],
+    "references": [
+      "digital_sla_configurations"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": [],
+    "sequences": []
   }
 }

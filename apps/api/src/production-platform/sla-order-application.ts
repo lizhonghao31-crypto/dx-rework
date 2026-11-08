@@ -38,6 +38,7 @@ export class SlaOrderApplicationService {
         if ((await db.query("SELECT 1 FROM digital_order_closures WHERE production_order_id=$1 UNION ALL SELECT 1 FROM digital_production_resource_lifecycle WHERE ((resource_kind='order' AND resource_id=$1) OR (resource_kind='source' AND resource_id=(SELECT source_id FROM digital_production_orders WHERE production_order_id=$1))) AND state='cancelled'", [input.orderId])).rowCount)
             fail('已结案或取消的订单不能应用新标准');
         const read = await new SlaOrderService(this.pool).readWithClient(actor, input.orderId, db);
+        if(read.receiving.stage==='本期装箱完成')fail('订单已正常完成，不能应用新标准');
         if (read.status !== 'planned')
             fail('历史订单没有首版计划，不补造历史标准');
         const current = read as Extract<typeof read, {
@@ -147,7 +148,12 @@ export class SlaOrderApplicationService {
             await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
             const p = await this.prepared(db, actor, input);
             await db.query('COMMIT');
-            return { orderId: input.orderId, token: this.tokens.issue(p.token), changes: p.changes, skipped: p.skipped, configurationVersion: p.configuration.version };
+            const notificationChanges=p.effectiveKeys.filter(key=>['warning_ratio','ship_sample_advance'].includes(key)).flatMap(key=>{
+                const before=p.snapshot.snapshot.parameters[key]!.value,after=p.next.parameters[key]!.value;
+                const enabled=(value:typeof before)=>!('notificationEnabled'in value)||value.notificationEnabled!==false;
+                return enabled(before)===enabled(after)?[]:[{key,label:key==='warning_ratio'?'节点临期提醒':'船样提前提醒',beforeEnabled:enabled(before),afterEnabled:enabled(after)}];
+            });
+            return { orderId: input.orderId, token: this.tokens.issue(p.token), notificationChanges,changes: p.changes, skipped: p.skipped, configurationVersion: p.configuration.version,adoptedParameters:[...new Set(input.parameterKeys)].sort().map(key=>({key,label:DIGITAL_SLA_PARAMETERS.find(parameter=>parameter.key===key)!.label,source:p.snapshot.snapshot.parameters[key]!.source,version:p.snapshot.snapshot.parameters[key]!.sourceVersion})),retainedCompletedNodes:p.current.current.plan.nodes.filter(node=>p.current.facts[node.id]?.businessCompleted||p.current.facts[node.id]?.completedAt).map(node=>node.label) };
         }
         catch (e) {
             await db.query('ROLLBACK');
