@@ -1,89 +1,38 @@
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import {
   ResponsibilityQueueResponseSchema,
-  type ResponsibilityQueueResponse,
 } from "@dx-rework/contracts/responsibility-queue";
-import { InsetField, Surface } from "@dx-rework/ui";
-import { useEffect, useMemo, useState } from "react";
+import { Button, InsetField, Surface } from "@dx-rework/ui";
+import {useRemoteQueue} from "./use-remote-queue.js";
 
 import { createWebUrls } from "../url-contract.js";
 import { Header, Shell, TaskCard } from "./components.js";
-import { ListPagination, usePaginatedItems } from "./list-pagination.js";
+import { ListPagination } from "./list-pagination.js";
 import "./responsibility-queue.css";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
-type QueueState =
-  | { kind: "loading" }
-  | { kind: "ready"; value: ResponsibilityQueueResponse }
-  | { kind: "unavailable"; message: string };
-
 export function ResponsibilityQueuePage() {
-  const [state, setState] = useState<QueueState>({ kind: "loading" });
-  const [q, setQ] = useState("");
-  const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
-
-  useEffect(() => {
-    const controller = new AbortController();
-    let requestInFlight = false;
-
-    const load = async (initial: boolean): Promise<void> => {
-      if (requestInFlight) return;
-      requestInFlight = true;
-      try {
-        const response = await fetch(apiUrl("responsibility-determinations/queue"), {
-          credentials: "include",
-          signal: controller.signal,
-          headers: { accept: "application/json" },
-        });
-        if (!response.ok) throw new Error("待判责队列加载失败");
-        const value = ResponsibilityQueueResponseSchema.parse(await response.json());
-        setState({ kind: "ready", value });
-      } catch (error: unknown) {
-        if (error instanceof DOMException && error.name === "AbortError") return;
-        if (initial) {
-          setState({
-            kind: "unavailable",
-            message: error instanceof Error ? error.message : "待判责队列加载失败",
-          });
-        }
-      } finally {
-        requestInFlight = false;
-      }
-    };
-
-    void load(true);
-    return () => controller.abort();
-  }, []);
-
-  const allItems = state.kind === "ready" ? state.value.items : [];
-  const items = useMemo(() => {
-    const needle = q.trim().toLocaleLowerCase("zh-CN");
-    if (!needle) return allItems;
-    return allItems.filter((item) => [item.reworkNo, item.styleNo, item.orderNo, item.problemPart]
-      .filter(Boolean)
-      .join(" ")
-      .toLocaleLowerCase("zh-CN")
-      .includes(needle));
-  }, [allItems, q]);
-  const page = usePaginatedItems(items, q);
+  const {state,q,setQ,searchInput,total,page,retry}=useRemoteQueue(apiUrl("responsibility-determinations/queue"),ResponsibilityQueueResponseSchema,"待判责队列加载失败");
+  const items=state.kind==="ready"?state.value.items:[];
+  const basePath=import.meta.env.BASE_URL.replace(/\/$/,"");
 
   return (
     <Shell active="责任处理">
       <Header
         title="待责任判定"
         subtitle="处理责任方、供应商与倍率；本厂责任及订单重新判责需老板确认。提交后按当前节点流转"
-        badge={state.kind === "ready" ? `${formatBusinessDecimal(items.length)} 条当前结果` : "加载中"}
+        badge={state.kind === "ready" ? `${formatBusinessDecimal(total)} 条当前结果` : "加载中"}
       />
       <Surface className="reporting-filters">
-        <InsetField label="搜索当前节点订单" type="search" value={q} onChange={(event) => setQ(event.target.value)} placeholder="单号 / 款号 / 订单号 / 问题部位" />
+        <InsetField label="搜索当前节点订单" type="search" {...searchInput} value={q} onChange={(event) => setQ(event.target.value)} placeholder="单号 / 款号 / 订单号 / 问题部位" />
       </Surface>
 
       {state.kind === "loading" && <Surface className="responsibility-queue-state">正在加载待判责返工单…</Surface>}
-      {state.kind === "unavailable" && <Surface className="responsibility-queue-state">{state.message}</Surface>}
+      {state.kind === "unavailable" && <Surface className="responsibility-queue-state">{state.message}<Button onClick={retry}>重试读取本页</Button></Surface>}
       {state.kind === "ready" && items.length === 0 && <Surface className="responsibility-queue-state">当前没有符合条件的待判责返工单。</Surface>}
       {state.kind === "ready" && items.length > 0 && (
         <div className="task-grid responsibility-queue-grid">
-          {page.items.map((item) => {
+          {items.map((item) => {
             const title = item.highMultiplierPending
               ? item.canConfirmHighMultiplier
                 ? "高倍率待你独立确认"

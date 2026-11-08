@@ -1,3 +1,4 @@
+import {QueuePageResponseFields} from './queue-page.js';
 import { z } from "zod";
 
 const IdSchema = z.string().uuid();
@@ -21,6 +22,7 @@ export const ResponsibilityQueueItemSchema = z.object({
 
 export const ResponsibilityQueueResponseSchema = z.object({
   items: z.array(ResponsibilityQueueItemSchema),
+  ...QueuePageResponseFields,
 }).strict();
 
 export type ResponsibilityQueueItem = z.infer<

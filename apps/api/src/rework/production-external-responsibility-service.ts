@@ -13,6 +13,7 @@ import type {
   PayablesReturnExternalResponsibilityCase,
   RequestExternalDeductionSpecialApproval,
 } from "@dx-rework/contracts/external-responsibility";
+import type { QueuePageQuery } from "@dx-rework/contracts";
 import type { Pool, PoolClient } from "pg";
 
 import { ApplicationError } from "../platform/errors.js";
@@ -94,8 +95,9 @@ export class ProductionExternalResponsibilityService
 
   override async listQueue(
     actor: TrustedActorContext,
+    input?:QueuePageQuery,
   ): Promise<ExternalResponsibilityQueueResponse> {
-    const value = await super.listQueue(actor);
+    const value = await super.listQueue(actor,input);
     if (value.items.length === 0) return value;
     const latestDeadlines = await this.productionDatabase.query<{
       case_id: string;
@@ -116,6 +118,7 @@ export class ProductionExternalResponsibilityService
       latestDeadlines.rows.map((item) => [item.case_id, item.overdue]),
     );
     return {
+      ...value,
       items: value.items.map((item) => ({
         ...item,
         overdue:

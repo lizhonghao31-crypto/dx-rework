@@ -171,6 +171,9 @@ export const classifyFullGatePaths = (inputPaths) => {
   let maintenanceSensitive = false;
   let activationSensitive = false;
   let transferSensitive = false;
+  if(paths.some(path=>/^apps\/api\/src\/rework\/(?:responsibility-determination-queue-service|own-factory-approval-service|external-responsibility-service|production-external-responsibility-service|queue-page)\.ts$/.test(path)||path==='tests/integration/responsibility-queue-pages-postgres.test.ts'||path==='tests/helpers/responsibility-queue-fixture.ts')){
+    for(const suite of ['responsibility-queue-pages','responsibility-queue-pages-native-browser'])mappedTests.add('tests/integration/'+suite+'-postgres.test.ts');domains.add('responsibility-queue-pages');
+  }
   if(paths.some(path=>/^apps\/api\/src\/todos\/(?:service|selection|content-reads|global-search)\.ts$/.test(path)||path==='apps/api/src/production-platform/notification-service.ts')){
     for(const suite of ['todo-global-search','digital-my-todo-context','digital-production-notifications'])mappedTests.add('tests/integration/'+suite+'-postgres.test.ts');
     domains.add('todo-read-split');
