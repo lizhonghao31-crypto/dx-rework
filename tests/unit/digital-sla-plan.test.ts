@@ -19,6 +19,44 @@ const route = (washing: "yes" | "no" = "yes") => buildOrderSlaRoute(resolveDigit
     expected_fabric_arrival: { precision: "instant", value: t0, source: "fixture:fabric_estimate" },
   }, ["po-fixture"]);
 const get = <T extends { id: string }>(items: T[], id: string) => items.find(n => n.id === id)!;
+describe('canonical next-change boundaries for lightweight reads',()=>{
+  const inspect=(p:SlaPlan,facts:Parameters<typeof evaluateSlaPlan>[1],now:string)=>{
+    const boundaries:string[]=[],clock={now,scenarioId:null,revision:0};
+    const rows=evaluateSlaPlan(p,facts,clock,{mode:'read_projection',onNextChange:at=>boundaries.push(at)});
+    expect(rows).toEqual(evaluateSlaPlan(p,facts,clock,{mode:'read_projection'}));
+    return {row:rows[0]!,next:boundaries.sort()[0]??null};
+  };
+  it('reports the original warning threshold then the strict millisecond after a duration deadline',()=>{
+    const p=plan([node('work')]),facts={work:{startedAt:t0,evidence:'original:work-window'}};
+    expect(inspect(p,facts,t0)).toMatchObject({row:{status:'running'},next:at(.7)});
+    const deadlineNext=new Date(Date.parse(at(1))+1).toISOString();
+    expect(inspect(p,facts,at(.7))).toMatchObject({row:{status:'warning'},next:deadlineNext});
+    expect(inspect(p,facts,at(1))).toMatchObject({row:{status:'warning'},next:deadlineNext});
+    expect(inspect(p,facts,deadlineNext)).toMatchObject({row:{status:'overdue'},next:null});
+  });
+  it('expires at the original exclusive Beijing date boundary without manufacturing a business occurrence',()=>{
+    const p=plan([node('promise',0,{kind:'order_date',minutes:null,anchorKey:null,targetKey:'delivery'})]);p.anchors.delivery={precision:'date',value:'2026-10-01',source:'original:customer-date'};
+    const boundary=slaDateBoundary('2026-10-01').at!;
+    expect(inspect(p,{},t0)).toMatchObject({row:{status:'not_started',actualStart:null,actualEnd:null},next:boundary});
+    expect(inspect(p,{},boundary)).toMatchObject({row:{status:'overdue',actualStart:null,actualEnd:null},next:null});
+  });
+  it('retains the inclusive remaining estimate until its actual expiry and reconsiders future facts without clamping them',()=>{
+    const p=plan([node('work',0,{kind:'unlimited',minutes:null,anchorKey:null})]),facts={work:{evidence:'original:remaining',remaining:{asOf:t0,validUntil:at(3),minutes:120,source:'original:assessment'}}};
+    const expiry=new Date(Date.parse(at(2))+1).toISOString();
+    expect(inspect(p,facts,t0)).toMatchObject({row:{forecast:{at:at(2)}},next:expiry});
+    expect(inspect(p,facts,expiry).row.forecast.at).toBeNull();
+    const future={work:{startedAt:at(1),completedAt:at(2),evidence:'original:future-observation'}};
+    expect(inspect(plan([node('work')]),future,t0)).toMatchObject({row:{status:'unknown',actualStart:null,actualEnd:null},next:at(1)});
+    expect(inspect(plan([node('work')]),future,at(2))).toMatchObject({row:{status:'completed_on_time',actualStart:at(1),actualEnd:at(2)},next:null});
+  });
+  it('keeps native batch warning and strict overdue boundaries even without a generic start',()=>{
+    const p=plan([node('work',60,{anchorKey:null})]),facts={work:{evidence:'original:batch',batchCoverageComplete:true,batchWindows:[{startedAt:t0,completedAt:null,complete:false,deadline:at(1),warningAt:at(.7),evidence:'original:batch-1'}]}};
+    expect(inspect(p,facts,t0)).toMatchObject({row:{status:'running'},next:at(.7)});
+    const overdue=new Date(Date.parse(at(1))+1).toISOString();
+    expect(inspect(p,facts,at(1))).toMatchObject({row:{status:'warning'},next:overdue});
+    expect(inspect(p,facts,overdue)).toMatchObject({row:{status:'overdue'},next:null});
+  });
+});
 describe("complete SLA plan and frozen windows", () => {
   it("keeps a supplemental unknown duration unknown instead of borrowing the original48h",()=>{
     const p=plan([node('bulk_pattern',2880)]);

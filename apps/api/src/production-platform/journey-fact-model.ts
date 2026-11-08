@@ -4,7 +4,7 @@ import type {SlaAnchor,SlaNodeFact,SlaPlan} from '@dx-rework/domain/digital-sla-
 import type {JourneyTimingInputs} from './journey-supervision.js';
 
 /** Bump when native mapping, time precision or applicability changes. No user DTO cache. */
-export const JOURNEY_FACT_CALCULATION_VERSION='journey-facts-final10-v1';
+export const JOURNEY_FACT_CALCULATION_VERSION='journey-facts-final10-v2-selectors-v3';
 type FactNode=Pick<JourneyNode,'key'|'instanceId'|'stage'|'state'|'round'|'occurrence'|'current'|'planningOnly'|'progressApplicability'|'expectedAt'|'expectedKind'|'expectedPrecision'|'deadlineMode'|'deadlineExclusive'|'actualAt'|'actualDate'|'actualQuality'|'enteredAt'|'sla'|'countsInProgress'|'inheritedFrom'|'inheritedResult'>&{
  ownerId:string|null;operatorId:string|null;blockers:Array<{key:string;ownerId:string|null}>;
  scopes:Array<{domain:string;id:string;lineId:string|null;version:number|null}>;
@@ -62,6 +62,10 @@ export function minimalJourneyFacts(item:OrderJourney,inputs:JourneyTimingInputs
 }
 /** Canonical object key order makes equivalent source facts stable across rebuilds. */
 export function journeyFactFingerprint(model:JourneyFactModel):string{
+ return journeyValueFingerprint(model);
+}
+/** Same canonical ordering for native facts and their separately read selector. */
+export function journeyValueFingerprint(value:unknown):string{
  const ordered=(value:unknown):unknown=>Array.isArray(value)?value.map(ordered):value&&typeof value==='object'?Object.fromEntries(Object.entries(value).filter(([,v])=>v!==undefined).sort(([a],[b])=>a.localeCompare(b,'en')).map(([k,v])=>[k,ordered(v)])):value;
- return createHash('sha256').update(JSON.stringify(ordered(model))).digest('hex');
+ return createHash('sha256').update(JSON.stringify(ordered(value))).digest('hex');
 }

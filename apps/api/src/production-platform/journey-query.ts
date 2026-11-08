@@ -5,7 +5,7 @@ import {styleLabelCuttingReason,preparationTestReasons} from './production-readi
 import {seriesPlanJourney} from './series-plan-journey.js';
 import type {BusinessTime,BusinessTimeScope} from '@dx-rework/domain/business-clock';
 import {readJourneySupervision} from "./journey-supervision.js";
-import {assertBusinessClockUnchanged,ContextBusinessClock} from '../acceptance-clock/business-time.js';
+import {assertBusinessClocksUnchanged,ContextBusinessClock,businessScopeKey} from '../acceptance-clock/business-time.js';
 import {factoryProductionFacts,factoryProductionCompletion} from './factory-production-facts.js';
 import {shipSampleFacts} from './ship-sample-facts.js';
 import {developmentReadTables} from "./development-amendment-repository.js";
@@ -16,7 +16,7 @@ import {materialReadiness} from "./development-material-readiness.js";
 import {reuseJourneySnapshotReads,prepareJourneySnapshotBatches} from "./journey-snapshot-reads.js";
 import {journeyTaskSummaries} from './journey-task-summary.js';
 import type { Pool, PoolClient } from "pg";
-import type { JourneyFilter, JourneyNode, JourneyRecord, JourneyState, OrderJourney } from "@dx-rework/contracts/digital-production-journey";
+import type { JourneyFilter, JourneyNode, JourneyRecord, JourneyState, JourneyResult, OrderJourney } from "@dx-rework/contracts/digital-production-journey";
 import type { TrustedActorContext } from "../tools/repositories.js";
 import { DigitalProductionAccessPolicy, digitalForbidden, digitalNotFound, isDigitalLeader, isDigitalManagementReader, isDigitalTechnicalManager } from "./access-policy.js";
 import { isRootActor } from "../access/business-authority.js";
@@ -27,7 +27,7 @@ import { OrderClosureService } from "./order-closure-service.js";
 import {savedDevelopmentRoute} from "./development-sla-enrollment.js";
 import { bulkCockpitProgress } from "./cockpit-progress.js";
 import { JOURNEY_NODES, journeyDefinition } from "./journey-catalog.js";
-import { appendJourneyInstance, journeyCompletion, journeyStages, selectJourneys } from "./journey-projection.js";
+import { appendJourneyInstance, journeyCompletion, journeyStages, selectJourneys,selectJourneySelections,journeyMatchesMetadata } from "./journey-projection.js";
 import { canReadProductionReporting, productionVisibilityFor, productionVisibilityArgs } from "../sourcing/production-reporting-service.js";
 import type { DevelopmentDocument } from "@dx-rework/contracts/digital-development";
 import { journeyReworkHistoryUrl } from "./journey-rework-record.js";
@@ -48,6 +48,14 @@ import {journeyVisualProgress} from './journey-visual-progress.js';
 import {journeyNodeFactTarget,mergeJourneyNodeFact} from './journey-node-fact.js';
 import {minimalJourneyFacts,type JourneyFactModel} from './journey-fact-model.js';
 import type {JourneyTimingInputs} from './journey-supervision.js';
+import {journeySelectionFacts,journeySelectionNodes,type JourneySelectionFacts,type JourneySelectionTask} from './journey-selection-facts.js';
+import {journeyObservedDay,journeyPlanDateOverdue,journeyTaskTimeRisks,journeyTaskDeadlineExclusive} from './journey-risk-clock.js';
+import {compileJourneySelectionClock,type JourneySelectionDelivery} from './journey-selection-clock.js';
+import {readJourneySelections} from './journey-selection-query.js';
+
+type FactCapture={timing:(inputs:JourneyTimingInputs)=>void;tasks:(tasks:Array<{id:string;routeInstanceId:string}>)=>void;
+ time?:(time:BusinessTime)=>void;nativeNodes?:(nodes:JourneyNode[])=>void;untimedNodes?:(nodes:JourneyNode[])=>void;
+ untimedItem?:(item:OrderJourney,delivery:JourneySelectionDelivery)=>void;recheckAt?:(at:string)=>void};
 
 const iso = (value: Date|string|null|undefined) => value == null ? null : new Date(value).toISOString();
 type Candidate = { source: {development_type:string;source_id:string;created_by:string;design_style_no:string;temporary_style_no:string|null;customer_code:string|null;created_at:string}|null;
@@ -64,15 +72,15 @@ const emptyNode = (key:string,state:JourneyState,round:number|null=null):Journey
 export class DigitalJourneyQuery {
   private readonly observations=new WeakMap<PoolClient,Map<string,{scope:BusinessTimeScope;time:BusinessTime}>>();
   private readonly authorizedTasks=new WeakMap<OrderJourney,readonly JourneyAuthorizedTask[]>();
-  constructor(private readonly database:Pool) {}
-  private async snapshot<T>(work:(db:PoolClient,asOf:string)=>Promise<T>) {
+  constructor(private readonly database:Pool,private readonly options:{listReadMode?:'legacy'|'indexed'}={}) {}
+  private async snapshot<T>(work:(db:PoolClient,asOf:string,transaction:PoolClient)=>Promise<T>) {
     const db=await this.database.connect(),reads=reuseJourneySnapshotReads(db),observations=new Map<string,{scope:BusinessTimeScope;time:BusinessTime}>();
     this.observations.set(reads,observations);let result:T;
     try { await db.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
       const asOf=iso((await db.query("SELECT CURRENT_TIMESTAMP AS as_of")).rows[0].as_of)!;
-      result=await work(reads,asOf);await db.query("COMMIT");
+      result=await work(reads,asOf,db);await db.query("COMMIT");
     } catch(error) { await db.query("ROLLBACK");throw error; } finally {this.observations.delete(reads);db.release();}
-    for(const {scope,time} of observations.values())await journeyMeasure('clock_postcheck',()=>assertBusinessClockUnchanged(new ContextBusinessClock(this.database),scope,time));
+    await journeyMeasure('clock_postcheck',()=>assertBusinessClocksUnchanged(new ContextBusinessClock(this.database),observations.values()));
     return result;
   }
   private async candidates(db:PoolClient,actor:TrustedActorContext,id:string|null=null,patternKinds:string[]|null=null):Promise<Candidate[]> {
@@ -97,6 +105,8 @@ export class DigitalJourneyQuery {
   }
   async list(actor:TrustedActorContext,filter:JourneyFilter,exportAll=false,selectPage?: (items:OrderJourney[])=>OrderJourney[],options:{details?:boolean;patternBusiness?:"development"|"bulk"|"all"}={}) {
     assertIdentityActor(actor);
+    if(this.options.listReadMode==='indexed'&&filter.scope&&!exportAll&&!selectPage&&options.details!==false&&!options.patternBusiness)
+      return this.snapshot((db,asOf,transaction)=>this.indexedList(db,actor,filter,asOf,transaction));
     return this.snapshot(async(db,asOf)=>{
       // Internal workspace selection runs after all authorized facts, before detail hydration.
       const summaryOnly=options.details===false||!exportAll||Boolean(selectPage);
@@ -122,6 +132,59 @@ export class DigitalJourneyQuery {
       }
       return {...result,canManagePolicies:isDigitalLeader(actor),facets};
     });
+  }
+  private async indexedList(db:PoolClient,actor:TrustedActorContext,filter:JourneyFilter,asOf:string,transaction:PoolClient):Promise<JourneyResult>{
+    const candidates=await journeyMeasure('candidates',()=>this.candidates(db,actor));journeyCandidateCount(candidates.length);
+    const read=await journeyMeasure('selection',()=>readJourneySelections(this.database,db,actor,candidates,filter,asOf));
+    for(const row of read.items){const time=read.clocks.get(businessScopeKey(row.resource))!;
+      if(time.scenarioId)this.observations.get(db)?.set(businessScopeKey(row.resource),{scope:row.resource,time});}
+    const facets={customers:[...new Set(read.items.map(row=>row.selection.customer).filter((value):value is string=>Boolean(value)))].sort(),
+      categories:[...new Set(read.items.map(row=>row.selection.category).filter((value):value is string=>Boolean(value)))].sort(),
+      merchandisers:[...new Map(read.items.flatMap(row=>row.selection.merchandisers).map(person=>[person.id,person])).values()]};
+    const relevant=read.items.filter(row=>journeyMatchesMetadata(row.selection,filter));
+    let pending=relevant.filter(row=>['missing','pending','obsolete'].includes(row.status)).length,failed=relevant.filter(row=>row.status==='failed').length;
+    const retryIds=relevant.filter(row=>row.status==='failed').map(row=>row.selection.id);
+    const ready=read.items.filter(row=>row.status==='ready').map(row=>row.selection),incomplete=Boolean(pending||failed);
+    const selected=selectJourneySelections(ready,incomplete?{...filter,page:1}:filter,asOf);
+    const candidateByResource=new Map(candidates.map(row=>[row.order?businessScopeKey({kind:'order',id:row.order.production_order_id}):businessScopeKey({kind:'source',id:row.source!.source_id}),row]));
+    const candidateById=new Map(read.items.map(row=>[row.selection.id,candidateByResource.get(businessScopeKey(row.resource))!]));
+    if(isDigitalManagementReader(actor))prepareJourneySnapshotBatches(db,selected.items.flatMap(item=>item.orderId?[item.orderId]:[]));
+    const items:OrderJourney[]=[];
+    for(const selectedItem of selected.items){
+      // The enclosing transaction is READ ONLY. Savepoint control cannot
+      // change its data snapshot; use its owner directly so it does not erase
+      // safe request-local identical-read/batch reuse before every row. Actual
+      // failed SQL still clears the read proxy's cache through its error path.
+      await transaction.query('SAVEPOINT journey_page_object');
+      try{
+        const item=await journeyMeasure('detail_projection',()=>this.project(db,actor,candidateById.get(selectedItem.id)!,asOf,undefined,true,null,false,true));
+        if(item)items.push({...item,hitReasons:selectJourneys([item],{...filter,scope:undefined,kpi:'all',page:1,missing:undefined},asOf,false).items[0]?.hitReasons??[]});else pending++;
+        await transaction.query('RELEASE SAVEPOINT journey_page_object');
+      }catch(error){
+        await transaction.query('ROLLBACK TO SAVEPOINT journey_page_object');await transaction.query('RELEASE SAVEPOINT journey_page_object');
+        if(error&&typeof error==='object'&&'statusCode' in error&&error.statusCode===409)throw error;
+        failed++;retryIds.push(selectedItem.id);
+      }
+    }
+    if(pending||failed){const available={...selected};delete available.scopeCounts;delete available.supervision;
+      return {...available,page:filter.page,total:null,summary:null,items,facets,canManagePolicies:isDigitalLeader(actor),freshness:{pending,failed,retryIds:[...new Set(retryIds)].slice(0,15)}};}
+    return {...selected,items,facets,canManagePolicies:isDigitalLeader(actor)};
+  }
+  /** An explicit, authorized single-object retry, never a GET-side rebuild.
+   * Only derived queue/backoff rows change; business facts remain untouched. */
+  async refreshOne(actor:TrustedActorContext,id:string){
+    assertIdentityActor(actor);const client=await this.database.connect(),db=reuseJourneySnapshotReads(client);
+    try{
+      await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+      const row=(await this.candidates(db,actor,id))[0]??digitalNotFound();
+      const asOf=iso((await db.query('SELECT CURRENT_TIMESTAMP AS as_of')).rows[0].as_of)!;
+      if(!await this.project(db,actor,row,asOf,undefined,true))digitalNotFound();
+      const scope=row.order?{kind:'order',id:row.order.production_order_id}:{kind:'source',id:row.source!.source_id};
+      await db.query(`INSERT INTO digital_journey_fact_changes(resource_kind,resource_id,reason)
+       SELECT $1,$2,'backfill' WHERE NOT EXISTS(SELECT 1 FROM digital_journey_fact_changes WHERE resource_kind=$1 AND resource_id=$2) ON CONFLICT DO NOTHING`,[scope.kind,scope.id]);
+      await db.query('DELETE FROM digital_journey_fact_retries WHERE resource_kind=$1 AND resource_id=$2',[scope.kind,scope.id]);
+      await db.query('COMMIT');return {status:'pending' as const};
+    }catch(error){await db.query('ROLLBACK');throw error;}finally{client.release();}
   }
   async export(actor:TrustedActorContext,filter:JourneyFilter) {
     assertBusinessExportAllowed(actor.actorRoles);
@@ -189,14 +252,19 @@ export class DigitalJourneyQuery {
    * No synthetic actor, Root authority, cached visibility or executable DTO.
    * Caller owns one consistent snapshot and persists only the whitelist below.
    */
-  async buildFactsWithClient(db:PoolClient,resource:{kind:'source'|'order';id:string},asOf:string):Promise<JourneyFactModel>{
+  async buildFactsWithClient(db:PoolClient,resource:{kind:'source'|'order';id:string},asOf:string,captureSelection?:(selection:{facts:JourneySelectionFacts;expiresAt:string|null})=>void):Promise<JourneyFactModel>{
     const row=(await db.query(`SELECT row_to_json(s) AS source,row_to_json(o) AS "order"
       FROM digital_production_sources s FULL JOIN digital_production_orders o ON o.source_id=s.source_id
       WHERE ($1='order' AND o.production_order_id=$2) OR ($1='source' AND s.source_id=$2 AND o.production_order_id IS NULL)`,[resource.kind,resource.id])).rows[0] as Candidate|undefined;
     if(!row)return digitalNotFound();
     let timing:JourneyTimingInputs={plan:null,original:null,facts:{}};
     let nativeTasks:Array<{id:string;routeInstanceId:string}>=[];
-    const item=await this.project(db,null,row,asOf,undefined,true,null,false,true,value=>{timing=value;},tasks=>{nativeTasks=tasks;});
+    let projectedTime:BusinessTime|undefined,nativeNodes:JourneySelectionFacts['nodes']=[],untimedNodes:JourneySelectionFacts['nodes']=[];
+    let untimedItem:OrderJourney|undefined,delivery:JourneySelectionDelivery|undefined,recheckAt:number|null=null;
+    const item=await this.project(db,null,row,asOf,undefined,true,null,false,true,{timing:value=>{timing=value;},tasks:tasks=>{nativeTasks=tasks;},time:value=>{projectedTime=value;},
+      nativeNodes:nodes=>{if(captureSelection)nativeNodes=journeySelectionNodes(nodes);},untimedNodes:nodes=>{if(captureSelection)untimedNodes=journeySelectionNodes(nodes);},
+      untimedItem:(item,value)=>{if(captureSelection){untimedItem=structuredClone(item);delivery=value;}},
+      recheckAt:at=>{const value=Date.parse(at);if(projectedTime&&value>Date.parse(projectedTime.now)&&(recheckAt===null||value<recheckAt))recheckAt=value;}});
     if(!item)throw new Error('Single-object Journey facts unavailable');
     // Native task identity is collected before setFact() substitutes original
     // business-document links. Presentation records are not a task inventory.
@@ -206,10 +274,21 @@ export class DigitalJourneyQuery {
     const dependencies=ids.length?(await db.query<{taskId:string;predecessorId:string}>('SELECT task_id AS "taskId",predecessor_id AS "predecessorId" FROM digital_production_task_dependencies WHERE task_id=ANY($1::uuid[]) ORDER BY task_id,predecessor_id',[ids])).rows:[];
     const tasks=[...summaries.values()].map(task=>({id:task.taskId,kind:task.taskKind,sourceId:task.sourceId,orderId:task.orderId,assigneeId:task.assigneeId,requiredRole:task.requiredRole,
       routeInstanceId:nativeTasks.find(row=>row.id===task.taskId)!.routeInstanceId,routeVersion:task.routeVersion,policyVersion:task.policyVersion,
-      enteredAt:task.enteredAt,dueAt:task.dueAt,warningAt:task.warningAt,deadlineMode:task.deadlineMode??null,deadlineExclusive:task.deadlineExclusive===true}));
+      enteredAt:task.enteredAt,dueAt:task.dueAt,warningAt:task.warningAt,deadlineMode:task.deadlineMode??null,deadlineExclusive:journeyTaskDeadlineExclusive(task)}));
+    if(captureSelection){
+      if(!projectedTime)throw Error('Journey selection observation was not captured');
+      const selectionTasks:JourneySelectionTask[]=tasks.map(task=>{const original=summaries.get(task.id)!;return {...task,
+        state:original.paused&&!['completed','cancelled'].includes(original.state)?'blocked':original.state==='ready'?'active':original.state};});
+      const selection=journeySelectionFacts(item,timing,selectionTasks,projectedTime,{native:nativeNodes,untimed:untimedNodes});
+      if(!untimedItem||!delivery)throw Error('Journey clock native facts were not captured');
+      const compiled=compileJourneySelectionClock(item,untimedItem,timing,selectionTasks,nativeNodes,delivery,projectedTime);
+      if(recheckAt!==null&&(!compiled.expiresAt||recheckAt<Date.parse(compiled.expiresAt)))compiled.expiresAt=new Date(recheckAt).toISOString();
+      selection.facts.frames=compiled.frames;selection.expiresAt=compiled.expiresAt;
+      captureSelection(selection);
+    }
     return minimalJourneyFacts(item,timing,tasks,dependencies);
   }
-  private async project(db:PoolClient,actor:TrustedActorContext|null,row:Candidate,asOf:string,selectedRound?:number,summaryOnly=false,patternKinds:string[]|null=null,compact=false,supervision=false,capture?:(inputs:JourneyTimingInputs)=>void,captureNativeTasks?:(tasks:Array<{id:string;routeInstanceId:string}>)=>void):Promise<OrderJourney|null> {
+  private async project(db:PoolClient,actor:TrustedActorContext|null,row:Candidate,asOf:string,selectedRound?:number,summaryOnly=false,patternKinds:string[]|null=null,compact=false,supervision=false,capture?:FactCapture):Promise<OrderJourney|null> {
     const policy=new DigitalProductionAccessPolicy(db),source=row.source,order=row.order;
     const sid=source?.source_id??null,oid=order?.production_order_id??null;
     // Projection time is business time; the outer audit-log snapshot remains real.
@@ -217,6 +296,7 @@ export class DigitalJourneyQuery {
     // Use SQL snapshot time only as the ordinary fallback. Guarded context and
     // actual reader results (including null scenario IDs) retain precedence.
     const observed=await journeyMeasure('clock_read',()=>new ContextBusinessClock(this.database,db).read(scope,()=>new Date(asOf)));
+    capture?.time?.(observed);
     if(observed.scenarioId)this.observations.get(db)?.set(`${scope.kind}:${scope.id}`,{scope,time:observed});
     asOf=observed.now;
     const attached=Boolean(sid&&oid&&(await db.query("SELECT 1 FROM audit_events WHERE entity_type='digital_production' AND entity_id=$1 AND action='digital_source_attached' AND after_state->>'sourceId'=$2 LIMIT 1",[oid,sid])).rowCount);
@@ -240,7 +320,7 @@ export class DigitalJourneyQuery {
     }
     if(!sourceAccess&&!orderAccess&&!visibleTasks.length)return null;
     if(selectedRound!==undefined&&!sourceAccess)digitalNotFound();
-    captureNativeTasks?.(visibleTasks.map(task=>({id:task.task_id,routeInstanceId:task.route_instance_id})));
+    capture?.tasks(visibleTasks.map(task=>({id:task.task_id,routeInstanceId:task.route_instance_id})));
     const documentTables=sid&&sourceAccess?await developmentReadTables(db):null;
     const document=sid&&sourceAccess?(await db.query(`SELECT * FROM ${documentTables!.documents} WHERE source_id=$1`,[sid])).rows[0]:null;
     const revisions=sid&&sourceAccess?(await db.query(`SELECT * FROM ${documentTables!.rounds} WHERE source_id=$1 ORDER BY round_number`,[sid])).rows:[];
@@ -349,8 +429,8 @@ export class DigitalJourneyQuery {
       if(task.blockedReason&&task.blockedReason!=='前置条件未满足')node.blockers.push({key:"recorded_block",label:task.blockedReason,ownerId:task.assigneeId,record:node.records[0]!});
       if(task.state==='ready'&&!task.paused&&!node.blockers.length)for(const key of completionKeys){const detail=digitalConditionGuidance(key,raw.required_role);node.blockers.push({key:`completion:${key}`,label:`完成办理前：${detail.missing}；由${businessRoleLabel(detail.responsibleRole)}在原任务办理页核实并提交，当前记录可查看`,ownerId:task.assigneeId,record:node.records[0]!});}
       if(["active","blocked"].includes(state)) {
-        if(task.dueAt&&(task.deadlineExclusive===false?Date.parse(task.dueAt)<Date.parse(asOf):Date.parse(task.dueAt)<=Date.parse(asOf))){node.risks.push("overdue");node.overdueSeconds=(Date.parse(asOf)-Date.parse(task.dueAt))/1000;}
-        else if(task.warningAt&&Date.parse(task.warningAt)<=Date.parse(asOf))node.risks.push("due_soon");
+        const timeRisks=journeyTaskTimeRisks({state,dueAt:task.dueAt,warningAt:task.warningAt,deadlineExclusive:task.deadlineExclusive},asOf);node.risks.push(...timeRisks);
+        if(timeRisks.includes('overdue'))node.overdueSeconds=(Date.parse(asOf)-Date.parse(task.dueAt!))/1000;
         if(state==="blocked")node.risks.push("blocked");
         if(!task.enteredAt)node.risks.push("unknown");
       }
@@ -365,7 +445,7 @@ export class DigitalJourneyQuery {
       const materialEvents = (await db.query<{material_id:string;action:string;expected_date:string|null}>(
         "SELECT material_id,action,expected_date::text FROM digital_development_material_events WHERE source_id=$1 AND route_version=$2 ORDER BY sequence", [sid, round ?? 1])).rows;
       const effectiveMaterials=(await materialsFor(round??1)).materials;
-      const today = new Intl.DateTimeFormat("en-CA", {timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(asOf));
+      const today=journeyObservedDay(asOf);
       const materials = (currentDocument.document as DevelopmentDocument).materials.filter(material => effectiveMaterials.some(item=>item.materialId===material.materialId&&item.required));
       const supplyPlaceholder = baseNodes.findIndex(value => value.key === "development_material_supply" && value.instanceId === `development_material_supply:${value.round ?? 0}`);
       if (!materials.length && supplyPlaceholder >= 0) baseNodes[supplyPlaceholder] = emptyNode("development_material_supply", "not_applicable", round);
@@ -381,7 +461,7 @@ export class DigitalJourneyQuery {
         node.expectedPrecision = plannedDate ? "date" : "missing";
         node.sla = "not_set";
         node.records = [record("development_material", material.materialId, `${developmentUrl(sid, round ?? 1)}#material-${material.materialId}`, currentDocument.version ?? currentDocument.document_version ?? null)];
-        if (!arrived && plannedDate && plannedDate < today) node.risks.push("overdue");
+        if (!arrived && plannedDate && journeyPlanDateOverdue(plannedDate,today)) node.risks.push("overdue");
         // Event registration time is not the actual arrival time.
         const placeholder = index === 0 ? supplyPlaceholder : -1;
         // A real supply task retains its lifecycle, owner and original handling URL.
@@ -392,6 +472,7 @@ export class DigitalJourneyQuery {
       const replaced=baseNodes.findIndex(node=>node.key==="development_materials"&&node.instanceId===`development_materials:${round??0}`);
       if(replaced>=0)baseNodes.splice(replaced,1);
     }
+    capture?.nativeNodes?.(baseNodes);
     // Future and applicable nodes stay visible; historical instances do not disappear after revision.
     const progress:OrderJourney["progress"]={development:null,bulk:null};
     let businessQuantities:ReturnType<typeof journeyBusinessQuantities>|undefined;
@@ -440,6 +521,8 @@ export class DigitalJourneyQuery {
       const gates=await journeyMeasure('bulk',()=>new BulkPreparationService(this.database).gates(db,oid));
       const bulkUrl=`/ui/digital-production?bulk=${oid}`;
       const confirmation=gates.customerSampleFact?.payload;
+      if(confirmation&&['现场登记','已核实'].includes(confirmation.timeQuality)&&typeof confirmation.actualCompletedAt==='string'
+       &&/T.*(?:Z|[+-]\d{2}:\d{2})$/.test(confirmation.actualCompletedAt)&&Number.isFinite(Date.parse(confirmation.actualCompletedAt)))capture?.recheckAt?.(confirmation.actualCompletedAt);
       let confirmationTime=confirmation&&['现场登记','已核实'].includes(confirmation.timeQuality)&&typeof confirmation.actualCompletedAt==='string'
         &&/T.*(?:Z|[+-]\d{2}:\d{2})$/.test(confirmation.actualCompletedAt)&&Number.isFinite(Date.parse(confirmation.actualCompletedAt))
         &&Date.parse(confirmation.actualCompletedAt)<=Date.parse(asOf)?iso(confirmation.actualCompletedAt):null;
@@ -451,6 +534,7 @@ export class DigitalJourneyQuery {
         const comment=(await db.query(`SELECT comment_id,occurred_at,recorded_by FROM digital_development_final_comments
           WHERE source_id=$1 AND round_number=$2 AND comment_id=$3 AND version=$4 AND scope_ref='整款' AND is_final AND decision='approved'`,
           [sid,gates.source.round_number,gates.technical.finalCommentRef.id,gates.technical.finalCommentRef.version])).rows[0];
+        if(comment?.occurred_at)capture?.recheckAt?.(iso(comment.occurred_at)!);
         if(comment?.occurred_at&&Date.parse(iso(comment.occurred_at)!)<=Date.parse(asOf)){
           confirmationTime=iso(comment.occurred_at);confirmationOperator=comment.recorded_by;confirmationQuality='unverified';
         }
@@ -605,6 +689,7 @@ export class DigitalJourneyQuery {
       // The immutable round publication atomically adopted the listed original
       // result. Its business timestamp is adoption, not that result's work end.
       const adoptedAt=round&&round>1&&currentDocument?.round_number===round?iso(currentDocument.published_at):null;
+      if(adoptedAt)capture?.recheckAt?.(adoptedAt);
       const valid=adoptedAt&&Date.parse(adoptedAt)<=Date.parse(asOf);
       node.inheritedResult={actualAt:original?.actualAt??null,quality:original?.actualQuality??'missing',adoptedAt:valid?adoptedAt:null,
         ...(valid?{adoptedRound:round!,adoptionSourceRef:`development-round:${sid}:${round}`} : {}),
@@ -614,7 +699,7 @@ export class DigitalJourneyQuery {
     const poDeliveryDates=!patternKinds&&orderAccess&&oid?await readOrderPoDeliveryDates(db,oid,lines.map(line=>line.id)):[];
     const finalClosed=baseNodes.some(node=>node.current&&['packing','special_closure'].includes(node.key)&&node.state==='completed');
     const terminal=!patternKinds&&orderAccess&&oid&&(await db.query("SELECT 1 WHERE EXISTS(SELECT 1 FROM digital_order_closures WHERE production_order_id=$1) OR EXISTS(SELECT 1 FROM digital_production_resource_lifecycle WHERE resource_kind='order' AND resource_id=$1 AND state='cancelled')",[oid])).rowCount;
-    const promiseDay=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(asOf));
+    const promiseDay=journeyObservedDay(asOf);
     // A hidden reporting node cannot stand in for the whole order's authoritative completion.
     // Read only this boolean for an already authorized mother; retain all reporting visibility gates.
     const factoryQcState=!patternKinds&&orderAccess&&oid?await factoryProductionFacts(db,oid):null;
@@ -664,6 +749,9 @@ export class DigitalJourneyQuery {
     const item:OrderJourney={seriesPlanVisible:Boolean(!patternKinds&&fullOrder&&oid),asOf,styleImageUrl,developmentType:sourceAccess?source?.development_type??null:null,requiredCompletionDate:sourceAccess?currentDocument?.document?.returnDate??null:null,id:canonicalId,sourceId:sid,orderId:orderAccess?oid:null,designStyleNo:chosenIdentity.design_style_no,temporaryStyleNo:chosenIdentity.temporary_style_no,customer:chosenIdentity.customer_code,category:currentDocument?.document.template??(orderAccess?order?.product_group:null)??null,styleName,designer,merchandisers,orderNumbers,createdAt:iso(sourceAccess?source!.created_at:orderAccess?order!.created_at:(source?.created_at??order!.created_at))!,deliveryDate:orderAccess?digitalDateText(order?.contract_delivery_date??null):null,poDeliveryDates,deliveryRisks,selectedRound:round,adoptedRound:instruction?.source_round??null,sourceVersion:currentDocument?.version??currentDocument?.document_version??null,instructionVersion:instruction?.version??null,lines,links,stages,progress,hitReasons:[]};
     const lifecycle=oid&&orderAccess?{kind:"order",id:oid}:!oid&&sid&&sourceAccess?{kind:"source",id:sid}:null;
     const cancelled=Boolean(!patternKinds&&lifecycle&&(await db.query("SELECT 1 FROM digital_production_resource_lifecycle WHERE resource_kind=$1 AND resource_id=$2 AND state='cancelled'",[lifecycle.kind,lifecycle.id])).rowCount);
+    capture?.untimedNodes?.(baseNodes);
+    capture?.untimedItem?.(item,{finished:finalClosed||Boolean(terminal),terminal:Boolean(terminal),factoryFinished,
+      sampleFinished:baseNodes.some(node=>node.current&&node.key==='bulk_ship_sample'&&node.state==='completed'),sentLineIds:[...sampleSentLineIds]});
     // Do not expand an assigned worker's single-task read scope to the whole SLA/PO history.
     if(supervision&&!patternKinds&&selectedRound===undefined){
     const timingRoles=['production_management','owner_group','pmc','pattern_room_supervisor','development_clerk'];
@@ -673,7 +761,7 @@ export class DigitalJourneyQuery {
     const ownOrder=actor&&(order?.created_by===actor.actorId&&actor.actorRoles.includes('sample_designer')&&await policy.activeRole(actor.actorId,'sample_designer')
       ||order?.primary_merchandiser_id===actor.actorId&&actor.actorRoles.includes('order_merchandiser')&&await policy.activeRole(actor.actorId,'order_merchandiser'));
     if(fullOrder&&(liveTimingAuthority||ownOrder)||!oid&&sourceAccess&&(liveTimingAuthority||ownSource))
-      await journeyMeasure('sla',()=>readJourneySupervision(this.database,db,actor,item,observed,visibleTasks.some(task=>task.task_kind==='bulk_cutting_external'),new Set(visibleTasks.map(task=>task.task_id)),capture));
+      await journeyMeasure('sla',()=>readJourneySupervision(this.database,db,actor,item,observed,visibleTasks.some(task=>task.task_kind==='bulk_cutting_external'),new Set(visibleTasks.map(task=>task.task_id)),capture?.timing,capture?.recheckAt));
     else item.supervision={asOf:observed.now,status:'limited',originalRevision:null,currentRevision:null,nodes:[],coverage:[{key:'scope',message:'仅有本岗位节点权限，整单SLA未计入；已授权节点照常监督'}],customerReminderDate:null};
     }
     item.display=journeyDisplay(item,asOf,{cancelled,closedAt:baseNodes.find(node=>node.current&&node.key==='special_closure'&&node.state==='completed')?.actualAt??null});

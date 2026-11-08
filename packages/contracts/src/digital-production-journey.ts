@@ -214,11 +214,18 @@ export type JourneyVisualProgress = {
   expected: JourneyBusinessDate; actual: JourneyBusinessDate;
   stages: JourneyVisualStage[];
 };
-export type JourneyResult = { ruleVersion: "journey-v2.0"; asOf: string; page: number; pageSize: 15; total: number; canManagePolicies?: boolean;
+export type JourneyCompleteResult = { ruleVersion: "journey-v2.0"; asOf: string; page: number; pageSize: 15; total: number; canManagePolicies?: boolean;
   facets?: { customers: string[]; categories: string[]; merchandisers: Array<{id:string;name:string|null}> };
   summary: {all:number;active:number;dueSoon:number;overdue:number;blocked:number;completed:number;notStarted?:number;timingMissing?:number};
   supervision?:{overdue:number;dueSoon:number;coverage:Array<{key:JourneyCoverage["key"];orders:number;message:string}>};
   scopeCounts?: {production:number;development:number;cancelled:number}; items: OrderJourney[] };
+/** An incomplete read cannot present zero or an old total as the latest value.
+ * Its items are the currently available matching objects, not a claimed page
+ * in a complete ordering; normal reads keep the existing complete contract. */
+export type JourneyResult=Omit<JourneyCompleteResult,'total'|'summary'>&{
+ total:number|null;summary:JourneyCompleteResult['summary']|null;
+ freshness?:{pending:number;failed:number;retryIds?:string[]};
+};
 
 export type JourneyDisplay = {
   ruleVersion: "cockpit-display-v1";

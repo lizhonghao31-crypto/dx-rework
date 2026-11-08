@@ -1,11 +1,35 @@
 import { describe, expect, it } from "vitest";
 import { JourneyFilterSchema, JourneyReturnContextSchema, JOURNEY_STAGES, journeyReturnUrl, type JourneyNode, type OrderJourney } from "@dx-rework/contracts/digital-production-journey";
-import { journeyCompletion, journeyStages, selectJourneys } from "../../apps/api/src/production-platform/journey-projection.js";
+import { journeyCompletion, journeyStages, selectJourneys,selectJourneySelections,type JourneySelection } from "../../apps/api/src/production-platform/journey-projection.js";
+import {journeyDisplay} from '../../apps/api/src/production-platform/journey-display.js';
 import { JOURNEY_NODES } from "../../apps/api/src/production-platform/journey-catalog.js";
 const at="2026-10-04T10:00:00.000Z";
 const node=(key:string,patch:Partial<JourneyNode>={}):JourneyNode=>({key,instanceId:key,label:key,stage:"development",state:"pending",current:true,round:1,occurrence:1,owner:null,operator:null,assignmentHistory:[],expectedAt:null,expectedPrecision:"missing",expectedKind:"unset",actualAt:null,actualQuality:"missing",enteredAt:null,sla:"not_started",completionResult:null,overdueSeconds:null,risks:[],blockers:[],records:[],inheritedFrom:null,countsInProgress:true,unavailableReason:null,...patch});
 const item=(id:string,nodes:JourneyNode[],patch:Partial<OrderJourney>={}):OrderJourney=>({id,sourceId:id,orderId:null,designStyleNo:`STYLE-${id}`,temporaryStyleNo:"TEMP-1234",customer:"PD",category:"男装",designer:"设计师",styleName:"款名",merchandisers:[{id:"19b5331b-c76f-4b9a-8773-849e24a35ad1",name:"第二跟单"}],orderNumbers:["ORDER-TEST"],createdAt:at,deliveryDate:null,selectedRound:1,adoptedRound:1,sourceVersion:1,instructionVersion:null,lines:[{id:`${id}-PO1`,po:"PO-1",color:"黑",formalStyleNo:"FORMAL-1",temporaryStyleNo:null,orderedQuantity:100}],links:[],stages:journeyStages(nodes),progress:{development:{applicable:6,completed:1},bulk:null},hitReasons:[],...patch});
 describe("V2 Journey shared query semantics",()=>{
+  it('selects the same global totals, categories and ordered page IDs from lightweight facts without any task/document/SLA hydration',()=>{
+    const orders=Array.from({length:37},(_,i)=>{
+      const completed=i%7===0,nodes=[node('development_pattern',{state:'active',risks:i%2?['overdue']:[]}),node('packing',{stage:'receiving',state:completed?'completed':'uncreated'})];
+      const value=item(String(i),nodes,{orderId:String(i),customer:i%3?'PD':'XX',orderNumbers:[['阿单','A单','a单'][i%3]!+String(i%5)],
+        supervision:{asOf:at,status:'planned',originalRevision:1,currentRevision:1,nodes:[],coverage:i%4?[]:[{key:'fact_time',message:'真实时间待核'}],customerReminderDate:null},
+        poDeliveryDates:[{lineId:String(i),position:i+1,poNumber:'PO-'+i,color:'黑',factoryDeliveryDate:null,customerWarehouseArrivalDate:i%6?'2026-10-12':null,sampleTargetDate:null}]});
+      value.display=journeyDisplay(value,at,{closedAt:completed?at:null});return value;
+    });
+    const light:JourneySelection[]=orders.map(value=>({id:value.id,sourceId:value.sourceId,orderId:value.orderId,designStyleNo:value.designStyleNo,temporaryStyleNo:value.temporaryStyleNo,customer:value.customer,category:value.category,designer:value.designer,styleName:value.styleName,merchandisers:value.merchandisers,orderNumbers:value.orderNumbers,createdAt:value.createdAt,
+      lines:value.lines.map(({po,formalStyleNo,temporaryStyleNo})=>({po,formalStyleNo,temporaryStyleNo})),links:value.links.map(({id})=>({id})),
+      stages:value.stages.map(stage=>({nodes:stage.nodes.map(({key,instanceId,stage,state,current,risks,planningOnly})=>({key,instanceId,stage,state,current,risks,...(planningOnly===undefined?{}:{planningOnly})}))})),
+      supervision:{coverage:value.supervision!.coverage},display:value.display!}));
+    const identity=(result:{items:Array<{id:string}>})=>({...result,items:result.items.map(value=>value.id)});
+    for(const page of [1,2,3])for(const patch of [{},{customer:'PD'},{search:'PO-1'},{stage:'development',risk:'overdue'},{kpi:'completed'},{missing:'fact_time'},{scope:'development'}]){
+      const filter=JourneyFilterSchema.parse({scope:'production',page,...patch});
+      expect(identity(selectJourneySelections(light,filter,at))).toEqual(identity(selectJourneys(orders,filter,at)));
+    }
+    expect(selectJourneySelections(light,JourneyFilterSchema.parse({scope:'production',page:2}),at).items).toHaveLength(15);
+  });
+  it('rejects a lightweight cockpit row with no reliable whole-order state instead of inventing an empty or completed state',()=>{
+    const value=item('missing-state',[]);
+    expect(()=>selectJourneySelections([value],JourneyFilterSchema.parse({scope:'development'}),at)).toThrow('Current authorized cockpit selection state is required');
+  });
   it("defines exactly seven stable stages and all declared subflow keys once",()=>{
     expect(JOURNEY_STAGES.map(stage=>stage.key)).toEqual(["creation","development","preparation","cutting","post_cutting","production","receiving"]);
     expect(new Set(JOURNEY_NODES.map(node=>node.key)).size).toBe(JOURNEY_NODES.length);

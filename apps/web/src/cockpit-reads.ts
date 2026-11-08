@@ -12,8 +12,13 @@ type DetailRead={identity:string;key:string;busy:boolean;data:OrderJourney|null;
 const denied=(error:unknown)=>error instanceof DigitalRequestError&&error.status!==null&&[401,403,404].includes(error.status);
 const message=(error:unknown)=>error instanceof Error?error.message:'读取失败，请重试';
 function validList(value:JourneyResult,page:number){
- return value?.ruleVersion==='journey-v2.0'&&value.page===page&&Number.isSafeInteger(value.total)&&value.total>=0&&Array.isArray(value.items)&&Boolean(value.summary)&&typeof value.asOf==='string'&&Number.isFinite(Date.parse(value.asOf));
+ const partial=value?.freshness;
+ const validTotals=partial?Number.isSafeInteger(partial.pending)&&partial.pending>=0&&Number.isSafeInteger(partial.failed)&&partial.failed>=0&&partial.pending+partial.failed>0&&value.total===null&&value.summary===null
+  :value?.total!==null&&Number.isSafeInteger(value?.total)&&value.total>=0&&Boolean(value.summary);
+ return value?.ruleVersion==='journey-v2.0'&&value.page===page&&validTotals&&Array.isArray(value.items)&&typeof value.asOf==='string'&&Number.isFinite(Date.parse(value.asOf));
 }
+export function cockpitAvailabilityMessage(data:JourneyResult){const state=data.freshness;return state
+ ?`${state.failed?`${state.failed} 单信息更新失败，`:''}${state.pending?`${state.pending} 单正在更新，`:''}统计和分页暂未更新。可先查看以下已更新订单，稍后刷新。`:'';}
 /** Results own their successful conditions. The independent generations also
  * protect same-key A1→B→A2, retries and finalizers; no settled API data is cached. */
 export function useCockpitReads(context:CockpitContext,refresh:number){

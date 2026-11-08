@@ -6,7 +6,7 @@ import {ApplicationError} from '../platform/errors.js';
 import {assertAcceptanceServerProof,type AcceptanceServerProof} from './guard.js';
 import {DigitalProductionIdentityService} from '../production-platform/identity-service.js';
 import {DigitalDevelopmentService} from '../production-platform/development-service.js';
-import {acceptanceBusinessContext,installAcceptanceClockReader,withAcceptanceBusinessTime,type AcceptanceBusinessContext} from './business-time.js';
+import {acceptanceBusinessContext,businessScopeKey,installAcceptanceClockReader,withAcceptanceBusinessTime,type AcceptanceBusinessContext} from './business-time.js';
 import {clockRoots} from './scope.js';
 import {AcceptanceClockRepository,clockConflict,type ClockRow} from './repository.js';
 
@@ -18,6 +18,14 @@ export class AcceptanceClockRuntime{
   this.repository=new AcceptanceClockRepository(database);
   installAcceptanceClockReader(database,{
    read:async(scope,transaction)=>{this.assertEnabled();const result=(await (transaction??database).query(`SELECT s.* FROM acceptance_sla_clock_resources r JOIN acceptance_sla_clock_scenarios s USING(scenario_id) WHERE r.resource_kind=$1 AND r.resource_id=$2`,[scope.kind,scope.id])).rows[0] as ClockRow|undefined;return result?{now:result.business_now.toISOString(),scenarioId:result.scenario_id,revision:result.version}:null;},
+   readMany:async(scopes,transaction)=>{
+    this.assertEnabled();if(!scopes.length)return new Map();
+    const rows=(await (transaction??database).query(`SELECT r.resource_kind,r.resource_id,s.business_now,s.scenario_id,s.version
+     FROM unnest($1::text[],$2::uuid[]) AS requested(kind,id)
+     JOIN acceptance_sla_clock_resources r ON r.resource_kind=requested.kind AND r.resource_id=requested.id
+     JOIN acceptance_sla_clock_scenarios s USING(scenario_id)`,[scopes.map(scope=>scope.kind),scopes.map(scope=>scope.id)])).rows;
+    return new Map(rows.map(row=>[businessScopeKey({kind:row.resource_kind,id:row.resource_id}),{now:row.business_now.toISOString(),scenarioId:row.scenario_id,revision:row.version}]));
+   },
    nativeScenario:async(id,transaction)=>{this.assertEnabled();const ids=[...new Set((await clockRoots(transaction??database,id)).map(r=>r.scenarioId).filter((v):v is string=>Boolean(v)))];if(ids.length>1)clockConflict('原业务关联跨测试场景，不能使用测试时间');return ids[0]??null;}
   });
  }

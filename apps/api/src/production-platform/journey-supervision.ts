@@ -38,7 +38,7 @@ export function attachJourneySupervision(item:OrderJourney,plan:SlaPlan|null,ori
  item.supervision={assessment:nodes.some(n=>n.assessmentIssue)?'partially_unavailable':'complete',asOf:time.now,status:plan?'planned':'legacy_unenrolled',originalRevision:revisions.original,currentRevision:revisions.current,nodes:timing,coverage,customerReminderDate:reminder};
  if(native){
   const visibleKeys=new Set(item.stages.flatMap(stage=>stage.nodes).filter(node=>node.current&&!['unavailable','not_applicable'].includes(node.state)).map(node=>node.key));
-  item.supervision.nativeFacts=Object.entries(native.facts).filter(([id])=>visibleKeys.has(journeyTimingKey(id)))
+  item.supervision.nativeFacts=Object.entries(native.facts).filter(([id])=>visibleKeys.has(journeyTimingKey(id))).sort(([a],[b])=>a.localeCompare(b))
    .map(([id,fact])=>({id,sourceRef:fact.evidence,timeRole:'sla_observation',startedAt:fact.startedAt??null,completedAt:fact.completedAt??null,businessCompleted:fact.businessCompleted??null}));
  }
  for(const stage of item.stages)for(const node of stage.nodes){
@@ -62,8 +62,8 @@ export function attachJourneySupervision(item:OrderJourney,plan:SlaPlan|null,ori
   }
  }
 }
-export async function readJourneySupervision(database:Pool,db:PoolClient,actor:TrustedActorContext|null,item:OrderJourney,time:BusinessTime,external=false,authorizedTaskIds?:ReadonlySet<string>,capture?:(inputs:JourneyTimingInputs)=>void){
- if(item.orderId){const service=new SlaOrderService(database,{read:async()=>time}),read=actor?await service.readWithClient(actor,item.orderId,db,{mode:"read_projection"}):await service.readFactsWithClient(item.orderId,db,{mode:"read_projection"});
+export async function readJourneySupervision(database:Pool,db:PoolClient,actor:TrustedActorContext|null,item:OrderJourney,time:BusinessTime,external=false,authorizedTaskIds?:ReadonlySet<string>,capture?:(inputs:JourneyTimingInputs)=>void,onFutureEvidence?:(at:string)=>void){
+ if(item.orderId){const service=new SlaOrderService(database,{read:async()=>time}),read=actor?await service.readWithClient(actor,item.orderId,db,{mode:"read_projection",...(onFutureEvidence?{onFutureEvidence}:{})}):await service.readFactsWithClient(item.orderId,db,{mode:"read_projection",...(onFutureEvidence?{onFutureEvidence}:{})});
   capture?.({plan:read.status==='planned'?read.evaluationPlan:null,original:read.status==='planned'?read.original.plan:null,facts:read.facts});
   attachJourneyNativeTimes(item,{orderId:read.receiving.orderId,rework:read.rework.windows,receiving:read.receiving.receivingSpan},read.time.now);
   if(read.status==='planned'){
@@ -76,9 +76,9 @@ export async function readJourneySupervision(database:Pool,db:PoolClient,actor:T
   }
   else attachJourneySupervision(item,null,null,[],read.time,{original:null,current:null},external,{facts:read.facts},authorizedTaskIds);
  }else if(item.sourceId){const saved=await developmentSlaPlan(db,item.sourceId);
-  if(!saved){const facts=await developmentNativeFacts(db,item.sourceId,time);capture?.({plan:null,original:null,facts});attachJourneySupervision(item,null,null,[],time,{original:null,current:null},false,{facts},authorizedTaskIds);}
+  if(!saved){const facts=await developmentNativeFacts(db,item.sourceId,time,onFutureEvidence);capture?.({plan:null,original:null,facts});attachJourneySupervision(item,null,null,[],time,{original:null,current:null},false,{facts},authorizedTaskIds);}
   else {
-  const evidence=await developmentSlaEvidence(db,item.sourceId,time),plan=developmentEvaluationPlan(saved.plan_json,evidence?.facts??{});
+  const evidence=await developmentSlaEvidence(db,item.sourceId,time,onFutureEvidence),plan=developmentEvaluationPlan(saved.plan_json,evidence?.facts??{});
   capture?.({plan,original:saved.plan_json,facts:evidence?.facts??{}});
   attachJourneySupervision(item,plan,saved.plan_json,evaluateSlaPlan(plan,evidence?.facts??{},time,{mode:"read_projection"}),time,{original:1,current:saved.revision},false,{facts:evidence?.facts??{}},authorizedTaskIds);
   }
