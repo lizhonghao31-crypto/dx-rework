@@ -1,3 +1,4 @@
+import {type TodoSelection,type TodoSelectionKey,type TodoProjection} from '../todos/selection.js';
 import {shortLeadTodos} from './short-lead-todos.js';
 import {qcProgressNotices,qcNoticesAsTodos} from './qc-progress-todos.js';
 import {preparationWindowTodos,preparationMaterialsTodos,preparationSupplement} from './preparation-todos.js';
@@ -189,22 +190,24 @@ export class DigitalProductionNotificationService {
       }
     }
   }
-  async todos(actor:TrustedActorContext):Promise<TodoResponse[]> {
+  async todos(actor:TrustedActorContext,projection?:TodoProjection):Promise<TodoResponse[]> {
+    let targetSelected=false;
+    if(projection?.todoId&&projection.select){const select=projection.select;projection={...projection,select:(key,load)=>{if(key.todoId===projection!.todoId)targetSelected=true;select(key,load);}};}
     const people=await this.people(this.database);
     if(!people.some(p=>p.actorId===actor.actorId))return [];
-    const tasks=(await this.database.query<Task>(`${TASKS} WHERE ${ACTIVE} ORDER BY d.due_at NULLS LAST,t.created_at,t.task_id`)).rows;
+    const tasks=(await this.database.query<Task>(`${TASKS} WHERE ${ACTIVE}${projection?.todoId?' AND t.task_id=$1::uuid':''} ORDER BY d.due_at NULLS LAST,t.created_at,t.task_id`,...(projection?.todoId?[[projection.todoId]]:[]))).rows;
     const unified=await arrangementsAvailable(this.database);
-    const result:TodoResponse[]=unified?[...await arrangementTodos(this.database,actor),...await fabricDecisionTodos(this.database,actor)]:[];
-    result.push(...await shortLeadTodos(this.database,actor));
-    result.push(...await preparationWindowTodos(this.database,actor),...await preparationMaterialsTodos(this.database,actor),...await bulkFabricDecisionTodos(this.database,actor),...await factoryProductionQcTodos(this.database,actor,new ContextBusinessClock(this.database)),...await garmentQualityTodos(this.database,actor,new ContextBusinessClock(this.database)));
-    result.push(...qcNoticesAsTodos(await qcProgressNotices(this.database,people),actor));
+    const result:TodoResponse[]=unified?[...await arrangementTodos(this.database,actor,projection),...await fabricDecisionTodos(this.database,actor,projection)]:[];
+    result.push(...await shortLeadTodos(this.database,actor,projection));
+    result.push(...await preparationWindowTodos(this.database,actor,projection),...await preparationMaterialsTodos(this.database,actor,projection),...await bulkFabricDecisionTodos(this.database,actor,projection),...await factoryProductionQcTodos(this.database,actor,new ContextBusinessClock(this.database),projection),...await garmentQualityTodos(this.database,actor,new ContextBusinessClock(this.database),projection));
+
+    if(!projection?.todoId)result.push(...qcNoticesAsTodos(await qcProgressNotices(this.database,people),actor,projection));
     for(const task of tasks){
       const missing=!people.some(p=>p.actorId===task.assignee_id&&hasRequiredWarehouseRole(p.actorRoles,task.required_role));
       if(unified&&missing&&task.source_id&&(DEVELOPMENT_ARRANGEABLE_KINDS as readonly string[]).includes(task.task_kind))continue;
       if(task.state==="pending"&&!missing)continue;
       if(!(await this.recipients(this.database,task,"ready",people)).some(p=>p.actorId===actor.actorId))continue;
-      // An effective personal action carries only its exact parent's style identity.
-      // Assignment exceptions expose only their own parent after the existing technical-read policy.
+      const readContext=async()=>{
       const ownAction=!missing&&await new DigitalProductionAccessPolicy(this.database).allowed(actor,"task",task.task_id,"execute");
       const styleNo=task.production_order_id?task.order_style_no:task.source_id?task.source_style_no:null;
       const readableAssignment=missing&&await new DigitalProductionAccessPolicy(this.database).allowed(actor,"task",task.task_id,"technical");
@@ -214,12 +217,32 @@ export class DigitalProductionNotificationService {
         // Source/task visibility alone does not reveal a linked mother's PO list.
         if(linkedOrder&&await new DigitalProductionAccessPolicy(this.database).allowed(actor,'order',linkedOrder,'technical'))orderContext.poNumbers=(await this.database.query('SELECT po_number FROM digital_production_po_lines WHERE production_order_id=$1 ORDER BY position',[linkedOrder])).rows.flatMap(row=>row.po_number?[row.po_number as string]:[]);
       }
-      const time=await new ContextBusinessClock(this.database).read(task.production_order_id?{kind:'order',id:task.production_order_id}:{kind:'source',id:task.source_id!});
       const supplement=ownAction&&task.task_kind==='bulk_pattern'?await preparationSupplement(this.database,task.task_id):null;
-      result.push({... (supplement?{contentToken:todoContentToken(['preparation-supplement',task.task_id,supplement.version])}:{}),todoId:task.task_id,taskTitle:supplement?`${task.label} · ${supplement.ready?'补料已到，请复核补做':'局部已做，仍待补料'}`:task.label,todoType:missing?"recipient_routing_exception":"business_action",category:missing?"digital_assignment":"digital_task",sourceEventId:task.task_id,sourceAction:"digital_task",entityType:"digital_task",entityId:task.task_id,recipientUserId:actor.actorId,requiredRole:task.required_role,requiredCapability:null,route:{routeName:"digital_production_task",entityId:task.task_id,todoId:task.task_id,...(task.source_id?{developmentRound:task.route_version}:{})},policyKey:null,dueAt:task.due_at?iso(task.due_at):null,timing:todoSlaTiming({dueAt:task.due_at?iso(task.due_at):null,warningAt:task.warning_at?iso(task.warning_at):null,enteredAt:task.entered_at?iso(task.entered_at):null,exclusive:task.source_sla?(task.deadline_exclusive??false):false,asOf:time.now,unlimited:explicitlyUnlimitedSla(task.sla_basis)}),reminderCount:0,status:missing?"blocked_recipient":"pending",blockedReason:missing?"主办缺失或已失效，请重新分配":null,orderContext,unread:true,version:1,createdAt:iso(task.created_at),updatedAt:iso(task.created_at)});
+       return {orderContext,supplement};
+      };
+      const metadata=projection?.select&&!projection.countOnly?await readContext():null;
+      const build=async():Promise<TodoResponse>=>{const {orderContext,supplement}=metadata??await readContext();
+      const time=await new ContextBusinessClock(this.database).read(task.production_order_id?{kind:'order',id:task.production_order_id}:{kind:'source',id:task.source_id!});
+       return {... (supplement?{contentToken:todoContentToken(['preparation-supplement',task.task_id,supplement.version])}:{}),todoId:task.task_id,taskTitle:supplement?`${task.label} · ${supplement.ready?'补料已到，请复核补做':'局部已做，仍待补料'}`:task.label,todoType:missing?"recipient_routing_exception":"business_action",category:missing?"digital_assignment":"digital_task",sourceEventId:task.task_id,sourceAction:"digital_task",entityType:"digital_task",entityId:task.task_id,recipientUserId:actor.actorId,requiredRole:task.required_role,requiredCapability:null,route:{routeName:"digital_production_task",entityId:task.task_id,todoId:task.task_id,...(task.source_id?{developmentRound:task.route_version}:{})},policyKey:null,dueAt:task.due_at?iso(task.due_at):null,timing:todoSlaTiming({dueAt:task.due_at?iso(task.due_at):null,warningAt:task.warning_at?iso(task.warning_at):null,enteredAt:task.entered_at?iso(task.entered_at):null,exclusive:task.source_sla?(task.deadline_exclusive??false):false,asOf:time.now,unlimited:explicitlyUnlimitedSla(task.sla_basis)}),reminderCount:0,status:missing?"blocked_recipient":"pending",blockedReason:missing?"主办缺失或已失效，请重新分配":null,orderContext,unread:true,version:1,createdAt:iso(task.created_at),updatedAt:iso(task.created_at)};
+      };
+      if(projection?.select){
+       const supplement=metadata?.supplement;
+       const key:TodoSelectionKey={todoId:task.task_id,sourceAction:'digital_task',taskTitle:supplement?`${task.label} · ${supplement.ready?'补料已到，请复核补做':'局部已做，仍待补料'}`:task.label,category:missing?'digital_assignment':'digital_task',recipientUserId:actor.actorId,todoType:missing?'recipient_routing_exception':'business_action',route:{routeName:'digital_production_task',entityId:task.task_id,todoId:task.task_id,...(task.source_id?{developmentRound:task.route_version}:{})},dueAt:task.due_at?iso(task.due_at):null,status:missing?'blocked_recipient':'pending',createdAt:iso(task.created_at),orderContext:metadata?.orderContext??null,unread:true};
+       projection.select(key,build);
+      }else result.push(await build());
     }
-    return applyTodoReadState(this.database,actor,result);
+    // Hashed QC-window IDs have no native row key. Resolve their windows only if
+    // this single ID was not already found by the native/auxiliary providers.
+    if(projection?.todoId&&!targetSelected)result.push(...qcNoticesAsTodos(await qcProgressNotices(this.database,people),actor,projection));
+    return projection?.select?result:applyTodoReadState(this.database,actor,result);
   }
+  async todoSelections(actor:TrustedActorContext,options:{metadata?:boolean;todoId?:string}={}){
+    const selected:TodoSelection[]=[];await this.todos(actor,{countOnly:!options.metadata,...(options.todoId?{todoId:options.todoId}:{}),select:(key,load)=>selected.push({key,load})});
+    const keys=await applyTodoReadState(this.database,actor,selected.map(item=>item.key));
+    return selected.map((item,index)=>({key:keys[index]!,load:async()=>{const todo=await item.load(),key=keys[index]!;if(!key.contentToken)delete todo.contentToken;return {...todo,...(key.contentToken?{contentToken:key.contentToken}:{}),...(key.readAt===undefined?{}:{readAt:key.readAt}),...(key.unread===undefined?{}:{unread:key.unread})};}}));
+  }
+  async todoCounts(actor:TrustedActorContext){const rows=await this.todoSelections(actor);return {totalCount:rows.length,pendingCount:rows.length,unreadCount:rows.filter(row=>row.key.contentToken&&row.key.unread===true).length};}
+  async todo(actor:TrustedActorContext,id:string){const selected=await this.todoSelections(actor,{todoId:id});return selected[0]?selected[0].load():null;}
   private async render(database:Database,actor:TrustedActorContext,event:{instruction_order_id?:string|null;development_source_id?:string|null;event_id:string;task_id:string|null;todo_id:string|null;event_kind:string;deadline_revision_id:string|null;created_at:Date;source_key?:string},people:TrustedActorContext[],includeContext=true,prepared?:NotificationTasks):Promise<DigitalNotification|null> {
     if(!people.some(p=>p.actorId===actor.actorId))return null;
     if(event.event_kind==='qc_progress'){

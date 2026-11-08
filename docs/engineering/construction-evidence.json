@@ -1,158 +1,152 @@
 {
   "version": 1,
-  "base": "2020b353ede3963f71ea3df6311019093ff9c584",
-  "sourceFingerprint": "e504285c3225b0605c51da09196ae0af227d5ae03b49a8c7dbbc1e2f9132a639",
+  "base": "fb7a2ed89fdcdfb30608559b772a60179fae863d",
+  "sourceFingerprint": "cf6183da0792dc701f6d6aec9e93f84a0f43091b2d8e6974249c940a02c0d202",
   "risk": "full",
   "rules": [
     {
-      "rule": "Create independent private derivatives after attachment-ready commit and on historical first demand, without rewriting originals or caching grants/roles. Original session/source/binding/version authorization is checked before and after generation. Development attachment reads keep original scope without materializing the complete form.",
-      "source": "Approved recovered PERF01–09 final revision msg_0923d6ae8074c9fd016aef6395d3e887d09479aa4680c34a97 PERF05, explicit parent instruction nowstart05; actualPERF04 merge2020 baseline. User authorizes scoped implementation/Review/normal sequentialmerge; no deployment, onsite configuration or real business-data writes. Keep original roles, inheritance, versions and original images; independent320 derivatives, not upload compression as a substitute.",
+      "rule": "Separate platform indicator, list and one-item provider paths. Full-range eligibility/search metadata and original module quantities stay exact; only current15 selected items hydrate full display data. Existing SQL-native modules and global dedup/order stay unchanged.",
+      "source": "Approved recovered final PERF01–09 plan PERF06: count without full DTO, page15 enrichment, target reads; keep original pending/unread/module definitions, production alert generation/resolution and read-token lifecycle. User explicitly authorizes05 then06 normal PR/Review/sequentialmerge, practical scoped checks only; no deployment, production data/config changes or permissions expansion.",
       "writes": [
-        "apps/api/src/production-platform/development-routes.ts",
-        "apps/api/src/production-platform/development-service.ts",
-        "apps/api/src/production-platform/production-instruction-routes.ts",
-        "apps/api/src/tools/aliyun-oss-v4-client.ts",
-        "apps/api/src/tools/attachment-image-preview.ts",
-        "apps/api/src/tools/attachments.ts",
-        "apps/api/src/tools/storage.ts"
+        "apps/api/src/sourcing/production-closure-service.ts",
+        "apps/api/src/todos/content-reads.ts",
+        "apps/api/src/todos/global-search.ts",
+        "apps/api/src/todos/selection.ts",
+        "apps/api/src/todos/service.ts"
       ],
       "reads": [
-        "apps/api/src/tools/attachments.ts",
-        "apps/api/src/tools/attachment-image-preview.ts",
-        "apps/api/src/tools/storage.ts",
-        "apps/api/src/tools/aliyun-oss-v4-client.ts",
-        "apps/api/src/production-platform/development-service.ts",
-        "apps/api/src/production-platform/development-routes.ts",
-        "apps/api/src/production-platform/production-instruction-routes.ts",
-        "apps/api/src/production-platform/development-revision-source.ts"
+        "apps/api/src/todos/service.ts",
+        "apps/api/src/todos/global-search.ts",
+        "apps/api/src/todos/content-reads.ts",
+        "apps/api/src/todos/selection.ts",
+        "apps/api/src/sourcing/production-closure-service.ts",
+        "apps/api/src/todos/routes.ts",
+        "apps/web/src/todo-indicator-refresh.ts"
       ],
       "oldTests": [
-        "tests/unit/attachment-service-failures.test.ts",
-        "tests/unit/attachment-upload-pipeline.test.ts",
-        "tests/unit/acceptance-storage.test.ts",
-        "tests/integration/digital-development-postgres.test.ts",
-        "tests/integration/development-technical-postgres.test.ts"
+        "tests/unit/todo-indicator.test.ts",
+        "tests/unit/todo-list-service.test.ts",
+        "tests/unit/todo-list-pagination.test.ts",
+        "tests/integration/todo-global-search-postgres.test.ts",
+        "tests/integration/production-closure-postgres.test.ts"
       ],
       "newTests": [
-        "tests/unit/attachment-image-preview.test.ts",
-        "tests/integration/attachment-image-preview-postgres.test.ts"
+        "tests/unit/todo-read-split.test.ts",
+        "tests/unit/todo-qc-lazy-clock.test.ts",
+        "tests/integration/production-closure-postgres.test.ts"
       ],
-      "initialization": "No new DB table, middleware, all-library backfill or original rewrite. Existing Sharp dependency; attachmentID+sourceSHA+spec version key.320inside/no-enlarge WebP; bounded original/pixel/output size. One decoder/eight queue,32 metadata requests,5s admission and3s decoder; same-object dedup, bounded30s failure cache. Warm hits bypass decode queue. Unknown immutable write verified, not blindly retried; original deletion cannot be falsely reported failed by derivative cleanup.",
-      "dateAndPermission": "Technical timeout/backoff uses real time, no business SLA/event/clock changes. Original attachment and inheritance checks, root special case and signed grant TTL preserved; fresh actual AuthService after generation handles revoke/expiry. Private/no-store preview redirect; no stored actor or signed URL. Existing material thumbnail480 transformation unchanged.",
-      "expectation": "Prior exact e167 feature results remain recorded in commit e167 and its original private reports. Source identity check proves API/web/feature tests/lock/config are unchanged; they were not rerun for this historical-fixture-only fix. Current ordered-upgrade fixture and original33 correction/public-tool cases pass, zero skips; current lint/preflight/secret pass. Prior e167124units and6 nativePG cases pass: actual smaller WebP/original SHA, post-ready generation, historical first demand/warm reuse/no full form, anonymous/foreign source denial, inherited source and published instruction bytes, provider failure fallback and independent objects, same still-valid signed designer session revoked during generation. Original40 consumers pass.20 simultaneous warm-cache objects do not fall back or reread originals; finite slow-provider cleanup and cancelledHEAD no fallback tested.",
+      "initialization": "No migration, new middleware, shared actor cache, new scheduler or frontend poll change. Request-local key/factory only; legacy injected providers retain original fallback. Production pilot facts refresh/project still runs under original transaction/advisorylock before counting; no stale alert table shortcut.",
+      "dateAndPermission": "Original role/member/owner/Root and production factory scope retained. Production indicator pending counts unread alerts; digital pending counts all current actions, unread only current content tokens. Read receipts and existing lifecycle locks remain original; archived/resolved/other-recipient facts are denied.",
+      "expectation": "127 unit cases including15-only hydration,31 total/3 pages, complete module quantities, single read404 and search key-vs-DTO pass. Original17 production warning/close/reopen/read/receiving cases and original global-search cases pass. Product eligibility still evaluated from authoritative facts; no onsite latency claim or unmeasured all-SQL-target-only claim.",
       "checks": [
-        "source-identity",
-        "amendment",
+        "unit",
+        "production",
+        "search",
+        "typesapi",
         "lint",
+        "preflight",
         "secret"
       ]
     },
     {
-      "rule": "List images read independent protected previews lazily, while enlargement uses the original. Keep existing full-App layout and authorized failure behavior, with one original fallback and no retry loop or fictitious missing image.",
-      "source": "Approved recovered PERF01–09 final revision msg_0923d6ae8074c9fd016aef6395d3e887d09479aa4680c34a97 PERF05, explicit parent instruction nowstart05; actualPERF04 merge2020 baseline. User authorizes scoped implementation/Review/normal sequentialmerge; no deployment, onsite configuration or real business-data writes. Keep original roles, inheritance, versions and original images; independent320 derivatives, not upload compression as a substitute.",
+      "rule": "Keep the same digital todo families, eligibility, order, route, scope and read content while deferring native task clocks/DTO enrichment to selected page. Filter direct IDs to their native parent before expensive derived facts; retain hashed-QC live window identification only when needed.",
+      "source": "Approved recovered final PERF01–09 plan PERF06: count without full DTO, page15 enrichment, target reads; keep original pending/unread/module definitions, production alert generation/resolution and read-token lifecycle. User explicitly authorizes05 then06 normal PR/Review/sequentialmerge, practical scoped checks only; no deployment, production data/config changes or permissions expansion.",
       "writes": [
-        "apps/web/src/cockpit-photo-preview.tsx"
+        "apps/api/src/production-platform/bulk-fabric-todos.ts",
+        "apps/api/src/production-platform/development-arrangement-todos.ts",
+        "apps/api/src/production-platform/development-fabric-cases.ts",
+        "apps/api/src/production-platform/factory-production-qc-todos.ts",
+        "apps/api/src/production-platform/garment-quality-todos.ts",
+        "apps/api/src/production-platform/notification-service.ts",
+        "apps/api/src/production-platform/preparation-todos.ts",
+        "apps/api/src/production-platform/qc-progress-todos.ts",
+        "apps/api/src/production-platform/short-lead-todos.ts"
       ],
       "reads": [
-        "apps/web/src/cockpit-photo-preview.tsx",
-        "apps/web/src/cockpit-home.tsx",
-        "apps/web/src/cockpit-detail.tsx",
-        "apps/web/src/delivery-calendar-page.tsx"
+        "apps/api/src/production-platform/notification-service.ts",
+        "apps/api/src/production-platform/notification-policy.ts",
+        "apps/api/src/production-platform/development-arrangement-todos.ts",
+        "apps/api/src/production-platform/short-lead-todos.ts",
+        "apps/api/src/production-platform/preparation-todos.ts",
+        "apps/api/src/production-platform/development-fabric-cases.ts",
+        "apps/api/src/production-platform/bulk-fabric-todos.ts",
+        "apps/api/src/production-platform/factory-production-qc-todos.ts",
+        "apps/api/src/production-platform/garment-quality-todos.ts",
+        "apps/api/src/production-platform/qc-progress-todos.ts",
+        "apps/api/src/production-platform/qc-progress-evidence.ts"
       ],
       "oldTests": [
-        "tests/unit/digital-attachment-metadata.test.ts"
+        "tests/integration/digital-production-notifications-postgres.test.ts",
+        "tests/integration/digital-my-todo-context-postgres.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/integration/development-technical-postgres.test.ts",
+        "tests/integration/qc-progress-retirement-postgres.test.ts"
       ],
       "newTests": [
-        "tests/unit/cockpit-photo-preview.test.ts",
-        "tests/integration/cockpit-thumbnails-native-browser-postgres.test.ts"
+        "tests/integration/digital-production-notifications-postgres.test.ts",
+        "tests/unit/todo-qc-lazy-clock.test.ts"
       ],
-      "initialization": "Recognize only the two actual development/instruction UUID attachment routes; external/other/version-query URLs retain original handling. Native loading=lazy/async decode and intrinsic dimensions retain existing CSS; original dialog, zoom, focus and manual retry remain. New source resets failure state.",
-      "dateAndPermission": "No list/global statistic/time/frozen/permission semantics change. Image denial does not become an unfilled business document. Real signed native PMC session remains valid after actual revocation and cannot obtain another grant; separate Root browser still works. No real-site deployment or screenshot claim.",
-      "expectation": "Prior exact e167 feature results remain recorded in commit e167 and its original private reports. Source identity check proves API/web/feature tests/lock/config are unchanged; they were not rerun for this historical-fixture-only fix. Current ordered-upgrade fixture and original33 correction/public-tool cases pass, zero skips; current lint/preflight/secret pass. Prior e1673 full production-App browser cases with indexed:true and productionAssets:true pass:320 thumbnail vs1200 original, warm reload no original generation, actual503 falls back once at1165, native same-session revoke and independentRoot.1440/1165 full-page screenshots captured/inspected. Synthetic flat PNG14269bytes vs210byte WebP is one local image observation, not onsite speed or general compression/P95. Prior e167 UI types and124unit tests pass.",
+      "initialization": "Original native records and partial/full-schema fixtures; no stored DTO or grant. Arrangement synthetic IDs match latest original round before readArrangement; direct request/report/window/preparation/receipt/task IDs restrict source facts. QC derived hashes cannot be reversed, so original current-window resolution is retained if direct providers found no target; do not promise zero unrelated identification SQL.",
+      "dateAndPermission": "Original ContextBusinessClock, SLA plans, frozen deadlines, Acceptance scope guards and native recipient roles kept. Count/selection skip ordinary task display clocks, not live QC eligibility clocks needed to generate/resolve warnings. Search explicitly loads only original-authorized style/PO and supplemental labels. Existing runOnce/notice/outbox/acknowledge behavior unchanged.",
+      "expectation": "24 native digital task/notification/context cases pass, including original read-token/round/reassignment/revocation and completion boundaries. Actual ContextBusinessClock spy shows zero ordinary task display reads for selection/count and one for one target; both factory recheck and garment QC31-candidate tests prove zero display clocks during selection and15 only for selected15;15 hydration bound checked independently. Original readiness/development/QC suites pass; no fake signed-auth or field-performance claim.",
       "checks": [
-        "source-identity",
-        "preflight",
-        "amendment"
+        "native",
+        "aux",
+        "unit",
+        "typesapi",
+        "lint",
+        "preflight"
       ]
     },
     {
-      "rule": "Wire native image/production-browser coverage into the original canonical plan and owned resource lifecycle; preserve indexed/module/home/calendar consumers and existing permission checks. Keep unrelated gate classification work separate.",
-      "source": "Approved recovered PERF01–09 final revision msg_0923d6ae8074c9fd016aef6395d3e887d09479aa4680c34a97 PERF05, explicit parent instruction nowstart05; actualPERF04 merge2020 baseline. User authorizes scoped implementation/Review/normal sequentialmerge; no deployment, onsite configuration or real business-data writes. Keep original roles, inheritance, versions and original images; independent320 derivatives, not upload compression as a substitute.",
+      "rule": "Keep changed read-token/search/notification coverage in the canonical PG plan and preserve time-source annotations outside four changed files.",
+      "source": "Approved recovered final PERF01–09 plan PERF06: count without full DTO, page15 enrichment, target reads; keep original pending/unread/module definitions, production alert generation/resolution and read-token lifecycle. User explicitly authorizes05 then06 normal PR/Review/sequentialmerge, practical scoped checks only; no deployment, production data/config changes or permissions expansion.",
       "writes": [
         "scripts/ci/full-gate-risk-map.mjs",
-        "scripts/ci/prepare-settings-browser.mjs",
-        "scripts/test-suite-plan.mjs",
-        "tests/acceptance/cockpit-thumbnail-fixture.ts",
-        "tests/acceptance/m01-cockpit-home-native-browser.ts",
-        "tests/integration/attachment-image-preview-postgres.test.ts",
-        "tests/integration/cockpit-thumbnails-native-browser-postgres.test.ts",
-        "tests/unit/aliyun-oss-v4-client.test.ts",
-        "tests/unit/attachment-image-preview.test.ts",
-        "tests/unit/cockpit-photo-preview.test.ts",
-        "tests/unit/digital-attachment-metadata.test.ts",
-        "tests/unit/full-gate-risk-map.test.ts"
+        "tests/integration/digital-production-notifications-postgres.test.ts",
+        "tests/integration/production-closure-postgres.test.ts",
+        "tests/unit/full-gate-risk-map.test.ts",
+        "tests/unit/todo-qc-lazy-clock.test.ts",
+        "tests/unit/todo-read-split.test.ts"
       ],
       "reads": [
-        "scripts/test-suite-plan.mjs",
         "scripts/ci/full-gate-risk-map.mjs",
-        "scripts/ci/prepare-settings-browser.mjs",
-        "tests/acceptance/m01-cockpit-home-native-browser.ts",
-        "tests/acceptance/cockpit-thumbnail-fixture.ts",
-        "tests/helpers/business-anchor-fixture.ts"
+        "scripts/test-suite-plan.mjs",
+        "scripts/acceptance/time-site-inventory.mjs",
+        "docs/engineering/acceptance-time-sites-20261027.json"
       ],
       "oldTests": [
         "tests/unit/full-gate-risk-map.test.ts",
-        "tests/unit/aliyun-oss-v4-client.test.ts",
-        "tests/unit/digital-attachment-metadata.test.ts"
+        "tests/unit/digital-notification-runtime.test.ts",
+        "tests/unit/todo-provider.test.ts"
       ],
       "newTests": [
-        "tests/integration/attachment-image-preview-postgres.test.ts",
-        "tests/integration/cockpit-thumbnails-native-browser-postgres.test.ts"
+        "tests/unit/full-gate-risk-map.test.ts",
+        "tests/unit/todo-read-split.test.ts"
       ],
-      "initialization": "Same original100s correctness budget and owned safePG identity/creation/disposal; no fake target DB or production source. Complete production Vite graph plus original AuthService and immutable local TEST storage bytes; original fake badge adapter remains labelled and outside image assertions. Initial fixture owner/time-context/import setup failures preserved as failures, not evidence passes.",
-      "dateAndPermission": "Source and mother fixture creator/time scopes use existing guards; no guard relaxed to pass tests. Time inventory only adds two protected routes and technical derivative backoff; unchanged manual entries retained. Current source tests all actual approved baseline; prior standalone IIFE/baseline checks remain historical, not current new-head approval.",
-      "expectation": "Prior exact e167 feature results remain recorded in commit e167 and its original private reports. Source identity check proves API/web/feature tests/lock/config are unchanged; they were not rerun for this historical-fixture-only fix. Current ordered-upgrade fixture and original33 correction/public-tool cases pass, zero skips; current lint/preflight/secret pass. Prior e167124unit/6 native/3 production-browser/40 original-consumer cases pass with zero skips. Prior e167 types/lint/preflight/secret match source. Full-App production graph is built by native browser fixture. No1000/5000 rerun for image changes; no unrelated backup/restore fix in this PR. Actual final merge baseline tree equals tested integration baseline before committing source.",
+      "initialization": "Existing owned schema creation and exact cleanup, marked low-privilege loopback TEST PG16.15; original canonical configs and100s heavy-correctness budget. New map adds original global search/digital-my-context/notifications when shared todo read inputs change; unrelated CI whitelist work stays isolated.",
+      "dateAndPermission": "No business event time, clock policy, frontend/backend auth, database migration or operational recovery rule change. Inventory updates four files source identities while retaining original changedSitesReview/siteReviews and semantic-status metadata verbatim, including original PR05 boundary evidence and Final10-P04 perPO notification review. FormalReview4506748124 found the initial metadata loss; it is corrected without business-rule changes. All other file objects remain unchanged.",
+      "expectation": "127 units and original preflight protocol pass; original127/24/17 and auxiliary/search suites have real bound reports. No duplicate1000/5000 or screenshot matrix for backend-only read split, no Full success until exact remote run actually completes.",
       "checks": [
-        "source-identity",
+        "unit",
+        "native",
+        "production",
+        "aux",
+        "search",
         "preflight",
-        "amendment"
-      ]
-    },
-    {
-      "rule": "Build the pre-0248 returned-development fixture before applying0248 and dependent later migrations; preserve old replenishment semantics and current production triggers.",
-      "source": "Full42492740828/job128769310309 failed beforeAll because0279 depends on the skipped0248 table. Parent authorized exact minimal historical-order correction; original25 cases must remain.",
-      "writes": [
-        "tests/integration/development-amendment-postgres.test.ts"
-      ],
-      "reads": [
-        "tests/integration/development-amendment-postgres.test.ts",
-        "apps/api/migrations/0248_development_document_amendments.sql",
-        "apps/api/migrations/0279_journey_fact_incremental_updates.sql",
-        "apps/api/src/platform/migration-manifest.json"
-      ],
-      "oldTests": [
-        "tests/integration/development-amendment-postgres.test.ts",
-        "tests/integration/public-tools-postgres.test.ts"
-      ],
-      "initialization": "Fresh marked low-privilege owned schema; migrate through0247, create actual historical returns using original guarded services, then execute0248 and all subsequent migrations in manifest order. Existing schema lifecycle and cleanup retained. No production migration/trigger/state alteration.",
-      "dateAndPermission": "No business date, role, nativeRoot, read token, frozen document or legacy semantics changed. History fixtures remain isolated TEST data only.",
-      "expectation": "33/33 native cases pass zero skips, including original25 correction/history/authorization and8 public tools. Actual test initialization reproduces the old state then upgrades; setup failure was not a thumbnail business failure. Current lint/preflight/secret pass.",
-      "checks": [
-        "amendment",
         "lint",
-        "preflight",
         "secret"
       ]
     }
   ],
   "checks": [
     {
-      "id": "amendment",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/development-amendment-postgres.test.ts tests/integration/public-tools-postgres.test.ts --config vitest.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf05-postgres-amendment-ordered.vitest.json",
+      "id": "typesapi",
+      "command": "npm run typecheck --workspace=@dx-rework/api",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "e504285c3225b0605c51da09196ae0af227d5ae03b49a8c7dbbc1e2f9132a639",
+      "sourceFingerprint": "cf6183da0792dc701f6d6aec9e93f84a0f43091b2d8e6974249c940a02c0d202",
       "inputPaths": [
         "apps",
         "packages",
@@ -167,35 +161,26 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "ba3047d465abf97cc61c4329cb82bc30b6e3ec6095f5e3c890d21557ad74ff3e",
+      "inputFingerprint": "48703fa96d01e1986c2e2a2f934e04d94118ad8e3f8c49b1017577dfb4f9e49e",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "e16768b6e037653509e709b86b675e95e716a89b",
-      "startedAt": "2026-11-08T15:09:35.588Z",
-      "endedAt": "2026-11-08T15:09:50.946Z",
-      "passed": 33,
-      "failed": 0,
-      "skipped": 0,
+      "testedHead": "c60296ed26e01766fd92f5fb945c59a794fccd73",
+      "startedAt": "2026-11-08T15:48:54.244Z",
+      "endedAt": "2026-11-08T15:49:04.711Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf05-postgres-amendment-ordered.log",
-      "logSha256": "070e7dc997a3d28461dabca7efd05ffecb555b0e50171e9b7e3706f2279f0f05",
-      "resultReport": "/workspace/scratch/dx-final10-20261108/perf05-postgres-amendment-ordered.vitest.json",
+      "log": "/workspace/scratch/dx-final10-20261108/perf06-typesapi-merged-native.log",
+      "logSha256": "d81733d2d3443600c8f5c4e1f5774d8d050a1c5a8ef34bd5a659eb50ebd68f00",
+      "resultReport": null,
       "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native preview tests use actual AuthService, actual role revocation and private AcceptanceObjectStorage bytes, no real business data or deployment.",
-      "kind": "tests",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "e227e510d033356051da1fb3c192896c7d38124cff29bb4be96623fc079b6b41"
-        }
-      ]
+      "kind": "command"
     },
     {
       "id": "lint",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/development-routes.ts apps/api/src/production-platform/development-service.ts apps/api/src/production-platform/production-instruction-routes.ts apps/api/src/tools/aliyun-oss-v4-client.ts apps/api/src/tools/attachment-image-preview.ts apps/api/src/tools/attachments.ts apps/api/src/tools/storage.ts apps/web/src/cockpit-photo-preview.tsx scripts/ci/full-gate-risk-map.mjs scripts/ci/prepare-settings-browser.mjs scripts/test-suite-plan.mjs tests/acceptance/cockpit-thumbnail-fixture.ts tests/acceptance/m01-cockpit-home-native-browser.ts tests/integration/attachment-image-preview-postgres.test.ts tests/integration/cockpit-thumbnails-native-browser-postgres.test.ts tests/integration/development-amendment-postgres.test.ts tests/unit/aliyun-oss-v4-client.test.ts tests/unit/attachment-image-preview.test.ts tests/unit/cockpit-photo-preview.test.ts tests/unit/digital-attachment-metadata.test.ts tests/unit/full-gate-risk-map.test.ts --max-warnings=0",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/bulk-fabric-todos.ts apps/api/src/production-platform/development-arrangement-todos.ts apps/api/src/production-platform/development-fabric-cases.ts apps/api/src/production-platform/factory-production-qc-todos.ts apps/api/src/production-platform/garment-quality-todos.ts apps/api/src/production-platform/notification-service.ts apps/api/src/production-platform/preparation-todos.ts apps/api/src/production-platform/qc-progress-todos.ts apps/api/src/production-platform/short-lead-todos.ts apps/api/src/sourcing/production-closure-service.ts apps/api/src/todos/content-reads.ts apps/api/src/todos/global-search.ts apps/api/src/todos/selection.ts apps/api/src/todos/service.ts scripts/ci/full-gate-risk-map.mjs tests/integration/digital-production-notifications-postgres.test.ts tests/integration/production-closure-postgres.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/todo-qc-lazy-clock.test.ts tests/unit/todo-read-split.test.ts --max-warnings=0",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "e504285c3225b0605c51da09196ae0af227d5ae03b49a8c7dbbc1e2f9132a639",
+      "sourceFingerprint": "cf6183da0792dc701f6d6aec9e93f84a0f43091b2d8e6974249c940a02c0d202",
       "inputPaths": [
         "apps",
         "packages",
@@ -210,14 +195,14 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "ba3047d465abf97cc61c4329cb82bc30b6e3ec6095f5e3c890d21557ad74ff3e",
+      "inputFingerprint": "48703fa96d01e1986c2e2a2f934e04d94118ad8e3f8c49b1017577dfb4f9e49e",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "e16768b6e037653509e709b86b675e95e716a89b",
-      "startedAt": "2026-11-08T15:10:32.445Z",
-      "endedAt": "2026-11-08T15:10:33.892Z",
+      "testedHead": "c60296ed26e01766fd92f5fb945c59a794fccd73",
+      "startedAt": "2026-11-08T15:49:16.797Z",
+      "endedAt": "2026-11-08T15:49:19.074Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf05-lint-amendment-ordered.log",
+      "log": "/workspace/scratch/dx-final10-20261108/perf06-lint-merged-native.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "resultReport": null,
       "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native preview tests use actual AuthService, actual role revocation and private AcceptanceObjectStorage bytes, no real business data or deployment.",
@@ -229,7 +214,7 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "e504285c3225b0605c51da09196ae0af227d5ae03b49a8c7dbbc1e2f9132a639",
+      "sourceFingerprint": "cf6183da0792dc701f6d6aec9e93f84a0f43091b2d8e6974249c940a02c0d202",
       "inputPaths": [
         "apps",
         "packages",
@@ -244,18 +229,233 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "ba3047d465abf97cc61c4329cb82bc30b6e3ec6095f5e3c890d21557ad74ff3e",
+      "inputFingerprint": "48703fa96d01e1986c2e2a2f934e04d94118ad8e3f8c49b1017577dfb4f9e49e",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "e16768b6e037653509e709b86b675e95e716a89b",
-      "startedAt": "2026-11-08T15:10:24.902Z",
-      "endedAt": "2026-11-08T15:10:32.363Z",
+      "testedHead": "c60296ed26e01766fd92f5fb945c59a794fccd73",
+      "startedAt": "2026-11-08T15:49:04.798Z",
+      "endedAt": "2026-11-08T15:49:16.722Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf05-preflight-amendment-ordered.log",
-      "logSha256": "d5b6e84b0c2e65de40a10ede33e077e147520b4b05502f311ef55bdbea63a925",
+      "log": "/workspace/scratch/dx-final10-20261108/perf06-preflight-merged-native.log",
+      "logSha256": "86b545e5137668140e0a030bc2dba842c43991e5695e9e150bd0a5b4c92fb195",
       "resultReport": null,
       "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native preview tests use actual AuthService, actual role revocation and private AcceptanceObjectStorage bytes, no real business data or deployment.",
       "kind": "command"
+    },
+    {
+      "id": "unit",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/todo-qc-lazy-clock.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/todo-read-split.test.ts tests/unit/todo-indicator.test.ts tests/unit/todo-list-service.test.ts tests/unit/todo-list-pagination.test.ts tests/unit/todo-provider.test.ts tests/unit/production-closure.test.ts tests/unit/todo-new-indicator.test.ts tests/unit/todo-session-refresh.test.ts tests/unit/digital-notification-runtime.test.ts tests/unit/digital-notification-child-context.test.ts tests/unit/sla-notification-window.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf06-unit-merged-native.vitest.json",
+      "status": "passed",
+      "exitCode": 0,
+      "allExited": true,
+      "sourceFingerprint": "cf6183da0792dc701f6d6aec9e93f84a0f43091b2d8e6974249c940a02c0d202",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests",
+        ".env.example",
+        "package.json",
+        "package-lock.json",
+        "eslint.config.js",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "vitest.postgres-immediate.config.ts"
+      ],
+      "inputFingerprint": "48703fa96d01e1986c2e2a2f934e04d94118ad8e3f8c49b1017577dfb4f9e49e",
+      "inputsUnchanged": true,
+      "sourceUnchanged": true,
+      "testedHead": "c60296ed26e01766fd92f5fb945c59a794fccd73",
+      "startedAt": "2026-11-08T15:49:19.154Z",
+      "endedAt": "2026-11-08T15:49:26.603Z",
+      "passed": 127,
+      "failed": 0,
+      "skipped": 0,
+      "planError": null,
+      "log": "/workspace/scratch/dx-final10-20261108/perf06-unit-merged-native.log",
+      "logSha256": "c8fb0e1f0411c6ac409ab130253472d5aa72cb7a6436886e39fcf078c4cfd32e",
+      "resultReport": "/workspace/scratch/dx-final10-20261108/perf06-unit-merged-native.vitest.json",
+      "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native preview tests use actual AuthService, actual role revocation and private AcceptanceObjectStorage bytes, no real business data or deployment.",
+      "kind": "tests",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "61aff932501865b43c7651039883ed40ebdd1dfe1d355721aa89d4c9bb68cd1c"
+        }
+      ]
+    },
+    {
+      "id": "native",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/digital-production-notifications-postgres.test.ts tests/integration/digital-my-todo-context-postgres.test.ts --config vitest.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf06-postgres-merged-native.vitest.json",
+      "status": "passed",
+      "exitCode": 0,
+      "allExited": true,
+      "sourceFingerprint": "cf6183da0792dc701f6d6aec9e93f84a0f43091b2d8e6974249c940a02c0d202",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests",
+        ".env.example",
+        "package.json",
+        "package-lock.json",
+        "eslint.config.js",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "vitest.postgres-immediate.config.ts"
+      ],
+      "inputFingerprint": "48703fa96d01e1986c2e2a2f934e04d94118ad8e3f8c49b1017577dfb4f9e49e",
+      "inputsUnchanged": true,
+      "sourceUnchanged": true,
+      "testedHead": "c60296ed26e01766fd92f5fb945c59a794fccd73",
+      "startedAt": "2026-11-08T15:49:26.687Z",
+      "endedAt": "2026-11-08T15:49:37.280Z",
+      "passed": 24,
+      "failed": 0,
+      "skipped": 0,
+      "planError": null,
+      "log": "/workspace/scratch/dx-final10-20261108/perf06-postgres-merged-native.log",
+      "logSha256": "7ec49dfe7a0a07bd839c827e6c5dea3d05079c38b718205d27b7404c489f4438",
+      "resultReport": "/workspace/scratch/dx-final10-20261108/perf06-postgres-merged-native.vitest.json",
+      "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native preview tests use actual AuthService, actual role revocation and private AcceptanceObjectStorage bytes, no real business data or deployment.",
+      "kind": "tests",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "3f6da23826af23fb1fe223e2348543cf8d3df553ce9d644a8fd4329adc006838"
+        }
+      ]
+    },
+    {
+      "id": "aux",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/production-readiness-postgres.test.ts tests/integration/development-technical-postgres.test.ts tests/integration/qc-progress-retirement-postgres.test.ts --config vitest.business-chain.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf06-postgres-merged-aux.vitest.json",
+      "status": "passed",
+      "exitCode": 0,
+      "allExited": true,
+      "sourceFingerprint": "cf6183da0792dc701f6d6aec9e93f84a0f43091b2d8e6974249c940a02c0d202",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests",
+        ".env.example",
+        "package.json",
+        "package-lock.json",
+        "eslint.config.js",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "vitest.postgres-immediate.config.ts"
+      ],
+      "inputFingerprint": "48703fa96d01e1986c2e2a2f934e04d94118ad8e3f8c49b1017577dfb4f9e49e",
+      "inputsUnchanged": true,
+      "sourceUnchanged": true,
+      "testedHead": "c60296ed26e01766fd92f5fb945c59a794fccd73",
+      "startedAt": "2026-11-08T15:50:31.640Z",
+      "endedAt": "2026-11-08T15:51:57.415Z",
+      "passed": 54,
+      "failed": 0,
+      "skipped": 0,
+      "planError": null,
+      "log": "/workspace/scratch/dx-final10-20261108/perf06-postgres-merged-aux.log",
+      "logSha256": "f98bb6e0f3cb5fac5578cc2048c5bd3806082c06158dd490d8066bbbab3534cd",
+      "resultReport": "/workspace/scratch/dx-final10-20261108/perf06-postgres-merged-aux.vitest.json",
+      "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native preview tests use actual AuthService, actual role revocation and private AcceptanceObjectStorage bytes, no real business data or deployment.",
+      "kind": "tests",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "6e6c1640d6dd19d4dff15feba081b73b85d79544b018a7768497b2fface264ca"
+        }
+      ]
+    },
+    {
+      "id": "production",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/production-closure-postgres.test.ts --config vitest.business-chain.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf06-postgres-merged-production.vitest.json",
+      "status": "passed",
+      "exitCode": 0,
+      "allExited": true,
+      "sourceFingerprint": "cf6183da0792dc701f6d6aec9e93f84a0f43091b2d8e6974249c940a02c0d202",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests",
+        ".env.example",
+        "package.json",
+        "package-lock.json",
+        "eslint.config.js",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "vitest.postgres-immediate.config.ts"
+      ],
+      "inputFingerprint": "48703fa96d01e1986c2e2a2f934e04d94118ad8e3f8c49b1017577dfb4f9e49e",
+      "inputsUnchanged": true,
+      "sourceUnchanged": true,
+      "testedHead": "c60296ed26e01766fd92f5fb945c59a794fccd73",
+      "startedAt": "2026-11-08T15:53:31.850Z",
+      "endedAt": "2026-11-08T15:53:47.247Z",
+      "passed": 17,
+      "failed": 0,
+      "skipped": 0,
+      "planError": null,
+      "log": "/workspace/scratch/dx-final10-20261108/perf06-postgres-merged-production.log",
+      "logSha256": "a1a88d2ac73caa199464afcbe16a7ee5db0c3d0df3eed7f59e20d9072cfb92b7",
+      "resultReport": "/workspace/scratch/dx-final10-20261108/perf06-postgres-merged-production.vitest.json",
+      "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native preview tests use actual AuthService, actual role revocation and private AcceptanceObjectStorage bytes, no real business data or deployment.",
+      "kind": "tests",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "1b9d5c1648c25fa56a08f16916bcb157cde4b397e2bee5908485a69b20831da2"
+        }
+      ]
+    },
+    {
+      "id": "search",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/todo-global-search-postgres.test.ts --config vitest.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf06-postgres-merged-search.vitest.json",
+      "status": "passed",
+      "exitCode": 0,
+      "allExited": true,
+      "sourceFingerprint": "cf6183da0792dc701f6d6aec9e93f84a0f43091b2d8e6974249c940a02c0d202",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests",
+        ".env.example",
+        "package.json",
+        "package-lock.json",
+        "eslint.config.js",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "vitest.postgres-immediate.config.ts"
+      ],
+      "inputFingerprint": "48703fa96d01e1986c2e2a2f934e04d94118ad8e3f8c49b1017577dfb4f9e49e",
+      "inputsUnchanged": true,
+      "sourceUnchanged": true,
+      "testedHead": "c60296ed26e01766fd92f5fb945c59a794fccd73",
+      "startedAt": "2026-11-08T15:54:03.832Z",
+      "endedAt": "2026-11-08T15:54:05.300Z",
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0,
+      "planError": null,
+      "log": "/workspace/scratch/dx-final10-20261108/perf06-postgres-merged-search.log",
+      "logSha256": "db82f7257f9a44de442bbb090e4dc42527ac5b40e0eb71b1365f776e21e338c3",
+      "resultReport": "/workspace/scratch/dx-final10-20261108/perf06-postgres-merged-search.vitest.json",
+      "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native preview tests use actual AuthService, actual role revocation and private AcceptanceObjectStorage bytes, no real business data or deployment.",
+      "kind": "tests",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "8660ef39e40f9924079eb08ccc897e962ad149d15bdc57529e8e117c3d815a88"
+        }
+      ]
     },
     {
       "id": "secret",
@@ -263,7 +463,7 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "e504285c3225b0605c51da09196ae0af227d5ae03b49a8c7dbbc1e2f9132a639",
+      "sourceFingerprint": "cf6183da0792dc701f6d6aec9e93f84a0f43091b2d8e6974249c940a02c0d202",
       "inputPaths": [
         "apps",
         "packages",
@@ -278,47 +478,18 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "ba3047d465abf97cc61c4329cb82bc30b6e3ec6095f5e3c890d21557ad74ff3e",
+      "inputFingerprint": "48703fa96d01e1986c2e2a2f934e04d94118ad8e3f8c49b1017577dfb4f9e49e",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "e16768b6e037653509e709b86b675e95e716a89b",
-      "startedAt": "2026-11-08T15:10:33.979Z",
-      "endedAt": "2026-11-08T15:10:34.827Z",
+      "testedHead": "c60296ed26e01766fd92f5fb945c59a794fccd73",
+      "startedAt": "2026-11-08T15:53:31.008Z",
+      "endedAt": "2026-11-08T15:53:31.766Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf05-secret-amendment-ordered.log",
+      "log": "/workspace/scratch/dx-final10-20261108/perf06-secret-merged-production.log",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda",
       "resultReport": null,
       "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native preview tests use actual AuthService, actual role revocation and private AcceptanceObjectStorage bytes, no real business data or deployment.",
       "kind": "command"
-    },
-    {
-      "id": "source-identity",
-      "kind": "command",
-      "command": "git diff --name-only e16768b6e037653509e709b86b675e95e716a89b -- apps packages scripts tests .env.example package.json package-lock.json",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "e16768b6e037653509e709b86b675e95e716a89b",
-      "sourceFingerprint": "e504285c3225b0605c51da09196ae0af227d5ae03b49a8c7dbbc1e2f9132a639",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "tests",
-        ".env.example",
-        "package.json",
-        "package-lock.json",
-        "eslint.config.js",
-        "tsconfig.base.json",
-        "vitest.business-chain.config.ts",
-        "vitest.config.ts",
-        "vitest.postgres-immediate.config.ts"
-      ],
-      "inputFingerprint": "ba3047d465abf97cc61c4329cb82bc30b6e3ec6095f5e3c890d21557ad74ff3e",
-      "startedAt": "2026-11-08T15:11:36.622Z",
-      "endedAt": "2026-11-08T15:11:36.674Z",
-      "log": "/workspace/scratch/dx-final10-20261108/perf05-source-identity-amendment.log",
-      "logSha256": "9cb99c55a4e0cb2dd5248dfdeaf4be6c80e9c52e06d544c76d1d232ee335bc8e",
-      "context": "Exact Git file comparison against reviewed e167; comparison is not a new business or GitHub Full test. Only old fixture migration order changed."
     }
   ]
 }

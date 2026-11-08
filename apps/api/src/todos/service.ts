@@ -1,3 +1,4 @@
+import {todoSelectionKey,type TodoSelection} from './selection.js';
 import {effectiveSourcingDueSql} from '../production-platform/sla-sourcing-deadline-sql.js';
 import {sourcingTodoPresentation} from "./sla-presentation.js";
 import {acceptanceBusinessContext,assertAcceptanceAssignee,businessNow} from '../acceptance-clock/business-time.js';
@@ -14,7 +15,6 @@ import { randomUUID } from "node:crypto";
 
 import {
   TodoRouteDescriptorSchema,
-  TodoResponseSchema,
   type TodoListResponse,
   type TodoModule,
   type TodoModuleCounts,
@@ -294,9 +294,18 @@ export class TodoService {
     private readonly database: Pool,
     private readonly events = new OperationEventRepository(),
     private readonly outbox = new MessageOutboxRepository(),
-    private readonly production?: Pick<ProductionClosureService,"todos"> & Partial<Pick<ProductionClosureService,'markRead'>>,
-    private readonly digital?: {todos(actor:TrustedActorContext):Promise<TodoResponse[]>},
+    private readonly production?: Pick<ProductionClosureService,"todos"> & Partial<Pick<ProductionClosureService,'markRead'|'todo'|'todoSelections'|'todoCounts'>>,
+    private readonly digital?: {todos(actor:TrustedActorContext):Promise<TodoResponse[]>;todo?(actor:TrustedActorContext,id:string):Promise<TodoResponse|null>;todoSelections?(actor:TrustedActorContext,options?:{metadata?:boolean;todoId?:string}):Promise<TodoSelection[]>;todoCounts?(actor:TrustedActorContext):Promise<{totalCount:number;pendingCount:number;unreadCount:number}>},
   ) {}
+
+  private async providerSelections(provider:{todos(actor:TrustedActorContext):Promise<TodoResponse[]>;todoSelections?(actor:TrustedActorContext,options?:{metadata?:boolean}):Promise<TodoSelection[]>}|undefined,actor:TrustedActorContext,metadata:boolean):Promise<TodoSelection[]> {
+    if(!provider)return [];
+    if(provider.todoSelections)return provider.todoSelections(actor,{metadata});
+    return (await provider.todos(actor)).map(todo=>({key:todoSelectionKey(todo),load:async()=>todo}));
+  }
+  private async providerTodo(provider:{todos(actor:TrustedActorContext):Promise<TodoResponse[]>;todo?(actor:TrustedActorContext,id:string):Promise<TodoResponse|null>}|undefined,actor:TrustedActorContext,id:string){
+    return provider?.todo?provider.todo(actor,id):(await provider?.todos(actor))?.find(todo=>todo.todoId===id)??null;
+  }
 
   async listForActor(
     actor: TrustedActorContext,
@@ -332,31 +341,36 @@ export class TodoService {
     for (const row of countResult.rows) {
       moduleCounts[row.todo_module] = Number(row.todo_count);
     }
-    const productionTodos = this.production ? await this.production.todos(actor) : [];
+    const productionTodos = await this.providerSelections(this.production,actor,Boolean(normalizedQuery));
     if (this.production) moduleCounts.production = productionTodos.length;
-    const digitalTodos = this.digital ? await this.digital.todos(actor) : [];
+    const digitalTodos = await this.providerSelections(this.digital,actor,Boolean(normalizedQuery));
     if (this.digital) moduleCounts.digital_production = digitalTodos.length;
     const activeModule = options.module
       ?? TODO_MODULES.find((module) => (moduleCounts[module] ?? 0) > 0)
       ?? "rework";
     if(normalizedQuery){
       const result=await globalTodoSearch(this.database,await this.contextSql(),actor.actorId,normalizedQuery,requestedPage,[
-        ...productionTodos.map(todo=>({module:"production",todo})),...digitalTodos.map(todo=>({module:"digital_production",todo})),
+        ...productionTodos.map(item=>({module:"production",todo:item.key})),...digitalTodos.map(item=>({module:"digital_production",todo:item.key})),
       ]);
-      const todos=result.items.map(item=>{
-        if(item.kind==="provider")return TodoResponseSchema.parse(item.value);
+      const providers=new Map([...productionTodos,...digitalTodos].map(item=>[item.key.todoId,item]));
+      const todos=await Promise.all(result.items.map(async item=>{
+        if(item.kind==="provider"){
+          const selected=providers.get(String(item.value.todoId));
+          if(!selected)throw new ApplicationError('NOT_FOUND','待办信息已变化，请刷新当前列表',409);
+          return selected.load();
+        }
         const row={...item.value};
         for(const key of ["due_at","created_at","updated_at","rework_updated_at","sourcing_updated_at","sample_updated_at","pattern_updated_at","supplier_request_updated_at"]){if(row[key]!=null)row[key]=new Date(String(row[key]));}
         return todoResponse(row as unknown as TodoRow);
-      });
+      }));
       return {todos:await sourcingTodoPresentation(this.database,todos),activeModule,moduleCounts,searchScope:"all",page:result.page,pageSize:15,totalCount:Number(result.total_count),totalPages:result.total_pages};
     }
     if (activeModule === "production" || activeModule === "digital_production") {
-      const filtered = (activeModule === "production" ? productionTodos : digitalTodos).filter(todo => !normalizedQuery ||
-        [todo.orderContext?.styleNo, todo.orderContext?.supplierName, todo.orderContext?.merchandiserName].some(value => value?.toUpperCase().includes(normalizedQuery.toUpperCase())));
-      const totalCount = filtered.length, totalPages = Math.ceil(totalCount / 15), page = totalPages ? Math.min(requestedPage,totalPages) : 1;
-      return {todos:filtered.slice((page-1)*15,page*15),activeModule,moduleCounts,page,pageSize:15,totalCount,totalPages};
+      const selected = activeModule === "production" ? productionTodos : digitalTodos;
+      const totalCount = selected.length, totalPages = Math.ceil(totalCount / 15), page = totalPages ? Math.min(requestedPage,totalPages) : 1;
+      return {todos:await Promise.all(selected.slice((page-1)*15,page*15).map(item=>item.load())),activeModule,moduleCounts,page,pageSize:15,totalCount,totalPages};
     }
+
     const totalResult = await this.database.query<{ total_count: number | string }>(
       `WITH todo_view AS (${await this.contextSql()})
        SELECT COUNT(*) total_count
@@ -438,8 +452,8 @@ export class TodoService {
       [actor.actorId, todoId],
     );
     const row = result.rows[0];
-    if (!row && this.production) { const todo = (await this.production.todos(actor)).find(item=>item.todoId===todoId); if(todo)return todo; }
-    if (!row && this.digital) { const todo = (await this.digital.todos(actor)).find(item=>item.todoId===todoId); if(todo)return todo; }
+    if (!row && this.production) { const todo = await this.providerTodo(this.production,actor,todoId); if(todo)return todo; }
+    if (!row && this.digital) { const todo = await this.providerTodo(this.digital,actor,todoId); if(todo)return todo; }
     if (!row) throw new ApplicationError("NOT_FOUND", "待办不存在或已不再分配给你", 404);
     return (await sourcingTodoPresentation(this.database,[todoResponse(row)]))[0]!;
   }
@@ -465,11 +479,14 @@ export class TodoService {
          ${this.digital&&await arrangementsAvailable(this.database)?`AND ${nativeDevelopmentTodoExclusion}`:''}`,
       [actor.actorId],
     );
-    const production=this.production?await this.production.todos(actor):[],digital=this.digital?await this.digital.todos(actor):[];
-    return {
-      pendingCount:Number(result.rows[0]?.pending_count??0)+production.filter(todo=>todo.unread).length+digital.length,
-      unreadCount:[...production,...digital].filter(todo=>todo.contentToken&&todo.unread===true).length,
+    const counts=async(provider:typeof this.digital|typeof this.production,production:boolean)=>{
+      if(!provider)return {pendingCount:0,unreadCount:0};
+      if(provider.todoCounts)return provider.todoCounts(actor);
+      const rows=await provider.todos(actor);
+      return {pendingCount:production?rows.filter(todo=>todo.unread).length:rows.length,unreadCount:rows.filter(todo=>todo.contentToken&&todo.unread===true).length};
     };
+    const production=await counts(this.production,true),digital=await counts(this.digital,false);
+    return {pendingCount:Number(result.rows[0]?.pending_count??0)+production.pendingCount+digital.pendingCount,unreadCount:production.unreadCount+digital.unreadCount};
   }
 
   async markReadForActor(actor:TrustedActorContext,todoId:string,input:MarkTodoRead){
@@ -494,7 +511,7 @@ export class TodoService {
       await client.query('BEGIN');await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
       // Re-resolve original provider membership after acquiring its lifecycle lock;
       // a stale read cannot mark a new return/reassignment/round as read.
-      const current=(await this.digital?.todos(actor))?.find(item=>item.todoId===todoId);
+      const current=await this.providerTodo(this.digital,actor,todoId);
       if(!current)throw new ApplicationError('NOT_FOUND','事项已结束、已改派或不再属于你，本次未标读',404);check(current);
       await client.query('INSERT INTO todo_content_reads(recipient_id,todo_id,content_token,read_route) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING',[actor.actorId,todoId,current.contentToken,JSON.stringify(current.route)]);
       const row=(await client.query('SELECT read_at FROM todo_content_reads WHERE recipient_id=$1 AND todo_id=$2 AND content_token=$3',[actor.actorId,todoId,current.contentToken])).rows[0];

@@ -252,3 +252,11 @@ it('R3-04 relative standard calculator remains in the original native settings a
  for(const path of ['packages/domain/src/sla-relative-calculation.ts','packages/domain/src/sla-calculation.ts']){const tests=classifyFullGatePaths([path]).mappedPostgresTests;expect(tests).toContain('tests/integration/m01-settings-native-browser-postgres.test.ts');expect(tests).toContain('tests/integration/sla-calculation-postgres.test.ts');}
  expect(configForSuite('tests/integration/m01-settings-native-browser-postgres.test.ts')).toBe('vitest.business-chain.config.ts');
 });
+
+it('keeps original native todo search, read-token and notification suites in the canonical plan for split reads',()=>{
+ for(const path of ['apps/api/src/todos/selection.ts','apps/api/src/todos/content-reads.ts','apps/api/src/todos/global-search.ts','apps/api/src/todos/service.ts','apps/api/src/production-platform/notification-service.ts']){
+  const risk=classifyFullGatePaths([path]);
+  for(const suite of ['todo-global-search','digital-my-todo-context','digital-production-notifications'])expect(risk.mappedPostgresTests).toContain('tests/integration/'+suite+'-postgres.test.ts');
+  expect(risk.businessChainSensitive).toBe(true);
+ }
+});

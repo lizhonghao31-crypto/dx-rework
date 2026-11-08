@@ -1,3 +1,4 @@
+import {ContextBusinessClock} from '../../apps/api/src/acceptance-clock/business-time.js';
 import {minimumInitialCustomerDate} from "@dx-rework/contracts/digital-production";
 import { applyDigitalPoDateFixture } from "../helpers/digital-po-date-fixture.js";
 import { TodoDeliveryWorker } from "../../apps/api/src/todos/delivery-worker.js";
@@ -99,6 +100,18 @@ run("P04 in-app notifications PostgreSQL", () => {
     await condition(ids[0]!,"business_recorded");await tasks.complete(boss,ids[0]!,{note:"TEST actual completion"},randomUUID());
     expect((await notifications.todos(actor())).filter(todo=>ids.includes(todo.todoId))).toHaveLength(2);
     await drain(other); // Consume this test's reassignment receipt before later foreign-user scenarios.
+  });
+  it("keeps native selection/count/single parity and removes completed targets",async()=>{
+    const {taskId}=await create(await order());
+    const full=await notifications.todos(actor()),clock=vi.spyOn(ContextBusinessClock.prototype,"read"),selected=await notifications.todoSelections(actor());
+    expect(selected.map(item=>item.key.todoId)).toEqual(full.map(item=>item.todoId));
+    expect(await notifications.todoCounts(actor())).toEqual({totalCount:full.length,pendingCount:full.length,unreadCount:full.filter(todo=>todo.contentToken&&todo.unread===true).length});
+    expect(clock).not.toHaveBeenCalled();
+    const current=full.find(todo=>todo.todoId===taskId)!,one=await notifications.todo(actor(),taskId);expect(clock).toHaveBeenCalledOnce();clock.mockRestore();expect(one).toMatchObject({todoId:taskId,unread:current.unread,route:current.route});expect(one?.contentToken).toBe(current.contentToken);
+    expect(await notifications.todo(actor(other),taskId)).toBeNull();
+    await condition(taskId,"business_recorded");await tasks.complete(boss,taskId,{note:"TEST native read split complete"},randomUUID());
+    expect(await notifications.todo(actor(),taskId)).toBeNull();
+    await notifications.runOnce();await drain();
   });
   it("atomically claims across tabs, persists across refresh, and acknowledgement never finishes a task or its SLA",async()=>{
     const resource=await order(),{taskId}=await create(resource);

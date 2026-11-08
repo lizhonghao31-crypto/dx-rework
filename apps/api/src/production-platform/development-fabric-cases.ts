@@ -1,3 +1,4 @@
+import {appendSelectedTodo,type TodoSelectionKey,type TodoProjection} from '../todos/selection.js';
 import {todoContentToken} from '../todos/content-reads.js';
 import type {Pool,PoolClient} from "pg";
 import type {TodoResponse} from "@dx-rework/contracts";
@@ -19,14 +20,14 @@ export async function fabricCases(db:DB,sourceId:string){
  for(const person of people)if(await new DigitalProductionAccessPolicy(db).activeRole(person.id,"production_management")||await new DigitalProductionAccessPolicy(db).activeRole(person.id,"owner_group"))responsible.push(person);
  return rows.map(row=>({...row,responsible,status:row.decision?.decision??"等待决定",scope:row.payload.scope??null}));
 }
-export async function fabricDecisionTodos(db:DB,actor:TrustedActorContext):Promise<TodoResponse[]>{
+export async function fabricDecisionTodos(db:DB,actor:TrustedActorContext,projection?:TodoProjection):Promise<TodoResponse[]>{
  let allowed=isRootActor(actor);for(const role of ["production_management","owner_group"])if(actor.actorRoles.includes(role)&&await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,role))allowed=true;
  if(!allowed)return [];
  if(!(await db.query("SELECT to_regclass('digital_development_material_verifications') AS relation")).rows[0]?.relation)return [];
  const sources=(await db.query(`SELECT s.source_id,s.design_style_no,coalesce((SELECT max(r.round_number) FROM digital_development_rounds r WHERE r.source_id=s.source_id),1) AS round_number FROM digital_production_sources s JOIN digital_development_documents d USING(source_id)
  LEFT JOIN digital_production_resource_lifecycle l ON l.resource_kind='source' AND l.resource_id=s.source_id
  WHERE d.status='published' AND coalesce(l.state,'active')='active'
- AND EXISTS(SELECT 1 FROM digital_development_execution_facts f WHERE f.source_id=s.source_id AND f.kind='面料报告')`)).rows;
+ AND EXISTS(SELECT 1 FROM digital_development_execution_facts f WHERE f.source_id=s.source_id AND f.kind='面料报告' AND ($1::uuid IS NULL OR f.fact_id=$1))`,[projection?.todoId??null])).rows;
  const result:TodoResponse[]=[];
  for(const source of sources){
   if(!await new DigitalProductionAccessPolicy(db).allowed(actor,"source",source.source_id,"technical"))continue;
@@ -36,7 +37,8 @@ export async function fabricDecisionTodos(db:DB,actor:TrustedActorContext):Promi
   for(const report of await fabricCases(db,source.source_id)){
    if(report.decisionId)continue;
    const at=new Date(report.reportedAt).toISOString(),id=report.reportId;
-   result.push({contentToken:todoContentToken(['fabric',id,source.round_number]),todoId:id,taskTitle:"决定问题面料是否使用",todoType:"business_action",category:"digital_fabric_decision",sourceEventId:id,sourceAction:"development_fabric_report",entityType:task?"digital_task":"digital_development",entityId:task?.task_id??source.source_id,recipientUserId:actor.actorId,requiredRole:actor.actorRoles.includes("owner_group")?"owner_group":"production_management",requiredCapability:null,route:{routeName:task?"digital_production_task":"digital_development",entityId:task?.task_id??source.source_id,todoId:id,developmentRound:source.round_number},policyKey:null,dueAt:null,reminderCount:0,status:"pending",blockedReason:null,orderContext:{reworkNo:null,orderNo:null,styleNo:source.design_style_no,supplierName:null,status:"问题面料等待明确决定",updatedAt:at},unread:true,version:1,createdAt:at,updatedAt:at});
+   const selectionKey:TodoSelectionKey={contentToken:todoContentToken(['fabric',id,source.round_number]),todoId:id,taskTitle:"决定问题面料是否使用",todoType:"business_action",category:"digital_fabric_decision",sourceAction:"development_fabric_report",recipientUserId:actor.actorId,route:{routeName:task?"digital_production_task":"digital_development",entityId:task?.task_id??source.source_id,todoId:id,developmentRound:source.round_number},dueAt:null,status:"pending",orderContext:{reworkNo:null,orderNo:null,styleNo:source.design_style_no,supplierName:null,status:"问题面料等待明确决定",updatedAt:at},unread:true,createdAt:at};
+  appendSelectedTodo(result,projection,selectionKey,()=>({...selectionKey,sourceEventId:id,entityType:task?"digital_task":"digital_development",entityId:task?.task_id??source.source_id,requiredRole:actor.actorRoles.includes("owner_group")?"owner_group":"production_management",requiredCapability:null,policyKey:null,reminderCount:0,blockedReason:null,version:1,updatedAt:at}));
   }
  }
  return result;

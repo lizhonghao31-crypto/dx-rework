@@ -5,7 +5,7 @@ import type {TrustedActorContext} from '../tools/repositories.js';
 type DB=Pick<Pool|PoolClient,'query'>;
 export const todoContentToken=(parts:unknown)=>createHash('sha256').update(JSON.stringify(parts)).digest('hex');
 /** Providers supply durable semantic content, never `asOf` or the fixed DTO version. */
-export async function applyTodoReadState(db:DB,actor:TrustedActorContext,todos:TodoResponse[]){
+export async function applyTodoReadState<T extends Pick<TodoResponse,'todoId'|'sourceAction'|'contentToken'|'unread'|'readAt'>>(db:DB,actor:TrustedActorContext,todos:T[]):Promise<T[]>{
  if(!todos.length)return todos;
  if(!(await db.query("SELECT to_regclass('todo_content_reads') AS relation")).rows[0]?.relation)return todos.map(todo=>{const next={...todo};delete next.contentToken;return next;});
  const taskIds=todos.filter(todo=>todo.sourceAction==='digital_task').map(todo=>todo.todoId);

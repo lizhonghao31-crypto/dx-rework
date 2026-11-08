@@ -1,3 +1,4 @@
+import {appendSelectedTodo,type TodoSelectionKey,type TodoProjection} from '../todos/selection.js';
 import {memberCanWriteModule} from '../access/member-module-policy.js';
 import {createHash} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
@@ -45,6 +46,9 @@ export async function qcProgressNotices(db:DB,people:TrustedActorContext[],onlyO
  }
  return result;
 }
-export function qcNoticesAsTodos(notices:QcProgressNotice[],actor:TrustedActorContext):TodoResponse[]{
- return notices.filter(n=>n.recipients.includes(actor.actorId)).map(n=>({todoId:n.route.todoId,contentToken:todoContentToken([n.key,...n.lineIds]),taskTitle:n.title,todoType:n.blockedReason?'recipient_routing_exception':'business_action',category:'digital_qc_progress',sourceEventId:n.route.todoId,sourceAction:'digital_qc_progress',entityType:'digital_production_order',entityId:n.orderId,recipientUserId:actor.actorId,requiredRole:null,requiredCapability:null,route:n.route,policyKey:null,dueAt:n.dueAt,reminderCount:0,status:n.blockedReason?'blocked_recipient':'pending',blockedReason:n.blockedReason,orderContext:{reworkNo:null,orderNo:null,styleNo:n.styleNo,supplierName:n.supplierName,status:n.title,updatedAt:n.createdAt},unread:true,version:1,createdAt:n.createdAt,updatedAt:n.createdAt}));
+export function qcNoticesAsTodos(notices:QcProgressNotice[],actor:TrustedActorContext,projection?:TodoProjection):TodoResponse[]{
+ const result:TodoResponse[]=[];for(const n of notices.filter(n=>n.recipients.includes(actor.actorId))){
+  const selectionKey:TodoSelectionKey={todoId:n.route.todoId,contentToken:todoContentToken([n.key,...n.lineIds]),taskTitle:n.title,todoType:n.blockedReason?'recipient_routing_exception':'business_action',category:'digital_qc_progress',sourceAction:'digital_qc_progress',recipientUserId:actor.actorId,route:n.route,dueAt:n.dueAt,status:n.blockedReason?'blocked_recipient':'pending',orderContext:{reworkNo:null,orderNo:null,styleNo:n.styleNo,supplierName:n.supplierName,status:n.title,updatedAt:n.createdAt},unread:true,createdAt:n.createdAt};
+  appendSelectedTodo(result,projection,selectionKey,()=>({...selectionKey,sourceEventId:n.route.todoId,entityType:'digital_production_order',entityId:n.orderId,requiredRole:null,requiredCapability:null,policyKey:null,reminderCount:0,blockedReason:n.blockedReason,version:1,updatedAt:n.createdAt}));
+ }return result;
 }

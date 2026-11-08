@@ -1,3 +1,4 @@
+import type {TodoSelection,TodoSelectionKey} from '../todos/selection.js';
 import {todoContentToken} from '../todos/content-reads.js';
 import { hasWarehouseReceivingRole } from "@dx-rework/contracts";
 import { productionNotExcluded, productionMerchandiserId } from "./production-visibility.js";
@@ -93,32 +94,34 @@ export class ProductionClosureService {
  }
  // Refresh when the existing todo list/indicator is read. No new scheduler, push or escalation.
  // A single lock serializes projections; repeating observations creates no new episode.
- async todos(actor:TrustedActorContext):Promise<TodoResponse[]> {
+ async todos(actor:TrustedActorContext):Promise<TodoResponse[]> {return (await this.readTodos(actor)).todos;}
+ async todoSelections(actor:TrustedActorContext){return (await this.readTodos(actor,{selection:true})).selections;}
+ async todoCounts(actor:TrustedActorContext){const result=await this.readTodos(actor,{details:false});return {totalCount:result.totalCount,unreadCount:result.unreadCount,pendingCount:result.unreadCount};}
+ async todoPage(actor:TrustedActorContext,page:number){return this.readTodos(actor,{page});}
+ async todo(actor:TrustedActorContext,id:string){if(!z.string().uuid().safeParse(id).success)return null;return (await this.readTodos(actor,{todoId:id})).todos[0]??null;}
+ private async readTodos(actor:TrustedActorContext,options:{details?:boolean;page?:number;todoId?:string;selection?:boolean}={}) {
   const root=await this.rootActor(actor);
-  if(!isProductionRiskRecipient(actor,actor.actorId,root))return [];
-  if(!await memberCanReceiveFact(this.database,actor.actorId,"sourcing.production.dispatch","production_order"))return [];
+  if(!isProductionRiskRecipient(actor,actor.actorId,root))return {todos:[] as TodoResponse[],selections:[] as TodoSelection[],totalCount:0,unreadCount:0,page:1,totalPages:0};
+  if(!await memberCanReceiveFact(this.database,actor.actorId,"sourcing.production.dispatch","production_order"))return {todos:[] as TodoResponse[],selections:[] as TodoSelection[],totalCount:0,unreadCount:0,page:1,totalPages:0};
   const client=await this.database.connect();
   try{await client.query("BEGIN");await client.query("SELECT pg_advisory_xact_lock(hashtext('production-closure'))");
    const timestamp=await client.query<{as_of:Date}>("SELECT clock_timestamp() AS as_of"),asOf=(this.clock?.()??timestamp.rows[0]!.as_of).toISOString();
-   const {orders:byId,facts,ids}=await this.pilotFacts(client,null,asOf);
+   const target=options.todoId?(await client.query<{production_order_id:string}>('SELECT production_order_id FROM sourcing_production_alerts WHERE alert_id=$1',[options.todoId])).rows.map(row=>row.production_order_id):null;
+   const {orders:byId,facts,ids}=await this.pilotFacts(client,target,asOf);
    await this.project(client,ids,facts);
    const alerts=await client.query<{alert_id:string;production_order_id:string;kind:string;opened_at:Date;read_at:Date|null}>(`SELECT alert.*,reading.read_at FROM sourcing_production_alerts alert
     LEFT JOIN sourcing_production_alert_reads reading ON reading.alert_id=alert.alert_id AND reading.user_id=$1
-    WHERE alert.resolved_at IS NULL ORDER BY CASE alert.kind WHEN 'stale' THEN 0 WHEN 'high_risk' THEN 1 ELSE 2 END,alert.opened_at,alert.alert_id`,[actor.actorId]);
-   const result=alerts.rows.flatMap(a=>{const o=byId.get(a.production_order_id);if(!o||!isProductionRiskRecipient(actor,o.created_by,root))return [];
-    const p=facts.get(o.production_order_id)!;
-    return [TodoResponseSchema.parse({todoId:a.alert_id,todoType:"business_action",category:`production_${a.kind}`,sourceEventId:o.operation_event_id,
-     sourceAction:"sourcing.production.dispatch",entityType:"production_order",entityId:o.production_order_id,recipientUserId:actor.actorId,
-     requiredRole:null,requiredCapability:"sourcing:view",route:{routeName:"production_detail",entityId:o.production_order_id,todoId:a.alert_id,...(o.factory_decision_id?{factoryDecisionId:o.factory_decision_id}:{})},policyKey:null,dueAt:null,reminderCount:0,
-     status:"pending",blockedReason:null,orderContext:{reworkNo:null,orderNo:null,styleNo:o.first_style_no,supplierName:o.supplier_name_snapshot,merchandiserName:o.merchandiser_name ?? null,status:a.kind,updatedAt:asOf},
-     contentToken:todoContentToken(['production-risk',a.alert_id,a.production_order_id,a.kind,iso(a.opened_at)]),readAt:a.read_at?iso(a.read_at):null,unread:a.read_at===null,productionProgress:p.productionProgress,daysWithoutUpdate:p.daysWithoutUpdate,
-     version:1,createdAt:iso(a.opened_at),updatedAt:asOf})];});
-   await client.query("COMMIT");return result;
+    WHERE alert.resolved_at IS NULL AND ($2::uuid IS NULL OR alert.alert_id=$2) ORDER BY CASE alert.kind WHEN 'stale' THEN 0 WHEN 'high_risk' THEN 1 ELSE 2 END,alert.opened_at,alert.alert_id`,[actor.actorId,options.todoId??null]);
+   const visible=alerts.rows.filter(a=>{const order=byId.get(a.production_order_id);return order&&isProductionRiskRecipient(actor,order.created_by,root);});
+   const totalCount=visible.length,unreadCount=visible.filter(a=>a.read_at===null).length,totalPages=Math.ceil(totalCount/15),page=totalPages?Math.min(options.page??1,totalPages):1;
+   const selections:TodoSelection[]=options.details===false?[]:visible.map(a=>{const o=byId.get(a.production_order_id)!,p=facts.get(a.production_order_id)!;const key:TodoSelectionKey={todoId:a.alert_id,todoType:"business_action",category:`production_${a.kind}`,sourceAction:"sourcing.production.dispatch",recipientUserId:actor.actorId,route:{routeName:"production_detail",entityId:o.production_order_id,todoId:a.alert_id,...(o.factory_decision_id?{factoryDecisionId:o.factory_decision_id}:{})},dueAt:null,status:"pending",orderContext:{reworkNo:null,orderNo:null,styleNo:o.first_style_no,supplierName:o.supplier_name_snapshot,merchandiserName:o.merchandiser_name ?? null,status:a.kind,updatedAt:asOf},contentToken:todoContentToken(['production-risk',a.alert_id,a.production_order_id,a.kind,iso(a.opened_at)]),readAt:a.read_at?iso(a.read_at):null,unread:a.read_at===null,daysWithoutUpdate:p.daysWithoutUpdate,createdAt:iso(a.opened_at)};return {key,load:async()=>TodoResponseSchema.parse({...key,sourceEventId:o.operation_event_id,entityType:"production_order",entityId:o.production_order_id,requiredRole:null,requiredCapability:"sourcing:view",policyKey:null,reminderCount:0,blockedReason:null,productionProgress:p.productionProgress,version:1,updatedAt:asOf})};});
+   const selected=options.selection?[]:options.page===undefined?selections:selections.slice((page-1)*15,page*15),result:TodoResponse[]=[];for(const item of selected)result.push(await item.load());
+   await client.query("COMMIT");return {todos:result,selections,totalCount,unreadCount,page,totalPages};
   }catch(error){await client.query("ROLLBACK");throw error;}finally{client.release();}
  }
  async markRead(actor:TrustedActorContext,id:string){
   if(!z.string().uuid().safeParse(id).success)fail("待办编号无效",400);
-  const todos=await this.todos(actor);if(!todos.some(t=>t.todoId===id))fail("待办已解除或不属于你",404);
+  if(!await this.todo(actor,id))fail("待办已解除或不属于你",404);
   await this.database.query(`INSERT INTO sourcing_production_alert_reads(alert_id,user_id)
    SELECT alert_id,$2 FROM sourcing_production_alerts WHERE alert_id=$1 AND resolved_at IS NULL ON CONFLICT DO NOTHING`,[id,actor.actorId]);
   return {read:true};
