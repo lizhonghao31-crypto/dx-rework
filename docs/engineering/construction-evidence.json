@@ -71,7 +71,8 @@
       "expectation": "Prior exact e167 feature results remain recorded in commit e167 and its original private reports. Source identity check proves API/web/feature tests/lock/config are unchanged; they were not rerun for this historical-fixture-only fix. Current ordered-upgrade fixture and original33 correction/public-tool cases pass, zero skips; current lint/preflight/secret pass. Prior e1673 full production-App browser cases with indexed:true and productionAssets:true pass:320 thumbnail vs1200 original, warm reload no original generation, actual503 falls back once at1165, native same-session revoke and independentRoot.1440/1165 full-page screenshots captured/inspected. Synthetic flat PNG14269bytes vs210byte WebP is one local image observation, not onsite speed or general compression/P95. Prior e167 UI types and124unit tests pass.",
       "checks": [
         "source-identity",
-        "preflight"
+        "preflight",
+        "amendment"
       ]
     },
     {
@@ -113,7 +114,8 @@
       "expectation": "Prior exact e167 feature results remain recorded in commit e167 and its original private reports. Source identity check proves API/web/feature tests/lock/config are unchanged; they were not rerun for this historical-fixture-only fix. Current ordered-upgrade fixture and original33 correction/public-tool cases pass, zero skips; current lint/preflight/secret pass. Prior e167124unit/6 native/3 production-browser/40 original-consumer cases pass with zero skips. Prior e167 types/lint/preflight/secret match source. Full-App production graph is built by native browser fixture. No1000/5000 rerun for image changes; no unrelated backup/restore fix in this PR. Actual final merge baseline tree equals tested integration baseline before committing source.",
       "checks": [
         "source-identity",
-        "preflight"
+        "preflight",
+        "amendment"
       ]
     },
     {
