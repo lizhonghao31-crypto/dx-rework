@@ -266,7 +266,7 @@ const app = buildApp({
   auth,
   access: {
     auxiliaryCatalog:new AuxiliaryCatalogService(database,rootAuthority),
-    authenticate: (token) => auth.authenticate(token),
+    authenticate: (token, context) => auth.authenticate(token, context),
     service: accessService,
     root: rootAuthority,
   },
@@ -302,7 +302,7 @@ const app = buildApp({
     service: new SampleCreateService(database, config.dingtalk.corpId), files: sampleFiles, attachments,
   },
   sourcing: {
-    authenticate: (token) => auth.authenticate(token),
+    authenticate: (token, context) => auth.authenticate(token, context),
     service: sourcingService,
     contracts: sourcingContractService,
     contractReturns: new SourcingContractReturnService(database),

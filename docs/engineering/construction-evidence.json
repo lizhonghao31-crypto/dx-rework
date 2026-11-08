@@ -1,32 +1,35 @@
 {
   "version": 1,
-  "base": "cd36f84e9188ab64289e445a26892bfa32f7ab5c",
-  "sourceFingerprint": "48237d45a2a735d4cc75258ce4b31ed57e03915340f01a4cae6e49808318eba8",
+  "base": "c75fda81491d7f1e640bf80e1f493ba3893a9ebf",
+  "sourceFingerprint": "c18869cea7591b37980cd505bac9a04b807d3a0b1cd0977cfc98ffcbd8231d9d",
   "risk": "full",
   "rules": [
     {
-      "rule": "Budget copy compensation depends on actual COMMIT attempt and confirmed rollback, never on a later ROLLBACK acknowledgement after COMMIT.",
-      "source": "User-authorized architecture handoff at cd36f84 and full Pro V1.1 section4, Library libfile_fde3_f-1f1ae595d0c48191aa3fe2b7197fa676_c8d3bf5d609c8191bce6411a30e94d44. Coordinator supplied complete architecture-work-handoff-cd36f84.md and performance-closure-20261108.md inline after absent local paths were accurately reported. Preserve all19 merged M01/PERF PRs. Implement A/B/C+F3/F1/F2/F4 with F6 alongside, F5 conditional. A is first isolated unit; no schema, dependencies, runtime configuration, historical repair, deployment or real data operations.",
+      "rule": "Reuse only successful external identity proof within an actual request/authorization phase, with fresh handler boundary and fresh local authority on every call.",
+      "source": "Full approved Pro Architecture Governance V1.1 section5 and coordinator inline architecture-work-handoff-cd36f84 sections2-5: adopt5.5 last-online-check semantics, request-owned external proof only, current local authority at original points, no full AuthUser cache or repeated old-member upsert. Narrow B when remote-wait/write boundaries cannot be satisfied without expansion. Preserve all PERF01-12 and A safety. User authorizes code/PR/Codex Review/sequential merges, no deployment/live data/configuration. A946 actually merged c75fda81491d7f1e640bf80e1f493ba3893a9ebf, tree24a3487a0cb3061fa72644ce6eb17a1eb8c05d58 equals passed candidate; B rebased from its isolated preparation onto this real merge before current checks.",
       "writes": [
-        "apps/api/src/tools/attachments.ts#copyDigitalBudgetImage"
+        "apps/api/src/auth/service.ts",
+        "apps/api/src/auth/request-identity-context.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/budget-service.ts#prepareSourcing",
-        "apps/api/src/production-platform/budget-routes.ts",
-        "apps/api/src/production-platform/budget-sourcing-adapter.ts#readBudgetSourcing",
-        "apps/api/src/tools/repositories.ts#OperationEventRepository"
+        "apps/api/src/auth/postgres-store.ts",
+        "apps/api/src/auth/provider.ts",
+        "apps/api/src/auth/acceptance-provider.ts",
+        "apps/api/src/auth/acceptance-control.ts",
+        "apps/api/src/access/root-authority.ts",
+        "docs/requirements/platform-permission-golden-source-v1.0.md"
       ],
       "oldTests": [
-        "tests/integration/sourcing-pr03-postgres.test.ts",
-        "tests/unit/attachment-service-failures.test.ts"
+        "tests/integration/auth.test.ts",
+        "tests/integration/auth-embedded-qr.test.ts",
+        "tests/integration/auth-session-revocation-postgres.test.ts"
       ],
       "newTests": [
-        "tests/unit/budget-image-copy-safety.test.ts",
-        "tests/integration/digital-budget-shared-postgres.test.ts"
+        "tests/integration/request-identity-postgres.test.ts"
       ],
-      "initialization": "No SQL/schema/dependency/runtime change. Existing order lock, source read, copied attachment/mapping and audit transaction retained. COMMIT attempt marked before call, confirmed only after response. Only pre-COMMIT confirmed rollback cleans this newly created object. Unknown transaction connection is destroyed once; known committed DTO conversion occurs after release outside compensation. Cleanup failure emits a bounded secret-free warning and preserves original error. Unknown outcomes may retain unreferenced bytes, not delete possibly committed references.",
-      "dateAndPermission": "Existing published budget/version/source and current own-merchandiser/Root/PMC policy remains. No native event/time/quantity/price/dirty-registration changes. Unit source guard is explicitly mocked for control flow only; native PG cases exercise actual current-role policy and separate tuple/actor sources.",
-      "expectation": "Native isolated PostgreSQL executes real COMMIT before controlled client throws acknowledgement, then confirms one mapping, intact private bytes and one audit after retry. Native audit-then-fail rolls back image/mapping/event atomically and cleans only new bytes. Unit covers successful rollback after attempted COMMIT, failed rollback, post-COMMIT DTO failure and cleanup failure. Native same-tuple concurrent retries create one copy; different source/actor identities remain distinct. Partial two-image preparation does not undo first committed image and full retry reuses it.",
+      "initialization": "No schema, dependency, token, TTL, cookie, runtime configuration or role migration. AuthService owns a WeakMap keyed by actual request object; binding includes corporation/sessionID/token hash/userID/provider identity, phase only, no AuthUser/member payload/Root/roles/capabilities. First online revalidate/upsert retained. Reuse does not repeat upsert. Existing protected64/public16/member32 reservations and only-inflight directory coalescing unchanged. Error deletes proof; original App onResponse releases proof. Optional context leaves all unscoped callers on original online path.",
+      "dateAndPermission": "Both initial/current findSession and Acceptance business-session checks remain, with current local active/employed/session/role/capabilities. Local errors fail closed. Last external successful handler check may cover later external change unknown locally only in this phase; next actual request is online, even identical client x-request-id/token. Handler helper explicitly requests fresh; remote-workflow paths are excluded. No claim of globally linearizable/zero-window revocation.",
+      "expectation": "Original auth unit/rate/concurrency/QR/session tests plus new phase/context cases pass. Same-request admission avoids duplicate external lookup, handler is fresh, response local-only; different actual request/sameID and switched sessions cannot reuse. Failure proof not retained, explicit fresh and release require online reads, local roles reload without old upsert and logout invalidates. Native signed same-valid-session role withdrawal is tested using original Root revokeRole and an independently retained warehouse role, not a Lab switch.",
       "checks": [
         "unit",
         "postgres",
@@ -36,63 +39,42 @@
       ]
     },
     {
-      "rule": "Mapped-copy retry checks ready ownership/binding and verifies private bytes only after DB transaction and connection release.",
-      "source": "User-authorized architecture handoff at cd36f84 and full Pro V1.1 section4, Library libfile_fde3_f-1f1ae595d0c48191aa3fe2b7197fa676_c8d3bf5d609c8191bce6411a30e94d44. Coordinator supplied complete architecture-work-handoff-cd36f84.md and performance-closure-20261108.md inline after absent local paths were accurately reported. Preserve all19 merged M01/PERF PRs. Implement A/B/C+F3/F1/F2/F4 with F6 alongside, F5 conditional. A is first isolated unit; no schema, dependencies, runtime configuration, historical repair, deployment or real data operations.",
+      "rule": "Wire the narrow sourcing/supplier pilot through existing HTTP/module/Root/field gates without moving business transaction responsibilities.",
+      "source": "Full approved Pro Architecture Governance V1.1 section5 and coordinator inline architecture-work-handoff-cd36f84 sections2-5: adopt5.5 last-online-check semantics, request-owned external proof only, current local authority at original points, no full AuthUser cache or repeated old-member upsert. Narrow B when remote-wait/write boundaries cannot be satisfied without expansion. Preserve all PERF01-12 and A safety. User authorizes code/PR/Codex Review/sequential merges, no deployment/live data/configuration. A946 actually merged c75fda81491d7f1e640bf80e1f493ba3893a9ebf, tree24a3487a0cb3061fa72644ce6eb17a1eb8c05d58 equals passed candidate; B rebased from its isolated preparation onto this real merge before current checks.",
       "writes": [
-        "apps/api/src/tools/attachments.ts#verifyBudgetImageCopy"
+        "apps/api/src/access/member-module-http.ts",
+        "apps/api/src/access/pmc-readonly-http.ts",
+        "apps/api/src/access/routes.ts",
+        "apps/api/src/sourcing/sourcing-routes.ts",
+        "apps/api/src/app.ts",
+        "apps/api/src/server.ts"
       ],
       "reads": [
-        "apps/api/src/tools/storage.ts#ObjectStorage",
-        "apps/api/src/tools/attachment-image-preview.ts",
-        "apps/api/src/production-platform/budget-sourcing-adapter.ts"
-      ],
-      "oldTests": [
-        "tests/unit/attachment-image-preview.test.ts",
-        "tests/integration/attachment-image-preview-postgres.test.ts",
-        "tests/integration/digital-budget-routes.test.ts",
-        "tests/unit/pmc-release-readonly-api.test.ts"
-      ],
-      "newTests": [
-        "tests/unit/budget-image-copy-safety.test.ts",
-        "tests/integration/digital-budget-shared-postgres.test.ts"
-      ],
-      "initialization": "Existing mapping remains keyed by order,budgetVersion,sourceAttachment,actor. Reused attachment must be ready and owned, unbound or demonstrably attached to the same mother via original child relation. Original readBudgetSourcing already rejects a mother linked to sourcing: this entry guard is retained, not expanded by the helper binding check. HEAD validates size/MIME/available SHA. Missing SHA uses bounded readBytes and local digest, never ETag/unbounded computeSha256. One local five-second AbortSignal budget covers HEAD and hash fallback; no retry, global timeout or repair.",
-      "dateAndPermission": "No cross-user cache, public grant, original image replacement, authorization expansion or thumbnail changes. Missing object409, corrupt metadata/content422 and storage transport/OSS denied503 are distinct, existing ApplicationError preserved. No false full preparation success on partial batch. Current authority is checked before mapping lookup as before.",
-      "expectation": "Actual storage tests verify HEAD starts after COMMIT/release, no new copy on retry, missing/403/size/MIME/SHA errors, absent-metadata hash success/corruption, HEAD deadline and remaining hash budget after slow HEAD. Native tests retain original image bytes, new/historical private thumbnails, inherited/published bindings and last authorization of the same real signed session revoked during generation. Existing unrelated thumbnail generation remains bounded and unchanged.",
-      "checks": [
-        "unit",
-        "postgres",
-        "typesapi",
-        "lint",
-        "secret"
-      ]
-    },
-    {
-      "rule": "New failure tests use canonical discovery and exact owned PostgreSQL lifecycle, preserving original shared publication and preview consumers.",
-      "source": "User-authorized architecture handoff at cd36f84 and full Pro V1.1 section4, Library libfile_fde3_f-1f1ae595d0c48191aa3fe2b7197fa676_c8d3bf5d609c8191bce6411a30e94d44. Coordinator supplied complete architecture-work-handoff-cd36f84.md and performance-closure-20261108.md inline after absent local paths were accurately reported. Preserve all19 merged M01/PERF PRs. Implement A/B/C+F3/F1/F2/F4 with F6 alongside, F5 conditional. A is first isolated unit; no schema, dependencies, runtime configuration, historical repair, deployment or real data operations.",
-      "writes": [
-        "tests/unit/budget-image-copy-safety.test.ts",
-        "tests/integration/digital-budget-shared-postgres.test.ts"
-      ],
-      "reads": [
-        "scripts/test-suite-plan.mjs",
-        "scripts/test-resource-contract.mjs",
-        "scripts/ci/full-gate-risk-map.mjs",
-        "tests/helpers/owned-postgres-schema.ts",
-        "docs/requirements/platform-permission-golden-source-v1.0.md",
+        "apps/api/src/access/business-authority.ts",
+        "apps/api/src/access/permission-sensitive-field-policy.ts",
+        "apps/api/src/access/employee-access-service.ts",
+        "apps/api/src/access/directory-query.ts",
+        "apps/api/src/sourcing/sourcing-service.ts",
+        "apps/api/src/sourcing/sourcing-contract-service.ts",
+        "apps/api/src/platform/browser-request-protection.ts",
         "docs/requirements/sourcing-supplier-production-v1.0.md"
       ],
       "oldTests": [
-        "tests/integration/digital-budget-shared-postgres.test.ts",
-        "tests/integration/attachment-image-preview-postgres.test.ts",
-        "tests/unit/attachment-service-failures.test.ts"
+        "tests/integration/access-routes.test.ts",
+        "tests/integration/sourcing-routes.test.ts",
+        "tests/integration/sourcing-price-routes.test.ts",
+        "tests/integration/sourcing-factory-change-routes.test.ts",
+        "tests/integration/sourcing-dispatch-routes.test.ts",
+        "tests/unit/pmc-release-readonly-api.test.ts",
+        "tests/unit/supplier-batch-routes.test.ts",
+        "tests/unit/permission-sensitive-field-policy.test.ts"
       ],
       "newTests": [
-        "tests/unit/budget-image-copy-safety.test.ts"
+        "tests/integration/request-identity-postgres.test.ts"
       ],
-      "initialization": "Shared budget fixture keeps its existing explicit referenced-domain schema, now uses original createOwnedPostgresSchema/releaseOwnedPostgresSchema instead of legacy manual CREATE/DROP. Native preview fixture independently uses current complete schema and original real AuthService. No trigger disabling added. Existing changed-PG canonical discovery maps the touched suite, unit is picked by original non-DB runner; no CI/risk-map edit or ops drill. Local command safety required NODE_ENV=test and correctly rejected first missing setting; runner corrected, guard retained. First unit attempt used Buffer vs Uint8Array structural equality; fixed to byte equality. Preflight found old manual schema creator when fixture became modified; migrated to original resource contract and reran affected native checks. Failed attempts remain private and are not counted as passes.",
-      "dateAndPermission": "No time, SLA or production data changes. Fixture confirms current role revocation using unchanged trusted-actor service boundary; only existing preview suite is cited for real signed AuthService last-check behavior, not new budget command tests. Local Node22.22.2/npm10.9.9/PG16.15 CPUs/resource boundaries recorded per check, not asserted equivalent to CI hardware or onsite.",
-      "expectation": "Current exact-source87 unit/routes and12 PostgreSQL cases pass, zero skips; API types, scoped lint, original preflight and secret scan pass. No unrelated5000-order/browser rerun. These are local checks; remote light/Review/final Full and actual merge are separate pending stages.",
+      "initialization": "Existing dependency callbacks accept optional trusted request context; server forwards only access/sourcing. Original current member-module write and PMC/Root guards remain. Admission guards can reuse their phase; original route actor point is fresh, successful sensitive preSerialization uses handler external proof but reloads local auth/Root then original redactor. Without an eligible handler proof, original online path is retained. No business command/refactoring, transaction/lock/version/key/audit/dirty update change; PERF12 supplier directory endpoints/legacy arrays/selectors and PERF09 list SQL unchanged.",
+      "dateAndPermission": "Explicit pilot whitelist: ordinary supplier profile/history and native maintenance/batch routes; sourcing ordinary case/list/metadata/history/catalog/analysis reads and pure-DB IE quote, management decision, budget correction, return, finance and exception commands. Create/correction/images, owner approval/contract rendering, styles, transfer/reprice/contract refresh, downloads/exports/Lab/other domains remain original fresh paths because they may wait remotely then write. This is a disclosed narrowing, not a claim that all sensitive workflows are migrated. Original attachment final authorization is excluded. Current local permission failure after commit is error/unknown result, never fake200/rollback.",
+      "expectation": "Actual buildApp+AuthService+PostgresAuthStore native supplier and IE quote commits tolerate subsequent controlled directory failure with only admission+handler2 external lookups and no post-commit lookup. Next request with same clientID fails online. Native IE same body/key replay returns original receipt and one native quote. Native audited disable after commit returns401, leaves saved row and performs no stale upsert. Native local session-read fault after commit returns500/no payload and keeps one row. Native post-read merch role withdrawal retains valid warehouse session and redacts bank/address. Dedicated pure PMC is truly logged in with exact[pmc] role and non-Root authority, can read approved supplier data but cannot write.",
       "checks": [
         "unit",
         "postgres",
@@ -101,16 +83,84 @@
         "preflight",
         "secret"
       ]
+    },
+    {
+      "rule": "Canonical tests cover true native identity/commit boundaries and original private thumbnails; no handmade authentication or unsafe fixture mutation is counted as native evidence.",
+      "source": "Full approved Pro Architecture Governance V1.1 section5 and coordinator inline architecture-work-handoff-cd36f84 sections2-5: adopt5.5 last-online-check semantics, request-owned external proof only, current local authority at original points, no full AuthUser cache or repeated old-member upsert. Narrow B when remote-wait/write boundaries cannot be satisfied without expansion. Preserve all PERF01-12 and A safety. User authorizes code/PR/Codex Review/sequential merges, no deployment/live data/configuration. A946 actually merged c75fda81491d7f1e640bf80e1f493ba3893a9ebf, tree24a3487a0cb3061fa72644ce6eb17a1eb8c05d58 equals passed candidate; B rebased from its isolated preparation onto this real merge before current checks.",
+      "writes": [
+        "tests/integration/auth.test.ts",
+        "tests/integration/request-identity-postgres.test.ts"
+      ],
+      "reads": [
+        "tests/helpers/business-anchor-fixture.ts",
+        "scripts/test-suite-plan.mjs",
+        "scripts/test-resource-contract.mjs",
+        "scripts/test-execution-config.mjs",
+        "scripts/acceptance/standard-identities.ts",
+        "apps/api/src/tools/attachments.ts",
+        "apps/api/src/tools/attachment-image-preview.ts"
+      ],
+      "oldTests": [
+        "tests/integration/auth-session-revocation-postgres.test.ts",
+        "tests/integration/attachment-image-preview-postgres.test.ts"
+      ],
+      "newTests": [
+        "tests/integration/request-identity-postgres.test.ts"
+      ],
+      "initialization": "New suite uses current complete schema and original owned marked businessAnchorFixture lifecycle, actual App/AuthService/PostgresAuthStore, original Acceptance identity/code exchange, native Access/EmployeeAccess/Sourcing commands/audits and controlled directory/session-read fault wrappers. No live provider or database outage, trigger disabling or production operation. Dedicated PMC uses native directory onboarding then Root assignRole; provider+union identifiers follow original Lab prefixes, not an old user role rewrite. Correctness/hooks explicitly use existing100s budget; new *-postgres test canonical discovery and original risk map auto-select it. Existing native preview tests prove actual signed default AuthService generation-final-check behavior, not just unit mocks.",
+      "dateAndPermission": "Initial local raw account-disable injection was correctly blocked by original audited-account guard and returned500; replaced with native EmployeeAccessService disable/restore on a non-Root fixture. Initial dedicated PMC used a non-Lab union prefix and original provider correctly rejected it; corrected to original uat-union prefix, no production/provider/seed guard relaxation. Failed reports are retained but not counted as passed. Same-session role revoke test uses actual native roles and same signed token; permission-negative tests do not substitute Root for ordinary users.",
+      "expectation": "After actual A merge, current exact-source131 unit/routes and16 PG pass, zero skips:7 new native pilot cases,3 original auth revocation and6 original private thumbnail cases. API types, scoped lint, original preflight/secret pass. No UI/CSS/business SLA/5000-order repeated workload. Local tool versions/CPUs/schema ownership and original logs/reports are pinned; not CI or onsite equivalence. Remote Light/Review/final Full remain separate stages.",
+      "checks": [
+        "unit",
+        "postgres",
+        "typesapi",
+        "lint",
+        "preflight",
+        "secret"
+      ]
+    },
+    {
+      "rule": "Document actual migrated responsibilities and preserve new work placement without introducing governance machinery.",
+      "source": "Full approved Pro Architecture Governance V1.1 section5 and coordinator inline architecture-work-handoff-cd36f84 sections2-5: adopt5.5 last-online-check semantics, request-owned external proof only, current local authority at original points, no full AuthUser cache or repeated old-member upsert. Narrow B when remote-wait/write boundaries cannot be satisfied without expansion. Preserve all PERF01-12 and A safety. User authorizes code/PR/Codex Review/sequential merges, no deployment/live data/configuration. A946 actually merged c75fda81491d7f1e640bf80e1f493ba3893a9ebf, tree24a3487a0cb3061fa72644ce6eb17a1eb8c05d58 equals passed candidate; B rebased from its isolated preparation onto this real merge before current checks. F6 is explicitly approved alongside actual implementation.",
+      "writes": [
+        "AGENTS.md",
+        "docs/architecture/business-module-boundaries.md"
+      ],
+      "reads": [
+        "apps/api/src/auth/request-identity-context.ts",
+        "apps/api/src/tools/attachments.ts",
+        "docs/requirements/platform-permission-golden-source-v1.0.md",
+        "docs/requirements/sourcing-supplier-production-v1.0.md"
+      ],
+      "oldTests": [
+        "tests/integration/auth.test.ts",
+        "tests/integration/attachment-image-preview-postgres.test.ts"
+      ],
+      "newTests": [
+        "tests/integration/request-identity-postgres.test.ts"
+      ],
+      "initialization": "One short root AGENTS link and one actual responsibility document describe A copy compensation and B external-proof/current-authority ownership, transaction/key/audit responsibilities, actual excluded pilot paths and bounded phase semantics. Explicitly state sourcing/receiving read/page splits are not yet migrated; no planned module is presented as existing. No new architecture linter, package, diagram requirement, gate or line-count policy.",
+      "dateAndPermission": "No policy relaxation. Existing golden sources remain authoritative; approved last-check external window is explicit, local revoke/fail-closed still required. Future affected changes follow actual boundary or explain business reason/cost/risk/rollback in ordinary PR. Rollback of B wiring preserves A non-deletion and all PERF01-12, with no historical reset or business/schema reversion.",
+      "expectation": "The actual files and native cases identify where scoped identity, current policy, business transaction and original thumbnail final checks belong. Ordinary existing preflight/types/lint/secret plus targeted native cases validate implementation. Scoped staged documentation check binds the actual AGENTS/link document inputs without rerunning business tests for evidence scope/format.",
+      "checks": [
+        "unit",
+        "postgres",
+        "typesapi",
+        "lint",
+        "preflight",
+        "secret",
+        "docs"
+      ]
     }
   ],
   "checks": [
     {
       "id": "unit",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/budget-image-copy-safety.test.ts tests/unit/attachment-service-failures.test.ts tests/unit/attachment-image-preview.test.ts tests/unit/attachment-upload-pipeline.test.ts tests/unit/pmc-release-readonly-api.test.ts tests/unit/budget-sourcing-draft.test.ts tests/unit/digital-budget.test.ts tests/integration/digital-budget-routes.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-architecture-20261109/arch-a-unit-assembled.vitest.json",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/auth.test.ts tests/integration/auth-embedded-qr.test.ts tests/integration/access-routes.test.ts tests/integration/sourcing-routes.test.ts tests/integration/sourcing-price-routes.test.ts tests/integration/sourcing-factory-change-routes.test.ts tests/integration/sourcing-dispatch-routes.test.ts tests/unit/pmc-release-readonly-api.test.ts tests/unit/permission-sensitive-field-policy.test.ts tests/unit/supplier-batch-routes.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-architecture-20261109/arch-b-unit-integrated-a.vitest.json",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "48237d45a2a735d4cc75258ce4b31ed57e03915340f01a4cae6e49808318eba8",
+      "sourceFingerprint": "c18869cea7591b37980cd505bac9a04b807d3a0b1cd0977cfc98ffcbd8231d9d",
       "inputPaths": [
         "apps",
         "packages",
@@ -125,35 +175,35 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "e2d8b2e1629312a43c33c390ea767ec17e689c35bb9bc8b7c055ba102e2a5540",
+      "inputFingerprint": "f5a7b7d878827c5a2270107104d7ffc7c9bce6c3f4041d84f67189d2fbc50f81",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "cd36f84e9188ab64289e445a26892bfa32f7ab5c",
-      "startedAt": "2026-11-08T20:39:31.393Z",
-      "endedAt": "2026-11-08T20:39:35.531Z",
-      "passed": 87,
+      "testedHead": "c75fda81491d7f1e640bf80e1f493ba3893a9ebf",
+      "startedAt": "2026-11-08T21:08:30.972Z",
+      "endedAt": "2026-11-08T21:08:37.833Z",
+      "passed": 131,
       "failed": 0,
       "skipped": 0,
       "planError": null,
-      "log": "/workspace/scratch/dx-architecture-20261109/arch-a-unit-assembled.log",
-      "logSha256": "42a5c5b54f8cf21d82fba301d06bd868f4252a8a03b2ee730ee4e5c876c749fb",
-      "resultReport": "/workspace/scratch/dx-architecture-20261109/arch-a-unit-assembled.vitest.json",
-      "context": "Canonical configs and owned-command; dedicated marked loopback TEST PG16.15, Node22.22.2/npm10.9.9. Node CPUs2/3; existing PG CPUs0/1 and 2GiB boundary. Hardlinked same-lock dependencies from PERF12 tree-identical to cd36f84; not CI hardware or onsite equivalence. No production data, private live OSS or deployment. PG acknowledgement fault is injected after actual COMMIT on an isolated schema.",
+      "log": "/workspace/scratch/dx-architecture-20261109/arch-b-unit-integrated-a.log",
+      "logSha256": "cb39e9b5cfe659f3187befe6c00618b866cd2cf77f5617437c48f2d27c7a10cb",
+      "resultReport": "/workspace/scratch/dx-architecture-20261109/arch-b-unit-integrated-a.vitest.json",
+      "context": "Canonical configs and owned-command; dedicated marked loopback TEST PG16.15, Node22.22.2/npm10.9.9. Node CPUs2/3; existing PG CPUs0/1 and 2GiB boundary. Hardlinked same-lock dependencies from PERF12 tree-identical to cd36f84; not CI hardware or onsite equivalence. No production data, private live OSS or deployment. Controlled directory faults after native commits and native role changes are confined to marked isolated TEST schemas; actual AuthService, PostgresAuthStore and buildApp are used.",
       "kind": "tests",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "66672c8cb3a2dcc5784c13103133b1d2caae3d6a7d61795af72db29b8c2892d5"
+          "sha256": "a39acef811c1e72694977fdcbe3cfd47bd504d389f57fc86b5fa28ec4794d70e"
         }
       ]
     },
     {
       "id": "postgres",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/digital-budget-shared-postgres.test.ts tests/integration/attachment-image-preview-postgres.test.ts --config vitest.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-architecture-20261109/arch-a-postgres-assembled.vitest.json",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/request-identity-postgres.test.ts tests/integration/auth-session-revocation-postgres.test.ts tests/integration/attachment-image-preview-postgres.test.ts --config vitest.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-architecture-20261109/arch-b-postgres-integrated-a.vitest.json",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "48237d45a2a735d4cc75258ce4b31ed57e03915340f01a4cae6e49808318eba8",
+      "sourceFingerprint": "c18869cea7591b37980cd505bac9a04b807d3a0b1cd0977cfc98ffcbd8231d9d",
       "inputPaths": [
         "apps",
         "packages",
@@ -168,25 +218,25 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "e2d8b2e1629312a43c33c390ea767ec17e689c35bb9bc8b7c055ba102e2a5540",
+      "inputFingerprint": "f5a7b7d878827c5a2270107104d7ffc7c9bce6c3f4041d84f67189d2fbc50f81",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "cd36f84e9188ab64289e445a26892bfa32f7ab5c",
-      "startedAt": "2026-11-08T20:39:35.614Z",
-      "endedAt": "2026-11-08T20:39:45.319Z",
-      "passed": 12,
+      "testedHead": "c75fda81491d7f1e640bf80e1f493ba3893a9ebf",
+      "startedAt": "2026-11-08T21:08:37.917Z",
+      "endedAt": "2026-11-08T21:08:54.870Z",
+      "passed": 16,
       "failed": 0,
       "skipped": 0,
       "planError": null,
-      "log": "/workspace/scratch/dx-architecture-20261109/arch-a-postgres-assembled.log",
-      "logSha256": "29fd432fea331dddcc0b5b17af241dd81da73ce1903a5057595bd5caf86ca62d",
-      "resultReport": "/workspace/scratch/dx-architecture-20261109/arch-a-postgres-assembled.vitest.json",
-      "context": "Canonical configs and owned-command; dedicated marked loopback TEST PG16.15, Node22.22.2/npm10.9.9. Node CPUs2/3; existing PG CPUs0/1 and 2GiB boundary. Hardlinked same-lock dependencies from PERF12 tree-identical to cd36f84; not CI hardware or onsite equivalence. No production data, private live OSS or deployment. PG acknowledgement fault is injected after actual COMMIT on an isolated schema.",
+      "log": "/workspace/scratch/dx-architecture-20261109/arch-b-postgres-integrated-a.log",
+      "logSha256": "748d9ff1db863ded6b39a7e2799e8fe798b9b964803044982aea877db8ead67a",
+      "resultReport": "/workspace/scratch/dx-architecture-20261109/arch-b-postgres-integrated-a.vitest.json",
+      "context": "Canonical configs and owned-command; dedicated marked loopback TEST PG16.15, Node22.22.2/npm10.9.9. Node CPUs2/3; existing PG CPUs0/1 and 2GiB boundary. Hardlinked same-lock dependencies from PERF12 tree-identical to cd36f84; not CI hardware or onsite equivalence. No production data, private live OSS or deployment. Controlled directory faults after native commits and native role changes are confined to marked isolated TEST schemas; actual AuthService, PostgresAuthStore and buildApp are used.",
       "kind": "tests",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "28a01776de7d404134eadfd21cc0bda69a4ea24fa0bcf53146963c4c77069a76"
+          "sha256": "d050eaab8b1075ca44b9857381592719c58786d50979957748cc81d86ef0364a"
         }
       ]
     },
@@ -196,7 +246,7 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "48237d45a2a735d4cc75258ce4b31ed57e03915340f01a4cae6e49808318eba8",
+      "sourceFingerprint": "c18869cea7591b37980cd505bac9a04b807d3a0b1cd0977cfc98ffcbd8231d9d",
       "inputPaths": [
         "apps",
         "packages",
@@ -211,26 +261,26 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "e2d8b2e1629312a43c33c390ea767ec17e689c35bb9bc8b7c055ba102e2a5540",
+      "inputFingerprint": "f5a7b7d878827c5a2270107104d7ffc7c9bce6c3f4041d84f67189d2fbc50f81",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "cd36f84e9188ab64289e445a26892bfa32f7ab5c",
-      "startedAt": "2026-11-08T20:39:45.400Z",
-      "endedAt": "2026-11-08T20:39:55.230Z",
+      "testedHead": "c75fda81491d7f1e640bf80e1f493ba3893a9ebf",
+      "startedAt": "2026-11-08T21:08:54.952Z",
+      "endedAt": "2026-11-08T21:09:05.177Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-architecture-20261109/arch-a-typesapi-assembled.log",
+      "log": "/workspace/scratch/dx-architecture-20261109/arch-b-typesapi-integrated-a.log",
       "logSha256": "d81733d2d3443600c8f5c4e1f5774d8d050a1c5a8ef34bd5a659eb50ebd68f00",
       "resultReport": null,
-      "context": "Canonical configs and owned-command; dedicated marked loopback TEST PG16.15, Node22.22.2/npm10.9.9. Node CPUs2/3; existing PG CPUs0/1 and 2GiB boundary. Hardlinked same-lock dependencies from PERF12 tree-identical to cd36f84; not CI hardware or onsite equivalence. No production data, private live OSS or deployment. PG acknowledgement fault is injected after actual COMMIT on an isolated schema.",
+      "context": "Canonical configs and owned-command; dedicated marked loopback TEST PG16.15, Node22.22.2/npm10.9.9. Node CPUs2/3; existing PG CPUs0/1 and 2GiB boundary. Hardlinked same-lock dependencies from PERF12 tree-identical to cd36f84; not CI hardware or onsite equivalence. No production data, private live OSS or deployment. Controlled directory faults after native commits and native role changes are confined to marked isolated TEST schemas; actual AuthService, PostgresAuthStore and buildApp are used.",
       "kind": "command"
     },
     {
       "id": "lint",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/eslint/bin/eslint.js apps/api/src/tools/attachments.ts tests/unit/budget-image-copy-safety.test.ts tests/integration/digital-budget-shared-postgres.test.ts --max-warnings=0",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/eslint/bin/eslint.js apps/api/src/auth/service.ts apps/api/src/auth/request-identity-context.ts apps/api/src/access/member-module-http.ts apps/api/src/access/pmc-readonly-http.ts apps/api/src/access/routes.ts apps/api/src/sourcing/sourcing-routes.ts apps/api/src/app.ts apps/api/src/server.ts tests/integration/auth.test.ts tests/integration/request-identity-postgres.test.ts --max-warnings=0",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "48237d45a2a735d4cc75258ce4b31ed57e03915340f01a4cae6e49808318eba8",
+      "sourceFingerprint": "c18869cea7591b37980cd505bac9a04b807d3a0b1cd0977cfc98ffcbd8231d9d",
       "inputPaths": [
         "apps",
         "packages",
@@ -245,17 +295,17 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "e2d8b2e1629312a43c33c390ea767ec17e689c35bb9bc8b7c055ba102e2a5540",
+      "inputFingerprint": "f5a7b7d878827c5a2270107104d7ffc7c9bce6c3f4041d84f67189d2fbc50f81",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "cd36f84e9188ab64289e445a26892bfa32f7ab5c",
-      "startedAt": "2026-11-08T20:39:55.314Z",
-      "endedAt": "2026-11-08T20:39:56.283Z",
+      "testedHead": "c75fda81491d7f1e640bf80e1f493ba3893a9ebf",
+      "startedAt": "2026-11-08T21:09:05.264Z",
+      "endedAt": "2026-11-08T21:09:06.529Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-architecture-20261109/arch-a-lint-assembled.log",
+      "log": "/workspace/scratch/dx-architecture-20261109/arch-b-lint-integrated-a.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "resultReport": null,
-      "context": "Canonical configs and owned-command; dedicated marked loopback TEST PG16.15, Node22.22.2/npm10.9.9. Node CPUs2/3; existing PG CPUs0/1 and 2GiB boundary. Hardlinked same-lock dependencies from PERF12 tree-identical to cd36f84; not CI hardware or onsite equivalence. No production data, private live OSS or deployment. PG acknowledgement fault is injected after actual COMMIT on an isolated schema.",
+      "context": "Canonical configs and owned-command; dedicated marked loopback TEST PG16.15, Node22.22.2/npm10.9.9. Node CPUs2/3; existing PG CPUs0/1 and 2GiB boundary. Hardlinked same-lock dependencies from PERF12 tree-identical to cd36f84; not CI hardware or onsite equivalence. No production data, private live OSS or deployment. Controlled directory faults after native commits and native role changes are confined to marked isolated TEST schemas; actual AuthService, PostgresAuthStore and buildApp are used.",
       "kind": "command"
     },
     {
@@ -264,7 +314,7 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "48237d45a2a735d4cc75258ce4b31ed57e03915340f01a4cae6e49808318eba8",
+      "sourceFingerprint": "c18869cea7591b37980cd505bac9a04b807d3a0b1cd0977cfc98ffcbd8231d9d",
       "inputPaths": [
         "apps",
         "packages",
@@ -279,17 +329,17 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "e2d8b2e1629312a43c33c390ea767ec17e689c35bb9bc8b7c055ba102e2a5540",
+      "inputFingerprint": "f5a7b7d878827c5a2270107104d7ffc7c9bce6c3f4041d84f67189d2fbc50f81",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "cd36f84e9188ab64289e445a26892bfa32f7ab5c",
-      "startedAt": "2026-11-08T20:39:56.370Z",
-      "endedAt": "2026-11-08T20:40:04.948Z",
+      "testedHead": "c75fda81491d7f1e640bf80e1f493ba3893a9ebf",
+      "startedAt": "2026-11-08T21:09:06.612Z",
+      "endedAt": "2026-11-08T21:09:14.808Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-architecture-20261109/arch-a-preflight-assembled.log",
-      "logSha256": "f8b721aa9c19d9a9a1291d5d7b26a266037a1799d6d7022c448a85004ce967d1",
+      "log": "/workspace/scratch/dx-architecture-20261109/arch-b-preflight-integrated-a.log",
+      "logSha256": "c2b128367ccc6d881eaa9d874459aff590df488dfb220ee8a8d4ffde04e9973d",
       "resultReport": null,
-      "context": "Canonical configs and owned-command; dedicated marked loopback TEST PG16.15, Node22.22.2/npm10.9.9. Node CPUs2/3; existing PG CPUs0/1 and 2GiB boundary. Hardlinked same-lock dependencies from PERF12 tree-identical to cd36f84; not CI hardware or onsite equivalence. No production data, private live OSS or deployment. PG acknowledgement fault is injected after actual COMMIT on an isolated schema.",
+      "context": "Canonical configs and owned-command; dedicated marked loopback TEST PG16.15, Node22.22.2/npm10.9.9. Node CPUs2/3; existing PG CPUs0/1 and 2GiB boundary. Hardlinked same-lock dependencies from PERF12 tree-identical to cd36f84; not CI hardware or onsite equivalence. No production data, private live OSS or deployment. Controlled directory faults after native commits and native role changes are confined to marked isolated TEST schemas; actual AuthService, PostgresAuthStore and buildApp are used.",
       "kind": "command"
     },
     {
@@ -298,7 +348,7 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "48237d45a2a735d4cc75258ce4b31ed57e03915340f01a4cae6e49808318eba8",
+      "sourceFingerprint": "c18869cea7591b37980cd505bac9a04b807d3a0b1cd0977cfc98ffcbd8231d9d",
       "inputPaths": [
         "apps",
         "packages",
@@ -313,18 +363,40 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "e2d8b2e1629312a43c33c390ea767ec17e689c35bb9bc8b7c055ba102e2a5540",
+      "inputFingerprint": "f5a7b7d878827c5a2270107104d7ffc7c9bce6c3f4041d84f67189d2fbc50f81",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "cd36f84e9188ab64289e445a26892bfa32f7ab5c",
-      "startedAt": "2026-11-08T20:40:05.032Z",
-      "endedAt": "2026-11-08T20:40:05.882Z",
+      "testedHead": "c75fda81491d7f1e640bf80e1f493ba3893a9ebf",
+      "startedAt": "2026-11-08T21:09:14.897Z",
+      "endedAt": "2026-11-08T21:09:15.811Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-architecture-20261109/arch-a-secret-assembled.log",
+      "log": "/workspace/scratch/dx-architecture-20261109/arch-b-secret-integrated-a.log",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda",
       "resultReport": null,
-      "context": "Canonical configs and owned-command; dedicated marked loopback TEST PG16.15, Node22.22.2/npm10.9.9. Node CPUs2/3; existing PG CPUs0/1 and 2GiB boundary. Hardlinked same-lock dependencies from PERF12 tree-identical to cd36f84; not CI hardware or onsite equivalence. No production data, private live OSS or deployment. PG acknowledgement fault is injected after actual COMMIT on an isolated schema.",
+      "context": "Canonical configs and owned-command; dedicated marked loopback TEST PG16.15, Node22.22.2/npm10.9.9. Node CPUs2/3; existing PG CPUs0/1 and 2GiB boundary. Hardlinked same-lock dependencies from PERF12 tree-identical to cd36f84; not CI hardware or onsite equivalence. No production data, private live OSS or deployment. Controlled directory faults after native commits and native role changes are confined to marked isolated TEST schemas; actual AuthService, PostgresAuthStore and buildApp are used.",
       "kind": "command"
+    },
+    {
+      "id": "docs",
+      "kind": "command",
+      "command": "git diff --cached --check -- AGENTS.md docs/architecture/business-module-boundaries.md",
+      "status": "passed",
+      "exitCode": 0,
+      "allExited": true,
+      "sourceFingerprint": "c18869cea7591b37980cd505bac9a04b807d3a0b1cd0977cfc98ffcbd8231d9d",
+      "inputPaths": [
+        "AGENTS.md",
+        "docs/architecture/business-module-boundaries.md"
+      ],
+      "inputFingerprint": "57064f33d11c390f2128e541eee0cbde8231fd78244493db8101732c0efb4755",
+      "inputsUnchanged": true,
+      "sourceUnchanged": true,
+      "testedHead": "c75fda81491d7f1e640bf80e1f493ba3893a9ebf",
+      "startedAt": "2026-11-08T21:12:46.232Z",
+      "endedAt": "2026-11-08T21:12:46.282Z",
+      "log": "/workspace/scratch/dx-architecture-20261109/arch-b-docs-integrated-a.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "context": "Scoped staged documentation whitespace check after actual responsibility review. Exact AGENTS link and single module document are input-bound; no business tests repeated for evidence format."
     }
   ]
 }

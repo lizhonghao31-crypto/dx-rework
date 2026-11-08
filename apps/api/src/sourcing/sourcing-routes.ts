@@ -38,7 +38,7 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 
 import { businessActor, isRootUser } from "../access/business-authority.js";
 import type { RootAuthority } from "../access/root-authority.js";
-import type { AuthUser } from "../auth/service.js";
+import { authenticateForRequest, type RequestAuthenticator } from "../auth/request-identity-context.js";
 import { ApplicationError } from "../platform/errors.js";
 import type { SourcingContractService } from "./sourcing-contract-service.js";
 import type { SourcingContractReturnService } from "./sourcing-contract-return-service.js";
@@ -71,7 +71,7 @@ const validationError = (message: string): never => {
 };
 
 export type SourcingHttpDependencies = Readonly<{
-  authenticate(value: string | undefined): Promise<AuthUser>;
+  authenticate: RequestAuthenticator;
   service: SourcingService;
   contracts?: SourcingContractService;
   contractReturns?: SourcingContractReturnService;
@@ -90,7 +90,7 @@ export function registerSourcingRoutes(
   if (dependencies.reporting) registerProductionReportingRoutes(app, { authenticate: dependencies.authenticate, root: dependencies.root, service: dependencies.reporting });
   if (dependencies.dashboard) registerProductionDashboardRoutes(app, { authenticate: dependencies.authenticate, root: dependencies.root, service: dependencies.dashboard });
   const readActor = async (request: FastifyRequest) => {
-    const user = await dependencies.authenticate(token(request));
+    const user = await authenticateForRequest(dependencies.authenticate, token(request), request, "handler");
     const root = await isRootUser(dependencies.root, user.id);
     if (!root && !user.capabilities.includes("sourcing:view")) {
       throw new ApplicationError("FORBIDDEN", "无权查看报价选厂数据", 403);
@@ -117,7 +117,7 @@ export function registerSourcingRoutes(
       | "sourcing:finance:reconcile"
       | "sourcing:exception:verify",
   ) => {
-    const user = await dependencies.authenticate(token(request));
+    const user = await authenticateForRequest(dependencies.authenticate, token(request), request, "handler");
     const root = await isRootUser(dependencies.root, user.id);
     const allowed = user.businessRoles?.includes(role) === true
       && user.capabilities.includes(capability);
@@ -134,7 +134,7 @@ export function registerSourcingRoutes(
   };
 
   const supplementalImageActor = async (request: FastifyRequest) => {
-    const user = await dependencies.authenticate(token(request));
+    const user = await authenticateForRequest(dependencies.authenticate, token(request), request, "handler");
     const root = await isRootUser(dependencies.root, user.id);
     if (!user.businessRoles?.length && !root) {
       throw new ApplicationError("NO_BUSINESS_ROLE", "未分配业务角色", 403);
@@ -156,7 +156,7 @@ export function registerSourcingRoutes(
   };
 
   const rootBudgetCorrectionActor = async (request: FastifyRequest) => {
-    const user = await dependencies.authenticate(token(request));
+    const user = await authenticateForRequest(dependencies.authenticate, token(request), request, "handler");
     const root = await isRootUser(dependencies.root, user.id);
     if (!root) {
       throw new ApplicationError("FORBIDDEN", "只有超级用户可以更正预算价", 403);
@@ -170,7 +170,7 @@ export function registerSourcingRoutes(
   };
 
   const rootDeleteActor = async (request: FastifyRequest) => {
-    const user = await dependencies.authenticate(token(request));
+    const user = await authenticateForRequest(dependencies.authenticate, token(request), request, "handler");
     const root = await isRootUser(dependencies.root, user.id);
     if (!root) {
       throw new ApplicationError("FORBIDDEN", "只有超级用户可以删除报价选厂订单", 403);
@@ -218,7 +218,7 @@ export function registerSourcingRoutes(
   }
 
   app.post<{ Params: { sourcingCaseId: string } }>("/sourcing/cases/:sourcingCaseId/styles", async (request, reply) => {
-    const user = await dependencies.authenticate(token(request));
+    const user = await authenticateForRequest(dependencies.authenticate, token(request), request, "handler");
     const root = await isRootUser(dependencies.root,user.id);
     const manager = user.businessRoles?.includes("production_management") && user.capabilities.includes("sourcing:decision:record");
     if (!root && !manager && !(user.businessRoles?.includes("order_merchandiser") && user.capabilities.includes("sourcing:inquiry:create"))) {
@@ -457,7 +457,7 @@ export function registerSourcingRoutes(
 
   if (dependencies.contracts) {
     const templateActor = async (request: FastifyRequest) => {
-      const user = await dependencies.authenticate(token(request));
+      const user = await authenticateForRequest(dependencies.authenticate, token(request), request, "handler");
       if (!await isRootUser(dependencies.root,user.id)) throw new ApplicationError("FORBIDDEN","仅Root可设置合同模板",403);
       return businessActor(dependencies.root,user,request.id,"sourcing:contract:record");
     };
@@ -485,7 +485,7 @@ export function registerSourcingRoutes(
         .send(await dependencies.contracts!.management.previewTemplate(actor,parsed.data!));
     });
     const contentActor = async (request:FastifyRequest) => {
-      const user = await dependencies.authenticate(token(request));
+      const user = await authenticateForRequest(dependencies.authenticate, token(request), request, "handler");
       if (!await isRootUser(dependencies.root,user.id)) throw new ApplicationError("FORBIDDEN","仅Root可修改合同内容",403);
       return businessActor(dependencies.root,user,request.id,"sourcing:contract:record");
     };

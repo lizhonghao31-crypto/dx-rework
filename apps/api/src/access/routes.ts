@@ -36,6 +36,7 @@ import {
 import type { FastifyInstance, FastifyRequest } from "fastify";
 
 import type { AuthUser } from "../auth/service.js";
+import { authenticateForRequest, type RequestAuthenticator } from "../auth/request-identity-context.js";
 import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
 import { ROOT_ACTOR_ROLE } from "./business-authority.js";
@@ -74,14 +75,14 @@ type AssignmentCorrectionService = Readonly<{
 
 export type AccessHttpDependencies = Readonly<{
   auxiliaryCatalog?:AuxiliaryCatalogService;
-  authenticate(token: string | undefined): Promise<AuthUser>;
+  authenticate: RequestAuthenticator;
   service: AccessMasterDataService & Partial<AssignmentCorrectionService>;
   root: RootAuthority;
 }>;
 
 export function registerAccessRoutes(app: FastifyInstance, dependencies: AccessHttpDependencies): void {
   const authenticated = (request: FastifyRequest): Promise<AuthUser> =>
-    dependencies.authenticate(cookieToken(request));
+    authenticateForRequest(dependencies.authenticate, cookieToken(request), request, "handler");
 
   const actor = async (request: FastifyRequest, capability: string): Promise<TrustedActorContext> => {
     const user = await authenticated(request);
