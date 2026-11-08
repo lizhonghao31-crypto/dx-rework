@@ -431,7 +431,7 @@ export function Shell({
     || (!isOwner && hasCapability("master_data:manage"));
 
   const cockpitSettingsNavigation: NavigationEntry[] = currentUser && canAccessDigitalProduction(currentUser) && (isRoot || hasRole("owner_group") || hasRole("production_management") || hasRole("pmc")) ? [{name:"生产管理设置",description:"客户跟单与节点时效",href:"/ui/digital-cockpit?workspace=settings",activeKey:"digital-settings"}] : [];
-  const cockpitNavigation:NavigationEntry[]=[...cockpitSettingsNavigation,...(currentUser&&canAccessDigitalProduction(currentUser)?[isRoot||hasCapability('report:view')?{name:'生产数据沙盘',description:'当前数量、期间与人员分析',href:'/ui/digital-analysis?view=production',activeKey:'digital-analysis'}:{name:'板房数据沙盘',description:'原授权开发与板房分析',href:'/ui/digital-analysis',activeKey:'digital-analysis'}]:[])];
+  const cockpitNavigation:NavigationEntry[]=[...cockpitSettingsNavigation,...(currentUser&&canAccessDigitalProduction(currentUser)?[{name:'交付点阵图',description:'按客户出货交期查看PO与件数',href:'/ui/digital-cockpit?workspace=delivery',activeKey:'digital-delivery'},isRoot||hasCapability('report:view')?{name:'生产数据沙盘',description:'当前数量、期间与人员分析',href:'/ui/digital-analysis?view=production',activeKey:'digital-analysis'}:{name:'板房数据沙盘',description:'原授权开发与板房分析',href:'/ui/digital-analysis',activeKey:'digital-analysis'}]:[])];
   const globalNavigation: NavigationEntry[] = [];
   if (todoAccess) {
     globalNavigation.push({

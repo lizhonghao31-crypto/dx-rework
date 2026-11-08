@@ -1,4 +1,5 @@
 import { JOURNEY_NODES,JourneyFilterSchema,JourneyReturnContextSchema, journeyReturnUrl, type JourneyNode, type JourneyRecord, type JourneyState, type OrderJourney } from "@dx-rework/contracts/digital-production-journey";
+import {deliveryReturnPath} from './delivery-calendar-model.js';
 
 export type CockpitContext = ReturnType<typeof JourneyReturnContextSchema.parse>;
 export const journeyStateLabels: Record<JourneyState, string> = { uncreated: "未启动", pending: "待前置", active: "进行中", blocked: "受阻", completed: "已完成", cancelled: "已取消", not_applicable: "不适用", unavailable: "无可见事实", inherited: "沿用前轮" };
@@ -23,14 +24,18 @@ export function cockpitReturnPath(search: string): string | null {
   const workspace = params.get("workspace");
   if (workspace !== null && !["preparation", "factory"].includes(workspace)) return null;
   params.delete("workspace");
+  const calendarValue=params.get('deliveryReturn'),calendarReturn=deliveryReturnPath(calendarValue);
+  if(calendarValue!==null&&!calendarReturn)return null;
+  params.delete('deliveryReturn');
   const parsed = JourneyReturnContextSchema.safeParse(Object.fromEntries(params));
-  return parsed.success ? journeyReturnUrl(parsed.data) + (workspace ? `&workspace=${workspace}` : "") : null;
+  return parsed.success ? journeyReturnUrl(parsed.data) + (workspace ? `&workspace=${workspace}` : "")+(calendarReturn?'&'+new URLSearchParams({deliveryReturn:calendarReturn}):'') : null;
 }
 export function journeyRecordHref(url: string, context: CockpitContext, mode?: JourneyRecord["mode"]): string {
   if (!url.startsWith("/ui/") || url.includes("\\")) return "";
   const parsed = new URL(url, "https://local.invalid");
   if (mode && parsed.pathname === "/ui/digital-production" && parsed.searchParams.has("task")) parsed.searchParams.set("taskView", mode);
-  parsed.searchParams.set("returnTo", journeyReturnUrl(context));
+  const calendarReturn=typeof window==='undefined'?null:deliveryReturnPath(new URLSearchParams(window.location.search).get('deliveryReturn'),import.meta.env.BASE_URL);
+  parsed.searchParams.set("returnTo", journeyReturnUrl(context)+(calendarReturn?'&'+new URLSearchParams({deliveryReturn:calendarReturn}):''));
   return parsed.pathname + parsed.search + parsed.hash;
 }
 export function journeyTime(value: string | null, precision: JourneyNode["expectedPrecision"] = "instant", missing = "未登记"): string {
