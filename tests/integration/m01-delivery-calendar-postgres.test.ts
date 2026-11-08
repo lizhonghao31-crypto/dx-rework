@@ -66,33 +66,40 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const denied=await app.inject({url:path('day',{date:due,snapshotId:first.snapshotId}),headers:{cookie}});expect([403,404,409]).toContain(denied.statusCode);expect(denied.body).not.toContain(made.productionOrderId);expect((await get<DeliveryDayResponse>(cookie,'day',{date:due})).total).toBe(0);
  });
  it('bounds a small requested month before the5000 cap and retains undated PO despite large unrelated years',async()=>{
-  const made=await make('DATE-RANGE',f.people.merchandiser!.actorId,1,'2097-02-15'),line=made.lines[0]!.lineId;
-  // Synthetic volume only in this owned TEST schema, with the original date
-  // audit and deferred effective-fact guards active. Not5011 command journeys.
+  const started=performance.now(),tag='DATE-RANGE-'+randomUUID(),made=await make(tag,f.people.merchandiser!.actorId,1,'2097-02-15');
+  // Same5010 unrelated-year PO and one undated PO; retain mixed years in the
+  // primary mother. Bound each synthetic creation audit to about500 lines so
+  // the original per-line audit guard does not repeatedly decode a5012-line
+  // JSON payload. All original immediate and deferred guards stay active.
+  const groups=[{order:made,count:501,primary:true}];
+  for(let index=0;index<9;index++)groups.push({order:await make(tag,f.people.merchandiser!.actorId,1,'2096-01-15'),count:500,primary:false});
   const client=await f.db.connect();try{
    await client.query('BEGIN');
-   const extra=(await client.query(`INSERT INTO digital_production_po_lines
-    SELECT (jsonb_populate_record(NULL::digital_production_po_lines,to_jsonb(p)||jsonb_build_object(
-     'line_id',gen_random_uuid(),'position',g+1,'po_number','TEST-RANGE-'||g,'formal_style_no','TEST-RANGE-'||g,'color','TEST range '||g,
-     'customer_warehouse_arrival_date',NULL,'factory_delivery_date',NULL,'customer_date_version',0,'factory_date_version',0,'customer_date_source',NULL,'factory_date_source',NULL))).*
-    FROM digital_production_po_lines p CROSS JOIN generate_series(1,5011) g WHERE p.line_id=$1 RETURNING line_id`,[line])).rows;
-   await client.query("INSERT INTO digital_production_po_sizes(line_id,size,quantity) SELECT unnest($1::uuid[]),'M',100",[extra.map(row=>row.line_id)]);
-   const audit=randomUUID(),lines=[{customerWarehouseArrivalDate:'2097-02-15'},...Array.from({length:5010},()=>({customerWarehouseArrivalDate:'2096-01-15'})),{}];
-   await client.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1,$2,$3,'digital_order_created','digital_production',$4,$5)",[audit,f.root.requestId,f.root.actorId,made.productionOrderId,JSON.stringify({lines,testFixture:'isolated calendar read volume, not business command history'})]);
-   await client.query(`INSERT INTO digital_po_date_changes(change_id,production_order_id,line_id,date_kind,old_date,new_date,version,source,approval_event_id,changed_by,request_id,reason)
-    SELECT gen_random_uuid(),production_order_id,line_id,'customer',NULL,'2096-01-15',1,'initial_po',$2,$3,$4,'TEST isolated volume date facts'
-    FROM digital_production_po_lines WHERE production_order_id=$1 AND position BETWEEN 2 AND 5011`,[made.productionOrderId,audit,f.root.actorId,f.root.requestId]);
-   await client.query("UPDATE digital_production_po_lines SET customer_warehouse_arrival_date='2096-01-15',customer_date_version=1,customer_date_source='initial_po' WHERE production_order_id=$1 AND position BETWEEN 2 AND 5011",[made.productionOrderId]);
+   for(const {order,count,primary}of groups){
+    const extra=(await client.query(`INSERT INTO digital_production_po_lines
+     SELECT (jsonb_populate_record(NULL::digital_production_po_lines,to_jsonb(p)||jsonb_build_object(
+      'line_id',gen_random_uuid(),'position',g+1,'po_number','TEST-RANGE-'||g,'formal_style_no','TEST-RANGE-'||g,'color','TEST range '||g,
+      'customer_warehouse_arrival_date',NULL,'factory_delivery_date',NULL,'customer_date_version',0,'factory_date_version',0,'customer_date_source',NULL,'factory_date_source',NULL))).*
+     FROM digital_production_po_lines p CROSS JOIN generate_series(1,$2::int) g WHERE p.line_id=$1 RETURNING line_id`,[order.lines[0]!.lineId,count+(primary?1:0)])).rows;
+    await client.query("INSERT INTO digital_production_po_sizes(line_id,size,quantity) SELECT unnest($1::uuid[]),'M',100",[extra.map(row=>row.line_id)]);
+    const audit=randomUUID(),lines=[{customerWarehouseArrivalDate:primary?'2097-02-15':'2096-01-15'},...Array.from({length:count},()=>({customerWarehouseArrivalDate:'2096-01-15'})),...primary?[{}]:[]];
+    await client.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1,$2,$3,'digital_order_created','digital_production',$4,$5)",[audit,f.root.requestId,f.root.actorId,order.productionOrderId,JSON.stringify({lines,testFixture:'isolated calendar read volume, not business command history'})]);
+    await client.query(`INSERT INTO digital_po_date_changes(change_id,production_order_id,line_id,date_kind,old_date,new_date,version,source,approval_event_id,changed_by,request_id,reason)
+     SELECT gen_random_uuid(),production_order_id,line_id,'customer',NULL,'2096-01-15',1,'initial_po',$2,$3,$4,'TEST isolated volume date facts'
+     FROM digital_production_po_lines WHERE production_order_id=$1 AND position BETWEEN 2 AND $5`,[order.productionOrderId,audit,f.root.actorId,f.root.requestId,count+1]);
+    await client.query("UPDATE digital_production_po_lines SET customer_warehouse_arrival_date='2096-01-15',customer_date_version=1,customer_date_source='initial_po' WHERE production_order_id=$1 AND position BETWEEN 2 AND $2",[order.productionOrderId,count+1]);
+   }
    await client.query('COMMIT');
   }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
-  const cookie=await login(f.root.actorId),filters={search:made.designStyleNo},month=await get<DeliveryMonthResponse>(cookie,'month',{...filters,month:'2097-02'});
+  const prepared=performance.now();console.info('TEST_CALENDAR_VOLUME fixtureMs='+Math.round(prepared-started));
+  const cookie=await login(f.root.actorId),filters={search:'TEST-CALENDAR-'+tag},month=await get<DeliveryMonthResponse>(cookie,'month',{...filters,month:'2097-02'});
   expect(month.monthSummary).toMatchObject({poCount:1,orderedQty:100});expect(month.missingSummary).toMatchObject({poCount:2,missingDuePoCount:1,orderedQty:200});
   const composite=await get<DeliveryMonthResponse>(cookie,'month',{...filters,month:'2097-02',selectedDate:'2097-02-15'});expect(composite.selectedDay!.total).toBe(1);expect(composite.selectedDay!.daySummary).toEqual(composite.days.find(day=>day.date==='2097-02-15')!.summary);expect(composite.relatedQuantityUnknownPoCount).toBe(5010);
   const missing=await get<DeliveryMissingResponse>(cookie,'missing',{...filters,month:'2097-02',snapshotId:month.snapshotId});expect(missing.total).toBe(2);expect(missing.items.filter(row=>row.effectiveDueDate===null)).toHaveLength(1);expect(missing.items.every(row=>row.effectiveDueDate===null||row.effectiveDueDate==='2097-02-15')).toBe(true);
   expect(month.undatedSummary).toMatchObject({poCount:1,orderedQty:100});const undated=await get<DeliveryMissingResponse>(cookie,'missing',{...filters,month:'2097-02',snapshotId:month.snapshotId,kind:'undated'}),unknown=await get<DeliveryMissingResponse>(cookie,'missing',{...filters,month:'2097-02',snapshotId:month.snapshotId,kind:'quantity'});expect(undated.kind).toBe('undated');expect(undated.total).toBe(1);expect(undated.items[0]!.effectiveDueDate).toBeNull();expect(unknown.total).toBe(2);expect(unknown.items.every(row=>row.pendingQty===null)).toBe(true);
   expect((await app.inject({url:path('year',{...filters,year:'2097',snapshotId:month.snapshotId}),headers:{cookie}})).statusCode).toBe(409);
   const year=await get<DeliveryYearResponse>(cookie,'year',{...filters,year:'2097'}),sameMonth=await get<DeliveryMonthResponse>(cookie,'month',{...filters,month:'2097-02',snapshotId:year.snapshotId});expect(year.yearSummary).toEqual(month.monthSummary);expect(sameMonth.monthSummary).toEqual(month.monthSummary);expect(sameMonth.asOf).toBe(year.asOf);
-  const tooLarge=await app.inject({url:path('year',{...filters,year:'2096'}),headers:{cookie}});expect(tooLarge.statusCode).toBe(409);expect(tooLarge.json().error.code).toBe('DELIVERY_RANGE_TOO_LARGE');
+  const tooLarge=await app.inject({url:path('year',{...filters,year:'2096'}),headers:{cookie}});expect(tooLarge.statusCode).toBe(409);expect(tooLarge.json().error.code).toBe('DELIVERY_RANGE_TOO_LARGE');console.info('TEST_CALENDAR_VOLUME queryChecksMs='+Math.round(performance.now()-prepared));
  });
  it('reads the native cumulative packing correction for each PO without changing business facts, while explicit older queries keep their own asOf',async()=>{
   const ready=await f.bulkReady('无',undefined,2,f.sourcing,{quantity:100,accessory:true}),cuts=(await f.db.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1 ORDER BY sourcing_line_position',[ready.caseId])).rows,cutter={...f.people['cutting-worker']!,authorizationCapability:'cutting:records:create',authorizationCapabilities:['cutting:records:create']};expect(cuts).toHaveLength(2);
