@@ -24,6 +24,18 @@ CREATE INDEX journey_fact_task_predecessor ON digital_production_task_dependenci
 CREATE INDEX journey_fact_task_assignee ON digital_production_task_access(assignee_id,task_id) WHERE assignee_id IS NOT NULL;
 CREATE INDEX journey_fact_inherited_attachment ON digital_development_inherited_files(attachment_id,source_id);
 
+-- Generic audit/todo IDs are text (for example owner-policy key0915), not
+-- necessarily UUIDs. Validation lives inside this function: a WHERE predicate
+-- alone cannot protect a cast that PostgreSQL may fold while planning.
+CREATE FUNCTION digital_journey_uuid(value text) RETURNS uuid LANGUAGE plpgsql IMMUTABLE STRICT AS $fn$
+BEGIN
+ IF value ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$' THEN
+  RETURN value::uuid;
+ END IF;
+ RETURN NULL;
+END;
+$fn$;
+
 -- Only native ID relationships; no names, style-number guesses, role snapshots
 -- or user-authorized DTOs. UNION deduplicates the bounded native relationship graph.
 CREATE FUNCTION digital_journey_affected(kind text, id uuid)
@@ -59,6 +71,13 @@ CREATE FUNCTION digital_journey_register_change() RETURNS trigger LANGUAGE plpgs
 DECLARE item jsonb; native record; affected record;
 BEGIN
  IF TG_OP='UPDATE' AND OLD IS NOT DISTINCT FROM NEW THEN RETURN NEW; END IF;
+ -- Only eligibility affects shared blocker facts. Login heartbeat, names and
+ -- audit metadata must not schedule every order assigned to the same person.
+ IF TG_OP='UPDATE' AND (
+  (TG_TABLE_NAME='app_users' AND ROW(to_jsonb(OLD)->'enabled',to_jsonb(OLD)->'manual_access_disabled') IS NOT DISTINCT FROM ROW(to_jsonb(NEW)->'enabled',to_jsonb(NEW)->'manual_access_disabled')) OR
+  (TG_TABLE_NAME='identity_mappings' AND ROW(to_jsonb(OLD)->'user_id',to_jsonb(OLD)->'active',to_jsonb(OLD)->'employed') IS NOT DISTINCT FROM ROW(to_jsonb(NEW)->'user_id',to_jsonb(NEW)->'active',to_jsonb(NEW)->'employed')) OR
+  (TG_TABLE_NAME='user_role_assignments' AND ROW(to_jsonb(OLD)->'user_id',to_jsonb(OLD)->'role_code',to_jsonb(OLD)->'revoked_at') IS NOT DISTINCT FROM ROW(to_jsonb(NEW)->'user_id',to_jsonb(NEW)->'role_code',to_jsonb(NEW)->'revoked_at'))
+ ) THEN RETURN NEW; END IF;
  FOR item IN SELECT value FROM jsonb_array_elements(CASE TG_OP
   WHEN 'INSERT' THEN jsonb_build_array(to_jsonb(NEW))
   WHEN 'DELETE' THEN jsonb_build_array(to_jsonb(OLD))
@@ -608,11 +627,11 @@ CREATE TRIGGER journey_fact_dirty BEFORE INSERT OR UPDATE OR DELETE ON digital_p
 
 CREATE TRIGGER journey_fact_dirty BEFORE INSERT OR UPDATE OR DELETE ON acceptance_sla_clock_resources FOR EACH ROW EXECUTE FUNCTION digital_journey_register_change('SELECT $1->>''resource_kind'' AS kind,($1->>''resource_id'')::uuid AS id');
 
-CREATE TRIGGER journey_fact_dirty BEFORE INSERT OR UPDATE OR DELETE ON app_users FOR EACH ROW EXECUTE FUNCTION digital_journey_register_change('SELECT ''task''::text kind,a.task_id id FROM digital_production_task_access a WHERE a.assignee_id=($1->>''id'')::uuid');
+CREATE TRIGGER journey_fact_dirty BEFORE INSERT OR UPDATE OF enabled,manual_access_disabled OR DELETE ON app_users FOR EACH ROW EXECUTE FUNCTION digital_journey_register_change('SELECT ''task''::text kind,a.task_id id FROM digital_production_task_access a WHERE a.assignee_id=($1->>''id'')::uuid');
 
-CREATE TRIGGER journey_fact_dirty BEFORE INSERT OR UPDATE OR DELETE ON identity_mappings FOR EACH ROW EXECUTE FUNCTION digital_journey_register_change('SELECT ''task''::text kind,a.task_id id FROM digital_production_task_access a WHERE a.assignee_id=($1->>''user_id'')::uuid');
+CREATE TRIGGER journey_fact_dirty BEFORE INSERT OR UPDATE OF user_id,active,employed OR DELETE ON identity_mappings FOR EACH ROW EXECUTE FUNCTION digital_journey_register_change('SELECT ''task''::text kind,a.task_id id FROM digital_production_task_access a WHERE a.assignee_id=($1->>''user_id'')::uuid');
 
-CREATE TRIGGER journey_fact_dirty BEFORE INSERT OR UPDATE OR DELETE ON user_role_assignments FOR EACH ROW EXECUTE FUNCTION digital_journey_register_change('SELECT ''task''::text kind,a.task_id id FROM digital_production_task_access a WHERE a.assignee_id=($1->>''user_id'')::uuid');
+CREATE TRIGGER journey_fact_dirty BEFORE INSERT OR UPDATE OF user_id,role_code,revoked_at OR DELETE ON user_role_assignments FOR EACH ROW EXECUTE FUNCTION digital_journey_register_change('SELECT ''task''::text kind,a.task_id id FROM digital_production_task_access a WHERE a.assignee_id=($1->>''user_id'')::uuid');
 
 CREATE TRIGGER journey_fact_dirty BEFORE UPDATE OF enabled ON business_roles FOR EACH ROW EXECUTE FUNCTION digital_journey_register_change('SELECT ''task''::text kind,a.task_id id FROM digital_production_task_access a JOIN user_role_assignments u ON u.user_id=a.assignee_id WHERE u.role_code=$1->>''role_code'' AND u.revoked_at IS NULL');
 
@@ -620,11 +639,11 @@ CREATE TRIGGER journey_fact_dirty BEFORE INSERT OR UPDATE OR DELETE ON digital_p
 
 CREATE TRIGGER journey_fact_dirty BEFORE UPDATE OF version,business_now ON acceptance_sla_clock_scenarios FOR EACH ROW EXECUTE FUNCTION digital_journey_register_change('SELECT resource_kind kind,resource_id id FROM acceptance_sla_clock_resources WHERE scenario_id=($1->>''scenario_id'')::uuid');
 
-CREATE TRIGGER journey_fact_dirty BEFORE INSERT ON audit_events FOR EACH ROW EXECUTE FUNCTION digital_journey_register_change('SELECT ''task''::text kind,($1->>''entity_id'')::uuid id WHERE $1->>''action''=''digital_task_reassigned'' UNION SELECT ''order'',($1->>''entity_id'')::uuid WHERE $1->>''action''=''digital_source_attached''');
+CREATE TRIGGER journey_fact_dirty BEFORE INSERT ON audit_events FOR EACH ROW EXECUTE FUNCTION digital_journey_register_change('SELECT ''task''::text kind,digital_journey_uuid($1->>''entity_id'') id WHERE $1->>''action''=''digital_task_reassigned'' UNION SELECT ''order'',digital_journey_uuid($1->>''entity_id'') WHERE $1->>''action''=''digital_source_attached''');
 
-CREATE TRIGGER journey_fact_dirty BEFORE INSERT OR UPDATE OR DELETE ON rework_todos FOR EACH ROW EXECUTE FUNCTION digital_journey_register_change('SELECT ''sourcing''::text kind,($1->>''entity_id'')::uuid id WHERE $1->>''entity_type''=''sourcing_case'' AND $1->>''todo_type''=''business_action'' AND $1->>''category'' IN (''sourcing_ie_quote'',''sourcing_management_decision'',''sourcing_owner_approval'') AND $1->>''entity_id'' ~ ''^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$''');
+CREATE TRIGGER journey_fact_dirty BEFORE INSERT OR UPDATE OR DELETE ON rework_todos FOR EACH ROW EXECUTE FUNCTION digital_journey_register_change('SELECT ''sourcing''::text kind,digital_journey_uuid($1->>''entity_id'') id WHERE $1->>''entity_type''=''sourcing_case'' AND $1->>''todo_type''=''business_action'' AND $1->>''category'' IN (''sourcing_ie_quote'',''sourcing_management_decision'',''sourcing_owner_approval'') AND $1->>''entity_id'' ~ ''^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$''');
 
-CREATE TRIGGER journey_fact_dirty BEFORE INSERT ON operation_events FOR EACH ROW EXECUTE FUNCTION digital_journey_register_change('SELECT ''rework''::text kind,($1->>''entity_id'')::uuid id WHERE $1->>''entity_type''=''rework_order'' AND $1->>''action''=''rework.work_task.assignment_confirm'' AND $1->>''entity_id'' ~ ''^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$''');
+CREATE TRIGGER journey_fact_dirty BEFORE INSERT ON operation_events FOR EACH ROW EXECUTE FUNCTION digital_journey_register_change('SELECT ''rework''::text kind,digital_journey_uuid($1->>''entity_id'') id WHERE $1->>''entity_type''=''rework_order'' AND $1->>''action''=''rework.work_task.assignment_confirm'' AND $1->>''entity_id'' ~ ''^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$''');
 
 CREATE INDEX journey_fact_material_evidence ON digital_preparation_material_versions USING gin ((body->'evidenceIds'));
 

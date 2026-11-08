@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "7ed45f6507907c59e120330efcac384bc4acd219",
-  "sourceFingerprint": "a8403587fce7a7a3bb4c76dd4bf5af585d1389a481e0a56337664f82addc63f1",
+  "sourceFingerprint": "3db742e185db7e8e303752ee21af6f919a1709ee6b8db402c81471a1e1e83bd9",
   "risk": "full",
   "rules": [
     {
@@ -9,8 +9,8 @@
       "source": "Approved restored PERF01–09 final revision msg_0923d6ae8074c9fd016aef6395d3e887d09479aa4680c34a97, parent autonomous construction/Review/serial merge instruction. PERF02 after actual PERF01 merge7ed45f6507907c59e120330efcac384bc4acd219. No deployment or real business-data operation.",
       "writes": [
         "apps/api/src/production-platform/journey-fact-repository.ts",
-        "apps/api/src/server.ts",
-        "apps/api/src/production-platform/journey-fact-updates.ts"
+        "apps/api/src/production-platform/journey-fact-updates.ts",
+        "apps/api/src/server.ts"
       ],
       "reads": [
         "apps/api/src/production-platform/journey-query.ts",
@@ -44,9 +44,9 @@
       "rule": "Transactional native registration covers relevant task/material/route/preparation/approval/PO/packing/effective correction/void/association and source-owner changes without changing existing business guards or financial/state semantics.",
       "source": "Approved restored PERF01–09 final revision msg_0923d6ae8074c9fd016aef6395d3e887d09479aa4680c34a97, parent autonomous construction/Review/serial merge instruction. PERF02 after actual PERF01 merge7ed45f6507907c59e120330efcac384bc4acd219. No deployment or real business-data operation.",
       "writes": [
+        "apps/api/migrations/0279_journey_fact_incremental_updates.sql",
         "apps/api/src/platform/migration-manifest.json",
-        "scripts/deploy/acceptance-migration-requirements.json",
-        "apps/api/migrations/0279_journey_fact_incremental_updates.sql"
+        "scripts/deploy/acceptance-migration-requirements.json"
       ],
       "reads": [
         "apps/api/src/production-platform/identity-service.ts",
@@ -71,9 +71,10 @@
       ],
       "initialization": "Fresh marked low-privilege owned schema applies exact0279 on complete native migrations, creates only derived dirty/retry tables and native-scope functions/explicit static triggers plus indexed readiness-evidence lookup. Business writers append per-(resource,transaction) rows in their own transaction, no shared model lock or autonomous commit. No old SQL modified or mandatory unrelated backup/recovery simulation.",
       "dateAndPermission": "OLD/NEW direct native IDs, optional-source/order IDs and resource-scoped events even with null technical task; no fuzzy style joins. Original task/order/link immutability and Root-only access-state guards retained. Only sourcing action todos/actual rework assignment events affect native timing; attachment availability targets actual bindings/evidence, not cached attachment authorization. Scenario revisions target associated resources. Default standard does not rewrite native frozen snapshots.",
-      "expectation": "Exact checksum/Acceptance inventory and fresh schema succeed, native correction coalesces writes, rollback removes dirty registration, denied immutable task rebind leaves both mothers fresh, native cross-module parent queries map to real mother, native work and packing invalidate and rebuild correct quantities, null-task event registers mother, publication preserves original snapshot and frozen plan. Final Full covers broader original native chain; local prior original Journey report is separately scoped and never represented as onsite or final approval.",
+      "expectation": "Exact checksum/Acceptance inventory and fresh schema succeed, native correction coalesces writes, rollback removes dirty registration, denied immutable task rebind leaves both mothers fresh, native cross-module parent queries map to real mother, native work and packing invalidate and rebuild correct quantities, null-task event registers mother, publication preserves original snapshot and frozen plan. Current original full chain60 covers actual member binding, forged-role denials, native N01–N11 and all seven first-Full failures. First Full PG failed for generic text-key0915/empty casts; strict native-ID parser fixes this without changing authorization or audit identifiers. Current22 native cases also preserve generic audit writes and avoid metadata-heartbeat invalidation while retaining real role revoke. Prior Journey report is separately scoped and never represented as onsite or final approval.",
       "checks": [
         "postgres",
+        "chain",
         "unit",
         "preflight",
         "typesapi"
@@ -125,7 +126,7 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "a8403587fce7a7a3bb4c76dd4bf5af585d1389a481e0a56337664f82addc63f1",
+      "sourceFingerprint": "3db742e185db7e8e303752ee21af6f919a1709ee6b8db402c81471a1e1e83bd9",
       "inputPaths": [
         "apps/api",
         "packages",
@@ -139,26 +140,26 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "874ac05b4c80565b48d02d0546fe7e07d6df66b207025e88af859b2411b7a1a4",
+      "inputFingerprint": "e55280f368f9320b53c6f04a137937404180ecad2f0f41b18714939e0215e9e9",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "7ed45f6507907c59e120330efcac384bc4acd219",
-      "startedAt": "2026-11-08T08:18:17.914Z",
-      "endedAt": "2026-11-08T08:18:24.999Z",
+      "testedHead": "fc81d4b775ee093914848f649343f9a6b9500ee3",
+      "startedAt": "2026-11-08T08:45:03.529Z",
+      "endedAt": "2026-11-08T08:45:10.625Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf02-preflight-indexed-ownership.log",
-      "logSha256": "7c7bb3bdccee2ef8a76acede0135527e2cb668889d59cc0a2773b1112b124c73",
+      "log": "/workspace/scratch/dx-final10-20261108/perf02-preflight-generic-text-ids.log",
+      "logSha256": "fed0ac7f0dd0965fb5c9e6112d3183287e563b01fa9d7a1aba27e608d2ea2acc",
       "resultReport": null,
       "context": "Original configForSuite, marked owned loopback PG16.15 fixture and exact cleanup. Nodecpuset2,3, PGcpuset0,1/2GiB; local host not equivalent to CI hardware. Real AuthService and native business mutations on isolated fixtures only.",
       "kind": "command"
     },
     {
       "id": "unit",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/journey-fact-updates.test.ts tests/unit/journey-fact-model.test.ts tests/unit/journey-visual-progress.test.ts tests/unit/journey-native-times.test.ts tests/unit/journey-projection-isolation.test.ts tests/unit/current-migration-manifest-checksum.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf02-unit-indexed-ownership.vitest.json",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/journey-fact-updates.test.ts tests/unit/journey-fact-model.test.ts tests/unit/journey-visual-progress.test.ts tests/unit/journey-native-times.test.ts tests/unit/journey-projection-isolation.test.ts tests/unit/current-migration-manifest-checksum.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf02-unit-generic-text-ids.vitest.json",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "a8403587fce7a7a3bb4c76dd4bf5af585d1389a481e0a56337664f82addc63f1",
+      "sourceFingerprint": "3db742e185db7e8e303752ee21af6f919a1709ee6b8db402c81471a1e1e83bd9",
       "inputPaths": [
         "apps/api",
         "packages",
@@ -172,35 +173,35 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "874ac05b4c80565b48d02d0546fe7e07d6df66b207025e88af859b2411b7a1a4",
+      "inputFingerprint": "e55280f368f9320b53c6f04a137937404180ecad2f0f41b18714939e0215e9e9",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "7ed45f6507907c59e120330efcac384bc4acd219",
-      "startedAt": "2026-11-08T08:18:48.776Z",
-      "endedAt": "2026-11-08T08:18:51.987Z",
+      "testedHead": "fc81d4b775ee093914848f649343f9a6b9500ee3",
+      "startedAt": "2026-11-08T08:45:34.232Z",
+      "endedAt": "2026-11-08T08:45:37.425Z",
       "passed": 114,
       "failed": 0,
       "skipped": 0,
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf02-unit-indexed-ownership.log",
-      "logSha256": "c31d8f7e824ccf187248fb61bf60347804e5ee375395919506eccec6dc692d20",
-      "resultReport": "/workspace/scratch/dx-final10-20261108/perf02-unit-indexed-ownership.vitest.json",
+      "log": "/workspace/scratch/dx-final10-20261108/perf02-unit-generic-text-ids.log",
+      "logSha256": "01ef84c5549282fb13bed6941c8ead1fec7a308d03babc2567336ca71cd049fd",
+      "resultReport": "/workspace/scratch/dx-final10-20261108/perf02-unit-generic-text-ids.vitest.json",
       "context": "Original configForSuite, marked owned loopback PG16.15 fixture and exact cleanup. Nodecpuset2,3, PGcpuset0,1/2GiB; local host not equivalent to CI hardware. Real AuthService and native business mutations on isolated fixtures only.",
       "kind": "tests",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "98036c7597a9de03f69a493cb1a69ed41d674f2197e0d5a92da7784e0d9ab63a"
+          "sha256": "d0c41d93c222f8a2178348c08e69252e69f6e9b61ffb00131bc1d8e689811728"
         }
       ]
     },
     {
       "id": "lint",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/journey-fact-repository.ts apps/api/src/server.ts scripts/ci/full-gate-risk-map.mjs scripts/test-suite-plan.mjs apps/api/src/production-platform/journey-fact-updates.ts tests/integration/journey-fact-updates-postgres.test.ts tests/unit/journey-fact-updates.test.ts --max-warnings=0",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/journey-fact-repository.ts apps/api/src/production-platform/journey-fact-updates.ts apps/api/src/server.ts scripts/ci/full-gate-risk-map.mjs scripts/test-suite-plan.mjs tests/integration/journey-fact-updates-postgres.test.ts tests/unit/journey-fact-updates.test.ts --max-warnings=0",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "a8403587fce7a7a3bb4c76dd4bf5af585d1389a481e0a56337664f82addc63f1",
+      "sourceFingerprint": "3db742e185db7e8e303752ee21af6f919a1709ee6b8db402c81471a1e1e83bd9",
       "inputPaths": [
         "apps/api",
         "packages",
@@ -214,14 +215,14 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "874ac05b4c80565b48d02d0546fe7e07d6df66b207025e88af859b2411b7a1a4",
+      "inputFingerprint": "e55280f368f9320b53c6f04a137937404180ecad2f0f41b18714939e0215e9e9",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "7ed45f6507907c59e120330efcac384bc4acd219",
-      "startedAt": "2026-11-08T08:18:25.076Z",
-      "endedAt": "2026-11-08T08:18:25.996Z",
+      "testedHead": "fc81d4b775ee093914848f649343f9a6b9500ee3",
+      "startedAt": "2026-11-08T08:45:10.700Z",
+      "endedAt": "2026-11-08T08:45:11.734Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf02-lint-indexed-ownership.log",
+      "log": "/workspace/scratch/dx-final10-20261108/perf02-lint-generic-text-ids.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "resultReport": null,
       "context": "Original configForSuite, marked owned loopback PG16.15 fixture and exact cleanup. Nodecpuset2,3, PGcpuset0,1/2GiB; local host not equivalent to CI hardware. Real AuthService and native business mutations on isolated fixtures only.",
@@ -233,7 +234,7 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "a8403587fce7a7a3bb4c76dd4bf5af585d1389a481e0a56337664f82addc63f1",
+      "sourceFingerprint": "3db742e185db7e8e303752ee21af6f919a1709ee6b8db402c81471a1e1e83bd9",
       "inputPaths": [
         "apps/api",
         "packages",
@@ -247,14 +248,14 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "874ac05b4c80565b48d02d0546fe7e07d6df66b207025e88af859b2411b7a1a4",
+      "inputFingerprint": "e55280f368f9320b53c6f04a137937404180ecad2f0f41b18714939e0215e9e9",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "7ed45f6507907c59e120330efcac384bc4acd219",
-      "startedAt": "2026-11-08T08:18:38.616Z",
-      "endedAt": "2026-11-08T08:18:48.691Z",
+      "testedHead": "fc81d4b775ee093914848f649343f9a6b9500ee3",
+      "startedAt": "2026-11-08T08:45:24.430Z",
+      "endedAt": "2026-11-08T08:45:34.154Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf02-typesapi-indexed-ownership.log",
+      "log": "/workspace/scratch/dx-final10-20261108/perf02-typesapi-generic-text-ids.log",
       "logSha256": "d81733d2d3443600c8f5c4e1f5774d8d050a1c5a8ef34bd5a659eb50ebd68f00",
       "resultReport": null,
       "context": "Original configForSuite, marked owned loopback PG16.15 fixture and exact cleanup. Nodecpuset2,3, PGcpuset0,1/2GiB; local host not equivalent to CI hardware. Real AuthService and native business mutations on isolated fixtures only.",
@@ -262,11 +263,11 @@
     },
     {
       "id": "postgres",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/journey-fact-model-postgres.test.ts tests/integration/journey-fact-updates-postgres.test.ts --config vitest.business-chain.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf02-postgres-indexed-ownership.vitest.json",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/journey-fact-model-postgres.test.ts tests/integration/journey-fact-updates-postgres.test.ts --config vitest.business-chain.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf02-postgres-generic-text-ids.vitest.json",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "a8403587fce7a7a3bb4c76dd4bf5af585d1389a481e0a56337664f82addc63f1",
+      "sourceFingerprint": "3db742e185db7e8e303752ee21af6f919a1709ee6b8db402c81471a1e1e83bd9",
       "inputPaths": [
         "apps/api",
         "packages",
@@ -280,25 +281,25 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "874ac05b4c80565b48d02d0546fe7e07d6df66b207025e88af859b2411b7a1a4",
+      "inputFingerprint": "e55280f368f9320b53c6f04a137937404180ecad2f0f41b18714939e0215e9e9",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "7ed45f6507907c59e120330efcac384bc4acd219",
-      "startedAt": "2026-11-08T08:18:52.062Z",
-      "endedAt": "2026-11-08T08:19:11.639Z",
-      "passed": 21,
+      "testedHead": "fc81d4b775ee093914848f649343f9a6b9500ee3",
+      "startedAt": "2026-11-08T08:45:37.501Z",
+      "endedAt": "2026-11-08T08:45:57.187Z",
+      "passed": 22,
       "failed": 0,
       "skipped": 0,
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf02-postgres-indexed-ownership.log",
-      "logSha256": "90e4a4fc9c3777ab765e3b1dcfba255e177ba4cd0e5fdf3ebbc2f10bebe93c64",
-      "resultReport": "/workspace/scratch/dx-final10-20261108/perf02-postgres-indexed-ownership.vitest.json",
+      "log": "/workspace/scratch/dx-final10-20261108/perf02-postgres-generic-text-ids.log",
+      "logSha256": "0dbcc98eda43cdc0f844240c363e0e24bb8d2cd23456a4803b7bc3f3a4f88134",
+      "resultReport": "/workspace/scratch/dx-final10-20261108/perf02-postgres-generic-text-ids.vitest.json",
       "context": "Original configForSuite, marked owned loopback PG16.15 fixture and exact cleanup. Nodecpuset2,3, PGcpuset0,1/2GiB; local host not equivalent to CI hardware. Real AuthService and native business mutations on isolated fixtures only.",
       "kind": "tests",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "42c69473a73b390c973eb9d5c517ac820dbd39ad943ac775e453c7822a9df4ed"
+          "sha256": "c7c3626635542969829523f8d4c77ad6231ee7e2a5b2b88287fa3a480e158dd7"
         }
       ]
     },
@@ -308,7 +309,7 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "a8403587fce7a7a3bb4c76dd4bf5af585d1389a481e0a56337664f82addc63f1",
+      "sourceFingerprint": "3db742e185db7e8e303752ee21af6f919a1709ee6b8db402c81471a1e1e83bd9",
       "inputPaths": [
         "apps/api",
         "packages",
@@ -322,14 +323,14 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "874ac05b4c80565b48d02d0546fe7e07d6df66b207025e88af859b2411b7a1a4",
+      "inputFingerprint": "e55280f368f9320b53c6f04a137937404180ecad2f0f41b18714939e0215e9e9",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "7ed45f6507907c59e120330efcac384bc4acd219",
-      "startedAt": "2026-11-08T08:18:37.767Z",
-      "endedAt": "2026-11-08T08:18:38.543Z",
+      "testedHead": "fc81d4b775ee093914848f649343f9a6b9500ee3",
+      "startedAt": "2026-11-08T08:45:23.641Z",
+      "endedAt": "2026-11-08T08:45:24.351Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf02-secret-indexed-ownership.log",
+      "log": "/workspace/scratch/dx-final10-20261108/perf02-secret-generic-text-ids.log",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda",
       "resultReport": null,
       "context": "Original configForSuite, marked owned loopback PG16.15 fixture and exact cleanup. Nodecpuset2,3, PGcpuset0,1/2GiB; local host not equivalent to CI hardware. Real AuthService and native business mutations on isolated fixtures only.",
@@ -341,7 +342,7 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "a8403587fce7a7a3bb4c76dd4bf5af585d1389a481e0a56337664f82addc63f1",
+      "sourceFingerprint": "3db742e185db7e8e303752ee21af6f919a1709ee6b8db402c81471a1e1e83bd9",
       "inputPaths": [
         "apps/api",
         "packages",
@@ -355,18 +356,60 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "874ac05b4c80565b48d02d0546fe7e07d6df66b207025e88af859b2411b7a1a4",
+      "inputFingerprint": "e55280f368f9320b53c6f04a137937404180ecad2f0f41b18714939e0215e9e9",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "7ed45f6507907c59e120330efcac384bc4acd219",
-      "startedAt": "2026-11-08T08:18:26.080Z",
-      "endedAt": "2026-11-08T08:18:37.695Z",
+      "testedHead": "fc81d4b775ee093914848f649343f9a6b9500ee3",
+      "startedAt": "2026-11-08T08:45:11.812Z",
+      "endedAt": "2026-11-08T08:45:23.568Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf02-buildapi-indexed-ownership.log",
+      "log": "/workspace/scratch/dx-final10-20261108/perf02-buildapi-generic-text-ids.log",
       "logSha256": "8dd8c96364991c28227c467fbbb326a32e6737fddfa4e2d355be3ef6dd8512fe",
       "resultReport": null,
       "context": "Original configForSuite, marked owned loopback PG16.15 fixture and exact cleanup. Nodecpuset2,3, PGcpuset0,1/2GiB; local host not equivalent to CI hardware. Real AuthService and native business mutations on isolated fixtures only.",
       "kind": "command"
+    },
+    {
+      "id": "chain",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/full-business-chain-postgres.test.ts --config vitest.postgres-immediate.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf02-postgres-generic-text-final-chain.vitest.json",
+      "status": "passed",
+      "exitCode": 0,
+      "allExited": true,
+      "sourceFingerprint": "3db742e185db7e8e303752ee21af6f919a1709ee6b8db402c81471a1e1e83bd9",
+      "inputPaths": [
+        "apps/api",
+        "packages",
+        "scripts",
+        "tests",
+        "package.json",
+        "package-lock.json",
+        "eslint.config.js",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "vitest.postgres-immediate.config.ts"
+      ],
+      "inputFingerprint": "e55280f368f9320b53c6f04a137937404180ecad2f0f41b18714939e0215e9e9",
+      "inputsUnchanged": true,
+      "sourceUnchanged": true,
+      "testedHead": "fc81d4b775ee093914848f649343f9a6b9500ee3",
+      "startedAt": "2026-11-08T08:46:39.005Z",
+      "endedAt": "2026-11-08T08:47:45.669Z",
+      "passed": 60,
+      "failed": 0,
+      "skipped": 0,
+      "planError": null,
+      "log": "/workspace/scratch/dx-final10-20261108/perf02-postgres-generic-text-final-chain.log",
+      "logSha256": "897ed1f2768960db3f59843dc3ad3a904ed02a14f7d65015b27c0e24563f5ce9",
+      "resultReport": "/workspace/scratch/dx-final10-20261108/perf02-postgres-generic-text-final-chain.vitest.json",
+      "context": "Original configForSuite, marked owned loopback PG16.15 fixture and exact cleanup. Nodecpuset2,3, PGcpuset0,1/2GiB; local host not equivalent to CI hardware. Real AuthService and native business mutations on isolated fixtures only.",
+      "kind": "tests",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "cc09134aebfd9bf3f537c0e70a48b52a3de1e9e782d36f1a2f560078ba513cd0"
+        }
+      ]
     }
   ]
 }

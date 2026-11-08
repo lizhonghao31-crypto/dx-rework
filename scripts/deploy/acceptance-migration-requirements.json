@@ -1720,7 +1720,7 @@
     "sequences": []
   },
   "0279_journey_fact_incremental_updates": {
-    "checksum": "f46b5359921788fcc656a6575d3b93c4b8a6fbe761927f78e8e98b44d2ccbc6b",
+    "checksum": "199bf92cde8b5181aeef78ba1e04e9a0590cee3eb89fe8ef86fac4c46ef5bd0c",
     "tables": [
       "acceptance_sla_clock_resources",
       "acceptance_sla_clock_scenarios",

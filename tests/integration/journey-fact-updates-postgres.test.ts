@@ -9,6 +9,7 @@ import {JourneyFactUpdates} from '../../apps/api/src/production-platform/journey
 import {ReceivingService} from '../../apps/api/src/receiving/receiving-service.js';
 import {SlaConfigurationRepository} from '../../apps/api/src/production-platform/sla-configuration-repository.js';
 import {SlaConfigurationService} from '../../apps/api/src/production-platform/sla-configuration-service.js';
+import {OperationEventRepository} from '../../apps/api/src/tools/repositories.js';
 import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
@@ -100,6 +101,16 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   }finally{await db.query('ROLLBACK');db.release();}
   expect(await pending(scope.id)).toHaveLength(0);
  }));
+ it('preserves original text-key audit writes without UUID coercion or unrelated invalidation',()=>run(async()=>{
+  const order=await make();await repo.buildOne({kind:'order',id:order.productionOrderId});const db=await f.db.connect();
+  try{await db.query('BEGIN');for(const entityId of ['0915','','role:owner_group','------------------------------------']){
+   const id=await new OperationEventRepository().append(db,f.root,{action:'access.member_module.bind',entityType:'business_module_owner_bindings',entityId,after:{testOnly:true},reason:'TEST original generic text-key audit storage, no binding command'});
+   expect((await db.query('SELECT entity_id FROM operation_events WHERE event_id=$1',[id])).rows[0]!.entity_id).toBe(entityId);
+  }
+  expect((await db.query('SELECT 1 FROM digital_journey_fact_changes')).rowCount).toBe(0);
+  }finally{await db.query('ROLLBACK');db.release();}
+  expect((await status(order.productionOrderId)).status).toBe('ready');
+ }));
  it('tracks original multi-PO preparation, task reassignment, dispatch, effective work and packing families',()=>run(async()=>{
   const ready=await f.reworkReady(),mother=ready.ready.id,scope={kind:'order' as const,id:mother};await repo.buildOne(scope);
   const targets=[['digital_bulk_preparations','preparation_id',ready.ready.preparationId],['digital_production_task_access','production_order_id',mother],['rework_work_tasks','rework_order_id',ready.id],['receiving_batches','receiving_batch_id',(await f.db.query('SELECT source_receiving_batch_id id FROM rework_orders WHERE rework_order_id=$1',[ready.id])).rows[0]!.id]];
@@ -145,6 +156,9 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  it('registers native assignee role revocation without changing frozen plan inputs',()=>run(async()=>{
   const order=await f.bulkReady('无'),scope={kind:'order' as const,id:order.id};const first=await repo.buildOne(scope);
   const person=(await f.db.query("SELECT assignee_id FROM digital_production_task_access WHERE production_order_id=$1 AND task_kind='bulk_pattern'",[order.id])).rows[0]!.assignee_id;
+  await f.db.query("UPDATE app_users SET display_name=display_name||' TEST' WHERE id=$1",[person]);
+  await f.db.query('UPDATE identity_mappings SET active=active,employed=employed,last_verified_at=CURRENT_TIMESTAMP WHERE user_id=$1',[person]);
+  expect(await pending(order.id)).toHaveLength(0);expect((await status(order.id)).status).toBe('ready');
   const assignment=(await f.db.query("SELECT assignment_id FROM user_role_assignments WHERE user_id=$1 AND role_code='pattern_room_worker' AND revoked_at IS NULL",[person])).rows[0]!.assignment_id;
   await f.access.revokeRole({...f.root,authorizationCapability:'access:admin'},assignment,'TEST native eligibility revocation');
   expect(await pending(order.id)).toHaveLength(1);expect(await status(order.id)).toMatchObject({status:'pending',model:null});
