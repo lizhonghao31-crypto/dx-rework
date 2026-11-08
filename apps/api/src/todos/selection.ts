@@ -12,3 +12,8 @@ export function todoSelectionKey(todo:TodoResponse):TodoSelectionKey{
  const {todoId,sourceAction,contentToken,unread,readAt,status,dueAt,createdAt,taskTitle,category,orderContext,recipientUserId,todoType,route,daysWithoutUpdate}=todo;
  return {todoId,sourceAction,...(contentToken?{contentToken}:{}),...(unread===undefined?{}:{unread}),...(readAt===undefined?{}:{readAt}),status,dueAt,createdAt,...(taskTitle?{taskTitle}:{}),category,orderContext,recipientUserId,todoType,route,...(daysWithoutUpdate===undefined?{}:{daysWithoutUpdate})};
 }
+
+export async function appendSelectedTodoAsync(result:TodoResponse[],projection:TodoProjection|undefined,key:TodoSelectionKey,create:()=>Promise<TodoResponse>){
+ if(projection?.todoId&&projection.todoId!==key.todoId)return;
+ if(projection?.select)projection.select(key,create);else result.push(await create());
+}

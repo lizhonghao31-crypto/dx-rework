@@ -1,4 +1,4 @@
-import {appendSelectedTodo,type TodoSelectionKey,type TodoProjection} from '../todos/selection.js';
+import {appendSelectedTodoAsync,type TodoSelectionKey,type TodoProjection} from '../todos/selection.js';
 import {todoSlaTiming} from "../todos/sla-presentation.js";
 import {ContextBusinessClock} from "../acceptance-clock/business-time.js";
 import type {BusinessClock} from "@dx-rework/domain/business-clock";
@@ -24,15 +24,17 @@ export async function factoryProductionQcTodos(db:Pick<Pool|PoolClient,'query'>,
   if(missing ? !isDigitalLeader(actor)||!await policy.allowed(actor,'task',row.task_id,'technical') : row.assignee_id!==actor.actorId||!await policy.allowed(actor,'task',row.task_id,'execute'))continue;
   const current=await factoryProductionFacts(db,row.production_order_id);if(current.complete||!current.checks.length)continue;
   const pending=current.checks.filter(c=>!c.inspected),at=new Date(row.created_at).toISOString();
-  const repo=new SlaPlanRepository(db),plan=await repo.available()?(await repo.plans(row.production_order_id)).at(-1):null,time=await clock.read({kind:'order',id:row.production_order_id});
-  if(plan&&plan.time.scenarioId!==time.scenarioId)throw new Error('SLA clock scope mismatch');
+  const repo=new SlaPlanRepository(db),plan=await repo.available()?(await repo.plans(row.production_order_id)).at(-1):null;
   const planned=plan?new Map(calculateSlaPlan(plan.plan).map(n=>[n.id,n.end])):null;
   const targets=pending.map(c=>planned?planned.get(`factory_production:${c.lineId}`)??{at:null,exclusive:true,reasons:[]}:slaAnchorTime(c.targetDate?{precision:'date',value:c.targetDate,source:'native-factory-scope'}:undefined,'factory_delivery_date'));
   const earliest=targets.filter(t=>t.at).sort((a,b)=>a.at!.localeCompare(b.at!))[0],dueAt=earliest?.at??null;
-  const timing=todoSlaTiming({dueAt,warningAt:null,enteredAt:null,exclusive:earliest?.exclusive??true,asOf:time.now});
-  if(targets.some(t=>!t.at))timing.reason='部分PO没有可信工厂目标，已知日期仍监督；进入原工厂记录核对';
   const selectionKey:TodoSelectionKey={todoId:row.task_id,contentToken:todoContentToken(['factory-qc-scope',...pending.map(c=>`${c.factoryDecisionId??'original'}:${c.lineId}:${c.quantity}`)]),taskTitle:'工厂范围变更后补做QC检查',todoType:missing?'recipient_routing_exception':'business_action',category:missing?'digital_assignment':'digital_task',sourceAction:'factory_scope_changed',recipientUserId:actor.actorId,route:{routeName:'digital_production_task',entityId:row.task_id,todoId:row.task_id},dueAt,status:missing?'blocked_recipient':'pending',orderContext:{reworkNo:null,orderNo:null,styleNo:row.design_style_no,supplierName:null,status:`${pending.length}项当前工厂范围尚未检查`,updatedAt:at},unread:true,createdAt:at};
-  appendSelectedTodo(result,projection,selectionKey,()=>({...selectionKey,sourceEventId:row.task_id,entityType:'digital_task',entityId:row.task_id,requiredRole:'quality_control',requiredCapability:null,policyKey:null,timing,reminderCount:0,blockedReason:missing?'QC主办缺失或已失效，请重新分配':null,version:1,updatedAt:at}));
+  await appendSelectedTodoAsync(result,projection,selectionKey,async()=>{
+   const time=await clock.read({kind:'order',id:row.production_order_id});
+   if(plan&&plan.time.scenarioId!==time.scenarioId)throw new Error('SLA clock scope mismatch');
+   const timing=todoSlaTiming({dueAt,warningAt:null,enteredAt:null,exclusive:earliest?.exclusive??true,asOf:time.now});
+   if(targets.some(t=>!t.at))timing.reason='部分PO没有可信工厂目标，已知日期仍监督；进入原工厂记录核对';
+   return {...selectionKey,sourceEventId:row.task_id,entityType:'digital_task',entityId:row.task_id,requiredRole:'quality_control',requiredCapability:null,policyKey:null,timing,reminderCount:0,blockedReason:missing?'QC主办缺失或已失效，请重新分配':null,version:1,updatedAt:at};});
  }
  return result;
 }

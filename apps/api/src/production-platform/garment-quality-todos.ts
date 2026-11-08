@@ -1,4 +1,4 @@
-import {appendSelectedTodo,type TodoSelectionKey,type TodoProjection} from '../todos/selection.js';
+import {appendSelectedTodoAsync,type TodoSelectionKey,type TodoProjection} from '../todos/selection.js';
 import {todoSlaTiming} from "../todos/sla-presentation.js";
 import {ContextBusinessClock} from "../acceptance-clock/business-time.js";
 import type {BusinessClock} from "@dx-rework/domain/business-clock";
@@ -20,12 +20,12 @@ export async function garmentQualityTodos(db:Pick<Pool|PoolClient,'query'>,actor
  const result:TodoResponse[]=[];
  for(const id of new Set(records.map(r=>r.order_id))){
   if(!await policy.allowed(actor,'order',id,'technical'))continue;
-  const state=await garmentSlaEvidence(db,id),time=await clock.read({kind:"order",id});
+  const state=await garmentSlaEvidence(db,id);
   for(const row of records.filter(r=>r.order_id===id)){
    const receipt=state.quality.find(r=>r.receiptId===row.receipt_id);if(!receipt||receipt.inspected)continue;
    const window=state.windows.find(w=>w.receiptId===receipt.receiptId),at=new Date(row.recorded_at).toISOString();
    const selectionKey:TodoSelectionKey={todoId:row.event_id,contentToken:todoContentToken(['garment-quality',receipt.receiptId,receipt.quantityVersion]),taskTitle:receipt.priorInspection?'核对更正后的到仓检查范围':'办理成衣到仓质检',todoType:'business_action',category:'digital_garment_quality',sourceAction:'garment_receipt_registered',recipientUserId:actor.actorId,route:{routeName:'digital_production_closure',entityId:id,todoId:row.event_id},dueAt:window?.deadline??null,status:'pending',orderContext:{reworkNo:null,orderNo:null,styleNo:row.design_style_no,supplierName:null,status:receipt.receivedAt?`本批实收${receipt.quantity}件，待检查`:`本批实收${receipt.quantity}件，到仓仅有日期，精确时效未知`,updatedAt:at},unread:true,createdAt:at};
-  appendSelectedTodo(result,projection,selectionKey,()=>({...selectionKey,sourceEventId:row.event_id,entityType:'digital_production',entityId:id,requiredRole:'quality_control',requiredCapability:null,policyKey:null,timing:todoSlaTiming({dueAt:window?.deadline??null,warningAt:window?.warningAt??null,enteredAt:window?.startedAt??null,asOf:time.now}),reminderCount:0,blockedReason:null,version:1,updatedAt:at}));
+  await appendSelectedTodoAsync(result,projection,selectionKey,async()=>{const time=await clock.read({kind:"order",id});return {...selectionKey,sourceEventId:row.event_id,entityType:'digital_production',entityId:id,requiredRole:'quality_control',requiredCapability:null,policyKey:null,timing:todoSlaTiming({dueAt:window?.deadline??null,warningAt:window?.warningAt??null,enteredAt:window?.startedAt??null,asOf:time.now}),reminderCount:0,blockedReason:null,version:1,updatedAt:at};});
   }
  }
  return result;
