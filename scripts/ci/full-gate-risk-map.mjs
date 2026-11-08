@@ -171,6 +171,10 @@ export const classifyFullGatePaths = (inputPaths) => {
   let maintenanceSensitive = false;
   let activationSensitive = false;
   let transferSensitive = false;
+  if(paths.some(path=>/^apps\/api\/src\/todos\/(?:service|selection|content-reads|global-search)\.ts$/.test(path)||path==='apps/api/src/production-platform/notification-service.ts')){
+    for(const suite of ['todo-global-search','digital-my-todo-context','digital-production-notifications'])mappedTests.add('tests/integration/'+suite+'-postgres.test.ts');
+    domains.add('todo-read-split');
+  }
   if(paths.some(path=>['apps/web/src/App.tsx','apps/web/src/main.tsx','apps/web/src/lazy-business-page.tsx','tests/integration/module-bundles-native-browser-postgres.test.ts'].includes(path))){mappedTests.add('tests/integration/module-bundles-native-browser-postgres.test.ts');domains.add('business-module-bundles');}
   if(paths.some(path=>/^apps\/web\/src\/(?:cockpit-home(?:-[^/]*)?|cockpit-detail(?:-[^/]*)?|cockpit-stage-progress|cockpit-documents|cockpit-operation-log|node-materials-panel|cockpit-timing-coverage|digital-journey-cockpit)\.(?:tsx?|css)$/.test(path)||['apps/api/src/production-platform/journey-projection.ts','packages/contracts/src/digital-production-journey.ts','tests/acceptance/m01-cockpit-home-native-browser.ts','tests/fixtures/m01-cockpit-home-native-ui.tsx','tests/integration/m01-cockpit-home-native-browser-postgres.test.ts'].includes(path))){mappedTests.add('tests/integration/m01-cockpit-home-native-browser-postgres.test.ts');domains.add('cockpit-home-browser');}
   if (paths.some(path => path.startsWith('apps/api/src/auth/') || path === 'packages/config/src/index.ts' || path === 'tests/integration/acceptance-session-retention-postgres.test.ts')) {

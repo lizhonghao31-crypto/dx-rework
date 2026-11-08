@@ -131,6 +131,11 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   const [a,b]=await Promise.all([closure.todos(merch()),closure.todos(boss())]);
   expect(a).toHaveLength(1);expect(b).toHaveLength(1);expect(a[0]!.todoId).toBe(b[0]!.todoId);
   expect(a[0]).toMatchObject({category:"production_high_risk",unread:true});
+  expect(await closure.todoCounts(merch())).toEqual({totalCount:a.length,pendingCount:a.length,unreadCount:a.length});
+  expect((await closure.todoPage(merch(),1)).todos.map(t=>t.todoId)).toEqual(a.map(t=>t.todoId));
+  expect(await closure.todo(merch(),a[0]!.todoId)).toMatchObject({todoId:a[0]!.todoId,contentToken:a[0]!.contentToken,unread:true});
+  const selections=await closure.todoSelections(merch());expect(selections!.map(s=>s.key.todoId)).toEqual(a.map(t=>t.todoId));expect(await selections![0]!.load()).toMatchObject({todoId:a[0]!.todoId,contentToken:a[0]!.contentToken});
+
   const source=await database.query<{action:string}>("SELECT action FROM operation_events WHERE event_id=$1",[a[0]!.sourceEventId]);
   expect(source.rows[0]?.action).toBe(a[0]!.sourceAction);
   expect(await closure.todos(actor(warehouse,["order_merchandiser"],["sourcing:view","todo:view"]))).toEqual([]);
@@ -138,6 +143,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   await expect(closure.markRead(receiver(),a[0]!.todoId)).rejects.toMatchObject({statusCode:404});
   await Promise.all([closure.markRead(merch(),a[0]!.todoId),closure.markRead(merch(),a[0]!.todoId)]);
   expect((await closure.todos(merch()))[0]).toMatchObject({unread:false,status:"pending"});
+  expect(await closure.todoCounts(merch())).toEqual({totalCount:1,pendingCount:0,unreadCount:0});
   expect((await closure.todos(boss()))[0]).toMatchObject({unread:true,status:"pending"});
   const personal=new TodoService(database,undefined,undefined,closure),legacyRead=(await closure.todos(merch()))[0]!,firstRead=legacyRead.readAt;
   expect(firstRead).toBeTruthy();expect(legacyRead.contentToken).toMatch(/^[a-f0-9]{64}$/);
@@ -154,6 +160,8 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   expect((await future.todos(merch()))[0]).toMatchObject({category:"production_stale",daysWithoutUpdate:3});
   await reporting.execute(root(),order.productionOrderId,"complete",{businessDate:today(),confirmed:true},randomUUID());
   expect(await closure.todos(merch())).toEqual([]);
+  expect(await closure.todoCounts(merch())).toEqual({totalCount:0,pendingCount:0,unreadCount:0});
+  expect(await closure.todo(merch(),reopened.todoId)).toBeNull();
   expect((await database.query("SELECT 1 FROM message_outbox WHERE topic='todo.delivery'")).rowCount).toBe(0);
  });
  it("keeps shipped distinct from received and atomically links only the selected shipment",async()=>{

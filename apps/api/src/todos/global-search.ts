@@ -1,10 +1,10 @@
 import type { Pool } from 'pg';
-import type { TodoResponse } from '@dx-rework/contracts';
+import type { TodoSelectionKey } from './selection.js';
 import { todoTaskTitle } from '@dx-rework/contracts';
 import { todoSearchLabels } from './todo-search-labels.js';
 
 type Item={kind:'database'|'provider';value:Record<string,unknown>};
-export async function globalTodoSearch(database:Pool,contextSql:string,actorId:string,query:string,requestedPage:number,providers:readonly {module:string;todo:TodoResponse}[]) {
+export async function globalTodoSearch(database:Pool,contextSql:string,actorId:string,query:string,requestedPage:number,providers:readonly {module:string;todo:TodoSelectionKey}[]) {
  const upper=query.toUpperCase();
  const matches=providers.filter(({module,todo})=>todo.recipientUserId===actorId&&todo.todoType!=='information'&&['pending','blocked_recipient'].includes(todo.status)&&todo.category!=='wage_month_close'&&[
    todoSearchLabels[module],todoSearchLabels[todo.category],todoTaskTitle(todo),todo.taskTitle,todo.category==='production_stale'?`已 ${todo.daysWithoutUpdate??0} 天未更新`:null,todo.orderContext?.styleNo,todo.orderContext?.supplierName,todo.orderContext?.merchandiserName,todo.orderContext?.orderNo,todo.orderContext?.reworkNo,...(todo.orderContext?.poNumbers??[]),
