@@ -34,9 +34,10 @@ export type DeliverySummary={
  unknownQuantityPoCount:number;missingDuePoCount:number;overduePoCount:number;overduePendingQty:number;
 };
 export type DeliveryDay={date:string;summary:DeliverySummary;states:Partial<Record<DeliveryRisk,number>>};
+export type DeliveryCoverage={kind:'period';from:string;to:string}|{kind:'day';date:string};
 export type DeliverySnapshot={
  result:{ruleVersion:typeof DELIVERY_CALENDAR_VERSION};watermark:string;asOf:string;asOfBusinessDate:string;
- clockRevision:number;scenarioId:string|null;filters:DeliveryCalendarFilters;rows:DeliveryPo[];permissionOrderIds:string[];
+ clockRevision:number;scenarioId:string|null;coverage:DeliveryCoverage;filters:DeliveryCalendarFilters;rows:DeliveryPo[];permissionOrderIds:string[];
 };
 export type DeliveryReadBasis={
  asOf:string;asOfBusinessDate:string;snapshotId:string;createdAt:string;expiresAt:string;

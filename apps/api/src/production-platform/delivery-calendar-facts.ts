@@ -9,7 +9,7 @@ const businessNumber=(value:unknown):string|null=>{if(typeof value!=='string')re
  * original PO sizes, native cumulative packing and immutable customer date/SLA
  * snapshots; no Journey, task/SLA recalculation, factory share allocation or write.
  */
-export async function deliveryCalendarFacts(db:PoolClient,orderIds:string[],sourcingAllowed=false):Promise<DeliveryPoFact[]>{
+export async function deliveryCalendarFacts(db:PoolClient,orderIds:string[],range:{from:string;to:string},sourcingAllowed=false):Promise<DeliveryPoFact[]>{
  if(!orderIds.length)return [];
  const rows=(await db.query<PoRow>(`SELECT p.line_id,p.production_order_id,o.source_id,o.design_style_no,p.po_number,p.color,o.customer_code,o.product_group,
   (SELECT sum(size.quantity)::text FROM digital_production_po_sizes size WHERE size.line_id=p.line_id) AS quantity,
@@ -19,7 +19,10 @@ export async function deliveryCalendarFacts(db:PoolClient,orderIds:string[],sour
   EXISTS(SELECT 1 FROM digital_production_resource_lifecycle life WHERE ((life.resource_kind='order' AND life.resource_id=o.production_order_id) OR (life.resource_kind='source' AND life.resource_id=o.source_id)) AND life.state='paused') AS paused,
   EXISTS(SELECT 1 FROM digital_order_closures closure WHERE closure.production_order_id=o.production_order_id) AS closed
   FROM digital_production_po_lines p JOIN digital_production_orders o USING(production_order_id)
-  WHERE o.production_order_id=ANY($1::uuid[]) ORDER BY o.production_order_id,p.position,p.line_id`,[orderIds])).rows;
+  WHERE o.production_order_id=ANY($1::uuid[]) AND (p.customer_warehouse_arrival_date IS NULL OR p.customer_warehouse_arrival_date BETWEEN $2::date AND $3::date)
+  ORDER BY o.production_order_id,p.position,p.line_id`,[orderIds,range.from,range.to])).rows;
+ if(!rows.length)return [];
+ const selectedOrders=[...new Set(rows.map(row=>row.production_order_id))];
  const cutIds=[...new Set(rows.flatMap(row=>row.cutting_ids?.length===1?row.cutting_ids:[]))];
  // This is the original closure/receiving grouping and latest action batch,
  // including corrections/deletion and one cumulative packing across factories.
@@ -28,15 +31,15 @@ export async function deliveryCalendarFacts(db:PoolClient,orderIds:string[],sour
   FROM style_totals totals
   JOIN LATERAL(SELECT b.receiving_batch_id FROM batch_totals b WHERE b.group_key=totals.group_key ORDER BY b.last_all_received_at DESC,b.receiving_batch_id DESC LIMIT 1) action ON true
   LEFT JOIN LATERAL(SELECT p.packing_revision_id,p.packing_quantity FROM receiving_packing_revisions p WHERE p.receiving_batch_id=action.receiving_batch_id ORDER BY p.created_at DESC,p.packing_revision_id DESC LIMIT 1) packing ON true`,['2000-01-01','2199-12-31','#',cutIds])).rows:[];
- const history=(await db.query(`SELECT line_id,version,change_id,new_date::text,old_date::text,source FROM digital_po_date_changes WHERE production_order_id=ANY($1::uuid[]) AND date_kind='customer' ORDER BY line_id,version`,[orderIds])).rows;
- const policies=(await db.query(`SELECT DISTINCT ON(production_order_id) production_order_id,snapshot_id,revision,parameters_json FROM digital_sla_order_snapshots WHERE production_order_id=ANY($1::uuid[]) ORDER BY production_order_id,revision DESC`,[orderIds])).rows;
+ const history=(await db.query(`SELECT line_id,version,change_id,new_date::text,old_date::text,source FROM digital_po_date_changes WHERE line_id=ANY($1::uuid[]) AND date_kind='customer' ORDER BY line_id,version`,[rows.map(row=>row.line_id)])).rows;
+ const policies=(await db.query(`SELECT DISTINCT ON(production_order_id) production_order_id,snapshot_id,revision,parameters_json FROM digital_sla_order_snapshots WHERE production_order_id=ANY($1::uuid[]) ORDER BY production_order_id,revision DESC`,[selectedOrders])).rows;
  // Business order numbers have the same field permission as the original
  // Journey. A design style number or internal UUID must never impersonate one.
  const numbers=sourcingAllowed?(await db.query(`SELECT DISTINCT ON(link.production_order_id) link.production_order_id,source.erp_order_no
   FROM digital_production_child_links link JOIN sourcing_cases source ON source.sourcing_case_id=link.child_id
   JOIN current_sourcing_cases current ON current.sourcing_case_id=source.sourcing_case_id
   WHERE link.module='sourcing' AND link.production_order_id=ANY($1::uuid[]) AND source.deleted_at IS NULL
-  ORDER BY link.production_order_id,link.child_id`,[orderIds])).rows:[];
+  ORDER BY link.production_order_id,link.child_id`,[selectedOrders])).rows:[];
  // Native sourcing creation historically puts its internal UUID in erp_order_no.
  // The field name alone is not evidence of a human business number.
  const byNumber=new Map(numbers.map(row=>[row.production_order_id,businessNumber(row.erp_order_no)]));
