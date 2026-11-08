@@ -148,7 +148,12 @@ export class SlaOrderApplicationService {
             await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
             const p = await this.prepared(db, actor, input);
             await db.query('COMMIT');
-            return { orderId: input.orderId, token: this.tokens.issue(p.token), changes: p.changes, skipped: p.skipped, configurationVersion: p.configuration.version,adoptedParameters:[...new Set(input.parameterKeys)].sort().map(key=>({key,label:DIGITAL_SLA_PARAMETERS.find(parameter=>parameter.key===key)!.label,source:p.snapshot.snapshot.parameters[key]!.source,version:p.snapshot.snapshot.parameters[key]!.sourceVersion})),retainedCompletedNodes:p.current.current.plan.nodes.filter(node=>p.current.facts[node.id]?.businessCompleted||p.current.facts[node.id]?.completedAt).map(node=>node.label) };
+            const notificationChanges=p.effectiveKeys.filter(key=>['warning_ratio','ship_sample_advance'].includes(key)).flatMap(key=>{
+                const before=p.snapshot.snapshot.parameters[key]!.value,after=p.next.parameters[key]!.value;
+                const enabled=(value:typeof before)=>!('notificationEnabled'in value)||value.notificationEnabled!==false;
+                return enabled(before)===enabled(after)?[]:[{key,label:key==='warning_ratio'?'节点临期提醒':'船样提前提醒',beforeEnabled:enabled(before),afterEnabled:enabled(after)}];
+            });
+            return { orderId: input.orderId, token: this.tokens.issue(p.token), notificationChanges,changes: p.changes, skipped: p.skipped, configurationVersion: p.configuration.version,adoptedParameters:[...new Set(input.parameterKeys)].sort().map(key=>({key,label:DIGITAL_SLA_PARAMETERS.find(parameter=>parameter.key===key)!.label,source:p.snapshot.snapshot.parameters[key]!.source,version:p.snapshot.snapshot.parameters[key]!.sourceVersion})),retainedCompletedNodes:p.current.current.plan.nodes.filter(node=>p.current.facts[node.id]?.businessCompleted||p.current.facts[node.id]?.completedAt).map(node=>node.label) };
         }
         catch (e) {
             await db.query('ROLLBACK');

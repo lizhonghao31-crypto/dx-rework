@@ -5,9 +5,10 @@ import type {TrustedActorContext} from '../tools/repositories.js';
 import {ApplicationError} from '../platform/errors.js';
 import {assertSlaSettingsActor,assertSlaSettingsReadActor} from './sla-settings-authority.js';
 import {OrderClosureService} from './order-closure-service.js';
-import {acceptanceIncludesNative} from '../acceptance-clock/business-time.js';
+import {acceptanceIncludesNative,acceptanceClockReaderEnabled} from '../acceptance-clock/business-time.js';
 import {readSlaPolicyValuesMany} from './sla-policy-values.js';
 type Row={version:number;created_at:Date|string;display_name:string|null;reason:string;policy_refs_json:unknown;values_json:unknown};
+const candidateSearch="($1='' OR strpos(lower(o.design_style_no),lower($1))>0 OR strpos(lower(coalesce(o.temporary_style_no,'')),lower($1))>0 OR strpos(lower(o.customer_code),lower($1))>0 OR EXISTS(SELECT 1 FROM digital_production_po_lines l WHERE l.production_order_id=o.production_order_id AND strpos(lower(coalesce(l.po_number,l.formal_style_no,'')),lower($1))>0))";
 const row=(value:Row):SlaHistoryRow=>({version:value.version,publishedAt:new Date(value.created_at).toISOString(),publishedBy:value.display_name,reason:value.reason,scope:'new_orders'});
 /** Immutable published standards, never an order fact/history writer. */
 export class SlaSettingsHistoryService{
@@ -26,23 +27,33 @@ export class SlaSettingsHistoryService{
  async candidates(actor:TrustedActorContext,input:SlaApplicationCandidatesQuery):Promise<SlaApplicationCandidatesPage>{
   return this.read(actor,async db=>{
    await assertSlaSettingsActor(db,actor);
-   const rows=(await db.query<{production_order_id:string;design_style_no:string;customer_code:string;pos:string[];version:number|null;has_plan:boolean;has_snapshot:boolean;closed:boolean;cancelled:boolean}>(`SELECT o.production_order_id,o.design_style_no,o.customer_code,
+   // Ordinary manager reads count/page in SQL. Installed Acceptance keeps its
+   // original scope filter before totals/paging, enumerating IDs only; never PO,
+   // policy or closure details for the full matching set.
+   let scope:string[]|null=null;
+   if(acceptanceClockReaderEnabled(this.database)){
+    const ids=(await db.query<{production_order_id:string}>(`SELECT o.production_order_id FROM digital_production_orders o WHERE ${candidateSearch}`,[input.search])).rows;
+    scope=[];for(const value of ids)if(await acceptanceIncludesNative(this.database,value.production_order_id,db))scope.push(value.production_order_id);
+   }
+   const where=`${candidateSearch} AND ($2::uuid[] IS NULL OR o.production_order_id=ANY($2::uuid[]))`;
+   const total=(await db.query<{total:number}>(`SELECT count(*)::int AS total FROM digital_production_orders o WHERE ${where}`,[input.search,scope])).rows[0]!.total;
+   const rows=(await db.query<{production_order_id:string;design_style_no:string;customer_code:string;pos:string[];version:number|null;has_plan:boolean;has_snapshot:boolean;closed:boolean;cancelled:boolean}>(`WITH selected_orders AS MATERIALIZED(SELECT o.production_order_id,o.source_id,o.design_style_no,o.customer_code,o.created_at FROM digital_production_orders o WHERE ${where} ORDER BY o.created_at DESC,o.production_order_id DESC LIMIT 15 OFFSET $3)
+    SELECT o.production_order_id,o.design_style_no,o.customer_code,
     ARRAY(SELECT DISTINCT coalesce(l.po_number,l.formal_style_no) FROM digital_production_po_lines l WHERE l.production_order_id=o.production_order_id AND coalesce(l.po_number,l.formal_style_no) IS NOT NULL ORDER BY 1) AS pos,
     (SELECT c.version FROM digital_sla_order_snapshots s LEFT JOIN digital_sla_configurations c USING(configuration_id) WHERE s.production_order_id=o.production_order_id ORDER BY s.revision DESC LIMIT 1) AS version,
     EXISTS(SELECT 1 FROM digital_sla_plans p WHERE p.production_order_id=o.production_order_id) AS has_plan,
     EXISTS(SELECT 1 FROM digital_sla_order_snapshots s WHERE s.production_order_id=o.production_order_id) AS has_snapshot,
     EXISTS(SELECT 1 FROM digital_order_closures c WHERE c.production_order_id=o.production_order_id) AS closed,
     EXISTS(SELECT 1 FROM digital_production_resource_lifecycle r WHERE ((r.resource_kind='order' AND r.resource_id=o.production_order_id) OR (r.resource_kind='source' AND r.resource_id=o.source_id)) AND r.state='cancelled') AS cancelled
-    FROM digital_production_orders o WHERE ($1='' OR strpos(lower(o.design_style_no),lower($1))>0 OR strpos(lower(coalesce(o.temporary_style_no,'')),lower($1))>0 OR strpos(lower(o.customer_code),lower($1))>0 OR EXISTS(SELECT 1 FROM digital_production_po_lines l WHERE l.production_order_id=o.production_order_id AND strpos(lower(coalesce(l.po_number,l.formal_style_no,'')),lower($1))>0)) ORDER BY o.created_at DESC,o.production_order_id DESC`,[input.search])).rows;
-   const visible=[];for(const value of rows)if(await acceptanceIncludesNative(this.database,value.production_order_id,db))visible.push(value);
-   const items=[];for(const value of visible.slice((input.page-1)*15,input.page*15)){
+    FROM selected_orders o ORDER BY o.created_at DESC,o.production_order_id DESC`,[input.search,scope,(input.page-1)*15])).rows;
+   const items=[];for(const value of rows){
     let reason=value.cancelled?'已取消':value.closed?'已结案':!value.has_plan||!value.has_snapshot?'无有效原采用计划，不能补造历史标准':null;
     // Only the current page reads original completion facts. Packing alone is
     // insufficient: receipt differences, quality, rework and pending work count.
     if(reason===null){try{if((await new OrderClosureService(this.database).read(actor,value.production_order_id,db)).stage==='本期装箱完成')reason='已正常完成';}catch(error){if(error instanceof ApplicationError&&error.statusCode===404)reason='订单已变化，请重新查询';else throw error;}}
     items.push({orderId:value.production_order_id,designStyleNo:value.design_style_no,customerCode:value.customer_code,pos:value.pos,adoptedVersion:value.version,selectable:reason===null,reason});
    }
-   return {page:input.page,pageSize:15,total:visible.length,items};
+   return {page:input.page,pageSize:15,total,items};
   });
  }
  async version(actor:TrustedActorContext,version:number):Promise<SlaVersionDetail>{
