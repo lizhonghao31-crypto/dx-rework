@@ -67,6 +67,11 @@ export class AttachmentService {
     if (isPmcOnly(actor.actorRoles)) throw new ApplicationError("FORBIDDEN", "PMC不能上传或确认附件", 403);
     const client = await this.pool.connect();
     let createdKey: string | null = null;
+    let commitAttempted = false;
+    let commitConfirmed = false;
+    let destroyConnection = false;
+    let result: AttachmentRow;
+    let reused = false;
     try {
       await client.query("BEGIN");
       await client.query("SELECT production_order_id FROM digital_production_orders WHERE production_order_id=$1 FOR UPDATE", [orderId]);
@@ -74,25 +79,84 @@ export class AttachmentService {
       if (source.budgetVersion !== budgetVersion || !source.document.imageAttachmentIds.includes(sourceId)) throw new ApplicationError("BUDGET_CONFLICT", "预算图片已更新，请重新进入外发发起", 409);
       const prior = (await client.query<AttachmentRow>(`SELECT a.* FROM digital_budget_image_copies c JOIN attachments a USING(attachment_id)
         WHERE c.production_order_id=$1 AND c.budget_version=$2 AND c.source_attachment_id=$3 AND c.actor_id=$4`, [orderId, budgetVersion, sourceId, actor.actorId])).rows[0];
-      if (prior) { await client.query("COMMIT"); return this.dto(prior); }
-      const original = (await client.query<AttachmentRow>(`SELECT a.* FROM attachments a JOIN digital_budget_attachment_bindings b USING(attachment_id)
-        WHERE a.attachment_id=$1 AND b.production_order_id=$2::uuid AND a.entity_type='digital_budget' AND a.entity_id=$2::text
-        AND a.status='ready' AND a.mime_type IN ('image/jpeg','image/png','image/webp')`, [sourceId, orderId])).rows[0];
-      if (!original) throw new ApplicationError("ATTACHMENT_NOT_READY", "预算图片不可用", 409);
-      const { bytes, sha256 } = await this.readVerifiedSourcingImage(original);
-      const attachmentId = randomUUID();
-      createdKey = createPrivateObjectKey(this.options.prefix, original.original_filename);
-      await this.storageCall(() => this.storage.writeImmutable(createdKey!, bytes, { mimeType: original.mime_type, sha256 }));
-      const copied = (await client.query<AttachmentRow>(`INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at)
-        VALUES($1,$2,$3,$4,$5,$6,$7,'ready',CURRENT_TIMESTAMP) RETURNING *`, [attachmentId, createdKey, original.original_filename, original.mime_type, bytes.byteLength, sha256, actor.actorId])).rows[0]!;
-      await client.query("INSERT INTO digital_budget_image_copies(production_order_id,budget_version,source_attachment_id,actor_id,attachment_id) VALUES($1,$2,$3,$4,$5)", [orderId, budgetVersion, sourceId, actor.actorId, attachmentId]);
-      await this.events.append(client, actor, { action: "attachment.budget_sourcing_copy", entityType: "attachment", entityId: attachmentId, after: { sourceAttachmentId: sourceId, productionOrderId: orderId, budgetVersion } });
-      await client.query("COMMIT"); return this.dto(copied);
+      if (prior) {
+        const unbound = prior.entity_type === null && prior.entity_id === null;
+        const boundToThisOrder = prior.entity_type === "sourcing_case" && Boolean((await client.query(
+          "SELECT 1 FROM digital_production_child_links WHERE module='sourcing' AND production_order_id=$1 AND child_id::text=$2",
+          [orderId, prior.entity_id],
+        )).rowCount);
+        if (prior.status !== "ready" || prior.uploaded_by !== actor.actorId || !unbound && !boundToThisOrder
+          || !["image/jpeg", "image/png", "image/webp"].includes(prior.mime_type)) {
+          throw new ApplicationError("ATTACHMENT_NOT_READY", "预算图片副本不可用，请核对后重试", 409);
+        }
+        result = prior;
+        reused = true;
+      } else {
+        const original = (await client.query<AttachmentRow>(`SELECT a.* FROM attachments a JOIN digital_budget_attachment_bindings b USING(attachment_id)
+          WHERE a.attachment_id=$1 AND b.production_order_id=$2::uuid AND a.entity_type='digital_budget' AND a.entity_id=$2::text
+          AND a.status='ready' AND a.mime_type IN ('image/jpeg','image/png','image/webp')`, [sourceId, orderId])).rows[0];
+        if (!original) throw new ApplicationError("ATTACHMENT_NOT_READY", "预算图片不可用", 409);
+        const { bytes, sha256 } = await this.readVerifiedSourcingImage(original);
+        const attachmentId = randomUUID();
+        createdKey = createPrivateObjectKey(this.options.prefix, original.original_filename);
+        await this.storageCall(() => this.storage.writeImmutable(createdKey!, bytes, { mimeType: original.mime_type, sha256 }));
+        const copied = (await client.query<AttachmentRow>(`INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at)
+          VALUES($1,$2,$3,$4,$5,$6,$7,'ready',CURRENT_TIMESTAMP) RETURNING *`, [attachmentId, createdKey, original.original_filename, original.mime_type, bytes.byteLength, sha256, actor.actorId])).rows[0]!;
+        await client.query("INSERT INTO digital_budget_image_copies(production_order_id,budget_version,source_attachment_id,actor_id,attachment_id) VALUES($1,$2,$3,$4,$5)", [orderId, budgetVersion, sourceId, actor.actorId, attachmentId]);
+        await this.events.append(client, actor, { action: "attachment.budget_sourcing_copy", entityType: "attachment", entityId: attachmentId, after: { sourceAttachmentId: sourceId, productionOrderId: orderId, budgetVersion } });
+        result = copied;
+      }
+      // A failed acknowledgement does not prove that PostgreSQL rolled back.
+      commitAttempted = true;
+      await client.query("COMMIT");
+      commitConfirmed = true;
     } catch (error) {
-      await client.query("ROLLBACK").catch(() => undefined);
-      if (createdKey) await this.storage.deleteObject(createdKey).catch(() => undefined);
+      let rollbackConfirmed = false;
+      if (!commitConfirmed) {
+        try { await client.query("ROLLBACK"); rollbackConfirmed = true; }
+        catch { destroyConnection = true; }
+      }
+      if (commitAttempted && !commitConfirmed) destroyConnection = true;
+      if (createdKey && !commitAttempted && rollbackConfirmed) {
+        await this.storage.deleteObject(createdKey).catch(() => {
+          process.emitWarning("Uncommitted budget image cleanup failed; the original operation error is preserved", { code: "BUDGET_IMAGE_CLEANUP_FAILED" });
+        });
+      }
       throw error;
-    } finally { client.release(); }
+    } finally { client.release(destroyConnection ? true : undefined); }
+    // The additional storage check must not hold the parent order lock or a DB
+    // connection, and its failure must never enter transaction compensation.
+    if (reused) await this.verifyBudgetImageCopy(result);
+    return this.dto(result);
+  }
+
+  private async verifyBudgetImageCopy(row: AttachmentRow): Promise<void> {
+    const controller = new AbortController();
+    // One local budget covers HEAD and the optional bounded hash read. No
+    // global timeout, retry loop or background repair is introduced.
+    const timer = setTimeout(() => controller.abort(), 5000);
+    timer.unref();
+    try {
+      const metadata = await this.storage.head(row.object_key, controller.signal);
+      controller.signal.throwIfAborted();
+      if (metadata.sizeBytes !== Number(row.size_bytes) || metadata.mimeType.toLowerCase() !== row.mime_type
+        || metadata.sha256 !== undefined && metadata.sha256 !== row.sha256) {
+        throw new ApplicationError("ATTACHMENT_METADATA_MISMATCH", "预算图片副本校验失败，请核对后重试", 422);
+      }
+      if (metadata.sha256 === undefined) {
+        const bytes = await this.storage.readBytes(row.object_key, this.options.maxUploadBytes, controller.signal);
+        controller.signal.throwIfAborted();
+        if (bytes.byteLength !== Number(row.size_bytes) || createHash("sha256").update(bytes).digest("hex") !== row.sha256) {
+          throw new ApplicationError("ATTACHMENT_METADATA_MISMATCH", "预算图片副本校验失败，请核对后重试", 422);
+        }
+      }
+    } catch (error) {
+      if (error instanceof ObjectStorageObjectNotFoundError) {
+        throw new ApplicationError("ATTACHMENT_NOT_READY", "预算图片副本不存在，请核对后重试", 409);
+      }
+      if (error instanceof ApplicationError) throw error;
+      throw new ApplicationError("STORAGE_UNAVAILABLE", "暂时无法核对预算图片，请稍后重试", 503);
+    } finally { clearTimeout(timer); }
   }
 
   // Internal contract rendering only: callers supply the already-frozen case and image IDs.
