@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "acc029d6f580f7d471dc3343db9b1235bd926e4a",
-  "sourceFingerprint": "1de2800e9c5e89e37fe2bb3d7855de5c194d49703d15f1347131b159955647db",
+  "sourceFingerprint": "95b8e80e545a395863a1bdc6fed6439420c56ab1c22e0b90dce19afb75ca3f6c",
   "risk": "full",
   "rules": [
     {
@@ -9,12 +9,12 @@
       "source": "Parent recovered and authorized full PERF plan, final revision msg_0923d6ae8074c9fd016aef6395d3e887d09479aa4680c34a97 overrides base msg_0923d6ae8074c9fd016aef628775f887d0a891e056a272ea6a. PERF01 only, on actual Final10-P07 merge acc029d6. No deployment or real business-data mutation.",
       "writes": [
         "apps/api/src/production-platform/bulk-preparation-service.ts",
+        "apps/api/src/production-platform/journey-fact-model.ts",
+        "apps/api/src/production-platform/journey-fact-repository.ts",
         "apps/api/src/production-platform/journey-query.ts",
         "apps/api/src/production-platform/journey-supervision.ts",
         "apps/api/src/production-platform/order-closure-service.ts",
-        "apps/api/src/production-platform/sla-order-service.ts",
-        "apps/api/src/production-platform/journey-fact-model.ts",
-        "apps/api/src/production-platform/journey-fact-repository.ts"
+        "apps/api/src/production-platform/sla-order-service.ts"
       ],
       "reads": [
         "apps/api/src/production-platform/journey-task-summary.ts",
@@ -37,7 +37,7 @@
       ],
       "initialization": "No GET read switch or automatic all-object backfill. Internal single-object snapshot uses original native facts without a synthetic actor. Explicit fields only; current time risk and percentages are not persisted. Existing identity, PO label, customer and date tables remain live. Source-only resources and already attached order resources stay distinct.",
       "dateAndPermission": "Original public read/list/service permission entry remains intact. Internal adapters are not routed and do not supply action authority. Current source/instruction/round, native observed dates, original final10 fixes, separate inherited result/adoption and original frozen plan/facts are retained. No broadening of operation, price, history, attachment or export scope.",
-      "expectation": "Current native6 and unit112 verify exact multi-PO original requirements, original task target precision and native SLA evaluation, true marker time, actor-free builder, source-only unknown route, exact dependencies and stable task-set ordering, no sensitive/UI fields and no mutation. Original Journey34 passed at prior source57a30ef before serializer-only deterministic sorting; do not represent that prior report as current final-head CI. Current original Full will cover canonical old consumers.",
+      "expectation": "Current native6 and unit112 verify the completed Review fix4505365983: complete original task IDs before presentation substitution, exact linked sourcing task role/assignment/route/target/dependencies, plus exact multi-PO original requirements, original task target precision and native SLA evaluation, true marker time, actor-free builder, source-only unknown route, exact dependencies and stable task-set ordering, no sensitive/UI fields and no mutation. Original Journey34 passed at prior source57a30ef before serializer-only deterministic sorting; do not represent that prior report as current final-head CI. Current original Full will cover canonical old consumers.",
       "checks": [
         "postgres",
         "unit",
@@ -50,9 +50,9 @@
       "rule": "Persist rebuildable source/applied/calculation versions and integrity-bound facts only, retain business clock identity separately from real build time, refuse stale/obsolete/corrupt payloads, and provide exact migration identity plus Acceptance new-table permission inventory.",
       "source": "Parent recovered and authorized full PERF plan, final revision msg_0923d6ae8074c9fd016aef6395d3e887d09479aa4680c34a97 overrides base msg_0923d6ae8074c9fd016aef628775f887d0a891e056a272ea6a. PERF01 only, on actual Final10-P07 merge acc029d6. No deployment or real business-data mutation.",
       "writes": [
+        "apps/api/migrations/0278_journey_fact_read_model.sql",
         "apps/api/src/platform/migration-manifest.json",
-        "scripts/deploy/acceptance-migration-requirements.json",
-        "apps/api/migrations/0278_journey_fact_read_model.sql"
+        "scripts/deploy/acceptance-migration-requirements.json"
       ],
       "reads": [
         "apps/api/src/production-platform/journey-fact-repository.ts",
@@ -123,7 +123,7 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "1de2800e9c5e89e37fe2bb3d7855de5c194d49703d15f1347131b159955647db",
+      "sourceFingerprint": "95b8e80e545a395863a1bdc6fed6439420c56ab1c22e0b90dce19afb75ca3f6c",
       "inputPaths": [
         "apps/api",
         "packages",
@@ -137,26 +137,26 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "05674c06000230f65c4f9ac6156df74ab010d7b43fcd7df1ae82de277f6805c5",
+      "inputFingerprint": "1027195529bb474f71e3b1c4e79b25dc3d60922d0a55dec7423884a12182dc71",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "acc029d6f580f7d471dc3343db9b1235bd926e4a",
-      "startedAt": "2026-11-08T06:53:38.751Z",
-      "endedAt": "2026-11-08T06:53:45.574Z",
+      "testedHead": "84e54710c8332d6a2bdcd179136f180c4af8034b",
+      "startedAt": "2026-11-08T07:04:42.284Z",
+      "endedAt": "2026-11-08T07:04:49.287Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf01-preflight-final-sorted.log",
-      "logSha256": "82b3a1d3fff885594f1a76f818359eaec52d6d3e8e708d6eecea84fed8927061",
+      "log": "/workspace/scratch/dx-final10-20261108/perf01-preflight-review-native-inventory.log",
+      "logSha256": "8aa39028a65a95b25f0ce103223ddf103ecb57325f02dc02a320f735dc0e9be2",
       "resultReport": null,
       "context": "Original configForSuite, marked owned loopback PG16.15 fixture and exact cleanup. Nodecpuset2,3, PGcpuset0,1/2GiB; local host not equivalent to CI hardware. Real AuthService and native business mutations on isolated fixtures only.",
       "kind": "command"
     },
     {
       "id": "unit",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/journey-fact-model.test.ts tests/unit/journey-visual-progress.test.ts tests/unit/journey-native-times.test.ts tests/unit/journey-projection-isolation.test.ts tests/unit/current-migration-manifest-checksum.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf01-unit-final-sorted.vitest.json",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/journey-fact-model.test.ts tests/unit/journey-visual-progress.test.ts tests/unit/journey-native-times.test.ts tests/unit/journey-projection-isolation.test.ts tests/unit/current-migration-manifest-checksum.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf01-unit-review-native-inventory.vitest.json",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "1de2800e9c5e89e37fe2bb3d7855de5c194d49703d15f1347131b159955647db",
+      "sourceFingerprint": "95b8e80e545a395863a1bdc6fed6439420c56ab1c22e0b90dce19afb75ca3f6c",
       "inputPaths": [
         "apps/api",
         "packages",
@@ -170,35 +170,35 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "05674c06000230f65c4f9ac6156df74ab010d7b43fcd7df1ae82de277f6805c5",
+      "inputFingerprint": "1027195529bb474f71e3b1c4e79b25dc3d60922d0a55dec7423884a12182dc71",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "acc029d6f580f7d471dc3343db9b1235bd926e4a",
-      "startedAt": "2026-11-08T06:53:57.810Z",
-      "endedAt": "2026-11-08T06:54:00.484Z",
+      "testedHead": "84e54710c8332d6a2bdcd179136f180c4af8034b",
+      "startedAt": "2026-11-08T07:03:45.496Z",
+      "endedAt": "2026-11-08T07:03:48.246Z",
       "passed": 112,
       "failed": 0,
       "skipped": 0,
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf01-unit-final-sorted.log",
-      "logSha256": "3fb94aaaae2b9f7832e1676397bce1f90248eafa088a3961cfdf76b959e6f787",
-      "resultReport": "/workspace/scratch/dx-final10-20261108/perf01-unit-final-sorted.vitest.json",
+      "log": "/workspace/scratch/dx-final10-20261108/perf01-unit-review-native-inventory.log",
+      "logSha256": "16b2bf925c23e939f8680493d9b2ebc7a5e3ae52181e2fb750a19d8325ac50d0",
+      "resultReport": "/workspace/scratch/dx-final10-20261108/perf01-unit-review-native-inventory.vitest.json",
       "context": "Original configForSuite, marked owned loopback PG16.15 fixture and exact cleanup. Nodecpuset2,3, PGcpuset0,1/2GiB; local host not equivalent to CI hardware. Real AuthService and native business mutations on isolated fixtures only.",
       "kind": "tests",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "6cafc54dcb88f1c1720cc26b2c3dc7e1ae837f097abc362f17f1b98bbe828e0e"
+          "sha256": "d16bb6de1210c0107c7809c8533ed71a80a40272b95455e6506ef1bb4fd29ee3"
         }
       ]
     },
     {
       "id": "lint",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/bulk-preparation-service.ts apps/api/src/production-platform/journey-query.ts apps/api/src/production-platform/journey-supervision.ts apps/api/src/production-platform/order-closure-service.ts apps/api/src/production-platform/sla-order-service.ts scripts/ci/full-gate-risk-map.mjs scripts/test-suite-plan.mjs apps/api/src/production-platform/journey-fact-model.ts apps/api/src/production-platform/journey-fact-repository.ts tests/integration/journey-fact-model-postgres.test.ts tests/unit/journey-fact-model.test.ts --max-warnings=0",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/bulk-preparation-service.ts apps/api/src/production-platform/journey-fact-model.ts apps/api/src/production-platform/journey-fact-repository.ts apps/api/src/production-platform/journey-query.ts apps/api/src/production-platform/journey-supervision.ts apps/api/src/production-platform/order-closure-service.ts apps/api/src/production-platform/sla-order-service.ts scripts/ci/full-gate-risk-map.mjs scripts/test-suite-plan.mjs tests/integration/journey-fact-model-postgres.test.ts tests/unit/journey-fact-model.test.ts --max-warnings=0",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "1de2800e9c5e89e37fe2bb3d7855de5c194d49703d15f1347131b159955647db",
+      "sourceFingerprint": "95b8e80e545a395863a1bdc6fed6439420c56ab1c22e0b90dce19afb75ca3f6c",
       "inputPaths": [
         "apps/api",
         "packages",
@@ -212,14 +212,14 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "05674c06000230f65c4f9ac6156df74ab010d7b43fcd7df1ae82de277f6805c5",
+      "inputFingerprint": "1027195529bb474f71e3b1c4e79b25dc3d60922d0a55dec7423884a12182dc71",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "acc029d6f580f7d471dc3343db9b1235bd926e4a",
-      "startedAt": "2026-11-08T06:53:45.647Z",
-      "endedAt": "2026-11-08T06:53:46.972Z",
+      "testedHead": "84e54710c8332d6a2bdcd179136f180c4af8034b",
+      "startedAt": "2026-11-08T07:03:34.138Z",
+      "endedAt": "2026-11-08T07:03:35.376Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf01-lint-final-sorted.log",
+      "log": "/workspace/scratch/dx-final10-20261108/perf01-lint-review-native-inventory.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "resultReport": null,
       "context": "Original configForSuite, marked owned loopback PG16.15 fixture and exact cleanup. Nodecpuset2,3, PGcpuset0,1/2GiB; local host not equivalent to CI hardware. Real AuthService and native business mutations on isolated fixtures only.",
@@ -231,7 +231,7 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "1de2800e9c5e89e37fe2bb3d7855de5c194d49703d15f1347131b159955647db",
+      "sourceFingerprint": "95b8e80e545a395863a1bdc6fed6439420c56ab1c22e0b90dce19afb75ca3f6c",
       "inputPaths": [
         "apps/api",
         "packages",
@@ -245,14 +245,14 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "05674c06000230f65c4f9ac6156df74ab010d7b43fcd7df1ae82de277f6805c5",
+      "inputFingerprint": "1027195529bb474f71e3b1c4e79b25dc3d60922d0a55dec7423884a12182dc71",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "acc029d6f580f7d471dc3343db9b1235bd926e4a",
-      "startedAt": "2026-11-08T06:53:47.922Z",
-      "endedAt": "2026-11-08T06:53:57.736Z",
+      "testedHead": "84e54710c8332d6a2bdcd179136f180c4af8034b",
+      "startedAt": "2026-11-08T07:03:35.449Z",
+      "endedAt": "2026-11-08T07:03:45.421Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf01-typesapi-final-sorted.log",
+      "log": "/workspace/scratch/dx-final10-20261108/perf01-typesapi-review-native-inventory.log",
       "logSha256": "d81733d2d3443600c8f5c4e1f5774d8d050a1c5a8ef34bd5a659eb50ebd68f00",
       "resultReport": null,
       "context": "Original configForSuite, marked owned loopback PG16.15 fixture and exact cleanup. Nodecpuset2,3, PGcpuset0,1/2GiB; local host not equivalent to CI hardware. Real AuthService and native business mutations on isolated fixtures only.",
@@ -260,11 +260,11 @@
     },
     {
       "id": "postgres",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/journey-fact-model-postgres.test.ts --config vitest.business-chain.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf01-postgres-final-sorted.vitest.json",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/journey-fact-model-postgres.test.ts --config vitest.business-chain.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf01-postgres-review-native-inventory.vitest.json",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "1de2800e9c5e89e37fe2bb3d7855de5c194d49703d15f1347131b159955647db",
+      "sourceFingerprint": "95b8e80e545a395863a1bdc6fed6439420c56ab1c22e0b90dce19afb75ca3f6c",
       "inputPaths": [
         "apps/api",
         "packages",
@@ -278,25 +278,25 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "05674c06000230f65c4f9ac6156df74ab010d7b43fcd7df1ae82de277f6805c5",
+      "inputFingerprint": "1027195529bb474f71e3b1c4e79b25dc3d60922d0a55dec7423884a12182dc71",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "acc029d6f580f7d471dc3343db9b1235bd926e4a",
-      "startedAt": "2026-11-08T06:54:00.564Z",
-      "endedAt": "2026-11-08T06:54:08.846Z",
+      "testedHead": "84e54710c8332d6a2bdcd179136f180c4af8034b",
+      "startedAt": "2026-11-08T07:03:48.324Z",
+      "endedAt": "2026-11-08T07:03:56.563Z",
       "passed": 6,
       "failed": 0,
       "skipped": 0,
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf01-postgres-final-sorted.log",
-      "logSha256": "4705b1e57d28f4ca92d7da48beef67d117b9212453c0aa604c407a688932ac68",
-      "resultReport": "/workspace/scratch/dx-final10-20261108/perf01-postgres-final-sorted.vitest.json",
+      "log": "/workspace/scratch/dx-final10-20261108/perf01-postgres-review-native-inventory.log",
+      "logSha256": "c6a67c1685802b973ea95b678429c4b4e298d37aa342563283b5ce865967878b",
+      "resultReport": "/workspace/scratch/dx-final10-20261108/perf01-postgres-review-native-inventory.vitest.json",
       "context": "Original configForSuite, marked owned loopback PG16.15 fixture and exact cleanup. Nodecpuset2,3, PGcpuset0,1/2GiB; local host not equivalent to CI hardware. Real AuthService and native business mutations on isolated fixtures only.",
       "kind": "tests",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "1f4f9ddd8893b7fd20f4b7a4a87e654ded918256b03aced9001b8028efbd23d3"
+          "sha256": "531f4c02f7c73e933234f3372c349e071c1798fadee8a7b3e64ae4ed5abfd146"
         }
       ]
     },
@@ -306,7 +306,7 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "1de2800e9c5e89e37fe2bb3d7855de5c194d49703d15f1347131b159955647db",
+      "sourceFingerprint": "95b8e80e545a395863a1bdc6fed6439420c56ab1c22e0b90dce19afb75ca3f6c",
       "inputPaths": [
         "apps/api",
         "packages",
@@ -320,14 +320,14 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "05674c06000230f65c4f9ac6156df74ab010d7b43fcd7df1ae82de277f6805c5",
+      "inputFingerprint": "1027195529bb474f71e3b1c4e79b25dc3d60922d0a55dec7423884a12182dc71",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "acc029d6f580f7d471dc3343db9b1235bd926e4a",
-      "startedAt": "2026-11-08T06:53:47.048Z",
-      "endedAt": "2026-11-08T06:53:47.843Z",
+      "testedHead": "84e54710c8332d6a2bdcd179136f180c4af8034b",
+      "startedAt": "2026-11-08T07:05:00.921Z",
+      "endedAt": "2026-11-08T07:05:01.823Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf01-secret-final-sorted.log",
+      "log": "/workspace/scratch/dx-final10-20261108/perf01-secret-review-native-inventory.log",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda",
       "resultReport": null,
       "context": "Original configForSuite, marked owned loopback PG16.15 fixture and exact cleanup. Nodecpuset2,3, PGcpuset0,1/2GiB; local host not equivalent to CI hardware. Real AuthService and native business mutations on isolated fixtures only.",
@@ -339,7 +339,7 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "1de2800e9c5e89e37fe2bb3d7855de5c194d49703d15f1347131b159955647db",
+      "sourceFingerprint": "95b8e80e545a395863a1bdc6fed6439420c56ab1c22e0b90dce19afb75ca3f6c",
       "inputPaths": [
         "apps/api",
         "packages",
@@ -353,14 +353,14 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "05674c06000230f65c4f9ac6156df74ab010d7b43fcd7df1ae82de277f6805c5",
+      "inputFingerprint": "1027195529bb474f71e3b1c4e79b25dc3d60922d0a55dec7423884a12182dc71",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "acc029d6f580f7d471dc3343db9b1235bd926e4a",
-      "startedAt": "2026-11-08T06:54:14.873Z",
-      "endedAt": "2026-11-08T06:54:25.887Z",
+      "testedHead": "84e54710c8332d6a2bdcd179136f180c4af8034b",
+      "startedAt": "2026-11-08T07:04:49.366Z",
+      "endedAt": "2026-11-08T07:05:00.837Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf01-buildapi-final-sorted.log",
+      "log": "/workspace/scratch/dx-final10-20261108/perf01-buildapi-review-native-inventory.log",
       "logSha256": "8dd8c96364991c28227c467fbbb326a32e6737fddfa4e2d355be3ef6dd8512fe",
       "resultReport": null,
       "context": "Original configForSuite, marked owned loopback PG16.15 fixture and exact cleanup. Nodecpuset2,3, PGcpuset0,1/2GiB; local host not equivalent to CI hardware. Real AuthService and native business mutations on isolated fixtures only.",

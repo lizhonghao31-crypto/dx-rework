@@ -195,19 +195,21 @@ export class DigitalJourneyQuery {
       WHERE ($1='order' AND o.production_order_id=$2) OR ($1='source' AND s.source_id=$2 AND o.production_order_id IS NULL)`,[resource.kind,resource.id])).rows[0] as Candidate|undefined;
     if(!row)return digitalNotFound();
     let timing:JourneyTimingInputs={plan:null,original:null,facts:{}};
-    const item=await this.project(db,null,row,asOf,undefined,true,null,false,true,value=>{timing=value;});
+    let nativeTasks:Array<{id:string;routeInstanceId:string}>=[];
+    const item=await this.project(db,null,row,asOf,undefined,true,null,false,true,value=>{timing=value;},tasks=>{nativeTasks=tasks;});
     if(!item)throw new Error('Single-object Journey facts unavailable');
-    const ids=[...new Set(item.stages.flatMap(stage=>stage.nodes).flatMap(node=>node.records.filter(record=>record.domain==='task').map(record=>record.id)))];
+    // Native task identity is collected before setFact() substitutes original
+    // business-document links. Presentation records are not a task inventory.
+    const ids=nativeTasks.map(task=>task.id);
     const time=await new ContextBusinessClock(this.database,db).read(resource,()=>new Date(asOf));
     const summaries=await journeyTaskSummaries(db,ids,time);
-    const routes=ids.length?(await db.query<{task_id:string;route_instance_id:string}>('SELECT task_id,route_instance_id FROM digital_production_tasks WHERE task_id=ANY($1::uuid[])',[ids])).rows:[];
     const dependencies=ids.length?(await db.query<{taskId:string;predecessorId:string}>('SELECT task_id AS "taskId",predecessor_id AS "predecessorId" FROM digital_production_task_dependencies WHERE task_id=ANY($1::uuid[]) ORDER BY task_id,predecessor_id',[ids])).rows:[];
     const tasks=[...summaries.values()].map(task=>({id:task.taskId,kind:task.taskKind,sourceId:task.sourceId,orderId:task.orderId,assigneeId:task.assigneeId,requiredRole:task.requiredRole,
-      routeInstanceId:routes.find(row=>row.task_id===task.taskId)!.route_instance_id,routeVersion:task.routeVersion,policyVersion:task.policyVersion,
+      routeInstanceId:nativeTasks.find(row=>row.id===task.taskId)!.routeInstanceId,routeVersion:task.routeVersion,policyVersion:task.policyVersion,
       enteredAt:task.enteredAt,dueAt:task.dueAt,warningAt:task.warningAt,deadlineMode:task.deadlineMode??null,deadlineExclusive:task.deadlineExclusive===true}));
     return minimalJourneyFacts(item,timing,tasks,dependencies);
   }
-  private async project(db:PoolClient,actor:TrustedActorContext|null,row:Candidate,asOf:string,selectedRound?:number,summaryOnly=false,patternKinds:string[]|null=null,compact=false,supervision=false,capture?:(inputs:JourneyTimingInputs)=>void):Promise<OrderJourney|null> {
+  private async project(db:PoolClient,actor:TrustedActorContext|null,row:Candidate,asOf:string,selectedRound?:number,summaryOnly=false,patternKinds:string[]|null=null,compact=false,supervision=false,capture?:(inputs:JourneyTimingInputs)=>void,captureNativeTasks?:(tasks:Array<{id:string;routeInstanceId:string}>)=>void):Promise<OrderJourney|null> {
     const policy=new DigitalProductionAccessPolicy(db),source=row.source,order=row.order;
     const sid=source?.source_id??null,oid=order?.production_order_id??null;
     // Projection time is business time; the outer audit-log snapshot remains real.
@@ -238,6 +240,7 @@ export class DigitalJourneyQuery {
     }
     if(!sourceAccess&&!orderAccess&&!visibleTasks.length)return null;
     if(selectedRound!==undefined&&!sourceAccess)digitalNotFound();
+    captureNativeTasks?.(visibleTasks.map(task=>({id:task.task_id,routeInstanceId:task.route_instance_id})));
     const documentTables=sid&&sourceAccess?await developmentReadTables(db):null;
     const document=sid&&sourceAccess?(await db.query(`SELECT * FROM ${documentTables!.documents} WHERE source_id=$1`,[sid])).rows[0]:null;
     const revisions=sid&&sourceAccess?(await db.query(`SELECT * FROM ${documentTables!.rounds} WHERE source_id=$1 ORDER BY round_number`,[sid])).rows:[];

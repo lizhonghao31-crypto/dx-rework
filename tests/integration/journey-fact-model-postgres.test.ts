@@ -40,6 +40,14 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect(model.requirements.map(r=>({key:r.key,completed:r.completed,applicability:r.applicability,targets:r.targets}))).toEqual(original.businessProgress!.requirements.map(r=>({key:r.key,completed:r.completed,applicability:r.applicability,targets:r.targets})));
   const marker=model.nodes.find(n=>n.key==='bulk_marker'&&n.current)!;expect(marker.state).toBe('completed');expect(marker.actualAt).toBeTruthy();
   expect(model.tasks.length).toBeGreaterThan(2);expect(model.tasks.every(t=>t.requiredRole&&t.routeInstanceId)).toBe(true);
+  const nativeTasks=(await f.db.query(`SELECT a.task_id,a.task_kind,a.required_role,a.assignee_id,t.route_instance_id FROM digital_production_task_access a
+   JOIN digital_production_tasks t USING(task_id) WHERE a.task_kind<>'factory_material_count' AND (a.source_id=$1 OR a.production_order_id=$2) ORDER BY a.task_id`,[ready.sourceId,ready.id])).rows;
+  expect(model.tasks.map(t=>t.id)).toEqual(nativeTasks.map(t=>t.task_id));
+  const originalSourcing=nativeTasks.find(t=>t.task_kind==='sourcing_preparation')!;expect(originalSourcing).toBeTruthy();
+  expect(model.tasks.find(t=>t.id===originalSourcing.task_id)).toMatchObject({kind:'sourcing_preparation',requiredRole:originalSourcing.required_role,assigneeId:originalSourcing.assignee_id,routeInstanceId:originalSourcing.route_instance_id});
+  // Native instance identity survives even though the visible link correctly
+  // opens the original sourcing case rather than the technical task page.
+  const sourcingNode=model.nodes.find(n=>n.current&&n.key==='sourcing_preparation')!;expect(sourcingNode.instanceId).toBe(originalSourcing.task_id);expect(sourcingNode.scopes.some(s=>s.domain==='sourcing')).toBe(true);
   const nativeDependencies=(await f.db.query('SELECT task_id AS "taskId",predecessor_id AS "predecessorId" FROM digital_production_task_dependencies WHERE task_id=ANY($1::uuid[]) ORDER BY task_id,predecessor_id',[model.tasks.map(t=>t.id)])).rows;
   expect(model.dependencies).toEqual(nativeDependencies);expect(model.sla.plan?.nodes.some(n=>n.dependsOn.length>0)).toBe(true);
   for(const task of model.tasks){const n=original.stages.flatMap(s=>s.nodes).find(n=>n.instanceId===task.id);expect(n?.enteredAt).toBe(task.enteredAt);expect(n?.expectedPrecision).toBe(task.dueAt?task.deadlineMode==='date_target'?'date':'instant':'missing');}
