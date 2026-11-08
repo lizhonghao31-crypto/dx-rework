@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "2020b353ede3963f71ea3df6311019093ff9c584",
-  "sourceFingerprint": "e0ff918feaa62a504d5bb2b24e4ad0ee91f25b4b50558a35586b08de23cddec3",
+  "sourceFingerprint": "e504285c3225b0605c51da09196ae0af227d5ae03b49a8c7dbbc1e2f9132a639",
   "risk": "full",
   "rules": [
     {
@@ -39,14 +39,11 @@
       ],
       "initialization": "No new DB table, middleware, all-library backfill or original rewrite. Existing Sharp dependency; attachmentID+sourceSHA+spec version key.320inside/no-enlarge WebP; bounded original/pixel/output size. One decoder/eight queue,32 metadata requests,5s admission and3s decoder; same-object dedup, bounded30s failure cache. Warm hits bypass decode queue. Unknown immutable write verified, not blindly retried; original deletion cannot be falsely reported failed by derivative cleanup.",
       "dateAndPermission": "Technical timeout/backoff uses real time, no business SLA/event/clock changes. Original attachment and inheritance checks, root special case and signed grant TTL preserved; fresh actual AuthService after generation handles revoke/expiry. Private/no-store preview redirect; no stored actor or signed URL. Existing material thumbnail480 transformation unchanged.",
-      "expectation": "Current124units and6 nativePG cases pass: actual smaller WebP/original SHA, post-ready generation, historical first demand/warm reuse/no full form, anonymous/foreign source denial, inherited source and published instruction bytes, provider failure fallback and independent objects, same still-valid signed designer session revoked during generation. Original40 consumers pass.20 simultaneous warm-cache objects do not fall back or reread originals; finite slow-provider cleanup and cancelledHEAD no fallback tested.",
+      "expectation": "Prior exact e167 feature results remain recorded in commit e167 and its original private reports. Source identity check proves API/web/feature tests/lock/config are unchanged; they were not rerun for this historical-fixture-only fix. Current ordered-upgrade fixture and original33 correction/public-tool cases pass, zero skips; current lint/preflight/secret pass. Prior e167124units and6 nativePG cases pass: actual smaller WebP/original SHA, post-ready generation, historical first demand/warm reuse/no full form, anonymous/foreign source denial, inherited source and published instruction bytes, provider failure fallback and independent objects, same still-valid signed designer session revoked during generation. Original40 consumers pass.20 simultaneous warm-cache objects do not fall back or reread originals; finite slow-provider cleanup and cancelledHEAD no fallback tested.",
       "checks": [
-        "unit",
-        "native",
-        "consumers",
-        "typesapi",
+        "source-identity",
+        "amendment",
         "lint",
-        "preflight",
         "secret"
       ]
     },
@@ -71,12 +68,9 @@
       ],
       "initialization": "Recognize only the two actual development/instruction UUID attachment routes; external/other/version-query URLs retain original handling. Native loading=lazy/async decode and intrinsic dimensions retain existing CSS; original dialog, zoom, focus and manual retry remain. New source resets failure state.",
       "dateAndPermission": "No list/global statistic/time/frozen/permission semantics change. Image denial does not become an unfilled business document. Real signed native PMC session remains valid after actual revocation and cannot obtain another grant; separate Root browser still works. No real-site deployment or screenshot claim.",
-      "expectation": "Current3 full production-App browser cases with indexed:true and productionAssets:true pass:320 thumbnail vs1200 original, warm reload no original generation, actual503 falls back once at1165, native same-session revoke and independentRoot.1440/1165 full-page screenshots captured/inspected. Synthetic flat PNG14269bytes vs210byte WebP is one local image observation, not onsite speed or general compression/P95. Current UI types and124unit tests pass.",
+      "expectation": "Prior exact e167 feature results remain recorded in commit e167 and its original private reports. Source identity check proves API/web/feature tests/lock/config are unchanged; they were not rerun for this historical-fixture-only fix. Current ordered-upgrade fixture and original33 correction/public-tool cases pass, zero skips; current lint/preflight/secret pass. Prior e1673 full production-App browser cases with indexed:true and productionAssets:true pass:320 thumbnail vs1200 original, warm reload no original generation, actual503 falls back once at1165, native same-session revoke and independentRoot.1440/1165 full-page screenshots captured/inspected. Synthetic flat PNG14269bytes vs210byte WebP is one local image observation, not onsite speed or general compression/P95. Prior e167 UI types and124unit tests pass.",
       "checks": [
-        "browser",
-        "unit",
-        "typesweb",
-        "lint",
+        "source-identity",
         "preflight"
       ]
     },
@@ -116,26 +110,47 @@
       ],
       "initialization": "Same original100s correctness budget and owned safePG identity/creation/disposal; no fake target DB or production source. Complete production Vite graph plus original AuthService and immutable local TEST storage bytes; original fake badge adapter remains labelled and outside image assertions. Initial fixture owner/time-context/import setup failures preserved as failures, not evidence passes.",
       "dateAndPermission": "Source and mother fixture creator/time scopes use existing guards; no guard relaxed to pass tests. Time inventory only adds two protected routes and technical derivative backoff; unchanged manual entries retained. Current source tests all actual approved baseline; prior standalone IIFE/baseline checks remain historical, not current new-head approval.",
-      "expectation": "Current124unit/6 native/3 production-browser/40 original-consumer cases pass with zero skips. Current types/lint/preflight/secret match source. Full-App production graph is built by native browser fixture. No1000/5000 rerun for image changes; no unrelated backup/restore fix in this PR. Actual final merge baseline tree equals tested integration baseline before committing source.",
+      "expectation": "Prior exact e167 feature results remain recorded in commit e167 and its original private reports. Source identity check proves API/web/feature tests/lock/config are unchanged; they were not rerun for this historical-fixture-only fix. Current ordered-upgrade fixture and original33 correction/public-tool cases pass, zero skips; current lint/preflight/secret pass. Prior e167124unit/6 native/3 production-browser/40 original-consumer cases pass with zero skips. Prior e167 types/lint/preflight/secret match source. Full-App production graph is built by native browser fixture. No1000/5000 rerun for image changes; no unrelated backup/restore fix in this PR. Actual final merge baseline tree equals tested integration baseline before committing source.",
       "checks": [
-        "unit",
-        "native",
-        "browser",
-        "consumers",
-        "preflight",
+        "source-identity",
+        "preflight"
+      ]
+    },
+    {
+      "rule": "Build the pre-0248 returned-development fixture before applying0248 and dependent later migrations; preserve old replenishment semantics and current production triggers.",
+      "source": "Full42492740828/job128769310309 failed beforeAll because0279 depends on the skipped0248 table. Parent authorized exact minimal historical-order correction; original25 cases must remain.",
+      "writes": [
+        "tests/integration/development-amendment-postgres.test.ts"
+      ],
+      "reads": [
+        "tests/integration/development-amendment-postgres.test.ts",
+        "apps/api/migrations/0248_development_document_amendments.sql",
+        "apps/api/migrations/0279_journey_fact_incremental_updates.sql",
+        "apps/api/src/platform/migration-manifest.json"
+      ],
+      "oldTests": [
+        "tests/integration/development-amendment-postgres.test.ts",
+        "tests/integration/public-tools-postgres.test.ts"
+      ],
+      "initialization": "Fresh marked low-privilege owned schema; migrate through0247, create actual historical returns using original guarded services, then execute0248 and all subsequent migrations in manifest order. Existing schema lifecycle and cleanup retained. No production migration/trigger/state alteration.",
+      "dateAndPermission": "No business date, role, nativeRoot, read token, frozen document or legacy semantics changed. History fixtures remain isolated TEST data only.",
+      "expectation": "33/33 native cases pass zero skips, including original25 correction/history/authorization and8 public tools. Actual test initialization reproduces the old state then upgrades; setup failure was not a thumbnail business failure. Current lint/preflight/secret pass.",
+      "checks": [
+        "amendment",
         "lint",
+        "preflight",
         "secret"
       ]
     }
   ],
   "checks": [
     {
-      "id": "typesapi",
-      "command": "npm run typecheck --workspace=@dx-rework/api",
+      "id": "amendment",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/development-amendment-postgres.test.ts tests/integration/public-tools-postgres.test.ts --config vitest.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf05-postgres-amendment-ordered.vitest.json",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "e0ff918feaa62a504d5bb2b24e4ad0ee91f25b4b50558a35586b08de23cddec3",
+      "sourceFingerprint": "e504285c3225b0605c51da09196ae0af227d5ae03b49a8c7dbbc1e2f9132a639",
       "inputPaths": [
         "apps",
         "packages",
@@ -150,60 +165,35 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "dfe2f9459e2d391f0d6a0a99d4f10126123bed3a3c436429c59423ed2bf8e288",
+      "inputFingerprint": "ba3047d465abf97cc61c4329cb82bc30b6e3ec6095f5e3c890d21557ad74ff3e",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "b7b28a0ec3967614f2fc4af04a229b2ebea1d5c8",
-      "startedAt": "2026-11-08T14:46:31.907Z",
-      "endedAt": "2026-11-08T14:46:41.833Z",
+      "testedHead": "e16768b6e037653509e709b86b675e95e716a89b",
+      "startedAt": "2026-11-08T15:09:35.588Z",
+      "endedAt": "2026-11-08T15:09:50.946Z",
+      "passed": 33,
+      "failed": 0,
+      "skipped": 0,
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf05-typesapi-integrated-current.log",
-      "logSha256": "d81733d2d3443600c8f5c4e1f5774d8d050a1c5a8ef34bd5a659eb50ebd68f00",
-      "resultReport": null,
+      "log": "/workspace/scratch/dx-final10-20261108/perf05-postgres-amendment-ordered.log",
+      "logSha256": "070e7dc997a3d28461dabca7efd05ffecb555b0e50171e9b7e3706f2279f0f05",
+      "resultReport": "/workspace/scratch/dx-final10-20261108/perf05-postgres-amendment-ordered.vitest.json",
       "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native preview tests use actual AuthService, actual role revocation and private AcceptanceObjectStorage bytes, no real business data or deployment.",
-      "kind": "command"
-    },
-    {
-      "id": "typesweb",
-      "command": "npm run typecheck --workspace=@dx-rework/web",
-      "status": "passed",
-      "exitCode": 0,
-      "allExited": true,
-      "sourceFingerprint": "e0ff918feaa62a504d5bb2b24e4ad0ee91f25b4b50558a35586b08de23cddec3",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "tests",
-        ".env.example",
-        "package.json",
-        "package-lock.json",
-        "eslint.config.js",
-        "tsconfig.base.json",
-        "vitest.business-chain.config.ts",
-        "vitest.config.ts",
-        "vitest.postgres-immediate.config.ts"
-      ],
-      "inputFingerprint": "dfe2f9459e2d391f0d6a0a99d4f10126123bed3a3c436429c59423ed2bf8e288",
-      "inputsUnchanged": true,
-      "sourceUnchanged": true,
-      "testedHead": "b7b28a0ec3967614f2fc4af04a229b2ebea1d5c8",
-      "startedAt": "2026-11-08T14:46:41.916Z",
-      "endedAt": "2026-11-08T14:46:58.912Z",
-      "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf05-typesweb-integrated-current.log",
-      "logSha256": "752b0f4f80e1f2fdeece6837aa0d8538e17009bd166c8888d0c5c5d0c6148bcd",
-      "resultReport": null,
-      "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native preview tests use actual AuthService, actual role revocation and private AcceptanceObjectStorage bytes, no real business data or deployment.",
-      "kind": "command"
+      "kind": "tests",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "e227e510d033356051da1fb3c192896c7d38124cff29bb4be96623fc079b6b41"
+        }
+      ]
     },
     {
       "id": "lint",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/development-routes.ts apps/api/src/production-platform/development-service.ts apps/api/src/production-platform/production-instruction-routes.ts apps/api/src/tools/aliyun-oss-v4-client.ts apps/api/src/tools/attachments.ts apps/api/src/tools/storage.ts apps/web/src/App.tsx apps/web/src/cockpit-photo-preview.tsx apps/web/src/components.tsx apps/web/src/lazy-business-page.tsx apps/web/src/main.tsx scripts/ci/full-gate-risk-map.mjs scripts/ci/prepare-settings-browser.mjs scripts/test-suite-plan.mjs tests/acceptance/m01-cockpit-home-native-browser.ts tests/integration/frontend-asset-compat.test.ts tests/integration/module-bundles-native-browser-postgres.test.ts tests/unit/acceptance-lab-web.test.ts tests/unit/aliyun-oss-v4-client.test.ts tests/unit/digital-attachment-metadata.test.ts tests/unit/full-gate-risk-map.test.ts apps/api/src/tools/attachment-image-preview.ts tests/acceptance/cockpit-thumbnail-fixture.ts tests/integration/attachment-image-preview-postgres.test.ts tests/integration/cockpit-thumbnails-native-browser-postgres.test.ts tests/unit/attachment-image-preview.test.ts tests/unit/cockpit-photo-preview.test.ts --max-warnings=0",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/development-routes.ts apps/api/src/production-platform/development-service.ts apps/api/src/production-platform/production-instruction-routes.ts apps/api/src/tools/aliyun-oss-v4-client.ts apps/api/src/tools/attachment-image-preview.ts apps/api/src/tools/attachments.ts apps/api/src/tools/storage.ts apps/web/src/cockpit-photo-preview.tsx scripts/ci/full-gate-risk-map.mjs scripts/ci/prepare-settings-browser.mjs scripts/test-suite-plan.mjs tests/acceptance/cockpit-thumbnail-fixture.ts tests/acceptance/m01-cockpit-home-native-browser.ts tests/integration/attachment-image-preview-postgres.test.ts tests/integration/cockpit-thumbnails-native-browser-postgres.test.ts tests/integration/development-amendment-postgres.test.ts tests/unit/aliyun-oss-v4-client.test.ts tests/unit/attachment-image-preview.test.ts tests/unit/cockpit-photo-preview.test.ts tests/unit/digital-attachment-metadata.test.ts tests/unit/full-gate-risk-map.test.ts --max-warnings=0",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "e0ff918feaa62a504d5bb2b24e4ad0ee91f25b4b50558a35586b08de23cddec3",
+      "sourceFingerprint": "e504285c3225b0605c51da09196ae0af227d5ae03b49a8c7dbbc1e2f9132a639",
       "inputPaths": [
         "apps",
         "packages",
@@ -218,190 +208,18 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "dfe2f9459e2d391f0d6a0a99d4f10126123bed3a3c436429c59423ed2bf8e288",
+      "inputFingerprint": "ba3047d465abf97cc61c4329cb82bc30b6e3ec6095f5e3c890d21557ad74ff3e",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "b7b28a0ec3967614f2fc4af04a229b2ebea1d5c8",
-      "startedAt": "2026-11-08T14:46:58.995Z",
-      "endedAt": "2026-11-08T14:47:00.417Z",
+      "testedHead": "e16768b6e037653509e709b86b675e95e716a89b",
+      "startedAt": "2026-11-08T15:10:32.445Z",
+      "endedAt": "2026-11-08T15:10:33.892Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf05-lint-integrated-current.log",
+      "log": "/workspace/scratch/dx-final10-20261108/perf05-lint-amendment-ordered.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "resultReport": null,
       "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native preview tests use actual AuthService, actual role revocation and private AcceptanceObjectStorage bytes, no real business data or deployment.",
       "kind": "command"
-    },
-    {
-      "id": "unit",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/attachment-image-preview.test.ts tests/unit/cockpit-photo-preview.test.ts tests/unit/digital-attachment-metadata.test.ts tests/unit/attachment-service-failures.test.ts tests/unit/attachment-upload-pipeline.test.ts tests/unit/acceptance-storage.test.ts tests/unit/aliyun-oss-v4-client.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf05-unit-integrated-current.vitest.json",
-      "status": "passed",
-      "exitCode": 0,
-      "allExited": true,
-      "sourceFingerprint": "e0ff918feaa62a504d5bb2b24e4ad0ee91f25b4b50558a35586b08de23cddec3",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "tests",
-        ".env.example",
-        "package.json",
-        "package-lock.json",
-        "eslint.config.js",
-        "tsconfig.base.json",
-        "vitest.business-chain.config.ts",
-        "vitest.config.ts",
-        "vitest.postgres-immediate.config.ts"
-      ],
-      "inputFingerprint": "dfe2f9459e2d391f0d6a0a99d4f10126123bed3a3c436429c59423ed2bf8e288",
-      "inputsUnchanged": true,
-      "sourceUnchanged": true,
-      "testedHead": "b7b28a0ec3967614f2fc4af04a229b2ebea1d5c8",
-      "startedAt": "2026-11-08T14:47:00.502Z",
-      "endedAt": "2026-11-08T14:47:04.634Z",
-      "passed": 124,
-      "failed": 0,
-      "skipped": 0,
-      "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf05-unit-integrated-current.log",
-      "logSha256": "a63f41c12e4c72a8da26978d8b413344cc54bda695863c7f100966c461ab23b2",
-      "resultReport": "/workspace/scratch/dx-final10-20261108/perf05-unit-integrated-current.vitest.json",
-      "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native preview tests use actual AuthService, actual role revocation and private AcceptanceObjectStorage bytes, no real business data or deployment.",
-      "kind": "tests",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "8a407d63aa98a2f3704a36d63bad9dc87ffc8373496292451836cefc0066c695"
-        }
-      ]
-    },
-    {
-      "id": "native",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/attachment-image-preview-postgres.test.ts --config vitest.business-chain.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf05-postgres-integrated-current.vitest.json",
-      "status": "passed",
-      "exitCode": 0,
-      "allExited": true,
-      "sourceFingerprint": "e0ff918feaa62a504d5bb2b24e4ad0ee91f25b4b50558a35586b08de23cddec3",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "tests",
-        ".env.example",
-        "package.json",
-        "package-lock.json",
-        "eslint.config.js",
-        "tsconfig.base.json",
-        "vitest.business-chain.config.ts",
-        "vitest.config.ts",
-        "vitest.postgres-immediate.config.ts"
-      ],
-      "inputFingerprint": "dfe2f9459e2d391f0d6a0a99d4f10126123bed3a3c436429c59423ed2bf8e288",
-      "inputsUnchanged": true,
-      "sourceUnchanged": true,
-      "testedHead": "b7b28a0ec3967614f2fc4af04a229b2ebea1d5c8",
-      "startedAt": "2026-11-08T14:47:04.715Z",
-      "endedAt": "2026-11-08T14:47:13.345Z",
-      "passed": 6,
-      "failed": 0,
-      "skipped": 0,
-      "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf05-postgres-integrated-current.log",
-      "logSha256": "fee2c4f1ed400f4e66008ff78c77cb88e1350dc99fd507ec1643cc5c69ebf5b4",
-      "resultReport": "/workspace/scratch/dx-final10-20261108/perf05-postgres-integrated-current.vitest.json",
-      "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native preview tests use actual AuthService, actual role revocation and private AcceptanceObjectStorage bytes, no real business data or deployment.",
-      "kind": "tests",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "817683005edafffe77003b0496f72e6f7907826a722a718569dbe63d2e0756c1"
-        }
-      ]
-    },
-    {
-      "id": "browser",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/cockpit-thumbnails-native-browser-postgres.test.ts --config vitest.business-chain.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf05-postgres-integrated-browser.vitest.json",
-      "status": "passed",
-      "exitCode": 0,
-      "allExited": true,
-      "sourceFingerprint": "e0ff918feaa62a504d5bb2b24e4ad0ee91f25b4b50558a35586b08de23cddec3",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "tests",
-        ".env.example",
-        "package.json",
-        "package-lock.json",
-        "eslint.config.js",
-        "tsconfig.base.json",
-        "vitest.business-chain.config.ts",
-        "vitest.config.ts",
-        "vitest.postgres-immediate.config.ts"
-      ],
-      "inputFingerprint": "dfe2f9459e2d391f0d6a0a99d4f10126123bed3a3c436429c59423ed2bf8e288",
-      "inputsUnchanged": true,
-      "sourceUnchanged": true,
-      "testedHead": "b7b28a0ec3967614f2fc4af04a229b2ebea1d5c8",
-      "startedAt": "2026-11-08T14:47:13.518Z",
-      "endedAt": "2026-11-08T14:47:31.706Z",
-      "passed": 3,
-      "failed": 0,
-      "skipped": 0,
-      "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf05-postgres-integrated-browser.log",
-      "logSha256": "4da9fc3559f0c7f7c8e4e8f61b478c27286ff90a7a717d3afba007ac4e21e8e0",
-      "resultReport": "/workspace/scratch/dx-final10-20261108/perf05-postgres-integrated-browser.vitest.json",
-      "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native preview tests use actual AuthService, actual role revocation and private AcceptanceObjectStorage bytes, no real business data or deployment.",
-      "kind": "tests",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "e07440dc19fdb0ecd11f238abadba86604c9d039c443acc33ed284e39372e9b8"
-        }
-      ]
-    },
-    {
-      "id": "consumers",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/development-technical-postgres.test.ts tests/integration/digital-development-postgres.test.ts --config vitest.business-chain.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf05-postgres-integrated-consumers.vitest.json",
-      "status": "passed",
-      "exitCode": 0,
-      "allExited": true,
-      "sourceFingerprint": "e0ff918feaa62a504d5bb2b24e4ad0ee91f25b4b50558a35586b08de23cddec3",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "tests",
-        ".env.example",
-        "package.json",
-        "package-lock.json",
-        "eslint.config.js",
-        "tsconfig.base.json",
-        "vitest.business-chain.config.ts",
-        "vitest.config.ts",
-        "vitest.postgres-immediate.config.ts"
-      ],
-      "inputFingerprint": "dfe2f9459e2d391f0d6a0a99d4f10126123bed3a3c436429c59423ed2bf8e288",
-      "inputsUnchanged": true,
-      "sourceUnchanged": true,
-      "testedHead": "2020b353ede3963f71ea3df6311019093ff9c584",
-      "startedAt": "2026-11-08T14:48:00.410Z",
-      "endedAt": "2026-11-08T14:48:22.258Z",
-      "passed": 40,
-      "failed": 0,
-      "skipped": 0,
-      "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf05-postgres-integrated-consumers.log",
-      "logSha256": "a55e9978ea39311f431c619325e279dc351f63eab0d875e4f83d7bb84b402927",
-      "resultReport": "/workspace/scratch/dx-final10-20261108/perf05-postgres-integrated-consumers.vitest.json",
-      "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native preview tests use actual AuthService, actual role revocation and private AcceptanceObjectStorage bytes, no real business data or deployment.",
-      "kind": "tests",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "227c83aed1e21b32cf69c15ae62c21049be49d5de36a050379270022c72333ba"
-        }
-      ]
     },
     {
       "id": "preflight",
@@ -409,7 +227,7 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "e0ff918feaa62a504d5bb2b24e4ad0ee91f25b4b50558a35586b08de23cddec3",
+      "sourceFingerprint": "e504285c3225b0605c51da09196ae0af227d5ae03b49a8c7dbbc1e2f9132a639",
       "inputPaths": [
         "apps",
         "packages",
@@ -424,15 +242,15 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "dfe2f9459e2d391f0d6a0a99d4f10126123bed3a3c436429c59423ed2bf8e288",
+      "inputFingerprint": "ba3047d465abf97cc61c4329cb82bc30b6e3ec6095f5e3c890d21557ad74ff3e",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "2020b353ede3963f71ea3df6311019093ff9c584",
-      "startedAt": "2026-11-08T14:47:51.740Z",
-      "endedAt": "2026-11-08T14:47:59.302Z",
+      "testedHead": "e16768b6e037653509e709b86b675e95e716a89b",
+      "startedAt": "2026-11-08T15:10:24.902Z",
+      "endedAt": "2026-11-08T15:10:32.363Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf05-preflight-integrated-consumers.log",
-      "logSha256": "1916a5acce20b8862f4d7b4b0bf5137b394688887f0160b1be811bccb58af167",
+      "log": "/workspace/scratch/dx-final10-20261108/perf05-preflight-amendment-ordered.log",
+      "logSha256": "d5b6e84b0c2e65de40a10ede33e077e147520b4b05502f311ef55bdbea63a925",
       "resultReport": null,
       "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native preview tests use actual AuthService, actual role revocation and private AcceptanceObjectStorage bytes, no real business data or deployment.",
       "kind": "command"
@@ -443,7 +261,7 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "e0ff918feaa62a504d5bb2b24e4ad0ee91f25b4b50558a35586b08de23cddec3",
+      "sourceFingerprint": "e504285c3225b0605c51da09196ae0af227d5ae03b49a8c7dbbc1e2f9132a639",
       "inputPaths": [
         "apps",
         "packages",
@@ -458,18 +276,47 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "dfe2f9459e2d391f0d6a0a99d4f10126123bed3a3c436429c59423ed2bf8e288",
+      "inputFingerprint": "ba3047d465abf97cc61c4329cb82bc30b6e3ec6095f5e3c890d21557ad74ff3e",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "2020b353ede3963f71ea3df6311019093ff9c584",
-      "startedAt": "2026-11-08T14:47:59.389Z",
-      "endedAt": "2026-11-08T14:48:00.326Z",
+      "testedHead": "e16768b6e037653509e709b86b675e95e716a89b",
+      "startedAt": "2026-11-08T15:10:33.979Z",
+      "endedAt": "2026-11-08T15:10:34.827Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf05-secret-integrated-consumers.log",
+      "log": "/workspace/scratch/dx-final10-20261108/perf05-secret-amendment-ordered.log",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda",
       "resultReport": null,
       "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native preview tests use actual AuthService, actual role revocation and private AcceptanceObjectStorage bytes, no real business data or deployment.",
       "kind": "command"
+    },
+    {
+      "id": "source-identity",
+      "kind": "command",
+      "command": "git diff --name-only e16768b6e037653509e709b86b675e95e716a89b -- apps packages scripts tests .env.example package.json package-lock.json",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "e16768b6e037653509e709b86b675e95e716a89b",
+      "sourceFingerprint": "e504285c3225b0605c51da09196ae0af227d5ae03b49a8c7dbbc1e2f9132a639",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests",
+        ".env.example",
+        "package.json",
+        "package-lock.json",
+        "eslint.config.js",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "vitest.postgres-immediate.config.ts"
+      ],
+      "inputFingerprint": "ba3047d465abf97cc61c4329cb82bc30b6e3ec6095f5e3c890d21557ad74ff3e",
+      "startedAt": "2026-11-08T15:11:36.622Z",
+      "endedAt": "2026-11-08T15:11:36.674Z",
+      "log": "/workspace/scratch/dx-final10-20261108/perf05-source-identity-amendment.log",
+      "logSha256": "9cb99c55a4e0cb2dd5248dfdeaf4be6c80e9c52e06d544c76d1d232ee335bc8e",
+      "context": "Exact Git file comparison against reviewed e167; comparison is not a new business or GitHub Full test. Only old fixture migration order changed."
     }
   ]
 }
