@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "0942b07a448fbe5883fb1ca4e618decf4aabdd19",
-  "sourceFingerprint": "f3178e8c9401bce35d188a717f89cc7a650410f9d837c03154b816e23e5e3a61",
+  "sourceFingerprint": "367d8fa8fb74341de72b9eebae7f8ad62da06682c370b9397c1d6231a41fc855",
   "risk": "full",
   "rules": [
     {
@@ -27,17 +27,19 @@
         "tests/unit/journey-projection-isolation.test.ts"
       ],
       "newTests": [
-        "tests/integration/module-bundles-native-browser-postgres.test.ts"
+        "tests/integration/module-bundles-native-browser-postgres.test.ts",
+        "tests/unit/acceptance-lab-web.test.ts"
       ],
       "initialization": "52 typed lazy page factories and separate AcceptanceLab; default complete-App IIFE harness remains available, new optional real production Vite graph exercises actual main/App/CSS with signed AuthService and owned PostgreSQL fixtures. Six per-case100s budgets, original cleanup, no new business route.",
       "dateAndPermission": "No SLA, native timing, business event, role/capability or field policy change. Original gate resolves before unauthorized module import. Draft identity stays stable across parent renders; no automatic navigation/reload destroys edits.",
-      "expectation": "Current production-native6 covers needed-only asset graph,1165/1440 home and seven-stage detail, signed PMC denied employee access without importing that module, settings unsaved edit/back URL/fonts, actual aborted calendar chunk and manual recovery. Current types/build and112 scoped units pass; no onsite/P95/latency claim. Full required after actual03 integration, not yet run.",
+      "expectation": "Current labunit2 verifies lazy AcceptanceLab remains outside business AuthGate and production navigation, with shellOnError:false. Actual original production-browser6/type/build/112unit and47asset tests are reused only with exact frozen unchanged inputs and original result bytes. First Full42478013326 PG128723868828 succeeded; nonDB128723868884 failed the now-fixed old static-import assertion, so Full is not called passed. No application change in this delta; merge remains afterPERF03.",
       "checks": [
         "postgres",
         "typesweb",
         "unit",
         "lint",
-        "secret"
+        "secret",
+        "labunit"
       ]
     },
     {
@@ -91,7 +93,8 @@
         "scripts/test-suite-plan.mjs",
         "tests/acceptance/m01-cockpit-home-native-browser.ts",
         "tests/integration/frontend-asset-compat.test.ts",
-        "tests/integration/module-bundles-native-browser-postgres.test.ts"
+        "tests/integration/module-bundles-native-browser-postgres.test.ts",
+        "tests/unit/acceptance-lab-web.test.ts"
       ],
       "reads": [
         "scripts/test-suite-plan.mjs",
@@ -108,17 +111,19 @@
       ],
       "newTests": [
         "tests/integration/module-bundles-native-browser-postgres.test.ts",
-        "tests/integration/frontend-asset-compat.test.ts"
+        "tests/integration/frontend-asset-compat.test.ts",
+        "tests/unit/acceptance-lab-web.test.ts"
       ],
       "initialization": "Actual latest release base verified via fetch/ls-remote. Stash merge conflict resolved retaining original journey-fact-model, journey-fact-updates and module-bundles suite entries, one declaration. Original configForSuite/owned-command, Node22.22.2/npm10.9.9/locked Chromium141, loopback PG16.15 (2GiB); NodeCPU2,3/PGCPU0,1 is not CI hardware equivalence.",
       "dateAndPermission": "No simulated business clock or extra permissions replace true auth. Production harness builds production React conditions and strict hashed static resources; current native fixture uses real safe isolated business writes, cleanup complete.",
-      "expectation": "Current112 unit+6 native+47 deployment tests passed with source/input-bound reports and no skips. Current preflight/types/build/lint/secret passed. This is submission evidence, not a final CI or deployment claim. PERF03 local work is separate and untouched; integrate actual03 and only revalidate affected parts before04 merge.",
+      "expectation": "Current2 AcceptanceLab semantic unit cases pass; existing112unit+6native+47asset reports remain actual unchanged-input evidence. This test-only fix does not rerun already completed business cases. First remote Full failed its old test assertion despite PG success; subsequent final approval will bind its actual candidate/base. No deployment or onsite claim.",
       "checks": [
         "unit",
         "postgres",
         "assetcompat",
         "preflight",
-        "lint"
+        "lint",
+        "labunit"
       ]
     }
   ],
@@ -135,7 +140,10 @@
         "apps/api",
         "packages",
         "scripts",
-        "tests",
+        "tests/acceptance",
+        "tests/fixtures",
+        "tests/helpers",
+        "tests/integration",
         "infra",
         "package.json",
         "package-lock.json",
@@ -145,7 +153,7 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "890a94ee0cc9329b68528d1869d8b0ccc9b71669f785c40309d4400cf96cb899",
+      "inputFingerprint": "954a2ca56725940f21f213a3cad0888be63af3b4a6afbd2b53c47499f3a4b00c",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
       "testedHead": "a22973efd9cd0a0415dfb79f0cf5c64aeb970ab5",
@@ -155,8 +163,13 @@
       "log": "/workspace/scratch/dx-final10-20261108/perf04-typesweb-review-pending-shell.log",
       "logSha256": "752b0f4f80e1f2fdeece6837aa0d8538e17009bd166c8888d0c5c5d0c6148bcd",
       "resultReport": null,
-      "context": "Original configForSuite, marked owned loopback PG16.15 fixture and exact cleanup. Nodecpuset2,3, PGcpuset0,1/2GiB; local host not equivalent to CI hardware. Real AuthService and native business mutations on isolated fixtures only.",
-      "kind": "command"
+      "context": "Original configForSuite, marked owned loopback PG16.15 fixture and exact cleanup. Nodecpuset2,3, PGcpuset0,1/2GiB; local host not equivalent to CI hardware. Real AuthService and native business mutations on isolated fixtures only. Current delta changes only the separate acceptance-lab-web unit assertion. Exact original inputs above match the clean frozen source; selected112 units retain their actual six files, native/browser/deploy consumers retain their actual code and fixture trees. Original execution/log/report unchanged; not a new execution. AcceptanceLab semantics have their own current labunit2 receipt.",
+      "kind": "command",
+      "scopeProof": {
+        "frozenHead": "416ac8d6826330ebb4d84ee4ed1fb01eabfa6667",
+        "sourceFingerprint": "f3178e8c9401bce35d188a717f89cc7a650410f9d837c03154b816e23e5e3a61",
+        "verifiedAt": "2026-11-08T12:39:27.910Z"
+      }
     },
     {
       "id": "preflight",
@@ -170,7 +183,10 @@
         "apps/api",
         "packages",
         "scripts",
-        "tests",
+        "tests/acceptance",
+        "tests/fixtures",
+        "tests/helpers",
+        "tests/integration",
         "infra",
         "package.json",
         "package-lock.json",
@@ -180,7 +196,7 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "890a94ee0cc9329b68528d1869d8b0ccc9b71669f785c40309d4400cf96cb899",
+      "inputFingerprint": "954a2ca56725940f21f213a3cad0888be63af3b4a6afbd2b53c47499f3a4b00c",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
       "testedHead": "a22973efd9cd0a0415dfb79f0cf5c64aeb970ab5",
@@ -190,8 +206,13 @@
       "log": "/workspace/scratch/dx-final10-20261108/perf04-preflight-review-pending-shell.log",
       "logSha256": "3695dfc8a6c290b96698356f40642b3dbb9a2e41c3824011c9b7860805c18335",
       "resultReport": null,
-      "context": "Original configForSuite, marked owned loopback PG16.15 fixture and exact cleanup. Nodecpuset2,3, PGcpuset0,1/2GiB; local host not equivalent to CI hardware. Real AuthService and native business mutations on isolated fixtures only.",
-      "kind": "command"
+      "context": "Original configForSuite, marked owned loopback PG16.15 fixture and exact cleanup. Nodecpuset2,3, PGcpuset0,1/2GiB; local host not equivalent to CI hardware. Real AuthService and native business mutations on isolated fixtures only. Current delta changes only the separate acceptance-lab-web unit assertion. Exact original inputs above match the clean frozen source; selected112 units retain their actual six files, native/browser/deploy consumers retain their actual code and fixture trees. Original execution/log/report unchanged; not a new execution. AcceptanceLab semantics have their own current labunit2 receipt.",
+      "kind": "command",
+      "scopeProof": {
+        "frozenHead": "416ac8d6826330ebb4d84ee4ed1fb01eabfa6667",
+        "sourceFingerprint": "f3178e8c9401bce35d188a717f89cc7a650410f9d837c03154b816e23e5e3a61",
+        "verifiedAt": "2026-11-08T12:39:28.064Z"
+      }
     },
     {
       "id": "lint",
@@ -205,7 +226,10 @@
         "apps/api",
         "packages",
         "scripts",
-        "tests",
+        "tests/acceptance",
+        "tests/fixtures",
+        "tests/helpers",
+        "tests/integration",
         "infra",
         "package.json",
         "package-lock.json",
@@ -215,7 +239,7 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "890a94ee0cc9329b68528d1869d8b0ccc9b71669f785c40309d4400cf96cb899",
+      "inputFingerprint": "954a2ca56725940f21f213a3cad0888be63af3b4a6afbd2b53c47499f3a4b00c",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
       "testedHead": "a22973efd9cd0a0415dfb79f0cf5c64aeb970ab5",
@@ -225,8 +249,13 @@
       "log": "/workspace/scratch/dx-final10-20261108/perf04-lint-review-pending-shell.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "resultReport": null,
-      "context": "Original configForSuite, marked owned loopback PG16.15 fixture and exact cleanup. Nodecpuset2,3, PGcpuset0,1/2GiB; local host not equivalent to CI hardware. Real AuthService and native business mutations on isolated fixtures only.",
-      "kind": "command"
+      "context": "Original configForSuite, marked owned loopback PG16.15 fixture and exact cleanup. Nodecpuset2,3, PGcpuset0,1/2GiB; local host not equivalent to CI hardware. Real AuthService and native business mutations on isolated fixtures only. Current delta changes only the separate acceptance-lab-web unit assertion. Exact original inputs above match the clean frozen source; selected112 units retain their actual six files, native/browser/deploy consumers retain their actual code and fixture trees. Original execution/log/report unchanged; not a new execution. AcceptanceLab semantics have their own current labunit2 receipt.",
+      "kind": "command",
+      "scopeProof": {
+        "frozenHead": "416ac8d6826330ebb4d84ee4ed1fb01eabfa6667",
+        "sourceFingerprint": "f3178e8c9401bce35d188a717f89cc7a650410f9d837c03154b816e23e5e3a61",
+        "verifiedAt": "2026-11-08T12:39:28.214Z"
+      }
     },
     {
       "id": "secret",
@@ -240,7 +269,10 @@
         "apps/api",
         "packages",
         "scripts",
-        "tests",
+        "tests/acceptance",
+        "tests/fixtures",
+        "tests/helpers",
+        "tests/integration",
         "infra",
         "package.json",
         "package-lock.json",
@@ -250,7 +282,7 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "890a94ee0cc9329b68528d1869d8b0ccc9b71669f785c40309d4400cf96cb899",
+      "inputFingerprint": "954a2ca56725940f21f213a3cad0888be63af3b4a6afbd2b53c47499f3a4b00c",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
       "testedHead": "a22973efd9cd0a0415dfb79f0cf5c64aeb970ab5",
@@ -260,8 +292,13 @@
       "log": "/workspace/scratch/dx-final10-20261108/perf04-secret-review-pending-shell.log",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda",
       "resultReport": null,
-      "context": "Original configForSuite, marked owned loopback PG16.15 fixture and exact cleanup. Nodecpuset2,3, PGcpuset0,1/2GiB; local host not equivalent to CI hardware. Real AuthService and native business mutations on isolated fixtures only.",
-      "kind": "command"
+      "context": "Original configForSuite, marked owned loopback PG16.15 fixture and exact cleanup. Nodecpuset2,3, PGcpuset0,1/2GiB; local host not equivalent to CI hardware. Real AuthService and native business mutations on isolated fixtures only. Current delta changes only the separate acceptance-lab-web unit assertion. Exact original inputs above match the clean frozen source; selected112 units retain their actual six files, native/browser/deploy consumers retain their actual code and fixture trees. Original execution/log/report unchanged; not a new execution. AcceptanceLab semantics have their own current labunit2 receipt.",
+      "kind": "command",
+      "scopeProof": {
+        "frozenHead": "416ac8d6826330ebb4d84ee4ed1fb01eabfa6667",
+        "sourceFingerprint": "f3178e8c9401bce35d188a717f89cc7a650410f9d837c03154b816e23e5e3a61",
+        "verifiedAt": "2026-11-08T12:39:28.372Z"
+      }
     },
     {
       "id": "unit",
@@ -284,9 +321,14 @@
         "vitest.business-chain.config.ts",
         "vitest.postgres-immediate.config.ts",
         ".github",
-        "tests/unit"
+        "tests/unit/journey-fact-model.test.ts",
+        "tests/unit/journey-visual-progress.test.ts",
+        "tests/unit/journey-native-times.test.ts",
+        "tests/unit/journey-projection-isolation.test.ts",
+        "tests/unit/current-migration-manifest-checksum.test.ts",
+        "tests/unit/full-gate-risk-map.test.ts"
       ],
-      "inputFingerprint": "0fa5c63ffee47da46d70b5a2c166b9775bbb8628eddf43cd9282a35913953731",
+      "inputFingerprint": "896cc04b42f245b1ab282c303247382aab88dbbd124a99bbe5028f3593fccb08",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
       "testedHead": "0942b07a448fbe5883fb1ca4e618decf4aabdd19",
@@ -299,11 +341,11 @@
       "log": "/workspace/scratch/dx-final10-20261108/perf04-unit-submitted-preparation.log",
       "logSha256": "ff00601d70c9a14d8c0887d94eaea4113708f8862d023a6d298d0a4c2c12c9d5",
       "resultReport": "/workspace/scratch/dx-final10-20261108/perf04-unit-submitted-preparation.vitest.json",
-      "context": "Original configForSuite, marked owned loopback PG16.15 fixture and exact cleanup. Nodecpuset2,3, PGcpuset0,1/2GiB; local host not equivalent to CI hardware. Real AuthService and native business mutations on isolated fixtures only. Reused unchanged inputs verified against clean frozen commit5b76a28d whose entire source fingerprint equals this original actual run. Scope excludes later UI-only loading/recovery and browser-case changes; original command/results/log bytes unchanged. Not a new test execution.",
+      "context": "Original configForSuite, marked owned loopback PG16.15 fixture and exact cleanup. Nodecpuset2,3, PGcpuset0,1/2GiB; local host not equivalent to CI hardware. Real AuthService and native business mutations on isolated fixtures only. Reused unchanged inputs verified against clean frozen commit5b76a28d whose entire source fingerprint equals this original actual run. Scope excludes later UI-only loading/recovery and browser-case changes; original command/results/log bytes unchanged. Not a new test execution. Current delta changes only the separate acceptance-lab-web unit assertion. Exact original inputs above match the clean frozen source; selected112 units retain their actual six files, native/browser/deploy consumers retain their actual code and fixture trees. Original execution/log/report unchanged; not a new execution. AcceptanceLab semantics have their own current labunit2 receipt.",
       "scopeProof": {
         "frozenHead": "5b76a28d4a21378038175a64539e0ec75952b381",
         "sourceFingerprint": "ad3be7995cb4385336d4134afd1e607143f2b4615ea2e0019d388ff60b1a17c5",
-        "verifiedAt": "2026-11-08T11:03:32.174Z"
+        "verifiedAt": "2026-11-08T12:39:28.565Z"
       },
       "kind": "tests",
       "resultReports": [
@@ -325,7 +367,10 @@
         "apps/api",
         "packages",
         "scripts",
-        "tests",
+        "tests/acceptance",
+        "tests/fixtures",
+        "tests/helpers",
+        "tests/integration",
         "infra",
         "package.json",
         "package-lock.json",
@@ -335,7 +380,7 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "890a94ee0cc9329b68528d1869d8b0ccc9b71669f785c40309d4400cf96cb899",
+      "inputFingerprint": "954a2ca56725940f21f213a3cad0888be63af3b4a6afbd2b53c47499f3a4b00c",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
       "testedHead": "a22973efd9cd0a0415dfb79f0cf5c64aeb970ab5",
@@ -348,14 +393,19 @@
       "log": "/workspace/scratch/dx-final10-20261108/perf04-postgres-review-pending-shell.log",
       "logSha256": "3f25c492c787861ea9e0632437b9ef5c27f13df5c1d547c71ca269587fba473c",
       "resultReport": "/workspace/scratch/dx-final10-20261108/perf04-postgres-review-pending-shell.vitest.json",
-      "context": "Original configForSuite, marked owned loopback PG16.15 fixture and exact cleanup. Nodecpuset2,3, PGcpuset0,1/2GiB; local host not equivalent to CI hardware. Real AuthService and native business mutations on isolated fixtures only.",
+      "context": "Original configForSuite, marked owned loopback PG16.15 fixture and exact cleanup. Nodecpuset2,3, PGcpuset0,1/2GiB; local host not equivalent to CI hardware. Real AuthService and native business mutations on isolated fixtures only. Current delta changes only the separate acceptance-lab-web unit assertion. Exact original inputs above match the clean frozen source; selected112 units retain their actual six files, native/browser/deploy consumers retain their actual code and fixture trees. Original execution/log/report unchanged; not a new execution. AcceptanceLab semantics have their own current labunit2 receipt.",
       "kind": "tests",
       "resultReports": [
         {
           "format": "vitest-json",
           "sha256": "101a5d87fb32f0adb552cead5ee7d99482b24fe391e64c1e199fcb00b0015b91"
         }
-      ]
+      ],
+      "scopeProof": {
+        "frozenHead": "416ac8d6826330ebb4d84ee4ed1fb01eabfa6667",
+        "sourceFingerprint": "f3178e8c9401bce35d188a717f89cc7a650410f9d837c03154b816e23e5e3a61",
+        "verifiedAt": "2026-11-08T12:39:28.716Z"
+      }
     },
     {
       "id": "assetcompat",
@@ -398,17 +448,61 @@
       "log": "/workspace/scratch/dx-final10-20261108/perf04-assetcompat-submitted-preparation.log",
       "logSha256": "e9720cff01d41d5c0ab986e3737558b38a83ca76eb48aaa36ecf64d53fd7ad64",
       "resultReport": "/workspace/scratch/dx-final10-20261108/perf04-assetcompat-submitted-preparation.vitest.json",
-      "context": "Original configForSuite, marked owned loopback PG16.15 fixture and exact cleanup. Nodecpuset2,3, PGcpuset0,1/2GiB; local host not equivalent to CI hardware. Real AuthService and native business mutations on isolated fixtures only. Reused unchanged inputs verified against clean frozen commit5b76a28d whose entire source fingerprint equals this original actual run. Scope excludes later UI-only loading/recovery and browser-case changes; original command/results/log bytes unchanged. Not a new test execution.",
+      "context": "Original configForSuite, marked owned loopback PG16.15 fixture and exact cleanup. Nodecpuset2,3, PGcpuset0,1/2GiB; local host not equivalent to CI hardware. Real AuthService and native business mutations on isolated fixtures only. Reused unchanged inputs verified against clean frozen commit5b76a28d whose entire source fingerprint equals this original actual run. Scope excludes later UI-only loading/recovery and browser-case changes; original command/results/log bytes unchanged. Not a new test execution. Current delta changes only the separate acceptance-lab-web unit assertion. Exact original inputs above match the clean frozen source; selected112 units retain their actual six files, native/browser/deploy consumers retain their actual code and fixture trees. Original execution/log/report unchanged; not a new execution. AcceptanceLab semantics have their own current labunit2 receipt.",
       "scopeProof": {
         "frozenHead": "5b76a28d4a21378038175a64539e0ec75952b381",
         "sourceFingerprint": "ad3be7995cb4385336d4134afd1e607143f2b4615ea2e0019d388ff60b1a17c5",
-        "verifiedAt": "2026-11-08T11:03:32.121Z"
+        "verifiedAt": "2026-11-08T12:39:28.843Z"
       },
       "kind": "tests",
       "resultReports": [
         {
           "format": "vitest-json",
           "sha256": "595912c1b724f99bc90796dd455311bef8db587d4a13eb523a57849943f94d1f"
+        }
+      ]
+    },
+    {
+      "id": "labunit",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/acceptance-lab-web.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf04-labunit-lab-dynamic-import.vitest.json",
+      "status": "passed",
+      "exitCode": 0,
+      "allExited": true,
+      "sourceFingerprint": "367d8fa8fb74341de72b9eebae7f8ad62da06682c370b9397c1d6231a41fc855",
+      "inputPaths": [
+        "apps/web",
+        "apps/api",
+        "packages",
+        "scripts",
+        "tests",
+        "infra",
+        "package.json",
+        "package-lock.json",
+        "eslint.config.js",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "vitest.postgres-immediate.config.ts"
+      ],
+      "inputFingerprint": "16560c21db7f580db53fabdf64bf413e33d95aa6ec19049d20de07ef9b4a804e",
+      "inputsUnchanged": true,
+      "sourceUnchanged": true,
+      "testedHead": "416ac8d6826330ebb4d84ee4ed1fb01eabfa6667",
+      "startedAt": "2026-11-08T12:14:37.346Z",
+      "endedAt": "2026-11-08T12:14:37.928Z",
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "planError": null,
+      "log": "/workspace/scratch/dx-final10-20261108/perf04-labunit-lab-dynamic-import.log",
+      "logSha256": "8bbf1c6c18fe4c49f259c51e583a11e9ab556210f73b7b82a997ad85d9d1eecc",
+      "resultReport": "/workspace/scratch/dx-final10-20261108/perf04-labunit-lab-dynamic-import.vitest.json",
+      "context": "Original configForSuite, marked owned loopback PG16.15 fixture and exact cleanup. Nodecpuset2,3, PGcpuset0,1/2GiB; local host not equivalent to CI hardware. Real AuthService and native business mutations on isolated fixtures only.",
+      "kind": "tests",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "7c4ccf00a9dc473ba14532beded95ef124f085b415dd1e969795cb8d798e796e"
         }
       ]
     }
