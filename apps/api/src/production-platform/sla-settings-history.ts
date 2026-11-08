@@ -33,7 +33,7 @@ export class SlaSettingsHistoryService{
     EXISTS(SELECT 1 FROM digital_sla_order_snapshots s WHERE s.production_order_id=o.production_order_id) AS has_snapshot,
     EXISTS(SELECT 1 FROM digital_order_closures c WHERE c.production_order_id=o.production_order_id) AS closed,
     EXISTS(SELECT 1 FROM digital_production_resource_lifecycle r WHERE ((r.resource_kind='order' AND r.resource_id=o.production_order_id) OR (r.resource_kind='source' AND r.resource_id=o.source_id)) AND r.state='cancelled') AS cancelled
-    FROM digital_production_orders o WHERE ($1='' OR strpos(lower(o.design_style_no),lower($1))>0 OR strpos(lower(o.customer_code),lower($1))>0 OR EXISTS(SELECT 1 FROM digital_production_po_lines l WHERE l.production_order_id=o.production_order_id AND strpos(lower(coalesce(l.po_number,l.formal_style_no,'')),lower($1))>0)) ORDER BY o.created_at DESC,o.production_order_id DESC`,[input.search])).rows;
+    FROM digital_production_orders o WHERE ($1='' OR strpos(lower(o.design_style_no),lower($1))>0 OR strpos(lower(coalesce(o.temporary_style_no,'')),lower($1))>0 OR strpos(lower(o.customer_code),lower($1))>0 OR EXISTS(SELECT 1 FROM digital_production_po_lines l WHERE l.production_order_id=o.production_order_id AND strpos(lower(coalesce(l.po_number,l.formal_style_no,'')),lower($1))>0)) ORDER BY o.created_at DESC,o.production_order_id DESC`,[input.search])).rows;
    const visible=[];for(const value of rows)if(await acceptanceIncludesNative(this.database,value.production_order_id,db))visible.push(value);
    const items=[];for(const value of visible.slice((input.page-1)*15,input.page*15)){
     let reason=value.cancelled?'已取消':value.closed?'已结案':!value.has_plan||!value.has_snapshot?'无有效原采用计划，不能补造历史标准':null;

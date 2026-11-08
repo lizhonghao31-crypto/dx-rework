@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "e9961399d7500bf8f909339d24d3cc59f481e97d",
-  "sourceFingerprint": "48ffeb2eeffbeea857dd22d6a51944542d1c048385fcb563bbaa90966b3cb5f7",
+  "sourceFingerprint": "dea67257b9c97a599801807eec44c661066232510ff65b7b87b384714e66fffb",
   "risk": "full",
   "rules": [
     {
@@ -10,9 +10,9 @@
       "writes": [
         "apps/api/src/production-platform/sla-policy-values.ts",
         "apps/api/src/production-platform/sla-settings-drafts.ts",
+        "apps/api/src/production-platform/sla-settings-history.ts",
         "packages/contracts/package.json",
         "packages/contracts/src/sla-settings-drafts.ts",
-        "apps/api/src/production-platform/sla-settings-history.ts",
         "packages/contracts/src/sla-settings-history.ts",
         "tests/integration/m01-sla-history-postgres.test.ts",
         "tests/unit/sla-settings-history.test.ts"
@@ -34,7 +34,6 @@
       "checks": [
         "history_pg",
         "unit",
-        "native",
         "lint",
         "buildapi",
         "types"
@@ -46,11 +45,11 @@
       "writes": [
         "apps/web/src/cockpit-production-settings.css",
         "apps/web/src/cockpit-production-settings.tsx",
+        "apps/web/src/sla-history-workspace.tsx",
         "apps/web/src/sla-order-application-panel.tsx",
         "apps/web/src/sla-settings-workspace.tsx",
         "apps/web/src/sla-standard-editor.tsx",
-        "tests/acceptance/m01-settings-native-browser.ts",
-        "apps/web/src/sla-history-workspace.tsx"
+        "tests/acceptance/m01-settings-native-browser.ts"
       ],
       "reads": [
         "apps/web/src/use-sla-saved-draft.ts",
@@ -65,9 +64,8 @@
       ],
       "initialization": "Keep both original standard/development controllers mounted, replace only equivalent legacy historical/application controls in the managed workspace. Original standalone consumers retain old paths; series/customer settings remain reachable when returning. Five actual server-paged versions per UI page, not a truncated history.",
       "dateAndPermission": "Original full App/Shell and authenticated TEST sessions; readonly and authority errors never become empty. Publication, current draft baseline, keyboard controls, navigation pending guard and source precision remain. No synthetic numbers or dates from the illustration.",
-      "expectation": "Complete actual native35 passes all original31 cases plus three new history stages and final matrix completion, including full App1165/1366/1440 natural layout, immutable detail values, return/page/selected version, two independent order apply retries, copy lost receipt and successful-copy read503 without extra POST. Local isolated evidence is not onsite acceptance.",
+      "expectation": "Original native35 at immutable reviewed eee6f039 passed all original31 stages plus history additions and matrix completion; frontend/package bytes are unchanged. Current focused PG8 adds real temporary-style lookup equivalence to the original picker, and current unit206 plus scoped frontend type/build checks pass. Final canonical Full will establish the repaired-head native result; do not treat the prior native report as a new-head execution. Original native coverage included including full App1165/1366/1440 natural layout, immutable detail values, return/page/selected version, two independent order apply retries, copy lost receipt and successful-copy read503 without extra POST. Local isolated evidence is not onsite acceptance.",
       "checks": [
-        "native",
         "unit",
         "types",
         "lint",
@@ -101,7 +99,6 @@
       "expectation": "PG native new order adopts current publication; real cut/dispatch/QC/production shipment/receipt/quality/packing reaches original normal completion, is excluded and direct preview rejects409. Existing native two-order exact apply and old frozen sibling proof passes; same-session original AuthService revocation and stale publication remain.",
       "checks": [
         "history_pg",
-        "native",
         "unit",
         "lint",
         "buildapi",
@@ -112,11 +109,11 @@
       "rule": "Additive provenance migration and exact Acceptance permissions join the original canonical suite mapping and budgets; preserve time-source notes and original source/deployment rules.",
       "source": "Approved Final10 Version2 section8 and final image09, pinned file_000000009f4c81fbaa74ab5bfebbf489; current execution and business-analysis golden. User authorized autonomous implementation, Codex Review and sequential merges; no deployment/real data changes. P04 actual merged base is e9961399d7500bf8f909339d24d3cc59f481e97d.",
       "writes": [
+        "apps/api/migrations/0277_sla_draft_source_version.sql",
         "apps/api/src/platform/migration-manifest.json",
         "scripts/ci/full-gate-risk-map.mjs",
         "scripts/deploy/acceptance-migration-requirements.json",
-        "scripts/test-suite-plan.mjs",
-        "apps/api/migrations/0277_sla_draft_source_version.sql"
+        "scripts/test-suite-plan.mjs"
       ],
       "reads": [
         "scripts/test-execution-config.mjs",
@@ -135,7 +132,6 @@
       "expectation": "Current migration lint, actual PG fixture creation/cleanup, native suite, full-gate-risk unit and250 protocol preflight checks passed; new history suite has canonical long config and explicit future input mapping. No source status is fabricated as onsite verified.",
       "checks": [
         "history_pg",
-        "native",
         "unit",
         "migrationlint",
         "preflight",
@@ -148,17 +144,17 @@
     {
       "id": "unit",
       "kind": "tests",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/digital-pmc-readonly-ui.test.ts tests/unit/digital-sla-configuration.test.ts tests/unit/sla-notification-preferences.test.ts tests/unit/sla-notification-window.test.ts tests/unit/sla-saved-draft.test.ts tests/unit/sla-calculation.test.ts tests/unit/development-cycle.test.ts tests/unit/development-technical-contract.test.ts tests/unit/sla-settings-history.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/p05-history-return-read-unit.vitest.json",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/digital-pmc-readonly-ui.test.ts tests/unit/digital-sla-configuration.test.ts tests/unit/sla-notification-preferences.test.ts tests/unit/sla-notification-window.test.ts tests/unit/sla-saved-draft.test.ts tests/unit/sla-calculation.test.ts tests/unit/development-cycle.test.ts tests/unit/development-technical-contract.test.ts tests/unit/sla-settings-history.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/p05-history-review-temp-unit.vitest.json",
       "status": "passed",
       "exitCode": 0,
-      "sourceFingerprint": "48ffeb2eeffbeea857dd22d6a51944542d1c048385fcb563bbaa90966b3cb5f7",
-      "testedHead": "e9961399d7500bf8f909339d24d3cc59f481e97d",
-      "startedAt": "2026-11-08T02:54:16.636Z",
-      "endedAt": "2026-11-08T02:54:20.466Z",
+      "sourceFingerprint": "dea67257b9c97a599801807eec44c661066232510ff65b7b87b384714e66fffb",
+      "testedHead": "eee6f039111e2b5695fcaca3bc417480a0be1479",
+      "startedAt": "2026-11-08T03:09:40.424Z",
+      "endedAt": "2026-11-08T03:09:43.733Z",
       "sourceUnchanged": true,
       "allExited": true,
-      "logSha256": "1784ff11224c34205240a777b31525932f0c3fbfb7d81c434b80fa3373fad6cc",
-      "logPath": "/workspace/scratch/dx-final10-20261108/p05-history-return-read-unit.log",
+      "logSha256": "9783409d2204e53ce39f5f2c865d785e7f8f4678c287c6daa1118852c2317c3e",
+      "logPath": "/workspace/scratch/dx-final10-20261108/p05-history-review-temp-unit.log",
       "context": "Node22.22.2/npm10.9.9; lock80b0332e; taskset2,3 applies only to command descendants; original Vitest config nonDB1 worker, original preflight protocol2 workers; local host not claimed CI equivalent",
       "passed": 206,
       "failed": 0,
@@ -166,10 +162,10 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "4420c03931636967d840d61ea2c8fb829bc5299593ef37d09794c3c732ff6d9f"
+          "sha256": "5afbe50114ddd9f43007cd8ad1cf36f44231e43a8b1a662178f61b9259220a8e"
         }
       ],
-      "log": "/workspace/scratch/dx-final10-20261108/p05-history-return-read-unit.log"
+      "log": "/workspace/scratch/dx-final10-20261108/p05-history-review-temp-unit.log"
     },
     {
       "id": "types",
@@ -185,25 +181,37 @@
       "allExited": true,
       "logSha256": "752b0f4f80e1f2fdeece6837aa0d8538e17009bd166c8888d0c5c5d0c6148bcd",
       "logPath": "/workspace/scratch/dx-final10-20261108/p05-history-return-read-types.log",
-      "context": "Node22.22.2/npm10.9.9; lock80b0332e; taskset2,3 applies only to command descendants; original Vitest config nonDB1 worker, original preflight protocol2 workers; local host not claimed CI equivalent",
+      "context": "Node22.22.2/npm10.9.9; lock80b0332e; taskset2,3 applies only to command descendants; original Vitest config nonDB1 worker, original preflight protocol2 workers; local host not claimed CI equivalent Source scope derived from the exact immutable tested eee6f039 checkout after verifying its complete source matches the original command fingerprint and log bytes. All frontend/package/build-tool inputs remain byte-identical; only candidate SQL temporary-style predicate and its PG regression changed. No claim of rerunning the original native matrix on this repair.",
+      "inputPaths": [
+        "apps/web",
+        "packages/contracts",
+        "packages/domain",
+        "packages/config",
+        "packages/ui",
+        "scripts",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json"
+      ],
+      "inputFingerprint": "59a4473cc6f446449b6fed20886d98eb50f74f589efc386e10262632bba67767",
       "log": "/workspace/scratch/dx-final10-20261108/p05-history-return-read-types.log"
     },
     {
       "id": "lint",
       "kind": "command",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/sla-settings-history.ts apps/web/src/sla-history-workspace.tsx packages/contracts/src/sla-settings-history.ts tests/integration/m01-sla-history-postgres.test.ts tests/unit/sla-settings-history.test.ts apps/api/src/production-platform/sla-order-application.ts apps/api/src/production-platform/sla-policy-values.ts apps/api/src/production-platform/sla-settings-drafts.ts apps/api/src/production-platform/task-routes.ts apps/api/src/production-platform/task-service.ts apps/web/src/cockpit-production-settings.tsx apps/web/src/sla-order-application-panel.tsx apps/web/src/sla-settings-workspace.tsx apps/web/src/sla-standard-editor.tsx packages/contracts/src/sla-settings-drafts.ts scripts/ci/full-gate-risk-map.mjs scripts/test-suite-plan.mjs tests/acceptance/m01-settings-native-browser.ts --max-warnings=0",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/sla-settings-history.ts tests/integration/m01-sla-history-postgres.test.ts --max-warnings=0",
       "status": "passed",
       "exitCode": 0,
-      "sourceFingerprint": "48ffeb2eeffbeea857dd22d6a51944542d1c048385fcb563bbaa90966b3cb5f7",
-      "testedHead": "e9961399d7500bf8f909339d24d3cc59f481e97d",
-      "startedAt": "2026-11-08T02:54:39.381Z",
-      "endedAt": "2026-11-08T02:54:41.110Z",
+      "sourceFingerprint": "dea67257b9c97a599801807eec44c661066232510ff65b7b87b384714e66fffb",
+      "testedHead": "eee6f039111e2b5695fcaca3bc417480a0be1479",
+      "startedAt": "2026-11-08T03:09:43.818Z",
+      "endedAt": "2026-11-08T03:09:44.503Z",
       "sourceUnchanged": true,
       "allExited": true,
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "logPath": "/workspace/scratch/dx-final10-20261108/p05-history-return-read-lint.log",
+      "logPath": "/workspace/scratch/dx-final10-20261108/p05-history-review-temp-lint.log",
       "context": "Node22.22.2/npm10.9.9; lock80b0332e; taskset2,3 applies only to command descendants; original Vitest config nonDB1 worker, original preflight protocol2 workers; local host not claimed CI equivalent",
-      "log": "/workspace/scratch/dx-final10-20261108/p05-history-return-read-lint.log"
+      "log": "/workspace/scratch/dx-final10-20261108/p05-history-review-temp-lint.log"
     },
     {
       "id": "buildweb",
@@ -219,7 +227,19 @@
       "allExited": true,
       "logSha256": "5cb8fc4373ddd4e32a9fedc21b65a661d3f13fa053b6b58334988a1f227ae4d4",
       "logPath": "/workspace/scratch/dx-final10-20261108/p05-history-return-read-buildweb.log",
-      "context": "Node22.22.2/npm10.9.9; lock80b0332e; taskset2,3 applies only to command descendants; original Vitest config nonDB1 worker, original preflight protocol2 workers; local host not claimed CI equivalent",
+      "context": "Node22.22.2/npm10.9.9; lock80b0332e; taskset2,3 applies only to command descendants; original Vitest config nonDB1 worker, original preflight protocol2 workers; local host not claimed CI equivalent Source scope derived from the exact immutable tested eee6f039 checkout after verifying its complete source matches the original command fingerprint and log bytes. All frontend/package/build-tool inputs remain byte-identical; only candidate SQL temporary-style predicate and its PG regression changed. No claim of rerunning the original native matrix on this repair.",
+      "inputPaths": [
+        "apps/web",
+        "packages/contracts",
+        "packages/domain",
+        "packages/config",
+        "packages/ui",
+        "scripts",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json"
+      ],
+      "inputFingerprint": "59a4473cc6f446449b6fed20886d98eb50f74f589efc386e10262632bba67767",
       "log": "/workspace/scratch/dx-final10-20261108/p05-history-return-read-buildweb.log"
     },
     {
@@ -228,28 +248,16 @@
       "command": "npm run build --workspace=@dx-rework/api",
       "status": "passed",
       "exitCode": 0,
-      "sourceFingerprint": "20ddb3b7576927a56da8db7696d740d3af4247a37136b96361e96c558d239453",
-      "testedHead": "e9961399d7500bf8f909339d24d3cc59f481e97d",
-      "startedAt": "2026-11-08T02:48:45.384Z",
-      "endedAt": "2026-11-08T02:49:00.758Z",
+      "sourceFingerprint": "dea67257b9c97a599801807eec44c661066232510ff65b7b87b384714e66fffb",
+      "testedHead": "eee6f039111e2b5695fcaca3bc417480a0be1479",
+      "startedAt": "2026-11-08T03:09:44.584Z",
+      "endedAt": "2026-11-08T03:09:56.449Z",
       "sourceUnchanged": true,
       "allExited": true,
       "logSha256": "8dd8c96364991c28227c467fbbb326a32e6737fddfa4e2d355be3ef6dd8512fe",
-      "logPath": "/workspace/scratch/dx-final10-20261108/p05-history-final-buildapi.log",
-      "context": "Node22.22.2/npm10.9.9; lock80b0332e; taskset2,3 applies only to command descendants; original Vitest config nonDB1 worker, original preflight protocol2 workers; local host not claimed CI equivalent Scope captured while the original complete fingerprint still matched, before independent history UI freshness wording/disable fix. No backend/package/script dependency changes.",
-      "inputPaths": [
-        "apps/api",
-        "packages/contracts",
-        "packages/domain",
-        "packages/config",
-        "packages/ui",
-        "scripts",
-        "package.json",
-        "package-lock.json",
-        "tsconfig.base.json"
-      ],
-      "inputFingerprint": "837f714e77cddade47867d4a9ecbbf0ff8a4fbafbdc24969e8563bb77bbd95c9",
-      "log": "/workspace/scratch/dx-final10-20261108/p05-history-final-buildapi.log"
+      "logPath": "/workspace/scratch/dx-final10-20261108/p05-history-review-temp-buildapi.log",
+      "context": "Node22.22.2/npm10.9.9; lock80b0332e; taskset2,3 applies only to command descendants; original Vitest config nonDB1 worker, original preflight protocol2 workers; local host not claimed CI equivalent",
+      "log": "/workspace/scratch/dx-final10-20261108/p05-history-review-temp-buildapi.log"
     },
     {
       "id": "migrationlint",
@@ -257,28 +265,16 @@
       "command": "npm run db:migrate:lint",
       "status": "passed",
       "exitCode": 0,
-      "sourceFingerprint": "20ddb3b7576927a56da8db7696d740d3af4247a37136b96361e96c558d239453",
-      "testedHead": "e9961399d7500bf8f909339d24d3cc59f481e97d",
-      "startedAt": "2026-11-08T02:49:00.849Z",
-      "endedAt": "2026-11-08T02:49:01.337Z",
+      "sourceFingerprint": "dea67257b9c97a599801807eec44c661066232510ff65b7b87b384714e66fffb",
+      "testedHead": "eee6f039111e2b5695fcaca3bc417480a0be1479",
+      "startedAt": "2026-11-08T03:09:56.530Z",
+      "endedAt": "2026-11-08T03:09:56.920Z",
       "sourceUnchanged": true,
       "allExited": true,
-      "logSha256": "90876b21ef74df91f90087fbbb15bd97ad81f49b7eeba1340d37e99aaa3b3954",
-      "logPath": "/workspace/scratch/dx-final10-20261108/p05-history-final-migrationlint.log",
-      "context": "Node22.22.2/npm10.9.9; lock80b0332e; taskset2,3 applies only to command descendants; original Vitest config nonDB1 worker, original preflight protocol2 workers; local host not claimed CI equivalent Scope captured while the original complete fingerprint still matched, before independent history UI freshness wording/disable fix. No backend/package/script dependency changes.",
-      "inputPaths": [
-        "apps/api",
-        "packages/contracts",
-        "packages/domain",
-        "packages/config",
-        "packages/ui",
-        "scripts",
-        "package.json",
-        "package-lock.json",
-        "tsconfig.base.json"
-      ],
-      "inputFingerprint": "837f714e77cddade47867d4a9ecbbf0ff8a4fbafbdc24969e8563bb77bbd95c9",
-      "log": "/workspace/scratch/dx-final10-20261108/p05-history-final-migrationlint.log"
+      "logSha256": "7372b3b30c719a14193d8059e1a586bd6b1c8735770f02d4b6184a9afe1fea5f",
+      "logPath": "/workspace/scratch/dx-final10-20261108/p05-history-review-temp-migrationlint.log",
+      "context": "Node22.22.2/npm10.9.9; lock80b0332e; taskset2,3 applies only to command descendants; original Vitest config nonDB1 worker, original preflight protocol2 workers; local host not claimed CI equivalent",
+      "log": "/workspace/scratch/dx-final10-20261108/p05-history-review-temp-migrationlint.log"
     },
     {
       "id": "preflight",
@@ -286,16 +282,16 @@
       "command": "npm run test:preflight",
       "status": "passed",
       "exitCode": 0,
-      "sourceFingerprint": "48ffeb2eeffbeea857dd22d6a51944542d1c048385fcb563bbaa90966b3cb5f7",
-      "testedHead": "e9961399d7500bf8f909339d24d3cc59f481e97d",
-      "startedAt": "2026-11-08T02:54:44.089Z",
-      "endedAt": "2026-11-08T02:54:53.249Z",
+      "sourceFingerprint": "dea67257b9c97a599801807eec44c661066232510ff65b7b87b384714e66fffb",
+      "testedHead": "eee6f039111e2b5695fcaca3bc417480a0be1479",
+      "startedAt": "2026-11-08T03:09:57.000Z",
+      "endedAt": "2026-11-08T03:10:03.896Z",
       "sourceUnchanged": true,
       "allExited": true,
-      "logSha256": "188aa270a8f9298a5b60a8a8f7c5421a3cc5190a27ae075102acf5b65054bb11",
-      "logPath": "/workspace/scratch/dx-final10-20261108/p05-history-return-read-preflight.log",
+      "logSha256": "9f26ce23bd702dd6affdbd90fe3bc7e06be33e25e0dc006be5700fdeef69c593",
+      "logPath": "/workspace/scratch/dx-final10-20261108/p05-history-review-temp-preflight.log",
       "context": "Node22.22.2/npm10.9.9; lock80b0332e; taskset2,3 applies only to command descendants; original Vitest config nonDB1 worker, original preflight protocol2 workers; local host not claimed CI equivalent",
-      "log": "/workspace/scratch/dx-final10-20261108/p05-history-return-read-preflight.log"
+      "log": "/workspace/scratch/dx-final10-20261108/p05-history-review-temp-preflight.log"
     },
     {
       "id": "secret",
@@ -303,21 +299,21 @@
       "command": "npm run secret:scan",
       "status": "passed",
       "exitCode": 0,
-      "sourceFingerprint": "48ffeb2eeffbeea857dd22d6a51944542d1c048385fcb563bbaa90966b3cb5f7",
-      "testedHead": "e9961399d7500bf8f909339d24d3cc59f481e97d",
-      "startedAt": "2026-11-08T02:54:53.352Z",
-      "endedAt": "2026-11-08T02:54:54.287Z",
+      "sourceFingerprint": "dea67257b9c97a599801807eec44c661066232510ff65b7b87b384714e66fffb",
+      "testedHead": "eee6f039111e2b5695fcaca3bc417480a0be1479",
+      "startedAt": "2026-11-08T03:10:03.984Z",
+      "endedAt": "2026-11-08T03:10:04.654Z",
       "sourceUnchanged": true,
       "allExited": true,
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda",
-      "logPath": "/workspace/scratch/dx-final10-20261108/p05-history-return-read-secret.log",
+      "logPath": "/workspace/scratch/dx-final10-20261108/p05-history-review-temp-secret.log",
       "context": "Node22.22.2/npm10.9.9; lock80b0332e; taskset2,3 applies only to command descendants; original Vitest config nonDB1 worker, original preflight protocol2 workers; local host not claimed CI equivalent",
-      "log": "/workspace/scratch/dx-final10-20261108/p05-history-return-read-secret.log"
+      "log": "/workspace/scratch/dx-final10-20261108/p05-history-review-temp-secret.log"
     },
     {
       "id": "history_pg",
       "kind": "tests",
-      "command": "taskset \"-c\" \"2,3\" \"/workspace/.dx-cloud/toolchain/node_modules/node/bin/node\" \"node_modules/vitest/vitest.mjs\" \"run\" \"tests/integration/m01-sla-history-postgres.test.ts\" \"--config\" \"vitest.business-chain.config.ts\" \"--reporter=verbose\" \"--reporter=json\" \"--outputFile=/workspace/scratch/dx-final10-20261108/p05-history-normal-completion-long.vitest.json\"",
+      "command": "taskset \"-c\" \"2,3\" \"/workspace/.dx-cloud/toolchain/node_modules/node/bin/node\" \"node_modules/vitest/vitest.mjs\" \"run\" \"tests/integration/m01-sla-history-postgres.test.ts\" \"--config\" \"vitest.business-chain.config.ts\" \"--reporter=verbose\" \"--reporter=json\" \"--outputFile=/workspace/scratch/dx-final10-20261108/p05-history-review-temporary-long.vitest.json\"",
       "config": "vitest.business-chain.config.ts",
       "suites": [
         "tests/integration/m01-sla-history-postgres.test.ts"
@@ -325,8 +321,8 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "testedHead": "e9961399d7500bf8f909339d24d3cc59f481e97d",
-      "sourceFingerprint": "20ddb3b7576927a56da8db7696d740d3af4247a37136b96361e96c558d239453",
+      "testedHead": "eee6f039111e2b5695fcaca3bc417480a0be1479",
+      "sourceFingerprint": "dea67257b9c97a599801807eec44c661066232510ff65b7b87b384714e66fffb",
       "sourceUnchanged": true,
       "inputPaths": [
         "apps/api",
@@ -342,50 +338,32 @@
         "vitest.postgres-immediate.config.ts",
         "tests/integration/m01-sla-history-postgres.test.ts"
       ],
-      "inputFingerprint": "9e7819a555c2e49e021f4406ddb6c930b21c7265d037d857759cfaddc2b1877f",
+      "inputFingerprint": "fd1f0008046919fed54bd80d4c5e3f319506b3bfae7abf0b1b95e451b77b536f",
       "inputsUnchanged": true,
-      "startedAt": "2026-11-08T02:47:31.818Z",
-      "endedAt": "2026-11-08T02:47:41.041Z",
+      "startedAt": "2026-11-08T03:07:40.534Z",
+      "endedAt": "2026-11-08T03:07:50.223Z",
       "passed": 8,
       "failed": 0,
       "skipped": 0,
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/p05-history-normal-completion-long.log",
-      "logSha256": "eb9b5a28272e70a61067855d06614205454e0df497a1f661f554b92c7e01dbff",
-      "resultReport": "/workspace/scratch/dx-final10-20261108/p05-history-normal-completion-long.vitest.json",
+      "log": "/workspace/scratch/dx-final10-20261108/p05-history-review-temporary-long.log",
+      "logSha256": "b9eb386e66471f9ac6633142e43e80ba7e2a9751d9f6839972a66dbaa860c28f",
+      "resultReport": "/workspace/scratch/dx-final10-20261108/p05-history-review-temporary-long.vitest.json",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "a5a383e7ee54e7ffa394946873a5333cce5190738e448c5963cebab2cf005a27"
+          "sha256": "ffadcf58bdfc8a376df556ffbf40023d25d402a1d0d1f32e186d812b1f58f687"
         }
       ],
       "context": "Actual original configForSuite and owned marked PostgreSQL16.15 fixture creation/cleanup. Long group max2workers; ordinary group max1 and original strict timing. Nodecpuset2,3 and PGcpuset0,1/2GB, not CI host equivalent. Service tests do not establish original browser/AuthService evidence. Notification tests control only Date observation, not IO timers or real business data. Backend dependency input fingerprint captured before independent frontend-only edits."
-    },
-    {
-      "id": "native",
-      "command": "taskset \"-c\" \"2,3\" \"/workspace/.dx-cloud/toolchain/node_modules/node/bin/node\" \"node_modules/vitest/vitest.mjs\" \"run\" \"tests/integration/m01-settings-native-browser-postgres.test.ts\" \"--config\" \"vitest.business-chain.config.ts\" \"--reporter=verbose\" \"--reporter=json\" \"--outputFile=/workspace/scratch/dx-final10-20261108/p05-history-native-final-return.vitest.json\"",
-      "startedAt": "2026-11-08T02:54:15.185Z",
-      "endedAt": "2026-11-08T02:55:34.993Z",
-      "sourceFingerprint": "48ffeb2eeffbeea857dd22d6a51944542d1c048385fcb563bbaa90966b3cb5f7",
-      "testedHead": "e9961399d7500bf8f909339d24d3cc59f481e97d",
-      "sourceUnchanged": true,
-      "exitCode": 0,
-      "allExited": true,
-      "passed": 35,
-      "failed": 0,
-      "skipped": 0,
-      "log": "/workspace/scratch/dx-final10-20261108/p05-history-native-final-return.log",
-      "logSha256": "4a03cfc8ee9cf5c25f1d02885d27d48c431d2102df869908c9c4d430bb44d89e",
-      "resultReport": "/workspace/scratch/dx-final10-20261108/p05-history-native-final-return.vitest.json",
-      "context": "Original full App/Shell, real original AuthService and owned marked PostgreSQL16.15 TEST fixtures. Original configForSuite and100s per-test/120s setup, lock-pinned Playwright1.56.1/Chromium141.0.7390.37. Only one file worker; Node/browser descendants cpuset2,3, PG2CPU/2GiB cpuset0,1. Same canonical browser/config but not CI host load/hardware or onsite acceptance.",
-      "kind": "tests",
-      "status": "passed",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "8c2c134763309df8377819669553d6fbb1e5e63c71d4c8b166c020d137db393d"
-        }
-      ]
     }
-  ]
+  ],
+  "ancestorUiVerification": {
+    "head": "eee6f039111e2b5695fcaca3bc417480a0be1479",
+    "sourceFingerprint": "48ffeb2eeffbeea857dd22d6a51944542d1c048385fcb563bbaa90966b3cb5f7",
+    "passed": 35,
+    "log": "/workspace/scratch/dx-final10-20261108/p05-history-native-final-return.log",
+    "logSha256": "4a03cfc8ee9cf5c25f1d02885d27d48c431d2102df869908c9c4d430bb44d89e",
+    "reason": "Historical supporting result for byte-identical frontend. Not a current-head native check; current targeted SQL fix is covered by history_pg, and canonical Full must run original native matrix."
+  }
 }
