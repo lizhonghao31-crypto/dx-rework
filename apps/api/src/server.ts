@@ -1,3 +1,4 @@
+import {JourneyFactUpdates,JourneyFactRuntime} from './production-platform/journey-fact-updates.js';
 import {DeliveryCalendarQuery} from './production-platform/delivery-calendar-query.js';
 import {createJourneyDiagnostic} from './platform/journey-diagnostic.js';
 import {QcProductionProgressService} from './production-platform/qc-production-progress-service.js';
@@ -456,6 +457,7 @@ const app = buildApp({
 registerDatabasePoolErrorHandler(database, app.log);
 
 const digitalNotificationRuntime = digitalNotifications ? new DigitalNotificationRuntime(digitalNotifications, app.log, config.digitalProduction?.notificationIntervalMs) : undefined;
+const journeyFactRuntime=config.digitalProduction?.enabled?new JourneyFactRuntime(new JourneyFactUpdates(database),app.log):undefined;
 const runtimeOperationalMonitor = new RuntimeOperationalMonitor(database, app.log);
 
 const todoProvider = config.todoRuntime.deliveryEnabled
@@ -504,6 +506,7 @@ async function shutdown(signal: string): Promise<void> {
   await runtimeOperationalMonitor.stop();
   await todoRuntime.stop();
   await digitalNotificationRuntime?.stop();
+  await journeyFactRuntime?.stop();
   await app.close();
   await database.end();
 }
@@ -516,6 +519,7 @@ try {
   runtimeOperationalMonitor.start();
   todoRuntime.start();
   digitalNotificationRuntime?.start();
+  journeyFactRuntime?.start();
   void runAttachmentCleanup();
   attachmentCleanupTimer = setInterval(
     () => void runAttachmentCleanup(),
@@ -527,6 +531,7 @@ try {
   await runtimeOperationalMonitor.stop();
   await todoRuntime.stop();
   await digitalNotificationRuntime?.stop();
+  await journeyFactRuntime?.stop();
   await database.end();
   process.exitCode = 1;
 }
