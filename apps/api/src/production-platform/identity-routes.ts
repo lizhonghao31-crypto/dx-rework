@@ -113,6 +113,7 @@ export function registerDigitalIdentityRoutes(app: FastifyInstance, dependencies
     app.get("/digital-production/workspaces/designer", async request => workspaces.designer(await actor(request), parse(DevelopmentWorkspaceFilterSchema, request.query)));
     app.get("/digital-production/workspaces/pattern", async request => workspaces.pattern(await actor(request), parse(PatternWorkspaceFilterSchema, request.query)));
     app.get("/digital-production/journeys", async request => dependencies.journeys!.list(await journeyMeasure('route_auth',()=>actor(request)), parse(JourneyFilterSchema, request.query)));
+    app.post('/digital-production/journeys/:id/refresh',async request=>dependencies.journeys!.refreshOne(await actor(request),id(request,'id')));
     app.get("/digital-production/journeys/export", async request => dependencies.journeys!.export(await actor(request), parse(JourneyFilterSchema, request.query)));
     app.get("/digital-production/journeys/:id/node-materials", async request => {
       const query=parse(NodeMaterialsQuerySchema,request.query);

@@ -22,6 +22,7 @@ import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {createServer,type Server} from 'node:http';
 import type {Browser,Page,chromium as Chromium} from 'playwright-core';
+import type {PoolClient} from 'pg';
 import Fastify from 'fastify';
 import {build} from 'vite';
 import {AuthService,AuthDeniedError} from '../../apps/api/src/auth/service.js';
@@ -34,30 +35,38 @@ import {businessAnchorFixture} from '../helpers/business-anchor-fixture.js';
 import {registerDigitalIdentityRoutes} from '../../apps/api/src/production-platform/identity-routes.js';
 import {DigitalProductionIdentityService} from '../../apps/api/src/production-platform/identity-service.js';
 import {DigitalJourneyQuery} from '../../apps/api/src/production-platform/journey-query.js';
+import {JourneyFactRepository} from '../../apps/api/src/production-platform/journey-fact-repository.js';
+import {JourneyFactRuntime,JourneyFactUpdates} from '../../apps/api/src/production-platform/journey-fact-updates.js';
 import {ReceivingService} from '../../apps/api/src/receiving/receiving-service.js';
 import {DigitalOrderCreateSchema,beijingCalendarDate} from '@dx-rework/contracts/digital-production';
 import {JOURNEY_COVERAGE_KEYS,type JourneyResult} from '@dx-rework/contracts/digital-production-journey';
 
 /** Full original App/Shell, original signed auth and marked, owned PostgreSQL.
  * All objects are TEST fixtures, not Acceptance site or customer business data. */
-export async function cockpitHomeBrowser({databaseUrl,evidence,executablePath,calendar=false}:{databaseUrl:string;evidence:string;executablePath?:string;calendar?:boolean}){
+export async function cockpitHomeBrowser({databaseUrl,evidence,executablePath,calendar=false,indexed=false,orderCount=31,mixedNative=false}:{databaseUrl:string;evidence:string;executablePath?:string;calendar?:boolean;indexed?:boolean;orderCount?:31|1000|5000;mixedNative?:boolean}){
+ assert([31,1000,5000].includes(orderCount));
  const out=await mkdtemp(join(tmpdir(),'dx-m01-home-')),app=Fastify(),errors:string[]=[],requests:Array<{path:string;status:number}>=[];
- let f:Awaited<ReturnType<typeof businessAnchorFixture>>|undefined,browser:Browser|undefined,server:Server|undefined;
+ let f:Awaited<ReturnType<typeof businessAnchorFixture>>|undefined,browser:Browser|undefined,server:Server|undefined,factRuntime:JourneyFactRuntime|undefined;
  const dispose=async()=>{
   try{await mkdir(evidence,{recursive:true});if(browser)for(const [i,page]of browser.contexts().flatMap(c=>c.pages()).entries())await writeFile(join(evidence,`last-page-${i}.txt`),await page.locator('body').innerText().catch(()=>''));await writeFile(join(evidence,'requests.json'),JSON.stringify({requests,errors},null,2));}
-  finally{await browser?.close();if(server){server.closeAllConnections();await new Promise<void>(done=>server!.close(()=>done()));}await app.close();await f?.dispose();await rm(out,{recursive:true,force:true});}
+  finally{await browser?.close();if(server){server.closeAllConnections();await new Promise<void>(done=>server!.close(()=>done()));}await factRuntime?.stop();await app.close();await f?.dispose();await rm(out,{recursive:true,force:true});}
  };
  try{
   f=await businessAnchorFixture(databaseUrl);const fixture=f,db=f.db,identity=new DigitalProductionIdentityService(db,true),secret='TEST original home browser signed authentication '.repeat(3),root=new RootAuthority(db,'anchor-test','uat-root'),auth=new AuthService(new AcceptanceDingTalkProvider(db,'anchor-test',secret),new PostgresAuthStore(db,'anchor-test','uat-root'),'anchor-test',3600000,secret);
   registerAuthRoutes(app,auth,{secureCookie:false,ttlSeconds:3600,appBasePath:'/',corpId:'anchor-test',mobileClientId:'TEST',webClientId:'TEST',qrRedirectUri:'https://acceptance.invalid/auth/qr/callback',isRootUser:id=>root.isRootUser(id)});
   app.setErrorHandler((error,_request,reply)=>{const value=error as ApplicationError;void reply.code(error instanceof AuthDeniedError?401:value.statusCode??500).send({error:{code:value.code,message:value.message}});});
-  registerDigitalIdentityRoutes(app,{service:identity,creationEnabled:true,root,authenticate:token=>auth.authenticate(token),qcProgress:new QcProductionProgressService(db),factoryFlowService:new FactoryFlowService(db),closureService:new OrderClosureService(db),quotationService:new DigitalQuotationService(db,true),developmentRounds:new DevelopmentRoundService(db,true),notificationService:new DigitalProductionNotificationService(db),taskService:new DigitalProductionTaskService(db),accessService:new DigitalProductionAccessService(db),developmentService:new DigitalDevelopmentService(db,true),developmentExecution:new DevelopmentExecutionService(db,true),developmentAttachments:f.attachments,budgetService:new DigitalBudgetService(db,true),instructionService:new ProductionInstructionService(db,true),bulkPreparationService:new BulkPreparationService(db),journeys:new DigitalJourneyQuery(db),...(calendar?{deliveryCalendar:new DeliveryCalendarQuery(db)}:{})});
+  registerDigitalIdentityRoutes(app,{service:identity,creationEnabled:true,root,authenticate:token=>auth.authenticate(token),qcProgress:new QcProductionProgressService(db),factoryFlowService:new FactoryFlowService(db),closureService:new OrderClosureService(db),quotationService:new DigitalQuotationService(db,true),developmentRounds:new DevelopmentRoundService(db,true),notificationService:new DigitalProductionNotificationService(db),taskService:new DigitalProductionTaskService(db),accessService:new DigitalProductionAccessService(db),developmentService:new DigitalDevelopmentService(db,true),developmentExecution:new DevelopmentExecutionService(db,true),developmentAttachments:f.attachments,budgetService:new DigitalBudgetService(db,true),instructionService:new ProductionInstructionService(db,true),bulkPreparationService:new BulkPreparationService(db),journeys:new DigitalJourneyQuery(db,{listReadMode:indexed?'indexed':'legacy'}),...(calendar?{deliveryCalendar:new DeliveryCalendarQuery(db)}:{})});
   // The unrelated navigation badge is a labelled TEST adapter, still authenticated.
   app.get('/todos/mine/indicator',async(request,reply)=>{const token=request.headers.cookie?.split(';').map(v=>v.trim()).find(v=>v.startsWith('dx_rework_session='))?.slice(18),user=await auth.authenticate(token);reply.header('x-dx-rework-actor-id',user.id);return {pendingCount:0,unreadCount:0};});
   const prefix='TEST-R3-HOME-',scene=await f.scene('2026-08-01T00:00:00Z'),orders:string[]=[];
-  await f.runtime.run(scene,f.root,async()=>{for(let i=0;i<31;i++)orders.push((await identity.createOrder(fixture.root,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:prefix+String(i+1).padStart(2,'0'),orderDate:'2026-08-01',primaryMerchandiserId:fixture.people.merchandiser!.actorId,lines:Array.from({length:i===0?3:2},(_,j)=>({formalPoNo:`TEST-PO-${i+1}-${j+1}${i===0?'-LONG-'.repeat(7):''}`,color:['黑','浅蓝','白'][j],customerWarehouseArrivalDate:`2026-10-0${j+1}`,sizes:[{size:'M',quantity:100+j}]}))}),randomUUID())).productionOrderId);});
+  const includeNative=mixedNative||orderCount>31;
+  await f.runtime.run(scene,f.root,async()=>{for(let i=0;i<orderCount-(includeNative?3:0);i++){
+   orders.push((await identity.createOrder(fixture.root,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:prefix+String(i+1).padStart(2,'0'),orderDate:'2026-08-01',primaryMerchandiserId:fixture.people.merchandiser!.actorId,lines:Array.from({length:i===0?3:2},(_,j)=>({formalPoNo:`TEST-PO-${i+1}-${j+1}${i===0?'-LONG-'.repeat(7):''}`,color:['黑','浅蓝','白'][j],customerWarehouseArrivalDate:includeNative?'2027-03-01':`2026-10-0${j+1}`,sizes:[{size:'M',quantity:100+j}]}))}),randomUUID())).productionOrderId);
+   if(orderCount>31&&(i+1)%250===0)console.log('JOURNEY_SCALE_SETUP '+JSON.stringify({phase:'create',completed:i+1,total:orderCount}));
+  }});
   await f.advance(scene,'2026-11-07T00:00:00Z');
   // Original cutting/receiving/packing commands establish real visible receipt debt.
+  if(includeNative)await fixture.runtime.run(scene,fixture.root,async()=>{for(const craft of ['无','印花','印绣花'] as const)orders.push((await fixture.bulkReady(craft,undefined,2,fixture.sourcing,{stylePrefix:prefix})).id);console.log('JOURNEY_SCALE_SETUP '+JSON.stringify({phase:'create',completed:orders.length,total:orderCount,mixedNativeMothers:3}));});
   let updateCalendarPacking:((quantity:number)=>Promise<void>)|undefined;
   const prepareShortage=async()=>{
    const ready=await fixture.bulkReady('无',undefined,1,fixture.sourcing,{quantity:4}),cut=(await db.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[ready.caseId])).rows[0],cutter={...fixture.people['cutting-worker']!,authorizationCapability:'cutting:records:create',authorizationCapabilities:['cutting:records:create']};
@@ -70,6 +79,17 @@ export async function cockpitHomeBrowser({databaseUrl,evidence,executablePath,ca
   await db.query('INSERT INTO app_users(id,display_name,enabled) VALUES($1,$2,true)',[pmcId,'TEST dedicated home PMC']);await db.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at)VALUES($1,$2,'dingtalk','anchor-test',$3,$4,true,true,CURRENT_TIMESTAMP)",[randomUUID(),pmcId,'uat-home-'+pmcId,'uat-union-home-'+pmcId]);
   const pmcGrant=await f.access.assignRole(rootAccess,{userId:pmcId,roleCode:'pmc',reason:'TEST home drill dedicated original PMC'});await f.access.assignRole(rootAccess,{userId:pmcId,roleCode:'finance_read',reason:'TEST keep original signed session valid after PMC revocation'});
   let loginIndex=0;const login=async(id:string)=>{const mapping=(await db.query("SELECT provider_user_id FROM identity_mappings WHERE user_id=$1 AND active AND employed",[id])).rows[0],response=await app.inject({method:'POST',url:'/auth/mobile',remoteAddress:`127.0.0.${++loginIndex}`,payload:{code:mintAcceptanceLoginCode(mapping.provider_user_id.slice(4),secret)}});assert.equal(response.statusCode,200,response.body);const headers=response.headers['set-cookie'],token=(Array.isArray(headers)?headers[0]:headers)!.split(';',1)[0]!.slice('dx_rework_session='.length);assert.equal((await auth.authenticate(token)).id,id);return token;};
+  const facts=new JourneyFactRepository(db);
+  // Explicit owned TEST setup, never a GET/read-side backfill or user action.
+  if(indexed){const resources=(await db.query<{kind:'source'|'order';id:string}>(`SELECT 'order' AS kind,production_order_id AS id FROM digital_production_orders
+   UNION ALL SELECT 'source',source_id FROM digital_production_sources s WHERE NOT EXISTS(SELECT 1 FROM digital_production_orders o WHERE o.source_id=s.source_id)`)).rows;
+   let next=0,completed=0;const workers=await Promise.allSettled(Array.from({length:2},async()=>{
+    for(;;){const resource=resources[next++];if(!resource)return;await facts.buildOne(resource);completed++;
+     if(orderCount>31&&completed%250===0)console.log('JOURNEY_SCALE_SETUP '+JSON.stringify({phase:'build',completed,total:resources.length}));}
+   }));for(const worker of workers)if(worker.status==='rejected')throw worker.reason;}
+  const corruptProjection=async(id:string)=>{assert(indexed&&orders.includes(id));await db.query("UPDATE digital_journey_fact_models SET selection_fingerprint=repeat('0',64) WHERE resource_id=$1",[id]);};
+  const repairProjection=async(id:string)=>{assert(indexed&&orders.includes(id));await facts.buildOne({kind:'order',id});};
+  if(indexed){factRuntime=new JourneyFactRuntime(new JourneyFactUpdates(db,facts),{warn:(_value,message)=>{errors.push(message);}});factRuntime.start();}
   await app.ready();await build({configFile:false,esbuild:{jsx:'automatic',jsxDev:false},define:{'import.meta.env.BASE_URL':'"/"','process.env.NODE_ENV':'"production"'},build:{outDir:out,lib:{entry:resolve('tests/fixtures/m01-cockpit-home-native-ui.tsx'),name:'NativeCockpitHomeUi',formats:['iife']}}});
   const files=await readdir(out),js=await readFile(join(out,files.find(file=>file.endsWith('.js'))!),'utf8'),css=await readFile(join(out,files.find(file=>file.endsWith('.css'))!),'utf8'),html=`<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css}</style><div id="root"></div><script>${js.replace(/<\/script/gi,'<\\/script')}</script></html>`;
   // inject() is lazy: calendar reads must begin inside the guarded clock context.
@@ -82,7 +102,63 @@ export async function cockpitHomeBrowser({databaseUrl,evidence,executablePath,ca
   const calendarChangedDates=()=>fixture.runtime.run(scene,fixture.root,async()=>{const second=await prepareShortage(),baseDate=shortage.lines[0]!.customerWarehouseArrivalDate!,selectedDate=addCalendarDays(baseDate,2),dates=new PoCustomerDateService(db);for(const [order,date]of [[shortage,selectedDate],[second,addCalendarDays(baseDate,1)]] as const){const current=await identity.read(fixture.root,order.productionOrderId),sheet=await dates.read(fixture.root,order.productionOrderId),line=sheet.customerPoDates[0]!,request=await dates.request(fixture.root,order.productionOrderId,{orderVersion:current.version,reason:'TEST calendar selected-day history separate from side debt list',changes:[{lineId:line.lineId,expectedVersion:line.version,date}]},randomUUID());await dates.decide(fixture.root,order.productionOrderId,request.requestId,true,randomUUID());}return {selectedDate,primaryId:shortage.productionOrderId,secondId:second.productionOrderId};});
   const path=(extra:Record<string,string>={})=>'/ui/digital-cockpit?'+new URLSearchParams({scope:'production',search:prefix,...extra}),open=async(id=f!.root.actorId,extra:Record<string,string>={},width=1584,scale=1)=>{const context=await browser!.newContext({viewport:{width:Math.round(width/scale),height:Math.round(1003/scale)},deviceScaleFactor:scale});await context.addCookies([{name:'dx_rework_session',value:await login(id),url:base}]);const page=await context.newPage();page.setDefaultTimeout(12000);page.on('pageerror',error=>errors.push(error.message));await page.goto(base+path(extra));if(extra.workspace==='delivery')await page.locator('.delivery-calendar[aria-busy="false"]').waitFor();else await homeReady(page);return {context,page};};
   const read=async(page:Page,extra:Record<string,string>={})=>{const response=await page.request.get(base+'/api/digital-production/journeys?'+new URLSearchParams({scope:'production',search:prefix,...extra}));assert.equal(response.status(),200,await response.text());return response.json() as Promise<JourneyResult>;};
-  return {dispose,open,read,evidence,orders,prefix,pmcId,shortage,errors,path,base,auth,updateCalendarPacking,calendarChangedDates,revokePmc:()=>fixture.access.revokeRole(rootAccess,pmcGrant.assignmentId,'TEST live original home role revocation'),hash:(value:string)=>createHash('sha256').update(value).digest('hex')};
+  const measureScale=async()=>{
+   assert(indexed);await factRuntime?.stop();
+   const baseline=Fastify(),token=await login(fixture.root.actorId),cookie=`dx_rework_session=${token}`,query='/digital-production/journeys?'+new URLSearchParams({scope:'production',search:prefix});
+   registerDigitalIdentityRoutes(baseline,{service:identity,creationEnabled:true,root,authenticate:token=>auth.authenticate(token),journeys:new DigitalJourneyQuery(db,{listReadMode:'legacy'})});
+   await baseline.ready();
+   let tracing=false,calls=0,sqlMs=0,poolMs=0;
+   const seen=new WeakSet<PoolClient>(),connect=db.connect;
+   const costs=new Map<string,{signature:string;template:string;calls:number;aggregateMs:number;maximumMs:number}>();
+   let selectionQuery:{text:string;values:unknown[]}|undefined;
+   const instrument=(client:PoolClient)=>{
+    if(seen.has(client))return;seen.add(client);const original=client.query;
+    client.query=function(this:PoolClient,...args:unknown[]){
+     if(!tracing)return Reflect.apply(original,this,args);calls++;const start=performance.now();let ended=false;
+     const text=typeof args[0]==='string'?args[0]:String((args[0] as {text?:unknown})?.text??'');
+     const signature=createHash('sha256').update(text).digest('hex'),cost=costs.get(signature)??{signature,template:text.replace(/\s+/g,' ').slice(0,120),calls:0,aggregateMs:0,maximumMs:0};costs.set(signature,cost);
+     if(text.includes('native AS MATERIALIZED')&&text.includes('selection_full_json')&&Array.isArray(args[1]))selectionQuery={text,values:args[1]};
+     const end=()=>{if(!ended){const elapsed=performance.now()-start;sqlMs+=elapsed;cost.calls++;cost.aggregateMs+=elapsed;cost.maximumMs=Math.max(cost.maximumMs,elapsed);ended=true;}};
+     const callback=args.at(-1);if(typeof callback==='function')args[args.length-1]=function(this:unknown,...values:unknown[]){end();return Reflect.apply(callback,this,values);};
+     try{const value=Reflect.apply(original,this,args);if(typeof callback==='function')return value;
+      if(value&&typeof value.then==='function')return value.then((result:unknown)=>{end();return result;},(error:unknown)=>{end();throw error;});end();return value;
+     }catch(error){end();throw error;}
+    } as PoolClient['query'];
+   };
+   db.connect=function(this:typeof db,callback?:(...args:unknown[])=>unknown){const start=performance.now(),timed=tracing;
+    if(callback)return Reflect.apply(connect,this,[function(this:unknown,error:unknown,client:PoolClient|undefined,release:unknown){if(timed)poolMs+=performance.now()-start;if(client)instrument(client);return Reflect.apply(callback,this,[error,client,release]);}]);
+    return Reflect.apply(connect,this,[]).then((client:PoolClient)=>{if(timed)poolMs+=performance.now()-start;instrument(client);return client;});
+   } as typeof db.connect;
+   const normalize=(value:unknown):unknown=>Array.isArray(value)?value.map(normalize):value&&typeof value==='object'?Object.fromEntries(Object.entries(value).filter(([key])=>key!=='asOf').sort(([a],[b])=>a.localeCompare(b)).map(([key,value])=>[key,normalize(value)])):value;
+   let reference='';
+   const sample=async(target:typeof app)=>{calls=sqlMs=poolMs=0;costs.clear();tracing=true;const started=performance.now();
+    try{const response=await target.inject({url:query,headers:{cookie}});const elapsed=performance.now()-started;tracing=false;assert.equal(response.statusCode,200,response.body);
+     const body=response.json() as JourneyResult;assert.equal(body.total,orderCount);assert.equal(body.items.length,15);assert.equal(body.freshness,undefined);
+     const comparable=JSON.stringify(normalize(body));if(reference&&comparable!==reference){await writeFile(join(evidence,'scale-difference.json'),JSON.stringify({expected:JSON.parse(reference),actual:JSON.parse(comparable)},null,2));assert.equal(createHash('sha256').update(comparable).digest('hex'),createHash('sha256').update(reference).digest('hex'),'Full normalized native result mismatch; exact TEST-only values saved in scale-difference.json');}else if(!reference)reference=comparable;
+     return {requestMs:elapsed,physicalSqlCalls:calls,sqlAggregateMs:sqlMs,poolWaitAggregateMs:poolMs,responseBytes:Buffer.byteLength(response.body),pageNativeSourceMothers:body.items.filter(item=>item.sourceId).length,completeResultHash:createHash('sha256').update(comparable).digest('hex'),topSql:[...costs.values()].sort((a,b)=>b.aggregateMs-a.aggregateMs).slice(0,8)};
+    }finally{tracing=false;}
+   };
+   try{
+    const old=[await sample(baseline)];if(old[0]!.requestMs<10000){old.push(await sample(baseline),await sample(baseline));}
+    const current=[];for(let i=0;i<7;i++)current.push(await sample(app));
+    const sorted=current.map(value=>value.requestMs).sort((a,b)=>a-b),result={fixtureOrders:orderCount,poPerOrder:`2; first mother3;${includeNative?3:0} actual development/procurement/preparation craft mothers; one additional actual receiving mother outside search`,
+     scope:'Owned TEST PostgreSQL and real AuthService/Fastify serialization, loopback app.inject; no TCP/site/compression equivalence. Same native data, clock, identity, scope and query; no user DTO or permission result cache. SQL aggregate/pool waits can overlap and are not wall time.',
+     sourceFingerprint:process.env.DX_JOURNEY_SCALE_SOURCE??null,baseline:old,indexed:current,indexedMedianMs:sorted[Math.floor(sorted.length/2)],indexedSampleMaximumMs:sorted.at(-1),
+     baselineLimit:old.length===1?'Expensive baseline measured once (>10 seconds); deterministic full-result/SQL comparison, not a robust latency percentile.':'3 same-condition baseline observations;7 indexed observations; no P95 claim.'};
+    await writeFile(join(evidence,'native-scale-comparison.json'),JSON.stringify(result,null,2)+'\n');console.log('JOURNEY_SCALE_RESULT '+JSON.stringify(result));
+    if(selectionQuery&&result.indexedMedianMs>(orderCount===5000?1500:1000)){
+     // Diagnose the actual owned TEST-only read after all timed observations.
+     // Never EXPLAIN a mutation, live data or a background builder.
+     const client=await db.connect();try{await client.query('BEGIN READ ONLY');await client.query("SET LOCAL statement_timeout='90s'");
+      const plan=await client.query('EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) '+selectionQuery.text,selectionQuery.values);
+      const redact=(value:unknown):unknown=>Array.isArray(value)?value.map(redact):value&&typeof value==='object'?Object.fromEntries(Object.entries(value).map(([key,item])=>[key,redact(item)])):typeof value==='string'&&value.length>300?{omittedBytes:Buffer.byteLength(value),sha256:createHash('sha256').update(value).digest('hex')}:value;
+      await writeFile(join(evidence,'selection-explain.json'),JSON.stringify({scope:'Same owned TEST read after latency measurement; large literals omitted, no onsite statement',plan:redact(plan.rows)},null,2)+'\n');await client.query('COMMIT');
+     }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
+    }
+    return result;
+   }finally{db.connect=connect;await baseline.close();factRuntime?.start();}
+  };
+  return {dispose,open,read,evidence,orders,prefix,pmcId,shortage,errors,path,base,auth,corruptProjection,repairProjection,measureScale,updateCalendarPacking,calendarChangedDates,revokePmc:()=>fixture.access.revokeRole(rootAccess,pmcGrant.assignmentId,'TEST live original home role revocation'),hash:(value:string)=>createHash('sha256').update(value).digest('hex')};
  }catch(error){await dispose();throw error;}
 }
 export async function homeReady(page:Page){await page.locator('.digital-journey-cockpit[data-view="overview"][aria-busy="false"]').waitFor();await page.locator('.journey-orders[aria-busy="false"]').waitFor();await page.locator('.journey-orders tbody tr').first().waitFor();}

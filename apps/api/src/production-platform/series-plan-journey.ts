@@ -2,6 +2,7 @@ import type {PoolClient} from 'pg';
 import type {JourneyNode} from '@dx-rework/contracts/digital-production-journey';
 import {SERIES_MILESTONES,type SeriesPlanSnapshot} from '@dx-rework/contracts/digital-series-plan';
 import {readSeriesPlanFacts} from './series-plan-facts.js';
+import {journeyPlanDateOverdue} from './journey-risk-clock.js';
 /** Read-only date projection, excluded from execution completion denominators and all native gates. */
 export async function seriesPlanJourney(db:Pick<PoolClient,'query'>,id:string,day:string,closed:boolean):Promise<JourneyNode[]>{
  if(!(await db.query("SELECT to_regclass('digital_series_plans') AS t")).rows[0]?.t)return [];
@@ -13,7 +14,7 @@ export async function seriesPlanJourney(db:Pick<PoolClient,'query'>,id:string,da
  const names=new Map<string,string>((await db.query('SELECT id,display_name FROM app_users WHERE id=ANY($1::uuid[])',[ownerIds])).rows.map(r=>[r.id,r.display_name]));
  return SERIES_MILESTONES.filter(m=>m.key!=='color_confirmation'||(plan?.route==='A'||!plan&&order.requires_color_matching!==false)).map(m=>{
   const target=plan?.milestones.find(n=>n.key===m.key&&n.scopeRef==='whole'),facts=actual.facts.filter(f=>f.key===m.key&&f.scopeRef==='whole'),completed=facts.some(f=>f.completed),started=facts.some(f=>f.started),f=facts.find(f=>f.completed)??facts[0];
-  const date=target?.targetDate??null,overdue=!closed&&!completed&&date!==null&&date<day;
+  const date=target?.targetDate??null,overdue=!closed&&!completed&&journeyPlanDateOverdue(date,day);
   const ownerId=m.role.startsWith('设计')?order.created_by:m.role.startsWith('订单跟单')?order.primary_merchandiser_id:warehouse;
   return {planningOnly:true,key:`series_${m.key}`,instanceId:`series:${id}:${m.key}`,label:m.label,stage:m.key==='processing_dispatch'?'post_cutting':m.key==='planned_shipment'?'receiving':'preparation',state:completed?'completed':started?'active':'pending',round:null,occurrence:null,current:!closed,
    owner:ownerId?{id:ownerId,name:names.get(ownerId)??null}:null,operator:null,responsibilityRole:m.role,assignmentHistory:[],expectedAt:date,expectedKind:date?'plan':'unset',expectedPrecision:date?'date':'missing',

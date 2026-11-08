@@ -11,7 +11,7 @@ const iso = (value: Date | string) => new Date(value).toISOString();
  * current native instances, never fabricate a plan target or collapse attempts.
  * The caller has already authorized the whole source's timing evidence.
  */
-export async function developmentNativeFacts(db: DB, sourceId: string, time: BusinessTime): Promise<Record<string, SlaNodeFact>> {
+export async function developmentNativeFacts(db: DB, sourceId: string, time: BusinessTime,onFutureEvidence?:(at:string)=>void): Promise<Record<string, SlaNodeFact>> {
   const rows = (await db.query(`SELECT t.task_id,t.state,t.entered_at,t.entered_quality,t.completed_at,t.completed_quality,a.task_kind,
       EXISTS(SELECT 1 FROM digital_production_task_events e WHERE e.task_id=t.task_id AND e.event_kind='material_returned') AS returned,
       EXISTS(SELECT 1 FROM digital_development_route_facts f WHERE f.task_id=t.task_id AND f.kind='尾查退回') AS rejected
@@ -20,8 +20,10 @@ export async function developmentNativeFacts(db: DB, sourceId: string, time: Bus
     ORDER BY t.created_at,t.task_id`, [sourceId])).rows;
   return Object.fromEntries(rows.map(row => {
     const complete = row.state === 'completed' && !row.returned && !row.rejected;
-    const trusted = (at: Date | string | null, quality: string) => at && ['现场登记', '已核实'].includes(quality)
-      && Date.parse(iso(at)) <= Date.parse(time.now);
+    const trusted = (at: Date | string | null, quality: string) => {
+      if(!at||!['现场登记','已核实'].includes(quality))return false;
+      const observed=iso(at);if(Date.parse(observed)>Date.parse(time.now)){onFutureEvidence?.(observed);return false;}return true;
+    };
     return [`${row.task_kind}:task:${row.task_id}`, { evidence: `task:${row.task_id}`, businessCompleted: complete,
       ...(trusted(row.entered_at, row.entered_quality) ? { startedAt: iso(row.entered_at) } : {}),
       ...(complete && trusted(row.completed_at, row.completed_quality) ? { completedAt: iso(row.completed_at) } : {}) }];
@@ -31,7 +33,7 @@ export async function developmentNativeFacts(db: DB, sourceId: string, time: Bus
 /** Original source/round evidence remains authoritative after conversion to a mother order.
  * This reader neither invents history nor changes P0. Correction rounds remain separate records.
  */
-export async function developmentSlaEvidence(db: DB, sourceId: string, time: BusinessTime) {
+export async function developmentSlaEvidence(db: DB, sourceId: string, time: BusinessTime,onFutureEvidence?:(at:string)=>void) {
   const saved = await developmentSlaPlan(db, sourceId);
   if (!saved) return null;
   if (saved.business_time.scenarioId !== time.scenarioId) throw new Error("Development/order SLA clock scope mismatch");
@@ -67,7 +69,7 @@ export async function developmentSlaEvidence(db: DB, sourceId: string, time: Bus
     const enteredAt = nodeId === "development_craft_return"
       ? [...first].reverse().find(candidate => ["development_printing", "development_embroidery", "development_print_embroidery"].includes(candidate.task_kind) && accepted(candidate))?.completed_at
       : row.entered_at;
-    if (enteredAt && Date.parse(iso(enteredAt)) <= Date.parse(time.now)) fact.startedAt = iso(enteredAt);
+    if(enteredAt){if(Date.parse(iso(enteredAt))<=Date.parse(time.now))fact.startedAt=iso(enteredAt);else onFutureEvidence?.(iso(enteredAt));}
     if(typeof row.sla_basis.warningRatio==='number')fact.standardWarningPercent=row.sla_basis.warningRatio*100;
     if (row.sla_basis.seconds !== null) fact.standardMinutes = row.sla_basis.seconds / 60;
     if (accepted(row)) {
@@ -96,6 +98,7 @@ export async function developmentSlaEvidence(db: DB, sourceId: string, time: Bus
     const fact: SlaNodeFact = { ...facts[nodeId], evidence: `development-round:${sourceId}:${latestRound.round_number}${row ? `;task:${row.task_id}` : ""}` };
     delete fact.completedAt; delete fact.completedDeadline; delete fact.waitingFor;
     fact.businessCompleted = Boolean(row && businessCompleted(row));
+    if(!fact.startedAt&&row?.sla_basis&&row.entered_at&&Date.parse(iso(row.entered_at))>Date.parse(time.now))onFutureEvidence?.(iso(row.entered_at));
     if (!fact.startedAt && row?.sla_basis && row.entered_at && Date.parse(iso(row.entered_at)) <= Date.parse(time.now)) {
       fact.startedAt = iso(row.entered_at);
       if(typeof row.sla_basis.warningRatio==='number')fact.standardWarningPercent=row.sla_basis.warningRatio*100;

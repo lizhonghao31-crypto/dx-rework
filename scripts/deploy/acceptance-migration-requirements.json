@@ -1920,5 +1920,18 @@
     ],
     "execute": [],
     "sequences": []
+  },
+  "0280_journey_selection_facts": {
+    "checksum": "dfd64e16dec3de921b34aad2143295e8880bbde2bad6c77b5d8227e95720429e",
+    "tables": [
+      "digital_journey_fact_models"
+    ],
+    "functions": [],
+    "references": [],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": [],
+    "sequences": []
   }
 }

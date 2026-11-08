@@ -1,6 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import {afterAll,beforeAll,beforeEach,describe,expect,it,vi} from 'vitest';
 import {DigitalOrderCreateSchema} from '@dx-rework/contracts/digital-production';
+import {JourneyFilterSchema} from '@dx-rework/contracts/digital-production-journey';
 import {businessAnchorFixture} from '../helpers/business-anchor-fixture.js';
 import {DigitalProductionIdentityService} from '../../apps/api/src/production-platform/identity-service.js';
 import {DigitalJourneyQuery} from '../../apps/api/src/production-platform/journey-query.js';
@@ -67,12 +68,29 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  }));
  it('isolates one build failure, keeps its dirty row and retries that exact mother',()=>run(async()=>{
   const a=await make(),b=await make(),original=DigitalJourneyQuery.prototype.buildFactsWithClient;
-  const spy=vi.spyOn(DigitalJourneyQuery.prototype,'buildFactsWithClient').mockImplementation(async function(db,resource,at){if(resource.id===a.productionOrderId)throw Error('TEST isolated builder failure');return original.call(this,db,resource,at);});
+  const spy=vi.spyOn(DigitalJourneyQuery.prototype,'buildFactsWithClient').mockImplementation(async function(...args){if(args[1].id===a.productionOrderId)throw Error('TEST isolated builder failure');return original.apply(this,args);});
   const updates=new JourneyFactUpdates(f.db,repo),result=await updates.runOnce();expect(result).toMatchObject({failed:1,built:1});
   expect(await pending(a.productionOrderId)).toHaveLength(1);expect(await pending(b.productionOrderId)).toHaveLength(0);expect((await status(b.productionOrderId)).status).toBe('ready');
   expect((await f.db.query('SELECT attempts,error_code FROM digital_journey_fact_retries WHERE resource_id=$1',[a.productionOrderId])).rows[0]).toEqual({attempts:1,error_code:'BUILD_FAILED'});
+  const query=new DigitalJourneyQuery(f.db,{listReadMode:'indexed'}),filter=JourneyFilterSchema.parse({scope:'production',search:a.productionOrderId});
+  expect(await query.list(f.root,filter)).toMatchObject({total:null,summary:null,freshness:{failed:1,pending:0,retryIds:[a.productionOrderId]}});
+  expect((await query.list(f.root,{...filter,search:b.productionOrderId})).total).toBe(1);
+  const client=await f.db.connect();try{const selection=await repo.readSelectionsWithClient(client,[{kind:'order',id:a.productionOrderId}],(await f.runtime.repository.view(scene)).now);
+   expect(selection.items.get('order:'+a.productionOrderId)).toMatchObject({status:'failed',facts:null});}finally{client.release();}
   spy.mockRestore();await f.db.query("UPDATE digital_journey_fact_retries SET retry_after=clock_timestamp()-interval '1 second' WHERE resource_id=$1",[a.productionOrderId]);
   expect(await updates.runOnce()).toMatchObject({built:1,failed:0});expect((await status(a.productionOrderId)).status).toBe('ready');expect(await updates.runOnce()).toMatchObject({built:0,failed:0});
+  expect((await query.list(f.root,filter)).total).toBe(1);
+ }));
+ it('explicitly queues only a failed native mother and clears its backoff without rebuilding in the retry request',()=>run(async()=>{
+  const a=await make(),original=DigitalJourneyQuery.prototype.buildFactsWithClient;
+  const spy=vi.spyOn(DigitalJourneyQuery.prototype,'buildFactsWithClient').mockImplementationOnce(async()=>{throw Error('TEST native failed first build');});
+  const updates=new JourneyFactUpdates(f.db,repo);expect(await updates.runOnce()).toMatchObject({failed:1});spy.mockRestore();
+  const query=new DigitalJourneyQuery(f.db,{listReadMode:'indexed'}),filter=JourneyFilterSchema.parse({scope:'production',search:a.productionOrderId});
+  const build=vi.spyOn(DigitalJourneyQuery.prototype,'buildFactsWithClient').mockImplementation(original);
+  expect(await query.refreshOne(f.root,a.productionOrderId)).toEqual({status:'pending'});expect(build).not.toHaveBeenCalled();
+  expect((await f.db.query('SELECT 1 FROM digital_journey_fact_retries WHERE resource_id=$1',[a.productionOrderId])).rowCount).toBe(0);
+  expect(await query.list(f.root,filter)).toMatchObject({total:null,freshness:{failed:0,pending:1}});
+  expect(await updates.runOnce()).toMatchObject({built:1,failed:0});expect((await query.list(f.root,filter)).total).toBe(1);
  }));
  it('preserves immutable task ownership and rolls a denied rebind back without dirtying either mother',()=>run(async()=>{
   const a=await make(),b=await make();await repo.buildOne({kind:'order',id:a.productionOrderId});await repo.buildOne({kind:'order',id:b.productionOrderId});
@@ -175,6 +193,17 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   await repo.buildOne({kind:'order',id:order.productionOrderId});await f.advance(scene,'2026-11-08T01:00:00Z');
   expect(await pending(order.productionOrderId)).toHaveLength(1);expect(await status(order.productionOrderId)).toMatchObject({status:'pending',model:null});
  }));
+ it('rechecks only the expired ordinary derived object without enqueuing normal compiled date transitions',()=>run(async()=>{
+  const a=await make(),b=await make(),scopes=[a,b].map(order=>({kind:'order' as const,id:order.productionOrderId}));
+  for(const scope of scopes)await repo.buildOne(scope);
+  expect((await f.db.query('SELECT selection_expires_at FROM digital_journey_fact_models')).rows.every(row=>row.selection_expires_at===null)).toBe(true);
+  // Deliberately stale derived observation, never a forged native business event.
+  await f.db.query("UPDATE digital_journey_fact_models SET clock_scenario_id=NULL,clock_revision=0,selection_expires_at=clock_timestamp()-interval '1 second' WHERE resource_id=$1",[a.productionOrderId]);
+  const spy=vi.spyOn(repo,'buildOne'),result=await new JourneyFactUpdates(f.db,repo).runOnce();
+  expect(result).toEqual({built:1,retired:0,failed:0,busy:0});expect(spy.mock.calls.map(call=>call[0].id)).toEqual([a.productionOrderId]);
+  expect(await pending(a.productionOrderId)).toHaveLength(0);expect(await pending(b.productionOrderId)).toHaveLength(0);
+  expect((await status(b.productionOrderId)).status).toBe('ready');
+ }));
  it('bounds explicit startup backfill and performs no payload construction during registration',()=>run(async()=>{
   const a=await make(),b=await make();await repo.buildOne({kind:'order',id:a.productionOrderId});await repo.buildOne({kind:'order',id:b.productionOrderId});
   await f.db.query("UPDATE digital_journey_fact_models SET calculation_version='TEST-old' WHERE resource_id=ANY($1::uuid[])",[[a.productionOrderId,b.productionOrderId]]);
@@ -183,7 +212,10 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect((await updates.registerBackfill(first.cursor,1)).registered).toBe(1);
   expect(spy).not.toHaveBeenCalled();expect(await pending(a.productionOrderId)).toHaveLength(1);expect(await pending(b.productionOrderId)).toHaveLength(1);
   expect((await f.db.query('SELECT DISTINCT reason FROM digital_journey_fact_changes')).rows).toEqual([{reason:'backfill'}]);
-  const current=await make();await updates.runOnce();expect(spy.mock.calls[0]![1].id).toBe(current.productionOrderId);
+  // Priority applies at bounded dispatch. Two builders can acquire connections
+  // and reach their inner projection in either order; that is not queue order.
+  const dispatch=vi.spyOn(repo,'buildOne'),current=await make();await updates.runOnce();
+  expect(dispatch.mock.calls[0]![0].id).toBe(current.productionOrderId);expect(spy).toHaveBeenCalled();
   expect((await updates.registerBackfill(null,1,true)).registered).toBe(1);
  }));
 });

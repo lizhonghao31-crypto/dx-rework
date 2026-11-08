@@ -27,10 +27,15 @@ describe("loadConfig", () => {
     expect(() => loadConfig({ ...validEnvironment, SESSION_TTL_SECONDS: "86401" })).toThrow(ConfigurationError);
   });
   it("keeps digital production disabled by default and separates new creation from existing work", () => {
-    expect(loadConfig(validEnvironment).digitalProduction).toEqual({ enabled: false, creationEnabled: false });
+    expect(loadConfig(validEnvironment).digitalProduction).toEqual({ enabled: false, creationEnabled: false,listReadMode:"indexed" });
     expect(loadConfig({ ...validEnvironment, DIGITAL_PRODUCTION_ENABLED: "true" }).digitalProduction)
-      .toEqual({ enabled: true, creationEnabled: false });
+      .toEqual({ enabled: true, creationEnabled: false,listReadMode:"indexed" });
     expect(() => loadConfig({ ...validEnvironment, DIGITAL_PRODUCTION_ENABLED: "yes" })).toThrow(ConfigurationError);
+  });
+
+  it("supports explicit legacy Journey read rollback and rejects an unknown mode",()=>{
+    expect(loadConfig({...validEnvironment,DIGITAL_JOURNEY_LIST_READ_MODE:'legacy'}).digitalProduction?.listReadMode).toBe('legacy');
+    expect(()=>loadConfig({...validEnvironment,DIGITAL_JOURNEY_LIST_READ_MODE:'cached-old'})).toThrow(ConfigurationError);
   });
 
   it("loads typed defaults without exposing source environment", () => {

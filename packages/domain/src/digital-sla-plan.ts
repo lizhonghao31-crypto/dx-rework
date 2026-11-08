@@ -156,8 +156,17 @@ export function slaPastDeadline(at: string, deadline: SlaTime): boolean {
   return deadline.exclusive ? instant(at) >= instant(deadline.at) : instant(at) > instant(deadline.at);
 }
 /** Reads one captured clock; never writes status, starts work, or grants permissions. */
-export function evaluateSlaPlan(plan: SlaPlan, facts: Record<string, SlaNodeFact>, time: BusinessTime, options: {mode?:"read_projection"} = {}): SlaNodeEvaluation[] {
+export function evaluateSlaPlan(plan: SlaPlan, facts: Record<string, SlaNodeFact>, time: BusinessTime, options: {mode?:"read_projection";onNextChange?:(at:string)=>void} = {}): SlaNodeEvaluation[] {
   validateBusinessTime(time); const now = instant(time.now);
+  // Only the canonical comparisons report their next possible change. A list
+  // index may expire then; it must not reimplement SLA rules or poll every order.
+  // Date has millisecond precision: strict > flips one millisecond after an
+  // integral deadline, while >= flips at its rounded-up boundary.
+  const reconsider=(value:string|number|null|undefined,strict=false)=>{
+    if(value==null||!options.onNextChange)return;
+    const ms=typeof value==='number'?value:instant(value),boundary=strict?Math.floor(ms)+1:Math.ceil(ms);
+    if(boundary>now)options.onNextChange(iso(boundary));
+  };
   const planned = new Map(calculateSlaPlan(plan).map(n => [n.id, n]));
   const result = new Map<string, SlaNodeEvaluation>();
   // Separate rolling windows from immutable P0/Pk. Included targets follow the effective parent window.
@@ -175,6 +184,8 @@ export function evaluateSlaPlan(plan: SlaPlan, facts: Record<string, SlaNodeFact
     if(f?.remaining){const r=f.remaining;if(!r.source.trim()||!Number.isSafeInteger(r.minutes)||r.minutes<0||instant(r.validUntil)<instant(r.asOf))throw new Error("Invalid remaining-work estimate");}
     for(const w of f?.batchWindows??[]){if(!w.evidence.trim())throw new Error('Batch window evidence required');for(const at of [w.startedAt,w.deadline,w.warningAt,w.completedAt])if(at)instant(at);}
     const actuals=[{startedAt:f?.startedAt,completedAt:f?.completedAt},...(f?.batchWindows??[])];
+    for(const actual of actuals){reconsider(actual.startedAt);reconsider(actual.completedAt);}
+    for(const window of f?.batchWindows??[])if(!window.complete){reconsider(window.deadline,true);reconsider(window.warningAt);}
     const issue:SlaFactIssue|undefined=actuals.some(w=>w.startedAt&&w.completedAt&&instant(w.completedAt)<instant(w.startedAt))
       ?{code:"completion_before_start",reason:"实际完成早于实际进入，时效不可评估"}
       :actuals.some(w=>w.startedAt&&instant(w.startedAt)>now||w.completedAt&&instant(w.completedAt)>now)
@@ -199,6 +210,7 @@ export function evaluateSlaPlan(plan: SlaPlan, facts: Record<string, SlaNodeFact
       if (f.completedDeadline.at) instant(f.completedDeadline.at);
       deadline = structuredClone(f.completedDeadline);
     }
+    if(!f?.completedAt&&!f?.businessCompleted){reconsider(p.end.at,!p.end.exclusive);reconsider(deadline.at,!deadline.exclusive);}
     let status: SlaNodeEvaluation["status"] = n.applicable === "no" ? "not_applicable" : n.applicable === "unknown" ? "unknown" : "not_started";
     let forecast = missing(`${n.label}缺少有效预计依据`);
     let forecastBasis: SlaNodeEvaluation["forecastBasis"] = "unknown";
@@ -214,7 +226,11 @@ export function evaluateSlaPlan(plan: SlaPlan, facts: Record<string, SlaNodeFact
         if (slaPastDeadline(time.now, deadline)) status = "overdue";
         else if (f?.startedAt) {
           status = "running";
-          if (deadline.at && now >= instant(f.startedAt) + (instant(deadline.at) - instant(f.startedAt)) * (f.standardWarningPercent??plan.warningPercent) / 100) status = "warning";
+          if (deadline.at) {
+            const warningAt=instant(f.startedAt)+(instant(deadline.at)-instant(f.startedAt))*(f.standardWarningPercent??plan.warningPercent)/100;
+            reconsider(warningAt);
+            if(now>=warningAt)status="warning";
+          }
         }
         if (f?.waitingFor) {
           if (!f.waitingFor.reason.trim() || !f.waitingFor.source.trim()) throw new Error("Business hold evidence required");
@@ -222,6 +238,7 @@ export function evaluateSlaPlan(plan: SlaPlan, facts: Record<string, SlaNodeFact
         } else if (f?.remaining) {
           const r = f.remaining;
           if (!r.source.trim() || !Number.isSafeInteger(r.minutes) || r.minutes < 0 || instant(r.validUntil) < instant(r.asOf)) throw new Error("Invalid remaining-work estimate");
+          reconsider(r.asOf);reconsider(r.validUntil,true);reconsider(instant(r.asOf)+r.minutes*MINUTE,true);
           if (instant(r.asOf) <= now && now <= instant(r.validUntil) && instant(r.asOf) + r.minutes * MINUTE >= now) { forecast = known(instant(r.asOf) + r.minutes * MINUTE); forecastBasis = "remaining_estimate"; }
           else forecast = missing(`${n.label}剩余工时预计已失效`);
           // A remaining-work assessment never proves an unstarted prerequisite was met.
@@ -246,10 +263,12 @@ export function evaluateSlaPlan(plan: SlaPlan, facts: Record<string, SlaNodeFact
         } else if (f?.startedAt) {
           // A started window is never reset when a prerequisite arrives or ownership changes.
           const target = n.kind === "estimate" ? add(known(instant(f.startedAt)), n.minutes!) : deadline;
+          reconsider(target.at,!target.exclusive);
           if (target.at && !slaPastDeadline(time.now, target)) { forecast = target; forecastBasis = "standard_window"; }
           else forecast = missing(`${n.label}窗口已过，缺少剩余工时预计`);
         } else {
           const candidate = projected.end;
+          reconsider(candidate.at,!candidate.exclusive);
           if (candidate.at && !slaPastDeadline(time.now, candidate)) { forecast = candidate; forecastBasis = "plan"; }
           else forecast = candidate.at ? missing(`${n.label}计划时间已过，缺少新预计`) : candidate;
         }

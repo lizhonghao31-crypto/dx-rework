@@ -44,7 +44,7 @@ import {assertTestDatabaseTarget} from '../../scripts/test-database-safety.mjs';
 import {ownedPostgresSchema,createOwnedPostgresSchema,releaseOwnedPostgresSchema} from '../helpers/owned-postgres-schema.js';
 import {verifyAcceptanceClockServer} from '../../apps/api/src/acceptance-clock/guard.js';
 import {AcceptanceClockRuntime} from '../../apps/api/src/acceptance-clock/runtime.js';
-import {businessNow,ContextBusinessClock,registerAcceptanceCreated} from '../../apps/api/src/acceptance-clock/business-time.js';
+import {assertBusinessClocksUnchanged,businessNow,businessScopeKey,ContextBusinessClock,registerAcceptanceCreated} from '../../apps/api/src/acceptance-clock/business-time.js';
 import {DigitalProductionIdentityService} from '../../apps/api/src/production-platform/identity-service.js';
 import {SlaConfigurationRepository} from '../../apps/api/src/production-platform/sla-configuration-repository.js';
 import {mintAcceptanceControlCode,AcceptanceControlAuthority} from '../../apps/api/src/auth/acceptance-control.js';
@@ -138,6 +138,32 @@ const databaseUrl=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TE
   }))).rejects.toThrow(/newly created UAT/);
   expect((await db.query("SELECT count(*)::int n FROM acceptance_sla_clock_resources WHERE resource_kind='source' AND resource_id=$1",[old.sourceId])).rows[0].n).toBe(0);
   expect((await db.query('SELECT business_time FROM digital_development_sla_plans WHERE source_id=$1',[old.sourceId])).rows[0].business_time.scenarioId).toBeNull();
+ });
+ it('batch reads original native clocks in one owned transaction, keeps ordinary fallback and rejects mixed guarded scopes',async()=>{
+  const a=await runtime.create(actor(),{name:'TEST-batch-clock-A',requestKey:randomUUID()}),b=await runtime.create(actor(),{name:'TEST-batch-clock-B',requestKey:randomUUID()});
+  const {effect:observedA}=await runtime.run(a.scenarioId,actor(),()=>runtime.repository.change(a.scenarioId,rootId,{expectedVersion:a.version,requestKey:randomUUID(),at:new Date(Date.parse(a.now)+86400000).toISOString()}));
+  const {effect:observedB}=await runtime.run(b.scenarioId,actor(),()=>runtime.repository.change(b.scenarioId,rootId,{expectedVersion:b.version,requestKey:randomUUID(),at:new Date(Date.parse(b.now)+2*86400000).toISOString()}));
+  const ordinary=await new DigitalProductionIdentityService(db,true).createSource(actor(realId),{developmentType:'头版',designStyleNo:`TEST-batch-ordinary-${randomUUID()}`,temporaryStyleNo:null,customerCode:null},randomUUID());
+  const scopes=[{kind:'source' as const,id:a.sourceIds[0]!},{kind:'source' as const,id:b.sourceIds[0]!},{kind:'source' as const,id:ordinary.sourceId}];
+  const connection=await db.connect();let committed=false;
+  try{
+   await connection.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+   const asOf=new Date((await connection.query('SELECT CURRENT_TIMESTAMP AS observed')).rows[0].observed).toISOString(),spy=vi.spyOn(connection,'query');
+   try{
+    const clocks=await new ContextBusinessClock(db,connection).readMany([...scopes,scopes[0]!],()=>new Date(asOf));
+    expect(clocks.size).toBe(3);
+    expect(clocks.get(businessScopeKey(scopes[0]!))).toEqual({now:observedA.now,scenarioId:a.scenarioId,revision:observedA.version});
+    expect(clocks.get(businessScopeKey(scopes[1]!))).toEqual({now:observedB.now,scenarioId:b.scenarioId,revision:observedB.version});
+    expect(clocks.get(businessScopeKey(scopes[2]!))).toEqual({now:asOf,scenarioId:null,revision:0});
+    expect(spy.mock.calls.filter(call=>String(call[0]).includes('FROM unnest'))).toHaveLength(1);
+   }finally{spy.mockRestore();}
+   await connection.query('COMMIT');committed=true;
+  }finally{if(!committed)await connection.query('ROLLBACK');connection.release();}
+  await expect(runtime.run(a.scenarioId,actor(),()=>new ContextBusinessClock(db).readMany(scopes))).rejects.toMatchObject({statusCode:409});
+  const observation={scope:scopes[0]!,time:{now:observedA.now,scenarioId:a.scenarioId,revision:observedA.version}};
+  await expect(assertBusinessClocksUnchanged(new ContextBusinessClock(db),[observation])).resolves.toBeUndefined();
+  await runtime.run(a.scenarioId,actor(),()=>runtime.repository.change(a.scenarioId,rootId,{expectedVersion:observedA.version,requestKey:randomUUID(),at:new Date(Date.parse(observedA.now)+3600000).toISOString()}));
+  await expect(assertBusinessClocksUnchanged(new ContextBusinessClock(db),[observation])).rejects.toMatchObject({statusCode:409});
  });
  it('advances once, rejects backwards/concurrent commands and persists across runtime recreation',async()=>{
   const scene=await runtime.create(actor(),{name:'TEST-monotonic',requestKey:randomUUID()}),key=randomUUID(),at=new Date(Date.parse(scene.now)+201*3600000).toISOString();
