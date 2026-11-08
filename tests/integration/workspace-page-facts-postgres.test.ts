@@ -70,7 +70,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    return native.apply(query,args);
   });
   try{const value=await new DevelopmentWorkspaceQuery(query).designer(f.root,DevelopmentWorkspaceFilterSchema.parse({search:'TEST-PERF07-'}));
-   expect(value).toMatchObject({total:null,counts:null,freshness:{failed:1,pending:0}});expect(value.items).toHaveLength(14);expect(value.items.some(item=>item.journey.id===ids.at(-1))).toBe(false);
+   expect(value.total).toBe(31);expect(value.counts).not.toBeNull();expect(value.freshness).toBeUndefined();expect(value.detailFailures).toEqual([{journeyId:ids.at(-1),designStyleNo:'TEST-PERF07-30'}]);expect(value.items).toHaveLength(14);expect(value.items.some(item=>item.journey.id===ids.at(-1))).toBe(false);
   }finally{project.mockRestore();}
  }));
 
@@ -83,6 +83,22 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    return {ids:[],finish:()=>true};
   })).toBe(true);
   const filter=DevelopmentWorkspaceFilterSchema.parse({search:style,view:'ordered'});expect(difference(normalize(await indexed.designer(f.root,filter)),normalize(await legacy.designer(f.root,filter)))).toBeNull();
+ }));
+
+ it('keeps reliable counts and page2 when one selected designer detail fails',()=>run(async()=>{
+  const filter=DevelopmentWorkspaceFilterSchema.parse({search:'TEST-PERF07-',page:2}),expected=await legacy.designer(f.root,filter),target=expected.items[0]!.journey.id;
+  const nativeQuery=new DigitalJourneyQuery(f.db,{listReadMode:'indexed'}),native=Reflect.get(nativeQuery,'project') as (...args:unknown[])=>Promise<OrderJourney|null>;
+  const spy=vi.spyOn(nativeQuery as unknown as {project:typeof native},'project').mockImplementation(async(...args)=>{if((args[2] as {source?:{source_id:string}}).source?.source_id===target)await(args[0] as PoolClient).query('SELECT 1/0');return native.apply(nativeQuery,args);});
+  try{const actual=await new DevelopmentWorkspaceQuery(nativeQuery).designer(f.root,filter);expect(actual).toMatchObject({page:2,total:expected.total,counts:expected.counts});expect(actual.freshness).toBeUndefined();expect(actual.detailFailures?.map(item=>item.journeyId)).toEqual([target]);expect(actual.items.map(item=>item.journey.id)).toEqual(expected.items.filter(item=>item.journey.id!==target).map(item=>item.journey.id));}finally{spy.mockRestore();}
+ }));
+
+ it('keeps reliable counts and page2 when one selected pattern detail fails',()=>run(async()=>{
+  const tasks=new DigitalProductionTaskService(f.db);
+  for(const sourceId of ids.slice(3,18)){const db=await f.db.connect();try{await db.query('BEGIN');await tasks.createWithClient(db,f.root,{resource:{kind:'source',id:sourceId},kind:'development_pattern',routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:f.people['pattern-room-worker']!.actorId});await db.query('COMMIT');}catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}await repo.buildOne({kind:'source',id:sourceId});}
+  const filter=PatternWorkspaceFilterSchema.parse({scope:'all',state:'all',group:'pattern',page:2}),expected=await legacy.pattern(f.root,filter),target=expected.items[0]!.journeyId;
+  const nativeQuery=new DigitalJourneyQuery(f.db,{listReadMode:'indexed'}),native=Reflect.get(nativeQuery,'project') as (...args:unknown[])=>Promise<OrderJourney|null>;
+  const spy=vi.spyOn(nativeQuery as unknown as {project:typeof native},'project').mockImplementation(async(...args)=>{if((args[2] as {source?:{source_id:string}}).source?.source_id===target)await(args[0] as PoolClient).query('SELECT 1/0');return native.apply(nativeQuery,args);});
+  try{const actual=await new DevelopmentWorkspaceQuery(nativeQuery).pattern(f.root,filter);expect(actual).toMatchObject({page:2,total:expected.total,counts:expected.counts,riskCounts:expected.riskCounts,archiveTotal:expected.archiveTotal});expect(actual.freshness).toBeUndefined();expect(actual.detailFailures?.map(item=>item.journeyId)).toEqual([target]);expect(actual.items.map(item=>item.node.instanceId)).toEqual(expected.items.filter(item=>item.journeyId!==target).map(item=>item.node.instanceId));}finally{spy.mockRestore();}
  }));
 
 });

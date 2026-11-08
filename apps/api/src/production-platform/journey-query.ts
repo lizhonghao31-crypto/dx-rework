@@ -138,7 +138,7 @@ export class DigitalJourneyQuery {
   /** Read minimal authorized facts once, then hydrate only the objects the
    * workspace actually displays. No GET-side rebuild or stale-result fallback. */
   async workspace<T>(actor:TrustedActorContext,filter:JourneyFilter,patternBusiness:"development"|"bulk"|"all"|undefined,
-    select:(items:WorkspaceJourneyFact[],asOf:string,freshness?:NonNullable<JourneyResult['freshness']>)=>Promise<{ids:string[];finish:(details:Map<string,OrderJourney>,freshness?:NonNullable<JourneyResult['freshness']>)=>T}>|{ids:string[];finish:(details:Map<string,OrderJourney>,freshness?:NonNullable<JourneyResult['freshness']>)=>T}):Promise<T|null>{
+    select:(items:WorkspaceJourneyFact[],asOf:string,freshness?:NonNullable<JourneyResult['freshness']>)=>Promise<{ids:string[];finish:(details:Map<string,OrderJourney>,freshness?:NonNullable<JourneyResult['freshness']>,detailFailures?:readonly string[])=>T}>|{ids:string[];finish:(details:Map<string,OrderJourney>,freshness?:NonNullable<JourneyResult['freshness']>,detailFailures?:readonly string[])=>T}):Promise<T|null>{
     if(this.options.listReadMode!=='indexed')return null;
     assertIdentityActor(actor);
     return this.snapshot(async(db,asOf,transaction)=>{
@@ -156,22 +156,23 @@ export class DigitalJourneyQuery {
         if(row.status!=='ready'){if(row.status==='failed'){failed++;retryIds.push(row.selection.id);}else pending++;continue;}
         facts.push({...row.selection,asOf:time.now,nodes:row.workspaceNodes??[]});byId.set(row.selection.id,candidate);
       }
-      const plan=await select(facts,asOf,pending||failed?{pending,failed,retryIds:retryIds.slice(0,15)}:undefined),details=new Map<string,OrderJourney>();
+      const freshness=()=>pending||failed?{pending,failed,retryIds:[...new Set(retryIds)].slice(0,15)}:undefined;
+      const plan=await select(facts,asOf,freshness()),details=new Map<string,OrderJourney>(),detailFailures:string[]=[];
       if(isDigitalManagementReader(actor))prepareJourneySnapshotBatches(db,plan.ids.flatMap(id=>byId.get(id)?.order?[byId.get(id)!.order!.production_order_id]:[]));
       for(const id of new Set(plan.ids)){
         const candidate=byId.get(id);if(!candidate)throw new ApplicationError('INVALID_STATE_TRANSITION','当前筛选范围已变化，请刷新工作区',409);
         await transaction.query('SAVEPOINT workspace_page_object');
         try{
           const item=await journeyMeasure('detail_projection',()=>this.project(db,actor,candidate,asOf,undefined,Boolean(patternBusiness),patternKinds));
-          if(item)details.set(id,patternBusiness?item:{...item,hitReasons:selectJourneys([item],filter,asOf,false).items[0]?.hitReasons??[]});else pending++;
+          if(item)details.set(id,patternBusiness?item:{...item,hitReasons:selectJourneys([item],filter,asOf,false).items[0]?.hitReasons??[]});else detailFailures.push(id);
           await transaction.query('RELEASE SAVEPOINT workspace_page_object');
         }catch(error){
           await transaction.query('ROLLBACK TO SAVEPOINT workspace_page_object');await transaction.query('RELEASE SAVEPOINT workspace_page_object');
           if(error&&typeof error==='object'&&'statusCode' in error&&error.statusCode===409)throw error;
-          failed++;retryIds.push(id);
+          detailFailures.push(id);
         }
       }
-      return plan.finish(details,pending||failed?{pending,failed,retryIds:[...new Set(retryIds)].slice(0,15)}:undefined);
+      return plan.finish(details,freshness(),detailFailures);
     });
   }
   private async indexedList(db:PoolClient,actor:TrustedActorContext,filter:JourneyFilter,asOf:string,transaction:PoolClient):Promise<JourneyResult>{

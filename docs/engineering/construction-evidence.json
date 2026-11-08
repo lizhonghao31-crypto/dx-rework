@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "fda824f89cc7b715575419221f526879c6543c97",
-  "sourceFingerprint": "57d23fef0b3c988a752394d9f31e87ae137550119abfaabee43b30b477ce2758",
+  "sourceFingerprint": "371a55d38e819b47af20537445363c1f652ed6d50c796bc16669cf3da322466d",
   "risk": "full",
   "rules": [
     {
@@ -29,9 +29,9 @@
       "newTests": [
         "tests/integration/workspace-page-facts-postgres.test.ts"
       ],
-      "initialization": "No migration/new storage/calculation-version change or GET-side rebuild; original models already retain required fields. Live access and batch clocks remain original; newworkspace option uses original untimed/native workspace semantics, not manager completeSLA DTO. Existinghome selector defaultfalse remains; readonly perobject savepoints isolate actual SQL failure.",
-      "dateAndPermission": "Keep original roles/Root/node budget/domain visibility, current facts/version/scenario/revision and frame integrity gates. No synthetic events/dates or cached grant. Freshness marks pending/failed objects; unknown total/counts, never stale latest. Default sharedhome path receives false/null/empty extraoptions, covered by original3browser cases.",
-      "expectation": "108 units,5 native cases, originalhome3 pass. Native31 sources include actual published draft transition; page1/2/3 and views/facets/card fields matchoriginal, including previously omitted hitReasons now computed only on selected native rows. Ordinarytask reads bounded to current15; ordered designer metadata transfers no unused node collection. Current-page task/light-field behavior is source-proved, no onsite/P95 claim.",
+      "initialization": "No migration/new storage/calculation-version change or GET-side rebuild; original models already retain required fields. Live access and batch clocks remain original; newworkspace option uses original untimed/native workspace semantics, not manager completeSLA DTO. Existinghome selector defaultfalse remains; readonly perobject savepoints isolate actual SQL failure. A display-only failure leaves ready selection counts and the requested page intact; source-fact failure alone marks counts unknown.",
+      "dateAndPermission": "Keep original roles/Root/node budget/domain visibility, current facts/version/scenario/revision and frame integrity gates. No synthetic events/dates or cached grant. Selection freshness marks pending/failed facts with unknown total/counts. Separate detailFailures preserve reliable counts and requested page, with named failure and current-page retry; never stale latest. Default sharedhome path receives false/null/empty extraoptions, covered by original3browser cases.",
+      "expectation": "108 units,7 native cases, originalhome3 pass. Native31 sources include actual published draft transition; page1/2/3 and views/facets/card fields matchoriginal, including previously omitted hitReasons now computed only on selected native rows. Ordinarytask reads bounded to current15; ordered designer metadata transfers no unused node collection. Current-page task/light-field behavior is source-proved, no onsite/P95 claim.",
       "checks": [
         "unit",
         "native",
@@ -65,7 +65,7 @@
       ],
       "initialization": "Original nonindexed rollback path stays available. Same current candidate order, original fullrange scope/facets/count meanings and source-owner confirmation; existing independent patternroom SQL pagination unchanged. Card preview3perlane and risk15 remain bounded additional visible requirements, not unbounded enrichment.",
       "dateAndPermission": "Current live task-node scope comes from original SQL access, nativeTask IDs match originaltask records; inherited/planning/history/uncreated placeholders excluded as before. Existing pendingPatternAssignments stays original authority. Counter values null onlywhen necessary facts unavailable; available authorized rows remain usable and do not claim complete latest.",
-      "expectation": "5 native cases compare31 rows including actual published source againstlegacy on everypage, realworker/Root native task group/owner/lane/search parity, missing source update/rebuild and selected SQL rollback isolation. Selected native DTO retains original hitReasons. No full-scope richJourney materialization on indexed GET.",
+      "expectation": "7 native cases compare31 rows including actual published source againstlegacy on everypage, realworker/Root native task group/owner/lane/search parity, missing source update/rebuild and selected SQL rollback isolation; designer and pattern page2 failures preserve reliable counts/page and remaining rows. Selected native DTO retains original hitReasons. No full-scope richJourney materialization on indexed GET.",
       "checks": [
         "native",
         "unit",
@@ -75,7 +75,7 @@
       ]
     },
     {
-      "rule": "Preserve original designer/board appearance and controls; show short partial status only for actual pending/failure, hide uncertain numbers/pagination and retry only failed authorized objects.",
+      "rule": "Preserve original designer/board appearance and controls; show short partial status only for actual pending/failure, hide numbers/pagination only for incomplete selection facts; display-only failures retain reliable counts/current page and provide named failures and reread action.",
       "source": "Approved recovered PERF07: designer/digitalpattern/production workspaces select currentpage before enriching, use existing trustworthy facts and live role/node scopes, preserve round/material/task/handling and fullglobal stats. Approved user allcoding/normalPR/Review/sequentialmerge, practical scopedverification. Original PER F03 already covers production workspace list route and existingSQL tasklist pagination; retain those rather than rewriting. No deployment/production data/config or permissions changes.",
       "writes": [
         "apps/web/src/digital-designer-workspace.tsx",
@@ -98,7 +98,7 @@
       ],
       "initialization": "Nullable totals/counts/risk counts only represent incomplete current reads; successful responses and oldserver numbers remain compatible. Normal page adds no notice wall, progress basis/version link or style redesign. Existing retry component/revalidation reused, no new polling/sharedcache.",
       "dateAndPermission": "Original real signed AuthService/nativeRoot fullApp with productionAssets:true,indexed:true,mixedNative3. Notifications remain enabled and acknowledged through actual controls if covering nextpage; no force clicks. Failed bulk-only mother cannot contaminate development-board scope. Screenshot fixtures are isolated TEST, not deployed onsite proof.",
-      "expectation": "2 complete productionApp browsercases pass: actualnetwork-ready15 rows/laterpage, existing pattern cards/counters; actualderived corruption retains available designer15 and hidesuncertaincounts/pagination/no falseempty, unrelated developmentboard remains unaffected.1440 full-page screenshots inspected. Browser initial failures were 1s poll beforeAPIready and wrongscope/class test assumptions, not claimed passes.",
+      "expectation": "3 complete productionApp browsercases pass: actualnetwork-ready15 rows/laterpage, existing pattern cards/counters; actualderived corruption retains available designer15 and hidesuncertaincounts/pagination/no falseempty, unrelated developmentboard remains unaffected. New third UI case injects only display failure over the real API response: page2/counts/navigation remain and current-page reread recovers15; it is UI fault injection, not native SQL proof.1440 full-page screenshots inspected. Browser initial failures were 1s poll beforeAPIready and wrongscope/class test assumptions, not claimed passes.",
       "checks": [
         "browser",
         "home",
@@ -137,7 +137,7 @@
       ],
       "initialization": "Original owned marked low-privilege PG16.15 fixture/create/cleanup and bounded100s correctness budget. Original sharedquery classification and required gates retained, no appenv governance patch mixed. Local Node22.22.2/npm10.9.9, Chromium141/Playwright1.56.1, NodeCPU2/3 PGCPU0/1 2GiB, not CIhardware/site equivalent.",
       "dateAndPermission": "Inventory check matches without regeneration; no original annotation was rewritten. No deadline rule/permission/write-flow or operational drill change. Default source/model/calculation version remains original; rollback readmode retains actual time fixes and existing dirty-registration worker.",
-      "expectation": "Current108unit/5native/home3/productionApp2, typesAPI/Web/lint/preflight/secret sourceboundpass, no skips. No repeated1000/5000 suite for perworkspace work; modelquery default/home regression is actually checked and no scale number is promoted to measuredfield gain. Scope and known fixes pointchecked before finalcontroller.",
+      "expectation": "Current108unit/7native/home3/productionApp3, typesAPI/Web/lint/preflight/secret sourceboundpass, no skips. No repeated1000/5000 suite for perworkspace work; modelquery default/home regression is actually checked and no scale number is promoted to measuredfield gain. Scope and known fixes pointchecked before finalcontroller.",
       "checks": [
         "unit",
         "native",
@@ -156,7 +156,7 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "57d23fef0b3c988a752394d9f31e87ae137550119abfaabee43b30b477ce2758",
+      "sourceFingerprint": "371a55d38e819b47af20537445363c1f652ed6d50c796bc16669cf3da322466d",
       "inputPaths": [
         "apps",
         "packages",
@@ -171,14 +171,14 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "1d2b4705b5f1b04252c97fc341e71a50c2015f66e8c23fac60575a01edbcb04f",
+      "inputFingerprint": "e320141c6e60352fd78a2790ca921b368f7ebcf9a2dfdd8a273aba22d45d930c",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "fda824f89cc7b715575419221f526879c6543c97",
-      "startedAt": "2026-11-08T16:25:29.871Z",
-      "endedAt": "2026-11-08T16:25:41.111Z",
+      "testedHead": "91b7667c953a61136b8c3c938c8f8724033a1e41",
+      "startedAt": "2026-11-08T16:41:53.208Z",
+      "endedAt": "2026-11-08T16:42:05.392Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf07-typesapi-integrated06.log",
+      "log": "/workspace/scratch/dx-final10-20261108/perf07-typesapi-review-split.log",
       "logSha256": "d81733d2d3443600c8f5c4e1f5774d8d050a1c5a8ef34bd5a659eb50ebd68f00",
       "resultReport": null,
       "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native preview tests use actual AuthService, actual role revocation and private AcceptanceObjectStorage bytes, no real business data or deployment.",
@@ -190,7 +190,7 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "57d23fef0b3c988a752394d9f31e87ae137550119abfaabee43b30b477ce2758",
+      "sourceFingerprint": "371a55d38e819b47af20537445363c1f652ed6d50c796bc16669cf3da322466d",
       "inputPaths": [
         "apps",
         "packages",
@@ -205,14 +205,14 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "1d2b4705b5f1b04252c97fc341e71a50c2015f66e8c23fac60575a01edbcb04f",
+      "inputFingerprint": "e320141c6e60352fd78a2790ca921b368f7ebcf9a2dfdd8a273aba22d45d930c",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "fda824f89cc7b715575419221f526879c6543c97",
-      "startedAt": "2026-11-08T16:25:41.195Z",
-      "endedAt": "2026-11-08T16:25:58.806Z",
+      "testedHead": "91b7667c953a61136b8c3c938c8f8724033a1e41",
+      "startedAt": "2026-11-08T16:42:05.485Z",
+      "endedAt": "2026-11-08T16:42:23.511Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf07-typesweb-integrated06.log",
+      "log": "/workspace/scratch/dx-final10-20261108/perf07-typesweb-review-split.log",
       "logSha256": "752b0f4f80e1f2fdeece6837aa0d8538e17009bd166c8888d0c5c5d0c6148bcd",
       "resultReport": null,
       "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native preview tests use actual AuthService, actual role revocation and private AcceptanceObjectStorage bytes, no real business data or deployment.",
@@ -220,11 +220,11 @@
     },
     {
       "id": "lint",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/development-workspace-query.ts apps/api/src/production-platform/journey-query.ts apps/api/src/production-platform/journey-selection-query.ts apps/web/src/digital-designer-workspace.tsx apps/web/src/digital-pattern-workspace.tsx packages/contracts/src/digital-development-workspace.ts scripts/ci/full-gate-risk-map.mjs scripts/ci/prepare-settings-browser.mjs scripts/test-suite-plan.mjs apps/api/src/production-platform/journey-workspace-facts.ts tests/integration/workspace-page-facts-postgres.test.ts tests/integration/workspace-page-native-browser-postgres.test.ts --max-warnings=0",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/development-workspace-query.ts apps/api/src/production-platform/journey-query.ts apps/api/src/production-platform/journey-selection-query.ts apps/api/src/production-platform/journey-workspace-facts.ts apps/web/src/digital-designer-workspace.tsx apps/web/src/digital-pattern-workspace.tsx packages/contracts/src/digital-development-workspace.ts scripts/ci/full-gate-risk-map.mjs scripts/ci/prepare-settings-browser.mjs scripts/test-suite-plan.mjs tests/integration/workspace-page-facts-postgres.test.ts tests/integration/workspace-page-native-browser-postgres.test.ts --max-warnings=0",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "57d23fef0b3c988a752394d9f31e87ae137550119abfaabee43b30b477ce2758",
+      "sourceFingerprint": "371a55d38e819b47af20537445363c1f652ed6d50c796bc16669cf3da322466d",
       "inputPaths": [
         "apps",
         "packages",
@@ -239,14 +239,14 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "1d2b4705b5f1b04252c97fc341e71a50c2015f66e8c23fac60575a01edbcb04f",
+      "inputFingerprint": "e320141c6e60352fd78a2790ca921b368f7ebcf9a2dfdd8a273aba22d45d930c",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "fda824f89cc7b715575419221f526879c6543c97",
-      "startedAt": "2026-11-08T16:26:07.092Z",
-      "endedAt": "2026-11-08T16:26:08.772Z",
+      "testedHead": "91b7667c953a61136b8c3c938c8f8724033a1e41",
+      "startedAt": "2026-11-08T16:42:31.727Z",
+      "endedAt": "2026-11-08T16:42:33.173Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf07-lint-integrated06.log",
+      "log": "/workspace/scratch/dx-final10-20261108/perf07-lint-review-split.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "resultReport": null,
       "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native preview tests use actual AuthService, actual role revocation and private AcceptanceObjectStorage bytes, no real business data or deployment.",
@@ -258,7 +258,7 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "57d23fef0b3c988a752394d9f31e87ae137550119abfaabee43b30b477ce2758",
+      "sourceFingerprint": "371a55d38e819b47af20537445363c1f652ed6d50c796bc16669cf3da322466d",
       "inputPaths": [
         "apps",
         "packages",
@@ -273,26 +273,26 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "1d2b4705b5f1b04252c97fc341e71a50c2015f66e8c23fac60575a01edbcb04f",
+      "inputFingerprint": "e320141c6e60352fd78a2790ca921b368f7ebcf9a2dfdd8a273aba22d45d930c",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "fda824f89cc7b715575419221f526879c6543c97",
-      "startedAt": "2026-11-08T16:25:58.893Z",
-      "endedAt": "2026-11-08T16:26:06.995Z",
+      "testedHead": "91b7667c953a61136b8c3c938c8f8724033a1e41",
+      "startedAt": "2026-11-08T16:42:23.605Z",
+      "endedAt": "2026-11-08T16:42:31.646Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf07-preflight-integrated06.log",
-      "logSha256": "f64bb7194aebadf42f75dfd2553908bfc25f32b09de59354dd57aac8ca6e95d7",
+      "log": "/workspace/scratch/dx-final10-20261108/perf07-preflight-review-split.log",
+      "logSha256": "2e4837d4f1a21e40d2bf4d562de7023b21627e9b4f98ccc9b35cd64526e08e3a",
       "resultReport": null,
       "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native preview tests use actual AuthService, actual role revocation and private AcceptanceObjectStorage bytes, no real business data or deployment.",
       "kind": "command"
     },
     {
       "id": "unit",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/digital-development-workspace.test.ts tests/unit/digital-journey-projection.test.ts tests/unit/journey-projection-isolation.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf07-unit-integrated06.vitest.json",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/digital-development-workspace.test.ts tests/unit/digital-journey-projection.test.ts tests/unit/journey-projection-isolation.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf07-unit-review-split.vitest.json",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "57d23fef0b3c988a752394d9f31e87ae137550119abfaabee43b30b477ce2758",
+      "sourceFingerprint": "371a55d38e819b47af20537445363c1f652ed6d50c796bc16669cf3da322466d",
       "inputPaths": [
         "apps",
         "packages",
@@ -307,35 +307,35 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "1d2b4705b5f1b04252c97fc341e71a50c2015f66e8c23fac60575a01edbcb04f",
+      "inputFingerprint": "e320141c6e60352fd78a2790ca921b368f7ebcf9a2dfdd8a273aba22d45d930c",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "fda824f89cc7b715575419221f526879c6543c97",
-      "startedAt": "2026-11-08T16:26:09.936Z",
-      "endedAt": "2026-11-08T16:26:12.466Z",
+      "testedHead": "91b7667c953a61136b8c3c938c8f8724033a1e41",
+      "startedAt": "2026-11-08T16:42:34.290Z",
+      "endedAt": "2026-11-08T16:42:36.814Z",
       "passed": 108,
       "failed": 0,
       "skipped": 0,
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf07-unit-integrated06.log",
-      "logSha256": "63040804149cc5611a367ac575defbd1800cfb2649e55de0fcd03029c71075cd",
-      "resultReport": "/workspace/scratch/dx-final10-20261108/perf07-unit-integrated06.vitest.json",
+      "log": "/workspace/scratch/dx-final10-20261108/perf07-unit-review-split.log",
+      "logSha256": "256bf8a51d54a0e23151ebd6535ef758669a2ab2d3e8661acb9d1039bbec88c8",
+      "resultReport": "/workspace/scratch/dx-final10-20261108/perf07-unit-review-split.vitest.json",
       "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native preview tests use actual AuthService, actual role revocation and private AcceptanceObjectStorage bytes, no real business data or deployment.",
       "kind": "tests",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "21ea7f6721354f61ff941ff05b6a52ef80efc8a03a2328a89162f9b1ae4cfcd8"
+          "sha256": "0a41c0dc05a841812d46c3e1d585fee2fcda01ee91ca9aadb25427fb9a54d8ae"
         }
       ]
     },
     {
       "id": "native",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/workspace-page-facts-postgres.test.ts --config vitest.business-chain.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf07-postgres-integrated06-facts.vitest.json",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/workspace-page-facts-postgres.test.ts --config vitest.business-chain.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf07-postgres-review-split-facts.vitest.json",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "57d23fef0b3c988a752394d9f31e87ae137550119abfaabee43b30b477ce2758",
+      "sourceFingerprint": "371a55d38e819b47af20537445363c1f652ed6d50c796bc16669cf3da322466d",
       "inputPaths": [
         "apps",
         "packages",
@@ -350,35 +350,35 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "1d2b4705b5f1b04252c97fc341e71a50c2015f66e8c23fac60575a01edbcb04f",
+      "inputFingerprint": "e320141c6e60352fd78a2790ca921b368f7ebcf9a2dfdd8a273aba22d45d930c",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "fda824f89cc7b715575419221f526879c6543c97",
-      "startedAt": "2026-11-08T16:25:36.200Z",
-      "endedAt": "2026-11-08T16:25:50.619Z",
-      "passed": 5,
+      "testedHead": "91b7667c953a61136b8c3c938c8f8724033a1e41",
+      "startedAt": "2026-11-08T16:41:54.716Z",
+      "endedAt": "2026-11-08T16:42:11.118Z",
+      "passed": 7,
       "failed": 0,
       "skipped": 0,
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf07-postgres-integrated06-facts.log",
-      "logSha256": "27d54f3e3b1df0ba5ef6eba55308e6c1468747ad50a55fd52a1bcdd6bb3141d6",
-      "resultReport": "/workspace/scratch/dx-final10-20261108/perf07-postgres-integrated06-facts.vitest.json",
+      "log": "/workspace/scratch/dx-final10-20261108/perf07-postgres-review-split-facts.log",
+      "logSha256": "d0402c83cf4de2583283d4cc5833f8cfe522e98a365980b643ec6508d571a791",
+      "resultReport": "/workspace/scratch/dx-final10-20261108/perf07-postgres-review-split-facts.vitest.json",
       "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native preview tests use actual AuthService, actual role revocation and private AcceptanceObjectStorage bytes, no real business data or deployment.",
       "kind": "tests",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "db7ed8844380cbcb217bce6d89b6ba463eb9cb6d592802fb89019553dc375cf7"
+          "sha256": "b3dcd32aa9fdb460aeca0d8295f44e9841a332b76f294a9c883f85f421573571"
         }
       ]
     },
     {
       "id": "home",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/journey-page-native-browser-postgres.test.ts --config vitest.business-chain.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf07-postgres-integrated06-home.vitest.json",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/journey-page-native-browser-postgres.test.ts --config vitest.business-chain.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf07-postgres-review-split-home.vitest.json",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "57d23fef0b3c988a752394d9f31e87ae137550119abfaabee43b30b477ce2758",
+      "sourceFingerprint": "371a55d38e819b47af20537445363c1f652ed6d50c796bc16669cf3da322466d",
       "inputPaths": [
         "apps",
         "packages",
@@ -393,35 +393,35 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "1d2b4705b5f1b04252c97fc341e71a50c2015f66e8c23fac60575a01edbcb04f",
+      "inputFingerprint": "e320141c6e60352fd78a2790ca921b368f7ebcf9a2dfdd8a273aba22d45d930c",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "fda824f89cc7b715575419221f526879c6543c97",
-      "startedAt": "2026-11-08T16:26:05.531Z",
-      "endedAt": "2026-11-08T16:26:37.708Z",
+      "testedHead": "91b7667c953a61136b8c3c938c8f8724033a1e41",
+      "startedAt": "2026-11-08T16:43:09.777Z",
+      "endedAt": "2026-11-08T16:43:47.339Z",
       "passed": 3,
       "failed": 0,
       "skipped": 0,
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf07-postgres-integrated06-home.log",
-      "logSha256": "9004e9dd8a5418cc0c800ef507d55f9c2c565a51f761c1a4870544eaa13c4dcf",
-      "resultReport": "/workspace/scratch/dx-final10-20261108/perf07-postgres-integrated06-home.vitest.json",
+      "log": "/workspace/scratch/dx-final10-20261108/perf07-postgres-review-split-home.log",
+      "logSha256": "7920d9ec96abb1b291a5d451f1ef35da92d6aa95a7279c593b89b60506053835",
+      "resultReport": "/workspace/scratch/dx-final10-20261108/perf07-postgres-review-split-home.vitest.json",
       "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native preview tests use actual AuthService, actual role revocation and private AcceptanceObjectStorage bytes, no real business data or deployment.",
       "kind": "tests",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "4335915100a8a3b011bfa3797f6349ab7fb4d52d9fe59cc90040354cd79b9fc5"
+          "sha256": "1864ff7d4b5697edec8bbd675854ee78d69eefb24dd6e01343a22c8cceb8ce33"
         }
       ]
     },
     {
       "id": "browser",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/workspace-page-native-browser-postgres.test.ts --config vitest.business-chain.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf07-postgres-integrated06-browser.vitest.json",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/workspace-page-native-browser-postgres.test.ts --config vitest.business-chain.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf07-postgres-review-split-browser.vitest.json",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "57d23fef0b3c988a752394d9f31e87ae137550119abfaabee43b30b477ce2758",
+      "sourceFingerprint": "371a55d38e819b47af20537445363c1f652ed6d50c796bc16669cf3da322466d",
       "inputPaths": [
         "apps",
         "packages",
@@ -436,25 +436,25 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "1d2b4705b5f1b04252c97fc341e71a50c2015f66e8c23fac60575a01edbcb04f",
+      "inputFingerprint": "e320141c6e60352fd78a2790ca921b368f7ebcf9a2dfdd8a273aba22d45d930c",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "fda824f89cc7b715575419221f526879c6543c97",
-      "startedAt": "2026-11-08T16:26:54.635Z",
-      "endedAt": "2026-11-08T16:27:20.333Z",
-      "passed": 2,
+      "testedHead": "91b7667c953a61136b8c3c938c8f8724033a1e41",
+      "startedAt": "2026-11-08T16:42:28.882Z",
+      "endedAt": "2026-11-08T16:42:59.162Z",
+      "passed": 3,
       "failed": 0,
       "skipped": 0,
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf07-postgres-integrated06-browser.log",
-      "logSha256": "30301d4cf92ede0dbf0e14eb51c482f0c43acc4444131b057b6c44a34a618804",
-      "resultReport": "/workspace/scratch/dx-final10-20261108/perf07-postgres-integrated06-browser.vitest.json",
+      "log": "/workspace/scratch/dx-final10-20261108/perf07-postgres-review-split-browser.log",
+      "logSha256": "2887439f58538210165d682f2305c2c88b05cf3388e1e3a7fe82dd858f58dd30",
+      "resultReport": "/workspace/scratch/dx-final10-20261108/perf07-postgres-review-split-browser.vitest.json",
       "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native preview tests use actual AuthService, actual role revocation and private AcceptanceObjectStorage bytes, no real business data or deployment.",
       "kind": "tests",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "9c4d61e352887a63c61b282291357e47095b02622b6f3d3d892f3f0c093c29f3"
+          "sha256": "1e4806bca11a119bc88598aff95e90666dc2a56289e0052f4624d9964132851c"
         }
       ]
     },
@@ -464,7 +464,7 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "57d23fef0b3c988a752394d9f31e87ae137550119abfaabee43b30b477ce2758",
+      "sourceFingerprint": "371a55d38e819b47af20537445363c1f652ed6d50c796bc16669cf3da322466d",
       "inputPaths": [
         "apps",
         "packages",
@@ -479,14 +479,14 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "1d2b4705b5f1b04252c97fc341e71a50c2015f66e8c23fac60575a01edbcb04f",
+      "inputFingerprint": "e320141c6e60352fd78a2790ca921b368f7ebcf9a2dfdd8a273aba22d45d930c",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "fda824f89cc7b715575419221f526879c6543c97",
-      "startedAt": "2026-11-08T16:26:08.859Z",
-      "endedAt": "2026-11-08T16:26:09.843Z",
+      "testedHead": "91b7667c953a61136b8c3c938c8f8724033a1e41",
+      "startedAt": "2026-11-08T16:42:33.253Z",
+      "endedAt": "2026-11-08T16:42:34.206Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf07-secret-integrated06.log",
+      "log": "/workspace/scratch/dx-final10-20261108/perf07-secret-review-split.log",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda",
       "resultReport": null,
       "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native preview tests use actual AuthService, actual role revocation and private AcceptanceObjectStorage bytes, no real business data or deployment.",

@@ -19,7 +19,7 @@ export const DevelopmentWorkspaceFilterSchema = z.object({
 export type DevelopmentWorkspaceFilter = z.infer<typeof DevelopmentWorkspaceFilterSchema>;
 export type DevelopmentWorkspaceItem = { journey: OrderJourney; view: DevelopmentView; canConfirm: boolean };
 export type DevelopmentWorkspaceResult = {
-  asOf: string; page: number; pageSize: 15; total: number|null; freshness?:NonNullable<JourneyResult['freshness']>;
+  asOf: string; page: number; pageSize: 15; total: number|null; freshness?:NonNullable<JourneyResult['freshness']>;detailFailures?:Array<{journeyId:string;designStyleNo:string}>;
   counts: Record<DevelopmentWorkspaceFilter["view"], number>|null;
   customers: string[]; designers?: string[]; items: DevelopmentWorkspaceItem[];
 };
@@ -66,7 +66,7 @@ export type PatternWorkspaceTask = {
   nativeAssignment?: {orderId:string};
 };
 export type PatternWorkspaceResult = {
-  asOf: string; page: number; pageSize: 15; total: number|null; freshness?:NonNullable<JourneyResult['freshness']>; archiveTotal: number|null;
+  asOf: string; page: number; pageSize: 15; total: number|null; freshness?:NonNullable<JourneyResult['freshness']>;detailFailures?:Array<{journeyId:string;designStyleNo:string}>; archiveTotal: number|null;
   counts: Record<typeof PATTERN_GROUPS[number]["key"], number>|null;
   owners: Array<{id: string; name: string | null}>; items: PatternWorkspaceTask[];
   /** Three recent existing tasks per lane, selected before list pagination. */

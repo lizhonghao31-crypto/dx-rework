@@ -37,4 +37,19 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const unaffected=page.waitForResponse(value=>value.url().includes('/workspaces/pattern?'));await page.goto(h.base+'/ui/digital-pattern-room?scope=all&state=all');const boardReply=await unaffected;expect(boardReply.status()).toBe(200);const board=await boardReply.json();expect(board.freshness).toBeUndefined();expect(board.total).not.toBeNull();
   }finally{await h.repairProjection(target);await context.close();}
  });
+ it('keeps reliable totals and page2 controls after a display-only detail failure, then rereads that page',async()=>{
+  const {context,page}=await h.open();let fail=true,total:number|undefined;
+  try{
+   // Inject only the display failure response; identity, selection and counts
+   // still come from the original signed full application's actual API.
+   await page.route('**/workspaces/designer?**',async route=>{const response=await route.fetch(),body=await response.json();total=body.total;
+    if(fail&&body.items.length){const missing=body.items.splice(0,1)[0];body.detailFailures=[{journeyId:missing.journey.id,designStyleNo:missing.journey.designStyleNo}];}
+    await route.fulfill({response,json:body});
+   });
+   const response=page.waitForResponse(value=>value.url().includes('/workspaces/designer?'));await page.goto(h.base+'/ui/digital-production?workspace=designer&view=ordered&page=2');expect((await response).status()).toBe(200);
+   await page.getByRole('status').filter({hasText:'的详情读取失败'}).waitFor();expect(await page.locator('.development-list-panel tbody tr').count()).toBe(14);
+   expect(await page.getByRole('navigation',{name:'分页',exact:true}).count()).toBe(1);expect(new URL(page.url()).searchParams.get('page')).toBe('2');expect(await page.locator('.development-view-cards').innerText()).toContain(String(total));expect(await page.getByText('部分订单信息尚未更新，数量暂不显示。',{exact:true}).count()).toBe(0);
+   fail=false;const restored=page.waitForResponse(value=>value.url().includes('/workspaces/designer?'));await page.getByRole('button',{name:'重新读取本页',exact:true}).click();expect((await restored).status()).toBe(200);await expect.poll(()=>page.locator('.development-list-panel tbody tr').count(),{timeout:12000}).toBe(15);expect(new URL(page.url()).searchParams.get('page')).toBe('2');
+  }finally{await context.close();}
+ });
 });
