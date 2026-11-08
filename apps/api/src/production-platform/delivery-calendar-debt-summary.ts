@@ -1,6 +1,6 @@
 import type {PoolClient} from 'pg';
 import type {DeliveryCalendarFilters,DeliverySummary} from '@dx-rework/contracts/delivery-calendar';
-import {DIGITAL_RECEIVING_BASE_SQL} from '../receiving/receiving-service.js';
+import {DIGITAL_RECEIVING_BASE_SQL} from '../receiving/receiving-quantity-query.js';
 
 export type DeliveryDebtSummary={overdue:DeliverySummary;beforeSelected:DeliverySummary;quantityUnknownPoCount:number};
 const empty=():DeliverySummary=>({poCount:0,orderedQty:0,packedQty:0,pendingQty:0,extraQty:0,knownOrderedQty:0,comparableOrderedQty:0,knownPackedQty:0,knownPendingQty:0,knownExtraQty:0,unknownQuantityPoCount:0,missingDuePoCount:0,overduePoCount:0,overduePendingQty:0});

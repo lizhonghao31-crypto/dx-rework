@@ -9,15 +9,19 @@ describe("order board cutting facts", () => {
       readFile("apps/web/src/order-board-page.tsx", "utf8"),
       readFile("apps/api/src/receiving/receiving-routes.ts", "utf8"),
     ]);
-    expect(service).toContain("COALESCE('cut:'||batch.cutting_order_id::text");
-    expect(service).toContain("GROUP BY totals.group_key,totals.style_key");
+    const quantityRead = await readFile("apps/api/src/receiving/receiving-quantity-query.ts", "utf8");
+    const boardRead = await readFile("apps/api/src/receiving/receiving-board-query.ts", "utf8");
+    expect(service).toContain("readReceivingBoard");
+
+    expect(quantityRead).toContain("COALESCE('cut:'||batch.cutting_order_id::text");
+    expect(quantityRead).toContain("GROUP BY totals.group_key,totals.style_key");
     expect(filters).toContain("batch.group_key=totals.group_key");
-    expect(service).toContain("LEFT JOIN current_cutting_records cutting_record");
-    expect(service).toContain("cutting_record.actual_cut_count");
-    expect(service).toContain("cutting_user.display_name AS cutting_recorded_by");
-    expect(service).toContain("cutting_record.recorded_at AS cutting_recorded_at");
-    expect(service).toContain("actualCutCount: row.actual_cut_count == null ? null : Number(row.actual_cut_count)");
-    expect(service).toContain("totals.cumulative_actual_quantity-totals.document_quantity AS difference_quantity");
+    expect(boardRead).toContain("LEFT JOIN current_cutting_records cutting_record");
+    expect(boardRead).toContain("cutting_record.actual_cut_count");
+    expect(boardRead).toContain("cutting_user.display_name AS cutting_recorded_by");
+    expect(boardRead).toContain("cutting_record.recorded_at AS cutting_recorded_at");
+    expect(boardRead).toContain("actualCutCount: row.actual_cut_count == null ? null : Number(row.actual_cut_count)");
+    expect(boardRead).toContain("totals.cumulative_actual_quantity-totals.document_quantity AS difference_quantity");
     expect(page).toContain('<span>实裁数</span>');
     expect(page).toContain('<span>裁床登记人</span>');
     expect(page).toContain('row.actualCutCount === null ? "—"');
@@ -30,8 +34,11 @@ describe("order board cutting facts", () => {
       readFile("apps/api/src/receiving/receiving-service.ts", "utf8"),
       readFile("apps/web/src/order-board-page.tsx", "utf8"),
     ]);
-    expect(service).toContain("scope.group_key");
-    expect(service).toContain("batch.group_key=totals.group_key");
+    const boardRead = await readFile("apps/api/src/receiving/receiving-board-query.ts", "utf8");
+    expect(service).toContain("readReceivingBoard");
+
+    expect(boardRead).toContain("scope.group_key");
+    expect(boardRead).toContain("batch.group_key=totals.group_key");
     expect(page).toContain("expandedRows.has(row.receivingBatchId)");
     expect(page).toContain("toggleHistory(row.receivingBatchId)");
   });

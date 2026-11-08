@@ -15,7 +15,7 @@ import type {ClosureLine,ClosureWorkSummary,OrderClosureSheet,SpecialClosure} fr
 import type {TrustedActorContext} from '../tools/repositories.js';
 import {ApplicationError} from '../platform/errors.js';
 import {DigitalProductionAccessPolicy,digitalForbidden} from './access-policy.js';
-import {DIGITAL_RECEIVING_BASE_SQL} from '../receiving/receiving-service.js';
+import {DIGITAL_RECEIVING_BASE_SQL} from '../receiving/receiving-quantity-query.js';
 import {DigitalProductionTaskService} from './task-service.js';
 type DB=Pick<Pool|PoolClient,'query'>;
 const fail=(message:string):never=>{throw new ApplicationError('DIGITAL_CLOSURE_CONFLICT',message,409);};
