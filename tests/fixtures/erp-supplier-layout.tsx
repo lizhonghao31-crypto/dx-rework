@@ -1,3 +1,4 @@
+import {supplierDirectoryFixturePage} from "./directory-page-response.js";
 // Actual application and synthetic reads only; maintenance mutations remain blocked.
 import {createRoot} from 'react-dom/client';
 import {App} from '../../apps/web/src/App.js';
@@ -19,6 +20,7 @@ const requests:{path:string;method:string}[]=[];Object.assign(window,{supplierLa
 window.fetch=async(input,init)=>{
  const path=String(input),method=init?.method??'GET',url=new URL(path,location.origin);requests.push({path,method});if(method!=='GET')return Response.json({error:{message:'隔离场景，未写入供应商资料'}},{status:403});
  if(url.pathname.endsWith('/auth/me'))return Response.json({status:'authorized',user:{id:id(100),displayName:root?'TEST Root':'TEST 目录只读跟单',isRoot:root,businessRoles:['order_merchandiser'],capabilities:['supplier_profile:read']}});
+ if(url.pathname.endsWith('/master-data/supplier-page'))return scenario==='list-failure'?Response.json({error:{message:'TEST 合成目录读取失败'}},{status:503}):Response.json(supplierDirectoryFixturePage(scenario==='empty'?[]:records,url));
  if(url.pathname.endsWith('/master-data/suppliers'))return scenario==='list-failure'?Response.json({error:{message:'TEST 合成目录读取失败'}},{status:503}):Response.json(scenario==='empty'?[]:records.map(p=>({supplierId:p.supplierId,supplierCode:p.supplierCode,supplierType:p.supplierType,version:p.version,supplierName:p.supplierName,active:p.active,supportedCrafts:p.supportedCrafts,dailyCapacity:p.dailyCapacity,contractDataMissing:p.contractDataMissing,changedAt:p.changedAt})));
  if(url.pathname.includes('/master-data/suppliers/')){
   const supplierId=url.pathname.split('/suppliers/')[1]?.split('/')[0],profile=records.find(r=>r.supplierId===supplierId);if(!profile)return Response.json({error:{message:'TEST 合成资料不存在'}},{status:404});

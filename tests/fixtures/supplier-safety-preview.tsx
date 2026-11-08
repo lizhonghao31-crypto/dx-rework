@@ -1,3 +1,4 @@
+import {supplierDirectoryFixturePage} from "./directory-page-response.js";
 import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { installInternalNavigation } from "../../apps/web/src/internal-navigation.js";
@@ -47,6 +48,7 @@ globalThis.fetch = async (input, init) => {
     return reply({ supplierId: saved.supplierId, version: saved.version }, 201);
   }
   if (failReadAfterSave && writes > 0) return reply({ error: { message: "合成测试：保存后读取失败" } }, 503);
+  if (new URL(url,location.origin).pathname.endsWith("/master-data/supplier-page")) return reply(supplierDirectoryFixturePage(profiles,new URL(url,location.origin)));
   if (url.includes("suppliers?")) return reply(profiles);
   const profile = profiles.find((item) => url.includes(`/${item.supplierId}`));
   if (!profile) return reply({ error: { message: "测试对象不存在" } }, 404);

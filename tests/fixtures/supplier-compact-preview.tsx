@@ -1,3 +1,4 @@
+import {supplierDirectoryFixturePage} from "./directory-page-response.js";
 // All writes modify in-memory synthetic records only.
 import React from 'react';
 import {createRoot} from 'react-dom/client';
@@ -11,13 +12,14 @@ import '../../apps/web/src/dialog-visual-system.css';
 import '../../apps/web/src/workflow-state-visual.css';
 import '../../apps/web/src/ui-polish.css';
 const id=(n:number)=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
-const sample={supplierId:id(1),supplierCode:'FAC_FIXTURE_01',supplierType:'factory',version:1,supplierName:'合成测试 · 广州市达兴服装长期合作加工厂第一生产基地',active:true,notes:'合成资料，非真实供应商',contactPerson:'测试联系人',contactPhone:'020-00000000',address:'合成测试地址第一生产区',contractEntityName:'合成合同主体',partyBRepresentative:'测试代表',payeeName:'测试收款人',bankAccount:'001234567890',bankName:'合成开户行',supportedCrafts:['车缝','整烫'],dailyCapacity:12800,contractDataMissing:[],changeReason:'合成初始资料',changedBy:id(100),changedAt:'2026-09-08T01:00:00Z'};
+const sample={supplierId:id(1),supplierCode:'FAC_FIXTURE_01',supplierType:'factory' as const,version:1,supplierName:'合成测试 · 广州市达兴服装长期合作加工厂第一生产基地',active:true,notes:'合成资料，非真实供应商',contactPerson:'测试联系人',contactPhone:'020-00000000',address:'合成测试地址第一生产区',contractEntityName:'合成合同主体',partyBRepresentative:'测试代表',payeeName:'测试收款人',bankAccount:'001234567890',bankName:'合成开户行',supportedCrafts:['车缝','整烫'],dailyCapacity:12800,contractDataMissing:[],changeReason:'合成初始资料',changedBy:id(100),changedAt:'2026-09-08T01:00:00Z'};
 type Profile=typeof sample;
 const records:Profile[]=[sample];const histories=new Map<string,Profile[]>([[sample.supplierId,[sample]]]);let reads=0,created=10;
 const reply=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json','x-dx-rework-actor-id':id(100)}});
 window.fetch=async(input,init)=>{
  const u=new URL(String(input),location.origin),method=init?.method??'GET';
  if(u.pathname.endsWith('/indicator'))return reply({pendingCount:0});
+ if(method==='GET'&&u.pathname.endsWith('/master-data/supplier-page')){reads++;if(document.body.dataset.mode==='pending'&&reads===1)return reply({error:{message:'合成目录暂时不可用，请刷新重试'}},503);return reply(supplierDirectoryFixturePage(records,u));}
  if(!u.pathname.includes('/master-data/suppliers'))return reply({},404);
  if(method==='GET'&&u.pathname.endsWith('/suppliers')){reads++;if(document.body.dataset.mode==='pending'&&reads===1)return reply({error:{message:'合成目录暂时不可用，请刷新重试'}},503);return reply(records);}
  if(method==='POST'&&document.body.dataset.scenario==='large')return reply({error:{message:'无权维护供应商'}},403);

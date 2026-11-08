@@ -1,3 +1,5 @@
+import {SupplierDirectoryPageSchema,type SupplierDirectoryPage} from "@dx-rework/contracts/master-data-pages";
+import {useLiveSearch} from "./use-live-search.js";
 import { SearchableSelect } from "./search-select.js";
 import {LazyHistoryDetails} from "./lazy-history-details.js";
 import {readSupplierWorkspaceQuery,supplierWorkspaceSearch} from "./supplier-workspace-query.js";
@@ -5,7 +7,7 @@ import { SupplierOnboardingPage } from "./supplier-onboarding-page.js";
 import { canRequestSupplier, canReadSupplierApplications, canAccessSupplierMaintenance } from "./supplier-onboarding-model.js";
 import { ProductionAnalysisPanel } from "./production-analysis-panel.js";
 import { NavigationIcon } from "./navigation-icons.js";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button, StatusBadge, Surface } from "@dx-rework/ui";
 
 import { createWebUrls } from "../url-contract.js";
@@ -15,12 +17,10 @@ import { createSupplierDraftGuard } from "./supplier-draft-guard.js";
 import { SupplierDirectoryList, SupplierMaintenanceList } from "./supplier-center-lists.js";
 import { confirmInApp } from "./system-dialog.js";
 import { Shell } from "./components.js";
-import { ListPagination, usePaginatedItems } from "./list-pagination.js";
+import { ListPagination } from "./list-pagination.js";
 import {
   SUPPLIER_TYPE_LABELS,
   canWriteSupplierProfiles,
-  filterSupplierDirectory,
-  nextSupplierSelection,
   supplierContractMissingLabels,
   type SupplierSummary,
 } from "./supplier-center-model.js";
@@ -82,9 +82,26 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
   const [savedMessage,setSavedMessage]=useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [directoryError,setDirectoryError]=useState("");
   const [detailLoading, setDetailLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [reload, setReload] = useState(0);
+  const [appliedQuery,setAppliedQuery]=useState(initialQuery.q),[directory,setDirectory]=useState<SupplierDirectoryPage|null>(null),[directoryLoading,setDirectoryLoading]=useState(false),[directoryDataKey,setDirectoryDataKey]=useState("");
+  const liveSearch=useLiveSearch(query,appliedQuery,setAppliedQuery);
+  const filterKey=JSON.stringify({q:appliedQuery,type:supplierType,status,craft:mode==="directory"?craft:"",completeness:mode==="manage"?completeness:"all"});
+  const [directoryPage,setDirectoryPage]=useState({key:filterKey,page:1});
+  const requestedPage=directoryPage.key===filterKey?directoryPage.page:1,directoryKey=filterKey+":"+requestedPage;
+  const directoryQuery=useRef({key:directoryKey,query:new URLSearchParams()});directoryQuery.current={key:directoryKey,query:new URLSearchParams({...JSON.parse(filterKey),page:String(requestedPage)})};
+  const directoryRead=useRef({version:0,controller:null as AbortController|null});
+  const readDirectory=async()=>{
+    const current=++directoryRead.current.version,controller=new AbortController(),request=directoryQuery.current;directoryRead.current.controller?.abort();directoryRead.current.controller=controller;setDirectoryLoading(true);setDirectoryDataKey("");setDirectoryError("");
+    try{const value=SupplierDirectoryPageSchema.safeParse(await json<unknown>("master-data/supplier-page?"+request.query,{signal:controller.signal}));if(!value.success)throw new Error("供应商目录返回资料不完整，请重新读取。");if(current!==directoryRead.current.version||controller.signal.aborted)return null;setDirectory(value.data);setSuppliers(value.data.items);setDirectoryDataKey(request.key);return value.data;}
+    catch(error){if(controller.signal.aborted)return null;setDirectoryError(error instanceof Error?error.message:"供应商目录尚未读取");throw error;}
+    finally{if(current===directoryRead.current.version)setDirectoryLoading(false);}
+  };
+  const directoryReady=directoryDataKey===directoryKey&&!directoryLoading;
+  useEffect(()=>{if(directoryReady&&directory&&requestedPage>Math.max(1,Math.ceil(directory.totalCount/15)))setDirectoryPage({key:filterKey,page:Math.max(1,Math.ceil(directory.totalCount/15))});},[directoryReady,directory,requestedPage,filterKey]);
+
   useEffect(()=>{const search=supplierWorkspaceSearch({q:query,type:supplierType,status,craft,completeness,supplierId:selectedId});window.history.replaceState(window.history.state,'',window.location.pathname+(search?'?'+search:''));},[query,supplierType,status,craft,completeness,selectedId]);
   const selectedRef = useRef(selectedId);
   const writeLock = useRef(false);
@@ -146,7 +163,7 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
     finally{setIdentityLoading(false);}
   };
   useEffect(()=>{let live=true;void verifySession().then(session=>{if(!live)return;if(session==="denied")throw new Error("登录已失效，请重新登录");setUser(session.user);}).catch(e=>{if(live)setIdentityError(e instanceof Error?e.message:"身份核验失败，请重试");}).finally(()=>{if(live)setIdentityLoading(false);});return()=>{live=false;};},[]);
-  useEffect(()=>{let live=true;setRefreshing(true);void json<SupplierSummary[]>("master-data/suppliers?includeInactive=true").then(items=>{if(live)setSuppliers(items);}).catch(e=>{if(live)setError(e instanceof Error?e.message:"供应商目录加载失败");}).finally(()=>{if(live)setRefreshing(false);});return()=>{live=false;};},[]);
+  useEffect(()=>{void readDirectory().catch(()=>undefined);return()=>{directoryRead.current.version++;directoryRead.current.controller?.abort();};},[directoryKey]);
 
   const beginCreate=async()=>{
     if(!canMaintain||!await discardChanges()||writeLock.current||refreshLock.current)return;
@@ -175,11 +192,9 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
     setEditing(false);
     setDetailLoading(true);
     try {
-      const items = await json<SupplierSummary[]>("master-data/suppliers?includeInactive=true");
-      setSuppliers(items);
-      const id = nextSupplierSelection(selectedRef.current, items, window.matchMedia("(max-width: 800px)").matches);
-      selectedRef.current = id;
-      setSelectedId(id);
+      await readDirectory();
+      // A selected record can be outside this page/filter. Its original ID
+      // detail request remains authoritative; page absence does not deselect it.
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "供应商目录刷新失败");
     } finally {
@@ -211,15 +226,8 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
     return () => { mounted = false; };
   }, [selectedId, mode, canWrite, reload, refreshing, creating]);
 
-  const filtered = useMemo(() => filterSupplierDirectory(suppliers, {
-    query,
-    type: supplierType,
-    status,
-    craft: mode === "directory" ? craft : "",
-    completeness: mode === "manage" ? completeness : "all",
-  }), [query, status, supplierType, suppliers, craft, completeness, mode]);
-  const crafts = useMemo(() => [...new Set(suppliers.flatMap(supplier => supplier.supportedCrafts))].sort((a, b) => a.localeCompare(b, "zh-CN")), [suppliers]);
-  const page = usePaginatedItems(filtered, `${query}:${supplierType}:${status}:${craft}:${completeness}`);
+  const page={items:directoryReady?suppliers:[],page:requestedPage,totalPages:Math.max(1,Math.ceil((directory?.totalCount??0)/15)),setPage:(value:number)=>setDirectoryPage({key:filterKey,page:value})};
+  const crafts=directory?.crafts??[];
   const missingLabels = supplierContractMissingLabels(profile?.contractDataMissing ?? []);
   const contractVisible = profile ? Object.hasOwn(profile, "contractEntityName") : false;
 
@@ -237,7 +245,7 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
       savedSelection.current=result.supplierId;setSavedMessage("资料已保存 · 版本 "+result.version);
       selectedRef.current=result.supplierId;setCreating(false);setSelectedId(result.supplierId);setEditing(false);setProfile(null);setDetailLoading(true);
       setReload(value=>value+1);
-      try{setSuppliers(await json<SupplierSummary[]>("master-data/suppliers?includeInactive=true"));}
+      try{await readDirectory();}
       catch{setError("资料已保存，目录刷新失败，请刷新目录核对。");}
     }catch(e){setError(e instanceof Error?e.message:"供应商资料保存失败");}
     finally{writeLock.current=false;setBusy(false);}
@@ -269,18 +277,18 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
       <SupplierCenterNavigation active={mode} canMaintain={user ? canAccessSupplierMaintenance(user) : false} />
       {identityError?<p role="alert">{identityError} <Button onClick={()=>void loadIdentity()}>重新核验</Button></p>:null}
       {savedMessage?<p className="supplier-center-notice" role="status">{savedMessage}</p>:null}
-      {error ? <div className="supplier-center-error" role="alert"><b>请处理以下问题</b><p>{error}</p></div> : null}
+      {error||directoryError ? <div className="supplier-center-error" role="alert"><b>请处理以下问题</b><p>{error||directoryError}</p></div> : null}
       {mode === "manage" && !identityLoading && !identityError && !canWrite ? (
         <div className="supplier-center-notice" role="status">当前账号为只读，可查看资料与变更历史。</div>
       ) : null}
-      {batchOpen && canMaintain ? <SupplierBatchPanel onClose={() => setBatchOpen(false)} onChanged={async () => { setSuppliers(await json<SupplierSummary[]>("master-data/suppliers?includeInactive=true")); }} /> : <div data-supplier-layout={mode} className={`supplier-center-workspace${selectedId||creating ? " has-selection" : ""}`}>
+      {batchOpen && canMaintain ? <SupplierBatchPanel onClose={() => setBatchOpen(false)} onChanged={async () => { await readDirectory(); }} /> : <div data-supplier-layout={mode} className={`supplier-center-workspace${selectedId||creating ? " has-selection" : ""}`}>
         <Surface className="supplier-directory">
           <div className="supplier-directory__heading">
-            <div><h2>{mode === "manage" ? "供应商资料" : "供应商列表"}</h2><p>共 {filtered.length} 家</p></div>
+            <div><h2>{mode === "manage" ? "供应商资料" : "供应商列表"}</h2><p>{directoryReady?`共 ${directory?.totalCount??0} 家`:directoryLoading?"正在读取目录…":"目录尚未读取"}</p></div>
             <Button onClick={() => void refreshDirectory()} disabled={busy || refreshing}>刷新</Button>
           </div>
           <div className="supplier-directory__filters">
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索名称、编码或工艺" aria-label="搜索供应商" />
+            <input value={query} onCompositionStart={liveSearch.onCompositionStart} onCompositionEnd={liveSearch.onCompositionEnd} onChange={(event) => setQuery(event.target.value)} placeholder="搜索名称、编码或工艺" aria-label="搜索供应商" />
             <select value={supplierType} onChange={(event) => setSupplierType(event.target.value as typeof supplierType)} aria-label="供应商类型">
               <option value="all">全部类型</option>
               {Object.entries(SUPPLIER_TYPE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
@@ -297,8 +305,8 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
           {page.items.length ? mode === "directory"
             ? <SupplierDirectoryList suppliers={page.items} disabled={busy || refreshing} onSelect={id => void selectSupplier(id)} />
             : <SupplierMaintenanceList suppliers={page.items} canWrite={canMaintain} disabled={busy || refreshing} onSelect={id => void selectSupplier(id)} />
-            : <p className="supplier-center-empty">没有符合条件的供应商。</p>}
-          <ListPagination page={page.page} totalPages={page.totalPages} onPageChange={page.setPage} ariaLabel={mode === "manage" ? "资料维护分页" : "供应商目录分页"} />
+            : <p className="supplier-center-empty">{directoryReady?"没有符合条件的供应商。":directoryLoading?"正在读取供应商…":<>供应商目录尚未读取。<Button onClick={()=>void readDirectory().catch(()=>undefined)}>重新读取目录</Button></>}</p>}
+          <ListPagination page={page.page} totalPages={page.totalPages} onPageChange={page.setPage} busy={directoryLoading||refreshing} ariaLabel={mode === "manage" ? "资料维护分页" : "供应商目录分页"} />
         </Surface>
 
         <Surface className="supplier-profile">

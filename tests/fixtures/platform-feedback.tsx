@@ -1,3 +1,4 @@
+import {emptyPeopleFixturePage} from "./directory-page-response.js";
 // Actual pages with synthetic TEST responses. No real identity sync, Acceptance control or deployment.
 import '../../apps/web/src/App.js';
 import {createRoot} from 'react-dom/client';
@@ -35,7 +36,7 @@ window.fetch=async(input,init)=>{
   directoryReads++;if(mode==='fail'&&directoryReads===1||mode==='saved-read-fail'&&commits===1&&!failOnce){failOnce=true;return reject(503);}
   return Response.json({lastDirectorySyncedAt:null,employees:mode==='empty'?[]:[employee]});
  }
- if(path.includes('/master-data/people')&&method==='GET'){directoryReads++;if(mode==='fail'&&directoryReads===1)return reject(503);return Response.json([]);}
+ if(path.includes('/master-data/people')&&method==='GET'){directoryReads++;if(mode==='fail'&&directoryReads===1)return reject(503);return Response.json(path.includes("/master-data/people-page")?emptyPeopleFixturePage(new URL(path,location.origin)):[]);}
  if(path.endsWith('/pattern-room/prices')&&method==='GET')return Response.json(prices);
  if(path.includes('/pattern-room/prices/')&&path.endsWith('/history'))return Response.json([]);
  if(path.endsWith('/sourcing/contract-template')&&method==='GET')return Response.json(template);
