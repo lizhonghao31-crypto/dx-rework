@@ -127,11 +127,47 @@
         "typesweb",
         "lint",
         "preflight",
-        "secret"
+        "secret",
+        "inventory"
       ]
     }
   ],
   "checks": [
+    {
+      "id": "inventory",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node scripts/acceptance/time-site-inventory.mjs",
+      "status": "passed",
+      "exitCode": 0,
+      "allExited": true,
+      "sourceFingerprint": "87582fd04ae95b041c8c89b2df17a49bffc22b0c3beddb43a4da018445c4736a",
+      "inputPaths": [
+        "docs/engineering/acceptance-time-sites-20261027.json",
+        "apps",
+        "packages",
+        "scripts",
+        "tests",
+        ".env.example",
+        "package.json",
+        "package-lock.json",
+        "eslint.config.js",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "vitest.postgres-immediate.config.ts"
+      ],
+      "inputFingerprint": "2091244e3c237be5504a6423bbf6d63db06fad89f3ac02dd2f26af1d959e9014",
+      "inputsUnchanged": true,
+      "sourceUnchanged": true,
+      "testedHead": "b7bdd8914ad531bbaaaf0b70035ed033fe8d36ef",
+      "startedAt": "2026-11-08T18:16:44.697Z",
+      "endedAt": "2026-11-08T18:16:45.253Z",
+      "planError": null,
+      "log": "/workspace/scratch/dx-final10-20261108/perf10-inventory-candidate.log",
+      "logSha256": "114d19b3f81e82ca812ccaf79d465b9eac16b584f779c9b621a2e15595e62be6",
+      "resultReport": null,
+      "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native production tests retain actual roles, permissions, frozen clocks, native corrections and full-range statistics, no real business data or deployment.",
+      "kind": "command"
+    },
     {
       "id": "typesapi",
       "command": "npm run typecheck --workspace=@dx-rework/api",
