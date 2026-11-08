@@ -1,3 +1,5 @@
+import {type QueuePageQuery,ExternalResponsibilityQueueStatusLabels} from "@dx-rework/contracts";
+import {queuePage,queuePageMetadata} from "./queue-page.js";
 import {workflowStateRejection} from "../platform/business-rejection-guidance.js";
 import { canReadFinanceOrders, scopedExternalSource } from "./finance-order-access.js";
 import { createHash, randomUUID } from "node:crypto";
@@ -608,11 +610,15 @@ export class ExternalResponsibilityService {
     }
   }
 
-  async listQueue(actor: TrustedActorContext): Promise<ExternalResponsibilityQueueResponse> {
-    const result = await this.database.query<{
-      case_id: string; rework_order_id: string; rework_no: string | null; style_no: string | null; order_no: string | null; problem_part: string | null; responsibility_type: ResponsibilityType; supplier_name_snapshot: string; status: CaseStatus; proposed_deduction_amount: string; actual_deducted_amount: string; remaining_amount: string; case_version: number; overdue: boolean; can_act: boolean;
-    }>(
-      `SELECT c.case_id,c.rework_order_id,o.rework_no,o.style_no,o.order_no,o.problem_part,c.responsibility_type,c.supplier_name_snapshot,c.status,c.proposed_deduction_amount::text,
+  async listQueue(actor: TrustedActorContext,input?:QueuePageQuery): Promise<ExternalResponsibilityQueueResponse> {
+    const page=queuePage(input);
+    const scope=`FROM rework_external_responsibility_cases c
+       JOIN rework_external_responsibility_batches batch ON batch.batch_id=c.batch_id
+       JOIN rework_orders o ON o.rework_order_id=c.rework_order_id
+       WHERE batch.status='active' AND c.status<>'superseded' AND o.status<>'deleted'
+         AND external_responsibility_can_view_case($1,c.rework_order_id,c.responsibility_type)
+`;
+    const details=`SELECT c.case_id,c.rework_order_id,o.rework_no,o.style_no,o.order_no,o.problem_part,c.responsibility_type,c.supplier_name_snapshot,c.status,c.proposed_deduction_amount::text,
               COALESCE((SELECT sum(entry.amount) FROM external_deduction_scope(c.case_id) entry),0)::text actual_deducted_amount,
               (c.proposed_deduction_amount-COALESCE((SELECT sum(entry.amount) FROM external_deduction_scope(c.case_id) entry),0))::text remaining_amount,
               c.case_version,
@@ -638,10 +644,23 @@ export class ExternalResponsibilityService {
        JOIN rework_orders o ON o.rework_order_id=c.rework_order_id
        WHERE batch.status='active' AND c.status<>'superseded' AND o.status<>'deleted'
          AND external_responsibility_can_view_case($1,c.rework_order_id,c.responsibility_type)
-       ORDER BY CASE c.status WHEN 'pending_business_signoff' THEN 1 WHEN 'returned' THEN 2 WHEN 'pending_payables_confirmation' THEN 3 WHEN 'deduction_follow_up' THEN 4 ELSE 5 END,c.created_at`,
-      [actor.actorId],
+`;
+    const result = await this.database.query<{
+      total_count?: string; case_id: string; rework_order_id: string; rework_no: string | null; style_no: string | null; order_no: string | null; problem_part: string | null; responsibility_type: ResponsibilityType; supplier_name_snapshot: string; status: CaseStatus; proposed_deduction_amount: string; actual_deducted_amount: string; remaining_amount: string; case_version: number; overdue: boolean; can_act: boolean;
+    }>(page ? `
+      WITH queue_matches AS MATERIALIZED (
+        SELECT c.case_id,row_number() OVER (ORDER BY CASE c.status WHEN 'pending_business_signoff' THEN 1 WHEN 'returned' THEN 2 WHEN 'pending_payables_confirmation' THEN 3 WHEN 'deduction_follow_up' THEN 4 ELSE 5 END,c.created_at,c.case_id) ordinal
+        ${scope} AND ($2::text='' OR position(lower($2::text) in lower(concat_ws(' ',nullif(o.rework_no,''),nullif(o.style_no,''),nullif(o.order_no,''),nullif(c.supplier_name_snapshot,''),($4::jsonb->>c.status))))>0)
+      ), queue_page AS MATERIALIZED (
+        SELECT * FROM queue_matches ORDER BY ordinal LIMIT 15 OFFSET $3
+      )
+      SELECT totals.total_count,details.* FROM (SELECT count(*)::text total_count FROM queue_matches) totals
+      LEFT JOIN queue_page selected ON true
+      LEFT JOIN LATERAL (${details} AND c.case_id=selected.case_id) details ON true
+      ORDER BY selected.ordinal` : `${details} ORDER BY CASE c.status WHEN 'pending_business_signoff' THEN 1 WHEN 'returned' THEN 2 WHEN 'pending_payables_confirmation' THEN 3 WHEN 'deduction_follow_up' THEN 4 ELSE 5 END,c.created_at`,
+      [actor.actorId,...(page?[page.search,page.offset,JSON.stringify(ExternalResponsibilityQueueStatusLabels)]:[])],
     );
-    return { items: result.rows.map((row) => ({
+    return { ...queuePageMetadata(page,Number(result.rows[0]?.total_count??0)),items: result.rows.filter(row=>row.case_id).map((row) => ({
       caseId: row.case_id, reworkOrderId: row.rework_order_id, reworkNo: row.rework_no, styleNo: row.style_no, orderNo: row.order_no, problemPart: row.problem_part,
       responsibilityType: row.responsibility_type, supplierName: row.supplier_name_snapshot, status: row.status,
       proposedDeductionAmount: row.proposed_deduction_amount, actualDeductedAmount: row.actual_deducted_amount, remainingAmount: row.remaining_amount,

@@ -46,7 +46,14 @@ window.fetch=async(input,init)=>{
   if(scenario==="failure")return Response.json({error:{message:"TEST 本地合成报表读取失败"}},{status:503});
   return Response.json(report(url.pathname.split('/').at(-1) as ReportType,url));
  }
- if(url.pathname.endsWith(`wage-periods/${id(900)}`))return scenario==="failure"?Response.json({error:{message:"TEST 本地合成工资详情读取失败"}},{status:503}):Response.json(scenario==="empty"?{...detail,period:{...detail.period,sourceItemCount:0,personCount:0,totalAmount:"0.00"},items:[]}:detail);
+ if(url.pathname.endsWith(`wage-periods/${id(900)}`)){
+  if(scenario==="failure")return Response.json({error:{message:"TEST 本地合成工资详情读取失败"}},{status:503});
+  const value=scenario==="empty"?{...detail,period:{...detail.period,sourceItemCount:0,personCount:0,totalAmount:"0.00"},items:[]}:detail;
+  if(!url.searchParams.has("page"))return Response.json(value);
+  const page=Number(url.searchParams.get("page")??1),q=(url.searchParams.get("q")??"").trim().toLowerCase();
+  const items=value.items.filter(item=>!q||[item.personNameSnapshot,item.reworkNoSnapshot,item.styleNoSnapshot,item.processNameSnapshot].join(" ").toLowerCase().includes(q));
+  return Response.json({...value,page,pageSize:15,totalCount:items.length,items:items.slice((page-1)*15,page*15)});
+ }
  throw new Error(`Unexpected synthetic read: ${path}`);
 };
 void verifySession().then(()=>createRoot(document.getElementById("root")!).render(<App/>));

@@ -1,3 +1,4 @@
+import {QueuePageResponseFields} from './queue-page.js';
 import { validationFieldLabel } from "./validation-language.js";
 import { z } from "zod";
 
@@ -413,6 +414,7 @@ export const ExternalResponsibilityQueueResponseSchema = z.object({
     overdue: z.boolean(),
     canAct: z.boolean(),
   }).strict()),
+  ...QueuePageResponseFields,
 }).strict();
 
 export type CreateExternalTemporarySupplier =
@@ -449,3 +451,6 @@ export type ExternalResponsibilityBatchResponse =
   z.infer<typeof ExternalResponsibilityBatchResponseSchema>;
 export type ExternalResponsibilityQueueResponse =
   z.infer<typeof ExternalResponsibilityQueueResponseSchema>;
+
+/** Existing external queue wording also defines its searchable status text. */
+export const ExternalResponsibilityQueueStatusLabels = {pending_business_signoff:"待交财务",pending_payables_confirmation:"待扣款",deduction_follow_up:"扣款中",pending_special_approval:"待财务总监特批",returned:"资料退回",pending_responsibility_revision:"待重判",closed:"扣款完成",superseded:"历史台账"} as const;

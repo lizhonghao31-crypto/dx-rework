@@ -173,6 +173,10 @@ export const classifyFullGatePaths = (inputPaths) => {
   let maintenanceSensitive = false;
   let activationSensitive = false;
   let transferSensitive = false;
+  if(paths.some(path=>['apps/api/src/wages/wage-service.ts','apps/api/src/wages/wage-routes.ts','tests/helpers/wage-page-fixture.ts','tests/integration/wage-period-pages-postgres.test.ts'].includes(path))){for(const suite of ['wage-period-pages','wage-period-pages-native-browser'])mappedTests.add('tests/integration/'+suite+'-postgres.test.ts');domains.add('wage-period-pages');}
+  if(paths.some(path=>/^apps\/api\/src\/rework\/(?:responsibility-determination-queue-service|own-factory-approval-service|external-responsibility-service|production-external-responsibility-service|queue-page)\.ts$/.test(path)||path==='tests/integration/responsibility-queue-pages-postgres.test.ts'||path==='tests/helpers/responsibility-queue-fixture.ts')){
+    for(const suite of ['responsibility-queue-pages','responsibility-queue-pages-native-browser'])mappedTests.add('tests/integration/'+suite+'-postgres.test.ts');domains.add('responsibility-queue-pages');
+  }
   if(paths.some(path=>['apps/api/src/sourcing/sourcing-service.ts','tests/integration/sourcing-page-details-postgres.test.ts'].includes(path))){
     for(const suite of ['sourcing-page-details','contract-return-clock','contract-return-routes-clock','contract-return-cycles'])mappedTests.add('tests/integration/'+suite+'-postgres.test.ts');domains.add('sourcing-page-details');
   }

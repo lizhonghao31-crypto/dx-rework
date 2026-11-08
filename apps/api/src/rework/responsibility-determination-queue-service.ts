@@ -1,10 +1,13 @@
 import type { ResponsibilityQueueResponse } from "@dx-rework/contracts/responsibility-queue";
+import type { QueuePageQuery } from "@dx-rework/contracts";
+import {queuePage,queuePageMetadata} from "./queue-page.js";
 import type { Pool } from "pg";
 
 import { isRootActor } from "../access/business-authority.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
 
 type QueueRow = {
+  total_count?: string;
   rework_order_id: string;
   rework_no: string | null;
   style_no: string | null;
@@ -29,7 +32,9 @@ export class ResponsibilityDeterminationQueueService {
 
   async list(
     actor: TrustedActorContext,
+    input?: QueuePageQuery,
   ): Promise<ResponsibilityQueueResponse> {
+    const page=queuePage(input);
     const actorCapabilities = capabilities(actor);
     const root = isRootActor(actor);
     const hasDetermine = root || actorCapabilities.includes("responsibility:determine");
@@ -41,11 +46,29 @@ export class ResponsibilityDeterminationQueueService {
     const pmcRead = actor.actorRoles.includes("pmc") && actorCapabilities.includes("external_responsibility:view")
       && (await this.database.query<{allowed:boolean}>("SELECT responsibility_actor_has_direct_role($1,'external_responsibility:view',ARRAY['pmc']) allowed",[actor.actorId])).rows[0]?.allowed === true;
     if (!hasDetermine && !hasTakeover && !hasConfirm && !pmcRead) {
-      return { items: [] };
+      return { items: [],...queuePageMetadata(page,0) };
     }
 
-    const result = await this.database.query<QueueRow>(
-      `SELECT order_record.rework_order_id,
+    const scope=`FROM rework_orders order_record
+       WHERE order_record.status='pending_responsibility_determination'
+         AND (
+           $5::boolean OR ($2::boolean AND responsibility_can_determine(
+             $1,
+             order_record.rework_order_id
+           ))
+           OR ($3::boolean AND responsibility_actor_has_direct_role(
+             $1,
+             'responsibility:takeover',
+             ARRAY['owner_group']
+           ))
+           OR ($4::boolean AND responsibility_actor_has_direct_role(
+             $1,
+             'responsibility:confirm_high_multiplier',
+             ARRAY['owner_group']
+           ))
+         )
+`;
+    const details=`SELECT order_record.rework_order_id,
               order_record.rework_no,
               order_record.style_no,
               order_record.order_no,
@@ -116,13 +139,25 @@ export class ResponsibilityDeterminationQueueService {
              ARRAY['owner_group']
            ))
          )
-       ORDER BY order_record.updated_at,order_record.rework_order_id
-       LIMIT 200`,
-      [actor.actorId, hasDetermine, hasTakeover, hasConfirm, pmcRead],
+`;
+    const result = await this.database.query<QueueRow>(page ? `
+      WITH queue_matches AS MATERIALIZED (
+        SELECT order_record.rework_order_id,
+               row_number() OVER (ORDER BY order_record.updated_at,order_record.rework_order_id) ordinal
+        ${scope} AND ($6::text='' OR position(lower($6::text) in lower(concat_ws(' ',nullif(order_record.rework_no,''),nullif(order_record.style_no,''),nullif(order_record.order_no,''),nullif(order_record.problem_part,''))))>0)
+      ), queue_page AS MATERIALIZED (
+        SELECT * FROM queue_matches ORDER BY ordinal LIMIT 15 OFFSET $7
+      )
+      SELECT totals.total_count,details.* FROM (SELECT count(*)::text total_count FROM queue_matches) totals
+      LEFT JOIN queue_page selected ON true
+      LEFT JOIN LATERAL (${details} AND order_record.rework_order_id=selected.rework_order_id) details ON true
+      ORDER BY selected.ordinal` : `${details} ORDER BY order_record.updated_at,order_record.rework_order_id LIMIT 200`,
+      [actor.actorId,hasDetermine,hasTakeover,hasConfirm,pmcRead,...(page?[page.search,page.offset]:[])],
     );
 
     return {
-      items: result.rows.map((row) => ({
+      ...queuePageMetadata(page,Number(result.rows[0]?.total_count??0)),
+      items: result.rows.filter(row=>row.rework_order_id).map((row) => ({
         reworkOrderId: row.rework_order_id,
         reworkNo: row.rework_no,
         styleNo: row.style_no,

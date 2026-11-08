@@ -1,3 +1,4 @@
+import {QueuePageQuerySchema} from "@dx-rework/contracts";
 import { requestValidationMessage } from "@dx-rework/contracts/validation-language";
 import { IdempotencyKeySchema } from "@dx-rework/contracts";
 import {
@@ -51,7 +52,11 @@ export function registerExternalResponsibilityRoutes(app: FastifyInstance, depen
     );
   const key = (request: FastifyRequest) => parse(IdempotencyKeySchema, request.headers["idempotency-key"]);
 
-  app.get("/external-responsibilities/queue", async (request) => ExternalResponsibilityQueueResponseSchema.parse(await dependencies.service.listQueue(await actor(request, "external_responsibility:view"))));
+  app.get("/external-responsibilities/queue", async (request) => {
+    const currentActor=await actor(request,"external_responsibility:view");
+    const query=parse(QueuePageQuerySchema,request.query);
+    return ExternalResponsibilityQueueResponseSchema.parse(await (Object.keys(query).length ? dependencies.service.listQueue(currentActor,query) : dependencies.service.listQueue(currentActor)));
+  });
   app.get("/rework-orders/:reworkOrderId/external-responsibilities", async (request) => ExternalResponsibilityBatchResponseSchema.parse(await dependencies.service.get(await actor(request, "external_responsibility:view"), parse(ExternalResponsibilityOrderParamsSchema, request.params).reworkOrderId)));
   app.get("/rework-orders/:reworkOrderId/external-responsibilities/supplier-options", async (request) => dependencies.service.listSupplierOptions(await actor(request, "external_responsibility:sign"), parse(ExternalResponsibilityOrderParamsSchema, request.params).reworkOrderId));
   app.post("/rework-orders/:reworkOrderId/external-responsibilities/temporary-suppliers", async (request, reply) => {
