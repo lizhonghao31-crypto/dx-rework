@@ -17,6 +17,12 @@ it('keeps the original homepage browser and shared correctness budget in the exa
  expect(classifyFullGatePaths(['apps/web/src/receiving-page.tsx']).mappedPostgresTests).not.toContain(suite);
 });
 
+it('keeps the actual delivery browser in the canonical plan with locked Chromium and the shared finite correctness budget',()=>{
+ const suite='tests/integration/m01-delivery-calendar-native-browser-postgres.test.ts';
+ for(const path of ['apps/api/src/production-platform/delivery-calendar-images.ts','apps/api/src/production-platform/delivery-calendar-query.ts','packages/contracts/src/delivery-calendar.ts','apps/web/src/delivery-calendar-page.tsx','apps/web/src/delivery-calendar-grid.tsx','apps/web/src/delivery-calendar-model.ts','apps/web/src/delivery-calendar.css','apps/web/src/digital-cockpit-page.tsx','apps/web/src/digital-journey-cockpit-model.ts',suite])expect(classifyFullGatePaths([path]).mappedPostgresTests).toContain(suite);
+ expect(configForSuite(suite)).toBe('vitest.business-chain.config.ts');expect(settingsBrowserRequired({DB_REQUIRED:'true',BASE_SHA:'a'.repeat(40),BUSINESS_CHAIN_SENSITIVE:'false',MIGRATION_SENSITIVE:'false',DEPLOYMENT_SENSITIVE:'false',MAPPED_POSTGRES_TESTS:suite})).toBe(true);expect(classifyFullGatePaths(['apps/web/src/wages/wage-page.tsx']).mappedPostgresTests).not.toContain(suite);
+});
+
 it('keeps native persistent-session and Chromium coverage in the exact auth/config plan', () => {
   const suite='tests/integration/acceptance-session-retention-postgres.test.ts';
   for(const path of ['apps/api/src/auth/service.ts','apps/api/src/auth/acceptance-control.ts','packages/config/src/index.ts',suite]) {

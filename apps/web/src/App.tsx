@@ -5,6 +5,8 @@ import {CockpitProductionSettings} from "./cockpit-production-settings.js";
 import { ProductionWorkspace } from "@dx-rework/ui/production";
 import { DigitalAnalysisPage } from "./digital-analysis-page.js";
 import { DigitalCockpitPage } from "./digital-cockpit-page.js";
+import {DeliveryCalendarPage} from './delivery-calendar-page.js';
+import {deliveryReturnPath} from './delivery-calendar-model.js';
 import {DigitalQuotationPage} from './digital-quotation-panel.js';
 import { DigitalProductionPage } from "./digital-production-page.js";
 import { DigitalDesignerWorkspace } from "./digital-designer-workspace.js";
@@ -291,7 +293,7 @@ function AppRoutes() {
   const cuttingOrderMatch = path.match(/^\/ui\/cutting\/orders\/([0-9a-f-]{36})$/i);
   let page;
   if (path === "/ui/digital-analysis") page = <Shell active="digital-analysis" appearance="digital"><ProductionWorkspace><DigitalAnalysisPage navigation={navigation} /></ProductionWorkspace></Shell>;
-  else if (path === "/ui/digital-cockpit") page = <Shell active="生产管理座舱" appearance="digital"><ProductionWorkspace>{new URLSearchParams(search).get("workspace")==="settings" ? <CockpitProductionSettings/> : ["pattern","preparation"].includes(new URLSearchParams(search).get("workspace")??"") ? <DigitalPatternWorkspace key={search}/> : ["factory"].includes(new URLSearchParams(search).get("workspace") ?? "") ? <DigitalProductionWorkspace key={search} kind={new URLSearchParams(search).get("workspace") === "factory" ? "factory" : "preparation"}/> : <DigitalCockpitPage key={search} />}</ProductionWorkspace></Shell>;
+  else if (path === "/ui/digital-cockpit") page = <Shell active="生产管理座舱" appearance="digital"><ProductionWorkspace>{new URLSearchParams(search).get("workspace")==="delivery"?<DeliveryCalendarPage key={search}/>:new URLSearchParams(search).get("workspace")==="settings" ? <CockpitProductionSettings/> : ["pattern","preparation"].includes(new URLSearchParams(search).get("workspace")??"") ? <DigitalPatternWorkspace key={search}/> : ["factory"].includes(new URLSearchParams(search).get("workspace") ?? "") ? <DigitalProductionWorkspace key={search} kind={new URLSearchParams(search).get("workspace") === "factory" ? "factory" : "preparation"}/> : <DigitalCockpitPage key={search} deliveryReturn={deliveryReturnPath(new URLSearchParams(search).get('deliveryReturn'),import.meta.env.BASE_URL)??undefined} />}</ProductionWorkspace></Shell>;
   else if(path === "/ui/digital-quotation") page = <Shell active="客户报价协作" appearance="digital"><ProductionWorkspace><DigitalQuotationPage key={search}/></ProductionWorkspace></Shell>;
   else if (path === "/ui/digital-production") page = <Shell active="开发与大货办理" appearance="digital"><ProductionWorkspace>{new URLSearchParams(search).get("workspace") === "designer" ? <DigitalDesignerWorkspace key={search}/> : <><DevelopmentWorkspaceReturn/><DigitalProductionPage key={search} /></>}</ProductionWorkspace></Shell>;
   else if (path === "/ui/digital-pattern-room") page = <Shell active="digital-pattern" appearance="digital"><ProductionWorkspace><DigitalPatternWorkspace key={search}/></ProductionWorkspace></Shell>;
