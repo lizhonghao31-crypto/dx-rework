@@ -765,73 +765,17 @@ export class SourcingService {
     await assertContractReturnListClock(this.database);
     const result = await this.database.query<SourcingCaseRow>(
       `WITH filtered_cases AS MATERIALIZED (
-       SELECT
+       SELECT case_view.sourcing_case_id,case_view.created_at,case_view.order_quantity,
+         case_view.erp_order_id,case_view.erp_order_no,case_view.style_no,case_view.lane_key,
+         case_view.delivery_date,case_view.process_description,case_view.process_items,
+         case_view.status,case_view.version,case_view.created_by,case_view.updated_at,
          COALESCE(to_jsonb(additional_case)->>'workflow_generation','legacy') AS workflow_generation,
-         case_view.sourcing_case_id,case_view.erp_order_id,case_view.erp_order_no,
-         case_view.style_no,case_view.lane_key,case_view.order_quantity,
-         (SELECT COALESCE(max(revision),0) FROM sourcing_style_revisions WHERE sourcing_case_id=case_view.sourcing_case_id) AS identity_revision,
-         source_case.gender,source_case.style_name_snapshot,
          ${principalAvailable?"CASE WHEN to_jsonb(additional_case)->>'workflow_generation'='digital_production_v1' THEN principal_order.primary_merchandiser_id ELSE case_view.created_by END AS effective_created_by,":""}
          ${principalAvailable?"CASE WHEN to_jsonb(additional_case)->>'workflow_generation'='digital_production_v1' THEN concat_ws('/',principal_user.display_name,additional_user.display_name) ELSE concat_ws('/',creator_user.display_name,additional_user.display_name) END":"concat_ws('/',creator_user.display_name,additional_user.display_name)"} AS merchandiser_name,
-         first_image.attachment_id AS first_image_attachment_id,
-         COALESCE((
-            SELECT correction.new_unit_price FROM sourcing_budget_price_corrections correction
-            WHERE correction.sourcing_case_id=source_case.sourcing_case_id
-            ORDER BY correction.correction_version DESC LIMIT 1
-          ),source_case.daxing_unit_price)::text AS daxing_unit_price,
-         to_char(source_case.estimated_cut_piece_send_date,'YYYY-MM-DD')
-           AS estimated_cut_piece_send_date,
-         lines_row.line_items,
-         to_char(sourcing_effective_delivery_date(case_view.sourcing_case_id,case_view.delivery_date),'YYYY-MM-DD') AS delivery_date,
-         case_view.process_description,case_view.process_items,
-         COALESCE(decision_row.crafts,crafts_row.crafts) AS crafts,
-         case_view.status,case_view.version,case_view.created_by,
-         case_view.created_at,case_view.updated_at,
-         COALESCE(monitor_case.contract_return_monitor_enabled,false) AS contract_return_monitor_enabled,
-          COALESCE(monitor_case.contract_return_catchup,false) AS contract_return_catchup,monitor_case.contract_generated_at,
-         monitor_case.contract_return_due_at,monitor_case.contract_returned_at,
-         sourcing_contract_return_elapsed_seconds(
-           monitor_case.contract_return_due_at,COALESCE(monitor_case.contract_returned_at,monitor_case.business_as_of)
-         ) AS contract_return_overdue_seconds,
-         monitor_case.business_as_of AS contract_return_as_of,monitor_case.time_quality,monitor_case.time_reason,
-         quote_row.sourcing_ie_quote_id,quote_row.quote_version,
-         quote_row.unit_price,quote_row.quantity AS quote_quantity,
-         quote_row.total_amount,quote_row.quote_reason,
-         quote_lines_row.line_prices AS quote_line_prices,
-         quote_row.quoted_by,quote_row.quoted_at,
-         decision_row.sourcing_decision_id,decision_row.decision_version,
-         decision_row.source_type,decision_row.source_ie_quote_id,
-         decision_row.supersedes_decision_id,decision_row.supplier_id,
-         decision_row.supplier_code_snapshot,decision_row.supplier_name_snapshot,
-         decision_row.unit_price AS decision_unit_price,
-         decision_row.quantity AS decision_quantity,
-         decision_row.total_amount AS decision_total_amount,
-         decision_lines_row.line_prices AS decision_line_prices,
-         decision_row.cutting_process,decision_row.cutting_process_other,
-         decision_row.decision_reason AS management_decision_reason,
-         decision_row.decided_by AS management_decided_by,
-         decision_row.decided_at AS management_decided_at,
-         owner_row.sourcing_owner_decision_id,
-         owner_row.sourcing_decision_id AS owner_sourcing_decision_id,
-         owner_row.decision AS owner_decision,
-         owner_row.decision_reason AS owner_decision_reason,
-         owner_row.decided_by AS owner_decided_by,
-         owner_row.decided_at AS owner_decided_at,
-         snapshot.sourcing_approval_snapshot_id,
-         snapshot.sourcing_decision_id AS approval_decision_id,
-         snapshot.decision_version AS approval_decision_version,
-         snapshot.supplier_id AS approval_supplier_id,
-         snapshot.supplier_code_snapshot AS approval_supplier_code,
-         snapshot.supplier_name_snapshot AS approval_supplier_name,
-         snapshot.quantity AS approval_quantity,
-         snapshot.total_amount AS approval_total_amount,
-         snapshot.daxing_unit_price::text AS approval_daxing_unit_price,
-         to_char(snapshot.estimated_cut_piece_send_date,'YYYY-MM-DD') AS approval_estimated_cut_piece_send_date,
-         to_char(snapshot.delivery_date,'YYYY-MM-DD') AS approval_delivery_date,
-         snapshot.gender AS approval_gender,snapshot.style_name_snapshot AS approval_style_name,
-         snapshot.processes AS approval_processes,
-         snapshot_lines.line_prices AS approval_line_prices,
-         snapshot.approved_by AS approval_by,snapshot.approved_at AS approval_at
+         source_case.gender,source_case.style_name_snapshot,source_case.daxing_unit_price AS original_daxing_unit_price,
+         source_case.estimated_cut_piece_send_date AS original_send_date,
+         monitor_case.contract_return_monitor_enabled, monitor_case.contract_return_catchup, monitor_case.contract_generated_at, monitor_case.contract_return_due_at, monitor_case.contract_returned_at, monitor_case.business_as_of, monitor_case.time_quality, monitor_case.time_reason,
+         decision_row.sourcing_decision_id AS selected_decision_id
        FROM current_sourcing_cases case_view
        JOIN LATERAL sourcing_case_facts_at(case_view.sourcing_case_id) source_case ON true
        LEFT JOIN LATERAL sourcing_contract_return_business_state(case_view.sourcing_case_id) monitor_case ON true
@@ -840,66 +784,6 @@ export class SourcingService {
        LEFT JOIN app_users additional_user ON additional_user.id=nullif(to_jsonb(additional_case)->>'additional_merchandiser_user_id','')::uuid
        ${principalJoins}
        LEFT JOIN LATERAL (
-         SELECT after_state->'attachmentIds' AS ids FROM operation_events
-         WHERE entity_type='sourcing_case' AND entity_id=case_view.sourcing_case_id::text
-           AND action IN ('sourcing.case.correct','sourcing.attachments.supplement','sourcing.case.create')
-           AND jsonb_typeof(after_state->'attachmentIds')='array'
-         ORDER BY created_at DESC, CASE WHEN action='sourcing.case.correct' THEN 0 ELSE 1 END, event_id DESC LIMIT 1
-       ) current_images ON true
-       LEFT JOIN LATERAL (
-         SELECT image.attachment_id FROM attachments image
-         WHERE image.entity_type='sourcing_case' AND image.entity_id=case_view.sourcing_case_id::text
-           AND image.status='ready' AND image.mime_type IN ('image/jpeg','image/png','image/webp')
-           AND (current_images.ids IS NULL OR current_images.ids ? image.attachment_id::text)
-         ORDER BY image.created_at,image.attachment_id LIMIT 1
-       ) first_image ON true
-       LEFT JOIN LATERAL (
-         SELECT jsonb_agg(
-           jsonb_build_object(
-             'position',line.position,
-             'styleNo',line.style_no,'formalStyleNo',line.formal_style_no,'imageAttachmentId',line.image_attachment_id,
-             'alternateStyleNo',line.alternate_style_no,
-             'color',line.color,
-             'quantity',line.quantity,
-             'externalUnitPrice',line.external_unit_price::text,
-             'legacy',line.legacy_source
-           )
-           ORDER BY line.position
-         ) AS line_items
-         FROM current_sourcing_case_lines line
-         WHERE line.sourcing_case_id=case_view.sourcing_case_id
-       ) lines_row ON true
-       LEFT JOIN LATERAL (
-         SELECT jsonb_agg(
-           jsonb_build_object(
-             'position',binding.position,
-             'craftId',binding.craft_id,
-             'craftCode',binding.craft_code_snapshot,
-             'craftVersion',binding.craft_version,
-             'craftName',binding.craft_name_snapshot
-           )
-           ORDER BY binding.position
-         ) AS crafts
-         FROM sourcing_case_crafts binding
-         WHERE binding.sourcing_case_id=case_view.sourcing_case_id
-       ) crafts_row ON true
-       LEFT JOIN LATERAL (
-         SELECT quote.*
-         FROM sourcing_ie_quotes quote
-         WHERE quote.sourcing_case_id=case_view.sourcing_case_id
-         AND quote.quoted_at > COALESCE((SELECT max(transitioned_at) FROM sourcing_case_transitions WHERE sourcing_case_id=case_view.sourcing_case_id AND business_action='returned_to_merchandiser'), '-infinity'::timestamptz)
-         ORDER BY quote.quote_version DESC
-         LIMIT 1
-       ) quote_row ON true
-       LEFT JOIN LATERAL (
-         SELECT jsonb_agg(jsonb_build_object(
-           'position',line.position,'quantity',line.quantity,
-           'unitPrice',line.unit_price::text,'totalAmount',line.total_amount::text
-         ) ORDER BY line.position) AS line_prices
-         FROM sourcing_ie_quote_lines line
-         WHERE line.sourcing_ie_quote_id=quote_row.sourcing_ie_quote_id
-       ) quote_lines_row ON true
-       LEFT JOIN LATERAL (
          SELECT decision_fact.*
          FROM sourcing_decisions decision_fact
          WHERE decision_fact.sourcing_case_id=case_view.sourcing_case_id
@@ -907,32 +791,6 @@ export class SourcingService {
          ORDER BY decision_fact.decision_version DESC
          LIMIT 1
        ) decision_row ON true
-       LEFT JOIN LATERAL (
-         SELECT jsonb_agg(jsonb_build_object(
-           'position',line.position,'quantity',line.quantity,
-           'unitPrice',line.unit_price::text,'totalAmount',line.total_amount::text
-         ) ORDER BY line.position) AS line_prices
-         FROM sourcing_decision_lines line
-         WHERE line.sourcing_decision_id=decision_row.sourcing_decision_id
-       ) decision_lines_row ON true
-       LEFT JOIN sourcing_owner_decisions owner_row
-         ON owner_row.sourcing_decision_id=decision_row.sourcing_decision_id
-       LEFT JOIN LATERAL (
-         SELECT approval.*
-         FROM sourcing_approval_snapshots approval
-         WHERE approval.sourcing_case_id=case_view.sourcing_case_id
-         ORDER BY approval.decision_version DESC LIMIT 1
-       ) snapshot ON true
-       LEFT JOIN LATERAL (
-         SELECT jsonb_agg(jsonb_build_object(
-           'position',line.position,'styleNo',line.style_no,
-           'alternateStyleNo',line.alternate_style_no,'color',line.color,
-           'quantity',line.quantity,'unitPrice',line.unit_price::text,
-           'totalAmount',line.total_amount::text
-         ) ORDER BY line.position) AS line_prices
-         FROM sourcing_approval_snapshot_lines line
-         WHERE line.sourcing_approval_snapshot_id=snapshot.sourcing_approval_snapshot_id
-       ) snapshot_lines ON true
        WHERE ($1='' OR case_view.erp_order_no ILIKE '%'||$1||'%'
           OR case_view.style_no ILIKE '%'||$1||'%'
           OR EXISTS(SELECT 1 FROM sourcing_style_aliases alias WHERE alias.sourcing_case_id=case_view.sourcing_case_id AND alias.style_no ILIKE '%'||$1||'%')
@@ -1010,6 +868,169 @@ export class SourcingService {
              )
            )
          )
+       ), page_cases AS MATERIALIZED (
+         SELECT * FROM filtered_cases
+         ORDER BY created_at DESC,sourcing_case_id DESC
+         LIMIT 15 OFFSET $7
+       ), case_details AS (
+       SELECT
+         case_view.workflow_generation,
+         case_view.sourcing_case_id,case_view.erp_order_id,case_view.erp_order_no,
+         case_view.style_no,case_view.lane_key,case_view.order_quantity,
+         (SELECT COALESCE(max(revision),0) FROM sourcing_style_revisions WHERE sourcing_case_id=case_view.sourcing_case_id) AS identity_revision,
+         source_case.gender,source_case.style_name_snapshot,
+         ${principalAvailable?"case_view.effective_created_by,":""}
+         case_view.merchandiser_name,
+         first_image.attachment_id AS first_image_attachment_id,
+         COALESCE((
+            SELECT correction.new_unit_price FROM sourcing_budget_price_corrections correction
+            WHERE correction.sourcing_case_id=source_case.sourcing_case_id
+            ORDER BY correction.correction_version DESC LIMIT 1
+          ),source_case.daxing_unit_price)::text AS daxing_unit_price,
+         to_char(source_case.estimated_cut_piece_send_date,'YYYY-MM-DD')
+           AS estimated_cut_piece_send_date,
+         lines_row.line_items,
+         to_char(sourcing_effective_delivery_date(case_view.sourcing_case_id,case_view.delivery_date),'YYYY-MM-DD') AS delivery_date,
+         case_view.process_description,case_view.process_items,
+         COALESCE(decision_row.crafts,crafts_row.crafts) AS crafts,
+         case_view.status,case_view.version,case_view.created_by,
+         case_view.created_at,case_view.updated_at,
+         COALESCE(monitor_case.contract_return_monitor_enabled,false) AS contract_return_monitor_enabled,
+          COALESCE(monitor_case.contract_return_catchup,false) AS contract_return_catchup,monitor_case.contract_generated_at,
+         monitor_case.contract_return_due_at,monitor_case.contract_returned_at,
+         sourcing_contract_return_elapsed_seconds(
+           monitor_case.contract_return_due_at,COALESCE(monitor_case.contract_returned_at,monitor_case.business_as_of)
+         ) AS contract_return_overdue_seconds,
+         monitor_case.business_as_of AS contract_return_as_of,monitor_case.time_quality,monitor_case.time_reason,
+         quote_row.sourcing_ie_quote_id,quote_row.quote_version,
+         quote_row.unit_price,quote_row.quantity AS quote_quantity,
+         quote_row.total_amount,quote_row.quote_reason,
+         quote_lines_row.line_prices AS quote_line_prices,
+         quote_row.quoted_by,quote_row.quoted_at,
+         decision_row.sourcing_decision_id,decision_row.decision_version,
+         decision_row.source_type,decision_row.source_ie_quote_id,
+         decision_row.supersedes_decision_id,decision_row.supplier_id,
+         decision_row.supplier_code_snapshot,decision_row.supplier_name_snapshot,
+         decision_row.unit_price AS decision_unit_price,
+         decision_row.quantity AS decision_quantity,
+         decision_row.total_amount AS decision_total_amount,
+         decision_lines_row.line_prices AS decision_line_prices,
+         decision_row.cutting_process,decision_row.cutting_process_other,
+         decision_row.decision_reason AS management_decision_reason,
+         decision_row.decided_by AS management_decided_by,
+         decision_row.decided_at AS management_decided_at,
+         owner_row.sourcing_owner_decision_id,
+         owner_row.sourcing_decision_id AS owner_sourcing_decision_id,
+         owner_row.decision AS owner_decision,
+         owner_row.decision_reason AS owner_decision_reason,
+         owner_row.decided_by AS owner_decided_by,
+         owner_row.decided_at AS owner_decided_at,
+         snapshot.sourcing_approval_snapshot_id,
+         snapshot.sourcing_decision_id AS approval_decision_id,
+         snapshot.decision_version AS approval_decision_version,
+         snapshot.supplier_id AS approval_supplier_id,
+         snapshot.supplier_code_snapshot AS approval_supplier_code,
+         snapshot.supplier_name_snapshot AS approval_supplier_name,
+         snapshot.quantity AS approval_quantity,
+         snapshot.total_amount AS approval_total_amount,
+         snapshot.daxing_unit_price::text AS approval_daxing_unit_price,
+         to_char(snapshot.estimated_cut_piece_send_date,'YYYY-MM-DD') AS approval_estimated_cut_piece_send_date,
+         to_char(snapshot.delivery_date,'YYYY-MM-DD') AS approval_delivery_date,
+         snapshot.gender AS approval_gender,snapshot.style_name_snapshot AS approval_style_name,
+         snapshot.processes AS approval_processes,
+         snapshot_lines.line_prices AS approval_line_prices,
+         snapshot.approved_by AS approval_by,snapshot.approved_at AS approval_at
+       FROM page_cases case_view
+       CROSS JOIN LATERAL (SELECT case_view.sourcing_case_id,case_view.gender,case_view.style_name_snapshot,
+         case_view.original_daxing_unit_price AS daxing_unit_price,case_view.original_send_date AS estimated_cut_piece_send_date) source_case
+       CROSS JOIN LATERAL (SELECT case_view.contract_return_monitor_enabled, case_view.contract_return_catchup, case_view.contract_generated_at, case_view.contract_return_due_at, case_view.contract_returned_at, case_view.business_as_of, case_view.time_quality, case_view.time_reason) monitor_case
+       LEFT JOIN LATERAL (
+         SELECT after_state->'attachmentIds' AS ids FROM operation_events
+         WHERE entity_type='sourcing_case' AND entity_id=case_view.sourcing_case_id::text
+           AND action IN ('sourcing.case.correct','sourcing.attachments.supplement','sourcing.case.create')
+           AND jsonb_typeof(after_state->'attachmentIds')='array'
+         ORDER BY created_at DESC, CASE WHEN action='sourcing.case.correct' THEN 0 ELSE 1 END, event_id DESC LIMIT 1
+       ) current_images ON true
+       LEFT JOIN LATERAL (
+         SELECT image.attachment_id FROM attachments image
+         WHERE image.entity_type='sourcing_case' AND image.entity_id=case_view.sourcing_case_id::text
+           AND image.status='ready' AND image.mime_type IN ('image/jpeg','image/png','image/webp')
+           AND (current_images.ids IS NULL OR current_images.ids ? image.attachment_id::text)
+         ORDER BY image.created_at,image.attachment_id LIMIT 1
+       ) first_image ON true
+       LEFT JOIN LATERAL (
+         SELECT jsonb_agg(
+           jsonb_build_object(
+             'position',line.position,
+             'styleNo',line.style_no,'formalStyleNo',line.formal_style_no,'imageAttachmentId',line.image_attachment_id,
+             'alternateStyleNo',line.alternate_style_no,
+             'color',line.color,
+             'quantity',line.quantity,
+             'externalUnitPrice',line.external_unit_price::text,
+             'legacy',line.legacy_source
+           )
+           ORDER BY line.position
+         ) AS line_items
+         FROM current_sourcing_case_lines line
+         WHERE line.sourcing_case_id=case_view.sourcing_case_id
+       ) lines_row ON true
+       LEFT JOIN LATERAL (
+         SELECT jsonb_agg(
+           jsonb_build_object(
+             'position',binding.position,
+             'craftId',binding.craft_id,
+             'craftCode',binding.craft_code_snapshot,
+             'craftVersion',binding.craft_version,
+             'craftName',binding.craft_name_snapshot
+           )
+           ORDER BY binding.position
+         ) AS crafts
+         FROM sourcing_case_crafts binding
+         WHERE binding.sourcing_case_id=case_view.sourcing_case_id
+       ) crafts_row ON true
+       LEFT JOIN LATERAL (
+         SELECT quote.*
+         FROM sourcing_ie_quotes quote
+         WHERE quote.sourcing_case_id=case_view.sourcing_case_id
+         AND quote.quoted_at > COALESCE((SELECT max(transitioned_at) FROM sourcing_case_transitions WHERE sourcing_case_id=case_view.sourcing_case_id AND business_action='returned_to_merchandiser'), '-infinity'::timestamptz)
+         ORDER BY quote.quote_version DESC
+         LIMIT 1
+       ) quote_row ON true
+       LEFT JOIN LATERAL (
+         SELECT jsonb_agg(jsonb_build_object(
+           'position',line.position,'quantity',line.quantity,
+           'unitPrice',line.unit_price::text,'totalAmount',line.total_amount::text
+         ) ORDER BY line.position) AS line_prices
+         FROM sourcing_ie_quote_lines line
+         WHERE line.sourcing_ie_quote_id=quote_row.sourcing_ie_quote_id
+       ) quote_lines_row ON true
+       LEFT JOIN sourcing_decisions decision_row ON decision_row.sourcing_decision_id=case_view.selected_decision_id
+       LEFT JOIN LATERAL (
+         SELECT jsonb_agg(jsonb_build_object(
+           'position',line.position,'quantity',line.quantity,
+           'unitPrice',line.unit_price::text,'totalAmount',line.total_amount::text
+         ) ORDER BY line.position) AS line_prices
+         FROM sourcing_decision_lines line
+         WHERE line.sourcing_decision_id=decision_row.sourcing_decision_id
+       ) decision_lines_row ON true
+       LEFT JOIN sourcing_owner_decisions owner_row
+         ON owner_row.sourcing_decision_id=decision_row.sourcing_decision_id
+       LEFT JOIN LATERAL (
+         SELECT approval.*
+         FROM sourcing_approval_snapshots approval
+         WHERE approval.sourcing_case_id=case_view.sourcing_case_id
+         ORDER BY approval.decision_version DESC LIMIT 1
+       ) snapshot ON true
+       LEFT JOIN LATERAL (
+         SELECT jsonb_agg(jsonb_build_object(
+           'position',line.position,'styleNo',line.style_no,
+           'alternateStyleNo',line.alternate_style_no,'color',line.color,
+           'quantity',line.quantity,'unitPrice',line.unit_price::text,
+           'totalAmount',line.total_amount::text
+         ) ORDER BY line.position) AS line_prices
+         FROM sourcing_approval_snapshot_lines line
+         WHERE line.sourcing_approval_snapshot_id=snapshot.sourcing_approval_snapshot_id
+       ) snapshot_lines ON true
        )
        SELECT page_row.*,totals.total_count,totals.total_order_quantity
        FROM (
@@ -1018,9 +1039,7 @@ export class SourcingService {
          FROM filtered_cases
        ) totals
        LEFT JOIN LATERAL (
-         SELECT * FROM filtered_cases
-         ORDER BY created_at DESC,sourcing_case_id DESC
-         LIMIT 15 OFFSET $7
+         SELECT * FROM case_details
        ) page_row ON true
        ORDER BY page_row.created_at DESC,page_row.sourcing_case_id DESC`,
       [
