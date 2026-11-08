@@ -26,7 +26,8 @@ describe("sourcing PR2 unified desktop workspace", () => {
       "办理区",
     ]) expect(source).toContain(label);
     expect(source).toContain("MAX_SOURCING_ATTACHMENTS");
-    expect(source).toContain("SourcingTimelineResponseSchema");
+    expect(source).toContain("useSourcingDetailRead(sourcingCaseId,request");
+    expect(await readFile("apps/web/src/sourcing-detail-read.ts","utf8")).toContain("SourcingTimelineResponseSchema");
     expect(source).toContain("sourcingWorkflowNodeHref");
     expect(source).toContain('{ key: "finance", number: "05"');
     expect(source).not.toContain('{ key: "contract"');

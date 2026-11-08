@@ -1,15 +1,19 @@
 import { SourcingNewUnitPriceSchema } from "@dx-rework/contracts";
 import { formatBusinessCurrency } from "@dx-rework/contracts/business-display";
 import { Button } from "@dx-rework/ui";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 
 const editablePrice = (value: string): boolean => /^(?:\d+(?:\.\d*)?)?$/.test(value);
 
-export function SourcingBudgetPriceCorrectionDialog({ currentPrice, busy, error, onClose, onSubmit }: {
+export function SourcingBudgetPriceCorrectionDialog({ currentPrice, busy, error, onClose, onSubmit, draft, onDraftChange, recovery }: {
+  draft?:{price:string;reason:string};onDraftChange?:(draft:{price:string;reason:string})=>void;
+  recovery?:ReactNode;
   currentPrice: string; busy: boolean; error: string; onClose(): void; onSubmit(daxingUnitPrice: string, reason: string): void;
 }) {
   const ref = useRef<HTMLDialogElement>(null), inputRef = useRef<HTMLInputElement>(null);
-  const [price,setPrice]=useState(""), [reason,setReason]=useState(""), [attempted,setAttempted]=useState(false);
+  const [local,setLocal]=useState({price:"",reason:""}),[attempted,setAttempted]=useState(false);
+  const {price,reason}=draft??local,setDraft=onDraftChange??setLocal;
+  const setPrice=(price:string)=>setDraft({price,reason}),setReason=(reason:string)=>setDraft({price,reason});
   const parsed=SourcingNewUnitPriceSchema.safeParse(price.trim());
   const priceError=attempted&&!parsed.success?(parsed.error.issues[0]?.message??"请填写有效预算价"):"";
   const reasonError=attempted&&!reason.trim()?"请填写更正原因":"";
@@ -25,6 +29,7 @@ export function SourcingBudgetPriceCorrectionDialog({ currentPrice, busy, error,
     <label className="system-dialog__field"><span>更正原因</span><textarea value={reason} disabled={busy} maxLength={500}
       aria-invalid={!!reasonError} onChange={event=>setReason(event.target.value)} />{reasonError?<small role="status">{reasonError}</small>:null}</label>
     {error?<p className="sourcing-budget-price-correction__error" role="alert">{error}</p>:null}
+    {recovery}
     <div className="system-dialog__actions"><Button type="button" disabled={busy} onClick={onClose}>取消</Button>
       <Button type="submit" variant="primary" disabled={busy}>{busy?"正在更正…":"确认更正"}</Button></div>
   </form></dialog>;

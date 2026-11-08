@@ -18,7 +18,8 @@ describe("sourcing role-aware transfer UI", () => {
 
   it("routes the three initiators and two approvers to the role-aware backend endpoints", async () => {
     const page = await readFile("apps/web/src/sourcing-workspace-page.tsx", "utf8");
-    expect(page).toContain("factory-changes/current");
+    expect(page).toContain("useSourcingDetailRead(sourcingCaseId,request");
+    expect(await readFile("apps/web/src/sourcing-detail-read.ts","utf8")).toContain("factory-changes/current");
     expect(page).toContain("factory-changes/management");
     expect(page).toContain("factory-changes/owner");
     expect(page).toContain('factory-changes/${factoryChange.factoryChangeRequestId}/decision');
@@ -44,17 +45,18 @@ describe("sourcing role-aware transfer UI", () => {
       readFile("apps/web/src/sourcing-workspace-page.tsx", "utf8"),
       readFile("apps/web/src/sourcing-workspace.css", "utf8"),
     ]);
-    expect(page).toContain("detail.decision?.linePrices.find");
-    expect(page).toContain("detail.ieQuote?.linePrices.find");
+    const prices=await readFile("apps/web/src/sourcing-detail-prices.ts","utf8");
+    expect(page).toContain("useSourcingDetailPrices(sourcingCaseId,item");
+    expect(prices).toContain("item.decision?.linePrices.find");
+    expect(prices).toContain("item.ieQuote?.linePrices.find");
     expect(page).toContain("linesTotalPreview(decision.linePrices, item.lineItems)");
     expect(page).toContain('activeBusinessInput === "factory-change-unit-price" ? factoryChangeDraft.unitPrice');
     expect(page).not.toContain("factoryChangeUnitPriceEdited");
-    expect(page).toContain("supplierId: current.supplierId");
-    expect(page).toContain("changeReason: current.changeReason");
-    expect(page).toContain("resetFactoryChange = false");
-    expect(page).toContain("if (resetFactoryChange) {");
-    expect(page).toContain('supplierId: ""');
-    expect(page).toContain('changeReason: ""');
+    expect(prices).toContain('touched.current.has("transfer")?current.transfer:next.transfer');
+    expect(page).toContain("resetFactoryChange=false");
+    expect(page).toContain("if(resetFactoryChange){");
+    expect(page).toContain('prices.confirmed("transfer")');
+    expect(prices).toContain('transfer:{supplierId:"",unitPrice:item?.decision?.unitPrice||"",changeReason:""}');
     expect(page).toContain('setFactoryChangeReviewReason("");');
     expect(page).toContain('"转厂申请已提交", true');
     expect(page).toContain("formatBusinessCurrency(factoryChange.proposedUnitPrice)");

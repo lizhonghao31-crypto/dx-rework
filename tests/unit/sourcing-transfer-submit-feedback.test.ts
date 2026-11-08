@@ -1,31 +1,13 @@
-import { Children, isValidElement, type ReactElement, type ReactNode } from "react";
-import type * as ReactModule from "react";
-import { SourcingCaseSummarySchema } from "@dx-rework/contracts";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
-// As in rework-initiation-actions: invoke the real component's handlers without a DOM.
-// Initial order data is supplied to the first state cell; submit and load are not mocked.
-const hooks = vi.hoisted(() => ({ cursor: 0, values: [] as { value: unknown }[], initialItem: undefined as unknown }));
-vi.mock("react", async importOriginal => ({
-  ...await importOriginal<typeof ReactModule>(),
-  useState: (initial: unknown) => {
-    const index = hooks.cursor++;
-    const cell = hooks.values[index] ??= { value: index === 0 && hooks.initialItem !== undefined
-      ? hooks.initialItem : typeof initial === "function" ? initial() : initial };
-    return [cell.value, (value: unknown) => { cell.value = typeof value === "function" ? value(cell.value) : value; }];
-  },
-  useRef: (initial: unknown) => (hooks.values[hooks.cursor++] ??= { value: { current: initial } }).value,
-  useMemo: (compute: () => unknown) => compute(),
-  useEffect: () => undefined,
-}));
-import { SourcingWorkspacePage } from "../../apps/web/src/sourcing-workspace-page.js";
-
-type Props = { children?: ReactNode; onClick?: () => void; onChange?: (event: { target: { value: string } }) => void;
-  disabled?: boolean; busy?: boolean; role?: string; value?: unknown };
-function elements(node: ReactNode): ReactElement<Props>[] {
-  if (!isValidElement<Props>(node)) return [];
-  return [node, ...Children.toArray(node.props.children).flatMap(elements)];
-}
+// @vitest-environment jsdom
+import {act,createElement,type ReactNode} from "react";
+import {createRoot,type Root} from "react-dom/client";
+import {SourcingCaseSummarySchema} from "@dx-rework/contracts";
+import {afterEach,beforeEach,describe,expect,it,vi} from "vitest";
+vi.mock("../../apps/web/src/auth.js",()=>({verifySession:async()=>({status:"authorized",user})}));
+vi.mock("../../apps/web/src/components.js",()=>({Shell:({children}:{children:ReactNode})=>createElement("div",null,children),Header:()=>null}));
+vi.mock("../../apps/web/src/search-select.js",()=>({SearchableSelect:(props:Record<string,unknown>)=>createElement("select",props)}));
+vi.mock("../../apps/web/src/system-dialog.js",()=>({alertInApp:vi.fn(async()=>undefined),confirmInApp:vi.fn(async()=>true)}));
+import {SourcingWorkspacePage} from "../../apps/web/src/sourcing-workspace-page.js";
 const id = (number: number) => `00000000-0000-4000-8000-${String(number).padStart(12, "0")}`;
 const now = "2026-10-24T00:00:00.000Z";
 const item = SourcingCaseSummarySchema.parse({
@@ -49,60 +31,57 @@ const user = { id: id(1), displayName: "TEST root", isRoot: true, businessRoles:
 const contractReturn = { contractReturnMonitoring: false, contractReturnStatus: null, contractGeneratedAt: null,
   contractReturnDueAt: null, contractReturnedAt: null, contractReturnOverdueHours: null, uploadedByName: null, canUpload: false, attachments: [] };
 
-function setup(postFails: boolean) {
-  const fetchMock = vi.fn(async (input: string, init?: RequestInit) => {
-    if (init?.method === "POST") return postFails
-      ? Response.json({ error: { message: "TEST-转厂提交被拒绝", code: "INVALID_STATE_TRANSITION", requestId: "TEST-submit-refused" } }, { status: 409 })
-      : Response.json({ ...item, decision: { ...item.decision!, supplierId: id(5), supplierName: "TEST新工厂" } }, { status: 201 });
-    if (input.endsWith("/timeline")) return Response.json({ error: { message: "TEST-订单页面刷新失败" } }, { status: 500 });
-    if (input.endsWith(`/cases/${id(100)}`)) return Response.json(item);
-    if (input.endsWith("/attachments")) return Response.json({ items: [] });
-    if (input.endsWith("/dispatch")) return Response.json({ item: null, canDispatch: false });
-    if (input.endsWith("/contract-return")) return Response.json(contractReturn);
-    return Response.json({ item: null });
-  });
-  vi.stubGlobal("fetch", fetchMock);
-  hooks.cursor = 0; hooks.values = []; hooks.initialItem = undefined;
-  const child = elements(SourcingWorkspacePage({ view: "detail", sourcingCaseId: item.sourcingCaseId }))
-    .find(node => typeof node.type === "function" && node.type.name === "OrderDetailPage");
-  expect(child).toBeDefined();
-  const Detail = child!.type as (props: { sourcingCaseId: string; user: typeof user }) => ReactNode;
-  hooks.cursor = 0; hooks.values = []; hooks.initialItem = item;
-  const render = () => { hooks.cursor = 0; return elements(Detail({ sourcingCaseId: item.sourcingCaseId, user })); };
-  const button = (text: string) => render().find(node => node.type === "button" && node.props.children === text)!.props;
-  button("订单转厂").onClick!();
-  for (const [label, value] of [["新加工厂", id(5)], ["新加工单价", "11.3"], ["转厂原因", "TEST-转厂原因"]]) {
-    const field = render().find(node => node.type === "label" && Children.toArray(node.props.children)
-      .some(child => isValidElement<Props>(child) && child.type === "span" && child.props.children === label));
-    elements(field).find(node => node.props.onChange)?.props.onChange!({ target: { value: value! } });
-  }
-  expect(button("提交转厂").disabled).toBe(false);
-  const busy = () => render().find(node => typeof node.type === "function" && node.type.name === "SourcingPriceReapplicationPanel")!.props.busy;
-  return { fetchMock, render, button, busy };
-}
-beforeEach(() => { vi.stubGlobal("window", { location: { search: "", pathname: "/ui/sourcing/orders/test" } }); });
-afterEach(() => { vi.unstubAllGlobals(); hooks.values = []; hooks.initialItem = undefined; });
 
-describe("actual transfer submission and refresh feedback", () => {
-  it("retains confirmed success when the following GET fails without a second POST", async () => {
-    const { fetchMock, render, button, busy } = setup(false);
-    button("提交转厂").onClick!();
-    await vi.waitFor(() => expect(render().some(node => node.props.role === "status" && node.props.children === "TEST-订单页面刷新失败")).toBe(true));
-    const feedback = render().filter(node => node.props.role === "status");
-    expect(feedback.some(node => Children.toArray(node.props.children).includes("老板发起的转厂已直接生效"))).toBe(true);
-    expect(render().some(node => node.props.role === "alert")).toBe(false);
-    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
-    expect(fetchMock.mock.calls.filter(([, init]) => init?.method !== "POST")).toHaveLength(7);
-    expect(busy()).toBe(false);
-  });
-  it("shows a refused POST as failure without attempting a refresh", async () => {
-    const { fetchMock, render, button, busy } = setup(true);
-    button("提交转厂").onClick!();
-    await vi.waitFor(() => expect(render().some(node => node.props.role === "alert" && Children.toArray(node.props.children).includes("TEST-转厂提交被拒绝"))).toBe(true));
-    expect(render().some(node => node.props.role === "status" && Children.toArray(node.props.children).includes("老板发起的转厂已直接生效"))).toBe(false);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0]![1]?.method).toBe("POST");
-    expect(button("提交转厂").disabled).toBe(false);
-    expect(busy()).toBe(false);
-  });
+let host:HTMLDivElement,root:Root;
+const button=(text:string)=>[...host.querySelectorAll<HTMLButtonElement>("button")].find(node=>node.textContent===text)!;
+async function setup(postFails:boolean|"unknown"){
+ let posted=false,postCount=0;
+ const fetchMock=vi.fn(async(input:string,init?:RequestInit)=>{
+  if(init?.method==="POST"){posted=true;postCount++;if(postFails==="unknown"&&postCount===1)return Response.json({error:{message:"TEST unknown receipt",code:"TEST_RECEIPT_LOST"}},{status:503});return postFails===true?Response.json({error:{message:"TEST-转厂提交被拒绝",code:"INVALID_STATE_TRANSITION",requestId:"TEST-submit-refused"}},{status:409}):Response.json({...item,decision:{...item.decision!,supplierId:id(5),supplierName:"TEST新工厂"}},{status:201});}
+  if(input.endsWith("/timeline"))return posted?Response.json({error:{message:"TEST-订单页面刷新失败"}},{status:500}):Response.json({items:[]});
+  if(input.endsWith(`/cases/${id(100)}`))return Response.json(item);
+  if(input.endsWith("/attachments"))return Response.json({items:[]});
+  if(input.endsWith("/dispatch"))return Response.json({item:null,canDispatch:false});
+  if(input.endsWith("/contract-return"))return Response.json(contractReturn);
+  if(input.endsWith("/factories"))return Response.json({items:[{supplierId:id(5),supplierCode:"TEST-NEW",supplierName:"TEST新工厂"}]});
+  if(input.includes("master-data/crafts"))return Response.json([]);
+  return Response.json({item:null});
+ });
+ vi.stubGlobal("fetch",fetchMock);
+ await act(async()=>root.render(createElement(SourcingWorkspacePage,{view:"detail",sourcingCaseId:item.sourcingCaseId})));
+ await act(async()=>{button("订单转厂").click();});
+ for(const [label,value] of [["新加工厂",id(5)],["新加工单价","11.3"],["转厂原因","TEST-转厂原因"]]){
+  const field=[...host.querySelectorAll("label")].find(node=>node.querySelector("span")?.textContent===label)!.querySelector("input,select") as HTMLInputElement|HTMLSelectElement;
+  await act(async()=>{Object.getOwnPropertyDescriptor(field instanceof HTMLSelectElement?HTMLSelectElement.prototype:HTMLInputElement.prototype,"value")!.set!.call(field,value);field.dispatchEvent(new Event(field instanceof HTMLSelectElement?"change":"input",{bubbles:true}));});
+ }
+ expect(button("提交转厂").disabled).toBe(false);return fetchMock;
+}
+beforeEach(()=>{vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT",true);Element.prototype.scrollIntoView=vi.fn();host=document.createElement("div");document.body.append(host);root=createRoot(host);});
+afterEach(async()=>{await act(async()=>root.unmount());host.remove();vi.unstubAllGlobals();});
+describe("actual transfer submission and refresh feedback",()=>{
+ it("retains confirmed success when the following GET fails without a second POST",async()=>{
+  const fetchMock=await setup(false),before=fetchMock.mock.calls.length;
+  await act(async()=>button("提交转厂").click());
+  await act(async()=>{await vi.waitFor(()=>expect(host.textContent).toContain("提交已成功，但页面更新未完成"));});
+  expect(host.textContent).toContain("老板发起的转厂已直接生效");expect(host.textContent).toContain("TEST-订单页面刷新失败");
+  expect(fetchMock.mock.calls.filter(([,init])=>init?.method==="POST")).toHaveLength(1);
+  expect(fetchMock.mock.calls.length-before).toBe(8);expect(button("提交转厂").disabled).toBe(true);
+  // A failed refresh is not permission to submit against a stale snapshot.
+  expect(host.textContent).not.toContain("核对上次提交结果");
+ });
+ it("shows a refused POST as failure without attempting a refresh",async()=>{
+  const fetchMock=await setup(true),before=fetchMock.mock.calls.length;
+  await act(async()=>button("提交转厂").click());
+  await act(async()=>{await vi.waitFor(()=>expect(host.textContent).toContain("TEST-转厂提交被拒绝"));});
+  expect(host.textContent).not.toContain("老板发起的转厂已直接生效");expect(fetchMock.mock.calls.length-before).toBe(1);expect(button("提交转厂").disabled).toBe(false);
+ });
+ it("freezes transfer inputs and recovers the original request after an unknown receipt",async()=>{
+  const fetchMock=await setup("unknown");await act(async()=>button("提交转厂").click());
+  await act(async()=>{await vi.waitFor(()=>expect(host.textContent).toContain("核对上次提交结果"));});
+  const input=[...host.querySelectorAll("label")].find(node=>node.querySelector("span")?.textContent==="新加工单价")!.querySelector("input")!;
+  expect(input.disabled).toBe(true);const first=fetchMock.mock.calls.find(([,init])=>init?.method==="POST")![1]!;
+  await act(async()=>button("核对上次提交结果").click());
+  await act(async()=>{await vi.waitFor(()=>expect(host.textContent).toContain("提交已成功，但页面更新未完成"));});
+  const posts=fetchMock.mock.calls.filter(([,init])=>init?.method==="POST");expect(posts).toHaveLength(2);expect(posts[1]![1]?.body).toBe(first.body);expect(posts[1]![1]?.headers).toEqual(first.headers);
+ });
 });

@@ -83,7 +83,7 @@ try{
    }
    assert.deepEqual(await page.evaluate(()=>window.orderLayoutFixture.requests.filter(r=>r.method!=='GET')),[],'no business writes');assert.deepEqual(errors,[]);
    if(i===4&&evidence){await writeFile(join(evidence,'representatives-ready.json'),JSON.stringify({status:'passed',cases:results.slice(0,5)},null,2));console.log(JSON.stringify({representatives_ready:true,evidence}));}
-  }catch(error){failures.push({name,error:String(error),pageErrors:errors,body:(await page.locator('body').innerText().catch(()=>'' )).slice(0,1800)});if(evidence)await page.screenshot({path:join(evidence,`FAILED-${name}.png`),fullPage:true});if(i<5||failures.length>=3)throw error;}
+  }catch(error){failures.push({name,error:String(error),pageErrors:errors,body:(await page.locator('body').innerText().catch(()=>'' )).slice(0,1800)});if(evidence){await page.screenshot({path:join(evidence,`FAILED-${name}.png`),fullPage:true});await writeFile(join(evidence,`FAILED-${name}.json`),JSON.stringify(failures.at(-1),null,2));}if(i<5||failures.length>=3)throw error;}
   finally{await page.close();}
  }
  assert.deepEqual(failures,[]);

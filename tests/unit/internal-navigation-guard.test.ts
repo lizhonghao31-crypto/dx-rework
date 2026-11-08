@@ -14,6 +14,17 @@ describe("internal navigation leave guard", () => {
     expect(await canLeaveInternalPage()).toBe(true);
   });
 
+  it("passes the optional destination without changing existing no-argument guard behavior",async()=>{
+    const observed:string[]=[];
+    const legacy=vi.fn(async()=>true),unregisterLegacy=registerInternalNavigationGuard(legacy);
+    const unregister=registerInternalNavigationGuard(async target=>{if(target)observed.push(target);return target?.includes("/orders/TEST-A")===true;});
+    try{
+      expect(await canLeaveInternalPage("https://local.invalid/ui/sourcing/orders/TEST-A?node=created")).toBe(true);
+      expect(await canLeaveInternalPage("https://local.invalid/ui/sourcing/pending")).toBe(false);
+      expect(await canLeaveInternalPage()).toBe(false);expect(legacy).toHaveBeenCalledTimes(3);expect(observed).toHaveLength(2);
+    }finally{unregister();unregisterLegacy();}
+  });
+
   it("does not queue a second navigation while a confirmation is outstanding", async () => {
     let resolve!: (value: boolean) => void;
     const unregister = registerInternalNavigationGuard(() => new Promise<boolean>((done) => { resolve = done; }));
