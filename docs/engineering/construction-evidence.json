@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "base": "fda824f89cc7b715575419221f526879c6543c97",
-  "sourceFingerprint": "03aff5e74107311df2a786393c1be332a3de498e7a6bc3c607248c85941edae6",
+  "base": "05e7ea472fcfcfa148ed6ac7f4407ff73747c05c",
+  "sourceFingerprint": "ad7a7150a597c9f19608b725aefb92f9cb9082ce041a8a2f419f3c0b027032fc",
   "risk": "full",
   "rules": [
     {
@@ -119,7 +119,7 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "03aff5e74107311df2a786393c1be332a3de498e7a6bc3c607248c85941edae6",
+      "sourceFingerprint": "ad7a7150a597c9f19608b725aefb92f9cb9082ce041a8a2f419f3c0b027032fc",
       "inputPaths": [
         "apps",
         "packages",
@@ -134,14 +134,14 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "40b5c5e2de83e10e035ea09e75a5b88743cd5d474b9baf8a985b0dcc68aee4ad",
+      "inputFingerprint": "320ada8d415be8da73a372c09b2d8dbb66c3f9da4371a992e418e311897b914f",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "fda824f89cc7b715575419221f526879c6543c97",
-      "startedAt": "2026-11-08T16:43:11.290Z",
-      "endedAt": "2026-11-08T16:43:22.996Z",
+      "testedHead": "1a5f180e98c0279a8590f67c3e41432610561eb7",
+      "startedAt": "2026-11-08T17:13:33.191Z",
+      "endedAt": "2026-11-08T17:13:44.957Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf08a-typesapi-final.log",
+      "log": "/workspace/scratch/dx-final10-20261108/perf08a-typesapi-integrated07.log",
       "logSha256": "d81733d2d3443600c8f5c4e1f5774d8d050a1c5a8ef34bd5a659eb50ebd68f00",
       "resultReport": null,
       "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native production tests retain actual roles, permissions, frozen clocks, native corrections and full-range statistics, no real business data or deployment.",
@@ -153,7 +153,7 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "03aff5e74107311df2a786393c1be332a3de498e7a6bc3c607248c85941edae6",
+      "sourceFingerprint": "ad7a7150a597c9f19608b725aefb92f9cb9082ce041a8a2f419f3c0b027032fc",
       "inputPaths": [
         "apps",
         "packages",
@@ -168,14 +168,14 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "40b5c5e2de83e10e035ea09e75a5b88743cd5d474b9baf8a985b0dcc68aee4ad",
+      "inputFingerprint": "320ada8d415be8da73a372c09b2d8dbb66c3f9da4371a992e418e311897b914f",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "fda824f89cc7b715575419221f526879c6543c97",
-      "startedAt": "2026-11-08T16:43:31.618Z",
-      "endedAt": "2026-11-08T16:43:32.742Z",
+      "testedHead": "1a5f180e98c0279a8590f67c3e41432610561eb7",
+      "startedAt": "2026-11-08T17:13:53.260Z",
+      "endedAt": "2026-11-08T17:13:54.174Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf08a-lint-final.log",
+      "log": "/workspace/scratch/dx-final10-20261108/perf08a-lint-integrated07.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "resultReport": null,
       "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native production tests retain actual roles, permissions, frozen clocks, native corrections and full-range statistics, no real business data or deployment.",
@@ -187,7 +187,7 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "03aff5e74107311df2a786393c1be332a3de498e7a6bc3c607248c85941edae6",
+      "sourceFingerprint": "ad7a7150a597c9f19608b725aefb92f9cb9082ce041a8a2f419f3c0b027032fc",
       "inputPaths": [
         "apps",
         "packages",
@@ -202,26 +202,26 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "40b5c5e2de83e10e035ea09e75a5b88743cd5d474b9baf8a985b0dcc68aee4ad",
+      "inputFingerprint": "320ada8d415be8da73a372c09b2d8dbb66c3f9da4371a992e418e311897b914f",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "fda824f89cc7b715575419221f526879c6543c97",
-      "startedAt": "2026-11-08T16:43:23.076Z",
-      "endedAt": "2026-11-08T16:43:31.531Z",
+      "testedHead": "1a5f180e98c0279a8590f67c3e41432610561eb7",
+      "startedAt": "2026-11-08T17:13:45.043Z",
+      "endedAt": "2026-11-08T17:13:53.179Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf08a-preflight-final.log",
-      "logSha256": "753935b0df9a1e96a0bcd76019d32fea2b1463a0020e440d5dfe0ee5a8387a90",
+      "log": "/workspace/scratch/dx-final10-20261108/perf08a-preflight-integrated07.log",
+      "logSha256": "910f84fcbfc8a37fad20070cd93f47d8c287ef0691f27af24c7c6a06a7775cdc",
       "resultReport": null,
       "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native production tests retain actual roles, permissions, frozen clocks, native corrections and full-range statistics, no real business data or deployment.",
       "kind": "command"
     },
     {
       "id": "unit",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/journey-snapshot-reads.test.ts tests/unit/journey-snapshot-batches.test.ts tests/unit/m01-production-statistics.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf08a-unit-final.vitest.json",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/journey-snapshot-reads.test.ts tests/unit/journey-snapshot-batches.test.ts tests/unit/m01-production-statistics.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf08a-unit-integrated07.vitest.json",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "03aff5e74107311df2a786393c1be332a3de498e7a6bc3c607248c85941edae6",
+      "sourceFingerprint": "ad7a7150a597c9f19608b725aefb92f9cb9082ce041a8a2f419f3c0b027032fc",
       "inputPaths": [
         "apps",
         "packages",
@@ -236,25 +236,25 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "40b5c5e2de83e10e035ea09e75a5b88743cd5d474b9baf8a985b0dcc68aee4ad",
+      "inputFingerprint": "320ada8d415be8da73a372c09b2d8dbb66c3f9da4371a992e418e311897b914f",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "fda824f89cc7b715575419221f526879c6543c97",
-      "startedAt": "2026-11-08T16:43:33.985Z",
-      "endedAt": "2026-11-08T16:43:35.517Z",
+      "testedHead": "1a5f180e98c0279a8590f67c3e41432610561eb7",
+      "startedAt": "2026-11-08T17:13:55.248Z",
+      "endedAt": "2026-11-08T17:13:56.495Z",
       "passed": 108,
       "failed": 0,
       "skipped": 0,
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf08a-unit-final.log",
-      "logSha256": "7c6f3b59709123290d222c1bd9d9e753a3fb36f381423321e09e7b2eebfef7ae",
-      "resultReport": "/workspace/scratch/dx-final10-20261108/perf08a-unit-final.vitest.json",
+      "log": "/workspace/scratch/dx-final10-20261108/perf08a-unit-integrated07.log",
+      "logSha256": "0f51fe17ee0ca4b52cf4da7914d6b65ad1bda0cca4a7a41f0d7ee4d7455cf75a",
+      "resultReport": "/workspace/scratch/dx-final10-20261108/perf08a-unit-integrated07.vitest.json",
       "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native production tests retain actual roles, permissions, frozen clocks, native corrections and full-range statistics, no real business data or deployment.",
       "kind": "tests",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "c295e29a46f5c1b1dcc0b12991e742be097005266ec27f6141c7dca27280abf6"
+          "sha256": "a977f9a10ebb86aa4a6df03c9e61f3e0bcafe1710d8424946870fe28830b2399"
         }
       ]
     },
@@ -264,7 +264,7 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "03aff5e74107311df2a786393c1be332a3de498e7a6bc3c607248c85941edae6",
+      "sourceFingerprint": "ad7a7150a597c9f19608b725aefb92f9cb9082ce041a8a2f419f3c0b027032fc",
       "inputPaths": [
         "apps",
         "packages",
@@ -279,14 +279,14 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "40b5c5e2de83e10e035ea09e75a5b88743cd5d474b9baf8a985b0dcc68aee4ad",
+      "inputFingerprint": "320ada8d415be8da73a372c09b2d8dbb66c3f9da4371a992e418e311897b914f",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "fda824f89cc7b715575419221f526879c6543c97",
-      "startedAt": "2026-11-08T16:43:32.825Z",
-      "endedAt": "2026-11-08T16:43:33.901Z",
+      "testedHead": "1a5f180e98c0279a8590f67c3e41432610561eb7",
+      "startedAt": "2026-11-08T17:13:54.264Z",
+      "endedAt": "2026-11-08T17:13:55.161Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf08a-secret-final.log",
+      "log": "/workspace/scratch/dx-final10-20261108/perf08a-secret-integrated07.log",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda",
       "resultReport": null,
       "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native production tests retain actual roles, permissions, frozen clocks, native corrections and full-range statistics, no real business data or deployment.",
@@ -294,11 +294,11 @@
     },
     {
       "id": "native",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/production-read-batches-postgres.test.ts --config vitest.business-chain.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf08a-postgres-canonical-default.vitest.json",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/production-read-batches-postgres.test.ts --config vitest.business-chain.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf08a-postgres-integrated07-native.vitest.json",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "03aff5e74107311df2a786393c1be332a3de498e7a6bc3c607248c85941edae6",
+      "sourceFingerprint": "ad7a7150a597c9f19608b725aefb92f9cb9082ce041a8a2f419f3c0b027032fc",
       "inputPaths": [
         "apps",
         "packages",
@@ -313,35 +313,35 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "40b5c5e2de83e10e035ea09e75a5b88743cd5d474b9baf8a985b0dcc68aee4ad",
+      "inputFingerprint": "320ada8d415be8da73a372c09b2d8dbb66c3f9da4371a992e418e311897b914f",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "fda824f89cc7b715575419221f526879c6543c97",
-      "startedAt": "2026-11-08T16:55:03.158Z",
-      "endedAt": "2026-11-08T16:55:12.169Z",
+      "testedHead": "1a5f180e98c0279a8590f67c3e41432610561eb7",
+      "startedAt": "2026-11-08T17:13:34.676Z",
+      "endedAt": "2026-11-08T17:13:47.928Z",
       "passed": 2,
       "failed": 0,
       "skipped": 0,
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf08a-postgres-canonical-default.log",
-      "logSha256": "c116e7912f5310ea8ea67f126bb52006b4ba0bd702d01f6934e22f63d81bebc1",
-      "resultReport": "/workspace/scratch/dx-final10-20261108/perf08a-postgres-canonical-default.vitest.json",
+      "log": "/workspace/scratch/dx-final10-20261108/perf08a-postgres-integrated07-native.log",
+      "logSha256": "2faa1d9682d560b087f4ee30dad0baa4d23f01e5c62a6a22c3e711a4139cb2f8",
+      "resultReport": "/workspace/scratch/dx-final10-20261108/perf08a-postgres-integrated07-native.vitest.json",
       "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native production tests retain actual roles, permissions, frozen clocks, native corrections and full-range statistics, no real business data or deployment.",
       "kind": "tests",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "cba3d90046969c08ddc39dd899bc69efcffdc867a64851730ab025b97f2693f6"
+          "sha256": "ccf2f12fc0aacf778e8c236e0c23698001abdc0b58a1684a4ec85cff501d3caa"
         }
       ]
     },
     {
       "id": "original",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/m01-production-statistics-postgres.test.ts tests/integration/m01-production-period-postgres.test.ts tests/integration/m01-production-collaboration-postgres.test.ts --config vitest.business-chain.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf08a-postgres-original-final.vitest.json",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/m01-production-statistics-postgres.test.ts tests/integration/m01-production-period-postgres.test.ts tests/integration/m01-production-collaboration-postgres.test.ts --config vitest.business-chain.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf08a-postgres-integrated07-original.vitest.json",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "03aff5e74107311df2a786393c1be332a3de498e7a6bc3c607248c85941edae6",
+      "sourceFingerprint": "ad7a7150a597c9f19608b725aefb92f9cb9082ce041a8a2f419f3c0b027032fc",
       "inputPaths": [
         "apps",
         "packages",
@@ -356,25 +356,25 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "40b5c5e2de83e10e035ea09e75a5b88743cd5d474b9baf8a985b0dcc68aee4ad",
+      "inputFingerprint": "320ada8d415be8da73a372c09b2d8dbb66c3f9da4371a992e418e311897b914f",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "fda824f89cc7b715575419221f526879c6543c97",
-      "startedAt": "2026-11-08T16:44:05.691Z",
-      "endedAt": "2026-11-08T16:44:42.758Z",
+      "testedHead": "1a5f180e98c0279a8590f67c3e41432610561eb7",
+      "startedAt": "2026-11-08T17:14:30.997Z",
+      "endedAt": "2026-11-08T17:15:07.279Z",
       "passed": 26,
       "failed": 0,
       "skipped": 0,
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf08a-postgres-original-final.log",
-      "logSha256": "42db3a82faedc85030ee9a1c6b2e4c251629c3ed3acabc27d05a301f339e2e8f",
-      "resultReport": "/workspace/scratch/dx-final10-20261108/perf08a-postgres-original-final.vitest.json",
+      "log": "/workspace/scratch/dx-final10-20261108/perf08a-postgres-integrated07-original.log",
+      "logSha256": "ba3ff751d183c70dbcaee8333801e27c5ae92f31eb45da6f10fda3d6eac2dee4",
+      "resultReport": "/workspace/scratch/dx-final10-20261108/perf08a-postgres-integrated07-original.vitest.json",
       "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native production tests retain actual roles, permissions, frozen clocks, native corrections and full-range statistics, no real business data or deployment.",
       "kind": "tests",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "fd62b82f5938dc344aa74cec1816032b82c51d395e598b33efd0f9cca7004e44"
+          "sha256": "01aff1cccdba940d57494fd66257e103f91600cd26f8344a18220777f86ee8b8"
         }
       ]
     }

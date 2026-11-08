@@ -1,3 +1,5 @@
+import type {WorkspaceJourneyFact} from './journey-workspace-facts.js';
+import {ApplicationError} from '../platform/errors.js';
 import {journeyMeasure,journeySpan,journeyCandidateCount} from '../platform/journey-diagnostic.js';
 import {readQcExecutionEvidence} from './qc-progress-evidence.js';
 import {readNodeMaterials} from './node-materials.js';
@@ -131,6 +133,46 @@ export class DigitalJourneyQuery {
         result.items=details;
       }
       return {...result,canManagePolicies:isDigitalLeader(actor),facets};
+    });
+  }
+  /** Read minimal authorized facts once, then hydrate only the objects the
+   * workspace actually displays. No GET-side rebuild or stale-result fallback. */
+  async workspace<T>(actor:TrustedActorContext,filter:JourneyFilter,patternBusiness:"development"|"bulk"|"all"|undefined,
+    select:(items:WorkspaceJourneyFact[],asOf:string,freshness?:NonNullable<JourneyResult['freshness']>)=>Promise<{ids:string[];finish:(details:Map<string,OrderJourney>,freshness?:NonNullable<JourneyResult['freshness']>,detailFailures?:readonly string[])=>T}>|{ids:string[];finish:(details:Map<string,OrderJourney>,freshness?:NonNullable<JourneyResult['freshness']>,detailFailures?:readonly string[])=>T}):Promise<T|null>{
+    if(this.options.listReadMode!=='indexed')return null;
+    assertIdentityActor(actor);
+    return this.snapshot(async(db,asOf,transaction)=>{
+      const patternKinds=patternBusiness?PATTERN_GROUPS.flatMap(group=>[...group.nodes]).filter(kind=>patternBusiness==="all"||(patternBusiness==="bulk"?kind==="bulk_pattern":kind!=="bulk_pattern")):null;
+      const candidates=await this.candidates(db,actor,null,patternKinds);
+      const read=await readJourneySelections(this.database,db,actor,candidates,filter,asOf,{workspaceNodes:patternBusiness?'pattern':'designer',...(patternKinds?{workspaceKinds:patternKinds}:{})});
+      const byResource=new Map(read.items.map(row=>[businessScopeKey(row.resource),row])),facts:WorkspaceJourneyFact[]=[],byId=new Map<string,Candidate>();let pending=0,failed=0;const retryIds:string[]=[];
+      for(const candidate of candidates){
+        const scope:BusinessTimeScope=candidate.order?{kind:'order',id:candidate.order.production_order_id}:{kind:'source',id:candidate.source!.source_id};
+        const row=byResource.get(businessScopeKey(scope));if(!row)continue;
+        const time=read.clocks.get(businessScopeKey(row.resource))!;
+        if(time.scenarioId)this.observations.get(db)?.set(businessScopeKey(row.resource),{scope:row.resource,time});
+        const metadata={...row.selection};if(patternBusiness)delete metadata.selectionSignals;
+        if(!journeyMatchesMetadata(metadata,patternBusiness?{...filter,search:''}:filter))continue;
+        if(row.status!=='ready'){if(row.status==='failed'){failed++;retryIds.push(row.selection.id);}else pending++;continue;}
+        facts.push({...row.selection,asOf:time.now,nodes:row.workspaceNodes??[]});byId.set(row.selection.id,candidate);
+      }
+      const freshness=()=>pending||failed?{pending,failed,retryIds:[...new Set(retryIds)].slice(0,15)}:undefined;
+      const plan=await select(facts,asOf,freshness()),details=new Map<string,OrderJourney>(),detailFailures:string[]=[];
+      if(isDigitalManagementReader(actor))prepareJourneySnapshotBatches(db,plan.ids.flatMap(id=>byId.get(id)?.order?[byId.get(id)!.order!.production_order_id]:[]));
+      for(const id of new Set(plan.ids)){
+        const candidate=byId.get(id);if(!candidate)throw new ApplicationError('INVALID_STATE_TRANSITION','当前筛选范围已变化，请刷新工作区',409);
+        await transaction.query('SAVEPOINT workspace_page_object');
+        try{
+          const item=await journeyMeasure('detail_projection',()=>this.project(db,actor,candidate,asOf,undefined,Boolean(patternBusiness),patternKinds));
+          if(item)details.set(id,patternBusiness?item:{...item,hitReasons:selectJourneys([item],filter,asOf,false).items[0]?.hitReasons??[]});else detailFailures.push(id);
+          await transaction.query('RELEASE SAVEPOINT workspace_page_object');
+        }catch(error){
+          await transaction.query('ROLLBACK TO SAVEPOINT workspace_page_object');await transaction.query('RELEASE SAVEPOINT workspace_page_object');
+          if(error&&typeof error==='object'&&'statusCode' in error&&error.statusCode===409)throw error;
+          detailFailures.push(id);
+        }
+      }
+      return plan.finish(details,freshness(),detailFailures);
     });
   }
   private async indexedList(db:PoolClient,actor:TrustedActorContext,filter:JourneyFilter,asOf:string,transaction:PoolClient):Promise<JourneyResult>{
