@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { JourneyNode, OrderJourney } from "./digital-production-journey.js";
+import type { JourneyNode, OrderJourney,JourneyResult } from "./digital-production-journey.js";
 
 export const DEVELOPMENT_VIEWS = [
   { key: "all", label: "全部档案" }, { key: "draft", label: "草稿" },
@@ -19,8 +19,8 @@ export const DevelopmentWorkspaceFilterSchema = z.object({
 export type DevelopmentWorkspaceFilter = z.infer<typeof DevelopmentWorkspaceFilterSchema>;
 export type DevelopmentWorkspaceItem = { journey: OrderJourney; view: DevelopmentView; canConfirm: boolean };
 export type DevelopmentWorkspaceResult = {
-  asOf: string; page: number; pageSize: 15; total: number;
-  counts: Record<DevelopmentWorkspaceFilter["view"], number>;
+  asOf: string; page: number; pageSize: 15; total: number|null; freshness?:NonNullable<JourneyResult['freshness']>;
+  counts: Record<DevelopmentWorkspaceFilter["view"], number>|null;
   customers: string[]; designers?: string[]; items: DevelopmentWorkspaceItem[];
 };
 
@@ -66,11 +66,11 @@ export type PatternWorkspaceTask = {
   nativeAssignment?: {orderId:string};
 };
 export type PatternWorkspaceResult = {
-  asOf: string; page: number; pageSize: 15; total: number; archiveTotal: number;
-  counts: Record<typeof PATTERN_GROUPS[number]["key"], number>;
+  asOf: string; page: number; pageSize: 15; total: number|null; freshness?:NonNullable<JourneyResult['freshness']>; archiveTotal: number|null;
+  counts: Record<typeof PATTERN_GROUPS[number]["key"], number>|null;
   owners: Array<{id: string; name: string | null}>; items: PatternWorkspaceTask[];
   /** Three recent existing tasks per lane, selected before list pagination. */
   boardPreview?: PatternWorkspaceTask[];
   risks?: PatternWorkspaceTask[];
-  riskCounts: Record<typeof PATTERN_GROUPS[number]["key"], {dueSoon: number; overdue: number}>;
+  riskCounts: Record<typeof PATTERN_GROUPS[number]["key"], {dueSoon: number; overdue: number}>|null;
 };
