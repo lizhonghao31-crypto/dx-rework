@@ -42,14 +42,20 @@ export function registerDevelopmentRoutes(app: FastifyInstance, dependencies: Di
   });
   app.get(`${base}/attachments/:attachmentId/metadata`, async request => {
     const trusted=await actor(request),sourceId=id(request,"sourceId"),attachmentId=id(request,"attachmentId");
-    await service.read(trusted,sourceId);
+    await service.authorizeAttachmentRead(trusted,sourceId);
     return attachments.readIdentity(trusted,attachmentId,async row=>row.entityType==="digital_development"&&service.canDownload(trusted,sourceId,attachmentId));
   });
   app.get(`${base}/attachments/:attachmentId`, async (request,reply) => {
     const trusted = await actor(request), sourceId = id(request,"sourceId"), attachmentId = id(request,"attachmentId");
     // Includes source scope even for unbound drafts owned by the same uploader.
-    await service.read(trusted,sourceId);
+    await service.authorizeAttachmentRead(trusted,sourceId);
     const grant = await attachments.createDownloadIntent(trusted,attachmentId, async row => row.entityType === "digital_development" && service.canDownload(trusted,sourceId,attachmentId),"inline");
     return reply.redirect(grant.downloadUrl);
+  });
+  app.get(`${base}/attachments/:attachmentId/preview`,async(request,reply)=>{
+    const sourceId=id(request,'sourceId'),attachmentId=id(request,'attachmentId');
+    const grant=await attachments.createImagePreviewDownloadIntent(async()=>{const trusted=await actor(request);await service.authorizeAttachmentRead(trusted,sourceId);return trusted;},attachmentId,
+      (trusted,row)=>Promise.resolve(row.entityType==='digital_development'&&service.canDownload(trusted,sourceId,attachmentId)));
+    return reply.header('cache-control','private, no-store').redirect(grant.downloadUrl);
   });
 }

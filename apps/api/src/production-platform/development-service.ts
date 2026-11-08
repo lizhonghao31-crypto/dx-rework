@@ -39,6 +39,7 @@ export class DigitalDevelopmentService {
     return { ...source, can_edit: owner && this.creationEnabled, can_view_order_draft: owner };
   }
   async authorizeUpload(actor: TrustedActorContext, sourceId: string) { await this.source(this.database, actor, sourceId, true); }
+  async authorizeAttachmentRead(actor:TrustedActorContext,sourceId:string){await this.source(this.database,actor,sourceId);}
   async canDownload(actor: TrustedActorContext, sourceId: string, attachmentId: string): Promise<boolean> {
     await this.source(this.database, actor, sourceId);
     return Boolean((await this.database.query("SELECT 1 FROM digital_development_attachment_bindings WHERE source_id=$1 AND attachment_id=$2", [sourceId, attachmentId])).rowCount)||await inheritedDevelopmentFile(this.database,sourceId,attachmentId);
