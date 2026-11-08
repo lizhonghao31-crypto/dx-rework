@@ -28,7 +28,14 @@ if(!Number.isInteger(caseCount)||caseCount<31||caseCount>1000)throw Error('Owned
   const trace=vi.spyOn(f.db,'query').mockImplementation(function(...args:unknown[]){if(typeof args[0]==='string'&&args[0].startsWith('WITH filtered_cases'))queries.push({text:args[0],values:args[1] as unknown[]});return Reflect.apply(original,f.db,args);} as typeof f.db.query);
   try{
    const first=await service.listCases(reader()),second=await service.listCases(reader(),'','all',2),last=await service.listCases(reader(),'','all',3),totals=(await f.db.query('SELECT count(*)::int AS count,sum(order_quantity)::int AS quantity FROM current_sourcing_cases')).rows[0]!;
-   expect(first.totalCount).toBe(caseCount+1);expect(first.totalCount).toBe(totals.count);expect(first.totalOrderQuantity).toBe(totals.quantity);expect([first.items.length,second.items.length,last.items.length]).toEqual([15,15,Math.min(15,caseCount-29)]);expect(new Set([...first.items,...second.items,...last.items].map(item=>item.sourcingCaseId)).size).toBe(Math.min(45,caseCount+1));
+   expect(first.totalCount).toBe(caseCount+1);expect(first.totalCount).toBe(totals.count);expect(first.totalOrderQuantity).toBe(totals.quantity);expect(first.totalOrderQuantity).toBe(caseCount*16+10);expect([first.items.length,second.items.length,last.items.length]).toEqual([15,15,Math.min(15,caseCount-29)]);expect(new Set([...first.items,...second.items,...last.items].map(item=>item.sourcingCaseId)).size).toBe(Math.min(45,caseCount+1));
+   const approved=[...first.items,...second.items,...last.items].find(item=>item.styleNo==='TEST-PERF09-00-0')!;
+   expect(approved.orderQuantity).toBe(16);expect(Number(approved.decision?.totalAmount)).toBe(52);expect(Number(approved.approvalSnapshot?.totalAmount)).toBe(52);
+   const detail=await service.getCase(reader(),approved.sourcingCaseId);expect(detail.lineItems).toHaveLength(8);expect(Number(detail.decision?.totalAmount)).toBe(52);expect(Number(detail.approvalSnapshot?.totalAmount)).toBe(52);
+   expect((await service.getCase(reader(f.people.merchandiser!),approved.sourcingCaseId)).daxingUnitPrice).toBe('5.0000');
+   const history=await service.nodeHistory(reader(),approved.sourcingCaseId,'ie_quote');expect(history.item.lineItems).toHaveLength(8);expect(Number(history.item.ieQuote?.totalAmount)).toBe(52);expect(history.item.decision).toBeNull();expect(history.item.approvalSnapshot).toBeNull();
+   const empty=await service.listCases(reader(),'TEST-F1-NO-MATCH-'+randomUUID());expect(empty.items).toEqual([]);expect(empty.totalCount).toBe(0);expect(empty.totalOrderQuantity).toBe(0);
+   const female=await service.listCases(reader(),'TEST-PERF09-','all',1,{gender:'女装'});expect(female.totalCount).toBe(Math.floor(caseCount/2));expect(female.totalOrderQuantity).toBe(Math.floor(caseCount/2)*16);expect(female.items.every(item=>item.gender==='女装')).toBe(true);
    const selected=queries[0]!,plan=(await f.db.query('EXPLAIN (ANALYZE,VERBOSE,FORMAT JSON) '+selected.text,selected.values)).rows[0]['QUERY PLAN'][0].Plan;
    const nodes=(node:Record<string,unknown>):Array<Record<string,unknown>>=>[node,...((node.Plans??[]) as Array<Record<string,unknown>>).flatMap(nodes)],aggregates=nodes(plan).filter(node=>node['Node Type']==='Aggregate'&&(node.Output as string[]|undefined)?.some(value=>value.includes('jsonb_agg')));
    expect(aggregates.length).toBeGreaterThan(0);for(const aggregate of aggregates)expect(Number(aggregate['Actual Loops'])).toBeLessThanOrEqual(15);
@@ -43,5 +50,41 @@ if(!Number.isInteger(caseCount)||caseCount<31||caseCount>1000)throw Error('Owned
     console.log('SOURCING_NATIVE_PAGE_COMPARE '+JSON.stringify({base:process.env.M01_SOURCING_LIST_BASELINE_HEAD,caseCount,before,after,oldRichAggregateLoops:oldAggregates.map(node=>node['Actual Loops']),richAggregateLoops:aggregates.map(node=>node['Actual Loops']),scope:'Same isolated legacy cases with8lines,5 native price decisions and1 approval; additional linked digital case included in correctness checks. Only observation field contractReturnAsOf excluded; no onsite/P95 claim.'}));
    }
   }finally{trace.mockRestore();}
+ });
+ it('reads the new corrected price through the existing command transaction before COMMIT, never a pool detail read',async()=>{
+  const merch=f.people.merchandiser!,created=await f.sourcing.createCase(merch,CreateSourcingCaseSchema.parse({gender:'男装',styleName:'TEST F1事务',estimatedCutPieceSendDate:'2026-12-01',deliveryDate:'2027-01-10',daxingUnitPrice:'5',attachmentIds:[await f.image(merch)],lineItems:[{styleNo:'TEST-F1-TX-'+randomUUID(),color:'黑',quantity:10}]}),randomUUID());
+  const id=created.value.sourcingCaseId,original=f.db.query,poolDetails:string[]=[];
+  const trace=vi.spyOn(f.db,'query').mockImplementation(function(...args:unknown[]){if(typeof args[0]==='string'&&args[0].startsWith('SELECT\n         case_view.sourcing_case_id'))poolDetails.push(args[0]);return Reflect.apply(original,f.db,args);} as typeof f.db.query);
+  try{
+   const key=randomUUID(),actor={...f.root,authorizationCapability:'sourcing:inquiry:create'};
+   const result=await service.correctBudgetPrice(actor,id,{daxingUnitPrice:'10.8',reason:'TEST 原事务读回'},key);
+   expect(result.value.daxingUnitPrice).toBe('10.8000');expect(poolDetails).toEqual([]);
+   expect((await f.db.query('SELECT new_unit_price::text price FROM sourcing_budget_price_corrections WHERE sourcing_case_id=$1',[id])).rows).toEqual([{price:'10.8000'}]);
+   const replay=await service.correctBudgetPrice(actor,id,{daxingUnitPrice:'10.8',reason:'TEST 原事务读回'},key);expect(replay.reused).toBe(true);expect(replay.value.daxingUnitPrice).toBe('10.8000');
+  }finally{trace.mockRestore();}
+ });
+ it('rolls back the native correction, idempotency and audit together when transaction-bound read-back fails',async()=>{
+  const merch=f.people.merchandiser!,created=await f.sourcing.createCase(merch,CreateSourcingCaseSchema.parse({gender:'男装',styleName:'TEST F1回滚',estimatedCutPieceSendDate:'2026-12-01',deliveryDate:'2027-01-10',daxingUnitPrice:'5',attachmentIds:[await f.image(merch)],lineItems:[{styleNo:'TEST-F1-ROLLBACK-'+randomUUID(),color:'黑',quantity:10}]}),randomUUID());
+  const id=created.value.sourcingCaseId,key=randomUUID();
+  // Actual PG inserts and native audit occur before a controlled read-adapter
+  // failure. Only the command's checked-out client is wrapped, not pool reads.
+  const database=new Proxy(f.db,{get(pool,name){
+   if(name==='connect')return async()=>{
+    const client=await pool.connect();return new Proxy(client,{get(target,property){
+     if(property==='query')return async(...args:unknown[])=>{
+      if(typeof args[0]==='string'&&args[0].startsWith('SELECT\n         case_view.sourcing_case_id'))throw Error('TEST F1 transaction read-back failure');
+      return Reflect.apply(target.query,target,args);
+     };
+     const value=Reflect.get(target,property);return typeof value==='function'?value.bind(target):value;
+    }});
+   };
+   const value=Reflect.get(pool,name);return typeof value==='function'?value.bind(pool):value;
+  }});
+  const commands=new SourcingService(database);
+  await expect(commands.correctBudgetPrice({...f.root,authorizationCapability:'sourcing:inquiry:create'},id,{daxingUnitPrice:'12.34',reason:'TEST 原事务读回失败回滚'},key)).rejects.toThrow('TEST F1 transaction read-back failure');
+  expect((await f.db.query('SELECT count(*)::int n FROM idempotency_records WHERE scope=$1 AND idempotency_key=$2',['sourcing.budget_price.correct',key])).rows[0].n).toBe(0);
+  expect((await f.db.query('SELECT count(*)::int n FROM operation_events WHERE action=$1 AND entity_id=$2',['sourcing.budget_price.correct',id])).rows[0].n).toBe(0);
+  expect((await f.db.query('SELECT count(*)::int n FROM sourcing_budget_price_corrections WHERE sourcing_case_id=$1',[id])).rows[0].n).toBe(0);
+  expect((await service.getCase(reader(),id)).daxingUnitPrice).toBe('5.0000');
  });
 });
