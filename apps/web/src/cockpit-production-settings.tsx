@@ -20,6 +20,6 @@ export function CockpitProductionSettings(){
   {error&&<p role="alert">{error}</p>}
   {!access&&!error&&<p>正在读取设置…</p>}
   {access&&!canReadDigitalProductionSettings(access)&&!access.customers&&<p>当前岗位无权访问生产管理设置。</p>}
-  {access&&canReadDigitalProductionSettings(access)?<><SlaSettingsWorkspace customerControl={access.customers?<DigitalCockpitPersonnel orderId={null} onChanged={()=>undefined}/>:access.roles?.includes('pmc')?<details className="cockpit-customer-readonly"><summary>客户跟单配置</summary><DigitalCockpitPersonnel orderId={null} readOnly onChanged={()=>undefined}/></details>:undefined} readOnly={!access.manage} onAuthorityChanged={refreshAuthority}/><SeriesSettings readOnly={!access.manage}/></>:access?.customers&&<div className="cockpit-settings-node-section"><DigitalCockpitPersonnel orderId={null} onChanged={()=>undefined}/></div>}
+  {access&&canReadDigitalProductionSettings(access)?<><SlaSettingsWorkspace customerControl={access.customers?<DigitalCockpitPersonnel orderId={null} onChanged={()=>undefined}/>:access.roles?.includes('pmc')?<DigitalCockpitPersonnel orderId={null} readOnly onChanged={()=>undefined}/>:undefined} readOnly={!access.manage} onAuthorityChanged={refreshAuthority}/><SeriesSettings readOnly={!access.manage}/></>:access?.customers&&<div className="cockpit-settings-node-section"><DigitalCockpitPersonnel orderId={null} onChanged={()=>undefined}/></div>}
  </div>;
 }

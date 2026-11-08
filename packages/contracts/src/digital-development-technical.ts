@@ -57,7 +57,7 @@ export const TechnicalPlotUploadSchema=z.object({filename:z.string().min(1).max(
 export const DevelopmentCycleValuesSchema=z.object({normalDays:z.number().int().min(1).max(365),urgentDays:z.number().int().min(1).max(365),sizeReviewHours:z.number().int().min(1).max(8760),externalWashDays:z.number().int().min(1).max(365)}).strict().superRefine((v,c)=>{if(v.urgentDays>v.normalDays)c.addIssue({code:'custom',message:'加急周期不能长于正常周期'});});
 export const DEVELOPMENT_CYCLE_DEFAULTS={normalDays:7,urgentDays:5,sizeReviewHours:24,externalWashDays:3} as const;
 export const DevelopmentCycleDraftSchema=z.object({expectedVersion:z.number().int().positive(),values:DevelopmentCycleValuesSchema,reason:z.string().trim().min(1).max(1000)}).strict();
-export const DevelopmentCyclePublishSchema=DevelopmentCycleDraftSchema.extend({previewToken:z.string().min(1)}).strict();
+export const DevelopmentCyclePublishSchema=DevelopmentCycleDraftSchema.extend({previewToken:z.string().min(1),savedDraftRevision:z.number().int().positive().optional()}).strict();
 export const DevelopmentUrgentRequestSchema=z.object({roundNumber:z.number().int().positive(),expectedRevision:z.number().int().nonnegative(),action:z.enum(['request','approve','reject']),reason:z.string().trim().min(1).max(1000)}).strict();
 export const DevelopmentPatchDecisionSchema=z.object({issueId:z.string().uuid(),expectedVersion:z.number().int().positive(),decision:z.enum(['patch','new_round']),making:DevelopmentMakingUpgradeSchema.optional(),reusableArtifacts:z.boolean(),reason:z.string().trim().min(1).max(2000)}).strict().superRefine((v,c)=>{if(v.decision==='patch'&&!v.reusableArtifacts)c.addIssue({code:'custom',message:'关键成果不能复用时须建立新轮次'});});
 

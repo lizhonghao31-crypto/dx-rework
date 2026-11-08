@@ -1670,5 +1670,22 @@
     ],
     "execute": [],
     "sequences": []
+  },
+  "0276_sla_settings_drafts": {
+    "checksum": "b7eeee181bc627aa00bed358f808888663643aee7d166908e6c9a6a85988046d",
+    "tables": [],
+    "functions": [],
+    "references": [
+      "app_users"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [
+      "digital_sla_settings_drafts"
+    ],
+    "execute": [
+      "guard_production_order_root_immutable"
+    ],
+    "sequences": []
   }
 }

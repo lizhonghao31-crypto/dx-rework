@@ -155,6 +155,121 @@
 @media(max-width:1100px){.cockpit-policy-stages button>strong{font-size:14px}.cockpit-policy-stage-ring{width:52px;height:52px}.cockpit-policy-stages li:not(:last-child)::after{top:26px}.cockpit-policy-cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:800px){.cockpit-settings{padding:12px;font-size:16px}.cockpit-policy-stages{min-width:700px}.sla-selected-stage-title{align-items:start;flex-wrap:wrap}.sla-settings-tools,.sla-stage-nodes>.sla-settings-help{font-size:14px}}
 @media(max-width:600px){.cockpit-policy-cards{grid-template-columns:minmax(0,1fr)}.sla-overall-time{font-size:16px}.sla-calculation-summary{gap:12px}}
+
+/* Final10: one set of tabs and a shared table/editor grid, scoped to settings. */
+.cockpit-settings .sla-workspace-tabs{order:-1;display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:1px solid var(--production-border,#dbe6f5);margin:2px 0 14px}
+.cockpit-settings .sla-workspace-tabs [role=tablist]{display:flex;gap:20px;min-width:0}
+.cockpit-settings .sla-workspace-tabs [role=tab]{border:0;border-bottom:3px solid transparent;border-radius:0;background:transparent;padding:10px 12px;min-height:44px;font:inherit;font-size:16px;font-weight:600;color:var(--production-text,#26384c);white-space:nowrap;cursor:pointer}
+.cockpit-settings .sla-workspace-tabs [role=tab][aria-selected=true]{color:var(--production-primary,#0065ff);border-bottom-color:var(--production-primary,#0065ff)}
+.cockpit-settings .sla-workspace-tabs [role=tab]:focus-visible{outline:2px solid var(--production-primary,#0065ff);outline-offset:2px}
+.cockpit-settings .sla-workspace-tabs>.journey-text-action{min-height:40px;white-space:nowrap}
+.cockpit-settings .sla-calculation-summary{order:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr) minmax(0,1.25fr);gap:16px;padding:18px;margin-bottom:12px;min-height:86px}
+.cockpit-settings .sla-calculation-summary>div{min-width:0;display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-start;gap:5px 8px;font-size:16px;margin:0}
+.cockpit-settings .sla-calculation-summary>div+div{border-left:1px solid var(--production-border,#dbe6f5);padding-left:18px}
+.cockpit-settings .sla-calculation-summary>div>strong{font-size:15px;font-weight:600}
+.cockpit-settings .sla-calculation-summary>div>span{font-weight:650;color:var(--production-text,#26384c)}
+.cockpit-settings .sla-calculation-summary>div>small{flex-basis:100%;font-size:13px;color:#6e829f}
+.cockpit-settings .sla-calculation-summary .sla-overall-time button{margin-left:auto;padding:6px 10px;font-size:14px}
+.cockpit-settings .sla-settings-workspace .sla-tab-panel{order:1;display:flex;flex-direction:column;min-width:0}
+.cockpit-settings .sla-tab-panel>div:not(.sla-standard-editor){order:2}
+.cockpit-settings .sla-tab-panel [hidden]{display:none}
+.cockpit-settings .sla-stage-selector{padding:10px 12px;margin:0 0 12px}
+.cockpit-settings .cockpit-policy-stage-ring{width:34px;height:34px}
+.cockpit-settings .cockpit-policy-stage-ring svg circle:first-child{fill:#a9b5c7;stroke:#a9b5c7;stroke-width:1}
+.cockpit-settings .cockpit-policy-stage-ring svg circle:last-child{display:none}
+.cockpit-settings .cockpit-policy-stage-ring b{color:#fff;font-size:16px}
+.cockpit-settings .cockpit-policy-stages button[aria-pressed=true] .cockpit-policy-stage-ring b{color:#fff}
+.cockpit-settings .cockpit-policy-stages [aria-pressed=true] svg circle:first-child{fill:var(--production-primary,#0065ff);stroke:var(--production-primary,#0065ff)}
+.cockpit-settings .cockpit-policy-stages li:not(:last-child)::after{top:17px;left:calc(50% + 20px);right:calc(-50% + 20px)}
+.cockpit-settings .cockpit-policy-stages button>strong{font-size:14px}
+.cockpit-settings .cockpit-policy-stages button>small{font-size:13px}
+.cockpit-settings .sla-node-editor-grid{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(280px,1fr);gap:16px;align-items:start;margin:12px 0}
+.cockpit-settings .sla-stage-nodes{padding:0;border:0;background:transparent;box-shadow:none}
+.cockpit-settings .sla-node-table-panel{min-width:0;border:1px solid var(--production-border,#dbe6f5);border-radius:7px;overflow:hidden;background:#fff}
+.cockpit-settings .sla-node-table-panel .sla-selected-stage-title{padding:14px;margin:0;gap:10px;align-items:start}
+.cockpit-settings .sla-node-table-panel .sla-selected-stage-title h2{font-size:17px;white-space:nowrap}
+.cockpit-settings .sla-node-table-panel .sla-selected-stage-title>strong{font-size:13px;font-weight:500;flex:1;min-width:0;text-align:right}
+.cockpit-settings .sla-node-table-scroll{max-height:420px;overflow:auto;overscroll-behavior:contain}
+.cockpit-settings .sla-node-table-scroll::-webkit-scrollbar{width:8px;height:8px}
+.cockpit-settings .sla-node-table-scroll::-webkit-scrollbar-track{background:#f0f4fa}
+.cockpit-settings .sla-node-table-scroll::-webkit-scrollbar-thumb{background:#bccbdc;border-radius:4px}
+.cockpit-settings .sla-node-table-scroll table{width:100%;min-width:500px;border-collapse:collapse;table-layout:auto;font-size:14px;line-height:1.4}
+.cockpit-settings .sla-node-table-scroll thead th{position:sticky;top:0;z-index:1;background:#f0f4fa;font-weight:650;white-space:nowrap}
+.cockpit-settings .sla-node-table-scroll :is(th,td){padding:9px 8px;border-bottom:1px solid var(--production-border,#dbe6f5);text-align:left;vertical-align:middle}
+.cockpit-settings .sla-node-table-scroll th[scope=row]{font-weight:500;min-width:8em}
+.cockpit-settings .sla-node-table-scroll tr[aria-selected=true]{background:#edf4ff}
+.cockpit-settings .sla-node-table-scroll td:first-child{white-space:nowrap}
+.cockpit-settings .sla-node-table-scroll input[type=checkbox]{width:14px;height:14px;margin:0 6px 0 0;vertical-align:middle}
+.cockpit-settings .sla-node-table-scroll small{display:block;font-size:12px;line-height:1.4;color:#7084a3}
+.cockpit-settings .sla-node-table-scroll small[role=alert]{color:#bd3443}
+.cockpit-settings .sla-node-table-scroll button{font-size:14px;min-height:32px;padding:4px 7px;white-space:nowrap}
+.cockpit-settings .sla-node-edit-column{min-width:0}
+.cockpit-settings .sla-node-inline-editor,.cockpit-settings .sla-node-inline-placeholder{box-sizing:border-box;border:1px solid var(--production-border,#dbe6f5);border-radius:7px;padding:16px;background:#fff;margin:0;width:100%;max-width:none;color:inherit}
+.cockpit-settings .sla-node-inline-editor>div{padding:0;display:flex;flex-direction:column;gap:12px;min-width:0}
+.cockpit-settings .sla-node-inline-editor header{display:flex;justify-content:space-between;align-items:start;gap:8px}
+.cockpit-settings .sla-node-inline-editor h2,.cockpit-settings .sla-node-inline-placeholder h2{margin:0;font-size:17px;line-height:1.4}
+.cockpit-settings .sla-node-inline-editor header button{font-size:13px;padding:4px 8px;min-height:30px}
+.cockpit-settings .sla-node-inline-editor p{margin:0;font-size:14px;line-height:1.5}
+.cockpit-settings .sla-node-inline-editor .sla-value-input{display:grid;grid-template-columns:5.5em minmax(64px,1fr) auto;align-items:center;gap:6px;font-size:14px}
+.cockpit-settings .sla-node-inline-editor .sla-value-input input{min-width:0;width:100%;min-height:36px}
+.cockpit-settings .sla-node-inline-editor select{min-width:0;max-width:105px;min-height:36px}
+.cockpit-settings .sla-node-inline-editor label:not(.sla-value-input){display:grid;gap:5px;font-size:14px}
+.cockpit-settings .sla-node-inline-editor label:not(.sla-value-input) input{width:100%;min-width:0;box-sizing:border-box}
+.cockpit-settings .sla-node-inline-editor footer{display:flex;flex-wrap:wrap;gap:8px;margin-top:2px}
+.cockpit-settings .sla-node-inline-editor footer button{flex:1;min-width:100px;font-size:14px}
+.cockpit-settings .sla-node-source{font-size:13px;color:#6e829f;line-height:1.5}
+.cockpit-settings .sla-linked-settings{order:5}
+.cockpit-settings .sla-linked-settings>summary{cursor:pointer;font-weight:600}
+.cockpit-settings [data-expanded=true]>summary{display:none}
+@media(max-width:1000px){.cockpit-settings .sla-node-editor-grid{grid-template-columns:minmax(0,1fr)}.cockpit-settings .sla-calculation-summary{grid-template-columns:minmax(0,1fr)}.cockpit-settings .sla-calculation-summary>div+div{border-left:0;border-top:1px solid var(--production-border,#dbe6f5);padding:12px 0 0}}
+@media(max-width:600px){.cockpit-settings .sla-workspace-tabs{align-items:start;flex-direction:column;gap:4px}.cockpit-settings .sla-workspace-tabs [role=tablist]{gap:2px;width:100%}.cockpit-settings .sla-workspace-tabs [role=tab]{padding:9px 7px;font-size:15px}}
+
+.cockpit-home-dialog:has(.sla-adjustment-preview){width:min(1080px,calc(100vw - 32px));max-width:none}
+.sla-settings-live-content{display:contents}
+.sla-settings-live-content[hidden],.sla-adjustment-preview-host[hidden]{display:none}
+.sla-adjustment-preview{padding:18px 24px 22px;display:grid;gap:16px;min-width:0;background:#fff;border:1px solid var(--production-border,#dbe6f5);border-radius:8px;color:var(--production-text,#26384c)}
+.sla-adjustment-preview>header{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.sla-adjustment-preview>header h2{margin:0;font-size:24px}
+.sla-adjustment-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.sla-adjustment-summary>section{padding:16px;border:1px solid var(--production-border,#dbe6f5);border-radius:7px;background:#f8fbff;min-width:0}
+.sla-adjustment-summary h3{margin:0 0 10px;font-size:15px}
+.sla-adjustment-summary>section>div{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:14px}
+.sla-adjustment-summary strong{font-size:16px;color:#1358a7}
+.sla-adjustment-summary small{display:block;margin-top:8px;color:#6e829f;font-size:12px}
+.sla-preview-conditions>.sla-calculation-options{border:1px solid var(--production-border,#dbe6f5);border-radius:6px;padding:12px}
+.sla-preview-conditions input,.sla-preview-conditions select{font:inherit;min-height:36px;max-width:100%;box-sizing:border-box;border:1px solid #c7dbf5;border-radius:6px;padding:6px 8px;background:#fff;color:inherit}
+.sla-preview-conditions label{display:grid;gap:6px;font-size:14px}
+.sla-calculation-options>fieldset{border:0;margin:0;padding:0;min-width:0}
+.sla-preview-stage-scroll{overflow:auto;max-width:100%}
+.sla-preview-stage-scroll .cockpit-policy-stages{min-width:680px;margin:0}
+.cockpit-settings .sla-common-fields{font-size:13px;line-height:1.5;color:#617797}
+.cockpit-settings .sla-common-fields>label{margin-top:10px}
+.cockpit-settings .sla-common-fields>label>span{display:flex;align-items:center;gap:7px}
+.cockpit-settings .sla-common-fields input{max-width:110px}
+.cockpit-settings .sla-reminder-scope{margin:0;display:grid;gap:9px;font-size:13px;line-height:1.5}
+.cockpit-settings .sla-reminder-scope>div{display:grid;grid-template-columns:5em minmax(0,1fr);gap:8px}
+.cockpit-settings .sla-reminder-scope dt{color:#7084a3}
+.cockpit-settings .sla-reminder-scope dd{margin:0;overflow-wrap:anywhere}
+.cockpit-settings .sla-node-table-scroll input[role=switch]{appearance:none;position:relative;width:34px;height:20px;min-height:20px;margin:0;border:1px solid #bdcad9;border-radius:12px;background:#dce5f0;cursor:pointer}
+.cockpit-settings .sla-node-table-scroll input[role=switch]::before{content:'';position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;box-shadow:0 1px 3px #193a6226}
+.cockpit-settings .sla-node-table-scroll input[role=switch]:checked{background:var(--production-primary,#0065ff);border-color:var(--production-primary,#0065ff)}
+.cockpit-settings .sla-node-table-scroll input[role=switch]:checked::before{transform:translateX(14px)}
+.cockpit-settings .sla-node-table-scroll input[role=switch]:focus-visible{outline:2px solid var(--production-primary,#0065ff);outline-offset:3px}
+.cockpit-settings .sla-node-table-scroll input[role=switch]:disabled{opacity:.55;cursor:default}
+@media(max-width:800px){.sla-adjustment-summary{grid-template-columns:minmax(0,1fr)}}
+.sla-adjustment-preview>p{margin:0;font-size:14px;line-height:1.5}
+.sla-adjustment-preview table{width:100%;border-collapse:collapse;font-size:14px}
+.sla-adjustment-preview :is(th,td){text-align:left;padding:10px 12px;border-bottom:1px solid var(--production-border,#dbe6f5)}
+.sla-adjustment-totals thead,.sla-adjustment-stages thead{background:#f1f5fb}
+.sla-adjustment-totals tbody th{font-weight:500}
+.sla-adjustment-totals tr:last-child{background:#edf4ff}
+.sla-adjustment-stages{max-height:48vh;overflow:auto;border:1px solid var(--production-border,#dbe6f5);border-radius:6px}
+.sla-adjustment-stages details+details{border-top:1px solid var(--production-border,#dbe6f5)}
+.sla-adjustment-stages summary{padding:12px 14px;cursor:pointer;font-size:15px;font-weight:600}
+.sla-adjustment-stages small{display:block;font-size:12px;font-weight:400;color:#75879e}
+.sla-adjustment-preview footer{display:flex;justify-content:flex-end;gap:12px;flex-wrap:wrap}
+.sla-adjustment-preview .sla-draft-publication-note{font-size:13px;color:#7084a3}
+@media(max-width:600px){.sla-adjustment-preview{padding:12px;gap:12px}.sla-adjustment-preview :is(th,td){padding:8px 6px;font-size:13px}}
 .cockpit-settings .sla-stage-nodes:has(.sla-settings-tools:not([open])) .cockpit-policy-cards input[type=checkbox]{display:none}
 .cockpit-settings .cockpit-policy-cards .cockpit-policy-card-icon{flex:0 0 30px}
 .cockpit-settings .cockpit-policy-cards .cockpit-policy-card-icon .navigation-icon{width:22px;height:22px}

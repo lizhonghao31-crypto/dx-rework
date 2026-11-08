@@ -199,13 +199,21 @@ export const classifyFullGatePaths = (inputPaths) => {
     if (['apps/api/src/production-platform/reporting-query.ts','apps/api/src/production-platform/reporting-routes.ts','packages/contracts/src/digital-production-analysis.ts','tests/helpers/business-anchor-fixture.ts'].includes(path)) {
       mappedTests.add('tests/integration/time-reading-clock-postgres.test.ts');
     }
-    if (/^apps\/web\/src\/(?:sla-|development-cycle-settings|cockpit-production-settings|digital-cockpit-personnel|series-settings|series-plan-panel|auth-session)/.test(path)
+    if (/^apps\/web\/src\/(?:sla-|use-sla-saved-draft|development-cycle-settings|cockpit-production-settings|digital-cockpit-personnel|series-settings|series-plan-panel|auth-session)/.test(path)
       || /^apps\/api\/src\/production-platform\/(?:sla-|development-technical-service)/.test(path)
       || path.startsWith('apps/api/src/auth/')
       || ['packages/domain/src/sla-relative-calculation.ts','packages/domain/src/sla-calculation.ts','apps/web/src/digital-production-api.ts','tests/acceptance/m01-settings-native-browser.ts','tests/fixtures/m01-settings-native-ui.tsx','scripts/ci/prepare-settings-browser.mjs'].includes(path)) {
       mappedTests.add('tests/integration/m01-settings-native-browser-postgres.test.ts');
       domains.add('settings-native-browser');
       if(['packages/domain/src/sla-relative-calculation.ts','packages/domain/src/sla-calculation.ts'].includes(path))mappedTests.add('tests/integration/sla-calculation-postgres.test.ts');
+    }
+    if (['apps/api/src/production-platform/sla-notification-preferences.ts','apps/api/src/production-platform/notification-service.ts','apps/api/src/production-platform/ship-sample-timing.ts','packages/contracts/src/digital-sla.ts','tests/integration/sla-notification-preferences-postgres.test.ts'].includes(path)) {
+      for(const suite of ['sla-notification-preferences','digital-production-notifications','digital-production-notification-delivery'])mappedTests.add('tests/integration/'+suite+'-postgres.test.ts');
+      domains.add('settings-notification-preferences');
+    }
+    if (['apps/api/src/production-platform/sla-settings-drafts.ts','apps/api/src/production-platform/sla-settings-service.ts','apps/api/src/production-platform/development-technical-settings.ts','packages/contracts/src/sla-settings-drafts.ts','apps/api/migrations/0276_sla_settings_drafts.sql','tests/integration/sla-settings-drafts-postgres.test.ts'].includes(path)) {
+      mappedTests.add('tests/integration/sla-settings-drafts-postgres.test.ts');
+      domains.add('settings-drafts');
     }
     if (DEVELOPMENT_AMENDMENT_INPUTS.has(path)) {
       businessChainSensitive = true;

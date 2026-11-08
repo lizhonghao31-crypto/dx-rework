@@ -3,6 +3,7 @@ import {qcProgressNotices,qcNoticesAsTodos} from './qc-progress-todos.js';
 import {preparationWindowTodos,preparationMaterialsTodos,preparationSupplement} from './preparation-todos.js';
 import {effectiveSourcingDueSql} from './sla-sourcing-deadline-sql.js';
 import {slaNotificationWindow} from './sla-notification-window.js';
+import {slaNotificationPreferences,slaNotificationDue,type SlaNotificationPreference} from './sla-notification-preferences.js';
 import {todoSlaTiming,explicitlyUnlimitedSla} from "../todos/sla-presentation.js";
 import {acceptanceBusinessContext,acceptanceClockReaderEnabled,acceptanceIncludesNative,businessNow,ContextBusinessClock} from '../acceptance-clock/business-time.js';
 import {garmentQualityTodos} from './garment-quality-todos.js';
@@ -47,10 +48,16 @@ const TASKS = `SELECT t.*,a.assignee_id,a.required_role,a.task_kind,a.production
   JOIN LATERAL(SELECT label FROM digital_production_deadline_policies WHERE node_key=t.node_key ORDER BY version DESC LIMIT 1)p ON true
   LEFT JOIN LATERAL(SELECT * FROM digital_production_deadline_revisions WHERE task_id=t.task_id ORDER BY revision_id DESC LIMIT 1)d ON true`;
 type Task = {entered_at:Date|null;sla_basis?:unknown;deadline_exclusive?:boolean;source_sla?:boolean;route_version:number;task_id:string;state:string;assignee_id:string|null;required_role:string;task_kind:string;production_order_id:string|null;source_id:string|null;order_style_no:string|null;source_style_no:string|null;designer_id:string;primary_merchandiser_id:string|null;label:string;revision_id:string|null;warning_at:Date|null;due_at:Date|null;lifecycle:string;created_at:Date};
+type NotificationTasks={tasks:Map<string,Task>;preferences:Map<string,SlaNotificationPreference>};
 const labels: Record<string,string> = {ready:"待办理",reassigned:"已改派给你",unblocked:"已解除阻断",blocked:"办理遇到阻断",completed:"已完成",warning:"即将超时",overdue:"已超时",created:"待分配主办"};
 
 export class DigitalProductionNotificationService {
   constructor(private readonly database: Pool) {}
+  private async notificationTasks(database:Database,events:Array<{task_id:string|null;event_kind:string}>):Promise<NotificationTasks>{
+    const ids=[...new Set(events.flatMap(event=>event.task_id?[event.task_id]:[]))],tasks=ids.length?(await database.query<Task>(`${TASKS} WHERE t.task_id=ANY($1::uuid[])`,[ids])).rows:[];
+    const timed=new Set(events.filter(event=>['warning','overdue'].includes(event.event_kind)).map(event=>event.task_id));
+    return {tasks:new Map(tasks.map(task=>[task.task_id,task])),preferences:await slaNotificationPreferences(database,tasks.filter(task=>timed.has(task.task_id)))};
+  }
   private async transaction<T>(action:(client:PoolClient)=>Promise<T>):Promise<T> {
     const client=await this.database.connect();
     try { await client.query("BEGIN");
@@ -135,13 +142,16 @@ export class DigitalProductionNotificationService {
         await client.query("INSERT INTO digital_production_notification_projection(event_id) VALUES($1) ON CONFLICT DO NOTHING",[intent.event_id]);
       }
       const tasks=(await client.query<Task>(`${TASKS} WHERE ${ACTIVE}`)).rows;
+      const preferences=await slaNotificationPreferences(client,tasks);
       for(const task of tasks){
         if(!await acceptanceIncludesNative(this.database,task.task_id))continue;
         // Repair an unassigned/disabled operator as an upstream routing task; never broadcast to all craftspeople.
         if(!(unified&&task.source_id&&(DEVELOPMENT_ARRANGEABLE_KINDS as readonly string[]).includes(task.task_kind))&&!people.some(p=>p.actorId===task.assignee_id&&hasRequiredWarehouseRole(p.actorRoles,task.required_role)))
           await this.notice(client,{key:`missing:${task.task_id}:${task.assignee_id??'none'}`,taskId:task.task_id,kind:"created"},(await this.recipients(client,task,"created",people)).map(p=>p.actorId));
-        if(task.state==="pending"&&!task.source_sla||!task.due_at)continue;
-        const now=businessNow().getTime(),due=new Date(task.due_at).getTime(),kind=(task.source_sla&&!task.deadline_exclusive?due<now:due<=now)?"overdue":task.warning_at&&new Date(task.warning_at).getTime()<=now?"warning":null;
+        const flags=preferences.get(task.task_id),noticeDue=slaNotificationDue(task,flags);
+        if(task.state==="pending"&&!task.source_sla||!noticeDue)continue;
+        const now=businessNow().getTime(),due=new Date(noticeDue).getTime(),kind=(task.source_sla&&!task.deadline_exclusive?due<now:due<=now)?"overdue":task.warning_at&&new Date(task.warning_at).getTime()<=now?"warning":null;
+        if(kind==='warning'&&flags?.warning===false)continue;
         if(kind){
           const prior=task.source_sla?(await client.query(`SELECT n.source_key,r.entered_at,to_jsonb(r)->'sla_basis' AS sla_basis
             FROM digital_production_notification_events n JOIN digital_production_deadline_revisions r ON r.revision_id=n.deadline_revision_id
@@ -210,7 +220,7 @@ export class DigitalProductionNotificationService {
     }
     return applyTodoReadState(this.database,actor,result);
   }
-  private async render(database:Database,actor:TrustedActorContext,event:{instruction_order_id?:string|null;development_source_id?:string|null;event_id:string;task_id:string|null;todo_id:string|null;event_kind:string;deadline_revision_id:string|null;created_at:Date;source_key?:string},people:TrustedActorContext[],includeContext=true):Promise<DigitalNotification|null> {
+  private async render(database:Database,actor:TrustedActorContext,event:{instruction_order_id?:string|null;development_source_id?:string|null;event_id:string;task_id:string|null;todo_id:string|null;event_kind:string;deadline_revision_id:string|null;created_at:Date;source_key?:string},people:TrustedActorContext[],includeContext=true,prepared?:NotificationTasks):Promise<DigitalNotification|null> {
     if(!people.some(p=>p.actorId===actor.actorId))return null;
     if(event.event_kind==='qc_progress'){
       const parent=(await database.query('SELECT production_order_id FROM digital_production_task_access WHERE task_id=$1',[event.task_id])).rows[0];
@@ -248,7 +258,7 @@ export class DigitalProductionNotificationService {
       title=notice.title;actionable=false;
       route={routeName:"digital_development",entityId:event.development_source_id,todoId:event.event_id,developmentRound:notice.round_number};
     }else if(event.task_id){
-      const task=(await database.query<Task>(`${TASKS} WHERE t.task_id=$1`,[event.task_id])).rows[0];
+      const task=prepared?prepared.tasks.get(event.task_id):(await database.query<Task>(`${TASKS} WHERE t.task_id=$1`,[event.task_id])).rows[0];
       if(!task||task.lifecycle!=="active")return null;
       if(!await this.currentTaskEvent(database,task,event.event_id,event.event_kind))return null;
       if(event.deadline_revision_id&&String(event.deadline_revision_id)!==String(task.revision_id)){
@@ -256,9 +266,12 @@ export class DigitalProductionNotificationService {
         if(!prior||slaNotificationWindow(prior)!==slaNotificationWindow(task))return null;
       }
       const taskTime=await new ContextBusinessClock(this.database).read(task.production_order_id?{kind:'order',id:task.production_order_id}:{kind:'source',id:task.source_id!});
-      if(event.event_kind==="warning"&&task.due_at&&(task.source_sla&&!task.deadline_exclusive?new Date(task.due_at).getTime()<Date.parse(taskTime.now):new Date(task.due_at).getTime()<=Date.parse(taskTime.now)))return null;
+      const timed=['warning','overdue'].includes(event.event_kind),flags=timed?(prepared?.preferences??await slaNotificationPreferences(database,[task])).get(task.task_id):undefined,noticeDue=slaNotificationDue(task,flags);
+      if(timed&&task.task_kind==='bulk_ship_sample'&&!noticeDue)return null;
+      if(event.event_kind==='warning'&&flags?.warning===false)return null;
+      if(event.event_kind==="warning"&&noticeDue&&(task.source_sla&&!task.deadline_exclusive?new Date(noticeDue).getTime()<Date.parse(taskTime.now):new Date(noticeDue).getTime()<=Date.parse(taskTime.now)))return null;
       if(event.event_kind==='warning'&&(!task.warning_at||Date.parse(taskTime.now)<new Date(task.warning_at).getTime()))return null;
-      if(event.event_kind==='overdue'&&(!task.due_at||(task.source_sla&&!task.deadline_exclusive?Date.parse(taskTime.now)<=new Date(task.due_at).getTime():Date.parse(taskTime.now)<new Date(task.due_at).getTime())))return null;
+      if(event.event_kind==='overdue'&&(!noticeDue||(task.source_sla&&!task.deadline_exclusive?Date.parse(taskTime.now)<=new Date(noticeDue).getTime():Date.parse(taskTime.now)<new Date(noticeDue).getTime())))return null;
       const missing=!people.some(p=>p.actorId===task.assignee_id&&hasRequiredWarehouseRole(p.actorRoles,task.required_role));
       if(event.event_kind==="created"&&(!missing||task.source_id&&(DEVELOPMENT_ARRANGEABLE_KINDS as readonly string[]).includes(task.task_kind)&&await arrangementsAvailable(database)))return null;
       if(!(await this.recipients(database,task,event.event_kind,people)).some(p=>p.actorId===actor.actorId))return null;
@@ -385,8 +398,9 @@ export class DigitalProductionNotificationService {
       const allPeople=await this.people(client),context=acceptanceBusinessContext(),people=context?await Promise.all(allPeople.map(async p=>await context.acceptsActor(p.actorId)?p:null)).then(rows=>rows.filter((p):p is TrustedActorContext=>p!==null)):allPeople;
       const events=(await client.query(`SELECT e.* FROM digital_production_notification_receipts r JOIN digital_production_notification_events e USING(event_id)
         WHERE r.recipient_id=$1 AND r.shown_at IS NULL ORDER BY e.created_at,e.event_id LIMIT 100 FOR UPDATE OF r SKIP LOCKED`,[actor.actorId])).rows;
+      const prepared=await this.notificationTasks(client,events);
       for(const event of events){
-        const notification=await this.render(client,actor,event,people);
+        const notification=await this.render(client,actor,event,people,true,prepared);
         await client.query("UPDATE digital_production_notification_receipts SET shown_at=CURRENT_TIMESTAMP WHERE event_id=$1 AND recipient_id=$2 AND shown_at IS NULL",[event.event_id,actor.actorId]);
         if(notification)return {notification};
       }
@@ -399,7 +413,8 @@ export class DigitalProductionNotificationService {
     const people=await this.people(this.database);
     const events=(await this.database.query(`SELECT e.* FROM digital_production_notification_receipts r JOIN digital_production_notification_events e USING(event_id)
       WHERE r.recipient_id=$1 AND r.shown_at IS NULL AND r.acknowledged_at IS NULL`,[actor.actorId])).rows;
-    let count=0;for(const event of events)if(await this.render(this.database,actor,event,people,false))count++;
+    const prepared=await this.notificationTasks(this.database,events);
+    let count=0;for(const event of events)if(await this.render(this.database,actor,event,people,false,prepared))count++;
     return count;
   }
   async acknowledge(actor:TrustedActorContext,eventId:string) {

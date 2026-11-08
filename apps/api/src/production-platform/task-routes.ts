@@ -1,3 +1,4 @@
+import {SlaDraftGroupSchema,SlaDraftSaveSchema,SlaDraftDiscardSchema} from '@dx-rework/contracts/sla-settings-drafts';
 import {DigitalSlaValuesSchema,DIGITAL_SLA_PARAMETERS} from '@dx-rework/contracts/digital-sla';
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
@@ -37,10 +38,13 @@ export function registerDigitalTaskRoutes(app: FastifyInstance, dependencies: Di
   const orderSelection=z.object({orderId:z.string().uuid(),configurationVersion:z.number().int().positive(),parameterKeys:z.array(z.string()).min(1).max(DIGITAL_SLA_PARAMETERS.length),reason:z.string().trim().min(1).max(1000)}).strict();
   app.post('/digital-production/sla-settings/orders/preview',async request=>service.previewSlaOrder(await actor(request),parse(orderSelection,request.body)));
   app.post('/digital-production/sla-settings/orders/apply',async request=>service.applySlaOrder(await actor(request),parse(orderSelection.extend({previewToken:z.string().max(512).regex(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/)}),request.body),parse(z.string().uuid(),key(request))));
+  app.get('/digital-production/sla-settings/drafts',async request=>service.readSlaDraft(await actor(request),parse(z.object({group:SlaDraftGroupSchema}).strict(),request.query).group));
+  app.post('/digital-production/sla-settings/drafts',async request=>service.saveSlaDraft(await actor(request),parse(SlaDraftSaveSchema,request.body),parse(z.string().uuid(),key(request))));
+  app.post('/digital-production/sla-settings/drafts/discard',async request=>service.discardSlaDraft(await actor(request),parse(SlaDraftDiscardSchema,request.body),parse(z.string().uuid(),key(request))));
   app.get('/digital-production/sla-settings',async request=>service.slaSettings(await actor(request),parse(z.object({version:z.coerce.number().int().positive().optional()}).strict(),request.query).version));
   app.post('/digital-production/sla-settings/calculation-preview',async request=>service.slaCalculationPreview(await actor(request),request.body));
   app.post('/digital-production/sla-settings/preview',async request=>service.previewSlaSettings(await actor(request),parse(standardDraft,request.body)));
-  app.post('/digital-production/sla-settings/publish',async request=>service.publishSlaSettings(await actor(request),parse(standardDraft.extend({previewToken:z.string().max(512).regex(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/)}),request.body),parse(z.string().uuid(),key(request))));
+  app.post('/digital-production/sla-settings/publish',async request=>service.publishSlaSettings(await actor(request),parse(standardDraft.extend({savedDraftRevision:z.number().int().positive().optional(),previewToken:z.string().max(512).regex(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/)}),request.body),parse(z.string().uuid(),key(request))));
   app.get("/digital-production/deadline-policies", async request => service.policies(await actor(request)));
   app.put("/digital-production/deadline-policies/:nodeKey", async request => service.changePolicy(await actor(request), parse(z.string().regex(/^[a-z][a-z_]{1,99}$/), (request.params as Record<string, unknown>).nodeKey), parse(DigitalDeadlinePolicySchema, request.body), key(request)));
   app.post("/digital-production/lifecycle/:kind/:resourceId", async request => {

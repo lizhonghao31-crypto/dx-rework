@@ -18,7 +18,7 @@ export async function shipSampleTargets(db:DB,orderId:string){
  const effective=lines.map(l=>{
   const applied=base?appliedSlaWindow(base,'ship_sample_advance',`sample:${l.line_id}`,applications):null,parameter=applied?.snapshot.parameters.ship_sample_advance?.value,advance=parameter?.kind==='offset'?parameter.days:days;
   const targetDate=l.customer_date?new Date(Date.parse(`${l.customer_date}T00:00:00Z`)-advance*86400000).toISOString().slice(0,10):null;
-  return {lineId:l.line_id as string,sent:sent.has(l.line_id),days:advance,targetDate,dueAt:targetDate?slaDateBoundary(targetDate).at:null,snapshotId:applied?.snapshotId??row?.snapshot_id??null};
+  return {lineId:l.line_id as string,sent:sent.has(l.line_id),days:advance,targetDate,dueAt:targetDate?slaDateBoundary(targetDate).at:null,snapshotId:applied?.snapshotId??row?.snapshot_id??null,notificationEnabled:parameter?.kind==='offset'?parameter.notificationEnabled!==false:value?.kind==='offset'?value.notificationEnabled!==false:true};
  });
  return {snapshotId:effective.find(l=>!l.sent)?.snapshotId??row?.snapshot_id??null,days:effective.find(l=>!l.sent)?.days??days,lines:effective};
 }

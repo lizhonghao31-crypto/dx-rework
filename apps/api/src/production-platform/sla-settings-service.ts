@@ -7,6 +7,7 @@ import { assertSlaSettingsActor, assertSlaSettingsReadActor } from './sla-settin
 import { SlaPreviewTokens } from './sla-preview-token.js';
 import { SlaConfigurationRepository, SlaVersionConflict, SlaIdempotencyConflict } from './sla-configuration-repository.js';
 import { SlaConfigurationService } from './sla-configuration-service.js';
+import {assertSavedSettingsDraft,consumeSavedSettingsDraft,assertSavedSettingsReplay} from './sla-settings-drafts.js';
 export type StandardDraft = {
     expectedVersion: number;
     values: DigitalSlaValues;
@@ -50,18 +51,22 @@ export class SlaSettingsService {
     }
     async publish(client: PoolClient, actor: TrustedActorContext, input: StandardDraft & {
         previewToken: string;
+        savedDraftRevision?: number|undefined;
     }, requestKey: string) {
         await assertSlaSettingsActor(client, actor, true);
         const draft = checked(input);
         // Same transaction serializes preview revalidation and canonical policy publication.
         await client.query('LOCK TABLE digital_sla_configurations IN SHARE ROW EXCLUSIVE MODE');
-        const retry = (await client.query('SELECT 1 FROM digital_sla_configurations WHERE request_key=$1', [requestKey])).rowCount;
+        const retry = (await client.query('SELECT version FROM digital_sla_configurations WHERE request_key=$1', [requestKey])).rows[0] as {version:number}|undefined;
         if (!retry) {
             this.tokens.verify(input.previewToken, token(actor, draft));
             await this.preview(client, actor, draft);
+            if(input.savedDraftRevision!==undefined)await assertSavedSettingsDraft(client,actor,'unified',input.savedDraftRevision,draft);
         }
+        else await assertSavedSettingsReplay(client,actor,'unified',input.savedDraftRevision,retry.version);
         try {
             const result = await new SlaConfigurationService().publishNewStandard(client, actor, { ...draft, requestKey });
+            if(!retry&&input.savedDraftRevision!==undefined)await consumeSavedSettingsDraft(client,actor,'unified',input.savedDraftRevision,result.version);
             return { version: result.version, scope: 'new_orders' as const, existingOrdersChanged: 0 };
         }
         catch (error) {

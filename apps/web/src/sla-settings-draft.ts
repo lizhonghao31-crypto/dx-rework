@@ -2,7 +2,7 @@ import {DIGITAL_SLA_PARAMETERS,DigitalSlaValueSchema,isSlaDurationMinutes,type D
 import {DevelopmentCycleValuesSchema,type DevelopmentCycleValues} from '@dx-rework/contracts/digital-development-technical';
 
 export type SlaSettingErrors=Record<string,string>;
-export type SlaDraftSnapshot<T>={version:number;current:T;values:T;errors:SlaSettingErrors;publishedVersion:number|null;readOnly:boolean;resultUnknown?:boolean};
+export type SlaDraftSnapshot<T>={version:number;current:T;values:T;errors:SlaSettingErrors;publishedVersion:number|null;readOnly:boolean;resultUnknown?:boolean;draftResultUnknown?:boolean};
 export type SlaInputUnit='minutes'|'hours'|'days-duration'|'days'|'percent';
 export const slaUnitFactor=(unit:SlaInputUnit)=>unit==='hours'?60:unit==='days-duration'?1440:1;
 export const slaScalar=(value:DigitalSlaValue)=>'minutes'in value?value.minutes:'days'in value?value.days:'percent'in value?value.percent:0;
@@ -24,7 +24,10 @@ export function readableSlaMinutes(minutes:number):string{
  const parts:string[]=[];for(const [size,label]of [[86400000,'天'],[3600000,'小时'],[60000,'分钟'],[1000,'秒'],[1,'毫秒']] as const){const count=Math.floor(remaining/size);if(count){parts.push(`${count}${label}`);remaining-=count*size;}}
  return parts.join('');
 }
-export const readableSlaValue=(value:DigitalSlaValue)=>'minutes'in value?`${readableSlaMinutes(value.minutes)}${value.kind==='included'?'（计入父窗口）':value.kind==='estimate'?'（预计）':''}`:'days'in value?`提前${value.days}天`:'percent'in value?`${value.percent}%`:value.kind==='order_date'?'按原约定日期':'不设独立截止';
+export const readableSlaValue=(value:DigitalSlaValue)=>{
+ const label='minutes'in value?`${readableSlaMinutes(value.minutes)}${value.kind==='included'?'（计入父窗口）':value.kind==='estimate'?'（预计）':''}`:'days'in value?`提前${value.days}天`:'percent'in value?`${value.percent}%`:value.kind==='order_date'?'按原约定日期':'不设独立截止';
+ return label+('notificationEnabled'in value&&typeof value.notificationEnabled==='boolean'?value.notificationEnabled?'（提醒开启）':'（提醒关闭）':'');
+};
 export function slaDraftErrors(values:DigitalSlaValues):SlaSettingErrors{
  const errors:SlaSettingErrors={};
  for(const p of DIGITAL_SLA_PARAMETERS){const value=values[p.key];if(!value||value.kind!==p.defaultValue.kind||!DigitalSlaValueSchema.safeParse(value).success)errors[p.key]=`${p.label}的数值、类型或单位不合法`;}
