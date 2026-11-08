@@ -1159,6 +1159,10 @@
     {
       "version": "0275_acceptance_control_sessions",
       "checksum": "ccd793e5801fcd61010eaf83f8143e0640490879d643bcd7e7625e346db7fafc"
+    },
+    {
+      "version": "0276_sla_settings_drafts",
+      "checksum": "b7eeee181bc627aa00bed358f808888663643aee7d166908e6c9a6a85988046d"
     }
   ]
 }

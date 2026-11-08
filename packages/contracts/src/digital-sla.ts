@@ -12,8 +12,8 @@ export const DigitalSlaValueSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("duration"), minutes: durationMinutes }).strict(),
   z.object({ kind: z.literal("included"), minutes: durationMinutes }).strict(),
   z.object({ kind: z.literal("estimate"), minutes: durationMinutes }).strict(),
-  z.object({ kind: z.literal("offset"), days: z.number().int().nonnegative().max(365) }).strict(),
-  z.object({ kind: z.literal("ratio"), percent: z.number().int().min(1).max(99) }).strict(),
+  z.object({ kind: z.literal("offset"), days: z.number().int().nonnegative().max(365), notificationEnabled:z.boolean().optional() }).strict(),
+  z.object({ kind: z.literal("ratio"), percent: z.number().int().min(1).max(99), notificationEnabled:z.boolean().optional() }).strict(),
   z.object({ kind: z.literal("buffer"), minutes: z.number().int().nonnegative().max(525600) }).strict(),
   z.object({ kind: z.literal("order_date") }).strict(),
   z.object({ kind: z.literal("unlimited") }).strict(),
@@ -122,6 +122,7 @@ export function validateDigitalSlaValues(input: unknown): DigitalSlaValues {
   }
   for (const [key, value] of Object.entries(values)) {
     if (parameterByKey.get(key)?.defaultValue.kind !== value.kind) throw new Error(`SLA type mismatch: ${key}`);
+    if('notificationEnabled'in value&&!['warning_ratio','ship_sample_advance'].includes(key))throw new Error(`No independent notification switch: ${key}`);
   }
   for (const parent of DIGITAL_SLA_PARAMETERS.filter(row => row.defaultValue.kind === "duration")) {
     const window = values[parent.key]!;

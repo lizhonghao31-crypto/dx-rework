@@ -8,6 +8,7 @@ import {canReadAllDigitalPatternTasks, canReadDigitalProductionSettings, pmcPatt
 import * as slaEditor from '../../apps/web/src/sla-standard-editor.js';
 import * as developmentCycle from '../../apps/web/src/development-cycle-settings.js';
 import * as seriesSettings from '../../apps/web/src/series-settings.js';
+import * as savedDraftController from '../../apps/web/src/use-sla-saved-draft.js';
 import {CockpitProductionSettings} from '../../apps/web/src/cockpit-production-settings.js';
 
 // Seed only the loaded GET state. The real components render all permission-
@@ -139,7 +140,8 @@ describe('loaded settings render values and history without PMC write controls',
     expect(html).not.toContain('type="number"'); // Values are edited in the native dialog after opening.
     expect(html).toContain('type="checkbox"');
     expect(html).toContain('复制该版本到草稿');
-    expect(html).toContain('预览新单标准');
+    expect(html).toContain('保存草稿');
+    expect(html).not.toContain('预览新单标准'); // Publication follows an acknowledged save.
     expect(html).toContain('TEST existing order application');
   });
 
@@ -157,7 +159,23 @@ describe('loaded settings render values and history without PMC write controls',
     expect(html).toContain('aria-label="调整正常内部周期（自然日）"');
     expect(html).not.toContain('type="number"'); // The four existing values retain their dialog editors.
     expect(html).toContain('调整原因');
-    expect(html).toContain('预览开发周期变化');
+    expect(html).toContain('保存开发草稿');
+    expect(html).not.toContain('预览开发周期变化');
+  });
+
+  it('retains the authorized publication controls after a coherent saved-draft acknowledgement',()=>{
+    // SSR seeds only the saved view; actual signed-auth save/publication and
+    // rejection are verified in the original PostgreSQL browser matrix.
+    const values={...sla.values,bulk_cutting:{kind:'duration' as const,minutes:1500}},developmentValues={...cycle.values,normalDays:8};
+    vi.spyOn(savedDraftController,'useSlaSavedDraft').mockImplementation((group)=>{
+      const draft=group==='unified'?{group,revision:1,expectedVersion:sla.version,values,baselineValues:sla.values,reason:'TEST saved',savedAt:'2026-11-07T00:00:00Z'}:{group,revision:1,expectedVersion:cycle.version,values:developmentValues,baselineValues:cycle.values,reason:'TEST saved',savedAt:'2026-11-07T00:00:00Z'};
+      const savedFor=(version:number,actual:unknown,reason:string)=>version===draft.expectedVersion&&savedDraftController.settingsDraftEqual(actual,draft.values)&&reason.trim()===draft.reason;
+      return {head:{group,currentStandardVersion:2,revision:1,draft},unknown:false,busy:false,savedFor,savedRevision:()=>1,read:async()=>null,save:async()=>({superseded:false,draft,currentStandardVersion:2}),discard:async()=>({superseded:false,draft:null,currentStandardVersion:2})};
+    });
+    const standard=renderLoaded(slaEditor.SlaStandardEditor,[sla,values,3,'',[],'TEST saved'],false);
+    expect(standard.match(/<button[^>]*>预览新单标准<\/button>/)?.[0]).not.toContain('disabled');expect(standard).toContain('预览新单标准');
+    const development=renderLoaded(developmentCycle.DevelopmentCycleSettings,[cycle,developmentValues,'TEST saved'],false);
+    expect(development.match(/<button[^>]*>预览开发周期变化<\/button>/)?.[0]).not.toContain('disabled');expect(development).toContain('预览开发周期变化');
   });
 
   it('renders current series defaults and reason without a publication form', () => {

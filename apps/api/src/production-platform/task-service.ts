@@ -1,3 +1,5 @@
+import {SlaSettingsDraftService} from './sla-settings-drafts.js';
+import type {SlaDraftGroup} from '@dx-rework/contracts/sla-settings-drafts';
 import {SlaCalculationService} from './sla-calculation-service.js';
 import {assertCurrentFactoryTask,isRetiredFactoryTask,FACTORY_RECEIPT_RETIREMENT} from './retired-factory-nodes.js';
 import {SlaSettingsService,type StandardDraft} from './sla-settings-service.js';
@@ -453,6 +455,9 @@ export class DigitalProductionTaskService {
   }
   async previewSlaOrder(actor:TrustedActorContext,input:Parameters<SlaOrderApplicationService['preview']>[1]){return new SlaOrderApplicationService(this.database,this.previewSecret).preview(actor,input);}
   async applySlaOrder(actor:TrustedActorContext,input:Parameters<SlaOrderApplicationService['apply']>[1],key:string){return new SlaOrderApplicationService(this.database,this.previewSecret).apply(actor,input,key);}
+  async readSlaDraft(actor:TrustedActorContext,group:SlaDraftGroup){return new SlaSettingsDraftService(this.database).read(actor,group);}
+  async saveSlaDraft(actor:TrustedActorContext,input:unknown,key:string){return new SlaSettingsDraftService(this.database).save(actor,input,key);}
+  async discardSlaDraft(actor:TrustedActorContext,input:unknown,key:string){return new SlaSettingsDraftService(this.database).discard(actor,input,key);}
   async slaSettings(actor:TrustedActorContext,version?:number){
     return this.transaction(client=>new SlaSettingsService(this.previewSecret).read(client,actor,version));
   }
@@ -460,7 +465,7 @@ export class DigitalProductionTaskService {
   async previewSlaSettings(actor:TrustedActorContext,input:StandardDraft){
     return this.transaction(client=>new SlaSettingsService(this.previewSecret).preview(client,actor,input));
   }
-  async publishSlaSettings(actor:TrustedActorContext,input:StandardDraft&{previewToken:string},key:string){
+  async publishSlaSettings(actor:TrustedActorContext,input:StandardDraft&{previewToken:string;savedDraftRevision?:number|undefined},key:string){
     return this.transaction(client=>new SlaSettingsService(this.previewSecret).publish(client,actor,input,key));
   }
   async policies(actor: TrustedActorContext) {
