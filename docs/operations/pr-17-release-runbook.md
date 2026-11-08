@@ -15,6 +15,8 @@
 
 Nginx 安装或配置变更属于单独的基础设施窗口，须另行批准并先备份、执行 `nginx -t` 后再由基础设施操作完成 graceful reload。shared-path 模式使用 `infra/nginx/dx-rework-shared-paths.conf.example` 的标记块作为审查基线；该块必须原样存在于配置文件与 `nginx -T` 输出中。`release-switch.lock` 只能在 `/rework/**` locations 内返回 503，**绝不能在共享 `server {}` 顶层使整个 staging origin 返回 503**。
 
+PERF04 按需模块支持仅一代 `frontend/previous-assets` 兼容软链接：当前哈希资源优先，缺失时才从已校验上一代 assets 读取；未知资源仍返回 404，绝不回退为 HTML。激活从真实 frontend/current 判断 source/generation 布局，保留原不可变包及恢复边界。原旧 source 前端没有 checksum 时不补造校验，其首次更新及超过一代的旧页面使用主动刷新恢复。该能力的四种 Nginx 示例须在上述独立窗口同步；常规业务更新不自动安装模板或 reload，未同步的现场不得报已启用。实现、验证与边界见 `../engineering/perf04-module-bundles.md`。
+
 `dedicated_vhost` 现为 production 正式模式；`shared_path` 仅保留给 Pilot/兼容环境。部署模式必须由 `DX_REWORK_NGINX_MODE=shared_path|dedicated_vhost` 显式指定，不得根据 hostname 猜测。
 
 ## 2. 目标机配置与目录

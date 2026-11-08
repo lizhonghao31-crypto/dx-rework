@@ -115,6 +115,7 @@ process.stdout.write(String(current.version!==process.argv[2]||current.checksum!
   api="$DX_ROOT/releases/$sha"
   generation="$(ensure_generation "$sha")"
   ensure_active_aliases
+  retain_previous_frontend_assets "$sha"
   atomic_link "$generation" "$DX_ROOT/active"
 
   pm2 startOrReload "$api/infra/pm2/ecosystem.acceptance.config.cjs" --only dx-rework-acceptance-api --update-env

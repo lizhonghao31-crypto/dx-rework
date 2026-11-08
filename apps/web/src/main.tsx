@@ -4,7 +4,7 @@ import { lazy, StrictMode, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 
 import { App } from "./App.js";
-import { AcceptanceLabPage } from "./acceptance-lab-page.js";
+import {lazyBusinessPage} from './lazy-business-page.js';
 import "@dx-rework/ui/tokens.css";
 import "@dx-rework/ui/components.css";
 import "./styles.css";
@@ -13,6 +13,8 @@ import "./workflow-shell.css";
 import "./dialog-visual-system.css";
 import "./workflow-state-visual.css";
 import "./ui-polish.css";
+
+const AcceptanceLabPage=lazyBusinessPage(()=>import('./acceptance-lab-page.js').then(module=>({default:module.AcceptanceLabPage})));
 
 const AcceptanceProductionCommandCenterPage = lazy(async () => {
   const module = await import("./acceptance-production-command-center-page.js");

@@ -55,6 +55,21 @@ location ^~ /rework/assets/ {
     access_log /opt/dx-rework/logs/nginx-access.log dx_rework_query_free;
     rewrite ^/rework/(.*)$ /$1 break;
     root /opt/dx-rework/frontend/current;
+    error_page 404 = @dx_rework_previous_asset;
+    try_files $uri =404;
+}
+
+# One previous verified generation for already-open lazy module graphs.
+# Unknown files remain404; this is never a fallback to HTML or business data.
+location @dx_rework_previous_asset {
+    access_log off;
+    add_header X-Content-Type-Options nosniff always;
+    add_header Referrer-Policy strict-origin-when-cross-origin always;
+    add_header X-Frame-Options SAMEORIGIN always;
+    add_header Cache-Control "public, max-age=31536000, immutable" always;
+    internal;
+    root /opt/dx-rework/frontend/previous-assets;
+    rewrite "^/(?:rework/)?assets/(.+)$" /$1 break;
     try_files $uri =404;
 }
 

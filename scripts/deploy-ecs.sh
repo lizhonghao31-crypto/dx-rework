@@ -144,6 +144,8 @@ cp -a apps/web/dist/. "$web_target/"
 cat > "$web_target/release-manifest.json" <<JSON
 {"gitSha":"$sha","buildTime":"$build_time","schemaVersion":"$schema_version","appBasePath":"$APP_BASE_PATH","viteBasePath":"$APP_BASE_PATH","kind":"frontend"}
 JSON
+(cd "$web_target" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
+retain_previous_frontend_assets "$sha"
 ln -sfn "$SOURCE_ROOT" "$DX_ROOT/current"
 ln -sfn "$web_target" "$DX_ROOT/frontend/current"
 
