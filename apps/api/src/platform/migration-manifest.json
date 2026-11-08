@@ -1171,6 +1171,10 @@
     {
       "version": "0278_journey_fact_read_model",
       "checksum": "4dabefff025c63876f4678009e85d3636fe955c1725c34850ca10398f527cf72"
+    },
+    {
+      "version": "0279_journey_fact_incremental_updates",
+      "checksum": "f46b5359921788fcc656a6575d3b93c4b8a6fbe761927f78e8e98b44d2ccbc6b"
     }
   ]
 }
