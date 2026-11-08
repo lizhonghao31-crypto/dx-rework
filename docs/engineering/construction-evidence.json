@@ -191,7 +191,13 @@
       "logSha256": "2f642f4825bee340620387d5227ded804065230e58821910694d047bcdb5bccb",
       "resultReport": "/workspace/scratch/dx-final10-20261108/p06-service-unit-parent-final.vitest.json",
       "context": "Original configForSuite, marked owned loopback PG16.15 fixture and exact cleanup. Nodecpuset2,3, PGcpuset0,1/2GiB; local host not equivalent to CI hardware. Real AuthService and native business mutations on isolated fixtures only.",
-      "kind": "tests"
+      "kind": "tests",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "321845b7d7ae66db14634b4c1ce7d578e794c2fc289bd3772bead93eb4fabd8d"
+        }
+      ]
     },
     {
       "id": "postgres",
@@ -212,7 +218,13 @@
       "logSha256": "55640bad85378d10ac8e9038c292b1f42f597f9f1f4c9af53380dfd01f5bf4a1",
       "resultReport": "/workspace/scratch/dx-final10-20261108/p06-service-postgres-parent-date-range-audited.vitest.json",
       "context": "Original configForSuite, marked owned loopback PG16.15 fixture and exact cleanup. Nodecpuset2,3, PGcpuset0,1/2GiB; local host not equivalent to CI hardware. Real AuthService and native business mutations on isolated fixtures only.",
-      "kind": "tests"
+      "kind": "tests",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "e71b07fe2699a5c606d9614977b977e289838ac8a8d1df63bd3aab42616a4716"
+        }
+      ]
     }
   ]
 }
