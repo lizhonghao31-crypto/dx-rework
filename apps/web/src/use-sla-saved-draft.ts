@@ -42,7 +42,7 @@ export function useSlaSavedDraft(group:SlaDraftGroup,readOnly:boolean,onAuthorit
    throw error;
   }finally{writing.current=false;setBusy(false);}
  };
- return {head,unknown,busy,read,savedFor,
+ return {head,unknown,busy,read,savedFor,pendingKind:unknown?pending.current?.kind??null:null,
   savedRevision:(version:number,values:Values,reason:string)=>savedFor(version,values,reason)?head?.draft?.revision:undefined,
   save:(version:number,values:Values,reason:string)=>write('save',{group,expectedVersion:version,expectedDraftRevision:latest.current?.revision??0,values,reason:reason.trim()}),
   discard:()=>write('discard',{group,expectedDraftRevision:latest.current?.revision??0})};
