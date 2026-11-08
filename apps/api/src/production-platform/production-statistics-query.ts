@@ -28,6 +28,7 @@ import {productionMaterialFacts} from './production-statistics-materials.js';
 import {productionGroups} from './production-statistics-groups.js';
 import {productionFacets} from './production-statistics-dimensions.js';
 import {productionResultProjection,scopedMotherCompletion} from './production-statistics-projection.js';
+import {reuseJourneySnapshotReads,prepareJourneySnapshotBatches} from './journey-snapshot-reads.js';
 
 const hash=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const none=():StatisticsTime=>({at:null,date:null,precision:'unknown',quality:'unknown',sourceRefs:[]});
@@ -58,7 +59,7 @@ export class ProductionStatisticsQuery{
   return hash({actorId:actor.actorId,roles:sorted(actor.actorRoles),capabilities:sorted([...(actor.authorizationCapabilities??[]),actor.authorizationCapability??'']),orders:sorted(orderIds),tasks:sorted(taskIds),reworks:sorted(reworkIds),scene:acceptanceBusinessContext()?.scenarioId??null,canExport:this.exportAllowed(actor)});
  }
  private async read<T>(work:(db:PoolClient)=>Promise<T>){
-  const db=await this.database.connect();try{await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');const result=await work(db);await db.query('COMMIT');return result;}catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
+  const db=await this.database.connect();try{await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');const result=await work(reuseJourneySnapshotReads(db));await db.query('COMMIT');return result;}catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
  }
  async list(actor:TrustedActorContext,filters:DigitalAnalysisFilters,exportAll=false):Promise<ProductionStatisticsResponse>{
   const applied=currentFilters(filters),key=filterHash(applied);
@@ -80,6 +81,9 @@ export class ProductionStatisticsQuery{
     if(applied.customer&&order.customer_code!==applied.customer)continue;
     orders.push(order);
    }
+   // Reuse only this actor's authorized orders inside this readonly snapshot.
+   // Native eligibility, effective events and full-range aggregates stay intact.
+   if(isDigitalManagementReader(live))prepareJourneySnapshotBatches(db,orders.map(order=>order.production_order_id));
    const rows:StatisticsPo[]=[];for(const order of orders){
     const time=await new ContextBusinessClock(this.database,db).read({kind:'order',id:order.production_order_id});
     if(time.scenarioId&&(time.scenarioId!==observation.scenarioId||time.now!==observation.now))throw new ApplicationError('ANALYSIS_CONTEXT_MISMATCH','不同业务场景或时点不能合成同一截面',409);

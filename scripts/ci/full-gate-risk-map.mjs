@@ -208,8 +208,11 @@ export const classifyFullGatePaths = (inputPaths) => {
       mappedTests.add('tests/integration/series-plan-postgres.test.ts');
     }
     if (/^apps\/api\/src\/production-platform\/(?:production-statistics[^/]*|analysis-result-store|reporting-query|reporting-routes|factory-production-facts)\.ts$/.test(path)
-      || ['packages/contracts/src/production-statistics.ts','packages/contracts/src/digital-production-analysis.ts','packages/domain/src/production-statistics.ts','tests/integration/m01-production-statistics-postgres.test.ts'].includes(path)) {
+      || ['packages/contracts/src/production-statistics.ts','packages/contracts/src/digital-production-analysis.ts','packages/domain/src/production-statistics.ts','tests/integration/m01-production-statistics-postgres.test.ts','tests/integration/production-read-batches-postgres.test.ts'].includes(path)) {
       mappedTests.add('tests/integration/m01-production-statistics-postgres.test.ts');
+      mappedTests.add('tests/integration/production-read-batches-postgres.test.ts');
+      mappedTests.add('tests/integration/m01-production-period-postgres.test.ts');
+      mappedTests.add('tests/integration/m01-production-collaboration-postgres.test.ts');
     }
     if (['apps/api/src/production-platform/reporting-query.ts','apps/api/src/production-platform/reporting-routes.ts','packages/contracts/src/digital-production-analysis.ts','tests/helpers/business-anchor-fixture.ts'].includes(path)) {
       mappedTests.add('tests/integration/time-reading-clock-postgres.test.ts');
