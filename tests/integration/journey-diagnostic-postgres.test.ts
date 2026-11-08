@@ -114,7 +114,11 @@ const url = process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL;
       const stable=(value:unknown):unknown=>Array.isArray(value)?value.map(stable):value&&typeof value==='object'?Object.fromEntries(Object.entries(value).filter(([key])=>key!=='asOf').map(([key,v])=>[key,stable(v)])):value;
       expect(stable(on.json())).toEqual(stable(off.json()));
       const record=JSON.parse(samples[0]!.slice('JOURNEY_DIAGNOSTIC '.length));
-      expect(record.candidates).toBe(1);expect(record.calls.summary_projection).toBe(1);expect(record.calls.detail_projection).toBe(1);expect(record.calls.route_auth).toBe(1);expect(record.calls.clock_postcheck).toBe(0);expect(record.calls.sql).toBeGreaterThan(0);
+      // Stage counters record one batch boundary, including an empty batch;
+      // they do not claim an ordinary read performed a guarded-clock query.
+      // The transaction-reader native/unit regressions verify the empty batch
+      // makes no clock read, while the scenario below retains its real recheck.
+      expect(record.candidates).toBe(1);expect(record.calls.summary_projection).toBe(1);expect(record.calls.detail_projection).toBe(1);expect(record.calls.route_auth).toBe(1);expect(record.calls.clock_postcheck).toBe(1);expect(record.calls.sql).toBeGreaterThan(0);
       const time={now:new Date().toISOString(),scenarioId:randomUUID(),revision:1};
       installAcceptanceClockReader(runtimePool,{read:async(_scope,transaction)=>{await (transaction??runtimePool).query('SELECT 1');return time;},nativeScenario:async()=>null});
       expect((await http.inject('/digital-production/journeys')).statusCode).toBe(200);

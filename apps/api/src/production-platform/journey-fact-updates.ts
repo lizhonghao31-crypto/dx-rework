@@ -9,6 +9,15 @@ export class JourneyFactUpdates{
  constructor(private readonly database:Pool,private readonly repository=new JourneyFactRepository(database)){}
  /** One bounded batch. A failed mother has its own backoff, not a batch rollback. */
  async runOnce(){
+  // Only genuine future-fact rechecks expire. Ordinary SLA/date transitions
+  // are already compiled; midnight must not enqueue every mother again.
+  // Guarded clocks change through their existing native invalidations.
+  await this.database.query(`INSERT INTO digital_journey_fact_changes(resource_kind,resource_id,reason)
+   SELECT m.resource_kind,m.resource_id,'backfill' FROM digital_journey_fact_models m
+   WHERE m.clock_scenario_id IS NULL AND m.selection_expires_at<=clock_timestamp()
+    AND m.calculation_version=$2 AND m.source_version=m.applied_source_version
+    AND NOT EXISTS(SELECT 1 FROM digital_journey_fact_changes c WHERE c.resource_kind=m.resource_kind AND c.resource_id=m.resource_id)
+   ORDER BY m.selection_expires_at,m.resource_kind,m.resource_id LIMIT $1 ON CONFLICT DO NOTHING`,[JOURNEY_FACT_UPDATE_LIMIT,JOURNEY_FACT_CALCULATION_VERSION]);
   const pending=(await this.database.query<Pending&{transaction_ids:string[]}>(`SELECT c.resource_kind,c.resource_id,array_agg(c.transaction_id::text) AS transaction_ids FROM digital_journey_fact_changes c
    LEFT JOIN digital_journey_fact_retries r USING(resource_kind,resource_id)
    WHERE r.retry_after IS NULL OR r.retry_after<=clock_timestamp()

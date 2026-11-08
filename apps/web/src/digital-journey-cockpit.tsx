@@ -12,6 +12,8 @@ import { cockpitFilterPatch,journeyRiskLabels,journeyStateLabels,type CockpitCon
 import "./digital-journey-cockpit.css";
 import {CockpitTimingCoverage,cockpitCoverageLabels} from './cockpit-timing-coverage.js';
 import {CockpitDate} from './cockpit-date.js';
+import {cockpitAvailabilityMessage} from './cockpit-reads.js';
+import {CockpitRetryUpdates} from './cockpit-retry-updates.js';
 
 const kpis = [
   {key:"all",label:"订单总数",field:"all",tone:"info"},
@@ -63,9 +65,11 @@ export function DigitalJourneyCockpit({ data, error, detail, detailError, detail
  if(context.selected)return <div className="digital-journey-cockpit dx-production-refined" data-view="order" aria-busy={detailLoading}>{detail?<>{detailLoading&&<p role="status">正在重新读取；以下仍是上次数据时点的资料。</p>}{detailError&&<p role="alert">刷新失败：{detailError}。仍显示上次读取资料，请重试刷新。</p>}<CockpitDetail key={detail.id} busy={detailLoading||Boolean(detailError)} order={detail} asOf={detail.asOf??data?.asOf} context={{...context,selected:detail.id}} onChange={patch=>onChange(patch,true)} actions={actions} onPlanCommitted={onPlanCommitted} restoreReading={restoreReading}/></>:<section className="dx-production-panel"><button className="journey-text-action" onClick={()=>onChange({selected:undefined},true)}>‹ 返回订单总览</button>{detailError?<p role="alert">{detailError}</p>:<p role="status">正在读取订单全景…</p>}{actions}</section>}</div>;
  const actual=appliedContext??context,applyResult=(patch:Partial<CockpitContext>,preserve=false)=>onChange({...cockpitFilterPatch(actual),...patch},preserve),pending=Boolean(searchDraft?.pending)||['preparing','loading'].includes(readPhase??'');
  const primaryKeys=['all','active','due_soon','overdue'];
- const renderKpi=(kpi:typeof kpis[number])=>{const index=kpis.indexOf(kpi);return <KpiCard key={kpi.key} {...(primaryKeys.includes(kpi.key)?{icon:<NavigationIcon name={(['List','Activity','Clock','TriangleAlert','TriangleAlert','TriangleAlert','CircleCheck'] as const)[index]??'List'}/>}:{})} label={kpi.label} value={data?.summary[kpi.field]??'—'} tone={kpi.tone} selected={kpi.key==='timing_missing'?Boolean(actual.missing):actual.kpi===kpi.key} onClick={()=>{if(kpi.key==='timing_missing'){if(data&&!pending)setCoverage({data,context:actual});}else applyResult({kpi:kpi.key,missing:undefined,page:1});}}/>;};
+ const renderKpi=(kpi:typeof kpis[number])=>{const index=kpis.indexOf(kpi);return <KpiCard key={kpi.key} {...(primaryKeys.includes(kpi.key)?{icon:<NavigationIcon name={(['List','Activity','Clock','TriangleAlert','TriangleAlert','TriangleAlert','CircleCheck'] as const)[index]??'List'}/>}:{})} label={kpi.label} value={data?.summary?.[kpi.field]??'—'} tone={kpi.tone} selected={kpi.key==='timing_missing'?Boolean(actual.missing):actual.kpi===kpi.key} onClick={()=>{if(kpi.key==='timing_missing'){if(data?.summary&&!pending)setCoverage({data,context:actual});}else applyResult({kpi:kpi.key,missing:undefined,page:1});}}/>;};
  return <div className="digital-journey-cockpit dx-production-refined" data-view="overview" aria-busy={pending||readPhase==='identity'}><PageHeader title="生产管理总览" actions={actions}/>
   <CockpitFilters context={context} data={data} onChange={onChange} onSearchDraft={onSearchDraft}/>
+  {data?.freshness&&<p className="cockpit-read-status" role={data.freshness.failed?'alert':'status'}>{cockpitAvailabilityMessage(data)}</p>}
+  {data?.freshness?.retryIds?.length&&onPlanCommitted?<CockpitRetryUpdates key={data.freshness.retryIds.join(',')} ids={data.freshness.retryIds} onUpdated={onPlanCommitted}/>:null}
   {pending&&<p className="cockpit-read-status" role="status">{searchDraft?.pending||readPhase==='preparing'?'准备搜索…':'正在更新…'}{data&&<> 上次读取 <CockpitDate value={data.asOf} precision="instant" missing="时点待核"/>，以下暂为上次结果。</>}</p>}{readPhase==='identity'&&<p role="status">正在核验当前身份…</p>}
   <section aria-label="订单状态统计"><div className="journey-kpis" aria-label="主要订单指标">{kpis.filter(kpi=>primaryKeys.includes(kpi.key)).map(renderKpi)}</div><div className="journey-secondary-kpis" aria-label="其他订单指标">{kpis.filter(kpi=>!primaryKeys.includes(kpi.key)).map(renderKpi)}</div></section>
   {actual.missing&&<div className="cockpit-applied-coverage"><span>{cockpitCoverageLabels[actual.missing]}</span><Button type="button" variant="secondary" onClick={()=>applyResult({missing:undefined,page:1})}>清除缺项筛选</Button></div>}

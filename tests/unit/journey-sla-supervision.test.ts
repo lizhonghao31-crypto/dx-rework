@@ -7,6 +7,14 @@ import {journeyDisplay} from '../../apps/api/src/production-platform/journey-dis
 import {todoSlaTiming,explicitlyUnlimitedSla} from '../../apps/api/src/todos/sla-presentation.js';
 import {slaTargetLabel} from '../../apps/web/src/journey-sla-details.js';
 const now='2026-10-20T00:00:00.000Z',time={now,scenarioId:null,revision:0};
+it('keeps native evidence order deterministic when equivalent database reads return a different insertion order',()=>{
+ const p=plan(),a=order(),b=order(),facts={bulk_cutting:{evidence:'TEST cutting',startedAt:now},development_pattern:{evidence:'TEST pattern',completedAt:now,businessCompleted:true}};
+ const reversed=Object.fromEntries(Object.entries(facts).reverse());
+ attachJourneySupervision(a,p,p,evaluateSlaPlan(p,facts,time),time,{original:1,current:1},false,{facts});
+ attachJourneySupervision(b,p,p,evaluateSlaPlan(p,reversed,time),time,{original:1,current:1},false,{facts:reversed});
+ expect(a.supervision!.nativeFacts).toEqual(b.supervision!.nativeFacts);
+ expect(a.supervision!.nativeFacts!.map(row=>row.id)).toEqual(['bulk_cutting','development_pattern']);
+});
 const plan=(kind:'duration'|'order_date'|'estimate'='duration'):SlaPlan=>({nodes:[{id:'development_pattern',label:'纸样',stage:2,parameterKey:'development_pattern',kind,minutes:120,offsetDays:null,applicable:'yes',countsProgress:true,dependsOn:[],anchorKey:'published',targetKey:kind==='order_date'?'target':null,includedIn:null,includedPosition:'start'}],anchors:{published:{precision:'instant',value:'2026-10-19T00:00:00.000Z',source:'native'},target:{precision:'date',value:'2026-10-20',source:'native-po'}},warningPercent:70,stageBufferMinutes:0});
 function order(id='one'):OrderJourney{
  const nodes:JourneyNode[]=JOURNEY_NODES.map(d=>({key:d.key,label:d.label,stage:d.stage,instanceId:d.key,state:d.key==='order_information'?'completed':'active',current:true,round:null,occurrence:null,owner:null,operator:null,assignmentHistory:[],expectedAt:null,expectedKind:'unset',expectedPrecision:'missing',actualAt:null,actualQuality:'missing',enteredAt:null,sla:'not_started',completionResult:null,overdueSeconds:null,risks:[],blockers:[],records:[],inheritedFrom:null,countsInProgress:true,unavailableReason:null,progressApplicability:'applicable'}));

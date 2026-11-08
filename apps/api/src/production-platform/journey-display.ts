@@ -1,8 +1,21 @@
 import { JOURNEY_NODES, JOURNEY_STAGES, isJourneyPlanningNode, type JourneyDisplay, type JourneyNode, type OrderJourney } from "@dx-rework/contracts/digital-production-journey";
+import {journeyObservedDay} from './journey-risk-clock.js';
+
+/** The same whole-order state for the full DTO and lightweight SQL reductions.
+ * Node lateness does not redefine the customer's whole-order delivery state. */
+export function journeyOrderState(input:{cancelled:boolean;closed:boolean;activated:boolean;earliestShipmentDate:string|null;reminderDate:string|null},asOf:string):JourneyDisplay['mainState']{
+ const today=journeyObservedDay(asOf),date=input.earliestShipmentDate;
+ return input.cancelled?'cancelled':input.closed?'completed':date&&date<today?'overdue':date&&(input.reminderDate??date)<=today?'due_soon':input.activated?'active':'not_started';
+}
 
 /** Canonical business shares, independent of legacy count flags and PO/task multiplicity. */
 const businessKey=(key:string)=>key==="development_material_recheck"?"development_materials":key;
 const finished=(node:JourneyNode)=>node.state==="completed"||node.state==="inherited"&&Boolean(node.inheritedFrom);
+export function journeyActivated(order:Pick<OrderJourney,'stages'>):boolean{
+ const nodes=order.stages.flatMap(stage=>stage.nodes).filter(node=>node.current&&!isJourneyPlanningNode(node));
+ return nodes.some(node=>node.stage!=="creation"&&Boolean(node.enteredAt))
+  ||nodes.some(node=>node.stage!=="creation"&&["active","completed"].includes(node.state)&&node.records.length>0);
+}
 export function progressLabel(ratio:number|null):string {
   if(ratio===null)return "进度资料待完善";
   const percentage=ratio===1?100:Math.min(99.9,Math.round(ratio*1000)/10);
@@ -11,12 +24,10 @@ export function progressLabel(ratio:number|null):string {
 export function journeyDisplay(order:OrderJourney,asOf:string,terminal:{cancelled?:boolean;closedAt?:string|null}={}):JourneyDisplay {
   const nodes=order.stages.flatMap(stage=>stage.nodes).filter(node=>node.current&&!isJourneyPlanningNode(node));
   const closed=nodes.some(node=>["packing","special_closure"].includes(node.key)&&node.state==="completed");
-  const today=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(asOf));
   const dates=order.poDeliveryDates??[];
   const earliestShipmentDate=dates.flatMap(line=>line.customerWarehouseArrivalDate?[line.customerWarehouseArrivalDate]:[]).sort()[0]??null;
-  const activated=nodes.some(node=>!["creation"].includes(node.stage)&&Boolean(node.enteredAt))
-    ||nodes.some(node=>node.stage!=="creation"&&["active","completed"].includes(node.state)&&node.records.length>0);
-  const mainState=terminal.cancelled?"cancelled":closed?"completed":earliestShipmentDate&&earliestShipmentDate<today?"overdue":earliestShipmentDate&&(itemReminder(order)??earliestShipmentDate)<=today?"due_soon":activated?"active":"not_started";
+  const activated=journeyActivated(order);
+  const mainState=journeyOrderState({cancelled:Boolean(terminal.cancelled),closed,activated,earliestShipmentDate,reminderDate:itemReminder(order)??null},asOf);
   const stages=JOURNEY_STAGES.map(definition=>{
     const candidates=nodes.filter(node=>node.stage===definition.key&&(definition.key!=="creation"||node.key===(order.orderId?"order_information":"product_development")));
     const expectedKeys=new Set(JOURNEY_NODES.filter(node=>!node.planningOnly&&node.stage===definition.key&&(definition.key!=="creation"||node.key===(order.orderId?"order_information":"product_development"))).map(node=>businessKey(node.key)));
@@ -40,7 +51,8 @@ export function journeyDisplay(order:OrderJourney,asOf:string,terminal:{cancelle
 }
 const itemReminder=(order:OrderJourney)=>order.supervision?.customerReminderDate;
 /** Explicit cockpit scope. Existing workspace consumers keep their legacy selection contract. */
-export function compareCockpitOrders(a:OrderJourney,b:OrderJourney):number {
+type CockpitSortable=Pick<OrderJourney,'id'|'orderNumbers'|'designStyleNo'>&{display?:Pick<NonNullable<OrderJourney['display']>,'mainState'|'closedAt'|'earliestShipmentDate'>};
+export function compareCockpitOrders(a:CockpitSortable,b:CockpitSortable):number {
   const x=a.display!,y=b.display!;
   if((x.mainState==="completed")!==(y.mainState==="completed"))return x.mainState==="completed"?1:-1;
   if(x.mainState==="completed"){

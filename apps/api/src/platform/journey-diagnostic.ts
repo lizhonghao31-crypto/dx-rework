@@ -6,7 +6,7 @@ import type { Pool, PoolClient } from 'pg';
 import { assertAcceptanceServerProof, type AcceptanceServerProof } from '../acceptance-clock/guard.js';
 
 export const JOURNEY_DIAGNOSTIC_FILE = '/opt/dx-rework-acceptance/shared/journey-diagnostic.json';
-const stages = ['clock_prehandler', 'route_auth', 'pool_acquire', 'candidates', 'summary_projection', 'filter_page', 'detail_projection', 'bulk', 'closure', 'sla', 'clock_read', 'clock_postcheck', 'sql', 'serialization_window'] as const;
+const stages = ['clock_prehandler', 'route_auth', 'pool_acquire', 'candidates', 'selection','summary_projection', 'filter_page', 'detail_projection', 'bulk', 'closure', 'sla', 'clock_read', 'clock_postcheck', 'sql', 'serialization_window'] as const;
 type Stage = typeof stages[number];
 type Window = { key: string; expiresAt: number };
 type Sample = { window: Window; deadline: number; id: string; start: number; closed: boolean; durations: Record<Stage, number>; calls: Record<Stage, number>; cacheHits: number; candidates: number; serializationStart?: number };

@@ -1,15 +1,17 @@
 import type {Pool,PoolClient} from 'pg';
 import type {BusinessTime,BusinessTimeScope} from '@dx-rework/domain/business-clock';
-import {assertBusinessClockUnchanged,ContextBusinessClock} from '../acceptance-clock/business-time.js';
+import {assertBusinessClockUnchanged,businessScopeKey,ContextBusinessClock} from '../acceptance-clock/business-time.js';
 import {reuseJourneySnapshotReads} from './journey-snapshot-reads.js';
 import {DigitalJourneyQuery} from './journey-query.js';
-import {JOURNEY_FACT_CALCULATION_VERSION,journeyFactFingerprint,type JourneyFactModel} from './journey-fact-model.js';
+import {JOURNEY_FACT_CALCULATION_VERSION,journeyFactFingerprint,journeyValueFingerprint,type JourneyFactModel} from './journey-fact-model.js';
+import type {JourneySelectionFacts} from './journey-selection-facts.js';
 
 type Row={source_version:string;applied_source_version:string|null;calculation_version:string|null;source_fingerprint:string|null;payload:JourneyFactModel|null;clock_scenario_id:string|null;clock_revision:string;observed_at:Date|null};
 export class JourneyFactBusy extends Error{constructor(){super('Journey fact construction is already running');}}
 type Built={resource:BusinessTimeScope;sourceVersion:string;sourceFingerprint:string;model:JourneyFactModel;retired:false};
 type Retired={resource:BusinessTimeScope;retired:true};
 export type JourneyStoredFact={sourceVersion:string;appliedSourceVersion:string|null;status:'missing'|'pending'|'obsolete'|'ready';model:JourneyFactModel|null};
+export type JourneyStoredSelection={sourceVersion:string;appliedSourceVersion:string|null;status:JourneyStoredFact['status']|'failed';facts:JourneySelectionFacts|null};
 /** Server-internal facts; no route, implicit GET backfill, actor impersonation
  * or cross-user authorization result. Native invalidations commit with business data. */
 export class JourneyFactRepository{
@@ -42,15 +44,23 @@ export class JourneyFactRepository{
    }
    const time=await new ContextBusinessClock(this.database,db).read(resource);observed=time;
    // Establish the exact resource identity before creating a derived row.
-   const model=await new DigitalJourneyQuery(this.database).buildFactsWithClient(db,resource,time.now);
+   let selection:{facts:JourneySelectionFacts;expiresAt:string|null}|undefined;
+   const model=await new DigitalJourneyQuery(this.database).buildFactsWithClient(db,resource,time.now,value=>{selection=value;});
+   if(!selection)throw Error('Journey selector was not constructed in the native snapshot');
+   if(!selection.facts.frames?.length)throw Error('Journey selector has no compiled observation');
+   const fullSelection={version:selection.facts.version,cancelled:selection.facts.cancelled,closedAt:selection.facts.closedAt,
+    frames:selection.facts.frames.map(({from,fullSignals,coverage,customerReminderDate})=>({from,fullSignals,coverage,customerReminderDate}))};
    await db.query(`INSERT INTO digital_journey_fact_models(resource_kind,resource_id,source_id,production_order_id)
     VALUES($1,$2,$3,$4) ON CONFLICT(resource_kind,resource_id) DO NOTHING`,[resource.kind,resource.id,model.sourceId,model.orderId]);
    const row=(await db.query<Row>('SELECT * FROM digital_journey_fact_models WHERE resource_kind=$1 AND resource_id=$2 FOR UPDATE',[resource.kind,resource.id])).rows[0]!;
    const sourceFingerprint=journeyFactFingerprint(model);
    const version=BigInt(row.source_version)+(row.applied_source_version!==null&&pending.length?1n:0n);
    await db.query(`UPDATE digital_journey_fact_models SET source_id=$3,production_order_id=$4,source_version=$12,applied_source_version=$12,
-    calculation_version=$5,source_fingerprint=$6,payload=$7,clock_scenario_id=$8,clock_revision=$9,observed_at=$10,built_at=CURRENT_TIMESTAMP
-    WHERE resource_kind=$1 AND resource_id=$2 AND source_version=$11`,[resource.kind,resource.id,model.sourceId,model.orderId,JOURNEY_FACT_CALCULATION_VERSION,sourceFingerprint,JSON.stringify(model),time.scenarioId,time.revision,time.now,row.source_version,version.toString()]);
+    calculation_version=$5,source_fingerprint=$6,payload=$7,clock_scenario_id=$8,clock_revision=$9,observed_at=$10,built_at=CURRENT_TIMESTAMP,
+    selection_json=$13,selection_fingerprint=$14,selection_expires_at=$15,
+    selection_integrity=md5(($13::jsonb)::text||$14::text),selection_full_json=$16::jsonb,
+    selection_full_integrity=md5(($16::jsonb)::text||$14::text)
+    WHERE resource_kind=$1 AND resource_id=$2 AND source_version=$11`,[resource.kind,resource.id,model.sourceId,model.orderId,JOURNEY_FACT_CALCULATION_VERSION,sourceFingerprint,JSON.stringify(model),time.scenarioId,time.revision,time.now,row.source_version,version.toString(),JSON.stringify(selection.facts),journeyValueFingerprint(selection.facts),selection.expiresAt,JSON.stringify(fullSelection)]);
    await assertBusinessClockUnchanged(new ContextBusinessClock(this.database,db),resource,time);
    await db.query('DELETE FROM digital_journey_fact_changes WHERE resource_kind=$1 AND resource_id=$2 AND transaction_id=ANY($3::bigint[])',[resource.kind,resource.id,pending]);
    await db.query('DELETE FROM digital_journey_fact_retries WHERE resource_kind=$1 AND resource_id=$2',[resource.kind,resource.id]);
@@ -75,5 +85,41 @@ export class JourneyFactRepository{
   const status=row.pending||row.source_version!==row.applied_source_version||!row.payload||row.clock_scenario_id!==time.scenarioId||row.clock_revision!==String(time.revision)?'pending':row.calculation_version!==JOURNEY_FACT_CALCULATION_VERSION?'obsolete':'ready';
   if(status==='ready'&&journeyFactFingerprint(row.payload!)!==row.source_fingerprint)throw new Error('Journey fact payload fingerprint mismatch');
   return {sourceVersion:row.source_version,appliedSourceVersion:row.applied_source_version,status,model:status==='ready'?row.payload:null};
+ }
+ /** Internal only: caller supplies its already-authorized candidates and owns
+  * one read snapshot. This reads no full payload/SLA JSON and constructs nothing.
+  * Every requested object has an explicit result; one corrupt selector does not
+  * erase independently ready mothers. DB/scope failures still reject the read. */
+ async readSelectionsWithClient(db:PoolClient,resources:readonly BusinessTimeScope[],asOf:string){
+  const unique=new Map(resources.map(scope=>[businessScopeKey(scope),scope])),items=new Map<string,JourneyStoredSelection>();
+  const clocks=await new ContextBusinessClock(this.database,db).readMany([...unique.values()],()=>new Date(asOf));
+  if(!unique.size)return {items,clocks};
+  type SelectionRow=Pick<Row,'source_version'|'applied_source_version'|'calculation_version'|'clock_scenario_id'|'clock_revision'>&{
+   resource_kind:'source'|'order';resource_id:string;model_id:string|null;pending:boolean;build_failed:boolean;selection_json:JourneySelectionFacts|null;selection_fingerprint:string|null;selection_expires_at:Date|null};
+  const rows=(await db.query<SelectionRow>(`SELECT requested.kind AS resource_kind,requested.id AS resource_id,m.resource_id AS model_id,
+   m.source_version,m.applied_source_version,m.calculation_version,m.clock_scenario_id,m.clock_revision,
+   m.selection_json,m.selection_fingerprint,m.selection_expires_at,
+   EXISTS(SELECT 1 FROM digital_journey_fact_changes c WHERE c.resource_kind=requested.kind AND c.resource_id=requested.id) AS pending,
+   EXISTS(SELECT 1 FROM digital_journey_fact_retries retry JOIN digital_journey_fact_changes change USING(resource_kind,resource_id)
+    WHERE retry.resource_kind=requested.kind AND retry.resource_id=requested.id) AS build_failed
+   FROM unnest($1::text[],$2::uuid[]) AS requested(kind,id)
+   LEFT JOIN digital_journey_fact_models m ON m.resource_kind=requested.kind AND m.resource_id=requested.id`,
+  [[...unique.values()].map(scope=>scope.kind),[...unique.values()].map(scope=>scope.id)])).rows;
+  for(const row of rows){
+   const key=businessScopeKey({kind:row.resource_kind,id:row.resource_id}),time=clocks.get(key)!;
+   let status:JourneyStoredSelection['status']=!row.model_id?'missing':row.pending||row.source_version!==row.applied_source_version
+    ||row.clock_scenario_id!==time.scenarioId||row.clock_revision!==String(time.revision)?'pending'
+    :row.calculation_version!==JOURNEY_FACT_CALCULATION_VERSION?'obsolete'
+    :!row.selection_json||!row.selection_fingerprint||row.selection_expires_at&&row.selection_expires_at.getTime()<=Date.parse(time.now)?'pending':'ready';
+   if(row.build_failed&&(row.pending||!row.model_id))status='failed';
+   if(status==='ready'){
+    const value=row.selection_json!;
+    if(value.version!=='journey-selection-v1'||!Array.isArray(value.nodes)||!Array.isArray(value.nativeNodes)||!Array.isArray(value.untimedNodes)
+     ||!Array.isArray(value.tasks)||!Array.isArray(value.coverage)||!Array.isArray(value.deliveryRisks)
+     ||journeyValueFingerprint(value)!==row.selection_fingerprint)status='failed';
+   }
+   items.set(key,{sourceVersion:row.source_version??'0',appliedSourceVersion:row.applied_source_version??null,status,facts:status==='ready'?row.selection_json:null});
+  }
+  return {items,clocks};
  }
 }

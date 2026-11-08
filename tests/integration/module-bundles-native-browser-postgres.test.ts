@@ -10,7 +10,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
 (url?describe.sequential:describe.skip)('PERF04 real production module graph with original signed PostgreSQL identity',()=>{
  let h:Awaited<ReturnType<typeof cockpitHomeBrowser>>;
  const asset=(name:string)=>{const file=Object.entries(h.assetManifest!).find(([id])=>id.endsWith('/'+name))?.[1].file;expect(file,'dynamic production asset for '+name).toBeTruthy();return '/'+file!;};
- beforeAll(async()=>{h=await cockpitHomeBrowser({databaseUrl:url!,productionAssets:true,calendar:true,evidence:join(process.env.M01_SETTINGS_NATIVE_EVIDENCE??tmpdir(),'module-bundles-'+randomUUID()),...(process.env.M01_SETTINGS_BROWSER_EXECUTABLE?{executablePath:process.env.M01_SETTINGS_BROWSER_EXECUTABLE}:{})});});
+ beforeAll(async()=>{h=await cockpitHomeBrowser({databaseUrl:url!,productionAssets:true,indexed:true,calendar:true,evidence:join(process.env.M01_SETTINGS_NATIVE_EVIDENCE??tmpdir(),'module-bundles-'+randomUUID()),...(process.env.M01_SETTINGS_BROWSER_EXECUTABLE?{executablePath:process.env.M01_SETTINGS_BROWSER_EXECUTABLE}:{})});});
  afterAll(async()=>{await h?.dispose();});
  it('opens the real complete App with only the needed page graph and preserves approved home layout across widths',async()=>{
   const start=h.resources.length,{context,page}=await h.open(undefined,{},1440);try{

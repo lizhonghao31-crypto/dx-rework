@@ -1,7 +1,35 @@
 import {describe,it,expect} from 'vitest';
 import type {Pool,PoolClient} from 'pg';
-import {acceptanceIncludesNative,ContextBusinessClock,installAcceptanceClockReader,withAcceptanceBusinessTime} from '../../apps/api/src/acceptance-clock/business-time.js';
+import {acceptanceIncludesNative,assertBusinessClocksUnchanged,businessScopeKey,ContextBusinessClock,installAcceptanceClockReader,withAcceptanceBusinessTime} from '../../apps/api/src/acceptance-clock/business-time.js';
 describe('original scene isolation with an owned read transaction',()=>{
+ it('uses one exact transaction batch, deduplicates scopes and keeps trusted null-scenario times without evaluating fallback',async()=>{
+  const pool={} as Pool,transaction={} as PoolClient,scope={kind:'order' as const,id:'TEST order'},trusted={now:'2026-12-01T12:00:00.000Z',scenarioId:null,revision:0},calls:Array<unknown>=[];
+  installAcceptanceClockReader(pool,{read:async()=>{throw Error('single reads must not run');},readMany:async(scopes,connection)=>{calls.push([scopes,connection]);return new Map([[businessScopeKey(scope),trusted]]);},nativeScenario:async()=>null});
+  expect(await new ContextBusinessClock(pool,transaction).readMany([scope,scope],()=>{throw Error('fallback must not run');})).toEqual(new Map([[businessScopeKey(scope),trusted]]));
+  expect(calls).toEqual([[[scope],transaction]]);
+ });
+ it('uses the captured ordinary snapshot only for missing scoped rows and preserves older custom singleton readers',async()=>{
+  const pool={} as Pool,transaction={} as PoolClient,ordinary={kind:'order' as const,id:'TEST ordinary'},scoped={kind:'source' as const,id:'TEST scenario'},at='2026-10-01T12:00:00.000Z',trusted={now:'2026-09-01T00:00:00.000Z',scenarioId:'TEST scene',revision:2},calls:string[]=[];
+  installAcceptanceClockReader(pool,{read:async(scope,connection)=>{expect(connection).toBe(transaction);calls.push(scope.id);return scope.id===scoped.id?trusted:null;},nativeScenario:async()=>null});
+  const result=await new ContextBusinessClock(pool,transaction).readMany([ordinary,scoped],()=>new Date(at));
+  expect(result.get(businessScopeKey(ordinary))).toEqual({now:at,scenarioId:null,revision:0});expect(result.get(businessScopeKey(scoped))).toEqual(trusted);expect(calls).toEqual([ordinary.id,scoped.id]);
+ });
+ it('checks every guarded scope and rejects a foreign object before returning any partial batch',async()=>{
+  const own={kind:'order' as const,id:'TEST own'},foreign={kind:'source' as const,id:'TEST foreign'},seen:string[]=[],pool={} as Pool;
+  installAcceptanceClockReader(pool,{read:async()=>{throw Error('native reader must not run');},readMany:async()=>{throw Error('native batch must not run');},nativeScenario:async()=>null});
+  const context={time:{now:'2026-11-01T00:00:00Z',scenarioId:'TEST scene',revision:1},configurationId:'TEST configuration',scenarioId:'TEST scene',assertScope:async(scope:typeof own|typeof foreign)=>{seen.push(scope.id);if(scope.id===foreign.id)throw Error('TEST foreign scope denied');},acceptsActor:async()=>true,registerCreated:async()=>{}};
+  await expect(withAcceptanceBusinessTime(context,()=>new ContextBusinessClock(pool).readMany([own,foreign]))).rejects.toThrow('TEST foreign scope denied');expect(seen).toEqual([own.id,foreign.id]);
+  const result=await withAcceptanceBusinessTime(context,()=>new ContextBusinessClock(pool).readMany([own],()=>{throw Error('fallback must not run');}));expect(result.get(businessScopeKey(own))).toEqual(context.time);
+ });
+ it('postchecks guarded scenario identity, revision and time in one batch while ordinary observations need no recheck',async()=>{
+  const pool={} as Pool,scope={kind:'order' as const,id:'TEST scoped'},time={now:'2026-11-01T00:00:00.000Z',scenarioId:'TEST scene',revision:1};let current={...time},calls=0;
+  installAcceptanceClockReader(pool,{read:async()=>{throw Error('singleton postcheck must not run');},readMany:async(scopes)=>{calls++;expect(scopes).toEqual([scope]);return new Map([[businessScopeKey(scope),current]]);},nativeScenario:async()=>null});
+  const clock=new ContextBusinessClock(pool),observed=[{scope,time},{scope:{kind:'source' as const,id:'TEST ordinary'},time:{...time,scenarioId:null}}];
+  await expect(assertBusinessClocksUnchanged(clock,observed)).resolves.toBeUndefined();
+  for(const changed of [{...time,revision:2},{...time,scenarioId:'TEST other'},{...time,now:'2026-11-02T00:00:00.000Z'}]){current=changed;await expect(assertBusinessClocksUnchanged(clock,observed)).rejects.toMatchObject({code:'CONFLICT'});}
+  expect(calls).toBe(4);
+  await expect(assertBusinessClocksUnchanged(clock,[observed[1]!])).resolves.toBeUndefined();expect(calls).toBe(4);
+ });
  it('forwards the owned connection without weakening ordinary or cross-scene isolation',async()=>{
   const pool={} as Pool,transaction={} as PoolClient,seen:Array<PoolClient|undefined>=[];
   installAcceptanceClockReader(pool,{read:async()=>null,nativeScenario:async(id,connection)=>{seen.push(connection);return id==='ordinary'?null:'TEST scene';}});

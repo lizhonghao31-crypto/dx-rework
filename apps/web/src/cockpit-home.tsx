@@ -47,8 +47,8 @@ export function CockpitHome({data,error,context,onChange}:{data:JourneyResult|nu
     </tr>;
    })}</tbody>
   </BusinessTable></div>
-  {!data&&!error&&<p role="status">正在读取订单…</p>}{data?.items.length===0&&<p role="status">当前授权和筛选范围没有订单。</p>}
-  <Pagination page={context.page} pageSize={15} total={data?.total??null} onPage={page=>onChange({page})}/>
+  {!data&&!error&&<p role="status">正在读取订单…</p>}{data?.items.length===0&&!data.freshness&&<p role="status">当前授权和筛选范围没有订单。</p>}
+  {!data?.freshness&&<Pagination page={context.page} pageSize={15} total={data?.total??null} onPage={page=>onChange({page})}/>}
   {riskOrder&&riskOrder.source===data&&<CockpitHomeRisks order={riskOrder.order} context={context} onClose={()=>setRiskOrder(null)} onNode={node=>{setRiskOrder(null);enter(riskOrder.order,node);}} onOrder={()=>{setRiskOrder(null);enter(riskOrder.order);}}/>}
  </section>;
 }

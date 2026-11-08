@@ -11,7 +11,12 @@ export type AcceptanceBusinessContext=Readonly<{
  registerCreated:(db:PoolClient,scope:BusinessTimeScope,actorId:string,auditEventId:string)=>Promise<void>;
 }>;
 const contexts=new AsyncLocalStorage<AcceptanceBusinessContext>();
-type ClockReader=Readonly<{read:(scope:BusinessTimeScope,transaction?:PoolClient)=>Promise<BusinessTime|null>;nativeScenario:(id:string,transaction?:PoolClient)=>Promise<string|null>}>;
+type ClockReader=Readonly<{
+ read:(scope:BusinessTimeScope,transaction?:PoolClient)=>Promise<BusinessTime|null>;
+ readMany?:(scopes:readonly BusinessTimeScope[],transaction?:PoolClient)=>Promise<ReadonlyMap<string,BusinessTime>>;
+ nativeScenario:(id:string,transaction?:PoolClient)=>Promise<string|null>;
+}>;
+export const businessScopeKey=(scope:BusinessTimeScope)=>`${scope.kind}:${scope.id}`;
 const readers=new WeakMap<object,ClockReader>();
 /** Called once by the boot-verified runtime, not by a public configuration endpoint. */
 export function installAcceptanceClockReader(database:Pool,reader:ClockReader){readers.set(database,reader);}
@@ -43,6 +48,22 @@ export class ContextBusinessClock implements BusinessClock{
   if(context){await context.assertScope(scope);return observedBusinessTime();}
   return this.database?await readers.get(this.database)?.read(scope,this.transaction)??observedBusinessTime(fallback):observedBusinessTime(fallback);
  }
+ /** The same guarded clock contract for a lightweight candidate batch. It
+  * neither grants scope nor replaces a custom reader returning scenarioId=null.
+  * Ordinary missing rows share one caller-captured snapshot fallback. */
+ async readMany(scopes:readonly BusinessTimeScope[],fallback?:()=>Date):Promise<ReadonlyMap<string,BusinessTime>>{
+  const unique=new Map(scopes.map(scope=>[businessScopeKey(scope),scope]));
+  if(!unique.size)return new Map();
+  const context=contexts.getStore(),result=new Map<string,BusinessTime>();
+  if(context){for(const [key,scope] of unique){await context.assertScope(scope);result.set(key,observedBusinessTime());}return result;}
+  let ordinary:BusinessTime|undefined;
+  const ordinaryTime=()=>ordinary??(ordinary=observedBusinessTime(fallback)),reader=this.database?readers.get(this.database):undefined;
+  if(reader?.readMany){
+   const batch=await reader.readMany([...unique.values()],this.transaction);
+   for(const [key] of unique)result.set(key,batch.get(key)??ordinaryTime());
+  }else for(const [key,scope] of unique)result.set(key,await reader?.read(scope,this.transaction)??ordinaryTime());
+  return result;
+ }
 }
 export async function registerAcceptanceCreated(db:PoolClient,scope:BusinessTimeScope,actorId:string,eventId:string){
  const context=contexts.getStore();if(context)await context.registerCreated(db,scope,actorId,eventId);
@@ -57,4 +78,15 @@ export async function assertBusinessClockUnchanged(clock:BusinessClock,scope:Bus
  const current=await clock.read(scope);
  if(current.scenarioId!==observed.scenarioId||current.revision!==observed.revision||current.now!==observed.now)
   throw new ApplicationError('CONFLICT','测试时钟在读取期间已变化，请刷新原页面',409);
+}
+
+/** Post-transaction check of only the actually observed guarded clocks. */
+export async function assertBusinessClocksUnchanged(clock:ContextBusinessClock,observations:Iterable<{scope:BusinessTimeScope;time:BusinessTime}>){
+ const observed=[...observations].filter(value=>value.time.scenarioId);
+ if(!observed.length)return;
+ const current=await clock.readMany(observed.map(value=>value.scope));
+ for(const {scope,time}of observed){const actual=current.get(businessScopeKey(scope));
+  if(!actual||actual.scenarioId!==time.scenarioId||actual.revision!==time.revision||actual.now!==time.now)
+   throw new ApplicationError('CONFLICT','测试时钟在读取期间已变化，请刷新原页面',409);
+ }
 }
