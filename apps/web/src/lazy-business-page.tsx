@@ -35,6 +35,7 @@ export function lazyBusinessPage<PageType extends (props:never)=>ReactNode>(load
  const Page=lazy(async()=>{try{const module=await load();preserveCommonStyleOrder();return {default:module.default as unknown as ComponentType<Props>};}catch(error){preserveCommonStyleOrder();throw new BusinessModuleLoadError(error);}});
  return function DeferredBusinessPage(props:Props){
   const insideShell=useContext(ShellPresenceContext);
-  return <ModuleLoadBoundary recoveryShell={!insideShell&&options.shellOnError!==false}><Suspense fallback={<p role="status">正在打开页面…</p>}><Page {...props}/></Suspense></ModuleLoadBoundary>;
+  const recoveryShell=!insideShell&&options.shellOnError!==false,loading=<p role="status">正在打开页面…</p>;
+  return <ModuleLoadBoundary recoveryShell={recoveryShell}><Suspense fallback={recoveryShell?<Shell active="正在打开页面">{loading}</Shell>:loading}><Page {...props}/></Suspense></ModuleLoadBoundary>;
  };
 }

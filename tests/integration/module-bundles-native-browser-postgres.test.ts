@@ -64,4 +64,17 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    }finally{await context.close();}
   }
  });
+ it('keeps original navigation usable while a self-shell page download is still pending',async()=>{
+  const {context,page}=await h.open();let release=()=>{};
+  const waiting=new Promise<void>(resolve=>{release=resolve;});
+  try{
+   const target=asset('employee-access-page.tsx');let attempts=0;
+   await page.route('**'+target,async route=>{attempts++;await waiting;await route.abort('failed');});
+   await page.goto(h.base+'/ui/employee-access',{waitUntil:'domcontentloaded'});
+   await page.getByRole('status').filter({hasText:'正在打开页面…'}).waitFor();
+   expect(attempts).toBe(1);expect(await page.locator('.app-shell>aside').count()).toBe(1);
+   const cockpit=page.locator('aside a[href$="/ui/digital-cockpit"]').first();await cockpit.waitFor();await cockpit.click();release();await homeReady(page);
+   expect(await page.locator('.app-shell>aside').count()).toBe(1);expect((await page.request.get(h.base+'/api/auth/me')).status()).toBe(200);
+  }finally{release();await context.close();}
+ });
 });
