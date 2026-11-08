@@ -1,3 +1,5 @@
+import {registerDeliveryCalendarRoutes} from './delivery-calendar-routes.js';
+import type {DeliveryCalendarQuery} from './delivery-calendar-query.js';
 import {journeyMeasure} from '../platform/journey-diagnostic.js';
 import {registerQcProductionProgressRoutes} from './qc-production-progress-routes.js';
 import type {QcProductionProgressService} from './qc-production-progress-service.js';
@@ -49,6 +51,7 @@ import { ApplicationError } from "../platform/errors.js";
 import { assertIdentityActor, type DigitalProductionIdentityService } from "./identity-service.js";
 
 export type DigitalIdentityDependencies = {
+  deliveryCalendar?:DeliveryCalendarQuery;
   readinessService?:ProductionReadinessService;
   analysis?: DigitalAnalysisQuery;
   cockpit?: DigitalCockpitQuery;
@@ -81,6 +84,7 @@ export function registerDigitalIdentityRoutes(app: FastifyInstance, dependencies
   if(dependencies.readinessService&&dependencies.developmentAttachments)registerProductionReadinessRoutes(app,dependencies,dependencies.readinessService,dependencies.developmentAttachments);
   if(dependencies.seriesPlans&&dependencies.shortLead)registerSeriesPlanRoutes(app,dependencies,dependencies.seriesPlans,dependencies.shortLead);
   if(dependencies.quotationService)registerQuotationRoutes(app,dependencies,dependencies.quotationService);
+  if(dependencies.deliveryCalendar)registerDeliveryCalendarRoutes(app,dependencies,dependencies.deliveryCalendar);
   if(dependencies.analysis) registerDigitalAnalysisRoutes(app,dependencies,dependencies.analysis);
   if(dependencies.closureService)registerOrderClosureRoutes(app,dependencies,dependencies.closureService);
   if(dependencies.factoryFlowService&&dependencies.developmentAttachments)registerFactoryFlowRoutes(app,dependencies,dependencies.factoryFlowService,dependencies.developmentAttachments);

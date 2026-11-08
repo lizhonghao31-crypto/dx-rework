@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./delivery-calendar": { "types": "./src/delivery-calendar.ts", "import": "./dist/delivery-calendar.js" },
     "./sla-settings-history": { "types": "./src/sla-settings-history.ts", "import": "./dist/sla-settings-history.js" },
     "./production-collaboration": { "types": "./src/production-collaboration.ts", "import": "./dist/production-collaboration.js" },
     "./production-period": { "types": "./src/production-period.ts", "import": "./dist/production-period.js" },

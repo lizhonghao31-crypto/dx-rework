@@ -1,404 +1,218 @@
 {
   "version": 1,
-  "base": "e9961399d7500bf8f909339d24d3cc59f481e97d",
-  "sourceFingerprint": "8052e638b9c923366e99118517e8856925ce7c7d488170c084fa58ae59a30497",
+  "base": "d3ec9dda6320381be47614220d762c2ac8574c90",
+  "sourceFingerprint": "abf9cbb773bd1198dbfe26dade5221c63bee18dafcf2603de5ccf7e770744de2",
   "risk": "full",
   "rules": [
     {
-      "rule": "Read every immutable published standard through server cursor pages; compare real effective values and copy only into an actor-owned original draft with exact provenance, current policy/draft conflicts and original idempotency.",
-      "source": "Approved Final10 Version2 section8 and final image09, pinned file_000000009f4c81fbaa74ab5bfebbf489; current execution and business-analysis golden. User authorized autonomous implementation, Codex Review and sequential merges; no deployment/real data changes. P04 actual merged base is e9961399d7500bf8f909339d24d3cc59f481e97d.",
+      "source": "Approved Final10 Version2 sections2/9/14, exact final images05/06/10. User authorized implementation, original Codex Review and serial merges. Current source has original P01 time repair and all prior merged changes. No deployment or real business-data operation.",
+      "rule": "Read effective current customer PO dates and quantities using the original cumulative receiving/packing group. Clamp and reconcile each PO before aggregation, preserve unknown and current lifecycle scope.",
       "writes": [
-        "apps/api/src/production-platform/sla-policy-values.ts",
-        "apps/api/src/production-platform/sla-settings-drafts.ts",
-        "apps/api/src/production-platform/sla-settings-history.ts",
         "packages/contracts/package.json",
-        "packages/contracts/src/sla-settings-drafts.ts",
-        "packages/contracts/src/sla-settings-history.ts",
-        "tests/integration/m01-sla-history-postgres.test.ts",
-        "tests/unit/sla-settings-history.test.ts"
+        "packages/domain/package.json",
+        "apps/api/src/production-platform/delivery-calendar-facts.ts",
+        "packages/contracts/src/delivery-calendar.ts",
+        "packages/domain/src/delivery-calendar.ts",
+        "tests/unit/delivery-calendar.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/sla-configuration-repository.ts",
-        "apps/api/src/production-platform/sla-settings-authority.ts",
-        "apps/api/src/production-platform/sla-settings-service.ts",
-        "apps/web/src/use-sla-saved-draft.ts"
-      ],
-      "oldTests": [
-        "tests/integration/sla-settings-drafts-postgres.test.ts",
-        "tests/integration/digital-sla-configuration-postgres.test.ts",
-        "tests/unit/sla-saved-draft.test.ts"
-      ],
-      "initialization": "Existing immutable configuration/policy storage and original personal draft table; new nullable sourceVersion only on newly appended unified revisions. Empty history does not publish or initialize. Bounded selected versions batch exactly matching policy references; inline legacy values remain supported.",
-      "dateAndPermission": "Original Root and current owner/manager writes; PMC historical reads only, no private draft or copying. Real publication audit dates never replace business dates. Legacy absent notification metadata means enabled. Actual role revocation and concurrent policy/personal revision are rechecked before writes.",
-      "expectation": "Actual owned PG8 checks empty, 23 real versions across cursor pages, original-reader equivalence, old copy/edit/new publication and unchanged old bytes, exact-command replay, version races, actual role authority, new-order adoption, 17-candidate pagination and native terminal exclusion. Unit verifies effective flag equivalence.",
-      "checks": [
-        "history_pg",
-        "unit",
-        "lint",
-        "buildapi",
-        "types",
-        "native"
-      ]
-    },
-    {
-      "rule": "Final image09 history table, readonly comparison and deliberate application tabs preserve original settings inputs, selection and return state; unknown copy results retry the same command, committed-copy refresh failure only rereads.",
-      "source": "Approved Final10 Version2 section8 and final image09, pinned file_000000009f4c81fbaa74ab5bfebbf489; current execution and business-analysis golden. User authorized autonomous implementation, Codex Review and sequential merges; no deployment/real data changes. P04 actual merged base is e9961399d7500bf8f909339d24d3cc59f481e97d.",
-      "writes": [
-        "apps/web/src/cockpit-production-settings.css",
-        "apps/web/src/cockpit-production-settings.tsx",
-        "apps/web/src/sla-history-workspace.tsx",
-        "apps/web/src/sla-order-application-panel.tsx",
-        "apps/web/src/sla-settings-workspace.tsx",
-        "apps/web/src/sla-standard-editor.tsx",
-        "tests/acceptance/m01-settings-native-browser.ts",
-        "tests/unit/sla-order-application-preview.test.ts"
-      ],
-      "reads": [
-        "apps/web/src/use-sla-saved-draft.ts",
-        "apps/web/src/sla-settings-draft.ts",
-        "apps/web/src/auth-session.ts",
-        "apps/web/src/system-dialog.tsx",
-        "apps/web/src/use-digital-detail-navigation-guard.ts"
-      ],
-      "oldTests": [
-        "tests/integration/m01-settings-native-browser-postgres.test.ts",
-        "tests/unit/digital-pmc-readonly-ui.test.ts"
-      ],
-      "initialization": "Keep both original standard/development controllers mounted, replace only equivalent legacy historical/application controls in the managed workspace. Original standalone consumers retain old paths; series/customer settings remain reachable when returning. Five actual server-paged versions per UI page, not a truncated history.",
-      "dateAndPermission": "Original full App/Shell and authenticated TEST sessions; readonly and authority errors never become empty. Publication, current draft baseline, keyboard controls, navigation pending guard and source precision remain. No synthetic numbers or dates from the illustration.",
-      "expectation": "Current native35 on this exact frozen source preserves original31 stages and history/copy/return additions, with real AuthService and original selected-order routes. The two-order apply scenario now selects warning/sample enable metadata too and reads actual rendered before/after flags before confirming. Current unit208 includes explicit flag-only preview and no-invented-change rendering; current PG10 validates normal SQL page bounds, original Acceptance isolation, real adopted notification flags and unchanged actual/deadline dates.",
-      "checks": [
-        "unit",
-        "types",
-        "lint",
-        "buildweb",
-        "secret",
-        "native"
-      ]
-    },
-    {
-      "rule": "Explicit in-flight application still uses original per-order signed preview/apply and current actor, policy and actual facts; exclude known cancelled, special-closed, unplanned and genuinely normally completed orders.",
-      "source": "Approved Final10 Version2 section8 and final image09, pinned file_000000009f4c81fbaa74ab5bfebbf489; current execution and business-analysis golden. User authorized autonomous implementation, Codex Review and sequential merges; no deployment/real data changes. P04 actual merged base is e9961399d7500bf8f909339d24d3cc59f481e97d.",
-      "writes": [
-        "apps/api/src/production-platform/sla-order-application.ts",
-        "apps/api/src/production-platform/task-routes.ts",
-        "apps/api/src/production-platform/task-service.ts"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/sla-order-service.ts",
+        "apps/api/src/receiving/receiving-service.ts",
         "apps/api/src/production-platform/order-closure-service.ts",
-        "apps/api/src/production-platform/sla-plan-repository.ts",
-        "apps/api/src/production-platform/sla-configuration-repository.ts",
-        "apps/api/src/production-platform/sla-settings-history.ts",
-        "apps/web/src/sla-order-application-panel.tsx"
+        "apps/api/src/production-platform/po-customer-date-service.ts",
+        "apps/api/src/production-platform/sla-order-service.ts",
+        "apps/api/src/production-platform/journey-query.ts"
       ],
       "oldTests": [
-        "tests/integration/m01-settings-native-browser-postgres.test.ts",
-        "tests/integration/factory-logistics-cockpit-postgres.test.ts",
-        "tests/integration/sourcing-pr03-postgres.test.ts"
+        "tests/integration/m01-production-statistics-postgres.test.ts",
+        "tests/integration/factory-logistics-cockpit-postgres.test.ts"
       ],
-      "initialization": "No second order ledger, adoption engine or automatic mass apply. Candidate metadata is authorized before pagination; original completion evidence is read only for the current15 candidate rows, no all-order SLA loop. Per-object selection and unknown recovery remain separate.",
-      "dateAndPermission": "Normal completion reuses original receipt/packing differences, quality, rework and unfinished work checks, not packing alone. Preparation/customer/order overrides, real start and completed snapshots remain. Parameter provenance names its real global/customer/order source and version; no mixed-layer version impersonation.",
-      "expectation": "PG native new order adopts current publication; real cut/dispatch/QC/production shipment/receipt/quality/packing reaches original normal completion, is excluded and direct preview rejects409. Existing native two-order exact apply and old frozen sibling proof passes; same-session original AuthService revocation and stale publication remain.",
+      "initialization": "No new ledger or migration. Read current PO sizes, original dated changes, original effective cumulative packing and frozen reminder offset in bounded batches. Business-number field keeps original sourcing permission, filters actual UUID placeholders and does not invent IDs. Unknown source remains nullable.",
+      "dateAndPermission": "Shanghai observation date determines overdue independently from selected day. Current customer date is distinct from factory date, historical original date and actual shipping occurrence. No inferred past daily shipment/arrival. Authorization precedes quantities; cancelled/special-closed demand stays a separate range.",
+      "expectation": "Real native PG and pure projection tests reconcile complete authorized year/month/day against current PO quantities, partial/zero/corrected/extra packing, two dates, multi-factory and full transfer with old allocation zero. Current due change enters only its effective new year, original history stays traceable. Known-demand and comparable known-quantity sets remain distinct.",
       "checks": [
-        "history_pg",
+        "postgres",
         "unit",
-        "lint",
         "buildapi",
-        "types",
-        "native"
+        "lint"
       ]
     },
     {
-      "rule": "Additive provenance migration and exact Acceptance permissions join the original canonical suite mapping and budgets; preserve time-source notes and original source/deployment rules.",
-      "source": "Approved Final10 Version2 section8 and final image09, pinned file_000000009f4c81fbaa74ab5bfebbf489; current execution and business-analysis golden. User authorized autonomous implementation, Codex Review and sequential merges; no deployment/real data changes. P04 actual merged base is e9961399d7500bf8f909339d24d3cc59f481e97d.",
+      "source": "Approved Final10 Version2 sections2/9/14, exact final images05/06/10. User authorized implementation, original Codex Review and serial merges. Current source has original P01 time repair and all prior merged changes. No deployment or real business-data operation.",
+      "rule": "Use an authorized, coherent lightweight read snapshot for aggregates and paged PO rows. Normal refresh reads current facts; only explicit older query identifiers reuse labelled older observations with live role/object/field revalidation.",
       "writes": [
-        "apps/api/migrations/0277_sla_draft_source_version.sql",
-        "apps/api/src/platform/migration-manifest.json",
-        "scripts/ci/full-gate-risk-map.mjs",
-        "scripts/deploy/acceptance-migration-requirements.json",
-        "scripts/test-suite-plan.mjs"
+        "apps/api/src/production-platform/analysis-result-store.ts",
+        "apps/api/src/production-platform/delivery-calendar-query.ts",
+        "tests/integration/m01-delivery-calendar-postgres.test.ts"
       ],
       "reads": [
+        "apps/api/src/production-platform/access-policy.ts",
+        "apps/api/src/production-platform/production-statistics-query.ts",
+        "apps/api/src/acceptance-clock/business-time.ts",
+        "apps/api/src/auth/service.ts",
+        "apps/api/src/auth/postgres-store.ts"
+      ],
+      "oldTests": [
+        "tests/integration/m01-production-statistics-postgres.test.ts",
+        "tests/integration/business-anchors-clock-postgres.test.ts"
+      ],
+      "initialization": "Reuse original bounded actor-owned PostgreSQL AnalysisResultStore; generic type has no runtime change to old statistics. Full summaries use lightweight facts rather than per-order Journey/SLA. Existing clock and exception authorization helpers retained. Explicit bound rejects oversized queries instead of truncating.",
+      "dateAndPermission": "Actual AuthService and active roles are revalidated before reads and snapshot reuse; original direct technical grants are evaluated together, original assigned task/preparation/QC exceptions retain canonical policy. No cross-user query reuse, no private fields through removed capability. Scenario/revision changes reject old query; refresh has no old snapshot identifier.",
+      "expectation": "Native authenticated 20-PO five-mother primary-owner scope verifies no per-order canonical-policy calls for the original direct grant, then same valid session loses old query and reads no objects after role removal. Original warehouse assignment still invokes original exception policy and reads its two PO facts. Real scenario midnight isolates ordinary/scenario scope; packed corrections appear on next fresh read while explicit old query is labelled.",
+      "checks": [
+        "postgres",
+        "unit",
+        "buildapi",
+        "lint"
+      ]
+    },
+    {
+      "source": "Approved Final10 Version2 sections2/9/14, exact final images05/06/10. User authorized implementation, original Codex Review and serial merges. Current source has original P01 time repair and all prior merged changes. No deployment or real business-data operation.",
+      "rule": "Expose four authenticated read-only calendar resources through the original digital-production route registration and canonical test mapping, with finite correctness budgets and unchanged business commands.",
+      "writes": [
+        "apps/api/src/production-platform/identity-routes.ts",
+        "apps/api/src/server.ts",
+        "scripts/ci/full-gate-risk-map.mjs",
+        "scripts/test-suite-plan.mjs",
+        "apps/api/src/production-platform/delivery-calendar-routes.ts"
+      ],
+      "reads": [
+        "apps/api/src/access/business-authority.ts",
+        "apps/api/src/auth/routes.ts",
         "scripts/test-execution-config.mjs",
         "scripts/run-business-chain-gate.mjs",
-        "scripts/check-migrations.mjs",
-        "scripts/test-preflight.mjs",
-        "scripts/deploy/acceptance-migration-requirements.json"
+        "scripts/test-preflight.mjs"
       ],
       "oldTests": [
-        "scripts/ci/test-execution-contract.test.mjs",
         "tests/unit/full-gate-risk-map.test.ts",
-        "tests/unit/current-migration-manifest-checksum.test.ts"
+        "tests/integration/digital-production-identity-postgres.test.ts"
       ],
-      "initialization": "0277 only original draft provenance foreign key and group check; actual complete fresh marked low-privilege TEST migrations run before service fixtures. No backfill, deploy executable or backup/restore tool change, so no simulated operational rehearsal claim.",
-      "dateAndPermission": "Existing100s scenario/120s setup separate from business SLA. Original max2long/max1ordinary configs and exact cleanup stay. Only four new original-auth history/copy/candidate route occurrences are annotated, all unchanged time notes preserved.",
-      "expectation": "Current migration lint, actual PG fixture creation/cleanup, native suite, full-gate-risk unit and250 protocol preflight checks passed; new history suite has canonical long config and explicit future input mapping. No source status is fabricated as onsite verified.",
+      "initialization": "Only year/month/day/missing GET resources are added under original configured digital-production service. Strict date/year/month/page/search inputs reject invalid values. New PG suite joins original LONG_CORRECTNESS and risk mapping. Original source time inventory preserves existing annotations.",
+      "dateAndPermission": "PMC remains read only, invalid dates and foreign query identifiers are rejected. No date edit/approval, upload, shipment, history rewrite or deployment route added. Correctness timeout remains original configured100 seconds, independent from business SLA. Existing isolated fixture cleanup remains exact.",
+      "expectation": "Target native PG, domain unit, API build/lint and actual canonical preflight/secret checks pass on this actual merged base and exact source. No synthetic browser page is claimed: the three user-facing calendar views belong to subsequent P07, with final representative integration validation later.",
       "checks": [
-        "history_pg",
+        "postgres",
         "unit",
-        "migrationlint",
         "preflight",
-        "lint",
         "buildapi",
-        "native"
-      ]
-    },
-    {
-      "rule": "Parent independent review: page candidate metadata in the database and expose real reminder enable changes before explicit application.",
-      "source": "Parent delegated independent findings after first Full request: eliminate all-matching PO/snapshot load before15-row paging; show actual warning_ratio/ship_sample_advance notificationEnabled before/after. Approved Final10V2 section8 and performance read principles, no production deployment.",
-      "writes": [
-        "apps/api/src/production-platform/sla-settings-history.ts",
-        "apps/api/src/production-platform/sla-order-application.ts",
-        "apps/web/src/sla-order-application-panel.tsx",
-        "tests/integration/m01-sla-history-postgres.test.ts",
-        "tests/unit/sla-order-application-preview.test.ts",
-        "tests/acceptance/m01-settings-native-browser.ts"
-      ],
-      "reads": [
-        "apps/api/src/acceptance-clock/business-time.ts",
-        "apps/api/src/production-platform/sla-settings-authority.ts",
-        "apps/api/src/production-platform/identity-service.ts",
-        "apps/api/src/production-platform/sla-notification-preferences.ts",
-        "apps/api/src/production-platform/task-service.ts"
-      ],
-      "oldTests": [
-        "tests/integration/m01-settings-native-browser-postgres.test.ts",
-        "tests/integration/sla-notification-preferences-postgres.test.ts"
-      ],
-      "initialization": "No new table or global cache protocol. Ordinary requests do SQL count and MATERIALIZED current15 selection before metadata. Installed Acceptance only enumerates matching IDs through its original scope helper before SQL count/page; no full matching PO/config/closure loads. Shared Acceptance batch API stays outside this local fix.",
-      "dateAndPermission": "Existing actual manager authority and original Acceptance scene membership retained before counts/pages. Original effective selected frozen parameter values determine legacy-default-on enable transitions. No new write body, permission, sender, task cancellation or SLA/actual-date rewrite.",
-      "expectation": "Actual PG normal-mode read uses real original pool/data and observes current-page metadata SQL returning15 rows, no ordinary full-ID enumeration; current scene isolation excludes3 out-of-scene matches before17-item totals and15+2 paging. Reminder-only real apply previews both flags while all minutes/days/percent stay equal, leaves original deadline/actual starts unchanged and the original notification reader observes actual adopted off flags. New unit2 and current native two-order rendered preview confirm user-visible intent.",
-      "checks": [
-        "history_pg",
-        "native",
-        "unit",
-        "types",
         "lint",
-        "buildapi",
-        "buildweb"
+        "secret"
       ]
     }
   ],
   "checks": [
     {
-      "id": "unit",
-      "kind": "tests",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/digital-pmc-readonly-ui.test.ts tests/unit/digital-sla-configuration.test.ts tests/unit/sla-notification-preferences.test.ts tests/unit/sla-notification-window.test.ts tests/unit/sla-saved-draft.test.ts tests/unit/sla-calculation.test.ts tests/unit/development-cycle.test.ts tests/unit/development-technical-contract.test.ts tests/unit/sla-settings-history.test.ts tests/unit/sla-order-application-preview.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/p05-history-parent-final-unit.vitest.json",
-      "status": "passed",
-      "exitCode": 0,
-      "sourceFingerprint": "8052e638b9c923366e99118517e8856925ce7c7d488170c084fa58ae59a30497",
-      "testedHead": "5ae602a0d5d01982dff6afba0f74d7ad1a17fc6d",
-      "startedAt": "2026-11-08T03:31:18.695Z",
-      "endedAt": "2026-11-08T03:31:22.829Z",
-      "sourceUnchanged": true,
-      "allExited": true,
-      "logSha256": "c1725c2ea19f672a0802448939955168029d7b062528b88019b9dfa59e2bb226",
-      "logPath": "/workspace/scratch/dx-final10-20261108/p05-history-parent-final-unit.log",
-      "context": "Node22.22.2/npm10.9.9; lock80b0332e; taskset2,3 applies only to command descendants; original Vitest config nonDB1 worker, original preflight protocol2 workers; local host not claimed CI equivalent",
-      "passed": 208,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "b10c0d4e9c0d22c3cd612767526df5cf45155725aca58ddadcafc1d980eb45c8"
-        }
-      ],
-      "log": "/workspace/scratch/dx-final10-20261108/p05-history-parent-final-unit.log",
-      "resultReport": "/workspace/scratch/dx-final10-20261108/p05-history-parent-final-unit.vitest.json"
-    },
-    {
-      "id": "types",
-      "kind": "command",
-      "command": "npm run typecheck --workspace=@dx-rework/web",
-      "status": "passed",
-      "exitCode": 0,
-      "sourceFingerprint": "8052e638b9c923366e99118517e8856925ce7c7d488170c084fa58ae59a30497",
-      "testedHead": "5ae602a0d5d01982dff6afba0f74d7ad1a17fc6d",
-      "startedAt": "2026-11-08T03:31:22.941Z",
-      "endedAt": "2026-11-08T03:31:43.786Z",
-      "sourceUnchanged": true,
-      "allExited": true,
-      "logSha256": "752b0f4f80e1f2fdeece6837aa0d8538e17009bd166c8888d0c5c5d0c6148bcd",
-      "logPath": "/workspace/scratch/dx-final10-20261108/p05-history-parent-final-types.log",
-      "context": "Node22.22.2/npm10.9.9; lock80b0332e; taskset2,3 applies only to command descendants; original Vitest config nonDB1 worker, original preflight protocol2 workers; local host not claimed CI equivalent",
-      "log": "/workspace/scratch/dx-final10-20261108/p05-history-parent-final-types.log"
-    },
-    {
-      "id": "lint",
-      "kind": "command",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/eslint/bin/eslint.js tests/unit/sla-order-application-preview.test.ts apps/api/src/production-platform/sla-order-application.ts apps/api/src/production-platform/sla-settings-history.ts apps/web/src/sla-order-application-panel.tsx tests/acceptance/m01-settings-native-browser.ts tests/integration/m01-sla-history-postgres.test.ts --max-warnings=0",
-      "status": "passed",
-      "exitCode": 0,
-      "sourceFingerprint": "8052e638b9c923366e99118517e8856925ce7c7d488170c084fa58ae59a30497",
-      "testedHead": "5ae602a0d5d01982dff6afba0f74d7ad1a17fc6d",
-      "startedAt": "2026-11-08T03:31:43.876Z",
-      "endedAt": "2026-11-08T03:31:45.248Z",
-      "sourceUnchanged": true,
-      "allExited": true,
-      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "logPath": "/workspace/scratch/dx-final10-20261108/p05-history-parent-final-lint.log",
-      "context": "Node22.22.2/npm10.9.9; lock80b0332e; taskset2,3 applies only to command descendants; original Vitest config nonDB1 worker, original preflight protocol2 workers; local host not claimed CI equivalent",
-      "log": "/workspace/scratch/dx-final10-20261108/p05-history-parent-final-lint.log"
-    },
-    {
-      "id": "buildweb",
-      "kind": "command",
-      "command": "npm run build --workspace=@dx-rework/web",
-      "status": "passed",
-      "exitCode": 0,
-      "sourceFingerprint": "8052e638b9c923366e99118517e8856925ce7c7d488170c084fa58ae59a30497",
-      "testedHead": "5ae602a0d5d01982dff6afba0f74d7ad1a17fc6d",
-      "startedAt": "2026-11-08T03:31:45.364Z",
-      "endedAt": "2026-11-08T03:31:47.822Z",
-      "sourceUnchanged": true,
-      "allExited": true,
-      "logSha256": "7a387a61ca278f99d371a529051c414086299ff86507fd1dfdbec6dd70155059",
-      "logPath": "/workspace/scratch/dx-final10-20261108/p05-history-parent-final-buildweb.log",
-      "context": "Node22.22.2/npm10.9.9; lock80b0332e; taskset2,3 applies only to command descendants; original Vitest config nonDB1 worker, original preflight protocol2 workers; local host not claimed CI equivalent",
-      "log": "/workspace/scratch/dx-final10-20261108/p05-history-parent-final-buildweb.log"
-    },
-    {
-      "id": "buildapi",
-      "kind": "command",
-      "command": "npm run build --workspace=@dx-rework/api",
-      "status": "passed",
-      "exitCode": 0,
-      "sourceFingerprint": "8052e638b9c923366e99118517e8856925ce7c7d488170c084fa58ae59a30497",
-      "testedHead": "5ae602a0d5d01982dff6afba0f74d7ad1a17fc6d",
-      "startedAt": "2026-11-08T03:31:47.913Z",
-      "endedAt": "2026-11-08T03:32:02.805Z",
-      "sourceUnchanged": true,
-      "allExited": true,
-      "logSha256": "8dd8c96364991c28227c467fbbb326a32e6737fddfa4e2d355be3ef6dd8512fe",
-      "logPath": "/workspace/scratch/dx-final10-20261108/p05-history-parent-final-buildapi.log",
-      "context": "Node22.22.2/npm10.9.9; lock80b0332e; taskset2,3 applies only to command descendants; original Vitest config nonDB1 worker, original preflight protocol2 workers; local host not claimed CI equivalent",
-      "log": "/workspace/scratch/dx-final10-20261108/p05-history-parent-final-buildapi.log"
-    },
-    {
-      "id": "migrationlint",
-      "kind": "command",
-      "command": "npm run db:migrate:lint",
-      "status": "passed",
-      "exitCode": 0,
-      "sourceFingerprint": "8052e638b9c923366e99118517e8856925ce7c7d488170c084fa58ae59a30497",
-      "testedHead": "5ae602a0d5d01982dff6afba0f74d7ad1a17fc6d",
-      "startedAt": "2026-11-08T03:32:02.903Z",
-      "endedAt": "2026-11-08T03:32:03.388Z",
-      "sourceUnchanged": true,
-      "allExited": true,
-      "logSha256": "90876b21ef74df91f90087fbbb15bd97ad81f49b7eeba1340d37e99aaa3b3954",
-      "logPath": "/workspace/scratch/dx-final10-20261108/p05-history-parent-final-migrationlint.log",
-      "context": "Node22.22.2/npm10.9.9; lock80b0332e; taskset2,3 applies only to command descendants; original Vitest config nonDB1 worker, original preflight protocol2 workers; local host not claimed CI equivalent",
-      "log": "/workspace/scratch/dx-final10-20261108/p05-history-parent-final-migrationlint.log"
-    },
-    {
       "id": "preflight",
-      "kind": "command",
       "command": "npm run test:preflight",
       "status": "passed",
       "exitCode": 0,
-      "sourceFingerprint": "8052e638b9c923366e99118517e8856925ce7c7d488170c084fa58ae59a30497",
-      "testedHead": "5ae602a0d5d01982dff6afba0f74d7ad1a17fc6d",
-      "startedAt": "2026-11-08T03:32:03.488Z",
-      "endedAt": "2026-11-08T03:32:11.959Z",
-      "sourceUnchanged": true,
       "allExited": true,
-      "logSha256": "697755d44b1f35ed9ed1f8ada5309efdbc0048f45acec484d9abb53b37304fd5",
-      "logPath": "/workspace/scratch/dx-final10-20261108/p05-history-parent-final-preflight.log",
-      "context": "Node22.22.2/npm10.9.9; lock80b0332e; taskset2,3 applies only to command descendants; original Vitest config nonDB1 worker, original preflight protocol2 workers; local host not claimed CI equivalent",
-      "log": "/workspace/scratch/dx-final10-20261108/p05-history-parent-final-preflight.log"
+      "sourceFingerprint": "abf9cbb773bd1198dbfe26dade5221c63bee18dafcf2603de5ccf7e770744de2",
+      "sourceUnchanged": true,
+      "testedHead": "d3ec9dda6320381be47614220d762c2ac8574c90",
+      "startedAt": "2026-11-08T04:13:55.817Z",
+      "endedAt": "2026-11-08T04:14:02.457Z",
+      "planError": null,
+      "log": "/workspace/scratch/dx-final10-20261108/p06-service-preflight-integrated.log",
+      "logSha256": "c4009b06e01c366399c19b884c4f5a5139a3af417815bce6dd987f1ffa6af9dc",
+      "resultReport": null,
+      "context": "Original configForSuite, marked owned loopback PG16.15 fixture and exact cleanup. Nodecpuset2,3, PGcpuset0,1/2GiB; local host not equivalent to CI hardware. Real AuthService and native business mutations on isolated fixtures only.",
+      "kind": "command"
+    },
+    {
+      "id": "lint",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/analysis-result-store.ts apps/api/src/production-platform/identity-routes.ts apps/api/src/server.ts scripts/ci/full-gate-risk-map.mjs scripts/test-suite-plan.mjs apps/api/src/production-platform/delivery-calendar-facts.ts apps/api/src/production-platform/delivery-calendar-query.ts apps/api/src/production-platform/delivery-calendar-routes.ts packages/contracts/src/delivery-calendar.ts packages/domain/src/delivery-calendar.ts tests/integration/m01-delivery-calendar-postgres.test.ts tests/unit/delivery-calendar.test.ts --max-warnings=0",
+      "status": "passed",
+      "exitCode": 0,
+      "allExited": true,
+      "sourceFingerprint": "abf9cbb773bd1198dbfe26dade5221c63bee18dafcf2603de5ccf7e770744de2",
+      "sourceUnchanged": true,
+      "testedHead": "d3ec9dda6320381be47614220d762c2ac8574c90",
+      "startedAt": "2026-11-08T04:14:59.064Z",
+      "endedAt": "2026-11-08T04:15:00.230Z",
+      "planError": null,
+      "log": "/workspace/scratch/dx-final10-20261108/p06-service-lint-integrated.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "resultReport": null,
+      "context": "Original configForSuite, marked owned loopback PG16.15 fixture and exact cleanup. Nodecpuset2,3, PGcpuset0,1/2GiB; local host not equivalent to CI hardware. Real AuthService and native business mutations on isolated fixtures only.",
+      "kind": "command"
+    },
+    {
+      "id": "buildapi",
+      "command": "npm run build --workspace=@dx-rework/api",
+      "status": "passed",
+      "exitCode": 0,
+      "allExited": true,
+      "sourceFingerprint": "abf9cbb773bd1198dbfe26dade5221c63bee18dafcf2603de5ccf7e770744de2",
+      "sourceUnchanged": true,
+      "testedHead": "d3ec9dda6320381be47614220d762c2ac8574c90",
+      "startedAt": "2026-11-08T04:14:03.472Z",
+      "endedAt": "2026-11-08T04:14:15.018Z",
+      "planError": null,
+      "log": "/workspace/scratch/dx-final10-20261108/p06-service-buildapi-integrated.log",
+      "logSha256": "8dd8c96364991c28227c467fbbb326a32e6737fddfa4e2d355be3ef6dd8512fe",
+      "resultReport": null,
+      "context": "Original configForSuite, marked owned loopback PG16.15 fixture and exact cleanup. Nodecpuset2,3, PGcpuset0,1/2GiB; local host not equivalent to CI hardware. Real AuthService and native business mutations on isolated fixtures only.",
+      "kind": "command"
     },
     {
       "id": "secret",
-      "kind": "command",
       "command": "npm run secret:scan",
       "status": "passed",
       "exitCode": 0,
-      "sourceFingerprint": "8052e638b9c923366e99118517e8856925ce7c7d488170c084fa58ae59a30497",
-      "testedHead": "5ae602a0d5d01982dff6afba0f74d7ad1a17fc6d",
-      "startedAt": "2026-11-08T03:32:12.042Z",
-      "endedAt": "2026-11-08T03:32:12.952Z",
-      "sourceUnchanged": true,
       "allExited": true,
+      "sourceFingerprint": "abf9cbb773bd1198dbfe26dade5221c63bee18dafcf2603de5ccf7e770744de2",
+      "sourceUnchanged": true,
+      "testedHead": "d3ec9dda6320381be47614220d762c2ac8574c90",
+      "startedAt": "2026-11-08T04:14:15.057Z",
+      "endedAt": "2026-11-08T04:14:15.817Z",
+      "planError": null,
+      "log": "/workspace/scratch/dx-final10-20261108/p06-service-secret-integrated.log",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda",
-      "logPath": "/workspace/scratch/dx-final10-20261108/p05-history-parent-final-secret.log",
-      "context": "Node22.22.2/npm10.9.9; lock80b0332e; taskset2,3 applies only to command descendants; original Vitest config nonDB1 worker, original preflight protocol2 workers; local host not claimed CI equivalent",
-      "log": "/workspace/scratch/dx-final10-20261108/p05-history-parent-final-secret.log"
+      "resultReport": null,
+      "context": "Original configForSuite, marked owned loopback PG16.15 fixture and exact cleanup. Nodecpuset2,3, PGcpuset0,1/2GiB; local host not equivalent to CI hardware. Real AuthService and native business mutations on isolated fixtures only.",
+      "kind": "command"
     },
     {
-      "id": "history_pg",
-      "kind": "tests",
-      "command": "taskset \"-c\" \"2,3\" \"/workspace/.dx-cloud/toolchain/node_modules/node/bin/node\" \"node_modules/vitest/vitest.mjs\" \"run\" \"tests/integration/m01-sla-history-postgres.test.ts\" \"--config\" \"vitest.business-chain.config.ts\" \"--reporter=verbose\" \"--reporter=json\" \"--outputFile=/workspace/scratch/dx-final10-20261108/p05-history-parent-complete-long.vitest.json\"",
-      "config": "vitest.business-chain.config.ts",
-      "suites": [
-        "tests/integration/m01-sla-history-postgres.test.ts"
-      ],
+      "id": "unit",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/delivery-calendar.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/p06-service-unit-integrated.vitest.json",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "testedHead": "5ae602a0d5d01982dff6afba0f74d7ad1a17fc6d",
-      "sourceFingerprint": "8052e638b9c923366e99118517e8856925ce7c7d488170c084fa58ae59a30497",
+      "sourceFingerprint": "abf9cbb773bd1198dbfe26dade5221c63bee18dafcf2603de5ccf7e770744de2",
       "sourceUnchanged": true,
-      "inputPaths": [
-        "apps/api",
-        "packages/contracts",
-        "packages/domain",
-        "packages/config",
-        "tests/helpers",
-        "scripts",
-        "package.json",
-        "package-lock.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts",
-        "vitest.postgres-immediate.config.ts",
-        "tests/integration/m01-sla-history-postgres.test.ts"
-      ],
-      "inputFingerprint": "9cf82836f8877639408576ca9377a7b64ad1350b354e60992429c3618d56dae3",
-      "inputsUnchanged": true,
-      "startedAt": "2026-11-08T03:31:15.761Z",
-      "endedAt": "2026-11-08T03:31:36.422Z",
-      "passed": 10,
+      "testedHead": "d3ec9dda6320381be47614220d762c2ac8574c90",
+      "startedAt": "2026-11-08T04:14:15.861Z",
+      "endedAt": "2026-11-08T04:14:16.456Z",
+      "passed": 9,
       "failed": 0,
       "skipped": 0,
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/p05-history-parent-complete-long.log",
-      "logSha256": "5fb4da07a3712ea476e3aec72c474917b8696ed0fd5f81547f2ffbe4a21021dd",
-      "resultReport": "/workspace/scratch/dx-final10-20261108/p05-history-parent-complete-long.vitest.json",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "c2918a2a9fb34f0a21d833136ba9a4e6c7c865f73be3965b64208ad2ac441b5f"
-        }
-      ],
-      "context": "Actual original configForSuite and owned marked PostgreSQL16.15 fixture creation/cleanup. Long group max2workers; ordinary group max1 and original strict timing. Nodecpuset2,3 and PGcpuset0,1/2GB, not CI host equivalent. Service tests do not establish original browser/AuthService evidence. Notification tests control only Date observation, not IO timers or real business data. Backend dependency input fingerprint captured before independent frontend-only edits."
+      "log": "/workspace/scratch/dx-final10-20261108/p06-service-unit-integrated.log",
+      "logSha256": "97f1958692780ed95f07742ff6a82a253bae0b33b99e6b1ec89bc37448bbc324",
+      "resultReport": "/workspace/scratch/dx-final10-20261108/p06-service-unit-integrated.vitest.json",
+      "context": "Original configForSuite, marked owned loopback PG16.15 fixture and exact cleanup. Nodecpuset2,3, PGcpuset0,1/2GiB; local host not equivalent to CI hardware. Real AuthService and native business mutations on isolated fixtures only.",
+      "kind": "tests"
     },
     {
-      "id": "native",
-      "command": "taskset \"-c\" \"2,3\" \"/workspace/.dx-cloud/toolchain/node_modules/node/bin/node\" \"node_modules/vitest/vitest.mjs\" \"run\" \"tests/integration/m01-settings-native-browser-postgres.test.ts\" \"--config\" \"vitest.business-chain.config.ts\" \"--reporter=verbose\" \"--reporter=json\" \"--outputFile=/workspace/scratch/dx-final10-20261108/p05-history-native-parent-flags.vitest.json\"",
-      "startedAt": "2026-11-08T03:31:17.194Z",
-      "endedAt": "2026-11-08T03:32:45.028Z",
-      "sourceFingerprint": "8052e638b9c923366e99118517e8856925ce7c7d488170c084fa58ae59a30497",
-      "testedHead": "5ae602a0d5d01982dff6afba0f74d7ad1a17fc6d",
-      "sourceUnchanged": true,
+      "id": "postgres",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/m01-delivery-calendar-postgres.test.ts --config vitest.business-chain.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/p06-service-postgres-integrated.vitest.json",
+      "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "passed": 35,
+      "sourceFingerprint": "abf9cbb773bd1198dbfe26dade5221c63bee18dafcf2603de5ccf7e770744de2",
+      "sourceUnchanged": true,
+      "testedHead": "d3ec9dda6320381be47614220d762c2ac8574c90",
+      "startedAt": "2026-11-08T04:14:16.496Z",
+      "endedAt": "2026-11-08T04:14:29.844Z",
+      "passed": 7,
       "failed": 0,
       "skipped": 0,
-      "log": "/workspace/scratch/dx-final10-20261108/p05-history-native-parent-flags.log",
-      "logSha256": "e5cf638f0e304e345cda84cdc646dafb0560154086ad73cf72fd1c33a52c806e",
-      "resultReport": "/workspace/scratch/dx-final10-20261108/p05-history-native-parent-flags.vitest.json",
-      "context": "Original full App/Shell, real original AuthService and owned marked PostgreSQL16.15 TEST fixtures. Original configForSuite and100s per-test/120s setup, lock-pinned Playwright1.56.1/Chromium141.0.7390.37. Only one file worker; Node/browser descendants cpuset2,3, PG2CPU/2GiB cpuset0,1. Same canonical browser/config but not CI host load/hardware or onsite acceptance.",
-      "kind": "tests",
-      "status": "passed",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "311ffd2bae9b2ad72dfa1abfca9583ff008381b95e74fb413059dde921d1ad2e"
-        }
-      ]
+      "planError": null,
+      "log": "/workspace/scratch/dx-final10-20261108/p06-service-postgres-integrated.log",
+      "logSha256": "34691c0b77d9d25f730fc14efe853866eb95ebef998f59dce7ed559cc4f71602",
+      "resultReport": "/workspace/scratch/dx-final10-20261108/p06-service-postgres-integrated.vitest.json",
+      "context": "Original configForSuite, marked owned loopback PG16.15 fixture and exact cleanup. Nodecpuset2,3, PGcpuset0,1/2GiB; local host not equivalent to CI hardware. Real AuthService and native business mutations on isolated fixtures only.",
+      "kind": "tests"
     }
   ]
 }
