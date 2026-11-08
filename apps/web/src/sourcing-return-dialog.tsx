@@ -1,11 +1,13 @@
 import { Button } from "@dx-rework/ui";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
-export function SourcingReturnDialog({ busy, error, onClose, onSubmit }: {
+export function SourcingReturnDialog({ busy, error, onClose, onSubmit, reason:draftReason, onReasonChange }: {
+  reason?:string;onReasonChange?:(reason:string)=>void;
   busy: boolean; error: string; onClose(): void; onSubmit(reason: string): void;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
-  const [reason, setReason] = useState("");
+  const [localReason,setLocalReason]=useState("");
+  const reason=draftReason??localReason,setReason=onReasonChange??setLocalReason;
   useEffect(() => { const modal = ref.current; modal?.showModal(); return () => modal?.close(); }, []);
   const submit = (event: FormEvent) => { event.preventDefault(); if (!busy && reason.trim()) onSubmit(reason.trim()); };
   return <dialog ref={ref} className="system-dialog" aria-label="退回跟单修改" onCancel={event => {event.preventDefault(); if (!busy) onClose();}}>

@@ -24,11 +24,13 @@ describe("sourcing form feedback", () => {
   });
   it("wires first-line price cascade independently into IE and management forms", async () => {
     const source = await readFile("apps/web/src/sourcing-workspace-page.tsx", "utf8");
-    expect(source).toContain('import { applySourcingPriceCascade } from "./sourcing-price-cascade.js";');
-    expect(source).toContain("const quotePriceOverrides = useRef<ReadonlySet<number>>(new Set<number>());");
-    expect(source).toContain("const decisionPriceOverrides = useRef<ReadonlySet<number>>(new Set<number>());");
-    expect(source).toContain("const result = applySourcingPriceCascade(lines, position, next, overrides.current);");
-    expect(source).toContain('const overrides = kind === "quote" ? quotePriceOverrides : decisionPriceOverrides;');
+    const prices=await readFile("apps/web/src/sourcing-detail-prices.ts","utf8");
+    expect(source).toContain("useSourcingDetailPrices(sourcingCaseId,item");
+    expect(source).toContain('priceInput("quote", line.position, price)');
+    expect(source).toContain('priceInput("decision", line.position, price)');
+    expect(prices).toContain('import {applySourcingPriceCascade} from "./sourcing-price-cascade.js"');
+    expect(prices).toContain('kind==="quote"?quoteOverrides:decisionOverrides');
+    expect(prices).toContain("applySourcingPriceCascade(lines,position,next,overrides.current)");
   });
 
   it("keeps order list filters compact, input-driven and free of a submit search button", async () => {
@@ -47,7 +49,7 @@ describe("sourcing form feedback", () => {
     const source = await readFile("apps/web/src/sourcing-workspace-page.tsx", "utf8");
     expect(source).toContain('aria-describedby={missingDecisionReason ? "sourcing-decision-reason-hint" : undefined}');
     expect(source).toContain("validateSourcingDecision(decision, item.ieQuote?.linePrices ?? [], processes)");
-    expect(source).toContain('disabled={busy || feedback.uncertain || priceComposing("decision")}');
+    expect(source).toContain('disabled={writeBlocked || feedback.uncertain || priceComposing("decision")}');
     expect(source).toContain("if (issues.length) { await feedback.reject(issues); return; }");
     expect(source).not.toContain("历史价格不会自动截断");
     expect(source).not.toContain("任一行调价时必须填写原因");

@@ -1,6 +1,6 @@
 import { preparePatternNavigation } from "./pattern-navigation.js";
 
-type LeaveGuard = () => Promise<boolean>;
+type LeaveGuard = (targetHref?:string) => Promise<boolean>;
 const guards = new Set<LeaveGuard>();
 let asking = false;
 const POSITION = "dxInternalNavigationPosition";
@@ -9,7 +9,7 @@ let activeNavigate: ((href: string, options?: NavigateOptions) => Promise<boolea
 
 export async function navigateInternalPage(href: string, options?: NavigateOptions): Promise<boolean> {
   if (activeNavigate) return activeNavigate(href, options);
-  if (!await canLeaveInternalPage()) return false;
+  if (!await canLeaveInternalPage(href)) return false;
   const target = new URL(href, window.location.href);
   if (target.origin !== window.location.origin) return false;
   if (options?.replace) window.location.replace(target.href); else window.location.assign(target.href);
@@ -21,11 +21,11 @@ export function registerInternalNavigationGuard(guard: LeaveGuard): () => void {
   return () => { guards.delete(guard); };
 }
 
-export async function canLeaveInternalPage(): Promise<boolean> {
+export async function canLeaveInternalPage(targetHref?:string): Promise<boolean> {
   if (asking) return false;
   asking = true;
   try {
-    for (const guard of guards) if (!await guard()) return false;
+    for (const guard of guards) if (!await guard(targetHref)) return false;
     return true;
   } finally { asking = false; }
 }
@@ -66,7 +66,7 @@ export function installInternalNavigation(basePath: string, sync: () => void): (
     if (window.location.href === current.href) { remember(); return; }
     const attempt = ++generation;
     const target = { href: window.location.href, state: window.history.state };
-    if (guards.size && !await canLeaveInternalPage()) {
+    if (guards.size && !await canLeaveInternalPage(target.href)) {
       if (attempt !== generation) return;
       const delta = navigationRollbackDelta(current.state?.[POSITION], target.state?.[POSITION]);
       if (delta !== null) { restoring = true; window.history.go(delta); }
@@ -86,7 +86,7 @@ export function installInternalNavigation(basePath: string, sync: () => void): (
     const relativePath = appPath(url.pathname);
     if (!(relativePath === "/" || relativePath.startsWith("/ui/") || relativePath.startsWith("/system/") || relativePath.startsWith("/auth/"))) return false;
     const attempt = generation;
-    if (guards.size && !await canLeaveInternalPage()) return false;
+    if (guards.size && !await canLeaveInternalPage(url.href)) return false;
     if (attempt !== generation) return false;
     ++generation;
     const sourcePath = appPath(window.location.pathname);
