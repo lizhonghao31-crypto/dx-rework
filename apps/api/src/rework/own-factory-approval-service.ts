@@ -1,12 +1,14 @@
 import { createHash, randomUUID } from "node:crypto";
 import type {
   ApproveOwnFactoryApproval,
+  QueuePageQuery,
   OwnFactoryApprovalQueueResponse,
   OwnFactoryApprovalResponse,
   RejectOwnFactoryApproval,
 } from "@dx-rework/contracts";
 import type { Pool, PoolClient } from "pg";
 
+import {queuePage,queuePageMetadata} from "./queue-page.js";
 import { ApplicationError } from "../platform/errors.js";
 import { maybeCompleteResponsibilityAction } from "./external-responsibility-service.js";
 import {
@@ -69,6 +71,7 @@ type HistoryRow = {
   decided_at: Date | null;
 };
 type QueueRow = {
+  total_count?: string;
   approval_id: string;
   rework_order_id: string;
   rework_no: string | null;
@@ -266,9 +269,15 @@ export class OwnFactoryApprovalService {
     };
   }
 
-  async listQueue(actor: TrustedActorContext): Promise<OwnFactoryApprovalQueueResponse> {
-    const result = await this.database.query<QueueRow>(
-      `SELECT approval.approval_id,approval.rework_order_id,order_record.rework_no,
+  async listQueue(actor: TrustedActorContext,input?:QueuePageQuery): Promise<OwnFactoryApprovalQueueResponse> {
+    const page=queuePage(input);
+    const scope=`FROM rework_own_factory_approvals approval
+       JOIN rework_orders order_record ON order_record.rework_order_id=approval.rework_order_id
+       WHERE approval.status='pending'
+         AND order_record.status<>'deleted'
+         AND own_factory_approval_can_view($1,approval.rework_order_id)
+`;
+    const details=`SELECT approval.approval_id,approval.rework_order_id,order_record.rework_no,
               order_record.style_no,order_record.order_no,order_record.problem_part,
               order_record.version order_version,approval.approval_version,
               approval.status,approval.own_factory_total_amount::text,
@@ -278,12 +287,24 @@ export class OwnFactoryApprovalService {
        WHERE approval.status='pending'
          AND order_record.status<>'deleted'
          AND own_factory_approval_can_view($1,approval.rework_order_id)
-       ORDER BY approval.created_at ASC
-       LIMIT 200`,
-      [actor.actorId],
+`;
+    const result = await this.database.query<QueueRow>(page ? `
+      WITH queue_matches AS MATERIALIZED (
+        SELECT approval.approval_id,
+               row_number() OVER (ORDER BY approval.created_at,approval.approval_id) ordinal
+        ${scope} AND ($2::text='' OR position(lower($2::text) in lower(concat_ws(' ',nullif(order_record.rework_no,''),nullif(order_record.style_no,''),nullif(order_record.order_no,''),nullif(order_record.problem_part,''))))>0)
+      ), queue_page AS MATERIALIZED (
+        SELECT * FROM queue_matches ORDER BY ordinal LIMIT 15 OFFSET $3
+      )
+      SELECT totals.total_count,details.* FROM (SELECT count(*)::text total_count FROM queue_matches) totals
+      LEFT JOIN queue_page selected ON true
+      LEFT JOIN LATERAL (${details} AND approval.approval_id=selected.approval_id) details ON true
+      ORDER BY selected.ordinal` : `${details} ORDER BY approval.created_at ASC LIMIT 200`,
+      [actor.actorId,...(page?[page.search,page.offset]:[])],
     );
     return {
-      items: result.rows.map((row) => ({
+      ...queuePageMetadata(page,Number(result.rows[0]?.total_count??0)),
+      items: result.rows.filter(row=>row.approval_id).map((row) => ({
         approvalId: row.approval_id,
         reworkOrderId: row.rework_order_id,
         reworkNo: row.rework_no,
