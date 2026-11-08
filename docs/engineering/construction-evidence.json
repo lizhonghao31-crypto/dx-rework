@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "base": "2020b353ede3963f71ea3df6311019093ff9c584",
-  "sourceFingerprint": "3b2f9db014eb9c7f09b7b438a4288bf7c29456adfc481e72057b2989b270e0ee",
+  "base": "fb7a2ed89fdcdfb30608559b772a60179fae863d",
+  "sourceFingerprint": "cf6183da0792dc701f6d6aec9e93f84a0f43091b2d8e6974249c940a02c0d202",
   "risk": "full",
   "rules": [
     {
@@ -106,8 +106,8 @@
         "tests/integration/digital-production-notifications-postgres.test.ts",
         "tests/integration/production-closure-postgres.test.ts",
         "tests/unit/full-gate-risk-map.test.ts",
-        "tests/unit/todo-read-split.test.ts",
-        "tests/unit/todo-qc-lazy-clock.test.ts"
+        "tests/unit/todo-qc-lazy-clock.test.ts",
+        "tests/unit/todo-read-split.test.ts"
       ],
       "reads": [
         "scripts/ci/full-gate-risk-map.mjs",
@@ -146,7 +146,7 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "3b2f9db014eb9c7f09b7b438a4288bf7c29456adfc481e72057b2989b270e0ee",
+      "sourceFingerprint": "cf6183da0792dc701f6d6aec9e93f84a0f43091b2d8e6974249c940a02c0d202",
       "inputPaths": [
         "apps",
         "packages",
@@ -161,14 +161,14 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "97e8588db7b05f8b4d59978ce7210da4cdd3967fe6cc6118f9d01c9905a7282c",
+      "inputFingerprint": "48703fa96d01e1986c2e2a2f934e04d94118ad8e3f8c49b1017577dfb4f9e49e",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "195eb714c718265d56a94f26d3d5369b34867934",
-      "startedAt": "2026-11-08T15:32:52.026Z",
-      "endedAt": "2026-11-08T15:33:02.829Z",
+      "testedHead": "c60296ed26e01766fd92f5fb945c59a794fccd73",
+      "startedAt": "2026-11-08T15:48:54.244Z",
+      "endedAt": "2026-11-08T15:49:04.711Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf06-typesapi-qc-fixed-native.log",
+      "log": "/workspace/scratch/dx-final10-20261108/perf06-typesapi-merged-native.log",
       "logSha256": "d81733d2d3443600c8f5c4e1f5774d8d050a1c5a8ef34bd5a659eb50ebd68f00",
       "resultReport": null,
       "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native preview tests use actual AuthService, actual role revocation and private AcceptanceObjectStorage bytes, no real business data or deployment.",
@@ -176,11 +176,11 @@
     },
     {
       "id": "lint",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/bulk-fabric-todos.ts apps/api/src/production-platform/development-arrangement-todos.ts apps/api/src/production-platform/development-fabric-cases.ts apps/api/src/production-platform/factory-production-qc-todos.ts apps/api/src/production-platform/garment-quality-todos.ts apps/api/src/production-platform/notification-service.ts apps/api/src/production-platform/preparation-todos.ts apps/api/src/production-platform/qc-progress-todos.ts apps/api/src/production-platform/short-lead-todos.ts apps/api/src/sourcing/production-closure-service.ts apps/api/src/todos/content-reads.ts apps/api/src/todos/global-search.ts apps/api/src/todos/selection.ts apps/api/src/todos/service.ts scripts/ci/full-gate-risk-map.mjs tests/integration/digital-production-notifications-postgres.test.ts tests/integration/production-closure-postgres.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/todo-read-split.test.ts tests/unit/todo-qc-lazy-clock.test.ts --max-warnings=0",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/bulk-fabric-todos.ts apps/api/src/production-platform/development-arrangement-todos.ts apps/api/src/production-platform/development-fabric-cases.ts apps/api/src/production-platform/factory-production-qc-todos.ts apps/api/src/production-platform/garment-quality-todos.ts apps/api/src/production-platform/notification-service.ts apps/api/src/production-platform/preparation-todos.ts apps/api/src/production-platform/qc-progress-todos.ts apps/api/src/production-platform/short-lead-todos.ts apps/api/src/sourcing/production-closure-service.ts apps/api/src/todos/content-reads.ts apps/api/src/todos/global-search.ts apps/api/src/todos/selection.ts apps/api/src/todos/service.ts scripts/ci/full-gate-risk-map.mjs tests/integration/digital-production-notifications-postgres.test.ts tests/integration/production-closure-postgres.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/todo-qc-lazy-clock.test.ts tests/unit/todo-read-split.test.ts --max-warnings=0",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "3b2f9db014eb9c7f09b7b438a4288bf7c29456adfc481e72057b2989b270e0ee",
+      "sourceFingerprint": "cf6183da0792dc701f6d6aec9e93f84a0f43091b2d8e6974249c940a02c0d202",
       "inputPaths": [
         "apps",
         "packages",
@@ -195,14 +195,14 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "97e8588db7b05f8b4d59978ce7210da4cdd3967fe6cc6118f9d01c9905a7282c",
+      "inputFingerprint": "48703fa96d01e1986c2e2a2f934e04d94118ad8e3f8c49b1017577dfb4f9e49e",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "195eb714c718265d56a94f26d3d5369b34867934",
-      "startedAt": "2026-11-08T15:33:10.509Z",
-      "endedAt": "2026-11-08T15:33:12.059Z",
+      "testedHead": "c60296ed26e01766fd92f5fb945c59a794fccd73",
+      "startedAt": "2026-11-08T15:49:16.797Z",
+      "endedAt": "2026-11-08T15:49:19.074Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf06-lint-qc-fixed-native.log",
+      "log": "/workspace/scratch/dx-final10-20261108/perf06-lint-merged-native.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "resultReport": null,
       "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native preview tests use actual AuthService, actual role revocation and private AcceptanceObjectStorage bytes, no real business data or deployment.",
@@ -214,7 +214,7 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "3b2f9db014eb9c7f09b7b438a4288bf7c29456adfc481e72057b2989b270e0ee",
+      "sourceFingerprint": "cf6183da0792dc701f6d6aec9e93f84a0f43091b2d8e6974249c940a02c0d202",
       "inputPaths": [
         "apps",
         "packages",
@@ -229,26 +229,26 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "97e8588db7b05f8b4d59978ce7210da4cdd3967fe6cc6118f9d01c9905a7282c",
+      "inputFingerprint": "48703fa96d01e1986c2e2a2f934e04d94118ad8e3f8c49b1017577dfb4f9e49e",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "195eb714c718265d56a94f26d3d5369b34867934",
-      "startedAt": "2026-11-08T15:33:02.918Z",
-      "endedAt": "2026-11-08T15:33:10.428Z",
+      "testedHead": "c60296ed26e01766fd92f5fb945c59a794fccd73",
+      "startedAt": "2026-11-08T15:49:04.798Z",
+      "endedAt": "2026-11-08T15:49:16.722Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf06-preflight-qc-fixed-native.log",
-      "logSha256": "717f0f4093b91c26f3910a41c95540886139969a50784b98a5d6a9652b8e2a4f",
+      "log": "/workspace/scratch/dx-final10-20261108/perf06-preflight-merged-native.log",
+      "logSha256": "86b545e5137668140e0a030bc2dba842c43991e5695e9e150bd0a5b4c92fb195",
       "resultReport": null,
       "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native preview tests use actual AuthService, actual role revocation and private AcceptanceObjectStorage bytes, no real business data or deployment.",
       "kind": "command"
     },
     {
       "id": "unit",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/todo-qc-lazy-clock.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/todo-read-split.test.ts tests/unit/todo-indicator.test.ts tests/unit/todo-list-service.test.ts tests/unit/todo-list-pagination.test.ts tests/unit/todo-provider.test.ts tests/unit/production-closure.test.ts tests/unit/todo-new-indicator.test.ts tests/unit/todo-session-refresh.test.ts tests/unit/digital-notification-runtime.test.ts tests/unit/digital-notification-child-context.test.ts tests/unit/sla-notification-window.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf06-unit-qc-fixed-native.vitest.json",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/todo-qc-lazy-clock.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/todo-read-split.test.ts tests/unit/todo-indicator.test.ts tests/unit/todo-list-service.test.ts tests/unit/todo-list-pagination.test.ts tests/unit/todo-provider.test.ts tests/unit/production-closure.test.ts tests/unit/todo-new-indicator.test.ts tests/unit/todo-session-refresh.test.ts tests/unit/digital-notification-runtime.test.ts tests/unit/digital-notification-child-context.test.ts tests/unit/sla-notification-window.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf06-unit-merged-native.vitest.json",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "3b2f9db014eb9c7f09b7b438a4288bf7c29456adfc481e72057b2989b270e0ee",
+      "sourceFingerprint": "cf6183da0792dc701f6d6aec9e93f84a0f43091b2d8e6974249c940a02c0d202",
       "inputPaths": [
         "apps",
         "packages",
@@ -263,35 +263,35 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "97e8588db7b05f8b4d59978ce7210da4cdd3967fe6cc6118f9d01c9905a7282c",
+      "inputFingerprint": "48703fa96d01e1986c2e2a2f934e04d94118ad8e3f8c49b1017577dfb4f9e49e",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "195eb714c718265d56a94f26d3d5369b34867934",
-      "startedAt": "2026-11-08T15:33:12.147Z",
-      "endedAt": "2026-11-08T15:33:17.146Z",
+      "testedHead": "c60296ed26e01766fd92f5fb945c59a794fccd73",
+      "startedAt": "2026-11-08T15:49:19.154Z",
+      "endedAt": "2026-11-08T15:49:26.603Z",
       "passed": 127,
       "failed": 0,
       "skipped": 0,
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf06-unit-qc-fixed-native.log",
-      "logSha256": "b98f3b7158ceabc19baf635dcd20fada8bd4b5aba3ab201d3009746127344906",
-      "resultReport": "/workspace/scratch/dx-final10-20261108/perf06-unit-qc-fixed-native.vitest.json",
+      "log": "/workspace/scratch/dx-final10-20261108/perf06-unit-merged-native.log",
+      "logSha256": "c8fb0e1f0411c6ac409ab130253472d5aa72cb7a6436886e39fcf078c4cfd32e",
+      "resultReport": "/workspace/scratch/dx-final10-20261108/perf06-unit-merged-native.vitest.json",
       "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native preview tests use actual AuthService, actual role revocation and private AcceptanceObjectStorage bytes, no real business data or deployment.",
       "kind": "tests",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "ea495e4d4972c1410bfde3f5c4517d16887369c0c6d5ef2c204b431518ed378a"
+          "sha256": "61aff932501865b43c7651039883ed40ebdd1dfe1d355721aa89d4c9bb68cd1c"
         }
       ]
     },
     {
       "id": "native",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/digital-production-notifications-postgres.test.ts tests/integration/digital-my-todo-context-postgres.test.ts --config vitest.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf06-postgres-qc-fixed-native.vitest.json",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/digital-production-notifications-postgres.test.ts tests/integration/digital-my-todo-context-postgres.test.ts --config vitest.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf06-postgres-merged-native.vitest.json",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "3b2f9db014eb9c7f09b7b438a4288bf7c29456adfc481e72057b2989b270e0ee",
+      "sourceFingerprint": "cf6183da0792dc701f6d6aec9e93f84a0f43091b2d8e6974249c940a02c0d202",
       "inputPaths": [
         "apps",
         "packages",
@@ -306,35 +306,35 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "97e8588db7b05f8b4d59978ce7210da4cdd3967fe6cc6118f9d01c9905a7282c",
+      "inputFingerprint": "48703fa96d01e1986c2e2a2f934e04d94118ad8e3f8c49b1017577dfb4f9e49e",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "195eb714c718265d56a94f26d3d5369b34867934",
-      "startedAt": "2026-11-08T15:33:17.234Z",
-      "endedAt": "2026-11-08T15:33:25.916Z",
+      "testedHead": "c60296ed26e01766fd92f5fb945c59a794fccd73",
+      "startedAt": "2026-11-08T15:49:26.687Z",
+      "endedAt": "2026-11-08T15:49:37.280Z",
       "passed": 24,
       "failed": 0,
       "skipped": 0,
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf06-postgres-qc-fixed-native.log",
-      "logSha256": "36c22aa28cdbd4cbfe0c1d546ea1eb368166be373f2e7a5715bdbef14ff6128b",
-      "resultReport": "/workspace/scratch/dx-final10-20261108/perf06-postgres-qc-fixed-native.vitest.json",
+      "log": "/workspace/scratch/dx-final10-20261108/perf06-postgres-merged-native.log",
+      "logSha256": "7ec49dfe7a0a07bd839c827e6c5dea3d05079c38b718205d27b7404c489f4438",
+      "resultReport": "/workspace/scratch/dx-final10-20261108/perf06-postgres-merged-native.vitest.json",
       "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native preview tests use actual AuthService, actual role revocation and private AcceptanceObjectStorage bytes, no real business data or deployment.",
       "kind": "tests",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "08799454d5d9825f54d77dc40dd2a70d54ddb68c230b7af209b653d6295fe6cf"
+          "sha256": "3f6da23826af23fb1fe223e2348543cf8d3df553ce9d644a8fd4329adc006838"
         }
       ]
     },
     {
       "id": "aux",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/production-readiness-postgres.test.ts tests/integration/development-technical-postgres.test.ts tests/integration/qc-progress-retirement-postgres.test.ts --config vitest.business-chain.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf06-postgres-qc-fixed-aux.vitest.json",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/production-readiness-postgres.test.ts tests/integration/development-technical-postgres.test.ts tests/integration/qc-progress-retirement-postgres.test.ts --config vitest.business-chain.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf06-postgres-merged-aux.vitest.json",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "3b2f9db014eb9c7f09b7b438a4288bf7c29456adfc481e72057b2989b270e0ee",
+      "sourceFingerprint": "cf6183da0792dc701f6d6aec9e93f84a0f43091b2d8e6974249c940a02c0d202",
       "inputPaths": [
         "apps",
         "packages",
@@ -349,35 +349,35 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "97e8588db7b05f8b4d59978ce7210da4cdd3967fe6cc6118f9d01c9905a7282c",
+      "inputFingerprint": "48703fa96d01e1986c2e2a2f934e04d94118ad8e3f8c49b1017577dfb4f9e49e",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "195eb714c718265d56a94f26d3d5369b34867934",
-      "startedAt": "2026-11-08T15:34:19.046Z",
-      "endedAt": "2026-11-08T15:35:32.634Z",
+      "testedHead": "c60296ed26e01766fd92f5fb945c59a794fccd73",
+      "startedAt": "2026-11-08T15:50:31.640Z",
+      "endedAt": "2026-11-08T15:51:57.415Z",
       "passed": 54,
       "failed": 0,
       "skipped": 0,
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf06-postgres-qc-fixed-aux.log",
-      "logSha256": "c69a0b45e1d5276e686412f96cccad6f843c1d56602b2ca844f3767fa092eaca",
-      "resultReport": "/workspace/scratch/dx-final10-20261108/perf06-postgres-qc-fixed-aux.vitest.json",
+      "log": "/workspace/scratch/dx-final10-20261108/perf06-postgres-merged-aux.log",
+      "logSha256": "f98bb6e0f3cb5fac5578cc2048c5bd3806082c06158dd490d8066bbbab3534cd",
+      "resultReport": "/workspace/scratch/dx-final10-20261108/perf06-postgres-merged-aux.vitest.json",
       "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native preview tests use actual AuthService, actual role revocation and private AcceptanceObjectStorage bytes, no real business data or deployment.",
       "kind": "tests",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "2c55402685cee54a1b033f9199a07bce14ede6961d3027fdbd6893e1933435d0"
+          "sha256": "6e6c1640d6dd19d4dff15feba081b73b85d79544b018a7768497b2fface264ca"
         }
       ]
     },
     {
       "id": "production",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/production-closure-postgres.test.ts --config vitest.business-chain.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf06-postgres-qc-fixed-production.vitest.json",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/production-closure-postgres.test.ts --config vitest.business-chain.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf06-postgres-merged-production.vitest.json",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "3b2f9db014eb9c7f09b7b438a4288bf7c29456adfc481e72057b2989b270e0ee",
+      "sourceFingerprint": "cf6183da0792dc701f6d6aec9e93f84a0f43091b2d8e6974249c940a02c0d202",
       "inputPaths": [
         "apps",
         "packages",
@@ -392,35 +392,35 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "97e8588db7b05f8b4d59978ce7210da4cdd3967fe6cc6118f9d01c9905a7282c",
+      "inputFingerprint": "48703fa96d01e1986c2e2a2f934e04d94118ad8e3f8c49b1017577dfb4f9e49e",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "195eb714c718265d56a94f26d3d5369b34867934",
-      "startedAt": "2026-11-08T15:36:05.772Z",
-      "endedAt": "2026-11-08T15:36:15.740Z",
+      "testedHead": "c60296ed26e01766fd92f5fb945c59a794fccd73",
+      "startedAt": "2026-11-08T15:53:31.850Z",
+      "endedAt": "2026-11-08T15:53:47.247Z",
       "passed": 17,
       "failed": 0,
       "skipped": 0,
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf06-postgres-qc-fixed-production.log",
-      "logSha256": "32652185579a4abf736b7717296e84104da1ea9fd52d28665319aeff01e15afe",
-      "resultReport": "/workspace/scratch/dx-final10-20261108/perf06-postgres-qc-fixed-production.vitest.json",
+      "log": "/workspace/scratch/dx-final10-20261108/perf06-postgres-merged-production.log",
+      "logSha256": "a1a88d2ac73caa199464afcbe16a7ee5db0c3d0df3eed7f59e20d9072cfb92b7",
+      "resultReport": "/workspace/scratch/dx-final10-20261108/perf06-postgres-merged-production.vitest.json",
       "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native preview tests use actual AuthService, actual role revocation and private AcceptanceObjectStorage bytes, no real business data or deployment.",
       "kind": "tests",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "d5c5fc9a70a6be1fdbf374022962270f57a101187d19a044d7fd84857f91079d"
+          "sha256": "1b9d5c1648c25fa56a08f16916bcb157cde4b397e2bee5908485a69b20831da2"
         }
       ]
     },
     {
       "id": "search",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/todo-global-search-postgres.test.ts --config vitest.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf06-postgres-qc-fixed-search.vitest.json",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/todo-global-search-postgres.test.ts --config vitest.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf06-postgres-merged-search.vitest.json",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "3b2f9db014eb9c7f09b7b438a4288bf7c29456adfc481e72057b2989b270e0ee",
+      "sourceFingerprint": "cf6183da0792dc701f6d6aec9e93f84a0f43091b2d8e6974249c940a02c0d202",
       "inputPaths": [
         "apps",
         "packages",
@@ -435,25 +435,25 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "97e8588db7b05f8b4d59978ce7210da4cdd3967fe6cc6118f9d01c9905a7282c",
+      "inputFingerprint": "48703fa96d01e1986c2e2a2f934e04d94118ad8e3f8c49b1017577dfb4f9e49e",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "195eb714c718265d56a94f26d3d5369b34867934",
-      "startedAt": "2026-11-08T15:36:59.712Z",
-      "endedAt": "2026-11-08T15:37:00.902Z",
+      "testedHead": "c60296ed26e01766fd92f5fb945c59a794fccd73",
+      "startedAt": "2026-11-08T15:54:03.832Z",
+      "endedAt": "2026-11-08T15:54:05.300Z",
       "passed": 4,
       "failed": 0,
       "skipped": 0,
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf06-postgres-qc-fixed-search.log",
-      "logSha256": "71e5247dbefebb6154aaa99826227c7059ebe2ef5221e8ae1003fd594fa29efd",
-      "resultReport": "/workspace/scratch/dx-final10-20261108/perf06-postgres-qc-fixed-search.vitest.json",
+      "log": "/workspace/scratch/dx-final10-20261108/perf06-postgres-merged-search.log",
+      "logSha256": "db82f7257f9a44de442bbb090e4dc42527ac5b40e0eb71b1365f776e21e338c3",
+      "resultReport": "/workspace/scratch/dx-final10-20261108/perf06-postgres-merged-search.vitest.json",
       "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native preview tests use actual AuthService, actual role revocation and private AcceptanceObjectStorage bytes, no real business data or deployment.",
       "kind": "tests",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "705bd981fe0efd7a6a501a4d0c0138e05bb684b7bfc24186515f5b77ddc7a4a6"
+          "sha256": "8660ef39e40f9924079eb08ccc897e962ad149d15bdc57529e8e117c3d815a88"
         }
       ]
     },
@@ -463,7 +463,7 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "3b2f9db014eb9c7f09b7b438a4288bf7c29456adfc481e72057b2989b270e0ee",
+      "sourceFingerprint": "cf6183da0792dc701f6d6aec9e93f84a0f43091b2d8e6974249c940a02c0d202",
       "inputPaths": [
         "apps",
         "packages",
@@ -478,14 +478,14 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "97e8588db7b05f8b4d59978ce7210da4cdd3967fe6cc6118f9d01c9905a7282c",
+      "inputFingerprint": "48703fa96d01e1986c2e2a2f934e04d94118ad8e3f8c49b1017577dfb4f9e49e",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "195eb714c718265d56a94f26d3d5369b34867934",
-      "startedAt": "2026-11-08T15:36:04.867Z",
-      "endedAt": "2026-11-08T15:36:05.692Z",
+      "testedHead": "c60296ed26e01766fd92f5fb945c59a794fccd73",
+      "startedAt": "2026-11-08T15:53:31.008Z",
+      "endedAt": "2026-11-08T15:53:31.766Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf06-secret-qc-fixed-production.log",
+      "log": "/workspace/scratch/dx-final10-20261108/perf06-secret-merged-production.log",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda",
       "resultReport": null,
       "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native preview tests use actual AuthService, actual role revocation and private AcceptanceObjectStorage bytes, no real business data or deployment.",

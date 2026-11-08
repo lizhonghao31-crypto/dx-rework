@@ -68,7 +68,8 @@ describe('same-round correction source-only PG coverage',()=>{
  ])('selects unchanged real correction regression for %s alone',path=>{
   const risk=classifyFullGatePaths([path]),plan=amendmentPlan([path]);expect(risk.highRisk).toBe(true);expect(risk.mappedPostgresTests).toContain(amendmentSuite);expect(()=>assertMappedPostgresTests(risk.mappedPostgresTests)).not.toThrow();
   const shortLead=path==='apps/api/src/production-platform/access-policy.ts'?['tests/integration/m01-short-lead-native-browser-postgres.test.ts']:[];
-  expect(plan.plan.map(s=>s.path)).toEqual([...POSTGRES_CHAIN_TESTS,amendmentSuite,...shortLead].sort());
+  const imagePreview=['apps/api/src/production-platform/development-routes.ts','apps/api/src/production-platform/development-service.ts'].includes(path)?['tests/integration/attachment-image-preview-postgres.test.ts']:[];
+  expect(plan.plan.map(s=>s.path)).toEqual([...POSTGRES_CHAIN_TESTS,amendmentSuite,...shortLead,...imagePreview].sort());
   expect(plan.plan.find(s=>s.path===amendmentSuite)?.config).toBe('vitest.config.ts');
  });
  it('guards the actual amendment-service domain imports against a newly omitted direct dependency',()=>{

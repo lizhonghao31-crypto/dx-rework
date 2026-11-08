@@ -40,14 +40,18 @@ const url=process.env.TEST_DATABASE_URL;
  beforeAll(async()=>{
   await createOwnedPostgresSchema(admin,schema);await db.query("CREATE TABLE schema_migrations(version text PRIMARY KEY,checksum char(64) NOT NULL,applied_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP)");
   const manifest=JSON.parse(await readFile(new URL("../../apps/api/src/platform/migration-manifest.json",import.meta.url),"utf8"));
-  for(const row of manifest.migrations.filter((row:{version:string})=>row.version!=="0248_development_document_amendments")){await db.query(await readFile(new URL(`../../apps/api/migrations/${row.version}.sql`,import.meta.url),"utf8"));await db.query("INSERT INTO schema_migrations(version,checksum) VALUES($1,$2)",[row.version,row.checksum]);}
+  const amendmentIndex=manifest.migrations.findIndex((row:{version:string})=>row.version==="0248_development_document_amendments");
+  if(amendmentIndex<0)throw new Error("Missing development amendment migration");
+  const migrate=async(rows:Array<{version:string;checksum:string}>)=>{for(const row of rows){await db.query(await readFile(new URL(`../../apps/api/migrations/${row.version}.sql`,import.meta.url),"utf8"));await db.query("INSERT INTO schema_migrations(version,checksum) VALUES($1,$2)",[row.version,row.checksum]);}};
+  // Create the historical return before 0248, then upgrade in the real order.
+  // Later migrations can depend on the amendment tables and must not run first.
+  await migrate(manifest.migrations.slice(0,amendmentIndex));
   // Test-only identity bootstrap, before organization policy. All tested commands use actual service authorization.
   for(const who of Object.keys(ids) as Array<keyof typeof ids>){const id=ids[who];await db.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,$2,true)",[id,`TEST ${who}`]);await db.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) VALUES($1,$2,'dingtalk','TEST',$3,$3,true,true,CURRENT_TIMESTAMP)",[randomUUID(),id,`TEST-${id}`]);if(who!=="root")await db.query("INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason) VALUES($1,$2,$3,$2,'P02 test bootstrap')",[randomUUID(),id,actor(who).actorRoles[0]]);}
   await db.query("INSERT INTO owner_bootstrap_consumptions(singleton,user_id,provider_user_id,corp_id) VALUES(true,$1,$2,'TEST')",[ids.root,`TEST-${ids.root}`]);
   await new AccessMasterDataService(db,"TEST").ensureOrganizationPolicy();
   legacyReturns=[await prepareLegacyReturn(),await prepareLegacyReturn(),await prepareLegacyReturn()];
-  const amendmentMigration=manifest.migrations.find((row:{version:string})=>row.version==="0248_development_document_amendments");
-  await db.query(await readFile(new URL(`../../apps/api/migrations/${amendmentMigration.version}.sql`,import.meta.url),"utf8"));await db.query("INSERT INTO schema_migrations(version,checksum) VALUES($1,$2)",[amendmentMigration.version,amendmentMigration.checksum]);
+  await migrate(manifest.migrations.slice(amendmentIndex));
  },testExecutionConfig.correctnessTimeoutMs);
  afterAll(async()=>{try{await db.end();await releaseOwnedPostgresSchema(admin,schema);}finally{await admin.end();}});
  let legacyReturns:Array<Awaited<ReturnType<typeof prepareLegacyReturn>>>=[];

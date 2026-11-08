@@ -26,10 +26,10 @@ export interface ObjectStorage {
     options: { mimeType: string; sizeBytes: number; sha256: string; ttlSeconds: number },
   ): Promise<UploadGrant>;
   createDownloadGrant(objectKey: string, options: DownloadOptions): Promise<DownloadGrant>;
-  head(objectKey: string): Promise<StoredObjectMetadata>;
-  readBytes(objectKey: string, maxBytes: number): Promise<Uint8Array>;
+  head(objectKey: string, signal?: AbortSignal): Promise<StoredObjectMetadata>;
+  readBytes(objectKey: string, maxBytes: number, signal?: AbortSignal): Promise<Uint8Array>;
   computeSha256(objectKey: string): Promise<string>;
-  writeImmutable(objectKey: string, content: Uint8Array, options: { mimeType: string; sha256: string }): Promise<void>;
+  writeImmutable(objectKey: string, content: Uint8Array, options: { mimeType: string; sha256: string; signal?: AbortSignal }): Promise<void>;
   deleteObject(objectKey: string): Promise<void>;
 }
 
@@ -50,9 +50,9 @@ export interface AliyunOssSdkClient {
     conditions: readonly AliyunPostPolicyCondition[];
   }): Promise<{ uploadUrl: string; fields: Readonly<Record<string, string>> }>;
   signatureUrl(name: string, options: Record<string, unknown>): string;
-  head(name: string): Promise<{ res: { headers: Record<string, string | number | undefined> } }>;
-  createReadStream(name: string): Promise<AsyncIterable<Uint8Array>>;
-  putGeneratedObject(name: string, content: Uint8Array, options: { mimeType: string; sha256: string }): Promise<void>;
+  head(name: string, signal?: AbortSignal): Promise<{ res: { headers: Record<string, string | number | undefined> } }>;
+  createReadStream(name: string, signal?: AbortSignal): Promise<AsyncIterable<Uint8Array>>;
+  putGeneratedObject(name: string, content: Uint8Array, options: { mimeType: string; sha256: string; signal?: AbortSignal }): Promise<void>;
   delete(name: string): Promise<void>;
 }
 
@@ -136,17 +136,18 @@ export class AliyunPrivateObjectStorage implements ObjectStorage {
   async writeImmutable(
     objectKey: string,
     content: Uint8Array,
-    options: { mimeType: string; sha256: string },
+    options: { mimeType: string; sha256: string; signal?: AbortSignal },
   ): Promise<void> {
     await this.client.putGeneratedObject(objectKey, content, options);
   }
 
-  async readBytes(objectKey: string, maxBytes: number): Promise<Uint8Array> {
+  async readBytes(objectKey: string, maxBytes: number, signal?: AbortSignal): Promise<Uint8Array> {
     try {
-      const stream = await this.client.createReadStream(objectKey);
+      const stream = await this.client.createReadStream(objectKey, ...(signal ? [signal] : []));
       const chunks: Buffer[] = [];
       let totalBytes = 0;
       for await (const chunk of stream) {
+        signal?.throwIfAborted();
         totalBytes += chunk.byteLength;
         if (totalBytes > maxBytes) {
           throw new ApplicationError("ATTACHMENT_METADATA_MISMATCH", "Stored object exceeds its declared size", 422);
@@ -170,10 +171,10 @@ export class AliyunPrivateObjectStorage implements ObjectStorage {
     }
   }
 
-  async head(objectKey: string): Promise<StoredObjectMetadata> {
+  async head(objectKey: string, signal?: AbortSignal): Promise<StoredObjectMetadata> {
     let result;
     try {
-      result = await this.client.head(objectKey);
+      result = await this.client.head(objectKey, ...(signal ? [signal] : []));
     } catch (error) {
       if (isObjectNotFound(error)) throw new ObjectStorageObjectNotFoundError();
       throw error;

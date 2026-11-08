@@ -2,12 +2,16 @@ import {useEffect,useRef,useState} from "react";
 import {createWebUrls} from "../url-contract.js";
 import {trapCockpitDialogFocus} from "./cockpit-dialog-focus.js";
 const urls=createWebUrls(import.meta.env.BASE_URL);
+export function cockpitImagePreviewPath(src:string){
+  return /^\/api\/digital-production\/(?:sources\/[0-9a-f-]{36}\/development|orders\/[0-9a-f-]{36}\/instruction)\/attachments\/[0-9a-f-]{36}$/i.test(src)?`${src}/preview`:src;
+}
 
 /** One actual registered image, previewed in place without losing the order context. */
 export function CockpitPhoto({src,label,className=""}:{src:string|null|undefined;label:string;className?:string}){
   const [open,setOpen]=useState(false),[failed,setFailed]=useState(false),[thumbFailed,setThumbFailed]=useState(false),[zoom,setZoom]=useState(1),[retry,setRetry]=useState(0);
+  const [originalThumbnail,setOriginalThumbnail]=useState(false);
   const dialog=useRef<HTMLDialogElement>(null),trigger=useRef<HTMLButtonElement>(null),backdropDown=useRef(false);
-  useEffect(()=>{setOpen(false);setFailed(false);setThumbFailed(false);setZoom(1);setRetry(0);},[src]);
+  useEffect(()=>{setOpen(false);setFailed(false);setThumbFailed(false);setOriginalThumbnail(false);setZoom(1);setRetry(0);},[src]);
   useEffect(()=>{
     if(!open||!dialog.current)return;
     const view=dialog.current,previous=document.body.style.overflow;
@@ -16,8 +20,9 @@ export function CockpitPhoto({src,label,className=""}:{src:string|null|undefined
   },[open]);
   if(!src)return <span className={`cockpit-photo-empty ${className}`}>未上传款图</span>;
   const url=urls.pageUrl(src);
+  const thumbnail=urls.pageUrl(originalThumbnail?src:cockpitImagePreviewPath(src));
   return <><button type="button" className={`cockpit-photo-trigger ${className}`} ref={trigger} aria-label={`预览${label}款图`} onClick={()=>{setOpen(true);setZoom(1);setFailed(false);}}>
-    <img key={`${src}:thumbnail:${retry}`} src={url} alt={`${label}款图`} onLoad={event=>{event.currentTarget.hidden=false;setThumbFailed(false);}} onError={event=>{event.currentTarget.hidden=true;setThumbFailed(true);}}/><span className="cockpit-photo-fallback">{thumbFailed?"加载失败，点击重试":"款图预览"}</span>
+    <img key={`${src}:thumbnail:${retry}`} src={thumbnail} width={320} height={320} loading="lazy" decoding="async" alt={`${label}款图`} onLoad={event=>{event.currentTarget.hidden=false;setThumbFailed(false);}} onError={event=>{if(thumbnail!==url){setOriginalThumbnail(true);return;}event.currentTarget.hidden=true;setThumbFailed(true);}}/><span className="cockpit-photo-fallback">{thumbFailed?"加载失败，点击重试":"款图预览"}</span>
   </button><dialog className="cockpit-photo-dialog" ref={dialog} onClose={()=>setOpen(false)} aria-label={`${label}款图预览`} onKeyDown={trapCockpitDialogFocus}
     onPointerDown={event=>{const box=event.currentTarget.getBoundingClientRect();backdropDown.current=event.target===event.currentTarget&&(event.clientX<box.left||event.clientX>box.right||event.clientY<box.top||event.clientY>box.bottom);}}
     onClick={event=>{const box=event.currentTarget.getBoundingClientRect(),outside=event.clientX<box.left||event.clientX>box.right||event.clientY<box.top||event.clientY>box.bottom;if(backdropDown.current&&event.target===event.currentTarget&&outside)event.currentTarget.close();backdropDown.current=false;}}>

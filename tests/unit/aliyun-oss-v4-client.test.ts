@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { AliyunOssV4RestClient } from "../../apps/api/src/tools/aliyun-oss-v4-client.js";
 import {
@@ -22,6 +22,17 @@ const baseOptions = {
 const sha256 = "a".repeat(64);
 
 describe("Aliyun OSS V4 REST client", () => {
+  it('propagates the derivative-owned cancellation to private head/read/write without changing ordinary signing',async()=>{
+    const controller=new AbortController(),calls:RequestInit[]=[];
+    const client=new AliyunOssV4RestClient({...baseOptions,fetchImpl:async(_url,init)=>{calls.push(init!);init?.signal?.throwIfAborted();return new Response('TEST',{status:200,headers:{'content-type':'image/webp','content-length':'4','x-oss-meta-sha256':sha256}});}});
+    await client.head('private/preview.webp',controller.signal);const stream=await client.createReadStream('private/original.png',controller.signal);for await(const chunk of stream)expect(chunk.byteLength).toBeGreaterThan(0);
+    await client.putGeneratedObject('private/preview.webp',Buffer.from('TEST'),{mimeType:'image/webp',sha256,signal:controller.signal});
+    expect(calls.map(call=>call.signal)).toEqual([controller.signal,controller.signal,controller.signal]);expect(calls.map(call=>call.method)).toEqual(['HEAD','GET','POST']);
+  });
+  it('does not start a fallback GET after a derivative-owned HEAD is aborted',async()=>{
+    const controller=new AbortController();controller.abort();const fetchImpl=vi.fn(async(_url:unknown,init?:RequestInit)=>{init?.signal?.throwIfAborted();return new Response();});
+    const client=new AliyunOssV4RestClient({...baseOptions,fetchImpl});await expect(client.head('private/preview.webp',controller.signal)).rejects.toThrow();expect(fetchImpl).toHaveBeenCalledOnce();
+  });
   it("matches a deterministic POST V4 policy signature", async () => {
     const client = new AliyunOssV4RestClient(baseOptions);
     const fields = {
