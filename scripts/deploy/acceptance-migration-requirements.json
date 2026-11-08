@@ -1702,5 +1702,21 @@
     "creates": [],
     "execute": [],
     "sequences": []
+  },
+  "0278_journey_fact_read_model": {
+    "checksum": "4dabefff025c63876f4678009e85d3636fe955c1725c34850ca10398f527cf72",
+    "tables": [],
+    "functions": [],
+    "references": [
+      "digital_production_sources",
+      "digital_production_orders"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [
+      "digital_journey_fact_models"
+    ],
+    "execute": [],
+    "sequences": []
   }
 }

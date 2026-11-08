@@ -23,6 +23,8 @@ import { DigitalProductionTaskService } from "./task-service.js";
 import { developmentDocumentRow } from "./development-round-repository.js";
 import { resolveDigitalChild } from "./child-link-repository.js";
 import { isRootActor } from "../access/business-authority.js";
+import {journeyTaskSummaries} from './journey-task-summary.js';
+import type {BusinessTime} from '@dx-rework/domain/business-clock';
 type DB=Pick<Pool|PoolClient,"query">;
 const fail=(message:string):never=>{throw new ApplicationError("BULK_PREPARATION_CONFLICT",message,409);};
 const lock=(db:DB)=>db.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
@@ -138,6 +140,19 @@ export class BulkPreparationService {
  async syncSource(db:PoolClient,actor:TrustedActorContext,sourceId:string){
   if(!(await db.query("SELECT to_regclass('digital_bulk_preparations') AS relation")).rows[0]?.relation)return;
   for(const row of (await db.query("SELECT production_order_id FROM digital_production_orders WHERE source_id=$1 ORDER BY production_order_id",[sourceId])).rows)await this.sync(db,actor,row.production_order_id);
+ }
+ /** Internal facts for one mother only. No task DTO/action permission is persisted. */
+ async readJourneyFactsWithClient(id:string,db:PoolClient,time:BusinessTime){
+  const g=await this.gates(db,id),prep=await this.current(db,id,g);
+  const rows=(await db.query(`SELECT po.line_id AS "lineId",r.actual_cut_count AS "actualCutCount"
+   FROM digital_production_po_lines po LEFT JOIN digital_production_child_lines l ON l.module='cutting' AND l.line_id=po.line_id
+   LEFT JOIN current_cutting_records r ON r.cutting_order_id=l.child_id WHERE po.production_order_id=$1 ORDER BY po.position`,[id])).rows;
+  const tasks=prep?[...(await journeyTaskSummaries(db,(await this.routeTasks(db,prep.preparation_id)).map(t=>t.task_id),time)).values()]:[];
+  const responsibility=await preparationResponsibility(db,await preparationContext(db,{kind:'order',id}));
+  return {instructionVersion:g.instruction?.version??null,sourceRound:g.source?.round_number??null,
+   customerConfirmed:g.customerConfirmed,ownerApproved:g.ownerApproved,instructionValid:g.instructionValid,reasons:g.reasons,tasks,
+   preshrink:(await readBulkPreshrinkRequirement(db,prep,g.instruction?.document)).requirement,
+   cutting:{completed:rows.length>0&&rows.every(r=>r.actualCutCount!==null),lines:rows.map(r=>({lineId:r.lineId as string}))},readiness:{responsibility}};
  }
  async read(actor:TrustedActorContext,id:string,db:DB=this.database):Promise<BulkPreparationSheet>{
   const policy=new DigitalProductionAccessPolicy(db);await policy.assert(actor,'order',id,'technical');const g=await this.gates(db,id),prep=await this.current(db,id,g);
