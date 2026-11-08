@@ -3,6 +3,7 @@ import { assertFinanceWageAccess, type WageAccessCapability } from "./wage-acces
 import {
   WageItemParamsSchema,
   WagePeriodParamsSchema,
+  WagePeriodPageQuerySchema,
 } from "@dx-rework/contracts/wages";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { businessActor, isRootUser } from "../access/business-authority.js";
@@ -55,11 +56,11 @@ export function registerWageRoutes(app: FastifyInstance, dependencies: WageHttpD
   app.get("/wage-periods", async (request) =>
     dependencies.service.list(await actor(request, "wage:view")));
 
-  app.get("/wage-periods/:periodId", async (request) =>
-    dependencies.service.get(
-      await actor(request, "wage:view"),
-      parse(WagePeriodParamsSchema, request.params).periodId,
-    ));
+  app.get("/wage-periods/:periodId", async (request) => {
+    const currentActor=await actor(request,"wage:view"),periodId=parse(WagePeriodParamsSchema,request.params).periodId;
+    const query=parse(WagePeriodPageQuerySchema,request.query);
+    return Object.keys(query).length?dependencies.service.getPage(currentActor,periodId,query):dependencies.service.get(currentActor,periodId);
+  });
 
   app.get("/wage-periods/:periodId/items", async (request) =>
     (await dependencies.service.get(

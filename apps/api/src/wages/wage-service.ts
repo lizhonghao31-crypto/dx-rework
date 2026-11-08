@@ -5,6 +5,8 @@ import type {
   WageItem,
   WagePeriod,
   WagePeriodDetail,
+  WagePeriodPageQuery,
+  WagePeriodDetailPage,
 } from "@dx-rework/contracts/wages";
 import type { Pool, PoolClient } from "pg";
 
@@ -161,6 +163,31 @@ export class WageService {
       period: this.periodDto(first(periods.rows, "工资期间不存在"), permissions),
       items: items.rows.map((row) => this.itemDto(row)),
     };
+  }
+
+  async getPage(actor:TrustedActorContext,periodId:string,input:WagePeriodPageQuery):Promise<WagePeriodDetailPage>{
+    await this.requireView(actor);
+    const permission=await this.permissions(actor,this.db),page=input.page??1,q=input.q??"";
+    const result=await this.db.query<PeriodRow&{total_count:string;item:ItemRow|null}>(`
+      WITH selected_period AS MATERIALIZED (
+        SELECT period_id,period_month::text,timezone,status,period_version,
+               source_item_count,person_count,original_total::text,locked_by,locked_at,lock_note
+        FROM rework_wage_periods WHERE period_id=$1 AND (status='locked' OR source_item_count>0)
+      ), matching AS MATERIALIZED (
+        SELECT item.wage_item_id,item.person_name_snapshot,item.created_at
+        FROM rework_wage_items item JOIN selected_period USING(period_id)
+        JOIN rework_orders orders ON orders.rework_order_id=item.rework_order_id
+        WHERE item.invalidated_at IS NULL AND ($2::text='' OR position(lower($2::text) in lower(concat_ws(' ',nullif(item.person_name_snapshot,''),nullif(item.rework_no_snapshot,''),nullif(item.style_no_snapshot,''),nullif(item.process_name_snapshot,''))))>0)
+      ), selected AS MATERIALIZED (
+        SELECT * FROM matching ORDER BY person_name_snapshot,created_at,wage_item_id LIMIT 15 OFFSET $3
+      )
+      SELECT period.*,totals.total_count,to_jsonb(details) item FROM selected_period period
+      CROSS JOIN (SELECT count(*)::text total_count FROM matching) totals
+      LEFT JOIN selected ON true
+      LEFT JOIN LATERAL (${this.itemSelect()} WHERE item.wage_item_id=selected.wage_item_id) details ON true
+      ORDER BY selected.person_name_snapshot,selected.created_at,selected.wage_item_id`,[periodId,q,(page-1)*15]);
+    const head=first(result.rows,"工资期间不存在");
+    return {period:this.periodDto(head,permission),items:result.rows.flatMap(row=>row.item?.wage_item_id?[this.itemDto(row.item)]:[]),page,pageSize:15,totalCount:Number(head.total_count)};
   }
 
   async item(actor: TrustedActorContext, itemId: string): Promise<WageItem> {

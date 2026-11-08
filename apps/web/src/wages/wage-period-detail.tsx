@@ -3,12 +3,15 @@ import { AuthGate } from "../auth.js";
 import { financePageRequirements } from "../finance-access.js";
 import {
   WagePeriodDetailSchema,
-  type WagePeriodDetail,
+  WagePeriodDetailPageSchema,
+  type WagePeriodDetailPage as PagedWagePeriod,
 } from "@dx-rework/contracts/wages";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { fixedBusinessCurrency as formatBusinessCurrency } from "../fixed-business-currency.js";
-import { Button, Surface } from "@dx-rework/ui";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Button, InsetField, Surface } from "@dx-rework/ui";
+import {useEffect,useState} from "react";
+import {ListPagination} from "../list-pagination.js";
+import {useLiveSearch} from "../use-live-search.js";
 
 import { createWebUrls } from "../../url-contract.js";
 
@@ -23,50 +26,34 @@ export function WagePeriodDetailPage({ periodId }: { periodId: string }) {
 }
 
 function WagePeriodDetailContent({ periodId }: { periodId: string }) {
-  const [detail, setDetail] = useState<WagePeriodDetail | null>(null);
-  const [message, setMessage] = useState("");
-  const refreshing = useRef(false);
-  const mounted = useRef(true);
+  const [detail,setDetail]=useState<PagedWagePeriod|null>(null),[message,setMessage]=useState("");
+  const [selection,setSelection]=useState({periodId,page:1}),[q,setQ]=useState(""),[search,setSearch]=useState(""),[revision,setRevision]=useState(0);
+  const page=selection.periodId===periodId?selection.page:1,setPage=(page:number)=>setSelection({periodId,page});
+  const live=useLiveSearch(q,search,value=>{setSearch(value);setPage(1);});
+  const load=()=>setRevision(value=>value+1);
+  useEffect(()=>{
+    const controller=new AbortController();setDetail(null);setMessage("");
+    void feedbackFetch(apiUrl(`wage-periods/${periodId}?`+new URLSearchParams({page:String(page),q:search})),{credentials:"include",headers:{accept:"application/json"},signal:controller.signal})
+      .then(response=>feedbackJson(response,"GET",value=>WagePeriodDetailPageSchema.parse(value)))
+      .then(value=>{if(!controller.signal.aborted)setDetail(value);})
+      .catch((error:unknown)=>{if(!controller.signal.aborted)setMessage(error instanceof Error?error.message:"工资详情加载失败");});
+    return()=>controller.abort();
+  },[periodId,page,search,revision]);
+  useEffect(()=>{if(detail&&detail.page>Math.max(1,Math.ceil(detail.totalCount/15)))setSelection({periodId,page:Math.max(1,Math.ceil(detail.totalCount/15))});},[detail,periodId]);
 
-  const load = useCallback(async () => {
-    if (refreshing.current) return;
-    refreshing.current = true;
-    try {
-      const nextDetail=await readWagePeriodDetail(periodId);if(mounted.current)setMessage("");
-      if (mounted.current) setDetail(nextDetail);
-    } catch (error: unknown) {
-      if (mounted.current) setMessage(error instanceof Error ? error.message : "工资详情加载失败");
-    } finally {
-      refreshing.current = false;
-    }
-  }, [periodId]);
-
-  useEffect(() => {
-    mounted.current = true;
-    void load();
-    return () => { mounted.current = false; };
-  }, [load]);
-
-  if (!detail) {
-    return (
-      <div className="wage-page wage-period-detail">
-        <header className="page-heading"><div><h1>工资详情</h1></div></header>
-        <Surface><p role={message?"alert":"status"}>{message || "正在读取工资月份…"}</p>{message&&<Button onClick={()=>{void load();}}>重新读取工资详情</Button>}</Surface>
-      </div>
-    );
-  }
-
-  const { period, items } = detail;
+  const period=detail?.period,items=detail?.items??[];
   return (
     <div className="wage-page wage-period-detail">
       <header className="page-heading">
         <div>
           <h1>返工工资对数明细</h1>
-          <p>工资期间：{period.periodMonth.slice(0, 7)}</p>
+          {period&&<p>工资期间：{period.periodMonth.slice(0, 7)}</p>}
         </div>
       </header>
 
-      <Surface className="wage-summary">
+      <Surface><InsetField label="搜索本期工资明细" value={q} type="search" onChange={event=>setQ(event.target.value)} onCompositionStart={live.onCompositionStart} onCompositionEnd={live.onCompositionEnd} placeholder="工人 / 返工单 / 款号 / 工序" />{detail&&<p>{formatBusinessDecimal(detail.totalCount)} 条当前结果</p>}</Surface>
+      {!detail&&<Surface><p role={message?"alert":"status"}>{message||"正在读取工资明细…"}</p>{message&&<Button onClick={load}>重新读取工资详情</Button>}</Surface>}
+      {period&&<Surface className="wage-summary">
         <dl>
           <dt>工人 / 明细</dt><dd>{formatBusinessDecimal(period.personCount)} / {formatBusinessDecimal(period.sourceItemCount)}</dd>
           <dt>工资总额</dt><dd><strong>{formatBusinessCurrency(period.totalAmount)}</strong></dd>
@@ -78,10 +65,12 @@ function WagePeriodDetailContent({ periodId }: { periodId: string }) {
             </a>
           ) : null}
         </div>
-      </Surface>
+      </Surface>}
 
-      {message && <p role="alert" className="form-message">{message}<Button onClick={()=>{void load();}}>重新读取工资详情</Button></p>}
+      {detail&&message && <p role="alert" className="form-message">{message}<Button onClick={()=>{void load();}}>重新读取工资详情</Button></p>}
 
+
+      {detail&&items.length===0&&<p>当前条件没有工资明细。</p>}
       <section className="wage-grid">
         {items.map((item) => (
           <Surface key={item.wageItemId} className="wage-item-card">
@@ -97,6 +86,7 @@ function WagePeriodDetailContent({ periodId }: { periodId: string }) {
           </Surface>
         ))}
       </section>
+      {detail&&<ListPagination page={detail.page} totalPages={Math.max(1,Math.ceil(detail.totalCount/15))} onPageChange={setPage} ariaLabel="工资期间明细分页" />}
 
     </div>
   );

@@ -81,6 +81,12 @@ export const WagePeriodDetailSchema = z.object({
 });
 export type WagePeriodDetail = z.infer<typeof WagePeriodDetailSchema>;
 
+export const WagePeriodPageQuerySchema=z.object({page:z.coerce.number().int().min(1).max(100000).optional(),q:z.string().trim().max(200).optional()}).strict();
+export type WagePeriodPageQuery=z.infer<typeof WagePeriodPageQuerySchema>;
+export const WagePeriodDetailPageSchema=WagePeriodDetailSchema.extend({page:z.number().int().positive(),pageSize:z.literal(15),totalCount:z.number().int().nonnegative()});
+export type WagePeriodDetailPage=z.infer<typeof WagePeriodDetailPageSchema>;
+
+
 export const WageMonthCloseResponseSchema = z.object({
   closureId: Id,
   periodId: Id,
