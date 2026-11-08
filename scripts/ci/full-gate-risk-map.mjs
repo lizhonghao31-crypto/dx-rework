@@ -171,6 +171,9 @@ export const classifyFullGatePaths = (inputPaths) => {
   let maintenanceSensitive = false;
   let activationSensitive = false;
   let transferSensitive = false;
+  if(paths.some(path=>['apps/api/src/sourcing/sourcing-service.ts','tests/integration/sourcing-page-details-postgres.test.ts'].includes(path))){
+    for(const suite of ['sourcing-page-details','contract-return-clock','contract-return-routes-clock','contract-return-cycles'])mappedTests.add('tests/integration/'+suite+'-postgres.test.ts');domains.add('sourcing-page-details');
+  }
   if(paths.some(path=>/^apps\/api\/src\/todos\/(?:service|selection|content-reads|global-search)\.ts$/.test(path)||path==='apps/api/src/production-platform/notification-service.ts')){
     for(const suite of ['todo-global-search','digital-my-todo-context','digital-production-notifications'])mappedTests.add('tests/integration/'+suite+'-postgres.test.ts');
     domains.add('todo-read-split');
