@@ -9,6 +9,7 @@ describe("sourcing craft database separation", () => {
       orderCraftMigration,
       service,
       sourcingService,
+      sourcingRead,
       routes,
       sourcingPage,
       masterDataPage,
@@ -18,6 +19,7 @@ describe("sourcing craft database separation", () => {
       readFile("apps/api/migrations/0135_sourcing_case_craft_snapshots.sql", "utf8"),
       readFile("apps/api/src/access/service.ts", "utf8"),
       readFile("apps/api/src/sourcing/sourcing-service.ts", "utf8"),
+      readFile("apps/api/src/sourcing/sourcing-case-read.ts", "utf8"),
       readFile("apps/api/src/access/routes.ts", "utf8"),
       readFile("apps/web/src/sourcing-workspace-page.tsx", "utf8"),
       readFile("apps/web/src/master-data-page.tsx", "utf8"),
@@ -37,7 +39,8 @@ describe("sourcing craft database separation", () => {
     expect(orderCraftMigration).not.toContain("INSERT INTO sourcing_case_crafts");
     expect(sourcingService).toContain("JSON.stringify(selectedCrafts)");
     expect(sourcingService).toContain("所选工艺已停用或不存在");
-    expect(sourcingService).toContain("ORDER BY binding.position");
+    expect(sourcingService).toContain("readSourcingCaseList(this.database,actor");
+    expect(sourcingRead).toContain("ORDER BY binding.position");
 
     expect(service).toContain("async listCrafts(");
     expect(service).toContain("async ensureCrafts(");

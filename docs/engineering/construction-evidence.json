@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "aad07830bea6feda5fef8654f234ce8118c28c14",
-  "sourceFingerprint": "4725c650d2219b03984de50251bfb9e0f93b9376e9985d09ff27695dbf89b5dd",
+  "sourceFingerprint": "f2d4b9b3d3ce4bbb2018d75bc2d3f151a941ecdaff47a9b27e0b826258f16a20",
   "risk": "full",
   "rules": [
     {
@@ -50,6 +50,7 @@
         "tests/unit/sourcing-list-root-delete-contract.test.ts",
         "tests/unit/sourcing-pc-form-approval-contract.test.ts",
         "tests/unit/sourcing-pr03-contract.test.ts",
+        "tests/unit/craft-database-separation.test.ts",
         "docs/architecture/business-module-boundaries.md",
         "docs/engineering/acceptance-time-sites-20261027.json"
       ],
@@ -60,6 +61,7 @@
         "docs/requirements/sourcing-supplier-production-v1.0.md"
       ],
       "oldTests": [
+        "tests/unit/craft-database-separation.test.ts",
         "tests/integration/contract-return-clock-postgres.test.ts",
         "tests/integration/contract-return-routes-clock-postgres.test.ts",
         "tests/integration/contract-return-cycles-postgres.test.ts"
@@ -69,7 +71,7 @@
       ],
       "initialization": "New internal paths join the existing sourcing page-details and contract-return mapped suites. Latest C native-browser rule retained resolving one actual adjacent-line merge conflict. No extra architecture gate/backup exercise. Existing owned schema/PG cleanup and canonical config reused. F6 records actual read/mapper/service paths. Original time-site generator reconciles only new read and moved service sites; all other annotations including C UI entry retained. Pending historical sites remain pending with explicit move review, not blanket approval.",
       "dateAndPermission": "No migration/seed/runtime/UI change. Original temporal expressions moved unchanged and inventory is not authority for new deadline behavior. Production data and onsite authorization are untouched. Actual isolated loopback PG and Node22 environment recorded; not CI hardware equivalence.",
-      "expectation": "Current canonical native3 and285 targeted units/routes, API types, lint and original preflight/secret succeed with zero skipped. Earlier preparation results are historical only. Current actual merge base and input/log fingerprints bind checks; Full and Review remain separate later stages. Backout restores only this extraction and keeps A no-delete safety, B current checks, C modal recovery and all performance work.",
+      "expectation": "Current canonical native3 and286 targeted units/routes, API types, lint and original preflight/secret succeed with zero skipped. Earlier preparation results are historical only. Initial Full non-db had1old craft-database separation source assertion still looking for moved ORDER BY in command service, while591files passed. Only that sentinel is adapted to actual read path plus facade wiring; business code and SQL remain unchanged. Original PG lane is retained running, not cancelled or mislabeled. Current actual merge base and input/log fingerprints bind checks; Full and Review remain separate later stages. Backout restores only this extraction and keeps A no-delete safety, B current checks, C modal recovery and all performance work.",
       "checks": [
         "unit",
         "postgres",
@@ -83,11 +85,11 @@
   "checks": [
     {
       "id": "unit",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/sourcing-additional-merchandiser.test.ts tests/unit/sourcing-capability-migration.test.ts tests/unit/sourcing-contract-history-scope.test.ts tests/unit/sourcing-contract-images.test.ts tests/unit/sourcing-contract-layout.test.ts tests/unit/sourcing-contract-number-format.test.ts tests/unit/sourcing-contract-return-list-query.test.ts tests/unit/sourcing-contract-return-state.test.ts tests/unit/sourcing-contract-return-upload.test.ts tests/unit/sourcing-contract-v2-pdf.test.ts tests/unit/sourcing-correction.test.ts tests/unit/sourcing-detail-identity.test.ts tests/unit/sourcing-factory-change-errors.test.ts tests/unit/sourcing-factory-change-schema-contract.test.ts tests/unit/sourcing-factory-change-workflow-contract.test.ts tests/unit/sourcing-feedback-contract.test.ts tests/unit/sourcing-finance-readonly-contract.test.ts tests/unit/sourcing-finance-todo-routing-contract.test.ts tests/unit/sourcing-foundation.test.ts tests/unit/sourcing-governed-components.test.ts tests/unit/sourcing-ie-first-cutting.test.ts tests/unit/sourcing-image-lifecycle-contract.test.ts tests/unit/sourcing-list-pagination.test.ts tests/unit/sourcing-list-query.test.ts tests/unit/sourcing-list-root-delete-contract.test.ts tests/unit/sourcing-migration-extension.test.ts tests/unit/sourcing-migration-tool-relocation.test.ts tests/unit/sourcing-mobile-workspace.test.ts tests/unit/sourcing-node-history.test.ts tests/unit/sourcing-number-presentation.test.ts tests/unit/sourcing-order-craft-contract.test.ts tests/unit/sourcing-pc-form-approval-contract.test.ts tests/unit/sourcing-pr03-contract.test.ts tests/unit/sourcing-pr2-workspace-contract.test.ts tests/unit/sourcing-pr3-todo-contract.test.ts tests/unit/sourcing-pr4-contract-factory-change.test.ts tests/unit/sourcing-price-cascade.test.ts tests/unit/sourcing-price-input.test.ts tests/unit/sourcing-price-presentation.test.ts tests/unit/sourcing-production-contract.test.ts tests/unit/sourcing-role-aware-factory-change-ui.test.ts tests/unit/sourcing-role-visibility.test.ts tests/unit/sourcing-ssp04-line-price-contract.test.ts tests/unit/sourcing-ssp05-contract-pdf.test.ts tests/unit/sourcing-style-identity.test.ts tests/unit/sourcing-submit-validation.test.ts tests/unit/sourcing-supplier-profile-contract.test.ts tests/unit/sourcing-todo-sla.test.ts tests/unit/sourcing-transfer-delivery.test.ts tests/unit/sourcing-transfer-submit-feedback.test.ts tests/integration/sourcing-routes.test.ts tests/integration/sourcing-price-routes.test.ts tests/unit/permission-sensitive-field-policy.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-architecture-20261109/arch-f1-unit-integrated.vitest.json",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/sourcing-additional-merchandiser.test.ts tests/unit/sourcing-capability-migration.test.ts tests/unit/sourcing-contract-history-scope.test.ts tests/unit/sourcing-contract-images.test.ts tests/unit/sourcing-contract-layout.test.ts tests/unit/sourcing-contract-number-format.test.ts tests/unit/sourcing-contract-return-list-query.test.ts tests/unit/sourcing-contract-return-state.test.ts tests/unit/sourcing-contract-return-upload.test.ts tests/unit/sourcing-contract-v2-pdf.test.ts tests/unit/sourcing-correction.test.ts tests/unit/sourcing-detail-identity.test.ts tests/unit/sourcing-factory-change-errors.test.ts tests/unit/sourcing-factory-change-schema-contract.test.ts tests/unit/sourcing-factory-change-workflow-contract.test.ts tests/unit/sourcing-feedback-contract.test.ts tests/unit/sourcing-finance-readonly-contract.test.ts tests/unit/sourcing-finance-todo-routing-contract.test.ts tests/unit/sourcing-foundation.test.ts tests/unit/sourcing-governed-components.test.ts tests/unit/sourcing-ie-first-cutting.test.ts tests/unit/sourcing-image-lifecycle-contract.test.ts tests/unit/sourcing-list-pagination.test.ts tests/unit/sourcing-list-query.test.ts tests/unit/sourcing-list-root-delete-contract.test.ts tests/unit/sourcing-migration-extension.test.ts tests/unit/sourcing-migration-tool-relocation.test.ts tests/unit/sourcing-mobile-workspace.test.ts tests/unit/sourcing-node-history.test.ts tests/unit/sourcing-number-presentation.test.ts tests/unit/sourcing-order-craft-contract.test.ts tests/unit/sourcing-pc-form-approval-contract.test.ts tests/unit/sourcing-pr03-contract.test.ts tests/unit/sourcing-pr2-workspace-contract.test.ts tests/unit/sourcing-pr3-todo-contract.test.ts tests/unit/sourcing-pr4-contract-factory-change.test.ts tests/unit/sourcing-price-cascade.test.ts tests/unit/sourcing-price-input.test.ts tests/unit/sourcing-price-presentation.test.ts tests/unit/sourcing-production-contract.test.ts tests/unit/sourcing-role-aware-factory-change-ui.test.ts tests/unit/sourcing-role-visibility.test.ts tests/unit/sourcing-ssp04-line-price-contract.test.ts tests/unit/sourcing-ssp05-contract-pdf.test.ts tests/unit/sourcing-style-identity.test.ts tests/unit/sourcing-submit-validation.test.ts tests/unit/sourcing-supplier-profile-contract.test.ts tests/unit/sourcing-todo-sla.test.ts tests/unit/sourcing-transfer-delivery.test.ts tests/unit/sourcing-transfer-submit-feedback.test.ts tests/unit/craft-database-separation.test.ts tests/integration/sourcing-routes.test.ts tests/integration/sourcing-price-routes.test.ts tests/unit/permission-sensitive-field-policy.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-architecture-20261109/arch-f1-unit-integrated.vitest.json",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "4725c650d2219b03984de50251bfb9e0f93b9376e9985d09ff27695dbf89b5dd",
+      "sourceFingerprint": "f2d4b9b3d3ce4bbb2018d75bc2d3f151a941ecdaff47a9b27e0b826258f16a20",
       "inputPaths": [
         "apps",
         "packages",
@@ -104,25 +106,25 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "5d7433c0c7135ee1295f75e9b2af349d2e47a815d75b3adcf1e6c72ddbec4a04",
+      "inputFingerprint": "202260e8f1b65c492e34bac92e2ef9f83dcae2167eb7ade450d12dbafaaa273e",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "aad07830bea6feda5fef8654f234ce8118c28c14",
-      "startedAt": "2026-11-08T22:56:40.501Z",
-      "endedAt": "2026-11-08T22:56:56.698Z",
-      "passed": 285,
+      "testedHead": "73cf4c0d3c1b97dbb81b786eaebdc5ddb2879321",
+      "startedAt": "2026-11-08T23:15:57.653Z",
+      "endedAt": "2026-11-08T23:16:13.713Z",
+      "passed": 286,
       "failed": 0,
       "skipped": 0,
       "planError": null,
       "log": "/workspace/scratch/dx-architecture-20261109/arch-f1-unit-integrated.log",
-      "logSha256": "fd971f20ec07297aafd230dd5cc6c5c594e1b32a15a5b9ad2397d28870f45990",
+      "logSha256": "fcafba215a6fe2fd9f5cabc0214b3390845d56cbcbdee91f82f7b405e2456b13",
       "resultReport": "/workspace/scratch/dx-architecture-20261109/arch-f1-unit-integrated.vitest.json",
       "context": "Canonical configs and owned-command; dedicated marked loopback TEST PG16.15, Node22.22.2/npm10.9.9. Node CPUs2/3; existing PG CPUs0/1 and 2GiB boundary. Hardlinked same-lock dependencies from PERF12 tree-identical to cd36f84; not CI hardware or onsite equivalence. No production data, private live OSS or deployment. Original PERF09 native31-case fixture plus linked digital order; exact SQL paging/independent totals and approved52 amounts. Native budget correction retains original transaction and replay. Controlled adapter failure on transaction-bound read occurs after native audit/insert and validates real rollback, not a live database outage.",
       "kind": "tests",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "62d6f26a37fca55b2e4387a263411a70af088337988842ba402a461a7cdaa71f"
+          "sha256": "992dced00eedebeaef79a495e862b41baf7cdf54fc7b2f2db668669b7d3a1f51"
         }
       ]
     },
@@ -132,7 +134,7 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "4725c650d2219b03984de50251bfb9e0f93b9376e9985d09ff27695dbf89b5dd",
+      "sourceFingerprint": "f2d4b9b3d3ce4bbb2018d75bc2d3f151a941ecdaff47a9b27e0b826258f16a20",
       "inputPaths": [
         "apps",
         "packages",
@@ -149,25 +151,25 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "5d7433c0c7135ee1295f75e9b2af349d2e47a815d75b3adcf1e6c72ddbec4a04",
+      "inputFingerprint": "202260e8f1b65c492e34bac92e2ef9f83dcae2167eb7ade450d12dbafaaa273e",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "aad07830bea6feda5fef8654f234ce8118c28c14",
-      "startedAt": "2026-11-08T22:56:56.787Z",
-      "endedAt": "2026-11-08T22:57:05.840Z",
+      "testedHead": "73cf4c0d3c1b97dbb81b786eaebdc5ddb2879321",
+      "startedAt": "2026-11-08T23:16:13.796Z",
+      "endedAt": "2026-11-08T23:16:22.676Z",
       "passed": 3,
       "failed": 0,
       "skipped": 0,
       "planError": null,
       "log": "/workspace/scratch/dx-architecture-20261109/arch-f1-postgres-integrated.log",
-      "logSha256": "c595d1e134224213d333081c520fc4601ed93712e1d557d80ca687b85b8882dd",
+      "logSha256": "a00f31c7e91a680b4be652f8e98b15b49101d92b7371974f067da60d5f973acd",
       "resultReport": "/workspace/scratch/dx-architecture-20261109/arch-f1-postgres-integrated.vitest.json",
       "context": "Canonical configs and owned-command; dedicated marked loopback TEST PG16.15, Node22.22.2/npm10.9.9. Node CPUs2/3; existing PG CPUs0/1 and 2GiB boundary. Hardlinked same-lock dependencies from PERF12 tree-identical to cd36f84; not CI hardware or onsite equivalence. No production data, private live OSS or deployment. Original PERF09 native31-case fixture plus linked digital order; exact SQL paging/independent totals and approved52 amounts. Native budget correction retains original transaction and replay. Controlled adapter failure on transaction-bound read occurs after native audit/insert and validates real rollback, not a live database outage.",
       "kind": "tests",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "a397b8ebf3fd69ef463861d4dddf2c00285e81c1fda82944718d272826f7d449"
+          "sha256": "fe2addb4fd9a34e885592b7ea7e4bba8d5984ccfdb582cf2273ccfce2cd88943"
         }
       ]
     },
@@ -177,7 +179,7 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "4725c650d2219b03984de50251bfb9e0f93b9376e9985d09ff27695dbf89b5dd",
+      "sourceFingerprint": "f2d4b9b3d3ce4bbb2018d75bc2d3f151a941ecdaff47a9b27e0b826258f16a20",
       "inputPaths": [
         "apps",
         "packages",
@@ -194,12 +196,12 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "5d7433c0c7135ee1295f75e9b2af349d2e47a815d75b3adcf1e6c72ddbec4a04",
+      "inputFingerprint": "202260e8f1b65c492e34bac92e2ef9f83dcae2167eb7ade450d12dbafaaa273e",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "aad07830bea6feda5fef8654f234ce8118c28c14",
-      "startedAt": "2026-11-08T22:57:05.920Z",
-      "endedAt": "2026-11-08T22:57:15.936Z",
+      "testedHead": "73cf4c0d3c1b97dbb81b786eaebdc5ddb2879321",
+      "startedAt": "2026-11-08T23:16:22.758Z",
+      "endedAt": "2026-11-08T23:16:32.929Z",
       "planError": null,
       "log": "/workspace/scratch/dx-architecture-20261109/arch-f1-typesapi-integrated.log",
       "logSha256": "d81733d2d3443600c8f5c4e1f5774d8d050a1c5a8ef34bd5a659eb50ebd68f00",
@@ -209,11 +211,11 @@
     },
     {
       "id": "lint",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/eslint/bin/eslint.js apps/api/src/sourcing/sourcing-service.ts apps/api/src/sourcing/sourcing-case-read.ts apps/api/src/sourcing/sourcing-case-mapping.ts tests/integration/sourcing-page-details-postgres.test.ts tests/unit/sourcing-list-root-delete-contract.test.ts tests/unit/sourcing-pc-form-approval-contract.test.ts tests/unit/sourcing-pr03-contract.test.ts --max-warnings=0",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/eslint/bin/eslint.js apps/api/src/sourcing/sourcing-service.ts apps/api/src/sourcing/sourcing-case-read.ts apps/api/src/sourcing/sourcing-case-mapping.ts tests/integration/sourcing-page-details-postgres.test.ts tests/unit/sourcing-list-root-delete-contract.test.ts tests/unit/sourcing-pc-form-approval-contract.test.ts tests/unit/sourcing-pr03-contract.test.ts tests/unit/craft-database-separation.test.ts --max-warnings=0",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "4725c650d2219b03984de50251bfb9e0f93b9376e9985d09ff27695dbf89b5dd",
+      "sourceFingerprint": "f2d4b9b3d3ce4bbb2018d75bc2d3f151a941ecdaff47a9b27e0b826258f16a20",
       "inputPaths": [
         "apps",
         "packages",
@@ -230,12 +232,12 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "5d7433c0c7135ee1295f75e9b2af349d2e47a815d75b3adcf1e6c72ddbec4a04",
+      "inputFingerprint": "202260e8f1b65c492e34bac92e2ef9f83dcae2167eb7ade450d12dbafaaa273e",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "aad07830bea6feda5fef8654f234ce8118c28c14",
-      "startedAt": "2026-11-08T22:57:16.020Z",
-      "endedAt": "2026-11-08T22:57:17.238Z",
+      "testedHead": "73cf4c0d3c1b97dbb81b786eaebdc5ddb2879321",
+      "startedAt": "2026-11-08T23:16:33.009Z",
+      "endedAt": "2026-11-08T23:16:34.344Z",
       "planError": null,
       "log": "/workspace/scratch/dx-architecture-20261109/arch-f1-lint-integrated.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -249,7 +251,7 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "4725c650d2219b03984de50251bfb9e0f93b9376e9985d09ff27695dbf89b5dd",
+      "sourceFingerprint": "f2d4b9b3d3ce4bbb2018d75bc2d3f151a941ecdaff47a9b27e0b826258f16a20",
       "inputPaths": [
         "apps",
         "packages",
@@ -266,15 +268,15 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "5d7433c0c7135ee1295f75e9b2af349d2e47a815d75b3adcf1e6c72ddbec4a04",
+      "inputFingerprint": "202260e8f1b65c492e34bac92e2ef9f83dcae2167eb7ade450d12dbafaaa273e",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "aad07830bea6feda5fef8654f234ce8118c28c14",
-      "startedAt": "2026-11-08T22:57:17.328Z",
-      "endedAt": "2026-11-08T22:57:25.364Z",
+      "testedHead": "73cf4c0d3c1b97dbb81b786eaebdc5ddb2879321",
+      "startedAt": "2026-11-08T23:16:34.428Z",
+      "endedAt": "2026-11-08T23:16:42.740Z",
       "planError": null,
       "log": "/workspace/scratch/dx-architecture-20261109/arch-f1-preflight-integrated.log",
-      "logSha256": "d39e60c9711b3411203a4fc094360714c18b358615635aa640e96ad389637176",
+      "logSha256": "c45dec34970cd3a1dc94b161b9863056901d8d8cce553c6190285c1dc788dbf3",
       "resultReport": null,
       "context": "Canonical configs and owned-command; dedicated marked loopback TEST PG16.15, Node22.22.2/npm10.9.9. Node CPUs2/3; existing PG CPUs0/1 and 2GiB boundary. Hardlinked same-lock dependencies from PERF12 tree-identical to cd36f84; not CI hardware or onsite equivalence. No production data, private live OSS or deployment. Original PERF09 native31-case fixture plus linked digital order; exact SQL paging/independent totals and approved52 amounts. Native budget correction retains original transaction and replay. Controlled adapter failure on transaction-bound read occurs after native audit/insert and validates real rollback, not a live database outage.",
       "kind": "command"
@@ -285,7 +287,7 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "4725c650d2219b03984de50251bfb9e0f93b9376e9985d09ff27695dbf89b5dd",
+      "sourceFingerprint": "f2d4b9b3d3ce4bbb2018d75bc2d3f151a941ecdaff47a9b27e0b826258f16a20",
       "inputPaths": [
         "apps",
         "packages",
@@ -302,12 +304,12 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "5d7433c0c7135ee1295f75e9b2af349d2e47a815d75b3adcf1e6c72ddbec4a04",
+      "inputFingerprint": "202260e8f1b65c492e34bac92e2ef9f83dcae2167eb7ade450d12dbafaaa273e",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "aad07830bea6feda5fef8654f234ce8118c28c14",
-      "startedAt": "2026-11-08T22:57:25.443Z",
-      "endedAt": "2026-11-08T22:57:26.343Z",
+      "testedHead": "73cf4c0d3c1b97dbb81b786eaebdc5ddb2879321",
+      "startedAt": "2026-11-08T23:16:42.820Z",
+      "endedAt": "2026-11-08T23:16:43.796Z",
       "planError": null,
       "log": "/workspace/scratch/dx-architecture-20261109/arch-f1-secret-integrated.log",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda",
