@@ -14,6 +14,7 @@ import {attachJourneyNativeTimes} from './journey-native-times.js';
 const aliases:Record<string,string>={production_sheet:'production_instruction',sourcing_selection:'sourcing_director',sourcing_approval:'sourcing_owner',development_craft_return:'development_craft_confirmation',external_pattern:'development_external_pattern',bulk_printing:'process_logistics',bulk_embroidery:'process_logistics',bulk_print_embroidery:'process_logistics',factory_production:'factory_production_qc',ship_sample_advance:'bulk_ship_sample',garment_inspection:'receiving_inspection',garment_rework:'rework',garment_packing:'packing',receiving_span:'receipts'};
 export const journeyTimingKey=(id:string)=>aliases[id.split(':')[0]!]??id.split(':')[0]!;
 export type JourneyTimingEvidence={facts:Record<string,SlaNodeFact>;labels?:ReadonlyMap<string,{scopeLabel:string;snapshotId?:string|null}>};
+export type JourneyTimingInputs={plan:SlaPlan|null;original:SlaPlan|null;facts:Record<string,SlaNodeFact>};
 const open=(state:string)=>!['completed','inherited','cancelled','not_applicable','unavailable'].includes(state);
 /** No new event or risk formula: adapt the canonical evaluation inside Journey's authorized snapshot. */
 export function attachJourneySupervision(item:OrderJourney,plan:SlaPlan|null,original:SlaPlan|null,nodes:SlaNodeEvaluation[],time:BusinessTime,revisions:{original:number|null;current:number|null},external=false,native?:JourneyTimingEvidence,authorizedTaskIds?:ReadonlySet<string>) {
@@ -61,8 +62,9 @@ export function attachJourneySupervision(item:OrderJourney,plan:SlaPlan|null,ori
   }
  }
 }
-export async function readJourneySupervision(database:Pool,db:PoolClient,actor:TrustedActorContext,item:OrderJourney,time:BusinessTime,external=false,authorizedTaskIds?:ReadonlySet<string>){
- if(item.orderId){const read=await new SlaOrderService(database,{read:async()=>time}).readWithClient(actor,item.orderId,db,{mode:"read_projection"});
+export async function readJourneySupervision(database:Pool,db:PoolClient,actor:TrustedActorContext|null,item:OrderJourney,time:BusinessTime,external=false,authorizedTaskIds?:ReadonlySet<string>,capture?:(inputs:JourneyTimingInputs)=>void){
+ if(item.orderId){const service=new SlaOrderService(database,{read:async()=>time}),read=actor?await service.readWithClient(actor,item.orderId,db,{mode:"read_projection"}):await service.readFactsWithClient(item.orderId,db,{mode:"read_projection"});
+  capture?.({plan:read.status==='planned'?read.evaluationPlan:null,original:read.status==='planned'?read.original.plan:null,facts:read.facts});
   attachJourneyNativeTimes(item,{orderId:read.receiving.orderId,rework:read.rework.windows,receiving:read.receiving.receivingSpan},read.time.now);
   if(read.status==='planned'){
    const labels=new Map<string,{scopeLabel:string;snapshotId?:string|null}>();
@@ -74,13 +76,14 @@ export async function readJourneySupervision(database:Pool,db:PoolClient,actor:T
   }
   else attachJourneySupervision(item,null,null,[],read.time,{original:null,current:null},external,{facts:read.facts},authorizedTaskIds);
  }else if(item.sourceId){const saved=await developmentSlaPlan(db,item.sourceId);
-  if(!saved){attachJourneySupervision(item,null,null,[],time,{original:null,current:null},false,{facts:await developmentNativeFacts(db,item.sourceId,time)},authorizedTaskIds);}
+  if(!saved){const facts=await developmentNativeFacts(db,item.sourceId,time);capture?.({plan:null,original:null,facts});attachJourneySupervision(item,null,null,[],time,{original:null,current:null},false,{facts},authorizedTaskIds);}
   else {
   const evidence=await developmentSlaEvidence(db,item.sourceId,time),plan=developmentEvaluationPlan(saved.plan_json,evidence?.facts??{});
+  capture?.({plan,original:saved.plan_json,facts:evidence?.facts??{}});
   attachJourneySupervision(item,plan,saved.plan_json,evaluateSlaPlan(plan,evidence?.facts??{},time,{mode:"read_projection"}),time,{original:1,current:saved.revision},false,{facts:evidence?.facts??{}},authorizedTaskIds);
   }
  }
- if(item.supervision?.assessment==='partially_unavailable')item.supervision.requestId=actor.requestId;
+ if(actor&&item.supervision?.assessment==='partially_unavailable')item.supervision.requestId=actor.requestId;
  if(time.scenarioId){const current=await new ContextBusinessClock(database,db).read(item.orderId?{kind:'order',id:item.orderId}:{kind:'source',id:item.sourceId!});
   if(current.scenarioId!==time.scenarioId||current.revision!==time.revision)throw new ApplicationError('CONFLICT','测试时钟在读取期间已变化，请刷新原页面',409);
  }

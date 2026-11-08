@@ -1,117 +1,112 @@
 {
   "version": 1,
-  "base": "ef971b3acf7299a6f95b317ca059350c58207b09",
-  "sourceFingerprint": "a0cbab4c6e4fbcec4bc175e9f082f0ffa4343f63bb8152e41ac3c582cd139290",
+  "base": "acc029d6f580f7d471dc3343db9b1235bd926e4a",
+  "sourceFingerprint": "1de2800e9c5e89e37fe2bb3d7855de5c194d49703d15f1347131b159955647db",
   "risk": "full",
   "rules": [
     {
-      "source": "Approved Final10 Version2 section10, actual user final images05/06/10 and parent execution authorization. Latest actual P06 merge includes all time-fact and settings fixes. No deployment or real business-data mutation.",
-      "rule": "Provide the original Shell with authorized year/month/day and independent undated/unknown drill views, correct quantity units and real calendar weeks; preserve filters/page/reading position through original order and nested records, while normal returns and refresh obtain fresh data.",
+      "rule": "Build a single canonical mother fact model without a Root/user DTO, authorization cache, financial values or attachment URLs, reusing original native task/Bulk/Closure/SLA calculations and retaining unknown values, real completion/adoption distinction, PO scope, date/exclusive precision and captured rule versions.",
+      "source": "Parent recovered and authorized full PERF plan, final revision msg_0923d6ae8074c9fd016aef6395d3e887d09479aa4680c34a97 overrides base msg_0923d6ae8074c9fd016aef628775f887d0a891e056a272ea6a. PERF01 only, on actual Final10-P07 merge acc029d6. No deployment or real business-data mutation.",
       "writes": [
-        "apps/web/src/App.tsx",
-        "apps/web/src/components.tsx",
-        "apps/web/src/delivery-calendar-grid.tsx",
-        "apps/web/src/delivery-calendar-model.ts",
-        "apps/web/src/delivery-calendar-page.tsx",
-        "apps/web/src/delivery-calendar.css",
-        "apps/web/src/digital-cockpit-page.tsx",
-        "apps/web/src/digital-journey-cockpit-model.ts",
-        "apps/web/src/digital-workspace-navigation.ts",
-        "tests/unit/delivery-calendar-model.test.ts"
+        "apps/api/src/production-platform/bulk-preparation-service.ts",
+        "apps/api/src/production-platform/journey-query.ts",
+        "apps/api/src/production-platform/journey-supervision.ts",
+        "apps/api/src/production-platform/order-closure-service.ts",
+        "apps/api/src/production-platform/sla-order-service.ts",
+        "apps/api/src/production-platform/journey-fact-model.ts",
+        "apps/api/src/production-platform/journey-fact-repository.ts"
       ],
       "reads": [
-        "apps/web/src/auth-session.ts",
-        "apps/web/src/internal-navigation.ts",
-        "apps/web/src/cockpit-reads.ts",
-        "apps/web/src/cockpit-photo-preview.tsx",
-        "packages/domain/src/delivery-calendar.ts",
-        "packages/ui/src/production.tsx"
+        "apps/api/src/production-platform/journey-task-summary.ts",
+        "apps/api/src/production-platform/journey-native-times.ts",
+        "apps/api/src/production-platform/journey-progress-dates.ts",
+        "apps/api/src/production-platform/journey-business-progress.ts",
+        "apps/api/src/production-platform/access-policy.ts",
+        "apps/api/src/production-platform/journey-adopted-plan.ts",
+        "packages/domain/src/digital-sla-plan.ts"
       ],
       "oldTests": [
-        "tests/unit/digital-journey-cockpit.test.ts",
-        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts"
+        "tests/integration/digital-journey-postgres.test.ts",
+        "tests/unit/journey-visual-progress.test.ts",
+        "tests/unit/journey-native-times.test.ts",
+        "tests/unit/journey-projection-isolation.test.ts"
       ],
       "newTests": [
-        "tests/unit/delivery-calendar-model.test.ts",
-        "tests/integration/m01-delivery-calendar-native-browser-postgres.test.ts"
+        "tests/integration/journey-fact-model-postgres.test.ts",
+        "tests/unit/journey-fact-model.test.ts"
       ],
-      "initialization": "Keep existing App/AuthGate/navigation/components/tokens and source facts; no UI cache, shipment/date editing or invented business ID. Preferences contain only a validated local UI path/scroll and same verified identity with finite real TTL. Use actual 4/5/6-week cells, density from response quantities and independent status text/symbols. Empty, unknown, forbidden and failed remain distinct; malformed calendar coverage rejects rather than rendering false zero.",
-      "dateAndPermission": "All risk and quantities derive from server asOfBusinessDate; selected date is only the delivery bucket. Abort, immediate generation invalidation and verified-session identity prevent stale responses. Current-page protected photos use original route authorization. History reads original instruction/PO approval only on demand. External/duplicate/unapproved return targets rejected. No permissions added.",
-      "expectation": "Original authenticated full App verifies1165/1366/1440, all12 cards/real leap date, monthly same-asOf day totals across15 rows, original order return/page preservation, search+reset, empty/unknown/errors, delayed old response rejection, real same-session PMC removal, original image grant and original date history, packing correction2→3 refreshed50/50→75/25. Existing homepage/detail consumers were verified on reviewed cb5d051a; the new delta only changes selected-day history rendering, with its six-case current native calendar regression. Local TEST screenshots are not onsite acceptance.",
+      "initialization": "No GET read switch or automatic all-object backfill. Internal single-object snapshot uses original native facts without a synthetic actor. Explicit fields only; current time risk and percentages are not persisted. Existing identity, PO label, customer and date tables remain live. Source-only resources and already attached order resources stay distinct.",
+      "dateAndPermission": "Original public read/list/service permission entry remains intact. Internal adapters are not routed and do not supply action authority. Current source/instruction/round, native observed dates, original final10 fixes, separate inherited result/adoption and original frozen plan/facts are retained. No broadening of operation, price, history, attachment or export scope.",
+      "expectation": "Current native6 and unit112 verify exact multi-PO original requirements, original task target precision and native SLA evaluation, true marker time, actor-free builder, source-only unknown route, exact dependencies and stable task-set ordering, no sensitive/UI fields and no mutation. Original Journey34 passed at prior source57a30ef before serializer-only deterministic sorting; do not represent that prior report as current final-head CI. Current original Full will cover canonical old consumers.",
       "checks": [
         "postgres",
         "unit",
-        "types",
+        "typesapi",
         "lint",
-        "preflight"
+        "buildapi"
       ]
     },
     {
-      "source": "Approved Final10 Version2 section10, actual user final images05/06/10 and parent execution authorization. Latest actual P06 merge includes all time-fact and settings fixes. No deployment or real business-data mutation.",
-      "rule": "Extend the same bounded authorized P06 read snapshot with optional monthly selected-day rows and two global scalar debt summaries, separate missing categories, and current-page image metadata without a second cache or full-order SLA/Journey expansion.",
+      "rule": "Persist rebuildable source/applied/calculation versions and integrity-bound facts only, retain business clock identity separately from real build time, refuse stale/obsolete/corrupt payloads, and provide exact migration identity plus Acceptance new-table permission inventory.",
+      "source": "Parent recovered and authorized full PERF plan, final revision msg_0923d6ae8074c9fd016aef6395d3e887d09479aa4680c34a97 overrides base msg_0923d6ae8074c9fd016aef628775f887d0a891e056a272ea6a. PERF01 only, on actual Final10-P07 merge acc029d6. No deployment or real business-data mutation.",
       "writes": [
-        "apps/api/src/production-platform/delivery-calendar-debt-summary.ts",
-        "apps/api/src/production-platform/delivery-calendar-images.ts",
-        "apps/api/src/production-platform/delivery-calendar-query.ts",
-        "apps/api/src/production-platform/delivery-calendar-routes.ts",
-        "packages/contracts/src/delivery-calendar.ts",
-        "tests/integration/m01-delivery-calendar-postgres.test.ts"
+        "apps/api/src/platform/migration-manifest.json",
+        "scripts/deploy/acceptance-migration-requirements.json",
+        "apps/api/migrations/0278_journey_fact_read_model.sql"
       ],
       "reads": [
-        "apps/api/src/production-platform/delivery-calendar-facts.ts",
-        "apps/api/src/production-platform/access-policy.ts",
-        "apps/api/src/production-platform/analysis-result-store.ts",
-        "apps/api/src/receiving/receiving-service.ts",
-        "apps/api/src/production-platform/production-instruction-service.ts",
-        "apps/api/src/production-platform/development-service.ts",
-        "apps/api/src/production-platform/po-customer-date-service.ts",
-        "apps/api/src/acceptance-clock/business-time.ts"
+        "apps/api/src/production-platform/journey-fact-repository.ts",
+        "apps/api/src/acceptance-clock/business-time.ts",
+        "scripts/migration-lib.mjs",
+        "scripts/migration-history-policy.mjs",
+        "scripts/deploy/prepare-acceptance-migration.py",
+        "tests/helpers/business-anchor-fixture.ts"
       ],
       "oldTests": [
-        "tests/integration/m01-delivery-calendar-postgres.test.ts",
-        "tests/integration/m01-production-statistics-postgres.test.ts"
+        "tests/unit/current-migration-manifest-checksum.test.ts",
+        "tests/integration/acceptance-sla-clock-postgres.test.ts"
       ],
-      "initialization": "No new migration/background updater/middleware. Reuse original PG repeatable-read, AnalysisResultStore and effective cumulative receiving/packing SQL. Date-or-undated predicate remains before primary range cap; related debt is scalar only and permission contributors are retained. Only selected page15 gets image metadata and original protected URLs, no signed/public URL cache.",
-      "dateAndPermission": "Original live roles/object/field scopes and guarded Acceptance clock checks remain on all contributors. Extra monthly context is tied to its exact selectedDate and stored coverage. Unknown demand/packing stays unknown and is independently accessible. Root/PMC/technical grants retain original semantics; source image fallback uses original canDownload. Customer due dates stay distinct from factory dates and actual occurrence.",
-      "expectation": "Original native PG covers exact same monthly grid/day/paged totals and asOf, 5010 unrelated-year PO with a small requested month, independent undated versus quantity lists, current published photo metadata, unchanged current packing corrections, transfer-zero allocation, cancellation/special closure, effective date movement, midnight and authenticated scope revocation. No cross-user query reuse or fabricated history.",
+      "newTests": [
+        "tests/integration/journey-fact-model-postgres.test.ts"
+      ],
+      "initialization": "Fresh owned marked low-privilege TEST schema applies full original migrations plus0278; no historical SQL edited, no production replay or forced maintenance rehearsal. Exact REFERENCES on original source/order, one new derived table, no sequence/function privilege expansion. Bound payload2MiB, no raw business ledger. PERF02 owns future dirty registration, retries and concurrency coverage; not falsely claimed implemented here.",
+      "dateAndPermission": "One mother RR build/store with version row lock and original post-commit business-clock check; stored clock revision is rechecked before ready. Missing resource/attached alias fail without a partial derived row. No user-specific visibility conclusion or Root identity saved. Production realtime and Acceptance business clock remain separate from persistence CURRENT_TIMESTAMP.",
+      "expectation": "Current native6 verifies source-only/direct/source-linked setup, exact target-only storage, stable rebuild, missing/foreign scope refusal and rollback, old source/calculation/clock versions returning no payload, and checksum mismatch rejection. Manifest/checksum and original preflight pass. No deployment or onsite permissions claim.",
       "checks": [
         "postgres",
         "unit",
-        "types",
-        "lint",
-        "preflight"
+        "preflight",
+        "typesapi"
       ]
     },
     {
-      "source": "Approved Final10 Version2 section10, actual user final images05/06/10 and parent execution authorization. Latest actual P06 merge includes all time-fact and settings fixes. No deployment or real business-data mutation.",
-      "rule": "Register actual delivery browser coverage in the canonical plan with lock-pinned Chromium, finite shared correctness budgets and original owned cleanup, retaining default existing home harness behavior.",
+      "rule": "Register new fact foundation tests in the original canonical plan with existing bounded correctness settings, safe native fixtures and exact owned cleanup; preserve unchanged time-inventory annotations and keep UI/read path unchanged.",
+      "source": "Parent recovered and authorized full PERF plan, final revision msg_0923d6ae8074c9fd016aef6395d3e887d09479aa4680c34a97 overrides base msg_0923d6ae8074c9fd016aef628775f887d0a891e056a272ea6a. PERF01 only, on actual Final10-P07 merge acc029d6. No deployment or real business-data mutation.",
       "writes": [
         "scripts/ci/full-gate-risk-map.mjs",
-        "scripts/ci/prepare-settings-browser.mjs",
         "scripts/test-suite-plan.mjs",
-        "tests/acceptance/m01-cockpit-home-native-browser.ts",
-        "tests/integration/m01-delivery-calendar-native-browser-postgres.test.ts",
-        "tests/unit/full-gate-risk-map.test.ts"
+        "tests/integration/journey-fact-model-postgres.test.ts",
+        "tests/unit/journey-fact-model.test.ts"
       ],
       "reads": [
         "scripts/test-execution-config.mjs",
         "scripts/owned-command.mjs",
         "scripts/test-resource-contract.mjs",
-        "tests/helpers/business-anchor-fixture.ts",
-        "tests/fixtures/m01-cockpit-home-native-ui.tsx",
-        "apps/api/src/auth/service.ts",
-        "apps/api/src/tools/attachments.ts"
+        "scripts/acceptance/time-site-inventory.mjs",
+        "tests/helpers/owned-postgres-schema.ts",
+        "tests/helpers/business-anchor-fixture.ts"
       ],
       "oldTests": [
         "tests/unit/full-gate-risk-map.test.ts",
-        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts"
+        "tests/integration/digital-journey-postgres.test.ts"
       ],
       "newTests": [
-        "tests/integration/m01-delivery-calendar-native-browser-postgres.test.ts"
+        "tests/integration/journey-fact-model-postgres.test.ts",
+        "tests/unit/journey-fact-model.test.ts"
       ],
-      "initialization": "New suite uses the actual complete App and original AuthService/PostgresAuthStore, owned marked low-privilege TEST schemas and exact cleanup. Optional calendar harness awaits lazy Fastify injection inside guarded runtime. Existing home mode retains its old context behavior. Local FakeObjectStorage serves actual TEST bytes only after original protected attachment authorization issues a bounded random download grant, with original302 Location preserved.",
-      "dateAndPermission": "Test data and images are isolated fixtures, never site/customer data. No fake business authentication, production request clock control, role widening or skipped permission assertions. Original100-second per-case budget and bounded hook cleanup retained independently from business SLA.",
-      "expectation": "Canonical risk map selects delivery browser for actual UI/reader/contract consumers and installs lock-pinned Chromium; original home and new browser suites execute with native PG and cleanup.250 protocol preflight and focused gate mapping/unit checks pass. Report SHA pins actual JSON without inventing test counts for compiler/lint/build commands.",
+      "initialization": "Original configForSuite selects existing long correctness config with100-second per-case budget. No new browser matrix or mandatory scale test per PR;1000/5000 representative acceptance belongs PERF03. No change to maintenance gate selection, global timeout, actual business SLA, seed or real users.",
+      "dateAndPermission": "Local exact guarded TEST identities and loopback PG16.15, Node22.22.2/npm10.9.9, Nodecpuset2,3 and PGcpuset0,1/2GiB are recorded. Not CI hardware equivalence. Original native setup/teardown and root/role guards retained. No scene or data outside owned fixtures.",
+      "expectation": "Current preflight250, focused112units, native6, lint/types/APIbuild/secret each have immutable actual logs. Test report digests pinned before requestFinal; no test counts invented for command checks. Only actual time-site candidate changes reconciled with unchanged prior annotations; no business Full rerun for report format.",
       "checks": [
         "postgres",
         "unit",
@@ -128,17 +123,12 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "a0cbab4c6e4fbcec4bc175e9f082f0ffa4343f63bb8152e41ac3c582cd139290",
+      "sourceFingerprint": "1de2800e9c5e89e37fe2bb3d7855de5c194d49703d15f1347131b159955647db",
       "inputPaths": [
-        "apps/web",
         "apps/api",
         "packages",
         "scripts",
-        "tests/helpers",
-        "tests/fixtures",
-        "tests/integration/m01-delivery-calendar-postgres.test.ts",
-        "tests/integration/m01-delivery-calendar-native-browser-postgres.test.ts",
-        "tests/acceptance/m01-cockpit-home-native-browser.ts",
+        "tests",
         "package.json",
         "package-lock.json",
         "eslint.config.js",
@@ -147,18 +137,168 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "8fe438087b60ccb85d311e6fd8adba46bf9ff70c345a2bb7daf2cbaddaa69d4e",
+      "inputFingerprint": "05674c06000230f65c4f9ac6156df74ab010d7b43fcd7df1ae82de277f6805c5",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "6606c4a382b8755d715a4261ce1c7d723b1e387f",
-      "startedAt": "2026-11-08T06:08:28.073Z",
-      "endedAt": "2026-11-08T06:08:34.902Z",
+      "testedHead": "acc029d6f580f7d471dc3343db9b1235bd926e4a",
+      "startedAt": "2026-11-08T06:53:38.751Z",
+      "endedAt": "2026-11-08T06:53:45.574Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/p07-service-preflight-volume-bounded.log",
-      "logSha256": "113964388d5f719934bb927231b9b79aa83b51ce12dafeb43b27b2762b1c83a3",
+      "log": "/workspace/scratch/dx-final10-20261108/perf01-preflight-final-sorted.log",
+      "logSha256": "82b3a1d3fff885594f1a76f818359eaec52d6d3e8e708d6eecea84fed8927061",
       "resultReport": null,
       "context": "Original configForSuite, marked owned loopback PG16.15 fixture and exact cleanup. Nodecpuset2,3, PGcpuset0,1/2GiB; local host not equivalent to CI hardware. Real AuthService and native business mutations on isolated fixtures only.",
       "kind": "command"
+    },
+    {
+      "id": "unit",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/journey-fact-model.test.ts tests/unit/journey-visual-progress.test.ts tests/unit/journey-native-times.test.ts tests/unit/journey-projection-isolation.test.ts tests/unit/current-migration-manifest-checksum.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf01-unit-final-sorted.vitest.json",
+      "status": "passed",
+      "exitCode": 0,
+      "allExited": true,
+      "sourceFingerprint": "1de2800e9c5e89e37fe2bb3d7855de5c194d49703d15f1347131b159955647db",
+      "inputPaths": [
+        "apps/api",
+        "packages",
+        "scripts",
+        "tests",
+        "package.json",
+        "package-lock.json",
+        "eslint.config.js",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "vitest.postgres-immediate.config.ts"
+      ],
+      "inputFingerprint": "05674c06000230f65c4f9ac6156df74ab010d7b43fcd7df1ae82de277f6805c5",
+      "inputsUnchanged": true,
+      "sourceUnchanged": true,
+      "testedHead": "acc029d6f580f7d471dc3343db9b1235bd926e4a",
+      "startedAt": "2026-11-08T06:53:57.810Z",
+      "endedAt": "2026-11-08T06:54:00.484Z",
+      "passed": 112,
+      "failed": 0,
+      "skipped": 0,
+      "planError": null,
+      "log": "/workspace/scratch/dx-final10-20261108/perf01-unit-final-sorted.log",
+      "logSha256": "3fb94aaaae2b9f7832e1676397bce1f90248eafa088a3961cfdf76b959e6f787",
+      "resultReport": "/workspace/scratch/dx-final10-20261108/perf01-unit-final-sorted.vitest.json",
+      "context": "Original configForSuite, marked owned loopback PG16.15 fixture and exact cleanup. Nodecpuset2,3, PGcpuset0,1/2GiB; local host not equivalent to CI hardware. Real AuthService and native business mutations on isolated fixtures only.",
+      "kind": "tests",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "6cafc54dcb88f1c1720cc26b2c3dc7e1ae837f097abc362f17f1b98bbe828e0e"
+        }
+      ]
+    },
+    {
+      "id": "lint",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/bulk-preparation-service.ts apps/api/src/production-platform/journey-query.ts apps/api/src/production-platform/journey-supervision.ts apps/api/src/production-platform/order-closure-service.ts apps/api/src/production-platform/sla-order-service.ts scripts/ci/full-gate-risk-map.mjs scripts/test-suite-plan.mjs apps/api/src/production-platform/journey-fact-model.ts apps/api/src/production-platform/journey-fact-repository.ts tests/integration/journey-fact-model-postgres.test.ts tests/unit/journey-fact-model.test.ts --max-warnings=0",
+      "status": "passed",
+      "exitCode": 0,
+      "allExited": true,
+      "sourceFingerprint": "1de2800e9c5e89e37fe2bb3d7855de5c194d49703d15f1347131b159955647db",
+      "inputPaths": [
+        "apps/api",
+        "packages",
+        "scripts",
+        "tests",
+        "package.json",
+        "package-lock.json",
+        "eslint.config.js",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "vitest.postgres-immediate.config.ts"
+      ],
+      "inputFingerprint": "05674c06000230f65c4f9ac6156df74ab010d7b43fcd7df1ae82de277f6805c5",
+      "inputsUnchanged": true,
+      "sourceUnchanged": true,
+      "testedHead": "acc029d6f580f7d471dc3343db9b1235bd926e4a",
+      "startedAt": "2026-11-08T06:53:45.647Z",
+      "endedAt": "2026-11-08T06:53:46.972Z",
+      "planError": null,
+      "log": "/workspace/scratch/dx-final10-20261108/perf01-lint-final-sorted.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "resultReport": null,
+      "context": "Original configForSuite, marked owned loopback PG16.15 fixture and exact cleanup. Nodecpuset2,3, PGcpuset0,1/2GiB; local host not equivalent to CI hardware. Real AuthService and native business mutations on isolated fixtures only.",
+      "kind": "command"
+    },
+    {
+      "id": "typesapi",
+      "command": "npm run typecheck --workspace=@dx-rework/api",
+      "status": "passed",
+      "exitCode": 0,
+      "allExited": true,
+      "sourceFingerprint": "1de2800e9c5e89e37fe2bb3d7855de5c194d49703d15f1347131b159955647db",
+      "inputPaths": [
+        "apps/api",
+        "packages",
+        "scripts",
+        "tests",
+        "package.json",
+        "package-lock.json",
+        "eslint.config.js",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "vitest.postgres-immediate.config.ts"
+      ],
+      "inputFingerprint": "05674c06000230f65c4f9ac6156df74ab010d7b43fcd7df1ae82de277f6805c5",
+      "inputsUnchanged": true,
+      "sourceUnchanged": true,
+      "testedHead": "acc029d6f580f7d471dc3343db9b1235bd926e4a",
+      "startedAt": "2026-11-08T06:53:47.922Z",
+      "endedAt": "2026-11-08T06:53:57.736Z",
+      "planError": null,
+      "log": "/workspace/scratch/dx-final10-20261108/perf01-typesapi-final-sorted.log",
+      "logSha256": "d81733d2d3443600c8f5c4e1f5774d8d050a1c5a8ef34bd5a659eb50ebd68f00",
+      "resultReport": null,
+      "context": "Original configForSuite, marked owned loopback PG16.15 fixture and exact cleanup. Nodecpuset2,3, PGcpuset0,1/2GiB; local host not equivalent to CI hardware. Real AuthService and native business mutations on isolated fixtures only.",
+      "kind": "command"
+    },
+    {
+      "id": "postgres",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/journey-fact-model-postgres.test.ts --config vitest.business-chain.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf01-postgres-final-sorted.vitest.json",
+      "status": "passed",
+      "exitCode": 0,
+      "allExited": true,
+      "sourceFingerprint": "1de2800e9c5e89e37fe2bb3d7855de5c194d49703d15f1347131b159955647db",
+      "inputPaths": [
+        "apps/api",
+        "packages",
+        "scripts",
+        "tests",
+        "package.json",
+        "package-lock.json",
+        "eslint.config.js",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "vitest.postgres-immediate.config.ts"
+      ],
+      "inputFingerprint": "05674c06000230f65c4f9ac6156df74ab010d7b43fcd7df1ae82de277f6805c5",
+      "inputsUnchanged": true,
+      "sourceUnchanged": true,
+      "testedHead": "acc029d6f580f7d471dc3343db9b1235bd926e4a",
+      "startedAt": "2026-11-08T06:54:00.564Z",
+      "endedAt": "2026-11-08T06:54:08.846Z",
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "planError": null,
+      "log": "/workspace/scratch/dx-final10-20261108/perf01-postgres-final-sorted.log",
+      "logSha256": "4705b1e57d28f4ca92d7da48beef67d117b9212453c0aa604c407a688932ac68",
+      "resultReport": "/workspace/scratch/dx-final10-20261108/perf01-postgres-final-sorted.vitest.json",
+      "context": "Original configForSuite, marked owned loopback PG16.15 fixture and exact cleanup. Nodecpuset2,3, PGcpuset0,1/2GiB; local host not equivalent to CI hardware. Real AuthService and native business mutations on isolated fixtures only.",
+      "kind": "tests",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "1f4f9ddd8893b7fd20f4b7a4a87e654ded918256b03aced9001b8028efbd23d3"
+        }
+      ]
     },
     {
       "id": "secret",
@@ -166,17 +306,12 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "a0cbab4c6e4fbcec4bc175e9f082f0ffa4343f63bb8152e41ac3c582cd139290",
+      "sourceFingerprint": "1de2800e9c5e89e37fe2bb3d7855de5c194d49703d15f1347131b159955647db",
       "inputPaths": [
-        "apps/web",
         "apps/api",
         "packages",
         "scripts",
-        "tests/helpers",
-        "tests/fixtures",
-        "tests/integration/m01-delivery-calendar-postgres.test.ts",
-        "tests/integration/m01-delivery-calendar-native-browser-postgres.test.ts",
-        "tests/acceptance/m01-cockpit-home-native-browser.ts",
+        "tests",
         "package.json",
         "package-lock.json",
         "eslint.config.js",
@@ -185,36 +320,31 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "8fe438087b60ccb85d311e6fd8adba46bf9ff70c345a2bb7daf2cbaddaa69d4e",
+      "inputFingerprint": "05674c06000230f65c4f9ac6156df74ab010d7b43fcd7df1ae82de277f6805c5",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "6606c4a382b8755d715a4261ce1c7d723b1e387f",
-      "startedAt": "2026-11-08T06:08:34.967Z",
-      "endedAt": "2026-11-08T06:08:35.717Z",
+      "testedHead": "acc029d6f580f7d471dc3343db9b1235bd926e4a",
+      "startedAt": "2026-11-08T06:53:47.048Z",
+      "endedAt": "2026-11-08T06:53:47.843Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/p07-service-secret-volume-bounded.log",
+      "log": "/workspace/scratch/dx-final10-20261108/perf01-secret-final-sorted.log",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda",
       "resultReport": null,
       "context": "Original configForSuite, marked owned loopback PG16.15 fixture and exact cleanup. Nodecpuset2,3, PGcpuset0,1/2GiB; local host not equivalent to CI hardware. Real AuthService and native business mutations on isolated fixtures only.",
       "kind": "command"
     },
     {
-      "id": "postgres",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/m01-delivery-calendar-postgres.test.ts tests/integration/m01-delivery-calendar-native-browser-postgres.test.ts --config vitest.business-chain.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/p07-service-postgres-volume-bounded.vitest.json",
+      "id": "buildapi",
+      "command": "npm run build --workspace=@dx-rework/api",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "a0cbab4c6e4fbcec4bc175e9f082f0ffa4343f63bb8152e41ac3c582cd139290",
+      "sourceFingerprint": "1de2800e9c5e89e37fe2bb3d7855de5c194d49703d15f1347131b159955647db",
       "inputPaths": [
-        "apps/web",
         "apps/api",
         "packages",
         "scripts",
-        "tests/helpers",
-        "tests/fixtures",
-        "tests/integration/m01-delivery-calendar-postgres.test.ts",
-        "tests/integration/m01-delivery-calendar-native-browser-postgres.test.ts",
-        "tests/acceptance/m01-cockpit-home-native-browser.ts",
+        "tests",
         "package.json",
         "package-lock.json",
         "eslint.config.js",
@@ -223,85 +353,18 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "8fe438087b60ccb85d311e6fd8adba46bf9ff70c345a2bb7daf2cbaddaa69d4e",
+      "inputFingerprint": "05674c06000230f65c4f9ac6156df74ab010d7b43fcd7df1ae82de277f6805c5",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "6606c4a382b8755d715a4261ce1c7d723b1e387f",
-      "startedAt": "2026-11-08T06:07:36.404Z",
-      "endedAt": "2026-11-08T06:08:05.157Z",
-      "passed": 14,
-      "failed": 0,
-      "skipped": 0,
+      "testedHead": "acc029d6f580f7d471dc3343db9b1235bd926e4a",
+      "startedAt": "2026-11-08T06:54:14.873Z",
+      "endedAt": "2026-11-08T06:54:25.887Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/p07-service-postgres-volume-bounded.log",
-      "logSha256": "738f3c44e82a75636fbe2f15d9f5b8841b790c1c1c18bfd75e7795c559dfba61",
-      "resultReport": "/workspace/scratch/dx-final10-20261108/p07-service-postgres-volume-bounded.vitest.json",
+      "log": "/workspace/scratch/dx-final10-20261108/perf01-buildapi-final-sorted.log",
+      "logSha256": "8dd8c96364991c28227c467fbbb326a32e6737fddfa4e2d355be3ef6dd8512fe",
+      "resultReport": null,
       "context": "Original configForSuite, marked owned loopback PG16.15 fixture and exact cleanup. Nodecpuset2,3, PGcpuset0,1/2GiB; local host not equivalent to CI hardware. Real AuthService and native business mutations on isolated fixtures only.",
-      "kind": "tests",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "9cd921cf69000ed840fd4959b97c621563663a9dc7b677486c8f81ea891e19af"
-        }
-      ]
-    },
-    {
-      "id": "types",
-      "kind": "command",
-      "command": "npm run typecheck --workspace=@dx-rework/web",
-      "status": "passed",
-      "exitCode": 0,
-      "allExited": true,
-      "sourceFingerprint": "a0cbab4c6e4fbcec4bc175e9f082f0ffa4343f63bb8152e41ac3c582cd139290",
-      "sourceUnchanged": true,
-      "testedHead": "6606c4a382b8755d715a4261ce1c7d723b1e387f",
-      "startedAt": "2026-11-08T06:08:08.429Z",
-      "endedAt": "2026-11-08T06:08:25.147Z",
-      "log": "/workspace/scratch/dx-final10-20261108/p07-types-volume-bounded.log",
-      "logSha256": "752b0f4f80e1f2fdeece6837aa0d8538e17009bd166c8888d0c5c5d0c6148bcd",
-      "context": "Original local Vitest/web compiler and locked dependencies; Node22.22.2, taskset2,3. Pure client navigation/projection check, not original authenticated browser or onsite acceptance."
-    },
-    {
-      "id": "lint",
-      "kind": "command",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/delivery-calendar-debt-summary.ts apps/api/src/production-platform/delivery-calendar-images.ts apps/api/src/production-platform/delivery-calendar-query.ts apps/api/src/production-platform/delivery-calendar-routes.ts apps/web/src/App.tsx apps/web/src/components.tsx apps/web/src/delivery-calendar-grid.tsx apps/web/src/delivery-calendar-model.ts apps/web/src/delivery-calendar-page.tsx apps/web/src/digital-cockpit-page.tsx apps/web/src/digital-journey-cockpit-model.ts apps/web/src/digital-workspace-navigation.ts packages/contracts/src/delivery-calendar.ts scripts/ci/full-gate-risk-map.mjs scripts/ci/prepare-settings-browser.mjs scripts/test-suite-plan.mjs tests/acceptance/m01-cockpit-home-native-browser.ts tests/integration/m01-delivery-calendar-native-browser-postgres.test.ts tests/integration/m01-delivery-calendar-postgres.test.ts tests/unit/delivery-calendar-model.test.ts tests/unit/full-gate-risk-map.test.ts --max-warnings=0",
-      "status": "passed",
-      "exitCode": 0,
-      "allExited": true,
-      "sourceFingerprint": "a0cbab4c6e4fbcec4bc175e9f082f0ffa4343f63bb8152e41ac3c582cd139290",
-      "sourceUnchanged": true,
-      "testedHead": "6606c4a382b8755d715a4261ce1c7d723b1e387f",
-      "startedAt": "2026-11-08T06:08:25.148Z",
-      "endedAt": "2026-11-08T06:08:26.512Z",
-      "log": "/workspace/scratch/dx-final10-20261108/p07-lint-volume-bounded.log",
-      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "context": "Original local Vitest/web compiler and locked dependencies; Node22.22.2, taskset2,3. Pure client navigation/projection check, not original authenticated browser or onsite acceptance."
-    },
-    {
-      "id": "unit",
-      "kind": "tests",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/delivery-calendar-model.test.ts tests/unit/digital-journey-cockpit.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/p07-unit-volume-bounded.vitest.json",
-      "status": "passed",
-      "exitCode": 0,
-      "allExited": true,
-      "sourceFingerprint": "a0cbab4c6e4fbcec4bc175e9f082f0ffa4343f63bb8152e41ac3c582cd139290",
-      "sourceUnchanged": true,
-      "testedHead": "6606c4a382b8755d715a4261ce1c7d723b1e387f",
-      "startedAt": "2026-11-08T06:08:26.513Z",
-      "endedAt": "2026-11-08T06:08:27.919Z",
-      "passed": 84,
-      "failed": 0,
-      "skipped": 0,
-      "resultReport": "/workspace/scratch/dx-final10-20261108/p07-unit-volume-bounded.vitest.json",
-      "log": "/workspace/scratch/dx-final10-20261108/p07-unit-volume-bounded.log",
-      "logSha256": "b7cf3ac34fb6e83763ab98bf0914ee6fdab07d571a212172906977ad0d35b643",
-      "context": "Original local Vitest/web compiler and locked dependencies; Node22.22.2, taskset2,3. Pure client navigation/projection check, not original authenticated browser or onsite acceptance.",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "507dce02a48e6a7b8516472893048600b9835d4718674b7ad090ac860376efff"
-        }
-      ]
+      "kind": "command"
     }
   ]
 }

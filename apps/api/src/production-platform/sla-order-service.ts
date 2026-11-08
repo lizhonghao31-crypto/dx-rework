@@ -100,6 +100,13 @@ export class SlaOrderService {
   /** Reuse the caller's authorized read snapshot; never open a nested connection/transaction. */
   async readWithClient(actor: TrustedActorContext, orderId: string, client: PoolClient, options:{mode?:"read_projection"}={}) {
       await new DigitalProductionAccessPolicy(client).assert(actor, "order", orderId, "technical");
+      return this.readFacts(orderId,client,options,actor);
+  }
+  /** Internal canonical inputs. This never supplies an actor or an authorization result. */
+  async readFactsWithClient(orderId:string,client:PoolClient,options:{mode?:"read_projection"}={}){
+      return this.readFacts(orderId,client,options,null);
+  }
+  private async readFacts(orderId:string,client:PoolClient,options:{mode?:"read_projection"},actor:TrustedActorContext|null){
       const repo = new SlaPlanRepository(client), time = validateBusinessTime(await (this.clock instanceof ContextBusinessClock?this.clock.withTransaction(client):this.clock).read({ kind: "order", id: orderId }));
       const history = await repo.available() ? await repo.plans(orderId) : [];
       const current = history.at(-1);
@@ -122,7 +129,7 @@ export class SlaOrderService {
       Object.assign(facts,bulk,await sourcingSlaEvidence(client,orderId),await shipSampleSlaEvidence(client,orderId),production.facts);
       const factory=await factorySlaEvidence(client,orderId);if(factory)Object.assign(facts,factory.facts);
       const garments=await garmentSlaEvidence(client,orderId);Object.assign(facts,garments.facts);
-      const receiving=await new OrderClosureService(this.database).read(actor,orderId,client);
+      const receiving=actor?await new OrderClosureService(this.database).read(actor,orderId,client):await new OrderClosureService(this.database).readFactsWithClient(orderId,client);
       const span=receiving.receivingSpan;facts.receiving_span={businessCompleted:receiving.collection?.status==='已收齐',evidence:`native-receipts:${receiving.revision}`,
        ...(span?.firstEffectiveReceipt?.receivedAt?{startedAt:span.firstEffectiveReceipt.receivedAt}:{}),...(span?.collectedAt?{completedAt:span.collectedAt}:{})};
       const packing=packingSlaEvidence(receiving);Object.assign(facts,packing.facts);
