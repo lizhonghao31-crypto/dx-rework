@@ -118,11 +118,11 @@ export async function readJourneySelections(database:Pool,db:PoolClient,actor:Tr
    coalesce(risks,node->'risks','[]'::jsonb) AS risks FROM selected_nodes n
   UNION ALL
   SELECT n.kind,n.id,c.value->>'key',c.value->>'stage',
-   CASE WHEN c.value->>'key'='budget' AND NOT n.budget OR c.value->>'key'=ANY(ARRAY['rework_review','responsibility']) AND NOT $8
+   CASE WHEN n.oid IS NULL AND c.value->>'stage' NOT IN ('creation','development') THEN 'not_applicable'
+    WHEN c.value->>'key'='budget' AND NOT n.budget OR c.value->>'key'=ANY(ARRAY['rework_review','responsibility']) AND NOT $8
     OR c.value->>'key'=ANY(ARRAY['sourcing_ie','sourcing_director','sourcing_owner']) AND n.sourcing_id IS NOT NULL AND NOT $7
     OR c.value->>'key'='production_reporting' AND n.production_id IS NOT NULL AND NOT n.production_id=ANY($9::uuid[]) THEN 'unavailable'
     WHEN c.value->>'key'='order_information' AND n.oid IS NULL THEN 'uncreated'
-    WHEN n.oid IS NULL AND c.value->>'stage' NOT IN ('creation','development') THEN 'not_applicable'
     WHEN c.value->>'stage'='creation' AND (n."sourceAccess" OR n."fullOrder") OR c.value->>'stage'='development' AND (n."sourceAccess" OR n."fullOrder" AND n.sid IS NULL) OR c.value->>'stage' NOT IN ('creation','development') AND n."fullOrder" THEN 'uncreated' ELSE 'unavailable' END,
    false,false,false,'[]'::jsonb FROM framed n CROSS JOIN jsonb_array_elements($4::jsonb) c(value)
    WHERE NOT coalesce(n.fast,false) AND NOT coalesce((c.value->>'planningOnly')::boolean,false) AND NOT EXISTS(SELECT 1 FROM selected_nodes v WHERE v.kind=n.kind AND v.id=n.id AND v.node->>'key'=c.value->>'key')

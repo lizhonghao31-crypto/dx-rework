@@ -13,7 +13,7 @@ import {evaluateSlaPlan} from '@dx-rework/domain/digital-sla-plan';
 import {readJourneySelectionAccess} from '../../apps/api/src/production-platform/journey-selection-access.js';
 import {readJourneySelections} from '../../apps/api/src/production-platform/journey-selection-query.js';
 import {selectJourneySelections,selectJourneys} from '../../apps/api/src/production-platform/journey-projection.js';
-import {JourneyFilterSchema} from '@dx-rework/contracts/digital-production-journey';
+import {JOURNEY_NODES,JourneyFilterSchema} from '@dx-rework/contracts/digital-production-journey';
 import {JourneyFactUpdates} from '../../apps/api/src/production-platform/journey-fact-updates.js';
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
@@ -91,6 +91,23 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const built=await repo.buildOne({kind:'source',id:source.sourceId});expect(built.model.orderId).toBeNull();expect(built.model.quantities).toBeNull();
   expect(built.model.requirements.every(r=>r.stage==='development')).toBe(true);expect(built.model.nodes.filter(n=>n.key==='development_pattern').every(n=>n.actualAt===null&&n.enteredAt===null)).toBe(true);
   expect(built.model.requirements.some(r=>r.applicability==='unknown')).toBe(true);
+  const client=await f.db.connect(),asOf=(await f.runtime.repository.view(scene)).now;
+  try{
+   await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+   for(const actor of [f.root,f.people['sample-designer']!]){
+    const original=await new DigitalJourneyQuery(f.db).read(actor,source.sourceId,undefined,true);
+    for(const spec of JOURNEY_NODES.filter(node=>!node.planningOnly&&!['creation','development'].includes(node.stage))){
+     for(const state of ['not_applicable','unavailable']){
+      const filter=JourneyFilterSchema.parse({scope:'development',node:spec.key,state});
+      const read=await readJourneySelections(f.db,client,actor,[{source:{source_id:source.sourceId},order:null}],filter,asOf);
+      expect(read.items.map(row=>row.status)).toEqual(['ready']);
+      const actual=selectJourneySelections(read.items.map(row=>row.selection),filter,asOf),expected=selectJourneys([original],filter,asOf);
+      expect({...actual,items:actual.items.map(item=>item.id)},`${actor.actorRoles} ${spec.key} ${state}`).toEqual({...expected,items:expected.items.map(item=>item.id)});
+     }
+    }
+   }
+   await client.query('COMMIT');
+  }finally{await client.query('ROLLBACK');client.release();}
  }));
  it('refuses missing resources and attached-source aliases without creating partial derived rows',()=>run(async()=>{
   const count=Number((await f.db.query('SELECT count(*) FROM digital_journey_fact_models')).rows[0].count);

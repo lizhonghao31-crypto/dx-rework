@@ -4,7 +4,7 @@ import {JOURNEY_STAGES,type JourneyNode,type OrderJourney} from '@dx-rework/cont
 import type {SlaPlan} from '@dx-rework/domain/digital-sla-plan';
 import {journeyDisplay} from '../../apps/api/src/production-platform/journey-display.js';
 import {journeySelectionFacts,type JourneySelectionTask} from '../../apps/api/src/production-platform/journey-selection-facts.js';
-import {journeyObservedDay,journeyPlanDateOverdue,journeyTaskTimeRisks} from '../../apps/api/src/production-platform/journey-risk-clock.js';
+import {journeyObservedDay,journeyPlanDateOverdue,journeyTaskTimeRisks,journeyTaskDeadlineExclusive} from '../../apps/api/src/production-platform/journey-risk-clock.js';
 import {compileJourneySelectionClock} from '../../apps/api/src/production-platform/journey-selection-clock.js';
 import {journeySelectionNodes} from '../../apps/api/src/production-platform/journey-selection-facts.js';
 import {attachJourneySupervision} from '../../apps/api/src/production-platform/journey-supervision.js';
@@ -62,6 +62,18 @@ describe('minimal native Journey selection facts',()=>{
 describe('compiled native Journey clock transitions',()=>{
  const delivery={finished:false,factoryFinished:false,sampleFinished:false,sentLineIds:[] as string[]};
  const frameAt=(frames:ReturnType<typeof compileJourneySelectionClock>['frames'],at:string)=>frames.filter(frame=>frame.from<=at).at(-1)!;
+ it('keeps the native undefined deadline default at equality when facts normalize it to a stored boolean',()=>{
+  for(const flag of [undefined,true,false]){
+   const native={...task(),deadlineExclusive:flag},stored={...native,deadlineExclusive:journeyTaskDeadlineExclusive(native)};
+   const original=order([node()]),item=structuredClone(original);
+   const compiled=compileJourneySelectionClock(item,original,empty,[stored],journeySelectionNodes(original.stages.flatMap(stage=>stage.nodes)),delivery,time());
+   for(const offset of [-1,0,1]){
+    const observed=new Date(Date.parse(after(1))+offset).toISOString();
+    expect(frameAt(compiled.frames,observed).risks[0]!.risks).toEqual(journeyTaskTimeRisks(native,observed));
+   }
+   expect(frameAt(compiled.frames,after(1)).risks[0]!.risks.includes('overdue')).toBe(flag!==false);
+  }
+ });
  it('reports a future trusted native event recheck without inventing its start/completion or polling permanently untrusted history',async()=>{
   const row={task_id:'TEST future task',task_kind:'development_pattern',state:'completed',entered_at:after(1),completed_at:after(2),entered_quality:'已核实',completed_quality:'已核实',returned:false,rejected:false};
   const db={query:vi.fn().mockResolvedValue({rows:[row]})} as unknown as PoolClient,rechecks:string[]=[];

@@ -49,7 +49,7 @@ import {journeyNodeFactTarget,mergeJourneyNodeFact} from './journey-node-fact.js
 import {minimalJourneyFacts,type JourneyFactModel} from './journey-fact-model.js';
 import type {JourneyTimingInputs} from './journey-supervision.js';
 import {journeySelectionFacts,journeySelectionNodes,type JourneySelectionFacts,type JourneySelectionTask} from './journey-selection-facts.js';
-import {journeyObservedDay,journeyPlanDateOverdue,journeyTaskTimeRisks} from './journey-risk-clock.js';
+import {journeyObservedDay,journeyPlanDateOverdue,journeyTaskTimeRisks,journeyTaskDeadlineExclusive} from './journey-risk-clock.js';
 import {compileJourneySelectionClock,type JourneySelectionDelivery} from './journey-selection-clock.js';
 import {readJourneySelections} from './journey-selection-query.js';
 
@@ -274,7 +274,7 @@ export class DigitalJourneyQuery {
     const dependencies=ids.length?(await db.query<{taskId:string;predecessorId:string}>('SELECT task_id AS "taskId",predecessor_id AS "predecessorId" FROM digital_production_task_dependencies WHERE task_id=ANY($1::uuid[]) ORDER BY task_id,predecessor_id',[ids])).rows:[];
     const tasks=[...summaries.values()].map(task=>({id:task.taskId,kind:task.taskKind,sourceId:task.sourceId,orderId:task.orderId,assigneeId:task.assigneeId,requiredRole:task.requiredRole,
       routeInstanceId:nativeTasks.find(row=>row.id===task.taskId)!.routeInstanceId,routeVersion:task.routeVersion,policyVersion:task.policyVersion,
-      enteredAt:task.enteredAt,dueAt:task.dueAt,warningAt:task.warningAt,deadlineMode:task.deadlineMode??null,deadlineExclusive:task.deadlineExclusive===true}));
+      enteredAt:task.enteredAt,dueAt:task.dueAt,warningAt:task.warningAt,deadlineMode:task.deadlineMode??null,deadlineExclusive:journeyTaskDeadlineExclusive(task)}));
     if(captureSelection){
       if(!projectedTime)throw Error('Journey selection observation was not captured');
       const selectionTasks:JourneySelectionTask[]=tasks.map(task=>{const original=summaries.get(task.id)!;return {...task,
