@@ -1,87 +1,75 @@
 {
   "version": 1,
-  "base": "68aa46af065d795b3245a47b772d39f2a7fad208",
-  "sourceFingerprint": "e07f89e5986a8d6b5189c15df8b4a3d2940d71bcd714aadf1d587cdb42c4ec49",
+  "base": "9bcb08262addbc34ca601db09f7e584cf1042f68",
+  "sourceFingerprint": "a031b1ed3542c7c567bc3d6e87e4ca6a618c2a2243056d616bdd334702a82f7e",
   "risk": "full",
   "rules": [
     {
-      "rule": "Select full authorized matching queue IDs and count in one SQL snapshot, then current15 details; retain original native scope, role flags, immutable money and unparameterized contracts.",
-      "source": "Approved recovered conditional PERF10 only actual active unpaged/truncated responsibility queues. /ui/responsibility and /ui/own-factory-approvals fetch fixed200 then search/page in browser; no approved200 business window found. /ui/external-responsibilities has no200 cutoff: it fetches whole queue and supplements follow-up dates for allIDs before browser paging, qualifying the actual unpaged condition. Retired ReworkInitiationWorkbench/listOwn has no active App consumer and is deliberately excluded. User authorized normal PR/Review/ordered merge; no deployment/live business data/config/permission changes.",
+      "rule": "Add explicit current15 period read with complete matching count and original all-period metadata in one SQL statement; preserve unparameterized get/items and complete independent export.",
+      "source": "Approved recovered conditional PERF11: actual WagePage /ui/wages/:id and responsibility-task/todo wage_period_detail consumers still call original full-period WageService.get. Separate current15 page reads from existing complete exports and whole-period metadata; preserve exact monetary precision/effective rows and native finance/Root permission. Main SQL reporting/settlement page remains unchanged. User authorizes normal scoped PR/Review/ordered merge, not deployment, live data, permissions or configuration.",
       "writes": [
-        "apps/api/src/rework/queue-page.ts",
-        "apps/api/src/rework/responsibility-determination-queue-service.ts",
-        "apps/api/src/rework/own-factory-approval-service.ts",
-        "apps/api/src/rework/external-responsibility-service.ts",
-        "apps/api/src/rework/production-external-responsibility-service.ts",
-        "apps/api/src/rework/responsibility-determination-routes.ts",
-        "apps/api/src/rework/own-factory-approval-routes.ts",
-        "apps/api/src/rework/external-responsibility-routes.ts",
-        "packages/contracts/src/queue-page.ts",
-        "packages/contracts/src/index.ts",
-        "packages/contracts/src/responsibility-queue.ts",
-        "packages/contracts/src/external-responsibility.ts"
+        "apps/api/src/wages/wage-service.ts",
+        "apps/api/src/wages/wage-routes.ts",
+        "packages/contracts/src/wages.ts"
       ],
       "reads": [
-        "apps/api/src/rework/responsibility-determination-application-service.ts",
-        "apps/api/src/rework/own-factory-approval-application-service.ts",
-        "apps/api/src/rework/external-responsibility-application-service.ts",
+        "apps/api/src/wages/wage-access.ts",
+        "apps/api/src/wages/wage-export-service.ts",
+        "apps/api/src/access/export-authority.ts",
         "apps/api/src/access/business-authority.ts",
-        "apps/api/migrations/0015_own_factory_responsibility_approval.sql",
-        "apps/api/migrations/0017_external_responsibility_deduction.sql",
-        "docs/requirements/startup-requirements-v1.2.md",
+        "apps/web/src/responsibility-task-page.tsx",
+        "packages/contracts/src/todo-destination.ts",
+        "apps/api/src/reporting/wage-report-selection.ts",
         "docs/requirements/platform-permission-golden-source-v1.0.md"
       ],
       "oldTests": [
-        "tests/integration/responsibility-determination-routes.test.ts",
-        "tests/integration/own-factory-approval-routes.test.ts",
-        "tests/integration/external-responsibility-routes.test.ts",
-        "tests/unit/own-factory-approval-application-service.test.ts"
+        "tests/integration/wage-routes.test.ts",
+        "tests/unit/wage-web-and-export.test.ts",
+        "tests/unit/wage-largest-remainder.test.ts",
+        "tests/unit/finance-wage-access.test.ts"
       ],
       "newTests": [
-        "tests/integration/responsibility-queue-pages-postgres.test.ts",
-        "tests/integration/responsibility-queue-pages-native-browser-postgres.test.ts"
+        "tests/integration/wage-period-pages-postgres.test.ts",
+        "tests/integration/wage-period-pages-native-browser-postgres.test.ts"
       ],
-      "initialization": "No migration or business write. Optional explicit page/search activates pagination; legacy unparameterized result shape/window retained. Current scope SQL keeps same predicates and original rich SELECT; only display enrichment follows selected15. Application Parameters forwarding remains original. Current native table/FK/constraint schema and actual original seeded roles used for explicitly synthetic historical READ rows, not claimed command workflow/event provenance. Exact7 fixture USER triggers suspended only during transaction initialization in the newly owned TEST schema, restored before reads; rollback restores transaction, no production trigger definitions relaxed.",
-      "dateAndPermission": "Original responsibility canDetermine/handler/takeover/high-multiplier and PMC direct-role branch remain; own-factory can_view/can_decide and external per-type scope, native deduction_scope and current latest follow-up overdue retained. Production external adapter supplements selected15 only and retains count/page metadata. Existing primary sort retained, stable ID tie added only in new paged mode. Literal lower/position search retains fields, percent and underscore are literal; external status text comes from existing labels. No new authorization cache, amount calculation or state transition.",
-      "expectation": "Current164 original unit/routes and2 PG read cases pass zero skips. Synthetic201 pending and201 historical final rows cover three current service paths: full totals,15-row pages, nonoverlap, later-page search, empty/out-of-range, live actual role rejection, original legacy row equality and exact unchanged money string outputs compared with original unparameterized reads. Native signed browser also reaches original GET parsers/application services.",
+      "initialization": "No migration or money/state write. Separate new paged DTO/query keeps old full DTO/service unchanged. Thin matching valid wageIDs uses original rework-order join and invalidated_at condition, optional literal snapshot-name/style/rework/process search. Select15 by exact original person_name_snapshot/created_at/wage_item_id order before original full itemSelect enriches supplier and current coefficient. Single SQL also reads selected period and count; missing/hidden period remains404, empty/out-of-range keeps real period metadata and count.",
+      "dateAndPermission": "Original persisted finance_authorized_wage_roles and Root gate remain before each read, same wage:view and export field. Original unit price/quantity/8decimal shares/2decimal payable snapshots preserved through original itemDto. Whole original period counters and total are not replaced with page or filtered totals. Existing export service/get/item/items/main reporting and settlement writers unmodified; no current-summary recomputation of historical wages.",
+      "expectation": "3 current PostgreSQL cases with explicit33 historical read rows:15+15+3 original DTOs equal full read, complete global metadata/amount same on all pages and search, literal wildcard/no-match and out-of-range. Original independent export still has33 detail rows after filtered read. Actual finance-denied ordinary role and unknown-period reject. Original97 unit/routes passed, no skipped cases.",
       "checks": [
         "native",
         "unit",
-        "browser",
         "typesapi",
         "lint",
         "preflight"
       ]
     },
     {
-      "rule": "Actual three queue pages use remote page/count and literal debounced search; keep current handling links and truthful loading/failure/retry with obsolete responses ignored.",
-      "source": "Approved recovered conditional PERF10 only actual active unpaged/truncated responsibility queues. /ui/responsibility and /ui/own-factory-approvals fetch fixed200 then search/page in browser; no approved200 business window found. /ui/external-responsibilities has no200 cutoff: it fetches whole queue and supplements follow-up dates for allIDs before browser paging, qualifying the actual unpaged condition. Retired ReworkInitiationWorkbench/listOwn has no active App consumer and is deliberately excluded. User authorized normal PR/Review/ordered merge; no deployment/live business data/config/permission changes.",
+      "rule": "Existing wage detail/deep-link page requests only current15 and full summary, retaining original cards, financial access, complete export and truthful retry/search state.",
+      "source": "Approved recovered conditional PERF11: actual WagePage /ui/wages/:id and responsibility-task/todo wage_period_detail consumers still call original full-period WageService.get. Separate current15 page reads from existing complete exports and whole-period metadata; preserve exact monetary precision/effective rows and native finance/Root permission. Main SQL reporting/settlement page remains unchanged. User authorizes normal scoped PR/Review/ordered merge, not deployment, live data, permissions or configuration.",
       "writes": [
-        "apps/web/src/use-remote-queue.ts",
-        "apps/web/src/responsibility-queue-page.tsx",
-        "apps/web/src/own-factory-approval-queue-page.tsx",
-        "apps/web/src/external-responsibility-queue-page.tsx"
+        "apps/web/src/wages/wage-period-detail.tsx"
       ],
       "reads": [
-        "apps/web/src/App.tsx",
-        "apps/web/src/list-pagination.tsx",
+        "apps/web/src/wages/wage-page.tsx",
+        "apps/web/src/wages/wage-period-list.tsx",
+        "apps/web/src/finance-access.ts",
+        "apps/web/src/auth.tsx",
         "apps/web/src/use-live-search.ts",
-        "apps/web/src/components.tsx",
-        "apps/web/src/auth-session.ts",
-        "apps/web/src/responsibility-queue.css",
-        "apps/web/src/external-responsibility.css"
+        "apps/web/src/list-pagination.tsx",
+        "apps/web/src/request-response-feedback.ts",
+        "apps/web/src/fixed-business-currency.ts"
       ],
       "oldTests": [
-        "tests/unit/responsibility-queue-refresh.test.ts",
-        "tests/unit/own-factory-approval-web.test.ts",
-        "tests/unit/external-responsibility-ui-contract.test.ts"
+        "tests/unit/request-response-feedback.test.ts",
+        "tests/unit/wage-web-and-export.test.ts",
+        "tests/unit/workflow-task-page.test.ts"
       ],
       "newTests": [
-        "tests/integration/responsibility-queue-pages-native-browser-postgres.test.ts"
+        "tests/integration/wage-period-pages-native-browser-postgres.test.ts"
       ],
-      "initialization": "Reuse original Shell/Header/TaskCard/InsetField/ListPagination and CSS, no redesign or polling. Small shared hook fetches only explicit current page, original useLiveSearch composition/debounce, aborts obsolete owned request and gates state updates by signal. Missing pagination metadata is an actual failure rather than inferring count from15 or displaying stale results as current. Real failures show simple retry on same page; no normal-page explanation wall or cross-user response cache.",
-      "dateAndPermission": "Full original production App and native AuthService/Postgres store/RootAuthority use signed real session and original HTTP gates; no handcrafted auth replacement. Fixture historical rows remain synthetic and are not onsite business evidence. Original handling URLs/amount formatting/status wording preserved, no change to approval or financial write actions. Only changed hook Math.max count is a false-positive time inventory candidate, not clock/SLA logic.",
-      "expectation": "2 browser cases pass: all three original routes at1165px show201fullcount/current15, page2 changes native IDs and search beyond former window gives1; original handling links and no horizontal overflow. Injected transport failure offers same-page retry; delayed obsolete search cannot overwrite new result. Actual complete-page screenshots reviewed, no onsite/visual redesign/performance-percentile claim.",
+      "initialization": "Reuse original feedbackFetch/feedbackJson, live search composition/debounce and ListPagination. Original exported readWagePeriodDetail helper retained for existing callers. Component current period/page/search read owns an AbortController and only commits a non-aborted result; no shared cache. Loading or failed current reads hide old wage cards/totals rather than claim freshness. Search stays available during reads, failure retries current selected page, original handling layout and all-period export URL retained.",
+      "dateAndPermission": "Original AuthGate financePageRequirements and signed AuthService/Postgres store/RootAuthority path retained. No handcrafted identity or amount logic. No timer/polling introduced, prior date/frozen/correction/settlement semantics unchanged. UI Math.max computes page count only, its regex time candidate is explicitly reviewed.",
+      "expectation": "2 complete production App browser cases with native signed identity and synthetic historical wage rows pass at1165:15 current cards, real nonoverlap page2, global summary unchanged through11-result filter, full export URL, no horizontal overflow. Transport error hides old monetary rows and retries page2; delayed obsolete search does not overwrite latest11 results. Screenshot actually reviewed, no onsite or reliable performance percentile claim.",
       "checks": [
         "browser",
         "unit",
@@ -91,39 +79,39 @@
       ]
     },
     {
-      "rule": "Keep new scoped PG/browser reads in canonical100s plan, original historical boundary and manual time reviews intact; no unrelated maintenance replay.",
-      "source": "Approved recovered conditional PERF10 only actual active unpaged/truncated responsibility queues. /ui/responsibility and /ui/own-factory-approvals fetch fixed200 then search/page in browser; no approved200 business window found. /ui/external-responsibilities has no200 cutoff: it fetches whole queue and supplements follow-up dates for allIDs before browser paging, qualifying the actual unpaged condition. Retired ReworkInitiationWorkbench/listOwn has no active App consumer and is deliberately excluded. User authorized normal PR/Review/ordered merge; no deployment/live business data/config/permission changes.",
+      "rule": "Register real scoped PG/browser checks with100s boundary and exact owned historical fixture cleanup, preserve manual time index annotations and original finance invariants.",
+      "source": "Approved recovered conditional PERF11: actual WagePage /ui/wages/:id and responsibility-task/todo wage_period_detail consumers still call original full-period WageService.get. Separate current15 page reads from existing complete exports and whole-period metadata; preserve exact monetary precision/effective rows and native finance/Root permission. Main SQL reporting/settlement page remains unchanged. User authorizes normal scoped PR/Review/ordered merge, not deployment, live data, permissions or configuration.",
       "writes": [
-        "scripts/ci/prepare-settings-browser.mjs",
-        "scripts/ci/test-execution-contract.test.mjs",
-        "tests/unit/external-direct-deduction-ui.test.ts",
+        "tests/fixtures/erp-report-wage-layout.tsx",
+        "tests/acceptance/erp-report-wage-layout-browser.mjs",
+        "tests/acceptance/request-response-feedback-browser.mjs",
+        "tests/helpers/wage-page-fixture.ts",
+        "tests/integration/wage-period-pages-postgres.test.ts",
+        "tests/integration/wage-period-pages-native-browser-postgres.test.ts",
         "scripts/ci/full-gate-risk-map.mjs",
         "scripts/test-suite-plan.mjs",
-        "tests/helpers/responsibility-queue-fixture.ts",
-        "tests/integration/responsibility-queue-pages-postgres.test.ts",
-        "tests/integration/responsibility-queue-pages-native-browser-postgres.test.ts",
         "docs/engineering/acceptance-time-sites-20261027.json"
       ],
       "reads": [
-        "scripts/test-execution-config.mjs",
-        "scripts/test-resource-contract.mjs",
         "tests/helpers/business-anchor-fixture.ts",
         "tests/integration/own-tail-responsibility-history.cases.ts",
+        "scripts/test-execution-config.mjs",
+        "scripts/test-resource-contract.mjs",
         "scripts/acceptance/time-site-inventory.mjs"
       ],
       "oldTests": [
-        "tests/unit/responsibility-queue-refresh.test.ts",
-        "tests/integration/responsibility-determination-routes.test.ts"
+        "tests/unit/wage-web-and-export.test.ts",
+        "tests/integration/wage-routes.test.ts",
+        "tests/unit/request-response-feedback.test.ts"
       ],
       "newTests": [
-        "tests/integration/responsibility-queue-pages-postgres.test.ts",
-        "tests/integration/responsibility-queue-pages-native-browser-postgres.test.ts"
+        "tests/integration/wage-period-pages-postgres.test.ts",
+        "tests/integration/wage-period-pages-native-browser-postgres.test.ts"
       ],
-      "initialization": "Original marked low-privilege owned TEST lifecycle and full current migration manifest, original browser resource cleanup. Fixture uses Acceptance-clock TEST URL to satisfy unmodified seed guard. Earlier old historical command fixture missing temporary_code was discarded rather than loosening guards; synthetic READ fixture is explicit. Initial fixture supplier code join/submitted_at fixed while constraints retained. Incorrect generated responsibility SQL inner-WHERE split repaired against exact original full SELECT before CI; initial browser1s polling replaced by waiting actual original page response. All failed initial attempts retained and not passed evidence.",
-      "dateAndPermission": "Generator required because three existing GET lines changed; four entries updated including hook count Math.max candidate. All other entries and manual fields byte-preserved, affected entries contain precise changedSitesReview, no broad time approval. Original100s correctness and cleanup boundaries retained, no business SLA alteration. No deployment, restore policy, real data or permission changes. Original Full non-db had one stale source-location assertion for the moved shared待扣款 mapping; fixed test now asserts actual shared value and the page import/use. Business code unchanged. The same original Full PG lane passed357 tests but could not start2 new browser cases: the hand-maintained preparation set omitted the registered suite and Chromium was absent. Conditional preparation now additionally recognizes canonical native-browser suite paths while retaining every legacy exception and the existing locked installer.18 actual original NodeTAP contract cases verify the real canonical plan and new queue/browser names. All current-source checks below were rerun after this CI preparation fix; original failed Full is not passing current-head evidence.",
-      "expectation": "API/web types, lint, preflight and secret scan pass;18 canonical browser preparation contracts and164 unit/routes plus2 current-schema read and2 native signed full-App browser pass no skips. Local Node22.22.2/npm10.9.9/PG16.15/Chromium141, NodeCPU2/3 PGCPU0/1 2GiB are isolated representative conditions, not CI hardware or onsite equivalence. No whole cockpit5000 scale rerun for conditional queue change.",
+      "initialization": "Latest complete schema in marked low-privilege owned Acceptance-clock TEST DB. Existing seedOwnTailHistory creates11 explicitly synthetic historical datasets on one owned client, yielding33 wage rows; USER triggers restored before reads, foreign keys/checks retained. Only initial period metadata sets source/person counts and original/final totals consistently; first check constraint failure fixed by respecting final_total=original+adjustment, not weakening guards. Owned client releases before fixture dispose on error; success/failure cleanup uses exact original manifest contract. Not evidence of native command writes or real event provenance.",
+      "dateAndPermission": "New suites registered in existing canonical/risk map with100s correctness limit, no business SLA or maintenance gate changes. Original generator updates only wage GET and detail Math.max entries, preserving every other manual review; affected entries have explicit unchanged time meaning. Formal Review P2 4507335945 identified old18-card and retry fixtures returning unpaged shape. Both fixture consumers now return page/pageSize/totalCount; old legacy baseline unparameterized path remains. Original layout checks precision/keyboard disclosure,15+3 reachability and unchanged full export. Original feedback waits actual successful summary after retry rather than always-visible heading. Scoped original layout3widths and feedback2widths commands passed; no original assertions removed. All checks below bind actual current source after PERF10 merge9bcb. Shared canonical lists/risk maps preserve both queue and wage suites, generic native browser preparation is present, and all prior manual clock notes are preserved. Wage implementation/contract/page bytes remain unchanged from the reviewed version; old fixture fixes are explicit, not claimed re-reviewed.",
+      "expectation": "Current API/web types,lint/preflight/secret/inventory plus97 unit/routes,3 PG and2 browser pass with zero skips. Local Node22.22.2/npm10.9.9/PG16.15/Chromium141 and NodeCPU2/3 PGCPU0/1 2GiB are not onsite/CI hardware equivalence. No whole cockpit scale rerun, wage write/approval/settlement change or deployment.",
       "checks": [
-        "browserplan",
         "native",
         "browser",
         "unit",
@@ -132,7 +120,9 @@
         "lint",
         "preflight",
         "secret",
-        "inventory"
+        "inventory",
+        "legacylayout",
+        "legacyfeedback"
       ]
     }
   ],
@@ -143,7 +133,7 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "e07f89e5986a8d6b5189c15df8b4a3d2940d71bcd714aadf1d587cdb42c4ec49",
+      "sourceFingerprint": "a031b1ed3542c7c567bc3d6e87e4ca6a618c2a2243056d616bdd334702a82f7e",
       "inputPaths": [
         "docs/engineering/acceptance-time-sites-20261027.json",
         "apps",
@@ -159,62 +149,18 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "f62da01d6a8e1af95e90ef982a124e450eb94ca61f7131be56950977502faaa4",
+      "inputFingerprint": "053ca373ea3d1b06f9e4dac566725ff0e5666c9be3c613898d7c546ccda0a009",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "b77d9a9938210f68a4b7ed0abaf530a346344bed",
-      "startedAt": "2026-11-08T18:53:20.408Z",
-      "endedAt": "2026-11-08T18:53:20.995Z",
+      "testedHead": "562825116741692861432ec63407d6c306c109c5",
+      "startedAt": "2026-11-08T19:21:56.071Z",
+      "endedAt": "2026-11-08T19:21:56.628Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf10-inventory-browser-preparation-final.log",
+      "log": "/workspace/scratch/dx-final10-20261108/perf11-inventory-integrated10.log",
       "logSha256": "114d19b3f81e82ca812ccaf79d465b9eac16b584f779c9b621a2e15595e62be6",
       "resultReport": null,
       "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native production tests retain actual roles, permissions, frozen clocks, native corrections and full-range statistics, no real business data or deployment.",
       "kind": "command"
-    },
-    {
-      "id": "browserplan",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node --test --test-concurrency=2 scripts/ci/test-execution-contract.test.mjs",
-      "status": "passed",
-      "exitCode": 0,
-      "allExited": true,
-      "sourceFingerprint": "e07f89e5986a8d6b5189c15df8b4a3d2940d71bcd714aadf1d587cdb42c4ec49",
-      "inputPaths": [
-        "docs/engineering/acceptance-time-sites-20261027.json",
-        "apps",
-        "packages",
-        "scripts",
-        "tests",
-        ".env.example",
-        "package.json",
-        "package-lock.json",
-        "eslint.config.js",
-        "tsconfig.base.json",
-        "vitest.business-chain.config.ts",
-        "vitest.config.ts",
-        "vitest.postgres-immediate.config.ts"
-      ],
-      "inputFingerprint": "f62da01d6a8e1af95e90ef982a124e450eb94ca61f7131be56950977502faaa4",
-      "inputsUnchanged": true,
-      "sourceUnchanged": true,
-      "testedHead": "b77d9a9938210f68a4b7ed0abaf530a346344bed",
-      "startedAt": "2026-11-08T18:53:19.707Z",
-      "endedAt": "2026-11-08T18:53:20.321Z",
-      "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf10-browserplan-browser-preparation-final.log",
-      "logSha256": "15327369ab82c54de9babf341a66ea81d39f1f335b51b9e069fe84a99d0541f9",
-      "resultReport": "/workspace/scratch/dx-final10-20261108/perf10-browserplan-browser-preparation-final.log",
-      "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native production tests retain actual roles, permissions, frozen clocks, native corrections and full-range statistics, no real business data or deployment.",
-      "kind": "tests",
-      "passed": 18,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [
-        {
-          "format": "node-tap",
-          "sha256": "15327369ab82c54de9babf341a66ea81d39f1f335b51b9e069fe84a99d0541f9"
-        }
-      ]
     },
     {
       "id": "typesapi",
@@ -222,7 +168,7 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "e07f89e5986a8d6b5189c15df8b4a3d2940d71bcd714aadf1d587cdb42c4ec49",
+      "sourceFingerprint": "a031b1ed3542c7c567bc3d6e87e4ca6a618c2a2243056d616bdd334702a82f7e",
       "inputPaths": [
         "docs/engineering/acceptance-time-sites-20261027.json",
         "apps",
@@ -238,14 +184,14 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "f62da01d6a8e1af95e90ef982a124e450eb94ca61f7131be56950977502faaa4",
+      "inputFingerprint": "053ca373ea3d1b06f9e4dac566725ff0e5666c9be3c613898d7c546ccda0a009",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "b77d9a9938210f68a4b7ed0abaf530a346344bed",
-      "startedAt": "2026-11-08T18:53:21.083Z",
-      "endedAt": "2026-11-08T18:53:33.752Z",
+      "testedHead": "562825116741692861432ec63407d6c306c109c5",
+      "startedAt": "2026-11-08T19:21:56.712Z",
+      "endedAt": "2026-11-08T19:22:08.401Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf10-typesapi-browser-preparation-final.log",
+      "log": "/workspace/scratch/dx-final10-20261108/perf11-typesapi-integrated10.log",
       "logSha256": "d81733d2d3443600c8f5c4e1f5774d8d050a1c5a8ef34bd5a659eb50ebd68f00",
       "resultReport": null,
       "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native production tests retain actual roles, permissions, frozen clocks, native corrections and full-range statistics, no real business data or deployment.",
@@ -257,7 +203,7 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "e07f89e5986a8d6b5189c15df8b4a3d2940d71bcd714aadf1d587cdb42c4ec49",
+      "sourceFingerprint": "a031b1ed3542c7c567bc3d6e87e4ca6a618c2a2243056d616bdd334702a82f7e",
       "inputPaths": [
         "docs/engineering/acceptance-time-sites-20261027.json",
         "apps",
@@ -273,14 +219,14 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "f62da01d6a8e1af95e90ef982a124e450eb94ca61f7131be56950977502faaa4",
+      "inputFingerprint": "053ca373ea3d1b06f9e4dac566725ff0e5666c9be3c613898d7c546ccda0a009",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "b77d9a9938210f68a4b7ed0abaf530a346344bed",
-      "startedAt": "2026-11-08T18:53:33.842Z",
-      "endedAt": "2026-11-08T18:53:52.412Z",
+      "testedHead": "562825116741692861432ec63407d6c306c109c5",
+      "startedAt": "2026-11-08T19:22:08.481Z",
+      "endedAt": "2026-11-08T19:22:25.241Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf10-typesweb-browser-preparation-final.log",
+      "log": "/workspace/scratch/dx-final10-20261108/perf11-typesweb-integrated10.log",
       "logSha256": "752b0f4f80e1f2fdeece6837aa0d8538e17009bd166c8888d0c5c5d0c6148bcd",
       "resultReport": null,
       "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native production tests retain actual roles, permissions, frozen clocks, native corrections and full-range statistics, no real business data or deployment.",
@@ -288,11 +234,11 @@
     },
     {
       "id": "lint",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/eslint/bin/eslint.js apps/api/src/rework/external-responsibility-routes.ts apps/api/src/rework/external-responsibility-service.ts apps/api/src/rework/own-factory-approval-routes.ts apps/api/src/rework/own-factory-approval-service.ts apps/api/src/rework/production-external-responsibility-service.ts apps/api/src/rework/queue-page.ts apps/api/src/rework/responsibility-determination-queue-service.ts apps/api/src/rework/responsibility-determination-routes.ts apps/web/src/external-responsibility-queue-page.tsx apps/web/src/own-factory-approval-queue-page.tsx apps/web/src/responsibility-queue-page.tsx apps/web/src/use-remote-queue.ts packages/contracts/src/external-responsibility.ts packages/contracts/src/index.ts packages/contracts/src/queue-page.ts packages/contracts/src/responsibility-queue.ts scripts/ci/full-gate-risk-map.mjs scripts/ci/prepare-settings-browser.mjs scripts/ci/test-execution-contract.test.mjs scripts/test-suite-plan.mjs tests/helpers/responsibility-queue-fixture.ts tests/integration/responsibility-queue-pages-native-browser-postgres.test.ts tests/integration/responsibility-queue-pages-postgres.test.ts tests/unit/external-direct-deduction-ui.test.ts --max-warnings=0",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/eslint/bin/eslint.js apps/api/src/wages/wage-routes.ts apps/api/src/wages/wage-service.ts apps/web/src/wages/wage-period-detail.tsx packages/contracts/src/wages.ts scripts/ci/full-gate-risk-map.mjs scripts/test-suite-plan.mjs tests/acceptance/erp-report-wage-layout-browser.mjs tests/acceptance/request-response-feedback-browser.mjs tests/fixtures/erp-report-wage-layout.tsx tests/helpers/wage-page-fixture.ts tests/integration/wage-period-pages-native-browser-postgres.test.ts tests/integration/wage-period-pages-postgres.test.ts --max-warnings=0",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "e07f89e5986a8d6b5189c15df8b4a3d2940d71bcd714aadf1d587cdb42c4ec49",
+      "sourceFingerprint": "a031b1ed3542c7c567bc3d6e87e4ca6a618c2a2243056d616bdd334702a82f7e",
       "inputPaths": [
         "docs/engineering/acceptance-time-sites-20261027.json",
         "apps",
@@ -308,14 +254,14 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "f62da01d6a8e1af95e90ef982a124e450eb94ca61f7131be56950977502faaa4",
+      "inputFingerprint": "053ca373ea3d1b06f9e4dac566725ff0e5666c9be3c613898d7c546ccda0a009",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "b77d9a9938210f68a4b7ed0abaf530a346344bed",
-      "startedAt": "2026-11-08T18:54:00.546Z",
-      "endedAt": "2026-11-08T18:54:02.083Z",
+      "testedHead": "562825116741692861432ec63407d6c306c109c5",
+      "startedAt": "2026-11-08T19:22:33.571Z",
+      "endedAt": "2026-11-08T19:22:34.824Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf10-lint-browser-preparation-final.log",
+      "log": "/workspace/scratch/dx-final10-20261108/perf11-lint-integrated10.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "resultReport": null,
       "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native production tests retain actual roles, permissions, frozen clocks, native corrections and full-range statistics, no real business data or deployment.",
@@ -327,7 +273,7 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "e07f89e5986a8d6b5189c15df8b4a3d2940d71bcd714aadf1d587cdb42c4ec49",
+      "sourceFingerprint": "a031b1ed3542c7c567bc3d6e87e4ca6a618c2a2243056d616bdd334702a82f7e",
       "inputPaths": [
         "docs/engineering/acceptance-time-sites-20261027.json",
         "apps",
@@ -343,15 +289,15 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "f62da01d6a8e1af95e90ef982a124e450eb94ca61f7131be56950977502faaa4",
+      "inputFingerprint": "053ca373ea3d1b06f9e4dac566725ff0e5666c9be3c613898d7c546ccda0a009",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "b77d9a9938210f68a4b7ed0abaf530a346344bed",
-      "startedAt": "2026-11-08T18:53:52.497Z",
-      "endedAt": "2026-11-08T18:54:00.466Z",
+      "testedHead": "562825116741692861432ec63407d6c306c109c5",
+      "startedAt": "2026-11-08T19:22:25.338Z",
+      "endedAt": "2026-11-08T19:22:33.490Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf10-preflight-browser-preparation-final.log",
-      "logSha256": "cb57e3f9a7d01fa6ac2a1776996f7fa7d5a29bebac6c0008e5b67be6ddceb96e",
+      "log": "/workspace/scratch/dx-final10-20261108/perf11-preflight-integrated10.log",
+      "logSha256": "9229895b7b020e9f58360796a8e02dec518bf6f8e95d14c0124e80e3df4c8842",
       "resultReport": null,
       "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native production tests retain actual roles, permissions, frozen clocks, native corrections and full-range statistics, no real business data or deployment.",
       "kind": "command"
@@ -362,7 +308,7 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "e07f89e5986a8d6b5189c15df8b4a3d2940d71bcd714aadf1d587cdb42c4ec49",
+      "sourceFingerprint": "a031b1ed3542c7c567bc3d6e87e4ca6a618c2a2243056d616bdd334702a82f7e",
       "inputPaths": [
         "docs/engineering/acceptance-time-sites-20261027.json",
         "apps",
@@ -378,14 +324,14 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "f62da01d6a8e1af95e90ef982a124e450eb94ca61f7131be56950977502faaa4",
+      "inputFingerprint": "053ca373ea3d1b06f9e4dac566725ff0e5666c9be3c613898d7c546ccda0a009",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "b77d9a9938210f68a4b7ed0abaf530a346344bed",
-      "startedAt": "2026-11-08T18:54:02.162Z",
-      "endedAt": "2026-11-08T18:54:02.947Z",
+      "testedHead": "562825116741692861432ec63407d6c306c109c5",
+      "startedAt": "2026-11-08T19:22:34.904Z",
+      "endedAt": "2026-11-08T19:22:35.670Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf10-secret-browser-preparation-final.log",
+      "log": "/workspace/scratch/dx-final10-20261108/perf11-secret-integrated10.log",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda",
       "resultReport": null,
       "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native production tests retain actual roles, permissions, frozen clocks, native corrections and full-range statistics, no real business data or deployment.",
@@ -393,11 +339,11 @@
     },
     {
       "id": "unit",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/external-direct-deduction-ui.test.ts tests/unit/external-responsibility-allocation-service.test.ts tests/unit/external-responsibility-contracts-and-web.test.ts tests/unit/external-responsibility-entrypoints.test.ts tests/unit/external-responsibility-ui-contract.test.ts tests/unit/external-responsibility-ui-idempotency.test.ts tests/unit/ho20544223-tail-responsibility-repair.test.ts tests/unit/list-pagination.test.ts tests/unit/merchandiser-responsibility-deduction-access.test.ts tests/unit/n07-n11-responsibility-settlement-contract.test.ts tests/unit/own-factory-approval-application-service.test.ts tests/unit/own-factory-approval-live-refresh.test.ts tests/unit/own-factory-approval-web.test.ts tests/unit/phase1-responsibility-close.test.ts tests/unit/responsibility-amount-view.test.ts tests/unit/responsibility-determination-application-service.test.ts tests/unit/responsibility-determination-web.test.ts tests/unit/responsibility-determination.test.ts tests/unit/responsibility-finalize-usability.test.ts tests/unit/responsibility-panels-component.test.ts tests/unit/responsibility-queue-confirmation.test.ts tests/unit/responsibility-queue-refresh.test.ts tests/unit/responsibility-review-navigation.test.ts tests/unit/responsibility-rounding-reconciliation.test.ts tests/unit/responsibility-supplier-options.test.ts tests/unit/responsibility-task-page.test.ts tests/unit/responsibility-todo-routing.test.ts tests/unit/responsibility-ui-idempotency.test.ts tests/unit/rework-detail-responsibility-access.test.ts tests/unit/rework-responsibility-entry-consolidation.test.ts tests/unit/rework-v2-pr06-responsibility-2.test.ts tests/unit/sourcing-list-pagination.test.ts tests/unit/todo-list-pagination.test.ts tests/unit/v1-prelaunch-pr-07-responsibility-usability.test.ts tests/integration/responsibility-determination-routes.test.ts tests/integration/own-factory-approval-routes.test.ts tests/integration/external-responsibility-routes.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf10-unit-browser-preparation-final.vitest.json",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/finance-director-rework-detail-access.test.ts tests/unit/finance-director-sample-read-access.test.ts tests/unit/finance-navigation-hierarchy.test.ts tests/unit/finance-node-date-values.test.ts tests/unit/finance-node-mixed-role-access.test.ts tests/unit/finance-node-quantity-history.test.ts tests/unit/finance-read-business-access.test.ts tests/unit/finance-wage-access.test.ts tests/unit/n01-image-and-wage-integrity.test.ts tests/unit/rework-v2-pr07-finance-closure.test.ts tests/unit/root-delete-wage-cleanup.test.ts tests/unit/sourcing-finance-readonly-contract.test.ts tests/unit/sourcing-finance-todo-routing-contract.test.ts tests/unit/wage-attachment-access.test.ts tests/unit/wage-basis-return.test.ts tests/unit/wage-largest-remainder.test.ts tests/unit/wage-month-close-export-permission.test.ts tests/unit/wage-restore-compatibility.test.ts tests/unit/wage-settlement-batches.test.ts tests/unit/wage-source-query.test.ts tests/unit/wage-ui-idempotency.test.ts tests/unit/wage-web-and-export.test.ts tests/unit/request-response-feedback.test.ts tests/integration/wage-routes.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf11-unit-integrated10.vitest.json",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "e07f89e5986a8d6b5189c15df8b4a3d2940d71bcd714aadf1d587cdb42c4ec49",
+      "sourceFingerprint": "a031b1ed3542c7c567bc3d6e87e4ca6a618c2a2243056d616bdd334702a82f7e",
       "inputPaths": [
         "docs/engineering/acceptance-time-sites-20261027.json",
         "apps",
@@ -413,35 +359,35 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "f62da01d6a8e1af95e90ef982a124e450eb94ca61f7131be56950977502faaa4",
+      "inputFingerprint": "053ca373ea3d1b06f9e4dac566725ff0e5666c9be3c613898d7c546ccda0a009",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "b77d9a9938210f68a4b7ed0abaf530a346344bed",
-      "startedAt": "2026-11-08T18:54:03.030Z",
-      "endedAt": "2026-11-08T18:54:13.067Z",
-      "passed": 164,
+      "testedHead": "562825116741692861432ec63407d6c306c109c5",
+      "startedAt": "2026-11-08T19:22:35.753Z",
+      "endedAt": "2026-11-08T19:22:42.239Z",
+      "passed": 97,
       "failed": 0,
       "skipped": 0,
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf10-unit-browser-preparation-final.log",
-      "logSha256": "9467f9656b3fc33bca9d594552e4eeb22560df60700cf50d42ab2c87c64b3161",
-      "resultReport": "/workspace/scratch/dx-final10-20261108/perf10-unit-browser-preparation-final.vitest.json",
+      "log": "/workspace/scratch/dx-final10-20261108/perf11-unit-integrated10.log",
+      "logSha256": "6c524ae9c39f3e65c5b9cec49cab66bd10518faac92333de55e2216199c70d9f",
+      "resultReport": "/workspace/scratch/dx-final10-20261108/perf11-unit-integrated10.vitest.json",
       "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native production tests retain actual roles, permissions, frozen clocks, native corrections and full-range statistics, no real business data or deployment.",
       "kind": "tests",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "c7bea6870a5b6487b97c7f3a335d721afb0d5d3272fc4a685215bf450dc7116a"
+          "sha256": "67966fb495bf5e49c5d1016dc7c14c73091a81f646df30ce9a799e8076f6a374"
         }
       ]
     },
     {
       "id": "native",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/responsibility-queue-pages-postgres.test.ts --config vitest.business-chain.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf10-postgres-browser-preparation-final-native.vitest.json",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/wage-period-pages-postgres.test.ts --config vitest.business-chain.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf11-postgres-integrated10-native.vitest.json",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "e07f89e5986a8d6b5189c15df8b4a3d2940d71bcd714aadf1d587cdb42c4ec49",
+      "sourceFingerprint": "a031b1ed3542c7c567bc3d6e87e4ca6a618c2a2243056d616bdd334702a82f7e",
       "inputPaths": [
         "docs/engineering/acceptance-time-sites-20261027.json",
         "apps",
@@ -457,35 +403,35 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "f62da01d6a8e1af95e90ef982a124e450eb94ca61f7131be56950977502faaa4",
+      "inputFingerprint": "053ca373ea3d1b06f9e4dac566725ff0e5666c9be3c613898d7c546ccda0a009",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "b77d9a9938210f68a4b7ed0abaf530a346344bed",
-      "startedAt": "2026-11-08T18:55:32.489Z",
-      "endedAt": "2026-11-08T18:56:00.051Z",
-      "passed": 2,
+      "testedHead": "562825116741692861432ec63407d6c306c109c5",
+      "startedAt": "2026-11-08T19:21:57.546Z",
+      "endedAt": "2026-11-08T19:22:06.584Z",
+      "passed": 3,
       "failed": 0,
       "skipped": 0,
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf10-postgres-browser-preparation-final-native.log",
-      "logSha256": "ef65ec9ddb411154372aa85df70902fe5465117e7fea4d42c26937a45304d121",
-      "resultReport": "/workspace/scratch/dx-final10-20261108/perf10-postgres-browser-preparation-final-native.vitest.json",
+      "log": "/workspace/scratch/dx-final10-20261108/perf11-postgres-integrated10-native.log",
+      "logSha256": "179db5b0e8cf5504b190da74dc79611757727abe5e09af66de1255855d0c08c2",
+      "resultReport": "/workspace/scratch/dx-final10-20261108/perf11-postgres-integrated10-native.vitest.json",
       "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native production tests retain actual roles, permissions, frozen clocks, native corrections and full-range statistics, no real business data or deployment.",
       "kind": "tests",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "ad07061547a10ff992b990e2c8bd502f3064e8f397ad9ceb8b14835d76b3e07d"
+          "sha256": "19e5485f61ba967c0cbce2b333d30519877d1d0396460450c919636cd06fff56"
         }
       ]
     },
     {
       "id": "browser",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/responsibility-queue-pages-native-browser-postgres.test.ts --config vitest.business-chain.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf10-postgres-browser-preparation-final-browser.vitest.json",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/wage-period-pages-native-browser-postgres.test.ts --config vitest.business-chain.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/perf11-postgres-integrated10-browser.vitest.json",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "e07f89e5986a8d6b5189c15df8b4a3d2940d71bcd714aadf1d587cdb42c4ec49",
+      "sourceFingerprint": "a031b1ed3542c7c567bc3d6e87e4ca6a618c2a2243056d616bdd334702a82f7e",
       "inputPaths": [
         "docs/engineering/acceptance-time-sites-20261027.json",
         "apps",
@@ -501,27 +447,97 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "f62da01d6a8e1af95e90ef982a124e450eb94ca61f7131be56950977502faaa4",
+      "inputFingerprint": "053ca373ea3d1b06f9e4dac566725ff0e5666c9be3c613898d7c546ccda0a009",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "b77d9a9938210f68a4b7ed0abaf530a346344bed",
-      "startedAt": "2026-11-08T18:53:21.207Z",
-      "endedAt": "2026-11-08T18:53:42.629Z",
+      "testedHead": "562825116741692861432ec63407d6c306c109c5",
+      "startedAt": "2026-11-08T19:23:03.656Z",
+      "endedAt": "2026-11-08T19:23:15.106Z",
       "passed": 2,
       "failed": 0,
       "skipped": 0,
       "planError": null,
-      "log": "/workspace/scratch/dx-final10-20261108/perf10-postgres-browser-preparation-final-browser.log",
-      "logSha256": "54d363230346193572fc781fc82619bd2fa830324cb075df41d56d13bc374ba8",
-      "resultReport": "/workspace/scratch/dx-final10-20261108/perf10-postgres-browser-preparation-final-browser.vitest.json",
+      "log": "/workspace/scratch/dx-final10-20261108/perf11-postgres-integrated10-browser.log",
+      "logSha256": "cd7d132189d0e997ed20eb41be5ad25487de0ba85ec79a1b8dcfc27a96633487",
+      "resultReport": "/workspace/scratch/dx-final10-20261108/perf11-postgres-integrated10-browser.vitest.json",
       "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native production tests retain actual roles, permissions, frozen clocks, native corrections and full-range statistics, no real business data or deployment.",
       "kind": "tests",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "96e17b3d085752cc72f5f70a5c9e7a82b82005ff2cc92f47894caee84c227650"
+          "sha256": "7fd9d385bde6fb79563f4558b54ad34b01c7e80882483df18cff974ddf4b1f41"
         }
       ]
+    },
+    {
+      "id": "legacylayout",
+      "command": "/usr/bin/env NODE_ENV=production PLAYWRIGHT_IMPORT=playwright-core CHROMIUM_PATH=/workspace/scratch/m01-p06-ci-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell REPORT_WAGE_ONLY_CASE=wage-detail REPORT_WAGE_FOCUSED=1 REPORT_WAGE_EVIDENCE=/workspace/scratch/dx-final10-20261108/perf11-legacy-layout /workspace/.dx-cloud/toolchain/node_modules/node/bin/node tests/acceptance/erp-report-wage-layout-browser.mjs",
+      "status": "passed",
+      "exitCode": 0,
+      "allExited": true,
+      "sourceFingerprint": "a031b1ed3542c7c567bc3d6e87e4ca6a618c2a2243056d616bdd334702a82f7e",
+      "inputPaths": [
+        "docs/engineering/acceptance-time-sites-20261027.json",
+        "apps",
+        "packages",
+        "scripts",
+        "tests",
+        ".env.example",
+        "package.json",
+        "package-lock.json",
+        "eslint.config.js",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "vitest.postgres-immediate.config.ts"
+      ],
+      "inputFingerprint": "053ca373ea3d1b06f9e4dac566725ff0e5666c9be3c613898d7c546ccda0a009",
+      "inputsUnchanged": true,
+      "sourceUnchanged": true,
+      "testedHead": "562825116741692861432ec63407d6c306c109c5",
+      "startedAt": "2026-11-08T19:23:02.138Z",
+      "endedAt": "2026-11-08T19:23:07.723Z",
+      "planError": null,
+      "log": "/workspace/scratch/dx-final10-20261108/perf11-legacylayout-integrated10.log",
+      "logSha256": "7e9c173f3319c105b464d18665c7b0dc5d210362891723e60d35924f6cac0415",
+      "resultReport": null,
+      "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native production tests retain actual roles, permissions, frozen clocks, native corrections and full-range statistics, no real business data or deployment.",
+      "kind": "command"
+    },
+    {
+      "id": "legacyfeedback",
+      "command": "/usr/bin/env NODE_ENV=production PLAYWRIGHT_IMPORT=playwright-core CHROMIUM_PATH=/workspace/scratch/m01-p06-ci-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell REQUEST_FEEDBACK_ONLY_CASE=wage REQUEST_FEEDBACK_EVIDENCE=/workspace/scratch/dx-final10-20261108/perf11-legacy-feedback /workspace/.dx-cloud/toolchain/node_modules/node/bin/node tests/acceptance/request-response-feedback-browser.mjs",
+      "status": "passed",
+      "exitCode": 0,
+      "allExited": true,
+      "sourceFingerprint": "a031b1ed3542c7c567bc3d6e87e4ca6a618c2a2243056d616bdd334702a82f7e",
+      "inputPaths": [
+        "docs/engineering/acceptance-time-sites-20261027.json",
+        "apps",
+        "packages",
+        "scripts",
+        "tests",
+        ".env.example",
+        "package.json",
+        "package-lock.json",
+        "eslint.config.js",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "vitest.postgres-immediate.config.ts"
+      ],
+      "inputFingerprint": "053ca373ea3d1b06f9e4dac566725ff0e5666c9be3c613898d7c546ccda0a009",
+      "inputsUnchanged": true,
+      "sourceUnchanged": true,
+      "testedHead": "562825116741692861432ec63407d6c306c109c5",
+      "startedAt": "2026-11-08T19:23:07.818Z",
+      "endedAt": "2026-11-08T19:23:10.509Z",
+      "planError": null,
+      "log": "/workspace/scratch/dx-final10-20261108/perf11-legacyfeedback-integrated10.log",
+      "logSha256": "d9d5d4d6126b690d4e6a228cf2016113e25b50a191916431c388cae1dbe39e7b",
+      "resultReport": null,
+      "context": "Original canonical configs and owned-command; marked low-privilege loopback TEST PG16.15. Node22.22.2/npm10.9.9, NodeCPU2/3 PGCPU0/1 2GiB; not CI hardware or onsite equivalence. Native production tests retain actual roles, permissions, frozen clocks, native corrections and full-range statistics, no real business data or deployment.",
+      "kind": "command"
     }
   ]
 }
