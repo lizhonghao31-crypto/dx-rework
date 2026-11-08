@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "base": "aad07830bea6feda5fef8654f234ce8118c28c14",
-  "sourceFingerprint": "24be87ec7c1a8860b313fe6e47c169fedd1a2572a43d8f4399c70bd7e7bb9ade",
+  "base": "4d0d4d4ef2f096bdcf696653442a09eadb30ece7",
+  "sourceFingerprint": "24f0afaedba706530a578f89a21fab0041b87cec6150ba9f5ec02d20846dd07f",
   "risk": "full",
   "rules": [
     {
       "rule": "Share the original receiving quantity SQL across locked command snapshot, board, analysis and exact digital scope; extract board reads without changing command semantics.",
-      "source": "Approved full Pro Architecture Governance V1.1 F2 and accompanying F6, coordinator architecture-work-handoff-cd36f84 inline section2. Preserve native quantity meaning, command transaction/locks/latest batch and existing PERF01-12. User authorizes independent PR/Codex Review/sequential merge, no deployment/live data/configuration/schema/dependency changes. This independent preparation starts on actual C948 merge; final Full and merge wait for actual F1 merge integration.",
+      "source": "Approved full Pro Architecture Governance V1.1 F2 and accompanying F6, coordinator architecture-work-handoff-cd36f84 inline section2. Preserve native quantity meaning, command transaction/locks/latest batch and existing PERF01-12. User authorizes independent PR/Codex Review/sequential merge, no deployment/live data/configuration/schema/dependency changes. F1 merged as4d0d4d4ef2f096bdcf696653442a09eadb30ece7 before this final assembly; actual F1 integration retains original F2 reviewed commit as ancestor.",
       "writes": [
         "apps/api/src/receiving/receiving-service.ts",
         "apps/api/src/receiving/receiving-quantity-query.ts",
@@ -44,7 +44,7 @@
     },
     {
       "rule": "Preserve old entry contracts and responsibility/time documentation while keeping targeted regressions canonical.",
-      "source": "Approved full Pro Architecture Governance V1.1 F2 and accompanying F6, coordinator architecture-work-handoff-cd36f84 inline section2. Preserve native quantity meaning, command transaction/locks/latest batch and existing PERF01-12. User authorizes independent PR/Codex Review/sequential merge, no deployment/live data/configuration/schema/dependency changes. This independent preparation starts on actual C948 merge; final Full and merge wait for actual F1 merge integration.",
+      "source": "Approved full Pro Architecture Governance V1.1 F2 and accompanying F6, coordinator architecture-work-handoff-cd36f84 inline section2. Preserve native quantity meaning, command transaction/locks/latest batch and existing PERF01-12. User authorizes independent PR/Codex Review/sequential merge, no deployment/live data/configuration/schema/dependency changes. F1 merged as4d0d4d4ef2f096bdcf696653442a09eadb30ece7 before this final assembly; actual F1 integration retains original F2 reviewed commit as ancestor.",
       "writes": [
         "tests/integration/receiving-postgres.test.ts",
         "tests/unit/order-board-cutting-facts.test.ts",
@@ -73,7 +73,7 @@
       "newTests": [
         "tests/integration/receiving-postgres.test.ts"
       ],
-      "initialization": "Existing receiving path classification already maps new modules and changed original native suite; no risk-map/runner changes needed. Seven old source sentinel files point moved assertions to actual query/quantity implementation and assert public facade wiring, retaining original command/permission/formula expectations. Native suite continues existing marked owned-schema resource lifecycle; no trigger disabling or fake production seed. Original inventory generator moves entries to new paths, only3 receiving entries change; manual annotations elsewhere including C retained; F1 additions will be retained when actual F1 base is integrated. F6 names actual new modules and transaction owner, no extra architecture check.",
+      "initialization": "Existing receiving path classification already maps new modules and changed original native suite; no risk-map/runner changes needed. Seven old source sentinel files point moved assertions to actual query/quantity implementation and assert public facade wiring, retaining original command/permission/formula expectations. Native suite continues existing marked owned-schema resource lifecycle; no trigger disabling or fake production seed. Original inventory generator moves entries to new paths, only3 receiving entries change; manual annotations elsewhere including F1/C retained. F6 names actual new modules and transaction owner, no extra architecture check.",
       "dateAndPermission": "No public API/route/UI/clock changes. Inventory notes are move reviews, pending prior sites stay pending. All PERF03 light facts, PERF08 snapshot reuse, PERF09 rich15 and PERF10-12 queues/directories preserved. Rollback this structural unit only, never A/B/C or earlier performance/correctness work.",
       "expectation": "Final exact-base targeted unit, native receiving/analysis, API types, scoped lint, preflight and secret pass, zero skips; earlier native calendar8 is separately identified as preparation. Canonical receiving suite covers added export case. Fresh checkout and accurate Head/base bind final stages. No onsite or CI hardware equivalence claim.",
       "checks": [
@@ -89,11 +89,11 @@
   "checks": [
     {
       "id": "unit",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/order-board-cutting-facts.test.ts tests/unit/order-board-global-style-search.test.ts tests/unit/order-board-receiving-attachments.test.ts tests/unit/order-board-root-actions-layout.test.ts tests/unit/receiving-analysis.test.ts tests/unit/receiving-board-feedback.test.ts tests/unit/receiving-board-operations-contract.test.ts tests/unit/receiving-board-pagination.test.ts tests/unit/receiving-defective-quantity.test.ts tests/unit/receiving-dialog.test.ts tests/unit/receiving-forecast.test.ts tests/unit/receiving-image-upload.test.ts tests/unit/receiving-pr01-contract.test.ts tests/unit/receiving-quantity-ceiling.test.ts tests/unit/receiving-source.test.ts tests/unit/receiving-span.test.ts tests/unit/receiving-summary.test.ts tests/unit/v1-prelaunch-receiving-rework-contract.test.ts tests/unit/v1-root-uat-receiving-backfill.test.ts tests/unit/rework-v2-pr08-information-display.test.ts tests/unit/rework-business-detail-attachment-authorization.test.ts tests/unit/export-permission-closure.test.ts tests/integration/receiving-routes.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-architecture-20261109/arch-f2-unit-integrated.vitest.json",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/order-board-cutting-facts.test.ts tests/unit/order-board-global-style-search.test.ts tests/unit/order-board-receiving-attachments.test.ts tests/unit/order-board-root-actions-layout.test.ts tests/unit/receiving-analysis.test.ts tests/unit/receiving-board-feedback.test.ts tests/unit/receiving-board-operations-contract.test.ts tests/unit/receiving-board-pagination.test.ts tests/unit/receiving-defective-quantity.test.ts tests/unit/receiving-dialog.test.ts tests/unit/receiving-forecast.test.ts tests/unit/receiving-image-upload.test.ts tests/unit/receiving-pr01-contract.test.ts tests/unit/receiving-quantity-ceiling.test.ts tests/unit/receiving-source.test.ts tests/unit/receiving-span.test.ts tests/unit/receiving-summary.test.ts tests/unit/v1-prelaunch-receiving-rework-contract.test.ts tests/unit/v1-root-uat-receiving-backfill.test.ts tests/unit/rework-v2-pr08-information-display.test.ts tests/unit/rework-business-detail-attachment-authorization.test.ts tests/unit/export-permission-closure.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-architecture-20261109/arch-f2-unit-merged-f1.vitest.json",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "24be87ec7c1a8860b313fe6e47c169fedd1a2572a43d8f4399c70bd7e7bb9ade",
+      "sourceFingerprint": "24f0afaedba706530a578f89a21fab0041b87cec6150ba9f5ec02d20846dd07f",
       "inputPaths": [
         "apps",
         "packages",
@@ -110,35 +110,35 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "38b515d5aa2b6c627b98a9db8a30f4db31bc0c67331b0a74e26cdcfe39200f93",
+      "inputFingerprint": "5eee80f1eba7b4aaba68c633dfdea2c5f8bd3a4db0de88250400775a5e677bb4",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "aad07830bea6feda5fef8654f234ce8118c28c14",
-      "startedAt": "2026-11-08T23:18:19.971Z",
-      "endedAt": "2026-11-08T23:18:23.485Z",
+      "testedHead": "48052c24bb6ebf9efcd2175605646763f866db16",
+      "startedAt": "2026-11-08T23:44:36.780Z",
+      "endedAt": "2026-11-08T23:44:40.615Z",
       "passed": 83,
       "failed": 0,
       "skipped": 0,
       "planError": null,
-      "log": "/workspace/scratch/dx-architecture-20261109/arch-f2-unit-integrated.log",
-      "logSha256": "36e2465d1172b24f4bff9f574f77e6df6be07e93dfe1441a1819103e90bbdbbf",
-      "resultReport": "/workspace/scratch/dx-architecture-20261109/arch-f2-unit-integrated.vitest.json",
+      "log": "/workspace/scratch/dx-architecture-20261109/arch-f2-unit-merged-f1.log",
+      "logSha256": "501e1be3e78b3c2d0b68d5aa6ed597bdc91037d495d8244ce94079f8aa5a4932",
+      "resultReport": "/workspace/scratch/dx-architecture-20261109/arch-f2-unit-merged-f1.vitest.json",
       "context": "Canonical config/owned-command; dedicated marked loopback TEST PG16.15 Node22.22.2/npm10.9.9. Node CPUs2/3; existing PG CPUs0/1 and2GiB boundary, not CI hardware or onsite equivalence. Same-lock dependencies hardlinked from completed F1. No production/live data/configuration or deployment. Original receiving native schema/commands and original analysis SQL fixture exercise quantity/date/correction/packing/history/scope; analysis fixture deliberately uses isolated reference tables and is not native auth evidence. Current business quantities retain independent expected values. Unchanged command lock/snapshot, quantity CTE and board body verified against real base in private extraction comparison.",
       "kind": "tests",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "42391d403d5cfb733e8774a92b4d13d1f87ef4b32d2e1e27a591e37fee4df308"
+          "sha256": "eba1dee8b9c1640b221cc3229e35ef0d2786a3d51c2de363465bd7324cd45960"
         }
       ]
     },
     {
       "id": "postgres",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/receiving-postgres.test.ts --config vitest.business-chain.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-architecture-20261109/arch-f2-postgres-integrated.vitest.json",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/receiving-postgres.test.ts --config vitest.business-chain.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-architecture-20261109/arch-f2-postgres-merged-f1.vitest.json",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "24be87ec7c1a8860b313fe6e47c169fedd1a2572a43d8f4399c70bd7e7bb9ade",
+      "sourceFingerprint": "24f0afaedba706530a578f89a21fab0041b87cec6150ba9f5ec02d20846dd07f",
       "inputPaths": [
         "apps",
         "packages",
@@ -155,25 +155,25 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "38b515d5aa2b6c627b98a9db8a30f4db31bc0c67331b0a74e26cdcfe39200f93",
+      "inputFingerprint": "5eee80f1eba7b4aaba68c633dfdea2c5f8bd3a4db0de88250400775a5e677bb4",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "aad07830bea6feda5fef8654f234ce8118c28c14",
-      "startedAt": "2026-11-08T23:18:23.564Z",
-      "endedAt": "2026-11-08T23:18:26.925Z",
+      "testedHead": "48052c24bb6ebf9efcd2175605646763f866db16",
+      "startedAt": "2026-11-08T23:44:40.697Z",
+      "endedAt": "2026-11-08T23:44:44.408Z",
       "passed": 38,
       "failed": 0,
       "skipped": 0,
       "planError": null,
-      "log": "/workspace/scratch/dx-architecture-20261109/arch-f2-postgres-integrated.log",
-      "logSha256": "e4c309ed869982aa650e32594b9155738aa78818af31a76d257672973a38c523",
-      "resultReport": "/workspace/scratch/dx-architecture-20261109/arch-f2-postgres-integrated.vitest.json",
+      "log": "/workspace/scratch/dx-architecture-20261109/arch-f2-postgres-merged-f1.log",
+      "logSha256": "361404720d9849c95b556e498ba418852ec44c644907a8719fb4b89ee2f82f88",
+      "resultReport": "/workspace/scratch/dx-architecture-20261109/arch-f2-postgres-merged-f1.vitest.json",
       "context": "Canonical config/owned-command; dedicated marked loopback TEST PG16.15 Node22.22.2/npm10.9.9. Node CPUs2/3; existing PG CPUs0/1 and2GiB boundary, not CI hardware or onsite equivalence. Same-lock dependencies hardlinked from completed F1. No production/live data/configuration or deployment. Original receiving native schema/commands and original analysis SQL fixture exercise quantity/date/correction/packing/history/scope; analysis fixture deliberately uses isolated reference tables and is not native auth evidence. Current business quantities retain independent expected values. Unchanged command lock/snapshot, quantity CTE and board body verified against real base in private extraction comparison.",
       "kind": "tests",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "d75651fc5354a40ae476149b73f9812e0a61e622c767d5af28dcafb88d730e19"
+          "sha256": "201e271ad418a5550a2d9b519f716b72c661c2b943daceec324237ba4e593ee4"
         }
       ]
     },
@@ -183,7 +183,7 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "24be87ec7c1a8860b313fe6e47c169fedd1a2572a43d8f4399c70bd7e7bb9ade",
+      "sourceFingerprint": "24f0afaedba706530a578f89a21fab0041b87cec6150ba9f5ec02d20846dd07f",
       "inputPaths": [
         "apps",
         "packages",
@@ -200,14 +200,14 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "38b515d5aa2b6c627b98a9db8a30f4db31bc0c67331b0a74e26cdcfe39200f93",
+      "inputFingerprint": "5eee80f1eba7b4aaba68c633dfdea2c5f8bd3a4db0de88250400775a5e677bb4",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "aad07830bea6feda5fef8654f234ce8118c28c14",
-      "startedAt": "2026-11-08T23:18:27.004Z",
-      "endedAt": "2026-11-08T23:18:37.334Z",
+      "testedHead": "48052c24bb6ebf9efcd2175605646763f866db16",
+      "startedAt": "2026-11-08T23:44:44.488Z",
+      "endedAt": "2026-11-08T23:44:55.729Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-architecture-20261109/arch-f2-typesapi-integrated.log",
+      "log": "/workspace/scratch/dx-architecture-20261109/arch-f2-typesapi-merged-f1.log",
       "logSha256": "d81733d2d3443600c8f5c4e1f5774d8d050a1c5a8ef34bd5a659eb50ebd68f00",
       "resultReport": null,
       "context": "Canonical config/owned-command; dedicated marked loopback TEST PG16.15 Node22.22.2/npm10.9.9. Node CPUs2/3; existing PG CPUs0/1 and2GiB boundary, not CI hardware or onsite equivalence. Same-lock dependencies hardlinked from completed F1. No production/live data/configuration or deployment. Original receiving native schema/commands and original analysis SQL fixture exercise quantity/date/correction/packing/history/scope; analysis fixture deliberately uses isolated reference tables and is not native auth evidence. Current business quantities retain independent expected values. Unchanged command lock/snapshot, quantity CTE and board body verified against real base in private extraction comparison.",
@@ -215,11 +215,11 @@
     },
     {
       "id": "lint",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/delivery-calendar-debt-summary.ts apps/api/src/production-platform/delivery-calendar-facts.ts apps/api/src/production-platform/order-closure-service.ts apps/api/src/receiving/receiving-service.ts tests/integration/receiving-postgres.test.ts tests/unit/order-board-cutting-facts.test.ts tests/unit/order-board-global-style-search.test.ts tests/unit/order-board-receiving-attachments.test.ts tests/unit/receiving-board-operations-contract.test.ts tests/unit/receiving-defective-quantity.test.ts tests/unit/rework-v2-pr08-information-display.test.ts tests/unit/v1-prelaunch-receiving-rework-contract.test.ts apps/api/src/receiving/receiving-board-query.ts apps/api/src/receiving/receiving-quantity-query.ts --max-warnings=0",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/delivery-calendar-debt-summary.ts apps/api/src/production-platform/delivery-calendar-facts.ts apps/api/src/production-platform/order-closure-service.ts apps/api/src/receiving/receiving-board-query.ts apps/api/src/receiving/receiving-quantity-query.ts apps/api/src/receiving/receiving-service.ts tests/integration/receiving-postgres.test.ts tests/unit/order-board-cutting-facts.test.ts tests/unit/order-board-global-style-search.test.ts tests/unit/order-board-receiving-attachments.test.ts tests/unit/receiving-board-operations-contract.test.ts tests/unit/receiving-defective-quantity.test.ts tests/unit/rework-v2-pr08-information-display.test.ts tests/unit/v1-prelaunch-receiving-rework-contract.test.ts apps/api/src/receiving/receiving-board-query.ts apps/api/src/receiving/receiving-quantity-query.ts --max-warnings=0",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "24be87ec7c1a8860b313fe6e47c169fedd1a2572a43d8f4399c70bd7e7bb9ade",
+      "sourceFingerprint": "24f0afaedba706530a578f89a21fab0041b87cec6150ba9f5ec02d20846dd07f",
       "inputPaths": [
         "apps",
         "packages",
@@ -236,14 +236,14 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "38b515d5aa2b6c627b98a9db8a30f4db31bc0c67331b0a74e26cdcfe39200f93",
+      "inputFingerprint": "5eee80f1eba7b4aaba68c633dfdea2c5f8bd3a4db0de88250400775a5e677bb4",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "aad07830bea6feda5fef8654f234ce8118c28c14",
-      "startedAt": "2026-11-08T23:18:37.422Z",
-      "endedAt": "2026-11-08T23:18:38.680Z",
+      "testedHead": "48052c24bb6ebf9efcd2175605646763f866db16",
+      "startedAt": "2026-11-08T23:45:55.763Z",
+      "endedAt": "2026-11-08T23:45:57.059Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-architecture-20261109/arch-f2-lint-integrated.log",
+      "log": "/workspace/scratch/dx-architecture-20261109/arch-f2-lint-merged-f1.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "resultReport": null,
       "context": "Canonical config/owned-command; dedicated marked loopback TEST PG16.15 Node22.22.2/npm10.9.9. Node CPUs2/3; existing PG CPUs0/1 and2GiB boundary, not CI hardware or onsite equivalence. Same-lock dependencies hardlinked from completed F1. No production/live data/configuration or deployment. Original receiving native schema/commands and original analysis SQL fixture exercise quantity/date/correction/packing/history/scope; analysis fixture deliberately uses isolated reference tables and is not native auth evidence. Current business quantities retain independent expected values. Unchanged command lock/snapshot, quantity CTE and board body verified against real base in private extraction comparison.",
@@ -255,7 +255,7 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "24be87ec7c1a8860b313fe6e47c169fedd1a2572a43d8f4399c70bd7e7bb9ade",
+      "sourceFingerprint": "24f0afaedba706530a578f89a21fab0041b87cec6150ba9f5ec02d20846dd07f",
       "inputPaths": [
         "apps",
         "packages",
@@ -272,15 +272,15 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "38b515d5aa2b6c627b98a9db8a30f4db31bc0c67331b0a74e26cdcfe39200f93",
+      "inputFingerprint": "5eee80f1eba7b4aaba68c633dfdea2c5f8bd3a4db0de88250400775a5e677bb4",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "aad07830bea6feda5fef8654f234ce8118c28c14",
-      "startedAt": "2026-11-08T23:18:38.767Z",
-      "endedAt": "2026-11-08T23:18:47.058Z",
+      "testedHead": "48052c24bb6ebf9efcd2175605646763f866db16",
+      "startedAt": "2026-11-08T23:44:56.708Z",
+      "endedAt": "2026-11-08T23:45:04.784Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-architecture-20261109/arch-f2-preflight-integrated.log",
-      "logSha256": "2a3e375bf73a9d75f4414e85ad73ea5682dac1416153444d0893c8d1050e44d4",
+      "log": "/workspace/scratch/dx-architecture-20261109/arch-f2-preflight-merged-f1.log",
+      "logSha256": "ebaaa6dfc524c0b30be288916bd15b8e51548145c7c31cfaf62b69342bf05063",
       "resultReport": null,
       "context": "Canonical config/owned-command; dedicated marked loopback TEST PG16.15 Node22.22.2/npm10.9.9. Node CPUs2/3; existing PG CPUs0/1 and2GiB boundary, not CI hardware or onsite equivalence. Same-lock dependencies hardlinked from completed F1. No production/live data/configuration or deployment. Original receiving native schema/commands and original analysis SQL fixture exercise quantity/date/correction/packing/history/scope; analysis fixture deliberately uses isolated reference tables and is not native auth evidence. Current business quantities retain independent expected values. Unchanged command lock/snapshot, quantity CTE and board body verified against real base in private extraction comparison.",
       "kind": "command"
@@ -291,7 +291,7 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "24be87ec7c1a8860b313fe6e47c169fedd1a2572a43d8f4399c70bd7e7bb9ade",
+      "sourceFingerprint": "24f0afaedba706530a578f89a21fab0041b87cec6150ba9f5ec02d20846dd07f",
       "inputPaths": [
         "apps",
         "packages",
@@ -308,14 +308,14 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "38b515d5aa2b6c627b98a9db8a30f4db31bc0c67331b0a74e26cdcfe39200f93",
+      "inputFingerprint": "5eee80f1eba7b4aaba68c633dfdea2c5f8bd3a4db0de88250400775a5e677bb4",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "aad07830bea6feda5fef8654f234ce8118c28c14",
-      "startedAt": "2026-11-08T23:18:47.140Z",
-      "endedAt": "2026-11-08T23:18:47.999Z",
+      "testedHead": "48052c24bb6ebf9efcd2175605646763f866db16",
+      "startedAt": "2026-11-08T23:45:04.866Z",
+      "endedAt": "2026-11-08T23:45:05.802Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-architecture-20261109/arch-f2-secret-integrated.log",
+      "log": "/workspace/scratch/dx-architecture-20261109/arch-f2-secret-merged-f1.log",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda",
       "resultReport": null,
       "context": "Canonical config/owned-command; dedicated marked loopback TEST PG16.15 Node22.22.2/npm10.9.9. Node CPUs2/3; existing PG CPUs0/1 and2GiB boundary, not CI hardware or onsite equivalence. Same-lock dependencies hardlinked from completed F1. No production/live data/configuration or deployment. Original receiving native schema/commands and original analysis SQL fixture exercise quantity/date/correction/packing/history/scope; analysis fixture deliberately uses isolated reference tables and is not native auth evidence. Current business quantities retain independent expected values. Unchanged command lock/snapshot, quantity CTE and board body verified against real base in private extraction comparison.",
