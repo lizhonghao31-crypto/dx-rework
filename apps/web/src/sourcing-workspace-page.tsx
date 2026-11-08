@@ -12,7 +12,7 @@ import { type PoDeliveryDate } from "@dx-rework/contracts";
 import {FactorySettlementPanel} from "./factory-settlement-panel.js";
 import { contractReturnFileError, finishContractReturnUpload, type ContractReturnUpload } from "./sourcing-contract-return-upload.js";
 import {readBudgetSourcingDraft,saveBudgetSourcingDraft,clearBudgetSourcingDraft,recoverBudgetSourcingManual,type BudgetSourcingDraft} from "./budget-sourcing-draft.js";
-import {registerInternalNavigationGuard} from "./internal-navigation.js";
+import {registerInternalNavigationGuard,navigateInternalPage} from "./internal-navigation.js";
 import type {BudgetSheet} from "@dx-rework/contracts/digital-budget";
 import type { BudgetSourcingPreparation } from "@dx-rework/contracts/digital-budget";
 import { digitalRequest } from "./digital-production-api.js";
@@ -1429,7 +1429,10 @@ function OrderDetailPage({
     const key=returnKey.current??createClientRequestId();returnKey.current=key;
     const target=detailHref(item),body=JSON.stringify({expectedVersion:item.version,reason});
     await submission.run(()=>requestSubmission(`sourcing/cases/${sourcingCaseId}/return-to-merchandiser`,SourcingCaseSummarySchema,{
-      method:"POST",headers:{"idempotency-key":key},body}),()=>{window.location.assign(target);});
+      method:"POST",headers:{"idempotency-key":key},body}),async(updated,identity)=>{
+      read.apply(identity,{item:updated});setReturnDraft("");setReturnOpen(false);returnKey.current=null;
+      await read.reload();if(read.owns(identity))await navigateInternalPage(target);
+    });
   };
   const submitBudgetCorrection=async(daxingUnitPrice:string,reason:string):Promise<void>=>{
     if(!item||!canCorrectBudget||writeBlocked)return;
@@ -1679,8 +1682,9 @@ function OrderDetailPage({
             </div>);
   return (
     <div className="sourcing-workspace sourcing-order-detail sourcing-module-layout" data-legacy-ui="sourcing">
-      {returnOpen ? <SourcingReturnDialog reason={returnDraft} onReasonChange={setReturnDraft} busy={writeBlocked} error={returnError} onClose={()=>{setReturnOpen(false);setReturnDraft("");returnKey.current=null;}} onSubmit={reason=>void submitReturn(reason)} /> : null}
+      {returnOpen ? <SourcingReturnDialog recovery={<SubmissionFeedback feedback={feedback} busy={busy}/>} reason={returnDraft} onReasonChange={setReturnDraft} busy={writeBlocked} error={returnError} onClose={()=>{setReturnOpen(false);setReturnDraft("");returnKey.current=null;}} onSubmit={reason=>void submitReturn(reason)} /> : null}
       {budgetCorrectionOpen && item?.daxingUnitPrice ? <SourcingBudgetPriceCorrectionDialog
+        recovery={<SubmissionFeedback feedback={feedback} busy={busy}/>}
         draft={budgetCorrectionDraft} onDraftChange={setBudgetCorrectionDraft}
         currentPrice={item.daxingUnitPrice}
         busy={writeBlocked}
@@ -1759,7 +1763,7 @@ function OrderDetailPage({
             {!financialReadView && !quoteEntryView ? orderLineItems : null}
             {item.decision?.sourceType === "factory_change" && item.lineItems.length > 1 && item.lineItems.some(line => !item.decision?.linePrices.some(price => price.position === line.position)) ? <p className="sourcing-price-note">转厂后按统一生产单价执行，部分款式缺少逐款金额记录，生产总额见合计。</p> : null}
             <section id="node-workspace" className="sourcing-node-workspace" aria-label="节点办理区">
-                <SubmissionFeedback feedback={feedback} busy={busy||contractUploading} />
+                {!returnOpen&&!budgetCorrectionOpen&&!financeDifferenceOpen?<SubmissionFeedback feedback={feedback} busy={busy||contractUploading}/>:null}
                 {read.error?<button type="button" disabled={busy||read.loading} onClick={()=>void read.reload().catch(()=>undefined)}>重新读取订单</button>:null}
                 {item.status === "pending_ie_quote" && selectedNode === "ie_quote" ? <Surface className="rework-detail-node-preview">
                   <h2>IE 给价</h2>
@@ -1958,6 +1962,7 @@ function OrderDetailPage({
                         }} />{label}</label>)}</fieldset>
                         <label className="system-dialog__field"><span>差异说明 *</span><input disabled={writeBlocked} required value={financeReview.differenceReason} maxLength={500} onChange={(event) => { setFinanceReview({ ...financeReview, differenceReason: event.target.value }); actionKey.current = null; }} /></label>
                         {message ? <p role="status">{message}</p> : null}
+                        <SubmissionFeedback feedback={feedback} busy={busy}/>
                         <div className="system-dialog__actions">
                           <button className="dx-button dx-button--secondary" type="button" disabled={writeBlocked} onClick={() => setFinanceDifferenceOpen(false)}>取消</button>
                           <button className="dx-button dx-button--primary" type="submit" disabled={writeBlocked || !financeReview.differenceFields.length || !financeReview.differenceReason.trim()}>{busy ? "正在提交…" : "提交差异核实"}</button>

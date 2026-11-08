@@ -1,8 +1,9 @@
 import { Button } from "@dx-rework/ui";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 
-export function SourcingReturnDialog({ busy, error, onClose, onSubmit, reason:draftReason, onReasonChange }: {
+export function SourcingReturnDialog({ busy, error, onClose, onSubmit, reason:draftReason, onReasonChange, recovery }: {
   reason?:string;onReasonChange?:(reason:string)=>void;
+  recovery?:ReactNode;
   busy: boolean; error: string; onClose(): void; onSubmit(reason: string): void;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -15,6 +16,7 @@ export function SourcingReturnDialog({ busy, error, onClose, onSubmit, reason:dr
       <div className="system-dialog__copy"><h2>退回跟单修改</h2><p>修改后重新提交 IE、供应链总监和老板确认，流程累计用时保留。</p></div>
       <label className="system-dialog__field"><span>退回原因 *</span><textarea autoFocus required maxLength={500} value={reason} disabled={busy} onChange={event => setReason(event.target.value)} /></label>
       {error ? <p role="alert">{error}</p> : null}
+      {recovery}
       <div className="system-dialog__actions"><Button type="button" disabled={busy} onClick={onClose}>取消</Button><Button type="submit" variant="primary" disabled={busy || !reason.trim()}>{busy ? "正在退回…" : "确认退回"}</Button></div>
     </form>
   </dialog>;

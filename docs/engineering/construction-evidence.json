@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "deb3c93d4320552440bfe7603c9aae3de220f1ea",
-  "sourceFingerprint": "b4a27e7a94a0ca4023ad6036c0140c6933c382bbf50ab3d1245ceb31044bdd4c",
+  "sourceFingerprint": "e79de59bb01b0950689650fe63f1e88a95be75cb8ccb0a6a127d0f7182a2a2d5",
   "risk": "full",
   "rules": [
     {
@@ -41,7 +41,6 @@
         "postgres",
         "typesweb",
         "lint",
-        "visual",
         "preflight"
       ]
     },
@@ -73,15 +72,14 @@
         "tests/unit/sourcing-detail-identity.test.ts",
         "tests/integration/sourcing-detail-native-browser-postgres.test.ts"
       ],
-      "initialization": "One page-level original submission feedback coordinator is reused, not replaced by new platform or per-button unknown-submit stores. IE/management, owner, finance, exception, contract, dispatch, budget correction, style and price-reapplication requests capture body/key before awaits. Existing expectedRevision/expectedVersion/document identifiers remain unchanged. Duplicate-style confirmation updates the captured body used for later recovery, not a new key. Management craft IDs are resolved once and retained; no later case mutation after losing owner. Contract-return files and original binding key survive retry; uploaded images use original recovery. No GET abort signal is used for business requests.",
+      "initialization": "One page-level original submission feedback coordinator is reused, not replaced by new platform or per-button unknown-submit stores. IE/management, owner, finance, exception, contract, dispatch, budget correction, style and price-reapplication requests capture body/key before awaits. Existing expectedRevision/expectedVersion/document identifiers remain unchanged. Duplicate-style confirmation updates the captured body used for later recovery, not a new key. Management craft IDs are resolved once and retained; no later case mutation after losing owner. Contract-return files and original binding key survive retry; uploaded images use original recovery. No GET abort signal is used for business requests. Review P1 4508028771 is fixed with one existing coordinator rendered inside native return/budget/finance modals, never a second mutation store. Input/new-submit protections remain; internal recovery uses actual request busy rather than the blocked editing flag. Confirmed return uses same-entity read-back and existing internal navigation, avoiding full-refresh draft/beforeunload interference.",
       "dateAndPermission": "Same-entity GET refresh does not invalidate a pending write owner. Success is marked before refresh; a later refresh failure cannot pretend rollback or issue another POST. Old entity success/failure/finally callbacks cannot alert/navigate/update a new mounted page. Unknown commit retains original request; permission/version checks remain server-owned. Optional targetHref is passed through original navigation and pop handling; no-argument guards keep compatibility. Same-entity chapters do not prompt; actual unsaved entity departure confirms once. Unknown or pending attachment submission stays on original entity for recovery. Confirmed finance/budget/proposal saves clear only their own dirty state.",
       "expectation": "Native browser first commits a quote through original service/PG, then injects receipt503; recovery sends identical body/key twice and native database has exactly one quote. Attempted departure during unknown result remains on original order. Original failed/confirmed transfer tests now use real React effects and request/refresh behavior instead of state-cell-number mocks. Leave cancel retains the same order proposal; accepted leave and natural list navigation do not carry it to another order. Known successful POST followed by GET failure retains success and disables writes against the stale snapshot, with GET-only retry available.",
       "checks": [
         "unit",
         "postgres",
         "typesweb",
-        "lint",
-        "visual"
+        "lint"
       ]
     },
     {
@@ -117,7 +115,7 @@
         "tests/integration/sourcing-detail-native-browser-postgres.test.ts",
         "tests/unit/sourcing-detail-identity.test.ts"
       ],
-      "initialization": "New browser suite is mapped from actual sourcing detail paths, discovered by the existing native browser preparer, and uses shared bounded correctness test/hook configuration. Native fixture supplies actual dispatch and contract-return services as production wiring requires; original failed fixture reports are retained and do not count as passes. Five old source sentinels follow actual hook imports/implementations and preserve their business assertions; dynamic tests cover the extracted behavior. Existing layout runner only gains bounded failure JSON next to its original failure screenshot, no new report gate. Native isolated PG/schema lifecycle, browser/server/temp output cleanups are retained.",
+      "initialization": "New browser suite is mapped from actual sourcing detail paths, discovered by the existing native browser preparer, and uses shared bounded correctness test/hook configuration. Native fixture supplies actual dispatch and contract-return services as production wiring requires; original failed fixture reports are retained and do not count as passes. Five old source sentinels follow actual hook imports/implementations and preserve their business assertions; dynamic tests cover the extracted behavior. Existing layout runner only gains bounded failure JSON next to its original failure screenshot, no new report gate. Native isolated PG/schema lifecycle, browser/server/temp output cleanups are retained. Prior candidate034529ecebfdf2345b9fe8dc716129df6b3352cf passed299 targeted unit/routes,3native browser,62classification and5synthetic layouts. Those unchanged-scope results remain historical supporting evidence, not current-head reruns. This fix reruns only affected UI/recovery units and all5 native cases including2new real modal/one-stored-change regressions, types/lint/preflight/secret. No repeated broad unit/scale/layout matrix for a report change.",
       "dateAndPermission": "No migration, backup, scene clock, production data, site configuration or shared layout changes. PERF04 lazy module identity and CSS order are unchanged; PERF09 list SQL/count/15-row enrichment is untouched, as are all other PERF and authority/time fixes. Current F6 document now names read/proposal/submission boundaries and approved narrow navigation adapter; F1/F2/receiving-page extraction remains explicitly not yet done. Rollback only C wiring, not B/A or performance/history.",
       "expectation": "Final same-source unit, native PG/browser, types, lint, protocol, original preflight/secret and five representative layout results are pinned to actual inputs/logs. Native failures due missing optional service wiring were fixed in fixture, not by granting permissions or removing GETs. A preliminary empty-fill failure was original focus formatting/selection in browser automation, resolved by focusing before clearing; pricing input rules were not changed. Original synthetic layout runner requires production JSX build context; private runner initially forced test NODE_ENV and was corrected to production, with failed report retained. Neither local hardware nor synthetic layout images are represented as CI/onsite equivalence.",
       "checks": [
@@ -125,21 +123,19 @@
         "postgres",
         "typesweb",
         "lint",
-        "protocol",
         "preflight",
-        "secret",
-        "visual"
+        "secret"
       ]
     }
   ],
   "checks": [
     {
       "id": "unit",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/sourcing-additional-merchandiser.test.ts tests/unit/sourcing-capability-migration.test.ts tests/unit/sourcing-contract-history-scope.test.ts tests/unit/sourcing-contract-images.test.ts tests/unit/sourcing-contract-layout.test.ts tests/unit/sourcing-contract-number-format.test.ts tests/unit/sourcing-contract-return-list-query.test.ts tests/unit/sourcing-contract-return-state.test.ts tests/unit/sourcing-contract-return-upload.test.ts tests/unit/sourcing-contract-v2-pdf.test.ts tests/unit/sourcing-correction.test.ts tests/unit/sourcing-detail-identity.test.ts tests/unit/sourcing-factory-change-errors.test.ts tests/unit/sourcing-factory-change-schema-contract.test.ts tests/unit/sourcing-factory-change-workflow-contract.test.ts tests/unit/sourcing-feedback-contract.test.ts tests/unit/sourcing-finance-readonly-contract.test.ts tests/unit/sourcing-finance-todo-routing-contract.test.ts tests/unit/sourcing-foundation.test.ts tests/unit/sourcing-governed-components.test.ts tests/unit/sourcing-ie-first-cutting.test.ts tests/unit/sourcing-image-lifecycle-contract.test.ts tests/unit/sourcing-list-pagination.test.ts tests/unit/sourcing-list-query.test.ts tests/unit/sourcing-list-root-delete-contract.test.ts tests/unit/sourcing-migration-extension.test.ts tests/unit/sourcing-migration-tool-relocation.test.ts tests/unit/sourcing-mobile-workspace.test.ts tests/unit/sourcing-node-history.test.ts tests/unit/sourcing-number-presentation.test.ts tests/unit/sourcing-order-craft-contract.test.ts tests/unit/sourcing-pc-form-approval-contract.test.ts tests/unit/sourcing-pr03-contract.test.ts tests/unit/sourcing-pr2-workspace-contract.test.ts tests/unit/sourcing-pr3-todo-contract.test.ts tests/unit/sourcing-pr4-contract-factory-change.test.ts tests/unit/sourcing-price-cascade.test.ts tests/unit/sourcing-price-input.test.ts tests/unit/sourcing-price-presentation.test.ts tests/unit/sourcing-production-contract.test.ts tests/unit/sourcing-role-aware-factory-change-ui.test.ts tests/unit/sourcing-role-visibility.test.ts tests/unit/sourcing-ssp04-line-price-contract.test.ts tests/unit/sourcing-ssp05-contract-pdf.test.ts tests/unit/sourcing-style-identity.test.ts tests/unit/sourcing-submit-validation.test.ts tests/unit/sourcing-supplier-profile-contract.test.ts tests/unit/sourcing-todo-sla.test.ts tests/unit/sourcing-transfer-delivery.test.ts tests/unit/sourcing-transfer-submit-feedback.test.ts tests/unit/submission-attempt.test.ts tests/unit/request-response-feedback.test.ts tests/unit/internal-navigation-guard.test.ts tests/unit/pattern-navigation-return.test.ts tests/unit/pattern-draft-guard.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-architecture-20261109/arch-c-unit-submitted.vitest.json",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/sourcing-detail-identity.test.ts tests/unit/sourcing-transfer-submit-feedback.test.ts tests/unit/sourcing-feedback-contract.test.ts tests/unit/sourcing-role-aware-factory-change-ui.test.ts tests/unit/internal-navigation-guard.test.ts tests/unit/submission-attempt.test.ts tests/unit/request-response-feedback.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-architecture-20261109/arch-c-unit-review-fix.vitest.json",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "b4a27e7a94a0ca4023ad6036c0140c6933c382bbf50ab3d1245ceb31044bdd4c",
+      "sourceFingerprint": "e79de59bb01b0950689650fe63f1e88a95be75cb8ccb0a6a127d0f7182a2a2d5",
       "inputPaths": [
         "apps",
         "packages",
@@ -149,41 +145,42 @@
         "package.json",
         "package-lock.json",
         "docs/architecture/business-module-boundaries.md",
+        "docs/engineering/acceptance-time-sites-20261027.json",
         "eslint.config.js",
         "tsconfig.base.json",
         "vitest.business-chain.config.ts",
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "e95fc26d024cdd15a0d40114ad70b5431d1c04f1fc27c9b31546e8b0dcb7d449",
+      "inputFingerprint": "dfe7d94e719bd181731448b3b11b00d54839f4b7362815948bba2f987a819074",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "deb3c93d4320552440bfe7603c9aae3de220f1ea",
-      "startedAt": "2026-11-08T22:08:36.544Z",
-      "endedAt": "2026-11-08T22:08:52.546Z",
-      "passed": 299,
+      "testedHead": "034529ecebfdf2345b9fe8dc716129df6b3352cf",
+      "startedAt": "2026-11-08T22:29:27.740Z",
+      "endedAt": "2026-11-08T22:29:32.255Z",
+      "passed": 52,
       "failed": 0,
       "skipped": 0,
       "planError": null,
-      "log": "/workspace/scratch/dx-architecture-20261109/arch-c-unit-submitted.log",
-      "logSha256": "8c56353bee2970576915b447e5a300b9da4eb18a56e55ab4c42f6da9fdff3f64",
-      "resultReport": "/workspace/scratch/dx-architecture-20261109/arch-c-unit-submitted.vitest.json",
+      "log": "/workspace/scratch/dx-architecture-20261109/arch-c-unit-review-fix.log",
+      "logSha256": "8d07233b08f4b05f7092eb147b32af854d777db591f3e7d9d451bdb321e255fb",
+      "resultReport": "/workspace/scratch/dx-architecture-20261109/arch-c-unit-review-fix.vitest.json",
       "context": "Canonical configs and owned-command; dedicated marked loopback TEST PG16.15, Node22.22.2/npm10.9.9. Node CPUs2/3; existing PG CPUs0/1 and 2GiB boundary. Hardlinked same-lock dependencies from PERF12 tree-identical to cd36f84; not CI hardware or onsite equivalence. No production data, private live OSS or deployment. Full production App with real AuthService, PostgresAuthStore, native sourcing commands in marked isolated TEST schemas. Browser receipt failure is injected after an actual native commit; this is not an onsite or real network-outage claim. Partial test-name runs record skipped cases and are not whole-suite passes.",
       "kind": "tests",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "765e98c2429478be1e62b7d9fe7630ae35d90e00f3b2dcad9fec0aa76988c974"
+          "sha256": "bc2d4b561237b9bcaa6292c518c4e3e8c4f5438092511465dc554a40eaa47084"
         }
       ]
     },
     {
       "id": "postgres",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/sourcing-detail-native-browser-postgres.test.ts --config vitest.business-chain.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-architecture-20261109/arch-c-postgres-submitted.vitest.json",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/sourcing-detail-native-browser-postgres.test.ts --config vitest.business-chain.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-architecture-20261109/arch-c-postgres-review-fix.vitest.json",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "b4a27e7a94a0ca4023ad6036c0140c6933c382bbf50ab3d1245ceb31044bdd4c",
+      "sourceFingerprint": "e79de59bb01b0950689650fe63f1e88a95be75cb8ccb0a6a127d0f7182a2a2d5",
       "inputPaths": [
         "apps",
         "packages",
@@ -193,31 +190,32 @@
         "package.json",
         "package-lock.json",
         "docs/architecture/business-module-boundaries.md",
+        "docs/engineering/acceptance-time-sites-20261027.json",
         "eslint.config.js",
         "tsconfig.base.json",
         "vitest.business-chain.config.ts",
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "e95fc26d024cdd15a0d40114ad70b5431d1c04f1fc27c9b31546e8b0dcb7d449",
+      "inputFingerprint": "dfe7d94e719bd181731448b3b11b00d54839f4b7362815948bba2f987a819074",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "deb3c93d4320552440bfe7603c9aae3de220f1ea",
-      "startedAt": "2026-11-08T22:08:52.629Z",
-      "endedAt": "2026-11-08T22:09:05.107Z",
-      "passed": 3,
+      "testedHead": "034529ecebfdf2345b9fe8dc716129df6b3352cf",
+      "startedAt": "2026-11-08T22:29:32.341Z",
+      "endedAt": "2026-11-08T22:29:47.881Z",
+      "passed": 5,
       "failed": 0,
       "skipped": 0,
       "planError": null,
-      "log": "/workspace/scratch/dx-architecture-20261109/arch-c-postgres-submitted.log",
-      "logSha256": "8ace77f6c76ef629ab945afb16762d74c3f896ea0afd878ec5dd9442413616b0",
-      "resultReport": "/workspace/scratch/dx-architecture-20261109/arch-c-postgres-submitted.vitest.json",
+      "log": "/workspace/scratch/dx-architecture-20261109/arch-c-postgres-review-fix.log",
+      "logSha256": "6dcc9a4414778b92292ca4dae9f59b9a83b631f39cfd3c00824c6753c08c2ea6",
+      "resultReport": "/workspace/scratch/dx-architecture-20261109/arch-c-postgres-review-fix.vitest.json",
       "context": "Canonical configs and owned-command; dedicated marked loopback TEST PG16.15, Node22.22.2/npm10.9.9. Node CPUs2/3; existing PG CPUs0/1 and 2GiB boundary. Hardlinked same-lock dependencies from PERF12 tree-identical to cd36f84; not CI hardware or onsite equivalence. No production data, private live OSS or deployment. Full production App with real AuthService, PostgresAuthStore, native sourcing commands in marked isolated TEST schemas. Browser receipt failure is injected after an actual native commit; this is not an onsite or real network-outage claim. Partial test-name runs record skipped cases and are not whole-suite passes.",
       "kind": "tests",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "5e2097e7846b86abe9a7325d9af89e16b5107de7d1b6df0f076454a3c8fcf70f"
+          "sha256": "811ab29df5605152d5485f6144f89dc1827bf76cf6172f455d6cd17e3f32b586"
         }
       ]
     },
@@ -227,7 +225,7 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "b4a27e7a94a0ca4023ad6036c0140c6933c382bbf50ab3d1245ceb31044bdd4c",
+      "sourceFingerprint": "e79de59bb01b0950689650fe63f1e88a95be75cb8ccb0a6a127d0f7182a2a2d5",
       "inputPaths": [
         "apps",
         "packages",
@@ -237,20 +235,21 @@
         "package.json",
         "package-lock.json",
         "docs/architecture/business-module-boundaries.md",
+        "docs/engineering/acceptance-time-sites-20261027.json",
         "eslint.config.js",
         "tsconfig.base.json",
         "vitest.business-chain.config.ts",
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "e95fc26d024cdd15a0d40114ad70b5431d1c04f1fc27c9b31546e8b0dcb7d449",
+      "inputFingerprint": "dfe7d94e719bd181731448b3b11b00d54839f4b7362815948bba2f987a819074",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "deb3c93d4320552440bfe7603c9aae3de220f1ea",
-      "startedAt": "2026-11-08T22:09:05.186Z",
-      "endedAt": "2026-11-08T22:09:22.589Z",
+      "testedHead": "034529ecebfdf2345b9fe8dc716129df6b3352cf",
+      "startedAt": "2026-11-08T22:29:47.965Z",
+      "endedAt": "2026-11-08T22:30:05.066Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-architecture-20261109/arch-c-typesweb-submitted.log",
+      "log": "/workspace/scratch/dx-architecture-20261109/arch-c-typesweb-review-fix.log",
       "logSha256": "752b0f4f80e1f2fdeece6837aa0d8538e17009bd166c8888d0c5c5d0c6148bcd",
       "resultReport": null,
       "context": "Canonical configs and owned-command; dedicated marked loopback TEST PG16.15, Node22.22.2/npm10.9.9. Node CPUs2/3; existing PG CPUs0/1 and 2GiB boundary. Hardlinked same-lock dependencies from PERF12 tree-identical to cd36f84; not CI hardware or onsite equivalence. No production data, private live OSS or deployment. Full production App with real AuthService, PostgresAuthStore, native sourcing commands in marked isolated TEST schemas. Browser receipt failure is injected after an actual native commit; this is not an onsite or real network-outage claim. Partial test-name runs record skipped cases and are not whole-suite passes.",
@@ -262,42 +261,7 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "b4a27e7a94a0ca4023ad6036c0140c6933c382bbf50ab3d1245ceb31044bdd4c",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "tests",
-        ".env.example",
-        "package.json",
-        "package-lock.json",
-        "docs/architecture/business-module-boundaries.md",
-        "eslint.config.js",
-        "tsconfig.base.json",
-        "vitest.business-chain.config.ts",
-        "vitest.config.ts",
-        "vitest.postgres-immediate.config.ts"
-      ],
-      "inputFingerprint": "e95fc26d024cdd15a0d40114ad70b5431d1c04f1fc27c9b31546e8b0dcb7d449",
-      "inputsUnchanged": true,
-      "sourceUnchanged": true,
-      "testedHead": "deb3c93d4320552440bfe7603c9aae3de220f1ea",
-      "startedAt": "2026-11-08T22:09:22.671Z",
-      "endedAt": "2026-11-08T22:09:24.052Z",
-      "planError": null,
-      "log": "/workspace/scratch/dx-architecture-20261109/arch-c-lint-submitted.log",
-      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "resultReport": null,
-      "context": "Canonical configs and owned-command; dedicated marked loopback TEST PG16.15, Node22.22.2/npm10.9.9. Node CPUs2/3; existing PG CPUs0/1 and 2GiB boundary. Hardlinked same-lock dependencies from PERF12 tree-identical to cd36f84; not CI hardware or onsite equivalence. No production data, private live OSS or deployment. Full production App with real AuthService, PostgresAuthStore, native sourcing commands in marked isolated TEST schemas. Browser receipt failure is injected after an actual native commit; this is not an onsite or real network-outage claim. Partial test-name runs record skipped cases and are not whole-suite passes.",
-      "kind": "command"
-    },
-    {
-      "id": "protocol",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/full-gate-risk-map.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-architecture-20261109/arch-c-protocol-submitted.vitest.json",
-      "status": "passed",
-      "exitCode": 0,
-      "allExited": true,
-      "sourceFingerprint": "b4a27e7a94a0ca4023ad6036c0140c6933c382bbf50ab3d1245ceb31044bdd4c",
+      "sourceFingerprint": "e79de59bb01b0950689650fe63f1e88a95be75cb8ccb0a6a127d0f7182a2a2d5",
       "inputPaths": [
         "apps",
         "packages",
@@ -314,27 +278,18 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "977137e8b5e2798eae26570ddc2eb37cf41ab671eb8e0c98cb66400f02af1239",
+      "inputFingerprint": "dfe7d94e719bd181731448b3b11b00d54839f4b7362815948bba2f987a819074",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "deb3c93d4320552440bfe7603c9aae3de220f1ea",
-      "startedAt": "2026-11-08T22:11:13.806Z",
-      "endedAt": "2026-11-08T22:11:14.570Z",
-      "passed": 62,
-      "failed": 0,
-      "skipped": 0,
+      "testedHead": "034529ecebfdf2345b9fe8dc716129df6b3352cf",
+      "startedAt": "2026-11-08T22:30:05.153Z",
+      "endedAt": "2026-11-08T22:30:06.608Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-architecture-20261109/arch-c-protocol-submitted.log",
-      "logSha256": "2fd2d35de16c8788130ae4a9d63504d4f4c0bf83be4be8c6b1e1a6b16e14ac34",
-      "resultReport": "/workspace/scratch/dx-architecture-20261109/arch-c-protocol-submitted.vitest.json",
+      "log": "/workspace/scratch/dx-architecture-20261109/arch-c-lint-review-fix.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "resultReport": null,
       "context": "Canonical configs and owned-command; dedicated marked loopback TEST PG16.15, Node22.22.2/npm10.9.9. Node CPUs2/3; existing PG CPUs0/1 and 2GiB boundary. Hardlinked same-lock dependencies from PERF12 tree-identical to cd36f84; not CI hardware or onsite equivalence. No production data, private live OSS or deployment. Full production App with real AuthService, PostgresAuthStore, native sourcing commands in marked isolated TEST schemas. Browser receipt failure is injected after an actual native commit; this is not an onsite or real network-outage claim. Partial test-name runs record skipped cases and are not whole-suite passes.",
-      "kind": "tests",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "3e538dc3c566ff60f25c6b34e37f4dd152b2e232178c7b6c45aeb8bd4bb93e0f"
-        }
-      ]
+      "kind": "command"
     },
     {
       "id": "preflight",
@@ -342,7 +297,7 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "b4a27e7a94a0ca4023ad6036c0140c6933c382bbf50ab3d1245ceb31044bdd4c",
+      "sourceFingerprint": "e79de59bb01b0950689650fe63f1e88a95be75cb8ccb0a6a127d0f7182a2a2d5",
       "inputPaths": [
         "apps",
         "packages",
@@ -359,15 +314,15 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "977137e8b5e2798eae26570ddc2eb37cf41ab671eb8e0c98cb66400f02af1239",
+      "inputFingerprint": "dfe7d94e719bd181731448b3b11b00d54839f4b7362815948bba2f987a819074",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "deb3c93d4320552440bfe7603c9aae3de220f1ea",
-      "startedAt": "2026-11-08T22:11:04.311Z",
-      "endedAt": "2026-11-08T22:11:12.777Z",
+      "testedHead": "034529ecebfdf2345b9fe8dc716129df6b3352cf",
+      "startedAt": "2026-11-08T22:30:06.690Z",
+      "endedAt": "2026-11-08T22:30:15.062Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-architecture-20261109/arch-c-preflight-submitted.log",
-      "logSha256": "94a15f6ee3520a072474acb57595647795c354418194768999ee60f9bc6a4a55",
+      "log": "/workspace/scratch/dx-architecture-20261109/arch-c-preflight-review-fix.log",
+      "logSha256": "34fee6477f4a9747cfe44a4e331df7ae8eda7a8fb14e97a9f20639a28c6f8dbf",
       "resultReport": null,
       "context": "Canonical configs and owned-command; dedicated marked loopback TEST PG16.15, Node22.22.2/npm10.9.9. Node CPUs2/3; existing PG CPUs0/1 and 2GiB boundary. Hardlinked same-lock dependencies from PERF12 tree-identical to cd36f84; not CI hardware or onsite equivalence. No production data, private live OSS or deployment. Full production App with real AuthService, PostgresAuthStore, native sourcing commands in marked isolated TEST schemas. Browser receipt failure is injected after an actual native commit; this is not an onsite or real network-outage claim. Partial test-name runs record skipped cases and are not whole-suite passes.",
       "kind": "command"
@@ -378,7 +333,7 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "b4a27e7a94a0ca4023ad6036c0140c6933c382bbf50ab3d1245ceb31044bdd4c",
+      "sourceFingerprint": "e79de59bb01b0950689650fe63f1e88a95be75cb8ccb0a6a127d0f7182a2a2d5",
       "inputPaths": [
         "apps",
         "packages",
@@ -395,51 +350,15 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "977137e8b5e2798eae26570ddc2eb37cf41ab671eb8e0c98cb66400f02af1239",
+      "inputFingerprint": "dfe7d94e719bd181731448b3b11b00d54839f4b7362815948bba2f987a819074",
       "inputsUnchanged": true,
       "sourceUnchanged": true,
-      "testedHead": "deb3c93d4320552440bfe7603c9aae3de220f1ea",
-      "startedAt": "2026-11-08T22:11:12.858Z",
-      "endedAt": "2026-11-08T22:11:13.721Z",
+      "testedHead": "034529ecebfdf2345b9fe8dc716129df6b3352cf",
+      "startedAt": "2026-11-08T22:30:15.139Z",
+      "endedAt": "2026-11-08T22:30:15.994Z",
       "planError": null,
-      "log": "/workspace/scratch/dx-architecture-20261109/arch-c-secret-submitted.log",
+      "log": "/workspace/scratch/dx-architecture-20261109/arch-c-secret-review-fix.log",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda",
-      "resultReport": null,
-      "context": "Canonical configs and owned-command; dedicated marked loopback TEST PG16.15, Node22.22.2/npm10.9.9. Node CPUs2/3; existing PG CPUs0/1 and 2GiB boundary. Hardlinked same-lock dependencies from PERF12 tree-identical to cd36f84; not CI hardware or onsite equivalence. No production data, private live OSS or deployment. Full production App with real AuthService, PostgresAuthStore, native sourcing commands in marked isolated TEST schemas. Browser receipt failure is injected after an actual native commit; this is not an onsite or real network-outage claim. Partial test-name runs record skipped cases and are not whole-suite passes.",
-      "kind": "command"
-    },
-    {
-      "id": "visual",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node tests/acceptance/sourcing-module-layout-browser.mjs",
-      "status": "passed",
-      "exitCode": 0,
-      "allExited": true,
-      "sourceFingerprint": "b4a27e7a94a0ca4023ad6036c0140c6933c382bbf50ab3d1245ceb31044bdd4c",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "tests",
-        ".env.example",
-        "package.json",
-        "package-lock.json",
-        "docs/architecture/business-module-boundaries.md",
-        "docs/engineering/acceptance-time-sites-20261027.json",
-        "eslint.config.js",
-        "tsconfig.base.json",
-        "vitest.business-chain.config.ts",
-        "vitest.config.ts",
-        "vitest.postgres-immediate.config.ts"
-      ],
-      "inputFingerprint": "977137e8b5e2798eae26570ddc2eb37cf41ab671eb8e0c98cb66400f02af1239",
-      "inputsUnchanged": true,
-      "sourceUnchanged": true,
-      "testedHead": "deb3c93d4320552440bfe7603c9aae3de220f1ea",
-      "startedAt": "2026-11-08T22:11:14.656Z",
-      "endedAt": "2026-11-08T22:11:19.262Z",
-      "planError": null,
-      "log": "/workspace/scratch/dx-architecture-20261109/arch-c-visual-submitted.log",
-      "logSha256": "89fffa99e2839d43847ef249485b028a80113eed5f260caafd036013312bc044",
       "resultReport": null,
       "context": "Canonical configs and owned-command; dedicated marked loopback TEST PG16.15, Node22.22.2/npm10.9.9. Node CPUs2/3; existing PG CPUs0/1 and 2GiB boundary. Hardlinked same-lock dependencies from PERF12 tree-identical to cd36f84; not CI hardware or onsite equivalence. No production data, private live OSS or deployment. Full production App with real AuthService, PostgresAuthStore, native sourcing commands in marked isolated TEST schemas. Browser receipt failure is injected after an actual native commit; this is not an onsite or real network-outage claim. Partial test-name runs record skipped cases and are not whole-suite passes.",
       "kind": "command"

@@ -93,4 +93,34 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(await page.locator('[aria-label="供应链总监逐款价格"] input').first().inputValue()).toBe("5");expect((await page.request.get(base+"/api/auth/me")).status()).toBe(200);
   }finally{await context.close();}
  });
+ it("recovers the native return modal internally after a committed response is lost, with exactly one transition",async()=>{
+  const {context,page}=await open(0);try{
+   const posts:{body:string|null;key:string|null}[]=[];
+   await page.route("**/api/sourcing/cases/"+ids[0]+"/return-to-merchandiser",async route=>{
+    posts.push({body:route.request().postData(),key:route.request().headers()["idempotency-key"]??null});const response=await route.fetch();
+    if(posts.length===1){expect(response.status()).toBe(200);await route.fulfill({status:503,contentType:"application/json",body:JSON.stringify({error:{code:"TEST_RETURN_RECEIPT_LOST",message:"TEST退回回执丢失"}})});}else await route.fulfill({response});
+   });
+   await page.getByRole("button",{name:"退回跟单修改",exact:true}).click();const modal=page.getByRole("dialog",{name:"退回跟单修改",exact:true});
+   await modal.getByLabel("退回原因 *",{exact:true}).fill("TEST原退回请求");await modal.getByRole("button",{name:"确认退回",exact:true}).click();await dismiss(page);
+   const recovery=modal.getByRole("button",{name:"核对上次提交结果",exact:true});await recovery.waitFor();expect(await recovery.isEnabled()).toBe(true);expect(await modal.locator("textarea").isDisabled()).toBe(true);
+   await page.screenshot({path:join(evidence,"native-return-modal-recovery-1165.png"),fullPage:true});await recovery.click();await modal.waitFor({state:"hidden"});await page.getByText("退回原因：TEST原退回请求",{exact:false}).waitFor();
+   expect(posts).toHaveLength(2);expect(posts[1]).toEqual(posts[0]);expect((await f.db.query("SELECT count(*)::int n FROM sourcing_case_transitions WHERE sourcing_case_id=$1 AND business_action='returned_to_merchandiser'",[ids[0]])).rows[0].n).toBe(1);
+  }finally{await context.close();}
+ });
+ it("recovers the native budget-correction modal internally with the same request and one stored correction",async()=>{
+  const {context,page}=await open(2);try{
+   const posts:{body:string|null;key:string|null}[]=[];
+   await page.route("**/api/sourcing/cases/"+ids[2]+"/budget-price-corrections",async route=>{
+    posts.push({body:route.request().postData(),key:route.request().headers()["idempotency-key"]??null});const response=await route.fetch();
+    if(posts.length===1){expect(response.status()).toBe(200);await route.fulfill({status:503,contentType:"application/json",body:JSON.stringify({error:{code:"TEST_BUDGET_RECEIPT_LOST",message:"TEST预算更正回执丢失"}})});}else await route.fulfill({response});
+   });
+   await page.getByText("查看订单款式、交期与预算",{exact:true}).click();await page.getByRole("button",{name:"更正",exact:true}).click();const modal=page.getByRole("dialog",{name:"更正预算价",exact:true});
+   await modal.getByLabel("新预算价",{exact:true}).fill("10.8");await modal.getByLabel("更正原因",{exact:true}).fill("TEST原预算更正请求");await modal.getByRole("button",{name:"确认更正",exact:true}).click();await dismiss(page);
+   const recovery=modal.getByRole("button",{name:"核对上次提交结果",exact:true});await recovery.waitFor();expect(await recovery.isEnabled()).toBe(true);expect(await modal.getByLabel("新预算价",{exact:true}).isDisabled()).toBe(true);
+   await page.screenshot({path:join(evidence,"native-budget-modal-recovery-1165.png"),fullPage:true});await recovery.click();await modal.waitFor({state:"hidden"});
+   expect(posts).toHaveLength(2);expect(posts[1]).toEqual(posts[0]);expect((await f.db.query("SELECT count(*)::int n FROM sourcing_budget_price_corrections WHERE sourcing_case_id=$1",[ids[2]])).rows[0].n).toBe(1);
+   expect((await f.db.query("SELECT new_unit_price::text price FROM sourcing_budget_price_corrections WHERE sourcing_case_id=$1",[ids[2]])).rows[0].price).toBe("10.8000");
+  }finally{await context.close();}
+ });
+
 });
