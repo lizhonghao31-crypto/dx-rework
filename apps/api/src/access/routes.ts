@@ -1,3 +1,4 @@
+import {PeopleDirectoryQuerySchema,PeopleDirectoryPageSchema,SupplierDirectoryQuerySchema,SupplierDirectoryPageSchema} from "@dx-rework/contracts/master-data-pages";
 import { requestValidationMessage } from "@dx-rework/contracts/validation-language";
 import {
   AssignRoleSchema,
@@ -286,6 +287,9 @@ export function registerAccessRoutes(app: FastifyInstance, dependencies: AccessH
       includeRevoked: query.includeRevoked === "true",
     });
   });
+
+  app.get("/master-data/people-page",async request=>PeopleDirectoryPageSchema.parse(await dependencies.service.peoplePage(parse(PeopleDirectoryQuerySchema,request.query),await actor(request,"people:read"))));
+  app.get("/master-data/supplier-page",async request=>{await supplierReadAccess(request);return SupplierDirectoryPageSchema.parse(await dependencies.service.supplierPage(parse(SupplierDirectoryQuerySchema,request.query)));});
 
   app.get("/master-data/people", async (request) => {
     const peopleActor = await actor(request, "people:read");

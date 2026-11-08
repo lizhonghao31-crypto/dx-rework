@@ -1,13 +1,15 @@
+import {PeopleDirectoryPageSchema,type PeopleDirectoryPage} from "@dx-rework/contracts/master-data-pages";
+import {useLiveSearch} from "./use-live-search.js";
 import {z} from 'zod';
 import {masterDataRequest} from './master-data-page.js';
 import {RequestFeedbackError,invalidResponseMessage,unknownWriteResult} from './request-response-feedback.js';
 import { NavigationIcon } from "./navigation-icons.js";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Shell } from "./components.js";
-import { ListPagination, usePaginatedItems } from "./list-pagination.js";
+import { ListPagination } from "./list-pagination.js";
 import { alertInApp, promptInApp } from "./system-dialog.js";
 import { SystemManagementNavigation } from "./system-management-navigation.js";
 import "./workforce-master-data-page.css";
@@ -32,6 +34,7 @@ type Person = Readonly<{
 async function json<T>(path: string, init: RequestInit = {}): Promise<T> {
   const method=init.method??'GET',value=await masterDataRequest<T>(path,init);
   try{
+   if(method==='GET'&&path.startsWith('master-data/people-page'))return PeopleDirectoryPageSchema.parse(value) as T;
    if(method==='GET')return z.array(z.object({personId:z.string(),personType:z.enum(['internal','temporary']),appUserId:z.string().nullable(),displayName:z.string(),temporaryCode:z.string().nullable(),temporaryRemark:z.string().nullable(),active:z.boolean(),aliases:z.array(z.object({aliasId:z.string(),alias:z.string(),revokedAt:z.string().nullable(),revokeReason:z.string().nullable()}).passthrough())}).passthrough()).parse(value) as T;
    if(method==='POST')z.object(path.endsWith('/aliases')?{aliasId:z.string()}:{personId:z.string()}).passthrough().parse(value);
    return value;
@@ -41,6 +44,12 @@ async function json<T>(path: string, init: RequestInit = {}): Promise<T> {
 export function WorkforceMasterDataPage() {
   const [people, setPeople] = useState<Person[]>([]);
   const [query, setQuery] = useState("");
+  const [appliedQuery,setAppliedQuery]=useState(""),[internalPageNo,setInternalPageNo]=useState(1),[temporaryPageNo,setTemporaryPageNo]=useState(1);
+  const [directory,setDirectory]=useState<PeopleDirectoryPage|null>(null);
+  const liveSearch=useLiveSearch(query,appliedQuery,value=>{setAppliedQuery(value);setInternalPageNo(1);setTemporaryPageNo(1);});
+  const queryRef=useRef({q:appliedQuery,internalPage:internalPageNo,temporaryPage:temporaryPageNo});queryRef.current={q:appliedQuery,internalPage:internalPageNo,temporaryPage:temporaryPageNo};
+  const readController=useRef<AbortController|null>(null);
+
   const [name, setName] = useState("");
   const [aliases, setAliases] = useState("");
   const [temporaryRemark, setTemporaryRemark] = useState("");
@@ -50,16 +59,17 @@ export function WorkforceMasterDataPage() {
   const working=useRef(false),version=useRef(0);const locked=busy||uncertain||refreshPending;
 
   const load = async (): Promise<void> => {
-    const current=++version.current;setReading(true);
-    try{const rows=await json<Person[]>("master-data/people?includeInactive=true&includeRevokedAliases=true");if(current!==version.current)return;setPeople(rows);setLoaded(true);setRefreshPending(false);}
+    const current=++version.current,controller=new AbortController();readController.current?.abort();readController.current=controller;setReading(true);setLoaded(false);
+    const selection=queryRef.current;
+    try{const value=await json<PeopleDirectoryPage>("master-data/people-page?"+new URLSearchParams({q:selection.q,internalPage:String(selection.internalPage),temporaryPage:String(selection.temporaryPage)}),{signal:controller.signal});if(current!==version.current||controller.signal.aborted)return;setDirectory(value);setPeople([...value.internal.items,...value.temporary.items]);setLoaded(true);setRefreshPending(false);}
     finally{if(current===version.current)setReading(false);}
   };
 
   useEffect(() => {
-    void load().catch((error: unknown) => {
-      setMessage(error instanceof Error ? error.message : "人员资料加载失败");
-    });return()=>{version.current++;};
-  }, []);
+    void load().catch((error: unknown) => {if(!(error instanceof DOMException&&error.name==="AbortError"))setMessage(error instanceof Error ? error.message : "人员资料加载失败");});
+    return()=>{version.current++;readController.current?.abort();};
+  }, [appliedQuery,internalPageNo,temporaryPageNo]);
+  useEffect(()=>{if(!loaded||!directory)return;const internalLast=Math.max(1,Math.ceil(directory.internal.totalCount/15)),temporaryLast=Math.max(1,Math.ceil(directory.temporary.totalCount/15));if(internalPageNo>internalLast)setInternalPageNo(internalLast);if(temporaryPageNo>temporaryLast)setTemporaryPageNo(temporaryLast);},[loaded,directory,internalPageNo,temporaryPageNo]);
 
   const run = async (work: () => Promise<void>, success: string,description=""): Promise<void> => {
     if (locked||working.current) return;
@@ -143,26 +153,9 @@ export function WorkforceMasterDataPage() {
     }, "临时工档案已停用，历史任务和工资快照不受影响。 ",`原输入：停用${person.displayName}；原因：${reason}`);
   };
 
-  const filteredPeople = useMemo(() => {
-    const needle = query.trim().toLocaleLowerCase("zh-CN");
-    if (!needle) return people;
-    return people.filter((person) => {
-      const activeAliases = person.aliases
-        .filter((alias) => alias.revokedAt === null)
-        .map((alias) => alias.alias)
-        .join(" ");
-      const type = person.personType === "temporary" ? "临时工" : "内部工人 内部员工";
-      const status = person.active ? "有效 可分配" : "停用";
-      return `${person.displayName} ${person.temporaryCode ?? ""} ${person.temporaryRemark ?? ""} ${activeAliases} ${type} ${status}`
-        .toLocaleLowerCase("zh-CN")
-        .includes(needle);
-    });
-  }, [people, query]);
-
-  const internal = filteredPeople.filter((person) => person.personType === "internal");
-  const temporary = filteredPeople.filter((person) => person.personType === "temporary");
-  const internalPage = usePaginatedItems(internal, query);
-  const temporaryPage = usePaginatedItems(temporary, query);
+  const internal=people.filter(person=>person.personType==="internal"),temporary=people.filter(person=>person.personType==="temporary");
+  const internalPage={items:internal,page:internalPageNo,totalPages:Math.max(1,Math.ceil((directory?.internal.totalCount??0)/15)),setPage:setInternalPageNo};
+  const temporaryPage={items:temporary,page:temporaryPageNo,totalPages:Math.max(1,Math.ceil((directory?.temporary.totalCount??0)/15)),setPage:setTemporaryPageNo};
 
   return (
     <Shell active="人员资料">
@@ -195,11 +188,12 @@ export function WorkforceMasterDataPage() {
               <h2>查找人员</h2>
               <p>按姓名、现场别名、人员类型或状态搜索；业务页面不展示系统内部 ID。</p>
             </div>
-            <StatusBadge tone="info">{loaded?`${formatBusinessDecimal(filteredPeople.length)} / ${formatBusinessDecimal(people.length)} 人`:"目录尚未读取"}</StatusBadge>
+            <StatusBadge tone="info">{loaded?`${formatBusinessDecimal(directory?.matchedCount??0)} / ${formatBusinessDecimal(directory?.totalCount??0)} 人`:"目录尚未读取"}</StatusBadge>
           </div>
           <InsetField
             label="搜索人员"
             type="search"
+            onCompositionStart={liveSearch.onCompositionStart} onCompositionEnd={liveSearch.onCompositionEnd}
             value={query}
             placeholder="输入姓名、临时编号、备注、别名、临时工或停用"
             onChange={(event) => setQuery(event.target.value)}
@@ -222,7 +216,7 @@ export function WorkforceMasterDataPage() {
                 </article>
               ))}
             </div>
-            <ListPagination page={internalPage.page} totalPages={internalPage.totalPages} onPageChange={internalPage.setPage} ariaLabel="内部工人分页" />
+            <ListPagination page={internalPage.page} totalPages={internalPage.totalPages} onPageChange={internalPage.setPage} busy={reading} ariaLabel="内部工人分页" />
           </Surface>
 
           <Surface>
@@ -244,7 +238,7 @@ export function WorkforceMasterDataPage() {
                 </article>
               ))}
             </div>
-            <ListPagination page={temporaryPage.page} totalPages={temporaryPage.totalPages} onPageChange={temporaryPage.setPage} ariaLabel="临时工分页" />
+            <ListPagination page={temporaryPage.page} totalPages={temporaryPage.totalPages} onPageChange={temporaryPage.setPage} busy={reading} ariaLabel="临时工分页" />
           </Surface>
         </div>
       </div>

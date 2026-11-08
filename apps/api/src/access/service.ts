@@ -1,3 +1,5 @@
+import {AccessDirectoryQuery} from "./directory-query.js";
+import type {PeopleDirectoryQuery,SupplierDirectoryQuery} from "@dx-rework/contracts/master-data-pages";
 import { createHash, randomUUID } from "node:crypto";
 import { CreateSupplierSchema, ReviseSupplierSchema, SUPPLIER_BATCH_COLUMNS, type SupplierBatchApply, type SupplierBatchCell, type SupplierBatchRow } from "@dx-rework/contracts";
 import { flagSupplierBatchDuplicates, planSupplierBatchRow, supplierBatchPayload, type SupplierBatchProfile } from "./supplier-batch-model.js";
@@ -296,8 +298,9 @@ export class AccessMasterDataService {
   }
 
   async listPeople(
-    input: { includeInactive?: boolean; includeRevokedAliases?: boolean } = {},
+    input: { includeInactive?: boolean; includeRevokedAliases?: boolean;personIds?:readonly string[] } = {},
     actor?: TrustedActorContext,
+    executor:Pool|PoolClient=this.database,
   ): Promise<Array<{
     personId: string;
     personType: string;
@@ -311,7 +314,7 @@ export class AccessMasterDataService {
     active: boolean;
     aliases: Array<{ aliasId: string; alias: string; revokedAt: string | null; revokeReason: string | null }>;
   }>> {
-    const result = await this.database.query<{
+    const result = await executor.query<{
       person_id: string;
       person_type: string;
       app_user_id: string | null;
@@ -341,10 +344,10 @@ export class AccessMasterDataService {
        FROM business_people p
        LEFT JOIN business_person_aliases a
          ON a.person_id=p.person_id AND ($2::boolean OR a.revoked_at IS NULL)
-       WHERE ($1::boolean OR p.active=true)
+       WHERE ($1::boolean OR p.active=true) ${input.personIds?"AND p.person_id=ANY($3::uuid[])":""}
        GROUP BY p.person_id
        ORDER BY p.display_name,p.person_id`,
-      [input.includeInactive ?? false, input.includeRevokedAliases ?? false],
+      [input.includeInactive ?? false, input.includeRevokedAliases ?? false,...(input.personIds?[input.personIds]:[])],
     );
     const canReadPrivateProfile = canReadTemporaryWorkerPrivateProfile(actor);
     return result.rows.map((row) => ({
@@ -362,6 +365,9 @@ export class AccessMasterDataService {
       aliases: row.aliases,
     }));
   }
+
+  peoplePage(input:PeopleDirectoryQuery,actor:TrustedActorContext){return new AccessDirectoryQuery(this.database,this).people(input,actor);}
+  supplierPage(input:SupplierDirectoryQuery){return new AccessDirectoryQuery(this.database,this).suppliers(input);}
 
   async listCrafts(query = "", includeInactive = false): Promise<ReturnType<typeof craftCatalogItem>[]> {
     const normalizedQuery = query.trim();
@@ -680,7 +686,7 @@ export class AccessMasterDataService {
     }));
   }
 
-  async listSuppliers(includeInactive = false): Promise<Array<{
+  async listSuppliers(includeInactive = false,supplierIds?:readonly string[],executor:Pool|PoolClient=this.database): Promise<Array<{
     supplierId: string;
     supplierCode: string;
     supplierType: string;
@@ -692,7 +698,7 @@ export class AccessMasterDataService {
     contractDataMissing: string[];
     changedAt: string;
   }>> {
-    const result = await this.database.query<{
+    const result = await executor.query<{
       supplier_id: string;
       supplier_code: string;
       supplier_type: string;
@@ -713,9 +719,9 @@ export class AccessMasterDataService {
               supported_crafts,daily_capacity,contract_entity_name,party_b_representative,
               payee_name,bank_account,bank_name,created_at
        FROM current_supplier_catalog
-       WHERE ($1::boolean OR active=true)
+       WHERE ($1::boolean OR active=true) ${supplierIds?"AND supplier_id=ANY($2::uuid[])":""}
        ORDER BY supplier_name,supplier_code`,
-      [includeInactive],
+      [includeInactive,...(supplierIds?[supplierIds]:[])],
     );
     return result.rows.map((row) => ({
       supplierId: row.supplier_id,

@@ -4,6 +4,8 @@ const normalize = (path) => path.trim().replaceAll("\\", "/");
 
 const TESTS = Object.freeze({
   access: [
+    "tests/integration/master-data-pages-postgres.test.ts",
+    "tests/integration/master-data-pages-native-browser-postgres.test.ts",
     "tests/integration/access-postgres.test.ts",
     "tests/integration/employee-access-lifecycle-postgres.test.ts",
     "tests/integration/full-business-chain-postgres.test.ts",
