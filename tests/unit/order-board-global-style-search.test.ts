@@ -20,11 +20,14 @@ describe("order board global style search", () => {
     expect(service).toContain("receipt.received_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')");
     expect(routes).toContain("status?: string;");
     expect(routes).toContain("request.query.status ?? \"all\"");
-    expect(page).toContain('mode: "range" | "search";');
+    expect(page).toContain("useReceivingBoardRead(targetBatchId,invalidTarget)");
+    const types = await readFile("apps/web/src/receiving-board-types.ts", "utf8");
+    expect(types).toContain('mode: "range" | "search";');
     expect(page).toContain('data?.mode === "search"');
     expect(page).toContain("全时间 · 不受所选日期影响");
-    expect(page).toContain("全时间范围内没有匹配的收货记录");
-    expect(page).toContain('params.set("status", status)');
+    const pageRead = await readFile("apps/web/src/receiving-board-read.ts", "utf8");
+    expect(pageRead).toContain("全时间范围内没有匹配的收货记录");
+    expect(pageRead).toContain('params.set("status", status)');
     expect(page).toContain('<option value="normal">正常</option>');
     expect(page).toContain('<option value="short">少收</option>');
     expect(page).toContain('<option value="extra">多收</option>');

@@ -1,121 +1,24 @@
-import {uploadAttachmentWithRecovery,toolsAttachmentApi,localFileScope} from "./attachment-upload-recovery.js";
-import { hasWarehouseReceivingRole } from "@dx-rework/contracts";
+import {useReceivingBoardRead,localDate} from "./receiving-board-read.js";
+import {useReceivingBoardEditSession} from "./receiving-board-edit-session.js";
+import type {BoardStatus,BoardRow,ReceivingAttachment,ReworkStatus} from "./receiving-board-types.js";
 import { Button } from "@dx-rework/ui";
 import {digitalDetailReturnUrl} from "./digital-detail-route.js";
 
-import { moduleCanWrite } from "./member-module-policy.js";
 import { NavigationIcon } from "./navigation-icons.js";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { KpiInstrument, StatusBadge, Surface } from "@dx-rework/ui";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
-import {
-  isImageAttachment,
-  hasInvalidDeclaredImageError,
-  isReceivingImageCandidate,
-  normalizeReceivingImageForUpload,
-  prepareAttachmentForUpload,
-} from "./attachment-upload.js";
-import { verifySession } from "./auth.js";
-import { shanghaiBusinessDate } from "./business-date.js";
-import { createClientRequestId } from "./client-request-id.js";
-import {createReceivingBoardMutation,receivingBoardRead} from "./receiving-board-request.js";
 import { ReceivingDialog } from "./receiving-dialog.js";
 import { ImageViewer } from "./image-viewer.js";
 import { ListPagination } from "./list-pagination.js";
 import { alertInApp } from "./system-dialog.js";
-import { useDebouncedValue } from "./use-debounced-value.js";
 import "./order-board-page.css";
 import "./legacy-ui.css";
 
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 
-type ReworkStatus = "draft" | "active" | "completed" | null;
-type BoardStatus = "all" | "normal" | "extra" | "short" | "multiple" | "receiving_difference" | "packing_difference" | "missing_packing" | "pending" | "handled" | "stale";
-
-type ReceivingHistoryItem = Readonly<{
-  receiptId: string;
-  receivingBatchId: string;
-  batchVersion: number;
-  sequence: number;
-  documentQuantity: number;
-  receiptDocumentQuantity: number;
-  receivingSource: "legacy" | "initial" | "backfill" | "jiashun" | "other_factory";
-  actualQuantity: number;
-  defectiveQuantity: number;
-  cumulativeActualQuantity: number;
-  differenceQuantity: number;
-  receivedAt: string;
-  receiverName: string;
-}>;
-type ReceivingAttachment = Readonly<{ attachmentId: string; filename: string }>;
-type DifferenceResolution = Readonly<{
-  resolutionId: string;
-  result: string;
-  handledBy: string;
-  handledAt: string;
-  attachments?: readonly ReceivingAttachment[];
-}>;
-
-type BoardRow = Readonly<{
-  receivingBatchId: string;
-  styleNo: string;
-  documentQuantity: number;
-  attachments: readonly ReceivingAttachment[];
-  priorActualQuantity: number;
-  actualQuantity: number;
-  defectiveQuantity: number;
-  currentActualQuantity: number;
-  currentDefectiveQuantity: number;
-  cumulativeActualQuantity: number;
-  differenceQuantity: number;
-  packingRevisionId: string | null;
-  packingQuantity: number | null;
-  packingDifferenceQuantity: number | null;
-  packingRecordedBy: string | null;
-  packingRecordedAt: string | null;
-  actualCutCount: number | null;
-  cuttingRecordedBy: string | null;
-  cuttingRecordedAt: string | null;
-  receivingDifferenceResolution: DifferenceResolution | null;
-  packingDifferenceResolution: DifferenceResolution | null;
-  staleResolution?: boolean;
-  resolutionHistory?: readonly (DifferenceResolution & { differenceType: "receiving" | "packing"; differenceQuantity: number })[];
-  receiptCount: number;
-  receivingHistory: readonly ReceivingHistoryItem[];
-  lastReceivedAt: string;
-  lastReceiverName: string;
-  reworkOrderId: string | null;
-  reworkStatus: ReworkStatus;
-  version: number;
-  rootCorrectable: boolean;
-  rootDeletable: boolean;
-  rootMutable: boolean;
-}>;
-
-type BoardResult = Readonly<{
-  date: string;
-  startDate: string;
-  endDate: string;
-  mode: "range" | "search";
-  status: BoardStatus;
-  insights?: Readonly<{ pendingCount: number; missingPackingCount: number; staleCount: number }>;
-  kpis: Readonly<{
-    orderCount: number;
-    receivedQuantity: number;
-    abnormalOrderCount: number;
-    differenceQuantity: number;
-    differenceRate: number;
-  }>;
-  rows: readonly BoardRow[];
-  page: number;
-  pageSize: 15;
-  totalCount: number;
-  totalPages: number;
-}>;
-
-const localDate = (): string => shanghaiBusinessDate();
 
 const dateTime = (value: string): string => new Intl.DateTimeFormat("zh-CN", {
   timeZone: "Asia/Shanghai",
@@ -157,181 +60,35 @@ const responseError = async (response: Response, fallback: string): Promise<stri
 const attachmentUrl = (attachmentId: string, mode: "preview" | "download"): string =>
   apiUrl(`tools/attachments/${attachmentId}/download?mode=${mode}`);
 
-const uploadReplacementImage = async (source: File): Promise<string> => {
-  const upload=async(file:File):Promise<string>=>(await uploadAttachmentWithRecovery(file,`receiving-replacement:${localFileScope(source)}`,toolsAttachmentApi,undefined,undefined,source)).attachmentId;
-  const prepared = isImageAttachment(source)
-    ? await prepareAttachmentForUpload(source)
-    : await normalizeReceivingImageForUpload(source);
-  try {
-    return await upload(prepared);
-  } catch (error) {
-    if (!hasInvalidDeclaredImageError(error)) {
-      throw error;
-    }
-    return upload(await normalizeReceivingImageForUpload(source));
-  }
-};
-
 export function OrderBoardPage() {
   const targetValues=new URLSearchParams(window.location.search).getAll("receivingBatchId");
   const targetBatchId=targetValues[0];
   const invalidTarget=targetValues.length>1||Boolean(targetValues.length&&!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(targetBatchId??""));
   const motherReturn=digitalDetailReturnUrl(new URLSearchParams(window.location.search).get("returnTo"),import.meta.env.BASE_URL);
-  const [startDate, setStartDate] = useState(localDate);
-  const [endDate, setEndDate] = useState(localDate);
-  const [query, setQuery] = useState("");
-  const [status, setStatus] = useState<BoardStatus>("all");
-  const debouncedQuery = useDebouncedValue(query, 180);
-  const [data, setData] = useState<BoardResult | null>(null);
-  const [message, setMessage] = useState("正在加载订单回货…");
-  const [pageLoading, setPageLoading] = useState(false);
-  const [canReceive, setCanReceive] = useState(false);
-  const [canInitiate, setCanInitiate] = useState(false);
-  const [canInitiateFinishing, setCanInitiateFinishing] = useState(false);
-  const [canExport, setCanExport] = useState(false);
-  const [canResolveDifferences, setCanResolveDifferences] = useState(false);
-  const [canManagePacking, setCanManagePacking] = useState(false);
-  const [isRoot, setIsRoot] = useState(false);
-  const [refreshToken, setRefreshToken] = useState(0);
-  const [page, setPage] = useState(1);
-  const [expandedRows, setExpandedRows] = useState<ReadonlySet<string>>(() => new Set());
-  const [editing, setEditing] = useState<BoardRow | null>(null);
-  const [correctingReceipt, setCorrectingReceipt] = useState<ReceivingHistoryItem | null>(null);
-  const [deleting, setDeleting] = useState<BoardRow | null>(null);
-  const [editStyleNo, setEditStyleNo] = useState("");
-  const [editDocumentQuantity, setEditDocumentQuantity] = useState("");
-  const [editActualQuantity, setEditActualQuantity] = useState("");
-  const [editDefectiveQuantity, setEditDefectiveQuantity] = useState("");
-  const [editImages, setEditImages] = useState<readonly File[]>([]);
-  const [receiptSource, setReceiptSource] = useState<"" | "jiashun" | "other_factory">("");
-  const [receiptDocumentQuantity, setReceiptDocumentQuantity] = useState("");
-  const [receiptActualQuantity, setReceiptActualQuantity] = useState("");
-  const [receiptDefectiveQuantity, setReceiptDefectiveQuantity] = useState("");
-  const [readFailed,setReadFailed]=useState(false);
-  const [mutationBusy, setMutationBusy] = useState(false);
-  const boardMutation=useRef(createReceivingBoardMutation());
-  const [mutationUnknown,setMutationUnknown]=useState(false);
-  const [mutationMessage, setMutationMessage] = useState("");
+  const {
+    startDate,setStartDate,endDate,setEndDate,query,setQuery,
+    status,setStatus,debouncedQuery,data,message,pageLoading,
+    canReceive,canInitiate,canInitiateFinishing,canExport,canResolveDifferences,canManagePacking,
+    isRoot,setRefreshToken,setPage,expandedRows,readFailed,resetPagination,
+    toggleHistory
+  } = useReceivingBoardRead(targetBatchId,invalidTarget);
+  const {
+    editing,setEditing,correctingReceipt,setCorrectingReceipt,deleting,setDeleting,
+    editStyleNo,setEditStyleNo,editDocumentQuantity,setEditDocumentQuantity,editActualQuantity,setEditActualQuantity,
+    editDefectiveQuantity,setEditDefectiveQuantity,editImages,setEditImages,receiptSource,setReceiptSource,
+    receiptDocumentQuantity,setReceiptDocumentQuantity,receiptActualQuantity,setReceiptActualQuantity,receiptDefectiveQuantity,setReceiptDefectiveQuantity,
+    mutationBusy,boardMutation,mutationUnknown,mutationMessage,setMutationMessage,packingEditing,
+    setPackingEditing,packingQuantity,setPackingQuantity,differenceEditing,differenceResult,setDifferenceResult,
+    differenceImages,closeDifference,selectDifferenceImages,openPacking,submitPacking,openDifference,
+    submitDifference,openEdit,openReceiptCorrection,submitReceiptCorrection,submitCorrection,confirmDelete,
+    recoveryActions,removeDifferenceImage
+  } = useReceivingBoardEditSession(setRefreshToken);
   const [exportBusy, setExportBusy] = useState(false);
-  const [packingEditing, setPackingEditing] = useState<BoardRow | null>(null);
-  const [packingQuantity, setPackingQuantity] = useState("");
-  const [packingRequestKey, setPackingRequestKey] = useState("");
-  const [differenceEditing, setDifferenceEditing] = useState<Readonly<{
-    row: BoardRow;
-    type: "receiving" | "packing";
-    resolution: DifferenceResolution | null;
-  }> | null>(null);
-  const [differenceResult, setDifferenceResult] = useState("");
-  const [differenceRequestKey, setDifferenceRequestKey] = useState("");
-  const [differenceImages, setDifferenceImages] = useState<readonly { file: File; previewUrl: string }[]>([]);
-  const differenceUploaded = useRef(new Map<File, string>());
-  const differencePreviewUrls = useRef(new Set<string>());
-  const differenceSubmitting = useRef(false);
-  useEffect(() => {
-    const urls = differencePreviewUrls.current;
-    return () => { for (const url of urls) URL.revokeObjectURL(url); };
-  }, []);
-  const clearDifferenceImages = () => {
-    for (const url of differencePreviewUrls.current) URL.revokeObjectURL(url);
-    differencePreviewUrls.current.clear();
-    differenceUploaded.current.clear();
-    setDifferenceImages([]);
-  };
-  const closeDifference = () => {
-    if (differenceSubmitting.current) return;
-    clearDifferenceImages();
-    setDifferenceEditing(null);
-  };
-  const selectDifferenceImages = (files: FileList | null) => {
-    if (!files?.length || mutationBusy) return;
-    const selected = Array.from(files);
-    if (differenceImages.length + selected.length > 3) { setMutationMessage("处理凭证最多3张"); return; }
-    if (selected.some((file) => !isReceivingImageCandidate(file))) { setMutationMessage("请选择JPEG、PNG、WebP图片"); return; }
-    const additions = selected.map((file) => {
-      const previewUrl = URL.createObjectURL(file);
-      differencePreviewUrls.current.add(previewUrl);
-      return { file, previewUrl };
-    });
-    setDifferenceImages((current) => [...current, ...additions]);
-    setMutationMessage("");
-  };
   const [attachmentViewer, setAttachmentViewer] = useState<Readonly<{
     attachments: readonly ReceivingAttachment[];
     index: number;
     title?: string;
   }> | null>(null);
-
-  const resetPagination = () => {
-    setPage(1);
-  };
-
-  useEffect(() => {
-    let active = true;
-    void verifySession()
-      .then((session) => {
-        if (!active || session === "denied" || session.status !== "authorized") return;
-        const isRoot = session.user.isRoot === true;
-        const roles = session.user.businessRoles ?? [];
-        const capabilities = session.user.capabilities;
-        const warehouseReceiver = hasWarehouseReceivingRole(roles)
-          && capabilities.includes("receiving:create");
-        const qualityControl = roles.includes("quality_control")
-          && capabilities.includes("rework:initiate");
-        setCanReceive(isRoot || warehouseReceiver);
-        setCanInitiate(moduleCanWrite(session.user, "rework") && (isRoot || roles.includes("owner_group") || qualityControl));
-        setCanInitiateFinishing(moduleCanWrite(session.user, "rework") && (isRoot || roles.includes("owner_group")
-          || (roles.includes("tail_supervisor") && capabilities.includes("process:configure"))));
-        setCanExport(isRoot || capabilities.includes("receiving:export"));
-        setCanResolveDifferences(isRoot || (
-          roles.includes("order_merchandiser") && capabilities.includes("receiving:resolve_difference")
-        ));
-        setCanManagePacking(isRoot || (
-          hasWarehouseReceivingRole(roles) && capabilities.includes("receiving:packing_manage")
-        ));
-        setIsRoot(isRoot);
-      })
-      .catch(() => {
-        if (!active) return;
-        setCanReceive(false);
-        setCanInitiate(false);
-        setCanInitiateFinishing(false);
-        setCanExport(false);
-        setCanResolveDifferences(false);
-        setCanManagePacking(false);
-        setIsRoot(false);
-      });
-    return () => { active = false; };
-  }, []);
-
-  useEffect(() => {
-    let active = true;
-    if(invalidTarget){setData(null);setMessage("收货批次链接无效，请返回来源订单");return;}
-    setPageLoading(true);setReadFailed(false);
-    const params = new URLSearchParams({ startDate, endDate });
-    params.set("status", status);
-    params.set("page", String(page));
-    if(targetBatchId){params.set("receivingBatchId",targetBatchId);params.set("status","all");params.set("page","1");}
-    if (debouncedQuery.trim()) params.set("q", debouncedQuery.trim().toUpperCase());
-    void receivingBoardRead<BoardResult>(apiUrl(`receiving/board?${params.toString()}`))
-      .then((body) => {
-        if (!active) return;
-        setData(body);
-        setMessage(body.rows.length
-          ? ""
-          : body.mode === "search"
-            ? "全时间范围内没有匹配的收货记录"
-            : "选中日期内没有收货记录");
-      })
-      .catch((error:unknown) => {
-        if (!active) return;
-        setData(null);setReadFailed(true);
-        setMessage(error instanceof Error?error.message:"订单回货加载失败，请刷新后重试");
-      })
-      .finally(() => {
-        if (active) setPageLoading(false);
-      });
-    return () => { active = false; };
-  }, [startDate, endDate, debouncedQuery, status, page, refreshToken, targetBatchId, invalidTarget]);
 
   const kpis = !pageLoading&&!readFailed&&!invalidTarget ? data?.kpis : undefined;
   const kpiUnavailable = pageLoading ? "正在读取，暂不计算" : "数据未读到，暂不计算";
@@ -369,111 +126,6 @@ export function OrderBoardPage() {
     }
   };
 
-  const openPacking = (row: BoardRow) => {
-    if(boardMutation.current.hasUnknown()){setMutationMessage("原提交结果尚未确认，请先核对原提交或仅重新读取记录；不能开始另一笔修改");return;}
-    setDifferenceEditing(null);
-    setPackingEditing(row);
-    setPackingQuantity(row.packingQuantity === null ? "" : String(row.packingQuantity));
-    setPackingRequestKey(createClientRequestId());
-    setMutationMessage("");
-  };
-
-  const submitPacking = async () => {
-    if (!packingEditing || mutationBusy || boardMutation.current.hasUnknown()) return;
-    const value = Number(packingQuantity);
-    if (!Number.isInteger(value) || value < 0 || value > 10_000_000) {
-      setMutationMessage("装箱数量必须是0到10000000之间的整数");
-      return;
-    }
-    setMutationBusy(true);
-    setMutationMessage("");
-    try {
-      await boardMutation.current.submit('packing',apiUrl(`receiving/batches/${packingEditing.receivingBatchId}/packing-revisions`), {
-        method: "POST",
-        credentials: "include",
-        headers: { "content-type": "application/json", "idempotency-key": packingRequestKey },
-        body: JSON.stringify({
-          expectedVersion: packingEditing.version,
-          expectedPackingRevisionId: packingEditing.packingRevisionId,
-          packingQuantity: value,
-        }),
-      });
-      setPackingEditing(null);
-      setMutationUnknown(false);
-      setRefreshToken((current) => current + 1);
-      setMutationMessage("装箱数量已保存");
-    } catch (error) {
-      setMutationUnknown(boardMutation.current.hasUnknown());
-      const text = error instanceof Error ? error.message : "装箱数量保存失败";
-      setMutationMessage(text);
-    } finally {
-      setMutationBusy(false);
-    }
-  };
-
-  const openDifference = (row: BoardRow, type: "receiving" | "packing") => {
-    if(boardMutation.current.hasUnknown()){setMutationMessage("原提交结果尚未确认，请先核对原提交或仅重新读取记录；不能开始另一笔修改");return;}
-    const resolution = type === "receiving"
-      ? row.receivingDifferenceResolution
-      : row.packingDifferenceResolution;
-    setPackingEditing(null);
-    clearDifferenceImages();
-    setDifferenceEditing({ row, type, resolution });
-    setDifferenceResult("");
-    setDifferenceRequestKey(createClientRequestId());
-    setMutationMessage("");
-  };
-
-  const submitDifference = async () => {
-    if (!differenceEditing || differenceEditing.resolution || mutationBusy || differenceSubmitting.current || boardMutation.current.hasUnknown()) return;
-    const result = differenceResult.trim();
-    if (!result || result.length > 500) {
-      setMutationMessage("处理结果不能为空且不能超过500个字符");
-      return;
-    }
-    differenceSubmitting.current = true;
-    setMutationBusy(true);
-    setMutationMessage("");
-    try {
-      const attachmentIds: string[] = [];
-      for (const image of differenceImages) {
-        let attachmentId = differenceUploaded.current.get(image.file);
-        if (!attachmentId) {
-          attachmentId = await uploadReplacementImage(image.file);
-          differenceUploaded.current.set(image.file, attachmentId);
-        }
-        attachmentIds.push(attachmentId);
-      }
-      const row = differenceEditing.row;
-      await boardMutation.current.submit('difference',apiUrl(`receiving/batches/${row.receivingBatchId}/difference-resolutions`), {
-        method: "POST",
-        credentials: "include",
-        headers: { "content-type": "application/json", "idempotency-key": differenceRequestKey },
-        body: JSON.stringify({
-          expectedVersion: row.version,
-          expectedDocumentQuantity: row.documentQuantity,
-          expectedActualQuantity: row.cumulativeActualQuantity,
-          expectedPackingRevisionId: row.packingRevisionId,
-          differenceType: differenceEditing.type,
-          result,
-          ...(attachmentIds.length ? { attachmentIds } : {}),
-        }),
-      });
-      clearDifferenceImages();
-      setDifferenceEditing(null);
-      setMutationUnknown(false);
-      setRefreshToken((current) => current + 1);
-      setMutationMessage("差异处理结果已保存");
-    } catch (error) {
-      setMutationUnknown(boardMutation.current.hasUnknown());
-      const text = error instanceof Error ? error.message : "差异处理提交失败";
-      setMutationMessage(text);
-    } finally {
-      differenceSubmitting.current = false;
-      setMutationBusy(false);
-    }
-  };
-
   const reworkControl = (row: BoardRow) => {
     const className = "order-board-rework-link";
     const label = reworkLabel(row.reworkStatus);
@@ -489,18 +141,6 @@ export function OrderBoardPage() {
       return <a className={className} href={pageUrl(`ui/tasks/${row.reworkOrderId}`)}>{label}</a>;
     }
     return <span className={`${className} is-readonly`}>{label}</span>;
-  };
-
-  const openEdit = (row: BoardRow) => {
-    if(boardMutation.current.hasUnknown()){setMutationMessage("原提交结果尚未确认，请先核对原提交或仅重新读取记录；不能开始另一笔修改");return;}
-    setDeleting(null);
-    setEditing(row);
-    setEditStyleNo(row.styleNo);
-    setEditDocumentQuantity(String(row.documentQuantity));
-    setEditActualQuantity(String(row.currentActualQuantity));
-    setEditDefectiveQuantity(String(row.currentDefectiveQuantity));
-    setEditImages([]);
-    setMutationMessage("");
   };
 
   const rootControls = (row: BoardRow, mobile: boolean) => {
@@ -542,143 +182,6 @@ export function OrderBoardPage() {
       {value !== 0 && !resolution && canHandle && !liveOperationSnapshot ? <small>历史只读</small> : null}
     </>;
   };
-
-  const toggleHistory = (receivingBatchId: string) => {
-    setExpandedRows((current) => {
-      const next = new Set(current);
-      if (next.has(receivingBatchId)) next.delete(receivingBatchId);
-      else next.add(receivingBatchId);
-      return next;
-    });
-  };
-
-  const openReceiptCorrection = (item: ReceivingHistoryItem) => {
-    if(boardMutation.current.hasUnknown()){setMutationMessage("原提交结果尚未确认，请先核对原提交或仅重新读取记录；不能开始另一笔修改");return;}
-    setEditing(null);
-    setDeleting(null);
-    setCorrectingReceipt(item);
-    setReceiptSource(
-      item.receivingSource === "jiashun" || item.receivingSource === "other_factory"
-        ? item.receivingSource
-        : "",
-    );
-    setReceiptDocumentQuantity(String(item.receiptDocumentQuantity));
-    setReceiptActualQuantity(String(item.actualQuantity));
-    setReceiptDefectiveQuantity(String(item.defectiveQuantity));
-    setMutationMessage("");
-  };
-
-  const submitReceiptCorrection = async () => {
-    if (!correctingReceipt || mutationBusy || boardMutation.current.hasUnknown()) return;
-    if (Number(receiptDefectiveQuantity) > Number(receiptActualQuantity)) {
-      setMutationMessage("次品数量不能超过实际收货数量");
-      return;
-    }
-    setMutationBusy(true);
-    setMutationMessage("");
-    try {
-      await boardMutation.current.submit('receipt',apiUrl(`receiving/receipts/${correctingReceipt.receiptId}/corrections`), {
-        method: "POST",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          expectedVersion: correctingReceipt.batchVersion,
-          source: receiptSource,
-          documentQuantity: Number(receiptDocumentQuantity),
-          actualQuantity: Number(receiptActualQuantity),
-          defectiveQuantity: Number(receiptDefectiveQuantity),
-        }),
-      });
-      setCorrectingReceipt(null);
-      setMutationUnknown(false);
-      setRefreshToken((value) => value + 1);
-      setMutationMessage("本次收货已修正");
-    } catch (error) {
-      setMutationUnknown(boardMutation.current.hasUnknown());
-      setMutationMessage(error instanceof Error ? error.message : "收货记录修正失败");
-    } finally {
-      setMutationBusy(false);
-    }
-  };
-
-  const submitCorrection = async () => {
-    if (!editing || mutationBusy || boardMutation.current.hasUnknown()) return;
-    if (Number(editDefectiveQuantity) > Number(editActualQuantity)) {
-      setMutationMessage("次品数量不能超过实际收货数量");
-      return;
-    }
-    if (editImages.some((file) => !isReceivingImageCandidate(file))) {
-      setMutationMessage("请选择手机相册中的图片文件");
-      return;
-    }
-    setMutationBusy(true);
-    setMutationMessage("");
-    try {
-      const attachmentIds = editImages.length > 0
-        ? await Promise.all(editImages.map(uploadReplacementImage))
-        : undefined;
-      await boardMutation.current.submit('batch',apiUrl(`receiving/batches/${editing.receivingBatchId}`), {
-        method: "PATCH",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          expectedVersion: editing.version,
-          styleNo: editStyleNo,
-          documentQuantity: Number(editDocumentQuantity),
-          actualQuantity: Number(editActualQuantity),
-          defectiveQuantity: Number(editDefectiveQuantity),
-          ...(attachmentIds ? { attachmentIds } : {}),
-        }),
-      });
-      setEditing(null);
-      setMutationUnknown(false);
-      setRefreshToken((value) => value + 1);
-      setMutationMessage("收货订单已修改");
-    } catch (error) {
-      setMutationUnknown(boardMutation.current.hasUnknown());
-      setMutationMessage(error instanceof Error ? error.message : "收货订单修改失败");
-    } finally {
-      setMutationBusy(false);
-    }
-  };
-
-  const confirmDelete = async () => {
-    if (!deleting || mutationBusy || boardMutation.current.hasUnknown()) return;
-    setMutationBusy(true);
-    setMutationMessage("");
-    try {
-      await boardMutation.current.submit('delete',apiUrl(`receiving/batches/${deleting.receivingBatchId}`), {
-        method: "DELETE",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ expectedVersion: deleting.version }),
-      });
-      setDeleting(null);
-      setMutationUnknown(false);
-      setRefreshToken((value) => value + 1);
-      setMutationMessage("收货订单已删除");
-    } catch (error) {
-      setMutationUnknown(boardMutation.current.hasUnknown());
-      setMutationMessage(error instanceof Error ? error.message : "收货订单删除失败");
-    } finally {
-      setMutationBusy(false);
-    }
-  };
-
-  const retryOriginalMutation=async()=>{
-    if(mutationBusy)return;setMutationBusy(true);
-    try{const command=await boardMutation.current.retry();setMutationUnknown(false);
-      const belongs=(value:string)=>command.path.includes(`/${value}`);
-      if(command.kind==='packing')setPackingEditing(current=>current&&belongs(current.receivingBatchId)?null:current);
-      if(command.kind==='difference'){setDifferenceEditing(current=>current&&belongs(current.row.receivingBatchId)?null:current);clearDifferenceImages();}
-      if(command.kind==='receipt')setCorrectingReceipt(current=>current&&belongs(current.receiptId)?null:current);
-      if(command.kind==='batch')setEditing(current=>current&&belongs(current.receivingBatchId)?null:current);
-      if(command.kind==='delete')setDeleting(current=>current&&belongs(current.receivingBatchId)?null:current);
-      setMutationMessage('原提交已确认保存，正在重新读取回货记录；读取失败时仅重读，不重复提交。');setRefreshToken(value=>value+1);
-    }catch(error){setMutationUnknown(boardMutation.current.hasUnknown());setMutationMessage(error instanceof Error?error.message:'原提交结果仍未确认，请核对原记录');}
-    finally{setMutationBusy(false);}
-  };
-  const recoveryActions=mutationUnknown?<><button type="button" disabled={mutationBusy} onClick={()=>void retryOriginalMutation()}>使用原内容核对提交结果</button><button type="button" disabled={mutationBusy} onClick={()=>setRefreshToken(value=>value+1)}>仅重新读取回货记录</button><small>关闭窗口不代表撤销；读取结果不会自动当作原提交回执。</small></>:null;
   return <div className="order-board-page" data-legacy-ui="receiving-board">
     <div className="order-board-heading">
       <div className="order-board-heading__title">
@@ -951,10 +454,7 @@ export function OrderBoardPage() {
             {differenceImages.map((image) => <div key={image.previewUrl}>
               <img src={image.previewUrl} alt={image.file.name} />
               <button type="button" disabled={mutationBusy} onClick={() => {
-                URL.revokeObjectURL(image.previewUrl);
-                differencePreviewUrls.current.delete(image.previewUrl);
-                differenceUploaded.current.delete(image.file);
-                setDifferenceImages((current) => current.filter((item) => item !== image));
+                removeDifferenceImage(image);
               }}>移除</button>
             </div>)}
           </div>

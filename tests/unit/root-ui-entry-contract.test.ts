@@ -92,7 +92,9 @@ describe("zero-role Root UI entry contract", () => {
       readFile(new URL("../../apps/api/src/rework/v2-submission-service.ts", import.meta.url), "utf8"),
     ]);
 
-    expect(board).toContain('setCanInitiate(moduleCanWrite(session.user, "rework") && (isRoot || roles.includes("owner_group") || qualityControl))');
+    const boardRead = await readFile(new URL("../../apps/web/src/receiving-board-read.ts", import.meta.url), "utf8");
+    expect(board).toContain("useReceivingBoardRead(targetBatchId,invalidTarget)");
+    expect(boardRead).toContain('setCanInitiate(moduleCanWrite(session.user, "rework") && (isRoot || roles.includes("owner_group") || qualityControl))');
     expect(board).toContain('pageUrl("ui/qc/new")');
     expect(routes).toContain('actorRoles.push("root_superuser")');
     expect(routes).toContain('actorRoles.push("quality_control")');
