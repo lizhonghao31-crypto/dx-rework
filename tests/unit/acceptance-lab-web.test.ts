@@ -9,7 +9,10 @@ describe("acceptance lab controller UI", () => {
       readFile("apps/web/src/acceptance-lab-page.tsx", "utf8"),
       readFile("apps/web/src/components.tsx", "utf8"),
     ]);
-    expect(main).toContain('import { AcceptanceLabPage } from "./acceptance-lab-page.js"');
+    expect(main).toContain("lazyBusinessPage(()=>import('./acceptance-lab-page.js')");
+    expect(main).toContain('{shellOnError:false}');
+    expect(main).not.toMatch(/import\s*\{\s*AcceptanceLabPage\s*\}\s*from/);
+    expect(main).not.toContain('<AuthGate');
     expect(main).toContain('const acceptanceLabPath = `${basePath}/ui/acceptance-lab`');
     expect(main).toContain('? <AcceptanceLabPage />');
     expect(app).not.toContain("acceptance-lab");

@@ -1,40 +1,17 @@
-import {PatternHistoryPage} from './pattern-history-page.js';
-import {AuxiliaryCatalogPage} from "./auxiliary-catalog-page.js";
+import {lazyBusinessPage} from './lazy-business-page.js';
 import {auxiliaryCatalogRequirements} from "./auxiliary-catalog-access.js";
-import {CockpitProductionSettings} from "./cockpit-production-settings.js";
 import { ProductionWorkspace } from "@dx-rework/ui/production";
-import { DigitalAnalysisPage } from "./digital-analysis-page.js";
-import { DigitalCockpitPage } from "./digital-cockpit-page.js";
-import {DeliveryCalendarPage} from './delivery-calendar-page.js';
 import {deliveryReturnPath} from './delivery-calendar-model.js';
-import {DigitalQuotationPage} from './digital-quotation-panel.js';
-import { DigitalProductionPage } from "./digital-production-page.js";
-import { DigitalDesignerWorkspace } from "./digital-designer-workspace.js";
-import { DigitalPatternWorkspace } from "./digital-pattern-workspace.js";
 import { DevelopmentWorkspaceReturn } from "./development-workspace-return.js";
-import { PatternOrderCreatePage } from "./pattern-order-create-page.js";
-import { CuttingDetailPage, CuttingListPage } from "./cutting-page.js";
 import { cuttingPageRequirements } from "./cutting-access.js";
-import { SupplierOnboardingPage } from "./supplier-onboarding-page.js";
-import { PatternRoomOrdersPage, PatternRoomOrderDetailPage } from "./pattern-room-orders-page.js";
-import { PatternRoomPage } from "./pattern-room-page.js";
-import { PatternRoomPricesPage } from "./pattern-room-prices-page.js";
 import { patternRoomPriceRequirements, patternRoomOrderRequirements, patternRoomCreateRequirements } from "./pattern-room-access.js";
 import { patternPagePath } from "./pattern-order-query.js";
 import { financePageRequirements } from "./finance-access.js";
 import { installInternalNavigation } from "./internal-navigation.js";
-import { ProductionDashboardPage } from "./production-dashboard-page.js";
-import { ProductionDisplayWorkspace } from "./production-display-workspace.js";
-import { DigitalProductionWorkspace } from "./digital-production-workspaces.js";
-import { SampleWorkspacePage } from "./sample-workspace-page.js";
-import { SampleHandoffPage } from "./sample-workflow-page.js";
-import { SampleCreatePage } from "./sample-create-page.js";
-import { ProductionReportingPage } from "./production-reporting-page.js";
 import { StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useRef, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
-import { Foundation } from "./pages.js";
 import {
   AuthGate,
   DeniedPage,
@@ -46,30 +23,6 @@ import {
   SessionBoundary,
 } from "./auth.js";
 import { Shell } from "./components.js";
-import { ReworkInitiationV2Form } from "./rework-v2-form.js";
-import { ReworkDetailPage } from "./rework-detail-page.js";
-import { ProcessConfigurationForm } from "./process-configuration-form.js";
-import { ResponsibilityQueuePage } from "./responsibility-queue-page.js";
-import { OwnFactoryApprovalQueuePage } from "./own-factory-approval-queue-page.js";
-import { ExternalResponsibilityQueuePage } from "./external-responsibility-queue-page.js";
-import { WorkReportingForm } from "./work-reporting-form.js";
-import { WagePage } from "./wages/wage-page.js";
-import { ManagementDashboardPage } from "./reporting/management-dashboard-page.js";
-import { ReworkQueryPage } from "./reporting/rework-query-page.js";
-import { ReportCenterPage } from "./reporting/report-center-page.js";
-import { WorkflowQueuePage } from "./reporting/workflow-queue-page.js";
-import { AdminConsolePage } from "./admin-console-page.js";
-import { ContractTemplateSettingsPage } from "./contract-template-settings-page.js";
-import { EmployeeAccessPage } from "./employee-access-page.js";
-import { MasterDataPage } from "./master-data-page.js";
-import { SupplierDirectoryPage, SupplierMaintenancePage } from "./supplier-center-page.js";
-import { WorkforceMasterDataPage } from "./workforce-master-data-page.js";
-import { MyTodosPage } from "./my-todos-page.js";
-import { ResponsibilityTaskPage } from "./responsibility-task-page.js";
-import { ReceivingPage } from "./receiving-page.js";
-import { OrderBoardPage } from "./order-board-page.js";
-import { FrontlineLandingPage } from "./frontline-landing-page.js";
-import { FrontlineTaskPage } from "./frontline-task-page.js";
 import {
   accessiblePlatformModules,
   DIGITAL_PRODUCTION_ROLES,
@@ -77,7 +30,59 @@ import {
   platformLandingTarget,
   shouldRedirectLegacyLandingToPlatformHome,
 } from "./platform-modules.js";
-import { SourcingWorkspacePage } from "./sourcing-workspace-page.js";
+
+const PatternHistoryPage=lazyBusinessPage(()=>import('./pattern-history-page.js').then(module=>({default:module.PatternHistoryPage})));
+const AuxiliaryCatalogPage=lazyBusinessPage(()=>import('./auxiliary-catalog-page.js').then(module=>({default:module.AuxiliaryCatalogPage})));
+const CockpitProductionSettings=lazyBusinessPage(()=>import('./cockpit-production-settings.js').then(module=>({default:module.CockpitProductionSettings})));
+const DigitalAnalysisPage=lazyBusinessPage(()=>import('./digital-analysis-page.js').then(module=>({default:module.DigitalAnalysisPage})));
+const DigitalCockpitPage=lazyBusinessPage(()=>import('./digital-cockpit-page.js').then(module=>({default:module.DigitalCockpitPage})));
+const DeliveryCalendarPage=lazyBusinessPage(()=>import('./delivery-calendar-page.js').then(module=>({default:module.DeliveryCalendarPage})));
+const DigitalQuotationPage=lazyBusinessPage(()=>import('./digital-quotation-panel.js').then(module=>({default:module.DigitalQuotationPage})));
+const DigitalProductionPage=lazyBusinessPage(()=>import('./digital-production-page.js').then(module=>({default:module.DigitalProductionPage})));
+const DigitalDesignerWorkspace=lazyBusinessPage(()=>import('./digital-designer-workspace.js').then(module=>({default:module.DigitalDesignerWorkspace})));
+const DigitalPatternWorkspace=lazyBusinessPage(()=>import('./digital-pattern-workspace.js').then(module=>({default:module.DigitalPatternWorkspace})));
+const PatternOrderCreatePage=lazyBusinessPage(()=>import('./pattern-order-create-page.js').then(module=>({default:module.PatternOrderCreatePage})));
+const CuttingDetailPage=lazyBusinessPage(()=>import('./cutting-page.js').then(module=>({default:module.CuttingDetailPage})));
+const CuttingListPage=lazyBusinessPage(()=>import('./cutting-page.js').then(module=>({default:module.CuttingListPage})));
+const SupplierOnboardingPage=lazyBusinessPage(()=>import('./supplier-onboarding-page.js').then(module=>({default:module.SupplierOnboardingPage})));
+const PatternRoomOrdersPage=lazyBusinessPage(()=>import('./pattern-room-orders-page.js').then(module=>({default:module.PatternRoomOrdersPage})));
+const PatternRoomOrderDetailPage=lazyBusinessPage(()=>import('./pattern-room-orders-page.js').then(module=>({default:module.PatternRoomOrderDetailPage})));
+const PatternRoomPage=lazyBusinessPage(()=>import('./pattern-room-page.js').then(module=>({default:module.PatternRoomPage})));
+const PatternRoomPricesPage=lazyBusinessPage(()=>import('./pattern-room-prices-page.js').then(module=>({default:module.PatternRoomPricesPage})));
+const ProductionDashboardPage=lazyBusinessPage(()=>import('./production-dashboard-page.js').then(module=>({default:module.ProductionDashboardPage})));
+const ProductionDisplayWorkspace=lazyBusinessPage(()=>import('./production-display-workspace.js').then(module=>({default:module.ProductionDisplayWorkspace})));
+const DigitalProductionWorkspace=lazyBusinessPage(()=>import('./digital-production-workspaces.js').then(module=>({default:module.DigitalProductionWorkspace})));
+const SampleWorkspacePage=lazyBusinessPage(()=>import('./sample-workspace-page.js').then(module=>({default:module.SampleWorkspacePage})));
+const SampleHandoffPage=lazyBusinessPage(()=>import('./sample-workflow-page.js').then(module=>({default:module.SampleHandoffPage})));
+const SampleCreatePage=lazyBusinessPage(()=>import('./sample-create-page.js').then(module=>({default:module.SampleCreatePage})));
+const ProductionReportingPage=lazyBusinessPage(()=>import('./production-reporting-page.js').then(module=>({default:module.ProductionReportingPage})));
+const Foundation=lazyBusinessPage(()=>import('./pages.js').then(module=>({default:module.Foundation})));
+const ReworkInitiationV2Form=lazyBusinessPage(()=>import('./rework-v2-form.js').then(module=>({default:module.ReworkInitiationV2Form})));
+const ReworkDetailPage=lazyBusinessPage(()=>import('./rework-detail-page.js').then(module=>({default:module.ReworkDetailPage})));
+const ProcessConfigurationForm=lazyBusinessPage(()=>import('./process-configuration-form.js').then(module=>({default:module.ProcessConfigurationForm})));
+const ResponsibilityQueuePage=lazyBusinessPage(()=>import('./responsibility-queue-page.js').then(module=>({default:module.ResponsibilityQueuePage})));
+const OwnFactoryApprovalQueuePage=lazyBusinessPage(()=>import('./own-factory-approval-queue-page.js').then(module=>({default:module.OwnFactoryApprovalQueuePage})));
+const ExternalResponsibilityQueuePage=lazyBusinessPage(()=>import('./external-responsibility-queue-page.js').then(module=>({default:module.ExternalResponsibilityQueuePage})));
+const WorkReportingForm=lazyBusinessPage(()=>import('./work-reporting-form.js').then(module=>({default:module.WorkReportingForm})));
+const WagePage=lazyBusinessPage(()=>import('./wages/wage-page.js').then(module=>({default:module.WagePage})));
+const ManagementDashboardPage=lazyBusinessPage(()=>import('./reporting/management-dashboard-page.js').then(module=>({default:module.ManagementDashboardPage})));
+const ReworkQueryPage=lazyBusinessPage(()=>import('./reporting/rework-query-page.js').then(module=>({default:module.ReworkQueryPage})));
+const ReportCenterPage=lazyBusinessPage(()=>import('./reporting/report-center-page.js').then(module=>({default:module.ReportCenterPage})));
+const WorkflowQueuePage=lazyBusinessPage(()=>import('./reporting/workflow-queue-page.js').then(module=>({default:module.WorkflowQueuePage})));
+const AdminConsolePage=lazyBusinessPage(()=>import('./admin-console-page.js').then(module=>({default:module.AdminConsolePage})));
+const ContractTemplateSettingsPage=lazyBusinessPage(()=>import('./contract-template-settings-page.js').then(module=>({default:module.ContractTemplateSettingsPage})));
+const EmployeeAccessPage=lazyBusinessPage(()=>import('./employee-access-page.js').then(module=>({default:module.EmployeeAccessPage})));
+const MasterDataPage=lazyBusinessPage(()=>import('./master-data-page.js').then(module=>({default:module.MasterDataPage})));
+const SupplierDirectoryPage=lazyBusinessPage(()=>import('./supplier-center-page.js').then(module=>({default:module.SupplierDirectoryPage})));
+const SupplierMaintenancePage=lazyBusinessPage(()=>import('./supplier-center-page.js').then(module=>({default:module.SupplierMaintenancePage})));
+const WorkforceMasterDataPage=lazyBusinessPage(()=>import('./workforce-master-data-page.js').then(module=>({default:module.WorkforceMasterDataPage})));
+const MyTodosPage=lazyBusinessPage(()=>import('./my-todos-page.js').then(module=>({default:module.MyTodosPage})));
+const ResponsibilityTaskPage=lazyBusinessPage(()=>import('./responsibility-task-page.js').then(module=>({default:module.ResponsibilityTaskPage})));
+const ReceivingPage=lazyBusinessPage(()=>import('./receiving-page.js').then(module=>({default:module.ReceivingPage})));
+const OrderBoardPage=lazyBusinessPage(()=>import('./order-board-page.js').then(module=>({default:module.OrderBoardPage})));
+const FrontlineLandingPage=lazyBusinessPage(()=>import('./frontline-landing-page.js').then(module=>({default:module.FrontlineLandingPage})));
+const FrontlineTaskPage=lazyBusinessPage(()=>import('./frontline-task-page.js').then(module=>({default:module.FrontlineTaskPage})));
+const SourcingWorkspacePage=lazyBusinessPage(()=>import('./sourcing-workspace-page.js').then(module=>({default:module.SourcingWorkspacePage})));
 
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 

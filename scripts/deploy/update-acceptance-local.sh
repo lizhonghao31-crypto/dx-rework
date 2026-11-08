@@ -111,6 +111,7 @@ for key in OSS_REGION OSS_ENDPOINT OSS_BUCKET OSS_ACCESS_KEY_ID OSS_ACCESS_KEY_S
 echo '[4/5] Activate Acceptance generation'
 generation="$(ensure_generation "$sha")"
 ensure_active_aliases
+retain_previous_frontend_assets "$sha"
 atomic_link "$generation" "$DX_ROOT/active"
 # A started runtime may create new test data: never reuse an earlier backup on that basis.
 rm -f -- "$checkpoint"

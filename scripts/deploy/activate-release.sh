@@ -20,6 +20,7 @@ DATABASE_URL="${DATABASE_URL:?DATABASE_URL required}" node_exec \
   "$api/apps/api/src/platform/migration-manifest.json"
 
 old_sha="$(current_generation_sha || true)"
+old_asset_compat="$(previous_frontend_asset_target)"
 restore_previous="${DX_REWORK_ALLOW_PREVIOUS_RESTORE:-true}"
 
 restore() {
@@ -31,6 +32,7 @@ restore() {
       old_api="$DX_ROOT/releases/$old_sha"
       old_schema="$(manifest_field "$old_api/release-manifest.json" schemaVersion)"
       atomic_link "$DX_ROOT/generations/$old_sha" "$DX_ROOT/active"
+      restore_previous_frontend_assets "$old_asset_compat"
       if pm2 startOrReload "$old_api/infra/pm2/ecosystem.config.cjs" --only dx-rework-api && \
         DX_REWORK_SMOKE_LOCAL=true "$(dirname "$0")/smoke.sh" "$old_sha" "$old_schema"; then
         leave_release_maintenance
@@ -61,6 +63,7 @@ trap restore ERR EXIT INT TERM
 # in-memory API process are advanced, without reloading any other vhost.
 sudo -n nginx -t
 enter_release_maintenance
+retain_previous_frontend_assets "$sha"
 atomic_link "$generation" "$DX_ROOT/active"
 pm2 startOrReload "$api/infra/pm2/ecosystem.config.cjs" --only dx-rework-api
 DX_REWORK_SMOKE_LOCAL=true "$(dirname "$0")/smoke.sh" \

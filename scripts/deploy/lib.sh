@@ -262,6 +262,67 @@ current_generation_sha() {
   return 1
 }
 
+# Only the immediately previous verified public asset directory. This pointer
+# never modifies an immutable release, copies attachments or adds disk capacity.
+# Nginx compatibility locations use it only after the current asset returns404.
+assert_frontend_asset_target() {
+  local target="$1" release sha
+  case "$target" in
+    "$DX_ROOT/frontend/releases/"*/assets|"$DX_ROOT/frontend/source-releases/"*/assets) ;;
+    *) die 'previous frontend assets escaped release root' ;;
+  esac
+  release="${target%/assets}"
+  sha="${release##*/}"
+  require_sha "$sha"
+  [[ "$release" == "$DX_ROOT/frontend/releases/$sha" || "$release" == "$DX_ROOT/frontend/source-releases/$sha" ]] || die 'invalid previous frontend release identity'
+  [[ -d "$target" && ! -L "$target" && "$(assert_safe_path "$target")" == "$target" ]] || die 'invalid previous frontend assets'
+  assert_release "$release" "$sha"
+}
+
+previous_frontend_asset_target() {
+  local link="$DX_ROOT/frontend/previous-assets" target
+  if [[ ! -L "$link" ]]; then
+    [[ ! -e "$link" ]] || die 'previous frontend assets must be a symlink'
+    return 0
+  fi
+  target="$(readlink -f "$link" 2>/dev/null || true)"
+  assert_frontend_asset_target "$target"
+  printf '%s\n' "$target"
+}
+
+retain_previous_frontend_assets() {
+  local next="$1" previous target
+  require_sha "$next"
+  # Validate any existing compatibility pointer before replacing it.
+  previous_frontend_asset_target >/dev/null
+  # Source layout may leave a historical active/generations pointer behind.
+  # The frontend actually being served is the authority for either layout.
+  target="$(readlink -f "$DX_ROOT/frontend/current/assets" 2>/dev/null || true)"
+  # Older releases/test artifacts without an asset directory need no fallback.
+  [[ -d "$target" ]] || return 0
+  # Pre-existing source releases did not contain checksums. Their first update
+  # uses explicit browser refresh recovery; never invent verification evidence.
+  if [[ "$target" == "$DX_ROOT/frontend/source-releases/"*/assets && ! -f "${target%/assets}/SHA256SUMS" ]]; then
+    return 0
+  fi
+  assert_frontend_asset_target "$target"
+  previous="${target%/assets}"; previous="${previous##*/}"
+  [[ "$previous" != "$next" ]] || return 0
+  atomic_link "$target" "$DX_ROOT/frontend/previous-assets"
+}
+
+restore_previous_frontend_assets() {
+  local target="$1" link="$DX_ROOT/frontend/previous-assets"
+  previous_frontend_asset_target >/dev/null
+  if [[ -n "$target" ]]; then
+    assert_frontend_asset_target "$target"
+    atomic_link "$target" "$link"
+  elif [[ -L "$link" ]]; then
+    # Only this validated compatibility symlink; never an asset/release tree.
+    rm -f -- "$link"
+  fi
+}
+
 assert_active_release() {
   local expected_sha="$1" active_sha
   require_sha "$expected_sha"
