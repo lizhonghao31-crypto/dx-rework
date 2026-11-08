@@ -196,19 +196,20 @@ export class AliyunOssV4RestClient implements AliyunOssSdkClient {
     });
   }
 
-  async head(name: string): Promise<{
+  async head(name: string, signal?: AbortSignal): Promise<{
     res: { headers: Record<string, string | number | undefined> };
   }> {
     let headFailure: unknown;
     try {
       const response = await this.fetchImpl(
         this.presign(name, { method: "HEAD", expires: INTERNAL_REQUEST_TTL_SECONDS }),
-        { method: "HEAD" },
+        { method: "HEAD", ...(signal ? { signal } : {}) },
       );
       if (response.ok) return { res: { headers: this.responseHeaders(response) } };
       if (response.status === 404) this.ensureSuccess(response);
       headFailure = new AliyunOssHttpError(response.status);
     } catch (error) {
+      signal?.throwIfAborted();
       if (error instanceof AliyunOssHttpError && error.statusCode === 404) throw error;
       headFailure = error;
     }
@@ -219,7 +220,7 @@ export class AliyunOssV4RestClient implements AliyunOssSdkClient {
     try {
       const response = await this.fetchImpl(
         this.presign(name, { method: "GET", expires: INTERNAL_REQUEST_TTL_SECONDS }),
-        { method: "GET", headers: { range: "bytes=0-0" } },
+        { method: "GET", headers: { range: "bytes=0-0" }, ...(signal ? { signal } : {}) },
       );
       this.ensureSuccess(response);
       const headers = this.responseHeaders(response);
@@ -247,10 +248,10 @@ export class AliyunOssV4RestClient implements AliyunOssSdkClient {
     return Number.isSafeInteger(total) && total >= 0 ? total : undefined;
   }
 
-  async createReadStream(name: string): Promise<AsyncIterable<Uint8Array>> {
+  async createReadStream(name: string, signal?: AbortSignal): Promise<AsyncIterable<Uint8Array>> {
     const response = await this.fetchImpl(
       this.presign(name, { method: "GET", expires: INTERNAL_REQUEST_TTL_SECONDS }),
-      { method: "GET" },
+      { method: "GET", ...(signal ? { signal } : {}) },
     );
     this.ensureSuccess(response);
     if (!response.body) {
@@ -266,7 +267,7 @@ export class AliyunOssV4RestClient implements AliyunOssSdkClient {
   async putGeneratedObject(
     name: string,
     content: Uint8Array,
-    options: { mimeType: string; sha256: string },
+    options: { mimeType: string; sha256: string; signal?: AbortSignal },
   ): Promise<void> {
     const grant = await this.createPostObjectUploadGrant({
       expiration: new Date(this.now().getTime() + INTERNAL_REQUEST_TTL_SECONDS * 1000).toISOString(),
@@ -290,7 +291,8 @@ export class AliyunOssV4RestClient implements AliyunOssSdkClient {
     const form = new FormData();
     for (const [key, value] of Object.entries(grant.fields)) form.append(key, value);
     form.append("file", new Blob([Uint8Array.from(content)], { type: options.mimeType }), "contract.pdf");
-    const response = await this.fetchImpl(grant.uploadUrl, { method: "POST", body: form });
+    options.signal?.throwIfAborted();
+    const response = await this.fetchImpl(grant.uploadUrl, { method: "POST", body: form, ...(options.signal ? { signal: options.signal } : {}) });
     this.ensureSuccess(response);
     await response.body?.cancel();
   }

@@ -18,6 +18,7 @@ import {technicalEnrollment} from '../production-platform/development-technical-
 import { createPrivateObjectKey, ObjectStorageObjectNotFoundError, type ObjectStorage } from "./storage.js";
 import type { TrustedActorContext } from "./repositories.js";
 import { OperationEventRepository } from "./repositories.js";
+import {AttachmentImagePreviews,type PreviewSource} from './attachment-image-preview.js';
 
 const MIME_EXTENSIONS: Record<string, readonly string[]> = {
   "image/jpeg": ["jpg", "jpeg"],
@@ -51,13 +52,14 @@ export type AttachmentCleanupResult = Readonly<{
 
 export class AttachmentService {
   private readonly activeFinalizationsByActor = new Map<string, number>();
+  private readonly imagePreviews:AttachmentImagePreviews;
 
   constructor(
     private readonly pool: Pool,
     private readonly storage: ObjectStorage,
     private readonly options: { prefix: string; ttlSeconds: number; maxUploadBytes: number },
     private readonly events = new OperationEventRepository(),
-  ) {}
+  ) {this.imagePreviews=new AttachmentImagePreviews(storage,options.prefix,options.maxUploadBytes);}
 
   uploadLimits(): { maxUploadBytes: number } { return { maxUploadBytes: this.options.maxUploadBytes }; }
 
@@ -229,7 +231,11 @@ export class AttachmentService {
     }
     this.activeFinalizationsByActor.set(actor.actorId, active + 1);
     try {
-      return await this.finalizePending(actor, row, attachmentId);
+      const result=await this.finalizePending(actor, row, attachmentId);
+      // The ready transaction and connection have already completed. A failed
+      // derivative must never undo or misreport a successful original upload.
+      await this.prepareImagePreview(row).catch(()=>null);
+      return result;
     } finally {
       const remaining = (this.activeFinalizationsByActor.get(actor.actorId) ?? 1) - 1;
       if (remaining <= 0) this.activeFinalizationsByActor.delete(actor.actorId);
@@ -399,9 +405,36 @@ export class AttachmentService {
     const row = await this.ownedOrBound(attachmentId, actor.actorId, authorizeBound);
     if (row.status !== "ready") throw new ApplicationError("ATTACHMENT_NOT_READY", "Attachment is not ready", 409);
     if (variant === "thumbnail" && !row.mime_type.startsWith("image/")) throw new ApplicationError("VALIDATION_ERROR", "该文件不是图片", 400);
-    const grant = await this.storageCall(() => this.storage.createDownloadGrant(row.object_key, {
+    return this.issueDownloadGrant(actor,row,row.object_key,disposition,variant);
+  }
+
+  async createImagePreviewDownloadIntent(
+    readActor:()=>Promise<TrustedActorContext>,
+    attachmentId:string,
+    authorizeBound:(actor:TrustedActorContext,row:Readonly<{attachmentId:string;entityType:string;entityId:string;uploadedBy:string;mimeType:string}>)=>Promise<boolean>,
+  ):Promise<DownloadIntentResponse>{
+    const actor=await readActor(),row=await this.ownedOrBound(attachmentId,actor.actorId,bound=>authorizeBound(actor,bound));
+    if(row.status!=='ready')throw new ApplicationError('ATTACHMENT_NOT_READY','Attachment is not ready',409);
+    if(!row.mime_type.startsWith('image/'))throw new ApplicationError('VALIDATION_ERROR','该文件不是图片',400);
+    const preview=await this.prepareImagePreview(row);
+    // A generation can take longer than a normal grant. Re-read the original
+    // session, scope and binding rather than caching any authorization result.
+    const latest=await readActor(),current=await this.ownedOrBound(attachmentId,latest.actorId,bound=>authorizeBound(latest,bound));
+    if(current.status!=='ready')throw new ApplicationError('ATTACHMENT_NOT_READY','Attachment is not ready',409);
+    const same=current.sha256===row.sha256&&current.object_key===row.object_key;
+    return this.issueDownloadGrant(latest,current,same&&preview?preview:current.object_key,'inline',undefined,Boolean(same&&preview));
+  }
+
+  private prepareImagePreview(row:AttachmentRow){
+    const source:PreviewSource={attachmentId:row.attachment_id,objectKey:row.object_key,mimeType:row.mime_type,sizeBytes:Number(row.size_bytes),sha256:row.sha256};
+    return this.imagePreviews.prepare(source,async()=>Boolean((await this.pool.query(`SELECT 1 FROM attachments WHERE attachment_id=$1 AND status='ready' AND object_key=$2 AND sha256=$3`,[source.attachmentId,source.objectKey,source.sha256])).rowCount));
+  }
+
+  private async issueDownloadGrant(actor:TrustedActorContext,row:AttachmentRow,objectKey:string,disposition:'attachment'|'inline',variant?:'thumbnail',preview=false):Promise<DownloadIntentResponse>{
+    const attachmentId=row.attachment_id;
+    const grant = await this.storageCall(() => this.storage.createDownloadGrant(objectKey, {
       ttlSeconds: this.options.ttlSeconds,
-      filename: row.original_filename,
+      filename:preview?'preview.webp':row.original_filename,
       disposition:row.mime_type==='application/octet-stream'?'attachment':disposition,
       ...(variant ? { variant } : {}),
     }));
@@ -469,8 +502,8 @@ export class AttachmentService {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
-      const locked = await client.query<Pick<AttachmentRow, "object_key">>(
-        `SELECT object_key
+      const locked = await client.query<Pick<AttachmentRow, "object_key"|"sha256">>(
+        `SELECT object_key,sha256
          FROM attachments
          WHERE attachment_id=$1
            AND entity_type IS NULL
@@ -494,6 +527,10 @@ export class AttachmentService {
         [attachmentId],
       );
       await client.query("COMMIT");
+      if(result.rowCount===1&&row.sha256){
+        try{await this.storage.deleteObject(this.imagePreviews.key({attachmentId,sha256:row.sha256}));}
+        catch{/* The original deletion already committed; a derived-cache failure cannot undo it. */}
+      }
       return result.rowCount === 1;
     } catch (error) {
       await client.query("ROLLBACK");

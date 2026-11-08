@@ -23,4 +23,9 @@ export function registerInstructionRoutes(app: FastifyInstance, dependencies: Di
   app.post(`${base}/upload-intents`,async request=>{const trusted=await actor(request);await service.authorizeUpload(trusted,id(request,"orderId"));const input=parse(CreateUploadIntentSchema,request.body);if(!["image/jpeg","image/png","image/webp"].includes(input.mimeType))throw new ApplicationError("VALIDATION_ERROR","制单图片仅支持 JPG、PNG、WebP",400);return attachments.createUploadIntent(trusted,input);});
   app.post(`${base}/attachments/:attachmentId/finalize`,async request=>{const trusted=await actor(request);await service.authorizeUpload(trusted,id(request,"orderId"));return attachments.finalize(trusted,id(request,"attachmentId"));});
   app.get(`${base}/attachments/:attachmentId`,async(request,reply)=>{const trusted=await actor(request),orderId=id(request,"orderId"),attachmentId=id(request,"attachmentId");const grant=await attachments.createDownloadIntent(trusted,attachmentId,()=>service.canDownload(trusted,orderId,attachmentId),"inline");return reply.redirect(grant.downloadUrl);});
+  app.get(`${base}/attachments/:attachmentId/preview`,async(request,reply)=>{
+    const orderId=id(request,'orderId'),attachmentId=id(request,'attachmentId');
+    const grant=await attachments.createImagePreviewDownloadIntent(()=>actor(request),attachmentId,(trusted)=>service.canDownload(trusted,orderId,attachmentId));
+    return reply.header('cache-control','private, no-store').redirect(grant.downloadUrl);
+  });
 }
