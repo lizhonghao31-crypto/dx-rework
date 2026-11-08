@@ -178,7 +178,7 @@ export const classifyFullGatePaths = (inputPaths) => {
     for(const suite of ['responsibility-queue-pages','responsibility-queue-pages-native-browser'])mappedTests.add('tests/integration/'+suite+'-postgres.test.ts');domains.add('responsibility-queue-pages');
   }
   if(paths.some(path=>/^apps\/web\/src\/sourcing-(?:workspace-page|detail-[^/]+|price-reapplication)\.tsx?$/.test(path)||path==='tests/integration/sourcing-detail-native-browser-postgres.test.ts')){mappedTests.add('tests/integration/sourcing-detail-native-browser-postgres.test.ts');domains.add('sourcing-detail-browser');}
-  if(paths.some(path=>['apps/api/src/sourcing/sourcing-service.ts','tests/integration/sourcing-page-details-postgres.test.ts'].includes(path))){
+  if(paths.some(path=>['apps/api/src/sourcing/sourcing-service.ts','apps/api/src/sourcing/sourcing-case-read.ts','apps/api/src/sourcing/sourcing-case-mapping.ts','tests/integration/sourcing-page-details-postgres.test.ts'].includes(path))){
     for(const suite of ['sourcing-page-details','contract-return-clock','contract-return-routes-clock','contract-return-cycles'])mappedTests.add('tests/integration/'+suite+'-postgres.test.ts');domains.add('sourcing-page-details');
   }
   if(paths.some(path=>/^apps\/api\/src\/todos\/(?:service|selection|content-reads|global-search)\.ts$/.test(path)||path==='apps/api/src/production-platform/notification-service.ts')){

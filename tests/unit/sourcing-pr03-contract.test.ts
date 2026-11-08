@@ -158,7 +158,8 @@ describe("sourcing PR03 contracts", () => {
     expect(migration).toContain("sourcing_case_lines_no_delete");
     expect(migration).toContain("daxingUnitPriceRecorded");
     expect(migration).not.toContain("after_state ->> 'daxingUnitPrice'");
-    expect(service).toContain("canViewSourcingDaxingPrice(actor,row.effective_created_by===undefined?row.created_by:row.effective_created_by)");
+    expect(service).toContain('export {canViewSourcingDaxingPrice} from "./sourcing-case-mapping.js"');
+    expect(await readFile("apps/api/src/sourcing/sourcing-case-mapping.ts","utf8")).toContain("canViewSourcingDaxingPrice(actor,row.effective_created_by===undefined?row.created_by:row.effective_created_by)");
     expect(contracts).toContain("daxingUnitPrice: z.string().optional()");
     expect(contracts).not.toMatch(/RecordSourcingContractSchema[\s\S]{0,400}daxingUnitPrice/);
     expect(page).not.toContain("加工报价由 IE 首次填写");
