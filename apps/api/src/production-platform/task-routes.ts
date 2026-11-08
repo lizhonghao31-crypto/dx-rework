@@ -1,4 +1,5 @@
 import {SlaDraftGroupSchema,SlaDraftSaveSchema,SlaDraftDiscardSchema} from '@dx-rework/contracts/sla-settings-drafts';
+import {SlaHistoryQuerySchema,SlaCopyVersionSchema,SlaApplicationCandidatesQuerySchema} from '@dx-rework/contracts/sla-settings-history';
 import {DigitalSlaValuesSchema,DIGITAL_SLA_PARAMETERS} from '@dx-rework/contracts/digital-sla';
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
@@ -36,11 +37,15 @@ export function registerDigitalTaskRoutes(app: FastifyInstance, dependencies: Di
   app.post("/digital-production/tasks/:taskId/time-corrections", async request => service.correctTime(await actor(request), id(request), parse(DigitalTimeCorrectionSchema, request.body), key(request)));
   const standardDraft=z.object({expectedVersion:z.number().int().nonnegative(),values:DigitalSlaValuesSchema,reason:z.string().trim().min(1).max(1000)}).strict();
   const orderSelection=z.object({orderId:z.string().uuid(),configurationVersion:z.number().int().positive(),parameterKeys:z.array(z.string()).min(1).max(DIGITAL_SLA_PARAMETERS.length),reason:z.string().trim().min(1).max(1000)}).strict();
+  app.get('/digital-production/sla-settings/orders/candidates',async request=>service.slaApplicationCandidates(await actor(request),parse(SlaApplicationCandidatesQuerySchema,request.query)));
   app.post('/digital-production/sla-settings/orders/preview',async request=>service.previewSlaOrder(await actor(request),parse(orderSelection,request.body)));
   app.post('/digital-production/sla-settings/orders/apply',async request=>service.applySlaOrder(await actor(request),parse(orderSelection.extend({previewToken:z.string().max(512).regex(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/)}),request.body),parse(z.string().uuid(),key(request))));
   app.get('/digital-production/sla-settings/drafts',async request=>service.readSlaDraft(await actor(request),parse(z.object({group:SlaDraftGroupSchema}).strict(),request.query).group));
   app.post('/digital-production/sla-settings/drafts',async request=>service.saveSlaDraft(await actor(request),parse(SlaDraftSaveSchema,request.body),parse(z.string().uuid(),key(request))));
   app.post('/digital-production/sla-settings/drafts/discard',async request=>service.discardSlaDraft(await actor(request),parse(SlaDraftDiscardSchema,request.body),parse(z.string().uuid(),key(request))));
+  app.post('/digital-production/sla-settings/drafts/copy-version',async request=>service.copySlaVersion(await actor(request),parse(SlaCopyVersionSchema,request.body),parse(z.string().uuid(),key(request))));
+  app.get('/digital-production/sla-settings/history',async request=>service.slaHistory(await actor(request),parse(SlaHistoryQuerySchema,request.query)));
+  app.get('/digital-production/sla-settings/history/:version',async request=>service.slaHistoryVersion(await actor(request),parse(z.coerce.number().int().positive(),(request.params as Record<string,unknown>).version)));
   app.get('/digital-production/sla-settings',async request=>service.slaSettings(await actor(request),parse(z.object({version:z.coerce.number().int().positive().optional()}).strict(),request.query).version));
   app.post('/digital-production/sla-settings/calculation-preview',async request=>service.slaCalculationPreview(await actor(request),request.body));
   app.post('/digital-production/sla-settings/preview',async request=>service.previewSlaSettings(await actor(request),parse(standardDraft,request.body)));

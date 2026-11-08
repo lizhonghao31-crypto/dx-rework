@@ -1,4 +1,7 @@
+import type {SlaApplicationCandidatesQuery} from '@dx-rework/contracts/sla-settings-history';
 import {SlaSettingsDraftService} from './sla-settings-drafts.js';
+import {SlaSettingsHistoryService} from './sla-settings-history.js';
+import type {SlaHistoryQuery} from '@dx-rework/contracts/sla-settings-history';
 import type {SlaDraftGroup} from '@dx-rework/contracts/sla-settings-drafts';
 import {SlaCalculationService} from './sla-calculation-service.js';
 import {assertCurrentFactoryTask,isRetiredFactoryTask,FACTORY_RECEIPT_RETIREMENT} from './retired-factory-nodes.js';
@@ -458,6 +461,10 @@ export class DigitalProductionTaskService {
   async readSlaDraft(actor:TrustedActorContext,group:SlaDraftGroup){return new SlaSettingsDraftService(this.database).read(actor,group);}
   async saveSlaDraft(actor:TrustedActorContext,input:unknown,key:string){return new SlaSettingsDraftService(this.database).save(actor,input,key);}
   async discardSlaDraft(actor:TrustedActorContext,input:unknown,key:string){return new SlaSettingsDraftService(this.database).discard(actor,input,key);}
+  async copySlaVersion(actor:TrustedActorContext,input:unknown,key:string){return new SlaSettingsDraftService(this.database).copyVersion(actor,input,key);}
+  async slaHistory(actor:TrustedActorContext,input:SlaHistoryQuery){return new SlaSettingsHistoryService(this.database).list(actor,input);}
+  async slaApplicationCandidates(actor:TrustedActorContext,input:SlaApplicationCandidatesQuery){return new SlaSettingsHistoryService(this.database).candidates(actor,input);}
+  async slaHistoryVersion(actor:TrustedActorContext,version:number){return new SlaSettingsHistoryService(this.database).version(actor,version);}
   async slaSettings(actor:TrustedActorContext,version?:number){
     return this.transaction(client=>new SlaSettingsService(this.previewSecret).read(client,actor,version));
   }

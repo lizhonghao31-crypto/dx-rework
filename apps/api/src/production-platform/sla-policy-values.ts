@@ -29,6 +29,37 @@ export async function readSlaPolicyValues(client: Pick<PoolClient, "query">, sto
   return validateDigitalSlaValues(values);
 }
 
+/** A bounded set of selected historical standards shares one exact-reference
+ * read. The original per-standard reader and all its existing callers remain.
+ */
+export async function readSlaPolicyValuesMany(client:Pick<PoolClient,'query'>,stored:readonly unknown[]):Promise<DigitalSlaValues[]>{
+ const references=new Map<string,{nodeKey:string;version:number}>();
+ const prepared=stored.map(value=>{
+  if(!value||typeof value!=='object'||!('storage'in value))return {inline:validateDigitalSlaValues(value)};
+  const refs=value as References;if(refs.storage!=='policy_refs_v1'||!refs.policies||!refs.parameters)throw Error('Invalid SLA policy references');
+  for(const [key,ref]of Object.entries(refs.policies)){
+   const definition=DIGITAL_SLA_PARAMETERS.find(p=>p.key===key)?.defaultValue;
+   if(!definition||!['duration','included','estimate','unlimited','order_date'].includes(definition.kind)||ref.nodeKey!==slaPolicyKey(key)||!Number.isSafeInteger(ref.version)||ref.version<1||key in refs.parameters)throw Error('Invalid SLA policy reference');
+   references.set(JSON.stringify([ref.nodeKey,ref.version]),ref);
+  }
+  return {refs};
+ });
+ const keys=[...references.values()],rows=keys.length?(await client.query<{node_key:string;version:number;sla_seconds:string|null}>(`SELECT node_key,version,sla_seconds FROM digital_production_deadline_policies
+  WHERE (node_key,version) IN(SELECT * FROM unnest($1::text[],$2::integer[]))`,[keys.map(ref=>ref.nodeKey),keys.map(ref=>ref.version)])).rows:[];
+ const policies=new Map(rows.map(row=>[JSON.stringify([row.node_key,row.version]),row]));
+ return prepared.map(item=>{
+  if(item.inline)return item.inline;
+  const values:DigitalSlaValues={...item.refs!.parameters};
+  for(const [key,ref]of Object.entries(item.refs!.policies)){
+   const definition=DIGITAL_SLA_PARAMETERS.find(p=>p.key===key)!.defaultValue,row=policies.get(JSON.stringify([ref.nodeKey,ref.version]));
+   if(!row)throw Error(`Missing SLA policy: ${key}`);
+   if(definition.kind==='unlimited'||definition.kind==='order_date'){if(row.sla_seconds!==null)throw Error(`Unexpected SLA duration: ${key}`);values[key]={kind:definition.kind};}
+   else{if(row.sla_seconds===null)throw Error(`Missing SLA policy duration: ${key}`);values[key]={kind:definition.kind as 'duration'|'included'|'estimate',minutes:Number(row.sla_seconds)/60};}
+  }
+  return validateDigitalSlaValues(values);
+ });
+}
+
 /** Called inside the publication transaction, after taking the shared publication lock. */
 export async function storeSlaPolicyValues(client: PoolClient, values: DigitalSlaValues, actorId: string, reason: string): Promise<References> {
   const result: References = { storage: "policy_refs_v1", policies: {}, parameters: {} };

@@ -14,7 +14,7 @@ export type SlaDraftSave=z.infer<typeof SlaDraftSaveSchema>;
 export const SlaDraftDiscardSchema=z.object({group:SlaDraftGroupSchema,expectedDraftRevision:revision}).strict();
 const saved={revision:z.number().int().positive(),expectedVersion:revision,reason:z.string().max(1000),savedAt:z.iso.datetime({offset:true})};
 export const SlaSavedDraftSchema=z.discriminatedUnion('group',[
- z.object({...saved,group:z.literal('unified'),values:DigitalSlaValuesSchema,baselineValues:DigitalSlaValuesSchema}).strict(),
+ z.object({...saved,group:z.literal('unified'),sourceVersion:z.number().int().positive().optional(),values:DigitalSlaValuesSchema,baselineValues:DigitalSlaValuesSchema}).strict(),
  z.object({...saved,group:z.literal('development'),values:DevelopmentCycleValuesSchema,baselineValues:DevelopmentCycleValuesSchema}).strict(),
 ]);
 export type SlaSavedDraft=z.infer<typeof SlaSavedDraftSchema>;

@@ -211,6 +211,10 @@ export const classifyFullGatePaths = (inputPaths) => {
       for(const suite of ['sla-notification-preferences','digital-production-notifications','digital-production-notification-delivery'])mappedTests.add('tests/integration/'+suite+'-postgres.test.ts');
       domains.add('settings-notification-preferences');
     }
+    if (['apps/api/src/production-platform/sla-settings-history.ts','apps/api/src/production-platform/sla-policy-values.ts','apps/api/src/production-platform/sla-settings-drafts.ts','packages/contracts/src/sla-settings-history.ts','packages/contracts/src/sla-settings-drafts.ts','apps/api/migrations/0277_sla_draft_source_version.sql','tests/integration/m01-sla-history-postgres.test.ts'].includes(path)) {
+      mappedTests.add('tests/integration/m01-sla-history-postgres.test.ts');
+      domains.add('settings-history');
+    }
     if (['apps/api/src/production-platform/sla-settings-drafts.ts','apps/api/src/production-platform/sla-settings-service.ts','apps/api/src/production-platform/development-technical-settings.ts','packages/contracts/src/sla-settings-drafts.ts','apps/api/migrations/0276_sla_settings_drafts.sql','tests/integration/sla-settings-drafts-postgres.test.ts'].includes(path)) {
       mappedTests.add('tests/integration/sla-settings-drafts-postgres.test.ts');
       domains.add('settings-drafts');
