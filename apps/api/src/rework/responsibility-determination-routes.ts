@@ -1,3 +1,4 @@
+import {QueuePageQuerySchema} from "@dx-rework/contracts";
 import { requestValidationMessage } from "@dx-rework/contracts/validation-language";
 import {
   ReopenOrderResponsibilitySchema,
@@ -66,7 +67,11 @@ export function registerResponsibilityDeterminationRoutes(app: FastifyInstance, 
     const result=await dependencies.service.revisions.reopen(await actor(request,"responsibility:determine"),parse(ResponsibilityOrderParamsSchema,request.params).reworkOrderId,parse(ReopenOrderResponsibilitySchema,request.body),key(request));
     if(result.reused)reply.header("idempotency-replayed","true");return reply.code(201).send(result.value);
   });
-  app.get("/responsibility-determinations/queue", async (request) => ResponsibilityQueueResponseSchema.parse(await dependencies.service.listQueue(await actor(request, "responsibility:determine"))));
+  app.get("/responsibility-determinations/queue", async (request) => {
+    const currentActor=await actor(request,"responsibility:determine");
+    const query=parse(QueuePageQuerySchema,request.query);
+    return ResponsibilityQueueResponseSchema.parse(await (Object.keys(query).length ? dependencies.service.listQueue(currentActor,query) : dependencies.service.listQueue(currentActor)));
+  });
   app.get("/rework-orders/:reworkOrderId/responsibility-determination", async (request) => {
     const currentActor = await actor(request, "responsibility:determine");
     const result = await dependencies.service.get(currentActor, parse(ResponsibilityOrderParamsSchema, request.params).reworkOrderId);

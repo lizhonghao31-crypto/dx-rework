@@ -1,3 +1,5 @@
+import {QueuePageResponseFields} from './queue-page.js';
+export * from './queue-page.js';
 import { validationFieldLabel } from "./validation-language.js";
 import { z } from "zod";
 import { OtherCraftDescriptionSchema, SpecialProcessTypeSchema } from "./rework-special-process.js";
@@ -1376,6 +1378,7 @@ export const OwnFactoryApprovalQueueResponseSchema = z.object({
     ownFactoryTotalAmount: z.string(),
     canDecide: z.boolean(),
   }).strict()),
+  ...QueuePageResponseFields,
 }).strict();
 export type ApproveOwnFactoryApproval = z.infer<typeof ApproveOwnFactoryApprovalSchema>;
 export type RejectOwnFactoryApproval = z.infer<typeof RejectOwnFactoryApprovalSchema>;

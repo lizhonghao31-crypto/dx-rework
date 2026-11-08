@@ -10,7 +10,7 @@ import {ownedPostgresSchema,createOwnedPostgresSchema,readOwnedResources,SCHEMA_
 import {classifyFullGatePaths} from './full-gate-risk-map.mjs';
 import {worktreeSnapshot,inspectCompatibility} from '../check-main-release-compat.mjs';
 import {assertManagedSchemaCreation,resourceChangedPaths} from '../test-preflight.mjs';
-import {settingsBrowserRequired} from './prepare-settings-browser.mjs';
+import {settingsBrowserRequired,isNativeBrowserSuite} from './prepare-settings-browser.mjs';
 import {reconcileTimeInventory} from '../acceptance/time-site-inventory.mjs';
 import {testExecutionConfig} from '../test-execution-config.mjs';
 const identity={database:'dx_rework_ci',username:'dx_rework_test',databaseOid:'42',serverVersion:'160015',marker:'dx-rework-isolated-test-v1'};
@@ -164,4 +164,10 @@ test('short lead browser joins the original finite canonical plan and conditiona
  assert.equal(configForSuite(file),'vitest.business-chain.config.ts');
  const environment={BASE_SHA:'a'.repeat(40),DB_REQUIRED:'true',BUSINESS_CHAIN_SENSITIVE:'false',MIGRATION_SENSITIVE:'false',DEPLOYMENT_SENSITIVE:'false',MAPPED_POSTGRES_TESTS:file};assert.equal(settingsBrowserRequired(environment),true);assert.equal(settingsBrowserRequired({...environment,MAPPED_POSTGRES_TESTS:POSTGRES_CHAIN_TESTS[0]}),false);
  assert.ok(readFileSync(file,'utf8').includes('runNativeShortLeadBrowser'));assert.ok(readFileSync(file,'utf8').includes('TEST_DATABASE_URL'));assert.ok(readFileSync(file,'utf8').includes('M01_SETTINGS_NATIVE_EVIDENCE'));
+});
+
+test('canonical native browser names require Chromium preparation, retaining legacy nonstandard names',()=>{
+ for(const path of ['tests/integration/responsibility-queue-pages-native-browser-postgres.test.ts','tests/integration/wage-period-pages-native-browser-postgres.test.ts','tests/integration/master-data-pages-native-browser-postgres.test.ts','tests/integration/acceptance-session-retention-postgres.test.ts'])assert.equal(isNativeBrowserSuite(path),true);
+ assert.equal(settingsBrowserRequired({BASE_SHA:'a'.repeat(40),DB_REQUIRED:'true',BUSINESS_CHAIN_SENSITIVE:'false',MIGRATION_SENSITIVE:'false',DEPLOYMENT_SENSITIVE:'false',MAPPED_POSTGRES_TESTS:'tests/integration/responsibility-queue-pages-native-browser-postgres.test.ts'}),true);
+ for(const path of ['tests/integration/responsibility-queue-pages-postgres.test.ts','tests/unit/label-native-browser.test.ts'])assert.equal(isNativeBrowserSuite(path),false);
 });

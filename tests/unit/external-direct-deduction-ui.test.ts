@@ -1,3 +1,4 @@
+import {ExternalResponsibilityQueueStatusLabels} from "@dx-rework/contracts/external-responsibility";
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
@@ -20,7 +21,9 @@ describe("N10 external deduction UI", () => {
     expect(panel).not.toContain("按部分关闭");
     expect(panel).not.toContain("登记未扣成功");
     expect(panel).not.toContain('label="扣款凭证号（选填）"');
-    expect(queue).toContain('pending_payables_confirmation: "待扣款"');
+    expect(ExternalResponsibilityQueueStatusLabels.pending_payables_confirmation).toBe("待扣款");
+    expect(queue).toContain("ExternalResponsibilityQueueStatusLabels as statusLabel");
+    expect(queue).toContain("statusLabel[item.status]");
     expect(queue).toContain("录入本次实际扣款并按现有流程完成");
   });
 
