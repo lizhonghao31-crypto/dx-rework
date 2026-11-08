@@ -14,7 +14,7 @@ import "./dialog-visual-system.css";
 import "./workflow-state-visual.css";
 import "./ui-polish.css";
 
-const AcceptanceLabPage=lazyBusinessPage(()=>import('./acceptance-lab-page.js').then(module=>({default:module.AcceptanceLabPage})));
+const AcceptanceLabPage=lazyBusinessPage(()=>import('./acceptance-lab-page.js').then(module=>({default:module.AcceptanceLabPage})),{shellOnError:false});
 
 const AcceptanceProductionCommandCenterPage = lazy(async () => {
   const module = await import("./acceptance-production-command-center-page.js");

@@ -52,4 +52,16 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(await page.getByRole('alert').filter({hasText:'页面暂时未能打开'}).count()).toBe(0);expect((await page.request.get(h.base+'/api/auth/me')).status()).toBe(200);await page.screenshot({path:join(h.evidence,'production-module-recovered.png'),fullPage:true});
   }finally{await context.close();}
  });
+ it('retains original authorized navigation when sourcing, rework or personnel modules own their Shell and fail to download',async()=>{
+  for(const [name,path]of [['sourcing-workspace-page.tsx','/ui/sourcing/pending'],['rework-detail-page.tsx','/ui/tasks/'+h.orders[0]!],['employee-access-page.tsx','/ui/employee-access']]){
+   const {context,page}=await h.open();try{
+    const target=asset(name!);let attempts=0;await page.route('**'+target,async route=>{attempts++;await route.abort('failed');});
+    await page.goto(h.base+path);const error=page.getByRole('alert').filter({hasText:'页面暂时未能打开'});await error.waitFor();
+    expect(attempts).toBe(1);expect(await page.locator('.app-shell>aside').count()).toBe(1);
+    const cockpit=page.locator('aside a[href$="/ui/digital-cockpit"]').first();await cockpit.waitFor();await cockpit.click();await homeReady(page);
+    expect(await page.locator('.app-shell>aside').count()).toBe(1);expect(await error.count()).toBe(0);
+    expect((await page.request.get(h.base+'/api/auth/me')).status()).toBe(200);
+   }finally{await context.close();}
+  }
+ });
 });

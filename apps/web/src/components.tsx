@@ -5,7 +5,7 @@ import { financeNavigationEntries } from "./finance-access.js";
 import { canAccessCutting } from "./cutting-access.js";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { TodoCountIndicatorSchema } from "@dx-rework/contracts";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Button,
   KpiInstrument,
@@ -36,6 +36,7 @@ import { NavigationIcon } from "./navigation-icons.js";
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
 const MOBILE_PULL_REFRESH_THRESHOLD = 56;
 const MOBILE_PULL_REFRESH_MAX_DISTANCE = 72;
+export const ShellPresenceContext=createContext(false);
 
 type NavigationEntry = Readonly<{
   name: string;
@@ -627,7 +628,7 @@ export function Shell({
       : activeEntry?.name ?? active;
 
   return (
-    <div data-brand-scope={['我的待办','开发与大货办理','digital-designer','digital-pattern','pattern-room-history'].includes(active)&&!window.location.pathname.endsWith('/ui/digital-cockpit')?'approved-six':undefined} className={`app-shell ui-polish unified-shell${appearance === "digital" ? " digital-workspace production-command-shell" : ""}`}>
+    <ShellPresenceContext.Provider value={true}><div data-brand-scope={['我的待办','开发与大货办理','digital-designer','digital-pattern','pattern-room-history'].includes(active)&&!window.location.pathname.endsWith('/ui/digital-cockpit')?'approved-six':undefined} className={`app-shell ui-polish unified-shell${appearance === "digital" ? " digital-workspace production-command-shell" : ""}`}>
       {pullDistance > 0 ? (
         <div
           className="mobile-pull-refresh"
@@ -673,7 +674,7 @@ export function Shell({
 
       <main>{!(window.location.pathname === basePath + "/ui/digital-production" && digitalDetailRoute(window.location.search).kind !== "landing") && cockpitReturnPath(window.location.search) && <a className="dx-button dx-button--secondary journey-return-link" href={basePath+cockpitReturnPath(window.location.search)}>返回生产管理座舱</a>}{children}</main>
       {currentUser?.capabilities.includes("todo:view") && <DigitalNotificationToast key={currentUser.id} userId={currentUser.id} />}
-    </div>
+    </div></ShellPresenceContext.Provider>
   );
 }
 
