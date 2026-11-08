@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "2a5428982e68bef7bc579bdaa195148ada35f043",
-  "sourceFingerprint": "97fb4bc9a0da8a732493f0c92c96b1eff9baf6bb905fb5068a1763f634a68547",
+  "sourceFingerprint": "c451dc249edda3521586d2ad2ed9ac432d3875d019fdc34aea7a453aff6029f0",
   "risk": "full",
   "rules": [
     {
@@ -160,28 +160,43 @@
     {
       "id": "unit",
       "kind": "tests",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/digital-pmc-readonly-ui.test.ts tests/unit/digital-sla-configuration.test.ts tests/unit/sla-notification-preferences.test.ts tests/unit/sla-notification-window.test.ts tests/unit/sla-saved-draft.test.ts tests/unit/sla-calculation.test.ts tests/unit/development-cycle.test.ts tests/unit/development-technical-contract.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/p04-final-unit.vitest.json",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/digital-pmc-readonly-ui.test.ts tests/unit/digital-sla-configuration.test.ts tests/unit/sla-notification-preferences.test.ts tests/unit/sla-notification-window.test.ts tests/unit/sla-saved-draft.test.ts tests/unit/sla-calculation.test.ts tests/unit/development-cycle.test.ts tests/unit/development-technical-contract.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/dx-final10-20261108/p04-readiness-final-unit.vitest.json",
       "status": "passed",
       "exitCode": 0,
-      "sourceFingerprint": "97fb4bc9a0da8a732493f0c92c96b1eff9baf6bb905fb5068a1763f634a68547",
-      "testedHead": "3e7cf380cec514d02bae5a78d887f8b7eb03f745",
-      "startedAt": "2026-11-08T01:02:43.526Z",
-      "endedAt": "2026-11-08T01:02:46.880Z",
+      "sourceFingerprint": "8858503789ba8d3f427c58958277339a67db408c640cad416aa5c74d466bf5ec",
+      "testedHead": "b69e2fcb027b24cb9142b3c0f14e721a2b28848a",
+      "startedAt": "2026-11-08T01:35:47.019Z",
+      "endedAt": "2026-11-08T01:35:50.820Z",
       "sourceUnchanged": true,
       "allExited": true,
-      "logSha256": "5b67d3b1b0ad3cad81d9c27b4ec9317ead79a0baf917b9ddedf702335c972c52",
-      "logPath": "/workspace/scratch/dx-final10-20261108/p04-final-unit.log",
-      "context": "Node22.22.2/npm10.9.9; lock80b0332e; taskset2,3 applies only to command descendants; original Vitest config nonDB1 worker, original preflight protocol2 workers; local host not claimed CI equivalent",
+      "logSha256": "45f5aa55cbfadadb9b1bc8894d8220d8540e5a1a15b37663d6fdf0ed9c72f5da",
+      "logPath": "/workspace/scratch/dx-final10-20261108/p04-readiness-final-unit.log",
+      "context": "Node22.22.2/npm10.9.9; lock80b0332e; taskset2,3 applies only to command descendants; original Vitest config nonDB1 worker, original preflight protocol2 workers; local host not claimed CI equivalent Scope captured while original source fingerprint matched, before native TEST transport/expectation-only extension; actual apps/packages/scripts/unit/helper/fixture/config inputs remain exact.",
       "passed": 143,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "65c98c5f1609fa8fa81af50429481bfe867a907af1e853d94d45ff554e4b73ba"
+          "sha256": "9d9f8d58aed26a2f729f7617434e5cdf4d734870da416acea6a74408abfb9af6"
         }
       ],
-      "log": "/workspace/scratch/dx-final10-20261108/p04-final-unit.log"
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests/unit",
+        "tests/helpers",
+        "tests/fixtures",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts",
+        "vitest.postgres-immediate.config.ts"
+      ],
+      "inputFingerprint": "db5ca52e2cf2313574aecdcbba8fecd90d5f98acdc8ca0f2a80c961edfea59f9",
+      "log": "/workspace/scratch/dx-final10-20261108/p04-readiness-final-unit.log"
     },
     {
       "id": "types",
@@ -189,16 +204,31 @@
       "command": "npm run typecheck --workspace=@dx-rework/web",
       "status": "passed",
       "exitCode": 0,
-      "sourceFingerprint": "97fb4bc9a0da8a732493f0c92c96b1eff9baf6bb905fb5068a1763f634a68547",
-      "testedHead": "3e7cf380cec514d02bae5a78d887f8b7eb03f745",
-      "startedAt": "2026-11-08T01:02:46.971Z",
-      "endedAt": "2026-11-08T01:03:06.112Z",
+      "sourceFingerprint": "8858503789ba8d3f427c58958277339a67db408c640cad416aa5c74d466bf5ec",
+      "testedHead": "b69e2fcb027b24cb9142b3c0f14e721a2b28848a",
+      "startedAt": "2026-11-08T01:35:50.953Z",
+      "endedAt": "2026-11-08T01:36:10.410Z",
       "sourceUnchanged": true,
       "allExited": true,
       "logSha256": "752b0f4f80e1f2fdeece6837aa0d8538e17009bd166c8888d0c5c5d0c6148bcd",
-      "logPath": "/workspace/scratch/dx-final10-20261108/p04-final-types.log",
-      "context": "Node22.22.2/npm10.9.9; lock80b0332e; taskset2,3 applies only to command descendants; original Vitest config nonDB1 worker, original preflight protocol2 workers; local host not claimed CI equivalent",
-      "log": "/workspace/scratch/dx-final10-20261108/p04-final-types.log"
+      "logPath": "/workspace/scratch/dx-final10-20261108/p04-readiness-final-types.log",
+      "context": "Node22.22.2/npm10.9.9; lock80b0332e; taskset2,3 applies only to command descendants; original Vitest config nonDB1 worker, original preflight protocol2 workers; local host not claimed CI equivalent Scope captured while original source fingerprint matched, before native TEST transport/expectation-only extension; actual apps/packages/scripts/unit/helper/fixture/config inputs remain exact.",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests/unit",
+        "tests/helpers",
+        "tests/fixtures",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts",
+        "vitest.postgres-immediate.config.ts"
+      ],
+      "inputFingerprint": "db5ca52e2cf2313574aecdcbba8fecd90d5f98acdc8ca0f2a80c961edfea59f9",
+      "log": "/workspace/scratch/dx-final10-20261108/p04-readiness-final-types.log"
     },
     {
       "id": "types_backend",
@@ -233,16 +263,31 @@
       "command": "npm run build --workspace=@dx-rework/web",
       "status": "passed",
       "exitCode": 0,
-      "sourceFingerprint": "97fb4bc9a0da8a732493f0c92c96b1eff9baf6bb905fb5068a1763f634a68547",
-      "testedHead": "3e7cf380cec514d02bae5a78d887f8b7eb03f745",
-      "startedAt": "2026-11-08T01:03:07.739Z",
-      "endedAt": "2026-11-08T01:03:11.415Z",
+      "sourceFingerprint": "8858503789ba8d3f427c58958277339a67db408c640cad416aa5c74d466bf5ec",
+      "testedHead": "b69e2fcb027b24cb9142b3c0f14e721a2b28848a",
+      "startedAt": "2026-11-08T01:36:11.700Z",
+      "endedAt": "2026-11-08T01:36:13.613Z",
       "sourceUnchanged": true,
       "allExited": true,
-      "logSha256": "e408f3088de33bcae26b085343d890fd311e15b9200468336c06764eaf7ef33b",
-      "logPath": "/workspace/scratch/dx-final10-20261108/p04-final-buildweb.log",
-      "context": "Node22.22.2/npm10.9.9; lock80b0332e; taskset2,3 applies only to command descendants; original Vitest config nonDB1 worker, original preflight protocol2 workers; local host not claimed CI equivalent",
-      "log": "/workspace/scratch/dx-final10-20261108/p04-final-buildweb.log"
+      "logSha256": "7aa261546d4225d0a6f1c7f53343d23b2056af2b893d17f4f6b00130ea467434",
+      "logPath": "/workspace/scratch/dx-final10-20261108/p04-readiness-final-buildweb.log",
+      "context": "Node22.22.2/npm10.9.9; lock80b0332e; taskset2,3 applies only to command descendants; original Vitest config nonDB1 worker, original preflight protocol2 workers; local host not claimed CI equivalent Scope captured while original source fingerprint matched, before native TEST transport/expectation-only extension; actual apps/packages/scripts/unit/helper/fixture/config inputs remain exact.",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests/unit",
+        "tests/helpers",
+        "tests/fixtures",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.base.json",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts",
+        "vitest.postgres-immediate.config.ts"
+      ],
+      "inputFingerprint": "db5ca52e2cf2313574aecdcbba8fecd90d5f98acdc8ca0f2a80c961edfea59f9",
+      "log": "/workspace/scratch/dx-final10-20261108/p04-readiness-final-buildweb.log"
     },
     {
       "id": "buildapi",
@@ -303,19 +348,19 @@
     {
       "id": "lint",
       "kind": "command",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/eslint/bin/eslint.js apps/web/src/development-cycle-settings.tsx apps/web/src/sla-node-edit-dialog.tsx apps/web/src/sla-settings-workspace.tsx apps/web/src/sla-standard-editor.tsx tests/acceptance/m01-settings-native-browser.ts --max-warnings=0",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/eslint/bin/eslint.js apps/web/src/development-cycle-settings.tsx apps/web/src/sla-calculation-preview.tsx apps/web/src/sla-node-edit-dialog.tsx apps/web/src/sla-settings-workspace.tsx apps/web/src/sla-standard-editor.tsx tests/acceptance/m01-settings-native-browser.ts --max-warnings=0",
       "status": "passed",
       "exitCode": 0,
-      "sourceFingerprint": "97fb4bc9a0da8a732493f0c92c96b1eff9baf6bb905fb5068a1763f634a68547",
-      "testedHead": "3e7cf380cec514d02bae5a78d887f8b7eb03f745",
-      "startedAt": "2026-11-08T01:03:06.202Z",
-      "endedAt": "2026-11-08T01:03:07.622Z",
+      "sourceFingerprint": "c451dc249edda3521586d2ad2ed9ac432d3875d019fdc34aea7a453aff6029f0",
+      "testedHead": "b69e2fcb027b24cb9142b3c0f14e721a2b28848a",
+      "startedAt": "2026-11-08T01:37:33.061Z",
+      "endedAt": "2026-11-08T01:37:34.519Z",
       "sourceUnchanged": true,
       "allExited": true,
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "logPath": "/workspace/scratch/dx-final10-20261108/p04-final-lint.log",
+      "logPath": "/workspace/scratch/dx-final10-20261108/p04-readiness-final-lint.log",
       "context": "Node22.22.2/npm10.9.9; lock80b0332e; taskset2,3 applies only to command descendants; original Vitest config nonDB1 worker, original preflight protocol2 workers; local host not claimed CI equivalent",
-      "log": "/workspace/scratch/dx-final10-20261108/p04-final-lint.log"
+      "log": "/workspace/scratch/dx-final10-20261108/p04-readiness-final-lint.log"
     },
     {
       "id": "preflight",
@@ -323,16 +368,16 @@
       "command": "npm run test:preflight",
       "status": "passed",
       "exitCode": 0,
-      "sourceFingerprint": "97fb4bc9a0da8a732493f0c92c96b1eff9baf6bb905fb5068a1763f634a68547",
-      "testedHead": "3e7cf380cec514d02bae5a78d887f8b7eb03f745",
-      "startedAt": "2026-11-08T01:03:11.499Z",
-      "endedAt": "2026-11-08T01:03:20.730Z",
+      "sourceFingerprint": "c451dc249edda3521586d2ad2ed9ac432d3875d019fdc34aea7a453aff6029f0",
+      "testedHead": "b69e2fcb027b24cb9142b3c0f14e721a2b28848a",
+      "startedAt": "2026-11-08T01:37:34.609Z",
+      "endedAt": "2026-11-08T01:37:43.287Z",
       "sourceUnchanged": true,
       "allExited": true,
-      "logSha256": "532a36b56ffba42396e2e1fb40b4fbb900bc5b0af8142d6608d0366b62a1e4e7",
-      "logPath": "/workspace/scratch/dx-final10-20261108/p04-final-preflight.log",
+      "logSha256": "0ca563e71923435942a55f6bfa76caa1f8ffb8c1b221b9f8fc947018b61672c9",
+      "logPath": "/workspace/scratch/dx-final10-20261108/p04-readiness-final-preflight.log",
       "context": "Node22.22.2/npm10.9.9; lock80b0332e; taskset2,3 applies only to command descendants; original Vitest config nonDB1 worker, original preflight protocol2 workers; local host not claimed CI equivalent",
-      "log": "/workspace/scratch/dx-final10-20261108/p04-final-preflight.log"
+      "log": "/workspace/scratch/dx-final10-20261108/p04-readiness-final-preflight.log"
     },
     {
       "id": "secret",
@@ -340,16 +385,16 @@
       "command": "npm run secret:scan",
       "status": "passed",
       "exitCode": 0,
-      "sourceFingerprint": "97fb4bc9a0da8a732493f0c92c96b1eff9baf6bb905fb5068a1763f634a68547",
-      "testedHead": "3e7cf380cec514d02bae5a78d887f8b7eb03f745",
-      "startedAt": "2026-11-08T01:03:20.811Z",
-      "endedAt": "2026-11-08T01:03:21.591Z",
+      "sourceFingerprint": "c451dc249edda3521586d2ad2ed9ac432d3875d019fdc34aea7a453aff6029f0",
+      "testedHead": "b69e2fcb027b24cb9142b3c0f14e721a2b28848a",
+      "startedAt": "2026-11-08T01:37:43.369Z",
+      "endedAt": "2026-11-08T01:37:44.252Z",
       "sourceUnchanged": true,
       "allExited": true,
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda",
-      "logPath": "/workspace/scratch/dx-final10-20261108/p04-final-secret.log",
+      "logPath": "/workspace/scratch/dx-final10-20261108/p04-readiness-final-secret.log",
       "context": "Node22.22.2/npm10.9.9; lock80b0332e; taskset2,3 applies only to command descendants; original Vitest config nonDB1 worker, original preflight protocol2 workers; local host not claimed CI equivalent",
-      "log": "/workspace/scratch/dx-final10-20261108/p04-final-secret.log"
+      "log": "/workspace/scratch/dx-final10-20261108/p04-readiness-final-secret.log"
     },
     {
       "id": "backend_long",
@@ -792,27 +837,27 @@
     },
     {
       "id": "native",
-      "command": "taskset \"-c\" \"2,3\" \"/workspace/.dx-cloud/toolchain/node_modules/node/bin/node\" \"node_modules/vitest/vitest.mjs\" \"run\" \"tests/integration/m01-settings-native-browser-postgres.test.ts\" \"--config\" \"vitest.business-chain.config.ts\" \"--reporter=verbose\" \"--reporter=json\" \"--outputFile=/workspace/scratch/dx-final10-20261108/p04-native-final-inline-undo-reminder.vitest.json\"",
-      "startedAt": "2026-11-08T01:02:42.091Z",
-      "endedAt": "2026-11-08T01:03:51.001Z",
-      "sourceFingerprint": "97fb4bc9a0da8a732493f0c92c96b1eff9baf6bb905fb5068a1763f634a68547",
-      "testedHead": "3e7cf380cec514d02bae5a78d887f8b7eb03f745",
+      "command": "taskset \"-c\" \"2,3\" \"/workspace/.dx-cloud/toolchain/node_modules/node/bin/node\" \"node_modules/vitest/vitest.mjs\" \"run\" \"tests/integration/m01-settings-native-browser-postgres.test.ts\" \"--config\" \"vitest.business-chain.config.ts\" \"--reporter=verbose\" \"--reporter=json\" \"--outputFile=/workspace/scratch/dx-final10-20261108/p04-native-readiness-both-editors-final.vitest.json\"",
+      "startedAt": "2026-11-08T01:37:04.634Z",
+      "endedAt": "2026-11-08T01:38:04.878Z",
+      "sourceFingerprint": "c451dc249edda3521586d2ad2ed9ac432d3875d019fdc34aea7a453aff6029f0",
+      "testedHead": "b69e2fcb027b24cb9142b3c0f14e721a2b28848a",
       "sourceUnchanged": true,
       "exitCode": 0,
       "allExited": true,
       "passed": 32,
       "failed": 0,
       "skipped": 0,
-      "log": "/workspace/scratch/dx-final10-20261108/p04-native-final-inline-undo-reminder.log",
-      "logSha256": "a5a0c24177baeb068f6d5e51080c38da9a17066cecea7c37565b8ca0c18669cc",
-      "resultReport": "/workspace/scratch/dx-final10-20261108/p04-native-final-inline-undo-reminder.vitest.json",
+      "log": "/workspace/scratch/dx-final10-20261108/p04-native-readiness-both-editors-final.log",
+      "logSha256": "005f5a88c7fdd780b0c8128025f33190932d958d666cfa88909ebfbc7675de10",
+      "resultReport": "/workspace/scratch/dx-final10-20261108/p04-native-readiness-both-editors-final.vitest.json",
       "context": "Original full App/Shell, real original AuthService and owned marked PostgreSQL16.15 TEST fixtures. Original configForSuite and100s per-test/120s setup, lock-pinned Playwright1.56.1/Chromium141.0.7390.37. Only one file worker; Node/browser descendants cpuset2,3, PG2CPU/2GiB cpuset0,1. Same canonical browser/config but not CI host load/hardware or onsite acceptance. First layout cases use full App/Shell; other original cases may use original component fixture with same real API/AuthService, not all full Shell. TEST only, no onsite claim.",
       "kind": "tests",
       "status": "passed",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "4f70b9c9aa3e3e6ca7648b0b9b29740149a8861e3c222ef21e5133dd6a3584e8"
+          "sha256": "2569b99fa4abbf1625c7bcefb91b14857fd4784e19a63f3f753bfb503a60d6e4"
         }
       ]
     }

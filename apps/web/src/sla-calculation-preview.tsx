@@ -14,7 +14,7 @@ import {SlaAdjustmentPreviewHost,type SlaAdjustmentComparison} from './sla-adjus
 import {createPortal} from 'react-dom';
 
 export type SlaCalculationHandle={recheck(group:'unified'|'development'):Promise<boolean>};
-type Props={blocked?:boolean;customerControl?:ReactNode;ready?:boolean;unified:SlaDraftSnapshot<DigitalSlaValues>|null;development:SlaDraftSnapshot<DevelopmentCycleValues>|null;onSummary?(value:string):void;onStageTimes?(value:SlaStageTiming[]):void;onComparison?(value:SlaAdjustmentComparison|null):void;onAuthorityChanged?():void};
+type Props={onReadinessChange?(value:boolean):void;blocked?:boolean;customerControl?:ReactNode;ready?:boolean;unified:SlaDraftSnapshot<DigitalSlaValues>|null;development:SlaDraftSnapshot<DevelopmentCycleValues>|null;onSummary?(value:string):void;onStageTimes?(value:SlaStageTiming[]):void;onComparison?(value:SlaAdjustmentComparison|null):void;onAuthorityChanged?():void};
 const ranges={whole:'适用全流程',development:'开发本轮',preparation:'产前纸样与面料',bulk_craft:'本批大货工艺与发裁片',delivery:'工厂目标与回货装箱',contract:'合同首次回签（独立）'};
 const referenceLabels:Record<typeof SLA_REFERENCE_KEYS[number],string>={development_published:'本轮开发发布',external_pattern_requested:'外部纸样请求',customer_order_confirmed:'客户订单确认',instruction_published:'正式制单发布',whole_fabric_arrived:'主料实际到仓',final_preparation_ready:'正式制单前提齐备',cut_craft_dispatched:'本批发工艺',whole_cutting_completed:'本批开裁完成',sourcing_decided:'原选厂批准',factory_production_finished:'工厂生产完成',factory_return_dispatched:'工厂回货发出',garment_arrived:'本批成衣到仓',garment_qc_completed:'本批质检完成',rework_assignments_confirmed:'本轮返工派工确认',round_actual_work_completed:'本轮实际作业完成',original_packing_conditions_ready:'原装箱前提齐备',contract_pdf_ready:'原合同首次就绪',factory_delivery_date:'工厂交货约定',customer_shipping_date:'客户出货约定',final_comment_recorded:'本份最终评语',source_published:'来源发布',order_created:'母单创建',accessories_requested:'开发辅料申请',clerk_accessories_received:'开发辅料实收',sample_available:'可寄开发样',sample_sent:'开发样已寄',budget_created:'预算创建',merchandiser_final_published:'预算最终发布',sourcing_accepted:'IE接单',cutting_fabric_actually_received:'裁床实际收布',accessories_available:'仓库辅料可调配',accessories_dispatched:'仓库辅料已发',ship_sample_available_before_production:'生产前船样可寄',ship_sample_sent:'船样已寄',first_effective_receipt:'首次有效实收',effective_receipts_reach_quantity:'有效实收到齐'};
 const initialConditions:SlaCalculationConditions={craft:'none',craftExecution:'internal',pattern:'internal',washing:'none',preshrink:'yes',preparation:'adopted',developmentMode:'normal',rework:'no'};
@@ -25,7 +25,7 @@ const referenceValue=(raw:string,date=false):CalculationAnchor=>{
  if(date)return {precision:'date',value:raw,source:'用户明确填写的流程示例日期'};
  const value=new Date(raw+'+08:00');return Number.isFinite(value.getTime())?{precision:'instant',value:value.toISOString(),source:'用户明确填写的北京时间参考时刻'}:{precision:'unknown',reason:'参考时刻尚未完整'};
 };
-export const SlaCalculationPreviewPanel=forwardRef<SlaCalculationHandle,Props>(function SlaCalculationPreviewPanel({blocked=false,ready=true,unified,development,onSummary,onStageTimes,onComparison,onAuthorityChanged},ref){
+export const SlaCalculationPreviewPanel=forwardRef<SlaCalculationHandle,Props>(function SlaCalculationPreviewPanel({onReadinessChange,blocked=false,ready=true,unified,development,onSummary,onStageTimes,onComparison,onAuthorityChanged},ref){
  const previewHost=useContext(SlaAdjustmentPreviewHost),conditionsHost=previewHost?.conditionsElement;
  const [mode,setMode]=useState<'example'|'instance'>('example'),[range,setRange]=useState<SlaCalculationSelection['range']>('whole'),[conditions,setConditions]=useState(initialConditions),[references,setReferences]=useState<Partial<Record<typeof SLA_REFERENCE_KEYS[number],CalculationAnchor>>>({}),[referenceRaw,setReferenceRaw]=useState<Record<string,string>>({});
  const [instance,setInstance]=useState<Extract<SlaCalculationSelection,{mode:'instance'}>|null>(null),[search,setSearch]=useState(''),[matches,setMatches]=useState<OrderJourney[]>([]),[searchError,setSearchError]=useState(''),[searchBusy,setSearchBusy]=useState(false),[identity,setIdentity]=useState(sessionCacheVersion);
@@ -43,6 +43,8 @@ export const SlaCalculationPreviewPanel=forwardRef<SlaCalculationHandle,Props>(f
  useEffect(()=>{live.current=true;return()=>{live.current=false;generation.current++;searchGeneration.current++;};},[]);
  useEffect(()=>registerSessionInvalidator(()=>{generation.current++;searchGeneration.current++;setRecord(null);setMatches([]);setInstance(null);setIdentity(sessionCacheVersion());setBusy(false);setSearchBusy(false);}),[]);
  useEffect(()=>{setFailure(null);setNotice('');if(blocked){setBusy(false);return()=>{generation.current++;};}setRecord(null);if(selection&&ready)void calculate();else setBusy(false);return()=>{generation.current++;};},[owner,reload,ready,blocked]);
+ const canRecheck=ready&&!blocked&&Boolean(selection&&current)&&!busy;
+ useEffect(()=>{onReadinessChange?.(canRecheck);},[canRecheck,onReadinessChange]);
  const local=useMemo(()=>{
   if(!current)return null;
   try{return {...settingsCalculation(current.context,unified,development),error:null};}catch(e){return {result:null,errors:[],graph:null,error:(e as Error).message};}
