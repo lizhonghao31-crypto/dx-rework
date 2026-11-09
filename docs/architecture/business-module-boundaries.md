@@ -46,6 +46,12 @@
 
 `order-board-page.tsx` 保留原展示、字段／按钮权限、导出编排和 `ReceivingDialog`；不新增持久草稿、不重排 UI。服务端最终授权与数量判断仍在原入口，页面读取不覆盖正在编辑的快照。未知提交时禁用新写入，原核对入口在弹窗内或关闭后的页面保持可达。
 
+## 开发执行读取装配
+
+`development-execution-read.ts` 负责开发资料、授权任务、轮次、材料、安排、技术证据与原响应的装配，明确原字段形状。只接收原快照代理 client、actor、sourceId 及资料／任务／技术／事实四项窄读取能力；不传整个 service，不另连池、开事务、释放连接或新建缓存。原 SQL、参数、调用次序和历史 tasks／routeFacts／facts 保留，不因当前轮规则裁掉历史数组。
+
+`DevelopmentExecutionService.read` 继续拥有取得／释放连接、只读 RR、COMMIT／ROLLBACK，以及唯一的 `reuseJourneySnapshotReads`。资料、任务、技术和事实读取显式共用该代理；读取错误原样向上交回事务 owner。其余命令、生命周期锁、写前授权、幂等、审计、派工／核料／完成／转交和未知提交边界不迁移。原执行 GET、同单授权任务二维码和 `useDevelopmentExecution` 消费者不改；请求身份复用试点不扩展到开发模块。
+
 ## 后续维护
 
 尚未迁出的业务命令继续沿原服务维护；预算更正、装箱及差异等只有对应业务需求触发后才按 F5 核迁出，不扩展为全命令搬迁。纯规则／映射不依赖 React、Fastify、新连接或私自提交；已有事务 client 必须继续传入，不把同事务读回换成池外读取。
