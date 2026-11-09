@@ -8,7 +8,8 @@ import {publishedProductionBasis} from './production-document-basis.js';
 import {preparationAdoption,preparationContext,preparationResponsibility,currentPreparationMaterial,appendPreparationMaterial} from './preparation-material-repository.js';
 import {refreshPreparationWindows,instructionTechnicalCurrent,styleLabelCuttingReason,productionReadiness,preparationTestReasons} from './production-readiness-repository.js';
 import {technicalEnrollment,effectiveTechnicalEvidence} from './development-technical-repository.js';
-import {businessNow} from '../acceptance-clock/business-time.js';
+import {businessNow,ContextBusinessClock} from '../acceptance-clock/business-time.js';
+import {captureOrderTimeline} from './fixed-order-adoption.js';
 import {BulkMaterialsDispatchSchema,type BulkMaterialsDispatch} from '@dx-rework/contracts/bulk-preparation';
 import {bulkFabricFacts} from "./bulk-fabric-facts.js";
 import {BulkFabricReportSchema,BulkFabricDecisionSchema,type BulkFabricReport,type BulkFabricDecision} from "@dx-rework/contracts/bulk-preparation";
@@ -100,6 +101,8 @@ export class BulkPreparationService {
    const pid=randomUUID(),document=g.instruction.document as InstructionDocument;
    await db.query("INSERT INTO digital_bulk_preparations(preparation_id,production_order_id,instruction_version,approval_snapshot_id,source_id,source_round,preshrink,created_by,workflow_version,sla_snapshot_id,supplement_of_preparation_id,clock_origin_preparation_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)",[pid,id,g.instruction.version,g.approval?.sourcing_approval_snapshot_id??null,g.order.source_id,g.source!.round_number,resolveBulkPreshrinkRequirement(null,document),actor.actorId,g.parallel?2:1,g.parallel?g.snapshotId:null,supplement,origin]);
    prep=(await db.query("SELECT * FROM digital_bulk_preparations WHERE preparation_id=$1",[pid])).rows[0];
+   await captureOrderTimeline(db,actor.actorId,id,pid,g.instruction.version,document,g.order.source_id,g.source!.round_number,g.source!.document,
+    `digital_bulk_preparations:${pid}`,await new ContextBusinessClock(this.database,db).read({kind:'order',id}));
    const dispatch=(await db.query("SELECT * FROM digital_bulk_dispatch WHERE production_order_id=$1",[id])).rows[0];
    for(const kind of ['bulk_pattern',...(resolveBulkPreshrinkRequirement(prep)==='需要预缩'?['warehouse_preshrink']:[])] as Array<'bulk_pattern'|'warehouse_preshrink'>){
     const assignee=await this.validAssignee(db,kind==='bulk_pattern'?dispatch?.pattern_worker_id:dispatch?.warehouse_worker_id,kind==='bulk_pattern'?'pattern_room_worker':'warehouse_receiver');

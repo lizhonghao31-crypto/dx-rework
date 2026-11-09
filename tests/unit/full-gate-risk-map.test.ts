@@ -226,6 +226,14 @@ describe("Full Gate sensitive path mapping", () => {
     }
   });
 
+  it('maps fixed timeline native writes and real craft controls without a maintenance drill',()=>{
+    for(const path of ['apps/api/src/production-platform/fixed-order-route.ts','apps/api/src/production-platform/factory-step-ledger.ts','apps/web/src/independent-craft-field.tsx']){
+      const result=classifyFullGatePaths([path]);
+      expect(result.mappedPostgresTests).toEqual(expect.arrayContaining(['tests/integration/fixed-timeline-postgres.test.ts','tests/integration/fixed-timeline-native-browser-postgres.test.ts']));
+      expect(result.maintenanceSensitive).toBe(false);
+    }
+  });
+
   it("maps migration, deployment and changed PostgreSQL tests explicitly", () => {
     const migration = classifyFullGatePaths(["apps/api/migrations/9999_test.sql"]);
     expect(migration.migrationSensitive).toBe(true);

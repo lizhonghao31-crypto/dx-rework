@@ -19,7 +19,8 @@ import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
 import { DigitalProductionAccessPolicy, digitalForbidden, digitalNotFound } from "./access-policy.js";
 import { DigitalProductionTaskService } from "./task-service.js";
-import { captureDevelopmentSla, developmentSlaPlan } from "./development-sla-enrollment.js";
+import { captureDevelopmentSla, developmentSlaPlan,developmentSlaRoute } from "./development-sla-enrollment.js";
+import {captureDevelopmentTimeline} from './fixed-development-adoption.js';
 import type { BusinessClock } from "@dx-rework/domain/business-clock";
 
 type Database = Pick<Pool | PoolClient, "query">;
@@ -46,6 +47,7 @@ export class DigitalDevelopmentService {
   }
   async read(actor: TrustedActorContext, sourceId: string, db: Database = this.database, roundNumber?: number): Promise<DevelopmentSheet> {
     const source = await this.source(db, actor, sourceId);
+    const adoptedPlan=await developmentSlaPlan(db,sourceId);
     const row = await developmentDocumentRow(db,sourceId,roundNumber);
     const rounds=await developmentRoundsAvailable(db);
     if(roundNumber&&!row)digitalNotFound();
@@ -55,7 +57,7 @@ export class DigitalDevelopmentService {
     let document=row?.document??null;
     if(document?.customerOrderDraft&&!source.can_view_order_draft){document={...document};delete document.customerOrderDraft;}
     const effectiveMaterials=row?.status==="published"&&(await db.query("SELECT to_regclass('digital_development_execution_facts') AS relation")).rows[0]?.relation?(await materialReadiness(db,sourceId,row.round_number??1)).materials:[];
-    return { revisionSource:await developmentRevisionSource(db,sourceId),independentRevisions:Boolean(await developmentSlaPlan(db,sourceId)),developmentCreatedDate:beijingCalendarDate(new Date(acceptanceBusinessContext()?(await db.query('SELECT business_time FROM digital_development_sla_plans WHERE source_id=$1 ORDER BY revision LIMIT 1',[sourceId])).rows[0]?.business_time?.now??source.created_at:source.created_at)), metadata:await documentMetadata(db,row?.revision??row), materialReadiness:effectiveMaterials, sourceId, productionOrderId, designStyleNo: source.design_style_no, temporaryStyleNo: source.temporary_style_no, customerCode: source.customer_code,
+    return { ...(adoptedPlan?.timeline_schema_version===2?{timelineSchemaVersion:2 as const}:{}),revisionSource:await developmentRevisionSource(db,sourceId),independentRevisions:Boolean(adoptedPlan),developmentCreatedDate:beijingCalendarDate(new Date(acceptanceBusinessContext()?(await db.query('SELECT business_time FROM digital_development_sla_plans WHERE source_id=$1 ORDER BY revision LIMIT 1',[sourceId])).rows[0]?.business_time?.now??source.created_at:source.created_at)), metadata:await documentMetadata(db,row?.revision??row), materialReadiness:effectiveMaterials, sourceId, productionOrderId, designStyleNo: source.design_style_no, temporaryStyleNo: source.temporary_style_no, customerCode: source.customer_code,
       developmentType: source.development_type, designerName: source.designer_name, version: row?.version ?? 0, status: row?.status ?? "draft",
       document, publishedAt: row?.published_at ? new Date(row.published_at).toISOString() : null, taskId: row?.task_id ?? null,
       canRevise:source.can_edit,roundNumber:row?.round_number??1,latestRoundNumber:row?.latest_round_number??1,canEdit: source.can_edit && (!row || row.round_number===row.latest_round_number), materialEvents };
@@ -132,11 +134,15 @@ export class DigitalDevelopmentService {
         : observedBusinessTime(this.now);
       // Only sources enrolled at creation receive the new rules. Publishing a legacy draft is not enrollment.
       if (await developmentSlaPlan(db, sourceId)) await captureDevelopmentSla(db, actor, sourceId, row.document, time, `development-publish:${sourceId}:${key}`);
+      const routeId=randomUUID();
+      const publishedPlan=await developmentSlaPlan(db,sourceId);
+      if(publishedPlan?.timeline_schema_version===2)await captureDevelopmentTimeline(db,actor.actorId,sourceId,1,routeId,
+        ['development_materials',...developmentSlaRoute(row.document,craftPiece?'工艺布片':'整件样板',2)],row.document,row.version+1,`development-publish:${sourceId}:${key}`,time);
       const candidates = (await db.query(`SELECT DISTINCT u.id FROM app_users u JOIN user_role_assignments r ON r.user_id=u.id AND r.revoked_at IS NULL
         WHERE u.enabled AND r.role_code='development_clerk' ORDER BY u.id`)).rows;
       const eligible: string[] = [];
       for (const user of candidates) if (await new DigitalProductionAccessPolicy(db).activeRole(user.id, "development_clerk")) eligible.push(user.id);
-      const { taskId } = await new DigitalProductionTaskService(this.database).createWithClient(db, actor, { resource: { kind: "source", id: sourceId }, kind: "development_materials", routeId: randomUUID(), routeVersion: 1, occurrence: 1, assigneeId: eligible.length === 1 ? eligible[0]! : null });
+      const { taskId } = await new DigitalProductionTaskService(this.database).createWithClient(db, actor, { resource: { kind: "source", id: sourceId }, kind: "development_materials", routeId, routeVersion: 1, occurrence: 1, assigneeId: eligible.length === 1 ? eligible[0]! : null });
       await db.query("UPDATE digital_development_documents SET status='published',published_at=$4,task_id=$2,version=version+1,updated_by=$3,updated_at=CURRENT_TIMESTAMP WHERE source_id=$1", [sourceId, taskId, actor.actorId, time.now]);
       if (await developmentSlaPlan(db,sourceId)) {
         const designer=(await db.query("SELECT created_by FROM digital_production_sources WHERE source_id=$1",[sourceId])).rows[0].created_by;

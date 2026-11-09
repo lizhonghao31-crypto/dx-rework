@@ -1,4 +1,5 @@
 import { InitialCustomerOrderDraftSchema } from "./digital-production.js";
+import {CraftStepChoicesSchema,craftLegacyLabel} from './digital-craft.js';
 import type {JourneyDocumentMetadata} from "./digital-production-journey.js";
 import { z } from "zod";
 import {AuxiliaryReferenceSchema} from "./auxiliary-catalog.js";
@@ -36,9 +37,11 @@ export const DevelopmentDocumentSchema = z.object({
   formalSizes: short, casualSizes: short, mainLabel: z.boolean(), mainLabelMethod: text,
   sizeLabel: z.boolean(), careLabel: z.boolean(), instructions: text,
   craft: z.enum(["无", "印花", "绣花", "印绣花"]), washing: z.enum(["免洗", "内洗", "外洗"]),
+  craftSteps: CraftStepChoicesSchema.optional(),
   materials: z.array(DevelopmentMaterialSchema).max(100),
   files: z.array(z.object({ attachmentId: z.string().uuid(), kind: z.enum(["款图", "局部图", "菲林", "工艺开发板"]) }).strict()).max(30),
 }).strict().superRefine((value, context) => {
+  if(value.craftSteps&&craftLegacyLabel(value.craftSteps)!==value.craft)context.addIssue({code:'custom',path:['craftSteps'],message:'工艺选择与资料内容不一致，请重新读取后选择'});
   const namedSizes = value.sizes.filter(Boolean);
   if (new Set(namedSizes).size !== namedSizes.length) context.addIssue({ code: "custom", path: ["sizes"], message: "尺码列不能重复" });
   if (value.measurements.some(row => row.values.length !== value.sizes.length)) context.addIssue({ code: "custom", path: ["measurements"], message: "尺寸数值必须对应尺码列" });
@@ -106,6 +109,7 @@ export function developmentAmendmentPublicationOptions(before:DevelopmentDocumen
  return {allowLegacySizeQuantities:legacy,allowMissingOrderDate:before.orderDate===null&&after.orderDate===null};
 }
 export type DevelopmentSheet = {
+  timelineSchemaVersion?:2;
   independentRevisions?:boolean;
   revisionSource?:{sourceId:string;parentSourceId:string;rootSourceId:string;revisionNumber:number;parentRound:number;origin:string;customerComment:string;explanation:string;categories:string[];affectedNodes:string[];outputKind:string}|null;
   developmentCreatedDate?:string;

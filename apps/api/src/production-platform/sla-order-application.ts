@@ -1,4 +1,5 @@
 import {preparationAdoption} from './preparation-material-repository.js';
+import {FixedTimelineAdoptionRepository} from './fixed-timeline-adoptions.js';
 import { factoryReturnLogistics } from './factory-return-logistics.js';
 import { assertSlaSettingsActor } from './sla-settings-authority.js';
 import { SlaPreviewTokens } from './sla-preview-token.js';
@@ -27,6 +28,8 @@ export class SlaOrderApplicationService {
     constructor(private readonly pool: Pool, secret?: string) { this.tokens = new SlaPreviewTokens(secret); }
     private async prepared(db: PoolClient, actor: TrustedActorContext, input: Selection) {
         await assertSlaSettingsActor(db, actor);
+        if(await new FixedTimelineAdoptionRepository(db).mode({kind:'order',id:input.orderId})==='fixed_v2')
+            fail('本单已冻结采用标准，新发布标准仅用于新单；客户交期变更仍沿原审批办理');
         const keys = [...new Set(input.parameterKeys)].sort();
         if (!keys.length || keys.some(k => !DIGITAL_SLA_PARAMETERS.some(p => p.key === k && !['unlimited', 'order_date'].includes(p.defaultValue.kind))) || !input.reason.trim())
             fail('请选择可调整参数并填写原因');

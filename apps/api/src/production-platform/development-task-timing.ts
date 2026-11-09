@@ -1,3 +1,4 @@
+import type {FixedTimelineCalendar} from './fixed-timeline-targets.js';
 import {slaApplications,appliedSlaWindow} from './sla-applied-window.js';
 import {externalPatternRecords} from "./development-external-pattern-facts.js";
 import type {PoolClient} from "pg";
@@ -6,11 +7,13 @@ import {developmentSlaPlan} from "./development-sla-enrollment.js";
 import {developmentDocumentRow} from "./development-round-repository.js";
 import {technicalDevelopmentTiming} from './development-cycle-evidence.js';
 import {nativeTaskReadiness} from './task-readiness-facts.js';
+import {fixedCraftTiming} from './fixed-craft-timing.js';
+import {fixedTaskPosition} from './fixed-craft-steps.js';
 
 type DB=Pick<PoolClient,"query">;
 type Task={task_id:string;source_id:string|null;task_kind:string;route_version:number};
 export type DevelopmentTiming={sourceId:string;sourceRevision:number;configurationId:string;parameterKey:string;
-  enteredAt:string|null;seconds:number|null;warningRatio:number;basis:string[]};
+  enteredAt:string|null;seconds:number|null;warningRatio:number;basis:string[];calendarRef?:FixedTimelineCalendar|null};
 const iso=(value:string|Date)=>new Date(value).toISOString();
 
 /** Responsibility starts at the business boundary, even while assignment or the next action waits. */
@@ -19,6 +22,7 @@ export async function developmentTaskTiming(db:DB,task:Task,options:{prerequisit
   const technical=await technicalDevelopmentTiming(db,task);if(technical)return technical;
   const saved=await developmentSlaPlan(db,task.source_id);
   if(!saved?.route_nodes.length)return null;
+  if(saved.route_schema_version===2){const fixedCraft=await fixedCraftTiming(db,task);if(fixedCraft)return fixedCraft;}
   const document=await developmentDocumentRow(db,task.source_id,task.route_version);
   if(!document)return null;
   let snapshot=validateDigitalSlaSnapshot({ruleVersion:saved.rule_version,parameters:saved.parameters_json});
@@ -33,6 +37,7 @@ export async function developmentTaskTiming(db:DB,task:Task,options:{prerequisit
   if(warning.kind!=='ratio')throw new Error('Invalid development warning standard');
   let seconds=parameter.kind==='duration'||parameter.kind==='included'?parameter.minutes*60:null;
   const inherited:Record<string,{taskId:string}>=document.revision?.inherited??{};
+  const position=saved.route_schema_version===2?await fixedTaskPosition(db,task.task_id):null;
   const rows=(await db.query(`SELECT t.task_id,t.route_version,t.completed_at,a.task_kind FROM digital_production_tasks t
     JOIN digital_production_task_access a USING(task_id)
     WHERE a.source_id=$1 AND t.state='completed' AND t.completed_at IS NOT NULL
@@ -42,8 +47,10 @@ export async function developmentTaskTiming(db:DB,task:Task,options:{prerequisit
     ORDER BY t.completed_at,t.task_id`,[task.source_id,task.route_version,Object.values(inherited).map(f=>f.taskId)])).rows;
   const published=task.route_version===1?saved.plan_json.anchors.development_published?.value:document.published_at;
   const basis:string[]=[];
+  const fixedPrior=position?(await db.query('SELECT task_id,route_position FROM digital_timeline_task_positions WHERE route_ref=$1 AND route_version=$2 AND route_position<$3 ORDER BY route_position DESC',[position.route_ref,task.route_version,position.route_position])).rows:[];
   const completed=(...kinds:string[]):string|null=>{
-    const row=rows.find(r=>kinds.includes(r.task_kind)&&(r.route_version===task.route_version||kinds.some(k=>inherited[k]?.taskId===r.task_id)));
+    const candidates=rows.filter(r=>kinds.includes(r.task_kind)&&(r.route_version===task.route_version||kinds.some(k=>inherited[k]?.taskId===r.task_id)));
+    const row=position?fixedPrior.map(prior=>candidates.find(row=>row.task_id===prior.task_id)).find(Boolean)??candidates.find(row=>row.route_version!==task.route_version):candidates[0];
     if(!row)return null;
     basis.push(`task:${row.task_id}:completed`);
     // Reused work may enable a new correction round, but cannot start its window before that round was published.

@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./digital-craft": {"types":"./src/digital-craft.ts","import":"./dist/digital-craft.js"},
     "./master-data-pages": {"types":"./src/master-data-pages.ts","import":"./dist/master-data-pages.js"},
     "./delivery-calendar": { "types": "./src/delivery-calendar.ts", "import": "./dist/delivery-calendar.js" },
     "./sla-settings-history": { "types": "./src/sla-settings-history.ts", "import": "./dist/sla-settings-history.js" },

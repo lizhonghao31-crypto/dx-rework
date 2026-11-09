@@ -178,6 +178,13 @@ export const classifyFullGatePaths = (inputPaths) => {
     "tests/integration/development-execution-read-native-browser-postgres.test.ts",
   ]);
   const domains = new Set();
+  if(paths.some(path=>/^apps\/api\/src\/production-platform\/(?:fixed-[^/]+|factory-step-ledger)\.ts$/.test(path)
+    || ['packages/contracts/src/digital-craft.ts','apps/web/src/independent-craft-field.tsx','apps/web/src/independent-craft-field.css','apps/api/migrations/0281_fixed_timeline_adoptions.sql'].includes(path))){
+    addAll(mappedTests,['tests/integration/fixed-timeline-postgres.test.ts','tests/integration/fixed-timeline-native-browser-postgres.test.ts',
+      'tests/integration/development-sla-enrollment-postgres.test.ts','tests/integration/development-technical-postgres.test.ts',
+      'tests/integration/production-readiness-postgres.test.ts','tests/integration/factory-logistics-cockpit-postgres.test.ts','tests/integration/sourcing-pr03-postgres.test.ts']);
+    domains.add('fixed-timeline-native-crafts');
+  }
   let migrationSensitive = false;
   let receivingSensitive = false;
   let businessChainSensitive = false;

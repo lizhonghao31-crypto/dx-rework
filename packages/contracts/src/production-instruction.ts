@@ -1,4 +1,5 @@
 import type {TechnicalSizeTable} from "./digital-development-technical.js";
+import {CraftStepChoicesSchema,craftLegacyLabel} from './digital-craft.js';
 import type {ProductionReadinessState} from "./production-readiness.js";
 import { z } from "zod";
 import type {JourneyDocumentMetadata} from "./digital-production-journey.js";
@@ -14,6 +15,7 @@ export const MATERIAL_COUNT_TERM = "大货面、辅料到贵公司，请在48小
 export const InstructionDocumentSchema = z.object({
   styleName: short, category: short, season: short, fabricType: short, composition: text,
   date: z.iso.date().nullable(), process: text, secondaryCraft:z.enum(["沿用开发","无","印花","绣花","印绣花"]).default("沿用开发"), remarks: text, patternMaker: short,
+  craftSteps:CraftStepChoicesSchema.optional(),
   preshrink: z.enum(["待确认", "需要预缩", "无需预缩"]), shipSample: text,
   sewingRequirements: text, comments: text,
   fabrics: z.array(z.object({ id: z.string().uuid(), name: short, part: short, colors: z.record(z.string().uuid(), short), remarks: text }).strict()).max(200),
@@ -22,6 +24,7 @@ export const InstructionDocumentSchema = z.object({
   unit: z.enum(["inch", "cm"]), sizes: z.array(short.min(1)).max(50),
   measurements: z.array(z.object({ id: z.string().uuid(), name: short, tolerance: short, method: text, values: z.array(short).max(50) }).strict()).max(200),
 }).strict().superRefine((doc, ctx) => {
+  if(doc.craftSteps&&(doc.secondaryCraft==='沿用开发'||craftLegacyLabel(doc.craftSteps)!==doc.secondaryCraft))ctx.addIssue({code:'custom',path:['craftSteps'],message:'请明确沿用开发工艺或本制单独立工艺选择'});
   if (new Set(doc.sizes).size !== doc.sizes.length) ctx.addIssue({ code: "custom", message: "尺码列不能重复", path: ["sizes"] });
   if (doc.measurements.some(row => row.values.length !== doc.sizes.length)) ctx.addIssue({ code: "custom", message: "尺寸须对应尺码列", path: ["measurements"] });
   for (const key of ["fabrics", "accessories", "measurements"] as const)
@@ -37,7 +40,7 @@ export const ReviewInstructionSourceSchema=z.object({expectedVersion:z.number().
  decisions:z.array(z.object({group:z.enum(INSTRUCTION_SOURCE_GROUPS),action:z.enum(["adopt","retain"])}).strict()).max(INSTRUCTION_SOURCE_GROUPS.length)
 }).strict().superRefine((value,ctx)=>{if(new Set(value.decisions.map(item=>item.group)).size!==value.decisions.length)ctx.addIssue({code:"custom",path:["decisions"],message:"每组资料只能选择一次"});});
 export type InstructionSourceReview=z.infer<typeof ReviewInstructionSourceSchema>;
-export const instructionSourceFields:Record<InstructionSourceGroup,ReadonlyArray<keyof InstructionDocument>>={craft:["secondaryCraft","process"],comments:["comments"],measurements:["unit","sizes","measurements"],images:["images"],fabrics:["fabrics"],accessories:["accessories"],composition:["composition"]};
+export const instructionSourceFields:Record<InstructionSourceGroup,ReadonlyArray<keyof InstructionDocument>>={craft:["secondaryCraft","craftSteps","process"],comments:["comments"],measurements:["unit","sizes","measurements"],images:["images"],fabrics:["fabrics"],accessories:["accessories"],composition:["composition"]};
 export function instructionSourceValue(document:InstructionDocument,group:InstructionSourceGroup){return Object.fromEntries(instructionSourceFields[group].map(field=>[field,document[field]]));}
 const withoutRowIds=(value:unknown):unknown=>Array.isArray(value)?value.map(withoutRowIds):value&&typeof value==="object"?Object.fromEntries(Object.entries(value).filter(([key])=>key!=="id").map(([key,item])=>[key,withoutRowIds(item)])):value;
 export function changedInstructionSourceGroups(before:InstructionDocument,after:InstructionDocument){return INSTRUCTION_SOURCE_GROUPS.filter(group=>JSON.stringify(withoutRowIds(instructionSourceValue(before,group)))!==JSON.stringify(withoutRowIds(instructionSourceValue(after,group))));}
@@ -90,6 +93,7 @@ export function instructionErrors(doc: InstructionDocument, order: DigitalOrder)
   return errors;
 }
 export type InstructionSheet = {
+  timelineSchemaVersion?:2;
   technicalSizeTable?:TechnicalSizeTable;
   readiness?:ProductionReadinessState;
   metadata?:JourneyDocumentMetadata;

@@ -68,9 +68,9 @@ describe('physical sewing receipt on saved routes',()=>{
   vi.mocked(savedDevelopmentRoute).mockResolvedValue(route as never);
   const start=vi.spyOn(service,'startRound').mockResolvedValue({taskId:'sewing'} as never);
   const system=vi.spyOn(DigitalProductionTaskService.prototype,'recordSystemRouteWithClient').mockResolvedValue(undefined);
-  const db={query:vi.fn(async(sql:string)=>sql.startsWith('SELECT t.*,a.task_kind')?{rows:[{task_kind:'development_craft_confirmation',route_version:round,route_instance_id:'route'}]}:sql.startsWith('SELECT route_nodes')?{rows:[{route_nodes:route}]}:sql.startsWith('SELECT 1')?{rows:[],rowCount:existing?1:0}:sql.startsWith('INSERT INTO audit_events')?{rows:[],rowCount:1}:Promise.reject(new Error('Unexpected query')))};
+  const db={query:vi.fn(async(sql:string)=>sql.includes("to_regclass('digital_timeline_adoptions')")?{rows:[{relation:null}]}:sql.startsWith('SELECT t.*,a.task_kind')?{rows:[{task_kind:'development_craft_confirmation',route_version:round,route_instance_id:'route'}]}:sql.startsWith('SELECT route_nodes')?{rows:[{route_nodes:route}]}:sql.startsWith('SELECT 1')?{rows:[],rowCount:existing?1:0}:sql.startsWith('INSERT INTO audit_events')?{rows:[],rowCount:1}:Promise.reject(new Error('Unexpected query')))};
   await service.advance(db as unknown as PoolClient,{actorId:'actor',requestId:'request'} as never,'source','confirmation');
-  expect(start).toHaveBeenCalledWith(db,expect.anything(),'source',next,'route',round,'confirmation','confirmation',null,receipt);
+  expect(start).toHaveBeenCalledWith(db,expect.anything(),'source',next,'route',round,'confirmation','confirmation',null,receipt,undefined);
   expect(system).toHaveBeenCalledTimes(receipt?1:0);
   expect(db.query.mock.calls.filter(([sql])=>sql.startsWith('INSERT INTO audit_events'))).toHaveLength(receipt?1:0);
  });

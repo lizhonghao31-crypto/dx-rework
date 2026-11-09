@@ -1,4 +1,5 @@
 import { hasWarehouseReceivingRole } from "@dx-rework/contracts";
+import {assertFixedFactoryDispatch} from '../production-platform/fixed-factory-dispatch.js';
 import { linkNewDigitalChild, resolveDigitalChild } from "../production-platform/child-link-repository.js";
 import { DigitalProductionAccessPolicy } from "../production-platform/access-policy.js";
 import { memberCanWriteModule } from "../access/member-module-policy.js";
@@ -226,6 +227,7 @@ export class SourcingProductionService {
   async dispatchDigitalWithClient(client:PoolClient,actor:TrustedActorContext,orderId:string,factId:string){
     const fact=(await client.query(`SELECT f.*,l.child_id AS sourcing_case_id FROM digital_factory_facts f JOIN digital_factory_routes r USING(preparation_id) JOIN digital_production_child_links l ON l.production_order_id=r.production_order_id AND l.module='sourcing' WHERE f.fact_id=$1 AND r.production_order_id=$2 AND f.kind='仓库实际发厂' AND f.actor_id=$3`,[factId,orderId,actor.actorId])).rows[0];
     if(!fact||!actor.actorRoles.includes(ROOT)&&(!hasWarehouseReceivingRole(actor.actorRoles)||!await new DigitalProductionAccessPolicy(client).activeRole(actor.actorId,'warehouse_receiver')))fail('发厂须匹配仓库实际登记事实',403);
+    await assertFixedFactoryDispatch(client,orderId,fact);
     const source=await this.source(client,fact.sourcing_case_id,true);
     if(source.workflow_generation!=='digital_production_v1')fail('发厂事实与数字生产来源不一致');
     if(!source.sourcing_contract_document_id||source.contract_status!=='ready')fail('当前批准合同尚未就绪；请订单跟单在本单合同页处理已列缺项并等待文件生成，生成失败时按该页重试，不能用旧版合同派单');

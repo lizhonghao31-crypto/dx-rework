@@ -15,6 +15,10 @@ import {bulkTaskTiming} from "./bulk-task-timing.js";
 import {DEVELOPMENT_ARRANGEABLE_KINDS} from "@dx-rework/contracts/development-arrangement";
 import {developmentTaskTiming} from "./development-task-timing.js";
 import {nativeTaskReadiness,nativeCuttingReadiness,NATIVE_READINESS_KINDS} from './task-readiness-facts.js';
+import {prepareFixedTaskPosition,insertFixedTaskPosition} from './fixed-task-route.js';
+import {shiftFixedTimeline} from './fixed-timeline-targets.js';
+import {FixedTimelineAdoptionRepository} from './fixed-timeline-adoptions.js';
+import {fixedCraftTiming,FIXED_DEVELOPMENT_CRAFT_TASKS} from './fixed-craft-timing.js';
 import {developmentSlaPlan} from "./development-sla-enrollment.js";
 import {isNativeRootSewingRecipient} from './development-native-recipient.js';
 import {authorizePatternOrder} from '../pattern-room/order-authority.js';
@@ -134,6 +138,10 @@ export class DigitalProductionTaskService {
     const timing=timingOverride??await developmentTaskTiming(client,task)??await bulkTaskTiming(client,task)??await factoryTaskTiming(client,task);
     if(timing){
       const deadline=digitalDeadline(timing.enteredAt,timing.seconds,timing.warningRatio);
+      if('calendarRef'in timing&&timing.calendarRef&&timing.enteredAt&&timing.seconds!==null){
+        deadline.dueAt=new Date(shiftFixedTimeline(timing.enteredAt,timing.seconds/60,timing.calendarRef));
+        deadline.warningAt=new Date(shiftFixedTimeline(timing.enteredAt,timing.seconds/60*timing.warningRatio,timing.calendarRef));
+      }
       await client.query(`INSERT INTO digital_production_deadline_revisions(task_id,policy_node_key,policy_version,entered_at,warning_at,due_at,reason,event_id,changed_by,sla_basis)
         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,[taskId,policy.node_key,policy.version,timing.enteredAt,deadline.warningAt,deadline.dueAt,reason,eventId,actor.actorId,JSON.stringify(timing)]);
       return deadline;
@@ -164,9 +172,19 @@ export class DigitalProductionTaskService {
    * do not infer historical overlap from unrelated old timestamps.
    */
   private async captureNativeReadiness(client:PoolClient,actor:TrustedActorContext,task:{task_id:string;task_kind:string;source_id:string|null;production_order_id:string|null;route_instance_id:string;route_version:number;state:string},physicalCut?:{cuttingOrderId:string;actualCutCount:number}){
-    if(!NATIVE_READINESS_KINDS.has(task.task_kind)||['completed','cancelled'].includes(task.state))return;
+    const craft=Boolean(task.source_id&&FIXED_DEVELOPMENT_CRAFT_TASKS.has(task.task_kind));
+    if(!NATIVE_READINESS_KINDS.has(task.task_kind)&&!craft||['completed','cancelled'].includes(task.state))return;
     const saved=(await nativeTaskReadiness(client,[task.task_id])).get(task.task_id);
     if(!saved?.tracked)return;
+    if(craft){
+      if(saved.eventId)return;
+      const timing=await fixedCraftTiming(client,task,{prerequisitesOnly:true});if(!timing?.enteredAt)return;
+      const eventId=randomUUID();
+      await client.query(`INSERT INTO digital_production_task_events(event_id,task_id,resource_kind,resource_id,event_kind,actor_id,occurred_at,time_quality,payload)
+        VALUES($1,$2,'source',$3,'ready',$4,$5,'现场登记',$6)`,[eventId,task.task_id,task.source_id,actor.actorId,timing.enteredAt,
+        JSON.stringify({readinessOnly:true,nativeReadiness:{version:1,scopeRef:`task:${task.task_id}:route:${task.route_instance_id}:${task.route_version}`,basis:timing.basis}})]);
+      return eventId;
+    }
     const sewing=task.task_kind==='development_sewing'||task.task_kind==='development_sewing_transfer';
     if(sewing&&saved.eventId)return;
     const ignored=sewing?['handover_received','pattern_assignment_ready','materials_ready']:[];
@@ -287,7 +305,7 @@ export class DigitalProductionTaskService {
     else if (quality === "缺失") quality = "补报未核实";
     const bulkTiming=await bulkTaskTiming(client,task)??await factoryTaskTiming(client,task);
     if(bulkTiming){occurredAt=bulkTiming.enteredAt;quality=bulkTiming.timeQuality as TimeQuality;}
-    if(NATIVE_READINESS_KINDS.has(task.task_kind)){
+    if(NATIVE_READINESS_KINDS.has(task.task_kind)||task.source_id&&FIXED_DEVELOPMENT_CRAFT_TASKS.has(task.task_kind)){
       const readiness=(await nativeTaskReadiness(client,[id])).get(id);
       if(readiness?.tracked){occurredAt=readiness.firstReadyAt;quality=(readiness.quality??'缺失') as TimeQuality;}
     }
@@ -305,7 +323,7 @@ export class DigitalProductionTaskService {
     return true;
   }
   // Called by fixed business adapters inside their own transaction; no public task-builder route.
-  async createWithClient(client: PoolClient, actor: TrustedActorContext, input: { resource: Resource; authorizingTaskId?: string; kind: DigitalTaskKind; routeId: string; routeVersion: number; occurrence: number; assigneeId: string | null; predecessors?: string[]; conditions?: typeof DIGITAL_CONDITION_KEYS[number][]; occurredAt?: string | null }) {
+  async createWithClient(client: PoolClient, actor: TrustedActorContext, input: { resource: Resource; authorizingTaskId?: string; kind: DigitalTaskKind; routeId: string; routeVersion: number; occurrence: number; routePosition?:number; assigneeId: string | null; predecessors?: string[]; conditions?: typeof DIGITAL_CONDITION_KEYS[number][]; occurredAt?: string | null }) {
     assertCurrentFactoryTask(input.kind);
     await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
     await this.active(client, input.resource);
@@ -317,14 +335,16 @@ export class DigitalProductionTaskService {
       await new DigitalProductionAccessPolicy(client).assert(actor, "task", input.authorizingTaskId, "execute");
     } else await new DigitalProductionAccessPolicy(client).assert(actor, input.resource.kind, input.resource.id, "technical");
     const column = input.resource.kind === "order" ? "production_order_id" : "source_id";
-    const existing = (await client.query(`SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.${column}=$1 AND a.task_kind=$2 AND t.occurrence=$3`, [input.resource.id, input.kind, input.occurrence])).rows[0];
+    const fixed=await prepareFixedTaskPosition(client,input),occurrence=fixed?.occurrence??input.occurrence;
+    const existing = (await client.query(`SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.${column}=$1 AND a.task_kind=$2 AND t.occurrence=$3`, [input.resource.id, input.kind, occurrence])).rows[0];
     if (existing) fail("本轮该节点任务已经存在");
     for (const predecessor of input.predecessors ?? []) {
       const prior = await this.task(client, predecessor);
       if (this.resource(prior).kind !== input.resource.kind || this.resource(prior).id !== input.resource.id || prior.route_instance_id !== input.routeId) fail("前置任务必须属于同一业务轮次");
     }
     const id = await createDigitalTaskAccess(client, actor, { kind: input.kind, assigneeId: input.assigneeId, ...(input.resource.kind === "order" ? { orderId: input.resource.id } : { sourceId: input.resource.id }) });
-    await client.query("INSERT INTO digital_production_tasks(task_id,node_key,route_instance_id,route_version,occurrence) VALUES($1,$2,$3,$4,$5)", [id, input.kind, input.routeId, input.routeVersion, input.occurrence]);
+    await client.query("INSERT INTO digital_production_tasks(task_id,node_key,route_instance_id,route_version,occurrence) VALUES($1,$2,$3,$4,$5)", [id, input.kind, input.routeId, input.routeVersion, occurrence]);
+    if(fixed)await insertFixedTaskPosition(client,id,fixed);
     for (const prior of input.predecessors ?? []) await client.query("INSERT INTO digital_production_task_dependencies(task_id,predecessor_id) VALUES($1,$2)", [id, prior]);
     let activation=REQUIRED_ACTIVATION[input.kind]??[];
     if(input.resource.kind==='order'&&['bulk_pattern','warehouse_preshrink'].includes(input.kind)){
@@ -338,7 +358,7 @@ export class DigitalProductionTaskService {
     }
     // Enroll only native SLA routes. Older order-scoped development tasks and
     // manually created legacy routes keep their original clock contract.
-    const trackReadiness=NATIVE_READINESS_KINDS.has(input.kind)&&(input.kind.startsWith('development_')
+    const trackReadiness=Boolean(input.resource.kind==='source'&&fixed?.position.stepId)||NATIVE_READINESS_KINDS.has(input.kind)&&(input.kind.startsWith('development_')
       ?input.resource.kind==='source'&&Boolean(await developmentSlaPlan(client,input.resource.id))
       :input.resource.kind==='order'&&Boolean((await client.query("SELECT to_regclass('digital_bulk_preparations') AS relation")).rows[0]?.relation)
        &&Boolean((await client.query('SELECT 1 FROM digital_bulk_preparations WHERE preparation_id=$1 AND production_order_id=$2 AND workflow_version=2 AND sla_snapshot_id IS NOT NULL',[input.routeId,input.resource.id])).rowCount));
@@ -709,6 +729,17 @@ export class DigitalProductionTaskService {
         const business=nodes.filter(node=>!["development_material_supply","development_craft_dispatch","development_sewing_transfer","development_washing_dispatch"].includes(node));
         const rows=(await db.query("SELECT DISTINCT CASE WHEN node_key='development_material_recheck' THEN 'development_materials' ELSE node_key END AS node,state FROM digital_production_tasks t WHERE route_instance_id=$1 AND NOT EXISTS(SELECT 1 FROM digital_production_task_events e WHERE e.task_id=t.task_id AND e.event_kind='material_returned')",[task.route_instance_id])).rows;
         route={applicable:business.length,completed:business.filter(node=>rows.some(row=>row.node===node&&row.state==='completed')).length,cancelled:business.filter(node=>rows.some(row=>row.node===node&&row.state==='cancelled')&&!rows.some(row=>row.node===node&&row.state==='completed')).length};
+        const savedPlan=await developmentSlaPlan(db,task.source_id);
+        if(savedPlan?.route_schema_version===2){
+          const adopted=await new FixedTimelineAdoptionRepository(db).existing({kind:'source',id:task.source_id},task.route_version);
+          if(adopted&&adopted.input.sourceVersions.routeRef===task.route_instance_id){
+            const positions=(adopted.input.route??[]).filter(position=>!['development_material_supply','development_craft_dispatch','development_sewing_transfer','development_washing_dispatch'].includes(position.kind));
+            const actual=(await db.query(`SELECT p.route_position,t.state FROM digital_timeline_task_positions p JOIN digital_production_tasks t USING(task_id)
+              WHERE p.route_ref=$1 AND p.route_version=$2 AND NOT EXISTS(SELECT 1 FROM digital_production_task_events e WHERE e.task_id=t.task_id AND e.event_kind='material_returned')`,[task.route_instance_id,task.route_version])).rows;
+            route={applicable:positions.length,completed:positions.filter(position=>actual.some(row=>row.route_position===position.position&&row.state==='completed')).length,
+              cancelled:positions.filter(position=>actual.some(row=>row.route_position===position.position&&row.state==='cancelled')).length};
+          }
+        }
       }
     }
     const handover = await db.query("SELECT 1 FROM digital_production_task_conditions WHERE task_id=$1 AND condition_key='handover_received'", [id]);
@@ -718,7 +749,11 @@ export class DigitalProductionTaskService {
     if(task.state==='blocked'&&task.blocked_reason&&task.blocked_reason!=='前置条件未满足')unmetConditions.push({condition:'manual_block',name:'任务阻断',missing:task.blocked_reason,responsibleRole:task.required_role,action:canManage?'处理阻断原因':null,evidenceId:null,verified:true});
     const factoryQc=task.task_kind==='factory_production_qc'&&task.production_order_id?await factoryProductionFacts(db,task.production_order_id):null;
     const observed=await new ContextBusinessClock(this.database,db === this.database ? undefined : db as PoolClient).read(resource);
-    return { ...(effective?.timing_mode?{deadlineMode:effective.timing_mode as "duration"|"date_target"|"unlimited",...(effective.timing_mode==='date_target'?{deadlineExclusive:true}:{})}:{}),...(observed.scenarioId?{acceptanceBusinessNow:observed.now,...(effective?.sla_basis?{deadlineExclusive:effective.sla_basis.exclusive===true}:{})}:{}),unmetConditions, identity, priority,...(retired?{retiredRule:FACTORY_RECEIPT_RETIREMENT}:{}), taskId: id, orderId: task.production_order_id as string | null, sourceId: task.source_id as string | null, taskKind: task.task_kind as string, label: retired?`${currentPolicy.label}（已停用）`:currentPolicy.label as string,
+    const taskBasis:string[]=effective?.sla_basis?.basis??[];
+    const stepRef=taskBasis.find(ref=>ref.startsWith('craft-step:'))?.slice(11),craftKind=taskBasis.find(ref=>ref.startsWith('craft-kind:'))?.slice(11);
+    const craftName=craftKind==='embroidery'?'绣花':craftKind==='printing'?'印花':null;
+    const stepLabel=craftName?({development_craft_dispatch:`发${craftName}`,development_craft_confirmation:`${craftName}回样确认`,process_logistics:`${craftName}物流`,bulk_qc:`${craftName}回仓检查`} as Record<string,string>)[task.task_kind]:null;
+    return { ...(stepRef&&craftName?{stepRef,craftKind:craftKind as 'embroidery'|'printing'}:{}),...(effective?.timing_mode?{deadlineMode:effective.timing_mode as "duration"|"date_target"|"unlimited",...(effective.timing_mode==='date_target'?{deadlineExclusive:true}:{})}:{}),...(observed.scenarioId?{acceptanceBusinessNow:observed.now,...(effective?.sla_basis?{deadlineExclusive:effective.sla_basis.exclusive===true}:{})}:{}),unmetConditions, identity, priority,...(retired?{retiredRule:FACTORY_RECEIPT_RETIREMENT}:{}), taskId: id, orderId: task.production_order_id as string | null, sourceId: task.source_id as string | null, taskKind: task.task_kind as string, label: retired?`${currentPolicy.label}（已停用）`:stepLabel??currentPolicy.label as string,
       routeProgress: route, assigneeName: assignee, requiredRole: task.required_role, hasHandover: Boolean(handover.rowCount), canManage:!retired&&canManage, canControl:!retired&&canControl, canCorrect:!retired&&( isDigitalLeader(actor) || isDigitalTechnicalManager(actor)),
       assigneeId: task.assignee_id as string | null, state: (factoryQc&&task.state==='completed'&&!factoryQc.complete?'ready':task.state) as DigitalTaskState, routeVersion: task.route_version as number, occurrence: task.occurrence as number,
       enteredAt: iso(effective?.sla_basis?effective.entered_at:task.entered_at), recordedAt: iso(task.created_at)!, completedAt: factoryQc?factoryQc.complete&&factoryQc.checks.every(c=>c.completedAt)?new Date(Math.max(...factoryQc.checks.map(c=>Date.parse(c.completedAt!)))).toISOString():null:iso(task.completed_at), paused,
