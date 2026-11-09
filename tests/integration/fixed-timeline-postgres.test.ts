@@ -140,6 +140,28 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   await tx(db=>new FixedTimelineAdoptionRepository(db).buildPendingTargets(saved));expect((await read()).rows).toEqual(rows);
   });
  });
+ it('replays a real approved customer H change committed before the first physical route adoption',async()=>{
+  configureTimelineAdoption(f.db,'fixed_v2');
+  try{
+   const p=await run(()=>make()),initial=(await readInitialTimelineInput(f.db,p.resource))!,base=Date.parse(initial.data.time.now);
+   await f.advance(scene,new Date(base+3600000).toISOString());
+   await run(async()=>{
+    const dates=new PoCustomerDateService(f.db),state=await dates.read(f.root,p.resource.id),version=(await f.db.query('SELECT version FROM digital_production_orders WHERE production_order_id=$1',[p.resource.id])).rows[0].version;
+    const request=await dates.request(f.root,p.resource.id,{orderVersion:version,changes:[{lineId:p.lineId,date:'2027-03-02',expectedVersion:state.customerPoDates[0]!.version}],reason:'TEST real H before original route adoption'},randomUUID()) as {requestId:string};
+    await dates.decide(f.root,p.resource.id,request.requestId,true,randomUUID());
+   });
+   await f.advance(scene,new Date(base+7200000).toISOString());
+   await run(async()=>{
+    const time=await new ContextBusinessClock(f.db).read(p.resource),saved=(await tx(db=>new FixedTimelineAdoptionRepository(db).capture(p.resource,1,f.root.actorId,p.eventRef,time,'fixed_v2',()=>input(db,p))))!;
+    expect(saved.time.now).toBe(new Date(base+7200000).toISOString());
+    await tx(db=>new FixedTimelineAdoptionRepository(db).buildPendingTargets(saved));
+    const rows=(await f.db.query('SELECT revision,targets_json FROM digital_timeline_target_revisions WHERE adoption_id=$1 ORDER BY revision',[saved.adoptionId])).rows;
+    expect(rows.map(row=>row.revision)).toEqual([1,2]);expect(rows.map(row=>row.targets_json[0].end.at)).toEqual(['2027-03-01T16:00:00.000Z','2027-03-02T16:00:00.000Z']);
+    await tx(db=>new FixedTimelineAdoptionRepository(db).buildPendingTargets(saved));
+    expect((await f.db.query('SELECT 1 FROM digital_timeline_target_revisions WHERE adoption_id=$1',[saved.adoptionId])).rowCount).toBe(2);
+   });
+  }finally{configureTimelineAdoption(f.db,'legacy');}
+ });
  it('isolates a target storage failure in the original bounded worker after business commit and retries the original input',()=>run(async()=>{
   const bad=await make(),good=await make(),save=async(p:Awaited<ReturnType<typeof make>>)=>tx(async db=>new FixedTimelineAdoptionRepository(db).capture(p.resource,1,f.root.actorId,p.eventRef,await new ContextBusinessClock(f.db,db).read(p.resource),'fixed_v2',()=>input(db,p)));
   const badAdoption=(await save(bad))!,goodAdoption=(await save(good))!;

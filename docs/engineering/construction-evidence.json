@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "5db8ffde9195db99cf8ba1ad2e3018c87a16fac6",
-  "sourceFingerprint": "eb89007c6c175631366304d37a803fe24b1012c320a8f134269eafc7ece991f5",
+  "sourceFingerprint": "fafe55f08b9c2594baad9f2686afda0d36895e76efd230c2862e49a5efd9e0d9",
   "risk": "full",
   "rules": [
     {
@@ -11,11 +11,6 @@
       "writes": [
         "apps/api/src/production-platform/bulk-preparation-service.ts",
         "apps/api/src/production-platform/development-sla-enrollment.ts",
-        "apps/api/src/production-platform/identity-service.ts",
-        "apps/api/src/production-platform/journey-fact-repository.ts",
-        "apps/api/src/production-platform/sla-order-application.ts",
-        "apps/api/src/production-platform/sla-order-service.ts",
-        "apps/api/src/production-platform/sla-plan-repository.ts",
         "apps/api/src/production-platform/fixed-development-adoption.ts",
         "apps/api/src/production-platform/fixed-order-adoption.ts",
         "apps/api/src/production-platform/fixed-order-route-targets.ts",
@@ -26,6 +21,11 @@
         "apps/api/src/production-platform/fixed-timeline-mode.ts",
         "apps/api/src/production-platform/fixed-timeline-targets.ts",
         "apps/api/src/production-platform/fixed-work-definition.ts",
+        "apps/api/src/production-platform/identity-service.ts",
+        "apps/api/src/production-platform/journey-fact-repository.ts",
+        "apps/api/src/production-platform/sla-order-application.ts",
+        "apps/api/src/production-platform/sla-order-service.ts",
+        "apps/api/src/production-platform/sla-plan-repository.ts",
         "tests/integration/fixed-timeline-native-browser-postgres.test.ts",
         "tests/integration/fixed-timeline-postgres.test.ts",
         "tests/unit/fixed-timeline-targets.test.ts"
@@ -47,7 +47,7 @@
         "tests/unit/fixed-timeline-targets.test.ts"
       ],
       "initialization": "Additive0281 records new adopted inputs only; no historic adoption/backfill. Original native creation uses RR only for opt-in initial adoption, proving a concurrently committed development standard cannot be mixed into the earlier read. Frozen legacy source references are not retroactively adopted. Original async bounded worker builds B0 then ordered real H changes using original inputs, including missing planning rather than later defaults; worker failure preserves business success. New instruction/preparation scope uses original identity and frozen handoff constraints, not an instruction version as adoption-round. Shared source work retains canonical references; ship sample constraint is soft, not a new gate. Paired planning publication and final unified display follow PR05/04.",
-      "expectation": "Current actual14 PG13 cases prove immutable/retry/concurrency/H/rollback/failure isolation, native creation and source continuation with new adoption off, both real dual source routes, real second round/history, planning60 versus own5760, missing inherited standard and later instruction scope/native task positions. Target units prove required serial/parallel/included, calendars/Sunday zero, unknown and ship-sample minimum/exclusive precision. Earlier actual90-case core command passed before the final RR/concurrency case; later same core run had90pass/1test-hook failure, now corrected and all14targeted pass; do not claim that failed full command passed or that it was rerun for test-hook formatting. No onsite claim.",
+      "expectation": "Current actual15 PG13 cases prove immutable/retry/concurrency/H/rollback/failure isolation, native creation and source continuation with new adoption off, both real dual source routes, real second round/history, planning60 versus own5760, missing inherited standard and later instruction scope/native task positions. Target units prove required serial/parallel/included, calendars/Sunday zero, unknown and ship-sample minimum/exclusive precision. Earlier actual90-case core command passed before the final RR/concurrency case; later same core run had90pass/1test-hook failure, now corrected and all15targeted pass; do not claim that failed full command passed or that it was rerun for test-hook formatting. No onsite claim.",
       "checks": [
         "p02-adoption-final",
         "p02-legacy16-final",
@@ -67,14 +67,15 @@
         "apps/api/src/production-platform/factory-batch-timing.ts",
         "apps/api/src/production-platform/factory-flow-service.ts",
         "apps/api/src/production-platform/factory-sla-evidence.ts",
-        "apps/api/src/production-platform/task-service.ts",
-        "apps/api/src/sourcing/sourcing-production-service.ts",
         "apps/api/src/production-platform/factory-step-ledger.ts",
         "apps/api/src/production-platform/fixed-craft-steps.ts",
         "apps/api/src/production-platform/fixed-craft-timing.ts",
         "apps/api/src/production-platform/fixed-factory-dispatch.ts",
         "apps/api/src/production-platform/fixed-factory-timing.ts",
-        "apps/api/src/production-platform/fixed-task-route.ts"
+        "apps/api/src/production-platform/fixed-task-route.ts",
+        "apps/api/src/production-platform/task-service.ts",
+        "apps/api/src/sourcing/sourcing-production-service.ts",
+        "tests/unit/fixed-factory-dispatch-windows.test.ts"
       ],
       "reads": [
         "apps/api/src/production-platform/factory-batch-ledger.ts",
@@ -94,7 +95,7 @@
         "tests/unit/factory-step-ledger.test.ts"
       ],
       "initialization": "Only actual adopted routes create immutable step UUIDs and positions. Source revisions keep completed historic tasks and cancel superseded pending tasks under original rules; new work is added_work. Craft firstR is captured in native write only from actual complete prerequisites independently of assignment; included30min own handoff remains, dual parent has no inferred96/168/84 SLA. Factory ledger consumes previous qualified per-PO returns and terminal warehouse supply, preserving original facts and latest QC. Underlying SourcingProductionService dispatch guards malicious earlier return even with spoofed terminal label. Unsupported overlapping multi-cut stays rejected, not guessed.",
-      "expectation": "Both chosen sequences are actual native commands. First-step complete/QC with final0 rejects direct dispatch; low-level spoofed fact is rejected and rolled back in owned TEST transaction. Final60+40, own10 resend/return, latest bad/good QC and idempotent dispatch reach native100, never200. Current legacy16 suites preserve old combined route, task guards, deadline clocks, correction, quantities and authorization. Business actor fixtures cut/prepare and original HTTP AuthService are real; no claim all new dual permission combinations or onsite cases tested.",
+      "expectation": "Both chosen sequences are actual native commands. First-step complete/QC with final0 rejects direct dispatch; low-level spoofed fact is rejected and rolled back in owned TEST transaction. Final60+40, own10 resend/return, latest bad/good QC and idempotent dispatch reach native100, never200. Prior actual53 legacy16 cases at aa3b candidate preserve old combined route, task guards, deadline clocks, correction, quantities and authorization; they are not rerun after two v2-only Review fixes. Current actual15 native cases and pure Monday60/Wednesday40 plus recheck/dispatch obligations cover both fixes. Business actor fixtures cut/prepare and original HTTP AuthService are real; no claim all new dual permission combinations or onsite cases tested.",
       "checks": [
         "p02-adoption-final",
         "p02-legacy16-final",
@@ -113,15 +114,15 @@
         "apps/web/src/digital-development-create-form.tsx",
         "apps/web/src/digital-development-panel.tsx",
         "apps/web/src/factory-batch-panel.tsx",
+        "apps/web/src/independent-craft-field.css",
+        "apps/web/src/independent-craft-field.tsx",
         "apps/web/src/production-instruction-panel.tsx",
         "packages/contracts/package.json",
+        "packages/contracts/src/digital-craft.ts",
         "packages/contracts/src/digital-development.ts",
         "packages/contracts/src/digital-production-tasks.ts",
         "packages/contracts/src/factory-flow.ts",
-        "packages/contracts/src/production-instruction.ts",
-        "apps/web/src/independent-craft-field.css",
-        "apps/web/src/independent-craft-field.tsx",
-        "packages/contracts/src/digital-craft.ts"
+        "packages/contracts/src/production-instruction.ts"
       ],
       "reads": [
         "apps/web/src/digital-development-editing.ts",
@@ -152,11 +153,11 @@
       "dateAndPermission": "Original TrustedActorContext/resource/task/field gates, lifecycle lock, command key/body/hash, original committing owner and Root exception remain. No actor authorization DTO cached. BusinessTime occurrence, original source/round/PO/cut references and frozen own calendar remain separate from wall audit time, build time and observation. Legacy request/DTO behavior persists; no live events or historical timestamps manufactured.",
       "rule": "Register additive opt-in schema, minimal existing migration privileges and compatible default configuration without half-enabling new adoption or triggering unrelated recovery drills.",
       "writes": [
+        "apps/api/migrations/0281_fixed_timeline_adoptions.sql",
         "apps/api/src/platform/migration-manifest.json",
         "apps/api/src/server.ts",
         "packages/config/src/index.ts",
-        "scripts/deploy/acceptance-migration-requirements.json",
-        "apps/api/migrations/0281_fixed_timeline_adoptions.sql"
+        "scripts/deploy/acceptance-migration-requirements.json"
       ],
       "reads": [
         "scripts/deploy/migration-execution-compatibility.mjs",
@@ -195,8 +196,8 @@
         "tests/helpers/development-sla-native-fixture.ts",
         "tests/unit/config.test.ts",
         "tests/unit/development-craft-timing-review.test.ts",
-        "tests/unit/full-gate-risk-map.test.ts",
-        "tests/unit/factory-step-ledger.test.ts"
+        "tests/unit/factory-step-ledger.test.ts",
+        "tests/unit/full-gate-risk-map.test.ts"
       ],
       "reads": [
         "scripts/test-execution-config.mjs",
@@ -215,7 +216,7 @@
         "tests/integration/fixed-timeline-native-browser-postgres.test.ts"
       ],
       "initialization": "New PG/native browser files use canonical2worker configuration and shared100s correctness/hook budget, retain bounded cleanup and actual executable. Risk map selects target/native source/readiness/factory consumers, no new gate. Inventory reconciler retains previous semantic fields and explicit P01 cut95 review; only actual changed sites get bounded P02 occurrence/consumer notes. Real prior failures from bridge missing key, config build absence, fixture delivery step, type imports and missing new requirements remain private logs, not passed evidence. No test weakening, live data or low-timeout workaround.",
-      "expectation": "Actual independent target/ledger/contracts/config/old route/risk units, current native adoption/legacy suites and full App2browser cases are the automatic evidence; old90source/technical/readiness/calculation cases retained as accurately described reference after a test-only hook correction, not falsely finalFull. Node22.22.2/npm10.9.9 and original actualPG13.23/16.15 isolated lowpriv loopback databases,2workers onCPUs2/3 and DB on0/1; no Docker/CI-hardware or onsite equivalence. Final remote Light/CodexReview/Full still required before normal expected-head merge.",
+      "expectation": "Actual independent target/ledger/contracts/config/old route/risk units, current native adoption/legacy suites and full App2browser cases are the automatic evidence; old90source/technical/readiness/calculation cases retained as accurately described reference after a test-only hook correction, not falsely finalFull. Node22.22.2/npm10.9.9 and original actualPG13.23/16.15 isolated lowpriv loopback databases,2workers onCPUs2/3 and DB on0/1; no Docker/CI-hardware or onsite equivalence. Light and formal Codex Review of aa3b255ce345b02917ced7dc02094a75f6c77278 found4519056745 and4519056755. Original header creation time now bounds real customer-H replay before first route capture; original first release per terminal-return/PO survives later batches and rechecks. Both fixed with actual15native and2independent calendar expected units. Final-head Light/Full and thread closure still required; no claim fix re-reviewed.",
       "checks": [
         "p02-adoption-final",
         "p02-legacy16-final",
@@ -229,147 +230,11 @@
     {
       "id": "p02-adoption-final",
       "kind": "tests",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/fixed-timeline-postgres.test.ts --maxWorkers=2 --config vitest.business-chain.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/supplychain-board-20261109/p02-adoption-final.vitest.json",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/fixed-timeline-postgres.test.ts --maxWorkers=2 --config vitest.business-chain.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/supplychain-board-20261109/p02-review-native.vitest.json",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "1c7a4dba8d609c2867dbe7eefc2f58f79b86736dc37f8190aab6b57998b7497a",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "package.json",
-        "package-lock.json",
-        "eslint.config.js",
-        "tsconfig.base.json",
-        "vitest.business-chain.config.ts",
-        "vitest.config.ts",
-        "vitest.postgres-immediate.config.ts",
-        "tests/helpers",
-        "tests/acceptance",
-        "tests/fixtures",
-        "tests/integration"
-      ],
-      "inputFingerprint": "16db31e0e70680a338e67b273f592538f8bd4dd74a65a60bfeee8d2ffdf8dec5",
-      "sourceUnchanged": true,
-      "inputsUnchanged": true,
-      "testedHead": "5db8ffde9195db99cf8ba1ad2e3018c87a16fac6",
-      "startedAt": "2026-11-09T22:50:53.200Z",
-      "endedAt": "2026-11-09T22:51:17.808Z",
-      "passed": 14,
-      "failed": 0,
-      "skipped": 0,
-      "planError": null,
-      "log": "/workspace/scratch/supplychain-board-20261109/p02-adoption-final.log",
-      "logSha256": "38e038b78ec956095541bba372ef7a101652049021c3c94ca4f29fb987f3b15b",
-      "resultReport": "/workspace/scratch/supplychain-board-20261109/p02-adoption-final.vitest.json",
-      "postgresVersion": 130023,
-      "context": "Actual PostgreSQL130023 official cached-image binaries/libraries in private /tmp, non-superuser marked TEST databases, original full native schema and businessAnchorFixture/UAT initializer. Original canonical suite config/runOwnedCommand, Node22.22.2,2 Vitest workers onCPUs2/3, PostgreSQL onCPUs0/1/default100connections/64MiB shared buffers. No Docker/CI hardware or onsite equivalence. p01 is explicitly bounded new-case discovery, not all suites or skipped old coverage passed. Verified native evidence reuse: complete original source tree cryptographically reconstructed; only two later unrelated pure unit fixture updates differ, no business/runtime/helper/integration input change. Original global input record retained in reuseProof. No repeat of already passed business tests.",
-      "reuseProof": {
-        "originalSourceFingerprint": "1c7a4dba8d609c2867dbe7eefc2f58f79b86736dc37f8190aab6b57998b7497a",
-        "originalInputPaths": [
-          "apps",
-          "packages",
-          "scripts",
-          "tests",
-          "package.json",
-          "package-lock.json",
-          "eslint.config.js",
-          "tsconfig.base.json",
-          "vitest.business-chain.config.ts",
-          "vitest.config.ts",
-          "vitest.postgres-immediate.config.ts"
-        ],
-        "originalInputFingerprint": "d80028f3fc279d815472bf388882aa9558ec1dd460ecd10bb9f001ab51d32c49",
-        "verifiedLaterOnlyChanges": [
-          "tests/unit/config.test.ts",
-          "tests/unit/development-craft-timing-review.test.ts"
-        ],
-        "method": "Reconstructed complete historical tracked/untracked source inventory byte-for-byte from current tree with the only two later unit fixtures restored from unchanged pre-test HEAD; SHA256 equals original command source fingerprint. All native runtime/helper/integration inputs are unchanged; unrelated pure unit fixtures are not native imports. Counts, log and report are the original run, never a new run claim."
-      },
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "db9ebba48ede66c201b4b58eaa5b139a2605889cdb2b6332ad76fc8470843959"
-        }
-      ]
-    },
-    {
-      "id": "p02-legacy16-final",
-      "kind": "tests",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/development-sla-enrollment-postgres.test.ts tests/integration/factory-logistics-cockpit-postgres.test.ts tests/integration/digital-production-tasks-postgres.test.ts tests/integration/bulk-preshrink-correction-postgres.test.ts --maxWorkers=2 --config vitest.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/supplychain-board-20261109/p02-legacy16-final.vitest.json",
-      "status": "passed",
-      "exitCode": 0,
-      "allExited": true,
-      "sourceFingerprint": "1c7a4dba8d609c2867dbe7eefc2f58f79b86736dc37f8190aab6b57998b7497a",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "package.json",
-        "package-lock.json",
-        "eslint.config.js",
-        "tsconfig.base.json",
-        "vitest.business-chain.config.ts",
-        "vitest.config.ts",
-        "vitest.postgres-immediate.config.ts",
-        "tests/helpers",
-        "tests/acceptance",
-        "tests/fixtures",
-        "tests/integration"
-      ],
-      "inputFingerprint": "16db31e0e70680a338e67b273f592538f8bd4dd74a65a60bfeee8d2ffdf8dec5",
-      "sourceUnchanged": true,
-      "inputsUnchanged": true,
-      "testedHead": "5db8ffde9195db99cf8ba1ad2e3018c87a16fac6",
-      "startedAt": "2026-11-09T22:52:39.461Z",
-      "endedAt": "2026-11-09T22:53:30.157Z",
-      "passed": 53,
-      "failed": 0,
-      "skipped": 0,
-      "planError": null,
-      "log": "/workspace/scratch/supplychain-board-20261109/p02-legacy16-final.log",
-      "logSha256": "d3c1cefcab149852ae3c9f512a93028403d4cb4c47f01cc48bbc3dd9f5738c66",
-      "resultReport": "/workspace/scratch/supplychain-board-20261109/p02-legacy16-final.vitest.json",
-      "postgresVersion": 160015,
-      "context": "Actual PostgreSQL160015 official cached-image binaries/libraries in private /tmp, non-superuser marked TEST databases, original full native schema and businessAnchorFixture/UAT initializer. Original canonical suite config/runOwnedCommand, Node22.22.2,2 Vitest workers onCPUs2/3, PostgreSQL onCPUs0/1/default100connections/64MiB shared buffers. No Docker/CI hardware or onsite equivalence. p01 is explicitly bounded new-case discovery, not all suites or skipped old coverage passed. Verified native evidence reuse: complete original source tree cryptographically reconstructed; only two later unrelated pure unit fixture updates differ, no business/runtime/helper/integration input change. Original global input record retained in reuseProof. No repeat of already passed business tests.",
-      "reuseProof": {
-        "originalSourceFingerprint": "1c7a4dba8d609c2867dbe7eefc2f58f79b86736dc37f8190aab6b57998b7497a",
-        "originalInputPaths": [
-          "apps",
-          "packages",
-          "scripts",
-          "tests",
-          "package.json",
-          "package-lock.json",
-          "eslint.config.js",
-          "tsconfig.base.json",
-          "vitest.business-chain.config.ts",
-          "vitest.config.ts",
-          "vitest.postgres-immediate.config.ts"
-        ],
-        "originalInputFingerprint": "d80028f3fc279d815472bf388882aa9558ec1dd460ecd10bb9f001ab51d32c49",
-        "verifiedLaterOnlyChanges": [
-          "tests/unit/config.test.ts",
-          "tests/unit/development-craft-timing-review.test.ts"
-        ],
-        "method": "Reconstructed complete historical tracked/untracked source inventory byte-for-byte from current tree with the only two later unit fixtures restored from unchanged pre-test HEAD; SHA256 equals original command source fingerprint. All native runtime/helper/integration inputs are unchanged; unrelated pure unit fixtures are not native imports. Counts, log and report are the original run, never a new run claim."
-      },
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "2bf3d429e034ef3c5cf71a196804a2a8f1acfe9adbb3538b64c9bc8f6de81a65"
-        }
-      ]
-    },
-    {
-      "id": "p02-browser-final",
-      "kind": "tests",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/fixed-timeline-native-browser-postgres.test.ts --maxWorkers=2 --config vitest.business-chain.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/supplychain-board-20261109/p02-browser-final.vitest.json",
-      "status": "passed",
-      "exitCode": 0,
-      "allExited": true,
-      "sourceFingerprint": "eb89007c6c175631366304d37a803fe24b1012c320a8f134269eafc7ece991f5",
+      "sourceFingerprint": "fafe55f08b9c2594baad9f2686afda0d36895e76efd230c2862e49a5efd9e0d9",
       "inputPaths": [
         "apps",
         "packages",
@@ -383,36 +248,87 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "13c1cefce7924ffef718447c83fba175f4c8f27042f02baf74f4b01b41cf7c6e",
+      "inputFingerprint": "625a6316304375950f5ce2daa619dd13edfed40a23e7a56fa6a40f7e7afe799c",
       "sourceUnchanged": true,
       "inputsUnchanged": true,
-      "testedHead": "5db8ffde9195db99cf8ba1ad2e3018c87a16fac6",
-      "startedAt": "2026-11-09T22:55:26.596Z",
-      "endedAt": "2026-11-09T22:55:47.124Z",
-      "passed": 2,
+      "testedHead": "aa3b255ce345b02917ced7dc02094a75f6c77278",
+      "startedAt": "2026-11-09T23:11:31.750Z",
+      "endedAt": "2026-11-09T23:11:51.394Z",
+      "passed": 15,
       "failed": 0,
       "skipped": 0,
       "planError": null,
-      "log": "/workspace/scratch/supplychain-board-20261109/p02-browser-final.log",
-      "logSha256": "be829edffb2a5149c86f987038dbfa708349393b037048737ad82474b2ac2da5",
-      "resultReport": "/workspace/scratch/supplychain-board-20261109/p02-browser-final.vitest.json",
+      "log": "/workspace/scratch/supplychain-board-20261109/p02-review-native.log",
+      "logSha256": "8f417606815b85a36e30a811b6c045f43f368353eec53ee524b22db75fd3d61c",
+      "resultReport": "/workspace/scratch/supplychain-board-20261109/p02-review-native.vitest.json",
       "postgresVersion": 130023,
       "context": "Actual PostgreSQL130023 official cached-image binaries/libraries in private /tmp, non-superuser marked TEST databases, original full native schema and businessAnchorFixture/UAT initializer. Original canonical suite config/runOwnedCommand, Node22.22.2,2 Vitest workers onCPUs2/3, PostgreSQL onCPUs0/1/default100connections/64MiB shared buffers. No Docker/CI hardware or onsite equivalence. p01 is explicitly bounded new-case discovery, not all suites or skipped old coverage passed.",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "d40912ce293d23ec5d67a272c316e076edbb2b69c70069d71901f4cfdc8bd761"
+          "sha256": "20982c583949a22babac9ea05bb2f7519356e69c31e3c8f43ea312452c63c9e1"
+        }
+      ]
+    },
+    {
+      "id": "p02-legacy16-final",
+      "kind": "command",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/development-sla-enrollment-postgres.test.ts tests/integration/factory-logistics-cockpit-postgres.test.ts tests/integration/digital-production-tasks-postgres.test.ts tests/integration/bulk-preshrink-correction-postgres.test.ts --maxWorkers=2 --config vitest.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/supplychain-board-20261109/p02-legacy16-final.vitest.json",
+      "status": "not-applicable",
+      "reason": "Not reexecuted after the two Review fixes, which only change adopted-v2 target replay and per-terminal-return windows. Original actual53 legacy PG16 cases passed at original source 1c7a4dba8d609c2867dbe7eefc2f58f79b86736dc37f8190aab6b57998b7497a; current v2 native15, unit136 and full App2 plus exact diff/type checks cover the actual fixes. This is original branch evidence and scoped non-rerun, not current-head Full or53 reexecuted passes.",
+      "context": "Original log /workspace/scratch/supplychain-board-20261109/p02-legacy16-final.log SHA256 d3c1cefcab149852ae3c9f512a93028403d4cb4c47f01cc48bbc3dd9f5738c66 and report /workspace/scratch/supplychain-board-20261109/p02-legacy16-final.vitest.json preserved. Final remoteFull still required; no unrelated repeat for report format."
+    },
+    {
+      "id": "p02-browser-final",
+      "kind": "tests",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/fixed-timeline-native-browser-postgres.test.ts --maxWorkers=2 --config vitest.business-chain.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/supplychain-board-20261109/p02-review-browser.vitest.json",
+      "status": "passed",
+      "exitCode": 0,
+      "allExited": true,
+      "sourceFingerprint": "fafe55f08b9c2594baad9f2686afda0d36895e76efd230c2862e49a5efd9e0d9",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests",
+        "package.json",
+        "package-lock.json",
+        "eslint.config.js",
+        "tsconfig.base.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts",
+        "vitest.postgres-immediate.config.ts"
+      ],
+      "inputFingerprint": "625a6316304375950f5ce2daa619dd13edfed40a23e7a56fa6a40f7e7afe799c",
+      "sourceUnchanged": true,
+      "inputsUnchanged": true,
+      "testedHead": "aa3b255ce345b02917ced7dc02094a75f6c77278",
+      "startedAt": "2026-11-09T23:12:45.899Z",
+      "endedAt": "2026-11-09T23:13:07.242Z",
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "planError": null,
+      "log": "/workspace/scratch/supplychain-board-20261109/p02-review-browser.log",
+      "logSha256": "e0902e2b7594390b659c0a30b4e44fd58783ebd6445c8e7aac0d62e0d828f284",
+      "resultReport": "/workspace/scratch/supplychain-board-20261109/p02-review-browser.vitest.json",
+      "postgresVersion": 130023,
+      "context": "Actual PostgreSQL130023 official cached-image binaries/libraries in private /tmp, non-superuser marked TEST databases, original full native schema and businessAnchorFixture/UAT initializer. Original canonical suite config/runOwnedCommand, Node22.22.2,2 Vitest workers onCPUs2/3, PostgreSQL onCPUs0/1/default100connections/64MiB shared buffers. No Docker/CI hardware or onsite equivalence. p01 is explicitly bounded new-case discovery, not all suites or skipped old coverage passed.",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "8cc4db1b581ff173f84072b8c8f71d7e5b5719f1cf5feb290ff9859e04c3da9d"
         }
       ]
     },
     {
       "id": "p02-units-final",
       "kind": "tests",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/fixed-timeline-targets.test.ts tests/unit/factory-step-ledger.test.ts tests/unit/factory-batch-ledger.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/config.test.ts tests/unit/digital-development.test.ts tests/unit/doc03-instruction-validation.test.ts tests/unit/digital-development-rounds.test.ts tests/unit/digital-development-route.test.ts tests/unit/development-craft-timing-review.test.ts --maxWorkers=2 --config vitest.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/supplychain-board-20261109/p02-units-final.vitest.json",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/fixed-timeline-targets.test.ts tests/unit/factory-step-ledger.test.ts tests/unit/fixed-factory-dispatch-windows.test.ts tests/unit/factory-batch-ledger.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/config.test.ts tests/unit/digital-development.test.ts tests/unit/doc03-instruction-validation.test.ts tests/unit/digital-development-rounds.test.ts tests/unit/digital-development-route.test.ts tests/unit/development-craft-timing-review.test.ts --maxWorkers=2 --config vitest.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/supplychain-board-20261109/p02-review-units.vitest.json",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "eb89007c6c175631366304d37a803fe24b1012c320a8f134269eafc7ece991f5",
+      "sourceFingerprint": "fafe55f08b9c2594baad9f2686afda0d36895e76efd230c2862e49a5efd9e0d9",
       "inputPaths": [
         "apps",
         "packages",
@@ -426,25 +342,25 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "13c1cefce7924ffef718447c83fba175f4c8f27042f02baf74f4b01b41cf7c6e",
+      "inputFingerprint": "625a6316304375950f5ce2daa619dd13edfed40a23e7a56fa6a40f7e7afe799c",
       "sourceUnchanged": true,
       "inputsUnchanged": true,
-      "testedHead": "5db8ffde9195db99cf8ba1ad2e3018c87a16fac6",
-      "startedAt": "2026-11-09T22:54:16.133Z",
-      "endedAt": "2026-11-09T22:54:18.123Z",
-      "passed": 134,
+      "testedHead": "aa3b255ce345b02917ced7dc02094a75f6c77278",
+      "startedAt": "2026-11-09T23:12:33.377Z",
+      "endedAt": "2026-11-09T23:12:35.512Z",
+      "passed": 136,
       "failed": 0,
       "skipped": 0,
       "planError": null,
-      "log": "/workspace/scratch/supplychain-board-20261109/p02-units-final.log",
-      "logSha256": "f363bb781b63a44dc306ab77057bc5f6e61e0cb4131eed674997b64193fa0228",
-      "resultReport": "/workspace/scratch/supplychain-board-20261109/p02-units-final.vitest.json",
+      "log": "/workspace/scratch/supplychain-board-20261109/p02-review-units.log",
+      "logSha256": "b1c805f7576ffedaea4e8a2f39e4e31cb08c314c1781ec313b5f1ce010818d43",
+      "resultReport": "/workspace/scratch/supplychain-board-20261109/p02-review-units.vitest.json",
       "postgresVersion": 130023,
       "context": "Actual PostgreSQL130023 official cached-image binaries/libraries in private /tmp, non-superuser marked TEST databases, original full native schema and businessAnchorFixture/UAT initializer. Original canonical suite config/runOwnedCommand, Node22.22.2,2 Vitest workers onCPUs2/3, PostgreSQL onCPUs0/1/default100connections/64MiB shared buffers. No Docker/CI hardware or onsite equivalence. p01 is explicitly bounded new-case discovery, not all suites or skipped old coverage passed.",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "37c07b772e55040ea879feab7103c0700bc84f3b4808bef0be90dab44b7847c8"
+          "sha256": "809ab3cdd98673410b0bed7ffcb21fe3ec49df02f7e76c9690d3a08656ee5617"
         }
       ]
     },
@@ -455,7 +371,7 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "eb89007c6c175631366304d37a803fe24b1012c320a8f134269eafc7ece991f5",
+      "sourceFingerprint": "fafe55f08b9c2594baad9f2686afda0d36895e76efd230c2862e49a5efd9e0d9",
       "inputPaths": [
         "apps",
         "packages",
@@ -469,14 +385,14 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "13c1cefce7924ffef718447c83fba175f4c8f27042f02baf74f4b01b41cf7c6e",
+      "inputFingerprint": "625a6316304375950f5ce2daa619dd13edfed40a23e7a56fa6a40f7e7afe799c",
       "sourceUnchanged": true,
       "inputsUnchanged": true,
-      "testedHead": "5db8ffde9195db99cf8ba1ad2e3018c87a16fac6",
-      "startedAt": "2026-11-09T22:55:28.047Z",
-      "endedAt": "2026-11-09T22:56:25.453Z",
-      "log": "/workspace/scratch/supplychain-board-20261109/p02-cheap-closeout.log",
-      "logSha256": "791c532772454162ae95deb9f76cac25fd152b7ef879bc32e6a2fd47b3b566b7",
+      "testedHead": "aa3b255ce345b02917ced7dc02094a75f6c77278",
+      "startedAt": "2026-11-09T23:12:34.824Z",
+      "endedAt": "2026-11-09T23:13:33.389Z",
+      "log": "/workspace/scratch/supplychain-board-20261109/p02-review-static.log",
+      "logSha256": "a38c72fae82089cd33995ba66c229d8ff0ee988119a9706783808a88328d43da",
       "context": "Actual scoped command on Node22.22.2 and unchanged task workspace. No assertion of CI hardware or onsite equivalence."
     }
   ]

@@ -115,6 +115,12 @@ export class FixedTimelineAdoptionRepository{
   await this.db.query('SELECT adoption_id FROM digital_timeline_adoptions WHERE adoption_id=$1 FOR UPDATE',[saved.adoptionId]);
   await this.buildInitialTargets(saved,saved.createdBy,saved.time);
   if(saved.input.resource.kind!=='order')return;
+  // The first physical route may be published after a legitimate H change.
+  // Replay starts from the original creation snapshot, not that later route's
+  // capture time; otherwise the original B0 can never advance to the real H.
+  const initial=await readInitialTimelineInput(this.db,saved.input.resource);
+  const earliest=initial?.data.time??saved.time;
+  if(earliest.scenarioId!==saved.time.scenarioId||Date.parse(earliest.now)>Date.parse(saved.time.now))throw Error('原订单采用与路线时钟范围不一致');
   for(const consumer of saved.input.consumers){
    const changes=(await this.db.query(`SELECT c.change_id,c.version,c.old_date::text AS old_date,c.new_date::text AS new_date,c.approval_event_id,c.changed_by,p.business_time
     FROM digital_po_date_changes c JOIN digital_sla_plans p ON p.production_order_id=c.production_order_id AND p.request_key=c.approval_event_id
@@ -123,7 +129,7 @@ export class FixedTimelineAdoptionRepository{
    let previousGoals=structuredClone(consumer.ends);
    for(const change of changes){
     const time=validateBusinessTime(change.business_time);
-    if(time.scenarioId!==saved.time.scenarioId||Date.parse(time.now)<Date.parse(saved.time.now))throw Error('客户改期与原冻结时钟范围不一致');
+    if(time.scenarioId!==earliest.scenarioId||Date.parse(time.now)<Date.parse(earliest.now))throw Error('客户改期与原冻结时钟范围不一致');
     const goals=structuredClone(previousGoals);
     for(const id of consumer.customerGoalIds!){
      const prior=goals[id]!;
