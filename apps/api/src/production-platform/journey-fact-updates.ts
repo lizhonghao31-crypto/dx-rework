@@ -52,7 +52,7 @@ export class JourneyFactUpdates{
     SELECT 'order'::text resource_kind,production_order_id resource_id FROM digital_production_orders
     UNION ALL SELECT 'source',s.source_id FROM digital_production_sources s
      WHERE NOT EXISTS(SELECT 1 FROM digital_production_orders o WHERE o.source_id=s.source_id)
-   ) SELECT r.*,r.resource_kind||':'||r.resource_id::text cursor FROM resources r
+   ) SELECT r.*,r.resource_kind||':'||r.resource_id::text AS cursor FROM resources r
    LEFT JOIN digital_journey_fact_models m USING(resource_kind,resource_id)
    WHERE ($1::text IS NULL OR r.resource_kind||':'||r.resource_id::text>$1)
     AND ($4::boolean OR m.resource_id IS NULL OR m.calculation_version IS DISTINCT FROM $2)
