@@ -139,6 +139,7 @@ const DEVELOPMENT_AMENDMENT_INPUTS = new Set([
   "apps/api/src/production-platform/development-service.ts",
   "apps/api/src/production-platform/development-routes.ts",
   "apps/api/src/production-platform/development-execution-service.ts",
+  "apps/api/src/production-platform/development-execution-read.ts",
   "apps/api/src/production-platform/development-execution-routes.ts",
   "apps/api/src/production-platform/development-supply.ts",
   "apps/api/src/production-platform/development-material-reopen.ts",
@@ -164,6 +165,12 @@ const addAll = (target, values) => {
 export const classifyFullGatePaths = (inputPaths) => {
   const paths = [...new Set(inputPaths.map(normalize).filter(Boolean))];
   const mappedTests = new Set();
+  if(paths.some(path=>/^apps\/api\/src\/production-platform\/development-execution-(?:read|service|routes)\.ts$/.test(path))) addAll(mappedTests,[
+    "tests/integration/digital-development-execution-postgres.test.ts",
+    "tests/integration/development-sla-enrollment-postgres.test.ts",
+    "tests/integration/development-technical-postgres.test.ts",
+    "tests/integration/development-execution-read-native-browser-postgres.test.ts",
+  ]);
   const domains = new Set();
   let migrationSensitive = false;
   let receivingSensitive = false;

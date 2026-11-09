@@ -1,3 +1,4 @@
+import {readDevelopmentExecutionSnapshot} from "./development-execution-read.js";
 import {businessNow} from '../acceptance-clock/business-time.js';
 import {publishedTechnicalArtifact,technicalEnrollment,technicalDocumentFingerprint} from './development-technical-repository.js';
 import {DevelopmentTechnicalService} from './development-technical-service.js';
@@ -10,14 +11,13 @@ import {validateExecutionTransfer} from './development-execution-transfer.js';
 import type {DevelopmentExecutionTransfer} from '@dx-rework/contracts/development-arrangement';
 import {developmentAmendmentsAvailable} from "./development-amendment-repository.js";
 import {validateDevelopmentReturn,recordDevelopmentReturn,submitDevelopmentSupply} from "./development-supply.js";
-import {fabricCases} from "./development-fabric-cases.js";
 import {assertMaterialChecks,readMaterialVerification,saveMaterialVerification} from "./development-material-verification.js";
 import type {SaveMaterialVerification} from "@dx-rework/contracts/digital-development-execution";
 import type {DevelopmentArrangementInput} from "@dx-rework/contracts/development-arrangement";
-import {readArrangement,saveArrangement,arrangementsAvailable,plannedRecipient} from "./development-arrangement.js";
+import {saveArrangement,arrangementsAvailable} from "./development-arrangement.js";
 import {reuseJourneySnapshotReads} from "./journey-snapshot-reads.js";
 import {materialReadiness,materialCheckError} from "./development-material-readiness.js";
-import {developmentSlaPlan,savedDevelopmentRoute} from "./development-sla-enrollment.js";
+import {developmentSlaPlan} from "./development-sla-enrollment.js";
 import { BulkPreparationService } from "./bulk-preparation-service.js";
 import {DevelopmentRoundService} from "./development-round-service.js";
 import {DevelopmentRouteService,type DevelopmentRouteAction} from "./development-route-service.js";
@@ -31,8 +31,7 @@ import {ApplicationError} from "../platform/errors.js";
 import {DigitalProductionAccessPolicy,digitalForbidden,digitalNotFound,isDigitalLeader,isDigitalTechnicalManager} from "./access-policy.js";
 import {DigitalDevelopmentService} from "./development-service.js";
 import {DigitalProductionTaskService} from "./task-service.js";
-import {developmentNextSteps} from "./development-route.js";
-import {fixedDevelopmentCutter,canConfigureDevelopmentCutter,saveFixedDevelopmentCutter} from "./development-fixed-cutting.js";
+import {fixedDevelopmentCutter,saveFixedDevelopmentCutter} from "./development-fixed-cutting.js";
 const fail=(message:string):never=>{throw new ApplicationError("DEVELOPMENT_EXECUTION_CONFLICT",message,409);};
 export class DevelopmentExecutionService {
   constructor(private readonly database:Pool,private readonly enabled:boolean,private readonly patternOrders?:PatternRoomOrderService,private readonly previewSecret?:string){}
@@ -45,48 +44,14 @@ export class DevelopmentExecutionService {
     const db=await this.database.connect();
     try{
       await db.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
-      const result=await this.readSnapshot(actor,sourceId,reuseJourneySnapshotReads(db));
+      const result=await readDevelopmentExecutionSnapshot(reuseJourneySnapshotReads(db),actor,sourceId,{
+        readSheet:(readerActor,id,client)=>this.forms().read(readerActor,id,client),
+        readTask:(readerActor,id,client)=>this.tasks().read(readerActor,id,client),
+        readTechnical:(readerActor,id,round,scope,client)=>new DevelopmentTechnicalService(this.database,this.enabled).read(readerActor,id,round,scope,client),
+        readFacts:(client,id)=>this.facts(client,id),
+      });
       await db.query("COMMIT");return result;
     }catch(error){await db.query("ROLLBACK");throw error;}finally{db.release();}
-  }
-  private async readSnapshot(actor:TrustedActorContext,sourceId:string,db:PoolClient){
-    const sheet=await this.forms().read(actor,sourceId,db);
-    const dispatch=(await db.query('SELECT version,pattern_worker_id AS "patternWorkerId",cutting_worker_id AS "cuttingWorkerId",sewing_worker_id AS "sewingWorkerId" FROM digital_development_dispatch WHERE source_id=$1',[sourceId])).rows[0]??null;
-    const ids=(await db.query("SELECT task_id FROM digital_production_task_access WHERE source_id=$1 ORDER BY created_at,task_id",[sourceId])).rows;
-    const tasks=[];for(const row of ids)if(await new DigitalProductionAccessPolicy(db).allowed(actor,"task",row.task_id,"technical"))tasks.push(await this.tasks().read(actor,row.task_id,db));
-    const routeFacts=(await db.query('SELECT fact_id AS "factId",task_id AS "taskId",route_version AS "routeVersion",kind,payload,recorded_at AS "recordedAt" FROM digital_development_route_facts WHERE source_id=$1 ORDER BY sequence',[sourceId])).rows;
-    const patternOrder=(await db.query('SELECT order_id AS "orderId" FROM digital_development_pattern_links WHERE source_id=$1',[sourceId])).rows[0]??null;
-    const patternPreparation=patternOrder&&(await db.query("SELECT to_regclass('pattern_room_rounds') AS relation")).rows[0]?.relation?(await db.query(`SELECT o.status,r.category_id IS NOT NULL AS "categorySaved",r.agreed_amount IS NOT NULL AS "priceSaved",
-      o.version,r.round_id AS "roundId",r.round_type AS "roundType",s.worker_user_id AS "workerId",s.worker_name AS "workerName" FROM pattern_room_orders o JOIN pattern_room_rounds r ON r.round_id=o.current_round_id
-      LEFT JOIN LATERAL(SELECT worker_user_id,worker_name FROM pattern_room_segments WHERE round_id=r.round_id ORDER BY segment_index DESC LIMIT 1)s ON true
-      WHERE o.order_id=$1 AND o.deleted_at IS NULL`,[patternOrder.orderId])).rows[0]??null:null;
-    const currentRound=sheet.roundNumber??1;
-    const plannedSewing=await plannedRecipient(db,sourceId,currentRound,'development_sewing');
-    const sewingRecipientId=tasks.find(t=>t.taskKind==='development_sewing'&&t.routeVersion===currentRound)?.assigneeId??(plannedSewing.planned?plannedSewing.id:dispatch?.sewingWorkerId);
-    const sewingRecipientName=sewingRecipientId?(await db.query("SELECT display_name FROM app_users WHERE id=$1",[sewingRecipientId])).rows[0]?.display_name??null:null;
-    const route:string[]=currentRound===1&&sheet.document?await savedDevelopmentRoute(db,sourceId,sheet.document):(await db.query('SELECT route_nodes FROM digital_development_rounds WHERE source_id=$1 AND round_number=$2',[sourceId,currentRound])).rows[0]?.route_nodes??[];
-    const nextSteps=developmentNextSteps(route,tasks,currentRound);
-    const readiness=sheet.document?await materialReadiness(db,sourceId,currentRound):null;
-    const supplementTask=readiness?.sewingMissing.length?tasks.filter(task=>task.routeVersion===currentRound&&task.state==="completed"&&task.canExecute&&["development_materials","development_material_recheck"].includes(task.taskKind)).at(-1):null;
-
-    const materialVerification=sheet.document?await readMaterialVerification(db,sourceId,currentRound,sheet.document,sheet.version):null;
-    let reopenMaterialCheck:null|{taskId:string;supplyTaskId:string;roundNumber:number;expectedDocumentVersion:number;expectedVerificationVersion:number}=null;
-    if(materialVerification?.taskId&&(isRootActor(actor)||(actor.actorRoles.includes('development_clerk')&&await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,'development_clerk')))){
-      const candidate=(await db.query(`SELECT supply.task_id AS supply_id,check_task.task_id AS check_id,v.version FROM digital_production_tasks supply
-       JOIN digital_production_task_access sa ON sa.task_id=supply.task_id AND sa.source_id=$1
-       JOIN digital_development_material_verifications v ON v.source_id=sa.source_id AND v.round_number=supply.route_version
-       LEFT JOIN digital_development_execution_facts f ON f.source_id=sa.source_id AND f.task_id=supply.task_id AND f.kind='补料复核' AND f.payload ? 'returnRequirements'
-       JOIN digital_production_tasks check_task ON check_task.task_id=coalesce((f.payload->'returnRequirements'->>'checkTaskId')::uuid,v.task_id) AND check_task.route_instance_id=supply.route_instance_id AND check_task.route_version=supply.route_version
-       JOIN digital_production_task_access ca ON ca.task_id=check_task.task_id AND ca.source_id=sa.source_id
-       WHERE sa.task_kind='development_material_supply' AND supply.state='ready' AND supply.route_version=$2 AND check_task.state='completed'
-       AND v.task_id=check_task.task_id AND ca.task_kind IN ('development_materials','development_material_recheck')
-       AND EXISTS(SELECT 1 FROM digital_development_execution_facts returned WHERE returned.source_id=sa.source_id AND returned.task_id=check_task.task_id AND returned.kind='缺项退回')
-       ORDER BY f.sequence DESC NULLS LAST LIMIT 1`,[sourceId,currentRound])).rows[0];
-      if(candidate&&tasks.some(task=>task.taskId===candidate.check_id&&task.canExecute))reopenMaterialCheck={taskId:candidate.check_id,supplyTaskId:candidate.supply_id,roundNumber:currentRound,expectedDocumentVersion:sheet.version,expectedVerificationVersion:candidate.version};
-    }
-    const externalPatterns=await developmentSlaPlan(db,sourceId)?await externalPatternRecords(db,sourceId):[];
-    const canRequestExternalPattern=isRootActor(actor)||actor.actorRoles.includes('pattern_room_supervisor')&&await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,'pattern_room_supervisor');
-    return {technical:await new DevelopmentTechnicalService(this.database,this.enabled).read(actor,sourceId,currentRound,'整款',db),externalPatterns,canRequestExternalPattern,sewingRecipientName,slaEnrolled:Boolean(await developmentSlaPlan(db,sourceId)),fixedCutting:await developmentSlaPlan(db,sourceId)?{...await fixedDevelopmentCutter(db),canConfigure:await canConfigureDevelopmentCutter(db,actor)}:null,reopenMaterialCheck,fabricCases:await fabricCases(db,sourceId),materialVerification,unifiedArrangement:await arrangementsAvailable(db),arrangement:await readArrangement(db,actor,sourceId),canConfirmExecution:isRootActor(actor)||actor.actorRoles.includes("pattern_room_supervisor"),sheet,materialReadiness:readiness?.materials??[],supplementCheckTaskId:supplementTask?.taskId??null,nextSteps,dispatch,tasks,routeFacts,patternOrder,patternPreparation,facts:await this.facts(db,sourceId),canReportFabric:isRootActor(actor)||actor.actorRoles.some(role=>["pattern_room_worker","pattern_room_supervisor","order_merchandiser"].includes(role)),canDispatch:isDigitalLeader(actor)||isDigitalTechnicalManager(actor)||actor.actorRoles.includes("development_clerk"),canDecideFabric:isDigitalLeader(actor)};
   }
   private async command(actor:TrustedActorContext,sourceId:string,kind:string,key:string,input:unknown,action:(db:PoolClient)=>Promise<unknown>){
     if(!this.enabled)digitalForbidden();if(!/^[A-Za-z0-9._:-]{1,128}$/.test(key))fail("缺少操作标识");

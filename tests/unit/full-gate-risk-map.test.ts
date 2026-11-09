@@ -7,6 +7,17 @@ import { assertMappedPostgresTests, classifyFullGatePaths, POSTGRES_CASE_SUITES 
 import {configForSuite,fullGatePostgresPlan,POSTGRES_CHAIN_TESTS} from '../../scripts/test-suite-plan.mjs';
 import {settingsBrowserRequired} from '../../scripts/ci/prepare-settings-browser.mjs';
 
+it('keeps the extracted development read and original GET/QR consumers in the existing native plan',()=>{
+ const suite='tests/integration/development-execution-read-native-browser-postgres.test.ts';
+ for(const path of ['apps/api/src/production-platform/development-execution-read.ts','apps/api/src/production-platform/development-execution-service.ts','apps/api/src/production-platform/development-execution-routes.ts',suite]){
+  const risk=classifyFullGatePaths([path]);
+  expect(risk.mappedPostgresTests).toContain(suite);
+  expect(risk.migrationSensitive).toBe(false);
+ }
+ expect(configForSuite(suite)).toBe('vitest.business-chain.config.ts');
+ expect(settingsBrowserRequired({DB_REQUIRED:'true',BASE_SHA:'a'.repeat(40),BUSINESS_CHAIN_SENSITIVE:'false',MIGRATION_SENSITIVE:'false',DEPLOYMENT_SENSITIVE:'false',MAPPED_POSTGRES_TESTS:suite})).toBe(true);
+});
+
 it('keeps the original homepage browser and shared correctness budget in the exact home projection plan',()=>{
  const suite='tests/integration/m01-cockpit-home-native-browser-postgres.test.ts';
  for(const path of ['apps/web/src/cockpit-home.tsx','apps/web/src/cockpit-detail.tsx','apps/web/src/cockpit-detail.css','apps/web/src/cockpit-detail-risks.tsx','apps/web/src/cockpit-stage-progress.tsx','apps/web/src/cockpit-documents.tsx','apps/web/src/cockpit-operation-log.tsx','apps/web/src/node-materials-panel.tsx','apps/web/src/cockpit-home-progress.tsx','apps/web/src/cockpit-home-dialog.tsx','apps/web/src/cockpit-timing-coverage.tsx','apps/web/src/digital-journey-cockpit.tsx','apps/api/src/production-platform/journey-projection.ts','packages/contracts/src/digital-production-journey.ts','tests/acceptance/m01-cockpit-home-native-browser.ts','tests/fixtures/m01-cockpit-home-native-ui.tsx',suite]){
@@ -56,6 +67,7 @@ describe('same-round correction source-only PG coverage',()=>{
   'apps/api/src/production-platform/development-material-readiness.ts',
   'apps/api/src/production-platform/development-material-check-rules.ts',
   'apps/api/src/production-platform/development-execution-service.ts',
+  'apps/api/src/production-platform/development-execution-read.ts',
   'apps/api/src/production-platform/development-execution-routes.ts',
   'apps/api/src/production-platform/development-round-repository.ts',
   'apps/api/src/production-platform/development-round-service.ts',
@@ -69,7 +81,8 @@ describe('same-round correction source-only PG coverage',()=>{
   const risk=classifyFullGatePaths([path]),plan=amendmentPlan([path]);expect(risk.highRisk).toBe(true);expect(risk.mappedPostgresTests).toContain(amendmentSuite);expect(()=>assertMappedPostgresTests(risk.mappedPostgresTests)).not.toThrow();
   const shortLead=path==='apps/api/src/production-platform/access-policy.ts'?['tests/integration/m01-short-lead-native-browser-postgres.test.ts']:[];
   const imagePreview=['apps/api/src/production-platform/development-routes.ts','apps/api/src/production-platform/development-service.ts'].includes(path)?['tests/integration/attachment-image-preview-postgres.test.ts']:[];
-  expect(plan.plan.map(s=>s.path)).toEqual([...POSTGRES_CHAIN_TESTS,amendmentSuite,...shortLead,...imagePreview].sort());
+  const execution=/development-execution-(read|service|routes)\.ts$/.test(path)?['tests/integration/digital-development-execution-postgres.test.ts','tests/integration/development-sla-enrollment-postgres.test.ts','tests/integration/development-execution-read-native-browser-postgres.test.ts']:[];
+  expect(plan.plan.map(s=>s.path)).toEqual([...POSTGRES_CHAIN_TESTS,amendmentSuite,...shortLead,...imagePreview,...execution].sort());
   expect(plan.plan.find(s=>s.path===amendmentSuite)?.config).toBe('vitest.config.ts');
  });
  it('guards the actual amendment-service domain imports against a newly omitted direct dependency',()=>{

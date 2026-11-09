@@ -8,6 +8,7 @@ import { readFile } from "node:fs/promises";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it,vi } from "vitest";
 import { DevelopmentExecutionService } from "../../apps/api/src/production-platform/development-execution-service.js";
+import { DevelopmentTechnicalService } from "../../apps/api/src/production-platform/development-technical-service.js";
 import { DigitalProductionTaskService } from "../../apps/api/src/production-platform/task-service.js";
 import { DigitalProductionIdentityService } from "../../apps/api/src/production-platform/identity-service.js";
 import { DigitalDevelopmentService } from "../../apps/api/src/production-platform/development-service.js";
@@ -339,6 +340,76 @@ run("P06 development execution PostgreSQL", () => {
     await execution.report(merchant,id,{recommendation:"正常",note:"主跟单跟进",attachmentIds:[file]},randomUUID());
     await database.query("UPDATE user_role_assignments SET revoked_at=CURRENT_TIMESTAMP WHERE user_id=$1",[primary]);
     await expect(execution.authorizeUpload(merchant,id)).rejects.toMatchObject({statusCode:404});
+  });
+
+  it("S1 passes one snapshot proxy to every original read capability and releases its only connection",async()=>{
+    const {id}=await prepare(),clients:pg.PoolClient[]=[],releases:unknown[]=[],statements:string[]=[];
+    const measured={connect:async()=>{
+      const client=await database.connect();
+      return new Proxy(client,{get(target,key){
+        if(key==='query')return (...args:unknown[])=>{if(typeof args[0]==='string')statements.push(args[0]);return Reflect.apply(target.query,target,args);};
+        if(key==='release')return (...args:unknown[])=>{releases.push(args);return Reflect.apply(target.release,target,args);};
+        const value=Reflect.get(target,key,target);return typeof value==='function'?value.bind(target):value;
+      }});
+    }} as unknown as pg.Pool;
+    const reuse=snapshotReads.reuseJourneySnapshotReads;
+    const proxy=vi.spyOn(snapshotReads,'reuseJourneySnapshotReads').mockImplementation(client=>{const wrapped=reuse(client);clients.push(wrapped);return wrapped;});
+    const sheet=vi.spyOn(DigitalDevelopmentService.prototype,'read'),task=vi.spyOn(DigitalProductionTaskService.prototype,'read'),technical=vi.spyOn(DevelopmentTechnicalService.prototype,'read');
+    try{
+      const state=await new DevelopmentExecutionService(measured,true).read(boss(),id);
+      expect(state.sheet.sourceId).toBe(id);expect(state.sheet.status).toBe('published');
+      expect(state.dispatch).toMatchObject({version:1,patternWorkerId:other,cuttingWorkerId:other,sewingWorkerId:other});
+      expect(state.tasks.some(t=>t.taskKind==='development_materials')).toBe(true);
+      expect(clients).toHaveLength(1);expect(releases).toHaveLength(1);
+      expect(sheet.mock.calls.length).toBeGreaterThan(0);expect(task.mock.calls.length).toBeGreaterThan(0);expect(technical.mock.calls).toHaveLength(1);
+      expect(sheet.mock.calls.every(call=>call[2]===clients[0])).toBe(true);
+      expect(task.mock.calls.every(call=>call[2]===clients[0])).toBe(true);
+      expect(technical.mock.calls[0]![4]).toBe(clients[0]);
+      expect(statements.filter(sql=>/^BEGIN|^COMMIT|^ROLLBACK/.test(sql))).toEqual(['BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY','COMMIT']);
+    }finally{proxy.mockRestore();sheet.mockRestore();task.mockRestore();technical.mockRestore();}
+  });
+
+  it("S1 keeps a concurrent native assignment outside the current RR snapshot and sees it on the next read",async()=>{
+    const {id}=await prepare(false,'无',false);let committed=false;
+    const measured={connect:async()=>{
+      const client=await database.connect();
+      return new Proxy(client,{get(target,key){
+        if(key==='query')return async(...args:unknown[])=>{
+          if(!committed&&typeof args[0]==='string'&&args[0].startsWith('SELECT version,pattern_worker_id')){
+            committed=true;
+            await execution.dispatch(clerk(),id,{expectedVersion:0,patternWorkerId:other,cuttingWorkerId:other,sewingWorkerId:other},randomUUID());
+          }
+          return Reflect.apply(target.query,target,args);
+        };
+        const value=Reflect.get(target,key,target);return typeof value==='function'?value.bind(target):value;
+      }});
+    }} as unknown as pg.Pool;
+    const before=await new DevelopmentExecutionService(measured,true).read(boss(),id);
+    expect(committed).toBe(true);expect(before.dispatch).toBeNull();
+    const after=await execution.read(boss(),id);
+    expect(after.dispatch).toMatchObject({version:1,patternWorkerId:other,sewingWorkerId:other});
+    expect(after.sheet.sourceId).toBe(id);expect(after.sheet.version).toBe(before.sheet.version);
+  });
+
+  it("S1 propagates the real helper SQL error, rolls back and releases the read connection",async()=>{
+    const {id}=await prepare(),statements:string[]=[],releases:unknown[]=[];let original:unknown;
+    const measured={connect:async()=>{
+      const client=await database.connect();
+      return new Proxy(client,{get(target,key){
+        if(key==='query')return async(...args:unknown[])=>{
+          if(typeof args[0]==='string')statements.push(args[0]);
+          if(typeof args[0]==='string'&&args[0].includes('FROM digital_development_execution_facts WHERE source_id=$1 ORDER BY sequence')){
+            try{await target.query('SELECT nonexistent_s1_read_field FROM digital_development_execution_facts');}catch(error){original=error;throw error;}
+          }
+          return Reflect.apply(target.query,target,args);
+        };
+        if(key==='release')return (...args:unknown[])=>{releases.push(args);return Reflect.apply(target.release,target,args);};
+        const value=Reflect.get(target,key,target);return typeof value==='function'?value.bind(target):value;
+      }});
+    }} as unknown as pg.Pool;
+    await expect(new DevelopmentExecutionService(measured,true).read(boss(),id)).rejects.toMatchObject({code:'42703'});
+    expect(original).toBeDefined();expect(statements.at(-1)).toBe('ROLLBACK');expect(statements).not.toContain('COMMIT');expect(releases).toHaveLength(1);
+    expect((await execution.read(boss(),id)).sheet.sourceId).toBe(id);
   });
 
   it("R2 reuses material and policy reads only inside one actor's read-only snapshot",async()=>{
