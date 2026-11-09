@@ -4190,8 +4190,9 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await service.recordManagementDecision(managerActor(),caseId,{supplierId:factoryId,craftIds:[craftId('净色车缝')],linePrices:prices,cuttingProcess:'in_house'},randomUUID());
     await service.decideOwner(ownerActor(),caseId,{decision:'approved'},randomUUID());
     const cut=(await bulk.read(rootActor(),id)).tasks.find(t=>t.taskKind==='bulk_cutting');
-    expect(cut).toMatchObject({state:'ready',enteredAt:null,dueAt:null});
-    expect((await database.query('SELECT count(*)::int n FROM production_order_node_clocks WHERE node_instance_id=$1',[cut!.taskId])).rows[0].n).toBe(0);
+    expect(cut).toMatchObject({state:'ready',timeQuality:'现场登记',enteredAt:expect.any(String),dueAt:expect.any(String)});
+    expect(Date.parse(cut!.dueAt!)-Date.parse(cut!.enteredAt!)).toBe(24*3600000);
+    expect((await database.query('SELECT entered_at,due_at FROM production_order_node_clocks WHERE node_instance_id=$1',[cut!.taskId])).rows).toEqual([{entered_at:new Date(cut!.enteredAt!),due_at:new Date(cut!.dueAt!)}]);
 
 
   });
@@ -4534,7 +4535,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const read=await new SlaOrderService(database).read(root,id);
     if(read.status!=='planned')throw Error('missing no-preshrink SLA plan');
     expect(read.nodes.find(n=>n.id==='warehouse_preshrink')?.status).toBe('not_applicable');
-    expect(read.nodes.find(n=>n.id==='bulk_cutting')).toMatchObject({actualStart:null,actualEnd:null});
+    expect(read.nodes.find(n=>n.id==='bulk_cutting')).toMatchObject({actualStart:before.tasks.find(t=>t.node_key==='bulk_cutting').entered_at.toISOString(),actualEnd:null});
     expect(read.current.plan.nodes.find(n=>n.id==='warehouse_preshrink')?.applicable).toBe('yes');
     expect((await new DigitalJourneyQuery(database).read(root,id)).stages.flatMap(s=>s.nodes).find(n=>n.key==='warehouse_preshrink')?.state).toBe('not_applicable');
     const current=await instruction.read(primary,id);
@@ -4629,7 +4630,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       const cuttingNode=afterSla.nodes.find(n=>n.id==='bulk_cutting')!;
       expect(cuttingNode.actualEnd).not.toBeNull();expect(cuttingNode.planOverdue).toBe(false);
       expect(afterSla.progress.stages.find(stage=>stage.stage===4)!.completed).toBe(1);
-      if(mode==='outsourced'){expect(cuttingNode.actualStart).toBeNull();expect(cuttingNode.deadline.at).toBeNull();expect(cuttingNode.status).toBe('completed_unrated');}
+      if(mode==='outsourced'){expect(cuttingNode.actualStart).toBe(before.enteredAt);expect(cuttingNode.actualStart).not.toBeNull();expect(cuttingNode.deadline.at).toBeNull();expect(cuttingNode.status).toBe('completed_unrated');}
     }
     expect((await cockpit.list(primary,cockpitInput)).items.find(row=>row.orderId===id)!.progress).toEqual({applicable:6,completed:2});
     expect((await database.query('SELECT 1 FROM digital_bulk_cutting_completions WHERE production_order_id=$1',[id])).rowCount).toBe(1);

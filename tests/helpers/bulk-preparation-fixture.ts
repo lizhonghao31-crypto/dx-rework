@@ -19,7 +19,8 @@ import type { DigitalBudgetService } from "../../apps/api/src/production-platfor
 import { DigitalProductionIdentityService } from "../../apps/api/src/production-platform/identity-service.js";
 import { DigitalDevelopmentService } from "../../apps/api/src/production-platform/development-service.js";
 import { ProductionInstructionService } from "../../apps/api/src/production-platform/production-instruction-service.js";
-import { BulkPreparationService } from "../../apps/api/src/production-platform/bulk-preparation-service.js";
+import { BulkPreparationService,digitalCuttingGate } from "../../apps/api/src/production-platform/bulk-preparation-service.js";
+import {nativeTaskReadiness,nativeCuttingReadiness} from '../../apps/api/src/production-platform/task-readiness-facts.js';
 import { DigitalProductionTaskService } from "../../apps/api/src/production-platform/task-service.js";
 import { CuttingService } from "../../apps/api/src/cutting/cutting-source-service.js";
 import { developmentRoute } from "../../apps/api/src/production-platform/development-route.js";
@@ -171,7 +172,23 @@ export async function exerciseBulkPreparation(db:Pool,fixture:{order:DigitalOrde
  if(!(options?.cuttingProcess==='outsourced')){
   const before=await bulk.read(primary,id);await expect(bulk.dispatch(actors.root,id,{expectedVersion:before.dispatch.version,patternWorkerId:worker.actorId,warehouseWorkerId:warehouse.actorId,cuttingWorkerId:null,deliverPattern:false},randomUUID())).rejects.toMatchObject({statusCode:409});expect((await bulk.read(primary,id)).dispatch).toEqual(before.dispatch);
  }
- const complete=await bulk.read(primary,id);expect(complete.tasks.filter(t=>t.taskKind===(options?.cuttingProcess==='outsourced'?'bulk_cutting_external':'bulk_cutting'))).toHaveLength(1);expect(complete.tasks.find(t=>t.taskKind===(options?.cuttingProcess==='outsourced'?'bulk_cutting_external':'bulk_cutting'))).toMatchObject({state:'ready',slaHours:options?.cuttingProcess==='outsourced'?null:24,timeQuality:'缺失',enteredAt:null,dueAt:null});
+ const complete=await bulk.read(primary,id),cuttingTask=complete.tasks.filter(t=>t.taskKind===(options?.cuttingProcess==='outsourced'?'bulk_cutting_external':'bulk_cutting'));
+ expect(cuttingTask).toHaveLength(1);const readyCut=cuttingTask[0]!;
+ expect(readyCut).toMatchObject({state:'ready',slaHours:options?.cuttingProcess==='outsourced'?null:24});
+ const readiness=(await nativeTaskReadiness(db,[readyCut.taskId])).get(readyCut.taskId)!,nativePreparation=(await db.query('SELECT workflow_version,sla_snapshot_id FROM digital_bulk_preparations WHERE preparation_id=$1',[complete.preparationId])).rows[0];
+ const nativeCapture=nativePreparation.workflow_version===2&&Boolean(nativePreparation.sla_snapshot_id);
+ expect(readiness.tracked).toBe(nativeCapture);
+ if(nativeCapture){
+  expect(readiness.firstReadyAt).not.toBeNull();
+  expect(readyCut).toMatchObject({timeQuality:'现场登记',enteredAt:readiness.firstReadyAt});
+  expect(readyCut.dueAt).toBe(options?.cuttingProcess==='outsourced'?null:new Date(Date.parse(readiness.firstReadyAt!)+24*3600000).toISOString());
+  const scopes=await nativeCuttingReadiness(db,[readyCut.taskId]);
+  expect(scopes).toHaveLength(complete.cutting.lines.length);
+  for(const line of complete.cutting.lines){
+   expect(scopes.find(scope=>scope.lineId===line.lineId&&scope.cuttingOrderId===line.cuttingOrderId)).toMatchObject({firstReadyAt:expect.any(String),quality:'现场登记'});
+   expect((await digitalCuttingGate(db,db,line.cuttingOrderId!))?.ready).toBe(true);
+  }
+ }else expect(readyCut).toMatchObject({timeQuality:'缺失',enteredAt:null,dueAt:null});
  const completedIds=complete.tasks.filter(t=>['bulk_pattern','warehouse_preshrink'].includes(t.taskKind)&&t.state==='completed').map(t=>t.taskId);
  const clocks=(await db.query('SELECT entered_quality,completed_quality,extract(epoch FROM completed_at-entered_at)::float8 AS seconds FROM digital_production_tasks WHERE task_id=ANY($1::uuid[])',[completedIds])).rows;
  expect(clocks).toHaveLength(mode==='none'?1:2);for(const clock of clocks){expect(['现场登记','补报未核实']).toContain(clock.entered_quality);expect(clock.completed_quality).toBe('现场登记');expect(clock.seconds).toBeGreaterThan(0);}
