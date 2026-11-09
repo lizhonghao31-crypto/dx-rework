@@ -29,6 +29,8 @@ import {ProductionInstructionService} from '../../apps/api/src/production-platfo
 import {readMaterialSuccessors} from '../../apps/api/src/production-platform/journey-material-successors.js';
 import { selectJourneys } from "../../apps/api/src/production-platform/journey-projection.js";
 import { DigitalJourneyQuery } from "../../apps/api/src/production-platform/journey-query.js";
+import {JourneyFactUpdates} from '../../apps/api/src/production-platform/journey-fact-updates.js';
+import {JourneyFactRepository} from '../../apps/api/src/production-platform/journey-fact-repository.js';
 import { developmentView, patternTasks, DevelopmentWorkspaceQuery } from "../../apps/api/src/production-platform/development-workspace-query.js";
 import { DevelopmentWorkspaceFilterSchema, PatternWorkspaceFilterSchema } from "@dx-rework/contracts/digital-development-workspace";
 import { registerDigitalIdentityRoutes } from "../../apps/api/src/production-platform/identity-routes.js";
@@ -98,6 +100,35 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     if(signal.aborted){markFailed();signal.throwIfAborted();}
   });
   afterAll(async()=>{await app.close();await db.end();await releaseOwnedPostgresSchema(admin,schema);await admin.end();});
+  it('registers cursor-bounded startup backfill and consumes it into native source and order facts on PG13',async()=>{
+    const source=(await identity.createSource(actor(),{developmentType:'头版',designStyleNo:'TEST-PG13-BACKFILL-SOURCE',temporaryStyleNo:null,customerCode:null},randomUUID())).sourceId;
+    const order=await identity.createOrder(actor(),input('PG13-BACKFILL'),randomUUID());
+    const ids=[source,order.productionOrderId];
+    // No prebuilt model or native dirty row: startup registration itself must
+    // supply the work. Keep all changes confined to this owned test schema.
+    await db.query('DELETE FROM digital_journey_fact_changes WHERE resource_id=ANY($1::uuid[])',[ids]);
+    expect((await db.query('SELECT 1 FROM digital_journey_fact_models WHERE resource_id=ANY($1::uuid[])',[ids])).rowCount).toBe(0);
+    const updates=new JourneyFactUpdates(db);
+    const first=await updates.registerBackfill(null,1);
+    expect(first).toEqual({registered:1,cursor:`order:${order.productionOrderId}`,done:false});
+    const second=await updates.registerBackfill(first.cursor,1);
+    expect(second).toEqual({registered:1,cursor:`source:${source}`,done:false});
+    expect(await updates.registerBackfill(second.cursor,1)).toEqual({registered:0,cursor:null,done:true});
+    expect((await db.query("SELECT resource_id FROM digital_journey_fact_changes WHERE reason='backfill' ORDER BY resource_id")).rows.map(row=>row.resource_id).sort()).toEqual([...ids].sort());
+    expect((await db.query('SELECT 1 FROM digital_journey_fact_models')).rowCount).toBe(0);
+    expect(await updates.runOnce()).toEqual({built:2,retired:0,failed:0,busy:0});
+    const repository=new JourneyFactRepository(db),client=await db.connect();
+    try{
+      const sourceFact=await repository.readStoredWithClient(client,{kind:'source',id:source});
+      const orderFact=await repository.readStoredWithClient(client,{kind:'order',id:order.productionOrderId});
+      expect(sourceFact).toMatchObject({status:'ready',model:{sourceId:source,orderId:null}});
+      expect(orderFact).toMatchObject({status:'ready',model:{orderId:order.productionOrderId}});
+      expect(orderFact.model!.quantities!.lines.map(line=>line.demand)).toEqual([100,200]);
+    }finally{client.release();}
+    expect((await db.query('SELECT 1 FROM digital_journey_fact_changes WHERE resource_id=ANY($1::uuid[])',[ids])).rowCount).toBe(0);
+    expect(await updates.registerBackfill()).toEqual({registered:0,cursor:null,done:true});
+    expect(await updates.runOnce()).toEqual({built:0,retired:0,failed:0,busy:0});
+  });
   it("uses the original assignment, upstream and completion reasons in both management summary and detail",async()=>{
     const sourceId=(await identity.createSource(actor(),{developmentType:"头版",designStyleNo:"TEST-A02-BLOCKERS",temporaryStyleNo:null,customerCode:null},randomUUID())).sourceId;
     const routeId=randomUUID();

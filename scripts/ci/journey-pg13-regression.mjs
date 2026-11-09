@@ -40,7 +40,7 @@ try{
  const output=clean(`${result.stdout??""}${result.stderr??""}`);process.stdout.write(output);
  if(result.error||result.status!==0)throw new Error("Journey PG13 regression suite failed");
  if(!/Tests\s+[1-9][0-9]* passed/.test(output))throw new Error("Journey PG13 suite executed no passing tests");
- process.stdout.write(`${JSON.stringify({status:"passed",postgresVersion:version,databaseRole:"non-superuser",suite:"digital-journey-postgres",coverage:"empty logs, first five, twenty-row cursor pages through final page, Root HTTP details, scoped permissions and cursor binding"})}\n`);
+ process.stdout.write(`${JSON.stringify({status:"passed",postgresVersion:version,databaseRole:"non-superuser",suite:"digital-journey-postgres",coverage:"startup backfill cursor registration, native queue consumption and fact generation; empty logs, first five, twenty-row cursor pages through final page, Root HTTP details, scoped permissions and cursor binding"})}\n`);
 }catch(error){process.stderr.write(`JOURNEY_PG13_REGRESSION_FAILED: ${clean(error.message)}\n`);process.exitCode=1;}
 finally{
  if(admin)await admin.end().catch(()=>{});
