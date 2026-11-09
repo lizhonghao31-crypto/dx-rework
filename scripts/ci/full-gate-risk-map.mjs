@@ -166,6 +166,7 @@ export const classifyFullGatePaths = (inputPaths) => {
   const paths = [...new Set(inputPaths.map(normalize).filter(Boolean))];
   const mappedTests = new Set();
   if(paths.some(path=>path==='apps/api/src/production-platform/task-readiness-facts.ts'))addAll(mappedTests,[
+    'tests/integration/production-readiness-postgres.test.ts',
     'tests/integration/development-technical-postgres.test.ts',
     'tests/integration/digital-production-tasks-postgres.test.ts',
     'tests/integration/journey-fact-model-postgres.test.ts',

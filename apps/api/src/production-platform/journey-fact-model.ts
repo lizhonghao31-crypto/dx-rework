@@ -2,7 +2,7 @@ import {createHash} from 'node:crypto';
 import type {JourneyNode,OrderJourney} from '@dx-rework/contracts/digital-production-journey';
 import type {SlaAnchor,SlaNodeFact,SlaPlan} from '@dx-rework/domain/digital-sla-plan';
 import type {JourneyTimingInputs} from './journey-supervision.js';
-import type {NativeTaskReadiness} from './task-readiness-facts.js';
+import type {NativeTaskReadiness,NativeCuttingReadiness} from './task-readiness-facts.js';
 import type {JourneyTermination} from './journey-termination.js';
 import type {JourneyCutScope} from './journey-cut-scopes.js';
 import type {NativeFactoryTimeline} from './factory-production-facts.js';
@@ -17,7 +17,7 @@ export type JourneyFactTask={id:string;kind:string;sourceId:string|null;orderId:
 export type JourneyFactModel={
  schemaVersion:1;sourceId:string|null;orderId:string|null;sourceDocumentVersion:number|null;instructionVersion:number|null;
  selectedRound:number|null;adoptedRound:number|null;cancelled:boolean;closedAt:string|null;
- nativeReadiness?:NativeTaskReadiness[];termination?:JourneyTermination|null;cutScopes?:JourneyCutScope[];factoryTimeline?:NativeFactoryTimeline[];
+ nativeReadiness?:NativeTaskReadiness[];cuttingReadiness?:NativeCuttingReadiness[];termination?:JourneyTermination|null;cutScopes?:JourneyCutScope[];factoryTimeline?:NativeFactoryTimeline[];
  nodes:FactNode[];tasks:JourneyFactTask[];dependencies:Array<{taskId:string;predecessorId:string}>;
  requirements:Array<Pick<NonNullable<OrderJourney['businessProgress']>['requirements'][number],'id'|'key'|'stage'|'scopeRef'|'applicability'|'completed'|'instanceIds'|'targets'>>;
  quantities:NonNullable<OrderJourney['businessProgress']>['quantities']|null;
@@ -43,10 +43,11 @@ const fact=(f:SlaNodeFact):SlaNodeFact=>({evidence:f.evidence,
  * Identity/PO labels stay in their existing lightweight tables. Time-sensitive
  * risk, ratios and statuses are deliberately not cached as current results.
  */
-export function minimalJourneyFacts(item:OrderJourney,inputs:JourneyTimingInputs,tasks:JourneyFactTask[]=[],dependencies:JourneyFactModel['dependencies']=[],native?:{readiness:NativeTaskReadiness[];termination:JourneyTermination|null;cutScopes?:JourneyCutScope[];factoryTimeline?:NativeFactoryTimeline[]}):JourneyFactModel{
+export function minimalJourneyFacts(item:OrderJourney,inputs:JourneyTimingInputs,tasks:JourneyFactTask[]=[],dependencies:JourneyFactModel['dependencies']=[],native?:{readiness:NativeTaskReadiness[];cuttingReadiness?:NativeCuttingReadiness[];termination:JourneyTermination|null;cutScopes?:JourneyCutScope[];factoryTimeline?:NativeFactoryTimeline[]}):JourneyFactModel{
  return {schemaVersion:1,sourceId:item.sourceId,orderId:item.orderId,sourceDocumentVersion:item.sourceVersion,instructionVersion:item.instructionVersion,
   selectedRound:item.selectedRound,adoptedRound:item.adoptedRound,cancelled:item.display?.mainState==='cancelled',closedAt:item.display?.closedAt??null,
   ...(native?{nativeReadiness:native.readiness.filter(r=>r.tracked).map(r=>({taskId:r.taskId,tracked:r.tracked,eventId:r.eventId,effectiveEventId:r.effectiveEventId,firstReadyAt:r.firstReadyAt,quality:r.quality,scopeRef:r.scopeRef,basis:[...r.basis]})).sort((a,b)=>a.taskId.localeCompare(b.taskId,'en')),
+   cuttingReadiness:(native.cuttingReadiness??[]).map(r=>({taskId:r.taskId,tracked:r.tracked,eventId:r.eventId,effectiveEventId:r.effectiveEventId,firstReadyAt:r.firstReadyAt,quality:r.quality,scopeRef:r.scopeRef,lineId:r.lineId,cuttingOrderId:r.cuttingOrderId,basis:[...r.basis]})).sort((a,b)=>a.scopeRef!.localeCompare(b.scopeRef!,'en')),
    termination:native.termination?{kind:native.termination.kind,at:native.termination.at,precision:native.termination.precision,originEventRef:native.termination.originEventRef,scopeRef:native.termination.scopeRef}:null,
    cutScopes:(native.cutScopes??[]).map(scope=>({lineId:scope.lineId,status:scope.status,cuts:scope.cuts.map(cut=>({cuttingOrderId:cut.cuttingOrderId,sourcingCaseId:cut.sourcingCaseId,sourcingLinePosition:cut.sourcingLinePosition,approvalSnapshotId:cut.approvalSnapshotId,sourceLineId:cut.sourceLineId}))})),
    factoryTimeline:(native.factoryTimeline??[]).map(scope=>({productionId:scope.productionId,factoryDecisionId:scope.factoryDecisionId,lineId:scope.lineId,quantity:scope.quantity,

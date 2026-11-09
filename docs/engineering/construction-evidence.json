@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "1fec53e9d79a2b4c4a5466fc44e5bfa707c1ae26",
-  "sourceFingerprint": "60a433cdc36f408a313b8ad1d608a96782ff4334bd41dff1d31f583a6407bebe",
+  "sourceFingerprint": "1f598f09b8f39da64ee16c77b553dad9b72ca8bd7be244e2dae5d7a326167e84",
   "risk": "full",
   "rules": [
     {
@@ -162,7 +162,7 @@
       ],
       "initialization": "JOURNEY_FACT_CALCULATION_VERSION is now journey-facts-supplychain-p01-v1-selectors-v3; unchanged selector schema remainsv3 because this PR adds raw facts only. Old models are obsolete, registerBackfill200/runOnce16/concurrency2 and PG13 AS cursor fix retained; no ordinary GET full reconstruction, extra migration or live operations. New helper modules map to their existing native canonical suites, units remain normal Vitest. Inventory refresh retains earlier unchanged/scoped annotations and adds explicit P01 occurrence/consumer review. Construction is source-bound actual tests, not a new approval layer.",
       "dateAndPermission": "All PERF01-12, original full authorized lightweight statistics/filter/sort/snapshot selection and15rich assembly remain. Raw model contains no authorization conclusions or complete user DTO. Default/v2 adoption behavior is not switched in PR01. Existing native OLD/NEW invalidation, source version compare, retry isolation and committed write visibility remain original.",
-      "expectation": "Final PG13 actual80 native cases include original dirty register/queue consumption, stale calculation model, rollback/race/failure isolation, authorization and pagination; PG16 actual36 legacy/factory/preshrink cases and93 unit/risk cases are source-matched. Local image binaries are PG13.23/16.15, marked low-privilege loopback TEST DBs; original canonical configs/owned cleanup,2workers per command. They do not prove onsite behavior or CI hardware equivalence. No1000/5000, unrelated browser or backup matrices added; normal Light/Review/finalFull still required.",
+      "expectation": "Final PG13 actual107 native cases include original dirty register/queue consumption, stale calculation model, rollback/race/failure isolation, authorization and pagination; PG16 actual36 legacy/factory/preshrink cases and93 unit/risk cases are source-matched. Local image binaries are PG13.23/16.15, marked low-privilege loopback TEST DBs; original canonical configs/owned cleanup,2workers per command. They do not prove onsite behavior or CI hardware equivalence. No1000/5000, unrelated browser or backup matrices added; normal Light/Review/finalFull still required.",
       "checks": [
         "p01-unit-ready",
         "p01-core13-final",
@@ -174,17 +174,66 @@
         "p01-docs",
         "p01-resource"
       ]
+    },
+    {
+      "rule": "Coordinator955 follow-up: first cutting readiness uses the complete original PO/cut gate, not merely activation conditions; sibling and whole-task clocks stay independent.",
+      "source": "User-approved unified six-PR supply-chain board plan https://chatgpt.com/space/page_6c91556b94cc81918747a7b4d6b2f19b sequence9 updated2026-11-09T17:54:39.933751Z, complete current section including14.1/B35-B42 and authoritative appendices read. Parent delegated autonomous code/PR/Codex Review/sequential merge; no deployment/ECS/real-data/config changes. PR01 native facts only; new fixed_v2 adoption/two-step writing not enabled, no schema/dependency/UI/new business input. Coordinator independently identified missing technical-test and second-PO9/10-label gates;955 explicitly held until actual fix/verification.",
+      "writes": [
+        "apps/api/src/production-platform/task-service.ts",
+        "apps/api/src/production-platform/task-readiness-facts.ts",
+        "apps/api/src/production-platform/bulk-preparation-service.ts",
+        "apps/api/src/production-platform/development-technical-service.ts",
+        "apps/api/src/cutting/cutting-source-service.ts",
+        "apps/api/src/production-platform/journey-fact-model.ts",
+        "apps/api/src/production-platform/journey-query.ts",
+        "tests/helpers/business-anchor-fixture.ts",
+        "tests/integration/production-readiness-postgres.test.ts",
+        "scripts/ci/full-gate-risk-map.mjs",
+        "tests/unit/full-gate-risk-map.test.ts",
+        "docs/requirements/digital-sla-golden-source-20261023.md",
+        "docs/engineering/acceptance-time-sites-20261027.json"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/production-readiness-repository.ts",
+        "apps/api/src/production-platform/journey-task-summary.ts",
+        "apps/api/src/production-platform/child-link-repository.ts",
+        "apps/api/src/production-platform/node-clock-repository.ts"
+      ],
+      "oldTests": [
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/integration/digital-production-tasks-postgres.test.ts",
+        "tests/integration/journey-fact-model-postgres.test.ts",
+        "tests/integration/factory-logistics-cockpit-postgres.test.ts",
+        "tests/integration/bulk-preshrink-correction-postgres.test.ts"
+      ],
+      "newTests": [
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/unit/full-gate-risk-map.test.ts"
+      ],
+      "initialization": "Original digitalCuttingGate remains the sole technical/material/quantity eligibility predicate. Native writes record separate PO/cut ready events with stable original task/prep references and actual preparation revision. Activation pending is not eligibility: capture rechecks after native task activation, when original material facts update, and immediately before original first physical cut. Bulk sync after one PO cut still refreshes the uncut sibling; existing physical-cut gate waivers never reconstruct missing historic R. Whole-task R waits for all scoped gates, never takes the earlier PO. Original correction of a PO ready event changes only its own effective chain, not a sibling or whole-task clock. Old/untracked tasks remain unchanged.",
+      "dateAndPermission": "Material-decision hook only refreshes existing cutting facts after its original technical-role authorization; it does not call broad bulk sync to create/replace tasks or grant bulk execution. Actual cutting write still validates original current internal/external recorder and every original gate. Native test actors use their actual active DB role capabilities plus original audit intent, no new grants or role weakening. Read-only GET and builder do not capture R; typed PO facts are whitelisted separately in the shared model. Previous time-site annotations preserved.",
+      "expectation": "Three native PG13 cases prove internal/external firstPO10/10R08 vs sibling9/10 noR, a real firstPO cut, sibling physical labels10/10R12 through original warehouse write, original firstR preserved, whole-taskR12, identical raw model and no GET writes. Root correction of firstPO R to unknown plus ordinary pause/restore cannot reset or copy sibling/wholeR. Third case proves actual technical applicability missing means noR and original technical save at12 capturesR. Original27preparation cases and all affected technical/model/update/calculation/legacy/factory/preshrink suites run without skipped cases. No new schema, gate removal, permission widening, frontend or deployment.",
+      "checks": [
+        "p01-unit-ready",
+        "p01-core13-final",
+        "p01-legacy16-final",
+        "p01-api-types",
+        "p01-lint-ready",
+        "p01-preflight",
+        "p01-docs",
+        "p01-resource"
+      ]
     }
   ],
   "checks": [
     {
       "id": "p01-unit-ready",
       "kind": "tests",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/development-material-readiness.test.ts tests/unit/journey-fact-model.test.ts tests/unit/journey-fact-updates.test.ts tests/unit/journey-termination.test.ts tests/unit/journey-cut-scopes.test.ts tests/unit/full-gate-risk-map.test.ts --maxWorkers=2 --reporter=verbose --reporter=json --outputFile=/workspace/scratch/supplychain-board-20261109/p01-unit-resourcefix.vitest.json",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/development-material-readiness.test.ts tests/unit/journey-fact-model.test.ts tests/unit/journey-fact-updates.test.ts tests/unit/journey-termination.test.ts tests/unit/journey-cut-scopes.test.ts tests/unit/full-gate-risk-map.test.ts --maxWorkers=2 --reporter=verbose --reporter=json --outputFile=/workspace/scratch/supplychain-board-20261109/p01-unit-cutgates-ready.vitest.json",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "60a433cdc36f408a313b8ad1d608a96782ff4334bd41dff1d31f583a6407bebe",
+      "sourceFingerprint": "1f598f09b8f39da64ee16c77b553dad9b72ca8bd7be244e2dae5d7a326167e84",
       "inputPaths": [
         "apps",
         "packages",
@@ -198,36 +247,36 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "c1a9d834c3fcd229aacdc267a2d74c83d5c1294b3168b37b33095293ae333976",
+      "inputFingerprint": "0c7c9bca4869a844b91cd5b4383caf9cc93b1a2e13d39352a824a24937b793ab",
       "sourceUnchanged": true,
       "inputsUnchanged": true,
-      "testedHead": "c43355683f0ac574ec9e3943937587a5b637cdfa",
-      "startedAt": "2026-11-09T19:28:28.439Z",
-      "endedAt": "2026-11-09T19:28:32.433Z",
+      "testedHead": "80ab9fa27b7e06e4106fc4596fcc16e6bab4786a",
+      "startedAt": "2026-11-09T19:55:09.225Z",
+      "endedAt": "2026-11-09T19:55:14.751Z",
       "passed": 93,
       "failed": 0,
       "skipped": 0,
       "planError": null,
-      "log": "/workspace/scratch/supplychain-board-20261109/p01-unit-resourcefix.log",
-      "logSha256": "32d61dc00e19257a4612726771696b2fd8674b4a9377294cc583507b6a3f9286",
-      "resultReport": "/workspace/scratch/supplychain-board-20261109/p01-unit-resourcefix.vitest.json",
+      "log": "/workspace/scratch/supplychain-board-20261109/p01-unit-cutgates-ready.log",
+      "logSha256": "3f4f7978f849f482aa5f6e79f0391e104ce705e28fbc95dd77931aeb6a40bf72",
+      "resultReport": "/workspace/scratch/supplychain-board-20261109/p01-unit-cutgates-ready.vitest.json",
       "postgresVersion": 160015,
       "context": "Actual PostgreSQL160015 official cached-image binaries/libraries in private /tmp, non-superuser marked TEST databases, original full native schema and businessAnchorFixture/UAT initializer. Original canonical suite config/runOwnedCommand, Node22.22.2,2 Vitest workers onCPUs2/3, PostgreSQL onCPUs0/1/default100connections/64MiB shared buffers. No Docker/CI hardware or onsite equivalence. p01 is explicitly bounded new-case discovery, not all suites or skipped old coverage passed.",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "205348bc5751fff04d99d26d3e056eff7812adadc5b18e1b22b866a27cc00ede"
+          "sha256": "9f9cbe69064196e068fe1579502cfd3c0ee1e1f214ece8cddc0f1a4a566b47b7"
         }
       ]
     },
     {
       "id": "p01-core13-final",
       "kind": "tests",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/development-technical-postgres.test.ts tests/integration/journey-fact-model-postgres.test.ts tests/integration/journey-fact-updates-postgres.test.ts tests/integration/sla-calculation-postgres.test.ts --maxWorkers=2 --config vitest.business-chain.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/supplychain-board-20261109/p01-core13-resourcefix.vitest.json",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/development-technical-postgres.test.ts tests/integration/journey-fact-model-postgres.test.ts tests/integration/journey-fact-updates-postgres.test.ts tests/integration/sla-calculation-postgres.test.ts tests/integration/production-readiness-postgres.test.ts --maxWorkers=2 --config vitest.business-chain.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/supplychain-board-20261109/p01-core13-cutgates-ready.vitest.json",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "60a433cdc36f408a313b8ad1d608a96782ff4334bd41dff1d31f583a6407bebe",
+      "sourceFingerprint": "1f598f09b8f39da64ee16c77b553dad9b72ca8bd7be244e2dae5d7a326167e84",
       "inputPaths": [
         "apps",
         "packages",
@@ -241,36 +290,36 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "c1a9d834c3fcd229aacdc267a2d74c83d5c1294b3168b37b33095293ae333976",
+      "inputFingerprint": "0c7c9bca4869a844b91cd5b4383caf9cc93b1a2e13d39352a824a24937b793ab",
       "sourceUnchanged": true,
       "inputsUnchanged": true,
-      "testedHead": "c43355683f0ac574ec9e3943937587a5b637cdfa",
-      "startedAt": "2026-11-09T19:28:28.404Z",
-      "endedAt": "2026-11-09T19:29:18.324Z",
-      "passed": 80,
+      "testedHead": "80ab9fa27b7e06e4106fc4596fcc16e6bab4786a",
+      "startedAt": "2026-11-09T19:53:22.527Z",
+      "endedAt": "2026-11-09T19:54:31.835Z",
+      "passed": 107,
       "failed": 0,
       "skipped": 0,
       "planError": null,
-      "log": "/workspace/scratch/supplychain-board-20261109/p01-core13-resourcefix.log",
-      "logSha256": "a86f149af947052f2c8c4fad929000c1a60c69c245440b1deae0efca2d31b9d2",
-      "resultReport": "/workspace/scratch/supplychain-board-20261109/p01-core13-resourcefix.vitest.json",
+      "log": "/workspace/scratch/supplychain-board-20261109/p01-core13-cutgates-ready.log",
+      "logSha256": "2d3b1013f2bea3811e8a0eb6c3b70556d121f999db433aa96f33295c0907a344",
+      "resultReport": "/workspace/scratch/supplychain-board-20261109/p01-core13-cutgates-ready.vitest.json",
       "postgresVersion": 130023,
       "context": "Actual PostgreSQL130023 official cached-image binaries/libraries in private /tmp, non-superuser marked TEST databases, original full native schema and businessAnchorFixture/UAT initializer. Original canonical suite config/runOwnedCommand, Node22.22.2,2 Vitest workers onCPUs2/3, PostgreSQL onCPUs0/1/default100connections/64MiB shared buffers. No Docker/CI hardware or onsite equivalence. p01 is explicitly bounded new-case discovery, not all suites or skipped old coverage passed.",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "5a77296ccec9c0366a510ec49b3bcb3225e72e3ce7bd94d2f9eb98264668ed1f"
+          "sha256": "34f3042502697c69d1df4ce0abe8efe8ca36c3d94fd9340245dc628547630219"
         }
       ]
     },
     {
       "id": "p01-legacy16-final",
       "kind": "tests",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/digital-production-tasks-postgres.test.ts tests/integration/factory-logistics-cockpit-postgres.test.ts tests/integration/bulk-preshrink-correction-postgres.test.ts --maxWorkers=2 --config vitest.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/supplychain-board-20261109/p01-legacy16-resourcefix.vitest.json",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/digital-production-tasks-postgres.test.ts tests/integration/factory-logistics-cockpit-postgres.test.ts tests/integration/bulk-preshrink-correction-postgres.test.ts --maxWorkers=2 --config vitest.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/supplychain-board-20261109/p01-legacy16-cutgates-ready.vitest.json",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "60a433cdc36f408a313b8ad1d608a96782ff4334bd41dff1d31f583a6407bebe",
+      "sourceFingerprint": "1f598f09b8f39da64ee16c77b553dad9b72ca8bd7be244e2dae5d7a326167e84",
       "inputPaths": [
         "apps",
         "packages",
@@ -284,25 +333,25 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "c1a9d834c3fcd229aacdc267a2d74c83d5c1294b3168b37b33095293ae333976",
+      "inputFingerprint": "0c7c9bca4869a844b91cd5b4383caf9cc93b1a2e13d39352a824a24937b793ab",
       "sourceUnchanged": true,
       "inputsUnchanged": true,
-      "testedHead": "c43355683f0ac574ec9e3943937587a5b637cdfa",
-      "startedAt": "2026-11-09T19:29:54.588Z",
-      "endedAt": "2026-11-09T19:30:38.896Z",
+      "testedHead": "80ab9fa27b7e06e4106fc4596fcc16e6bab4786a",
+      "startedAt": "2026-11-09T19:55:09.156Z",
+      "endedAt": "2026-11-09T19:56:00.496Z",
       "passed": 36,
       "failed": 0,
       "skipped": 0,
       "planError": null,
-      "log": "/workspace/scratch/supplychain-board-20261109/p01-legacy16-resourcefix.log",
-      "logSha256": "201a4eeb5202b8a67ce634e563199c3214b1a998f67e0d21d304c6c9315372e7",
-      "resultReport": "/workspace/scratch/supplychain-board-20261109/p01-legacy16-resourcefix.vitest.json",
+      "log": "/workspace/scratch/supplychain-board-20261109/p01-legacy16-cutgates-ready.log",
+      "logSha256": "7aa92142d5ced484271e5d8bb9f18225d754d85c70330b59b4718ff5711943d1",
+      "resultReport": "/workspace/scratch/supplychain-board-20261109/p01-legacy16-cutgates-ready.vitest.json",
       "postgresVersion": 160015,
       "context": "Actual PostgreSQL160015 official cached-image binaries/libraries in private /tmp, non-superuser marked TEST databases, original full native schema and businessAnchorFixture/UAT initializer. Original canonical suite config/runOwnedCommand, Node22.22.2,2 Vitest workers onCPUs2/3, PostgreSQL onCPUs0/1/default100connections/64MiB shared buffers. No Docker/CI hardware or onsite equivalence. p01 is explicitly bounded new-case discovery, not all suites or skipped old coverage passed.",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "972e2590e1546cc0b6d4e793d4342b274905d06a19e318f896ab561564e95127"
+          "sha256": "1b89ded6ff6103f5b5db844ebb44571bf1bbfc58bdc512e4727cdfb7452a4df3"
         }
       ]
     },
@@ -313,7 +362,7 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "60a433cdc36f408a313b8ad1d608a96782ff4334bd41dff1d31f583a6407bebe",
+      "sourceFingerprint": "1f598f09b8f39da64ee16c77b553dad9b72ca8bd7be244e2dae5d7a326167e84",
       "inputPaths": [
         "apps",
         "packages",
@@ -327,24 +376,24 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "c1a9d834c3fcd229aacdc267a2d74c83d5c1294b3168b37b33095293ae333976",
+      "inputFingerprint": "0c7c9bca4869a844b91cd5b4383caf9cc93b1a2e13d39352a824a24937b793ab",
       "sourceUnchanged": true,
       "inputsUnchanged": true,
-      "testedHead": "c43355683f0ac574ec9e3943937587a5b637cdfa",
-      "startedAt": "2026-11-09T19:28:28.370Z",
-      "endedAt": "2026-11-09T19:28:38.902Z",
-      "log": "/workspace/scratch/supplychain-board-20261109/p01-types-resourcefix.log",
+      "testedHead": "80ab9fa27b7e06e4106fc4596fcc16e6bab4786a",
+      "startedAt": "2026-11-09T19:55:09.027Z",
+      "endedAt": "2026-11-09T19:55:23.828Z",
+      "log": "/workspace/scratch/supplychain-board-20261109/p01-types-cutgates-ready.log",
       "logSha256": "d81733d2d3443600c8f5c4e1f5774d8d050a1c5a8ef34bd5a659eb50ebd68f00",
       "context": "Actual scoped command on Node22.22.2 and unchanged task workspace. No assertion of CI hardware or onsite equivalence."
     },
     {
       "id": "p01-lint-ready",
       "kind": "command",
-      "command": "/workspace/scratch/m01-toolchain/bin/node node_modules/eslint/bin/eslint.js tests/integration/digital-production-tasks-postgres.test.ts --max-warnings=0",
+      "command": "/workspace/scratch/m01-toolchain/bin/node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/task-service.ts apps/api/src/production-platform/task-readiness-facts.ts apps/api/src/production-platform/bulk-preparation-service.ts apps/api/src/production-platform/development-technical-service.ts apps/api/src/production-platform/journey-query.ts apps/api/src/production-platform/journey-fact-model.ts apps/api/src/cutting/cutting-source-service.ts tests/integration/production-readiness-postgres.test.ts tests/helpers/business-anchor-fixture.ts scripts/ci/full-gate-risk-map.mjs tests/unit/full-gate-risk-map.test.ts --max-warnings=0",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "60a433cdc36f408a313b8ad1d608a96782ff4334bd41dff1d31f583a6407bebe",
+      "sourceFingerprint": "1f598f09b8f39da64ee16c77b553dad9b72ca8bd7be244e2dae5d7a326167e84",
       "inputPaths": [
         "apps",
         "packages",
@@ -358,13 +407,13 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "c1a9d834c3fcd229aacdc267a2d74c83d5c1294b3168b37b33095293ae333976",
+      "inputFingerprint": "0c7c9bca4869a844b91cd5b4383caf9cc93b1a2e13d39352a824a24937b793ab",
       "sourceUnchanged": true,
       "inputsUnchanged": true,
-      "testedHead": "c43355683f0ac574ec9e3943937587a5b637cdfa",
-      "startedAt": "2026-11-09T19:28:50.125Z",
-      "endedAt": "2026-11-09T19:28:51.054Z",
-      "log": "/workspace/scratch/supplychain-board-20261109/p01-lint-resourcefix.log",
+      "testedHead": "80ab9fa27b7e06e4106fc4596fcc16e6bab4786a",
+      "startedAt": "2026-11-09T19:55:09.194Z",
+      "endedAt": "2026-11-09T19:55:13.663Z",
+      "log": "/workspace/scratch/supplychain-board-20261109/p01-lint-cutgates-ready.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "context": "Actual scoped command on Node22.22.2 and unchanged task workspace. No assertion of CI hardware or onsite equivalence."
     },
@@ -375,7 +424,7 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "60a433cdc36f408a313b8ad1d608a96782ff4334bd41dff1d31f583a6407bebe",
+      "sourceFingerprint": "1f598f09b8f39da64ee16c77b553dad9b72ca8bd7be244e2dae5d7a326167e84",
       "inputPaths": [
         "apps",
         "packages",
@@ -389,14 +438,14 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "c1a9d834c3fcd229aacdc267a2d74c83d5c1294b3168b37b33095293ae333976",
+      "inputFingerprint": "0c7c9bca4869a844b91cd5b4383caf9cc93b1a2e13d39352a824a24937b793ab",
       "sourceUnchanged": true,
       "inputsUnchanged": true,
-      "testedHead": "c43355683f0ac574ec9e3943937587a5b637cdfa",
-      "startedAt": "2026-11-09T19:28:50.077Z",
-      "endedAt": "2026-11-09T19:28:55.580Z",
-      "log": "/workspace/scratch/supplychain-board-20261109/p01-preflight-resourcefix.log",
-      "logSha256": "b2c37abfa6a76c0539224127ee041b58089b17692c83ecebbcb9e4f4bf90c936",
+      "testedHead": "80ab9fa27b7e06e4106fc4596fcc16e6bab4786a",
+      "startedAt": "2026-11-09T19:55:08.976Z",
+      "endedAt": "2026-11-09T19:55:18.827Z",
+      "log": "/workspace/scratch/supplychain-board-20261109/p01-preflight-cutgates-ready.log",
+      "logSha256": "0ea73c9b6ca1243b99fd7577449a22222c8e4256dd2386d8798f60ed86040b66",
       "context": "Actual scoped command on Node22.22.2 and unchanged task workspace. No assertion of CI hardware or onsite equivalence."
     },
     {
@@ -406,7 +455,7 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "60a433cdc36f408a313b8ad1d608a96782ff4334bd41dff1d31f583a6407bebe",
+      "sourceFingerprint": "1f598f09b8f39da64ee16c77b553dad9b72ca8bd7be244e2dae5d7a326167e84",
       "inputPaths": [
         "apps",
         "packages",
@@ -420,13 +469,13 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "c1a9d834c3fcd229aacdc267a2d74c83d5c1294b3168b37b33095293ae333976",
+      "inputFingerprint": "0c7c9bca4869a844b91cd5b4383caf9cc93b1a2e13d39352a824a24937b793ab",
       "sourceUnchanged": true,
       "inputsUnchanged": true,
-      "testedHead": "c43355683f0ac574ec9e3943937587a5b637cdfa",
-      "startedAt": "2026-11-09T19:28:50.094Z",
-      "endedAt": "2026-11-09T19:28:51.646Z",
-      "log": "/workspace/scratch/supplychain-board-20261109/p01-secrets-resourcefix.log",
+      "testedHead": "80ab9fa27b7e06e4106fc4596fcc16e6bab4786a",
+      "startedAt": "2026-11-09T19:55:08.959Z",
+      "endedAt": "2026-11-09T19:55:13.052Z",
+      "log": "/workspace/scratch/supplychain-board-20261109/p01-secrets-cutgates-ready.log",
       "logSha256": "e41648ae52b20dec12f1a629ecc0096df7be90f1c557e46cfa97dfbb12429bda",
       "context": "Actual scoped command on Node22.22.2 and unchanged task workspace. No assertion of CI hardware or onsite equivalence."
     },
@@ -437,7 +486,7 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "60a433cdc36f408a313b8ad1d608a96782ff4334bd41dff1d31f583a6407bebe",
+      "sourceFingerprint": "1f598f09b8f39da64ee16c77b553dad9b72ca8bd7be244e2dae5d7a326167e84",
       "inputPaths": [
         "apps",
         "packages",
@@ -453,12 +502,12 @@
         "docs/requirements/digital-sla-golden-source-20261023.md",
         "docs/engineering/acceptance-time-sites-20261027.json"
       ],
-      "inputFingerprint": "c5a88d9083e2e7c7d1ad6eba2121074f7e9b168d3cdd9473bda2d5940ef841b1",
+      "inputFingerprint": "d126392ec86b356b278e4e5864b6d5d07886b0d382066595c8d5dd90fb62d52f",
       "sourceUnchanged": true,
       "inputsUnchanged": true,
-      "testedHead": "c43355683f0ac574ec9e3943937587a5b637cdfa",
-      "startedAt": "2026-11-09T19:28:50.157Z",
-      "endedAt": "2026-11-09T19:28:52.144Z",
+      "testedHead": "80ab9fa27b7e06e4106fc4596fcc16e6bab4786a",
+      "startedAt": "2026-11-09T19:55:08.976Z",
+      "endedAt": "2026-11-09T19:55:14.223Z",
       "log": "/workspace/scratch/supplychain-board-20261109/p01-docs.log",
       "logSha256": "0802b95dbcb2b1a6ae17e536b017425c5eb73c0b27166c6e7cc11387ea293a00",
       "context": "Actual scoped command on Node22.22.2 and unchanged task workspace. No assertion of CI hardware or onsite equivalence."
@@ -470,7 +519,7 @@
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "60a433cdc36f408a313b8ad1d608a96782ff4334bd41dff1d31f583a6407bebe",
+      "sourceFingerprint": "1f598f09b8f39da64ee16c77b553dad9b72ca8bd7be244e2dae5d7a326167e84",
       "inputPaths": [
         "apps",
         "packages",
@@ -484,14 +533,14 @@
         "vitest.config.ts",
         "vitest.postgres-immediate.config.ts"
       ],
-      "inputFingerprint": "c1a9d834c3fcd229aacdc267a2d74c83d5c1294b3168b37b33095293ae333976",
+      "inputFingerprint": "0c7c9bca4869a844b91cd5b4383caf9cc93b1a2e13d39352a824a24937b793ab",
       "sourceUnchanged": true,
       "inputsUnchanged": true,
-      "testedHead": "c43355683f0ac574ec9e3943937587a5b637cdfa",
-      "startedAt": "2026-11-09T19:27:47.181Z",
-      "endedAt": "2026-11-09T19:27:47.441Z",
+      "testedHead": "80ab9fa27b7e06e4106fc4596fcc16e6bab4786a",
+      "startedAt": "2026-11-09T19:55:08.982Z",
+      "endedAt": "2026-11-09T19:55:09.568Z",
       "log": "/workspace/scratch/supplychain-board-20261109/p01-resource.log",
-      "logSha256": "cbe2fbe14d065aaae459b5fadff248a55689191ed8702d471d679683f21f5042",
+      "logSha256": "8cf564e41b3d557de53d460ec4d13fd53b64a08b3ca81932a1725889f4b6e241",
       "context": "Actual scoped command on Node22.22.2 and unchanged task workspace. No assertion of CI hardware or onsite equivalence."
     }
   ]

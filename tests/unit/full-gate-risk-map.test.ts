@@ -217,7 +217,7 @@ describe("Full Gate sensitive path mapping", () => {
   it('keeps native readiness, cut and termination readers on their actual PostgreSQL consumers',()=>{
     const readiness=classifyFullGatePaths(['apps/api/src/production-platform/task-readiness-facts.ts']);
     expect(readiness.mappedPostgresTests).toEqual(expect.arrayContaining([
-      'tests/integration/development-technical-postgres.test.ts','tests/integration/digital-production-tasks-postgres.test.ts','tests/integration/journey-fact-model-postgres.test.ts'
+      'tests/integration/production-readiness-postgres.test.ts','tests/integration/development-technical-postgres.test.ts','tests/integration/digital-production-tasks-postgres.test.ts','tests/integration/journey-fact-model-postgres.test.ts'
     ]));
     for(const name of ['journey-cut-scopes','journey-termination']){
       const result=classifyFullGatePaths(['apps/api/src/production-platform/'+name+'.ts']);

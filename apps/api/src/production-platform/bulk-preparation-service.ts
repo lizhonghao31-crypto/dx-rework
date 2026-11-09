@@ -84,7 +84,7 @@ export class BulkPreparationService {
   await refreshPreparationWindows(db,id);
   const g=await this.gates(db,id);
   // Never rewrite or supersede a route once a real cutting fact exists.
-  if((await db.query("SELECT 1 FROM digital_production_child_links l JOIN cutting_orders c ON c.sourcing_case_id=l.child_id JOIN cutting_records r ON r.cutting_order_id=c.cutting_order_id WHERE l.module='sourcing' AND l.production_order_id=$1 LIMIT 1",[id])).rowCount){if(g.instruction&&g.source&&g.instruction.source_round!==g.source.round_number)fail('已开始实裁，不能发布影响本单大货的开发修改');return;}
+  if((await db.query("SELECT 1 FROM digital_production_child_links l JOIN cutting_orders c ON c.sourcing_case_id=l.child_id JOIN cutting_records r ON r.cutting_order_id=c.cutting_order_id WHERE l.module='sourcing' AND l.production_order_id=$1 LIMIT 1",[id])).rowCount){if(g.instruction&&g.source&&g.instruction.source_round!==g.source.round_number)fail('已开始实裁，不能发布影响本单大货的开发修改');await this.refreshCuttingReadiness(db,actor,id);return;}
   if(g.technicalReasons.length){if(!g.instructionValid||!g.customerConfirmed)await this.tasks().supersedeBulkTasksWithClient(db,actor,id);return;}
   let prep=await this.current(db,id,g);
   if(!prep){
@@ -113,6 +113,7 @@ export class BulkPreparationService {
    if(resolveBulkPreshrinkRequirement(prep)==='无需预缩')await this.fact(db,actor,pid,'无需预缩',null);
   }
   await this.syncPreparationTasks(db,actor,id,g,prep);
+  await this.refreshCuttingReadiness(db,actor,id);
  }
  async syncCorrectedPreparation(db:PoolClient,actor:TrustedActorContext,id:string,preparationId:string,correctionId:string){
   // A correction may converge the existing route only. It must never initialize
@@ -121,6 +122,15 @@ export class BulkPreparationService {
   const g=await this.gates(db,id),prep=await this.current(db,id,g);
   if(!prep||prep.preparation_id!==preparationId||!(await db.query('SELECT 1 FROM digital_bulk_preshrink_corrections WHERE correction_id=$1 AND production_order_id=$2 AND preparation_id=$3',[correctionId,id,preparationId])).rowCount)fail('纠正依据已变化，不能同步其它准备');
   await this.syncPreparationTasks(db,actor,id,g,prep);
+ }
+ private async refreshCuttingReadiness(db:PoolClient,actor:TrustedActorContext,id:string){
+  const tasks=(await db.query("SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.production_order_id=$1 AND a.task_kind IN ('bulk_cutting','bulk_cutting_external') AND t.state IN ('pending','ready','blocked') ORDER BY t.task_id",[id])).rows;
+  for(const task of tasks)await this.tasks().refreshNativeReadinessWithClient(db,actor,task.task_id);
+ }
+ /** A technical fact update does not authorize creating/replacing bulk work. */
+ async refreshSourceCuttingReadiness(db:PoolClient,actor:TrustedActorContext,sourceId:string){
+  for(const row of (await db.query('SELECT production_order_id FROM digital_production_orders WHERE source_id=$1 ORDER BY production_order_id',[sourceId])).rows)
+   await this.refreshCuttingReadiness(db,actor,row.production_order_id);
  }
  private async syncPreparationTasks(db:PoolClient,actor:TrustedActorContext,id:string,g:Awaited<ReturnType<BulkPreparationService['gates']>>,prep:{preparation_id:string;instruction_version:number;preshrink:string}){
   const effectivePreshrink=await readBulkPreshrinkRequirement(db,prep);
