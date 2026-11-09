@@ -252,22 +252,28 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   });
  });
  it('projects48/72 reminders once per window and recipient, revalidates queued events and unifies stale dashboard rules',async()=>{
-  const scene=await f.scene('2026-11-07T00:00:00Z');let ready!:Awaited<ReturnType<typeof dispatch>>;
+  // Native transition recording uses statement_timestamp(), independent of the
+  // scenario clock. Keep this elapsed-window test ahead of its real writes.
+  const startedAt=Date.now(),hour=60*60*1000,at=(elapsed:number)=>new Date(startedAt+elapsed).toISOString();
+  const scene=await f.scene(at(0));let ready!:Awaited<ReturnType<typeof dispatch>>;
   const actors=Object.values(f.people).map(p=>p.actorId===qc.actorId?qc:p),notifications=new DigitalProductionNotificationService(f.db);
   await f.runtime.run(scene,f.root,async()=>{ready=await dispatch();await service.settingsCommand(f.root,ready.id,{expectedVersion:0,qualityLeadId:qc.actorId},randomUUID());});
-  await f.advance(scene,'2026-11-08T23:59:59Z');await f.runtime.run(scene,f.root,async()=>{
+  await f.advance(scene,at(48*hour-1000));await f.runtime.run(scene,f.root,async()=>{
    expect((await qcProgressNotices(f.db,actors,ready.id)).filter(n=>n.recipients.includes(qc.actorId))).toHaveLength(0);
   });
-  await f.advance(scene,'2026-11-09T00:00:00Z');let oldEvent!:string;
+  await f.advance(scene,at(48*hour));let oldEvent!:string;
   await f.runtime.run(scene,f.root,async()=>{
    const pending=(await qcProgressNotices(f.db,actors,ready.id)).filter(n=>n.recipients.includes(qc.actorId));expect(pending).toHaveLength(1);expect(pending[0]!.key.endsWith(':48')).toBe(true);
    await notifications.runOnce();await notifications.runOnce();
    const rows=(await f.db.query("SELECT e.event_id FROM digital_production_notification_events e JOIN digital_production_notification_receipts r USING(event_id) WHERE e.task_id=$1 AND e.event_kind='qc_progress' AND r.recipient_id=$2",[ready.taskId,qc.actorId])).rows;
    expect(rows).toHaveLength(1);oldEvent=rows[0]!.event_id;
-   const native=new ProductionReportingService(f.db),e=(await service.read(qc,ready.id)).executions[0]!,dashboard=await new ProductionDashboardService(f.db,native,()=>businessNow()).detail(qc,e.productionId,e.factoryDecisionId);
+   const native=new ProductionReportingService(f.db),e=(await service.read(qc,ready.id)).executions[0]!;
+   const transition=(await f.db.query('SELECT created_at FROM sourcing_production_transitions WHERE production_order_id=$1 AND factory_decision_id IS NOT DISTINCT FROM $2::uuid ORDER BY sequence DESC LIMIT 1',[e.productionId,e.factoryDecisionId])).rows[0]!;
+   expect(transition.created_at.getTime()).toBeLessThanOrEqual(businessNow().getTime());
+   const dashboard=await new ProductionDashboardService(f.db,native,()=>businessNow()).detail(qc,e.productionId,e.factoryDecisionId);
    expect(dashboard.progress).toMatchObject({progressState:'stale',qcObservation:{state:'due'},completedQuantity:0});
   });
-  await f.advance(scene,'2026-11-10T00:00:00Z');await f.runtime.run(scene,f.root,async()=>{
+  await f.advance(scene,at(72*hour));await f.runtime.run(scene,f.root,async()=>{
    const pending=(await qcProgressNotices(f.db,actors,ready.id)).filter(n=>n.recipients.includes(qc.actorId));expect(pending).toHaveLength(1);expect(pending[0]!.key.endsWith(':72')).toBe(true);expect(pending[0]!.recipients).toContain(ready.primary.actorId);
    await f.db.query('UPDATE digital_production_notification_receipts SET shown_at=CURRENT_TIMESTAMP WHERE event_id=$1 AND recipient_id=$2',[oldEvent,qc.actorId]);
    expect((await notifications.current(qc,oldEvent)).notification).toBeNull();
