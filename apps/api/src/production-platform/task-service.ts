@@ -163,7 +163,7 @@ export class DigitalProductionTaskService {
    * conditions. Capture a current conjunction in this native write transaction;
    * do not infer historical overlap from unrelated old timestamps.
    */
-  private async captureNativeReadiness(client:PoolClient,actor:TrustedActorContext,task:{task_id:string;task_kind:string;source_id:string|null;production_order_id:string|null;route_instance_id:string;route_version:number;state:string}){
+  private async captureNativeReadiness(client:PoolClient,actor:TrustedActorContext,task:{task_id:string;task_kind:string;source_id:string|null;production_order_id:string|null;route_instance_id:string;route_version:number;state:string},physicalCut?:{cuttingOrderId:string;actualCutCount:number}){
     if(!NATIVE_READINESS_KINDS.has(task.task_kind)||['completed','cancelled'].includes(task.state))return;
     const saved=(await nativeTaskReadiness(client,[task.task_id])).get(task.task_id);
     if(!saved?.tracked)return;
@@ -206,7 +206,10 @@ export class DigitalProductionTaskService {
       if(saved.eventId&&cuts.every(cut=>recorded.some(fact=>fact.lineId===cut.line_id&&fact.cuttingOrderId===cut.cutting_order_id)))return;
       let allReady=cuts.length>0;
       for(const cut of cuts){
-        const gate=await digitalCuttingGate(client,this.database,cut.cutting_order_id);
+        // Only this native cutting write has validated an actual quantity.
+        // Sibling scopes still use their own original full-quantity gate.
+        const actualCutCount=physicalCut&&physicalCut.cuttingOrderId===cut.cutting_order_id?physicalCut.actualCutCount:undefined;
+        const gate=await digitalCuttingGate(client,this.database,cut.cutting_order_id,actualCutCount);
         if(!gate?.ready||gate.taskId!==task.task_id){allReady=false;continue;}
         const scopeRef=`po:${cut.line_id}:cut:${cut.cutting_order_id}`;
         if(recorded.some(fact=>fact.scopeRef===scopeRef))continue;
@@ -217,7 +220,7 @@ export class DigitalProductionTaskService {
         const readiness=await productionReadiness(client,task.production_order_id);
         const eventId=randomUUID();
         await client.query(`INSERT INTO digital_production_task_events(event_id,task_id,resource_kind,resource_id,event_kind,actor_id,occurred_at,time_quality,payload)
-         VALUES($1,$2,'order',$3,'ready',$4,$5,'现场登记',$6)`,[eventId,task.task_id,task.production_order_id,actor.actorId,businessNow().toISOString(),JSON.stringify({readinessOnly:true,nativeReadiness:{version:1,scopeKind:'po',scopeRef,lineId:cut.line_id,cuttingOrderId:cut.cutting_order_id,basis:[...basis,`digitalCuttingGate:${cut.cutting_order_id}:full-current-gate`,`preparation-readiness:${readiness.revision}`]}})]);
+         VALUES($1,$2,'order',$3,'ready',$4,$5,'现场登记',$6)`,[eventId,task.task_id,task.production_order_id,actor.actorId,businessNow().toISOString(),JSON.stringify({readinessOnly:true,nativeReadiness:{version:1,scopeKind:'po',scopeRef,lineId:cut.line_id,cuttingOrderId:cut.cutting_order_id,basis:[...basis,`digitalCuttingGate:${cut.cutting_order_id}:full-current-gate`,...(actualCutCount===undefined?[]:[`actual-cut-quantity:${actualCutCount}`]),`preparation-readiness:${readiness.revision}`]}})]);
       }
       if(!allReady||saved.eventId)return;
       basis.push(...cuts.map(cut=>`digitalCuttingGate:${cut.cutting_order_id}:full-current-gate`));
@@ -229,10 +232,10 @@ export class DigitalProductionTaskService {
     return eventId;
   }
   /** Caller already owns the authorized source command and transaction. */
-  async refreshNativeReadinessWithClient(client:PoolClient,actor:TrustedActorContext,id:string){
+  async refreshNativeReadinessWithClient(client:PoolClient,actor:TrustedActorContext,id:string,physicalCut?:{cuttingOrderId:string;actualCutCount:number}){
     await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
     const task=await this.task(client,id,true);
-    const eventId=await this.captureNativeReadiness(client,actor,task);
+    const eventId=await this.captureNativeReadiness(client,actor,task,physicalCut);
     if(eventId)await this.applyNativeReadinessClock(client,actor,task,eventId);
   }
   private async applyNativeReadinessClock(client:PoolClient,actor:TrustedActorContext,task:Awaited<ReturnType<DigitalProductionTaskService['task']>>,eventId:string){

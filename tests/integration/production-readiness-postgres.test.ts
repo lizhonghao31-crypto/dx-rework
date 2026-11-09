@@ -108,6 +108,40 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect(corrected.find(f=>f.lineId===ready.lines[1]!.lineId)).toEqual(final.find(f=>f.lineId===ready.lines[1]!.lineId));
   expect((await nativeTaskReadiness(f.db,[task.task_id])).get(task.task_id)?.firstReadyAt).toBe('2026-11-09T12:00:00.000Z');
  });
+ for(const external of [false,true])for(const poCount of [1,2])it(`P01 records legitimate 95-of-100 actual cutting readiness without borrowing sibling quantity (${external?'external':'internal'}, ${poCount} PO)`,async()=>{
+  const scene=await f.scene('2026-11-09T08:00:00.000Z'),run=<T,>(action:()=>Promise<T>)=>f.runtime.run(scene,f.root,action);
+  const ready=await run(async()=>{
+   const ready=await f.bulkReady('无',undefined,poCount,f.sourcing,{stopBeforeCompletion:true,quantity:100,cuttingProcess:external?'outsourced':'in_house'}),resource={kind:'order' as const,id:ready.id},state=await service.read(f.root,resource),prior=state.facts.find(f=>f.kind==='style_label_ready')!;
+   await service.record(f.people.warehouse!,resource,{kind:'style_label_ready',scopeRef:'whole',expectedVersion:prior.version,state:'ready',occurredAt:businessNow().toISOString(),note:'TEST actual planned cut95; original PO100',quantities:state.lines.map(line=>({lineId:line.lineId,materialId:null,name:'TEST款号唛',quantity:95,unit:'枚'})),evidenceIds:[],sourceDocumentVersion:null,recipientId:null},randomUUID());
+   for(const kind of ['纸样完成','唛架完成','预缩完成'] as const)await completeBulkRangeFixture(f.db,kind==='预缩完成'?f.people.warehouse!:f.people['pattern-room-worker']!,ready.id,ready.preparationId,kind);
+   return {...ready,lines:state.lines};
+  });
+  const task=(await f.db.query("SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.production_order_id=$1 AND a.task_kind=$2",[ready.id,external?'bulk_cutting_external':'bulk_cutting'])).rows[0];
+  expect(await nativeCuttingReadiness(f.db,[task.task_id])).toEqual([]);
+  expect((await nativeTaskReadiness(f.db,[task.task_id])).get(task.task_id)?.firstReadyAt).toBeNull();
+  const cuts=(await f.db.query("SELECT child_id FROM digital_production_child_lines WHERE production_order_id=$1 AND module='cutting' AND child_line_key='record' ORDER BY line_id",[ready.id])).rows;
+  const principal=external?ready.primary:f.people['cutting-worker']!,capabilities=(await f.db.query('SELECT DISTINCT capability FROM user_role_assignments a JOIN role_capabilities c USING(role_code) JOIN business_roles role USING(role_code) WHERE a.user_id=$1 AND a.revoked_at IS NULL AND role.enabled',[principal.actorId])).rows.map(row=>row.capability as string),cutter={...principal,authorizationCapability:'cutting:records:create',authorizationCapabilities:capabilities};
+  await f.advance(scene,'2026-11-09T09:00:00.000Z');
+  await run(async()=>{
+   const body={pieceCount:1,actualCutCount:95,attachmentIds:[await f.image(cutter)]},key=randomUUID();
+   await ready.cutting.record(cutter,cuts[0]!.child_id,body,key);
+   const count=await nativeCuttingReadiness(f.db,[task.task_id]);
+   expect(count).toHaveLength(1);expect(count[0]).toMatchObject({cuttingOrderId:cuts[0]!.child_id,firstReadyAt:'2026-11-09T09:00:00.000Z'});
+   expect(count[0]!.basis).toContain('actual-cut-quantity:95');
+   expect((await nativeTaskReadiness(f.db,[task.task_id])).get(task.task_id)?.firstReadyAt).toBe(poCount===1?'2026-11-09T09:00:00.000Z':null);
+   await ready.cutting.record(cutter,cuts[0]!.child_id,body,key);
+   expect(await nativeCuttingReadiness(f.db,[task.task_id])).toEqual(count);
+  });
+  if(poCount===2){
+   await f.advance(scene,'2026-11-09T12:00:00.000Z');
+   await run(async()=>ready.cutting.record(cutter,cuts[1]!.child_id,{pieceCount:1,actualCutCount:95,attachmentIds:[await f.image(cutter)]},randomUUID()));
+   const final=await nativeCuttingReadiness(f.db,[task.task_id]);
+   expect(final).toHaveLength(2);expect(final.find(f=>f.cuttingOrderId===cuts[0]!.child_id)?.firstReadyAt).toBe('2026-11-09T09:00:00.000Z');
+   expect(final.find(f=>f.cuttingOrderId===cuts[1]!.child_id)?.firstReadyAt).toBe('2026-11-09T12:00:00.000Z');
+   expect((await nativeTaskReadiness(f.db,[task.task_id])).get(task.task_id)?.firstReadyAt).toBe('2026-11-09T12:00:00.000Z');
+  }
+  expect((await f.db.query('SELECT actual_cut_count FROM cutting_records WHERE cutting_order_id=ANY($1::uuid[])',[cuts.map(cut=>cut.child_id)])).rows.map(row=>Number(row.actual_cut_count))).toEqual(Array(poCount).fill(95));
+ });
  it('P01 cutting readiness waits for actual technical test evidence and records its native update',async()=>{
   const scene=await f.scene('2026-11-09T08:00:00.000Z'),run=<T,>(action:()=>Promise<T>)=>f.runtime.run(scene,f.root,action),technical=new DevelopmentTechnicalService(f.db,true);
   const ready=await run(async()=>{
