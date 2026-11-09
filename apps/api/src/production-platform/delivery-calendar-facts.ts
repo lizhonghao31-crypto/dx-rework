@@ -1,6 +1,6 @@
 import type {PoolClient} from 'pg';
 import type {DeliveryPoFact,DeliveryScope} from '@dx-rework/contracts/delivery-calendar';
-import {DIGITAL_RECEIVING_BASE_SQL} from '../receiving/receiving-service.js';
+import {DIGITAL_RECEIVING_BASE_SQL} from '../receiving/receiving-quantity-query.js';
 
 type PoRow={line_id:string;production_order_id:string;source_id:string|null;design_style_no:string;po_number:string|null;color:string;customer_code:string;product_group:string;quantity:string|null;customer_date:string|null;factory_date:string|null;customer_date_version:number;cutting_ids:string[]|null;cancelled:boolean;paused:boolean;closed:boolean};
 const quantity=(value:unknown):number|null=>{if(value===null||value===undefined)return null;const n=Number(value);return Number.isSafeInteger(n)&&n>=0?n:null;};

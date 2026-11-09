@@ -12,12 +12,15 @@ describe("order board global style search", () => {
       readFile("apps/api/src/rework/service.ts", "utf8"),
       readFile("apps/api/migrations/0115_receiving_style_identity_canonicalization.sql", "utf8"),
     ]);
+    const boardRead = await readFile("apps/api/src/receiving/receiving-board-query.ts", "utf8");
+    const quantityRead = await readFile("apps/api/src/receiving/receiving-quantity-query.ts", "utf8");
+    expect(service).toContain("readReceivingBoard");
 
-    expect(service).toContain("const mode = needle ? \"search\" : \"range\"");
-    expect(service).toContain("$3::text<>''");
-    expect(service).toContain("strpos(upper(btrim(batch.style_no)),$3)>0");
-    expect(service).toContain("receipt.received_at>=($1::date::timestamp AT TIME ZONE 'Asia/Shanghai')");
-    expect(service).toContain("receipt.received_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')");
+    expect(boardRead).toContain("const mode = needle ? \"search\" : \"range\"");
+    expect(boardRead).toContain("$3::text<>''");
+    expect(quantityRead).toContain("strpos(upper(btrim(batch.style_no)),$3)>0");
+    expect(quantityRead).toContain("receipt.received_at>=($1::date::timestamp AT TIME ZONE 'Asia/Shanghai')");
+    expect(boardRead).toContain("receipt.received_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')");
     expect(routes).toContain("status?: string;");
     expect(routes).toContain("request.query.status ?? \"all\"");
     expect(page).toContain('mode: "range" | "search";');
@@ -30,7 +33,7 @@ describe("order board global style search", () => {
     expect(page).toContain('<option value="extra">多收</option>');
     expect(page).toContain('<option value="multiple">多次收货</option>');
     const filters = await readFile("apps/api/src/receiving/receiving-board-filters.ts", "utf8");
-    expect(service).toContain("${boardBaseSql}${RECEIVING_BOARD_FILTERS_SQL}");
+    expect(boardRead).toContain("${boardBaseSql}${RECEIVING_BOARD_FILTERS_SQL}");
     expect(filters).toContain("$4='multiple' AND receipt_count>1");
     expect(page).toContain("event.target.value.toUpperCase()");
     expect(receivingPage).toContain("styleNo.trim().toUpperCase()");

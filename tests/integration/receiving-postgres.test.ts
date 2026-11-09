@@ -1847,6 +1847,44 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     )).rejects.toThrow();
   });
 
+  it("exports the complete filtered quantity snapshot and preserves zero packing versus unknown packing", async () => {
+    const prefix = "TEST-F2-EXPORT-";
+    let firstBatch = "";
+    for (let index = 0; index < 16; index++) {
+      const receipt = await service.create(receiver(), {
+        styleNo: `${prefix}${index}`, documentQuantity: 10,
+        actualQuantity: index === 0 ? 12 : 10,
+        attachmentIds: [await readyImage()],
+      }, randomUUID());
+      if (index === 0) firstBatch = receipt.value.receivingBatchId;
+    }
+    const page = await service.board(businessDate(), businessDate(), prefix);
+    expect(page.rows).toHaveLength(15);
+    expect(page.totalCount).toBe(16);
+    expect(page.kpis).toMatchObject({ orderCount: 16, receivedQuantity: 162, abnormalOrderCount: 1, differenceQuantity: 2 });
+    const row = page.rows.find(item => item.receivingBatchId === firstBatch)!;
+    expect(row.packingQuantity).toBeNull();
+    await service.recordPacking(packingRecorder(), {
+      receivingBatchId: firstBatch, expectedVersion: row.version,
+      expectedPackingRevisionId: null, packingQuantity: 0,
+    }, randomUUID());
+    const exact = await service.board(businessDate(), businessDate(), "", "all", 1, 15, firstBatch);
+    expect(exact.totalCount).toBe(1);
+    expect(exact.rows[0]).toMatchObject({ receivingBatchId: firstBatch, packingQuantity: 0, packingDifferenceQuantity: -12 });
+    await expect(service.exportBoard(receiver(), businessDate(), businessDate(), prefix)).rejects.toMatchObject({ statusCode: 403 });
+    const actor = { ...rootCorrector(), authorizationCapability: "receiving:export" };
+    const exported = await service.exportBoard(actor, businessDate(), businessDate(), prefix);
+    expect(exported.rows).toHaveLength(16);
+    expect(exported.kpis).toEqual(page.kpis);
+    expect(exported.rows.filter(item => item.packingQuantity === null)).toHaveLength(15);
+    expect(exported.rows.flatMap(item => item.receivingHistory)).toHaveLength(16);
+    const audit = await database.query<{ count: number }>(
+      "SELECT count(*)::int count FROM operation_events WHERE action='receiving.board.export' AND request_id=$1",
+      [actor.requestId],
+    );
+    expect(audit.rows[0]!.count).toBe(1);
+  });
+
   it("searches known style numbers without forcing a second manual spelling", async () => {
     const options = await service.listStyleOptions("RECEIVING");
     expect(options).toContain("STYLE-RECEIVING-01");
