@@ -2,6 +2,7 @@ import {slaApplications,appliedSlaWindow} from './sla-applied-window.js';
 import {bulkFabricFacts} from "./bulk-fabric-facts.js";
 import type {PoolClient} from 'pg';
 import {validateDigitalSlaSnapshot} from '@dx-rework/contracts/digital-sla';
+import {nativeTaskReadiness} from './task-readiness-facts.js';
 /** Original business anchors, independent of task assignment/readiness. No receipt-input API. */
 export async function bulkTaskTiming(db:Pick<PoolClient,'query'>,task:{task_id:string;production_order_id:string|null;task_kind:string;route_instance_id:string}){
  if(!task.production_order_id||!['bulk_pattern','warehouse_preshrink','bulk_cutting','bulk_cutting_external'].includes(task.task_kind))return null;
@@ -34,6 +35,8 @@ export async function bulkTaskTiming(db:Pick<PoolClient,'query'>,task:{task_id:s
   enteredAt=original?new Date(original.entered_at).toISOString():fabric.usableAt;
   timeQuality=original?.sla_basis?.timeQuality??fabric.usableQuality;
  }
+ const cuttingReady=['bulk_cutting','bulk_cutting_external'].includes(task.task_kind)?(await nativeTaskReadiness(db,[task.task_id])).get(task.task_id):null;
+ if(cuttingReady?.tracked){enteredAt=cuttingReady.firstReadyAt;timeQuality=cuttingReady.quality??'缺失';}
  return {snapshotId:applied.snapshotId??row.sla_snapshot_id,parameterKey:task.task_kind,enteredAt,timeQuality,seconds,warningRatio:warning.percent/100,
-   basis:enteredAt?[...(supplemental?['supplement:original-completed-range-retained']:[]),`instruction:${task.production_order_id}:${row.preparation_id}:published`]:[]};
+   basis:cuttingReady?.tracked?(cuttingReady.effectiveEventId?[`readiness:${cuttingReady.effectiveEventId}`]:[]):enteredAt?[...(supplemental?['supplement:original-completed-range-retained']:[]),`instruction:${task.production_order_id}:${row.preparation_id}:published`]:[]};
 }

@@ -25,6 +25,32 @@ export async function factoryProductionCompletion(db:DB,orderId:string,lineIds?:
  const operators=[...new Map(rows.flatMap(row=>row.transition?[[row.transition.actor_id,{id:row.transition.actor_id as string,name:row.transition.display_name as string|null}] as const]:[])).values()];
  return {completed,actualDate:completed&&dates.every(Boolean)?(dates as string[]).sort().at(-1)!:null,operators};
 }
+export type NativeFactoryTimeline={productionId:string;factoryDecisionId:string|null;lineId:string;quantity:number;
+ dispatchedAt:string|null;startTransitionRef:string|null;completedDate:string|null;completionTransitionRef:string|null};
+/** Preserve native factory/PO allocation and date precision. Dispatch starts
+ * that execution, not a fictitious full-order R; QC is never production A.
+ */
+export async function nativeFactoryTimeline(db:DB,orderId:string):Promise<NativeFactoryTimeline[]>{
+ const scopes=await factoryProductionScopes(db,orderId);
+ if(!scopes.length)return [];
+ const transitions=(await db.query(`SELECT t.production_transition_id,t.production_order_id,t.factory_decision_id,t.status,t.business_date::text,
+   coalesce((event.after_state->'acceptanceClock'->>'now')::timestamptz,transfer.effective_at) AS transferred_at
+  FROM sourcing_production_transitions t
+  LEFT JOIN sourcing_production_factory_transfers transfer ON transfer.factory_decision_id=t.factory_decision_id AND transfer.production_order_id=t.production_order_id
+  LEFT JOIN operation_events event ON event.event_id=transfer.operation_event_id
+  WHERE t.production_order_id=ANY($1::uuid[]) AND t.status IN ('in_production','production_completed')
+  ORDER BY t.production_order_id,t.factory_decision_id NULLS FIRST,t.sequence`,[[...new Set(scopes.map(scope=>scope.production_order_id))]])).rows;
+ return scopes.map(scope=>{
+  const events=transitions.filter(event=>event.production_order_id===scope.production_order_id&&event.factory_decision_id===scope.factory_decision_id);
+  const start=events.find(event=>event.status==='in_production'),completion=events.find(event=>event.status==='production_completed');
+  const completed=['production_completed','shipped'].includes(scope.execution_status)&&!!completion;
+  const dispatchedAt=scope.factory_decision_id?start?.transferred_at:scope.dispatched_at;
+  return {productionId:scope.production_order_id,factoryDecisionId:scope.factory_decision_id??null,lineId:scope.line_id,quantity:Number(scope.quantity),
+   dispatchedAt:start&&dispatchedAt?new Date(dispatchedAt).toISOString():null,
+   startTransitionRef:start?`sourcing_production_transitions:${start.production_transition_id}`:null,
+   completedDate:completed?completion.business_date:null,completionTransitionRef:completed?`sourcing_production_transitions:${completion.production_transition_id}`:null};
+ });
+}
 export async function factoryProductionFacts(db:DB,orderId:string){
  const scopes=await factoryProductionScopes(db,orderId);
  const events=(await db.query(`SELECT e.*,u.display_name FROM digital_production_task_events e JOIN app_users u ON u.id=e.actor_id

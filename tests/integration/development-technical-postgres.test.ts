@@ -33,6 +33,7 @@ import {TodoService} from '../../apps/api/src/todos/service.js';
 import {DevelopmentDocumentSchema} from '@dx-rework/contracts/digital-development';
 import type {TechnicalArtifactBody,SaveTechnicalArtifact,RecordFinalComment} from '@dx-rework/contracts/digital-development-technical';
 import {DEVELOPMENT_ARRANGEABLE_KINDS} from '@dx-rework/contracts/development-arrangement';
+import {nativeTaskReadiness} from '../../apps/api/src/production-platform/task-readiness-facts.js';
 
 // This fixture exercises the real Acceptance business clock and original UAT
 // initializer, so use the existing clock-test database rather than the CI app DB.
@@ -56,25 +57,27 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   category={categoryId:changed.priceId,priceVersion:changed.version};
  });
  afterAll(async()=>{await f?.dispose();});
- const prepare=async(craft:'无'|'印花'='无')=>{
+ const prepare=async(craft:'无'|'印花'='无',options:{missingAccessory?:boolean;assignSewing?:boolean}={})=>{
   const designer=person('sample-designer'),worker=person('pattern-room-worker'),materialId=randomUUID();
   const created=await identity.createSource(designer,{developmentType:'头版',designStyleNo:`TEST-TECH-${randomUUID()}`,temporaryStyleNo:null,customerCode:'PD'},randomUUID());
   const sourceId=created.sourceId,photo=await f.image(designer);
   const document=DevelopmentDocumentSchema.parse({documentFormatVersion:2,sizeQuantities:[],template:'上衣',quantity:1,sampleSize:'',orderDate:null,returnDate:null,unit:'cm',sizes:[],measurements:[],
    interlining:'',placketInterlining:'',sewingThread:'',buttonholeThread:'',stitchDensity:'',washingIroning:'',packaging:'',formalSizes:'',casualSizes:'',mainLabel:false,mainLabelMethod:'',sizeLabel:false,careLabel:false,instructions:'TEST technical garment',craft,washing:'免洗',
    materials:[{materialId,category:'主布',label:'主布',supplier:'TEST',name:'TEST棉布',width:'150',weight:'200',composition:'棉',consumption:'',color:'黑',specification:'TEST40支',quantity:'1',requiredThisRound:true,available:true,expectedDate:null}],files:[{attachmentId:photo,kind:'款图'}]});
+  const accessoryId=options.missingAccessory?randomUUID():null;
+  if(accessoryId)document.materials.push({...document.materials[0]!,materialId:accessoryId,category:'辅料',label:'TEST必要纽扣',name:'纽扣',available:false,expectedDate:'2027-01-01'});
   const saved=await forms.save(designer,sourceId,{expectedVersion:0,document},randomUUID());
   await forms.publish(designer,sourceId,saved.version,randomUUID(),category);
   const fixed=await execution.read(f.root,sourceId);
   if(!fixed.fixedCutting?.valid)await execution.configureFixedCutting(f.root,sourceId,{expectedVersion:fixed.fixedCutting?.version??0,assigneeId:worker.actorId,reason:'TEST fixed cutter'},randomUUID());
   const checkedState=await execution.read(f.root,sourceId),check=checkedState.tasks.find(t=>t.taskKind==='development_materials')!;
   const savedVerification=await execution.saveMaterials(f.root,sourceId,{taskId:check.taskId,expectedVersion:checkedState.materialVerification!.version,expectedDocumentVersion:checkedState.sheet.version,
-   entries:[{materialId,usage:'use',physical:true,quantity:true,color:true,specification:true,note:'TEST真实使用',confirmedWith:''}],note:'TEST actual clerk verification',result:'通过'},randomUUID());
-  await execution.check(f.root,sourceId,{taskId:check.taskId,result:'通过',note:'TEST actual material verification',expectedVerificationVersion:savedVerification.version,items:[{materialId,physical:true,quantity:true,color:true,specification:true}]},randomUUID());
+   entries:[{materialId,usage:'use',physical:true,quantity:true,color:true,specification:true,note:'TEST真实使用',confirmedWith:''},...(accessoryId?[{materialId:accessoryId,usage:'use' as const,physical:false,quantity:true,color:true,specification:true,note:'TEST必要辅料待到，原规则允许先纸样裁板',confirmedWith:'TEST设计师确认'}]:[])],note:'TEST actual clerk verification',result:'通过'},randomUUID());
+  await execution.check(f.root,sourceId,{taskId:check.taskId,result:'通过',note:'TEST actual material verification',expectedVerificationVersion:savedVerification.version,items:[{materialId,physical:true,quantity:true,color:true,specification:true},...(accessoryId?[{materialId:accessoryId,physical:false,quantity:true,color:true,specification:true}]:[])]},randomUUID());
   const state=await execution.read(f.root,sourceId),arrangement=state.arrangement!;
-  await execution.arrange(f.root,sourceId,{roundNumber:1,expectedDocumentVersion:state.sheet.version,expectedVersion:arrangement.version,management:'keep',managementReason:'',entries:arrangement.rows.filter(r=>(DEVELOPMENT_ARRANGEABLE_KINDS as readonly string[]).includes(r.kind)).map(r=>({kind:r.kind as typeof DEVELOPMENT_ARRANGEABLE_KINDS[number],assigneeId:r.editable&&r.requiredRole==='pattern_room_worker'?worker.actorId:r.editable&&r.requiredRole==='pattern_room_tail_inspector'?Object.values(f.people).find(p=>p.actorRoles.includes('pattern_room_tail_inspector'))!.actorId:r.assigneeId,expectedTask:r.taskId?{taskId:r.taskId,state:r.state!,assigneeId:r.assigneeId}:null,reason:'TEST explicit current worker'}))},randomUUID());
+  await execution.arrange(f.root,sourceId,{roundNumber:1,expectedDocumentVersion:state.sheet.version,expectedVersion:arrangement.version,management:'keep',managementReason:'',entries:arrangement.rows.filter(r=>(DEVELOPMENT_ARRANGEABLE_KINDS as readonly string[]).includes(r.kind)).map(r=>({kind:r.kind as typeof DEVELOPMENT_ARRANGEABLE_KINDS[number],assigneeId:r.kind==='development_sewing'&&options.assignSewing===false?null:r.editable&&r.requiredRole==='pattern_room_worker'?worker.actorId:r.editable&&r.requiredRole==='pattern_room_tail_inspector'?Object.values(f.people).find(p=>p.actorRoles.includes('pattern_room_tail_inspector'))!.actorId:r.assigneeId,expectedTask:r.taskId?{taskId:r.taskId,state:r.state!,assigneeId:r.assigneeId}:null,reason:'TEST explicit current worker'}))},randomUUID());
   const paper=(await execution.read(worker,sourceId)).tasks.find(t=>t.taskKind==='development_pattern')!;
-  return {sourceId,materialId,designer,worker,paper,checkTaskId:check.taskId,publishedAt:(await forms.read(f.root,sourceId)).publishedAt,documentVersion:(await forms.read(worker,sourceId)).version};
+  return {sourceId,materialId,accessoryId,designer,worker,paper,checkTaskId:check.taskId,publishedAt:(await forms.read(f.root,sourceId)).publishedAt,documentVersion:(await forms.read(worker,sourceId)).version};
  };
  const plot=async(p:Awaited<ReturnType<typeof prepare>>,taskId=p.paper.taskId)=>{
   const bytes=Buffer.from('IN;SP1;PU0,0;PD100,100;PU;SP0;'),sha256=createHash('sha256').update(bytes).digest('hex');
@@ -88,6 +91,55 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   return technical.saveArtifact(p.worker,p.sourceId,{taskId:p.paper.taskId,expectedDocumentVersion:p.documentVersion,expectedVersion:0,scopeRef:'整款',action:'publish',body,...overrides},randomUUID());
  };
  const comment=(version=0,isFinal=true):RecordFinalComment=>({roundNumber:1,scopeRef:'整款',expectedVersion:version,isFinal,decision:'approved',text:'TEST客户最终批复，技术仍须核对或沿用',evidenceRefs:[],evidenceNote:'TEST客户邮件文字记录，非报价确认',occurredAt:null});
+
+ it('P01 captures sewing readiness at actual late-material verification before assignment and retains correction/restore history',async()=>{
+  const scene=await f.scene('2026-11-09T08:00:00.000Z');
+  const run=<T,>(action:()=>Promise<T>)=>f.runtime.run(scene,f.root,action);
+  const p=await run(async()=>{
+   const current=await prepare('无',{missingAccessory:true,assignSewing:false}),published=await artifact(current);
+   await execution.complete(current.worker,current.sourceId,{taskId:current.paper.taskId,attachmentIds:[],artifactRef:{id:published.artifactSetId,version:published.version,scopeRef:'整款'},note:'TEST paper'},randomUUID());
+   const cut=(await execution.read(f.root,current.sourceId)).tasks.find(t=>t.taskKind==='development_cutting')!;
+   await execution.complete(current.worker,current.sourceId,{taskId:cut.taskId,attachmentIds:[],note:'TEST cut before accessories'},randomUUID());
+   return current;
+  });
+  const sewingId=(await run(()=>execution.read(f.root,p.sourceId))).tasks.find(t=>t.taskKind==='development_sewing')!.taskId;
+  const readiness=async()=>(await nativeTaskReadiness(f.db,[sewingId])).get(sewingId)!;
+  expect(await readiness()).toMatchObject({tracked:true,eventId:null,firstReadyAt:null});
+  await f.advance(scene,'2026-11-09T09:00:00.000Z');
+  await run(async()=>{
+   const sheet=await forms.read(p.designer,p.sourceId);
+   await forms.materialEvent(p.designer,p.sourceId,p.accessoryId!,{expectedVersion:sheet.version,expectedMaterialRevision:0,action:'到货',expectedDate:null,note:'TEST designer delivery is not clerk verification'},randomUUID());
+   await execution.read(f.root,p.sourceId);await execution.read(f.root,p.sourceId);
+  });
+  expect(await readiness()).toMatchObject({eventId:null,firstReadyAt:null});
+  await f.advance(scene,'2026-11-09T12:00:00.000Z');
+  await run(async()=>{
+   const check=await execution.supplementCheck(f.root,p.sourceId,p.checkTaskId,randomUUID()),state=await execution.read(f.root,p.sourceId);
+   const entries=[p.materialId,p.accessoryId!].map(materialId=>({materialId,usage:'use' as const,physical:true,quantity:true,color:true,specification:true,note:'TEST clerk confirms physical availability now',confirmedWith:''}));
+   const saved=await execution.saveMaterials(f.root,p.sourceId,{taskId:check.taskId,expectedVersion:state.materialVerification!.version,expectedDocumentVersion:state.sheet.version,entries,note:'TEST full current material conjunction',result:'通过'},randomUUID());
+   await execution.check(f.root,p.sourceId,{taskId:check.taskId,result:'通过',expectedVerificationVersion:saved.version,note:'TEST late auxiliary verified',items:entries.map(({materialId,physical,quantity,color,specification})=>({materialId,physical,quantity,color,specification}))},randomUUID());
+  });
+  const first=await readiness();expect(first).toMatchObject({tracked:true,firstReadyAt:'2026-11-09T12:00:00.000Z',quality:'现场登记'});expect(first.eventId).toBeTruthy();
+  expect((await f.db.query('SELECT assignee_id FROM digital_production_task_access WHERE task_id=$1',[sewingId])).rows[0].assignee_id).toBeNull();
+  expect((await f.db.query('SELECT 1 FROM digital_production_event_intents WHERE event_id=$1',[first.eventId])).rowCount).toBe(0);
+  await f.advance(scene,'2026-11-09T13:00:00.000Z');
+  await run(async()=>{
+   const state=await execution.read(f.root,p.sourceId),arrangement=state.arrangement!;
+   await execution.arrange(f.root,p.sourceId,{roundNumber:1,expectedDocumentVersion:state.sheet.version,expectedVersion:arrangement.version,management:'keep',managementReason:'',entries:arrangement.rows.map(row=>({kind:row.kind as typeof DEVELOPMENT_ARRANGEABLE_KINDS[number],assigneeId:row.kind==='development_sewing'?p.worker.actorId:row.assigneeId,expectedTask:row.taskId?{taskId:row.taskId,state:row.state!,assigneeId:row.assigneeId}:null,reason:'TEST assign after already ready'}))},randomUUID());
+   expect((await tasks.read(f.root,sewingId)).enteredAt).toBe(first.firstReadyAt);
+   await expect(tasks.correctTime(p.worker,sewingId,{eventId:first.eventId!,occurredAt:null,reason:'TEST worker cannot change readiness'},randomUUID())).rejects.toMatchObject({statusCode:403});
+   await tasks.controlResource(f.root,{kind:'source',id:p.sourceId},'pause','TEST ordinary pause',randomUUID());
+   await tasks.controlResource(f.root,{kind:'source',id:p.sourceId},'resume','TEST ordinary restore',randomUUID());
+  });
+  expect(await readiness()).toEqual(first);
+  await run(()=>tasks.correctTime(f.root,sewingId,{eventId:first.eventId!,occurredAt:null,reason:'TEST authorized original occurrence is explicitly unknown'},randomUUID()));
+  await run(async()=>{
+   await tasks.controlResource(f.root,{kind:'source',id:p.sourceId},'pause','TEST pause after explicit unknown',randomUUID());
+   await tasks.controlResource(f.root,{kind:'source',id:p.sourceId},'resume','TEST restoring does not manufacture missing readiness',randomUUID());
+  });
+  expect(await readiness()).toMatchObject({eventId:first.eventId,firstReadyAt:null,quality:'缺失'});
+  expect((await f.db.query("SELECT 1 FROM digital_production_task_events WHERE task_id=$1 AND payload->'nativeReadiness'->>'version'='1'",[sewingId])).rowCount).toBe(1);
+ });
 
  it('applies the actual0268schema and keeps source creation sizes optional',async()=>{
   const p=await prepare();expect(p.paper.state).toBe('ready');

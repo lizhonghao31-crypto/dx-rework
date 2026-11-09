@@ -12,6 +12,7 @@ import {CreateSupplierSchema} from '@dx-rework/contracts';
 import {businessAnchorFixture} from '../helpers/business-anchor-fixture.js';
 import {businessNow} from '../../apps/api/src/acceptance-clock/business-time.js';
 import {FactoryFlowService} from '../../apps/api/src/production-platform/factory-flow-service.js';
+import {nativeFactoryTimeline} from '../../apps/api/src/production-platform/factory-production-facts.js';
 import {ProductionReportingService} from '../../apps/api/src/sourcing/production-reporting-service.js';
 import {ProductionClosureService} from '../../apps/api/src/sourcing/production-closure-service.js';
 import {SlaOrderService} from '../../apps/api/src/production-platform/sla-order-service.js';
@@ -52,6 +53,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   await factory.productionQc(f.root,sundayReady.id,{expectedRevision:dispatched.revision,factoryDecisionId:null,occurredAt:businessNow().toISOString(),checks:[{lineId,result:'合格',problem:''}],note:'TEST QC before native production completion'},randomUUID());
   const before=await new SlaCalculationService(f.db).preview(f.root,{selection:{mode:'instance',kind:'order',id:sundayReady.id,range:'delivery'}});
   expect(before.context.graph.anchors[`${lineId}/factory_production_finished`]).toBeUndefined();expect(before.current.rows.find(n=>n.id===`${lineId}/factory_finished`)!.end.at).toBeNull();
+  const timeline=await nativeFactoryTimeline(f.db,sundayReady.id);
+  expect(timeline).toHaveLength(1);expect(timeline[0]).toMatchObject({lineId,completedDate:null,completionTransitionRef:null});
  }));
  const ship=async(r:{productionId:string;day:string},factoryDecisionId:string|null=null,quantities=[10])=>{
   const reports=new ProductionReportingService(f.db);
@@ -139,6 +142,13 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const first=result.sla.nodes!.find(n=>n.id===`return_logistics:${lines[0].line_id}`)!,second=result.sla.nodes!.find(n=>n.id===`return_logistics:${lines[1].line_id}`)!;
   expect(first.logisticsWindows).toHaveLength(2);expect(first.logisticsWindows!.map(w=>w.factoryDecisionId)).toEqual([null,decision!]);expect(second.logisticsWindows).toHaveLength(1);expect(second.logisticsWindows![0]!.factoryDecisionId).toBe(decision!);
   expect(first.logisticsWindows![0]!.shippedOn).toBe('2026-11-24');expect(second.logisticsWindows![0]!.shippedOn).toBe('2026-11-25');
+  const timeline=await nativeFactoryTimeline(f.db,r.id);
+  expect(timeline.map(scope=>({factory:scope.factoryDecisionId,line:scope.lineId,quantity:scope.quantity,day:scope.completedDate}))).toEqual([
+   {factory:null,line:lines[0].line_id,quantity:4,day:'2026-11-24'},
+   {factory:decision!,line:lines[0].line_id,quantity:6,day:'2026-11-25'},
+   {factory:decision!,line:lines[1].line_id,quantity:10,day:'2026-11-25'}
+  ]);
+  expect(timeline.every(scope=>scope.startTransitionRef&&scope.completionTransitionRef)).toBe(true);
  },testExecutionConfig.correctnessTimeoutMs);
  it('retains received logistics ranges through explicit standard application and later clock observations',async()=>{
   const ctx=await context('2026-11-20T09:00:00.000Z'),r=await prepare(ctx.run);await ctx.run(()=>ship(r));

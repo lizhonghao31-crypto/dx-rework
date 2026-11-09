@@ -214,6 +214,18 @@ describe("Full Gate sensitive path mapping", () => {
     expect(result.mappedPostgresTests).toEqual(["tests/integration/receiving-postgres.test.ts"]);
   });
 
+  it('keeps native readiness, cut and termination readers on their actual PostgreSQL consumers',()=>{
+    const readiness=classifyFullGatePaths(['apps/api/src/production-platform/task-readiness-facts.ts']);
+    expect(readiness.mappedPostgresTests).toEqual(expect.arrayContaining([
+      'tests/integration/development-technical-postgres.test.ts','tests/integration/digital-production-tasks-postgres.test.ts','tests/integration/journey-fact-model-postgres.test.ts'
+    ]));
+    for(const name of ['journey-cut-scopes','journey-termination']){
+      const result=classifyFullGatePaths(['apps/api/src/production-platform/'+name+'.ts']);
+      expect(result.mappedPostgresTests).toContain('tests/integration/journey-fact-model-postgres.test.ts');
+      expect(result.maintenanceSensitive).toBe(false);
+    }
+  });
+
   it("maps migration, deployment and changed PostgreSQL tests explicitly", () => {
     const migration = classifyFullGatePaths(["apps/api/migrations/9999_test.sql"]);
     expect(migration.migrationSensitive).toBe(true);

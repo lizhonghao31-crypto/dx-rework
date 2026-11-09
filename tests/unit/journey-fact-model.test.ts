@@ -34,3 +34,14 @@ it('keeps an equivalent task/dependency set stable when PostgreSQL returns a dif
  const a=minimalJourneyFacts(item,{plan:null,original:null,facts:{}},[task('TEST-b'),task('TEST-a')],deps),b=minimalJourneyFacts(item,{plan:null,original:null,facts:{}},[task('TEST-a'),task('TEST-b')],[...deps].reverse());
  expect(a).toEqual(b);expect(journeyFactFingerprint(a)).toBe(journeyFactFingerprint(b));
 });
+it('whitelists native readiness, cut/factory identities and termination without sharing actor or authorization results',()=>{
+ const native={readiness:[{taskId:'TEST-ready',tracked:true,eventId:'TEST-event',effectiveEventId:'TEST-correction',firstReadyAt:null,quality:'缺失',scopeRef:'TEST-scope',basis:['TEST-native'],privateUser:'PRIVATE'}],
+  termination:{kind:'cancelled' as const,at:null,precision:'unknown' as const,originEventRef:'TEST-cancel',scopeRef:'TEST-order',canClose:true},
+  cutScopes:[{lineId:'TEST-line',status:'verified' as const,cuts:[{cuttingOrderId:'TEST-cut',sourcingCaseId:'TEST-case',sourcingLinePosition:1,approvalSnapshotId:'TEST-snapshot',sourceLineId:'TEST-line',style:'PRIVATE'}]}],
+  factoryTimeline:[{productionId:'TEST-production',factoryDecisionId:null,lineId:'TEST-line',quantity:10,dispatchedAt:'2026-11-08T12:00:00.123Z',startTransitionRef:'TEST-transition',completedDate:'2026-11-09',completionTransitionRef:'TEST-completed',actorName:'PRIVATE'}]};
+ const model=minimalJourneyFacts(item,{plan:null,original:null,facts:{}},[],[],native),before=journeyFactFingerprint(model);
+ expect(model.nativeReadiness![0]!.firstReadyAt).toBeNull();expect(model.factoryTimeline![0]!.completedDate).toBe('2026-11-09');
+ expect(JSON.stringify(model)).not.toMatch(/PRIVATE|canClose|actorName|privateUser/);
+ native.readiness[0]!.basis.push('MUTATED');native.cutScopes[0]!.cuts[0]!.cuttingOrderId='MUTATED';
+ expect(journeyFactFingerprint(model)).toBe(before);
+});
