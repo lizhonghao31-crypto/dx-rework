@@ -1779,3 +1779,15 @@
 
 .sourcing-list-summary { margin: 10px 0; color: var(--dx-text-muted, #64748b); font-size: 12px; line-height: 1.6; }
 .sourcing-list-summary strong { color: var(--dx-text, #1e293b); font-weight: 600; }
+
+.sourcing-return-files-dialog { width: min(960px, calc(100vw - 32px)); max-height: 90dvh; overflow: auto; padding: var(--dx-v2-space-5); box-sizing: border-box; }
+.sourcing-return-files-dialog::backdrop { background: var(--dx-dialog-backdrop); }
+.sourcing-return-files-heading, .sourcing-return-files-controls, .sourcing-return-files-list { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.sourcing-return-files-heading { justify-content: space-between; }
+.sourcing-return-files-dialog h2, .sourcing-return-files-dialog h3 { margin: 8px 0; }
+.sourcing-return-files-dialog p, .sourcing-return-files-list button { overflow-wrap: anywhere; }
+.sourcing-return-files-list button { max-width: 100%; text-align: left; }
+.sourcing-return-files-preview iframe { display: block; width: 100%; height: 55dvh; border: 0; }
+.sourcing-return-files-preview { margin: 12px 0; }
+
+.sourcing-return-files-controls { justify-content: flex-start; }

@@ -292,7 +292,7 @@ export const SourcingContractStateResponseSchema = z.object({
 
 export const SourcingContractReturnUploadSchema = z.object({
   expectedContractDocumentId: IdSchema.nullable().optional(),
-  attachmentIds: z.array(IdSchema).min(1).max(2).refine(ids=>new Set(ids).size===ids.length),
+  attachmentIds: z.array(IdSchema).min(1).max(3).refine(ids=>new Set(ids).size===ids.length),
 }).strict();
 export const SourcingContractReturnResponseSchema = z.object({
   contractReturnCycleId: IdSchema.nullable().optional(),

@@ -142,7 +142,7 @@ export class SourcingContractReturnService {
       signedContractDocumentId:current?.signedContractDocumentId ?? null,
       signedContractVersion:current?.signedContractVersion ?? null,signedContractNumber:current?.signedContractNumber ?? null,
       canUpload: status.contractReturnMonitoring && row.current_contract_accepts_upload
-        && totals.count < 2 && Number(totals.bytes) < MAX_UPLOAD_BYTES && await this.canUpload(actor,row.created_by,row.additional_merchandiser_user_id),
+        && totals.count < 3 && Number(totals.bytes) < MAX_UPLOAD_BYTES && await this.canUpload(actor,row.created_by,row.additional_merchandiser_user_id),
       uploadedFileCount:totals.count,uploadedTotalBytes:Number(totals.bytes),
       attachments:currentFiles,history };
   }
@@ -155,8 +155,8 @@ export class SourcingContractReturnService {
         || actor.authorizationCapability === "sourcing:owner:approve" && actor.actorRoles.includes(OWNER)
         || actor.authorizationCapability === "sourcing:decision:record" && actor.actorRoles.includes(MANAGEMENT)
       )) forbidden();
-    if (attachmentIds.length < 1 || attachmentIds.length > 2 || new Set(attachmentIds).size !== attachmentIds.length) {
-      throw new ApplicationError("VALIDATION_ERROR","请上传 1 至 2 个不重复的回签合同文件",400);
+    if (attachmentIds.length < 1 || attachmentIds.length > 3 || new Set(attachmentIds).size !== attachmentIds.length) {
+      throw new ApplicationError("VALIDATION_ERROR","请上传 1 至 3 个不重复的回签合同文件",400);
     }
     if (!/^[A-Za-z0-9._:-]{1,200}$/.test(key)) throw new ApplicationError("VALIDATION_ERROR","上传请求标识无效",400);
     const client=await this.database.connect();
@@ -216,8 +216,8 @@ export class SourcingContractReturnService {
         return this.get({...actor,authorizationCapability:READ},sourcingCaseId);
       }
       const currentVersionFiles=existing.rows.filter(file=>file.sourcing_contract_document_id===documentId);
-      if (currentVersionFiles.length + attachmentIds.length > 2) {
-        throw new ApplicationError("INVALID_STATE_TRANSITION","当前合同版本回签文件累计最多 2 个，已保存文件和历史版本保留，不能再追加",409);
+      if (currentVersionFiles.length + attachmentIds.length > 3) {
+        throw new ApplicationError("INVALID_STATE_TRANSITION","当前合同版本回签文件累计最多 3 个，已保存文件和历史版本保留，不能再追加",409);
       }
       const existingBytes=currentVersionFiles.reduce((total,file)=>total+Number(file.size_bytes),0);
       const files=await client.query<FileRow & { uploaded_by: string }>(`SELECT attachment_id,original_filename,mime_type,size_bytes,uploaded_by
@@ -227,7 +227,7 @@ export class SourcingContractReturnService {
         || !MIME_TYPES.includes(file.mime_type as (typeof MIME_TYPES)[number])
         || Number(file.size_bytes)>MAX_UPLOAD_BYTES)
         || existingBytes+files.rows.reduce((total,file)=>total+Number(file.size_bytes),0)>MAX_UPLOAD_BYTES) {
-        throw new ApplicationError("VALIDATION_ERROR","当前合同版本回签须为 1 至 2 个 PDF/JPG/PNG 文件，累计不超过 20 MB，且文件必须属于当前上传人",400);
+        throw new ApplicationError("VALIDATION_ERROR","当前合同版本回签须为 1 至 3 个 PDF/JPG/PNG 文件，累计不超过 20 MB，且文件必须属于当前上传人",400);
       }
       const next=(await client.query<{revision:number}>(`SELECT COALESCE(max(revision),0)+1 AS revision
         FROM sourcing_contract_return_submissions WHERE sourcing_case_id=$1`,[sourcingCaseId])).rows[0]!.revision;
