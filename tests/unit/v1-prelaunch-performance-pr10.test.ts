@@ -3,6 +3,10 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it, vi } from "vitest";
 
 const read = (path: string) => readFile(path, "utf8");
+const readOrderBoardData = async () => {
+  expect(await read("apps/web/src/order-board-page.tsx")).toContain("useReceivingBoardRead(targetBatchId,invalidTarget)");
+  return read("apps/web/src/receiving-board-read.ts");
+};
 
 describe("1.0 prelaunch PR-10 perceived performance", () => {
   it("reuses the verified in-page session instead of refetching auth/me", async () => {
@@ -11,7 +15,7 @@ describe("1.0 prelaunch PR-10 perceived performance", () => {
       read("apps/web/src/auth-session.ts"),
       read("apps/web/src/components.tsx"),
       read("apps/web/src/reporting/rework-query-page.tsx"),
-      read("apps/web/src/order-board-page.tsx"),
+      readOrderBoardData(),
     ]);
 
     expect(auth).toContain('export { verifySession, verifySessionResult } from "./auth-session.js";');
@@ -38,7 +42,7 @@ describe("1.0 prelaunch PR-10 perceived performance", () => {
     const [hook, reworkQuery, orderBoard, workflowQueue, wages] = await Promise.all([
       read("apps/web/src/use-debounced-value.ts"),
       read("apps/web/src/reporting/rework-query-page.tsx"),
-      read("apps/web/src/order-board-page.tsx"),
+      readOrderBoardData(),
       read("apps/web/src/reporting/workflow-queue-page.tsx"),
       read("apps/web/src/wages/wage-period-list.tsx"),
     ]);
@@ -53,7 +57,7 @@ describe("1.0 prelaunch PR-10 perceived performance", () => {
   it("keeps ready business data visible while filters refresh", async () => {
     const [reworkQuery, orderBoard, workflowQueue, wages] = await Promise.all([
       read("apps/web/src/reporting/rework-query-page.tsx"),
-      read("apps/web/src/order-board-page.tsx"),
+      readOrderBoardData(),
       read("apps/web/src/reporting/workflow-queue-page.tsx"),
       read("apps/web/src/wages/wage-period-list.tsx"),
     ]);

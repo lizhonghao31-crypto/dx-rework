@@ -27,7 +27,8 @@ describe("role-conditioned filter layout safety", () => {
     expect(board).toContain('type="date" value={endDate} min={startDate}');
     expect(board).toContain("setStartDate(event.target.value)");
     expect(board).toContain("setEndDate(event.target.value)");
-    expect(board).toContain("new URLSearchParams({ startDate, endDate })");
+    expect(board).toContain("useReceivingBoardRead(targetBatchId,invalidTarget)");
+    expect(source("apps/web/src/receiving-board-read.ts")).toContain("new URLSearchParams({ startDate, endDate })");
   });
 
   it("sizes nested controls within the available content width", () => {
