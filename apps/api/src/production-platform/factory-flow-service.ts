@@ -17,6 +17,11 @@ import {DigitalProductionTaskService} from './task-service.js';
 import {DigitalProductionAccessPolicy,digitalForbidden,isDigitalLeader} from './access-policy.js';
 import {SourcingProductionService} from '../sourcing/sourcing-production-service.js';
 import {factoryBatchLedger,type FactoryScope} from './factory-batch-ledger.js';
+import {factoryStepLedger} from './factory-step-ledger.js';
+import {fixedCraftSteps} from './fixed-craft-steps.js';
+import {FixedTimelineAdoptionRepository} from './fixed-timeline-adoptions.js';
+import {craftLegacyLabel} from '@dx-rework/contracts/digital-craft';
+import {readFixedOrderRoute} from './fixed-order-route.js';
 type DB=Pick<Pool|PoolClient,'query'>;
 const fail=(message:string):never=>{throw new ApplicationError('FACTORY_FLOW_CONFLICT',message,409);};
 const iso=(v:Date|string|null)=>v===null?null:new Date(v).toISOString();
@@ -28,7 +33,8 @@ export class FactoryFlowService{
   const gate=await new BulkPreparationService(this.database).gates(db,id);
   const route=(await db.query('SELECT route.*,completion.completed_at AS cutting_completed_at FROM digital_factory_routes route JOIN digital_bulk_cutting_completions completion USING(preparation_id) WHERE route.production_order_id=$1',[id])).rows[0];
   const facts=route?(await db.query('SELECT f.*,u.display_name AS actor_name FROM digital_factory_facts f JOIN app_users u ON u.id=f.actor_id WHERE preparation_id=$1 ORDER BY sequence',[route.preparation_id])).rows:[];
-  const tasks=(await db.query("SELECT t.*,a.task_kind,a.assignee_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.production_order_id=$1 AND (t.route_instance_id=$2 OR a.task_kind='bulk_ship_sample') AND a.task_kind IN ('process_logistics','bulk_qc','factory_production_qc','warehouse_dispatch','bulk_ship_sample') ORDER BY t.created_at",[id,route?.preparation_id??null])).rows;
+  const fixed=route?.route_schema_version===2;
+  const tasks=(await db.query(`SELECT t.*,a.task_kind,a.assignee_id${fixed?',p.step_id,p.phase':''} FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) ${fixed?'LEFT JOIN digital_timeline_task_positions p USING(task_id)':''} WHERE a.production_order_id=$1 AND (t.route_instance_id=$2 OR a.task_kind='bulk_ship_sample') AND a.task_kind IN ('process_logistics','bulk_qc','factory_production_qc','warehouse_dispatch','bulk_ship_sample') ORDER BY t.created_at`,[id,route?.preparation_id??null])).rows;
   const lines=(await db.query('SELECT line_id,po_number,color,customer_warehouse_arrival_date::text AS customer_date,(customer_warehouse_arrival_date-10)::text AS sample_date FROM digital_production_po_lines WHERE production_order_id=$1 ORDER BY position',[id])).rows;
   const checks=route?(await db.query('SELECT q.*,u.display_name AS checker FROM digital_factory_qc q JOIN app_users u ON u.id=q.checked_by WHERE preparation_id=$1 ORDER BY q.sequence',[route.preparation_id])).rows:[];
   const lastMovement=facts.filter(f=>['工艺发出','工艺回仓'].includes(f.kind)).at(-1),returned=lastMovement?.kind==='工艺回仓'?lastMovement:null;
@@ -36,11 +42,13 @@ export class FactoryFlowService{
   const allQc=Boolean(route&&(route.secondary_craft==='无'||returned&&latest.every(r=>r.check?.result==='合格')));
   const dispatched=facts.find(f=>f.kind==='仓库实际发厂');
   const quantities=(await db.query(`SELECT po.line_id AS "lineId",r.actual_cut_count::int AS quantity FROM digital_production_po_lines po JOIN digital_production_child_lines l ON l.module='cutting' AND l.line_id=po.line_id JOIN current_cutting_records r ON r.cutting_order_id=l.child_id WHERE po.production_order_id=$1 ORDER BY po.position`,[id])).rows as FactoryScope[];
-  const batch=route?.workflow_version===2?factoryBatchLedger(quantities,facts,checks,route.secondary_craft==='无'):null;
+  const craftSteps=fixed?await fixedCraftSteps(db,route.preparation_id):[];
+  const stepLedger=craftSteps.length?factoryStepLedger(quantities,facts,checks,craftSteps):null;
+  const batch=stepLedger??(route?.workflow_version===2?factoryBatchLedger(quantities,facts,checks,route.secondary_craft==='无'):null);
   const production=await factoryProductionFacts(db,id);
   const revision=facts.length+checks.length+production.revision;
   const contract=gate.approval?(await db.query('SELECT status,sourcing_contract_document_id FROM sourcing_contract_documents WHERE sourcing_approval_snapshot_id=$1 ORDER BY contract_version DESC LIMIT 1',[gate.approval.sourcing_approval_snapshot_id])).rows[0]:null;
-  return {production,gate,route,facts,tasks,lines,checks,latest,allQc:batch?batch.totals.every(l=>l.sent+l.remaining===l.quantity)&&batch.totals.every(l=>l.remaining===0||route.secondary_craft==='无'||batch.batches.reduce((n,b)=>n+b.rows.filter(r=>r.lineId===l.lineId&&r.allowDispatch).reduce((a,r)=>a+r.available,0),0)>=l.remaining):allQc,returned,lastMovement,dispatched:batch?(batch.complete?dispatched:undefined):dispatched,revision,contract,batch};
+  return {production,gate,route,facts,tasks,lines,checks,latest,craftSteps,stepLedger,allQc:batch?batch.totals.every(l=>l.sent+l.remaining===l.quantity)&&batch.totals.every(l=>l.remaining===0||route.secondary_craft==='无'||batch.batches.reduce((n,b)=>n+b.rows.filter(r=>r.lineId===l.lineId&&r.allowDispatch).reduce((a,r)=>a+r.available,0),0)>=l.remaining):allQc,returned,lastMovement,dispatched:batch?(batch.complete?dispatched:undefined):dispatched,revision,contract,batch};
  }
  async sync(db:PoolClient,actor:TrustedActorContext,id:string){
   if(!(await db.query("SELECT to_regclass('digital_factory_routes') AS relation")).rows[0]?.relation)return;
@@ -50,14 +58,28 @@ export class FactoryFlowService{
    if(s.gate.reasons.length)fail(s.gate.reasons.join('；'));
    const chosen=s.gate.instruction.document.secondaryCraft,craft=chosen&&chosen!=='沿用开发'?chosen:s.gate.source?.document.craft;
    if(!['无','印花','绣花','印绣花'].includes(craft))fail('请在有效制单明确大货印绣路线');
-   await db.query('INSERT INTO digital_factory_routes(preparation_id,production_order_id,secondary_craft,workflow_version) VALUES($1,$2,$3,$4)',[completion.preparation_id,id,craft,s.gate.parallel?2:1]);
+   const adopted=await new FixedTimelineAdoptionRepository(db).existing({kind:'order',id});
+   const scope=adopted?await readFixedOrderRoute(db,adopted,completion.preparation_id):null;
+   const steps=adopted?await fixedCraftSteps(db,completion.preparation_id):[];
+   if(adopted&&steps.length!==(scope?.craftSteps.length??adopted.input.craftSteps?.length??0))fail('本次原冻结工艺步骤尚未完整登记');
+   if(adopted){
+    const chosenSteps=s.gate.instruction.document.secondaryCraft==='沿用开发'?s.gate.source?.document.craftSteps:s.gate.instruction.document.craftSteps;
+    if(craftLegacyLabel(steps)!==craft||chosenSteps&&(chosenSteps.length!==steps.length||chosenSteps.some((step:{craftKind:string;sequence:number},index:number)=>step.craftKind!==steps[index]?.craftKind||step.sequence!==steps[index]?.sequence)))fail('本次工艺内容与首次冻结路线不同，须保留原范围并登记新增工艺范围，不能覆盖原目标');
+   }
+   await db.query(`INSERT INTO digital_factory_routes(preparation_id,production_order_id,secondary_craft,workflow_version${adopted?',route_schema_version,timeline_adoption_id':''}) VALUES($1,$2,$3,$4${adopted?',2,$5':''})`,[completion.preparation_id,id,craft,s.gate.parallel?2:1,...(adopted?[adopted.adoptionId]:[])]);
    const warehouse=(await db.query('SELECT warehouse_worker_id FROM digital_bulk_dispatch WHERE production_order_id=$1',[id])).rows[0]?.warehouse_worker_id;
-   for(const kind of [...(craft==='无'?[]:['process_logistics','bulk_qc'] as const),'warehouse_dispatch','bulk_ship_sample'] as const){
+   const operations:Array<{kind:'process_logistics'|'bulk_qc'|'warehouse_dispatch'|'bulk_ship_sample';position?:number}>=adopted
+    ?[...(scope?.route??adopted.input.route??[]).map(position=>({kind:position.kind as 'process_logistics'|'bulk_qc'|'warehouse_dispatch',position:position.position})),{kind:'bulk_ship_sample'}]
+    :([...(craft==='无'?[]:['process_logistics','bulk_qc'] as const),'warehouse_dispatch','bulk_ship_sample'] as const).map(kind=>({kind}));
+   for(const {kind,position} of operations){
     if(kind==='bulk_ship_sample'&&s.tasks.some(t=>t.task_kind==='bulk_ship_sample'))continue;
     let assignee=kind==='warehouse_dispatch'?warehouse:kind==='bulk_ship_sample'?s.gate.order.primary_merchandiser_id:null;
     const role=kind==='warehouse_dispatch'?'warehouse_receiver':'order_merchandiser';
     if(assignee&&!await new DigitalProductionAccessPolicy(db).activeRole(assignee,role))assignee=null;
-    const task=await this.tasks().createWithClient(db,actor,{resource:{kind:'order',id},kind,routeId:completion.preparation_id,routeVersion:s.gate.instruction.version,occurrence:1,assigneeId:assignee,conditions:kind==='bulk_qc'?['handover_received']:[]});
+    const ownStep=position===undefined?null:(scope?.route??adopted?.input.route??[]).find(row=>row.position===position)?.stepId;
+    const needsPrior=kind==='process_logistics'&&steps.some(step=>step.stepId===ownStep&&step.sequence>1);
+    const task=await this.tasks().createWithClient(db,actor,{resource:{kind:'order',id},kind,routeId:completion.preparation_id,routeVersion:s.gate.instruction.version,occurrence:1,assigneeId:assignee,...(position===undefined?{}:{routePosition:position}),
+      conditions:kind==='bulk_qc'?['handover_received']:needsPrior?['qc_approved']:[]});
     if(kind==='warehouse_dispatch'){
      await this.tasks().setConditionWithClient(db,actor,task.taskId,'all_po_complete',true,undefined,'全部PO原实裁已齐');
      if(craft==='无')await this.tasks().setConditionWithClient(db,actor,task.taskId,'qc_approved',true,undefined,'无印绣路线无需裁片工艺QC');
@@ -65,16 +87,26 @@ export class FactoryFlowService{
    }
    s=await this.state(db,id);
   }
+  if(s.stepLedger){
+   for(const step of s.stepLedger.steps.filter(step=>step.step.sequence>1)){
+    const task=s.tasks.find(task=>task.task_kind==='process_logistics'&&task.step_id===step.step.stepId);if(!task||['completed','cancelled'].includes(task.state))continue;
+    const ready=s.facts.some(fact=>fact.kind==='工艺发出'&&fact.payload.stepRef===step.step.stepId)||s.stepLedger.sendable.find(row=>row.stepRef===step.step.stepId)!.lines.some(line=>line.remaining>0);
+    const prior=(await db.query("SELECT satisfied FROM digital_production_task_conditions WHERE task_id=$1 AND condition_key='qc_approved'",[task.task_id])).rows[0];
+    if(prior&&prior.satisfied!==ready)await this.tasks().setConditionWithClient(db,actor,task.task_id,'qc_approved',ready,undefined,'前一道工艺已有本PO完整合格范围，或本工艺已有合法发出批次');
+    if(ready&&task.state==='pending')await this.tasks().refreshBusinessConditionsWithClient(db,actor,task.task_id);
+   }
+  }
   if(s.batch)await this.tasks().refreshFactoryBatchTimingWithClient(db,actor,id);
   if(s.dispatched)return;
   const warehouse=s.tasks.find(t=>t.task_kind==='warehouse_dispatch');
   if(warehouse){await this.tasks().setConditionWithClient(db,actor,warehouse.task_id,'qc_approved',s.batch?s.batch.canDispatch:s.allQc,undefined,s.batch?'按本批检查及放行范围发厂':s.allQc?'整款工艺检查满足':'任一PO未通过，整款不得发厂');if(s.batch?s.batch.canDispatch:s.allQc)await this.tasks().refreshBusinessConditionsWithClient(db,actor,warehouse.task_id);}
  }
- private async authorized(db:DB,actor:TrustedActorContext,s:Awaited<ReturnType<FactoryFlowService['state']>>,kind:string){
-  const task=s.tasks.find(t=>t.task_kind===kind);if(!task)return false;
+ private async authorized(db:DB,actor:TrustedActorContext,s:Awaited<ReturnType<FactoryFlowService['state']>>,kind:string,stepRef?:string){
+  const tasks=s.tasks.filter(t=>t.task_kind===kind&&(!stepRef||t.step_id===stepRef));if(!tasks.length)return false;
   if(actor.actorRoles.includes(ROOT))return true;
   if(kind==='bulk_ship_sample'&&s.gate.order.primary_merchandiser_id!==actor.actorId)return false;
-  return new DigitalProductionAccessPolicy(db).allowed(actor,'task',task.task_id,'execute');
+  for(const task of tasks)if(await new DigitalProductionAccessPolicy(db).allowed(actor,'task',task.task_id,'execute'))return true;
+  return false;
  }
  async read(actor:TrustedActorContext,id:string,db:DB=this.database):Promise<FactoryFlowSheet>{
   await new DigitalProductionAccessPolicy(db).assert(actor,'order',id,'technical');const s=await this.state(db,id);
@@ -83,7 +115,7 @@ export class FactoryFlowService{
   const tasks=await this.tasks().readAuthorized(actor,s.tasks.map(t=>t.task_id),db);
   const batchTiming=s.batch?await factoryBatchTiming(db,id):null;
   const now=new Date((await new ContextBusinessClock(this.database).read({kind:'order',id})).now);
-  return {returnLogistics:await factoryReturnLogistics(db,id,now),productionInspectionHistory:s.production.history,productionChecks:s.production.checks,canProductionQc:await this.authorized(db,actor,s,'factory_production_qc'),sampleAdvanceDays:sampleTargets.days,canRecordShipSample:actor.actorRoles.includes(ROOT)||s.gate.order.primary_merchandiser_id===actor.actorId&&await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,'order_merchandiser'),shipSamples:await shipSampleFacts(db,id),...(batchTiming?{batchWindows:batchTiming.windows}:{}),batchMode:Boolean(s.batch),canPartialDispatch:s.batch?.canDispatch??s.allQc,...(s.batch?{batches:s.batch.batches,batchTotals:s.batch.totals,pendingSends:s.batch.pendingSends}:{}),currentReturn:s.returned?{factId:s.returned.fact_id,occurredAt:iso(s.returned.occurred_at),recordedAt:iso(s.returned.recorded_at)!}:null,orderId:id,preparationId:s.route?.preparation_id??null,revision:s.revision,secondaryCraft:s.route?.secondary_craft??null,reasons:[...s.gate.reasons,...(s.batch?.quantityConflict?['已发数量超过当前实裁，请核对原数量更正记录']:[]),...(!s.route?['全部PO实裁尚未完成']:[]),...(s.route&&!s.dispatched&&s.contract?.status!=='ready'?['当前原合同尚未生成，发厂前请在原合同页补齐资料']:[])],allCut:Boolean(s.route),allQc:s.allQc,inTransit:s.batch?s.batch.pendingSends.some(b=>b.rows.some(l=>l.remaining>0)):s.lastMovement?.kind==='工艺发出',dispatched:Boolean(s.dispatched),supplierId:s.gate.approval?.supplier_id??null,supplierName:s.gate.approval?.supplier_name_snapshot??null,productionId:link?.child_id??null,sampleTargetDate,canManage:isDigitalLeader(actor),canLogistics:await this.authorized(db,actor,s,'process_logistics'),canQc:await this.authorized(db,actor,s,'bulk_qc'),canWarehouse:await this.authorized(db,actor,s,'warehouse_dispatch'),canFollowup:false,tasks,lines:s.latest.map(({line,check})=>({lineId:line.line_id,poNumber:line.po_number,color:line.color,customerWarehouseArrivalDate:line.customer_date,sampleTargetDate:sampleTargets.lines.find(l=>l.lineId===line.line_id)?.targetDate??null,result:check?.result??null,problem:check?.problem??'',treatment:check?.treatment??''})),facts:s.facts.map(f=>({factId:f.fact_id,kind:f.kind,occurredAt:iso(f.occurred_at),recordedAt:iso(f.recorded_at)!,actorName:f.actor_name,payload:f.payload})),checks:s.checks.map(c=>({checkId:c.check_id,lineId:c.line_id,returnFactId:c.return_fact_id,result:c.result,problem:c.problem,treatment:c.treatment,attachmentIds:c.attachment_ids,checkedBy:c.checker,checkedAt:iso(c.checked_at)!}))};
+  return {...(s.route?.route_schema_version===2?{routeSchemaVersion:2 as const,craftSteps:s.craftSteps,craftSendable:s.stepLedger?.sendable??[]}:{}),returnLogistics:await factoryReturnLogistics(db,id,now),productionInspectionHistory:s.production.history,productionChecks:s.production.checks,canProductionQc:await this.authorized(db,actor,s,'factory_production_qc'),sampleAdvanceDays:sampleTargets.days,canRecordShipSample:actor.actorRoles.includes(ROOT)||s.gate.order.primary_merchandiser_id===actor.actorId&&await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,'order_merchandiser'),shipSamples:await shipSampleFacts(db,id),...(batchTiming?{batchWindows:batchTiming.windows}:{}),batchMode:Boolean(s.batch),canPartialDispatch:s.batch?.canDispatch??s.allQc,...(s.batch?{batches:s.stepLedger?s.stepLedger.steps.flatMap(step=>step.batches):s.batch.batches,batchTotals:s.batch.totals,pendingSends:s.batch.pendingSends}:{}),currentReturn:s.returned?{factId:s.returned.fact_id,occurredAt:iso(s.returned.occurred_at),recordedAt:iso(s.returned.recorded_at)!}:null,orderId:id,preparationId:s.route?.preparation_id??null,revision:s.revision,secondaryCraft:s.route?.secondary_craft??null,reasons:[...s.gate.reasons,...(s.batch?.quantityConflict?['已发数量超过当前实裁，请核对原数量更正记录']:[]),...(!s.route?['全部PO实裁尚未完成']:[]),...(s.route&&!s.dispatched&&s.contract?.status!=='ready'?['当前原合同尚未生成，发厂前请在原合同页补齐资料']:[])],allCut:Boolean(s.route),allQc:s.allQc,inTransit:s.batch?s.batch.pendingSends.some(b=>b.rows.some(l=>l.remaining>0)):s.lastMovement?.kind==='工艺发出',dispatched:Boolean(s.dispatched),supplierId:s.gate.approval?.supplier_id??null,supplierName:s.gate.approval?.supplier_name_snapshot??null,productionId:link?.child_id??null,sampleTargetDate,canManage:isDigitalLeader(actor),canLogistics:await this.authorized(db,actor,s,'process_logistics'),canQc:await this.authorized(db,actor,s,'bulk_qc'),canWarehouse:await this.authorized(db,actor,s,'warehouse_dispatch'),canFollowup:false,tasks,lines:s.latest.map(({line,check})=>({lineId:line.line_id,poNumber:line.po_number,color:line.color,customerWarehouseArrivalDate:line.customer_date,sampleTargetDate:sampleTargets.lines.find(l=>l.lineId===line.line_id)?.targetDate??null,result:check?.result??null,problem:check?.problem??'',treatment:check?.treatment??''})),facts:s.facts.map(f=>({factId:f.fact_id,kind:f.kind,occurredAt:iso(f.occurred_at),recordedAt:iso(f.recorded_at)!,actorName:f.actor_name,payload:f.payload})),checks:s.checks.map(c=>({checkId:c.check_id,lineId:c.line_id,returnFactId:c.return_fact_id,result:c.result,problem:c.problem,treatment:c.treatment,attachmentIds:c.attachment_ids,checkedBy:c.checker,checkedAt:iso(c.checked_at)!}))};
  }
  private async command(actor:TrustedActorContext,id:string,action:string,input:{expectedRevision:number},key:string,work:(db:PoolClient,s:Awaited<ReturnType<FactoryFlowService['state']>>)=>Promise<void>){
   if(!/^[A-Za-z0-9._:-]{1,128}$/.test(key))fail('缺少有效操作标识');const db=await this.database.connect();try{
@@ -108,7 +140,7 @@ export class FactoryFlowService{
  private checkTime(at:string|null,earliest?:Date|string|null){if(at&&(!Number.isFinite(new Date(at).getTime())||new Date(at).getTime()>businessNow().getTime()||earliest&&new Date(at)<new Date(earliest)))fail('真实时间不能晚于当前或早于前置发生时间；请在本页操作记录核对最近的实际发出、回仓或到厂时间后填写，不要用预计日期替代');}
  private async fact(db:PoolClient,actor:TrustedActorContext,prep:string,kind:string,at:string|null,payload:unknown){const id=randomUUID();await db.query('INSERT INTO digital_factory_facts(fact_id,preparation_id,sequence,kind,payload,actor_id,occurred_at) SELECT $1,$2,coalesce(max(sequence),0)+1,$3,$4,$5,$6 FROM digital_factory_facts WHERE preparation_id=$2',[id,prep,kind,JSON.stringify(payload),actor.actorId,at]);return id;}
  async logistics(actor:TrustedActorContext,id:string,input:FactoryLogistics,key:string){return this.command(actor,id,'logistics',input,key,async(db,s)=>{
-  if(!await this.authorized(db,actor,s,'process_logistics'))digitalForbidden();if(s.batch)return this.batchLogistics(db,actor,s,input);if(s.dispatched)fail('已发厂，裁后工艺记录已结束');if(s.tasks.find(t=>t.task_kind==='process_logistics')?.state!=='ready')fail(await this.taskBlockReason(db,actor,s,'process_logistics'));
+  if(!await this.authorized(db,actor,s,'process_logistics',input.stepRef))digitalForbidden();if(s.batch)return this.batchLogistics(db,actor,s,input);if(s.dispatched)fail('已发厂，裁后工艺记录已结束');if(s.tasks.find(t=>t.task_kind==='process_logistics')?.state!=='ready')fail(await this.taskBlockReason(db,actor,s,'process_logistics'));
   if(input.kind==='工艺沟通'&&!input.note.trim())fail('请填写沟通记录');
   if(input.kind==='工艺发出'&&s.lastMovement?.kind==='工艺发出')fail('整款已在工艺厂，不能重复发出');
   if(input.kind==='工艺发出'&&!input.supplier.trim())fail('请登记实际工艺供应厂');
@@ -118,7 +150,7 @@ export class FactoryFlowService{
   if(input.kind==='工艺回仓'){const task=s.tasks.find(t=>t.task_kind==='bulk_qc');await this.tasks().setConditionWithClient(db,actor,task.task_id,'handover_received',true,input.occurredAt,'整款工艺已回仓待QC');}
  });}
  async qc(actor:TrustedActorContext,id:string,input:FactoryQc,key:string){return this.command(actor,id,'qc',input,key,async(db,s)=>{
-  if(!await this.authorized(db,actor,s,'bulk_qc'))digitalForbidden();const checkedAt=businessNow().toISOString();if(s.batch)return this.batchQc(db,actor,s,input,checkedAt);if(s.dispatched||!s.returned)fail(s.dispatched?'本单已经实际发厂，本轮QC记录已结束；请QC在本单操作记录核对原检查结果，不要补写本轮检查':'尚无整款工艺回仓记录；请印绣洗跟单在本单工艺物流登记实际回仓，再由QC逐PO检查');if(s.tasks.find(t=>t.task_kind==='bulk_qc')?.state!=='ready')fail(await this.taskBlockReason(db,actor,s,'bulk_qc'));
+  if(!await this.authorized(db,actor,s,'bulk_qc',input.stepRef))digitalForbidden();const checkedAt=businessNow().toISOString();if(s.batch)return this.batchQc(db,actor,s,input,checkedAt);if(s.dispatched||!s.returned)fail(s.dispatched?'本单已经实际发厂，本轮QC记录已结束；请QC在本单操作记录核对原检查结果，不要补写本轮检查':'尚无整款工艺回仓记录；请印绣洗跟单在本单工艺物流登记实际回仓，再由QC逐PO检查');if(s.tasks.find(t=>t.task_kind==='bulk_qc')?.state!=='ready')fail(await this.taskBlockReason(db,actor,s,'bulk_qc'));
   this.checkTime(checkedAt,this.latestTime(s.route.cutting_completed_at,s.returned.occurred_at));
   if(new Set(input.checks.map(c=>c.lineId)).size!==input.checks.length||input.checks.some(c=>!s.lines.some(l=>l.line_id===c.lineId)))fail('检查款色必须属于本母单且不可重复');
   for(const check of input.checks){
@@ -148,28 +180,38 @@ export class FactoryFlowService{
   return value;
  }
  private async batchLogistics(db:PoolClient,actor:TrustedActorContext,s:Awaited<ReturnType<FactoryFlowService['state']>>,input:FactoryLogistics){
-  if(s.dispatched||s.tasks.find(t=>t.task_kind==='process_logistics')?.state!=='ready')fail('本轮工艺任务不可办理');
-  if(input.kind==='工艺沟通'){if(!input.note.trim())fail('请填写沟通记录');this.checkTime(input.occurredAt);await this.fact(db,actor,s.route.preparation_id,input.kind,input.occurredAt,{supplier:input.supplier,note:input.note});return;}
-  const ledger=s.batch!;let lines:FactoryScope[],sendFactId:string|undefined,fromReturnId:string|undefined;
+  const step=s.stepLedger?s.stepLedger.steps.find(step=>step.step.stepId===input.stepRef):null;
+  if(s.stepLedger&&!step)fail('请明确本次实际办理的绣花或印花步骤');
+  if(s.dispatched||s.tasks.find(t=>t.task_kind==='process_logistics'&&(!step||t.step_id===step.step.stepId))?.state!=='ready')fail('本轮工艺任务不可办理');
+  const identity=step?{stepRef:step.step.stepId}:{};
+  if(input.kind==='工艺沟通'){if(!input.note.trim())fail('请填写沟通记录');this.checkTime(input.occurredAt);await this.fact(db,actor,s.route.preparation_id,input.kind,input.occurredAt,{supplier:input.supplier,note:input.note,...identity});return;}
+  const ledger=step??s.batch!;let lines:FactoryScope[],sendFactId:string|undefined,fromReturnId:string|undefined;
   if(input.kind==='工艺发出'){
    if(!input.supplier.trim())fail('请登记实际工艺供应厂');
    fromReturnId=input.fromReturnId;
    // Old whole-order form may re-send the current return, but never resend dispatched pieces.
    if(!input.lines&&!fromReturnId&&ledger.totals.every(l=>l.craftRemaining===0))fromReturnId=ledger.batches.at(-1)?.factId;
-   const from=fromReturnId?ledger.batches.find(b=>b.factId===fromReturnId):null;if(fromReturnId&&!from)fail('返工来源批次不属于本单');
-   lines=this.scope(input.lines,from?from.rows.map(l=>({lineId:l.lineId,remaining:l.available})):ledger.totals.map(l=>({lineId:l.lineId,remaining:l.craftRemaining})));
+   const prior=step&&step.step.sequence>1?s.stepLedger!.steps[step.step.sequence-2]:null;
+   const own=fromReturnId?ledger.batches.find(b=>b.factId===fromReturnId):null;
+   const previous=fromReturnId?prior?.batches.find(b=>b.factId===fromReturnId):null;
+   const from=own??previous;if(fromReturnId&&!from)fail('来源批次不属于本单该步骤或其前一道工艺');
+   if(prior&&!own&&!previous)fail('后一道工艺须选择前一道已检查放行的真实回仓批次');
+   const sendable=step?s.stepLedger!.sendable.find(row=>row.stepRef===step.step.stepId)!.lines:null;
+   lines=this.scope(input.lines,from?from.rows.map(l=>({lineId:l.lineId,remaining:previous?l.allowDispatch?Math.min(l.available,sendable!.find(row=>row.lineId===l.lineId)?.remaining??0):0:l.available})):sendable??ledger.totals.map(l=>({lineId:l.lineId,remaining:l.craftRemaining})));
    this.checkTime(input.occurredAt,this.latestTime(s.route.cutting_completed_at,from?.occurredAt));
   }else{
    sendFactId=input.sendFactId??ledger.pendingSends.filter(b=>b.rows.some(l=>l.remaining>0)).at(-1)?.factId;
    const send=ledger.pendingSends.find(b=>b.factId===sendFactId);if(!send)fail('请选本单尚有未回数量的工艺发出批次');
    lines=this.scope(input.lines,send!.rows);this.checkTime(input.occurredAt,this.latestTime(s.route.cutting_completed_at,send!.occurredAt));
   }
-  await this.fact(db,actor,s.route.preparation_id,input.kind,input.occurredAt,{supplier:input.supplier,note:input.note,lines,...(sendFactId?{sendFactId}:{}),...(fromReturnId?{fromReturnId}:{})});
-  if(input.kind==='工艺回仓'){const task=s.tasks.find(t=>t.task_kind==='bulk_qc');await this.tasks().setConditionWithClient(db,actor,task.task_id,'handover_received',true,input.occurredAt,'已有工艺批次回仓，先回先检查');}
+  await this.fact(db,actor,s.route.preparation_id,input.kind,input.occurredAt,{supplier:input.supplier,note:input.note,lines,...identity,...(sendFactId?{sendFactId}:{}),...(fromReturnId?{fromReturnId}:{})});
+  if(input.kind==='工艺回仓'){const task=s.tasks.find(t=>t.task_kind==='bulk_qc'&&(!step||t.step_id===step.step.stepId));await this.tasks().setConditionWithClient(db,actor,task.task_id,'handover_received',true,input.occurredAt,'本工艺已有批次回仓，先回先检查');}
  }
  private async batchQc(db:PoolClient,actor:TrustedActorContext,s:Awaited<ReturnType<FactoryFlowService['state']>>,input:FactoryQc,checkedAt:string){
-  const batch=s.batch!.batches.find(b=>b.factId===(input.returnFactId??s.returned?.fact_id));
-  if(s.dispatched||!batch||s.tasks.find(t=>t.task_kind==='bulk_qc')?.state!=='ready')fail('请在本单选择可检查的实际回仓批次');
+  const step=s.stepLedger?s.stepLedger.steps.find(step=>step.step.stepId===input.stepRef):null;
+  if(s.stepLedger&&!step)fail('请明确本次检查的绣花或印花步骤');
+  const batch=(step??s.batch!).batches.find(b=>b.factId===(input.returnFactId??s.returned?.fact_id));
+  if(s.dispatched||!batch||s.tasks.find(t=>t.task_kind==='bulk_qc'&&(!step||t.step_id===step.step.stepId))?.state!=='ready')fail('请在本单选择该工艺可检查的实际回仓批次');
   this.checkTime(checkedAt,this.latestTime(s.route.cutting_completed_at,batch!.occurredAt));
   if(new Set(input.checks.map(c=>c.lineId)).size!==input.checks.length)fail('同批检查PO不可重复');
   for(const check of input.checks){
@@ -199,7 +241,7 @@ export class FactoryFlowService{
   const lines=this.scope(input.lines,limits);
   if(s.tasks.find(t=>t.task_kind==='warehouse_dispatch')?.state!=='ready')fail(await this.taskBlockReason(db,actor,s,'warehouse_dispatch'));
   this.checkTime(input.occurredAt,this.latestTime(s.route.cutting_completed_at,batch?.occurredAt,...(batch?.rows.filter(l=>lines.some(x=>x.lineId===l.lineId)).map(l=>l.checkedAt)??[])));
-  const factId=await this.fact(db,actor,s.route.preparation_id,'仓库实际发厂',input.occurredAt,{supplierId:input.supplierId,note:input.note,lines,...(batch?{returnFactId:batch.factId,releaseCheckIds:lines.map(l=>({lineId:l.lineId,checkId:s.checks.filter(c=>c.return_fact_id===batch.factId&&c.line_id===l.lineId).at(-1)!.check_id}))}:{})});
+  const factId=await this.fact(db,actor,s.route.preparation_id,'仓库实际发厂',input.occurredAt,{supplierId:input.supplierId,note:input.note,lines,...(s.stepLedger?{stepRef:s.stepLedger.terminalStepRef}:{}),...(batch?{returnFactId:batch.factId,releaseCheckIds:lines.map(l=>({lineId:l.lineId,checkId:s.checks.filter(c=>c.return_fact_id===batch.factId&&c.line_id===l.lineId).at(-1)!.check_id}))}:{})});
   await new SourcingProductionService(this.database).dispatchDigitalWithClient(db,actor,id,factId);
   await this.ensureProductionQc(db,actor,id,s.route.preparation_id);
   await startQcTrackingFromDispatch(db,actor,id,factId);

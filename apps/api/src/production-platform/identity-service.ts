@@ -6,6 +6,7 @@ import type { SourcingService } from "../sourcing/sourcing-service.js";
 import { SlaOrderService } from "./sla-order-service.js";
 import { developmentRevisionSource } from "./development-revision-source.js";
 import { captureDevelopmentSla } from "./development-sla-enrollment.js";
+import {newTimelineAdoptionMode} from './fixed-timeline-mode.js';
 import type { BusinessClock } from "@dx-rework/domain/business-clock";
 import {acceptanceBusinessContext,observedBusinessTime,registerAcceptanceCreated,ContextBusinessClock,acceptanceClockReaderEnabled} from '../acceptance-clock/business-time.js';
 import { createHash, randomUUID } from "node:crypto";
@@ -59,7 +60,9 @@ export class DigitalProductionIdentityService {
     if (!/^[A-Za-z0-9._:-]{1,128}$/.test(key)) fail("缺少有效操作标识", 400);
     const client = await this.database.connect();
     try {
-      await client.query("BEGIN");
+      const initialAdoption=newTimelineAdoptionMode(this.database)==='fixed_v2'
+        &&(command==='create-source'||command==='direct-order'||command.startsWith('confirm-source:'));
+      await client.query(initialAdoption?'BEGIN ISOLATION LEVEL REPEATABLE READ':'BEGIN');
       if(command.startsWith("numbers:")||command.startsWith("confirm-source:")||command.startsWith('attach-source:'))await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [JSON.stringify([actor.actorId, command, key])]);
       const hash = digest(payload);
@@ -98,7 +101,7 @@ export class DigitalProductionIdentityService {
       await this.visibleSource(this.database,actor,sourceId);
       now=new Date((await (this.businessClock??new ContextBusinessClock(this.database)).read({kind:'source',id:sourceId})).now);
     }
-    return {serverToday:beijingCalendarDate(now),minimumInitialCustomerDate:minimumInitialCustomerDate(now)};
+    return {...(newTimelineAdoptionMode(this.database)==='fixed_v2'?{independentCraftsEnabled:true}:{}),serverToday:beijingCalendarDate(now),minimumInitialCustomerDate:minimumInitialCustomerDate(now)};
   }
   async sources(actor: TrustedActorContext, page: number, search: string): Promise<{ items: DigitalSource[]; page: number }> {
     assertIdentityActor(actor);
@@ -142,7 +145,7 @@ export class DigitalProductionIdentityService {
       await enrollPreparation(client,{kind:'source',id},actor.actorId,eventId);
       const time = this.businessClock ? await this.businessClock.read({ kind: "source", id })
         : observedBusinessTime(this.now);
-      await captureDevelopmentSla(client, actor, id, null, time, eventId);
+      await captureDevelopmentSla(client, actor, id, null, time, eventId,newTimelineAdoptionMode(this.database));
       return { sourceId: id };
     });
   }

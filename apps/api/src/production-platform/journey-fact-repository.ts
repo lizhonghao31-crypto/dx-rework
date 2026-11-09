@@ -5,6 +5,7 @@ import {reuseJourneySnapshotReads} from './journey-snapshot-reads.js';
 import {DigitalJourneyQuery} from './journey-query.js';
 import {JOURNEY_FACT_CALCULATION_VERSION,journeyFactFingerprint,journeyValueFingerprint,type JourneyFactModel} from './journey-fact-model.js';
 import type {JourneySelectionFacts} from './journey-selection-facts.js';
+import {FixedTimelineAdoptionRepository} from './fixed-timeline-adoptions.js';
 
 type Row={source_version:string;applied_source_version:string|null;calculation_version:string|null;source_fingerprint:string|null;payload:JourneyFactModel|null;clock_scenario_id:string|null;clock_revision:string;observed_at:Date|null};
 export class JourneyFactBusy extends Error{constructor(){super('Journey fact construction is already running');}}
@@ -30,6 +31,13 @@ export class JourneyFactRepository{
    await db.query("SET LOCAL idle_in_transaction_session_timeout='100s'");
    const locked=(await db.query<{locked:boolean}>('SELECT pg_try_advisory_xact_lock(hashtext($1),hashtext($2)) AS locked',['journey-fact:'+resource.kind,resource.id])).rows[0]!.locked;
    if(!locked)throw new JourneyFactBusy();
+   // Derive fixed targets only in the existing bounded object's write worker,
+   // from its immutable original inputs. A target failure keeps this object's
+   // dirty entry/retry; it cannot roll back the already committed business action.
+   // Use the same original client and RR transaction, before capturing the dirty
+   // transaction set, so these derived writes do not cause a second rebuild.
+   const timelines=new FixedTimelineAdoptionRepository(client),adoption=await timelines.existing(resource);
+   if(adoption)await timelines.buildPendingTargets(adoption);
    // No sequence watermark: transactions allocated earlier can commit later.
    // Acknowledge only the exact dirty transactions visible in this snapshot.
    const pending=(await db.query<{transaction_id:string}>('SELECT transaction_id FROM digital_journey_fact_changes WHERE resource_kind=$1 AND resource_id=$2',[resource.kind,resource.id])).rows.map(r=>r.transaction_id);

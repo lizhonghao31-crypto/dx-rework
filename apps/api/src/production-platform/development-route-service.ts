@@ -21,6 +21,8 @@ import {validateDevelopmentMeasurements} from './development-inspection-evidence
 import {developmentSlaPlan} from './development-sla-enrollment.js';
 import {fixedDevelopmentCutter} from './development-fixed-cutting.js';
 import {savedDevelopmentRoute} from "./development-sla-enrollment.js";
+import {FixedTimelineAdoptionRepository} from './fixed-timeline-adoptions.js';
+import {fixedTaskPosition} from './fixed-craft-steps.js';
 const fail=(message:string):never=>{throw new ApplicationError('DEVELOPMENT_ROUTE_CONFLICT',message,409);};
 export type DevelopmentRouteAction={measurements?:DevelopmentActualMeasurements|undefined;making?:DevelopmentMakingUpgrade|undefined;attachmentIds?:string[]|undefined;returnNodes?:DevelopmentRevision["affectedNodes"]|undefined;problemCategories?:DevelopmentRevision["categories"]|undefined;craftExecution:'内部'|'外发'|null;taskId:string;note:string;result:'通过'|'退回';nextAssigneeId:string|null;sentDate:string|null;trackingNo:string|null};
 export class DevelopmentRouteService {
@@ -52,10 +54,10 @@ export class DevelopmentRouteService {
    const active=[];for(const person of people)if(await policy.activeRole(person.user_id,role))active.push(person.user_id);
    return active.length===1?active[0]:null;
  }
- async startRound(db:PoolClient,actor:TrustedActorContext,sourceId:string,kind:DigitalTaskKind,routeId:string,roundNumber:number,authorizingTaskId?:string,predecessorId?:string,nextAssigneeId:string|null=null,requireActualReceipt=false){
+ async startRound(db:PoolClient,actor:TrustedActorContext,sourceId:string,kind:DigitalTaskKind,routeId:string,roundNumber:number,authorizingTaskId?:string,predecessorId?:string,nextAssigneeId:string|null=null,requireActualReceipt=false,routePosition?:number){
    const sheet=await new DigitalDevelopmentService(this.database,true).read(actor,sourceId,db,roundNumber),service=new DigitalProductionTaskService(this.database);
    const positioning=kind==='development_craft_dispatch'&&await technicalEnrollment(db,sourceId)?(await db.query(`SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND t.route_version=$2 AND a.task_kind='development_positioning' AND t.state<>'cancelled' ORDER BY t.created_at DESC LIMIT 1`,[sourceId,roundNumber])).rows[0]:null;
-   const next=await service.createWithClient(db,actor,{resource:{kind:'source',id:sourceId},...(authorizingTaskId?{authorizingTaskId}:{}),kind,routeId,routeVersion:roundNumber,occurrence:roundNumber,assigneeId:await this.recipient(db,sourceId,kind,nextAssigneeId,roundNumber),predecessors:[...(predecessorId?[predecessorId]:[]),...(positioning?[positioning.task_id]:[])],conditions:kind==='development_sewing'?['pattern_assignment_ready']:kind==='development_cutting'?['materials_ready']:[]});
+   const next=await service.createWithClient(db,actor,{resource:{kind:'source',id:sourceId},...(authorizingTaskId?{authorizingTaskId}:{}),kind,routeId,routeVersion:roundNumber,occurrence:roundNumber,...(routePosition===undefined?{}:{routePosition}),assigneeId:await this.recipient(db,sourceId,kind,nextAssigneeId,roundNumber),predecessors:[...(predecessorId?[predecessorId]:[]),...(positioning?[positioning.task_id]:[])],conditions:kind==='development_sewing'?['pattern_assignment_ready']:kind==='development_cutting'?['materials_ready']:[]});
    if(!requireActualReceipt&&['development_pattern','development_cutting','development_sewing','development_washing'].includes(kind))await service.setConditionWithClient(db,actor,next.taskId,'handover_received',true,undefined,'本轮已交出');
    if(['development_pattern','development_cutting','development_sewing'].includes(kind)){
      const materialState=await materialReadiness(db,sourceId,roundNumber);
@@ -76,8 +78,11 @@ export class DevelopmentRouteService {
  async advance(db:PoolClient,actor:TrustedActorContext,sourceId:string,taskId:string,nextAssigneeId:string|null=null){
    const task=await this.task(db,sourceId,taskId);
    const sheet=await new DigitalDevelopmentService(this.database,true).read(actor,sourceId,db,task.route_version);
-   const route:DigitalTaskKind[]=task.route_version===1?await savedDevelopmentRoute(db,sourceId,sheet.document!):(await db.query('SELECT route_nodes FROM digital_development_rounds WHERE source_id=$1 AND round_number=$2',[sourceId,task.route_version])).rows[0].route_nodes;
-   const index=route.indexOf(task.task_kind==='development_material_recheck'?'development_materials':task.task_kind);
+   const adopted=await new FixedTimelineAdoptionRepository(db).existing({kind:'source',id:sourceId},task.route_version);
+   const fixed=adopted&&adopted.input.sourceVersions.routeRef===task.route_instance_id?adopted.input.route:null;
+   const route:DigitalTaskKind[]=fixed?fixed.map(position=>position.kind as DigitalTaskKind):task.route_version===1?await savedDevelopmentRoute(db,sourceId,sheet.document!):(await db.query('SELECT route_nodes FROM digital_development_rounds WHERE source_id=$1 AND round_number=$2',[sourceId,task.route_version])).rows[0].route_nodes;
+   const position=fixed?await fixedTaskPosition(db,taskId):null;
+   const index=position?Number(position.route_position):route.indexOf(task.task_kind==='development_material_recheck'?'development_materials':task.task_kind);
    if(index<0||index===route.length-1)return null;
    let nextKind=route[index+1]!,requireActualReceipt=false;
    // Only bypass the transfer when sewing is the saved successor. Revisions may inherit sewing.
@@ -91,7 +96,7 @@ export class DevelopmentRouteService {
    if(requireActualReceipt){
        await db.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1,$2,$3,'development_system_route','digital_development',$4,$5)",[randomUUID(),actor.requestId,actor.actorId,sourceId,JSON.stringify({mode:'system_route',fromTaskId:taskId,round:task.route_version,nextKind,reason:'设计师已确认工艺，沿用本单车板安排；不记录人工转交或实物接收'})]);
    }
-   const next=await this.startRound(db,actor,sourceId,nextKind,task.route_instance_id,task.route_version,taskId,taskId,nextAssigneeId,requireActualReceipt);
+   const next=await this.startRound(db,actor,sourceId,nextKind,task.route_instance_id,task.route_version,taskId,taskId,nextAssigneeId,requireActualReceipt,fixed?index+1:undefined);
    if(requireActualReceipt)await new DigitalProductionTaskService(this.database).recordSystemRouteWithClient(db,actor,next.taskId,taskId);
    return next;
  }
@@ -141,8 +146,9 @@ export class DevelopmentRouteService {
        if(!artifact||!position||position.payload.artifactSetId!==artifact.artifact.artifactSetId||position.payload.artifactVersion!==artifact.artifact.version)fail('相应裁片和当前纸样的定位图尚未形成；设计定位可与裁板并行，但发工艺前须具备有效定位');
      }
      const sheet=await new DigitalDevelopmentService(this.database,true).read(actor,sourceId,db,task.route_version);
-     const route:DigitalTaskKind[]=task.route_version===1?await savedDevelopmentRoute(db,sourceId,sheet.document!):(await db.query('SELECT route_nodes FROM digital_development_rounds WHERE source_id=$1 AND round_number=$2',[sourceId,task.route_version])).rows[0].route_nodes;
-     const nextKind=route[route.indexOf(task.task_kind)+1];
+     const saved=await new FixedTimelineAdoptionRepository(db).existing({kind:'source',id:sourceId},task.route_version),position=await fixedTaskPosition(db,task.task_id);
+     const route:DigitalTaskKind[]=saved&&position?saved.input.route!.map(row=>row.kind as DigitalTaskKind):task.route_version===1?await savedDevelopmentRoute(db,sourceId,sheet.document!):(await db.query('SELECT route_nodes FROM digital_development_rounds WHERE source_id=$1 AND round_number=$2',[sourceId,task.route_version])).rows[0].route_nodes;
+     const nextKind=route[(position?Number(position.route_position):route.indexOf(task.task_kind))+1];
      const recipient=nextKind?await this.recipient(db,sourceId,nextKind,input.nextAssigneeId,task.route_version):null;
      if(!recipient)fail('本轮工艺尚无有效办理人，请开发文员在总委派页安排后再发出。');
      input={...input,nextAssigneeId:recipient};

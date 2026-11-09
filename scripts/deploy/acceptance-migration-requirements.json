@@ -1933,5 +1933,39 @@
     "creates": [],
     "execute": [],
     "sequences": []
+  },
+  "0281_fixed_timeline_adoptions": {
+    "checksum": "01b13784d4df01c502051eb3c67ea1435ece301a6f9b871ec160ade40a02f4bc",
+    "tables": [
+      "digital_development_sla_plans",
+      "digital_sla_plans",
+      "digital_factory_routes"
+    ],
+    "functions": [],
+    "references": [
+      "app_users",
+      "digital_sla_configurations",
+      "digital_development_cycle_standards",
+      "digital_production_sources",
+      "digital_production_orders",
+      "digital_production_po_lines",
+      "digital_production_tasks",
+      "digital_bulk_preparations"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [
+      "digital_timeline_standard_versions",
+      "digital_timeline_adoptions",
+      "digital_timeline_target_revisions",
+      "digital_timeline_craft_steps",
+      "digital_timeline_task_positions",
+      "digital_timeline_order_routes"
+    ],
+    "execute": [
+      "guard_production_order_root_immutable",
+      "digital_journey_register_change"
+    ],
+    "sequences": []
   }
 }

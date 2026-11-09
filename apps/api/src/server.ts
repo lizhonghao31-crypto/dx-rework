@@ -1,4 +1,5 @@
 import {JourneyFactUpdates,JourneyFactRuntime} from './production-platform/journey-fact-updates.js';
+import {configureTimelineAdoption} from './production-platform/fixed-timeline-mode.js';
 import {DeliveryCalendarQuery} from './production-platform/delivery-calendar-query.js';
 import {createJourneyDiagnostic} from './platform/journey-diagnostic.js';
 import {QcProductionProgressService} from './production-platform/qc-production-progress-service.js';
@@ -106,6 +107,7 @@ const database = new Pool({
   connectionTimeoutMillis: 3_000,
   idleTimeoutMillis: 30_000,
 });
+configureTimelineAdoption(database,config.digitalProduction?.timelineAdoptionMode??'legacy');
 let acceptanceClockProof:AcceptanceServerProof|undefined;
 if (config.acceptanceLab.enabled) {
   try {

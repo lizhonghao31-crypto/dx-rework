@@ -2,7 +2,8 @@ import {captureTechnicalRound} from './development-cycle-evidence.js';
 import {technicalEnrollment,inheritTechnicalArtifact,publishedTechnicalArtifact} from './development-technical-repository.js';
 import {DevelopmentTechnicalService} from './development-technical-service.js';
 import {createIndependentDevelopmentRevision} from './development-revision-source.js';
-import {businessNow} from '../acceptance-clock/business-time.js';
+import {businessNow,ContextBusinessClock} from '../acceptance-clock/business-time.js';
+import {captureDevelopmentTimeline} from './fixed-development-adoption.js';
 import {developmentSlaPlan,developmentSlaRoute} from "./development-sla-enrollment.js";
 import {validateAuxiliaryReferences} from '../access/auxiliary-catalog-service.js';
 import {verificationAvailable} from "./development-material-verification.js";
@@ -100,7 +101,20 @@ export class DevelopmentRoundService {
   const completed:Record<string,{taskId:string;roundNumber:number}>={};
   const tasks=(await db.query("SELECT t.task_id,t.route_version,a.task_kind FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND t.state='completed' AND NOT EXISTS(SELECT 1 FROM digital_production_task_events e WHERE e.task_id=t.task_id AND e.event_kind='material_returned') ORDER BY t.route_version DESC,t.completed_at DESC,t.task_id",[sourceId])).rows;
   for(const task of tasks){const kind=task.task_kind==='development_material_recheck'?'development_materials':task.task_kind;if(!completed[kind])completed[kind]={taskId:task.task_id,roundNumber:task.route_version};}
-  const {route,inherited}=developmentRevisionPlan({...input,document,affectedNodes},completed,await developmentSlaPlan(db,sourceId)?developmentSlaRoute(document):undefined),roundNumber=input.basedOnRound+1,routeId=randomUUID();
+  const savedPlan=await developmentSlaPlan(db,sourceId);
+  let {route,inherited}=developmentRevisionPlan({...input,document,affectedNodes},completed,savedPlan?developmentSlaRoute(document,input.outputKind,savedPlan.route_schema_version===2?2:1):undefined);
+  if(savedPlan?.route_schema_version===2){
+   // A repeated generic handoff is not proof for its sibling craft. If an
+   // unfinished craft is carried forward, include that step's own dispatch and
+   // confirmation, while retaining genuinely completed other work as history.
+   const full=['development_materials' as const,...developmentSlaRoute(document,input.outputKind,2)],selected=new Set(route);
+   const craftKinds=['development_printing','development_embroidery'] as const;
+   const selectedCraft=new Set(craftKinds.filter(kind=>selected.has(kind)));
+   route=full.filter((kind,index)=>kind==='development_craft_dispatch'?selectedCraft.has(full[index+1] as typeof craftKinds[number])
+    :kind==='development_craft_confirmation'?selectedCraft.has(full[index-1] as typeof craftKinds[number]):selected.has(kind));
+   if(selectedCraft.size){inherited={...inherited};delete inherited.development_craft_dispatch;delete inherited.development_craft_confirmation;}
+  }
+  const roundNumber=input.basedOnRound+1,routeId=randomUUID();
   await this.forms().bindFiles(db,actor,sourceId,document);
   await db.query(`INSERT INTO digital_development_rounds(source_id,round_number,based_on_round,document_version,document,origin,customer_comment,internal_problem,explanation,categories,affected_nodes,output_kind,route_nodes,inherited,return_task_id,route_id,created_by,published_at)
     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,[sourceId,roundNumber,input.basedOnRound,sheet.version+1,JSON.stringify(document),input.origin,input.customerComment,input.internalProblem,input.explanation,input.categories,affectedNodes,input.outputKind,route,JSON.stringify(inherited),returnTaskId??null,routeId,actor.actorId,businessNow().toISOString()]);
@@ -108,6 +122,8 @@ export class DevelopmentRoundService {
   if(priorCycle)await captureTechnicalRound(db,actor.actorId,sourceId,roundNumber,businessNow().toISOString(),priorCycle.internal_wash_minutes,Number(priorCycle.warning_ratio));
   if(!affectedNodes.includes('纸样'))await inheritTechnicalArtifact(db,actor.actorId,sourceId,roundNumber,sourceId,input.basedOnRound,businessNow().toISOString());
   if(await technicalEnrollment(db,sourceId)&&!route.includes('development_pattern')&&!await publishedTechnicalArtifact(db,sourceId,roundNumber))fail('本次技术依据已改变，原成果不能沿用；请将纸样加入受影响节点后再发布，当前草稿与原轮次保持');
+  if(savedPlan?.timeline_schema_version===2)await captureDevelopmentTimeline(db,actor.actorId,sourceId,roundNumber,routeId,route,document,sheet.version+1,
+    `development-round:${sourceId}:${roundNumber}`,await new ContextBusinessClock(this.database,db).read({kind:'source',id:sourceId}));
   await new DigitalProductionTaskService(this.database).supersedeSourceTasksWithClient(db,actor,sourceId,input.basedOnRound,returnTaskId);
   await new DevelopmentRouteService(this.database).startRound(db,actor,sourceId,route[0]!,routeId,roundNumber,returnTaskId);
   await new DevelopmentTechnicalService(this.database,this.enabled).ensurePositionForRound(db,actor,sourceId,roundNumber,routeId,returnTaskId);

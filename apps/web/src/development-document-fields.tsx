@@ -1,3 +1,4 @@
+import {IndependentCraftField} from './independent-craft-field.js';
 import {AuxiliaryCatalogDialog} from './auxiliary-catalog-dialog.js';
 import {AttachmentIdentity,type AttachmentIdentityData} from './attachment-identity.js';
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
@@ -10,7 +11,7 @@ import { confirmInApp } from "./system-dialog.js";
 import { DocumentTableScroll, DocumentField, DocumentSection, DocumentSectionGroup, DocumentAddRow } from "./document-editor.js";
 type FileKind = DevelopmentDocument["files"][number]["kind"];
 type Props = {
- document:DevelopmentDocument;edit:(patch:Partial<DevelopmentDocument>)=>void;readonly:boolean;busy:boolean;
+ fixedCraft?:boolean;document:DevelopmentDocument;edit:(patch:Partial<DevelopmentDocument>)=>void;readonly:boolean;busy:boolean;
  sizeQuantityInputs:string[];setSizeQuantityInputs:(values:string[])=>void;sectionStart?:number;basicDetailsExternal?:boolean;
  writing:{current:boolean};quantityInput:string;setQuantityInput:(value:string)=>void;
  measurementIds:{current:string[]};successfulUploads:{current:Map<string,string>};
@@ -22,7 +23,7 @@ const material = (category: DevelopmentMaterial["category"], label: string): Dev
 const fileKinds=["款图","局部图","菲林","工艺开发板"] as const;
 const fileLabels:Record<FileKind,string>={款图:"主款图",局部图:"局部图",菲林:"菲林图",工艺开发板:"工艺开发板"};
 const labels = {interlining:"朴号",placketInterlining:"门筒朴",sewingThread:"车缝线",buttonholeThread:"纽门线",stitchDensity:"针距",washingMethod:"洗水方法",ironing:"整烫方法",packaging:"包装方法",formalSizes:"正装尺码",casualSizes:"休闲尺码",mainLabelMethod:"主唛车法",instructions:"制作说明"} as const;
-export function DevelopmentDocumentFields({document,edit,readonly,busy,writing,quantityInput,setQuantityInput,measurementIds,successfulUploads,imageUrl,upload,fileKind,setFileKind,issue,patternSection,uploadHelp,templateResetKey,attachmentPageSize,fileIdentity,metadataPath,sizeQuantityInputs,setSizeQuantityInputs,sectionStart=1,basicDetailsExternal=false}:Props){
+export function DevelopmentDocumentFields({fixedCraft=false,document,edit,readonly,busy,writing,quantityInput,setQuantityInput,measurementIds,successfulUploads,imageUrl,upload,fileKind,setFileKind,issue,patternSection,uploadHelp,templateResetKey,attachmentPageSize,fileIdentity,metadataPath,sizeQuantityInputs,setSizeQuantityInputs,sectionStart=1,basicDetailsExternal=false}:Props){
   const [auxiliaryMaterialId,setAuxiliaryMaterialId]=useState<string|null>(null);
   const sizeIds=useRef(document.sizes.map(()=>createClientRequestId()));
   if(sizeIds.current.length!==document.sizes.length)sizeIds.current=document.sizes.map((_,index)=>sizeIds.current[index]??createClientRequestId());
@@ -83,7 +84,7 @@ export function DevelopmentDocumentFields({document,edit,readonly,busy,writing,q
             {field("instructions","制作说明（选填）",1000,true)}
           </DocumentSection>
 <DocumentSection id="development-basic" title="打板信息"><div className="development-basic-grid">
-            {!basicDetailsExternal&&<><label>开发下单日期<DocumentField id="development-orderDate" label="开发下单日期" value={document.orderDate??"首次开发日期未登记"} readonly issue={issue("development-orderDate")}/></label>{select("craft","工艺",["无","印花","绣花","印绣花"])}</>}
+            {!basicDetailsExternal&&<><label>开发下单日期<DocumentField id="development-orderDate" label="开发下单日期" value={document.orderDate??"首次开发日期未登记"} readonly issue={issue("development-orderDate")}/></label>{fixedCraft?<IndependentCraftField label="工艺" value={document.craft} steps={document.craftSteps} readonly={readonly} disabled={busy} onChange={(craft,craftSteps)=>edit({craft,craftSteps})}/>:select("craft","工艺",["无","印花","绣花","印绣花"])}</>}
             {patternSection??<label>打板品类<span className="dx-doc-readonly">沿已发布打板执行单</span></label>}
             <label>本轮打板数量（发布必填）<DocumentField id="development-quantity" label="本轮打板数量" value={quantityInput} numeric readonly={readonly} disabled={busy} issue={issue("development-quantity")} onValue={value=>{setQuantityInput(value);edit({quantity:/^\d+$/.test(value)&&Number(value)>=1&&Number(value)<=100000?Number(value):null});}}/></label>
             {<label>预计样板完成日期（选填）<DocumentField id="development-returnDate" label="预计样板完成日期" type="date" value={document.returnDate??""} readonly={readonly} disabled={busy} issue={issue("development-returnDate")} onValue={value=>edit({returnDate:value||null})}/></label>}

@@ -32,7 +32,7 @@ function StyleImage({item}: {item: DevelopmentWorkspaceItem}) {
 }
 export function DigitalDesignerWorkspace() {
   const [filter, setFilter] = useState(initialFilter), [result, setResult] = useState<DevelopmentWorkspaceResult | null>(null);
-  const [options, setOptions] = useState<{creationEnabled: boolean; customers: DigitalCustomer[]; minimumInitialCustomerDate?:string;serverToday?:string} | null>(null), [access, setAccess] = useState<DigitalAccessOptions | null>(null);
+  const [options, setOptions] = useState<{independentCraftsEnabled?:boolean;creationEnabled: boolean; customers: DigitalCustomer[]; minimumInitialCustomerDate?:string;serverToday?:string} | null>(null), [access, setAccess] = useState<DigitalAccessOptions | null>(null);
   const [intent, setIntent] = useState<DevelopmentCreateIntent | null>(null), [confirm, setConfirm] = useState<DevelopmentWorkspaceItem | null>(null);
   const [confirmSheet,setConfirmSheet]=useState<DevelopmentSheet|undefined>(),[preparingConfirm,setPreparingConfirm]=useState(false),[confirmError,setConfirmError]=useState("");
   const [confirmedOrderId,setConfirmedOrderId]=useState<string|null>(null);
@@ -104,7 +104,7 @@ export function DigitalDesignerWorkspace() {
   };
   if (intent && options) return <div className="development-workspace development-golden dx-production-refined development-create-page">
     <div className="development-breadcrumb">产品开发 › <strong>{confirm?"客户确定订单":"新建开发订单"}</strong></div>
-    <DevelopmentCreateForm key={confirm?.journey.id ?? "new-development"} intent={intent} {...(confirm ? {source: confirm.journey,...(confirmSheet?{existingDraft:confirmSheet}:{}),cancelLabel:"返回开发单"} : {})} customers={options.customers} minimumDate={options.minimumInitialCustomerDate} serverToday={options.serverToday} onIntentChange={setIntent} onCancel={() => {setIntent(null); setConfirm(null); setConfirmSheet(undefined);if(!editor)setRefresh(value => value + 1);}} onCreated={(sourceId,orderId) => {
+    <DevelopmentCreateForm key={confirm?.journey.id ?? "new-development"} intent={intent} {...(confirm ? {source: confirm.journey,...(confirmSheet?{existingDraft:confirmSheet}:{}),cancelLabel:"返回开发单"} : {})} customers={options.customers} independentCraftsEnabled={options.independentCraftsEnabled} minimumDate={options.minimumInitialCustomerDate} serverToday={options.serverToday} onIntentChange={setIntent} onCancel={() => {setIntent(null); setConfirm(null); setConfirmSheet(undefined);if(!editor)setRefresh(value => value + 1);}} onCreated={(sourceId,orderId) => {
       if(confirm&&editor===sourceId){setConfirmedOrderId(orderId);setIntent(null);setConfirm(null);setConfirmSheet(undefined);setRefresh(value=>value+1);}
       else void navigateInternalPage(contextUrl({development:sourceId}));
     }}/>

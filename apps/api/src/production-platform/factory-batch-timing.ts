@@ -1,9 +1,12 @@
+import type {FixedTimelineCalendar} from './fixed-timeline-targets.js';
 import {firstContractBusinessReady} from './contract-business-ready.js';
 import {slaApplications,appliedSlaWindow} from './sla-applied-window.js';
 import type {PoolClient} from 'pg';
 import {validateDigitalSlaSnapshot} from '@dx-rework/contracts/digital-sla';
 import {factoryBatchLedger,type FactoryScope} from './factory-batch-ledger.js';
-export type FactoryWindow={key:string;kind:'process_logistics'|'bulk_qc'|'warehouse_dispatch';enteredAt:string|null;dueAt:string|null;warningAt:string|null;completedAt:string|null;complete:boolean;evidence:string;minutes:number;parameterKey:string;applicationId?:string|null;snapshotId?:string;lineId?:string};
+import {fixedFactoryBatchTiming} from './fixed-factory-timing.js';
+import {fixedTaskPosition} from './fixed-craft-steps.js';
+export type FactoryWindow={key:string;kind:'process_logistics'|'bulk_qc'|'warehouse_dispatch';enteredAt:string|null;dueAt:string|null;warningAt:string|null;completedAt:string|null;complete:boolean;evidence:string;minutes:number|null;parameterKey:string;applicationId?:string|null;snapshotId?:string;lineId?:string;stepRef?:string;calendarRef?:FixedTimelineCalendar|null};
 const latest=(values:Array<Date|string|null|undefined>)=>values.every(Boolean)&&values.length?new Date(Math.max(...values.map(v=>new Date(v!).getTime()))).toISOString():null;
 /** Batch windows derive only from original factory facts and the preparation's frozen standard. */
 export async function factoryBatchTiming(db:Pick<PoolClient,'query'>,orderId:string){
@@ -18,6 +21,7 @@ export async function factoryBatchTiming(db:Pick<PoolClient,'query'>,orderId:str
  const facts=(await db.query('SELECT * FROM digital_factory_facts WHERE preparation_id=$1 ORDER BY sequence',[row.preparation_id])).rows;
  const checks=(await db.query('SELECT * FROM digital_factory_qc WHERE preparation_id=$1 ORDER BY sequence',[row.preparation_id])).rows;
  const lines=(await db.query(`SELECT p.line_id AS "lineId",r.actual_cut_count::int AS quantity FROM digital_production_po_lines p JOIN digital_production_child_lines l ON l.module='cutting' AND l.line_id=p.line_id JOIN current_cutting_records r ON r.cutting_order_id=l.child_id WHERE p.production_order_id=$1`,[orderId])).rows as FactoryScope[];
+ if(row.route_schema_version===2)return fixedFactoryBatchTiming(db,orderId,row,lines,facts,checks);
  const ledger=factoryBatchLedger(lines,facts,checks,row.secondary_craft==='无');
  // Retain the first contract-ready fact; later contract revisions do not reset the opened window.
  const contract=await firstContractBusinessReady(db,orderId);
@@ -52,12 +56,17 @@ export async function factoryBatchTiming(db:Pick<PoolClient,'query'>,orderId:str
  }else{
   for(const line of ledger.totals){const dispatched=facts.filter(f=>f.kind==='仓库实际发厂'&&f.payload.lines?.some((l:FactoryScope)=>l.lineId===line.lineId));add(`cut:${line.lineId}`,'warehouse_dispatch',latest([row.completed_at,contract.at]),line.remaining===0,line.remaining===0?latest(dispatched.map(f=>f.occurred_at)):null,minutes('warehouse_dispatch'),`cut-completion:${row.preparation_id}${contract.kind==='business'?`;${contract.evidence}`:''}`,line.lineId);}
  }
- return {preparationId:row.preparation_id,snapshotId:row.sla_snapshot_id,warningRatio:warning.percent/100,windows,ledger};
+ return {routeSchemaVersion:1 as const,preparationId:row.preparation_id,snapshotId:row.sla_snapshot_id,warningRatio:warning.percent/100,windows,ledger,stepLedger:null};
 }
-export async function factoryTaskTiming(db:Pick<PoolClient,'query'>,task:{production_order_id:string|null;task_kind:string;route_instance_id:string},prepared?:Awaited<ReturnType<typeof factoryBatchTiming>>){
+export async function factoryTaskTiming(db:Pick<PoolClient,'query'>,task:{task_id?:string;production_order_id:string|null;task_kind:string;route_instance_id:string},prepared?:Awaited<ReturnType<typeof factoryBatchTiming>>){
  if(!task.production_order_id||!['process_logistics','bulk_qc','warehouse_dispatch'].includes(task.task_kind))return null;
  const timing=prepared??await factoryBatchTiming(db,task.production_order_id);if(!timing||timing.preparationId!==task.route_instance_id)return null;
- const rows=timing.windows.filter(w=>w.kind===task.task_kind),open=rows.filter(w=>!w.complete);
- const selected=open.slice().sort((a,b)=>(a.dueAt?Date.parse(a.dueAt):Infinity)-(b.dueAt?Date.parse(b.dueAt):Infinity))[0];
- return {snapshotId:selected?.snapshotId??timing.snapshotId,parameterKey:selected?.parameterKey??task.task_kind,enteredAt:selected?.enteredAt??null,timeQuality:selected?.enteredAt?'补报未核实':'缺失',seconds:selected?selected.minutes*60:null,warningRatio:selected?.warningAt&&selected.enteredAt&&selected.dueAt?(Date.parse(selected.warningAt)-Date.parse(selected.enteredAt))/(Date.parse(selected.dueAt)-Date.parse(selected.enteredAt)):timing.warningRatio,basis:selected?[selected.key,selected.evidence]:[],unknownWindows:open.filter(w=>!w.enteredAt).length};
+ const position=task.task_id&&timing.routeSchemaVersion===2&&timing.stepLedger?await fixedTaskPosition(db,task.task_id):null;
+ const rows=timing.windows.filter(w=>w.kind===task.task_kind&&(!position?.step_id||w.stepRef===position.step_id)),open=rows.filter(w=>!w.complete);
+ const selected=open.slice().sort((a,b)=>(a.dueAt?Date.parse(a.dueAt):Infinity)-(b.dueAt?Date.parse(b.dueAt):Infinity))[0]??(timing.routeSchemaVersion===2?rows[0]:undefined);
+ const step=timing.routeSchemaVersion===2?timing.stepLedger?.steps.find(step=>step.step.stepId===position?.step_id)?.step:null;
+ return {snapshotId:selected?.snapshotId??timing.snapshotId,parameterKey:selected?.parameterKey??task.task_kind,enteredAt:selected?.enteredAt??null,timeQuality:selected?.enteredAt?'补报未核实':'缺失',seconds:selected?.minutes==null?null:selected.minutes*60,
+  ...(timing.routeSchemaVersion===2?{calendarRef:selected?.calendarRef??null}:{}),
+  warningRatio:timing.routeSchemaVersion===2?timing.warningRatio:selected?.warningAt&&selected.enteredAt&&selected.dueAt?(Date.parse(selected.warningAt)-Date.parse(selected.enteredAt))/(Date.parse(selected.dueAt)-Date.parse(selected.enteredAt)):timing.warningRatio,
+  basis:[...(step?[`craft-step:${step.stepId}`,`craft-kind:${step.craftKind}`]:[]),...(selected?[selected.key,selected.evidence]:[])],unknownWindows:open.filter(w=>!w.enteredAt).length};
 }

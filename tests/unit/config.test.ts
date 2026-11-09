@@ -27,10 +27,15 @@ describe("loadConfig", () => {
     expect(() => loadConfig({ ...validEnvironment, SESSION_TTL_SECONDS: "86401" })).toThrow(ConfigurationError);
   });
   it("keeps digital production disabled by default and separates new creation from existing work", () => {
-    expect(loadConfig(validEnvironment).digitalProduction).toEqual({ enabled: false, creationEnabled: false,listReadMode:"indexed" });
+    expect(loadConfig(validEnvironment).digitalProduction).toEqual({ enabled: false, creationEnabled: false,listReadMode:"indexed",timelineAdoptionMode:'legacy' });
     expect(loadConfig({ ...validEnvironment, DIGITAL_PRODUCTION_ENABLED: "true" }).digitalProduction)
-      .toEqual({ enabled: true, creationEnabled: false,listReadMode:"indexed" });
+      .toEqual({ enabled: true, creationEnabled: false,listReadMode:"indexed",timelineAdoptionMode:'legacy' });
     expect(() => loadConfig({ ...validEnvironment, DIGITAL_PRODUCTION_ENABLED: "yes" })).toThrow(ConfigurationError);
+  });
+
+  it('requires an explicit supported mode for new fixed timeline adoption',()=>{
+    expect(loadConfig({...validEnvironment,DIGITAL_TIMELINE_ADOPTION_MODE:'fixed_v2'}).digitalProduction?.timelineAdoptionMode).toBe('fixed_v2');
+    expect(()=>loadConfig({...validEnvironment,DIGITAL_TIMELINE_ADOPTION_MODE:'latest'})).toThrow(ConfigurationError);
   });
 
   it("supports explicit legacy Journey read rollback and rejects an unknown mode",()=>{

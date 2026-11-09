@@ -51,6 +51,7 @@ const EnvironmentSchema = z
     DIGITAL_PRODUCTION_CREATION_ENABLED: BooleanTextSchema,
     DIGITAL_NOTIFICATION_INTERVAL_MS: z.coerce.number().int().min(1_000).max(3_600_000).optional(),
     DIGITAL_JOURNEY_LIST_READ_MODE: z.enum(['indexed','legacy']).default('indexed'),
+    DIGITAL_TIMELINE_ADOPTION_MODE: z.enum(['legacy','fixed_v2']).default('legacy'),
     TODO_RUNTIME_ENABLED: BooleanTextSchema,
     TODO_DELIVERY_ENABLED: z.enum(["true", "false"]).optional(),
     TODO_TIMING_ENABLED: z.enum(["true", "false"]).optional(),
@@ -199,7 +200,7 @@ export type AppConfig = Readonly<{
     deliveryIntervalMs: number;
     timingIntervalMs: number;
   }>;
-  digitalProduction?: Readonly<{ enabled: boolean; creationEnabled: boolean; notificationIntervalMs?: number;listReadMode?:'indexed'|'legacy' }>;
+  digitalProduction?: Readonly<{ enabled: boolean; creationEnabled: boolean; notificationIntervalMs?: number;listReadMode?:'indexed'|'legacy';timelineAdoptionMode?:'legacy'|'fixed_v2' }>;
   objectStorage: Readonly<{ enabled: boolean; region: string | undefined; endpoint: string | undefined; bucket: string | undefined; accessKeyId: string | undefined; accessKeySecret: string | undefined; privatePrefix: string; signedUrlTtlSeconds: number; maxUploadBytes: number }>;
   openai: Readonly<{ apiKey: string | undefined; visionModel: string }>;
 }>;
@@ -237,7 +238,7 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
       enabled: result.data.ACCEPTANCE_LAB_ENABLED === "true",
       secret: result.data.ACCEPTANCE_LAB_SECRET,
     },
-    digitalProduction: { listReadMode:result.data.DIGITAL_JOURNEY_LIST_READ_MODE, enabled: result.data.DIGITAL_PRODUCTION_ENABLED === "true", creationEnabled: result.data.DIGITAL_PRODUCTION_CREATION_ENABLED === "true", ...(result.data.DIGITAL_NOTIFICATION_INTERVAL_MS === undefined ? {} : { notificationIntervalMs: result.data.DIGITAL_NOTIFICATION_INTERVAL_MS }) },
+    digitalProduction: { timelineAdoptionMode:result.data.DIGITAL_TIMELINE_ADOPTION_MODE, listReadMode:result.data.DIGITAL_JOURNEY_LIST_READ_MODE, enabled: result.data.DIGITAL_PRODUCTION_ENABLED === "true", creationEnabled: result.data.DIGITAL_PRODUCTION_CREATION_ENABLED === "true", ...(result.data.DIGITAL_NOTIFICATION_INTERVAL_MS === undefined ? {} : { notificationIntervalMs: result.data.DIGITAL_NOTIFICATION_INTERVAL_MS }) },
     todoRuntime: {
       enabled: (result.data.TODO_DELIVERY_ENABLED ?? result.data.TODO_RUNTIME_ENABLED) === "true"
         || (result.data.TODO_TIMING_ENABLED ?? result.data.TODO_RUNTIME_ENABLED) === "true",

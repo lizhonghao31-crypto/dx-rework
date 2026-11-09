@@ -10,6 +10,9 @@ import { isDeepStrictEqual } from "node:util";
 import { developmentRoute } from "./development-route.js";
 import type { DigitalTaskKind } from "./task-access-repository.js";
 import {captureTechnicalEnrollment,captureTechnicalRound} from './development-cycle-evidence.js';
+import {freezeInitialTimelineInput,readInitialTimelineInput} from './fixed-timeline-initial-input.js';
+import type {TimelineAdoptionMode} from './fixed-timeline-mode.js';
+import {CraftStepChoicesSchema} from '@dx-rework/contracts/digital-craft';
 
 type DB = Pick<PoolClient, "query">;
 export async function developmentSlaPlan(db: DB, sourceId: string) {
@@ -17,9 +20,15 @@ export async function developmentSlaPlan(db: DB, sourceId: string) {
   return (await db.query("SELECT * FROM digital_development_sla_plans WHERE source_id=$1 ORDER BY revision DESC LIMIT 1", [sourceId])).rows[0] ?? null;
 }
 /** Fixed route for newly enrolled sources only. Historical routes stay on their original reader. */
-export function developmentSlaRoute(document: Pick<DevelopmentDocument, "craft" | "washing">,outputKind="整件样板"): DigitalTaskKind[] {
+export function developmentSlaRoute(document: Pick<DevelopmentDocument, "craft" | "washing" | "craftSteps">,outputKind="整件样板",routeSchemaVersion:1|2=1): DigitalTaskKind[] {
   const route: DigitalTaskKind[] = ["development_pattern", "development_cutting"];
-  if (document.craft !== "无") route.push("development_craft_dispatch", document.craft === "印花" ? "development_printing" : document.craft === "绣花" ? "development_embroidery" : "development_print_embroidery", "development_craft_confirmation");
+  if (document.craft !== "无") {
+    if(routeSchemaVersion===2){
+      if(document.craft==='印绣花'&&!document.craftSteps)throw Error('请在开发资料中明确绣花和印花的实际先后顺序');
+      const steps=CraftStepChoicesSchema.parse(document.craftSteps??[{craftKind:document.craft==='绣花'?'embroidery':'printing',sequence:1}]);
+      for(const step of steps)route.push('development_craft_dispatch',step.craftKind==='embroidery'?'development_embroidery':'development_printing','development_craft_confirmation');
+    }else route.push("development_craft_dispatch", document.craft === "印花" ? "development_printing" : document.craft === "绣花" ? "development_embroidery" : "development_print_embroidery", "development_craft_confirmation");
+  }
   if(outputKind==='工艺布片'){route.push("development_confirmation");return route;}
   route.push("development_sewing");
   if (document.washing !== "免洗") route.push("development_pre_wash_check", "development_washing_dispatch", "development_washing");
@@ -32,7 +41,7 @@ export async function savedDevelopmentRoute(db: DB, sourceId: string, document: 
   return saved?.route_nodes.length ? saved.route_nodes : developmentRoute(document);
 }
 export async function captureDevelopmentSla(db: PoolClient, actor: TrustedActorContext, sourceId: string,
-  document: DevelopmentDocument | null, time: BusinessTime, eventKey: string) {
+  document: DevelopmentDocument | null, time: BusinessTime, eventKey: string,newMode:TimelineAdoptionMode='legacy') {
   if (!(await db.query("SELECT to_regclass('digital_development_sla_plans') AS relation")).rows[0]?.relation) return;
   validateBusinessTime(time);
   const outputKind=(await db.query('SELECT output_kind FROM digital_development_revision_sources WHERE source_id=$1',[sourceId])).rows[0]?.output_kind??'整件样板';
@@ -40,7 +49,7 @@ export async function captureDevelopmentSla(db: PoolClient, actor: TrustedActorC
   const repeated = (await db.query("SELECT * FROM digital_development_sla_plans WHERE event_key=$1", [eventKey])).rows[0];
   if (repeated) {
     if (repeated.source_id !== sourceId || repeated.created_by !== actor.actorId || !isDeepStrictEqual(repeated.business_time, time)
-      || !isDeepStrictEqual(repeated.route_nodes, document ? developmentSlaRoute(document,outputKind) : [])) throw new Error("Development SLA event reused with different content");
+      || !isDeepStrictEqual(repeated.route_nodes, document ? developmentSlaRoute(document,outputKind,repeated.route_schema_version===2?2:1) : [])) throw new Error("Development SLA event reused with different content");
     return;
   }
   const prior = await developmentSlaPlan(db, sourceId);
@@ -66,11 +75,18 @@ export async function captureDevelopmentSla(db: PoolClient, actor: TrustedActorC
   if(outputKind==='工艺布片')for(const node of plan.nodes)if(['development_sewing','development_sewing_transfer','development_pre_wash_check','development_washing','development_washing_dispatch','development_tail_check'].includes(node.id))node.applicable='no';
   calculateSlaPlan(plan);
   const revision = (prior?.revision ?? 0) + 1;
-  await db.query(`INSERT INTO digital_development_sla_plans(source_id,revision,configuration_id,rule_version,parameters_json,plan_json,route_nodes,created_by,business_time,reason,event_key)
-    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, [sourceId, revision, prior?.configuration_id ?? config!.configurationId, snapshot.ruleVersion,
-    JSON.stringify(snapshot.parameters), JSON.stringify(plan), document ? developmentSlaRoute(document,outputKind) : [], actor.actorId, JSON.stringify(time),
-    document ? "开发发布：保存本单适用路线，文员窗口从发布开始" : "新开发单：冻结初版标准，未发布日期保持未知", eventKey]);
-  if(!prior&&!document)await captureTechnicalEnrollment(db,actor.actorId,sourceId,eventKey);
+  const inherited=prior?.timeline_schema_version===2?await readInitialTimelineInput(db,{kind:'source',id:sourceId}):null;
+  if(prior?.timeline_schema_version&&!['1','2'].includes(String(prior.timeline_schema_version)))throw Error('此开发单采用版本不受当前程序支持');
+  const mode=inherited?'fixed_v2':prior?'legacy':newMode;
+  if(!prior&&!document&&mode==='fixed_v2')await captureTechnicalEnrollment(db,actor.actorId,sourceId,eventKey);
+  const initial=inherited??await freezeInitialTimelineInput(db,mode,{resource:{kind:'source',id:sourceId},creationEventRef:`audit_events:${eventKey}`,time,
+    unified:{configurationId:prior?.configuration_id??config!.configurationId,snapshotRef:`digital_development_sla_plans:${sourceId}:1`,values:snapshot}});
+  const values=[sourceId, revision, prior?.configuration_id ?? config!.configurationId, snapshot.ruleVersion,
+    JSON.stringify(snapshot.parameters), JSON.stringify(plan), document ? developmentSlaRoute(document,outputKind,initial?2:1) : [], actor.actorId, JSON.stringify(time),
+    document ? "开发发布：保存本单适用路线，文员窗口从发布开始" : "新开发单：冻结初版标准，未发布日期保持未知", eventKey];
+  await db.query(`INSERT INTO digital_development_sla_plans(source_id,revision,configuration_id,rule_version,parameters_json,plan_json,route_nodes,created_by,business_time,reason,event_key${initial?',timeline_schema_version,route_schema_version,initial_adoption_input':''})
+    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11${initial?',2,2,$12':''})`,[...values,...(initial?[JSON.stringify(initial)]:[])]);
+  if(!prior&&!document&&mode==='legacy')await captureTechnicalEnrollment(db,actor.actorId,sourceId,eventKey);
   if(document){
     const washing=snapshot.parameters.development_washing!.value,warning=snapshot.parameters.warning_ratio!.value;
     await captureTechnicalRound(db,actor.actorId,sourceId,1,time.now,'minutes' in washing?washing.minutes:1440,warning.kind==='ratio'?warning.percent/100:0.7);

@@ -1,3 +1,4 @@
+import {IndependentCraftField} from './independent-craft-field.js';
 import {ProductionReadinessPanel} from './production-readiness-panel.js';
 import {ShortLeadPanel} from './short-lead-panel.js';
 import {SeriesCreationPreview} from './series-creation-preview.js';
@@ -43,13 +44,14 @@ export function initialDevelopmentOrder(customers: DigitalCustomer[], source?: O
 }
 
 /** A facade over the existing source and order commands; no sample approval or route writes. */
-export function DevelopmentCreateForm({intent, source, customers, onCancel, onCreated, onIntentChange, existingDraft, minimumDate, serverToday, calendarSourceId, contained=false, cancelLabel="返回列表"}: {
-  contained?:boolean; intent: DevelopmentCreateIntent; source?: OrderJourney; existingDraft?: DevelopmentSheet; minimumDate?:string|undefined; serverToday?:string|undefined; calendarSourceId?:string|null; customers: DigitalCustomer[];
+export function DevelopmentCreateForm({intent, source, customers, onCancel, onCreated, onIntentChange, existingDraft, independentCraftsEnabled=false, minimumDate, serverToday, calendarSourceId, contained=false, cancelLabel="返回列表"}: {
+  independentCraftsEnabled?:boolean|undefined;contained?:boolean; intent: DevelopmentCreateIntent; source?: OrderJourney; existingDraft?: DevelopmentSheet; minimumDate?:string|undefined; serverToday?:string|undefined; calendarSourceId?:string|null; customers: DigitalCustomer[];
   onCancel: () => void; onCreated: (sourceId: string, orderId: string | null) => void; cancelLabel?:string;
   onIntentChange?: (intent: "development" | "certain_order") => void;
 }) {
   const formId=useId();
   const [form, setForm] = useState(() => existingDraft?.document?.customerOrderDraft?.order ?? {...initialDevelopmentOrder(customers, source),...(serverToday?{orderDate:serverToday}:{}),...(existingDraft?{customerCode:existingDraft.customerCode??"",designStyleNo:existingDraft.designStyleNo,temporaryStyleNo:existingDraft.temporaryStyleNo}:{} )});
+  const [fixedCraft,setFixedCraft]=useState(existingDraft?existingDraft.timelineSchemaVersion===2:independentCraftsEnabled);
   const [document,setDocument]=useState<DevelopmentDocument>(()=>existingDraft?.document?(existingDraft.status==="published"?existingDraft.document:{...editableDevelopmentDocument(existingDraft.document),orderDate:existingDraft.document.orderDate??existingDraft.developmentCreatedDate??null}):{...initialDevelopmentDocument(),orderDate:serverToday??null});
   const [sizeQuantityInputs,setSizeQuantityInputs]=useState(()=>developmentSizeQuantityInputs(document));
   const [quantityInput,setQuantityInput]=useState(()=>document.quantity===null?"":String(document.quantity));
@@ -240,7 +242,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
       let persistedDocument=document;
       if (!source) {
         const base = `sources/${id}/development`;
-        let sheet = await digitalRequest<DevelopmentSheet>(base);
+        let sheet = await digitalRequest<DevelopmentSheet>(base);setFixedCraft(sheet.timelineSchemaVersion===2);
         if(loadedVersion.current===null)loadedVersion.current=sheet.version;
         if (sheet.status !== "published") {
           if (!sheet.canEdit) throw new Error("当前没有修改开发单的权限");
@@ -338,7 +340,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
         <label>销售系列<select aria-label="销售系列" value={form.salesSeries??""} onChange={event=>setForm({...form,salesSeries:event.target.value?SalesSeriesSchema.parse(event.target.value):null})}><option value="">请选择系列</option>{SalesSeriesSchema.options.map(series=><option key={series} value={series}>{series} · {Number(series.slice(1))}月上架</option>)}</select></label>
         <label>辅料是否需要对色<select aria-label="辅料是否需要对色" value={form.requiresColorMatching===true?'yes':form.requiresColorMatching===false?'no':''} onChange={event=>setForm({...form,requiresColorMatching:event.target.value===''?null:event.target.value==='yes'})}><option value="">尚未确定</option><option value="yes">需要对色（A路线）</option><option value="no">无需对色（B路线）</option></select></label>
         <label>客户下单日期（必填）<input id="development-customer-order-date" aria-label="客户下单日期" required max={calendarToday} type="date" value={form.orderDate} onChange={event => setForm({...form, orderDate: event.target.value})}/></label>
-</>}<label>开发下单日期（固定）<input id="development-orderDate" aria-label="开发下单日期" readOnly value={document.orderDate??(published?"历史未登记":"保存后由服务器确定")}/></label><label>工艺<select aria-label="工艺" disabled={published} value={document.craft} onChange={event=>edit({craft:event.target.value as DevelopmentDocument["craft"]})}>{["无","印花","绣花","印绣花"].map(value=><option key={value}>{value}</option>)}</select></label></div></section>
+</>}<label>开发下单日期（固定）<input id="development-orderDate" aria-label="开发下单日期" readOnly value={document.orderDate??(published?"历史未登记":"保存后由服务器确定")}/></label>{fixedCraft?<IndependentCraftField label="工艺" value={document.craft} steps={document.craftSteps} readonly={published} disabled={busy} onChange={(craft,craftSteps)=>edit({craft,craftSteps})}/>:<label>工艺<select aria-label="工艺" disabled={published} value={document.craft} onChange={event=>edit({craft:event.target.value as DevelopmentDocument["craft"]})}>{["无","印花","绣花","印绣花"].map(value=><option key={value}>{value}</option>)}</select></label>}</div></section>
     {withOrder && <section className="development-create-card development-create-details"><h3>2 · 客户订单明细 <small>默认主跟单：{customers.find(customer=>customer.code===form.customerCode)?.defaultMerchandiserName??"未配置，待主管指派"}</small></h3>
       {!sharedPoColumns&&<p className="development-legacy-po-note">本草稿各 PO 原尺码不同，按原行保留；修改尺码只影响该 PO，订购数量不会并入其它尺码。</p>}
       <div className="development-table-scroll" role="region" aria-label="PO 明细，可左右滑动查看全部列" tabIndex={0}>
@@ -367,7 +369,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
     {!source&&<div className="development-editor dx-doc-development">
       <DocumentErrors issues={issues}/>
       {pictures.filter(picture=>picture.error).map(picture=><p key={picture.id} role="alert">{picture.file.name}：{picture.error}</p>)}
-      <DevelopmentDocumentFields sectionStart={withOrder?3:2} basicDetailsExternal uploadHelp="选择后可预览，保存草稿或发布时上传；失败资料仍保留。" document={document} edit={edit} readonly={published} busy={busy} writing={writing} sizeQuantityInputs={sizeQuantityInputs} setSizeQuantityInputs={setSizeQuantityInputs} quantityInput={quantityInput} setQuantityInput={setQuantityInput} measurementIds={measurementIds} successfulUploads={successfulUploads} fileIdentity={id=>{const picture=picturesRef.current.find(picture=>picture.id===id||picture.attachmentId===id);return picture?{filename:picture.file.name,mimeType:picture.file.type,sizeBytes:picture.file.size}:undefined;}} metadataPath={id=>createdSource&&!picturesRef.current.some(picture=>picture.id===id&&!picture.attachmentId)?`sources/${createdSource}/development/attachments/${id}/metadata`:undefined} imageUrl={id=>picturesRef.current.find(picture=>picture.id===id||picture.attachmentId===id)?.preview??createWebUrls(import.meta.env.BASE_URL).apiUrl(`digital-production/sources/${createdSource}/development/attachments/${id}`)} upload={selectPictures} fileKind={fileKind} setFileKind={setFileKind} issue={id=>issues.find(value=>value.id===id)?.message} patternSection={!published&&existingDraft?.revisionSource?.outputKind!=='工艺布片'?<div id="development-pattern-preparation"><DevelopmentPatternLink busy={busy} preparing selectedCategoryId={document.patternCategoryId??""} onCategoryChange={categoryId=>edit({patternCategoryId:categoryId||null})} onSelection={setPatternChoice}/></div>:null}/>
+      <DevelopmentDocumentFields fixedCraft={fixedCraft} sectionStart={withOrder?3:2} basicDetailsExternal uploadHelp="选择后可预览，保存草稿或发布时上传；失败资料仍保留。" document={document} edit={edit} readonly={published} busy={busy} writing={writing} sizeQuantityInputs={sizeQuantityInputs} setSizeQuantityInputs={setSizeQuantityInputs} quantityInput={quantityInput} setQuantityInput={setQuantityInput} measurementIds={measurementIds} successfulUploads={successfulUploads} fileIdentity={id=>{const picture=picturesRef.current.find(picture=>picture.id===id||picture.attachmentId===id);return picture?{filename:picture.file.name,mimeType:picture.file.type,sizeBytes:picture.file.size}:undefined;}} metadataPath={id=>createdSource&&!picturesRef.current.some(picture=>picture.id===id&&!picture.attachmentId)?`sources/${createdSource}/development/attachments/${id}/metadata`:undefined} imageUrl={id=>picturesRef.current.find(picture=>picture.id===id||picture.attachmentId===id)?.preview??createWebUrls(import.meta.env.BASE_URL).apiUrl(`digital-production/sources/${createdSource}/development/attachments/${id}`)} upload={selectPictures} fileKind={fileKind} setFileKind={setFileKind} issue={id=>issues.find(value=>value.id===id)?.message} patternSection={!published&&existingDraft?.revisionSource?.outputKind!=='工艺布片'?<div id="development-pattern-preparation"><DevelopmentPatternLink busy={busy} preparing selectedCategoryId={document.patternCategoryId??""} onCategoryChange={categoryId=>edit({patternCategoryId:categoryId||null})} onSelection={setPatternChoice}/></div>:null}/>
     </div>}
     </fieldset>
     {withOrder&&<SeriesCreationPreview customerCode={form.customerCode} salesYear={form.salesYear??null} salesSeries={form.salesSeries??null} requiresColorMatching={form.requiresColorMatching??null}/>}

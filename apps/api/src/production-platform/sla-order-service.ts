@@ -27,6 +27,8 @@ import { developmentDocumentRow } from "./development-round-repository.js";
 import { developmentSlaPlan } from "./development-sla-enrollment.js";
 import { developmentEvaluationPlan, developmentNativeFacts, developmentSlaEvidence } from "./development-sla-evidence.js";
 import { applyOrderCreationEvidence, orderCreationSlaEvidence } from "./sla-order-evidence.js";
+import {newTimelineAdoptionMode} from './fixed-timeline-mode.js';
+import {freezeInitialTimelineInput,readInitialTimelineInput} from './fixed-timeline-initial-input.js';
 
 /** Creation and reads reuse order authorization; there is no generic event/date edit endpoint. */
 export class SlaOrderService {
@@ -77,8 +79,16 @@ export class SlaOrderService {
         ? structuredClone(originalNodes.get(node.id)) as typeof node : node);
       Object.assign(plan.anchors, sourcePlan.plan_json.anchors);
     }
+    // A formal order continuing an already adopted source retains that source's
+    // frozen rule; stopping new adoption must not turn its two real steps into
+    // a legacy combined route. Independent new orders still follow the switch.
+    const inheritedInput=order.source_id?await readInitialTimelineInput(client,{kind:'source',id:order.source_id}):null;
+    const initialMode=inheritedInput?'fixed_v2':newTimelineAdoptionMode(this.database);
+    const initial=initialMode==='fixed_v2'?await freezeInitialTimelineInput(client,initialMode,{resource:{kind:'order',id:orderId},creationEventRef:`audit_events:${creationEventId}`,time,
+      unified:{configurationId:sourcePlan?.configuration_id??config!.configurationId,snapshotRef:snapshot.snapshotId,values:snapshot.snapshot}},
+      inheritedInput):null;
     await plans.appendPlan({ orderId, expectedRevision: 0, snapshotId: snapshot.snapshotId, plan, time, actorId: actor.actorId,
-      reason: "新订单保存全链首版计划；未有依据的日期保持未知", requestKey: randomUUID() });
+      reason: "新订单保存全链首版计划；未有依据的日期保持未知", requestKey: randomUUID(),...(initial?{initialAdoptionInput:initial}:{}) });
     await new ShipSampleService(this.database).ensureWithClient(client,actor,orderId);
     // Actual creation/confirmation is read from the original audit event, not copied three times.
     // Development evidence is retained on its original source/round, never copied as newly performed work.
@@ -154,7 +164,7 @@ export class SlaOrderService {
         }
       }
       const bulkPlan=bulkEvaluationPlan(current.plan,preshrink,facts);
-      const evaluationPlan = reworkEvaluationPlan(developmentEvaluationPlan(factory?factoryEvaluationPlan(bulkPlan,factory.craftKey):bulkPlan, facts),rework.facts);
+      const evaluationPlan = reworkEvaluationPlan(developmentEvaluationPlan(factory?factoryEvaluationPlan(bulkPlan,factory.craftKey,'craftSteps'in factory?factory.craftSteps:undefined):bulkPlan, facts),rework.facts);
       const evaluated=evaluateSlaPlan(evaluationPlan,facts,time,options);
       // Display-only ranges must not enter strict before/after business comparisons.
       const nodes=options.mode==='read_projection'?attachFactoryLogisticsRanges(evaluated,evaluationPlan,

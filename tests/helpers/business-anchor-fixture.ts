@@ -1,3 +1,4 @@
+import type {CraftStepChoice} from '@dx-rework/contracts/digital-craft';
 import {productionReadinessFixture,completeBulkRangeFixture} from './production-readiness-fixture.js';
 import {customerQuotationFixture} from './customer-quotation-fixture.js';
 import {execFile} from 'node:child_process';
@@ -83,7 +84,7 @@ export async function businessAnchorFixture(url:string,options?:{throughVersion?
    }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
   };
   const advance=async(id:string,at:string)=>runtime.run(id,root,async()=>{const row=await runtime.repository.row(id);await runtime.repository.change(id,root.actorId,{expectedVersion:row.version,requestKey:randomUUID(),at});});
-  const bulkReady=async(secondaryCraft:'无'|'印花'|'绣花'|'印绣花',beforeCreate?:(input:Parameters<SourcingService['createCase']>[1],key:string,primary:TrustedActorContext)=>Promise<void>,poCount=1,sourcingCommands=sourcing,options?:{stopBeforeCompletion?:boolean;cuttingProcess?:'in_house'|'outsourced';accessory?:boolean;quantity?:number;primaryActor?:TrustedActorContext;designerActor?:TrustedActorContext;stylePrefix?:string})=>{
+  const bulkReady=async(secondaryCraft:'无'|'印花'|'绣花'|'印绣花',beforeCreate?:(input:Parameters<SourcingService['createCase']>[1],key:string,primary:TrustedActorContext)=>Promise<void>,poCount=1,sourcingCommands=sourcing,options?:{stopBeforeCompletion?:boolean;cuttingProcess?:'in_house'|'outsourced';accessory?:boolean;quantity?:number;primaryActor?:TrustedActorContext;designerActor?:TrustedActorContext;stylePrefix?:string;craftSteps?:CraftStepChoice[]})=>{
    const designer=options?.designerActor??people['sample-designer']!,primary=options?.primaryActor??people.merchandiser!,manager=people['production-management']!,owner=people.owner!,ie=people.ie!;
    const identity=new DigitalProductionIdentityService(db,true),forms=new DigitalDevelopmentService(db,true),bulk=new BulkPreparationService(db),instruction=new ProductionInstructionService(db,true),budget=new DigitalBudgetService(db,true);
    const style=`${options?.stylePrefix??'TEST-ANCHOR-'}${randomUUID()}`;
@@ -96,7 +97,7 @@ export async function businessAnchorFixture(url:string,options?:{throughVersion?
    // Development completion is a fixture precondition; the production path below uses native commands.
    await db.query("INSERT INTO digital_development_route_facts(fact_id,source_id,route_version,kind,payload,actor_id) VALUES($1,$2,1,'最终设计确认','{}',$3)",[randomUUID(),source.sourceId,designer.actorId]);
    // This clock fixture performs a real warehouse preshrink action below; request it explicitly.
-   const current=await identity.read(primary,id),instructionDoc={...initialInstruction(),...(options?.accessory?{accessories:[{id:randomUUID(),group:'车缝' as const,garmentColors:'黑',materialColor:'黑',name:'TEST纽扣',category:'扣',part:'门襟',specification:'TEST',consumption:'1',remarks:''}]}:{}),styleName:'TEST产前',secondaryCraft,category:'上衣',date:beijingCalendarDate(businessNow()),preshrink:'需要预缩' as const,sizes:['M'],measurements:[{id:randomUUID(),name:'袖长',tolerance:'±1/4',method:'平量',values:['6']}],images:[{attachmentId:photo,kind:'款图' as const,description:'TEST'}]};
+   const current=await identity.read(primary,id),instructionDoc={...initialInstruction(),...(options?.accessory?{accessories:[{id:randomUUID(),group:'车缝' as const,garmentColors:'黑',materialColor:'黑',name:'TEST纽扣',category:'扣',part:'门襟',specification:'TEST',consumption:'1',remarks:''}]}:{}),styleName:'TEST产前',secondaryCraft,...(options?.craftSteps?{craftSteps:options.craftSteps}:{}),category:'上衣',date:beijingCalendarDate(businessNow()),preshrink:'需要预缩' as const,sizes:['M'],measurements:[{id:randomUUID(),name:'袖长',tolerance:'±1/4',method:'平量',values:['6']}],images:[{attachmentId:photo,kind:'款图' as const,description:'TEST'}]};
    await instruction.save(primary,id,{expectedVersion:0,orderVersion:current.version,sourceRound:1,document:instructionDoc},randomUUID());const readyBasis=await productionReadinessFixture(db,root,id,people['pattern-room-worker']!.actorId,people.warehouse!);await instruction.publish(primary,id,{expectedVersion:1,orderVersion:current.version,expectedReadinessRevision:readyBasis.revision},randomUUID());
    await bulk.dispatch(manager,id,{expectedVersion:0,patternWorkerId:people['pattern-room-worker']!.actorId,warehouseWorkerId:people.warehouse!.actorId,cuttingWorkerId:people['cutting-worker']!.actorId,deliverPattern:false},randomUUID());
    await customerQuotationFixture(db,root,id);

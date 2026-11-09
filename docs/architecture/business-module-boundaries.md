@@ -2,6 +2,14 @@
 
 本文只记录已经接入的代码边界，作为后续相关改动的入口；业务决定仍以领域规范和最新批准为准。不增加独立架构门禁。
 
+## 固定目标与独立工艺（供应链总看板 PR02）
+
+`fixed-timeline-initial-input.ts` 在原来源/母单创建事务冻结标准身份；`fixed-development-adoption.ts`、`fixed-order-adoption.ts` 由原发布/产前准备事务保存实际范围、顺序和不可变输入。原服务继续拥有授权、锁、命令、幂等及提交，reader 不补写历史。默认 `legacy`；已采用 v2 按自身版本读写，关闭新采用不能改变其语义。官方安装环境的启用接线留六项集成完成时处理，本 PR 不启用现场。
+
+`fixed-timeline-targets.ts` 只按传入冻结 DAG 和节点日历倒排。`fixed-timeline-adoptions.ts` 接入原有界事实 worker：先重建原 B0，再顺序回放真实批准且值改变的该 PO 客户交期。失败留原重试状态，不回滚已提交办理。`fixed-order-route.ts` 留存后续真实制单范围，`fixed-order-route-targets.ts` 仅为新增工作沿原交接约束分配目标，不重排旧 B。规划时长和独立责任标准分别保存；未知不推成零。
+
+`fixed-task-route.ts`／`fixed-craft-steps.ts` 保存真实任务位置和工艺身份，`fixed-craft-timing.ts` 用原生前置与首个可信就绪事件计时。`factory-step-ledger.ts` 复用原不可变收发事实；下一道消费前道有效合格回仓，同件不重复计数。`fixed-factory-dispatch.ts` 在原底层发厂写入口再次核末道范围；表层隐藏按钮不能替代数量、质检和权限守卫。原 legacy 路线、RR 读取、私有附件以及分页/统计保持原职责。
+
 ## 附件复制
 
 `tools/attachments.ts` 的 `copyDigitalBudgetImage` 负责预算来源、版本、操作者映射、订单事务与审计。只有未尝试提交且确认回滚的新对象可以清理；提交结果未知时不得删除。副本重试的私有对象核验在提交和释放连接之后执行，失败不自动修历史附件。原件、私有缩略图及生成后的最后鉴权由原附件入口负责。
