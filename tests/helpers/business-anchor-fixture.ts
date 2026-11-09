@@ -83,7 +83,7 @@ export async function businessAnchorFixture(url:string,options?:{throughVersion?
    }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
   };
   const advance=async(id:string,at:string)=>runtime.run(id,root,async()=>{const row=await runtime.repository.row(id);await runtime.repository.change(id,root.actorId,{expectedVersion:row.version,requestKey:randomUUID(),at});});
-  const bulkReady=async(secondaryCraft:'无'|'印花'|'绣花'|'印绣花',beforeCreate?:(input:Parameters<SourcingService['createCase']>[1],key:string,primary:TrustedActorContext)=>Promise<void>,poCount=1,sourcingCommands=sourcing,options?:{stopBeforeCompletion?:boolean;accessory?:boolean;quantity?:number;primaryActor?:TrustedActorContext;designerActor?:TrustedActorContext;stylePrefix?:string})=>{
+  const bulkReady=async(secondaryCraft:'无'|'印花'|'绣花'|'印绣花',beforeCreate?:(input:Parameters<SourcingService['createCase']>[1],key:string,primary:TrustedActorContext)=>Promise<void>,poCount=1,sourcingCommands=sourcing,options?:{stopBeforeCompletion?:boolean;cuttingProcess?:'in_house'|'outsourced';accessory?:boolean;quantity?:number;primaryActor?:TrustedActorContext;designerActor?:TrustedActorContext;stylePrefix?:string})=>{
    const designer=options?.designerActor??people['sample-designer']!,primary=options?.primaryActor??people.merchandiser!,manager=people['production-management']!,owner=people.owner!,ie=people.ie!;
    const identity=new DigitalProductionIdentityService(db,true),forms=new DigitalDevelopmentService(db,true),bulk=new BulkPreparationService(db),instruction=new ProductionInstructionService(db,true),budget=new DigitalBudgetService(db,true);
    const style=`${options?.stylePrefix??'TEST-ANCHOR-'}${randomUUID()}`;
@@ -106,7 +106,7 @@ export async function businessAnchorFixture(url:string,options?:{throughVersion?
    const input={gender:prepared.gender,styleName:prepared.styleName,deliveryDate:'2026-12-10',estimatedCutPieceSendDate:'2026-11-01',daxingUnitPrice:prepared.daxingUnitPrice,attachmentIds:prepared.images.map(i=>i.attachmentId),lineItems:prepared.lineItems.map(({lineId,styleNo,alternateStyleNo,color,quantity})=>({lineId,styleNo,alternateStyleNo,color,quantity,factoryDeliveryDate:'2026-12-10'})),digitalBudget:{productionOrderId:id,budgetVersion:prepared.budgetVersion,orderVersion:prepared.orderVersion}};
    const key=randomUUID();await beforeCreate?.(input,key,primary);
    const created=await sourcingCommands.createCase(primary,input,key),caseId=created.value.sourcingCaseId;
-   const prices=input.lineItems.map((_,index)=>({position:index+1,unitPrice:'5'}));await sourcingCommands.quoteIePrice(ie,caseId,{linePrices:prices},randomUUID());await sourcingCommands.recordManagementDecision(manager,caseId,{supplierId:supplier.supplierId,craftIds:[craft.craftId],linePrices:prices,cuttingProcess:'in_house'},randomUUID());
+   const prices=input.lineItems.map((_,index)=>({position:index+1,unitPrice:'5'}));await sourcingCommands.quoteIePrice(ie,caseId,{linePrices:prices},randomUUID());await sourcingCommands.recordManagementDecision(manager,caseId,{supplierId:supplier.supplierId,craftIds:[craft.craftId],linePrices:prices,cuttingProcess:options?.cuttingProcess??'in_house'},randomUUID());
    await sourcingCommands.decideOwner(owner,caseId,{decision:'approved'},randomUUID());
    // The final customer/size prerequisites were established before final publication above.
    await bulk.dispatch(people['development-clerk']!,id,{expectedVersion:1,patternWorkerId:people['pattern-room-worker']!.actorId,deliverPattern:true},randomUUID());

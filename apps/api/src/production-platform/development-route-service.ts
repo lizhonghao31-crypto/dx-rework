@@ -98,10 +98,11 @@ export class DevelopmentRouteService {
  async releaseSewing(db:PoolClient,actor:TrustedActorContext,sourceId:string){
    const sheet=await new DigitalDevelopmentService(this.database,true).read(actor,sourceId,db);
    const roundNumber=sheet.roundNumber??1;
-   const tasks=(await db.query("SELECT t.task_id,t.state,a.task_kind FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND a.task_kind IN ('development_pattern','development_cutting','development_sewing') AND t.state IN ('pending','ready','blocked') AND t.route_version=$2",[sourceId,roundNumber])).rows;
+   const tasks=(await db.query("SELECT t.task_id,t.state,a.task_kind FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND a.task_kind IN ('development_pattern','development_cutting','development_sewing','development_sewing_transfer') AND t.state IN ('pending','ready','blocked') AND t.route_version=$2",[sourceId,roundNumber])).rows;
    if(!tasks.length)return;
    const readiness=await materialReadiness(db,sourceId,roundNumber),service=new DigitalProductionTaskService(this.database);
    for(const task of tasks){
+     if(task.task_kind==='development_sewing_transfer'){await service.refreshNativeReadinessWithClient(db,actor,task.task_id);continue;}
      // Older unfinished cutting tasks did not contain this gate. Add a condition
      // only to the affected current task; completed history is never rewritten.
      await db.query("INSERT INTO digital_production_task_conditions(task_id,condition_key,stage) VALUES($1,'materials_ready','activation') ON CONFLICT DO NOTHING",[task.task_id]);

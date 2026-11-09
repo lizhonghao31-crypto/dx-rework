@@ -61,6 +61,7 @@ export class DevelopmentTechnicalService {
    if(prior&&prior.payload_hash!==hash)conflict('原操作标识不能用于不同内容');
    const result=prior?prior.response as T:await work(db);
    if(!prior&&['artifact','comment','review','preparation-basis'].includes(kind))await new BulkPreparationService(this.database).syncSource(db,actor,sourceId);
+   if(!prior&&kind==='material-decision')await new BulkPreparationService(this.database).refreshSourceCuttingReadiness(db,actor,sourceId);
    if(!prior)await db.query('INSERT INTO digital_production_commands(actor_id,command,key,payload_hash,response) VALUES($1,$2,$3,$4,$5)',[actor.actorId,command,key,hash,JSON.stringify(result)]);
    await db.query('COMMIT');return result;
   }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}

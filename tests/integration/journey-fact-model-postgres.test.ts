@@ -15,6 +15,10 @@ import {readJourneySelections} from '../../apps/api/src/production-platform/jour
 import {selectJourneySelections,selectJourneys} from '../../apps/api/src/production-platform/journey-projection.js';
 import {JOURNEY_NODES,JourneyFilterSchema} from '@dx-rework/contracts/digital-production-journey';
 import {JourneyFactUpdates} from '../../apps/api/src/production-platform/journey-fact-updates.js';
+import {DigitalProductionTaskService} from '../../apps/api/src/production-platform/task-service.js';
+import {OrderClosureService} from '../../apps/api/src/production-platform/order-closure-service.js';
+import {nativeTaskReadiness} from '../../apps/api/src/production-platform/task-readiness-facts.js';
+import {FactoryFlowService} from '../../apps/api/src/production-platform/factory-flow-service.js';
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (url?describe.sequential:describe.skip)('PERF01 original single-mother facts in owned PostgreSQL',()=>{
@@ -258,5 +262,54 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await new JourneyFactUpdates(f.db,repo).runOnce();expect(builds.mock.calls.map(call=>call[0].id)).toEqual([target]);
   }finally{await repo.buildOne({kind:'order',id:target});}
   expect((await query.list(f.root,filter)).total).toBe(31);
+ }));
+ it('P01 captures native cutting-gate readiness once and cancellation keeps its real business termination',async()=>{
+  const ownScene=await f.scene('2026-11-09T08:00:00.123Z');
+  const ready=await f.runtime.run(ownScene,f.root,()=>f.bulkReady('无'));
+  const ids=(await f.db.query("SELECT a.task_id FROM digital_production_task_access a WHERE a.production_order_id=$1 AND a.task_kind IN ('bulk_cutting','bulk_cutting_external')",[ready.id])).rows.map(row=>row.task_id as string);
+  expect(ids).toHaveLength(1);
+  const initial=(await nativeTaskReadiness(f.db,ids)).get(ids[0]!)!;
+  expect(initial).toMatchObject({tracked:true,firstReadyAt:'2026-11-09T08:00:00.123Z',quality:'现场登记'});expect(initial.basis).not.toHaveLength(0);
+  const taskService=new DigitalProductionTaskService(f.db);
+  await f.advance(ownScene,'2026-11-09T10:00:00.456Z');
+  await f.runtime.run(ownScene,f.root,()=>taskService.controlResource(f.root,{kind:'order',id:ready.id},'cancel','TEST original cancellation, not delivery',randomUUID()));
+  const first=await f.runtime.run(ownScene,f.root,()=>repo.buildOne({kind:'order',id:ready.id}));
+  expect(first.model).toMatchObject({cancelled:true,closedAt:null,termination:{kind:'cancelled',at:'2026-11-09T10:00:00.456Z',precision:'instant',scopeRef:`order:${ready.id}`}});
+  expect(first.model.nativeReadiness).toContainEqual(initial);
+  await f.advance(ownScene,'2026-11-29T10:00:00.456Z');
+  const later=await f.runtime.run(ownScene,f.root,()=>repo.buildOne({kind:'order',id:ready.id}));
+  expect(later.model.termination).toEqual(first.model.termination);
+  expect((await nativeTaskReadiness(f.db,ids)).get(ids[0]!)).toEqual(initial);
+ });
+ it('P01 special closure records scoped BusinessTime and does not turn outstanding work into delivery A',async()=>{
+  const ownScene=await f.scene('2026-11-09T08:00:00.789Z');
+  await f.runtime.run(ownScene,f.root,async()=>{
+   const ready=await f.bulkReady('无'),closure=new OrderClosureService(f.db);
+   const cut=(await f.db.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[ready.caseId])).rows[0];
+   const cutter={...f.people['cutting-worker']!,authorizationCapability:'cutting:records:create',authorizationCapabilities:['cutting:records:create']};
+   await ready.cutting.record(cutter,cut.cutting_order_id,{pieceCount:1,actualCutCount:10,attachmentIds:[await f.image(cutter)]},randomUUID());
+   const flow=new FactoryFlowService(f.db),state=await flow.read(f.root,ready.id);
+   await flow.dispatch(f.people.warehouse!,ready.id,{expectedRevision:state.revision,occurredAt:'2026-11-09T08:00:00.789Z',supplierId:f.supplierId,note:'TEST original dispatch enters production'},randomUUID());
+   const before=await closure.read(f.root,ready.id);
+   expect(before.canClose).toBe(true);
+   const closed=await closure.close(f.root,ready.id,{expectedRevision:before.revision,reason:'TEST administrative termination preserves outstanding quantities'},randomUUID());
+   expect(closed.closed?.closedAt).toBe('2026-11-09T08:00:00.789Z');
+   const model=(await repo.buildOne({kind:'order',id:ready.id})).model;
+   expect(model.termination).toMatchObject({kind:'special_closure',at:'2026-11-09T08:00:00.789Z',scopeRef:`order:${ready.id}`});
+   expect(model.quantities!.lines.some(line=>line.packed===null||line.packed<line.demand!)).toBe(true);
+   expect(model.nodes.find(node=>node.key==='packing')?.state).not.toBe('completed');
+   expect(model.factoryTimeline).toHaveLength(1);
+   expect(model.factoryTimeline![0]).toMatchObject({factoryDecisionId:null,quantity:10,dispatchedAt:'2026-11-09T08:00:00.789Z',completedDate:null,completionTransitionRef:null});
+   expect(model.factoryTimeline![0]!.startTransitionRef).toMatch(/^sourcing_production_transitions:/);
+  });
+ });
+ it('P01 native cut references preserve separate PO identities within one style',()=>run(async()=>{
+  const ready=await f.bulkReady('无',undefined,2),model=(await repo.buildOne({kind:'order',id:ready.id})).model;
+  const original=(await f.db.query(`SELECT c.cutting_order_id,c.sourcing_line_position,c.approval_snapshot_id,l.line_id
+   FROM cutting_orders c JOIN digital_production_child_lines l ON l.module='sourcing' AND l.child_id=c.sourcing_case_id AND l.child_line_key=c.sourcing_line_position::text
+   WHERE c.sourcing_case_id=$1 ORDER BY c.sourcing_line_position`,[ready.caseId])).rows;
+  expect(original).toHaveLength(2);expect(new Set(original.map(row=>row.cutting_order_id)).size).toBe(2);
+  expect(model.cutScopes).toEqual(original.map(row=>({lineId:row.line_id,status:'verified',cuts:[{cuttingOrderId:row.cutting_order_id,sourcingCaseId:ready.caseId,
+   sourcingLinePosition:row.sourcing_line_position,approvalSnapshotId:row.approval_snapshot_id,sourceLineId:row.line_id}]})));
  }));
 });

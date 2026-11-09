@@ -8,7 +8,7 @@ import {seriesPlanJourney} from './series-plan-journey.js';
 import type {BusinessTime,BusinessTimeScope} from '@dx-rework/domain/business-clock';
 import {readJourneySupervision} from "./journey-supervision.js";
 import {assertBusinessClocksUnchanged,ContextBusinessClock,businessScopeKey} from '../acceptance-clock/business-time.js';
-import {factoryProductionFacts,factoryProductionCompletion} from './factory-production-facts.js';
+import {factoryProductionFacts,factoryProductionCompletion,nativeFactoryTimeline} from './factory-production-facts.js';
 import {shipSampleFacts} from './ship-sample-facts.js';
 import {developmentReadTables} from "./development-amendment-repository.js";
 import {digitalConditionGuidance} from "@dx-rework/contracts/digital-production-tasks";
@@ -49,6 +49,9 @@ import {journeyBusinessDates} from './journey-progress-dates.js';
 import {journeyVisualProgress} from './journey-visual-progress.js';
 import {journeyNodeFactTarget,mergeJourneyNodeFact} from './journey-node-fact.js';
 import {minimalJourneyFacts,type JourneyFactModel} from './journey-fact-model.js';
+import {nativeTaskReadiness,nativeCuttingReadiness} from './task-readiness-facts.js';
+import {journeyTermination} from './journey-termination.js';
+import {journeyCutScopes} from './journey-cut-scopes.js';
 import type {JourneyTimingInputs} from './journey-supervision.js';
 import {journeySelectionFacts,journeySelectionNodes,type JourneySelectionFacts,type JourneySelectionTask} from './journey-selection-facts.js';
 import {journeyObservedDay,journeyPlanDateOverdue,journeyTaskTimeRisks,journeyTaskDeadlineExclusive} from './journey-risk-clock.js';
@@ -328,7 +331,12 @@ export class DigitalJourneyQuery {
       selection.facts.frames=compiled.frames;selection.expiresAt=compiled.expiresAt;
       captureSelection(selection);
     }
-    return minimalJourneyFacts(item,timing,tasks,dependencies);
+    const readiness=await nativeTaskReadiness(db,ids);
+    const termination=await journeyTermination(db,resource,time.now);
+    const cutScopes=resource.kind==='order'?await journeyCutScopes(db,resource.id):[];
+    const factoryTimeline=resource.kind==='order'?await nativeFactoryTimeline(db,resource.id):[];
+    const cuttingReadiness=await nativeCuttingReadiness(db,ids);
+    return minimalJourneyFacts(item,timing,tasks,dependencies,{readiness:[...readiness.values()],cuttingReadiness,termination,cutScopes,factoryTimeline});
   }
   private async project(db:PoolClient,actor:TrustedActorContext|null,row:Candidate,asOf:string,selectedRound?:number,summaryOnly=false,patternKinds:string[]|null=null,compact=false,supervision=false,capture?:FactCapture):Promise<OrderJourney|null> {
     const policy=new DigitalProductionAccessPolicy(db),source=row.source,order=row.order;

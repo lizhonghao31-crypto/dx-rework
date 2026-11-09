@@ -10,6 +10,8 @@ import {nodeMaterialsFixture,nodeMaterialsFootprint} from '../helpers/node-mater
 import {registerOrderClosureRoutes} from '../../apps/api/src/production-platform/order-closure-routes.js';
 import {OrderClosureService} from '../../apps/api/src/production-platform/order-closure-service.js';
 import {DigitalProductionTaskService} from '../../apps/api/src/production-platform/task-service.js';
+import {nativeTaskReadiness,nativeCuttingReadiness} from '../../apps/api/src/production-platform/task-readiness-facts.js';
+import {JourneyFactRepository} from '../../apps/api/src/production-platform/journey-fact-repository.js';
 import {DevelopmentExecutionService} from '../../apps/api/src/production-platform/development-execution-service.js';
 import {DevelopmentTechnicalService} from '../../apps/api/src/production-platform/development-technical-service.js';
 import {SlaOrderApplicationService} from '../../apps/api/src/production-platform/sla-order-application.js';
@@ -63,6 +65,100 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   return service.record(kind==='material_investment'?p.primary:p.warehouse,resource,{kind,scopeRef:'whole',expectedVersion:prior?.version??0,state,occurredAt:state==='unknown'?null:businessNow().toISOString(),note:'TEST actual native material record',quantities:kind==='material_investment'?[{lineId:null,materialId:p.document.materials[0]!.materialId,name:'TEST棉布',quantity:100,unit:'米'}]:[],evidenceIds:[],sourceDocumentVersion:null,recipientId:null},randomUUID());
  };
  const order=async(p:Awaited<ReturnType<typeof setup>>)=>identity.createOrder(p.designer,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:p.style,orderDate:beijingCalendarDate(businessNow()),primaryMerchandiserId:p.primary.actorId,lines:[{formalPoNo:`TEST-${randomUUID()}`,color:'黑',customerWarehouseArrivalDate:'2027-08-15',sizes:[{size:'M',quantity:10}]}]}),randomUUID(),p.sourceId);
+ for(const external of [false,true])it(`P01 records each PO cutting gate only after its actual labels and retains earlier PO readiness (${external?'external':'internal'})`,async()=>{
+  const scene=await f.scene('2026-11-09T08:00:00.000Z'),run=<T,>(action:()=>Promise<T>)=>f.runtime.run(scene,f.root,action);
+  const ready=await run(async()=>{
+   const ready=await f.bulkReady('无',undefined,2,f.sourcing,{stopBeforeCompletion:true,cuttingProcess:external?'outsourced':'in_house'}),resource={kind:'order' as const,id:ready.id},state=await service.read(f.root,resource),prior=state.facts.find(f=>f.kind==='style_label_ready')!;
+   await service.record(f.people.warehouse!,resource,{kind:'style_label_ready',scopeRef:'whole',expectedVersion:prior.version,state:'ready',occurredAt:businessNow().toISOString(),note:'TEST first PO10/10; second PO9/10',quantities:state.lines.map((line,i)=>({lineId:line.lineId,materialId:null,name:'TEST款号唛',quantity:i?9:10,unit:'枚'})),evidenceIds:[],sourceDocumentVersion:null,recipientId:null},randomUUID());
+   for(const kind of ['纸样完成','唛架完成','预缩完成'] as const)await completeBulkRangeFixture(f.db,kind==='预缩完成'?f.people.warehouse!:f.people['pattern-room-worker']!,ready.id,ready.preparationId,kind);
+   return {...ready,lines:state.lines};
+  });
+  const task=(await f.db.query("SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.production_order_id=$1 AND a.task_kind=$2",[ready.id,external?'bulk_cutting_external':'bulk_cutting'])).rows[0];
+  const first=await nativeCuttingReadiness(f.db,[task.task_id]);
+  expect(first).toHaveLength(1);expect(first[0]).toMatchObject({lineId:ready.lines[0]!.lineId,firstReadyAt:'2026-11-09T08:00:00.000Z'});
+  expect((await nativeTaskReadiness(f.db,[task.task_id])).get(task.task_id)?.firstReadyAt).toBeNull();
+  await f.advance(scene,'2026-11-09T09:00:00.000Z');
+  await run(async()=>{
+   const principal=external?ready.primary:f.people['cutting-worker']!;
+   const capabilities=(await f.db.query('SELECT DISTINCT capability FROM user_role_assignments a JOIN role_capabilities c USING(role_code) JOIN business_roles role USING(role_code) WHERE a.user_id=$1 AND a.revoked_at IS NULL AND role.enabled',[principal.actorId])).rows.map(row=>row.capability as string);
+   const cutter={...principal,authorizationCapability:'cutting:records:create',authorizationCapabilities:capabilities};
+   await ready.cutting.record(cutter,first[0]!.cuttingOrderId,{pieceCount:1,actualCutCount:10,attachmentIds:[await f.image(cutter)]},randomUUID());
+  });
+  await f.advance(scene,'2026-11-09T12:00:00.000Z');
+  await run(async()=>{
+   const resource={kind:'order' as const,id:ready.id},state=await service.read(f.root,resource),prior=state.facts.find(f=>f.kind==='style_label_ready')!;
+   await service.record(f.people.warehouse!,resource,{kind:'style_label_ready',scopeRef:'whole',expectedVersion:prior.version,state:'ready',occurredAt:businessNow().toISOString(),note:'TEST second PO physical labels now10/10',quantities:state.lines.map(line=>({lineId:line.lineId,materialId:null,name:'TEST款号唛',quantity:10,unit:'枚'})),evidenceIds:[],sourceDocumentVersion:null,recipientId:null},randomUUID());
+  });
+  const final=await nativeCuttingReadiness(f.db,[task.task_id]);
+  expect(final).toHaveLength(2);expect(final.find(f=>f.lineId===ready.lines[0]!.lineId)).toEqual(first[0]);
+  expect(final.find(f=>f.lineId===ready.lines[1]!.lineId)?.firstReadyAt).toBe('2026-11-09T12:00:00.000Z');
+  expect((await nativeTaskReadiness(f.db,[task.task_id])).get(task.task_id)?.firstReadyAt).toBe('2026-11-09T12:00:00.000Z');
+  await run(()=>new DigitalJourneyQuery(f.db).read(f.root,ready.id,undefined,true));
+  expect(await nativeCuttingReadiness(f.db,[task.task_id])).toEqual(final);
+  const model=await run(()=>new JourneyFactRepository(f.db).buildOne({kind:'order',id:ready.id}));
+  expect(model.model.cuttingReadiness).toEqual(final);
+  await run(async()=>{
+   const tasks=new DigitalProductionTaskService(f.db);
+   await tasks.correctTime(f.root,task.task_id,{eventId:first[0]!.eventId!,occurredAt:null,reason:'TEST scoped first-ready correction must not alter sibling PO or whole-task clock'},randomUUID());
+   await tasks.controlResource(f.root,{kind:'order',id:ready.id},'pause','TEST ordinary pause',randomUUID());
+   await tasks.controlResource(f.root,{kind:'order',id:ready.id},'resume','TEST ordinary restore',randomUUID());
+  });
+  const corrected=await nativeCuttingReadiness(f.db,[task.task_id]);
+  expect(corrected.find(f=>f.lineId===ready.lines[0]!.lineId)).toMatchObject({eventId:first[0]!.eventId,firstReadyAt:null,quality:'缺失'});
+  expect(corrected.find(f=>f.lineId===ready.lines[1]!.lineId)).toEqual(final.find(f=>f.lineId===ready.lines[1]!.lineId));
+  expect((await nativeTaskReadiness(f.db,[task.task_id])).get(task.task_id)?.firstReadyAt).toBe('2026-11-09T12:00:00.000Z');
+ });
+ for(const external of [false,true])for(const poCount of [1,2])it(`P01 records legitimate 95-of-100 actual cutting readiness without borrowing sibling quantity (${external?'external':'internal'}, ${poCount} PO)`,async()=>{
+  const scene=await f.scene('2026-11-09T08:00:00.000Z'),run=<T,>(action:()=>Promise<T>)=>f.runtime.run(scene,f.root,action);
+  const ready=await run(async()=>{
+   const ready=await f.bulkReady('无',undefined,poCount,f.sourcing,{stopBeforeCompletion:true,quantity:100,cuttingProcess:external?'outsourced':'in_house'}),resource={kind:'order' as const,id:ready.id},state=await service.read(f.root,resource),prior=state.facts.find(f=>f.kind==='style_label_ready')!;
+   await service.record(f.people.warehouse!,resource,{kind:'style_label_ready',scopeRef:'whole',expectedVersion:prior.version,state:'ready',occurredAt:businessNow().toISOString(),note:'TEST actual planned cut95; original PO100',quantities:state.lines.map(line=>({lineId:line.lineId,materialId:null,name:'TEST款号唛',quantity:95,unit:'枚'})),evidenceIds:[],sourceDocumentVersion:null,recipientId:null},randomUUID());
+   for(const kind of ['纸样完成','唛架完成','预缩完成'] as const)await completeBulkRangeFixture(f.db,kind==='预缩完成'?f.people.warehouse!:f.people['pattern-room-worker']!,ready.id,ready.preparationId,kind);
+   return {...ready,lines:state.lines};
+  });
+  const task=(await f.db.query("SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.production_order_id=$1 AND a.task_kind=$2",[ready.id,external?'bulk_cutting_external':'bulk_cutting'])).rows[0];
+  expect(await nativeCuttingReadiness(f.db,[task.task_id])).toEqual([]);
+  expect((await nativeTaskReadiness(f.db,[task.task_id])).get(task.task_id)?.firstReadyAt).toBeNull();
+  const cuts=(await f.db.query("SELECT child_id FROM digital_production_child_lines WHERE production_order_id=$1 AND module='cutting' AND child_line_key='record' ORDER BY line_id",[ready.id])).rows;
+  const principal=external?ready.primary:f.people['cutting-worker']!,capabilities=(await f.db.query('SELECT DISTINCT capability FROM user_role_assignments a JOIN role_capabilities c USING(role_code) JOIN business_roles role USING(role_code) WHERE a.user_id=$1 AND a.revoked_at IS NULL AND role.enabled',[principal.actorId])).rows.map(row=>row.capability as string),cutter={...principal,authorizationCapability:'cutting:records:create',authorizationCapabilities:capabilities};
+  await f.advance(scene,'2026-11-09T09:00:00.000Z');
+  await run(async()=>{
+   const body={pieceCount:1,actualCutCount:95,attachmentIds:[await f.image(cutter)]},key=randomUUID();
+   await ready.cutting.record(cutter,cuts[0]!.child_id,body,key);
+   const count=await nativeCuttingReadiness(f.db,[task.task_id]);
+   expect(count).toHaveLength(1);expect(count[0]).toMatchObject({cuttingOrderId:cuts[0]!.child_id,firstReadyAt:'2026-11-09T09:00:00.000Z'});
+   expect(count[0]!.basis).toContain('actual-cut-quantity:95');
+   expect((await nativeTaskReadiness(f.db,[task.task_id])).get(task.task_id)?.firstReadyAt).toBe(poCount===1?'2026-11-09T09:00:00.000Z':null);
+   await ready.cutting.record(cutter,cuts[0]!.child_id,body,key);
+   expect(await nativeCuttingReadiness(f.db,[task.task_id])).toEqual(count);
+  });
+  if(poCount===2){
+   await f.advance(scene,'2026-11-09T12:00:00.000Z');
+   await run(async()=>ready.cutting.record(cutter,cuts[1]!.child_id,{pieceCount:1,actualCutCount:95,attachmentIds:[await f.image(cutter)]},randomUUID()));
+   const final=await nativeCuttingReadiness(f.db,[task.task_id]);
+   expect(final).toHaveLength(2);expect(final.find(f=>f.cuttingOrderId===cuts[0]!.child_id)?.firstReadyAt).toBe('2026-11-09T09:00:00.000Z');
+   expect(final.find(f=>f.cuttingOrderId===cuts[1]!.child_id)?.firstReadyAt).toBe('2026-11-09T12:00:00.000Z');
+   expect((await nativeTaskReadiness(f.db,[task.task_id])).get(task.task_id)?.firstReadyAt).toBe('2026-11-09T12:00:00.000Z');
+  }
+  expect((await f.db.query('SELECT actual_cut_count FROM cutting_records WHERE cutting_order_id=ANY($1::uuid[])',[cuts.map(cut=>cut.child_id)])).rows.map(row=>Number(row.actual_cut_count))).toEqual(Array(poCount).fill(95));
+ });
+ it('P01 cutting readiness waits for actual technical test evidence and records its native update',async()=>{
+  const scene=await f.scene('2026-11-09T08:00:00.000Z'),run=<T,>(action:()=>Promise<T>)=>f.runtime.run(scene,f.root,action),technical=new DevelopmentTechnicalService(f.db,true);
+  const ready=await run(async()=>{
+   const ready=await f.bulkReady('无',undefined,1,f.sourcing,{stopBeforeCompletion:true});
+   await completeBulkRangeFixture(f.db,f.people.warehouse!,ready.id,ready.preparationId,'预缩完成');
+   const state=await technical.read(f.root,ready.sourceId),material=state.materialDecisions[0]!;
+   await technical.saveMaterialDecision(f.root,ready.sourceId,{roundNumber:1,materialId:material.materialId,expectedVersion:material.version,highTemperatureRequired:null,preshrinkMethod:material.preshrinkMethod,basis:'TEST actual applicability not yet determined',supplierEvidenceIds:[],warpShrinkPercent:null,weftShrinkPercent:null},randomUUID());
+   for(const kind of ['纸样完成','唛架完成'] as const)await completeBulkRangeFixture(f.db,f.people['pattern-room-worker']!,ready.id,ready.preparationId,kind);
+   return {...ready,material};
+  });
+  const task=(await f.db.query("SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.production_order_id=$1 AND a.task_kind='bulk_cutting'",[ready.id])).rows[0];
+  expect(await nativeCuttingReadiness(f.db,[task.task_id])).toEqual([]);
+  expect((await nativeTaskReadiness(f.db,[task.task_id])).get(task.task_id)?.firstReadyAt).toBeNull();
+  await f.advance(scene,'2026-11-09T12:00:00.000Z');
+  await run(()=>technical.saveMaterialDecision(f.root,ready.sourceId,{roundNumber:1,materialId:ready.material.materialId,expectedVersion:ready.material.version+1,highTemperatureRequired:false,preshrinkMethod:ready.material.preshrinkMethod,basis:'TEST actual technical applicability now confirmed',supplierEvidenceIds:[],warpShrinkPercent:null,weftShrinkPercent:null},randomUUID()));
+  expect((await nativeCuttingReadiness(f.db,[task.task_id]))[0]?.firstReadyAt).toBe('2026-11-09T12:00:00.000Z');
+ });
  it('projects real two-PO label shortages by scope and does not mutate tasks, plans, facts, reminders or windows',async()=>{
   const scene=await f.scene('2026-11-02T00:00:00Z');await f.runtime.run(scene,f.root,async()=>{
    const ready=await f.bulkReady('无',undefined,2,f.sourcing,{stopBeforeCompletion:true}),resource={kind:'order' as const,id:ready.id},state=await service.read(f.root,resource),prior=state.facts.find(r=>r.kind==='style_label_ready')!;

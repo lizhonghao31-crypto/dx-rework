@@ -5,6 +5,7 @@ import {validateDigitalSlaSnapshot} from "@dx-rework/contracts/digital-sla";
 import {developmentSlaPlan} from "./development-sla-enrollment.js";
 import {developmentDocumentRow} from "./development-round-repository.js";
 import {technicalDevelopmentTiming} from './development-cycle-evidence.js';
+import {nativeTaskReadiness} from './task-readiness-facts.js';
 
 type DB=Pick<PoolClient,"query">;
 type Task={task_id:string;source_id:string|null;task_kind:string;route_version:number};
@@ -13,7 +14,7 @@ export type DevelopmentTiming={sourceId:string;sourceRevision:number;configurati
 const iso=(value:string|Date)=>new Date(value).toISOString();
 
 /** Responsibility starts at the business boundary, even while assignment or the next action waits. */
-export async function developmentTaskTiming(db:DB,task:Task):Promise<DevelopmentTiming|null>{
+export async function developmentTaskTiming(db:DB,task:Task,options:{prerequisitesOnly?:boolean}={}):Promise<DevelopmentTiming|null>{
   if(!task.source_id)return null;
   const technical=await technicalDevelopmentTiming(db,task);if(technical)return technical;
   const saved=await developmentSlaPlan(db,task.source_id);
@@ -64,7 +65,15 @@ export async function developmentTaskTiming(db:DB,task:Task):Promise<Development
     // A parent-window target is not evidence that the returned work was received.
     // Keep the frozen parent target in the plan; start confirmation only at the native craft return/completion.
     enteredAt=craft?completed(craft):null;
-  }else if(kind==='development_sewing'||kind==='development_sewing_transfer')enteredAt=hasCraft?completed('development_craft_confirmation'):completed('development_cutting');
+  }else if(kind==='development_sewing'||kind==='development_sewing_transfer'){
+    enteredAt=hasCraft?completed('development_craft_confirmation'):completed('development_cutting');
+    if(!options.prerequisitesOnly){
+      const ready=(await nativeTaskReadiness(db,[task.task_id])).get(task.task_id);
+      // Detailed prerequisite refs remain on the immutable native ready event;
+      // downstream calculation anchors carry its bounded identity, not a tree.
+      if(ready?.tracked){enteredAt=ready.firstReadyAt;basis.splice(0,basis.length,...(ready.effectiveEventId?[`readiness:${ready.effectiveEventId}`]:[]));}
+    }
+  }
   else if(kind==='development_pre_wash_check')enteredAt=completed('development_sewing');
   else if(kind==='development_washing'||kind==='development_washing_dispatch')enteredAt=completed('development_pre_wash_check');
   else if(kind==='development_tail_check')enteredAt=document.document.washing==='免洗'?completed('development_sewing'):completed('development_washing');

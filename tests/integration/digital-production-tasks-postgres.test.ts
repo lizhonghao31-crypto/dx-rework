@@ -12,7 +12,7 @@ import { DigitalProductionTaskService } from "../../apps/api/src/production-plat
 import { registerDigitalIdentityRoutes } from "../../apps/api/src/production-platform/identity-routes.js";
 import { DigitalProductionAccessService } from "../../apps/api/src/production-platform/access-service.js";
 import { ApplicationError } from "../../apps/api/src/platform/errors.js";
-import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema,createOwnedPostgresSchema,releaseOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 import type { DigitalTaskKind } from "../../apps/api/src/production-platform/task-access-repository.js";
 const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
@@ -32,7 +32,7 @@ run("P03 task lifecycle PostgreSQL", () => {
   const create=async(resource:{kind:"order"|"source";id:string},kind:DigitalTaskKind="budget",extra:Partial<Parameters<DigitalProductionTaskService["createWithClient"]>[2]>={})=>tx(c=>tasks.createWithClient(c,boss,{resource,kind,routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:kind==="budget"?designer:null,...extra}));
   const condition=async(id:string,key:Parameters<DigitalProductionTaskService["setConditionWithClient"]>[3],at:string|null=null)=>tx(c=>tasks.setConditionWithClient(c,boss,id,key,true,at));
   beforeAll(async () => {
-    await admin.query(`CREATE SCHEMA ${schema}`);
+    await createOwnedPostgresSchema(admin,schema);
     for (const name of ["0001_platform_foundation.sql", "0002_dingtalk_identity_access.sql", "0216_digital_production_order_roots.sql", "0217_digital_production_node_clocks.sql"])
       await database.query(await readFile(new URL(`../../apps/api/migrations/${name}`, import.meta.url), "utf8"));
     // Existing-domain tables are represented only by referenced identity columns in this isolated fixture.
@@ -70,7 +70,7 @@ run("P03 task lifecycle PostgreSQL", () => {
     } });
     await app.ready();
   });
-  afterAll(async () => { await app.close(); await database.end(); await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`); await admin.end(); });
+  afterAll(async () => { await app.close(); await database.end(); await releaseOwnedPostgresSchema(admin,schema); await admin.end(); });
   it("P15 scopes cockpit sources, preserves task deadlines and audits priority without changing clocks",async()=>{
     const source=await service.createSource(actor(),DigitalSourceCreateSchema.parse({developmentType:"头版",designStyleNo:"TEST-P15-COCKPIT",customerCode:"PD"}),randomUUID());
     const resource={kind:"source" as const,id:source.sourceId};

@@ -14,6 +14,7 @@ import {factoryTaskTiming,factoryBatchTiming} from './factory-batch-timing.js';
 import {bulkTaskTiming} from "./bulk-task-timing.js";
 import {DEVELOPMENT_ARRANGEABLE_KINDS} from "@dx-rework/contracts/development-arrangement";
 import {developmentTaskTiming} from "./development-task-timing.js";
+import {nativeTaskReadiness,nativeCuttingReadiness,NATIVE_READINESS_KINDS} from './task-readiness-facts.js';
 import {developmentSlaPlan} from "./development-sla-enrollment.js";
 import {isNativeRootSewingRecipient} from './development-native-recipient.js';
 import {authorizePatternOrder} from '../pattern-room/order-authority.js';
@@ -158,8 +159,101 @@ export class DigitalProductionTaskService {
     const event=await this.event(client,actor,taskId,{kind:'source',id:task.source_id},'technical_basis_recorded',businessNow().toISOString(),'现场登记',{basis:timing.basis});
     await this.revision(client,actor,taskId,await this.policy(client,task.task_kind,taskId),null,'activation',event);
   }
+  /** Organization readiness precedes assignment, but never bypasses execution
+   * conditions. Capture a current conjunction in this native write transaction;
+   * do not infer historical overlap from unrelated old timestamps.
+   */
+  private async captureNativeReadiness(client:PoolClient,actor:TrustedActorContext,task:{task_id:string;task_kind:string;source_id:string|null;production_order_id:string|null;route_instance_id:string;route_version:number;state:string},physicalCut?:{cuttingOrderId:string;actualCutCount:number}){
+    if(!NATIVE_READINESS_KINDS.has(task.task_kind)||['completed','cancelled'].includes(task.state))return;
+    const saved=(await nativeTaskReadiness(client,[task.task_id])).get(task.task_id);
+    if(!saved?.tracked)return;
+    const sewing=task.task_kind==='development_sewing'||task.task_kind==='development_sewing_transfer';
+    if(sewing&&saved.eventId)return;
+    const ignored=sewing?['handover_received','pattern_assignment_ready','materials_ready']:[];
+    const unmet=await client.query(`SELECT 1 FROM digital_production_task_conditions
+      WHERE task_id=$1 AND stage='activation' AND NOT satisfied AND NOT(condition_key=ANY($2::text[]))
+      UNION ALL SELECT 1 FROM digital_production_task_dependencies d JOIN digital_production_tasks p ON p.task_id=d.predecessor_id
+      WHERE d.task_id=$1 AND p.state<>'completed' AND p.node_key<>'factory_material_count' LIMIT 1`,[task.task_id,ignored]);
+    if(unmet.rowCount)return;
+    const basis:string[]=[];
+    if(sewing){
+      if(!task.source_id)return;
+      const prerequisites=await developmentTaskTiming(client,task,{prerequisitesOnly:true});
+      const materials=await materialReadiness(client,task.source_id,task.route_version);
+      if(!prerequisites?.enteredAt||!materials.sewingReady)return;
+      basis.push(...prerequisites.basis,`development:${task.source_id}:round:${task.route_version}`,
+        ...materials.materials.filter(material=>material.required).map(material=>`material:${material.materialId}:verification:${material.evidenceId}`));
+    }
+    const conditions=(await client.query(`SELECT c.condition_key,event.event_id,event.payload->>'satisfied' AS evidence_satisfied
+      FROM digital_production_task_conditions c LEFT JOIN LATERAL(SELECT e.event_id,e.payload FROM digital_production_task_events e
+      LEFT JOIN digital_production_event_intents i USING(event_id)
+      WHERE e.task_id=c.task_id AND e.event_kind='condition' AND e.payload->>'condition'=c.condition_key
+      ORDER BY (to_jsonb(i)->>'notification_sequence')::bigint DESC NULLS LAST,e.recorded_at DESC,e.event_id DESC LIMIT 1) AS event ON true
+      WHERE c.task_id=$1 AND c.stage='activation' AND c.satisfied
+       AND NOT(c.condition_key=ANY($2::text[])) ORDER BY c.condition_key`,[task.task_id,ignored])).rows;
+    if(conditions.some(condition=>!condition.event_id||condition.evidence_satisfied!=='true'))return;
+    basis.push(...conditions.map(condition=>`condition:${condition.event_id}:${condition.condition_key}`));
+    if(!sewing){
+      if(!task.production_order_id)return;
+      // Use the actual cutting service's complete gate, including technical
+      // tests and this PO's labels; task activation alone is insufficient.
+      const {digitalCuttingGate}=await import('./bulk-preparation-service.js');
+      const cuts=(await client.query(`SELECT map.line_id,c.cutting_order_id,c.already_cut FROM digital_production_child_lines map
+       JOIN LATERAL(SELECT cut.cutting_order_id,EXISTS(SELECT 1 FROM cutting_records record WHERE record.cutting_order_id=cut.cutting_order_id) AS already_cut
+        FROM cutting_orders cut WHERE cut.cutting_order_id=map.child_id) c ON true
+       WHERE map.module='cutting' AND map.production_order_id=$1 AND map.child_line_key='record' ORDER BY map.line_id,map.child_id`,[task.production_order_id])).rows;
+      const recorded=await nativeCuttingReadiness(client,[task.task_id]);
+      if(saved.eventId&&cuts.every(cut=>recorded.some(fact=>fact.lineId===cut.line_id&&fact.cuttingOrderId===cut.cutting_order_id)))return;
+      let allReady=cuts.length>0;
+      for(const cut of cuts){
+        // Only this native cutting write has validated an actual quantity.
+        // Sibling scopes still use their own original full-quantity gate.
+        const actualCutCount=physicalCut&&physicalCut.cuttingOrderId===cut.cutting_order_id?physicalCut.actualCutCount:undefined;
+        const gate=await digitalCuttingGate(client,this.database,cut.cutting_order_id,actualCutCount);
+        if(!gate?.ready||gate.taskId!==task.task_id){allReady=false;continue;}
+        const scopeRef=`po:${cut.line_id}:cut:${cut.cutting_order_id}`;
+        if(recorded.some(fact=>fact.scopeRef===scopeRef))continue;
+        // A prior physical cut makes the original gate waive some checks. It
+        // is not evidence for reconstructing a missing first-ready timestamp.
+        if(cut.already_cut){allReady=false;continue;}
+        const {productionReadiness}=await import('./production-readiness-repository.js');
+        const readiness=await productionReadiness(client,task.production_order_id);
+        const eventId=randomUUID();
+        await client.query(`INSERT INTO digital_production_task_events(event_id,task_id,resource_kind,resource_id,event_kind,actor_id,occurred_at,time_quality,payload)
+         VALUES($1,$2,'order',$3,'ready',$4,$5,'现场登记',$6)`,[eventId,task.task_id,task.production_order_id,actor.actorId,businessNow().toISOString(),JSON.stringify({readinessOnly:true,nativeReadiness:{version:1,scopeKind:'po',scopeRef,lineId:cut.line_id,cuttingOrderId:cut.cutting_order_id,basis:[...basis,`digitalCuttingGate:${cut.cutting_order_id}:full-current-gate`,...(actualCutCount===undefined?[]:[`actual-cut-quantity:${actualCutCount}`]),`preparation-readiness:${readiness.revision}`]}})]);
+      }
+      if(!allReady||saved.eventId)return;
+      basis.push(...cuts.map(cut=>`digitalCuttingGate:${cut.cutting_order_id}:full-current-gate`));
+    }
+    // This records a fact, not a ready-state notification or a new task action.
+    const eventId=randomUUID();
+    await client.query(`INSERT INTO digital_production_task_events(event_id,task_id,resource_kind,resource_id,event_kind,actor_id,occurred_at,time_quality,payload)
+      VALUES($1,$2,$3,$4,'ready',$5,$6,'现场登记',$7)`,[eventId,task.task_id,this.resource(task).kind,this.resource(task).id,actor.actorId,businessNow().toISOString(),JSON.stringify({readinessOnly:true,nativeReadiness:{version:1,scopeRef:`task:${task.task_id}:route:${task.route_instance_id}:${task.route_version}`,basis}})]);
+    return eventId;
+  }
+  /** Caller already owns the authorized source command and transaction. */
+  async refreshNativeReadinessWithClient(client:PoolClient,actor:TrustedActorContext,id:string,physicalCut?:{cuttingOrderId:string;actualCutCount:number}){
+    await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
+    const task=await this.task(client,id,true);
+    const eventId=await this.captureNativeReadiness(client,actor,task,physicalCut);
+    if(eventId)await this.applyNativeReadinessClock(client,actor,task,eventId);
+  }
+  private async applyNativeReadinessClock(client:PoolClient,actor:TrustedActorContext,task:Awaited<ReturnType<DigitalProductionTaskService['task']>>,eventId:string){
+    const policy=await this.policy(client,task.task_kind,task.task_id),deadline=await this.revision(client,actor,task.task_id,policy,null,'activation',eventId);
+    if(!['bulk_cutting','bulk_cutting_external'].includes(task.task_kind)||task.state!=='ready')return;
+    const ready=(await nativeTaskReadiness(client,[task.task_id])).get(task.task_id)!;
+    let clockId=task.baseline_clock_id;
+    if(!clockId&&ready.firstReadyAt&&deadline.dueAt&&deadline.warningAt){
+      await new ProductionOrderNodeClockRepository(client).enter({nodeInstanceId:task.task_id,productionOrderId:task.production_order_id,nodeKey:task.task_kind,occurrence:task.occurrence,
+       enteredAt:new Date(ready.firstReadyAt),dueAt:deadline.dueAt,warningAt:deadline.warningAt,deadlinePolicyKey:task.task_kind,deadlinePolicyVersion:policy.version,createdBy:actor.actorId});
+      clockId=task.task_id;
+    }
+    await client.query('UPDATE digital_production_tasks SET entered_at=$2,entered_quality=$3,baseline_clock_id=$4 WHERE task_id=$1',[task.task_id,ready.firstReadyAt,ready.quality??'缺失',clockId]);
+  }
   private async activate(client: PoolClient, actor: TrustedActorContext, id: string, occurredAt: string | null, quality: TimeQuality) {
     const task = await this.task(client, id, true);
+    const readinessEvent=await this.captureNativeReadiness(client,actor,task);
+    if(readinessEvent)await this.applyNativeReadinessClock(client,actor,task,readinessEvent);
     if (await requiresDevelopmentAssignee(client,task) && (!task.assignee_id||(await client.query("SELECT to_regclass('digital_development_round_arrangements') AS relation")).rows[0]?.relation&&!await new DigitalProductionAccessPolicy(client).activeRole(task.assignee_id,task.required_role)&&!(['development_sewing','development_patch'].includes(task.task_kind)&&task.source_id&&await isNativeRootSewingRecipient(client,task.source_id,task.assignee_id)))) return false;
     if(task.task_kind==="development_sewing"&&await activateInitialDevelopmentExecution(client,actor,id,new TodoService(this.database))){
       const activatedAt=businessNow().toISOString();
@@ -173,6 +267,7 @@ export class DigitalProductionTaskService {
     if(restoring){
       await client.query("UPDATE digital_production_tasks SET state='ready',blocked_reason=NULL WHERE task_id=$1",[id]);
       await this.event(client,actor,id,this.resource(task),'unblocked',businessNow().toISOString(),'现场登记',{note:'业务前置恢复，保留原进入时间'});
+      if(['bulk_cutting','bulk_cutting_external'].includes(task.task_kind))await this.refreshNativeReadinessWithClient(client,actor,id);
       return true;
     }
     const facts = (await client.query(`SELECT count(*)::int AS count,bool_or(moment IS NULL) AS has_unknown,max(moment) AS latest_at,
@@ -192,6 +287,10 @@ export class DigitalProductionTaskService {
     else if (quality === "缺失") quality = "补报未核实";
     const bulkTiming=await bulkTaskTiming(client,task)??await factoryTaskTiming(client,task);
     if(bulkTiming){occurredAt=bulkTiming.enteredAt;quality=bulkTiming.timeQuality as TimeQuality;}
+    if(NATIVE_READINESS_KINDS.has(task.task_kind)){
+      const readiness=(await nativeTaskReadiness(client,[id])).get(id);
+      if(readiness?.tracked){occurredAt=readiness.firstReadyAt;quality=(readiness.quality??'缺失') as TimeQuality;}
+    }
     const policy = await this.policy(client, task.task_kind, task.task_id);
     const eventId = await this.event(client, actor, id, this.resource(task), "ready", occurredAt, quality);
     const deadline = await this.revision(client, actor, id, policy, occurredAt, "activation", eventId);
@@ -202,6 +301,7 @@ export class DigitalProductionTaskService {
         enteredAt: new Date(occurredAt), dueAt: deadline.dueAt, warningAt: deadline.warningAt, deadlinePolicyKey: task.task_kind, deadlinePolicyVersion: policy.version, createdBy: actor.actorId });
     }
     await client.query("UPDATE digital_production_tasks SET state='ready',entered_at=$2,entered_quality=$3,baseline_clock_id=$4 WHERE task_id=$1", [id, occurredAt, quality, clockId]);
+    if(['bulk_cutting','bulk_cutting_external'].includes(task.task_kind))await this.refreshNativeReadinessWithClient(client,actor,id);
     return true;
   }
   // Called by fixed business adapters inside their own transaction; no public task-builder route.
@@ -236,7 +336,13 @@ export class DigitalProductionTaskService {
       if (!DIGITAL_CONDITION_KEYS.includes(condition)) fail("未知前置条件");
       await client.query("INSERT INTO digital_production_task_conditions(task_id,condition_key,stage) VALUES($1,$2,$3)", [id, condition, condition === "business_recorded" ? "completion" : "activation"]);
     }
-    const createdEvent=await this.event(client, actor, id, input.resource, "created", businessNow().toISOString(), "现场登记");
+    // Enroll only native SLA routes. Older order-scoped development tasks and
+    // manually created legacy routes keep their original clock contract.
+    const trackReadiness=NATIVE_READINESS_KINDS.has(input.kind)&&(input.kind.startsWith('development_')
+      ?input.resource.kind==='source'&&Boolean(await developmentSlaPlan(client,input.resource.id))
+      :input.resource.kind==='order'&&Boolean((await client.query("SELECT to_regclass('digital_bulk_preparations') AS relation")).rows[0]?.relation)
+       &&Boolean((await client.query('SELECT 1 FROM digital_bulk_preparations WHERE preparation_id=$1 AND production_order_id=$2 AND workflow_version=2 AND sla_snapshot_id IS NOT NULL',[input.routeId,input.resource.id])).rowCount));
+    const createdEvent=await this.event(client, actor, id, input.resource, "created", businessNow().toISOString(), "现场登记",trackReadiness?{readinessCaptureVersion:1}:{});
     const activated=await this.activate(client, actor, id, input.occurredAt === undefined ? businessNow().toISOString() : input.occurredAt, input.occurredAt === null ? "缺失" : input.occurredAt === undefined ? "现场登记" : "补报未核实");
     if(!activated&&(await developmentTaskTiming(client,await this.task(client,id))||await bulkTaskTiming(client,await this.task(client,id))||await factoryTaskTiming(client,await this.task(client,id))))
       await this.revision(client,actor,id,await this.policy(client,input.kind,id),null,'activation',createdEvent);
@@ -529,7 +635,11 @@ export class DigitalProductionTaskService {
         const entry = original.event_kind === "ready" ? corrected : task.entered_at ? new Date(task.entered_at) : null;
         const completion = original.event_kind === "completed" ? corrected : task.completed_at ? new Date(task.completed_at) : null;
         if (entry && completion && completion < entry) fail("完成时间不能早于进入时间");
-        const eventId = await this.event(client, actor, id, this.resource(task), "time_corrected", input.occurredAt, corrected ? "已核实" : "缺失", { reason: input.reason, originalKind: original.event_kind }, input.eventId);
+        const poReady=original.payload?.nativeReadiness?.scopeKind==='po';
+        const readiness=!poReady&&original.event_kind==='ready'&&NATIVE_READINESS_KINDS.has(task.task_kind)?(await nativeTaskReadiness(client,[id])).get(id):null;
+        const correctedReference=readiness?.eventId??input.eventId;
+        const eventId = await this.event(client, actor, id, this.resource(task), "time_corrected", input.occurredAt, corrected ? "已核实" : "缺失", { reason: input.reason, originalKind: original.event_kind,...(correctedReference!==input.eventId?{requestedEventId:input.eventId}:{}) }, correctedReference);
+        if(poReady)return {taskId:id,eventId};
         if (original.event_kind === "ready") await client.query("UPDATE digital_production_tasks SET entered_at=$2,entered_quality=$3 WHERE task_id=$1", [id, corrected, corrected ? "已核实" : "缺失"]);
         else await client.query("UPDATE digital_production_tasks SET completed_at=$2,completed_quality=$3 WHERE task_id=$1", [id, corrected, corrected ? "已核实" : "缺失"]);
         let policy = await this.policy(client, task.task_kind, task.task_id);
@@ -554,16 +664,19 @@ export class DigitalProductionTaskService {
         const current = (await client.query("SELECT state FROM digital_production_resource_lifecycle WHERE resource_kind=$1 AND resource_id=$2", [resource.kind, resource.id])).rows[0]?.state ?? "active";
         if (current === "cancelled") fail("已取消业务不能重新启动");
         if (action === "resume" && current !== "paused") fail("当前业务未暂停");
+        const actionAt=businessNow().toISOString();
         const state = action === "pause" ? "paused" : action === "cancel" ? "cancelled" : "active";
         await client.query(`INSERT INTO digital_production_resource_lifecycle(resource_kind,resource_id,state,changed_by,reason) VALUES($1,$2,$3,$4,$5)
           ON CONFLICT(resource_kind,resource_id) DO UPDATE SET state=EXCLUDED.state,changed_by=EXCLUDED.changed_by,reason=EXCLUDED.reason,changed_at=CURRENT_TIMESTAMP`, [resource.kind, resource.id, state, actor.actorId, reason]);
         const tasks = await client.query(`SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.${column}=$1 AND t.state NOT IN ('completed','cancelled') ORDER BY t.task_id FOR UPDATE OF t`, [resource.id]);
         for (const row of tasks.rows) {
           if (action === "cancel") await client.query("UPDATE digital_production_tasks SET state='cancelled',terminal_recorded_at=CURRENT_TIMESTAMP WHERE task_id=$1", [row.task_id]);
-          await this.event(client, actor, row.task_id, resource, action, businessNow().toISOString(), "现场登记", { reason });
+          await this.event(client, actor, row.task_id, resource, action, actionAt, "现场登记", { reason });
         }
         if (action === "resume") for (const row of tasks.rows) await this.activate(client, actor, row.task_id, null, "缺失");
-        if (!tasks.rowCount) await this.event(client, actor, null, resource, action, businessNow().toISOString(), "现场登记", { reason });
+        if (!tasks.rowCount) await this.event(client, actor, null, resource, action, actionAt, "现场登记", { reason });
+        else if(action==='cancel')await client.query(`INSERT INTO digital_production_task_events(event_id,task_id,resource_kind,resource_id,event_kind,actor_id,occurred_at,time_quality,payload)
+          VALUES($1,NULL,$2,$3,'cancel',$4,$5,'现场登记',$6)`,[randomUUID(),resource.kind,resource.id,actor.actorId,actionAt,JSON.stringify({reason,scope:'whole_resource'})]);
         return { ...resource, state };
       });
     });

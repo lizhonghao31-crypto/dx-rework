@@ -88,7 +88,8 @@ export class OrderClosureService{
    await db.query('SELECT production_order_id FROM digital_production_orders WHERE production_order_id=$1 FOR UPDATE',[id]);
    const sheet=await this.read(actor,id,db);if(!sheet.canClose)fail('尚未进入原生产、已经结案或已正常完成，无需特殊结案');if(sheet.revision!==input.expectedRevision)fail('实绩或未清事项已变化，请刷新核对后再结案');
    const audit=randomUUID();await db.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1,$2,$3,'digital.order.special_close','digital_production_order',$4,$5)",[audit,actor.requestId,actor.actorId,id,JSON.stringify({reason:input.reason,outstanding:sheet.outstanding,revision:sheet.revision})]);
-   await db.query('INSERT INTO digital_order_closures(production_order_id,reason,outstanding,source_revision,closed_by,audit_event_id) VALUES($1,$2,$3,$4,$5,$6)',[id,input.reason,JSON.stringify(sheet.outstanding),sheet.revision,actor.actorId,audit]);
+   const closedAt=(await new ContextBusinessClock(this.database,db).read({kind:'order',id})).now;
+   await db.query('INSERT INTO digital_order_closures(production_order_id,reason,outstanding,source_revision,closed_by,audit_event_id,closed_at) VALUES($1,$2,$3,$4,$5,$6,$7)',[id,input.reason,JSON.stringify(sheet.outstanding),sheet.revision,actor.actorId,audit,closedAt]);
    await new DigitalProductionTaskService(this.database).cancelForSpecialClosureWithClient(db,actor,id,input.reason);
    const response=await this.read(actor,id,db);await db.query('INSERT INTO digital_production_commands(actor_id,command,key,payload_hash,response) VALUES($1,$2,$3,$4,$5)',[actor.actorId,command,key,payloadHash,JSON.stringify(response)]);await db.query('COMMIT');return response;
   }catch(e){await db.query('ROLLBACK');throw e;}finally{db.release();}

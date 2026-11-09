@@ -492,6 +492,10 @@ export class CuttingService {
       }, async () => {
         const productionGate=await digitalCuttingGate(client,this.database,cuttingOrderId,input.actualCutCount);
         if(productionGate&&!productionGate.ready)fail(productionGate.reason);
+        if(productionGate?.taskId){
+          const {DigitalProductionTaskService}=await import('../production-platform/task-service.js');
+          await new DigitalProductionTaskService(this.database).refreshNativeReadinessWithClient(client,actor,productionGate.taskId,{cuttingOrderId,actualCutCount:input.actualCutCount});
+        }
         await this.lockActiveOrder(client, cuttingOrderId);
         const source = await client.query<{
           formal_style_no: string | null;
