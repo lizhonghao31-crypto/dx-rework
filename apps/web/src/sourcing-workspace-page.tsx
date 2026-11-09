@@ -1,3 +1,4 @@
+import { SourcingContractReturnFiles } from "./sourcing-contract-return-files.js";
 import { SourcingPriceReapplicationPanel } from "./sourcing-price-reapplication.js";
 import { SearchableSelect } from "./search-select.js";
 import { contractReturnFileError, finishContractReturnUpload, type ContractReturnUpload } from "./sourcing-contract-return-upload.js";
@@ -1925,31 +1926,13 @@ function OrderDetailPage({
                       {contractUploading?"正在上传…":contractReturn.uploadedFileCount?"补传回签合同":"上传回签合同"}
                     </button>
                   </> : null}
-                  {(contractReturn.uploadedFileCount ?? contractReturn.attachments.length)>=2 ? <span>当前合同版本已达文件上限，已保存附件及历史记录保留</span> : null}
-                  {contractReturn.attachments.length ? <div className="sourcing-contract-return-links" aria-label="回签附件，可左右滑动查看更多">
-                    {contractReturn.attachments.map((file,index)=>
-                      <a className="dx-button dx-button--secondary" key={file.attachmentId}
-                        href={attachmentUrl(file.attachmentId,"preview")} target="_blank" rel="noreferrer" title={file.filename}>
-                        {index===0?(contractReturn.signedContractVersion ? `查看 V${contractReturn.signedContractVersion} 回签合同` : "查看历史回签（版本未记录）"):`查看第 ${index+1} 个文件`}
-                      </a>)}
-                  </div> : null}
+                  {(contractReturn.uploadedFileCount ?? contractReturn.attachments.length)>=3 ? <span>当前合同版本已达文件上限，已保存附件及历史记录保留</span> : null}
+                  <SourcingContractReturnFiles key={sourcingCaseId} value={contractReturn} attachmentUrl={attachmentUrl} />
                   {contractPendingUpload.current && contractReturnError ? <button className="dx-button dx-button--secondary" type="button"
                     disabled={contractUploading} onClick={()=>void continueContractReturnUpload()}>重试上传</button> : null}
                   {contractPendingSubmission && contractReturnError ? <button className="dx-button dx-button--secondary" type="button"
                     disabled={contractUploading} onClick={()=>void retryContractReturn()}>重试保存</button> : null}
                 </div>
-                {contractReturn.history.length ? <details className="sourcing-contract-return-history">
-                  <summary>历史回签 · {contractReturn.history.length} 次</summary>
-                  {contractReturn.history.map(version=><div key={version.revision}>
-                    <span>第 {version.revision} 次 · {version.signedContractVersion ? `合同 V${version.signedContractVersion} · ${version.signedContractNumber}` : "合同版本未记录"} · {version.uploadedByName} · {formatDateTime(version.submittedAt)}</span>
-                    <div className="sourcing-contract-return-links">
-                      {version.attachments.map((file,index)=><a className="dx-button dx-button--secondary" key={file.attachmentId}
-                        href={attachmentUrl(file.attachmentId,"preview")} target="_blank" rel="noreferrer" title={file.filename}>
-                        {index===0?"查看回签合同":`查看第 ${index+1} 个文件`}
-                      </a>)}
-                    </div>
-                  </div>)}
-                </details> : null}
                 {contractReturnError ? <p role="alert" className="sourcing-contract-return-error">{contractReturnError}</p> : null}
                 <details className="sourcing-contract-return-facts" open={!window.matchMedia("(max-width: 768px)").matches}>
                   <summary className={`sourcing-contract-return-status--${contractReturn.contractReturnStatus}`}>{contractReturn.contractReturnCycleId ? "本次合同回签时效" : "首次回签时效"} · {sourcingContractReturnLabel(contractReturn)}</summary>

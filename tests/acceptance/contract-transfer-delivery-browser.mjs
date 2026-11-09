@@ -24,7 +24,7 @@ try{
     assert.equal(await page.getByText('可一次传两个，也可分次追加；累计最多 2 个 PDF/JPG/PNG，合计不超过 20 MB',{exact:true}).count(),0);
     assert.equal(await page.getByRole('button',{name:'补传回签合同',exact:true}).count(),1);
     await page.getByText('本版本 V7 无回签记录',{exact:true}).waitFor();
-    assert.equal(await page.getByRole('link',{name:'查看 V6 回签合同',exact:true}).count(),1);
+    assert.equal(await page.getByRole('button',{name:'查看回签文件',exact:true}).count(),1);
     if(role==='root'&&evidence)await page.locator('.sourcing-contract-bar').screenshot({path:join(evidence,'contract-'+width+'.png')});
     await page.getByRole('button',{name:'订单转厂',exact:true}).click();
     const allowed=role==='root'||role==='management',toggle=page.getByRole('checkbox',{name:'修改交货日期',exact:true});
@@ -146,7 +146,7 @@ try{
     await page.getByText('本版本 V7 无回签记录',{exact:true}).waitFor();
     await page.getByText('本次合同回签时效 · 合同待回签',{exact:true}).click();
     assert.equal(await page.getByRole('button',{name:'上传回签合同',exact:true}).count(),1);
-    assert.equal(await page.getByRole('link',{name:'查看 V6 回签合同',exact:true}).count(),1);
+    assert.equal(await page.getByRole('button',{name:'查看回签文件',exact:true}).count(),1);
     assert.equal(await page.evaluate(()=>document.body.scrollWidth>innerWidth),false);
     if(evidence)await page.locator('.sourcing-contract-bar').screenshot({path:join(evidence,'cycle-'+width+'x'+height+'.png')});
     results.push({width,height,versionCyclePending:true,oldSignaturePreserved:true,noHorizontalOverflow:true,passed:true});await page.close();
