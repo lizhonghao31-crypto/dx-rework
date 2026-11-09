@@ -10,8 +10,10 @@ describe("order board receiving attachments", () => {
       readFile("apps/api/src/server.ts", "utf8"),
       readFile("apps/web/src/order-board-page.css", "utf8"),
     ]);
+    const boardRead = await readFile("apps/api/src/receiving/receiving-board-query.ts", "utf8");
+    expect(service).toContain("readReceivingBoard");
 
-    expect(service).toContain("COALESCE(receiving_attachments.items,'[]'::jsonb) AS receiving_attachments");
+    expect(boardRead).toContain("COALESCE(receiving_attachments.items,'[]'::jsonb) AS receiving_attachments");
     expect(service).toContain("attachment.entity_type='receiving_batch'");
     expect(service).toContain("attachment.mime_type LIKE 'image/%'");
     expect(page).toContain('className="order-board-row__document-value"');

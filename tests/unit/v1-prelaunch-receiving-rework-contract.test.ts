@@ -21,6 +21,9 @@ describe("1.0 prelaunch receiving -> rework evidence chain", () => {
       read("apps/api/src/receiving/receiving-service.ts"),
       read("apps/web/src/order-board-page.tsx"),
     ]);
+    const boardRead = await readFile("apps/api/src/receiving/receiving-board-query.ts", "utf8");
+    expect(service).toContain("readReceivingBoard");
+
     expect(migration).toContain("receiving.batch.correct");
     expect(migration).toContain("receiving.batch.delete");
     expect(migration).toContain("root_superuser");
@@ -34,8 +37,8 @@ describe("1.0 prelaunch receiving -> rework evidence chain", () => {
     expect(service).toContain("has_rework_history");
     expect(board).toContain("修改收货订单");
     expect(board).toContain("确认删除收货订单");
-    expect(service).toContain("rootCorrectable");
-    expect(service).toContain("rootDeletable");
+    expect(boardRead).toContain("rootCorrectable");
+    expect(boardRead).toContain("rootDeletable");
     expect(service).toContain("返工发起后不能替换送货单图片");
     expect(board).toContain("row.rootCorrectable");
     expect(board).toContain("row.rootDeletable");
@@ -83,8 +86,11 @@ describe("1.0 prelaunch receiving -> rework evidence chain", () => {
       read("apps/api/src/receiving/receiving-service.ts"),
       read("apps/web/src/order-board-page.tsx"),
     ]);
-    expect(service).toContain("reworkStatus");
-    expect(service).toContain("reworkOrderId");
+    const boardRead = await readFile("apps/api/src/receiving/receiving-board-query.ts", "utf8");
+    expect(service).toContain("readReceivingBoard");
+
+    expect(boardRead).toContain("reworkStatus");
+    expect(boardRead).toContain("reworkOrderId");
     expect(board).toContain("正在返工");
     expect(board).toContain("返工结束");
     expect(board).toContain("继续填写");
@@ -96,8 +102,11 @@ describe("1.0 prelaunch receiving -> rework evidence chain", () => {
       read("apps/api/migrations/0086_receiving_rework_evidence_link.sql"),
       read("apps/api/src/receiving/receiving-service.ts"),
     ]);
+    const boardRead = await readFile("apps/api/src/receiving/receiving-board-query.ts", "utf8");
+    expect(service).toContain("readReceivingBoard");
+
     expect(migration).toContain("source_receiving_batch_id");
-    expect(service).toContain("reworkStatus");
+    expect(boardRead).toContain("reworkStatus");
   });
 
   it("keeps a bound draft on the same style and serializes completion with same-style receiving", async () => {

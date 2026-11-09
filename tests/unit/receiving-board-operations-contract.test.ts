@@ -29,6 +29,9 @@ describe("receiving board operations", () => {
       read("apps/api/src/receiving/receiving-routes.ts"),
       read("apps/api/src/receiving/receiving-service.ts"),
     ]);
+    const boardRead = await readFile("apps/api/src/receiving/receiving-board-query.ts", "utf8");
+    expect(service).toContain("readReceivingBoard");
+
     expect(migration).toContain("CREATE TABLE receiving_packing_revisions");
     expect(migration).toContain("CREATE TABLE receiving_difference_resolutions");
     expect(migration).toContain("receiving_packing_revisions_no_update");
@@ -47,7 +50,7 @@ describe("receiving board operations", () => {
     expect(migration).not.toContain("('worker','receiving:export')");
     expect(correctiveMigration).toContain("difference_quantity_snapshot=packing_quantity_snapshot-actual_quantity_snapshot");
     expect(service).toContain("snapshot.packingQuantity! - snapshot.actualQuantity");
-    expect(service).toContain("Number(row.packing_quantity) - Number(row.cumulative_actual_quantity)");
+    expect(boardRead).toContain("Number(row.packing_quantity) - Number(row.cumulative_actual_quantity)");
   });
 
   it("shows the confirmed two-layer facts and confirmation ownership", async () => {

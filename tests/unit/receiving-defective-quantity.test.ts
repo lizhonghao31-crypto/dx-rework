@@ -35,13 +35,15 @@ describe("receiving defective quantity", () => {
       readFile("apps/web/src/order-board-page.tsx", "utf8"),
       readFile("apps/web/src/order-board-page.css", "utf8"),
     ]);
+    const quantityRead = await readFile("apps/api/src/receiving/receiving-quantity-query.ts", "utf8");
+    expect(service).toContain("readReceivingBoard");
 
     expect(migration).toContain("defective_quantity integer NOT NULL DEFAULT 0");
     expect(migration).toContain("defective_quantity<=actual_quantity");
     expect(migration).toContain("defective_quantity_adjustment");
     expect(routes).toContain("body.defectiveQuantity === undefined ? 0");
     expect(service).toContain("defectiveQuantity: input.defectiveQuantity");
-    expect(service).toContain("sum(r.defective_quantity)+batch.defective_quantity_adjustment");
+    expect(quantityRead).toContain("sum(r.defective_quantity)+batch.defective_quantity_adjustment");
     expect(receivingPage.indexOf("<span>次品数量</span>")).toBeGreaterThan(
       receivingPage.indexOf("<span>实际收货数量</span>"),
     );

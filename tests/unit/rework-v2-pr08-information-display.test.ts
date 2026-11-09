@@ -8,11 +8,14 @@ describe("PR-08 information display", () => {
       readFile("apps/api/src/receiving/receiving-service.ts", "utf8"),
       readFile("apps/web/src/order-board-page.tsx", "utf8"),
     ]);
-    expect(service).toContain("abnormalOrderCount");
-    expect(service).toContain("count(*) FILTER (WHERE difference_quantity<>0)");
-    expect(service).toContain("prior_actual_quantity");
+    const boardRead = await readFile("apps/api/src/receiving/receiving-board-query.ts", "utf8");
+    expect(service).toContain("readReceivingBoard");
+
+    expect(boardRead).toContain("abnormalOrderCount");
+    expect(boardRead).toContain("count(*) FILTER (WHERE difference_quantity<>0)");
+    expect(boardRead).toContain("prior_actual_quantity");
     expect(service).toContain("delivery_note_quantity");
-    expect(service).toContain('const mode = needle ? "search" : "range"');
+    expect(boardRead).toContain('const mode = needle ? "search" : "range"');
     expect(page).toContain('"搜索结果订单数" : "期间收货订单数"');
     expect(page).toContain('"搜索结果累计实收" : "期间实收数量"');
     expect(page).toContain('label="异常订单数量"');
