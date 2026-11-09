@@ -1,3 +1,6 @@
+import { Button } from "@dx-rework/ui";
+import "./system-dialog.css";
+import "./dialog-visual-system.css";
 import type { SourcingContractReturnResponse } from "@dx-rework/contracts";
 import { useEffect, useRef, useState } from "react";
 import { ImageViewer } from "./image-viewer.js";
@@ -47,13 +50,13 @@ function ReturnFilesDialog({ value, groups, attachmentUrl, onClose }: Props & { 
   useEffect(() => { const element = dialog.current; element?.showModal(); return () => element?.close(); }, []);
   useEffect(() => { setFailed(false); }, [selected.attachmentId]);
   const close = () => { dialog.current?.close(); onClose(); };
-  return <dialog ref={dialog} className="sourcing-return-files-dialog" aria-label="查看回签文件" onCancel={event => { event.preventDefault(); close(); }}>
-    <div className="sourcing-return-files-heading"><h2>回签文件</h2><button type="button" onClick={close}>关闭</button></div>
+  return <dialog ref={dialog} className="system-dialog sourcing-return-files-dialog" aria-label="查看回签文件" onCancel={event => { event.preventDefault(); close(); }}>
+    <div className="sourcing-return-files-heading"><h2>回签文件</h2><Button type="button" onClick={close}>关闭</Button></div>
     {!value.currentContractReturned && value.currentContractDocumentId ? <p role="status">本版本无回签记录，以下为历史回签文件。</p> : null}
     <nav aria-label="全部回签文件">{groups.map(item => <section key={item.documentId ?? "unrecorded"}>
       <h3>{groupLabel(item, value.currentContractDocumentId)}</h3>
-      <div className="sourcing-return-files-list">{item.files.map(file => <button type="button" key={file.attachmentId}
-        aria-pressed={file.attachmentId === selected.attachmentId} onClick={() => setSelectedId(file.attachmentId)}>{file.filename}</button>)}</div>
+      <div className="sourcing-return-files-list">{item.files.map(file => <Button type="button" key={file.attachmentId}
+        variant={file.attachmentId === selected.attachmentId ? "primary" : "secondary"} aria-pressed={file.attachmentId === selected.attachmentId} onClick={() => setSelectedId(file.attachmentId)}>{file.filename}</Button>)}</div>
     </section>)}</nav>
     <p>{groupLabel(group, value.currentContractDocumentId)} · {selected.filename}</p>
     <div className="sourcing-return-files-preview" onErrorCapture={() => setFailed(true)}>
@@ -61,13 +64,13 @@ function ReturnFilesDialog({ value, groups, attachmentUrl, onClose }: Props & { 
         ? <iframe key={selected.attachmentId} title={selected.filename} src={attachmentUrl(selected.attachmentId, "preview")} onError={() => setFailed(true)} />
         : <ImageViewer key={selected.attachmentId} src={attachmentUrl(selected.attachmentId, "preview")} alt={selected.filename} />}
     </div>
-    <div className="sourcing-return-files-controls">
-      <button type="button" disabled={index === 0} onClick={() => setSelectedId(files[index - 1]!.attachmentId)}>上一份</button>
+    <div className="system-dialog__actions sourcing-return-files-controls">
+      <Button type="button" disabled={index === 0} onClick={() => setSelectedId(files[index - 1]!.attachmentId)}>上一份</Button>
       <span>{index + 1} / {files.length}</span>
-      <button type="button" disabled={index === files.length - 1} onClick={() => setSelectedId(files[index + 1]!.attachmentId)}>下一份</button>
-      {failed ? <button type="button" onClick={() => setFailed(false)}>重试预览</button> : null}
-      <a href={attachmentUrl(selected.attachmentId, "preview")} target="_blank" rel="noreferrer">打开原文件</a>
-      <a href={attachmentUrl(selected.attachmentId, "download")} target="_blank" rel="noreferrer">下载</a>
+      <Button type="button" disabled={index === files.length - 1} onClick={() => setSelectedId(files[index + 1]!.attachmentId)}>下一份</Button>
+      {failed ? <Button type="button" onClick={() => setFailed(false)}>重试预览</Button> : null}
+      <a className="dx-button dx-button--secondary" href={attachmentUrl(selected.attachmentId, "preview")} target="_blank" rel="noreferrer">打开原文件</a>
+      <a className="dx-button dx-button--secondary" href={attachmentUrl(selected.attachmentId, "download")} target="_blank" rel="noreferrer">下载</a>
     </div>
     <p>PDF 无法在当前浏览器内显示时，可打开原文件查看。</p>
     {value.history.length ? <details><summary>历史上传记录</summary>{value.history.map(submission => <p key={submission.revision}>

@@ -1,3 +1,5 @@
+import "../../packages/ui/src/tokens.css";
+import "../../packages/ui/src/components.css";
 import { createRoot } from "react-dom/client";
 import { SourcingContractReturnResponseSchema } from "@dx-rework/contracts";
 import { SourcingContractReturnFiles } from "../../apps/web/src/sourcing-contract-return-files.js";

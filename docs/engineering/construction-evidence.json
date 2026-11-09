@@ -2,7 +2,7 @@
   "version": 1,
   "base": "dca186adf3ee3251d111073c29d45d3661c89536",
   "risk": "full",
-  "sourceFingerprint": "8fdc9d6a994410d936befc0ef62eb199357d6687e9529ea0d728511000e685fb",
+  "sourceFingerprint": "e2c4269242648c670dcd4ee58d624f1eca334eb426292f0f3f0b0ecf513b2077",
   "rules": [
     {
       "rule": "Each contract document accepts up to three cumulative files, with unchanged 20 MB, authorization, transaction, idempotency and first-return facts.",
@@ -72,11 +72,11 @@
       "status": "passed",
       "exitCode": 0,
       "testedHead": "dca186adf3ee3251d111073c29d45d3661c89536",
-      "sourceFingerprint": "8fdc9d6a994410d936befc0ef62eb199357d6687e9529ea0d728511000e685fb",
+      "sourceFingerprint": "e2c4269242648c670dcd4ee58d624f1eca334eb426292f0f3f0b0ecf513b2077",
       "context": "Independent main checkout; Node 22, npm 10; Vitest canonical maxWorkers=1; PostgreSQL 18.6 local marked database dx_contract_test, non-superuser contract_runner, port 55439; Chromium synthetic fixtures only.",
-      "startedAt": "2026-11-09T03:42:02.024071+00:00",
-      "endedAt": "2026-11-09T03:42:02.966705+00:00",
-      "logSha256": "1ce4451341c91336a09b3cea29c738135abdd44fa033c2c3c4adba82ad920810",
+      "startedAt": "2026-11-09T03:52:44.944886+00:00",
+      "endedAt": "2026-11-09T03:52:45.916266+00:00",
+      "logSha256": "f49caf4ae67731b48bf1263feb676c399fa00f027ba9ec86d4a867a5baec9c02",
       "kind": "tests",
       "passed": 13,
       "failed": 0,
@@ -85,7 +85,7 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "7b949f26a7528530a2078aea3c54b8f67f30677d3e61b767aa533b6d517ceabd"
+          "sha256": "afb1290ada725df6e2b307d39fc4d10c6dc21e13ef2d6e0a39877f80d8f66d9e"
         }
       ]
     },
@@ -104,6 +104,17 @@
       "passed": 5,
       "failed": 0,
       "skipped": 84,
+      "inputPaths": [
+        "apps/api",
+        "packages",
+        "tests/integration",
+        "tests/helpers",
+        "scripts",
+        "vitest.config.ts",
+        "package.json",
+        "package-lock.json"
+      ],
+      "inputFingerprint": "ee2b162407d367c1c884829e907aa3e7832d6531ce22744715c963e2cc8ac31b",
       "log": "/tmp/dx-contract-postgres-final.log",
       "resultReports": [
         {
@@ -118,11 +129,11 @@
       "status": "passed",
       "exitCode": 0,
       "testedHead": "dca186adf3ee3251d111073c29d45d3661c89536",
-      "sourceFingerprint": "8fdc9d6a994410d936befc0ef62eb199357d6687e9529ea0d728511000e685fb",
+      "sourceFingerprint": "e2c4269242648c670dcd4ee58d624f1eca334eb426292f0f3f0b0ecf513b2077",
       "context": "Independent main checkout; Node 22, npm 10; Vitest canonical maxWorkers=1; PostgreSQL 18.6 local marked database dx_contract_test, non-superuser contract_runner, port 55439; Chromium synthetic fixtures only.",
-      "startedAt": "2026-11-09T03:42:06.147886+00:00",
-      "endedAt": "2026-11-09T03:42:08.182978+00:00",
-      "logSha256": "1defb3326ec892b00a0bc430b65f7a2c2d893a08ab3c91d89180178335bd1317",
+      "startedAt": "2026-11-09T03:52:45.916569+00:00",
+      "endedAt": "2026-11-09T03:52:48.128281+00:00",
+      "logSha256": "e9432215d0fcfa79d5dfd4c8d963694ee0909219c9e68f1050e55d2ecb5d24ad",
       "kind": "tests",
       "passed": 1,
       "failed": 0,
@@ -131,7 +142,7 @@
       "resultReports": [
         {
           "format": "node-tap",
-          "sha256": "1defb3326ec892b00a0bc430b65f7a2c2d893a08ab3c91d89180178335bd1317"
+          "sha256": "e9432215d0fcfa79d5dfd4c8d963694ee0909219c9e68f1050e55d2ecb5d24ad"
         }
       ]
     },
@@ -141,11 +152,11 @@
       "status": "passed",
       "exitCode": 0,
       "testedHead": "dca186adf3ee3251d111073c29d45d3661c89536",
-      "sourceFingerprint": "8fdc9d6a994410d936befc0ef62eb199357d6687e9529ea0d728511000e685fb",
+      "sourceFingerprint": "e2c4269242648c670dcd4ee58d624f1eca334eb426292f0f3f0b0ecf513b2077",
       "context": "Independent main checkout; Node 22, npm 10; Vitest canonical maxWorkers=1; PostgreSQL 18.6 local marked database dx_contract_test, non-superuser contract_runner, port 55439; Chromium synthetic fixtures only.",
-      "startedAt": "2026-11-09T03:42:08.183118+00:00",
-      "endedAt": "2026-11-09T03:42:44.096134+00:00",
-      "logSha256": "2312fb4d28ec114769d854f7d81bddb5d7530137e8d1b494b8c34eaec504871c",
+      "startedAt": "2026-11-09T03:52:48.128468+00:00",
+      "endedAt": "2026-11-09T03:53:24.326992+00:00",
+      "logSha256": "a51b6cf173c293f35260dbf173185c1ba29a57c9b74c6a5575e18bbc98c84018",
       "kind": "command",
       "log": "/tmp/dx-contract-static-final.log"
     }

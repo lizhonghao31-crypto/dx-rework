@@ -22,6 +22,9 @@ await test('one return-file entry supports desktop and mobile preview, version h
       const entry=page.getByRole('button',{name:'查看回签文件',exact:true});
       await entry.waitFor();assert.equal(await entry.count(),1);await entry.click();
       const dialog=page.getByRole('dialog');await dialog.waitFor();
+      assert.equal(await dialog.evaluate(el=>el.classList.contains('system-dialog')),true);
+      assert.equal(await dialog.locator('button:not(.dx-button)').count(),0);
+      assert.equal(await dialog.evaluate(el=>{const probe=document.createElement('div');probe.className='system-dialog';probe.hidden=true;document.body.append(probe);const matches=getComputedStyle(el).borderTopColor===getComputedStyle(probe).borderTopColor && getComputedStyle(el).borderTopLeftRadius===getComputedStyle(probe).borderTopLeftRadius;probe.remove();return matches;}),true);
       assert.equal(await dialog.locator('nav button').count(),5);
       assert.equal(await dialog.locator('iframe').count(),1);
       assert.equal(await dialog.getByRole('button',{name:'上一份',exact:true}).isDisabled(),true);
