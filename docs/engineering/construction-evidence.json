@@ -1,16 +1,16 @@
 {
   "version": 1,
   "base": "2bd3487e0d4ffb39230c7939697734db7e6102ee",
-  "sourceFingerprint": "119535271e82eb229c53aa1bcf92cf8da153a64f54cbe5e4a28f60e2ac48bd5f",
+  "sourceFingerprint": "06b33e29d98eb17b37853750b9b8d33ef3db2779758870cce52d24c112defac7",
   "risk": "full",
   "rules": [
     {
       "source": "Approved latest unified supply-chain six-PR plan sequence9, https://chatgpt.com/space/page_6c91556b94cc81918747a7b4d6b2f19b sections11/14.1 andB33/B35-B42. PR05 on actual P04 merge; user authorizes necessary code, CodexReview, sequential expected-head merge; no deployment, live data/config or new adoption activation.",
       "dateAndPermission": "Original current management and PMC read authority with actual database roles and original same-session revocation. Root original special case retained, no cross-request authorization cache. Published set applies to future adoptions only; adopted B/D/A/H/snapshots never rewritten. All personal draft commands retain original actor, content and key; same transaction locks/versions, rollback and receipts. Date-only H remains date with original Beijing exclusive boundary, not actual midnight.",
       "checks": [
-        "p05-profile-compat-native",
-        "p05-profile-compat-units",
-        "p05-profile-compat-static"
+        "p05-craft-timer-native",
+        "p05-craft-timer-units",
+        "p05-craft-timer-static"
       ],
       "rule": "Atomic actual standard pairs, personal drafts, compatible one-side publishers and genuine history without inferred pairing.",
       "writes": [
@@ -50,9 +50,9 @@
       "source": "Approved latest unified supply-chain six-PR plan sequence9, https://chatgpt.com/space/page_6c91556b94cc81918747a7b4d6b2f19b sections11/14.1 andB33/B35-B42. PR05 on actual P04 merge; user authorizes necessary code, CodexReview, sequential expected-head merge; no deployment, live data/config or new adoption activation.",
       "dateAndPermission": "Original current management and PMC read authority with actual database roles and original same-session revocation. Root original special case retained, no cross-request authorization cache. Published set applies to future adoptions only; adopted B/D/A/H/snapshots never rewritten. All personal draft commands retain original actor, content and key; same transaction locks/versions, rollback and receipts. Date-only H remains date with original Beijing exclusive boundary, not actual midnight.",
       "checks": [
-        "p05-profile-compat-native",
-        "p05-profile-compat-units",
-        "p05-profile-compat-static"
+        "p05-craft-timer-native",
+        "p05-craft-timer-units",
+        "p05-craft-timer-static"
       ],
       "rule": "Read-only temporary calculator shares native pure route builders and backward targets, with independent PO calendars, craft sequence and critical path spans.",
       "writes": [
@@ -89,9 +89,9 @@
       "source": "Approved latest unified supply-chain six-PR plan sequence9, https://chatgpt.com/space/page_6c91556b94cc81918747a7b4d6b2f19b sections11/14.1 andB33/B35-B42. PR05 on actual P04 merge; user authorizes necessary code, CodexReview, sequential expected-head merge; no deployment, live data/config or new adoption activation.",
       "dateAndPermission": "Original current management and PMC read authority with actual database roles and original same-session revocation. Root original special case retained, no cross-request authorization cache. Published set applies to future adoptions only; adopted B/D/A/H/snapshots never rewritten. All personal draft commands retain original actor, content and key; same transaction locks/versions, rollback and receipts. Date-only H remains date with original Beijing exclusive boundary, not actual midnight.",
       "checks": [
-        "p05-profile-compat-native",
-        "p05-profile-compat-units",
-        "p05-profile-compat-static"
+        "p05-craft-timer-native",
+        "p05-craft-timer-units",
+        "p05-craft-timer-static"
       ],
       "rule": "Remove all current series profile/default candidates while retaining explicit legitimate dates and adopted history.",
       "writes": [
@@ -122,9 +122,9 @@
       "source": "Approved latest unified supply-chain six-PR plan sequence9, https://chatgpt.com/space/page_6c91556b94cc81918747a7b4d6b2f19b sections11/14.1 andB33/B35-B42. PR05 on actual P04 merge; user authorizes necessary code, CodexReview, sequential expected-head merge; no deployment, live data/config or new adoption activation.",
       "dateAndPermission": "Original current management and PMC read authority with actual database roles and original same-session revocation. Root original special case retained, no cross-request authorization cache. Published set applies to future adoptions only; adopted B/D/A/H/snapshots never rewritten. All personal draft commands retain original actor, content and key; same transaction locks/versions, rollback and receipts. Date-only H remains date with original Beijing exclusive boundary, not actual midnight.",
       "checks": [
-        "p05-profile-compat-native",
-        "p05-profile-compat-units",
-        "p05-profile-compat-static"
+        "p05-craft-timer-native",
+        "p05-craft-timer-units",
+        "p05-craft-timer-static"
       ],
       "rule": "Compact original three workspaces and current canonical coverage, with honest bounded88 legacy compatibility diagnostics and no unrelated operational drills.",
       "writes": [
@@ -140,7 +140,8 @@
         "tests/integration/m01-journey-performance-postgres.test.ts",
         "tests/integration/m01-settings-native-browser-postgres.test.ts",
         "tests/unit/digital-pmc-readonly-ui.test.ts",
-        "tests/unit/full-gate-risk-map.test.ts"
+        "tests/unit/full-gate-risk-map.test.ts",
+        "tests/unit/sourcing-transfer-submit-feedback.test.ts"
       ],
       "reads": [
         "apps/web/src/App.tsx",
@@ -166,78 +167,78 @@
   ],
   "checks": [
     {
-      "id": "p05-profile-compat-native",
+      "id": "p05-craft-timer-native",
       "kind": "tests",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/sla-settings-sets-postgres.test.ts tests/integration/sla-settings-drafts-postgres.test.ts tests/integration/series-plan-postgres.test.ts --maxWorkers=2 --config vitest.business-chain.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/supplychain-board-20261109/p05-profile-compat-native.vitest.json",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/sla-settings-sets-postgres.test.ts tests/integration/sla-settings-drafts-postgres.test.ts tests/integration/series-plan-postgres.test.ts --maxWorkers=2 --config vitest.business-chain.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/supplychain-board-20261109/p05-craft-timer-native.vitest.json",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "119535271e82eb229c53aa1bcf92cf8da153a64f54cbe5e4a28f60e2ac48bd5f",
+      "sourceFingerprint": "06b33e29d98eb17b37853750b9b8d33ef3db2779758870cce52d24c112defac7",
       "sourceUnchanged": true,
       "inputsUnchanged": true,
-      "testedHead": "eadb10664e0da4a5ac8bdc4f7883c42f347ef33e",
-      "startedAt": "2026-11-10T04:21:57.522Z",
-      "endedAt": "2026-11-10T04:22:11.997Z",
+      "testedHead": "93d59c4e8cd193d753eda1c50063cf63e8e77818",
+      "startedAt": "2026-11-10T04:42:41.512Z",
+      "endedAt": "2026-11-10T04:42:50.985Z",
       "passed": 43,
       "failed": 0,
       "skipped": 0,
       "planError": null,
-      "log": "/workspace/scratch/supplychain-board-20261109/p05-profile-compat-native.log",
-      "logSha256": "5adb09ef6b68ecd55f6a04f6d4bc8748fe99186a84287955e1db59ab9d0c4edb",
-      "resultReport": "/workspace/scratch/supplychain-board-20261109/p05-profile-compat-native.vitest.json",
+      "log": "/workspace/scratch/supplychain-board-20261109/p05-craft-timer-native.log",
+      "logSha256": "c4e30db3dbf7693179b7dba6af6a2ce5d9aec32e57769d9bdd8a09f7af611255",
+      "resultReport": "/workspace/scratch/supplychain-board-20261109/p05-craft-timer-native.vitest.json",
       "postgresVersion": 130023,
       "context": "Actual PostgreSQL130023 official cached-image binaries/libraries in private /tmp, non-superuser marked TEST databases, original full native schema and businessAnchorFixture/UAT initializer. Original canonical suite config/runOwnedCommand, Node22.22.2,2 Vitest workers onCPUs2/3, PostgreSQL onCPUs0/1/default100connections/64MiB shared buffers. No Docker/CI hardware or onsite equivalence. p01 is explicitly bounded new-case discovery, not all suites or skipped old coverage passed.",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "f64fef3667b7b1b2e35a3075cb8beb8cdba60b2b0ddda76e587c6b47cd785308"
+          "sha256": "76b082521331d662c43c63605c522bf612b6f54911868326840d4335b6fd7f3b"
         }
       ]
     },
     {
-      "id": "p05-profile-compat-units",
+      "id": "p05-craft-timer-units",
       "kind": "tests",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/digital-pmc-readonly-access.test.ts tests/unit/digital-pmc-readonly-ui.test.ts tests/unit/sla-settings-history.test.ts tests/unit/sla-settings-calculation.test.ts tests/unit/m01-settings-preview.test.ts tests/unit/sla-saved-draft.test.ts tests/unit/digital-sla-configuration.test.ts tests/unit/sla-calculation.test.ts tests/unit/sla-notification-preferences.test.ts tests/unit/series-plan-dates.test.ts tests/unit/m01-series-plan-reading.test.ts tests/unit/request-response-feedback.test.ts tests/unit/full-gate-risk-map.test.ts --maxWorkers=2 --reporter=verbose --reporter=json --outputFile=/workspace/scratch/supplychain-board-20261109/p05-profile-compat-units.vitest.json",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/digital-pmc-readonly-access.test.ts tests/unit/digital-pmc-readonly-ui.test.ts tests/unit/sla-settings-history.test.ts tests/unit/sla-settings-calculation.test.ts tests/unit/m01-settings-preview.test.ts tests/unit/sla-saved-draft.test.ts tests/unit/digital-sla-configuration.test.ts tests/unit/sla-calculation.test.ts tests/unit/sla-notification-preferences.test.ts tests/unit/series-plan-dates.test.ts tests/unit/m01-series-plan-reading.test.ts tests/unit/request-response-feedback.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/sourcing-transfer-submit-feedback.test.ts --maxWorkers=2 --reporter=verbose --reporter=json --outputFile=/workspace/scratch/supplychain-board-20261109/p05-craft-timer-units.vitest.json",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "119535271e82eb229c53aa1bcf92cf8da153a64f54cbe5e4a28f60e2ac48bd5f",
+      "sourceFingerprint": "06b33e29d98eb17b37853750b9b8d33ef3db2779758870cce52d24c112defac7",
       "sourceUnchanged": true,
       "inputsUnchanged": true,
-      "testedHead": "eadb10664e0da4a5ac8bdc4f7883c42f347ef33e",
-      "startedAt": "2026-11-10T04:21:58.859Z",
-      "endedAt": "2026-11-10T04:22:05.827Z",
-      "passed": 285,
+      "testedHead": "93d59c4e8cd193d753eda1c50063cf63e8e77818",
+      "startedAt": "2026-11-10T04:42:51.283Z",
+      "endedAt": "2026-11-10T04:42:56.898Z",
+      "passed": 288,
       "failed": 0,
       "skipped": 0,
       "planError": null,
-      "log": "/workspace/scratch/supplychain-board-20261109/p05-profile-compat-units.log",
-      "logSha256": "f43a5359e483f0bc8454c39f6e078b0bb7f38051bfffcba339bbcb5c2491563b",
-      "resultReport": "/workspace/scratch/supplychain-board-20261109/p05-profile-compat-units.vitest.json",
+      "log": "/workspace/scratch/supplychain-board-20261109/p05-craft-timer-units.log",
+      "logSha256": "8f98fde1f0d6ae5dcf42dc1b0c1bf75161350407dc6c45b7b6c6b1ec3fcca5a1",
+      "resultReport": "/workspace/scratch/supplychain-board-20261109/p05-craft-timer-units.vitest.json",
       "postgresVersion": 130023,
       "context": "Actual PostgreSQL130023 official cached-image binaries/libraries in private /tmp, non-superuser marked TEST databases, original full native schema and businessAnchorFixture/UAT initializer. Original canonical suite config/runOwnedCommand, Node22.22.2,2 Vitest workers onCPUs2/3, PostgreSQL onCPUs0/1/default100connections/64MiB shared buffers. No Docker/CI hardware or onsite equivalence. p01 is explicitly bounded new-case discovery, not all suites or skipped old coverage passed.",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "722f30f3873a3eccd9e6270e673910564f7da0e1d5d82f2e7431852b495fceaf"
+          "sha256": "7c8ff4034fb652de0d6b8408283e134d7856c27f2142fe7679552e9bd8a9914c"
         }
       ]
     },
     {
-      "id": "p05-profile-compat-static",
+      "id": "p05-craft-timer-static",
       "kind": "command",
-      "command": "bash -c set -e; node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/series-plan-service.ts apps/api/src/production-platform/development-technical-settings.ts tests/integration/sla-settings-sets-postgres.test.ts --max-warnings=0; npm run typecheck --workspace @dx-rework/api; node scripts/acceptance/time-site-inventory.mjs; git diff --check",
+      "command": "bash -c set -e; node node_modules/eslint/bin/eslint.js tests/unit/sourcing-transfer-submit-feedback.test.ts --max-warnings=0; node scripts/acceptance/time-site-inventory.mjs; git diff --check",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "119535271e82eb229c53aa1bcf92cf8da153a64f54cbe5e4a28f60e2ac48bd5f",
+      "sourceFingerprint": "06b33e29d98eb17b37853750b9b8d33ef3db2779758870cce52d24c112defac7",
       "sourceUnchanged": true,
       "inputsUnchanged": true,
-      "testedHead": "eadb10664e0da4a5ac8bdc4f7883c42f347ef33e",
-      "startedAt": "2026-11-10T04:22:00.188Z",
-      "endedAt": "2026-11-10T04:22:11.481Z",
-      "log": "/workspace/scratch/supplychain-board-20261109/p05-profile-compat-static.log",
-      "logSha256": "0c3a41731f176b4b8c6f8282d89f05cc2ab13055df9392c43c094fe823a00d70",
+      "testedHead": "93d59c4e8cd193d753eda1c50063cf63e8e77818",
+      "startedAt": "2026-11-10T04:43:36.355Z",
+      "endedAt": "2026-11-10T04:43:37.275Z",
+      "log": "/workspace/scratch/supplychain-board-20261109/p05-craft-timer-static.log",
+      "logSha256": "114d19b3f81e82ca812ccaf79d465b9eac16b584f779c9b621a2e15595e62be6",
       "context": "Actual scoped command on Node22.22.2 and unchanged task workspace. No assertion of CI hardware or onsite equivalence."
     }
   ],
