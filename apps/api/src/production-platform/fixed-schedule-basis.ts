@@ -215,6 +215,7 @@ export function attachFixedJourneySchedule(item:OrderJourney,basis:FixedSchedule
    const raw=value.id.startsWith('source:')?value.id.slice(7):value.id,key=raw.split(':')[0]!;return (aliases[key]??key)===node.key;
   }).map(value=>({scopeRef:scope.scopeRef,lineId:scope.lineId,progress:value})));
   if(!targets.length)continue;
+  if(node.expectedKind==='sla'&&node.expectedAt&&node.records.some(record=>record.domain==='task'&&record.id===node.instanceId)&&['instant','date'].includes(node.expectedPrecision))node.nativeTaskDeadline={at:node.expectedAt,precision:node.expectedPrecision as 'instant'|'date',mode:node.deadlineMode,exclusive:node.deadlineExclusive};
   node.fixedTargets=targets;
   const ends=targets.map(target=>target.progress.goalDelta.targetAt),same=ends.every(at=>at!==null&&at===ends[0]);
   // Original native timing.target remains independent D. Only the field named

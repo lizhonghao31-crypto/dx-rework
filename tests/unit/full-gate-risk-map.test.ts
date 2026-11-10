@@ -313,3 +313,6 @@ it('maps actual paired-settings writers, migration and full-App harness to nativ
   const result=classifyFullGatePaths([path]);expect(result.mappedPostgresTests).toContain('tests/integration/sla-settings-sets-postgres.test.ts');expect(result.mappedPostgresTests).toContain('tests/integration/m01-settings-native-browser-postgres.test.ts');
  }
 });
+
+
+it('maps actual supply-chain integration consumers to the original App and native fixed progress checks',()=>{const result=classifyFullGatePaths(['apps/web/src/cockpit-fixed-schedule.tsx','apps/web/src/components.tsx']);expect(result.mappedPostgresTests).toContain('tests/integration/supplychain-board-native-browser-postgres.test.ts');expect(result.mappedPostgresTests).toContain('tests/integration/fixed-progress-postgres.test.ts');});

@@ -2,7 +2,7 @@ import {TodoReadBoundary,useTodoContentRead} from './todo-content-read.js';
 import { SearchableSelect } from "./search-select.js";
 import { PoDateSummary,PoDateDetails,PoDateRisks,PoDeadline } from "./po-delivery-dates.js";
 import { shanghaiBusinessTime } from "./business-date.js";
-import { productionDisplayReturnUrl,productionDisplayDomainHref } from "./production-display-context.js";
+import { productionDisplayReturnUrl,productionDisplayDomainHref,productionReportingHref } from "./production-display-context.js";
 import { todoReturnPath } from "./todo-query-state.js";
 import { ProductionExclusionControls } from "./production-exclusion-controls.js";
 import { NavigationIcon } from "./navigation-icons.js";
@@ -87,7 +87,7 @@ function ProductionDashboardContent({productionOrderId}:{productionOrderId?:stri
   const displayReturn=productionDisplayReturnUrl(new URLSearchParams(window.location.search).get('returnTo'));
   return <Shell active="实时看板"><div ref={readRef} className="sourcing-workspace production-dashboard production-board">
     <Header iconRoute="/ui/production-dashboard" title="实时看板" subtitle="生产数量与工作日进度，按实际记录判断。" badge="实时生产看板"/>
-    <div className="production-dashboard__toolbar">{canOpenReporting?<a href={pageUrl("ui/production-reporting")}><NavigationIcon route="/ui/production-reporting" />生产数据填报</a>:null}{productionOrderId?<a href={todoReturnPath(window.location.search)?pageUrl(todoReturnPath(window.location.search)!):orderReturn??displayReturn??pageUrl("ui/production-dashboard")}>{todoReturnPath(window.location.search) ? "返回我的待办" : orderReturn?"返回这张订单":displayReturn?"返回实时生产展示":"返回实时看板"}</a>:null}
+    <div className="production-dashboard__toolbar">{canOpenReporting?<a href={productionReportingHref(productionOrderId??null,factoryDecisionId,orderReturn??displayReturn)!}><NavigationIcon route="/ui/production-reporting" />生产数据填报</a>:null}{productionOrderId?<a href={todoReturnPath(window.location.search)?pageUrl(todoReturnPath(window.location.search)!):orderReturn??displayReturn??pageUrl("ui/production-dashboard")}>{todoReturnPath(window.location.search) ? "返回我的待办" : orderReturn?"返回这张订单":displayReturn?"返回实时生产展示":"返回实时看板"}</a>:null}
       <span>{asOf?<time dateTime={asOf} title={timestamp(asOf)}>数据截至 {timestamp(asOf)} · 读取于{relativeProductionTime(asOf,now)}前</time>:"正在读取数据"}</span>
       {canControlMotion?<Button variant="secondary" aria-pressed={paused} onClick={()=>{if(canControlMotion)setPaused(value=>!value);}}>{paused?"继续动效":"暂停动效"}</Button>:null}
       <Button variant="secondary" disabled={loading} onClick={()=>{void load(true);}}><span aria-hidden="true" className={loading?"production-dashboard__refreshing":""}>↻</span> {loading?"刷新中…":"刷新"}</Button>

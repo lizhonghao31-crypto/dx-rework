@@ -377,3 +377,12 @@ Acceptance 更新仍通过固定 root launcher、生产只读健康/锁、实际
 实时 main 新增 migration 明确输出 `PENDING_RELEASE_INTEGRATION`，`productionPromotionVerified=false`、`applicationSemanticsVerified=false`。这不是生产上线通过。生产晋级/切换仍只允许准确 main SHA，须核真实 production ledger→candidate、声明支持源历史的真实升级/低权限/ACL/恢复及必要应用行为；禁止直接 release 部署 production。源码完整性不能证明 PMC 应用/API 已兼容；既有 PMC 部分403仍是独立上线待办，不为门禁抄 SQL 或扩大角色。
 
 策略变更涉及已安装工具：仍遵守本手册原有显式同版本 `install` 后 `diagnose/update` 要求，不能靠 data-only refresh 偷换执行策略。本治理交付不执行任何现场 install/update/deploy。
+
+
+## 供应链六项集成后的新采用模式
+
+`DIGITAL_TIMELINE_ADOPTION_MODE=legacy|fixed_v2`沿原应用配置加载，默认legacy，不在业务设置页另设开关。官方工具白名单现能传递此已有配置；涉及工具代码的版本继续先显式同版本install，再diagnose/update，不能靠旧工具data-only刷新替换执行策略。代码合并本身不修改现场配置或启动服务。
+
+部署者在所有实例、schema、核心新单/多PO/双工艺及原有界队列核验完成后，才可一次切换新采用为fixed_v2。现存v2对象继续按自己的timelineSchemaVersion/routeSchemaVersion读写；关闭新采用只使后续新对象不再采用，不能把已有stepRef/B0/Bk解释回legacy。新数据已写后不得盲退到不认识v2的旧二进制，不通过回退配置删除事实、审计、附件或已冻结标准。普通GET仍不全库重建；共享派生更新未完成时保留原pending/failed语义。
+
+现场更新及真实业务验收仍由用户执行，本节不是已部署或现场通过的回执。既有生产锁、权限/备份/恢复和固定版本流程不变。

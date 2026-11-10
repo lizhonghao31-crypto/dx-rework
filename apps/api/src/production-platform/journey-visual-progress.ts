@@ -82,6 +82,15 @@ function recordedStart(rows: JourneyBusinessRequirement[], nodes: JourneyNode[],
   return first !== null && milestoneUpperBounds.every(end => end >= first) ? new Date(first).toISOString() : null;
 }
 
+/** v2 presentation reads the already-frozen B from the same authorized
+ * projection. It does not replace native responsibility D or calculate a new
+ * forecast/baseline from current time. Legacy dates keep their original meaning. */
+function fixedExpectedDate(targets:NonNullable<JourneyNode['fixedTargets']>):JourneyBusinessDate{
+ if(!targets.length||targets.some(target=>!target.progress.goalDelta.targetAt))return unknownDate();
+ const latest=targets.reduce((a,b)=>Date.parse(a.progress.goalDelta.targetAt!)>=Date.parse(b.progress.goalDelta.targetAt!)?a:b).progress.goalDelta;
+ return {at:latest.targetPrecision==='date'?latest.targetDate:latest.targetAt,precision:latest.targetPrecision,quality:'recorded',status:'complete',covered:targets.length,total:targets.length,reasons:[]};
+}
+
 /** Versioned presentation only. Reuses the original one-kind/every-effective-
  * instance requirements, including native PO, replacement and closure evidence.
  * It does not rewrite their n/m statistics, dates, authorization or lifecycle.
@@ -104,9 +113,10 @@ export function journeyVisualProgress(order: OrderJourney, asOf: string): Journe
     const applicability = excluded || !unavailable && !applicable.length ? 'not_applicable' as const
       : unavailable ? 'unknown' as const : 'applicable' as const;
     const date = dates?.stages.find(value => value.key === stage.key);
-    // "预计" stays the original forecast. Adopted plan and responsibility D
-    // are deliberately never substituted into this existing business meaning.
-    const expected = copyDate(date?.forecast), actual = copyDate(date?.actual);
+    // Adopted v2 displays its immutable B; legacy keeps its original forecast.
+    // Responsibility D and current F remain distinct in the node detail.
+    const fixedTargets=order.fixedSchedule?nodes.filter(node=>node.stage===stage.key&&node.current).flatMap(node=>node.fixedTargets??[]):null;
+    const expected = fixedTargets?fixedExpectedDate(fixedTargets):copyDate(date?.forecast), actual = copyDate(date?.actual);
     const startedAt = applicability === 'applicable' ? recordedStart(relevant, nodes, asOf) : null;
     return { key: stage.key, applicability, applicable: applicable.length, completed, unknown: unknown + (missing || duplicate ? 1 : 0),
       actualRatio: applicability === 'applicable' ? completed / applicable.length : null,
@@ -115,7 +125,10 @@ export function journeyVisualProgress(order: OrderJourney, asOf: string): Journe
   });
   const applicable = stages.filter(stage => stage.applicability === 'applicable');
   const unknownStages = stages.filter(stage => stage.applicability === 'unknown').length;
-  const expected = copyDate(dates?.overall.forecast), actual = copyDate(dates?.overall.actual);
+  const fixed=order.fixedSchedule,planEnd=fixed?.durationSummary.planEnd,terminalTargets=fixed?.scopes.flatMap(scope=>scope.nodes.filter(node=>node.goalDelta.targetAt===planEnd).map(progress=>({scopeRef:scope.scopeRef,lineId:scope.lineId,progress})))??[];
+  const expected = fixed?planEnd?fixedExpectedDate(terminalTargets):unknownDate():copyDate(dates?.overall.forecast);
+  const completed=fixed?.durationSummary.deliveryCompletedAt;
+  const actual = fixed?completed&&completed.precision!=='unknown'?{at:completed.precision==='date'?completed.date:completed.at,precision:completed.precision,quality:'recorded' as const,status:'complete' as const,covered:fixed.scopes.length,total:fixed.scopes.length,reasons:[]}:unknownDate():copyDate(dates?.overall.actual);
   const startedAt = observed && !unknownStages ? recordedStart(rows, nodes, asOf) : null;
   return { ruleVersion: 'journey-visual-v2', asOf,
     actualRatio: unknownStages || !applicable.length ? null : applicable.reduce((sum, stage) => sum + stage.actualRatio!, 0) / applicable.length,

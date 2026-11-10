@@ -348,7 +348,8 @@ export class DigitalJourneyQuery {
     const scope:BusinessTimeScope=oid?{kind:'order',id:oid}:{kind:'source',id:sid!};
     // Use SQL snapshot time only as the ordinary fallback. Guarded context and
     // actual reader results (including null scenario IDs) retain precedence.
-    const observed=await journeyMeasure('clock_read',()=>new ContextBusinessClock(this.database,db).read(scope,()=>new Date(asOf)));
+    const observation=await journeyMeasure('clock_read',()=>new ContextBusinessClock(this.database,db).readObservation(scope,{now:()=>new Date(asOf),mode:'live'}));
+    const observed=observation.time;
     capture?.time?.(observed);
     if(observed.scenarioId)this.observations.get(db)?.set(`${scope.kind}:${scope.id}`,{scope,time:observed});
     asOf=observed.now;
@@ -830,7 +831,7 @@ export class DigitalJourneyQuery {
         ?await readMaterialSuccessors(db,sid,visibleTasks.map(task=>task.task_id)):[];
       item.businessProgress=journeyBusinessProgress(item,observed.now,adopted,businessQuantities,requirementEvidence,replacements);
       item.businessProgress.dates=journeyBusinessDates(item);
-      if(fixedInputs?.fixedSchedule)attachFixedJourneySchedule(item,fixedInputs.fixedSchedule,observed.now);
+      if(fixedInputs?.fixedSchedule){attachFixedJourneySchedule(item,fixedInputs.fixedSchedule,observed.now);item.fixedSchedule!.observationMode=observation.mode;}
       item.visualProgress=journeyVisualProgress(item,asOf);
     }
     this.authorizedTasks.set(item,visibleTasks.map(task=>({id:task.task_id,key:journeyDefinition(task.task_kind)?.key??task.task_kind,label:journeyDefinition(task.task_kind)?.label??"业务节点",round:task.route_version})));

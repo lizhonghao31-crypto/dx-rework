@@ -26,7 +26,7 @@ const kpis = [
 ] as const;
 
 function CockpitFilters({ context, data, onChange, onSearchDraft }: { context: CockpitContext; data: JourneyResult | null; onChange: (patch: Partial<CockpitContext>) => void; onSearchDraft?:((value:string,pending:boolean)=>void)|undefined }) {
-  const [more, setMore] = useState(Boolean(context.scope==='development'||context.merchandiserId||context.category||context.stage || context.node || context.state || context.risk || context.startDate || context.endDate));
+  const [more, setMore] = useState(Boolean(context.progress||context.scope==='development'||context.merchandiserId||context.category||context.stage || context.node || context.state || context.risk || context.startDate || context.endDate));
   const [draft, setDraft] = useState(context),composing=useRef(false);
   useEffect(() => setDraft(current=>({...context,search:current.search.trim()===context.search?current.search:context.search})), [context]);
   const liveSearch=useLiveSearch(draft.search,context.search,search=>onChange({...draft,search,page:1}));
@@ -37,7 +37,7 @@ function CockpitFilters({ context, data, onChange, onSearchDraft }: { context: C
     <label>客户<SearchableSelect aria-label="客户" value={draft.customer ?? ""} onChange={event => field("customer", event.target.value)}><option value="">全部客户</option>{data?.facets?.customers.map(value => <option key={value}>{value}</option>)}</SearchableSelect></label>
     <label>状态<select aria-label="整单状态" value={draft.kpi} onChange={event=>field('kpi',event.target.value)}><option value="all">全部状态</option>{kpis.filter(kpi=>kpi.key!=='all'&&kpi.key!=='timing_missing').map(kpi=><option key={kpi.key} value={kpi.key}>{kpi.label}</option>)}<option value="blocked">受阻</option></select></label>
     <div className="journey-filter-actions"><Button type="submit">搜索</Button><Button type="button" variant="secondary" onClick={() => setMore(!more)} aria-expanded={more}>更多筛选</Button>
-    <Button type="button" variant="secondary" onClick={() => onChange({ page: 1, search: "", kpi: "all", customer: undefined, merchandiserId: undefined, category: undefined, stage: undefined, node: undefined, state: undefined, risk: undefined, startDate: undefined, endDate: undefined, missing:undefined })}>重置筛选</Button></div>
+    <Button type="button" variant="secondary" onClick={() => onChange({ page: 1, search: "", kpi: "all", customer: undefined, merchandiserId: undefined, category: undefined, stage: undefined, node: undefined, state: undefined, risk: undefined, startDate: undefined, endDate: undefined, progress:undefined, missing:undefined })}>重置筛选</Button></div>
     {more && <div className="journey-more-filters">
       <label>订单范围<select aria-label="订单范围" value={draft.scope??'production'} onChange={event=>field('scope',event.target.value)}><option value="production">生产订单</option><option value="development">纯开发未下单</option></select></label>
       <label>跟单<SearchableSelect aria-label="跟单" value={draft.merchandiserId ?? ""} onChange={event => field("merchandiserId", event.target.value)}><option value="">主 / 第二跟单</option>{data?.facets?.merchandisers.map(person => <option value={person.id} key={person.id}>{person.name ?? person.id}</option>)}</SearchableSelect></label>
@@ -45,6 +45,7 @@ function CockpitFilters({ context, data, onChange, onSearchDraft }: { context: C
       <label>阶段<select aria-label="大流程" value={draft.stage ?? ""} onChange={event => field("stage", event.target.value)}><option value="">全流程</option>{JOURNEY_STAGES.map(stage => <option key={stage.key} value={stage.key}>{stage.label}</option>)}</select></label>
       <label>小流程<SearchableSelect aria-label="小流程" value={draft.node ?? ""} onChange={event => field("node", event.target.value)}><option value="">全部节点</option>{JOURNEY_NODES.map(node => <option key={node.key} value={node.key}>{node.label}</option>)}</SearchableSelect></label>
       <label>业务状态<select aria-label="业务状态" value={draft.state ?? ""} onChange={event => field("state", event.target.value)}><option value="">全部状态</option>{Object.entries(journeyStateLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
+      <label>计划与交期<select aria-label="计划与交期" value={draft.progress??""} onChange={event=>field("progress",event.target.value)}><option value="">全部</option><option value="schedule_lag">进度落后</option><option value="customer_due_passed">客户交期已过</option><option value="unknown">计划待核</option></select></label>
       <label>风险<select aria-label="风险" value={draft.risk ?? ""} onChange={event => field("risk", event.target.value)}><option value="">全部风险</option>{Object.entries(journeyRiskLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
       <label>创建开始日期<input type="date" value={draft.startDate ?? ""} onChange={event => field("startDate", event.target.value)} /></label>
       <label>创建结束日期<input type="date" value={draft.endDate ?? ""} onChange={event => field("endDate", event.target.value)} /></label>
@@ -53,6 +54,7 @@ function CockpitFilters({ context, data, onChange, onSearchDraft }: { context: C
 }
 export function cockpitConditionsLabel(context:CockpitContext,data?:JourneyResult|null){
  const pieces=[context.scope==='development'?'纯开发未下单':'生产订单',context.search?`搜索“${context.search}”`:'全部搜索词',context.stage?JOURNEY_STAGES.find(stage=>stage.key===context.stage)?.label??'阶段待核':'全流程'];
+ if(context.progress)pieces.push(({schedule_lag:'进度落后',customer_due_passed:'客户交期已过',unknown:'计划待核'} as const)[context.progress]);
  if(context.customer)pieces.push(`客户 ${context.customer}`);if(context.category)pieces.push(`品类 ${context.category}`);
  if(context.merchandiserId)pieces.push(`跟单 ${data?.facets?.merchandisers.find(person=>person.id===context.merchandiserId)?.name??'已指定（姓名未读取）'}`);
  if(context.node)pieces.push(JOURNEY_NODES.find(node=>node.key===context.node)?.label??'所选节点');if(context.state)pieces.push(journeyStateLabels[context.state]);if(context.risk)pieces.push(journeyRiskLabels[context.risk]);
@@ -71,7 +73,7 @@ export function DigitalJourneyCockpit({ data, error, detail, detailError, detail
   {data?.freshness&&<p className="cockpit-read-status" role={data.freshness.failed?'alert':'status'}>{cockpitAvailabilityMessage(data)}</p>}
   {data?.freshness?.retryIds?.length&&onPlanCommitted?<CockpitRetryUpdates key={data.freshness.retryIds.join(',')} ids={data.freshness.retryIds} onUpdated={onPlanCommitted}/>:null}
   {pending&&<p className="cockpit-read-status" role="status">{searchDraft?.pending||readPhase==='preparing'?'准备搜索…':'正在更新…'}{data&&<> 上次读取 <CockpitDate value={data.asOf} precision="instant" missing="时点待核"/>，以下暂为上次结果。</>}</p>}{readPhase==='identity'&&<p role="status">正在核验当前身份…</p>}
-  <section aria-label="订单状态统计"><div className="journey-kpis" aria-label="主要订单指标">{kpis.filter(kpi=>primaryKeys.includes(kpi.key)).map(renderKpi)}</div><div className="journey-secondary-kpis" aria-label="其他订单指标">{kpis.filter(kpi=>!primaryKeys.includes(kpi.key)).map(renderKpi)}</div></section>
+  <section aria-label="订单状态统计"><div className="journey-kpis" aria-label="七项订单指标">{kpis.map(renderKpi)}</div></section>
   {actual.missing&&<div className="cockpit-applied-coverage"><span>{cockpitCoverageLabels[actual.missing]}</span><Button type="button" variant="secondary" onClick={()=>applyResult({missing:undefined,page:1})}>清除缺项筛选</Button></div>}
   {error&&<p role="alert">读取“{cockpitConditionsLabel(context,data)}”失败：{error}。{data?'仍显示上次读取的订单，可刷新重试。':''}</p>}
   <CockpitHome data={data} error={error} context={actual} onChange={applyResult}/>

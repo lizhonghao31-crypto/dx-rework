@@ -1,5 +1,6 @@
 /** Route-only adapter. Existing domain URLs and authorization remain authoritative. */
 export function digitalWorkspaceActive(active: string, search: string): string {
+  if(active==="生产数据填报")return "实时生产看板";
   const workspace = new URLSearchParams(search).get("workspace");
   if (active === "开发与大货办理" && workspace === "designer") return "digital-designer";
   if (active === "生产管理座舱") {

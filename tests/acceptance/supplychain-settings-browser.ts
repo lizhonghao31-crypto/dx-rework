@@ -26,7 +26,7 @@ import {ShortLeadService} from '../../apps/api/src/production-platform/short-lea
 export type SettingsBrowserFault={losePath?:string;lost?:boolean;failRead?:boolean;afterPublishRead?:boolean};
 /** Original full App, original auth routes/store/membership and actual native
  * services. Only DingTalk and named transport faults are TEST adapters. */
-export async function supplychainSettingsBrowser(url:string,evidence:string){
+export async function supplychainSettingsBrowser(url:string,evidence:string,options?:{fullApp?:boolean}){
  const out=await mkdtemp(join(tmpdir(),'dx-settings-set-')),app=Fastify(),f=await businessAnchorFixture(url),db=f.db,secret='TEST paired settings native auth only '.repeat(4),root=new RootAuthority(db,'anchor-test','uat-root');
  const auth=new AuthService(new AcceptanceDingTalkProvider(db,'anchor-test',secret),new PostgresAuthStore(db,'anchor-test','uat-root'),'anchor-test',3600000,secret),errors:string[]=[],faults=new Map<string,SettingsBrowserFault>();
  const requests:Array<{session:string;path:string;method:string;key:string|null;bodyHash:string|null;status:number}>=[];
@@ -39,7 +39,7 @@ export async function supplychainSettingsBrowser(url:string,evidence:string){
   // Unrelated navigation indicator is a clearly labelled TEST response.
   app.get('/todos/mine/indicator',async(request,reply)=>{const user=await auth.authenticate(request.headers.cookie?.split(';').map(v=>v.trim()).find(v=>v.startsWith('dx_rework_session='))?.slice(18));reply.header('x-dx-rework-actor-id',user.id);return {pendingCount:0,unreadCount:0};});
   await app.ready();
-  await build({configFile:false,esbuild:{jsx:'automatic',jsxDev:false},define:{'import.meta.env.BASE_URL':'"/"','process.env.NODE_ENV':'"production"'},build:{outDir:out,lib:{entry:resolve('tests/fixtures/m01-settings-native-ui.tsx'),name:'NativeSettingsUi',formats:['iife']}}});
+  await build({configFile:false,esbuild:{jsx:'automatic',jsxDev:false},define:{'import.meta.env.BASE_URL':'"/"','process.env.NODE_ENV':'"production"'},build:{outDir:out,lib:{entry:resolve(options?.fullApp?'tests/fixtures/m01-cockpit-home-native-ui.tsx':'tests/fixtures/m01-settings-native-ui.tsx'),name:'NativeSettingsUi',formats:['iife']}}});
   const files=await readdir(out),js=await readFile(join(out,files.find(p=>p.endsWith('.js'))!),'utf8'),css=await readFile(join(out,files.find(p=>p.endsWith('.css'))!),'utf8');
   const html=`<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css}</style><div id="root"></div><script>${js.replace(/<\/script/gi,'<\\/script')}</script></html>`;
   server=createServer(async(req,res)=>{try{

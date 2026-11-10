@@ -1,3 +1,4 @@
+import type {ScheduleNodeProgress} from '@dx-rework/contracts';
 import { expect, it } from 'vitest';
 import { JOURNEY_NODES, type JourneyBusinessDate, type JourneyNode, type OrderJourney } from '@dx-rework/contracts/digital-production-journey';
 import { journeyStages } from '../../apps/api/src/production-platform/journey-projection.js';
@@ -188,4 +189,13 @@ it('R3 missing effective entry times and historical/planning records cannot fabr
   order.stages.find(stage => stage.key === 'cutting')!.nodes.push({ ...current, instanceId: 'old-round', current: false, enteredAt: start });
   const plan = nodes(order).find(node => node.planningOnly)!; plan.enteredAt = start;
   expect(journeyVisualProgress(order, now)).toMatchObject({ startedAt: null, timeRatio: null });
+});
+
+it('supply-chain v2 uses frozen per-scope B and physical delivery A while preserving the old lifecycle and actual progress',()=>{
+ const order=fixture(['bulk_cutting']),current=node(order,'bulk_cutting');current.expectedAt='2026-11-10T00:00:00Z';current.expectedKind='plan';current.expectedPrecision='instant';
+ const point:ScheduleNodeProgress={id:'bulk_cutting',scopeRef:'po:TEST-A',targetRevision:'TEST frozen1',canonicalWorkRef:'TEST nativecut',state:'normal' as const,lagMinutes:{minimum:0,maximum:0},businessCompleted:false,availabilityBound:null,creditLimit:null,goalDelta:{kind:'on_target' as const,signedValue:0,unit:'minute' as const,asOf:now,targetAt:end,targetPrecision:'instant' as const,targetDate:null,actual:{precision:'unknown' as const},targetRevision:'TEST frozen1',scopeRef:'po:TEST-A'},ownSla:{state:'not_adopted' as const,overdueMinutes:null,sourceRef:null},coverage:[]};
+ current.fixedTargets=[{scopeRef:point.scopeRef,lineId:'TEST-A',progress:point}];order.fixedSchedule={version:'fixed-schedule-progress-v1',asOf:now,scopeRevision:'TEST1',factRevision:'TEST1',state:'normal',scopes:[{scopeRef:point.scopeRef,lineId:'TEST-A',targetRevision:'TEST1',state:'normal',lagMinutes:{minimum:0,maximum:0},customerDuePassed:false,nodes:[point],coverage:[]}],durationSummary:{planStart:start,planEnd:end,actualStart:{precision:'unknown'},observationAt:now,deliveryCompletedAt:{precision:'unknown'},planSpanMinutes:2880,elapsedSpanMinutes:null,finalActualSpanMinutes:null,asOf:now,coverage:[]},legacyOverdue:false,nextChangeAt:null};
+ order.display=journeyDisplay(order,now);const lifecycle=JSON.stringify(order.display),result=progress(order);
+ expect(result.stages.find(stage=>stage.key==='cutting')?.expected).toMatchObject({at:end,precision:'instant',status:'complete'});expect(result.expected.at).toBe(end);expect(result.actual).toMatchObject({at:null,status:'unknown'});expect(result.actualRatio).toBe(0);expect(JSON.stringify(order.display)).toBe(lifecycle);
+ point.goalDelta.targetAt=null;expect(progress(order).stages.find(stage=>stage.key==='cutting')?.expected.at).toBeNull();
 });

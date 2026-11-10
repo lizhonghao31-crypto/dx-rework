@@ -231,3 +231,12 @@
 .digital-journey-cockpit[data-view="overview"] .cockpit-home-progress-unknown{position:absolute;inset:-5px 0;text-align:center;color:#687b98;font-size:12px;line-height:18px}
 .digital-journey-cockpit[data-view="overview"] .cockpit-home-receipt-gap{display:inline-flex;align-items:center;border:0;cursor:pointer;font-family:inherit;margin:3px 0 0;min-height:30px}
 @media(max-width:700px){.dx-production-ui .digital-journey-cockpit[data-view="overview"] .journey-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Seven original KPIs share one level and preserve their original predicates. */
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .journey-kpis{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px}
+.digital-journey-cockpit[data-view="overview"] .cockpit-home-receipt-gap{display:inline-flex;border-radius:4px;padding:2px 5px;font-size:12px;line-height:1.35;min-height:0}
+@media(max-width:800px){.dx-production-ui .digital-journey-cockpit[data-view="overview"] .journey-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+.digital-journey-cockpit .cockpit-schedule-reason{display:block;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px;line-height:1.4;margin-top:4px}
+.digital-journey-cockpit .cockpit-schedule-reason.is-danger{color:#d83145}
+.digital-journey-cockpit .cockpit-schedule-reason.is-warning{color:#a35d00}
