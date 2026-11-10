@@ -29,3 +29,13 @@ it('keeps a physical date without midnight conversion and never promotes an old 
  const historical=packingSlaEvidence({...sheet,lines:[{...sheet.lines[0]!,packingActualTime:{precision:'unknown'}}]}).facts['garment_packing:po']!;
  expect(historical.businessCompleted).toBe(true);expect(historical.completedAt).toBeUndefined();expect(historical.completedDate).toBeUndefined();
 });
+
+it('does not complete a four-piece delivery when two effective receipt checks qualify only one plus two pieces',()=>{
+ const original=sheet.quality![0]!;
+ const inconsistent={...sheet,lines:[{...sheet.lines[0]!,orderedQuantity:4,actualQuantity:4,documentQuantity:4,packingQuantity:4}],
+  quality:[{...original,receiptId:'first',quantity:2,qualifiedQuantity:1},{...original,receiptId:'second',quantity:2,qualifiedQuantity:2}]};
+ const evidence=packingSlaEvidence(inconsistent);
+ expect(evidence.facts['garment_packing:po']?.businessCompleted).toBe(false);
+ expect(evidence.facts['garment_packing:po']?.completedAt).toBeUndefined();
+ expect(inconsistent.lines[0]!.packingQuantity).toBe(4);
+});

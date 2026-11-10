@@ -105,11 +105,12 @@ export function journeyBusinessQuantities(closure: OrderClosureSheet, attributed
     const receipts = line.receipts ?? [];
     const attributionKnown = receipts.length > 0 && receipts.every(receipt => attributedReceiptIds.has(receipt.receiptId))
       && receipts.reduce((sum, receipt) => sum + receipt.actualQuantity, 0) === line.actualQuantity;
+    const packed=line.effectivePackingQuantity===undefined?line.packingQuantity:line.effectivePackingQuantity;
     return {lineId: line.lineId, demand: line.orderedQuantity, received: line.actualQuantity,
       inspected: available ? inspected : null, qualified: available ? qualified : null,
-      packed: line.packingQuantity, remainingReceipt: Math.max(0, line.orderedQuantity - line.actualQuantity),
+      packed, remainingReceipt: Math.max(0, line.orderedQuantity - line.actualQuantity),
       factoryAttribution: attributionKnown ? 'known' : 'unknown',
-      remainingShipment: line.packingQuantity === null ? null : Math.max(0, line.orderedQuantity - line.packingQuantity),
+      remainingShipment: packed === null ? null : Math.max(0, line.orderedQuantity - packed),
       qualityConflict: available && (inspected > line.actualQuantity || qualified > inspected),
       qualityGap: available ? Math.max(0, line.actualQuantity - inspected) : null, reasons: available ? [] : ['尚未取得到仓质检覆盖记录']};
   });

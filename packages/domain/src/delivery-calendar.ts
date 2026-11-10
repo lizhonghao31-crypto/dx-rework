@@ -6,7 +6,8 @@ const validDate=(value:string|null)=>value&&isCalendarDate(value)?value:null;
 export function deliveryPo(fact:DeliveryPoFact,today:string):DeliveryPo{
  if(!isCalendarDate(today))throw Error('A real Shanghai observation date is required');
  const orderedQty=quantity(fact.orderedQty),rawPackedQty=quantity(fact.rawPackedQty),date=validDate(fact.effectiveDueDate);
- const known=orderedQty!==null&&rawPackedQty!==null,packedQty=known?Math.min(orderedQty,rawPackedQty):null,pendingQty=known?Math.max(orderedQty-rawPackedQty,0):null,extraQty=known?Math.max(rawPackedQty-orderedQty,0):null;
+ const effectivePackedQty=fact.effectivePackedQty===undefined?rawPackedQty:quantity(fact.effectivePackedQty);
+ const known=orderedQty!==null&&effectivePackedQty!==null,packedQty=known?Math.min(orderedQty,effectivePackedQty):null,pendingQty=known?Math.max(orderedQty-effectivePackedQty,0):null,extraQty=known?Math.max(effectivePackedQty-orderedQty,0):null;
  const reminderDays=fact.reminderDays!==null&&Number.isInteger(fact.reminderDays)&&fact.reminderDays>=0&&fact.reminderDays<=365?fact.reminderDays:null;
  const riskStatus=pendingQty===null||date===null?'unknown':pendingQty===0?'delivered':date<today?'overdue':reminderDays===null?'unknown':date<=addCalendarDays(today,reminderDays)?'due_soon':'pending';
  return {...fact,orderedQty,rawPackedQty,reminderDays,effectiveDueDate:date,originalDueDate:validDate(fact.originalDueDate),factoryDueDate:validDate(fact.factoryDueDate),packedQty,pendingQty,extraQty,riskStatus};

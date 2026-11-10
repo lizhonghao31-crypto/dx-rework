@@ -1,4 +1,5 @@
 import {readNativePackingHeads,RECEIVING_GROUP_RESOLUTION_SCOPE_SQL,RECEIVING_GROUP_PACKING_JOIN_SQL} from '../receiving/receiving-quantity-query.js';
+import {packingQualityCoverage} from './packing-quality-coverage.js';
 import {packingActualTime} from '@dx-rework/contracts';
 import {journeyCutScopes,NATIVE_EMPTY_PACKING_SCOPE_SQL} from './journey-cut-scopes.js';
 import {readClosureWorkSummary} from './closure-work-summary.js';
@@ -69,6 +70,15 @@ export class OrderClosureService{
   const quality=await garmentQuality(db,id);
   const registered=new Set((await db.query("SELECT payload->>'receiptId' AS id FROM digital_production_task_events WHERE resource_kind='order' AND resource_id=$1 AND event_kind='garment_receipt_registered'",[id])).rows.map(r=>r.id));
   const outstanding:string[]=[];
+  for(const line of lines){
+   const coverage=packingQualityCoverage(line,quality);line.effectivePackingQuantity=coverage.effectiveQuantity;
+   if(line.packingQuantity!==null&&line.packingQuantity>0&&coverage.effectiveQuantity===null){
+    const label=`${line.poNumber??'待补PO'} ${line.color}`;
+    outstanding.push(coverage.totals&&coverage.totals.inspected>=line.actualQuantity
+     ?`${label}：有效合格${coverage.totals.qualified}，不足以覆盖原装箱${line.packingQuantity}，交付数量待核对`
+     :`${label}：有效到仓质检覆盖尚未齐，原装箱${line.packingQuantity}的交付数量待核对`);
+   }
+  }
   for(const q of quality)if(q.quantity>0&&registered.has(q.receiptId)&&!q.inspected)outstanding.push(`到仓批次${q.receiptId.slice(-6)}：${q.priorInspection?'数量已更正，原检查范围待核对':'到仓质检尚未完成'}`);
   for(const l of lines){const label=`${l.poNumber??'待补PO'} ${l.color}`;if(l.cutScope==='unresolved')outstanding.push(`${label}：原开裁范围尚不能唯一对应本PO，累计回货与装箱待核对`);if(l.actualQuantity<l.orderedQuantity)outstanding.push(`${label}：实收${l.actualQuantity}，订购${l.orderedQuantity}，未到足量`);if(!l.receiptCount)outstanding.push(`${label}：尚无原收货事实`);if(l.packingQuantity===null)outstanding.push(`${label}：装箱累计待核对`);else if(l.packingQuantity<l.orderedQuantity)outstanding.push(`${label}：装箱${l.packingQuantity}，少于订购${l.orderedQuantity}`);if(l.receiptCount&&l.actualQuantity!==l.documentQuantity&&!l.receivingResolution)outstanding.push(`${label}：原收货差异待处理`);if(l.packingQuantity!==null&&l.packingQuantity!==l.actualQuantity&&!l.packingResolution)outstanding.push(`${label}：原装箱差异待处理`);for(const r of l.reworks)if(!['completed','cancelled'].includes(r.status))outstanding.push(`${label}：原返工${r.reworkNo??r.reworkId}未完成`);if(l.defectiveQuantity>0&&!l.reworks.some(r=>r.status==='completed'))outstanding.push(`${label}：原次品${l.defectiveQuantity}，未见已完成返工依据`);}
   const pending=(await db.query(`SELECT t.task_id,t.node_key,t.state,(SELECT label FROM digital_production_deadline_policies WHERE node_key=t.node_key ORDER BY version DESC LIMIT 1) AS label FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.production_order_id=$1 AND a.task_kind NOT IN ('bulk_ship_sample','factory_material_count') AND t.state NOT IN ('completed','cancelled') ORDER BY t.task_id`,[id])).rows;

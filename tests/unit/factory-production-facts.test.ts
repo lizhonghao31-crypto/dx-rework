@@ -27,4 +27,11 @@ describe('factory inspection native scope projection',()=>{
   const result=await read([scope(null,40),scope('new',60)],[event(null),event('new',60,'需处理','2026-10-23T03:00:00Z')]);
   expect(result.facts['factory_production:po']).toMatchObject({businessCompleted:true,completedAt:'2026-10-23T03:00:00.000Z'});
  });
+ it('names each historical inspection from its own factory, including a retired zero allocation',async()=>{
+  const result=await read([{...scope(null,0),supplier_name_snapshot:'原工厂'},{...scope('new',100),supplier_name_snapshot:'新工厂'}],[event(null),event('new')]);
+  expect(result.history.map(item=>item.supplierName)).toEqual(['原工厂','新工厂']);
+  expect(result.checks.map(item=>item.supplierName)).toEqual(['新工厂']);
+  const unknown=await read([scope('new')],[event('unmatched')]);
+  expect(unknown.history[0]?.supplierName).toBeNull();
+ });
 });

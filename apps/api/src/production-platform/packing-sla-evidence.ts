@@ -1,6 +1,7 @@
 import type {OrderClosureSheet} from '@dx-rework/contracts/order-closure';
 import type {SlaNodeFact} from '@dx-rework/domain/digital-sla-plan';
 import {beijingCalendarDate} from '@dx-rework/contracts/digital-production';
+import {packingQualityCoverage} from './packing-quality-coverage.js';
 /** Native packing records one cumulative style/PO quantity, not per-receipt allocations. Never invent FIFO. */
 export function packingSlaEvidence(sheet:OrderClosureSheet){
  const facts:Record<string,SlaNodeFact>={},limitations:Array<{lineId:string;reason:string}>=[];
@@ -12,8 +13,9 @@ export function packingSlaEvidence(sheet:OrderClosureSheet){
   const actual=line.packingActualTime;
   const end=actual?.precision==='instant'?actual.at:null;
   const covered=checks.length>0&&checks.reduce((sum,q)=>sum+q.quantity,0)>=line.orderedQuantity;
-  const qualified=covered&&checks.every(q=>q.inspected&&q.qualifiedQuantity===q.quantity);
-  const complete=line.packingQuantity!==null&&line.packingQuantity>=line.orderedQuantity;
+  const quality=packingQualityCoverage(line,sheet.quality);
+  const qualified=quality.effectiveQuantity!==null;
+  const complete=qualified&&quality.effectiveQuantity!>=line.orderedQuantity;
   const physical=complete&&line.actualQuantity>=line.orderedQuantity&&qualified;
   const actualEnd=physical&&end&&Number.isFinite(Date.parse(end))&&checks.every(q=>q.completedAt&&Number.isFinite(Date.parse(q.completedAt))&&Date.parse(q.completedAt)<=Date.parse(end))?end:null;
   const actualDate=physical&&actual?.precision==='date'&&checks.every(q=>q.completedAt&&Number.isFinite(Date.parse(q.completedAt))&&beijingCalendarDate(new Date(q.completedAt))<=actual.date)?actual.date:null;
