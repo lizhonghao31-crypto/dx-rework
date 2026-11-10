@@ -1,3 +1,4 @@
+import {businessNow} from '../../apps/api/src/acceptance-clock/business-time.js';
 import {arrangeTestRound} from "./development-arrangement-fixture.js";
 import {taskResult} from "./development-task-result-fixture.js";
 import {DigitalJourneyQuery} from '../../apps/api/src/production-platform/journey-query.js';
@@ -10,8 +11,15 @@ import {DevelopmentRoundService} from '../../apps/api/src/production-platform/de
 import {DigitalDevelopmentService} from '../../apps/api/src/production-platform/development-service.js';
 import {materialReadiness} from '../../apps/api/src/production-platform/development-material-readiness.js';
 import type {DevelopmentExecutionService} from '../../apps/api/src/production-platform/development-execution-service.js';
-export async function exerciseDevelopmentRounds(db:Pool,execution:DevelopmentExecutionService,root:TrustedActorContext,sourceId:string,workerId:string,patternRoundId:string,outsider:TrustedActorContext,onFabricPieceConfirmed?:()=>Promise<void>){
- const rounds=new DevelopmentRoundService(db,true),forms=new DigitalDevelopmentService(db,true);
+import type {PatternRoomOrderService} from '../../apps/api/src/pattern-room/order-service.js';
+export async function exerciseDevelopmentRounds(db:Pool,execution:DevelopmentExecutionService,root:TrustedActorContext,sourceId:string,workerId:string,patternRoundId:string,outsider:TrustedActorContext,native:PatternRoomOrderService,onFabricPieceConfirmed?:()=>Promise<void>){
+ const rounds=new DevelopmentRoundService(db,true,native),forms=new DigitalDevelopmentService(db,true);
+ const approveRemake=async()=>{
+  const link=(await db.query('SELECT order_id FROM digital_development_pattern_links WHERE source_id=$1',[sourceId])).rows[0];
+  const order=await native.get(root,link.order_id),person=(await db.query('SELECT person_id FROM business_people WHERE app_user_id=$1 AND active',[workerId])).rows[0];
+  expect(order.status).toBe('pending_assignment');
+  await native.assign(root,order.orderId,{roundId:order.currentRoundId,version:order.version,personId:person.person_id,amount:'0'},randomUUID());
+ };
  const original=await forms.read(root,sourceId),wages=async()=>Number((await db.query('SELECT count(*) AS n FROM pattern_room_segments WHERE round_id=$1 AND wage_eligible_at IS NOT NULL',[patternRoundId])).rows[0].n);
  const before=await wages();
  const revision:DevelopmentRevision={basedOnRound:1,document:{...original.document!,craft:'印花'},origin:'客户新增要求',customerComment:'只改胸前印花，先寄工艺布片',internalProblem:'',explanation:'保留客户原话',categories:['工艺'],affectedNodes:['工艺'],outputKind:'工艺布片'};
@@ -29,7 +37,7 @@ export async function exerciseDevelopmentRounds(db:Pool,execution:DevelopmentExe
  const act=async(round:number,kind:string,returned=false)=>{
   const available=await versionTasks(round),task=available.find(task=>task.taskKind===kind)!;
   expect(task,JSON.stringify({round,kind,available:available.map(t=>[t.taskKind,t.state])})).toBeDefined();
-  return execution.route(root,sourceId,{...(kind==='development_sewing'?{attachmentIds:[await taskResult(db,execution,root,sourceId,task.taskId,'车板成果')]}:{}),taskId:task.taskId,result:returned?'退回':'通过',note:returned?'内部发现：领口车缝不平':'本轮完成',craftExecution:kind==='development_craft_dispatch'?'内部':null,nextAssigneeId:kind==='development_craft_dispatch'?workerId:null,sentDate:kind==='development_shipping'?'2026-09-30':null,trackingNo:kind==='development_shipping'?'P08-TEST':null,...(returned?{returnNodes:['车板' as const],problemCategories:['车缝' as const]}:{})},randomUUID());
+  return execution.route(root,sourceId,{...(kind==='development_sewing'?{attachmentIds:[await taskResult(db,execution,root,sourceId,task.taskId,'车板成果')]}:{}),taskId:task.taskId,result:returned?'退回':'通过',note:returned?'内部发现：领口车缝不平':'本轮完成',craftExecution:kind==='development_craft_dispatch'?'内部':null,nextAssigneeId:kind==='development_craft_dispatch'?workerId:null,sentDate:kind==='development_shipping'?businessNow().toLocaleDateString('en-CA',{timeZone:'Asia/Shanghai'}):null,trackingNo:kind==='development_shipping'?'P08-TEST':null,...(returned?{returnNodes:['车板' as const],problemCategories:['车缝' as const]}:{})},randomUUID());
  };
  await arrangeTestRound(db,execution,root,sourceId,workerId);
  for(const kind of ['development_craft_dispatch','development_printing','development_craft_confirmation','development_confirmation','development_shipping'])await act(2,kind);
@@ -38,6 +46,7 @@ export async function exerciseDevelopmentRounds(db:Pool,execution:DevelopmentExe
  const second:DevelopmentRevision={...revision,basedOnRound:2,document:current.document!,origin:'内部发现',customerComment:'',internalProblem:'调整领口车缝',categories:['车缝'],affectedNodes:['车板'],outputKind:'整件样板'};
  const draft=await rounds.save(root,sourceId,{expectedDraftVersion:0,revision:second},randomUUID());await rounds.publish(root,sourceId,{expectedDraftVersion:draft.draftVersion,basedOnRound:2},randomUUID());
  expect((await materialReadiness(db,sourceId,3)).sewingReady).toBe(true);
+ await approveRemake();
  await arrangeTestRound(db,execution,root,sourceId,workerId);
  await act(3,'development_sewing_transfer');await act(3,'development_sewing');
  const oldTail=(await versionTasks(3)).find(task=>task.taskKind==='development_tail_check')!;
@@ -45,6 +54,7 @@ export async function exerciseDevelopmentRounds(db:Pool,execution:DevelopmentExe
  expect((await forms.read(root,sourceId)).roundNumber).toBe(4);
  const history=await rounds.read(root,sourceId);expect(history.rounds.at(-1)).toMatchObject({origin:'内部发现',customerComment:'',internalProblem:'内部发现：领口车缝不平'});
  expect(history.rounds.at(-1).inherited.development_pattern.roundNumber).toBe(1);
+ await approveRemake();
  await arrangeTestRound(db,execution,root,sourceId,workerId);
  await act(4,'development_sewing_transfer');await act(4,'development_sewing');
  const newTail=(await versionTasks(4)).find(task=>task.taskKind==='development_tail_check')!;

@@ -61,6 +61,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const source=await identity.createSource(designer,{developmentType:'头版',designStyleNo:'TEST-S1-'+randomUUID(),temporaryStyleNo:null,customerCode:'PD'},randomUUID());
    const materialId=randomUUID(),photo=await f.image(designer);
    const document=DevelopmentDocumentSchema.parse({documentFormatVersion:2,sizeQuantities:[],template:'上衣',quantity:1,sampleSize:'',orderDate:null,returnDate:null,unit:'cm',sizes:[],measurements:[],interlining:'',placketInterlining:'',sewingThread:'',buttonholeThread:'',stitchDensity:'',washingIroning:'',packaging:'',formalSizes:'',casualSizes:'',mainLabel:false,mainLabelMethod:'',sizeLabel:false,careLabel:false,instructions:'TEST S1 原制作说明',craft:'无',washing:'免洗',materials:[{materialId,category:'主布',label:'主布',supplier:'TEST',name:'TEST棉布',width:'150',weight:'200',composition:'棉',consumption:'',color:'黑',specification:'TEST40支',quantity:'1',requiredThisRound:true,available:true,expectedDate:null}],files:[{attachmentId:photo,kind:'款图'}]});
+   document.patternCategoryId=category.priceId;
    const saved=await forms.save(designer,source.sourceId,{expectedVersion:0,document},randomUUID());
    if(published)await forms.publish(designer,source.sourceId,saved.version,randomUUID(),{categoryId:category.priceId,priceVersion:category.version});
    return {id:source.sourceId,materialId};
@@ -75,7 +76,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   paperId=(await execution.read(worker,sourceId)).tasks.find(t=>t.taskKind==='development_pattern')!.taskId;
   foreignSourceId=(await prepare()).id;foreignTaskId=(await execution.read(f.root,foreignSourceId)).tasks.find(t=>t.taskKind==='development_materials')!.taskId;
   draftId=(await prepare(false)).id;
-  app=buildApp({config,auth,checkDatabase:async()=>undefined,getAppliedSchemaHistory:async()=>null,access:{authenticate,root,service:f.access},digitalIdentity:{authenticate,root,service:identity,creationEnabled:true,developmentQrBase:'https://architecture.invalid/',developmentService:forms,developmentExecution:execution,developmentAttachments:f.attachments,quotationService:new DigitalQuotationService(f.db,true),taskService:tasks,accessService:new DigitalProductionAccessService(f.db),notificationService:new DigitalProductionNotificationService(f.db)}});await app.ready();
+  app=buildApp({config,auth,checkDatabase:async()=>undefined,getAppliedSchemaHistory:async()=>null,access:{authenticate,root,service:f.access},patternRoomPrices:{authenticate,root,service:prices},digitalIdentity:{authenticate,root,service:identity,creationEnabled:true,developmentQrBase:'https://architecture.invalid/',developmentService:forms,developmentExecution:execution,developmentAttachments:f.attachments,quotationService:new DigitalQuotationService(f.db,true),taskService:tasks,accessService:new DigitalProductionAccessService(f.db),notificationService:new DigitalProductionNotificationService(f.db)}});await app.ready();
   for(const role of ['root','pattern-room-worker','worker-a','pattern-room-supervisor','development-clerk'])tokens.set(role,(await auth.loginMobile(mintAcceptanceLoginCode(role,secret))).token);
   output=await mkdtemp(join(tmpdir(),"dx-development-read-native-"));const previous=process.env.NODE_ENV;
   try{process.env.NODE_ENV="production";await build({root:resolve("apps/web"),configFile:resolve("apps/web/vite.config.ts"),mode:"production",base:"/",build:{outDir:output,emptyOutDir:true}});}finally{if(previous===undefined)delete process.env.NODE_ENV;else process.env.NODE_ENV=previous;}
@@ -168,5 +169,37 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const current=await new DigitalJourneyQuery(f.db).read(f.root,sourceId,2);
   const material=current.stages.flatMap(stage=>stage.nodes).find(node=>node.instanceId===`material:${old.document!.materials[0]!.materialId}:2`)!;
   expect(material).toMatchObject({state:'completed',round:2,actualAt:check.completed_at.toISOString(),actualQuality:'verified'});
+ });
+ it("R5 blocks publication during quote loading, failed or unconfigured reads and publishes with the recovered native quote",async()=>{
+  const context=await browser.newContext({viewport:{width:1165,height:1003}});
+  await context.addCookies([{name:'dx_rework_session',value:tokens.get('root')!,url:base}]);
+  const page=await context.newPage();page.setDefaultTimeout(12000);
+  let release!:()=>void;const held=new Promise<void>(done=>{release=done;});
+  let mode:'loading'|'failed'|'unconfigured'|'ready'='loading',publishes=0;
+  await context.route('**/*',async route=>{
+   const request=route.request(),url=new URL(request.url());
+   if(url.origin!==base&&!['data:','blob:'].includes(url.protocol))return route.abort();
+   if(request.method()==='POST'&&url.pathname.endsWith(`/sources/${draftId}/development/publish`))publishes++;
+   if(/\/pattern-room\/category-options\/[^/]+\/quote$/.test(url.pathname)){
+    if(mode==='loading')await held;
+    if(mode==='failed'||mode==='unconfigured')return route.fulfill({status:mode==='failed'?503:409,contentType:'application/json',body:JSON.stringify({error:{code:mode==='failed'?'SERVICE_UNAVAILABLE':'PRICE_NOT_CONFIGURED',message:mode==='failed'?'TEST价格读取暂时失败':'TEST执行价尚未配置'}})});
+   }
+   return route.continue();
+  });
+  try{
+   await page.goto(base+`/ui/digital-production?development=${draftId}`);
+   await page.getByRole('button',{name:'打板信息',exact:true}).click();
+   const publish=page.getByRole('button',{name:'发布开发单',exact:true}),refresh=page.getByRole('button',{name:'刷新价格',exact:true});
+   await page.getByText('执行单价正在读取…',{exact:true}).waitFor();expect(await publish.isDisabled()).toBe(true);expect(publishes).toBe(0);
+   mode='ready';release();await page.getByText('执行单价：10.000 元/件',{exact:true}).waitFor();await expect.poll(()=>publish.isEnabled()).toBe(true);
+   mode='failed';await refresh.click();await page.getByRole('alert').filter({hasText:'TEST价格读取暂时失败'}).waitFor();expect(await publish.isDisabled()).toBe(true);expect(publishes).toBe(0);
+   mode='unconfigured';await refresh.click();await page.getByRole('alert').filter({hasText:'TEST执行价尚未配置'}).waitFor();expect(await publish.isDisabled()).toBe(true);expect(publishes).toBe(0);
+   mode='ready';await refresh.click();await page.getByText('执行单价：10.000 元/件',{exact:true}).waitFor();await expect.poll(()=>publish.isEnabled()).toBe(true);
+   const response=page.waitForResponse(reply=>reply.request().method()==='POST'&&reply.url().endsWith(`/sources/${draftId}/development/publish`));await publish.click();
+   const receipt=await response;expect(receipt.status(),await receipt.text()).toBe(200);expect(publishes).toBe(1);
+   const native=(await f.db.query('SELECT o.status FROM digital_development_pattern_links l JOIN pattern_room_orders o USING(order_id) WHERE l.source_id=$1',[draftId])).rows;
+   expect(native).toEqual([{status:'pending_assignment'}]);
+  }catch(error){await page.screenshot({path:join(evidence,'quote-failure.png'),fullPage:true});await writeFile(join(evidence,'quote-failure-body.txt'),await page.locator('body').innerText());throw error;}
+  finally{release();await context.close();}
  });
 });

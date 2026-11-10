@@ -1,3 +1,4 @@
+import {businessNow} from '../../apps/api/src/acceptance-clock/business-time.js';
 import {PatternHistoryQuerySchema} from '@dx-rework/contracts/pattern-orders';
 import {exerciseDevelopmentTransfer} from './development-transfer-guards.js';
 import {fabricDecisionTodos} from "../../apps/api/src/production-platform/development-fabric-cases.js";
@@ -43,7 +44,7 @@ export async function exerciseDevelopmentRoute(db:Pool,todos:TodoProjectionServi
   const sourceId=source.sourceId,fileId=randomUUID(),mainId=randomUUID(),trimId=randomUUID();
   await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'款图.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[fileId,`p07/${fileId}`,'a'.repeat(64),root.actorId]);
   const material={supplier:'',width:'',weight:'',composition:'',consumption:'',color:'黑',specification:'',quantity:'1',requiredThisRound:true};
-  const document=DevelopmentDocumentSchema.parse({documentFormatVersion:2,sizeQuantities:[1],template:'上衣',quantity:1,sampleSize:'M',orderDate:null,returnDate:null,unit:'cm',sizes:['M'],measurements:[{name:'胸围',values:['50']}],interlining:'',placketInterlining:'',sewingThread:'',buttonholeThread:'',stitchDensity:'',washingIroning:'',packaging:'',formalSizes:'',casualSizes:'',mainLabel:false,mainLabelMethod:'',sizeLabel:false,careLabel:false,instructions:'',craft,washing,materials:[{...material,materialId:mainId,category:'主布',label:'主布',name:'棉',specification:'TEST 40支',requiredThisRound:craft!=='无',available:true,expectedDate:null},{...material,materialId:trimId,category:'辅料',auxiliaryKind:'拉链',label:'拉链',name:'拉链',available:false,expectedDate:'2026-09-30'}],files:[{attachmentId:fileId,kind:'款图'}]});
+  const document=DevelopmentDocumentSchema.parse({documentFormatVersion:2,sizeQuantities:[1],template:'上衣',quantity:1,sampleSize:'M',orderDate:null,returnDate:null,unit:'cm',sizes:['M'],measurements:[{name:'胸围',values:['50']}],interlining:'',placketInterlining:'',sewingThread:'',buttonholeThread:'',stitchDensity:'',washingIroning:'',packaging:'',formalSizes:'',casualSizes:'',mainLabel:false,mainLabelMethod:'',sizeLabel:false,careLabel:false,instructions:'',craft,washing,materials:[{...material,materialId:mainId,category:'主布',label:'主布',name:'棉',specification:'TEST 40支',requiredThisRound:craft!=='无',available:true,expectedDate:null},{...material,materialId:trimId,category:'辅料',auxiliaryKind:'拉链',label:'拉链',name:'拉链',available:false,expectedDate:businessNow().toLocaleDateString('en-CA',{timeZone:'Asia/Shanghai'})}],files:[{attachmentId:fileId,kind:'款图'}]});
   const price=(await db.query("SELECT price_id,version FROM pattern_room_prices WHERE kind='category' AND enabled ORDER BY price_id LIMIT 1")).rows[0];
   const patternChoice={categoryId:price.price_id,priceVersion:price.version};
   let sheet;
@@ -84,7 +85,7 @@ export async function exerciseDevelopmentRoute(db:Pool,todos:TodoProjectionServi
   await expect(execution.arrange(clerk,sourceId,await arrangementInput(db,execution,clerk,sourceId,workerId),randomUUID())).rejects.toThrow('核料尚未通过');
   const task=async(kind:string)=>(await execution.read(root,sourceId)).tasks.filter(item=>item.taskKind===kind).at(-1)!;
   const work=async(kind:string)=>{const current=await task(kind);return execution.complete(root,sourceId,{taskId:current.taskId,note:'完成并交出',attachmentIds:kind==='development_pattern'?[await taskResult(db,execution,root,sourceId,current.taskId,'纸样成果')]:[]},randomUUID());};
-  const route=async(kind:string,nextAssigneeId:string|null=null)=>{const current=await task(kind);return execution.route(root,sourceId,{...(kind==='development_sewing'&&current.state==='ready'?{attachmentIds:[await taskResult(db,execution,root,sourceId,current.taskId,'车板成果')]}:{}),craftExecution:kind==='development_craft_dispatch'?'内部':null,taskId:current.taskId,result:'通过',note:'业务验收',nextAssigneeId,sentDate:kind==='development_shipping'?'2026-09-30':null,trackingNo:kind==='development_shipping'?'P07-TEST-001':null},randomUUID());};
+  const route=async(kind:string,nextAssigneeId:string|null=null)=>{const current=await task(kind);return execution.route(root,sourceId,{...(kind==='development_sewing'&&current.state==='ready'?{attachmentIds:[await taskResult(db,execution,root,sourceId,current.taskId,'车板成果')]}:{}),craftExecution:kind==='development_craft_dispatch'?'内部':null,taskId:current.taskId,result:'通过',note:'业务验收',nextAssigneeId,sentDate:kind==='development_shipping'?businessNow().toLocaleDateString('en-CA',{timeZone:'Asia/Shanghai'}):null,trackingNo:kind==='development_shipping'?'P07-TEST-001':null},randomUUID());};
   const checkItems=[{materialId:mainId,physical:true,quantity:true,color:true,specification:true},{materialId:trimId,physical:false,quantity:false,color:false,specification:false}];
   const verified=await exerciseMaterialVerification(db,execution,clerk,root,sourceId,sheet.taskId!,checkItems,craft==='无');
   await execution.check(clerk,sourceId,{...verified,result:'通过',note:'拉链未到，由设计师按预计日期跟进',items:checkItems},randomUUID());
@@ -206,12 +207,17 @@ export async function exerciseDevelopmentRoute(db:Pool,todos:TodoProjectionServi
     expect((await native.get(root,order.orderId)).rounds).toHaveLength(nativeRoundCount);
    }
    await expect(submit(making,clerk)).rejects.toThrow();
-   const key=randomUUID();await submit(making,root,key);await submit(making,root,key);
+   const returnActor=legacyMaking==='tail'?{...root,actorId:tail.assigneeId,actorRoles:['pattern_room_tail_inspector'],authorizationCapability:'digital_production:view',authorizationCapabilities:['digital_production:view']}:root;
+   if(legacyMaking==='tail'){
+    expect(tail.assigneeId).not.toBe(root.actorId);
+    await expect(native.requestRework(returnActor,order.orderId,nativeInput,randomUUID())).rejects.toMatchObject({statusCode:403});
+   }
+   const key=randomUUID();await submit(making,returnActor,key);await submit(making,returnActor,key);
    expect((await forms.read(root,sourceId)).document).toMatchObject({documentFormatVersion:2,sizeQuantities:[1],quantity:1,orderDate:null});
    expect((await forms.read(root,sourceId,undefined,1)).document).toEqual(document);
    expect((await db.query('SELECT count(*)::int n FROM digital_development_rounds WHERE source_id=$1',[sourceId])).rows[0].n).toBe(1);
-   expect((await native.get(root,order.orderId)).rounds).toHaveLength(nativeRoundCount+(legacyMaking==='native'?1:0));
-   if(legacyMaking==='native'){
+   expect((await native.get(root,order.orderId)).rounds).toHaveLength(nativeRoundCount+1);
+   {
     const supervisorId=(await db.query("SELECT user_id FROM user_role_assignments WHERE role_code='pattern_room_supervisor' AND revoked_at IS NULL LIMIT 1")).rows[0].user_id;
     const supervisor={...root,actorId:supervisorId,actorRoles:['pattern_room_supervisor'],authorizationCapability:'pattern_room:orders:assign',authorizationCapabilities:['pattern_room:orders:view','pattern_room:orders:assign','digital_production:view']};
     await execution.arrange(clerk,sourceId,await arrangementInput(db,execution,clerk,sourceId,workerId),randomUUID());
@@ -258,7 +264,7 @@ export async function exerciseDevelopmentRoute(db:Pool,todos:TodoProjectionServi
    await execution.decideFabric(director,sourceId,{reportId:report.reportId,expectedDecisionId:null,decision:'停止使用',note:'TEST完工后仍须明确决定'},randomUUID());
    expect((await fabricDecisionTodos(db,director)).filter(t=>t.todoId===report.reportId)).toHaveLength(0);
   }
-  if(craft==='无')await exerciseDevelopmentRounds(db,execution,root,sourceId,workerId,order.currentRoundId,qc,async()=>{const result=await history();expect(result.totalCount).toBe(1);expect(result.items[0]).toMatchObject({nativeRoundId:order.currentRoundId,developmentRounds:[1]});});
+  if(craft==='无')await exerciseDevelopmentRounds(db,execution,root,sourceId,workerId,order.currentRoundId,qc,native,async()=>{const result=await history();expect(result.totalCount).toBe(1);expect(result.items[0]).toMatchObject({nativeRoundId:order.currentRoundId,developmentRounds:[1]});});
   if(craft==='印花')await exerciseGarmentCraftRevision(db,execution,root,sourceId,workerId,order.currentRoundId,qc);
   if(checkHistory&&craft==='印花'){const result=await history();expect(result.totalCount).toBe(1);expect(result.items[0]).toMatchObject({nativeRoundId:order.currentRoundId,developmentRounds:[1,2]});}
   if(craft==='印绣花'){
