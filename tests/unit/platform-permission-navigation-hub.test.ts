@@ -132,7 +132,9 @@ describe("platform permission and desktop navigation hub", () => {
     ]);
 
     const todoIndex = components.indexOf('name: "我的待办"');
-    const productionIndex = components.indexOf('name: "实时生产看板"');
+    const productionIndex = components.indexOf("globalNavigation.push({name:'供应链总看板'");
+    expect(components).toContain("expandOnly:true,children:cockpitNavigation");
+    expect(components).toContain("currentUser&&canAccessProduction(currentUser)");
     const receivingIndex = components.indexOf('name: "订单回货"');
     expect(todoIndex).toBeLessThan(productionIndex);
     expect(productionIndex).toBeLessThan(receivingIndex);
@@ -143,7 +145,7 @@ describe("platform permission and desktop navigation hub", () => {
     expect(components).toContain("currentUser && canAccessSourcing(currentUser)");
     expect(components).toContain("mobileSourcingNavigation");
     expect(components).toContain('name: "外发定价&选厂"');
-    expect(components).toContain('const MOBILE_PRIMARY_NAVIGATION_NAMES = ["我的待办", "生产管理座舱", "订单回货", "返工单看板", "外发定价&选厂", "订单开裁", "供应商中心"]');
+    expect(components).toContain('const MOBILE_PRIMARY_NAVIGATION_NAMES = ["我的待办", "供应链总看板", "订单回货", "返工单看板", "外发定价&选厂", "订单开裁", "供应商中心"]');
     expect(components).not.toContain('name: "发起返工"');
     expect(components).toContain("currentUser && canAccessSupplierCenter(currentUser)");
     expect(components).toContain('name: "供应商目录"');
@@ -153,7 +155,7 @@ describe("platform permission and desktop navigation hub", () => {
     expect(components).toContain("|| technicalAdminAccess");
     expect(components).toContain('|| (!isOwner && hasCapability("master_data:manage"));');
     expect(productionDashboard).toContain("setCanOpenReporting(canAccessProductionReporting(session.user))");
-    expect(productionDashboard).toContain('canOpenReporting?<a href={pageUrl("ui/production-reporting")}');
+    expect(productionDashboard).toContain('canOpenReporting?<a href={productionReportingHref(productionOrderId??null,factoryDecisionId,orderReturn??displayReturn)!}');
     expect(employeeAccess).toContain('<h1><NavigationIcon route="/ui/employee-access" size="title" />人员与权限</h1>');
     expect(employeeAccess).toContain('aria-label="业务模块"');
     expect(employeeAccess).toContain('<option value="cutting">订单开裁</option>');

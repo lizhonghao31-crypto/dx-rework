@@ -342,3 +342,30 @@
 }
 
 @media(max-width:560px){.digital-journey-cockpit[data-view="order"] .cockpit-identity-facts{grid-template-columns:minmax(0,1fr)}}
+
+/* Approved supply-chain detail: natural top row and seven complete table rows. */
+.dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-detail .cockpit-detail-columns{grid-template-rows:auto var(--cockpit-lower-row-height,auto);align-items:stretch}
+.dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-detail-columns>.dx-production-panel{max-height:none;overflow:visible}
+.digital-journey-cockpit[data-view="order"] .cockpit-current-scroll,.digital-journey-cockpit[data-view="order"] .cockpit-detail-risk-summary{overflow:visible;max-height:none}
+.digital-journey-cockpit[data-view="order"] .cockpit-detail-columns .journey-current-panel{grid-template-rows:auto auto auto;align-content:start}
+.digital-journey-cockpit[data-view="order"] .cockpit-stage-dates-with-delta{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:4px}
+.digital-journey-cockpit[data-view="order"] .cockpit-stage-dates{font-size:12px;line-height:1.35;text-align:left}
+.digital-journey-cockpit[data-view="order"] .cockpit-stage-dates>div{display:grid;gap:1px}
+.digital-journey-cockpit .cockpit-target-difference{font-size:12px;white-space:nowrap;line-height:1.4;font-variant-numeric:tabular-nums}
+.digital-journey-cockpit .cockpit-target-difference.is-danger{color:#d83145}
+.digital-journey-cockpit .cockpit-target-difference.is-success{color:#087f5b}
+.digital-journey-cockpit .cockpit-target-difference.is-neutral{color:#7084a3}
+.digital-journey-cockpit .cockpit-duration-summary{display:flex;align-items:baseline;flex-wrap:wrap;gap:5px 20px;font-size:14px;margin-top:10px;color:#48617f}
+.digital-journey-cockpit .cockpit-duration-summary strong{font-weight:500;color:#243c61}
+.digital-journey-cockpit[data-view="order"] .cockpit-node-heading-actions .cockpit-node-primary>a{position:relative;min-height:0;padding:2px 5px;font-size:12px;line-height:1.35;font-weight:400}
+.digital-journey-cockpit[data-view="order"] .cockpit-node-heading-actions .dx-badge{padding:2px 5px;font-size:12px;line-height:1.35}
+.digital-journey-cockpit[data-view="order"] .cockpit-detail .journey-node-viewport{flex:none;height:var(--cockpit-seven-row-height,390px);min-height:0;max-height:none}
+.digital-journey-cockpit[data-view="order"] .journey-node-table .cockpit-target-difference{display:block}
+@media(max-width:800px){.digital-journey-cockpit[data-view="order"] .cockpit-node-heading-actions .cockpit-node-primary>a::after{content:"";position:absolute;inset:-13px 0;min-height:44px}.digital-journey-cockpit[data-view="order"] .cockpit-stage-dates{font-size:16px}.digital-journey-cockpit .cockpit-duration-summary{font-size:16px}}
+
+.digital-journey-cockpit[data-view="order"] .cockpit-node-blockers{max-height:none;overflow:visible}
+@media(max-width:900px){.dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-detail .cockpit-detail-columns{grid-template-rows:auto;align-items:start}.digital-journey-cockpit[data-view="order"] .cockpit-detail-columns>.dx-production-panel{min-height:0}}
+.digital-journey-cockpit .cockpit-fixed-target-date{display:block;line-height:1.4;overflow-wrap:anywhere}
+.digital-journey-cockpit .cockpit-fixed-target-date>small{display:block;font-size:12px}
+
+.digital-journey-cockpit .journey-node-table .cockpit-fixed-target-date>small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}

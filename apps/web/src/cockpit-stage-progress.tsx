@@ -1,3 +1,4 @@
+import {CockpitTargetDifference} from './cockpit-fixed-schedule.js';
 import type {JourneyBusinessDate,JourneyVisualStage,OrderJourney} from '@dx-rework/contracts/digital-production-journey';
 import {CockpitDate} from './cockpit-date.js';
 
@@ -7,7 +8,7 @@ function StageDate({value}:{value:JourneyBusinessDate|undefined}){
  return value?.status==='complete'&&value.at&&value.precision!=='unknown'?<CockpitDate value={value.at} precision={value.precision}/>:<span>—</span>;
 }
 /** Only the shared server projection supplies progress, risk and date facts. */
-export function CockpitStageProgress({stage,index,fact,selected,onSelect,tooltipOpen,onTooltipOpen,onTooltipClose}:{stage:OrderJourney['stages'][number];index:number;fact:JourneyVisualStage|undefined;selected:boolean;onSelect:()=>void;tooltipOpen:boolean;onTooltipOpen:()=>void;onTooltipClose:()=>void}){
+export function CockpitStageProgress({stage,index,fact,selected,scheduleAsOf,lines,onSelect,tooltipOpen,onTooltipOpen,onTooltipClose}:{stage:OrderJourney['stages'][number];index:number;fact:JourneyVisualStage|undefined;selected:boolean;lines?:OrderJourney['lines']|undefined;scheduleAsOf?:string|undefined;onSelect:()=>void;tooltipOpen:boolean;onTooltipOpen:()=>void;onTooltipClose:()=>void}){
  const time=cockpitStagePercentage(fact?.timeRatio),actual=cockpitStagePercentage(fact?.actualRatio);
  const started=Boolean(fact?.startedAt)||known(fact?.actualRatio)&&fact.actualRatio>0;
  const tone=!fact||fact.applicability!=='applicable'||fact.risk==='unknown'?'neutral':fact.risk==='overdue'?'danger':fact.risk==='due_soon'?'warning':started?'success':'neutral';
@@ -23,6 +24,6 @@ export function CockpitStageProgress({stage,index,fact,selected,onSelect,tooltip
    </svg></span><strong>{stage.label}</strong>
    <span id={tip} role="tooltip" className={'cockpit-stage-tooltip'+(tooltipOpen?' is-open':'')}><span>时间进度 <b>{time}</b></span><span>实际进度 <b>{actual}</b></span></span>
   </button>
-  <div className="cockpit-stage-dates" aria-label={`${stage.label}日期`}><div><span>预计完成</span><StageDate value={fact?.expected}/></div><div><span>实际完成</span><StageDate value={fact?.actual}/></div></div>
+  <div className="cockpit-stage-dates-with-delta"><div className="cockpit-stage-dates" aria-label={`${stage.label}日期`}><div><span>预计完成</span><StageDate value={fact?.expected}/></div><div><span>实际完成</span><StageDate value={fact?.actual}/></div></div><CockpitTargetDifference nodes={stage.nodes} asOf={scheduleAsOf} {...(lines?{lines}:{})}/></div>
  </div>;
 }

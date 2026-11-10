@@ -1,4 +1,6 @@
-import {hasDateOnlyTarget,nodeTargetLabel} from './journey-sla-details.js';
+import {CockpitDate} from './cockpit-date.js';
+import {cockpitScheduleReason} from './cockpit-fixed-schedule.js';
+import {hasDateOnlyTarget,nodeTargetLabel,originalNodeDeadlineLabel} from './journey-sla-details.js';
 import {useEffect,useState} from 'react';
 import {type JourneyNode,type JourneyResult,type OrderJourney} from '@dx-rework/contracts/digital-production-journey';
 import {StatusBadge} from '@dx-rework/ui';
@@ -7,7 +9,6 @@ import {CockpitPhoto} from './cockpit-photo-preview.js';
 import {representativeCockpitNodes,type CockpitContext} from './digital-journey-cockpit-model.js';
 import {poDeliveryKindLabels,sortedCockpitPoLines} from './po-delivery-dates.js';
 import {cockpitVisibleBlockers} from './cockpit-node-rows.js';
-import {CockpitDate} from './cockpit-date.js';
 import {CockpitHomeProgress,cockpitReceiptGap} from './cockpit-home-progress.js';
 import {CockpitHomeRisks,cockpitHomeRisks} from './cockpit-home-risks.js';
 import './cockpit-home.css';
@@ -15,7 +16,7 @@ import './cockpit-home.css';
 const stateLabels={completed:'整单已完成',overdue:'逾期',due_soon:'临期',active:'进行中',not_started:'未启动',cancelled:'已取消'};
 function Task({node,showBlocker=true}:{node:JourneyNode;showBlocker?:boolean}){
  const status=node.risks.includes('overdue')?'逾期':node.risks.includes('due_soon')?'临期':node.state==='blocked'?'受阻':node.state==='active'?'进行中':'等待前置';
- return <><strong>{node.label}</strong><small>{node.owner?.name??'负责人未指派'}</small><StatusBadge tone={node.risks.includes('overdue')?'danger':node.risks.includes('due_soon')?'warning':node.state==='active'?'info':'neutral'}>{status}</StatusBadge><small>截止 {node.nativeWindows?.length||hasDateOnlyTarget(node)?nodeTargetLabel(node):<CockpitDate value={node.expectedAt} precision={node.expectedPrecision} missing="—"/>}</small>{showBlocker&&cockpitVisibleBlockers(node).filter(blocker=>!blocker.key.startsWith('completion:')&&!blocker.label.startsWith('完成办理前')).slice(0,1).map(blocker=><small className="cockpit-home-blocker" key={blocker.key}>{blocker.label}</small>)}</>;
+ return <><strong>{node.label}</strong><small>{node.owner?.name??'负责人未指派'}</small><StatusBadge tone={node.risks.includes('overdue')?'danger':node.risks.includes('due_soon')?'warning':node.state==='active'?'info':'neutral'}>{status}</StatusBadge><small>截止 {node.fixedTargets?.length?originalNodeDeadlineLabel(node):node.nativeWindows?.length||hasDateOnlyTarget(node)?nodeTargetLabel(node):<CockpitDate value={node.expectedAt} precision={node.expectedPrecision} missing="—"/>}</small>{showBlocker&&cockpitVisibleBlockers(node).filter(blocker=>!blocker.key.startsWith('completion:')&&!blocker.label.startsWith('完成办理前')).slice(0,1).map(blocker=><small className="cockpit-home-blocker" key={blocker.key}>{blocker.label}</small>)}</>;
 }
 function HomePos({order,onOpen}:{order:OrderJourney;onOpen:()=>void}){
  const lines=sortedCockpitPoLines(order);
@@ -32,6 +33,7 @@ export function CockpitHome({data,error,context,onChange}:{data:JourneyResult|nu
    <thead><tr><th>款图</th><th>订单 / 款名 / 客户</th><th className="cockpit-home-quantity"><span>类型</span><span>下单数量</span></th><th>PO 与日期</th><th>当前任务 / 风险</th><th>{context.scope==='development'?'进度（开发）':'进度（全单）'}</th><th>整单状态</th></tr></thead>
    <tbody>{data?.items.map(order=>{
     const display=order.display,closed=display?.mainState==='completed',node=closed?undefined:representativeCockpitNodes(order,context)[0],risks=cockpitHomeRisks(order,context),delivery=closed||node?undefined:risks.deliveries[0],gap=cockpitReceiptGap(order);
+    const scheduleReason=cockpitScheduleReason(order);
     const other=risks.total-(node&&risks.nodes.some(row=>row.instanceId===node.instanceId)?1:0)-(delivery?1:0);
     return <tr key={order.id} data-order-id={order.id}>
      <td><CockpitPhoto src={order.styleImageUrl} label={order.designStyleNo} className="cockpit-home-photo"/></td>
@@ -43,7 +45,7 @@ export function CockpitHome({data,error,context,onChange}:{data:JourneyResult|nu
       {risks.total>0&&data&&<button type="button" className="journey-text-action cockpit-home-risk-trigger" aria-label={`查看${order.designStyleNo}的全部${risks.total}项风险`} onClick={()=>setRiskOrder({order,source:data})}>{other>0?`${node||delivery?'另':'查看'} ${other} 项风险`:'查看风险'}</button>}
       {gap&&gap.gap>0&&data&&<button type="button" className="cockpit-home-receipt-gap" onClick={()=>setRiskOrder({order,source:data})}>{gap.full?'':'可见范围'}欠收 {gap.gap.toLocaleString()}件</button>}
      </td>
-     <td><CockpitHomeProgress order={order}/></td><td>{display?<span className={`cockpit-order-state is-${display.mainState}`}>{stateLabels[display.mainState]}</span>:<span>—</span>}</td>
+     <td><CockpitHomeProgress order={order}/></td><td>{display?<span className={`cockpit-order-state is-${display.mainState}`}>{stateLabels[display.mainState]}</span>:<span>—</span>}{scheduleReason&&<small className={"cockpit-schedule-reason is-"+scheduleReason.tone} title={scheduleReason.text}>{scheduleReason.text}</small>}</td>
     </tr>;
    })}</tbody>
   </BusinessTable></div>

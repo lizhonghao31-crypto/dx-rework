@@ -86,3 +86,10 @@
 `sla-settings-sets.ts`在原全局生命周期锁、当前授权及同一事务内协调两类原个人草稿和正式标准；`sla-settings-set-repository.ts`只保存真实组合引用与规划参数，不拼历史、不更新在途。原单侧发布仍走自己的服务与原权限，预览绑定两侧当前版本，发布后形成真实当前配对。PMC不读取未发布个人草稿。0283仅扩展既有组合/草稿记录，不做历史回填或新采用启用。
 
 `fixed-development-work.ts`与`fixed-order-work.ts`是从原采用入口提取的纯路线构建器；实际采用仍由原事务冻结真实来源、范围、日历与标准。`sla-settings-calculation.ts`只把临时假设交给同一构建器和倒排算法，不连接数据库、伪造A或发布配置。`sla-settings-set-editor.tsx`维护唯一组合编辑/提交恢复协调，`sla-independent-calculator.tsx`维护独立临时输入和只读请求代次；客户跟单仍用原入口。`SeriesPlanService`保留显式采用和真实历史，默认profile/自动候选使用面已撤除。
+
+
+### 供应链 PR06：统一数据的展示与导航
+
+`journey-query.ts`只在授权富化结果附真实观察模式；`fixed-schedule-basis.ts`保留原任务D后再附冻结B，不更改任务或共享事实存储。`journey-visual-progress.ts`在v2使用已存在的固定目标和原物理交付A，旧单继续沿原日期语义；比例、KPI和分类谓词不重写。
+
+`cockpit-fixed-schedule.tsx`负责原目标差/独立责任/物理跨度的紧凑格式和可见live数值展示，不调用API、不持有授权缓存、不写时间或状态。原`CockpitDetail`测量真实七行视口并在同一网格约束单据/记录，不强制固定短包装高度或把资料藏在上排内部滚动。`components.tsx`仅聚合原授权导航；`production-display-context.ts`复用原本地返回地址验证，填报继续走原服务的权限/提交恢复。

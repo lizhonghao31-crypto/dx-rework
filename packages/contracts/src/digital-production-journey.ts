@@ -98,6 +98,7 @@ export type JourneyCoverage = {key:typeof JOURNEY_COVERAGE_KEYS[number];message:
 export type JourneyNativeFact = {id:string;sourceRef:string;timeRole:'sla_observation';startedAt:string|null;completedAt:string|null;businessCompleted:boolean|null};
 export type JourneySupervision = {assessment?:"complete"|"partially_unavailable";requestId?:string;asOf:string;status:"planned"|"legacy_unenrolled"|"limited";originalRevision:number|null;currentRevision:number|null;nodes:JourneyTiming[];nativeFacts?:JourneyNativeFact[];coverage:JourneyCoverage[];customerReminderDate:string|null};
 export type JourneyNode = {
+  nativeTaskDeadline?:{at:string;precision:'instant'|'date';mode?:'duration'|'date_target'|'unlimited'|undefined;exclusive?:boolean|undefined};
   fixedTargets?:Array<{scopeRef:string;lineId:string|null;progress:ScheduleNodeProgress}>;
   planningOnly?:boolean;
   responsibilityRole?:string;

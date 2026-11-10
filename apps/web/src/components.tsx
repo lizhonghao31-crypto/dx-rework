@@ -45,6 +45,7 @@ type NavigationEntry = Readonly<{
   activeKey?: string;
   label?: string;
   children?: readonly NavigationEntry[];
+  expandOnly?: boolean;
 }>;
 
 type NavigationGroup = Readonly<{
@@ -136,7 +137,7 @@ function PrimaryNavigation({
 }) {
   return (
     <nav className="primary-navigation" aria-label="主导航">
-      {navigation.map((entry) => (
+      {navigation.map((entry) => entry.expandOnly ? <details key={entry.name} className="desktop-navigation__group supply-chain-navigation" open={entry.children?.some(child=>(child.activeKey??child.name)===active)||undefined}><summary><strong className="dx-navigation-group-label"><NavigationIcon route={entry.href} size={iconSize}/>{entry.label??entry.name}</strong><b aria-hidden="true">⌄</b></summary><PrimaryNavigation navigation={entry.children??[]} active={active} basePath={basePath}/></details> : (
         <div className="primary-navigation__entry" key={entry.name}>
           <a
             href={`${basePath}${entry.href}`}
@@ -197,10 +198,10 @@ function DesktopNavigation({
   );
 }
 
-const MOBILE_PRIMARY_NAVIGATION_NAMES = ["我的待办", "生产管理座舱", "订单回货", "返工单看板", "外发定价&选厂", "订单开裁", "供应商中心"] as const;
+const MOBILE_PRIMARY_NAVIGATION_NAMES = ["我的待办", "供应链总看板", "订单回货", "返工单看板", "外发定价&选厂", "订单开裁", "供应商中心"] as const;
 
 const MOBILE_NAVIGATION_META: Record<string, Readonly<{ label: string; glyph: string }>> = {
-  "生产管理座舱": { label: "数字生产", glyph: "数" },
+  "供应链总看板": { label: "供应链总看板", glyph: "数" },
   "我的待办": { label: "待办", glyph: "待" },
   "订单回货": { label: "收货", glyph: "收" },
   "返工单看板": { label: "返工", glyph: "返" },
@@ -226,6 +227,7 @@ function MobileNavigationLink({
   basePath: string;
   pendingTodoCount: number;
 }) {
+  if(entry.expandOnly)return <details className="mobile-supply-chain-navigation" open={entry.children?.some(child=>(child.activeKey??child.name)===active)||undefined}><summary>{entry.label??entry.name}</summary><PrimaryNavigation navigation={entry.children??[]} active={active} basePath={basePath}/></details>;
   const meta = MOBILE_NAVIGATION_META[entry.name] ?? { label: entry.name, glyph: "目" };
   const isActive = active === (entry.activeKey ?? entry.name);
   return (
@@ -432,7 +434,12 @@ export function Shell({
     || (!isOwner && hasCapability("master_data:manage"));
 
   const cockpitSettingsNavigation: NavigationEntry[] = currentUser && canAccessDigitalProduction(currentUser) && (isRoot || hasRole("owner_group") || hasRole("production_management") || hasRole("pmc")) ? [{name:"生产管理设置",description:"客户跟单与节点时效",href:"/ui/digital-cockpit?workspace=settings",activeKey:"digital-settings"}] : [];
-  const cockpitNavigation:NavigationEntry[]=[...cockpitSettingsNavigation,...(currentUser&&canAccessDigitalProduction(currentUser)?[{name:'交付点阵图',description:'按客户出货交期查看PO与件数',href:'/ui/digital-cockpit?workspace=delivery',activeKey:'digital-delivery'},isRoot||hasCapability('report:view')?{name:'生产数据沙盘',description:'当前数量、期间与人员分析',href:'/ui/digital-analysis?view=production',activeKey:'digital-analysis'}:{name:'板房数据沙盘',description:'原授权开发与板房分析',href:'/ui/digital-analysis',activeKey:'digital-analysis'}]:[])];
+  const cockpitNavigation:NavigationEntry[]=[
+   ...(currentUser&&canAccessDigitalProduction(currentUser)?[{name:'生产管理座舱',description:'查看开发与大货进度',href:'/ui/digital-cockpit'}]:[]),
+   ...(currentUser&&canAccessProduction(currentUser)?[{name:'实时生产看板',description:'查看生产订单、进度与填报',href:'/ui/production-dashboard?workspace=display'}]:[]),
+   ...(currentUser&&canAccessDigitalProduction(currentUser)?[{name:'交付点阵图',description:'按客户交期查看PO与件数',href:'/ui/digital-cockpit?workspace=delivery',activeKey:'digital-delivery'},isRoot||hasCapability('report:view')?{name:'生产数据沙盘',description:'当前数量、期间与人员分析',href:'/ui/digital-analysis?view=production',activeKey:'digital-analysis'}:{name:'板房数据沙盘',description:'原授权开发与板房分析',href:'/ui/digital-analysis',activeKey:'digital-analysis'}]:[]),
+   ...cockpitSettingsNavigation,
+  ];
   const globalNavigation: NavigationEntry[] = [];
   if (todoAccess) {
     globalNavigation.push({
@@ -441,17 +448,7 @@ export function Shell({
       href: "/ui/my-tasks",
     });
   }
-  if (currentUser && canAccessDigitalProduction(currentUser)) globalNavigation.push(
-    {name:"生产管理座舱",description:"查看数字开发与大货双进度",href:"/ui/digital-cockpit",...(cockpitNavigation.length?{children:cockpitNavigation}:{})},
-  );
-  if (currentUser && canAccessProduction(currentUser)) {
-    globalNavigation.push({
-      name: "实时生产看板",
-      description: "查看生产订单与进度",
-      href: "/ui/production-dashboard?workspace=display",
-      ...(canAccessProductionReporting(currentUser) ? { children: [{ name: "生产数据填报", description: "查看负责范围的生产记录与办理入口", href: "/ui/production-reporting" }] } : {}),
-    });
-  }
+  if(cockpitNavigation.length)globalNavigation.push({name:'供应链总看板',description:'供应链进度与交付',href:cockpitNavigation[0]!.href,expandOnly:true,children:cockpitNavigation});
   globalNavigation.push({
     name: "订单回货",
     label: "订单回货看板",
