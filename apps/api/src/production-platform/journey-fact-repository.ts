@@ -1,3 +1,4 @@
+import {buildFixedReworkTargets} from './fixed-rework-progress.js';
 import type {Pool,PoolClient} from 'pg';
 import type {BusinessTime,BusinessTimeScope} from '@dx-rework/domain/business-clock';
 import {assertBusinessClockUnchanged,businessScopeKey,ContextBusinessClock} from '../acceptance-clock/business-time.js';
@@ -37,7 +38,19 @@ export class JourneyFactRepository{
    // Use the same original client and RR transaction, before capturing the dirty
    // transaction set, so these derived writes do not cause a second rebuild.
    const timelines=new FixedTimelineAdoptionRepository(client),adoption=await timelines.existing(resource);
-   if(adoption)await timelines.buildPendingTargets(adoption);
+   if(adoption){
+    const buildTargets=async(saved:NonNullable<typeof adoption>)=>{
+     if(saved.input.resource.kind==='source'&&saved.input.round>1){const origin=await timelines.existing(saved.input.resource,1);if(origin)await timelines.buildPendingTargets(origin);}
+     await timelines.buildPendingTargets(saved);
+    };
+    const sourceId=resource.kind==='order'&&typeof adoption.input.sourceVersions.sourceId==='string'?adoption.input.sourceVersions.sourceId:null;
+    const source=sourceId?await timelines.existing({kind:'source',id:sourceId},Number(adoption.input.sourceVersions.sourceRound)):null;
+    // Shared source B is its own original adopted target, never re-frozen from
+    // a later PO constraint. This remains the bounded worker, not a GET write.
+    if(source)await buildTargets(source);
+    await buildTargets(adoption);
+    await buildFixedReworkTargets(client,adoption);
+   }
    // No sequence watermark: transactions allocated earlier can commit later.
    // Acknowledge only the exact dirty transactions visible in this snapshot.
    const pending=(await db.query<{transaction_id:string}>('SELECT transaction_id FROM digital_journey_fact_changes WHERE resource_kind=$1 AND resource_id=$2',[resource.kind,resource.id])).rows.map(r=>r.transaction_id);
@@ -57,7 +70,7 @@ export class JourneyFactRepository{
    if(!selection)throw Error('Journey selector was not constructed in the native snapshot');
    if(!selection.facts.frames?.length)throw Error('Journey selector has no compiled observation');
    const fullSelection={version:selection.facts.version,cancelled:selection.facts.cancelled,closedAt:selection.facts.closedAt,
-    frames:selection.facts.frames.map(({from,fullSignals,coverage,customerReminderDate})=>({from,fullSignals,coverage,customerReminderDate}))};
+    frames:selection.facts.frames.map(({from,fullSignals,coverage,customerReminderDate,schedule})=>({from,fullSignals,coverage,customerReminderDate,schedule}))};
    await db.query(`INSERT INTO digital_journey_fact_models(resource_kind,resource_id,source_id,production_order_id)
     VALUES($1,$2,$3,$4) ON CONFLICT(resource_kind,resource_id) DO NOTHING`,[resource.kind,resource.id,model.sourceId,model.orderId]);
    const row=(await db.query<Row>('SELECT * FROM digital_journey_fact_models WHERE resource_kind=$1 AND resource_id=$2 FOR UPDATE',[resource.kind,resource.id])).rows[0]!;
@@ -122,7 +135,8 @@ export class JourneyFactRepository{
    if(row.build_failed&&(row.pending||!row.model_id))status='failed';
    if(status==='ready'){
     const value=row.selection_json!;
-    if(value.version!=='journey-selection-v1'||!Array.isArray(value.nodes)||!Array.isArray(value.nativeNodes)||!Array.isArray(value.untimedNodes)
+    if((value as {version:string}).version==='journey-selection-v1')status='pending';
+    else if(value.version!=='journey-selection-v2'||!Array.isArray(value.nodes)||!Array.isArray(value.nativeNodes)||!Array.isArray(value.untimedNodes)
      ||!Array.isArray(value.tasks)||!Array.isArray(value.coverage)||!Array.isArray(value.deliveryRisks)
      ||journeyValueFingerprint(value)!==row.selection_fingerprint)status='failed';
    }

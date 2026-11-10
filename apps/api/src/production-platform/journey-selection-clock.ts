@@ -1,3 +1,4 @@
+import {evaluateFixedJourneyBasis,nextFixedScheduleClassification} from './fixed-schedule-basis.js';
 import type {BusinessTime} from '@dx-rework/domain/business-clock';
 import {evaluateSlaPlan,slaDateBoundary} from '@dx-rework/domain/digital-sla-plan';
 import {poDeliveryRisks} from '@dx-rework/contracts';
@@ -10,6 +11,7 @@ import {journeyActivated} from './journey-display.js';
 
 export type JourneySelectionClockFrame={
  from:string;
+ schedule:{state:'normal'|'late'|'unknown'|'terminated';lagLineIds:string[];dueLineIds:string[];unknownLineIds:string[]}|null;
  /** Only time-dependent flags, never copies of documents, grants or plans. */
  risks:Array<{id:string;risks:JourneySelectionFacts['nodes'][number]['risks']}>;
  nativeRisks:JourneySelectionClockFrame['risks'];
@@ -35,6 +37,10 @@ export function compileJourneySelectionClock(item:OrderJourney,untimed:OrderJour
  for(const fact of Object.values(inputs.facts))for(const actual of [fact,...fact.batchWindows??[]])for(const at of [actual.startedAt,actual.completedAt]){
   if(!at)continue;const value=Date.parse(at);
   if(value>Date.parse(time.now)&&(hardBoundary===null||value<hardBoundary))hardBoundary=value;
+ }
+ for(const scope of inputs.fixedSchedule?.scopes??[])for(const fact of Object.values(scope.facts))for(const point of [fact.ready,fact.completed,fact.clockStart]){
+  const future=point.precision==='instant'?Date.parse(point.at):point.precision==='date'?Date.parse(point.date+'T00:00:00+08:00'):NaN;
+  if(future>Date.parse(time.now)&&(hardBoundary===null||future<hardBoundary))hardBoundary=future;
  }
  const frames:JourneySelectionClockFrame[]=[];
  let at=time.now,previous='';
@@ -86,7 +92,10 @@ export function compileJourneySelectionClock(item:OrderJourney,untimed:OrderJour
    for(const line of item.poDeliveryDates??[]){dateBoundary(line.customerWarehouseArrivalDate);if(!delivery.factoryFinished)dateBoundary(line.factoryDeliveryDate);if(!delivery.sampleFinished&&!delivery.sentLineIds.includes(line.lineId))dateBoundary(line.sampleTargetDate);}
    dateBoundary(projected.supervision?.customerReminderDate);
   }
-  const value:Omit<JourneySelectionClockFrame,'from'>={
+  const fixed=inputs.fixedSchedule?evaluateFixedJourneyBasis(inputs.fixedSchedule,at,false):null;
+  if(inputs.fixedSchedule)reconsider(nextFixedScheduleClassification(inputs.fixedSchedule,at));
+  const schedule=fixed?{state:fixed.state,lagLineIds:fixed.scopes.filter(scope=>scope.state==='late').flatMap(scope=>scope.lineId?[scope.lineId]:[]),dueLineIds:fixed.scopes.filter(scope=>scope.customerDuePassed).flatMap(scope=>scope.lineId?[scope.lineId]:[]),unknownLineIds:fixed.scopes.filter(scope=>scope.state==='unknown').flatMap(scope=>scope.lineId?[scope.lineId]:[])}:null;
+  const value:Omit<JourneySelectionClockFrame,'from'>={schedule,
    risks:projected.stages.flatMap(stage=>stage.nodes).filter(node=>node.current).map(node=>({id:node.instanceId,risks:[...node.risks]})),
    nativeRisks,untimedRisks,coverage:projected.supervision?.coverage??[],deliveryRisks,partialDeliveryRisks,customerReminderDate:projected.supervision?.customerReminderDate??null,
    fullSignals:{...journeyUnfilteredSignals({...projected,deliveryRisks}),activated:journeyActivated(projected)}};

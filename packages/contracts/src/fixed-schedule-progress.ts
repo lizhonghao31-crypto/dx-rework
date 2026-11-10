@@ -1,0 +1,10 @@
+/** Read-only fixed-target evaluation. None of these fields is a permission,
+ * employee attribution, editable forecast or business completion event. */
+export type FixedScheduleCalendar='continuous'|'natural_days'|'beijing_sunday_excluded';
+export type ScheduleOccurrence={precision:'instant';at:string}|{precision:'date';date:string}|{precision:'unknown'};
+export type ScheduleRange={minimum:number;maximum:number};
+export type ScheduleGoalDelta={kind:'on_target'|'early'|'late'|'unknown'|'terminated';signedValue:number|null;unit:'minute'|'day';asOf:string;targetAt:string|null;targetPrecision:'instant'|'date';targetDate:string|null;actual:ScheduleOccurrence;targetRevision:string;scopeRef:string};
+export type ScheduleNodeProgress={id:string;scopeRef:string;targetRevision:string;canonicalWorkRef:string;state:'normal'|'late'|'unknown'|'terminated';lagMinutes:ScheduleRange|null;businessCompleted:boolean;availabilityBound:{earliest:string;latest:string}|null;creditLimit:{earliest:string;latest:string}|null;goalDelta:ScheduleGoalDelta;ownSla:{state:'within'|'overdue'|'unknown'|'not_adopted'|'terminated';overdueMinutes:ScheduleRange|null;sourceRef:string|null};coverage:string[]};
+export type ScheduleScopeProgress={scopeRef:string;lineId:string|null;targetRevision:string;state:'normal'|'late'|'unknown'|'terminated';lagMinutes:ScheduleRange|null;customerDuePassed:boolean|null;nodes:ScheduleNodeProgress[];coverage:string[]};
+export type ScheduleDurationSummary={planStart:string|null;planEnd:string|null;actualStart:ScheduleOccurrence;observationAt:string|null;deliveryCompletedAt:ScheduleOccurrence;planSpanMinutes:number|null;elapsedSpanMinutes:ScheduleRange|null;finalActualSpanMinutes:ScheduleRange|null;asOf:string;coverage:string[]};
+export type FixedScheduleProgress={version:'fixed-schedule-progress-v1';asOf:string;scopeRevision:string;factRevision:string;state:'normal'|'late'|'unknown'|'terminated';scopes:ScheduleScopeProgress[];durationSummary:ScheduleDurationSummary;legacyOverdue:boolean;nextChangeAt:string|null};

@@ -49,7 +49,7 @@ export async function readJourneySelections(database:Pool,db:PoolClient,actor:Tr
   AND nullif($3::jsonb->>'state','') IS NULL AND nullif($3::jsonb->>'risk','') IS NULL)`;
  const selection=`CASE WHEN ${fullView} THEN m.selection_full_json ELSE m.selection_json END`;
  type Row={kind:'source'|'order';resource_id:string;status:JourneySelectionRead['status'];id:string;sourceId:string|null;orderId:string|null;designStyleNo:string;temporaryStyleNo:string|null;customer:string|null;category:string|null;designer:string|null;styleName:string|null;
-  merchandisers:JourneySelection['merchandisers'];orderNumbers:string[];createdAt:string;closed:boolean;activated:boolean;cancelled:boolean;closedAt:string|null;earliestShipmentDate:string|null;reminder:string|null;coverage:JourneyCoverage[];signals:JourneySelectionSignals;search_values:string[];workspace_nodes:WorkspaceNodeFact[]};
+  merchandisers:JourneySelection['merchandisers'];orderNumbers:string[];createdAt:string;closed:boolean;activated:boolean;cancelled:boolean;closedAt:string|null;earliestShipmentDate:string|null;reminder:string|null;coverage:JourneyCoverage[];signals:JourneySelectionSignals;search_values:string[];workspace_nodes:WorkspaceNodeFact[];scheduleSelection:JourneySelection['scheduleSelection']};
  const rows=(await db.query<Row>(`WITH requested AS (
   SELECT * FROM jsonb_to_recordset($1::jsonb) AS r(kind text,id uuid,"sourceAccess" boolean,"orderAccess" boolean,"fullOrder" boolean,timing boolean,budget boolean,now timestamptz,scenario uuid,revision bigint)
  ), native AS MATERIALIZED (
@@ -60,7 +60,7 @@ export async function readJourneySelections(database:Pool,db:PoolClient,actor:Tr
     WHEN EXISTS(SELECT 1 FROM digital_journey_fact_changes c WHERE c.resource_kind=r.kind AND c.resource_id=r.id)
      OR m.source_version IS DISTINCT FROM m.applied_source_version OR m.clock_scenario_id IS DISTINCT FROM r.scenario OR m.clock_revision<>r.revision THEN CASE WHEN EXISTS(SELECT 1 FROM digital_journey_fact_retries retry JOIN digital_journey_fact_changes change USING(resource_kind,resource_id) WHERE retry.resource_kind=r.kind AND retry.resource_id=r.id) THEN 'failed' ELSE 'pending' END
     WHEN m.calculation_version IS DISTINCT FROM $2 THEN 'obsolete'
-    WHEN (${selection}) IS NULL OR m.selection_expires_at<=r.now THEN 'pending'
+    WHEN (${selection}) IS NULL OR (${selection})->>'version' IS DISTINCT FROM 'journey-selection-v2' OR m.selection_expires_at<=r.now THEN 'pending'
     WHEN (CASE WHEN ${fullView} THEN m.selection_full_integrity ELSE m.selection_integrity END) IS DISTINCT FROM md5((${selection})::text||m.selection_fingerprint)
      OR jsonb_typeof((${selection})->'frames') IS DISTINCT FROM 'array' THEN 'failed' ELSE 'ready' END AS status,
    coalesce(o.design_style_no,s.design_style_no) AS order_style,s.design_style_no AS source_style,
@@ -170,6 +170,7 @@ flags AS (SELECT kind,id,bool_or(key IN ('packing','special_closure') AND state=
   CASE WHEN flags.closed THEN n.facts->>'closedAt' END AS "closedAt",
   (SELECT min(l.customer_warehouse_arrival_date)::text FROM digital_production_po_lines l WHERE n."orderAccess" AND l.production_order_id=n.oid) AS "earliestShipmentDate",
   CASE WHEN n.timing THEN n.frame->>'customerReminderDate' END AS reminder,
+  CASE WHEN n.timing THEN n.frame->'schedule' END AS "scheduleSelection",
   CASE WHEN n.timing THEN coalesce(n.frame->'coverage','[]'::jsonb) ELSE '[{"key":"scope","message":"仅有本岗位节点权限，整单SLA未计入；已授权节点照常监督"}]'::jsonb END AS coverage,
   jsonb_build_object('completed',coalesce(flags.closed,false),'ongoing',NOT coalesce(flags.closed,false) AND coalesce(flags.ongoing,false),
    'nodeMatched',coalesce(flags.matched,false),'deliveryMatched',coalesce(delivery.matched,false),
@@ -207,7 +208,7 @@ flags AS (SELECT kind,id,bool_or(key IN ('packing','special_closure') AND state=
   const resource={kind:row.kind,id:row.resource_id},clock=clocks.get(businessScopeKey(resource))!;
   const selection:JourneySelection={id:row.id,sourceId:row.sourceId,orderId:row.orderId,designStyleNo:row.designStyleNo,temporaryStyleNo:row.temporaryStyleNo,customer:row.customer,category:row.category,designer:row.designer,styleName:row.styleName,
    merchandisers:row.merchandisers,orderNumbers:row.orderNumbers,createdAt:new Date(row.createdAt).toISOString(),links:[],lines:[],stages:[],supervision:{coverage:row.coverage},
-   display:{mainState:journeyOrderState({cancelled:row.cancelled,closed:row.closed,activated:row.activated,earliestShipmentDate:row.earliestShipmentDate,reminderDate:row.reminder},clock.now),earliestShipmentDate:row.earliestShipmentDate,closedAt:row.closedAt},selectionSignals:row.signals};
+   ...(row.scheduleSelection?{scheduleSelection:row.scheduleSelection}:{}),display:{mainState:journeyOrderState({cancelled:row.cancelled,closed:row.closed,activated:row.activated,earliestShipmentDate:row.earliestShipmentDate,reminderDate:row.reminder},clock.now),earliestShipmentDate:row.earliestShipmentDate,closedAt:row.closedAt},selectionSignals:row.signals};
   selection.selectionSignals!.searchMatched=journeyMatchesSearch(selection,filter.search.toLocaleLowerCase())||row.search_values.some(value=>value?.toLocaleLowerCase().includes(filter.search.toLocaleLowerCase()));
   return {resource,status:row.status,selection,...(options.workspaceNodes?{workspaceNodes:row.workspace_nodes}:{})};
  });

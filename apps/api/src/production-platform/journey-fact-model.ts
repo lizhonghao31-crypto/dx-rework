@@ -1,3 +1,4 @@
+import {fixedScheduleBasisSnapshot,type FixedScheduleBasis} from './fixed-schedule-basis.js';
 import {createHash} from 'node:crypto';
 import type {JourneyNode,OrderJourney} from '@dx-rework/contracts/digital-production-journey';
 import type {SlaAnchor,SlaNodeFact,SlaPlan} from '@dx-rework/domain/digital-sla-plan';
@@ -8,13 +9,14 @@ import type {JourneyCutScope} from './journey-cut-scopes.js';
 import type {NativeFactoryTimeline} from './factory-production-facts.js';
 
 /** Bump when native mapping, time precision or applicability changes. No user DTO cache. */
-export const JOURNEY_FACT_CALCULATION_VERSION='journey-facts-supplychain-p03-packing-v1-selectors-v3';
+export const JOURNEY_FACT_CALCULATION_VERSION='journey-facts-supplychain-p04-progress-v1-selectors-v2';
 type FactNode=Pick<JourneyNode,'key'|'instanceId'|'stage'|'state'|'round'|'occurrence'|'current'|'planningOnly'|'progressApplicability'|'expectedAt'|'expectedKind'|'expectedPrecision'|'deadlineMode'|'deadlineExclusive'|'actualAt'|'actualDate'|'actualQuality'|'enteredAt'|'sla'|'countsInProgress'|'inheritedFrom'|'inheritedResult'>&{
  ownerId:string|null;operatorId:string|null;blockers:Array<{key:string;ownerId:string|null}>;
  scopes:Array<{domain:string;id:string;lineId:string|null;version:number|null}>;
 };
 export type JourneyFactTask={id:string;kind:string;sourceId:string|null;orderId:string|null;assigneeId:string|null;requiredRole:string;routeInstanceId:string;routeVersion:number;policyVersion:number;enteredAt:string|null;dueAt:string|null;warningAt:string|null;deadlineMode:string|null;deadlineExclusive:boolean};
 export type JourneyFactModel={
+ fixedSchedule?:FixedScheduleBasis;
  schemaVersion:1;sourceId:string|null;orderId:string|null;sourceDocumentVersion:number|null;instructionVersion:number|null;
  selectedRound:number|null;adoptedRound:number|null;cancelled:boolean;closedAt:string|null;
  nativeReadiness?:NativeTaskReadiness[];cuttingReadiness?:NativeCuttingReadiness[];termination?:JourneyTermination|null;cutScopes?:JourneyCutScope[];factoryTimeline?:NativeFactoryTimeline[];
@@ -45,7 +47,7 @@ const fact=(f:SlaNodeFact):SlaNodeFact=>({evidence:f.evidence,
  * risk, ratios and statuses are deliberately not cached as current results.
  */
 export function minimalJourneyFacts(item:OrderJourney,inputs:JourneyTimingInputs,tasks:JourneyFactTask[]=[],dependencies:JourneyFactModel['dependencies']=[],native?:{readiness:NativeTaskReadiness[];cuttingReadiness?:NativeCuttingReadiness[];termination:JourneyTermination|null;cutScopes?:JourneyCutScope[];factoryTimeline?:NativeFactoryTimeline[]}):JourneyFactModel{
- return {schemaVersion:1,sourceId:item.sourceId,orderId:item.orderId,sourceDocumentVersion:item.sourceVersion,instructionVersion:item.instructionVersion,
+ return {...(inputs.fixedSchedule?{fixedSchedule:fixedScheduleBasisSnapshot(inputs.fixedSchedule)}:{}),schemaVersion:1,sourceId:item.sourceId,orderId:item.orderId,sourceDocumentVersion:item.sourceVersion,instructionVersion:item.instructionVersion,
   selectedRound:item.selectedRound,adoptedRound:item.adoptedRound,cancelled:item.display?.mainState==='cancelled',closedAt:item.display?.closedAt??null,
   ...(native?{nativeReadiness:native.readiness.filter(r=>r.tracked).map(r=>({taskId:r.taskId,tracked:r.tracked,eventId:r.eventId,effectiveEventId:r.effectiveEventId,firstReadyAt:r.firstReadyAt,quality:r.quality,scopeRef:r.scopeRef,basis:[...r.basis]})).sort((a,b)=>a.taskId.localeCompare(b.taskId,'en')),
    cuttingReadiness:(native.cuttingReadiness??[]).map(r=>({taskId:r.taskId,tracked:r.tracked,eventId:r.eventId,effectiveEventId:r.effectiveEventId,firstReadyAt:r.firstReadyAt,quality:r.quality,scopeRef:r.scopeRef,lineId:r.lineId,cuttingOrderId:r.cuttingOrderId,basis:[...r.basis]})).sort((a,b)=>a.scopeRef!.localeCompare(b.scopeRef!,'en')),

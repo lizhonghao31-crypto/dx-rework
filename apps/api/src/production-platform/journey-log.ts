@@ -6,7 +6,7 @@ import type {JourneyAuthorizedTask} from "./journey-read-scope.js";
 
 const cursorSchema=z.object({v:z.literal(1),order:z.string(),actor:z.string(),asOf:z.iso.datetime({precision:null}),at:z.iso.datetime({precision:null}),id:z.string().regex(/^(task|assignment):[0-9a-f-]{36}$/)}).strict();
 const coverage=["数字生产节点事件（按登记时间）","节点改派审计（未重复登记为节点事件的记录）"] as const;
-const labels:Record<string,string>={created:"创建节点",ready:"进入办理",completed:"节点完成",reassigned:"改派节点",condition:"更新前置条件",time_corrected:"更正节点时间",priority_changed:"调整优先级",material_returned:"物料退回",cancelled:"取消节点",paused:"暂停节点",resumed:"恢复节点",blocked:"登记阻断",unblocked:"解除阻断",deadline_changed:"更新节点时效",policy_changed:"更新节点时效",system_route:"衔接办理节点",pause:"暂停流程",resume:"恢复流程",cancel:"取消流程"};
+const labels:Record<string,string>={created:"创建节点",ready:"进入办理",completed:"节点完成",cutting_scope_completed:"PO实裁完成",reassigned:"改派节点",condition:"更新前置条件",time_corrected:"更正节点时间",priority_changed:"调整优先级",material_returned:"物料退回",cancelled:"取消节点",paused:"暂停节点",resumed:"恢复节点",blocked:"登记阻断",unblocked:"解除阻断",deadline_changed:"更新节点时效",policy_changed:"更新节点时效",system_route:"衔接办理节点",pause:"暂停流程",resume:"恢复流程",cancel:"取消流程"};
 export function parseJourneyLogCursor(value:string,order:string,asOf:string,actor:string){
   try{
     const parsed=cursorSchema.parse(JSON.parse(Buffer.from(value,"base64url").toString("utf8")));

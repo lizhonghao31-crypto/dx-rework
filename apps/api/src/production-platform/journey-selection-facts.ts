@@ -9,7 +9,7 @@ import type {JourneySelectionClockFrame} from './journey-selection-clock.js';
 /** Shared native selection facts, never an authorized row or an executable DTO.
  * A reader must still apply live source/order/node and field permissions. */
 export type JourneySelectionFacts={
- version:'journey-selection-v1';canonicalId:string;
+ version:'journey-selection-v2';canonicalId:string;
  nodes:JourneySelectionFactNode[];
  /** Native pre-domain and pre-SLA alternatives for live field/node scopes. */
  nativeNodes:JourneySelectionFactNode[];
@@ -59,7 +59,7 @@ export function journeySelectionFacts(item:OrderJourney,inputs:JourneyTimingInpu
   reconsiderDate(item.supervision?.customerReminderDate);
  }
  const ids=new Set(current.map(node=>node.instanceId));
- const facts:JourneySelectionFacts={version:'journey-selection-v1',canonicalId:item.id,
+ const facts:JourneySelectionFacts={version:'journey-selection-v2',canonicalId:item.id,
   nodes:journeySelectionNodes(current),
   nativeNodes:structuredClone(originalNodes?.native??journeySelectionNodes(current)),untimedNodes:structuredClone(originalNodes?.untimed??journeySelectionNodes(current)),
   tasks:tasks.filter(task=>ids.has(task.id)).map(task=>({id:task.id,kind:task.kind,sourceId:task.sourceId,orderId:task.orderId,assigneeId:task.assigneeId,requiredRole:task.requiredRole})),

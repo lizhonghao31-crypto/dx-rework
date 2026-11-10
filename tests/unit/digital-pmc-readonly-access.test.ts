@@ -35,6 +35,8 @@ type ReadRows = (sql: string, values: unknown[]) => Record<string, unknown>[] | 
 
 function database(activeRoles: string[], readRows: ReadRows) {
   const query = vi.fn(async (raw: string, values: unknown[] = []) => {
+    if(raw==="SELECT to_regclass('digital_timeline_adoptions') AS relation")return {rows:[{relation:null}],rowCount:1}; // This legacy permission fixture has no v2 adoption; assertions remain unchanged.
+
     const sql = raw.replace(/\s+/g, ' ').trim();
     // Model the native batching envelope while evaluating only the original
     // strict per-object SELECT fixtures. Unknown SQL still fails this regression.

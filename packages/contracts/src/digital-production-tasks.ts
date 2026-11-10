@@ -10,6 +10,8 @@ export type DigitalTaskState = z.infer<typeof DigitalTaskStateSchema>;
 export type DigitalTimeQuality = z.infer<typeof DigitalTimeQualitySchema>;
 export type DigitalTaskBlocker = {condition:string;name:string;missing:string;responsibleRole:string;action:string|null;evidenceId:string|null;verified:boolean};
 export type DigitalTask = {
+  /** Fixed B for this authorized work only. dueAt remains its own R-based D. */
+  plannedTargets?: {state:'ready'|'pending';targets:Array<{scopeRef:string;lineId:string|null;targetRevision:string;startAt:string|null;endAt:string|null;precision:'instant'|'date';date:string|null}>};
   retiredRule?:string;
   /** Present only for a server-verified isolated Acceptance resource. */
   acceptanceBusinessNow?:string;

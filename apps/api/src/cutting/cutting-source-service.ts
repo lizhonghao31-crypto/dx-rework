@@ -583,7 +583,7 @@ export class CuttingService {
         if (boundAttachments.rowCount !== input.attachmentIds.length) {
           fail("裁床单图片绑定失败，本次登记未完成；请重新读取本单核对图片状态，保留已上传图片，不要直接重复上传全部文件", 409, "INVALID_STATE_TRANSITION");
         }
-        if(productionGate?.taskId)await new DigitalProductionTaskService(this.database).completeCuttingFactWithClient(client,actor,productionGate.taskId);
+        if(productionGate?.taskId)await new DigitalProductionTaskService(this.database).completeCuttingFactWithClient(client,actor,productionGate.taskId,{cuttingOrderId,cuttingRecordId:recordId});
         return {
           statusCode: 201,
           response: {

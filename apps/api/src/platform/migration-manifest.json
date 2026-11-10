@@ -1183,6 +1183,10 @@
     {
       "version": "0281_fixed_timeline_adoptions",
       "checksum": "01b13784d4df01c502051eb3c67ea1435ece301a6f9b871ec160ade40a02f4bc"
+    },
+    {
+      "version": "0282_journey_fixed_progress_selectors",
+      "checksum": "9d6029e6c8d4e1de7807ae1d0491f459ff76eedf935e4f4585ef31db4c6d9c76"
     }
   ]
 }

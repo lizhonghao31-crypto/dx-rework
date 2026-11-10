@@ -19,7 +19,7 @@ import type {CraftStepChoice} from '@dx-rework/contracts/digital-craft';
 
 /** Current enrollment, real migrated schema and original native execution/wage integration. */
 export async function exerciseDevelopmentSlaNative(db: Pool, todos: TodoProjectionService, root: TrustedActorContext, workerId: string, clock?:BusinessClock,
-  variants:readonly (readonly [DevelopmentDocument['craft'],DevelopmentDocument['washing']])[]=[["无", "免洗"], ["印花", "内洗"], ["绣花", "外洗"], ["印绣花", "内洗"]],options?:{fixedCraftSteps:CraftStepChoice[]}) {
+  variants:readonly (readonly [DevelopmentDocument['craft'],DevelopmentDocument['washing']])[]=[["无", "免洗"], ["印花", "内洗"], ["绣花", "外洗"], ["印绣花", "内洗"]],options?:{fixedCraftSteps:CraftStepChoice[];onRouteComplete?(sourceId:string,kind:string,taskId:string):Promise<void>}) {
   const created:Array<{sourceId:string;orderId:string}>=[];
   const native = new PatternRoomOrderService(db, todos, { ordersEnabled: true });
   const forms = new DigitalDevelopmentService(db, true, native), execution = new DevelopmentExecutionService(db, true, native);
@@ -56,10 +56,11 @@ export async function exerciseDevelopmentSlaNative(db: Pool, todos: TodoProjecti
     }
     const route = async (kind: string) => {
       const current = await task(kind), actor = kind === "development_sewing" ? worker : root;
-      return execution.route(actor, sourceId, { taskId: current.taskId, result: "通过", note: "TEST实做", craftExecution: kind === "development_craft_dispatch" ? "内部" : null,
+      const result=await execution.route(actor, sourceId, { taskId: current.taskId, result: "通过", note: "TEST实做", craftExecution: kind === "development_craft_dispatch" ? "内部" : null,
         nextAssigneeId: null, sentDate: null, trackingNo: null,
         ...(kind === "development_pre_wash_check" || kind === "development_tail_check" ? { measurements: [{ name: "胸围", values: [kind === "development_pre_wash_check" ? "51" : "50"] }] } : {}),
         ...(["development_sewing", "development_tail_check","development_printing","development_embroidery","development_print_embroidery"].includes(kind) ? { attachmentIds: [await taskResult(db, execution, actor, sourceId, current.taskId, kind === "development_sewing" ? "车板成果" : kind === "development_tail_check"?"尾查照片":"工艺回样照片")] } : {}) }, randomUUID());
+      await options?.onRouteComplete?.(sourceId,kind,current.taskId);return result;
     };
     if (craft !== "无") {
       const position=await task('development_positioning'),technical=execution.technicalEvidenceService(),group=(await technical.read(root,sourceId)).artifacts.find(a=>a.status==='published')!;
