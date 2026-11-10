@@ -13,12 +13,13 @@ export function replayReceivingSpan(expected:number,changes:ReceiptChange[]){
  }
  return {received,history};
 }
-export async function receivingSpan(db:Pick<Pool|PoolClient,'query'>,orderId:string,expected:number,currentReceived:number){
+export async function receivingSpan(db:Pick<Pool|PoolClient,'query'>,orderId:string,expected:number,currentReceived:number,scope?:{lineId:string;position:number}){
  const original=(await db.query("SELECT after_state FROM audit_events WHERE entity_id=$1 AND action='digital_order_created' ORDER BY created_at,id LIMIT 1",[orderId])).rows[0]?.after_state;
- const initial=original?.lines?.reduce((n:number,l:{sizes:Array<{quantity:number}>})=>n+l.sizes.reduce((sum,q)=>sum+q.quantity,0),0);
+ const initialLines=scope?original?.lines?.slice(scope.position-1,scope.position):original?.lines;
+ const initial=initialLines?.reduce((n:number,l:{sizes:Array<{quantity:number}>})=>n+l.sizes.reduce((sum,q)=>sum+q.quantity,0),0);
  const receipts=(await db.query(`SELECT DISTINCT r.receipt_id,r.received_at,r.actual_quantity,e.event_id,e.created_at,e.after_state,b.deleted_at,b.last_operation_event_id
  FROM digital_production_child_lines l JOIN receiving_receipts r ON r.receipt_id=l.child_id JOIN receiving_batches b USING(receiving_batch_id)
- JOIN operation_events e ON e.event_id=r.operation_event_id WHERE l.module='receiving' AND l.production_order_id=$1`,[orderId])).rows;
+ JOIN operation_events e ON e.event_id=r.operation_event_id WHERE l.module='receiving' AND l.production_order_id=$1 ${scope?'AND l.line_id=$2':''}` ,scope?[orderId,scope.lineId]:[orderId])).rows;
  const corrections=receipts.length?(await db.query('SELECT * FROM receiving_receipt_corrections WHERE receipt_id=ANY($1::uuid[]) ORDER BY created_at,correction_id',[receipts.map(r=>r.receipt_id)])).rows:[];
  const changes:ReceiptChange[]=[];
  for(const r of receipts){const time=receiptTime(r.received_at,r.after_state);changes.push({id:r.event_id,receiptId:r.receipt_id,recordedAt:new Date(r.created_at).toISOString(),quantity:Number(r.actual_quantity),actualAt:time.receivedAt,date:time.receivedDate,kind:'receipt'});

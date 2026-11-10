@@ -18,6 +18,7 @@ import {nativeTaskReadiness,nativeCuttingReadiness,NATIVE_READINESS_KINDS} from 
 import {prepareFixedTaskPosition,insertFixedTaskPosition} from './fixed-task-route.js';
 import {shiftFixedTimeline} from './fixed-timeline-targets.js';
 import {FixedTimelineAdoptionRepository} from './fixed-timeline-adoptions.js';
+import {fixedTaskTargets} from './fixed-task-targets.js';
 import {fixedCraftTiming,FIXED_DEVELOPMENT_CRAFT_TASKS} from './fixed-craft-timing.js';
 import {developmentSlaPlan} from "./development-sla-enrollment.js";
 import {isNativeRootSewingRecipient} from './development-native-recipient.js';
@@ -449,7 +450,7 @@ export class DigitalProductionTaskService {
         return { taskId: id, state: "completed" };
       });
   }
-  async completeCuttingFactWithClient(client:PoolClient,actor:TrustedActorContext,id:string){
+  async completeCuttingFactWithClient(client:PoolClient,actor:TrustedActorContext,id:string,physical?:{cuttingOrderId:string;cuttingRecordId:string}){
     const task=await this.task(client,id,true);
     if(!['bulk_cutting','bulk_cutting_external'].includes(task.task_kind))fail('不是整款实裁任务');
     const native=(await client.query(`SELECT o.primary_merchandiser_id,p.preparation_id FROM digital_bulk_preparations p JOIN digital_production_orders o USING(production_order_id) WHERE p.preparation_id=$1 AND o.production_order_id=$2`,[task.route_instance_id,task.production_order_id])).rows[0];
@@ -459,6 +460,13 @@ export class DigitalProductionTaskService {
       if(task.task_kind==='bulk_cutting_external'){
         if(native.primary_merchandiser_id!==actor.actorId||!actor.actorRoles.includes('order_merchandiser')||!await new DigitalProductionAccessPolicy(client).activeRole(actor.actorId,'order_merchandiser'))digitalForbidden();
       }else if(!actor.actorRoles.some(r=>['cutting_worker','cutting_supervisor'].includes(r))||!(actor.authorizationCapabilities??[]).includes('cutting:records:create'))digitalForbidden();
+    }
+    if(physical&&await new FixedTimelineAdoptionRepository(client).existing({kind:'order',id:task.production_order_id!})){
+      const scopes=(await client.query(`SELECT map.line_id,po.po_number FROM digital_production_child_lines map JOIN digital_production_po_lines po ON po.line_id=map.line_id AND po.production_order_id=map.production_order_id JOIN cutting_records record ON record.cutting_order_id=map.child_id WHERE map.module='cutting' AND map.child_line_key='record' AND map.production_order_id=$1 AND map.child_id=$2 AND record.cutting_record_id=$3`,[task.production_order_id,physical.cuttingOrderId,physical.cuttingRecordId])).rows;
+      if(scopes.length===1&&!(await client.query("SELECT 1 FROM digital_production_task_events WHERE task_id=$1 AND event_kind='cutting_scope_completed' AND payload->>'cuttingRecordId'=$2",[id,physical.cuttingRecordId])).rowCount){
+        await this.active(client,this.resource(task));
+        await client.query(`INSERT INTO digital_production_task_events(event_id,task_id,resource_kind,resource_id,event_kind,actor_id,occurred_at,time_quality,payload) VALUES($1,$2,'order',$3,'cutting_scope_completed',$4,$5,'现场登记',$6)`,[randomUUID(),id,task.production_order_id,actor.actorId,businessNow().toISOString(),JSON.stringify({lineId:scopes[0]!.line_id,cuttingOrderId:physical.cuttingOrderId,cuttingRecordId:physical.cuttingRecordId,note:`PO ${scopes[0]!.po_number??'号码尚未取得'} 原实裁登记完成`})]);
+      }
     }
     const coverage=(await client.query(`SELECT count(*)::int AS total,count(r.cutting_record_id)::int AS completed FROM digital_production_po_lines po LEFT JOIN digital_production_child_lines l ON l.module='cutting' AND l.line_id=po.line_id AND l.production_order_id=po.production_order_id LEFT JOIN cutting_records r ON r.cutting_order_id=l.child_id WHERE po.production_order_id=$1`,[task.production_order_id])).rows[0];
     if(!coverage.total||coverage.completed!==coverage.total)return false;
@@ -648,18 +656,19 @@ export class DigitalProductionTaskService {
       await new DigitalProductionAccessPolicy(client).assert(actor, "task", id, "technical");
       return this.command(client, actor, `task-time:${id}`, key, input, async () => {
         const task = await this.task(client, id, true);
-        const original = (await client.query("SELECT * FROM digital_production_task_events WHERE event_id=$1 AND task_id=$2 AND event_kind IN ('ready','completed')", [input.eventId, id])).rows[0] ?? digitalNotFound();
+        const original = (await client.query("SELECT * FROM digital_production_task_events WHERE event_id=$1 AND task_id=$2 AND event_kind IN ('ready','completed','cutting_scope_completed')", [input.eventId, id])).rows[0] ?? digitalNotFound();
         if (task.state === "cancelled") fail("已取消任务不能订正办理时间");
         const corrected = input.occurredAt === null ? null : new Date(input.occurredAt);
         if (corrected && (!Number.isFinite(corrected.getTime()) || corrected.getTime() > businessNow().getTime())) fail("请填写过去真实时间或明确未知");
-        const entry = original.event_kind === "ready" ? corrected : task.entered_at ? new Date(task.entered_at) : null;
-        const completion = original.event_kind === "completed" ? corrected : task.completed_at ? new Date(task.completed_at) : null;
+        const poCut=original.event_kind==='cutting_scope_completed',cutReady=poCut?(await nativeCuttingReadiness(client,[id])).find(ready=>ready.lineId===original.payload.lineId&&ready.cuttingOrderId===original.payload.cuttingOrderId):null;
+        const entry = original.event_kind === 'ready' ? corrected : poCut?cutReady?.firstReadyAt?new Date(cutReady.firstReadyAt):null:task.entered_at?new Date(task.entered_at):null;
+        const completion = original.event_kind === "completed"||poCut ? corrected : task.completed_at ? new Date(task.completed_at) : null;
         if (entry && completion && completion < entry) fail("完成时间不能早于进入时间");
         const poReady=original.payload?.nativeReadiness?.scopeKind==='po';
         const readiness=!poReady&&original.event_kind==='ready'&&NATIVE_READINESS_KINDS.has(task.task_kind)?(await nativeTaskReadiness(client,[id])).get(id):null;
         const correctedReference=readiness?.eventId??input.eventId;
         const eventId = await this.event(client, actor, id, this.resource(task), "time_corrected", input.occurredAt, corrected ? "已核实" : "缺失", { reason: input.reason, originalKind: original.event_kind,...(correctedReference!==input.eventId?{requestedEventId:input.eventId}:{}) }, correctedReference);
-        if(poReady)return {taskId:id,eventId};
+        if(poReady||poCut)return {taskId:id,eventId};
         if (original.event_kind === "ready") await client.query("UPDATE digital_production_tasks SET entered_at=$2,entered_quality=$3 WHERE task_id=$1", [id, corrected, corrected ? "已核实" : "缺失"]);
         else await client.query("UPDATE digital_production_tasks SET completed_at=$2,completed_quality=$3 WHERE task_id=$1", [id, corrected, corrected ? "已核实" : "缺失"]);
         let policy = await this.policy(client, task.task_kind, task.task_id);
@@ -752,9 +761,10 @@ export class DigitalProductionTaskService {
     const taskBasis:string[]=effective?.sla_basis?.basis??[];
     const stepRef=taskBasis.find(ref=>ref.startsWith('craft-step:'))?.slice(11),craftKind=taskBasis.find(ref=>ref.startsWith('craft-kind:'))?.slice(11);
     const craftName=craftKind==='embroidery'?'绣花':craftKind==='printing'?'印花':null;
+    const plannedTargets=await fixedTaskTargets(db,{taskId:id,resource,round:task.route_version,routeRef:task.route_instance_id,kind:task.task_kind});
     const stepLabel=craftName?({development_craft_dispatch:`发${craftName}`,development_craft_confirmation:`${craftName}回样确认`,process_logistics:`${craftName}物流`,bulk_qc:`${craftName}回仓检查`} as Record<string,string>)[task.task_kind]:null;
     return { ...(stepRef&&craftName?{stepRef,craftKind:craftKind as 'embroidery'|'printing'}:{}),...(effective?.timing_mode?{deadlineMode:effective.timing_mode as "duration"|"date_target"|"unlimited",...(effective.timing_mode==='date_target'?{deadlineExclusive:true}:{})}:{}),...(observed.scenarioId?{acceptanceBusinessNow:observed.now,...(effective?.sla_basis?{deadlineExclusive:effective.sla_basis.exclusive===true}:{})}:{}),unmetConditions, identity, priority,...(retired?{retiredRule:FACTORY_RECEIPT_RETIREMENT}:{}), taskId: id, orderId: task.production_order_id as string | null, sourceId: task.source_id as string | null, taskKind: task.task_kind as string, label: retired?`${currentPolicy.label}（已停用）`:stepLabel??currentPolicy.label as string,
-      routeProgress: route, assigneeName: assignee, requiredRole: task.required_role, hasHandover: Boolean(handover.rowCount), canManage:!retired&&canManage, canControl:!retired&&canControl, canCorrect:!retired&&( isDigitalLeader(actor) || isDigitalTechnicalManager(actor)),
+      ...(plannedTargets?{plannedTargets}:{}),routeProgress: route, assigneeName: assignee, requiredRole: task.required_role, hasHandover: Boolean(handover.rowCount), canManage:!retired&&canManage, canControl:!retired&&canControl, canCorrect:!retired&&( isDigitalLeader(actor) || isDigitalTechnicalManager(actor)),
       assigneeId: task.assignee_id as string | null, state: (factoryQc&&task.state==='completed'&&!factoryQc.complete?'ready':task.state) as DigitalTaskState, routeVersion: task.route_version as number, occurrence: task.occurrence as number,
       enteredAt: iso(effective?.sla_basis?effective.entered_at:task.entered_at), recordedAt: iso(task.created_at)!, completedAt: factoryQc?factoryQc.complete&&factoryQc.checks.every(c=>c.completedAt)?new Date(Math.max(...factoryQc.checks.map(c=>Date.parse(c.completedAt!)))).toISOString():null:iso(task.completed_at), paused,
       dueAt: retired?null:iso(effective?.due_at ?? null), warningAt: retired?null:iso(effective?.warning_at ?? null), slaHours: retired||currentPolicy.sla_seconds === null ? null : Number(currentPolicy.sla_seconds) / 3600,

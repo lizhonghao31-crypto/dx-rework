@@ -26,7 +26,7 @@ export function digitalTaskObjectLabel(task:Pick<DigitalTask,'orderId'|'sourceId
 
 /** Display existing history kinds only; unknown events keep their saved facts and order. */
 export function digitalTaskHistoryKindLabel(kind:string):string {
-  const names:Record<string,string>={created:'创建任务',ready:'进入任务',completed:'完成任务',condition:'前置条件登记',time_corrected:'时间核实',policy_changed:'时效调整',pause:'暂停',resume:'恢复',cancel:'取消后续任务',cancelled:'任务已取消',blocked:'问题登记',unblocked:'解除问题登记',reassigned:'改派任务',priority_changed:'优先级调整',system_route:'系统路由',material_returned:'缺项退回'};
+  const names:Record<string,string>={created:'创建任务',ready:'进入任务',completed:'完成任务',cutting_scope_completed:'PO实裁完成',condition:'前置条件登记',time_corrected:'时间核实',policy_changed:'时效调整',pause:'暂停',resume:'恢复',cancel:'取消后续任务',cancelled:'任务已取消',blocked:'问题登记',unblocked:'解除问题登记',reassigned:'改派任务',priority_changed:'优先级调整',system_route:'系统路由',material_returned:'缺项退回'};
   return Object.hasOwn(names,kind)?names[kind]!:'任务记录';
 }
 

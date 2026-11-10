@@ -1,0 +1,227 @@
+import {fixedReworkProgressFacts} from './fixed-rework-progress.js';
+import {receivingSpan} from './receiving-span.js';
+import {factoryBatchTiming} from './factory-batch-timing.js';
+import {factoryReturnLogistics} from './factory-return-logistics.js';
+import {createHash} from 'node:crypto';
+import type {PoolClient} from 'pg';
+import type {BusinessTimeScope} from '@dx-rework/domain/business-clock';
+import type {SlaNodeFact} from '@dx-rework/domain/digital-sla-plan';
+import type {OrderClosureSheet} from '@dx-rework/contracts/order-closure';
+import type {OrderJourney} from '@dx-rework/contracts/digital-production-journey';
+import type {FixedScheduleProgress,ScheduleOccurrence} from '@dx-rework/contracts';
+import {FixedTimelineAdoptionRepository,type FixedTimelineAdoption,type FixedTimelineInput} from './fixed-timeline-adoptions.js';
+import type {FixedTimelineTarget} from './fixed-timeline-targets.js';
+import {readFixedOrderRoute} from './fixed-order-route.js';
+import {nativeTaskReadiness,nativeCuttingReadiness} from './task-readiness-facts.js';
+import {nativeFactoryTimeline} from './factory-production-facts.js';
+import {journeyTermination,type JourneyTermination} from './journey-termination.js';
+import {evaluateFixedScheduleScope,fixedDurationSummary,type ScheduleScopeInput,type ScheduleFact,type ScheduleWork} from './fixed-schedule-progress.js';
+
+export type FixedScheduleBasis={version:'fixed-schedule-basis-v1';scopeRevision:string;factRevision:string;scopes:ScheduleScopeInput[];termination:JourneyTermination|null;pending:boolean};
+type DB=Pick<PoolClient,'query'>;
+const unknown:ScheduleOccurrence={precision:'unknown'};
+const occurrence=(at:unknown):ScheduleOccurrence=>at instanceof Date?{precision:'instant',at:at.toISOString()}:typeof at==='string'&&/T.*(?:Z|[+-]\d{2}:\d{2})$/.test(at)&&Number.isFinite(Date.parse(at))?{precision:'instant',at:new Date(at).toISOString()}:unknown;
+const fromFact=(fact:SlaNodeFact|undefined):ScheduleFact=>({ready:occurrence(fact?.startedAt),clockStart:occurrence(fact?.startedAt),completed:fact?.completedDate?{precision:'date',date:fact.completedDate}:occurrence(fact?.completedAt),businessCompleted:fact?.businessCompleted===true||Boolean(fact?.completedAt||fact?.completedDate),waitingForPredecessors:false,evidenceRefs:fact?.evidence?[fact.evidence]:[]});
+const hash=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
+const latest=(values:ScheduleOccurrence[]):ScheduleOccurrence=>{
+ if(!values.length||values.some(value=>value.precision==='unknown'))return unknown;
+ const dates=values.filter(value=>value.precision==='date'),instants=values.filter(value=>value.precision==='instant');
+ const exact=instants.sort((a,b)=>Date.parse(b.at)-Date.parse(a.at))[0];
+ if(exact&&dates.every(date=>Date.parse(exact.at)>=Date.parse(date.date+'T00:00:00+08:00')+86400000))return exact;
+ if(!dates.length)return exact!;
+ return {precision:'date',date:values.map(value=>value.precision==='date'?value.date:value.precision==='instant'?new Date(Date.parse(value.at)+28800000).toISOString().slice(0,10):'').sort().at(-1)!};
+};
+
+/** Internal factual basis only. The existing Journey/SLA caller first checks
+ * live full-resource/field scope and owns the RR snapshot. No extra connection,
+ * transaction, Root actor, current settings or GET target reconstruction. */
+export async function readFixedScheduleBasis(db:DB,resource:BusinessTimeScope,item:OrderJourney,native:Readonly<Record<string,SlaNodeFact>>,asOf:string,closure?:OrderClosureSheet):Promise<FixedScheduleBasis|null>{
+ const repository=new FixedTimelineAdoptionRepository(db),current=await repository.currentTargets(resource,resource.kind==='source'?item.adoptedRound??item.selectedRound??undefined:undefined);
+ if(!current)return null;
+ const saved=current.adoption,sourceId=resource.kind==='source'?resource.id:typeof saved.input.sourceVersions.sourceId==='string'?saved.input.sourceVersions.sourceId:null;
+ const sourceOrigin=resource.kind==='source'&&saved.input.round>1?await repository.currentTargets(resource,1):null;
+ const inherited=resource.kind==='order'&&sourceId?await repository.existing({kind:'source',id:sourceId},Number(saved.input.sourceVersions.sourceRound)):null;
+ const inheritedTargets=inherited?await repository.currentTargets(inherited.input.resource,inherited.input.round):null;
+ const tasks=(await db.query(`SELECT t.task_id,t.state,t.entered_at,t.entered_quality,t.completed_at,t.completed_quality,t.route_version,t.route_instance_id,a.task_kind,a.source_id,a.production_order_id,
+  position.adoption_id,position.route_position,position.route_ref,position.step_id,position.phase,
+  EXISTS(SELECT 1 FROM digital_production_task_events returned WHERE returned.task_id=t.task_id AND returned.event_kind='material_returned') AS returned,
+  EXISTS(SELECT 1 FROM digital_development_route_facts rejected WHERE rejected.task_id=t.task_id AND rejected.kind='尾查退回') AS rejected
+  FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id)
+  LEFT JOIN digital_timeline_task_positions position USING(task_id)
+  WHERE ($1::uuid IS NOT NULL AND a.production_order_id=$1) OR ($2::uuid IS NOT NULL AND a.source_id=$2)
+  ORDER BY t.route_version,t.created_at,t.task_id`,[resource.kind==='order'?resource.id:null,sourceId])).rows;
+ const readiness=await nativeTaskReadiness(db,tasks.map(task=>task.task_id)),cuts=resource.kind==='order'?await nativeCuttingReadiness(db,tasks.map(task=>task.task_id)):[],production=resource.kind==='order'?await nativeFactoryTimeline(db,resource.id):[];
+ const cutCompletions=resource.kind==='order'?(await db.query(`SELECT event.event_id,CASE WHEN corrected.event_id IS NULL THEN event.occurred_at ELSE corrected.occurred_at END AS occurred_at,coalesce(corrected.time_quality,event.time_quality) AS time_quality,event.payload FROM digital_production_task_events event JOIN cutting_records record ON record.cutting_record_id::text=event.payload->>'cuttingRecordId' JOIN digital_production_child_lines map ON map.module='cutting' AND map.child_id=record.cutting_order_id AND map.production_order_id=event.resource_id AND map.line_id::text=event.payload->>'lineId' LEFT JOIN LATERAL(SELECT correction.event_id,correction.occurred_at,correction.time_quality FROM digital_production_task_events correction LEFT JOIN digital_production_event_intents intent USING(event_id) WHERE correction.corrects_event_id=event.event_id AND correction.event_kind='time_corrected' ORDER BY (to_jsonb(intent)->>'notification_sequence')::bigint DESC NULLS LAST,correction.recorded_at DESC,correction.event_id DESC LIMIT 1) corrected ON true WHERE event.resource_kind='order' AND event.resource_id=$1 AND event.event_kind='cutting_scope_completed' ORDER BY event.recorded_at,event.event_id`,[resource.id])).rows:[];
+ const factory=resource.kind==='order'?await factoryBatchTiming(db,resource.id):null;
+ const returnLogistics=resource.kind==='order'?await factoryReturnLogistics(db,resource.id,new Date(asOf)):[];
+ const currentPreparation=resource.kind==='order'?(await db.query(`SELECT p.preparation_id FROM digital_instruction_documents d JOIN digital_instruction_versions v ON v.production_order_id=d.production_order_id AND v.version=d.published_version JOIN digital_bulk_preparations p ON p.production_order_id=v.production_order_id AND p.instruction_version=v.version AND p.source_round=v.source_round WHERE d.production_order_id=$1`,[resource.id])).rows[0]?.preparation_id:null;
+ const routeTimes=new Map<string,string>();
+ const routes=new Map<string,NonNullable<FixedTimelineInput['route']>>([[String(saved.input.sourceVersions.routeRef),saved.input.route??[]]]),routeWorks=new Map<string,FixedTimelineInput['work']>();
+ for(const row of (resource.kind==='order'?(await db.query('SELECT route_ref FROM digital_timeline_order_routes WHERE adoption_id=$1 ORDER BY recorded_at,route_ref',[saved.adoptionId])).rows:[])){
+  const route=await readFixedOrderRoute(db,saved,row.route_ref);if(route){routes.set(row.route_ref,route.route);routeWorks.set(row.route_ref,route.work);routeTimes.set(row.route_ref,route.time.now);}
+ }
+ const relevant=(definition:FixedTimelineInput['work'][number],owner:FixedTimelineAdoption)=>{
+  const route=owner===inherited?owner.input.route:routes.get(String(owner.input.sourceVersions.routeRef));
+  const ownId=definition.id.startsWith('source:')?definition.id.slice(7):definition.id;
+  return tasks.filter(task=>task.state!=='cancelled'&&(owner.input.resource.kind==='source'?task.source_id===owner.input.resource.id&&task.route_version===owner.input.round:task.production_order_id===resource.id))
+   .filter(task=>task.adoption_id?task.adoption_id===owner.adoptionId&&(routes.get(task.route_ref)??route??[]).some(position=>position.position===Number(task.route_position)&&position.nodeId===ownId)
+    :task.task_kind===(definition.parameterKey??ownId)||definition.parameterKey==='bulk_cutting'&&task.task_kind==='bulk_cutting_external');
+ };
+ const scopes:ScheduleScopeInput[]=[];
+ for(const consumer of saved.input.consumers){
+  const targetsRow=current.scopes.find(row=>row.scope_ref===consumer.scopeRef);if(!targetsRow)continue;
+  const targets=targetsRow.targets_json as FixedTimelineTarget[],targetMap=new Map(targets.map(target=>[target.id,target]));
+  const definitions=saved.input.work.filter(work=>consumer.nodeIds.includes(work.id)),facts:Record<string,ScheduleFact>={};
+  const works:ScheduleWork[]=definitions.map(definition=>{
+   const shared=definition.id.startsWith('source:'),sourceScope=inheritedTargets?.scopes.find(row=>row.scope_ref===inherited?.input.consumers[0]?.scopeRef),sourceTarget=shared?(sourceScope?.targets_json as FixedTimelineTarget[]|undefined)?.find(target=>target.id===definition.id.slice(7)):undefined;
+   const target=shared?sourceTarget:targetMap.get(definition.id),goal=consumer.customerGoalIds?.includes(definition.id),anchor=goal?targetsRow.goal_anchor?.[definition.id]:null;
+   return {...definition,start:target?.start.at??null,end:target?.end.at??null,...(shared&&sourceScope?{targetRevision:`${inherited!.adoptionId}:${sourceScope.revision}`}:{ }),targetPrecision:anchor?.precision==='date'?'date':'instant',targetDate:anchor?.precision==='date'?anchor.value:null};
+  });
+  for(const definition of definitions){
+   const inheritedWork=definition.id.startsWith('source:'),owner=inheritedWork?inherited:saved,ownId=inheritedWork?definition.id.slice(7):definition.id;
+   // A shared source fact must be the adopted source round, not today's new round.
+   const originalFact=inheritedWork?undefined:native[ownId]??native[definition.parameterKey??ownId];
+   let fact=fromFact(originalFact);
+   const matches=owner?relevant(definition,owner):[];
+   if(matches.length===1){const task=matches[0]!,ready=readiness.get(task.task_id);
+    const accepted=task.state==='completed'&&!task.returned&&!task.rejected;
+    const completed=accepted&&['现场登记','已核实'].includes(task.completed_quality)?occurrence(task.completed_at):unknown;
+    const first=ready?.tracked?occurrence(ready.firstReadyAt):fact.ready;
+    fact={...fact,ready:first,clockStart:first,completed,businessCompleted:accepted,evidenceRefs:[`task:${task.task_id}:round:${task.route_version}`,...ready?.basis??[]]};
+   }
+   if(definition.parameterKey==='bulk_cutting'&&consumer.lineId){const own=cuts.filter(cut=>cut.lineId===consumer.lineId);if(own.length===1){fact.ready=occurrence(own[0]!.firstReadyAt);fact.clockStart=fact.ready;fact.evidenceRefs=[...fact.evidenceRefs,...own[0]!.basis];const complete=cutCompletions.find(event=>event.payload.lineId===consumer.lineId&&event.payload.cuttingOrderId===own[0]!.cuttingOrderId);if(complete){fact.businessCompleted=true;fact.completed=['现场登记','已核实'].includes(complete.time_quality)?occurrence(complete.occurred_at):unknown;fact.evidenceRefs=[...fact.evidenceRefs,`digital_production_task_events:${complete.event_id}`];}}}
+   if(ownId.startsWith('factory_work:')&&consumer.lineId){const rows=production.filter(row=>row.lineId===consumer.lineId),complete=rows.length>0&&rows.every(row=>row.completedDate);fact={...fact,ready:latest(rows.map(row=>occurrence(row.dispatchedAt))),clockStart:unknown,businessCompleted:complete,completed:complete?latest(rows.map(row=>({precision:'date',date:row.completedDate!}))):unknown,evidenceRefs:rows.flatMap(row=>[row.startTransitionRef,row.completionTransitionRef].filter((ref):ref is string=>Boolean(ref)))};}
+   if(ownId.startsWith('factory_production:')&&consumer.lineId){
+    // The QC task has its own native entry. Production business completion is
+    // another fact and must not be fabricated into QC's start (QC can be early).
+    const rows=tasks.filter(task=>task.production_order_id===resource.id&&task.task_kind==='factory_production_qc'&&task.state!=='cancelled'),task=rows.length===1?rows[0]:null;
+    const ready=task&&['现场登记','已核实'].includes(task.entered_quality)?occurrence(task.entered_at):unknown;
+    fact={...fact,ready,clockStart:ready,evidenceRefs:[...fact.evidenceRefs,...(task?[`task:${task.task_id}:native-entry`]:[])]};
+   }
+   if(ownId.startsWith('return_logistics:')&&consumer.lineId&&closure){const line=closure.lines.find(line=>line.lineId===consumer.lineId),valid=line?.cutScope!=='unresolved'&&line?.actualQuantity!==undefined&&line.actualQuantity>=line.orderedQuantity,records=line?.receipts??[];
+    const span=line?await receivingSpan(db,resource.id,line.orderedQuantity,line.actualQuantity,{lineId:line.lineId,position:item.lines.findIndex(po=>po.id===line.lineId)+1}):null;
+    const shipments=returnLogistics.filter(shipment=>production.some(row=>row.lineId===consumer.lineId&&row.productionId===shipment.productionId&&row.factoryDecisionId===shipment.factoryDecisionId)),first=shipments.map(shipment=>shipment.shippedOn).sort()[0];
+    fact={...fact,ready:first?{precision:'date',date:first}:unknown,clockStart:unknown,businessCompleted:Boolean(valid&&records.length),completed:valid&&span?span.collectedDate?{precision:'date',date:span.collectedDate}:occurrence(span.collectedAt):unknown,evidenceRefs:[...shipments.map(shipment=>shipment.evidence),...records.map(row=>`receipt:${row.receiptId}`)]};
+   }
+   // The independent QC step ID must not borrow the aggregate of both crafts.
+   if(ownId.startsWith('bulk_qc:')){const windows=factory?.windows.filter(window=>window.kind==='bulk_qc'&&window.stepRef===ownId.slice(8))??[];fact={...fact,ready:latest(windows.map(window=>occurrence(window.enteredAt))),clockStart:latest(windows.map(window=>occurrence(window.enteredAt))),completed:latest(windows.map(window=>occurrence(window.completedAt))),businessCompleted:windows.length>0&&windows.every(window=>window.complete),evidenceRefs:[...fact.evidenceRefs,...windows.map(window=>window.evidence)]};}
+   facts[definition.id]=fact;
+  }
+  for(const work of works){const fact=facts[work.id]!;fact.waitingForPredecessors=fact.ready.precision==='unknown'&&work.dependsOn.length>0&&work.dependsOn.some(id=>!facts[id]?.businessCompleted);}
+  const goalIds=consumer.customerGoalIds?.length?consumer.customerGoalIds:Object.keys(consumer.ends).filter(id=>!id.includes('ship_sample')&&id!=='development_shipping');
+  // Development's own adopted goal is not a customer's PO delivery promise.
+  const customerGoal=resource.kind==='order'?goalIds.map(id=>targetMap.get(id)?.end.at).filter((at):at is string=>Boolean(at)).sort().at(-1)??null:null;
+  if(resource.kind==='source'&&saved.input.round>1){
+   const original=sourceOrigin?.adoption,originScope=sourceOrigin?.scopes[0],originalEnds=original?Object.keys(original.input.consumers[0]!.ends).filter(id=>id!=='development_shipping'):[],originGoal=originalEnds.length===1?originalEnds[0]:null;
+   const target=(originScope?.targets_json as FixedTimelineTarget[]|undefined)?.find(target=>target.id===originGoal),handoff=target?.end.at??null,originId=`prior_source_completion:${resource.id}:round:1`;
+   const position=original?.input.route?.find(position=>position.nodeId===originGoal),candidates=tasks.filter(task=>task.adoption_id===original?.adoptionId&&task.route_position===position?.position),task=candidates.length===1?candidates[0]:null,complete=Boolean(task&&task.state==='completed'&&!task.returned&&!task.rejected);
+   works.unshift({id:originId,canonicalWorkRef:original?.input.work.find(work=>work.id===originGoal)?.canonicalWorkRef??originId,dependsOn:[],start:handoff,end:handoff,minutes:0,calendar:'continuous',accountingRole:'shared_reference',responsibilitySlaRef:null});
+   facts[originId]={ready:unknown,clockStart:unknown,completed:complete&&['现场登记','已核实'].includes(task!.completed_quality)?occurrence(task!.completed_at):unknown,businessCompleted:complete,waitingForPredecessors:false,evidenceRefs:task?[`task:${task.task_id}:round:1`]:[]};
+   for(const work of works.filter(work=>work.accountingRole==='added_work')){
+    work.originalHandoffAt=handoff;if(!work.dependsOn.length)work.dependsOn=[originId];
+    facts[work.id]={...facts[work.id]!,impactStartedAt:saved.time.now};
+   }
+  }
+  scopes.push({scopeRef:consumer.scopeRef,lineId:consumer.lineId,targetRevision:`${saved.adoptionId}:${targetsRow.revision}`,work:works,facts,terminalIds:goalIds,customerGoal});
+ }
+ // Added route targets stay constrained to their original handoff. They do not
+ // replace the base targets or add their own planning SLA to the old budget.
+ for(const scope of scopes)for(const row of current.scopes.filter(row=>row.line_id===scope.lineId&&row.goal_anchor?.originalHandoff)){
+  const nodeId=row.goal_anchor.originalHandoff.nodeId as string,routeRef=String(row.scope_ref).split(':route:')[1]?.split(':handoff:')[0],definitions=routeRef?routeWorks.get(routeRef)??[]:[],targets=row.targets_json as FixedTimelineTarget[],handoff=scope.work.find(work=>work.id===nodeId);
+  if(!handoff||!definitions.length||routeRef!==currentPreparation)continue;
+  const replaced=new Set(nodeId==='warehouse_dispatch'?(saved.input.route??[]).filter(position=>position.phase==='logistics'||position.phase==='qc').map(position=>position.nodeId):[]);
+  const originalDependencies=handoff.dependsOn.filter(id=>!replaced.has(id));
+  for(const replacedId of replaced)if(scope.facts[replacedId]&&!scope.facts[replacedId]!.businessCompleted)scope.facts={...scope.facts,[replacedId]:{...scope.facts[replacedId]!,terminated:true}};
+  let previous=[...originalDependencies];
+  for(const definition of definitions.filter(work=>targets.some(target=>target.id===work.id))){const target=targets.find(target=>target.id===definition.id)!;
+   scope.work=[...scope.work,{...definition,dependsOn:definition.dependsOn.length?definition.dependsOn:previous,start:target.start.at,end:target.end.at,originalHandoffAt:row.goal_anchor.originalHandoff.start?.at??null}];
+   let fact=fromFact(native[definition.id]??native[definition.parameterKey??definition.id]);
+   const routePosition=(routes.get(routeRef!)??[]).find(position=>position.nodeId===definition.id),ownTasks=tasks.filter(task=>task.adoption_id===saved.adoptionId&&task.route_ref===routeRef&&task.route_position===routePosition?.position&&task.state!=='cancelled');
+   fact.evidenceRefs=[...fact.evidenceRefs,...ownTasks.map(task=>`task:${task.task_id}:round:${task.route_version}`)];
+   if(definition.id.startsWith('bulk_qc:')){
+    const windows=factory?.windows.filter(window=>window.kind==='bulk_qc'&&window.stepRef===definition.id.slice(8))??[];
+    fact={...fact,ready:latest(windows.map(window=>occurrence(window.enteredAt))),clockStart:latest(windows.map(window=>occurrence(window.enteredAt))),completed:latest(windows.map(window=>occurrence(window.completedAt))),businessCompleted:windows.length>0&&windows.every(window=>window.complete),evidenceRefs:[...fact.evidenceRefs,...windows.map(window=>window.evidence)]};
+   }
+   fact.impactStartedAt=routeRef?routeTimes.get(routeRef)??null:null;scope.facts={...scope.facts,[definition.id]:fact};previous=[definition.id];
+  }
+  handoff.dependsOn=[...new Set([...originalDependencies,...previous])];
+ }
+ const repairs=await fixedReworkProgressFacts(db,saved);
+ for(const scope of scopes){
+  const handoff=scope.work.find(work=>work.id===`garment_packing:${scope.lineId}`);if(!handoff)continue;
+  const predecessors=[...handoff.dependsOn],required:string[]=[];
+  for(const repair of repairs.filter(repair=>repair.lineId===scope.lineId)){
+   const id=`garment_rework:${scope.lineId}:${repair.reworkId}`,row=current.scopes.find(row=>row.scope_ref===`${scope.scopeRef}:rework:${repair.reworkId}`),target=(row?.targets_json as FixedTimelineTarget[]|undefined)?.find(target=>target.id===id);
+   const window=repair.windows,policy=saved.input.unified.values.parameters.garment_rework?.value,own=window.length===1?window[0]:null,minutes=policy?.kind==='duration'?policy.minutes:null;
+   scope.work=[...scope.work,{id,canonicalWorkRef:`rework:${repair.reworkId}`,dependsOn:predecessors,start:target?.start.at??null,end:target?.end.at??null,minutes,calendar:'continuous',accountingRole:'added_work',originalHandoffAt:row?.goal_anchor.originalHandoff.start?.at??null,responsibilitySlaRef:own?.snapshotId?`snapshot:${own.snapshotId}:garment_rework`:null,responsibilityMinutes:own?.startedAt&&own.deadline?(Date.parse(own.deadline)-Date.parse(own.startedAt))/60000:null,responsibilityCalendar:'continuous',...(row?{targetRevision:`${saved.adoptionId}:rework:${row.revision}`}:{})}];
+   scope.facts={...scope.facts,[id]:{ready:occurrence(repair.approvedAt),clockStart:occurrence(own?.startedAt),completed:occurrence(own?.completedAt),businessCompleted:own?.complete===true,waitingForPredecessors:false,evidenceRefs:[repair.eventRef,...window.map(window=>window.evidence)],impactStartedAt:repair.approvedAt}};required.push(id);
+  }
+  if(required.length)handoff.dependsOn=[...predecessors,...required];
+ }
+ const termination=await journeyTermination(db,resource,asOf);
+ return {version:'fixed-schedule-basis-v1',scopeRevision:hash([current.scopes.map(row=>[row.scope_ref,row.revision,row.source_event_ref]),inheritedTargets?.scopes.map(row=>[row.scope_ref,row.revision,row.source_event_ref])??[]]),factRevision:hash(scopes.map(scope=>scope.facts)),scopes,termination,pending:scopes.length!==saved.input.consumers.length||Boolean(inherited&&!inheritedTargets?.scopes.length)};
+}
+
+export function evaluateFixedJourneyBasis(basis:FixedScheduleBasis,asOf:string,legacyOverdue:boolean):FixedScheduleProgress{
+ const scopes=basis.scopes.map(scope=>evaluateFixedScheduleScope(scope,asOf,basis.termination));
+ const unfinished=basis.scopes.some(scope=>scope.terminalIds.some(id=>!scope.facts[id]?.businessCompleted));
+ const state=basis.termination&&unfinished?'terminated':scopes.some(scope=>scope.state==='late')?'late':basis.pending||!scopes.length||scopes.some(scope=>scope.state==='unknown')?'unknown':'normal';
+ return {version:'fixed-schedule-progress-v1',asOf,scopeRevision:basis.scopeRevision,factRevision:basis.factRevision,state,scopes,durationSummary:fixedDurationSummary(basis.scopes,asOf,basis.termination),legacyOverdue,nextChangeAt:null};
+}
+
+/** Only finite classification changes are compiled. Numeric display values are
+ * evaluated for selected rows; ordinary full-range selection reads flags. */
+export function nextFixedScheduleClassification(basis:FixedScheduleBasis,asOf:string):string|null{
+ if(basis.termination)return null;
+ const now=Date.parse(asOf);let next:number|null=null;
+ const consider=(at:number)=>{if(at>now&&(next===null||at<next))next=at;};
+ for(const scope of basis.scopes){
+  const current=evaluateFixedScheduleScope(scope,asOf);
+  if(current.customerDuePassed===false&&scope.customerGoal)consider(Date.parse(scope.customerGoal));
+  if(!current.lagMinutes||current.nodes.every(node=>node.businessCompleted))continue;
+  const ends=scope.work.flatMap(work=>work.end?[Date.parse(work.end)]:[]),horizon=Math.max(now,...ends)+366*86400000;
+  for(const side of ['minimum','maximum'] as const){
+   if(current.lagMinutes[side]>0)continue;
+   const late=(time:number)=>(evaluateFixedScheduleScope(scope,new Date(time).toISOString()).lagMinutes?.[side]??-Infinity)>0;
+   if(!late(horizon))continue;
+   let low=now,high=horizon;
+   while(high-low>1){const mid=Math.floor((low+high)/2);if(late(mid))high=mid;else low=mid;}
+   consider(high);
+  }
+ }
+ return next===null?null:new Date(next).toISOString();
+}
+
+/** Live scoped DTO only; the existing role/field owner decides whether this
+ * basis is readable. Shared storage uses the separate explicit whitelist. */
+export function attachFixedJourneySchedule(item:OrderJourney,basis:FixedScheduleBasis,asOf:string){
+ const progress=evaluateFixedJourneyBasis(basis,asOf,item.display?.mainState==='overdue');progress.nextChangeAt=nextFixedScheduleClassification(basis,asOf);item.fixedSchedule=progress;
+ const aliases:Record<string,string>={production_sheet:'production_instruction',sourcing_selection:'sourcing_director',sourcing_approval:'sourcing_owner',customer_confirmation:'customer_sample',source_confirmation:'development_confirmation',factory_work:'production_reporting',factory_production:'factory_production_qc',return_logistics:'receipts',garment_inspection:'receiving_inspection',garment_packing:'packing',bulk_printing:'process_logistics',bulk_embroidery:'process_logistics',development_craft_return:'development_craft_confirmation'};
+ for(const node of item.stages.flatMap(stage=>stage.nodes)){
+  if(!node.current||node.state==='unavailable'||node.unavailableReason==='permission')continue;
+  const ids=new Set(node.records.flatMap(record=>record.lineId?[record.lineId]:[]));
+  const taskRef=`task:${node.instanceId}:`,exactTask=basis.scopes.some(scope=>Object.values(scope.facts).some(fact=>fact.evidenceRefs.some(ref=>ref.startsWith(taskRef))));
+  const targets=progress.scopes.flatMap(scope=>ids.size&&scope.lineId&&!ids.has(scope.lineId)?[]:scope.nodes.filter(value=>{
+   if(exactTask)return basis.scopes.find(input=>input.scopeRef===scope.scopeRef)?.facts[value.id]?.evidenceRefs.some(ref=>ref.startsWith(taskRef));
+   const raw=value.id.startsWith('source:')?value.id.slice(7):value.id,key=raw.split(':')[0]!;return (aliases[key]??key)===node.key;
+  }).map(value=>({scopeRef:scope.scopeRef,lineId:scope.lineId,progress:value})));
+  if(!targets.length)continue;
+  node.fixedTargets=targets;
+  const ends=targets.map(target=>target.progress.goalDelta.targetAt),same=ends.every(at=>at!==null&&at===ends[0]);
+  // Original native timing.target remains independent D. Only the field named
+  // expected uses B; never choose one PO deadline as the whole aggregate.
+  const date=targets[0]!.progress.goalDelta.targetDate,sameDay=same&&date!==null&&targets.every(target=>target.progress.goalDelta.targetPrecision==='date'&&target.progress.goalDelta.targetDate===date);
+  node.expectedAt=sameDay?date:same?ends[0]!:null;node.expectedPrecision=sameDay?'date':same?'instant':'missing';node.expectedKind=same?'plan':'unset';
+ }
+}
+
+/** An explicit minimal shared-fact whitelist: no user, names, grants, URLs,
+ * complete adopted settings or executable response can enter this snapshot. */
+export function fixedScheduleBasisSnapshot(basis:FixedScheduleBasis):FixedScheduleBasis{
+ return {version:basis.version,scopeRevision:basis.scopeRevision,factRevision:basis.factRevision,pending:basis.pending,
+  termination:basis.termination?{kind:basis.termination.kind,at:basis.termination.at,precision:basis.termination.precision,originEventRef:basis.termination.originEventRef,scopeRef:basis.termination.scopeRef}:null,
+  scopes:basis.scopes.map(scope=>({scopeRef:scope.scopeRef,lineId:scope.lineId,targetRevision:scope.targetRevision,terminalIds:[...scope.terminalIds],customerGoal:scope.customerGoal,
+   work:scope.work.map(work=>({id:work.id,canonicalWorkRef:work.canonicalWorkRef,dependsOn:[...work.dependsOn],start:work.start,end:work.end,minutes:work.minutes,calendar:work.calendar,
+    ...(work.includedIn!==undefined?{includedIn:work.includedIn}:{}),...(work.accountingRole!==undefined?{accountingRole:work.accountingRole}:{}),...(work.originalHandoffAt!==undefined?{originalHandoffAt:work.originalHandoffAt}:{}),responsibilitySlaRef:work.responsibilitySlaRef,...(work.responsibilityMinutes!==undefined?{responsibilityMinutes:work.responsibilityMinutes}:{}),...(work.responsibilityCalendar!==undefined?{responsibilityCalendar:work.responsibilityCalendar}:{}),...(work.targetPrecision!==undefined?{targetPrecision:work.targetPrecision}:{}),...(work.targetDate!==undefined?{targetDate:work.targetDate}:{}),...(work.targetRevision!==undefined?{targetRevision:work.targetRevision}:{})})),
+   facts:Object.fromEntries(Object.entries(scope.facts).map(([id,fact])=>[id,{ready:structuredClone(fact.ready),completed:structuredClone(fact.completed),clockStart:structuredClone(fact.clockStart),businessCompleted:fact.businessCompleted,waitingForPredecessors:fact.waitingForPredecessors,evidenceRefs:[...fact.evidenceRefs],...(fact.impactStartedAt!==undefined?{impactStartedAt:fact.impactStartedAt}:{}),...(fact.terminated!==undefined?{terminated:fact.terminated}:{})}]))}))};
+}

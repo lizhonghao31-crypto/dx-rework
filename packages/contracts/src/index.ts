@@ -1411,3 +1411,5 @@ export * from "./production-analysis.js";
 
 export * from "./work-analysis.js";
 export * from './order-responsibility-revision.js';
+
+export type * from "./fixed-schedule-progress.js";

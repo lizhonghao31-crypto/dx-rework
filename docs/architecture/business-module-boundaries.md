@@ -73,3 +73,9 @@
 本批附带修复已复现的CI回执传输故障：三个lane的原始记录通过同run/attempt artifact传递，只把各job结果与bundle hash作为短环境输入；原Head/base、版本、完整计划、构建与清理核验不变，不减少业务检查。#956的最终汇总失败仍保留，不能称远端Full通过。
 
 `readNativePackingHeads`对授权cut集合批量读取，包括已删除但未明确撤销的来源；不靠制造收货行让head可见。原Root累计写入记录当前合并scope事件集合，跨旧scope后的新累计须在同锁内确认。`NATIVE_EMPTY_PACKING_SCOPE_SQL`在同一RR内用原创建审计、子链与旧别名候选证明正常空范围，漏挂或旧来源候选仍unknown。尚不确证的历史多cut分配仍不猜；本批不自动改历史关联。
+
+### 供应链 PR04：固定进度读取
+
+`fixed-schedule-progress.ts`只评价传入的冻结DAG/日历和可信事实，分别计算可交下界、已赚提前、目标差、独立责任窗及整单物理跨度。`fixed-schedule-basis.ts`在原授权RR内复用原生来源/轮次、逐PO实裁、工厂、收货/质检/装箱和终止事实；共享存储只保存明确白名单，不保存用户结果。`fixed-rework-progress.ts`读取原批准和当前配置派工，新增范围目标只由原有界worker在原交接约束下补齐。`fixed-task-targets.ts`只返回已授权单任务自己的B，原task dueAt/D不变；计划缺失不回退成另一个时间。
+
+`JourneySelectionClock`保存有限分类帧；`journey-selection-query.ts`在当前完整授权范围读轻量标志，`journey-projection.ts`保留原KPI母集合和15条富化。当前选中行才计算数值，GET不重建全库、不改B。原实裁事务仅为新v2原生PO/cut/record写真实分PO完成事件，Root原更正入口只更正该事件，不改兄弟PO或共享整任务完成时间。纯读取、原事务/权限、有限后台更新与后续UI消费职责保持分离。

@@ -14,7 +14,7 @@ import {JourneyFactRepository} from '../../apps/api/src/production-platform/jour
 import {JourneyFactUpdates} from '../../apps/api/src/production-platform/journey-fact-updates.js';
 import {configureTimelineAdoption} from '../../apps/api/src/production-platform/fixed-timeline-mode.js';
 import {readInitialTimelineInput,freezeInitialTimelineInput} from '../../apps/api/src/production-platform/fixed-timeline-initial-input.js';
-import {DigitalOrderCreateSchema} from '@dx-rework/contracts/digital-production';
+import {DigitalOrderCreateSchema,beijingCalendarDate} from '@dx-rework/contracts/digital-production';
 import {validateDigitalSlaSnapshot} from '@dx-rework/contracts/digital-sla';
 import {exerciseDevelopmentSlaNative} from '../helpers/development-sla-native-fixture.js';
 import {TodoProjectionService} from '../../apps/api/src/todos/projection-service.js';
@@ -57,6 +57,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  beforeAll(async()=>{
   f=await businessAnchorFixture(url!,{throughVersion:'0280_journey_selection_facts'});
   await f.db.query(await readFile(new URL('../../apps/api/migrations/0281_fixed_timeline_adoptions.sql',import.meta.url),'utf8'));
+  await f.db.query(await readFile(new URL('../../apps/api/migrations/0282_journey_fixed_progress_selectors.sql',import.meta.url),'utf8'));
   expect((await f.db.query("SELECT current_setting('is_superuser') AS superuser")).rows[0].superuser).toBe('off');
   scene=await f.scene('2026-11-09T08:00:00.000Z');
  });
@@ -273,8 +274,13 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(history.filter(row=>row.state==='completed')).toEqual(before.filter(row=>row.state==='completed'));
    expect(history.filter(row=>row.state!=='completed').every(row=>row.state==='cancelled'&&row.completed_at===null)).toBe(true);
    expect((await forms.read(f.root,sourceId)).roundNumber).toBe(2);
+   const built=await new JourneyFactRepository(f.db).buildOne({kind:'source',id:sourceId}),progress=built.model.fixedSchedule!.scopes[0]!,oldTargets=(await repo.currentTargets({kind:'source',id:sourceId},1))!;
+   const oldGoal=Object.keys(original.input.consumers[0]!.ends).find(id=>id!=='development_shipping')!,handoff=oldTargets.scopes[0].targets_json.find((target:{id:string})=>target.id===oldGoal)!.end.at;
+   expect(progress.work.filter(work=>work.accountingRole==='added_work').length).toBeGreaterThan(0);
+   expect(progress.work.filter(work=>work.accountingRole==='added_work').every(work=>work.originalHandoffAt===handoff)).toBe(true);
+   expect(progress.work.some(work=>work.id===`prior_source_completion:${sourceId}:round:1`)).toBe(true);
    const source=(await f.db.query('SELECT design_style_no,temporary_style_no,customer_code FROM digital_production_sources WHERE source_id=$1',[sourceId])).rows[0];
-   const order=await new DigitalProductionIdentityService(f.db,true).createOrder(f.root,DigitalOrderCreateSchema.parse({customerCode:source.customer_code??'PD',productGroup:'男装',designStyleNo:source.design_style_no,temporaryStyleNo:source.temporary_style_no,orderDate:'2026-11-10',primaryMerchandiserId:f.people.merchandiser!.actorId,
+   const order=await new DigitalProductionIdentityService(f.db,true).createOrder(f.root,DigitalOrderCreateSchema.parse({customerCode:source.customer_code??'PD',productGroup:'男装',designStyleNo:source.design_style_no,temporaryStyleNo:source.temporary_style_no,orderDate:beijingCalendarDate(businessNow()),primaryMerchandiserId:f.people.merchandiser!.actorId,
     lines:[{formalPoNo:'TEST-CONTINUATION-'+randomUUID(),color:'黑',customerWarehouseArrivalDate:'2027-03-01',sizes:[{size:'M',quantity:10}]}]}),randomUUID(),sourceId);
    const continuation=(await readInitialTimelineInput(f.db,{kind:'order',id:order.productionOrderId}))!;
    expect(continuation).not.toBeNull();expect(continuation.data.development).toEqual(original.input.development);

@@ -1,3 +1,5 @@
+import {readFixedScheduleBasis,type FixedScheduleBasis} from './fixed-schedule-basis.js';
+import type {OrderClosureSheet} from '@dx-rework/contracts/order-closure';
 import {ContextBusinessClock} from "../acceptance-clock/business-time.js";
 import {ApplicationError} from "../platform/errors.js";
 import type {Pool,PoolClient} from 'pg';
@@ -14,7 +16,7 @@ import {attachJourneyNativeTimes} from './journey-native-times.js';
 const aliases:Record<string,string>={production_sheet:'production_instruction',sourcing_selection:'sourcing_director',sourcing_approval:'sourcing_owner',development_craft_return:'development_craft_confirmation',external_pattern:'development_external_pattern',bulk_printing:'process_logistics',bulk_embroidery:'process_logistics',bulk_print_embroidery:'process_logistics',factory_production:'factory_production_qc',ship_sample_advance:'bulk_ship_sample',garment_inspection:'receiving_inspection',garment_rework:'rework',garment_packing:'packing',receiving_span:'receipts'};
 export const journeyTimingKey=(id:string)=>aliases[id.split(':')[0]!]??id.split(':')[0]!;
 export type JourneyTimingEvidence={facts:Record<string,SlaNodeFact>;labels?:ReadonlyMap<string,{scopeLabel:string;snapshotId?:string|null}>};
-export type JourneyTimingInputs={plan:SlaPlan|null;original:SlaPlan|null;facts:Record<string,SlaNodeFact>};
+export type JourneyTimingInputs={plan:SlaPlan|null;original:SlaPlan|null;facts:Record<string,SlaNodeFact>;fixedSchedule?:FixedScheduleBasis|null};
 const open=(state:string)=>!['completed','inherited','cancelled','not_applicable','unavailable'].includes(state);
 /** No new event or risk formula: adapt the canonical evaluation inside Journey's authorized snapshot. */
 export function attachJourneySupervision(item:OrderJourney,plan:SlaPlan|null,original:SlaPlan|null,nodes:SlaNodeEvaluation[],time:BusinessTime,revisions:{original:number|null;current:number|null},external=false,native?:JourneyTimingEvidence,authorizedTaskIds?:ReadonlySet<string>) {
@@ -63,8 +65,9 @@ export function attachJourneySupervision(item:OrderJourney,plan:SlaPlan|null,ori
  }
 }
 export async function readJourneySupervision(database:Pool,db:PoolClient,actor:TrustedActorContext|null,item:OrderJourney,time:BusinessTime,external=false,authorizedTaskIds?:ReadonlySet<string>,capture?:(inputs:JourneyTimingInputs)=>void,onFutureEvidence?:(at:string)=>void){
+ let capturedInputs:JourneyTimingInputs|undefined,receiving:OrderClosureSheet|undefined;const originalCapture=capture;capture=value=>{capturedInputs=value;originalCapture?.(value);};
  if(item.orderId){const service=new SlaOrderService(database,{read:async()=>time}),read=actor?await service.readWithClient(actor,item.orderId,db,{mode:"read_projection",...(onFutureEvidence?{onFutureEvidence}:{})}):await service.readFactsWithClient(item.orderId,db,{mode:"read_projection",...(onFutureEvidence?{onFutureEvidence}:{})});
-  capture?.({plan:read.status==='planned'?read.evaluationPlan:null,original:read.status==='planned'?read.original.plan:null,facts:read.facts});
+  receiving=read.receiving;capture?.({plan:read.status==='planned'?read.evaluationPlan:null,original:read.status==='planned'?read.original.plan:null,facts:read.facts});
   attachJourneyNativeTimes(item,{orderId:read.receiving.orderId,rework:read.rework.windows,receiving:read.receiving.receivingSpan},read.time.now);
   if(read.status==='planned'){
    const labels=new Map<string,{scopeLabel:string;snapshotId?:string|null}>();
@@ -82,6 +85,9 @@ export async function readJourneySupervision(database:Pool,db:PoolClient,actor:T
   capture?.({plan,original:saved.plan_json,facts:evidence?.facts??{}});
   attachJourneySupervision(item,plan,saved.plan_json,evaluateSlaPlan(plan,evidence?.facts??{},time,{mode:"read_projection"}),time,{original:1,current:saved.revision},false,{facts:evidence?.facts??{}},authorizedTaskIds);
   }
+ }
+ if(capturedInputs){const resource=item.orderId?{kind:'order' as const,id:item.orderId}:item.sourceId?{kind:'source' as const,id:item.sourceId}:null;
+  if(resource)capturedInputs.fixedSchedule=await readFixedScheduleBasis(db,resource,item,capturedInputs.facts,time.now,receiving);
  }
  if(actor&&item.supervision?.assessment==='partially_unavailable')item.supervision.requestId=actor.requestId;
  if(time.scenarioId){const current=await new ContextBusinessClock(database,db).read(item.orderId?{kind:'order',id:item.orderId}:{kind:'source',id:item.sourceId!});

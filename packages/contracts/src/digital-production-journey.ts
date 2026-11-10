@@ -1,3 +1,4 @@
+import type {FixedScheduleProgress,ScheduleNodeProgress} from './fixed-schedule-progress.js';
 import { z } from "zod";
 import type {QcProgressClock} from './qc-production-progress.js';
 import type { PoDeliveryDate,PoDeliveryRisk } from "./po-delivery-dates.js";
@@ -44,6 +45,7 @@ export const JourneyFilterSchema = z.object({
   state: JourneyStateSchema.optional(),
   risk: z.enum(["overdue", "due_soon", "blocked", "unknown"]).optional(),
   missing: z.enum(JOURNEY_COVERAGE_KEYS).optional(),
+  progress:z.enum(['schedule_lag','customer_due_passed','unknown']).optional(),
   kpi: z.enum(["all", "active", "not_started", "due_soon", "overdue", "blocked", "completed"]).default("all"),
   startDate: z.iso.date().optional(), endDate: z.iso.date().optional(),
 }).strict().superRefine((value, context) => {
@@ -96,6 +98,7 @@ export type JourneyCoverage = {key:typeof JOURNEY_COVERAGE_KEYS[number];message:
 export type JourneyNativeFact = {id:string;sourceRef:string;timeRole:'sla_observation';startedAt:string|null;completedAt:string|null;businessCompleted:boolean|null};
 export type JourneySupervision = {assessment?:"complete"|"partially_unavailable";requestId?:string;asOf:string;status:"planned"|"legacy_unenrolled"|"limited";originalRevision:number|null;currentRevision:number|null;nodes:JourneyTiming[];nativeFacts?:JourneyNativeFact[];coverage:JourneyCoverage[];customerReminderDate:string|null};
 export type JourneyNode = {
+  fixedTargets?:Array<{scopeRef:string;lineId:string|null;progress:ScheduleNodeProgress}>;
   planningOnly?:boolean;
   responsibilityRole?:string;
   timing?:JourneyTiming;
@@ -130,6 +133,7 @@ export type JourneyNode = {
   countsInProgress: boolean; unavailableReason: "permission" | "fact_not_recorded" | null;
 };
 export type OrderJourney = {
+  fixedSchedule?:FixedScheduleProgress;
   /** Shared UI ratios. Business-requirement counts and legacy workspace ratios remain separate. */
   visualProgress?: JourneyVisualProgress;
   /** Versioned business requirements; legacy display/progress remain compatible. */
@@ -216,7 +220,7 @@ export type JourneyVisualProgress = {
 };
 export type JourneyCompleteResult = { ruleVersion: "journey-v2.0"; asOf: string; page: number; pageSize: 15; total: number; canManagePolicies?: boolean;
   facets?: { customers: string[]; categories: string[]; merchandisers: Array<{id:string;name:string|null}> };
-  summary: {all:number;active:number;dueSoon:number;overdue:number;blocked:number;completed:number;notStarted?:number;timingMissing?:number};
+  summary: {all:number;active:number;dueSoon:number;overdue:number;blocked:number;completed:number;notStarted?:number;timingMissing?:number;scheduleLag?:number;customerDuePassed?:number;scheduleUnknown?:number};
   supervision?:{overdue:number;dueSoon:number;coverage:Array<{key:JourneyCoverage["key"];orders:number;message:string}>};
   scopeCounts?: {production:number;development:number;cancelled:number}; items: OrderJourney[] };
 /** An incomplete read cannot present zero or an old total as the latest value.

@@ -1967,5 +1967,18 @@
       "digital_journey_register_change"
     ],
     "sequences": []
+  },
+  "0282_journey_fixed_progress_selectors": {
+    "checksum": "9d6029e6c8d4e1de7807ae1d0491f459ff76eedf935e4f4585ef31db4c6d9c76",
+    "tables": [
+      "digital_journey_fact_models"
+    ],
+    "functions": [],
+    "references": [],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": [],
+    "sequences": []
   }
 }

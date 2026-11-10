@@ -1,3 +1,5 @@
+import {FixedTimelineAdoptionRepository} from './fixed-timeline-adoptions.js';
+import {attachFixedJourneySchedule} from './fixed-schedule-basis.js';
 import type {WorkspaceJourneyFact} from './journey-workspace-facts.js';
 import {ApplicationError} from '../platform/errors.js';
 import {journeyMeasure,journeySpan,journeyCandidateCount} from '../platform/journey-diagnostic.js';
@@ -254,6 +256,7 @@ export class DigitalJourneyQuery {
       const current=round===undefined?item:await this.project(db,actor,row,asOf,undefined,true,null,false,compact);
       if(current){
         if(current.businessProgress)item.businessProgress=current.businessProgress;
+        if(current.fixedSchedule)item.fixedSchedule=current.fixedSchedule;
         if(current.visualProgress)item.visualProgress=current.visualProgress;
         if(current.identity)item.identity=current.identity;
         if(current.display)item.display=current.display;
@@ -802,17 +805,20 @@ export class DigitalJourneyQuery {
     capture?.untimedNodes?.(baseNodes);
     capture?.untimedItem?.(item,{finished:finalClosed||Boolean(terminal),terminal:Boolean(terminal),factoryFinished,
       sampleFinished:baseNodes.some(node=>node.current&&node.key==='bulk_ship_sample'&&node.state==='completed'),sentLineIds:[...sampleSentLineIds]});
+    let fixedInputs:JourneyTimingInputs|undefined;
     // Do not expand an assigned worker's single-task read scope to the whole SLA/PO history.
-    if(supervision&&!patternKinds&&selectedRound===undefined){
+    if(!patternKinds&&selectedRound===undefined){
     const timingRoles=['production_management','owner_group','pmc','pattern_room_supervisor','development_clerk'];
     let liveTimingAuthority=!actor||isRootActor(actor);
     if(actor&&!liveTimingAuthority)for(const role of timingRoles)if(actor.actorRoles.includes(role)&&await policy.activeRole(actor.actorId,role)){liveTimingAuthority=true;break;}
     const ownSource=actor&&sourceAccess&&source?.created_by===actor.actorId&&actor.actorRoles.includes('sample_designer')&&await policy.activeRole(actor.actorId,'sample_designer');
     const ownOrder=actor&&(order?.created_by===actor.actorId&&actor.actorRoles.includes('sample_designer')&&await policy.activeRole(actor.actorId,'sample_designer')
       ||order?.primary_merchandiser_id===actor.actorId&&actor.actorRoles.includes('order_merchandiser')&&await policy.activeRole(actor.actorId,'order_merchandiser'));
-    if(fullOrder&&(liveTimingAuthority||ownOrder)||!oid&&sourceAccess&&(liveTimingAuthority||ownSource))
-      await journeyMeasure('sla',()=>readJourneySupervision(this.database,db,actor,item,observed,visibleTasks.some(task=>task.task_kind==='bulk_cutting_external'),new Set(visibleTasks.map(task=>task.task_id)),capture?.timing,capture?.recheckAt));
-    else item.supervision={asOf:observed.now,status:'limited',originalRevision:null,currentRevision:null,nodes:[],coverage:[{key:'scope',message:'仅有本岗位节点权限，整单SLA未计入；已授权节点照常监督'}],customerReminderDate:null};
+    const timingAllowed=fullOrder&&(liveTimingAuthority||ownOrder)||!oid&&sourceAccess&&(liveTimingAuthority||ownSource);
+    const fixedRequested=timingAllowed&&!supervision&&Boolean(await new FixedTimelineAdoptionRepository(db).existing(scope));
+    if(timingAllowed&&(supervision||fixedRequested))
+      await journeyMeasure('sla',()=>readJourneySupervision(this.database,db,actor,item,observed,visibleTasks.some(task=>task.task_kind==='bulk_cutting_external'),new Set(visibleTasks.map(task=>task.task_id)),value=>{fixedInputs=value;capture?.timing?.(value);},capture?.recheckAt));
+    else if(supervision)item.supervision={asOf:observed.now,status:'limited',originalRevision:null,currentRevision:null,nodes:[],coverage:[{key:'scope',message:'仅有本岗位节点权限，整单SLA未计入；已授权节点照常监督'}],customerReminderDate:null};
     }
     item.display=journeyDisplay(item,asOf,{cancelled,closedAt:baseNodes.find(node=>node.current&&node.key==='special_closure'&&node.state==='completed')?.actualAt??null});
     if(!patternKinds){
@@ -824,6 +830,7 @@ export class DigitalJourneyQuery {
         ?await readMaterialSuccessors(db,sid,visibleTasks.map(task=>task.task_id)):[];
       item.businessProgress=journeyBusinessProgress(item,observed.now,adopted,businessQuantities,requirementEvidence,replacements);
       item.businessProgress.dates=journeyBusinessDates(item);
+      if(fixedInputs?.fixedSchedule)attachFixedJourneySchedule(item,fixedInputs.fixedSchedule,observed.now);
       item.visualProgress=journeyVisualProgress(item,asOf);
     }
     this.authorizedTasks.set(item,visibleTasks.map(task=>({id:task.task_id,key:journeyDefinition(task.task_kind)?.key??task.task_kind,label:journeyDefinition(task.task_kind)?.label??"业务节点",round:task.route_version})));

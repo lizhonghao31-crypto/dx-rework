@@ -186,6 +186,10 @@ export const classifyFullGatePaths = (inputPaths) => {
       'tests/integration/production-readiness-postgres.test.ts','tests/integration/factory-logistics-cockpit-postgres.test.ts','tests/integration/sourcing-pr03-postgres.test.ts']);
     domains.add('fixed-timeline-native-crafts');
   }
+  if(paths.some(path=>/fixed-(?:schedule|rework|task-targets)|0282_journey_fixed_progress|fixed-progress-postgres/.test(path))){
+    addAll(mappedTests,['tests/integration/fixed-progress-postgres.test.ts','tests/integration/journey-fact-model-postgres.test.ts','tests/integration/journey-fact-updates-postgres.test.ts','tests/integration/fixed-timeline-postgres.test.ts']);
+    domains.add('fixed-schedule-progress');
+  }
   if(paths.some(path=>['apps/api/src/receiving/packing-actual-time.ts','apps/api/src/receiving/packing-alias-invalidation.ts','apps/api/src/receiving/receiving-service.ts','apps/api/src/receiving/receiving-quantity-query.ts','apps/api/src/receiving/receiving-board-query.ts','apps/api/src/receiving/receiving-board-filters.ts','apps/api/src/receiving/receiving-analysis.ts','apps/api/src/production-platform/order-closure-service.ts','apps/api/src/production-platform/packing-sla-evidence.ts','apps/api/src/production-platform/delivery-calendar-facts.ts','packages/contracts/src/receiving-packing-time.ts','tests/integration/effective-packing-postgres.test.ts'].includes(path))){
     mappedTests.add('tests/integration/effective-packing-postgres.test.ts');
     domains.add('effective-packing-scope');
