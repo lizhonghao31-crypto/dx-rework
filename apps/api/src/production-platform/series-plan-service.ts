@@ -149,7 +149,7 @@ export class SeriesPlanService{
   if(input.requestId)await db.query('INSERT INTO digital_series_request_decisions(request_id,approved,plan_id,reason,decided_by,audit_event_id,business_time) VALUES($1,true,$2,$3,$4,$5,$6)',[input.requestId,planId,input.reason,actor.actorId,audit,JSON.stringify(time)]);return snapshot;
  });}
  async reject(actor:TrustedActorContext,id:string,requestId:string,raw:unknown,key:string){const input=parse(SeriesRequestDecisionSchema,raw);return this.command(actor,id,`reject:${requestId}`,key,input,db=>this.manager(db,actor,true),async db=>{const r=(await db.query('SELECT * FROM digital_series_requests WHERE production_order_id=$1 AND request_id=$2',[id,requestId])).rows[0]??digitalNotFound();if(!isRootActor(actor)&&r.requested_by===actor.actorId)digitalForbidden();if((await db.query('SELECT 1 FROM digital_series_request_decisions WHERE request_id=$1',[requestId])).rowCount)fail('申请已处理');const time=await new ContextBusinessClock(this.database,db).read({kind:'order',id}),audit=await this.audit(db,actor,id,'series_plan_rejected',{requestId,...input});await db.query('INSERT INTO digital_series_request_decisions(request_id,approved,reason,decided_by,audit_event_id,business_time) VALUES($1,false,$2,$3,$4,$5)',[requestId,input.reason,actor.actorId,audit,JSON.stringify(time)]);return {requestId,approved:false};});}
- async profiles(actor:TrustedActorContext){await assertSlaSettingsReadActor(this.database,actor);return {profiles:[],suggestionsEnabled:false};}
+ async profiles(actor:TrustedActorContext){await assertSlaSettingsReadActor(this.database,actor);return {profiles:[]};}
  async saveProfile(actor:TrustedActorContext,raw:unknown,key:string){
   void raw;void key;
   await assertSlaSettingsActor(this.database,actor,true);
