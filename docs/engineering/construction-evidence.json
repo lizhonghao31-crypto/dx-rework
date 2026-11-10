@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "831cb40b5a3f47db52644fbd6c72e6eeacfeea8e",
-  "sourceFingerprint": "5e619addf8fa5e7e4155211483f8c790d57aba13aaffa6b928afa8d8bc1de18a",
+  "sourceFingerprint": "df0b8fa6883a729cc265a03ab47f191dbf74a13d0556e081fc29ad92450cd3e6",
   "risk": "full",
   "rules": [
     {
@@ -22,7 +22,10 @@
         "packages/contracts/src/digital-development.ts",
         "tests/unit/development-occurrence.test.ts",
         "tests/integration/digital-development-execution-postgres.test.ts",
-        "tests/integration/development-execution-read-native-browser-postgres.test.ts"
+        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
+        "tests/helpers/digital-development-route-fixture.ts",
+        "tests/helpers/digital-development-round-fixture.ts",
+        "tests/helpers/digital-development-craft-revision-fixture.ts"
       ],
       "reads": [
         "apps/api/src/production-platform/development-execution-read.ts",
@@ -33,18 +36,21 @@
         "tests/unit/digital-development.test.ts",
         "tests/unit/digital-development-route.test.ts",
         "tests/integration/digital-development-execution-postgres.test.ts",
-        "tests/integration/development-execution-read-native-browser-postgres.test.ts"
+        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
+        "tests/integration/full-business-chain-postgres.test.ts"
       ],
       "newTests": [
         "tests/unit/digital-development.test.ts",
         "tests/unit/digital-development-route.test.ts",
         "tests/integration/digital-development-execution-postgres.test.ts",
-        "tests/integration/development-execution-read-native-browser-postgres.test.ts"
+        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
+        "tests/integration/full-business-chain-postgres.test.ts"
       ],
-      "expectation": "Current-order trusted now is independent from wall2099; manual instant/date/unknown and old notes are distinct. Native idempotency/round/future guards and material event identity pass. Original App submits date-only material event, checks original HTTP body/response and stored occurrence vs registration, and retains original authenticated GET/QR/revocation and unsaved input. Not six-image visual acceptance.",
+      "expectation": "Current-order trusted now is independent from wall2099; manual instant/date/unknown and old notes are distinct. Native idempotency/round/future guards and material event identity pass. Original App submits date-only material event, checks original HTTP body/response and stored occurrence vs registration, and retains original authenticated GET/QR/revocation and unsaved input. Not six-image visual acceptance. Original legacy dispatch fixtures now use the same trusted business date as their just-entered tasks, rather than a fixed September date; the native three-case legacy chain passes without changing actual-time validation.",
       "checks": [
         "r502-final-units",
-        "r502-final-pg"
+        "r502-final-pg",
+        "r502-legacy-pg16"
       ]
     },
     {
@@ -143,23 +149,23 @@
     {
       "id": "r502-final-units",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/development-material-readiness.test.ts tests/unit/development-occurrence.test.ts tests/unit/digital-development-route.test.ts tests/unit/digital-development.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/journey-native-times.test.ts tests/unit/journey-progress-dates.test.ts tests/unit/journey-projection-isolation.test.ts tests/unit/sourcing-todo-sla.test.ts tests/unit/journey-business-progress.test.ts tests/unit/m01-production-statistics.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r502-final-units.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/development-material-readiness.test.ts tests/unit/development-occurrence.test.ts tests/unit/digital-development-route.test.ts tests/unit/digital-development.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/journey-native-times.test.ts tests/unit/journey-progress-dates.test.ts tests/unit/journey-projection-isolation.test.ts tests/unit/sourcing-todo-sla.test.ts tests/unit/journey-business-progress.test.ts tests/unit/m01-production-statistics.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r502-route-units.json",
       "status": "passed",
       "exitCode": 0,
       "passed": 231,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "831cb40b5a3f47db52644fbd6c72e6eeacfeea8e",
-      "sourceFingerprint": "5e619addf8fa5e7e4155211483f8c790d57aba13aaffa6b928afa8d8bc1de18a",
-      "context": "Isolated preparation on the exact R5-01 final candidate. Before submission, confirm actual merged base introduces no changed test inputs. Node22.22.2/Vitest4.1.10, non-DB max1/PG max2 canonical workers, PostgreSQL13.23 owned marked test DB and non-superuser. Original App/auth local Chromium on ephemeral test server; no live data, onsite or approved-image visual acceptance. Final query correction has36 selected PG cases including4 original-App/GET/native-inheritance cases and owner readiness. The earlier59-case5508503c run is retained separately; unchanged direct execution writers are not claimed rerun by this36-case command. Explicit current source/input hashes retained so an unrelated R5-01 current-production browser fixture update need not rerun these unchanged inputs. Recheck these exact hashes on the actual merged base; any changed input requires affected validation. Source-version scopes conservatively also bind the unchanged direct-execution test file; only the command/report case list defines what ran, and no extra test counts are inferred from these paths.",
-      "startedAt": "2026-11-10T19:45:20.954Z",
-      "endedAt": "2026-11-10T19:45:28.963Z",
-      "log": "/workspace/.dx-cloud/r502-final-units.log",
-      "logSha256": "f8759586a6b194e01e3b7d67d591f75b9fb85dd892ad2e32fb0bfc5c66e00135",
+      "testedHead": "cdcf04b0959add4c629e0f5883a6764f583622a5",
+      "sourceFingerprint": "df0b8fa6883a729cc265a03ab47f191dbf74a13d0556e081fc29ad92450cd3e6",
+      "context": "Isolated local preparation, not submitted or merged. Node22.22.2/npm10.9.9, original canonical bounded workers. Current source includes only trusted-business-day correction in three legacy shipping fixtures; production occurrence guards unchanged. This command actually reran its listed231 units or36 PG13.23 cases (including4 original App/GET/QR/role and inherited-material cases), with native Chromium and owned marked low-privilege test DB. Separate PG16.14 legacy chain below; not onsite, approved-image or production acceptance. Explicit input hashes must match after the actual R5-01 merge before remote submission.",
+      "startedAt": "2026-11-10T20:34:40.471Z",
+      "endedAt": "2026-11-10T20:34:47.330Z",
+      "log": "/workspace/.dx-cloud/r502-route-units.log",
+      "logSha256": "027608e680b89587c8c06091e7c6a45b270c1f4fedc0c64ccb94c2fdd6b8307d",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "54d62b25fb41dffd6ee80980ed5feefa31bc86b031c439ecbec766d56a1e38b9"
+          "sha256": "1a2482731f01dd9ebc84328364060c627e185b35e260f276f5f11d402ef83fcc"
         }
       ],
       "inputPaths": [
@@ -174,28 +180,28 @@
         "tests/unit",
         "tests/integration/digital-development-execution-postgres.test.ts"
       ],
-      "inputFingerprint": "5f87fbe12f4f4db1feb34b5749918a11949e936cfbc890bae8a95558713a9d3a"
+      "inputFingerprint": "807eee6def1f053f58c6ef0c45be1ac48a6aa0f77a35c6f5c33525ede9f76006"
     },
     {
       "id": "r502-final-pg",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/production-readiness-postgres.test.ts tests/integration/sourcing-owner-readiness-postgres.test.ts tests/integration/development-execution-read-native-browser-postgres.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r502-final-pg.json",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/production-readiness-postgres.test.ts tests/integration/sourcing-owner-readiness-postgres.test.ts tests/integration/development-execution-read-native-browser-postgres.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r502-route-pg.json",
       "status": "passed",
       "exitCode": 0,
       "passed": 36,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "831cb40b5a3f47db52644fbd6c72e6eeacfeea8e",
-      "sourceFingerprint": "5e619addf8fa5e7e4155211483f8c790d57aba13aaffa6b928afa8d8bc1de18a",
-      "context": "Isolated preparation on the exact R5-01 final candidate. Before submission, confirm actual merged base introduces no changed test inputs. Node22.22.2/Vitest4.1.10, non-DB max1/PG max2 canonical workers, PostgreSQL13.23 owned marked test DB and non-superuser. Original App/auth local Chromium on ephemeral test server; no live data, onsite or approved-image visual acceptance. Final query correction has36 selected PG cases including4 original-App/GET/native-inheritance cases and owner readiness. The earlier59-case5508503c run is retained separately; unchanged direct execution writers are not claimed rerun by this36-case command. Explicit current source/input hashes retained so an unrelated R5-01 current-production browser fixture update need not rerun these unchanged inputs. Recheck these exact hashes on the actual merged base; any changed input requires affected validation. Source-version scopes conservatively also bind the unchanged direct-execution test file; only the command/report case list defines what ran, and no extra test counts are inferred from these paths.",
-      "startedAt": "2026-11-10T19:45:19.522Z",
-      "endedAt": "2026-11-10T19:46:45.636Z",
-      "log": "/workspace/.dx-cloud/r502-final-pg.log",
-      "logSha256": "7c27a62699d60252a5458184b30c5756a354f5a0248af9ae3bf994eff6629457",
+      "testedHead": "cdcf04b0959add4c629e0f5883a6764f583622a5",
+      "sourceFingerprint": "df0b8fa6883a729cc265a03ab47f191dbf74a13d0556e081fc29ad92450cd3e6",
+      "context": "Isolated local preparation, not submitted or merged. Node22.22.2/npm10.9.9, original canonical bounded workers. Current source includes only trusted-business-day correction in three legacy shipping fixtures; production occurrence guards unchanged. This command actually reran its listed231 units or36 PG13.23 cases (including4 original App/GET/QR/role and inherited-material cases), with native Chromium and owned marked low-privilege test DB. Separate PG16.14 legacy chain below; not onsite, approved-image or production acceptance. Explicit input hashes must match after the actual R5-01 merge before remote submission.",
+      "startedAt": "2026-11-10T20:34:40.459Z",
+      "endedAt": "2026-11-10T20:35:58.885Z",
+      "log": "/workspace/.dx-cloud/r502-route-pg.log",
+      "logSha256": "facb2d1c5219f1bfc82a4e23a145ea6cc7936349aaf8b33ef39e21cd4203a546",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "d3c574c9d12f8a7a26ba6cfee8e4768bcd9dbd0c007269abe4f671b6b79e68e8"
+          "sha256": "0e39f062b7a42586b178d55249a46ada7985299e4d93cca54c75a271a511a0a2"
         }
       ],
       "inputPaths": [
@@ -212,7 +218,42 @@
         "tests/integration/development-execution-read-native-browser-postgres.test.ts",
         "tests/integration/digital-development-execution-postgres.test.ts"
       ],
-      "inputFingerprint": "6dc697e34d42f8b772ddeffb7a36b199370ba6194339ff0b362d849f41141afd"
+      "inputFingerprint": "8c1b1f18bba9cc0d39aefd7fb34249a5b3ed9a2f741eca7acbed4ce918b6097e"
+    },
+    {
+      "id": "r502-legacy-pg16",
+      "kind": "tests",
+      "command": "TEST_DATABASE_URL=<owned PG16.14 marked test DB> node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/full-business-chain-postgres.test.ts -t 'P07/P08 development routes|P03 legacy' --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r502-legacy-pg16.json",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 3,
+      "failed": 0,
+      "skipped": 57,
+      "testedHead": "cdcf04b0959add4c629e0f5883a6764f583622a5",
+      "sourceFingerprint": "df0b8fa6883a729cc265a03ab47f191dbf74a13d0556e081fc29ad92450cd3e6",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests/helpers",
+        "tests/integration",
+        "package.json",
+        "package-lock.json",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts"
+      ],
+      "inputFingerprint": "77ab9f8d48e42c5c409689dd9dc624ffb3d4306a53566754e1b314a2e0675d52",
+      "startedAt": "2026-11-10T20:31:25.487Z",
+      "endedAt": "2026-11-10T20:31:51.746Z",
+      "log": "/workspace/.dx-cloud/r502-legacy-pg16.log",
+      "logSha256": "c8e26449c2615f3a5531d3fdb0279dbaff978e0b931c296f5e985143e098ed29",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "09099ea754f36db1b982866d52f2e60effb6bb0704472d5f04451191d6bb85d5"
+        }
+      ],
+      "context": "Three real native legacy-route cases on separate owned PG16.14 low-privilege marked test DB, Node22.22.2/npm10.9.9, canonical long correctness max2. The old full-chain fixture directly executes historical PostgreSQL15+ SQL, so PG13 initialization failed at NULLS syntax before any case; no SQL/guard was relaxed. Existing supported local PG16 binary used with fresh owned data directory/port55416. This result is not the entire60-case business chain;57 unrelated tests intentionally not selected. Trusted business-day dispatch fixtures preserve original actual-date-before-entry guard. No onsite, config or deployment operation."
     }
   ]
 }

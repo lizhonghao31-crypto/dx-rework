@@ -1,3 +1,4 @@
+import {businessNow} from '../../apps/api/src/acceptance-clock/business-time.js';
 import {arrangeTestRound} from "./development-arrangement-fixture.js";
 import {taskResult} from "./development-task-result-fixture.js";
 import {DigitalJourneyQuery} from '../../apps/api/src/production-platform/journey-query.js';
@@ -29,7 +30,7 @@ export async function exerciseDevelopmentRounds(db:Pool,execution:DevelopmentExe
  const act=async(round:number,kind:string,returned=false)=>{
   const available=await versionTasks(round),task=available.find(task=>task.taskKind===kind)!;
   expect(task,JSON.stringify({round,kind,available:available.map(t=>[t.taskKind,t.state])})).toBeDefined();
-  return execution.route(root,sourceId,{...(kind==='development_sewing'?{attachmentIds:[await taskResult(db,execution,root,sourceId,task.taskId,'车板成果')]}:{}),taskId:task.taskId,result:returned?'退回':'通过',note:returned?'内部发现：领口车缝不平':'本轮完成',craftExecution:kind==='development_craft_dispatch'?'内部':null,nextAssigneeId:kind==='development_craft_dispatch'?workerId:null,sentDate:kind==='development_shipping'?'2026-09-30':null,trackingNo:kind==='development_shipping'?'P08-TEST':null,...(returned?{returnNodes:['车板' as const],problemCategories:['车缝' as const]}:{})},randomUUID());
+  return execution.route(root,sourceId,{...(kind==='development_sewing'?{attachmentIds:[await taskResult(db,execution,root,sourceId,task.taskId,'车板成果')]}:{}),taskId:task.taskId,result:returned?'退回':'通过',note:returned?'内部发现：领口车缝不平':'本轮完成',craftExecution:kind==='development_craft_dispatch'?'内部':null,nextAssigneeId:kind==='development_craft_dispatch'?workerId:null,sentDate:kind==='development_shipping'?businessNow().toLocaleDateString('en-CA',{timeZone:'Asia/Shanghai'}):null,trackingNo:kind==='development_shipping'?'P08-TEST':null,...(returned?{returnNodes:['车板' as const],problemCategories:['车缝' as const]}:{})},randomUUID());
  };
  await arrangeTestRound(db,execution,root,sourceId,workerId);
  for(const kind of ['development_craft_dispatch','development_printing','development_craft_confirmation','development_confirmation','development_shipping'])await act(2,kind);
