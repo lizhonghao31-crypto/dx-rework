@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "45fc58a572437aa45318d3e91ca18631e3fa03b2",
-  "sourceFingerprint": "a4759ef1552676fb505c16d4169ee9565a6b660aa716ccec38a5e9944ee958f4",
+  "sourceFingerprint": "0b35499219f2974a81fdfdf6c2bbc6dba6836e68f3cf551319aa55ee8b37ea40",
   "risk": "full",
   "rules": [
     {
@@ -33,7 +33,7 @@
         "tests/integration/effective-packing-postgres.test.ts"
       ],
       "checks": [
-        "r501-final-units",
+        "r501-retry-units",
         "r501-final-pg"
       ],
       "expectation": "Independent two receipts2+2 / qualified1+2 / packing4 counterexample stays incomplete and preserves recorded4. Proven zero stays zero; unknown or superseded coverage is not0. Native targeted PG run additionally demonstrated real reinspection and pending-to-ready quantity update; final canonical plan includes the expanded native regression."
@@ -62,7 +62,8 @@
         "tests/integration/m01-production-statistics-postgres.test.ts",
         "tests/integration/sourcing-pr03-postgres.test.ts",
         "tests/unit/journey-business-progress.test.ts",
-        "tests/unit/m01-production-statistics.test.ts"
+        "tests/unit/m01-production-statistics.test.ts",
+        "tests/acceptance/m01-current-production-native-browser.ts"
       ],
       "reads": [
         "apps/api/src/production-platform/journey-fact-repository.ts",
@@ -77,14 +78,16 @@
         "tests/integration/m01-delivery-calendar-postgres.test.ts"
       ],
       "checks": [
-        "r501-final-units",
-        "r501-final-pg"
+        "r501-retry-units",
+        "r501-final-pg",
+        "r501-production-browser"
       ],
-      "expectation": "Native calendar counts all allowed PO before15-row paging, keeps16 PO across pages, readonly PMC/revocation, current quantity corrections, original-snapshot conservation, zero old-factory scope and5001 unrelated-year cap. Valid overdelivery fixture now has real extra receipt and QC, not nonexistent stock. Packing raw count remains separate from unknown effective shipment. Original packing remains in original fields and is separately visible in detail/export; effective shipment and completion use qualified delivery. Native special closure preserves raw2 and uncertain delivery; browser native2-to3 delivery, real date side lists and same-session revocation pass. No visual redesign or six-image acceptance claimed.",
+      "expectation": "Native calendar counts all allowed PO before15-row paging, keeps16 PO across pages, readonly PMC/revocation, current quantity corrections, original-snapshot conservation, zero old-factory scope and5001 unrelated-year cap. Valid overdelivery fixture now has real extra receipt and QC, not nonexistent stock. Packing raw count remains separate from unknown effective shipment. Original packing remains in original fields and is separately visible in detail/export; effective shipment and completion use qualified delivery. Native special closure preserves raw2 and uncertain delivery; browser native2-to3 delivery, real date side lists and same-session revocation pass. No visual redesign or six-image acceptance claimed. Full original current-production browser matrix13 cases passes: keep uninspected raw2 distinct from unknown delivery, retained result beforeQC remains unknown while freshQC becomes known2, and sandbox remains under the currently approved expandable supply-chain parent.",
       "newTests": [
         "tests/integration/m01-delivery-calendar-native-browser-postgres.test.ts",
         "tests/unit/journey-business-progress.test.ts",
-        "tests/unit/m01-production-statistics.test.ts"
+        "tests/unit/m01-production-statistics.test.ts",
+        "tests/integration/m01-current-production-native-browser-postgres.test.ts"
       ]
     },
     {
@@ -109,7 +112,7 @@
         "tests/unit/factory-production-facts.test.ts"
       ],
       "checks": [
-        "r501-final-units"
+        "r501-retry-units"
       ],
       "expectation": "Retired and current factories keep their own names, only positive scopes determine current inspection; unmatched event stays unknown instead of using current factory. Existing whole-order completion and all-PO reader behavior retained; no visual redesign."
     },
@@ -129,32 +132,32 @@
         "tests/unit/full-gate-risk-map.test.ts"
       ],
       "checks": [
-        "r501-final-units"
+        "r501-retry-units"
       ],
       "expectation": "Original70 classification cases remain valid, preserving actual supplychain/database consumers and the cancellation of routine backup/restore drills. New helper shares the existing native packing suite mapping, not a separate governance gate."
     }
   ],
   "checks": [
     {
-      "id": "r501-final-units",
+      "id": "r501-retry-units",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/packing-sla-evidence.test.ts tests/unit/receiving-summary.test.ts tests/unit/factory-production-facts.test.ts tests/unit/delivery-calendar.test.ts tests/unit/delivery-calendar-model.test.ts tests/unit/journey-business-progress.test.ts tests/unit/m01-production-statistics.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/m01-current-production-workspace.test.ts tests/unit/journey-fact-model.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r501-final-units.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/packing-sla-evidence.test.ts tests/unit/receiving-summary.test.ts tests/unit/factory-production-facts.test.ts tests/unit/delivery-calendar.test.ts tests/unit/delivery-calendar-model.test.ts tests/unit/journey-business-progress.test.ts tests/unit/m01-production-statistics.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/m01-current-production-workspace.test.ts tests/unit/journey-fact-model.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r501-retry-units.json",
       "status": "passed",
       "exitCode": 0,
       "passed": 202,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "663c4aa9da7ea05147993ab8b039f9c9fbbb4a7b",
-      "sourceFingerprint": "a4759ef1552676fb505c16d4169ee9565a6b660aa716ccec38a5e9944ee958f4",
-      "context": "Node22.22.2/Vitest4.1.10, same complete source fingerprint. PG13.23 private marked isolated database/non-superuser; canonical max2 PG workers. Original App/auth Chromium browser on ephemeral local test server. PG selection intentionally skips154 unrelated cases. No Full, deployment, live data or six-image acceptance claim. Prior failed reports are retained separately.",
-      "startedAt": "2026-11-10T19:11:12.982Z",
-      "endedAt": "2026-11-10T19:11:22.238Z",
-      "log": "/workspace/.dx-cloud/r501-final-units.log",
-      "logSha256": "25067e15b32da69458b29325b5c30d833f132b4dafa764e6a982506f5273194d",
+      "testedHead": "831cb40b5a3f47db52644fbd6c72e6eeacfeea8e",
+      "sourceFingerprint": "0b35499219f2974a81fdfdf6c2bbc6dba6836e68f3cf551319aa55ee8b37ea40",
+      "context": "Node22.22.2 / PG13.23 owned marked isolated DB, original authentication and original App Chromium. Only current-production acceptance expectations changed: uninspected raw2 stays raw2, delivery unknown until realQC2; approved expandable supply-chain parent preserved. Prior Full449-pass/12-fail and local11-pass/2-fail reports retained, not passed. No production or six-image visual acceptance.",
+      "startedAt": "2026-11-10T19:59:41.900Z",
+      "endedAt": "2026-11-10T19:59:46.552Z",
+      "log": "/workspace/.dx-cloud/r501-retry-units.log",
+      "logSha256": "fb4df5712aa7ffc7ceb81d558054bac0afacdc012861a8f7560397eddd511cf1",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "36843ff4f0dbcfe3dd800a1735a2cfde39e63fd4582b994720a710e2c99e518b"
+          "sha256": "df414131ddd213600bc6beacf9935ef99e4ac337a05cb2e9dfea3ba2e0574b84"
         }
       ]
     },
@@ -169,7 +172,7 @@
       "skipped": 154,
       "testedHead": "663c4aa9da7ea05147993ab8b039f9c9fbbb4a7b",
       "sourceFingerprint": "a4759ef1552676fb505c16d4169ee9565a6b660aa716ccec38a5e9944ee958f4",
-      "context": "Node22.22.2/Vitest4.1.10, same complete source fingerprint. PG13.23 private marked isolated database/non-superuser; canonical max2 PG workers. Original App/auth Chromium browser on ephemeral local test server. PG selection intentionally skips154 unrelated cases. No Full, deployment, live data or six-image acceptance claim. Prior failed reports are retained separately.",
+      "context": "Node22.22.2/Vitest4.1.10, same complete source fingerprint. PG13.23 private marked isolated database/non-superuser; canonical max2 PG workers. Original App/auth Chromium browser on ephemeral local test server. PG selection intentionally skips154 unrelated cases. No Full, deployment, live data or six-image acceptance claim. Prior failed reports are retained separately. Reused27-case evidence: explicit broad consumed source/version input hash equals the clean tested831cb40b checkout. Only the separate current-production acceptance helper changed; that helper is verified by its own13-case report. No new execution is claimed.",
       "startedAt": "2026-11-10T19:11:13.001Z",
       "endedAt": "2026-11-10T19:12:55.286Z",
       "log": "/workspace/.dx-cloud/r501-final-pg.log",
@@ -178,6 +181,45 @@
         {
           "format": "vitest-json",
           "sha256": "8032c3797067019614d8d71de699cdc108a4f08ad6e38428a3186472f4683729"
+        }
+      ],
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests/helpers",
+        "tests/integration",
+        "tests/unit",
+        "tests/acceptance/m01-cockpit-home-native-browser.ts",
+        "tests/acceptance/cockpit-thumbnail-fixture.ts",
+        "package.json",
+        "package-lock.json",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts",
+        "tests/fixtures"
+      ],
+      "inputFingerprint": "e3924d32a947c721e1b1917478a735956708467892e37e1e6a81803e0226c63b"
+    },
+    {
+      "id": "r501-production-browser",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/m01-current-production-native-browser-postgres.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r501-production-browser-ready.json",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 13,
+      "failed": 0,
+      "skipped": 0,
+      "testedHead": "831cb40b5a3f47db52644fbd6c72e6eeacfeea8e",
+      "sourceFingerprint": "0b35499219f2974a81fdfdf6c2bbc6dba6836e68f3cf551319aa55ee8b37ea40",
+      "context": "Node22.22.2 / PG13.23 owned marked isolated DB, original authentication and original App Chromium. Only current-production acceptance expectations changed: uninspected raw2 stays raw2, delivery unknown until realQC2; approved expandable supply-chain parent preserved. Prior Full449-pass/12-fail and local11-pass/2-fail reports retained, not passed. No production or six-image visual acceptance.",
+      "startedAt": "2026-11-10T19:59:01.785Z",
+      "endedAt": "2026-11-10T19:59:40.553Z",
+      "log": "/workspace/.dx-cloud/r501-production-browser-ready.log",
+      "logSha256": "b17a920f2e9d3a01456b27f70f5e22c370547c8a8d6fb737bcb94d47b188be52",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "7ae503a220753cf397a46b740bf58e9e34a28210d6fd06e019c0c48cfd32df35"
         }
       ]
     }
