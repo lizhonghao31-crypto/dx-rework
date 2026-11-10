@@ -42,7 +42,12 @@ export class DevelopmentTechnicalSettingsService{
   if(JSON.stringify(current.values)===JSON.stringify(input.values))conflict('没有参数变化');
   const version=current.version+1;
   await db.query('INSERT INTO digital_development_cycle_standards(version,values_json,changed_by,reason) VALUES($1,$2,$3,$4)',[version,JSON.stringify(input.values),actor.actorId,input.reason]);
-  await appendCurrentSettingsSet(db,actor.actorId,key);
+  // This original endpoint accepts text keys, whereas the immutable pair's
+  // request_key is UUID. Bind a stable internal key to this actor/command,
+  // preserving the original public key and command receipt unchanged.
+  const pairDigest=createHash('sha256').update(JSON.stringify(['development-cycle-pair-v1',actor.actorId,key])).digest('hex');
+  const pairKey=`${pairDigest.slice(0,8)}-${pairDigest.slice(8,12)}-5${pairDigest.slice(13,16)}-8${pairDigest.slice(17,20)}-${pairDigest.slice(20,32)}`;
+  await appendCurrentSettingsSet(db,actor.actorId,pairKey);
   const result={version,scope:'new_sources' as const,existingSourcesChanged:0};
   if(input.savedDraftRevision!==undefined)await consumeSavedSettingsDraft(db,actor,'development',input.savedDraftRevision,version);
   await db.query('INSERT INTO digital_production_commands(actor_id,command,key,payload_hash,response) VALUES($1,$2,$3,$4,$5)',[actor.actorId,command,key,hash,JSON.stringify(result)]);return result;

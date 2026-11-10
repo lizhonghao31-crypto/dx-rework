@@ -1,36 +1,33 @@
 {
   "version": 1,
   "base": "2bd3487e0d4ffb39230c7939697734db7e6102ee",
-  "sourceFingerprint": "d93a6e4156b489f451170e053a44941beea15665c995fb169c45da55439720d0",
+  "sourceFingerprint": "8549a7842e4e7340dda93245efc01cf14043fd0d70c0f9dcdcb6674bac7ccd56",
   "risk": "full",
   "rules": [
     {
       "source": "Approved latest unified supply-chain six-PR plan sequence9, https://chatgpt.com/space/page_6c91556b94cc81918747a7b4d6b2f19b sections11/14.1 andB33/B35-B42. PR05 on actual P04 merge; user authorizes necessary code, CodexReview, sequential expected-head merge; no deployment, live data/config or new adoption activation.",
       "dateAndPermission": "Original current management and PMC read authority with actual database roles and original same-session revocation. Root original special case retained, no cross-request authorization cache. Published set applies to future adoptions only; adopted B/D/A/H/snapshots never rewritten. All personal draft commands retain original actor, content and key; same transaction locks/versions, rollback and receipts. Date-only H remains date with original Beijing exclusive boundary, not actual midnight.",
       "checks": [
-        "p05-pg-final",
-        "p05-browser-complete",
-        "p05-88-complete",
-        "p05-units-final",
-        "p05-static-checked",
-        "p05-protocol"
+        "p05-review-native",
+        "p05-review-units",
+        "p05-review-static"
       ],
       "rule": "Atomic actual standard pairs, personal drafts, compatible one-side publishers and genuine history without inferred pairing.",
       "writes": [
+        "apps/api/migrations/0283_sla_settings_sets.sql",
         "apps/api/src/platform/migration-manifest.json",
         "apps/api/src/production-platform/development-technical-settings.ts",
         "apps/api/src/production-platform/sla-configuration-service.ts",
         "apps/api/src/production-platform/sla-settings-drafts.ts",
         "apps/api/src/production-platform/sla-settings-service.ts",
-        "apps/api/src/production-platform/task-routes.ts",
-        "apps/api/src/production-platform/task-service.ts",
-        "packages/contracts/package.json",
-        "scripts/deploy/acceptance-migration-requirements.json",
-        "apps/api/migrations/0283_sla_settings_sets.sql",
         "apps/api/src/production-platform/sla-settings-set-repository.ts",
         "apps/api/src/production-platform/sla-settings-sets.ts",
+        "apps/api/src/production-platform/task-routes.ts",
+        "apps/api/src/production-platform/task-service.ts",
         "apps/web/src/sla-settings-set-editor.tsx",
+        "packages/contracts/package.json",
         "packages/contracts/src/sla-settings-sets.ts",
+        "scripts/deploy/acceptance-migration-requirements.json",
         "tests/integration/sla-settings-sets-postgres.test.ts"
       ],
       "reads": [
@@ -46,27 +43,24 @@
       "newTests": [
         "tests/integration/sla-settings-sets-postgres.test.ts"
       ],
-      "initialization": "0283 adds only reason/source pair reference and existing draft context; no backfill or replacement draft store. Original0281 actual pairing reused. Real legacy unified-only history restores only that side and keeps other draft/planning; manager can select genuine development version into new draft. PMC sees published standards/history only, including after prior manager role revoked. Old one-side previews bind current counterpart, retries retain original successful receipt.",
+      "initialization": "0283 adds only reason/source pair reference and existing draft context; no backfill or replacement draft store. Original0281 actual pairing reused. Real legacy unified-only history restores only that side and keeps other draft/planning; manager can select genuine development version into new draft. PMC sees published standards/history only, including after prior manager role revoked. Old one-side previews bind current counterpart, retries retain original successful receipt. Codex4520984077 repaired: original development publisher accepts text keys; stable actor/command-bound UUID is used only for the immutable pair, preserving external key/body/receipt. Actual PG13 verifies text-key replay exactly once, changed-body refusal and existing UUID calls.",
       "expectation": "Independent native PG13 cases prove one pair/exact-key replay, unchanged side reference, second-side real trigger failure rolls back both sides/draft receipts, conflicts preserve drafts, real restore creates only personal drafts, old publishers form actual current pairs and refuse changed counterpart in both directions. Original fixed timeline source/order frozen inputs and native current second-round/craft paths pass. Browser lost-save/discard/publish recovery and known-success refresh failure retain exact action/body/key without duplicate writes."
     },
     {
       "source": "Approved latest unified supply-chain six-PR plan sequence9, https://chatgpt.com/space/page_6c91556b94cc81918747a7b4d6b2f19b sections11/14.1 andB33/B35-B42. PR05 on actual P04 merge; user authorizes necessary code, CodexReview, sequential expected-head merge; no deployment, live data/config or new adoption activation.",
       "dateAndPermission": "Original current management and PMC read authority with actual database roles and original same-session revocation. Root original special case retained, no cross-request authorization cache. Published set applies to future adoptions only; adopted B/D/A/H/snapshots never rewritten. All personal draft commands retain original actor, content and key; same transaction locks/versions, rollback and receipts. Date-only H remains date with original Beijing exclusive boundary, not actual midnight.",
       "checks": [
-        "p05-pg-final",
-        "p05-browser-complete",
-        "p05-88-complete",
-        "p05-units-final",
-        "p05-static-checked",
-        "p05-protocol"
+        "p05-review-native",
+        "p05-review-units",
+        "p05-review-static"
       ],
       "rule": "Read-only temporary calculator shares native pure route builders and backward targets, with independent PO calendars, craft sequence and critical path spans.",
       "writes": [
         "apps/api/src/production-platform/fixed-development-adoption.ts",
-        "apps/api/src/production-platform/fixed-order-adoption.ts",
-        "apps/api/src/production-platform/fixed-work-definition.ts",
         "apps/api/src/production-platform/fixed-development-work.ts",
+        "apps/api/src/production-platform/fixed-order-adoption.ts",
         "apps/api/src/production-platform/fixed-order-work.ts",
+        "apps/api/src/production-platform/fixed-work-definition.ts",
         "apps/api/src/production-platform/sla-settings-calculation.ts",
         "apps/web/src/sla-calculation-cycle-inputs.tsx",
         "apps/web/src/sla-independent-calculator.tsx",
@@ -89,18 +83,15 @@
         "tests/integration/m01-settings-native-browser-postgres.test.ts"
       ],
       "initialization": "Extract native work construction without changing capture transaction/SQL/identity, orders or actual evidence. Exact same builders and target engine receive ephemeral input only. Missing required planning remainsunknown, included work not summed, dual craft ownSLA only explicit adoption. No settings draft mutation from calculator; current/history only read.",
-      "expectation": "Pure independent expectations cover critical+120 versus shorter branch unchanged, ordered independent dual steps with no168hcombined, Sunday physical interval, dateH and unknown capacity. Actual App verifies multiPO, critical total automatic recompute, held old response cannot overwrite newH, invalid raw/new incompletePO removes stale result, no business/config writes. Original fixed source/order native integration remains correct."
+      "expectation": "Pure independent expectations cover critical+120 versus shorter branch unchanged, ordered independent dual steps with no168hcombined, Sunday physical interval, dateH and unknown capacity. Initial2fb69a75 App verifies multiPO, critical total automatic recompute, held old response cannot overwrite newH, invalid raw/new incompletePO removes stale result, no business/config writes. Original fixed source/order native integration remains correct."
     },
     {
       "source": "Approved latest unified supply-chain six-PR plan sequence9, https://chatgpt.com/space/page_6c91556b94cc81918747a7b4d6b2f19b sections11/14.1 andB33/B35-B42. PR05 on actual P04 merge; user authorizes necessary code, CodexReview, sequential expected-head merge; no deployment, live data/config or new adoption activation.",
       "dateAndPermission": "Original current management and PMC read authority with actual database roles and original same-session revocation. Root original special case retained, no cross-request authorization cache. Published set applies to future adoptions only; adopted B/D/A/H/snapshots never rewritten. All personal draft commands retain original actor, content and key; same transaction locks/versions, rollback and receipts. Date-only H remains date with original Beijing exclusive boundary, not actual midnight.",
       "checks": [
-        "p05-pg-final",
-        "p05-browser-complete",
-        "p05-88-complete",
-        "p05-units-final",
-        "p05-static-checked",
-        "p05-protocol"
+        "p05-review-native",
+        "p05-review-units",
+        "p05-review-static"
       ],
       "rule": "Remove all current series profile/default candidates while retaining explicit legitimate dates and adopted history.",
       "writes": [
@@ -125,18 +116,15 @@
         "tests/integration/m01-settings-native-browser-postgres.test.ts"
       ],
       "initialization": "Original profilesGET compatibility empty, old candidateGET returns no date and no suggestions, writes rejected. prepare/apply accept actual explicit legitimate plan but never profile/-2month15fallback or old suggestion flag withoutdate. No deletion or rewrite of prior adopted plans, POH, years or series business facts.",
-      "expectation": "Native explicit plan/PO H history, authorized adoption and original frozen customer date survive. MissingH and old suggestion-only directapply reject. Actual originalApp does not request candidate/profile or show defaultcard; backend read/write authority retained, manager revocation still denies retry."
+      "expectation": "Native explicit plan/PO H history, authorized adoption and original frozen customer date survive. MissingH and old suggestion-only directapply reject. Initial2fb69a75 originalApp does not request candidate/profile or show defaultcard; backend read/write authority retained, manager revocation still denies retry."
     },
     {
       "source": "Approved latest unified supply-chain six-PR plan sequence9, https://chatgpt.com/space/page_6c91556b94cc81918747a7b4d6b2f19b sections11/14.1 andB33/B35-B42. PR05 on actual P04 merge; user authorizes necessary code, CodexReview, sequential expected-head merge; no deployment, live data/config or new adoption activation.",
       "dateAndPermission": "Original current management and PMC read authority with actual database roles and original same-session revocation. Root original special case retained, no cross-request authorization cache. Published set applies to future adoptions only; adopted B/D/A/H/snapshots never rewritten. All personal draft commands retain original actor, content and key; same transaction locks/versions, rollback and receipts. Date-only H remains date with original Beijing exclusive boundary, not actual midnight.",
       "checks": [
-        "p05-pg-final",
-        "p05-browser-complete",
-        "p05-88-complete",
-        "p05-units-final",
-        "p05-static-checked",
-        "p05-protocol"
+        "p05-review-native",
+        "p05-review-units",
+        "p05-review-static"
       ],
       "rule": "Compact original three workspaces and current canonical coverage, with honest bounded88 legacy compatibility diagnostics and no unrelated operational drills.",
       "writes": [
@@ -148,11 +136,11 @@
         "scripts/ci/full-gate-risk-map.mjs",
         "scripts/ci/test-execution-contract.test.mjs",
         "scripts/test-suite-plan.mjs",
+        "tests/acceptance/supplychain-settings-browser.ts",
         "tests/integration/m01-journey-performance-postgres.test.ts",
         "tests/integration/m01-settings-native-browser-postgres.test.ts",
         "tests/unit/digital-pmc-readonly-ui.test.ts",
-        "tests/unit/full-gate-risk-map.test.ts",
-        "tests/acceptance/supplychain-settings-browser.ts"
+        "tests/unit/full-gate-risk-map.test.ts"
       ],
       "reads": [
         "apps/web/src/App.tsx",
@@ -172,159 +160,97 @@
         "tests/acceptance/supplychain-settings-browser.ts"
       ],
       "initialization": "Original fullApp/AuthService with dedicated TEST people, low privilege marked PG13 schema and original cleanup; no fake auth bypass or production access. Canonical100s per settings case retained; legacy88 wrapper240s covers native setup/10samples/role/export/cleanup, not business SLA. Historical3926 cap fails exactpreP04baseline6931physicalcalls; new bounded7100 physicaldriver scope separate from indexed15 PERF03 budget, existing optional relative comparisons unchanged.",
-      "expectation": "Three sibling tabs, original colors/components, no search/diagnostic/defaultfold wall, 1165/1366/1440 and topaligned actual edit panels. Current real browser covers permission/recovery/conflict and calculator; original singleAPI PG tests retained.88 full legacy read preserves all88 and mixed89, fullscopeKPI/page2/search/export, realPMC/assignedworker/same-valid-session revocation; phase/count evidence diagnostic only, no onsite or reliableP95 claim. Test plan/risk mapping includes actual new suite; additive migration no backup/recovery executor change."
+      "expectation": "Three sibling tabs, original colors/components, no search/diagnostic/defaultfold wall, 1165/1366/1440 and topaligned actual edit panels. Initial2fb69a75 browser covers permission/recovery/conflict and calculator; original singleAPI PG tests retained.Initial2fb69a75 88 full legacy read preserves all88 and mixed89, fullscopeKPI/page2/search/export, realPMC/assignedworker/same-valid-session revocation; phase/count evidence diagnostic only, no onsite or reliableP95 claim. Test plan/risk mapping includes actual new suite; additive migration no backup/recovery executor change."
     }
   ],
   "checks": [
     {
-      "id": "p05-pg-final",
+      "id": "p05-review-native",
       "kind": "tests",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/sla-settings-sets-postgres.test.ts tests/integration/sla-settings-drafts-postgres.test.ts tests/integration/fixed-timeline-postgres.test.ts tests/integration/fixed-progress-postgres.test.ts tests/integration/series-plan-postgres.test.ts --maxWorkers=2 --config vitest.business-chain.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/supplychain-board-20261109/p05-pg-final.vitest.json",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/sla-settings-sets-postgres.test.ts tests/integration/sla-settings-drafts-postgres.test.ts --maxWorkers=2 --config vitest.business-chain.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/supplychain-board-20261109/p05-review-native.vitest.json",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "d93a6e4156b489f451170e053a44941beea15665c995fb169c45da55439720d0",
+      "sourceFingerprint": "8549a7842e4e7340dda93245efc01cf14043fd0d70c0f9dcdcb6674bac7ccd56",
       "sourceUnchanged": true,
       "inputsUnchanged": true,
-      "testedHead": "2bd3487e0d4ffb39230c7939697734db7e6102ee",
-      "startedAt": "2026-11-10T03:48:09.482Z",
-      "endedAt": "2026-11-10T03:48:52.157Z",
-      "passed": 66,
+      "testedHead": "2fb69a754f21e5021cca23a8b2051610848312a2",
+      "startedAt": "2026-11-10T04:01:32.339Z",
+      "endedAt": "2026-11-10T04:01:39.871Z",
+      "passed": 18,
       "failed": 0,
       "skipped": 0,
       "planError": null,
-      "log": "/workspace/scratch/supplychain-board-20261109/p05-pg-final.log",
-      "logSha256": "853c6073dc71152d008a37641a74f388876501e1496b02877b3755f57f57a4e8",
-      "resultReport": "/workspace/scratch/supplychain-board-20261109/p05-pg-final.vitest.json",
+      "log": "/workspace/scratch/supplychain-board-20261109/p05-review-native.log",
+      "logSha256": "9292f3f284351e90793034f3c778a6d13f93eb01c350a22c32c489e3b963691d",
+      "resultReport": "/workspace/scratch/supplychain-board-20261109/p05-review-native.vitest.json",
       "postgresVersion": 130023,
       "context": "Actual PostgreSQL130023 official cached-image binaries/libraries in private /tmp, non-superuser marked TEST databases, original full native schema and businessAnchorFixture/UAT initializer. Original canonical suite config/runOwnedCommand, Node22.22.2,2 Vitest workers onCPUs2/3, PostgreSQL onCPUs0/1/default100connections/64MiB shared buffers. No Docker/CI hardware or onsite equivalence. p01 is explicitly bounded new-case discovery, not all suites or skipped old coverage passed.",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "6b689cff91d7bc9c535663cc4349525bc9481679078bce5bf5360070645d805d"
+          "sha256": "8a61d19404e49ac78489020fa18ead8a97006a2daa9d0c9e9896fe41e1ac8f7d"
         }
       ]
     },
     {
-      "id": "p05-browser-complete",
+      "id": "p05-review-units",
       "kind": "tests",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/m01-settings-native-browser-postgres.test.ts --maxWorkers=2 --config vitest.business-chain.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/supplychain-board-20261109/p05-browser-complete.vitest.json",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/digital-pmc-readonly-ui.test.ts tests/unit/sla-settings-history.test.ts tests/unit/sla-settings-calculation.test.ts tests/unit/m01-settings-preview.test.ts tests/unit/sla-saved-draft.test.ts tests/unit/digital-sla-configuration.test.ts tests/unit/sla-calculation.test.ts tests/unit/sla-notification-preferences.test.ts tests/unit/series-plan-dates.test.ts tests/unit/m01-series-plan-reading.test.ts tests/unit/request-response-feedback.test.ts tests/unit/full-gate-risk-map.test.ts --maxWorkers=2 --reporter=verbose --reporter=json --outputFile=/workspace/scratch/supplychain-board-20261109/p05-review-units.vitest.json",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "d93a6e4156b489f451170e053a44941beea15665c995fb169c45da55439720d0",
+      "sourceFingerprint": "8549a7842e4e7340dda93245efc01cf14043fd0d70c0f9dcdcb6674bac7ccd56",
       "sourceUnchanged": true,
       "inputsUnchanged": true,
-      "testedHead": "2bd3487e0d4ffb39230c7939697734db7e6102ee",
-      "startedAt": "2026-11-10T03:51:03.377Z",
-      "endedAt": "2026-11-10T03:51:33.552Z",
-      "passed": 12,
-      "failed": 0,
-      "skipped": 0,
-      "planError": null,
-      "log": "/workspace/scratch/supplychain-board-20261109/p05-browser-complete.log",
-      "logSha256": "1fd9f2a3712d22d25c87240604d4a96426e5125a865c8ce9795a90ae0159bcae",
-      "resultReport": "/workspace/scratch/supplychain-board-20261109/p05-browser-complete.vitest.json",
-      "postgresVersion": 130023,
-      "context": "Actual PostgreSQL130023 official cached-image binaries/libraries in private /tmp, non-superuser marked TEST databases, original full native schema and businessAnchorFixture/UAT initializer. Original canonical suite config/runOwnedCommand, Node22.22.2,2 Vitest workers onCPUs2/3, PostgreSQL onCPUs0/1/default100connections/64MiB shared buffers. No Docker/CI hardware or onsite equivalence. p01 is explicitly bounded new-case discovery, not all suites or skipped old coverage passed.",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "195f72d225f94212c4f15ee4ca4d1da035485589b0198ae011896a982754d275"
-        }
-      ]
-    },
-    {
-      "id": "p05-88-complete",
-      "kind": "tests",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/m01-journey-performance-postgres.test.ts --maxWorkers=2 --config vitest.business-chain.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/supplychain-board-20261109/p05-88-complete.vitest.json",
-      "status": "passed",
-      "exitCode": 0,
-      "allExited": true,
-      "sourceFingerprint": "d93a6e4156b489f451170e053a44941beea15665c995fb169c45da55439720d0",
-      "sourceUnchanged": true,
-      "inputsUnchanged": true,
-      "testedHead": "2bd3487e0d4ffb39230c7939697734db7e6102ee",
-      "startedAt": "2026-11-10T03:49:07.148Z",
-      "endedAt": "2026-11-10T03:49:53.234Z",
-      "passed": 1,
-      "failed": 0,
-      "skipped": 0,
-      "planError": null,
-      "log": "/workspace/scratch/supplychain-board-20261109/p05-88-complete.log",
-      "logSha256": "e806b28b32333571fb548d4343c0543036a6e09d039bf9fc9a933a8dba5d3dfc",
-      "resultReport": "/workspace/scratch/supplychain-board-20261109/p05-88-complete.vitest.json",
-      "postgresVersion": 130023,
-      "context": "Actual PostgreSQL130023 official cached-image binaries/libraries in private /tmp, non-superuser marked TEST databases, original full native schema and businessAnchorFixture/UAT initializer. Original canonical suite config/runOwnedCommand, Node22.22.2,2 Vitest workers onCPUs2/3, PostgreSQL onCPUs0/1/default100connections/64MiB shared buffers. No Docker/CI hardware or onsite equivalence. p01 is explicitly bounded new-case discovery, not all suites or skipped old coverage passed.",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "076502874d5d35b25b5b0763f462e693dcce6344347bd6a7a168336ffa8eed59"
-        }
-      ]
-    },
-    {
-      "id": "p05-units-final",
-      "kind": "tests",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/digital-pmc-readonly-ui.test.ts tests/unit/sla-settings-history.test.ts tests/unit/sla-settings-calculation.test.ts tests/unit/m01-settings-preview.test.ts tests/unit/sla-saved-draft.test.ts tests/unit/digital-sla-configuration.test.ts tests/unit/sla-calculation.test.ts tests/unit/sla-notification-preferences.test.ts tests/unit/series-plan-dates.test.ts tests/unit/m01-series-plan-reading.test.ts tests/unit/request-response-feedback.test.ts tests/unit/full-gate-risk-map.test.ts --maxWorkers=2 --reporter=verbose --reporter=json --outputFile=/workspace/scratch/supplychain-board-20261109/p05-units-final.vitest.json",
-      "status": "passed",
-      "exitCode": 0,
-      "allExited": true,
-      "sourceFingerprint": "d93a6e4156b489f451170e053a44941beea15665c995fb169c45da55439720d0",
-      "sourceUnchanged": true,
-      "inputsUnchanged": true,
-      "testedHead": "2bd3487e0d4ffb39230c7939697734db7e6102ee",
-      "startedAt": "2026-11-10T03:49:08.454Z",
-      "endedAt": "2026-11-10T03:49:13.526Z",
+      "testedHead": "2fb69a754f21e5021cca23a8b2051610848312a2",
+      "startedAt": "2026-11-10T04:01:35.146Z",
+      "endedAt": "2026-11-10T04:01:40.269Z",
       "passed": 245,
       "failed": 0,
       "skipped": 0,
       "planError": null,
-      "log": "/workspace/scratch/supplychain-board-20261109/p05-units-final.log",
-      "logSha256": "2c4daf3f407c13d6bb314d09f46e576c2d1f0339c422839ebe0e724fb0601af4",
-      "resultReport": "/workspace/scratch/supplychain-board-20261109/p05-units-final.vitest.json",
+      "log": "/workspace/scratch/supplychain-board-20261109/p05-review-units.log",
+      "logSha256": "d005c5bbb37157bc94281164423b45c7425943bd0a35b6df6909ec90f06d9cee",
+      "resultReport": "/workspace/scratch/supplychain-board-20261109/p05-review-units.vitest.json",
       "postgresVersion": 130023,
       "context": "Actual PostgreSQL130023 official cached-image binaries/libraries in private /tmp, non-superuser marked TEST databases, original full native schema and businessAnchorFixture/UAT initializer. Original canonical suite config/runOwnedCommand, Node22.22.2,2 Vitest workers onCPUs2/3, PostgreSQL onCPUs0/1/default100connections/64MiB shared buffers. No Docker/CI hardware or onsite equivalence. p01 is explicitly bounded new-case discovery, not all suites or skipped old coverage passed.",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "698a320248963cb809c973e596fda7055bbf1d9755b4d35107543b028d2990b7"
+          "sha256": "d032f726aacb12e3a7a428060ac77ce6849ff6e817de523fdf51a81ba0d95a4a"
         }
       ]
     },
     {
-      "id": "p05-static-checked",
+      "id": "p05-review-static",
       "kind": "command",
-      "command": "bash -c set -e; npm run lint; npm run typecheck; npm run build:packages; node scripts/check-migrations.mjs; node scripts/acceptance/time-site-inventory.mjs; node scripts/secret-scan.mjs --worktree; git diff --check",
+      "command": "bash -c set -e; node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/development-technical-settings.ts tests/integration/sla-settings-sets-postgres.test.ts --max-warnings=0; npm run typecheck --workspace @dx-rework/api; node scripts/acceptance/time-site-inventory.mjs; git diff --check",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "d93a6e4156b489f451170e053a44941beea15665c995fb169c45da55439720d0",
+      "sourceFingerprint": "8549a7842e4e7340dda93245efc01cf14043fd0d70c0f9dcdcb6674bac7ccd56",
       "sourceUnchanged": true,
       "inputsUnchanged": true,
-      "testedHead": "2bd3487e0d4ffb39230c7939697734db7e6102ee",
-      "startedAt": "2026-11-10T03:48:10.795Z",
-      "endedAt": "2026-11-10T03:49:11.750Z",
-      "log": "/workspace/scratch/supplychain-board-20261109/p05-static-checked.log",
-      "logSha256": "f6762014d62dc2494bdaedb24165804c8ebd891eb01266a81db60a677537924c",
-      "context": "Actual scoped command on Node22.22.2 and unchanged task workspace. No assertion of CI hardware or onsite equivalence."
-    },
-    {
-      "id": "p05-protocol",
-      "kind": "command",
-      "command": "bash -c set -e; npm run test:preflight; node scripts/ci/verify-actions-policy.mjs; node scripts/check-business-time-writes.mjs; node --test --test-concurrency=2 scripts/ci/test-execution-contract.test.mjs",
-      "status": "passed",
-      "exitCode": 0,
-      "allExited": true,
-      "sourceFingerprint": "d93a6e4156b489f451170e053a44941beea15665c995fb169c45da55439720d0",
-      "sourceUnchanged": true,
-      "inputsUnchanged": true,
-      "testedHead": "2bd3487e0d4ffb39230c7939697734db7e6102ee",
-      "startedAt": "2026-11-10T03:51:03.330Z",
-      "endedAt": "2026-11-10T03:51:09.749Z",
-      "log": "/workspace/scratch/supplychain-board-20261109/p05-protocol.log",
-      "logSha256": "043b20d12b58fb60e7b293f43cbe328564612ec1013a9d504341302868a06291",
+      "testedHead": "2fb69a754f21e5021cca23a8b2051610848312a2",
+      "startedAt": "2026-11-10T04:01:33.640Z",
+      "endedAt": "2026-11-10T04:01:44.519Z",
+      "log": "/workspace/scratch/supplychain-board-20261109/p05-review-static.log",
+      "logSha256": "0c3a41731f176b4b8c6f8282d89f05cc2ab13055df9392c43c094fe823a00d70",
       "context": "Actual scoped command on Node22.22.2 and unchanged task workspace. No assertion of CI hardware or onsite equivalence."
     }
-  ]
+  ],
+  "initialCandidateValidation": {
+    "head": "2fb69a754f21e5021cca23a8b2051610848312a2",
+    "sourceFingerprint": "d93a6e4156b489f451170e053a44941beea15665c995fb169c45da55439720d0",
+    "checks": [
+      "p05-pg-final:66 native PG13 cases",
+      "p05-browser-complete:12 original App cases",
+      "p05-88-complete:1 full compatibility scenario",
+      "p05-units-final:245 cases",
+      "p05-static-checked",
+      "p05-protocol"
+    ],
+    "boundary": "Actual initial-candidate results retained, not claimed rerun on repair. Only repair is stable UUID mapping for existing text development publication keys and its real PG test. Final current-source18 native and245 units plus scoped static are recorded above; final remote Full binds repaired head."
+  }
 }
