@@ -10,6 +10,8 @@ import {DigitalOrderCreateSchema} from '@dx-rework/contracts/digital-production'
 import {DeliveryCalendarFiltersSchema} from '@dx-rework/contracts/delivery-calendar';
 import type {PackingTimeInput} from '@dx-rework/contracts';
 import {JourneyFactRepository} from '../../apps/api/src/production-platform/journey-fact-repository.js';
+import {ProductionStatisticsQuery} from '../../apps/api/src/production-platform/production-statistics-query.js';
+import {DigitalAnalysisFilterSchema} from '@dx-rework/contracts/digital-production-analysis';
 import {packingSlaEvidence} from '../../apps/api/src/production-platform/packing-sla-evidence.js';
 
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
@@ -62,6 +64,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect(await run(()=>row(first.receivingBatchId))).toMatchObject({packingRevisionId:sheet.lines[0]!.packingRevisionId,packingQuantity:null,packingScopeUnresolved:true});
   expect((await run(day)).daySummary).toMatchObject({packedQty:null,pendingQty:null,unknownQuantityPoCount:1});
   expect((await run(()=>closure.read(f.root,made.id))).collection).toMatchObject({shipmentQuantity:null,unknownPackingLineCount:1});
+  const statistics=await run(()=>new ProductionStatisticsQuery(f.db).list(f.root,DigitalAnalysisFilterSchema.parse({from:'2026-11-09',to:'2026-11-09',view:'production',lineId:order.lines[0]!.lineId})));
+  expect(statistics.result.rows[0]).toMatchObject({line:{packing:null},remaining:null,quantityComplete:null});expect(statistics.result.metrics.packed.value).toBeNull();expect(statistics.result.unknown.some(value=>value.key==='packed'&&value.lineId===order.lines[0]!.lineId)).toBe(true);
   await run(()=>pack(first.receivingBatchId,80));expect((await run(day)).daySummary).toMatchObject({packedQty:80,pendingQty:20});
   const last=await run(()=>row(first.receivingBatchId));await run(()=>receiving.deleteBatch(corrector(),first.receivingBatchId,last.version));
   expect((await run(day)).daySummary).toMatchObject({packedQty:null,pendingQty:null,unknownQuantityPoCount:1});
