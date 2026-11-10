@@ -1,4 +1,3 @@
-import {SeriesSettings} from './series-settings.js';
 import {useEffect,useState} from 'react';
 import {PageHeader} from '@dx-rework/ui/production';
 import {JOURNEY_NODES} from '@dx-rework/contracts/digital-production-journey';
@@ -20,6 +19,6 @@ export function CockpitProductionSettings(){
   {error&&<p role="alert">{error}</p>}
   {!access&&!error&&<p>正在读取设置…</p>}
   {access&&!canReadDigitalProductionSettings(access)&&!access.customers&&<p>当前岗位无权访问生产管理设置。</p>}
-  {access&&canReadDigitalProductionSettings(access)?<><SlaSettingsWorkspace onHistoryChange={setHistoryOpen} customerControl={access.customers?<DigitalCockpitPersonnel orderId={null} onChanged={()=>undefined}/>:access.roles?.includes('pmc')?<DigitalCockpitPersonnel orderId={null} readOnly onChanged={()=>undefined}/>:undefined} readOnly={!access.manage} onAuthorityChanged={refreshAuthority}/><div hidden={historyOpen}><SeriesSettings readOnly={!access.manage}/></div></>:access?.customers&&<div className="cockpit-settings-node-section"><DigitalCockpitPersonnel orderId={null} onChanged={()=>undefined}/></div>}
+  {access&&canReadDigitalProductionSettings(access)?<><SlaSettingsWorkspace onHistoryChange={setHistoryOpen} customerControl={access.customers?<DigitalCockpitPersonnel orderId={null} onChanged={()=>undefined}/>:access.roles?.includes('pmc')?<DigitalCockpitPersonnel orderId={null} readOnly onChanged={()=>undefined}/>:undefined} readOnly={!access.manage} onAuthorityChanged={refreshAuthority}/></>:access?.customers&&<div className="cockpit-settings-node-section"><DigitalCockpitPersonnel orderId={null} onChanged={()=>undefined}/></div>}
  </div>;
 }

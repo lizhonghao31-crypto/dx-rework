@@ -1,7 +1,6 @@
 import {IndependentCraftField} from './independent-craft-field.js';
 import {ProductionReadinessPanel} from './production-readiness-panel.js';
 import {ShortLeadPanel} from './short-lead-panel.js';
-import {SeriesCreationPreview} from './series-creation-preview.js';
 import {matchingShortLeadApproval,type ShortLeadState} from '@dx-rework/contracts/short-commitment';
 import {quotationHref} from './digital-quotation-panel.js';
 import {DocumentToolbar,DocumentErrors} from "./document-editor.js";
@@ -372,7 +371,6 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
       <DevelopmentDocumentFields fixedCraft={fixedCraft} sectionStart={withOrder?3:2} basicDetailsExternal uploadHelp="选择后可预览，保存草稿或发布时上传；失败资料仍保留。" document={document} edit={edit} readonly={published} busy={busy} writing={writing} sizeQuantityInputs={sizeQuantityInputs} setSizeQuantityInputs={setSizeQuantityInputs} quantityInput={quantityInput} setQuantityInput={setQuantityInput} measurementIds={measurementIds} successfulUploads={successfulUploads} fileIdentity={id=>{const picture=picturesRef.current.find(picture=>picture.id===id||picture.attachmentId===id);return picture?{filename:picture.file.name,mimeType:picture.file.type,sizeBytes:picture.file.size}:undefined;}} metadataPath={id=>createdSource&&!picturesRef.current.some(picture=>picture.id===id&&!picture.attachmentId)?`sources/${createdSource}/development/attachments/${id}/metadata`:undefined} imageUrl={id=>picturesRef.current.find(picture=>picture.id===id||picture.attachmentId===id)?.preview??createWebUrls(import.meta.env.BASE_URL).apiUrl(`digital-production/sources/${createdSource}/development/attachments/${id}`)} upload={selectPictures} fileKind={fileKind} setFileKind={setFileKind} issue={id=>issues.find(value=>value.id===id)?.message} patternSection={!published&&existingDraft?.revisionSource?.outputKind!=='工艺布片'?<div id="development-pattern-preparation"><DevelopmentPatternLink busy={busy} preparing selectedCategoryId={document.patternCategoryId??""} onCategoryChange={categoryId=>edit({patternCategoryId:categoryId||null})} onSelection={setPatternChoice}/></div>:null}/>
     </div>}
     </fieldset>
-    {withOrder&&<SeriesCreationPreview customerCode={form.customerCode} salesYear={form.salesYear??null} salesSeries={form.salesSeries??null} requiresColorMatching={form.requiresColorMatching??null}/>}
     {withOrder&&!preorder&&shortInput&&dateMinimum&&initialCustomerDateErrors(shortInput.lines,dateMinimum).length>0&&<ShortLeadPanel key={createdSource??'new'} sourceId={createdSource} order={shortInput} onState={setShortState} readOnly={confirmationUnknown} {...(!source&&!published?{saveDraft:async()=>{if(!await save(true))throw new Error("原开发草稿尚未保存成功；请先核对表单错误，再提交本来源的特批申请。");}}:{})}/>}
   </form>{createdSource&&preorder&&<ProductionReadinessPanel resource={{kind:"source",id:createdSource}} sourceDocumentVersion={loadedVersion.current??undefined} readonly={busy||dirty.current}/>}</Surface>;
 }

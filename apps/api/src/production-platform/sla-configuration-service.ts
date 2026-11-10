@@ -1,3 +1,4 @@
+import {appendCurrentSettingsSet} from './sla-settings-set-repository.js';
 import type { PoolClient } from "pg";
 import { createHash } from "node:crypto";
 import { DIGITAL_SLA_PARAMETERS, validateDigitalSlaValues, type DigitalSlaValues } from "@dx-rework/contracts/digital-sla";
@@ -13,7 +14,9 @@ export class SlaConfigurationService {
     expectedVersion: number; values: DigitalSlaValues; reason: string; requestKey: string;
   }) {
     await assertSlaSettingsActor(client,actor,true);
-    return new SlaConfigurationRepository(client).publish({ ...input, values: validateDigitalSlaValues(input.values), actorId: actor.actorId });
+    const result=await new SlaConfigurationRepository(client).publish({ ...input, values: validateDigitalSlaValues(input.values), actorId: actor.actorId });
+    await appendCurrentSettingsSet(client,actor.actorId,input.requestKey);
+    return result;
   }
 
   async changeLegacyPolicy(client: PoolClient, actor: TrustedActorContext, nodeKey: string, input: {

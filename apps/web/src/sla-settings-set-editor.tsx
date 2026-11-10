@@ -1,0 +1,103 @@
+import {confirmInApp} from './system-dialog.js';
+import {SlaPlanningInputs} from './sla-planning-inputs.js';
+import {useCallback,useEffect,useRef,useState} from 'react';
+import {Button} from '@dx-rework/ui';
+import {DIGITAL_SLA_PARAMETERS,validateDigitalSlaValues,type DigitalSlaValue} from '@dx-rework/contracts/digital-sla';
+import {DevelopmentCycleValuesSchema} from '@dx-rework/contracts/digital-development-technical';
+import {SettingsPlanningSchema,type SettingsSetBasis,type SettingsSetDraft,type SettingsSetRead,type SettingsSetValues,type SettingsSetHistory,type SettingsSetHistoryRow} from '@dx-rework/contracts/sla-settings-sets';
+import {JOURNEY_STAGES} from '@dx-rework/contracts/digital-production-journey';
+import {DigitalRequestError,digitalRequest} from './digital-production-api.js';
+import {createClientRequestId} from './client-request-id.js';
+import {SlaNodeEditDialog} from './sla-node-edit-dialog.js';
+import {readableSlaMinutes,readableSlaValue,slaDraftErrors,developmentDraftErrors} from './sla-settings-draft.js';
+import {useDigitalDetailNavigationGuard} from './use-digital-detail-navigation-guard.js';
+const endpoint='sla-settings/sets';
+const equal=(a:unknown,b:unknown)=>JSON.stringify(a)===JSON.stringify(b);
+const developmentRows=[['normalDays','普通开发周期','days'],['urgentDays','批准加急周期','days'],['sizeReviewHours','尺寸复核','hours'],['externalWashDays','外洗周期','days']] as const;
+type Edit={group:'unified'|'development';key:string;label:string;original:DigitalSlaValue};
+type Pending={action:'draft'|'discard'|'restore'|'publish';body:unknown;key:string};
+const checked=(value:SettingsSetRead)=>{
+ if(!value?.basis||!Number.isInteger(value.basis.unifiedVersion)||!Number.isInteger(value.basis.developmentVersion)||!value.current)throw Error('设置返回不完整，请重试读取');
+ validateDigitalSlaValues(value.current.unified);DevelopmentCycleValuesSchema.parse(value.current.development);SettingsPlanningSchema.parse(value.current.planning);
+ if(value.draft){validateDigitalSlaValues(value.draft.values.unified);DevelopmentCycleValuesSchema.parse(value.draft.values.development);SettingsPlanningSchema.parse(value.draft.values.planning);}
+ return value;
+};
+/** One UI command owns the paired body/key until its outcome is known. The
+ * independent calculator never mutates these drafts or an order. */
+export function SlaSettingsSetEditor({readOnly,onAuthorityChanged,onHistoryChange,onValues}:{readOnly:boolean;onAuthorityChanged():void;onHistoryChange?(open:boolean):void;onValues?(values:SettingsSetValues):void}){
+ const [state,setState]=useState<SettingsSetRead|null>(null),[values,setValues]=useState<SettingsSetValues|null>(null),[basis,setBasis]=useState<SettingsSetBasis|null>(null),[reason,setReason]=useState('');
+ const [error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[unknown,setUnknown]=useState(false),[conflict,setConflict]=useState(false),[saved,setSaved]=useState(false);
+ const [preview,setPreview]=useState<{token:string;changes:Array<{label:string;before:unknown;after:unknown}>}|null>(null),[stage,setStage]=useState(2),[edit,setEdit]=useState<Edit|null>(null),[fieldError,setFieldError]=useState(''),[planningValid,setPlanningValid]=useState(true),[developmentHistoryVersion,setDevelopmentHistoryVersion]=useState('');
+ const [history,setHistory]=useState<SettingsSetHistory|null>(null),[historyOpen,setHistoryOpen]=useState(false),[historyPage,setHistoryPage]=useState(1);
+ const pending=useRef<Pending|null>(null),live=useRef(true),active=useRef(false),generation=useRef(0),baselineRef=useRef<SettingsSetValues|null>(null),basisRef=useRef<SettingsSetBasis|null>(null),published=useRef(false);basisRef.current=basis;
+ const dirty=Boolean(values&&state&&!equal(values,state.current));
+ useDigitalDetailNavigationGuard(dirty&&!saved,busy||unknown,active,'本次修改尚未保存或提交结果待核对，仍要离开设置吗？');
+ useEffect(()=>{onHistoryChange?.(historyOpen);},[historyOpen,onHistoryChange]);
+ const accept=useCallback((next:SettingsSetRead)=>{checked(next);published.current=false;baselineRef.current=structuredClone(next.draft?.baseline??next.current);setState(next);setValues(structuredClone(next.draft?.values??next.current));setBasis(next.draft?.basis??next.basis);setReason(next.draft?.reason??'');setSaved(Boolean(next.draft));setConflict(Boolean(next.draft&&!equal(next.draft.basis,next.basis)));setPreview(null);setEdit(null);if(next.draft?.partialRestore)setNotice('仅恢复已保存部分；开发周期和规划参数保留。');},[]);
+ const load=useCallback(async(preserve=false)=>{
+  const current=++generation.current,next=checked(await digitalRequest<SettingsSetRead>(endpoint));if(!live.current||current!==generation.current)return;
+  if(preserve){const changed=!equal(basisRef.current,next.basis);setState(next);if(changed){setConflict(true);setPreview(null);setSaved(false);}}else accept(next);
+ },[accept]);
+ useEffect(()=>{live.current=true;void load().catch(e=>{if(live.current)setError(e.message);});return()=>{live.current=false;generation.current++;};},[load]);
+ useEffect(()=>{if(values)onValues?.(values);},[values,onValues]);
+ const authority=(e:unknown)=>{if(e instanceof DigitalRequestError&&[401,403].includes(e.status??0))onAuthorityChanged();};
+ const write=async(action:Pending['action'],body:unknown)=>{
+  if(readOnly||active.current)return;active.current=true;setBusy(true);setError('');setNotice('');
+  const operation=pending.current??{action,body:structuredClone(body),key:createClientRequestId()};pending.current=operation;
+  try{
+   const result=await digitalRequest<SettingsSetRead|{set:{setId:string;version:number};existingOrdersChanged:number}>(endpoint+'/'+operation.action,'POST',operation.body,operation.key);
+   if(operation.action==='publish'){
+    if(!('existingOrdersChanged'in result)||!result.set?.setId||result.existingOrdersChanged!==0)throw new DigitalRequestError('发布回执不完整，请核对上次提交结果',null);
+    pending.current=null;published.current=true;setUnknown(false);setPreview(null);setNotice(`已发布第${result.set.version}套标准，仅未来新采用生效。`);
+    try{await load();}catch(e){setError('发布已成功，读取新标准失败；请重试读取，不要重复发布。');authority(e);}
+   }else{
+    const next=checked(result as SettingsSetRead);pending.current=null;setUnknown(false);
+    // A replay must not replace another browser's newer draft with an old receipt.
+    let current:SettingsSetRead;try{current=checked(await digitalRequest<SettingsSetRead>(endpoint));}catch(e){if(live.current){setState(next);setConflict(true);setError('草稿操作已成功，最新设置读取失败；请重试读取，不要重复操作。');authority(e);}return;}if(!live.current)return;
+    if(equal(next.basis,current.basis))accept(next);else{setState(current);setConflict(true);setSaved(false);setPreview(null);}
+    setNotice(operation.action==='discard'?'本次草稿已取消。':operation.action==='restore'&&next.draft?.partialRestore?'仅恢复已保存部分；另一侧草稿保留。':'组合草稿已保存，尚未发布。');
+   }
+  }catch(e){authority(e);setError(e instanceof Error?e.message:'操作失败');
+   if(e instanceof DigitalRequestError&&e.resultUnknown){setUnknown(true);}
+   else{pending.current=null;setUnknown(false);if(e instanceof DigitalRequestError&&e.status===409){try{await load(true);}catch{setError('标准或草稿已更新，你的输入已保留；最新设置读取失败，请重试。');}}}
+  }finally{active.current=false;if(live.current)setBusy(false);}
+ };
+ const refresh=async()=>{if(active.current||unknown)return;setBusy(true);setError('');try{await load(dirty&&!published.current);}catch(e){authority(e);setError((e as Error).message);}finally{setBusy(false);}};
+ const mergeCurrent=()=>{
+  if(!state||!values||!basis)return;
+  const baseline=baselineRef.current??state.current,next=structuredClone(state.current);
+  for(const key of Object.keys(values.unified))if(!equal(values.unified[key],baseline.unified[key]))next.unified[key]=values.unified[key]!;
+  for(const key of Object.keys(values.development) as Array<keyof typeof values.development>)if(values.development[key]!==baseline.development[key])next.development[key]=values.development[key];
+  if(!equal(values.planning,baseline.planning))next.planning=values.planning;
+  baselineRef.current=structuredClone(state.current);setValues(next);setBasis(state.basis);setEdit(null);setConflict(false);setSaved(false);setPreview(null);setNotice('已保留本次编辑，请核对现行值后保存组合草稿。');
+ };
+ const change=(group:'unified'|'development',key:string,value:DigitalSlaValue)=>{if(!values)return;setSaved(false);setPreview(null);setValues(previous=>{if(!previous)return previous;if(group==='unified')return {...previous,unified:{...previous.unified,[key]:value}};const entry=developmentRows.find(row=>row[0]===key)!;const minutes='minutes'in value?value.minutes:'days'in value?value.days*1440:0,number=minutes/(entry[2]==='hours'?60:1440);return {...previous,development:{...previous.development,[key]:number}};});};
+ const makePreview=async()=>{
+  if(!values||!basis||!saved||active.current)return;active.current=true;setBusy(true);setError('');
+  try{const result=await digitalRequest<{token:string;changes:Array<{label:string;before:unknown;after:unknown}>}>(endpoint+'/preview','POST',{...basis,values,reason});if(!result.token||!Array.isArray(result.changes))throw Error('预览返回不完整');setPreview(result);}
+  catch(e){authority(e);setError((e as Error).message);if(e instanceof DigitalRequestError&&e.status===409){try{await load(true);}catch{setConflict(true);}}}
+  finally{active.current=false;setBusy(false);}
+ };
+ const loadHistory=async(page:number)=>{if(active.current||unknown)return;active.current=true;setBusy(true);setError('');try{const next=await digitalRequest<SettingsSetHistory>(endpoint+'/history?page='+page);if(!Array.isArray(next.items)||!Number.isInteger(next.totalCount))throw Error('历史返回不完整');setHistory(next);setHistoryPage(page);setHistoryOpen(true);}catch(e){authority(e);setError((e as Error).message);}finally{active.current=false;setBusy(false);}};
+ if(!state||!values||!basis)return <section className="cockpit-settings-node-section">{error?<><p role="alert">{error}</p><Button disabled={busy} onClick={()=>void refresh()}>重试读取设置</Button></>:<p>正在读取设置…</p>}</section>;
+ const errors={...slaDraftErrors(values.unified),...developmentDraftErrors(values.development)},disabled=busy||unknown||conflict,rows=DIGITAL_SLA_PARAMETERS.filter(p=>!['development_print_embroidery','bulk_print_embroidery'].includes(p.key)&&(stage===0?p.stage===0:p.stage===stage));
+ const input:SettingsSetDraft={...basis,values,reason};
+ const restore=async(row:SettingsSetHistoryRow)=>{if(dirty&&!saved&&!await confirmInApp('恢复历史会替换本次未保存编辑，仍要恢复吗？'))return;setHistoryOpen(false);await write('restore',{...basis,setId:row.setId,unifiedSourceVersion:row.setId?null:row.unifiedVersion});};
+ const scalar=(value:unknown)=>value&&typeof value==='object'&&'kind'in value?readableSlaValue(value as DigitalSlaValue):value===null||value===undefined?'未设置':typeof value==='object'&&'minutes'in value?`${value.minutes===null?'待补规划时长':readableSlaMinutes(Number(value.minutes))} · ${{continuous:'连续自然时间',natural_days:'自然日',beijing_sunday_excluded:'周日不计时'}[String((value as {calendar?:unknown}).calendar)]??'日历待补'}${(value as {responsibilityAdopted?:boolean}).responsibilityAdopted?' · 双工艺独立责任 '+readableSlaMinutes(Number((value as {responsibilityMinutes?:number}).responsibilityMinutes))+'／'+({continuous:'连续自然时间',natural_days:'自然日',beijing_sunday_excluded:'周日不计时'} as Record<string,string>)[String((value as {responsibilityCalendar?:unknown}).responsibilityCalendar)]:' · 仅作规划'}`:String(value);
+ return <div className="sla-standard-editor">
+  <div className="sla-set-toolbar"><Button variant="secondary" disabled={busy||unknown} onClick={()=>void refresh()}>重新读取设置</Button><span>{state.set?`第${state.set.version}套标准`:'现行标准'} · 时效 v{state.basis.unifiedVersion} / 开发 v{state.basis.developmentVersion}</span><Button variant="secondary" disabled={busy||unknown} onClick={()=>void loadHistory(1)}>查看历史设置</Button></div>
+  {error&&<p role="alert">{error}</p>}{notice&&<p role="status">{notice}</p>}
+  {unknown&&<div role="status"><span>上次操作结果尚未确认，编辑已保留。</span><Button disabled={busy} onClick={()=>void write(pending.current!.action,pending.current!.body)}>核对上次提交结果</Button></div>}
+  {conflict&&<div role="alert">现行标准或草稿已更新，本次输入已保留。<Button disabled={busy||unknown} onClick={mergeCurrent}>核对现行标准并保留编辑</Button><Button disabled={busy||unknown} onClick={()=>void refresh()}>重试读取</Button></div>}
+  {historyOpen?<section className="cockpit-settings-node-section" aria-label="历史设置"><header><h2>历史设置</h2><Button onClick={()=>{setHistoryOpen(false);void refresh();}}>返回修改</Button></header>{history&&<><table><thead><tr><th>版本</th><th>时间</th><th>调整原因</th><th>操作</th></tr></thead><tbody>{history.items.map(row=><tr key={row.setId??'unified:'+row.unifiedVersion}><th>{row.setId?`第${row.version}套 · 时效v${row.unifiedVersion} / 开发v${row.developmentVersion}`:`时效v${row.unifiedVersion}（仅保存部分）`}</th><td>{new Date(row.recordedAt).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'})}</td><td>{row.reason}</td><td>{!readOnly&&<Button disabled={disabled} onClick={()=>void restore(row)}>恢复为配置草稿</Button>}</td></tr>)}</tbody></table><div className="series-plan-actions"><Button disabled={disabled||historyPage===1} onClick={()=>void loadHistory(historyPage-1)}>上一页</Button><span>第{historyPage}页 · 共{history.totalCount}条</span><Button disabled={disabled||historyPage*15>=history.totalCount} onClick={()=>void loadHistory(historyPage+1)}>下一页</Button></div></>}</section>:<>
+  <section className="cockpit-settings-node-section sla-stage-selector"><div className="cockpit-policy-stage-scroll"><ol className="cockpit-policy-stages">{JOURNEY_STAGES.map((p,i)=><li key={p.key}><button type="button" aria-label={p.label} aria-pressed={stage===i+1} onClick={()=>{setStage(i+1);setEdit(null);}}><span className="cockpit-policy-stage-ring"><svg viewBox="0 0 72 72" aria-hidden="true"><circle cx="36" cy="36" r="30"/><circle cx="36" cy="36" r="30"/></svg><b>{i+1}</b></span><strong>{p.label}</strong></button></li>)}</ol></div><Button variant="secondary" aria-pressed={stage===0} onClick={()=>{setStage(0);setEdit(null);}}>提醒与缓冲</Button></section>
+  <section className="cockpit-settings-node-section">{stage===2&&<div className="series-plan-actions"><label>开发周期历史<select aria-label="选择真实开发周期版本" value={developmentHistoryVersion} disabled={disabled} onChange={e=>setDevelopmentHistoryVersion(e.target.value)}><option value="">保留本次草稿</option>{state.developmentHistory.map(row=><option key={row.version} value={row.version}>v{row.version} · {row.reason}</option>)}</select></label><Button variant="secondary" disabled={disabled||readOnly||!developmentHistoryVersion} onClick={()=>{if(active.current)return;active.current=true;setBusy(true);setError('');void digitalRequest<{values:SettingsSetValues['development']}>(`development-technical-settings?version=${developmentHistoryVersion}`).then(result=>{const development=DevelopmentCycleValuesSchema.parse(result.values);if(!live.current)return;setValues(previous=>({...previous!,development}));setSaved(false);setPreview(null);setNotice('已引用该开发周期到本次草稿组合，尚未发布。');}).catch(e=>{authority(e);setError(e.message);}).finally(()=>{active.current=false;if(live.current)setBusy(false);});}}>引用到本次草稿</Button></div>}<div className="sla-node-editor-grid"><div className="sla-node-table-panel"><div className="sla-node-table-scroll" role="region" tabIndex={0} aria-label="本阶段节点与标准用时"><table className="sla-standard-table"><thead><tr><th>节点</th><th>现行 / 本次草稿</th><th>提醒</th><th>操作</th></tr></thead><tbody>
+   {stage===2&&developmentRows.map(([key,label,unit])=>{const value:DigitalSlaValue={kind:'duration',minutes:values.development[key]*(unit==='hours'?60:1440)},current={kind:'duration' as const,minutes:state.current.development[key]*(unit==='hours'?60:1440)};return <tr key={key} data-development-node={key}><th>{label}{errors[key]&&<small role="alert">{errors[key]}</small>}</th><td>{unit==='hours'?`${values.development[key]}小时`:`${values.development[key]}天`}{values.development[key]!==state.current.development[key]&&<small>现行{state.current.development[key]}{unit==='hours'?'小时':'天'}</small>}</td><td>{values.unified.warning_ratio?.kind==='ratio'&&values.unified.warning_ratio.notificationEnabled!==false?`用时${values.unified.warning_ratio.percent}%时提醒`:'临期提醒关闭'}</td><td><Button variant="secondary" disabled={disabled} onClick={()=>{setFieldError('');setEdit({group:'development',key,label,original:value});}}>{readOnly?'查看':'编辑'}</Button>{!readOnly&&values.development[key]!==state.current.development[key]&&<Button disabled={disabled} onClick={()=>{change('development',key,current);setEdit(null);}}>撤销</Button>}</td></tr>;})}
+   {rows.map(p=>{const value=values.unified[p.key]!,warning=values.unified.warning_ratio,reminder=value.kind==='included'?'沿所属窗口':value.kind==='duration'||value.kind==='ratio'?warning?.kind==='ratio'&&warning.notificationEnabled!==false?`用时${warning.percent}%时提醒`:'临期提醒关闭':value.kind==='offset'?`提前${value.days}天`:'—';return <tr key={p.key} data-sla-node={p.key}><th>{p.label}{errors[p.key]&&<small role="alert">{errors[p.key]}</small>}</th><td>{readableSlaValue(value)}{!equal(value,state.current.unified[p.key])&&<small>现行{readableSlaValue(state.current.unified[p.key]!)}</small>}</td><td>{reminder}</td><td><Button variant="secondary" disabled={disabled} onClick={()=>{setFieldError('');setEdit({group:'unified',key:p.key,label:p.label,original:structuredClone(value)});}}>{readOnly?'查看':'编辑'}</Button>{!readOnly&&!equal(value,state.current.unified[p.key])&&<Button disabled={disabled} onClick={()=>{change('unified',p.key,state.current.unified[p.key]!);setEdit(null);}}>撤销</Button>}</td></tr>;})}
+  </tbody></table></div></div><div className="sla-node-edit-column">{edit?<SlaNodeEditDialog key={edit.group+':'+edit.key} inline label={edit.label} source="" value={edit.group==='unified'?values.unified[edit.key]!:{kind:'duration',minutes:values.development[edit.key as keyof typeof values.development]*(edit.key==='sizeReviewHours'?60:1440)}} current={edit.group==='unified'?state.current.unified[edit.key]!:{kind:'duration',minutes:state.current.development[edit.key as keyof typeof state.current.development]*(edit.key==='sizeReviewHours'?60:1440)}} {...(edit.group==='development'?{initialUnit:edit.key==='sizeReviewHours'?'hours' as const:'days-duration' as const}:{})} readOnly={readOnly} disabled={disabled} keepLabel="保留本项修改" onInput={(value,error)=>{setFieldError(error??'');if(value)change(edit.group,edit.key,value);}} onCancel={()=>{if(!readOnly)change(edit.group,edit.key,edit.original);setEdit(null);setFieldError('');}} onKeep={()=>{setEdit(null);setFieldError('');}}><p role="alert">{fieldError}</p>{edit.group==='unified'&&['warning_ratio','ship_sample_advance'].includes(edit.key)&&<label><input type="checkbox" role="switch" aria-label={edit.label+'提醒启用'} disabled={disabled||readOnly} checked={(values.unified[edit.key] as {notificationEnabled?:boolean}).notificationEnabled!==false} onChange={e=>change('unified',edit.key,{...values.unified[edit.key]!,notificationEnabled:e.target.checked} as DigitalSlaValue)}/>启用提醒</label>}</SlaNodeEditDialog>:<aside className="sla-node-inline-placeholder"><h2>选中节点</h2><p>选择节点查看或调整标准。</p></aside>}</div></div>
+  <h3>规划用时与日历</h3><SlaPlanningInputs key={state.basis.unifiedDraftRevision+':'+state.basis.developmentDraftRevision} value={values.planning} stage={stage} onlySupplementary readOnly={readOnly} disabled={disabled} onValidity={setPlanningValid} onChange={planning=>{setValues(previous=>({...previous!,planning}));setSaved(false);setPreview(null);}}/>
+  {!readOnly&&<><div className="sla-publish-controls"><label className="sla-change-reason">调整原因<input maxLength={1000} aria-label="调整原因" disabled={disabled} value={reason} onChange={e=>{setReason(e.target.value);setSaved(false);setPreview(null);}}/></label><Button variant="secondary" disabled={disabled||!state.draft&&!dirty} onClick={()=>void write('discard',basis)}>取消草稿</Button><Button disabled={disabled||Boolean(fieldError)||!planningValid||Object.keys(errors).length>0} onClick={()=>void write('draft',input)}>保存草稿</Button><Button variant="primary" disabled={disabled||!saved||!reason.trim()||Boolean(fieldError)||!planningValid||Object.keys(errors).length>0} onClick={()=>void makePreview()}>预览发布</Button></div><p className="sla-draft-publication-note">草稿尚未发布，在办订单不变。</p></>}
+  {preview&&<section className="sla-publish-preview" aria-label="发布预览"><h3>确认发布本套标准</h3><ul>{preview.changes.map((change,i)=><li key={i}>{change.label}：{scalar(change.before)} → {scalar(change.after)}</li>)}</ul><Button disabled={disabled} onClick={()=>void write('publish',{...input,previewToken:preview.token})}>确认发布</Button><Button variant="secondary" disabled={disabled} onClick={()=>setPreview(null)}>返回修改</Button></section>}
+  </section></>}
+ </div>;
+}

@@ -1,3 +1,5 @@
+import {SettingsCalculationSchema,SettingsSetSaveSchema,SettingsSetDraftSchema,SettingsSetBasisSchema,SettingsSetPublishSchema,SettingsSetRestoreSchema} from '@dx-rework/contracts/sla-settings-sets';
+import {settingsCalculation} from './sla-settings-calculation.js';
 import {SlaDraftGroupSchema,SlaDraftSaveSchema,SlaDraftDiscardSchema} from '@dx-rework/contracts/sla-settings-drafts';
 import {SlaHistoryQuerySchema,SlaCopyVersionSchema,SlaApplicationCandidatesQuerySchema} from '@dx-rework/contracts/sla-settings-history';
 import {DigitalSlaValuesSchema,DIGITAL_SLA_PARAMETERS} from '@dx-rework/contracts/digital-sla';
@@ -37,6 +39,16 @@ export function registerDigitalTaskRoutes(app: FastifyInstance, dependencies: Di
   app.post("/digital-production/tasks/:taskId/time-corrections", async request => service.correctTime(await actor(request), id(request), parse(DigitalTimeCorrectionSchema, request.body), key(request)));
   const standardDraft=z.object({expectedVersion:z.number().int().nonnegative(),values:DigitalSlaValuesSchema,reason:z.string().trim().min(1).max(1000)}).strict();
   const orderSelection=z.object({orderId:z.string().uuid(),configurationVersion:z.number().int().positive(),parameterKeys:z.array(z.string()).min(1).max(DIGITAL_SLA_PARAMETERS.length),reason:z.string().trim().min(1).max(1000)}).strict();
+  const sets='/digital-production/sla-settings/sets';
+  app.post(sets+'/calculate',async request=>{await service.settingsSets().read(await actor(request));try{return settingsCalculation(parse(SettingsCalculationSchema,request.body));}catch(e){if(e instanceof ApplicationError)throw e;throw new ApplicationError('VALIDATION_ERROR',e instanceof Error?e.message:'请检查本次演算条件',400);}});
+  app.get(sets,async request=>service.settingsSets().read(await actor(request)));
+  app.get(sets+'/history',async request=>service.settingsSets().history(await actor(request),parse(z.object({page:z.coerce.number().int().positive().max(100000).default(1)}).strict(),request.query).page));
+  app.get(sets+'/history/values',async request=>service.settingsSets().historyValues(await actor(request),parse(z.object({setId:z.uuid().nullable().default(null),unifiedSourceVersion:z.coerce.number().int().positive().nullable().default(null)}).strict(),request.query)));
+  app.post(sets+'/draft',async request=>service.settingsSets().save(await actor(request),parse(SettingsSetSaveSchema,request.body),parse(z.uuid(),key(request))));
+  app.post(sets+'/discard',async request=>service.settingsSets().discard(await actor(request),parse(SettingsSetBasisSchema,request.body),parse(z.uuid(),key(request))));
+  app.post(sets+'/restore',async request=>service.settingsSets().restore(await actor(request),parse(SettingsSetRestoreSchema,request.body),parse(z.uuid(),key(request))));
+  app.post(sets+'/preview',async request=>service.settingsSets().preview(await actor(request),parse(SettingsSetDraftSchema,request.body)));
+  app.post(sets+'/publish',async request=>service.settingsSets().publish(await actor(request),parse(SettingsSetPublishSchema,request.body),parse(z.uuid(),key(request))));
   app.get('/digital-production/sla-settings/orders/candidates',async request=>service.slaApplicationCandidates(await actor(request),parse(SlaApplicationCandidatesQuerySchema,request.query)));
   app.post('/digital-production/sla-settings/orders/preview',async request=>service.previewSlaOrder(await actor(request),parse(orderSelection,request.body)));
   app.post('/digital-production/sla-settings/orders/apply',async request=>service.applySlaOrder(await actor(request),parse(orderSelection.extend({previewToken:z.string().max(512).regex(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/)}),request.body),parse(z.string().uuid(),key(request))));

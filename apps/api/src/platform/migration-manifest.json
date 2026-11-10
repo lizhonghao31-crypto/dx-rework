@@ -1187,6 +1187,10 @@
     {
       "version": "0282_journey_fixed_progress_selectors",
       "checksum": "9d6029e6c8d4e1de7807ae1d0491f459ff76eedf935e4f4585ef31db4c6d9c76"
+    },
+    {
+      "version": "0283_sla_settings_sets",
+      "checksum": "e7b11b60ea8246b5676a2c5be42687344146b5e23fa15dfcfa70c59623dabf24"
     }
   ]
 }

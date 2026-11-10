@@ -307,3 +307,9 @@ it('treats the extracted Full CI receipt worker as shared gate code while retain
  expect(shared.highRisk).toBe(true);expect(shared.dbRequired).toBe(true);expect(shared.deploymentSensitive).toBe(true);expect(shared.maintenanceSensitive).toBe(false);
  for(const path of ['scripts/backup-postgres.sh','scripts/restore-postgres.sh','scripts/deploy/backup-runtime.sh'])expect(classifyFullGatePaths([path]).maintenanceSensitive).toBe(true);
 });
+
+it('maps actual paired-settings writers, migration and full-App harness to native atomic/publication and readonly cases',()=>{
+ for(const path of ['apps/api/src/production-platform/sla-settings-sets.ts','packages/contracts/src/sla-settings-sets.ts','apps/api/migrations/0283_sla_settings_sets.sql','tests/acceptance/supplychain-settings-browser.ts']){
+  const result=classifyFullGatePaths([path]);expect(result.mappedPostgresTests).toContain('tests/integration/sla-settings-sets-postgres.test.ts');expect(result.mappedPostgresTests).toContain('tests/integration/m01-settings-native-browser-postgres.test.ts');
+ }
+});

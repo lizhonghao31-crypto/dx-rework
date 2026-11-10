@@ -25,7 +25,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  const designer=()=>f.people['sample-designer']!,manager=()=>f.people['production-management']!,owner=()=>f.people.owner!;
  const orderInput=(date?:string)=>DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:`TEST-SERIES-${randomUUID()}`,orderDate:beijingCalendarDate(new Date()),salesYear:2027,salesSeries:'P05',requiresColorMatching:true,lines:[{formalPoNo:`TEST-PO-${randomUUID()}`,color:'黑',customerWarehouseArrivalDate:date??minimumInitialCustomerDate(new Date()),sizes:[{size:'M',quantity:10}]}]});
  const create=async()=>identity.createOrder(designer(),orderInput('2027-03-20'),randomUUID());
- const prepare=async(id:string,day:string|null=null):Promise<SeriesPlanPreview>=>{const s=await plans.read(manager(),id);return plans.preview(manager(),id,{expectedOrderVersion:s.orderVersion,expectedPlanRevision:s.current?.revision??0,plannedShippingDate:day,selectedNodeIds:null,plannedDurations:{}});};
+ const prepare=async(id:string,day:string|null='2027-03-15'):Promise<SeriesPlanPreview>=>{const s=await plans.read(manager(),id);return plans.preview(manager(),id,{expectedOrderVersion:s.orderVersion,expectedPlanRevision:s.current?.revision??0,plannedShippingDate:day,selectedNodeIds:null,plannedDurations:{}});};
  const apply=(id:string,p:SeriesPlanPreview,key=randomUUID())=>plans.apply(manager(),id,{...p.input,previewToken:p.previewToken,reason:'TEST 显式采用计划，不改客户承诺',acceptSuggestedDate:true},key);
  const publishedSource=async(input:ReturnType<typeof orderInput>,missingDate=false,publish=true,sourceActor=designer())=>{
   const source=await identity.createSource(sourceActor,{developmentType:'头版',designStyleNo:input.designStyleNo,temporaryStyleNo:null,customerCode:'PD'},randomUUID()),forms=new DigitalDevelopmentService(f.db,true),image=await f.image(sourceActor);
@@ -115,9 +115,9 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  it('previews without writing; adopts one explicit plan while preserving all customer dates and original SLA snapshots',async()=>{
   const o=await create(),id=o.productionOrderId,before=(await f.db.query('SELECT * FROM digital_production_po_lines WHERE production_order_id=$1',[id])).rows;
   const native=(await f.db.query('SELECT * FROM digital_sla_order_snapshots WHERE production_order_id=$1',[id])).rows;
-  const p=await prepare(id);expect(p.candidateDate).toBe('2027-03-15');expect(p.basis).toBe('series-suggestion');expect(p.milestones.find(m=>m.key==='material_investment')?.targetDate).toBe('2026-12-10');
+  const p=await prepare(id);expect(p.candidateDate).toBe('2027-03-15');expect(p.basis).toBe('manual');expect(p.milestones.find(m=>m.key==='material_investment')?.targetDate).toBe('2026-12-10');
   expect((await f.db.query('SELECT 1 FROM digital_series_plans WHERE production_order_id=$1',[id])).rowCount).toBe(0);
-  await expect(plans.apply(manager(),id,{...p.input,previewToken:p.previewToken,reason:'TEST 未明确采用建议'},randomUUID())).rejects.toMatchObject({statusCode:409});
+  const missing=await prepare(id,null);expect(missing.candidateDate).toBeNull();await expect(plans.apply(manager(),id,{...missing.input,previewToken:missing.previewToken,acceptSuggestedDate:true,reason:'TEST 旧建议标记不能生成真实日期'},randomUUID())).rejects.toMatchObject({statusCode:409});
   const key=randomUUID();const result=await apply(id,p,key);expect(result.revision).toBe(1);expect((await apply(id,p,key)).revision).toBe(1);
   expect(result.planningGraph).toEqual(p.planningGraph);expect(result.dependencies).toEqual(p.dependencies);expect(result.risks).toEqual(p.risks);expect(result.slaSnapshotRef).toEqual(p.sourceRevisionSet.slaSnapshotRef);
   expect((await f.db.query('SELECT * FROM digital_production_po_lines WHERE production_order_id=$1',[id])).rows).toEqual(before);
@@ -128,7 +128,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const o=await create(),id=o.productionOrderId;await apply(id,await prepare(id));const old=await prepare(id);
   await plans.context(designer(),id,{expectedOrderVersion:o.version,salesYear:2028,salesSeries:'P05',requiresColorMatching:false,reason:'TEST 改系列只出候选'},randomUUID());
   await expect(apply(id,old)).rejects.toMatchObject({statusCode:409});const current=await plans.read(manager(),id);expect(current.current?.plannedShippingDate).toBe('2027-03-15');
-  const p=await prepare(id);expect(p.candidateDate).toBe('2028-03-15');expect(p.milestones.find(m=>m.key==='material_investment')?.targetDate).toBe('2028-01-11');expect(p.risks.some(r=>r.code==='CUSTOMER_EARLIER_THAN_PLAN')).toBe(true);
+  const p=await prepare(id,'2028-03-15');expect(p.candidateDate).toBe('2028-03-15');expect(p.milestones.find(m=>m.key==='material_investment')?.targetDate).toBe('2028-01-11');expect(p.risks.some(r=>r.code==='CUSTOMER_EARLIER_THAN_PLAN')).toBe(true);
   const dates=new PoCustomerDateService(f.db),s=await dates.read(f.root,id),request=await dates.request(f.root,id,{orderVersion:current.orderVersion,reason:'TEST 客户正式改期',changes:s.customerPoDates.map(l=>({lineId:l.lineId,date:'2027-03-25',expectedVersion:l.version}))},randomUUID());
   await dates.decide(f.root,id,request.requestId,true,randomUUID());expect((await plans.read(f.root,id)).current?.plannedShippingDate).toBe('2027-03-15');
  });
@@ -204,13 +204,14 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(all.find(x=>x.key==='processing_dispatch'&&x.scopeRef==='whole')).toMatchObject({started:true,completed:true,occurredAt:'2026-11-01T16:10:00.000Z',precision:'instant'});
   });
  });
- it('does not silently overflow profile dates or rewrite in-flight plans, and keeps revoked manager retries denied',async()=>{
+ it('removes automatic profile candidates without changing adopted plans and keeps revoked manager retries denied',async()=>{
   const id=(await create()).productionOrderId;await apply(id,await prepare(id));
-  const saved=await plans.saveProfile(manager(),{customerCode:'PD',expectedVersion:0,monthOffset:-2,shippingDay:31,reason:'TEST 配置日号，非法月份需人工明确'},randomUUID());expect(saved.version).toBe(1);
-  const s=await plans.read(designer(),id);await plans.context(designer(),id,{expectedOrderVersion:s.orderVersion,salesYear:2028,salesSeries:'P04',requiresColorMatching:true,reason:'TEST 二月31日不可溢出'},randomUUID());
-  const p=await prepare(id);expect(p.candidateDate).toBeNull();expect(p.risks.some(r=>r.code==='INVALID_SERIES_DAY')).toBe(true);expect((await plans.read(designer(),id)).current?.plannedShippingDate).toBe('2027-03-15');
-  const input={customerCode:'PD',expectedVersion:1,monthOffset:-2,shippingDay:null,reason:'TEST 清除固定日恢复建议'},key=randomUUID();await plans.saveProfile(manager(),input,key);
+  const profile={customerCode:'PD',expectedVersion:0,monthOffset:-2,shippingDay:31,reason:'TEST retired default cannot create a new candidate'},key=randomUUID();
+  await expect(plans.saveProfile(manager(),profile,key)).rejects.toMatchObject({statusCode:409});
+  const s=await plans.read(designer(),id);await plans.context(designer(),id,{expectedOrderVersion:s.orderVersion,salesYear:2028,salesSeries:'P04',requiresColorMatching:true,reason:'TEST series facts do not imply a customer date'},randomUUID());
+  const p=await prepare(id,null);expect(p.candidateDate).toBeNull();expect(p.basis).toBe('unavailable');expect(p.risks.some(r=>r.code==='PLAN_DATE_MISSING')).toBe(true);expect((await plans.read(designer(),id)).current?.plannedShippingDate).toBe('2027-03-15');
+  await expect(plans.apply(manager(),id,{...p.input,previewToken:p.previewToken,acceptSuggestedDate:true,reason:'TEST old suggested-date payload rejected'},randomUUID())).rejects.toMatchObject({statusCode:409});
   const assignment=(await f.db.query("SELECT assignment_id FROM user_role_assignments WHERE user_id=$1 AND role_code='production_management' AND revoked_at IS NULL",[manager().actorId])).rows[0];await f.access.revokeRole(f.root,assignment.assignment_id,'TEST native audited role revocation');
-  await expect(plans.saveProfile(manager(),input,key)).rejects.toMatchObject({statusCode:403});
+  await expect(plans.saveProfile(manager(),profile,key)).rejects.toMatchObject({statusCode:403});
  });
 });

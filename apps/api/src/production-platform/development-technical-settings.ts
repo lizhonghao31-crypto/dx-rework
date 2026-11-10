@@ -1,3 +1,4 @@
+import {appendCurrentSettingsSet,lockSettingsStandards,settingsPublicationBasis} from './sla-settings-set-repository.js';
 import {createHash} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {DevelopmentCycleDraftSchema,DevelopmentCyclePublishSchema,DevelopmentCycleValuesSchema,SaveTechnicalTemplateSchema,technicalSizeTableIssues} from '@dx-rework/contracts/digital-development-technical';
@@ -11,7 +12,7 @@ import {DigitalProductionAccessPolicy,digitalForbidden,digitalNotFound} from './
 import {SlaPreviewTokens} from './sla-preview-token.js';
 const conflict=(message:string):never=>{throw new ApplicationError('DEVELOPMENT_TECHNICAL_CONFLICT',message,409);};
 type CycleDraft=ReturnType<typeof DevelopmentCycleDraftSchema.parse>;
-const fingerprint=(actorId:string,d:CycleDraft)=>createHash('sha256').update(JSON.stringify(['development-cycle',actorId,d.expectedVersion,d.values.normalDays,d.values.urgentDays,d.values.sizeReviewHours,d.values.externalWashDays,d.reason])).digest('hex');
+const fingerprint=(actorId:string,d:CycleDraft,basis:Awaited<ReturnType<typeof settingsPublicationBasis>>)=>createHash('sha256').update(JSON.stringify(['development-cycle',actorId,d.expectedVersion,d.values.normalDays,d.values.urgentDays,d.values.sizeReviewHours,d.values.externalWashDays,d.reason,basis])).digest('hex');
 
 /** A scoped extension of the existing settings; old global SLA catalogs are never reinterpreted. */
 export class DevelopmentTechnicalSettingsService{
@@ -28,19 +29,20 @@ export class DevelopmentTechnicalSettingsService{
   await assertSlaSettingsActor(db,actor);const current=await this.current(db);if(current.version!==input.expectedVersion)conflict('现行开发周期已更新，请重新读取');
   const changes=(Object.keys(input.values) as Array<keyof typeof input.values>).filter(key=>input.values[key]!==current.values[key]).map(key=>({key,before:current.values[key],after:input.values[key]}));
   if(!changes.length)conflict('没有需要发布的开发周期变化');
-  return {token:this.tokens.issue(fingerprint(actor.actorId,input)),version:current.version,scope:'new_sources' as const,existingSourcesChanged:0,changes};
+  return {token:this.tokens.issue(fingerprint(actor.actorId,input,await settingsPublicationBasis(db))),version:current.version,scope:'new_sources' as const,existingSourcesChanged:0,changes};
  });}
  async publish(actor:TrustedActorContext,raw:unknown,key:string){const input=DevelopmentCyclePublishSchema.parse(raw);if(!this.enabled)digitalForbidden();if(!/^[A-Za-z0-9._:-]{1,128}$/.test(key))conflict('缺少操作标识');return this.transaction(async db=>{
   await assertSlaSettingsActor(db,actor,true);const command='development-cycle-standard',hash=createHash('sha256').update(JSON.stringify(input)).digest('hex');
   const prior=(await db.query('SELECT payload_hash,response FROM digital_production_commands WHERE actor_id=$1 AND command=$2 AND key=$3',[actor.actorId,command,key])).rows[0];
   if(prior){if(prior.payload_hash!==hash)conflict('原发布标识不能用于不同内容');return prior.response;}
-  await db.query('LOCK TABLE digital_development_cycle_standards IN SHARE ROW EXCLUSIVE MODE');
+  await lockSettingsStandards(db);
   const current=await this.current(db);if(current.version!==input.expectedVersion)conflict('现行开发周期已更新，请重新预览');
-  this.tokens.verify(input.previewToken,fingerprint(actor.actorId,input));
+  this.tokens.verify(input.previewToken,fingerprint(actor.actorId,input,await settingsPublicationBasis(db)));
   if(input.savedDraftRevision!==undefined)await assertSavedSettingsDraft(db,actor,'development',input.savedDraftRevision,input);
   if(JSON.stringify(current.values)===JSON.stringify(input.values))conflict('没有参数变化');
   const version=current.version+1;
   await db.query('INSERT INTO digital_development_cycle_standards(version,values_json,changed_by,reason) VALUES($1,$2,$3,$4)',[version,JSON.stringify(input.values),actor.actorId,input.reason]);
+  await appendCurrentSettingsSet(db,actor.actorId,key);
   const result={version,scope:'new_sources' as const,existingSourcesChanged:0};
   if(input.savedDraftRevision!==undefined)await consumeSavedSettingsDraft(db,actor,'development',input.savedDraftRevision,version);
   await db.query('INSERT INTO digital_production_commands(actor_id,command,key,payload_hash,response) VALUES($1,$2,$3,$4,$5)',[actor.actorId,command,key,hash,JSON.stringify(result)]);return result;
