@@ -1,3 +1,6 @@
+import {exerciseDevelopmentSlaNative} from '../helpers/development-sla-native-fixture.js';
+import {TodoProjectionService} from '../../apps/api/src/todos/projection-service.js';
+import {TodoService} from '../../apps/api/src/todos/service.js';
 import {randomUUID} from 'node:crypto';
 import {beforeAll,afterAll,describe,it,expect,vi} from 'vitest';
 import {businessAnchorFixture} from '../helpers/business-anchor-fixture.js';
@@ -97,4 +100,27 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(returned.ready).toEqual({precision:'date',date:'2026-11-21'});expect(returned.completed).toEqual({precision:'unknown'});expect(returned.businessCompleted).toBe(false);
   });
  });
+ it('closes each adopted development craft parent only on its matching original return confirmation',async()=>{
+  const ownScene=await f.scene('2026-11-22T08:00:00.000Z');
+  await f.runtime.run(ownScene,f.root,async()=>{
+   configureTimelineAdoption(f.db,'fixed_v2');const checked:string[]=[];
+   try{await exerciseDevelopmentSlaNative(f.db,new TodoProjectionService(new TodoService(f.db)),f.root,f.people['pattern-room-worker']!.actorId,new ContextBusinessClock(f.db),[['印绣花','免洗']],{
+    fixedCraftSteps:[{craftKind:'embroidery',sequence:1},{craftKind:'printing',sequence:2}],
+    onRouteComplete:async(sourceId,kind,taskId)=>{
+     if(!['development_embroidery','development_printing','development_craft_confirmation'].includes(kind))return;
+     const task=(await f.db.query('SELECT p.step_id,t.completed_at FROM digital_timeline_task_positions p JOIN digital_production_tasks t USING(task_id) WHERE p.task_id=$1',[taskId])).rows[0];
+     const saved=(await new FixedTimelineAdoptionRepository(f.db).existing({kind:'source',id:sourceId},1))!,step=saved.input.craftSteps!.find(step=>step.stepId===task.step_id)!;
+     const built=await new JourneyFactRepository(f.db).buildOne({kind:'source',id:sourceId}),fact=built.model.fixedSchedule!.scopes[0]!.facts[`development_${step.craftKind}`]!;
+     if(kind==='development_craft_confirmation'){
+      expect(fact.businessCompleted).toBe(true);expect(fact.completed).toEqual({precision:'instant',at:new Date(task.completed_at).toISOString()});
+     }else{
+      expect(fact.businessCompleted).toBe(false);expect(fact.completed).toEqual({precision:'unknown'});
+     }
+     checked.push(kind+':'+step.craftKind);
+    },
+   });}finally{configureTimelineAdoption(f.db,'legacy');}
+   expect(checked).toEqual(['development_embroidery:embroidery','development_craft_confirmation:embroidery','development_printing:printing','development_craft_confirmation:printing']);
+  });
+ });
+
 });

@@ -29,4 +29,22 @@ describe('fixed schedule progress, independent goal/own SLA and physical spans',
  it('requires an independently adopted own SLA and retains terminated unfinished goal state',()=>{const input=scope([work('a',0,4,[],{responsibilitySlaRef:null})],{a:fact(0,null)}),end={at:at(8),kind:'special_closure' as const},result=evaluateFixedScheduleScope(input,at(20),end);expect(result.state).toBe('terminated');expect(result.nodes[0]!.goalDelta.kind).toBe('terminated');expect(result.nodes[0]!.ownSla.state).toBe('not_adopted');});
  it('uses one whole-order span and real delivery or termination, never sums PO windows',()=>{const a=scope([work('a',0,12)],{a:fact(1,null)}),b={...scope([work('b',2,10)],{b:fact(3,null)}),scopeRef:'po:two',lineId:'two'};expect(fixedDurationSummary([a,b],at(8))).toMatchObject({planSpanMinutes:720,elapsedSpanMinutes:{minimum:420,maximum:420},finalActualSpanMinutes:null});expect(fixedDurationSummary([a,b],at(20),{at:at(8),kind:'cancelled'})).toMatchObject({observationAt:at(8),elapsedSpanMinutes:{minimum:420},finalActualSpanMinutes:null});a.facts={a:fact(1,11)};b.facts={b:fact(3,10)};expect(fixedDurationSummary([a,b],at(20))).toMatchObject({elapsedSpanMinutes:{minimum:600},finalActualSpanMinutes:{minimum:600},deliveryCompletedAt:instant(11)});});
  it('does not replace an unrecorded termination with now or a customer goal',()=>{const input=scope([work('a',0,12)],{a:fact(1,null)});expect(fixedDurationSummary([input],at(20),{at:null,kind:'cancelled'})).toMatchObject({observationAt:null,elapsedSpanMinutes:null,finalActualSpanMinutes:null});});
+ it('retains an unknown original start when only downstream packing has R and A',()=>{
+  const input=scope([work('original',0,6),work('packing',6,8,['original'])],{original:fact(null,null),packing:fact(6,8)});
+  expect(fixedDurationSummary([input],at(10))).toMatchObject({actualStart:{precision:'unknown'},elapsedSpanMinutes:null,finalActualSpanMinutes:null,coverage:expect.arrayContaining(['本单可信起点待核'])});
+  input.facts={...input.facts,original:fact(1,5)};
+  expect(fixedDurationSummary([input],at(10))).toMatchObject({actualStart:instant(1),finalActualSpanMinutes:{minimum:420,maximum:420}});
+ });
+ it('does not turn a partly unknown parallel original start into an exact span',()=>{
+  const input=scope([work('a',0,6),work('b',1,6),work('packing',6,8,['a','b'])],{a:fact(1,5),b:fact(null,6),packing:fact(6,8)});
+  expect(fixedDurationSummary([input],at(10))).toMatchObject({actualStart:{precision:'unknown'},finalActualSpanMinutes:null});
+ });
+
+ it('freezes a terminated unfinished own SLA at credible Z and leaves missing or inverted Z unknown',()=>{
+  const input=scope([work('a',0,4)],{a:fact(0,null)});
+  for(const now of [8,20,30])expect(evaluateFixedScheduleScope(input,at(now),{at:at(8),kind:'cancelled'}).nodes[0]!.ownSla).toMatchObject({state:'terminated',overdueMinutes:{minimum:240,maximum:240}});
+  for(const stop of [null,at(-1),at(40)])expect(evaluateFixedScheduleScope(input,at(30),{at:stop,kind:'special_closure'}).nodes[0]!.ownSla).toMatchObject({state:'terminated',overdueMinutes:null});
+  input.facts={a:fact(0,null,{terminated:true})};expect(evaluate(input,30).nodes[0]!.ownSla.overdueMinutes).toBeNull();
+ });
+
 });

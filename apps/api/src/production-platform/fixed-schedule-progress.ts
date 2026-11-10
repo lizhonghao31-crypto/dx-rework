@@ -104,8 +104,9 @@ export function evaluateFixedScheduleScope(input:ScheduleScopeInput,asOf:string,
    }
   }
   const lag=boundary&&end!==null&&calendar?range(scheduleElapsed(end,boundary.available[0],calendar),scheduleElapsed(end,boundary.available[1],calendar)):null;
-  const ownCalendar=work.responsibilityCalendar,ownStart=fact?scheduleOccurrenceBounds(fact.clockStart,asOf):null,ownEnd=completed?actual:[now,now] as const;
-  const ownKnown=Boolean(work.responsibilitySlaRef&&work.responsibilityMinutes!==null&&work.responsibilityMinutes!==undefined&&ownCalendar&&ownStart&&ownEnd);
+  const stop=terminated?timestamp(termination?.at):null;
+  const ownCalendar=work.responsibilityCalendar,ownStart=fact?scheduleOccurrenceBounds(fact.clockStart,asOf):null,ownEnd=completed?actual:terminated?stop!==null&&stop<=now?[stop,stop] as const:null:[now,now] as const;
+  const ownKnown=Boolean(work.responsibilitySlaRef&&work.responsibilityMinutes!==null&&work.responsibilityMinutes!==undefined&&ownCalendar&&ownStart&&ownEnd&&ownEnd[1]>=ownStart[0]);
   const own=ownKnown?range(Math.max(0,scheduleElapsed(ownStart![1],ownEnd![0],ownCalendar!)-work.responsibilityMinutes!),Math.max(0,scheduleElapsed(ownStart![0],ownEnd![1],ownCalendar!)-work.responsibilityMinutes!)):null;
   const ownState=!work.responsibilitySlaRef?'not_adopted':terminated?'terminated':!own?'unknown':own.minimum>0?'overdue':own.maximum===0?'within':'unknown';
   results.set(id,{id,scopeRef:input.scopeRef,targetRevision:work.targetRevision??input.targetRevision,canonicalWorkRef:work.canonicalWorkRef,state:terminated?'terminated':state(lag),lagMinutes:lag,businessCompleted:completed,availabilityBound:boundary?{earliest:iso(boundary.available[0]),latest:iso(boundary.available[1])}:null,creditLimit:boundary?{earliest:iso(boundary.credit[0]),latest:iso(boundary.credit[1])}:null,goalDelta,ownSla:{state:ownState,overdueMinutes:own,sourceRef:work.responsibilitySlaRef},coverage});
@@ -127,11 +128,13 @@ export function fixedDurationSummary(scopes:readonly ScheduleScopeInput[],asOf:s
   const terminalEnds=scope.terminalIds.map(id=>timestamp(scope.work.find(work=>work.id===id)?.end));
   return terminalEnds.length&&terminalEnds.every(at=>at!==null)?Math.max(...terminalEnds as number[]):null;
  });
- const ready=scopes.flatMap(scope=>Object.values(scope.facts).map(fact=>scheduleOccurrenceBounds(fact.ready,asOf)).filter((value):value is Interval=>value!==null));
+ const roots=scopes.flatMap(scope=>scope.work.filter(work=>!work.includedIn&&work.dependsOn.length===0&&work.accountingRole!=='added_work').map(work=>scheduleOccurrenceBounds(scope.facts[work.id]?.ready??unknown,asOf)));
+ // Missing original roots cannot be replaced by a surviving downstream R.
+ const ready=roots.length&&roots.every((value):value is Interval=>value!==null)?roots:null;
  const terminal=scopes.flatMap(scope=>scope.terminalIds.map(id=>scope.facts[id]));
  const completion=terminal.map(fact=>completedBounds(fact,asOf));
  const allDelivered=terminal.length>0&&completion.every(Boolean),delivery=allDelivered?[Math.max(...completion.map(at=>at![0])),Math.max(...completion.map(at=>at![1]))] as const:null;
- const first=ready.length?[Math.min(...ready.map(at=>at[0])),Math.min(...ready.map(at=>at[1]))] as const:null;
+ const first=ready?.length?[Math.min(...ready.map(at=>at[0])),Math.min(...ready.map(at=>at[1]))] as const:null;
  const observed=allDelivered?delivery:termination?timestamp(termination.at)===null?null:[timestamp(termination.at)!,timestamp(termination.at)!] as const:[Date.parse(asOf),Date.parse(asOf)] as const;
  const span=first&&observed&&observed[0]>=first[1]?range((observed[0]-first[1])/MINUTE,(observed[1]-first[0])/MINUTE):null;
  const occurrence=(at:Interval|null):ScheduleOccurrence=>!at?unknown:at[0]===at[1]?{precision:'instant',at:iso(at[0])}:dateOf(at[0])===dateOf(at[1])?{precision:'date',date:dateOf(at[0])}:unknown;

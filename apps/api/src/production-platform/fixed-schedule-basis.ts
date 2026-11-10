@@ -107,6 +107,15 @@ export async function readFixedScheduleBasis(db:DB,resource:BusinessTimeScope,it
    if(ownId.startsWith('bulk_qc:')){const windows=factory?.windows.filter(window=>window.kind==='bulk_qc'&&window.stepRef===ownId.slice(8))??[];fact={...fact,ready:latest(windows.map(window=>occurrence(window.enteredAt))),clockStart:latest(windows.map(window=>occurrence(window.enteredAt))),completed:latest(windows.map(window=>occurrence(window.completedAt))),businessCompleted:windows.length>0&&windows.every(window=>window.complete),evidenceRefs:[...fact.evidenceRefs,...windows.map(window=>window.evidence)]};}
    facts[definition.id]=fact;
   }
+  // Each adopted craft window includes its own return confirmation. A
+  // processing report closes only that task, not the parent craft window.
+  for(const parent of definitions.filter(work=>['development_printing','development_embroidery'].includes(work.parameterKey??''))){
+   const confirmations=definitions.filter(work=>work.includedIn===parent.id&&work.parameterKey==='development_craft_return');
+   const receipt=confirmations.length===1?facts[confirmations[0]!.id]:null,fact=facts[parent.id]!;
+   fact.businessCompleted=fact.businessCompleted&&receipt?.businessCompleted===true;
+   fact.completed=fact.businessCompleted?receipt!.completed:unknown;
+   fact.evidenceRefs=[...fact.evidenceRefs,...receipt?.evidenceRefs??[]];
+  }
   for(const work of works){const fact=facts[work.id]!;fact.waitingForPredecessors=fact.ready.precision==='unknown'&&work.dependsOn.length>0&&work.dependsOn.some(id=>!facts[id]?.businessCompleted);}
   const goalIds=consumer.customerGoalIds?.length?consumer.customerGoalIds:Object.keys(consumer.ends).filter(id=>!id.includes('ship_sample')&&id!=='development_shipping');
   // Development's own adopted goal is not a customer's PO delivery promise.
