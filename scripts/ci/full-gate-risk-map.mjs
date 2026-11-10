@@ -57,6 +57,7 @@ const isMigration = (path) =>
 // It does not itself migrate, back up, activate or transfer a release.
 const SHARED_GATE_INPUTS = new Set([
   ".github/workflows/ci.yml",
+  ".github/workflows/full-gate.yml",
   "scripts/ci/full-gate-risk-map.mjs",
   "scripts/ci/ci-gate-runtime.mjs",
   "scripts/ci/full-gate-lanes.mjs",
@@ -184,6 +185,10 @@ export const classifyFullGatePaths = (inputPaths) => {
       'tests/integration/development-sla-enrollment-postgres.test.ts','tests/integration/development-technical-postgres.test.ts',
       'tests/integration/production-readiness-postgres.test.ts','tests/integration/factory-logistics-cockpit-postgres.test.ts','tests/integration/sourcing-pr03-postgres.test.ts']);
     domains.add('fixed-timeline-native-crafts');
+  }
+  if(paths.some(path=>['apps/api/src/receiving/packing-actual-time.ts','apps/api/src/receiving/packing-alias-invalidation.ts','apps/api/src/receiving/receiving-service.ts','apps/api/src/receiving/receiving-quantity-query.ts','apps/api/src/receiving/receiving-board-query.ts','apps/api/src/receiving/receiving-board-filters.ts','apps/api/src/receiving/receiving-analysis.ts','apps/api/src/production-platform/order-closure-service.ts','apps/api/src/production-platform/packing-sla-evidence.ts','apps/api/src/production-platform/delivery-calendar-facts.ts','packages/contracts/src/receiving-packing-time.ts','tests/integration/effective-packing-postgres.test.ts'].includes(path))){
+    mappedTests.add('tests/integration/effective-packing-postgres.test.ts');
+    domains.add('effective-packing-scope');
   }
   let migrationSensitive = false;
   let receivingSensitive = false;

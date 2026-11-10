@@ -65,3 +65,11 @@
 尚未迁出的业务命令继续沿原服务维护；预算更正、装箱及差异等只有对应业务需求触发后才按 F5 核迁出，不扩展为全命令搬迁。纯规则／映射不依赖 React、Fastify、新连接或私自提交；已有事务 client 必须继续传入，不把同事务读回换成池外读取。
 
 相关 PR 只需核对：职责放置是否正确，事务／权限／业务反例是否完整，是否保留当前按页读取、全量统计、敏感字段及性能边界。确需例外时在原 PR 说明原因、成本、风险与回退。回退本单元接线时保留图片不误删底线及已合并的业务、时效和 PERF01–12 成果。
+
+### 供应链 PR03：有效装箱读取
+
+`receiving-quantity-query.ts` 的 `RECEIVING_GROUP_PACKING_JOIN_SQL`/`RECEIVING_GROUP_RESOLUTION_SCOPE_SQL` 统一原收货组的当前累计head与有效处理范围；原ReceivingService继续拥有权限、组锁、写入、幂等和审计。`packing-actual-time.ts` 只校验/解析原入口显式发生时间，`receiving-packing-time.ts` 契约保留instant/date/unknown精度，登记时间不替代物理A。`journey-cut-scopes.ts` 共用原生身份谓词，结案和日历对歧义范围保留未知；`packing-sla-evidence.ts` 只从同PO质量/数量/时间证据形成物理完成，保留数量完成但时间无证的事实。现有Journey有界队列随计算版本更新，不在GET全库重建。
+
+本批附带修复已复现的CI回执传输故障：三个lane的原始记录通过同run/attempt artifact传递，只把各job结果与bundle hash作为短环境输入；原Head/base、版本、完整计划、构建与清理核验不变，不减少业务检查。#956的最终汇总失败仍保留，不能称远端Full通过。
+
+`readNativePackingHeads`对授权cut集合批量读取，包括已删除但未明确撤销的来源；不靠制造收货行让head可见。原Root累计写入记录当前合并scope事件集合，跨旧scope后的新累计须在同锁内确认。`NATIVE_EMPTY_PACKING_SCOPE_SQL`在同一RR内用原创建审计、子链与旧别名候选证明正常空范围，漏挂或旧来源候选仍unknown。尚不确证的历史多cut分配仍不猜；本批不自动改历史关联。

@@ -1,5 +1,8 @@
 import {readReceivingBoard,type BoardResult} from "./receiving-board-query.js";
-import {RECEIVING_BOARD_BASE_SQL,type RepeatedReceivingSource,type ReceiptSource,type ReceivingDifferenceType,type StyleOperationSnapshot} from "./receiving-quantity-query.js";
+import {invalidatePackingAliasCandidates} from './packing-alias-invalidation.js';
+import {normalizePackingTime,resolvePackingTime} from './packing-actual-time.js';
+import type {PackingTimeInput,PackingActualTime} from '@dx-rework/contracts';
+import {RECEIVING_PACKING_SCOPE_UNRESOLVED_SQL,RECEIVING_GROUP_PACKING_JOIN_SQL,RECEIVING_BOARD_BASE_SQL,type RepeatedReceivingSource,type ReceiptSource,type ReceivingDifferenceType,type StyleOperationSnapshot} from "./receiving-quantity-query.js";
 export {RECEIVING_BOARD_BASE_SQL,RECEIVING_BATCH_BOARD_BASE_SQL,DIGITAL_RECEIVING_BASE_SQL} from "./receiving-quantity-query.js";
 import {businessNow} from '../acceptance-clock/business-time.js';
 import {linkDigitalReceipt} from "../production-platform/receiving-link-adapter.js";
@@ -27,6 +30,7 @@ type RecordPackingInput = Readonly<{
   expectedVersion: number;
   expectedPackingRevisionId?: string | null;
   packingQuantity: number;
+  packingTime?:PackingTimeInput;
 }>;
 
 type ResolveReceivingDifferenceInput = Readonly<{
@@ -141,6 +145,7 @@ type PackingRevisionResult = Readonly<{
   packingQuantity: number;
   recordedBy: string;
   recordedAt: string;
+  packingActualTime?:PackingActualTime;
 }>;
 
 type DifferenceResolutionResult = Readonly<{
@@ -557,6 +562,7 @@ export class ReceivingService {
       actual_quantity: string;
       packing_revision_id: string | null;
       packing_quantity: string | null;
+      packing_source_quantity:string|null;packing_scope_merge_event_ids:string[];packing_scope_unresolved:boolean;
       receiving_quantity_changed_at: string | null;
       receiving_quantity_revision: string;
       actual_quantity_changed_at: string | null;
@@ -566,7 +572,7 @@ export class ReceivingService {
        SELECT action.receiving_batch_id,totals.style_key AS style_no,action.version,
               totals.document_quantity,
               totals.current_actual_quantity AS actual_quantity,
-              packing.packing_revision_id,packing.packing_quantity,
+              packing.packing_revision_id,packing.packing_quantity,packing.source_quantity AS packing_source_quantity,packing_scope.merge_event_ids AS packing_scope_merge_event_ids,${RECEIVING_PACKING_SCOPE_UNRESOLVED_SQL} AS packing_scope_unresolved,
               totals.receiving_quantity_changed_at::text,totals.actual_quantity_changed_at::text,
               totals.receiving_quantity_revision,totals.actual_quantity_revision
        FROM style_totals totals
@@ -577,13 +583,7 @@ export class ReceivingService {
          ORDER BY item.last_all_received_at DESC NULLS LAST,item.receiving_batch_id DESC
          LIMIT 1
        ) action ON true
-       LEFT JOIN LATERAL (
-         SELECT revision.packing_revision_id,revision.packing_quantity
-         FROM receiving_packing_revisions revision
-         WHERE revision.receiving_batch_id=action.receiving_batch_id
-         ORDER BY revision.created_at DESC,revision.packing_revision_id DESC
-         LIMIT 1
-       ) packing ON true
+       ${RECEIVING_GROUP_PACKING_JOIN_SQL}
        WHERE totals.group_key=COALESCE('cut:'||$4::uuid::text,'style:'||$3)`,
       ["2000-01-01", "2999-12-31", styleNo, batch.cutting_order_id],
     );
@@ -600,6 +600,7 @@ export class ReceivingService {
       actualQuantity: Number(snapshot.actual_quantity),
       packingRevisionId: snapshot.packing_revision_id,
       packingQuantity: snapshot.packing_quantity === null ? null : Number(snapshot.packing_quantity),
+      packingSourceQuantity:snapshot.packing_source_quantity==null?null:Number(snapshot.packing_source_quantity),packingScopeMergeEventIds:snapshot.packing_scope_merge_event_ids,packingScopeUnresolved:snapshot.packing_scope_unresolved,
       receivingQuantityChangedAt:snapshot.receiving_quantity_changed_at,
       receivingQuantityRevision:snapshot.receiving_quantity_revision,
       actualQuantityChangedAt:snapshot.actual_quantity_changed_at,
@@ -931,6 +932,7 @@ export class ReceivingService {
         );
         if (deleted.rowCount !== 1) fail("来源收货订单状态已变化，请刷新后重试", 409, "CONFLICT");
         await this.replaceReceivingImages(client, actor, targetId, normalized.attachmentIds);
+        await invalidatePackingAliasCandidates(client,[current.style_no,normalized.styleNo]);
         await client.query("COMMIT");
         return after;
       }
@@ -977,6 +979,7 @@ export class ReceivingService {
         );
       }
       await this.replaceReceivingImages(client, actor, receivingBatchId, normalized.attachmentIds);
+      await invalidatePackingAliasCandidates(client,[current.style_no,normalized.styleNo]);
       await client.query("COMMIT");
       return after;
     } catch (error) {
@@ -1040,6 +1043,7 @@ export class ReceivingService {
         [receivingBatchId, actor.actorId, eventId, actor.requestId, version],
       );
       if (updated.rowCount !== 1) fail("收货订单状态已变化，请刷新后重试", 409, "CONFLICT");
+      await invalidatePackingAliasCandidates(client,[current.style_no]);
       await client.query("COMMIT");
       return { receivingBatchId, deleted: true };
     } catch (error) {
@@ -1470,6 +1474,7 @@ export class ReceivingService {
       if (updated.rowCount !== 1) fail("该订单已不可追加收货，请重新搜索选择", 409, "INVALID_STATE_TRANSITION");
     }
     const row = inserted.rows[0]!;
+    if(!input.cuttingOrderId)await invalidatePackingAliasCandidates(client,[input.styleNo]);
     await linkDigitalReceipt(client,receiptId,receivingBatchId);
     if (this.production && input.cuttingOrderId) {
       await this.production.linkReceiptByCuttingOrder(client,actor,{
@@ -1910,6 +1915,7 @@ export class ReceivingService {
       expectedVersion: this.validateExpectedVersion(input.expectedVersion),
       expectedPackingRevisionId: normalizeOptionalUuid(input.expectedPackingRevisionId, "装箱数量版本"),
       packingQuantity: validateQuantity(input.packingQuantity, "装箱数量", true),
+      ...(input.packingTime===undefined?{}:{packingTime:normalizePackingTime(input.packingTime)}),
     };
     const scope = "receiving.packing.record";
     const client = await this.database.connect();
@@ -1924,7 +1930,7 @@ export class ReceivingService {
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       }, async () => {
         const snapshot = await this.styleOperationSnapshot(client, normalized.receivingBatchId);
-        if (snapshot.packingRevisionId !== null && !actor.actorRoles.includes("root_superuser")) {
+        if ((snapshot.packingRevisionId !== null||snapshot.packingScopeUnresolved) && !actor.actorRoles.includes("root_superuser")) {
           fail("已录入的装箱数量只有Root可以修改",403,"FORBIDDEN");
         }
         if (snapshot.version !== normalized.expectedVersion
@@ -1932,15 +1938,16 @@ export class ReceivingService {
           fail("订单或装箱数量已更新，本次未覆盖；请在本单回货处理页重新读取累计收货与装箱数，再核对后提交", 409, "CONFLICT");
         }
         const packingRevisionId = randomUUID();
+        const packingActualTime=resolvePackingTime(normalized.packingTime,businessNow().toISOString());
         const eventId = await this.events.append(client, actor, {
           action: "receiving.packing.record",
           entityType: "receiving_batch",
           entityId: snapshot.receivingBatchId,
           before: snapshot.packingRevisionId === null ? null : {
             packingRevisionId: snapshot.packingRevisionId,
-            packingQuantity: snapshot.packingQuantity,
+            packingQuantity: snapshot.packingSourceQuantity??snapshot.packingQuantity,
           },
-          after: { packingRevisionId, packingQuantity: normalized.packingQuantity },
+          after: { packingRevisionId, packingQuantity: normalized.packingQuantity,packingScopeMergeEventIds:snapshot.packingScopeMergeEventIds??[],...(normalized.packingTime?{packingActualTime}:{}) },
         });
         const inserted = await client.query<{
           packing_revision_id: string;
@@ -1966,6 +1973,7 @@ export class ReceivingService {
             packingQuantity: Number(row.packing_quantity),
             recordedBy: row.recorded_by,
             recordedAt: row.created_at.toISOString(),
+            ...(normalized.packingTime?{packingActualTime}:{}),
           },
         };
       });

@@ -56,7 +56,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const order=await make(),other=await make(1),query=new DigitalJourneyQuery(f.db);
   const before=await query.read(f.root,order.productionOrderId,undefined,true),built=await repo.buildOne({kind:'order',id:order.productionOrderId});
   expect(built.model.orderId).toBe(order.productionOrderId);expect(built.model.quantities?.lines.map(l=>l.lineId)).toEqual(order.lines.map(l=>l.lineId));
-  expect(built.model.quantities?.lines.map(l=>l.demand)).toEqual([10,10]);expect(built.model.quantities?.lines.every(l=>l.packed===null)).toBe(true);
+  expect(built.model.quantities?.lines.map(l=>l.demand)).toEqual([10,10]);expect(built.model.quantities?.lines.every(l=>l.packed===0)).toBe(true);
   expect(built.model.nodes.some(n=>n.key==='development_pattern'&&n.progressApplicability==='unknown')).toBe(true);
   expect((await f.db.query('SELECT resource_id FROM digital_journey_fact_models')).rows).toEqual([{resource_id:order.productionOrderId}]);
   expect(JSON.stringify(built.model)).not.toContain(other.productionOrderId);

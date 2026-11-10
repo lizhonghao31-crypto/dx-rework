@@ -1,3 +1,4 @@
+import {RECEIVING_PACKING_SCOPE_UNRESOLVED_SQL,RECEIVING_GROUP_PACKING_JOIN_SQL,RECEIVING_GROUP_RESOLUTION_SCOPE_SQL} from './receiving-quantity-query.js';
 import { ReceivingAnalysisQuerySchema, ReceivingAnalysisResponseSchema } from "@dx-rework/contracts";
 import type { Pool } from "pg";
 import { ApplicationError } from "../platform/errors.js";
@@ -27,18 +28,18 @@ export async function readReceivingAnalysis(database: Pool, baseSql: string, act
     await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
     const facts = `${baseSql}, analysis_facts AS (
       SELECT totals.*,action.receiving_batch_id,action.version,
-        packing.packing_revision_id,packing.packing_quantity,
+        packing.packing_revision_id,packing.packing_quantity,${RECEIVING_PACKING_SCOPE_UNRESOLVED_SQL} AS packing_scope_unresolved,
         totals.cumulative_actual_quantity-totals.document_quantity AS receiving_difference,
         packing.packing_quantity-totals.cumulative_actual_quantity AS packing_difference,
         EXISTS(SELECT 1 FROM receiving_difference_resolutions resolution
-          WHERE resolution.receiving_batch_id=action.receiving_batch_id AND resolution.difference_type='receiving'
+          WHERE ${RECEIVING_GROUP_RESOLUTION_SCOPE_SQL} AND resolution.difference_type='receiving'
             AND resolution.document_quantity_snapshot=totals.document_quantity
             AND resolution.actual_quantity_snapshot=totals.cumulative_actual_quantity
             AND resolution.difference_quantity_snapshot=totals.cumulative_actual_quantity-totals.document_quantity
             AND COALESCE((SELECT event.after_state->>'quantityRevision' FROM operation_events event WHERE event.event_id=resolution.operation_event_id)=totals.receiving_quantity_revision,
             totals.receiving_quantity_changed_at IS NULL OR resolution.created_at>=totals.receiving_quantity_changed_at)) AS receiving_handled,
         EXISTS(SELECT 1 FROM receiving_difference_resolutions resolution
-          WHERE resolution.receiving_batch_id=action.receiving_batch_id AND resolution.difference_type='packing'
+          WHERE ${RECEIVING_GROUP_RESOLUTION_SCOPE_SQL} AND resolution.difference_type='packing'
             AND resolution.actual_quantity_snapshot=totals.cumulative_actual_quantity
             AND resolution.packing_revision_id=packing.packing_revision_id
             AND resolution.packing_quantity_snapshot=packing.packing_quantity
@@ -49,9 +50,7 @@ export async function readReceivingAnalysis(database: Pool, baseSql: string, act
       JOIN LATERAL (SELECT batch.receiving_batch_id,batch.version FROM batch_totals batch
         WHERE batch.group_key=totals.group_key ORDER BY batch.last_through_end_received_at DESC NULLS LAST,
           batch.receiving_batch_id DESC LIMIT 1) action ON true
-      LEFT JOIN LATERAL (SELECT revision.packing_revision_id,revision.packing_quantity FROM receiving_packing_revisions revision
-        WHERE revision.receiving_batch_id=action.receiving_batch_id
-        ORDER BY revision.created_at DESC,revision.packing_revision_id DESC LIMIT 1) packing ON true
+      ${RECEIVING_GROUP_PACKING_JOIN_SQL}
     ), filtered AS (SELECT * FROM analysis_facts WHERE $4='all'
       OR ($4='receiving_difference' AND receiving_difference<>0)
       OR ($4='packing_difference' AND packing_difference<>0)

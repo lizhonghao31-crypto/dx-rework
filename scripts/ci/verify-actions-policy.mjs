@@ -154,7 +154,7 @@ assert(release.includes("npm run secret:scan:full"), "manual release must rescan
 assert(!/^\s*pull_request:/m.test(governance), "standalone Governance must not auto-run on pull requests");
 assert(!/^\s*pull_request:/m.test(preview), "Preview must not auto-run on pull requests");
 
-assert(full.includes('needs: [prepare, non-db, postgres]') && full.includes('FULL_GATE_NEEDS: ${{ toJSON(needs) }}'), 'Full final result must depend on all three jobs');
+assert(full.includes('needs: [prepare, non-db, postgres]') && ['FULL_GATE_PREPARE_RESULT: ${{ needs.prepare.result }}','FULL_GATE_NON_DB_RESULT: ${{ needs.non-db.result }}','FULL_GATE_POSTGRES_RESULT: ${{ needs.postgres.result }}','FULL_GATE_RECORD_DIRECTORY:'].every(value=>full.includes(value)) && !full.includes('FULL_GATE_NEEDS:'), 'Full final result must validate all three job results and artifact records without an oversized environment');
 assert(countOccurrences(full, 'needs: prepare') === 2 && !full.includes('needs: non-db'), 'Complete non-DB and PG must be siblings');
 assert(!full.includes('continue-on-error:'), 'Required lanes may not suppress failures');
 assert(!/^ {4}concurrency:/m.test(full), 'Sibling lanes must not serialize or cancel each other');

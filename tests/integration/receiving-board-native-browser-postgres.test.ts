@@ -68,6 +68,19 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect((await f.db.query("SELECT count(*)::int n FROM receiving_packing_revisions WHERE receiving_batch_id=$1",[ids[0]])).rows[0].n).toBe(1);await page.screenshot({path:join(evidence,"native-packing-recovered-1165.png"),fullPage:true});
   }finally{await context.close();}
  });
+ it("records date precision in the original packing dialog and keeps quantity corrections without an invented actual time",async()=>{
+  const {context,page}=await open(0);try{
+   await page.locator('.order-board-packing-button').filter({hasText:'修改'}).click();
+   const dialog=page.getByRole('dialog');expect(await dialog.getByLabel('实际装箱时间',{exact:true}).inputValue()).toBe('unknown');
+   await dialog.getByLabel('实际装箱时间',{exact:true}).selectOption('date');const date='2026-01-01';await dialog.getByLabel('实际装箱日期',{exact:true}).fill(date);
+   await dialog.getByRole('button',{name:'保存',exact:true}).click();await dialog.waitFor({state:'hidden'});
+   let saved=(await f.db.query("SELECT event.after_state->'packingActualTime' actual FROM receiving_packing_revisions revision JOIN operation_events event ON event.event_id=revision.operation_event_id WHERE revision.receiving_batch_id=$1 ORDER BY revision.created_at DESC LIMIT 1",[ids[0]])).rows[0]!.actual;
+   expect(saved).toEqual({precision:'date',date});await page.getByText('实际 '+date,{exact:true}).waitFor();
+   await page.locator('.order-board-packing-button').filter({hasText:'修改'}).click();expect(await dialog.getByLabel('实际装箱时间',{exact:true}).inputValue()).toBe('unknown');
+   await dialog.getByLabel('当前累计已装箱数量',{exact:true}).fill('8');await dialog.getByRole('button',{name:'保存',exact:true}).click();await dialog.waitFor({state:'hidden'});
+   saved=(await f.db.query("SELECT event.after_state->'packingActualTime' actual FROM receiving_packing_revisions revision JOIN operation_events event ON event.event_id=revision.operation_event_id WHERE revision.receiving_batch_id=$1 ORDER BY revision.created_at DESC LIMIT 1",[ids[0]])).rows[0]!.actual;expect(saved).toEqual({precision:'unknown'});
+  }finally{await context.close();}
+ });
  it("keeps native difference recovery reachable inside the modal and does not treat a GET as its receipt",async()=>{
   const {context,page}=await open(1);try{
    const posts:Array<{body:string|null;key:string|null}>=[];

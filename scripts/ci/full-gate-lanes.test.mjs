@@ -5,7 +5,7 @@ import {execFileSync} from 'node:child_process';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {finalRef} from './pr-gate-protocol.mjs';
-import {aggregate,owner,digest,validateBuildFiles,validateBundle,validateNonDatabase,identity,laneBuildMode,validateLaneBuild} from './full-gate-lanes.mjs';
+import {aggregate,laneNeedsFromFiles,owner,digest,validateBuildFiles,validateBundle,validateNonDatabase,identity,laneBuildMode,validateLaneBuild} from './full-gate-lanes.mjs';
 import {checkCatalog,scopeRequired} from './ci-gate-runtime.mjs';
 const id={repository:'lizhonghao31-crypto/dx-rework',pr:1,head:'a'.repeat(40),base:'b'.repeat(40),baseRef:'release/digital-production-v1',kind:'full',runId:'1',attempt:'1'};
 const inputs={scope:{event:'create',final:'true',base:id.baseRef,db:'true',mapped:'test',journey:'true',migration:'true',business_chain:'true',deployment:'true',maintenance:'true',activation:'true',transfer:'true'},postgres:{status:'required',plan:[]}};
@@ -51,7 +51,7 @@ test('non-DB file evidence rejects omission, duplicates, empty and failed result
 test('request identity cannot be a light run, missing attempt or another kind',()=>{const p={...id,phase:'final'};identity(p,{GITHUB_RUN_ID:'1',GITHUB_RUN_ATTEMPT:'1'});assert.throws(()=>identity({...p,phase:'light'},{GITHUB_RUN_ID:'1',GITHUB_RUN_ATTEMPT:'1'}));assert.throws(()=>identity(p,{}));});
 test('workflow dispatches both lanes only after one common bundle and aggregates actual GitHub results',()=>{
  const w=readFileSync('.github/workflows/full-gate.yml','utf8'),caller=readFileSync('.github/workflows/ci.yml','utf8');
- assert.equal((w.match(/needs: prepare/g)||[]).length,2);assert.match(w,/needs: \[prepare, non-db, postgres\]/);assert.match(w,/FULL_GATE_NEEDS: \$\{\{ toJSON\(needs\) \}\}/);
+ assert.equal((w.match(/needs: prepare/g)||[]).length,2);assert.match(w,/needs: \[prepare, non-db, postgres\]/);assert.doesNotMatch(w,/FULL_GATE_NEEDS:/);assert.match(w,/FULL_GATE_RECORD_DIRECTORY:/);assert.match(w,/pattern: full-record-\*-\$\{\{ github.run_id \}\}-\$\{\{ github.run_attempt \}\}/);
  assert.equal((w.match(/full-gate-lanes.mjs restore/g)||[]).length,2);assert.equal((w.match(/--full-gate\n/g)||[]).length,1);assert.doesNotMatch(w,/continue-on-error:|^ {4}concurrency:/m);
  assert.match(caller,/group: pr-gate-\$\{\{ needs.request.outputs.pr \}\}/);assert.match(w,/--reporter=json --outputFile=/);
 });
@@ -129,4 +129,23 @@ test('different image revisions execute a real local workspace build; corrupt in
   writeFileSync(bundle,original);
   assert.throws(()=>execFileSync(process.execPath,[script,'restore'],{cwd:consumer,env:{...consumerEnv,BUILD_FIXTURE_FAIL:'1'},stdio:'pipe'}));assert.equal(existsSync(proofFile),false);assert.equal(existsSync(join(consumer,'apps/api/dist/out.js')),false);
  }finally{rmSync(root,{recursive:true,force:true});}
+});
+
+test('artifact transport starts a process with a large real-shape test plan and retains identity, status and hash validation',()=>{
+ const directory=mkdtempSync(join(tmpdir(),'full-lane-record-'));try{
+  const n=fixture(),large=structuredClone(inputs);large.nonDatabase={files:Array.from({length:6000},(_,i)=>'tests/unit/representative-business-case-'+i+'.test.ts')};
+  for(const [lane,value]of Object.entries(n)){
+   const record=JSON.parse(value.outputs.record);record.inputs=large;value.outputs.record=JSON.stringify(record);assert.ok(Buffer.byteLength(value.outputs.record)>131072);
+   const path=join(directory,`full-record-${lane}-${id.runId}-${id.attempt}`);mkdirSync(path);writeFileSync(join(path,'full-lane-record.json'),value.outputs.record);
+  }
+  const environment={FULL_GATE_PREPARE_RESULT:'success',FULL_GATE_NON_DB_RESULT:'success',FULL_GATE_POSTGRES_RESULT:'success',FULL_GATE_BUNDLE_HASH:hash};
+  const script=`import {laneNeedsFromFiles,aggregate} from ${JSON.stringify(new URL('./full-gate-lanes.mjs',import.meta.url).href)};import{readFileSync}from'node:fs';const spec=JSON.parse(readFileSync(process.argv[2]));console.log(Object.keys(aggregate(laneNeedsFromFiles(process.argv[1],spec.id,process.env),spec.id,spec.inputs)).length);`;
+  const spec=join(directory,'context.json');writeFileSync(spec,JSON.stringify({id,inputs:large}));
+  assert.equal(Number(execFileSync(process.execPath,['--input-type=module','-e',script,directory,spec],{encoding:'utf8',env:{...process.env,...environment}}).trim()),catalog.length);
+  const read=env=>laneNeedsFromFiles(directory,id,{...environment,...env});
+  assert.throws(()=>aggregate(read({FULL_GATE_POSTGRES_RESULT:'failure'}),id,large),/NOT_SUCCESS/);
+  assert.throws(()=>aggregate(read({FULL_GATE_BUNDLE_HASH:'d'.repeat(64)}),id,large),/MISMATCH/);
+  assert.throws(()=>aggregate(read({}),{...id,head:'d'.repeat(40)},large),/MISMATCH/);
+  rmSync(join(directory,'full-record-postgres-1-1','full-lane-record.json'));assert.throws(()=>read({}));
+ }finally{rmSync(directory,{recursive:true,force:true});}
 });

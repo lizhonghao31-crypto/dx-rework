@@ -25,7 +25,7 @@ const url = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
       CREATE TABLE receiving_receipts(receipt_id uuid PRIMARY KEY,receiving_batch_id uuid,received_at timestamptz,document_quantity bigint,actual_quantity bigint,defective_quantity bigint DEFAULT 0,receiving_source text DEFAULT 'jiashun',operation_event_id uuid);
       CREATE TABLE operation_events(entity_id text,action text,entity_type text,after_state jsonb,before_state jsonb,created_at timestamptz,event_id uuid DEFAULT gen_random_uuid());
       CREATE TABLE receiving_receipt_corrections(correction_id uuid,receipt_id uuid,actual_quantity bigint,document_quantity bigint,receiving_source text,created_at timestamptz);
-      CREATE TABLE receiving_packing_revisions(packing_revision_id uuid,receiving_batch_id uuid,packing_quantity bigint,created_at timestamptz);
+      CREATE TABLE receiving_packing_revisions(packing_revision_id uuid,receiving_batch_id uuid,packing_quantity bigint,created_at timestamptz,operation_event_id uuid,recorded_by uuid);
       CREATE TABLE receiving_difference_resolutions(resolution_id uuid,receiving_batch_id uuid,difference_type text,document_quantity_snapshot bigint,
         actual_quantity_snapshot bigint,packing_revision_id uuid,packing_quantity_snapshot bigint,difference_quantity_snapshot bigint,result text,created_at timestamptz,operation_event_id uuid);
       CREATE TABLE sourcing_production_receipt_links(receipt_id uuid PRIMARY KEY,production_order_id uuid);
@@ -42,7 +42,7 @@ const url = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
     await database.query("INSERT INTO sourcing_production_orders VALUES($1,$2,'同名供应商','HT-1',$3)", [production, supplier,contract]);
     await database.query("INSERT INTO sourcing_contract_content_overrides VALUES($1,$2)",[contract,{contractNumber:"人工-HT-1"}]);
     await database.query("INSERT INTO sourcing_production_receipt_links VALUES($1,$2)", [receipt, production]);
-    await database.query("INSERT INTO receiving_packing_revisions VALUES($1,$2,80,'2026-09-04'),($3,$2,90,'2026-09-05')", [oldPacking, secondBatch, packing]);
+    await database.query("INSERT INTO receiving_packing_revisions(packing_revision_id,receiving_batch_id,packing_quantity,created_at) VALUES($1,$2,80,'2026-09-04'),($3,$2,90,'2026-09-05')", [oldPacking, secondBatch, packing]);
     await database.query("INSERT INTO receiving_difference_resolutions(resolution_id,receiving_batch_id,difference_type,document_quantity_snapshot,actual_quantity_snapshot,packing_revision_id,packing_quantity_snapshot,difference_quantity_snapshot,result,created_at) VALUES($1,$2,'packing',200,100,$3,80,20,'旧方向快照','2026-09-04'),($4,$2,'packing',200,100,$5,90,-10,'短装待继续','2026-09-05')", [historicalResolution, secondBatch, oldPacking, randomUUID(), packing]);
     for (let index = 0; index < 16; index++) {
       const id = randomUUID();

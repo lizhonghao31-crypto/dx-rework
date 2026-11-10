@@ -28,7 +28,7 @@ export function DeliveryYearGrid({data,selectedDate,onMonth,onDay}:{data:Deliver
   })}</div>
  </section>;
 }
-export function DeliveryMonthGrid({data,selectedDate,onSelect,onOpen}:{data:DeliveryMonthResponse;selectedDate:string;onSelect:(date:string)=>void;onOpen:(date:string)=>void}){
+export function DeliveryMonthGrid({data,selectedDate,onSelect}:{data:DeliveryMonthResponse;selectedDate:string;onSelect:(date:string)=>void}){
  const byDate=new Map(data.days.map(day=>[day.date,day]));
  return <section className="delivery-month-panel dx-production-panel" aria-label={data.yearMonth+'交付月历'}>
   <div className="delivery-weekdays"><span>周一</span><span>周二</span><span>周三</span><span>周四</span><span>周五</span><span>周六</span><span>周日</span></div>
@@ -37,7 +37,6 @@ export function DeliveryMonthGrid({data,selectedDate,onSelect,onOpen}:{data:Deli
    const day=byDate.get(date)!,present=day.summary.poCount>0;
    return <div className={'delivery-month-day'+(date===selectedDate?' is-selected':'')+(date===data.asOfBusinessDate?' is-today':'')} key={date}>
     <button type="button" className="delivery-day-select" onClick={()=>onSelect(date)} aria-label={dayLabel(day)} aria-pressed={date===selectedDate} aria-current={date===data.asOfBusinessDate?'date':undefined}><strong>{Number(date.slice(8))}</strong>{present&&<><span>应交 {deliveryQtyText(day.summary.orderedQty)}</span><span>待交 {deliveryQtyText(day.summary.pendingQty)}</span><DeliveryStateMarks day={day} words/></>}</button>
-    {present&&<button type="button" className="delivery-day-open" aria-label={'查看'+date+'交付明细'} onClick={()=>onOpen(date)}>明细 ›</button>}
    </div>;
   })}</div>
  </section>;

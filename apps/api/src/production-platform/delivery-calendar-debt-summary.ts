@@ -1,6 +1,7 @@
+import {NATIVE_CUT_SCOPE_ROWS_SQL,NATIVE_EMPTY_PACKING_SCOPE_SQL} from './journey-cut-scopes.js';
 import type {PoolClient} from 'pg';
 import type {DeliveryCalendarFilters,DeliverySummary} from '@dx-rework/contracts/delivery-calendar';
-import {DIGITAL_RECEIVING_BASE_SQL} from '../receiving/receiving-quantity-query.js';
+import {RECEIVING_GROUP_PACKING_JOIN_SQL,DIGITAL_RECEIVING_BASE_SQL} from '../receiving/receiving-quantity-query.js';
 
 export type DeliveryDebtSummary={overdue:DeliverySummary;beforeSelected:DeliverySummary;quantityUnknownPoCount:number};
 const empty=():DeliverySummary=>({poCount:0,orderedQty:0,packedQty:0,pendingQty:0,extraQty:0,knownOrderedQty:0,comparableOrderedQty:0,knownPackedQty:0,knownPendingQty:0,knownExtraQty:0,unknownQuantityPoCount:0,missingDuePoCount:0,overduePoCount:0,overduePendingQty:0});
@@ -16,18 +17,17 @@ export async function deliveryDebtSummary(db:PoolClient,orderIds:readonly string
  const rows=(await db.query<{bucket:string;po_count:string;ordered:string|null;packed:string|null;pending:string|null}>(`${DIGITAL_RECEIVING_BASE_SQL}, calendar_po AS (
   SELECT p.line_id,p.customer_warehouse_arrival_date AS due,
    (SELECT sum(size.quantity) FROM digital_production_po_sizes size WHERE size.line_id=p.line_id) AS demand,
-   CASE WHEN cardinality(cutting.ids)=1 THEN packed.packing_quantity ELSE NULL END AS packed,
+   CASE WHEN cutting.verified OR (${NATIVE_EMPTY_PACKING_SCOPE_SQL}) THEN CASE WHEN packed.packing_revision_id IS NULL THEN 0 ELSE packed.packing_quantity END ELSE NULL END AS packed,
    CASE WHEN reminder.value->>'kind'='offset' AND jsonb_typeof(reminder.value->'days')='number' THEN
     CASE WHEN (reminder.value->>'days')::numeric BETWEEN 0 AND 365 AND trunc((reminder.value->>'days')::numeric)=(reminder.value->>'days')::numeric
      THEN (reminder.value->>'days')::numeric::integer ELSE NULL END ELSE NULL END AS reminder_days,
    EXISTS(SELECT 1 FROM digital_production_resource_lifecycle life WHERE ((life.resource_kind='order' AND life.resource_id=o.production_order_id) OR (life.resource_kind='source' AND life.resource_id=o.source_id)) AND life.state='cancelled')
     OR EXISTS(SELECT 1 FROM digital_order_closures closed WHERE closed.production_order_id=o.production_order_id) AS excluded
   FROM digital_production_po_lines p JOIN digital_production_orders o USING(production_order_id)
-  LEFT JOIN LATERAL(SELECT array_agg(DISTINCT map.child_id) AS ids FROM digital_production_child_lines map WHERE map.production_order_id=p.production_order_id AND map.line_id=p.line_id AND map.module='cutting') cutting ON true
-  LEFT JOIN LATERAL(SELECT packing.packing_quantity FROM style_totals totals
-   JOIN LATERAL(SELECT batch.receiving_batch_id FROM batch_totals batch WHERE batch.group_key=totals.group_key ORDER BY batch.last_all_received_at DESC,batch.receiving_batch_id DESC LIMIT 1) action ON true
-   LEFT JOIN LATERAL(SELECT revision.packing_quantity FROM receiving_packing_revisions revision WHERE revision.receiving_batch_id=action.receiving_batch_id ORDER BY revision.created_at DESC,revision.packing_revision_id DESC LIMIT 1) packing ON true
-   WHERE cardinality(cutting.ids)=1 AND totals.group_key='cut:'||cutting.ids[1]::text) packed ON true
+  LEFT JOIN LATERAL(SELECT array_agg(DISTINCT scope.child_id) FILTER(WHERE scope.child_id IS NOT NULL) AS ids,count(scope.child_id)=1 AND count(*)=1 AND bool_and(coalesce(scope.source_line_id=p.line_id,false)) AS verified FROM (${NATIVE_CUT_SCOPE_ROWS_SQL} WHERE po.line_id=p.line_id) scope) cutting ON true
+  LEFT JOIN LATERAL(SELECT packing.packing_quantity,packing.packing_revision_id FROM (SELECT 'cut:'||cutting.ids[1]::text AS group_key) totals
+   ${RECEIVING_GROUP_PACKING_JOIN_SQL}
+   WHERE cardinality(cutting.ids)=1) packed ON true
   LEFT JOIN LATERAL(SELECT snapshot.parameters_json->'order_shipping_reminder'->'value' AS value FROM digital_sla_order_snapshots snapshot WHERE snapshot.production_order_id=p.production_order_id ORDER BY snapshot.revision DESC LIMIT 1) reminder ON true
   LEFT JOIN LATERAL(SELECT btrim(source.erp_order_no) AS value FROM digital_production_child_links link JOIN sourcing_cases source ON source.sourcing_case_id=link.child_id
    JOIN current_sourcing_cases current ON current.sourcing_case_id=source.sourcing_case_id WHERE $12::boolean AND link.module='sourcing' AND link.production_order_id=o.production_order_id AND source.deleted_at IS NULL

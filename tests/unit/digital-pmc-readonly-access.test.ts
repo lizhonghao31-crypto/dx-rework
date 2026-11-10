@@ -229,7 +229,9 @@ function closureDatabase(roles: string[]) {
   const receivedAt = '2026-10-24T08:00:00.000Z';
   return database(roles, (sql, values) => {
     if (sql.startsWith('SELECT * FROM digital_production_orders ')) return values[0] === ORDER ? [order()] : [];
-    if (sql.startsWith('SELECT p.*,(SELECT sum(quantity)')) return [{line_id: ROW, po_number: 'TEST-PMC-PO', color: '黑', total_quantity: '10', cutting_id: TASK}];
+    if (sql.startsWith('SELECT p.*,(')&&sql.includes('packing_absence_proven')) return [{line_id: ROW, po_number: 'TEST-PMC-PO', color: '黑', total_quantity: '10', cutting_id: TASK}];
+    if(sql.startsWith('SELECT po.line_id,map.child_id'))return [{line_id:ROW,child_id:TASK,sourcing_case_id:QUOTE,sourcing_line_position:1,approval_snapshot_id:null,source_line_id:ROW}];
+    if(sql.includes('FROM unnest($1::uuid[]) requested(cutting_id)'))return [{group_key:`cut:${TASK}`,packing_revision_id:null,packing_quantity:null,packing_actual_time:null,packing_recorded_at:null,packing_scope_unresolved:false}];
     if (sql.includes('SELECT totals.*,action.receiving_batch_id')) return [{
       group_key: `cut:${TASK}`, receiving_batch_id: BATCH, current_actual_quantity: '3', document_quantity: '3',
       current_defective_quantity: '1', receipt_count: 1, packing_quantity: null,

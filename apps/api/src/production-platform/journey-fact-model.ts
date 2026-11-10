@@ -8,7 +8,7 @@ import type {JourneyCutScope} from './journey-cut-scopes.js';
 import type {NativeFactoryTimeline} from './factory-production-facts.js';
 
 /** Bump when native mapping, time precision or applicability changes. No user DTO cache. */
-export const JOURNEY_FACT_CALCULATION_VERSION='journey-facts-supplychain-p01-v1-selectors-v3';
+export const JOURNEY_FACT_CALCULATION_VERSION='journey-facts-supplychain-p03-packing-v1-selectors-v3';
 type FactNode=Pick<JourneyNode,'key'|'instanceId'|'stage'|'state'|'round'|'occurrence'|'current'|'planningOnly'|'progressApplicability'|'expectedAt'|'expectedKind'|'expectedPrecision'|'deadlineMode'|'deadlineExclusive'|'actualAt'|'actualDate'|'actualQuality'|'enteredAt'|'sla'|'countsInProgress'|'inheritedFrom'|'inheritedResult'>&{
  ownerId:string|null;operatorId:string|null;blockers:Array<{key:string;ownerId:string|null}>;
  scopes:Array<{domain:string;id:string;lineId:string|null;version:number|null}>;
@@ -31,6 +31,7 @@ const plan=(p:SlaPlan|null):SlaPlan|null=>p?{
 }:null;
 const fact=(f:SlaNodeFact):SlaNodeFact=>({evidence:f.evidence,
  ...(f.startedAt!==undefined?{startedAt:f.startedAt}:{}),...(f.completedAt!==undefined?{completedAt:f.completedAt}:{}),
+ ...(f.completedDate!==undefined?{completedDate:f.completedDate}:{}),
  ...(f.businessCompleted!==undefined?{businessCompleted:f.businessCompleted}:{}),...(f.standardMinutes!==undefined?{standardMinutes:f.standardMinutes}:{}),
  ...(f.standardWarningPercent!==undefined?{standardWarningPercent:f.standardWarningPercent}:{}),
  ...(f.batchCoverageComplete!==undefined?{batchCoverageComplete:f.batchCoverageComplete}:{}),

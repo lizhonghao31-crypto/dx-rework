@@ -54,7 +54,8 @@ test('one resource registry admits every created prefix and binds exact run, tar
 test('migration inventory retains real DB/ACL checks without simulated recovery; tools and unknown deploy logic retain recovery',()=>{
  for(const path of ['apps/api/migrations/9999_new.sql','scripts/deploy/acceptance-migration-requirements.json']){const r=classifyFullGatePaths([path]);assert.ok(r.migrationSensitive&&r.dbRequired&&r.businessChainSensitive);assert.equal(r.maintenanceSensitive,false);assert.equal(r.activationSensitive,false);assert.equal(r.transferSensitive,false);}
  for(const path of ['scripts/migrate.mjs','scripts/migration-history-policy.mjs']){const r=classifyFullGatePaths([path]);assert.ok(r.migrationSensitive&&r.maintenanceSensitive&&r.businessChainSensitive);}
- for(const path of ['scripts/deploy/update-acceptance-local.sh','scripts/deploy/unknown-new-executor.sh','.github/workflows/full-gate.yml']){const r=classifyFullGatePaths([path]);assert.ok(r.maintenanceSensitive&&r.activationSensitive&&r.transferSensitive);}
+ for(const path of ['scripts/deploy/update-acceptance-local.sh','scripts/deploy/unknown-new-executor.sh','.github/workflows/future-deploy.yml']){const r=classifyFullGatePaths([path]);assert.ok(r.maintenanceSensitive&&r.activationSensitive&&r.transferSensitive);}
+ for(const path of ['.github/workflows/ci.yml','.github/workflows/full-gate.yml']){const r=classifyFullGatePaths([path]);assert.ok(r.highRisk&&r.dbRequired&&r.deploymentSensitive);assert.equal(r.maintenanceSensitive,false);}
  assert.equal(classifyFullGatePaths(['scripts/deploy/package-release.sh']).maintenanceSensitive,false);
  assert.equal(classifyFullGatePaths(['scripts/deploy/activate-release.sh']).activationSensitive,true);
 });

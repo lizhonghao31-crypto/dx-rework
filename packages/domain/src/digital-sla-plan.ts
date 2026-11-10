@@ -23,6 +23,8 @@ export type SlaNodeFact = {
   /** Native batch read model, never a second editable fact source. */
   batchWindows?:SlaBatchWindow[]; batchCoverageComplete?:boolean;
   startedAt?: string; completedAt?: string; evidence: string;
+  /** A physical calendar date stays a date; never synthesize a midnight instant. */
+  completedDate?:string;
   /** Native business completion can remain valid even when its actual time is unknown. */
   businessCompleted?: boolean;
   /** Captured when a responsibility window opens; formal changes append a new fact version. */

@@ -78,7 +78,7 @@ export function OrderBoardPage() {
     editDefectiveQuantity,setEditDefectiveQuantity,editImages,setEditImages,receiptSource,setReceiptSource,
     receiptDocumentQuantity,setReceiptDocumentQuantity,receiptActualQuantity,setReceiptActualQuantity,receiptDefectiveQuantity,setReceiptDefectiveQuantity,
     mutationBusy,boardMutation,mutationUnknown,mutationMessage,setMutationMessage,packingEditing,
-    setPackingEditing,packingQuantity,setPackingQuantity,differenceEditing,differenceResult,setDifferenceResult,
+    setPackingEditing,packingQuantity,setPackingQuantity,packingTimeMode,setPackingTimeMode,packingTimeValue,setPackingTimeValue,differenceEditing,differenceResult,setDifferenceResult,
     differenceImages,closeDifference,selectDifferenceImages,openPacking,submitPacking,openDifference,
     submitDifference,openEdit,openReceiptCorrection,submitReceiptCorrection,submitCorrection,confirmDelete,
     recoveryActions,removeDifferenceImage
@@ -318,12 +318,13 @@ export function OrderBoardPage() {
             <div className="order-board-operation order-board-row__packing">
               <span>装箱数量</span>
               <div>
-                <strong>{row.packingQuantity === null ? "-" : `${quantity(row.packingQuantity)}件`}</strong>
-                {canManagePacking && liveOperationSnapshot && (row.packingQuantity === null || isRoot) ? <button
+                <strong>{row.packingQuantity === null ? (row.packingScopeUnresolved?"待核":"-") : `${quantity(row.packingQuantity)}件`}</strong>
+                {row.packingActualTime?.precision==='instant'?<small>实际 {new Date(row.packingActualTime.at).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'})}</small>:row.packingActualTime?.precision==='date'?<small>实际 {row.packingActualTime.date}</small>:null}
+                {canManagePacking && liveOperationSnapshot && (row.packingQuantity === null && !row.packingScopeUnresolved || isRoot) ? <button
                   type="button"
                   className="order-board-packing-button"
                   onClick={() => openPacking(row)}
-                >{row.packingQuantity === null ? "录入" : "修改"}</button> : null}
+                >{row.packingScopeUnresolved?"核对":row.packingQuantity === null ? "录入" : "修改"}</button> : null}
               </div>
             </div>
             <div className="order-board-operation order-board-row__packing-difference">
@@ -413,6 +414,11 @@ export function OrderBoardPage() {
         <h2>{packingEditing.packingQuantity === null ? "录入" : "修改"}装箱数量</h2>
         <p>款号：<strong>{packingEditing.styleNo}</strong>。填写当前累计已装箱数量；保存后保留上一版本。</p>
         <label>当前累计已装箱数量<input type="number" min="0" max="10000000" step="1" inputMode="numeric" value={packingQuantity} disabled={mutationBusy} onChange={(event) => setPackingQuantity(event.target.value)} /></label>
+        <label>实际装箱时间<select aria-label="实际装箱时间" value={packingTimeMode} disabled={mutationBusy} onChange={event=>{setPackingTimeMode(event.target.value as typeof packingTimeMode);setPackingTimeValue('');}}>
+          <option value="now">按本单当前时间登记</option><option value="instant">填写实际时间</option><option value="date">只记实际日期</option><option value="unknown">时间未记录</option>
+        </select></label>
+        {packingTimeMode==='instant'&&<label>实际装箱时间（北京时间）<input type="datetime-local" step="0.001" required value={packingTimeValue} disabled={mutationBusy} onChange={event=>setPackingTimeValue(event.target.value)}/></label>}
+        {packingTimeMode==='date'&&<label>实际装箱日期<input type="date" required value={packingTimeValue} disabled={mutationBusy} onChange={event=>setPackingTimeValue(event.target.value)}/></label>}
         {mutationMessage ? <p className="order-board-dialog__error" role="alert">{mutationMessage}{recoveryActions}</p> : null}
         <div className="order-board-dialog__actions">
           <button type="button" disabled={mutationBusy} onClick={() => setPackingEditing(null)}>取消</button>
