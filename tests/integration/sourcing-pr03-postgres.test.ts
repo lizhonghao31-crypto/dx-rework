@@ -4643,6 +4643,9 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
   it("P14 reads empty receipt/packing facts before cutting for authorized users", async () => {
     const { order, designer } = await budgetFixture();
     const closure = new OrderClosureService(database);
+    // Native creation has complete PO identity and no production/receipt chain;
+    // this proves not packed yet, unlike a deleted or unresolved packing source.
+    expect((await database.query("SELECT 1 FROM digital_production_child_links WHERE production_order_id=$1 AND module IN ('sourcing','cutting','receiving','production')", [order.productionOrderId])).rowCount).toBe(0);
     for (const actor of [designer, managerActor(), merchandiserActor()]) {
       const sheet = await closure.read(actor, order.productionOrderId);
       expect(sheet).toMatchObject({ stage: "等待回货与装箱", productionId: null, canClose: false, closed: null });
@@ -4650,10 +4653,10 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       expect(sheet.lines.map(line => line.orderedQuantity)).toEqual([137, 63]);
       for (const line of sheet.lines) expect(line).toMatchObject({
         cuttingId: null, receivingBatchId: null, actualQuantity: 0, documentQuantity: 0,
-        defectiveQuantity: 0, receiptCount: 0, packingQuantity: null, receipts: [], reworks: [],
+        defectiveQuantity: 0, receiptCount: 0, packingQuantity: 0, packingRevisionId: null, receipts: [], reworks: [],
       });
       expect(sheet.outstanding).toContain(`${order.lines[0]!.formalStyleNo} 黑：尚无原收货事实`);
-      expect(sheet.outstanding).toContain(`${order.lines[1]!.formalStyleNo} 白：尚无原装箱事实`);
+      expect(sheet.outstanding).toContain(`${order.lines[1]!.formalStyleNo} 白：装箱0，少于订购63`);
     }
     await expect(closure.read({ ...designer, actorId: randomUUID() }, order.productionOrderId))
       .rejects.toMatchObject({ statusCode: 404 });
