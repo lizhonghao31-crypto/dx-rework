@@ -1,15 +1,93 @@
-import {beforeAll,afterAll,describe,it,expect} from 'vitest';
+import {randomUUID,createHash} from 'node:crypto';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {randomUUID} from 'node:crypto';
-import {NATIVE_SETTINGS_CASES,runNativeSettingsBrowser} from '../acceptance/m01-settings-native-browser.js';
+import {beforeAll,afterAll,describe,it,expect,vi} from 'vitest';
+import type {Page} from 'playwright-core';
+import {DIGITAL_SLA_PARAMETERS} from '@dx-rework/contracts/digital-sla';
+import {JOURNEY_STAGES} from '@dx-rework/contracts/digital-production-journey';
+import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
+import {supplychainSettingsBrowser} from '../acceptance/supplychain-settings-browser.js';
+import {SlaSettingsSetsService} from '../../apps/api/src/production-platform/sla-settings-sets.js';
+import type {SettingsSetRead,SettingsSetDraft,SettingsCalculationResult} from '@dx-rework/contracts/sla-settings-sets';
+// The approved paired workspaces replace incompatible separate-publication and
+// automatic-series UI scenarios. Original APIs, freezes and calculations retain
+// their PG suites; these cases exercise the current full App and real auth.
+vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 const databaseUrl=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
-(databaseUrl?describe.sequential:describe.skip)('M01 settings original browser, auth and PostgreSQL matrix',()=>{
- let matrix:ReturnType<typeof runNativeSettingsBrowser>|undefined,finished=false;
- beforeAll(()=>{matrix=runNativeSettingsBrowser({tap:false,databaseUrl:databaseUrl!,evidence:process.env.M01_SETTINGS_NATIVE_EVIDENCE??join(process.env.RUNNER_TEMP??tmpdir(),'m01-settings-native-'+randomUUID()),...(process.env.M01_SETTINGS_BROWSER_EXECUTABLE?{executablePath:process.env.M01_SETTINGS_BROWSER_EXECUTABLE}:{})});});
- afterAll(async()=>{if(matrix&&!finished)await matrix.return([]);});
- // Keep each real scenario within the existing finite timeout. The same original
- // fixture and browser stay owned by this sequential suite, never by another test.
- for(const name of NATIVE_SETTINGS_CASES)it(name,async()=>{const next=await matrix!.next();expect(next.done).toBe(false);expect(next.value).toBe(name);});
- it('runs the complete settings route/publication/recovery/authorization matrix through original components, services and AuthService',async()=>{const next=await matrix!.next();expect(next.done).toBe(true);expect(next.value).toEqual([...NATIVE_SETTINGS_CASES]);finished=true;});
+(databaseUrl?describe.sequential:describe.skip)('supply-chain settings original App, auth and PostgreSQL',()=>{
+ let h:Awaited<ReturnType<typeof supplychainSettingsBrowser>>;
+ const ready=async(page:Page)=>{try{await page.getByRole('button',{name:'重新读取设置',exact:true}).waitFor();}catch(e){console.error('TEST settings UI readiness',await page.locator('body').innerText(),h.errors,h.requests.map(r=>({path:r.path,status:r.status})));throw e;}};
+ const edit=async(page:Page,key:string,value:string)=>{const p=DIGITAL_SLA_PARAMETERS.find(p=>p.key===key)!;await page.locator('.cockpit-policy-stages').getByRole('button',{name:JOURNEY_STAGES[p.stage-1]!.label,exact:true}).click();await page.locator(`[data-sla-node="${key}"]`).getByRole('button',{name:'编辑',exact:true}).click();const side=page.getByRole('complementary',{name:'调整'+p.label,exact:true});await side.getByLabel(p.label+'数值',{exact:true}).fill(value);await side.getByRole('button',{name:'保留本项修改',exact:true}).click();};
+ const save=async(page:Page,reason:string)=>{await page.getByLabel('调整原因',{exact:true}).fill(reason);await page.getByRole('button',{name:'保存草稿',exact:true}).click();await page.getByText('组合草稿已保存，尚未发布。',{exact:true}).waitFor();};
+ const publish=async(page:Page)=>{await page.getByRole('button',{name:'预览发布',exact:true}).click();await page.getByRole('region',{name:'发布预览',exact:true}).getByRole('button',{name:'确认发布',exact:true}).click();};
+ const owner=()=>h.dedicated('owner_group');
+ const counts=async()=>Object.fromEntries(await Promise.all(['digital_sla_configurations','digital_development_cycle_standards','digital_timeline_standard_versions','digital_sla_settings_drafts','digital_sla_order_snapshots','digital_production_tasks'].map(async table=>[table,Number((await h.db.query(`SELECT count(*) AS n FROM ${table}`)).rows[0].n)])));
+ const bodyInput=(state:SettingsSetRead,reason:string):SettingsSetDraft=>({...state.basis,values:structuredClone(state.current),reason});
+ beforeAll(async()=>{h=await supplychainSettingsBrowser(databaseUrl!,process.env.M01_SETTINGS_NATIVE_EVIDENCE??join(process.env.RUNNER_TEMP??tmpdir(),'supplychain-settings-'+randomUUID()));});
+ afterAll(async()=>{if(h){await h.writeEvidence();await h.dispose();}});
+ it('keeps three sibling workspaces and compact real full-page alignment at1165/1366/1440 without writes or default suggestions',async()=>{
+  const before=await counts(),{page,context}=await h.open();try{await ready(page);for(const width of [1165,1366,1440]){
+   await page.setViewportSize({width,height:960});expect(await page.getByRole('tab',{name:'开发周期&时效',exact:true}).count()).toBe(1);expect(await page.getByRole('tab',{name:'时效演算',exact:true}).count()).toBe(1);expect(await page.getByRole('tab',{name:'客户跟单配置',exact:true}).count()).toBe(1);expect(await page.getByText('销售系列计划默认值',{exact:true}).count()).toBe(0);expect(await page.getByText('查找节点与版本',{exact:true}).count()).toBe(0);
+   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);await page.screenshot({path:join(h.evidence,'paired-settings-'+width+'.png'),fullPage:true});
+  }await page.setViewportSize({width:1165,height:960});await page.locator('[data-development-node="normalDays"]').getByRole('button',{name:'编辑',exact:true}).click();
+   const geometry=await page.locator('.sla-node-editor-grid').evaluate(element=>{const a=element.children[0]!.getBoundingClientRect(),b=element.children[1]!.getBoundingClientRect();return {top:Math.abs(a.top-b.top),gap:b.left-a.right};});expect(geometry.top).toBeLessThanOrEqual(1);expect(geometry.gap).toBeGreaterThan(0);await page.screenshot({path:join(h.evidence,'paired-settings-edit-1165.png'),fullPage:true});await page.getByRole('button',{name:'取消本项修改',exact:true}).click();
+   expect(await counts()).toEqual(before);expect(h.requests.some(r=>r.path.includes('series-profiles')||r.path.includes('series-candidate'))).toBe(false);
+  }finally{await context.close();}
+ });
+ it('recovers a lost paired draft receipt with one key/body and exactly two saved rows, surviving refresh only for its owner',async()=>{
+  const person=await owner(),fault={losePath:'/api/digital-production/sla-settings/sets/draft'},before=await counts(),{page,context,session}=await h.open(person.id,1440,fault);
+  try{await ready(page);await edit(page,'bulk_cutting','25');await page.getByLabel('调整原因',{exact:true}).fill('TEST native paired draft lost receipt');await page.getByRole('button',{name:'保存草稿',exact:true}).click();await page.getByRole('button',{name:'核对上次提交结果',exact:true}).waitFor();await page.getByRole('button',{name:'核对上次提交结果',exact:true}).click();await page.getByText('组合草稿已保存，尚未发布。',{exact:true}).waitFor();
+   const requests=h.requests.filter(r=>r.session===session&&r.path===fault.losePath);expect(requests).toHaveLength(2);expect(new Set(requests.map(r=>r.key)).size).toBe(1);expect(new Set(requests.map(r=>r.bodyHash)).size).toBe(1);expect((await counts()).digital_sla_settings_drafts).toBe(before.digital_sla_settings_drafts!+2);expect((await counts()).digital_sla_configurations).toBe(before.digital_sla_configurations);
+   await page.reload();await ready(page);await page.locator('.cockpit-policy-stages').getByRole('button',{name:JOURNEY_STAGES[3]!.label,exact:true}).click();expect(await page.locator('[data-sla-node="bulk_cutting"]').innerText()).toContain('1天1小时');
+  }finally{await context.close();}
+ });
+ it('retries the exact discard action after lost acknowledgement, rather than saving either draft again',async()=>{
+  const person=await owner(),fault={losePath:'/api/digital-production/sla-settings/sets/discard'},{page,context,session}=await h.open(person.id,1440,fault);
+  try{await ready(page);await edit(page,'bulk_cutting','26');await save(page,'TEST paired discard');const draftWrites=h.requests.filter(r=>r.session===session&&r.path.endsWith('/sets/draft')).length;await page.getByRole('button',{name:'取消草稿',exact:true}).click();await page.getByRole('button',{name:'核对上次提交结果',exact:true}).click();await page.getByText('本次草稿已取消。',{exact:true}).waitFor();const requests=h.requests.filter(r=>r.session===session&&r.path===fault.losePath);expect(requests).toHaveLength(2);expect(new Set(requests.map(r=>r.key)).size).toBe(1);expect(h.requests.filter(r=>r.session===session&&r.path.endsWith('/sets/draft'))).toHaveLength(draftWrites);const rows=(await h.db.query("SELECT DISTINCT ON(standard_group) standard_group,state FROM digital_sla_settings_drafts WHERE actor_id=$1 ORDER BY standard_group,revision DESC",[person.id])).rows;expect(rows).toHaveLength(2);expect(rows.every(r=>r.state==='discarded')).toBe(true);
+  }finally{await context.close();}
+ });
+ it('publishes one pair after a lost receipt, keeps original order snapshots unchanged, and retains exact command identity',async()=>{
+  const existing=await h.f.bulkReady('无'),old=(await h.db.query('SELECT * FROM digital_sla_order_snapshots WHERE production_order_id=$1 ORDER BY revision',[existing.id])).rows,person=await owner(),fault={losePath:'/api/digital-production/sla-settings/sets/publish'},before=await counts(),{page,context,session}=await h.open(person.id,1440,fault);
+  try{await ready(page);await edit(page,'bulk_cutting','27');await save(page,'TEST paired publish lost response');await publish(page);await page.getByRole('button',{name:'核对上次提交结果',exact:true}).click();await page.getByText(/已发布第.*套标准，仅未来新采用生效/).waitFor();expect((await counts()).digital_timeline_standard_versions).toBe(before.digital_timeline_standard_versions!+1);expect((await h.db.query('SELECT * FROM digital_sla_order_snapshots WHERE production_order_id=$1 ORDER BY revision',[existing.id])).rows).toEqual(old);const requests=h.requests.filter(r=>r.session===session&&r.path===fault.losePath);expect(requests).toHaveLength(2);expect(new Set(requests.map(r=>r.key)).size).toBe(1);expect(new Set(requests.map(r=>r.bodyHash)).size).toBe(1);
+  }finally{await context.close();}
+ });
+ it('keeps a known publication successful when the follow-up read fails and rereads without another publication',async()=>{
+  const person=await owner(),{page,context,session}=await h.open(person.id,1440,{afterPublishRead:true});try{await ready(page);await edit(page,'bulk_cutting','28');await save(page,'TEST known pair publish followup failure');await publish(page);await page.getByText('发布已成功，读取新标准失败；请重试读取，不要重复发布。',{exact:true}).waitFor();await page.getByRole('button',{name:'重新读取设置',exact:true}).click();await ready(page);expect(h.requests.filter(r=>r.session===session&&r.path.endsWith('/sets/publish'))).toHaveLength(1);
+  }finally{await context.close();}
+ });
+ it('preserves first-save edits on a genuine new-standard conflict and retains untouched newer fields after reconciliation',async()=>{
+  const person=await owner(),{page,context}=await h.open(person.id),service=new SlaSettingsSetsService(h.db,'TEST concurrent native publication '.repeat(4));
+  try{await ready(page);await edit(page,'bulk_cutting','29');const state=await service.read(h.f.root),draft=bodyInput(state,'TEST concurrent other publisher');draft.values.unified.fabric_inspection={kind:'duration',minutes:1500};const saved=await service.save(h.f.root,draft,randomUUID()),next={...draft,...saved.basis},preview=await service.preview(h.f.root,next);await service.publish(h.f.root,{...next,previewToken:preview.token},randomUUID());
+   await page.getByLabel('调整原因',{exact:true}).fill('TEST my first save preserves edit');await page.getByRole('button',{name:'保存草稿',exact:true}).click();await page.getByRole('button',{name:'核对现行标准并保留编辑',exact:true}).click();await save(page,'TEST reconciled first save');const result=await service.read({...h.f.root,actorId:person.id,actorRoles:['owner_group']});expect(result.draft?.values.unified.bulk_cutting).toMatchObject({minutes:1740});expect(result.draft?.values.unified.fabric_inspection).toMatchObject({minutes:1500});
+  }finally{await context.close();}
+ });
+ it('reaches original node/reminder/development fields, retains invalid text, cancels without mismatched values and restores focus',async()=>{
+  const person=await owner(),{page,context}=await h.open(person.id);try{await ready(page);await page.locator('[data-development-node="normalDays"]').getByRole('button',{name:'编辑',exact:true}).click();const side=page.getByRole('complementary',{name:'调整普通开发周期',exact:true}),input=side.getByLabel('普通开发周期数值',{exact:true});await input.fill('');expect(await input.inputValue()).toBe('');expect(await side.getByRole('button',{name:'保留本项修改',exact:true}).isDisabled()).toBe(true);await side.getByRole('button',{name:'取消本项修改',exact:true}).click();expect(await page.locator('[data-development-node="normalDays"]').getByRole('button',{name:'编辑',exact:true}).evaluate(e=>document.activeElement===e)).toBe(true);
+   await page.getByRole('button',{name:'提醒与缓冲',exact:true}).click();await page.locator('[data-sla-node="warning_ratio"]').getByRole('button',{name:'编辑',exact:true}).click();await page.getByRole('switch',{name:'节点临期比例提醒启用',exact:true}).uncheck();await page.getByRole('button',{name:'保留本项修改',exact:true}).click();expect(await page.locator('[data-sla-node="warning_ratio"]').innerText()).toContain('提醒关闭');
+  }finally{await context.close();}
+ });
+ it('restores a real history pair only into drafts and keeps history and customer controls in their own workspaces',async()=>{
+  const person=await owner(),{page,context}=await h.open(person.id),before=await counts();try{await ready(page);await page.getByRole('button',{name:'查看历史设置',exact:true}).click();await page.getByRole('region',{name:'历史设置',exact:true}).getByRole('button',{name:'恢复为配置草稿',exact:true}).first().click();await page.getByText('组合草稿已保存，尚未发布。',{exact:true}).waitFor();expect((await counts()).digital_timeline_standard_versions).toBe(before.digital_timeline_standard_versions);expect(await page.getByRole('region',{name:'发布预览',exact:true}).count()).toBe(0);await page.getByRole('tab',{name:'客户跟单配置',exact:true}).click();expect(await page.getByRole('tab',{name:'客户跟单配置',exact:true}).getAttribute('aria-selected')).toBe('true');expect(await page.getByRole('button',{name:'保存草稿',exact:true}).isVisible()).toBe(false);
+  }finally{await context.close();}
+ });
+ it('uses independent temporary calculation, ordered crafts and perPO H with dynamic critical totals and no business/config writes',async()=>{
+  const person=await owner(),{page,context,session}=await h.open(person.id),before=await counts();try{await ready(page);await page.getByRole('tab',{name:'时效演算',exact:true}).click();const calc=page.getByRole('region',{name:'时效演算',exact:true});await calc.getByRole('button',{name:'开始演算',exact:true}).waitFor();await calc.getByLabel('包含开发流程',{exact:true}).uncheck();await calc.getByLabel('演算客户交期1',{exact:true}).fill('2026-12-01');await calc.getByRole('button',{name:'增加PO',exact:true}).click();await calc.getByLabel('演算客户交期2',{exact:true}).fill('2026-12-02');
+   for(const [stage,label,value]of [[2,'共享预算冻结','0'],[5,'仓库辅料调配','0'],[6,'工厂生产规划','10'],[6,'工厂生产目标','0']] as const){await calc.getByRole('navigation',{name:'演算阶段',exact:true}).getByRole('button',{name:JOURNEY_STAGES[stage-1]!.label,exact:true}).click();await calc.getByLabel(label+'规划小时',{exact:true}).fill(value);}
+   const response=page.waitForResponse(r=>r.url().endsWith('/sets/calculate')&&r.request().method()==='POST');await calc.getByRole('button',{name:'开始演算',exact:true}).click();const first=await(await response).json() as SettingsCalculationResult;await calc.getByRole('region',{name:'演算结果',exact:true}).waitFor();expect(first.lines).toHaveLength(2);expect(first.lines[0]!.totalSpanMinutes).not.toBeNull();expect(first.lines[0]!.endAt).not.toBe(first.lines[1]!.endAt);
+   const updated=page.waitForResponse(r=>r.url().endsWith('/sets/calculate')&&JSON.parse(r.request().postData()??'{}').values?.planning?.factory_production_work?.minutes===720);await calc.getByLabel('工厂生产规划规划小时',{exact:true}).fill('12');const second=await(await updated).json() as SettingsCalculationResult;expect(second.lines[0]!.totalSpanMinutes).toBe(first.lines[0]!.totalSpanMinutes!+120);
+   let release!:()=>void,held!:()=>void,finished!:()=>void,intercept=true;const hold=new Promise<void>(r=>held=r),delay=new Promise<void>(r=>release=r),oldFinished=new Promise<void>(r=>finished=r);
+   await page.route('**/sla-settings/sets/calculate',async route=>{const body=route.request().postDataJSON();if(intercept&&body.lines[0].customerDate==='2026-12-03'){intercept=false;const response=await route.fetch();held();try{await delay;await route.fulfill({response});}catch{/* The old read is intentionally aborted by the real generation change. */}finally{finished();}}else await route.continue();});
+   try{await calc.getByLabel('演算客户交期1',{exact:true}).fill('2026-12-03');await hold;const latest=page.waitForResponse(r=>r.url().endsWith('/sets/calculate')&&JSON.parse(r.request().postData()??'{}').lines?.[0]?.customerDate==='2026-12-04');await calc.getByLabel('演算客户交期1',{exact:true}).fill('2026-12-04');await latest;await calc.locator('[data-customer-date="2026-12-04"]').waitFor();release();await oldFinished;expect(await calc.getByRole('region',{name:'演算结果',exact:true}).getAttribute('data-customer-date')).toBe('2026-12-04');}finally{release();await page.unroute('**/sla-settings/sets/calculate');}
+   await calc.getByLabel('工厂生产规划规划小时',{exact:true}).fill('bad');await calc.getByRole('region',{name:'演算结果',exact:true}).waitFor({state:'detached'});expect(await calc.getByRole('button',{name:'开始演算',exact:true}).isDisabled()).toBe(true);const validAgain=page.waitForResponse(r=>r.url().endsWith('/sets/calculate'));await calc.getByLabel('工厂生产规划规划小时',{exact:true}).fill('12');await validAgain;await calc.getByRole('region',{name:'演算结果',exact:true}).waitFor();await calc.getByRole('button',{name:'增加PO',exact:true}).click();await calc.getByRole('region',{name:'演算结果',exact:true}).waitFor({state:'detached'});
+   expect(await counts()).toEqual(before);expect(h.requests.filter(r=>r.session===session&&r.method==='POST'&&r.path.includes('/sla-settings/')).every(r=>r.path.endsWith('/sets/calculate'))).toBe(true);
+  }finally{await context.close();}
+ });
+ it('keeps initial read failure distinct from empty settings and retries through the original app',async()=>{
+  const person=await owner(),{page,context}=await h.open(person.id,1165,{failRead:true});try{await page.getByRole('button',{name:'重试读取设置',exact:true}).click();await ready(page);expect(await page.getByRole('button',{name:'保存草稿',exact:true}).isVisible()).toBe(true);}finally{await context.close();}
+ });
+ it('keeps PMC genuinely readonly and removes private settings after live revocation in the same otherwise valid original session',async()=>{
+  const person=await h.dedicated('pmc'),{page,context}=await h.open(person.id),hash=(v:string)=>createHash('sha256').update(v).digest('hex');try{await ready(page);expect(await page.getByRole('button',{name:'保存草稿',exact:true}).count()).toBe(0);expect(await page.getByRole('button',{name:'确认发布',exact:true}).count()).toBe(0);const before=hash((await context.cookies()).find(c=>c.name==='dx_rework_session')!.value);await h.f.access.assignRole(h.admin,{userId:person.id,roleCode:'finance_read',reason:'TEST retain separate valid login role'});await h.f.access.revokeRole(h.admin,person.assignmentId,'TEST actual current PMC revoked');await page.getByRole('button',{name:'重新读取设置',exact:true}).click();await page.locator('.sla-settings-workspace').waitFor({state:'detached'});expect(await page.evaluate(async()=> (await fetch('/api/digital-production/sla-settings/sets')).status)).toBe(403);expect(await page.evaluate(async()=> (await(await fetch('/api/auth/me')).json()).status)).toBe('authorized');expect(hash((await context.cookies()).find(c=>c.name==='dx_rework_session')!.value)).toBe(before);
+  }finally{await context.close();}
+ });
+ it('has no browser runtime exceptions in completed original App cases',()=>{expect(h.errors).toEqual([]);});
 });

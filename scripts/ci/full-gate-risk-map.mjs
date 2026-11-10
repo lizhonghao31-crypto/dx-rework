@@ -186,6 +186,10 @@ export const classifyFullGatePaths = (inputPaths) => {
       'tests/integration/production-readiness-postgres.test.ts','tests/integration/factory-logistics-cockpit-postgres.test.ts','tests/integration/sourcing-pr03-postgres.test.ts']);
     domains.add('fixed-timeline-native-crafts');
   }
+  if(paths.some(path=>/sla-settings-(?:sets|set-repository|calculation)|0283_sla_settings_sets|supplychain-settings-browser/.test(path))){
+    addAll(mappedTests,['tests/integration/sla-settings-sets-postgres.test.ts','tests/integration/m01-settings-native-browser-postgres.test.ts','tests/integration/sla-settings-drafts-postgres.test.ts','tests/integration/fixed-timeline-postgres.test.ts','tests/integration/series-plan-postgres.test.ts']);
+    domains.add('settings-atomic-sets');
+  }
   if(paths.some(path=>/fixed-(?:schedule|rework|task-targets)|0282_journey_fixed_progress|fixed-progress-postgres/.test(path))){
     addAll(mappedTests,['tests/integration/fixed-progress-postgres.test.ts','tests/integration/journey-fact-model-postgres.test.ts','tests/integration/journey-fact-updates-postgres.test.ts','tests/integration/fixed-timeline-postgres.test.ts']);
     domains.add('fixed-schedule-progress');

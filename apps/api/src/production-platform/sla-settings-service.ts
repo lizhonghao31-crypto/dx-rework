@@ -1,3 +1,4 @@
+import {settingsPublicationBasis} from './sla-settings-set-repository.js';
 import { createHash } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import { DIGITAL_SLA_PARAMETERS, validateDigitalSlaValues, type DigitalSlaValues } from '@dx-rework/contracts/digital-sla';
@@ -15,7 +16,7 @@ export type StandardDraft = {
 };
 const conflict = () => new ApplicationError('DIGITAL_TASK_CONFLICT', '现行标准或草稿已改变，请重新预览后应用', 409);
 const ordered = (values: DigitalSlaValues) => DIGITAL_SLA_PARAMETERS.map(p => [p.key, values[p.key]]);
-const token = (actor: TrustedActorContext, draft: StandardDraft) => createHash('sha256').update(JSON.stringify([actor.actorId, draft.expectedVersion, ordered(draft.values), draft.reason])).digest('hex');
+const token = (actor: TrustedActorContext, draft: StandardDraft, basis:Awaited<ReturnType<typeof settingsPublicationBasis>>) => createHash('sha256').update(JSON.stringify([actor.actorId, draft.expectedVersion, ordered(draft.values), draft.reason,basis])).digest('hex');
 function checked(input: StandardDraft): StandardDraft {
     try {
         if (!Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 0 || !input.reason.trim() || input.reason.trim().length > 1000)
@@ -47,7 +48,7 @@ export class SlaSettingsService {
             .map(p => ({ key: p.key, label: p.label, before: current.values[p.key]!, after: draft.values[p.key]! }));
         if (!changes.length)
             throw new ApplicationError('VALIDATION_ERROR', '没有需要发布的参数变化', 400);
-        return { token: this.tokens.issue(token(actor, draft)), version: current.version, scope: 'new_orders' as const, changes, existingOrdersChanged: 0 };
+        return { token: this.tokens.issue(token(actor, draft,await settingsPublicationBasis(client))), version: current.version, scope: 'new_orders' as const, changes, existingOrdersChanged: 0 };
     }
     async publish(client: PoolClient, actor: TrustedActorContext, input: StandardDraft & {
         previewToken: string;
@@ -59,7 +60,7 @@ export class SlaSettingsService {
         await client.query('LOCK TABLE digital_sla_configurations IN SHARE ROW EXCLUSIVE MODE');
         const retry = (await client.query('SELECT version FROM digital_sla_configurations WHERE request_key=$1', [requestKey])).rows[0] as {version:number}|undefined;
         if (!retry) {
-            this.tokens.verify(input.previewToken, token(actor, draft));
+            this.tokens.verify(input.previewToken, token(actor, draft,await settingsPublicationBasis(client)));
             await this.preview(client, actor, draft);
             if(input.savedDraftRevision!==undefined)await assertSavedSettingsDraft(client,actor,'unified',input.savedDraftRevision,draft);
         }

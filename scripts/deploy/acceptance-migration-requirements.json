@@ -1980,5 +1980,21 @@
     "creates": [],
     "execute": [],
     "sequences": []
+  },
+  "0283_sla_settings_sets": {
+    "checksum": "e7b11b60ea8246b5676a2c5be42687344146b5e23fa15dfcfa70c59623dabf24",
+    "tables": [
+      "digital_timeline_standard_versions",
+      "digital_sla_settings_drafts"
+    ],
+    "functions": [],
+    "references": [
+      "digital_timeline_standard_versions"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": [],
+    "sequences": []
   }
 }

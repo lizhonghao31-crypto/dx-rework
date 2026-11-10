@@ -1,3 +1,4 @@
+import {SlaSettingsSetsService} from './sla-settings-sets.js';
 import type {SlaApplicationCandidatesQuery} from '@dx-rework/contracts/sla-settings-history';
 import {SlaSettingsDraftService} from './sla-settings-drafts.js';
 import {SlaSettingsHistoryService} from './sla-settings-history.js';
@@ -592,6 +593,7 @@ export class DigitalProductionTaskService {
   }
   async previewSlaOrder(actor:TrustedActorContext,input:Parameters<SlaOrderApplicationService['preview']>[1]){return new SlaOrderApplicationService(this.database,this.previewSecret).preview(actor,input);}
   async applySlaOrder(actor:TrustedActorContext,input:Parameters<SlaOrderApplicationService['apply']>[1],key:string){return new SlaOrderApplicationService(this.database,this.previewSecret).apply(actor,input,key);}
+  settingsSets(){return new SlaSettingsSetsService(this.database,this.previewSecret);}
   async readSlaDraft(actor:TrustedActorContext,group:SlaDraftGroup){return new SlaSettingsDraftService(this.database).read(actor,group);}
   async saveSlaDraft(actor:TrustedActorContext,input:unknown,key:string){return new SlaSettingsDraftService(this.database).save(actor,input,key);}
   async discardSlaDraft(actor:TrustedActorContext,input:unknown,key:string){return new SlaSettingsDraftService(this.database).discard(actor,input,key);}

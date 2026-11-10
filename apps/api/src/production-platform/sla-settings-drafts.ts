@@ -12,21 +12,21 @@ import {SlaConfigurationRepository} from './sla-configuration-repository.js';
 import {SlaCopyVersionSchema,copiedHistoryValues} from '@dx-rework/contracts/sla-settings-history';
 import {readSlaPolicyValuesMany} from './sla-policy-values.js';
 
-type DraftRow={actor_id:string;standard_group:SlaDraftGroup;revision:number;basis_version:number;source_version?:number|null;values_json:unknown;basis_values_json:unknown;reason:string;state:'saved'|'discarded'|'published';created_at:Date|string};
+export type DraftRow={actor_id:string;standard_group:SlaDraftGroup;revision:number;basis_version:number;source_version?:number|null;set_context_json?:unknown;values_json:unknown;basis_values_json:unknown;reason:string;state:'saved'|'discarded'|'published';created_at:Date|string};
 const conflict=(message:string):never=>{throw new ApplicationError('SLA_DRAFT_CONFLICT',message,409);};
 const digest=(value:unknown)=>createHash('sha256').update(JSON.stringify(value,(_key,item)=>item&&typeof item==='object'&&!Array.isArray(item)?Object.fromEntries(Object.entries(item).sort(([a],[b])=>a.localeCompare(b,'en'))):item)).digest('hex');
 const values=(group:SlaDraftGroup,value:unknown)=>group==='unified'?validateDigitalSlaValues(value):DevelopmentCycleValuesSchema.parse(value);
-const latest=async(db:PoolClient,actorId:string,group:SlaDraftGroup):Promise<DraftRow|null>=>(await db.query<DraftRow>('SELECT * FROM digital_sla_settings_drafts WHERE actor_id=$1 AND standard_group=$2 ORDER BY revision DESC LIMIT 1',[actorId,group])).rows[0]??null;
+export const latest=async(db:PoolClient,actorId:string,group:SlaDraftGroup):Promise<DraftRow|null>=>(await db.query<DraftRow>('SELECT * FROM digital_sla_settings_drafts WHERE actor_id=$1 AND standard_group=$2 ORDER BY revision DESC LIMIT 1',[actorId,group])).rows[0]??null;
 const version=async(db:PoolClient,group:SlaDraftGroup):Promise<number>=>Number((await db.query(group==='unified'?'SELECT version FROM digital_sla_configurations ORDER BY version DESC LIMIT 1':'SELECT version FROM digital_development_cycle_standards ORDER BY version DESC LIMIT 1')).rows[0]?.version??0);
-const lockOwn=async(db:PoolClient,actorId:string,group:SlaDraftGroup)=>{await db.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`sla-settings-draft:${actorId}:${group}`]);};
+export const lockOwn=async(db:PoolClient,actorId:string,group:SlaDraftGroup)=>{await db.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`sla-settings-draft:${actorId}:${group}`]);};
 function saved(row:DraftRow):SlaSavedDraft{
  const base={revision:row.revision,expectedVersion:row.basis_version,reason:row.reason,savedAt:new Date(row.created_at).toISOString()};
  return row.standard_group==='unified'?{...base,group:'unified',...(row.source_version?{sourceVersion:row.source_version??null}:{}),values:validateDigitalSlaValues(row.values_json),baselineValues:validateDigitalSlaValues(row.basis_values_json)}:{...base,group:'development',values:DevelopmentCycleValuesSchema.parse(row.values_json),baselineValues:DevelopmentCycleValuesSchema.parse(row.basis_values_json)};
 }
-async function envelope(db:PoolClient,actorId:string,group:SlaDraftGroup):Promise<SlaDraftEnvelope>{const row=await latest(db,actorId,group);return {group,currentStandardVersion:await version(db,group),revision:row?.revision??0,draft:row?.state==='saved'?saved(row):null};}
-async function append(db:PoolClient,actorId:string,group:SlaDraftGroup,input:{revision:number;basis:number;values:unknown;baseline:unknown;reason:string;state:DraftRow['state'];publishedVersion?:number;sourceVersion?:number|null}){
- return (await db.query<DraftRow>(`INSERT INTO digital_sla_settings_drafts(actor_id,standard_group,revision,basis_version,values_json,basis_values_json,reason,state,published_version,source_version)
- VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,[actorId,group,input.revision,input.basis,JSON.stringify(input.values),JSON.stringify(input.baseline),input.reason,input.state,input.publishedVersion??null,input.sourceVersion??null])).rows[0]!;
+export async function envelope(db:PoolClient,actorId:string,group:SlaDraftGroup):Promise<SlaDraftEnvelope>{const row=await latest(db,actorId,group);return {group,currentStandardVersion:await version(db,group),revision:row?.revision??0,draft:row?.state==='saved'?saved(row):null};}
+export async function append(db:PoolClient,actorId:string,group:SlaDraftGroup,input:{revision:number;basis:number;values:unknown;baseline:unknown;reason:string;state:DraftRow['state'];publishedVersion?:number;sourceVersion?:number|null;setContext?:unknown}){
+ return (await db.query<DraftRow>(`INSERT INTO digital_sla_settings_drafts(actor_id,standard_group,revision,basis_version,values_json,basis_values_json,reason,state,published_version,source_version,set_context_json)
+ VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,[actorId,group,input.revision,input.basis,JSON.stringify(input.values),JSON.stringify(input.baseline),input.reason,input.state,input.publishedVersion??null,input.sourceVersion??null,input.setContext?JSON.stringify(input.setContext):null])).rows[0]!;
 }
 /** Same publication transaction, after its original standard lock/authority check.
  * Taking the policy-table lock before the personal lock avoids lock inversion. */

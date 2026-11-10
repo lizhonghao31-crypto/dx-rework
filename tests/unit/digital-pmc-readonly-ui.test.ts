@@ -1,3 +1,4 @@
+import * as pairedEditor from '../../apps/web/src/sla-settings-set-editor.js';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import {createElement, type ComponentType} from 'react';
 import type * as React from 'react';
@@ -110,14 +111,12 @@ describe('PMC digital read entry preserves original write flags', () => {
     {roles: ['production_management'], manage: true, visible: true, readOnly: false},
     {roles: ['quality_control'], manage: false, visible: false, readOnly: true},
   ])('settings shell passes independent readOnly for $roles', ({roles, manage, visible, readOnly}) => {
-    vi.spyOn(slaEditor, 'SlaStandardEditor').mockImplementation((props = {}) => createElement('span', {'data-settings-editor': 'sla', 'data-readonly': String(props.readOnly)}));
-    vi.spyOn(developmentCycle, 'DevelopmentCycleSettings').mockImplementation((props = {}) => createElement('span', {'data-settings-editor': 'development', 'data-readonly': String(props.readOnly)}));
-    vi.spyOn(seriesSettings, 'SeriesSettings').mockImplementation((props = {}) => createElement('span', {'data-settings-editor': 'series', 'data-readonly': String(props.readOnly)}));
+    vi.spyOn(pairedEditor, 'SlaSettingsSetEditor').mockImplementation(props => createElement('span', {'data-settings-editor': 'paired', 'data-readonly': String(props.readOnly)}));
     state.seeds = [access(roles, manage), ''];
     const html = renderToStaticMarkup(createElement(CockpitProductionSettings));
     expect(html.includes('data-settings-editor')).toBe(visible);
     if (visible) {
-      expect(html.match(new RegExp(`data-readonly="${readOnly}"`, 'g'))).toHaveLength(3);
+      expect(html.match(new RegExp(`data-readonly="${readOnly}"`, 'g'))).toHaveLength(1);
       expect(html).not.toContain('当前岗位无权访问');
     } else expect(html).toContain('当前岗位无权访问生产管理设置');
   });
@@ -178,16 +177,9 @@ describe('loaded settings render values and history without PMC write controls',
     expect(development.match(/<button[^>]*>预览开发周期变化<\/button>/)?.[0]).not.toContain('disabled');expect(development).toContain('预览开发周期变化');
   });
 
-  it('renders current series defaults and reason without a publication form', () => {
-    const rows = [{customerCode: 'TEST-PD', version: 3, monthOffset: -2, shippingDay: 15, reason: 'TEST adopted default'}];
-    const html = renderLoaded(seriesSettings.SeriesSettings, [rows], true);
-    expect(html).toContain('TEST-PD');
-    expect(html).toContain('TEST adopted default');
-    expect(html).toContain('提前2个月 · 15日（已发布固定日）');
-    for (const text of ['<input', '<textarea', '发布新默认']) expect(html).not.toContain(text);
-    const manager = renderLoaded(seriesSettings.SeriesSettings, [rows], false);
-    expect(manager).toContain('系列月份偏移');
-    expect(manager).toContain('发布新默认');
+  it('removes retired series defaults for managers and PMC without rendering a replacement write form', () => {
+    expect(renderToStaticMarkup(createElement(seriesSettings.SeriesSettings,{readOnly:true}))).toBe('');
+    expect(renderToStaticMarkup(createElement(seriesSettings.SeriesSettings,{readOnly:false}))).toBe('');
   });
 });
 

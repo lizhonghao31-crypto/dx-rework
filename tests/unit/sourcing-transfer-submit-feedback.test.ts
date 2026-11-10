@@ -54,6 +54,9 @@ async function setup(postFails:boolean|"unknown"){
   const field=[...host.querySelectorAll("label")].find(node=>node.querySelector("span")?.textContent===label)!.querySelector("input,select") as HTMLInputElement|HTMLSelectElement;
   await act(async()=>{Object.getOwnPropertyDescriptor(field instanceof HTMLSelectElement?HTMLSelectElement.prototype:HTMLInputElement.prototype,"value")!.set!.call(field,value);field.dispatchEvent(new Event(field instanceof HTMLSelectElement?"change":"input",{bubbles:true}));});
  }
+ // The original 150ms craft lookup belongs to initial loading, not POST
+ // recovery. Settle it before measuring whether a refused write refreshes.
+ await act(async()=>{await vi.waitFor(()=>expect(fetchMock.mock.calls.some(([path,init])=>path.includes("master-data/crafts")&&init?.method!=="POST")).toBe(true));});
  expect(button("提交转厂").disabled).toBe(false);return fetchMock;
 }
 beforeEach(()=>{vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT",true);Element.prototype.scrollIntoView=vi.fn();host=document.createElement("div");document.body.append(host);root=createRoot(host);});

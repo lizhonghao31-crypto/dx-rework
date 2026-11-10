@@ -4,7 +4,8 @@ import type {FixedTimelineCalendar} from './fixed-timeline-targets.js';
 /** Planning and responsibility are separate adopted values. Changing a planning
  * budget does not change the original personal SLA or its calendar.
  */
-export function frozenWorkDefinition(initial:FrozenInitialTimelineInput,key:string,dualCraft=false){
+export type FixedWorkInputs={data:Pick<FrozenInitialTimelineInput['data'],'unified'|'planning'|'development'>};
+export function frozenWorkDefinition(initial:FixedWorkInputs,key:string,dualCraft=false){
  const parameter=initial.data.unified.values.parameters[key]?.value;
  const adopted=initial.data.planning?.values[key] as {minutes?:number;calendar?:FixedTimelineCalendar;responsibilityAdopted?:boolean;responsibilityMinutes?:number;responsibilityCalendar?:FixedTimelineCalendar}|undefined;
  const ref=initial.data.planning?`${initial.data.planning.standardRef}:${key}`:null;

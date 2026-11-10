@@ -2,10 +2,9 @@ import {createHash,randomUUID} from 'node:crypto';
 import {readBulkPreshrinkRequirement} from './bulk-preshrink-requirement.js';
 import {z} from 'zod';
 import type {Pool,PoolClient} from 'pg';
-import {SeriesProfileInputSchema,SeriesContextInputSchema,SeriesPreviewInputSchema,ApplySeriesPlanSchema,RequestSeriesPlanSchema,SeriesRequestDecisionSchema,SERIES_PLAN_RULE,
+import {SeriesContextInputSchema,SeriesPreviewInputSchema,ApplySeriesPlanSchema,RequestSeriesPlanSchema,SeriesRequestDecisionSchema,SERIES_PLAN_RULE,
  type SeriesPlanPreview,type SeriesPlanState,type SeriesPlanSnapshot,type SeriesProfile,type SeriesPreviewInput,type SeriesRisk,type PlanningDependency} from '@dx-rework/contracts/digital-series-plan';
 import {beijingCalendarDate} from '@dx-rework/contracts/digital-production';
-import {seriesCalendarDate} from '@dx-rework/contracts/series-calendar';
 import {seriesMilestones,retainSeriesTargets,evaluatePlanningDependencies} from '@dx-rework/domain/series-plan';
 import {isRootActor} from '../access/business-authority.js';
 import {ApplicationError} from '../platform/errors.js';
@@ -24,10 +23,9 @@ export class SeriesPlanService{
  private readonly tokens:SlaPreviewTokens;
  constructor(private readonly database:Pool,secret?:string){this.tokens=new SlaPreviewTokens(secret);}
  async creationPreview(actor:TrustedActorContext,raw:unknown){
-  const input=parse(z.object({customerCode:z.string().max(100),salesYear:z.number().int().min(1000).max(9999),salesSeries:z.enum(['P01','P02','P03','P04','P05','P06','P07','P08','P09','P10','P11','P12']),requiresColorMatching:z.boolean().nullable()}).strict(),raw);
+  parse(z.object({customerCode:z.string().max(100),salesYear:z.number().int().min(1000).max(9999),salesSeries:z.enum(['P01','P02','P03','P04','P05','P06','P07','P08','P09','P10','P11','P12']),requiresColorMatching:z.boolean().nullable()}).strict(),raw);
   if(!isRootActor(actor)&&(!actor.actorRoles.includes('sample_designer')||!(actor.authorizationCapabilities??[]).includes('pattern_room:orders:create')||!await new DigitalProductionAccessPolicy(this.database).activeRole(actor.actorId,'sample_designer')))digitalForbidden();
-  const profile=await this.profile(this.database,input.customerCode||null);let candidateDate:string|null=null;try{candidateDate=seriesCalendarDate(input.salesYear,Number(input.salesSeries.slice(1)),profile.monthOffset,profile.shippingDay??profile.suggestionDay);}catch{/* Invalid dates remain explicit, never overflow. */}
-  return {profile,candidateDate,basis:profile.configured?'configured-series':'series-suggestion',milestones:candidateDate&&input.requiresColorMatching!==null?seriesMilestones(candidateDate,input.requiresColorMatching?'A':'B'):[]};
+  return {profile:await this.profile(this.database,null),candidateDate:null,basis:'unavailable',milestones:[],suggestionsEnabled:false};
  }
  private async order(db:DB,actor:TrustedActorContext,id:string,readOnly=false){const p=new DigitalProductionAccessPolicy(db);await p.assert(actor,'order',id,'technical');const row=(await db.query('SELECT * FROM digital_production_orders WHERE production_order_id=$1',[id])).rows[0]??digitalNotFound();
   if(isRootActor(actor))return row;
@@ -43,8 +41,10 @@ export class SeriesPlanService{
  private async requester(db:DB,actor:TrustedActorContext,order:Record<string,unknown>,write=false){if(await this.designer(db,actor,order,write)||await this.manager(db,actor,write))return true;
   const p=new DigitalProductionAccessPolicy(db);return order.primary_merchandiser_id===actor.actorId&&actor.actorRoles.includes('order_merchandiser')&&await(write?p.lockActiveRole(actor.actorId,'order_merchandiser'):p.activeRole(actor.actorId,'order_merchandiser'));}
  async profile(db:DB,customerCode:string|null):Promise<SeriesProfile>{
-  const row=(await db.query(`SELECT * FROM digital_series_profiles WHERE config_key IN ('*',$1) ORDER BY (customer_code IS NOT NULL) DESC,version DESC LIMIT 1`,[customerCode??'*'])).rows[0];
-  return row?{customerCode:row.customer_code,version:row.version,monthOffset:row.month_offset,shippingDay:row.shipping_day,suggestionDay:15,configured:row.shipping_day!==null}:{customerCode:null,version:0,monthOffset:-2,shippingDay:null,suggestionDay:15,configured:false};
+  void db;void customerCode;
+  // Legacy response shape only. Historical adopted snapshots retain their own
+  // profile; no profile or fallback date is used for a new plan.
+  return {customerCode:null,version:0,monthOffset:0,shippingDay:null,suggestionDay:15,configured:false};
  }
  private async history(db:DB,id:string):Promise<SeriesPlanSnapshot[]>{return (await db.query('SELECT snapshot_json FROM digital_series_plans WHERE production_order_id=$1 ORDER BY revision DESC',[id])).rows.map(r=>r.snapshot_json);}
  private async prepare(db:PoolClient,actor:TrustedActorContext,id:string,input:SeriesPreviewInput):Promise<SeriesPlanPreview>{
@@ -52,12 +52,9 @@ export class SeriesPlanService{
   if(order.version!==input.expectedOrderVersion||(previous?.revision??0)!==input.expectedPlanRevision)fail('订单或计划版本已更新，请重新预览');
   const profile=await this.profile(db,order.customer_code),native=await readSeriesPlanFacts(db,id,order.source_id,order.customer_code),time=await new ContextBusinessClock(this.database,db).read({kind:'order',id});
   const route=order.requires_color_matching===true?'A':order.requires_color_matching===false?'B':null;
-  let candidateDate=input.plannedShippingDate,basis:SeriesPlanPreview['basis']=candidateDate?'manual':'unavailable';const risks:SeriesRisk[]=[];
-  if(!candidateDate&&order.sales_year&&order.sales_series){try{candidateDate=seriesCalendarDate(order.sales_year,Number(order.sales_series.slice(1)),profile.monthOffset,profile.shippingDay??profile.suggestionDay);basis=profile.configured?'configured-series':'series-suggestion';}
-   catch{risks.push({code:'INVALID_SERIES_DAY',tone:'danger',nodeId:null,message:'系列月份不含配置的出货日，请明确选择有效计划日期，不自动跨月或改成月底'});}}
+  const candidateDate=input.plannedShippingDate,basis:SeriesPlanPreview['basis']=candidateDate?'manual':'unavailable';const risks:SeriesRisk[]=[];
   if(!route)risks.push({code:'DESIGN_ROUTE_MISSING',tone:'unknown',nodeId:null,message:'设计尚未明确辅料是否需对色，无法生成A/B路线'});
-  if(!candidateDate)risks.push({code:'PLAN_DATE_MISSING',tone:'unknown',nodeId:null,message:'未生成计划出货日期，请核对销售年份、系列或手动输入计划'});
-  if(basis==='series-suggestion')risks.push({code:'DAY_15_PROPOSAL',tone:'warning',nodeId:null,message:'15日仅为待采用建议；本单明确采用不等于修改全局默认'});
+  if(!candidateDate)risks.push({code:'PLAN_DATE_MISSING',tone:'unknown',nodeId:null,message:'请在原交期入口确认真实日期，或明确填写有效的计划日期'});
   const lines=(await db.query(`SELECT line_id,po_number,color,coalesce(customer_warehouse_arrival_date,delivery_date)::text AS date,factory_delivery_date::text AS factory_date,customer_date_version AS version FROM digital_production_po_lines WHERE production_order_id=$1 ORDER BY position`,[id])).rows;
   for(const line of lines)if(candidateDate&&line.date&&line.date<candidateDate)risks.push({code:'CUSTOMER_EARLIER_THAN_PLAN',tone:'danger',nodeId:null,message:`${line.po_number??line.color} 客户约定出货 ${line.date} 早于计划 ${candidateDate}；请有权调整计划或办理客户改期，系统不覆盖任一日期`});
   const shipmentLocked=native.facts.some(f=>f.key==='planned_shipment'&&f.scopeRef==='whole'&&(f.completed||f.started));
@@ -144,7 +141,7 @@ export class SeriesPlanService{
   await db.query('INSERT INTO digital_series_requests(request_id,production_order_id,expected_plan_revision,order_version,input_json,candidate_date,reason,requested_by,business_time,audit_event_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',[requestId,id,input.expectedPlanRevision,input.expectedOrderVersion,JSON.stringify(p.input),p.candidateDate,input.reason,actor.actorId,JSON.stringify(time),audit]);return {requestId};});}
  async apply(actor:TrustedActorContext,id:string,raw:unknown,key:string){const input=parse(ApplySeriesPlanSchema,raw);return this.command(actor,id,'apply',key,input,db=>this.manager(db,actor,true),async db=>{
   const previewInput=SeriesPreviewInputSchema.parse(Object.fromEntries(Object.entries(input).filter(([k])=>!['previewToken','reason','acceptSuggestedDate','requestId'].includes(k)))),p=await this.prepare(db,actor,id,previewInput);
-  this.tokens.verify(input.previewToken,hash(p.sourceRevisionSet));if(!p.candidateDate||!p.route)fail('计划日期或设计对色路线不完整');if(p.basis==='series-suggestion'&&!input.acceptSuggestedDate)fail('15日为建议日期，请明确本单采用或填写计划日期');
+  this.tokens.verify(input.previewToken,hash(p.sourceRevisionSet));if(!p.candidateDate||!p.route)fail('计划日期或设计对色路线不完整');if(input.acceptSuggestedDate&&!input.plannedShippingDate)fail('系列默认建议已取消，请明确填写有效的计划日期');
   if(input.requestId){const r=(await db.query('SELECT * FROM digital_series_requests WHERE request_id=$1 AND production_order_id=$2',[input.requestId,id])).rows[0];if(!r)digitalNotFound();if(!isRootActor(actor)&&r.requested_by===actor.actorId)digitalForbidden();if(hash(r.input_json)!==hash(p.input))fail('申请条件已变，请按原申请重新预览或驳回后重新申请');if((await db.query('SELECT 1 FROM digital_series_request_decisions WHERE request_id=$1',[input.requestId])).rowCount)fail('申请已处理');}
   const planId=randomUUID(),time=await new ContextBusinessClock(this.database,db).read({kind:'order',id}),snapshot:SeriesPlanSnapshot={revision:p.planRevision+1,plannedShippingDate:p.candidateDate!,route:p.route!,salesYear:p.sourceRevisionSet.series instanceof Array?p.sourceRevisionSet.series[0]:null,salesSeries:p.sourceRevisionSet.series instanceof Array?p.sourceRevisionSet.series[1]:null,profile:p.profile,milestones:p.milestones,plannedDurations:p.input.plannedDurations,planningGraph:p.planningGraph,dependencies:p.dependencies,risks:p.risks,slaSnapshotRef:p.sourceRevisionSet.slaSnapshotRef as {id:string;revision:number}|null,reason:input.reason,createdBy:actor.actorId,recordedAt:new Date((await db.query('SELECT CURRENT_TIMESTAMP AS at')).rows[0].at).toISOString()};
   const audit=await this.audit(db,actor,id,'series_plan_applied',{planId,snapshot,sourceRevisionSet:p.sourceRevisionSet,risks:p.risks});
@@ -152,9 +149,10 @@ export class SeriesPlanService{
   if(input.requestId)await db.query('INSERT INTO digital_series_request_decisions(request_id,approved,plan_id,reason,decided_by,audit_event_id,business_time) VALUES($1,true,$2,$3,$4,$5,$6)',[input.requestId,planId,input.reason,actor.actorId,audit,JSON.stringify(time)]);return snapshot;
  });}
  async reject(actor:TrustedActorContext,id:string,requestId:string,raw:unknown,key:string){const input=parse(SeriesRequestDecisionSchema,raw);return this.command(actor,id,`reject:${requestId}`,key,input,db=>this.manager(db,actor,true),async db=>{const r=(await db.query('SELECT * FROM digital_series_requests WHERE production_order_id=$1 AND request_id=$2',[id,requestId])).rows[0]??digitalNotFound();if(!isRootActor(actor)&&r.requested_by===actor.actorId)digitalForbidden();if((await db.query('SELECT 1 FROM digital_series_request_decisions WHERE request_id=$1',[requestId])).rowCount)fail('申请已处理');const time=await new ContextBusinessClock(this.database,db).read({kind:'order',id}),audit=await this.audit(db,actor,id,'series_plan_rejected',{requestId,...input});await db.query('INSERT INTO digital_series_request_decisions(request_id,approved,reason,decided_by,audit_event_id,business_time) VALUES($1,false,$2,$3,$4,$5)',[requestId,input.reason,actor.actorId,audit,JSON.stringify(time)]);return {requestId,approved:false};});}
- async profiles(actor:TrustedActorContext){await assertSlaSettingsReadActor(this.database,actor);return {profiles:(await this.database.query('SELECT DISTINCT ON(config_key) config_key,customer_code AS "customerCode",version,month_offset AS "monthOffset",shipping_day AS "shippingDay",reason FROM digital_series_profiles ORDER BY config_key,version DESC')).rows};}
- async saveProfile(actor:TrustedActorContext,raw:unknown,key:string){const input=parse(SeriesProfileInputSchema,raw);if(!/^[A-Za-z0-9._:-]{1,128}$/.test(key))throw new ApplicationError('VALIDATION_ERROR','缺少有效操作标识',400);const db=await this.database.connect();try{await db.query('BEGIN');await db.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");await assertSlaSettingsActor(db,actor,true);const command='series-profile',fingerprint=hash(input),prior=(await db.query('SELECT payload_hash,response FROM digital_production_commands WHERE actor_id=$1 AND command=$2 AND key=$3',[actor.actorId,command,key])).rows[0];if(prior&&prior.payload_hash!==fingerprint)fail('操作标识已用于不同内容');if(prior){await db.query('COMMIT');return prior.response;}
-  if(input.customerCode&&!(await db.query('SELECT 1 FROM digital_production_customers WHERE code=$1 AND enabled',[input.customerCode])).rowCount)throw new ApplicationError('VALIDATION_ERROR','请使用已登记且启用的客户代码',400);
-  const version=(await db.query('SELECT coalesce(max(version),0)::int AS v FROM digital_series_profiles WHERE config_key=$1',[input.customerCode??'*'])).rows[0].v;if(version!==input.expectedVersion)fail('系列默认配置已更新，请刷新');await db.query('INSERT INTO digital_series_profiles(config_key,customer_code,version,month_offset,shipping_day,reason,created_by) VALUES($1,$2,$3,$4,$5,$6,$7)',[input.customerCode??'*',input.customerCode,version+1,input.monthOffset,input.shippingDay,input.reason,actor.actorId]);const response={version:version+1};await this.audit(db,actor,actor.actorId,'series_profile_changed',{...input,version:version+1});await db.query('INSERT INTO digital_production_commands(actor_id,command,key,payload_hash,response) VALUES($1,$2,$3,$4,$5)',[actor.actorId,command,key,fingerprint,JSON.stringify(response)]);await db.query('COMMIT');return response;
- }catch(e){await db.query('ROLLBACK');throw e;}finally{db.release();}}
+ async profiles(actor:TrustedActorContext){await assertSlaSettingsReadActor(this.database,actor);return {profiles:[]};}
+ async saveProfile(actor:TrustedActorContext,raw:unknown,key:string){
+  void raw;void key;
+  await assertSlaSettingsActor(this.database,actor,true);
+  fail('销售系列默认建议已取消，请在原订单交期入口确认日期');
+ }
 }

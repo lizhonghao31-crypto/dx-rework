@@ -79,3 +79,10 @@
 `fixed-schedule-progress.ts`只评价传入的冻结DAG/日历和可信事实，分别计算可交下界、已赚提前、目标差、独立责任窗及整单物理跨度。`fixed-schedule-basis.ts`在原授权RR内复用原生来源/轮次、逐PO实裁、工厂、收货/质检/装箱和终止事实；共享存储只保存明确白名单，不保存用户结果。`fixed-rework-progress.ts`读取原批准和当前配置派工，新增范围目标只由原有界worker在原交接约束下补齐。`fixed-task-targets.ts`只返回已授权单任务自己的B，原task dueAt/D不变；计划缺失不回退成另一个时间。
 
 `JourneySelectionClock`保存有限分类帧；`journey-selection-query.ts`在当前完整授权范围读轻量标志，`journey-projection.ts`保留原KPI母集合和15条富化。当前选中行才计算数值，GET不重建全库、不改B。原实裁事务仅为新v2原生PO/cut/record写真实分PO完成事件，Root原更正入口只更正该事件，不改兄弟PO或共享整任务完成时间。纯读取、原事务/权限、有限后台更新与后续UI消费职责保持分离。
+
+
+### 供应链 PR05：成套标准与演算
+
+`sla-settings-sets.ts`在原全局生命周期锁、当前授权及同一事务内协调两类原个人草稿和正式标准；`sla-settings-set-repository.ts`只保存真实组合引用与规划参数，不拼历史、不更新在途。原单侧发布仍走自己的服务与原权限，预览绑定两侧当前版本，发布后形成真实当前配对。PMC不读取未发布个人草稿。0283仅扩展既有组合/草稿记录，不做历史回填或新采用启用。
+
+`fixed-development-work.ts`与`fixed-order-work.ts`是从原采用入口提取的纯路线构建器；实际采用仍由原事务冻结真实来源、范围、日历与标准。`sla-settings-calculation.ts`只把临时假设交给同一构建器和倒排算法，不连接数据库、伪造A或发布配置。`sla-settings-set-editor.tsx`维护唯一组合编辑/提交恢复协调，`sla-independent-calculator.tsx`维护独立临时输入和只读请求代次；客户跟单仍用原入口。`SeriesPlanService`保留显式采用和真实历史，默认profile/自动候选使用面已撤除。
