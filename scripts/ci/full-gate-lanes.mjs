@@ -85,6 +85,16 @@ export function validateNonDatabase(report,files){
   if(!Array.isArray(r.assertionResults)||!r.assertionResults.length||r.assertionResults.some(c=>!['passed','skipped','pending'].includes(c.status))||(!knownSkip&&!r.assertionResults.some(c=>c.status==='passed')))throw Error('FULL_NON_DB_NO_PASS: '+path);
  }
 }
+/** Records travel as artifacts, never as an exec environment containing the
+ * full test plan three times. GitHub results remain separate authoritative inputs. */
+export function laneNeedsFromFiles(directory,id,environment){
+ const resultKeys={prepare:'FULL_GATE_PREPARE_RESULT','non-db':'FULL_GATE_NON_DB_RESULT',postgres:'FULL_GATE_POSTGRES_RESULT'};
+ return Object.fromEntries(Object.entries(resultKeys).map(([lane,key])=>{
+  const path=join(directory,`full-record-${lane}-${id.runId}-${id.attempt}`,'full-lane-record.json');
+  if(!lstatSync(path).isFile()||lstatSync(path).size>4*1024*1024)throw Error('FULL_LANE_RECORD_SIZE: '+lane);
+  return [lane,{result:environment[key],outputs:{record:readFileSync(path,'utf8'),...(lane==='prepare'?{bundle_hash:environment.FULL_GATE_BUNDLE_HASH}:{})}}];
+ }));
+}
 export function aggregate(needs,id,inputs,catalog=checkCatalog('full')){
  const combined={};let buildHash,sourceContext,sourceFilesHash;
  for(const lane of ['prepare','non-db','postgres']){
@@ -158,7 +168,7 @@ async function cli(){
   writeFileSync(join(temp,'full-lane-record.json'),JSON.stringify(record));output('record',record);
   if(status!=='success')throw Error('FULL_LANE_FAILED: '+lane);
  }else if(command==='aggregate'){
-  const needs=JSON.parse(process.env.FULL_GATE_NEEDS);
+  const needs=laneNeedsFromFiles(process.env.FULL_GATE_RECORD_DIRECTORY,id,process.env);
   try{const steps=aggregate(needs,id,inputs);output('steps',steps);output('scope',inputs.scope);}
   catch(error){
    if(process.env.GITHUB_STEP_SUMMARY)appendFileSync(process.env.GITHUB_STEP_SUMMARY,

@@ -5,6 +5,7 @@ import {isImageAttachment,hasInvalidDeclaredImageError,isReceivingImageCandidate
 import {createClientRequestId} from "./client-request-id.js";
 import {createReceivingBoardMutation} from "./receiving-board-request.js";
 import type {BoardRow,ReceivingHistoryItem,DifferenceResolution} from "./receiving-board-types.js";
+import type {PackingTimeInput} from '@dx-rework/contracts';
 const {apiUrl}=createWebUrls(import.meta.env.BASE_URL);
 const uploadReplacementImage = async (source: File): Promise<string> => {
   const upload=async(file:File):Promise<string>=>(await uploadAttachmentWithRecovery(file,`receiving-replacement:${localFileScope(source)}`,toolsAttachmentApi,undefined,undefined,source)).attachmentId;
@@ -58,6 +59,8 @@ export function useReceivingBoardEditSession(setRefreshToken:Dispatch<SetStateAc
   const [packingEditing, setPackingEditing] = useState<BoardRow | null>(null);
 
   const [packingQuantity, setPackingQuantity] = useState("");
+  const [packingTimeMode,setPackingTimeMode]=useState<PackingTimeInput['mode']>('unknown');
+  const [packingTimeValue,setPackingTimeValue]=useState('');
 
   const [packingRequestKey, setPackingRequestKey] = useState("");
 
@@ -116,6 +119,8 @@ export function useReceivingBoardEditSession(setRefreshToken:Dispatch<SetStateAc
     setDifferenceEditing(null);
     setPackingEditing(row);
     setPackingQuantity(row.packingQuantity === null ? "" : String(row.packingQuantity));
+    setPackingTimeMode(row.packingRevisionId===null&&!row.packingScopeUnresolved?'now':'unknown');
+    setPackingTimeValue('');
     setPackingRequestKey(createClientRequestId());
     setMutationMessage("");
   };
@@ -127,6 +132,15 @@ export function useReceivingBoardEditSession(setRefreshToken:Dispatch<SetStateAc
       setMutationMessage("装箱数量必须是0到10000000之间的整数");
       return;
     }
+    let packingTime:PackingTimeInput;
+    if(packingTimeMode==='instant'){
+      const at=new Date(`${packingTimeValue}+08:00`);
+      if(!packingTimeValue||!Number.isFinite(at.getTime())){setMutationMessage('请填写有效的实际装箱时间（北京时间）');return;}
+      packingTime={mode:'instant',value:at.toISOString()};
+    }else if(packingTimeMode==='date'){
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(packingTimeValue)){setMutationMessage('请填写实际装箱日期');return;}
+      packingTime={mode:'date',value:packingTimeValue};
+    }else packingTime={mode:packingTimeMode};
     setMutationBusy(true);
     setMutationMessage("");
     try {
@@ -138,6 +152,7 @@ export function useReceivingBoardEditSession(setRefreshToken:Dispatch<SetStateAc
           expectedVersion: packingEditing.version,
           expectedPackingRevisionId: packingEditing.packingRevisionId,
           packingQuantity: value,
+          packingTime,
         }),
       });
       setPackingEditing(null);
@@ -368,7 +383,7 @@ export function useReceivingBoardEditSession(setRefreshToken:Dispatch<SetStateAc
     editDefectiveQuantity,setEditDefectiveQuantity,editImages,setEditImages,receiptSource,setReceiptSource,
     receiptDocumentQuantity,setReceiptDocumentQuantity,receiptActualQuantity,setReceiptActualQuantity,receiptDefectiveQuantity,setReceiptDefectiveQuantity,
     mutationBusy,boardMutation,mutationUnknown,mutationMessage,setMutationMessage,packingEditing,
-    setPackingEditing,packingQuantity,setPackingQuantity,differenceEditing,differenceResult,setDifferenceResult,
+    setPackingEditing,packingQuantity,setPackingQuantity,packingTimeMode,setPackingTimeMode,packingTimeValue,setPackingTimeValue,differenceEditing,differenceResult,setDifferenceResult,
     differenceImages,closeDifference,selectDifferenceImages,openPacking,submitPacking,openDifference,
     submitDifference,openEdit,openReceiptCorrection,submitReceiptCorrection,submitCorrection,confirmDelete,
     recoveryActions,removeDifferenceImage,

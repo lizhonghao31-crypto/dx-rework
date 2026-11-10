@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { hasWarehouseReceivingRole } from "@dx-rework/contracts";
+import type {PackingTimeInput} from '@dx-rework/contracts';
 
 import { businessActor, isRootUser } from "../access/business-authority.js";
 import { assertDataExportPolicy } from "../access/data-export-policy.js";
@@ -137,6 +138,7 @@ const packingBody = (input: unknown): {
   expectedVersion: number;
   expectedPackingRevisionId: string | null;
   packingQuantity: number;
+  packingTime?:PackingTimeInput;
 } => {
   if (!input || typeof input !== "object") {
     throw new ApplicationError("VALIDATION_ERROR", "装箱数量信息不完整", 400);
@@ -148,6 +150,7 @@ const packingBody = (input: unknown): {
       ? body.expectedPackingRevisionId
       : null,
     packingQuantity: Number(body.packingQuantity),
+    ...(body.packingTime===undefined?{}:{packingTime:body.packingTime as PackingTimeInput}),
   };
 };
 

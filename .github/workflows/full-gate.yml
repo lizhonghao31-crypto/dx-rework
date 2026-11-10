@@ -203,6 +203,14 @@ jobs:
           LANE_STEPS: ${{ toJSON(steps) }}
           LANE_STATUS: ${{ job.status }}
         run: node scripts/ci/full-gate-lanes.mjs record
+      - name: Retain bounded lane record for aggregation
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-record-${{ env.FULL_GATE_LANE }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/full-lane-record.json
+          if-no-files-found: error
+          retention-days: 7
 
   non-db:
     name: Full Gate non-db
@@ -255,6 +263,14 @@ jobs:
           LANE_STEPS: ${{ toJSON(steps) }}
           LANE_STATUS: ${{ job.status }}
         run: node scripts/ci/full-gate-lanes.mjs record
+      - name: Retain bounded lane record for aggregation
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-record-${{ env.FULL_GATE_LANE }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/full-lane-record.json
+          if-no-files-found: error
+          retention-days: 7
       - name: Retain original lane evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -501,6 +517,14 @@ jobs:
           LANE_STEPS: ${{ toJSON(steps) }}
           LANE_STATUS: ${{ job.status }}
         run: node scripts/ci/full-gate-lanes.mjs record
+      - name: Retain bounded lane record for aggregation
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-record-${{ env.FULL_GATE_LANE }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/full-lane-record.json
+          if-no-files-found: error
+          retention-days: 7
       - name: Retain original lane evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -539,10 +563,19 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version-file: .node-version
+      - name: Download this run lane records
+        uses: actions/download-artifact@v4
+        with:
+          pattern: full-record-*-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/full-lane-evidence
       - name: Verify complete lane results
         id: aggregate
         env:
-          FULL_GATE_NEEDS: ${{ toJSON(needs) }}
+          FULL_GATE_RECORD_DIRECTORY: ${{ runner.temp }}/full-lane-evidence
+          FULL_GATE_PREPARE_RESULT: ${{ needs.prepare.result }}
+          FULL_GATE_NON_DB_RESULT: ${{ needs.non-db.result }}
+          FULL_GATE_POSTGRES_RESULT: ${{ needs.postgres.result }}
+          FULL_GATE_BUNDLE_HASH: ${{ needs.prepare.outputs.bundle_hash }}
         run: node scripts/ci/full-gate-lanes.mjs aggregate
 
       - name: Write actual gate summary

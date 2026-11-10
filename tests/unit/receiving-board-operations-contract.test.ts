@@ -95,7 +95,7 @@ describe("receiving board operations", () => {
     expect(css).toContain("font-family:inherit;font-size:10px;font-weight:700;line-height:1");
     expect(css).not.toContain("font:800 7px/1 inherit");
     expect(css).toContain(".order-board-history__entry>button{justify-self:end;width:max-content;min-width:max-content;white-space:nowrap");
-    expect(page).toContain('>{row.packingQuantity === null ? "录入" : "修改"}</button>');
+    expect(page).toContain('>{row.packingScopeUnresolved?"核对":row.packingQuantity === null ? "录入" : "修改"}</button>');
     expect(page).toContain("<span>本次送货单 <strong>{quantity(item.receiptDocumentQuantity)}件</strong></span>");
     expect(page).toContain("const liveOperationSnapshot = searchMode || endDate >= localDate()");
     expect(page).toContain("canManagePacking && liveOperationSnapshot");

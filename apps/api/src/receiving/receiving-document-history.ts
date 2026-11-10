@@ -1,3 +1,4 @@
+import {packingActualTime} from '@dx-rework/contracts';
 import {receiptTime} from '../production-platform/receiving-summary.js';
 import type {Pool} from "pg";
 import {ApplicationError} from "../platform/errors.js";
@@ -14,13 +15,13 @@ export async function receivingDocumentHistory(database:Pool,batchId:string){
     FROM receiving_receipts r LEFT JOIN operation_events e ON e.event_id=r.operation_event_id LEFT JOIN app_users u ON u.id=r.received_by WHERE r.receiving_batch_id=ANY($1::uuid[]) ORDER BY r.received_at,r.receipt_id`,[ids])).rows;
   const corrections=(await db.query(`SELECT c.correction_id AS id,c.receipt_id AS "receiptId",c.created_at AS at,u.display_name AS "by",c.document_quantity AS "documentQuantity",c.actual_quantity AS "actualQuantity",c.defective_quantity AS "defectiveQuantity"
     FROM receiving_receipt_corrections c LEFT JOIN app_users u ON u.id=c.corrected_by WHERE c.receiving_batch_id=ANY($1::uuid[]) ORDER BY c.created_at,c.correction_id`,[ids])).rows;
-  const packing=(await db.query(`SELECT p.packing_revision_id AS id,p.receiving_batch_id AS "batchId",p.packing_quantity AS quantity,p.created_at AS at,u.display_name AS "by"
-    FROM receiving_packing_revisions p LEFT JOIN app_users u ON u.id=p.recorded_by WHERE p.receiving_batch_id=ANY($1::uuid[]) ORDER BY p.created_at,p.packing_revision_id`,[ids])).rows;
+  const packing=(await db.query(`SELECT p.packing_revision_id AS id,p.receiving_batch_id AS "batchId",p.packing_quantity AS quantity,p.created_at AS at,u.display_name AS "by",event.after_state->'packingActualTime' AS actual_time
+    FROM receiving_packing_revisions p LEFT JOIN operation_events event ON event.event_id=p.operation_event_id LEFT JOIN app_users u ON u.id=p.recorded_by WHERE p.receiving_batch_id=ANY($1::uuid[]) ORDER BY p.created_at,p.packing_revision_id`,[ids])).rows;
   const resolutions=(await db.query(`SELECT r.resolution_id AS id,r.difference_type AS "differenceType",r.result,r.created_at AS at,u.display_name AS "by",r.packing_revision_id AS "packingRevisionId"
     FROM receiving_difference_resolutions r LEFT JOIN app_users u ON u.id=r.handled_by WHERE r.receiving_batch_id=ANY($1::uuid[]) ORDER BY r.created_at,r.resolution_id`,[ids])).rows;
   const files=(await db.query(`SELECT a.attachment_id AS id,a.original_filename AS filename,a.entity_id AS "entityId",a.status,a.created_at AS at,u.display_name AS "by",retired.retired_at AS "retiredAt"
     FROM attachments a LEFT JOIN app_users u ON u.id=a.uploaded_by LEFT JOIN receiving_attachment_retirements retired USING(attachment_id)
     WHERE a.entity_type='receiving_batch' AND a.entity_id=ANY($1::text[]) OR a.entity_type='receiving_difference_resolution' AND a.entity_id=ANY($2::text[]) ORDER BY a.created_at,a.attachment_id`,[ids,resolutions.map(row=>row.id)])).rows;
-  await db.query("COMMIT");return {batchIds:ids,receipts:receipts.map(({actualTimeState,...receipt})=>({...receipt,...receiptTime(receipt.receivedAt,actualTimeState)})),corrections,packing,resolutions,files};
+  await db.query("COMMIT");return {batchIds:ids,receipts:receipts.map(({actualTimeState,...receipt})=>({...receipt,...receiptTime(receipt.receivedAt,actualTimeState)})),corrections,packing:packing.map(({actual_time,...item})=>({...item,actualTime:packingActualTime(actual_time)})),resolutions,files};
  }catch(error){await db.query("ROLLBACK");throw error;}finally{db.release();}
 }

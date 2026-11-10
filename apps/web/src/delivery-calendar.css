@@ -42,10 +42,10 @@
 .delivery-month-days{display:grid;grid-template-columns:repeat(7,minmax(0,1fr))}
 .delivery-month-day,.delivery-month-blank{position:relative;min-width:0;min-height:85px;border-right:1px solid #dfe7f3;border-bottom:1px solid #dfe7f3}
 .delivery-month-day:nth-child(7n),.delivery-month-blank:nth-child(7n){border-right:0}.delivery-month-blank{background:#f4f7fc}
-.delivery-day-select{width:100%;height:100%;min-height:85px;border:0;background:transparent;text-align:left;display:flex;flex-direction:column;align-items:flex-start;gap:3px;padding:6px 8px 20px;color:inherit;font-size:11px}
+.delivery-day-select{width:100%;height:100%;min-height:85px;border:0;background:transparent;text-align:left;display:flex;flex-direction:column;align-items:flex-start;gap:3px;padding:6px 8px 8px;color:inherit;font-size:11px}
 .delivery-day-select>strong{font-size:19px;line-height:1.15}.delivery-day-select>span{max-width:100%;overflow-wrap:anywhere}.delivery-day-select .delivery-state-marks{gap:4px;flex-wrap:wrap}
 .delivery-month-day.is-today{background:#edf8f1}.delivery-month-day.is-selected{background:#edf4ff;box-shadow:inset 0 0 0 2px #2877ff;border-radius:4px}.delivery-day-select:hover{background:#e7f0ff99}
-.delivery-day-open{position:absolute;bottom:4px;right:5px;border:0;background:none;color:#1260dc;font-size:10px;padding:1px 3px}
+
 @media(max-width:1250px){.delivery-year-layout{grid-template-columns:minmax(0,1fr) 200px;gap:12px}.delivery-mini-month{padding:6px}.delivery-year-months{gap:9px}.delivery-mini-heading{gap:4px}.delivery-mini-heading span{font-size:10px}.delivery-day-select{padding-left:5px;padding-right:5px;font-size:10px}.delivery-legends{gap:8px}.delivery-section-heading{align-items:flex-start;flex-direction:column}}
 @media(max-width:1250px){.delivery-kpi{padding:12px;gap:9px}.delivery-kpi strong{font-size:22px}.delivery-toolbar{gap:7px}.delivery-toolbar form{max-width:none;flex-basis:180px}.delivery-toolbar select{max-width:135px}}
 @media(max-width:1000px){.delivery-year-layout{grid-template-columns:minmax(0,1fr)}.delivery-year-months{grid-template-columns:repeat(3,minmax(0,1fr))}.delivery-bottom-cards{grid-template-columns:1fr}.delivery-kpi{padding:10px;gap:7px}.delivery-kpi-icon{flex-basis:32px;height:32px;font-size:21px}}
@@ -57,3 +57,10 @@
 .delivery-po-photo.cockpit-photo-trigger{position:relative;display:block;overflow:hidden;border:0;padding:0;cursor:zoom-in;background:#edf2f9}.delivery-po-photo img{display:block;width:100%;height:100%;object-fit:contain;position:relative;z-index:1;background:#edf2f9}.delivery-po-photo img[hidden]{display:none}.delivery-po-photo .cockpit-photo-fallback{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:9px;color:#617089;padding:3px}
 
 .delivery-calendar .cockpit-photo-dialog{width:min(960px,94vw);max-height:92dvh;border:0;border-radius:10px;padding:20px;color:#203756;background:#fff;box-shadow:0 16px 80px #12233b55}.delivery-calendar .cockpit-photo-dialog::backdrop{background:#14243b88}.delivery-calendar .cockpit-photo-dialog header,.delivery-calendar .cockpit-photo-dialog footer{display:flex;align-items:center;gap:10px;justify-content:space-between}.delivery-calendar .cockpit-photo-dialog h2{margin:0;font-size:22px}.delivery-calendar .cockpit-photo-dialog p{font-size:14px}.delivery-calendar .cockpit-photo-dialog button{font:inherit;border:1px solid #cddcf0;background:#fff;color:#2460a0;border-radius:5px;min-height:40px;min-width:40px;padding:6px 12px}.delivery-calendar .cockpit-photo-dialog footer{justify-content:flex-end}.delivery-calendar .cockpit-photo-stage{height:min(64dvh,620px);overflow:auto;background:#eef2f7;margin:14px 0;text-align:center}.delivery-calendar .cockpit-photo-stage img{display:block;max-width:none;height:auto;margin:auto;object-fit:contain}
+
+/* The calendar sets the track height; the focus list never sets its height. */
+.delivery-year-layout>.delivery-focus{align-self:stretch;min-height:0;contain:size;overflow:auto;overscroll-behavior:contain}
+.delivery-focus-row{display:flex;flex-direction:column;gap:5px;width:100%;border:0;border-bottom:1px solid #dce5f2;background:none;color:inherit;padding:10px 0;text-align:left;font:inherit;cursor:pointer}
+.delivery-focus-row:hover{background:#edf4ff}.delivery-focus-row strong{font-size:14px}.delivery-focus-row span,.delivery-focus-row small{font-size:12px}
+.delivery-row-info{margin-top:6px;font-size:11px;white-space:normal}.delivery-row-info summary{cursor:pointer;color:#1761bf}.delivery-row-info p{margin:5px 0;line-height:1.5}.delivery-row-info[open]{width:190px;max-width:100%}
+@media(max-width:1000px){.delivery-year-layout>.delivery-focus{contain:none;max-height:360px}}

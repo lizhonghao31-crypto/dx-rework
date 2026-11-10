@@ -247,7 +247,8 @@ describe("Full Gate sensitive path mapping", () => {
     expect(classifyFullGatePaths(["scripts/dx-acceptance.sh"]).deploymentSensitive).toBe(true);
     expect(classifyFullGatePaths(["scripts/ci/acceptance-maintenance-drill.mjs"]).deploymentSensitive).toBe(true);
     for(const path of ["scripts/ci/ci-gate-runtime.mjs","scripts/ci/pr-gate-protocol.mjs","scripts/ci/pr-gate-controller.mjs","scripts/ci/verify-actions-policy.mjs","scripts/check-main-release-compat.mjs","scripts/ci/main-release-history-drill.mjs","docs/operations/g1-acceptance-compat-update.sh"])expect(classifyFullGatePaths([path]).deploymentSensitive).toBe(true);
-    expect(deployment.mappedPostgresTests).toContain("tests/integration/migration-compatibility-postgres.test.ts");
+    expect(deployment.mappedPostgresTests).not.toContain("tests/integration/migration-compatibility-postgres.test.ts");
+    expect(classifyFullGatePaths([".github/workflows/future-deploy.yml"]).mappedPostgresTests).toContain("tests/integration/migration-compatibility-postgres.test.ts");
     for (const path of ["scripts/migration-lib.mjs", "scripts/migration-history-policy.mjs", "scripts/check-migration-export.mjs"]) {
       const result = classifyFullGatePaths([path]);
       expect(result.migrationSensitive).toBe(true);
@@ -292,4 +293,17 @@ it('keeps original native todo search, read-token and notification suites in the
   for(const suite of ['todo-global-search','digital-my-todo-context','digital-production-notifications'])expect(risk.mappedPostgresTests).toContain('tests/integration/'+suite+'-postgres.test.ts');
   expect(risk.businessChainSensitive).toBe(true);
  }
+});
+
+it('keeps cumulative native packing scope, physical-time precision and original permissions in the canonical PG plan',()=>{
+ const suite='tests/integration/effective-packing-postgres.test.ts';
+ for(const path of ['apps/api/src/receiving/packing-actual-time.ts','apps/api/src/receiving/packing-alias-invalidation.ts','apps/api/src/receiving/receiving-service.ts','apps/api/src/receiving/receiving-quantity-query.ts','apps/api/src/production-platform/order-closure-service.ts','apps/api/src/production-platform/packing-sla-evidence.ts','packages/contracts/src/receiving-packing-time.ts',suite])expect(classifyFullGatePaths([path]).mappedPostgresTests).toContain(suite);
+ expect(configForSuite(suite)).toBe('vitest.business-chain.config.ts');
+ expect(classifyFullGatePaths(['apps/web/src/wages/wage-page.tsx']).mappedPostgresTests).not.toContain(suite);
+});
+
+it('treats the extracted Full CI receipt worker as shared gate code while retaining real backup-tool drills',()=>{
+ const shared=classifyFullGatePaths(['.github/workflows/full-gate.yml']);
+ expect(shared.highRisk).toBe(true);expect(shared.dbRequired).toBe(true);expect(shared.deploymentSensitive).toBe(true);expect(shared.maintenanceSensitive).toBe(false);
+ for(const path of ['scripts/backup-postgres.sh','scripts/restore-postgres.sh','scripts/deploy/backup-runtime.sh'])expect(classifyFullGatePaths([path]).maintenanceSensitive).toBe(true);
 });

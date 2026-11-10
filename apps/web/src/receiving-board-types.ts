@@ -1,3 +1,4 @@
+import type {PackingActualTime} from '@dx-rework/contracts';
 export type ReworkStatus = "draft" | "active" | "completed" | null;
 export type BoardStatus = "all" | "normal" | "extra" | "short" | "multiple" | "receiving_difference" | "packing_difference" | "missing_packing" | "pending" | "handled" | "stale";
 
@@ -42,6 +43,8 @@ export type BoardRow = Readonly<{
   packingDifferenceQuantity: number | null;
   packingRecordedBy: string | null;
   packingRecordedAt: string | null;
+  packingActualTime?:PackingActualTime;
+  packingScopeUnresolved?:boolean;
   actualCutCount: number | null;
   cuttingRecordedBy: string | null;
   cuttingRecordedAt: string | null;

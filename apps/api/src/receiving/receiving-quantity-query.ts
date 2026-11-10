@@ -1,6 +1,67 @@
+import type {PoolClient} from 'pg';
 export type RepeatedReceivingSource = "jiashun" | "other_factory";
 export type ReceiptSource = "legacy" | "initial" | "backfill" | RepeatedReceivingSource;
 export type ReceivingDifferenceType = "receiving" | "packing";
+export const RECEIVING_GROUP_RESOLUTION_SCOPE_SQL = `EXISTS(
+ SELECT 1 FROM scoped_batches resolution_batch
+ WHERE resolution_batch.receiving_batch_id=resolution.receiving_batch_id
+ AND resolution_batch.group_key=totals.group_key
+)`;
+
+/** Packing is one cumulative head per native cut/legacy-style group. The
+ * operation batch is only the write source, not the cumulative scope. Native
+ * writes hold the group lock and use clock_timestamp after taking that lock;
+ * latest revision therefore retains Root decreases instead of MAX(quantity).
+ * All consumers use the same active scoped_batches from the original query.
+ */
+export const RECEIVING_PACKING_SCOPE_UNRESOLVED_SQL="coalesce(packing.scope_unresolved,cardinality(packing_scope.merge_event_ids)>0)";
+export const RECEIVING_GROUP_PACKING_JOIN_SQL = `LEFT JOIN LATERAL (
+ SELECT coalesce(array_agg(merge.event_id::text ORDER BY merge.event_id::text),ARRAY[]::text[]) AS merge_event_ids
+ FROM operation_events merge JOIN receiving_batches target ON merge.entity_id=target.receiving_batch_id::text
+ WHERE totals.group_key LIKE 'style:%' AND merge.action='receiving.batch.merge' AND merge.entity_type='receiving_batch'
+ AND coalesce('cut:'||target.cutting_order_id::text,'style:'||upper(btrim(target.style_no)))=totals.group_key
+ AND EXISTS(SELECT 1 FROM receiving_batches source JOIN receiving_packing_revisions original USING(receiving_batch_id)
+  WHERE source.receiving_batch_id::text=merge.after_state->>'sourceReceivingBatchId'
+  AND (source.cutting_order_id IS NOT NULL OR 'style:'||upper(btrim(merge.after_state->'source'->>'styleNo'))<>totals.group_key))
+) packing_scope ON true
+LEFT JOIN LATERAL (
+ SELECT head.packing_revision_id,head.receiving_batch_id,head.recorded_by,head.created_at,head.operation_event_id,head.packing_quantity AS source_quantity,
+  CASE WHEN quality.complete THEN head.packing_quantity ELSE NULL END AS packing_quantity,
+  CASE WHEN quality.complete THEN head.after_state->'packingActualTime' ELSE NULL END AS packing_actual_time,
+  NOT quality.complete AS scope_unresolved
+ FROM (
+  SELECT revision.*,batch.deleted_at,batch.cutting_order_id,event.after_state,
+   EXISTS(SELECT 1 FROM receiving_packing_revisions next JOIN receiving_batches next_batch USING(receiving_batch_id)
+    JOIN operation_events next_event ON next_event.event_id=next.operation_event_id
+    WHERE next_event.before_state->>'packingRevisionId'=revision.packing_revision_id::text
+    AND coalesce('cut:'||next_batch.cutting_order_id::text,'style:'||upper(btrim(next_batch.style_no)))=totals.group_key) AS superseded
+  FROM receiving_packing_revisions revision JOIN receiving_batches batch USING(receiving_batch_id)
+  LEFT JOIN operation_events event ON event.event_id=revision.operation_event_id
+  WHERE coalesce('cut:'||batch.cutting_order_id::text,'style:'||upper(btrim(batch.style_no)))=totals.group_key
+  ORDER BY superseded ASC,revision.created_at DESC,revision.packing_revision_id DESC LIMIT 1
+ ) head
+ CROSS JOIN LATERAL(SELECT NOT head.superseded
+  AND (head.deleted_at IS NULL OR EXISTS(
+   SELECT 1 FROM operation_events merge JOIN receiving_batches target ON target.receiving_batch_id::text=merge.after_state->>'targetReceivingBatchId'
+   WHERE merge.action='receiving.batch.merge' AND merge.after_state->>'sourceReceivingBatchId'=head.receiving_batch_id::text
+   AND coalesce('cut:'||target.cutting_order_id::text,'style:'||upper(btrim(target.style_no)))=totals.group_key
+   AND (head.cutting_order_id IS NOT NULL AND target.cutting_order_id=head.cutting_order_id OR head.cutting_order_id IS NULL AND target.cutting_order_id IS NULL AND 'style:'||upper(btrim(merge.after_state->'source'->>'styleNo'))=totals.group_key)
+   AND EXISTS(SELECT 1 FROM receiving_batches active WHERE coalesce('cut:'||active.cutting_order_id::text,'style:'||upper(btrim(active.style_no)))=totals.group_key AND active.deleted_at IS NULL)))
+  AND coalesce(head.after_state->'packingScopeMergeEventIds','[]'::jsonb)?&packing_scope.merge_event_ids AS complete) quality
+) packing ON true`;
+
+/** Authorized native cut groups, including an uncertain deleted source. No
+ * receipt is invented just to make a group exist. */
+export async function readNativePackingHeads(db:Pick<PoolClient,'query'>,cutIds:readonly string[]){
+ if(!cutIds.length)return [];
+ return (await db.query<{group_key:string;packing_revision_id:string|null;packing_quantity:string|null;packing_actual_time:unknown;packing_recorded_at:Date|null;packing_scope_unresolved:boolean}>(`
+  SELECT totals.group_key,packing.packing_revision_id,packing.packing_quantity,packing.packing_actual_time,
+   coalesce((event.after_state->'acceptanceClock'->>'now')::timestamptz,packing.created_at) AS packing_recorded_at,
+   ${RECEIVING_PACKING_SCOPE_UNRESOLVED_SQL} AS packing_scope_unresolved
+  FROM unnest($1::uuid[]) requested(cutting_id) CROSS JOIN LATERAL(SELECT 'cut:'||requested.cutting_id::text AS group_key) totals
+  ${RECEIVING_GROUP_PACKING_JOIN_SQL}
+  LEFT JOIN operation_events event ON event.event_id=packing.operation_event_id`,[cutIds])).rows;
+}
 
 export type StyleOperationSnapshot = Readonly<{
   receivingBatchId: string;
@@ -10,6 +71,9 @@ export type StyleOperationSnapshot = Readonly<{
   actualQuantity: number;
   packingRevisionId: string | null;
   packingQuantity: number | null;
+  packingScopeMergeEventIds?:readonly string[];
+  packingScopeUnresolved?:boolean;
+  packingSourceQuantity?:number|null;
   receivingQuantityChangedAt: string | null;
   receivingQuantityRevision: string;
   actualQuantityChangedAt: string | null;

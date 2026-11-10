@@ -1,6 +1,7 @@
+import {packingActualTime,type PackingActualTime} from '@dx-rework/contracts';
 import type {Pool} from "pg";
 import {ApplicationError} from "../platform/errors.js";
-import {RECEIVING_BOARD_BASE_SQL,RECEIVING_BATCH_BOARD_BASE_SQL,type ReceiptSource,type ReceivingDifferenceType} from "./receiving-quantity-query.js";
+import {RECEIVING_PACKING_SCOPE_UNRESOLVED_SQL,RECEIVING_GROUP_RESOLUTION_SCOPE_SQL,RECEIVING_GROUP_PACKING_JOIN_SQL,RECEIVING_BOARD_BASE_SQL,RECEIVING_BATCH_BOARD_BASE_SQL,type ReceiptSource,type ReceivingDifferenceType} from "./receiving-quantity-query.js";
 import {RECEIVING_BOARD_FILTERS_SQL} from "./receiving-board-filters.js";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -52,6 +53,8 @@ type BoardRow = Readonly<{
   packingDifferenceQuantity: number | null;
   packingRecordedBy: string | null;
   packingRecordedAt: string | null;
+  packingActualTime?:PackingActualTime;
+  packingScopeUnresolved?:boolean;
   actualCutCount: number | null;
   cuttingRecordedBy: string | null;
   cuttingRecordedAt: string | null;
@@ -202,6 +205,8 @@ export async function readReceivingBoard(
       packing_quantity: string | null;
       packing_recorded_by: string | null;
       packing_recorded_at: Date | null;
+  packing_actual_time?:unknown;
+  packing_scope_unresolved?:boolean;
       actual_cut_count: string | null;
       cutting_recorded_by: string | null;
       cutting_recorded_at: Date | null;
@@ -245,7 +250,7 @@ export async function readReceivingBoard(
               totals.current_actual_quantity,totals.current_defective_quantity,
               totals.cumulative_actual_quantity,
               totals.cumulative_actual_quantity-totals.document_quantity AS difference_quantity,
-              packing.packing_revision_id,packing.packing_quantity,
+              packing.packing_revision_id,packing.packing_quantity,packing.packing_actual_time,${RECEIVING_PACKING_SCOPE_UNRESOLVED_SQL} AS packing_scope_unresolved,
               packing_user.display_name AS packing_recorded_by,
               packing.created_at AS packing_recorded_at,
               cutting_record.actual_cut_count,
@@ -298,13 +303,7 @@ export async function readReceivingBoard(
                   batch.receiving_batch_id DESC
          LIMIT 1
        ) action ON true
-       LEFT JOIN LATERAL (
-         SELECT revision.packing_revision_id,revision.packing_quantity,revision.recorded_by,revision.created_at
-         FROM receiving_packing_revisions revision
-         WHERE revision.receiving_batch_id=action.receiving_batch_id
-         ORDER BY revision.created_at DESC,revision.packing_revision_id DESC
-         LIMIT 1
-       ) packing ON true
+       ${RECEIVING_GROUP_PACKING_JOIN_SQL}
        LEFT JOIN app_users packing_user ON packing_user.id=packing.recorded_by
        LEFT JOIN current_cutting_records cutting_record
          ON cutting_record.cutting_order_id=action.cutting_order_id
@@ -312,7 +311,7 @@ export async function readReceivingBoard(
        LEFT JOIN LATERAL (
          SELECT resolution.resolution_id,resolution.result,resolution.handled_by,resolution.created_at
          FROM receiving_difference_resolutions resolution
-         WHERE resolution.receiving_batch_id=action.receiving_batch_id
+         WHERE ${RECEIVING_GROUP_RESOLUTION_SCOPE_SQL}
            AND resolution.difference_type='receiving'
            AND resolution.document_quantity_snapshot=totals.document_quantity
            AND resolution.actual_quantity_snapshot=totals.cumulative_actual_quantity
@@ -326,7 +325,7 @@ export async function readReceivingBoard(
        LEFT JOIN LATERAL (
          SELECT resolution.resolution_id,resolution.result,resolution.handled_by,resolution.created_at
          FROM receiving_difference_resolutions resolution
-         WHERE resolution.receiving_batch_id=action.receiving_batch_id
+         WHERE ${RECEIVING_GROUP_RESOLUTION_SCOPE_SQL}
            AND resolution.difference_type='packing'
            AND resolution.actual_quantity_snapshot=totals.cumulative_actual_quantity
            AND resolution.packing_revision_id=packing.packing_revision_id
@@ -480,11 +479,12 @@ export async function readReceivingBoard(
       currentDefectiveQuantity: Number(row.current_defective_quantity),
       cumulativeActualQuantity: Number(row.cumulative_actual_quantity),
       differenceQuantity: Number(row.difference_quantity),
-      packingRevisionId: row.packing_revision_id,
+      packingRevisionId: row.packing_revision_id,packingScopeUnresolved:Boolean(row.packing_scope_unresolved),
       packingQuantity: row.packing_quantity === null ? null : Number(row.packing_quantity),
       packingDifferenceQuantity: row.packing_quantity === null
         ? null
         : Number(row.packing_quantity) - Number(row.cumulative_actual_quantity),
+      ...(row.packing_actual_time?{packingActualTime:packingActualTime(row.packing_actual_time)}:{}),
       packingRecordedBy: row.packing_recorded_by,
       packingRecordedAt: row.packing_recorded_at?.toISOString() ?? null,
       actualCutCount: row.actual_cut_count == null ? null : Number(row.actual_cut_count),

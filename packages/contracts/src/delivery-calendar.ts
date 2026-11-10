@@ -1,3 +1,4 @@
+import type {PackingActualTime} from './receiving-packing-time.js';
 import {z} from 'zod';
 
 export const DELIVERY_CALENDAR_VERSION='customer-delivery-calendar-v1' as const;
@@ -24,7 +25,7 @@ export const DeliveryMissingQuerySchema=DeliveryCalendarFiltersSchema.extend({..
 /** Original current facts only. No implied actual shipping occurrence date. */
 export type DeliveryPoFact={
  orderId:string;lineId:string;businessOrderNo:string|null;designStyleNo:string;po:string|null;color:string;customer:string;productType:string|null;
- orderedQty:number|null;rawPackedQty:number|null;packingRevision:string|null;
+ orderedQty:number|null;rawPackedQty:number|null;packingRevision:string|null;packingActualTime?:PackingActualTime;
  effectiveDueDate:string|null;originalDueDate:string|null;factoryDueDate:string|null;dueRevision:number;
  dueHistoryRef:string|null;hasRecordedDueChange:boolean;reminderDays:number|null;scopeStatus:DeliveryScope;sourceRefs:string[];unknownReasons:string[];
  styleImageUrl?:string|null;styleImageState?:'available'|'empty'|'unavailable'|'failed';
