@@ -1,12 +1,12 @@
 {
   "version": 1,
   "base": "45fc58a572437aa45318d3e91ca18631e3fa03b2",
-  "sourceFingerprint": "b4fa07319f1b93d20e990824d6bfbd067209dcdd84ef736bfd4c58cb49f92a51",
+  "sourceFingerprint": "a4759ef1552676fb505c16d4169ee9565a6b660aa716ccec38a5e9944ee958f4",
   "risk": "full",
   "rules": [
     {
       "source": "Approved complete v2, Library libfile_fde3_f-7ab204d715f48191a1e467100a057111_c8d3bf5d609c8191bce6411a30e94d44 Version2 sections9/11/14/15; approved nine-PR execution table R5-01, including immediate existing read-model invalidation. User authorizes implementation, GitHub Codex Review and sequential merge; no deployment or live data/config changes.",
-      "initialization": "No schema change, dependency upgrade or history repair. Effective receipt/QC versions use existing native sources. Journey calculation version starts original bounded reconciliation; calendar result rule version rejects old-algorithm snapshots. Ordinary GET never rebuilds all objects.",
+      "initialization": "No schema change, dependency upgrade or history repair. Effective receipt/QC versions use existing native sources. Journey calculation version starts original bounded reconciliation; calendar and current-production result rule versions rejects old-algorithm snapshots. Ordinary GET never rebuilds all objects.",
       "dateAndPermission": "Preserve current original technical object and field authority, Root exception, quantity correction/packing permissions, current role revocation and same-client/RR reads. Business time and actual date precision retained; QC registration does not invent an actual packing instant. No user DTO/authorization cache.",
       "rule": "Recorded packing remains immutable business evidence; qualified delivery cannot be completed by a count unsupported by effective receipt QC.",
       "writes": [
@@ -33,14 +33,14 @@
         "tests/integration/effective-packing-postgres.test.ts"
       ],
       "checks": [
-        "r501-review-units",
-        "r501-review-pg"
+        "r501-final-units",
+        "r501-final-pg"
       ],
       "expectation": "Independent two receipts2+2 / qualified1+2 / packing4 counterexample stays incomplete and preserves recorded4. Proven zero stays zero; unknown or superseded coverage is not0. Native targeted PG run additionally demonstrated real reinspection and pending-to-ready quantity update; final canonical plan includes the expanded native regression."
     },
     {
       "source": "Approved complete v2, Library libfile_fde3_f-7ab204d715f48191a1e467100a057111_c8d3bf5d609c8191bce6411a30e94d44 Version2 sections9/11/14/15; approved nine-PR execution table R5-01, including immediate existing read-model invalidation. User authorizes implementation, GitHub Codex Review and sequential merge; no deployment or live data/config changes.",
-      "initialization": "No schema change, dependency upgrade or history repair. Effective receipt/QC versions use existing native sources. Journey calculation version starts original bounded reconciliation; calendar result rule version rejects old-algorithm snapshots. Ordinary GET never rebuilds all objects.",
+      "initialization": "No schema change, dependency upgrade or history repair. Effective receipt/QC versions use existing native sources. Journey calculation version starts original bounded reconciliation; calendar and current-production result rule versions rejects old-algorithm snapshots. Ordinary GET never rebuilds all objects.",
       "dateAndPermission": "Preserve current original technical object and field authority, Root exception, quantity correction/packing permissions, current role revocation and same-client/RR reads. Business time and actual date precision retained; QC registration does not invent an actual packing instant. No user DTO/authorization cache.",
       "rule": "Full authorized quantities, light selection, 15-row decoration and prior-query snapshots use coherent current qualified-delivery facts.",
       "writes": [
@@ -51,7 +51,18 @@
         "apps/api/src/production-platform/production-statistics-query.ts",
         "packages/contracts/src/delivery-calendar.ts",
         "packages/domain/src/delivery-calendar.ts",
-        "tests/integration/m01-delivery-calendar-postgres.test.ts"
+        "tests/integration/m01-delivery-calendar-postgres.test.ts",
+        "packages/contracts/src/digital-production-journey.ts",
+        "packages/contracts/src/production-statistics.ts",
+        "packages/domain/src/production-statistics.ts",
+        "apps/api/src/production-platform/reporting-query.ts",
+        "apps/web/src/current-production-page.tsx",
+        "apps/web/src/current-production-po-dialog.tsx",
+        "tests/acceptance/m01-cockpit-home-native-browser.ts",
+        "tests/integration/m01-production-statistics-postgres.test.ts",
+        "tests/integration/sourcing-pr03-postgres.test.ts",
+        "tests/unit/journey-business-progress.test.ts",
+        "tests/unit/m01-production-statistics.test.ts"
       ],
       "reads": [
         "apps/api/src/production-platform/journey-fact-repository.ts",
@@ -66,14 +77,19 @@
         "tests/integration/m01-delivery-calendar-postgres.test.ts"
       ],
       "checks": [
-        "r501-review-units",
-        "r501-review-pg"
+        "r501-final-units",
+        "r501-final-pg"
       ],
-      "expectation": "Native calendar counts all allowed PO before15-row paging, keeps16 PO across pages, readonly PMC/revocation, current quantity corrections, original-snapshot conservation, zero old-factory scope and5001 unrelated-year cap. Valid overdelivery fixture now has real extra receipt and QC, not nonexistent stock. Packing raw count remains separate from unknown effective shipment."
+      "expectation": "Native calendar counts all allowed PO before15-row paging, keeps16 PO across pages, readonly PMC/revocation, current quantity corrections, original-snapshot conservation, zero old-factory scope and5001 unrelated-year cap. Valid overdelivery fixture now has real extra receipt and QC, not nonexistent stock. Packing raw count remains separate from unknown effective shipment. Original packing remains in original fields and is separately visible in detail/export; effective shipment and completion use qualified delivery. Native special closure preserves raw2 and uncertain delivery; browser native2-to3 delivery, real date side lists and same-session revocation pass. No visual redesign or six-image acceptance claimed.",
+      "newTests": [
+        "tests/integration/m01-delivery-calendar-native-browser-postgres.test.ts",
+        "tests/unit/journey-business-progress.test.ts",
+        "tests/unit/m01-production-statistics.test.ts"
+      ]
     },
     {
       "source": "Approved complete v2, Library libfile_fde3_f-7ab204d715f48191a1e467100a057111_c8d3bf5d609c8191bce6411a30e94d44 Version2 sections9/11/14/15; approved nine-PR execution table R5-01, including immediate existing read-model invalidation. User authorizes implementation, GitHub Codex Review and sequential merge; no deployment or live data/config changes.",
-      "initialization": "No schema change, dependency upgrade or history repair. Effective receipt/QC versions use existing native sources. Journey calculation version starts original bounded reconciliation; calendar result rule version rejects old-algorithm snapshots. Ordinary GET never rebuilds all objects.",
+      "initialization": "No schema change, dependency upgrade or history repair. Effective receipt/QC versions use existing native sources. Journey calculation version starts original bounded reconciliation; calendar and current-production result rule versions rejects old-algorithm snapshots. Ordinary GET never rebuilds all objects.",
       "dateAndPermission": "Preserve current original technical object and field authority, Root exception, quantity correction/packing permissions, current role revocation and same-client/RR reads. Business time and actual date precision retained; QC registration does not invent an actual packing instant. No user DTO/authorization cache.",
       "rule": "Historical factory inspection names come from that event native factory identity, including zero-quantity history, without changing current scope.",
       "writes": [
@@ -93,13 +109,13 @@
         "tests/unit/factory-production-facts.test.ts"
       ],
       "checks": [
-        "r501-review-units"
+        "r501-final-units"
       ],
       "expectation": "Retired and current factories keep their own names, only positive scopes determine current inspection; unmatched event stays unknown instead of using current factory. Existing whole-order completion and all-PO reader behavior retained; no visual redesign."
     },
     {
       "source": "Approved complete v2, Library libfile_fde3_f-7ab204d715f48191a1e467100a057111_c8d3bf5d609c8191bce6411a30e94d44 Version2 sections9/11/14/15; approved nine-PR execution table R5-01, including immediate existing read-model invalidation. User authorizes implementation, GitHub Codex Review and sequential merge; no deployment or live data/config changes.",
-      "initialization": "No schema change, dependency upgrade or history repair. Effective receipt/QC versions use existing native sources. Journey calculation version starts original bounded reconciliation; calendar result rule version rejects old-algorithm snapshots. Ordinary GET never rebuilds all objects.",
+      "initialization": "No schema change, dependency upgrade or history repair. Effective receipt/QC versions use existing native sources. Journey calculation version starts original bounded reconciliation; calendar and current-production result rule versions rejects old-algorithm snapshots. Ordinary GET never rebuilds all objects.",
       "dateAndPermission": "Preserve current original technical object and field authority, Root exception, quantity correction/packing permissions, current role revocation and same-client/RR reads. Business time and actual date precision retained; QC registration does not invent an actual packing instant. No user DTO/authorization cache.",
       "rule": "New quality coverage helper belongs to the existing effective-packing canonical PostgreSQL checks, without new maintenance drills.",
       "writes": [
@@ -113,55 +129,55 @@
         "tests/unit/full-gate-risk-map.test.ts"
       ],
       "checks": [
-        "r501-review-units"
+        "r501-final-units"
       ],
       "expectation": "Original70 classification cases remain valid, preserving actual supplychain/database consumers and the cancellation of routine backup/restore drills. New helper shares the existing native packing suite mapping, not a separate governance gate."
     }
   ],
   "checks": [
     {
-      "id": "r501-review-units",
+      "id": "r501-final-units",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/packing-sla-evidence.test.ts tests/unit/receiving-summary.test.ts tests/unit/factory-production-facts.test.ts tests/unit/delivery-calendar.test.ts tests/unit/delivery-calendar-model.test.ts tests/unit/journey-business-progress.test.ts tests/unit/m01-production-statistics.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r501-review-units.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/packing-sla-evidence.test.ts tests/unit/receiving-summary.test.ts tests/unit/factory-production-facts.test.ts tests/unit/delivery-calendar.test.ts tests/unit/delivery-calendar-model.test.ts tests/unit/journey-business-progress.test.ts tests/unit/m01-production-statistics.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/m01-current-production-workspace.test.ts tests/unit/journey-fact-model.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r501-final-units.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 183,
+      "passed": 202,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "c6cda957b0f1b5a08babbafa65316030c1c05ada",
-      "sourceFingerprint": "b4fa07319f1b93d20e990824d6bfbd067209dcdd84ef736bfd4c58cb49f92a51",
-      "context": "Node22.22.2/Vitest4.1.10, working tree from reviewed c6cda957. Full source fingerprint unchanged during these checks. PG13.23 private marked isolated database, non-superuser role, original native commands. Includes Root whole-batch actual3 vs receipt/QC4/packing4, with calendar scalar debt; no live data or deployment.",
-      "startedAt": "2026-11-10T18:29:49.841Z",
-      "endedAt": "2026-11-10T18:29:54.982Z",
-      "log": "/workspace/.dx-cloud/r501-review-units.log",
-      "logSha256": "4acaccfa969f0000aabc95df7343a16c6afa71e3bd24e7f3927a3524d6b46ac3",
+      "testedHead": "663c4aa9da7ea05147993ab8b039f9c9fbbb4a7b",
+      "sourceFingerprint": "a4759ef1552676fb505c16d4169ee9565a6b660aa716ccec38a5e9944ee958f4",
+      "context": "Node22.22.2/Vitest4.1.10, same complete source fingerprint. PG13.23 private marked isolated database/non-superuser; canonical max2 PG workers. Original App/auth Chromium browser on ephemeral local test server. PG selection intentionally skips154 unrelated cases. No Full, deployment, live data or six-image acceptance claim. Prior failed reports are retained separately.",
+      "startedAt": "2026-11-10T19:11:12.982Z",
+      "endedAt": "2026-11-10T19:11:22.238Z",
+      "log": "/workspace/.dx-cloud/r501-final-units.log",
+      "logSha256": "25067e15b32da69458b29325b5c30d833f132b4dafa764e6a982506f5273194d",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "19d47cc7375b2e1ecc27238d892e6687f8f75631fc4cd6025d6c6cde3287190e"
+          "sha256": "36843ff4f0dbcfe3dd800a1735a2cfde39e63fd4582b994720a710e2c99e518b"
         }
       ]
     },
     {
-      "id": "r501-review-pg",
+      "id": "r501-final-pg",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/effective-packing-postgres.test.ts tests/integration/m01-delivery-calendar-postgres.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r501-review-pg.json",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/effective-packing-postgres.test.ts tests/integration/m01-delivery-calendar-postgres.test.ts tests/integration/m01-production-statistics-postgres.test.ts tests/integration/sourcing-pr03-postgres.test.ts tests/integration/m01-delivery-calendar-native-browser-postgres.test.ts -t 'effective native packing|delivery calendar original facts|original full App delivery calendar|keeps native packing40|keeps an unfinished sibling|preserves effective cumulative2|SLA08 keeps collected|P01-06 reads' --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r501-final-pg.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 15,
+      "passed": 27,
       "failed": 0,
-      "skipped": 0,
-      "testedHead": "c6cda957b0f1b5a08babbafa65316030c1c05ada",
-      "sourceFingerprint": "b4fa07319f1b93d20e990824d6bfbd067209dcdd84ef736bfd4c58cb49f92a51",
-      "context": "Node22.22.2/Vitest4.1.10, working tree from reviewed c6cda957. Full source fingerprint unchanged during these checks. PG13.23 private marked isolated database, non-superuser role, original native commands. Includes Root whole-batch actual3 vs receipt/QC4/packing4, with calendar scalar debt; no live data or deployment.",
-      "startedAt": "2026-11-10T18:29:48.466Z",
-      "endedAt": "2026-11-10T18:30:25.810Z",
-      "log": "/workspace/.dx-cloud/r501-review-pg.log",
-      "logSha256": "dd6450938ad2099e2167fd3043b0e4a5afc1313c837515288b7320254b30c0ec",
+      "skipped": 154,
+      "testedHead": "663c4aa9da7ea05147993ab8b039f9c9fbbb4a7b",
+      "sourceFingerprint": "a4759ef1552676fb505c16d4169ee9565a6b660aa716ccec38a5e9944ee958f4",
+      "context": "Node22.22.2/Vitest4.1.10, same complete source fingerprint. PG13.23 private marked isolated database/non-superuser; canonical max2 PG workers. Original App/auth Chromium browser on ephemeral local test server. PG selection intentionally skips154 unrelated cases. No Full, deployment, live data or six-image acceptance claim. Prior failed reports are retained separately.",
+      "startedAt": "2026-11-10T19:11:13.001Z",
+      "endedAt": "2026-11-10T19:12:55.286Z",
+      "log": "/workspace/.dx-cloud/r501-final-pg.log",
+      "logSha256": "76e04cc842fe770bceae99e52276cc5e465965e0c0de900e969578f81953c31c",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "29eaaab4c9bb34bcff2d9ab7cbb4a4b16b2bc4a37868e4d83eba5f1ad58c2853"
+          "sha256": "8032c3797067019614d8d71de699cdc108a4f08ad6e38428a3186472f4683729"
         }
       ]
     }

@@ -177,7 +177,7 @@ export type JourneyBusinessRequirement = {
 export type JourneyBusinessQuantities = {
   revision: string;
   lines: Array<{lineId: string; demand: number; received: number; inspected: number | null;
-    qualified: number | null; packed: number | null; remainingReceipt: number; remainingShipment: number | null;
+    qualified: number | null; packed: number | null; effectivePacked?: number | null; remainingReceipt: number; remainingShipment: number | null;
     qualityGap: number | null; qualityConflict: boolean; factoryAttribution: 'known' | 'unknown'; reasons: string[]}>;
   /** Native receipt links do not establish precise factory attribution. */
   factoryAttribution: 'known' | 'unknown';

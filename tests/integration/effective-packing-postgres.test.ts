@@ -152,9 +152,9 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect((await run(()=>readPackingQualityCoverage(f.db,[made.id]))).get(line.lineId)).toEqual({received:4,inspected:4,qualified:3});
   const repository=new JourneyFactRepository(f.db),scope={kind:'order' as const,id:made.id};await run(()=>repository.buildOne(scope));
   const stored=()=>run(async()=>{const client=await f.db.connect();try{return await repository.readStoredWithClient(client,scope);}finally{client.release();}});
-  const before=await stored();expect(before.status).toBe('ready');expect(before.model!.quantities!.lines[0]!.packed).toBeNull();
+  const before=await stored();expect(before.status).toBe('ready');expect(before.model!.quantities!.lines[0]!).toMatchObject({packed:4,effectivePacked:null,remainingShipment:null});
   await inspect(first.receiptId,2);expect((await stored()).status).toBe('pending');
-  await run(()=>repository.buildOne(scope));const updated=await stored();expect(updated.status).toBe('ready');expect(updated.model!.quantities!.lines[0]!.packed).toBe(4);
+  await run(()=>repository.buildOne(scope));const updated=await stored();expect(updated.status).toBe('ready');expect(updated.model!.quantities!.lines[0]!).toMatchObject({packed:4,effectivePacked:4,remainingShipment:0});
   expect((await run(()=>closure.read(f.root,made.id))).collection!.shipmentQuantity).toBe(4);
   const fresh=await run(()=>calendar.day(f.root,filters,due));expect(fresh.daySummary).toMatchObject({orderedQty:4,packedQty:4,pendingQty:0,unknownQuantityPoCount:0});
   expect((await run(()=>row(second.receivingBatchId))).packingQuantity).toBe(4);
