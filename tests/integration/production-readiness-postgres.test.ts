@@ -93,6 +93,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect(final).toHaveLength(2);expect(final.find(f=>f.lineId===ready.lines[0]!.lineId)).toEqual(first[0]);
   expect(final.find(f=>f.lineId===ready.lines[1]!.lineId)?.firstReadyAt).toBe('2026-11-09T12:00:00.000Z');
   expect((await nativeTaskReadiness(f.db,[task.task_id])).get(task.task_id)?.firstReadyAt).toBe('2026-11-09T12:00:00.000Z');
+  const joined=await run(()=>new DigitalJourneyQuery(f.db).read(f.root,ready.id,undefined,true));
+  expect(joined.stages.flatMap(stage=>stage.nodes).find(node=>node.key==='cutting_gate'&&node.current)).toMatchObject({actualAt:'2026-11-09T12:00:00.000Z',actualQuality:'verified',enteredAt:null});
   await run(()=>new DigitalJourneyQuery(f.db).read(f.root,ready.id,undefined,true));
   expect(await nativeCuttingReadiness(f.db,[task.task_id])).toEqual(final);
   const model=await run(()=>new JourneyFactRepository(f.db).buildOne({kind:'order',id:ready.id}));
@@ -107,6 +109,10 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect(corrected.find(f=>f.lineId===ready.lines[0]!.lineId)).toMatchObject({eventId:first[0]!.eventId,firstReadyAt:null,quality:'缺失'});
   expect(corrected.find(f=>f.lineId===ready.lines[1]!.lineId)).toEqual(final.find(f=>f.lineId===ready.lines[1]!.lineId));
   expect((await nativeTaskReadiness(f.db,[task.task_id])).get(task.task_id)?.firstReadyAt).toBe('2026-11-09T12:00:00.000Z');
+  // The corrected PO has no credible readiness; no aggregate completion time
+  // may be borrowed from the other PO or the whole-task activation clock.
+  const unknown=await run(()=>new DigitalJourneyQuery(f.db).read(f.root,ready.id,undefined,true));
+  expect(unknown.stages.flatMap(stage=>stage.nodes).find(node=>node.key==='cutting_gate'&&node.current)?.actualAt).toBeNull();
  });
  for(const external of [false,true])for(const poCount of [1,2])it(`P01 records legitimate 95-of-100 actual cutting readiness without borrowing sibling quantity (${external?'external':'internal'}, ${poCount} PO)`,async()=>{
   const scene=await f.scene('2026-11-09T08:00:00.000Z'),run=<T,>(action:()=>Promise<T>)=>f.runtime.run(scene,f.root,action);

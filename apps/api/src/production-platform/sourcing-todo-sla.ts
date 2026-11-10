@@ -7,7 +7,7 @@ const parameters:Record<string,string>={sourcing_ie_quote:"sourcing_ie",sourcing
 /** Reuse the original approval todo, business transition and mother-order snapshot.
  * undefined keeps unenrolled legacy behavior; a null date preserves genuinely unknown timing.
  * Called only for creation, after the original todo deduplication check. */
-export async function sourcingTodoSla(client:Pick<PoolClient,"query">,input:{category:string;entityType:string;entityId:string;sourceEventId:string}) {
+export async function sourcingTodoSla(client:Pick<PoolClient,"query">,input:{category:string;entityType:string;entityId:string;sourceEventId:string;sourceAction?:string}) {
   const parameter=parameters[input.category];
   if(!parameter||input.entityType!=="sourcing_case")return undefined;
   if(!(await client.query("SELECT to_regclass('digital_sla_order_snapshots') AS relation")).rows[0]?.relation)return undefined;
@@ -28,7 +28,11 @@ export async function sourcingTodoSla(client:Pick<PoolClient,"query">,input:{cat
   if(previous)return {dueAt:previous.due_at===null?null:new Date(previous.due_at),snapshotId:(previous.snapshot_id??null) as string|null};
   const value=validateDigitalSlaSnapshot({ruleVersion:row.rule_version,parameters:row.parameters_json}).parameters[parameter]?.value;
   if(value?.kind!=="duration")throw new Error("Frozen sourcing SLA duration missing");
-  const transition=(await client.query(`SELECT transitioned_at FROM sourcing_case_transitions
-    WHERE sourcing_case_id=$1 AND operation_event_id=$2 ORDER BY sequence DESC LIMIT 1`,[input.entityId,input.sourceEventId])).rows[0];
-  return {dueAt:transition?new Date((acceptanceBusinessContext()?businessNow().getTime():new Date(transition.transitioned_at).getTime())+value.minutes*60000):null,snapshotId:row.snapshot_id as string};
+  const transition=input.category==='sourcing_owner_approval'&&input.sourceAction==='sourcing.owner.ready'
+   ?(await client.query(`SELECT (after_state->'approvalReadiness'->>'readyAt')::timestamptz AS transitioned_at
+      FROM operation_events WHERE event_id=$2 AND entity_type='sourcing_case' AND entity_id=$1::text
+       AND action='sourcing.owner.ready' AND after_state->'approvalReadiness'->>'version'='1'`,[input.entityId,input.sourceEventId])).rows[0]
+   :(await client.query(`SELECT transitioned_at FROM sourcing_case_transitions
+      WHERE sourcing_case_id=$1 AND operation_event_id=$2 ORDER BY sequence DESC LIMIT 1`,[input.entityId,input.sourceEventId])).rows[0];
+  return {dueAt:transition?.transitioned_at?new Date((acceptanceBusinessContext()?businessNow().getTime():new Date(transition.transitioned_at).getTime())+value.minutes*60000):null,snapshotId:row.snapshot_id as string};
 }

@@ -1,6 +1,18 @@
 import type {OrderJourney} from '@dx-rework/contracts/digital-production-journey';
 import type {OrderClosureSheet} from '@dx-rework/contracts/order-closure';
 import type {reworkSlaEvidence} from './rework-sla-evidence.js';
+import type {NativeCuttingReadiness} from './task-readiness-facts.js';
+
+/** A logical all-PO join has no invented duration or task-entry timestamp. Its
+ * completion is the latest first-ready fact of the exact current cut scopes. */
+export function journeyCuttingGateTime(taskId:string,lines:readonly {lineId:string;cuttingOrderId?:string|null}[],facts:readonly NativeCuttingReadiness[],asOf:string):string|null{
+ if(!lines.length)return null;
+ const times=lines.map(line=>{
+  const own=facts.filter(fact=>fact.taskId===taskId&&fact.lineId===line.lineId&&line.cuttingOrderId&&fact.cuttingOrderId===line.cuttingOrderId);
+  return own.length===1&&instant(own[0]!.firstReadyAt,asOf)?own[0]!.firstReadyAt:null;
+ });
+ return times.every((at):at is string=>at!==null)?new Date(Math.max(...times.map(at=>Date.parse(at)))).toISOString():null;
+}
 
 type Native = {orderId:string;rework:Awaited<ReturnType<typeof reworkSlaEvidence>>['windows'];receiving:OrderClosureSheet['receivingSpan']};
 const instant=(value:string|null|undefined,asOf:string):value is string=>Boolean(value&&/T.*(?:Z|[+-]\d{2}:\d{2})$/.test(value)&&Number.isFinite(Date.parse(value))&&Date.parse(value)<=Date.parse(asOf));

@@ -3,6 +3,8 @@ import { PoCustomerDateService } from "./po-customer-date-service.js";
 import { randomUUID } from "node:crypto";
 import { DigitalProductionTaskService } from "./task-service.js";
 import { TodoService } from "../todos/service.js";
+import {TodoProjectionService} from '../todos/projection-service.js';
+import {releaseSourcingOwnerApproval} from './sourcing-owner-readiness.js';
 import type { Pool, PoolClient } from "pg";
 import type { z } from "zod";
 import type { DigitalDelegationSchema, DigitalResourceKind } from "@dx-rework/contracts/digital-production-access";
@@ -93,6 +95,7 @@ export class DigitalProductionAccessService {
       await new DigitalProductionTaskService(this.database).syncSourcingAssignee(client, actor, id, merchandiserId);
       const auditId=await this.audit(client, actor, "digital_primary_merchandiser_assigned", id, before, { merchandiserId,version:expectedVersion+1 });
       await new TodoService(this.database).reassignDigitalSourcingWithClient(client,actor,id,before.primary_merchandiser_id,merchandiserId,auditId);
+      await releaseSourcingOwnerApproval(this.database,client,actor,id,new TodoProjectionService(new TodoService(this.database)));
       return { version: expectedVersion + 1 };
     });
   }

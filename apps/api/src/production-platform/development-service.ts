@@ -1,5 +1,5 @@
 import {developmentRevisionSource,inheritedDevelopmentFile} from './development-revision-source.js';
-import {acceptanceBusinessContext,observedBusinessTime} from '../acceptance-clock/business-time.js';
+import {acceptanceBusinessContext,observedBusinessTime,businessNow} from '../acceptance-clock/business-time.js';
 import {validateAuxiliaryReferences} from '../access/auxiliary-catalog-service.js';
 import {DevelopmentAmendmentService} from "./development-amendment-service.js";
 import {developmentDraftForSave} from "./development-document-format.js";
@@ -20,6 +20,7 @@ import type { TrustedActorContext } from "../tools/repositories.js";
 import { DigitalProductionAccessPolicy, digitalForbidden, digitalNotFound } from "./access-policy.js";
 import { DigitalProductionTaskService } from "./task-service.js";
 import { captureDevelopmentSla, developmentSlaPlan,developmentSlaRoute } from "./development-sla-enrollment.js";
+import {developmentOccurrence} from './development-occurrence.js';
 import {captureDevelopmentTimeline} from './fixed-development-adoption.js';
 import type { BusinessClock } from "@dx-rework/domain/business-clock";
 
@@ -51,8 +52,11 @@ export class DigitalDevelopmentService {
     const row = await developmentDocumentRow(db,sourceId,roundNumber);
     const rounds=await developmentRoundsAvailable(db);
     if(roundNumber&&!row)digitalNotFound();
-    const materialEvents = (await db.query(`SELECT event_id AS "eventId",material_id AS "materialId",action,expected_date::text AS "expectedDate",note,created_at AS "createdAt"
-      FROM digital_development_material_events WHERE source_id=$1 ${rounds?"AND route_version=$2":""} ORDER BY sequence`, rounds?[sourceId,row?.round_number??1]:[sourceId])).rows;
+    const materialEvents = (await db.query(`SELECT m.event_id AS "eventId",m.material_id AS "materialId",m.action,m.expected_date::text AS "expectedDate",m.note,m.created_at AS "createdAt",
+      e.occurred_at AS "occurredAt",e.payload->>'actualCompletedDate' AS "occurredDate",e.time_quality AS "timeQuality"
+      FROM digital_development_material_events m LEFT JOIN digital_production_task_events e ON e.event_id=m.event_id
+       AND e.resource_kind='source' AND e.resource_id=m.source_id AND e.event_kind='development_material_recorded'
+      WHERE m.source_id=$1 ${rounds?"AND m.route_version=$2":""} ORDER BY m.sequence`, rounds?[sourceId,row?.round_number??1]:[sourceId])).rows;
     const productionOrderId=source.can_view_order_draft?(await db.query("SELECT production_order_id FROM digital_production_orders WHERE source_id=$1",[sourceId])).rows[0]?.production_order_id??null:null;
     let document=row?.document??null;
     if(document?.customerOrderDraft&&!source.can_view_order_draft){document={...document};delete document.customerOrderDraft;}
@@ -170,6 +174,11 @@ export class DigitalDevelopmentService {
       if (input.action === "确认代用" && material!.category !== "辅料") conflict("设计师代用确认仅适用于辅料；问题面料须供应链总监决定");
       const eventId = randomUUID();
       await db.query(`INSERT INTO digital_development_material_events(event_id,source_id,material_id,action,expected_date,note,actor_id${rounds?',route_version':''}) VALUES($1,$2,$3,$4,$5,$6,$7${rounds?',$8':''})`, [eventId, sourceId, materialId, input.action, input.expectedDate, input.note, actor.actorId,...(rounds?[row.round_number]:[])]);
+      if(input.action!=='修改预计日期'){
+        const occurrence=developmentOccurrence(input.actualTime,businessNow());
+        await db.query(`INSERT INTO digital_production_task_events(event_id,resource_kind,resource_id,event_kind,actor_id,occurred_at,time_quality,payload)
+          VALUES($1,'source',$2,'development_material_recorded',$3,$4,$5,$6)`,[eventId,sourceId,actor.actorId,occurrence.actualCompletedAt,occurrence.timeQuality,JSON.stringify({...occurrence,materialEventId:eventId,materialId,roundNumber:row.round_number??1,action:input.action})]);
+      }
       await new DevelopmentRouteService(this.database).releaseSewing(db,actor,sourceId);
       return this.read(actor, sourceId, db);
     });

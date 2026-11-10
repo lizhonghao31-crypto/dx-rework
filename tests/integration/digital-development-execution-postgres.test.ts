@@ -106,6 +106,37 @@ run("P06 development execution PostgreSQL", () => {
     expect((await read(legacy.id))[0].payload).toEqual({note:'TEST historical time never recorded'});
   });
 
+  it('R5 records a real customer occurrence separately from registration and preserves day-only/unknown precision',async()=>{
+    const at=new Date(Date.now()-3600000).toISOString(),date=at.slice(0,10);
+    for(const actualTime of [{precision:'instant',at},{precision:'date',date},{precision:'unknown'}] as const){
+      const current=await prepare(),key=randomUUID();
+      await database.query("INSERT INTO digital_development_route_facts(fact_id,source_id,route_version,kind,payload,actor_id) VALUES($1,$2,1,'最终设计确认','{}',$3)",[randomUUID(),current.id,designer]);
+      const input={routeVersion:1,note:'TEST actual customer occurrence',actualTime},before=Date.now();
+      await execution.customerSample(actor(),current.id,input,key);
+      const saved=(await database.query("SELECT payload,recorded_at FROM digital_development_route_facts WHERE source_id=$1 AND kind='客户样板确认'",[current.id])).rows[0];
+      expect(saved.recorded_at.getTime()).toBeGreaterThanOrEqual(before-1000);
+      expect(saved.payload).toMatchObject(actualTime.precision==='instant'?{actualCompletedAt:at,actualCompletedDate:null,timeQuality:'补报未核实'}:actualTime.precision==='date'?{actualCompletedAt:null,actualCompletedDate:date,timeQuality:'补报未核实'}:{actualCompletedAt:null,actualCompletedDate:null,timeQuality:'缺失'});
+      await execution.customerSample(actor(),current.id,input,key);
+      expect((await database.query("SELECT count(*)::int n FROM digital_development_route_facts WHERE source_id=$1 AND kind='客户样板确认'",[current.id])).rows[0].n).toBe(1);
+    }
+    const current=await prepare();
+    await database.query("INSERT INTO digital_development_route_facts(fact_id,source_id,route_version,kind,payload,actor_id) VALUES($1,$2,1,'最终设计确认','{}',$3)",[randomUUID(),current.id,designer]);
+    await expect(execution.customerSample(actor(),current.id,{routeVersion:1,note:'TEST future',actualTime:{precision:'instant',at:new Date(Date.now()+86400000).toISOString()}},randomUUID())).rejects.toMatchObject({statusCode:409});
+    expect((await database.query("SELECT 1 FROM digital_development_route_facts WHERE source_id=$1 AND kind='客户样板确认'",[current.id])).rowCount).toBe(0);
+  });
+
+  it('R5 material actions retain their real occurrence independently of the original registration sequence',async()=>{
+    const current=await prepare(true),actualDate='2026-10-20',sheet=await development.read(actor(),current.id),before=Date.now();
+    const result=await development.materialEvent(actor(),current.id,current.materialId,{expectedVersion:sheet.version,expectedMaterialRevision:0,action:'到货',expectedDate:null,note:'TEST material arrived earlier; only date known',actualTime:{precision:'date',date:actualDate}},randomUUID());
+    const material=result.materialEvents[0]!;
+    expect(material).toMatchObject({action:'到货',occurredAt:null,occurredDate:actualDate,timeQuality:'补报未核实'});
+    expect(new Date(material.createdAt).getTime()).toBeGreaterThanOrEqual(before-1000);
+    const event=(await database.query("SELECT task_id,resource_id,occurred_at,time_quality,payload FROM digital_production_task_events WHERE event_id=$1",[material.eventId])).rows[0];
+    expect(event).toMatchObject({task_id:null,resource_id:current.id,occurred_at:null,time_quality:'补报未核实',payload:{materialEventId:material.eventId,materialId:current.materialId,roundNumber:1,actualCompletedDate:actualDate}});
+    await development.materialEvent(actor(),current.id,current.materialId,{expectedVersion:sheet.version,expectedMaterialRevision:1,action:'修改预计日期',expectedDate:'2027-01-01',note:'TEST plan change only'},randomUUID());
+    expect((await database.query("SELECT count(*)::int n FROM digital_production_task_events WHERE resource_id=$1 AND event_kind='development_material_recorded'",[current.id])).rows[0].n).toBe(1);
+  });
+
   it("R2 requires exact-task paper results even without craft and preserves the task on rejection",async()=>{
     const {id,taskId,materialId}=await prepare();await execution.check(clerk(),id,{taskId,result:'通过',note:'',items:checks(materialId)},randomUUID());
     const paper=(await execution.read(worker(),id)).tasks.find(t=>t.taskKind==='development_pattern')!;

@@ -1,7 +1,8 @@
 import {expect,it} from 'vitest';
 import type {JourneyNode,OrderJourney} from '@dx-rework/contracts/digital-production-journey';
 import type {OrderClosureSheet} from '@dx-rework/contracts/order-closure';
-import {attachJourneyNativeTimes} from '../../apps/api/src/production-platform/journey-native-times.js';
+import {attachJourneyNativeTimes,journeyCuttingGateTime} from '../../apps/api/src/production-platform/journey-native-times.js';
+import type {NativeCuttingReadiness} from '../../apps/api/src/production-platform/task-readiness-facts.js';
 import {journeyActualPoint} from '../../apps/api/src/production-platform/journey-progress-dates.js';
 
 const start='2026-11-04T00:00:00.000Z',end='2026-11-04T06:00:00.000Z',asOf='2026-11-05T00:00:00.000Z';
@@ -34,4 +35,11 @@ it('Final10 receiving uses its first effective instant and never assigns midnigh
  attachJourneyNativeTimes(item,{...native,receiving},asOf);expect(node.enteredAt).toBe(start);
  receiving.firstEffectiveReceipt={id:'TEST-receipt',receivedAt:null,receivedDate:'2026-11-04',precision:'date'};
  attachJourneyNativeTimes(item,{...native,receiving},asOf);expect(node.enteredAt).toBeNull();
+});
+it('R5 logical cutting convergence uses the latest exact required PO readiness, without inventing a task entry',()=>{
+ const lines=[{lineId:'TEST-line-a',cuttingOrderId:'TEST-cut-a'},{lineId:'TEST-line-b',cuttingOrderId:'TEST-cut-b'}];
+ const facts=lines.map((line,i)=>({...line,taskId:'TEST-cutting',tracked:true,eventId:'TEST-ready-'+i,effectiveEventId:'TEST-ready-'+i,firstReadyAt:i?end:start,quality:'现场登记',scopeRef:'TEST-po-'+i,basis:[]})) as NativeCuttingReadiness[];
+ expect(journeyCuttingGateTime('TEST-cutting',lines,facts,asOf)).toBe(end);
+ for(const changed of [facts.slice(0,1),[facts[0]!,{...facts[1]!,taskId:'TEST-other'}],[facts[0]!,{...facts[1]!,cuttingOrderId:'TEST-old-cut'}],[facts[0]!,{...facts[1]!,firstReadyAt:null}],facts.concat(facts[0]!)])expect(journeyCuttingGateTime('TEST-cutting',lines,changed,asOf)).toBeNull();
+ expect(journeyCuttingGateTime('TEST-cutting',lines,facts,start)).toBeNull();
 });

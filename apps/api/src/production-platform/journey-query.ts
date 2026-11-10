@@ -58,6 +58,8 @@ import type {JourneyTimingInputs} from './journey-supervision.js';
 import {journeySelectionFacts,journeySelectionNodes,type JourneySelectionFacts,type JourneySelectionTask} from './journey-selection-facts.js';
 import {journeyObservedDay,journeyPlanDateOverdue,journeyTaskTimeRisks,journeyTaskDeadlineExclusive} from './journey-risk-clock.js';
 import {compileJourneySelectionClock,type JourneySelectionDelivery} from './journey-selection-clock.js';
+import {developmentRecordedTime} from './development-occurrence.js';
+import {journeyCuttingGateTime} from './journey-native-times.js';
 import {readJourneySelections} from './journey-selection-query.js';
 
 type FactCapture={timing:(inputs:JourneyTimingInputs)=>void;tasks:(tasks:Array<{id:string;routeInstanceId:string}>)=>void;
@@ -444,6 +446,11 @@ export class DigitalJourneyQuery {
     const materialStates=new Map<number,Awaited<ReturnType<typeof materialReadiness>>>();
     const materialsFor=async(version:number)=>{let value=materialStates.get(version);if(!value){value=await materialReadiness(db,sid!,version);materialStates.set(version,value);}return value;};
     const taskService=new DigitalProductionTaskService(this.database),taskDtos=[];
+    const routeTimes=sourceAccess&&sid&&visibleTasks.length?(await db.query(`SELECT f.task_id,f.route_version,f.payload,
+      EXISTS(SELECT 1 FROM digital_production_task_events e WHERE e.task_id=f.task_id AND e.event_kind='time_corrected'
+       AND e.payload->>'originalKind'='completed') AS corrected
+      FROM digital_development_route_facts f WHERE f.source_id=$1 AND f.task_id=ANY($2::uuid[])
+      ORDER BY f.sequence DESC`,[sid,visibleTasks.map(task=>task.task_id)])).rows:[];
     const summaries=summaryOnly||compact?await journeyTaskSummaries(db,visibleTasks.map(task=>task.task_id),observed):null;
     for(const raw of visibleTasks) {
       const definition=journeyDefinition(raw.task_kind);if(!definition)continue;
@@ -456,6 +463,15 @@ export class DigitalJourneyQuery {
       node.sla=task.slaHours===null?"not_set":["completed","cancelled"].includes(state)?"finished":task.enteredAt?"running":"not_started";
       node.current=raw.source_id?task.routeVersion===round&&!raw.returned:raw.task_kind==="sourcing_preparation"?task.state!=="cancelled":raw.route_instance_id===currentPrep;
       node.actualAt=task.completedAt;node.actualQuality=raw.completed_quality==="现场登记"||raw.completed_quality==="已核实"?"verified":raw.completed_quality==="补报未核实"?"unverified":"missing";
+      const routeTime=routeTimes.find(fact=>fact.task_id===task.taskId&&fact.route_version===task.routeVersion);
+      if(state==='completed'&&routeTime&&!routeTime.corrected){
+        const payload=raw.task_kind==='development_shipping'&&routeTime.payload.sentDate
+          ?{actualCompletedDate:routeTime.payload.sentDate,timeQuality:'补报未核实'}:routeTime.payload;
+        const actual=developmentRecordedTime(payload,asOf);
+        // Preserve exact task completion and its later corrections. Only an
+        // explicit date-only occurrence or shipping day needs this adapter.
+        if(actual?.date){node.actualAt=null;node.actualDate=actual.date;node.actualQuality=actual.quality;}
+      }
       const completion=journeyCompletion(node.expectedAt,node.actualAt,node.actualQuality==="verified");node.completionResult=state==="completed"?completion.result:null;node.overdueSeconds=state==="completed"?completion.overdueSeconds:null;
       const events=summaryOnly||compact?[]:(await db.query(`SELECT e.*,u.display_name AS actor_name FROM digital_production_task_events e JOIN app_users u ON u.id=e.actor_id
         WHERE task_id=$1 AND event_kind='completed' ORDER BY recorded_at DESC,event_id DESC LIMIT 1`,[task.taskId])).rows;
@@ -501,6 +517,16 @@ export class DigitalJourneyQuery {
       const effectiveMaterials=(await materialsFor(round??1)).materials;
       const today=journeyObservedDay(asOf);
       const materials = (currentDocument.document as DevelopmentDocument).materials.filter(material => effectiveMaterials.some(item=>item.materialId===material.materialId&&item.required));
+      const evidenceIds=[...new Set(effectiveMaterials.filter(item=>item.available&&item.evidenceId).map(item=>item.evidenceId!))];
+      // materialReadiness already restricts these exact IDs to the current round
+      // or its explicit completed-check inheritance. Preserve that original
+      // occurrence instead of requiring the inherited proof to be a new event.
+      const materialTimes=evidenceIds.length?(await db.query(`SELECT requested.id,coalesce(e.payload,jsonb_build_object('actualCompletedAt',t.completed_at,'timeQuality',t.completed_quality)) AS payload
+        FROM unnest($2::uuid[]) requested(id)
+        LEFT JOIN digital_development_execution_facts f ON f.fact_id=requested.id AND f.source_id=$1 AND f.kind='核配通过'
+        LEFT JOIN digital_production_tasks t ON t.task_id=f.task_id AND t.state='completed'
+        LEFT JOIN digital_production_task_events e ON e.event_id=requested.id AND e.resource_kind='source' AND e.resource_id=$1
+          AND e.event_kind='development_material_recorded'`,[sid,evidenceIds])).rows:[];
       const supplyPlaceholder = baseNodes.findIndex(value => value.key === "development_material_supply" && value.instanceId === `development_material_supply:${value.round ?? 0}`);
       if (!materials.length && supplyPlaceholder >= 0) baseNodes[supplyPlaceholder] = emptyNode("development_material_supply", "not_applicable", round);
       materials.forEach((material, index) => {
@@ -515,6 +541,9 @@ export class DigitalJourneyQuery {
         node.expectedPrecision = plannedDate ? "date" : "missing";
         node.sla = "not_set";
         node.records = [record("development_material", material.materialId, `${developmentUrl(sid, round ?? 1)}#material-${material.materialId}`, currentDocument.version ?? currentDocument.document_version ?? null)];
+        const materialEvidence=effectiveMaterials.find(item=>item.materialId===material.materialId)?.evidenceId;
+        const actual=arrived?developmentRecordedTime(materialTimes.find(row=>row.id===materialEvidence)?.payload,asOf):null;
+        if(actual){node.actualAt=actual.at;node.actualDate=actual.date;node.actualQuality=actual.quality;}
         if (!arrived && plannedDate && journeyPlanDateOverdue(plannedDate,today)) node.risks.push("overdue");
         // Event registration time is not the actual arrival time.
         const placeholder = index === 0 ? supplyPlaceholder : -1;
@@ -577,11 +606,10 @@ export class DigitalJourneyQuery {
       const confirmation=gates.customerSampleFact?.payload;
       if(confirmation&&['现场登记','已核实'].includes(confirmation.timeQuality)&&typeof confirmation.actualCompletedAt==='string'
        &&/T.*(?:Z|[+-]\d{2}:\d{2})$/.test(confirmation.actualCompletedAt)&&Number.isFinite(Date.parse(confirmation.actualCompletedAt)))capture?.recheckAt?.(confirmation.actualCompletedAt);
-      let confirmationTime=confirmation&&['现场登记','已核实'].includes(confirmation.timeQuality)&&typeof confirmation.actualCompletedAt==='string'
-        &&/T.*(?:Z|[+-]\d{2}:\d{2})$/.test(confirmation.actualCompletedAt)&&Number.isFinite(Date.parse(confirmation.actualCompletedAt))
-        &&Date.parse(confirmation.actualCompletedAt)<=Date.parse(asOf)?iso(confirmation.actualCompletedAt):null;
+      const originalConfirmation=developmentRecordedTime(confirmation,asOf);
+      let confirmationTime=originalConfirmation?.at??null,confirmationDate=originalConfirmation?.date??null;
       let confirmationOperator=gates.customerSampleFact?.actor_id as string|undefined;
-      let confirmationQuality:JourneyNode['actualQuality']='verified';
+      let confirmationQuality:JourneyNode['actualQuality']=originalConfirmation?.quality??'missing';
       if(bulk.customerConfirmed&&gates.technical?.finalCommentRef&&sid&&gates.source){
         // Technical effectiveness permits the route, while the customer's own
         // explicit occurrence (not review/recording time) proves confirmation.
@@ -590,13 +618,13 @@ export class DigitalJourneyQuery {
           [sid,gates.source.round_number,gates.technical.finalCommentRef.id,gates.technical.finalCommentRef.version])).rows[0];
         if(comment?.occurred_at)capture?.recheckAt?.(iso(comment.occurred_at)!);
         if(comment?.occurred_at&&Date.parse(iso(comment.occurred_at)!)<=Date.parse(asOf)){
-          confirmationTime=iso(comment.occurred_at);confirmationOperator=comment.recorded_by;confirmationQuality='unverified';
+          confirmationTime=iso(comment.occurred_at);confirmationDate=null;confirmationOperator=comment.recorded_by;confirmationQuality='unverified';
         }
       }
       // Technical readiness is a valid alternate gate, not a timestamp of the
       // separate customer-confirmation event. Old payloads remain time-unknown.
       const customerSample=setFact("customer_sample",bulk.customerConfirmed?"completed":"pending",sid?[record("development",sid,developmentUrl(sid,gates.source?bulk.sourceRound??round??1:currentDocument?round??1:undefined),bulk.sourceRound)]:[],bulk.customerConfirmed?confirmationTime:null);
-      if(confirmationTime){customerSample.actualQuality=confirmationQuality;if(confirmationQuality!=='verified'){customerSample.completionResult='unknown';customerSample.overdueSeconds=null;}if(confirmationOperator)customerSample.operator={id:confirmationOperator,name:null};}
+      if(confirmationTime||confirmationDate){customerSample.actualDate=confirmationDate;customerSample.actualQuality=confirmationQuality;if(confirmationQuality!=='verified'){customerSample.completionResult='unknown';customerSample.overdueSeconds=null;}if(confirmationOperator)customerSample.operator={id:confirmationOperator,name:null};}
       setFact("production_instruction",bulk.instructionValid?"completed":"pending",instruction?[record("instruction",oid,`/ui/digital-production?instruction=${oid}&instructionVersion=${instruction.version}`,instruction.version)]:[],iso(instruction?.published_at),instruction?.published_by?{id:instruction.published_by,name:null}:null);
       const gate=setFact("cutting_gate",bulk.reasons.length?"pending":bulk.tasks.some(task=>["bulk_cutting","bulk_cutting_external"].includes(task.taskKind))?"completed":"pending",[record("preparation",oid,bulkUrl,bulk.instructionVersion)]);
       gate.blockers=bulk.reasons.map((label,index)=>({key:`domain_gate_${index}`,label,ownerId:null,record:gate.records[0]!}));
@@ -614,6 +642,10 @@ export class DigitalJourneyQuery {
       if(cuttingTask&&bulk.cutting.completed) {
         gate.state="completed";
         gate.blockers=[];
+      }
+      if(gate.state==='completed'&&cuttingTask){
+        const joinedAt=journeyCuttingGateTime(cuttingTask.taskId,bulk.cutting.lines,await nativeCuttingReadiness(db,[cuttingTask.taskId]),asOf);
+        if(joinedAt){gate.actualAt=joinedAt;gate.actualQuality='verified';}
       }
       gate.completionResult=gate.state==="completed"?"unknown":null;
       // The original synchronous completion command records businessNow in this

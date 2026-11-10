@@ -1,4 +1,6 @@
-import {DevelopmentMakingUpgradeSchema} from './digital-development.js';
+import {DevelopmentMakingUpgradeSchema,DevelopmentOccurrenceSchema} from './digital-development.js';
+export {DevelopmentOccurrenceSchema};
+export type {DevelopmentOccurrence} from './digital-development.js';
 import {DevelopmentReturnIssueSchema,type DevelopmentReturnIssue} from "./digital-development-amendments.js";
 import {DEVELOPMENT_REVISION_NODES,DEVELOPMENT_PROBLEM_CATEGORIES} from "./digital-development-rounds.js";
 import { z } from "zod";
@@ -33,14 +35,15 @@ export type DevelopmentCheck=z.infer<typeof DevelopmentCheckSchema>;
 export type DevelopmentWork=z.infer<typeof DevelopmentWorkSchema>;
 export const DevelopmentActualMeasurementsSchema=z.array(z.object({name:z.string().trim().min(1).max(100),values:z.array(z.string().trim().min(1).max(32)).max(30)}).strict()).max(100);
 export type DevelopmentActualMeasurements=z.infer<typeof DevelopmentActualMeasurementsSchema>;
-export const DevelopmentRouteActionSchema=z.object({measurements:DevelopmentActualMeasurementsSchema.optional(),making:DevelopmentMakingUpgradeSchema.optional(),attachmentIds:z.array(z.string().uuid()).max(20).optional(),returnNodes:z.array(z.enum(DEVELOPMENT_REVISION_NODES)).max(6).optional(),problemCategories:z.array(z.enum(DEVELOPMENT_PROBLEM_CATEGORIES)).max(8).optional(),craftExecution:z.enum(["内部","外发"]).nullable(),taskId:z.string().uuid(),note:z.string().trim().max(2000),result:z.enum(["通过","退回"]),nextAssigneeId:z.string().uuid().nullable(),sentDate:z.iso.date().nullable(),trackingNo:z.string().trim().max(100).nullable()}).strict();
+export const DevelopmentRouteActionSchema=z.object({actualTime:DevelopmentOccurrenceSchema.optional(),measurements:DevelopmentActualMeasurementsSchema.optional(),making:DevelopmentMakingUpgradeSchema.optional(),attachmentIds:z.array(z.string().uuid()).max(20).optional(),returnNodes:z.array(z.enum(DEVELOPMENT_REVISION_NODES)).max(6).optional(),problemCategories:z.array(z.enum(DEVELOPMENT_PROBLEM_CATEGORIES)).max(8).optional(),craftExecution:z.enum(["内部","外发"]).nullable(),taskId:z.string().uuid(),note:z.string().trim().max(2000),result:z.enum(["通过","退回"]),nextAssigneeId:z.string().uuid().nullable(),sentDate:z.iso.date().nullable(),trackingNo:z.string().trim().max(100).nullable()}).strict();
 export const DevelopmentExternalPatternSchema=z.discriminatedUnion('action',[
  z.object({action:z.literal('request'),roundNumber:z.number().int().positive(),note:z.string().trim().max(1000)}).strict(),
  z.object({action:z.literal('receive'),requestId:z.string().uuid(),note:z.string().trim().max(1000),attachmentIds:z.array(z.string().uuid()).min(1).max(20)}).strict(),
 ]);
 export type DevelopmentExternalPattern=z.infer<typeof DevelopmentExternalPatternSchema>;
 export const DevelopmentPatternOrderSchema=z.object({categoryId:z.string().uuid(),priceVersion:z.number().int().positive()}).strict();
-export const DevelopmentCustomerSampleSchema=z.object({routeVersion:z.number().int().positive(),note:z.string().trim().min(1).max(2000)}).strict();
+export const DevelopmentCustomerSampleSchema=z.object({routeVersion:z.number().int().positive(),note:z.string().trim().min(1).max(2000),actualTime:DevelopmentOccurrenceSchema.optional()}).strict();
+export type DevelopmentCustomerSample=z.infer<typeof DevelopmentCustomerSampleSchema>;
 
 export const ReopenDevelopmentMaterialsSchema=z.object({taskId:z.string().uuid(),supplyTaskId:z.string().uuid(),roundNumber:z.number().int().positive(),expectedDocumentVersion:z.number().int().positive(),expectedVerificationVersion:z.number().int().positive(),note:z.string().trim().min(1,"请记录与设计师沟通后重新核料的原因").max(1000)}).strict();
 export type ReopenDevelopmentMaterials=z.infer<typeof ReopenDevelopmentMaterialsSchema>;
