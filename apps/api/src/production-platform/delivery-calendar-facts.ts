@@ -1,7 +1,7 @@
 import {packingActualTime} from '@dx-rework/contracts';
 import type {PoolClient} from 'pg';
 import type {DeliveryPoFact,DeliveryScope} from '@dx-rework/contracts/delivery-calendar';
-import {readNativePackingHeads} from '../receiving/receiving-quantity-query.js';
+import {readNativePackingHeads,DIGITAL_RECEIVING_BASE_SQL} from '../receiving/receiving-quantity-query.js';
 import {journeyCutScopesForOrders,NATIVE_EMPTY_PACKING_SCOPE_SQL} from './journey-cut-scopes.js';
 import {effectivePackingQuantity,readPackingQualityCoverage} from './packing-quality-coverage.js';
 
@@ -31,6 +31,8 @@ export async function deliveryCalendarFacts(db:PoolClient,orderIds:string[],rang
  // This is the original closure/receiving grouping and latest action batch,
  // including corrections/deletion and one cumulative packing across factories.
  const packing=await readNativePackingHeads(db,cutIds);
+ const receivingTotals=cutIds.length?(await db.query(`${DIGITAL_RECEIVING_BASE_SQL}
+  SELECT group_key,current_actual_quantity FROM style_totals`,['2000-01-01','2199-12-31','#',cutIds])).rows:[];
  const quality=await readPackingQualityCoverage(db,selectedOrders);
  const history=(await db.query(`SELECT line_id,version,change_id,new_date::text,old_date::text,source FROM digital_po_date_changes WHERE line_id=ANY($1::uuid[]) AND date_kind='customer' ORDER BY line_id,version`,[rows.map(row=>row.line_id)])).rows;
  const policies=(await db.query(`SELECT DISTINCT ON(production_order_id) production_order_id,snapshot_id,revision,parameters_json FROM digital_sla_order_snapshots WHERE production_order_id=ANY($1::uuid[]) ORDER BY production_order_id,revision DESC`,[selectedOrders])).rows;
@@ -44,14 +46,15 @@ export async function deliveryCalendarFacts(db:PoolClient,orderIds:string[],rang
  // Native sourcing creation historically puts its internal UUID in erp_order_no.
  // The field name alone is not evidence of a human business number.
  const byNumber=new Map(numbers.map(row=>[row.production_order_id,businessNumber(row.erp_order_no)]));
- const byPacking=new Map(packing.map(row=>[row.group_key,row])),byPolicy=new Map(policies.map(row=>[row.production_order_id,row])),byLine=new Map<string,typeof history>();
+ const byPacking=new Map(packing.map(row=>[row.group_key,row])),byReceiving=new Map(receivingTotals.map(row=>[row.group_key,row])),byPolicy=new Map(policies.map(row=>[row.production_order_id,row])),byLine=new Map<string,typeof history>();
  for(const item of history){const list=byLine.get(item.line_id)??[];list.push(item);byLine.set(item.line_id,list);}
  return rows.map(row=>{
   const cuts=row.cutting_ids??[],verified=cutScopes.get(row.line_id)?.status==='verified',packed=verified?byPacking.get('cut:'+cuts[0]):null,policy=byPolicy.get(row.production_order_id),dueHistory=byLine.get(row.line_id)??[],original=dueHistory.find(change=>change.version===1&&change.source==='initial_po'),effective=dueHistory.find(change=>change.version===row.customer_date_version&&change.new_date===row.customer_date),reasons:string[]=[];
   // A complete native cut/PO identity and this authorized group query prove
   // absence. No row is inserted and missing/ambiguous references remain unknown.
   const orderedQty=quantity(row.quantity),rawPackedQty=packed?.packing_revision_id==null&&(verified||row.packing_absence_proven)?0:quantity(packed?.packing_quantity);
-  const covered=quality.get(row.line_id)??null,effectivePackedQty=effectivePackingQuantity(rawPackedQty,covered?.received??0,covered);
+  const covered=quality.get(row.line_id)??null,nativeReceived=quantity(byReceiving.get('cut:'+cuts[0])?.current_actual_quantity)??0;
+  const effectivePackedQty=effectivePackingQuantity(rawPackedQty,nativeReceived,covered);
   if(rawPackedQty!==null&&effectivePackedQty===null)reasons.push('原装箱累计的有效合格覆盖待核对，不推定已交数量');
   if(orderedQty===null)reasons.push('本PO有效需求数量待核');if(rawPackedQty===null)reasons.push(cuts.length>1?'本PO有多个开裁关联，装箱范围待核':'本PO尚无可核有效装箱累计');if(!row.customer_date)reasons.push('本PO尚无有效客户出货交期');
   const reminder=policy?.parameters_json?.order_shipping_reminder?.value,reminderDays=reminder?.kind==='offset'&&Number.isInteger(reminder.days)&&reminder.days>=0&&reminder.days<=365?reminder.days as number:null;

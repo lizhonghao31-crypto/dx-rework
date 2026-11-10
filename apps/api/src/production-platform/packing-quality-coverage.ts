@@ -57,7 +57,8 @@ export async function readPackingQualityCoverage(db:Pick<Pool|PoolClient,'query'
 }
 /** The debt counters stay scalar SQL, using the same effective QC totals and
  * the same conditions as effectivePackingQuantity (covered by PG cases). */
-export const effectivePackingQuantitySql=(packed:string,received:string,inspected:string,qualified:string)=>
+export const effectivePackingQuantitySql=(packed:string,received:string,inspected:string,qualified:string,coverageReceived=received)=>
  `CASE WHEN ${packed}=0 THEN 0 WHEN ${packed} IS NULL OR ${received} IS NULL
+  OR ${coverageReceived} IS NULL OR ${coverageReceived}<>${received}
   OR ${inspected}>${received} OR ${qualified}>${inspected}
   OR ${packed}>${received} OR ${packed}>${qualified} THEN NULL ELSE ${packed} END`;

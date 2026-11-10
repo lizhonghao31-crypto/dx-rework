@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "45fc58a572437aa45318d3e91ca18631e3fa03b2",
-  "sourceFingerprint": "745b47e5ac913d68092cc63812b2cdd37fefefa3f63162328a9fefaf11baf297",
+  "sourceFingerprint": "b4fa07319f1b93d20e990824d6bfbd067209dcdd84ef736bfd4c58cb49f92a51",
   "risk": "full",
   "rules": [
     {
@@ -33,8 +33,8 @@
         "tests/integration/effective-packing-postgres.test.ts"
       ],
       "checks": [
-        "r501-units",
-        "r501-calendar"
+        "r501-review-units",
+        "r501-review-pg"
       ],
       "expectation": "Independent two receipts2+2 / qualified1+2 / packing4 counterexample stays incomplete and preserves recorded4. Proven zero stays zero; unknown or superseded coverage is not0. Native targeted PG run additionally demonstrated real reinspection and pending-to-ready quantity update; final canonical plan includes the expanded native regression."
     },
@@ -66,8 +66,8 @@
         "tests/integration/m01-delivery-calendar-postgres.test.ts"
       ],
       "checks": [
-        "r501-units",
-        "r501-calendar"
+        "r501-review-units",
+        "r501-review-pg"
       ],
       "expectation": "Native calendar counts all allowed PO before15-row paging, keeps16 PO across pages, readonly PMC/revocation, current quantity corrections, original-snapshot conservation, zero old-factory scope and5001 unrelated-year cap. Valid overdelivery fixture now has real extra receipt and QC, not nonexistent stock. Packing raw count remains separate from unknown effective shipment."
     },
@@ -93,7 +93,7 @@
         "tests/unit/factory-production-facts.test.ts"
       ],
       "checks": [
-        "r501-units"
+        "r501-review-units"
       ],
       "expectation": "Retired and current factories keep their own names, only positive scopes determine current inspection; unmatched event stays unknown instead of using current factory. Existing whole-order completion and all-PO reader behavior retained; no visual redesign."
     },
@@ -113,78 +113,55 @@
         "tests/unit/full-gate-risk-map.test.ts"
       ],
       "checks": [
-        "r501-map"
+        "r501-review-units"
       ],
       "expectation": "Original70 classification cases remain valid, preserving actual supplychain/database consumers and the cancellation of routine backup/restore drills. New helper shares the existing native packing suite mapping, not a separate governance gate."
     }
   ],
   "checks": [
     {
-      "id": "r501-units",
+      "id": "r501-review-units",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/packing-sla-evidence.test.ts tests/unit/receiving-summary.test.ts tests/unit/factory-production-facts.test.ts tests/unit/delivery-calendar.test.ts tests/unit/delivery-calendar-model.test.ts tests/unit/journey-business-progress.test.ts tests/unit/m01-production-statistics.test.ts tests/unit/digital-pmc-readonly-access.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r501-unit-final.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/packing-sla-evidence.test.ts tests/unit/receiving-summary.test.ts tests/unit/factory-production-facts.test.ts tests/unit/delivery-calendar.test.ts tests/unit/delivery-calendar-model.test.ts tests/unit/journey-business-progress.test.ts tests/unit/m01-production-statistics.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r501-review-units.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 113,
+      "passed": 183,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "45fc58a572437aa45318d3e91ca18631e3fa03b2",
-      "sourceFingerprint": "745b47e5ac913d68092cc63812b2cdd37fefefa3f63162328a9fefaf11baf297",
-      "context": "Node22.22.2/Vitest4.1.10; tested working tree derived from exact base, source fingerprint captured unchanged during closeout; calendar uses private PostgreSQL13.23, isolated marked database and non-superuser role, original guarded TEST fixture. No production/onsite operations. Reports and logs are the actual command outputs.",
-      "startedAt": "2026-11-10T18:03:32.432Z",
-      "endedAt": "2026-11-10T18:03:36.352Z",
-      "log": "/workspace/.dx-cloud/r501-unit-final.log",
-      "logSha256": "a42ce0165be4f3e743fc2ce3cd2bd55f319c742e542a20fcf6e4bf8974513977",
+      "testedHead": "c6cda957b0f1b5a08babbafa65316030c1c05ada",
+      "sourceFingerprint": "b4fa07319f1b93d20e990824d6bfbd067209dcdd84ef736bfd4c58cb49f92a51",
+      "context": "Node22.22.2/Vitest4.1.10, working tree from reviewed c6cda957. Full source fingerprint unchanged during these checks. PG13.23 private marked isolated database, non-superuser role, original native commands. Includes Root whole-batch actual3 vs receipt/QC4/packing4, with calendar scalar debt; no live data or deployment.",
+      "startedAt": "2026-11-10T18:29:49.841Z",
+      "endedAt": "2026-11-10T18:29:54.982Z",
+      "log": "/workspace/.dx-cloud/r501-review-units.log",
+      "logSha256": "4acaccfa969f0000aabc95df7343a16c6afa71e3bd24e7f3927a3524d6b46ac3",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "55d8f580ad58305aa6817d0b7d247e64d5ab843e66bb25b9284ed8e997286a8e"
+          "sha256": "19d47cc7375b2e1ecc27238d892e6687f8f75631fc4cd6025d6c6cde3287190e"
         }
       ]
     },
     {
-      "id": "r501-calendar",
+      "id": "r501-review-pg",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/m01-delivery-calendar-postgres.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r501-calendar.json",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/effective-packing-postgres.test.ts tests/integration/m01-delivery-calendar-postgres.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r501-review-pg.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 8,
+      "passed": 15,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "45fc58a572437aa45318d3e91ca18631e3fa03b2",
-      "sourceFingerprint": "745b47e5ac913d68092cc63812b2cdd37fefefa3f63162328a9fefaf11baf297",
-      "context": "Node22.22.2/Vitest4.1.10; tested working tree derived from exact base, source fingerprint captured unchanged during closeout; calendar uses private PostgreSQL13.23, isolated marked database and non-superuser role, original guarded TEST fixture. No production/onsite operations. Reports and logs are the actual command outputs.",
-      "startedAt": "2026-11-10T17:58:10.183Z",
-      "endedAt": "2026-11-10T17:58:46.582Z",
-      "log": "/workspace/.dx-cloud/r501-calendar.log",
-      "logSha256": "f61fe9681c738bc57caa992f35d7614b6ed0ac8e8197e7574b173dba5b3604ea",
+      "testedHead": "c6cda957b0f1b5a08babbafa65316030c1c05ada",
+      "sourceFingerprint": "b4fa07319f1b93d20e990824d6bfbd067209dcdd84ef736bfd4c58cb49f92a51",
+      "context": "Node22.22.2/Vitest4.1.10, working tree from reviewed c6cda957. Full source fingerprint unchanged during these checks. PG13.23 private marked isolated database, non-superuser role, original native commands. Includes Root whole-batch actual3 vs receipt/QC4/packing4, with calendar scalar debt; no live data or deployment.",
+      "startedAt": "2026-11-10T18:29:48.466Z",
+      "endedAt": "2026-11-10T18:30:25.810Z",
+      "log": "/workspace/.dx-cloud/r501-review-pg.log",
+      "logSha256": "dd6450938ad2099e2167fd3043b0e4a5afc1313c837515288b7320254b30c0ec",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "dc7cef3786bbe9d60a99a3549066619c0ac88f1572e606eafad2585b293f134c"
-        }
-      ]
-    },
-    {
-      "id": "r501-map",
-      "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/full-gate-risk-map.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/.dx-cloud/r501-map.json",
-      "status": "passed",
-      "exitCode": 0,
-      "passed": 70,
-      "failed": 0,
-      "skipped": 0,
-      "testedHead": "45fc58a572437aa45318d3e91ca18631e3fa03b2",
-      "sourceFingerprint": "745b47e5ac913d68092cc63812b2cdd37fefefa3f63162328a9fefaf11baf297",
-      "context": "Node22.22.2/Vitest4.1.10; tested working tree derived from exact base, source fingerprint captured unchanged during closeout; calendar uses private PostgreSQL13.23, isolated marked database and non-superuser role, original guarded TEST fixture. No production/onsite operations. Reports and logs are the actual command outputs.",
-      "startedAt": "2026-11-10T18:04:46.819Z",
-      "endedAt": "2026-11-10T18:04:47.168Z",
-      "log": "/workspace/.dx-cloud/r501-map.log",
-      "logSha256": "7202d7ff76ffe5a55de457ef3892009024e606a20941ec88ae6337ea9f23cb5b",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "6278ba17a2d72e623e55f2cd6dbe4f65b2ba6263aac5a5a0c078fec918c37ab4"
+          "sha256": "29eaaab4c9bb34bcff2d9ab7cbb4a4b16b2bc4a37868e4d83eba5f1ad58c2853"
         }
       ]
     }

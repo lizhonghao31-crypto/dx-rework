@@ -158,6 +158,17 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect((await run(()=>closure.read(f.root,made.id))).collection!.shipmentQuantity).toBe(4);
   const fresh=await run(()=>calendar.day(f.root,filters,due));expect(fresh.daySummary).toMatchObject({orderedQty:4,packedQty:4,pendingQty:0,unknownQuantityPoCount:0});
   expect((await run(()=>row(second.receivingBatchId))).packingQuantity).toBe(4);
+  // A native whole-batch correction does not rewrite receipt QC quantities.
+  // All delivery readers must keep that mismatch unknown instead of treating
+  // the receipt sum as both coverage and authoritative received stock.
+  const current=await run(()=>row(second.receivingBatchId));
+  await run(()=>receiving.correctBatch(corrector(),second.receivingBatchId,{expectedVersion:current.version,styleNo:current.styleNo,documentQuantity:4,actualQuantity:3,defectiveQuantity:0}));
+  expect((await run(()=>closure.read(f.root,made.id))).lines[0]).toMatchObject({actualQuantity:3,packingQuantity:4,effectivePackingQuantity:null});
+  const corrected=await run(()=>calendar.day(f.root,filters,due));
+  expect(corrected.items[0]).toMatchObject({rawPackedQty:4,effectivePackedQty:null,packedQty:null,pendingQty:null,riskStatus:'unknown'});
+  expect(corrected.daySummary).toMatchObject({packedQty:null,pendingQty:null,unknownQuantityPoCount:1});
+  const debt=await run(()=>calendar.month(f.root,filters,'2099-01',undefined,'2099-01-01'));
+  expect(debt.relatedQuantityUnknownPoCount).toBe(1);
  });
 
  it('uses identical scalar delivery quantities in SQL debt counters and the current PO reader',async()=>{
