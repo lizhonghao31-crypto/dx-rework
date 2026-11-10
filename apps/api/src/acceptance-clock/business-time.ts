@@ -44,9 +44,16 @@ export class ContextBusinessClock implements BusinessClock{
  constructor(private readonly database?:Pool,private readonly transaction?:PoolClient){}
  withTransaction(transaction:PoolClient){return new ContextBusinessClock(this.database,transaction);}
  async read(scope:BusinessTimeScope,fallback?:()=>Date):Promise<BusinessTime>{
+  return (await this.readObservation(scope,fallback?{now:fallback,mode:'fixed'}:undefined)).time;
+ }
+ /** Only the selected ordinary fallback can prove a live observation. A
+  * trusted reader or guarded context may freeze time with a null scenario ID. */
+ async readObservation(scope:BusinessTimeScope,fallback?:Readonly<{now:()=>Date;mode:'live'|'fixed'}>):Promise<{time:BusinessTime;mode:'live'|'fixed'}>{
   const context=contexts.getStore();
-  if(context){await context.assertScope(scope);return observedBusinessTime();}
-  return this.database?await readers.get(this.database)?.read(scope,this.transaction)??observedBusinessTime(fallback):observedBusinessTime(fallback);
+  if(context){await context.assertScope(scope);return {time:observedBusinessTime(),mode:'fixed'};}
+  const trusted=this.database?await readers.get(this.database)?.read(scope,this.transaction):null;
+  if(trusted)return {time:trusted,mode:'fixed'};
+  return {time:observedBusinessTime(fallback?.now),mode:fallback?.mode??'live'};
  }
  /** The same guarded clock contract for a lightweight candidate batch. It
   * neither grants scope nor replaces a custom reader returning scenarioId=null.

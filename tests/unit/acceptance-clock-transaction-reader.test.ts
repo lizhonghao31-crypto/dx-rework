@@ -57,3 +57,15 @@ describe('original scene isolation with an owned read transaction',()=>{
   await expect(withAcceptanceBusinessTime(context,()=>new ContextBusinessClock().read({kind:'order',id:'TEST foreign'},()=>new Date('2026-01-01T00:00:00Z')))).rejects.toThrow('TEST scope rejected');
  });
 });
+
+ it('proves live only for the selected ordinary clock fallback and never for a null-scenario reader',async()=>{
+  const pool={} as Pool,transaction={} as PoolClient,scope={kind:'order' as const,id:'TEST live proof'},at='2026-12-01T12:00:00.000Z',time={now:at,scenarioId:null,revision:0};
+  const clock=new ContextBusinessClock(pool,transaction),fallback={now:()=>new Date(at),mode:'live' as const};
+  expect(await clock.readObservation(scope,fallback)).toEqual({time,mode:'live'});
+  installAcceptanceClockReader(pool,{read:async(_scope,db)=>{expect(db).toBe(transaction);return null;},nativeScenario:async()=>null});
+  expect(await clock.readObservation(scope,fallback)).toEqual({time,mode:'live'});
+  installAcceptanceClockReader(pool,{read:async()=>time,nativeScenario:async()=>null});
+  expect(await clock.readObservation(scope,{now:()=>{throw Error('trusted reader must win');},mode:'live'})).toEqual({time,mode:'fixed'});
+  expect(await clock.read(scope,()=>{throw Error('fallback must not run');})).toEqual(time);
+  expect(await new ContextBusinessClock().readObservation(scope,{now:()=>new Date(at),mode:'fixed'})).toEqual({time,mode:'fixed'});
+ });

@@ -1,26 +1,30 @@
 {
   "version": 1,
   "base": "8056ff3de7e906712f29324f176b6d2d150d4658",
-  "sourceFingerprint": "6232365fe101ab43d3a710669fc72988c7b3dae57533101f9c29a7aaedcf5303",
+  "sourceFingerprint": "6c0fb610d9fea41970b863427099c74c3028937d5ed969f513b6a88306c9a052",
   "risk": "full",
   "rules": [
     {
       "source": "Approved latest unified six-PR supply-chain plan sequence9, https://chatgpt.com/space/page_6c91556b94cc81918747a7b4d6b2f19b sections4/9/10/13/14.1 and B31/B34-B42; PR06 integrates previously merged01-05, preserves original seven KPI membership and all PERF01-12. User authorizes code, official Codex Review and sequential expected-head merge; no deployment, live data/config or automatic adoption activation.",
       "dateAndPermission": "Original current role, resource, node and field permissions remain authoritative. No cross-user cache, new operational right or all-object rich GET. All scope/target/fact revisions and original BusinessTime retained. PerPO B is frozen; original task/window D and current F stay distinct; actual A only native evidence, dates use original precision and exclusive Beijing boundaries. Terminated or completed evidence does not advance. Same-identity previous read remains labelled stale and is never called current.",
       "checks": [
-        "p06-final-native-facts",
-        "p06-final-app-matrix",
-        "p06-final-units",
-        "p06-final-static",
-        "p06-final-protocol"
+        "p06-clock-native-corrected",
+        "p06-clock-digital",
+        "p06-clock-app",
+        "p06-clock-final-units",
+        "p06-clock-static",
+        "p06-clock-protocol"
       ],
       "rule": "Consume native adopted v2 B and actual physical delivery A without rewriting legacy forecast, original responsibility D, lifecycle or light selection semantics.",
       "writes": [
+        "apps/api/src/acceptance-clock/business-time.ts",
         "apps/api/src/production-platform/fixed-schedule-basis.ts",
         "apps/api/src/production-platform/journey-query.ts",
         "apps/api/src/production-platform/journey-visual-progress.ts",
         "packages/contracts/src/digital-production-journey.ts",
         "packages/contracts/src/fixed-schedule-progress.ts",
+        "tests/integration/fixed-progress-postgres.test.ts",
+        "tests/unit/acceptance-clock-transaction-reader.test.ts",
         "tests/unit/cockpit-fixed-schedule.test.ts",
         "tests/unit/journey-visual-progress.test.ts"
       ],
@@ -40,17 +44,18 @@
         "tests/integration/supplychain-board-native-browser-postgres.test.ts"
       ],
       "initialization": "No schema, calculation version or materialized fact shape change: native taskD and explicit live/fixed observation mode are rich authorized DTO only. Frozen stage B is read from existing scope targets; no reconstruction from current settings and no additional SQL. Explicit native TEST source return date and ordered craft steps make the complete target test valid, not fake actual events.",
-      "expectation": "Independent tests prove fixed B differs from current forecast without changing actual ratio/main risk, positive subminute delay and negativezero, no netting PO credit, date boundary, completed/terminated freeze, unknown responsibility and one physical span. Actual PG13 original fixed route/adoption/progress23 cases pass. Original real AuthService GET returns taskD equal to the native task endpoint even when rich target B differs; all two-PO independent craft targets persist after new-adoption mode is disabled."
+      "expectation": "Independent tests prove fixed B differs from current forecast without changing actual ratio/main risk, positive subminute delay and negativezero, no netting PO credit, date boundary, completed/terminated freeze, unknown responsibility and one physical span. Actual PG13 original fixed route/adoption/progress24 cases pass. Codex4521443131 repaired: ContextBusinessClock.readObservation reports actual provenance while read() keeps its original time shape. Guarded context and every actual reader value stayfixed including null scenario IDs; only a chosen explicit SQL snapshot fallback proveslive. Native ordinary v2 resource demonstrates both live fallback and fixed null-ID reader; original scene/SLA consistency guard preserved. Original real AuthService GET returns taskD equal to the native task endpoint even when rich target B differs; all two-PO independent craft targets persist after new-adoption mode is disabled."
     },
     {
       "source": "Approved latest unified six-PR supply-chain plan sequence9, https://chatgpt.com/space/page_6c91556b94cc81918747a7b4d6b2f19b sections4/9/10/13/14.1 and B31/B34-B42; PR06 integrates previously merged01-05, preserves original seven KPI membership and all PERF01-12. User authorizes code, official Codex Review and sequential expected-head merge; no deployment, live data/config or automatic adoption activation.",
       "dateAndPermission": "Original current role, resource, node and field permissions remain authoritative. No cross-user cache, new operational right or all-object rich GET. All scope/target/fact revisions and original BusinessTime retained. PerPO B is frozen; original task/window D and current F stay distinct; actual A only native evidence, dates use original precision and exclusive Beijing boundaries. Terminated or completed evidence does not advance. Same-identity previous read remains labelled stale and is never called current.",
       "checks": [
-        "p06-final-native-facts",
-        "p06-final-app-matrix",
-        "p06-final-units",
-        "p06-final-static",
-        "p06-final-protocol"
+        "p06-clock-native-corrected",
+        "p06-clock-digital",
+        "p06-clock-app",
+        "p06-clock-final-units",
+        "p06-clock-static",
+        "p06-clock-protocol"
       ],
       "rule": "Compact seven peer KPI and actual seven-row detail, signed scope-aware target differences and three physical spans using original styles and no extra explanation wall.",
       "writes": [
@@ -86,17 +91,18 @@
         "tests/integration/supplychain-board-native-browser-postgres.test.ts"
       ],
       "initialization": "Existing seven counters and exact overdue predicate unchanged; plan-lag/customer-due/unknown filters remain separate. Current visible numeric delta only uses explicit server live observation; fixed TEST clocks, stale result and completed/terminated values never tick. DOM measurement uses actual first seven rows, aligns documents/log and does not pad upper cards with arbitrary fixed blanks. Original legacy missing cutoff stays its compact dash. Long PO labels in narrow cells truncate on one line with full original label in title; all dates remain visible.",
-      "expectation": "Original App15 real-browser cases retain full-scope counters, zero-result click paths, category paging, risk modal, original read failure retry and actual same-session PMC revocation. Screenshots1165/1440, complete two-PO targets, preserved taskD, stage dates/spans, no horizontal document overflow and actual long-PO row height under160px pass. UI failures remain failures instead of unfilled documents; legacy card/permission meaning and approved whole-state badge retained."
+      "expectation": "Initial candidatefe3d0082 passed15 original App browser cases retaining full-scope counters, zero-result click paths, category paging, risk modal, original read failure retry and actual same-session PMC revocation. Screenshots1165/1440, complete two-PO targets, preserved taskD, stage dates/spans, no horizontal document overflow and actual long-PO row height under160px pass. Current repaired source rechecks the3 original integrated v2 App cases; unchanged12 legacy UI cases are retained as initial candidate evidence, not falsely claimed rerun. UI failures remain failures instead of unfilled documents; legacy card/permission meaning and approved whole-state badge retained."
     },
     {
       "source": "Approved latest unified six-PR supply-chain plan sequence9, https://chatgpt.com/space/page_6c91556b94cc81918747a7b4d6b2f19b sections4/9/10/13/14.1 and B31/B34-B42; PR06 integrates previously merged01-05, preserves original seven KPI membership and all PERF01-12. User authorizes code, official Codex Review and sequential expected-head merge; no deployment, live data/config or automatic adoption activation.",
       "dateAndPermission": "Original current role, resource, node and field permissions remain authoritative. No cross-user cache, new operational right or all-object rich GET. All scope/target/fact revisions and original BusinessTime retained. PerPO B is frozen; original task/window D and current F stay distinct; actual A only native evidence, dates use original precision and exclusive Beijing boundaries. Terminated or completed evidence does not advance. Same-identity previous read remains labelled stale and is never called current.",
       "checks": [
-        "p06-final-native-facts",
-        "p06-final-app-matrix",
-        "p06-final-units",
-        "p06-final-static",
-        "p06-final-protocol"
+        "p06-clock-native-corrected",
+        "p06-clock-digital",
+        "p06-clock-app",
+        "p06-clock-final-units",
+        "p06-clock-static",
+        "p06-clock-protocol"
       ],
       "rule": "Expansion-only supply-chain parent retains five permitted children and moves reporting to the actual production workspace with original order, factory and return context.",
       "writes": [
@@ -132,11 +138,12 @@
       "source": "Approved latest unified six-PR supply-chain plan sequence9, https://chatgpt.com/space/page_6c91556b94cc81918747a7b4d6b2f19b sections4/9/10/13/14.1 and B31/B34-B42; PR06 integrates previously merged01-05, preserves original seven KPI membership and all PERF01-12. User authorizes code, official Codex Review and sequential expected-head merge; no deployment, live data/config or automatic adoption activation.",
       "dateAndPermission": "Original current role, resource, node and field permissions remain authoritative. No cross-user cache, new operational right or all-object rich GET. All scope/target/fact revisions and original BusinessTime retained. PerPO B is frozen; original task/window D and current F stay distinct; actual A only native evidence, dates use original precision and exclusive Beijing boundaries. Terminated or completed evidence does not advance. Same-identity previous read remains labelled stale and is never called current.",
       "checks": [
-        "p06-final-native-facts",
-        "p06-final-app-matrix",
-        "p06-final-units",
-        "p06-final-static",
-        "p06-final-protocol"
+        "p06-clock-native-corrected",
+        "p06-clock-digital",
+        "p06-clock-app",
+        "p06-clock-final-units",
+        "p06-clock-static",
+        "p06-clock-protocol"
       ],
       "rule": "Connect actual native integrated browser to canonical plan and expose the existing adoption mode through the unchanged official private config loader; no activation or unrelated operational changes.",
       "writes": [
@@ -169,132 +176,173 @@
         "tests/integration/supplychain-board-native-browser-postgres.test.ts"
       ],
       "initialization": "Existing legacy default remains. Only existing DIGITAL_TIMELINE_ADOPTION_MODE is added to app-env whitelist and both example files staylegacy; official install/diagnose/update and all rollback protections remain. Existing v2 objects use their own timeline/route versions when new adoption isoff. Test fixture optional source return date defaults null for old callers; real production create fields and explicit craft sequence used. Existing canonical100s test/hook boundaries and cleanup retained, original cases preserved.",
-      "expectation": "Native route/progress23, original fullApp15 and417 related unit cases pass on exact product source with Node22.22.2/owned lowpriv PG13.23/2workers; original Chromium executable used locally, no claim of CI hardware or onsite equivalence. Actual private0600 config-loader child proves fixed_v2 and indexed values pass together without changing process or live files. Full lint/typecheck/build/inventory/diff pass; required final CI and official Review separately bind final head/base. No live install/update/deploy, full backfill or new-adoption flag changed."
+      "expectation": "Native route/progress24, original full Journey suite,3 integrated original App and426 related unit cases pass on exact repaired product source with Node22.22.2/owned lowpriv PG13.23/2workers; original Chromium executable used locally, no claim of CI hardware or onsite equivalence. Actual private0600 config-loader child proves fixed_v2 and indexed values pass together without changing process or live files. Initialfe3d full lint/typecheck/build passed; current API lint/type/inventory/diff and canonical protocol pass, with frontend byte-identical; required final CI and official Review separately bind final head/base. No live install/update/deploy, full backfill or new-adoption flag changed."
     }
   ],
   "checks": [
     {
-      "id": "p06-final-native-facts",
+      "id": "p06-clock-native-corrected",
       "kind": "tests",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/fixed-progress-postgres.test.ts tests/integration/fixed-timeline-postgres.test.ts --maxWorkers=2 --config vitest.business-chain.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/supplychain-board-20261109/p06-final-native-facts.vitest.json",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/fixed-progress-postgres.test.ts tests/integration/fixed-timeline-postgres.test.ts --maxWorkers=2 --config vitest.business-chain.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/supplychain-board-20261109/p06-clock-native-corrected.vitest.json",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "6232365fe101ab43d3a710669fc72988c7b3dae57533101f9c29a7aaedcf5303",
+      "sourceFingerprint": "6c0fb610d9fea41970b863427099c74c3028937d5ed969f513b6a88306c9a052",
       "sourceUnchanged": true,
       "inputsUnchanged": true,
-      "testedHead": "44884220ca1f0ef4a43a35fda50d972b7201aaac",
-      "startedAt": "2026-11-10T05:09:35.890Z",
-      "endedAt": "2026-11-10T05:10:21.084Z",
-      "passed": 23,
+      "testedHead": "fe3d008261edaa7c87f9e6dfc553e30a07cf0c02",
+      "startedAt": "2026-11-10T05:33:34.816Z",
+      "endedAt": "2026-11-10T05:33:59.791Z",
+      "passed": 24,
       "failed": 0,
       "skipped": 0,
       "planError": null,
-      "log": "/workspace/scratch/supplychain-board-20261109/p06-final-native-facts.log",
-      "logSha256": "7fe3e36be15d88d6932669564e7f4b99eb5e45caaaf581e14f9d2fd24756cb32",
-      "resultReport": "/workspace/scratch/supplychain-board-20261109/p06-final-native-facts.vitest.json",
+      "log": "/workspace/scratch/supplychain-board-20261109/p06-clock-native-corrected.log",
+      "logSha256": "4116d8e15193b751ff4f0cb3cdbeb390f47bdcfe1ef225a0045b2003be93292c",
+      "resultReport": "/workspace/scratch/supplychain-board-20261109/p06-clock-native-corrected.vitest.json",
       "postgresVersion": 130023,
       "context": "Actual PostgreSQL130023 official cached-image binaries/libraries in private /tmp, non-superuser marked TEST databases, original full native schema and businessAnchorFixture/UAT initializer. Original canonical suite config/runOwnedCommand, Node22.22.2,2 Vitest workers onCPUs2/3, PostgreSQL onCPUs0/1/default100connections/64MiB shared buffers. No Docker/CI hardware or onsite equivalence. p01 is explicitly bounded new-case discovery, not all suites or skipped old coverage passed.",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "03a2fc9128c171419bec84304e6de9b68da505f507a8af4c579cb6e8264e46ef"
+          "sha256": "def4f7a0fb67bb850dba4d5c97e0a80c70474ffdc9c8d42f250410909da5fbd0"
         }
       ]
     },
     {
-      "id": "p06-final-app-matrix",
+      "id": "p06-clock-digital",
       "kind": "tests",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/m01-cockpit-home-native-browser-postgres.test.ts tests/integration/supplychain-board-native-browser-postgres.test.ts --maxWorkers=2 --config vitest.business-chain.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/supplychain-board-20261109/p06-final-app-matrix.vitest.json",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/digital-journey-postgres.test.ts --maxWorkers=2 --config vitest.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/supplychain-board-20261109/p06-clock-digital.vitest.json",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "6232365fe101ab43d3a710669fc72988c7b3dae57533101f9c29a7aaedcf5303",
+      "sourceFingerprint": "6c0fb610d9fea41970b863427099c74c3028937d5ed969f513b6a88306c9a052",
       "sourceUnchanged": true,
       "inputsUnchanged": true,
-      "testedHead": "44884220ca1f0ef4a43a35fda50d972b7201aaac",
-      "startedAt": "2026-11-10T05:08:55.616Z",
-      "endedAt": "2026-11-10T05:10:36.088Z",
-      "passed": 15,
+      "testedHead": "fe3d008261edaa7c87f9e6dfc553e30a07cf0c02",
+      "startedAt": "2026-11-10T05:34:22.761Z",
+      "endedAt": "2026-11-10T05:35:38.248Z",
+      "passed": 35,
       "failed": 0,
       "skipped": 0,
       "planError": null,
-      "log": "/workspace/scratch/supplychain-board-20261109/p06-final-app-matrix.log",
-      "logSha256": "ecece4863590d55e21f99486edb25925ac7f66a9ad3f55d8a93589e9abf37624",
-      "resultReport": "/workspace/scratch/supplychain-board-20261109/p06-final-app-matrix.vitest.json",
+      "log": "/workspace/scratch/supplychain-board-20261109/p06-clock-digital.log",
+      "logSha256": "862e3bee7d1aa55837e80cb5f2e80356c96d1dc57a8571a8709001ba393aeebe",
+      "resultReport": "/workspace/scratch/supplychain-board-20261109/p06-clock-digital.vitest.json",
       "postgresVersion": 130023,
       "context": "Actual PostgreSQL130023 official cached-image binaries/libraries in private /tmp, non-superuser marked TEST databases, original full native schema and businessAnchorFixture/UAT initializer. Original canonical suite config/runOwnedCommand, Node22.22.2,2 Vitest workers onCPUs2/3, PostgreSQL onCPUs0/1/default100connections/64MiB shared buffers. No Docker/CI hardware or onsite equivalence. p01 is explicitly bounded new-case discovery, not all suites or skipped old coverage passed.",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "c1aaba50b8b7bbd144def959a140ada7919c6d7527271a0dced1c5b00163fce0"
+          "sha256": "208c21fdaaaca766d97cd7e97a886abdf24f38eb73b5516d3227e78606f85c4d"
         }
       ]
     },
     {
-      "id": "p06-final-units",
+      "id": "p06-clock-app",
       "kind": "tests",
-      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/acceptance-lab-web.test.ts tests/unit/acceptance-production-command-center.test.ts tests/unit/business-chain-ui-contract.test.ts tests/unit/business-copy-noise-contract.test.ts tests/unit/business-facing-workflow-ui.test.ts tests/unit/cockpit-detail.test.ts tests/unit/cockpit-document-directory.test.ts tests/unit/cockpit-document-new-sources.test.ts tests/unit/cockpit-home.test.ts tests/unit/cutting-ui-contract.test.ts tests/unit/delivery-calendar-model.test.ts tests/unit/digital-journey-cockpit.test.ts tests/unit/v2-workspace-navigation.test.ts tests/unit/uat-interface-closure.test.ts tests/unit/employee-access.test.ts tests/unit/workflow-navigation-access-contract.test.ts tests/unit/production-reporting-link.test.ts tests/unit/v1-prelaunch-pr-09-mobile-density.test.ts tests/unit/finance-director-sample-read-access.test.ts tests/unit/todo-new-indicator.test.ts tests/unit/finance-navigation-hierarchy.test.ts tests/unit/sourcing-pr2-workspace-contract.test.ts tests/unit/fixed-schedule-selection.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/g3-host-readability.test.ts tests/unit/role-navigation-source.test.ts tests/unit/header-action-semantics.test.ts tests/unit/root-ui-entry-contract.test.ts tests/unit/responsibility-queue-refresh.test.ts tests/unit/responsibility-review-navigation.test.ts tests/unit/journey-progress-dates.test.ts tests/unit/rework-initiation-workbench.test.ts tests/unit/receiving-pr01-contract.test.ts tests/unit/related-merchandiser-access-todos.test.ts tests/unit/journey-visual-progress.test.ts tests/unit/platform-modules.test.ts tests/unit/m01-cockpit-workspace.test.ts tests/unit/platform-permission-navigation-hub.test.ts tests/unit/mobile-bottom-navigation.test.ts tests/unit/my-todos-navigation.test.ts tests/unit/node-materials.test.ts tests/unit/n01-paper-report-entry.test.ts tests/unit/v1-prelaunch-performance-pr10.test.ts tests/unit/cockpit-fixed-schedule.test.ts tests/unit/production-dashboard.test.ts tests/unit/config.test.ts tests/unit/fixed-timeline-runtime-config.test.ts --maxWorkers=2 --reporter=verbose --reporter=json --outputFile=/workspace/scratch/supplychain-board-20261109/p06-final-units.vitest.json",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/supplychain-board-native-browser-postgres.test.ts --maxWorkers=2 --config vitest.business-chain.config.ts --reporter=verbose --reporter=json --outputFile=/workspace/scratch/supplychain-board-20261109/p06-clock-app.vitest.json",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "6232365fe101ab43d3a710669fc72988c7b3dae57533101f9c29a7aaedcf5303",
+      "sourceFingerprint": "6c0fb610d9fea41970b863427099c74c3028937d5ed969f513b6a88306c9a052",
       "sourceUnchanged": true,
       "inputsUnchanged": true,
-      "testedHead": "44884220ca1f0ef4a43a35fda50d972b7201aaac",
-      "startedAt": "2026-11-10T05:08:54.613Z",
-      "endedAt": "2026-11-10T05:09:05.306Z",
-      "passed": 417,
+      "testedHead": "fe3d008261edaa7c87f9e6dfc553e30a07cf0c02",
+      "startedAt": "2026-11-10T05:34:43.678Z",
+      "endedAt": "2026-11-10T05:35:04.108Z",
+      "passed": 3,
       "failed": 0,
       "skipped": 0,
       "planError": null,
-      "log": "/workspace/scratch/supplychain-board-20261109/p06-final-units.log",
-      "logSha256": "3fc0fc718138a97e7fed4ea98d74318c86881424f25c823104d773c7bb46efbd",
-      "resultReport": "/workspace/scratch/supplychain-board-20261109/p06-final-units.vitest.json",
+      "log": "/workspace/scratch/supplychain-board-20261109/p06-clock-app.log",
+      "logSha256": "0fe3b1cbfd155556f5a7660715a364fcae9ac790a5df44245a3c70a8ec87505b",
+      "resultReport": "/workspace/scratch/supplychain-board-20261109/p06-clock-app.vitest.json",
       "postgresVersion": 130023,
       "context": "Actual PostgreSQL130023 official cached-image binaries/libraries in private /tmp, non-superuser marked TEST databases, original full native schema and businessAnchorFixture/UAT initializer. Original canonical suite config/runOwnedCommand, Node22.22.2,2 Vitest workers onCPUs2/3, PostgreSQL onCPUs0/1/default100connections/64MiB shared buffers. No Docker/CI hardware or onsite equivalence. p01 is explicitly bounded new-case discovery, not all suites or skipped old coverage passed.",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "dee68717d00c07a60a7a3181e53be4cea980538fab06c07e2709ed54f77f8f25"
+          "sha256": "cdb11555ed920c140197d642a93acaf49349124ad2efc43c95a671aae49c7433"
         }
       ]
     },
     {
-      "id": "p06-final-static",
+      "id": "p06-clock-final-units",
+      "kind": "tests",
+      "command": "/workspace/.dx-cloud/toolchain/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/acceptance-lab-web.test.ts tests/unit/acceptance-production-command-center.test.ts tests/unit/business-chain-ui-contract.test.ts tests/unit/business-copy-noise-contract.test.ts tests/unit/business-facing-workflow-ui.test.ts tests/unit/cockpit-detail.test.ts tests/unit/cockpit-document-directory.test.ts tests/unit/cockpit-document-new-sources.test.ts tests/unit/cockpit-home.test.ts tests/unit/cutting-ui-contract.test.ts tests/unit/delivery-calendar-model.test.ts tests/unit/digital-journey-cockpit.test.ts tests/unit/v2-workspace-navigation.test.ts tests/unit/uat-interface-closure.test.ts tests/unit/employee-access.test.ts tests/unit/workflow-navigation-access-contract.test.ts tests/unit/production-reporting-link.test.ts tests/unit/v1-prelaunch-pr-09-mobile-density.test.ts tests/unit/finance-director-sample-read-access.test.ts tests/unit/todo-new-indicator.test.ts tests/unit/finance-navigation-hierarchy.test.ts tests/unit/sourcing-pr2-workspace-contract.test.ts tests/unit/fixed-schedule-selection.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/g3-host-readability.test.ts tests/unit/role-navigation-source.test.ts tests/unit/header-action-semantics.test.ts tests/unit/root-ui-entry-contract.test.ts tests/unit/responsibility-queue-refresh.test.ts tests/unit/responsibility-review-navigation.test.ts tests/unit/journey-progress-dates.test.ts tests/unit/rework-initiation-workbench.test.ts tests/unit/receiving-pr01-contract.test.ts tests/unit/related-merchandiser-access-todos.test.ts tests/unit/journey-visual-progress.test.ts tests/unit/platform-modules.test.ts tests/unit/m01-cockpit-workspace.test.ts tests/unit/platform-permission-navigation-hub.test.ts tests/unit/mobile-bottom-navigation.test.ts tests/unit/my-todos-navigation.test.ts tests/unit/node-materials.test.ts tests/unit/n01-paper-report-entry.test.ts tests/unit/v1-prelaunch-performance-pr10.test.ts tests/unit/cockpit-fixed-schedule.test.ts tests/unit/production-dashboard.test.ts tests/unit/config.test.ts tests/unit/fixed-timeline-runtime-config.test.ts tests/unit/acceptance-clock-transaction-reader.test.ts --maxWorkers=2 --reporter=verbose --reporter=json --outputFile=/workspace/scratch/supplychain-board-20261109/p06-clock-final-units.vitest.json",
+      "status": "passed",
+      "exitCode": 0,
+      "allExited": true,
+      "sourceFingerprint": "6c0fb610d9fea41970b863427099c74c3028937d5ed969f513b6a88306c9a052",
+      "sourceUnchanged": true,
+      "inputsUnchanged": true,
+      "testedHead": "fe3d008261edaa7c87f9e6dfc553e30a07cf0c02",
+      "startedAt": "2026-11-10T05:34:42.375Z",
+      "endedAt": "2026-11-10T05:34:52.963Z",
+      "passed": 426,
+      "failed": 0,
+      "skipped": 0,
+      "planError": null,
+      "log": "/workspace/scratch/supplychain-board-20261109/p06-clock-final-units.log",
+      "logSha256": "f40acf389fc48f8357731b6c57763f6ce261fa01d72fc463a7f22ae2bf168f32",
+      "resultReport": "/workspace/scratch/supplychain-board-20261109/p06-clock-final-units.vitest.json",
+      "postgresVersion": 130023,
+      "context": "Actual PostgreSQL130023 official cached-image binaries/libraries in private /tmp, non-superuser marked TEST databases, original full native schema and businessAnchorFixture/UAT initializer. Original canonical suite config/runOwnedCommand, Node22.22.2,2 Vitest workers onCPUs2/3, PostgreSQL onCPUs0/1/default100connections/64MiB shared buffers. No Docker/CI hardware or onsite equivalence. p01 is explicitly bounded new-case discovery, not all suites or skipped old coverage passed.",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "8fcc34880048a58c86a5dec7cfcf2598705296493d494aadb31c45d0489e829c"
+        }
+      ]
+    },
+    {
+      "id": "p06-clock-static",
       "kind": "command",
-      "command": "bash -c set -e; npm run lint; npm run typecheck; npm run build; node scripts/acceptance/time-site-inventory.mjs; git diff --check",
+      "command": "bash -c set -e; node node_modules/eslint/bin/eslint.js apps/api/src/acceptance-clock/business-time.ts apps/api/src/production-platform/journey-query.ts tests/unit/acceptance-clock-transaction-reader.test.ts tests/integration/fixed-progress-postgres.test.ts --max-warnings=0; npm run typecheck --workspace=@dx-rework/api; node scripts/acceptance/time-site-inventory.mjs; git diff --check",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "6232365fe101ab43d3a710669fc72988c7b3dae57533101f9c29a7aaedcf5303",
+      "sourceFingerprint": "6c0fb610d9fea41970b863427099c74c3028937d5ed969f513b6a88306c9a052",
       "sourceUnchanged": true,
       "inputsUnchanged": true,
-      "testedHead": "44884220ca1f0ef4a43a35fda50d972b7201aaac",
-      "startedAt": "2026-11-10T05:09:34.451Z",
-      "endedAt": "2026-11-10T05:10:50.751Z",
-      "log": "/workspace/scratch/supplychain-board-20261109/p06-final-static.log",
-      "logSha256": "027c3898105b1ccd58ed2b56c07914d2e1007f5d5783ddde3b69040d1be8a64d",
+      "testedHead": "fe3d008261edaa7c87f9e6dfc553e30a07cf0c02",
+      "startedAt": "2026-11-10T05:34:45.014Z",
+      "endedAt": "2026-11-10T05:34:56.997Z",
+      "log": "/workspace/scratch/supplychain-board-20261109/p06-clock-static.log",
+      "logSha256": "0c3a41731f176b4b8c6f8282d89f05cc2ab13055df9392c43c094fe823a00d70",
       "context": "Actual scoped command on Node22.22.2 and unchanged task workspace. No assertion of CI hardware or onsite equivalence."
     },
     {
-      "id": "p06-final-protocol",
+      "id": "p06-clock-protocol",
       "kind": "command",
       "command": "bash -c set -e; npm run test:preflight; node scripts/ci/verify-actions-policy.mjs; node scripts/check-business-time-writes.mjs; node --test --test-concurrency=2 scripts/ci/test-execution-contract.test.mjs",
       "status": "passed",
       "exitCode": 0,
       "allExited": true,
-      "sourceFingerprint": "6232365fe101ab43d3a710669fc72988c7b3dae57533101f9c29a7aaedcf5303",
+      "sourceFingerprint": "6c0fb610d9fea41970b863427099c74c3028937d5ed969f513b6a88306c9a052",
       "sourceUnchanged": true,
       "inputsUnchanged": true,
-      "testedHead": "44884220ca1f0ef4a43a35fda50d972b7201aaac",
-      "startedAt": "2026-11-10T05:10:50.861Z",
-      "endedAt": "2026-11-10T05:10:56.736Z",
-      "log": "/workspace/scratch/supplychain-board-20261109/p06-final-protocol.log",
-      "logSha256": "839102f0c23fa3a8254e5824b98aebffe0ed179f9b9cb58eec759d5b6784083b",
+      "testedHead": "fe3d008261edaa7c87f9e6dfc553e30a07cf0c02",
+      "startedAt": "2026-11-10T05:34:57.131Z",
+      "endedAt": "2026-11-10T05:35:04.131Z",
+      "log": "/workspace/scratch/supplychain-board-20261109/p06-clock-protocol.log",
+      "logSha256": "40f5c0efe72954481c92ba4f79e7e39c4556cafa88699739d8ceb937310dd570",
       "context": "Actual scoped command on Node22.22.2 and unchanged task workspace. No assertion of CI hardware or onsite equivalence."
     }
   ],
+  "initialCandidateValidation": {
+    "head": "fe3d008261edaa7c87f9e6dfc553e30a07cf0c02",
+    "sourceFingerprint": "6232365fe101ab43d3a710669fc72988c7b3dae57533101f9c29a7aaedcf5303",
+    "checks": [
+      "p06-final-native-facts:23 native",
+      "p06-final-app-matrix:15 original App",
+      "p06-final-units:417",
+      "p06-final-static",
+      "p06-final-protocol"
+    ],
+    "boundary": "Actual initial candidate results. Repair adds explicit observation provenance in the existing clock read layer and uses it in Journey rich DTO; no frontend, canonical plan, deployment, model or layout change. Current scoped checks are separately listed above."
+  },
   "limitations": [
     "Source/isolated TEST validation is not onsite acceptance. Fixture image and unrelated document routes may be unavailable and the actual UI must show failure rather than unfilled.",
     "Current physical span and perPO buffer stay unknown where native evidence is missing; no fabricated A or enteredAt.",

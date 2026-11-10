@@ -13,7 +13,7 @@ import {FixedTimelineAdoptionRepository} from '../../apps/api/src/production-pla
 import {JourneyFilterSchema} from '@dx-rework/contracts/digital-production-journey';
 import {FactoryFlowService} from '../../apps/api/src/production-platform/factory-flow-service.js';
 import {ProductionReportingService} from '../../apps/api/src/sourcing/production-reporting-service.js';
-import {businessNow,ContextBusinessClock} from '../../apps/api/src/acceptance-clock/business-time.js';
+import {businessNow,ContextBusinessClock,installAcceptanceClockReader} from '../../apps/api/src/acceptance-clock/business-time.js';
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (url?describe.sequential:describe.skip)('fixed progress original native scope, readonly selection and owned PG13',()=>{
@@ -40,6 +40,17 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   for(const target of taskDto.plannedTargets!.targets){const node=cockpit.fixedSchedule!.scopes.find(scope=>scope.lineId===target.lineId)!.nodes.find(node=>node.id==='bulk_cutting')!;expect(target.endAt).toBe(node.goalDelta.targetAt);}
   expect(taskDto.dueAt).not.toBeNull();
  }));
+ it('keeps a null-scenario trusted reader fixed in the actual adopted v2 projection',async()=>{
+  // Create a genuine ordinary-clock order in its own native TEST schema.
+  // Re-labelling a guarded scene as ordinary must still fail its original SLA guard.
+  const ordinary=await businessAnchorFixture(url!);try{
+   configureTimelineAdoption(ordinary.db,'fixed_v2');const made=await ordinary.bulkReady('无');configureTimelineAdoption(ordinary.db,'legacy');await new JourneyFactRepository(ordinary.db).buildOne({kind:'order',id:made.id});
+   const live=await new DigitalJourneyQuery(ordinary.db).read(ordinary.root,made.id,undefined,true);expect(live.fixedSchedule?.observationMode).toBe('live');const at=live.asOf!;
+   const scoped={query:ordinary.db.query.bind(ordinary.db),connect:ordinary.db.connect.bind(ordinary.db)} as unknown as typeof ordinary.db;
+   installAcceptanceClockReader(scoped,{read:async()=>({now:at,scenarioId:null,revision:0}),nativeScenario:async()=>null});
+   const item=await new DigitalJourneyQuery(scoped).read(ordinary.root,made.id,undefined,true);expect(item.fixedSchedule).toBeDefined();expect(item.asOf).toBe(at);expect(item.fixedSchedule!.observationMode).toBe('fixed');expect(item.fixedSchedule!.asOf).toBe(at);
+  }finally{configureTimelineAdoption(ordinary.db,'legacy');await ordinary.dispose();}
+ });
  it('keeps original legacy overdue KPI independent from unknown new progress and full-range filter counts',()=>run(async()=>{
   const query=new DigitalJourneyQuery(f.db),filter=JourneyFilterSchema.parse({scope:'production'}),all=await query.list(f.root,filter),selected=await query.list(f.root,JourneyFilterSchema.parse({...filter,progress:'unknown'}));
   expect(all.summary.overdue).toBe(0);expect(all.summary.scheduleUnknown).toBe(1);expect(selected.total).toBe(1);expect(selected.items[0]!.id).toBe(ready.id);expect(selected.summary.all).toBe(all.summary.all);expect(selected.summary.overdue).toBe(0);
