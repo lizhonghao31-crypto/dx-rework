@@ -14,15 +14,30 @@ export async function inheritCustomerSecondaryMerchandisers(db:DB,code:string,or
 /** Already-authorized order reads use the complete relationship in one query,
  * including the legacy external case, never one name lookup per person.
  */
-export async function readOrderSecondaryMerchandisers(db:DB,orderId:string):Promise<Array<{id:string;name:string|null}>>{
- return (await db.query<{id:string;name:string|null}>(`SELECT p.id,p.display_name AS name FROM (
+type Person={id:string;name:string|null};
+function merchandiserQuery(includePrimary:boolean){return `SELECT p.id,p.display_name AS name FROM (
   SELECT user_id,min(position) AS position FROM (
    SELECT s.user_id,s.position FROM digital_order_secondary_merchandisers s WHERE s.production_order_id=$1
+   UNION ALL SELECT primary_merchandiser_id,-1 FROM digital_production_orders WHERE production_order_id=$1 AND ${includePrimary?'true':'false'}
    UNION ALL SELECT selected.user_id,1000+selected.position::int FROM digital_production_child_links l
     JOIN sourcing_cases c ON c.sourcing_case_id=l.child_id AND c.deleted_at IS NULL
     CROSS JOIN LATERAL unnest(sourcing_additional_merchandiser_ids(c.sourcing_case_id)) WITH ORDINALITY selected(user_id,position)
     WHERE l.production_order_id=$1 AND l.module='sourcing'
   ) related GROUP BY user_id
- ) ids JOIN app_users p ON p.id=ids.user_id WHERE p.id IS DISTINCT FROM (SELECT primary_merchandiser_id FROM digital_production_orders WHERE production_order_id=$1)
- ORDER BY ids.position,p.id`,[orderId])).rows;
+ ) ids JOIN app_users p ON p.id=ids.user_id WHERE ${includePrimary?'true':'false'} OR p.id IS DISTINCT FROM (SELECT primary_merchandiser_id FROM digital_production_orders WHERE production_order_id=$1)
+ ORDER BY ids.position,p.id`;}
+export async function readOrderSecondaryMerchandisers(db:DB,orderId:string,includePrimary=false):Promise<Person[]>{
+ return (await db.query<Person>(merchandiserQuery(includePrimary),[orderId])).rows;
+}
+/** Factual names only, bounded to the caller's already-authorized IDs and RR
+ * client. The caller owns the request-local map; no grant or DTO is cached.
+ */
+export async function readOrderMerchandisersByOrder(db:DB,ids:readonly string[]):Promise<Map<string,Person[]>>{
+ const unique=[...new Set(ids)],result=new Map<string,Person[]>(unique.map(id=>[id,[]]));
+ for(let offset=0;offset<unique.length;offset+=32){
+  const rows=(await db.query<Person&{order_id:string}>(`SELECT requested.id AS order_id,people.* FROM unnest($1::uuid[]) requested(id)
+   CROSS JOIN LATERAL (${merchandiserQuery(true).replace(/\$1\b/g,'requested.id')}) people`,[unique.slice(offset,offset+32)])).rows;
+  for(const {order_id,...person}of rows)result.get(order_id)!.push(person);
+ }
+ return result;
 }

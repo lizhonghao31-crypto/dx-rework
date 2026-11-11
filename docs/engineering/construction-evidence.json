@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "be61c84d0e05cbc9428c974fdfbe1b00aff4ad89",
-  "sourceFingerprint": "3aac2e4bb0953588890eacb48446752b82a7830d8140648805736e41da5239d3",
+  "sourceFingerprint": "0d0af23310d8b2eb1575ef4e9f03683da91ecf17878907084c4bce51307055e4",
   "risk": "full",
   "rules": [
     {
@@ -36,7 +36,9 @@
       "checks": [
         "r505-units",
         "r505-native",
-        "r505-legacy"
+        "r505-legacy",
+        "r505-initialization",
+        "r505-cost"
       ]
     },
     {
@@ -82,7 +84,9 @@
       "checks": [
         "r505-units",
         "r505-native",
-        "r505-legacy"
+        "r505-legacy",
+        "r505-initialization",
+        "r505-cost"
       ]
     },
     {
@@ -119,7 +123,9 @@
       "checks": [
         "r505-units",
         "r505-native",
-        "r505-legacy"
+        "r505-legacy",
+        "r505-initialization",
+        "r505-cost"
       ]
     },
     {
@@ -132,17 +138,21 @@
         "scripts/deploy/acceptance-migration-requirements.json",
         "scripts/test-suite-plan.mjs",
         "tests/acceptance/supplychain-settings-browser.ts",
+        "tests/helpers/digital-po-date-fixture.ts",
         "tests/helpers/r5-order-time-fixture.ts",
         "tests/helpers/r5-role-fixture.ts",
         "tests/integration/customer-default-merchandisers-postgres.test.ts",
         "tests/integration/digital-production-identity-postgres.test.ts",
+        "tests/integration/fixed-timeline-postgres.test.ts",
         "tests/integration/m01-settings-native-browser-postgres.test.ts",
         "tests/integration/order-time-settings-postgres.test.ts",
+        "tests/integration/qc-progress-retirement-postgres.test.ts",
         "tests/integration/r5-settings-native-browser-postgres.test.ts",
         "tests/unit/digital-pmc-readonly-ui.test.ts",
         "tests/unit/order-time-settings.test.ts",
         "tests/unit/sourcing-additional-merchandiser.test.ts",
-        "tests/unit/sourcing-list-pagination.test.ts"
+        "tests/unit/sourcing-list-pagination.test.ts",
+        "tests/helpers/order-merchandiser-fixture.ts"
       ],
       "reads": [
         "scripts/owned-command.mjs",
@@ -164,7 +174,9 @@
       "checks": [
         "r505-units",
         "r505-native",
-        "r505-legacy"
+        "r505-legacy",
+        "r505-initialization",
+        "r505-cost"
       ]
     }
   ],
@@ -175,8 +187,8 @@
       "command": "/workspace/.dx-cloud/r5-runtime/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/order-time-settings.test.ts tests/unit/sourcing-list-pagination.test.ts tests/unit/sourcing-additional-merchandiser.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/acceptance-maintenance-generator.test.ts tests/unit/migration-history.test.ts tests/unit/order-time-plan.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/digital-pmc-readonly-ui.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r505-candidate-units.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "eaa02233b92bf37b7dc8e8066b09860963d71a80",
-      "sourceFingerprint": "3aac2e4bb0953588890eacb48446752b82a7830d8140648805736e41da5239d3",
+      "testedHead": "eb4385271a518f6acc52908d13167a60b33eaba8",
+      "sourceFingerprint": "0d0af23310d8b2eb1575ef4e9f03683da91ecf17878907084c4bce51307055e4",
       "inputPaths": [
         "apps",
         "packages",
@@ -188,11 +200,11 @@
         "vitest.business-chain.config.ts",
         "tests/unit"
       ],
-      "inputFingerprint": "8acc9cca08528a10a5c730d8215371da85e55f772764faaa9385e0d04c7a9a2a",
-      "startedAt": "2026-11-11T06:37:05.236Z",
-      "endedAt": "2026-11-11T06:37:13.115Z",
+      "inputFingerprint": "01eb63c2912426d52363aa52ed453d4ba15e4315a99fb17d3399bea53f5b6bfe",
+      "startedAt": "2026-11-11T07:45:07.376Z",
+      "endedAt": "2026-11-11T07:45:13.854Z",
       "log": "/workspace/.dx-cloud/r505-candidate-units.log",
-      "logSha256": "15904c446306801c54d04907f32ab764d0601b18522f94ef236081750d4a16e0",
+      "logSha256": "aa35b1c58c66a93ac64e48e05e281de697a7baf7f783f8ef9e7a375a16b036b8",
       "context": "Actual R5-04 merged base be61c84d0e05cbc9428c974fdfbe1b00aff4ad89. Node22.22.2/npm10.9.9. Canonical non-DB1, PostgreSQL1/long2; maximum2 actual local PG test workers, no other PG group concurrent. Only marked owned low-privilege TEST database/schema; native commands and original auth/App. New company settings explicitly enabled in this owned test server, ordinary runtime switch remains off until07. No onsite, production or deployment claims.",
       "passed": 191,
       "failed": 0,
@@ -200,7 +212,7 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "e2f53c2364242603e63c10b073a28dec25c2adf141eaa6c7d951fb054a27ae40"
+          "sha256": "dffee37ae99949d527829c70def79333d83d905f712153f51e66321092c91dd6"
         }
       ]
     },
@@ -210,8 +222,8 @@
       "command": "/workspace/.dx-cloud/r5-runtime/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/order-time-settings-postgres.test.ts tests/integration/customer-default-merchandisers-postgres.test.ts tests/integration/r5-settings-native-browser-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r505-candidate-native.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "6bea06cc1ccbc9474e6e959f9d33c5fb6f6ae9d2",
-      "sourceFingerprint": "ea7060512316c376212c23554c81a43ce09b686b83b857a525f48d456dcf5e7b",
+      "testedHead": "eb4385271a518f6acc52908d13167a60b33eaba8",
+      "sourceFingerprint": "0d0af23310d8b2eb1575ef4e9f03683da91ecf17878907084c4bce51307055e4",
       "inputPaths": [
         "apps",
         "packages",
@@ -225,11 +237,11 @@
         "tests/acceptance",
         "tests/fixtures"
       ],
-      "inputFingerprint": "7415d4c193bb659a8ee76c1d696186156871c0e382f0f7ab964222becf4adfb7",
-      "startedAt": "2026-11-11T06:11:26.791Z",
-      "endedAt": "2026-11-11T06:11:49.316Z",
+      "inputFingerprint": "fed7df542f8621118022b29c38571250a77a5b8f7d1884858dcf5de7e57bda64",
+      "startedAt": "2026-11-11T07:47:26.038Z",
+      "endedAt": "2026-11-11T07:47:48.693Z",
       "log": "/workspace/.dx-cloud/r505-candidate-native.log",
-      "logSha256": "5a3a3ae20cc16f4750760454dbcd08e9a6b298147c0eb3bf50a6c6fecfe9d16b",
+      "logSha256": "c2849e6ba595166449ed39a5586e870b3c6e759e1aefa177d884ce080f3f0e0a",
       "context": "Actual R5-04 merged base be61c84d0e05cbc9428c974fdfbe1b00aff4ad89. Node22.22.2/npm10.9.9. Canonical non-DB1, PostgreSQL1/long2; maximum2 actual local PG test workers, no other PG group concurrent. Only marked owned low-privilege TEST database/schema; native commands and original auth/App. New company settings explicitly enabled in this owned test server, ordinary runtime switch remains off until07. No onsite, production or deployment claims.",
       "passed": 20,
       "failed": 0,
@@ -237,7 +249,7 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "68c2a4a258fb0dd4ea413457de2380db34cddfe7f5858da5bd73202607f564b3"
+          "sha256": "6e98e762b5e7e43ac996c837874861dccde99f4dc6a2e3270d165d617b36cf99"
         }
       ]
     },
@@ -247,8 +259,8 @@
       "command": "/workspace/.dx-cloud/r5-runtime/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/digital-production-identity-postgres.test.ts tests/integration/m01-settings-native-browser-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r505-candidate-legacy.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "6bea06cc1ccbc9474e6e959f9d33c5fb6f6ae9d2",
-      "sourceFingerprint": "ea7060512316c376212c23554c81a43ce09b686b83b857a525f48d456dcf5e7b",
+      "testedHead": "eb4385271a518f6acc52908d13167a60b33eaba8",
+      "sourceFingerprint": "0d0af23310d8b2eb1575ef4e9f03683da91ecf17878907084c4bce51307055e4",
       "inputPaths": [
         "apps",
         "packages",
@@ -262,11 +274,11 @@
         "tests/acceptance",
         "tests/fixtures"
       ],
-      "inputFingerprint": "7415d4c193bb659a8ee76c1d696186156871c0e382f0f7ab964222becf4adfb7",
-      "startedAt": "2026-11-11T06:09:32.236Z",
-      "endedAt": "2026-11-11T06:10:12.300Z",
+      "inputFingerprint": "fed7df542f8621118022b29c38571250a77a5b8f7d1884858dcf5de7e57bda64",
+      "startedAt": "2026-11-11T07:47:48.848Z",
+      "endedAt": "2026-11-11T07:48:25.192Z",
       "log": "/workspace/.dx-cloud/r505-candidate-legacy.log",
-      "logSha256": "ab147c2601ada5c56087b458f6b2be0bd463a4af56f6298ece90b3f7ec2f17d6",
+      "logSha256": "64eb0c455e698f493cd53018f60d9aa192fd8c654473540df9b347e1bd44fb3f",
       "context": "Actual R5-04 merged base be61c84d0e05cbc9428c974fdfbe1b00aff4ad89. Node22.22.2/npm10.9.9. Canonical non-DB1, PostgreSQL1/long2; maximum2 actual local PG test workers, no other PG group concurrent. Only marked owned low-privilege TEST database/schema; native commands and original auth/App. New company settings explicitly enabled in this owned test server, ordinary runtime switch remains off until07. No onsite, production or deployment claims.",
       "passed": 49,
       "failed": 0,
@@ -274,9 +286,83 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "799c387c53d403ce1f119b06ee7e7c249afca8acbe9b7d041214521cb65f34a8"
+          "sha256": "242ca944b8f7b9c444dbc237f6438e3175fd5993eb4c400b7489b4067fec23ab"
         }
       ]
+    },
+    {
+      "id": "r505-initialization",
+      "kind": "tests",
+      "command": "/workspace/.dx-cloud/r5-runtime/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/customer-quotation-postgres.test.ts tests/integration/digital-budget-shared-postgres.test.ts tests/integration/digital-development-postgres.test.ts tests/integration/digital-development-execution-postgres.test.ts tests/integration/digital-production-notifications-postgres.test.ts tests/integration/digital-production-tasks-postgres.test.ts tests/integration/development-sla-enrollment-postgres.test.ts tests/integration/fixed-timeline-postgres.test.ts tests/integration/qc-progress-retirement-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r505-candidate-initialization.json",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "eb4385271a518f6acc52908d13167a60b33eaba8",
+      "sourceFingerprint": "0d0af23310d8b2eb1575ef4e9f03683da91ecf17878907084c4bce51307055e4",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests/helpers",
+        "package.json",
+        "package-lock.json",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts",
+        "tests/integration",
+        "tests/acceptance",
+        "tests/fixtures"
+      ],
+      "inputFingerprint": "fed7df542f8621118022b29c38571250a77a5b8f7d1884858dcf5de7e57bda64",
+      "startedAt": "2026-11-11T07:46:12.797Z",
+      "endedAt": "2026-11-11T07:47:25.882Z",
+      "log": "/workspace/.dx-cloud/r505-candidate-initialization.log",
+      "logSha256": "7e67915dd3122aa09cf6738ea5800995976a72358bcc280b9cef6ef0fa2fc6f3",
+      "context": "Actual R5-04 merged base be61c84d0e05cbc9428c974fdfbe1b00aff4ad89. Node22.22.2/npm10.9.9. Canonical non-DB1, PostgreSQL1/long2; maximum2 actual local PG test workers, no other PG group concurrent. Only marked owned low-privilege TEST database/schema; native commands and original auth/App. New company settings explicitly enabled in this owned test server, ordinary runtime switch remains off until07. No onsite, production or deployment claims.",
+      "passed": 136,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "1197904a50acdceb7496cdc573674e3f572857c363f360141ce318d7ffe76c50"
+        }
+      ]
+    },
+    {
+      "id": "r505-cost",
+      "kind": "tests",
+      "command": "Node22.22.2 vitest run m01-journey-performance-postgres customer-default-merchandisers-postgres --config vitest.business-chain.config.ts; exact full command in original PTY action",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "eb4385271a518f6acc52908d13167a60b33eaba8",
+      "sourceFingerprint": "0d0af23310d8b2eb1575ef4e9f03683da91ecf17878907084c4bce51307055e4",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests/helpers",
+        "tests/integration",
+        "tests/acceptance",
+        "tests/fixtures",
+        "package.json",
+        "package-lock.json",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts"
+      ],
+      "inputFingerprint": "fed7df542f8621118022b29c38571250a77a5b8f7d1884858dcf5de7e57bda64",
+      "startedAt": "2026-11-11T07:43:31.872Z",
+      "endedAt": "2026-11-11T07:45:18.333Z",
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0,
+      "log": "/workspace/.dx-cloud/r505-bounded-people.log",
+      "logSha256": "5489d474405832db53518520b88cdb92293f9363bbd8eb1039cfe34d6730aee2",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "58362ab31387911bd0ed92a9138d15873b7705a3b2df3df8a62c82173947d259"
+        }
+      ],
+      "context": "Actual unchanged working source captured by the concurrent191-case unit receipt; no code/config/test edits during this command. Native owned low-privilege PG16.14, canonical long2/max2 workers. Seven warm88-order calls7062 each under unchanged7100 budget; legacy full88 reader only, not indexed15-row or onsite timing. Complete current second page/search/export/PMC/assigned-merchandiser/same-valid-session revocation plus all-secondary native consumers pass. No production or deployment."
     }
   ]
 }

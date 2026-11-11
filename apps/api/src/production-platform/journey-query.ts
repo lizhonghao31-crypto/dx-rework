@@ -81,6 +81,7 @@ const emptyNode = (key:string,state:JourneyState,round:number|null=null):Journey
 export class DigitalJourneyQuery {
   private readonly observations=new WeakMap<PoolClient,Map<string,{scope:BusinessTimeScope;time:BusinessTime}>>();
   private readonly authorizedTasks=new WeakMap<OrderJourney,readonly JourneyAuthorizedTask[]>();
+  private readonly merchandiserNames=new WeakMap<PoolClient,Map<string,OrderJourney['merchandisers']>>();
   constructor(private readonly database:Pool,private readonly options:{listReadMode?:'legacy'|'indexed'}={}) {}
   private async snapshot<T>(work:(db:PoolClient,asOf:string,transaction:PoolClient)=>Promise<T>) {
     const db=await this.database.connect(),reads=reuseJourneySnapshotReads(db),observations=new Map<string,{scope:BusinessTimeScope;time:BusinessTime}>();
@@ -88,7 +89,7 @@ export class DigitalJourneyQuery {
     try { await db.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
       const asOf=iso((await db.query("SELECT CURRENT_TIMESTAMP AS as_of")).rows[0].as_of)!;
       result=await work(reads,asOf,db);await db.query("COMMIT");
-    } catch(error) { await db.query("ROLLBACK");throw error; } finally {this.observations.delete(reads);db.release();}
+    } catch(error) { await db.query("ROLLBACK");throw error; } finally {this.observations.delete(reads);this.merchandiserNames.delete(reads);db.release();}
     await journeyMeasure('clock_postcheck',()=>assertBusinessClocksUnchanged(new ContextBusinessClock(this.database),observations.values()));
     return result;
   }
@@ -125,6 +126,7 @@ export class DigitalJourneyQuery {
       // The original management policy grants the full read range for these exact candidates.
       // Assigned/technical partial readers retain their original per-object path.
       if(isDigitalManagementReader(actor))prepareJourneySnapshotBatches(db,rows.flatMap(row=>row.order?[row.order.production_order_id]:[]));
+      if(isDigitalManagementReader(actor)&&(actor.actorRoles.includes('root_superuser')||(actor.authorizationCapabilities??[]).includes('sourcing:view')))this.merchandiserNames.set(db,await readOrderMerchandisersByOrder(db,rows.flatMap(row=>row.order?[row.order.production_order_id]:[])));
       for(const row of rows) { const item=await journeyMeasure('summary_projection',()=>this.project(db,actor,row,asOf,undefined,summaryOnly,patternKinds,false,Boolean(filter.scope)));if(item){items.push(item);candidates.set(item.id,row);} }
       const endFilter=journeySpan('filter_page');
       const facets = {
@@ -198,6 +200,7 @@ export class DigitalJourneyQuery {
     const candidateByResource=new Map(candidates.map(row=>[row.order?businessScopeKey({kind:'order',id:row.order.production_order_id}):businessScopeKey({kind:'source',id:row.source!.source_id}),row]));
     const candidateById=new Map(read.items.map(row=>[row.selection.id,candidateByResource.get(businessScopeKey(row.resource))!]));
     if(isDigitalManagementReader(actor))prepareJourneySnapshotBatches(db,selected.items.flatMap(item=>item.orderId?[item.orderId]:[]));
+    if(isDigitalManagementReader(actor)&&(actor.actorRoles.includes('root_superuser')||(actor.authorizationCapabilities??[]).includes('sourcing:view')))this.merchandiserNames.set(db,await readOrderMerchandisersByOrder(db,selected.items.flatMap(item=>item.orderId?[item.orderId]:[])));
     const items:OrderJourney[]=[];
     for(const selectedItem of selected.items){
       // The enclosing transaction is READ ONLY. Savepoint control cannot
@@ -566,11 +569,14 @@ export class DigitalJourneyQuery {
       FROM digital_production_po_lines l LEFT JOIN digital_production_po_sizes s USING(line_id) WHERE l.production_order_id=$1 GROUP BY l.line_id ORDER BY l.position`,[oid])).rows:[];
     const links:JourneyRecord[]=[];
     const merchandisers:OrderJourney["merchandisers"]=[],orderNumbers:string[]=[];
-    if(orderAccess&&order?.primary_merchandiser_id)merchandisers.push({id:order.primary_merchandiser_id,name:(await db.query("SELECT display_name FROM app_users WHERE id=$1",[order.primary_merchandiser_id])).rows[0]?.display_name??null});
+    const sourcingAllowed=!actor||actor.actorRoles.includes("root_superuser")||(actor.authorizationCapabilities??[]).includes("sourcing:view");
+    // Same authorized lookup supplies main and every secondary together. Do not
+    // add one extra per-order query to the legacy full-range reader.
+    if(fullOrder&&oid&&sourcingAllowed)merchandisers.push(...(this.merchandiserNames.get(db)?.get(oid)??await readOrderSecondaryMerchandisers(db,oid,true)));
+    else if(orderAccess&&order?.primary_merchandiser_id)merchandisers.push({id:order.primary_merchandiser_id,name:(await db.query("SELECT display_name FROM app_users WHERE id=$1",[order.primary_merchandiser_id])).rows[0]?.display_name??null});
     let styleName:string|null=null;
     if(fullOrder&&oid) {
       const children=(await db.query("SELECT module,child_id FROM digital_production_child_links WHERE production_order_id=$1 ORDER BY module,child_id",[oid])).rows;
-      const sourcingAllowed=!actor||actor.actorRoles.includes("root_superuser")||(actor.authorizationCapabilities??[]).includes("sourcing:view");
       const sourcing=children.find(child=>child.module==="sourcing");
       // The original detail flow hides logically deleted cases, including approval history and URLs.
       const sourcingFields=sourcing&&sourcingAllowed?(await db.query("SELECT source.additional_merchandiser_user_id,source.style_name_snapshot,source.erp_order_no,current.status FROM sourcing_cases source JOIN current_sourcing_cases current USING(sourcing_case_id) WHERE source.sourcing_case_id=$1 AND source.deleted_at IS NULL",[sourcing.child_id])).rows[0]:null;
@@ -598,7 +604,6 @@ export class DigitalJourneyQuery {
       if(sourcingFields){
         styleName=sourcingFields.style_name_snapshot??null;if(sourcingFields.erp_order_no)orderNumbers.push(sourcingFields.erp_order_no);
       }
-      if(sourcingAllowed)for(const person of await readOrderSecondaryMerchandisers(db,oid))if(!merchandisers.some(current=>current.id===person.id))merchandisers.push(person);
       if(!patternKinds){
       const bulk=await journeyMeasure('bulk',async()=>actor?await new BulkPreparationService(this.database).read(actor,oid,db):await new BulkPreparationService(this.database).readJourneyFactsWithClient(oid,db,observed));
       const gates=await journeyMeasure('bulk',()=>new BulkPreparationService(this.database).gates(db,oid));
@@ -870,4 +875,4 @@ export class DigitalJourneyQuery {
     return item;
   }
 }
-import {readOrderSecondaryMerchandisers} from './order-merchandisers.js';
+import {readOrderSecondaryMerchandisers,readOrderMerchandisersByOrder} from './order-merchandisers.js';

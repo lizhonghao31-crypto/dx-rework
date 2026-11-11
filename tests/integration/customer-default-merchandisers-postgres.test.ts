@@ -15,6 +15,7 @@ import type {TrustedActorContext} from '../../apps/api/src/tools/repositories.js
 import {EmployeeAccessService} from '../../apps/api/src/access/employee-access-service.js';
 import {PostgresAuthStore} from '../../apps/api/src/auth/postgres-store.js';
 import {OfficialDingTalkProvider} from '../../apps/api/src/auth/provider.js';
+import {readOrderSecondaryMerchandisers,readOrderMerchandisersByOrder} from '../../apps/api/src/production-platform/order-merchandisers.js';
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (url?describe.sequential:describe.skip)('R5 customer batch defaults and all secondary relationships',()=>{
  let f:Awaited<ReturnType<typeof businessAnchorFixture>>,defaults:CustomerMerchandiserDefaultsService,a:Awaited<ReturnType<typeof r5RoleFixture>>,b:Awaited<ReturnType<typeof r5RoleFixture>>,other:Awaited<ReturnType<typeof r5RoleFixture>>;
@@ -49,7 +50,12 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const create=async()=>{const style='TEST-R5-SECONDARY-'+randomUUID();return identity.createOrder(designer,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:style,orderDate:beijingCalendarDate(businessNow()),lines:[{formalPoNo:style,color:'黑',customerWarehouseArrivalDate:'2027-03-01',sizes:[{size:'M',quantity:1}]}]}),randomUUID());};
   const first=await create(),read=async(id:string)=>(await f.db.query('SELECT user_id FROM digital_order_secondary_merchandisers WHERE production_order_id=$1 ORDER BY position',[id])).rows.map(row=>row.user_id);
   expect((await identity.slaPlan(f.root,first.productionOrderId)).status).toBe('planned');
+  expect((await readOrderSecondaryMerchandisers(f.db,first.productionOrderId,true)).map(person=>person.id)).toEqual([f.people.merchandiser!.actorId,a.actor.actorId,b.actor.actorId]);
+  expect((await readOrderSecondaryMerchandisers(f.db,first.productionOrderId)).map(person=>person.id)).toEqual([a.actor.actorId,b.actor.actorId]);
   expect(await read(first.productionOrderId)).toEqual([a.actor.actorId,b.actor.actorId]);await save([b.actor.actorId]);const second=await create();expect(await read(second.productionOrderId)).toEqual([b.actor.actorId]);expect(await read(first.productionOrderId)).toEqual([a.actor.actorId,b.actor.actorId]);
+  const names=await readOrderMerchandisersByOrder(f.db,[first.productionOrderId,second.productionOrderId]);
+  expect(names.get(first.productionOrderId)!.map(person=>person.id)).toEqual([f.people.merchandiser!.actorId,a.actor.actorId,b.actor.actorId]);
+  expect(names.get(second.productionOrderId)!.map(person=>person.id)).toEqual([f.people.merchandiser!.actorId,b.actor.actorId]);
  });
  it('inherits all secondary users into the real external case, named contract todos and original return permission without main editing rights',async()=>{
   await save([a.actor.actorId,b.actor.actorId]);const todos=new TodoService(f.db),projection=new TodoProjectionService(todos),sourcing=new SourcingService(f.db,undefined,undefined,projection,f.contracts),scene=await f.scene('2026-11-01T00:00:00Z');

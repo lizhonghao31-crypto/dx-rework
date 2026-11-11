@@ -28,6 +28,7 @@ import {productionReadinessFixture,completeBulkRangeFixture} from '../helpers/pr
 import {BulkPreparationService} from '../../apps/api/src/production-platform/bulk-preparation-service.js';
 import {DigitalDevelopmentService} from '../../apps/api/src/production-platform/development-service.js';
 import {DevelopmentRoundService} from '../../apps/api/src/production-platform/development-round-service.js';
+import {applyOrderMerchandiserFixture} from '../helpers/order-merchandiser-fixture.js';
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (url?describe.sequential:describe.skip)('fixed timeline repository foundation with original native parents (owned PostgreSQL)',()=>{
  let f:Awaited<ReturnType<typeof businessAnchorFixture>>,scene:string;
@@ -56,6 +57,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  };
  beforeAll(async()=>{
   f=await businessAnchorFixture(url!,{throughVersion:'0280_journey_selection_facts'});
+  await applyOrderMerchandiserFixture(f.db,true);
   await f.db.query(await readFile(new URL('../../apps/api/migrations/0281_fixed_timeline_adoptions.sql',import.meta.url),'utf8'));
   await f.db.query(await readFile(new URL('../../apps/api/migrations/0282_journey_fixed_progress_selectors.sql',import.meta.url),'utf8'));
   expect((await f.db.query("SELECT current_setting('is_superuser') AS superuser")).rows[0].superuser).toBe('off');

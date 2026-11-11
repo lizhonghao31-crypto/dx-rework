@@ -73,14 +73,6 @@ run("digital production P01 identities", () => {
       CREATE TABLE user_role_assignments(user_id uuid,role_code text,revoked_at timestamptz);
       INSERT INTO business_roles(role_code) VALUES('sample_designer'),('order_merchandiser'),('pattern_room_supervisor'),('pattern_room_worker'),('production_management'),('quality_control'),('embroidery_washing_merchandiser'),('warehouse_receiver');`);
     await database.query(await readFile(new URL("../../apps/api/migrations/0219_digital_production_access.sql", import.meta.url), "utf8"));
-    // This focused identity fixture intentionally represents other domains with
-    // identity columns only. Add the exact new customer/order relationship DDL,
-    // rather than weakening the command or pretending this is a full upgrade.
-    // Full0285, dirty triggers and current-role checks have real-schema PG tests.
-    const defaultSchema=await readFile(new URL('../../apps/api/migrations/0285_order_time_settings_and_merchandisers.sql',import.meta.url),'utf8');
-    for(const pattern of [/ALTER TABLE digital_production_customers ADD COLUMN[^;]+;/,/CREATE TABLE digital_customer_secondary_merchandisers[\s\S]*?\n\);/,/CREATE TABLE digital_order_secondary_merchandisers[\s\S]*?\n\);/]){
-      const statement=defaultSchema.match(pattern)?.[0];if(!statement)throw Error('Current customer relationship fixture DDL is missing');await database.query(statement);
-    }
     await database.query("INSERT INTO role_capabilities(role_code,capability) VALUES('order_merchandiser','sourcing:view'),('order_merchandiser','sourcing:inquiry:create'),('order_merchandiser','sourcing:contract:record')");
     await database.query(`CREATE FUNCTION fixture_identity() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
       INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at)
