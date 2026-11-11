@@ -1195,6 +1195,10 @@
     {
       "version": "0284_order_time_plan_versions",
       "checksum": "6ef5d4698fc3d0de8f8fa190ea6f41ccd7b68e1317b51b51c4b72a83018a91a8"
+    },
+    {
+      "version": "0285_order_time_settings_and_merchandisers",
+      "checksum": "3c0377e586a2332d9699b389f8fbb491995e99a73377514715edca70de2feeab"
     }
   ]
 }

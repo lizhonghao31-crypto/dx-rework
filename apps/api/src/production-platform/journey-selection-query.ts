@@ -69,7 +69,7 @@ export async function readJourneySelections(database:Pool,db:PoolClient,actor:Tr
    s.created_at AS source_created,o.created_at AS order_created,o.product_group,o.primary_merchandiser_id,
    designer.display_name AS designer,primary_person.display_name AS primary_name,
    sourcing.child_id AS sourcing_id,production.child_id AS production_id,source_case.style_name_snapshot,source_case.erp_order_no,
-   source_case.additional_merchandiser_user_id,additional.display_name AS additional_name,source_case.sourcing_case_id AS visible_sourcing_id,
+   additional.people AS secondary_merchandisers,source_case.sourcing_case_id AS visible_sourcing_id,
    CASE WHEN coalesce(round.round_number,1)>1 THEN round.document->>'template' ELSE document.document->>'template' END AS category_template,
    EXISTS(SELECT 1 FROM audit_events e WHERE e.entity_type='digital_production' AND e.entity_id=o.production_order_id::text AND e.action='digital_source_attached' AND e.after_state->>'sourceId'=s.source_id::text) AS attached,
    EXISTS(SELECT 1 FROM digital_production_task_access a WHERE a.task_kind<>'factory_material_count' AND (a.source_id=s.source_id OR a.production_order_id=o.production_order_id) AND a.assignee_id=$6 AND a.required_role=ANY($5::text[])) AS direct
@@ -85,7 +85,12 @@ export async function readJourneySelections(database:Pool,db:PoolClient,actor:Tr
   LEFT JOIN LATERAL (SELECT l.child_id FROM digital_production_child_links l WHERE l.production_order_id=o.production_order_id AND l.module='production' ORDER BY l.child_id LIMIT 1) production ON true
   LEFT JOIN (sourcing_cases source_case JOIN current_sourcing_cases current_case USING(sourcing_case_id))
    ON source_case.sourcing_case_id=sourcing.child_id AND source_case.deleted_at IS NULL AND r."fullOrder" AND $7
-  LEFT JOIN app_users additional ON additional.id=source_case.additional_merchandiser_user_id
+  LEFT JOIN LATERAL (SELECT jsonb_agg(jsonb_build_object('id',p.id,'name',p.display_name) ORDER BY ids.position,p.id) AS people FROM (
+   SELECT user_id,min(position) AS position FROM (
+    SELECT t.user_id,t.position FROM digital_order_secondary_merchandisers t WHERE t.production_order_id=o.production_order_id
+    UNION ALL SELECT selected.user_id,1000+selected.position::int FROM unnest(sourcing_additional_merchandiser_ids(source_case.sourcing_case_id)) WITH ORDINALITY selected(user_id,position)
+   ) related GROUP BY user_id
+  ) ids JOIN app_users p ON p.id=ids.user_id WHERE p.id IS DISTINCT FROM o.primary_merchandiser_id) additional ON r."fullOrder" AND $7
  ), clocked AS (
   SELECT n.*,frame.value AS frame FROM native n
   LEFT JOIN LATERAL (SELECT f.value FROM jsonb_array_elements(CASE WHEN n.status='ready' THEN n.facts->'frames' ELSE '[]'::jsonb END) f(value)
@@ -162,7 +167,7 @@ flags AS (SELECT kind,id,bool_or(key IN ('packing','special_closure') AND state=
   coalesce(CASE WHEN n."sourceAccess" THEN n.category_template END,CASE WHEN n."orderAccess" THEN n.product_group END) AS category,
   n.designer,n.style_name_snapshot AS "styleName",
   (CASE WHEN n."orderAccess" AND n.primary_merchandiser_id IS NOT NULL THEN jsonb_build_array(jsonb_build_object('id',n.primary_merchandiser_id,'name',n.primary_name)) ELSE '[]'::jsonb END)
-   ||(CASE WHEN n.additional_merchandiser_user_id IS NOT NULL THEN jsonb_build_array(jsonb_build_object('id',n.additional_merchandiser_user_id,'name',n.additional_name)) ELSE '[]'::jsonb END) AS merchandisers,
+   ||coalesce(n.secondary_merchandisers,'[]'::jsonb) AS merchandisers,
   CASE WHEN n.erp_order_no IS NOT NULL AND n.erp_order_no<>'' THEN ARRAY[n.erp_order_no] ELSE ARRAY[]::text[] END AS "orderNumbers",
   coalesce(CASE WHEN n."sourceAccess" THEN n.source_created WHEN n."orderAccess" THEN n.order_created END,n.source_created,n.order_created)::text AS "createdAt",
   coalesce(flags.closed,false) AS closed,coalesce(flags.activated,false) AS activated,

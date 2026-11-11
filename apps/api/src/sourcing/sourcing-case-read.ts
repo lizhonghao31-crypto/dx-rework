@@ -92,7 +92,9 @@ export async function readSourcingCase(database:Pool,client:Pick<PoolClient,"que
        JOIN LATERAL sourcing_case_facts_at(case_view.sourcing_case_id${history ? ', $2::timestamptz' : ''}) source_case ON true
        JOIN app_users creator_user ON creator_user.id=case_view.created_by
        JOIN sourcing_cases additional_case ON additional_case.sourcing_case_id=case_view.sourcing_case_id
-       LEFT JOIN app_users additional_user ON additional_user.id=nullif(to_jsonb(additional_case)->>'additional_merchandiser_user_id','')::uuid
+       LEFT JOIN LATERAL (SELECT string_agg(p.display_name,'/' ORDER BY selected.position) AS display_name
+        FROM unnest(sourcing_additional_merchandiser_ids(additional_case.sourcing_case_id)) WITH ORDINALITY selected(user_id,position)
+        JOIN app_users p ON p.id=selected.user_id) additional_user ON true
        LEFT JOIN LATERAL sourcing_contract_return_business_state(case_view.sourcing_case_id) monitor_case ON true
        LEFT JOIN LATERAL (
          SELECT jsonb_agg(
@@ -197,7 +199,9 @@ export async function readSourcingCase(database:Pool,client:Pick<PoolClient,"que
     row={...row,effective_created_by:await effectiveSourcingMerchandiser(client,sourcingCaseId,row.created_by,row.workflow_generation)};
     if(!history&&row.workflow_generation==="digital_production_v1")row={...row,merchandiser_name:(await client.query(`SELECT concat_ws('/',current_person.display_name,additional.display_name) AS name FROM sourcing_cases source
       LEFT JOIN app_users current_person ON current_person.id=$2
-      LEFT JOIN app_users additional ON additional.id=nullif(to_jsonb(source)->>'additional_merchandiser_user_id','')::uuid
+      LEFT JOIN LATERAL (SELECT string_agg(p.display_name,'/' ORDER BY selected.position) AS display_name
+       FROM unnest(sourcing_additional_merchandiser_ids(source.sourcing_case_id)) WITH ORDINALITY selected(user_id,position)
+       JOIN app_users p ON p.id=selected.user_id WHERE selected.user_id IS DISTINCT FROM $2::uuid) additional ON true
       WHERE source.sourcing_case_id=$1`,[sourcingCaseId,row.effective_created_by])).rows[0]?.name??null};
     if(!history)await contractReturnClock(database,client,sourcingCaseId);
     const item = mapCase(history ? { ...row,contract_return_monitor_enabled:false } : row, actor);
@@ -260,7 +264,9 @@ export async function readSourcingCaseList(database:Pool,actor:TrustedActorConte
        LEFT JOIN LATERAL sourcing_contract_return_business_state(case_view.sourcing_case_id) monitor_case ON true
        JOIN app_users creator_user ON creator_user.id=case_view.created_by
        JOIN sourcing_cases additional_case ON additional_case.sourcing_case_id=case_view.sourcing_case_id
-       LEFT JOIN app_users additional_user ON additional_user.id=nullif(to_jsonb(additional_case)->>'additional_merchandiser_user_id','')::uuid
+       LEFT JOIN LATERAL (SELECT string_agg(p.display_name,'/' ORDER BY selected.position) AS display_name
+        FROM unnest(sourcing_additional_merchandiser_ids(additional_case.sourcing_case_id)) WITH ORDINALITY selected(user_id,position)
+        JOIN app_users p ON p.id=selected.user_id) additional_user ON true
        ${principalJoins}
        LEFT JOIN LATERAL (
          SELECT decision_fact.*

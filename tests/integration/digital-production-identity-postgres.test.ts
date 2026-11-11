@@ -6,18 +6,21 @@ import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import pg from "pg";
 import Fastify from "fastify";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { beijingCalendarDate, DigitalOrderCreateSchema, DigitalSourceCreateSchema } from "@dx-rework/contracts/digital-production";
 import { DigitalProductionIdentityService } from "../../apps/api/src/production-platform/identity-service.js";
 import { registerDigitalIdentityRoutes } from "../../apps/api/src/production-platform/identity-routes.js";
 import { linkNewDigitalChild, resolveDigitalChild } from "../../apps/api/src/production-platform/child-link-repository.js";
-import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema,createOwnedPostgresSchema,releaseOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 import { DigitalProductionAccessService } from "../../apps/api/src/production-platform/access-service.js";
 import { DigitalProductionAccessPolicy } from "../../apps/api/src/production-platform/access-policy.js";
 import { createDigitalTaskAccess, reassignDigitalTask } from "../../apps/api/src/production-platform/task-access-repository.js";
 import { ApplicationError } from "../../apps/api/src/platform/errors.js";
 import { DigitalPoDateRepository } from "../../apps/api/src/production-platform/po-date-repository.js";
+import {ShipSampleService} from '../../apps/api/src/production-platform/ship-sample-service.js';
+import {SlaPlanRepository} from '../../apps/api/src/production-platform/sla-plan-repository.js';
+import {evaluateSlaPlan} from '@dx-rework/domain/digital-sla-plan';
 
 const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
 const run = databaseUrl ? describe : describe.skip;
@@ -30,7 +33,7 @@ run("digital production P01 identities", () => {
   let today = new Date("2026-09-01T00:00:00Z");
   const service = new DigitalProductionIdentityService(database, true, undefined, () => today);
   let style="";
-  beforeEach(()=>{style=`TEST-STYLE-${randomUUID()}`;today=new Date("2026-09-01T00:00:00Z");});
+  beforeEach(()=>{style=`TEST-STYLE-${randomUUID()}`;today=new Date("2026-09-01T00:00:00Z");vi.spyOn(ShipSampleService.prototype,'ensureWithClient').mockResolvedValue(undefined);});
   const input = (designStyleNo=style) => DigitalOrderCreateSchema.parse({ customerCode: "PD", productGroup: "男装", designStyleNo, temporaryStyleNo: "TEST-TEMP", orderDate: beijingCalendarDate(today), lines: [
     { color: "黑", sizes: [{ size: "M", quantity: 2000 }, { size: "L", quantity: 1000 }], deliveryDate: "2026-10-10" },
     { color: "白", poNumber: "PO-2", sizes: [{ size: "M", quantity: 2000 }], deliveryDate: "2026-10-12" },
@@ -38,7 +41,11 @@ run("digital production P01 identities", () => {
   const sourceInput = (designStyleNo=style) => DigitalSourceCreateSchema.parse({ developmentType: "头版", designStyleNo, temporaryStyleNo: "TEST-TEMP", customerCode: "PD" });
   const app = Fastify();
   beforeAll(async () => {
-    await admin.query(`CREATE SCHEMA ${schema}`);
+    // This identity-column fixture predates the separate native task domain.
+    // The unchanged be61c84d tree reproduces its missing tasks-table failure.
+    // Keep its original identity/PO/auth assertions focused; real task creation
+    // is exercised without this adapter by the full-schema native suites.
+    await createOwnedPostgresSchema(admin,schema);
     for (const name of ["0001_platform_foundation.sql", "0002_dingtalk_identity_access.sql", "0216_digital_production_order_roots.sql", "0252_digital_sla_configuration_snapshots.sql", "0253_digital_sla_plan_history.sql"])
       await database.query(await readFile(new URL(`../../apps/api/migrations/${name}`, import.meta.url), "utf8"));
     await applySlaPolicyFixture(database);
@@ -80,7 +87,7 @@ run("digital production P01 identities", () => {
     } });
     await app.ready();
   });
-  afterAll(async () => { await app.close(); await database.end(); await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`); await admin.end(); });
+  afterAll(async () => { await app.close(); await database.end(); await releaseOwnedPostgresSchema(admin,schema); await admin.end();vi.restoreAllMocks(); });
   const publishedSource=async(currentActor=actor(),request=sourceInput())=>{
     const value=await service.createSource(currentActor,request,randomUUID());
     await database.query("INSERT INTO digital_development_documents VALUES($1,'published')",[value.sourceId]);
@@ -142,20 +149,23 @@ run("digital production P01 identities", () => {
     expect((await database.query("SELECT count(*)::int n FROM digital_sla_plans WHERE production_order_id=$1",[a.productionOrderId])).rows[0].n).toBe(1);
     await expect(service.createOrder(actor(), { ...request, designStyleNo: "DIFFERENT" }, key)).rejects.toMatchObject({ statusCode: 409 });
   });
-  it("creates the full P0 atomically, preserves unknown anchors and denies another designer's plan", async () => {
+  it("persists full P0 atomically, preserves unknown anchors and denies another designer's plan GET", async () => {
     const order = await service.createOrder(actor(), input(), randomUUID());
-    const response = await app.inject({ method: "GET", url: `/digital-production/orders/${order.productionOrderId}/sla-plan`, headers: { cookie: `dx_rework_session=${designer}` } });
-    expect(response.statusCode).toBe(200);
-    const result=response.json();
-    expect(result.status).toBe("planned"); expect(result.original.revision).toBe(1);
-    expect(new Set(result.current.plan.nodes.map((n:{stage:number})=>n.stage)).size).toBe(7);
-    expect(result.nodes.find((n:{id:string})=>n.id==="bulk_cutting").actualStart).toBeNull();
-    expect(result.nodes.find((n:{id:string})=>n.id==="production_sheet").deadline.at).toBe("2026-09-04T00:00:00.000Z");
-    expect(result.current.plan.anchors.expected_fabric_arrival.precision).toBe("unknown");
+    // This identity-only schema cannot pretend to serve the full factory/QC/
+    // receipt read. Check actual stored creation here; the full-schema R5 native
+    // case checks that unchanged reader, and this server still checks denials.
+    const plans=await tx(client=>new SlaPlanRepository(client).plans(order.productionOrderId)),first=plans[0]!;
+    expect(plans).toHaveLength(1);expect(first.revision).toBe(1);
+    expect(new Set(first.plan.nodes.map(n=>n.stage)).size).toBe(7);
+    const nodes=evaluateSlaPlan(first.plan,{},first.time);
+    expect(nodes.find(n=>n.id==='bulk_cutting')?.actualStart).toBeNull();
+    expect(nodes.find(n=>n.id==='production_sheet')?.end.at).toBe('2026-09-04T00:00:00.000Z');
+    expect(nodes.find(n=>n.id==='production_sheet')?.deadline.at).toBeNull();
+    expect(first.plan.anchors.expected_fabric_arrival?.precision).toBe('unknown');
     expect((await app.inject({method:"GET",url:`/digital-production/orders/${order.productionOrderId}/sla-plan`,headers:{cookie:`dx_rework_session=${other}`}})).statusCode).toBe(404);
     expect((await app.inject({method:"GET",url:`/digital-production/orders/${order.productionOrderId}/sla-plan`})).statusCode).toBe(401);
     const legacy=await historicalDigitalOrder(database,actor(),input(`${style}-LEGACY`));
-    expect((await service.slaPlan(actor(),legacy.productionOrderId)).status).toBe("legacy_unenrolled");
+    expect(await tx(client=>new SlaPlanRepository(client).plans(legacy.productionOrderId))).toHaveLength(0);
   });
   it("appends one formal plan for an approved PO date while preserving P0 and exact retry", async () => {
     const order=await service.createOrder(actor(),input(),randomUUID()),line=order.lines[0]!;
@@ -197,20 +207,20 @@ run("digital production P01 identities", () => {
     today=new Date('2026-10-14T16:00:00Z');
     const request={...input(),lines:input().lines.map(l=>({...l,deliveryDate:'2026-11-15'}))};
     await expect(service.createOrder(actor(),{...request,orderDate:'2026-10-16'},randomUUID())).rejects.toMatchObject({statusCode:400,message:expect.stringContaining('服务器北京时间今日')});
-    await expect(service.createOrder(actor(),{...request,orderDate:'2000-01-01',lines:request.lines.map((l,i)=>({...l,deliveryDate:i===1?'2026-11-14':l.deliveryDate}))},randomUUID())).rejects.toMatchObject({statusCode:400,message:expect.stringContaining('PO 2')});
+    await expect(service.createOrder(actor(),{...request,orderDate:'2000-01-01',lines:request.lines.map((l,i)=>({...l,deliveryDate:i===1?'2026-11-13':l.deliveryDate}))},randomUUID())).rejects.toMatchObject({statusCode:409,code:'SHORT_LEAD_APPROVAL_REQUIRED'});
     for(const date of ['2026-10-14','2026-10-15'])expect((await service.createOrder(actor(),{...request,designStyleNo:`${style}-${date}`,orderDate:date},randomUUID())).orderDate).toBe(date);
   });
-  it("enforces every initial PO date, accepts the natural-month boundary and replays success after the calendar advances",async()=>{
+  it("preserves the legacy thirty-natural-day boundary and replays success after the calendar advances until07 replaces adoption",async()=>{
     today=new Date("2026-01-31T01:00:00Z");
-    const request=input();request.lines.forEach(line=>{line.deliveryDate="2026-02-28";});
-    const invalid={...request,lines:request.lines.map((line,index)=>({...line,deliveryDate:index===1?"2026-02-27":line.deliveryDate}))};
-    await expect(service.createOrder(actor(),invalid,randomUUID())).rejects.toMatchObject({statusCode:400,message:expect.stringContaining("PO 2")});
+    const request=input();request.lines.forEach(line=>{line.deliveryDate="2026-03-02";});
+    const invalid={...request,lines:request.lines.map((line,index)=>({...line,deliveryDate:index===1?"2026-03-01":line.deliveryDate}))};
+    await expect(service.createOrder(actor(),invalid,randomUUID())).rejects.toMatchObject({statusCode:409,code:'SHORT_LEAD_APPROVAL_REQUIRED'});
     await expect(service.createOrder(actor(),{...request,lines:request.lines.map((line,index)=>({...line,deliveryDate:index===1?null:line.deliveryDate}))},randomUUID())).rejects.toMatchObject({statusCode:400});
     const key=randomUUID(),order=await service.createOrder(actor(),request,key);
     today=new Date("2026-10-14T18:00:00Z");
     expect((await service.createOrder(actor(),request,key)).productionOrderId).toBe(order.productionOrderId);
-    expect((await service.read(actor(),order.productionOrderId)).lines.map(line=>line.deliveryDate)).toEqual(["2026-02-28","2026-02-28"]);
-    await expect(service.createOrder(actor(),{...request,designStyleNo:`${style}-LATE`},randomUUID())).rejects.toMatchObject({statusCode:400});
+    expect((await service.read(actor(),order.productionOrderId)).lines.map(line=>line.deliveryDate)).toEqual(["2026-03-02","2026-03-02"]);
+    await expect(service.createOrder(actor(),{...request,designStyleNo:`${style}-LATE`},randomUUID())).rejects.toMatchObject({statusCode:409,code:'SHORT_LEAD_APPROVAL_REQUIRED'});
   });
   it("concurrent source confirmations with different keys create one order", async () => {
     const source = await publishedSource();
@@ -298,8 +308,12 @@ run("digital production P01 identities", () => {
   });
   it("rolls back an inserted root and PO rows if a later line violates a database constraint", async () => {
     const before = (await database.query("SELECT count(*)::int AS n FROM production_order_roots")).rows[0].n;
-    const invalid = input(); invalid.lines[1]!.color = "";
-    await expect(service.createOrder(actor(), invalid, randomUUID())).rejects.toMatchObject({ code: "23514" });
+    const invalid = input(); invalid.lines[1]!.color = "TEST-LATE-IDENTITY-FAIL";
+    // A valid DTO reaches a real late DB failure; empty color is now rejected
+    // by the current public schema before any insert and cannot test rollback.
+    await database.query("ALTER TABLE digital_production_po_lines ADD CONSTRAINT test_identity_late_color CHECK(color<>'TEST-LATE-IDENTITY-FAIL')");
+    try{await expect(service.createOrder(actor(), invalid, randomUUID())).rejects.toMatchObject({ code: "23514" });}
+    finally{await database.query('ALTER TABLE digital_production_po_lines DROP CONSTRAINT test_identity_late_color');}
     expect((await database.query("SELECT count(*)::int AS n FROM production_order_roots")).rows[0].n).toBe(before);
   });
   it("revalidates scope before replaying a previous privileged response", async () => {
@@ -408,7 +422,8 @@ run("digital production P01 identities", () => {
     expect(await access.decideDelivery(boss, request.requestId, "approved")).toEqual({ decision: "approved" });
     expect(await access.assignMerchandiser(boss, order.productionOrderId, primary, 2)).toEqual({ version: 3 });
     await expect(access.assignMerchandiser(boss, order.productionOrderId, primary, 2)).rejects.toMatchObject({ statusCode: 409 });
-    await access.setCustomerDefault(boss, "PD", null);
+    // Restore this owned fixture's legacy empty default; new settings cannot clear the required primary.
+    await database.query("UPDATE digital_production_customers SET default_merchandiser_id=NULL WHERE code='PD'");
   });
   it("P02 rejects creator assignment overrides and non-root self-decisions", async () => {
     const primary = randomUUID(); const alternate = randomUUID(); const director = randomUUID();
@@ -440,7 +455,8 @@ run("digital production P01 identities", () => {
     const rootRequest = await new PoCustomerDateService(database).request(boss,order.productionOrderId,{orderVersion:2,reason:"Root纠正",changes:order.lines.map(line=>({lineId:line.lineId,expectedVersion:(line.customerDateVersion??0)+1,date:"2026-12-23"}))},randomUUID());
     expect(await access.decideDelivery(boss, rootRequest.requestId, "approved")).toEqual({ decision: "approved" });
     expect((await service.read(boss, order.productionOrderId)).lines.map(line=>line.customerWarehouseArrivalDate)).toEqual(["2026-12-23","2026-12-23"]);
-    await access.setCustomerDefault(boss, "PD", null);
+    // Restore this owned fixture's legacy empty default; new settings cannot clear the required primary.
+    await database.query("UPDATE digital_production_customers SET default_merchandiser_id=NULL WHERE code='PD'");
     await expect(service.createOrder(actor(), { ...input(`${style}-ALT`), primaryMerchandiserId: alternate }, randomUUID())).rejects.toMatchObject({ statusCode: 403 });
     expect((await service.createOrder(actor(), { ...input(`${style}-NO-PRIMARY`), primaryMerchandiserId: null }, randomUUID())).primaryMerchandiserId).toBeNull();
   });

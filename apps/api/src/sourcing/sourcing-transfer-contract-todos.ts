@@ -68,7 +68,7 @@ export class SourcingTransferContractTodos {
       WHERE source.sourcing_case_id=$1 AND source.deleted_at IS NULL`, [caseId])).rows[0];
     const primary = current ? await effectiveSourcingMerchandiser(client,caseId,current.created_by) : null;
     const recipients = [];
-    if (current) for (const userId of new Set([primary, current.additional_merchandiser_user_id].filter((id): id is string => !!id))) {
+    if (current) for (const userId of new Set([primary,...await readAdditionalMerchandiserIds(client,caseId)].filter((id): id is string => !!id))) {
       const eligible = (await client.query<{ eligible: boolean }>(
         "SELECT todo_user_has_direct_role($1::uuid,'order_merchandiser','sourcing:contract:record') AS eligible", [userId],
       )).rows[0]?.eligible === true && await memberCanReceiveFact(client, userId, current.source_action, "sourcing_case", caseId);
@@ -129,3 +129,4 @@ export class SourcingTransferContractTodos {
     )).rows.map(todo => todo.todo_id) };
   }
 }
+import {readAdditionalMerchandiserIds} from './additional-merchandisers.js';

@@ -1,4 +1,6 @@
 import {SettingsCalculationSchema,SettingsSetSaveSchema,SettingsSetDraftSchema,SettingsSetBasisSchema,SettingsSetPublishSchema,SettingsSetRestoreSchema} from '@dx-rework/contracts/sla-settings-sets';
+import {OrderTimeCalculationSchema,OrderTimeSettingsSaveSchema,OrderTimeSettingsUseSchema} from '@dx-rework/contracts/order-time-settings';
+import {orderTimeSettingsCalculation} from './order-time-settings-calculation.js';
 import {settingsCalculation} from './sla-settings-calculation.js';
 import {SlaDraftGroupSchema,SlaDraftSaveSchema,SlaDraftDiscardSchema} from '@dx-rework/contracts/sla-settings-drafts';
 import {SlaHistoryQuerySchema,SlaCopyVersionSchema,SlaApplicationCandidatesQuerySchema} from '@dx-rework/contracts/sla-settings-history';
@@ -40,6 +42,13 @@ export function registerDigitalTaskRoutes(app: FastifyInstance, dependencies: Di
   const standardDraft=z.object({expectedVersion:z.number().int().nonnegative(),values:DigitalSlaValuesSchema,reason:z.string().trim().min(1).max(1000)}).strict();
   const orderSelection=z.object({orderId:z.string().uuid(),configurationVersion:z.number().int().positive(),parameterKeys:z.array(z.string()).min(1).max(DIGITAL_SLA_PARAMETERS.length),reason:z.string().trim().min(1).max(1000)}).strict();
   const sets='/digital-production/sla-settings/sets';
+  const timeSettings='/digital-production/order-time-settings';
+  app.get(timeSettings,async request=>service.orderTimeSettings().read(await actor(request)));
+  app.get(timeSettings+'/history',async request=>service.orderTimeSettings().history(await actor(request),parse(z.object({page:z.coerce.number().int().positive().max(100000).default(1)}).strict(),request.query).page));
+  app.post(timeSettings+'/save',async request=>service.orderTimeSettings().save(await actor(request),parse(OrderTimeSettingsSaveSchema,request.body),key(request)));
+  app.post(timeSettings+'/use',async request=>service.orderTimeSettings().use(await actor(request),parse(OrderTimeSettingsUseSchema,request.body),key(request)));
+  app.post(timeSettings+'/remove',async request=>service.orderTimeSettings().remove(await actor(request),parse(OrderTimeSettingsUseSchema,request.body),key(request)));
+  app.post(timeSettings+'/calculate',async request=>{await service.orderTimeSettings().read(await actor(request));try{return orderTimeSettingsCalculation(parse(OrderTimeCalculationSchema,request.body));}catch(error){if(error instanceof ApplicationError)throw error;throw new ApplicationError('VALIDATION_ERROR',error instanceof Error?error.message:'请核对本次演算条件',400);}});
   app.post(sets+'/calculate',async request=>{await service.settingsSets().read(await actor(request));try{return settingsCalculation(parse(SettingsCalculationSchema,request.body));}catch(e){if(e instanceof ApplicationError)throw e;throw new ApplicationError('VALIDATION_ERROR',e instanceof Error?e.message:'请检查本次演算条件',400);}});
   app.get(sets,async request=>service.settingsSets().read(await actor(request)));
   app.get(sets+'/history',async request=>service.settingsSets().history(await actor(request),parse(z.object({page:z.coerce.number().int().positive().max(100000).default(1)}).strict(),request.query).page));

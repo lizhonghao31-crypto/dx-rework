@@ -1,9 +1,11 @@
 import { readFile } from "node:fs/promises";
 import type { Pool } from "pg";
+import {applyOrderMerchandiserFixture} from './order-merchandiser-fixture.js';
 
 // Minimal digital fixtures omit sourcing. Use the real shared normalization
 // function, then the real prospective migration; never substitute a date guard.
 export async function applyDigitalPoDateFixture(database: Pool): Promise<void> {
+  await applyOrderMerchandiserFixture(database);
   const styleMigration = await readFile(new URL("../../apps/api/migrations/0196_sourcing_style_duplicate_guards.sql", import.meta.url), "utf8");
   const normalizer = styleMigration.match(/CREATE FUNCTION normalize_sourcing_style_key[\s\S]*?\$\$;/)?.[0];
   if (!normalizer) throw new Error("Missing real sourcing PO normalizer");

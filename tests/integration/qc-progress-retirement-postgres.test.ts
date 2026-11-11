@@ -31,6 +31,7 @@ import {businessNow} from '../../apps/api/src/acceptance-clock/business-time.js'
 import {DigitalOrderCreateSchema,beijingCalendarDate} from '@dx-rework/contracts/digital-production';
 import {QC_PROGRESS_CAPABILITY,SubmitQcProgressSchema,type QcProductionExecution} from '@dx-rework/contracts/qc-production-progress';
 import {migrationExecutionSql} from '../../scripts/deploy/migration-execution-compatibility.mjs';
+import {applyOrderMerchandiserFixture} from '../helpers/order-merchandiser-fixture.js';
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (url?describe:describe.skip)('QC progress native lifecycle and retired factory requirement (TEST_DATABASE_URL)',()=>{
  let f:Awaited<ReturnType<typeof businessAnchorFixture>>,flow:FactoryFlowService,service:QcProductionProgressService,tasks:DigitalProductionTaskService,qc:typeof f.root;
@@ -322,6 +323,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  });
  it('retires a genuine previous-schema pending task without completed facts or losing queued/history records',async()=>{
   const old=await businessAnchorFixture(url!,{throughVersion:'0270_production_readiness_materials'});try{
+   await applyOrderMerchandiserFixture(old.db,true);
    const primary=old.people.merchandiser!,designer=old.people['sample-designer']!,identity=new DigitalProductionIdentityService(old.db,true),order=await identity.createOrder(designer,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:`TEST-LEGACY-${randomUUID()}`,orderDate:beijingCalendarDate(businessNow()),primaryMerchandiserId:primary.actorId,lines:[{formalPoNo:randomUUID(),color:'黑',customerWarehouseArrivalDate:'2027-08-01',sizes:[{size:'M',quantity:10}]}]}),randomUUID());
    const id=randomUUID();await old.db.query("INSERT INTO digital_production_task_access(task_id,production_order_id,task_kind,required_role,assignee_id,created_by) VALUES($1,$2,'factory_material_count','order_merchandiser',$3,$4)",[id,order.productionOrderId,primary.actorId,old.root.actorId]);await old.db.query("INSERT INTO digital_production_tasks(task_id,node_key,state,route_version,occurrence,route_instance_id) VALUES($1,'factory_material_count','pending',1,1,$2)",[id,randomUUID()]);
    const oldEvent=randomUUID();await old.db.query("INSERT INTO digital_production_notification_events(event_id,source_key,task_id,event_kind) VALUES($1,$2,$3,'ready')",[oldEvent,`TEST-retired:${oldEvent}`,id]);await old.db.query('INSERT INTO digital_production_notification_receipts(event_id,recipient_id,source_event_id,shown_at) VALUES($1,$2,$1,CURRENT_TIMESTAMP)',[oldEvent,primary.actorId]);

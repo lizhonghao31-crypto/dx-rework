@@ -5,10 +5,16 @@ import type {DigitalCustomer,DigitalOrder} from "@dx-rework/contracts/digital-pr
 import type {DigitalAccessOptions} from "./digital-production-access-panel.js";
 import {digitalRequest} from "./digital-production-api.js";
 import {trapCockpitDialogFocus} from './cockpit-dialog-focus.js';
+import {CustomerDefaultMerchandisers} from './customer-default-merchandisers.js';
 
 type Candidate={id:string;displayName:string;roles:string[]};
 type PersonnelDialog={kind:"customer";customers:DigitalCustomer[]}|{kind:"order";order:DigitalOrder};
-export function DigitalCockpitPersonnel({orderId,onChanged,showCustomer=true,readOnly=false}:{orderId:string|null;onChanged():void;showCustomer?:boolean;readOnly?:boolean}){
+type PersonnelProps={orderId:string|null;onChanged():void;showCustomer?:boolean;readOnly?:boolean};
+export function DigitalCockpitPersonnel(props:PersonnelProps){
+ if(props.orderId===null&&props.showCustomer!==false)return <CustomerDefaultMerchandisers readOnly={props.readOnly??false} onChanged={props.onChanged}/>;
+ return <DigitalOrderPersonnel {...props}/>;
+}
+function DigitalOrderPersonnel({orderId,onChanged,showCustomer=true,readOnly=false}:PersonnelProps){
   const [customerFacts,setCustomerFacts]=useState<DigitalCustomer[]|null>(null);
   const [access,setAccess]=useState<DigitalAccessOptions|null>(null),[dialog,setDialog]=useState<PersonnelDialog|null>(null);
   const [people,setPeople]=useState<Candidate[]>([]),[customerCode,setCustomerCode]=useState(""),[personId,setPersonId]=useState("");

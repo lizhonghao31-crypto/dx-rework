@@ -107,3 +107,9 @@
 `order-time-plan.ts`保存一份本单用时/日历/提醒及完整原公司对应项，`fixed-work-definition.ts`把新格式映射到原work职责；没有新格式的旧快照保持原值。`fixed-timeline-targets.ts`共用原DAG及计时日历完成正反向运算，内含交接不重复、并行取必要分支最晚，`order-time-schedule.ts`仅把明确适用路线和临时条件交给它，不制造R或A。
 
 `order-time-plan-repository.ts`只接受原命令传入的同一client；原命令负责当前权限、合法工艺变更、业务锁和提交。0284逐版本追加冻结输入及B，原始公司对应项不被后来标准替换；普通调整保留既有B，新增节点首次求解。原PO批准改期适配器在同事务追加相关目标，采用当时有效本单版本，并登记原有界更新。这里不写任务、实际事件或已启动责任，不自连Pool、GET构建或新建定时器。正式采用、办理链和统一读取分别由07/06接入；中间版本不启用新建单格式。
+
+### R5-05：设置与客户默认人员
+
+`order-time-settings-service.ts`拥有公司标准的原角色鉴权、事务、并发及幂等；`order-time-settings-history.ts`只在同一client读取原版本与隐藏记录；`order-time-settings-calculation.ts`将临时输入交给现有图和日历，不写订单或虚构事件。新发布与采用一同在07启用，旧生命周期入口继续兼容。
+
+`customer-merchandiser-defaults.ts`拥有客户批量设置及版本检查，`order-merchandisers.ts`只在新订单事务复制默认关系／授权读取后返回完整关系，`sourcing/additional-merchandisers.ts`保留外发旧单字段并读取、绑定全部副跟单。合同、待办、外发命令继续由原服务判权及提交，不把“副跟单”变成主跟单办理权。页面编辑、临时演算和客户弹窗分别管理自己的输入／提交恢复，不共用会串单的全局草稿。

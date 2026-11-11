@@ -132,7 +132,7 @@ export class ProductionStatisticsQuery{
   const lines=(await db.query('SELECT line_id,customer_warehouse_arrival_date::text AS customer_date,customer_date_version FROM digital_production_po_lines WHERE production_order_id=$1 ORDER BY position',[id])).rows;
   const lifecycle=(await db.query("SELECT state FROM digital_production_resource_lifecycle WHERE(resource_kind='order' AND resource_id=$1) OR(resource_kind='source' AND resource_id=$2)",[id,order.source_id])).rows;
   const state=lifecycle.some(row=>row.state==='cancelled')?'cancelled':lifecycle.some(row=>row.state==='paused')?'paused':'active';
-  const secondary=isRootActor(actor)||(actor.authorizationCapabilities??[]).includes('sourcing:view')?(await db.query(`SELECT s.additional_merchandiser_user_id FROM digital_production_child_links l JOIN sourcing_cases s ON s.sourcing_case_id=l.child_id WHERE l.production_order_id=$1 AND l.module='sourcing' AND s.deleted_at IS NULL`,[id])).rows.flatMap(row=>row.additional_merchandiser_user_id?[row.additional_merchandiser_user_id as string]:[]):[];
+  const secondary=isRootActor(actor)||(actor.authorizationCapabilities??[]).includes('sourcing:view')?(await readOrderSecondaryMerchandisers(db,id)).map(person=>person.id):[];
   const retired=await retiredBulkPreshrinkTaskIds(db),rawTasks=(await db.query(`SELECT t.*,a.assignee_id,assignee.display_name AS assignee_name,r.due_at,r.policy_version,r.deadline_kind,policy.label AS task_label
    FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) LEFT JOIN app_users assignee ON assignee.id=a.assignee_id
    LEFT JOIN LATERAL(SELECT * FROM digital_production_deadline_revisions WHERE task_id=t.task_id ORDER BY revision_id DESC LIMIT 1)r ON true
@@ -186,3 +186,4 @@ export class ProductionStatisticsQuery{
   });
  }
 }
+import {readOrderSecondaryMerchandisers} from './order-merchandisers.js';

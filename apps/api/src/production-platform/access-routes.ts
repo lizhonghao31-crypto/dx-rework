@@ -5,6 +5,7 @@ import { businessActor } from "../access/business-authority.js";
 import { ApplicationError } from "../platform/errors.js";
 import type { DigitalIdentityDependencies } from "./identity-routes.js";
 import type { DigitalProductionAccessService } from "./access-service.js";
+import {CustomerMerchandiserQuerySchema,CustomerMerchandiserSelectionSchema,CustomerMerchandisersSaveSchema} from '@dx-rework/contracts/digital-customer-merchandisers';
 export function registerDigitalAccessRoutes(app: FastifyInstance, dependencies: DigitalIdentityDependencies, service: DigitalProductionAccessService) {
   const actor = async (request: FastifyRequest) => {
     const token = request.headers.cookie?.split(";").map(value => value.trim()).find(value => value.startsWith("dx_rework_session="))?.slice(18);
@@ -19,6 +20,9 @@ export function registerDigitalAccessRoutes(app: FastifyInstance, dependencies: 
     return service.options(trusted);
   });
   app.get("/digital-production/access/candidates", async request => service.candidates(await actor(request)));
+  app.get('/digital-production/customers/default-merchandisers',async request=>service.customerDefaults().list(await actor(request),parse(CustomerMerchandiserQuerySchema,request.query)));
+  app.post('/digital-production/customers/default-merchandisers/selected',async request=>service.customerDefaults().selected(await actor(request),parse(CustomerMerchandiserSelectionSchema,request.body)));
+  app.post('/digital-production/customers/default-merchandisers',async request=>service.customerDefaults().save(await actor(request),parse(CustomerMerchandisersSaveSchema,request.body),parse(z.string().min(1).max(200),request.headers['idempotency-key'])));
   app.put("/digital-production/customers/:code/default-merchandiser", async request => service.setCustomerDefault(await actor(request), parse(z.string().trim().min(1).max(100), (request.params as Record<string, unknown>).code), parse(DigitalCustomerAssignmentSchema, request.body).merchandiserId));
   app.put("/digital-production/orders/:orderId/merchandiser", async request => {
     const input = parse(DigitalMerchandiserAssignmentSchema, request.body);

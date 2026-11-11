@@ -1,4 +1,6 @@
 import {SlaSettingsSetsService} from './sla-settings-sets.js';
+import {OrderTimeSettingsService} from './order-time-settings-service.js';
+import {ORDER_TIME_MODEL_ENABLED} from './order-time-activation.js';
 import type {SlaApplicationCandidatesQuery} from '@dx-rework/contracts/sla-settings-history';
 import {SlaSettingsDraftService} from './sla-settings-drafts.js';
 import {SlaSettingsHistoryService} from './sla-settings-history.js';
@@ -61,7 +63,7 @@ const REQUIRED_ACTIVATION: Partial<Record<DigitalTaskKind, readonly typeof DIGIT
   bulk_cutting: ["owner_approved", "pattern_ready", "preshrink_ready"], bulk_cutting_external: ["owner_approved", "pattern_ready", "preshrink_ready"], warehouse_dispatch: ["qc_approved", "all_po_complete"], factory_material_count: ["factory_arrived"],
 };
 export class DigitalProductionTaskService {
-  constructor(private readonly database: Pool,private readonly previewSecret?:string) {}
+  constructor(private readonly database: Pool,private readonly previewSecret?:string,private readonly orderTimeEnabled=ORDER_TIME_MODEL_ENABLED) {}
   async syncSourcingAssignee(client: PoolClient, actor: TrustedActorContext, orderId: string, assigneeId: string) {
     if (!(await client.query("SELECT to_regclass('digital_budget_preparations') AS relation")).rows[0]?.relation) return;
     const tasks = (await client.query(`SELECT a.task_id FROM digital_production_task_access a JOIN digital_production_tasks t USING(task_id)
@@ -594,6 +596,7 @@ export class DigitalProductionTaskService {
   async previewSlaOrder(actor:TrustedActorContext,input:Parameters<SlaOrderApplicationService['preview']>[1]){return new SlaOrderApplicationService(this.database,this.previewSecret).preview(actor,input);}
   async applySlaOrder(actor:TrustedActorContext,input:Parameters<SlaOrderApplicationService['apply']>[1],key:string){return new SlaOrderApplicationService(this.database,this.previewSecret).apply(actor,input,key);}
   settingsSets(){return new SlaSettingsSetsService(this.database,this.previewSecret);}
+  orderTimeSettings(){return new OrderTimeSettingsService(this.database,this.orderTimeEnabled);}
   async readSlaDraft(actor:TrustedActorContext,group:SlaDraftGroup){return new SlaSettingsDraftService(this.database).read(actor,group);}
   async saveSlaDraft(actor:TrustedActorContext,input:unknown,key:string){return new SlaSettingsDraftService(this.database).save(actor,input,key);}
   async discardSlaDraft(actor:TrustedActorContext,input:unknown,key:string){return new SlaSettingsDraftService(this.database).discard(actor,input,key);}
