@@ -1,4 +1,6 @@
-import { hasMemberModulePolicy, memberCanWriteModule } from "../access/member-module-policy.js";
+import { hasMemberModulePolicy } from "../access/member-module-policy.js";
+import {lockEligibleMerchandiser} from './merchandiser-eligibility.js';
+import {CustomerMerchandiserDefaultsService} from './customer-merchandiser-defaults.js';
 import { PoCustomerDateService } from "./po-customer-date-service.js";
 import { randomUUID } from "node:crypto";
 import { DigitalProductionTaskService } from "./task-service.js";
@@ -45,14 +47,9 @@ export class DigitalProductionAccessService {
     await client.query("SELECT pg_advisory_xact_lock_shared(hashtextextended('member-module-owner-bindings',0))");
   }
   private async eligibleMerchandiser(client:PoolClient,userId:string):Promise<boolean>{
-    if(!await new DigitalProductionAccessPolicy(client).lockActiveRole(userId,"order_merchandiser"))return false;
-    const required=["sourcing:view","sourcing:inquiry:create","sourcing:contract:record"];
-    const capabilities=(await client.query("SELECT capability FROM role_capabilities WHERE role_code='order_merchandiser' AND capability=ANY($1::text[]) FOR SHARE",[required])).rows;
-    if(!required.every(capability=>capabilities.some(row=>row.capability===capability))||!await memberCanWriteModule(client,userId,"sourcing"))return false;
-    if(!await hasMemberModulePolicy(client))return true;
-    await client.query("SELECT policy_key FROM access_security_policy WHERE policy_key='primary' FOR SHARE");
-    return (await client.query("SELECT bool_and(todo_user_has_direct_role($1,'order_merchandiser',capability)) AS eligible FROM unnest($2::text[]) required(capability)",[userId,required])).rows[0]?.eligible===true;
+    return lockEligibleMerchandiser(client,userId);
   }
+  customerDefaults(){return new CustomerMerchandiserDefaultsService(this.database);}
   async candidates(actor: TrustedActorContext) {
     if (!isDigitalManagementReader(actor) && !isDigitalTechnicalManager(actor) && !actor.actorRoles.includes("sample_designer") && !actor.actorRoles.includes("development_clerk")) digitalForbidden();
     const roles = isDigitalManagementReader(actor) || isDigitalTechnicalManager(actor) ? null : actor.actorRoles.includes("development_clerk") ? ["development_clerk", "pattern_room_worker", "pattern_room_tail_inspector"] : ["order_merchandiser", "pattern_room_worker"];
@@ -72,9 +69,11 @@ export class DigitalProductionAccessService {
     return this.transaction(async client => {
       await this.lockMemberPolicy(client);
       await this.personnelActor(client,actor,false);
+      if(!merchandiserId)conflict('主跟单必填，请选择一名有效订单跟单');
       if (merchandiserId && !await this.eligibleMerchandiser(client,merchandiserId)) conflict("主跟单必须为在职有效且可办理外发的订单跟单");
       const previous = (await client.query("SELECT default_merchandiser_id FROM digital_production_customers WHERE code=$1 FOR UPDATE", [code])).rows[0] ?? digitalNotFound();
-      await client.query("UPDATE digital_production_customers SET default_merchandiser_id=$2 WHERE code=$1", [code, merchandiserId]);
+      await client.query("UPDATE digital_production_customers SET default_merchandiser_id=$2,default_merchandiser_version=default_merchandiser_version+1 WHERE code=$1", [code, merchandiserId]);
+      await client.query('DELETE FROM digital_customer_secondary_merchandisers WHERE customer_code=$1 AND user_id=$2',[code,merchandiserId]);
       await this.audit(client, actor, "digital_customer_default_assigned", code, previous, { merchandiserId });
       return { customerCode: code, merchandiserId };
     });

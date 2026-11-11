@@ -597,8 +597,8 @@ export class DigitalJourneyQuery {
       // cards do not consume budgets, closure detail or downstream domain gates.
       if(sourcingFields){
         styleName=sourcingFields.style_name_snapshot??null;if(sourcingFields.erp_order_no)orderNumbers.push(sourcingFields.erp_order_no);
-        if(sourcingFields.additional_merchandiser_user_id)merchandisers.push({id:sourcingFields.additional_merchandiser_user_id,name:(await db.query("SELECT display_name FROM app_users WHERE id=$1",[sourcingFields.additional_merchandiser_user_id])).rows[0]?.display_name??null});
       }
+      if(sourcingAllowed)for(const person of await readOrderSecondaryMerchandisers(db,oid))if(!merchandisers.some(current=>current.id===person.id))merchandisers.push(person);
       if(!patternKinds){
       const bulk=await journeyMeasure('bulk',async()=>actor?await new BulkPreparationService(this.database).read(actor,oid,db):await new BulkPreparationService(this.database).readJourneyFactsWithClient(oid,db,observed));
       const gates=await journeyMeasure('bulk',()=>new BulkPreparationService(this.database).gates(db,oid));
@@ -870,3 +870,4 @@ export class DigitalJourneyQuery {
     return item;
   }
 }
+import {readOrderSecondaryMerchandisers} from './order-merchandisers.js';

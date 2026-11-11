@@ -2016,5 +2016,33 @@
       "digital_journey_register_change"
     ],
     "sequences": []
+  },
+  "0285_order_time_settings_and_merchandisers": {
+    "checksum": "3c0377e586a2332d9699b389f8fbb491995e99a73377514715edca70de2feeab",
+    "tables": [
+      "digital_production_customers"
+    ],
+    "functions": [],
+    "references": [
+      "digital_order_time_standards",
+      "app_users",
+      "digital_production_customers",
+      "digital_production_orders",
+      "sourcing_cases"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [
+      "digital_order_time_standards",
+      "digital_order_time_history_events",
+      "digital_customer_secondary_merchandisers",
+      "digital_order_secondary_merchandisers",
+      "sourcing_case_secondary_merchandisers"
+    ],
+    "execute": [
+      "guard_production_order_root_immutable",
+      "digital_journey_register_change"
+    ],
+    "sequences": []
   }
 }

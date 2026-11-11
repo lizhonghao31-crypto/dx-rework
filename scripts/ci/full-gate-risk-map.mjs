@@ -179,6 +179,10 @@ export const classifyFullGatePaths = (inputPaths) => {
     "tests/integration/development-execution-read-native-browser-postgres.test.ts",
   ]);
   const domains = new Set();
+  if(paths.some(path=>/order-time-(?:settings|standard-editor|calculator|node-fields|route-fields)|customer-default-merchandisers|customer-merchandiser-defaults|order-merchandisers|additional-merchandisers|digital-customer-merchandisers|0285_order_time_settings_and_merchandisers/.test(path))){
+    addAll(mappedTests,['tests/integration/order-time-settings-postgres.test.ts','tests/integration/customer-default-merchandisers-postgres.test.ts','tests/integration/r5-settings-native-browser-postgres.test.ts','tests/integration/m01-settings-native-browser-postgres.test.ts','tests/integration/digital-production-identity-postgres.test.ts']);
+    domains.add('order-time-settings-and-merchandisers');
+  }
   if(paths.some(path=>/order-time-(?:plan|schedule)|0284_order_time_plan_versions/.test(path))){
     addAll(mappedTests,['tests/integration/order-time-plan-postgres.test.ts','tests/integration/fixed-timeline-postgres.test.ts','tests/integration/fixed-progress-postgres.test.ts']);
     domains.add('order-time-plan-core');

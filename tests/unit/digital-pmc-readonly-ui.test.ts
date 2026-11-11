@@ -1,4 +1,4 @@
-import * as pairedEditor from '../../apps/web/src/sla-settings-set-editor.js';
+import * as settingsWorkspace from '../../apps/web/src/sla-settings-workspace.js';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import {createElement, type ComponentType} from 'react';
 import type * as React from 'react';
@@ -111,7 +111,11 @@ describe('PMC digital read entry preserves original write flags', () => {
     {roles: ['production_management'], manage: true, visible: true, readOnly: false},
     {roles: ['quality_control'], manage: false, visible: false, readOnly: true},
   ])('settings shell passes independent readOnly for $roles', ({roles, manage, visible, readOnly}) => {
-    vi.spyOn(pairedEditor, 'SlaSettingsSetEditor').mockImplementation(props => createElement('span', {'data-settings-editor': 'paired', 'data-readonly': String(props.readOnly)}));
+    // The real workspace now waits for its independently authorized GET before
+    // choosing the compatible/new editor. SSR cannot complete that effect;
+    // assert the shell's actual permission handoff at the workspace boundary.
+    // The full authenticated App tests cover both loaded editor paths.
+    vi.spyOn(settingsWorkspace, 'SlaSettingsWorkspace').mockImplementation(props => createElement('span', {'data-settings-editor': 'workspace', 'data-readonly': String(props.readOnly)}));
     state.seeds = [access(roles, manage), ''];
     const html = renderToStaticMarkup(createElement(CockpitProductionSettings));
     expect(html.includes('data-settings-editor')).toBe(visible);

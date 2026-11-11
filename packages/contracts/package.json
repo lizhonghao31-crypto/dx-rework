@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./digital-customer-merchandisers": { "types": "./src/digital-customer-merchandisers.ts", "import": "./dist/digital-customer-merchandisers.js" },
+    "./order-time-settings": { "types": "./src/order-time-settings.ts", "import": "./dist/order-time-settings.js" },
     "./order-time-plan": { "types": "./src/order-time-plan.ts", "import": "./dist/order-time-plan.js" },
     "./sla-settings-sets": { "types": "./src/sla-settings-sets.ts", "import": "./dist/sla-settings-sets.js" },
     "./digital-craft": {"types":"./src/digital-craft.ts","import":"./dist/digital-craft.js"},

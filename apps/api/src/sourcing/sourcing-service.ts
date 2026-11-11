@@ -421,7 +421,7 @@ export class SourcingService {
         );
         if (!source.rows[0]) fail("报价选厂询价不存在", 404, "NOT_FOUND");
         if (!actor.actorRoles.includes(ROOT_ROLE) && !actor.actorRoles.some(role=>role!==CASE_CREATE_ROLE && SOURCING_IMAGE_SUPPLEMENT_ROLES.includes(role as (typeof SOURCING_IMAGE_SUPPLEMENT_ROLES)[number]))
-          && source.rows[0]!.additional_merchandiser_user_id === actor.actorId
+          && (await readAdditionalMerchandiserIds(client,sourcingCaseId)).includes(actor.actorId)
           && await effectiveSourcingMerchandiser(client,sourcingCaseId,source.rows[0]!.created_by) !== actor.actorId) fail("添加跟单仅可回传合同",403,"FORBIDDEN");
 
         const existing = await client.query<{ attachment_id: string }>(
@@ -1112,12 +1112,13 @@ export class SourcingService {
           dedupeKey:`sourcing:${sourcingCaseId}:${correcting?"ie_quote":"correction"}:${before.version+1}`};
         if (correcting) await this.todoProjection?.actionableForAllAssignedRole(client,actor,projection);
         else {
-          await this.todoProjection?.actionableForNamedRecipient?.(client,actor,{...projection,recipientUserId:await effectiveSourcingMerchandiser(client,sourcingCaseId,source.created_by)??fail("当前主跟单缺失",409,"CONFLICT")});
-          if (source.additional_merchandiser_user_id) await this.todoProjection?.information(client,actor,{
+          const currentPrimary=await effectiveSourcingMerchandiser(client,sourcingCaseId,source.created_by)??fail("当前主跟单缺失",409,"CONFLICT");
+          await this.todoProjection?.actionableForNamedRecipient?.(client,actor,{...projection,recipientUserId:currentPrimary});
+          for(const additionalId of (await readAdditionalMerchandiserIds(client,sourcingCaseId)).filter(id=>id!==currentPrimary))await this.todoProjection?.information(client,actor,{
             category:"sourcing_merchandiser_correction",sourceEventId:eventId,sourceAction:scope,
-            entityType:"sourcing_case",entityId:sourcingCaseId,recipientUserId:source.additional_merchandiser_user_id,
+            entityType:"sourcing_case",entityId:sourcingCaseId,recipientUserId:additionalId,
             route:{routeName:"sourcing_detail",entityId:sourcingCaseId},
-            dedupeKey:`sourcing:${sourcingCaseId}:correction-info:${before.version+1}:${source.additional_merchandiser_user_id}`,
+            dedupeKey:`sourcing:${sourcingCaseId}:correction-info:${before.version+1}:${additionalId}`,
           });
         }
         return {statusCode:200,response:await this.readCase(client,sourcingCaseId,actor)};
@@ -1182,7 +1183,11 @@ export class SourcingService {
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       }, async () => {
         const digitalLines = await validateBudgetSourcing(client, actor, input);
-        if (normalized.additionalMerchandiserUserId) {
+        const inherited=input.digitalBudget?(await client.query<{primary_merchandiser_id:string|null;secondary:string[]|null}>(`SELECT o.primary_merchandiser_id,(SELECT array_agg(s.user_id ORDER BY s.position,s.user_id) FROM digital_order_secondary_merchandisers s WHERE s.production_order_id=o.production_order_id) AS secondary FROM digital_production_orders o WHERE o.production_order_id=$1`,[input.digitalBudget.productionOrderId])).rows[0]:null;
+        const primary=inherited?.primary_merchandiser_id??actor.actorId;
+        if(normalized.additionalMerchandiserUserId===primary||normalized.additionalMerchandiserUserId===actor.actorId)fail('添加跟单必须是当前有效的其它跟单账号');
+        const additionalIds=[...new Set([...(normalized.additionalMerchandiserUserId?[normalized.additionalMerchandiserUserId]:[]),...(inherited?.secondary??[])])].filter(id=>id!==primary&&id!==actor.actorId),legacyAdditional=additionalIds[0];
+        for(const additionalId of additionalIds){
           const eligible = await client.query(
             `SELECT 1 FROM app_users person JOIN user_role_assignments assignment
                ON assignment.user_id=person.id AND assignment.role_code='order_merchandiser'
@@ -1191,7 +1196,7 @@ export class SourcingService {
                AND todo_user_has_direct_role(person.id,'order_merchandiser','sourcing:contract:record')
                AND todo_user_has_direct_role(person.id,'order_merchandiser','sourcing:view')
                AND todo_user_has_direct_role(person.id,'order_merchandiser','supplier_contract_data:read') LIMIT 1`,
-            [normalized.additionalMerchandiserUserId,actor.actorId],
+            [additionalId,actor.actorId],
           );
           if (!eligible.rowCount) fail("添加跟单必须是当前有效的其它跟单账号");
         }
@@ -1224,7 +1229,7 @@ export class SourcingService {
           orderQuantity: normalized.orderQuantity,
           attachmentIds: normalized.attachmentIds,
           daxingUnitPriceRecorded: true,
-          ...(normalized.additionalMerchandiserUserId ? {additionalMerchandiserUserId:normalized.additionalMerchandiserUserId} : {}),
+          ...(legacyAdditional ? {additionalMerchandiserUserId:legacyAdditional,additionalMerchandiserUserIds:additionalIds} : {}),
           pricingOrigin: "ie",
           confirmedDuplicateStyles: confirmedDuplicates,
         };
@@ -1250,8 +1255,8 @@ export class SourcingService {
              sourcing_case_id,erp_order_id,erp_order_no,style_no,lane_key,
              order_quantity,delivery_date,process_description,process_items,
              created_by,operation_event_id,request_id,creation_reason,daxing_unit_price,
-             estimated_cut_piece_send_date,gender,style_id,style_name_snapshot${normalized.additionalMerchandiserUserId ? ',additional_merchandiser_user_id' : ''}${input.digitalBudget ? ',workflow_generation' : ''}
-           ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18${normalized.additionalMerchandiserUserId ? ',$19' : ''}${input.digitalBudget ? (normalized.additionalMerchandiserUserId ? ',$20' : ',$19') : ''})`,
+             estimated_cut_piece_send_date,gender,style_id,style_name_snapshot${legacyAdditional ? ',additional_merchandiser_user_id' : ''}${input.digitalBudget ? ',workflow_generation' : ''}
+           ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18${legacyAdditional ? ',$19' : ''}${input.digitalBudget ? (legacyAdditional ? ',$20' : ',$19') : ''})`,
           [
             sourcingCaseId,
             sourcingCaseId,
@@ -1269,10 +1274,11 @@ export class SourcingService {
             normalized.daxingUnitPrice,
             normalized.estimatedCutPieceSendDate,
             normalized.gender,style.style_id,style.style_name,
-            ...(normalized.additionalMerchandiserUserId ? [normalized.additionalMerchandiserUserId] : []),
+            ...(legacyAdditional ? [legacyAdditional] : []),
             ...(input.digitalBudget ? ["digital_production_v1"] : []),
           ],
         );
+        await bindAdditionalMerchandisers(client,sourcingCaseId,additionalIds);
         for (const line of normalized.lineItems) {
           await client.query(
             `INSERT INTO sourcing_case_lines(
@@ -2177,6 +2183,7 @@ export class SourcingService {
             [source.sourcing_decision_id],
           );
           if (returnFact.rows[0]?.contract_returned_at === null && !transferDecision.rows[0]?.is_transfer) {
+            const currentPrimary=await effectiveSourcingMerchandiser(client,sourcingCaseId,source.created_by)??fail("当前主跟单缺失",409,"CONFLICT");
             await this.todoProjection?.completeOpenByDedupePrefix(
               client, actor, `sourcing:${sourcingCaseId}:return:`, "选厂批准版本已更新",
             );
@@ -2186,20 +2193,20 @@ export class SourcingService {
               sourceAction: "sourcing.owner.approve",
               entityType: "sourcing_case",
               entityId: sourcingCaseId,
-              recipientUserId: await effectiveSourcingMerchandiser(client,sourcingCaseId,source.created_by)??fail("当前主跟单缺失",409,"CONFLICT"),
+              recipientUserId: currentPrimary,
               requiredRole: CONTRACT_ROLE,
               requiredCapability: CONTRACT_CAPABILITY,
               route: { routeName: "sourcing_detail", entityId: sourcingCaseId, tab: "contract_return" },
               policyKey: "sourcing_contract_return",
               dedupeKey: `sourcing:${sourcingCaseId}:return:${decisionVersion}`,
             });
-            if (source.additional_merchandiser_user_id) await this.todoProjection?.actionableForNamedRecipient?.(client,actor,{
+            for(const additionalId of (await readAdditionalMerchandiserIds(client,sourcingCaseId)).filter(id=>id!==currentPrimary))await this.todoProjection?.actionableForNamedRecipient?.(client,actor,{
               category:"sourcing_contract_return",sourceEventId:eventId,sourceAction:"sourcing.owner.approve",
-              entityType:"sourcing_case",entityId:sourcingCaseId,recipientUserId:source.additional_merchandiser_user_id,
+              entityType:"sourcing_case",entityId:sourcingCaseId,recipientUserId:additionalId,
               requiredRole:CONTRACT_ROLE,requiredCapability:CONTRACT_CAPABILITY,
               route:{routeName:"sourcing_detail",entityId:sourcingCaseId,tab:"contract_return"},
               policyKey:"sourcing_contract_return",
-              dedupeKey:`sourcing:${sourcingCaseId}:return:${decisionVersion}:${source.additional_merchandiser_user_id}`,
+              dedupeKey:`sourcing:${sourcingCaseId}:return:${decisionVersion}:${additionalId}`,
             });
           }
         }
@@ -2867,7 +2874,7 @@ export class SourcingService {
         const transferDeliveryDate = input.deliveryDate ?? source.current_delivery_date;
         if (!sourcingDatesValid(source.estimated_send_date,transferDeliveryDate)) fail(SOURCING_DATE_ORDER_ERROR);
         if (initiatorRole === "order_merchandiser" && !actor.actorRoles.includes(ROOT_ROLE)
-          && source.additional_merchandiser_user_id === actor.actorId && await effectiveSourcingMerchandiser(client,sourcingCaseId,source.created_by) !== actor.actorId)
+          && (await readAdditionalMerchandiserIds(client,sourcingCaseId)).includes(actor.actorId) && await effectiveSourcingMerchandiser(client,sourcingCaseId,source.created_by) !== actor.actorId)
           fail("添加跟单仅可回传合同",403,"FORBIDDEN");
         if (!source.sourcing_decision_id || !source.decision_unit_price) {
           fail("供应链总监首次提交选厂信息后才可发起订单转厂", 409, "INVALID_STATE_TRANSITION");
@@ -3634,3 +3641,4 @@ export class SourcingService {
   }
 
 }
+import {readAdditionalMerchandiserIds,bindAdditionalMerchandisers} from './additional-merchandisers.js';

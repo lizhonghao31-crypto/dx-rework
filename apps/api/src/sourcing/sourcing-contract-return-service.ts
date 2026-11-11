@@ -56,14 +56,14 @@ export class SourcingContractReturnService {
     }
   }
 
-  private async canUpload(actor: TrustedActorContext, creator: string|null, additional: string | null, database: Pick<Pool|PoolClient,"query"> = this.database): Promise<boolean> {
+  private async canUpload(actor: TrustedActorContext, creator: string|null, caseId: string, database: Pick<Pool|PoolClient,"query"> = this.database): Promise<boolean> {
     if (actor.actorRoles.includes(ROOT)) return true;
     if (!(await memberCanWriteModule(database,actor.actorId,"sourcing"))) return false;
     const capabilities = actor.authorizationCapabilities ?? [];
     return actor.actorRoles.includes(OWNER) && capabilities.includes("sourcing:owner:approve")
       || actor.actorRoles.includes(MANAGEMENT) && capabilities.includes("sourcing:decision:record")
       || actor.actorRoles.includes(MERCHANDISER)
-        && (actor.actorId === creator || actor.actorId === additional) && capabilities.includes("sourcing:contract:record");
+        && capabilities.includes("sourcing:contract:record") && (actor.actorId === creator || (await readAdditionalMerchandiserIds(database,caseId)).includes(actor.actorId));
   }
 
   async get(actor: TrustedActorContext, sourcingCaseId: string) {
@@ -145,7 +145,7 @@ export class SourcingContractReturnService {
       signedContractDocumentId:current?.signedContractDocumentId ?? null,
       signedContractVersion:current?.signedContractVersion ?? null,signedContractNumber:current?.signedContractNumber ?? null,
       canUpload: status.contractReturnMonitoring && row.current_contract_accepts_upload
-        && totals.count < 2 && Number(totals.bytes) < MAX_UPLOAD_BYTES && await this.canUpload(actor,await effectiveSourcingMerchandiser(this.database,sourcingCaseId,row.created_by),row.additional_merchandiser_user_id),
+        && totals.count < 2 && Number(totals.bytes) < MAX_UPLOAD_BYTES && await this.canUpload(actor,await effectiveSourcingMerchandiser(this.database,sourcingCaseId,row.created_by),sourcingCaseId),
       uploadedFileCount:totals.count,uploadedTotalBytes:Number(totals.bytes),
       attachments:currentFiles,history,versions:[...versions.values()] };
   }
@@ -182,7 +182,7 @@ export class SourcingContractReturnService {
       if (!monitor?.contract_return_monitor_enabled) {
         throw new ApplicationError("INVALID_STATE_TRANSITION","该订单尚未批准，暂不能回传合同；请老板在本单原选厂审批完成决定，订单跟单取得当前有效合同后再上传供应商回签件",409);
       }
-      if (!(await this.canUpload(actor,await effectiveSourcingMerchandiser(client,sourcingCaseId,monitor.created_by),monitor.additional_merchandiser_user_id,client))) forbidden();
+      if (!(await this.canUpload(actor,await effectiveSourcingMerchandiser(client,sourcingCaseId,monitor.created_by),sourcingCaseId,client))) forbidden();
       const previous=await client.query<{submitted_by:string;attachment_ids:string[]}>(`SELECT submission.submitted_by,
         submission.attachment_ids
         FROM sourcing_contract_return_requests submission
@@ -278,3 +278,4 @@ export class SourcingContractReturnService {
     } finally {client.release();}
   }
 }
+import {readAdditionalMerchandiserIds} from './additional-merchandisers.js';

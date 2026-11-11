@@ -205,6 +205,7 @@ export class DigitalProductionIdentityService {
       const businessTime = !sourceId&&this.businessClock ? await this.businessClock.read({ kind: "order", id: root.productionOrderId }) : formalTime;
       await client.query(`INSERT INTO digital_production_orders(production_order_id,source_id,customer_code,product_group,design_style_no,temporary_style_no,order_date,contract_delivery_date,created_by,creation_hash,primary_merchandiser_id)
         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, [root.productionOrderId, sourceId, input.customerCode, input.productGroup, input.designStyleNo, input.temporaryStyleNo, input.orderDate, input.contractDeliveryDate, createdBy, digest(input), merchandiserId]);
+      await inheritCustomerSecondaryMerchandisers(client,input.customerCode,root.productionOrderId,merchandiserId??null);
       if (input.salesYear !== undefined || input.salesSeries !== undefined || input.requiresColorMatching !== undefined) {
         await client.query("UPDATE digital_production_orders SET sales_year=$2,sales_series=$3,requires_color_matching=$4 WHERE production_order_id=$1",[root.productionOrderId,input.salesYear??null,input.salesSeries??null,input.requiresColorMatching??null]);
       }
@@ -304,3 +305,4 @@ export class DigitalProductionIdentityService {
     return result;
   }
 }
+import {inheritCustomerSecondaryMerchandisers} from './order-merchandisers.js';

@@ -5,6 +5,7 @@ import { SourcingContractReturnService } from "../../apps/api/src/sourcing/sourc
 
 const creator="00000000-0000-4000-8000-000000000001";
 const additional="00000000-0000-4000-8000-000000000002";
+const second="00000000-0000-4000-8000-000000000004";
 const other="00000000-0000-4000-8000-000000000003";
 const caseId="00000000-0000-4000-8000-000000000100";
 
@@ -19,6 +20,7 @@ describe("additional merchandiser contract scope",()=>{
     const query=vi.fn(async (sql:string)=>{
       if (sql.includes("sourcing_contract_return_clock_scope")) return {rows:[{native_order_id:null,scenario_id:null}]};
       if (sql.includes("business_module_owner_bindings")) return {rows:[{available:false}]};
+      if (sql.includes("SELECT sourcing_additional_merchandiser_ids")) return {rows:[{ids:[additional,second]}]};
       if (sql.includes("FROM sourcing_cases source_case")) return {rows:[{
         sourcing_case_id:caseId,created_by:creator,additional_merchandiser_user_id:additional,
         contract_return_monitor_enabled:true,contract_return_catchup:false,
@@ -33,6 +35,7 @@ describe("additional merchandiser contract scope",()=>{
     const service=new SourcingContractReturnService({query} as unknown as Pool);
     expect((await service.get(actor(creator),caseId)).canUpload).toBe(true);
     expect((await service.get(actor(additional),caseId)).canUpload).toBe(true);
+    expect((await service.get(actor(second),caseId)).canUpload).toBe(true);
     expect((await service.get(actor(other),caseId)).canUpload).toBe(false);
     returned=true;
     expect((await service.get(actor(creator),caseId)).canUpload).toBe(true);
