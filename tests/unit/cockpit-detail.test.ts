@@ -41,7 +41,7 @@ it('R2-02: directly shows every original PO target with its date boundary and ne
 });
 it('shows an actual day as a day in both detail and node rows, without an invented midnight or 08:00',()=>{
   const o=fixture(),n=o.stages[1]!.nodes[0]!;n.actualDate='2026-10-17';n.actualAt=null;n.state='completed';
-  const html=render(o),rows=renderToStaticMarkup(createElement(CockpitNodeRows,{nodes:[n],lines:[],context:{},onSelect:()=>{}}));expect(html).toContain('<dt>实际完成：</dt><dd>2026-10-17<small>原完成记录，时间待核</small></dd>');expect(rows).toContain('<span>2026-10-17</span>');expect(html+rows).not.toContain('2026/10/17 08:00');expect(html+rows).not.toContain('2026-10-17T00:00');
+  const html=render(o),rows=renderToStaticMarkup(createElement(CockpitNodeRows,{nodes:[n],lines:[],context:{},onSelect:()=>{}}));expect(html).toContain('<dt>实际完成：</dt><dd><span>2026-10-17</span><small>原完成记录，时间待核</small></dd>');expect(rows).toContain('<span>2026-10-17</span>');expect(html+rows).not.toContain('2026/10/17 08:00');expect(html+rows).not.toContain('2026-10-17T00:00');
 });
 it("renders seven double rings with only two date rows, risk color and no invented time ratio",()=>{
   const html=render(fixture());

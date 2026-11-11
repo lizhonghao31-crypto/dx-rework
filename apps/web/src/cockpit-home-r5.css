@@ -1,0 +1,41 @@
+/* Final approved R5 overview. Keep these styles within this business page. */
+.dx-production-ui .digital-journey-cockpit[data-view="overview"]{color:#17233b;font-family:"Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .journey-kpis{gap:10px}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .journey-kpis .dx-production-kpi{position:relative;display:grid;grid-template-columns:22px minmax(0,1fr);gap:10px 7px;min-height:108px;border:1px solid #d5e0f1;border-radius:12px;background:linear-gradient(130deg,#fff,#f9fbff);padding:16px 12px;text-align:left;box-shadow:0 2px 8px #203e6b05}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .journey-kpis .dx-production-kpi[aria-pressed="true"]{border-color:#98b7f7;box-shadow:0 0 0 1px #d6e4ff;background:#f5f9ff}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .journey-kpis .dx-production-kpi-icon{position:static;grid-column:1;grid-row:1;display:inline-flex;align-self:center;margin:0;width:22px;height:22px;color:inherit}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .journey-kpis .dx-production-kpi>span{grid-column:2;grid-row:1;align-self:center;color:#26334b;font-size:15px;font-weight:600;white-space:nowrap}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .journey-kpis .dx-production-kpi>strong{grid-column:1/-1;grid-row:2;display:block;padding:0;margin:0;font-size:33px;line-height:1.15;font-variant-numeric:tabular-nums}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .journey-kpis .cockpit-kpi-active{color:#2475e8}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .journey-kpis .cockpit-kpi-not_started{color:#8a919d}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .journey-kpis :is(.cockpit-kpi-due_soon,.cockpit-kpi-timing_missing){color:#cb8b1b}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .journey-kpis .cockpit-kpi-overdue{color:#c94343}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .journey-kpis .cockpit-kpi-completed{color:#238f69}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .journey-kpis .dx-production-kpi>strong{color:inherit}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .journey-kpis .dx-production-kpi>small:empty{display:none}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home{border:1px solid #d7e1f2;border-radius:12px;background:#fff;box-shadow:0 3px 14px #25477f05;padding:16px}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home .journey-section-title h2{border:0;padding:0;font-size:21px;color:#17233b}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home .dx-production-table th{background:linear-gradient(120deg,#edf1f8,#e9eef6);color:#25334a;font-size:15px;font-weight:600;white-space:nowrap}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home .dx-production-table td{border-color:#e0e7f2;padding:12px 10px;line-height:1.5}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home .journey-order-select{font-size:16px;min-height:26px;color:#17233b;font-weight:650}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home .cockpit-home-client{text-align:left;justify-items:start;gap:5px}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home .cockpit-home-client .cockpit-home-customer{font-weight:650;font-size:15px}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home .cockpit-home-type{display:inline-block;padding:1px 6px;border-radius:5px;background:#eaf0ff;border:1px solid #d5e2fb;color:#254875;font-size:13px}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home .cockpit-home-photo{max-width:70px;border-radius:8px}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home .cockpit-home-task>strong{font-size:15px;font-weight:600}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home-progress-row{display:grid;grid-template-columns:66px minmax(0,1fr);gap:7px;align-items:center;margin:6px 0}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home-progress-label{font-size:12px;color:#263956;white-space:nowrap;font-variant-numeric:tabular-nums}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home-progress-track{height:9px;border-radius:8px}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home-progress-dates{display:flex;gap:4px 8px;flex-wrap:wrap;margin-top:7px}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home small.cockpit-home-progress-date{display:inline-flex;gap:4px;font-size:12px;white-space:nowrap}
+.dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-personnel-inline{margin-top:4px;min-height:28px}
+.dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-personnel-inline>p{margin:0;font-size:12px}
+.dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-personnel-inline .dx-button{min-height:28px;padding:3px 8px;font-size:12px}
+@media(max-width:1250px){
+ .dx-production-ui .digital-journey-cockpit[data-view="overview"] .journey-kpis{gap:7px}
+ .dx-production-ui .digital-journey-cockpit[data-view="overview"] .journey-kpis .dx-production-kpi{grid-template-columns:18px minmax(0,1fr);gap:8px 4px;padding:12px 8px;min-height:96px}
+ .dx-production-ui .digital-journey-cockpit[data-view="overview"] .journey-kpis .dx-production-kpi>span{font-size:13px}
+ .dx-production-ui .digital-journey-cockpit[data-view="overview"] .journey-kpis .dx-production-kpi-icon{width:18px;height:18px;margin-right:4px}
+ .dx-production-ui .digital-journey-cockpit[data-view="overview"] .journey-kpis .dx-production-kpi>strong{font-size:29px}
+}
+@media(max-width:900px){.dx-production-ui .digital-journey-cockpit[data-view="overview"] .journey-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}

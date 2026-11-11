@@ -8,6 +8,8 @@
 }
 .dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-detail .cockpit-detail-identity {grid-template-columns:96px minmax(0,1fr);gap:12px 20px}
 .dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-detail-photo {width:96px;height:96px;border-radius:9px}
+.dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-identity-primary {grid-template-columns:96px minmax(160px,.9fr) minmax(0,1.7fr)}
+@media(max-width:1100px){.dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-identity-primary {grid-template-columns:96px minmax(0,1fr)}}
 .dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-detail .cockpit-identity-heading h1 {font-size:23px;line-height:1.4;color:#17233b}
 .dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-detail .cockpit-identity-facts .cockpit-compact-date {font-size:13px;max-width:100%}
 .dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-detail .cockpit-identity-facts {color:#263956;font-size:14px;gap:8px 18px}

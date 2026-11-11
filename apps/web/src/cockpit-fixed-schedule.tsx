@@ -59,6 +59,13 @@ export function CockpitFixedTargetDates({node,lines=[]}:{node:JourneyNode;lines?
  return <>{targets.map((target,index)=>{const goal=target.progress.goalDelta,line=lines.find(line=>line.id===target.lineId);return <span className="cockpit-fixed-target-date" key={target.scopeRef+'|'+target.progress.canonicalWorkRef}>{targets.length>1&&<small title={line?`PO ${line.po??'号码待补'} · ${line.color}`:undefined}>{line?`PO ${line.po??'号码待补'} · ${line.color}`:`对应范围${index+1}`}：</small>}{goal.targetPrecision==='date'&&goal.targetDate?<CockpitDate value={goal.targetDate} precision="date"/>:goal.targetAt?<CockpitDate value={goal.targetAt} precision="instant"/>:'待补充'}</span>;})}</>;
 }
 
+/** Actual dates and their adjacent delta share this exact scoped occurrence. */
+export function CockpitActualDates({node,lines=[],stacked=false}:{node:JourneyNode;lines?:OrderJourney['lines'];stacked?:boolean}){
+ const targets=node.fixedTargets??[],missing=node.state==='completed'?'完成时间待核实':'—';
+ if(!targets.length)return <><CockpitDate value={node.actualDate??node.actualAt} precision={node.actualDate?'date':'instant'} missing={missing} stacked={stacked}/>{(node.actualAt||node.actualDate)&&node.actualQuality!=='verified'&&<small>原完成记录，时间待核</small>}</>;
+ return <>{targets.map((target,index)=>{const actual=target.progress.goalDelta.actual,line=lines.find(line=>line.id===target.lineId);return <span className="cockpit-fixed-target-date" key={target.scopeRef+'|'+target.progress.canonicalWorkRef}>{targets.length>1&&<small>{line?`PO ${line.po??'号码待补'} · ${line.color}`:`对应范围${index+1}`}：</small>}<CockpitDate value={actual.precision==='instant'?actual.at:actual.precision==='date'?actual.date:null} precision={actual.precision==='date'?'date':'instant'} missing={missing} stacked={stacked}/></span>;})}</>;
+}
+
 /** Snapshot of the canonical perPO evaluator, no crossPO arithmetic or client
  * calendar approximation. Numeric buffer keeps the original server asOf. */
 export function cockpitScopeProgress(scope:ScheduleScopeProgress|undefined){

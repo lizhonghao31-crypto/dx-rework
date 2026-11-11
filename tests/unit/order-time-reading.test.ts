@@ -1,3 +1,4 @@
+import {orderTimeCreatedMany} from '../../apps/api/src/production-platform/order-time-created.js';
 import {describe,expect,it,vi} from 'vitest';
 import {JOURNEY_STAGES,type JourneyNode,type OrderJourney} from '@dx-rework/contracts/digital-production-journey';
 import type {OrderTimeRule} from '@dx-rework/contracts/order-time-plan';
@@ -29,6 +30,17 @@ function stored():StoredOrderTimePlan{
 const evidence=()=>({tasks:[],readiness:new Map(),cutting:[],cutCompletions:[]});
 const build=(saved=stored(),row=item(),old:FixedScheduleBasis|null=null)=>orderTimeReadingBasis(saved,resource,row,{},evidence(),old);
 describe('R5 exact frozen order-time reading and independent visible endpoints',()=>{
+ it('uses a verified native completion when the matching old plan has only an empty placeholder, without replacing recorded history',()=>{
+  const row=item(),saved=stored(),legacy=build(saved,row);row.stages[1]!.nodes=[node('a','completed',at(0),at(2))];
+  const native={a:{evidence:'TEST original policy without occurrence'}};
+  const current=orderTimeReadingBasis(saved,resource,row,native,evidence(),legacy);
+  expect(current.scopes[0]!.facts.a).toMatchObject({businessCompleted:true,completed:point(2)});
+  const recorded=structuredClone(legacy);recorded.scopes[0]!.facts.a={...recorded.scopes[0]!.facts.a!,businessCompleted:true,completed:point(1),evidenceRefs:['TEST retained older valid event']};
+  expect(orderTimeReadingBasis(saved,resource,row,native,evidence(),recorded).scopes[0]!.facts.a!.completed).toEqual(point(1));
+  row.stages[1]!.nodes[0]!.actualQuality='missing';
+  expect(orderTimeReadingBasis(saved,resource,row,native,evidence(),legacy).scopes[0]!.facts.a!.completed).toEqual(unknown);
+ });
+
  it('uses the confirmed policy at original readiness for non-task work, retaining it after a later arrangement',()=>{
   const saved=stored(),row=item();row.stages[1]!.nodes=[node('a','active',at(2))];
   const earlier=structuredClone(saved.input.plan);earlier.overrides.a=duration(2);
@@ -111,6 +123,13 @@ describe('R5 exact frozen order-time reading and independent visible endpoints',
   let result=orderTimeReadingBasis(saved,order,row,{},proof,null);
   expect(result.scopes[0]!.facts.bulk_cutting).toMatchObject({ready:point(2),completed:point(5),businessCompleted:true});
   expect(result.scopes[1]!.facts.bulk_cutting).toMatchObject({ready:unknown,completed:unknown,businessCompleted:false,notYetReady:true});
+  const completed=proof.cutCompletions;proof.cutCompletions=[];
+  const unfinished=orderTimeReadingBasis(saved,order,row,{},proof,null),observed=evaluateFixedJourneyBasis(unfinished,at(25),false);
+  expect(unfinished.scopes[0]!.facts.bulk_cutting!.clockStart).toEqual(point(2));expect(unfinished.scopes[1]!.facts.bulk_cutting!.clockStart).toEqual(unknown);
+  expect(observed.scopes[0]!.nodes[0]!.ownSla).toMatchObject({state:'within',overdueMinutes:{minimum:0,maximum:0}});expect(observed.scopes[1]!.nodes[0]!.ownSla.state).not.toBe('overdue');
+  proof.tasks[0]!.task_kind='bulk_cutting';const internal=orderTimeReadingBasis(saved,order,row,{},proof,null);expect(internal.scopes[0]!.facts.bulk_cutting!.clockStart).toEqual(point(2));expect(internal.scopes[1]!.facts.bulk_cutting!.clockStart).toEqual(unknown);
+  const corrected=structuredClone(unfinished);corrected.scopes[0]!.facts.bulk_cutting!.clockStart=point(3);corrected.scopes[0]!.facts.bulk_cutting!.evidenceRefs.push('TEST precise corrected PO clock');expect(orderTimeReadingBasis(saved,order,row,{},proof,corrected).scopes[0]!.facts.bulk_cutting!.clockStart).toEqual(point(3));
+  proof.tasks[0]!.task_kind='bulk_cutting_external';proof.cutCompletions=completed;
   proof.cutting=[];proof.readiness.get('TEST cut')!.tracked=false;result=orderTimeReadingBasis(saved,order,row,{},proof,null);
   expect(result.scopes[0]!.facts.bulk_cutting).toMatchObject({ready:unknown,completed:point(5),businessCompleted:true,notYetReady:false});
  });
@@ -176,5 +195,18 @@ describe('R5 exact frozen order-time reading and independent visible endpoints',
   const basis=build();Object.assign(basis,{company:{TESTsecret:true},actorRoles:['TEST root']});basis.scopes[0]!.work[0]!.responsibilityReminderPercent=70;
   const saved=fixedScheduleBasisSnapshot(basis);expect(saved.policyVersion).toBe('order-time-plan-v1');expect(saved.scopes[0]!.work[0]).toMatchObject({stage:2,responsibilityReminderPercent:70});
   expect(JSON.stringify(saved)).not.toContain('TESTsecret');expect(JSON.stringify(saved)).not.toContain('actorRoles');
+ });
+});
+
+describe('native creation metadata batch',()=>{
+ it('keeps a trustworthy creation date while isolating an invalid or missing subject in one batch',async()=>{
+  const query=vi.fn().mockResolvedValue({rows:[
+   {resource_kind:'source',resource_id:'a',created_business_time:{now:'2026-11-20T00:00:00.000Z',scenarioId:null,revision:0},creation_event_ref:'TEST actual creation'},
+   {resource_kind:'order',resource_id:'b',created_business_time:{now:'invalid',scenarioId:null,revision:0},creation_event_ref:'TEST invalid input'},
+   {resource_kind:'order',resource_id:'legacy',created_business_time:null,creation_event_ref:null,legacy_adopted:true},
+   {resource_kind:'order',resource_id:'missing-new',created_business_time:null,creation_event_ref:null,legacy_adopted:false},
+  ]});
+  const result=await orderTimeCreatedMany({query} as never,[{kind:'source',id:'a'},{kind:'order',id:'b'},{kind:'source',id:'missing'},{kind:'source',id:'a'},{kind:'order',id:'legacy'},{kind:'order',id:'missing-new'}]);
+  expect(query).toHaveBeenCalledTimes(1);expect(result.get('source:a')).toEqual({at:'2026-11-20T00:00:00.000Z',evidence:'TEST actual creation'});expect(result.get('order:b')).toBeNull();expect(result.get('source:missing')).toBeNull();expect(result.get('order:legacy')).toEqual({at:null,legacy:true});expect(result.get('order:missing-new')).toBeNull();
  });
 });

@@ -14,6 +14,7 @@ import {registerAuthRoutes} from '../../apps/api/src/auth/routes.js';
 import {RootAuthority} from '../../apps/api/src/access/root-authority.js';
 import type {ApplicationError} from '../../apps/api/src/platform/errors.js';
 import {businessAnchorFixture} from '../helpers/business-anchor-fixture.js';
+import {DeliveryCalendarQuery} from '../../apps/api/src/production-platform/delivery-calendar-query.js';
 import {registerDigitalIdentityRoutes} from '../../apps/api/src/production-platform/identity-routes.js';
 import {DigitalProductionIdentityService} from '../../apps/api/src/production-platform/identity-service.js';
 import {DigitalProductionTaskService} from '../../apps/api/src/production-platform/task-service.js';
@@ -53,7 +54,7 @@ export async function supplychainSettingsBrowser(url:string,evidence:string,opti
   const orderTimeRequests=options?.orderTimeFlow?new OrderTimeRequestService(db,orderTimeNativeExecutor(db,true,patternOrders)):undefined;
   let controlToken:string|undefined;
   if(options?.orderTimeFlow){registerAcceptanceClockRoutes(app,f.runtime,auth,root);controlToken=await auth.beginAcceptanceControl(mintAcceptanceControlCode(secret));registerPatternRoomPriceRoutes(app,{authenticate:token=>auth.authenticate(token),root,service:new PatternRoomPriceService(db)});registerTodoRoutes(app,{authenticate:token=>auth.authenticate(token),root,service:todos!});}
-  registerDigitalIdentityRoutes(app,{service:new DigitalProductionIdentityService(db,true),creationEnabled:true,root,authenticate:token=>auth.authenticate(token),accessService:new DigitalProductionAccessService(db),taskService:new DigitalProductionTaskService(db,secret,options?.orderTimeModel),developmentService:new DigitalDevelopmentService(db,true,patternOrders),developmentExecution:new DevelopmentExecutionService(db,true,patternOrders),developmentAttachments:f.attachments,readinessService:new ProductionReadinessService(db),journeys:new DigitalJourneyQuery(db),seriesPlans:new SeriesPlanService(db,secret),shortLead:new ShortLeadService(db),...(orderTimeRequests?{orderTimeRequests,notificationService:notifications!,instructionService:new ProductionInstructionService(db,true),developmentRounds:new DevelopmentRoundService(db,true,patternOrders)}:{})});
+  registerDigitalIdentityRoutes(app,{service:new DigitalProductionIdentityService(db,true),creationEnabled:true,root,authenticate:token=>auth.authenticate(token),accessService:new DigitalProductionAccessService(db),taskService:new DigitalProductionTaskService(db,secret,options?.orderTimeModel),developmentService:new DigitalDevelopmentService(db,true,patternOrders),developmentExecution:new DevelopmentExecutionService(db,true,patternOrders),developmentAttachments:f.attachments,readinessService:new ProductionReadinessService(db),journeys:new DigitalJourneyQuery(db),...(options?.fullApp?{deliveryCalendar:new DeliveryCalendarQuery(db)}:{}),seriesPlans:new SeriesPlanService(db,secret),shortLead:new ShortLeadService(db),...(orderTimeRequests?{orderTimeRequests,notificationService:notifications!,instructionService:new ProductionInstructionService(db,true),developmentRounds:new DevelopmentRoundService(db,true,patternOrders)}:{})});
   // Unrelated navigation indicator is a clearly labelled TEST response.
   if(!options?.orderTimeFlow)app.get('/todos/mine/indicator',async(request,reply)=>{const user=await auth.authenticate(request.headers.cookie?.split(';').map(v=>v.trim()).find(v=>v.startsWith('dx_rework_session='))?.slice(18));reply.header('x-dx-rework-actor-id',user.id);return {pendingCount:0,unreadCount:0};});
   await app.ready();
@@ -68,8 +69,8 @@ export async function supplychainSettingsBrowser(url:string,evidence:string,opti
    const inject=async()=>await app.inject({method:method as 'GET'|'POST'|'PUT',url:path.slice(4),headers:{cookie:req.headers.cookie??'',...(req.headers['content-type']?{'content-type':req.headers['content-type']}:{}),...(key?{'idempotency-key':key}:{})},...(body?{payload:body}:{})});
    // Global collection routes have no resource ID for the ordinary guarded
    // clock hook. This owned TEST harness supplies an explicitly selected scene;
-   // authentication, current role and original todo/notification services run.
-   const result=collectionScene&&/^\/api\/(?:todos\/|digital-production\/notifications\/)/.test(path)?await f.runtime.run(collectionScene,f.root,inject):await inject();
+   // authentication, current role and original todo/notification/calendar services run.
+   const result=collectionScene&&/^\/api\/(?:todos\/|digital-production\/(?:notifications|delivery-calendar)\/)/.test(path)?await f.runtime.run(collectionScene,f.root,inject):await inject();
    requests.push({session,path,method,key,bodyHash:body?createHash('sha256').update(body).digest('hex'):null,status:result.statusCode});
    if(fault?.afterPublishRead&&path.endsWith('/sets/publish')&&result.statusCode===200)fault.failRead=true;
    if(fault?.afterWriteRead===path&&method==='POST'&&result.statusCode===200)fault.failRead=true;
