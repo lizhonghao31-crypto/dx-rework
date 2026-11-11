@@ -41,7 +41,22 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const {context,page}=await h.open();try{const actual=await h.read(page),originalUrl=page.url(),trigger=page.getByRole('button',{name:/时效待补充/}).first();await trigger.click();const dialog=page.getByRole('dialog',{name:'时效待补充'});await dialog.waitFor();expect(await dialog.locator('.cockpit-coverage-categories li').count()).toBe(7);expect(await dialog.locator('.cockpit-coverage-order-list').count()).toBe(0);
    for(const [i,key]of JOURNEY_COVERAGE_KEYS.entries()){const category=actual.supervision!.coverage.find(row=>row.key===key),button=dialog.locator('.cockpit-coverage-categories button').nth(i);expect(await button.innerText()).toContain(`${category?.orders??0} 单`);if(!category?.orders){expect(await button.isDisabled()).toBe(true);continue;}await button.click();await coverageReady(page);expect(await dialog.locator('.cockpit-coverage-heading').innerText()).toContain(`共 ${category.orders} 单`);await dialog.getByRole('button',{name:'返回分类',exact:true}).click();}
    const category=actual.supervision!.coverage.find(row=>row.orders>15)!;expect(category).toBeTruthy();const index=JOURNEY_COVERAGE_KEYS.indexOf(category.key);await dialog.locator('.cockpit-coverage-categories button').nth(index).click();await coverageReady(page);
-   const ids=new Set<string>();let total=0;for(let i=1;i<=Math.ceil(category.orders/15);i++){const result=await h.read(page,{missing:category.key,page:String(i)});expect(result.total).toBe(category.orders);const rows=dialog.locator('.cockpit-coverage-order-list li');expect(await rows.count()).toBe(result.items.length);for(const item of result.items){expect(await rows.filter({hasText:item.designStyleNo}).count()).toBe(1);ids.add(item.id);}total+=await rows.count();if(i*15<category.orders){await dialog.getByRole('button',{name:'下一页',exact:true}).click();await coverageReady(page);}}
+   const ids=new Set<string>();let total=0;
+   for(let i=1;i<=Math.ceil(category.orders/15);i++){
+    const result=await h.read(page,{missing:category.key,page:String(i)});expect(result.total).toBe(category.orders);
+    const rows=dialog.locator('.cockpit-coverage-order-list li');
+    // An independently fetched page is not proof that React has committed the
+    // dialog's own response. Compare the settled visible sequence, not a single
+    // instantaneous DOM count during the request/paint handoff.
+    await expect.poll(()=>rows.locator('strong').allTextContents(),{timeout:12000,message:`Visible coverage page ${i} must match the complete authorized native result`}).toEqual(result.items.map(item=>item.designStyleNo));
+    expect(await rows.count()).toBe(result.items.length);
+    for(const item of result.items){expect(await rows.filter({hasText:item.designStyleNo}).count()).toBe(1);ids.add(item.id);}
+    total+=await rows.count();
+    if(i*15<category.orders){
+     const response=page.waitForResponse(response=>{const target=new URL(response.url());return target.pathname.endsWith('/digital-production/journeys')&&target.searchParams.get('missing')===category.key&&target.searchParams.get('page')===String(i+1);});
+     await dialog.getByRole('button',{name:'下一页',exact:true}).click();expect((await response).status()).toBe(200);await coverageReady(page);
+    }
+   }
    expect(total).toBe(category.orders);expect(ids.size).toBe(category.orders);await dialog.getByRole('button',{name:'返回分类',exact:true}).click();expect(await dialog.locator('.cockpit-coverage-categories li').count()).toBe(7);await page.keyboard.press('Escape');await dialog.waitFor({state:'detached'});expect(page.url()).toBe(originalUrl);expect(await trigger.evaluate(el=>el===document.activeElement)).toBe(true);
    await page.goto(h.base+h.path({search:'',missing:'factory_date'}));await homeReady(page);const full=await h.read(page,{search:''});expect(await page.locator('.cockpit-applied-coverage').count()).toBe(1);await page.getByRole('button',{name:/订单总数/}).first().click();await homeReady(page);expect(new URL(page.url()).searchParams.has('missing')).toBe(false);expect(await page.locator('.cockpit-applied-coverage').count()).toBe(0);expect(await page.locator('.journey-orders [aria-label="分页"]').innerText()).toContain(`共 ${full.summary.all} 条`);
   }finally{await context.close();}
