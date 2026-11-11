@@ -75,22 +75,31 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   try{
    const page=tab.page;await page.locator('[data-view="order"][aria-busy="false"]').waitFor();
    const docs=page.locator('.journey-documents-panel');expect(await docs.getByRole('tab',{name:'开发',exact:true}).getAttribute('aria-selected')).toBe('true');
-   for(const key of ['development_plt','development_sizes','development_consumption'])await expect.poll(()=>docs.locator(`[data-category="${key}"]`).getAttribute('data-state')).toBe('created');
+   const readyDocument=async(key:string)=>{const item=docs.locator(`[data-category="${key}"]`);await docs.locator(`[data-category="${key}"][data-read-state="ready"]`).waitFor();expect(await item.getAttribute('data-state'),key+' after the real directory read completed').toBe('created');};
+   // Reproduce the actual asynchronous boundary without fake API data or a
+   // sleep: native artifact reads are held until the loading UI is checked.
+   let release=()=>{};const held=new Promise<void>(resolve=>{release=resolve;});
+   const artifactPath='**/execution/technical/history?*',requested=page.waitForRequest(request=>request.url().includes('/technical/history?')&&new URL(request.url()).searchParams.get('kind')==='artifacts');
+   await page.route(artifactPath,async route=>{if(new URL(route.request().url()).searchParams.get('kind')==='artifacts')await held;await route.continue();});
+   try{await page.reload({waitUntil:'domcontentloaded'});await requested;const loading=docs.locator('[data-category="development_plt"][data-read-state="loading"]');await loading.waitFor();expect(await loading.getAttribute('data-state')).toBe('unknown');expect(await loading.innerText()).toContain('读取中');expect(await loading.innerText()).not.toMatch(/已填|未填/);}
+   finally{release();await page.unroute(artifactPath);}
+
+   for(const key of ['development_plt','development_sizes','development_consumption'])await readyDocument(key);
    expect(await docs.locator('[data-category="customer_final_approval"]').count()).toBe(0);expect(await docs.locator('[data-category="factory_history"]').count()).toBe(0);
    await docs.locator('[data-category="development_plt"]').click();let dialog=page.getByRole('dialog',{name:'全部相关单据',exact:true});await dialog.waitFor();
-   await expect.poll(()=>dialog.innerText()).toContain('技术成果 v2');await dialog.locator('summary').filter({hasText:'技术成果 v1'}).click();
+   await dialog.getByText('技术成果 v2',{exact:false}).last().waitFor();await dialog.locator('summary').filter({hasText:'技术成果 v1'}).click();
    const original=dialog.getByRole('link',{name:'PLT纸样原件 1',exact:true}).last();await original.waitFor();expect(await original.getAttribute('href')).toContain('/sources/'+s.sourceId+'/development/attachments/'+firstFile);
    const downloaded=tab.context.waitForEvent('response',{predicate:response=>response.url().includes('/development/attachments/'+firstFile)}),opened=tab.context.waitForEvent('page');await original.click();expect((await downloaded).status()).toBe(302);await (await opened).close();
    await page.keyboard.press('Escape');await docs.getByRole('tab',{name:'产前',exact:true}).click();
-   for(const key of ['customer_comments','customer_final_approval'])await expect.poll(()=>docs.locator(`[data-category="${key}"]`).getAttribute('data-state')).toBe('created');
-   await docs.locator('[data-category="customer_comments"]').click();dialog=page.getByRole('dialog',{name:'全部相关单据',exact:true});await dialog.waitFor();await dialog.locator('summary').filter({hasText:'客户中间评语 v1'}).click();await expect.poll(()=>dialog.innerText()).toContain('TEST客户中间评语');expect(await dialog.innerText()).not.toContain('TEST客户最终认可');
+   for(const key of ['customer_comments','customer_final_approval'])await readyDocument(key);
+   await docs.locator('[data-category="customer_comments"]').click();dialog=page.getByRole('dialog',{name:'全部相关单据',exact:true});await dialog.waitFor();await dialog.locator('summary').filter({hasText:'客户中间评语 v1'}).click();await dialog.getByText('TEST客户中间评语',{exact:false}).last().waitFor();expect(await dialog.innerText()).not.toContain('TEST客户最终认可');
    await page.keyboard.press('Escape');await docs.getByRole('tab',{name:'开发',exact:true}).click();
    const failurePath='**/execution/technical/history?*';await page.route(failurePath,async route=>new URL(route.request().url()).searchParams.get('kind')==='comments'?route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{message:'TEST单项评语读取失败'}})}):route.continue());
-   await docs.locator('[data-category="development_plt"]').click();dialog=page.getByRole('dialog',{name:'全部相关单据',exact:true});await dialog.waitFor();await expect.poll(()=>dialog.innerText()).toContain('技术成果 v2');await page.keyboard.press('Escape');
-   await docs.getByRole('tab',{name:'产前',exact:true}).click();await expect.poll(()=>docs.locator('[data-category="customer_comments"]').getAttribute('data-read-state')).toBe('error');expect(await docs.locator('[data-category="customer_comments"]').innerText()).toContain('读取失败');
-   const refreshedFailure=page.waitForResponse(response=>response.url().includes('/technical/history?')&&new URL(response.url()).searchParams.get('kind')==='comments'&&response.status()===503);await docs.locator('[data-category="customer_comments"]').click();dialog=page.getByRole('dialog',{name:'全部相关单据',exact:true});await dialog.waitFor();await refreshedFailure;await dialog.getByRole('button',{name:'重试读取目录',exact:true}).waitFor();await page.unroute(failurePath);await dialog.getByRole('button',{name:'重试读取目录',exact:true}).click();await expect.poll(()=>dialog.innerText()).toContain('客户中间评语 v1');await page.keyboard.press('Escape');
+   await docs.locator('[data-category="development_plt"]').click();dialog=page.getByRole('dialog',{name:'全部相关单据',exact:true});await dialog.waitFor();await dialog.getByText('技术成果 v2',{exact:false}).last().waitFor();await page.keyboard.press('Escape');
+   await docs.getByRole('tab',{name:'产前',exact:true}).click();await docs.locator('[data-category="customer_comments"][data-read-state="error"]').waitFor();expect(await docs.locator('[data-category="customer_comments"]').innerText()).toContain('读取失败');
+   const refreshedFailure=page.waitForResponse(response=>response.url().includes('/technical/history?')&&new URL(response.url()).searchParams.get('kind')==='comments'&&response.status()===503);await docs.locator('[data-category="customer_comments"]').click();dialog=page.getByRole('dialog',{name:'全部相关单据',exact:true});await dialog.waitFor();await refreshedFailure;await dialog.getByRole('button',{name:'重试读取目录',exact:true}).waitFor();await page.unroute(failurePath);await dialog.getByRole('button',{name:'重试读取目录',exact:true}).click();await dialog.getByText('客户中间评语 v1',{exact:false}).last().waitFor();await page.keyboard.press('Escape');
    await docs.getByRole('tab',{name:'开发',exact:true}).click();
-   for(const key of ['development_plt','development_sizes','development_consumption'])await expect.poll(()=>docs.locator(`[data-category="${key}"]`).getAttribute('data-state')).toBe('created');
+   for(const key of ['development_plt','development_sizes','development_consumption'])await readyDocument(key);
    for(const width of [1585,1165]){
     await page.setViewportSize({width,height:992});
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
