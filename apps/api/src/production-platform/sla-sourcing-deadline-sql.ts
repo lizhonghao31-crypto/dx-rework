@@ -15,6 +15,7 @@ export function sourcingAppliedDeadlineSql(alias: string) {
    WHERE original.entity_type='sourcing_case' AND original.entity_id=${alias}.entity_id AND original.category=${alias}.category AND original.todo_type='business_action'
    ORDER BY original.created_at,original.todo_id LIMIT 1) first_transition ON true
  WHERE ${alias}.entity_type='sourcing_case' AND link.module='sourcing' AND link.child_id::text=${alias}.entity_id
+   AND NOT EXISTS(SELECT 1 FROM operation_events own_window WHERE own_window.event_id=${alias}.created_operation_event_id AND own_window.after_state->'slaTiming'->'orderTime'->>'version'='1')
    AND ((application.payload->'parameterKeys' ? (${parameter})) OR (application.payload->'parameterKeys' ? 'warning_ratio'))
    AND NOT(application.payload->'completedWindows' ? ('sourcing:'||${alias}.entity_id||':'||${alias}.category))
  ORDER BY snapshot.revision DESC LIMIT 1)`;

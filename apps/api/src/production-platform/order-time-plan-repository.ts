@@ -3,6 +3,7 @@ import type {PoolClient} from 'pg';
 import {validateBusinessTime,type BusinessTime,type BusinessTimeScope} from '@dx-rework/domain/business-clock';
 import type {SlaAnchor} from '@dx-rework/domain/digital-sla-plan';
 import {FrozenOrderTimePlanSchema,type FrozenOrderTimePlan} from '@dx-rework/contracts/order-time-plan';
+import {orderTimeRule} from '@dx-rework/contracts/order-time-plan';
 import {fixedTimelineIdentity} from './fixed-timeline-identity.js';
 import {SlaVersionConflict,SlaIdempotencyConflict} from './sla-configuration-repository.js';
 import {evaluateOrderTimeScenario,type OrderTimeScope,type OrderTimeWork} from './order-time-schedule.js';
@@ -39,7 +40,21 @@ export class OrderTimePlanRepository{
   return row?saved(row):null;
  }
  async confirm(input:{resource:BusinessTimeScope;expectedRevision:number;value:OrderTimeInput;actorId:string;eventRef:string;time:BusinessTime;requestKey:string}):Promise<StoredOrderTimePlan>{
-  return this.append(input,'arrangement');
+  const previous=await this.current(input.resource),result=await this.append(input,'arrangement');
+  if(!previous||result.revision<=previous.revision)return result;
+  const keys=new Set([...Object.keys(previous.input.plan.overrides),...Object.keys(result.input.plan.overrides)]),changed=Object.fromEntries([...keys].filter(key=>fixedTimelineIdentity(orderTimeRule(previous.input.plan,key)?.rule??null)!==fixedTimelineIdentity(orderTimeRule(result.input.plan,key)?.rule??null)).flatMap(key=>{const rule=orderTimeRule(result.input.plan,key)?.rule;return rule?[[key,rule]]:[];}));
+  if(!Object.keys(changed).length)return result;
+  const row=(await this.db.query(`SELECT source_id,production_order_id FROM digital_production_orders WHERE ${input.resource.kind==='source'?'source_id':'production_order_id'}=$1`,[input.resource.id])).rows[0];
+  const linked:BusinessTimeScope|null=input.resource.kind==='source'?row?.production_order_id?{kind:'order',id:row.production_order_id}:null:row?.source_id?{kind:'source',id:row.source_id}:null;
+  const counterpart=linked?await this.current(linked):null;
+  // Only one actually linked order/source with the same original counterpart
+  // shares future settings. Independent historical adoptions are not merged.
+  if(!linked||!counterpart||fixedTimelineIdentity(counterpart.input.plan.company)!==fixedTimelineIdentity(result.input.plan.company))return result;
+  const updates=Object.fromEntries(Object.entries(changed).filter(([key,rule])=>fixedTimelineIdentity(orderTimeRule(counterpart.input.plan,key)?.rule??null)!==fixedTimelineIdentity(rule)));
+  if(!Object.keys(updates).length)return result;
+  const value=structuredClone(counterpart.input);value.plan={...value.plan,revision:value.plan.revision+1,overrides:{...value.plan.overrides,...updates}};
+  await this.append({resource:linked,expectedRevision:counterpart.revision,value,actorId:input.actorId,eventRef:input.eventRef,time:input.time,requestKey:'order-time:linked:'+fixedTimelineIdentity([input.requestKey,linked])},'arrangement');
+  return result;
  }
  private async append(input:{resource:BusinessTimeScope;expectedRevision:number;value:OrderTimeInput;actorId:string;eventRef:string;time:BusinessTime;requestKey:string},kind:'arrangement'|'customer_date_change',changedScopes:ReadonlySet<string>=new Set()):Promise<StoredOrderTimePlan>{
   if(!await this.available())throw Error('本单时间方案迁移尚未完成');
@@ -78,6 +93,26 @@ export class OrderTimePlanRepository{
   // This evaluation uses creation/confirmation as a planning assumption only;
   // it neither fabricates readiness nor stores its expected end as an actual.
   const targets:Targets=structuredClone(previous?.targets??{});
+  if(!previous&&resource.kind==='order'){
+   const sourceId=(await this.db.query('SELECT source_id FROM digital_production_orders WHERE production_order_id=$1',[resource.id])).rows[0]?.source_id;
+   const sourcePlan=sourceId?await this.current({kind:'source',id:sourceId}):null;
+   if(sourcePlan){
+    if(fixedTimelineIdentity(sourcePlan.input.plan.company)!==fixedTimelineIdentity(value.plan.company))throw Error('正式订单必须保留开发来源已采用的公司标准');
+    const sourceWork=new Map(sourcePlan.input.work.map(work=>[work.canonicalWorkRef??work.id,work]));
+    for(const scope of value.scopes){
+     const kept:Record<string,FixedTimelineTarget>={};
+     for(const work of value.work){
+      const original=sourceWork.get(work.canonicalWorkRef??work.id);
+      if(!original||original.parameterKey!==work.parameterKey||original.canonicalWorkRef!==work.canonicalWorkRef)continue;
+      const candidates=Object.values(sourcePlan.targets).flatMap(rows=>rows[original.id]?[rows[original.id]!]:[]),unique=new Map(candidates.map(target=>[fixedTimelineIdentity(target),target]));
+      // Independent development has one genuine prior promise. Preserve it on
+      // conversion; ambiguous per-PO history must not borrow another PO's B.
+      if(unique.size===1)kept[work.id]={...structuredClone([...unique.values()][0]!),id:work.id};
+     }
+     if(Object.keys(kept).length)targets[scope.scopeRef]=kept;
+    }
+   }
+  }
   for(const scope of value.scopes){
    const kept=changedScopes.has(scope.scopeRef)?undefined:targets[scope.scopeRef];
    const evaluated=evaluateOrderTimeScenario({...value,start:{precision:'instant',value:time.now,source:input.eventRef},scopes:[scope],...(kept?{fixedTargets:kept}:{})})[0]!;
@@ -103,6 +138,8 @@ export class OrderTimePlanRepository{
    const old=scope.customerGoal;
    if(old.precision==='date'?old.value!==row.old_date:old.precision!=='unknown'||row.old_date!==null)throw Error('本单客户目标与批准改期链不连续');
    const goal:SlaAnchor={precision:'date',value:row.new_date,source:`digital_po_date_changes:${row.change_id}`};
+   const advance=orderTimeRule(value.plan,'ship_sample_advance')?.rule;
+   if(scope.shipSample)scope.shipSample.advanceDays=advance?.kind==='offset'?advance.days:null;
    scope.customerGoal=goal;scope.goals={...scope.goals,...Object.fromEntries(scope.customerGoalIds.map(id=>[id,goal]))};changed.add(scope.scopeRef);
   }
   if(!changed.size)return previous;

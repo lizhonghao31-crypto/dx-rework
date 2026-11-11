@@ -1,4 +1,5 @@
 import {ShortLeadWorkspace} from './short-lead-workspace.js';
+import {OrderTimeRequestPage} from './order-time-request-page.js';
 import {CurrentProductionReturn} from './development-workspace-return.js';
 import {AcceptanceClockPanel} from './acceptance-clock-panel.js';
 import {TodoReadBoundary} from './todo-content-read.js';
@@ -78,6 +79,7 @@ function OrderDetail({ id }: { id: string }) {
       <a className="dx-button dx-button--secondary" href={detailUrl("bulk", id)}>产前准备</a>
       <a className="dx-button dx-button--secondary" href={detailUrl("factory", id)}>裁后工艺与发厂</a>
       <a className="dx-button dx-button--secondary" href={detailUrl("closure", id)}>回货与结案</a>
+      {(access.manage||access.roles.some(role=>['sample_designer','order_merchandiser'].includes(role)))&&<a className="dx-button dx-button--secondary" href={detailUrl('timeOrder',id)}>本单时效</a>}
       {order.sourceId && <a className="dx-button dx-button--secondary" href={detailUrl("development", order.sourceId)}>查看开发单</a>}
     </div>
     <Surface className="digital-mother-readonly"><p>{order.sourceId ? "已关联开发来源" : "待提交开发单 · 未设时限"} · 主跟单：{order.primaryMerchandiserId ? "已指派" : "待指派"}</p>
@@ -141,6 +143,9 @@ function DigitalProductionPageContent() {
   switch (route.kind) {
     case "landing": detail = <LegacyLanding />; break;
     case "invalid": detail = <><Button onClick={() => void closeDetail()}>返回</Button><p role="alert">{route.message}</p></>; break;
+    case "timeRequest": detail = <OrderTimeRequestPage key={route.id} requestId={route.id} onClose={()=>void closeDetail()}/>; break;
+    case "timeOrder": detail = <OrderTimeRequestPage key={route.id} resource={{kind:'order',id:route.id}} onClose={()=>void closeDetail()}/>; break;
+    case "timeSource": detail = <OrderTimeRequestPage key={route.id} resource={{kind:'source',id:route.id}} onClose={()=>void closeDetail()}/>; break;
     case "shortLead": detail = <ShortLeadWorkspace key={route.id} sourceId={route.id} onClose={()=>void closeDetail()}/>; break;
     case "closure": detail = <OrderClosurePanel orderId={route.id} onClose={() => void closeDetail()} />; break;
     case "factory": detail = <FactoryFlowPanel orderId={route.id} onClose={() => void closeDetail()} />; break;
@@ -152,5 +157,5 @@ function DigitalProductionPageContent() {
     case "development": detail = <OrderDocumentContainer key={`development:${route.id}:${route.version}`} initial={{kind:"development",id:route.id,version:route.version}} onClose={() => void closeDetail()} />; break;
     case "task": detail = <TaskDetail id={route.id} />; break;
   }
-  return <div className="pattern-orders digital-production"><CurrentProductionReturn/>{route.kind!=="landing"&&route.kind!=="invalid"&&<AcceptanceClockPanel resourceId={route.id}/>}{detail}</div>;
+  return <div className="pattern-orders digital-production"><CurrentProductionReturn/>{route.kind!=="landing"&&route.kind!=="invalid"&&route.kind!=='timeRequest'&&<AcceptanceClockPanel resourceId={route.id}/>}{detail}</div>;
 }

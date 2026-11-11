@@ -24,8 +24,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   await dialog.getByRole('combobox',{name:label,exact:true}).fill(name);await dialog.getByRole('option',{name,exact:true}).click();
  };
  beforeAll(async()=>{
-  // A future-enabled integration in this owned TEST server only. The ordinary
-  // application default remains off until the R5-07 adoption chain is present.
+  // Explicitly enabled owned TEST settings server; adoption is exercised by
+  // the separate complete original-App order-time request flow.
   h=await supplychainSettingsBrowser(url!,process.env.R5_SETTINGS_NATIVE_EVIDENCE??join(process.env.RUNNER_TEMP??tmpdir(),'r5-settings-'+randomUUID()),{fullApp:true,orderTimeModel:true});
   standards=new OrderTimeSettingsService(h.db,true);await standards.save(h.f.root,{expectedVersion:0,values:r5OneHourConfiguration()},randomUUID());
   secondaryA=await h.dedicated('order_merchandiser','TEST 副跟单甲');secondaryB=await h.dedicated('order_merchandiser','TEST 副跟单乙');

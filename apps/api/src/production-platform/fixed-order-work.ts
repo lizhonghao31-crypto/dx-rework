@@ -20,12 +20,14 @@ export function fixedOrderWork(initial:FixedWorkInputs,orderId:string,sourceId:s
    for(const node of used)work.push({...structuredClone(node),id:`source:${node.id}`,dependsOn:node.dependsOn.map(id=>`source:${id}`),
     ...(node.includedIn?{includedIn:`source:${node.includedIn}`}:{ }),accountingRole:'shared_reference'});
    const end=source.route?.at(-1)?.nodeId;if(end)sourceEnd=`source:${end}`;
-  }else{
+  }else if(!initial.data.orderTimePlan){
    // A legacy source is a reference to its own original scope, never a newly
    // performed copy or a reset employee clock. Its missing original B stays so.
    add('source_confirmation','source_confirmation',[],{minutes:0,calendar:null,planningParameterRef:null,responsibilitySlaRef:null,
     canonicalWorkRef:`source:${sourceId}:round:${sourceRound}:confirmation`,accountingRole:'shared_reference'});sourceEnd='source_confirmation';
   }
+  // A new direct formal order has no independent development route. Do not
+  // invent a legacy confirmation node and make every real successor unknown.
   add('customer_confirmation','customer_confirmation',[],{minutes:0,calendar:null,accountingRole:'event'});
   add('budget','budget',['customer_confirmation']);
   add('production_sheet','production_sheet',['customer_confirmation',...(sourceEnd?[sourceEnd]:[])]);
@@ -36,8 +38,8 @@ export function fixedOrderWork(initial:FixedWorkInputs,orderId:string,sourceId:s
   add('bulk_cutting','bulk_cutting',['bulk_pattern',preshrink==='需要预缩'?'warehouse_preshrink':'fabric_inspection','sourcing_approval']);
   let previous='bulk_cutting';
   for(const step of craftSteps){
-   const key=`bulk_${step.craftKind}`,node=add(key,key,[previous]);
-   const qc=add(`bulk_qc:${step.stepId}`,'bulk_qc',[node.id]);previous=qc.id;
+   const key=`bulk_${step.craftKind}`,node=add(initial.data.orderTimePlan?`${key}:${step.stepId}`:key,key,[previous],initial.data.orderTimePlan?{canonicalWorkRef:`order:${orderId}:step:${step.stepId}:work`}:{});
+   const qc=add(`bulk_qc:${step.stepId}`,'bulk_qc',[node.id],initial.data.orderTimePlan?{canonicalWorkRef:`order:${orderId}:step:${step.stepId}:qc`}:{});previous=qc.id;
    route.push({kind:'process_logistics',position:route.length,nodeId:node.id,stepId:step.stepId,phase:'logistics'});
    route.push({kind:'bulk_qc',position:route.length,nodeId:qc.id,stepId:step.stepId,phase:'qc'});
   }

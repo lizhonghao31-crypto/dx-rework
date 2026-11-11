@@ -58,6 +58,7 @@ export class TodoTimingService {
       `SELECT todo.todo_id
        FROM rework_todos todo
        JOIN todo_policies policy ON policy.policy_key=todo.policy_key AND policy.enabled=true
+       LEFT JOIN operation_events creation ON creation.event_id=todo.created_operation_event_id
        LEFT JOIN rework_orders order_record
          ON order_record.rework_order_id=COALESCE(
            NULLIF(todo.route_descriptor->>'reworkOrderId','')::uuid,
@@ -67,6 +68,14 @@ export class TodoTimingService {
          AND ($3::uuid[] IS NULL OR todo.todo_id=ANY($3::uuid[]))
          AND (order_record.rework_order_id IS NULL OR order_record.status<>'deleted')
          AND (
+           (creation.after_state->'slaTiming'->'orderTime'->>'version'='1'
+             AND creation.after_state->'slaTiming'->'orderTime'->>'notificationEnabled'='true'
+             AND COALESCE($2::timestamptz,CURRENT_TIMESTAMP)>=(creation.after_state->'slaTiming'->'orderTime'->>'warningAt')::timestamptz
+             AND COALESCE($2::timestamptz,CURRENT_TIMESTAMP)<${effectiveDue}
+             AND NOT EXISTS(SELECT 1 FROM operation_events warning WHERE warning.action='todo.remind'
+               AND warning.after_state->>'orderTimeWindowRef'=creation.after_state->'slaTiming'->'orderTime'->>'eventRef'
+               AND warning.after_state->>'recipientUserId'=todo.recipient_user_id::text))
+           OR
            (todo.reminder_count<policy.max_reminders AND (
              (todo.reminder_count=0
                AND COALESCE($2::timestamptz,CURRENT_TIMESTAMP)>=${effectiveDue}

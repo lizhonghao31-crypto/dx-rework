@@ -7,6 +7,7 @@ import type { TrustedActorContext } from "../tools/repositories.js";
 import { DigitalProductionAccessPolicy } from "./access-policy.js";
 import { recordSlaPoDateChange } from "./sla-po-date-adapter.js";
 import type { BusinessClock } from "@dx-rework/domain/business-clock";
+import {approvedOrderTimePoCreation} from './order-time-admission.js';
 
 type Database = Pick<PoolClient, "query">;
 export type PoDateChange = { lineId: string; date: string; expectedVersion: number };
@@ -24,9 +25,10 @@ export class DigitalPoDateRepository {
       conflict("请选择不重复的明确 PO");
     const kind = source === "approved_factory_change" ? "factory" : "customer";
     const policy = new DigitalProductionAccessPolicy(this.db);
+    const admitted=source==='initial_po'&&!isRootActor(actor)&&await approvedOrderTimePoCreation(this.db,actor,orderId);
     if (!isRootActor(actor)) {
       const permitted = source === "initial_po"
-        ? actor.actorRoles.includes("sample_designer") && await policy.activeRole(actor.actorId,"sample_designer")
+        ? actor.actorRoles.includes("sample_designer") && await policy.activeRole(actor.actorId,"sample_designer")||admitted
         : source === "approved_customer_change"
           ? (actor.actorRoles.includes("production_management") && await policy.activeRole(actor.actorId,"production_management")
             || actor.actorRoles.includes("owner_group") && await policy.activeRole(actor.actorId,"owner_group"))
@@ -47,7 +49,7 @@ export class DigitalPoDateRepository {
     }
     const order = (await this.db.query("SELECT created_by FROM digital_production_orders WHERE production_order_id=$1 FOR UPDATE",[orderId])).rows[0];
     if (!order) conflict("母单不存在");
-    if (source === "initial_po" && !isRootActor(actor) && order.created_by !== actor.actorId)
+    if (source === "initial_po" && !isRootActor(actor) && order.created_by !== actor.actorId&&!admitted)
       throw new ApplicationError("FORBIDDEN","不能登记其他设计师的订单交期",403);
     const approval = (await this.db.query("SELECT * FROM audit_events WHERE id=$1",[approvalEventId])).rows[0];
     const action = source === "initial_po" ? "digital_order_created"
@@ -72,7 +74,7 @@ export class DigitalPoDateRepository {
       const customer = kind === "customer" ? change.date : line.customer;
       const factory = kind === "factory" ? change.date : line.factory;
       if (customer && factory && factory > customer) conflict("加工厂交货日不能晚于出货日期");
-      const reason = source === "initial_po" ? "设计师逐 PO 登记出货日期" : approval.after_state?.reason;
+      const reason = source === "initial_po" ? admitted?'本单时效申请生效时登记出货日期':"设计师逐 PO 登记出货日期" : approval.after_state?.reason;
       if (typeof reason !== "string" || !reason.trim() || reason.length > 500) conflict("审批必须保留交期变更原因");
       await this.db.query(`INSERT INTO digital_po_date_changes(change_id,production_order_id,line_id,date_kind,old_date,new_date,version,source,approval_event_id,changed_by,request_id,reason)
         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,

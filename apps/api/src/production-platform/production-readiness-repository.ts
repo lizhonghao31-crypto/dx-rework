@@ -6,6 +6,9 @@ import {bulkFabricFacts} from './bulk-fabric-facts.js';
 import {developmentDocumentRow} from './development-round-repository.js';
 import {effectiveTechnicalEvidence} from './development-technical-repository.js';
 import {preparationAdoption,preparationAvailable,preparationContext,preparationHash,preparationIso,currentPreparationMaterials,preparationMaterialHistory,type PreparationDB} from './preparation-material-repository.js';
+import {orderTimePolicyAt} from './order-time-native-timing.js';
+import {orderTimeRule} from '@dx-rework/contracts/order-time-plan';
+import {shiftFixedTimeline} from './fixed-timeline-targets.js';
 
 /** Shared by original instruction commands, bulk gates, SLA and the UI. Reads never start clocks or adopt a plan. */
 export async function productionReadiness(db:PreparationDB,orderId:string){
@@ -49,11 +52,17 @@ export async function refreshPreparationWindows(db:PreparationDB,orderId:string)
  const receiptExists=(await db.query(`SELECT 1 FROM digital_preparation_material_versions m JOIN digital_production_orders o ON o.production_order_id=$1 WHERE m.kind='fabric_receipt' AND ((m.resource_kind='order' AND m.resource_id=o.production_order_id) OR (m.resource_kind='source' AND m.resource_id=o.source_id)) UNION ALL SELECT 1 FROM digital_production_task_events WHERE resource_kind='order' AND resource_id=$1 AND event_kind='bulk_fabric_report' LIMIT 1`,[orderId])).rowCount;
  if(!receiptExists)return;
  const state=await productionReadiness(db,orderId);if(!state.adoption)return;
+ const managed=(await db.query("SELECT to_jsonb(o)->>'order_time_managed' AS managed FROM digital_production_orders o WHERE production_order_id=$1",[orderId])).rows[0]?.managed==='true';
  for(const [kind,at,minutes] of [['draft',state.receiptAt,state.adoption.standards.draftMinutes],['final',!state.finalReasons.length?state.readyAt:null,state.adoption.standards.finalMinutes]] as const){
   if(!at||kind==='draft'&&state.adoption.standards.retainedDraftVersion>0||kind==='final'&&state.adoption.standards.retainedInstructionVersion&&state.adoption.standards.retainedTechnicalRevision===state.technical?.revision)continue;
+  const chosen=managed?await orderTimePolicyAt(db,{kind:'order',id:orderId},at):null,rule=chosen?orderTimeRule(chosen.plan,'production_sheet')?.rule:null;
+  const quota=chosen?rule?.kind==='work'?rule.minutes:null:minutes,calendar=chosen?rule?.calendar??null:'continuous';
+  if(quota===null||!calendar)continue;
+  const dueAt=shiftFixedTimeline(at,quota,calendar),basis={readinessRevision:state.revision,technicalRevision:state.technical?.revision??null,receipt:state.receipt?[state.receipt.recordId,state.receipt.version]:null,
+   ...(chosen?{orderTimePlanRef:chosen.id,calendarRef:calendar,warningPercent:rule!.reminder.percent,notificationEnabled:rule!.reminder.enabled}:{})};
   await db.query(`INSERT INTO digital_preparation_windows(window_id,production_order_id,kind,epoch,adoption_id,started_at,due_at,minutes,basis_json)
-   VALUES($1,$2,$3,1,$4,$5,$5::timestamptz+$6*interval '1 minute',$6,$7) ON CONFLICT(production_order_id,kind,epoch) DO NOTHING`,
-   [randomUUID(),orderId,kind,state.adoption.adoption_id,at,minutes,JSON.stringify({readinessRevision:state.revision,technicalRevision:state.technical?.revision??null,receipt:state.receipt?[state.receipt.recordId,state.receipt.version]:null})]);
+   VALUES($1,$2,$3,1,$4,$5,$6,$7,$8) ON CONFLICT(production_order_id,kind,epoch) DO NOTHING`,
+   [randomUUID(),orderId,kind,state.adoption.adoption_id,at,dueAt,quota,JSON.stringify(basis)]);
  }
 }
 export async function recordInstructionWork(db:PreparationDB,actorId:string,orderId:string,kind:'draft_saved'|'published',version:number,basis:unknown={}){
@@ -63,16 +72,20 @@ export async function recordInstructionWork(db:PreparationDB,actorId:string,orde
  await db.query(`INSERT INTO digital_preparation_instruction_events(event_id,production_order_id,kind,instruction_version,occurred_at,actor_id,body)
   VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(production_order_id,kind,instruction_version) DO NOTHING`,[randomUUID(),orderId,kind,version,businessNow().toISOString(),actorId,JSON.stringify(basis)]);
 }
-export async function preparationWindow(db:PreparationDB,orderId:string,kind:'draft'|'final',reasons:string[]=[]):Promise<PreparationWindow>{
+export async function readPreparationWindow(db:PreparationDB,orderId:string,kind:'draft'|'final',reasons:string[]=[]){
  const empty:PreparationWindow={startedAt:null,dueAt:null,completedAt:null,minutes:null,reason:null,status:'waiting'};
- if(!await preparationAvailable(db))return empty;
+ if(!await preparationAvailable(db))return {window:empty,basis:null};
  const row=(await db.query('SELECT * FROM digital_preparation_windows WHERE production_order_id=$1 AND kind=$2 ORDER BY epoch DESC LIMIT 1',[orderId,kind])).rows[0];
 
  const completion=(await db.query(`SELECT occurred_at FROM digital_preparation_instruction_events WHERE production_order_id=$1 AND kind=$2 ORDER BY instruction_version,occurred_at LIMIT 1`,[orderId,kind==='draft'?'draft_saved':'published'])).rows[0];
- if(!row)return {...empty,completedAt:preparationIso(completion?.occurred_at),status:completion?'unknown':'waiting',reason:reasons.length?reasons.join('；'):'尚无可信起点，不以创建或读取时间代替'};
+ if(!row)return {window:{...empty,completedAt:preparationIso(completion?.occurred_at),status:completion?'unknown' as const:'waiting' as const,reason:reasons.length?reasons.join('；'):'尚无可信起点，不以创建或读取时间代替'},basis:null};
  const startedAt=preparationIso(row.started_at),dueAt=preparationIso(row.due_at),completedAt=preparationIso(completion?.occurred_at);
- return {startedAt,dueAt,completedAt,minutes:row.minutes,reason:!completedAt&&reasons.length?reasons.join('；'):completedAt&&startedAt&&completedAt<startedAt?'已提前办理，保留真实发生时间':null,
+ const window:PreparationWindow={startedAt,dueAt,completedAt,minutes:row.minutes,reason:!completedAt&&reasons.length?reasons.join('；'):completedAt&&startedAt&&completedAt<startedAt?'已提前办理，保留真实发生时间':null,
   status:!startedAt||!dueAt?'unknown':completedAt?completedAt<=dueAt?'completed_on_time':'completed_late':businessNow().toISOString()>dueAt?'overdue':'running'};
+ return {window,basis:row.basis_json};
+}
+export async function preparationWindow(db:PreparationDB,orderId:string,kind:'draft'|'final',reasons:string[]=[]):Promise<PreparationWindow>{
+ return (await readPreparationWindow(db,orderId,kind,reasons)).window;
 }
 export async function instructionTechnicalCurrent(db:PreparationDB,orderId:string,instructionVersion:number,technicalRevision:string|null){
  const adoption=await preparationAdoption(db,{kind:'order',id:orderId});if(!adoption)return true;

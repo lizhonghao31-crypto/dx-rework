@@ -5,7 +5,7 @@ export type NotificationTask={task_id:string;production_order_id:string|null;sou
 export type SlaNotificationPreference={warning:boolean;shipSample:boolean};
 const original:SlaNotificationPreference={warning:true,shipSample:true};
 const uuid=(value:unknown):value is string=>typeof value==='string'&&/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(value);
-const basis=(task:NotificationTask)=>task.sla_basis&&typeof task.sla_basis==='object'?task.sla_basis as {snapshotId?:unknown;targets?:Array<{sent?:boolean;dueAt?:string|null;notificationEnabled?:boolean}>}:null;
+const basis=(task:NotificationTask)=>task.sla_basis&&typeof task.sla_basis==='object'?task.sla_basis as {snapshotId?:unknown;orderTimePlanRef?:unknown;notificationEnabled?:boolean;targets?:Array<{sent?:boolean;dueAt?:string|null;notificationEnabled?:boolean}>}:null;
 const preference=(parameters:Record<string,{value?:{notificationEnabled?:boolean}}> |null|undefined):SlaNotificationPreference=>({warning:parameters?.warning_ratio?.value?.notificationEnabled!==false,shipSample:parameters?.ship_sample_advance?.value?.notificationEnabled!==false});
 
 /** Flags follow the same original or explicitly adopted snapshot as the task.
@@ -22,7 +22,8 @@ export async function slaNotificationPreferences(db:Database,tasks:readonly Noti
  for(const task of tasks){
   const candidate=bySnapshot.get(basis(task)?.snapshotId),adopted=candidate&&(task.production_order_id?candidate.production_order_id===task.production_order_id:task.source_id&&candidate.source_id===task.source_id)?candidate:null;
   const row=adopted??(task.production_order_id?byOrder.get(task.production_order_id):null)??(task.source_id?bySource.get(task.source_id):null);
-  result.set(task.task_id,preference(row?.parameters_json));
+  const flags=preference(row?.parameters_json),own=basis(task);
+  result.set(task.task_id,own?.orderTimePlanRef&&typeof own.notificationEnabled==='boolean'?{...flags,warning:own.notificationEnabled}:flags);
  }
  return result;
 }

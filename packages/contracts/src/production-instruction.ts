@@ -93,6 +93,7 @@ export function instructionErrors(doc: InstructionDocument, order: DigitalOrder)
   return errors;
 }
 export type InstructionSheet = {
+  orderTimeEnabled?:boolean;
   timelineSchemaVersion?:2;
   technicalSizeTable?:TechnicalSizeTable;
   readiness?:ProductionReadinessState;

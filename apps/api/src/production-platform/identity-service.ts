@@ -21,6 +21,8 @@ import { ApplicationError } from "../platform/errors.js";
 import { DigitalProductionAccessPolicy, isDigitalLeader, isDigitalManagementReader, isDigitalTechnicalManager, digitalForbidden } from "./access-policy.js";
 import { ProductionOrderRootRepository } from "./order-root-repository.js";
 import {ensureQuotationBudget} from './quotation-budget-basis.js';
+import {acceptsNewOrderTime,approvedOrderTimeSource,approvedOrderTimeCreation,orderTimeAdmission,bindOrderTimeOrder} from './order-time-admission.js';
+import {automaticOrderTime} from './order-time-automatic.js';
 
 const fail = (message: string, status = 409): never => { throw new ApplicationError(status === 404 ? "NOT_FOUND" : status === 403 ? "FORBIDDEN" : "DIGITAL_PRODUCTION_CONFLICT", message, status); };
 const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -44,7 +46,8 @@ const readScope = (kind: "order" | "source", alias: string) => {
     )`;
 };
 export class DigitalProductionIdentityService {
-  constructor(private readonly database: Pool, private readonly creationEnabled: boolean, private readonly sourcing?:SourcingService, private readonly now:()=>Date=()=>new Date(), private readonly businessClock?: BusinessClock) {}
+  constructor(private readonly database: Pool, private readonly creationEnabled: boolean, private readonly sourcing?:SourcingService, private readonly now:()=>Date=()=>new Date(), private readonly businessClock?: BusinessClock,private readonly transactionClient?:PoolClient) {}
+  inTransaction(client:PoolClient){return new DigitalProductionIdentityService(this.database,this.creationEnabled,this.sourcing,this.now,this.businessClock,client);}
   private async visibleOrder(client: Pick<Pool, "query"> | PoolClient, actor: TrustedActorContext, id: string, lock = false) {
     await new DigitalProductionAccessPolicy(client).assert(actor, "order", id, "technical");
     const result = await client.query(`SELECT o.* FROM digital_production_orders o WHERE production_order_id=$1 ${lock ? "FOR UPDATE" : ""}`, [id]);
@@ -58,11 +61,11 @@ export class DigitalProductionIdentityService {
   private async command<T>(actor: TrustedActorContext, command: string, key: string, payload: unknown, execute: (client: PoolClient) => Promise<T>): Promise<T> {
     assertIdentityActor(actor);
     if (!/^[A-Za-z0-9._:-]{1,128}$/.test(key)) fail("缺少有效操作标识", 400);
-    const client = await this.database.connect();
+    const client = this.transactionClient??await this.database.connect();
     try {
       const initialAdoption=newTimelineAdoptionMode(this.database)==='fixed_v2'
         &&(command==='create-source'||command==='direct-order'||command.startsWith('confirm-source:'));
-      await client.query(initialAdoption?'BEGIN ISOLATION LEVEL REPEATABLE READ':'BEGIN');
+      if(!this.transactionClient)await client.query(initialAdoption?'BEGIN ISOLATION LEVEL REPEATABLE READ':'BEGIN');
       if(command.startsWith("numbers:")||command.startsWith("confirm-source:")||command.startsWith('attach-source:'))await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [JSON.stringify([actor.actorId, command, key])]);
       const hash = digest(payload);
@@ -72,15 +75,15 @@ export class DigitalProductionIdentityService {
         const saved = prior.rows[0].response as { productionOrderId?: string; sourceId?: string };
         if (saved.productionOrderId) await this.visibleOrder(client, actor, saved.productionOrderId);
         else if (saved.sourceId) await this.visibleSource(client, actor, saved.sourceId);
-        await client.query("COMMIT");
+        if(!this.transactionClient)await client.query("COMMIT");
         return prior.rows[0].response as T;
       }
       const response = await execute(client);
       await client.query("INSERT INTO digital_production_commands(actor_id,command,key,payload_hash,response) VALUES($1,$2,$3,$4,$5)", [actor.actorId, command, key, hash, JSON.stringify(response)]);
-      await client.query("COMMIT");
+      if(!this.transactionClient)await client.query("COMMIT");
       return response;
-    } catch (error) { await client.query("ROLLBACK"); throw error; }
-    finally { client.release(); }
+    } catch (error) { if(!this.transactionClient)await client.query("ROLLBACK"); throw error; }
+    finally { if(!this.transactionClient)client.release(); }
   }
   private assertCreation() { if (!this.creationEnabled) fail("新建数字生产订单尚未开放", 403); }
   private async audit(client: PoolClient, actor: TrustedActorContext, action: string, id: string, before: unknown, after: unknown) {
@@ -101,7 +104,8 @@ export class DigitalProductionIdentityService {
       await this.visibleSource(this.database,actor,sourceId);
       now=new Date((await (this.businessClock??new ContextBusinessClock(this.database)).read({kind:'source',id:sourceId})).now);
     }
-    return {...(newTimelineAdoptionMode(this.database)==='fixed_v2'?{independentCraftsEnabled:true}:{}),serverToday:beijingCalendarDate(now),minimumInitialCustomerDate:minimumInitialCustomerDate(now)};
+    const orderTimeEnabled=await acceptsNewOrderTime(this.database);
+    return {...(orderTimeEnabled||newTimelineAdoptionMode(this.database)==='fixed_v2'?{independentCraftsEnabled:true}:{}),orderTimeEnabled,serverToday:beijingCalendarDate(now),minimumInitialCustomerDate:orderTimeEnabled?beijingCalendarDate(now):minimumInitialCustomerDate(now)};
   }
   async sources(actor: TrustedActorContext, page: number, search: string): Promise<{ items: DigitalSource[]; page: number }> {
     assertIdentityActor(actor);
@@ -135,9 +139,11 @@ export class DigitalProductionIdentityService {
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [JSON.stringify(["digital-source-style",styleKey])]);
       if ((await client.query("SELECT 1 FROM digital_production_sources WHERE translate(btrim(design_style_no),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=$1 LIMIT 1", [styleKey])).rowCount)
         fail("该编号已有开发档案，请打开原档案继续办理");
-      const id = randomUUID();
-      await client.query(`INSERT INTO digital_production_sources(source_id,created_by,development_type,design_style_no,temporary_style_no,customer_code)
-        VALUES($1,$2,$3,$4,$5,$6)`, [id, actor.actorId, input.developmentType, input.designStyleNo, input.temporaryStyleNo, input.customerCode]);
+      const id = randomUUID(),managed=await acceptsNewOrderTime(client);
+      // Source identity is immutable. Record the adoption marker in its original
+      // INSERT; historical schemas retain the original six-column contract.
+      await client.query(`INSERT INTO digital_production_sources(source_id,created_by,development_type,design_style_no,temporary_style_no,customer_code${managed?',order_time_managed':''})
+        VALUES($1,$2,$3,$4,$5,$6${managed?',true':''})`, [id, actor.actorId, input.developmentType, input.designStyleNo, input.temporaryStyleNo, input.customerCode]);
       if((await client.query("SELECT to_regclass('digital_design_code_registry') AS relation")).rows[0]?.relation)
         await client.query("INSERT INTO digital_design_code_registry(code_key,source_id,code,created_by) VALUES($1,$2,$3,$4)",[styleKey,id,input.designStyleNo,actor.actorId]);
       const eventId = await this.audit(client, actor, "digital_source_created", id, null, input);
@@ -145,7 +151,9 @@ export class DigitalProductionIdentityService {
       await enrollPreparation(client,{kind:'source',id},actor.actorId,eventId);
       const time = this.businessClock ? await this.businessClock.read({ kind: "source", id })
         : observedBusinessTime(this.now);
-      await captureDevelopmentSla(client, actor, id, null, time, eventId,newTimelineAdoptionMode(this.database));
+      if(managed){
+        await client.query("INSERT INTO digital_order_time_subjects(resource_kind,source_id,created_by,created_business_time,creation_event_ref) VALUES('source',$1,$2,$3,$4)",[id,actor.actorId,JSON.stringify(time),'audit_events:'+eventId]);
+      }else await captureDevelopmentSla(client, actor, id, null, time, eventId,newTimelineAdoptionMode(this.database));
       return { sourceId: id };
     });
   }
@@ -155,7 +163,8 @@ export class DigitalProductionIdentityService {
   }
   async createOrder(actor: TrustedActorContext, input: DigitalOrderInput, key: string, sourceId: string | null = null): Promise<DigitalOrder> {
     this.assertCreation();
-    assertCreator(actor);
+    const approved=this.transactionClient?(sourceId?await approvedOrderTimeSource(this.transactionClient,actor,sourceId):await approvedOrderTimeCreation(this.transactionClient,actor)):false;
+    if(!approved)assertCreator(actor);
     if (new Set(input.lines.map(line => line.color.trim().toLowerCase())).size !== input.lines.length) fail("同一母单颜色不能重复", 400);
     const poKeys = input.lines.map(line => digitalPoKey(digitalFormalPoNo(line))).filter(Boolean);
     if (new Set(poKeys).size !== poKeys.length) fail("同一母单正式款号（PO）不能重复",400);
@@ -163,14 +172,14 @@ export class DigitalProductionIdentityService {
       fail("正式款号（PO）只能有一个有效值",400);
     for (const line of input.lines) if (line.customerWarehouseArrivalDate!==undefined && line.deliveryDate!==undefined && line.deliveryDate!==null
       && line.customerWarehouseArrivalDate!==line.deliveryDate) fail("出货日期不能互相矛盾",400);
-    return this.command(actor, sourceId ? `confirm-source:${sourceId}` : "direct-order", key, input, async client => {
+    return this.command(actor, sourceId ? `confirm-source:${sourceId}` : "direct-order", key, input, async client => automaticOrderTime(this.database,client,actor,sourceId?{kind:'confirm_order',sourceId,input}:{kind:'direct_order',input,route:input.productionPlanning??{craftSteps:null,preshrink:null}},async()=>{
       await this.customer(client, input.customerCode, input.productGroup);
-      let createdBy = actor.actorId;
+      let createdBy = approved?orderTimeAdmission(client)!.designerId:actor.actorId;
       let frozenOrdering:InitialCustomerOrderDraft|undefined;
       if (sourceId) {
         const source = await this.visibleSource(client, actor, sourceId, true);
         if(await developmentRevisionSource(client,sourceId))fail('复版沿原开发档案的客户订单，不重复建立大货数量');
-        if (!isRootActor(actor) && source.created_by !== actor.actorId) digitalForbidden();
+        if (!isRootActor(actor) && source.created_by !== actor.actorId && !approved) digitalForbidden();
         createdBy = source.created_by;
         if (source.design_style_no !== input.designStyleNo || (source.temporary_style_no ?? "") !== (input.temporaryStyleNo ?? "") || (source.customer_code && source.customer_code !== input.customerCode)) fail("下单资料与开发来源不一致");
         const existing = await client.query("SELECT production_order_id,creation_hash FROM digital_production_orders WHERE source_id=$1", [sourceId]);
@@ -192,10 +201,11 @@ export class DigitalProductionIdentityService {
       if(orderDateError)fail(orderDateError,400);
       let frozenInput:DigitalOrderInput|null=null;
       if(frozenOrdering){try{const parsed=DigitalOrderCreateSchema.safeParse(initialCustomerOrderInput(frozenOrdering));if(parsed.success)frozenInput=parsed.data;}catch{/* Incomplete published ordering remains recoverable. */}}
-      const frozenApproval=sourceId&&frozenInput?await approvedShortLeadCalendar(client,sourceId,frozenInput,formalTime.scenarioId):null;
-      if(frozenOrdering&&frozenInput&&initialCustomerOrderIsReady(frozenOrdering,{serverToday:beijingCalendarDate(now),minimumInitialCustomerDate:minimumInitialCustomerDate(now),approvedShortLead:frozenApproval})&&orderFactsDigest(input)!==orderFactsDigest(frozenInput!))
+      const usingOrderTime=Boolean(orderTimeAdmission(client));
+      const frozenApproval=!usingOrderTime&&sourceId&&frozenInput?await approvedShortLeadCalendar(client,sourceId,frozenInput,formalTime.scenarioId):null;
+      if(frozenOrdering&&frozenInput&&initialCustomerOrderIsReady(frozenOrdering,{serverToday:beijingCalendarDate(now),orderTimeEnabled:usingOrderTime,minimumInitialCustomerDate:minimumInitialCustomerDate(now),approvedShortLead:frozenApproval})&&orderFactsDigest(input)!==orderFactsDigest(frozenInput!))
         fail("确认信息须与当前已发布的订购草稿一致，请重新打开原档案恢复资料");
-      const shortApproval=await validateInitialLeadTime(client,actor,sourceId,input,formalTime);
+      const shortApproval=usingOrderTime?null:await validateInitialLeadTime(client,actor,sourceId,input,formalTime);
       let merchandiserId = input.primaryMerchandiserId;
       const defaultMerchandiserId = (await client.query("SELECT default_merchandiser_id FROM digital_production_customers WHERE code=$1 FOR SHARE", [input.customerCode])).rows[0]?.default_merchandiser_id ?? null;
       if (!isDigitalLeader(actor) && merchandiserId !== undefined && merchandiserId !== defaultMerchandiserId) digitalForbidden();
@@ -203,13 +213,17 @@ export class DigitalProductionIdentityService {
       if (merchandiserId && !await new DigitalProductionAccessPolicy(client).lockActiveRole(merchandiserId, "order_merchandiser")) fail("主跟单必须为在职有效订单跟单", 400);
       const root = await new ProductionOrderRootRepository(client).create(createdBy);
       const businessTime = !sourceId&&this.businessClock ? await this.businessClock.read({ kind: "order", id: root.productionOrderId }) : formalTime;
-      await client.query(`INSERT INTO digital_production_orders(production_order_id,source_id,customer_code,product_group,design_style_no,temporary_style_no,order_date,contract_delivery_date,created_by,creation_hash,primary_merchandiser_id)
-        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, [root.productionOrderId, sourceId, input.customerCode, input.productGroup, input.designStyleNo, input.temporaryStyleNo, input.orderDate, input.contractDeliveryDate, createdBy, digest(input), merchandiserId]);
+      await client.query(`INSERT INTO digital_production_orders(production_order_id,source_id,customer_code,product_group,design_style_no,temporary_style_no,order_date,contract_delivery_date,created_by,creation_hash,primary_merchandiser_id${usingOrderTime?',order_time_managed':''})
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11${usingOrderTime?',true':''})`, [root.productionOrderId, sourceId, input.customerCode, input.productGroup, input.designStyleNo, input.temporaryStyleNo, input.orderDate, input.contractDeliveryDate, createdBy, digest(input), merchandiserId]);
       await inheritCustomerSecondaryMerchandisers(client,input.customerCode,root.productionOrderId,merchandiserId??null);
       if (input.salesYear !== undefined || input.salesSeries !== undefined || input.requiresColorMatching !== undefined) {
         await client.query("UPDATE digital_production_orders SET sales_year=$2,sales_series=$3,requires_color_matching=$4 WHERE production_order_id=$1",[root.productionOrderId,input.salesYear??null,input.salesSeries??null,input.requiresColorMatching??null]);
       }
       const creationEventId = await this.audit(client, actor, "digital_order_created", root.productionOrderId, null, { ...input, slaBusinessTime: businessTime });
+      bindOrderTimeOrder(client,root.productionOrderId);
+      if(usingOrderTime){
+        await client.query("INSERT INTO digital_order_time_subjects(resource_kind,production_order_id,effective,created_by,created_business_time,creation_event_ref,production_route) VALUES('order',$1,true,$2,$3,$4,$5)",[root.productionOrderId,createdBy,JSON.stringify(businessTime),'audit_events:'+creationEventId,JSON.stringify(input.productionPlanning??null)]);
+      }
       await registerAcceptanceCreated(client,{kind:'order',id:root.productionOrderId},actor.actorId,creationEventId);
       for (const [position, line] of input.lines.entries()) {
         const lineId = randomUUID();
@@ -227,7 +241,7 @@ export class DigitalProductionIdentityService {
       await refreshPreparationWindows(client,root.productionOrderId);
       await ensureQuotationBudget(client,root.productionOrderId,actor.actorId);
       return this.readWith(client, actor, root.productionOrderId);
-    });
+    },result=>({kind:'order',id:result.productionOrderId})));
   }
   async attachSource(actor: TrustedActorContext, id: string, sourceId: string, key: string): Promise<DigitalOrder> {
     return this.command(actor, `attach-source:${id}`, key, { sourceId }, async client => {

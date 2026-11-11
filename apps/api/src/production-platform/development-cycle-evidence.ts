@@ -5,6 +5,13 @@ import {calculateDevelopmentCycle} from '@dx-rework/domain/development-cycle';
 import {technicalEnrollment,type TechnicalDB} from './development-technical-repository.js';
 import type {DevelopmentTiming} from './development-task-timing.js';
 import {developmentDocumentRow} from './development-round-repository.js';
+import {orderTimeAdmission} from './order-time-admission.js';
+import {OrderTimePlanRepository} from './order-time-plan-repository.js';
+import {OrderTimeRuleSchema,orderTimeRule} from '@dx-rework/contracts/order-time-plan';
+import {scheduleElapsed} from './fixed-schedule-progress.js';
+import {shiftFixedTimeline} from './fixed-timeline-targets.js';
+
+const cycleValues=(value:Record<string,unknown>)=>DevelopmentCycleValuesSchema.parse(Object.fromEntries(Object.entries(value).filter(([key])=>key!=='orderTimeCycle')));
 
 export async function captureTechnicalEnrollment(db:PoolClient,actorId:string,sourceId:string,eventKey:string){
  if(!(await db.query("SELECT to_regclass('digital_development_technical_enrollments') AS relation")).rows[0]?.relation)return;
@@ -16,13 +23,15 @@ export async function captureTechnicalEnrollment(db:PoolClient,actorId:string,so
 }
 export async function captureTechnicalRound(db:PoolClient,actorId:string,sourceId:string,round:number,publishedAt:string,internalWashMinutes:number,warningRatio:number){
  const enrolled=await technicalEnrollment(db,sourceId);if(!enrolled)return;
+ const plan=orderTimeAdmission(db)?.plan??(await new OrderTimePlanRepository(db).current({kind:'source',id:sourceId}))?.input.plan;
+ const values=plan?{...enrolled.values_json,orderTimeCycle:{version:'order-time-cycle-v1',normal:orderTimeRule(plan,'development_cycle_normal')?.rule??null,urgent:orderTimeRule(plan,'development_cycle_urgent')?.rule??null}}:enrolled.values_json;
  await db.query(`INSERT INTO digital_development_cycle_rounds(source_id,round_number,published_at,policy_version,values_json,internal_wash_minutes,warning_ratio,created_by)
-  VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT DO NOTHING`,[sourceId,round,publishedAt,enrolled.policy_version,enrolled.values_json,internalWashMinutes,warningRatio,actorId]);
+  VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT DO NOTHING`,[sourceId,round,publishedAt,enrolled.policy_version,values,internalWashMinutes,warningRatio,actorId]);
 }
 export async function developmentCycleEvidence(db:TechnicalDB,sourceId:string,round:number,now:string):Promise<DevelopmentCycleStatus|null>{
  if(!await technicalEnrollment(db,sourceId))return null;
  const saved=(await db.query('SELECT * FROM digital_development_cycle_rounds WHERE source_id=$1 AND round_number=$2',[sourceId,round])).rows[0];if(!saved)return null;
- const values=DevelopmentCycleValuesSchema.parse(saved.values_json);
+ const values=cycleValues(saved.values_json);
  const urgent=(await db.query('SELECT * FROM digital_development_urgent_events WHERE source_id=$1 AND round_number=$2 ORDER BY revision DESC LIMIT 1',[sourceId,round])).rows[0];
  const approved=Boolean((await db.query("SELECT 1 FROM digital_development_urgent_events WHERE source_id=$1 AND round_number=$2 AND action='approve'",[sourceId,round])).rowCount);
  const completed=(await db.query(`SELECT t.completed_at,t.completed_quality FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id)
@@ -50,20 +59,26 @@ export async function developmentCycleEvidence(db:TechnicalDB,sourceId:string,ro
   native.push({id:`native:${sent.fact_id}`,departedAt:sent.completed_at?new Date(sent.completed_at).toISOString():null,returnedAt:returned?.completed_at?new Date(returned.completed_at).toISOString():null,
    credible:['现场登记','已核实'].includes(sent.completed_quality)&&(!returned?.completed_at||['现场登记','已核实'].includes(returned.completed_quality)),closed:returned?.state==='completed'||returned?.state==='cancelled'});
  }
+ const perOrder=saved.values_json.orderTimeCycle,selected=perOrder?OrderTimeRuleSchema.nullable().parse(approved?perOrder.urgent:perOrder.normal):null;
+ if(perOrder&&perOrder.version!=='order-time-cycle-v1')throw Error('本轮开发周期版本不受支持');
+ const calendar=perOrder?selected?.calendar??null:null,minutes=selected?.kind==='supervision'?selected.minutes:null;
  const result=calculateDevelopmentCycle({publishedAt:new Date(saved.published_at).toISOString(),completedAt,internalCompleted:!!completed,
-  now,allowedDays:approved?values.urgentDays:values.normalDays,warningRatio:Number(saved.warning_ratio),intervals:[...manual,...native]});
+  now,allowedDays:perOrder?calendar&&minutes!==null?minutes/1440:null:approved?values.urgentDays:values.normalDays,warningRatio:selected?selected.reminder.percent/100:Number(saved.warning_ratio),intervals:[...manual,...native]},calendar?{
+   elapsedSeconds:(from,to)=>scheduleElapsed(from,to,calendar)*60,
+   shiftSeconds:(from,seconds)=>Date.parse(shiftFixedTimeline(new Date(from).toISOString(),seconds/60,calendar)),
+  }:undefined);
  return {ruleVersion:DEVELOPMENT_TECHNICAL_RULE,policyVersion:saved.policy_version,roundNumber:round,mode:approved?'urgent':'normal',
   publishedAt:new Date(saved.published_at).toISOString(),completedAt,internalCompleted:!!completed,
   internalSeconds:result.internalSeconds,excludedSeconds:result.excludedSeconds,allowedSeconds:result.allowedSeconds,state:result.state,
   precisionReasons:result.openExternal?[...result.precisionReasons,'真实外发进行中，截止随实际回收更新']:result.precisionReasons,dueAt:result.dueAt,
-  urgentRevision:urgent?.revision??0,urgentState:urgent?.action==='approve'?'approved':urgent?.action==='reject'?'rejected':urgent?'requested':'none'};
+  ...(perOrder?{calendarRef:calendar}:{}),urgentRevision:urgent?.revision??0,urgentState:urgent?.action==='approve'?'approved':urgent?.action==='reject'?'rejected':urgent?'requested':'none'};
 }
 /** New scoped policies do not alter the old global catalog or its immutable snapshots. */
 export async function technicalDevelopmentTiming(db:TechnicalDB,task:{task_id:string;source_id:string|null;task_kind:string;route_version:number}):Promise<DevelopmentTiming|null>{
  if(!task.source_id||!['development_size_review','development_washing','development_patch_tail_check'].includes(task.task_kind))return null;
  const enrolled=await technicalEnrollment(db,task.source_id);if(!enrolled)return null;
  const saved=(await db.query('SELECT * FROM digital_development_cycle_rounds WHERE source_id=$1 AND round_number=$2',[task.source_id,task.route_version])).rows[0];if(!saved)return null;
- const values=DevelopmentCycleValuesSchema.parse(saved.values_json);
+ const values=cycleValues(saved.values_json);
  const basis=[`development-technical:${task.source_id}:${task.route_version}:policy:${saved.policy_version}`];
  let enteredAt:string|null=null,seconds:number|null=null;
  if(task.task_kind==='development_size_review'){

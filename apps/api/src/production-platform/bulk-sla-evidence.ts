@@ -1,5 +1,5 @@
 import {preparationAdoption} from './preparation-material-repository.js';
-import {preparationWindow} from './production-readiness-repository.js';
+import {readPreparationWindow} from './production-readiness-repository.js';
 import type {PoolClient} from 'pg';
 import type {SlaNodeFact,SlaPlan} from '@dx-rework/domain/digital-sla-plan';
 import {readBulkPreshrinkRequirement,type BulkPreshrinkRequirement} from './bulk-preshrink-requirement.js';
@@ -28,9 +28,10 @@ export async function bulkSlaEvidence(db:Pick<PoolClient,'query'>,orderId:string
  const prep=basis?.workflow_version===2?basis:null;
  const adoption=await preparationAdoption(db,{kind:'order',id:orderId});
  const retainLegacy=Boolean(adoption?.standards.retainedInstructionVersion&&prep?.instruction_version<=adoption.standards.retainedInstructionVersion);
- if(adoption&&!retainLegacy){const window=await preparationWindow(db,orderId,'final');
+ if(adoption&&!retainLegacy){const {window,basis:original}=await readPreparationWindow(db,orderId,'final');
   const completion=(await db.query("SELECT occurred_at FROM digital_preparation_instruction_events WHERE production_order_id=$1 AND kind='published' ORDER BY instruction_version LIMIT 1",[orderId])).rows[0];
-  result.production_sheet={evidence:`preparation-window:${orderId}:final`,businessCompleted:Boolean(completion),standardMinutes:adoption.standards.finalMinutes,
+  result.production_sheet={evidence:`preparation-window:${orderId}:final`,businessCompleted:Boolean(completion),standardMinutes:window.minutes??adoption.standards.finalMinutes,
+   ...(original?.orderTimePlanRef?{standardCalendar:original.calendarRef,standardWarningPercent:original.warningPercent}:{}),
    ...(window.startedAt?{startedAt:window.startedAt}:{}),...(completion?{completedAt:new Date(completion.occurred_at).toISOString()}:{})};}
  if(!prep)return {facts:result,preshrink,preshrinkCorrection};
  if(!adoption||retainLegacy)result.production_sheet={evidence:`instruction:${orderId}:${prep.instruction_version}`,businessCompleted:true,completedAt:new Date(prep.published_at).toISOString()};

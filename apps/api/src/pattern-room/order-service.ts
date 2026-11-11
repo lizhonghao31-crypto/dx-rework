@@ -25,6 +25,7 @@ import { bindPatternMaterials } from "./order-attachments.js";
 import { PatternOrderReader, scopedPatternOrder, type PatternOrderRow, type PatternRoundRow, type PatternSegmentRow } from "./order-reader.js";
 import { PATTERN_HOURLY_PRICE_ID } from "./price-service.js";
 import { patternReworkCutBlocked, PATTERN_REWORK_CUT_BLOCK } from "./order-rework-boundary.js";
+import {approvedOrderTimeSource,approvedOrderTimeRevision} from '../production-platform/order-time-admission.js';
 
 const parse = <T>(schema: z.ZodType<T>, input: unknown): T => {
   const value = schema.safeParse(input);
@@ -91,19 +92,24 @@ export class PatternRoomOrderService {
   }
   private async mutate(actor: TrustedActorContext, capability: PatternOrderCapability, action: string, key: string, input: unknown,
     work: (client: PoolClient, effective: TrustedActorContext) => Promise<string>, lockDigitalLifecycle = false) {
+    return this.get(actor,await this.mutateId(actor,capability,action,key,input,work,lockDigitalLifecycle));
+  }
+  private async mutateId(actor: TrustedActorContext, capability: PatternOrderCapability, action: string, key: string, input: unknown,
+    work: (client: PoolClient, effective: TrustedActorContext) => Promise<string>, lockDigitalLifecycle = false,approvedDevelopmentSource?:string) {
     if (!/^[A-Za-z0-9._:-]{8,128}$/.test(key)) throw new ApplicationError("VALIDATION_ERROR", "缺少有效操作标识，请重试", 400);
     const client = this.options.transactionClient ?? await this.db.connect(); let orderId: string;
     try {
       if (!this.options.transactionClient) await client.query("BEGIN");
       if (lockDigitalLifecycle) await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
-      const effective = await authorizePatternOrder(client, actor, capability, this.enabled);
+      const admitted=Boolean(approvedDevelopmentSource&&capability==='pattern_room:orders:create'&&await approvedOrderTimeSource(client,actor,approvedDevelopmentSource));
+      const effective = admitted?actor:await authorizePatternOrder(client, actor, capability, this.enabled);
       const outcome = await this.idempotency.execute(client, { scope: action, actorKey: actor.actorId, key,
         requestHash: createHash("sha256").update(JSON.stringify(input)).digest("hex"), expiresAt: new Date("9999-12-31T00:00:00Z") }, async () => ({ statusCode: 200, response: { orderId: await work(client, effective) } }));
       orderId = outcome.response.orderId;
       if (!this.options.transactionClient) await client.query("COMMIT");
     } catch (error) { if (!this.options.transactionClient) await client.query("ROLLBACK"); throw error; }
     finally { if (!this.options.transactionClient) client.release(); }
-    return this.get(actor, orderId);
+    return orderId;
   }
   private async target(client: PoolClient, actor: TrustedActorContext, orderId: string, input: PatternRoundAction, status: PatternOrderRow["status"] | readonly PatternOrderRow["status"][], authorizedReturnSource?:string) {
     const order:PatternOrderRow=authorizedReturnSource?(await client.query<PatternOrderRow>(`SELECT o.* FROM pattern_room_orders o JOIN digital_development_pattern_links l USING(order_id)
@@ -136,16 +142,18 @@ export class PatternRoomOrderService {
 
   // Fixed adapters reuse the original authorization, pricing and wage logic atomically.
   inTransaction(client: PoolClient) { return new PatternRoomOrderService(this.db,this.todos,{...this.options,transactionClient:client},this.idempotency,this.events); }
-  async createDevelopment(actor: TrustedActorContext, sourceId:string, categoryId:string, priceVersion:number, key:string) {
+  async createDevelopment(actor: TrustedActorContext, sourceId:string, categoryId:string, priceVersion:number, key:string,resultOnly=false) {
     const client=this.options.transactionClient;
     if(!client) throw new ApplicationError("CONFLICT","开发打板衔接须在业务事务内执行",409);
+    if(resultOnly&&!await approvedOrderTimeSource(client,actor,sourceId))throw new ApplicationError('FORBIDDEN','仅本单有效时效申请可在原事务衔接执行',403);
     await client.query("SELECT source_id FROM digital_production_sources WHERE source_id=$1 FOR UPDATE",[sourceId]);
     const sheet=await new DigitalDevelopmentService(this.db,true).read(actor,sourceId,client);
     if(sheet.status!=="published"||!sheet.canEdit) throw new ApplicationError("FORBIDDEN","仅原设计师可提交本开发单的打板执行",403);
     const prior=(await client.query("SELECT order_id FROM digital_development_pattern_links WHERE source_id=$1",[sourceId])).rows[0];
-    if(prior)return this.get(actor,prior.order_id);
+    if(prior)return resultOnly?{orderId:prior.order_id as string}:this.get(actor,prior.order_id);
     const doc=sheet.document!;
-    return this.createOrder(actor,"pattern",{categoryId,priceVersion,styleNo:sheet.designStyleNo??sheet.temporaryStyleNo,quantity:doc.quantity,attachmentIds:doc.files.map(file=>file.attachmentId),requiredDate:doc.returnDate,customer:sheet.customerCode,sizeColor:developmentMakingSizes(doc),referenceStyleNo:null,variant:"初版",note:doc.instructions||null},key,sourceId,sheet.roundNumber??1);
+    const orderId=await this.createOrderId(actor,"pattern",{categoryId,priceVersion,styleNo:sheet.designStyleNo??sheet.temporaryStyleNo,quantity:doc.quantity,attachmentIds:doc.files.map(file=>file.attachmentId),requiredDate:doc.returnDate,customer:sheet.customerCode,sizeColor:developmentMakingSizes(doc),referenceStyleNo:null,variant:"初版",note:doc.instructions||null},key,sourceId,sheet.roundNumber??1);
+    return resultOnly?{orderId}:this.get(actor,orderId);
   }
   async create(actor: TrustedActorContext, _input: unknown, _key: string) {
     void _input;void _key;
@@ -161,12 +169,15 @@ export class PatternRoomOrderService {
   }
   createMisc(actor: TrustedActorContext, input: unknown, key: string) { return this.createOrder(actor, "misc", input, key); }
   private async createOrder(actor: TrustedActorContext, kind: "pattern" | "misc", input: unknown, key: string, developmentSourceId?:string,developmentRound?:number) {
+    return this.get(actor,await this.createOrderId(actor,kind,input,key,developmentSourceId,developmentRound));
+  }
+  private async createOrderId(actor: TrustedActorContext, kind: "pattern" | "misc", input: unknown, key: string, developmentSourceId?:string,developmentRound?:number) {
     // Only the private, already-authorized development adapter carries up to 20 full size names.
     // The public legacy free-text editor retains its original 200-character limit.
     const parsed = kind === "pattern" ? { ...parse(developmentSourceId?CreatePatternOrderSchema.extend({sizeColor:z.string().max(2400).nullable()}):CreatePatternOrderSchema, input), taskName: null }
       : { ...parse(CreateMiscOrderSchema, input), categoryId: PATTERN_HOURLY_PRICE_ID, quantity: null, customer: null, sizeColor: null, referenceStyleNo: null, variant: null };
     const action = kind === "pattern" ? "pattern_room.order.submitted" : "pattern_room.misc.submitted";
-    return this.mutate(actor, kind === "pattern" ? "pattern_room:orders:create" : "pattern_room:misc:create", action, key, developmentSourceId?{parsed,developmentSourceId}:parsed, async (client, effective) => {
+    return this.mutateId(actor, kind === "pattern" ? "pattern_room:orders:create" : "pattern_room:misc:create", action, key, developmentSourceId?{parsed,developmentSourceId}:parsed, async (client, effective) => {
       const association=kind==="misc"?await resolveMiscAssociation(client,effective,parsed):null;
       const styleNo=association?.styleNo??parsed.styleNo;
       const price = (await client.query<{ price_id: string; version: number; name: string; unit: string; amount: string | null }>(
@@ -189,7 +200,7 @@ export class PatternRoomOrderService {
       const eventId = await this.event(client, effective, action, orderId, roundId, {...parsed,styleNo,...(developmentSourceId?{developmentSourceId,developmentRound}:{}),...(kind==="misc"?{association}: {})});
       if (this.enabled) await this.todos.actionableForUniqueDirectRole(client, effective, { ...this.projection(orderId, roundId, eventId, action, "assignment"), requiredRole: "pattern_room_supervisor", requiredCapability: "pattern_room:orders:assign" });
       return orderId;
-    });
+    },false,developmentSourceId);
   }
 
   async assign(actor: TrustedActorContext, orderId: string, input: unknown, key: string) {
@@ -406,11 +417,12 @@ export class PatternRoomOrderService {
   async requestDevelopmentRevision(actor:TrustedActorContext,orderId:string,input:unknown,key:string,context:DevelopmentRevisionContext){
     const client=this.options.transactionClient;
     if(!client)throw new ApplicationError('CONFLICT','开发复版须与原制作轮在同一事务提交',409);
-    if(!context.returnTaskId)return this.requestReworkBound(actor,orderId,input,key,undefined,context);
+    const admitted=!context.returnTaskId&&context.revision.origin==='内部发现'&&await approvedOrderTimeRevision(client,actor,context.sourceId,context.revision.basedOnRound);
+    if(!context.returnTaskId&&!admitted)return this.requestReworkBound(actor,orderId,input,key,undefined,context);
     if(!/^[A-Za-z0-9._:-]{8,128}$/.test(key))throw new ApplicationError('VALIDATION_ERROR','缺少有效操作标识，请重试',400);
-    await authorizeDevelopmentReturn(client,actor,context.sourceId,context.returnTaskId,context.revision.basedOnRound);
+    if(!admitted)await authorizeDevelopmentReturn(client,actor,context.sourceId,context.returnTaskId!,context.revision.basedOnRound);
     const parsed=parse(RequestPatternReworkSchema,input);
-    // The caller owns this business transaction. The original tail permission
+    // The original tail permission or this exact validated time application
     // creates only pending assignment; native supervisor pricing stays separate.
     return (await this.idempotency.execute(client,{scope:'pattern_room.order.rework_requested',actorKey:actor.actorId,key,
       requestHash:createHash('sha256').update(JSON.stringify({orderId,...parsed,developmentRevision:context})).digest('hex'),expiresAt:new Date('9999-12-31T00:00:00Z')},

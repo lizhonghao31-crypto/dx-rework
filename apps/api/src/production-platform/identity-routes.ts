@@ -1,4 +1,6 @@
 import {registerDeliveryCalendarRoutes} from './delivery-calendar-routes.js';
+import {registerOrderTimeRequestRoutes} from './order-time-request-routes.js';
+import type {OrderTimeRequestService} from './order-time-request-service.js';
 import type {DeliveryCalendarQuery} from './delivery-calendar-query.js';
 import {journeyMeasure} from '../platform/journey-diagnostic.js';
 import {registerQcProductionProgressRoutes} from './qc-production-progress-routes.js';
@@ -51,6 +53,7 @@ import { ApplicationError } from "../platform/errors.js";
 import { assertIdentityActor, type DigitalProductionIdentityService } from "./identity-service.js";
 
 export type DigitalIdentityDependencies = {
+  orderTimeRequests?:OrderTimeRequestService;
   deliveryCalendar?:DeliveryCalendarQuery;
   readinessService?:ProductionReadinessService;
   analysis?: DigitalAnalysisQuery;
@@ -80,6 +83,7 @@ const parse = <T>(schema: z.ZodType<T>, value: unknown): T => {
   return result.data;
 };
 export function registerDigitalIdentityRoutes(app: FastifyInstance, dependencies: DigitalIdentityDependencies): void {
+  if(dependencies.orderTimeRequests)registerOrderTimeRequestRoutes(app,dependencies,dependencies.orderTimeRequests);
   if(dependencies.qcProgress&&dependencies.developmentAttachments)registerQcProductionProgressRoutes(app,dependencies,dependencies.qcProgress,dependencies.developmentAttachments);
   if(dependencies.readinessService&&dependencies.developmentAttachments)registerProductionReadinessRoutes(app,dependencies,dependencies.readinessService,dependencies.developmentAttachments);
   if(dependencies.seriesPlans&&dependencies.shortLead)registerSeriesPlanRoutes(app,dependencies,dependencies.seriesPlans,dependencies.shortLead);

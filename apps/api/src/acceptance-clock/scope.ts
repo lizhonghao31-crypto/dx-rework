@@ -3,6 +3,14 @@ import {ApplicationError} from '../platform/errors.js';
 export type ClockRoot=Readonly<{kind:'source'|'order'|'unbound';id:string;scenarioId:string|null}>;
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export const clockUuid=(value:unknown):value is string=>typeof value==='string'&&uuid.test(value);
+/** The new request is a pointer to its existing native source/order. Resolve
+ * only this route's stable request ID, without making all arbitrary request
+ * UUIDs native clock roots or guessing from a style number. */
+export async function clockOrderTimeRequestRoots(db:Pick<Pool|PoolClient,'query'>,id:unknown):Promise<ClockRoot[]>{
+ if(!clockUuid(id))return [];
+ const row=(await db.query('SELECT source_id,production_order_id FROM digital_order_time_requests WHERE request_id=$1',[id])).rows[0];
+ return row?.production_order_id?clockRoots(db,row.production_order_id):row?.source_id?clockRoots(db,row.source_id):[];
+}
 /** Stable native IDs only; never infer lifecycle from a style/PO text search. */
 export async function clockRoots(db:Pick<Pool|PoolClient,'query'>,id:string):Promise<ClockRoot[]>{
  if(!clockUuid(id))return [];

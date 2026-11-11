@@ -1,11 +1,11 @@
 import {randomUUID} from 'node:crypto';
 import type {PoolClient} from 'pg';
 import {validateBusinessTime,type BusinessTime,type BusinessTimeScope} from '@dx-rework/domain/business-clock';
-import {slaAnchorTime,type SlaTime} from '@dx-rework/domain/digital-sla-plan';
 import type {SlaAnchor,SlaPlan} from '@dx-rework/domain/digital-sla-plan';
 import {validateDigitalSlaSnapshot,type DigitalSlaSnapshot} from '@dx-rework/contracts/digital-sla';
 import {SlaVersionConflict} from './sla-configuration-repository.js';
-import {fixedTimelineTargets,shiftFixedTimeline,type FixedTimelineWork,type FixedTimelineTarget} from './fixed-timeline-targets.js';
+import type {FixedTimelineWork,FixedTimelineTarget} from './fixed-timeline-targets.js';
+import {fixedConsumerTargets} from './fixed-consumer-targets.js';
 import {canonicalTimelineInput as canonical,fixedTimelineIdentity} from './fixed-timeline-identity.js';
 import {readInitialTimelineInput} from './fixed-timeline-initial-input.js';
 import type {CraftStepChoice} from '@dx-rework/contracts/digital-craft';
@@ -32,15 +32,7 @@ export type FixedTimelineInput={
 export type FixedTimelineAdoption={adoptionId:string;identityHash:string;input:FixedTimelineInput;time:BusinessTime;creationEventRef:string;createdBy:string};
 type AdoptionRow={adoption_id:string;timeline_schema_version:number;route_schema_version:number;input_snapshot:FixedTimelineInput;identity_hash:string;business_time:BusinessTime;creation_event_ref:string;created_by:string};
 type DB=Pick<PoolClient,'query'>;
-export function fixedConsumerTargets(work:FixedTimelineInput['work'],consumer:FixedTimelineConsumer,goals=consumer.ends){
- const first=fixedTimelineTargets(work,goals,{preserveUnknown:true}),rule=consumer.shipSample;if(!rule)return first;
- const production=first.find(node=>node.id===rule.productionNodeId)?.start,customer=slaAnchorTime(goals[rule.customerGoalId]??{precision:'unknown',reason:'缺少本PO正式客户交期'},rule.customerGoalId);
- const limit:SlaTime=customer.at&&rule.advanceDays!==null?{...customer,at:shiftFixedTimeline(customer.at,-rule.advanceDays*1440,'natural_days')}
-  :{at:null,exclusive:false,reasons:[...customer.reasons,'尚未采用本PO寄船样提前量']};
- const end:SlaTime=production?.at&&limit.at?Date.parse(production.at)<=Date.parse(limit.at)?production:limit
-  :{at:null,exclusive:false,reasons:[...(production?.reasons??['计划生产开始尚未确定']),...limit.reasons]};
- return fixedTimelineTargets(work,goals,{preserveUnknown:true,endTimes:{[rule.nodeId]:end}});
-}
+export {fixedConsumerTargets} from './fixed-consumer-targets.js';
 function adoption(row:AdoptionRow):FixedTimelineAdoption{
  const input=row.input_snapshot as FixedTimelineInput;
  if(row.timeline_schema_version!==2||row.route_schema_version!==2||input.timelineSchemaVersion!==2||input.routeSchemaVersion!==2

@@ -10,6 +10,15 @@ const fixture=(minutes=120,transition=true,enrolled=true)=>{
  return {client:{query} as unknown as Pick<PoolClient,'query'>,query};
 };
 describe('original sourcing todo frozen SLA adapter',()=>{
+ it('captures the adopted per-order calendar, quota and disabled warning at the genuine business transition',async()=>{
+  const base=fixture(),original=base.query.getMockImplementation()!,rule={kind:'work',minutes:120,calendar:'beijing_sunday_excluded',reminder:{enabled:false,percent:70}},plan={version:'order-time-plan-v1',revision:2,overrides:{sourcing_ie:rule},company:{version:'order-time-standard-v1',reference:'TEST original company',revision:1,stageBufferMinutes:0,nodes:{sourcing_ie:{...rule,minutes:60,calendar:'continuous'}}}};
+  base.query.mockImplementation(async(sql:string)=>{
+   if(sql.startsWith('SELECT plan_version_id,input_snapshot'))return {rows:[{plan_version_id:'TEST confirmed order',input_snapshot:{plan}}]} as never;
+   if(sql.includes('sourcing_case_transitions'))return {rows:[{transitioned_at:'2027-01-09T15:00:00.000Z'}]} as never;
+   const result=await original(sql);if(sql.startsWith('SELECT s.rule_version'))Object.assign(result.rows[0]!,{managed:'true'});return result;
+  });
+  expect(await sourcingTodoSla(base.client,input)).toMatchObject({dueAt:new Date('2027-01-10T17:00:00.000Z'),orderTime:{enteredAt:'2027-01-09T15:00:00.000Z',minutes:120,calendarRef:'beijing_sunday_excluded',notificationEnabled:false,warningAt:'2027-01-10T16:24:00.000Z'}});
+ });
  it.each(['sourcing_ie_quote','sourcing_management_decision','sourcing_owner_approval'])('uses the original event plus frozen two-hour standard for %s',async(category)=>{
   const {client,query}=fixture();expect(await sourcingTodoSla(client,{...input,category})).toEqual({dueAt:new Date('2026-10-23T02:00:00Z'),snapshotId:'snapshot-fixture'});
   expect(query).toHaveBeenLastCalledWith(expect.stringContaining('operation_event_id=$2'),['case-fixture','event-fixture']);

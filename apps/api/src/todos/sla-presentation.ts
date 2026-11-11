@@ -23,7 +23,7 @@ export async function sourcingTodoPresentation(database:Pool,todos:TodoResponse[
  const relevant=todos.filter(t=>['pending','blocked_recipient'].includes(t.status)&&t.entityType==='sourcing_case'&&['sourcing_ie_quote','sourcing_management_decision','sourcing_owner_approval'].includes(t.category));
  if(!relevant.length)return todos;
  if(!(await database.query("SELECT to_regclass('digital_sla_order_snapshots') AS relation")).rows[0]?.relation)return todos;
- const rows=(await database.query(`SELECT t.todo_id,t.due_at,link.production_order_id,creation.after_state->'slaTiming'->>'snapshotId' AS snapshot_id,
+ const rows=(await database.query(`SELECT t.todo_id,t.due_at,link.production_order_id,creation.after_state->'slaTiming'->>'snapshotId' AS snapshot_id,creation.after_state->'slaTiming'->'orderTime' AS order_time,
    snapshot.parameters_json,${sourcingAppliedDeadlineSql('t')} AS applied
   FROM rework_todos t LEFT JOIN operation_events creation ON creation.event_id=t.created_operation_event_id AND creation.action='todo.create'
   LEFT JOIN digital_production_child_links link ON link.module='sourcing' AND link.child_id::text=t.entity_id
@@ -33,6 +33,9 @@ export async function sourcingTodoPresentation(database:Pool,todos:TodoResponse[
  return Promise.all(todos.map(async todo=>{const row=byId.get(todo.todoId);if(!row?.production_order_id||!row.snapshot_id&&!row.applied)return todo;
   const key=({sourcing_ie_quote:'sourcing_ie',sourcing_management_decision:'sourcing_selection',sourcing_owner_approval:'sourcing_approval'} as Record<string,string>)[todo.category]!;
   const minutes=row.parameters_json?.[key]?.value?.minutes,ratio=row.applied?.warningPercent??row.parameters_json?.warning_ratio?.value?.percent;
+  if(row.order_time?.version===1){const time=await new ContextBusinessClock(database).read({kind:'order',id:row.production_order_id}),dueAt=row.due_at?new Date(row.due_at).toISOString():null;
+   return {...todo,dueAt,timing:todoSlaTiming({dueAt,warningAt:row.order_time.warningAt,enteredAt:row.order_time.enteredAt,asOf:time.now})};
+  }
   const originalDue=row.due_at?new Date(row.due_at).getTime():null;
   const start=originalDue!==null&&Number.isFinite(minutes)?originalDue-minutes*60000:null;
   const dueAt=row.applied?(row.applied.dueAt?new Date(row.applied.dueAt).toISOString():null):todo.dueAt;

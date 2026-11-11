@@ -3,7 +3,7 @@ import {effectiveSourcingDueSql} from '../production-platform/sla-sourcing-deadl
 import {sourcingTodoPresentation} from "./sla-presentation.js";
 import {acceptanceBusinessContext,assertAcceptanceAssignee,businessNow} from '../acceptance-clock/business-time.js';
 import {arrangementsAvailable} from "../production-platform/development-arrangement.js";
-import {sourcingTodoSla} from "../production-platform/sourcing-todo-sla.js";
+import {sourcingTodoSla,type SourcingOrderTimeWindow} from "../production-platform/sourcing-todo-sla.js";
 import {isDeepStrictEqual} from 'node:util';
 import {MarkTodoReadSchema,type MarkTodoRead} from '@dx-rework/contracts';
 import {nativeDevelopmentTodoExclusion} from "../production-platform/development-arrangement-todos.js";
@@ -601,7 +601,7 @@ export class TodoService {
       entityType: "rework_todo",
       entityId: todoId,
       after: { sourceEventId: input.sourceEventId, sourceAction: input.sourceAction, todoType: input.todoType,
-        ...(sourcingTiming ? {slaTiming: {snapshotId:sourcingTiming.snapshotId,dueAt:sourcingTiming.dueAt?.toISOString()??null}} : {}) },
+        ...(sourcingTiming ? {slaTiming: {snapshotId:sourcingTiming.snapshotId,dueAt:sourcingTiming.dueAt?.toISOString()??null,...('orderTime'in sourcingTiming?{orderTime:sourcingTiming.orderTime}:{})}} : {}) },
     });
     await this.setTodoContext(client, creationEventId, actor.requestId);
     const created = await client.query<TodoRow>(
@@ -878,6 +878,7 @@ export class TodoService {
       escalate_after_due_seconds: number | null;
       max_reminders: number;
       database_now: Date;
+      order_time: SourcingOrderTimeWindow | null;
     }>(
       `SELECT todo.todo_id,todo.todo_type,todo.category,todo.source_event_id,todo.source_action,
               todo.entity_type,todo.entity_id,todo.recipient_user_id,todo.required_role,
@@ -885,9 +886,11 @@ export class TodoService {
               ${effectiveDue} AS due_at,todo.reminder_count,todo.status,todo.blocked_reason,todo.version,
               todo.created_at,todo.updated_at,policy.due_after_seconds,
               policy.first_reminder_after_due_seconds,policy.second_reminder_after_due_seconds,
-              policy.escalate_after_due_seconds,policy.max_reminders,COALESCE($2::timestamptz,CURRENT_TIMESTAMP) database_now
+              policy.escalate_after_due_seconds,policy.max_reminders,COALESCE($2::timestamptz,CURRENT_TIMESTAMP) database_now,
+              creation.after_state->'slaTiming'->'orderTime' AS order_time
        FROM rework_todos todo
        JOIN todo_policies policy ON policy.policy_key=todo.policy_key AND policy.enabled=true
+       LEFT JOIN operation_events creation ON creation.event_id=todo.created_operation_event_id
        WHERE todo.todo_id=$1 AND todo.status='pending' AND ${effectiveDue} IS NOT NULL
        FOR UPDATE OF todo,policy`,
       [todoId,acceptanceBusinessContext()?businessNow().toISOString():null],
@@ -895,6 +898,19 @@ export class TodoService {
     const todo = result.rows[0];
     if (!todo || !todo.due_at) return null;
     const dueAt = todo.due_at;
+    const window=todo.order_time;
+    if(window?.version===1&&window.notificationEnabled&&window.warningAt
+      &&todo.database_now.getTime()>=Date.parse(window.warningAt)&&todo.database_now<dueAt){
+      // Reassignment retains this first window. Deduplicate for its actual
+      // recipient without consuming either existing post-deadline reminder.
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[`order-time:warning:${window.eventRef}:${todo.recipient_user_id}`]);
+      const prior=await client.query("SELECT 1 FROM operation_events WHERE action='todo.remind' AND after_state->>'orderTimeWindowRef'=$1 AND after_state->>'recipientUserId'=$2 LIMIT 1",[window.eventRef,todo.recipient_user_id]);
+      if(!prior.rowCount){
+        const eventId=await this.events.append(client,actor,{action:'todo.remind',entityType:'rework_todo',entityId:todo.todo_id,before:{reminderCount:todo.reminder_count},after:{reminderCount:todo.reminder_count,orderTimeWindowRef:window.eventRef,recipientUserId:todo.recipient_user_id,stage:'warning'}});
+        await this.enqueueDelivery(client,todo,eventId,actor.requestId,'reminder');
+        return {todoId:todo.todo_id,operationEventId:eventId,category:todo.category,recipientUserId:todo.recipient_user_id,route:TodoRouteDescriptorSchema.parse(todo.route_descriptor),kind:'reminder'};
+      }
+    }
 
     const passed = (seconds: number | null): boolean => seconds !== null
       && todo.database_now.getTime() >= dueAt.getTime() + seconds * 1_000;

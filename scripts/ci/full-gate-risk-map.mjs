@@ -179,6 +179,10 @@ export const classifyFullGatePaths = (inputPaths) => {
     "tests/integration/development-execution-read-native-browser-postgres.test.ts",
   ]);
   const domains = new Set();
+  if(paths.some(path=>/order-time-(?:request|admission|automatic|native|operation|application|production-route|route-identities)|0286_order_time_requests/.test(path))){
+    addAll(mappedTests,['tests/integration/order-time-requests-postgres.test.ts','tests/integration/order-time-requests-browser-postgres.test.ts','tests/integration/order-time-reading-postgres.test.ts','tests/integration/order-time-settings-postgres.test.ts','tests/integration/development-technical-postgres.test.ts','tests/integration/development-round-history-clock-postgres.test.ts','tests/integration/production-readiness-postgres.test.ts']);
+    domains.add('order-time-first-effective-and-requests');
+  }
   if(paths.some(path=>/order-time-(?:settings|standard-editor|calculator|node-fields|route-fields)|customer-default-merchandisers|customer-merchandiser-defaults|order-merchandisers|additional-merchandisers|digital-customer-merchandisers|0285_order_time_settings_and_merchandisers/.test(path))){
     addAll(mappedTests,['tests/integration/order-time-settings-postgres.test.ts','tests/integration/customer-default-merchandisers-postgres.test.ts','tests/integration/r5-settings-native-browser-postgres.test.ts','tests/integration/m01-settings-native-browser-postgres.test.ts','tests/integration/digital-production-identity-postgres.test.ts']);
     domains.add('order-time-settings-and-merchandisers');

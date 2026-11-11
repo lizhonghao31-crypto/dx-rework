@@ -17,7 +17,7 @@ export async function preparationWindowTodos(db:DB,actor:TrustedActorContext,pro
  const result:TodoResponse[]=[];
  for(const r of rows){if(!await acceptanceIncludesNative(db,r.production_order_id))continue;const at=preparationIso(r.recorded_at)!;
   const selectionKey:TodoSelectionKey={todoId:r.window_id,contentToken:todoContentToken(['preparation-window',r.window_id]),taskTitle:r.kind==='draft'?'主料已到仓：完成制单草稿':'前提已齐：发布有效制单',todoType:'business_action',category:'digital_preparation_instruction',sourceAction:'preparation_window',recipientUserId:actor.actorId,route:{routeName:'digital_production_instruction',entityId:r.production_order_id,todoId:r.window_id},dueAt:preparationIso(r.due_at),status:'pending',orderContext:{reworkNo:null,orderNo:null,styleNo:r.design_style_no,supplierName:null,status:'待订单跟单办理',updatedAt:at},unread:true,createdAt:at};
-  appendSelectedTodo(result,projection,selectionKey,()=>({...selectionKey,sourceEventId:r.window_id,entityType:'digital_production',entityId:r.production_order_id,requiredRole:'order_merchandiser',requiredCapability:null,policyKey:null,reminderCount:0,blockedReason:businessNow().getTime()>new Date(r.due_at).getTime()?'原24小时窗口已逾期；不会因等待或补料重置':null,version:1,updatedAt:at}));
+  appendSelectedTodo(result,projection,selectionKey,()=>({...selectionKey,sourceEventId:r.window_id,entityType:'digital_production',entityId:r.production_order_id,requiredRole:'order_merchandiser',requiredCapability:null,policyKey:null,reminderCount:0,blockedReason:businessNow().getTime()>new Date(r.due_at).getTime()?'原制单时限已逾期；不会因等待或补料重置':null,version:1,updatedAt:at}));
  }
  return result;
 }

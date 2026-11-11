@@ -11,7 +11,7 @@ export async function factorySlaEvidence(db:Pick<PoolClient,'query'>,orderId:str
   const put=(key:string,windows:typeof timing.windows,done:boolean,covered:boolean)=>{
    const starts=windows.map(window=>window.enteredAt),ends=windows.map(window=>window.completedAt);
    facts[key]={evidence:`factory-route:${orderId}:${key}`,businessCompleted:done,batchCoverageComplete:covered,
-    batchWindows:windows.map(window=>({startedAt:window.enteredAt,deadline:window.dueAt,warningAt:window.warningAt,completedAt:window.completedAt,complete:window.complete,evidence:window.evidence})),
+    batchWindows:windows.map(window=>({startedAt:window.enteredAt,deadline:window.dueAt,warningAt:window.warningAt,completedAt:window.completedAt,complete:window.complete,evidence:window.evidence,...(window.calendarRef?{calendarRef:window.calendarRef}:{})})),
     ...(starts.length&&starts.every(Boolean)?{startedAt:new Date(Math.min(...starts.map(at=>Date.parse(at!)))).toISOString()}:{}),
     ...(done&&ends.length&&ends.every(Boolean)?{completedAt:new Date(Math.max(...ends.map(at=>Date.parse(at!)))).toISOString()}:{}),};
   };
@@ -35,7 +35,7 @@ export async function factorySlaEvidence(db:Pick<PoolClient,'query'>,orderId:str
  ] as const){if(!key)continue;
   const windows=timing.windows.filter(w=>w.kind===kind),starts=windows.map(w=>w.enteredAt),ends=windows.map(w=>w.completedAt);
   facts[key]={evidence:`factory-route:${orderId}`,businessCompleted:done,batchCoverageComplete:covered,
-   batchWindows:windows.map(w=>({startedAt:w.enteredAt,deadline:w.dueAt,warningAt:w.warningAt,completedAt:w.completedAt,complete:w.complete,evidence:w.evidence})),
+   batchWindows:windows.map(w=>({startedAt:w.enteredAt,deadline:w.dueAt,warningAt:w.warningAt,completedAt:w.completedAt,complete:w.complete,evidence:w.evidence,...(w.calendarRef?{calendarRef:w.calendarRef}:{})})),
    ...(starts.length&&starts.every(Boolean)?{startedAt:new Date(Math.min(...starts.map(x=>Date.parse(x!)))).toISOString()}:{}),
    ...(done&&ends.length&&ends.every(Boolean)?{completedAt:new Date(Math.max(...ends.map(x=>Date.parse(x!)))).toISOString()}:{}),
   };

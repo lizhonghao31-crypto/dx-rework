@@ -1,5 +1,5 @@
 import { InitialCustomerOrderDraftSchema } from "./digital-production.js";
-import {CraftStepChoicesSchema,craftLegacyLabel} from './digital-craft.js';
+import {CraftStepChoicesSchema,ProductionRoutePlanSchema,craftLegacyLabel} from './digital-craft.js';
 import type {JourneyDocumentMetadata} from "./digital-production-journey.js";
 import { z } from "zod";
 import {AuxiliaryReferenceSchema} from "./auxiliary-catalog.js";
@@ -28,6 +28,7 @@ export const DevelopmentDocumentSchema = z.object({
   customerOrderDraft: z.object({withOrder:z.boolean(),stage:z.enum(['preorder','formal']).optional(),order:InitialCustomerOrderDraftSchema}).strict().optional(),
   // Draft selection only. Publication still obtains and validates the current price quote.
   patternCategoryId: z.string().uuid().nullable().optional(),
+  productionPlanning:ProductionRoutePlanSchema.optional(),
   template: z.enum(["上衣", "裤子"]), quantity: z.number().int().min(1).max(100000).nullable(),
   sampleSize: short, orderDate: z.iso.date().nullable(), returnDate: z.iso.date().nullable(),
   unit: z.enum(["cm", "inch"]), sizes: z.array(short).max(20),
@@ -115,6 +116,7 @@ export function developmentAmendmentPublicationOptions(before:DevelopmentDocumen
  return {allowLegacySizeQuantities:legacy,allowMissingOrderDate:before.orderDate===null&&after.orderDate===null};
 }
 export type DevelopmentSheet = {
+  orderTimeEnabled?:boolean;
   timelineSchemaVersion?:2;
   independentRevisions?:boolean;
   revisionSource?:{sourceId:string;parentSourceId:string;rootSourceId:string;revisionNumber:number;parentRound:number;origin:string;customerComment:string;explanation:string;categories:string[];affectedNodes:string[];outputKind:string}|null;

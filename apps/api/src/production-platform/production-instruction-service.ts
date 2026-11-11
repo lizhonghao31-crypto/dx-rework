@@ -20,15 +20,19 @@ import { ApplicationError } from "../platform/errors.js";
 import { DigitalProductionAccessPolicy, digitalForbidden, digitalNotFound } from "./access-policy.js";
 import { DigitalProductionIdentityService } from "./identity-service.js";
 import { developmentDocumentRow } from "./development-round-repository.js";
+import {approvedOrderTimeOrder} from './order-time-admission.js';
+import {automaticOrderTime} from './order-time-automatic.js';
+import {acceptsNewOrderTime} from './order-time-admission.js';
 
 type Database = Pick<Pool | PoolClient, "query">;
 const fail = (message: string): never => { throw new ApplicationError("INSTRUCTION_CONFLICT", message, 409); };
 export class ProductionInstructionService {
-  constructor(private readonly database: Pool, private readonly creationEnabled: boolean) {}
+  constructor(private readonly database: Pool, private readonly creationEnabled: boolean,private readonly transactionClient?:PoolClient) {}
+  inTransaction(client:PoolClient){return new ProductionInstructionService(this.database,this.creationEnabled,client);}
   private identity = () => new DigitalProductionIdentityService(this.database, this.creationEnabled);
   private async order(db: Database, actor: TrustedActorContext, id: string, write = false) {
     const order = await this.identity().readWithClient(actor, id, db);
-    const editable = isRootActor(actor) || actor.actorRoles.includes("order_merchandiser") && order.primaryMerchandiserId === actor.actorId && await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId, "order_merchandiser");
+    const editable = isRootActor(actor) || actor.actorRoles.includes("order_merchandiser") && order.primaryMerchandiserId === actor.actorId && await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId, "order_merchandiser") || await approvedOrderTimeOrder(db,actor,id);
     if (write && !editable) digitalForbidden();
     return { order, editable };
   }
@@ -71,7 +75,7 @@ export class ProductionInstructionService {
     const review=(await db.query("SELECT a.after_state,a.created_at,u.display_name FROM audit_events a LEFT JOIN app_users u ON u.id=a.actor_id WHERE a.entity_type='digital_instruction' AND a.entity_id=$1 AND a.action='instruction_source_decisions' AND (a.after_state->>'version')::int<=$2 ORDER BY a.created_at DESC LIMIT 1",[id,row?.version??0])).rows[0];
     const sourceReview:InstructionSheet["sourceReview"]=review?{sourceRound:review.after_state.sourceRound,...(typeof review.after_state.sourceVersion==='number'?{sourceVersion:review.after_state.sourceVersion}:{}),instructionVersion:review.after_state.version,decisions:review.after_state.decisions,reviewedAt:new Date(review.created_at).toISOString(),reviewedBy:review.display_name??"",...(review.after_state.priorMeasurements?{priorMeasurements:review.after_state.priorMeasurements}:{})}:undefined;
     const technicalTable=order.sourceId&&latestSourceRound?(await publishedTechnicalArtifact(db,order.sourceId,latestSourceRound))?.artifact.body.baseSizeTable:null;
-    return { ...(await readInitialTimelineInput(db,{kind:'order',id})?{timelineSchemaVersion:2 as const}:{}),...(technicalTable?{technicalSizeTable:technicalTable}:{}),...(await preparationAdoption(db,{kind:'order',id})?{readiness:await new ProductionReadinessService(this.database).read(actor,{kind:'order',id},db)}:{}), metadata:await documentMetadata(db,row), order: selectedVersion ? {...row.order_snapshot,lines:(row.order_snapshot as DigitalOrder).lines.map(line=>{const current=order.lines.find(l=>l.lineId===line.lineId);return current?{...line,poNumber:current.poNumber,formalStyleNo:current.formalStyleNo,temporaryStyleNo:current.temporaryStyleNo}:line;})} : order, currentOrderVersion:order.version,currentDeliveryDate:order.contractDeliveryDate, document: seeded.document, version: row?.version ?? 0,
+    return { orderTimeEnabled:await acceptsNewOrderTime(db),...(await readInitialTimelineInput(db,{kind:'order',id})?{timelineSchemaVersion:2 as const}:{}),...(technicalTable?{technicalSizeTable:technicalTable}:{}),...(await preparationAdoption(db,{kind:'order',id})?{readiness:await new ProductionReadinessService(this.database).read(actor,{kind:'order',id},db)}:{}), metadata:await documentMetadata(db,row), order: selectedVersion ? {...row.order_snapshot,lines:(row.order_snapshot as DigitalOrder).lines.map(line=>{const current=order.lines.find(l=>l.lineId===line.lineId);return current?{...line,poNumber:current.poNumber,formalStyleNo:current.formalStyleNo,temporaryStyleNo:current.temporaryStyleNo}:line;})} : order, currentOrderVersion:order.version,currentDeliveryDate:order.contractDeliveryDate, document: seeded.document, version: row?.version ?? 0,
       publishedVersion: selectedVersion ?? published, isPublishedSnapshot:Boolean(selectedVersion), sourceRound: seeded.sourceRound, latestSourceRound, ...(sourceComparison?{sourceComparison}:{}),...(sourceReview?{sourceReview}:{}),
       versions: (await db.query("SELECT version FROM digital_instruction_versions WHERE production_order_id=$1 ORDER BY version DESC", [id])).rows.map(r => r.version),
       canEdit: draftAccess && !version && (Boolean(row) || this.creationEnabled), cutStarted, merchandiserName: name,
@@ -79,24 +83,24 @@ export class ProductionInstructionService {
   }
   private async command<T>(actor: TrustedActorContext, id: string, action: string, key: string, input: unknown, work: (db: PoolClient, order: DigitalOrder) => Promise<T>, leader = false, rejectingDate = false): Promise<T> {
     if (!/^[A-Za-z0-9._:-]{1,128}$/.test(key)) fail("缺少有效操作标识");
-    const db = await this.database.connect();
+    const db = this.transactionClient??await this.database.connect();
     try {
-      await db.query("BEGIN"); await db.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
+      if(!this.transactionClient)await db.query("BEGIN"); await db.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
       await db.query("SELECT production_order_id FROM digital_production_orders WHERE production_order_id=$1 FOR UPDATE", [id]);
       const { order } = await this.order(db, actor, id, !leader);
       if (leader && !isRootActor(actor) && !actor.actorRoles.includes("production_management")) digitalForbidden();
       const command = `instruction:${id}:${action}`, hash = createHash("sha256").update(JSON.stringify(input)).digest("hex");
       const prior = (await db.query("SELECT payload_hash,response FROM digital_production_commands WHERE actor_id=$1 AND command=$2 AND key=$3", [actor.actorId, command, key])).rows[0];
       if (prior && prior.payload_hash !== hash) fail("操作标识已用于不同内容");
-      if (prior) { await db.query("COMMIT"); return prior.response; }
+      if (prior) { if(!this.transactionClient)await db.query("COMMIT"); return prior.response; }
       const state = (await db.query("SELECT state FROM digital_production_resource_lifecycle WHERE resource_kind='order' AND resource_id=$1", [id])).rows[0]?.state;
       if (!rejectingDate && state && state !== "active") fail("母单已暂停或取消");
       if (!rejectingDate && await this.cutStarted(db, id)) fail("已经开裁，不能实质修改制单；编号请从母单补齐");
-      const result = await work(db, order);
+      const result = action==='publish'?await automaticOrderTime(this.database,db,actor,{kind:'instruction_publish',orderId:id,input:input as {expectedVersion:number;orderVersion:number;expectedReadinessRevision?:string}},()=>work(db,order)):await work(db,order);
       await db.query("INSERT INTO digital_production_commands(actor_id,command,key,payload_hash,response) VALUES($1,$2,$3,$4,$5)", [actor.actorId, command, key, hash, JSON.stringify(result)]);
       await db.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1,$2,$3,$4,'digital_instruction',$5,$6)", [randomUUID(), actor.requestId, actor.actorId, action, id, JSON.stringify({ action, version: (result as InstructionSheet).version })]);
-      await db.query("COMMIT"); return result;
-    } catch (error) { await db.query("ROLLBACK"); throw error; } finally { db.release(); }
+      if(!this.transactionClient)await db.query("COMMIT"); return result;
+    } catch (error) { if(!this.transactionClient)await db.query("ROLLBACK"); throw error; } finally { if(!this.transactionClient)db.release(); }
   }
   private async bindImages(db: PoolClient, actor: TrustedActorContext, order: DigitalOrder, document: InstructionDocument) {
     const source = order.sourceId ? await developmentDocumentRow(db, order.sourceId) : null;

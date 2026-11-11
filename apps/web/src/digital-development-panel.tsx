@@ -1,5 +1,6 @@
 import {DevelopmentMaterialEventForm} from './development-material-event-form.js';
 import {ProductionReadinessPanel} from './production-readiness-panel.js';
+import {useOrderTimeApplication} from './order-time-application.js';
 import {useTodoContentRead} from './todo-content-read.js';
 import {quotationHref} from './digital-quotation-panel.js';
 import {DevelopmentAmendmentHistory} from "./development-amendment-history.js";
@@ -52,6 +53,7 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound,embedded=
   const [revision,setRevision]=useState<RevisionFields|null>(null),[draftVersion,setDraftVersion]=useState(0),[rounds,setRounds]=useState<Rounds>({rounds:[],draft:null}),[selectedRound,setSelectedRound]=useState<number|undefined>(initialRound);
   const [fileKind,setFileKind]=useState<DevelopmentDocument["files"][number]["kind"]>("款图");
   const writing=useRef(false),operation=useRef<{payload:string;key:string}|null>(null);
+  const timeApplication=useOrderTimeApplication(()=>{setDirty(false);});
   useDigitalDetailNavigationGuard(dirty, busy, writing, "有未保存修改，确定离开？");
   const base=`sources/${sourceId}/development`;
   useEffect(()=>{let live=true;void digitalRequest<DevelopmentSheet>(`${base}${selectedRound?`?round=${selectedRound}`:""}`).then(value=>{if(live){setSheet(value);installDocument(value.document??initial());setDirty(false);setError("");if(value.status==="published")void digitalRequest<Rounds>(`${base}/rounds`).then(data=>{if(live)setRounds(data);}).catch(reason=>{if(live)setError(reason.message);});}}).catch(reason=>{if(live)setError(reason.message);});return()=>{live=false;};},[sourceId,selectedRound]);
@@ -59,7 +61,8 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound,embedded=
   const run=async(path:string,body:unknown,method="POST")=>{
     if(writing.current)return;writing.current=true;setBusy(true);setError("");
     const payload=JSON.stringify([path,body,method]);if(operation.current?.payload!==payload)operation.current={payload,key:createClientRequestId()};
-    try{const value=await digitalRequest<DevelopmentSheet>(path,method,body,operation.current.key);setSheet(value);installDocument(value.document??initial());setDirty(false);previews.saved();operation.current=null;}
+    try{if(path===base+'/publish'&&!await timeApplication.inspect({kind:'development_publish',sourceId,input:body as {expectedVersion:number;patternOrder?:DevelopmentPatternChoice}},Boolean(sheet?.orderTimeEnabled)))return;
+      const value=await digitalRequest<DevelopmentSheet>(path,method,body,operation.current.key);setSheet(value);installDocument(value.document??initial());setDirty(false);previews.saved();operation.current=null;}
     catch(reason){setError(reason instanceof Error?reason.message:"操作失败");}finally{writing.current=false;setBusy(false);}
   };
   const beginRevision=()=>{
@@ -71,7 +74,8 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound,embedded=
     if(!revision||writing.current)return;writing.current=true;setBusy(true);setError("");
     const body=publish?{expectedDraftVersion:draftVersion,basedOnRound:revision.basedOnRound}:{expectedDraftVersion:draftVersion,revision:{...revision,document}};
     const path=`${base}/${publish?"round-publish":"round-draft"}`,payload=JSON.stringify([path,body]);if(operation.current?.payload!==payload)operation.current={payload,key:createClientRequestId()};
-    try{const response=await digitalRequest<{draftVersion?:number;sourceId?:string}>(path,publish?"POST":"PUT",body,operation.current.key);operation.current=null;setDirty(false);previews.saved();
+    try{if(publish&&revision.origin==='内部发现'&&!await timeApplication.inspect({kind:'development_revision',sourceId,input:{expectedDraftVersion:draftVersion,basedOnRound:revision.basedOnRound}},Boolean(sheet?.orderTimeEnabled)))return;
+      const response=await digitalRequest<{draftVersion?:number;sourceId?:string}>(path,publish?"POST":"PUT",body,operation.current.key);operation.current=null;setDirty(false);previews.saved();
       if(publish&&response.sourceId&&response.sourceId!==sourceId){
         setRevision(null);setDirty(false);window.location.assign(urls.pageUrl(`ui/digital-production?development=${response.sourceId}`));return;
       }
@@ -114,7 +118,7 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound,embedded=
       {!readonly&&<><Button disabled={busy} onClick={save}>保存草稿</Button><Button variant="primary" disabled={busy||(!revision&&sheet?.revisionSource?.outputKind!=="工艺布片"&&!patternChoice)} onClick={publish}>{revision?(sheet?.independentRevisions&&revision.origin!=="内部发现"?"建立独立复版单":"正式发布本轮修改"):"发布开发单"}</Button></>}
       <Button disabled={!savedPrint||dirty||busy} onClick={()=>window.print()}>打印 / 保存 PDF</Button>
     </DocumentToolbar>
-    {sheet?.canEdit&&!embedded&&<a className="dx-button dx-button--secondary" href={quotationHref({kind:'source',id:sourceId},window.location.pathname+window.location.search)}>客户报价协作</a>}{previews.view}<DocumentErrors issues={issues} error={error}/>{error&&<Button disabled={busy} onClick={()=>void reload()}>重新载入</Button>}
+    {sheet?.canEdit&&!embedded&&<a className="dx-button dx-button--secondary" href={quotationHref({kind:'source',id:sourceId},window.location.pathname+window.location.search)}>客户报价协作</a>}{previews.view}<DocumentErrors issues={issues} error={error}/>{error&&<Button disabled={busy} onClick={()=>void reload()}>重新载入</Button>}{timeApplication.dialog}
     {!sheet&&<p>正在读取开发单</p>}
     {sheet&&<>
       {dirty||busy||!savedPrint?<article className="development-print"><p>当前单据不可打印，请先保存当前修改。</p></article>:<DevelopmentPrint sheet={revision?{...sheet,status:"draft",roundNumber:revision.basedOnRound+1,version:draftVersion}:sheet} document={savedPrint} imageUrl={imageUrl}/>}

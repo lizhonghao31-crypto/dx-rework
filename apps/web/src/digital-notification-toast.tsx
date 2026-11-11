@@ -11,6 +11,7 @@ export function DigitalNotificationToast({userId}:{userId:string}) {
   const current=useRef<DigitalNotification|null>(null),unavailable=useRef(false);
   const generation=useRef(0),refreshNow=useRef<(()=>Promise<void>)|null>(null);
   const region=useRef<HTMLElement|null>(null);
+  const autoAttempted=useRef<string|null>(null);
   useEffect(()=>{
     const element=region.current;
     if(!element||!notice)return;
@@ -33,7 +34,7 @@ export function DigitalNotificationToast({userId}:{userId:string}) {
     return()=>{resize.disconnect();changes.disconnect();window.removeEventListener("scroll",schedule,true);window.removeEventListener("resize",schedule);cancelAnimationFrame(frame);};
   },[notice?.eventId]);
   useEffect(()=>{
-    const controller=new AbortController();current.current=null;setNotice(null);setRemainingCount(undefined);unavailable.current=false;generation.current++;
+    const controller=new AbortController();current.current=null;setNotice(null);setRemainingCount(undefined);setBusy(false);setError('');unavailable.current=false;autoAttempted.current=null;generation.current++;
     let running=false,queued=false;
     const refresh=async()=>{
       if(unavailable.current||document.hidden)return;
@@ -60,15 +61,22 @@ export function DigitalNotificationToast({userId}:{userId:string}) {
   },[userId]);
   const dismiss=async(go:boolean)=>{
     if(!current.current||busy)return;
-    const item=current.current;setBusy(true);setError("");
+    const item=current.current,turn=generation.current;setBusy(true);setError("");
     try{
       const response=await fetch(apiUrl(`digital-production/notifications/${item.eventId}/acknowledge`),{method:"POST",credentials:"include"});
       if(!response.ok)throw new Error("确认未成功，请重试");
+      if(turn!==generation.current||current.current?.eventId!==item.eventId)return;
       generation.current++;current.current=null;setNotice(null);setRemainingCount(undefined);
       if(go)window.location.assign(todoRouteHref(item.route));
       else{window.dispatchEvent(new Event("dx-rework:todo-read"));void refreshNow.current?.();}
-    }catch{setError("确认未成功，请重试");}finally{setBusy(false);}
+    }catch{if(turn===generation.current&&current.current?.eventId===item.eventId)setError("确认未成功，请重试");}finally{if(turn===generation.current||current.current===null)setBusy(false);}
   };
+  const dismissNow=useRef(dismiss);dismissNow.current=dismiss;
+  useEffect(()=>{
+    if(!notice?.autoDismissAfterMs||notice.actionable||autoAttempted.current===notice.eventId)return;
+    const id=notice.eventId,timer=window.setTimeout(()=>{if(current.current?.eventId!==id)return;autoAttempted.current=id;void dismissNow.current(false);},notice.autoDismissAfterMs);
+    return()=>window.clearTimeout(timer);
+  },[notice?.eventId,notice?.autoDismissAfterMs,notice?.actionable]);
   if(!notice)return null;
   return <section ref={region} className="digital-notification-toast" aria-live="polite" aria-label="站内提醒"><div className="digital-notification-content"><p>{notice.title}</p>{notice.context&&<dl>{notice.context.styleNo&&<><dt>款号</dt><dd>{notice.context.styleNo}</dd></>}{notice.context.colors.length>0&&<><dt>颜色</dt><dd>{notice.context.colors.join(' / ')}</dd></>}{notice.context.poNumbers.length>0&&<><dt>PO</dt><dd>{notice.context.poNumbers.join(' / ')}</dd></>}{notice.context.orderId&&<><dt>母单编号</dt><dd>{notice.context.orderId}</dd></>}</dl>}</div><p className="digital-notification-hint">{notice.actionable?"确认提醒后，待办仍会保留。":"此消息仅供知悉。"}</p>{error&&<p role="alert">{error}</p>}<footer>{remainingCount!==undefined&&<span className="digital-notification-remaining">还有 {remainingCount} 条待办提醒</span>}<div><Button disabled={busy} onClick={()=>void dismiss(false)}>我知道了</Button><Button disabled={busy} onClick={()=>void dismiss(true)}>{notice.actionable?"去处理":"查看"}</Button></div></footer></section>;
 }

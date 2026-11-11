@@ -18,7 +18,7 @@ export type SlaPlanNode = {
 export type SlaPlan = { retainedNodeSnapshots?: Record<string,string>; nodes: SlaPlanNode[]; anchors: Record<string, SlaAnchor>; warningPercent: number; stageBufferMinutes: number };
 export type SlaTime = { at: string | null; exclusive: boolean; reasons: string[] };
 export type SlaPlannedNode = { id: string; start: SlaTime; end: SlaTime };
-export type SlaBatchWindow={startedAt:string|null;deadline:string|null;warningAt:string|null;completedAt:string|null;complete:boolean;evidence:string};
+export type SlaBatchWindow={startedAt:string|null;deadline:string|null;warningAt:string|null;completedAt:string|null;complete:boolean;evidence:string;calendarRef?:'continuous'|'natural_days'|'beijing_sunday_excluded'|null};
 export type SlaNodeFact = {
   /** Native batch read model, never a second editable fact source. */
   batchWindows?:SlaBatchWindow[]; batchCoverageComplete?:boolean;
@@ -29,6 +29,7 @@ export type SlaNodeFact = {
   businessCompleted?: boolean;
   /** Captured when a responsibility window opens; formal changes append a new fact version. */
   standardMinutes?: number | null;
+  standardCalendar?: 'continuous'|'natural_days'|'beijing_sunday_excluded';
   /** A retained window can keep its original warning ratio after a later application. */
   standardWarningPercent?: number;
   /** Server-captured assessment target at completion, including unknown precision. */

@@ -23,21 +23,38 @@ import {DevelopmentExecutionService} from '../../apps/api/src/production-platfor
 import {DigitalJourneyQuery} from '../../apps/api/src/production-platform/journey-query.js';
 import {SeriesPlanService} from '../../apps/api/src/production-platform/series-plan-service.js';
 import {ShortLeadService} from '../../apps/api/src/production-platform/short-lead-service.js';
+import {OrderTimeRequestService} from '../../apps/api/src/production-platform/order-time-request-service.js';
+import {orderTimeNativeExecutor} from '../../apps/api/src/production-platform/order-time-native-commands.js';
+import {PatternRoomOrderService} from '../../apps/api/src/pattern-room/order-service.js';
+import {TodoProjectionService} from '../../apps/api/src/todos/projection-service.js';
+import {TodoService} from '../../apps/api/src/todos/service.js';
+import {registerTodoRoutes} from '../../apps/api/src/todos/routes.js';
+import {DigitalProductionNotificationService} from '../../apps/api/src/production-platform/notification-service.js';
+import {registerPatternRoomPriceRoutes} from '../../apps/api/src/pattern-room/price-routes.js';
+import {PatternRoomPriceService} from '../../apps/api/src/pattern-room/price-service.js';
+import {DevelopmentRoundService} from '../../apps/api/src/production-platform/development-round-service.js';
+import {ProductionInstructionService} from '../../apps/api/src/production-platform/production-instruction-service.js';
+import {registerAcceptanceClockRoutes} from '../../apps/api/src/acceptance-clock/routes.js';
+import {mintAcceptanceControlCode} from '../../apps/api/src/auth/acceptance-control.js';
 export type SettingsBrowserFault={losePath?:string;lost?:boolean;failRead?:boolean;afterPublishRead?:boolean;readPath?:string;afterWriteRead?:string};
 /** Original full App, original auth routes/store/membership and actual native
  * services. Only DingTalk and named transport faults are TEST adapters. */
-export async function supplychainSettingsBrowser(url:string,evidence:string,options?:{fullApp?:boolean;orderTimeModel?:boolean}){
+export async function supplychainSettingsBrowser(url:string,evidence:string,options?:{fullApp?:boolean;orderTimeModel?:boolean;orderTimeFlow?:boolean}){
  const out=await mkdtemp(join(tmpdir(),'dx-settings-set-')),app=Fastify(),f=await businessAnchorFixture(url),db=f.db,secret='TEST paired settings native auth only '.repeat(4),root=new RootAuthority(db,'anchor-test','uat-root');
  const auth=new AuthService(new AcceptanceDingTalkProvider(db,'anchor-test',secret),new PostgresAuthStore(db,'anchor-test','uat-root'),'anchor-test',3600000,secret),errors:string[]=[],faults=new Map<string,SettingsBrowserFault>();
  const requests:Array<{session:string;path:string;method:string;key:string|null;bodyHash:string|null;status:number}>=[];
- let browser:Browser|undefined,server:Server|undefined,loginIndex=0;
+ let browser:Browser|undefined,server:Server|undefined,loginIndex=0,collectionScene:string|undefined;
  const dispose=async()=>{await browser?.close();if(server)await new Promise<void>(r=>server!.close(()=>r()));await app.close();await f.dispose();await rm(out,{recursive:true,force:true});};
  try{
   registerAuthRoutes(app,auth,{secureCookie:false,ttlSeconds:3600,appBasePath:'/',corpId:'anchor-test',mobileClientId:'TEST',webClientId:'TEST',qrRedirectUri:'https://acceptance.invalid/auth/qr/callback',isRootUser:id=>root.isRootUser(id)});
   app.setErrorHandler((error,_request,reply)=>{const e=error as ApplicationError;void reply.code(error instanceof AuthDeniedError?401:e.statusCode??500).send({error:{code:e.code,message:e.message}});});
-  registerDigitalIdentityRoutes(app,{service:new DigitalProductionIdentityService(db,true),creationEnabled:true,root,authenticate:token=>auth.authenticate(token),accessService:new DigitalProductionAccessService(db),taskService:new DigitalProductionTaskService(db,secret,options?.orderTimeModel),developmentService:new DigitalDevelopmentService(db,true),developmentExecution:new DevelopmentExecutionService(db,true),developmentAttachments:f.attachments,journeys:new DigitalJourneyQuery(db),seriesPlans:new SeriesPlanService(db,secret),shortLead:new ShortLeadService(db)});
+  const notifications=options?.orderTimeFlow?new DigitalProductionNotificationService(db):undefined,todos=notifications?new TodoService(db,undefined,undefined,undefined,notifications):undefined,patternOrders=todos?new PatternRoomOrderService(db,new TodoProjectionService(todos),{ordersEnabled:true}):undefined;
+  const orderTimeRequests=options?.orderTimeFlow?new OrderTimeRequestService(db,orderTimeNativeExecutor(db,true,patternOrders)):undefined;
+  let controlToken:string|undefined;
+  if(options?.orderTimeFlow){registerAcceptanceClockRoutes(app,f.runtime,auth,root);controlToken=await auth.beginAcceptanceControl(mintAcceptanceControlCode(secret));registerPatternRoomPriceRoutes(app,{authenticate:token=>auth.authenticate(token),root,service:new PatternRoomPriceService(db)});registerTodoRoutes(app,{authenticate:token=>auth.authenticate(token),root,service:todos!});}
+  registerDigitalIdentityRoutes(app,{service:new DigitalProductionIdentityService(db,true),creationEnabled:true,root,authenticate:token=>auth.authenticate(token),accessService:new DigitalProductionAccessService(db),taskService:new DigitalProductionTaskService(db,secret,options?.orderTimeModel),developmentService:new DigitalDevelopmentService(db,true,patternOrders),developmentExecution:new DevelopmentExecutionService(db,true,patternOrders),developmentAttachments:f.attachments,journeys:new DigitalJourneyQuery(db),seriesPlans:new SeriesPlanService(db,secret),shortLead:new ShortLeadService(db),...(orderTimeRequests?{orderTimeRequests,notificationService:notifications!,instructionService:new ProductionInstructionService(db,true),developmentRounds:new DevelopmentRoundService(db,true,patternOrders)}:{})});
   // Unrelated navigation indicator is a clearly labelled TEST response.
-  app.get('/todos/mine/indicator',async(request,reply)=>{const user=await auth.authenticate(request.headers.cookie?.split(';').map(v=>v.trim()).find(v=>v.startsWith('dx_rework_session='))?.slice(18));reply.header('x-dx-rework-actor-id',user.id);return {pendingCount:0,unreadCount:0};});
+  if(!options?.orderTimeFlow)app.get('/todos/mine/indicator',async(request,reply)=>{const user=await auth.authenticate(request.headers.cookie?.split(';').map(v=>v.trim()).find(v=>v.startsWith('dx_rework_session='))?.slice(18));reply.header('x-dx-rework-actor-id',user.id);return {pendingCount:0,unreadCount:0};});
   await app.ready();
   await build({configFile:false,esbuild:{jsx:'automatic',jsxDev:false},define:{'import.meta.env.BASE_URL':'"/"','process.env.NODE_ENV':'"production"'},build:{outDir:out,lib:{entry:resolve(options?.fullApp?'tests/fixtures/m01-cockpit-home-native-ui.tsx':'tests/fixtures/m01-settings-native-ui.tsx'),name:'NativeSettingsUi',formats:['iife']}}});
   const files=await readdir(out),js=await readFile(join(out,files.find(p=>p.endsWith('.js'))!),'utf8'),css=await readFile(join(out,files.find(p=>p.endsWith('.css'))!),'utf8');
@@ -47,7 +64,11 @@ export async function supplychainSettingsBrowser(url:string,evidence:string,opti
    if(!path.startsWith('/api/')){res.setHeader('content-type','text/html;charset=utf-8');res.end(html);return;}
    const chunks:Buffer[]=[];for await(const chunk of req)chunks.push(Buffer.from(chunk));const body=Buffer.concat(chunks).toString(),method=req.method??'GET',key=typeof req.headers['idempotency-key']==='string'?req.headers['idempotency-key']:null,fault=faults.get(session);
    if(fault?.failRead&&path===(fault.readPath??'/api/digital-production/sla-settings/sets')&&method==='GET'){fault.failRead=false;res.writeHead(503,{'content-type':'application/json'});res.end(JSON.stringify({error:{code:'TEST_READ_FAILURE',message:'TEST 设置读取暂时失败'}}));return;}
-   const result=await app.inject({method:method as 'GET'|'POST'|'PUT',url:path.slice(4),headers:{cookie:req.headers.cookie??'','content-type':'application/json',...(key?{'idempotency-key':key}:{})},...(body?{payload:body}:{})});
+   const inject=async()=>await app.inject({method:method as 'GET'|'POST'|'PUT',url:path.slice(4),headers:{cookie:req.headers.cookie??'',...(req.headers['content-type']?{'content-type':req.headers['content-type']}:{}),...(key?{'idempotency-key':key}:{})},...(body?{payload:body}:{})});
+   // Global collection routes have no resource ID for the ordinary guarded
+   // clock hook. This owned TEST harness supplies an explicitly selected scene;
+   // authentication, current role and original todo/notification services run.
+   const result=collectionScene&&/^\/api\/(?:todos\/|digital-production\/notifications\/)/.test(path)?await f.runtime.run(collectionScene,f.root,inject):await inject();
    requests.push({session,path,method,key,bodyHash:body?createHash('sha256').update(body).digest('hex'):null,status:result.statusCode});
    if(fault?.afterPublishRead&&path.endsWith('/sets/publish')&&result.statusCode===200)fault.failRead=true;
    if(fault?.afterWriteRead===path&&method==='POST'&&result.statusCode===200)fault.failRead=true;
@@ -59,8 +80,8 @@ export async function supplychainSettingsBrowser(url:string,evidence:string,opti
   const admin={...f.root,authorizationCapability:'access:admin',authorizationCapabilities:['access:admin','master_data:manage']};
   const dedicated=async(role:string,label?:string)=>{const id=randomUUID();await db.query('INSERT INTO app_users(id,display_name,enabled)VALUES($1,$2,true)',[id,label??'TEST settings set '+role]);await db.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at)VALUES($1,$2,'dingtalk','anchor-test',$3,$4,true,true,CURRENT_TIMESTAMP)",[randomUUID(),id,'uat-pair-'+id,'uat-union-pair-'+id]);const assignment=await f.access.assignRole(admin,{userId:id,roleCode:role,reason:'TEST isolated settings native identity'});return {id,assignmentId:assignment.assignmentId};};
   const login=async(id:string)=>{const mapping=(await db.query("SELECT provider_user_id FROM identity_mappings WHERE user_id=$1 AND corp_id='anchor-test' AND active AND employed",[id])).rows[0];assert(mapping?.provider_user_id.startsWith('uat-'));const response=await app.inject({method:'POST',url:'/auth/mobile',remoteAddress:'127.0.0.'+(++loginIndex),payload:{code:mintAcceptanceLoginCode(mapping.provider_user_id.slice(4),secret)}});assert.equal(response.statusCode,200,response.statusCode===200?undefined:response.body);const cookie=response.headers['set-cookie'],header=Array.isArray(cookie)?cookie[0]:cookie;assert.equal(typeof header,'string');const token=header!.split(';',1)[0]!.slice('dx_rework_session='.length);assert.equal((await auth.authenticate(token)).id,id);return token;};
-  const open=async(id=f.root.actorId,width=1440,fault:SettingsBrowserFault={})=>{const context=await browser!.newContext({viewport:{width,height:960}}),session=randomUUID();faults.set(session,fault);await context.addCookies([{name:'dx_rework_session',value:await login(id),url:base},{name:'settings_fixture_session',value:session,url:base}]);const page=await context.newPage();page.setDefaultTimeout(12000);page.on('pageerror',e=>errors.push(e.message));await page.goto(base+'/ui/digital-cockpit?workspace=settings&fullApp=1');return {context,page,session};};
+  const open=async(id=f.root.actorId,width=1440,fault:SettingsBrowserFault={},path='/ui/digital-cockpit?workspace=settings&fullApp=1')=>{const context=await browser!.newContext({viewport:{width,height:960}}),session=randomUUID();faults.set(session,fault);await context.addCookies([{name:'dx_rework_session',value:await login(id),url:base},{name:'settings_fixture_session',value:session,url:base},...(controlToken?[{name:'dx_acceptance_control',value:controlToken,url:base}]:[])]);const page=await context.newPage();page.setDefaultTimeout(12000);page.on('pageerror',e=>errors.push(e.message));await page.goto(base+path);return {context,page,session};};
   const writeEvidence=()=>writeFile(join(evidence,'requests.json'),JSON.stringify({source:'Original App/AuthService/native services, isolated lowpriv TEST PG, only labelled external provider/transport adapters',requests,errors},null,2));
-  return {f,db,auth,base,browser,open,dedicated,admin,requests,faults,errors,evidence,writeEvidence,dispose};
+  return {f,db,auth,base,browser,open,dedicated,admin,requests,faults,errors,evidence,writeEvidence,dispose,patternOrders,orderTimeRequests,setCollectionScene:(id:string)=>{collectionScene=id;}};
  }catch(e){await dispose();throw e;}
 }

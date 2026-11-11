@@ -6,13 +6,17 @@ import {validateDigitalSlaSnapshot} from '@dx-rework/contracts/digital-sla';
 import {factoryBatchLedger,type FactoryScope} from './factory-batch-ledger.js';
 import {fixedFactoryBatchTiming} from './fixed-factory-timing.js';
 import {fixedTaskPosition} from './fixed-craft-steps.js';
-export type FactoryWindow={key:string;kind:'process_logistics'|'bulk_qc'|'warehouse_dispatch';enteredAt:string|null;dueAt:string|null;warningAt:string|null;completedAt:string|null;complete:boolean;evidence:string;minutes:number|null;parameterKey:string;applicationId?:string|null;snapshotId?:string;lineId?:string;stepRef?:string;calendarRef?:FixedTimelineCalendar|null};
+import {orderTimePolicyHistory} from './order-time-native-timing.js';
+import {orderTimeRule} from '@dx-rework/contracts/order-time-plan';
+import {shiftFixedTimeline} from './fixed-timeline-targets.js';
+export type FactoryWindow={key:string;kind:'process_logistics'|'bulk_qc'|'warehouse_dispatch';enteredAt:string|null;dueAt:string|null;warningAt:string|null;completedAt:string|null;complete:boolean;evidence:string;minutes:number|null;parameterKey:string;applicationId?:string|null;snapshotId?:string;lineId?:string;stepRef?:string;calendarRef?:FixedTimelineCalendar|null;notificationEnabled?:boolean;orderTimePlanRef?:string;warningRatio?:number};
 const latest=(values:Array<Date|string|null|undefined>)=>values.every(Boolean)&&values.length?new Date(Math.max(...values.map(v=>new Date(v!).getTime()))).toISOString():null;
 /** Batch windows derive only from original factory facts and the preparation's frozen standard. */
 export async function factoryBatchTiming(db:Pick<PoolClient,'query'>,orderId:string){
  const available=(await db.query("SELECT to_regclass('digital_factory_routes') AS routes,to_regclass('digital_sla_order_snapshots') AS snapshots")).rows[0];if(!available?.routes||!available.snapshots)return null;
- const row=(await db.query(`SELECT r.*,to_jsonb(p)->>'sla_snapshot_id' AS sla_snapshot_id,s.rule_version,s.parameters_json,c.completed_at FROM digital_factory_routes r
+ const row=(await db.query(`SELECT r.*,to_jsonb(p)->>'sla_snapshot_id' AS sla_snapshot_id,s.rule_version,s.parameters_json,c.completed_at,to_jsonb(o)->>'order_time_managed' AS order_time_managed FROM digital_factory_routes r
  JOIN digital_bulk_preparations p USING(preparation_id) JOIN digital_sla_order_snapshots s ON s.snapshot_id::text=to_jsonb(p)->>'sla_snapshot_id'
+ JOIN digital_production_orders o ON o.production_order_id=r.production_order_id
  JOIN digital_bulk_cutting_completions c USING(preparation_id) WHERE r.production_order_id=$1 AND to_jsonb(r)->>'workflow_version'='2'`,[orderId])).rows[0];
  if(!row)return null;
  const snapshot=validateDigitalSlaSnapshot({ruleVersion:row.rule_version,parameters:row.parameters_json});
@@ -26,13 +30,16 @@ export async function factoryBatchTiming(db:Pick<PoolClient,'query'>,orderId:str
  // Retain the first contract-ready fact; later contract revisions do not reset the opened window.
  const contract=await firstContractBusinessReady(db,orderId);
  const applications=await slaApplications(db,orderId);
+ const policies=row.order_time_managed==='true'?await orderTimePolicyHistory(db,{kind:'order',id:orderId}):[];
  const windows:FactoryWindow[]=[];
  const add=(key:string,kind:FactoryWindow['kind'],enteredAt:string|null,complete:boolean,completedAt:string|null,duration:number,evidence:string,lineId?:string)=>{
   const parameterKey=kind==='process_logistics'?(row.secondary_craft==='印花'?'bulk_printing':row.secondary_craft==='绣花'?'bulk_embroidery':'bulk_print_embroidery'):kind;
   const applied=appliedSlaWindow(snapshot,parameterKey,`factory:${kind}:${key}`,applications),v=applied.snapshot.parameters[parameterKey]?.value,w=applied.snapshot.parameters.warning_ratio!.value;
-  const minutes=v?.kind==='duration'?v.minutes:duration,ratio=w.kind==='ratio'?w.percent/100:warning.percent/100;
+  const chosen=policies.find(policy=>!enteredAt||Date.parse(policy.at)<=Date.parse(enteredAt)),rule=chosen?orderTimeRule(chosen.plan,parameterKey)?.rule:null;
+  const minutes=chosen?rule?.kind==='work'||rule?.kind==='included'?rule.minutes:null:v?.kind==='duration'?v.minutes:duration,ratio=rule?rule.reminder.percent/100:w.kind==='ratio'?w.percent/100:warning.percent/100,calendar=chosen?rule?.calendar??null:'continuous';
+  const shift=(factor:number)=>enteredAt&&minutes!==null&&calendar?shiftFixedTimeline(enteredAt,minutes*factor,calendar):null;
   windows.push({key,kind,parameterKey,enteredAt,complete,completedAt,minutes,evidence,applicationId:applied.applicationId,snapshotId:applied.snapshotId??row.sla_snapshot_id,
-   dueAt:enteredAt?new Date(Date.parse(enteredAt)+minutes*60000).toISOString():null,warningAt:enteredAt?new Date(Date.parse(enteredAt)+minutes*60000*ratio).toISOString():null,...(lineId?{lineId}:{})});
+   dueAt:shift(1),warningAt:shift(ratio),...(chosen?{calendarRef:calendar,orderTimePlanRef:chosen.id,notificationEnabled:rule?.reminder.enabled===true,warningRatio:ratio}:{}),...(lineId?{lineId}:{})});
  };
  if(row.secondary_craft!=='无'){
   const craftKey=row.secondary_craft==='印花'?'bulk_printing':row.secondary_craft==='绣花'?'bulk_embroidery':'bulk_print_embroidery';
@@ -66,7 +73,8 @@ export async function factoryTaskTiming(db:Pick<PoolClient,'query'>,task:{task_i
  const selected=open.slice().sort((a,b)=>(a.dueAt?Date.parse(a.dueAt):Infinity)-(b.dueAt?Date.parse(b.dueAt):Infinity))[0]??(timing.routeSchemaVersion===2?rows[0]:undefined);
  const step=timing.routeSchemaVersion===2?timing.stepLedger?.steps.find(step=>step.step.stepId===position?.step_id)?.step:null;
  return {snapshotId:selected?.snapshotId??timing.snapshotId,parameterKey:selected?.parameterKey??task.task_kind,enteredAt:selected?.enteredAt??null,timeQuality:selected?.enteredAt?'补报未核实':'缺失',seconds:selected?.minutes==null?null:selected.minutes*60,
-  ...(timing.routeSchemaVersion===2?{calendarRef:selected?.calendarRef??null}:{}),
-  warningRatio:timing.routeSchemaVersion===2?timing.warningRatio:selected?.warningAt&&selected.enteredAt&&selected.dueAt?(Date.parse(selected.warningAt)-Date.parse(selected.enteredAt))/(Date.parse(selected.dueAt)-Date.parse(selected.enteredAt)):timing.warningRatio,
+  ...(timing.routeSchemaVersion===2||selected?.orderTimePlanRef?{calendarRef:selected?.calendarRef??null}:{}),
+  warningRatio:selected?.warningRatio??(timing.routeSchemaVersion===2?timing.warningRatio:selected?.warningAt&&selected.enteredAt&&selected.dueAt?(Date.parse(selected.warningAt)-Date.parse(selected.enteredAt))/(Date.parse(selected.dueAt)-Date.parse(selected.enteredAt)):timing.warningRatio),
+  ...(selected?.orderTimePlanRef?{orderTimePlanRef:selected.orderTimePlanRef,notificationEnabled:selected.notificationEnabled}:{}),
   basis:[...(step?[`craft-step:${step.stepId}`,`craft-kind:${step.craftKind}`]:[]),...(selected?[selected.key,selected.evidence]:[])],unknownWindows:open.filter(w=>!w.enteredAt).length};
 }
