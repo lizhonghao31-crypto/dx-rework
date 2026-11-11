@@ -193,5 +193,12 @@ export async function cockpitHomeBrowser({databaseUrl,evidence,executablePath,ca
  }catch(error){await dispose();throw error;}
 }
 export async function homeReady(page:Page){await page.locator('.digital-journey-cockpit[data-view="overview"][aria-busy="false"]').waitFor();await page.locator('.journey-orders[aria-busy="false"]').waitFor();await page.locator('.journey-orders tbody tr').first().waitFor();}
-export async function coverageReady(page:Page){await page.locator('.cockpit-coverage-orders[aria-busy="false"]').waitFor();await page.locator('.cockpit-coverage-order-list').waitFor();}
+export async function coverageReady(page:Page){
+ // The CI worker shares two bounded PG browser jobs. Waiting for an actual
+ // completed drill-down may exceed the generic12s locator budget; this does
+ // not relax the independent SQL/latency or correctness test limits.
+ try{await page.locator('.cockpit-coverage-orders[aria-busy="false"]').waitFor({timeout:30000});await page.locator('.cockpit-coverage-order-list').waitFor();}
+ catch(error){console.error('COVERAGE_WAIT_STATE',await page.locator('.cockpit-coverage-orders').innerText().catch(()=> 'coverage panel unavailable'));throw error;}
+ finally{console.log('COVERAGE_READ_TIMINGS',JSON.stringify(await page.evaluate(()=>performance.getEntriesByType('resource').filter(entry=>entry.name.includes('/digital-production/journeys?')&&entry.name.includes('missing=')).map(entry=>({path:new URL(entry.name).pathname+new URL(entry.name).search,durationMs:Math.round(entry.duration)})))));}
+}
 export {JOURNEY_COVERAGE_KEYS};

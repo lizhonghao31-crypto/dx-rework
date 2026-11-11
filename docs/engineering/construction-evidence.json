@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "6a8a3ec782e1c660206a28b1dca6a683f9d7e35f",
-  "sourceFingerprint": "503b9397ed4cac1ffc22f02c4a2b4cda9fd007a627c4ccc1bfb2708751d96064",
+  "sourceFingerprint": "08819bf339345913ac86d767978fad6eeb2e1d12514824279507c3c3ab8fbddf",
   "risk": "full",
   "rules": [
     {
@@ -2287,11 +2287,11 @@
     {
       "id": "r506-browser",
       "kind": "tests",
-      "command": "env TEST_DATABASE_URL=[owned PG13 TEST] ACCEPTANCE_CLOCK_TEST_DATABASE_URL=[same] M01_SETTINGS_BROWSER_EXECUTABLE=/usr/bin/chromium DX_REWORK_TEST_SUITE_KIND=postgres node node_modules/vitest/vitest.mjs run tests/integration/journey-page-native-browser-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r506-overlap-fixed-browser.json",
+      "command": "env TEST_DATABASE_URL=[owned PG13 TEST] ACCEPTANCE_CLOCK_TEST_DATABASE_URL=[same] M01_SETTINGS_BROWSER_EXECUTABLE=/usr/bin/chromium DX_REWORK_TEST_SUITE_KIND=postgres node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/m01-cockpit-home-native-browser-postgres.test.ts tests/integration/journey-page-native-browser-postgres.test.ts --maxWorkers=1 --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r506-coverage-budget-browser.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "fcbc4a46846894467af5d326479e1f8447bcf762",
-      "sourceFingerprint": "503b9397ed4cac1ffc22f02c4a2b4cda9fd007a627c4ccc1bfb2708751d96064",
+      "testedHead": "c136559c61724d9e067f104918472d5dbe6b71ec",
+      "sourceFingerprint": "08819bf339345913ac86d767978fad6eeb2e1d12514824279507c3c3ab8fbddf",
       "inputPaths": [
         "apps",
         "packages",
@@ -2302,21 +2302,21 @@
         "vitest.config.ts",
         "vitest.business-chain.config.ts"
       ],
-      "inputFingerprint": "2bf15e265843ae2fc7e56fe2b78f5c26c1904d2c3d3e0b86ee4a18ab9a650cb5",
-      "startedAt": "2026-11-11T09:58:15.806Z",
-      "endedAt": "2026-11-11T09:59:03.657Z",
-      "log": "/workspace/.dx-cloud/r506-overlap-fixed-browser.log",
-      "logSha256": "5d67c0a5fd2c8f707a277967126bbf3dd0640f038b898a4a8262e4febb8c78cc",
-      "passed": 4,
+      "inputFingerprint": "362876d0d7b44a1c275997b9fdeb1dfb76be499a663750967e0d432837700f94",
+      "startedAt": "2026-11-11T10:48:55.039Z",
+      "endedAt": "2026-11-11T10:51:50.029Z",
+      "log": "/workspace/.dx-cloud/r506-coverage-budget-browser.log",
+      "logSha256": "3b5ccc21d12f311e9dfecd79309928ff670e909df63dfdc67793318681dc7cb5",
+      "passed": 16,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "0a8b71c59528395b652e52cd17f9146af12d7ea59e753b2a994a35d4f6ed6e79"
+          "sha256": "c26b10bcda00fa7da079ba36db760e664bebdd44bdb2c15a7ebc6a54f54add7c"
         }
       ],
-      "context": "Real original App/auth and low-privilege PG13 with31 mothers. Deterministic shared style prefix reproduces the old false zero-row assumption at line43; a healthy matching mother remains usable. A unique native PO independently selects only the corrupted object, has unknown totals and no false empty claim, and explicit retry restores it. Other cases preserve current15/global totals, page2 selected-display failure and same-valid-session PMC revocation. This input was held unchanged throughout the run; original failing Full42994864631 remains failed. No production/onsite/scale or rerun of unaffected48/312 claim."
+      "context": "Two complete original App/AuthService/lowpriv PG13 browser suites,16 passed without skipped cases. Current page/global totals,7 category count/drilldowns/all pages, retry versus false empty, healthy style-prefix collision, second-page display failure and same-session revocation retained. Hosted Full43000707081 remains failed: the sole latest mapped failure was its12s coverage locator wait; original artifact records successful200 drilldown replies and no browser errors, but lacks per-request duration so CI infrastructure root is not asserted. Use bounded30s coverage wait within unchanged correctness/SQL/latency budgets and capture native browser resource timings; local successful category/pages measured1838–2428ms. Other312 units/48 native input receipts remain unchanged and verified, not rerun. No onsite/large-scale equivalence claim."
     }
   ]
 }
