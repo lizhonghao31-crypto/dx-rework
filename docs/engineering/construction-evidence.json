@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "22c0a5aca33130868703cdd998016e445ba30f68",
-  "sourceFingerprint": "9be8b15d2b14f91945f0ad6bd1e61db314ca2754bce12a40e795ca03ba5b0f8f",
+  "sourceFingerprint": "65b3366782d0935cbd1e8a74b954a7ac7860665e10ee78dd3aedc7f826e4786d",
   "risk": "full",
   "rules": [
     {
@@ -25,7 +25,8 @@
         "tests/integration/development-execution-read-native-browser-postgres.test.ts",
         "tests/helpers/digital-development-route-fixture.ts",
         "tests/helpers/digital-development-round-fixture.ts",
-        "tests/helpers/digital-development-craft-revision-fixture.ts"
+        "tests/helpers/digital-development-craft-revision-fixture.ts",
+        "tests/integration/development-sla-enrollment-postgres.test.ts"
       ],
       "reads": [
         "apps/api/src/production-platform/development-execution-read.ts",
@@ -37,20 +38,23 @@
         "tests/unit/digital-development-route.test.ts",
         "tests/integration/digital-development-execution-postgres.test.ts",
         "tests/integration/development-execution-read-native-browser-postgres.test.ts",
-        "tests/integration/full-business-chain-postgres.test.ts"
+        "tests/integration/full-business-chain-postgres.test.ts",
+        "tests/integration/development-sla-enrollment-postgres.test.ts"
       ],
       "newTests": [
         "tests/unit/digital-development.test.ts",
         "tests/unit/digital-development-route.test.ts",
         "tests/integration/digital-development-execution-postgres.test.ts",
         "tests/integration/development-execution-read-native-browser-postgres.test.ts",
-        "tests/integration/full-business-chain-postgres.test.ts"
+        "tests/integration/full-business-chain-postgres.test.ts",
+        "tests/integration/development-sla-enrollment-postgres.test.ts"
       ],
-      "expectation": "Current-order trusted now is independent from wall2099; manual instant/date/unknown and old notes are distinct. Native idempotency/round/future guards and material event identity pass. Original App submits date-only material event, checks original HTTP body/response and stored occurrence vs registration, and retains original authenticated GET/QR/revocation and unsaved input. Not six-image visual acceptance. Original legacy dispatch fixtures now use the same trusted business date as their just-entered tasks, rather than a fixed September date; the native three-case legacy chain passes without changing actual-time validation.",
+      "expectation": "Current-order trusted now is independent from wall2099; manual instant/date/unknown and old notes are distinct. Native idempotency/round/future guards and material event identity pass. Original App submits date-only material event, checks original HTTP body/response and stored occurrence vs registration, and retains original authenticated GET/QR/revocation and unsaved input. Not six-image visual acceptance. Original legacy dispatch fixtures now use the same trusted business date as their just-entered tasks, rather than a fixed September date; the native three-case legacy chain passes without changing actual-time validation. Full follow-up preserves immediate original shipment, exact date-only quality, before-entry rejection and original idempotency; the fixture no longer sends October22 for a just-entered shipment.",
       "checks": [
         "r502-final-units",
         "r502-final-pg",
-        "r502-legacy-pg16"
+        "r502-legacy-pg16",
+        "r502-full-findings-pg16"
       ]
     },
     {
@@ -64,7 +68,8 @@
         "apps/api/src/production-platform/journey-fact-model.ts",
         "tests/unit/journey-native-times.test.ts",
         "tests/integration/production-readiness-postgres.test.ts",
-        "apps/api/src/production-platform/bulk-preparation-service.ts"
+        "apps/api/src/production-platform/bulk-preparation-service.ts",
+        "tests/integration/digital-journey-postgres.test.ts"
       ],
       "reads": [
         "apps/api/src/production-platform/task-readiness-facts.ts",
@@ -75,17 +80,20 @@
       "oldTests": [
         "tests/unit/journey-progress-dates.test.ts",
         "tests/unit/journey-projection-isolation.test.ts",
-        "tests/integration/production-readiness-postgres.test.ts"
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/integration/digital-journey-postgres.test.ts"
       ],
       "newTests": [
         "tests/unit/journey-progress-dates.test.ts",
         "tests/unit/journey-projection-isolation.test.ts",
-        "tests/integration/production-readiness-postgres.test.ts"
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/integration/digital-journey-postgres.test.ts"
       ],
-      "expectation": "Date-only does not acquire midnight. Exact scoped correction wins; no recorded_at-to-actual fallback. Internal/external cutting per-PO9/10 gap stays not ready, complement advances only the proper join; unknown correction clears the join. Existing R5-01 raw/effective packing fields and statistics units retained. Explicitly inherited prior-round verified material evidence keeps its original completion, rather than becoming missing or receiving a new-round timestamp; full native regression failed before the SQL fix and passes after. ReviewP2: actor-free native bulk facts carry exact linked cuttingOrderId; the actual persisted cutting_gate timestamp matches the proven all-PO first-ready join, and clears after a scoped correction to unknown. Both internal and external cases fail before and pass after this narrow patch.",
+      "expectation": "Date-only does not acquire midnight. Exact scoped correction wins; no recorded_at-to-actual fallback. Internal/external cutting per-PO9/10 gap stays not ready, complement advances only the proper join; unknown correction clears the join. Existing R5-01 raw/effective packing fields and statistics units retained. Explicitly inherited prior-round verified material evidence keeps its original completion, rather than becoming missing or receiving a new-round timestamp; full native regression failed before the SQL fix and passes after. ReviewP2: actor-free native bulk facts carry exact linked cuttingOrderId; the actual persisted cutting_gate timestamp matches the proven all-PO first-ready join, and clears after a scoped correction to unknown. Both internal and external cases fail before and pass after this narrow patch. Full follow-up compares material actual to its real persisted accepted recheck completion, rather than expecting null despite that trusted fact; all35 original Journey scenarios including full authorization/page boundaries pass.",
       "checks": [
         "r502-final-units",
-        "r502-final-pg"
+        "r502-final-pg",
+        "r502-full-findings-pg16"
       ]
     },
     {
@@ -237,13 +245,13 @@
         "packages",
         "scripts",
         "tests/helpers",
-        "tests/integration",
+        "tests/integration/full-business-chain-postgres.test.ts",
         "package.json",
         "package-lock.json",
         "vitest.config.ts",
         "vitest.business-chain.config.ts"
       ],
-      "inputFingerprint": "c7804fb9cec45e0f128ea982ff966d2fa841bf96c18537cdcb5169aedce95e65",
+      "inputFingerprint": "28fcbcaae2d68f270ca4dbd798ea2f094b6709502c3dc71ccd62ecce0913e038",
       "startedAt": "2026-11-11T02:09:42.419Z",
       "endedAt": "2026-11-11T02:10:09.623Z",
       "log": "/workspace/.dx-cloud/r502-review-legacy.log",
@@ -254,7 +262,43 @@
           "sha256": "1ff8994a401e3f7a721d34fa3dcccf832f4aa3b489e69715c3d9be6d676ee27e"
         }
       ],
-      "context": "R5-02 Review repair on real release base22c0a5ac. Original source c81d6e34 plus internal cuttingOrderId/read-model regression patch; Node22.22.2/npm10.9.9/Vitest4.1.10, original canonical bounded workers, owned marked low-privilege PG13.23 for36 native/browser cases orPG16.14 for3 selected legacy cases. Internal/external two-PO counterexamples failed before patch because persisted cutting_gate time was null; after patch original detail, built model, stored readback and explicit unknown correction are checked independently. No original permissions or quantity/readiness guards relaxed.57 unselected legacy tests are not passed. No onsite/deployment/six-image visual acceptance."
+      "context": "R5-02 Review repair on real release base22c0a5ac. Original source c81d6e34 plus internal cuttingOrderId/read-model regression patch; Node22.22.2/npm10.9.9/Vitest4.1.10, original canonical bounded workers, owned marked low-privilege PG13.23 for36 native/browser cases orPG16.14 for3 selected legacy cases. Internal/external two-PO counterexamples failed before patch because persisted cutting_gate time was null; after patch original detail, built model, stored readback and explicit unknown correction are checked independently. No original permissions or quantity/readiness guards relaxed.57 unselected legacy tests are not passed. No onsite/deployment/six-image visual acceptance. Full findings only change two separate test modules. Refined actual input scope includes the selected full-business-chain file and its complete helper/app/package/config dependencies; independently matched against clean tested9a checkout, so no business rerun."
+    },
+    {
+      "id": "r502-full-findings-pg16",
+      "kind": "tests",
+      "command": "TEST_DATABASE_URL=<owned PG16.14 marked test DB> node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/development-sla-enrollment-postgres.test.ts tests/integration/digital-journey-postgres.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r502-full-findings-pg16.json",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 52,
+      "failed": 0,
+      "skipped": 0,
+      "testedHead": "9a82772c874a6688f86004fa6bb64eee4920da4f",
+      "sourceFingerprint": "65b3366782d0935cbd1e8a74b954a7ac7860665e10ee78dd3aedc7f826e4786d",
+      "context": "Actual9a candidate plus the two Full-discovered test compatibility fixes. Node22.22.2/npm10.9.9/Vitest4.1.10, canonical long-PG2 workers, owned marked low-privilege PG16.14 test database. All52 tests pass including the previously skipped22 Journey tests. Shipping records current trusted dispatch day and explicitly rejects pre-entry day; material actual equals the persisted real accepted recheck completion, registration is not inferred. Pagination aggregate cap120s and all authorization/revocation/hydration assertions preserved. First Full42945129813 failed PG (138pass,2failed,22skipped plus dependent afterAll assertion); non-db passed. Not a new-head Full or onsite pass.",
+      "startedAt": "2026-11-11T02:34:48.213Z",
+      "endedAt": "2026-11-11T02:36:19.096Z",
+      "log": "/workspace/.dx-cloud/r502-full-findings-pg16.log",
+      "logSha256": "fb9d27211b2d432640c8ff9fe4ed037877e9b6ffeea446a536b4fe488a1bbd25",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "eee74e63adf318966e866e432e277703167c9d11e571ab668f23e2c48fcf4c8e"
+        }
+      ],
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests/helpers",
+        "package.json",
+        "package-lock.json",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts",
+        "tests/integration/digital-journey-postgres.test.ts",
+        "tests/integration/development-sla-enrollment-postgres.test.ts"
+      ],
+      "inputFingerprint": "e0a5764bb8fe86236bc46058252e11059251bb6e65d62b99ed7fbd324bae84ea"
     }
   ]
 }
