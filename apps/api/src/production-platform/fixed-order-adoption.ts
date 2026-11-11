@@ -31,9 +31,9 @@ export async function captureOrderTimeline(db:PoolClient,actorId:string,orderId:
    planningLines.push({line_id:String(line.line_id),goal:original.plan_json.anchors[`customer_shipping_date:${line.line_id}`] as SlaAnchor|undefined,customerDateVersion:Number(recorded?.version??0)});
   }
   const {work,route,consumers}=fixedOrderWork(initial,orderId,sourceId,sourceRound,document.preshrink,craftSteps,dual,source?.input??null,planningLines);
-  return {timelineSchemaVersion:2,routeSchemaVersion:2,calculationVersion:'fixed-backward-v1',resource,round:1,
+  return {timelineSchemaVersion:2,routeSchemaVersion:2,calculationVersion:initial.data.orderTimePlan?'fixed-backward-v2':'fixed-backward-v1',resource,round:1,
    originalPlan:{ref:`digital_sla_plans:${original.plan_id}`,revision:original.revision,plan:original.plan_json},
-   unified:{snapshotRef:initial.data.unified.snapshotRef,values:initial.data.unified.values},development:initial.data.development,
+   unified:{snapshotRef:initial.data.unified.snapshotRef,values:initial.data.unified.values},development:initial.data.development,...(initial.data.orderTimePlan?{orderTimePlan:initial.data.orderTimePlan}:{}),
    sourceVersions:{initialIdentityHash:initial.identityHash,configurationId:initial.data.unified.configurationId,routeRef,instructionVersion,sourceId,sourceRound,preshrink:document.preshrink},work,route,craftSteps,consumers};
  });
  if(saved){

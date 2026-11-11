@@ -101,3 +101,9 @@
 `journey-query.ts`只在授权富化结果附真实观察模式；`fixed-schedule-basis.ts`保留原任务D后再附冻结B，不更改任务或共享事实存储。`journey-visual-progress.ts`在v2使用已存在的固定目标和原物理交付A，旧单继续沿原日期语义；比例、KPI和分类谓词不重写。
 
 `cockpit-fixed-schedule.tsx`负责原目标差/独立责任/物理跨度的紧凑格式和可见live数值展示，不调用API、不持有授权缓存、不写时间或状态。原`CockpitDetail`测量真实七行视口并在同一网格约束单据/记录，不强制固定短包装高度或把资料藏在上排内部滚动。`components.tsx`仅聚合原授权导航；`production-display-context.ts`复用原本地返回地址验证，填报继续走原服务的权限/提交恢复。
+
+### R5-04：本单时间核心
+
+`order-time-plan.ts`保存一份本单用时/日历/提醒及完整原公司对应项，`fixed-work-definition.ts`把新格式映射到原work职责；没有新格式的旧快照保持原值。`fixed-timeline-targets.ts`共用原DAG及计时日历完成正反向运算，内含交接不重复、并行取必要分支最晚，`order-time-schedule.ts`仅把明确适用路线和临时条件交给它，不制造R或A。
+
+`order-time-plan-repository.ts`只接受原命令传入的同一client；原命令负责当前权限、合法工艺变更、业务锁和提交。0284逐版本追加冻结输入及B，原始公司对应项不被后来标准替换；普通调整保留既有B，新增节点首次求解。原PO批准改期适配器在同事务追加相关目标，采用当时有效本单版本，并登记原有界更新。这里不写任务、实际事件或已启动责任，不自连Pool、GET构建或新建定时器。正式采用、办理链和统一读取分别由07/06接入；中间版本不启用新建单格式。

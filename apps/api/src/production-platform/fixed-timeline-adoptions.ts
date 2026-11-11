@@ -10,21 +10,24 @@ import {canonicalTimelineInput as canonical,fixedTimelineIdentity} from './fixed
 import {readInitialTimelineInput} from './fixed-timeline-initial-input.js';
 import type {CraftStepChoice} from '@dx-rework/contracts/digital-craft';
 import {buildFixedOrderRouteTargets} from './fixed-order-route-targets.js';
+import {FrozenOrderTimePlanSchema,type FrozenOrderTimePlan} from '@dx-rework/contracts/order-time-plan';
+import {OrderTimePlanRepository} from './order-time-plan-repository.js';
 export {fixedTimelineIdentity} from './fixed-timeline-identity.js';
 
 export type FixedTimelineConsumer={scopeRef:string;lineId:string|null;nodeIds:string[];ends:Record<string,SlaAnchor>;customerGoalIds?:string[];customerDateVersion?:number;
  shipSample?:{nodeId:string;productionNodeId:string;customerGoalId:string;advanceDays:number|null}};
 export type FixedTimelineInput={
- timelineSchemaVersion:2;routeSchemaVersion:2;calculationVersion:'fixed-backward-v1';
+ timelineSchemaVersion:2;routeSchemaVersion:2;calculationVersion:'fixed-backward-v1'|'fixed-backward-v2';
  resource:BusinessTimeScope;round:number;
  originalPlan:{ref:string;revision:number;plan:SlaPlan};
  unified:{snapshotRef:string;values:DigitalSlaSnapshot};
  development:{snapshotRef:string;version:number;values:Record<string,unknown>}|null;
  sourceVersions:Record<string,string|number>;
- work:Array<FixedTimelineWork&{canonicalWorkRef:string;planningParameterRef:string|null;responsibilitySlaRef:string|null;responsibilityMinutes?:number|null;responsibilityCalendar?:FixedTimelineWork['calendar'];parameterKey?:string;accountingRole?:'original_work'|'added_work'|'included'|'event'|'shared_reference'}>;
+ work:Array<FixedTimelineWork&{canonicalWorkRef:string;planningParameterRef:string|null;responsibilitySlaRef:string|null;responsibilityMinutes?:number|null;responsibilityCalendar?:FixedTimelineWork['calendar'];parameterKey?:string;stage?:number;accountingRole?:'original_work'|'added_work'|'included'|'event'|'shared_reference'}>;
  consumers:FixedTimelineConsumer[];
  craftSteps?:Array<CraftStepChoice&{stepId:string}>;
  route?:Array<{kind:string;position:number;nodeId:string;stepId?:string;phase?:'dispatch'|'work'|'confirmation'|'logistics'|'qc'}>;
+ orderTimePlan?:FrozenOrderTimePlan;
 };
 export type FixedTimelineAdoption={adoptionId:string;identityHash:string;input:FixedTimelineInput;time:BusinessTime;creationEventRef:string;createdBy:string};
 type AdoptionRow={adoption_id:string;timeline_schema_version:number;route_schema_version:number;input_snapshot:FixedTimelineInput;identity_hash:string;business_time:BusinessTime;creation_event_ref:string;created_by:string};
@@ -40,7 +43,9 @@ export function fixedConsumerTargets(work:FixedTimelineInput['work'],consumer:Fi
 }
 function adoption(row:AdoptionRow):FixedTimelineAdoption{
  const input=row.input_snapshot as FixedTimelineInput;
- if(row.timeline_schema_version!==2||row.route_schema_version!==2||input.timelineSchemaVersion!==2||input.routeSchemaVersion!==2||input.calculationVersion!=='fixed-backward-v1')throw Error('此订单已采用的计划版本不受当前程序支持');
+ if(row.timeline_schema_version!==2||row.route_schema_version!==2||input.timelineSchemaVersion!==2||input.routeSchemaVersion!==2
+  ||input.calculationVersion!==(input.orderTimePlan?'fixed-backward-v2':'fixed-backward-v1'))throw Error('此订单已采用的计划版本不受当前程序支持');
+ if(input.orderTimePlan)FrozenOrderTimePlanSchema.parse(input.orderTimePlan);
  if(fixedTimelineIdentity(input)!==row.identity_hash)throw Error('冻结计划输入校验失败');
  return {adoptionId:row.adoption_id,identityHash:row.identity_hash,input,time:validateBusinessTime(row.business_time),creationEventRef:row.creation_event_ref,createdBy:row.created_by};
 }
@@ -68,10 +73,12 @@ export class FixedTimelineAdoptionRepository{
   await this.db.query(`SELECT ${resource.kind==='order'?'production_order_id':'source_id'} FROM ${resource.kind==='order'?'digital_production_orders':'digital_production_sources'} WHERE ${resource.kind==='order'?'production_order_id':'source_id'}=$1 FOR UPDATE`,[resource.id]);
   const concurrent=await this.existing(resource,round);if(concurrent)return concurrent;
   const input=structuredClone(await capture(inherited));
-  if(input.timelineSchemaVersion!==2||input.routeSchemaVersion!==2||input.calculationVersion!=='fixed-backward-v1'||input.resource.kind!==resource.kind||input.resource.id!==resource.id||input.round!==round||!eventRef.trim())throw Error('采用输入与原业务范围不一致');
+  if(input.timelineSchemaVersion!==2||input.routeSchemaVersion!==2||input.calculationVersion!==(input.orderTimePlan?'fixed-backward-v2':'fixed-backward-v1')||input.resource.kind!==resource.kind||input.resource.id!==resource.id||input.round!==round||!eventRef.trim())throw Error('采用输入与原业务范围不一致');
+  if(input.orderTimePlan)FrozenOrderTimePlanSchema.parse(input.orderTimePlan);
   validateDigitalSlaSnapshot(input.unified.values);
   if(inherited&&(JSON.stringify(canonical(input.unified))!==JSON.stringify(canonical(inherited.input.unified))
    ||JSON.stringify(canonical(input.development))!==JSON.stringify(canonical(inherited.input.development))))throw Error('已有开发来源的新轮次须沿原冻结标准');
+  if(inherited&&fixedTimelineIdentity(input.orderTimePlan?.company??null)!==fixedTimelineIdentity(inherited.input.orderTimePlan?.company??null))throw Error('新轮次不能替换本单原公司标准');
   if(!input.originalPlan.ref||!Number.isSafeInteger(input.originalPlan.revision)||input.originalPlan.revision<1||!input.unified.snapshotRef||!input.consumers.length||new Set(input.consumers.map(scope=>scope.scopeRef)).size!==input.consumers.length)throw Error('采用输入缺少原冻结计划或唯一交付开发范围');
   for(const consumer of input.consumers){
    if(!consumer.scopeRef.trim()||!consumer.nodeIds.length||new Set(consumer.nodeIds).size!==consumer.nodeIds.length||resource.kind==='source'&&consumer.lineId!==null)throw Error('采用范围身份无效');
@@ -85,7 +92,7 @@ export class FixedTimelineAdoptionRepository{
   return adoption(row);
  }
  /** Read the captured version even if the deployment stops adopting new v2. */
- async mode(resource:BusinessTimeScope):Promise<'legacy'|'fixed_v2'>{return await this.existing(resource)||await readInitialTimelineInput(this.db,resource)?'fixed_v2':'legacy';}
+ async mode(resource:BusinessTimeScope):Promise<'legacy'|'fixed_v2'>{return await this.existing(resource)||await readInitialTimelineInput(this.db,resource)||await new OrderTimePlanRepository(this.db).current(resource)?'fixed_v2':'legacy';}
  async buildInitialTargets(saved:FixedTimelineAdoption,actorId:string,time:BusinessTime){
   validateBusinessTime(time);
   const stored=await this.existing(saved.input.resource,saved.input.round);

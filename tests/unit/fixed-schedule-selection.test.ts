@@ -23,6 +23,13 @@ describe('one fixed classification for complete scope, finite clock boundaries a
   const input=basis();input.scopes=[input.scopes[0]!,{...structuredClone(input.scopes[0]!),scopeRef:'po:two',lineId:'two',facts:{}}];const result=evaluateFixedJourneyBasis(input,at(10),false);expect(result.state).toBe('late');expect(result.scopes.map(scope=>scope.state)).toEqual(['late','unknown']);
   Object.assign(input,{actorRoles:['TEST-secret-role']});Object.assign(input.scopes[0]!.work[0]!,{price:'TEST-secret-price'});Object.assign(input.scopes[0]!.facts.a!,{canHandle:true});const shared=JSON.stringify(fixedScheduleBasisSnapshot(input));for(const value of ['TEST-secret-role','TEST-secret-price','canHandle'])expect(shared).not.toContain(value);
  });
+ it('retains only the new factual future-root and termination markers in shared storage',()=>{
+  const input=basis();input.scopes[0]!.facts.b={...input.scopes[0]!.facts.b!,notYetReady:true,terminated:true,terminationAt:at(6)};
+  Object.assign(input.scopes[0]!.facts.b,{canAdjust:true,actorRoles:['TEST private']});
+  const result=fixedScheduleBasisSnapshot(input),fact=result.scopes[0]!.facts.b!;
+  expect(fact).toMatchObject({notYetReady:true,terminated:true,terminationAt:at(6)});
+  expect(JSON.stringify(result)).not.toContain('canAdjust');expect(JSON.stringify(result)).not.toContain('TEST private');
+ });
  it('requires native evidence recheck at a future actual boundary rather than manufacturing an event when time passes',()=>{
   const input=basis(),now=at(6);input.scopes[0]!.facts={...input.scopes[0]!.facts,b:{...input.scopes[0]!.facts.b!,businessCompleted:true,completed:instant(8)}};
   const compiled=compileJourneySelectionClock(item(now),item(now),{plan:null,original:null,facts:{},fixedSchedule:input},[],[],{finished:false,factoryFinished:false,sampleFinished:false,sentLineIds:[]},{now,scenarioId:null,revision:0});expect(compiled.expiresAt).toBe(at(8));expect(compiled.frames.every(frame=>frame.from<at(8))).toBe(true);

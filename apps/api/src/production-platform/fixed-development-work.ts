@@ -1,7 +1,7 @@
 import type {CraftStepChoice} from '@dx-rework/contracts/digital-craft';
 import type {DigitalTaskKind} from './task-access-repository.js';
 import type {FixedTimelineInput} from './fixed-timeline-adoptions.js';
-import {frozenWorkDefinition as definition,type FixedWorkInputs} from './fixed-work-definition.js';
+import {frozenWorkDefinition as definition,withOrderTimeStageReserves,type FixedWorkInputs} from './fixed-work-definition.js';
 type Work=FixedTimelineInput['work'][number];
 /** Shared pure adopted route construction. The caller supplies original inputs;
  * the settings calculator supplies clearly temporary inputs, never actual A. */
@@ -22,7 +22,7 @@ export function fixedDevelopmentWork(initial:FixedWorkInputs,sourceId:string,rou
     work.push({id,parameterKey:key,dependsOn:[],...definition(initial,key),includedIn:kind==='development_washing_dispatch'?'development_washing':'development_sewing',includedPosition:'start',canonicalWorkRef:ref(id),accountingRole:'included'});continue;
    }
    const milestone=kind==='development_confirmation',policy=milestone?{minutes:0,calendar:null,planningParameterRef:null,responsibilitySlaRef:null,responsibilityMinutes:null,responsibilityCalendar:null}:definition(initial,key,Boolean(step&&dual));
-   if(kind==='development_washing'&&washing==='外洗'){
+   if(kind==='development_washing'&&washing==='外洗'&&!initial.data.orderTimePlan){
     const days=initial.data.development?.values.externalWashDays;
     if(typeof days==='number'){policy.minutes=days*1440;policy.calendar='natural_days';policy.planningParameterRef=`${initial.data.development!.snapshotRef}:externalWashDays`;policy.responsibilitySlaRef=policy.planningParameterRef;policy.responsibilityMinutes=days*1440;policy.responsibilityCalendar='natural_days';}
    }
@@ -41,5 +41,5 @@ export function fixedDevelopmentWork(initial:FixedWorkInputs,sourceId:string,rou
   for(const included of work.filter(work=>work.includedIn)){
    const parent=work.find(work=>work.id===included.includedIn);included.calendar=parent?.calendar??null;
   }
- return {work,route,previous};
+ return {work:withOrderTimeStageReserves(initial,work),route,previous};
 }

@@ -179,6 +179,10 @@ export const classifyFullGatePaths = (inputPaths) => {
     "tests/integration/development-execution-read-native-browser-postgres.test.ts",
   ]);
   const domains = new Set();
+  if(paths.some(path=>/order-time-(?:plan|schedule)|0284_order_time_plan_versions/.test(path))){
+    addAll(mappedTests,['tests/integration/order-time-plan-postgres.test.ts','tests/integration/fixed-timeline-postgres.test.ts','tests/integration/fixed-progress-postgres.test.ts']);
+    domains.add('order-time-plan-core');
+  }
   if(paths.some(path=>['apps/api/src/production-platform/development-occurrence.ts','apps/web/src/development-occurrence-input.tsx','apps/web/src/development-material-event-form.tsx'].includes(path))){
     addAll(mappedTests,['tests/integration/digital-development-execution-postgres.test.ts','tests/integration/production-readiness-postgres.test.ts']);
     domains.add('native-development-occurrence');

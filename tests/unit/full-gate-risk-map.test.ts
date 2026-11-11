@@ -316,3 +316,9 @@ it('maps actual paired-settings writers, migration and full-App harness to nativ
 
 
 it('maps actual supply-chain integration consumers to the original App and native fixed progress checks',()=>{const result=classifyFullGatePaths(['apps/web/src/cockpit-fixed-schedule.tsx','apps/web/src/components.tsx']);expect(result.mappedPostgresTests).toContain('tests/integration/supplychain-board-native-browser-postgres.test.ts');expect(result.mappedPostgresTests).toContain('tests/integration/fixed-progress-postgres.test.ts');});
+
+it('maps the new order-time storage and algorithm to its actual PG cases without operational drills',()=>{
+ for(const path of ['apps/api/src/production-platform/order-time-plan-repository.ts','apps/api/src/production-platform/order-time-schedule.ts','packages/contracts/src/order-time-plan.ts','apps/api/migrations/0284_order_time_plan_versions.sql']){
+  const scope=classifyFullGatePaths([path]);expect(scope.mappedPostgresTests).toContain('tests/integration/order-time-plan-postgres.test.ts');expect(scope.maintenanceSensitive).toBe(false);
+ }
+});

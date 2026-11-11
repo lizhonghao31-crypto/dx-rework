@@ -3,6 +3,8 @@ import type {BusinessTime,BusinessTimeScope} from '@dx-rework/domain/business-cl
 import type {DigitalSlaSnapshot} from '@dx-rework/contracts/digital-sla';
 import type {TimelineAdoptionMode} from './fixed-timeline-mode.js';
 import {fixedTimelineIdentity} from './fixed-timeline-identity.js';
+import {FrozenOrderTimePlanSchema,type FrozenOrderTimePlan} from '@dx-rework/contracts/order-time-plan';
+import {OrderTimePlanRepository} from './order-time-plan-repository.js';
 
 type DB=Pick<PoolClient,'query'>;
 export type FrozenInitialTimelineInput={
@@ -10,7 +12,8 @@ export type FrozenInitialTimelineInput={
  data:{resource:BusinessTimeScope;creationEventRef:string;time:BusinessTime;
   unified:{configurationId:string;snapshotRef:string;values:DigitalSlaSnapshot};
   development:{snapshotRef:string;version:number;values:Record<string,unknown>}|null;
-  planning:{standardRef:string;version:number;values:Record<string,unknown>}|null};
+  planning:{standardRef:string;version:number;values:Record<string,unknown>}|null;
+  orderTimePlan?:FrozenOrderTimePlan};
 };
 export async function readInitialTimelineInput(db:DB,resource:BusinessTimeScope):Promise<FrozenInitialTimelineInput|null>{
  const table=resource.kind==='source'?'digital_development_sla_plans':'digital_sla_plans';
@@ -20,6 +23,7 @@ export async function readInitialTimelineInput(db:DB,resource:BusinessTimeScope)
  if(!row||row.version===null||row.version==='1')return null;
  const input=row.input as FrozenInitialTimelineInput;
  if(row.version!=='2'||row.route_version!=='2'||input?.version!==2||!input.data||fixedTimelineIdentity(input.data)!==input.identityHash)throw Error('此对象原采用版本或冻结输入不受当前程序支持');
+ if(input.data.orderTimePlan)FrozenOrderTimePlanSchema.parse(input.data.orderTimePlan);
  return input;
 }
 /** Same original creation transaction: freeze existing standards even before
@@ -38,6 +42,10 @@ export async function freezeInitialTimelineInput(db:DB,mode:TimelineAdoptionMode
  }
  const row=inherited||!development?null:(await db.query('SELECT standard_id,version,planning_json FROM digital_timeline_standard_versions WHERE unified_configuration_id=$1 AND development_version=$2 ORDER BY version DESC LIMIT 1',[input.unified.configurationId,development.version])).rows[0];
  const planning=inherited?inherited.data.planning:row?{standardRef:row.standard_id,version:Number(row.version),values:row.planning_json}:null;
- const data=structuredClone({...input,development,planning});
+ const confirmed=inherited?await new OrderTimePlanRepository(db).current(inherited.data.resource):null;
+ const policy=confirmed?.input.plan??inherited?.data.orderTimePlan??input.orderTimePlan;
+ if(inherited?.data.orderTimePlan&&policy&&fixedTimelineIdentity(policy.company)!==fixedTimelineIdentity(inherited.data.orderTimePlan.company))throw Error('正式订单不能替换本单原公司标准');
+ if(inherited&&input.orderTimePlan&&fixedTimelineIdentity(input.orderTimePlan)!==fixedTimelineIdentity(policy??null))throw Error('正式订单须沿本单当前已确认的时间方案');
+ const data=structuredClone({...input,development,planning,...(policy?{orderTimePlan:FrozenOrderTimePlanSchema.parse(policy)}:{})});
  return {version:2,identityHash:fixedTimelineIdentity(data),data};
 }

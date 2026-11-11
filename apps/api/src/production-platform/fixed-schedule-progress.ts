@@ -2,11 +2,11 @@ import type {FixedScheduleCalendar,ScheduleOccurrence,ScheduleRange,ScheduleGoal
 import {shiftFixedTimeline} from './fixed-timeline-targets.js';
 
 export type ScheduleWork={id:string;canonicalWorkRef:string;dependsOn:readonly string[];start:string|null;end:string|null;minutes:number|null;calendar:FixedScheduleCalendar|null;includedIn?:string;accountingRole?:'original_work'|'added_work'|'included'|'event'|'shared_reference';originalHandoffAt?:string|null;responsibilitySlaRef:string|null;responsibilityMinutes?:number|null;responsibilityCalendar?:FixedScheduleCalendar|null;targetPrecision?:'instant'|'date';targetDate?:string|null;targetRevision?:string};
-export type ScheduleFact={ready:ScheduleOccurrence;completed:ScheduleOccurrence;businessCompleted:boolean;waitingForPredecessors:boolean;clockStart:ScheduleOccurrence;evidenceRefs:readonly string[];impactStartedAt?:string|null;terminated?:boolean};
+export type ScheduleFact={ready:ScheduleOccurrence;completed:ScheduleOccurrence;businessCompleted:boolean;waitingForPredecessors:boolean;clockStart:ScheduleOccurrence;evidenceRefs:readonly string[];impactStartedAt?:string|null;terminated?:boolean;terminationAt?:string|null;notYetReady?:boolean};
 export type ScheduleScopeInput={scopeRef:string;lineId:string|null;targetRevision:string;work:readonly ScheduleWork[];facts:Readonly<Record<string,ScheduleFact>>;terminalIds:readonly string[];customerGoal:string|null};
 export type ScheduleTermination={at:string|null;kind:'cancelled'|'special_closure'};
 type Interval=readonly[number,number];
-type Boundary={available:Interval;credit:Interval;reference:number;completed:boolean};
+type Boundary={available:Interval;credit:Interval;reference:number;completed:boolean;estimate:'actual'|'conditional'|'lower_bound'};
 const MINUTE=60000,DAY=86400000,OFFSET=8*60*MINUTE;
 const iso=(value:number)=>new Date(value).toISOString();
 const timestamp=(value:string|null|undefined)=>value&&Number.isFinite(Date.parse(value))?Date.parse(value):null;
@@ -75,7 +75,7 @@ export function evaluateFixedScheduleScope(input:ScheduleScopeInput,asOf:string,
   const goalDelta=fixedGoalDelta(work,fact,input,asOf,termination);
   let boundary:Boundary|null=null;
   if(work.accountingRole==='added_work'&&timestamp(work.originalHandoffAt)===null)coverage.push('新增范围缺少原交接目标');
-  else if(completed&&actual&&end!==null)boundary={available:actual,credit:actual,reference:work.accountingRole==='added_work'?timestamp(work.originalHandoffAt)??end:end,completed:true};
+  else if(completed&&actual&&end!==null)boundary={available:actual,credit:actual,reference:work.accountingRole==='added_work'?timestamp(work.originalHandoffAt)??end:end,completed:true,estimate:'actual'};
   else if(completed)coverage.push('已完成但实际发生时间待核');
   else if(terminated)coverage.push('已终止');
   else if(start===null||end===null||budget===null||budget<0||!calendar)coverage.push('本范围冻结目标、规划时长或日历待核');
@@ -86,7 +86,7 @@ export function evaluateFixedScheduleScope(input:ScheduleScopeInput,asOf:string,
    const allComplete=deps.every(dep=>dep!.completed);
    if(!ready&&work.accountingRole!=='added_work'&&!(deps.length&&!allComplete&&fact?.waitingForPredecessors))coverage.push('真实就绪或未完成前置依据待核');
    else {
-    const available:number[]=[],credit:number[]=[];
+    const available:number[]=[],credit:number[]=[];let lowerBound=deps.some(dep=>dep!.estimate==='lower_bound');
     for(const side of [0,1] as const){
      const candidates=deps.map(dep=>dep!.completed?dep!.available[side]:Math.max(dep!.available[side],shift(start,Math.min(0,scheduleElapsed(dep!.reference,dep!.credit[side],calendar)),calendar)));
      const join=candidates.length?Math.max(...candidates):start;
@@ -94,17 +94,17 @@ export function evaluateFixedScheduleScope(input:ScheduleScopeInput,asOf:string,
      const position=Math.max(join,shift(start,Math.min(0,scheduleElapsed(start,joinCredit,calendar)),calendar),ready?.[side]??-Infinity);
      if(work.accountingRole==='added_work'){
       const impact=timestamp(fact?.impactStartedAt),active=impact!==null&&impact<=now;
-      available.push(active?Math.max(join,now):join);credit.push(active?Math.max(joinCredit,now):joinCredit);
+      available.push(active?Math.max(join,now):join);credit.push(active?Math.max(joinCredit,now):joinCredit);lowerBound ||= active;
      }else{
       const quota=shift(position,budget!,calendar),bound=ready?Math.max(quota,now):quota;
-      available.push(bound);credit.push(shift(end,Math.min(0,scheduleElapsed(end,bound,calendar)),calendar));
+      available.push(bound);credit.push(shift(end,Math.min(0,scheduleElapsed(end,bound,calendar)),calendar));lowerBound ||= Boolean(ready&&now>=quota);
      }
     }
-    boundary={available:[available[0]!,available[1]!],credit:[credit[0]!,credit[1]!],reference:work.accountingRole==='added_work'?timestamp(work.originalHandoffAt)??end:end,completed:false};
+    boundary={available:[available[0]!,available[1]!],credit:[credit[0]!,credit[1]!],reference:work.accountingRole==='added_work'?timestamp(work.originalHandoffAt)??end:end,completed:false,estimate:lowerBound?'lower_bound':'conditional'};
    }
   }
   const lag=boundary&&end!==null&&calendar?range(scheduleElapsed(end,boundary.available[0],calendar),scheduleElapsed(end,boundary.available[1],calendar)):null;
-  const stop=terminated?timestamp(termination?.at):null;
+  const stop=terminated?timestamp(fact?.terminated?fact.terminationAt??termination?.at:termination?.at):null;
   const ownCalendar=work.responsibilityCalendar,ownStart=fact?scheduleOccurrenceBounds(fact.clockStart,asOf):null,ownEnd=completed?actual:terminated?stop!==null&&stop<=now?[stop,stop] as const:null:[now,now] as const;
   const ownKnown=Boolean(work.responsibilitySlaRef&&work.responsibilityMinutes!==null&&work.responsibilityMinutes!==undefined&&ownCalendar&&ownStart&&ownEnd&&ownEnd[1]>=ownStart[0]);
   const own=ownKnown?range(Math.max(0,scheduleElapsed(ownStart![1],ownEnd![0],ownCalendar!)-work.responsibilityMinutes!),Math.max(0,scheduleElapsed(ownStart![0],ownEnd![1],ownCalendar!)-work.responsibilityMinutes!)):null;
@@ -117,19 +117,32 @@ export function evaluateFixedScheduleScope(input:ScheduleScopeInput,asOf:string,
  const lag=terminals.length&&terminals.every(node=>node!.lagMinutes)?range(Math.max(...terminals.map(node=>node!.lagMinutes!.minimum)),Math.max(...terminals.map(node=>node!.lagMinutes!.maximum))):null;
  const provedLate=terminals.some(node=>node!.state==='late');
  const due=timestamp(input.customerGoal),delivered=terminals.length>0&&terminals.every(node=>node!.businessCompleted);
- return {scopeRef:input.scopeRef,lineId:input.lineId,targetRevision:input.targetRevision,state:termination&&!delivered?'terminated':provedLate?'late':state(lag),lagMinutes:lag,customerDuePassed:due===null?null:!delivered&&!termination&&now>=due,nodes:input.work.map(work=>results.get(work.id)!),coverage:[...new Set([...results.values()].flatMap(node=>node.coverage))]};
+ const ends=input.terminalIds.map(id=>boundaries.get(id));
+ const completionEstimate=!delivered&&termination?{kind:'terminated' as const,earliest:null,latest:null}
+  :!ends.length||ends.some(end=>!end)?{kind:'unknown' as const,earliest:null,latest:null}
+  :{kind:ends.every(end=>end!.completed)?'actual' as const:ends.some(end=>end!.estimate==='lower_bound')?'lower_bound' as const:'conditional' as const,
+    earliest:iso(Math.max(...ends.map(end=>end!.available[0]))),latest:ends.some(end=>end!.estimate==='lower_bound')?null:iso(Math.max(...ends.map(end=>end!.available[1])))};
+ return {scopeRef:input.scopeRef,lineId:input.lineId,targetRevision:input.targetRevision,state:termination&&!delivered?'terminated':provedLate?'late':state(lag),lagMinutes:lag,customerDuePassed:due===null?null:!delivered&&!termination&&now>=due,nodes:input.work.map(work=>results.get(work.id)!),coverage:[...new Set([...results.values()].flatMap(node=>node.coverage))],completionEstimate};
 }
 
 /** Whole-order spans use one physical time axis, never sums of node budgets,
  * parallel branches or PO clocks. Termination supplies an observation stop only. */
 export function fixedDurationSummary(scopes:readonly ScheduleScopeInput[],asOf:string,termination?:ScheduleTermination|null):ScheduleDurationSummary{
- const starts=scopes.flatMap(scope=>scope.work.filter(work=>!work.includedIn&&work.dependsOn.length===0).map(work=>timestamp(work.start))),ends=scopes.map(scope=>{
+ const deliveryWork=(scope:ScheduleScopeInput)=>{
+  const selected=new Set<string>(),visiting=new Set<string>(),byId=new Map(scope.work.map(work=>[work.id,work]));
+  const visit=(id:string)=>{if(selected.has(id))return;if(visiting.has(id))throw Error('交付用时依赖成环');const work=byId.get(id);if(!work)throw Error('交付用时缺少必要节点');visiting.add(id);for(const dep of work.dependsOn)visit(dep);if(work.includedIn)visit(work.includedIn);visiting.delete(id);selected.add(id);};
+  for(const id of scope.terminalIds)visit(id);return scope.work.filter(work=>selected.has(work.id));
+ };
+ const starts=scopes.flatMap(scope=>deliveryWork(scope).filter(work=>!work.includedIn&&work.dependsOn.length===0).map(work=>timestamp(work.start))),ends=scopes.map(scope=>{
   if(scope.customerGoal)return timestamp(scope.customerGoal);
   const terminalEnds=scope.terminalIds.map(id=>timestamp(scope.work.find(work=>work.id===id)?.end));
   return terminalEnds.length&&terminalEnds.every(at=>at!==null)?Math.max(...terminalEnds as number[]):null;
  });
- const roots=scopes.flatMap(scope=>scope.work.filter(work=>!work.includedIn&&work.dependsOn.length===0&&work.accountingRole!=='added_work').map(work=>scheduleOccurrenceBounds(scope.facts[work.id]?.ready??unknown,asOf)));
- // Missing original roots cannot be replaced by a surviving downstream R.
+ const roots=scopes.flatMap(scope=>deliveryWork(scope).filter(work=>!work.includedIn&&work.dependsOn.length===0&&work.accountingRole!=='added_work').filter(work=>{
+  const fact=scope.facts[work.id];return !(fact?.notYetReady===true&&!fact.businessCompleted&&fact.clockStart.precision==='unknown'&&fact.ready.precision==='unknown');
+ }).map(work=>scheduleOccurrenceBounds(scope.facts[work.id]?.ready??unknown,asOf)));
+ // A positively known future root is different from a missing historical R.
+ // Missing original starts cannot be replaced by a surviving downstream R.
  const ready=roots.length&&roots.every((value):value is Interval=>value!==null)?roots:null;
  const terminal=scopes.flatMap(scope=>scope.terminalIds.map(id=>scope.facts[id]));
  const completion=terminal.map(fact=>completedBounds(fact,asOf));
