@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "be61c84d0e05cbc9428c974fdfbe1b00aff4ad89",
-  "sourceFingerprint": "2c7389a0b6d7da9287423acfe2e9b3cad3df9526ef156505f2ec8772cbe66ddf",
+  "sourceFingerprint": "ea7060512316c376212c23554c81a43ce09b686b83b857a525f48d456dcf5e7b",
   "risk": "full",
   "rules": [
     {
@@ -11,13 +11,13 @@
       "rule": "Complete immutable company standards, safe paginated legacy history and explicit publication/adoption boundary.",
       "writes": [
         "apps/api/src/platform/migration-manifest.json",
-        "apps/api/src/production-platform/task-routes.ts",
-        "apps/api/src/production-platform/task-service.ts",
-        "packages/contracts/package.json",
         "apps/api/src/production-platform/order-time-activation.ts",
         "apps/api/src/production-platform/order-time-settings-calculation.ts",
         "apps/api/src/production-platform/order-time-settings-history.ts",
         "apps/api/src/production-platform/order-time-settings-service.ts",
+        "apps/api/src/production-platform/task-routes.ts",
+        "apps/api/src/production-platform/task-service.ts",
+        "packages/contracts/package.json",
         "packages/contracts/src/order-time-settings.ts"
       ],
       "reads": [
@@ -45,23 +45,23 @@
       "dateAndPermission": "One new standard value/calendar/reminder per node, historical records retain exact counterpart provenance. Targets, responsibility, real occurrences and publication audits remain distinct. Root/owner/director company authority, Root/director customer writes, current role/disable/member checks and PMC read-only remain; no user permission/DTO caching.",
       "rule": "Customer batch defaults inherit all secondary people into new orders and original contract/todo consumers without primary editing powers.",
       "writes": [
+        "apps/api/migrations/0285_order_time_settings_and_merchandisers.sql",
         "apps/api/src/production-platform/access-routes.ts",
         "apps/api/src/production-platform/access-service.ts",
+        "apps/api/src/production-platform/customer-merchandiser-defaults.ts",
         "apps/api/src/production-platform/identity-service.ts",
         "apps/api/src/production-platform/journey-query.ts",
         "apps/api/src/production-platform/journey-selection-query.ts",
+        "apps/api/src/production-platform/merchandiser-eligibility.ts",
+        "apps/api/src/production-platform/order-merchandisers.ts",
         "apps/api/src/production-platform/production-statistics-query.ts",
+        "apps/api/src/sourcing/additional-merchandisers.ts",
         "apps/api/src/sourcing/sourcing-case-read.ts",
         "apps/api/src/sourcing/sourcing-contract-return-service.ts",
         "apps/api/src/sourcing/sourcing-service.ts",
         "apps/api/src/sourcing/sourcing-transfer-contract-todos.ts",
-        "apps/web/src/digital-cockpit-personnel.tsx",
-        "apps/api/migrations/0285_order_time_settings_and_merchandisers.sql",
-        "apps/api/src/production-platform/customer-merchandiser-defaults.ts",
-        "apps/api/src/production-platform/merchandiser-eligibility.ts",
-        "apps/api/src/production-platform/order-merchandisers.ts",
-        "apps/api/src/sourcing/additional-merchandisers.ts",
         "apps/web/src/customer-default-merchandisers.tsx",
+        "apps/web/src/digital-cockpit-personnel.tsx",
         "packages/contracts/src/digital-customer-merchandisers.ts"
       ],
       "reads": [
@@ -92,13 +92,13 @@
       "rule": "Approved settings/calculator/customer visual scope and real editing/unknown-submit behavior retain original App authority and accurate math.",
       "writes": [
         "apps/web/src/digital-production-api.ts",
-        "apps/web/src/sla-settings-workspace.tsx",
         "apps/web/src/order-time-calculator.tsx",
         "apps/web/src/order-time-node-fields.tsx",
         "apps/web/src/order-time-route-fields.tsx",
         "apps/web/src/order-time-settings-model.ts",
         "apps/web/src/order-time-settings.css",
         "apps/web/src/order-time-standard-editor.tsx",
+        "apps/web/src/sla-settings-workspace.tsx",
         "apps/web/src/use-order-time-calculation.ts"
       ],
       "reads": [
@@ -132,16 +132,16 @@
         "scripts/deploy/acceptance-migration-requirements.json",
         "scripts/test-suite-plan.mjs",
         "tests/acceptance/supplychain-settings-browser.ts",
-        "tests/integration/digital-production-identity-postgres.test.ts",
-        "tests/integration/m01-settings-native-browser-postgres.test.ts",
-        "tests/unit/digital-pmc-readonly-ui.test.ts",
-        "tests/unit/sourcing-additional-merchandiser.test.ts",
         "tests/helpers/r5-order-time-fixture.ts",
         "tests/helpers/r5-role-fixture.ts",
         "tests/integration/customer-default-merchandisers-postgres.test.ts",
+        "tests/integration/digital-production-identity-postgres.test.ts",
+        "tests/integration/m01-settings-native-browser-postgres.test.ts",
         "tests/integration/order-time-settings-postgres.test.ts",
         "tests/integration/r5-settings-native-browser-postgres.test.ts",
-        "tests/unit/order-time-settings.test.ts"
+        "tests/unit/digital-pmc-readonly-ui.test.ts",
+        "tests/unit/order-time-settings.test.ts",
+        "tests/unit/sourcing-additional-merchandiser.test.ts"
       ],
       "reads": [
         "scripts/owned-command.mjs",
@@ -209,8 +209,8 @@
       "command": "/workspace/.dx-cloud/r5-runtime/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/order-time-settings-postgres.test.ts tests/integration/customer-default-merchandisers-postgres.test.ts tests/integration/r5-settings-native-browser-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r505-candidate-native.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "be61c84d0e05cbc9428c974fdfbe1b00aff4ad89",
-      "sourceFingerprint": "2c7389a0b6d7da9287423acfe2e9b3cad3df9526ef156505f2ec8772cbe66ddf",
+      "testedHead": "6bea06cc1ccbc9474e6e959f9d33c5fb6f6ae9d2",
+      "sourceFingerprint": "ea7060512316c376212c23554c81a43ce09b686b83b857a525f48d456dcf5e7b",
       "inputPaths": [
         "apps",
         "packages",
@@ -224,11 +224,11 @@
         "tests/acceptance",
         "tests/fixtures"
       ],
-      "inputFingerprint": "811fe90cc09fa4c86c8190e560616d5b4419e1c422e41e4f6e6c66c2b772209f",
-      "startedAt": "2026-11-11T05:41:36.528Z",
-      "endedAt": "2026-11-11T05:42:00.363Z",
+      "inputFingerprint": "7415d4c193bb659a8ee76c1d696186156871c0e382f0f7ab964222becf4adfb7",
+      "startedAt": "2026-11-11T06:11:26.791Z",
+      "endedAt": "2026-11-11T06:11:49.316Z",
       "log": "/workspace/.dx-cloud/r505-candidate-native.log",
-      "logSha256": "d9d4e4901d2ba6a34e62e07dc8fc3832aacbc6178ea40f609638280a190743a1",
+      "logSha256": "5a3a3ae20cc16f4750760454dbcd08e9a6b298147c0eb3bf50a6c6fecfe9d16b",
       "context": "Actual R5-04 merged base be61c84d0e05cbc9428c974fdfbe1b00aff4ad89. Node22.22.2/npm10.9.9. Canonical non-DB1, PostgreSQL1/long2; maximum2 actual local PG test workers, no other PG group concurrent. Only marked owned low-privilege TEST database/schema; native commands and original auth/App. New company settings explicitly enabled in this owned test server, ordinary runtime switch remains off until07. No onsite, production or deployment claims.",
       "passed": 20,
       "failed": 0,
@@ -236,7 +236,7 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "729fc3a1bcaee99dde7aeafd7e96b1f8cba4b3970b53670ed0d25496111d6590"
+          "sha256": "68c2a4a258fb0dd4ea413457de2380db34cddfe7f5858da5bd73202607f564b3"
         }
       ]
     },
@@ -246,8 +246,8 @@
       "command": "/workspace/.dx-cloud/r5-runtime/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/digital-production-identity-postgres.test.ts tests/integration/m01-settings-native-browser-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r505-candidate-legacy.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "be61c84d0e05cbc9428c974fdfbe1b00aff4ad89",
-      "sourceFingerprint": "2c7389a0b6d7da9287423acfe2e9b3cad3df9526ef156505f2ec8772cbe66ddf",
+      "testedHead": "6bea06cc1ccbc9474e6e959f9d33c5fb6f6ae9d2",
+      "sourceFingerprint": "ea7060512316c376212c23554c81a43ce09b686b83b857a525f48d456dcf5e7b",
       "inputPaths": [
         "apps",
         "packages",
@@ -261,11 +261,11 @@
         "tests/acceptance",
         "tests/fixtures"
       ],
-      "inputFingerprint": "811fe90cc09fa4c86c8190e560616d5b4419e1c422e41e4f6e6c66c2b772209f",
-      "startedAt": "2026-11-11T05:40:00.910Z",
-      "endedAt": "2026-11-11T05:40:45.150Z",
+      "inputFingerprint": "7415d4c193bb659a8ee76c1d696186156871c0e382f0f7ab964222becf4adfb7",
+      "startedAt": "2026-11-11T06:09:32.236Z",
+      "endedAt": "2026-11-11T06:10:12.300Z",
       "log": "/workspace/.dx-cloud/r505-candidate-legacy.log",
-      "logSha256": "011757ca9a7faa160d18971ff7ec642ea135b63dba606db5d6ea9b998720225f",
+      "logSha256": "ab147c2601ada5c56087b458f6b2be0bd463a4af56f6298ece90b3f7ec2f17d6",
       "context": "Actual R5-04 merged base be61c84d0e05cbc9428c974fdfbe1b00aff4ad89. Node22.22.2/npm10.9.9. Canonical non-DB1, PostgreSQL1/long2; maximum2 actual local PG test workers, no other PG group concurrent. Only marked owned low-privilege TEST database/schema; native commands and original auth/App. New company settings explicitly enabled in this owned test server, ordinary runtime switch remains off until07. No onsite, production or deployment claims.",
       "passed": 49,
       "failed": 0,
@@ -273,7 +273,7 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "0ac16830bafadbdf37b59df85fd15dd262d5c4a74489501a2b49cd8280aae303"
+          "sha256": "799c387c53d403ce1f119b06ee7e7c249afca8acbe9b7d041214521cb65f34a8"
         }
       ]
     }

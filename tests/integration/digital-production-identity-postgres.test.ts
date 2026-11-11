@@ -11,7 +11,7 @@ import { beijingCalendarDate, DigitalOrderCreateSchema, DigitalSourceCreateSchem
 import { DigitalProductionIdentityService } from "../../apps/api/src/production-platform/identity-service.js";
 import { registerDigitalIdentityRoutes } from "../../apps/api/src/production-platform/identity-routes.js";
 import { linkNewDigitalChild, resolveDigitalChild } from "../../apps/api/src/production-platform/child-link-repository.js";
-import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ownedPostgresSchema,createOwnedPostgresSchema,releaseOwnedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 import { DigitalProductionAccessService } from "../../apps/api/src/production-platform/access-service.js";
 import { DigitalProductionAccessPolicy } from "../../apps/api/src/production-platform/access-policy.js";
@@ -45,7 +45,7 @@ run("digital production P01 identities", () => {
     // The unchanged be61c84d tree reproduces its missing tasks-table failure.
     // Keep its original identity/PO/auth assertions focused; real task creation
     // is exercised without this adapter by the full-schema native suites.
-    await admin.query(`CREATE SCHEMA ${schema}`);
+    await createOwnedPostgresSchema(admin,schema);
     for (const name of ["0001_platform_foundation.sql", "0002_dingtalk_identity_access.sql", "0216_digital_production_order_roots.sql", "0252_digital_sla_configuration_snapshots.sql", "0253_digital_sla_plan_history.sql"])
       await database.query(await readFile(new URL(`../../apps/api/migrations/${name}`, import.meta.url), "utf8"));
     await applySlaPolicyFixture(database);
@@ -95,7 +95,7 @@ run("digital production P01 identities", () => {
     } });
     await app.ready();
   });
-  afterAll(async () => { await app.close(); await database.end(); await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`); await admin.end();vi.restoreAllMocks(); });
+  afterAll(async () => { await app.close(); await database.end(); await releaseOwnedPostgresSchema(admin,schema); await admin.end();vi.restoreAllMocks(); });
   const publishedSource=async(currentActor=actor(),request=sourceInput())=>{
     const value=await service.createSource(currentActor,request,randomUUID());
     await database.query("INSERT INTO digital_development_documents VALUES($1,'published')",[value.sourceId]);
