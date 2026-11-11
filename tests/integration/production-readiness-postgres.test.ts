@@ -99,6 +99,10 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect(await nativeCuttingReadiness(f.db,[task.task_id])).toEqual(final);
   const model=await run(()=>new JourneyFactRepository(f.db).buildOne({kind:'order',id:ready.id}));
   expect(model.model.cuttingReadiness).toEqual(final);
+  expect(model.model.nodes.find(node=>node.key==='cutting_gate'&&node.current)).toMatchObject({actualAt:'2026-11-09T12:00:00.000Z',actualQuality:'verified'});
+  const stored=await run(async()=>{const db=await f.db.connect();try{return new JourneyFactRepository(f.db).readStoredWithClient(db,{kind:'order',id:ready.id});}finally{db.release();}});
+  expect(stored.status).toBe('ready');
+  expect(stored.model?.nodes.find(node=>node.key==='cutting_gate'&&node.current)).toMatchObject({actualAt:'2026-11-09T12:00:00.000Z',actualQuality:'verified'});
   await run(async()=>{
    const tasks=new DigitalProductionTaskService(f.db);
    await tasks.correctTime(f.root,task.task_id,{eventId:first[0]!.eventId!,occurredAt:null,reason:'TEST scoped first-ready correction must not alter sibling PO or whole-task clock'},randomUUID());
@@ -113,6 +117,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   // may be borrowed from the other PO or the whole-task activation clock.
   const unknown=await run(()=>new DigitalJourneyQuery(f.db).read(f.root,ready.id,undefined,true));
   expect(unknown.stages.flatMap(stage=>stage.nodes).find(node=>node.key==='cutting_gate'&&node.current)?.actualAt).toBeNull();
+  const correctedModel=await run(()=>new JourneyFactRepository(f.db).buildOne({kind:'order',id:ready.id}));
+  expect(correctedModel.model.nodes.find(node=>node.key==='cutting_gate'&&node.current)?.actualAt).toBeNull();
  });
  for(const external of [false,true])for(const poCount of [1,2])it(`P01 records legitimate 95-of-100 actual cutting readiness without borrowing sibling quantity (${external?'external':'internal'}, ${poCount} PO)`,async()=>{
   const scene=await f.scene('2026-11-09T08:00:00.000Z'),run=<T,>(action:()=>Promise<T>)=>f.runtime.run(scene,f.root,action);
