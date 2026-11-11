@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "base": "f18531eb5e6ffd4375a63709074b64735588bca8",
-  "sourceFingerprint": "292970fdd2ca461e22ba62cbfeeb9bafa51a8977d07e3db357951931ad121b47",
+  "base": "b7dd1f98e16e70c61a4d6a1be19d919c4b150efa",
+  "sourceFingerprint": "5a462799fe544ae6490e668722feb39d1df49e618d62cdbdbd730dcd36bac616",
   "risk": "full",
   "rules": [
     {
@@ -145,14 +145,14 @@
     {
       "id": "r504-units",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/order-time-plan.test.ts tests/unit/fixed-timeline-targets.test.ts tests/unit/fixed-schedule-progress.test.ts tests/unit/fixed-schedule-selection.test.ts tests/unit/cockpit-fixed-schedule.test.ts tests/unit/acceptance-maintenance-generator.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/journey-visual-progress.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r504-local-freeze-units.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/order-time-plan.test.ts tests/unit/fixed-timeline-targets.test.ts tests/unit/fixed-schedule-progress.test.ts tests/unit/fixed-schedule-selection.test.ts tests/unit/cockpit-fixed-schedule.test.ts tests/unit/acceptance-maintenance-generator.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/journey-visual-progress.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r504-actual-base-units.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 166,
+      "passed": 167,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "f18531eb5e6ffd4375a63709074b64735588bca8",
-      "sourceFingerprint": "292970fdd2ca461e22ba62cbfeeb9bafa51a8977d07e3db357951931ad121b47",
+      "testedHead": "eb2d190d9efc2d088c9b5ca7cfbffe26bfa3a8fc",
+      "sourceFingerprint": "5a462799fe544ae6490e668722feb39d1df49e618d62cdbdbd730dcd36bac616",
       "inputPaths": [
         "apps",
         "packages",
@@ -164,30 +164,30 @@
         "vitest.business-chain.config.ts",
         "tests/unit"
       ],
-      "inputFingerprint": "39cf8d44401dab2e91de6135059836cb852d245495e87cef7381f9a01ab693b7",
-      "startedAt": "2026-11-11T03:29:42.753Z",
-      "endedAt": "2026-11-11T03:29:46.268Z",
-      "log": "/workspace/.dx-cloud/r504-local-freeze-units.log",
-      "logSha256": "d780a42881a094a8a44871817ba8c43feecd49a46e3b9ab1067b92235f1c5037",
+      "inputFingerprint": "413c5ba2fc885ff9a29f81a5948a4bc789d10fdff840cc35e6f63a9529e27e94",
+      "startedAt": "2026-11-11T04:17:27.165Z",
+      "endedAt": "2026-11-11T04:17:31.514Z",
+      "log": "/workspace/.dx-cloud/r504-actual-base-units.log",
+      "logSha256": "49b2ffbc06792d832b1a83020c474921fc49b368e580e9d6d03f2082a8fe2485",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "e072222f9135e22847f58526da6ae5944918769e687325bb0ad6cf3dd38e19fc"
+          "sha256": "9754c4b4ec816b48962e2141d938690dd7cfd271e2cf4f43d615ff1a477b69f9"
         }
       ],
-      "context": "Local R5-04 prepared on R5-03 candidate f18531eb, not remote-ready until its actual merge is synchronized. Node22.22.2/npm10.9.9/Vitest4.1.10, rebuilt contracts; canonical non-DB1/long-PG2 workers, at most2 actual PG test workers, distinct owned marked low-privilege PG13.23 and PG16.14 databases. Current8 storage cases independently assert known targets, immutable counterpart, current confirmed source inheritance, old-global-apply refusal, conditional missing input, unchanged B, real H approvals at each effective policy, sibling isolation, rollback, stale concurrency and original native clocks. No new creation cutover, historic backfill, HTTP permission widening, onsite/deployment or visual acceptance. Earlier31-case native combination and4-case legacy subset are retained as earlier source evidence, not current-head Full."
+      "context": "Actual R5-03 merge b7dd1f98 synchronized. Node22.22.2/npm10.9.9, marked low-privilege isolated PG13.23/PG16.14, canonical bounded workers and maximum2 actual PostgreSQL test workers. Current reports167 units plus8 cases on each server; older31/4 reports remain historical, not current Full. Includes explicit parent-calendar handoff, unchanged native clocks, rollback+dirty entry, same-key and concurrent revisions, approved-H time version, exact unknown newly inserted goal and frozen company counterpart inheritance. No designer/adoption cutover before07, no UI/current-site or deployment claims."
     },
     {
       "id": "r504-pg13",
       "kind": "tests",
-      "command": "TEST_DATABASE_URL=<owned marked PG13.23 test DB> node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/order-time-plan-postgres.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r504-final-storage-pg13.json",
+      "command": "TEST_DATABASE_URL=<owned marked PG13.23 test DB> node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/order-time-plan-postgres.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r504-actual-base-pg13.json",
       "status": "passed",
       "exitCode": 0,
       "passed": 8,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "f18531eb5e6ffd4375a63709074b64735588bca8",
-      "sourceFingerprint": "292970fdd2ca461e22ba62cbfeeb9bafa51a8977d07e3db357951931ad121b47",
+      "testedHead": "eb2d190d9efc2d088c9b5ca7cfbffe26bfa3a8fc",
+      "sourceFingerprint": "5a462799fe544ae6490e668722feb39d1df49e618d62cdbdbd730dcd36bac616",
       "inputPaths": [
         "apps",
         "packages",
@@ -199,30 +199,30 @@
         "vitest.business-chain.config.ts",
         "tests/integration/order-time-plan-postgres.test.ts"
       ],
-      "inputFingerprint": "f725ba132fe8086054aa8d4d0faad57254ca3e4f06ad9881798ff68bfd8d97f3",
-      "startedAt": "2026-11-11T03:24:58.672Z",
-      "endedAt": "2026-11-11T03:25:10.407Z",
-      "log": "/workspace/.dx-cloud/r504-final-storage-pg13.log",
-      "logSha256": "691114c4ffa49eb812bbf8b7c79776cd1a1f18f9fd8733d1f5161c2a597a86a1",
+      "inputFingerprint": "a7ceebb9d962f1bf6a98006cda5be982b8ac72b134ba3c8f5f425de323213777",
+      "startedAt": "2026-11-11T04:17:28.419Z",
+      "endedAt": "2026-11-11T04:17:39.957Z",
+      "log": "/workspace/.dx-cloud/r504-actual-base-pg13.log",
+      "logSha256": "8c4f5441ea38ae494fa09880bb7b42127109610fd5a42ed28c29db145798fd06",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "fbf13ad8d0f1ca8d7ec45c45534b47b9cfc3c70a2c506d7bb1cb9dfc441ad103"
+          "sha256": "0be7c42c0e9be46124aeaa854db026c7f2145cdc4024a9ed74a30043fda46e87"
         }
       ],
-      "context": "Local R5-04 prepared on R5-03 candidate f18531eb, not remote-ready until its actual merge is synchronized. Node22.22.2/npm10.9.9/Vitest4.1.10, rebuilt contracts; canonical non-DB1/long-PG2 workers, at most2 actual PG test workers, distinct owned marked low-privilege PG13.23 and PG16.14 databases. Current8 storage cases independently assert known targets, immutable counterpart, current confirmed source inheritance, old-global-apply refusal, conditional missing input, unchanged B, real H approvals at each effective policy, sibling isolation, rollback, stale concurrency and original native clocks. No new creation cutover, historic backfill, HTTP permission widening, onsite/deployment or visual acceptance. Earlier31-case native combination and4-case legacy subset are retained as earlier source evidence, not current-head Full."
+      "context": "Actual R5-03 merge b7dd1f98 synchronized. Node22.22.2/npm10.9.9, marked low-privilege isolated PG13.23/PG16.14, canonical bounded workers and maximum2 actual PostgreSQL test workers. Current reports167 units plus8 cases on each server; older31/4 reports remain historical, not current Full. Includes explicit parent-calendar handoff, unchanged native clocks, rollback+dirty entry, same-key and concurrent revisions, approved-H time version, exact unknown newly inserted goal and frozen company counterpart inheritance. No designer/adoption cutover before07, no UI/current-site or deployment claims."
     },
     {
       "id": "r504-pg16",
       "kind": "tests",
-      "command": "TEST_DATABASE_URL=<owned marked PG16.14 test DB> node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/order-time-plan-postgres.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r504-final-storage-pg16.json",
+      "command": "TEST_DATABASE_URL=<owned marked PG16.14 test DB> node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/order-time-plan-postgres.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r504-actual-base-pg16.json",
       "status": "passed",
       "exitCode": 0,
       "passed": 8,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "f18531eb5e6ffd4375a63709074b64735588bca8",
-      "sourceFingerprint": "292970fdd2ca461e22ba62cbfeeb9bafa51a8977d07e3db357951931ad121b47",
+      "testedHead": "eb2d190d9efc2d088c9b5ca7cfbffe26bfa3a8fc",
+      "sourceFingerprint": "5a462799fe544ae6490e668722feb39d1df49e618d62cdbdbd730dcd36bac616",
       "inputPaths": [
         "apps",
         "packages",
@@ -234,18 +234,18 @@
         "vitest.business-chain.config.ts",
         "tests/integration/order-time-plan-postgres.test.ts"
       ],
-      "inputFingerprint": "f725ba132fe8086054aa8d4d0faad57254ca3e4f06ad9881798ff68bfd8d97f3",
-      "startedAt": "2026-11-11T03:24:58.699Z",
-      "endedAt": "2026-11-11T03:25:10.086Z",
-      "log": "/workspace/.dx-cloud/r504-final-storage-pg16.log",
-      "logSha256": "501c08c74493d5940fd4540e489e66566da8cfc7552ec4189fb0eb7bd541e284",
+      "inputFingerprint": "a7ceebb9d962f1bf6a98006cda5be982b8ac72b134ba3c8f5f425de323213777",
+      "startedAt": "2026-11-11T04:17:29.757Z",
+      "endedAt": "2026-11-11T04:17:40.703Z",
+      "log": "/workspace/.dx-cloud/r504-actual-base-pg16.log",
+      "logSha256": "bfa31a8813b76c1dac2aea57045d8f985256cd0bbdbbd8319359b4318a50597c",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "4bf32885925ac0c04576e10d695233f06a68971ca23dc1ee3dc42a95a654819d"
+          "sha256": "e636ad4031224fdd8de45b9db83618dc29d543682b7ddfbcf90ea114c7fb39a1"
         }
       ],
-      "context": "Local R5-04 prepared on R5-03 candidate f18531eb, not remote-ready until its actual merge is synchronized. Node22.22.2/npm10.9.9/Vitest4.1.10, rebuilt contracts; canonical non-DB1/long-PG2 workers, at most2 actual PG test workers, distinct owned marked low-privilege PG13.23 and PG16.14 databases. Current8 storage cases independently assert known targets, immutable counterpart, current confirmed source inheritance, old-global-apply refusal, conditional missing input, unchanged B, real H approvals at each effective policy, sibling isolation, rollback, stale concurrency and original native clocks. No new creation cutover, historic backfill, HTTP permission widening, onsite/deployment or visual acceptance. Earlier31-case native combination and4-case legacy subset are retained as earlier source evidence, not current-head Full."
+      "context": "Actual R5-03 merge b7dd1f98 synchronized. Node22.22.2/npm10.9.9, marked low-privilege isolated PG13.23/PG16.14, canonical bounded workers and maximum2 actual PostgreSQL test workers. Current reports167 units plus8 cases on each server; older31/4 reports remain historical, not current Full. Includes explicit parent-calendar handoff, unchanged native clocks, rollback+dirty entry, same-key and concurrent revisions, approved-H time version, exact unknown newly inserted goal and frozen company counterpart inheritance. No designer/adoption cutover before07, no UI/current-site or deployment claims."
     }
   ]
 }

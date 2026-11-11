@@ -106,6 +106,13 @@ describe('new ordinary-node value and old frozen compatibility',()=>{
   const input=legacy();input.data.planning!.values.development_pattern={minutes:DAY,calendar:'beijing_sunday_excluded'};
   expect(frozenWorkDefinition(input,'development_pattern')).toMatchObject({minutes:DAY,responsibilityMinutes:2*DAY,responsibilityCalendar:'continuous'});
  });
+ it('uses the actual parent calendar for both included handoff planning and responsibility',()=>{
+  const input=legacy();input.data.orderTimePlan=plan({development_sewing:{...rule(2),calendar:'beijing_sunday_excluded'},development_sewing_transfer:rule(30/DAY,'included')});
+  const development=fixedDevelopmentWork(input,'TEST source',1,['development_sewing'],[],false,'免洗',false);
+  expect(development.work.find(node=>node.id==='development_sewing_transfer')).toMatchObject({calendar:'beijing_sunday_excluded',responsibilityCalendar:'beijing_sunday_excluded',responsibilityMinutes:30});
+  const order=fixedOrderWork(input,'TEST order','TEST source',1,'不需预缩',[],false,development,[]);
+  expect(order.work.find(node=>node.id==='source:development_sewing_transfer')).toMatchObject({calendar:'beijing_sunday_excluded',responsibilityCalendar:'beijing_sunday_excluded',responsibilityMinutes:30});
+ });
  it('uses the same adopted duration/calendar for new planning and ordinary responsibility without external-wash override',()=>{
   const input=legacy();input.data.orderTimePlan=plan({development_washing:{...rule(2),calendar:'beijing_sunday_excluded'}});
   expect(frozenWorkDefinition(input,'development_washing')).toMatchObject({minutes:2*DAY,responsibilityMinutes:2*DAY,calendar:'beijing_sunday_excluded',responsibilityCalendar:'beijing_sunday_excluded'});

@@ -45,10 +45,12 @@ export function orderTimeDependencyReserves(node:{stage:number;dependsOn:readonl
 /** Original native builders and the independent calculator use the same edge
  * accounting once an explicit new policy is present. Legacy snapshots stay exact.
  */
-export function withOrderTimeStageReserves<T extends {id:string;parameterKey?:string;dependsOn:readonly string[];stage?:number}>(initial:FixedWorkInputs,work:T[]):T[]{
+export function withOrderTimeStageReserves<T extends {id:string;parameterKey?:string;dependsOn:readonly string[];stage?:number;includedIn?:string;calendar?:FixedTimelineCalendar|null;responsibilitySlaRef?:string|null}>(initial:FixedWorkInputs,work:T[]):T[]{
  const plan=initial.data.orderTimePlan;if(!plan)return work;
  const catalog=new Map(DIGITAL_SLA_PARAMETERS.map(value=>[value.key,value.stage]));
  const staged=work.map(node=>{const stage=node.stage??catalog.get(node.parameterKey??node.id)??(node.parameterKey==='factory_production_work'?6:['source_confirmation','development_confirmation'].includes(node.parameterKey??node.id)?2:null);if(!stage)throw Error('适用节点阶段尚未明确');return {...node,stage};});
  const byId=new Map(staged.map(node=>[node.id,node])),buffer=plan.stageBufferMinutes??plan.company.stageBufferMinutes;
- return staged.map(node=>({...node,dependencyReserves:buffer?orderTimeDependencyReserves(node,byId,buffer):undefined}));
+ return staged.map(node=>{const parent=node.includedIn?byId.get(node.includedIn):null;return {...node,
+  ...(parent?{calendar:parent.calendar??null,...(node.responsibilitySlaRef?{responsibilityCalendar:parent.calendar??null}:{})}:{}),
+  dependencyReserves:buffer?orderTimeDependencyReserves(node,byId,buffer):undefined};});
 }
