@@ -10,7 +10,7 @@ import {ownedPostgresSchema,createOwnedPostgresSchema,readOwnedResources,SCHEMA_
 import {classifyFullGatePaths} from './full-gate-risk-map.mjs';
 import {worktreeSnapshot,inspectCompatibility} from '../check-main-release-compat.mjs';
 import {assertManagedSchemaCreation,resourceChangedPaths} from '../test-preflight.mjs';
-import {settingsBrowserRequired,isNativeBrowserSuite} from './prepare-settings-browser.mjs';
+import {settingsBrowserRequired,isNativeBrowserSuite,prepareSettingsBrowser} from './prepare-settings-browser.mjs';
 import {reconcileTimeInventory} from '../acceptance/time-site-inventory.mjs';
 import {testExecutionConfig} from '../test-execution-config.mjs';
 const identity={database:'dx_rework_ci',username:'dx_rework_test',databaseOid:'42',serverVersion:'160015',marker:'dx-rework-isolated-test-v1'};
@@ -150,6 +150,16 @@ test('shared correctness allowance is100seconds while strict defaults and finite
  const owner=readFileSync('scripts/owned-command.mjs','utf8');assert.ok(owner.includes("signalGroup(pid,'SIGKILL')"));assert.ok(owner.includes('OWNED_COMMAND_CHILDREN_STILL_RUNNING'));const workflow=readFileSync('.github/workflows/full-gate.yml','utf8');assert.ok(workflow.includes('timeout-minutes: 30'));assert.match(workflow.split('\n  postgres:\n')[1].split('\n  full-validate:\n')[0],/^ {4}timeout-minutes: 60$/m);
 });
 
+test('settings browser installs the pinned browser without APT and requires an actual launch',()=>{
+ const calls=[];prepareSettingsBrowser((binary,args,options)=>{calls.push({binary,args,options});return {status:0};});
+ assert.equal(calls.length,2);assert.equal(calls[0].binary,process.execPath);assert.deepEqual(calls[0].args,['node_modules/playwright-core/cli.js','install','chromium']);
+ assert.ok(calls[1].args.at(-1).includes('chromium.launch'));assert.ok(calls[1].args.at(-1).includes('await browser.close()'));assert.equal(calls[1].options.timeout,60000);
+});
+test('settings browser never treats failed install, launch or timeout as ready',()=>{
+ let calls=0;assert.throws(()=>prepareSettingsBrowser(()=>{calls++;return {status:1};}));assert.equal(calls,1);
+ calls=0;assert.throws(()=>prepareSettingsBrowser(()=>({status:++calls===1?0:1})));assert.equal(calls,2);
+ const timeout=new Error('TEST original launch timeout');calls=0;assert.throws(()=>prepareSettingsBrowser(()=>++calls===1?{status:0}:{error:timeout}),error=>error===timeout);
+});
 test('settings browser uses the original canonical PG plan with an installed browser only when required',()=>{
  const file='tests/integration/m01-settings-native-browser-postgres.test.ts';
  for(const path of ['apps/web/src/sla-calculation-preview-model.ts','apps/web/src/sla-standard-editor.tsx','apps/web/src/sla-settings-workspace.tsx','apps/web/src/development-cycle-settings.tsx','tests/acceptance/m01-settings-native-browser.ts','tests/fixtures/m01-settings-native-ui.tsx']){const scope=classifyFullGatePaths([path]);assert.equal(scope.dbRequired,true,path);assert.ok(scope.mappedPostgresTests.includes(file),path);}
