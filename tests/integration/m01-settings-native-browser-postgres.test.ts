@@ -9,9 +9,10 @@ import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
 import {supplychainSettingsBrowser} from '../acceptance/supplychain-settings-browser.js';
 import {SlaSettingsSetsService} from '../../apps/api/src/production-platform/sla-settings-sets.js';
 import type {SettingsSetRead,SettingsSetDraft,SettingsCalculationResult} from '@dx-rework/contracts/sla-settings-sets';
-// The approved paired workspaces replace incompatible separate-publication and
-// automatic-series UI scenarios. Original APIs, freezes and calculations retain
-// their PG suites; these cases exercise the current full App and real auth.
+// Retain the original paired-editor compatibility branch with new adoption
+// explicitly disabled. R5 settings and per-order requests have their own full
+// App suites with adoption enabled; a changed default must not change this
+// fixture's intended branch or weaken the original recovery/permission cases.
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 const databaseUrl=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (databaseUrl?describe.sequential:describe.skip)('supply-chain settings original App, auth and PostgreSQL',()=>{
@@ -23,7 +24,7 @@ const databaseUrl=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TE
  const owner=()=>h.dedicated('owner_group');
  const counts=async()=>Object.fromEntries(await Promise.all(['digital_sla_configurations','digital_development_cycle_standards','digital_timeline_standard_versions','digital_sla_settings_drafts','digital_sla_order_snapshots','digital_production_tasks'].map(async table=>[table,Number((await h.db.query(`SELECT count(*) AS n FROM ${table}`)).rows[0].n)])));
  const bodyInput=(state:SettingsSetRead,reason:string):SettingsSetDraft=>({...state.basis,values:structuredClone(state.current),reason});
- beforeAll(async()=>{h=await supplychainSettingsBrowser(databaseUrl!,process.env.M01_SETTINGS_NATIVE_EVIDENCE??join(process.env.RUNNER_TEMP??tmpdir(),'supplychain-settings-'+randomUUID()));});
+ beforeAll(async()=>{h=await supplychainSettingsBrowser(databaseUrl!,process.env.M01_SETTINGS_NATIVE_EVIDENCE??join(process.env.RUNNER_TEMP??tmpdir(),'supplychain-settings-'+randomUUID()),{fullApp:true,orderTimeModel:false});});
  afterAll(async()=>{if(h){await h.writeEvidence();await h.dispose();}});
  it('keeps three sibling workspaces and compact real full-page alignment at1165/1366/1440 without writes or default suggestions',async()=>{
   const before=await counts(),{page,context}=await h.open();try{await ready(page);for(const width of [1165,1366,1440]){

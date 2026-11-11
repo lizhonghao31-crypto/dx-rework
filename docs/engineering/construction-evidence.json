@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "fbee17e28830d671d64f49ee2e286755f785c118",
-  "sourceFingerprint": "4de926b01fd3dc00641ea4625cb063b55a4352d8e7e88952c59ac56c19f24c36",
+  "sourceFingerprint": "910d56d0ebaee6c0085a43e402bfc36c081d4348918bd6fc6790a90c108d72bb",
   "risk": "full",
   "rules": [
     {
@@ -54,7 +54,8 @@
         "r507-units",
         "r507-native",
         "r507-types",
-        "r507-lint"
+        "r507-lint",
+        "r507-settings-branches"
       ]
     },
     {
@@ -116,7 +117,8 @@
         "r507-units",
         "r507-native",
         "r507-types",
-        "r507-lint"
+        "r507-lint",
+        "r507-settings-branches"
       ]
     },
     {
@@ -148,7 +150,8 @@
         "r507-units",
         "r507-native",
         "r507-types",
-        "r507-lint"
+        "r507-lint",
+        "r507-settings-branches"
       ]
     },
     {
@@ -191,7 +194,8 @@
         "r507-units",
         "r507-native",
         "r507-types",
-        "r507-lint"
+        "r507-lint",
+        "r507-settings-branches"
       ]
     },
     {
@@ -234,7 +238,8 @@
         "r507-units",
         "r507-native",
         "r507-types",
-        "r507-lint"
+        "r507-lint",
+        "r507-settings-branches"
       ]
     },
     {
@@ -248,6 +253,7 @@
         "scripts/deploy/acceptance-migration-requirements.json",
         "scripts/test-suite-plan.mjs",
         "tests/acceptance/supplychain-settings-browser.ts",
+        "tests/integration/m01-settings-native-browser-postgres.test.ts",
         "tests/integration/order-time-requests-browser-postgres.test.ts",
         "tests/integration/order-time-requests-postgres.test.ts",
         "tests/integration/order-time-settings-postgres.test.ts",
@@ -273,12 +279,13 @@
         "tests/integration/order-time-requests-postgres.test.ts",
         "tests/integration/order-time-requests-browser-postgres.test.ts"
       ],
-      "expectation": "Original owned TEST creator and cleanup contract reused, new PG suites registered in canonical long2. Update exact original table-availability mock without removing roles/foreign-attachment denial, preserve prior time inventory annotations and add actual clock review. Final219units and27 actual PG/App cases pass with unchanged captured inputs; types/lint pass. Earlier3864/3/15 run remains failed, concentrated fixes verified rather than rerun for report form. Additional pre-existing obsolete PR13 fixture failure is documented, not represented as passed or mixed into this scope. No5000-scale/onsite/operations drill claim.",
+      "expectation": "Original owned TEST creator and cleanup contract reused, new PG suites registered in canonical long2. Update exact original table-availability mock without removing roles/foreign-attachment denial, preserve prior time inventory annotations and add actual clock review. Final219units and27 original PG/App cases retain precisely verified inputs; the disabled legacy paired settings12, enabled R5 settings7 and request3 are freshly verified together (22, with3 overlapping the original27), plus current types/lint. Full43030428363 non-db passed; its PG532passed/11failed legacy branch is preserved as failure. The old compatibility suite now explicitly supplies orderTimeModel:false after the approved default enablement; no production default, old assertion or permission behavior changed. Earlier3864/3/15 run remains failed, concentrated fixes verified rather than rerun for report form. Additional pre-existing obsolete PR13 fixture failure is documented, not represented as passed or mixed into this scope. No5000-scale/onsite/operations drill claim.",
       "checks": [
         "r507-units",
         "r507-native",
         "r507-types",
-        "r507-lint"
+        "r507-lint",
+        "r507-settings-branches"
       ]
     }
   ],
@@ -337,16 +344,18 @@
         "package-lock.json",
         "vitest.config.ts",
         "vitest.business-chain.config.ts",
-        "tests/integration",
         "tests/acceptance",
-        "tests/fixtures"
+        "tests/fixtures",
+        "tests/integration/order-time-requests-postgres.test.ts",
+        "tests/integration/order-time-requests-browser-postgres.test.ts",
+        "tests/integration/development-round-history-clock-postgres.test.ts"
       ],
-      "inputFingerprint": "8a3b8f92aec5bfccc29cc0c406a21f88dcea772d13828c03a8d9b9484ca86f88",
+      "inputFingerprint": "69c8a8a3f3063f9f2dd019a4b27870b03e0e5d11b9da8507efb5fbf0a94bf97f",
       "startedAt": "2026-11-11T13:23:07.217Z",
       "endedAt": "2026-11-11T13:24:09.051Z",
       "log": "/workspace/.dx-cloud/r507-candidate-native.log",
       "logSha256": "d11225cf12ae7fb67d72d50839e9bf95a868d9ac53b3961b607af9f714c03bbd",
-      "context": "Approved complete v2/R5-07 on actual R5-06 merge fbee17e2. Original App/native commands, role revocation in one valid session, original key/body lost-receipt recovery, normal/late/pending/inherited/changed-route scenarios; original source/formal future rules synchronize while begun R/D stay fixed. Captured per-node calendar/reminder and real bounded todo scheduler retain old overdue allowance. Chromium /usr/bin/chromium; Node22.22.2/npm10.9.9, canonical nonDB1/long2 with at most2 actual PG workers, owned low-privilege PG13 TEST schemas only. No deployment, onsite/5000-scale or full-system UI-completion claim.",
+      "context": "Approved complete v2/R5-07 on actual R5-06 merge fbee17e2. Original App/native commands, role revocation in one valid session, original key/body lost-receipt recovery, normal/late/pending/inherited/changed-route scenarios; original source/formal future rules synchronize while begun R/D stay fixed. Captured per-node calendar/reminder and real bounded todo scheduler retain old overdue allowance. Chromium /usr/bin/chromium; Node22.22.2/npm10.9.9, canonical nonDB1/long2 with at most2 actual PG workers, owned low-privilege PG13 TEST schemas only. No deployment, onsite/5000-scale or full-system UI-completion claim. Exact selected test input scope verified against immutable af78cbe6 checkpoint; the only new test change is the unselected legacy settings fixture. Original27 result and head preserved.",
       "passed": 27,
       "failed": 0,
       "skipped": 0,
@@ -363,8 +372,8 @@
       "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "5a3b00583a9ad7614cc539a390c0640453c51c34",
-      "sourceFingerprint": "4de926b01fd3dc00641ea4625cb063b55a4352d8e7e88952c59ac56c19f24c36",
+      "testedHead": "af78cbe609fb68ac9b7821ccaae3e9083309ec64",
+      "sourceFingerprint": "910d56d0ebaee6c0085a43e402bfc36c081d4348918bd6fc6790a90c108d72bb",
       "inputPaths": [
         "apps",
         "packages",
@@ -377,9 +386,9 @@
         "vitest.business-chain.config.ts",
         "tests"
       ],
-      "inputFingerprint": "0935eb2a5dbb7edcb2054f1952717f7a71d33c25747b33f002e443a0e2755776",
-      "startedAt": "2026-11-11T13:23:07.283Z",
-      "endedAt": "2026-11-11T13:24:19.679Z",
+      "inputFingerprint": "164542781ffeed41a67fe3fb50b32e59c5fd30c35883e7fe4dd1b189f2cef7fb",
+      "startedAt": "2026-11-11T14:18:36.248Z",
+      "endedAt": "2026-11-11T14:19:35.402Z",
       "log": "/workspace/.dx-cloud/r507-candidate-types.log",
       "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e",
       "context": "Approved complete v2/R5-07 on actual R5-06 merge fbee17e2. Original App/native commands, role revocation in one valid session, original key/body lost-receipt recovery, normal/late/pending/inherited/changed-route scenarios; original source/formal future rules synchronize while begun R/D stay fixed. Captured per-node calendar/reminder and real bounded todo scheduler retain old overdue allowance. Chromium /usr/bin/chromium; Node22.22.2/npm10.9.9, canonical nonDB1/long2 with at most2 actual PG workers, owned low-privilege PG13 TEST schemas only. No deployment, onsite/5000-scale or full-system UI-completion claim."
@@ -390,8 +399,8 @@
       "command": "npm run lint",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "5a3b00583a9ad7614cc539a390c0640453c51c34",
-      "sourceFingerprint": "4de926b01fd3dc00641ea4625cb063b55a4352d8e7e88952c59ac56c19f24c36",
+      "testedHead": "af78cbe609fb68ac9b7821ccaae3e9083309ec64",
+      "sourceFingerprint": "910d56d0ebaee6c0085a43e402bfc36c081d4348918bd6fc6790a90c108d72bb",
       "inputPaths": [
         "apps",
         "packages",
@@ -404,12 +413,50 @@
         "vitest.business-chain.config.ts",
         "tests"
       ],
-      "inputFingerprint": "0935eb2a5dbb7edcb2054f1952717f7a71d33c25747b33f002e443a0e2755776",
-      "startedAt": "2026-11-11T13:23:07.228Z",
-      "endedAt": "2026-11-11T13:24:06.629Z",
+      "inputFingerprint": "164542781ffeed41a67fe3fb50b32e59c5fd30c35883e7fe4dd1b189f2cef7fb",
+      "startedAt": "2026-11-11T14:18:36.248Z",
+      "endedAt": "2026-11-11T14:19:19.353Z",
       "log": "/workspace/.dx-cloud/r507-candidate-lint.log",
       "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763",
       "context": "Approved complete v2/R5-07 on actual R5-06 merge fbee17e2. Original App/native commands, role revocation in one valid session, original key/body lost-receipt recovery, normal/late/pending/inherited/changed-route scenarios; original source/formal future rules synchronize while begun R/D stay fixed. Captured per-node calendar/reminder and real bounded todo scheduler retain old overdue allowance. Chromium /usr/bin/chromium; Node22.22.2/npm10.9.9, canonical nonDB1/long2 with at most2 actual PG workers, owned low-privilege PG13 TEST schemas only. No deployment, onsite/5000-scale or full-system UI-completion claim."
+    },
+    {
+      "id": "r507-settings-branches",
+      "kind": "tests",
+      "command": "node node_modules/vitest/vitest.mjs run tests/integration/m01-settings-native-browser-postgres.test.ts tests/integration/r5-settings-native-browser-postgres.test.ts tests/integration/order-time-requests-browser-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r507-settings-branches.json",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 22,
+      "failed": 0,
+      "skipped": 0,
+      "testedHead": "af78cbe609fb68ac9b7821ccaae3e9083309ec64",
+      "sourceFingerprint": "910d56d0ebaee6c0085a43e402bfc36c081d4348918bd6fc6790a90c108d72bb",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests/helpers",
+        "tests/inspection-report-fixture.ts",
+        "package.json",
+        "package-lock.json",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts",
+        "tests/integration",
+        "tests/acceptance",
+        "tests/fixtures"
+      ],
+      "inputFingerprint": "8e940ceac7d9dc24eab2ec8cb53205861977796c548a89f91b0d8de7240fc1ea",
+      "startedAt": "2026-11-11T14:15:42.482Z",
+      "endedAt": "2026-11-11T14:16:42.081Z",
+      "log": "/workspace/.dx-cloud/r507-settings-branches.log",
+      "logSha256": "0bbc962d6795f0cbf51dee5f825788aa3f44b78752746d1d9ce71241dd0cbf40",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "a01b8509dda59eeb58cb81fdacb3baa3d3712341e97b618e143fe66c3ed6dbcb"
+        }
+      ],
+      "context": "Actual PG13 owned TEST schemas, original authenticated full App. Legacy new-adoption-disabled paired branch12, enabled R5 company settings7 and original per-order request3 all pass. Explicit fixturefalse replaces the former ambiguous default; no production behavior or old assertions removed. Node22.22.2/npm10.9.9 Chromium, actual maximum2 PG workers. Full43030428363 failed legacy-branch selection11/532; retained as failure, no repeat of unchanged unit/native scope."
     }
   ]
 }
