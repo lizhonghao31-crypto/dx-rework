@@ -263,19 +263,11 @@ jobs:
           LANE_STEPS: ${{ toJSON(steps) }}
           LANE_STATUS: ${{ job.status }}
         run: node scripts/ci/full-gate-lanes.mjs record
-      - name: Retain bounded lane record for aggregation
+      - name: Retain lane record and original evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: full-record-${{ env.FULL_GATE_LANE }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/full-lane-record.json
-          if-no-files-found: error
-          retention-days: 7
-      - name: Retain original lane evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: full-evidence-non-db-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/non-db-results.json
             ${{ runner.temp }}/postgres-execution.json
@@ -517,19 +509,11 @@ jobs:
           LANE_STEPS: ${{ toJSON(steps) }}
           LANE_STATUS: ${{ job.status }}
         run: node scripts/ci/full-gate-lanes.mjs record
-      - name: Retain bounded lane record for aggregation
+      - name: Retain lane record and original evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: full-record-${{ env.FULL_GATE_LANE }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/full-lane-record.json
-          if-no-files-found: error
-          retention-days: 7
-      - name: Retain original lane evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: full-evidence-postgres-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/non-db-results.json
             ${{ runner.temp }}/postgres-execution.json

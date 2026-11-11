@@ -54,6 +54,16 @@ test('workflow dispatches both lanes only after one common bundle and aggregates
  assert.equal((w.match(/needs: prepare/g)||[]).length,2);assert.match(w,/needs: \[prepare, non-db, postgres\]/);assert.doesNotMatch(w,/FULL_GATE_NEEDS:/);assert.match(w,/FULL_GATE_RECORD_DIRECTORY:/);assert.match(w,/pattern: full-record-\*-\$\{\{ github.run_id \}\}-\$\{\{ github.run_attempt \}\}/);
  assert.equal((w.match(/full-gate-lanes.mjs restore/g)||[]).length,2);assert.equal((w.match(/--full-gate\n/g)||[]).length,1);assert.doesNotMatch(w,/continue-on-error:|^ {4}concurrency:/m);
  assert.match(caller,/group: pr-gate-\$\{\{ needs.request.outputs.pr \}\}/);assert.match(w,/--reporter=json --outputFile=/);
+ // One mandatory artifact carries both the bounded record and raw evidence.
+ // A duplicate upload cannot fail the lane after that same evidence is saved.
+ for(const [lane,next,evidence]of [['non-db','postgres','non-db-results.json'],['postgres','full-validate','postgres-execution.json']]){
+  const block=w.slice(w.indexOf(`  ${lane}:\n`),w.indexOf(`  ${next}:\n`));
+  assert.equal((block.match(/uses: actions\/upload-artifact@v4/g)||[]).length,1,lane+' has one required upload');
+  assert.match(block,/name: full-record-\$\{\{ env.FULL_GATE_LANE \}\}-\$\{\{ github.run_id \}\}-\$\{\{ github.run_attempt \}\}/);
+  for(const file of ['full-lane-record.json','full-lane-build.json',evidence])assert.ok(block.includes('${{ runner.temp }}/'+file),lane+' retains '+file);
+  assert.match(block,/if-no-files-found: error/);
+ }
+ assert.doesNotMatch(w,/name: full-evidence-(postgres|non-db)-/);
 });
 
 test('real producer and fresh consumer round-trip identical build bytes; stale attempt and symlink reject',()=>{
