@@ -20,12 +20,14 @@ export function fixedOrderWork(initial:FixedWorkInputs,orderId:string,sourceId:s
    for(const node of used)work.push({...structuredClone(node),id:`source:${node.id}`,dependsOn:node.dependsOn.map(id=>`source:${id}`),
     ...(node.includedIn?{includedIn:`source:${node.includedIn}`}:{ }),accountingRole:'shared_reference'});
    const end=source.route?.at(-1)?.nodeId;if(end)sourceEnd=`source:${end}`;
-  }else{
+  }else if(!initial.data.orderTimePlan){
    // A legacy source is a reference to its own original scope, never a newly
    // performed copy or a reset employee clock. Its missing original B stays so.
    add('source_confirmation','source_confirmation',[],{minutes:0,calendar:null,planningParameterRef:null,responsibilitySlaRef:null,
     canonicalWorkRef:`source:${sourceId}:round:${sourceRound}:confirmation`,accountingRole:'shared_reference'});sourceEnd='source_confirmation';
   }
+  // A new direct formal order has no independent development route. Do not
+  // invent a legacy confirmation node and make every real successor unknown.
   add('customer_confirmation','customer_confirmation',[],{minutes:0,calendar:null,accountingRole:'event'});
   add('budget','budget',['customer_confirmation']);
   add('production_sheet','production_sheet',['customer_confirmation',...(sourceEnd?[sourceEnd]:[])]);

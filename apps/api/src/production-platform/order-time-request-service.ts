@@ -14,6 +14,7 @@ import {withinOrderTimeAdmission,orderTimeRequester} from './order-time-admissio
 import {OrderTimeRequestRepository,type OrderTimeRequestRow} from './order-time-request-repository.js';
 import {OrderTimePlanRepository} from './order-time-plan-repository.js';
 import {currentOrderTimeOperation} from './order-time-native-commands.js';
+import {DigitalProductionTaskService} from './task-service.js';
 
 export type OrderTimeNativeExecutor=(db:PoolClient,actor:TrustedActorContext,operation:OrderTimeOperation,key:string)=>Promise<{sourceId:string|null;orderId:string|null}>;
 const conflict=(code:string,message:string):never=>{throw new ApplicationError(code,message,409);};
@@ -115,6 +116,7 @@ export class OrderTimeRequestService{
     const actual=state.operation.kind==='arrangement'?state:await loadOrderTimeOperation(this.database,db,actor,actualOperation,time,input.overrides);
     const previous=await new OrderTimePlanRepository(db).current(target);
     const saved=await new OrderTimePlanRepository(db).confirm({resource:target,expectedRevision:previous?.revision??0,value:actual.value,actorId:actor.actorId,eventRef:'audit_events:'+eventId,time,requestKey:'order-time-request:'+id+':'+row.version});
+    if(target.kind==='order')await new DigitalProductionTaskService(this.database).refreshShipSampleTimingWithClient(db,actor,target.id);
     await db.query(`UPDATE digital_order_time_subjects SET effective=true WHERE resource_kind=$1 AND ${target.kind==='source'?'source_id':'production_order_id'}=$2`,[target.kind,target.id]);
     return {native,saved};
    });

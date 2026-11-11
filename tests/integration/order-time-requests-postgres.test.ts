@@ -23,6 +23,7 @@ import {orderTimeTodos} from '../../apps/api/src/production-platform/order-time-
 import {DevelopmentExecutionService} from '../../apps/api/src/production-platform/development-execution-service.js';
 import {arrangementInput} from '../helpers/development-arrangement-fixture.js';
 import {slaNotificationPreferences} from '../../apps/api/src/production-platform/sla-notification-preferences.js';
+import {DigitalPoDateRepository} from '../../apps/api/src/production-platform/po-date-repository.js';
 import {DigitalJourneyQuery} from '../../apps/api/src/production-platform/journey-query.js';
 import {DevelopmentRoundService} from '../../apps/api/src/production-platform/development-round-service.js';
 import {ProductionInstructionService} from '../../apps/api/src/production-platform/production-instruction-service.js';
@@ -172,6 +173,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   await f.advance(scene,'2027-03-01T00:30:00.000Z');await f.runtime.run(scene,f.root,async()=>{
    const sheet=await forms.read(row!.actor,row!.sourceId),input=DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:sheet.designStyleNo,orderDate:'2027-03-01',productionPlanning:{craftSteps:[],preshrink:false},lines:[{formalPoNo:'TEST-R507-FORMAL-'+randomUUID(),color:'黑',customerWarehouseArrivalDate:'2027-03-31',sizes:[{size:'M',quantity:1}]}]});
    const order=await identity.createOrder(row!.actor,input,randomUUID(),row!.sourceId),saved=(await new OrderTimePlanRepository(f.db).current({kind:'order',id:order.productionOrderId}))!;
+   const sample=(await f.db.query("SELECT task_id FROM digital_production_task_access WHERE production_order_id=$1 AND task_kind='bulk_ship_sample'",[order.productionOrderId])).rows[0];
+   expect(await new DigitalProductionTaskService(f.db).read(f.root,sample.task_id)).toMatchObject({dueAt:'2027-03-21T16:00:00.000Z',enteredAt:null});
    expect(saved.input.plan.company.reference).toBe('order-time-company:'+standardId);expect(saved.input.plan.company.nodes.development_materials!.minutes).toBe(60);
    const oldTargets=Object.values(original!.targets)[0]!,newTargets=Object.values(saved.targets)[0]!;
    let retained=0;for(const work of original!.input.work){const same=saved.input.work.find(next=>next.canonicalWorkRef===work.canonicalWorkRef);
@@ -193,6 +196,40 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await execute.arrange(clerk,row!.sourceId,await arrangementInput(f.db,execute,clerk,row!.sourceId,worker),randomUUID());
    expect((await execute.read(f.root,row!.sourceId)).tasks.find(task=>task.taskKind==='development_pattern')).toMatchObject({slaHours:2,enteredAt:'2027-03-01T00:30:00.000Z',dueAt:'2027-03-01T02:30:00.000Z'});
    expect(await new DigitalProductionTaskService(f.db).read(f.root,material.taskId)).toMatchObject({slaHours:1,enteredAt:'2027-03-01T00:00:00.000Z',dueAt:'2027-03-01T01:00:00.000Z'});
+  });
+ });
+ it('refreshes native per-PO ship-sample deadlines inside a manager-approved first formal activation',async()=>{
+  const scene=await f.scene('2027-08-01T15:00:00.000Z');await f.runtime.run(scene,f.root,async()=>{
+   const designer=f.people['sample-designer']!,input=DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:'TEST-R507-APPLIED-'+randomUUID(),orderDate:'2027-08-01',primaryMerchandiserId:f.people.merchandiser!.actorId,lines:[{formalPoNo:'TEST-R507-SAMPLE-'+randomUUID(),color:'黑',customerWarehouseArrivalDate:'2027-08-01',sizes:[{size:'M',quantity:1}]},{formalPoNo:'TEST-R507-SAMPLE-'+randomUUID(),color:'白',customerWarehouseArrivalDate:'2027-08-02',sizes:[{size:'M',quantity:1}]}]}),operation={kind:'direct_order' as const,input,route:{craftSteps:[],preshrink:false}};
+   const checked=await requests.check(designer,operation);expect(checked.feasibility,JSON.stringify({coverage:checked.coverage,rows:checked.rows.map(row=>[row.parameterKey,row.rule])})).toBe('insufficient');const requested=await requests.submit(designer,{operation,fingerprint:checked.fingerprint,reason:'TEST 两PO真实路线时间不足'},randomUUID()),manager=f.people.owner!,preview=await requests.read(manager,requested.requestId),body={expectedVersion:preview.version,fingerprint:preview.check.fingerprint,overrides:{},acceptLate:true},key=randomUUID(),applied=await requests.apply(manager,requested.requestId,body,key),orderId=applied.result!.orderId!;
+   const taskId=(await f.db.query("SELECT task_id FROM digital_production_task_access WHERE production_order_id=$1 AND task_kind='bulk_ship_sample'",[orderId])).rows[0].task_id;
+   expect(await new DigitalProductionTaskService(f.db).read(f.root,taskId)).toMatchObject({dueAt:'2027-07-22T16:00:00.000Z',enteredAt:null});
+   const revision=(await f.db.query('SELECT sla_basis FROM digital_production_deadline_revisions WHERE task_id=$1 ORDER BY revision_id DESC LIMIT 1',[taskId])).rows[0];
+   expect(revision.sla_basis.targets.map((target:{dueAt:string})=>target.dueAt).sort()).toEqual(['2027-07-22T16:00:00.000Z','2027-07-23T16:00:00.000Z']);
+   const count=(await f.db.query('SELECT count(*)::int AS count FROM digital_production_deadline_revisions WHERE task_id=$1',[taskId])).rows[0].count;
+   expect(await requests.apply(manager,requested.requestId,body,key)).toEqual(applied);expect((await f.db.query('SELECT count(*)::int AS count FROM digital_production_deadline_revisions WHERE task_id=$1',[taskId])).rows[0].count).toBe(count);
+   const line=(await f.db.query('SELECT line_id FROM digital_production_po_lines WHERE production_order_id=$1 ORDER BY position LIMIT 1',[orderId])).rows[0];
+   await expect(new DigitalPoDateRepository(f.db).applyWithClient(manager,orderId,'initial_po',[{lineId:line.line_id,date:'2027-09-01',expectedVersion:1}],randomUUID())).rejects.toMatchObject({code:'FORBIDDEN'});
+  });
+ });
+ it.each(['owner','production-management'] as const)('lets the actual %s apply an internal sewing revision after native work completion without gaining general remake permission',async(role)=>{
+  const scene=await f.scene('2027-07-01T00:00:00.000Z');let row:Awaited<ReturnType<typeof make>>,order:Awaited<ReturnType<PatternRoomOrderService['get']>>;
+  await f.runtime.run(scene,f.root,async()=>{
+   row=await make('2027-07-01');if(row.operation.kind!=='development_publish')throw Error('TEST source operation');await forms.publish(row.actor,row.sourceId,1,randomUUID(),row.operation.input.patternOrder);
+   const link=(await f.db.query('SELECT order_id FROM digital_development_pattern_links WHERE source_id=$1',[row.sourceId])).rows[0],person=(await f.db.query('SELECT person_id FROM business_people WHERE app_user_id=$1 AND active',[f.people['pattern-room-worker']!.actorId])).rows[0];
+   order=await native.get(f.root,link.order_id);order=await native.assign(f.root,order.orderId,{version:order.version,roundId:order.currentRoundId,personId:person.person_id},randomUUID());order=await native.complete(f.root,order.orderId,{version:order.version,roundId:order.currentRoundId},randomUUID());
+   expect(order.status).toBe('pending_confirmation');
+  });
+  await f.advance(scene,'2027-07-02T00:00:00.000Z');await f.runtime.run(scene,f.root,async()=>{
+   const sheet=await forms.read(row!.actor,row!.sourceId),rounds=new DevelopmentRoundService(f.db,true,native),revision={basedOnRound:1,document:sheet.document!,origin:'内部发现' as const,customerComment:'',internalProblem:'TEST 已完工后须重新车缝',explanation:'TEST 原单保留计价及历史',categories:['其他' as const],affectedNodes:['车板' as const],outputKind:'整件样板' as const};
+   const draft=await rounds.save(row!.actor,row!.sourceId,{expectedDraftVersion:0,revision},randomUUID()),operation={kind:'development_revision' as const,sourceId:row!.sourceId,input:{expectedDraftVersion:draft.draftVersion,basedOnRound:1}},check=await requests.check(row!.actor,operation);
+   const requested=await requests.submit(row!.actor,{operation,fingerprint:check.fingerprint,reason:'TEST 原生完工后复做申请'},randomUUID()),manager=f.people[role]!,preview=await requests.read(manager,requested.requestId),body={expectedVersion:preview.version,fingerprint:preview.check.fingerprint,overrides:{},acceptLate:true},key=randomUUID();
+   expect(manager.actorRoles).not.toContain('pattern_room_supervisor');expect(manager.actorRoles).not.toContain('sample_designer');
+   const applied=await requests.apply(manager,requested.requestId,body,key);expect(applied.state).toBe('applied');expect(await requests.apply(manager,requested.requestId,body,key)).toEqual(applied);
+   const current=await native.get(f.root,order!.orderId);expect(current.status).toBe('pending_assignment');expect(current.rounds.filter(round=>round.roundType==='rework')).toHaveLength(1);
+   expect((await f.db.query('SELECT requested_by FROM pattern_room_rounds WHERE round_id=$1',[current.currentRoundId])).rows[0].requested_by).toBe(manager.actorId);
+   expect((await f.db.query('SELECT created_by FROM digital_development_rounds WHERE source_id=$1 AND round_number=2',[row!.sourceId])).rows[0].created_by).toBe(manager.actorId);
+   await expect(native.requestRework(manager,order!.orderId,{roundId:current.currentRoundId,version:current.version,reason:'TEST 无独立返做权限',reasonCategory:'other',attachmentIds:[]},randomUUID())).rejects.toMatchObject({code:'FORBIDDEN'});
   });
  });
  it('keeps the original active quota and fixed target while the next native task adopts this order calendar and disabled reminder',async()=>{

@@ -24,6 +24,7 @@ import {DevelopmentRouteService} from './development-route-service.js';
 import {readDevelopmentRevisionPlan} from './development-round-plan.js';
 import type {PatternRoomOrderService} from '../pattern-room/order-service.js';
 import {authorizeDevelopmentReturn,linkedDevelopmentOrder} from './development-native-round.js';
+import {approvedOrderTimeRevision} from './order-time-admission.js';
 import {automaticOrderTime} from './order-time-automatic.js';
 const fail=(message:string):never=>{throw new ApplicationError('DEVELOPMENT_REVISION_CONFLICT',message,409);};
 export class DevelopmentRoundService {
@@ -86,7 +87,7 @@ export class DevelopmentRoundService {
        AND o.status='pending_assignment' AND o.deleted_at IS NULL`,[sourceId,patternReworkRoundId])).rows[0];
    if(!original||original.requested_by!==actor.actorId)digitalForbidden();
    if(returnTaskId)await authorizeDevelopmentReturn(db,actor,sourceId,returnTaskId,input.basedOnRound);
-   else await authorizePatternOrder(db,actor,"pattern_room:orders:rework",true);
+   else if(!await approvedOrderTimeRevision(db,actor,sourceId,input.basedOnRound))await authorizePatternOrder(db,actor,"pattern_room:orders:rework",true);
   }
   if(!returnTaskId&&!patternReworkRoundId&&!sheet.canEdit)digitalForbidden();
   if(input.basedOnRound!==(sheet.roundNumber??1))fail('已有新轮次，不能从旧版重复发布');

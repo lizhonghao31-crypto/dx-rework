@@ -7,6 +7,7 @@ import {ContextBusinessClock,observedBusinessTime,businessNow} from '../acceptan
 import {acceptsNewOrderTime,orderTimeAdmission,withinOrderTimeAdmission} from './order-time-admission.js';
 import {loadOrderTimeOperation,orderTimeOperationScope} from './order-time-operation-state.js';
 import {OrderTimePlanRepository} from './order-time-plan-repository.js';
+import {DigitalProductionTaskService} from './task-service.js';
 
 /** Called inside the original lifecycle/row/idempotency command. A request's
  * authorized application already owns its selected policy and outer commit. */
@@ -25,6 +26,7 @@ export async function automaticOrderTime<T>(database:Pool,db:PoolClient,actor:Tr
   const actual=await loadOrderTimeOperation(database,db,actor,{kind:'arrangement',resource:target},time);
   const prior=await new OrderTimePlanRepository(db).current(target);
   await new OrderTimePlanRepository(db).confirm({resource:target,expectedRevision:prior?.revision??0,value:actual.value,actorId:actor.actorId,eventRef:'audit_events:'+eventId,time,requestKey:'order-time-native:'+eventId});
+  if(target.kind==='order')await new DigitalProductionTaskService(database).refreshShipSampleTimingWithClient(db,actor,target.id);
   await db.query(`UPDATE digital_order_time_subjects SET effective=true WHERE resource_kind=$1 AND ${target.kind==='source'?'source_id':'production_order_id'}=$2`,[target.kind,target.id]);
   return result;
  });

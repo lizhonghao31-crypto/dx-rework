@@ -25,7 +25,7 @@ import { bindPatternMaterials } from "./order-attachments.js";
 import { PatternOrderReader, scopedPatternOrder, type PatternOrderRow, type PatternRoundRow, type PatternSegmentRow } from "./order-reader.js";
 import { PATTERN_HOURLY_PRICE_ID } from "./price-service.js";
 import { patternReworkCutBlocked, PATTERN_REWORK_CUT_BLOCK } from "./order-rework-boundary.js";
-import {approvedOrderTimeSource} from '../production-platform/order-time-admission.js';
+import {approvedOrderTimeSource,approvedOrderTimeRevision} from '../production-platform/order-time-admission.js';
 
 const parse = <T>(schema: z.ZodType<T>, input: unknown): T => {
   const value = schema.safeParse(input);
@@ -417,11 +417,12 @@ export class PatternRoomOrderService {
   async requestDevelopmentRevision(actor:TrustedActorContext,orderId:string,input:unknown,key:string,context:DevelopmentRevisionContext){
     const client=this.options.transactionClient;
     if(!client)throw new ApplicationError('CONFLICT','开发复版须与原制作轮在同一事务提交',409);
-    if(!context.returnTaskId)return this.requestReworkBound(actor,orderId,input,key,undefined,context);
+    const admitted=!context.returnTaskId&&context.revision.origin==='内部发现'&&await approvedOrderTimeRevision(client,actor,context.sourceId,context.revision.basedOnRound);
+    if(!context.returnTaskId&&!admitted)return this.requestReworkBound(actor,orderId,input,key,undefined,context);
     if(!/^[A-Za-z0-9._:-]{8,128}$/.test(key))throw new ApplicationError('VALIDATION_ERROR','缺少有效操作标识，请重试',400);
-    await authorizeDevelopmentReturn(client,actor,context.sourceId,context.returnTaskId,context.revision.basedOnRound);
+    if(!admitted)await authorizeDevelopmentReturn(client,actor,context.sourceId,context.returnTaskId!,context.revision.basedOnRound);
     const parsed=parse(RequestPatternReworkSchema,input);
-    // The caller owns this business transaction. The original tail permission
+    // The original tail permission or this exact validated time application
     // creates only pending assignment; native supervisor pricing stays separate.
     return (await this.idempotency.execute(client,{scope:'pattern_room.order.rework_requested',actorKey:actor.actorId,key,
       requestHash:createHash('sha256').update(JSON.stringify({orderId,...parsed,developmentRevision:context})).digest('hex'),expiresAt:new Date('9999-12-31T00:00:00Z')},

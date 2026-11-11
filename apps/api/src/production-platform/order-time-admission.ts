@@ -64,6 +64,25 @@ export async function approvedOrderTimeCreation(db:DB,actor:TrustedActorContext)
  if(!(value.designerId===actor.actorId&&isRootActor(actor))&&!await new DigitalProductionAccessPolicy(db).activeRole(value.designerId,'sample_designer'))digitalForbidden();
  return true;
 }
+/** Only the exact pending internal-revision application may cross the native
+ * remake seam. This is not a general pattern-room rework capability. */
+export async function approvedOrderTimeRevision(db:DB,actor:TrustedActorContext,sourceId:string,basedOnRound:number){
+ const active=admissions.get(db),operation=active?.operation;
+ if(!active?.requestId||operation?.kind!=='development_revision'||operation.sourceId!==sourceId||operation.input.basedOnRound!==basedOnRound)return false;
+ const draft=(await db.query('SELECT version,based_on_round,payload FROM digital_development_round_drafts WHERE source_id=$1 FOR UPDATE',[sourceId])).rows[0];
+ if(draft?.version!==operation.input.expectedDraftVersion||draft.based_on_round!==basedOnRound||draft.payload?.origin!=='内部发现')digitalForbidden();
+ return approvedOrderTimeSource(db,actor,sourceId);
+}
+/** Initial PO dates belong to the new native order made by this application;
+ * an existing order/date-change command cannot borrow this authorization. */
+export async function approvedOrderTimePoCreation(db:DB,actor:TrustedActorContext,orderId:string){
+ const active=admissions.get(db);if(!active?.requestId||active.actorId!==actor.actorId||active.generatedOrderId!==orderId)return false;
+ const operation=active.operation;
+ const approved=operation.kind==='direct_order'?await approvedOrderTimeCreation(db,actor):'sourceId'in operation&&['development_publish','confirm_order'].includes(operation.kind)?await approvedOrderTimeSource(db,actor,operation.sourceId):false;
+ if(!approved)return false;
+ const row=(await db.query('SELECT created_by FROM digital_production_orders WHERE production_order_id=$1',[orderId])).rows[0];
+ if(row?.created_by!==active.designerId)digitalForbidden();return true;
+}
 export async function approvedOrderTimeOrder(db:DB,actor:TrustedActorContext,orderId:string){
  const value=admissions.get(db);if(!value?.requestId||value.actorId!==actor.actorId||value.operation.kind!=='instruction_publish'||value.operation.orderId!==orderId)return false;
  await assertSlaSettingsActor(db,actor,true);

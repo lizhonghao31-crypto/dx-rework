@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "fbee17e28830d671d64f49ee2e286755f785c118",
-  "sourceFingerprint": "3b36b86fc975085979829b1f89d5903de5c21a63606fa10086017fc29726adfc",
+  "sourceFingerprint": "4de926b01fd3dc00641ea4625cb063b55a4352d8e7e88952c59ac56c19f24c36",
   "risk": "full",
   "rules": [
     {
@@ -10,6 +10,7 @@
       "dateAndPermission": "Same original client/lifecycle/transaction, current original role/resource/field checks and RR read proxy. Native R/D, actual C/Z, retained B, PO/round/step identity, calendar/precision/frozen company remain distinct. No fake designer/Root actor, full AuthUser cache or historical event synthesis. Full authorized statistics/selection before current15 enrichment and same-transaction dirty registration remain.",
       "rule": "Complete native first-effective admission, designer request and one atomic authorized response including source/formal inheritance and pending candidate changes.",
       "writes": [
+        "apps/api/migrations/0286_order_time_requests.sql",
         "apps/api/src/pattern-room/order-attachments.ts",
         "apps/api/src/pattern-room/order-service.ts",
         "apps/api/src/production-platform/development-revision-source.ts",
@@ -19,22 +20,21 @@
         "apps/api/src/production-platform/identity-routes.ts",
         "apps/api/src/production-platform/identity-service.ts",
         "apps/api/src/production-platform/order-time-activation.ts",
-        "apps/api/src/production-platform/order-time-plan-repository.ts",
-        "apps/api/src/production-platform/production-instruction-service.ts",
-        "apps/api/src/production-platform/short-lead-service.ts",
-        "apps/api/src/production-platform/short-lead-todos.ts",
-        "apps/api/src/server.ts",
-        "apps/api/migrations/0286_order_time_requests.sql",
         "apps/api/src/production-platform/order-time-admission.ts",
         "apps/api/src/production-platform/order-time-automatic.ts",
         "apps/api/src/production-platform/order-time-created.ts",
         "apps/api/src/production-platform/order-time-native-commands.ts",
         "apps/api/src/production-platform/order-time-operation-state.ts",
+        "apps/api/src/production-platform/order-time-plan-repository.ts",
         "apps/api/src/production-platform/order-time-request-plan.ts",
         "apps/api/src/production-platform/order-time-request-repository.ts",
         "apps/api/src/production-platform/order-time-request-routes.ts",
         "apps/api/src/production-platform/order-time-request-service.ts",
-        "apps/api/src/production-platform/order-time-route-identities.ts"
+        "apps/api/src/production-platform/order-time-route-identities.ts",
+        "apps/api/src/production-platform/production-instruction-service.ts",
+        "apps/api/src/production-platform/short-lead-service.ts",
+        "apps/api/src/production-platform/short-lead-todos.ts",
+        "apps/api/src/server.ts"
       ],
       "reads": [
         "apps/api/src/production-platform/order-time-request-service.ts",
@@ -49,7 +49,7 @@
       "newTests": [
         "tests/integration/order-time-requests-postgres.test.ts"
       ],
-      "expectation": "New pending source has no work/clock; sufficient publication adopts once. Designer requests reach actual three manager roles, one manager applies without second designer approval; unrelated worker, stale manager and same-session revoked actor cannot apply. Late still needs same confirm/cancel, unknown cannot fake X. Native business, versioned policy, todos and site result commit together. Return/withdraw/resubmit retain real original data. Formal orders inherit original company and fixed development goals; future source/order rule sync is atomic/idempotent and begun native deadlines remain. Customer revision is an independent inactive draft with exact inherited attachment mapping; internal craft revision and instruction candidate apply with time together, completed inherited work is not repeated.",
+      "expectation": "New pending source has no work/clock; sufficient publication adopts once. Designer requests reach actual three manager roles, one manager applies without second designer approval; unrelated worker, stale manager and same-session revoked actor cannot apply. Late still needs same confirm/cancel, unknown cannot fake X. Native business, versioned policy, todos and site result commit together. Return/withdraw/resubmit retain real original data. Codex4538195532: the exact pending internal-revision source/round/draft proof alone crosses native remake and nested publication; pure owner/director succeed after native work completion while general remake stays denied. Codex4538195551: automatic and approved first formal activation refresh native ship-sample deadlines after plan persistence in the same transaction. Direct formal routes without independent development do not invent a legacy confirmation; initial PO authority binds the actual generated order and matching creation audit, never general date writing. Formal orders inherit original company and fixed development goals; future source/order rule sync is atomic/idempotent and begun native deadlines remain. Customer revision is an independent inactive draft with exact inherited attachment mapping; internal craft revision and instruction candidate apply with time together, completed inherited work is not repeated.",
       "checks": [
         "r507-units",
         "r507-native",
@@ -71,13 +71,17 @@
         "apps/api/src/production-platform/factory-batch-timing.ts",
         "apps/api/src/production-platform/factory-flow-service.ts",
         "apps/api/src/production-platform/factory-sla-evidence.ts",
+        "apps/api/src/production-platform/fixed-consumer-targets.ts",
         "apps/api/src/production-platform/fixed-factory-timing.ts",
         "apps/api/src/production-platform/fixed-order-adoption.ts",
         "apps/api/src/production-platform/fixed-order-route.ts",
         "apps/api/src/production-platform/fixed-order-work.ts",
         "apps/api/src/production-platform/fixed-timeline-adoptions.ts",
         "apps/api/src/production-platform/notification-service.ts",
+        "apps/api/src/production-platform/order-time-native-timing.ts",
         "apps/api/src/production-platform/order-time-schedule.ts",
+        "apps/api/src/production-platform/order-time-todos.ts",
+        "apps/api/src/production-platform/po-date-repository.ts",
         "apps/api/src/production-platform/preparation-todos.ts",
         "apps/api/src/production-platform/production-readiness-repository.ts",
         "apps/api/src/production-platform/ship-sample-timing.ts",
@@ -91,10 +95,7 @@
         "apps/api/src/todos/delivery-worker.ts",
         "apps/api/src/todos/service.ts",
         "apps/api/src/todos/sla-presentation.ts",
-        "apps/api/src/todos/timing-service.ts",
-        "apps/api/src/production-platform/fixed-consumer-targets.ts",
-        "apps/api/src/production-platform/order-time-native-timing.ts",
-        "apps/api/src/production-platform/order-time-todos.ts"
+        "apps/api/src/todos/timing-service.ts"
       ],
       "reads": [
         "apps/api/src/production-platform/order-time-native-timing.ts",
@@ -164,13 +165,13 @@
         "apps/web/src/digital-notification-toast.tsx",
         "apps/web/src/digital-production-api.ts",
         "apps/web/src/digital-production-page.tsx",
-        "apps/web/src/production-instruction-panel.tsx",
-        "apps/web/src/short-lead-workspace.tsx",
-        "apps/web/src/system-dialog.tsx",
         "apps/web/src/order-time-application.tsx",
         "apps/web/src/order-time-production-route.tsx",
         "apps/web/src/order-time-request-page.tsx",
-        "apps/web/src/order-time-request.css"
+        "apps/web/src/order-time-request.css",
+        "apps/web/src/production-instruction-panel.tsx",
+        "apps/web/src/short-lead-workspace.tsx",
+        "apps/web/src/system-dialog.tsx"
       ],
       "reads": [
         "apps/web/src/order-time-request-page.tsx",
@@ -206,13 +207,13 @@
         "packages/contracts/src/digital-production-notifications.ts",
         "packages/contracts/src/digital-production.ts",
         "packages/contracts/src/order-time-plan.ts",
+        "packages/contracts/src/order-time-requests.ts",
         "packages/contracts/src/production-instruction.ts",
         "packages/contracts/src/todo-destination.ts",
         "packages/contracts/src/todo-presentation.ts",
         "packages/contracts/src/todos.ts",
         "packages/domain/src/development-cycle.ts",
-        "packages/domain/src/digital-sla-plan.ts",
-        "packages/contracts/src/order-time-requests.ts"
+        "packages/domain/src/digital-sla-plan.ts"
       ],
       "reads": [
         "packages/contracts/src/order-time-plan.ts",
@@ -247,15 +248,15 @@
         "scripts/deploy/acceptance-migration-requirements.json",
         "scripts/test-suite-plan.mjs",
         "tests/acceptance/supplychain-settings-browser.ts",
+        "tests/integration/order-time-requests-browser-postgres.test.ts",
+        "tests/integration/order-time-requests-postgres.test.ts",
         "tests/integration/order-time-settings-postgres.test.ts",
         "tests/integration/r5-settings-native-browser-postgres.test.ts",
         "tests/unit/development-cycle.test.ts",
         "tests/unit/digital-task-read-boundary.test.ts",
         "tests/unit/order-time-reading.test.ts",
-        "tests/unit/sourcing-todo-sla.test.ts",
-        "tests/integration/order-time-requests-browser-postgres.test.ts",
-        "tests/integration/order-time-requests-postgres.test.ts",
-        "tests/unit/order-time-requests.test.ts"
+        "tests/unit/order-time-requests.test.ts",
+        "tests/unit/sourcing-todo-sla.test.ts"
       ],
       "reads": [
         "scripts/test-suite-plan.mjs",
@@ -272,7 +273,7 @@
         "tests/integration/order-time-requests-postgres.test.ts",
         "tests/integration/order-time-requests-browser-postgres.test.ts"
       ],
-      "expectation": "Original owned TEST creator and cleanup contract reused, new PG suites registered in canonical long2. Update exact original table-availability mock without removing roles/foreign-attachment denial, preserve prior time inventory annotations and add actual clock review. Final219units and14 actual PG/App cases pass with unchanged captured inputs; types/lint pass. Earlier3864/3/15 run remains failed, concentrated fixes verified rather than rerun for report form. Additional pre-existing obsolete PR13 fixture failure is documented, not represented as passed or mixed into this scope. No5000-scale/onsite/operations drill claim.",
+      "expectation": "Original owned TEST creator and cleanup contract reused, new PG suites registered in canonical long2. Update exact original table-availability mock without removing roles/foreign-attachment denial, preserve prior time inventory annotations and add actual clock review. Final219units and27 actual PG/App cases pass with unchanged captured inputs; types/lint pass. Earlier3864/3/15 run remains failed, concentrated fixes verified rather than rerun for report form. Additional pre-existing obsolete PR13 fixture failure is documented, not represented as passed or mixed into this scope. No5000-scale/onsite/operations drill claim.",
       "checks": [
         "r507-units",
         "r507-native",
@@ -288,8 +289,8 @@
       "command": "/workspace/.dx-cloud/r5-runtime/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/order-time-requests.test.ts tests/unit/order-time-reading.test.ts tests/unit/order-time-plan.test.ts tests/unit/sourcing-todo-sla.test.ts tests/unit/fixed-timeline-targets.test.ts tests/unit/fixed-schedule-progress.test.ts tests/unit/development-cycle.test.ts tests/unit/digital-task-read-boundary.test.ts tests/unit/business-time-write-contract.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/todo-read-split.test.ts tests/unit/todo-list-service.test.ts tests/unit/todo-runtime-lifecycle.test.ts tests/unit/todo-owner-group-routing.test.ts tests/unit/todo-deep-link.test.ts tests/unit/my-todos-navigation.test.ts tests/unit/m01-short-lead-equivalence.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r507-candidate-units.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "fbee17e28830d671d64f49ee2e286755f785c118",
-      "sourceFingerprint": "3b36b86fc975085979829b1f89d5903de5c21a63606fa10086017fc29726adfc",
+      "testedHead": "5a3b00583a9ad7614cc539a390c0640453c51c34",
+      "sourceFingerprint": "4de926b01fd3dc00641ea4625cb063b55a4352d8e7e88952c59ac56c19f24c36",
       "inputPaths": [
         "apps",
         "packages",
@@ -302,11 +303,11 @@
         "vitest.business-chain.config.ts",
         "tests/unit"
       ],
-      "inputFingerprint": "b19c556b7095910b8a86ca6ef8e6824b9b8960d1cbf52a1a239575a658ba4212",
-      "startedAt": "2026-11-11T12:47:40.615Z",
-      "endedAt": "2026-11-11T12:47:57.027Z",
+      "inputFingerprint": "38db5cf15c3b2ef48d4ed2ad6d4963f1039c4d32a28582d6aa5031b1f35479b5",
+      "startedAt": "2026-11-11T13:23:07.281Z",
+      "endedAt": "2026-11-11T13:23:31.421Z",
       "log": "/workspace/.dx-cloud/r507-candidate-units.log",
-      "logSha256": "81080c96fc7072b69c62c702d0055fa8243ee82a5d7ea60ceb5687986863ed47",
+      "logSha256": "6d0a77e51bbba1ec6fff07f02dd0ba347d9da1e69fb74f63e3e34970e5378d67",
       "context": "Approved complete v2/R5-07 on actual R5-06 merge fbee17e2. Original App/native commands, role revocation in one valid session, original key/body lost-receipt recovery, normal/late/pending/inherited/changed-route scenarios; original source/formal future rules synchronize while begun R/D stay fixed. Captured per-node calendar/reminder and real bounded todo scheduler retain old overdue allowance. Chromium /usr/bin/chromium; Node22.22.2/npm10.9.9, canonical nonDB1/long2 with at most2 actual PG workers, owned low-privilege PG13 TEST schemas only. No deployment, onsite/5000-scale or full-system UI-completion claim.",
       "passed": 219,
       "failed": 0,
@@ -314,18 +315,18 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "bcbee0fb9e4b24c7a120b1fa1d4eded9a259a0b3670274cd5b47d9528e6154ae"
+          "sha256": "aceacb050ea8234451a4792b16cf8779d24b100d3265479c2ce3784c0bb303ac"
         }
       ]
     },
     {
       "id": "r507-native",
       "kind": "tests",
-      "command": "/workspace/.dx-cloud/r5-runtime/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/order-time-requests-postgres.test.ts tests/integration/order-time-requests-browser-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r507-candidate-native.json",
+      "command": "/workspace/.dx-cloud/r5-runtime/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/order-time-requests-postgres.test.ts tests/integration/order-time-requests-browser-postgres.test.ts tests/integration/development-round-history-clock-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r507-candidate-native.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "fbee17e28830d671d64f49ee2e286755f785c118",
-      "sourceFingerprint": "3b36b86fc975085979829b1f89d5903de5c21a63606fa10086017fc29726adfc",
+      "testedHead": "5a3b00583a9ad7614cc539a390c0640453c51c34",
+      "sourceFingerprint": "4de926b01fd3dc00641ea4625cb063b55a4352d8e7e88952c59ac56c19f24c36",
       "inputPaths": [
         "apps",
         "packages",
@@ -340,19 +341,19 @@
         "tests/acceptance",
         "tests/fixtures"
       ],
-      "inputFingerprint": "edd4f665429591ae64d20b61d4ee090b3ba50e4e1bdff0b3154929364a32c2cb",
-      "startedAt": "2026-11-11T12:47:40.566Z",
-      "endedAt": "2026-11-11T12:48:24.364Z",
+      "inputFingerprint": "8a3b8f92aec5bfccc29cc0c406a21f88dcea772d13828c03a8d9b9484ca86f88",
+      "startedAt": "2026-11-11T13:23:07.217Z",
+      "endedAt": "2026-11-11T13:24:09.051Z",
       "log": "/workspace/.dx-cloud/r507-candidate-native.log",
-      "logSha256": "ce50c8bc9f5fb5a60171c4687cfc3d88e2cef5c4d58ae2b972d7140e018ca784",
+      "logSha256": "d11225cf12ae7fb67d72d50839e9bf95a868d9ac53b3961b607af9f714c03bbd",
       "context": "Approved complete v2/R5-07 on actual R5-06 merge fbee17e2. Original App/native commands, role revocation in one valid session, original key/body lost-receipt recovery, normal/late/pending/inherited/changed-route scenarios; original source/formal future rules synchronize while begun R/D stay fixed. Captured per-node calendar/reminder and real bounded todo scheduler retain old overdue allowance. Chromium /usr/bin/chromium; Node22.22.2/npm10.9.9, canonical nonDB1/long2 with at most2 actual PG workers, owned low-privilege PG13 TEST schemas only. No deployment, onsite/5000-scale or full-system UI-completion claim.",
-      "passed": 14,
+      "passed": 27,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "4ceb04c33f0cbc041487617875c445ffda86a2a54c683ebee98e0ca2759b8482"
+          "sha256": "4ac6b0b7d7f6bc7268ec6926d4eb92a8a1d976403f6b40b8405fb9f11075f1e6"
         }
       ]
     },
@@ -362,8 +363,8 @@
       "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "fbee17e28830d671d64f49ee2e286755f785c118",
-      "sourceFingerprint": "3b36b86fc975085979829b1f89d5903de5c21a63606fa10086017fc29726adfc",
+      "testedHead": "5a3b00583a9ad7614cc539a390c0640453c51c34",
+      "sourceFingerprint": "4de926b01fd3dc00641ea4625cb063b55a4352d8e7e88952c59ac56c19f24c36",
       "inputPaths": [
         "apps",
         "packages",
@@ -376,9 +377,9 @@
         "vitest.business-chain.config.ts",
         "tests"
       ],
-      "inputFingerprint": "f0247a608df42ac89e445dce55533b850d4b0b2e66c6f395f6590305857d096b",
-      "startedAt": "2026-11-11T12:47:40.615Z",
-      "endedAt": "2026-11-11T12:48:39.960Z",
+      "inputFingerprint": "0935eb2a5dbb7edcb2054f1952717f7a71d33c25747b33f002e443a0e2755776",
+      "startedAt": "2026-11-11T13:23:07.283Z",
+      "endedAt": "2026-11-11T13:24:19.679Z",
       "log": "/workspace/.dx-cloud/r507-candidate-types.log",
       "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e",
       "context": "Approved complete v2/R5-07 on actual R5-06 merge fbee17e2. Original App/native commands, role revocation in one valid session, original key/body lost-receipt recovery, normal/late/pending/inherited/changed-route scenarios; original source/formal future rules synchronize while begun R/D stay fixed. Captured per-node calendar/reminder and real bounded todo scheduler retain old overdue allowance. Chromium /usr/bin/chromium; Node22.22.2/npm10.9.9, canonical nonDB1/long2 with at most2 actual PG workers, owned low-privilege PG13 TEST schemas only. No deployment, onsite/5000-scale or full-system UI-completion claim."
@@ -389,8 +390,8 @@
       "command": "npm run lint",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "fbee17e28830d671d64f49ee2e286755f785c118",
-      "sourceFingerprint": "3b36b86fc975085979829b1f89d5903de5c21a63606fa10086017fc29726adfc",
+      "testedHead": "5a3b00583a9ad7614cc539a390c0640453c51c34",
+      "sourceFingerprint": "4de926b01fd3dc00641ea4625cb063b55a4352d8e7e88952c59ac56c19f24c36",
       "inputPaths": [
         "apps",
         "packages",
@@ -403,12 +404,12 @@
         "vitest.business-chain.config.ts",
         "tests"
       ],
-      "inputFingerprint": "f0247a608df42ac89e445dce55533b850d4b0b2e66c6f395f6590305857d096b",
-      "startedAt": "2026-11-11T12:46:29.582Z",
-      "endedAt": "2026-11-11T12:52:20.196Z",
-      "log": "/workspace/.dx-cloud/r507-lint-ready.log",
+      "inputFingerprint": "0935eb2a5dbb7edcb2054f1952717f7a71d33c25747b33f002e443a0e2755776",
+      "startedAt": "2026-11-11T13:23:07.228Z",
+      "endedAt": "2026-11-11T13:24:06.629Z",
+      "log": "/workspace/.dx-cloud/r507-candidate-lint.log",
       "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763",
-      "context": "Actual lint invocation/session11557 completed exit0 after the final source edits. Times bound its log creation and observed completed result; no test counts are invented."
+      "context": "Approved complete v2/R5-07 on actual R5-06 merge fbee17e2. Original App/native commands, role revocation in one valid session, original key/body lost-receipt recovery, normal/late/pending/inherited/changed-route scenarios; original source/formal future rules synchronize while begun R/D stay fixed. Captured per-node calendar/reminder and real bounded todo scheduler retain old overdue allowance. Chromium /usr/bin/chromium; Node22.22.2/npm10.9.9, canonical nonDB1/long2 with at most2 actual PG workers, owned low-privilege PG13 TEST schemas only. No deployment, onsite/5000-scale or full-system UI-completion claim."
     }
   ]
 }
