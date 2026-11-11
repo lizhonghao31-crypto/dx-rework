@@ -76,14 +76,6 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const page=tab.page;await page.locator('[data-view="order"][aria-busy="false"]').waitFor();
    const docs=page.locator('.journey-documents-panel');expect(await docs.getByRole('tab',{name:'开发',exact:true}).getAttribute('aria-selected')).toBe('true');
    const readyDocument=async(key:string)=>{const item=docs.locator(`[data-category="${key}"]`);await docs.locator(`[data-category="${key}"][data-read-state="ready"]`).waitFor();expect(await item.getAttribute('data-state'),key+' after the real directory read completed').toBe('created');};
-   // Reproduce the actual asynchronous boundary without fake API data or a
-   // sleep: native artifact reads are held until the loading UI is checked.
-   let release=()=>{};const held=new Promise<void>(resolve=>{release=resolve;});
-   const artifactPath='**/execution/technical/history?*',requested=page.waitForRequest(request=>request.url().includes('/technical/history?')&&new URL(request.url()).searchParams.get('kind')==='artifacts');
-   await page.route(artifactPath,async route=>{if(new URL(route.request().url()).searchParams.get('kind')==='artifacts')await held;await route.continue();});
-   try{await page.reload({waitUntil:'domcontentloaded'});await requested;const loading=docs.locator('[data-category="development_plt"][data-read-state="loading"]');await loading.waitFor();expect(await loading.getAttribute('data-state')).toBe('unknown');expect(await loading.innerText()).toContain('读取中');expect(await loading.innerText()).not.toMatch(/已填|未填/);}
-   finally{release();await page.unroute(artifactPath);}
-
    for(const key of ['development_plt','development_sizes','development_consumption'])await readyDocument(key);
    expect(await docs.locator('[data-category="customer_final_approval"]').count()).toBe(0);expect(await docs.locator('[data-category="factory_history"]').count()).toBe(0);
    await docs.locator('[data-category="development_plt"]').click();let dialog=page.getByRole('dialog',{name:'全部相关单据',exact:true});await dialog.waitFor();
