@@ -33,6 +33,8 @@ export const FrozenOrderTimePlanSchema=z.object({
   const standard=plan.company.nodes[key];
   if(standard&&standard.kind!==value.kind)context.addIssue({code:'custom',path:['overrides',key,'kind'],message:'本单调整不能改变节点性质'});
  }
+ const normal=plan.overrides.development_cycle_normal??plan.company.nodes.development_cycle_normal,urgent=plan.overrides.development_cycle_urgent??plan.company.nodes.development_cycle_urgent;
+ if(normal?.kind==='supervision'&&urgent?.kind==='supervision'&&normal.minutes!==null&&urgent.minutes!==null&&urgent.minutes>normal.minutes)context.addIssue({code:'custom',path:['overrides','development_cycle_urgent'],message:'加急开发周期不能长于普通开发周期'});
 });
 export type FrozenOrderTimePlan=z.infer<typeof FrozenOrderTimePlanSchema>;
 export type OrderTimeRuleSource={rule:OrderTimeRule;source:'company'|'order';reference:string;revision:number};

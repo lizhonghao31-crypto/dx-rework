@@ -7,9 +7,11 @@ import {todoContentToken} from '../todos/content-reads.js';
 import {DigitalProductionAccessPolicy} from './access-policy.js';
 import {ShortLeadService} from './short-lead-service.js';
 import {shortLeadAvailable} from './short-lead-evidence.js';
+import {acceptsNewOrderTime} from './order-time-admission.js';
 import {acceptanceIncludesNative} from '../acceptance-clock/business-time.js';
 /** Project the original request/decision/consumption records into the existing personal provider. */
 export async function shortLeadTodos(database:Pool,actor:TrustedActorContext,projection?:TodoProjection):Promise<TodoResponse[]>{
+ if(await acceptsNewOrderTime(database))return [];
  if(!await shortLeadAvailable(database))return [];const policy=new DigitalProductionAccessPolicy(database),boss=isRootActor(actor)||actor.actorRoles.includes('owner_group')&&await policy.activeRole(actor.actorId,'owner_group'),designer=actor.actorRoles.includes('sample_designer')&&await policy.activeRole(actor.actorId,'sample_designer');if(!boss&&!designer)return [];
  const sources=(await database.query(`SELECT DISTINCT r.source_id FROM digital_short_lead_requests r LEFT JOIN digital_short_lead_decisions d USING(request_id) LEFT JOIN digital_short_lead_consumptions c USING(request_id) WHERE r.source_id IS NOT NULL AND c.request_id IS NULL AND (d.approved IS NULL OR d.approved) AND ($1::boolean OR r.requested_by=$2) AND ($3::uuid IS NULL OR r.request_id=$3)`,[boss,actor.actorId,projection?.todoId??null])).rows;
  const result:TodoResponse[]=[],service=new ShortLeadService(database);

@@ -2,10 +2,11 @@ import type {SlaAnchor} from '@dx-rework/domain/digital-sla-plan';
 import {slaAnchorTime} from '@dx-rework/domain/digital-sla-plan';
 import {FrozenOrderTimePlanSchema,orderTimeRule,type FrozenOrderTimePlan} from '@dx-rework/contracts/order-time-plan';
 import {orderTimeWorkDefinition,orderTimeDependencyReserves} from './fixed-work-definition.js';
-import {fixedTimelineTargets,fixedTimelineForward,requiredFixedTimelineWork,type FixedTimelineTarget,type FixedTimelineWork} from './fixed-timeline-targets.js';
+import {fixedTimelineForward,requiredFixedTimelineWork,type FixedTimelineTarget,type FixedTimelineWork} from './fixed-timeline-targets.js';
+import {fixedConsumerTargets,type ShipSampleTarget} from './fixed-consumer-targets.js';
 
 export type OrderTimeWork={id:string;parameterKey:string;stage:number;dependsOn:readonly string[];includedIn?:string;includedPosition?:'start'|'end';canonicalWorkRef?:string};
-export type OrderTimeScope={scopeRef:string;terminalIds:readonly string[];goals:Readonly<Record<string,SlaAnchor>>;customerGoal:SlaAnchor};
+export type OrderTimeScope={scopeRef:string;terminalIds:readonly string[];goals:Readonly<Record<string,SlaAnchor>>;customerGoal:SlaAnchor;shipSample?:ShipSampleTarget};
 export type OrderTimeScenario={plan:FrozenOrderTimePlan;work:readonly OrderTimeWork[];scopes:readonly OrderTimeScope[];
  route:{complete:boolean;missing:readonly string[]};start:SlaAnchor;notBefore?:Readonly<Record<string,SlaAnchor>>;
  fixedTargets?:Readonly<Record<string,FixedTimelineTarget>>};
@@ -37,14 +38,15 @@ export function evaluateOrderTimeScenario(input:OrderTimeScenario){
  const start=slaAnchorTime(input.start,'本次安排开始');
  return input.scopes.map(scope=>{
   const required=requiredFixedTimelineWork(work,scope.terminalIds),ids=new Set(required.map(node=>node.id));
-  const goals=Object.fromEntries(Object.entries(scope.goals).filter(([id])=>ids.has(id)));
-  const targets=fixedTimelineTargets(required,goals,{preserveUnknown:true,...(input.fixedTargets?{fixedTargets:input.fixedTargets}:{})});
+  const visible=work.filter(node=>ids.has(node.id)||node.includedIn&&ids.has(node.includedIn)||node.id===scope.shipSample?.nodeId),visibleById=new Map(visible.map(node=>[node.id,node]));
+  const goals=Object.fromEntries(Object.entries(scope.goals).filter(([id])=>visibleById.has(id)));
+  const targets=fixedConsumerTargets(visible,{ends:goals,...(scope.shipSample?{shipSample:scope.shipSample}:{})},goals,input.fixedTargets);
   const arranged=fixedTimelineForward(required,input.start,input.notBefore),terminal=scope.terminalIds.map(id=>arranged.find(node=>node.id===id)!);
   const end=terminal.length&&terminal.every(node=>node.end.at)?terminal.reduce((a,b)=>Date.parse(a.end.at!)>=Date.parse(b.end.at!)?a:b).end:null;
   const goal=slaAnchorTime(scope.customerGoal,'本PO客户交期');
-  const roots=targets.filter(node=>required.find(work=>work.id===node.id)!.dependsOn.length===0&&!required.find(work=>work.id===node.id)!.includedIn);
+  const roots=targets.filter(node=>visibleById.get(node.id)!.dependsOn.length===0&&!visibleById.get(node.id)!.includedIn);
   const planStart=roots.length&&roots.every(node=>node.start.at)?roots.reduce((a,b)=>Date.parse(a.start.at!)<=Date.parse(b.start.at!)?a:b).start:null;
-  const coverage=[...new Set([...missingRoute,...targets.flatMap(node=>[...node.start.reasons,...node.end.reasons]),...arranged.flatMap(node=>[...node.start.reasons,...node.end.reasons]),...goal.reasons])];
+  const coverage=[...new Set([...missingRoute,...targets.filter(node=>ids.has(node.id)).flatMap(node=>[...node.start.reasons,...node.end.reasons]),...arranged.flatMap(node=>[...node.start.reasons,...node.end.reasons]),...goal.reasons])];
   const known=coverage.length===0&&end?.at&&goal.at&&start.at;
   const boundary=known&&goal.exclusive&&!end.exclusive&&Date.parse(end.at!)===Date.parse(goal.at!);
   const difference=known?(Date.parse(end.at!)-Date.parse(goal.at!)+(boundary?1:0))/60000:null;

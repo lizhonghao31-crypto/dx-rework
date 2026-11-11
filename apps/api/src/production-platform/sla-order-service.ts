@@ -29,6 +29,8 @@ import { developmentEvaluationPlan, developmentNativeFacts, developmentSlaEviden
 import { applyOrderCreationEvidence, orderCreationSlaEvidence } from "./sla-order-evidence.js";
 import {newTimelineAdoptionMode} from './fixed-timeline-mode.js';
 import {freezeInitialTimelineInput,readInitialTimelineInput} from './fixed-timeline-initial-input.js';
+import {orderTimeAdmission} from './order-time-admission.js';
+import {orderTimeSnapshot} from './order-time-native-timing.js';
 
 /** Creation and reads reuse order authorization; there is no generic event/date edit endpoint. */
 export class SlaOrderService {
@@ -48,9 +50,9 @@ export class SlaOrderService {
       || Date.parse(sourcePlan.business_time.now) > Date.parse(time.now))) throw new Error("Development/order SLA clock scope mismatch");
     const repo = new SlaConfigurationRepository(client);
     const config = sourcePlan ? null : await repo.initialStandard(actor.actorId);
+    const admission=orderTimeAdmission(client),basis=sourcePlan ? validateDigitalSlaSnapshot({ ruleVersion: sourcePlan.rule_version, parameters: sourcePlan.parameters_json }):resolveDigitalSlaSnapshot({ version: config!.version, values: config!.values });
     const snapshot = await repo.appendOrder({ orderId, expectedRevision: 0, configurationId: sourcePlan?.configuration_id ?? config!.configurationId,
-      snapshot: sourcePlan ? validateDigitalSlaSnapshot({ ruleVersion: sourcePlan.rule_version, parameters: sourcePlan.parameters_json })
-        : resolveDigitalSlaSnapshot({ version: config!.version, values: config!.values }), actorId: actor.actorId,
+      snapshot:admission?orderTimeSnapshot(basis,admission.plan):basis, actorId: actor.actorId,
       reason: sourcePlan ? "沿用关联开发单已冻结的整单标准，不因转正式订单重置" : "新订单保存首版时效标准", requestKey: randomUUID() });
     const anchors: Record<string, SlaAnchor> = {
       customer_order_confirmed: { precision: "instant", value: time.now, source: `audit_events:${creationEventId}` },
@@ -83,9 +85,9 @@ export class SlaOrderService {
     // frozen rule; stopping new adoption must not turn its two real steps into
     // a legacy combined route. Independent new orders still follow the switch.
     const inheritedInput=order.source_id?await readInitialTimelineInput(client,{kind:'source',id:order.source_id}):null;
-    const initialMode=inheritedInput?'fixed_v2':newTimelineAdoptionMode(this.database);
+    const initialMode=inheritedInput||admission?'fixed_v2':newTimelineAdoptionMode(this.database);
     const initial=initialMode==='fixed_v2'?await freezeInitialTimelineInput(client,initialMode,{resource:{kind:'order',id:orderId},creationEventRef:`audit_events:${creationEventId}`,time,
-      unified:{configurationId:sourcePlan?.configuration_id??config!.configurationId,snapshotRef:snapshot.snapshotId,values:snapshot.snapshot}},
+      unified:{configurationId:sourcePlan?.configuration_id??config!.configurationId,snapshotRef:snapshot.snapshotId,values:snapshot.snapshot},...(admission?{orderTimePlan:admission.plan}:{})},
       inheritedInput):null;
     await plans.appendPlan({ orderId, expectedRevision: 0, snapshotId: snapshot.snapshotId, plan, time, actorId: actor.actorId,
       reason: "新订单保存全链首版计划；未有依据的日期保持未知", requestKey: randomUUID(),...(initial?{initialAdoptionInput:initial}:{}) });

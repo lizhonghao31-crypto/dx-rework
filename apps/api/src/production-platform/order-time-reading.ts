@@ -14,6 +14,9 @@ import {nativeCuttingCompletions,type NativeCuttingCompletion} from './cutting-c
 import type {FixedScheduleBasis} from './fixed-schedule-basis.js';
 import type {ScheduleFact,ScheduleWork} from './fixed-schedule-progress.js';
 import {journeyTermination} from './journey-termination.js';
+import {orderTimeCreated} from './order-time-created.js';
+import {orderTimePolicyHistory} from './order-time-native-timing.js';
+import {shiftFixedTimeline} from './fixed-timeline-targets.js';
 
 type DB=Pick<PoolClient,'query'>;
 const unknown:ScheduleOccurrence={precision:'unknown'};
@@ -23,7 +26,7 @@ const aliases:Record<string,string>={production_sheet:'production_instruction',s
 const keyOf=(work:OrderTimeWork)=>aliases[work.parameterKey]??work.parameterKey;
 const empty=():ScheduleFact=>({ready:unknown,clockStart:unknown,completed:unknown,businessCompleted:false,waitingForPredecessors:false,evidenceRefs:[]});
 type NativeTask={task_id:string;task_kind:string;source_id:string|null;production_order_id:string|null;route_version:number;state:string;entered_at:Date|null;entered_quality:string;completed_at:Date|null;completed_quality:string;step_id:string|null;returned:boolean;rejected:boolean;sla_basis:{seconds?:number|null;calendarRef?:ScheduleWork['calendar']}|null;native_entered_at:Date|null;warning_at:Date|null};
-type Evidence={tasks:NativeTask[];readiness:Awaited<ReturnType<typeof nativeTaskReadiness>>;cutting:NativeCuttingReadiness[];cutCompletions:NativeCuttingCompletion[]};
+type Evidence={tasks:NativeTask[];readiness:Awaited<ReturnType<typeof nativeTaskReadiness>>;cutting:NativeCuttingReadiness[];cutCompletions:NativeCuttingCompletion[];created?:{reference:string;at:string;evidence:string}|null;policies?:Awaited<ReturnType<typeof orderTimePolicyHistory>>};
 
 /** Current native task identities, not labels or a newly generated adoption ID.
  * The authorized caller already owns the original RR client and resource. */
@@ -43,6 +46,10 @@ async function taskEvidence(db:DB,resource:BusinessTimeScope,item:OrderJourney):
 }
 
 function nativeFor(work:OrderTimeWork,scope:{lineId:string|null},resource:BusinessTimeScope,item:OrderJourney,native:Readonly<Record<string,SlaNodeFact>>,evidence:Evidence):{fact:ScheduleFact;task:NativeTask|null;native?:SlaNodeFact}{
+ if(work.canonicalWorkRef?.startsWith('creation:')){
+  const created=evidence.created?.reference===work.canonicalWorkRef?evidence.created:null,at=created?instant(created.at):unknown;
+  return {fact:{...empty(),ready:at,clockStart:at,completed:at,businessCompleted:Boolean(created),evidenceRefs:created?[created.evidence]:[]},task:null};
+ }
  const shared=work.id.startsWith('source:'),raw=shared?work.id.slice(7):work.id,key=keyOf(work);
  const declared=work.canonicalWorkRef?.match(/^source:([^:]+):round:(\d+):/),round=declared?Number(declared[2]):resource.kind==='source'?item.selectedRound??1:shared?item.adoptedRound:null;
  const sourceId=resource.kind==='source'?resource.id:item.sourceId;
@@ -111,13 +118,22 @@ export function orderTimeReadingBasis(saved:StoredOrderTimePlan,resource:Busines
    const begun=fact.clockStart.precision!=='unknown'||fact.businessCompleted||Boolean(own.task?.native_entered_at);
    if(own.native?.batchWindows?.length&&(policy.responsibilitySlaRef||old?.responsibilitySlaRef))fact.ownWindows=own.native.batchWindows.map(window=>({sourceRef:window.evidence,started:instant(window.startedAt),completed:instant(window.completedAt),complete:window.complete,deadline:window.deadline,warningAt:window.warningAt,
     calendar:'calendarRef'in window&&['continuous','natural_days','beijing_sunday_excluded'].includes(String(window.calendarRef))?window.calendarRef as ScheduleWork['calendar']:old?.responsibilityCalendar??'continuous'}));
-   const originalOwn=begun&&old?{responsibilitySlaRef:old.responsibilitySlaRef,responsibilityMinutes:old.responsibilityMinutes,responsibilityCalendar:old.responsibilityCalendar}:begun&&own.task?.sla_basis?{responsibilitySlaRef:`task:${own.task.task_id}:original-window`,responsibilityMinutes:typeof own.task.sla_basis.seconds==='number'?own.task.sla_basis.seconds/60:null,responsibilityCalendar:own.task.sla_basis.calendarRef??'continuous' as const}:begun?{responsibilitySlaRef:null,responsibilityMinutes:null,responsibilityCalendar:null}:policy;
+   const taskOwn=begun&&typeof own.task?.sla_basis?.seconds==='number'?{responsibilitySlaRef:`task:${own.task.task_id}:original-window`,responsibilityMinutes:own.task.sla_basis.seconds/60,responsibilityCalendar:own.task.sla_basis.calendarRef??'continuous' as const}:null;
+   const nativeOwn=begun&&typeof own.native?.standardMinutes==='number'?{responsibilitySlaRef:own.native.evidence,responsibilityMinutes:own.native.standardMinutes,responsibilityCalendar:own.native.standardCalendar??'continuous' as const}:null;
+   const start=fact.clockStart.precision==='instant'?fact.clockStart.at:null;
+   const captured=start?evidence.policies?.find(version=>Date.parse(version.at)<=Date.parse(start)):undefined;
+   const capturedRule=captured?orderTimeRule(captured.plan,source.parameterKey)?.rule:null;
+   const atStart=begun&&captured&&capturedRule?.kind==='work'?{responsibilitySlaRef:`order-time:${captured.id}:${source.parameterKey}`,responsibilityMinutes:capturedRule.minutes,responsibilityCalendar:capturedRule.calendar}:null;
+   // Exact native task/batch windows own their clocks. Other original events
+   // select this order's confirmed policy at R, never a later arrangement.
+   const originalOwn=taskOwn??(own.native?.standardCalendar||own.native?.batchWindows?.length?nativeOwn:null)??atStart??nativeOwn??(begun&&old?{responsibilitySlaRef:old.responsibilitySlaRef,responsibilityMinutes:old.responsibilityMinutes,responsibilityCalendar:old.responsibilityCalendar}:begun?{responsibilitySlaRef:null,responsibilityMinutes:null,responsibilityCalendar:null}:policy);
+   const capturedWarning=atStart&&start&&capturedRule?.minutes!==null&&capturedRule?.calendar&&capturedRule.reminder.enabled?shiftFixedTimeline(start,capturedRule.minutes*capturedRule.reminder.percent/100,capturedRule.calendar):null;
    const reminder=orderTimeRule(saved.input.plan,source.parameterKey)?.rule.reminder;
    const goal=scope.customerGoalIds.includes(source.id),anchor=scope.goals[source.id];
    return {...definition,stage:source.stage,canonicalWorkRef:source.canonicalWorkRef??`${resource.kind}:${resource.id}:work:${source.id}`,
     start:target?.start.at??null,end:target?.end.at??null,...originalOwn,
     responsibilitySlaRef:originalOwn.responsibilitySlaRef,responsibilityMinutes:originalOwn.responsibilityMinutes??null,responsibilityCalendar:originalOwn.responsibilityCalendar??null,
-    ...(begun?{responsibilityWarningAt:own.task?.warning_at?.toISOString()??old?.responsibilityWarningAt??null}:{responsibilityReminderPercent:reminder?.enabled?reminder.percent:null}),
+    ...(begun?{responsibilityWarningAt:own.task?.warning_at?.toISOString()??(atStart?capturedWarning:old?.responsibilityWarningAt??null)}:{responsibilityReminderPercent:reminder?.enabled?reminder.percent:null}),
     targetPrecision:goal&&anchor?.precision==='date'?'date' as const:'instant' as const,targetDate:goal&&anchor?.precision==='date'?anchor.value:null};
   });
   // Native accepted redo remains real work even when it was not in the
@@ -149,7 +165,10 @@ export function orderTimeReadingBasis(saved:StoredOrderTimePlan,resource:Busines
 export async function readOrderTimeBasis(db:DB,resource:BusinessTimeScope,item:OrderJourney,native:Readonly<Record<string,SlaNodeFact>>,asOf:string,legacy:FixedScheduleBasis|null,time?:BusinessTime):Promise<FixedScheduleBasis|null>{
  const saved=await new OrderTimePlanRepository(db).current(resource);if(!saved)return legacy;
  if(time&&saved.time.scenarioId!==time.scenarioId)throw Error('本单时间方案与当前业务时钟范围不一致');
- const result=orderTimeReadingBasis(saved,resource,item,native,await taskEvidence(db,resource,item),legacy);
+ const evidence=await taskEvidence(db,resource,item),root=saved.input.work.find(work=>work.canonicalWorkRef?.startsWith('creation:'))?.canonicalWorkRef?.match(/^creation:(source|order):([0-9a-f-]{36})$/);
+ evidence.policies=await orderTimePolicyHistory(db,resource);
+ if(root&&((root[1]==='source'&&root[2]===item.sourceId)||(root[1]==='order'&&resource.kind==='order'&&root[2]===resource.id))){const created=await orderTimeCreated(db,{kind:root[1] as 'source'|'order',id:root[2]!});evidence.created=created&&Date.parse(created.at)<=Date.parse(asOf)?{...created,reference:root[0]}:null;}
+ const result=orderTimeReadingBasis(saved,resource,item,native,evidence,legacy);
  result.termination=await journeyTermination(db,resource,asOf);return result;
 }
 

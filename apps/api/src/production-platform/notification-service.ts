@@ -1,5 +1,6 @@
 import {type TodoSelection,type TodoSelectionKey,type TodoProjection} from '../todos/selection.js';
 import {shortLeadTodos} from './short-lead-todos.js';
+import {orderTimeTodos,orderTimeNotification} from './order-time-todos.js';
 import {qcProgressNotices,qcNoticesAsTodos} from './qc-progress-todos.js';
 import {preparationWindowTodos,preparationMaterialsTodos,preparationSupplement} from './preparation-todos.js';
 import {effectiveSourcingDueSql} from './sla-sourcing-deadline-sql.js';
@@ -198,7 +199,7 @@ export class DigitalProductionNotificationService {
     const tasks=(await this.database.query<Task>(`${TASKS} WHERE ${ACTIVE}${projection?.todoId?' AND t.task_id=$1::uuid':''} ORDER BY d.due_at NULLS LAST,t.created_at,t.task_id`,...(projection?.todoId?[[projection.todoId]]:[]))).rows;
     const unified=await arrangementsAvailable(this.database);
     const result:TodoResponse[]=unified?[...await arrangementTodos(this.database,actor,projection),...await fabricDecisionTodos(this.database,actor,projection)]:[];
-    result.push(...await shortLeadTodos(this.database,actor,projection));
+    result.push(...await orderTimeTodos(this.database,actor,projection),...await shortLeadTodos(this.database,actor,projection));
     result.push(...await preparationWindowTodos(this.database,actor,projection),...await preparationMaterialsTodos(this.database,actor,projection),...await bulkFabricDecisionTodos(this.database,actor,projection),...await factoryProductionQcTodos(this.database,actor,new ContextBusinessClock(this.database),projection),...await garmentQualityTodos(this.database,actor,new ContextBusinessClock(this.database),projection));
 
     if(!projection?.todoId)result.push(...qcNoticesAsTodos(await qcProgressNotices(this.database,people),actor,projection));
@@ -245,6 +246,7 @@ export class DigitalProductionNotificationService {
   async todo(actor:TrustedActorContext,id:string){const selected=await this.todoSelections(actor,{todoId:id});return selected[0]?selected[0].load():null;}
   private async render(database:Database,actor:TrustedActorContext,event:{instruction_order_id?:string|null;development_source_id?:string|null;event_id:string;task_id:string|null;todo_id:string|null;event_kind:string;deadline_revision_id:string|null;created_at:Date;source_key?:string},people:TrustedActorContext[],includeContext=true,prepared?:NotificationTasks):Promise<DigitalNotification|null> {
     if(!people.some(p=>p.actorId===actor.actorId))return null;
+    if(event.event_kind==='order_time_request')return orderTimeNotification(database,actor,event);
     if(event.event_kind==='qc_progress'){
       const parent=(await database.query('SELECT production_order_id FROM digital_production_task_access WHERE task_id=$1',[event.task_id])).rows[0];
       if(!parent)return null;

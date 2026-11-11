@@ -110,7 +110,7 @@ export class FactoryFlowService{
  }
  async read(actor:TrustedActorContext,id:string,db:DB=this.database):Promise<FactoryFlowSheet>{
   await new DigitalProductionAccessPolicy(db).assert(actor,'order',id,'technical');const s=await this.state(db,id);
-  const sampleTargets=await shipSampleTargets(db,id),sampleTargetDate=sampleTargets.lines.map(l=>l.targetDate).filter((d):d is string=>d!==null).sort()[0]??null;
+  const sampleTargets=await shipSampleTargets(db,id,s.gate.order.order_time_managed===true),sampleTargetDate=sampleTargets.lines.map(l=>l.targetDate).filter((d):d is string=>d!==null).sort()[0]??null;
   const link=(await db.query("SELECT child_id FROM digital_production_child_links WHERE module='production' AND production_order_id=$1",[id])).rows[0];
   const tasks=await this.tasks().readAuthorized(actor,s.tasks.map(t=>t.task_id),db);
   const batchTiming=s.batch?await factoryBatchTiming(db,id):null;

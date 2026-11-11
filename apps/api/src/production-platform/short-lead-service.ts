@@ -10,6 +10,7 @@ import {ContextBusinessClock,observedBusinessTime} from '../acceptance-clock/bus
 import {DigitalProductionAccessPolicy,digitalForbidden,digitalNotFound} from './access-policy.js';
 import {developmentDocumentRow} from './development-round-repository.js';
 import {commitmentHash,shortLeadAvailable,shortLeadStaleReason,shortLeadDocumentHash} from './short-lead-evidence.js';
+import {acceptsNewOrderTime} from './order-time-admission.js';
 type DB=Pick<Pool|PoolClient,'query'>;
 const conflict=(message:string):never=>{throw new ApplicationError('SHORT_LEAD_CONFLICT',message,409);};
 const dtoDate=(value:Date|string)=>new Date(value).toISOString();
@@ -45,6 +46,7 @@ export class ShortLeadService{
   const db=await this.database.connect();try{
    await db.query('BEGIN');await db.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
    if(!await shortLeadAvailable(db))conflict('短交期审批尚未迁移就绪');await this.source(db,actor,sourceId);await authorize(db);
+   if(await acceptsNewOrderTime(db))throw new ApplicationError('ORDER_TIME_REQUEST_REQUIRED','请回原单按实际工艺提交本单时效申请，原申请仅保留历史记录',409);
    const scopeTime=await this.time(db,sourceId);
    const command=`short-lead:${sourceId??'direct'}:${scopeTime.scenarioId??'real'}:${kind}`,hash=createHash('sha256').update(JSON.stringify(input)).digest('hex');
    const prior=(await db.query('SELECT payload_hash,response FROM digital_production_commands WHERE actor_id=$1 AND command=$2 AND key=$3',[actor.actorId,command,key])).rows[0];
@@ -69,7 +71,7 @@ export class ShortLeadService{
    order:r.order_facts,facts:formalCommitmentFacts(r.order_facts),commitmentDay:r.day,minimumNormalDate:r.minimum,reason:r.reason,
    requestedBy:r.requested_by,requesterName:r.requester_name,requestedAt:dtoDate(r.recorded_at),consumedOrderId:r.consumed_order_id??null,
    staleReason:r.consumed_order_id?null:await shortLeadStaleReason(this.database,r),decision:r.approved===null?null:{approved:r.approved,reason:r.decision_reason,decidedBy:r.decided_by,deciderName:r.decider_name,authority:r.authority,decidedAt:dtoDate(r.decided_at)}};}));
-  const now=new Date(time.now);return {canApprove,canRequest,serverToday:beijingCalendarDate(now),minimumNormalDate:minimumInitialCustomerDate(now),requests};
+  const now=new Date(time.now),replaced=await acceptsNewOrderTime(this.database);return {canApprove:!replaced&&canApprove,canRequest:!replaced&&canRequest,serverToday:beijingCalendarDate(now),minimumNormalDate:minimumInitialCustomerDate(now),requests};
  }
  async request(actor:TrustedActorContext,sourceId:string|null,raw:unknown,key:string){
   const parsed=ShortLeadRequestSchema.safeParse(raw);if(!parsed.success)throw new ApplicationError('VALIDATION_ERROR',parsed.error.issues[0]?.message??'订单资料不完整',400);

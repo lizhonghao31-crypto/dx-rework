@@ -7,11 +7,12 @@ export async function sourcingSlaEvidence(db: Pick<PoolClient, 'query'>, orderId
     if (!(await db.query("SELECT to_regclass('sourcing_cases') AS relation")).rows[0]?.relation)
         return facts;
     const rows = (await db.query(`SELECT DISTINCT ON(t.entity_id,t.category) t.entity_id,t.category,t.status,${effectiveSourcingDueSql('t')} AS effective_due,
-   first_window.started_at,done.business_at AS completed_at,done.operation_event_id,
+   first_window.started_at,first_window.order_time,done.business_at AS completed_at,done.operation_event_id,
    CASE t.category WHEN 'sourcing_ie_quote' THEN 'sourcing_ie' WHEN 'sourcing_management_decision' THEN 'sourcing_selection' ELSE 'sourcing_approval' END AS parameter
  FROM rework_todos t
  JOIN digital_production_child_links link ON link.module='sourcing' AND link.child_id::text=t.entity_id AND link.production_order_id=$1
- LEFT JOIN LATERAL(SELECT original.due_at-make_interval(secs=>((snapshot.parameters_json->(CASE original.category WHEN 'sourcing_ie_quote' THEN 'sourcing_ie' WHEN 'sourcing_management_decision' THEN 'sourcing_selection' ELSE 'sourcing_approval' END)->'value'->>'minutes')::numeric*60)::double precision) AS started_at
+ LEFT JOIN LATERAL(SELECT coalesce((creation.after_state->'slaTiming'->'orderTime'->>'enteredAt')::timestamptz,original.due_at-make_interval(secs=>((snapshot.parameters_json->(CASE original.category WHEN 'sourcing_ie_quote' THEN 'sourcing_ie' WHEN 'sourcing_management_decision' THEN 'sourcing_selection' ELSE 'sourcing_approval' END)->'value'->>'minutes')::numeric*60)::double precision)) AS started_at,
+   creation.after_state->'slaTiming'->'orderTime' AS order_time
    FROM rework_todos original LEFT JOIN operation_events creation ON creation.event_id=original.created_operation_event_id AND creation.action='todo.create'
    LEFT JOIN digital_sla_order_snapshots snapshot ON snapshot.snapshot_id::text=creation.after_state->'slaTiming'->>'snapshotId' AND snapshot.production_order_id=$1
    WHERE original.entity_type='sourcing_case' AND original.entity_id=t.entity_id AND original.category=t.category AND original.todo_type='business_action'
@@ -25,7 +26,7 @@ export async function sourcingSlaEvidence(db: Pick<PoolClient, 'query'>, orderId
     for (const row of rows) {
         const complete = row.status === 'completed' && !!row.completed_at, started = row.started_at ? new Date(row.started_at).toISOString() : null, due = row.effective_due ? new Date(row.effective_due).toISOString() : null;
         facts[row.parameter] = { evidence: `sourcing:${row.entity_id}:${row.category}${row.operation_event_id ? `;event:${row.operation_event_id}` : ''}`, businessCompleted: complete,
-            ...(started ? { startedAt: started } : {}), ...(started && due ? { standardMinutes: (Date.parse(due) - Date.parse(started)) / 60000 } : {}),
+            ...(started ? { startedAt: started } : {}), ...(row.order_time?.version===1?{standardMinutes:row.order_time.minutes,standardCalendar:row.order_time.calendarRef,standardWarningPercent:row.order_time.warningPercent}:started && due ? { standardMinutes: (Date.parse(due) - Date.parse(started)) / 60000 } : {}),
             ...(complete ? { completedAt: new Date(row.completed_at).toISOString(), completedDeadline: { at: due, exclusive: false, reasons: due ? [] : ['原商务待办缺少可信起点'] } } : {}) };
     }
     return facts;

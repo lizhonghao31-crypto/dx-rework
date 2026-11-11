@@ -7,6 +7,7 @@ import {ContextBusinessClock,registerAcceptanceCreated} from '../acceptance-cloc
 import type {TrustedActorContext} from '../tools/repositories.js';
 import {ApplicationError} from '../platform/errors.js';
 import {captureDevelopmentSla} from './development-sla-enrollment.js';
+import {acceptsNewOrderTime} from './order-time-admission.js';
 type DB=Pick<PoolClient,'query'>;
 export async function developmentRevisionSource(db:DB,sourceId:string){
  if(!(await db.query("SELECT to_regclass('digital_development_revision_sources') AS relation")).rows[0]?.relation)return null;
@@ -25,8 +26,9 @@ export async function createIndependentDevelopmentRevision(db:PoolClient,actor:T
  const root=(await db.query('SELECT * FROM digital_production_sources WHERE source_id=$1 FOR UPDATE',[rootId])).rows[0];
  const number=Number((await db.query('SELECT coalesce(max(revision_number),0)+1 AS n FROM digital_development_revision_sources WHERE root_source_id=$1',[rootId])).rows[0].n);
  const sourceId=randomUUID(),suffix=` · 复版${number}`,style=`${root.design_style_no.slice(0,100-suffix.length)}${suffix}`;
- await db.query(`INSERT INTO digital_production_sources(source_id,created_by,development_type,design_style_no,temporary_style_no,customer_code)
-  VALUES($1,$2,$3,$4,$5,$6)`,[sourceId,parent.created_by,parent.development_type,style,parent.temporary_style_no,parent.customer_code]);
+ const managed=await acceptsNewOrderTime(db);
+ await db.query(`INSERT INTO digital_production_sources(source_id,created_by,development_type,design_style_no,temporary_style_no,customer_code${managed?',order_time_managed':''})
+  VALUES($1,$2,$3,$4,$5,$6${managed?',true':''})`,[sourceId,parent.created_by,parent.development_type,style,parent.temporary_style_no,parent.customer_code]);
  await db.query(`INSERT INTO digital_development_revision_sources(source_id,parent_source_id,root_source_id,revision_number,parent_round,origin,customer_comment,explanation,categories,affected_nodes,output_kind,created_by)
   VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,[sourceId,parentId,rootId,number,input.basedOnRound,input.origin,input.customerComment,input.explanation,input.categories,input.affectedNodes,input.outputKind,actor.actorId]);
  const eventId=randomUUID();
@@ -45,6 +47,7 @@ export async function createIndependentDevelopmentRevision(db:PoolClient,actor:T
   await db.query('INSERT INTO digital_development_inherited_files(source_id,attachment_id,original_source_id,inherited_by) VALUES($1,$2,$3,$4)',[sourceId,file.attachmentId,original.entity_id,actor.actorId]);
  }
  await db.query("INSERT INTO digital_development_documents(source_id,version,status,document,updated_by) VALUES($1,1,'draft',$2,$3)",[sourceId,JSON.stringify(document),actor.actorId]);
- await captureDevelopmentSla(db,actor,sourceId,null,time,eventId);
+ if(managed)await db.query("INSERT INTO digital_order_time_subjects(resource_kind,source_id,created_by,created_business_time,creation_event_ref) VALUES('source',$1,$2,$3,$4)",[sourceId,parent.created_by,JSON.stringify(time),'audit_events:'+eventId]);
+ else await captureDevelopmentSla(db,actor,sourceId,null,time,eventId);
  return {sourceId,roundNumber:1,revisionNumber:number,status:'draft' as const};
 }

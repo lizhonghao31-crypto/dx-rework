@@ -10,6 +10,8 @@ import {readInitialTimelineInput} from './fixed-timeline-initial-input.js';
 import {captureFixedCraftSteps} from './fixed-craft-steps.js';
 import {fixedOrderWork} from './fixed-order-work.js';
 import {captureFixedOrderRoute} from './fixed-order-route.js';
+import {OrderTimePlanRepository} from './order-time-plan-repository.js';
+import {orderTimeBulkSteps,orderTimeStoredBulkSteps} from './order-time-route-identities.js';
 
 /** Only original authorized native publication/preparation calls this adapter.
  * It freezes identities and planning inputs; the bounded worker computes B.
@@ -24,7 +26,8 @@ export async function captureOrderTimeline(db:PoolClient,actorId:string,orderId:
   const selected=inherited?sourceDocument.craftSteps:document.craftSteps;
   if(label==='印绣花'&&!selected)throw Error('请在原制单明确绣花、印花的实际先后顺序');
   const choices=label==='无'?[]:CraftStepChoicesSchema.parse(selected??[{craftKind:label==='绣花'?'embroidery':'printing',sequence:1}]);
-  const craftSteps=choices.map(step=>({...step,stepId:randomUUID()})),dual=craftSteps.length===2;
+  const adoptedPolicy=initial.data.orderTimePlan?await new OrderTimePlanRepository(db).current(resource):null;
+  const craftSteps=initial.data.orderTimePlan?orderTimeBulkSteps(orderId,instructionVersion,choices,orderTimeStoredBulkSteps(adoptedPolicy?.input)):choices.map(step=>({...step,stepId:randomUUID()})),dual=craftSteps.length===2;
   const source=await repo.existing({kind:'source',id:sourceId},sourceRound),lines=(await db.query('SELECT line_id FROM digital_production_po_lines WHERE production_order_id=$1 ORDER BY position',[orderId])).rows;
   const planningLines=[];
   for(const line of lines){const recorded=(await db.query("SELECT version FROM digital_po_date_changes WHERE line_id=$1 AND date_kind='customer' AND source='initial_po' ORDER BY version LIMIT 1",[line.line_id])).rows[0];
@@ -37,7 +40,7 @@ export async function captureOrderTimeline(db:PoolClient,actorId:string,orderId:
    sourceVersions:{initialIdentityHash:initial.identityHash,configurationId:initial.data.unified.configurationId,routeRef,instructionVersion,sourceId,sourceRound,preshrink:document.preshrink},work,route,craftSteps,consumers};
  });
  if(saved){
-  const scope=await captureFixedOrderRoute(db,saved,routeRef,document,sourceDocument,eventRef,time,actorId);
+  const scope=await captureFixedOrderRoute(db,saved,routeRef,document,sourceDocument,eventRef,time,actorId,instructionVersion);
   await captureFixedCraftSteps(db,saved,resource,routeRef,1,scope?.craftSteps??saved.input.craftSteps??[],actorId,eventRef);
  }
  return saved;

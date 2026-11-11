@@ -4,11 +4,9 @@ import {DevelopmentTechnicalService} from './development-technical-service.js';
 import {createIndependentDevelopmentRevision} from './development-revision-source.js';
 import {businessNow,ContextBusinessClock} from '../acceptance-clock/business-time.js';
 import {captureDevelopmentTimeline} from './fixed-development-adoption.js';
-import {developmentSlaPlan,developmentSlaRoute} from "./development-sla-enrollment.js";
+import {developmentSlaPlan} from "./development-sla-enrollment.js";
 import {validateAuxiliaryReferences} from '../access/auxiliary-catalog-service.js';
-import {verificationAvailable} from "./development-material-verification.js";
 import {developmentRevisionForSave} from "./development-document-format.js";
-import {isDevelopmentMaterialPlaceholder} from "@dx-rework/contracts/digital-development";
 import {authorizePatternOrder} from "../pattern-room/order-authority.js";
 import { BulkPreparationService } from "./bulk-preparation-service.js";
 import {isDeepStrictEqual} from "node:util";
@@ -23,12 +21,14 @@ import {DigitalProductionAccessPolicy} from './access-policy.js';
 import {DigitalDevelopmentService} from './development-service.js';
 import {DigitalProductionTaskService} from './task-service.js';
 import {DevelopmentRouteService} from './development-route-service.js';
-import {developmentRevisionPlan} from './development-round-plan.js';
+import {readDevelopmentRevisionPlan} from './development-round-plan.js';
 import type {PatternRoomOrderService} from '../pattern-room/order-service.js';
 import {authorizeDevelopmentReturn,linkedDevelopmentOrder} from './development-native-round.js';
+import {automaticOrderTime} from './order-time-automatic.js';
 const fail=(message:string):never=>{throw new ApplicationError('DEVELOPMENT_REVISION_CONFLICT',message,409);};
 export class DevelopmentRoundService {
- constructor(private readonly database:Pool,private readonly enabled:boolean,private readonly patternOrders?:PatternRoomOrderService){}
+ constructor(private readonly database:Pool,private readonly enabled:boolean,private readonly patternOrders?:PatternRoomOrderService,private readonly transactionClient?:PoolClient){}
+ inTransaction(client:PoolClient){return new DevelopmentRoundService(this.database,this.enabled,this.patternOrders,client);}
  private forms(){return new DigitalDevelopmentService(this.database,this.enabled);}
  async read(actor:TrustedActorContext,sourceId:string){
   const sheet=await this.forms().read(actor,sourceId);
@@ -38,8 +38,8 @@ export class DevelopmentRoundService {
  }
  private async command<T>(actor:TrustedActorContext,sourceId:string,action:string,key:string,input:unknown,work:(db:PoolClient)=>Promise<T>){
   if(!this.enabled)digitalForbidden();if(!/^[A-Za-z0-9._:-]{1,100}$/.test(key))fail('缺少有效操作标识');
-  const db=await this.database.connect();try{
-   await db.query('BEGIN');await db.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
+  const db=this.transactionClient??await this.database.connect();try{
+   if(!this.transactionClient)await db.query('BEGIN');await db.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
    const sheet=await this.forms().read(actor,sourceId,db);if(!sheet.canEdit||sheet.status!=='published')digitalForbidden();
    const lifecycle=(await db.query("SELECT state FROM digital_production_resource_lifecycle WHERE resource_kind='source' AND resource_id=$1",[sourceId])).rows[0];if(lifecycle&&lifecycle.state!=='active')fail('开发单已暂停或取消');
    const command=`development-round:${sourceId}:${action}`,hash=createHash('sha256').update(JSON.stringify(input)).digest('hex');
@@ -47,8 +47,8 @@ export class DevelopmentRoundService {
    if(prior&&prior.payload_hash!==hash)fail('同一操作标识不能用于不同内容');
    const result=prior?prior.response as T:await work(db);
    if(!prior)await db.query('INSERT INTO digital_production_commands(actor_id,command,key,payload_hash,response) VALUES($1,$2,$3,$4,$5)',[actor.actorId,command,key,hash,JSON.stringify(result)]);
-   await db.query('COMMIT');return result;
-  }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
+   if(!this.transactionClient)await db.query('COMMIT');return result;
+  }catch(error){if(!this.transactionClient)await db.query('ROLLBACK');throw error;}finally{if(!this.transactionClient)db.release();}
  }
  async save(actor:TrustedActorContext,sourceId:string,input:{expectedDraftVersion:number;revision:DevelopmentRevision},key:string){
   return this.command(actor,sourceId,'save',key,input,async db=>{
@@ -65,7 +65,10 @@ export class DevelopmentRoundService {
   return this.command(actor,sourceId,'publish',key,input,async db=>{
    const draft=(await db.query('SELECT * FROM digital_development_round_drafts WHERE source_id=$1 FOR UPDATE',[sourceId])).rows[0]??fail('请先保存复版草稿');
    if(draft.version!==input.expectedDraftVersion||draft.based_on_round!==input.basedOnRound)fail('复版草稿已变化，请刷新后发布');
-   const result=await this.publishWithClient(db,actor,sourceId,DevelopmentRevisionSchema.parse(draft.payload));
+   const revision=DevelopmentRevisionSchema.parse(draft.payload),publish=()=>this.publishWithClient(db,actor,sourceId,revision);
+   // A customer revision creates a separate inactive draft. Its original
+   // publication later runs the same first-effective check as any new source.
+   const result=revision.origin!=='内部发现'?await publish():await automaticOrderTime(this.database,db,actor,{kind:'development_revision',sourceId,input},publish,result=>({kind:'source',id:result.sourceId}));
    await db.query('DELETE FROM digital_development_round_drafts WHERE source_id=$1',[sourceId]);return result;
   });
  }
@@ -96,27 +99,10 @@ export class DevelopmentRoundService {
     await this.forms().bindFiles(db,actor,sourceId,input.document);
     return createIndependentDevelopmentRevision(db,actor,sourceId,input);
   }
-  const document=structuredClone(input.document),affectedNodes=[...input.affectedNodes];
-  const clerkVerification=await verificationAvailable(db);
+  const document=structuredClone(input.document),savedPlan=await developmentSlaPlan(db,sourceId);
+  const {route,inherited,affectedNodes}=await readDevelopmentRevisionPlan(db,sourceId,input,sheet.document!,savedPlan?.route_schema_version);
   // A changed material gets its own identity; old arrivals never certify a replacement.
-  for(const material of document.materials){const old=sheet.document!.materials.find(item=>item.materialId===material.materialId);if(!old||!isDeepStrictEqual(old,material)){if(old)material.materialId=randomUUID();if((clerkVerification?!isDevelopmentMaterialPlaceholder(material):material.requiredThisRound)&&!affectedNodes.includes('核配'))affectedNodes.push('核配');}}
-  if(clerkVerification&&sheet.document!.materials.some(old=>!isDevelopmentMaterialPlaceholder(old)&&!input.document.materials.some(m=>m.materialId===old.materialId))&&!affectedNodes.includes('核配'))affectedNodes.push('核配');
-  const completed:Record<string,{taskId:string;roundNumber:number}>={};
-  const tasks=(await db.query("SELECT t.task_id,t.route_version,a.task_kind FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND t.state='completed' AND NOT EXISTS(SELECT 1 FROM digital_production_task_events e WHERE e.task_id=t.task_id AND e.event_kind='material_returned') ORDER BY t.route_version DESC,t.completed_at DESC,t.task_id",[sourceId])).rows;
-  for(const task of tasks){const kind=task.task_kind==='development_material_recheck'?'development_materials':task.task_kind;if(!completed[kind])completed[kind]={taskId:task.task_id,roundNumber:task.route_version};}
-  const savedPlan=await developmentSlaPlan(db,sourceId);
-  let {route,inherited}=developmentRevisionPlan({...input,document,affectedNodes},completed,savedPlan?developmentSlaRoute(document,input.outputKind,savedPlan.route_schema_version===2?2:1):undefined);
-  if(savedPlan?.route_schema_version===2){
-   // A repeated generic handoff is not proof for its sibling craft. If an
-   // unfinished craft is carried forward, include that step's own dispatch and
-   // confirmation, while retaining genuinely completed other work as history.
-   const full=['development_materials' as const,...developmentSlaRoute(document,input.outputKind,2)],selected=new Set(route);
-   const craftKinds=['development_printing','development_embroidery'] as const;
-   const selectedCraft=new Set(craftKinds.filter(kind=>selected.has(kind)));
-   route=full.filter((kind,index)=>kind==='development_craft_dispatch'?selectedCraft.has(full[index+1] as typeof craftKinds[number])
-    :kind==='development_craft_confirmation'?selectedCraft.has(full[index-1] as typeof craftKinds[number]):selected.has(kind));
-   if(selectedCraft.size){inherited={...inherited};delete inherited.development_craft_dispatch;delete inherited.development_craft_confirmation;}
-  }
+  for(const material of document.materials){const old=sheet.document!.materials.find(item=>item.materialId===material.materialId);if(old&&!isDeepStrictEqual(old,material))material.materialId=randomUUID();}
   const roundNumber=input.basedOnRound+1,routeId=randomUUID();
   const native=await linkedDevelopmentOrder(db,sourceId,true);
   if(!patternReworkRoundId&&input.outputKind==='整件样板'&&route.includes('development_sewing')

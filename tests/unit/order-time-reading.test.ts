@@ -1,4 +1,4 @@
-import {describe,expect,it} from 'vitest';
+import {describe,expect,it,vi} from 'vitest';
 import {JOURNEY_STAGES,type JourneyNode,type OrderJourney} from '@dx-rework/contracts/digital-production-journey';
 import type {OrderTimeRule} from '@dx-rework/contracts/order-time-plan';
 import type {ScheduleOccurrence} from '@dx-rework/contracts';
@@ -9,6 +9,9 @@ import {evaluateFixedJourneyBasis,attachFixedJourneySchedule,fixedScheduleBasisS
 import {fixedScheduleStages} from '../../apps/api/src/production-platform/fixed-schedule-stages.js';
 import {journeyVisualProgress} from '../../apps/api/src/production-platform/journey-visual-progress.js';
 import {cockpitOwnStatus,cockpitTargetDifference} from '../../apps/web/src/cockpit-fixed-schedule.js';
+import * as factoryTiming from '../../apps/api/src/production-platform/factory-batch-timing.js';
+import {factorySlaEvidence} from '../../apps/api/src/production-platform/factory-sla-evidence.js';
+import {factoryBatchLedger} from '../../apps/api/src/production-platform/factory-batch-ledger.js';
 
 const at=(hour:number)=>new Date(Date.parse('2027-03-01T00:00:00.000Z')+hour*3600000).toISOString();
 const point=(hour:number):ScheduleOccurrence=>({precision:'instant',at:at(hour)}),unknown:ScheduleOccurrence={precision:'unknown'};
@@ -26,6 +29,27 @@ function stored():StoredOrderTimePlan{
 const evidence=()=>({tasks:[],readiness:new Map(),cutting:[],cutCompletions:[]});
 const build=(saved=stored(),row=item(),old:FixedScheduleBasis|null=null)=>orderTimeReadingBasis(saved,resource,row,{},evidence(),old);
 describe('R5 exact frozen order-time reading and independent visible endpoints',()=>{
+ it('uses the confirmed policy at original readiness for non-task work, retaining it after a later arrangement',()=>{
+  const saved=stored(),row=item();row.stages[1]!.nodes=[node('a','active',at(2))];
+  const earlier=structuredClone(saved.input.plan);earlier.overrides.a=duration(2);
+  saved.input.plan.overrides.a=duration(1);
+  const basis=orderTimeReadingBasis(saved,resource,row,{}, {...evidence(),policies:[{id:'TEST later',at:at(3),plan:saved.input.plan},{id:'TEST original',at:at(1),plan:earlier}]},null);
+  const result=evaluateFixedJourneyBasis(basis,at(4.5),false).scopes[0]!.nodes.find(node=>node.id==='a')!;
+  expect(result.ownSla).toMatchObject({state:'overdue',overdueMinutes:{minimum:30,maximum:30},warningAt:at(3.4)});
+  expect(basis.scopes[0]!.work.find(work=>work.id==='a')?.responsibilityMinutes).toBe(120);
+ });
+ it('carries the original batch calendar through native evidence so an excluded Sunday is not charged as overdue work',async()=>{
+  const start='2027-01-09T14:30:00.000Z',deadline='2027-01-09T15:30:00.000Z',observed='2027-01-10T16:30:00.000Z',window={key:'TEST native batch',kind:'warehouse_dispatch' as const,parameterKey:'warehouse_dispatch',enteredAt:start,dueAt:deadline,warningAt:'2027-01-09T15:12:00.000Z',completedAt:null,complete:false,evidence:'TEST original batch receipt/contract',minutes:60,calendarRef:'beijing_sunday_excluded' as const,lineId:'TEST-po'};
+  const read=vi.spyOn(factoryTiming,'factoryBatchTiming').mockResolvedValue({routeSchemaVersion:1,preparationId:'TEST prep',snapshotId:'TEST frozen',warningRatio:.7,windows:[window],ledger:factoryBatchLedger([{lineId:'TEST-po',quantity:10}],[],[],true),stepLedger:null});
+  try{
+   const native=await factorySlaEvidence({query:async()=>({rows:[{secondary_craft:'无'}]})} as never,'TEST-order');expect(native?.facts.warehouse_dispatch!.batchWindows?.[0]?.calendarRef).toBe('beijing_sunday_excluded');
+   const saved=stored(),row={...item(),id:'TEST-order',orderId:'TEST-order',sourceId:null},scope=saved.input.scopes[0]!;saved.resource={kind:'order',id:'TEST-order'};
+   saved.input.plan.company.nodes={warehouse_dispatch:duration(1)};saved.input.work=[{id:'warehouse_dispatch',parameterKey:'warehouse_dispatch',stage:5,dependsOn:[]}];scope.scopeRef='po:TEST-po';scope.lineId='TEST-po';scope.terminalIds=['warehouse_dispatch'];scope.customerGoalIds=['warehouse_dispatch'];scope.customerGoal={precision:'instant',value:'2027-01-12T00:00:00.000Z',source:'TEST unchanged customer commitment'};scope.goals={warehouse_dispatch:scope.customerGoal};
+   const computed=evaluateOrderTimeScenario({...saved.input,start:{precision:'instant',value:start,source:'TEST planning assumption'}})[0]!;saved.targets={[scope.scopeRef]:Object.fromEntries(computed.targets.map(target=>[target.id,target]))};
+   const basis=orderTimeReadingBasis(saved,saved.resource,row,native!.facts,evidence(),null),result=evaluateFixedJourneyBasis(basis,observed,false);
+   expect(result.scopes[0]!.nodes[0]!.ownSla).toMatchObject({state:'overdue',overdueMinutes:{minimum:60,maximum:60}});
+  }finally{read.mockRestore();}
+ });
  it('reads accurate targets before production preparation and uses a known start without requiring future branch entries',()=>{
   const row=item();row.stages[1]!.nodes=[node('a','active',at(0)),node('b','uncreated',null),node('future','pending',null)];
   const basis=build(stored(),row),result=evaluateFixedJourneyBasis(basis,at(1),false);

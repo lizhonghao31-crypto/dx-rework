@@ -1,5 +1,6 @@
 import {FixedTimelineAdoptionRepository} from './fixed-timeline-adoptions.js';
 import {OrderTimePlanRepository} from './order-time-plan-repository.js';
+import {orderTimeCreated} from './order-time-created.js';
 import {attachFixedJourneySchedule} from './fixed-schedule-basis.js';
 import type {WorkspaceJourneyFact} from './journey-workspace-facts.js';
 import {ApplicationError} from '../platform/errors.js';
@@ -68,7 +69,7 @@ type FactCapture={timing:(inputs:JourneyTimingInputs)=>void;tasks:(tasks:Array<{
  untimedItem?:(item:OrderJourney,delivery:JourneySelectionDelivery)=>void;recheckAt?:(at:string)=>void};
 
 const iso = (value: Date|string|null|undefined) => value == null ? null : new Date(value).toISOString();
-type Candidate = { has_order_time_plan?:boolean;source: {development_type:string;source_id:string;created_by:string;design_style_no:string;temporary_style_no:string|null;customer_code:string|null;created_at:string}|null;
+type Candidate = { has_order_time_plan?:boolean;source: {order_time_managed?:boolean;development_type:string;source_id:string;created_by:string;design_style_no:string;temporary_style_no:string|null;customer_code:string|null;created_at:string}|null;
   order: {production_order_id:string;source_id:string|null;created_by:string;primary_merchandiser_id:string|null;design_style_no:string;temporary_style_no:string|null;customer_code:string;product_group:string;contract_delivery_date:string|null;created_at:string}|null };
 const record = (domain:string,id:string,url:string|null,version:number|null=null):JourneyRecord => ({domain,id,url,version,lineId:null,mode:"read"});
 const taskUrl = (id:string) => `/ui/digital-production?task=${encodeURIComponent(id)}`;
@@ -350,6 +351,20 @@ export class DigitalJourneyQuery {
     const cuttingReadiness=await nativeCuttingReadiness(db,ids);
     return minimalJourneyFacts(item,timing,tasks,dependencies,{readiness:[...readiness.values()],cuttingReadiness,termination,cutScopes,factoryTimeline});
   }
+  /** Internal single-order remaining-time read. The caller has authorized the
+   * exact resource and owns this transaction. Reuse the native cut/PO/batch,
+   * accepted redo and completion mapping used by the cockpit; return timing
+   * facts only, never an unscoped presentation or a substitute user. */
+  async orderTimeProgressWithClient(db:PoolClient,resource:{kind:'source'|'order';id:string},asOf:string):Promise<JourneyTimingInputs>{
+    const row=(await db.query(`SELECT row_to_json(s) AS source,row_to_json(o) AS "order"
+      FROM digital_production_sources s FULL JOIN digital_production_orders o ON o.source_id=s.source_id
+      WHERE ($1='order' AND o.production_order_id=$2) OR ($1='source' AND s.source_id=$2)`,[resource.kind,resource.id])).rows[0] as Candidate|undefined;
+    if(!row)return digitalNotFound();
+    let timing:JourneyTimingInputs={plan:null,original:null,facts:{}};
+    const item=await this.project(db,null,row,asOf,undefined,true,null,false,true,{timing:value=>{timing=value;},tasks:()=>{}});
+    if(!item)throw Error('本单原始时间事实暂时不可读取');
+    return timing;
+  }
   private async project(db:PoolClient,actor:TrustedActorContext|null,row:Candidate,asOf:string,selectedRound?:number,summaryOnly=false,patternKinds:string[]|null=null,compact=false,supervision=false,capture?:FactCapture):Promise<OrderJourney|null> {
     const policy=new DigitalProductionAccessPolicy(db),source=row.source,order=row.order;
     const sid=source?.source_id??null,oid=order?.production_order_id??null;
@@ -450,6 +465,10 @@ export class DigitalJourneyQuery {
     }
     if(fullOrder&&oid)setFact("order_information","completed",[record("order",oid,`/ui/digital-production?instruction=${oid}`)],iso(order!.created_at),{id:order!.created_by,name:designer});
     if(!oid)replace("order_information",emptyNode("order_information","uncreated"));
+    if(sourceAccess&&source?.order_time_managed){
+      const created=await orderTimeCreated(db,{kind:'source',id:source.source_id});
+      if(created&&Date.parse(created.at)<=Date.parse(asOf))setFact('order_information','completed',[record('source',source.source_id,developmentUrl(source.source_id))],created.at,{id:source.created_by,name:designer});
+    }
     const materialStates=new Map<number,Awaited<ReturnType<typeof materialReadiness>>>();
     const materialsFor=async(version:number)=>{let value=materialStates.get(version);if(!value){value=await materialReadiness(db,sid!,version);materialStates.set(version,value);}return value;};
     const taskService=new DigitalProductionTaskService(this.database),taskDtos=[];

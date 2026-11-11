@@ -1,0 +1,74 @@
+import {describe,expect,it} from 'vitest';
+import type {OrderTimeInput} from '../../apps/api/src/production-platform/order-time-plan-repository.js';
+import {orderTimeRemaining,orderTimeCheck,orderTimeBegunStates,type OrderTimeNativeProgress} from '../../apps/api/src/production-platform/order-time-request-plan.js';
+import {evaluateOrderTimeScenario} from '../../apps/api/src/production-platform/order-time-schedule.js';
+import {orderTimeBulkSteps,orderTimeStoredBulkSteps} from '../../apps/api/src/production-platform/order-time-route-identities.js';
+
+const at=(day:number)=>new Date(Date.UTC(2027,0,day,0)).toISOString();
+function input():OrderTimeInput{return {version:'order-time-input-v1',plan:{version:'order-time-plan-v1',revision:1,overrides:{},company:{version:'order-time-standard-v1',reference:'TEST frozen creation counterpart',revision:1,stageBufferMinutes:0,nodes:{a:{kind:'work',minutes:2880,calendar:'continuous',reminder:{enabled:true,percent:70}},b:{kind:'work',minutes:2880,calendar:'continuous',reminder:{enabled:true,percent:70}}}}},route:{complete:true,missing:[]},work:[{id:'a',parameterKey:'a',stage:2,dependsOn:[]},{id:'b',parameterKey:'b',stage:2,dependsOn:['a']}],scopes:[{scopeRef:'TEST actual PO',lineId:null,terminalIds:['b'],customerGoalIds:[],customerGoal:{precision:'instant',value:at(10),source:'TEST customer commitment'},goals:{b:{precision:'instant',value:at(10),source:'TEST customer commitment'}}}]};}
+const time={now:at(7),scenarioId:null,revision:0};
+describe('R5 per-order conditional remaining-time evaluation',()=>{
+ it('detects a full day short for7th start/10th promise with serial A+B of two days each without moving customer H',()=>{
+  const value=input(),original=structuredClone(value),result=orderTimeRemaining(value,time,new Map());
+  expect(result.scopes[0]).toMatchObject({feasibility:'insufficient',lateMinutes:1440,requiredSpanMinutes:5760,expectedEnd:{at:at(11)}});expect(value).toEqual(original);
+ });
+ it('does not zero an unfinished sibling that shares the same company parameter or count completed work twice',()=>{
+  const value=input();value.work[1]!.parameterKey='a';
+  const progress=new Map<string,OrderTimeNativeProgress>([['a',{completed:true,actualAt:at(6),readyAt:at(4),deadline:at(6)}]]),result=orderTimeRemaining(value,time,progress);
+  expect(result.scopes[0]).toMatchObject({feasibility:'sufficient',requiredSpanMinutes:2880,expectedEnd:{at:at(9)}});expect(value.plan.company.nodes.a!.minutes).toBe(2880);
+ });
+ it('retains an active original deadline after a per-order duration edit and labels an exhausted window as a lower bound',()=>{
+  const value=input();value.plan.overrides.a={...value.plan.company.nodes.a!,minutes:60};
+  const progress=new Map<string,OrderTimeNativeProgress>([['a',{completed:false,actualAt:null,readyAt:at(6),deadline:at(8),calendar:'continuous'}]]);
+  expect(orderTimeRemaining(value,time,progress).scopes[0]).toMatchObject({requiredSpanMinutes:4320,expectedEnd:{at:at(10)}});
+  progress.get('a')!.deadline=at(6);const result=orderTimeRemaining(value,time,progress);expect(result.lowerBound).toBe(true);expect(result.scopes[0]!.expectedEnd!.at).toBe(at(9));
+ });
+ it('joins truly parallel prerequisites by the last branch and keeps necessary unknown route inputs unknown',()=>{
+  const value=input();value.work[1]!.dependsOn=[];value.scopes[0]!.terminalIds=['a','b'];value.scopes[0]!.goals.a=value.scopes[0]!.customerGoal;
+  expect(orderTimeRemaining(value,time,new Map()).scopes[0]!.requiredSpanMinutes).toBe(2880);
+  value.route={complete:false,missing:['请确认是否需要预缩']};expect(orderTimeRemaining(value,time,new Map()).scopes[0]).toMatchObject({feasibility:'unknown',lateMinutes:null,expectedEnd:null});
+ });
+ it('keeps included handoffs within the shrinking parent window and freezes a genuinely completed terminal',()=>{
+  const value=input();value.plan.company.nodes.handoff={kind:'included',minutes:60,calendar:'continuous',reminder:{enabled:true,percent:70}};
+  value.work.push({id:'handoff',parameterKey:'handoff',stage:2,dependsOn:[],includedIn:'a'});
+  const progress=new Map<string,OrderTimeNativeProgress>([['a',{completed:false,actualAt:null,readyAt:at(6),deadline:'2027-01-07T00:30:00.000Z',calendar:'continuous'}]]);
+  expect(orderTimeRemaining(value,time,progress).scopes[0]).toMatchObject({requiredSpanMinutes:2910,expectedEnd:{at:'2027-01-09T00:30:00.000Z'}});
+  progress.set('b',{completed:true,actualAt:at(9),readyAt:at(7),deadline:at(10)});
+  expect(orderTimeRemaining(value,{...time,now:at(12)},progress).scopes[0]).toMatchObject({feasibility:'sufficient',requiredSpanMinutes:0,lateMinutes:0,expectedEnd:{at:at(9)}});
+  progress.get('b')!.actualAt=null;expect(orderTimeRemaining(value,{...time,now:at(12)},progress).scopes[0]).toMatchObject({feasibility:'unknown',expectedEnd:null});
+ });
+ it('does not call an exhausted unfinished window feasible just because its optimistic lower bound fits',()=>{
+  const value=input(),progress=new Map<string,OrderTimeNativeProgress>([['a',{completed:false,actualAt:null,readyAt:at(5),deadline:at(6)}]]);
+  const checked=orderTimeCheck({value,time,progress,sourceVersion:{},resource:{kind:'source',id:'TEST original source'},styleNo:'TEST',customerDates:[],canRequest:true,canApply:true});
+  expect(checked).toMatchObject({feasibility:'unknown',forecastQuality:'lower_bound',expectedEnd:at(9),lateMinutes:0});expect(checked.coverage).toContain('在办节点已超时，剩余工作时间尚未确认');
+ });
+ it('keeps each PO own readiness and remaining work separate for a shared predecessor',()=>{
+  const value=input();value.scopes[0]!.scopeRef='po:one';value.scopes.push({...structuredClone(value.scopes[0]!),scopeRef:'po:two',customerGoal:{precision:'instant',value:at(11),source:'TEST second PO'}});
+  const progress=new Map<string,OrderTimeNativeProgress>([['po:one|a',{completed:true,actualAt:at(6),readyAt:at(4),deadline:at(6)}]]),result=orderTimeRemaining(value,time,progress);
+  expect(result.scopes.map(scope=>scope.expectedEnd?.at)).toEqual([at(9),at(11)]);expect(result.scopes.map(scope=>scope.requiredSpanMinutes)).toEqual([2880,5760]);
+ });
+ it('allows a shared standard for a future PO while preserving the sibling original in-flight window',()=>{
+  const value=input();value.scopes[0]!.scopeRef='po:one';value.scopes.push({...structuredClone(value.scopes[0]!),scopeRef:'po:two'});
+  const progress=new Map<string,OrderTimeNativeProgress>([['po:one|a',{completed:false,actualAt:null,readyAt:at(6),deadline:at(8),calendar:'continuous'}]]);
+  expect(orderTimeBegunStates(value,progress).get('a')).toEqual({any:true,all:false});
+  const checked=orderTimeCheck({value,time,progress,sourceVersion:{},resource:{kind:'source',id:'TEST original source'},styleNo:'TEST',customerDates:[],canRequest:true,canApply:true});
+  expect(checked.rows.find(row=>row.id==='a')).toMatchObject({begun:false,preserveBegun:true});
+  value.plan.overrides.a={...value.plan.company.nodes.a!,minutes:60};
+  expect(orderTimeRemaining(value,time,progress).scopes.map(scope=>scope.requiredSpanMinutes)).toEqual([4320,2940]);
+  progress.set('po:two|a',{completed:true,actualAt:at(6),readyAt:at(4),deadline:at(6)});
+  expect(orderTimeBegunStates(value,progress).get('a')).toEqual({any:true,all:true});
+ });
+ it('keeps the ship-sample side target before both production start and the original customer offset without adding a second delivery span',()=>{
+  const value=input();value.plan.company.nodes.ship_sample={kind:'date',minutes:0,calendar:'continuous',reminder:{enabled:true,percent:70}};
+  value.work.push({id:'sample',parameterKey:'ship_sample',stage:5,dependsOn:[]});value.scopes[0]!.shipSample={nodeId:'sample',productionNodeId:'b',customerGoalId:'b',advanceDays:4};value.scopes[0]!.goals={...value.scopes[0]!.goals,sample:{precision:'unknown',reason:'由本PO生产开始及提前量求解'}};
+  const result=evaluateOrderTimeScenario({...value,start:{precision:'instant',value:at(7),source:'TEST start'}})[0]!;
+  expect(result.targets.find(target=>target.id==='sample')?.end.at).toBe(at(6));expect(result.requiredSpanMinutes).toBe(5760);
+ });
+ it('reserves real-order step identities through actual preparation and gives a changed sequence new identities',()=>{
+  const original=orderTimeBulkSteps('TEST real order',0,[{craftKind:'embroidery',sequence:1},{craftKind:'printing',sequence:2}],[]);
+  const value=input();value.work=original.map(step=>({id:'bulk_'+step.craftKind+':'+step.stepId,parameterKey:'bulk_'+step.craftKind,stage:5,dependsOn:[],canonicalWorkRef:'order:TEST real order:step:'+step.stepId+':work'}));
+  expect(orderTimeBulkSteps('TEST real order',1,original,orderTimeStoredBulkSteps(value))).toEqual(original);
+  const changed=orderTimeBulkSteps('TEST real order',2,[{craftKind:'printing',sequence:1},{craftKind:'embroidery',sequence:2}],original);expect(changed.every(step=>!original.some(old=>old.stepId===step.stepId))).toBe(true);
+  expect(orderTimeBulkSteps('TEST another order',0,original,[])).not.toEqual(original);
+ });
+});

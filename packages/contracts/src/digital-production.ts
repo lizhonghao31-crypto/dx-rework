@@ -1,4 +1,5 @@
 import { z } from "zod";
+import {ProductionRoutePlanSchema} from './digital-craft.js';
 import {addCalendarDays} from "./series-calendar.js";
 
 const text = z.string().trim().min(1).max(100);
@@ -50,6 +51,7 @@ export const DigitalPoInputSchema = z.object({
     context.addIssue({ code: "custom", path: ["sizes"], message: "数量超过上限" });
 });
 export const DigitalOrderCreateSchema = z.object({
+  productionPlanning:ProductionRoutePlanSchema.optional(),
   ...salesContext,
   customerCode: text,
   productGroup: z.enum(["男装", "女装", "男童", "女童"]),
@@ -153,7 +155,7 @@ export function formalCommitmentFacts(input:DigitalOrderInput){
 }
 export type FormalCommitmentFacts=ReturnType<typeof formalCommitmentFacts>;
 export type ApprovedShortLeadCalendar={requestId:string;facts:FormalCommitmentFacts;commitmentDay:string};
-export type CustomerOrderCalendar={serverToday:string;minimumInitialCustomerDate:string;approvedShortLead?:ApprovedShortLeadCalendar|null};
+export type CustomerOrderCalendar={serverToday:string;minimumInitialCustomerDate:string;orderTimeEnabled?:boolean;approvedShortLead?:ApprovedShortLeadCalendar|null};
 
 /** A published development may retain incomplete ordering details; formal confirmation stays strict. */
 export function initialCustomerOrderIsReady(draft: InitialCustomerOrderDraft,calendar:CustomerOrderCalendar|undefined): boolean {
@@ -164,7 +166,7 @@ export function initialCustomerOrderIsReady(draft: InitialCustomerOrderDraft,cal
     // must not freeze the ordering fields before the strict confirmation command.
     return parsed.success && !customerOrderDateError(parsed.data.orderDate,calendar.serverToday)
       && parsed.data.lines.every(line=>(line.customerWarehouseArrivalDate===undefined?line.deliveryDate:line.customerWarehouseArrivalDate)!==null)
-      && (initialCustomerDateErrors(parsed.data.lines,calendar.minimumInitialCustomerDate).length===0
+      && (calendar.orderTimeEnabled===true||initialCustomerDateErrors(parsed.data.lines,calendar.minimumInitialCustomerDate).length===0
         || Boolean(calendar.approvedShortLead&&JSON.stringify(formalCommitmentFacts(parsed.data))===JSON.stringify(calendar.approvedShortLead.facts)));
   }
   catch { return false; }

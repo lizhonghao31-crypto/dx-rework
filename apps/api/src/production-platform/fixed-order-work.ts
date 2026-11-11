@@ -36,8 +36,8 @@ export function fixedOrderWork(initial:FixedWorkInputs,orderId:string,sourceId:s
   add('bulk_cutting','bulk_cutting',['bulk_pattern',preshrink==='需要预缩'?'warehouse_preshrink':'fabric_inspection','sourcing_approval']);
   let previous='bulk_cutting';
   for(const step of craftSteps){
-   const key=`bulk_${step.craftKind}`,node=add(key,key,[previous]);
-   const qc=add(`bulk_qc:${step.stepId}`,'bulk_qc',[node.id]);previous=qc.id;
+   const key=`bulk_${step.craftKind}`,node=add(initial.data.orderTimePlan?`${key}:${step.stepId}`:key,key,[previous],initial.data.orderTimePlan?{canonicalWorkRef:`order:${orderId}:step:${step.stepId}:work`}:{});
+   const qc=add(`bulk_qc:${step.stepId}`,'bulk_qc',[node.id],initial.data.orderTimePlan?{canonicalWorkRef:`order:${orderId}:step:${step.stepId}:qc`}:{});previous=qc.id;
    route.push({kind:'process_logistics',position:route.length,nodeId:node.id,stepId:step.stepId,phase:'logistics'});
    route.push({kind:'bulk_qc',position:route.length,nodeId:qc.id,stepId:step.stepId,phase:'qc'});
   }

@@ -1,5 +1,7 @@
 import {describe,it,expect} from 'vitest';
 import {calculateDevelopmentCycle} from '../../packages/domain/src/development-cycle.js';
+import {scheduleElapsed} from '../../apps/api/src/production-platform/fixed-schedule-progress.js';
+import {shiftFixedTimeline} from '../../apps/api/src/production-platform/fixed-timeline-targets.js';
 const day=86400000,start='2026-10-23T00:00:00Z';
 const at=(days:number)=>new Date(Date.parse(start)+days*day).toISOString();
 const cycle=(days:number,extra:Partial<Parameters<typeof calculateDevelopmentCycle>[0]>={})=>calculateDevelopmentCycle({publishedAt:start,completedAt:null,now:at(days),allowedDays:7,warningRatio:.7,intervals:[],...extra});
@@ -37,5 +39,10 @@ describe('approved natural development cycle',()=>{
  it('keeps a completed tail with unknown time unrated without inventing an end',()=>{
   const result=calculateDevelopmentCycle({publishedAt:'2026-11-01T00:00:00Z',completedAt:null,internalCompleted:true,now:'2026-11-02T00:00:00Z',allowedDays:7,warningRatio:0.7,intervals:[]});
   expect(result.state).toBe('unrated');expect(result.onTime).toBeNull();expect(result.dueAt).toBeNull();
+ });
+ it('uses the same confirmed counted calendar while deducting only the counted union of real external intervals',()=>{
+  const result=calculateDevelopmentCycle({publishedAt:'2027-01-09T16:00:00Z',completedAt:null,now:'2027-01-11T16:00:00Z',allowedDays:2,warningRatio:.7,intervals:[{id:'TEST real Sunday external interval',departedAt:'2027-01-09T16:00:00Z',returnedAt:'2027-01-10T16:00:00Z',credible:true,closed:true}]},{elapsedSeconds:(from,to)=>scheduleElapsed(from,to,'beijing_sunday_excluded')*60,shiftSeconds:(from,seconds)=>Date.parse(shiftFixedTimeline(new Date(from).toISOString(),seconds/60,'beijing_sunday_excluded'))});
+  expect(result.internalSeconds).toBe(86400);expect(result.excludedSeconds).toBe(0);expect(result.dueAt).toBe('2027-01-12T16:00:00.000Z');
+  expect(cycle(10,{allowedDays:null})).toMatchObject({state:'unrated',allowedSeconds:null,dueAt:null,onTime:null});
  });
 });

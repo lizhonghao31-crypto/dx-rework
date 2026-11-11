@@ -14,7 +14,7 @@ registerSessionInvalidator(invalidate);
 /** Only concurrent task/candidate reads are shared. No settled data, budget,
  * attachment link, write or identity survives in this request map. */
 export async function digitalRequest<T>(path: string, method = "GET", body?: unknown, key?: string,options?:{signal?:AbortSignal}): Promise<T> {
-  const reading=isReadRequest(method)||(method==='POST'&&['sla-settings/calculation-preview','sla-settings/sets/calculate','order-time-settings/calculate','customers/default-merchandisers/selected'].includes(path));
+  const reading=isReadRequest(method)||(method==='POST'&&(['sla-settings/calculation-preview','sla-settings/sets/calculate','order-time-settings/calculate','customers/default-merchandisers/selected','order-time/check','order-time/preview'].includes(path)||/^order-time\/requests\/[0-9a-f-]{36}\/preview$/i.test(path)));
   if(!reading)invalidate();
   const identity=sessionCacheVersion(),revision=generation;
   const cacheKey=`${identity}:${revision}:${path}`;

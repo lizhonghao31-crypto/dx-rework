@@ -8,6 +8,7 @@ type DialogOptions = Readonly<{
   title?: string;
   confirmLabel?: string;
   cancelLabel?: string;
+  className?: string;
 }>;
 
 type PromptOptions = DialogOptions & Readonly<{
@@ -169,7 +170,7 @@ function SystemDialog({
   return (
     <div className="system-dialog-backdrop" role="presentation">
       <section
-        className="system-dialog"
+        className={'system-dialog'+(request.options.className?' '+request.options.className:'')}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}

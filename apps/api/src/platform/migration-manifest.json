@@ -1199,6 +1199,10 @@
     {
       "version": "0285_order_time_settings_and_merchandisers",
       "checksum": "3c0377e586a2332d9699b389f8fbb491995e99a73377514715edca70de2feeab"
+    },
+    {
+      "version": "0286_order_time_requests",
+      "checksum": "9baea9ab2d0d44669bfeb3cb0a4dc2111594bcaa16b8bd5c8ee8272de8090d36"
     }
   ]
 }

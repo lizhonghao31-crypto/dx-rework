@@ -11,14 +11,18 @@ import {SlaConfigurationRepository} from '../../apps/api/src/production-platform
 import {appendCurrentSettingsSet} from '../../apps/api/src/production-platform/sla-settings-set-repository.js';
 import {assertSlaSettingsActor} from '../../apps/api/src/production-platform/sla-settings-authority.js';
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
-(url?describe.sequential:describe.skip)('R5 native company time settings without early adoption',()=>{
- let f:Awaited<ReturnType<typeof businessAnchorFixture>>,service:OrderTimeSettingsService;
- beforeAll(async()=>{f=await businessAnchorFixture(url!);service=new OrderTimeSettingsService(f.db,true);});
+(url?describe.sequential:describe.skip)('R5 native company time settings and explicit disabled compatibility',()=>{
+ let f:Awaited<ReturnType<typeof businessAnchorFixture>>,service:OrderTimeSettingsService,historicalOrder:Awaited<ReturnType<DigitalProductionIdentityService['createOrder']>>;
+ beforeAll(async()=>{f=await businessAnchorFixture(url!);service=new OrderTimeSettingsService(f.db,true);
+  // This case protects an existing historical counterpart. Create it before
+  // new company publication instead of bypassing the new admission chain.
+  const style='TEST-R5-HISTORY-'+randomUUID();historicalOrder=await new DigitalProductionIdentityService(f.db,true).createOrder(f.people['sample-designer']!,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:style,orderDate:beijingCalendarDate(businessNow()),lines:[{formalPoNo:style,color:'黑',customerWarehouseArrivalDate:'2027-03-01',sizes:[{size:'M',quantity:1}]}]}),randomUUID());
+ });
  afterAll(async()=>{await f?.dispose();});
- it('reads without writing a new company standard or adopting an order and holds the runtime switch until07',async()=>{
+ it('reads without writing a new company standard or adopting an order when explicitly disabled',async()=>{
   const before=(await f.db.query('SELECT count(*)::int AS n FROM digital_order_time_standards')).rows[0].n;
-  const state=await new OrderTimeSettingsService(f.db).read(f.root);expect(state.enabled).toBe(false);expect(state.record).toBeNull();
-  await expect(new OrderTimeSettingsService(f.db).save(f.root,{expectedVersion:0,values:state.current},randomUUID())).rejects.toMatchObject({statusCode:409});
+  const state=await new OrderTimeSettingsService(f.db,false).read(f.root);expect(state.enabled).toBe(false);expect(state.record).toBeNull();
+  await expect(new OrderTimeSettingsService(f.db,false).save(f.root,{expectedVersion:0,values:state.current},randomUUID())).rejects.toMatchObject({statusCode:409});
   expect((await f.db.query('SELECT count(*)::int AS n FROM digital_order_time_standards')).rows[0].n).toBe(before);
   expect((await f.db.query('SELECT count(*)::int AS n FROM digital_order_time_plan_versions')).rows[0].n).toBe(0);
  });
@@ -41,7 +45,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  it('uses history in one command and hides a deleted entry without destroying an adopted order counterpart',async()=>{
   const history=await service.history(f.root),chosen=history.items.filter(row=>row.kind==='order_time').at(-1)!,state=await service.read(f.root);
   const used=await service.use(f.root,{expectedVersion:state.version,id:chosen.id},randomUUID());expect(used.record.sourceId).toBe(chosen.id);expect(used.record.standard.nodes).toEqual(chosen.standard.nodes);
-  const identity=new DigitalProductionIdentityService(f.db,true),style='TEST-R5-HISTORY-'+randomUUID(),order=await identity.createOrder(f.people['sample-designer']!,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:style,orderDate:beijingCalendarDate(businessNow()),lines:[{formalPoNo:style,color:'黑',customerWarehouseArrivalDate:'2027-03-01',sizes:[{size:'M',quantity:1}]}]}),randomUUID());
+  const order=historicalOrder;
   const line=order.lines[0]!,client=await f.db.connect();try{await client.query('BEGIN');await new OrderTimePlanRepository(client).confirm({resource:{kind:'order',id:order.productionOrderId},expectedRevision:0,value:{version:'order-time-input-v1',plan:{version:'order-time-plan-v1',revision:1,company:chosen.standard,overrides:{}},work:[{id:'TEST pattern',parameterKey:'development_pattern',stage:2,dependsOn:[]}],scopes:[{scopeRef:'po:'+line.lineId,lineId:line.lineId,terminalIds:['TEST pattern'],customerGoalIds:['TEST pattern'],goals:{'TEST pattern':{precision:'date',value:'2027-03-01',source:'TEST actual PO'}},customerGoal:{precision:'date',value:'2027-03-01',source:'TEST actual PO'}}],route:{complete:true,missing:[]}},actorId:f.root.actorId,eventRef:'TEST explicit original order confirmation',time:await new ContextBusinessClock().read({kind:'order',id:order.productionOrderId}),requestKey:randomUUID()});await client.query('COMMIT');}catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}
   const key=randomUUID(),body={expectedVersion:used.record.version,id:chosen.id};expect(await service.remove(f.root,body,key)).toEqual(await service.remove(f.root,body,key));
   expect((await service.history(f.root)).items.some(row=>row.id===chosen.id)).toBe(false);

@@ -13,6 +13,8 @@ import {captureTechnicalEnrollment,captureTechnicalRound} from './development-cy
 import {freezeInitialTimelineInput,readInitialTimelineInput} from './fixed-timeline-initial-input.js';
 import type {TimelineAdoptionMode} from './fixed-timeline-mode.js';
 import {CraftStepChoicesSchema} from '@dx-rework/contracts/digital-craft';
+import {orderTimeAdmission} from './order-time-admission.js';
+import {orderTimeSnapshot} from './order-time-native-timing.js';
 
 type DB = Pick<PoolClient, "query">;
 export async function developmentSlaPlan(db: DB, sourceId: string) {
@@ -53,17 +55,24 @@ export async function captureDevelopmentSla(db: PoolClient, actor: TrustedActorC
     return;
   }
   const prior = await developmentSlaPlan(db, sourceId);
+  const admission=orderTimeAdmission(db),firstEffective=Boolean(!prior&&document&&admission?.activationEventId&&admission.operation.kind==='development_publish'&&admission.operation.sourceId===sourceId);
   if (prior && (!document || prior.route_nodes.length)) throw new Error("Development SLA enrollment/publication already captured");
   if (prior && (prior.business_time.scenarioId !== time.scenarioId || prior.business_time.revision > time.revision
     || Date.parse(prior.business_time.now) > Date.parse(time.now))) throw new Error("Development SLA clock scope or time regression");
   if (!prior) {
-    if (document) throw new Error("Historical development cannot be enrolled by publishing");
-    const event = (await db.query("SELECT action,entity_id,actor_id FROM audit_events WHERE id=$1", [eventKey])).rows[0];
-    if (event?.action !== "digital_source_created" || event.entity_id !== sourceId || event.actor_id !== actor.actorId)
+    if (document&&!firstEffective) throw new Error("Historical development cannot be enrolled by publishing");
+    const event = (await db.query("SELECT action,entity_id,actor_id FROM audit_events WHERE id=$1", [firstEffective?admission!.activationEventId:eventKey])).rows[0];
+    if (event?.action !== (firstEffective?'order_time_activated':"digital_source_created") || event.entity_id !== sourceId || event.actor_id !== actor.actorId)
       throw new Error("Development SLA enrollment requires its source creation event");
+    if(firstEffective){
+      const subject=(await db.query("SELECT s.created_by,s.creation_event_ref FROM digital_order_time_subjects s WHERE s.source_id=$1 AND NOT s.effective FOR UPDATE",[sourceId])).rows[0];
+      if(!subject||subject.created_by!==admission!.designerId)throw Error('本单首次生效缺少原设计师档案');
+      await captureTechnicalEnrollment(db,subject.created_by,sourceId,String(subject.creation_event_ref).replace(/^audit_events:/,''));
+    }
   }
   const config = prior ? null : await new SlaConfigurationRepository(db).initialStandard(actor.actorId);
-  const snapshot = prior ? validateDigitalSlaSnapshot({ ruleVersion: prior.rule_version, parameters: prior.parameters_json }) : resolveDigitalSlaSnapshot({ version: config!.version, values: config!.values });
+  const originalSnapshot = prior ? validateDigitalSlaSnapshot({ ruleVersion: prior.rule_version, parameters: prior.parameters_json }) : resolveDigitalSlaSnapshot({ version: config!.version, values: config!.values });
+  const snapshot=admission&&!prior?orderTimeSnapshot(originalSnapshot,admission.plan):originalSnapshot;
   const selection: SlaRouteSelection = {
     developmentCraft: !document ? "unknown" : document.craft === "无" ? "none" : document.craft === "印花" ? "printing" : document.craft === "绣花" ? "embroidery" : "print_embroidery",
     washing: !document ? "unknown" : document.washing === "免洗" ? "no" : "yes", bulkCraft: "unknown",
@@ -79,8 +88,8 @@ export async function captureDevelopmentSla(db: PoolClient, actor: TrustedActorC
   if(prior?.timeline_schema_version&&!['1','2'].includes(String(prior.timeline_schema_version)))throw Error('此开发单采用版本不受当前程序支持');
   const mode=inherited?'fixed_v2':prior?'legacy':newMode;
   if(!prior&&!document&&mode==='fixed_v2')await captureTechnicalEnrollment(db,actor.actorId,sourceId,eventKey);
-  const initial=inherited??await freezeInitialTimelineInput(db,mode,{resource:{kind:'source',id:sourceId},creationEventRef:`audit_events:${eventKey}`,time,
-    unified:{configurationId:prior?.configuration_id??config!.configurationId,snapshotRef:`digital_development_sla_plans:${sourceId}:1`,values:snapshot}});
+  const initial=inherited??await freezeInitialTimelineInput(db,firstEffective?'fixed_v2':mode,{resource:{kind:'source',id:sourceId},creationEventRef:`audit_events:${firstEffective?admission!.activationEventId:eventKey}`,time,
+    unified:{configurationId:prior?.configuration_id??config!.configurationId,snapshotRef:`digital_development_sla_plans:${sourceId}:1`,values:snapshot},...(admission?{orderTimePlan:admission.plan}:{})});
   const values=[sourceId, revision, prior?.configuration_id ?? config!.configurationId, snapshot.ruleVersion,
     JSON.stringify(snapshot.parameters), JSON.stringify(plan), document ? developmentSlaRoute(document,outputKind,initial?2:1) : [], actor.actorId, JSON.stringify(time),
     document ? "开发发布：保存本单适用路线，文员窗口从发布开始" : "新开发单：冻结初版标准，未发布日期保持未知", eventKey];

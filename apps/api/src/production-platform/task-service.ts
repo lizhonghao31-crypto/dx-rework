@@ -26,6 +26,8 @@ import {fixedCraftTiming,FIXED_DEVELOPMENT_CRAFT_TASKS} from './fixed-craft-timi
 import {developmentSlaPlan} from "./development-sla-enrollment.js";
 import {isNativeRootSewingRecipient} from './development-native-recipient.js';
 import {authorizePatternOrder} from '../pattern-room/order-authority.js';
+import {orderTimeNativeTiming} from './order-time-native-timing.js';
+import {orderTimeAdmission} from './order-time-admission.js';
 import {activateInitialDevelopmentExecution} from "./development-native-activation.js";
 import {TodoService} from "../todos/service.js";
 import {taskDocuments,resourceDocuments} from "./task-documents.js";
@@ -94,8 +96,10 @@ export class DigitalProductionTaskService {
     return result;
   }
   private async task(client: PoolClient | Pick<Pool, "query">, id: string, lock = false) {
-    const task=(await client.query(`SELECT t.*,a.production_order_id,a.source_id,a.task_kind,a.assignee_id,a.required_role FROM digital_production_tasks t
-      JOIN digital_production_task_access a USING(task_id) WHERE t.task_id=$1 ${lock ? "FOR UPDATE OF t,a" : ""}`, [id])).rows[0] ?? digitalNotFound();
+    const task=(await client.query(`SELECT t.*,a.production_order_id,a.source_id,a.task_kind,a.assignee_id,a.required_role,
+      coalesce((to_jsonb(o)->>'order_time_managed')::boolean,(to_jsonb(s)->>'order_time_managed')::boolean,false) AS order_time_managed FROM digital_production_tasks t
+      JOIN digital_production_task_access a USING(task_id) LEFT JOIN digital_production_orders o ON o.production_order_id=a.production_order_id
+      LEFT JOIN digital_production_sources s ON s.source_id=a.source_id WHERE t.task_id=$1 ${lock ? "FOR UPDATE OF t,a" : ""}`, [id])).rows[0] ?? digitalNotFound();
     if(lock)assertCurrentFactoryTask(task.task_kind);
     return task;
   }
@@ -103,6 +107,11 @@ export class DigitalProductionTaskService {
     return task.production_order_id ? { kind: "order", id: task.production_order_id } : { kind: "source", id: task.source_id! };
   }
   private async active(client: PoolClient, resource: Resource) {
+    const parent=(await client.query(`SELECT to_jsonb(p)->>'order_time_managed' AS managed FROM ${resource.kind==='source'?'digital_production_sources':'digital_production_orders'} p WHERE ${resource.kind==='source'?'source_id':'production_order_id'}=$1`,[resource.id])).rows[0];
+    if(parent?.managed==='true'&&!orderTimeAdmission(client)){
+      const subject=(await client.query(`SELECT effective FROM digital_order_time_subjects WHERE resource_kind=$1 AND ${resource.kind==='source'?'source_id':'production_order_id'}=$2`,[resource.kind,resource.id])).rows[0];
+      if(subject?.effective===false)fail('本单时效尚未生效，请先处理本单时效申请');
+    }
     if(resource.kind==='order'&&(await client.query("SELECT to_regclass('digital_order_closures') AS relation")).rows[0]?.relation&&(await client.query('SELECT 1 FROM digital_order_closures WHERE production_order_id=$1',[resource.id])).rowCount)fail('母单已特殊结案');
     const state = (await client.query("SELECT state FROM digital_production_resource_lifecycle WHERE resource_kind=$1 AND resource_id=$2", [resource.kind, resource.id])).rows[0]?.state ?? "active";
     if (state !== "active") fail(state === "paused" ? "订单已暂停" : "订单已取消");
@@ -129,7 +138,7 @@ export class DigitalProductionTaskService {
   private async revision(client: PoolClient, actor: TrustedActorContext, taskId: string, policy: { node_key: string; version: number; sla_seconds: string | number | null; warning_ratio: string | number;sla_application_basis?:Record<string,unknown> }, enteredAt: string | null, reason: string, eventId: string, timingOverride?:Awaited<ReturnType<typeof factoryTaskTiming>>) {
     const task=await this.task(client,taskId);
     if(task.task_kind==='bulk_ship_sample'&&task.production_order_id){
-      const targets=await shipSampleTargets(client,task.production_order_id);
+      const targets=await shipSampleTargets(client,task.production_order_id,task.order_time_managed===true);
       if(targets.snapshotId){
         const remaining=targets.lines.filter(l=>!l.sent);
         const dueAt=(remaining.length?remaining:targets.lines).map(l=>l.dueAt).filter((d):d is string=>d!==null).sort()[0]??null;
@@ -139,13 +148,16 @@ export class DigitalProductionTaskService {
         return deadline;
       }
     }
-    const timing=timingOverride??await developmentTaskTiming(client,task)??await bulkTaskTiming(client,task)??await factoryTaskTiming(client,task);
+    const nativeTiming=timingOverride??await developmentTaskTiming(client,task)??await bulkTaskTiming(client,task)??await factoryTaskTiming(client,task);
+    const timing=await orderTimeNativeTiming(client,task,nativeTiming,enteredAt);
     if(timing){
       const deadline=digitalDeadline(timing.enteredAt,timing.seconds,timing.warningRatio);
       if('calendarRef'in timing&&timing.calendarRef&&timing.enteredAt&&timing.seconds!==null){
         deadline.dueAt=new Date(shiftFixedTimeline(timing.enteredAt,timing.seconds/60,timing.calendarRef));
         deadline.warningAt=new Date(shiftFixedTimeline(timing.enteredAt,timing.seconds/60*timing.warningRatio,timing.calendarRef));
       }
+      // Preserve the native typed time boundary. Muting the node's reminder
+      // is handled by its persisted preference, not by deleting clock facts.
       await client.query(`INSERT INTO digital_production_deadline_revisions(task_id,policy_node_key,policy_version,entered_at,warning_at,due_at,reason,event_id,changed_by,sla_basis)
         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,[taskId,policy.node_key,policy.version,timing.enteredAt,deadline.warningAt,deadline.dueAt,reason,eventId,actor.actorId,JSON.stringify(timing)]);
       return deadline;
@@ -490,7 +502,7 @@ export class DigitalProductionTaskService {
   async refreshShipSampleTimingWithClient(client:PoolClient,actor:TrustedActorContext,orderId:string){
     const row=(await client.query("SELECT task_id FROM digital_production_task_access WHERE production_order_id=$1 AND task_kind='bulk_ship_sample'",[orderId])).rows[0];
     if(!row)return;const task=await this.task(client,row.task_id);if(['completed','cancelled'].includes(task.state))return;
-    const targets=await shipSampleTargets(client,orderId),remaining=targets.lines.filter(l=>!l.sent);
+    const targets=await shipSampleTargets(client,orderId,task.order_time_managed===true),remaining=targets.lines.filter(l=>!l.sent);
     if(!targets.snapshotId||!remaining.length)return;
     const dueAt=remaining.map(l=>l.dueAt).filter((d):d is string=>d!==null).sort()[0]??null;
     const prior=(await client.query('SELECT due_at FROM digital_production_deadline_revisions WHERE task_id=$1 ORDER BY revision_id DESC LIMIT 1',[row.task_id])).rows[0];

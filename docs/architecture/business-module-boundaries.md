@@ -115,3 +115,13 @@
 `customer-merchandiser-defaults.ts`拥有客户批量设置及版本检查，`order-merchandisers.ts`只在新订单事务复制默认关系／授权读取后返回完整关系，`sourcing/additional-merchandisers.ts`保留外发旧单字段并读取、绑定全部副跟单。合同、待办、外发命令继续由原服务判权及提交，不把“副跟单”变成主跟单办理权。页面编辑、临时演算和客户弹窗分别管理自己的输入／提交恢复，不共用会串单的全局草稿。
 
 R5-06 时间读取：`order-time-reading.ts`在原授权RR内连接明确本单方案与原生事实，`fixed-schedule-stages.ts`负责同终点阶段日期/差值；`fixed-schedule-progress.ts`保留目标、自己的责任窗口和整单缓冲的区分。普通读取不采用、重建或查询新公司标准；原事务登记/有限worker负责更新，客户端只按已证明的live时钟重读当前页。
+
+### R5-07：本单申请与原生生效
+
+`order-time-request-service.ts`拥有申请状态、版本、办理事务和原请求回执；`order-time-operation-state.ts`在同一读取client装配当前有效事实及原单已保存的拟变更，复用原路线、日历和Journey原生事实，不替代原业务命令。`order-time-request-plan.ts`只计算条件预计／下界、各PO剩余路线和真实适用行，不把演算日期当完成事实。`order-time-request-repository.ts`保存不可变状态事件和按真实操作者／正文／key的回执；一个人办结后其他办理待办随状态关闭。
+
+`order-time-admission.ts`仅把已经锁定的合法申请绑定本事务实际client，原设计师仍是来源所有人，实际办理者仍是老板、Root或供应链总监；不更换actor、不缓存授权。`order-time-native-commands.ts`将该范围接回原开发发布、正式确认、内部复版及制单发布命令。原服务继续拥有资料／价格／技术／质量守卫、审计、幂等和提交。客户复版仍先形成独立未生效草稿，后续正式发布才采用时效；原生继承附件依据保留，不移动原件或允许无关订单引用。
+
+首次新格式公司发布与新采用同次启用；已保存本单方案不依赖新采用开关。原正式生产继承来源已采用标准，普通调整不改旧B，批准客户改期沿原PO入口重倒推。`order-time-native-timing.ts`及原产前／工艺批次适配器在真实窗口打开时选本单版本，保留已开始的R、D、日历和提醒；`order-time-created.ts`只读真实创建事件，不以数据库登记时间、采用或刷新替代。旧窗口／未知历史保持原依据。
+
+`order-time-todos.ts`只投影当前有权事项与轻量计数，不为角标演算整单。原页面的`order-time-application.tsx`接续当前保存资料；`order-time-request-page.tsx`负责本单输入、演算、单一提交、晚交确认及原正文/key恢复。正式写入、申请状态、方案及结果通知同事务提交；未知回执不能新key重复生产，正常页面没有额外审批中心或说明墙。

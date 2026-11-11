@@ -1,4 +1,5 @@
 import {IndependentCraftField} from './independent-craft-field.js';
+import {useOrderTimeApplication} from './order-time-application.js';
 import {PreparationWindows} from './production-readiness-panel.js';
 import {uploadAttachmentWithRecovery} from "./attachment-upload-recovery.js";
 import {instructionFeedbackProjection} from './document-feedback-projections.js';
@@ -45,6 +46,7 @@ export function ProductionInstructionPanel({ orderId, initialVersion, onClose, e
   const [validationMode, setValidationMode] = useState<"save" | "publish" | null>(null), [saveBlocked, setSaveBlocked] = useState(false), [confirming, setConfirming] = useState(false);
   const [focusId, setFocusId] = useState<string | null>(null), [reloadCount, setReloadCount] = useState(0), [uploadKind, setUploadKind] = useState<typeof kinds[number]>("款图");
   const writing = useRef(false), operation = useRef<{ payload: string; key: string } | null>(null), generation = useRef(0), successfulUploads = useRef(new Map<string, string>());
+  const timeApplication=useOrderTimeApplication(()=>setDirty(false));
   const submission=useRef(new SubmissionAttempt()),contextVersion=useRef(0);const [uncertain,setUncertain]=useState(false);
   useDigitalDetailNavigationGuard(dirty||uncertain, busy, writing, uncertain?"原制单提交结果尚未确认，离开不会撤销提交并会丢失原标识。仍要离开？":"仍有未保存修改，确定返回？");
   const base = `orders/${orderId}/instruction`;
@@ -149,7 +151,8 @@ export function ProductionInstructionPanel({ orderId, initialVersion, onClose, e
     const validation = instructionIssues(doc, order, true);
     if (dirty) { setError("请先保存当前修改"); if (validation[0]) focus(validation[0].tab, validation[0].id); return; }
     if (validation.length) { setError("请核对发布所需资料"); focus(validation[0]!.tab, validation[0]!.id); return; }
-    void act("/publish", "POST", { expectedVersion: sheet.version, orderVersion: order.version,...(sheet.readiness?{expectedReadinessRevision:sheet.readiness.revision}:{}) });
+    const input={ expectedVersion: sheet.version, orderVersion: order.version,...(sheet.readiness?{expectedReadinessRevision:sheet.readiness.revision}:{}) };
+    void (async()=>{try{if(await timeApplication.inspect({kind:'instruction_publish',orderId,input},Boolean(sheet.orderTimeEnabled)))await act('/publish','POST',input);}catch(reason){setError(reason instanceof Error?reason.message:'本单时间未核准，制单草稿保留');}})();
   };
   const remove = async (message: string, nonempty: boolean, action: () => void) => {
     if (inputDisabled) return;
@@ -168,6 +171,7 @@ export function ProductionInstructionPanel({ orderId, initialVersion, onClose, e
   };
   const printable = sheet.isPublishedSnapshot && !dirty && !busy;
   return <Surface><article className="dx-doc-instruction">
+    {timeApplication.dialog}
     <div className="instruction-screen">
       <DocumentToolbar title="大货制单" status={status}>
         {!embedded&&!contained&&<Button type="button" disabled={busy} onClick={onClose}>返回</Button>}
