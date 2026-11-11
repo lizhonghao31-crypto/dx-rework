@@ -21,8 +21,9 @@ export async function readJourneySelections(database:Pool,db:PoolClient,actor:Tr
  const scopes=candidates.flatMap(row=>[...(row.source?[{kind:'source' as const,id:row.source.source_id}]:[]),...(row.order?[{kind:'order' as const,id:row.order.production_order_id}]:[])]);
  const access=await readJourneySelectionAccess(db,actor,[...new Map(scopes.map(scope=>[businessScopeKey(scope),scope])).values()]);
  const resources=candidates.map(row=>row.order?{kind:'order' as const,id:row.order.production_order_id}:{kind:'source' as const,id:row.source!.source_id});
- const clocks=await new ContextBusinessClock(database,db).readMany(resources,()=>new Date(asOf));
- if(!resources.length)return {items:[] as JourneySelectionRead[],clocks};
+ const observations=await new ContextBusinessClock(database,db).readManyObservations(resources,{now:()=>new Date(asOf),mode:'live'});
+ const clocks=new Map([...observations].map(([key,value])=>[key,value.time])),observationMode=[...observations.values()].some(value=>value.mode==='live')?'live' as const:'fixed' as const;
+ if(!resources.length)return {items:[] as JourneySelectionRead[],clocks,observationMode};
  const requested=candidates.map((row,index)=>{
   const resource=resources[index]!,time=clocks.get(businessScopeKey(resource))!;
   const source=row.source?access.resources.get(businessScopeKey({kind:'source',id:row.source.source_id})):null;
@@ -217,5 +218,5 @@ flags AS (SELECT kind,id,bool_or(key IN ('packing','special_closure') AND state=
   selection.selectionSignals!.searchMatched=journeyMatchesSearch(selection,filter.search.toLocaleLowerCase())||row.search_values.some(value=>value?.toLocaleLowerCase().includes(filter.search.toLocaleLowerCase()));
   return {resource,status:row.status,selection,...(options.workspaceNodes?{workspaceNodes:row.workspace_nodes}:{})};
  });
- return {items,clocks};
+ return {items,clocks,observationMode};
 }

@@ -87,7 +87,7 @@ export async function readJourneySupervision(database:Pool,db:PoolClient,actor:T
   }
  }
  if(capturedInputs){const resource=item.orderId?{kind:'order' as const,id:item.orderId}:item.sourceId?{kind:'source' as const,id:item.sourceId}:null;
-  if(resource)capturedInputs.fixedSchedule=await readFixedScheduleBasis(db,resource,item,capturedInputs.facts,time.now,receiving);
+  if(resource)capturedInputs.fixedSchedule=await readFixedScheduleBasis(db,resource,item,capturedInputs.facts,time.now,receiving,time);
  }
  if(actor&&item.supervision?.assessment==='partially_unavailable')item.supervision.requestId=actor.requestId;
  if(time.scenarioId){const current=await new ContextBusinessClock(database,db).read(item.orderId?{kind:'order',id:item.orderId}:{kind:'source',id:item.sourceId!});

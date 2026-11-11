@@ -113,3 +113,5 @@
 `order-time-settings-service.ts`拥有公司标准的原角色鉴权、事务、并发及幂等；`order-time-settings-history.ts`只在同一client读取原版本与隐藏记录；`order-time-settings-calculation.ts`将临时输入交给现有图和日历，不写订单或虚构事件。新发布与采用一同在07启用，旧生命周期入口继续兼容。
 
 `customer-merchandiser-defaults.ts`拥有客户批量设置及版本检查，`order-merchandisers.ts`只在新订单事务复制默认关系／授权读取后返回完整关系，`sourcing/additional-merchandisers.ts`保留外发旧单字段并读取、绑定全部副跟单。合同、待办、外发命令继续由原服务判权及提交，不把“副跟单”变成主跟单办理权。页面编辑、临时演算和客户弹窗分别管理自己的输入／提交恢复，不共用会串单的全局草稿。
+
+R5-06 时间读取：`order-time-reading.ts`在原授权RR内连接明确本单方案与原生事实，`fixed-schedule-stages.ts`负责同终点阶段日期/差值；`fixed-schedule-progress.ts`保留目标、自己的责任窗口和整单缓冲的区分。普通读取不采用、重建或查询新公司标准；原事务登记/有限worker负责更新，客户端只按已证明的live时钟重读当前页。

@@ -5,6 +5,7 @@ import {
 } from '@dx-rework/contracts/digital-production-journey';
 import { slaDateBoundary } from '@dx-rework/domain/digital-sla-plan';
 import { journeyActualPoint } from './journey-progress-dates.js';
+import type {ScheduleOccurrence} from '@dx-rework/contracts';
 
 const instant = (at: string | null | undefined): number | null => {
   if (!at || !/T.*(?:Z|[+-]\d{2}:\d{2})$/.test(at)) return null;
@@ -16,6 +17,7 @@ const unknownDate = (): JourneyBusinessDate => ({ at: null, precision: 'unknown'
 const copyDate = (date: JourneyBusinessDate | undefined): JourneyBusinessDate => date
   ? { ...date, reasons: [...date.reasons], ...(date.coveredAt ? { coveredAt: { ...date.coveredAt } } : {}) }
   : unknownDate();
+const occurrenceDate=(point:ScheduleOccurrence):JourneyBusinessDate=>point.precision==='unknown'?unknownDate():{at:point.precision==='date'?point.date:point.at,precision:point.precision,quality:'recorded',status:'complete',covered:1,total:1,reasons:[]};
 
 /** A forecast day has the existing Beijing exclusive boundary for calculation.
  * Keep its original date/precision for display; it is never an actual event.
@@ -116,11 +118,13 @@ export function journeyVisualProgress(order: OrderJourney, asOf: string): Journe
     // Adopted v2 displays its immutable B; legacy keeps its original forecast.
     // Responsibility D and current F remain distinct in the node detail.
     const fixedTargets=order.fixedSchedule?nodes.filter(node=>node.stage===stage.key&&node.current).flatMap(node=>node.fixedTargets??[]):null;
-    const expected = fixedTargets?fixedExpectedDate(fixedTargets):copyDate(date?.forecast), actual = copyDate(date?.actual);
-    const startedAt = applicability === 'applicable' ? recordedStart(relevant, nodes, asOf) : null;
+    const fixedStage=order.fixedSchedule?.stages?.find(value=>value.stage===JOURNEY_STAGES.findIndex(value=>value.key===stage.key)+1);
+    const expected = fixedStage?occurrenceDate(fixedStage.expected):fixedTargets?fixedExpectedDate(fixedTargets):copyDate(date?.forecast), actual = fixedStage?occurrenceDate(fixedStage.actual):copyDate(date?.actual);
+    const startedAt = applicability === 'applicable' ?fixedStage?fixedStage.startedAt.precision==='instant'?fixedStage.startedAt.at:null:recordedStart(relevant, nodes, asOf) : null;
     return { key: stage.key, applicability, applicable: applicable.length, completed, unknown: unknown + (missing || duplicate ? 1 : 0),
       actualRatio: applicability === 'applicable' ? completed / applicable.length : null,
       timeRatio: naturalTimeRatio(startedAt, expected, asOf), startedAt, expected, actual,
+      ...(fixedStage?{goalDelta:fixedStage.goalDelta}:{}),
       risk: order.display?.stages.find(value => value.key === stage.key)?.risk ?? 'unknown' as const };
   });
   const applicable = stages.filter(stage => stage.applicability === 'applicable');
@@ -129,7 +133,7 @@ export function journeyVisualProgress(order: OrderJourney, asOf: string): Journe
   const expected = fixed?planEnd?fixedExpectedDate(terminalTargets):unknownDate():copyDate(dates?.overall.forecast);
   const completed=fixed?.durationSummary.deliveryCompletedAt;
   const actual = fixed?completed&&completed.precision!=='unknown'?{at:completed.precision==='date'?completed.date:completed.at,precision:completed.precision,quality:'recorded' as const,status:'complete' as const,covered:fixed.scopes.length,total:fixed.scopes.length,reasons:[]}:unknownDate():copyDate(dates?.overall.actual);
-  const startedAt = observed && !unknownStages ? recordedStart(rows, nodes, asOf) : null;
+  const startedAt = fixed?fixed.durationSummary.actualStart.precision==='instant'?fixed.durationSummary.actualStart.at:null:observed && !unknownStages ? recordedStart(rows, nodes, asOf) : null;
   return { ruleVersion: 'journey-visual-v2', asOf,
     actualRatio: unknownStages || !applicable.length ? null : applicable.reduce((sum, stage) => sum + stage.actualRatio!, 0) / applicable.length,
     timeRatio: naturalTimeRatio(startedAt, expected, asOf), startedAt,

@@ -20,7 +20,10 @@ export function useScheduleObservation(order:OrderJourney,stale=false){
  return schedule?new Date(Date.parse(schedule.asOf)+(stale?0:elapsed)).toISOString():undefined;
 }
 export function observedTargetDelta(progress:ScheduleNodeProgress,asOf?:string):ScheduleGoalDelta{
- const goal=progress.goalDelta;if(progress.businessCompleted||goal.kind==='unknown'||goal.kind==='terminated'||!asOf||!goal.targetAt)return goal;
+ return observedGoalDelta(progress.goalDelta,progress.businessCompleted,asOf);
+}
+function observedGoalDelta(goal:ScheduleGoalDelta,completed:boolean,asOf?:string):ScheduleGoalDelta{
+ if(completed||goal.kind==='unknown'||goal.kind==='terminated'||!asOf||!goal.targetAt)return goal;
  const at=Date.parse(asOf);if(!Number.isFinite(at)||at<Date.parse(goal.asOf))return goal;
  const signedValue=goal.unit==='day'&&goal.targetDate?Math.max(0,(Date.parse(new Date(at+8*3600000).toISOString().slice(0,10))-Date.parse(goal.targetDate))/day):Math.max(0,(at-Date.parse(goal.targetAt))/minute);
  return {...goal,signedValue,kind:signedValue>0?'late':'on_target'};
@@ -33,12 +36,17 @@ export function cockpitTargetDifference(nodes:JourneyNode[],asOf?:string,lines:O
  const known=values.filter(v=>v.goal.signedValue!==null&&!['unknown','terminated'].includes(v.goal.kind));
  const minutes=(goal:ScheduleGoalDelta)=>goal.signedValue!*(goal.unit==='day'?1440:1),late=known.filter(v=>v.goal.kind==='late');
  const chosen=late.sort((a,b)=>minutes(b.goal)-minutes(a.goal))[0]??(known.length===values.length?known.sort((a,b)=>minutes(b.goal)-minutes(a.goal))[0]:undefined);
- const format=(goal:ScheduleGoalDelta)=>goal.signedValue===null?'—':`${goal.signedValue>0?'+':'-'}${goal.unit==='day'?Math.abs(goal.signedValue)+'天':cockpitDuration(Math.abs(goal.signedValue))}`;
+ const format=(goal:ScheduleGoalDelta)=>goal.signedValue===null?'—':goal.signedValue===0?'-0':`${goal.signedValue>0?'+':'-'}${goal.unit==='day'?Math.abs(goal.signedValue)+'天':cockpitDuration(Math.abs(goal.signedValue))}`;
  return {text:chosen?format(chosen.goal):'—',tone:chosen?(chosen.goal.kind==='late'?'danger':'success'):'neutral',title:values.map(v=>v.label+' · '+v.scope+'：'+format(v.goal)).join('\n'),count:values.length};
 }
 export function CockpitTargetDifference({nodes,asOf,lines=[]}:{nodes:JourneyNode[];asOf?:string|undefined;lines?:OrderJourney['lines']}){const value=cockpitTargetDifference(nodes,asOf,lines);return <span className={'cockpit-target-difference is-'+value.tone} title={value.title||'尚无可信固定目标差'} aria-label={'节点目标差 '+value.text}>{value.text}</span>;}
+export function CockpitStageDifference({goal,asOf}:{goal:ScheduleGoalDelta;asOf?:string|undefined}){
+ const value=observedGoalDelta(goal,goal.actual.precision!=='unknown',asOf),amount=value.signedValue;
+ const text=amount===null?'—':amount===0?'-0':`${amount>0?'+':'-'}${value.unit==='day'?Math.abs(amount)+'天':cockpitDuration(Math.abs(amount))}`;
+ return <span className={'cockpit-target-difference is-'+(amount===null?'neutral':amount>0?'danger':'success')} aria-label={'阶段目标差 '+text}>{text}</span>;
+}
 export function cockpitOwnStatus(node:JourneyNode):{text:string;tone:'danger'|'warning'|'neutral'}|null{
- if(!node.fixedTargets?.length||['completed','inherited','cancelled','not_applicable','unavailable'].includes(node.state))return null;
+ if(!node.fixedTargets?.length||['inherited','cancelled','not_applicable','unavailable'].includes(node.state))return null;
  const rows=node.fixedTargets.map(t=>t.progress);if(rows.some(p=>p.ownSla.state==='overdue'))return {text:'逾期（有责口径）',tone:'danger'};
  if(rows.some(p=>p.goalDelta.kind==='late'))return rows.every(p=>p.ownSla.state==='within')?{text:'逾期（无责）',tone:'warning'}:{text:'超目标·待核',tone:'warning'};
  return null;

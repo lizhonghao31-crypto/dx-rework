@@ -3,12 +3,20 @@ import {DIGITAL_SLA_PARAMETERS,type DigitalSlaValue} from './digital-sla.js';
 import {OrderTimeRuleSchema,OrderTimeStandardSchema,type OrderTimeRule,type OrderTimeStandard} from './order-time-plan.js';
 import type {SettingsSetValues} from './sla-settings-sets.js';
 import {SettingsCalculationSchema} from './sla-settings-sets.js';
+import {JOURNEY_NODES,JOURNEY_STAGES} from './digital-production-journey.js';
 
 export type OrderTimeNode={key:string;label:string;stage:number;kind:OrderTimeRule['kind'];includedIn?:readonly string[]};
 const hidden=new Set(['development_print_embroidery','bulk_print_embroidery','receiving_span','warning_ratio','stage_buffer']);
 const event=new Set(['order_creation','customer_confirmation','budget','ship_sample']);
+/** The same seven business stages as the actual cockpit, not the older
+ * parameter catalogue's budget/customer-confirmation grouping. */
+export function orderTimeNodeStage(key:string,fallback:number){
+ const aliases:Record<string,string>={order_creation:'order_information',customer_confirmation:'customer_sample',production_sheet:'production_instruction',sourcing_selection:'sourcing_director',sourcing_approval:'sourcing_owner',source_confirmation:'development_confirmation',external_pattern:'development_external_pattern',development_craft_return:'development_craft_confirmation',bulk_printing:'process_logistics',bulk_embroidery:'process_logistics',factory_production_work:'production_reporting',factory_work:'production_reporting',factory_production:'factory_production_qc',return_logistics:'receipts',garment_inspection:'receiving_inspection',garment_packing:'packing',ship_sample:'bulk_ship_sample'};
+ const native=JOURNEY_NODES.find(node=>node.key===(aliases[key]??key));
+ return native?JOURNEY_STAGES.findIndex(stage=>stage.key===native.stage)+1:fallback;
+}
 export const ORDER_TIME_NODES:readonly OrderTimeNode[]=[
- ...DIGITAL_SLA_PARAMETERS.filter(p=>!hidden.has(p.key)).map(p=>({key:p.key,label:p.key==='ship_sample_advance'?'船样需提前几天完成':p.key==='order_shipping_reminder'?'交货前提醒':p.label,stage:p.stage,
+ ...DIGITAL_SLA_PARAMETERS.filter(p=>!hidden.has(p.key)).map(p=>({key:p.key,label:p.key==='ship_sample_advance'?'船样需提前几天完成':p.key==='order_shipping_reminder'?'交货前提醒':p.label,stage:orderTimeNodeStage(p.key,p.stage),
   kind:(p.defaultValue.kind==='duration'?'work':p.defaultValue.kind==='included'?'included':p.defaultValue.kind==='estimate'?'forecast':p.defaultValue.kind==='offset'?'offset':p.defaultValue.kind==='order_date'?'date':event.has(p.key)?'event':'forecast') as OrderTimeRule['kind'],...(p.includedIn?{includedIn:p.includedIn.filter(key=>!hidden.has(key))}:{})})),
  {key:'development_confirmation',label:'设计确认',stage:2,kind:'event'},
  {key:'development_positioning',label:'开发定位资料',stage:2,kind:'event'},

@@ -1,4 +1,5 @@
 import {FixedTimelineAdoptionRepository} from './fixed-timeline-adoptions.js';
+import {OrderTimePlanRepository} from './order-time-plan-repository.js';
 import {attachFixedJourneySchedule} from './fixed-schedule-basis.js';
 import type {WorkspaceJourneyFact} from './journey-workspace-facts.js';
 import {ApplicationError} from '../platform/errors.js';
@@ -67,7 +68,7 @@ type FactCapture={timing:(inputs:JourneyTimingInputs)=>void;tasks:(tasks:Array<{
  untimedItem?:(item:OrderJourney,delivery:JourneySelectionDelivery)=>void;recheckAt?:(at:string)=>void};
 
 const iso = (value: Date|string|null|undefined) => value == null ? null : new Date(value).toISOString();
-type Candidate = { source: {development_type:string;source_id:string;created_by:string;design_style_no:string;temporary_style_no:string|null;customer_code:string|null;created_at:string}|null;
+type Candidate = { has_order_time_plan?:boolean;source: {development_type:string;source_id:string;created_by:string;design_style_no:string;temporary_style_no:string|null;customer_code:string|null;created_at:string}|null;
   order: {production_order_id:string;source_id:string|null;created_by:string;primary_merchandiser_id:string|null;design_style_no:string;temporary_style_no:string|null;customer_code:string;product_group:string;contract_delivery_date:string|null;created_at:string}|null };
 const record = (domain:string,id:string,url:string|null,version:number|null=null):JourneyRecord => ({domain,id,url,version,lineId:null,mode:"read"});
 const taskUrl = (id:string) => `/ui/digital-production?task=${encodeURIComponent(id)}`;
@@ -95,13 +96,16 @@ export class DigitalJourneyQuery {
   }
   private async candidates(db:PoolClient,actor:TrustedActorContext,id:string|null=null,patternKinds:string[]|null=null):Promise<Candidate[]> {
     const leader=isDigitalManagementReader(actor)||isDigitalTechnicalManager(actor);
+    const typedPlan=await new OrderTimePlanRepository(db).available();
     // Only current live roles and legitimate task assignments add scope. No style-string join.
     return (await db.query(`WITH live_roles AS (
       SELECT a.role_code FROM user_role_assignments a JOIN app_users u ON u.id=a.user_id
       JOIN business_roles r ON r.role_code=a.role_code AND r.enabled
       WHERE a.user_id=$1 AND a.revoked_at IS NULL AND u.enabled AND NOT coalesce((to_jsonb(u)->>'manual_access_disabled')::boolean,false)
       AND a.role_code=ANY($2::text[]) AND EXISTS(SELECT 1 FROM identity_mappings m WHERE m.user_id=u.id AND m.active AND m.employed)
-    ) SELECT row_to_json(s) AS source,row_to_json(o) AS "order"
+    ) SELECT row_to_json(s) AS source,row_to_json(o) AS "order",${typedPlan?`EXISTS(SELECT 1 FROM digital_order_time_plan_versions plan
+      WHERE o.production_order_id IS NOT NULL AND plan.resource_kind='order' AND plan.production_order_id=o.production_order_id
+       OR o.production_order_id IS NULL AND plan.resource_kind='source' AND plan.source_id=s.source_id)`:'false'} AS has_order_time_plan
     FROM digital_production_sources s FULL JOIN digital_production_orders o ON o.source_id=s.source_id
     WHERE ($4::uuid IS NULL OR s.source_id=$4 OR o.production_order_id=$4)
       AND ($5::text[] IS NULL OR EXISTS(SELECT 1 FROM digital_production_task_access board_task WHERE (board_task.source_id=s.source_id OR board_task.production_order_id=o.production_order_id) AND board_task.task_kind=ANY($5::text[]))) AND ($3
@@ -141,7 +145,7 @@ export class DigitalJourneyQuery {
         for(const summary of selectPage?selectPage(result.items):result.items){const detail=await journeyMeasure('detail_projection',()=>this.project(db,actor,candidates.get(summary.id)!,asOf));if(detail)details.push({...detail,hitReasons:summary.hitReasons});}
         result.items=details;
       }
-      return {...result,canManagePolicies:isDigitalLeader(actor),facets};
+      return {...result,observationMode:items.some(item=>item.observationMode==='live')?'live' as const:'fixed' as const,canManagePolicies:isDigitalLeader(actor),facets};
     });
   }
   /** Read minimal authorized facts once, then hydrate only the objects the
@@ -218,9 +222,9 @@ export class DigitalJourneyQuery {
         failed++;retryIds.push(selectedItem.id);
       }
     }
-    if(pending||failed){const available={...selected};delete available.scopeCounts;delete available.supervision;
-      return {...available,page:filter.page,total:null,summary:null,items,facets,canManagePolicies:isDigitalLeader(actor),freshness:{pending,failed,retryIds:[...new Set(retryIds)].slice(0,15)}};}
-    return {...selected,items,facets,canManagePolicies:isDigitalLeader(actor)};
+    if(incomplete){const available={...selected};delete available.scopeCounts;delete available.supervision;
+      return {...available,page:filter.page,total:null,summary:null,items,facets,observationMode:read.observationMode,canManagePolicies:isDigitalLeader(actor),freshness:{pending,failed,retryIds:[...new Set(retryIds)].slice(0,15)}};}
+    return {...selected,items,facets,observationMode:read.observationMode,canManagePolicies:isDigitalLeader(actor),...(pending||failed?{freshness:{pending,failed,retryIds:[...new Set(retryIds)].slice(0,15),detailsOnly:true as const}}:{})};
   }
   /** An explicit, authorized single-object retry, never a GET-side rebuild.
    * Only derived queue/backoff rows change; business facts remain untouched. */
@@ -837,7 +841,7 @@ export class DigitalJourneyQuery {
       if(factory)attachJourneyFactoryDeadlines(baseNodes,visibleTasks,factory,lines);
     }
     const stages=journeyStages(baseNodes);
-    const item:OrderJourney={seriesPlanVisible:Boolean(!patternKinds&&fullOrder&&oid),asOf,styleImageUrl,developmentType:sourceAccess?source?.development_type??null:null,requiredCompletionDate:sourceAccess?currentDocument?.document?.returnDate??null:null,id:canonicalId,sourceId:sid,orderId:orderAccess?oid:null,designStyleNo:chosenIdentity.design_style_no,temporaryStyleNo:chosenIdentity.temporary_style_no,customer:chosenIdentity.customer_code,category:currentDocument?.document.template??(orderAccess?order?.product_group:null)??null,styleName,designer,merchandisers,orderNumbers,createdAt:iso(sourceAccess?source!.created_at:orderAccess?order!.created_at:(source?.created_at??order!.created_at))!,deliveryDate:orderAccess?digitalDateText(order?.contract_delivery_date??null):null,poDeliveryDates,deliveryRisks,selectedRound:round,adoptedRound:instruction?.source_round??null,sourceVersion:currentDocument?.version??currentDocument?.document_version??null,instructionVersion:instruction?.version??null,lines,links,stages,progress,hitReasons:[]};
+    const item:OrderJourney={observationMode:observation.mode,seriesPlanVisible:Boolean(!patternKinds&&fullOrder&&oid),asOf,styleImageUrl,developmentType:sourceAccess?source?.development_type??null:null,requiredCompletionDate:sourceAccess?currentDocument?.document?.returnDate??null:null,id:canonicalId,sourceId:sid,orderId:orderAccess?oid:null,designStyleNo:chosenIdentity.design_style_no,temporaryStyleNo:chosenIdentity.temporary_style_no,customer:chosenIdentity.customer_code,category:currentDocument?.document.template??(orderAccess?order?.product_group:null)??null,styleName,designer,merchandisers,orderNumbers,createdAt:iso(sourceAccess?source!.created_at:orderAccess?order!.created_at:(source?.created_at??order!.created_at))!,deliveryDate:orderAccess?digitalDateText(order?.contract_delivery_date??null):null,poDeliveryDates,deliveryRisks,selectedRound:round,adoptedRound:instruction?.source_round??null,sourceVersion:currentDocument?.version??currentDocument?.document_version??null,instructionVersion:instruction?.version??null,lines,links,stages,progress,hitReasons:[]};
     const lifecycle=oid&&orderAccess?{kind:"order",id:oid}:!oid&&sid&&sourceAccess?{kind:"source",id:sid}:null;
     const cancelled=Boolean(!patternKinds&&lifecycle&&(await db.query("SELECT 1 FROM digital_production_resource_lifecycle WHERE resource_kind=$1 AND resource_id=$2 AND state='cancelled'",[lifecycle.kind,lifecycle.id])).rowCount);
     capture?.untimedNodes?.(baseNodes);
@@ -853,7 +857,7 @@ export class DigitalJourneyQuery {
     const ownOrder=actor&&(order?.created_by===actor.actorId&&actor.actorRoles.includes('sample_designer')&&await policy.activeRole(actor.actorId,'sample_designer')
       ||order?.primary_merchandiser_id===actor.actorId&&actor.actorRoles.includes('order_merchandiser')&&await policy.activeRole(actor.actorId,'order_merchandiser'));
     const timingAllowed=fullOrder&&(liveTimingAuthority||ownOrder)||!oid&&sourceAccess&&(liveTimingAuthority||ownSource);
-    const fixedRequested=timingAllowed&&!supervision&&Boolean(await new FixedTimelineAdoptionRepository(db).existing(scope));
+    const fixedRequested=timingAllowed&&!supervision&&Boolean(await new FixedTimelineAdoptionRepository(db).existing(scope)||(row.has_order_time_plan??Boolean(await new OrderTimePlanRepository(db).current(scope))));
     if(timingAllowed&&(supervision||fixedRequested))
       await journeyMeasure('sla',()=>readJourneySupervision(this.database,db,actor,item,observed,visibleTasks.some(task=>task.task_kind==='bulk_cutting_external'),new Set(visibleTasks.map(task=>task.task_id)),value=>{fixedInputs=value;capture?.timing?.(value);},capture?.recheckAt));
     else if(supervision)item.supervision={asOf:observed.now,status:'limited',originalRevision:null,currentRevision:null,nodes:[],coverage:[{key:'scope',message:'仅有本岗位节点权限，整单SLA未计入；已授权节点照常监督'}],customerReminderDate:null};
@@ -869,6 +873,7 @@ export class DigitalJourneyQuery {
       item.businessProgress=journeyBusinessProgress(item,observed.now,adopted,businessQuantities,requirementEvidence,replacements);
       item.businessProgress.dates=journeyBusinessDates(item);
       if(fixedInputs?.fixedSchedule){attachFixedJourneySchedule(item,fixedInputs.fixedSchedule,observed.now);item.fixedSchedule!.observationMode=observation.mode;}
+      if(fixedInputs?.fixedSchedule?.policyVersion==='order-time-plan-v1')item.display=journeyDisplay(item,asOf,{cancelled,closedAt:item.display?.closedAt??null});
       item.visualProgress=journeyVisualProgress(item,asOf);
     }
     this.authorizedTasks.set(item,visibleTasks.map(task=>({id:task.task_id,key:journeyDefinition(task.task_kind)?.key??task.task_kind,label:journeyDefinition(task.task_kind)?.label??"业务节点",round:task.route_version})));

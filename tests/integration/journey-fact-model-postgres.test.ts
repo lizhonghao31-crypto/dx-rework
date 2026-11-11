@@ -253,7 +253,9 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const candidate=args[2] as {order:{production_order_id:string}|null};if(candidate.order?.production_order_id===target)throw Error('TEST one display object failure');
    return Reflect.apply(originalProject,query,args);
   });
-  const failed=await query.list(f.root,filter);expect(failed).toMatchObject({total:null,summary:null,freshness:{failed:1,pending:0}});expect(failed.items).toHaveLength(14);
+  const reliable=await query.list(f.root,filter); // same selected facts; only the target rich row is unavailable
+  expect(reliable).toMatchObject({total:31,page:1,freshness:{failed:1,pending:0,detailsOnly:true,retryIds:[target]}});expect(reliable.items).toHaveLength(14);
+  expect(reliable.summary).not.toBeNull();expect(reliable.summary!.all).toBe(31);
   vi.restoreAllMocks();await f.db.query("UPDATE digital_journey_fact_models SET selection_fingerprint=repeat('0',64) WHERE resource_id=$1",[target]);
   try{
    const corrupt=await query.list(f.root,filter);expect(corrupt).toMatchObject({total:null,summary:null,freshness:{failed:1,pending:0,retryIds:[target]}});expect(corrupt.items).toHaveLength(15);

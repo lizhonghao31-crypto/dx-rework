@@ -59,16 +59,22 @@ export class ContextBusinessClock implements BusinessClock{
   * neither grants scope nor replaces a custom reader returning scenarioId=null.
   * Ordinary missing rows share one caller-captured snapshot fallback. */
  async readMany(scopes:readonly BusinessTimeScope[],fallback?:()=>Date):Promise<ReadonlyMap<string,BusinessTime>>{
+  const observations=await this.readManyObservations(scopes,fallback?{now:fallback,mode:'fixed'}:undefined);
+  return new Map([...observations].map(([key,value])=>[key,value.time]));
+ }
+ /** Same batched clock evidence, retaining whether time really advances.
+  * A null scenario supplied by a trusted reader is still a fixed clock. */
+ async readManyObservations(scopes:readonly BusinessTimeScope[],fallback?:Readonly<{now:()=>Date;mode:'live'|'fixed'}>):Promise<ReadonlyMap<string,{time:BusinessTime;mode:'live'|'fixed'}>>{
   const unique=new Map(scopes.map(scope=>[businessScopeKey(scope),scope]));
   if(!unique.size)return new Map();
-  const context=contexts.getStore(),result=new Map<string,BusinessTime>();
-  if(context){for(const [key,scope] of unique){await context.assertScope(scope);result.set(key,observedBusinessTime());}return result;}
-  let ordinary:BusinessTime|undefined;
-  const ordinaryTime=()=>ordinary??(ordinary=observedBusinessTime(fallback)),reader=this.database?readers.get(this.database):undefined;
+  const context=contexts.getStore(),result=new Map<string,{time:BusinessTime;mode:'live'|'fixed'}>();
+  if(context){for(const [key,scope] of unique){await context.assertScope(scope);result.set(key,{time:observedBusinessTime(),mode:'fixed'});}return result;}
+  let ordinary:{time:BusinessTime;mode:'live'|'fixed'}|undefined;
+  const ordinaryTime=()=>ordinary??(ordinary={time:observedBusinessTime(fallback?.now),mode:fallback?.mode??'live'}),reader=this.database?readers.get(this.database):undefined;
   if(reader?.readMany){
    const batch=await reader.readMany([...unique.values()],this.transaction);
-   for(const [key] of unique)result.set(key,batch.get(key)??ordinaryTime());
-  }else for(const [key,scope] of unique)result.set(key,await reader?.read(scope,this.transaction)??ordinaryTime());
+   for(const [key] of unique){const time=batch.get(key);result.set(key,time?{time,mode:'fixed'}:ordinaryTime());}
+  }else for(const [key,scope] of unique){const time=await reader?.read(scope,this.transaction);result.set(key,time?{time,mode:'fixed'}:ordinaryTime());}
   return result;
  }
 }

@@ -1,4 +1,4 @@
-import type {FixedScheduleProgress,ScheduleNodeProgress} from './fixed-schedule-progress.js';
+import type {FixedScheduleProgress,ScheduleNodeProgress,ScheduleGoalDelta} from './fixed-schedule-progress.js';
 import { z } from "zod";
 import type {QcProgressClock} from './qc-production-progress.js';
 import type { PoDeliveryDate,PoDeliveryRisk } from "./po-delivery-dates.js";
@@ -134,6 +134,7 @@ export type JourneyNode = {
   countsInProgress: boolean; unavailableReason: "permission" | "fact_not_recorded" | null;
 };
 export type OrderJourney = {
+  observationMode?:'live'|'fixed';
   fixedSchedule?:FixedScheduleProgress;
   /** Shared UI ratios. Business-requirement counts and legacy workspace ratios remain separate. */
   visualProgress?: JourneyVisualProgress;
@@ -205,6 +206,7 @@ export type JourneyBusinessDateGroup = {
 };
 
 export type JourneyVisualStage = {
+  goalDelta?: ScheduleGoalDelta;
   key: JourneyStageKey;
   applicability: 'applicable' | 'not_applicable' | 'unknown';
   applicable: number; completed: number; unknown: number;
@@ -228,8 +230,9 @@ export type JourneyCompleteResult = { ruleVersion: "journey-v2.0"; asOf: string;
  * Its items are the currently available matching objects, not a claimed page
  * in a complete ordering; normal reads keep the existing complete contract. */
 export type JourneyResult=Omit<JourneyCompleteResult,'total'|'summary'>&{
+ observationMode?:'live'|'fixed';
  total:number|null;summary:JourneyCompleteResult['summary']|null;
- freshness?:{pending:number;failed:number;retryIds?:string[]};
+ freshness?:{pending:number;failed:number;retryIds?:string[];detailsOnly?:true};
 };
 
 export type JourneyDisplay = {
