@@ -123,6 +123,13 @@ describe('R5 exact frozen order-time reading and independent visible endpoints',
   let result=orderTimeReadingBasis(saved,order,row,{},proof,null);
   expect(result.scopes[0]!.facts.bulk_cutting).toMatchObject({ready:point(2),completed:point(5),businessCompleted:true});
   expect(result.scopes[1]!.facts.bulk_cutting).toMatchObject({ready:unknown,completed:unknown,businessCompleted:false,notYetReady:true});
+  const completed=proof.cutCompletions;proof.cutCompletions=[];
+  const unfinished=orderTimeReadingBasis(saved,order,row,{},proof,null),observed=evaluateFixedJourneyBasis(unfinished,at(25),false);
+  expect(unfinished.scopes[0]!.facts.bulk_cutting!.clockStart).toEqual(point(2));expect(unfinished.scopes[1]!.facts.bulk_cutting!.clockStart).toEqual(unknown);
+  expect(observed.scopes[0]!.nodes[0]!.ownSla).toMatchObject({state:'within',overdueMinutes:{minimum:0,maximum:0}});expect(observed.scopes[1]!.nodes[0]!.ownSla.state).not.toBe('overdue');
+  proof.tasks[0]!.task_kind='bulk_cutting';const internal=orderTimeReadingBasis(saved,order,row,{},proof,null);expect(internal.scopes[0]!.facts.bulk_cutting!.clockStart).toEqual(point(2));expect(internal.scopes[1]!.facts.bulk_cutting!.clockStart).toEqual(unknown);
+  const corrected=structuredClone(unfinished);corrected.scopes[0]!.facts.bulk_cutting!.clockStart=point(3);corrected.scopes[0]!.facts.bulk_cutting!.evidenceRefs.push('TEST precise corrected PO clock');expect(orderTimeReadingBasis(saved,order,row,{},proof,corrected).scopes[0]!.facts.bulk_cutting!.clockStart).toEqual(point(3));
+  proof.tasks[0]!.task_kind='bulk_cutting_external';proof.cutCompletions=completed;
   proof.cutting=[];proof.readiness.get('TEST cut')!.tracked=false;result=orderTimeReadingBasis(saved,order,row,{},proof,null);
   expect(result.scopes[0]!.facts.bulk_cutting).toMatchObject({ready:unknown,completed:point(5),businessCompleted:true,notYetReady:false});
  });
@@ -196,8 +203,10 @@ describe('native creation metadata batch',()=>{
   const query=vi.fn().mockResolvedValue({rows:[
    {resource_kind:'source',resource_id:'a',created_business_time:{now:'2026-11-20T00:00:00.000Z',scenarioId:null,revision:0},creation_event_ref:'TEST actual creation'},
    {resource_kind:'order',resource_id:'b',created_business_time:{now:'invalid',scenarioId:null,revision:0},creation_event_ref:'TEST invalid input'},
+   {resource_kind:'order',resource_id:'legacy',created_business_time:null,creation_event_ref:null,legacy_adopted:true},
+   {resource_kind:'order',resource_id:'missing-new',created_business_time:null,creation_event_ref:null,legacy_adopted:false},
   ]});
-  const result=await orderTimeCreatedMany({query} as never,[{kind:'source',id:'a'},{kind:'order',id:'b'},{kind:'source',id:'missing'},{kind:'source',id:'a'}]);
-  expect(query).toHaveBeenCalledTimes(1);expect(result.get('source:a')).toEqual({at:'2026-11-20T00:00:00.000Z',evidence:'TEST actual creation'});expect(result.get('order:b')).toBeNull();expect(result.get('source:missing')).toBeNull();
+  const result=await orderTimeCreatedMany({query} as never,[{kind:'source',id:'a'},{kind:'order',id:'b'},{kind:'source',id:'missing'},{kind:'source',id:'a'},{kind:'order',id:'legacy'},{kind:'order',id:'missing-new'}]);
+  expect(query).toHaveBeenCalledTimes(1);expect(result.get('source:a')).toEqual({at:'2026-11-20T00:00:00.000Z',evidence:'TEST actual creation'});expect(result.get('order:b')).toBeNull();expect(result.get('source:missing')).toBeNull();expect(result.get('order:legacy')).toEqual({at:null,legacy:true});expect(result.get('order:missing-new')).toBeNull();
  });
 });

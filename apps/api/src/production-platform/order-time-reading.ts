@@ -133,7 +133,7 @@ export function orderTimeReadingBasis(saved:StoredOrderTimePlan,resource:Busines
    // An original adopted task window owns its established responsibility R.
    // A legacy planning counterpart can lack readiness without erasing that
    // verified native clock. This does not invent availability/ready evidence.
-   if(taskOwn&&own.task?.native_entered_at&&['现场登记','已核实'].includes(own.task.entered_quality))fact.clockStart=instant(own.task.native_entered_at);
+   if(taskOwn&&fact.clockStart.precision==='unknown'&&fact.notYetReady!==true&&!own.native?.batchWindows?.length&&!(source.parameterKey==='bulk_cutting'&&scope.lineId!==null)&&own.task?.native_entered_at&&['现场登记','已核实'].includes(own.task.entered_quality))fact.clockStart=instant(own.task.native_entered_at);
    const nativeOwn=begun&&typeof own.native?.standardMinutes==='number'?{responsibilitySlaRef:own.native.evidence,responsibilityMinutes:own.native.standardMinutes,responsibilityCalendar:own.native.standardCalendar??'continuous' as const}:null;
    const start=fact.clockStart.precision==='instant'?fact.clockStart.at:null;
    const captured=start?evidence.policies?.find(version=>Date.parse(version.at)<=Date.parse(start)):undefined;

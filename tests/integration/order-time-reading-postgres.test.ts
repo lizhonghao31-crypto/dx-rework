@@ -1,3 +1,4 @@
+import {DigitalProductionAccessPolicy} from '../../apps/api/src/production-platform/access-policy.js';
 import {randomUUID} from 'node:crypto';
 import type {PoolClient} from 'pg';
 import {afterAll,beforeAll,describe,expect,it,vi} from 'vitest';
@@ -68,4 +69,18 @@ const duration=(minutes:number):OrderTimeRule=>({kind:'work',minutes,calendar:'c
   try{const result=await query.list(f.root,filter);expect(result.total).toBe(1);expect(result.items).toHaveLength(1);expect(result.items[0]!.id).toBe(order.productionOrderId);expect(build).not.toHaveBeenCalled();}finally{build.mockRestore();}
   const result=await new JourneyFactUpdates(f.db).runOnce();expect(result.failed).toBe(0);
  }));
+ it('keeps an old order first adopted by an explicit arrangement visible to its order-only technical reader',()=>run(async()=>{
+  const old=await f.bulkReady('无'),order=await new DigitalProductionIdentityService(f.db,true).read(f.root,old.id);
+  expect((await f.db.query('SELECT count(*)::int AS n FROM digital_order_time_subjects WHERE production_order_id=$1',[old.id])).rows[0].n).toBe(0);
+  // Focused historical-storage fixture: the exact audit → immutable plan →
+  // managed marker written by arrange(). No native creation is fabricated.
+  // Feasibility/arrange UI is covered by its own original-command suite.
+  await tx(async db=>{const eventId=randomUUID(),value=input(order);await db.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1,$2,$3,'order_time_arranged','digital_production',$4,$5)",[eventId,'TEST historical first arrangement',f.root.actorId,old.id,JSON.stringify({plan:value.plan})]);
+   await new OrderTimePlanRepository(db).confirm({resource:{kind:'order',id:old.id},expectedRevision:0,value,actorId:f.root.actorId,eventRef:'audit_events:'+eventId,time:await new ContextBusinessClock(f.db,db).read({kind:'order',id:old.id}),requestKey:randomUUID()});await db.query('UPDATE digital_production_orders SET order_time_managed=true WHERE production_order_id=$1',[old.id]);});
+  const actor=f.people['development-clerk']!,policy=new DigitalProductionAccessPolicy(f.db);expect(await policy.allowed(actor,'order',old.id,'technical')).toBe(true);expect(await policy.allowed(actor,'source',old.sourceId,'technical')).toBe(false);
+  await new JourneyFactRepository(f.db).buildOne({kind:'order',id:old.id});const query=new DigitalJourneyQuery(f.db,{listReadMode:'indexed'}),result=await query.list(actor,JourneyFilterSchema.parse({scope:'production',search:order.designStyleNo}));
+  expect(result.total).toBe(1);expect(result.items.map(item=>item.orderId)).toContain(old.id);expect(result.freshness).toBeUndefined();expect(result.summary).not.toBeNull();expect(result.items[0]!.createdAt).toBe((await f.db.query('SELECT created_at FROM digital_production_orders WHERE production_order_id=$1',[old.id])).rows[0].created_at.toISOString());
+  expect((await f.db.query('SELECT count(*)::int AS n FROM digital_order_time_subjects WHERE production_order_id=$1',[old.id])).rows[0].n).toBe(0);
+ }));
+
 });

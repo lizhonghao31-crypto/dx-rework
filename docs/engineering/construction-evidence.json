@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "e6df10d33dd591ebd60c1563a8eeee441a677bcd",
-  "sourceFingerprint": "d8eabe8cbf2086964c67757cacf025bfc8bd33471dbfdd2f96dcd16db57fcf89",
+  "sourceFingerprint": "20efa97f92cabf13b18c6b8253947633feffbf2bf3e561b1ee5fedd625a6ffaf",
   "risk": "full",
   "rules": [
     {
@@ -68,7 +68,7 @@
         "tests/unit/order-time-reading.test.ts",
         "tests/integration/order-time-requests-browser-postgres.test.ts"
       ],
-      "expectation": "NativeNov20 creation is included byNov20 and excluded by audit-registrationNov11; duplicate inputs one query, invalid/missing per-object metadata stays failed, no cross-permission source date or all-object rich enrichment."
+      "expectation": "NativeNov20 creation is included byNov20 and excluded by audit-registrationNov11; duplicate inputs one query, unproved new/invalid metadata stays failed, proven same-resource first historical arrangement uses registered date, no cross-permission source date or all-object rich enrichment."
     },
     {
       "source": "User-approved complete R5 v2 and corrected09 execution table;44 evidence/42 settings changes remain01–08; approved original image1 and latest image2 actually opened and compared to original App screenshots. Additional same-order gaps fixed under approved end-to-end correctness, without new business policy.",
@@ -103,7 +103,7 @@
         "tests/integration/order-time-reading-postgres.test.ts",
         "tests/integration/order-time-requests-browser-postgres.test.ts"
       ],
-      "expectation": "Same new order4h/2h/1.5h source commands: plan span130170min, actual690min, paper goal-16200min and responsibility+30min. Exact budget/approval/accessory occurrences, original valid history/windows preserved, unknown and perPO actuals independent. Calendar10 packed/0 pending, completed globalKPI1."
+      "expectation": "Task00/A02/Bnotready/24h at next01 retains Awithin/Bno R and exact correction/batch priority. Same new order4h/2h/1.5h source commands: plan span130170min, actual690min, paper goal-16200min and responsibility+30min. Exact budget/approval/accessory occurrences, original valid history/windows preserved, unknown and perPO actuals independent. Calendar10 packed/0 pending, completed globalKPI1."
     },
     {
       "source": "User-approved complete R5 v2 and corrected09 execution table;44 evidence/42 settings changes remain01–08; approved original image1 and latest image2 actually opened and compared to original App screenshots. Additional same-order gaps fixed under approved end-to-end correctness, without new business policy.",
@@ -187,6 +187,7 @@
         "tests/integration/factory-logistics-cockpit-postgres.test.ts",
         "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts",
         "tests/integration/module-bundles-native-browser-postgres.test.ts",
+        "tests/integration/order-time-reading-postgres.test.ts",
         "tests/integration/order-time-requests-browser-postgres.test.ts",
         "tests/unit/cockpit-detail.test.ts",
         "tests/unit/cockpit-fixed-schedule.test.ts",
@@ -209,7 +210,7 @@
         "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts",
         "tests/integration/module-bundles-native-browser-postgres.test.ts"
       ],
-      "expectation": "Current source native56 file matrix, positive and same-session revoked permissions, transport uncertainty exactly-once, current15/all-range distinction, module download/load-failure, widths and date precision. Earlier failed runs remain failed and all raw reports separate; no full5000/backup repetition or onsite success assertion."
+      "expectation": "Current source native57 case matrix, positive and same-session revoked permissions, transport uncertainty exactly-once, current15/all-range distinction, module download/load-failure, widths and date precision. Earlier failed runs remain failed and all raw reports separate; no full5000/backup repetition or onsite success assertion."
     }
   ],
   "checks": [
@@ -219,8 +220,8 @@
       "command": "/workspace/.dx-cloud/r5-runtime/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/cockpit-detail.test.ts tests/unit/cockpit-home.test.ts tests/unit/cockpit-display-facts.test.ts tests/unit/cockpit-fixed-schedule.test.ts tests/unit/factory-flow-navigation.test.ts tests/unit/digital-journey-cockpit.test.ts tests/unit/order-time-reading.test.ts tests/unit/order-time-requests.test.ts tests/unit/order-time-plan.test.ts tests/unit/order-time-settings.test.ts tests/unit/journey-fact-model.test.ts tests/unit/journey-selection-facts.test.ts tests/unit/fixed-schedule-progress.test.ts tests/unit/fixed-schedule-selection.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r509-current-units.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "e6df10d33dd591ebd60c1563a8eeee441a677bcd",
-      "sourceFingerprint": "d8eabe8cbf2086964c67757cacf025bfc8bd33471dbfdd2f96dcd16db57fcf89",
+      "testedHead": "b8510733c6ca18d6d36d0f0a7154e2710573f545",
+      "sourceFingerprint": "20efa97f92cabf13b18c6b8253947633feffbf2bf3e561b1ee5fedd625a6ffaf",
       "inputPaths": [
         "apps",
         "packages",
@@ -231,11 +232,11 @@
         "vitest.config.ts",
         "vitest.business-chain.config.ts"
       ],
-      "inputFingerprint": "d136c65f536876fdce8529f963c2d1e3e360d926e7de3388532ad5d42ff6db61",
-      "startedAt": "2026-11-11T19:19:30.988Z",
-      "endedAt": "2026-11-11T19:19:45.059Z",
+      "inputFingerprint": "5d8ab17a750ea310143fbc2abd62b65f2b54c8036880c8ee04691a3545636c23",
+      "startedAt": "2026-11-11T19:44:21.105Z",
+      "endedAt": "2026-11-11T19:44:38.181Z",
       "log": "/workspace/.dx-cloud/r509-current-units.log",
-      "logSha256": "870cc811bc59303c3f36768f87859006d3728fd79ba545678951633a1e6d2169",
+      "logSha256": "19e6eb59cdc70503ff08921172afa076417bb370ee5a615ee5b4ad06f12aa9ef",
       "context": "Approved R5-09 homepage07 peer KPI visual, source dual progress, original assignment-to-approval route and current native factory deep links. Owned TEST scope; no deployment or onsite performance claim. Node22/npm10; unchanged original contracts, permissions, private pictures and complete authorized statistics/current15 enrichment.",
       "passed": 182,
       "failed": 0,
@@ -243,7 +244,7 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "f740a1111ddd7ef778e2066e92dccbe3a68fb138200d0c004dde7e524a76ff2a"
+          "sha256": "cfcce60ae74a3e8aae63af784e766a2b215c2a5a08b8a55c66b1701446b3c701"
         }
       ]
     },
@@ -253,8 +254,8 @@
       "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "e6df10d33dd591ebd60c1563a8eeee441a677bcd",
-      "sourceFingerprint": "d8eabe8cbf2086964c67757cacf025bfc8bd33471dbfdd2f96dcd16db57fcf89",
+      "testedHead": "b8510733c6ca18d6d36d0f0a7154e2710573f545",
+      "sourceFingerprint": "20efa97f92cabf13b18c6b8253947633feffbf2bf3e561b1ee5fedd625a6ffaf",
       "inputPaths": [
         "apps",
         "packages",
@@ -265,9 +266,9 @@
         "vitest.config.ts",
         "vitest.business-chain.config.ts"
       ],
-      "inputFingerprint": "d136c65f536876fdce8529f963c2d1e3e360d926e7de3388532ad5d42ff6db61",
-      "startedAt": "2026-11-11T19:19:32.161Z",
-      "endedAt": "2026-11-11T19:20:26.315Z",
+      "inputFingerprint": "5d8ab17a750ea310143fbc2abd62b65f2b54c8036880c8ee04691a3545636c23",
+      "startedAt": "2026-11-11T19:44:22.411Z",
+      "endedAt": "2026-11-11T19:45:41.007Z",
       "log": "/workspace/.dx-cloud/r509-current-types.log",
       "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e",
       "context": "Approved R5-09 homepage07 peer KPI visual, source dual progress, original assignment-to-approval route and current native factory deep links. Owned TEST scope; no deployment or onsite performance claim. Node22/npm10; unchanged original contracts, permissions, private pictures and complete authorized statistics/current15 enrichment."
@@ -278,8 +279,8 @@
       "command": "npm run lint",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "e6df10d33dd591ebd60c1563a8eeee441a677bcd",
-      "sourceFingerprint": "d8eabe8cbf2086964c67757cacf025bfc8bd33471dbfdd2f96dcd16db57fcf89",
+      "testedHead": "b8510733c6ca18d6d36d0f0a7154e2710573f545",
+      "sourceFingerprint": "20efa97f92cabf13b18c6b8253947633feffbf2bf3e561b1ee5fedd625a6ffaf",
       "inputPaths": [
         "apps",
         "packages",
@@ -290,9 +291,9 @@
         "vitest.config.ts",
         "vitest.business-chain.config.ts"
       ],
-      "inputFingerprint": "d136c65f536876fdce8529f963c2d1e3e360d926e7de3388532ad5d42ff6db61",
-      "startedAt": "2026-11-11T19:19:33.507Z",
-      "endedAt": "2026-11-11T19:20:11.296Z",
+      "inputFingerprint": "5d8ab17a750ea310143fbc2abd62b65f2b54c8036880c8ee04691a3545636c23",
+      "startedAt": "2026-11-11T19:44:23.778Z",
+      "endedAt": "2026-11-11T19:45:19.267Z",
       "log": "/workspace/.dx-cloud/r509-current-lint.log",
       "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763",
       "context": "Approved R5-09 homepage07 peer KPI visual, source dual progress, original assignment-to-approval route and current native factory deep links. Owned TEST scope; no deployment or onsite performance claim. Node22/npm10; unchanged original contracts, permissions, private pictures and complete authorized statistics/current15 enrichment."
@@ -303,8 +304,8 @@
       "command": "/workspace/.dx-cloud/r5-runtime/node_modules/node/bin/node scripts/acceptance/time-site-inventory.mjs && /workspace/.dx-cloud/r5-runtime/node_modules/node/bin/node --input-type=module -e import {checkResourceRegistration} from './scripts/test-preflight.mjs';checkResourceRegistration();console.log('R509 original canonical resources and cleanup registration passed');",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "e6df10d33dd591ebd60c1563a8eeee441a677bcd",
-      "sourceFingerprint": "d8eabe8cbf2086964c67757cacf025bfc8bd33471dbfdd2f96dcd16db57fcf89",
+      "testedHead": "b8510733c6ca18d6d36d0f0a7154e2710573f545",
+      "sourceFingerprint": "20efa97f92cabf13b18c6b8253947633feffbf2bf3e561b1ee5fedd625a6ffaf",
       "inputPaths": [
         "apps",
         "packages",
@@ -315,9 +316,9 @@
         "vitest.config.ts",
         "vitest.business-chain.config.ts"
       ],
-      "inputFingerprint": "d136c65f536876fdce8529f963c2d1e3e360d926e7de3388532ad5d42ff6db61",
-      "startedAt": "2026-11-11T19:19:34.878Z",
-      "endedAt": "2026-11-11T19:19:36.419Z",
+      "inputFingerprint": "5d8ab17a750ea310143fbc2abd62b65f2b54c8036880c8ee04691a3545636c23",
+      "startedAt": "2026-11-11T19:46:41.779Z",
+      "endedAt": "2026-11-11T19:46:42.497Z",
       "log": "/workspace/.dx-cloud/r509-current-protocol.log",
       "logSha256": "c00eaf7c95df37fc9d03146d54ef3ae7ae112e4cf764a1434c7f24f28b64886d",
       "context": "Approved R5-09 homepage07 peer KPI visual, source dual progress, original assignment-to-approval route and current native factory deep links. Owned TEST scope; no deployment or onsite performance claim. Node22/npm10; unchanged original contracts, permissions, private pictures and complete authorized statistics/current15 enrichment."
@@ -328,8 +329,8 @@
       "command": "/workspace/.dx-cloud/r5-runtime/node_modules/node/bin/node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/order-time-requests-browser-postgres.test.ts tests/integration/order-time-reading-postgres.test.ts tests/integration/order-time-requests-postgres.test.ts tests/integration/m01-cockpit-home-native-browser-postgres.test.ts tests/integration/factory-logistics-cockpit-postgres.test.ts tests/integration/module-bundles-native-browser-postgres.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r509-final-native.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "bdb95cb8eda810c9d627f249284c69f48d7b13cb",
-      "sourceFingerprint": "527b8dddebe47767e457cc2124bfd5d958619c8f54b11f2617e223d4d95f995a",
+      "testedHead": "b8510733c6ca18d6d36d0f0a7154e2710573f545",
+      "sourceFingerprint": "20efa97f92cabf13b18c6b8253947633feffbf2bf3e561b1ee5fedd625a6ffaf",
       "inputPaths": [
         "apps",
         "packages",
@@ -503,18 +504,18 @@
         "scripts/test-suite-plan.mjs",
         "scripts/ui-polish-preview.mjs"
       ],
-      "inputFingerprint": "4e9cd1411759ea48fc68f2631b0b39bb4bb03ee2df6becc184af5d45a939bae0",
-      "startedAt": "2026-11-11T19:14:50.794Z",
-      "endedAt": "2026-11-11T19:17:55.450Z",
+      "inputFingerprint": "7baf97e1e13b508d3a42f96d3f41b327aeea4d2477995308608e1d40d5453970",
+      "startedAt": "2026-11-11T19:44:19.770Z",
+      "endedAt": "2026-11-11T19:48:03.301Z",
       "log": "/workspace/.dx-cloud/r509-final-native.log",
-      "logSha256": "9dcafbf7b762ddbd954463bb05fec1bb638353b4d85798f9c58bfb551425a260",
-      "passed": 56,
+      "logSha256": "5a467732ffb377c4ab07d0f3410637f904302df1bec72cb38d2843daa23b80f2",
+      "passed": 57,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "81d5ae281e203fef3003625e07cb7952f674633885848da03f10800ec58ca63a"
+          "sha256": "8640ad30d0342df04eb5cc41dee74cd857a33b6f298dee1eabfeeebad66b9a2d"
         }
       ],
       "context": "Actual original App/auth/native lowpriv isolated PG13.23, node22 Chromium, authoritative worker cap two. Current source: complete same new-order settings/adoption/native tasks/QC/packing/calendar, independent130170/690/-16200/+30 expected arithmetic; native creation date indexed/plain range and failure isolation, primary assignment to actual boss approval, factory reassignment/reprice/navigation and module loading. Inputs exclude ONLY two08 CI bootstrap files which are not executed/imported by this command; all original modules/helpers and other scripts included. No live data or deployment or onsite performance assertion."
