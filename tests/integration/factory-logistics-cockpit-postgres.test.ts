@@ -126,6 +126,28 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const list=await new DigitalJourneyQuery(f.db).list(f.root,JourneyFilterSchema.parse({scope:'production'}));
   for(const order of orders){const item=list.items.find(i=>i.orderId===order.id)!;expect(item.supervision!.nodes.find(n=>n.id.startsWith('return_logistics:'))!.logisticsWindows![0]!.shippedOn).toBe(order.day);if(order.scene)expect(item.supervision!.asOf).toBe(order.at);}
  },testExecutionConfig.correctnessTimeoutMs);
+ it('R5 exposes the current approved factory after all original allocation is transferred',async()=>{
+  const ctx=await context('2026-11-24T09:00:00.000Z'),r=await prepare(ctx.run);
+  const supplier=await f.access.createSupplier(f.root,CreateSupplierSchema.parse({supplierCode:`TEST-${randomUUID().slice(0,8).toUpperCase()}`,supplierType:'factory',supplierName:'TEST current factory after full transfer',address:'TEST',contractEntityName:'TEST',partyBRepresentative:'TEST',payeeName:'TEST',bankAccount:'TEST0002',bankName:'TEST',changeReason:'TEST original factory zero allocation'}));
+  await ctx.run(async()=>{
+   expect((await new FactoryFlowService(f.db).read(f.root,r.id)).currentProduction).toEqual({productionId:r.productionId,factoryDecisionId:null});
+   await f.sourcing.requestFactoryChange(f.people['production-management']!,r.caseId,{supplierId:supplier.supplierId,unitPrice:'6',changeReason:'TEST transfer all unstarted quantities'},randomUUID());
+   const request=(await f.sourcing.getCurrentFactoryChange({...f.root,authorizationCapability:'sourcing:view'},r.caseId)).item!;
+   const changed=await f.sourcing.decideFactoryChange(f.people.owner!,r.caseId,request.factoryChangeRequestId,{decision:'approved',verificationReason:'TEST exact current factory'},randomUUID());
+   const state=await new FactoryFlowService(f.db).read(f.root,r.id);
+   expect(state.supplierName).toBe('TEST current factory after full transfer');
+   expect(state.currentProduction).toEqual({productionId:r.productionId,factoryDecisionId:changed.value.decision!.sourcingDecisionId});
+   const original=(await f.db.query('SELECT quantity FROM sourcing_production_factory_orders WHERE production_order_id=$1 AND factory_decision_id IS NULL',[r.productionId])).rows;
+   expect(original.map(row=>Number(row.quantity))).toEqual([0]);
+   const factoryDecision=changed.value.decision!.sourcingDecisionId,document=(await f.db.query('SELECT sourcing_contract_document_id FROM sourcing_contract_documents WHERE sourcing_decision_id=$1 ORDER BY contract_version DESC LIMIT 1',[factoryDecision])).rows[0].sourcing_contract_document_id;
+   await f.sourcing.requestPriceReapplication(f.people['production-management']!,r.caseId,{unitPrice:'6.1',changeReason:'TEST price update retains native factory scope',expectedDecisionId:factoryDecision,expectedContractDocumentId:document},randomUUID());
+   const price=(await f.sourcing.getCurrentPriceReapplication({...f.root,authorizationCapability:'sourcing:view'},r.caseId)).item!;
+   const repriced=await f.sourcing.decidePriceReapplication(f.people.owner!,r.caseId,price.priceRequestId,{decision:'approved',verificationReason:'TEST same native execution'},randomUUID());
+   expect(repriced.value.decision!.sourcingDecisionId).not.toBe(factoryDecision);
+   expect((await new FactoryFlowService(f.db).read(f.root,r.id)).currentProduction).toEqual({productionId:r.productionId,factoryDecisionId:factoryDecision});
+
+  });
+ });
  it('keeps native factory transfer executions and two PO allocations separate',async()=>{
   const ctx=await context('2026-11-24T09:00:00.000Z'),r=await prepare(ctx.run,2),reports=new ProductionReportingService(f.db);
   const supplier=await f.access.createSupplier(f.root,CreateSupplierSchema.parse({supplierCode:`TEST-${randomUUID().slice(0,8).toUpperCase()}`,supplierType:'factory',supplierName:'TEST separate logistics factory',address:'TEST',contractEntityName:'TEST',partyBRepresentative:'TEST',payeeName:'TEST',bankAccount:'TEST0002',bankName:'TEST',changeReason:'TEST native factory scopes'}));
@@ -139,6 +161,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   });
   await f.advance(ctx.scene!,'2026-11-25T09:00:00.000Z');await ctx.run(()=>ship({...r,day:'2026-11-25'},decision!,[6,10]));
   const result=await reads(r.id,'two PO transferred factory scopes'),lines=(await f.db.query('SELECT line_id FROM digital_production_po_lines WHERE production_order_id=$1 ORDER BY position',[r.id])).rows;
+  expect(result.factory.currentProduction).toEqual({productionId:r.productionId,factoryDecisionId:decision!});
   const first=result.sla.nodes!.find(n=>n.id===`return_logistics:${lines[0].line_id}`)!,second=result.sla.nodes!.find(n=>n.id===`return_logistics:${lines[1].line_id}`)!;
   expect(first.logisticsWindows).toHaveLength(2);expect(first.logisticsWindows!.map(w=>w.factoryDecisionId)).toEqual([null,decision!]);expect(second.logisticsWindows).toHaveLength(1);expect(second.logisticsWindows![0]!.factoryDecisionId).toBe(decision!);
   expect(first.logisticsWindows![0]!.shippedOn).toBe('2026-11-24');expect(second.logisticsWindows![0]!.shippedOn).toBe('2026-11-25');

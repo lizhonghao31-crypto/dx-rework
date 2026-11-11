@@ -1,3 +1,4 @@
+import {orderTimeCreatedMany} from './order-time-created.js';
 import type {WorkspaceNodeFact} from './journey-workspace-facts.js';
 import type {Pool,PoolClient} from 'pg';
 import type {JourneyFilter,JourneyCoverage} from '@dx-rework/contracts/digital-production-journey';
@@ -49,7 +50,7 @@ export async function readJourneySelections(database:Pool,db:PoolClient,actor:Tr
   AND nullif($3::jsonb->>'stage','') IS NULL AND nullif($3::jsonb->>'node','') IS NULL
   AND nullif($3::jsonb->>'state','') IS NULL AND nullif($3::jsonb->>'risk','') IS NULL)`;
  const selection=`CASE WHEN ${fullView} THEN m.selection_full_json ELSE m.selection_json END`;
- type Row={kind:'source'|'order';resource_id:string;status:JourneySelectionRead['status'];id:string;sourceId:string|null;orderId:string|null;designStyleNo:string;temporaryStyleNo:string|null;customer:string|null;category:string|null;designer:string|null;styleName:string|null;
+ type Row={creationKind:'source'|'order'|null;creationId:string|null;kind:'source'|'order';resource_id:string;status:JourneySelectionRead['status'];id:string;sourceId:string|null;orderId:string|null;designStyleNo:string;temporaryStyleNo:string|null;customer:string|null;category:string|null;designer:string|null;styleName:string|null;
   merchandisers:JourneySelection['merchandisers'];orderNumbers:string[];createdAt:string;closed:boolean;activated:boolean;cancelled:boolean;closedAt:string|null;earliestShipmentDate:string|null;reminder:string|null;coverage:JourneyCoverage[];signals:JourneySelectionSignals;search_values:string[];workspace_nodes:WorkspaceNodeFact[];scheduleSelection:JourneySelection['scheduleSelection']};
  const rows=(await db.query<Row>(`WITH requested AS (
   SELECT * FROM jsonb_to_recordset($1::jsonb) AS r(kind text,id uuid,"sourceAccess" boolean,"orderAccess" boolean,"fullOrder" boolean,timing boolean,budget boolean,now timestamptz,scenario uuid,revision bigint)
@@ -67,7 +68,7 @@ export async function readJourneySelections(database:Pool,db:PoolClient,actor:Tr
    coalesce(o.design_style_no,s.design_style_no) AS order_style,s.design_style_no AS source_style,
    o.temporary_style_no AS order_temporary,s.temporary_style_no AS source_temporary,
    coalesce(o.customer_code,s.customer_code) AS order_customer,s.customer_code AS source_customer,
-   s.created_at AS source_created,o.created_at AS order_created,o.product_group,o.primary_merchandiser_id,
+   s.created_at AS source_created,o.created_at AS order_created,coalesce((to_jsonb(s)->>'order_time_managed')::boolean,false) AS source_managed,coalesce((to_jsonb(o)->>'order_time_managed')::boolean,false) AS order_managed,o.product_group,o.primary_merchandiser_id,
    designer.display_name AS designer,primary_person.display_name AS primary_name,
    sourcing.child_id AS sourcing_id,production.child_id AS production_id,source_case.style_name_snapshot,source_case.erp_order_no,
    additional.people AS secondary_merchandisers,source_case.sourcing_case_id AS visible_sourcing_id,
@@ -170,6 +171,8 @@ flags AS (SELECT kind,id,bool_or(key IN ('packing','special_closure') AND state=
   (CASE WHEN n."orderAccess" AND n.primary_merchandiser_id IS NOT NULL THEN jsonb_build_array(jsonb_build_object('id',n.primary_merchandiser_id,'name',n.primary_name)) ELSE '[]'::jsonb END)
    ||coalesce(n.secondary_merchandisers,'[]'::jsonb) AS merchandisers,
   CASE WHEN n.erp_order_no IS NOT NULL AND n.erp_order_no<>'' THEN ARRAY[n.erp_order_no] ELSE ARRAY[]::text[] END AS "orderNumbers",
+  CASE WHEN n."sourceAccess" THEN CASE WHEN n.source_managed THEN 'source' END WHEN n."orderAccess" AND n.order_managed THEN 'order' END AS "creationKind",
+  CASE WHEN n."sourceAccess" THEN CASE WHEN n.source_managed THEN n.sid::text END WHEN n."orderAccess" AND n.order_managed THEN n.oid::text END AS "creationId",
   coalesce(CASE WHEN n."sourceAccess" THEN n.source_created WHEN n."orderAccess" THEN n.order_created END,n.source_created,n.order_created)::text AS "createdAt",
   coalesce(flags.closed,false) AS closed,coalesce(flags.activated,false) AS activated,
   n."orderAccess" AND coalesce((n.facts->>'cancelled')::boolean,false) OR n.oid IS NULL AND n."sourceAccess" AND coalesce((n.facts->>'cancelled')::boolean,false) AS cancelled,
@@ -210,13 +213,14 @@ flags AS (SELECT kind,id,bool_or(key IN ('packing','special_closure') AND state=
  LEFT JOIN flags ON flags.kind=n.kind AND flags.id=n.id
  LEFT JOIN delivery ON delivery.kind=n.kind AND delivery.id=n.id`,
  [JSON.stringify(requested),JOURNEY_FACT_CALCULATION_VERSION,JSON.stringify(filter),JSON.stringify(JOURNEY_NODES),roles,actor.actorId,canSourcing,canRework,production,closureLinks,canCutting,Boolean(options.workspaceNodes),options.workspaceNodes??null,options.workspaceKinds??[]])).rows;
+ const created=await orderTimeCreatedMany(db,rows.flatMap(row=>row.creationKind&&row.creationId?[{kind:row.creationKind,id:row.creationId}]:[]));
  const items:JourneySelectionRead[]=rows.map(row=>{
   const resource={kind:row.kind,id:row.resource_id},clock=clocks.get(businessScopeKey(resource))!;
   const selection:JourneySelection={id:row.id,sourceId:row.sourceId,orderId:row.orderId,designStyleNo:row.designStyleNo,temporaryStyleNo:row.temporaryStyleNo,customer:row.customer,category:row.category,designer:row.designer,styleName:row.styleName,
-   merchandisers:row.merchandisers,orderNumbers:row.orderNumbers,createdAt:new Date(row.createdAt).toISOString(),links:[],lines:[],stages:[],supervision:{coverage:row.coverage},
+   merchandisers:row.merchandisers,orderNumbers:row.orderNumbers,createdAt:created.get(row.creationKind+':'+row.creationId)?.at??new Date(row.createdAt).toISOString(),links:[],lines:[],stages:[],supervision:{coverage:row.coverage},
    ...(row.scheduleSelection?{scheduleSelection:row.scheduleSelection}:{}),display:{mainState:journeyOrderState({cancelled:row.cancelled,closed:row.closed,activated:row.activated,earliestShipmentDate:row.earliestShipmentDate,reminderDate:row.reminder},clock.now),earliestShipmentDate:row.earliestShipmentDate,closedAt:row.closedAt},selectionSignals:row.signals};
   selection.selectionSignals!.searchMatched=journeyMatchesSearch(selection,filter.search.toLocaleLowerCase())||row.search_values.some(value=>value?.toLocaleLowerCase().includes(filter.search.toLocaleLowerCase()));
-  return {resource,status:row.status,selection,...(options.workspaceNodes?{workspaceNodes:row.workspace_nodes}:{})};
+  return {resource,status:row.creationKind&&!created.get(row.creationKind+':'+row.creationId)?'failed':row.status,selection,...(options.workspaceNodes?{workspaceNodes:row.workspace_nodes}:{})};
  });
  return {items,clocks,observationMode};
 }

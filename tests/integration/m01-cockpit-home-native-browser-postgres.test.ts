@@ -4,6 +4,11 @@ import {tmpdir} from 'node:os';
 import {randomUUID} from 'node:crypto';
 import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
 import {vi} from 'vitest';
+import {CreateSupplierSchema} from '@dx-rework/contracts';
+import {FactoryFlowService} from '../../apps/api/src/production-platform/factory-flow-service.js';
+import {businessNow} from '../../apps/api/src/acceptance-clock/business-time.js';
+import {SourcingService} from '../../apps/api/src/sourcing/sourcing-service.js';
+import {sourcingSlaEvidence} from '../../apps/api/src/production-platform/sourcing-sla-evidence.js';
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs});
 import {cockpitHomeBrowser,homeReady,coverageReady,JOURNEY_COVERAGE_KEYS} from '../acceptance/m01-cockpit-home-native-browser.js';
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
@@ -23,7 +28,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await page.screenshot({path:join(h.evidence,`full-home-${width}.png`),fullPage:true});await page.screenshot({path:join(h.evidence,`viewport-home-${width}.png`)});
   }
   await page.goto(h.base+h.path({search:h.prefix+'02'}));await homeReady(page);
-  for(const width of [1165,1366,1584]){await page.setViewportSize({width,height:1003});const row=page.locator('.journey-orders tbody tr').first();expect((await row.boundingBox())!.height).toBeLessThanOrEqual(190);const cell=row.locator('.cockpit-home-client'),quantity=cell.getByLabel('下单数量'),clientBox=await cell.boundingBox(),quantityBox=await quantity.boundingBox();expect(Math.abs((clientBox!.x+clientBox!.width/2)-(quantityBox!.x+quantityBox!.width/2))).toBeLessThan(1);await page.screenshot({path:join(h.evidence,`single-two-PO-home-${width}.png`),fullPage:true});}
+  for(const width of [1165,1366,1584]){await page.setViewportSize({width,height:1003});const row=page.locator('.journey-orders tbody tr').first();expect((await row.boundingBox())!.height).toBeLessThanOrEqual(190);const cell=row.locator('.cockpit-home-client'),quantity=cell.getByLabel('下单数量'),clientBox=await cell.boundingBox(),quantityBox=await quantity.boundingBox();expect(Math.abs(clientBox!.x-quantityBox!.x)).toBeLessThan(1);await page.screenshot({path:join(h.evidence,`single-two-PO-home-${width}.png`),fullPage:true});}
   await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);await page.screenshot({path:join(h.evidence,'viewport-home-390.png')});
   }finally{await context.close();}
  });
@@ -143,4 +148,72 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const {context,page}=await h.open(h.pmcId);try{const first=await h.read(page);expect(first.total).toBe(31);const token=(await context.cookies()).find(cookie=>cookie.name==='dx_rework_session')!.value,before=h.hash(token);await page.getByRole('button',{name:/时效待补充/}).first().click();await page.locator('.cockpit-coverage-categories button:enabled').first().click();await coverageReady(page);await h.revokePmc();const read=page.waitForResponse(response=>response.url().includes('/digital-production/journeys?'));await page.getByRole('dialog').getByRole('button',{name:'下一页',exact:true}).click();const response=await read;expect([200,403]).toContain(response.status());const result=await response.json();expect(JSON.stringify(result)).not.toContain(h.prefix);for(const id of h.orders)expect(JSON.stringify(result)).not.toContain(id);if(response.status()===200)expect(result.total).toBe(0);expect(h.hash((await context.cookies()).find(cookie=>cookie.name==='dx_rework_session')!.value)).toBe(before);const user=await h.auth.authenticate(token);expect(user.businessRoles).toContain('finance_read');expect(user.businessRoles).not.toContain('pmc');expect(h.errors).toEqual([]);
   }finally{await context.close();}
  });
+ it('R5 assigns the missing primary in the original order personnel UI, rejects an ordinary merchandiser and continues genuine owner approval',async()=>{
+  const f=h.fixture,native=new SourcingService(f.db,undefined,undefined,undefined,f.contracts),stop=new Error('TEST keep genuine owner approval pending');
+  let orderId='',caseId='';const original=native.recordManagementDecision.bind(native);
+  const management=vi.spyOn(native,'recordManagementDecision').mockImplementation(async(...args)=>{
+   caseId=args[1];orderId=(await f.db.query("SELECT production_order_id FROM digital_production_child_links WHERE module='sourcing' AND child_id=$1",[caseId])).rows[0].production_order_id;
+   // Isolated historical missing-staff precondition; assignment and approval below use the real UI and original commands.
+   await f.db.query('UPDATE digital_production_orders SET primary_merchandiser_id=NULL WHERE production_order_id=$1',[orderId]);return original(...args);
+  });
+  const owner=vi.spyOn(native,'decideOwner').mockRejectedValueOnce(stop);
+  try{await expect(h.runInScene(()=>f.bulkReady('无',undefined,1,native,{stylePrefix:h.prefix+'OWNER-READY-'}))).rejects.toBe(stop);}finally{management.mockRestore();owner.mockRestore();}
+  expect((await sourcingSlaEvidence(f.db,orderId)).sourcing_approval).toBeUndefined();
+  const manager=await h.open(f.people['production-management']!.actorId);
+  await manager.page.goto(h.base+h.path({selected:orderId}));
+  try{
+   const button=manager.page.getByRole('button',{name:'调整主跟单',exact:true});await button.waitFor();await button.click();
+   const dialog=manager.page.getByRole('dialog',{name:'调整主跟单',exact:true});await dialog.waitFor();
+   const name=(await f.db.query('SELECT display_name FROM app_users WHERE id=$1',[f.people.merchandiser!.actorId])).rows[0].display_name;
+   await dialog.getByRole('combobox',{name:'主跟单 *',exact:true}).fill(name);await dialog.getByRole('option',{name,exact:true}).click();
+   await dialog.getByRole('button',{name:'保存',exact:true}).click();await dialog.waitFor({state:'hidden'});
+   await expect.poll(async()=>(await f.db.query('SELECT primary_merchandiser_id FROM digital_production_orders WHERE production_order_id=$1',[orderId])).rows[0].primary_merchandiser_id).toBe(f.people.merchandiser!.actorId);
+   await expect.poll(()=>manager.page.locator('[data-identity-fact="merchandiser"]').innerText()).toContain(name);
+   expect((await sourcingSlaEvidence(f.db,orderId)).sourcing_approval?.startedAt).toBe('2026-11-07T00:00:00.000Z');
+  }finally{await manager.context.close();}
+  const merchandiser=await h.open(f.people.merchandiser!.actorId);
+  await merchandiser.page.goto(h.base+h.path({selected:orderId}));
+  try{
+   await merchandiser.page.locator('[data-view="order"][aria-busy="false"]').waitFor();expect(await merchandiser.page.getByRole('button',{name:'调整主跟单',exact:true}).count()).toBe(0);
+   const version=(await f.db.query('SELECT version FROM digital_production_orders WHERE production_order_id=$1',[orderId])).rows[0].version;
+   const denied=await merchandiser.page.request.put(h.base+'/api/digital-production/orders/'+orderId+'/merchandiser',{data:{merchandiserId:f.people.merchandiser!.actorId,expectedVersion:version}});expect(denied.status()).toBe(403);
+   expect((await f.db.query('SELECT version FROM digital_production_orders WHERE production_order_id=$1',[orderId])).rows[0].version).toBe(version);
+  }finally{await merchandiser.context.close();}
+  const approval=await h.open(f.people.owner!.actorId);
+  try{
+   await approval.page.goto(h.base+'/ui/sourcing/orders/'+caseId+'?node=owner');const approve=approval.page.getByRole('button',{name:'批准方案',exact:true});await approve.waitFor();await expect.poll(()=>approve.isEnabled()).toBe(true);const submitted=approval.page.waitForResponse(response=>response.url().endsWith('/owner-decisions')&&response.request().method()==='POST');await approve.click();const response=await submitted;expect(response.status(),response.status()===201?'original approval succeeded':await response.text()).toBe(201);
+   await expect.poll(async()=>(await f.db.query('SELECT decision,decided_by FROM sourcing_owner_decisions WHERE sourcing_case_id=$1',[caseId])).rows).toEqual([{decision:'approved',decided_by:f.people.owner!.actorId}]);
+   const current=await approval.page.request.get(h.base+'/api/sourcing/cases/'+caseId);expect(current.status()).toBe(200);expect((await current.json()).status).toBe('pending_finance_reconciliation');
+   await approval.page.screenshot({path:join(h.evidence,'r509-original-owner-approved.png'),fullPage:true});
+  }finally{await approval.context.close();}
+ });
+
+ it('R5 opens the actual current factory production page after the original factory allocation reaches zero',async()=>{
+  const f=h.fixture;await f.advance(h.scene,new Date(Date.now()+86400000).toISOString());
+  let id='',productionId='',decision='';
+  await h.runInScene(async()=>{
+   const r=await f.bulkReady('无',undefined,1,f.sourcing,{stylePrefix:h.prefix+'CURRENT-FACTORY-'});id=r.id;
+   const cuts=(await f.db.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[r.caseId])).rows;
+   const cutter={...f.people['cutting-worker']!,authorizationCapability:'cutting:records:create',authorizationCapabilities:['cutting:records:create']};
+   for(const cut of cuts)await r.cutting.record(cutter,cut.cutting_order_id,{pieceCount:1,actualCutCount:10,attachmentIds:[await f.image(cutter)]},randomUUID());
+   const flow=new FactoryFlowService(f.db),state=await flow.read(f.root,id);await flow.dispatch(f.people.warehouse!,id,{expectedRevision:state.revision,occurredAt:businessNow().toISOString(),supplierId:f.supplierId,note:'TEST current factory navigation'},randomUUID());
+   productionId=(await f.db.query('SELECT production_order_id FROM sourcing_production_orders WHERE sourcing_case_id=$1',[r.caseId])).rows[0].production_order_id;
+   const supplier=await f.access.createSupplier(f.root,CreateSupplierSchema.parse({supplierCode:'TEST-'+randomUUID().slice(0,8).toUpperCase(),supplierType:'factory',supplierName:'TEST-R509 current factory',address:'TEST',contractEntityName:'TEST',partyBRepresentative:'TEST',payeeName:'TEST',bankAccount:'TEST0002',bankName:'TEST',changeReason:'TEST original factory no remaining share'}));
+   await f.sourcing.requestFactoryChange(f.people['production-management']!,r.caseId,{supplierId:supplier.supplierId,unitPrice:'6',changeReason:'TEST transfer all unstarted production'},randomUUID());
+   const request=(await f.sourcing.getCurrentFactoryChange({...f.root,authorizationCapability:'sourcing:view'},r.caseId)).item!;
+   decision=(await f.sourcing.decideFactoryChange(f.people.owner!,r.caseId,request.factoryChangeRequestId,{decision:'approved',verificationReason:'TEST current factory scope'},randomUUID())).value.decision!.sourcingDecisionId;
+   const scopes=(await f.db.query('SELECT factory_decision_id,quantity::int FROM sourcing_production_factory_orders WHERE production_order_id=$1 ORDER BY factory_decision_id NULLS FIRST',[productionId])).rows;
+   expect(scopes).toEqual([{factory_decision_id:null,quantity:0},{factory_decision_id:decision,quantity:10}]);
+  });
+  const tab=await h.open();try{
+   await tab.page.goto(h.base+'/ui/digital-production?factory='+id);const link=tab.page.getByRole('link',{name:'打开原实时生产',exact:true});
+   await expect.poll(()=>link.count()).toBe(1);if(!await link.isVisible())await link.locator('xpath=ancestor::details[1]').locator('summary').first().click();
+   expect(new URL((await link.getAttribute('href'))!,h.base).searchParams.get('factoryDecisionId')).toBe(decision);
+   await link.click();await expect.poll(()=>new URL(tab.page.url()).searchParams.get('factoryDecisionId')).toBe(decision);
+   await expect.poll(()=>tab.page.locator('.production-dashboard').innerText()).toContain('TEST-R509 current factory');
+   expect((await tab.page.request.get(h.base+'/api/production-dashboard/'+productionId+'?factoryDecisionId='+decision)).status()).toBe(200);
+   await tab.page.screenshot({path:join(h.evidence,'r509-current-factory-production.png'),fullPage:true});
+  }finally{await tab.context.close();}
+ });
+
 });

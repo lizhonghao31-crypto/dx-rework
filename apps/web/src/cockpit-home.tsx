@@ -12,6 +12,7 @@ import {cockpitVisibleBlockers} from './cockpit-node-rows.js';
 import {CockpitHomeProgress,cockpitReceiptGap} from './cockpit-home-progress.js';
 import {CockpitHomeRisks,cockpitHomeRisks} from './cockpit-home-risks.js';
 import './cockpit-home.css';
+import './cockpit-home-r5.css';
 
 const stateLabels={completed:'整单已完成',overdue:'逾期',due_soon:'临期',active:'进行中',not_started:'未启动',cancelled:'已取消'};
 function Task({node,showBlocker=true}:{node:JourneyNode;showBlocker?:boolean}){
@@ -29,16 +30,16 @@ export function CockpitHome({data,error,context,onChange}:{data:JourneyResult|nu
  return <section className="dx-production-panel journey-orders cockpit-home" aria-label="订单列表" aria-busy={!data&&!error}>
   <div className="journey-section-title"><h2>订单总览</h2></div>
   <div className="cockpit-home-scroll" role="region" aria-label="订单列表，可横向滚动查看全部列" tabIndex={0}><BusinessTable>
-   <colgroup><col style={{width:'7%'}}/><col style={{width:'18%'}}/><col style={{width:'9%'}}/><col style={{width:'20%'}}/><col style={{width:'14%'}}/><col style={{width:'22%'}}/><col style={{width:'10%'}}/></colgroup>
-   <thead><tr><th>款图</th><th>订单 / 款名 / 客户</th><th className="cockpit-home-quantity"><span>类型</span><span>下单数量</span></th><th>PO 与日期</th><th>当前任务 / 风险</th><th>{context.scope==='development'?'进度（开发）':'进度（全单）'}</th><th>整单状态</th></tr></thead>
+   <colgroup><col style={{width:'7%'}}/><col style={{width:'17%'}}/><col style={{width:'12%'}}/><col style={{width:'19%'}}/><col style={{width:'15%'}}/><col style={{width:'21%'}}/><col style={{width:'9%'}}/></colgroup>
+   <thead><tr><th>款图</th><th>订单 / 款名</th><th className="cockpit-home-quantity"><span>客户 / 类型</span><span>下单数量</span></th><th>PO 与日期</th><th>当前任务 / 风险</th><th>{context.scope==='development'?'进度（开发）':'进度（全单）'}</th><th>整单状态</th></tr></thead>
    <tbody>{data?.items.map(order=>{
     const display=order.display,closed=display?.mainState==='completed',node=closed?undefined:representativeCockpitNodes(order,context)[0],risks=cockpitHomeRisks(order,context),delivery=closed||node?undefined:risks.deliveries[0],gap=cockpitReceiptGap(order);
     const scheduleReason=cockpitScheduleReason(order);
     const other=risks.total-(node&&risks.nodes.some(row=>row.instanceId===node.instanceId)?1:0)-(delivery?1:0);
     return <tr key={order.id} data-order-id={order.id}>
      <td><CockpitPhoto src={order.styleImageUrl} label={order.designStyleNo} className="cockpit-home-photo"/></td>
-     <td><button type="button" className="journey-order-select" data-cockpit-focus={`home-order:${order.id}`} onClick={()=>enter(order)}>{order.styleName||order.designStyleNo}</button>{order.styleName&&order.styleName!==order.designStyleNo&&<small className="cockpit-home-style" title={order.designStyleNo}>{order.designStyleNo}</small>}<small>{order.orderId?`订单ID：${order.identity?.businessNumber??'—'}`:'尚未下单'}</small><small>客户：{order.customer??'—'}</small><small className="cockpit-home-person" title={order.merchandisers.map(person=>person.name??'姓名未登记').join(' / ')}>跟单：{order.merchandisers.map(person=>person.name??'姓名未登记').join(' / ')||'未指派'}</small></td>
-     <td className="cockpit-home-quantity"><div className="cockpit-home-client"><span>{order.orderId?'大货订单':'产品开发'}</span><strong aria-label="下单数量">{order.orderId&&order.lines.length?`${order.lines.reduce((sum,line)=>sum+line.orderedQuantity,0).toLocaleString()}件`:'—'}</strong></div></td>
+     <td><button type="button" className="journey-order-select" data-cockpit-focus={`home-order:${order.id}`} onClick={()=>enter(order)}>{order.styleName||order.designStyleNo}</button>{order.styleName&&order.styleName!==order.designStyleNo&&<small className="cockpit-home-style" title={order.designStyleNo}>{order.designStyleNo}</small>}<small>{order.orderId?`订单ID：${order.identity?.businessNumber??'—'}`:'尚未下单'}</small><small className="cockpit-home-person" title={order.merchandisers.map(person=>person.name??'姓名未登记').join(' / ')}>跟单：{order.merchandisers.map(person=>person.name??'姓名未登记').join(' / ')||'未指派'}</small></td>
+     <td className="cockpit-home-quantity"><div className="cockpit-home-client"><span className="cockpit-home-customer">{order.customer??'—'}</span><span className="cockpit-home-type">{order.orderId?'大货订单':'产品开发'}</span><strong aria-label="下单数量">{order.orderId&&order.lines.length?`${order.lines.reduce((sum,line)=>sum+line.orderedQuantity,0).toLocaleString()}件`:'—'}</strong></div></td>
      <td><HomePos order={order} onOpen={()=>enter(order)}/></td>
      <td>{node?<button type="button" className="cockpit-home-task" onClick={()=>enter(order,node)}><Task node={node} showBlocker={!gap?.gap}/></button>:<span>{closed?'已完成':display?'暂无在办节点':'—'}</span>}
       {delivery&&<div className="cockpit-home-delivery"><span title={`${delivery.poNumber||'PO待补'} / ${delivery.color}`}>{delivery.poNumber||'PO待补'} / {delivery.color}</span><span>{poDeliveryKindLabels[delivery.kind]} <time>{delivery.date}</time></span><StatusBadge tone={delivery.risk==='overdue'?'danger':'warning'}>{delivery.risk==='overdue'?'约定日期已过':'今天到期'}</StatusBadge></div>}
