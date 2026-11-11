@@ -2,6 +2,12 @@
 
 现行执行政策见[根 AGENTS](../../AGENTS.md)。本文件是已实现协议说明，不是某轮PR、暂停或历史豁免的授权。
 
+## 自动验收与人工决定
+
+本页描述默认自动验收。用户明确要求合并时，按根AGENTS §4的人工合并路径核真实对象、Head/base和授权范围，保留检查及Review的真实状态，再使用正常合并入口；不把尚无成功Final Gate视为对用户决定的额外否决，也不将失败记录改成通过。
+
+`verify-merge`继续只核自动验收批准，其代码契约不变，不用于生成或伪装人工授权。人工合并仍受平台工具审批、服务端分支保护和身份权限约束；工具拒绝或结果不确定时先核事实、报告并停止该动作，不能借修改本地规则或换渠道规避该次拒绝。
+
 ## 请求与核证
 
 `node scripts/ci/pr-gate-controller.mjs request-final --pr <N> --head <Head40> --closeout <外置收口包>`只读核真实PR、当前目标tip、light、必要Review及[本批收口包](final-closeout-v1.md)；preview/apply均在新建引用前校验包、固定Head的construction摘要和实际报告，已有授权内加`--apply`创建唯一请求：
@@ -22,7 +28,7 @@
 
 ## 执行与复用证据
 
-`Final Gate exact Head`来自实际选择worker成功及结构化回执，旧Head、skipped、空跑或失败不能放行。普通检查记录`executed`；同Head采用已成功light检查时记录`verified_reuse`及源run/job/attempt、上下文与产物指纹，操作者与当前已核light再对照。仅复用真实同语义项，详见[Actions政策](github-actions-usage-policy-v1.0.md)。最终Gate本身仍在当前请求中真实认证。
+`Final Gate exact Head`来自实际选择worker成功及结构化回执，旧Head、skipped、空跑或失败不能作为自动验收批准。普通检查记录`executed`；同Head采用已成功light检查时记录`verified_reuse`及源run/job/attempt、上下文与产物指纹，操作者与当前已核light再对照。仅复用真实同语义项，详见[Actions政策](github-actions-usage-policy-v1.0.md)。最终Gate本身仍在当前请求中真实认证；用户人工决定不改变这些检查事实。
 
 CLI使用现有授权身份，日志重定向/凭证失败保持原错误。支持的连接器可读取原始GitHub事实，再调用相同纯协议核验，但必须分别记录该证据路径，不能声称CLI已经成功；不得更改代理、凭证、安装权限来绕拒绝。只读GraphQL的POST传输不等于写Review。
 
