@@ -10,15 +10,24 @@ import {SETTINGS_PLANNING_KEYS,type SettingsSetDraft} from '@dx-rework/contracts
 import type {OrderJourney} from '@dx-rework/contracts/digital-production-journey';
 import {cockpitDuration} from '../../apps/web/src/cockpit-fixed-schedule.js';
 import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
+import {OrderTimePlanRepository,type OrderTimeInput} from '../../apps/api/src/production-platform/order-time-plan-repository.js';
+import {FixedTimelineAdoptionRepository,fixedConsumerTargets} from '../../apps/api/src/production-platform/fixed-timeline-adoptions.js';
+import {ContextBusinessClock} from '../../apps/api/src/acceptance-clock/business-time.js';
+import {ORDER_TIME_NODES} from '@dx-rework/contracts/order-time-settings';
+import type {FrozenOrderTimePlan} from '@dx-rework/contracts/order-time-plan';
+import {buildOrderTimeWork} from '../../apps/api/src/production-platform/order-time-schedule.js';
+import {r5OneHourConfiguration} from '../helpers/r5-order-time-fixture.js';
+import {DigitalProductionIdentityService} from '../../apps/api/src/production-platform/identity-service.js';
+import {DigitalOrderCreateSchema,beijingCalendarDate} from '@dx-rework/contracts/digital-production';
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (url?describe.sequential:describe.skip)('supply-chain six-PR integrated original App and native adopted facts',()=>{
- let h:Awaited<ReturnType<typeof supplychainSettingsBrowser>>,id:string;
+ let h:Awaited<ReturnType<typeof supplychainSettingsBrowser>>,id:string,scene:string;
  beforeAll(async()=>{h=await supplychainSettingsBrowser(url!,join(process.env.M01_SETTINGS_NATIVE_EVIDENCE??tmpdir(),'supplychain-board-'+randomUUID()),{fullApp:true});
   const service=new SlaSettingsSetsService(h.db,'TEST integrated real paired adoption '.repeat(3)),state=await service.read(h.f.root),draft:SettingsSetDraft={...state.basis,values:structuredClone(state.current),reason:'TEST explicit planning for native integrated UI, not onsite defaults'};
   for(const key of SETTINGS_PLANNING_KEYS)draft.values.planning[key]={minutes:draft.values.unified[key as keyof typeof draft.values.unified]?.kind==='included'?0:60,calendar:'continuous'};
   const saved=await service.save(h.f.root,draft,randomUUID()),next={...draft,...saved.basis},preview=await service.preview(h.f.root,next);await service.publish(h.f.root,{...next,previewToken:preview.token},randomUUID());
-  const scene=await h.f.scene('2026-11-11T08:00:00.000Z');configureTimelineAdoption(h.db,'fixed_v2');
+  scene=await h.f.scene('2026-11-11T08:00:00.000Z');configureTimelineAdoption(h.db,'fixed_v2');
   try{const ready=await h.f.runtime.run(scene,h.f.root,()=>h.f.bulkReady('印绣花',undefined,2,h.f.sourcing,{developmentReturnDate:'2027-02-01',craftSteps:[{craftKind:'embroidery',sequence:1},{craftKind:'printing',sequence:2}]}));id=ready.id;await h.f.runtime.run(scene,h.f.root,async()=>{await new JourneyFactRepository(h.db).buildOne({kind:'order',id});});}finally{configureTimelineAdoption(h.db,'legacy');}
  });
  afterAll(async()=>{if(h){await h.writeEvidence();await h.dispose();}});
@@ -39,6 +48,49 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  it('preserves all seven original whole-range KPI values and separate plan filters on the actual current query',async()=>{
   const {page,context}=await h.open();try{await page.goto(h.base+'/ui/digital-cockpit');await page.locator('[data-view="overview"][aria-busy="false"]').waitFor();const query=await page.evaluate(async()=> (await fetch('/api/digital-production/journeys?scope=production')).json());expect(query.total).toBe(1);for(const[label,key]of [['订单总数','all'],['进行中','active'],['未启动','notStarted'],['临期','dueSoon'],['逾期','overdue'],['时效待补充','timingMissing'],['整单已完成','completed']] as const){expect(await page.locator('.journey-kpis').getByRole('button',{name:new RegExp(label)}).locator('strong').innerText()).toBe(String(query.summary[key]));}
    await page.getByRole('button',{name:'更多筛选',exact:true}).click();await page.getByLabel('计划与交期',{exact:true}).selectOption('unknown');await page.locator('[data-view="overview"][aria-busy="false"]').waitFor();expect(new URL(page.url()).searchParams.get('progress')).toBe('unknown');
+  }finally{await context.close();}
+ });
+ it('renders the real per-order model and same stage endpoints on the original authenticated App while keeping the begun native windows',async()=>{
+  await h.f.runtime.run(scene,h.f.root,async()=>{
+   const resource={kind:'order' as const,id},original=(await new FixedTimelineAdoptionRepository(h.db).currentTargets(resource))!,values=r5OneHourConfiguration();
+   const plan:FrozenOrderTimePlan={version:'order-time-plan-v1',revision:1,overrides:{},company:{version:'order-time-standard-v1',reference:'TEST explicit per-order arrangement',revision:1,...values}};
+   const work=original.adoption.input.work.map(work=>({id:work.id,parameterKey:work.parameterKey??work.id,stage:ORDER_TIME_NODES.find(node=>node.key===work.parameterKey)?.stage??2,dependsOn:[...work.dependsOn],canonicalWorkRef:work.canonicalWorkRef,...(work.includedIn?{includedIn:work.includedIn,...(work.includedPosition?{includedPosition:work.includedPosition}:{})}:{})}));
+   const newDefinitions=buildOrderTimeWork(plan,work);
+   const scopes=original.adoption.input.consumers.map(consumer=>{
+    const targets=fixedConsumerTargets(newDefinitions.filter(node=>consumer.nodeIds.includes(node.id)),consumer),goals={...consumer.ends};
+    for(const key of Object.keys(goals)){const target=targets.find(target=>target.id===key);if(goals[key]?.precision==='unknown'&&target?.end.at)goals[key]={precision:'instant',value:target.end.at,source:'TEST same adopted graph target'};}
+    const customerId=consumer.customerGoalIds![0]!;
+    return {scopeRef:consumer.scopeRef,lineId:consumer.lineId??null,terminalIds:Object.keys(consumer.ends),customerGoalIds:consumer.customerGoalIds??[],goals,customerGoal:goals[customerId]!};
+   });
+   const value:OrderTimeInput={version:'order-time-input-v1',plan,work,scopes,route:{complete:true,missing:[]}},db=await h.db.connect();
+   try{await db.query('BEGIN');await new OrderTimePlanRepository(db).confirm({resource,expectedRevision:0,value,actorId:h.f.root.actorId,eventRef:'TEST confirmed per-order current arrangement',time:await new ContextBusinessClock(h.db,db).read(resource),requestKey:randomUUID()});await db.query('COMMIT');}catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
+   await new JourneyFactRepository(h.db).buildOne(resource);
+  });
+  const {page,context}=await h.open();try{
+   await page.clock.install();await page.goto(h.base+'/ui/digital-cockpit?selected='+id);await page.locator('[data-view="order"][aria-busy="false"]').waitFor();
+   const dto=await page.evaluate(async selected=>{const response=await fetch('/api/digital-production/journeys/'+selected);if(!response.ok)throw Error('Real per-order read refused');return response.json();},id) as OrderJourney;
+   // Five1h source works, sheet/pattern/cut/dispatch4h, two ordered crafts+QC4h,
+   // factory/logistics/garmentQC/packing4h. FactoryQC supervision is not another
+   // independent work duration. Fabric/preshrink and sourcing are parallel.
+   expect(dto.fixedSchedule!.durationSummary.planSpanMinutes).toBe(17*60);
+   expect(await page.getByLabel('订单总用时').innerText()).toContain('17小时');
+   for(const stage of dto.visualProgress!.stages.filter(stage=>stage.goalDelta)){
+    const group=page.locator('.cockpit-stage').nth(dto.visualProgress!.stages.indexOf(stage));
+    expect(await group.locator('[aria-label^="阶段目标差"]').count()).toBe(1);
+    const expected=stage.goalDelta!;if(expected.targetPrecision==='instant')expect(stage.expected.at).toBe(expected.targetAt);else if(expected.targetPrecision==='date')expect(stage.expected.at).toBe(expected.targetDate);
+   }
+   const native=dto.stages.flatMap(stage=>stage.nodes).find(node=>node.nativeTaskDeadline);expect(native?.nativeTaskDeadline?.at).toBeTruthy();
+   let clockReads=0;page.on('request',request=>{if(new URL(request.url()).pathname.endsWith('/journeys/'+id))clockReads++;});await page.clock.fastForward(31000);expect(clockReads).toBe(0);
+   await page.screenshot({path:join(h.evidence,'r5-per-order-time-detail.png'),fullPage:true});expect(h.errors).toEqual([]);
+  }finally{await context.close();}
+ });
+ it('refreshes the real current page on a live clock while guarded and null-scenario supplied clocks remain fixed',async()=>{
+  const style='TEST-R506-LIVE-'+randomUUID(),order=await new DigitalProductionIdentityService(h.db,true).createOrder(h.f.root,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:style,orderDate:beijingCalendarDate(new Date()),primaryMerchandiserId:h.f.people.merchandiser!.actorId,lines:[{formalPoNo:style,color:'黑',customerWarehouseArrivalDate:'2027-03-01',sizes:[{size:'M',quantity:1}]}]}),randomUUID());
+  await new JourneyFactRepository(h.db).buildOne({kind:'order',id:order.productionOrderId});
+  const {page,context}=await h.open();try{await page.clock.install();await page.goto(h.base+'/ui/digital-cockpit');await page.locator('[data-view="overview"][aria-busy="false"]').waitFor();
+   const live=await page.evaluate(async()=> (await fetch('/api/digital-production/journeys?scope=production')).json());expect(live.observationMode).toBe('live');
+   const response=page.waitForResponse(response=>new URL(response.url()).pathname.endsWith('/api/digital-production/journeys')&&response.request().method()==='GET');
+   await page.clock.fastForward(31000);expect((await response).status()).toBe(200);expect(h.errors).toEqual([]);
   }finally{await context.close();}
  });
 });

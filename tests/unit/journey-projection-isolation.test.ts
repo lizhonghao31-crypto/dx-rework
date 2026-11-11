@@ -20,7 +20,7 @@ beforeEach(()=>{
  fixture.facts={development_pattern:{startedAt:'2026-10-19T02:00:00.000Z',completedAt:'2026-10-19T01:00:00.000Z',evidence:'TEST old inconsistent fact'},development_sewing:{startedAt:'2026-10-19T00:00:00.000Z',evidence:'TEST valid independent fact'}};
 });
 it('isolates a classified bad authorized projection without losing an independently provable overdue node',async()=>{
- const legacy={query:vi.fn(async(sql:string)=>{if(sql==="SELECT to_regclass('digital_timeline_adoptions') AS relation")return {rows:[{relation:null}],rowCount:1};throw Error('Unexpected legacy projection query: '+sql);})} as unknown as PoolClient;
+ const legacy={query:vi.fn(async(sql:string)=>{if(["SELECT to_regclass('digital_timeline_adoptions') AS relation","SELECT to_regclass('digital_order_time_plan_versions') AS relation"].includes(sql))return {rows:[{relation:null}],rowCount:1};throw Error('Unexpected legacy projection query: '+sql);})} as unknown as PoolClient;
  const row=item();await readJourneySupervision({} as Pool,legacy,actor,row,time);
  expect(row.supervision?.nodes.find(n=>n.id==='development_pattern')?.status).toBe('unknown');
  expect(row.supervision?.nodes.find(n=>n.id==='development_sewing')?.status).toBe('overdue');

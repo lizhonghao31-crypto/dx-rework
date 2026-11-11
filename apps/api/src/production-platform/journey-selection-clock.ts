@@ -1,4 +1,4 @@
-import {evaluateFixedJourneyBasis,nextFixedScheduleClassification} from './fixed-schedule-basis.js';
+import {evaluateFixedJourneyBasis,nextFixedScheduleClassification,attachFixedJourneySchedule} from './fixed-schedule-basis.js';
 import type {BusinessTime} from '@dx-rework/domain/business-clock';
 import {evaluateSlaPlan,slaDateBoundary} from '@dx-rework/domain/digital-sla-plan';
 import {poDeliveryRisks} from '@dx-rework/contracts';
@@ -84,6 +84,8 @@ export function compileJourneySelectionClock(item:OrderJourney,untimed:OrderJour
   attachJourneySupervision(projected,inputs.plan,inputs.original,evaluation,{...time,now:at},
    {original:item.supervision?.originalRevision??null,current:item.supervision?.currentRevision??null},
    tasks.some(task=>task.kind==='bulk_cutting_external'),{facts:inputs.facts},new Set(tasks.map(task=>task.id)));
+  const fixed=inputs.fixedSchedule?evaluateFixedJourneyBasis(inputs.fixedSchedule,at,false,false):null;
+  if(inputs.fixedSchedule&&fixed)attachFixedJourneySchedule(projected,inputs.fixedSchedule,at,{progress:fixed,nextChange:false});
   const deliveryRisks=poDeliveryRisks(item.poDeliveryDates??[],day,delivery).filter(risk=>risk.kind!=='sample'||!delivery.sentLineIds.includes(risk.lineId))
    .map(risk=>({nodeKey:risk.nodeKey,risk:risk.risk,lineId:risk.lineId}));
   const partialDeliveryRisks=poDeliveryRisks(item.poDeliveryDates??[],day,{...delivery,finished:delivery.terminal??delivery.finished})
@@ -92,7 +94,6 @@ export function compileJourneySelectionClock(item:OrderJourney,untimed:OrderJour
    for(const line of item.poDeliveryDates??[]){dateBoundary(line.customerWarehouseArrivalDate);if(!delivery.factoryFinished)dateBoundary(line.factoryDeliveryDate);if(!delivery.sampleFinished&&!delivery.sentLineIds.includes(line.lineId))dateBoundary(line.sampleTargetDate);}
    dateBoundary(projected.supervision?.customerReminderDate);
   }
-  const fixed=inputs.fixedSchedule?evaluateFixedJourneyBasis(inputs.fixedSchedule,at,false):null;
   if(inputs.fixedSchedule)reconsider(nextFixedScheduleClassification(inputs.fixedSchedule,at));
   const schedule=fixed?{state:fixed.state,lagLineIds:fixed.scopes.filter(scope=>scope.state==='late').flatMap(scope=>scope.lineId?[scope.lineId]:[]),dueLineIds:fixed.scopes.filter(scope=>scope.customerDuePassed).flatMap(scope=>scope.lineId?[scope.lineId]:[]),unknownLineIds:fixed.scopes.filter(scope=>scope.state==='unknown').flatMap(scope=>scope.lineId?[scope.lineId]:[])}:null;
   const value:Omit<JourneySelectionClockFrame,'from'>={schedule,

@@ -1,0 +1,71 @@
+import {randomUUID} from 'node:crypto';
+import type {PoolClient} from 'pg';
+import {afterAll,beforeAll,describe,expect,it,vi} from 'vitest';
+import {DigitalOrderCreateSchema} from '@dx-rework/contracts/digital-production';
+import {JourneyFilterSchema} from '@dx-rework/contracts/digital-production-journey';
+import {reviseOrderTimePlan,type OrderTimeRule} from '@dx-rework/contracts/order-time-plan';
+import {businessAnchorFixture} from '../helpers/business-anchor-fixture.js';
+import {DigitalProductionIdentityService} from '../../apps/api/src/production-platform/identity-service.js';
+import {DigitalJourneyQuery} from '../../apps/api/src/production-platform/journey-query.js';
+import {OrderTimePlanRepository,type OrderTimeInput} from '../../apps/api/src/production-platform/order-time-plan-repository.js';
+import {ContextBusinessClock} from '../../apps/api/src/acceptance-clock/business-time.js';
+import {JourneyFactRepository} from '../../apps/api/src/production-platform/journey-fact-repository.js';
+import {JourneyFactUpdates} from '../../apps/api/src/production-platform/journey-fact-updates.js';
+import {JOURNEY_FACT_CALCULATION_VERSION} from '../../apps/api/src/production-platform/journey-fact-model.js';
+import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
+
+vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
+const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
+const duration=(minutes:number):OrderTimeRule=>({kind:'work',minutes,calendar:'continuous',reminder:{enabled:true,percent:70}});
+(url?describe.sequential:describe.skip)('R5 stored order-time reading, actual authorized RR and bounded model updates',()=>{
+ let f:Awaited<ReturnType<typeof businessAnchorFixture>>,scene:string;
+ const run=<T,>(action:()=>Promise<T>)=>f.runtime.run(scene,f.root,action);
+ const tx=async<T,>(action:(db:PoolClient)=>Promise<T>)=>{const db=await f.db.connect();try{await db.query('BEGIN');const result=await action(db);await db.query('COMMIT');return result;}catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}};
+ const make=()=>new DigitalProductionIdentityService(f.db,true).createOrder(f.root,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:'TEST-R506-'+randomUUID(),orderDate:'2026-11-11',primaryMerchandiserId:f.people.merchandiser!.actorId,
+  lines:[0,1].map(index=>({formalPoNo:'TEST-R506-'+randomUUID(),color:index?'白':'黑',customerWarehouseArrivalDate:'2027-03-01',sizes:[{size:'M',quantity:10}]}))}),randomUUID());
+ // Explicit focused input tests the reader before production preparation. It
+ // is not the R5-07 full native first-adoption/route selection implementation.
+ const input=(order:Awaited<ReturnType<typeof make>>):OrderTimeInput=>({version:'order-time-input-v1',plan:{version:'order-time-plan-v1',revision:1,overrides:{},company:{version:'order-time-standard-v1',reference:'TEST explicit original counterpart',revision:1,stageBufferMinutes:0,nodes:{order_creation:{kind:'event',minutes:0,calendar:'continuous',reminder:{enabled:false,percent:70}},garment_packing:duration(240)}}},route:{complete:true,missing:[]},
+  work:[{id:'order_creation',parameterKey:'order_creation',stage:1,dependsOn:[]},...order.lines.map(line=>({id:'garment_packing:'+line.lineId,parameterKey:'garment_packing',stage:7,dependsOn:['order_creation']}))],
+  scopes:order.lines.map(line=>({scopeRef:'po:'+line.lineId,lineId:line.lineId,terminalIds:['garment_packing:'+line.lineId],customerGoalIds:['garment_packing:'+line.lineId],customerGoal:{precision:'date',value:'2027-03-01',source:'TEST actual PO customer date'},goals:{['garment_packing:'+line.lineId]:{precision:'date',value:'2027-03-01',source:'TEST actual PO customer date'}}}))});
+ const confirm=(order:Awaited<ReturnType<typeof make>>,value:OrderTimeInput,expectedRevision=0)=>tx(async db=>new OrderTimePlanRepository(db).confirm({resource:{kind:'order',id:order.productionOrderId},value,expectedRevision,actorId:f.root.actorId,eventRef:'TEST explicit original confirmed arrangement',requestKey:randomUUID(),time:await new ContextBusinessClock(f.db,db).read({kind:'order',id:order.productionOrderId})}));
+ beforeAll(async()=>{f=await businessAnchorFixture(url!);scene=await f.scene('2026-11-11T08:00:00.000Z');expect((await f.db.query("SELECT current_setting('is_superuser') AS value")).rows[0].value).toBe('off');});
+ afterAll(async()=>{await f?.dispose();});
+ it('returns both correct known PO targets before preparation through plain and cockpit reads without adopting or writing in GET',()=>run(async()=>{
+  const order=await make(),saved=await confirm(order,input(order)),query=new DigitalJourneyQuery(f.db);
+  const before=(await f.db.query('SELECT count(*)::int n FROM digital_order_time_plan_versions')).rows[0].n;
+  const plain=await query.read(f.root,order.productionOrderId),cockpit=await query.read(f.root,order.productionOrderId,undefined,true);
+  expect(plain.fixedSchedule).toEqual(cockpit.fixedSchedule);expect(cockpit.fixedSchedule!.observationMode).toBe('fixed');
+  expect(cockpit.fixedSchedule!.durationSummary).toMatchObject({planStart:'2027-03-01T12:00:00.000Z',planEnd:'2027-03-01T16:00:00.000Z',planSpanMinutes:240,actualStart:{precision:'instant',at:'2026-11-11T08:00:00.000Z'},deliveryCompletedAt:{precision:'unknown'},finalActualSpanMinutes:null});
+  for(const scope of cockpit.fixedSchedule!.scopes){expect(scope.targetRevision).toBe(saved.id+':1');expect(scope.nodes.find(node=>node.id.startsWith('garment_packing:'))!.goalDelta).toMatchObject({targetAt:'2027-03-01T16:00:00.000Z',targetPrecision:'date',targetDate:'2027-03-01',actual:{precision:'unknown'}});}
+  expect((await f.db.query('SELECT count(*)::int n FROM digital_order_time_plan_versions')).rows[0].n).toBe(before);
+  expect((await f.db.query('SELECT count(*)::int n FROM digital_timeline_adoptions WHERE production_order_id=$1',[order.productionOrderId])).rows[0].n).toBe(0);
+  expect((await f.db.query('SELECT count(*)::int n FROM digital_bulk_preparations WHERE production_order_id=$1',[order.productionOrderId])).rows[0].n).toBe(0);
+  await expect(query.read(f.people['pattern-room-worker']!,order.productionOrderId,undefined,true)).rejects.toMatchObject({statusCode:404});
+ }));
+ it('stores only the exact new factual basis with no actor DTO and switches freshness after the same-transaction dirty registration',()=>run(async()=>{
+  const order=await make(),saved=await confirm(order,input(order)),resource={kind:'order' as const,id:order.productionOrderId},repo=new JourneyFactRepository(f.db);
+  const first=await repo.buildOne(resource);expect(first.model.fixedSchedule?.policyVersion).toBe('order-time-plan-v1');expect(first.model.fixedSchedule?.scopes).toHaveLength(2);
+  for(const privateKey of ['authorizationCapabilities','actorRoles','company','overrides','styleImageUrl'])expect(JSON.stringify(first.model.fixedSchedule)).not.toContain('"'+privateKey+'"');
+  const changed=structuredClone(saved.input);changed.plan=reviseOrderTimePlan(changed.plan,{garment_packing:duration(120)});await confirm(order,changed,1);
+  const read=await f.db.connect();try{const state=await repo.readStoredWithClient(read,resource);expect(state.status).toBe('pending');}finally{read.release();}
+  const rebuilt=await repo.buildOne(resource);expect(rebuilt.model.fixedSchedule!.scopeRevision).not.toBe(first.model.fixedSchedule!.scopeRevision);
+  expect(rebuilt.model.fixedSchedule!.scopes[0]!.work.find(work=>work.id.startsWith('garment_packing:'))!.minutes).toBe(120);
+  expect(rebuilt.model.fixedSchedule!.scopes[0]!.work.find(work=>work.id.startsWith('garment_packing:'))!.end).toBe('2027-03-01T16:00:00.000Z');
+  expect((await f.db.query('SELECT calculation_version FROM digital_journey_fact_models WHERE resource_id=$1',[order.productionOrderId])).rows[0].calculation_version).toBe(JOURNEY_FACT_CALCULATION_VERSION);
+ }));
+ it('keeps one actual RR snapshot across a competing confirmed version and sees the next version on the next request',()=>run(async()=>{
+  const order=await make(),original=await confirm(order,input(order)),resource={kind:'order' as const,id:order.productionOrderId},read=await f.db.connect();
+  try{await read.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');const first=await new OrderTimePlanRepository(read).current(resource);expect(first!.revision).toBe(1);
+   const changed=structuredClone(original.input);changed.plan=reviseOrderTimePlan(changed.plan,{garment_packing:duration(120)});await confirm(order,changed,1);
+   expect((await new OrderTimePlanRepository(read).current(resource))!.revision).toBe(1);await read.query('COMMIT');
+   expect((await new OrderTimePlanRepository(read).current(resource))!.revision).toBe(2);
+  }catch(error){await read.query('ROLLBACK');throw error;}finally{read.release();}
+ }));
+ it('keeps complete authorized list counts and current15 assembly with new factual storage; ordinary reads never build a mother',()=>run(async()=>{
+  const order=await make();await confirm(order,input(order));await new JourneyFactRepository(f.db).buildOne({kind:'order',id:order.productionOrderId});
+  const build=vi.spyOn(JourneyFactRepository.prototype,'buildOne'),query=new DigitalJourneyQuery(f.db),filter=JourneyFilterSchema.parse({scope:'production',search:order.designStyleNo});
+  try{const result=await query.list(f.root,filter);expect(result.total).toBe(1);expect(result.items).toHaveLength(1);expect(result.items[0]!.id).toBe(order.productionOrderId);expect(build).not.toHaveBeenCalled();}finally{build.mockRestore();}
+  const result=await new JourneyFactUpdates(f.db).runOnce();expect(result.failed).toBe(0);
+ }));
+});

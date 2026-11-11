@@ -45,3 +45,8 @@ it('an explicit session invalidation re-verifies identity and resumes reading in
 it('a failed identity recheck clears private data and finishes with a retryable error rather than permanent busy',async()=>{
  await reply(0,list('private'));await render({selected:'Q'});vi.stubGlobal('fetch',vi.fn().mockResolvedValue(Response.json({error:{message:'TEST登录已失效'}},{status:401})));await act(async()=>{await refreshSession();});expect(current.data).toBeNull();expect(current.detail).toBeNull();expect(current.listPhase).toBe('error');expect(current.detailLoading).toBe(false);expect(current.detailError).toContain('当前登录或读取身份尚未核准');
 });
+it('accepts reliable current-page totals when only a display read fails, while preserving the distinct unknown-selection contract',async()=>{
+ const value={...list('known'),total:31,summary:{...list('known').summary!,all:31},freshness:{pending:0,failed:1,detailsOnly:true as const,retryIds:['TEST display']}};
+ await reply(0,value);expect(current.listError).toBe('');expect(current.data?.total).toBe(31);expect(current.data?.summary).toEqual(value.summary);expect(current.data?.freshness?.detailsOnly).toBe(true);
+ await render({},true);await reply(1,{...value,total:null,summary:null,freshness:{pending:1,failed:0}});expect(current.listError).toBe('');expect(current.data?.total).toBeNull();expect(current.data?.summary).toBeNull();
+});

@@ -72,7 +72,10 @@ export async function cockpitHomeBrowser({databaseUrl,evidence,executablePath,ca
   }});
   await f.advance(scene,'2026-11-07T00:00:00Z');
   // Original cutting/receiving/packing commands establish real visible receipt debt.
-  if(includeNative)await fixture.runtime.run(scene,fixture.root,async()=>{for(const craft of ['无','印花','印绣花'] as const)orders.push((await fixture.bulkReady(craft,undefined,2,fixture.sourcing,{stylePrefix:prefix})).id);console.log('JOURNEY_SCALE_SETUP '+JSON.stringify({phase:'create',completed:orders.length,total:orderCount,mixedNativeMothers:3}));});
+  // A native mother deliberately shares the first numeric style prefix. A
+  // substring search must retain it when a different matching model fails;
+  // randomized UUID prefixes previously made that valid overlap intermittent.
+  if(includeNative)await fixture.runtime.run(scene,fixture.root,async()=>{for(const craft of ['无','印花','印绣花'] as const)orders.push((await fixture.bulkReady(craft,undefined,2,fixture.sourcing,{stylePrefix:prefix+(craft==='无'?'01-':'')})).id);console.log('JOURNEY_SCALE_SETUP '+JSON.stringify({phase:'create',completed:orders.length,total:orderCount,mixedNativeMothers:3}));});
   let updateCalendarPacking:((quantity:number)=>Promise<void>)|undefined;
   const prepareShortage=async()=>{
    const ready=await fixture.bulkReady('无',undefined,1,fixture.sourcing,{quantity:4}),cut=(await db.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[ready.caseId])).rows[0],cutter={...fixture.people['cutting-worker']!,authorizationCapability:'cutting:records:create',authorizationCapabilities:['cutting:records:create']};
@@ -190,5 +193,12 @@ export async function cockpitHomeBrowser({databaseUrl,evidence,executablePath,ca
  }catch(error){await dispose();throw error;}
 }
 export async function homeReady(page:Page){await page.locator('.digital-journey-cockpit[data-view="overview"][aria-busy="false"]').waitFor();await page.locator('.journey-orders[aria-busy="false"]').waitFor();await page.locator('.journey-orders tbody tr').first().waitFor();}
-export async function coverageReady(page:Page){await page.locator('.cockpit-coverage-orders[aria-busy="false"]').waitFor();await page.locator('.cockpit-coverage-order-list').waitFor();}
+export async function coverageReady(page:Page){
+ // The CI worker shares two bounded PG browser jobs. Waiting for an actual
+ // completed drill-down may exceed the generic12s locator budget; this does
+ // not relax the independent SQL/latency or correctness test limits.
+ try{await page.locator('.cockpit-coverage-orders[aria-busy="false"]').waitFor({timeout:30000});await page.locator('.cockpit-coverage-order-list').waitFor();}
+ catch(error){console.error('COVERAGE_WAIT_STATE',await page.locator('.cockpit-coverage-orders').innerText().catch(()=> 'coverage panel unavailable'));throw error;}
+ finally{console.log('COVERAGE_READ_TIMINGS',JSON.stringify(await page.evaluate(()=>performance.getEntriesByType('resource').filter(entry=>entry.name.includes('/digital-production/journeys?')&&entry.name.includes('missing=')).map(entry=>({path:new URL(entry.name).pathname+new URL(entry.name).search,durationMs:Math.round(entry.duration)})))));}
+}
 export {JOURNEY_COVERAGE_KEYS};

@@ -19,6 +19,14 @@ export function DigitalCockpitPage({deliveryReturn}:{deliveryReturn?:string|unde
  const [searchDraft,setSearchDraft]=useState({value:context.search,pending:false});
  const reads=useCockpitReads(context,refresh),root=useRef<HTMLDivElement>(null),navigation=useRef(0),previousIdentity=useRef(reads.identity),seeded=useRef(false),initial=useRef(context);
  const ready=context.selected?Boolean(reads.detail)&&!reads.detailLoading:Boolean(reads.data)&&!['preparing','loading'].includes(reads.listPhase);
+ const observationMode=context.selected?reads.detail?.observationMode??reads.detail?.fixedSchedule?.observationMode:reads.data?.observationMode;
+ useEffect(()=>{
+  if(observationMode!=='live'||!ready||reads.listError||reads.detailError||searchDraft.pending)return;
+  let last=performance.now();
+  const update=()=>{if(document.hidden||performance.now()-last<30000)return;last=performance.now();setRefresh(value=>value+1);};
+  const timer=setInterval(update,30000);document.addEventListener('visibilitychange',update);
+  return()=>{clearInterval(timer);document.removeEventListener('visibilitychange',update);};
+ },[observationMode,ready,reads.data,reads.detail,reads.listError,reads.detailError,searchDraft.pending]);
  const restoreReading=Boolean(context.selected)&&matchesCockpitReading(reads.identity,context);
  const latest=useRef({context,identity:reads.identity,ready,canonicalId:reads.detail?.id});latest.current={context,identity:reads.identity,ready,canonicalId:reads.detail?.id};
  const remember=()=>{const current=latest.current;rememberCockpitReading(current.identity,current.context,root.current,current.ready);if(current.ready&&current.context.selected&&current.canonicalId&&current.context.selected!==current.canonicalId)rememberCockpitReading(current.identity,{...current.context,selected:current.canonicalId},root.current,true);};

@@ -2,6 +2,7 @@ import type {FrozenInitialTimelineInput} from './fixed-timeline-initial-input.js
 import type {FixedTimelineCalendar} from './fixed-timeline-targets.js';
 import {orderTimeRule,type FrozenOrderTimePlan} from '@dx-rework/contracts/order-time-plan';
 import {DIGITAL_SLA_PARAMETERS} from '@dx-rework/contracts/digital-sla';
+import {orderTimeNodeStage} from '@dx-rework/contracts/order-time-settings';
 
 /** Old snapshots keep their original split inputs. An explicit new order plan
  * supplies one ordinary-node duration/calendar to planning and responsibility.
@@ -48,7 +49,7 @@ export function orderTimeDependencyReserves(node:{stage:number;dependsOn:readonl
 export function withOrderTimeStageReserves<T extends {id:string;parameterKey?:string;dependsOn:readonly string[];stage?:number;includedIn?:string;calendar?:FixedTimelineCalendar|null;responsibilitySlaRef?:string|null}>(initial:FixedWorkInputs,work:T[]):T[]{
  const plan=initial.data.orderTimePlan;if(!plan)return work;
  const catalog=new Map(DIGITAL_SLA_PARAMETERS.map(value=>[value.key,value.stage]));
- const staged=work.map(node=>{const stage=node.stage??catalog.get(node.parameterKey??node.id)??(node.parameterKey==='factory_production_work'?6:['source_confirmation','development_confirmation'].includes(node.parameterKey??node.id)?2:null);if(!stage)throw Error('适用节点阶段尚未明确');return {...node,stage};});
+ const staged=work.map(node=>{const key=node.parameterKey??node.id,stage=orderTimeNodeStage(key,node.stage??catalog.get(key)??(key==='factory_production_work'?6:['source_confirmation','development_confirmation'].includes(key)?2:0));if(!stage)throw Error('适用节点阶段尚未明确');return {...node,stage};});
  const byId=new Map(staged.map(node=>[node.id,node])),buffer=plan.stageBufferMinutes??plan.company.stageBufferMinutes;
  return staged.map(node=>{const parent=node.includedIn?byId.get(node.includedIn):null;return {...node,
   ...(parent?{calendar:parent.calendar??null,...(node.responsibilitySlaRef?{responsibilityCalendar:parent.calendar??null}:{})}:{}),

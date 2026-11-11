@@ -4,7 +4,7 @@ import {FrozenOrderTimePlanSchema,orderTimeRule,type FrozenOrderTimePlan} from '
 import {orderTimeWorkDefinition,orderTimeDependencyReserves} from './fixed-work-definition.js';
 import {fixedTimelineTargets,fixedTimelineForward,requiredFixedTimelineWork,type FixedTimelineTarget,type FixedTimelineWork} from './fixed-timeline-targets.js';
 
-export type OrderTimeWork={id:string;parameterKey:string;stage:number;dependsOn:readonly string[];includedIn?:string;includedPosition?:'start'|'end'};
+export type OrderTimeWork={id:string;parameterKey:string;stage:number;dependsOn:readonly string[];includedIn?:string;includedPosition?:'start'|'end';canonicalWorkRef?:string};
 export type OrderTimeScope={scopeRef:string;terminalIds:readonly string[];goals:Readonly<Record<string,SlaAnchor>>;customerGoal:SlaAnchor};
 export type OrderTimeScenario={plan:FrozenOrderTimePlan;work:readonly OrderTimeWork[];scopes:readonly OrderTimeScope[];
  route:{complete:boolean;missing:readonly string[]};start:SlaAnchor;notBefore?:Readonly<Record<string,SlaAnchor>>;

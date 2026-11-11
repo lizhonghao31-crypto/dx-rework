@@ -53,6 +53,7 @@ function database(activeRoles: string[], readRows: ReadRows) {
     }
     let rows: Record<string, unknown>[] | undefined;
     if (/^(BEGIN|COMMIT|ROLLBACK)\b/.test(sql) || sql.startsWith('SELECT pg_advisory_xact_lock(')) rows = [];
+    else if (sql==="SELECT to_regclass('digital_order_time_plan_versions') AS relation") rows=[{relation:null}];
     else if (sql.startsWith('SELECT 1 FROM app_users u') && sql.includes('user_role_assignments')) {
       rows = values[0] === ACTOR && activeRoles.includes(String(values[1])) ? [{allowed: 1}] : [];
     } else rows = readRows(sql, values);

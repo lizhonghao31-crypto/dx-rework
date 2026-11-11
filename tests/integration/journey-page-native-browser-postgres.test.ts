@@ -5,6 +5,8 @@ import {randomUUID} from 'node:crypto';
 import {writeFile} from 'node:fs/promises';
 import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
 import {cockpitHomeBrowser,homeReady} from '../acceptance/m01-cockpit-home-native-browser.js';
+import type {OrderJourney} from '@dx-rework/contracts/digital-production-journey';
+import {DigitalJourneyQuery} from '../../apps/api/src/production-platform/journey-query.js';
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 const scale=process.env.DX_JOURNEY_SCALE==='5000'?5000:process.env.DX_JOURNEY_SCALE==='1000'?1000:31;
@@ -31,18 +33,36 @@ if(process.env.DX_JOURNEY_SCALE&&!['1000','5000'].includes(process.env.DX_JOURNE
   }finally{await context.close();}
  });
  it('keeps available orders usable while a real derived-object failure hides uncertain totals, pagination and false empty states',async()=>{
-  const {context,page}=await h.open();const target=h.orders[0]!;try{
+  const {context,page}=await h.open();const target=h.orders[0]!,search=(await h.fixture.db.query<{po_number:string}>('SELECT po_number FROM digital_production_po_lines WHERE production_order_id=$1 ORDER BY position LIMIT 1',[target])).rows[0]!.po_number;try{
    await h.corruptProjection(target);await page.getByRole('button',{name:'刷新数据',exact:true}).click();
    await page.getByRole('alert').filter({hasText:'1 单信息更新失败'}).waitFor();
    expect(await page.locator('.journey-orders tbody tr').count()).toBe(15);
    expect(await page.locator('.journey-kpis').innerText()).toContain('—');expect(await page.getByRole('navigation',{name:'分页',exact:true}).count()).toBe(0);
    expect(await page.getByText('当前授权和筛选范围没有订单。',{exact:true}).count()).toBe(0);
    await page.goto(h.base+h.path({search:'TEST-R3-HOME-01'}));await page.getByRole('alert').filter({hasText:'1 单信息更新失败'}).waitFor();
+   const overlapping=await h.read(page,{search:'TEST-R3-HOME-01'});expect(overlapping.items.length).toBeGreaterThan(0);expect(overlapping.items.every(item=>item.orderId!==target)).toBe(true);
+   await expect.poll(()=>page.locator('.journey-orders tbody tr').evaluateAll(rows=>rows.map(row=>(row as HTMLElement).dataset.orderId))).toEqual(overlapping.items.map(item=>item.id));
+   // The original style keyword is a substring, so a healthy shared-prefix
+   // mother must remain visible. Only this actual PO uniquely selects the
+   // failed object and can independently prove the empty-but-uncertain state.
+   await page.goto(h.base+h.path({search}));await page.getByRole('alert').filter({hasText:'1 单信息更新失败'}).waitFor();
    expect(await page.locator('.journey-orders tbody tr').count()).toBe(0);expect(await page.getByText('当前授权和筛选范围没有订单。',{exact:true}).count()).toBe(0);
    await page.getByRole('button',{name:'重试更新失败订单',exact:true}).click();
-   await expect.poll(async()=>(await h.read(page,{search:'TEST-R3-HOME-01'})).total,{timeout:12000}).toBe(1);
-   await page.getByRole('button',{name:'刷新数据',exact:true}).click();await homeReady(page);expect((await h.read(page,{search:'TEST-R3-HOME-01'})).total).toBe(1);
+   await expect.poll(async()=>(await h.read(page,{search})).total,{timeout:12000}).toBe(1);
+   await page.getByRole('button',{name:'刷新数据',exact:true}).click();await homeReady(page);expect((await h.read(page,{search})).total).toBe(1);
   }finally{await h.repairProjection(target);await context.close();}
+ });
+ it('keeps reliable global KPI, true second page and pagination when one selected display read fails',async()=>{
+  const {context,page}=await h.open(),prototype=DigitalJourneyQuery.prototype as unknown as {project(...args:unknown[]):Promise<OrderJourney|null>},original=prototype.project;
+  let spy:ReturnType<typeof vi.spyOn>|undefined;
+  try{
+   await page.goto(h.base+h.path({page:'2'}));await homeReady(page);const before=await h.read(page,{page:'2'}),target=before.items[0]!.orderId!;
+   spy=vi.spyOn(prototype,'project').mockImplementation(async function(this:unknown,...args:unknown[]){const row=args[2] as {order?:{production_order_id:string}};if(row.order?.production_order_id===target)throw Error('TEST selected display dependency failed');return original.apply(this,args);});
+   await page.getByRole('button',{name:'刷新数据',exact:true}).click();await page.getByRole('alert').filter({hasText:'1 单详情暂未读到'}).waitFor();
+   const after=await h.read(page,{page:'2'});expect(after.page).toBe(2);expect(after.total).toBe(scale);expect(after.summary).toEqual(before.summary);expect(after.freshness).toMatchObject({failed:1,detailsOnly:true});
+   expect(after.items.map(item=>item.id)).toEqual(before.items.filter(item=>item.orderId!==target).map(item=>item.id));
+   expect(await page.locator('.journey-orders tbody tr').count()).toBe(14);expect(await page.getByRole('navigation',{name:'分页',exact:true}).count()).toBe(1);expect(await page.locator('.journey-kpis').innerText()).not.toContain('—');
+  }finally{spy?.mockRestore();await context.close();}
  });
  it('rechecks the real same valid PMC session after native revocation instead of trusting a cached manager projection',async()=>{
   const {context,page}=await h.open(h.pmcId);try{

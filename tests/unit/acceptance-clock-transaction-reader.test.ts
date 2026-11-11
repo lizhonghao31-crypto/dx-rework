@@ -1,4 +1,4 @@
-import {describe,it,expect} from 'vitest';
+import {describe,it,expect,vi} from 'vitest';
 import type {Pool,PoolClient} from 'pg';
 import {acceptanceIncludesNative,assertBusinessClocksUnchanged,businessScopeKey,ContextBusinessClock,installAcceptanceClockReader,withAcceptanceBusinessTime} from '../../apps/api/src/acceptance-clock/business-time.js';
 describe('original scene isolation with an owned read transaction',()=>{
@@ -68,4 +68,13 @@ describe('original scene isolation with an owned read transaction',()=>{
   expect(await clock.readObservation(scope,{now:()=>{throw Error('trusted reader must win');},mode:'live'})).toEqual({time,mode:'fixed'});
   expect(await clock.read(scope,()=>{throw Error('fallback must not run');})).toEqual(time);
   expect(await new ContextBusinessClock().readObservation(scope,{now:()=>new Date(at),mode:'fixed'})).toEqual({time,mode:'fixed'});
+ });
+ it('keeps batched observation provenance without a query per object or treating a null-scenario supplied clock as live',async()=>{
+  const pool={} as Pool,transaction={} as PoolClient,ordinary={kind:'order' as const,id:'TEST ordinary'},fixed={kind:'source' as const,id:'TEST fixed-null'},at='2026-12-01T12:00:00.000Z';
+  const readMany=vi.fn(async()=>new Map([[businessScopeKey(fixed),{now:at,scenarioId:null,revision:0}]]));
+  installAcceptanceClockReader(pool,{read:async()=>{throw Error('must use one batch');},readMany,nativeScenario:async()=>null});
+  const rows=await new ContextBusinessClock(pool,transaction).readManyObservations([ordinary,fixed,ordinary],{now:()=>new Date(at),mode:'live'});
+  expect(readMany).toHaveBeenCalledTimes(1);expect(readMany).toHaveBeenCalledWith([ordinary,fixed],transaction);
+  expect(rows.get(businessScopeKey(ordinary))).toEqual({time:{now:at,scenarioId:null,revision:0},mode:'live'});
+  expect(rows.get(businessScopeKey(fixed))).toEqual({time:{now:at,scenarioId:null,revision:0},mode:'fixed'});
  });
