@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "6a8a3ec782e1c660206a28b1dca6a683f9d7e35f",
-  "sourceFingerprint": "0fd27470deb3646e01018b6f07edbce3337e4b71a3c6eeb48277dbc580d5746e",
+  "sourceFingerprint": "eb19c56e568ce4419603634f709c38950207e301584cf0292238d79862881798",
   "risk": "full",
   "rules": [
     {
@@ -121,6 +121,7 @@
       "writes": [
         "scripts/ci/full-gate-risk-map.mjs",
         "scripts/test-suite-plan.mjs",
+        "tests/integration/digital-journey-postgres.test.ts",
         "tests/integration/journey-fact-model-postgres.test.ts",
         "tests/integration/journey-page-native-browser-postgres.test.ts",
         "tests/integration/order-time-reading-postgres.test.ts",
@@ -148,7 +149,7 @@
         "tests/integration/order-time-reading-postgres.test.ts",
         "tests/unit/order-time-reading.test.ts"
       ],
-      "expectation": "New actual PG reader suite is on canonical long2/risk mappings; no new resource creator, operations drill or separate gate. Exact legacy table-availability mocks retain original permission/exception assertions. Update the one old display-failure expectation to retained reliable counts while preserving actual corrupt-selection refusal and retry without GET rebuilding. Existing timeDomain/semanticNotes/p06ClockReview are preserved and only changed occurrence identities gain specific current review. Prior57 native/original-App checks and88 budget are preserved as pre-review evidence, not rerun claims. Current312 units and13 native stored-reader/original-craft-chain checks cover the repair. No1000/5000 or onsite revalidation claim.",
+      "expectation": "New actual PG reader suite is on canonical long2/risk mappings; no new resource creator, operations drill or separate gate. Exact legacy table-availability mocks retain original permission/exception assertions. Update the one old display-failure expectation to retained reliable counts while preserving actual corrupt-selection refusal and retry without GET rebuilding. Existing timeDomain/semanticNotes/p06ClockReview are preserved and only changed occurrence identities gain specific current review. Prior57 native/original-App checks and88 budget are preserved as pre-review evidence, not rerun claims. Current312 units and48 native stored-reader/original-craft/Journey-pagination checks cover both repairs. The two exact old full-result comparisons explicitly include and check observationMode; subsequent original pagination/revocation cases execute, not skipped. No1000/5000 or onsite revalidation claim.",
       "checks": [
         "r506-units",
         "r506-native"
@@ -195,11 +196,11 @@
     {
       "id": "r506-native",
       "kind": "tests",
-      "command": "/workspace/.dx-cloud/r5-runtime/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/order-time-reading-postgres.test.ts tests/integration/fixed-progress-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r506-candidate-native.json",
+      "command": "/workspace/.dx-cloud/r5-runtime/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/order-time-reading-postgres.test.ts tests/integration/fixed-progress-postgres.test.ts tests/integration/digital-journey-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r506-candidate-native.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "7680253e59f85da8275a0810d6af696a669577e6",
-      "sourceFingerprint": "0fd27470deb3646e01018b6f07edbce3337e4b71a3c6eeb48277dbc580d5746e",
+      "testedHead": "33a78470ff64e1f57842b67ba6011855b3678c30",
+      "sourceFingerprint": "eb19c56e568ce4419603634f709c38950207e301584cf0292238d79862881798",
       "inputPaths": [
         "apps",
         "packages",
@@ -214,19 +215,19 @@
         "tests/acceptance",
         "tests/fixtures"
       ],
-      "inputFingerprint": "20c9fb3dd19d7f04bf57624518803d8be72ee8c4f0c00386c68b730c73db30b6",
-      "startedAt": "2026-11-11T08:58:01.036Z",
-      "endedAt": "2026-11-11T08:58:55.173Z",
+      "inputFingerprint": "f222af233b355a40f8766be6ebb2a2dcfba494639276b3d849bc9ddca60bf406",
+      "startedAt": "2026-11-11T09:13:13.770Z",
+      "endedAt": "2026-11-11T09:14:50.226Z",
       "log": "/workspace/.dx-cloud/r506-candidate-native.log",
-      "logSha256": "420b5e1371ed8ca688d026ea413cc3e04bce2b5b5a1b106464d7e019379443a3",
+      "logSha256": "75e04cf311e19df4d799c45a9d2e55f7d65c2f23073715168eff8323c63fbe55",
       "context": "R5-06 review repair on actual R5-05 merge6a8a3ec7. Exact included craft-return confirmation preserves original parent closure, missing precision and source/round/step scope; current native rerun covers stored reader and original native craft chain. Broader 57 PG and original-App cases were passed before this narrow mapper repair and are not represented as rerun. Node22.22.2/npm10.9.9. Canonical nonDB1/PG1/long2, maximum2 actual local PG workers; only owned low-privilege TEST schemas. Original auth/App31 mothers and explicit hand-countable new stored policy, same RR/read proxy and bounded worker. No new adoption/production/onsite/scale-performance claim.",
-      "passed": 13,
+      "passed": 48,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "3fec26b29e82aedf5aa9763c17e1860b1c58c4e2872b294bcfbef53fd5f04a53"
+          "sha256": "d4e824403c12ca289334b0b848537228bc4335197a59d07b672295a2fa83ac80"
         }
       ]
     }

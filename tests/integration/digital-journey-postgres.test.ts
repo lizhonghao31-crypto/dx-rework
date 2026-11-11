@@ -580,7 +580,8 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
             hydrated=reads.mock.calls.map(call=>call[1]);
           }finally{reads.mockRestore();}
           const expected=selectJourneys(full.items,filter,paged.asOf);
-          expect(normalize(paged)).toEqual(normalize({...expected,facets:full.facets,canManagePolicies:full.canManagePolicies}));
+          expect(paged.observationMode).toBe(full.observationMode);
+          expect(normalize(paged)).toEqual(normalize({...expected,facets:full.facets,canManagePolicies:full.canManagePolicies,observationMode:full.observationMode}));
           const pageTasks=paged.items.flatMap(item=>item.stages.flatMap(stage=>stage.nodes).filter(node=>node.records.some(record=>record.domain==='task'&&record.id===node.instanceId)).map(node=>node.instanceId));
           expect(hydrated.every(id=>pageTasks.includes(id))).toBe(true);
           expect(hydrated.length).toBeLessThanOrEqual(paged.items.length*2);
@@ -616,7 +617,8 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
       const context=actor(root,["root_superuser"]),full=await journeys.list(context,JourneyFilterSchema.parse({}),true);
       for(const patch of [{page:1},{page:2},{risk:'blocked'},{risk:'overdue'},{state:'completed'},{kpi:'completed'},{node:'development_materials'}]){
         const filter=JourneyFilterSchema.parse(patch),paged=await journeys.list(context,filter);
-        expect(normalize(paged)).toEqual(normalize({...selectJourneys(full.items,filter,paged.asOf),facets:full.facets,canManagePolicies:full.canManagePolicies}));
+        expect(paged.observationMode).toBe(full.observationMode);
+        expect(normalize(paged)).toEqual(normalize({...selectJourneys(full.items,filter,paged.asOf),facets:full.facets,canManagePolicies:full.canManagePolicies,observationMode:full.observationMode}));
       }
     },testExecutionConfig.correctnessTimeoutMs);
     it("preserves workroom card facts and completed ownership without executable hydration",async()=>{
