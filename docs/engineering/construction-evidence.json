@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "be61c84d0e05cbc9428c974fdfbe1b00aff4ad89",
-  "sourceFingerprint": "ea7060512316c376212c23554c81a43ce09b686b83b857a525f48d456dcf5e7b",
+  "sourceFingerprint": "3aac2e4bb0953588890eacb48446752b82a7830d8140648805736e41da5239d3",
   "risk": "full",
   "rules": [
     {
@@ -141,7 +141,8 @@
         "tests/integration/r5-settings-native-browser-postgres.test.ts",
         "tests/unit/digital-pmc-readonly-ui.test.ts",
         "tests/unit/order-time-settings.test.ts",
-        "tests/unit/sourcing-additional-merchandiser.test.ts"
+        "tests/unit/sourcing-additional-merchandiser.test.ts",
+        "tests/unit/sourcing-list-pagination.test.ts"
       ],
       "reads": [
         "scripts/owned-command.mjs",
@@ -171,11 +172,11 @@
     {
       "id": "r505-units",
       "kind": "tests",
-      "command": "/workspace/.dx-cloud/r5-runtime/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/order-time-settings.test.ts tests/unit/sourcing-additional-merchandiser.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/acceptance-maintenance-generator.test.ts tests/unit/migration-history.test.ts tests/unit/order-time-plan.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/digital-pmc-readonly-ui.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r505-candidate-units.json",
+      "command": "/workspace/.dx-cloud/r5-runtime/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/order-time-settings.test.ts tests/unit/sourcing-list-pagination.test.ts tests/unit/sourcing-additional-merchandiser.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/acceptance-maintenance-generator.test.ts tests/unit/migration-history.test.ts tests/unit/order-time-plan.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/digital-pmc-readonly-ui.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r505-candidate-units.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "be61c84d0e05cbc9428c974fdfbe1b00aff4ad89",
-      "sourceFingerprint": "2c7389a0b6d7da9287423acfe2e9b3cad3df9526ef156505f2ec8772cbe66ddf",
+      "testedHead": "eaa02233b92bf37b7dc8e8066b09860963d71a80",
+      "sourceFingerprint": "3aac2e4bb0953588890eacb48446752b82a7830d8140648805736e41da5239d3",
       "inputPaths": [
         "apps",
         "packages",
@@ -187,19 +188,19 @@
         "vitest.business-chain.config.ts",
         "tests/unit"
       ],
-      "inputFingerprint": "b52f2b1291ad3880d51a91da24cd510337b7d56a47fb003ca8abfd34c307ca54",
-      "startedAt": "2026-11-11T05:41:36.563Z",
-      "endedAt": "2026-11-11T05:41:42.948Z",
+      "inputFingerprint": "8acc9cca08528a10a5c730d8215371da85e55f772764faaa9385e0d04c7a9a2a",
+      "startedAt": "2026-11-11T06:37:05.236Z",
+      "endedAt": "2026-11-11T06:37:13.115Z",
       "log": "/workspace/.dx-cloud/r505-candidate-units.log",
-      "logSha256": "27df0e5673d6dc35d2ea8e88c1abe0a5ae59c0519fabe787924f7defcd77f07c",
+      "logSha256": "15904c446306801c54d04907f32ab764d0601b18522f94ef236081750d4a16e0",
       "context": "Actual R5-04 merged base be61c84d0e05cbc9428c974fdfbe1b00aff4ad89. Node22.22.2/npm10.9.9. Canonical non-DB1, PostgreSQL1/long2; maximum2 actual local PG test workers, no other PG group concurrent. Only marked owned low-privilege TEST database/schema; native commands and original auth/App. New company settings explicitly enabled in this owned test server, ordinary runtime switch remains off until07. No onsite, production or deployment claims.",
-      "passed": 186,
+      "passed": 191,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "d7151cf046819ae5a96cb63475402920940ea676be9c6b46d390b7b5970ce293"
+          "sha256": "e2f53c2364242603e63c10b073a28dec25c2adf141eaa6c7d951fb054a27ae40"
         }
       ]
     },

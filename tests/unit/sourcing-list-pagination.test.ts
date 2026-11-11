@@ -106,13 +106,14 @@ describe("sourcing list pagination", () => {
 
   it("returns the order's first ready image and merchandiser in the existing paginated list", async () => {
     const firstImage = "00000000-0000-4000-8000-000000000099";
-    const query = vi.fn().mockResolvedValueOnce({rows:[{relation:null}]}).mockResolvedValue({ rows: [{ ...row(1, 1), merchandiser_name: "原跟单/协同跟单", first_image_attachment_id: firstImage }] });
+    const query = vi.fn().mockResolvedValueOnce({rows:[{relation:null}]}).mockResolvedValue({ rows: [{ ...row(1, 1), merchandiser_name: "原跟单/副跟单甲/副跟单乙", first_image_attachment_id: firstImage }] });
     const service = new SourcingService(ordinaryPool(query));
 
     const result = await service.listCases(actor, "", "pending", 1);
-    expect(result.items[0]).toMatchObject({ merchandiserName: "原跟单/协同跟单", firstImageAttachmentId: firstImage });
+    expect(result.items[0]).toMatchObject({ merchandiserName: "原跟单/副跟单甲/副跟单乙", firstImageAttachmentId: firstImage });
     expect(query.mock.calls[1]?.[0]).toContain("concat_ws('/',creator_user.display_name,additional_user.display_name) AS merchandiser_name");
-    expect(query.mock.calls[1]?.[0]).toContain("LEFT JOIN app_users additional_user");
+    expect(query.mock.calls[1]?.[0]).toContain("unnest(sourcing_additional_merchandiser_ids(additional_case.sourcing_case_id)) WITH ORDINALITY");
+    expect(query.mock.calls[1]?.[0]).toContain("string_agg(p.display_name,'/' ORDER BY selected.position)");
     expect(query.mock.calls[1]?.[0]).toContain("image.entity_id=case_view.sourcing_case_id::text");
     expect(query.mock.calls[1]?.[0]).toContain("image.status='ready'");
     expect(query.mock.calls[1]?.[0]).toContain("ORDER BY image.created_at,image.attachment_id LIMIT 1");
