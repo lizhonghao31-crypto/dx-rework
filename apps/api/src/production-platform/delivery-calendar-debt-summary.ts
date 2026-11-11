@@ -2,6 +2,7 @@ import {NATIVE_CUT_SCOPE_ROWS_SQL,NATIVE_EMPTY_PACKING_SCOPE_SQL} from './journe
 import type {PoolClient} from 'pg';
 import type {DeliveryCalendarFilters,DeliverySummary} from '@dx-rework/contracts/delivery-calendar';
 import {RECEIVING_GROUP_PACKING_JOIN_SQL,DIGITAL_RECEIVING_BASE_SQL} from '../receiving/receiving-quantity-query.js';
+import {packingQualityCoverageSql,effectivePackingQuantitySql} from './packing-quality-coverage.js';
 
 export type DeliveryDebtSummary={overdue:DeliverySummary;beforeSelected:DeliverySummary;quantityUnknownPoCount:number};
 const empty=():DeliverySummary=>({poCount:0,orderedQty:0,packedQty:0,pendingQty:0,extraQty:0,knownOrderedQty:0,comparableOrderedQty:0,knownPackedQty:0,knownPendingQty:0,knownExtraQty:0,unknownQuantityPoCount:0,missingDuePoCount:0,overduePoCount:0,overduePendingQty:0});
@@ -14,17 +15,21 @@ export async function deliveryDebtSummary(db:PoolClient,orderIds:readonly string
  const cutIds=(await db.query<{ids:string[]|null}>(`SELECT array_agg(DISTINCT map.child_id) AS ids FROM digital_production_child_lines map
   JOIN digital_production_po_lines p USING(production_order_id,line_id) WHERE map.module='cutting' AND map.production_order_id=ANY($1::uuid[])
   AND p.customer_warehouse_arrival_date<greatest($2::date,$3::date)`,[orderIds,today,selectedDate])).rows[0]?.ids??[];
- const rows=(await db.query<{bucket:string;po_count:string;ordered:string|null;packed:string|null;pending:string|null}>(`${DIGITAL_RECEIVING_BASE_SQL}, calendar_po AS (
+ const rows=(await db.query<{bucket:string;po_count:string;ordered:string|null;packed:string|null;pending:string|null}>(`${DIGITAL_RECEIVING_BASE_SQL}, quality_totals AS (${packingQualityCoverageSql('$5')}), calendar_po AS (
   SELECT p.line_id,p.customer_warehouse_arrival_date AS due,
    (SELECT sum(size.quantity) FROM digital_production_po_sizes size WHERE size.line_id=p.line_id) AS demand,
-   CASE WHEN cutting.verified OR (${NATIVE_EMPTY_PACKING_SCOPE_SQL}) THEN CASE WHEN packed.packing_revision_id IS NULL THEN 0 ELSE packed.packing_quantity END ELSE NULL END AS packed,
+   CASE WHEN cutting.verified OR (${NATIVE_EMPTY_PACKING_SCOPE_SQL}) THEN CASE WHEN packed.packing_revision_id IS NULL THEN 0 ELSE packed.packing_quantity END ELSE NULL END AS raw_packed,
+   received.current_actual_quantity AS native_received,
+   quality.received::numeric AS quality_received,quality.inspected::numeric AS quality_inspected,quality.qualified::numeric AS quality_qualified,
    CASE WHEN reminder.value->>'kind'='offset' AND jsonb_typeof(reminder.value->'days')='number' THEN
     CASE WHEN (reminder.value->>'days')::numeric BETWEEN 0 AND 365 AND trunc((reminder.value->>'days')::numeric)=(reminder.value->>'days')::numeric
      THEN (reminder.value->>'days')::numeric::integer ELSE NULL END ELSE NULL END AS reminder_days,
    EXISTS(SELECT 1 FROM digital_production_resource_lifecycle life WHERE ((life.resource_kind='order' AND life.resource_id=o.production_order_id) OR (life.resource_kind='source' AND life.resource_id=o.source_id)) AND life.state='cancelled')
     OR EXISTS(SELECT 1 FROM digital_order_closures closed WHERE closed.production_order_id=o.production_order_id) AS excluded
   FROM digital_production_po_lines p JOIN digital_production_orders o USING(production_order_id)
+  LEFT JOIN quality_totals quality ON quality.line_id=p.line_id AND quality.production_order_id=o.production_order_id
   LEFT JOIN LATERAL(SELECT array_agg(DISTINCT scope.child_id) FILTER(WHERE scope.child_id IS NOT NULL) AS ids,count(scope.child_id)=1 AND count(*)=1 AND bool_and(coalesce(scope.source_line_id=p.line_id,false)) AS verified FROM (${NATIVE_CUT_SCOPE_ROWS_SQL} WHERE po.line_id=p.line_id) scope) cutting ON true
+  LEFT JOIN style_totals received ON received.group_key='cut:'||cutting.ids[1]::text AND cutting.verified
   LEFT JOIN LATERAL(SELECT packing.packing_quantity,packing.packing_revision_id FROM (SELECT 'cut:'||cutting.ids[1]::text AS group_key) totals
    ${RECEIVING_GROUP_PACKING_JOIN_SQL}
    WHERE cardinality(cutting.ids)=1) packed ON true
@@ -36,10 +41,12 @@ export async function deliveryDebtSummary(db:PoolClient,orderIds:readonly string
   WHERE o.production_order_id=ANY($5::uuid[]) AND p.customer_warehouse_arrival_date<greatest($6::date,$7::date)
    AND ($9::text IS NULL OR o.customer_code=$9)
    AND ($8='' OR EXISTS(SELECT 1 FROM unnest(ARRAY[o.design_style_no,p.po_number,o.customer_code,p.color,business_no.value]) searched(value) WHERE position(lower($8) IN lower(searched.value))>0))
+ ), calendar_quality AS (
+  SELECT calendar_po.*,${effectivePackingQuantitySql('raw_packed','native_received','quality_inspected','quality_qualified','quality_received')} AS packed FROM calendar_po
  ), calendar_risk AS (
   SELECT *,CASE WHEN demand IS NULL OR packed IS NULL THEN 'unknown' WHEN packed>=demand THEN 'delivered' WHEN due<$6::date THEN 'overdue'
    WHEN reminder_days IS NULL THEN 'unknown' WHEN due<=$6::date+reminder_days THEN 'due_soon' ELSE 'pending' END AS risk
-  FROM calendar_po WHERE $10='all' OR ($10='excluded' AND excluded) OR ($10='current' AND NOT excluded)
+  FROM calendar_quality WHERE $10='all' OR ($10='excluded' AND excluded) OR ($10='current' AND NOT excluded)
  ), calendar_buckets AS (
   SELECT fact.*,bucket.name FROM calendar_risk fact CROSS JOIN LATERAL(VALUES
    ('overdue',fact.due<$6::date AND fact.demand IS NOT NULL AND fact.packed IS NOT NULL AND fact.packed<fact.demand),

@@ -9,7 +9,7 @@ import type {JourneyCutScope} from './journey-cut-scopes.js';
 import type {NativeFactoryTimeline} from './factory-production-facts.js';
 
 /** Bump when native mapping, time precision or applicability changes. No user DTO cache. */
-export const JOURNEY_FACT_CALCULATION_VERSION='journey-facts-supplychain-p04-progress-v1-selectors-v2';
+export const JOURNEY_FACT_CALCULATION_VERSION='journey-facts-r5-qualified-packing-v1';
 type FactNode=Pick<JourneyNode,'key'|'instanceId'|'stage'|'state'|'round'|'occurrence'|'current'|'planningOnly'|'progressApplicability'|'expectedAt'|'expectedKind'|'expectedPrecision'|'deadlineMode'|'deadlineExclusive'|'actualAt'|'actualDate'|'actualQuality'|'enteredAt'|'sla'|'countsInProgress'|'inheritedFrom'|'inheritedResult'>&{
  ownerId:string|null;operatorId:string|null;blockers:Array<{key:string;ownerId:string|null}>;
  scopes:Array<{domain:string;id:string;lineId:string|null;version:number|null}>;
@@ -70,7 +70,7 @@ export function minimalJourneyFacts(item:OrderJourney,inputs:JourneyTimingInputs
   requirements:(item.businessProgress?.requirements??[]).map(r=>({id:r.id,key:r.key,stage:r.stage,scopeRef:r.scopeRef,applicability:r.applicability,completed:r.completed,instanceIds:[...r.instanceIds],
    targets:r.targets.map(t=>({source:t.source,planId:t.planId,revision:t.revision,scopeRef:t.scopeRef,at:t.at,precision:t.precision,retainedFromRevision:t.retainedFromRevision}))})),
   quantities:item.businessProgress?.quantities?{revision:item.businessProgress.quantities.revision,factoryAttribution:item.businessProgress.quantities.factoryAttribution,
-   lines:item.businessProgress.quantities.lines.map(l=>({lineId:l.lineId,demand:l.demand,received:l.received,inspected:l.inspected,qualified:l.qualified,packed:l.packed,remainingReceipt:l.remainingReceipt,remainingShipment:l.remainingShipment,qualityGap:l.qualityGap,qualityConflict:l.qualityConflict,factoryAttribution:l.factoryAttribution,reasons:[...l.reasons]}))}:null,
+   lines:item.businessProgress.quantities.lines.map(l=>({lineId:l.lineId,demand:l.demand,received:l.received,inspected:l.inspected,qualified:l.qualified,packed:l.packed,...(l.effectivePacked===undefined?{}:{effectivePacked:l.effectivePacked}),remainingReceipt:l.remainingReceipt,remainingShipment:l.remainingShipment,qualityGap:l.qualityGap,qualityConflict:l.qualityConflict,factoryAttribution:l.factoryAttribution,reasons:[...l.reasons]}))}:null,
   sla:{plan:plan(inputs.plan),original:plan(inputs.original),facts:Object.fromEntries(Object.entries(inputs.facts).map(([key,value])=>[key,fact(value)]))},
   revisions:{original:item.supervision?.originalRevision??null,current:item.supervision?.currentRevision??null}};
 }

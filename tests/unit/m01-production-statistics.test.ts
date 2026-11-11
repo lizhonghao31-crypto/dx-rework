@@ -115,3 +115,13 @@ describe('M01 current production quantity, scope and verified time contracts',()
  });
 
 });
+
+it('retains raw packing and the quality discrepancy without counting unqualified delivery as completed',()=>{
+ const input=po({demand:4,received:4,packing:4,effectivePacking:null,quality:[{scopeId:'receipt',quantityVersion:'v1',quantity:4,qualified:3,inspected:true,sourceRefs:[]}]});
+ const result=calculate([input]);
+ expect(result.rows[0]!.line).toMatchObject({packing:4,effectivePacking:null});
+ expect([result.metrics.packed.value,result.metrics.remaining.value,result.metrics.completedOrders.value,result.metrics.unallocated.value]).toEqual([null,null,null,0]);
+ expect(result.problems.map(problem=>problem.kind)).toContain('装箱数量超过已核合格数量');
+ const gap=calculate([{...input,received:5}]);
+ expect(gap.problems.map(problem=>problem.kind)).toContain('已装齐的到仓检查仍有缺口');
+});

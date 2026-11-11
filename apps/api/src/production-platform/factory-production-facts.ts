@@ -52,7 +52,8 @@ export async function nativeFactoryTimeline(db:DB,orderId:string):Promise<Native
  });
 }
 export async function factoryProductionFacts(db:DB,orderId:string){
- const scopes=await factoryProductionScopes(db,orderId);
+ const allScopes=await factoryProductionScopes(db,orderId,{includeZero:true});
+ const scopes=allScopes.filter(scope=>Number(scope.quantity)>0);
  const events=(await db.query(`SELECT e.*,u.display_name FROM digital_production_task_events e JOIN app_users u ON u.id=e.actor_id
  WHERE e.resource_kind='order' AND e.resource_id=$1 AND e.event_kind='factory_garment_qc' ORDER BY e.recorded_at,e.event_id`,[orderId])).rows;
  const checks=scopes.map(scope=>{
@@ -70,5 +71,5 @@ export async function factoryProductionFacts(db:DB,orderId:string){
   facts[`factory_production:${lineId}`]={businessCompleted:done,evidence:parts.map(c=>c.eventId??`factory:${c.productionId}:${c.factoryDecisionId??'original'}:unchecked`).join(','),
    ...(done&&parts.every(c=>c.completedAt)?{completedAt:new Date(Math.max(...parts.map(c=>Date.parse(c.completedAt!)))).toISOString()}:{})};
  }
- return {history:events.map(e=>({eventId:e.event_id as string,occurredAt:e.occurred_at?new Date(e.occurred_at).toISOString():null,operator:e.display_name as string,factoryDecisionId:e.payload.factoryDecisionId as string|null,checks:e.payload.checks as Array<{lineId:string;allocationQuantity:number;result:'合格'|'需处理';problem:string}>})),checks,facts,revision:events.length,complete:checks.length>0&&checks.every(c=>c.inspected)};
+ return {history:events.map(e=>({eventId:e.event_id as string,occurredAt:e.occurred_at?new Date(e.occurred_at).toISOString():null,operator:e.display_name as string,factoryDecisionId:e.payload.factoryDecisionId as string|null,supplierName:allScopes.find(scope=>scope.production_order_id===e.payload.productionId&&scope.factory_decision_id===(e.payload.factoryDecisionId??null))?.supplier_name_snapshot as string|undefined??null,checks:e.payload.checks as Array<{lineId:string;allocationQuantity:number;result:'合格'|'需处理';problem:string}>})),checks,facts,revision:events.length,complete:checks.length>0&&checks.every(c=>c.inspected)};
 }

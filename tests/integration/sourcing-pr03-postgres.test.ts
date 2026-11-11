@@ -4801,7 +4801,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect(results.filter(r=>r.status==='fulfilled')).toHaveLength(1);
     expect(results.filter(r=>r.status==='rejected')).toHaveLength(1);
     expect(await reworkSlaEvidence(database,ready.id)).toMatchObject({facts:{},windows:[]});
-    const corrected=await closure.read(root,ready.id);expect(corrected.collection!.status).toBe('待收齐');expect(corrected.collection!.remaining).toBeGreaterThan(0);expect(corrected.collection!.shipmentQuantity).toBe(40);expect(corrected.receivingSpan!.history.map(h=>h.state)).toEqual(['已收齐','待收齐']);expect(corrected.receivingSpan!.elapsedHours).toBeNull();
+    const corrected=await closure.read(root,ready.id);expect(corrected.collection!.status).toBe('待收齐');expect(corrected.collection!.remaining).toBeGreaterThan(0);expect(corrected.collection!.shipmentQuantity).toBeNull();expect(corrected.lines[0]!.packingQuantity).toBe(40);expect(corrected.receivingSpan!.history.map(h=>h.state)).toEqual(['已收齐','待收齐']);expect(corrected.receivingSpan!.elapsedHours).toBeNull();
     expect(await qcTodos()).toHaveLength(2);
     expect(corrected.quality!.find(q=>q.receiptId===quality.receiptId)).toMatchObject({inspected:false,priorInspection:true});
     await expect(closure.recordQuality(root,ready.id,qualityInput,randomUUID())).rejects.toMatchObject({statusCode:409});
@@ -4855,7 +4855,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const original=(await database.query('SELECT actual_quantity FROM receiving_receipts WHERE receipt_id=$1',[receipt.value.receiptId])).rows[0];
     expect(Number(original.actual_quantity)).toBe(1);
     const query=new DigitalJourneyQuery(database),projected=await query.read(root,ready.id);
-    expect(projected.businessProgress!.quantities!.lines.find(value=>value.lineId===white.lineId)).toMatchObject({received:2,inspected:1,qualified:1,packed:2,qualityGap:1,factoryAttribution:'unknown'});
+    expect(projected.businessProgress!.quantities!.lines.find(value=>value.lineId===white.lineId)).toMatchObject({received:2,inspected:1,qualified:1,packed:2,effectivePacked:null,remainingShipment:null,qualityGap:1,factoryAttribution:'unknown'});
     expect(projected.businessProgress!.requirements.find(value=>value.key==='receiving_inspection')).toMatchObject({completed:false,applicability:'applicable'});
     expect(projected.stages.flatMap(stage=>stage.nodes).find(value=>value.key==='special_closure')).toMatchObject({state:'completed'});
   });

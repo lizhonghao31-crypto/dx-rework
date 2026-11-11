@@ -138,3 +138,8 @@ it('P01-05: native sample evidence replaces a virtual progress obligation withou
   const result=journeyBusinessProgress(order,asOf,null,undefined,new Map([['bulk_ship_sample',{applicability:'applicable',completed:true,reason:'全部PO有原船样寄出证据',instanceIds:['sample-event']}]]));
   expect(result.requirements.find(row=>row.key==='bulk_ship_sample')?.completed).toBe(true);expect(node(order,'bulk_ship_sample')).toEqual(before);
 });
+
+it('keeps a recorded packing count distinct from qualified delivery and its unknown remaining shipment',()=>{
+ const value=closure(4,4,4);value.quality![0]!.qualifiedQuantity=3;value.lines[0]!.effectivePackingQuantity=null;
+ expect(journeyBusinessQuantities(value).lines[0]).toMatchObject({packed:4,effectivePacked:null,remainingShipment:null,qualityGap:0});
+});

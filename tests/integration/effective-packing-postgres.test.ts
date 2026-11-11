@@ -13,6 +13,7 @@ import {JourneyFactRepository} from '../../apps/api/src/production-platform/jour
 import {ProductionStatisticsQuery} from '../../apps/api/src/production-platform/production-statistics-query.js';
 import {DigitalAnalysisFilterSchema} from '@dx-rework/contracts/digital-production-analysis';
 import {packingSlaEvidence} from '../../apps/api/src/production-platform/packing-sla-evidence.js';
+import {readPackingQualityCoverage,effectivePackingQuantity,effectivePackingQuantitySql} from '../../apps/api/src/production-platform/packing-quality-coverage.js';
 
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
@@ -25,11 +26,11 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  const receiver=()=>({...f.people.warehouse!,authorizationCapability:'receiving:create',authorizationCapabilities:['receiving:create']});
  const row=async(id:string)=>(await receiving.board('2026-11-01','2026-11-30','','all',1,15,id)).rows[0]!;
  const pack=async(id:string,quantity:number,packingTime?:PackingTimeInput)=>{const current=await row(id);return receiving.recordPacking(packer(),{receivingBatchId:id,expectedVersion:current.version,expectedPackingRevisionId:current.packingRevisionId,packingQuantity:quantity,...(packingTime?{packingTime}:{})},randomUUID());};
- const ready=async()=>{
-  const made=await f.bulkReady('无',undefined,1,f.sourcing,{quantity:100,accessory:true});
+ const ready=async(quantity=100)=>{
+  const made=await f.bulkReady('无',undefined,1,f.sourcing,{quantity,accessory:true});
   const cut=(await f.db.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[made.caseId])).rows[0]!.cutting_order_id as string;
   const cutter={...f.people['cutting-worker']!,authorizationCapability:'cutting:records:create',authorizationCapabilities:['cutting:records:create']};
-  await made.cutting.record(cutter,cut,{pieceCount:1,actualCutCount:100,attachmentIds:[await f.image(cutter)]},randomUUID());
+  await made.cutting.record(cutter,cut,{pieceCount:1,actualCutCount:quantity,attachmentIds:[await f.image(cutter)]},randomUUID());
   return {...made,cut};
  };
  it('keeps 80 through a new empty batch, then100 and a Root decrease90 in all original readers, without inventing A',async()=>{
@@ -40,8 +41,10 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const before=await run(day);expect(before.items[0]!.rawPackedQty).toBe(0);expect(before.daySummary.pendingQty).toBe(100);
   expect((await f.db.query('SELECT count(*)::int n FROM receiving_packing_revisions')).rows[0]!.n).toBe(0);
   const first=(await run(async()=>receiving.create({...f.root,authorizationCapability:'receiving:create',authorizationCapabilities:['receiving:create']},{cuttingOrderId:made.cut,documentQuantity:80,actualQuantity:80,receivedDate:'2026-11-08',attachmentIds:[await f.image(f.root)]},randomUUID()))).value;
+  await run(async()=>{const q=(await closure.read(f.root,made.id)).quality!.find(q=>q.receiptId===first.receiptId)!;await closure.recordQuality(f.root,made.id,{receiptId:q.receiptId,quantityVersion:q.quantityVersion,occurredAt:'2026-11-09T08:00:00+08:00',qualifiedQuantity:q.quantity,problem:''},randomUUID());});
   await run(()=>pack(first.receivingBatchId,80));const stale=await run(()=>row(first.receivingBatchId));
   const second=(await run(async()=>receiving.create(receiver(),{cuttingOrderId:made.cut,documentQuantity:20,actualQuantity:20,attachmentIds:[await f.image(receiver())]},randomUUID()))).value;
+  await run(async()=>{const q=(await closure.read(f.root,made.id)).quality!.find(q=>q.receiptId===second.receiptId)!;await closure.recordQuality(f.root,made.id,{receiptId:q.receiptId,quantityVersion:q.quantityVersion,occurredAt:'2026-11-09T08:00:00+08:00',qualifiedQuantity:q.quantity,problem:''},randomUUID());});
   expect(second.receivingBatchId).not.toBe(first.receivingBatchId);
   expect((await run(()=>row(second.receivingBatchId))).packingQuantity).toBe(80);const style=(await run(()=>row(second.receivingBatchId))).styleNo;expect((await run(()=>receiving.board('2026-11-01','2026-11-30',style,'all'))).totalCount).toBe(1);expect((await run(()=>receiving.board('2026-11-01','2026-11-30',style,'missing_packing'))).totalCount).toBe(0);
   expect((await run(()=>closure.read(f.root,made.id))).lines[0]!.packingQuantity).toBe(80);
@@ -127,6 +130,61 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const merged=await run(()=>row(second.receivingBatchId));expect(merged).toMatchObject({packingQuantity:null,packingScopeUnresolved:true});
   await expect(run(()=>legacy.recordPacking({...receiver(),authorizationCapability:'receiving:packing_manage',authorizationCapabilities:['receiving:packing_manage']},{receivingBatchId:merged.receivingBatchId,expectedVersion:merged.version,expectedPackingRevisionId:merged.packingRevisionId,packingQuantity:17},randomUUID()))).rejects.toMatchObject({statusCode:403});
   await run(()=>record(second.receivingBatchId,17));expect(await run(()=>row(second.receivingBatchId))).toMatchObject({packingQuantity:17,packingScopeUnresolved:false});
+ });
+
+ it('keeps recorded four distinct from unknown qualified delivery, and refreshes the stored facts after a real QC correction',async()=>{
+  const scene=await f.scene('2026-11-14T08:00:00+08:00'),run=<T>(work:()=>Promise<T>)=>f.runtime.run(scene,f.root,work),made=await run(()=>ready(4));
+  const first=(await run(async()=>receiving.create(receiver(),{cuttingOrderId:made.cut,documentQuantity:4,actualQuantity:2,attachmentIds:[await f.image(receiver())]},randomUUID()))).value;
+  const second=(await run(()=>receiving.createRepeated(receiver(),{cuttingOrderId:made.cut,receivingBatchId:first.receivingBatchId,source:'jiashun',actualQuantity:2,defectiveQuantity:0},randomUUID()))).value;
+  const inspect=async(receiptId:string,qualifiedQuantity:number)=>run(async()=>{
+   const q=(await closure.read(f.root,made.id)).quality!.find(q=>q.receiptId===receiptId)!;
+   return closure.recordQuality(f.root,made.id,{receiptId,quantityVersion:q.quantityVersion,qualifiedQuantity,occurredAt:'2026-11-14T08:00:00+08:00',problem:qualifiedQuantity===2?'':'TEST一件需处理'},randomUUID());
+  });
+  await inspect(first.receiptId,1);await inspect(second.receiptId,2);await run(()=>pack(second.receivingBatchId,4,{mode:'now'}));
+  const sheet=await run(()=>closure.read(f.root,made.id)),line=sheet.lines[0]!;
+  expect(line).toMatchObject({orderedQuantity:4,actualQuantity:4,packingQuantity:4,effectivePackingQuantity:null});
+  expect(sheet.stage).toBe('等待回货与装箱');expect(sheet.outstanding.join('；')).toContain('有效合格3');
+  expect(sheet.collection!.shipmentQuantity).toBeNull();expect(packingSlaEvidence(sheet).facts['garment_packing:'+line.lineId]?.businessCompleted).toBe(false);
+  const identity=await run(()=>new DigitalProductionIdentityService(f.db,true).read(f.root,made.id));
+  const calendar=new DeliveryCalendarQuery(f.db),filters=DeliveryCalendarFiltersSchema.parse({search:identity.designStyleNo}),due=identity.lines[0]!.customerWarehouseArrivalDate!;
+  const day=await run(()=>calendar.day(f.root,filters,due));expect(day.items[0]).toMatchObject({rawPackedQty:4,effectivePackedQty:null,packedQty:null,pendingQty:null,riskStatus:'unknown'});
+  expect(day.daySummary).toMatchObject({orderedQty:4,packedQty:null,pendingQty:null,unknownQuantityPoCount:1});
+  expect((await run(()=>readPackingQualityCoverage(f.db,[made.id]))).get(line.lineId)).toEqual({received:4,inspected:4,qualified:3});
+  const repository=new JourneyFactRepository(f.db),scope={kind:'order' as const,id:made.id};await run(()=>repository.buildOne(scope));
+  const stored=()=>run(async()=>{const client=await f.db.connect();try{return await repository.readStoredWithClient(client,scope);}finally{client.release();}});
+  const before=await stored();expect(before.status).toBe('ready');expect(before.model!.quantities!.lines[0]!).toMatchObject({packed:4,effectivePacked:null,remainingShipment:null});
+  await inspect(first.receiptId,2);expect((await stored()).status).toBe('pending');
+  await run(()=>repository.buildOne(scope));const updated=await stored();expect(updated.status).toBe('ready');expect(updated.model!.quantities!.lines[0]!).toMatchObject({packed:4,effectivePacked:4,remainingShipment:0});
+  expect((await run(()=>closure.read(f.root,made.id))).collection!.shipmentQuantity).toBe(4);
+  const fresh=await run(()=>calendar.day(f.root,filters,due));expect(fresh.daySummary).toMatchObject({orderedQty:4,packedQty:4,pendingQty:0,unknownQuantityPoCount:0});
+  expect((await run(()=>row(second.receivingBatchId))).packingQuantity).toBe(4);
+  // A native whole-batch correction does not rewrite receipt QC quantities.
+  // All delivery readers must keep that mismatch unknown instead of treating
+  // the receipt sum as both coverage and authoritative received stock.
+  const current=await run(()=>row(second.receivingBatchId));
+  await run(()=>receiving.correctBatch(corrector(),second.receivingBatchId,{expectedVersion:current.version,styleNo:current.styleNo,documentQuantity:4,actualQuantity:3,defectiveQuantity:0}));
+  expect((await run(()=>closure.read(f.root,made.id))).lines[0]).toMatchObject({actualQuantity:3,packingQuantity:4,effectivePackingQuantity:null});
+  const corrected=await run(()=>calendar.day(f.root,filters,due));
+  expect(corrected.items[0]).toMatchObject({rawPackedQty:4,effectivePackedQty:null,packedQty:null,pendingQty:null,riskStatus:'unknown'});
+  expect(corrected.daySummary).toMatchObject({packedQty:null,pendingQty:null,unknownQuantityPoCount:1});
+  const debt=await run(()=>calendar.month(f.root,filters,'2099-01',undefined,'2099-01-01'));
+  expect(debt.relatedQuantityUnknownPoCount).toBe(1);
+ });
+
+ it('uses identical scalar delivery quantities in SQL debt counters and the current PO reader',async()=>{
+  const cases:Array<{packed:number|null;received:number|null;inspected:number|null;qualified:number|null;expected:number|null}>=[
+   {packed:0,received:null,inspected:null,qualified:null,expected:0},
+   {packed:4,received:4,inspected:4,qualified:3,expected:null},
+   {packed:4,received:4,inspected:4,qualified:4,expected:4},
+   {packed:4,received:4,inspected:2,qualified:2,expected:null},
+   {packed:4,received:3,inspected:3,qualified:3,expected:null},
+   {packed:null,received:4,inspected:4,qualified:4,expected:null},
+  ];
+  for(const value of cases){
+   const sql=(await f.db.query(`SELECT ${effectivePackingQuantitySql('$1::numeric','$2::numeric','$3::numeric','$4::numeric')} AS quantity`,[value.packed,value.received,value.inspected,value.qualified])).rows[0]!.quantity;
+   expect(sql===null?null:Number(sql)).toBe(value.expected);
+   expect(effectivePackingQuantity(value.packed,value.received??0,value.received===null?null:{received:value.received,inspected:value.inspected!,qualified:value.qualified!})).toBe(value.expected);
+  }
  });
 
 });
