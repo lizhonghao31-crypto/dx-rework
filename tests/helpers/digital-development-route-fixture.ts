@@ -207,12 +207,17 @@ export async function exerciseDevelopmentRoute(db:Pool,todos:TodoProjectionServi
     expect((await native.get(root,order.orderId)).rounds).toHaveLength(nativeRoundCount);
    }
    await expect(submit(making,clerk)).rejects.toThrow();
-   const key=randomUUID();await submit(making,root,key);await submit(making,root,key);
+   const returnActor=legacyMaking==='tail'?{...root,actorId:tail.assigneeId,actorRoles:['pattern_room_tail_inspector'],authorizationCapability:'digital_production:view',authorizationCapabilities:['digital_production:view']}:root;
+   if(legacyMaking==='tail'){
+    expect(tail.assigneeId).not.toBe(root.actorId);
+    await expect(native.requestRework(returnActor,order.orderId,nativeInput,randomUUID())).rejects.toMatchObject({statusCode:403});
+   }
+   const key=randomUUID();await submit(making,returnActor,key);await submit(making,returnActor,key);
    expect((await forms.read(root,sourceId)).document).toMatchObject({documentFormatVersion:2,sizeQuantities:[1],quantity:1,orderDate:null});
    expect((await forms.read(root,sourceId,undefined,1)).document).toEqual(document);
    expect((await db.query('SELECT count(*)::int n FROM digital_development_rounds WHERE source_id=$1',[sourceId])).rows[0].n).toBe(1);
-   expect((await native.get(root,order.orderId)).rounds).toHaveLength(nativeRoundCount+(legacyMaking==='native'?1:0));
-   if(legacyMaking==='native'){
+   expect((await native.get(root,order.orderId)).rounds).toHaveLength(nativeRoundCount+1);
+   {
     const supervisorId=(await db.query("SELECT user_id FROM user_role_assignments WHERE role_code='pattern_room_supervisor' AND revoked_at IS NULL LIMIT 1")).rows[0].user_id;
     const supervisor={...root,actorId:supervisorId,actorRoles:['pattern_room_supervisor'],authorizationCapability:'pattern_room:orders:assign',authorizationCapabilities:['pattern_room:orders:view','pattern_room:orders:assign','digital_production:view']};
     await execution.arrange(clerk,sourceId,await arrangementInput(db,execution,clerk,sourceId,workerId),randomUUID());
@@ -259,7 +264,7 @@ export async function exerciseDevelopmentRoute(db:Pool,todos:TodoProjectionServi
    await execution.decideFabric(director,sourceId,{reportId:report.reportId,expectedDecisionId:null,decision:'停止使用',note:'TEST完工后仍须明确决定'},randomUUID());
    expect((await fabricDecisionTodos(db,director)).filter(t=>t.todoId===report.reportId)).toHaveLength(0);
   }
-  if(craft==='无')await exerciseDevelopmentRounds(db,execution,root,sourceId,workerId,order.currentRoundId,qc,async()=>{const result=await history();expect(result.totalCount).toBe(1);expect(result.items[0]).toMatchObject({nativeRoundId:order.currentRoundId,developmentRounds:[1]});});
+  if(craft==='无')await exerciseDevelopmentRounds(db,execution,root,sourceId,workerId,order.currentRoundId,qc,native,async()=>{const result=await history();expect(result.totalCount).toBe(1);expect(result.items[0]).toMatchObject({nativeRoundId:order.currentRoundId,developmentRounds:[1]});});
   if(craft==='印花')await exerciseGarmentCraftRevision(db,execution,root,sourceId,workerId,order.currentRoundId,qc);
   if(checkHistory&&craft==='印花'){const result=await history();expect(result.totalCount).toBe(1);expect(result.items[0]).toMatchObject({nativeRoundId:order.currentRoundId,developmentRounds:[1,2]});}
   if(craft==='印绣花'){

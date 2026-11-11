@@ -62,6 +62,8 @@
 
 ## 开发执行读取装配
 
+整件返做的原生轮次关联由 `development-native-round.ts` 依据原提交／发布事实和明确继承解析，不能用不断变化的当前轮替代历史关联。`development-round-service.ts` 需要重做车板时接原 `PatternRoomOrderService` 的同事务入口，完整保留本次修订资料；原服务继续负责返工状态、金额待核、派工、计薪、幂等和审计。旧尾查退回仅以该任务当前有效办理权及已保存退回事实触发待核价制作，不返回财务详情。车板完工和最终确认由 `development-route-service.ts` 核对同一原生轮，不能跳过实际制作而沿用旧轮完成状态。
+
 `development-execution-read.ts` 负责开发资料、授权任务、轮次、材料、安排、技术证据与原响应的装配，明确原字段形状。只接收原快照代理 client、actor、sourceId 及资料／任务／技术／事实四项窄读取能力；不传整个 service，不另连池、开事务、释放连接或新建缓存。原 SQL、参数、调用次序和历史 tasks／routeFacts／facts 保留，不因当前轮规则裁掉历史数组。
 
 `DevelopmentExecutionService.read` 继续拥有取得／释放连接、只读 RR、COMMIT／ROLLBACK，以及唯一的 `reuseJourneySnapshotReads`。资料、任务、技术和事实读取显式共用该代理；读取错误原样向上交回事务 owner。其余命令、生命周期锁、写前授权、幂等、审计、派工／核料／完成／转交和未知提交边界不迁移。原执行 GET、同单授权任务二维码和 `useDevelopmentExecution` 消费者不改；请求身份复用试点不扩展到开发模块。

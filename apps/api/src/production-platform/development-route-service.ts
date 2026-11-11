@@ -1,6 +1,7 @@
 import {BulkPreparationService} from './bulk-preparation-service.js';
 import {businessNow} from '../acceptance-clock/business-time.js';
 import {developmentOccurrence} from './development-occurrence.js';
+import {developmentNativeRound,linkedDevelopmentOrder} from './development-native-round.js';
 import {technicalEnrollment,publishedTechnicalArtifact,technicalMeasurementDocument} from './development-technical-repository.js';
 import {developmentRevisionSource} from './development-revision-source.js';
 import type {DevelopmentMakingUpgrade} from '@dx-rework/contracts/digital-development';
@@ -161,19 +162,20 @@ export class DevelopmentRouteService {
      if(!readiness.sewingReady)fail(readiness.sewingMissing.map(item=>`${item.name}：${item.missing.join('、')}`).join('；')||'问题面料须供应链总监确认允许使用');
    }
    const revision=task.route_version>1?(await db.query('SELECT output_kind FROM digital_development_rounds WHERE source_id=$1 AND round_number=$2',[sourceId,task.route_version])).rows[0]:{output_kind:(await developmentRevisionSource(db,sourceId))?.outputKind};
-   const nativeRoundId=task.task_kind==='development_confirmation'&&revision?.output_kind!=='工艺布片'?(await db.query("SELECT o.current_round_id FROM digital_development_pattern_links l JOIN pattern_room_orders o USING(order_id) WHERE l.source_id=$1 AND o.deleted_at IS NULL FOR UPDATE OF o",[sourceId])).rows[0]?.current_round_id??null:null;
+   const hasNativeWork=(task.task_kind==='development_sewing'||task.task_kind==='development_confirmation')&&revision?.output_kind!=='工艺布片';
+   const native=hasNativeWork?await linkedDevelopmentOrder(db,sourceId,true):null;
+   const nativeRoundId=hasNativeWork?await developmentNativeRound(db,sourceId,task.route_version):null;
+   if(hasNativeWork&&(!native||!nativeRoundId||native.current_round_id!==nativeRoundId||!this.patternOrders))
+     fail('本轮尚无对应的原打板执行轮，请核实本轮制作与派工，不能沿用其他轮的完成记录');
    // Shipping already asks for the true dispatch day. It does not assert a
    // clock instant merely because the operator registered that day later.
    const occurrence=developmentOccurrence(task.task_kind==='development_shipping'?{precision:'date',date:input.sentDate!}:input.actualTime,businessNow(),task.entered_at?new Date(task.entered_at).toISOString():null);
-   await db.query('INSERT INTO digital_development_route_facts(fact_id,source_id,task_id,route_version,kind,payload,actor_id) VALUES($1,$2,$3,$4,$5,$6,$7)',[randomUUID(),sourceId,input.taskId,task.route_version,kind,JSON.stringify({...input,...occurrence,...(task.task_kind==='development_confirmation'?{nativeRoundId}:{}),...(inspection?{inspection}:{})}),actor.actorId]);
-   if((task.task_kind==='development_sewing'||task.task_kind==='development_confirmation')&&revision?.output_kind!=='工艺布片'){
-     const native=(await db.query("SELECT o.order_id,o.current_round_id,o.version,o.status FROM digital_development_pattern_links l JOIN pattern_room_orders o USING(order_id) WHERE l.source_id=$1 AND o.deleted_at IS NULL FOR UPDATE OF o",[sourceId])).rows[0];
-     if(!native||!this.patternOrders)fail('请先由设计师提交原打板执行单，并由技术主管确认派工');
+   await db.query('INSERT INTO digital_development_route_facts(fact_id,source_id,task_id,route_version,kind,payload,actor_id) VALUES($1,$2,$3,$4,$5,$6,$7)',[randomUUID(),sourceId,input.taskId,task.route_version,kind,JSON.stringify({...input,...occurrence,...(hasNativeWork?{nativeRoundId}:{}),...(inspection?{inspection}:{})}),actor.actorId]);
+   if(hasNativeWork&&native){
      const original=this.patternOrders!.inTransaction(db);
-     if(task.task_kind==='development_shipping'&&input.sentDate&&input.sentDate>businessNow().toLocaleDateString('en-CA',{timeZone:'Asia/Shanghai'}))fail('实际寄出日期不能晚于今天');
-   if(task.task_kind==='development_sewing'){
+     if(task.task_kind==='development_sewing'){
        if(native.status==='in_progress')await original.completeDevelopment(actor,sourceId,input.taskId,native.order_id,{roundId:native.current_round_id,version:native.version});
-       else if(native.status!=='pending_confirmation'&&!(task.route_version>1&&native.status==='completed'))fail('原打板执行状态不允许报车板完成');
+       else if(native.status!=='pending_confirmation')fail('原打板执行状态不允许报车板完成');
      }else{
        if(native.status==='pending_confirmation')await original.handoff(actor,native.order_id,{roundId:native.current_round_id,version:native.version},`development-final:${key}`);
        else if(native.status!=='completed')fail('请先完成原打板执行再最终确认');

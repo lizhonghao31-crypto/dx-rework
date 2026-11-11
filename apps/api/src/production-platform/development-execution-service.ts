@@ -332,7 +332,7 @@ export class DevelopmentExecutionService {
         if(!input.returnNodes?.length)fail("请选择退回的问题节点");
         if(await technicalEnrollment(db,sourceId)){
           await db.query(`INSERT INTO digital_development_patch_issues(issue_id,source_id,round_number,tail_task_id,payload,created_by,created_at) VALUES($1,$2,$3,$4,$5,$6,$7)`,[randomUUID(),sourceId,task.route_version,input.taskId,JSON.stringify(input),actor.actorId,businessNow().toISOString()]);
-        }else await new DevelopmentRoundService(this.database,this.enabled).publishWithClient(db,actor,sourceId,{basedOnRound:task.route_version,document:developmentAutomaticRoundDocument(sheet.document!,sheet.version,input.making),origin:"内部发现",customerComment:"",internalProblem:input.note,explanation:"板房尾查退回",categories:input.problemCategories?.length?input.problemCategories:["其他"],affectedNodes:input.returnNodes!,outputKind:"整件样板"},input.taskId);
+        }else await new DevelopmentRoundService(this.database,this.enabled,this.patternOrders).publishWithClient(db,actor,sourceId,{basedOnRound:task.route_version,document:developmentAutomaticRoundDocument(sheet.document!,sheet.version,input.making),origin:"内部发现",customerComment:"",internalProblem:input.note,explanation:"板房尾查退回",categories:input.problemCategories?.length?input.problemCategories:["其他"],affectedNodes:input.returnNodes!,outputKind:"整件样板"},input.taskId);
       }
       return result;});
   }

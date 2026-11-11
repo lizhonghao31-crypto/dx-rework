@@ -34,6 +34,10 @@ import {DevelopmentDocumentSchema} from '@dx-rework/contracts/digital-developmen
 import type {TechnicalArtifactBody,SaveTechnicalArtifact,RecordFinalComment} from '@dx-rework/contracts/digital-development-technical';
 import {DEVELOPMENT_ARRANGEABLE_KINDS} from '@dx-rework/contracts/development-arrangement';
 import {nativeTaskReadiness} from '../../apps/api/src/production-platform/task-readiness-facts.js';
+import {ManagementReportingService} from '../../apps/api/src/reporting/management-reporting-service.js';
+import {ReportQuerySchema} from '@dx-rework/contracts/reporting';
+import {arrangeTestRound} from '../helpers/development-arrangement-fixture.js';
+import {developmentNativeRound} from '../../apps/api/src/production-platform/development-native-round.js';
 
 // This fixture exercises the real Acceptance business clock and original UAT
 // initializer, so use the existing clock-test database rather than the CI app DB.
@@ -57,7 +61,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   category={categoryId:changed.priceId,priceVersion:changed.version};
  });
  afterAll(async()=>{await f?.dispose();});
- const prepare=async(craft:'无'|'印花'='无',options:{missingAccessory?:boolean;assignSewing?:boolean}={})=>{
+ const prepare=async(craft:'无'|'印花'='无',options:{missingAccessory?:boolean;assignSewing?:boolean;withoutNative?:boolean}={})=>{
   const designer=person('sample-designer'),worker=person('pattern-room-worker'),materialId=randomUUID();
   const created=await identity.createSource(designer,{developmentType:'头版',designStyleNo:`TEST-TECH-${randomUUID()}`,temporaryStyleNo:null,customerCode:'PD'},randomUUID());
   const sourceId=created.sourceId,photo=await f.image(designer);
@@ -67,7 +71,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const accessoryId=options.missingAccessory?randomUUID():null;
   if(accessoryId)document.materials.push({...document.materials[0]!,materialId:accessoryId,category:'辅料',label:'TEST必要纽扣',name:'纽扣',available:false,expectedDate:'2027-01-01'});
   const saved=await forms.save(designer,sourceId,{expectedVersion:0,document},randomUUID());
-  await forms.publish(designer,sourceId,saved.version,randomUUID(),category);
+  if(options.withoutNative)await new DigitalDevelopmentService(f.db,true).publish(designer,sourceId,saved.version,randomUUID());
+  else await forms.publish(designer,sourceId,saved.version,randomUUID(),category);
   const fixed=await execution.read(f.root,sourceId);
   if(!fixed.fixedCutting?.valid)await execution.configureFixedCutting(f.root,sourceId,{expectedVersion:fixed.fixedCutting?.version??0,assigneeId:worker.actorId,reason:'TEST fixed cutter'},randomUUID());
   const checkedState=await execution.read(f.root,sourceId),check=checkedState.tasks.find(t=>t.taskKind==='development_materials')!;
@@ -241,6 +246,63 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const tail=(await execution.read(f.root,p.sourceId)).tasks.find(t=>t.taskKind==='development_tail_check')!;
   return {...p,tail};
  };
+ it('R5 binds a newly submitted first native order to the actual later development round, without inventing a historical link',async()=>{
+  const p=await prepare('无',{withoutNative:true}),old=await forms.read(p.designer,p.sourceId),rounds=new DevelopmentRoundService(f.db,true,native);
+  const saved=await rounds.save(p.designer,p.sourceId,{expectedDraftVersion:0,revision:{basedOnRound:1,document:old.document!,origin:'内部发现',customerComment:'',internalProblem:'TEST首个原执行尚未生成前的资料复版',explanation:'TEST真实首次衔接',categories:['版型'],affectedNodes:['纸样'],outputKind:'整件样板'}},randomUUID());
+  await rounds.publish(p.designer,p.sourceId,{expectedDraftVersion:saved.draftVersion,basedOnRound:1},randomUUID());
+  const created=await execution.patternOrder(p.designer,p.sourceId,category,randomUUID()),order=await native.get(p.designer,created.orderId);
+  const client=await f.db.connect();try{
+   expect(await developmentNativeRound(client,p.sourceId,2)).toBe(order.currentRoundId);
+   expect(await developmentNativeRound(client,p.sourceId,1)).toBeNull();
+  }finally{client.release();}
+  expect(order.rounds).toHaveLength(1);expect(order.status).toBe('pending_assignment');
+ });
+ const confirmSample=async(p:Awaited<ReturnType<typeof sampleToTail>>)=>{
+  const current=(await forms.read(f.root,p.sourceId)).roundNumber??1;
+  const tail=(await execution.read(f.root,p.sourceId)).tasks.find(t=>t.taskKind==='development_tail_check'&&t.routeVersion===current)!;
+  const photo=await f.image(f.root);await execution.recordUploadPurpose(f.root,p.sourceId,photo,'尾查照片',tail.taskId);
+  await execution.route(f.root,p.sourceId,{taskId:tail.taskId,note:'TEST真实尾查通过',result:'通过',craftExecution:null,nextAssigneeId:null,sentDate:null,trackingNo:null,attachmentIds:[photo],measurements:[{name:'胸围',values:['48']}]},randomUUID());
+  const confirmation=(await execution.read(p.designer,p.sourceId)).tasks.find(t=>t.taskKind==='development_confirmation'&&t.routeVersion===current)!;
+  const input={taskId:confirmation.taskId,note:'TEST设计师实际确认本轮',result:'通过' as const,craftExecution:null,nextAssigneeId:null,sentDate:null,trackingNo:null},key=randomUUID();
+  await execution.route(p.designer,p.sourceId,input,key);await execution.route(p.designer,p.sourceId,input,key);
+ };
+ it.each([{confirmFirst:true,amount:'7',total:'17.00',reasonLength:2000},{confirmFirst:false,amount:'0',total:'10.00',reasonLength:2001},{confirmFirst:true,amount:'7',total:'17.00',reasonLength:4000}])('R5 creates a separate native whole remake and uses only its explicitly approved amount ($amount, revision $reasonLength)',async({confirmFirst,amount,total,reasonLength})=>{
+  const p=await sampleToTail();if(confirmFirst)await confirmSample(p);
+  const orderId=(await f.db.query('SELECT order_id FROM digital_development_pattern_links WHERE source_id=$1',[p.sourceId])).rows[0].order_id;
+  const initial=(await native.get(f.root,orderId)).currentRoundId;
+  const rounds=new DevelopmentRoundService(f.db,true,native),old=await forms.read(p.designer,p.sourceId);
+  const revision={basedOnRound:1,document:{...old.document!,instructions:'TEST第二轮实际制作说明，保留完整修订资料'},origin:'内部发现' as const,customerComment:'',internalProblem:'改'.repeat(reasonLength),explanation:'TEST独立制作，不借旧工资',categories:['车缝' as const],affectedNodes:['裁板' as const,'车板' as const],outputKind:'整件样板' as const};
+  const saved=await rounds.save(p.designer,p.sourceId,{expectedDraftVersion:0,revision},randomUUID()),key=randomUUID(),input={expectedDraftVersion:saved.draftVersion,basedOnRound:1};
+  await rounds.publish(p.designer,p.sourceId,input,key);await rounds.publish(p.designer,p.sourceId,input,key);
+  let order=await native.get(f.root,orderId);expect(order.currentRoundId).not.toBe(initial);const remake=order.currentRoundId;
+  expect(order.status).toBe('pending_assignment');
+  expect((await forms.read(p.designer,p.sourceId)).document!.instructions).toBe(revision.document.instructions);
+  expect((await f.db.query('SELECT request_reason FROM pattern_room_rounds WHERE round_id=$1',[remake])).rows[0].request_reason).toBe(revision.internalProblem.slice(0,2000));
+  expect((await f.db.query('SELECT internal_problem,explanation FROM digital_development_rounds WHERE source_id=$1 AND round_number=2',[p.sourceId])).rows[0]).toEqual({internal_problem:revision.internalProblem,explanation:revision.explanation});
+  expect((await f.db.query('SELECT round_type,agreed_amount FROM pattern_room_rounds WHERE round_id=$1',[remake])).rows[0]).toEqual({round_type:'rework',agreed_amount:null});
+  const personId=(await f.db.query('SELECT person_id FROM business_people WHERE app_user_id=$1',[p.worker.actorId])).rows[0].person_id;
+  await expect(native.assign(f.root,orderId,{roundId:remake,version:order.version,personId},randomUUID())).rejects.toMatchObject({statusCode:400});
+  order=await native.assign(f.root,orderId,{roundId:remake,version:order.version,personId,amount},randomUUID());
+  await arrangeTestRound(f.db,execution,f.root,p.sourceId,p.worker.actorId);
+  const cut=(await execution.read(p.worker,p.sourceId)).tasks.find(t=>t.taskKind==='development_cutting'&&t.routeVersion===2)!;
+  await execution.complete(p.worker,p.sourceId,{taskId:cut.taskId,attachmentIds:[],note:'TEST第二轮实际裁板'},randomUUID());
+  const sewing=(await execution.read(p.worker,p.sourceId)).tasks.find(t=>t.taskKind==='development_sewing'&&t.routeVersion===2)!,photo=await f.image(p.worker);
+  await execution.recordUploadPurpose(p.worker,p.sourceId,photo,'车板成果',sewing.taskId);
+  const sewInput={taskId:sewing.taskId,note:'TEST第二轮实际车板',result:'通过' as const,craftExecution:null,nextAssigneeId:null,sentDate:null,trackingNo:null,attachmentIds:[photo]},sewKey=randomUUID();
+  await execution.route(p.worker,p.sourceId,sewInput,sewKey);await execution.route(p.worker,p.sourceId,sewInput,sewKey);
+  expect((await f.db.query('SELECT count(*)::int n FROM pattern_room_segments WHERE round_id=$1 AND wage_eligible_at IS NOT NULL',[remake])).rows[0].n).toBe(0);
+  await confirmSample(p);
+  const rows=(await f.db.query('SELECT round_id,amount::text,wage_eligible_at FROM pattern_room_segments WHERE round_id=ANY($1::uuid[]) ORDER BY round_id',[[initial,remake]])).rows;
+  expect(rows).toHaveLength(2);expect(Number(rows.find(row=>row.round_id===initial).amount)).toBe(10);expect(Number(rows.find(row=>row.round_id===remake).amount)).toBe(Number(amount));
+  expect(rows.find(row=>row.round_id===initial).wage_eligible_at).not.toBeNull();
+  expect(rows.find(row=>row.round_id===remake).wage_eligible_at===null).toBe(amount==='0');
+  const facts=(await f.db.query("SELECT route_version,kind,payload->>'nativeRoundId' native_id FROM digital_development_route_facts WHERE source_id=$1 AND route_version=2 AND kind IN ('车板完成','最终设计确认')",[p.sourceId])).rows;
+  expect(facts).toHaveLength(2);expect(facts.every(row=>row.native_id===remake)).toBe(true);
+  const reporting=new ManagementReportingService(f.db),query=ReportQuerySchema.parse({from:'2026-01-01',to:'2026-12-31',q:old.designStyleNo,limit:100});
+  const page=await reporting.report(f.root,'wages',query,1),exported=await reporting.exportData(f.root,'wages',query);
+  expect(page.rows).toHaveLength(amount==='0'?1:2);expect(exported.data.rows).toHaveLength(page.rows.length);
+  expect(page.totals).toEqual(exported.data.totals);expect(page.totals.wageAmount).toBe(total);
+ });
  it.each(['worker','root'] as const)('keeps local patch in the original development round and pays only actual added work (%s)',async recipient=>{
   const p=await sampleToTail(),photo=await f.image(f.root);await execution.recordUploadPurpose(f.root,p.sourceId,photo,'尾查照片',p.tail.taskId);
   await execution.route(f.root,p.sourceId,{taskId:p.tail.taskId,note:'TEST局部袖片破损，原纸样可复用',result:'退回',craftExecution:null,nextAssigneeId:null,sentDate:null,trackingNo:null,attachmentIds:[photo],returnNodes:['车板'],problemCategories:['其他'],measurements:[{name:'胸围',values:['48']}]},randomUUID());
@@ -269,7 +331,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect((await technical.read(f.root,p.sourceId)).cycle?.completedAt).not.toBeNull();
  });
  it('rejects an internal revision with changed technical basis and no paper path before cancelling the old round',async()=>{
-  const p=await sampleToTail(),rounds=new DevelopmentRoundService(f.db,true),old=await forms.read(p.designer,p.sourceId),document=structuredClone(old.document!);
+  const p=await sampleToTail(),rounds=new DevelopmentRoundService(f.db,true,native),old=await forms.read(p.designer,p.sourceId),document=structuredClone(old.document!);
   document.materials[0]!.width='155';
   const revision={basedOnRound:1,document,origin:'内部发现' as const,customerComment:'',internalProblem:'TEST主料规格改变须重核技术成果',explanation:'TEST preserve old work on rejection',categories:['面料' as const],affectedNodes:['车板' as const],outputKind:'整件样板' as const};
   const draft=await rounds.save(p.designer,p.sourceId,{expectedDraftVersion:0,revision},randomUUID());
@@ -464,7 +526,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   }finally{await app.close();await rm(directory,{recursive:true,force:true});}
  });
  it('reads only the proven inherited artifact from the selected child round and rejects arbitrary artifact IDs',async()=>{
-  const p=await sampleToTail(),rounds=new DevelopmentRoundService(f.db,true),old=await forms.read(p.designer,p.sourceId);
+  const p=await sampleToTail(),rounds=new DevelopmentRoundService(f.db,true,native),old=await forms.read(p.designer,p.sourceId);
   const draft=await rounds.save(p.designer,p.sourceId,{expectedDraftVersion:0,revision:{basedOnRound:1,document:old.document!,origin:'内部发现',customerComment:'',internalProblem:'TEST仅重做车缝，技术成果仍可复用',explanation:'TEST原生复版继承',categories:['车缝'],affectedNodes:['车板'],outputKind:'整件样板'}},randomUUID());
   await rounds.publish(p.designer,p.sourceId,{expectedDraftVersion:draft.draftVersion,basedOnRound:1},randomUUID());
   const published=(await f.db.query('SELECT published_at FROM digital_development_rounds WHERE source_id=$1 AND round_number=2',[p.sourceId])).rows[0];

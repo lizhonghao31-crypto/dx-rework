@@ -24,9 +24,11 @@ import {DigitalDevelopmentService} from './development-service.js';
 import {DigitalProductionTaskService} from './task-service.js';
 import {DevelopmentRouteService} from './development-route-service.js';
 import {developmentRevisionPlan} from './development-round-plan.js';
+import type {PatternRoomOrderService} from '../pattern-room/order-service.js';
+import {authorizeDevelopmentReturn,linkedDevelopmentOrder} from './development-native-round.js';
 const fail=(message:string):never=>{throw new ApplicationError('DEVELOPMENT_REVISION_CONFLICT',message,409);};
 export class DevelopmentRoundService {
- constructor(private readonly database:Pool,private readonly enabled:boolean){}
+ constructor(private readonly database:Pool,private readonly enabled:boolean,private readonly patternOrders?:PatternRoomOrderService){}
  private forms(){return new DigitalDevelopmentService(this.database,this.enabled);}
  async read(actor:TrustedActorContext,sourceId:string){
   const sheet=await this.forms().read(actor,sourceId);
@@ -80,7 +82,8 @@ export class DevelopmentRoundService {
      WHERE l.source_id=$1 AND r.round_id=$2 AND r.round_type='rework' AND r.status='pending_assignment'
        AND o.status='pending_assignment' AND o.deleted_at IS NULL`,[sourceId,patternReworkRoundId])).rows[0];
    if(!original||original.requested_by!==actor.actorId)digitalForbidden();
-   await authorizePatternOrder(db,actor,"pattern_room:orders:rework",true);
+   if(returnTaskId)await authorizeDevelopmentReturn(db,actor,sourceId,returnTaskId,input.basedOnRound);
+   else await authorizePatternOrder(db,actor,"pattern_room:orders:rework",true);
   }
   if(!returnTaskId&&!patternReworkRoundId&&!sheet.canEdit)digitalForbidden();
   if(input.basedOnRound!==(sheet.roundNumber??1))fail('已有新轮次，不能从旧版重复发布');
@@ -115,6 +118,20 @@ export class DevelopmentRoundService {
    if(selectedCraft.size){inherited={...inherited};delete inherited.development_craft_dispatch;delete inherited.development_craft_confirmation;}
   }
   const roundNumber=input.basedOnRound+1,routeId=randomUUID();
+  const native=await linkedDevelopmentOrder(db,sourceId,true);
+  if(!patternReworkRoundId&&input.outputKind==='整件样板'&&route.includes('development_sewing')
+    &&native&&['pending_confirmation','completed'].includes(native.status)){
+   if(!this.patternOrders)fail('原打板执行服务未配置，不能建立没有计价依据的新制作轮');
+   await this.patternOrders!.inTransaction(db).requestDevelopmentRevision(actor,native.order_id,{
+    roundId:native.current_round_id,version:native.version,
+    // The native reason is a short summary; revisionContext retains the full
+    // accepted revision, including its 4,000-character comments.
+    reason:(input.internalProblem||input.customerComment||input.explanation).slice(0,2000),
+    reasonCategory:input.origin==='内部发现'?'other':input.origin==='客户新增要求'?'customer_change':'workmanship',
+    attachmentIds:[],developmentNodes:affectedNodes,developmentProblems:input.categories,
+   },`development-remake:${sourceId}:${roundNumber}`,{sourceId,revision:{...input,document,affectedNodes},...(returnTaskId?{returnTaskId}:{})});
+   return {sourceId,roundNumber};
+  }
   await this.forms().bindFiles(db,actor,sourceId,document);
   await db.query(`INSERT INTO digital_development_rounds(source_id,round_number,based_on_round,document_version,document,origin,customer_comment,internal_problem,explanation,categories,affected_nodes,output_kind,route_nodes,inherited,return_task_id,route_id,created_by,published_at)
     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,[sourceId,roundNumber,input.basedOnRound,sheet.version+1,JSON.stringify(document),input.origin,input.customerComment,input.internalProblem,input.explanation,input.categories,affectedNodes,input.outputKind,route,JSON.stringify(inherited),returnTaskId??null,routeId,actor.actorId,businessNow().toISOString()]);
@@ -132,7 +149,7 @@ export class DevelopmentRoundService {
     await new DigitalProductionTaskService(this.database).createWithClient(db,actor,{resource:{kind:'source',id:sourceId},...(returnTaskId?{authorizingTaskId:returnTaskId}:{}),kind:'development_shipping',routeId,routeVersion:roundNumber,occurrence:roundNumber,
       assigneeId:await new DigitalProductionAccessPolicy(db).activeRole(designer,'sample_designer')?designer:null});
   }
-  await db.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1,$2,$3,'development_round_published','digital_development',$4,$5)",[randomUUID(),actor.requestId,actor.actorId,sourceId,JSON.stringify({roundNumber,origin:input.origin,affectedNodes,route,inherited,...(patternReworkRoundId?{nativeRoundId:patternReworkRoundId}:{})})]);
+  await db.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1,$2,$3,'development_round_published','digital_development',$4,$5)",[randomUUID(),actor.requestId,actor.actorId,sourceId,JSON.stringify({roundNumber,origin:input.origin,affectedNodes,route,inherited,...(patternReworkRoundId||native?.current_round_id?{nativeRoundId:patternReworkRoundId??native!.current_round_id}:{})})]);
   await new BulkPreparationService(this.database).syncSource(db,actor,sourceId);
   return {sourceId,roundNumber};
  }

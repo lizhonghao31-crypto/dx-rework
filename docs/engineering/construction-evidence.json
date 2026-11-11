@@ -1,304 +1,249 @@
 {
   "version": 1,
-  "base": "22c0a5aca33130868703cdd998016e445ba30f68",
-  "sourceFingerprint": "65b3366782d0935cbd1e8a74b954a7ac7860665e10ee78dd3aedc7f826e4786d",
+  "base": "a28d0b451a1710e204ce388ab5e4063078790ea7",
+  "sourceFingerprint": "46dbd4a05230f698534870e7d749c2a9fdd87654523df24cf5a15efb4cd85b96",
   "risk": "full",
   "rules": [
     {
-      "rule": "Native development actions capture real occurrence separately from registration and preserve precision through original editable forms.",
-      "source": "Approved complete v2 Library libfile_fde3_f-7ab204d715f48191a1e467100a057111_c8d3bf5d609c8191bce6411a30e94d44 Version2 and corrected nine-PR execution table R5-02. Autonomous implementation/review/sequential merge authorized; actual R5-01 merge must be synchronized before remote submission. No live data, configuration or deployment.",
-      "initialization": "No schema, dependency or live configuration change. Old records without explicit occurrence stay unknown; no fabricated backfill. Existing Journey calculation-version change drives bounded dirty/build reconciliation; native event OLD/NEW registration remains transactional. Ordinary GET does not rebuild all orders.",
-      "dateAndPermission": "Original request/current role, source/task/round, material, personnel and field guards remain. Same client/transaction and business clock, separate actual vs registration, instant/date/unknown precision. No Root impersonation, authorization-result cache or clock reset. Legacy sourcing remains original; UI assignment chain is R5-09, not claimed here.",
+      "rule": "Whole garment redo creates a distinct native work round and real segment; completion/confirmation resolve the exact native round.",
       "writes": [
-        "apps/api/src/production-platform/development-occurrence.ts",
-        "apps/api/src/production-platform/development-execution-service.ts",
+        "apps/api/src/pattern-room/order-service.ts",
+        "apps/api/src/production-platform/development-native-round.ts",
+        "apps/api/src/production-platform/development-round-service.ts",
         "apps/api/src/production-platform/development-route-service.ts",
-        "apps/api/src/production-platform/development-service.ts",
-        "apps/web/src/development-occurrence-input.tsx",
-        "apps/web/src/development-material-event-form.tsx",
-        "apps/web/src/digital-development-execution-panel.tsx",
+        "apps/api/src/production-platform/development-execution-service.ts",
+        "apps/api/src/server.ts",
+        "tests/integration/development-technical-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/pattern-room/order-authority.ts",
+        "apps/api/src/pattern-room/order-rework-boundary.ts",
+        "apps/api/src/production-platform/development-execution-transfer.ts",
+        "apps/api/src/production-platform/development-round-plan.ts",
+        "apps/api/src/reporting/wage-report-selection.ts",
+        "apps/api/src/reporting/management-reporting-service.ts",
+        "apps/api/src/production-platform/development-occurrence.ts"
+      ],
+      "oldTests": [
+        "tests/integration/development-technical-postgres.test.ts",
+        "tests/integration/full-business-chain-postgres.test.ts",
+        "tests/unit/digital-development-rounds.test.ts"
+      ],
+      "newTests": [
+        "tests/integration/development-technical-postgres.test.ts",
+        "tests/integration/full-business-chain-postgres.test.ts"
+      ],
+      "checks": [
+        "r503-technical-current",
+        "r503-binding-final"
+      ],
+      "expectation": "Initial10 plus explicitly approved remake7 totals17; explicit remake0 keeps10; two real rounds and segments, no duplicate on retry. Sewing and final facts bind remake ID, not mutable old current ID. Unconfirmed first work releases only under original final receipt. First native submission at development round2 maps to2 and not1; actual original wage page totals/export match. Local patches and inherited sewing do not add wages. Native2000-character reason uses a bounded summary of accepted2000/2001/4000-character revision; full internalProblem and explanation persist unchanged in original development round and same-key publish is idempotent.",
+      "source": "Approved complete v2 Library libfile_fde3_f-7ab204d715f48191a1e467100a057111_c8d3bf5d609c8191bce6411a30e94d44 Version2 and corrected nine-PR execution table R5-03. Actual R5-02 merge a28d0b451a1710e204ce388ab5e4063078790ea7 synchronized with exact unchanged source/test inputs. Autonomous code, Review and sequential merge authorized; no deployment/onsite.",
+      "initialization": "No schema/dependency/runtime configuration change. Original historical wages, amounts, attachments and completed rounds remain; absent historical native proof stays unknown. Real first native submission in a later development round gets its current actual link, not a fabricated old event. Original same-transaction dirty registration and bounded Journey updates remain; no GET-wide rebuild.",
+      "dateAndPermission": "Original current identity, source/task/current round, native designer/supervisor pricing, role revocation and mass-cut guard remain. Same transaction, business clock and idempotency; actual occurrence vs registration preserved. A legacy tail return is limited to its currently authorized completed tail task and matching saved return fact; only pending unpriced work is created and no financial DTO returned. Native public rework/assignment and finance settlement permissions are not enlarged."
+    },
+    {
+      "rule": "Both original publication and resumed create form refuse a missing current valid quote while draft and published-order paths remain available.",
+      "writes": [
+        "apps/web/src/development-pattern-link.tsx",
         "apps/web/src/digital-development-panel.tsx",
-        "packages/contracts/src/digital-development-execution.ts",
-        "packages/contracts/src/digital-development.ts",
-        "tests/unit/development-occurrence.test.ts",
-        "tests/integration/digital-development-execution-postgres.test.ts",
-        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
+        "apps/web/src/digital-development-create-form.tsx",
+        "tests/integration/development-execution-read-native-browser-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/web/src/use-pattern-quote.ts",
+        "apps/api/src/pattern-room/price-service.ts",
+        "apps/api/src/production-platform/development-service.ts"
+      ],
+      "oldTests": [
+        "tests/unit/pattern-quote-lifecycle.test.ts",
+        "tests/integration/development-execution-read-native-browser-postgres.test.ts"
+      ],
+      "newTests": [
+        "tests/integration/development-execution-read-native-browser-postgres.test.ts"
+      ],
+      "checks": [
+        "r503-units-current",
+        "r503-browser-current"
+      ],
+      "expectation": "Original App: pending quote disabled; controlled503 and unconfigured409 disabled with no publish request; refresh recovers real10.000 quote and exactly one native publish succeeds. Existing authenticated GET/QR, foreign scope, same-session revoke/disable, document tabs, unsaved input and date-only material occurrence remain. Existing quote generation/abort mechanism retained; no approved-image style claim.",
+      "source": "Approved complete v2 Library libfile_fde3_f-7ab204d715f48191a1e467100a057111_c8d3bf5d609c8191bce6411a30e94d44 Version2 and corrected nine-PR execution table R5-03. Actual R5-02 merge a28d0b451a1710e204ce388ab5e4063078790ea7 synchronized with exact unchanged source/test inputs. Autonomous code, Review and sequential merge authorized; no deployment/onsite.",
+      "initialization": "No schema/dependency/runtime configuration change. Original historical wages, amounts, attachments and completed rounds remain; absent historical native proof stays unknown. Real first native submission in a later development round gets its current actual link, not a fabricated old event. Original same-transaction dirty registration and bounded Journey updates remain; no GET-wide rebuild.",
+      "dateAndPermission": "Original current identity, source/task/current round, native designer/supervisor pricing, role revocation and mass-cut guard remain. Same transaction, business clock and idempotency; actual occurrence vs registration preserved. A legacy tail return is limited to its currently authorized completed tail task and matching saved return fact; only pending unpriced work is created and no financial DTO returned. Native public rework/assignment and finance settlement permissions are not enlarged."
+    },
+    {
+      "rule": "Legacy return and repeated development fixtures retain lawful task authority, explicit supervisor money and trustworthy dispatch dates.",
+      "writes": [
         "tests/helpers/digital-development-route-fixture.ts",
         "tests/helpers/digital-development-round-fixture.ts",
-        "tests/helpers/digital-development-craft-revision-fixture.ts",
-        "tests/integration/development-sla-enrollment-postgres.test.ts"
+        "tests/helpers/digital-development-craft-revision-fixture.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/development-execution-read.ts",
-        "apps/api/src/production-platform/development-material-readiness.ts",
-        "apps/api/src/acceptance-clock/business-time.ts"
+        "apps/api/src/production-platform/access-policy.ts",
+        "apps/api/src/production-platform/development-arrangement.ts",
+        "apps/api/src/pattern-room/order-service.ts"
       ],
       "oldTests": [
-        "tests/unit/digital-development.test.ts",
-        "tests/unit/digital-development-route.test.ts",
-        "tests/integration/digital-development-execution-postgres.test.ts",
-        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
+        "tests/integration/full-business-chain-postgres.test.ts"
+      ],
+      "newTests": [
         "tests/integration/full-business-chain-postgres.test.ts",
-        "tests/integration/development-sla-enrollment-postgres.test.ts"
+        "tests/integration/development-technical-postgres.test.ts"
       ],
-      "newTests": [
-        "tests/unit/digital-development.test.ts",
-        "tests/unit/digital-development-route.test.ts",
-        "tests/integration/digital-development-execution-postgres.test.ts",
-        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
-        "tests/integration/full-business-chain-postgres.test.ts",
-        "tests/integration/development-sla-enrollment-postgres.test.ts"
-      ],
-      "expectation": "Current-order trusted now is independent from wall2099; manual instant/date/unknown and old notes are distinct. Native idempotency/round/future guards and material event identity pass. Original App submits date-only material event, checks original HTTP body/response and stored occurrence vs registration, and retains original authenticated GET/QR/revocation and unsaved input. Not six-image visual acceptance. Original legacy dispatch fixtures now use the same trusted business date as their just-entered tasks, rather than a fixed September date; the native three-case legacy chain passes without changing actual-time validation. Full follow-up preserves immediate original shipment, exact date-only quality, before-entry rejection and original idempotency; the fixture no longer sends October22 for a just-entered shipment.",
       "checks": [
-        "r502-final-units",
-        "r502-final-pg",
-        "r502-legacy-pg16",
-        "r502-full-findings-pg16"
-      ]
-    },
-    {
-      "rule": "Journey reads the exact existing task/round and material proof, and logical cutting join uses every current PO/cut first-ready fact.",
-      "source": "Approved complete v2 Library libfile_fde3_f-7ab204d715f48191a1e467100a057111_c8d3bf5d609c8191bce6411a30e94d44 Version2 and corrected nine-PR execution table R5-02. Autonomous implementation/review/sequential merge authorized; actual R5-01 merge must be synchronized before remote submission. No live data, configuration or deployment.",
-      "initialization": "No schema, dependency or live configuration change. Old records without explicit occurrence stay unknown; no fabricated backfill. Existing Journey calculation-version change drives bounded dirty/build reconciliation; native event OLD/NEW registration remains transactional. Ordinary GET does not rebuild all orders.",
-      "dateAndPermission": "Original request/current role, source/task/round, material, personnel and field guards remain. Same client/transaction and business clock, separate actual vs registration, instant/date/unknown precision. No Root impersonation, authorization-result cache or clock reset. Legacy sourcing remains original; UI assignment chain is R5-09, not claimed here.",
-      "writes": [
-        "apps/api/src/production-platform/journey-query.ts",
-        "apps/api/src/production-platform/journey-native-times.ts",
-        "apps/api/src/production-platform/journey-fact-model.ts",
-        "tests/unit/journey-native-times.test.ts",
-        "tests/integration/production-readiness-postgres.test.ts",
-        "apps/api/src/production-platform/bulk-preparation-service.ts",
-        "tests/integration/digital-journey-postgres.test.ts"
+        "r503-binding-final",
+        "r503-technical-current"
       ],
-      "reads": [
-        "apps/api/src/production-platform/task-readiness-facts.ts",
-        "apps/api/src/production-platform/journey-progress-dates.ts",
-        "apps/api/src/production-platform/journey-fact-updates.ts",
-        "apps/api/src/production-platform/journey-fact-model.ts"
-      ],
-      "oldTests": [
-        "tests/unit/journey-progress-dates.test.ts",
-        "tests/unit/journey-projection-isolation.test.ts",
-        "tests/integration/production-readiness-postgres.test.ts",
-        "tests/integration/digital-journey-postgres.test.ts"
-      ],
-      "newTests": [
-        "tests/unit/journey-progress-dates.test.ts",
-        "tests/unit/journey-projection-isolation.test.ts",
-        "tests/integration/production-readiness-postgres.test.ts",
-        "tests/integration/digital-journey-postgres.test.ts"
-      ],
-      "expectation": "Date-only does not acquire midnight. Exact scoped correction wins; no recorded_at-to-actual fallback. Internal/external cutting per-PO9/10 gap stays not ready, complement advances only the proper join; unknown correction clears the join. Existing R5-01 raw/effective packing fields and statistics units retained. Explicitly inherited prior-round verified material evidence keeps its original completion, rather than becoming missing or receiving a new-round timestamp; full native regression failed before the SQL fix and passes after. ReviewP2: actor-free native bulk facts carry exact linked cuttingOrderId; the actual persisted cutting_gate timestamp matches the proven all-PO first-ready join, and clears after a scoped correction to unknown. Both internal and external cases fail before and pass after this narrow patch. Full follow-up compares material actual to its real persisted accepted recheck completion, rather than expecting null despite that trusted fact; all35 original Journey scenarios including full authorization/page boundaries pass.",
-      "checks": [
-        "r502-final-units",
-        "r502-final-pg",
-        "r502-full-findings-pg16"
-      ]
-    },
-    {
-      "rule": "Digital owner approval starts responsibility only after a legitimate primary merchandiser enables the original handling action.",
-      "source": "Approved complete v2 Library libfile_fde3_f-7ab204d715f48191a1e467100a057111_c8d3bf5d609c8191bce6411a30e94d44 Version2 and corrected nine-PR execution table R5-02. Autonomous implementation/review/sequential merge authorized; actual R5-01 merge must be synchronized before remote submission. No live data, configuration or deployment.",
-      "initialization": "No schema, dependency or live configuration change. Old records without explicit occurrence stay unknown; no fabricated backfill. Existing Journey calculation-version change drives bounded dirty/build reconciliation; native event OLD/NEW registration remains transactional. Ordinary GET does not rebuild all orders.",
-      "dateAndPermission": "Original request/current role, source/task/round, material, personnel and field guards remain. Same client/transaction and business clock, separate actual vs registration, instant/date/unknown precision. No Root impersonation, authorization-result cache or clock reset. Legacy sourcing remains original; UI assignment chain is R5-09, not claimed here.",
-      "writes": [
-        "apps/api/src/production-platform/sourcing-owner-readiness.ts",
-        "apps/api/src/production-platform/sourcing-todo-sla.ts",
-        "apps/api/src/production-platform/access-service.ts",
-        "apps/api/src/sourcing/sourcing-service.ts",
-        "tests/integration/sourcing-owner-readiness-postgres.test.ts"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/sourcing-sla-evidence.ts",
-        "apps/api/src/todos/projection-service.ts",
-        "apps/api/src/todos/service.ts",
-        "apps/api/src/production-platform/access-policy.ts"
-      ],
-      "oldTests": [
-        "tests/unit/sourcing-todo-sla.test.ts",
-        "tests/unit/digital-pmc-readonly-access.test.ts",
-        "tests/integration/sourcing-owner-readiness-postgres.test.ts"
-      ],
-      "newTests": [
-        "tests/unit/sourcing-todo-sla.test.ts",
-        "tests/unit/digital-pmc-readonly-access.test.ts",
-        "tests/integration/sourcing-owner-readiness-postgres.test.ts"
-      ],
-      "expectation": "Explicit isolated missing-staff precondition yields no actionable owner todo or SLA start, original approval refuses before writes. Original assignment starts once at Nov11 12:00 using frozen quota, same native SLA evidence agrees, later assignment never resets and normal approval proceeds. No invented historical release for old untracked todo absence.",
-      "checks": [
-        "r502-final-units",
-        "r502-final-pg"
-      ]
-    },
-    {
-      "rule": "New native occurrence/readiness helpers participate in the existing canonical PG plan without adding operational drills.",
-      "source": "Approved complete v2 Library libfile_fde3_f-7ab204d715f48191a1e467100a057111_c8d3bf5d609c8191bce6411a30e94d44 Version2 and corrected nine-PR execution table R5-02. Autonomous implementation/review/sequential merge authorized; actual R5-01 merge must be synchronized before remote submission. No live data, configuration or deployment.",
-      "initialization": "No schema, dependency or live configuration change. Old records without explicit occurrence stay unknown; no fabricated backfill. Existing Journey calculation-version change drives bounded dirty/build reconciliation; native event OLD/NEW registration remains transactional. Ordinary GET does not rebuild all orders.",
-      "dateAndPermission": "Original request/current role, source/task/round, material, personnel and field guards remain. Same client/transaction and business clock, separate actual vs registration, instant/date/unknown precision. No Root impersonation, authorization-result cache or clock reset. Legacy sourcing remains original; UI assignment chain is R5-09, not claimed here.",
-      "writes": [
-        "scripts/ci/full-gate-risk-map.mjs"
-      ],
-      "reads": [
-        "scripts/test-suite-plan.mjs",
-        "scripts/ci/full-gate-risk-map.mjs"
-      ],
-      "oldTests": [
-        "tests/unit/full-gate-risk-map.test.ts"
-      ],
-      "newTests": [
-        "tests/unit/full-gate-risk-map.test.ts"
-      ],
-      "expectation": "Known original risk-map tests pass and the new owner-readiness native test is explicitly selected for its actual command changes; no migration, backup or restore tool change.",
-      "checks": [
-        "r502-final-units"
-      ]
+      "expectation": "Three original legacy cases pass. Real assigned non-Root tail inspector cannot public-request rework, but an authorized tail return produces exactly one unpriced next native round; only original supervisor can assign explicit0, wrong worker or clerk still rejected. Repeated remakes each require their own explicit amount. Fixture dispatch uses current trusted business date; occurrence-before-entry guard is not relaxed.",
+      "source": "Approved complete v2 Library libfile_fde3_f-7ab204d715f48191a1e467100a057111_c8d3bf5d609c8191bce6411a30e94d44 Version2 and corrected nine-PR execution table R5-03. Actual R5-02 merge a28d0b451a1710e204ce388ab5e4063078790ea7 synchronized with exact unchanged source/test inputs. Autonomous code, Review and sequential merge authorized; no deployment/onsite.",
+      "initialization": "No schema/dependency/runtime configuration change. Original historical wages, amounts, attachments and completed rounds remain; absent historical native proof stays unknown. Real first native submission in a later development round gets its current actual link, not a fabricated old event. Original same-transaction dirty registration and bounded Journey updates remain; no GET-wide rebuild.",
+      "dateAndPermission": "Original current identity, source/task/current round, native designer/supervisor pricing, role revocation and mass-cut guard remain. Same transaction, business clock and idempotency; actual occurrence vs registration preserved. A legacy tail return is limited to its currently authorized completed tail task and matching saved return fact; only pending unpriced work is created and no financial DTO returned. Native public rework/assignment and finance settlement permissions are not enlarged."
     }
   ],
   "checks": [
     {
-      "id": "r502-final-units",
+      "id": "r503-units-current",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/development-material-readiness.test.ts tests/unit/development-occurrence.test.ts tests/unit/digital-development-route.test.ts tests/unit/digital-development.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/journey-native-times.test.ts tests/unit/journey-progress-dates.test.ts tests/unit/journey-projection-isolation.test.ts tests/unit/sourcing-todo-sla.test.ts tests/unit/journey-business-progress.test.ts tests/unit/m01-production-statistics.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r502-review-units.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/pattern-quote-lifecycle.test.ts tests/unit/digital-development-route.test.ts tests/unit/digital-development-rounds.test.ts tests/unit/pattern-order-query.test.ts tests/unit/pattern-order-presentation.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r503-review-units.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 231,
+      "passed": 23,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "c81d6e347d7b0db914cef7e2f944784727732157",
-      "sourceFingerprint": "9be8b15d2b14f91945f0ad6bd1e61db314ca2754bce12a40e795ca03ba5b0f8f",
-      "context": "R5-02 Review repair on real release base22c0a5ac. Original source c81d6e34 plus internal cuttingOrderId/read-model regression patch; Node22.22.2/npm10.9.9/Vitest4.1.10, original canonical bounded workers, owned marked low-privilege PG13.23 for36 native/browser cases orPG16.14 for3 selected legacy cases. Internal/external two-PO counterexamples failed before patch because persisted cutting_gate time was null; after patch original detail, built model, stored readback and explicit unknown correction are checked independently. No original permissions or quantity/readiness guards relaxed.57 unselected legacy tests are not passed. No onsite/deployment/six-image visual acceptance.",
-      "startedAt": "2026-11-11T02:06:50.183Z",
-      "endedAt": "2026-11-11T02:07:00.296Z",
-      "log": "/workspace/.dx-cloud/r502-review-units.log",
-      "logSha256": "2eb386cd65cc5881a9cd4081be84db47a5d70431042cc1a76909462869e4d71e",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "75cc4c523a2a41fa6dcb2298f5c93cd95bf7137dc2158a0b83aca58a63048d46"
-        }
-      ],
+      "testedHead": "f18531eb5e6ffd4375a63709074b64735588bca8",
+      "sourceFingerprint": "46dbd4a05230f698534870e7d749c2a9fdd87654523df24cf5a15efb4cd85b96",
       "inputPaths": [
         "apps",
         "packages",
         "scripts",
         "tests/helpers",
-        "package.json",
-        "package-lock.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts",
         "tests/unit",
-        "tests/integration/digital-development-execution-postgres.test.ts"
-      ],
-      "inputFingerprint": "67974c7d4c0b7fbde7fccf79ee8bdf7725f5913c99d5c55c206197c0701b1fb1"
-    },
-    {
-      "id": "r502-final-pg",
-      "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/production-readiness-postgres.test.ts tests/integration/sourcing-owner-readiness-postgres.test.ts tests/integration/development-execution-read-native-browser-postgres.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r502-review-pg.json",
-      "status": "passed",
-      "exitCode": 0,
-      "passed": 36,
-      "failed": 0,
-      "skipped": 0,
-      "testedHead": "c81d6e347d7b0db914cef7e2f944784727732157",
-      "sourceFingerprint": "9be8b15d2b14f91945f0ad6bd1e61db314ca2754bce12a40e795ca03ba5b0f8f",
-      "context": "R5-02 Review repair on real release base22c0a5ac. Original source c81d6e34 plus internal cuttingOrderId/read-model regression patch; Node22.22.2/npm10.9.9/Vitest4.1.10, original canonical bounded workers, owned marked low-privilege PG13.23 for36 native/browser cases orPG16.14 for3 selected legacy cases. Internal/external two-PO counterexamples failed before patch because persisted cutting_gate time was null; after patch original detail, built model, stored readback and explicit unknown correction are checked independently. No original permissions or quantity/readiness guards relaxed.57 unselected legacy tests are not passed. No onsite/deployment/six-image visual acceptance.",
-      "startedAt": "2026-11-11T02:06:50.140Z",
-      "endedAt": "2026-11-11T02:08:10.482Z",
-      "log": "/workspace/.dx-cloud/r502-review-pg.log",
-      "logSha256": "52f5c376820f9202e7ab70affe8885a68f3d7581f26bcbe9d1ffd4390719d376",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "dee31fc0d9116b097e3e301c1e6976eca0dd05909dc70b62478b0f9c0d85b826"
-        }
-      ],
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "tests/helpers",
-        "package.json",
-        "package-lock.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts",
-        "tests/integration/production-readiness-postgres.test.ts",
-        "tests/integration/sourcing-owner-readiness-postgres.test.ts",
-        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
-        "tests/integration/digital-development-execution-postgres.test.ts"
-      ],
-      "inputFingerprint": "052df4c69f65d6e6dfe0736439af0ac97f4b156ce65d3004642f0397f39da0cc"
-    },
-    {
-      "id": "r502-legacy-pg16",
-      "kind": "tests",
-      "command": "TEST_DATABASE_URL=<owned PG16.14 marked test DB> node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/full-business-chain-postgres.test.ts -t 'P07/P08 development routes|P03 legacy' --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r502-review-legacy.json",
-      "status": "passed",
-      "exitCode": 0,
-      "passed": 3,
-      "failed": 0,
-      "skipped": 57,
-      "testedHead": "c81d6e347d7b0db914cef7e2f944784727732157",
-      "sourceFingerprint": "9be8b15d2b14f91945f0ad6bd1e61db314ca2754bce12a40e795ca03ba5b0f8f",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "tests/helpers",
-        "tests/integration/full-business-chain-postgres.test.ts",
+        "tests/integration",
         "package.json",
         "package-lock.json",
         "vitest.config.ts",
         "vitest.business-chain.config.ts"
       ],
-      "inputFingerprint": "28fcbcaae2d68f270ca4dbd798ea2f094b6709502c3dc71ccd62ecce0913e038",
-      "startedAt": "2026-11-11T02:09:42.419Z",
-      "endedAt": "2026-11-11T02:10:09.623Z",
-      "log": "/workspace/.dx-cloud/r502-review-legacy.log",
-      "logSha256": "4f42fd879f6cb135b1d68b9dbbf4ca76730d49a1e7210ba8ec5d6eebeab4a25a",
+      "inputFingerprint": "3e0b00f3a6dee8e67d3d31974f4135900fa212e63d53dcaa953b281d202f33bb",
+      "startedAt": "2026-11-11T03:37:50.595Z",
+      "endedAt": "2026-11-11T03:37:52.914Z",
+      "log": "/workspace/.dx-cloud/r503-review-units.log",
+      "logSha256": "9acb16f8d60ed515fa6e0a683be201a19cae9abbb94f852cf5ad147ad585aa37",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "1ff8994a401e3f7a721d34fa3dcccf832f4aa3b489e69715c3d9be6d676ee27e"
+          "sha256": "fd979df05d5535df90b3eb6572faa6dc681094912ae99e91aac4998e32050c08"
         }
       ],
-      "context": "R5-02 Review repair on real release base22c0a5ac. Original source c81d6e34 plus internal cuttingOrderId/read-model regression patch; Node22.22.2/npm10.9.9/Vitest4.1.10, original canonical bounded workers, owned marked low-privilege PG13.23 for36 native/browser cases orPG16.14 for3 selected legacy cases. Internal/external two-PO counterexamples failed before patch because persisted cutting_gate time was null; after patch original detail, built model, stored readback and explicit unknown correction are checked independently. No original permissions or quantity/readiness guards relaxed.57 unselected legacy tests are not passed. No onsite/deployment/six-image visual acceptance. Full findings only change two separate test modules. Refined actual input scope includes the selected full-business-chain file and its complete helper/app/package/config dependencies; independently matched against clean tested9a checkout, so no business rerun."
+      "context": "R5-03 exact current source after Codex comment4533654831. Original marked low-privilege local PG16.14/PG13.23 and Node22.22.2/npm10.9.9, at most2 PostgreSQL test workers; immediate legacy chain runs separately. Real App/auth browser, controlled price failure only, native recovered quote. Technical25 includes2000/2001/4000 original revision preservation and pending/completed native remakes, explicit7/0 price and wage/complete export. Legacy3 actual selected,57 unselected, not passed. No onsite data/deployment or full visual acceptance. This is targeted evidence, not remote final Full."
     },
     {
-      "id": "r502-full-findings-pg16",
+      "id": "r503-technical-current",
       "kind": "tests",
-      "command": "TEST_DATABASE_URL=<owned PG16.14 marked test DB> node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/development-sla-enrollment-postgres.test.ts tests/integration/digital-journey-postgres.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r502-full-findings-pg16.json",
+      "command": "TEST_DATABASE_URL=<owned PG16.14 marked test DB> node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/development-technical-postgres.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r503-review-technical.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 52,
+      "passed": 25,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "9a82772c874a6688f86004fa6bb64eee4920da4f",
-      "sourceFingerprint": "65b3366782d0935cbd1e8a74b954a7ac7860665e10ee78dd3aedc7f826e4786d",
-      "context": "Actual9a candidate plus the two Full-discovered test compatibility fixes. Node22.22.2/npm10.9.9/Vitest4.1.10, canonical long-PG2 workers, owned marked low-privilege PG16.14 test database. All52 tests pass including the previously skipped22 Journey tests. Shipping records current trusted dispatch day and explicitly rejects pre-entry day; material actual equals the persisted real accepted recheck completion, registration is not inferred. Pagination aggregate cap120s and all authorization/revocation/hydration assertions preserved. First Full42945129813 failed PG (138pass,2failed,22skipped plus dependent afterAll assertion); non-db passed. Not a new-head Full or onsite pass.",
-      "startedAt": "2026-11-11T02:34:48.213Z",
-      "endedAt": "2026-11-11T02:36:19.096Z",
-      "log": "/workspace/.dx-cloud/r502-full-findings-pg16.log",
-      "logSha256": "fb9d27211b2d432640c8ff9fe4ed037877e9b6ffeea446a536b4fe488a1bbd25",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "eee74e63adf318966e866e432e277703167c9d11e571ab668f23e2c48fcf4c8e"
-        }
-      ],
+      "testedHead": "f18531eb5e6ffd4375a63709074b64735588bca8",
+      "sourceFingerprint": "46dbd4a05230f698534870e7d749c2a9fdd87654523df24cf5a15efb4cd85b96",
       "inputPaths": [
         "apps",
         "packages",
         "scripts",
         "tests/helpers",
+        "tests/unit",
+        "tests/integration",
         "package.json",
         "package-lock.json",
         "vitest.config.ts",
-        "vitest.business-chain.config.ts",
-        "tests/integration/digital-journey-postgres.test.ts",
-        "tests/integration/development-sla-enrollment-postgres.test.ts"
+        "vitest.business-chain.config.ts"
       ],
-      "inputFingerprint": "e0a5764bb8fe86236bc46058252e11059251bb6e65d62b99ed7fbd324bae84ea"
+      "inputFingerprint": "3e0b00f3a6dee8e67d3d31974f4135900fa212e63d53dcaa953b281d202f33bb",
+      "startedAt": "2026-11-11T03:37:15.433Z",
+      "endedAt": "2026-11-11T03:37:50.708Z",
+      "log": "/workspace/.dx-cloud/r503-review-technical.log",
+      "logSha256": "75e965a0a3539e63983332fba2d8772888ed8208199fc903993cbfae242196b6",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "8aaf1805d71723bb2e1d657487e7a300029267c8d6adedbecce4c10fbebe659f"
+        }
+      ],
+      "context": "R5-03 exact current source after Codex comment4533654831. Original marked low-privilege local PG16.14/PG13.23 and Node22.22.2/npm10.9.9, at most2 PostgreSQL test workers; immediate legacy chain runs separately. Real App/auth browser, controlled price failure only, native recovered quote. Technical25 includes2000/2001/4000 original revision preservation and pending/completed native remakes, explicit7/0 price and wage/complete export. Legacy3 actual selected,57 unselected, not passed. No onsite data/deployment or full visual acceptance. This is targeted evidence, not remote final Full."
+    },
+    {
+      "id": "r503-browser-current",
+      "kind": "tests",
+      "command": "TEST_DATABASE_URL=<owned PG13.23 marked test DB> M01_SETTINGS_BROWSER_EXECUTABLE=/usr/bin/chromium node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/development-execution-read-native-browser-postgres.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r503-review-browser.json",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0,
+      "testedHead": "f18531eb5e6ffd4375a63709074b64735588bca8",
+      "sourceFingerprint": "46dbd4a05230f698534870e7d749c2a9fdd87654523df24cf5a15efb4cd85b96",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests/helpers",
+        "tests/unit",
+        "tests/integration",
+        "package.json",
+        "package-lock.json",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts"
+      ],
+      "inputFingerprint": "3e0b00f3a6dee8e67d3d31974f4135900fa212e63d53dcaa953b281d202f33bb",
+      "startedAt": "2026-11-11T03:37:49.158Z",
+      "endedAt": "2026-11-11T03:38:10.287Z",
+      "log": "/workspace/.dx-cloud/r503-review-browser.log",
+      "logSha256": "b14087e0f3e5ddde716422ccf3566c95411b1ea332187b46801d2b5ed180c0ef",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "e5e00a2ef015674f672a5aa2ac2c7d1899347bbcd293ee5839e644d1bb8ff034"
+        }
+      ],
+      "context": "R5-03 exact current source after Codex comment4533654831. Original marked low-privilege local PG16.14/PG13.23 and Node22.22.2/npm10.9.9, at most2 PostgreSQL test workers; immediate legacy chain runs separately. Real App/auth browser, controlled price failure only, native recovered quote. Technical25 includes2000/2001/4000 original revision preservation and pending/completed native remakes, explicit7/0 price and wage/complete export. Legacy3 actual selected,57 unselected, not passed. No onsite data/deployment or full visual acceptance. This is targeted evidence, not remote final Full."
+    },
+    {
+      "id": "r503-binding-final",
+      "kind": "tests",
+      "command": "TEST_DATABASE_URL=<owned PG16.14 marked test DB> node node_modules/vitest/vitest.mjs run --config vitest.postgres-immediate.config.ts tests/integration/full-business-chain-postgres.test.ts -t 'P07/P08 development routes|P03 legacy' --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r503-review-legacy.json",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 3,
+      "failed": 0,
+      "skipped": 57,
+      "testedHead": "f18531eb5e6ffd4375a63709074b64735588bca8",
+      "sourceFingerprint": "46dbd4a05230f698534870e7d749c2a9fdd87654523df24cf5a15efb4cd85b96",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests/helpers",
+        "tests/unit",
+        "tests/integration",
+        "package.json",
+        "package-lock.json",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts"
+      ],
+      "inputFingerprint": "3e0b00f3a6dee8e67d3d31974f4135900fa212e63d53dcaa953b281d202f33bb",
+      "startedAt": "2026-11-11T03:38:18.346Z",
+      "endedAt": "2026-11-11T03:38:48.621Z",
+      "log": "/workspace/.dx-cloud/r503-review-legacy.log",
+      "logSha256": "c5463ace3f2bc8810fefb213edcefe559620df9b51bad06d05dfe5abd7708fa4",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "72a80d0e66df7d12fdf5d1ef86f313346684e6a03adf467f079f701d0ae48b11"
+        }
+      ],
+      "context": "R5-03 exact current source after Codex comment4533654831. Original marked low-privilege local PG16.14/PG13.23 and Node22.22.2/npm10.9.9, at most2 PostgreSQL test workers; immediate legacy chain runs separately. Real App/auth browser, controlled price failure only, native recovered quote. Technical25 includes2000/2001/4000 original revision preservation and pending/completed native remakes, explicit7/0 price and wage/complete export. Legacy3 actual selected,57 unselected, not passed. No onsite data/deployment or full visual acceptance. This is targeted evidence, not remote final Full."
     }
   ]
 }
