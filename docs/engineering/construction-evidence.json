@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "eedec5e366b1dd4ef31e16618444ef7ecd4fa923",
-  "sourceFingerprint": "565de00ae343bb0a74a0d9c99eb431d3e310edce3958064f4b3371e86b92f748",
+  "sourceFingerprint": "387d4c306c4dc887d7606023accd10cb189afe429ccf5a872a2a9491cadab38e",
   "risk": "full",
   "rules": [
     {
@@ -209,7 +209,7 @@
         "tests/integration/order-time-requests-browser-postgres.test.ts",
         "tests/unit/cockpit-document-new-sources.test.ts"
       ],
-      "expectation": "141 current units pass. Exact current source has5 selected real PG13 history/private/original cases and1 focused original App case with actual native construction/two published PLTs, old file open, comments, partial503/retry, real1585/1165 geometry and full header. Filtered21+3 skips are not passes. Earlier15 original-App cases are retained as prior-stage results, not called rerun on final source. Same typed source/helpers/canonical config checked, old manual inventory notes remain verbatim; new own-SLA range display reviewed. No deployment/onsite/full-scale or whole Full success claim."
+      "expectation": "144 current units pass. Exact current source has5 selected real PG13 history/private/original cases and1 focused original App case with actual native construction/two published PLTs, old file open, comments, partial503/retry, real1585/1165 geometry and full header. Filtered21+3 skips are not passes. Earlier15 original-App cases are retained as prior-stage results, not called rerun on final source. Same typed source/helpers/canonical config checked, old manual inventory notes remain verbatim; new own-SLA range display reviewed. No deployment/onsite/full-scale or whole Full success claim."
     }
   ],
   "checks": [
@@ -219,8 +219,8 @@
       "command": "/workspace/.dx-cloud/r5-runtime/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/cockpit-detail.test.ts tests/unit/cockpit-document-directory.test.ts tests/unit/cockpit-document-new-sources.test.ts tests/unit/cockpit-document-snapshot.test.ts tests/unit/cockpit-fixed-schedule.test.ts tests/unit/cockpit-contract-directory-access.test.ts tests/unit/m01-cockpit-reading-context.test.ts tests/unit/digital-cockpit-progress.test.ts tests/unit/digital-cockpit-time.test.ts tests/unit/cockpit-photo-preview.test.ts tests/unit/cockpit-display-facts.test.ts tests/unit/m01-cockpit-reads.test.ts tests/unit/business-time-write-contract.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r508-current-units.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "95ce8f07369559354895a4822f2cf5a892082af4",
-      "sourceFingerprint": "565de00ae343bb0a74a0d9c99eb431d3e310edce3958064f4b3371e86b92f748",
+      "testedHead": "e504dd19d8d240ddb3c2c5c5a8cbd5a9a400109d",
+      "sourceFingerprint": "387d4c306c4dc887d7606023accd10cb189afe429ccf5a872a2a9491cadab38e",
       "inputPaths": [
         "apps",
         "packages",
@@ -233,19 +233,19 @@
         "vitest.business-chain.config.ts",
         "tests/unit"
       ],
-      "inputFingerprint": "48ca29d1b1cb172dce38dec05e933c6a6f702495f903a238a68e13c3f1f509ec",
-      "startedAt": "2026-11-11T15:53:55.395Z",
-      "endedAt": "2026-11-11T15:54:14.565Z",
+      "inputFingerprint": "c95de3b262c858741681ba71e033f27104d24502c00e4e96cdafaef4e49fd3f8",
+      "startedAt": "2026-11-11T16:26:51.113Z",
+      "endedAt": "2026-11-11T16:27:01.360Z",
       "log": "/workspace/.dx-cloud/r508-current-units.log",
-      "logSha256": "1e781337d8a6ca7365056a88b0ccea2f66bc369f0e689cfd4b54a3c952d5a38d",
+      "logSha256": "9aec79cfebd675ef3b1472a54078fedf23531863dd44a8a87df5942cb38de083",
       "context": "Approved v2/R5-08 original detail and node-scoped documents. Provisional R5-07 candidate95ce8f07, final base must be actual R5-07 merge. Approved image2 latest original reopened and compared at1585/1165; actual App/current auth and owned PG13. Exact technical versions, per-PO scope, legacy unenrolled directory, separate failures/permission/missing/loading, real private original redirect, compact7 rows and full native records. Some selected historical file cases are intentionally filtered: skips remain reported, not passed. Native storage is the existing TEST adapter, not onsite delivery. Canonical nonDB1/long2, maximum2 actual PG workers; Node22.22.2/npm10.9.9 Chromium. No deployment/onsite, schema/config, permission expansion or 5000-scale claim.",
-      "passed": 141,
+      "passed": 144,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "ac358cf67af10568541a4f90f6b413525f7c49466a360431fd863cecfdddba24"
+          "sha256": "3287d3f6043fb3c6f75b62ebe0718b0fe35b444fbb778d7738e2b7eafeed8963"
         }
       ]
     },
@@ -255,8 +255,8 @@
       "command": "/workspace/.dx-cloud/r5-runtime/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/order-time-requests-browser-postgres.test.ts --config vitest.business-chain.config.ts --testNamePattern R5-08 opens actual --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r508-current-native-app.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "95ce8f07369559354895a4822f2cf5a892082af4",
-      "sourceFingerprint": "565de00ae343bb0a74a0d9c99eb431d3e310edce3958064f4b3371e86b92f748",
+      "testedHead": "e504dd19d8d240ddb3c2c5c5a8cbd5a9a400109d",
+      "sourceFingerprint": "387d4c306c4dc887d7606023accd10cb189afe429ccf5a872a2a9491cadab38e",
       "inputPaths": [
         "apps",
         "packages",
@@ -271,11 +271,11 @@
         "tests/acceptance",
         "tests/fixtures"
       ],
-      "inputFingerprint": "5d9c1978d13f8c6ca04508a036c98cb07e26ab65717ba79ef15e16e7fd138e9f",
-      "startedAt": "2026-11-11T15:53:13.060Z",
-      "endedAt": "2026-11-11T15:53:28.597Z",
+      "inputFingerprint": "f5f5c17d84ce190845c51c18581a53342b302fc7677e659e84700c4c718c0359",
+      "startedAt": "2026-11-11T16:27:17.813Z",
+      "endedAt": "2026-11-11T16:27:47.907Z",
       "log": "/workspace/.dx-cloud/r508-current-native.log",
-      "logSha256": "cf886a605501e78d49a7932b387d6d66e8ed9f502c22290f1ff040414bffd016",
+      "logSha256": "607c4f01faf09f558fd7556bfdd87ca03c9a37d263746ca9c28d694d39a003d6",
       "context": "Approved v2/R5-08 original detail and node-scoped documents. Provisional R5-07 candidate95ce8f07, final base must be actual R5-07 merge. Approved image2 latest original reopened and compared at1585/1165; actual App/current auth and owned PG13. Exact technical versions, per-PO scope, legacy unenrolled directory, separate failures/permission/missing/loading, real private original redirect, compact7 rows and full native records. Some selected historical file cases are intentionally filtered: skips remain reported, not passed. Native storage is the existing TEST adapter, not onsite delivery. Canonical nonDB1/long2, maximum2 actual PG workers; Node22.22.2/npm10.9.9 Chromium. No deployment/onsite, schema/config, permission expansion or 5000-scale claim.",
       "passed": 1,
       "failed": 0,
@@ -283,7 +283,7 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "8013ef9a19b34c39524d37e978a6a00d2867890cf808131ab1c67d5cb4c2522f"
+          "sha256": "4ac415784324b38de5c035e97fef700f767882f3411117eb4219ceea82b1911b"
         }
       ]
     },
@@ -293,8 +293,8 @@
       "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "95ce8f07369559354895a4822f2cf5a892082af4",
-      "sourceFingerprint": "565de00ae343bb0a74a0d9c99eb431d3e310edce3958064f4b3371e86b92f748",
+      "testedHead": "e504dd19d8d240ddb3c2c5c5a8cbd5a9a400109d",
+      "sourceFingerprint": "387d4c306c4dc887d7606023accd10cb189afe429ccf5a872a2a9491cadab38e",
       "inputPaths": [
         "apps",
         "packages",
@@ -307,9 +307,9 @@
         "vitest.business-chain.config.ts",
         "tests"
       ],
-      "inputFingerprint": "3e70bfdcfa1ffe2dc77748167e73b11bc8235364cb84e249935afb8f8be14f43",
-      "startedAt": "2026-11-11T15:53:55.341Z",
-      "endedAt": "2026-11-11T15:54:54.874Z",
+      "inputFingerprint": "26929b1c2c65ed54dcec1ea8b9c0f325b582b5c46c102aed4e2d557381ae8ceb",
+      "startedAt": "2026-11-11T16:27:17.814Z",
+      "endedAt": "2026-11-11T16:28:18.389Z",
       "log": "/workspace/.dx-cloud/r508-current-types.log",
       "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e",
       "context": "Approved v2/R5-08 original detail and node-scoped documents. Provisional R5-07 candidate95ce8f07, final base must be actual R5-07 merge. Approved image2 latest original reopened and compared at1585/1165; actual App/current auth and owned PG13. Exact technical versions, per-PO scope, legacy unenrolled directory, separate failures/permission/missing/loading, real private original redirect, compact7 rows and full native records. Some selected historical file cases are intentionally filtered: skips remain reported, not passed. Native storage is the existing TEST adapter, not onsite delivery. Canonical nonDB1/long2, maximum2 actual PG workers; Node22.22.2/npm10.9.9 Chromium. No deployment/onsite, schema/config, permission expansion or 5000-scale claim."
@@ -320,8 +320,8 @@
       "command": "npm run lint",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "95ce8f07369559354895a4822f2cf5a892082af4",
-      "sourceFingerprint": "565de00ae343bb0a74a0d9c99eb431d3e310edce3958064f4b3371e86b92f748",
+      "testedHead": "e504dd19d8d240ddb3c2c5c5a8cbd5a9a400109d",
+      "sourceFingerprint": "387d4c306c4dc887d7606023accd10cb189afe429ccf5a872a2a9491cadab38e",
       "inputPaths": [
         "apps",
         "packages",
@@ -334,9 +334,9 @@
         "vitest.business-chain.config.ts",
         "tests"
       ],
-      "inputFingerprint": "3e70bfdcfa1ffe2dc77748167e73b11bc8235364cb84e249935afb8f8be14f43",
-      "startedAt": "2026-11-11T15:53:55.394Z",
-      "endedAt": "2026-11-11T15:54:38.050Z",
+      "inputFingerprint": "26929b1c2c65ed54dcec1ea8b9c0f325b582b5c46c102aed4e2d557381ae8ceb",
+      "startedAt": "2026-11-11T16:27:17.732Z",
+      "endedAt": "2026-11-11T16:28:02.562Z",
       "log": "/workspace/.dx-cloud/r508-current-lint.log",
       "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763",
       "context": "Approved v2/R5-08 original detail and node-scoped documents. Provisional R5-07 candidate95ce8f07, final base must be actual R5-07 merge. Approved image2 latest original reopened and compared at1585/1165; actual App/current auth and owned PG13. Exact technical versions, per-PO scope, legacy unenrolled directory, separate failures/permission/missing/loading, real private original redirect, compact7 rows and full native records. Some selected historical file cases are intentionally filtered: skips remain reported, not passed. Native storage is the existing TEST adapter, not onsite delivery. Canonical nonDB1/long2, maximum2 actual PG workers; Node22.22.2/npm10.9.9 Chromium. No deployment/onsite, schema/config, permission expansion or 5000-scale claim."
@@ -347,8 +347,8 @@
       "command": "/workspace/.dx-cloud/r5-runtime/node_modules/node/bin/node scripts/acceptance/time-site-inventory.mjs",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "95ce8f07369559354895a4822f2cf5a892082af4",
-      "sourceFingerprint": "565de00ae343bb0a74a0d9c99eb431d3e310edce3958064f4b3371e86b92f748",
+      "testedHead": "e504dd19d8d240ddb3c2c5c5a8cbd5a9a400109d",
+      "sourceFingerprint": "387d4c306c4dc887d7606023accd10cb189afe429ccf5a872a2a9491cadab38e",
       "inputPaths": [
         "apps",
         "packages",
@@ -362,12 +362,12 @@
         "tests",
         "docs/engineering/acceptance-time-sites-20261027.json"
       ],
-      "inputFingerprint": "24395f9a81aaa27da68fcaa17daf06e5f7c839d7e08c55fd39ae7767c85537cd",
-      "startedAt": "2026-11-11T15:53:32.851Z",
-      "endedAt": "2026-11-11T15:53:33.391Z",
+      "inputFingerprint": "d4d0d96f36adfeb35fcdcc63e14ed93c755f98acc8d13c49fb1d89fd2db1dd0c",
+      "startedAt": "2026-11-11T16:27:17.822Z",
+      "endedAt": "2026-11-11T16:27:18.732Z",
       "log": "/workspace/.dx-cloud/r508-current-protocol.log",
       "logSha256": "114d19b3f81e82ca812ccaf79d465b9eac16b584f779c9b621a2e15595e62be6",
-      "context": "Approved v2/R5-08 original detail and node-scoped documents. Provisional R5-07 candidate95ce8f07, final base must be actual R5-07 merge. Approved image2 latest original reopened and compared at1585/1165; actual App/current auth and owned PG13. Exact technical versions, per-PO scope, legacy unenrolled directory, separate failures/permission/missing/loading, real private original redirect, compact7 rows and full native records. Some selected historical file cases are intentionally filtered: skips remain reported, not passed. Native storage is the existing TEST adapter, not onsite delivery. Canonical nonDB1/long2, maximum2 actual PG workers; Node22.22.2/npm10.9.9 Chromium. No deployment/onsite, schema/config, permission expansion or 5000-scale claim. Generated inventory output scope is now explicit; current source and original protocol inputs match the recorded execution, and output bytes match the retained pre-layout snapshot. Record correction only, no rerun or additional pass claimed."
+      "context": "Approved v2/R5-08 original detail and node-scoped documents. Provisional R5-07 candidate95ce8f07, final base must be actual R5-07 merge. Approved image2 latest original reopened and compared at1585/1165; actual App/current auth and owned PG13. Exact technical versions, per-PO scope, legacy unenrolled directory, separate failures/permission/missing/loading, real private original redirect, compact7 rows and full native records. Some selected historical file cases are intentionally filtered: skips remain reported, not passed. Native storage is the existing TEST adapter, not onsite delivery. Canonical nonDB1/long2, maximum2 actual PG workers; Node22.22.2/npm10.9.9 Chromium. No deployment/onsite, schema/config, permission expansion or 5000-scale claim."
     },
     {
       "id": "r508-native-history",

@@ -27,5 +27,5 @@ export async function technicalPartDirectory(order:Parameters<typeof technicalDi
  if(!current)return {state:scoped.length?'unknown':'missing',entries:scoped};
  const loaded=await loadTechnicalEntry(tagged(current,part),read,signal);if(!loaded)throw Error('本版技术成果暂未读取完整');
  const selected=selectTechnicalPart(loaded,part),filled=part==='plt'?Boolean(selected.files?.length):Boolean(selected.children?.length);
- return {state:filled?'created':scoped.length?'unknown':'missing',entries:[selected,...artifacts.slice(1).map(entry=>({...tagged(entry,part),sourceOnly:true})),...directory.entries.filter(entry=>entry.load?.kind==='technical_history_artifacts').map(entry=>({...tagged(entry,part),sourceOnly:true})),...scoped]};
+ return {state:filled?'created':scoped.length?'unknown':'missing',entries:[{...selected,sourceOnly:!filled},...artifacts.slice(1).map(entry=>({...tagged(entry,part),sourceOnly:true})),...directory.entries.filter(entry=>entry.load?.kind==='technical_history_artifacts').map(entry=>({...tagged(entry,part),sourceOnly:true})),...scoped]};
 }

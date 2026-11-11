@@ -24,6 +24,14 @@ it('R5 old authorized paper records remain openable without labelling a generic 
  const usage=await category(order,'development_consumption',read,signal);expect(usage.entries[0]?.children?.[0]?.note).toBe('1.5 米');
  expect((await category(order,'customer_final_approval',read,signal)).state).toBe('unknown');
 });
+it.each(['development_plt','development_sizes','development_consumption'] as const)('R5 snapshot loader keeps empty %s unfilled even when a draft artifact record exists',async key=>{
+ const artifact={artifactSetId:'empty',version:1,sourceId:sid,roundNumber:1,scopeRef:'整款',taskId:'paper',documentVersion:1,status:'draft'};
+ const read:CockpitDocumentReader=async path=>{const q=new URL(path,'http://test').searchParams;return {sourceId:sid,roundNumber:1,scopeRef:q.get('scopeRef')??'整款',items:q.get('scopeRef')?.startsWith('po:')?[]:[q.has('version')?{...artifact,body:{pltAttachmentIds:[],consumptionRows:[],baseSizeTable:{sizes:[],measurements:[]}}}:artifact],nextBeforeVersion:null};};
+ const whole=await loadCockpitDirectoryPages({...order,lines:[]},key,read,signal);
+ expect(whole.state).toBe('missing');expect(whole.entries.length).toBeGreaterThan(0);expect(whole.entries.every(entry=>entry.sourceOnly)).toBe(true);
+ const scoped=await loadCockpitDirectoryPages(order,key,read,signal);
+ expect(scoped.state).toBe('unknown');expect(scoped.entries.every(entry=>entry.sourceOnly)).toBe(true);
+});
 it('R5 keeps independent PLT, sizes and usage on exact adopted and older versions without fetching all artifact bodies',async()=>{
  const artifact=(version:number)=>({artifactSetId:'a',version,sourceId:sid,roundNumber:1,scopeRef:'整款',taskId:'paper',documentVersion:1,status:'published'}),calls:string[]=[];
  const read:CockpitDocumentReader=async path=>{calls.push(path);const q=new URL(path,'http://test').searchParams,kind=q.get('kind'),version=Number(q.get('version'));
