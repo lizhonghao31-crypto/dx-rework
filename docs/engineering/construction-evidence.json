@@ -3,13 +3,6 @@
   "base": "c93f807d7cbe8101a85e60b20f43d6f82a42333f",
   "risk": "quick",
   "sourceFingerprint": "a187b68c6913e3dbeb3ce4d8cbe1d276de2d16ca7249f5fe9a96b9186ee00e9b",
-  "automaticTestsNotApplicable": "This is a prospective documentation-only governance change. There is no executable behavior or business data change to unit-test; independent policy review and the actual scoped document command are used without fabricated test counts.",
-  "alternativeVerification": {
-    "reason": "This is a prospective documentation-only governance change. There is no executable behavior or business data change to unit-test; independent policy review and the actual scoped document command are used without fabricated test counts.",
-    "checks": [
-      "merge-policy-doc-check"
-    ]
-  },
   "rules": [
     {
       "rule": "Explicit informed user merge directions choose a documented human decision path; default automated certification and external tool/branch protections remain separate.",
@@ -23,13 +16,15 @@
         "docs/governance/final-closeout-v1.md",
         "docs/governance/github-actions-usage-policy-v1.0.md"
       ],
-      "oldTests": [],
-      "noExistingTestsReason": "This is a prospective documentation-only governance change. There is no executable behavior or business data change to unit-test; independent policy review and the actual scoped document command are used without fabricated test counts.",
+      "oldTests": [
+        "scripts/ci/governance-policy.test.mjs"
+      ],
       "initialization": "No application, schema, CI workflow, controller, credentials or branch-protection change. Future repository operating guidance only; preserve real check results and exact current object identity.",
       "dateAndPermission": "Normal expected-head merge and real authority remain. User direction is not a fabricated successful check; platform rejection still stops the action. PR969 is left to the user and is not retried through this policy change.",
       "expectation": "Normal autonomous delivery keeps the current final-cert process. A specific informed user direction is recorded as human acceptance without demanding redundant final reruns or falsely approving CI. External protections, denial handling, actual status and merge/tree verification remain.",
       "checks": [
-        "merge-policy-doc-check"
+        "merge-policy-doc-check",
+        "merge-policy-existing-guards"
       ]
     }
   ],
@@ -52,6 +47,34 @@
       "log": "/workspace/.dx-cloud/merge-policy-doc-check.json",
       "logSha256": "e852d4b8a983a9d5c01e6ddd7ff4539dc1b3a1baf55a54364c46baf4f5dda4f8",
       "context": "Node22.22.2; actual git diff --check and scoped document review. Changes define future user-directed repository decisions separately from default automated certification; no tests/runtime/schema/permissions/protection modified. This separate PR itself uses the pre-existing normal review/final-cert process, not its proposed manual route. Rebased onto user-merged PR969 c93f807d; exact checked document bytes unchanged, old check provenance retained."
+    },
+    {
+      "id": "merge-policy-existing-guards",
+      "kind": "tests",
+      "command": "/workspace/.dx-cloud/r5-runtime/node_modules/node/bin/node --test scripts/ci/governance-policy.test.mjs",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "c990028d77fe77ae806bfd4260f8f0b9bbd161c1",
+      "sourceFingerprint": "a187b68c6913e3dbeb3ce4d8cbe1d276de2d16ca7249f5fe9a96b9186ee00e9b",
+      "inputPaths": [
+        "AGENTS.md",
+        "docs/governance",
+        "docs/requirements",
+        "scripts",
+        ".github",
+        "vitest.config.ts",
+        "vitest.postgres-immediate.config.ts",
+        "vitest.business-chain.config.ts"
+      ],
+      "inputFingerprint": "ed0de6800b13a678722c04f3247dbd63cd4b88782e1f893368c4775172ccea3e",
+      "startedAt": "2026-11-11T23:45:55.292Z",
+      "endedAt": "2026-11-11T23:45:55.385Z",
+      "log": "/workspace/.dx-cloud/merge-policy-governance-tests.log",
+      "logSha256": "7fea37f4abd4b3c48cd1128bd0c43850880169c6acbf75980664e9c78fdf5b19",
+      "context": "Actual Node22 existing governance regression guards: real references, no historical task pauses/Gate-before-Review, single worker configuration authority and preserved business-domain rules. Documentation-only future policy; no PR969 action, runtime/CI/controller change, business/PG test or fabricated test counts.",
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
     }
   ]
 }
