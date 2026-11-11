@@ -124,7 +124,9 @@ export class DevelopmentRoundService {
    if(!this.patternOrders)fail('原打板执行服务未配置，不能建立没有计价依据的新制作轮');
    await this.patternOrders!.inTransaction(db).requestDevelopmentRevision(actor,native.order_id,{
     roundId:native.current_round_id,version:native.version,
-    reason:input.internalProblem||input.customerComment||input.explanation,
+    // The native reason is a short summary; revisionContext retains the full
+    // accepted revision, including its 4,000-character comments.
+    reason:(input.internalProblem||input.customerComment||input.explanation).slice(0,2000),
     reasonCategory:input.origin==='内部发现'?'other':input.origin==='客户新增要求'?'customer_change':'workmanship',
     attachmentIds:[],developmentNodes:affectedNodes,developmentProblems:input.categories,
    },`development-remake:${sourceId}:${roundNumber}`,{sourceId,revision:{...input,document,affectedNodes},...(returnTaskId?{returnTaskId}:{})});

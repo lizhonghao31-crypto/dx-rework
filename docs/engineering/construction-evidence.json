@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "a28d0b451a1710e204ce388ab5e4063078790ea7",
-  "sourceFingerprint": "7e9f38e3a993e9c52374a61db49beecefc8ccb5051045ed091b8dbf3dff843a6",
+  "sourceFingerprint": "46dbd4a05230f698534870e7d749c2a9fdd87654523df24cf5a15efb4cd85b96",
   "risk": "full",
   "rules": [
     {
@@ -37,7 +37,7 @@
         "r503-technical-current",
         "r503-binding-final"
       ],
-      "expectation": "Initial10 plus explicitly approved remake7 totals17; explicit remake0 keeps10; two real rounds and segments, no duplicate on retry. Sewing and final facts bind remake ID, not mutable old current ID. Unconfirmed first work releases only under original final receipt. First native submission at development round2 maps to2 and not1; actual original wage page totals/export match. Local patches and inherited sewing do not add wages.",
+      "expectation": "Initial10 plus explicitly approved remake7 totals17; explicit remake0 keeps10; two real rounds and segments, no duplicate on retry. Sewing and final facts bind remake ID, not mutable old current ID. Unconfirmed first work releases only under original final receipt. First native submission at development round2 maps to2 and not1; actual original wage page totals/export match. Local patches and inherited sewing do not add wages. Native2000-character reason uses a bounded summary of accepted2000/2001/4000-character revision; full internalProblem and explanation persist unchanged in original development round and same-key publish is idempotent.",
       "source": "Approved complete v2 Library libfile_fde3_f-7ab204d715f48191a1e467100a057111_c8d3bf5d609c8191bce6411a30e94d44 Version2 and corrected nine-PR execution table R5-03. Actual R5-02 merge a28d0b451a1710e204ce388ab5e4063078790ea7 synchronized with exact unchanged source/test inputs. Autonomous code, Review and sequential merge authorized; no deployment/onsite.",
       "initialization": "No schema/dependency/runtime configuration change. Original historical wages, amounts, attachments and completed rounds remain; absent historical native proof stays unknown. Real first native submission in a later development round gets its current actual link, not a fabricated old event. Original same-transaction dirty registration and bounded Journey updates remain; no GET-wide rebuild.",
       "dateAndPermission": "Original current identity, source/task/current round, native designer/supervisor pricing, role revocation and mass-cut guard remain. Same transaction, business clock and idempotency; actual occurrence vs registration preserved. A legacy tail return is limited to its currently authorized completed tail task and matching saved return fact; only pending unpriced work is created and no financial DTO returned. Native public rework/assignment and finance settlement permissions are not enlarged."
@@ -104,14 +104,14 @@
     {
       "id": "r503-units-current",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/pattern-quote-lifecycle.test.ts tests/unit/digital-development-route.test.ts tests/unit/digital-development-rounds.test.ts tests/unit/pattern-order-query.test.ts tests/unit/pattern-order-presentation.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r503-synced-units.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/pattern-quote-lifecycle.test.ts tests/unit/digital-development-route.test.ts tests/unit/digital-development-rounds.test.ts tests/unit/pattern-order-query.test.ts tests/unit/pattern-order-presentation.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r503-review-units.json",
       "status": "passed",
       "exitCode": 0,
       "passed": 23,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "1b8951e5b3e1d8e7a9875262183fc3cb0fd8d343",
-      "sourceFingerprint": "7e9f38e3a993e9c52374a61db49beecefc8ccb5051045ed091b8dbf3dff843a6",
+      "testedHead": "f18531eb5e6ffd4375a63709074b64735588bca8",
+      "sourceFingerprint": "46dbd4a05230f698534870e7d749c2a9fdd87654523df24cf5a15efb4cd85b96",
       "inputPaths": [
         "apps",
         "packages",
@@ -124,30 +124,30 @@
         "vitest.config.ts",
         "vitest.business-chain.config.ts"
       ],
-      "inputFingerprint": "2cbce3d95046ac440ce32554bde9f7158f333432b28ffe57eac7e99f84e604fb",
-      "startedAt": "2026-11-11T02:49:19.567Z",
-      "endedAt": "2026-11-11T02:49:22.167Z",
-      "log": "/workspace/.dx-cloud/r503-synced-units.log",
-      "logSha256": "00d15f72d3f3366d236f6877531fd46213b0a8c530c7ea10f009f2896dcbaf27",
+      "inputFingerprint": "3e0b00f3a6dee8e67d3d31974f4135900fa212e63d53dcaa953b281d202f33bb",
+      "startedAt": "2026-11-11T03:37:50.595Z",
+      "endedAt": "2026-11-11T03:37:52.914Z",
+      "log": "/workspace/.dx-cloud/r503-review-units.log",
+      "logSha256": "9acb16f8d60ed515fa6e0a683be201a19cae9abbb94f852cf5ad147ad585aa37",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "3c2fd562b9aa8f3ab39915b0ca76e23d3b7f0720b1e24264f63b59446661a1aa"
+          "sha256": "fd979df05d5535df90b3eb6572faa6dc681094912ae99e91aac4998e32050c08"
         }
       ],
-      "context": "R5-03 local prepared1b candidate plus R5-02 frozen candidate7c6b0454 (merge in progress). Exact current source reported; actual R5-02 merge still required before remote PR. Node22.22.2/npm10.9.9/Vitest4.1.10, original canonical bounded workers and resource identity/cleanup; marked low-privilege PG13.23 App or PG16.14 native/legacy database.23 units,24 native technical,5 original App/auth/quote browser and3 original legacy routes pass. Legacy full chain uses its isolated immediate-delete config, no other PG suite concurrently,57 unselected are not passed. Original first/rework wages, known zero-price confirmation, original task role/round bindings, rejections, same-session revoke and actual recovered native quote publication retained. No onsite/deployment or six-image visual acceptance. No current-head final CI claimed. Actual R5-02 merge a28d0b451a1710e204ce388ab5e4063078790ea7 synchronized; source and each recorded input fingerprint unchanged, so these exact results are reused without rerunning."
+      "context": "R5-03 exact current source after Codex comment4533654831. Original marked low-privilege local PG16.14/PG13.23 and Node22.22.2/npm10.9.9, at most2 PostgreSQL test workers; immediate legacy chain runs separately. Real App/auth browser, controlled price failure only, native recovered quote. Technical25 includes2000/2001/4000 original revision preservation and pending/completed native remakes, explicit7/0 price and wage/complete export. Legacy3 actual selected,57 unselected, not passed. No onsite data/deployment or full visual acceptance. This is targeted evidence, not remote final Full."
     },
     {
       "id": "r503-technical-current",
       "kind": "tests",
-      "command": "TEST_DATABASE_URL=<owned PG16.14 marked test DB> node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/development-technical-postgres.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r503-synced-technical.json",
+      "command": "TEST_DATABASE_URL=<owned PG16.14 marked test DB> node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/development-technical-postgres.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r503-review-technical.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 24,
+      "passed": 25,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "1b8951e5b3e1d8e7a9875262183fc3cb0fd8d343",
-      "sourceFingerprint": "7e9f38e3a993e9c52374a61db49beecefc8ccb5051045ed091b8dbf3dff843a6",
+      "testedHead": "f18531eb5e6ffd4375a63709074b64735588bca8",
+      "sourceFingerprint": "46dbd4a05230f698534870e7d749c2a9fdd87654523df24cf5a15efb4cd85b96",
       "inputPaths": [
         "apps",
         "packages",
@@ -160,30 +160,30 @@
         "vitest.config.ts",
         "vitest.business-chain.config.ts"
       ],
-      "inputFingerprint": "2cbce3d95046ac440ce32554bde9f7158f333432b28ffe57eac7e99f84e604fb",
-      "startedAt": "2026-11-11T02:49:19.551Z",
-      "endedAt": "2026-11-11T02:49:57.254Z",
-      "log": "/workspace/.dx-cloud/r503-synced-technical.log",
-      "logSha256": "f1258120af776449eb8d521973ba460931903168208eb575e82700dcdcfe66db",
+      "inputFingerprint": "3e0b00f3a6dee8e67d3d31974f4135900fa212e63d53dcaa953b281d202f33bb",
+      "startedAt": "2026-11-11T03:37:15.433Z",
+      "endedAt": "2026-11-11T03:37:50.708Z",
+      "log": "/workspace/.dx-cloud/r503-review-technical.log",
+      "logSha256": "75e965a0a3539e63983332fba2d8772888ed8208199fc903993cbfae242196b6",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "568f00ab0ef6c2900e895ca1a3ec8fdddcbf062412f6e4c60280d44d840fce0e"
+          "sha256": "8aaf1805d71723bb2e1d657487e7a300029267c8d6adedbecce4c10fbebe659f"
         }
       ],
-      "context": "R5-03 local prepared1b candidate plus R5-02 frozen candidate7c6b0454 (merge in progress). Exact current source reported; actual R5-02 merge still required before remote PR. Node22.22.2/npm10.9.9/Vitest4.1.10, original canonical bounded workers and resource identity/cleanup; marked low-privilege PG13.23 App or PG16.14 native/legacy database.23 units,24 native technical,5 original App/auth/quote browser and3 original legacy routes pass. Legacy full chain uses its isolated immediate-delete config, no other PG suite concurrently,57 unselected are not passed. Original first/rework wages, known zero-price confirmation, original task role/round bindings, rejections, same-session revoke and actual recovered native quote publication retained. No onsite/deployment or six-image visual acceptance. No current-head final CI claimed. Actual R5-02 merge a28d0b451a1710e204ce388ab5e4063078790ea7 synchronized; source and each recorded input fingerprint unchanged, so these exact results are reused without rerunning."
+      "context": "R5-03 exact current source after Codex comment4533654831. Original marked low-privilege local PG16.14/PG13.23 and Node22.22.2/npm10.9.9, at most2 PostgreSQL test workers; immediate legacy chain runs separately. Real App/auth browser, controlled price failure only, native recovered quote. Technical25 includes2000/2001/4000 original revision preservation and pending/completed native remakes, explicit7/0 price and wage/complete export. Legacy3 actual selected,57 unselected, not passed. No onsite data/deployment or full visual acceptance. This is targeted evidence, not remote final Full."
     },
     {
       "id": "r503-browser-current",
       "kind": "tests",
-      "command": "TEST_DATABASE_URL=<owned PG13.23 marked test DB> M01_SETTINGS_BROWSER_EXECUTABLE=/usr/bin/chromium node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/development-execution-read-native-browser-postgres.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r503-synced-browser.json",
+      "command": "TEST_DATABASE_URL=<owned PG13.23 marked test DB> M01_SETTINGS_BROWSER_EXECUTABLE=/usr/bin/chromium node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/development-execution-read-native-browser-postgres.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r503-review-browser.json",
       "status": "passed",
       "exitCode": 0,
       "passed": 5,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "1b8951e5b3e1d8e7a9875262183fc3cb0fd8d343",
-      "sourceFingerprint": "7e9f38e3a993e9c52374a61db49beecefc8ccb5051045ed091b8dbf3dff843a6",
+      "testedHead": "f18531eb5e6ffd4375a63709074b64735588bca8",
+      "sourceFingerprint": "46dbd4a05230f698534870e7d749c2a9fdd87654523df24cf5a15efb4cd85b96",
       "inputPaths": [
         "apps",
         "packages",
@@ -196,30 +196,30 @@
         "vitest.config.ts",
         "vitest.business-chain.config.ts"
       ],
-      "inputFingerprint": "2cbce3d95046ac440ce32554bde9f7158f333432b28ffe57eac7e99f84e604fb",
-      "startedAt": "2026-11-11T02:49:19.571Z",
-      "endedAt": "2026-11-11T02:49:37.535Z",
-      "log": "/workspace/.dx-cloud/r503-synced-browser.log",
-      "logSha256": "1c3639fc4bd3fcb930dfa47e242314ed230266b47dbd6946b3b9b6219a42f858",
+      "inputFingerprint": "3e0b00f3a6dee8e67d3d31974f4135900fa212e63d53dcaa953b281d202f33bb",
+      "startedAt": "2026-11-11T03:37:49.158Z",
+      "endedAt": "2026-11-11T03:38:10.287Z",
+      "log": "/workspace/.dx-cloud/r503-review-browser.log",
+      "logSha256": "b14087e0f3e5ddde716422ccf3566c95411b1ea332187b46801d2b5ed180c0ef",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "ef6668a3679b5b52d37d1d9ec2a00b1a23d48a818712d2be7a9793dee8689884"
+          "sha256": "e5e00a2ef015674f672a5aa2ac2c7d1899347bbcd293ee5839e644d1bb8ff034"
         }
       ],
-      "context": "R5-03 local prepared1b candidate plus R5-02 frozen candidate7c6b0454 (merge in progress). Exact current source reported; actual R5-02 merge still required before remote PR. Node22.22.2/npm10.9.9/Vitest4.1.10, original canonical bounded workers and resource identity/cleanup; marked low-privilege PG13.23 App or PG16.14 native/legacy database.23 units,24 native technical,5 original App/auth/quote browser and3 original legacy routes pass. Legacy full chain uses its isolated immediate-delete config, no other PG suite concurrently,57 unselected are not passed. Original first/rework wages, known zero-price confirmation, original task role/round bindings, rejections, same-session revoke and actual recovered native quote publication retained. No onsite/deployment or six-image visual acceptance. No current-head final CI claimed. Actual R5-02 merge a28d0b451a1710e204ce388ab5e4063078790ea7 synchronized; source and each recorded input fingerprint unchanged, so these exact results are reused without rerunning."
+      "context": "R5-03 exact current source after Codex comment4533654831. Original marked low-privilege local PG16.14/PG13.23 and Node22.22.2/npm10.9.9, at most2 PostgreSQL test workers; immediate legacy chain runs separately. Real App/auth browser, controlled price failure only, native recovered quote. Technical25 includes2000/2001/4000 original revision preservation and pending/completed native remakes, explicit7/0 price and wage/complete export. Legacy3 actual selected,57 unselected, not passed. No onsite data/deployment or full visual acceptance. This is targeted evidence, not remote final Full."
     },
     {
       "id": "r503-binding-final",
       "kind": "tests",
-      "command": "TEST_DATABASE_URL=<owned PG16.14 marked test DB> node node_modules/vitest/vitest.mjs run --config vitest.postgres-immediate.config.ts tests/integration/full-business-chain-postgres.test.ts -t 'P07/P08 development routes|P03 legacy' --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r503-synced-legacy.json",
+      "command": "TEST_DATABASE_URL=<owned PG16.14 marked test DB> node node_modules/vitest/vitest.mjs run --config vitest.postgres-immediate.config.ts tests/integration/full-business-chain-postgres.test.ts -t 'P07/P08 development routes|P03 legacy' --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r503-review-legacy.json",
       "status": "passed",
       "exitCode": 0,
       "passed": 3,
       "failed": 0,
       "skipped": 57,
-      "testedHead": "1b8951e5b3e1d8e7a9875262183fc3cb0fd8d343",
-      "sourceFingerprint": "7e9f38e3a993e9c52374a61db49beecefc8ccb5051045ed091b8dbf3dff843a6",
+      "testedHead": "f18531eb5e6ffd4375a63709074b64735588bca8",
+      "sourceFingerprint": "46dbd4a05230f698534870e7d749c2a9fdd87654523df24cf5a15efb4cd85b96",
       "inputPaths": [
         "apps",
         "packages",
@@ -232,18 +232,18 @@
         "vitest.config.ts",
         "vitest.business-chain.config.ts"
       ],
-      "inputFingerprint": "2cbce3d95046ac440ce32554bde9f7158f333432b28ffe57eac7e99f84e604fb",
-      "startedAt": "2026-11-11T02:51:33.152Z",
-      "endedAt": "2026-11-11T02:52:02.359Z",
-      "log": "/workspace/.dx-cloud/r503-synced-legacy.log",
-      "logSha256": "af59c0ca56891a5e47caff758f1f7c5cf8974ddbd1b6795864b243812394e21a",
+      "inputFingerprint": "3e0b00f3a6dee8e67d3d31974f4135900fa212e63d53dcaa953b281d202f33bb",
+      "startedAt": "2026-11-11T03:38:18.346Z",
+      "endedAt": "2026-11-11T03:38:48.621Z",
+      "log": "/workspace/.dx-cloud/r503-review-legacy.log",
+      "logSha256": "c5463ace3f2bc8810fefb213edcefe559620df9b51bad06d05dfe5abd7708fa4",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "967c3d58972c4518defb8232c03e5ed162136cd8a0fd5680bdb3a27437ff9017"
+          "sha256": "72a80d0e66df7d12fdf5d1ef86f313346684e6a03adf467f079f701d0ae48b11"
         }
       ],
-      "context": "R5-03 local prepared1b candidate plus R5-02 frozen candidate7c6b0454 (merge in progress). Exact current source reported; actual R5-02 merge still required before remote PR. Node22.22.2/npm10.9.9/Vitest4.1.10, original canonical bounded workers and resource identity/cleanup; marked low-privilege PG13.23 App or PG16.14 native/legacy database.23 units,24 native technical,5 original App/auth/quote browser and3 original legacy routes pass. Legacy full chain uses its isolated immediate-delete config, no other PG suite concurrently,57 unselected are not passed. Original first/rework wages, known zero-price confirmation, original task role/round bindings, rejections, same-session revoke and actual recovered native quote publication retained. No onsite/deployment or six-image visual acceptance. No current-head final CI claimed. Actual R5-02 merge a28d0b451a1710e204ce388ab5e4063078790ea7 synchronized; source and each recorded input fingerprint unchanged, so these exact results are reused without rerunning."
+      "context": "R5-03 exact current source after Codex comment4533654831. Original marked low-privilege local PG16.14/PG13.23 and Node22.22.2/npm10.9.9, at most2 PostgreSQL test workers; immediate legacy chain runs separately. Real App/auth browser, controlled price failure only, native recovered quote. Technical25 includes2000/2001/4000 original revision preservation and pending/completed native remakes, explicit7/0 price and wage/complete export. Legacy3 actual selected,57 unselected, not passed. No onsite data/deployment or full visual acceptance. This is targeted evidence, not remote final Full."
     }
   ]
 }

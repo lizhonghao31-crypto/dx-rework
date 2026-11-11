@@ -266,17 +266,19 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const input={taskId:confirmation.taskId,note:'TEST设计师实际确认本轮',result:'通过' as const,craftExecution:null,nextAssigneeId:null,sentDate:null,trackingNo:null},key=randomUUID();
   await execution.route(p.designer,p.sourceId,input,key);await execution.route(p.designer,p.sourceId,input,key);
  };
- it.each([{confirmFirst:true,amount:'7',total:'17.00'},{confirmFirst:false,amount:'0',total:'10.00'}])('R5 creates a separate native whole remake and uses only its explicitly approved amount ($amount)',async({confirmFirst,amount,total})=>{
+ it.each([{confirmFirst:true,amount:'7',total:'17.00',reasonLength:2000},{confirmFirst:false,amount:'0',total:'10.00',reasonLength:2001},{confirmFirst:true,amount:'7',total:'17.00',reasonLength:4000}])('R5 creates a separate native whole remake and uses only its explicitly approved amount ($amount, revision $reasonLength)',async({confirmFirst,amount,total,reasonLength})=>{
   const p=await sampleToTail();if(confirmFirst)await confirmSample(p);
   const orderId=(await f.db.query('SELECT order_id FROM digital_development_pattern_links WHERE source_id=$1',[p.sourceId])).rows[0].order_id;
   const initial=(await native.get(f.root,orderId)).currentRoundId;
   const rounds=new DevelopmentRoundService(f.db,true,native),old=await forms.read(p.designer,p.sourceId);
-  const revision={basedOnRound:1,document:{...old.document!,instructions:'TEST第二轮实际制作说明，保留完整修订资料'},origin:'内部发现' as const,customerComment:'',internalProblem:'TEST整件车板需重做',explanation:'TEST独立制作，不借旧工资',categories:['车缝' as const],affectedNodes:['裁板' as const,'车板' as const],outputKind:'整件样板' as const};
+  const revision={basedOnRound:1,document:{...old.document!,instructions:'TEST第二轮实际制作说明，保留完整修订资料'},origin:'内部发现' as const,customerComment:'',internalProblem:'改'.repeat(reasonLength),explanation:'TEST独立制作，不借旧工资',categories:['车缝' as const],affectedNodes:['裁板' as const,'车板' as const],outputKind:'整件样板' as const};
   const saved=await rounds.save(p.designer,p.sourceId,{expectedDraftVersion:0,revision},randomUUID()),key=randomUUID(),input={expectedDraftVersion:saved.draftVersion,basedOnRound:1};
   await rounds.publish(p.designer,p.sourceId,input,key);await rounds.publish(p.designer,p.sourceId,input,key);
   let order=await native.get(f.root,orderId);expect(order.currentRoundId).not.toBe(initial);const remake=order.currentRoundId;
   expect(order.status).toBe('pending_assignment');
   expect((await forms.read(p.designer,p.sourceId)).document!.instructions).toBe(revision.document.instructions);
+  expect((await f.db.query('SELECT request_reason FROM pattern_room_rounds WHERE round_id=$1',[remake])).rows[0].request_reason).toBe(revision.internalProblem.slice(0,2000));
+  expect((await f.db.query('SELECT internal_problem,explanation FROM digital_development_rounds WHERE source_id=$1 AND round_number=2',[p.sourceId])).rows[0]).toEqual({internal_problem:revision.internalProblem,explanation:revision.explanation});
   expect((await f.db.query('SELECT round_type,agreed_amount FROM pattern_room_rounds WHERE round_id=$1',[remake])).rows[0]).toEqual({round_type:'rework',agreed_amount:null});
   const personId=(await f.db.query('SELECT person_id FROM business_people WHERE app_user_id=$1',[p.worker.actorId])).rows[0].person_id;
   await expect(native.assign(f.root,orderId,{roundId:remake,version:order.version,personId},randomUUID())).rejects.toMatchObject({statusCode:400});
