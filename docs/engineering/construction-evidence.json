@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "22c0a5aca33130868703cdd998016e445ba30f68",
-  "sourceFingerprint": "c7a02954a61833cac2120e7e524180a7bd3a91a5f53a629d3155b42d62d7e2b4",
+  "sourceFingerprint": "9be8b15d2b14f91945f0ad6bd1e61db314ca2754bce12a40e795ca03ba5b0f8f",
   "risk": "full",
   "rules": [
     {
@@ -63,7 +63,8 @@
         "apps/api/src/production-platform/journey-native-times.ts",
         "apps/api/src/production-platform/journey-fact-model.ts",
         "tests/unit/journey-native-times.test.ts",
-        "tests/integration/production-readiness-postgres.test.ts"
+        "tests/integration/production-readiness-postgres.test.ts",
+        "apps/api/src/production-platform/bulk-preparation-service.ts"
       ],
       "reads": [
         "apps/api/src/production-platform/task-readiness-facts.ts",
@@ -81,7 +82,7 @@
         "tests/unit/journey-projection-isolation.test.ts",
         "tests/integration/production-readiness-postgres.test.ts"
       ],
-      "expectation": "Date-only does not acquire midnight. Exact scoped correction wins; no recorded_at-to-actual fallback. Internal/external cutting per-PO9/10 gap stays not ready, complement advances only the proper join; unknown correction clears the join. Existing R5-01 raw/effective packing fields and statistics units retained. Explicitly inherited prior-round verified material evidence keeps its original completion, rather than becoming missing or receiving a new-round timestamp; full native regression failed before the SQL fix and passes after.",
+      "expectation": "Date-only does not acquire midnight. Exact scoped correction wins; no recorded_at-to-actual fallback. Internal/external cutting per-PO9/10 gap stays not ready, complement advances only the proper join; unknown correction clears the join. Existing R5-01 raw/effective packing fields and statistics units retained. Explicitly inherited prior-round verified material evidence keeps its original completion, rather than becoming missing or receiving a new-round timestamp; full native regression failed before the SQL fix and passes after. ReviewP2: actor-free native bulk facts carry exact linked cuttingOrderId; the actual persisted cutting_gate timestamp matches the proven all-PO first-ready join, and clears after a scoped correction to unknown. Both internal and external cases fail before and pass after this narrow patch.",
       "checks": [
         "r502-final-units",
         "r502-final-pg"
@@ -149,23 +150,23 @@
     {
       "id": "r502-final-units",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/development-material-readiness.test.ts tests/unit/development-occurrence.test.ts tests/unit/digital-development-route.test.ts tests/unit/digital-development.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/journey-native-times.test.ts tests/unit/journey-progress-dates.test.ts tests/unit/journey-projection-isolation.test.ts tests/unit/sourcing-todo-sla.test.ts tests/unit/journey-business-progress.test.ts tests/unit/m01-production-statistics.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r502-route-units.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/development-material-readiness.test.ts tests/unit/development-occurrence.test.ts tests/unit/digital-development-route.test.ts tests/unit/digital-development.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/journey-native-times.test.ts tests/unit/journey-progress-dates.test.ts tests/unit/journey-projection-isolation.test.ts tests/unit/sourcing-todo-sla.test.ts tests/unit/journey-business-progress.test.ts tests/unit/m01-production-statistics.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r502-review-units.json",
       "status": "passed",
       "exitCode": 0,
       "passed": 231,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "cdcf04b0959add4c629e0f5883a6764f583622a5",
-      "sourceFingerprint": "df0b8fa6883a729cc265a03ab47f191dbf74a13d0556e081fc29ad92450cd3e6",
-      "context": "Isolated local preparation, not submitted or merged. Node22.22.2/npm10.9.9, original canonical bounded workers. Current source includes only trusted-business-day correction in three legacy shipping fixtures; production occurrence guards unchanged. This command actually reran its listed231 units or36 PG13.23 cases (including4 original App/GET/QR/role and inherited-material cases), with native Chromium and owned marked low-privilege test DB. Separate PG16.14 legacy chain below; not onsite, approved-image or production acceptance. Explicit input hashes must match after the actual R5-01 merge before remote submission. Before remote submission the actual R5-01 merge22c0a5ac was synchronized; every recorded explicit input hash matched. Only unrelated R5-01 current-production acceptance-helper changes and source metadata differ from the original test source; original testedHead/source fingerprint/report remain unchanged.",
-      "startedAt": "2026-11-10T20:34:40.471Z",
-      "endedAt": "2026-11-10T20:34:47.330Z",
-      "log": "/workspace/.dx-cloud/r502-route-units.log",
-      "logSha256": "027608e680b89587c8c06091e7c6a45b270c1f4fedc0c64ccb94c2fdd6b8307d",
+      "testedHead": "c81d6e347d7b0db914cef7e2f944784727732157",
+      "sourceFingerprint": "9be8b15d2b14f91945f0ad6bd1e61db314ca2754bce12a40e795ca03ba5b0f8f",
+      "context": "R5-02 Review repair on real release base22c0a5ac. Original source c81d6e34 plus internal cuttingOrderId/read-model regression patch; Node22.22.2/npm10.9.9/Vitest4.1.10, original canonical bounded workers, owned marked low-privilege PG13.23 for36 native/browser cases orPG16.14 for3 selected legacy cases. Internal/external two-PO counterexamples failed before patch because persisted cutting_gate time was null; after patch original detail, built model, stored readback and explicit unknown correction are checked independently. No original permissions or quantity/readiness guards relaxed.57 unselected legacy tests are not passed. No onsite/deployment/six-image visual acceptance.",
+      "startedAt": "2026-11-11T02:06:50.183Z",
+      "endedAt": "2026-11-11T02:07:00.296Z",
+      "log": "/workspace/.dx-cloud/r502-review-units.log",
+      "logSha256": "2eb386cd65cc5881a9cd4081be84db47a5d70431042cc1a76909462869e4d71e",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "1a2482731f01dd9ebc84328364060c627e185b35e260f276f5f11d402ef83fcc"
+          "sha256": "75cc4c523a2a41fa6dcb2298f5c93cd95bf7137dc2158a0b83aca58a63048d46"
         }
       ],
       "inputPaths": [
@@ -180,28 +181,28 @@
         "tests/unit",
         "tests/integration/digital-development-execution-postgres.test.ts"
       ],
-      "inputFingerprint": "807eee6def1f053f58c6ef0c45be1ac48a6aa0f77a35c6f5c33525ede9f76006"
+      "inputFingerprint": "67974c7d4c0b7fbde7fccf79ee8bdf7725f5913c99d5c55c206197c0701b1fb1"
     },
     {
       "id": "r502-final-pg",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/production-readiness-postgres.test.ts tests/integration/sourcing-owner-readiness-postgres.test.ts tests/integration/development-execution-read-native-browser-postgres.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r502-route-pg.json",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/production-readiness-postgres.test.ts tests/integration/sourcing-owner-readiness-postgres.test.ts tests/integration/development-execution-read-native-browser-postgres.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r502-review-pg.json",
       "status": "passed",
       "exitCode": 0,
       "passed": 36,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "cdcf04b0959add4c629e0f5883a6764f583622a5",
-      "sourceFingerprint": "df0b8fa6883a729cc265a03ab47f191dbf74a13d0556e081fc29ad92450cd3e6",
-      "context": "Isolated local preparation, not submitted or merged. Node22.22.2/npm10.9.9, original canonical bounded workers. Current source includes only trusted-business-day correction in three legacy shipping fixtures; production occurrence guards unchanged. This command actually reran its listed231 units or36 PG13.23 cases (including4 original App/GET/QR/role and inherited-material cases), with native Chromium and owned marked low-privilege test DB. Separate PG16.14 legacy chain below; not onsite, approved-image or production acceptance. Explicit input hashes must match after the actual R5-01 merge before remote submission. Before remote submission the actual R5-01 merge22c0a5ac was synchronized; every recorded explicit input hash matched. Only unrelated R5-01 current-production acceptance-helper changes and source metadata differ from the original test source; original testedHead/source fingerprint/report remain unchanged.",
-      "startedAt": "2026-11-10T20:34:40.459Z",
-      "endedAt": "2026-11-10T20:35:58.885Z",
-      "log": "/workspace/.dx-cloud/r502-route-pg.log",
-      "logSha256": "facb2d1c5219f1bfc82a4e23a145ea6cc7936349aaf8b33ef39e21cd4203a546",
+      "testedHead": "c81d6e347d7b0db914cef7e2f944784727732157",
+      "sourceFingerprint": "9be8b15d2b14f91945f0ad6bd1e61db314ca2754bce12a40e795ca03ba5b0f8f",
+      "context": "R5-02 Review repair on real release base22c0a5ac. Original source c81d6e34 plus internal cuttingOrderId/read-model regression patch; Node22.22.2/npm10.9.9/Vitest4.1.10, original canonical bounded workers, owned marked low-privilege PG13.23 for36 native/browser cases orPG16.14 for3 selected legacy cases. Internal/external two-PO counterexamples failed before patch because persisted cutting_gate time was null; after patch original detail, built model, stored readback and explicit unknown correction are checked independently. No original permissions or quantity/readiness guards relaxed.57 unselected legacy tests are not passed. No onsite/deployment/six-image visual acceptance.",
+      "startedAt": "2026-11-11T02:06:50.140Z",
+      "endedAt": "2026-11-11T02:08:10.482Z",
+      "log": "/workspace/.dx-cloud/r502-review-pg.log",
+      "logSha256": "52f5c376820f9202e7ab70affe8885a68f3d7581f26bcbe9d1ffd4390719d376",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "0e39f062b7a42586b178d55249a46ada7985299e4d93cca54c75a271a511a0a2"
+          "sha256": "dee31fc0d9116b097e3e301c1e6976eca0dd05909dc70b62478b0f9c0d85b826"
         }
       ],
       "inputPaths": [
@@ -218,19 +219,19 @@
         "tests/integration/development-execution-read-native-browser-postgres.test.ts",
         "tests/integration/digital-development-execution-postgres.test.ts"
       ],
-      "inputFingerprint": "8c1b1f18bba9cc0d39aefd7fb34249a5b3ed9a2f741eca7acbed4ce918b6097e"
+      "inputFingerprint": "052df4c69f65d6e6dfe0736439af0ac97f4b156ce65d3004642f0397f39da0cc"
     },
     {
       "id": "r502-legacy-pg16",
       "kind": "tests",
-      "command": "TEST_DATABASE_URL=<owned PG16.14 marked test DB> node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/full-business-chain-postgres.test.ts -t 'P07/P08 development routes|P03 legacy' --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r502-legacy-pg16.json",
+      "command": "TEST_DATABASE_URL=<owned PG16.14 marked test DB> node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/full-business-chain-postgres.test.ts -t 'P07/P08 development routes|P03 legacy' --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r502-review-legacy.json",
       "status": "passed",
       "exitCode": 0,
       "passed": 3,
       "failed": 0,
       "skipped": 57,
-      "testedHead": "cdcf04b0959add4c629e0f5883a6764f583622a5",
-      "sourceFingerprint": "df0b8fa6883a729cc265a03ab47f191dbf74a13d0556e081fc29ad92450cd3e6",
+      "testedHead": "c81d6e347d7b0db914cef7e2f944784727732157",
+      "sourceFingerprint": "9be8b15d2b14f91945f0ad6bd1e61db314ca2754bce12a40e795ca03ba5b0f8f",
       "inputPaths": [
         "apps",
         "packages",
@@ -242,18 +243,18 @@
         "vitest.config.ts",
         "vitest.business-chain.config.ts"
       ],
-      "inputFingerprint": "77ab9f8d48e42c5c409689dd9dc624ffb3d4306a53566754e1b314a2e0675d52",
-      "startedAt": "2026-11-10T20:31:25.487Z",
-      "endedAt": "2026-11-10T20:31:51.746Z",
-      "log": "/workspace/.dx-cloud/r502-legacy-pg16.log",
-      "logSha256": "c8e26449c2615f3a5531d3fdb0279dbaff978e0b931c296f5e985143e098ed29",
+      "inputFingerprint": "c7804fb9cec45e0f128ea982ff966d2fa841bf96c18537cdcb5169aedce95e65",
+      "startedAt": "2026-11-11T02:09:42.419Z",
+      "endedAt": "2026-11-11T02:10:09.623Z",
+      "log": "/workspace/.dx-cloud/r502-review-legacy.log",
+      "logSha256": "4f42fd879f6cb135b1d68b9dbbf4ca76730d49a1e7210ba8ec5d6eebeab4a25a",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "09099ea754f36db1b982866d52f2e60effb6bb0704472d5f04451191d6bb85d5"
+          "sha256": "1ff8994a401e3f7a721d34fa3dcccf832f4aa3b489e69715c3d9be6d676ee27e"
         }
       ],
-      "context": "Three real native legacy-route cases on separate owned PG16.14 low-privilege marked test DB, Node22.22.2/npm10.9.9, canonical long correctness max2. The old full-chain fixture directly executes historical PostgreSQL15+ SQL, so PG13 initialization failed at NULLS syntax before any case; no SQL/guard was relaxed. Existing supported local PG16 binary used with fresh owned data directory/port55416. This result is not the entire60-case business chain;57 unrelated tests intentionally not selected. Trusted business-day dispatch fixtures preserve original actual-date-before-entry guard. No onsite, config or deployment operation. Before remote submission the actual R5-01 merge22c0a5ac was synchronized; every recorded explicit input hash matched. Only unrelated R5-01 current-production acceptance-helper changes and source metadata differ from the original test source; original testedHead/source fingerprint/report remain unchanged."
+      "context": "R5-02 Review repair on real release base22c0a5ac. Original source c81d6e34 plus internal cuttingOrderId/read-model regression patch; Node22.22.2/npm10.9.9/Vitest4.1.10, original canonical bounded workers, owned marked low-privilege PG13.23 for36 native/browser cases orPG16.14 for3 selected legacy cases. Internal/external two-PO counterexamples failed before patch because persisted cutting_gate time was null; after patch original detail, built model, stored readback and explicit unknown correction are checked independently. No original permissions or quantity/readiness guards relaxed.57 unselected legacy tests are not passed. No onsite/deployment/six-image visual acceptance."
     }
   ]
 }
