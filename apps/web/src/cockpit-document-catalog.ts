@@ -14,14 +14,20 @@ export const COCKPIT_DOCUMENT_CATEGORIES=[
  {key:'budget',label:'预算单',stage:'preparation',node:'budget'},
  {key:'quotation',label:'客户报价与确认',stage:'creation',node:'order_information'},
  {key:'development',label:'开发原单与轮次',stage:'creation',node:'development_publish'},
- {key:'development_technical',label:'开发技术成果与客户批复',stage:'development',node:'development_pattern'},
+ {key:'development_plt',label:'纸样PLT',stage:'development',node:'development_pattern'},
+ {key:'development_sizes',label:'尺寸表',stage:'development',node:'development_pattern'},
+ {key:'development_consumption',label:'单件用量',stage:'development',node:'development_pattern'},
+ {key:'customer_comments',label:'客户评语',stage:'preparation',node:'customer_sample'},
+ {key:'customer_final_approval',label:'最终批复',stage:'preparation',node:'customer_sample'},
+ {key:'development_technical',label:'开发技术成果与客户批复',stage:'development',node:'development_pattern',retired:true},
  {key:'pattern',label:'打板执行单',stage:'development',node:'development_sewing'},
  {key:'misc',label:'关联打板杂事单',stage:'development',node:'development_patch'},
  {key:'order',label:'订购信息、PO与日期历史',stage:'creation',node:'order_information'},
  {key:'ship_sample',label:'船样与快递记录',stage:'production',node:'bulk_ship_sample'},
  {key:'rework',label:'QC返工与本厂做尾',stage:'receiving',node:'rework'},
  {key:'closure',label:'本期结案依据',stage:'receiving',node:'special_closure'},
- {key:'factory_history',label:'旧工厂收料清点历史（已退役）',stage:'production',node:'production_reporting'},
-] as const satisfies ReadonlyArray<{key:string;label:string;stage:JourneyStageKey;node:string}>;
+ {key:'factory_history',label:'旧工厂收料清点历史（已退役）',stage:'production',node:'production_reporting',retired:true},
+] as const satisfies ReadonlyArray<{key:string;label:string;stage:JourneyStageKey;node:string;retired?:boolean}>;
 export type CockpitDocumentCategory=typeof COCKPIT_DOCUMENT_CATEGORIES[number]['key'];
 export const COCKPIT_PRIORITY_DOCUMENTS=COCKPIT_DOCUMENT_CATEGORIES.slice(0,10);
+export const COCKPIT_VISIBLE_DOCUMENT_CATEGORIES=COCKPIT_DOCUMENT_CATEGORIES.filter(category=>!('retired'in category&&category.retired));

@@ -1,4 +1,5 @@
 import type {OrderJourney} from '@dx-rework/contracts/digital-production-journey';
+import {legacyDevelopmentDirectory} from './cockpit-documents-legacy-development.js';
 import {row,rows,str,num,strings,file,result,requireFields,checkedRows,check,textValue,positiveValue,nullableText,sameEntity,original,type Row,type CockpitDocumentEntry,type CockpitDocumentReader,type CockpitDocumentResult} from './cockpit-document-data.js';
 const states:Record<string,string>={effective:'当前走货依据有效',pending_review:'待技术尺寸复核',pending_customer:'待客户最终批复',superseded:'原依据已变版',unknown:'适用依据待核'};
 const historyPath=(id:string,round:number,kind:'artifacts'|'comments',options:{cursor?:number;version?:number;directory?:boolean;adoptedArtifactId?:string;scopeRef?:string}={})=>`digital-production/sources/${id}/execution/technical/history?${new URLSearchParams({roundNumber:String(round),scopeRef:options.scopeRef??'整款',kind,...(options.cursor?{beforeVersion:String(options.cursor)}:{}),...(options.version?{version:String(options.version)}:{}),...(options.directory?{view:'directory'}:{}),...(options.adoptedArtifactId?{adoptedArtifactId:options.adoptedArtifactId}:{})})}`;
@@ -23,7 +24,7 @@ export async function productionTechnicalDirectory(entry:CockpitDocumentEntry,re
 }
 function commentEntry(c:Row,sid:string,round:number,scope:string):CockpitDocumentEntry{
  check(positiveValue(c.version)&&textValue(c.commentId)&&typeof c.isFinal==='boolean');
- return {id:`comment:${c.commentId}:${c.version}`,label:`${c.isFinal?'客户最终批复':'客户中间评语'} v${c.version} · ${c.decision==='approved'?'认可':'需修改'}`,at:str(c.occurredAt)||str(c.recordedAt),note:c.isFinal?'每次最终批复对应原技术复核记录':'中间沟通不触发最终尺寸复核',url:c.reviewTaskId?`/ui/digital-production?task=${c.reviewTaskId}&taskView=read`:original('development',sid,round),children:c.review?[{id:`review:${row(c.review).reviewId}`,label:row(c.review).completed?`技术尺寸复核 · ${row(c.review).decision==='reuse'?'明确沿用':'采用修改成果'} v${row(c.review).artifactVersion}`:'原尺寸复核任务',note:str(row(c.review).note),url:`/ui/digital-production?task=${row(c.review).taskId}&taskView=read`}]:[],load:{kind:'technical_comment',path:historyPath(sid,round,'comments',{version:num(c.version),scopeRef:scope}),id:sid,version:num(c.version),round:String(round),scopeRef:scope}};
+ return {technicalPart:c.isFinal?'final':'comment',id:`comment:${c.commentId}:${c.version}`,label:`${c.isFinal?'客户最终批复':'客户中间评语'} v${c.version} · ${c.decision==='approved'?'认可':'需修改'}`,at:str(c.occurredAt)||str(c.recordedAt),note:c.isFinal?'每次最终批复对应原技术复核记录':'中间沟通不触发最终尺寸复核',url:c.reviewTaskId?`/ui/digital-production?task=${c.reviewTaskId}&taskView=read`:original('development',sid,round),children:c.review?[{id:`review:${row(c.review).reviewId}`,label:row(c.review).completed?`技术尺寸复核 · ${row(c.review).decision==='reuse'?'明确沿用':'采用修改成果'} v${row(c.review).artifactVersion}`:'原尺寸复核任务',note:str(row(c.review).note),url:`/ui/digital-production?task=${row(c.review).taskId}&taskView=read`}]:[],load:{kind:'technical_comment',path:historyPath(sid,round,'comments',{version:num(c.version),scopeRef:scope}),id:sid,version:num(c.version),round:String(round),scopeRef:scope}};
 }
 function historyEntries(data:Row,sid:string,round:number,kind:'artifacts'|'comments',scope:string):CockpitDocumentEntry[]{
  sameEntity(data,'sourceId',sid,'技术资料');check(data.roundNumber===round&&data.scopeRef===scope&&(data.nextBeforeVersion===null||positiveValue(data.nextBeforeVersion)));
@@ -31,13 +32,19 @@ function historyEntries(data:Row,sid:string,round:number,kind:'artifacts'|'comme
  if(data.nextBeforeVersion)entries.push({id:`older:${kind}:${data.nextBeforeVersion}`,label:kind==='artifacts'?'读取更早技术成果':'读取更早客户评语',load:{kind:`technical_history_${kind}`,path:historyPath(sid,round,kind,{cursor:num(data.nextBeforeVersion),directory:true,scopeRef:scope}),id:sid,round:String(round),cursor:num(data.nextBeforeVersion),scopeRef:scope}});
  return entries;
 }
-export async function technicalDirectory(order:Pick<OrderJourney,'sourceId'|'selectedRound'> & Partial<Pick<OrderJourney,'lines'>>,read:CockpitDocumentReader,signal:AbortSignal,scope='整款'):Promise<CockpitDocumentResult>{
+export async function technicalDirectory(order:Pick<OrderJourney,'sourceId'|'selectedRound'> & Partial<Pick<OrderJourney,'lines'>>,read:CockpitDocumentReader,signal:AbortSignal,scope='整款',part?:'plt'|'sizes'|'consumption'|'comment'|'final'):Promise<CockpitDocumentResult>{
  const sid=order.sourceId;if(!sid)return {state:'not_applicable',entries:[]};const round=order.selectedRound??1;
- const [artifacts,comments]=await Promise.all([read(historyPath(sid,round,'artifacts',{directory:true,scopeRef:scope}),signal).then(row),read(historyPath(sid,round,'comments',{directory:true,scopeRef:scope}),signal).then(row)]);
- const entries=historyEntries(artifacts,sid,round,'artifacts',scope),adopted=row(artifacts.adoptedArtifact),effective=row(artifacts.effective);
- if(adopted.artifactSetId){const item=artifactEntry(adopted,sid,scope,true),index=entries.findIndex(e=>e.id===item.id);if(index<0)entries.unshift(item);else entries[index]=item;}
- const commentItems=historyEntries(comments,sid,round,'comments',scope);if(commentItems.length)entries.push({id:'comments',label:'客户评语与最终批复',children:commentItems});
- if(artifacts.contextAvailable)entries.push({id:'technical-context',label:'首版/复版、面料缩率与技术适用依据',load:{kind:'technical_context',path:`digital-production/sources/${sid}/execution/technical?roundNumber=${round}&scopeRef=${encodeURIComponent(scope)}`,id:sid,round:String(round),scopeRef:scope}});
+ const kinds:Array<'artifacts'|'comments'>=part?[part==='comment'||part==='final'?'comments':'artifacts']:['artifacts','comments'];
+ const loaded=await Promise.all(kinds.map(async kind=>({kind,data:row(await read(historyPath(sid,round,kind,{directory:true,scopeRef:scope}),signal))})));
+ const artifacts=loaded.find(value=>value.kind==='artifacts')?.data,comments=loaded.find(value=>value.kind==='comments')?.data;
+ if(loaded.some(value=>value.data.enrolled===false)){
+  check(loaded.every(({data})=>data.enrolled===false&&data.sourceId===sid&&data.roundNumber===round&&data.scopeRef===scope));
+  return legacyDevelopmentDirectory(order,read,signal,scope,part);
+ }
+ const entries=artifacts?historyEntries(artifacts,sid,round,'artifacts',scope):[],adopted=row(artifacts?.adoptedArtifact),effective=row(artifacts?.effective);
+ if(adopted.artifactSetId){const item=artifactEntry(adopted,sid,scope,true),index=entries.findIndex(e=>e.id===item.id);if(index>=0)entries.splice(index,1);entries.unshift(item);}
+ const commentItems=comments?historyEntries(comments,sid,round,'comments',scope):[];if(commentItems.length)entries.push({id:'comments',label:'客户评语与最终批复',children:commentItems});
+ if(artifacts?.contextAvailable)entries.push({id:'technical-context',label:'首版/复版、面料缩率与技术适用依据',load:{kind:'technical_context',path:`digital-production/sources/${sid}/execution/technical?roundNumber=${round}&scopeRef=${encodeURIComponent(scope)}`,id:sid,round:String(round),scopeRef:scope}});
  if(scope==='整款')for(const line of order.lines??[])entries.push({sourceOnly:true,id:`po-technical:${line.id}`,label:`${line.po||'PO待补'} · ${line.color} 的原技术成果与客户批复`,load:{kind:'technical_directory',path:'',id:sid,round:String(round),scopeRef:`po:${line.id}`}});
  return result(entries,states[str(effective.state)]??'原技术版本分别保留，资料存在不等同于有效；未采用新规则的历史资料仍从原开发单查看');
 }

@@ -465,6 +465,20 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
 
     });
  });
+ it('R5 distinguishes an authorized unenrolled old directory from a missing exact version and an unauthorized source',async()=>{
+  const designer=person('sample-designer'),created={sourceId:randomUUID()};
+  // Explicit old-source fixture: current createSource correctly enrolls new
+  // sources. Do not delete that immutable enrollment or disable its trigger.
+  await f.db.query("INSERT INTO digital_production_sources(source_id,created_by,development_type,design_style_no,customer_code)VALUES($1,$2,'头版',$3,'PD')",[created.sourceId,designer.actorId,`TEST-OLD-DIRECTORY-${randomUUID()}`]);
+  const document=DevelopmentDocumentSchema.parse({template:'上衣',quantity:1,sampleSize:'M',orderDate:null,returnDate:null,unit:'cm',sizes:['M'],measurements:[{name:'胸围',values:['48']}],interlining:'',placketInterlining:'',sewingThread:'',buttonholeThread:'',stitchDensity:'',washingIroning:'',packaging:'',formalSizes:'',casualSizes:'',mainLabel:false,mainLabelMethod:'',sizeLabel:false,careLabel:false,instructions:'TEST historical source document',craft:'无',washing:'免洗',materials:[],files:[{attachmentId:await f.image(designer),kind:'款图'}]});
+  await forms.save(designer,created.sourceId,{expectedVersion:0,document},randomUUID());
+  for(const kind of ['artifacts','comments'] as const){
+   const input={roundNumber:1,scopeRef:'整款',kind,view:'directory' as const};
+   expect(await technical.history(designer,created.sourceId,input)).toMatchObject({sourceId:created.sourceId,roundNumber:1,enrolled:false,items:[],contextAvailable:false});
+   await expect(technical.history(designer,created.sourceId,{...input,version:1})).rejects.toMatchObject({statusCode:404});
+   await expect(technical.history(person('qc'),created.sourceId,input)).rejects.toMatchObject({statusCode:404});
+  }
+ });
  it('serves bounded technical directory metadata and exact historic bodies without a latest fallback',async()=>{
   const p=await prepare(),first=await artifact(p),original=(await technical.read(p.worker,p.sourceId)).artifacts[0]!;
   for(let version=1;version<=21;version++)await technical.saveArtifact(p.worker,p.sourceId,{taskId:p.paper.taskId,expectedDocumentVersion:p.documentVersion,expectedVersion:version,scopeRef:'整款',action:'save',body:{...original.body,note:`TEST directory draft ${version+1}`}},randomUUID());

@@ -4,8 +4,55 @@ import {COCKPIT_DOCUMENT_CATEGORIES,createCockpitDocumentSnapshot,loadCockpitDir
 import {cockpitContext,cockpitQuery,journeyRecordHref} from '../../apps/web/src/digital-journey-cockpit-model.js';
 import {quotationHistoryFromSearch} from '../../apps/web/src/quotation-history-route.js';
 import {filterDocumentEntries,documentTime} from '../../apps/web/src/cockpit-document-presentation.js';
+import {COCKPIT_VISIBLE_DOCUMENT_CATEGORIES} from '../../apps/web/src/cockpit-document-catalog.js';
 const sid='00000000-0000-4000-8000-000000000001',oid='00000000-0000-4000-8000-000000000002',line='00000000-0000-4000-8000-000000000003',signal=new AbortController().signal;
 const order:OrderJourney={id:sid,sourceId:sid,orderId:oid,designStyleNo:'TEST-DIRECTORY',temporaryStyleNo:null,customer:'TEST',category:null,designer:null,styleName:null,merchandisers:[],orderNumbers:[],createdAt:'2026-11-01T00:00:00Z',deliveryDate:null,selectedRound:1,adoptedRound:1,sourceVersion:1,instructionVersion:1,lines:[{id:line,po:'PO-TEST',color:'黑',formalStyleNo:null,temporaryStyleNo:null,orderedQuantity:100}],links:[],stages:JOURNEY_STAGES.map(s=>({...s,state:'active',nodes:[]})),progress:{development:null,bulk:null},hitReasons:[]};
+it('R5 keeps five independent technical entries and removes retired history only from the current directory',()=>{
+ const keys=COCKPIT_VISIBLE_DOCUMENT_CATEGORIES.map(item=>item.key);
+ for(const key of ['development_plt','development_sizes','development_consumption','customer_comments','customer_final_approval'])expect(keys).toContain(key);
+ expect(keys).not.toContain('factory_history');expect(keys).not.toContain('development_technical');
+ expect(COCKPIT_DOCUMENT_CATEGORIES.some(item=>item.key==='factory_history')).toBe(true);
+});
+it('R5 old authorized paper records remain openable without labelling a generic PDF as PLT or borrowing another round',async()=>{
+ const read:CockpitDocumentReader=async path=>{
+  if(path.includes('/technical/history?'))return {sourceId:sid,roundNumber:1,scopeRef:'整款',enrolled:false,items:[],nextBeforeVersion:null};
+  if(path.endsWith('/execution'))return {sheet:{sourceId:sid},tasks:[{taskId:'paper1',taskKind:'development_pattern',routeVersion:1},{taskId:'paper2',taskKind:'development_pattern',routeVersion:2}],facts:[{factId:'first',taskId:'paper1',kind:'纸样完成',recordedAt:'2026-11-01T01:00:00Z',payload:{attachmentIds:['TEST-paper-pdf']}},{factId:'second',taskId:'paper2',kind:'纸样完成',payload:{pltAttachmentIds:['OTHER-ROUND-PLT']}}],routeFacts:[]};
+  return {sourceId:sid,roundNumber:1,version:3,document:{unit:'cm',sizes:['M'],measurements:[{name:'胸围',values:['48']}],materials:[{name:'主布',consumption:'1.5',unit:'米'}]}};
+ };
+ const plt=await category(order,'development_plt',read,signal);expect(plt.state).toBe('unknown');expect(plt.entries[0]?.files?.[0]).toMatchObject({id:'TEST-paper-pdf',name:'原任务附件 1'});expect(plt.entries[0]?.files?.[0]?.path).toContain(sid+'/development/attachments/TEST-paper-pdf');expect(JSON.stringify(plt)).not.toContain('OTHER-ROUND-PLT');
+ const sizes=await category(order,'development_sizes',read,signal);expect(sizes.state).toBe('created');expect(sizes.entries[0]?.label).toContain('单据v3');expect(sizes.entries[0]?.children?.[0]?.note).toBe('M：48 cm');
+ const usage=await category(order,'development_consumption',read,signal);expect(usage.entries[0]?.children?.[0]?.note).toBe('1.5 米');
+ expect((await category(order,'customer_final_approval',read,signal)).state).toBe('unknown');
+});
+it('R5 keeps independent PLT, sizes and usage on exact adopted and older versions without fetching all artifact bodies',async()=>{
+ const artifact=(version:number)=>({artifactSetId:'a',version,sourceId:sid,roundNumber:1,scopeRef:'整款',taskId:'paper',documentVersion:1,status:'published'}),calls:string[]=[];
+ const read:CockpitDocumentReader=async path=>{calls.push(path);const q=new URL(path,'http://test').searchParams,kind=q.get('kind'),version=Number(q.get('version'));
+  const header={sourceId:sid,roundNumber:1,scopeRef:'整款',nextBeforeVersion:!version&&!q.get('beforeVersion')&&kind==='artifacts'?2:null};
+  if(kind==='comments')return {...header,items:[]};
+  if(q.get('view')==='directory')return {...header,items:[artifact(q.has('beforeVersion')?1:2)]};
+  return {...header,items:[{...artifact(version),body:{pltAttachmentIds:['PLT-v'+version],consumptionRows:[{consumption:'1.5',unit:'米'}],baseSizeTable:{unit:'cm',sizes:['M'],measurements:[{name:'胸围',values:['48']}]}}}]};
+ };
+ const plt=await category(order,'development_plt',read,signal);expect(plt.entries[0]?.files?.[0]?.id).toBe('PLT-v2');expect(plt.entries[0]?.children).toEqual([]);expect(calls.filter(path=>path.includes('version='))).toHaveLength(1);
+ const older=await entry(plt.entries.find(item=>item.load?.kind==='technical_history_artifacts')!,read,signal);expect(older.children?.[0]?.load).toMatchObject({kind:'technical_artifact',version:1,part:'plt'});
+ const first=await entry(older.children![0]!,read,signal);expect(first.files?.[0]?.id).toBe('PLT-v1');expect(first.children).toEqual([]);
+ const sizes=await category(order,'development_sizes',read,signal),usage=await category(order,'development_consumption',read,signal);expect(sizes.entries[0]?.files).toEqual([]);expect(sizes.entries[0]?.children?.map(item=>item.label)).toEqual(['胸围']);expect(usage.entries[0]?.children?.map(item=>item.label)).toEqual(['结构单件用量 1']);
+ const denied=Object.assign(Error('原资料权限已撤回'),{status:403});await expect(category(order,'development_plt',async()=>{throw denied;},signal)).rejects.toBe(denied);
+});
+it('R5 reads each technical kind independently so a failed comment does not hide PLT, sizes or usage',async()=>{
+ const artifact={artifactSetId:'independent',version:1,sourceId:sid,roundNumber:1,scopeRef:'整款',taskId:'paper',documentVersion:1,status:'published'},calls:string[]=[];
+ const read:CockpitDocumentReader=async path=>{calls.push(path);const q=new URL(path,'http://test').searchParams;if(q.get('kind')==='comments')throw Object.assign(Error('评语暂不可读'),{status:503});return {sourceId:sid,roundNumber:1,scopeRef:'整款',items:[q.has('version')?{...artifact,body:{pltAttachmentIds:['INDEPENDENT-PLT'],consumptionRows:[{consumption:'1.5',unit:'米'}],baseSizeTable:{sizes:['M'],measurements:[{name:'胸围',values:['50']}]}}}:artifact],nextBeforeVersion:null};};
+ for(const key of ['development_plt','development_sizes','development_consumption'] as const)expect((await category(order,key,read,signal)).state).toBe('created');expect(calls.every(path=>!path.includes('kind=comments'))).toBe(true);
+ await expect(category(order,'customer_comments',read,signal)).rejects.toThrow('评语暂不可读');
+ const original=async(path:string)=>path.endsWith('/execution')?Promise.reject(Error('任务读取失败')):path.includes('/technical/history?')?{sourceId:sid,roundNumber:1,scopeRef:'整款',enrolled:false,items:[],nextBeforeVersion:null}:{sourceId:sid,roundNumber:1,version:1,document:{sizes:['M'],measurements:[{name:'胸围',values:['50']}]}};
+ expect((await category(order,'development_sizes',original,signal)).state).toBe('created');await expect(category(order,'development_plt',original,signal)).rejects.toThrow('任务读取失败');
+});
+it('R5 retains exact per-PO technical readers when a whole-style file is absent, without borrowing other scopes',async()=>{
+ const calls:string[]=[],scope='po:'+line,artifact={artifactSetId:'po-a',version:1,sourceId:sid,roundNumber:1,scopeRef:scope,taskId:'paper',documentVersion:1,status:'published'};
+ const read:CockpitDocumentReader=async path=>{calls.push(path);const q=new URL(path,'http://test').searchParams,selected=q.get('scopeRef');return {sourceId:sid,roundNumber:1,scopeRef:selected,items:q.get('kind')==='artifacts'&&selected===scope?[q.has('version')?{...artifact,body:{pltAttachmentIds:['PO-PLT'],consumptionRows:[],baseSizeTable:{sizes:[],measurements:[]}}}:artifact]:[],nextBeforeVersion:null};};
+ const directory=await category(order,'development_plt',read,signal);expect(directory.state).toBe('unknown');expect(calls.every(path=>!path.includes('scopeRef=po'))).toBe(true);
+ const scoped=directory.entries.find(item=>item.load?.scopeRef===scope)!;expect(scoped.load?.part).toBe('plt');const loaded=await entry(scoped,read,signal);expect(loaded.children?.[0]?.files?.[0]?.id).toBe('PO-PLT');expect(loaded.children?.[0]?.children).toEqual([]);
+ await expect(entry(scoped,async()=>({sourceId:sid,roundNumber:1,scopeRef:'整款',items:[],nextBeforeVersion:null}),signal)).rejects.toThrow('尚不能确认是否已创建');
+});
 it('classifies every directory with stable stage/node keys and keeps private UI state out of list queries',()=>{
  for(const c of COCKPIT_DOCUMENT_CATEGORIES){expect(JOURNEY_STAGES.some(s=>s.key===c.stage)).toBe(true);expect(JOURNEY_NODES.some(n=>n.key===c.node&&n.stage===c.stage)).toBe(true);}
  const context=JourneyReturnContextSchema.parse({selected:sid,round:1,row:'paper',documentView:'all',documentStage:'preparation',documentSearch:'原图',documentScroll:320,documentFocus:'instruction/published:1/original',documentOpen:'instruction|instruction/published:1'}),url=journeyRecordHref('/ui/digital-production?instruction='+oid,context,'read'),back=new URL(url,'http://test').searchParams.get('returnTo')!;

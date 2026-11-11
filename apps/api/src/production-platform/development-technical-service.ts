@@ -364,7 +364,12 @@ export class DevelopmentTechnicalService {
  }
  async history(actor:TrustedActorContext,sourceId:string,input:{roundNumber:number;scopeRef:string;kind:'artifacts'|'comments';beforeVersion?:number|undefined;version?:number|undefined;view?:'directory'|undefined;adoptedArtifactId?:string|undefined}){
   const db=await this.database.connect();try{await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');await this.forms().read(actor,sourceId,db,input.roundNumber);await this.scope(db,sourceId,input.scopeRef);
-   if(!await technicalEnrollment(db,sourceId))digitalNotFound();
+   if(!await technicalEnrollment(db,sourceId)){
+    // Only authorized directory discovery identifies the old native source;
+    // exact version/original reads stay strict and do not invent new records.
+    if(input.view!=='directory'||input.version!==undefined||input.adoptedArtifactId!==undefined)digitalNotFound();
+    await db.query('COMMIT');return {sourceId,roundNumber:input.roundNumber,scopeRef:input.scopeRef,enrolled:false,items:[],nextBeforeVersion:null,contextAvailable:false};
+   }
    if(input.adoptedArtifactId){
     if(input.kind!=='artifacts'||input.version===undefined||input.beforeVersion!==undefined)conflict('沿用成果只读取明确的已关联版本');
     const selection=input.view==='directory'?'a.artifact_set_id,a.version,a.source_id,a.round_number,a.scope_ref,a.task_id,a.document_version,a.status,a.created_at,u.display_name AS author_name':'a.*';

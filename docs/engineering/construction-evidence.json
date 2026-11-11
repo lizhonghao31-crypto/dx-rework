@@ -1,303 +1,226 @@
 {
   "version": 1,
-  "base": "fbee17e28830d671d64f49ee2e286755f785c118",
-  "sourceFingerprint": "910d56d0ebaee6c0085a43e402bfc36c081d4348918bd6fc6790a90c108d72bb",
+  "base": "eedec5e366b1dd4ef31e16618444ef7ecd4fa923",
+  "sourceFingerprint": "565de00ae343bb0a74a0d9c99eb431d3e310edce3958064f4b3371e86b92f748",
   "risk": "full",
   "rules": [
     {
-      "source": "User-approved complete v2 and corrected nine-PR execution plan R5-07; approved final original images5/6 actually inspected. Standards only affect new adoption, insufficient actual route enters designer request, owner/Root/director one decision, no fixed30-day or second designer approval. Actual R5-06 merge fbee17e2 retained.",
-      "initialization": "0286 only adds managed resource metadata, true native creation subjects, immutable request/state events and low-privilege grants; manifest/checksum and canonical mappings included. Joint adoption requires the new-format company standard; before it the old chain remains compatible, existing adopted new data reads irrespective of switch. No production data/config, live grants, dependency upgrade, full backfill or deployment.",
-      "dateAndPermission": "Same original client/lifecycle/transaction, current original role/resource/field checks and RR read proxy. Native R/D, actual C/Z, retained B, PO/round/step identity, calendar/precision/frozen company remain distinct. No fake designer/Root actor, full AuthUser cache or historical event synthesis. Full authorized statistics/selection before current15 enrichment and same-transaction dirty registration remain.",
-      "rule": "Complete native first-effective admission, designer request and one atomic authorized response including source/formal inheritance and pending candidate changes.",
-      "writes": [
-        "apps/api/migrations/0286_order_time_requests.sql",
-        "apps/api/src/pattern-room/order-attachments.ts",
-        "apps/api/src/pattern-room/order-service.ts",
-        "apps/api/src/production-platform/development-revision-source.ts",
-        "apps/api/src/production-platform/development-round-plan.ts",
-        "apps/api/src/production-platform/development-round-service.ts",
-        "apps/api/src/production-platform/development-service.ts",
-        "apps/api/src/production-platform/identity-routes.ts",
-        "apps/api/src/production-platform/identity-service.ts",
-        "apps/api/src/production-platform/order-time-activation.ts",
-        "apps/api/src/production-platform/order-time-admission.ts",
-        "apps/api/src/production-platform/order-time-automatic.ts",
-        "apps/api/src/production-platform/order-time-created.ts",
-        "apps/api/src/production-platform/order-time-native-commands.ts",
-        "apps/api/src/production-platform/order-time-operation-state.ts",
-        "apps/api/src/production-platform/order-time-plan-repository.ts",
-        "apps/api/src/production-platform/order-time-request-plan.ts",
-        "apps/api/src/production-platform/order-time-request-repository.ts",
-        "apps/api/src/production-platform/order-time-request-routes.ts",
-        "apps/api/src/production-platform/order-time-request-service.ts",
-        "apps/api/src/production-platform/order-time-route-identities.ts",
-        "apps/api/src/production-platform/production-instruction-service.ts",
-        "apps/api/src/production-platform/short-lead-service.ts",
-        "apps/api/src/production-platform/short-lead-todos.ts",
-        "apps/api/src/server.ts"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/order-time-request-service.ts",
-        "apps/api/src/production-platform/order-time-native-commands.ts",
-        "apps/api/src/production-platform/order-time-operation-state.ts",
-        "apps/api/src/production-platform/order-time-plan-repository.ts"
-      ],
-      "oldTests": [
-        "tests/integration/order-time-plan-postgres.test.ts",
-        "tests/integration/development-round-history-clock-postgres.test.ts"
-      ],
-      "newTests": [
-        "tests/integration/order-time-requests-postgres.test.ts"
-      ],
-      "expectation": "New pending source has no work/clock; sufficient publication adopts once. Designer requests reach actual three manager roles, one manager applies without second designer approval; unrelated worker, stale manager and same-session revoked actor cannot apply. Late still needs same confirm/cancel, unknown cannot fake X. Native business, versioned policy, todos and site result commit together. Return/withdraw/resubmit retain real original data. Codex4538195532: the exact pending internal-revision source/round/draft proof alone crosses native remake and nested publication; pure owner/director succeed after native work completion while general remake stays denied. Codex4538195551: automatic and approved first formal activation refresh native ship-sample deadlines after plan persistence in the same transaction. Direct formal routes without independent development do not invent a legacy confirmation; initial PO authority binds the actual generated order and matching creation audit, never general date writing. Formal orders inherit original company and fixed development goals; future source/order rule sync is atomic/idempotent and begun native deadlines remain. Customer revision is an independent inactive draft with exact inherited attachment mapping; internal craft revision and instruction candidate apply with time together, completed inherited work is not repeated.",
+      "source": "User-approved complete R5 v2 and corrected nine-PR execution plan08; latest approved original image2 libfile_fde3_f-7728ac73eda08191a9191d318b8f3460_c8d3bf5d609c8191bce6411a30e94d44 actually opened and compared. Actual release base eedec5e366b1dd4ef31e16618444ef7ecd4fa923 has been fetched and fast-forwarded. Its tree is identical to tested R5-07 candidate95ce8f07, and all retained check inputs are verified unchanged.",
+      "initialization": "No schema, dependency, runtime flag, production data, backfill or new permission. Original owned TEST resource creator and current migrations reused. Existing historical enrollment absence is a labelled isolated old-source fixture, not deletion of immutable new-source enrollment. Only current visible directory hides retired receipt entry; native history reader remains.",
+      "dateAndPermission": "Reuse original shared R5-06 B/A/D/delta and native state/window facts, complete authorized statistics and current15 enrichment. Exact source/round/PO/version identity, current resource authorization and private original/thumbnail final checks remain. Unknown, unfilled, denied, loading and failed remain distinct; no fake date/PLT or cross-scope borrowing.",
       "checks": [
-        "r507-units",
-        "r507-native",
-        "r507-types",
-        "r507-lint",
-        "r507-settings-branches"
-      ]
-    },
-    {
-      "source": "User-approved complete v2 and corrected nine-PR execution plan R5-07; approved final original images5/6 actually inspected. Standards only affect new adoption, insufficient actual route enters designer request, owner/Root/director one decision, no fixed30-day or second designer approval. Actual R5-06 merge fbee17e2 retained.",
-      "initialization": "0286 only adds managed resource metadata, true native creation subjects, immutable request/state events and low-privilege grants; manifest/checksum and canonical mappings included. Joint adoption requires the new-format company standard; before it the old chain remains compatible, existing adopted new data reads irrespective of switch. No production data/config, live grants, dependency upgrade, full backfill or deployment.",
-      "dateAndPermission": "Same original client/lifecycle/transaction, current original role/resource/field checks and RR read proxy. Native R/D, actual C/Z, retained B, PO/round/step identity, calendar/precision/frozen company remain distinct. No fake designer/Root actor, full AuthUser cache or historical event synthesis. Full authorized statistics/selection before current15 enrichment and same-transaction dirty registration remain.",
-      "rule": "Apply the confirmed per-order quota, calendar and reminder to original native task, preparation, batch, development-cycle and sourcing clocks without restart.",
+        "r508-units",
+        "r508-native",
+        "r508-types",
+        "r508-lint",
+        "r508-protocol",
+        "r508-native-history"
+      ],
+      "rule": "Approved detail visual and compact real dates with centered original duration summary.",
       "writes": [
-        "apps/api/src/acceptance-clock/hooks.ts",
-        "apps/api/src/acceptance-clock/scope.ts",
-        "apps/api/src/production-platform/bulk-sla-evidence.ts",
-        "apps/api/src/production-platform/development-cycle-evidence.ts",
-        "apps/api/src/production-platform/development-sla-enrollment.ts",
-        "apps/api/src/production-platform/factory-batch-timing.ts",
-        "apps/api/src/production-platform/factory-flow-service.ts",
-        "apps/api/src/production-platform/factory-sla-evidence.ts",
-        "apps/api/src/production-platform/fixed-consumer-targets.ts",
-        "apps/api/src/production-platform/fixed-factory-timing.ts",
-        "apps/api/src/production-platform/fixed-order-adoption.ts",
-        "apps/api/src/production-platform/fixed-order-route.ts",
-        "apps/api/src/production-platform/fixed-order-work.ts",
-        "apps/api/src/production-platform/fixed-timeline-adoptions.ts",
-        "apps/api/src/production-platform/notification-service.ts",
-        "apps/api/src/production-platform/order-time-native-timing.ts",
-        "apps/api/src/production-platform/order-time-schedule.ts",
-        "apps/api/src/production-platform/order-time-todos.ts",
-        "apps/api/src/production-platform/po-date-repository.ts",
-        "apps/api/src/production-platform/preparation-todos.ts",
-        "apps/api/src/production-platform/production-readiness-repository.ts",
-        "apps/api/src/production-platform/ship-sample-timing.ts",
-        "apps/api/src/production-platform/sla-notification-preferences.ts",
-        "apps/api/src/production-platform/sla-order-service.ts",
-        "apps/api/src/production-platform/sla-sourcing-deadline-sql.ts",
-        "apps/api/src/production-platform/sourcing-sla-evidence.ts",
-        "apps/api/src/production-platform/sourcing-todo-sla.ts",
-        "apps/api/src/production-platform/task-service.ts",
-        "apps/api/src/todos/deep-link.ts",
-        "apps/api/src/todos/delivery-worker.ts",
-        "apps/api/src/todos/service.ts",
-        "apps/api/src/todos/sla-presentation.ts",
-        "apps/api/src/todos/timing-service.ts"
+        "apps/web/src/cockpit-date.tsx",
+        "apps/web/src/cockpit-detail-r5.css",
+        "apps/web/src/cockpit-detail.tsx",
+        "apps/web/src/cockpit-fixed-schedule.tsx",
+        "apps/web/src/cockpit-stage-progress.tsx"
       ],
       "reads": [
-        "apps/api/src/production-platform/order-time-native-timing.ts",
-        "apps/api/src/production-platform/task-service.ts",
-        "apps/api/src/production-platform/production-readiness-repository.ts",
-        "apps/api/src/todos/timing-service.ts"
+        "apps/web/src/cockpit-fixed-schedule.tsx",
+        "apps/web/src/cockpit-node-dates.tsx",
+        "apps/web/src/cockpit-detail-risks.tsx"
       ],
       "oldTests": [
-        "tests/unit/sourcing-todo-sla.test.ts",
-        "tests/unit/development-cycle.test.ts",
-        "tests/unit/fixed-factory-dispatch-windows.test.ts"
-      ],
-      "newTests": [
-        "tests/integration/order-time-requests-postgres.test.ts"
-      ],
-      "expectation": "Future native pattern adopts120minutes/Sunday calendar/muted warning while material retains original1hour/R/D. Preparation window uses actual per-order60minutes, not hardcoded24hours. Exact physical batch timing keeps its own policy-at-R and calendar; aggregate earliest task cannot overwrite it. Sourcing immutable window stores original R/calendar/warning and return/reassignment preserves it. Real bounded PG scheduler warns once, respects muted prewarning, rechecks recipient and does not consume original overdue reminder counters. Development cycle uses actual counted calendar, original facts and original urgent/normal rules; no wall audit time becomes a real event.",
-      "checks": [
-        "r507-units",
-        "r507-native",
-        "r507-types",
-        "r507-lint",
-        "r507-settings-branches"
-      ]
-    },
-    {
-      "source": "User-approved complete v2 and corrected nine-PR execution plan R5-07; approved final original images5/6 actually inspected. Standards only affect new adoption, insufficient actual route enters designer request, owner/Root/director one decision, no fixed30-day or second designer approval. Actual R5-06 merge fbee17e2 retained.",
-      "initialization": "0286 only adds managed resource metadata, true native creation subjects, immutable request/state events and low-privilege grants; manifest/checksum and canonical mappings included. Joint adoption requires the new-format company standard; before it the old chain remains compatible, existing adopted new data reads irrespective of switch. No production data/config, live grants, dependency upgrade, full backfill or deployment.",
-      "dateAndPermission": "Same original client/lifecycle/transaction, current original role/resource/field checks and RR read proxy. Native R/D, actual C/Z, retained B, PO/round/step identity, calendar/precision/frozen company remain distinct. No fake designer/Root actor, full AuthUser cache or historical event synthesis. Full authorized statistics/selection before current15 enrichment and same-transaction dirty registration remain.",
-      "rule": "Read one effective per-order version and preserve original target, real events, exact own windows and current authorized performance/freshness contracts.",
-      "writes": [
-        "apps/api/src/production-platform/journey-query.ts",
-        "apps/api/src/production-platform/order-time-reading.ts",
-        "apps/api/src/production-platform/po-delivery-query.ts"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/journey-selection-facts.ts",
-        "apps/api/src/production-platform/journey-fact-updates.ts",
-        "apps/api/src/production-platform/order-time-request-plan.ts",
-        "apps/api/src/production-platform/fixed-schedule-basis.ts"
-      ],
-      "oldTests": [
-        "tests/integration/order-time-reading-postgres.test.ts",
-        "tests/integration/journey-fact-updates-postgres.test.ts"
-      ],
-      "newTests": [
-        "tests/unit/order-time-reading.test.ts",
-        "tests/integration/order-time-requests-postgres.test.ts"
-      ],
-      "expectation": "Real creation event anchors whole elapsed including actual waiting; no adoption/audit fallback. Non-task original R chooses that confirmed policy, later arrangements cannot reset it. Exact task and native per-batch windows take precedence; Sunday does not become1500minutes of overdue work. Only genuine H approval retargets fixed B. Known actual/unknown/date remain truthful, current company publication does not overwrite frozen old standards. Retain craft parent return confirmation, authorized lightweight global selection and15 rich rows, reliable totals on detail-only failure, RR and bounded background updates; no GET all-order construction.",
-      "checks": [
-        "r507-units",
-        "r507-native",
-        "r507-types",
-        "r507-lint",
-        "r507-settings-branches"
-      ]
-    },
-    {
-      "source": "User-approved complete v2 and corrected nine-PR execution plan R5-07; approved final original images5/6 actually inspected. Standards only affect new adoption, insufficient actual route enters designer request, owner/Root/director one decision, no fixed30-day or second designer approval. Actual R5-06 merge fbee17e2 retained.",
-      "initialization": "0286 only adds managed resource metadata, true native creation subjects, immutable request/state events and low-privilege grants; manifest/checksum and canonical mappings included. Joint adoption requires the new-format company standard; before it the old chain remains compatible, existing adopted new data reads irrespective of switch. No production data/config, live grants, dependency upgrade, full backfill or deployment.",
-      "dateAndPermission": "Same original client/lifecycle/transaction, current original role/resource/field checks and RR read proxy. Native R/D, actual C/Z, retained B, PO/round/step identity, calendar/precision/frozen company remain distinct. No fake designer/Root actor, full AuthUser cache or historical event synthesis. Full authorized statistics/selection before current15 enrichment and same-transaction dirty registration remain.",
-      "rule": "Expose one compact actual application/processing flow in the original App, aligned with approved visual5/6 and original unknown-submit recovery.",
-      "writes": [
-        "apps/web/src/development-technical-workspace.tsx",
-        "apps/web/src/digital-designer-workspace.tsx",
-        "apps/web/src/digital-detail-route.ts",
-        "apps/web/src/digital-development-create-form.tsx",
-        "apps/web/src/digital-development-panel.tsx",
-        "apps/web/src/digital-notification-toast.tsx",
-        "apps/web/src/digital-production-api.ts",
-        "apps/web/src/digital-production-page.tsx",
-        "apps/web/src/order-time-application.tsx",
-        "apps/web/src/order-time-production-route.tsx",
-        "apps/web/src/order-time-request-page.tsx",
-        "apps/web/src/order-time-request.css",
-        "apps/web/src/production-instruction-panel.tsx",
-        "apps/web/src/short-lead-workspace.tsx",
-        "apps/web/src/system-dialog.tsx"
-      ],
-      "reads": [
-        "apps/web/src/order-time-request-page.tsx",
-        "apps/web/src/order-time-application.tsx",
-        "apps/web/src/digital-production-page.tsx",
-        "apps/web/src/use-digital-detail-navigation-guard.ts"
-      ],
-      "oldTests": [
-        "tests/integration/r5-settings-native-browser-postgres.test.ts",
-        "tests/unit/my-todos-navigation.test.ts"
+        "tests/unit/cockpit-detail.test.ts",
+        "tests/unit/cockpit-fixed-schedule.test.ts",
+        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts"
       ],
       "newTests": [
         "tests/integration/order-time-requests-browser-postgres.test.ts"
       ],
-      "expectation": "Original designer creates request, actual manager todo deep-links the order, only applicable rules edit with unit/calendar/reminder and visible current difference. Real1586/1165 pages do not overflow, controls stay compact despite global label styles; date/late confirmation is business text. Lost POST receipt keeps original body/key and causes one native pattern binding. Same active session role revoke denies apply while retaining0.5 input; pending new source is not activated. Original manual drafts/navigation/lazy/CSS stay scoped. Result is nonblocking site notice, not designer reconfirmation or new approval center. Detail/home full visual work remains08/09, not claimed complete.",
-      "checks": [
-        "r507-units",
-        "r507-native",
-        "r507-types",
-        "r507-lint",
-        "r507-settings-branches"
-      ]
+      "expectation": "Original identity/PO/business fields remain, seven double rings keep native ratios/names, short visible dates retain full source precision in accessible title, same-source delta stays at right. Current/risk upper row and node/document/log lower row align; no filler or duplicate custom popup, no global Shell redesign."
     },
     {
-      "source": "User-approved complete v2 and corrected nine-PR execution plan R5-07; approved final original images5/6 actually inspected. Standards only affect new adoption, insufficient actual route enters designer request, owner/Root/director one decision, no fixed30-day or second designer approval. Actual R5-06 merge fbee17e2 retained.",
-      "initialization": "0286 only adds managed resource metadata, true native creation subjects, immutable request/state events and low-privilege grants; manifest/checksum and canonical mappings included. Joint adoption requires the new-format company standard; before it the old chain remains compatible, existing adopted new data reads irrespective of switch. No production data/config, live grants, dependency upgrade, full backfill or deployment.",
-      "dateAndPermission": "Same original client/lifecycle/transaction, current original role/resource/field checks and RR read proxy. Native R/D, actual C/Z, retained B, PO/round/step identity, calendar/precision/frozen company remain distinct. No fake designer/Root actor, full AuthUser cache or historical event synthesis. Full authorized statistics/selection before current15 enrichment and same-transaction dirty registration remain.",
-      "rule": "Keep explicit compatible DTOs and original per-order calendar/development counting semantics without weakening native state or permissions.",
+      "source": "User-approved complete R5 v2 and corrected nine-PR execution plan08; latest approved original image2 libfile_fde3_f-7728ac73eda08191a9191d318b8f3460_c8d3bf5d609c8191bce6411a30e94d44 actually opened and compared. Actual release base eedec5e366b1dd4ef31e16618444ef7ecd4fa923 has been fetched and fast-forwarded. Its tree is identical to tested R5-07 candidate95ce8f07, and all retained check inputs are verified unchanged.",
+      "initialization": "No schema, dependency, runtime flag, production data, backfill or new permission. Original owned TEST resource creator and current migrations reused. Existing historical enrollment absence is a labelled isolated old-source fixture, not deletion of immutable new-source enrollment. Only current visible directory hides retired receipt entry; native history reader remains.",
+      "dateAndPermission": "Reuse original shared R5-06 B/A/D/delta and native state/window facts, complete authorized statistics and current15 enrichment. Exact source/round/PO/version identity, current resource authorization and private original/thumbnail final checks remain. Unknown, unfilled, denied, loading and failed remain distinct; no fake date/PLT or cross-scope borrowing.",
+      "checks": [
+        "r508-units",
+        "r508-native",
+        "r508-types",
+        "r508-lint",
+        "r508-protocol",
+        "r508-native-history"
+      ],
+      "rule": "Seven genuine compact rows, original responsibility result and full original date/record access.",
       "writes": [
-        "packages/contracts/package.json",
-        "packages/contracts/src/digital-craft.ts",
-        "packages/contracts/src/digital-development-technical.ts",
-        "packages/contracts/src/digital-development.ts",
-        "packages/contracts/src/digital-production-notifications.ts",
-        "packages/contracts/src/digital-production.ts",
-        "packages/contracts/src/order-time-plan.ts",
-        "packages/contracts/src/order-time-requests.ts",
-        "packages/contracts/src/production-instruction.ts",
-        "packages/contracts/src/todo-destination.ts",
-        "packages/contracts/src/todo-presentation.ts",
-        "packages/contracts/src/todos.ts",
-        "packages/domain/src/development-cycle.ts",
-        "packages/domain/src/digital-sla-plan.ts"
+        "apps/web/src/cockpit-current-summary.tsx",
+        "apps/web/src/cockpit-node-rows.tsx",
+        "apps/web/src/cockpit-node-summary.tsx"
       ],
       "reads": [
-        "packages/contracts/src/order-time-plan.ts",
-        "packages/contracts/src/order-time-requests.ts",
-        "packages/domain/src/development-cycle.ts",
-        "packages/domain/src/digital-sla-plan.ts"
+        "apps/web/src/cockpit-fixed-schedule.tsx",
+        "apps/web/src/journey-sla-details.tsx",
+        "apps/web/src/cockpit-home-dialog.tsx",
+        "apps/web/src/node-materials-view.ts"
       ],
       "oldTests": [
-        "tests/unit/order-time-plan.test.ts",
-        "tests/unit/development-cycle.test.ts",
-        "tests/unit/todo-deep-link.test.ts"
+        "tests/unit/cockpit-detail.test.ts",
+        "tests/unit/cockpit-fixed-schedule.test.ts",
+        "tests/unit/m01-cockpit-reading-context.test.ts"
       ],
       "newTests": [
-        "tests/unit/order-time-requests.test.ts"
+        "tests/integration/order-time-requests-browser-postgres.test.ts"
       ],
-      "expectation": "Ordinary rule kind remains original, included stays in parent, forecast is not a responsibility quota, urgent cycle does not exceed normal. Optional production route distinguishes actual none from unknown. Source/formal DTOs and extra notification fields preserve old contracts, native task QR/resource permissions and private inherited attachments. Batch calendar is optional for unchanged legacy consumers. Actual elapsed and counted work remain separate; no fabricated missing dates.",
-      "checks": [
-        "r507-units",
-        "r507-native",
-        "r507-types",
-        "r507-lint",
-        "r507-settings-branches"
-      ]
+      "expectation": "Real first-seven heights and eighth-row scroll; filters remain as compact selection, original all-stage action and full table remain. Original task/date-exclusive/batch deadline is D, not B. Completed own late result stays visible; no responsibility invented when evidence missing. Full modal keeps dates/owners/history/actions and unique DOM IDs, deadline header fits190px. Original materials restoration preserved."
     },
     {
-      "source": "User-approved complete v2 and corrected nine-PR execution plan R5-07; approved final original images5/6 actually inspected. Standards only affect new adoption, insufficient actual route enters designer request, owner/Root/director one decision, no fixed30-day or second designer approval. Actual R5-06 merge fbee17e2 retained.",
-      "initialization": "0286 only adds managed resource metadata, true native creation subjects, immutable request/state events and low-privilege grants; manifest/checksum and canonical mappings included. Joint adoption requires the new-format company standard; before it the old chain remains compatible, existing adopted new data reads irrespective of switch. No production data/config, live grants, dependency upgrade, full backfill or deployment.",
-      "dateAndPermission": "Same original client/lifecycle/transaction, current original role/resource/field checks and RR read proxy. Native R/D, actual C/Z, retained B, PO/round/step identity, calendar/precision/frozen company remain distinct. No fake designer/Root actor, full AuthUser cache or historical event synthesis. Full authorized statistics/selection before current15 enrichment and same-transaction dirty registration remain.",
-      "rule": "Register actual new native/browser suites, migration and reviewed time occurrence changes, preserving prior manual semantics and avoiding unrelated repeated gates.",
+      "source": "User-approved complete R5 v2 and corrected nine-PR execution plan08; latest approved original image2 libfile_fde3_f-7728ac73eda08191a9191d318b8f3460_c8d3bf5d609c8191bce6411a30e94d44 actually opened and compared. Actual release base eedec5e366b1dd4ef31e16618444ef7ecd4fa923 has been fetched and fast-forwarded. Its tree is identical to tested R5-07 candidate95ce8f07, and all retained check inputs are verified unchanged.",
+      "initialization": "No schema, dependency, runtime flag, production data, backfill or new permission. Original owned TEST resource creator and current migrations reused. Existing historical enrollment absence is a labelled isolated old-source fixture, not deletion of immutable new-source enrollment. Only current visible directory hides retired receipt entry; native history reader remains.",
+      "dateAndPermission": "Reuse original shared R5-06 B/A/D/delta and native state/window facts, complete authorized statistics and current15 enrichment. Exact source/round/PO/version identity, current resource authorization and private original/thumbnail final checks remain. Unknown, unfilled, denied, loading and failed remain distinct; no fake date/PLT or cross-scope borrowing.",
+      "checks": [
+        "r508-units",
+        "r508-native",
+        "r508-types",
+        "r508-lint",
+        "r508-protocol",
+        "r508-native-history"
+      ],
+      "rule": "Independent trusted technical categories, exact adopted/history/template and per-PO version readers.",
       "writes": [
-        "apps/api/src/platform/migration-manifest.json",
-        "scripts/ci/full-gate-risk-map.mjs",
-        "scripts/deploy/acceptance-migration-requirements.json",
-        "scripts/test-suite-plan.mjs",
+        "apps/web/src/cockpit-document-catalog.ts",
+        "apps/web/src/cockpit-document-data.ts",
+        "apps/web/src/cockpit-documents-extended.ts",
+        "apps/web/src/cockpit-documents-technical.ts",
+        "apps/web/src/cockpit-technical-parts.ts"
+      ],
+      "reads": [
+        "apps/web/src/cockpit-documents-model.ts",
+        "apps/web/src/cockpit-documents-production.ts",
+        "apps/api/src/production-platform/development-technical-service.ts"
+      ],
+      "oldTests": [
+        "tests/unit/cockpit-document-directory.test.ts",
+        "tests/unit/cockpit-document-new-sources.test.ts",
+        "tests/unit/cockpit-contract-directory-access.test.ts"
+      ],
+      "newTests": [
+        "tests/unit/cockpit-document-new-sources.test.ts",
+        "tests/integration/order-time-requests-browser-postgres.test.ts"
+      ],
+      "expectation": "PLT/sizes/usage/comment/final separate, metadata only for required kind, exact current body then lazy historical bodies. Adopted version precedes newer draft; original inherited source and template stay exact. Per-PO lazy links retained and cannot borrow whole-style files. Comment failure does not break the three artifact categories or vice versa; no old history pages lost."
+    },
+    {
+      "source": "User-approved complete R5 v2 and corrected nine-PR execution plan08; latest approved original image2 libfile_fde3_f-7728ac73eda08191a9191d318b8f3460_c8d3bf5d609c8191bce6411a30e94d44 actually opened and compared. Actual release base eedec5e366b1dd4ef31e16618444ef7ecd4fa923 has been fetched and fast-forwarded. Its tree is identical to tested R5-07 candidate95ce8f07, and all retained check inputs are verified unchanged.",
+      "initialization": "No schema, dependency, runtime flag, production data, backfill or new permission. Original owned TEST resource creator and current migrations reused. Existing historical enrollment absence is a labelled isolated old-source fixture, not deletion of immutable new-source enrollment. Only current visible directory hides retired receipt entry; native history reader remains.",
+      "dateAndPermission": "Reuse original shared R5-06 B/A/D/delta and native state/window facts, complete authorized statistics and current15 enrichment. Exact source/round/PO/version identity, current resource authorization and private original/thumbnail final checks remain. Unknown, unfilled, denied, loading and failed remain distinct; no fake date/PLT or cross-scope borrowing.",
+      "checks": [
+        "r508-units",
+        "r508-native",
+        "r508-types",
+        "r508-lint",
+        "r508-protocol",
+        "r508-native-history"
+      ],
+      "rule": "Read actual legacy authorized sources without pretending they adopted new technical versions.",
+      "writes": [
+        "apps/api/src/production-platform/development-technical-service.ts",
+        "apps/web/src/cockpit-documents-legacy-development.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/development-service.ts",
+        "apps/api/src/production-platform/development-execution-read.ts",
+        "apps/api/src/tools/attachments.ts",
+        "apps/web/src/cockpit-documents-technical.ts"
+      ],
+      "oldTests": [
+        "tests/integration/development-technical-postgres.test.ts",
+        "tests/unit/cockpit-document-new-sources.test.ts"
+      ],
+      "newTests": [
+        "tests/integration/development-technical-postgres.test.ts",
+        "tests/unit/cockpit-document-new-sources.test.ts"
+      ],
+      "expectation": "Original forms and scope authorization precedes unenrolled directory discovery. Exact nonexistent/foreign versions stay404, arbitrary source reader remains denied. Legacy paper attachments remain original generic attachments, PDF not PLT; sizes/usage use original document version, task reader errors do not block those independent sheet parts. Facts must match original selected round or authorized task; no forged technical enrollment/event."
+    },
+    {
+      "source": "User-approved complete R5 v2 and corrected nine-PR execution plan08; latest approved original image2 libfile_fde3_f-7728ac73eda08191a9191d318b8f3460_c8d3bf5d609c8191bce6411a30e94d44 actually opened and compared. Actual release base eedec5e366b1dd4ef31e16618444ef7ecd4fa923 has been fetched and fast-forwarded. Its tree is identical to tested R5-07 candidate95ce8f07, and all retained check inputs are verified unchanged.",
+      "initialization": "No schema, dependency, runtime flag, production data, backfill or new permission. Original owned TEST resource creator and current migrations reused. Existing historical enrollment absence is a labelled isolated old-source fixture, not deletion of immutable new-source enrollment. Only current visible directory hides retired receipt entry; native history reader remains.",
+      "dateAndPermission": "Reuse original shared R5-06 B/A/D/delta and native state/window facts, complete authorized statistics and current15 enrichment. Exact source/round/PO/version identity, current resource authorization and private original/thumbnail final checks remain. Unknown, unfilled, denied, loading and failed remain distinct; no fake date/PLT or cross-scope borrowing.",
+      "checks": [
+        "r508-units",
+        "r508-native",
+        "r508-types",
+        "r508-lint",
+        "r508-protocol",
+        "r508-native-history"
+      ],
+      "rule": "Node-scoped horizontal directory with usable statuses, real retry and original return state.",
+      "writes": [
+        "apps/web/src/cockpit-documents.tsx"
+      ],
+      "reads": [
+        "apps/web/src/cockpit-documents-model.ts",
+        "apps/web/src/cockpit-document-presentation.ts",
+        "apps/web/src/auth-session.ts"
+      ],
+      "oldTests": [
+        "tests/unit/cockpit-document-snapshot.test.ts",
+        "tests/unit/cockpit-document-directory.test.ts"
+      ],
+      "newTests": [
+        "tests/integration/order-time-requests-browser-postgres.test.ts"
+      ],
+      "expectation": "Only selected stage reads metadata, no eager all-category start. Retired receipt and aggregate technical label hidden in current directory only. Current identity/snapshot guard, per-category retry and exact original file links preserved; no failure shown as unfilled. Reopen revalidates authority and real retry waits that actual read generation. Raw authorized attachments use original native redirect, not public storage address cache."
+    },
+    {
+      "source": "User-approved complete R5 v2 and corrected nine-PR execution plan08; latest approved original image2 libfile_fde3_f-7728ac73eda08191a9191d318b8f3460_c8d3bf5d609c8191bce6411a30e94d44 actually opened and compared. Actual release base eedec5e366b1dd4ef31e16618444ef7ecd4fa923 has been fetched and fast-forwarded. Its tree is identical to tested R5-07 candidate95ce8f07, and all retained check inputs are verified unchanged.",
+      "initialization": "No schema, dependency, runtime flag, production data, backfill or new permission. Original owned TEST resource creator and current migrations reused. Existing historical enrollment absence is a labelled isolated old-source fixture, not deletion of immutable new-source enrollment. Only current visible directory hides retired receipt entry; native history reader remains.",
+      "dateAndPermission": "Reuse original shared R5-06 B/A/D/delta and native state/window facts, complete authorized statistics and current15 enrichment. Exact source/round/PO/version identity, current resource authorization and private original/thumbnail final checks remain. Unknown, unfilled, denied, loading and failed remain distinct; no fake date/PLT or cross-scope borrowing.",
+      "checks": [
+        "r508-units",
+        "r508-native",
+        "r508-types",
+        "r508-lint",
+        "r508-protocol",
+        "r508-native-history"
+      ],
+      "rule": "Original-App/browser/native evidence, reviewed display-time candidate and old consumers remain explicit.",
+      "writes": [
         "tests/acceptance/supplychain-settings-browser.ts",
-        "tests/integration/m01-settings-native-browser-postgres.test.ts",
+        "tests/integration/development-technical-postgres.test.ts",
+        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts",
         "tests/integration/order-time-requests-browser-postgres.test.ts",
-        "tests/integration/order-time-requests-postgres.test.ts",
-        "tests/integration/order-time-settings-postgres.test.ts",
-        "tests/integration/r5-settings-native-browser-postgres.test.ts",
-        "tests/unit/development-cycle.test.ts",
-        "tests/unit/digital-task-read-boundary.test.ts",
-        "tests/unit/order-time-reading.test.ts",
-        "tests/unit/order-time-requests.test.ts",
-        "tests/unit/sourcing-todo-sla.test.ts"
+        "tests/unit/cockpit-detail.test.ts",
+        "tests/unit/cockpit-document-new-sources.test.ts",
+        "docs/engineering/acceptance-time-sites-20261027.json"
       ],
       "reads": [
         "scripts/test-suite-plan.mjs",
-        "scripts/ci/full-gate-risk-map.mjs",
         "scripts/test-resource-contract.mjs",
-        "docs/engineering/acceptance-time-sites-20261027.json"
+        "scripts/acceptance/time-site-inventory.mjs"
       ],
       "oldTests": [
-        "tests/unit/digital-task-read-boundary.test.ts",
-        "tests/unit/full-gate-risk-map.test.ts",
+        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts",
+        "tests/integration/order-time-requests-browser-postgres.test.ts",
+        "tests/integration/development-technical-postgres.test.ts",
         "tests/unit/business-time-write-contract.test.ts"
       ],
       "newTests": [
-        "tests/integration/order-time-requests-postgres.test.ts",
-        "tests/integration/order-time-requests-browser-postgres.test.ts"
+        "tests/integration/order-time-requests-browser-postgres.test.ts",
+        "tests/unit/cockpit-document-new-sources.test.ts"
       ],
-      "expectation": "Original owned TEST creator and cleanup contract reused, new PG suites registered in canonical long2. Update exact original table-availability mock without removing roles/foreign-attachment denial, preserve prior time inventory annotations and add actual clock review. Final219units and27 original PG/App cases retain precisely verified inputs; the disabled legacy paired settings12, enabled R5 settings7 and request3 are freshly verified together (22, with3 overlapping the original27), plus current types/lint. Full43030428363 non-db passed; its PG532passed/11failed legacy branch is preserved as failure. The old compatibility suite now explicitly supplies orderTimeModel:false after the approved default enablement; no production default, old assertion or permission behavior changed. Earlier3864/3/15 run remains failed, concentrated fixes verified rather than rerun for report form. Additional pre-existing obsolete PR13 fixture failure is documented, not represented as passed or mixed into this scope. No5000-scale/onsite/operations drill claim.",
-      "checks": [
-        "r507-units",
-        "r507-native",
-        "r507-types",
-        "r507-lint",
-        "r507-settings-branches"
-      ]
+      "expectation": "141 current units pass. Exact current source has5 selected real PG13 history/private/original cases and1 focused original App case with actual native construction/two published PLTs, old file open, comments, partial503/retry, real1585/1165 geometry and full header. Filtered21+3 skips are not passes. Earlier15 original-App cases are retained as prior-stage results, not called rerun on final source. Same typed source/helpers/canonical config checked, old manual inventory notes remain verbatim; new own-SLA range display reviewed. No deployment/onsite/full-scale or whole Full success claim."
     }
   ],
   "checks": [
     {
-      "id": "r507-units",
+      "id": "r508-units",
       "kind": "tests",
-      "command": "/workspace/.dx-cloud/r5-runtime/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/order-time-requests.test.ts tests/unit/order-time-reading.test.ts tests/unit/order-time-plan.test.ts tests/unit/sourcing-todo-sla.test.ts tests/unit/fixed-timeline-targets.test.ts tests/unit/fixed-schedule-progress.test.ts tests/unit/development-cycle.test.ts tests/unit/digital-task-read-boundary.test.ts tests/unit/business-time-write-contract.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/todo-read-split.test.ts tests/unit/todo-list-service.test.ts tests/unit/todo-runtime-lifecycle.test.ts tests/unit/todo-owner-group-routing.test.ts tests/unit/todo-deep-link.test.ts tests/unit/my-todos-navigation.test.ts tests/unit/m01-short-lead-equivalence.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r507-candidate-units.json",
+      "command": "/workspace/.dx-cloud/r5-runtime/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/cockpit-detail.test.ts tests/unit/cockpit-document-directory.test.ts tests/unit/cockpit-document-new-sources.test.ts tests/unit/cockpit-document-snapshot.test.ts tests/unit/cockpit-fixed-schedule.test.ts tests/unit/cockpit-contract-directory-access.test.ts tests/unit/m01-cockpit-reading-context.test.ts tests/unit/digital-cockpit-progress.test.ts tests/unit/digital-cockpit-time.test.ts tests/unit/cockpit-photo-preview.test.ts tests/unit/cockpit-display-facts.test.ts tests/unit/m01-cockpit-reads.test.ts tests/unit/business-time-write-contract.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r508-current-units.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "5a3b00583a9ad7614cc539a390c0640453c51c34",
-      "sourceFingerprint": "4de926b01fd3dc00641ea4625cb063b55a4352d8e7e88952c59ac56c19f24c36",
+      "testedHead": "95ce8f07369559354895a4822f2cf5a892082af4",
+      "sourceFingerprint": "565de00ae343bb0a74a0d9c99eb431d3e310edce3958064f4b3371e86b92f748",
       "inputPaths": [
         "apps",
         "packages",
@@ -310,127 +233,30 @@
         "vitest.business-chain.config.ts",
         "tests/unit"
       ],
-      "inputFingerprint": "38db5cf15c3b2ef48d4ed2ad6d4963f1039c4d32a28582d6aa5031b1f35479b5",
-      "startedAt": "2026-11-11T13:23:07.281Z",
-      "endedAt": "2026-11-11T13:23:31.421Z",
-      "log": "/workspace/.dx-cloud/r507-candidate-units.log",
-      "logSha256": "6d0a77e51bbba1ec6fff07f02dd0ba347d9da1e69fb74f63e3e34970e5378d67",
-      "context": "Approved complete v2/R5-07 on actual R5-06 merge fbee17e2. Original App/native commands, role revocation in one valid session, original key/body lost-receipt recovery, normal/late/pending/inherited/changed-route scenarios; original source/formal future rules synchronize while begun R/D stay fixed. Captured per-node calendar/reminder and real bounded todo scheduler retain old overdue allowance. Chromium /usr/bin/chromium; Node22.22.2/npm10.9.9, canonical nonDB1/long2 with at most2 actual PG workers, owned low-privilege PG13 TEST schemas only. No deployment, onsite/5000-scale or full-system UI-completion claim.",
-      "passed": 219,
+      "inputFingerprint": "48ca29d1b1cb172dce38dec05e933c6a6f702495f903a238a68e13c3f1f509ec",
+      "startedAt": "2026-11-11T15:53:55.395Z",
+      "endedAt": "2026-11-11T15:54:14.565Z",
+      "log": "/workspace/.dx-cloud/r508-current-units.log",
+      "logSha256": "1e781337d8a6ca7365056a88b0ccea2f66bc369f0e689cfd4b54a3c952d5a38d",
+      "context": "Approved v2/R5-08 original detail and node-scoped documents. Provisional R5-07 candidate95ce8f07, final base must be actual R5-07 merge. Approved image2 latest original reopened and compared at1585/1165; actual App/current auth and owned PG13. Exact technical versions, per-PO scope, legacy unenrolled directory, separate failures/permission/missing/loading, real private original redirect, compact7 rows and full native records. Some selected historical file cases are intentionally filtered: skips remain reported, not passed. Native storage is the existing TEST adapter, not onsite delivery. Canonical nonDB1/long2, maximum2 actual PG workers; Node22.22.2/npm10.9.9 Chromium. No deployment/onsite, schema/config, permission expansion or 5000-scale claim.",
+      "passed": 141,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "aceacb050ea8234451a4792b16cf8779d24b100d3265479c2ce3784c0bb303ac"
+          "sha256": "ac358cf67af10568541a4f90f6b413525f7c49466a360431fd863cecfdddba24"
         }
       ]
     },
     {
-      "id": "r507-native",
+      "id": "r508-native",
       "kind": "tests",
-      "command": "/workspace/.dx-cloud/r5-runtime/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/order-time-requests-postgres.test.ts tests/integration/order-time-requests-browser-postgres.test.ts tests/integration/development-round-history-clock-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r507-candidate-native.json",
+      "command": "/workspace/.dx-cloud/r5-runtime/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/order-time-requests-browser-postgres.test.ts --config vitest.business-chain.config.ts --testNamePattern R5-08 opens actual --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r508-current-native-app.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "5a3b00583a9ad7614cc539a390c0640453c51c34",
-      "sourceFingerprint": "4de926b01fd3dc00641ea4625cb063b55a4352d8e7e88952c59ac56c19f24c36",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "tests/helpers",
-        "tests/inspection-report-fixture.ts",
-        "package.json",
-        "package-lock.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts",
-        "tests/acceptance",
-        "tests/fixtures",
-        "tests/integration/order-time-requests-postgres.test.ts",
-        "tests/integration/order-time-requests-browser-postgres.test.ts",
-        "tests/integration/development-round-history-clock-postgres.test.ts"
-      ],
-      "inputFingerprint": "69c8a8a3f3063f9f2dd019a4b27870b03e0e5d11b9da8507efb5fbf0a94bf97f",
-      "startedAt": "2026-11-11T13:23:07.217Z",
-      "endedAt": "2026-11-11T13:24:09.051Z",
-      "log": "/workspace/.dx-cloud/r507-candidate-native.log",
-      "logSha256": "d11225cf12ae7fb67d72d50839e9bf95a868d9ac53b3961b607af9f714c03bbd",
-      "context": "Approved complete v2/R5-07 on actual R5-06 merge fbee17e2. Original App/native commands, role revocation in one valid session, original key/body lost-receipt recovery, normal/late/pending/inherited/changed-route scenarios; original source/formal future rules synchronize while begun R/D stay fixed. Captured per-node calendar/reminder and real bounded todo scheduler retain old overdue allowance. Chromium /usr/bin/chromium; Node22.22.2/npm10.9.9, canonical nonDB1/long2 with at most2 actual PG workers, owned low-privilege PG13 TEST schemas only. No deployment, onsite/5000-scale or full-system UI-completion claim. Exact selected test input scope verified against immutable af78cbe6 checkpoint; the only new test change is the unselected legacy settings fixture. Original27 result and head preserved.",
-      "passed": 27,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "4ac6b0b7d7f6bc7268ec6926d4eb92a8a1d976403f6b40b8405fb9f11075f1e6"
-        }
-      ]
-    },
-    {
-      "id": "r507-types",
-      "kind": "command",
-      "command": "npm run typecheck",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "af78cbe609fb68ac9b7821ccaae3e9083309ec64",
-      "sourceFingerprint": "910d56d0ebaee6c0085a43e402bfc36c081d4348918bd6fc6790a90c108d72bb",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "tests/helpers",
-        "tests/inspection-report-fixture.ts",
-        "package.json",
-        "package-lock.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts",
-        "tests"
-      ],
-      "inputFingerprint": "164542781ffeed41a67fe3fb50b32e59c5fd30c35883e7fe4dd1b189f2cef7fb",
-      "startedAt": "2026-11-11T14:18:36.248Z",
-      "endedAt": "2026-11-11T14:19:35.402Z",
-      "log": "/workspace/.dx-cloud/r507-candidate-types.log",
-      "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e",
-      "context": "Approved complete v2/R5-07 on actual R5-06 merge fbee17e2. Original App/native commands, role revocation in one valid session, original key/body lost-receipt recovery, normal/late/pending/inherited/changed-route scenarios; original source/formal future rules synchronize while begun R/D stay fixed. Captured per-node calendar/reminder and real bounded todo scheduler retain old overdue allowance. Chromium /usr/bin/chromium; Node22.22.2/npm10.9.9, canonical nonDB1/long2 with at most2 actual PG workers, owned low-privilege PG13 TEST schemas only. No deployment, onsite/5000-scale or full-system UI-completion claim."
-    },
-    {
-      "id": "r507-lint",
-      "kind": "command",
-      "command": "npm run lint",
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "af78cbe609fb68ac9b7821ccaae3e9083309ec64",
-      "sourceFingerprint": "910d56d0ebaee6c0085a43e402bfc36c081d4348918bd6fc6790a90c108d72bb",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "tests/helpers",
-        "tests/inspection-report-fixture.ts",
-        "package.json",
-        "package-lock.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts",
-        "tests"
-      ],
-      "inputFingerprint": "164542781ffeed41a67fe3fb50b32e59c5fd30c35883e7fe4dd1b189f2cef7fb",
-      "startedAt": "2026-11-11T14:18:36.248Z",
-      "endedAt": "2026-11-11T14:19:19.353Z",
-      "log": "/workspace/.dx-cloud/r507-candidate-lint.log",
-      "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763",
-      "context": "Approved complete v2/R5-07 on actual R5-06 merge fbee17e2. Original App/native commands, role revocation in one valid session, original key/body lost-receipt recovery, normal/late/pending/inherited/changed-route scenarios; original source/formal future rules synchronize while begun R/D stay fixed. Captured per-node calendar/reminder and real bounded todo scheduler retain old overdue allowance. Chromium /usr/bin/chromium; Node22.22.2/npm10.9.9, canonical nonDB1/long2 with at most2 actual PG workers, owned low-privilege PG13 TEST schemas only. No deployment, onsite/5000-scale or full-system UI-completion claim."
-    },
-    {
-      "id": "r507-settings-branches",
-      "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/integration/m01-settings-native-browser-postgres.test.ts tests/integration/r5-settings-native-browser-postgres.test.ts tests/integration/order-time-requests-browser-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r507-settings-branches.json",
-      "status": "passed",
-      "exitCode": 0,
-      "passed": 22,
-      "failed": 0,
-      "skipped": 0,
-      "testedHead": "af78cbe609fb68ac9b7821ccaae3e9083309ec64",
-      "sourceFingerprint": "910d56d0ebaee6c0085a43e402bfc36c081d4348918bd6fc6790a90c108d72bb",
+      "testedHead": "95ce8f07369559354895a4822f2cf5a892082af4",
+      "sourceFingerprint": "565de00ae343bb0a74a0d9c99eb431d3e310edce3958064f4b3371e86b92f748",
       "inputPaths": [
         "apps",
         "packages",
@@ -445,18 +271,141 @@
         "tests/acceptance",
         "tests/fixtures"
       ],
-      "inputFingerprint": "8e940ceac7d9dc24eab2ec8cb53205861977796c548a89f91b0d8de7240fc1ea",
-      "startedAt": "2026-11-11T14:15:42.482Z",
-      "endedAt": "2026-11-11T14:16:42.081Z",
-      "log": "/workspace/.dx-cloud/r507-settings-branches.log",
-      "logSha256": "0bbc962d6795f0cbf51dee5f825788aa3f44b78752746d1d9ce71241dd0cbf40",
+      "inputFingerprint": "5d9c1978d13f8c6ca04508a036c98cb07e26ab65717ba79ef15e16e7fd138e9f",
+      "startedAt": "2026-11-11T15:53:13.060Z",
+      "endedAt": "2026-11-11T15:53:28.597Z",
+      "log": "/workspace/.dx-cloud/r508-current-native.log",
+      "logSha256": "cf886a605501e78d49a7932b387d6d66e8ed9f502c22290f1ff040414bffd016",
+      "context": "Approved v2/R5-08 original detail and node-scoped documents. Provisional R5-07 candidate95ce8f07, final base must be actual R5-07 merge. Approved image2 latest original reopened and compared at1585/1165; actual App/current auth and owned PG13. Exact technical versions, per-PO scope, legacy unenrolled directory, separate failures/permission/missing/loading, real private original redirect, compact7 rows and full native records. Some selected historical file cases are intentionally filtered: skips remain reported, not passed. Native storage is the existing TEST adapter, not onsite delivery. Canonical nonDB1/long2, maximum2 actual PG workers; Node22.22.2/npm10.9.9 Chromium. No deployment/onsite, schema/config, permission expansion or 5000-scale claim.",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 3,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "a01b8509dda59eeb58cb81fdacb3baa3d3712341e97b618e143fe66c3ed6dbcb"
+          "sha256": "8013ef9a19b34c39524d37e978a6a00d2867890cf808131ab1c67d5cb4c2522f"
         }
+      ]
+    },
+    {
+      "id": "r508-types",
+      "kind": "command",
+      "command": "npm run typecheck",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "95ce8f07369559354895a4822f2cf5a892082af4",
+      "sourceFingerprint": "565de00ae343bb0a74a0d9c99eb431d3e310edce3958064f4b3371e86b92f748",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests/helpers",
+        "tests/inspection-report-fixture.ts",
+        "package.json",
+        "package-lock.json",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts",
+        "tests"
       ],
-      "context": "Actual PG13 owned TEST schemas, original authenticated full App. Legacy new-adoption-disabled paired branch12, enabled R5 company settings7 and original per-order request3 all pass. Explicit fixturefalse replaces the former ambiguous default; no production behavior or old assertions removed. Node22.22.2/npm10.9.9 Chromium, actual maximum2 PG workers. Full43030428363 failed legacy-branch selection11/532; retained as failure, no repeat of unchanged unit/native scope."
+      "inputFingerprint": "3e70bfdcfa1ffe2dc77748167e73b11bc8235364cb84e249935afb8f8be14f43",
+      "startedAt": "2026-11-11T15:53:55.341Z",
+      "endedAt": "2026-11-11T15:54:54.874Z",
+      "log": "/workspace/.dx-cloud/r508-current-types.log",
+      "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e",
+      "context": "Approved v2/R5-08 original detail and node-scoped documents. Provisional R5-07 candidate95ce8f07, final base must be actual R5-07 merge. Approved image2 latest original reopened and compared at1585/1165; actual App/current auth and owned PG13. Exact technical versions, per-PO scope, legacy unenrolled directory, separate failures/permission/missing/loading, real private original redirect, compact7 rows and full native records. Some selected historical file cases are intentionally filtered: skips remain reported, not passed. Native storage is the existing TEST adapter, not onsite delivery. Canonical nonDB1/long2, maximum2 actual PG workers; Node22.22.2/npm10.9.9 Chromium. No deployment/onsite, schema/config, permission expansion or 5000-scale claim."
+    },
+    {
+      "id": "r508-lint",
+      "kind": "command",
+      "command": "npm run lint",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "95ce8f07369559354895a4822f2cf5a892082af4",
+      "sourceFingerprint": "565de00ae343bb0a74a0d9c99eb431d3e310edce3958064f4b3371e86b92f748",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests/helpers",
+        "tests/inspection-report-fixture.ts",
+        "package.json",
+        "package-lock.json",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts",
+        "tests"
+      ],
+      "inputFingerprint": "3e70bfdcfa1ffe2dc77748167e73b11bc8235364cb84e249935afb8f8be14f43",
+      "startedAt": "2026-11-11T15:53:55.394Z",
+      "endedAt": "2026-11-11T15:54:38.050Z",
+      "log": "/workspace/.dx-cloud/r508-current-lint.log",
+      "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763",
+      "context": "Approved v2/R5-08 original detail and node-scoped documents. Provisional R5-07 candidate95ce8f07, final base must be actual R5-07 merge. Approved image2 latest original reopened and compared at1585/1165; actual App/current auth and owned PG13. Exact technical versions, per-PO scope, legacy unenrolled directory, separate failures/permission/missing/loading, real private original redirect, compact7 rows and full native records. Some selected historical file cases are intentionally filtered: skips remain reported, not passed. Native storage is the existing TEST adapter, not onsite delivery. Canonical nonDB1/long2, maximum2 actual PG workers; Node22.22.2/npm10.9.9 Chromium. No deployment/onsite, schema/config, permission expansion or 5000-scale claim."
+    },
+    {
+      "id": "r508-protocol",
+      "kind": "command",
+      "command": "/workspace/.dx-cloud/r5-runtime/node_modules/node/bin/node scripts/acceptance/time-site-inventory.mjs",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "95ce8f07369559354895a4822f2cf5a892082af4",
+      "sourceFingerprint": "565de00ae343bb0a74a0d9c99eb431d3e310edce3958064f4b3371e86b92f748",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests/helpers",
+        "tests/inspection-report-fixture.ts",
+        "package.json",
+        "package-lock.json",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts",
+        "tests",
+        "docs/engineering/acceptance-time-sites-20261027.json"
+      ],
+      "inputFingerprint": "24395f9a81aaa27da68fcaa17daf06e5f7c839d7e08c55fd39ae7767c85537cd",
+      "startedAt": "2026-11-11T15:53:32.851Z",
+      "endedAt": "2026-11-11T15:53:33.391Z",
+      "log": "/workspace/.dx-cloud/r508-current-protocol.log",
+      "logSha256": "114d19b3f81e82ca812ccaf79d465b9eac16b584f779c9b621a2e15595e62be6",
+      "context": "Approved v2/R5-08 original detail and node-scoped documents. Provisional R5-07 candidate95ce8f07, final base must be actual R5-07 merge. Approved image2 latest original reopened and compared at1585/1165; actual App/current auth and owned PG13. Exact technical versions, per-PO scope, legacy unenrolled directory, separate failures/permission/missing/loading, real private original redirect, compact7 rows and full native records. Some selected historical file cases are intentionally filtered: skips remain reported, not passed. Native storage is the existing TEST adapter, not onsite delivery. Canonical nonDB1/long2, maximum2 actual PG workers; Node22.22.2/npm10.9.9 Chromium. No deployment/onsite, schema/config, permission expansion or 5000-scale claim. Generated inventory output scope is now explicit; current source and original protocol inputs match the recorded execution, and output bytes match the retained pre-layout snapshot. Record correction only, no rerun or additional pass claimed."
+    },
+    {
+      "id": "r508-native-history",
+      "kind": "tests",
+      "command": "/workspace/.dx-cloud/r5-runtime/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/development-technical-postgres.test.ts --config vitest.business-chain.config.ts --testNamePattern R5 distinguishes|serves bounded technical|reads only the proven inherited|originally adopted customer template|P03-06 --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r508-current-native-history.json",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "95ce8f07369559354895a4822f2cf5a892082af4",
+      "sourceFingerprint": "b5dd8e62364da3f036c5d35708f141256396e750a28d286a89880bcce8944fb9",
+      "inputPaths": [
+        "apps/api",
+        "packages",
+        "scripts",
+        "tests/helpers",
+        "tests/inspection-report-fixture.ts",
+        "package.json",
+        "package-lock.json",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts",
+        "tests/acceptance",
+        "tests/fixtures",
+        "tests/integration/development-technical-postgres.test.ts"
+      ],
+      "inputFingerprint": "bf9a6035d628d4b91d1345bf527032c27b465e991aedfaf3b789cb7c4c300681",
+      "startedAt": "2026-11-11T14:38:39.210Z",
+      "endedAt": "2026-11-11T14:39:04.398Z",
+      "log": "/workspace/.dx-cloud/r508-current-native-history.json",
+      "logSha256": "a4ab7323bb5e094e90bd696a2fb9c9973bd20ba009182c56dae23359268b6765",
+      "context": "Approved v2/R5-08 original detail and node-scoped documents. Provisional R5-07 candidate95ce8f07, final base must be actual R5-07 merge. Approved image2 latest original reopened and compared at1585/1165; actual App/current auth and owned PG13. Exact technical versions, per-PO scope, legacy unenrolled directory, separate failures/permission/missing/loading, real private original redirect, compact7 rows and full native records. Some selected historical file cases are intentionally filtered: skips remain reported, not passed. Native storage is the existing TEST adapter, not onsite delivery. Canonical nonDB1/long2, maximum2 actual PG workers; Node22.22.2/npm10.9.9 Chromium. No deployment/onsite, schema/config, permission expansion or 5000-scale claim. This check is only the first original native history command, which passed5 with21 intentional filtered skips. Subsequent App retry wait failed separately and is not called passed. Input scope captured while the full original source fingerprint still matches, before changing the unselected App test wait. Reuse after the flow layout correction is proven by r508-history-reuse-proof.json, retaining the original execution and source identity; no native-history rerun or new pass is claimed. The shared stdout path was subsequently reused by the focused App run. This check retains its exact original Vitest JSON runner log as the inspectable log and report; no claim that the earlier shared stdout remains retained.",
+      "passed": 5,
+      "failed": 0,
+      "skipped": 21,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "a4ab7323bb5e094e90bd696a2fb9c9973bd20ba009182c56dae23359268b6765"
+        }
+      ]
     }
   ]
 }
