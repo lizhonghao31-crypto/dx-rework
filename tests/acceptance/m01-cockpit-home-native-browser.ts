@@ -72,7 +72,10 @@ export async function cockpitHomeBrowser({databaseUrl,evidence,executablePath,ca
   }});
   await f.advance(scene,'2026-11-07T00:00:00Z');
   // Original cutting/receiving/packing commands establish real visible receipt debt.
-  if(includeNative)await fixture.runtime.run(scene,fixture.root,async()=>{for(const craft of ['无','印花','印绣花'] as const)orders.push((await fixture.bulkReady(craft,undefined,2,fixture.sourcing,{stylePrefix:prefix})).id);console.log('JOURNEY_SCALE_SETUP '+JSON.stringify({phase:'create',completed:orders.length,total:orderCount,mixedNativeMothers:3}));});
+  // A native mother deliberately shares the first numeric style prefix. A
+  // substring search must retain it when a different matching model fails;
+  // randomized UUID prefixes previously made that valid overlap intermittent.
+  if(includeNative)await fixture.runtime.run(scene,fixture.root,async()=>{for(const craft of ['无','印花','印绣花'] as const)orders.push((await fixture.bulkReady(craft,undefined,2,fixture.sourcing,{stylePrefix:prefix+(craft==='无'?'01-':'')})).id);console.log('JOURNEY_SCALE_SETUP '+JSON.stringify({phase:'create',completed:orders.length,total:orderCount,mixedNativeMothers:3}));});
   let updateCalendarPacking:((quantity:number)=>Promise<void>)|undefined;
   const prepareShortage=async()=>{
    const ready=await fixture.bulkReady('无',undefined,1,fixture.sourcing,{quantity:4}),cut=(await db.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[ready.caseId])).rows[0],cutter={...fixture.people['cutting-worker']!,authorizationCapability:'cutting:records:create',authorizationCapabilities:['cutting:records:create']};
