@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 import { JOURNEY_STAGES, JourneyReturnContextSchema, type JourneyNode, type OrderJourney } from "@dx-rework/contracts/digital-production-journey";
 import { cockpitContext, cockpitQuery, cockpitReturnPath, journeyRecordHref, journeyTime, nodeStatus, orderStatus, stageTimes, journeyDocumentGroups, journeyDetailSelection } from "../../apps/web/src/digital-journey-cockpit-model.js";
 import { DigitalJourneyCockpit } from "../../apps/web/src/digital-journey-cockpit.js";
+import { CockpitNodeRows } from "../../apps/web/src/cockpit-node-rows.js";
+import { COCKPIT_VISIBLE_DOCUMENT_CATEGORIES } from "../../apps/web/src/cockpit-document-catalog.js";
 import { canWriteDigitalTask, digitalTaskView } from "../../apps/web/src/digital-task-view.js";
 import type { DigitalTask } from "@dx-rework/contracts/digital-production-tasks";
 const id = "19b5331b-c76f-4b9a-8773-849e24a35ad1";
@@ -67,12 +69,17 @@ describe("formal Journey cockpit", () => {
     item.progress.bulk = { completed: 4, applicable: 9 };
     const html = renderToStaticMarkup(createElement(DigitalJourneyCockpit, { data: { ruleVersion: "journey-v2.0", asOf: "2026-10-05T00:00:00Z", page: 1, pageSize: 15, total: 1, summary: { all: 1, active: 1, dueSoon: 0, overdue: 0, blocked: 0, completed: 0 }, items: [item] }, detail: item, context: JourneyReturnContextSchema.parse({ selected: id, expanded: "development,preparation" }), error: "", detailError: "", detailLoading: false, onChange: () => undefined, actions: null }));
     for (const stage of JOURNEY_STAGES) expect(html).toContain(stage.label);
-    for (const label of ["并行纸样", "并行预缩", "原截止 / 节点目标", "实际完成时间", "相关单据", "操作记录", "进入该节点办理"]) expect(html).toContain(label);
+    for (const label of ["并行纸样", "并行预缩", "节点名称", "责任结果", "查看更多", "相关单据", "操作记录", "进入该节点办理"]) expect(html).toContain(label);
     expect(html).not.toContain('aria-label="订单列表"');
     expect(html).toContain("生产管理总览");
     expect(html).toContain("returnTo=");
     expect(html).not.toContain("交货完成");
-    expect(html).toMatch(/权限隔离节点[\s\S]*无权限查看[\s\S]*无权限查看/);
+    expect(html).toMatch(/权限隔离节点[\s\S]*无权限查看/);
+    // The compact list opens the original full table; dates and denied fields
+    // remain available there rather than being duplicated in the default view.
+    const rows = renderToStaticMarkup(createElement(CockpitNodeRows, {nodes: [first, second, denied], selectedId: first.instanceId, context: JourneyReturnContextSchema.parse({selected: id}), asOf: "2026-10-05T00:00:00Z", onSelect() {}}));
+    for (const label of ["并行纸样", "并行预缩", "原截止 / 节点目标", "实际完成时间"]) expect(rows).toContain(label);
+    expect(rows).toMatch(/权限隔离节点[\s\S]*无权限查看[\s\S]*无可见时间[\s\S]*无权限查看/);
     expect(html).not.toContain('class="journey-order-metrics"');
     expect(html).not.toContain('class="journey-business-tabs"');
     expect(html).not.toContain("已交货");
@@ -135,7 +142,17 @@ describe("R2 PR07 stage display scope", () => {
     const record={domain:"development",id,url:"/ui/digital-production?development="+id+"&round=1",mode:"read" as const,version:1,lineId:null};
     const item=order([node("paper",{stage:"preparation",records:[record]})]);
     const html=renderToStaticMarkup(createElement(DigitalJourneyCockpit,{data:null,detail:item,context:context(),error:"",detailError:"",detailLoading:false,onChange(){},actions:null}));
-    expect(html).not.toContain('class="journey-node-expanded"');expect(html).not.toContain('journey-preparation-reference');expect(html).not.toContain('本单资料');expect(html).toContain('class="cockpit-document-directory"');expect(html).not.toContain('订单进度 · 全单范围');expect(html).toContain('适用节点');
-    expect(html).toContain('打板执行单');expect(html).toContain('真实回货与成衣QC');expect(html).toContain('装箱与数量差异');expect(html).toContain('查看全部');expect((html.match(/class="cockpit-document-priority-row"/g)??[])).toHaveLength(10);expect(html).toContain('读取中');expect(html).not.toContain('待判断');
+    expect(html).not.toContain('class="journey-node-expanded"');expect(html).not.toContain('journey-preparation-reference');expect(html).not.toContain('本单资料');expect(html).toContain('class="cockpit-document-directory"');expect(html).not.toContain('订单进度 · 全单范围');expect(html).toContain('节点状态筛选');
+    expect(html.match(/role="tab"/g)).toHaveLength(7);
+    for (const label of ['纸样PLT', '尺寸表', '单件用量', '打板执行单']) expect(html).toContain(label);
+    expect(html).not.toContain('真实回货与成衣QC');expect(html).not.toContain('装箱与数量差异');expect(html).toContain('查看更多');
+    expect((html.match(/class="cockpit-document-priority-row"/g)??[])).toHaveLength(5);
+    expect(html).toContain('data-read-state="idle"');expect(html).toContain('读取中');expect(html).not.toContain('>未填<');expect(html).not.toContain('>已填<');expect(html).not.toContain('待判断');
+    // Later stages stay reachable through the same real directory, without
+    // eagerly mounting every stage or misreporting unread data as missing.
+    const receiving = renderToStaticMarkup(createElement(DigitalJourneyCockpit,{data:null,detail:item,context:context({documentStage:'receiving'}),error:"",detailError:"",detailLoading:false,onChange(){},actions:null}));
+    for (const label of ['真实回货与成衣QC', '装箱与数量差异']) expect(receiving).toContain(label);
+    expect(receiving).not.toContain('打板执行单');
+    expect(COCKPIT_VISIBLE_DOCUMENT_CATEGORIES.map(category=>category.key)).not.toContain('factory_history');
   });
 });

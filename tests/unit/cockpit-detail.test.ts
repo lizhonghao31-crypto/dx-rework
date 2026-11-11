@@ -41,16 +41,16 @@ it('R2-02: directly shows every original PO target with its date boundary and ne
 });
 it('shows an actual day as a day in both detail and node rows, without an invented midnight or 08:00',()=>{
   const o=fixture(),n=o.stages[1]!.nodes[0]!;n.actualDate='2026-10-17';n.actualAt=null;n.state='completed';
-  const html=render(o);expect(html).toContain('<dt>实际完成：</dt><dd>2026-10-17<small>原完成记录，时间待核</small></dd>');expect(html).toContain('<span>2026-10-17</span>');expect(html).not.toContain('2026/10/17 08:00');expect(html).not.toContain('2026-10-17T00:00');
+  const html=render(o),rows=renderToStaticMarkup(createElement(CockpitNodeRows,{nodes:[n],lines:[],context:{},onSelect:()=>{}}));expect(html).toContain('<dt>实际完成：</dt><dd>2026-10-17<small>原完成记录，时间待核</small></dd>');expect(rows).toContain('<span>2026-10-17</span>');expect(html+rows).not.toContain('2026/10/17 08:00');expect(html+rows).not.toContain('2026-10-17T00:00');
 });
 it("renders seven double rings with only two date rows, risk color and no invented time ratio",()=>{
   const html=render(fixture());
   expect(html).not.toContain("节点全流程一览");expect(html.match(/class="cockpit-stage-rings"/g)).toHaveLength(7);expect(html.match(/class="cockpit-stage-dates"/g)).toHaveLength(7);
-  expect(html).toContain('is-danger');expect(html).toContain('stroke-dasharray="50 100"');expect(html).not.toContain("时间规则待完善");expect(html).toContain("实际进度");expect(html).not.toContain("计划与时效");expect(html).not.toContain("含逾期");expect(html).not.toContain("时间100%");expect(html).not.toContain("订单进度 · 全单范围");
+  expect(html).toContain('is-danger');expect(html).toContain('stroke-dasharray="50 100"');expect(html).not.toContain("时间规则待完善");expect(html).toContain('title="实际 50%"');expect(html).not.toContain('role="tooltip"');expect(html).not.toContain("计划与时效");expect(html).not.toContain("含逾期");expect(html).not.toContain("时间100%");expect(html).not.toContain("订单进度 · 全单范围");
 });
 it("keeps exactly one handling link above the full node table, with completed records read-only",()=>{
   const html=render(fixture());
-  expect(html.match(/taskView=handle/g)).toHaveLength(1);expect(html).toContain("进入该节点办理");expect(html).not.toContain("办理当前任务");expect(html).toContain("查看记录");expect(html).toContain("taskView=read");expect(html).toContain("returnTo=");
+  expect(html.match(/taskView=handle/g)).toHaveLength(1);expect(html).toContain("进入该节点办理");expect(html).not.toContain("办理当前任务");expect(html).toContain("查看更多");const rows=renderToStaticMarkup(createElement(CockpitNodeRows,{nodes:fixture().stages[1]!.nodes,lines:[],context:{},onSelect:()=>{}}));expect(rows).toContain("查看记录");expect(rows).toContain("taskView=read");expect(rows).toContain("returnTo=");
   expect(render(fixture(),true)).not.toContain("taskView=handle");
 });
 it("uses current flow dates independently of the selected older node and does not infer a past risk from completionResult",()=>{
@@ -60,14 +60,14 @@ it("uses current flow dates independently of the selected older node and does no
 });
 it("shows unavailable new facts rather than falling back to old 80% or the selected round's risks",()=>{
   const o=fixture();delete o.visualProgress;delete o.display;delete o.currentRiskNodes;delete o.currentDeliveryRisks;delete o.riskHistory;delete o.operationLog;
-  const html=render(o);expect(html).not.toContain("cockpit-stage-arc");expect(html.match(/时间进度 <b>—/g)).toHaveLength(7);expect(html).toContain("当前风险资料暂不可用");expect(html).toContain("操作记录暂不可用");expect(html).not.toContain("80%");
+  const html=render(o);expect(html).not.toContain("cockpit-stage-arc");expect(html).not.toContain('title="时间');expect(html).not.toContain('title="实际');expect(html).not.toContain('role="tooltip"');expect(html).toContain("当前风险资料暂不可用");expect(html).toContain("操作记录暂不可用");expect(html).not.toContain("80%");
 });
 
 it.each([['rework','/ui/tasks/'],['production','/ui/production-dashboard/'],['sourcing','/ui/sourcing/orders/']])("keeps the original %s node record reachable when excluded from the directory",(domain,path)=>{const o=fixture();o.stages[1]!.nodes[0]!.records=[{domain,id:task,url:path+task,mode:"read",version:null,lineId:null}];const html=render(o);expect(html).toContain(path+task);expect(html).toContain("查看节点记录");expect(html).not.toContain("进入该节点办理");expect(html).not.toContain("当前身份暂不可办理");});
 
 it.each([[0,'0%',false],[.364,'36.4%',true],[1,'100%',true],[null,'—',false]] as const)('R3-03 keeps the shared ratio %s distinct from unknown and from an old flat completion count', (ratio,label,arc)=>{
  const o=fixture();o.visualProgress!.stages=o.visualProgress!.stages.map(stage=>({...stage,actualRatio:ratio,timeRatio:ratio}));o.display!.mainState='completed';
- const html=render(o);expect(html).toContain(`实际进度 <b>${label}</b>`);expect(html.includes('cockpit-stage-arc')).toBe(arc);expect(html).not.toContain('80%');if(ratio!==1)expect(html).not.toContain('>✓</text>');
+ const html=render(o);if(ratio===null)expect(html).not.toContain('title="时间');else expect(html.match(new RegExp(`title="时间 ${label} · 实际 ${label}"`,'g'))).toHaveLength(7);expect(html.includes('cockpit-stage-arc')).toBe(arc);expect(html).not.toContain('80%');if(ratio!==1)expect(html).not.toContain('>✓</text>');
 });
 
 it.each([[.4,.8],[1,.6]])('Final10 renders independent time %s and actual %s arcs without rounding either to completion', (time,actual)=>{
@@ -77,5 +77,5 @@ it.each([[.4,.8],[1,.6]])('Final10 renders independent time %s and actual %s arc
 
 it.each([['overdue','danger'],['due_soon','warning'],['normal','neutral'],['unknown','neutral']] as const)('R3-03 Review preserves known %s with no verified stage start or completed work', (risk,tone)=>{
  const o=fixture();o.visualProgress!.stages=o.visualProgress!.stages.map(stage=>({...stage,risk,startedAt:null,actualRatio:0,timeRatio:null}));
- const html=render(o);expect(html.match(new RegExp(`class="cockpit-stage[^"]* is-${tone}"`,'g'))).toHaveLength(7);expect(html.match(/时间进度 <b>—/g)).toHaveLength(7);expect(html.match(/实际进度 <b>0%/g)).toHaveLength(7);expect(html).not.toContain('cockpit-stage-arc');
+ const html=render(o);expect(html.match(new RegExp(`class="cockpit-stage[^"]* is-${tone}"`,'g'))).toHaveLength(7);expect(html).not.toContain('title="时间');expect(html.match(/title="实际 0%"/g)).toHaveLength(7);expect(html).not.toContain('role="tooltip"');expect(html).not.toContain('cockpit-stage-arc');
 });

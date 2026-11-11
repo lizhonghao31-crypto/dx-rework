@@ -39,11 +39,12 @@ export function cockpitTargetDifference(nodes:JourneyNode[],asOf?:string,lines:O
  const format=(goal:ScheduleGoalDelta)=>goal.signedValue===null?'—':goal.signedValue===0?'-0':`${goal.signedValue>0?'+':'-'}${goal.unit==='day'?Math.abs(goal.signedValue)+'天':cockpitDuration(Math.abs(goal.signedValue))}`;
  return {text:chosen?format(chosen.goal):'—',tone:chosen?(chosen.goal.kind==='late'?'danger':'success'):'neutral',title:values.map(v=>v.label+' · '+v.scope+'：'+format(v.goal)).join('\n'),count:values.length};
 }
-export function CockpitTargetDifference({nodes,asOf,lines=[]}:{nodes:JourneyNode[];asOf?:string|undefined;lines?:OrderJourney['lines']}){const value=cockpitTargetDifference(nodes,asOf,lines);return <span className={'cockpit-target-difference is-'+value.tone} title={value.title||'尚无可信固定目标差'} aria-label={'节点目标差 '+value.text}>{value.text}</span>;}
-export function CockpitStageDifference({goal,asOf}:{goal:ScheduleGoalDelta;asOf?:string|undefined}){
+function differenceUnits(text:string){return text.match(/.*?(?:天|小时|分钟|$)/g)?.filter(Boolean).map((part,index)=><span className="cockpit-delta-unit" key={index}>{part}</span>);}
+export function CockpitTargetDifference({nodes,asOf,lines=[],wrapUnits=false}:{nodes:JourneyNode[];asOf?:string|undefined;lines?:OrderJourney['lines'];wrapUnits?:boolean}){const value=cockpitTargetDifference(nodes,asOf,lines);return <span className={'cockpit-target-difference is-'+value.tone} title={value.title||'尚无可信固定目标差'} aria-label={'节点目标差 '+value.text}>{wrapUnits?differenceUnits(value.text):value.text}</span>;}
+export function CockpitStageDifference({goal,asOf,wrapUnits=false}:{goal:ScheduleGoalDelta;asOf?:string|undefined;wrapUnits?:boolean}){
  const value=observedGoalDelta(goal,goal.actual.precision!=='unknown',asOf),amount=value.signedValue;
  const text=amount===null?'—':amount===0?'-0':`${amount>0?'+':'-'}${value.unit==='day'?Math.abs(amount)+'天':cockpitDuration(Math.abs(amount))}`;
- return <span className={'cockpit-target-difference is-'+(amount===null?'neutral':amount>0?'danger':'success')} aria-label={'阶段目标差 '+text}>{text}</span>;
+ return <span className={'cockpit-target-difference is-'+(amount===null?'neutral':amount>0?'danger':'success')} aria-label={'阶段目标差 '+text}>{wrapUnits?differenceUnits(text):text}</span>;
 }
 export function cockpitOwnStatus(node:JourneyNode):{text:string;tone:'danger'|'warning'|'neutral'}|null{
  if(!node.fixedTargets?.length||['inherited','cancelled','not_applicable','unavailable'].includes(node.state))return null;

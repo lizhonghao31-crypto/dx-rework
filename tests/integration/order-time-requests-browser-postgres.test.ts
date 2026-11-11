@@ -1,4 +1,4 @@
-import {randomUUID} from 'node:crypto';
+import {randomUUID,createHash} from 'node:crypto';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {beforeAll,afterAll,describe,it,expect,vi} from 'vitest';
@@ -12,6 +12,9 @@ import {DigitalDevelopmentService} from '../../apps/api/src/production-platform/
 import {OrderTimePlanRepository} from '../../apps/api/src/production-platform/order-time-plan-repository.js';
 import {orderTimeTodos} from '../../apps/api/src/production-platform/order-time-todos.js';
 import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
+import {DevelopmentExecutionService} from '../../apps/api/src/production-platform/development-execution-service.js';
+import {PatternRoomPriceService} from '../../apps/api/src/pattern-room/price-service.js';
+import {arrangeTestRound} from '../helpers/development-arrangement-fixture.js';
 
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
@@ -47,6 +50,63 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   h=await supplychainSettingsBrowser(url!,process.env.R507_BROWSER_EVIDENCE??join(process.env.RUNNER_TEMP??tmpdir(),'r507-ui-'+randomUUID()),{fullApp:true,orderTimeModel:true,orderTimeFlow:true});
   await new OrderTimeSettingsService(h.db).save(h.f.root,{expectedVersion:0,values:r5OneHourConfiguration()},randomUUID());
   scene=await h.f.scene('2027-01-07T15:00:00.000Z');h.setCollectionScene(scene);
+ });
+ it('R5-08 opens actual independent PLT, sizes, usage, comments and exact older files in the original authenticated App',async()=>{
+  const s=await source('detail-documents','2027-02-20'),worker=h.f.people['pattern-room-worker']!,materialId=randomUUID(),forms=new DigitalDevelopmentService(h.db,true,h.patternOrders),execution=new DevelopmentExecutionService(h.db,true,h.patternOrders);
+  let paperId='',firstFile='';
+  await h.f.runtime.run(scene,s.actor,async()=>{
+   const current=await forms.read(s.actor,s.sourceId),document={...current.document!,materials:[{materialId,category:'主布' as const,label:'主布',name:'TEST棉布',supplier:'TEST',width:'150',weight:'200',composition:'棉',consumption:'1.5',color:'黑',specification:'TEST',quantity:'1',requiredThisRound:true,available:true,expectedDate:null}]};
+   const saved=await forms.save(s.actor,s.sourceId,{expectedVersion:current.version,document},randomUUID()),price=await new PatternRoomPriceService(h.db).quote(h.f.root,'category',s.category.price_id);
+   await forms.publish(s.actor,s.sourceId,saved.version,randomUUID(),{categoryId:s.category.price_id,priceVersion:price.version});
+   let state=await execution.read(h.f.root,s.sourceId);
+   await execution.configureFixedCutting(h.f.root,s.sourceId,{expectedVersion:state.fixedCutting?.version??0,assigneeId:worker.actorId,reason:'TEST original detail cutter'},randomUUID());
+   state=await execution.read(h.f.root,s.sourceId);const check=state.tasks.find(task=>task.taskKind==='development_materials')!;
+   const verification=await execution.saveMaterials(h.f.root,s.sourceId,{taskId:check.taskId,expectedVersion:state.materialVerification!.version,expectedDocumentVersion:state.sheet.version,entries:[{materialId,usage:'use',physical:true,quantity:true,color:true,specification:true,note:'TEST原生核配',confirmedWith:''}],note:'TEST原生核配',result:'通过'},randomUUID());
+   await execution.check(h.f.root,s.sourceId,{taskId:check.taskId,result:'通过',note:'TEST原生核配完成',expectedVerificationVersion:verification.version,items:[{materialId,physical:true,quantity:true,color:true,specification:true}]},randomUUID());
+   await arrangeTestRound(h.db,execution,h.f.root,s.sourceId,worker.actorId);
+   const ready=await execution.read(worker,s.sourceId),paper=ready.tasks.find(task=>task.taskKind==='development_pattern')!;paperId=paper.taskId;
+   const bytes=Buffer.from('IN;SP1;PU0,0;PD100,100;PU;SP0;'),sha256=createHash('sha256').update(bytes).digest('hex'),intent=await h.f.attachments.createTechnicalPlotUploadIntent(worker,s.sourceId,paper.taskId,{filename:'TEST-R508-original.plt',mimeType:'application/octet-stream',sizeBytes:bytes.length,sha256});
+   await execution.recordUploadPurpose(worker,s.sourceId,intent.attachmentId,'纸样成果',paper.taskId);await h.f.storage.writeImmutable(intent.objectKey,bytes,{mimeType:'application/octet-stream',sha256});await h.f.attachments.finalize(worker,intent.attachmentId);firstFile=intent.attachmentId;
+   const body={pltAttachmentIds:[firstFile],consumptionRows:[{materialId,unit:'米',consumption:'1.500000'}],baseSizeTable:{unit:'cm',baseSize:'M',sizes:['M'],measurements:[{pointId:randomUUID(),name:'胸围',tolerance:'±1',method:'平量',values:['50']}],gradingNote:'TEST放码',templateRef:null},note:'TEST真实技术成果',basedOnFinalComment:null},technical=execution.technicalEvidenceService();
+   for(const version of [0,1])await technical.saveArtifact(worker,s.sourceId,{taskId:paper.taskId,expectedDocumentVersion:ready.sheet.version,expectedVersion:version,scopeRef:'整款',action:'publish',body:{...body,note:'TEST独立原版本 '+(version+1)}},randomUUID());
+   for(const [version,final]of [[0,false],[1,true]] as const)await technical.recordComment(s.actor,s.sourceId,{roundNumber:1,scopeRef:'整款',expectedVersion:version,isFinal:final,decision:'approved',text:final?'TEST客户最终认可':'TEST客户中间评语',evidenceRefs:[],evidenceNote:'TEST原记录',occurredAt:null},randomUUID());
+  });
+  const tab=await h.open(h.f.root.actorId,1585,{},'/ui/digital-cockpit?scope=development&selected='+s.sourceId+'&expanded=development');
+  try{
+   const page=tab.page;await page.locator('[data-view="order"][aria-busy="false"]').waitFor();
+   const docs=page.locator('.journey-documents-panel');expect(await docs.getByRole('tab',{name:'开发',exact:true}).getAttribute('aria-selected')).toBe('true');
+   const readyDocument=async(key:string)=>{const item=docs.locator(`[data-category="${key}"]`);await docs.locator(`[data-category="${key}"][data-read-state="ready"]`).waitFor();expect(await item.getAttribute('data-state'),key+' after the real directory read completed').toBe('created');};
+   for(const key of ['development_plt','development_sizes','development_consumption'])await readyDocument(key);
+   expect(await docs.locator('[data-category="customer_final_approval"]').count()).toBe(0);expect(await docs.locator('[data-category="factory_history"]').count()).toBe(0);
+   await docs.locator('[data-category="development_plt"]').click();let dialog=page.getByRole('dialog',{name:'全部相关单据',exact:true});await dialog.waitFor();
+   await dialog.getByText('技术成果 v2',{exact:false}).last().waitFor();await dialog.locator('summary').filter({hasText:'技术成果 v1'}).click();
+   const original=dialog.getByRole('link',{name:'PLT纸样原件 1',exact:true}).last();await original.waitFor();expect(await original.getAttribute('href')).toContain('/sources/'+s.sourceId+'/development/attachments/'+firstFile);
+   const downloaded=tab.context.waitForEvent('response',{predicate:response=>response.url().includes('/development/attachments/'+firstFile)}),opened=tab.context.waitForEvent('page');await original.click();expect((await downloaded).status()).toBe(302);await (await opened).close();
+   await page.keyboard.press('Escape');await docs.getByRole('tab',{name:'产前',exact:true}).click();
+   for(const key of ['customer_comments','customer_final_approval'])await readyDocument(key);
+   await docs.locator('[data-category="customer_comments"]').click();dialog=page.getByRole('dialog',{name:'全部相关单据',exact:true});await dialog.waitFor();await dialog.locator('summary').filter({hasText:'客户中间评语 v1'}).click();await dialog.getByText('TEST客户中间评语',{exact:false}).last().waitFor();expect(await dialog.innerText()).not.toContain('TEST客户最终认可');
+   await page.keyboard.press('Escape');await docs.getByRole('tab',{name:'开发',exact:true}).click();
+   const failurePath='**/execution/technical/history?*';await page.route(failurePath,async route=>new URL(route.request().url()).searchParams.get('kind')==='comments'?route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{message:'TEST单项评语读取失败'}})}):route.continue());
+   await docs.locator('[data-category="development_plt"]').click();dialog=page.getByRole('dialog',{name:'全部相关单据',exact:true});await dialog.waitFor();await dialog.getByText('技术成果 v2',{exact:false}).last().waitFor();await page.keyboard.press('Escape');
+   await docs.getByRole('tab',{name:'产前',exact:true}).click();await docs.locator('[data-category="customer_comments"][data-read-state="error"]').waitFor();expect(await docs.locator('[data-category="customer_comments"]').innerText()).toContain('读取失败');
+   const refreshedFailure=page.waitForResponse(response=>response.url().includes('/technical/history?')&&new URL(response.url()).searchParams.get('kind')==='comments'&&response.status()===503);await docs.locator('[data-category="customer_comments"]').click();dialog=page.getByRole('dialog',{name:'全部相关单据',exact:true});await dialog.waitFor();await refreshedFailure;await dialog.getByRole('button',{name:'重试读取目录',exact:true}).waitFor();await page.unroute(failurePath);await dialog.getByRole('button',{name:'重试读取目录',exact:true}).click();await dialog.getByText('客户中间评语 v1',{exact:false}).last().waitFor();await page.keyboard.press('Escape');
+   await docs.getByRole('tab',{name:'开发',exact:true}).click();
+   for(const key of ['development_plt','development_sizes','development_consumption'])await readyDocument(key);
+   for(const width of [1585,1165]){
+    await page.setViewportSize({width,height:992});
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+    const panels=await page.locator('.journey-node-panel,.journey-documents-panel,.journey-activity-panel').evaluateAll(elements=>elements.map(element=>element.getBoundingClientRect().bottom));
+    expect(Math.max(...panels)-Math.min(...panels)).toBeLessThanOrEqual(1);
+    const dates=await page.locator('.cockpit-stage-dates>div').evaluateAll(elements=>elements.map(element=>({height:element.getBoundingClientRect().height,date:element.querySelector('time')?.textContent??null})));
+    for(const row of dates){expect(row.height).toBeLessThan(24);if(row.date)expect(row.date).toMatch(/^\d{2}-\d{2}$/);}
+    const differences=await page.locator('.cockpit-stage-dates-with-delta').evaluateAll(elements=>elements.map(element=>{const dates=element.querySelector('.cockpit-stage-dates')!.getBoundingClientRect(),delta=element.querySelector('.cockpit-target-difference')!.getBoundingClientRect();return {separation:delta.left-dates.right,alignment:Math.abs((delta.top+delta.bottom-dates.top-dates.bottom)/2),overflow:delta.right-element.getBoundingClientRect().right};}));
+    for(const difference of differences){expect(difference.separation).toBeGreaterThanOrEqual(0);expect(difference.alignment).toBeLessThanOrEqual(1);expect(difference.overflow).toBeLessThanOrEqual(1);}
+    await page.screenshot({path:join(h.evidence,`r508-real-source-${width}.png`),fullPage:true});
+   }
+   await page.setViewportSize({width:1585,height:992});
+   await page.locator('.journey-node-panel').getByRole('button',{name:'查看更多 ›',exact:true}).click();const nodes=page.getByRole('dialog',{name:'全部节点明细',exact:true});await nodes.waitFor();expect(await nodes.locator(`#journey-full-node-${paperId}`).count()).toBe(1);const targetHeader=nodes.locator('th').filter({hasText:'原截止 / 节点目标'});await targetHeader.waitFor();expect(await targetHeader.evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);await page.screenshot({path:join(h.evidence,'r508-full-node-dates-1585.png'),fullPage:true});await page.keyboard.press('Escape');
+   expect(h.errors).toEqual([]);
+  }finally{await tab.context.close();}
  });
  afterAll(async()=>{if(h){await h.writeEvidence();await h.dispose();}});
  it('opens the genuine manager todo, adjusts only this order and applies once after a lost receipt with no designer reconfirmation',async()=>{
