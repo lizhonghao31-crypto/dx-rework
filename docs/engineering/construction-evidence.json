@@ -1,126 +1,140 @@
 {
   "version": 1,
-  "base": "45fc58a572437aa45318d3e91ca18631e3fa03b2",
-  "sourceFingerprint": "0b35499219f2974a81fdfdf6c2bbc6dba6836e68f3cf551319aa55ee8b37ea40",
+  "base": "22c0a5aca33130868703cdd998016e445ba30f68",
+  "sourceFingerprint": "65b3366782d0935cbd1e8a74b954a7ac7860665e10ee78dd3aedc7f826e4786d",
   "risk": "full",
   "rules": [
     {
-      "source": "Approved complete v2, Library libfile_fde3_f-7ab204d715f48191a1e467100a057111_c8d3bf5d609c8191bce6411a30e94d44 Version2 sections9/11/14/15; approved nine-PR execution table R5-01, including immediate existing read-model invalidation. User authorizes implementation, GitHub Codex Review and sequential merge; no deployment or live data/config changes.",
-      "initialization": "No schema change, dependency upgrade or history repair. Effective receipt/QC versions use existing native sources. Journey calculation version starts original bounded reconciliation; calendar and current-production result rule versions rejects old-algorithm snapshots. Ordinary GET never rebuilds all objects.",
-      "dateAndPermission": "Preserve current original technical object and field authority, Root exception, quantity correction/packing permissions, current role revocation and same-client/RR reads. Business time and actual date precision retained; QC registration does not invent an actual packing instant. No user DTO/authorization cache.",
-      "rule": "Recorded packing remains immutable business evidence; qualified delivery cannot be completed by a count unsupported by effective receipt QC.",
+      "rule": "Native development actions capture real occurrence separately from registration and preserve precision through original editable forms.",
+      "source": "Approved complete v2 Library libfile_fde3_f-7ab204d715f48191a1e467100a057111_c8d3bf5d609c8191bce6411a30e94d44 Version2 and corrected nine-PR execution table R5-02. Autonomous implementation/review/sequential merge authorized; actual R5-01 merge must be synchronized before remote submission. No live data, configuration or deployment.",
+      "initialization": "No schema, dependency or live configuration change. Old records without explicit occurrence stay unknown; no fabricated backfill. Existing Journey calculation-version change drives bounded dirty/build reconciliation; native event OLD/NEW registration remains transactional. Ordinary GET does not rebuild all orders.",
+      "dateAndPermission": "Original request/current role, source/task/round, material, personnel and field guards remain. Same client/transaction and business clock, separate actual vs registration, instant/date/unknown precision. No Root impersonation, authorization-result cache or clock reset. Legacy sourcing remains original; UI assignment chain is R5-09, not claimed here.",
       "writes": [
-        "apps/api/src/production-platform/packing-quality-coverage.ts",
-        "apps/api/src/production-platform/order-closure-service.ts",
-        "apps/api/src/production-platform/packing-sla-evidence.ts",
-        "apps/api/src/production-platform/receiving-summary.ts",
-        "packages/contracts/src/order-closure.ts",
-        "tests/unit/packing-sla-evidence.test.ts",
-        "tests/integration/effective-packing-postgres.test.ts"
+        "apps/api/src/production-platform/development-occurrence.ts",
+        "apps/api/src/production-platform/development-execution-service.ts",
+        "apps/api/src/production-platform/development-route-service.ts",
+        "apps/api/src/production-platform/development-service.ts",
+        "apps/web/src/development-occurrence-input.tsx",
+        "apps/web/src/development-material-event-form.tsx",
+        "apps/web/src/digital-development-execution-panel.tsx",
+        "apps/web/src/digital-development-panel.tsx",
+        "packages/contracts/src/digital-development-execution.ts",
+        "packages/contracts/src/digital-development.ts",
+        "tests/unit/development-occurrence.test.ts",
+        "tests/integration/digital-development-execution-postgres.test.ts",
+        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
+        "tests/helpers/digital-development-route-fixture.ts",
+        "tests/helpers/digital-development-round-fixture.ts",
+        "tests/helpers/digital-development-craft-revision-fixture.ts",
+        "tests/integration/development-sla-enrollment-postgres.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/garment-quality.ts",
-        "apps/api/src/receiving/receiving-quantity-query.ts",
-        "apps/api/src/production-platform/access-policy.ts"
+        "apps/api/src/production-platform/development-execution-read.ts",
+        "apps/api/src/production-platform/development-material-readiness.ts",
+        "apps/api/src/acceptance-clock/business-time.ts"
       ],
       "oldTests": [
-        "tests/unit/packing-sla-evidence.test.ts",
-        "tests/unit/receiving-summary.test.ts",
-        "tests/integration/effective-packing-postgres.test.ts"
+        "tests/unit/digital-development.test.ts",
+        "tests/unit/digital-development-route.test.ts",
+        "tests/integration/digital-development-execution-postgres.test.ts",
+        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
+        "tests/integration/full-business-chain-postgres.test.ts",
+        "tests/integration/development-sla-enrollment-postgres.test.ts"
       ],
       "newTests": [
-        "tests/unit/packing-sla-evidence.test.ts",
-        "tests/integration/effective-packing-postgres.test.ts"
+        "tests/unit/digital-development.test.ts",
+        "tests/unit/digital-development-route.test.ts",
+        "tests/integration/digital-development-execution-postgres.test.ts",
+        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
+        "tests/integration/full-business-chain-postgres.test.ts",
+        "tests/integration/development-sla-enrollment-postgres.test.ts"
       ],
+      "expectation": "Current-order trusted now is independent from wall2099; manual instant/date/unknown and old notes are distinct. Native idempotency/round/future guards and material event identity pass. Original App submits date-only material event, checks original HTTP body/response and stored occurrence vs registration, and retains original authenticated GET/QR/revocation and unsaved input. Not six-image visual acceptance. Original legacy dispatch fixtures now use the same trusted business date as their just-entered tasks, rather than a fixed September date; the native three-case legacy chain passes without changing actual-time validation. Full follow-up preserves immediate original shipment, exact date-only quality, before-entry rejection and original idempotency; the fixture no longer sends October22 for a just-entered shipment.",
       "checks": [
-        "r501-retry-units",
-        "r501-final-pg"
-      ],
-      "expectation": "Independent two receipts2+2 / qualified1+2 / packing4 counterexample stays incomplete and preserves recorded4. Proven zero stays zero; unknown or superseded coverage is not0. Native targeted PG run additionally demonstrated real reinspection and pending-to-ready quantity update; final canonical plan includes the expanded native regression."
-    },
-    {
-      "source": "Approved complete v2, Library libfile_fde3_f-7ab204d715f48191a1e467100a057111_c8d3bf5d609c8191bce6411a30e94d44 Version2 sections9/11/14/15; approved nine-PR execution table R5-01, including immediate existing read-model invalidation. User authorizes implementation, GitHub Codex Review and sequential merge; no deployment or live data/config changes.",
-      "initialization": "No schema change, dependency upgrade or history repair. Effective receipt/QC versions use existing native sources. Journey calculation version starts original bounded reconciliation; calendar and current-production result rule versions rejects old-algorithm snapshots. Ordinary GET never rebuilds all objects.",
-      "dateAndPermission": "Preserve current original technical object and field authority, Root exception, quantity correction/packing permissions, current role revocation and same-client/RR reads. Business time and actual date precision retained; QC registration does not invent an actual packing instant. No user DTO/authorization cache.",
-      "rule": "Full authorized quantities, light selection, 15-row decoration and prior-query snapshots use coherent current qualified-delivery facts.",
-      "writes": [
-        "apps/api/src/production-platform/delivery-calendar-facts.ts",
-        "apps/api/src/production-platform/delivery-calendar-debt-summary.ts",
-        "apps/api/src/production-platform/journey-business-progress.ts",
-        "apps/api/src/production-platform/journey-fact-model.ts",
-        "apps/api/src/production-platform/production-statistics-query.ts",
-        "packages/contracts/src/delivery-calendar.ts",
-        "packages/domain/src/delivery-calendar.ts",
-        "tests/integration/m01-delivery-calendar-postgres.test.ts",
-        "packages/contracts/src/digital-production-journey.ts",
-        "packages/contracts/src/production-statistics.ts",
-        "packages/domain/src/production-statistics.ts",
-        "apps/api/src/production-platform/reporting-query.ts",
-        "apps/web/src/current-production-page.tsx",
-        "apps/web/src/current-production-po-dialog.tsx",
-        "tests/acceptance/m01-cockpit-home-native-browser.ts",
-        "tests/integration/m01-production-statistics-postgres.test.ts",
-        "tests/integration/sourcing-pr03-postgres.test.ts",
-        "tests/unit/journey-business-progress.test.ts",
-        "tests/unit/m01-production-statistics.test.ts",
-        "tests/acceptance/m01-current-production-native-browser.ts"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/journey-fact-repository.ts",
-        "apps/api/src/production-platform/journey-fact-updates.ts",
-        "apps/api/src/production-platform/delivery-calendar-query.ts",
-        "apps/api/src/production-platform/journey-selection-query.ts"
-      ],
-      "oldTests": [
-        "tests/unit/journey-business-progress.test.ts",
-        "tests/unit/m01-production-statistics.test.ts",
-        "tests/unit/delivery-calendar-model.test.ts",
-        "tests/integration/m01-delivery-calendar-postgres.test.ts"
-      ],
-      "checks": [
-        "r501-retry-units",
-        "r501-final-pg",
-        "r501-production-browser"
-      ],
-      "expectation": "Native calendar counts all allowed PO before15-row paging, keeps16 PO across pages, readonly PMC/revocation, current quantity corrections, original-snapshot conservation, zero old-factory scope and5001 unrelated-year cap. Valid overdelivery fixture now has real extra receipt and QC, not nonexistent stock. Packing raw count remains separate from unknown effective shipment. Original packing remains in original fields and is separately visible in detail/export; effective shipment and completion use qualified delivery. Native special closure preserves raw2 and uncertain delivery; browser native2-to3 delivery, real date side lists and same-session revocation pass. No visual redesign or six-image acceptance claimed. Full original current-production browser matrix13 cases passes: keep uninspected raw2 distinct from unknown delivery, retained result beforeQC remains unknown while freshQC becomes known2, and sandbox remains under the currently approved expandable supply-chain parent.",
-      "newTests": [
-        "tests/integration/m01-delivery-calendar-native-browser-postgres.test.ts",
-        "tests/unit/journey-business-progress.test.ts",
-        "tests/unit/m01-production-statistics.test.ts",
-        "tests/integration/m01-current-production-native-browser-postgres.test.ts"
+        "r502-final-units",
+        "r502-final-pg",
+        "r502-legacy-pg16",
+        "r502-full-findings-pg16"
       ]
     },
     {
-      "source": "Approved complete v2, Library libfile_fde3_f-7ab204d715f48191a1e467100a057111_c8d3bf5d609c8191bce6411a30e94d44 Version2 sections9/11/14/15; approved nine-PR execution table R5-01, including immediate existing read-model invalidation. User authorizes implementation, GitHub Codex Review and sequential merge; no deployment or live data/config changes.",
-      "initialization": "No schema change, dependency upgrade or history repair. Effective receipt/QC versions use existing native sources. Journey calculation version starts original bounded reconciliation; calendar and current-production result rule versions rejects old-algorithm snapshots. Ordinary GET never rebuilds all objects.",
-      "dateAndPermission": "Preserve current original technical object and field authority, Root exception, quantity correction/packing permissions, current role revocation and same-client/RR reads. Business time and actual date precision retained; QC registration does not invent an actual packing instant. No user DTO/authorization cache.",
-      "rule": "Historical factory inspection names come from that event native factory identity, including zero-quantity history, without changing current scope.",
+      "rule": "Journey reads the exact existing task/round and material proof, and logical cutting join uses every current PO/cut first-ready fact.",
+      "source": "Approved complete v2 Library libfile_fde3_f-7ab204d715f48191a1e467100a057111_c8d3bf5d609c8191bce6411a30e94d44 Version2 and corrected nine-PR execution table R5-02. Autonomous implementation/review/sequential merge authorized; actual R5-01 merge must be synchronized before remote submission. No live data, configuration or deployment.",
+      "initialization": "No schema, dependency or live configuration change. Old records without explicit occurrence stay unknown; no fabricated backfill. Existing Journey calculation-version change drives bounded dirty/build reconciliation; native event OLD/NEW registration remains transactional. Ordinary GET does not rebuild all orders.",
+      "dateAndPermission": "Original request/current role, source/task/round, material, personnel and field guards remain. Same client/transaction and business clock, separate actual vs registration, instant/date/unknown precision. No Root impersonation, authorization-result cache or clock reset. Legacy sourcing remains original; UI assignment chain is R5-09, not claimed here.",
       "writes": [
-        "apps/api/src/production-platform/factory-production-facts.ts",
-        "packages/contracts/src/factory-flow.ts",
-        "apps/web/src/factory-production-qc-panel.tsx",
-        "tests/unit/factory-production-facts.test.ts"
+        "apps/api/src/production-platform/journey-query.ts",
+        "apps/api/src/production-platform/journey-native-times.ts",
+        "apps/api/src/production-platform/journey-fact-model.ts",
+        "tests/unit/journey-native-times.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts",
+        "apps/api/src/production-platform/bulk-preparation-service.ts",
+        "tests/integration/digital-journey-postgres.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/factory-flow-service.ts",
-        "apps/web/src/factory-flow-panel.tsx"
+        "apps/api/src/production-platform/task-readiness-facts.ts",
+        "apps/api/src/production-platform/journey-progress-dates.ts",
+        "apps/api/src/production-platform/journey-fact-updates.ts",
+        "apps/api/src/production-platform/journey-fact-model.ts"
       ],
       "oldTests": [
-        "tests/unit/factory-production-facts.test.ts"
+        "tests/unit/journey-progress-dates.test.ts",
+        "tests/unit/journey-projection-isolation.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/integration/digital-journey-postgres.test.ts"
       ],
       "newTests": [
-        "tests/unit/factory-production-facts.test.ts"
+        "tests/unit/journey-progress-dates.test.ts",
+        "tests/unit/journey-projection-isolation.test.ts",
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/integration/digital-journey-postgres.test.ts"
       ],
+      "expectation": "Date-only does not acquire midnight. Exact scoped correction wins; no recorded_at-to-actual fallback. Internal/external cutting per-PO9/10 gap stays not ready, complement advances only the proper join; unknown correction clears the join. Existing R5-01 raw/effective packing fields and statistics units retained. Explicitly inherited prior-round verified material evidence keeps its original completion, rather than becoming missing or receiving a new-round timestamp; full native regression failed before the SQL fix and passes after. ReviewP2: actor-free native bulk facts carry exact linked cuttingOrderId; the actual persisted cutting_gate timestamp matches the proven all-PO first-ready join, and clears after a scoped correction to unknown. Both internal and external cases fail before and pass after this narrow patch. Full follow-up compares material actual to its real persisted accepted recheck completion, rather than expecting null despite that trusted fact; all35 original Journey scenarios including full authorization/page boundaries pass.",
       "checks": [
-        "r501-retry-units"
-      ],
-      "expectation": "Retired and current factories keep their own names, only positive scopes determine current inspection; unmatched event stays unknown instead of using current factory. Existing whole-order completion and all-PO reader behavior retained; no visual redesign."
+        "r502-final-units",
+        "r502-final-pg",
+        "r502-full-findings-pg16"
+      ]
     },
     {
-      "source": "Approved complete v2, Library libfile_fde3_f-7ab204d715f48191a1e467100a057111_c8d3bf5d609c8191bce6411a30e94d44 Version2 sections9/11/14/15; approved nine-PR execution table R5-01, including immediate existing read-model invalidation. User authorizes implementation, GitHub Codex Review and sequential merge; no deployment or live data/config changes.",
-      "initialization": "No schema change, dependency upgrade or history repair. Effective receipt/QC versions use existing native sources. Journey calculation version starts original bounded reconciliation; calendar and current-production result rule versions rejects old-algorithm snapshots. Ordinary GET never rebuilds all objects.",
-      "dateAndPermission": "Preserve current original technical object and field authority, Root exception, quantity correction/packing permissions, current role revocation and same-client/RR reads. Business time and actual date precision retained; QC registration does not invent an actual packing instant. No user DTO/authorization cache.",
-      "rule": "New quality coverage helper belongs to the existing effective-packing canonical PostgreSQL checks, without new maintenance drills.",
+      "rule": "Digital owner approval starts responsibility only after a legitimate primary merchandiser enables the original handling action.",
+      "source": "Approved complete v2 Library libfile_fde3_f-7ab204d715f48191a1e467100a057111_c8d3bf5d609c8191bce6411a30e94d44 Version2 and corrected nine-PR execution table R5-02. Autonomous implementation/review/sequential merge authorized; actual R5-01 merge must be synchronized before remote submission. No live data, configuration or deployment.",
+      "initialization": "No schema, dependency or live configuration change. Old records without explicit occurrence stay unknown; no fabricated backfill. Existing Journey calculation-version change drives bounded dirty/build reconciliation; native event OLD/NEW registration remains transactional. Ordinary GET does not rebuild all orders.",
+      "dateAndPermission": "Original request/current role, source/task/round, material, personnel and field guards remain. Same client/transaction and business clock, separate actual vs registration, instant/date/unknown precision. No Root impersonation, authorization-result cache or clock reset. Legacy sourcing remains original; UI assignment chain is R5-09, not claimed here.",
+      "writes": [
+        "apps/api/src/production-platform/sourcing-owner-readiness.ts",
+        "apps/api/src/production-platform/sourcing-todo-sla.ts",
+        "apps/api/src/production-platform/access-service.ts",
+        "apps/api/src/sourcing/sourcing-service.ts",
+        "tests/integration/sourcing-owner-readiness-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/sourcing-sla-evidence.ts",
+        "apps/api/src/todos/projection-service.ts",
+        "apps/api/src/todos/service.ts",
+        "apps/api/src/production-platform/access-policy.ts"
+      ],
+      "oldTests": [
+        "tests/unit/sourcing-todo-sla.test.ts",
+        "tests/unit/digital-pmc-readonly-access.test.ts",
+        "tests/integration/sourcing-owner-readiness-postgres.test.ts"
+      ],
+      "newTests": [
+        "tests/unit/sourcing-todo-sla.test.ts",
+        "tests/unit/digital-pmc-readonly-access.test.ts",
+        "tests/integration/sourcing-owner-readiness-postgres.test.ts"
+      ],
+      "expectation": "Explicit isolated missing-staff precondition yields no actionable owner todo or SLA start, original approval refuses before writes. Original assignment starts once at Nov11 12:00 using frozen quota, same native SLA evidence agrees, later assignment never resets and normal approval proceeds. No invented historical release for old untracked todo absence.",
+      "checks": [
+        "r502-final-units",
+        "r502-final-pg"
+      ]
+    },
+    {
+      "rule": "New native occurrence/readiness helpers participate in the existing canonical PG plan without adding operational drills.",
+      "source": "Approved complete v2 Library libfile_fde3_f-7ab204d715f48191a1e467100a057111_c8d3bf5d609c8191bce6411a30e94d44 Version2 and corrected nine-PR execution table R5-02. Autonomous implementation/review/sequential merge authorized; actual R5-01 merge must be synchronized before remote submission. No live data, configuration or deployment.",
+      "initialization": "No schema, dependency or live configuration change. Old records without explicit occurrence stay unknown; no fabricated backfill. Existing Journey calculation-version change drives bounded dirty/build reconciliation; native event OLD/NEW registration remains transactional. Ordinary GET does not rebuild all orders.",
+      "dateAndPermission": "Original request/current role, source/task/round, material, personnel and field guards remain. Same client/transaction and business clock, separate actual vs registration, instant/date/unknown precision. No Root impersonation, authorization-result cache or clock reset. Legacy sourcing remains original; UI assignment chain is R5-09, not claimed here.",
       "writes": [
         "scripts/ci/full-gate-risk-map.mjs"
       ],
@@ -131,56 +145,36 @@
       "oldTests": [
         "tests/unit/full-gate-risk-map.test.ts"
       ],
-      "checks": [
-        "r501-retry-units"
+      "newTests": [
+        "tests/unit/full-gate-risk-map.test.ts"
       ],
-      "expectation": "Original70 classification cases remain valid, preserving actual supplychain/database consumers and the cancellation of routine backup/restore drills. New helper shares the existing native packing suite mapping, not a separate governance gate."
+      "expectation": "Known original risk-map tests pass and the new owner-readiness native test is explicitly selected for its actual command changes; no migration, backup or restore tool change.",
+      "checks": [
+        "r502-final-units"
+      ]
     }
   ],
   "checks": [
     {
-      "id": "r501-retry-units",
+      "id": "r502-final-units",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/packing-sla-evidence.test.ts tests/unit/receiving-summary.test.ts tests/unit/factory-production-facts.test.ts tests/unit/delivery-calendar.test.ts tests/unit/delivery-calendar-model.test.ts tests/unit/journey-business-progress.test.ts tests/unit/m01-production-statistics.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/m01-current-production-workspace.test.ts tests/unit/journey-fact-model.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r501-retry-units.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/development-material-readiness.test.ts tests/unit/development-occurrence.test.ts tests/unit/digital-development-route.test.ts tests/unit/digital-development.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/journey-native-times.test.ts tests/unit/journey-progress-dates.test.ts tests/unit/journey-projection-isolation.test.ts tests/unit/sourcing-todo-sla.test.ts tests/unit/journey-business-progress.test.ts tests/unit/m01-production-statistics.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r502-review-units.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 202,
+      "passed": 231,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "831cb40b5a3f47db52644fbd6c72e6eeacfeea8e",
-      "sourceFingerprint": "0b35499219f2974a81fdfdf6c2bbc6dba6836e68f3cf551319aa55ee8b37ea40",
-      "context": "Node22.22.2 / PG13.23 owned marked isolated DB, original authentication and original App Chromium. Only current-production acceptance expectations changed: uninspected raw2 stays raw2, delivery unknown until realQC2; approved expandable supply-chain parent preserved. Prior Full449-pass/12-fail and local11-pass/2-fail reports retained, not passed. No production or six-image visual acceptance.",
-      "startedAt": "2026-11-10T19:59:41.900Z",
-      "endedAt": "2026-11-10T19:59:46.552Z",
-      "log": "/workspace/.dx-cloud/r501-retry-units.log",
-      "logSha256": "fb4df5712aa7ffc7ceb81d558054bac0afacdc012861a8f7560397eddd511cf1",
+      "testedHead": "c81d6e347d7b0db914cef7e2f944784727732157",
+      "sourceFingerprint": "9be8b15d2b14f91945f0ad6bd1e61db314ca2754bce12a40e795ca03ba5b0f8f",
+      "context": "R5-02 Review repair on real release base22c0a5ac. Original source c81d6e34 plus internal cuttingOrderId/read-model regression patch; Node22.22.2/npm10.9.9/Vitest4.1.10, original canonical bounded workers, owned marked low-privilege PG13.23 for36 native/browser cases orPG16.14 for3 selected legacy cases. Internal/external two-PO counterexamples failed before patch because persisted cutting_gate time was null; after patch original detail, built model, stored readback and explicit unknown correction are checked independently. No original permissions or quantity/readiness guards relaxed.57 unselected legacy tests are not passed. No onsite/deployment/six-image visual acceptance.",
+      "startedAt": "2026-11-11T02:06:50.183Z",
+      "endedAt": "2026-11-11T02:07:00.296Z",
+      "log": "/workspace/.dx-cloud/r502-review-units.log",
+      "logSha256": "2eb386cd65cc5881a9cd4081be84db47a5d70431042cc1a76909462869e4d71e",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "df414131ddd213600bc6beacf9935ef99e4ac337a05cb2e9dfea3ba2e0574b84"
-        }
-      ]
-    },
-    {
-      "id": "r501-final-pg",
-      "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/effective-packing-postgres.test.ts tests/integration/m01-delivery-calendar-postgres.test.ts tests/integration/m01-production-statistics-postgres.test.ts tests/integration/sourcing-pr03-postgres.test.ts tests/integration/m01-delivery-calendar-native-browser-postgres.test.ts -t 'effective native packing|delivery calendar original facts|original full App delivery calendar|keeps native packing40|keeps an unfinished sibling|preserves effective cumulative2|SLA08 keeps collected|P01-06 reads' --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r501-final-pg.json",
-      "status": "passed",
-      "exitCode": 0,
-      "passed": 27,
-      "failed": 0,
-      "skipped": 154,
-      "testedHead": "663c4aa9da7ea05147993ab8b039f9c9fbbb4a7b",
-      "sourceFingerprint": "a4759ef1552676fb505c16d4169ee9565a6b660aa716ccec38a5e9944ee958f4",
-      "context": "Node22.22.2/Vitest4.1.10, same complete source fingerprint. PG13.23 private marked isolated database/non-superuser; canonical max2 PG workers. Original App/auth Chromium browser on ephemeral local test server. PG selection intentionally skips154 unrelated cases. No Full, deployment, live data or six-image acceptance claim. Prior failed reports are retained separately. Reused27-case evidence: explicit broad consumed source/version input hash equals the clean tested831cb40b checkout. Only the separate current-production acceptance helper changed; that helper is verified by its own13-case report. No new execution is claimed.",
-      "startedAt": "2026-11-10T19:11:13.001Z",
-      "endedAt": "2026-11-10T19:12:55.286Z",
-      "log": "/workspace/.dx-cloud/r501-final-pg.log",
-      "logSha256": "76e04cc842fe770bceae99e52276cc5e465965e0c0de900e969578f81953c31c",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "8032c3797067019614d8d71de699cdc108a4f08ad6e38428a3186472f4683729"
+          "sha256": "75cc4c523a2a41fa6dcb2298f5c93cd95bf7137dc2158a0b83aca58a63048d46"
         }
       ],
       "inputPaths": [
@@ -188,40 +182,123 @@
         "packages",
         "scripts",
         "tests/helpers",
-        "tests/integration",
-        "tests/unit",
-        "tests/acceptance/m01-cockpit-home-native-browser.ts",
-        "tests/acceptance/cockpit-thumbnail-fixture.ts",
         "package.json",
         "package-lock.json",
         "vitest.config.ts",
         "vitest.business-chain.config.ts",
-        "tests/fixtures"
+        "tests/unit",
+        "tests/integration/digital-development-execution-postgres.test.ts"
       ],
-      "inputFingerprint": "e3924d32a947c721e1b1917478a735956708467892e37e1e6a81803e0226c63b"
+      "inputFingerprint": "67974c7d4c0b7fbde7fccf79ee8bdf7725f5913c99d5c55c206197c0701b1fb1"
     },
     {
-      "id": "r501-production-browser",
+      "id": "r502-final-pg",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/m01-current-production-native-browser-postgres.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r501-production-browser-ready.json",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/production-readiness-postgres.test.ts tests/integration/sourcing-owner-readiness-postgres.test.ts tests/integration/development-execution-read-native-browser-postgres.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r502-review-pg.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 13,
+      "passed": 36,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "831cb40b5a3f47db52644fbd6c72e6eeacfeea8e",
-      "sourceFingerprint": "0b35499219f2974a81fdfdf6c2bbc6dba6836e68f3cf551319aa55ee8b37ea40",
-      "context": "Node22.22.2 / PG13.23 owned marked isolated DB, original authentication and original App Chromium. Only current-production acceptance expectations changed: uninspected raw2 stays raw2, delivery unknown until realQC2; approved expandable supply-chain parent preserved. Prior Full449-pass/12-fail and local11-pass/2-fail reports retained, not passed. No production or six-image visual acceptance.",
-      "startedAt": "2026-11-10T19:59:01.785Z",
-      "endedAt": "2026-11-10T19:59:40.553Z",
-      "log": "/workspace/.dx-cloud/r501-production-browser-ready.log",
-      "logSha256": "b17a920f2e9d3a01456b27f70f5e22c370547c8a8d6fb737bcb94d47b188be52",
+      "testedHead": "c81d6e347d7b0db914cef7e2f944784727732157",
+      "sourceFingerprint": "9be8b15d2b14f91945f0ad6bd1e61db314ca2754bce12a40e795ca03ba5b0f8f",
+      "context": "R5-02 Review repair on real release base22c0a5ac. Original source c81d6e34 plus internal cuttingOrderId/read-model regression patch; Node22.22.2/npm10.9.9/Vitest4.1.10, original canonical bounded workers, owned marked low-privilege PG13.23 for36 native/browser cases orPG16.14 for3 selected legacy cases. Internal/external two-PO counterexamples failed before patch because persisted cutting_gate time was null; after patch original detail, built model, stored readback and explicit unknown correction are checked independently. No original permissions or quantity/readiness guards relaxed.57 unselected legacy tests are not passed. No onsite/deployment/six-image visual acceptance.",
+      "startedAt": "2026-11-11T02:06:50.140Z",
+      "endedAt": "2026-11-11T02:08:10.482Z",
+      "log": "/workspace/.dx-cloud/r502-review-pg.log",
+      "logSha256": "52f5c376820f9202e7ab70affe8885a68f3d7581f26bcbe9d1ffd4390719d376",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "7ae503a220753cf397a46b740bf58e9e34a28210d6fd06e019c0c48cfd32df35"
+          "sha256": "dee31fc0d9116b097e3e301c1e6976eca0dd05909dc70b62478b0f9c0d85b826"
         }
-      ]
+      ],
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests/helpers",
+        "package.json",
+        "package-lock.json",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts",
+        "tests/integration/production-readiness-postgres.test.ts",
+        "tests/integration/sourcing-owner-readiness-postgres.test.ts",
+        "tests/integration/development-execution-read-native-browser-postgres.test.ts",
+        "tests/integration/digital-development-execution-postgres.test.ts"
+      ],
+      "inputFingerprint": "052df4c69f65d6e6dfe0736439af0ac97f4b156ce65d3004642f0397f39da0cc"
+    },
+    {
+      "id": "r502-legacy-pg16",
+      "kind": "tests",
+      "command": "TEST_DATABASE_URL=<owned PG16.14 marked test DB> node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/full-business-chain-postgres.test.ts -t 'P07/P08 development routes|P03 legacy' --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r502-review-legacy.json",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 3,
+      "failed": 0,
+      "skipped": 57,
+      "testedHead": "c81d6e347d7b0db914cef7e2f944784727732157",
+      "sourceFingerprint": "9be8b15d2b14f91945f0ad6bd1e61db314ca2754bce12a40e795ca03ba5b0f8f",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests/helpers",
+        "tests/integration/full-business-chain-postgres.test.ts",
+        "package.json",
+        "package-lock.json",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts"
+      ],
+      "inputFingerprint": "28fcbcaae2d68f270ca4dbd798ea2f094b6709502c3dc71ccd62ecce0913e038",
+      "startedAt": "2026-11-11T02:09:42.419Z",
+      "endedAt": "2026-11-11T02:10:09.623Z",
+      "log": "/workspace/.dx-cloud/r502-review-legacy.log",
+      "logSha256": "4f42fd879f6cb135b1d68b9dbbf4ca76730d49a1e7210ba8ec5d6eebeab4a25a",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "1ff8994a401e3f7a721d34fa3dcccf832f4aa3b489e69715c3d9be6d676ee27e"
+        }
+      ],
+      "context": "R5-02 Review repair on real release base22c0a5ac. Original source c81d6e34 plus internal cuttingOrderId/read-model regression patch; Node22.22.2/npm10.9.9/Vitest4.1.10, original canonical bounded workers, owned marked low-privilege PG13.23 for36 native/browser cases orPG16.14 for3 selected legacy cases. Internal/external two-PO counterexamples failed before patch because persisted cutting_gate time was null; after patch original detail, built model, stored readback and explicit unknown correction are checked independently. No original permissions or quantity/readiness guards relaxed.57 unselected legacy tests are not passed. No onsite/deployment/six-image visual acceptance. Full findings only change two separate test modules. Refined actual input scope includes the selected full-business-chain file and its complete helper/app/package/config dependencies; independently matched against clean tested9a checkout, so no business rerun."
+    },
+    {
+      "id": "r502-full-findings-pg16",
+      "kind": "tests",
+      "command": "TEST_DATABASE_URL=<owned PG16.14 marked test DB> node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/development-sla-enrollment-postgres.test.ts tests/integration/digital-journey-postgres.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r502-full-findings-pg16.json",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 52,
+      "failed": 0,
+      "skipped": 0,
+      "testedHead": "9a82772c874a6688f86004fa6bb64eee4920da4f",
+      "sourceFingerprint": "65b3366782d0935cbd1e8a74b954a7ac7860665e10ee78dd3aedc7f826e4786d",
+      "context": "Actual9a candidate plus the two Full-discovered test compatibility fixes. Node22.22.2/npm10.9.9/Vitest4.1.10, canonical long-PG2 workers, owned marked low-privilege PG16.14 test database. All52 tests pass including the previously skipped22 Journey tests. Shipping records current trusted dispatch day and explicitly rejects pre-entry day; material actual equals the persisted real accepted recheck completion, registration is not inferred. Pagination aggregate cap120s and all authorization/revocation/hydration assertions preserved. First Full42945129813 failed PG (138pass,2failed,22skipped plus dependent afterAll assertion); non-db passed. Not a new-head Full or onsite pass.",
+      "startedAt": "2026-11-11T02:34:48.213Z",
+      "endedAt": "2026-11-11T02:36:19.096Z",
+      "log": "/workspace/.dx-cloud/r502-full-findings-pg16.log",
+      "logSha256": "fb9d27211b2d432640c8ff9fe4ed037877e9b6ffeea446a536b4fe488a1bbd25",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "eee74e63adf318966e866e432e277703167c9d11e571ab668f23e2c48fcf4c8e"
+        }
+      ],
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests/helpers",
+        "package.json",
+        "package-lock.json",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts",
+        "tests/integration/digital-journey-postgres.test.ts",
+        "tests/integration/development-sla-enrollment-postgres.test.ts"
+      ],
+      "inputFingerprint": "e0a5764bb8fe86236bc46058252e11059251bb6e65d62b99ed7fbd324bae84ea"
     }
   ]
 }

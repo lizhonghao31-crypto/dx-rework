@@ -14,13 +14,15 @@ import {AcceptanceDingTalkProvider,mintAcceptanceLoginCode} from "../../apps/api
 import {RootAuthority} from "../../apps/api/src/access/root-authority.js";
 import {EmployeeAccessService} from "../../apps/api/src/access/employee-access-service.js";
 import {DevelopmentExecutionService} from "../../apps/api/src/production-platform/development-execution-service.js";
+import {DevelopmentRoundService} from "../../apps/api/src/production-platform/development-round-service.js";
+import {DigitalJourneyQuery} from "../../apps/api/src/production-platform/journey-query.js";
 import {DigitalProductionIdentityService} from "../../apps/api/src/production-platform/identity-service.js";
 import {DigitalDevelopmentService} from "../../apps/api/src/production-platform/development-service.js";
 import {DigitalProductionTaskService} from "../../apps/api/src/production-platform/task-service.js";
 import {DigitalProductionAccessService} from "../../apps/api/src/production-platform/access-service.js";
 import {DigitalProductionNotificationService} from "../../apps/api/src/production-platform/notification-service.js";
 import {DigitalQuotationService} from "../../apps/api/src/production-platform/quotation-service.js";
-import {DevelopmentDocumentSchema} from "@dx-rework/contracts/digital-development";
+import {DevelopmentDocumentSchema,type DevelopmentSheet} from "@dx-rework/contracts/digital-development";
 import {PatternRoomOrderService} from "../../apps/api/src/pattern-room/order-service.js";
 import {PatternRoomPriceService} from "../../apps/api/src/pattern-room/price-service.js";
 import {RootAwareTodoProjectionService} from "../../apps/api/src/todos/root-aware-projection-service.js";
@@ -128,5 +130,43 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await page.getByRole('button',{name:'当前办理',exact:true}).click();await technical.waitFor({state:'visible'});expect(await technical.getByLabel('原因',{exact:true}).inputValue()).toBe('TEST S1 尚未提交的技术原因');
    expect(errors).toEqual([]);await page.screenshot({path:join(evidence,'development-technical-1165.png'),fullPage:true});
   }catch(error){await page.screenshot({path:join(evidence,'failure.png'),fullPage:true});await writeFile(join(evidence,'failure-body.txt'),await page.locator('body').innerText());throw error;}finally{await context.close();}
+ });
+ it("records a date-only material occurrence through the original App without replacing its registration time",async()=>{
+  const context=await browser.newContext({viewport:{width:1165,height:1003}});
+  await context.addCookies([{name:'dx_rework_session',value:tokens.get('root')!,url:base}]);
+  const page=await context.newPage();page.setDefaultTimeout(12000);
+  await context.route('**/*',route=>{const url=new URL(route.request().url());return url.origin===base||['data:','blob:'].includes(url.protocol)?route.continue():route.abort();});
+  try{
+   // The task's "本单资料" is a reader. Use the original editable development
+   // entry and its handling chapter for a material business operation.
+   await page.goto(base+`/ui/digital-production?development=${sourceId}`);
+   await page.getByRole('button',{name:'轮次与记录',exact:true}).click();
+   const form=page.locator('.development-material-events');
+   await form.getByLabel('实际发生时间').selectOption('date');
+   await form.getByLabel('发生日期',{exact:true}).fill('2026-11-09');
+   await form.getByLabel('说明',{exact:true}).fill('TEST R5 original App material occurrence');
+   const result=page.waitForResponse(response=>response.request().method()==='POST'&&response.url().includes(`/sources/${sourceId}/development/materials/`)&&response.url().endsWith('/events'));
+   await form.getByRole('button',{name:'确认记录',exact:true}).click();
+   const response=await result;expect(response.status()).toBe(200);
+   expect(response.request().postDataJSON().actualTime).toEqual({precision:'date',date:'2026-11-09'});
+   const sheet=await response.json() as DevelopmentSheet,actual=sheet.materialEvents.find(event=>event.note==='TEST R5 original App material occurrence')!;
+   expect(actual).toMatchObject({occurredAt:null,occurredDate:'2026-11-09',timeQuality:'补报未核实'});
+   expect(actual.createdAt).not.toBeNull();
+   const stored=(await f.db.query('SELECT occurred_at,recorded_at,payload FROM digital_production_task_events WHERE event_id=$1 AND resource_id=$2',[actual.eventId,sourceId])).rows[0]!;
+   expect(stored.occurred_at).toBeNull();expect(stored.recorded_at).not.toBeNull();
+   expect(stored.payload.actualCompletedDate).toBe('2026-11-09');
+  }catch(error){await page.screenshot({path:join(evidence,'occurrence-failure.png'),fullPage:true});await writeFile(join(evidence,'occurrence-failure-body.txt'),await page.locator('body').innerText());await writeFile(join(evidence,'occurrence-failure-controls.json'),JSON.stringify(await page.locator('.development-material-events select').evaluateAll(selects=>selects.map(select=>select.outerHTML))));throw error;}finally{await context.close();}
+ });
+ it("inherits the original verified material occurrence when a new round explicitly retains the completed check",async()=>{
+  const old=await new DigitalDevelopmentService(f.db,true).read(f.root,sourceId);
+  const check=(await f.db.query("SELECT t.task_id,t.completed_at FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND a.task_kind='development_materials' AND t.route_version=1 AND t.state='completed'",[sourceId])).rows[0]!;
+  expect(check).toBeDefined();expect(check.completed_at).not.toBeNull();
+  const rounds=new DevelopmentRoundService(f.db,true);
+  const draft=await rounds.save(f.root,sourceId,{expectedDraftVersion:0,revision:{basedOnRound:1,document:old.document!,origin:'内部发现',customerComment:'',internalProblem:'TEST only pattern changes; verified material check retained',explanation:'TEST preserve actual occurrence of inherited material',categories:['版型'],affectedNodes:['纸样'],outputKind:'整件样板'}},randomUUID());
+  await rounds.publish(f.root,sourceId,{expectedDraftVersion:draft.draftVersion,basedOnRound:1},randomUUID());
+  expect((await rounds.read(f.root,sourceId)).rounds[0]!.inherited.development_materials.taskId).toBe(check.task_id);
+  const current=await new DigitalJourneyQuery(f.db).read(f.root,sourceId,2);
+  const material=current.stages.flatMap(stage=>stage.nodes).find(node=>node.instanceId===`material:${old.document!.materials[0]!.materialId}:2`)!;
+  expect(material).toMatchObject({state:'completed',round:2,actualAt:check.completed_at.toISOString(),actualQuality:'verified'});
  });
 });

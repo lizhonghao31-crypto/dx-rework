@@ -157,7 +157,7 @@ export class BulkPreparationService {
  /** Internal facts for one mother only. No task DTO/action permission is persisted. */
  async readJourneyFactsWithClient(id:string,db:PoolClient,time:BusinessTime){
   const g=await this.gates(db,id),prep=await this.current(db,id,g);
-  const rows=(await db.query(`SELECT po.line_id AS "lineId",r.actual_cut_count AS "actualCutCount"
+  const rows=(await db.query(`SELECT po.line_id AS "lineId",l.child_id AS "cuttingOrderId",r.actual_cut_count AS "actualCutCount"
    FROM digital_production_po_lines po LEFT JOIN digital_production_child_lines l ON l.module='cutting' AND l.line_id=po.line_id
    LEFT JOIN current_cutting_records r ON r.cutting_order_id=l.child_id WHERE po.production_order_id=$1 ORDER BY po.position`,[id])).rows;
   const tasks=prep?[...(await journeyTaskSummaries(db,(await this.routeTasks(db,prep.preparation_id)).map(t=>t.task_id),time)).values()]:[];
@@ -165,7 +165,7 @@ export class BulkPreparationService {
   return {instructionVersion:g.instruction?.version??null,sourceRound:g.source?.round_number??null,
    customerConfirmed:g.customerConfirmed,ownerApproved:g.ownerApproved,instructionValid:g.instructionValid,reasons:g.reasons,tasks,
    preshrink:(await readBulkPreshrinkRequirement(db,prep,g.instruction?.document)).requirement,
-   cutting:{completed:rows.length>0&&rows.every(r=>r.actualCutCount!==null),lines:rows.map(r=>({lineId:r.lineId as string}))},readiness:{responsibility}};
+   cutting:{completed:rows.length>0&&rows.every(r=>r.actualCutCount!==null),lines:rows.map(r=>({lineId:r.lineId as string,cuttingOrderId:r.cuttingOrderId as string|null}))},readiness:{responsibility}};
  }
  async read(actor:TrustedActorContext,id:string,db:DB=this.database):Promise<BulkPreparationSheet>{
   const policy=new DigitalProductionAccessPolicy(db);await policy.assert(actor,'order',id,'technical');const g=await this.gates(db,id),prep=await this.current(db,id,g);

@@ -3,6 +3,7 @@ import {toSourcingIso as toIso,SOURCING_LANE_KEY as LANE_KEY} from "./sourcing-c
 export {canViewSourcingDaxingPrice} from "./sourcing-case-mapping.js";
 import {workflowStateRejection} from "../platform/business-rejection-guidance.js";
 import {effectiveSourcingMerchandiser,lockDigitalSourcingHandover} from "./current-merchandiser.js";
+import {sourcingOwnerReady} from '../production-platform/sourcing-owner-readiness.js';
 import {SourcingContractReturnService} from "./sourcing-contract-return-service.js";
 import { factoryPoLines, syncFactoryPoNumbers, validateFactoryInputs, approveFactoryPoDates, prepareTransferPoDates, approveTransferPoDates } from "../production-platform/po-factory-date-adapter.js";
 import {factorySettlements,reconcileFactory} from "./factory-settlement-service.js";
@@ -1823,6 +1824,7 @@ export class SourcingService {
         const decisionVersion = Number(source.decision_version ?? 0) + 1;
         const sourceType = source.sourcing_decision_id ? "management_revision" : "initial";
         const transitionSequence = Number(source.sequence) + 1;
+        const approvalReady=await sourcingOwnerReady(client,sourcingCaseId);
         const eventId = await this.events.append(client, actor, {
           action: "sourcing.management_decision.record",
           entityType: "sourcing_case",
@@ -1837,6 +1839,7 @@ export class SourcingService {
             decisionVersion,
             sourceType,
             sourceIeQuoteId,
+            ...(!approvalReady?{approvalReadiness:{version:1,waitingFor:'primary_merchandiser'}}:{}),
             supplierId: selected.supplier_id,
             supplierCode: selected.supplier_code,
             supplierName: selected.supplier_name,
@@ -1907,7 +1910,7 @@ export class SourcingService {
           `sourcing:${sourcingCaseId}:management:`,
           "供应链总监已完成调价选厂",
         );
-        await this.todoProjection?.actionableForAllAssignedRole(client, actor, {
+        if(approvalReady)await this.todoProjection?.actionableForAllAssignedRole(client, actor, {
           category: "sourcing_owner_approval",
           sourceEventId: eventId,
           sourceAction: "sourcing.management_decision.record",
@@ -2033,6 +2036,7 @@ export class SourcingService {
           fail("该询价当前不在老板终审阶段", 409, "INVALID_STATE_TRANSITION");
         }
         const approved = input.decision === "approved";
+        if(approved&&!await sourcingOwnerReady(client,sourcingCaseId))fail('请先在本单指派有效主跟单，再办理老板审批',409,'CONFLICT');
         const eventId = await this.events.append(client, actor, {
           action: approved ? "sourcing.owner.approve" : "sourcing.owner.reject",
           entityType: "sourcing_case",

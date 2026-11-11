@@ -51,7 +51,13 @@ export const DevelopmentDocumentSchema = z.object({
 });
 export const SaveDevelopmentSchema = z.object({ expectedVersion: z.number().int().nonnegative(), document: DevelopmentDocumentSchema }).strict();
 export const PublishDevelopmentSchema = z.object({ expectedVersion: z.number().int().positive(), patternOrder:z.object({categoryId:z.string().uuid(),priceVersion:z.number().int().positive()}).strict().optional() }).strict();
-export const DevelopmentMaterialEventSchema = z.object({ expectedMaterialRevision: z.number().int().nonnegative(), expectedVersion: z.number().int().positive(), action: z.enum(["到货", "修改预计日期", "确认代用"]), expectedDate: z.iso.date().nullable(), note: text }).strict().superRefine((value, context) => {
+export const DevelopmentOccurrenceSchema=z.discriminatedUnion('precision',[
+ z.object({precision:z.literal('instant'),at:z.iso.datetime({offset:true})}).strict(),
+ z.object({precision:z.literal('date'),date:z.iso.date()}).strict(),
+ z.object({precision:z.literal('unknown')}).strict(),
+]);
+export type DevelopmentOccurrence=z.infer<typeof DevelopmentOccurrenceSchema>;
+export const DevelopmentMaterialEventSchema = z.object({ actualTime:DevelopmentOccurrenceSchema.optional(),expectedMaterialRevision: z.number().int().nonnegative(), expectedVersion: z.number().int().positive(), action: z.enum(["到货", "修改预计日期", "确认代用"]), expectedDate: z.iso.date().nullable(), note: text }).strict().superRefine((value, context) => {
   if (value.action === "修改预计日期" && !value.expectedDate) context.addIssue({code:"custom",path:["expectedDate"],message:"请填写预计日期"});
   if (value.action === "确认代用" && !value.note) context.addIssue({code:"custom",path:["note"],message:"请填写代用说明"});
 });
@@ -120,7 +126,7 @@ export type DevelopmentSheet = {
   developmentType: string; designerName: string; version: number; status: "draft" | "published";
   document: DevelopmentDocument | null; publishedAt: string | null; taskId: string | null; canEdit: boolean;
   canRevise?: boolean; roundNumber?: number; latestRoundNumber?: number;
-  materialEvents: Array<{ eventId: string; materialId: string; action: string; expectedDate: string | null; note: string; createdAt: string }>;
+  materialEvents: Array<{ eventId: string; materialId: string; action: string; expectedDate: string | null; note: string; createdAt: string;occurredAt?:string|null;occurredDate?:string|null;timeQuality?:string|null }>;
 };
 
 /** Shared by print, task handoff and native execution. Never invent counts for legacy text. */

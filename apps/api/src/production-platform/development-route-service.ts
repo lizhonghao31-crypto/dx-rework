@@ -1,5 +1,6 @@
 import {BulkPreparationService} from './bulk-preparation-service.js';
 import {businessNow} from '../acceptance-clock/business-time.js';
+import {developmentOccurrence} from './development-occurrence.js';
 import {technicalEnrollment,publishedTechnicalArtifact,technicalMeasurementDocument} from './development-technical-repository.js';
 import {developmentRevisionSource} from './development-revision-source.js';
 import type {DevelopmentMakingUpgrade} from '@dx-rework/contracts/digital-development';
@@ -16,7 +17,7 @@ import {DigitalProductionTaskService} from './task-service.js';
 import {DigitalProductionAccessPolicy,digitalNotFound} from './access-policy.js';
 import {DIGITAL_TASK_ROLES,type DigitalTaskKind} from './task-access-repository.js';
 import {materialReadiness} from './development-material-readiness.js';
-import type {DevelopmentActualMeasurements} from '@dx-rework/contracts/digital-development-execution';
+import type {DevelopmentActualMeasurements,DevelopmentOccurrence} from '@dx-rework/contracts/digital-development-execution';
 import {validateDevelopmentMeasurements} from './development-inspection-evidence.js';
 import {developmentSlaPlan} from './development-sla-enrollment.js';
 import {fixedDevelopmentCutter} from './development-fixed-cutting.js';
@@ -24,7 +25,7 @@ import {savedDevelopmentRoute} from "./development-sla-enrollment.js";
 import {FixedTimelineAdoptionRepository} from './fixed-timeline-adoptions.js';
 import {fixedTaskPosition} from './fixed-craft-steps.js';
 const fail=(message:string):never=>{throw new ApplicationError('DEVELOPMENT_ROUTE_CONFLICT',message,409);};
-export type DevelopmentRouteAction={measurements?:DevelopmentActualMeasurements|undefined;making?:DevelopmentMakingUpgrade|undefined;attachmentIds?:string[]|undefined;returnNodes?:DevelopmentRevision["affectedNodes"]|undefined;problemCategories?:DevelopmentRevision["categories"]|undefined;craftExecution:'内部'|'外发'|null;taskId:string;note:string;result:'通过'|'退回';nextAssigneeId:string|null;sentDate:string|null;trackingNo:string|null};
+export type DevelopmentRouteAction={actualTime?:DevelopmentOccurrence|undefined;measurements?:DevelopmentActualMeasurements|undefined;making?:DevelopmentMakingUpgrade|undefined;attachmentIds?:string[]|undefined;returnNodes?:DevelopmentRevision["affectedNodes"]|undefined;problemCategories?:DevelopmentRevision["categories"]|undefined;craftExecution:'内部'|'外发'|null;taskId:string;note:string;result:'通过'|'退回';nextAssigneeId:string|null;sentDate:string|null;trackingNo:string|null};
 export class DevelopmentRouteService {
  constructor(private readonly database:Pool,private readonly patternOrders?:PatternRoomOrderService){}
  private async task(db:PoolClient,sourceId:string,taskId:string){return (await db.query('SELECT t.*,a.task_kind,a.assignee_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND t.task_id=$2',[sourceId,taskId])).rows[0]??digitalNotFound();}
@@ -161,7 +162,10 @@ export class DevelopmentRouteService {
    }
    const revision=task.route_version>1?(await db.query('SELECT output_kind FROM digital_development_rounds WHERE source_id=$1 AND round_number=$2',[sourceId,task.route_version])).rows[0]:{output_kind:(await developmentRevisionSource(db,sourceId))?.outputKind};
    const nativeRoundId=task.task_kind==='development_confirmation'&&revision?.output_kind!=='工艺布片'?(await db.query("SELECT o.current_round_id FROM digital_development_pattern_links l JOIN pattern_room_orders o USING(order_id) WHERE l.source_id=$1 AND o.deleted_at IS NULL FOR UPDATE OF o",[sourceId])).rows[0]?.current_round_id??null:null;
-   await db.query('INSERT INTO digital_development_route_facts(fact_id,source_id,task_id,route_version,kind,payload,actor_id) VALUES($1,$2,$3,$4,$5,$6,$7)',[randomUUID(),sourceId,input.taskId,task.route_version,kind,JSON.stringify({...input,actualCompletedAt:businessNow().toISOString(),...(task.task_kind==='development_confirmation'?{nativeRoundId}:{}),...(inspection?{inspection}:{})}),actor.actorId]);
+   // Shipping already asks for the true dispatch day. It does not assert a
+   // clock instant merely because the operator registered that day later.
+   const occurrence=developmentOccurrence(task.task_kind==='development_shipping'?{precision:'date',date:input.sentDate!}:input.actualTime,businessNow(),task.entered_at?new Date(task.entered_at).toISOString():null);
+   await db.query('INSERT INTO digital_development_route_facts(fact_id,source_id,task_id,route_version,kind,payload,actor_id) VALUES($1,$2,$3,$4,$5,$6,$7)',[randomUUID(),sourceId,input.taskId,task.route_version,kind,JSON.stringify({...input,...occurrence,...(task.task_kind==='development_confirmation'?{nativeRoundId}:{}),...(inspection?{inspection}:{})}),actor.actorId]);
    if((task.task_kind==='development_sewing'||task.task_kind==='development_confirmation')&&revision?.output_kind!=='工艺布片'){
      const native=(await db.query("SELECT o.order_id,o.current_round_id,o.version,o.status FROM digital_development_pattern_links l JOIN pattern_room_orders o USING(order_id) WHERE l.source_id=$1 AND o.deleted_at IS NULL FOR UPDATE OF o",[sourceId])).rows[0];
      if(!native||!this.patternOrders)fail('请先由设计师提交原打板执行单，并由技术主管确认派工');
@@ -177,7 +181,7 @@ export class DevelopmentRouteService {
    }
    const service=new DigitalProductionTaskService(this.database);
    await service.setConditionWithClient(db,actor,input.taskId,'business_recorded',true,undefined,input.note);
-   await service.completeWithClient(db,actor,input.taskId,{note:input.note},`route:${key}`);
+   await service.completeWithClient(db,actor,input.taskId,{note:input.note,...(input.actualTime!==undefined||task.task_kind==='development_shipping'?{occurredAt:occurrence.actualCompletedAt}:{})},`route:${key}`);
    if(task.task_kind==='development_tail_check')await new BulkPreparationService(this.database).syncSource(db,actor,sourceId);
    if(input.result!=='退回')await this.advance(db,actor,sourceId,input.taskId,input.nextAssigneeId);
    return {taskId:input.taskId,result:input.result};

@@ -179,6 +179,13 @@ export const classifyFullGatePaths = (inputPaths) => {
     "tests/integration/development-execution-read-native-browser-postgres.test.ts",
   ]);
   const domains = new Set();
+  if(paths.some(path=>['apps/api/src/production-platform/development-occurrence.ts','apps/web/src/development-occurrence-input.tsx','apps/web/src/development-material-event-form.tsx'].includes(path))){
+    addAll(mappedTests,['tests/integration/digital-development-execution-postgres.test.ts','tests/integration/production-readiness-postgres.test.ts']);
+    domains.add('native-development-occurrence');
+  }
+  if(paths.some(path=>['apps/api/src/production-platform/sourcing-owner-readiness.ts','apps/api/src/production-platform/sourcing-todo-sla.ts','apps/api/src/production-platform/access-service.ts','apps/api/src/sourcing/sourcing-service.ts','tests/integration/sourcing-owner-readiness-postgres.test.ts'].includes(path))){
+    mappedTests.add('tests/integration/sourcing-owner-readiness-postgres.test.ts');domains.add('sourcing-owner-readiness');
+  }
   if(paths.some(path=>/^apps\/api\/src\/production-platform\/(?:fixed-[^/]+|factory-step-ledger)\.ts$/.test(path)
     || ['packages/contracts/src/digital-craft.ts','apps/web/src/independent-craft-field.tsx','apps/web/src/independent-craft-field.css','apps/api/migrations/0281_fixed_timeline_adoptions.sql'].includes(path))){
     addAll(mappedTests,['tests/integration/fixed-timeline-postgres.test.ts','tests/integration/fixed-timeline-native-browser-postgres.test.ts',

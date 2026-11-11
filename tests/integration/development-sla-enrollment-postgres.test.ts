@@ -1,4 +1,6 @@
 import {DevelopmentRoundService} from "../../apps/api/src/production-platform/development-round-service.js";
+import {businessNow as currentBusinessNow} from '../../apps/api/src/acceptance-clock/business-time.js';
+import {beijingCalendarDate} from '@dx-rework/contracts/digital-production';
 import type {DevelopmentRevision} from "@dx-rework/contracts/digital-development-rounds";
 import {applyDigitalPoDateFixture} from "../helpers/digital-po-date-fixture.js";
 import {randomUUID} from "node:crypto";
@@ -146,10 +148,12 @@ run("development SLA enrollment and legacy isolation",()=>{
     expect(task.state).toBe("ready");
     expect((await database.query("SELECT count(*)::int n FROM digital_production_task_dependencies WHERE task_id=$1",[task.task_id])).rows[0].n).toBe(0);
     const execute=new DevelopmentExecutionService(database,true);
-    const input={taskId:task.task_id,craftExecution:null,note:"TEST early sample",result:"通过" as const,nextAssigneeId:null,sentDate:"2026-10-22",trackingNo:"TEST-TRACKING"};
+    const input={taskId:task.task_id,craftExecution:null,note:"TEST early sample",result:"通过" as const,nextAssigneeId:null,sentDate:beijingCalendarDate(currentBusinessNow()),trackingNo:"TEST-TRACKING"};
     await expect(execute.route(actor(other),id,input,randomUUID())).rejects.toThrow();
+    await expect(execute.route(actor(),id,{...input,sentDate:'2026-10-22'},randomUUID())).rejects.toMatchObject({code:'DEVELOPMENT_OCCURRENCE_CONFLICT'});
     const key=randomUUID();await execute.route(actor(),id,input,key);await execute.route(actor(),id,input,key);
     expect((await database.query("SELECT count(*)::int n FROM digital_development_route_facts WHERE task_id=$1 AND kind='寄出'",[task.task_id])).rows[0].n).toBe(1);
+    expect((await database.query("SELECT payload FROM digital_development_route_facts WHERE task_id=$1 AND kind='寄出'",[task.task_id])).rows[0].payload).toMatchObject({actualCompletedAt:null,actualCompletedDate:input.sentDate,timeQuality:'补报未核实'});
     expect((await database.query("SELECT state FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND a.task_kind='development_materials'",[id])).rows[0].state).not.toBe("completed");
   });
   it("preserves separate before/after measurement evidence and requires exact-task tail photos",async()=>{
