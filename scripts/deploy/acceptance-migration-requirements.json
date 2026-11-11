@@ -1996,5 +1996,25 @@
     "creates": [],
     "execute": [],
     "sequences": []
+  },
+  "0284_order_time_plan_versions": {
+    "checksum": "6ef5d4698fc3d0de8f8fa190ea6f41ccd7b68e1317b51b51c4b72a83018a91a8",
+    "tables": [],
+    "functions": [],
+    "references": [
+      "digital_production_sources",
+      "digital_production_orders",
+      "app_users"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [
+      "digital_order_time_plan_versions"
+    ],
+    "execute": [
+      "guard_production_order_root_immutable",
+      "digital_journey_register_change"
+    ],
+    "sequences": []
   }
 }

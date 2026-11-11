@@ -1,7 +1,8 @@
 import type {SlaAnchor} from '@dx-rework/domain/digital-sla-plan';
 import type {CraftStepChoice} from '@dx-rework/contracts/digital-craft';
 import type {FixedTimelineInput} from './fixed-timeline-adoptions.js';
-import {frozenWorkDefinition,type FixedWorkInputs} from './fixed-work-definition.js';
+import {frozenWorkDefinition,withOrderTimeStageReserves,type FixedWorkInputs} from './fixed-work-definition.js';
+import {orderTimeRule} from '@dx-rework/contracts/order-time-plan';
 type Work=FixedTimelineInput['work'][number];
 export type FixedOrderPlanningLine={line_id:string;goal:SlaAnchor|undefined;customerDateVersion:number};
 /** The native capture and the read-only calculator share this exact DAG. */
@@ -54,10 +55,10 @@ export function fixedOrderWork(initial:FixedWorkInputs,orderId:string,sourceId:s
    add(`garment_packing${suffix}`,'garment_packing',[`garment_inspection${suffix}`]);
    add(`ship_sample${suffix}`,'ship_sample');
    const nodeIds=[...common,...work.filter(node=>node.id.endsWith(suffix)).map(node=>node.id)];
-   const advance=initial.data.unified.values.parameters.ship_sample_advance?.value;
+   const advance=initial.data.orderTimePlan?orderTimeRule(initial.data.orderTimePlan,'ship_sample_advance')?.rule:initial.data.unified.values.parameters.ship_sample_advance?.value;
    consumers.push({scopeRef:`po:${line.line_id}`,lineId:line.line_id,nodeIds,customerDateVersion:line.customerDateVersion,customerGoalIds:[`garment_packing${suffix}`],
     shipSample:{nodeId:`ship_sample${suffix}`,productionNodeId:`factory_work${suffix}`,customerGoalId:`garment_packing${suffix}`,advanceDays:advance?.kind==='offset'?advance.days:null},
     ends:{[`garment_packing${suffix}`]:goal??{precision:'unknown',reason:'本PO首次采用时尚无正式客户交期'},[`ship_sample${suffix}`]:{precision:'unknown',reason:'本PO寄船样目标待原冻结生产开始和提前量共同求解'}}});
   }
- return {work,route,consumers};
+ return {work:withOrderTimeStageReserves(initial,work),route,consumers};
 }

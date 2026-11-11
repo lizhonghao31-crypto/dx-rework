@@ -28,9 +28,9 @@ export async function captureDevelopmentTimeline(db:PoolClient,actorId:string,so
   const ends:Record<string,SlaAnchor>={};
   if(previous)ends[previous]=document.returnDate?{precision:'date',value:document.returnDate,source:`development:${sourceId}:round:${round}:document:${documentVersion}:returnDate`}:{precision:'unknown',reason:'本轮预计样板完成日期尚未填写'};
   if(round===1){work.push({id:'development_shipping',parameterKey:'development_shipping',dependsOn:[],...definition(initial,'development_shipping'),canonicalWorkRef:`source:${sourceId}:round:${round}:work:development_shipping`,accountingRole:'original_work'});ends.development_shipping={precision:'unknown',reason:'原资料尚无独立寄样目标，不以样板预计完成日期代替'};}
-  return {timelineSchemaVersion:2,routeSchemaVersion:2,calculationVersion:'fixed-backward-v1',resource,round,
+  return {timelineSchemaVersion:2,routeSchemaVersion:2,calculationVersion:initial.data.orderTimePlan?'fixed-backward-v2':'fixed-backward-v1',resource,round,
    originalPlan:{ref:`digital_development_sla_plans:${sourceId}:${original.revision}`,revision:original.revision,plan:original.plan_json},
-   unified:{snapshotRef:initial.data.unified.snapshotRef,values:initial.data.unified.values},development:initial.data.development,
+   unified:{snapshotRef:initial.data.unified.snapshotRef,values:initial.data.unified.values},development:initial.data.development,...(initial.data.orderTimePlan?{orderTimePlan:initial.data.orderTimePlan}:{}),
    sourceVersions:{initialIdentityHash:initial.identityHash,configurationId:initial.data.unified.configurationId,routeRef,documentVersion,round},work,route,craftSteps,
    consumers:[{scopeRef:`source:${sourceId}:round:${round}`,lineId:null,nodeIds:work.map(work=>work.id),ends}]};
  });

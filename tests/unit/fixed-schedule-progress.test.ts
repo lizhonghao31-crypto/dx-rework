@@ -10,6 +10,21 @@ const evaluate=(input:ScheduleScopeInput,hours:number)=>evaluateFixedScheduleSco
 
 describe('fixed schedule progress, independent goal/own SLA and physical spans',()=>{
  it.each([[6,-3],[8,-1],[9,0],[10,1]])('spends only earned credit at%s and keeps fixed B', (now,lag)=>{const input=scope([work('a',0,5),work('b',5,9,['a'])],{a:fact(0,2),b:fact(2,null)}),result=evaluate(input,now);expect(result.lagMinutes).toEqual({minimum:lag*60,maximum:lag*60});expect(result.nodes[1]!.goalDelta.targetAt).toBe(at(9));expect(result.state).toBe(lag>0?'late':'normal');});
+ it('keeps the approved A5 B4 C1 states and labels an overdue unfinished boundary honestly',()=>{
+  const input=scope([work('a',0,5),work('b',5,9,['a']),work('c',9,10,['b'])],{a:fact(0,2),b:fact(2,null),c:fact(null,null)});
+  for(const [now,end,lag,kind,own]of [[5,7,-3,'conditional',0],[8,9,-1,'lower_bound',2],[10,11,1,'lower_bound',4]] as const){
+   const result=evaluate(input,now);
+   expect(result.completionEstimate).toEqual({kind,earliest:at(end),latest:kind==='lower_bound'?null:at(end)});
+   expect(result.lagMinutes).toEqual({minimum:lag*60,maximum:lag*60});
+   expect(result.nodes[1]!.ownSla.overdueMinutes).toEqual({minimum:own*60,maximum:own*60});
+   expect(result.nodes[1]!.goalDelta.targetAt).toBe(at(9));
+   expect(input.facts.b!.completed).toEqual(unknown);
+  }
+  input.facts={...input.facts,b:fact(2,8),c:fact(8,null)};
+  expect(evaluate(input,8)).toMatchObject({lagMinutes:{minimum:-60},completionEstimate:{kind:'conditional',earliest:at(9)}});
+  input.facts={...input.facts,c:fact(8,9)};
+  for(const now of [9,20])expect(evaluate(input,now)).toMatchObject({lagMinutes:{minimum:-60},completionEstimate:{kind:'actual',earliest:at(9)}});
+ });
  it('replaces the active estimate with complete A once, never double counts prior credit',()=>{for(const [done,lag]of [[8,-1],[11,2]]){const input=scope([work('a',0,5),work('b',5,9,['a'])],{a:fact(0,2),b:fact(2,done)});expect(evaluate(input,12).lagMinutes!.minimum).toBe(lag*60);}});
  it('keeps carried delay when own next SLA is normal, then recovers on real completion',()=>{const input=scope([work('a',0,4),work('b',4,8,['a'])],{a:fact(0,6),b:fact(6,null)}),running=evaluate(input,7);expect(running.state).toBe('late');expect(running.lagMinutes!.minimum).toBe(120);expect(running.nodes[1]!.ownSla.state).toBe('within');input.facts={...input.facts,b:fact(6,8)};expect(evaluate(input,9).lagMinutes!.minimum).toBe(0);});
  it('does not consume now once per unstarted descendant',()=>{const works=Array.from({length:6},(_,index)=>work('n'+index,index*2,index*2+2,index?['n'+(index-1)]:[])),facts=Object.fromEntries(works.map((node,index)=>[node.id,fact(index?null:0,null)]));expect(evaluate(scope(works,facts),3).lagMinutes!.minimum).toBe(60);});
@@ -40,11 +55,21 @@ describe('fixed schedule progress, independent goal/own SLA and physical spans',
   expect(fixedDurationSummary([input],at(10))).toMatchObject({actualStart:{precision:'unknown'},finalActualSpanMinutes:null});
  });
 
+ it('starts elapsed time from the first credible required root without waiting for a genuinely future root',()=>{
+  const input=scope([work('a',0,6),work('b',1,6),work('packing',6,8,['a','b']),work('optional_shipping',0,20)],{a:fact(1,null),b:fact(null,null,{notYetReady:true}),packing:fact(null,null),optional_shipping:fact(null,null)},['packing']);
+  input.customerGoal=at(8);
+  expect(fixedDurationSummary([input],at(4))).toMatchObject({actualStart:instant(1),elapsedSpanMinutes:{minimum:180,maximum:180},planSpanMinutes:480,finalActualSpanMinutes:null});
+  input.facts={...input.facts,b:fact(null,3,{notYetReady:true})};
+  expect(fixedDurationSummary([input],at(4)).actualStart).toEqual(unknown);
+ });
+
  it('freezes a terminated unfinished own SLA at credible Z and leaves missing or inverted Z unknown',()=>{
   const input=scope([work('a',0,4)],{a:fact(0,null)});
   for(const now of [8,20,30])expect(evaluateFixedScheduleScope(input,at(now),{at:at(8),kind:'cancelled'}).nodes[0]!.ownSla).toMatchObject({state:'terminated',overdueMinutes:{minimum:240,maximum:240}});
   for(const stop of [null,at(-1),at(40)])expect(evaluateFixedScheduleScope(input,at(30),{at:stop,kind:'special_closure'}).nodes[0]!.ownSla).toMatchObject({state:'terminated',overdueMinutes:null});
   input.facts={a:fact(0,null,{terminated:true})};expect(evaluate(input,30).nodes[0]!.ownSla.overdueMinutes).toBeNull();
+  input.facts={a:fact(0,null,{terminated:true,terminationAt:at(8)})};
+  for(const now of [8,20,30])expect(evaluate(input,now).nodes[0]!.ownSla.overdueMinutes).toEqual({minimum:240,maximum:240});
  });
 
 });

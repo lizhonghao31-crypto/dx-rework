@@ -1,249 +1,251 @@
 {
   "version": 1,
-  "base": "a28d0b451a1710e204ce388ab5e4063078790ea7",
-  "sourceFingerprint": "46dbd4a05230f698534870e7d749c2a9fdd87654523df24cf5a15efb4cd85b96",
+  "base": "b7dd1f98e16e70c61a4d6a1be19d919c4b150efa",
+  "sourceFingerprint": "5a462799fe544ae6490e668722feb39d1df49e618d62cdbdbd730dcd36bac616",
   "risk": "full",
   "rules": [
     {
-      "rule": "Whole garment redo creates a distinct native work round and real segment; completion/confirmation resolve the exact native round.",
+      "rule": "One explicit per-order frozen policy and immutable original company counterpart survive native continuation and disable-new-adoption.",
       "writes": [
-        "apps/api/src/pattern-room/order-service.ts",
-        "apps/api/src/production-platform/development-native-round.ts",
-        "apps/api/src/production-platform/development-round-service.ts",
-        "apps/api/src/production-platform/development-route-service.ts",
-        "apps/api/src/production-platform/development-execution-service.ts",
-        "apps/api/src/server.ts",
-        "tests/integration/development-technical-postgres.test.ts"
+        "packages/contracts/src/order-time-plan.ts",
+        "packages/contracts/package.json",
+        "apps/api/src/production-platform/fixed-timeline-initial-input.ts",
+        "apps/api/src/production-platform/fixed-timeline-adoptions.ts",
+        "apps/api/src/production-platform/fixed-development-adoption.ts",
+        "apps/api/src/production-platform/fixed-order-adoption.ts",
+        "apps/api/src/production-platform/order-time-plan-repository.ts",
+        "tests/integration/order-time-plan-postgres.test.ts"
       ],
       "reads": [
-        "apps/api/src/pattern-room/order-authority.ts",
-        "apps/api/src/pattern-room/order-rework-boundary.ts",
-        "apps/api/src/production-platform/development-execution-transfer.ts",
-        "apps/api/src/production-platform/development-round-plan.ts",
-        "apps/api/src/reporting/wage-report-selection.ts",
-        "apps/api/src/reporting/management-reporting-service.ts",
-        "apps/api/src/production-platform/development-occurrence.ts"
+        "apps/api/src/production-platform/sla-order-service.ts",
+        "apps/api/src/production-platform/development-sla-enrollment.ts",
+        "apps/api/src/production-platform/sla-order-application.ts"
       ],
       "oldTests": [
-        "tests/integration/development-technical-postgres.test.ts",
-        "tests/integration/full-business-chain-postgres.test.ts",
-        "tests/unit/digital-development-rounds.test.ts"
+        "tests/integration/fixed-timeline-postgres.test.ts"
       ],
+      "expectation": "Current source confirmed overrides are inherited while the creation company counterpart and old snapshot stay unchanged. Explicit new storage survives stopping new adoption and blocks old global apply. Original targets exist before preparation; old native task clocks and deadline history are byte-equal after confirmation. Same key retries once, rollback removes both version and dirty entry, concurrent stale revision loses. No actual designer/adoption UI cutover claimed.",
+      "source": "Approved complete v2 Library libfile_fde3_f-7ab204d715f48191a1e467100a057111_c8d3bf5d609c8191bce6411a30e94d44 Version2, corrected nine-PR table R5-04 and user autonomous code/Review/sequential merge authority. New diagram replacements and customer-default additions do not enable unrelated UI in this backend unit.",
+      "initialization": "Additive0284 stores only explicit per-resource confirmations and same-transaction dirty marks; no legacy migration/backfill or creation activation. Old snapshots remain readable; new publishing/adoption waits07. Existing native business commands retain authority, transaction, locking and event ownership; normal GET does not rebuild targets or all orders.",
+      "dateAndPermission": "Native creation/confirmation, original R/A, fixed B, independent D, exact/date/unknown and original adopted calendars remain distinct. Ordinary changes never reset starts, overwrite completed facts or retarget existing B; only actual approved customer-H changes replan with the then-effective confirmed order policy. No authorization result/Root DTO cache, live data/config or deployment.",
       "newTests": [
-        "tests/integration/development-technical-postgres.test.ts",
-        "tests/integration/full-business-chain-postgres.test.ts"
+        "tests/integration/order-time-plan-postgres.test.ts"
       ],
       "checks": [
-        "r503-technical-current",
-        "r503-binding-final"
-      ],
-      "expectation": "Initial10 plus explicitly approved remake7 totals17; explicit remake0 keeps10; two real rounds and segments, no duplicate on retry. Sewing and final facts bind remake ID, not mutable old current ID. Unconfirmed first work releases only under original final receipt. First native submission at development round2 maps to2 and not1; actual original wage page totals/export match. Local patches and inherited sewing do not add wages. Native2000-character reason uses a bounded summary of accepted2000/2001/4000-character revision; full internalProblem and explanation persist unchanged in original development round and same-key publish is idempotent.",
-      "source": "Approved complete v2 Library libfile_fde3_f-7ab204d715f48191a1e467100a057111_c8d3bf5d609c8191bce6411a30e94d44 Version2 and corrected nine-PR execution table R5-03. Actual R5-02 merge a28d0b451a1710e204ce388ab5e4063078790ea7 synchronized with exact unchanged source/test inputs. Autonomous code, Review and sequential merge authorized; no deployment/onsite.",
-      "initialization": "No schema/dependency/runtime configuration change. Original historical wages, amounts, attachments and completed rounds remain; absent historical native proof stays unknown. Real first native submission in a later development round gets its current actual link, not a fabricated old event. Original same-transaction dirty registration and bounded Journey updates remain; no GET-wide rebuild.",
-      "dateAndPermission": "Original current identity, source/task/current round, native designer/supervisor pricing, role revocation and mass-cut guard remain. Same transaction, business clock and idempotency; actual occurrence vs registration preserved. A legacy tail return is limited to its currently authorized completed tail task and matching saved return fact; only pending unpriced work is created and no financial DTO returned. Native public rework/assignment and finance settlement permissions are not enlarged."
+        "r504-units",
+        "r504-pg13",
+        "r504-pg16"
+      ]
     },
     {
-      "rule": "Both original publication and resumed create form refuse a missing current valid quote while draft and published-order paths remain available.",
+      "rule": "Exact original DAG/calendar operations supply backward targets and forward arrangements, with unknowns, per-PO scope and nonduplicated stage/included work.",
       "writes": [
-        "apps/web/src/development-pattern-link.tsx",
-        "apps/web/src/digital-development-panel.tsx",
-        "apps/web/src/digital-development-create-form.tsx",
-        "tests/integration/development-execution-read-native-browser-postgres.test.ts"
+        "apps/api/src/production-platform/fixed-timeline-targets.ts",
+        "apps/api/src/production-platform/fixed-work-definition.ts",
+        "apps/api/src/production-platform/fixed-development-work.ts",
+        "apps/api/src/production-platform/fixed-order-work.ts",
+        "apps/api/src/production-platform/order-time-schedule.ts",
+        "apps/api/src/production-platform/sla-po-date-adapter.ts",
+        "tests/unit/order-time-plan.test.ts",
+        "tests/unit/fixed-timeline-targets.test.ts"
       ],
       "reads": [
-        "apps/web/src/use-pattern-quote.ts",
-        "apps/api/src/pattern-room/price-service.ts",
-        "apps/api/src/production-platform/development-service.ts"
+        "packages/domain/src/digital-sla-plan.ts",
+        "apps/api/src/production-platform/po-date-repository.ts",
+        "apps/api/src/production-platform/po-customer-date-service.ts"
       ],
       "oldTests": [
-        "tests/unit/pattern-quote-lifecycle.test.ts",
-        "tests/integration/development-execution-read-native-browser-postgres.test.ts"
+        "tests/unit/fixed-timeline-targets.test.ts",
+        "tests/integration/fixed-timeline-postgres.test.ts"
       ],
+      "expectation": "Independent8-day/10-day and6-day calculations, necessary parallel max, serial printing/embroidery, excluded Sunday physical spans, exclusive customer-date boundary and separate PO risk. One new ordinary value/calendar serves both planning and own quota, while old split inputs remain exact; new external wash is not overridden. Original B stays; inserted work uses adopted remaining budgets, and missing downstream budget leaves its first target unknown in stored readback. H changes use each actual effective policy, preserve sibling/history and never pull future company standards.",
+      "source": "Approved complete v2 Library libfile_fde3_f-7ab204d715f48191a1e467100a057111_c8d3bf5d609c8191bce6411a30e94d44 Version2, corrected nine-PR table R5-04 and user autonomous code/Review/sequential merge authority. New diagram replacements and customer-default additions do not enable unrelated UI in this backend unit.",
+      "initialization": "Additive0284 stores only explicit per-resource confirmations and same-transaction dirty marks; no legacy migration/backfill or creation activation. Old snapshots remain readable; new publishing/adoption waits07. Existing native business commands retain authority, transaction, locking and event ownership; normal GET does not rebuild targets or all orders.",
+      "dateAndPermission": "Native creation/confirmation, original R/A, fixed B, independent D, exact/date/unknown and original adopted calendars remain distinct. Ordinary changes never reset starts, overwrite completed facts or retarget existing B; only actual approved customer-H changes replan with the then-effective confirmed order policy. No authorization result/Root DTO cache, live data/config or deployment.",
       "newTests": [
-        "tests/integration/development-execution-read-native-browser-postgres.test.ts"
+        "tests/integration/order-time-plan-postgres.test.ts",
+        "tests/unit/order-time-plan.test.ts",
+        "tests/unit/fixed-timeline-targets.test.ts"
       ],
       "checks": [
-        "r503-units-current",
-        "r503-browser-current"
-      ],
-      "expectation": "Original App: pending quote disabled; controlled503 and unconfigured409 disabled with no publish request; refresh recovers real10.000 quote and exactly one native publish succeeds. Existing authenticated GET/QR, foreign scope, same-session revoke/disable, document tabs, unsaved input and date-only material occurrence remain. Existing quote generation/abort mechanism retained; no approved-image style claim.",
-      "source": "Approved complete v2 Library libfile_fde3_f-7ab204d715f48191a1e467100a057111_c8d3bf5d609c8191bce6411a30e94d44 Version2 and corrected nine-PR execution table R5-03. Actual R5-02 merge a28d0b451a1710e204ce388ab5e4063078790ea7 synchronized with exact unchanged source/test inputs. Autonomous code, Review and sequential merge authorized; no deployment/onsite.",
-      "initialization": "No schema/dependency/runtime configuration change. Original historical wages, amounts, attachments and completed rounds remain; absent historical native proof stays unknown. Real first native submission in a later development round gets its current actual link, not a fabricated old event. Original same-transaction dirty registration and bounded Journey updates remain; no GET-wide rebuild.",
-      "dateAndPermission": "Original current identity, source/task/current round, native designer/supervisor pricing, role revocation and mass-cut guard remain. Same transaction, business clock and idempotency; actual occurrence vs registration preserved. A legacy tail return is limited to its currently authorized completed tail task and matching saved return fact; only pending unpriced work is created and no financial DTO returned. Native public rework/assignment and finance settlement permissions are not enlarged."
+        "r504-units",
+        "r504-pg13",
+        "r504-pg16"
+      ]
     },
     {
-      "rule": "Legacy return and repeated development fixtures retain lawful task authority, explicit supervisor money and trustworthy dispatch dates.",
+      "rule": "Fixed target, real completion, independent responsibility and honest unfinished bounds remain separate, with physical delivery spans and minimal shared facts.",
       "writes": [
-        "tests/helpers/digital-development-route-fixture.ts",
-        "tests/helpers/digital-development-round-fixture.ts",
-        "tests/helpers/digital-development-craft-revision-fixture.ts"
+        "apps/api/src/production-platform/fixed-schedule-progress.ts",
+        "apps/api/src/production-platform/fixed-schedule-basis.ts",
+        "packages/contracts/src/fixed-schedule-progress.ts",
+        "tests/unit/fixed-schedule-progress.test.ts",
+        "tests/unit/fixed-schedule-selection.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/access-policy.ts",
-        "apps/api/src/production-platform/development-arrangement.ts",
-        "apps/api/src/pattern-room/order-service.ts"
+        "apps/api/src/production-platform/journey-selection-clock.ts",
+        "apps/api/src/production-platform/journey-projection.ts",
+        "apps/api/src/production-platform/journey-fact-model.ts"
       ],
       "oldTests": [
-        "tests/integration/full-business-chain-postgres.test.ts"
+        "tests/unit/fixed-schedule-progress.test.ts",
+        "tests/unit/cockpit-fixed-schedule.test.ts",
+        "tests/integration/fixed-progress-postgres.test.ts"
       ],
+      "expectation": "A5/B4/C1 at observation5/8/10 keeps3/1/-1 earned-path margin; unfinished work earns no extra credit, overdue unfinished estimates expose only a lower bound with no fabricated latest finish. Real recovery fixes completed results. Sunday, date precision and credible global/per-node Z retained. Necessary delivery roots only; positively proven future roots are distinct from missing historical starts. Shared whitelist preserves only factual new markers and strips actor/capability/price data. Actual new-marker population and new-model list integration remain06, not falsely claimed here.",
+      "source": "Approved complete v2 Library libfile_fde3_f-7ab204d715f48191a1e467100a057111_c8d3bf5d609c8191bce6411a30e94d44 Version2, corrected nine-PR table R5-04 and user autonomous code/Review/sequential merge authority. New diagram replacements and customer-default additions do not enable unrelated UI in this backend unit.",
+      "initialization": "Additive0284 stores only explicit per-resource confirmations and same-transaction dirty marks; no legacy migration/backfill or creation activation. Old snapshots remain readable; new publishing/adoption waits07. Existing native business commands retain authority, transaction, locking and event ownership; normal GET does not rebuild targets or all orders.",
+      "dateAndPermission": "Native creation/confirmation, original R/A, fixed B, independent D, exact/date/unknown and original adopted calendars remain distinct. Ordinary changes never reset starts, overwrite completed facts or retarget existing B; only actual approved customer-H changes replan with the then-effective confirmed order policy. No authorization result/Root DTO cache, live data/config or deployment.",
       "newTests": [
-        "tests/integration/full-business-chain-postgres.test.ts",
-        "tests/integration/development-technical-postgres.test.ts"
+        "tests/integration/order-time-plan-postgres.test.ts",
+        "tests/unit/fixed-schedule-progress.test.ts",
+        "tests/unit/fixed-schedule-selection.test.ts"
       ],
       "checks": [
-        "r503-binding-final",
-        "r503-technical-current"
+        "r504-units",
+        "r504-pg13",
+        "r504-pg16"
+      ]
+    },
+    {
+      "rule": "Compatible additive persistence and canonical execution keep current business/performance boundaries without operational-drill expansion.",
+      "writes": [
+        "apps/api/migrations/0284_order_time_plan_versions.sql",
+        "apps/api/src/platform/migration-manifest.json",
+        "scripts/deploy/acceptance-migration-requirements.json",
+        "scripts/ci/full-gate-risk-map.mjs",
+        "scripts/test-suite-plan.mjs",
+        "tests/unit/full-gate-risk-map.test.ts"
       ],
-      "expectation": "Three original legacy cases pass. Real assigned non-Root tail inspector cannot public-request rework, but an authorized tail return produces exactly one unpriced next native round; only original supervisor can assign explicit0, wrong worker or clerk still rejected. Repeated remakes each require their own explicit amount. Fixture dispatch uses current trusted business date; occurrence-before-entry guard is not relaxed.",
-      "source": "Approved complete v2 Library libfile_fde3_f-7ab204d715f48191a1e467100a057111_c8d3bf5d609c8191bce6411a30e94d44 Version2 and corrected nine-PR execution table R5-03. Actual R5-02 merge a28d0b451a1710e204ce388ab5e4063078790ea7 synchronized with exact unchanged source/test inputs. Autonomous code, Review and sequential merge authorized; no deployment/onsite.",
-      "initialization": "No schema/dependency/runtime configuration change. Original historical wages, amounts, attachments and completed rounds remain; absent historical native proof stays unknown. Real first native submission in a later development round gets its current actual link, not a fabricated old event. Original same-transaction dirty registration and bounded Journey updates remain; no GET-wide rebuild.",
-      "dateAndPermission": "Original current identity, source/task/current round, native designer/supervisor pricing, role revocation and mass-cut guard remain. Same transaction, business clock and idempotency; actual occurrence vs registration preserved. A legacy tail return is limited to its currently authorized completed tail task and matching saved return fact; only pending unpriced work is created and no financial DTO returned. Native public rework/assignment and finance settlement permissions are not enlarged."
+      "reads": [
+        "scripts/deploy/prepare-acceptance-migration.py",
+        "scripts/test-execution-config.mjs",
+        "scripts/migration-lib.mjs"
+      ],
+      "oldTests": [
+        "tests/unit/acceptance-maintenance-generator.test.ts",
+        "tests/unit/full-gate-risk-map.test.ts"
+      ],
+      "expectation": "Fresh marked low-privilege PG13/16 applies current manifest including0284, immutable table rejects update/delete, exact resource invalidation rolls back with its write. New suite is in actual mapped canonical plan with bounded workers; ordinary business migration does not trigger backup/recovery drills. No full-range KPI, current15, private attachment or lazy route regression is intentionally introduced; representative broad performance/UI stays09.",
+      "source": "Approved complete v2 Library libfile_fde3_f-7ab204d715f48191a1e467100a057111_c8d3bf5d609c8191bce6411a30e94d44 Version2, corrected nine-PR table R5-04 and user autonomous code/Review/sequential merge authority. New diagram replacements and customer-default additions do not enable unrelated UI in this backend unit.",
+      "initialization": "Additive0284 stores only explicit per-resource confirmations and same-transaction dirty marks; no legacy migration/backfill or creation activation. Old snapshots remain readable; new publishing/adoption waits07. Existing native business commands retain authority, transaction, locking and event ownership; normal GET does not rebuild targets or all orders.",
+      "dateAndPermission": "Native creation/confirmation, original R/A, fixed B, independent D, exact/date/unknown and original adopted calendars remain distinct. Ordinary changes never reset starts, overwrite completed facts or retarget existing B; only actual approved customer-H changes replan with the then-effective confirmed order policy. No authorization result/Root DTO cache, live data/config or deployment.",
+      "newTests": [
+        "tests/integration/order-time-plan-postgres.test.ts",
+        "tests/unit/full-gate-risk-map.test.ts"
+      ],
+      "checks": [
+        "r504-units",
+        "r504-pg13",
+        "r504-pg16"
+      ]
     }
   ],
   "checks": [
     {
-      "id": "r503-units-current",
+      "id": "r504-units",
       "kind": "tests",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/pattern-quote-lifecycle.test.ts tests/unit/digital-development-route.test.ts tests/unit/digital-development-rounds.test.ts tests/unit/pattern-order-query.test.ts tests/unit/pattern-order-presentation.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r503-review-units.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/order-time-plan.test.ts tests/unit/fixed-timeline-targets.test.ts tests/unit/fixed-schedule-progress.test.ts tests/unit/fixed-schedule-selection.test.ts tests/unit/cockpit-fixed-schedule.test.ts tests/unit/acceptance-maintenance-generator.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/journey-visual-progress.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r504-actual-base-units.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 23,
+      "passed": 167,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "f18531eb5e6ffd4375a63709074b64735588bca8",
-      "sourceFingerprint": "46dbd4a05230f698534870e7d749c2a9fdd87654523df24cf5a15efb4cd85b96",
+      "testedHead": "eb2d190d9efc2d088c9b5ca7cfbffe26bfa3a8fc",
+      "sourceFingerprint": "5a462799fe544ae6490e668722feb39d1df49e618d62cdbdbd730dcd36bac616",
       "inputPaths": [
         "apps",
         "packages",
         "scripts",
         "tests/helpers",
-        "tests/unit",
-        "tests/integration",
         "package.json",
         "package-lock.json",
         "vitest.config.ts",
-        "vitest.business-chain.config.ts"
+        "vitest.business-chain.config.ts",
+        "tests/unit"
       ],
-      "inputFingerprint": "3e0b00f3a6dee8e67d3d31974f4135900fa212e63d53dcaa953b281d202f33bb",
-      "startedAt": "2026-11-11T03:37:50.595Z",
-      "endedAt": "2026-11-11T03:37:52.914Z",
-      "log": "/workspace/.dx-cloud/r503-review-units.log",
-      "logSha256": "9acb16f8d60ed515fa6e0a683be201a19cae9abbb94f852cf5ad147ad585aa37",
+      "inputFingerprint": "413c5ba2fc885ff9a29f81a5948a4bc789d10fdff840cc35e6f63a9529e27e94",
+      "startedAt": "2026-11-11T04:17:27.165Z",
+      "endedAt": "2026-11-11T04:17:31.514Z",
+      "log": "/workspace/.dx-cloud/r504-actual-base-units.log",
+      "logSha256": "49b2ffbc06792d832b1a83020c474921fc49b368e580e9d6d03f2082a8fe2485",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "fd979df05d5535df90b3eb6572faa6dc681094912ae99e91aac4998e32050c08"
+          "sha256": "9754c4b4ec816b48962e2141d938690dd7cfd271e2cf4f43d615ff1a477b69f9"
         }
       ],
-      "context": "R5-03 exact current source after Codex comment4533654831. Original marked low-privilege local PG16.14/PG13.23 and Node22.22.2/npm10.9.9, at most2 PostgreSQL test workers; immediate legacy chain runs separately. Real App/auth browser, controlled price failure only, native recovered quote. Technical25 includes2000/2001/4000 original revision preservation and pending/completed native remakes, explicit7/0 price and wage/complete export. Legacy3 actual selected,57 unselected, not passed. No onsite data/deployment or full visual acceptance. This is targeted evidence, not remote final Full."
+      "context": "Actual R5-03 merge b7dd1f98 synchronized. Node22.22.2/npm10.9.9, marked low-privilege isolated PG13.23/PG16.14, canonical bounded workers and maximum2 actual PostgreSQL test workers. Current reports167 units plus8 cases on each server; older31/4 reports remain historical, not current Full. Includes explicit parent-calendar handoff, unchanged native clocks, rollback+dirty entry, same-key and concurrent revisions, approved-H time version, exact unknown newly inserted goal and frozen company counterpart inheritance. No designer/adoption cutover before07, no UI/current-site or deployment claims."
     },
     {
-      "id": "r503-technical-current",
+      "id": "r504-pg13",
       "kind": "tests",
-      "command": "TEST_DATABASE_URL=<owned PG16.14 marked test DB> node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/development-technical-postgres.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r503-review-technical.json",
+      "command": "TEST_DATABASE_URL=<owned marked PG13.23 test DB> node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/order-time-plan-postgres.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r504-actual-base-pg13.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 25,
+      "passed": 8,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "f18531eb5e6ffd4375a63709074b64735588bca8",
-      "sourceFingerprint": "46dbd4a05230f698534870e7d749c2a9fdd87654523df24cf5a15efb4cd85b96",
+      "testedHead": "eb2d190d9efc2d088c9b5ca7cfbffe26bfa3a8fc",
+      "sourceFingerprint": "5a462799fe544ae6490e668722feb39d1df49e618d62cdbdbd730dcd36bac616",
       "inputPaths": [
         "apps",
         "packages",
         "scripts",
         "tests/helpers",
-        "tests/unit",
-        "tests/integration",
         "package.json",
         "package-lock.json",
         "vitest.config.ts",
-        "vitest.business-chain.config.ts"
+        "vitest.business-chain.config.ts",
+        "tests/integration/order-time-plan-postgres.test.ts"
       ],
-      "inputFingerprint": "3e0b00f3a6dee8e67d3d31974f4135900fa212e63d53dcaa953b281d202f33bb",
-      "startedAt": "2026-11-11T03:37:15.433Z",
-      "endedAt": "2026-11-11T03:37:50.708Z",
-      "log": "/workspace/.dx-cloud/r503-review-technical.log",
-      "logSha256": "75e965a0a3539e63983332fba2d8772888ed8208199fc903993cbfae242196b6",
+      "inputFingerprint": "a7ceebb9d962f1bf6a98006cda5be982b8ac72b134ba3c8f5f425de323213777",
+      "startedAt": "2026-11-11T04:17:28.419Z",
+      "endedAt": "2026-11-11T04:17:39.957Z",
+      "log": "/workspace/.dx-cloud/r504-actual-base-pg13.log",
+      "logSha256": "8c4f5441ea38ae494fa09880bb7b42127109610fd5a42ed28c29db145798fd06",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "8aaf1805d71723bb2e1d657487e7a300029267c8d6adedbecce4c10fbebe659f"
+          "sha256": "0be7c42c0e9be46124aeaa854db026c7f2145cdc4024a9ed74a30043fda46e87"
         }
       ],
-      "context": "R5-03 exact current source after Codex comment4533654831. Original marked low-privilege local PG16.14/PG13.23 and Node22.22.2/npm10.9.9, at most2 PostgreSQL test workers; immediate legacy chain runs separately. Real App/auth browser, controlled price failure only, native recovered quote. Technical25 includes2000/2001/4000 original revision preservation and pending/completed native remakes, explicit7/0 price and wage/complete export. Legacy3 actual selected,57 unselected, not passed. No onsite data/deployment or full visual acceptance. This is targeted evidence, not remote final Full."
+      "context": "Actual R5-03 merge b7dd1f98 synchronized. Node22.22.2/npm10.9.9, marked low-privilege isolated PG13.23/PG16.14, canonical bounded workers and maximum2 actual PostgreSQL test workers. Current reports167 units plus8 cases on each server; older31/4 reports remain historical, not current Full. Includes explicit parent-calendar handoff, unchanged native clocks, rollback+dirty entry, same-key and concurrent revisions, approved-H time version, exact unknown newly inserted goal and frozen company counterpart inheritance. No designer/adoption cutover before07, no UI/current-site or deployment claims."
     },
     {
-      "id": "r503-browser-current",
+      "id": "r504-pg16",
       "kind": "tests",
-      "command": "TEST_DATABASE_URL=<owned PG13.23 marked test DB> M01_SETTINGS_BROWSER_EXECUTABLE=/usr/bin/chromium node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/development-execution-read-native-browser-postgres.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r503-review-browser.json",
+      "command": "TEST_DATABASE_URL=<owned marked PG16.14 test DB> node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/order-time-plan-postgres.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r504-actual-base-pg16.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 5,
+      "passed": 8,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "f18531eb5e6ffd4375a63709074b64735588bca8",
-      "sourceFingerprint": "46dbd4a05230f698534870e7d749c2a9fdd87654523df24cf5a15efb4cd85b96",
+      "testedHead": "eb2d190d9efc2d088c9b5ca7cfbffe26bfa3a8fc",
+      "sourceFingerprint": "5a462799fe544ae6490e668722feb39d1df49e618d62cdbdbd730dcd36bac616",
       "inputPaths": [
         "apps",
         "packages",
         "scripts",
         "tests/helpers",
-        "tests/unit",
-        "tests/integration",
         "package.json",
         "package-lock.json",
         "vitest.config.ts",
-        "vitest.business-chain.config.ts"
+        "vitest.business-chain.config.ts",
+        "tests/integration/order-time-plan-postgres.test.ts"
       ],
-      "inputFingerprint": "3e0b00f3a6dee8e67d3d31974f4135900fa212e63d53dcaa953b281d202f33bb",
-      "startedAt": "2026-11-11T03:37:49.158Z",
-      "endedAt": "2026-11-11T03:38:10.287Z",
-      "log": "/workspace/.dx-cloud/r503-review-browser.log",
-      "logSha256": "b14087e0f3e5ddde716422ccf3566c95411b1ea332187b46801d2b5ed180c0ef",
+      "inputFingerprint": "a7ceebb9d962f1bf6a98006cda5be982b8ac72b134ba3c8f5f425de323213777",
+      "startedAt": "2026-11-11T04:17:29.757Z",
+      "endedAt": "2026-11-11T04:17:40.703Z",
+      "log": "/workspace/.dx-cloud/r504-actual-base-pg16.log",
+      "logSha256": "bfa31a8813b76c1dac2aea57045d8f985256cd0bbdbbd8319359b4318a50597c",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "e5e00a2ef015674f672a5aa2ac2c7d1899347bbcd293ee5839e644d1bb8ff034"
+          "sha256": "e636ad4031224fdd8de45b9db83618dc29d543682b7ddfbcf90ea114c7fb39a1"
         }
       ],
-      "context": "R5-03 exact current source after Codex comment4533654831. Original marked low-privilege local PG16.14/PG13.23 and Node22.22.2/npm10.9.9, at most2 PostgreSQL test workers; immediate legacy chain runs separately. Real App/auth browser, controlled price failure only, native recovered quote. Technical25 includes2000/2001/4000 original revision preservation and pending/completed native remakes, explicit7/0 price and wage/complete export. Legacy3 actual selected,57 unselected, not passed. No onsite data/deployment or full visual acceptance. This is targeted evidence, not remote final Full."
-    },
-    {
-      "id": "r503-binding-final",
-      "kind": "tests",
-      "command": "TEST_DATABASE_URL=<owned PG16.14 marked test DB> node node_modules/vitest/vitest.mjs run --config vitest.postgres-immediate.config.ts tests/integration/full-business-chain-postgres.test.ts -t 'P07/P08 development routes|P03 legacy' --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r503-review-legacy.json",
-      "status": "passed",
-      "exitCode": 0,
-      "passed": 3,
-      "failed": 0,
-      "skipped": 57,
-      "testedHead": "f18531eb5e6ffd4375a63709074b64735588bca8",
-      "sourceFingerprint": "46dbd4a05230f698534870e7d749c2a9fdd87654523df24cf5a15efb4cd85b96",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "tests/helpers",
-        "tests/unit",
-        "tests/integration",
-        "package.json",
-        "package-lock.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts"
-      ],
-      "inputFingerprint": "3e0b00f3a6dee8e67d3d31974f4135900fa212e63d53dcaa953b281d202f33bb",
-      "startedAt": "2026-11-11T03:38:18.346Z",
-      "endedAt": "2026-11-11T03:38:48.621Z",
-      "log": "/workspace/.dx-cloud/r503-review-legacy.log",
-      "logSha256": "c5463ace3f2bc8810fefb213edcefe559620df9b51bad06d05dfe5abd7708fa4",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "72a80d0e66df7d12fdf5d1ef86f313346684e6a03adf467f079f701d0ae48b11"
-        }
-      ],
-      "context": "R5-03 exact current source after Codex comment4533654831. Original marked low-privilege local PG16.14/PG13.23 and Node22.22.2/npm10.9.9, at most2 PostgreSQL test workers; immediate legacy chain runs separately. Real App/auth browser, controlled price failure only, native recovered quote. Technical25 includes2000/2001/4000 original revision preservation and pending/completed native remakes, explicit7/0 price and wage/complete export. Legacy3 actual selected,57 unselected, not passed. No onsite data/deployment or full visual acceptance. This is targeted evidence, not remote final Full."
+      "context": "Actual R5-03 merge b7dd1f98 synchronized. Node22.22.2/npm10.9.9, marked low-privilege isolated PG13.23/PG16.14, canonical bounded workers and maximum2 actual PostgreSQL test workers. Current reports167 units plus8 cases on each server; older31/4 reports remain historical, not current Full. Includes explicit parent-calendar handoff, unchanged native clocks, rollback+dirty entry, same-key and concurrent revisions, approved-H time version, exact unknown newly inserted goal and frozen company counterpart inheritance. No designer/adoption cutover before07, no UI/current-site or deployment claims."
     }
   ]
 }
