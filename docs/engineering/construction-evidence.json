@@ -1,7 +1,7 @@
 {
   "version": 1,
   "base": "6a8a3ec782e1c660206a28b1dca6a683f9d7e35f",
-  "sourceFingerprint": "10067042696b6559b5e27b610732eda4ec9866cb66b107d95d21a8025d81b2a5",
+  "sourceFingerprint": "0fd27470deb3646e01018b6f07edbce3337e4b71a3c6eeb48277dbc580d5746e",
   "risk": "full",
   "rules": [
     {
@@ -10,19 +10,19 @@
       "dateAndPermission": "Fixed B, original native own R/D, real C/Z, instant/date/unknown and physical/counting calendar spans stay distinct. Exact source/round/task/step/PO/cut scope, same RR proxy and current resource/field authority remain. Trusted fixed clocks with null scenario stay fixed; only actual live fallback ticks. Full authorized selection/KPI, current15 and per-request factual reuse remain; no user grant/DTO cache.",
       "rule": "Connect exact frozen per-order inputs and native scope to the shared goal/own-SLA/stage calculation and minimal stored facts.",
       "writes": [
+        "apps/api/src/production-platform/cutting-completion-facts.ts",
         "apps/api/src/production-platform/fixed-schedule-basis.ts",
         "apps/api/src/production-platform/fixed-schedule-progress.ts",
+        "apps/api/src/production-platform/fixed-schedule-stages.ts",
         "apps/api/src/production-platform/fixed-work-definition.ts",
         "apps/api/src/production-platform/journey-fact-model.ts",
         "apps/api/src/production-platform/journey-supervision.ts",
         "apps/api/src/production-platform/journey-visual-progress.ts",
+        "apps/api/src/production-platform/order-time-reading.ts",
         "apps/api/src/production-platform/order-time-schedule.ts",
         "packages/contracts/src/digital-production-journey.ts",
         "packages/contracts/src/fixed-schedule-progress.ts",
-        "packages/contracts/src/order-time-settings.ts",
-        "apps/api/src/production-platform/cutting-completion-facts.ts",
-        "apps/api/src/production-platform/fixed-schedule-stages.ts",
-        "apps/api/src/production-platform/order-time-reading.ts"
+        "packages/contracts/src/order-time-settings.ts"
       ],
       "reads": [
         "apps/api/src/production-platform/order-time-plan-repository.ts",
@@ -40,7 +40,7 @@
         "tests/integration/order-time-reading-postgres.test.ts",
         "tests/unit/order-time-reading.test.ts"
       ],
-      "expectation": "Original frozen targets exist before preparation, source round and perPO cuts never borrow other scopes, original begun quotas/calendars/reminders survive arrangement changes, native redo and batch windows remain. Each displayed stage difference uses its own displayed endpoint: The same endpoint is132hours late, not the earlier-child372hours; its exact instants are independently asserted. Unknown root/actual/calendar remains unknown; original reliable creation event independently anchors the explicit focused policy. One native batch later starting does not reset an earlier one or charge the gap; completion and trustworthy termination freeze actual results. Only factual whitelist fields are shared.",
+      "expectation": "Original frozen targets exist before preparation, source round and perPO cuts never borrow other scopes, original begun quotas/calendars/reminders survive arrangement changes, native redo and batch windows remain. Each displayed stage difference uses its own displayed endpoint: The same endpoint is132hours late, not the earlier-child372hours; its exact instants are independently asserted. Unknown root/actual/calendar remains unknown; original reliable creation event independently anchors the explicit focused policy. One native batch later starting does not reset an earlier one or charge the gap; completion and trustworthy termination freeze actual results. Only factual whitelist fields are shared. Codex4535794762: printing/embroidery closes only on its exact included return confirmation, even without a legacy basis or included child in the independent critical path; no other craft/round completion is borrowed and missing actual precision remains unknown.",
       "checks": [
         "r506-units",
         "r506-native"
@@ -123,13 +123,13 @@
         "scripts/test-suite-plan.mjs",
         "tests/integration/journey-fact-model-postgres.test.ts",
         "tests/integration/journey-page-native-browser-postgres.test.ts",
+        "tests/integration/order-time-reading-postgres.test.ts",
         "tests/integration/supplychain-board-native-browser-postgres.test.ts",
         "tests/unit/acceptance-clock-transaction-reader.test.ts",
         "tests/unit/cockpit-fixed-schedule.test.ts",
         "tests/unit/digital-pmc-readonly-access.test.ts",
         "tests/unit/journey-projection-isolation.test.ts",
         "tests/unit/m01-cockpit-reads.test.ts",
-        "tests/integration/order-time-reading-postgres.test.ts",
         "tests/unit/order-time-reading.test.ts"
       ],
       "reads": [
@@ -148,7 +148,7 @@
         "tests/integration/order-time-reading-postgres.test.ts",
         "tests/unit/order-time-reading.test.ts"
       ],
-      "expectation": "New actual PG reader suite is on canonical long2/risk mappings; no new resource creator, operations drill or separate gate. Exact legacy table-availability mocks retain original permission/exception assertions. Update the one old display-failure expectation to retained reliable counts while preserving actual corrupt-selection refusal and retry without GET rebuilding. Existing timeDomain/semanticNotes/p06ClockReview are preserved and only changed occurrence identities gain specific current review. Current31 and88 representative checks do not claim1000/5000 or onsite revalidation.",
+      "expectation": "New actual PG reader suite is on canonical long2/risk mappings; no new resource creator, operations drill or separate gate. Exact legacy table-availability mocks retain original permission/exception assertions. Update the one old display-failure expectation to retained reliable counts while preserving actual corrupt-selection refusal and retry without GET rebuilding. Existing timeDomain/semanticNotes/p06ClockReview are preserved and only changed occurrence identities gain specific current review. Prior57 native/original-App checks and88 budget are preserved as pre-review evidence, not rerun claims. Current312 units and13 native stored-reader/original-craft-chain checks cover the repair. No1000/5000 or onsite revalidation claim.",
       "checks": [
         "r506-units",
         "r506-native"
@@ -162,8 +162,8 @@
       "command": "/workspace/.dx-cloud/r5-runtime/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/unit/order-time-reading.test.ts tests/unit/fixed-schedule-progress.test.ts tests/unit/fixed-schedule-selection.test.ts tests/unit/journey-visual-progress.test.ts tests/unit/journey-fact-model.test.ts tests/unit/cockpit-fixed-schedule.test.ts tests/unit/journey-selection-facts.test.ts tests/unit/m01-cockpit-reads.test.ts tests/unit/acceptance-clock-transaction-reader.test.ts tests/unit/order-time-settings.test.ts tests/unit/order-time-plan.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/journey-projection-isolation.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/digital-pmc-readonly-ui.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r506-candidate-units.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "9a9cfcfb00f99192872dea857990b347ca5f493c",
-      "sourceFingerprint": "10067042696b6559b5e27b610732eda4ec9866cb66b107d95d21a8025d81b2a5",
+      "testedHead": "7680253e59f85da8275a0810d6af696a669577e6",
+      "sourceFingerprint": "0fd27470deb3646e01018b6f07edbce3337e4b71a3c6eeb48277dbc580d5746e",
       "inputPaths": [
         "apps",
         "packages",
@@ -176,30 +176,30 @@
         "vitest.business-chain.config.ts",
         "tests/unit"
       ],
-      "inputFingerprint": "cef94f337834e89355ce6a4481eed2fed50c22015ed98f29cf3fe202b8dfb031",
-      "startedAt": "2026-11-11T08:01:35.938Z",
-      "endedAt": "2026-11-11T08:01:59.376Z",
+      "inputFingerprint": "07abc95dda77b960a3513c9f35c3ccf37bf59538f9a18f99da486f14eea00bed",
+      "startedAt": "2026-11-11T08:58:01.098Z",
+      "endedAt": "2026-11-11T08:58:22.327Z",
       "log": "/workspace/.dx-cloud/r506-candidate-units.log",
-      "logSha256": "7ed864375e0bcb81a62ba3e2edee33084eb5ff8858c8796cac6e9a1fbad335d6",
-      "context": "R5-06 preparation includes exact R5-05 repaired candidate9a9cfcfb; final submission must absorb actual05 merge. Node22.22.2/npm10.9.9. Canonical nonDB1/PG1/long2, maximum2 actual local PG workers; only owned low-privilege TEST schemas. Original auth/App31 mothers and explicit hand-countable new stored policy, same RR/read proxy and bounded worker. No new adoption/production/onsite/scale-performance claim.",
-      "passed": 310,
+      "logSha256": "493b149c13ba77abedaba80d4945666b546ab98b4173c4597536c10805c4c0cb",
+      "context": "R5-06 review repair on actual R5-05 merge6a8a3ec7. Exact included craft-return confirmation preserves original parent closure, missing precision and source/round/step scope; current native rerun covers stored reader and original native craft chain. Broader 57 PG and original-App cases were passed before this narrow mapper repair and are not represented as rerun. Node22.22.2/npm10.9.9. Canonical nonDB1/PG1/long2, maximum2 actual local PG workers; only owned low-privilege TEST schemas. Original auth/App31 mothers and explicit hand-countable new stored policy, same RR/read proxy and bounded worker. No new adoption/production/onsite/scale-performance claim.",
+      "passed": 312,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "c3d15ace6091697dd8839f59814f3b54353f552b531e8bfdb2b8ed532b7d7712"
+          "sha256": "2340893e31ac3e7e3415d79380de34ca49380353610b9b765fd2b33870605a29"
         }
       ]
     },
     {
       "id": "r506-native",
       "kind": "tests",
-      "command": "/workspace/.dx-cloud/r5-runtime/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/order-time-reading-postgres.test.ts tests/integration/supplychain-board-native-browser-postgres.test.ts tests/integration/journey-page-native-browser-postgres.test.ts tests/integration/fixed-progress-postgres.test.ts tests/integration/journey-fact-model-postgres.test.ts tests/integration/journey-fact-updates-postgres.test.ts tests/integration/m01-journey-performance-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r506-candidate-native.json",
+      "command": "/workspace/.dx-cloud/r5-runtime/node_modules/node/bin/node node_modules/vitest/vitest.mjs run tests/integration/order-time-reading-postgres.test.ts tests/integration/fixed-progress-postgres.test.ts --config vitest.business-chain.config.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/r506-candidate-native.json",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "9a9cfcfb00f99192872dea857990b347ca5f493c",
-      "sourceFingerprint": "10067042696b6559b5e27b610732eda4ec9866cb66b107d95d21a8025d81b2a5",
+      "testedHead": "7680253e59f85da8275a0810d6af696a669577e6",
+      "sourceFingerprint": "0fd27470deb3646e01018b6f07edbce3337e4b71a3c6eeb48277dbc580d5746e",
       "inputPaths": [
         "apps",
         "packages",
@@ -214,19 +214,19 @@
         "tests/acceptance",
         "tests/fixtures"
       ],
-      "inputFingerprint": "45d75d6c83f5312bc5ec790b9009b9d91e667805cc58150b932cef6b3438561a",
-      "startedAt": "2026-11-11T08:01:35.908Z",
-      "endedAt": "2026-11-11T08:04:57.365Z",
+      "inputFingerprint": "20c9fb3dd19d7f04bf57624518803d8be72ee8c4f0c00386c68b730c73db30b6",
+      "startedAt": "2026-11-11T08:58:01.036Z",
+      "endedAt": "2026-11-11T08:58:55.173Z",
       "log": "/workspace/.dx-cloud/r506-candidate-native.log",
-      "logSha256": "1df23c17cb24318b82485755549d96e978edb218690f959a21586b5c58665cf6",
-      "context": "R5-06 preparation includes exact R5-05 repaired candidate9a9cfcfb; final submission must absorb actual05 merge. Node22.22.2/npm10.9.9. Canonical nonDB1/PG1/long2, maximum2 actual local PG workers; only owned low-privilege TEST schemas. Original auth/App31 mothers and explicit hand-countable new stored policy, same RR/read proxy and bounded worker. No new adoption/production/onsite/scale-performance claim.",
-      "passed": 57,
+      "logSha256": "420b5e1371ed8ca688d026ea413cc3e04bce2b5b5a1b106464d7e019379443a3",
+      "context": "R5-06 review repair on actual R5-05 merge6a8a3ec7. Exact included craft-return confirmation preserves original parent closure, missing precision and source/round/step scope; current native rerun covers stored reader and original native craft chain. Broader 57 PG and original-App cases were passed before this narrow mapper repair and are not represented as rerun. Node22.22.2/npm10.9.9. Canonical nonDB1/PG1/long2, maximum2 actual local PG workers; only owned low-privilege TEST schemas. Original auth/App31 mothers and explicit hand-countable new stored policy, same RR/read proxy and bounded worker. No new adoption/production/onsite/scale-performance claim.",
+      "passed": 13,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "4498d409db71f3c2b840e1a62fba26112b18d0293ebacdc00eb707bd69404f90"
+          "sha256": "3fec26b29e82aedf5aa9763c17e1860b1c58c4e2872b294bcfbef53fd5f04a53"
         }
       ]
     }

@@ -124,6 +124,17 @@ export function orderTimeReadingBasis(saved:StoredOrderTimePlan,resource:Busines
   // original route. Preserve its original handoff/clock and reconnect only
   // those native additions; never restore a superseded planned route.
   const ids=new Set(work.map(node=>node.id)),added=original?.work.filter(node=>node.accountingRole==='added_work'&&!ids.has(node.id))??[];
+  // A craft's processing report does not close its parent window. Reconcile
+  // only that frozen work's included return, so another craft/round cannot
+  // supply its completion when there is no matching legacy basis.
+  for(const parent of saved.input.work.filter(node=>['development_printing','development_embroidery'].includes(node.parameterKey))){
+   const fact=facts[parent.id];if(!fact)continue;
+   const returns=saved.input.work.filter(node=>node.includedIn===parent.id&&node.parameterKey==='development_craft_return');
+   const receipt=returns.length===1?(facts[returns[0]!.id]??nativeFor(returns[0]!,scope,resource,item,native,evidence).fact):undefined;
+   fact.businessCompleted=fact.businessCompleted&&receipt?.businessCompleted===true;
+   fact.completed=fact.businessCompleted?receipt!.completed:unknown;
+   fact.evidenceRefs=[...new Set([...fact.evidenceRefs,...receipt?.evidenceRefs??[]])];
+  }
   const addedIds=new Set(added.map(node=>node.id));
   for(const node of added){work.push(structuredClone(node));facts[node.id]=structuredClone(original!.facts[node.id]??empty());}
   for(const node of work){const old=original?.work.find(previous=>previous.id===node.id);if(old)node.dependsOn=[...new Set([...node.dependsOn,...old.dependsOn.filter(id=>addedIds.has(id))])];}

@@ -90,6 +90,23 @@ describe('R5 exact frozen order-time reading and independent visible endpoints',
   proof.cutting=[];proof.readiness.get('TEST cut')!.tracked=false;result=orderTimeReadingBasis(saved,order,row,{},proof,null);
   expect(result.scopes[0]!.facts.bulk_cutting).toMatchObject({ready:unknown,completed:point(5),businessCompleted:true,notYetReady:false});
  });
+ it.each(['printing','embroidery'])('closes a stored %s parent only on its exact included return, without a legacy basis',craft=>{
+  const saved=stored(),parent='development_'+craft,other='development_'+(craft==='printing'?'embroidery':'printing');
+  saved.input.plan.company.nodes={[parent]:duration(6),[other]:duration(6),development_craft_return:{kind:'included',minutes:30,calendar:'continuous',reminder:{enabled:false,percent:70}}};
+  saved.input.work=[{id:parent,parameterKey:parent,stage:2,dependsOn:[],canonicalWorkRef:'source:TEST-source:round:1:step:TEST-own:work'},
+   {id:'own-return',parameterKey:'development_craft_return',stage:2,dependsOn:[],includedIn:parent,includedPosition:'end',canonicalWorkRef:'source:TEST-source:round:1:step:TEST-own:return'},
+   {id:other,parameterKey:other,stage:2,dependsOn:[]},{id:'other-return',parameterKey:'development_craft_return',stage:2,dependsOn:[],includedIn:other,includedPosition:'end',canonicalWorkRef:'source:TEST-source:round:1:step:TEST-other:return'}];
+  saved.input.scopes=[{...saved.input.scopes[0]!,terminalIds:[parent,other],goals:{[parent]:{precision:'instant',value:at(10),source:'TEST real promise'},[other]:{precision:'instant',value:at(10),source:'TEST real promise'}}}];
+  saved.targets=Object.fromEntries(evaluateOrderTimeScenario({...saved.input,start:{precision:'instant',value:at(0),source:'TEST planning assumption'}}).map(scope=>[scope.scopeRef,Object.fromEntries(scope.targets.map(target=>[target.id,target]))]));
+  const task=(id:string,kind:string,step:string,state:string,completed:number|null):Parameters<typeof orderTimeReadingBasis>[4]['tasks'][number]=>({task_id:id,task_kind:kind,source_id:resource.id,production_order_id:null,route_version:1,state,entered_at:new Date(at(0)),entered_quality:'已核实',completed_at:completed===null?null:new Date(at(completed)),completed_quality:completed===null?'未登记':'已核实',step_id:step,returned:false,rejected:false,sla_basis:{seconds:21600,calendarRef:'continuous'},native_entered_at:new Date(at(0)),warning_at:null});
+  const proof:Parameters<typeof orderTimeReadingBasis>[4]={...evidence(),tasks:[task('TEST processing',parent,'TEST-own','completed',2),task('TEST own receipt','development_craft_confirmation','TEST-own','active',null),task('TEST other receipt','development_craft_confirmation','TEST-other','completed',3)]};
+  const read=()=>orderTimeReadingBasis(saved,resource,item(),{[parent]:{evidence:'task:TEST processing;task:TEST own receipt',startedAt:at(0),businessCompleted:false}},proof,null).scopes[0]!.facts[parent]!;
+  expect(read()).toMatchObject({businessCompleted:false,completed:unknown});
+  proof.tasks[1]!.state='completed';proof.tasks[1]!.completed_at=new Date(at(5));proof.tasks[1]!.completed_quality='已核实';
+  expect(read()).toMatchObject({businessCompleted:true,completed:point(5)});expect(read().completed).not.toEqual(point(2));expect(read().completed).not.toEqual(point(3));
+  proof.tasks[1]!.completed_quality='未登记';expect(read()).toMatchObject({businessCompleted:true,completed:unknown});
+  proof.tasks[1]!.route_version=2;expect(read()).toMatchObject({businessCompleted:false,completed:unknown});
+ });
  it('uses the stage endpoint for its own date difference rather than an earlier child target',()=>{
   const basis=build(),scope=basis.scopes[0]!;scope.work=scope.work.filter(work=>work.id!=='future').map((work,index)=>({...work,dependsOn:[],start:at(0),end:at(index?12*24:2*24),stage:4}));scope.terminalIds=['a','b'];
   scope.facts={a:{ready:point(0),clockStart:point(0),completed:point(17*24+12),businessCompleted:true,waitingForPredecessors:false,evidenceRefs:[]},b:{ready:point(0),clockStart:point(0),completed:point(17*24+12),businessCompleted:true,waitingForPredecessors:false,evidenceRefs:[]}};
