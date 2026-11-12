@@ -8,7 +8,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "@dx-rework/ui";
 import { FilterBar, KpiCard, PageHeader } from "@dx-rework/ui/production";
 import { JOURNEY_NODES, JOURNEY_STAGES, type JourneyResult, type OrderJourney } from "@dx-rework/contracts/digital-production-journey";
-import { cockpitFilterPatch,journeyRiskLabels,journeyStateLabels,type CockpitContext } from "./digital-journey-cockpit-model.js";
+import { cockpitQuery,cockpitFilterPatch,journeyRiskLabels,journeyStateLabels,type CockpitContext } from "./digital-journey-cockpit-model.js";
 import "./digital-journey-cockpit.css";
 import {CockpitTimingCoverage,cockpitCoverageLabels} from './cockpit-timing-coverage.js';
 import {CockpitDate} from './cockpit-date.js';
@@ -62,11 +62,12 @@ export function cockpitConditionsLabel(context:CockpitContext,data?:JourneyResul
 }
 type Props = { data: JourneyResult | null; error: string; detail: OrderJourney | null; detailError: string; detailLoading: boolean; context: CockpitContext; appliedContext?:CockpitContext|null;readPhase?:string;searchDraft?:{value:string;pending:boolean};onSearchDraft?:((value:string,pending:boolean)=>void)|undefined;onChange: (patch: Partial<CockpitContext>, preserveSelection?: boolean) => void; actions: ReactNode;onPlanCommitted?:(()=>void)|undefined;restoreReading?:boolean };
 export function DigitalJourneyCockpit({ data, error, detail, detailError, detailLoading, context, appliedContext,readPhase,searchDraft,onSearchDraft,onChange,actions,onPlanCommitted,restoreReading=false }: Props) {
- const [coverage,setCoverage]=useState<{data:JourneyResult;context:CockpitContext}|null>(null);
- useEffect(()=>setCoverage(null),[data]);
+ const actual=appliedContext??context,query=cockpitQuery(actual);
+ const [coverage,setCoverage]=useState<{query:string;context:CockpitContext}|null>(null);
+ useEffect(()=>{if(!data||context.selected||coverage&&coverage.query!==query)setCoverage(null);},[data,context.selected,query,coverage]);
  if(context.selected)return <div className="digital-journey-cockpit dx-production-refined" data-view="order" aria-busy={detailLoading}>{detail?<>{detailLoading&&<p role="status">正在重新读取；以下仍是上次数据时点的资料。</p>}{detailError&&<p role="alert">刷新失败：{detailError}。仍显示上次读取资料，请重试刷新。</p>}<CockpitDetail key={detail.id} busy={detailLoading||Boolean(detailError)} order={detail} asOf={detail.asOf??data?.asOf} context={{...context,selected:detail.id}} onChange={patch=>onChange(patch,true)} actions={actions} onPlanCommitted={onPlanCommitted} restoreReading={restoreReading}/></>:<section className="dx-production-panel"><button className="journey-text-action" onClick={()=>onChange({selected:undefined},true)}>‹ 返回订单总览</button>{detailError?<p role="alert">{detailError}</p>:<p role="status">正在读取订单全景…</p>}{actions}</section>}</div>;
- const actual=appliedContext??context,applyResult=(patch:Partial<CockpitContext>,preserve=false)=>onChange({...cockpitFilterPatch(actual),...patch},preserve),pending=Boolean(searchDraft?.pending)||['preparing','loading'].includes(readPhase??'');
- const renderKpi=(kpi:typeof kpis[number])=>{const index=kpis.indexOf(kpi);return <KpiCard key={kpi.key} className={'cockpit-kpi-'+kpi.key} icon={<NavigationIcon name={(['List','Activity','Clock','TriangleAlert','TriangleAlert','ClipboardCheck','CircleCheck'] as const)[index]??'List'}/>} label={kpi.label} value={data?.summary?.[kpi.field]??'—'} tone={kpi.tone} selected={kpi.key==='timing_missing'?Boolean(actual.missing):actual.kpi===kpi.key} onClick={()=>{if(kpi.key==='timing_missing'){if(data?.summary&&!pending)setCoverage({data,context:actual});}else applyResult({kpi:kpi.key,missing:undefined,page:1});}}/>;};
+ const applyResult=(patch:Partial<CockpitContext>,preserve=false)=>onChange({...cockpitFilterPatch(actual),...patch},preserve),pending=Boolean(searchDraft?.pending)||['preparing','loading'].includes(readPhase??'');
+ const renderKpi=(kpi:typeof kpis[number])=>{const index=kpis.indexOf(kpi);return <KpiCard key={kpi.key} className={'cockpit-kpi-'+kpi.key} icon={<NavigationIcon name={(['List','Activity','Clock','TriangleAlert','TriangleAlert','ClipboardCheck','CircleCheck'] as const)[index]??'List'}/>} label={kpi.label} value={data?.summary?.[kpi.field]??'—'} tone={kpi.tone} selected={kpi.key==='timing_missing'?Boolean(actual.missing):actual.kpi===kpi.key} onClick={()=>{if(kpi.key==='timing_missing'){if(data?.summary&&!pending)setCoverage({query,context:actual});}else applyResult({kpi:kpi.key,missing:undefined,page:1});}}/>;};
  return <div className="digital-journey-cockpit dx-production-refined" data-view="overview" aria-busy={pending||readPhase==='identity'}><PageHeader title="生产管理总览" actions={actions}/>
   <CockpitFilters context={context} data={data} onChange={onChange} onSearchDraft={onSearchDraft}/>
   {data?.freshness&&<p className="cockpit-read-status" role={data.freshness.failed?'alert':'status'}>{cockpitAvailabilityMessage(data)}</p>}
@@ -76,6 +77,6 @@ export function DigitalJourneyCockpit({ data, error, detail, detailError, detail
   {actual.missing&&<div className="cockpit-applied-coverage"><span>{cockpitCoverageLabels[actual.missing]}</span><Button type="button" variant="secondary" onClick={()=>applyResult({missing:undefined,page:1})}>清除缺项筛选</Button></div>}
   {error&&<p role="alert">读取“{cockpitConditionsLabel(context,data)}”失败：{error}。{data?'仍显示上次读取的订单，可刷新重试。':''}</p>}
   <CockpitHome data={data} error={error} context={actual} onChange={applyResult}/>
-  {coverage&&coverage.data===data&&<CockpitTimingCoverage data={coverage.data} context={coverage.context} onClose={()=>setCoverage(null)} onOpen={id=>{setCoverage(null);applyResult({selected:id},true);}}/>}
+  {coverage&&coverage.query===query&&data&&<CockpitTimingCoverage data={data} context={coverage.context} onClose={()=>setCoverage(null)} onOpen={id=>{setCoverage(null);applyResult({selected:id},true);}}/>}
  </div>;
 }

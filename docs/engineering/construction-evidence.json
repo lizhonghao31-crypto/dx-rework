@@ -1,73 +1,78 @@
 {
   "version": 1,
-  "base": "d6664470e236bf1d62dc759429b9f79eda144e6b",
+  "base": "f0b958862febd91661d0328e36716e21c4c90997",
   "risk": "full",
-  "sourceFingerprint": "7238c9c41bd4b1ff867a11c3d739d8aca05248aaee311535e5c3377753ee7aa8",
+  "sourceFingerprint": "74f4263bb013508782f1e18a1faecd1d8a946e9db52ab37c2edfa0c528da38cf",
   "rules": [
     {
-      "rule": "Preserve original approved customer-goal provenance when the same resource/PO date and precision are unchanged; native publication/arrangement must not fabricate a new approval.",
-      "source": "Acceptance c93 dualPO draftv2 publication failure; coordinator mock hypothesis independently reproduced with native services on real PG13 at equivalent application base d666. Unfixed targeted baseline1 failed/14filtered; raw baseline JSON/log retained. Site POST logs unavailable, so not asserted as unique onsite root cause.",
+      "rule": "A live business clock advances display locally and never grants periodic whole-cockpit GET permission; explicit refresh and committed actions still read fresh authorized data.",
+      "source": "2026-11-12 user approved regression PR01 first, four PRs sequentially; onsite f0 modal closure and repeated source reads reproduced and traced; docs/engineering/acceptance-regression-01-reading.md.",
       "writes": [
-        "apps/api/src/production-platform/order-time-operation-state.ts",
-        "tests/integration/order-time-plan-postgres.test.ts",
-        "tests/integration/order-time-requests-postgres.test.ts"
+        "apps/web/src/digital-cockpit-page.tsx",
+        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts",
+        "tests/integration/supplychain-board-native-browser-postgres.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/order-time-plan-repository.ts#append",
-        "apps/api/src/production-platform/order-time-plan-repository.ts#approvedCustomerChange",
-        "apps/api/src/production-platform/po-customer-date-service.ts#decide",
-        "apps/api/src/production-platform/order-time-request-plan.ts#orderTimeInputFromRoute",
-        "apps/api/src/production-platform/order-time-automatic.ts#automaticOrderTime",
-        "apps/api/src/production-platform/order-time-request-service.ts#arrange",
-        "scripts/test-suite-plan.mjs",
-        "scripts/test-resource-contract.mjs"
+        "apps/web/src/cockpit-reads.ts",
+        "apps/web/src/cockpit-fixed-schedule.tsx",
+        "apps/web/src/digital-journey-cockpit.tsx"
       ],
       "oldTests": [
-        "tests/integration/order-time-requests-postgres.test.ts",
-        "tests/integration/order-time-plan-postgres.test.ts"
+        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts",
+        "tests/integration/supplychain-board-native-browser-postgres.test.ts",
+        "tests/unit/m01-cockpit-reads.test.ts"
       ],
       "newTests": [
-        "tests/integration/order-time-requests-postgres.test.ts",
-        "tests/integration/order-time-plan-postgres.test.ts"
+        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts"
       ],
-      "initialization": "No schema, route/API contract, dependency, authorization, production config or data migration. Reuse original owned low-privilege PG13 fixture and registered cleanup. No Acceptance/ECS action.",
-      "dateAndPermission": "Same authorized transaction/client and saved immutable resource plan. Match scopeRef and lineId plus date precision/value; preserve full saved anchor only then. Complete goal hash, real PO approval chain, company freeze, clock/R/D, facts and field/resource roles unchanged. No extra SQL or cross-user cache; missing/changed dates still face existing repository guard.",
-      "expectation": "Actual red-PO approval retains digital_po_date_changes id through first publication of draftv2 and later arrangement; green PO/fixed targets unchanged. Same-key operations write once, stale fingerprint rejected. Forged same-date source, forged terminal source, changed precision/date, foreign PO and company replacement still reject. Existing rollback/concurrency/source inheritance/native deadlines remain. Site original C still needs real post-update verification.",
+      "initialization": "No schema/config/dependency or business writes. Original two signed-native App browser fixtures and registered PG13 isolated schemas retained; no onsite deployment or data changes.",
+      "dateAndPermission": "Only remove the page polling effect, preserve local live/fixed clock distinction, explicit refresh, query generation, role/scope changes and committed-action refresh. No cached authorization or server calculation changes.",
+      "expectation": "61 seconds of live observation generate zero periodic Journey/source reads. Explicit refresh still fetches current data. Actual live and fixed clocks, full authorized KPI and current-page reads remain distinct.",
       "checks": [
-        "approved-date-native",
-        "approved-date-browser",
-        "approved-date-lint"
+        "passive-browser",
+        "passive-unit",
+        "passive-types",
+        "passive-lint",
+        "passive-time-sites",
+        "passive-resources"
       ]
     },
     {
-      "rule": "Every actual canonical browser suite must prepare the lock-pinned browser before PG execution; do not classify the nonstandard order-time browser path as inapplicable.",
-      "source": "Actual b095 Full43141563083 PG job130930596546: preparation skipped, executable missing in beforeAll, 5cases skipped. No browser assertion failed; job/final gate failed and are not rebranded.",
+      "rule": "Same-query refresh preserves open dialogs and user input while refreshing underlying facts; changed identity, entity, round or versions retain isolation and revoked reads cannot leak former results.",
+      "source": "Approved PR01; f0 personnel modal was unmounted by loading/readOnly and its unchanged dialog state never reran showModal. Related risk/coverage data identity and document asOf remounts checked together.",
       "writes": [
-        "scripts/ci/prepare-settings-browser.mjs",
-        "scripts/ci/test-execution-contract.test.mjs"
+        "apps/web/src/cockpit-documents.tsx",
+        "apps/web/src/cockpit-home.tsx",
+        "apps/web/src/digital-cockpit-personnel.tsx",
+        "apps/web/src/digital-journey-cockpit.tsx"
       ],
       "reads": [
-        ".github/workflows/full-gate.yml",
-        "scripts/test-suite-plan.mjs",
-        "scripts/ci/full-gate-risk-map.mjs",
-        "tests/acceptance/supplychain-settings-browser.ts",
-        "tests/integration/order-time-requests-browser-postgres.test.ts"
+        "apps/web/src/cockpit-documents-model.ts",
+        "apps/web/src/cockpit-reads.ts",
+        "apps/web/src/cockpit-detail.tsx",
+        "apps/web/src/cockpit-home-risks.tsx",
+        "apps/web/src/cockpit-timing-coverage.tsx",
+        "apps/web/src/auth-session.ts"
       ],
       "oldTests": [
-        "scripts/ci/test-execution-contract.test.mjs",
-        "tests/integration/order-time-requests-browser-postgres.test.ts"
+        "tests/unit/cockpit-document-snapshot.test.ts",
+        "tests/unit/cockpit-home.test.ts",
+        "tests/unit/cockpit-detail.test.ts",
+        "tests/unit/digital-journey-cockpit.test.ts",
+        "tests/unit/cockpit-fixed-schedule.test.ts",
+        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts"
       ],
       "newTests": [
-        "scripts/ci/test-execution-contract.test.mjs"
+        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts"
       ],
-      "initialization": "No schema, app config, dependency/lock, safety or workflow bypass. Only recognize the missed browser consumer; same supported install and actual launch checks, no apt installation or indefinite retry.",
-      "dateAndPermission": "No app time/permission changes in this CI patch. Original real-role browser tests include revoked manager and retained draft/recovery semantics.",
-      "expectation": "Exact mapped order-time browser triggers original preparation; all15 actual browser consumers recognized; false for non-browser paths. Lock-pinned actual launch and all5 original browser cases pass.",
+      "initialization": "No new cache/platform or persistence. Document ownership remains component/request-local; a new response swaps/disposes the old source snapshot without asOf-based modal remount. Original auth and server write authorization unchanged.",
+      "dateAndPermission": "Personnel fieldset/save stays disabled during readOnly and selection change clears the old form. Risk/coverage use current authorized results in the same query; identity invalidation clears data. Document reopen revalidates identity; entity, round, source/instruction version changes stay isolated. No UI/sidebar/style changes.",
+      "expectation": "Risk, missing-data, primary-merchandiser and document dialogs stay visible through same-query refresh; input/search preserved, source reads renewed only on explicit fresh results/reopen. Existing original App scope revocation and real assignment/approval cases pass.",
       "checks": [
-        "approved-date-browser-plan",
-        "approved-date-browser-preparation",
-        "approved-date-browser",
-        "approved-date-lint"
+        "passive-browser",
+        "passive-unit",
+        "passive-types",
+        "passive-lint"
       ]
     }
   ],
@@ -75,8 +80,8 @@
     {
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "b09513f2ffecc006057a00ba1550548e6e1877ee",
-      "sourceFingerprint": "7238c9c41bd4b1ff867a11c3d739d8aca05248aaee311535e5c3377753ee7aa8",
+      "testedHead": "f0b958862febd91661d0328e36716e21c4c90997",
+      "sourceFingerprint": "74f4263bb013508782f1e18a1faecd1d8a946e9db52ab37c2edfa0c528da38cf",
       "inputPaths": [
         "apps",
         "packages",
@@ -84,95 +89,32 @@
         "tests",
         "package.json",
         "package-lock.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts"
+        "vitest.config.ts"
       ],
-      "inputFingerprint": "c3c8fe1076d75ac5f7150e250b85c867dc8a36416fd451b564206c69ac2509d8",
-      "id": "approved-date-native",
+      "inputFingerprint": "e6f281dc04485b39855eb7b9338b4ce275d167d3565720e00ff9a6557ef51256",
+      "id": "passive-browser",
       "kind": "tests",
-      "command": "PATH=/workspace/.dx-cloud/r5-runtime/node_modules/.bin:$PATH DATABASE_URL= TEST_DATABASE_URL=postgresql://dx_r5_test@127.0.0.1:55413/dx_rework_acceptance_test_r5 ACCEPTANCE_CLOCK_TEST_DATABASE_URL=postgresql://dx_r5_test@127.0.0.1:55413/dx_rework_acceptance_test_r5 node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/order-time-requests-postgres.test.ts tests/integration/order-time-plan-postgres.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/approved-date-ci-native.json",
-      "startedAt": "2026-11-12T02:55:34.185Z",
-      "endedAt": "2026-11-12T02:56:01.752Z",
-      "log": "/workspace/.dx-cloud/approved-date-ci-native.log",
-      "logSha256": "20ad8ba30879912614d96e79e678d83641bfc94dd04249287f1755d2e8cfbb70",
-      "passed": 23,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "1f87b26b4a61b0b545cc0f426b346c356b9d80e8a388acc4f8b5c2578e922e3f"
-        }
-      ],
-      "context": "Actual Node22.22.2/npm10.9.9. Owned lowpriv PostgreSQL13.23 fixture where applicable; max2 PG workers, browser and native PG runs sequential. No site/production action. Initial b095 Full498 PG assertions passed but5 browser cases skipped on missing executable; nonDB3888passed/11skipped. That Full remains failed, PG13 later step not run. New CI-name recognition only, browser download and real launch guards unchanged. Real native approval/draftv2 publication and immutable target guards rechecked against the changed recorded CI input; original TEST physical prerequisites declared, no onsite claim."
-    },
-    {
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "b09513f2ffecc006057a00ba1550548e6e1877ee",
-      "sourceFingerprint": "7238c9c41bd4b1ff867a11c3d739d8aca05248aaee311535e5c3377753ee7aa8",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "tests",
-        "package.json",
-        "package-lock.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts"
-      ],
-      "inputFingerprint": "c3c8fe1076d75ac5f7150e250b85c867dc8a36416fd451b564206c69ac2509d8",
-      "id": "approved-date-browser",
-      "kind": "tests",
-      "command": "PATH=/workspace/.dx-cloud/r5-runtime/node_modules/.bin:$PATH DATABASE_URL= TEST_DATABASE_URL=postgresql://dx_r5_test@127.0.0.1:55413/dx_rework_acceptance_test_r5 ACCEPTANCE_CLOCK_TEST_DATABASE_URL=postgresql://dx_r5_test@127.0.0.1:55413/dx_rework_acceptance_test_r5 PLAYWRIGHT_BROWSERS_PATH=/workspace/.dx-cloud/playwright M01_SETTINGS_NATIVE_EVIDENCE=/workspace/.dx-cloud/approved-date-native-browser node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/order-time-requests-browser-postgres.test.ts --reporter=default --reporter=json --outputFile=/workspace/.dx-cloud/approved-date-native-browser.json",
-      "startedAt": "2026-11-12T02:54:07.300Z",
-      "endedAt": "2026-11-12T02:54:54.779Z",
-      "log": "/workspace/.dx-cloud/approved-date-native-browser.log",
-      "logSha256": "772547ad126c0dd17b85bf9e22c469edd7c7a00ef157386b1e7eacbf1060a453",
-      "passed": 5,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "ad06066e42a503b2e45d415d4b21ff2c649d6f4aba5baafda85ce83b52145c5e"
-        }
-      ],
-      "context": "Actual Node22.22.2/npm10.9.9. Owned lowpriv PostgreSQL13.23 fixture where applicable; max2 PG workers, browser and native PG runs sequential. No site/production action. Initial b095 Full498 PG assertions passed but5 browser cases skipped on missing executable; nonDB3888passed/11skipped. That Full remains failed, PG13 later step not run. New CI-name recognition only, browser download and real launch guards unchanged. Original authenticated App, genuine roles/services and locked Playwright Chromium141 build1194; five cases actually executed, including same-session revocation and lost receipt; setup/dispose completed."
-    },
-    {
-      "status": "passed",
-      "exitCode": 0,
-      "testedHead": "b09513f2ffecc006057a00ba1550548e6e1877ee",
-      "sourceFingerprint": "7238c9c41bd4b1ff867a11c3d739d8aca05248aaee311535e5c3377753ee7aa8",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "tests",
-        "package.json",
-        "package-lock.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts"
-      ],
-      "inputFingerprint": "c3c8fe1076d75ac5f7150e250b85c867dc8a36416fd451b564206c69ac2509d8",
-      "id": "approved-date-browser-plan",
-      "kind": "tests",
-      "command": "node --test scripts/ci/test-execution-contract.test.mjs",
-      "startedAt": "2026-11-12T02:53:03.761Z",
-      "endedAt": "2026-11-12T02:53:04.213Z",
-      "log": "/workspace/.dx-cloud/approved-date-browser-plan.log",
-      "logSha256": "65ed26381e85551ca1c51fbe39c3fdaba83f611a343dc9158d27240730783228",
-      "context": "Actual Node22.22.2/npm10.9.9. Owned lowpriv PostgreSQL13.23 fixture where applicable; max2 PG workers, browser and native PG runs sequential. No site/production action. Initial b095 Full498 PG assertions passed but5 browser cases skipped on missing executable; nonDB3888passed/11skipped. That Full remains failed, PG13 later step not run. New CI-name recognition only, browser download and real launch guards unchanged. Actual exec exit0; log creation/last-write bounds. All20 actual TAP cases pass. Exact mapped order-time browser now requires preparation; similarly named non-browser stays false. Additional read-only source scan found15 actual browser consumers, all recognized.",
+      "command": "PATH=/workspace/.dx-cloud/r5-runtime/node_modules/.bin:$PATH PLAYWRIGHT_BROWSERS_PATH=/workspace/.dx-cloud/playwright TEST_DATABASE_URL=postgresql://dx_r5_test@127.0.0.1:55413/dx_rework_acceptance_test_r5 DX_REWORK_TEST_SUITE_KIND=postgres node node_modules/vitest/vitest.mjs run tests/integration/m01-cockpit-home-native-browser-postgres.test.ts tests/integration/supplychain-board-native-browser-postgres.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/.dx-cloud/r5-regression-01-browser-final.json",
+      "startedAt": "2026-11-12T06:58:21.971Z",
+      "endedAt": "2026-11-12T07:01:23.973Z",
+      "log": "/workspace/.dx-cloud/r5-regression-01-browser-final.log",
+      "logSha256": "ee81770d71bbd22b909a400c5b7aeaff2d8231dae3749337c7602e941dadb240",
+      "context": "Original App, signed identity, isolated non-superuser PG13.23 fixture, actual Node22/npm10 and locked Chromium1194. Canonical postgres maxWorkers=1, two existing suites sequential; no production or onsite actions. New case adapts only observationMode to advance browser time and tests four real dialogs; existing suite separately verifies actual live clock. Full existing suites retain KPI, pagination, fixed clock, permissions/revocation and native primary assignment. Fixture-owned afterAll cleanup, no new resource class.",
       "passed": 20,
       "failed": 0,
-      "skipped": 0
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "4951a3e5fa15fbeee690821198f23312c558ccf0d36acfaaef2599510e348799"
+        }
+      ]
     },
     {
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "b09513f2ffecc006057a00ba1550548e6e1877ee",
-      "sourceFingerprint": "7238c9c41bd4b1ff867a11c3d739d8aca05248aaee311535e5c3377753ee7aa8",
+      "testedHead": "f0b958862febd91661d0328e36716e21c4c90997",
+      "sourceFingerprint": "74f4263bb013508782f1e18a1faecd1d8a946e9db52ab37c2edfa0c528da38cf",
       "inputPaths": [
         "apps",
         "packages",
@@ -180,24 +122,32 @@
         "tests",
         "package.json",
         "package-lock.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts"
+        "vitest.config.ts"
       ],
-      "inputFingerprint": "c3c8fe1076d75ac5f7150e250b85c867dc8a36416fd451b564206c69ac2509d8",
-      "id": "approved-date-browser-preparation",
-      "kind": "command",
-      "command": "PATH=/workspace/.dx-cloud/r5-runtime/node_modules/.bin:$PATH PLAYWRIGHT_BROWSERS_PATH=/workspace/.dx-cloud/playwright BASE_SHA=d6664470e236bf1d62dc759429b9f79eda144e6b DB_REQUIRED=true BUSINESS_CHAIN_SENSITIVE=false MIGRATION_SENSITIVE=false DEPLOYMENT_SENSITIVE=false MAPPED_POSTGRES_TESTS=tests/integration/order-time-requests-browser-postgres.test.ts node scripts/ci/prepare-settings-browser.mjs",
-      "startedAt": "2026-11-12T02:53:31.950Z",
-      "endedAt": "2026-11-12T02:53:43.418Z",
-      "log": "/workspace/.dx-cloud/approved-date-browser-preparation-writable.log",
-      "logSha256": "9a884dd0746a10c5d28cb795d615431f3a8f35edde631b4433debf5ff7b649ab",
-      "context": "Actual Node22.22.2/npm10.9.9. Owned lowpriv PostgreSQL13.23 fixture where applicable; max2 PG workers, browser and native PG runs sequential. No site/production action. Initial b095 Full498 PG assertions passed but5 browser cases skipped on missing executable; nonDB3888passed/11skipped. That Full remains failed, PG13 later step not run. New CI-name recognition only, browser download and real launch guards unchanged. Actual exec exit0; log creation/last-write bounds. Original preparation downloaded lock-pinned Chromium and actually launched it. Default cloud HOME cache was unwritable; first local attempt failed, then explicitly used a separate writable workspace cache. No HOME/credential/system package changes."
+      "inputFingerprint": "e6f281dc04485b39855eb7b9338b4ce275d167d3565720e00ff9a6557ef51256",
+      "id": "passive-unit",
+      "kind": "tests",
+      "command": "PATH=/workspace/.dx-cloud/r5-runtime/node_modules/.bin:$PATH node node_modules/vitest/vitest.mjs run tests/unit/m01-cockpit-reads.test.ts tests/unit/cockpit-home.test.ts tests/unit/cockpit-detail.test.ts tests/unit/cockpit-document-snapshot.test.ts tests/unit/digital-journey-cockpit.test.ts tests/unit/cockpit-fixed-schedule.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/.dx-cloud/r5-regression-01-unit-final.json",
+      "startedAt": "2026-11-12T06:59:13.278Z",
+      "endedAt": "2026-11-12T06:59:17.823Z",
+      "log": "/workspace/.dx-cloud/r5-regression-01-unit-final.log",
+      "logSha256": "82322095526bacb91ddbee35b1dfdd51afaa2331c373fb675fd8f7939655e132",
+      "context": "Existing six suites; actual canonical non-database worker limit. Generation, identity, failed reads, directory ownership and original time formatting. Same final source/test inputs.",
+      "passed": 94,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "c69e334651272d089604f9f364e11f397a62baa1a0b5868fb4b2c198c9ce1d04"
+        }
+      ]
     },
     {
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "b09513f2ffecc006057a00ba1550548e6e1877ee",
-      "sourceFingerprint": "7238c9c41bd4b1ff867a11c3d739d8aca05248aaee311535e5c3377753ee7aa8",
+      "testedHead": "f0b958862febd91661d0328e36716e21c4c90997",
+      "sourceFingerprint": "74f4263bb013508782f1e18a1faecd1d8a946e9db52ab37c2edfa0c528da38cf",
       "inputPaths": [
         "apps",
         "packages",
@@ -205,18 +155,89 @@
         "tests",
         "package.json",
         "package-lock.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts"
+        "vitest.config.ts"
       ],
-      "inputFingerprint": "c3c8fe1076d75ac5f7150e250b85c867dc8a36416fd451b564206c69ac2509d8",
-      "id": "approved-date-lint",
+      "inputFingerprint": "e6f281dc04485b39855eb7b9338b4ce275d167d3565720e00ff9a6557ef51256",
+      "id": "passive-types",
       "kind": "command",
-      "command": "npm run lint",
-      "startedAt": "2026-11-12T02:55:35.216Z",
-      "endedAt": "2026-11-12T02:56:09.568Z",
-      "log": "/workspace/.dx-cloud/approved-date-ci-lint.log",
-      "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763",
-      "context": "Actual Node22.22.2/npm10.9.9. Owned lowpriv PostgreSQL13.23 fixture where applicable; max2 PG workers, browser and native PG runs sequential. No site/production action. Initial b095 Full498 PG assertions passed but5 browser cases skipped on missing executable; nonDB3888passed/11skipped. That Full remains failed, PG13 later step not run. New CI-name recognition only, browser download and real launch guards unchanged. Actual exec exit0; log creation/last-write bounds. Actual eslint max-warnings0 after the CI fix. Initial candidate type/inventory/resource checks stay historical; new-head Light covers current required checks."
+      "command": "PATH=/workspace/.dx-cloud/r5-runtime/node_modules/.bin:$PATH npm run typecheck --workspace=@dx-rework/web",
+      "startedAt": "2026-11-12T06:59:32.187Z",
+      "endedAt": "2026-11-12T07:00:03.920Z",
+      "log": "/workspace/.dx-cloud/r5-regression-01-typecheck-final.log",
+      "logSha256": "752b0f4f80e1f2fdeece6837aa0d8538e17009bd166c8888d0c5c5d0c6148bcd",
+      "context": "Affected web workspace typecheck, unchanged public DTO. Actual exit0 observed from executor completion; log creation/last-write timestamps, no invented test counts."
+    },
+    {
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "f0b958862febd91661d0328e36716e21c4c90997",
+      "sourceFingerprint": "74f4263bb013508782f1e18a1faecd1d8a946e9db52ab37c2edfa0c528da38cf",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests",
+        "package.json",
+        "package-lock.json",
+        "vitest.config.ts"
+      ],
+      "inputFingerprint": "e6f281dc04485b39855eb7b9338b4ce275d167d3565720e00ff9a6557ef51256",
+      "id": "passive-lint",
+      "kind": "command",
+      "command": "PATH=/workspace/.dx-cloud/r5-runtime/node_modules/.bin:$PATH node node_modules/eslint/bin/eslint.js apps/web/src/digital-cockpit-page.tsx apps/web/src/cockpit-home.tsx apps/web/src/digital-journey-cockpit.tsx apps/web/src/cockpit-documents.tsx apps/web/src/digital-cockpit-personnel.tsx tests/integration/m01-cockpit-home-native-browser-postgres.test.ts tests/integration/supplychain-board-native-browser-postgres.test.ts --max-warnings=0",
+      "startedAt": "2026-11-12T06:53:58.178Z",
+      "endedAt": "2026-11-12T06:53:58.178Z",
+      "log": "/workspace/.dx-cloud/r5-regression-01-lint.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "context": "All seven changed source/test files; no edits after lint. Actual exit0 observed from executor completion; log creation/last-write timestamps, no invented test counts."
+    },
+    {
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "f0b958862febd91661d0328e36716e21c4c90997",
+      "sourceFingerprint": "74f4263bb013508782f1e18a1faecd1d8a946e9db52ab37c2edfa0c528da38cf",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests",
+        "package.json",
+        "package-lock.json",
+        "vitest.config.ts"
+      ],
+      "inputFingerprint": "e6f281dc04485b39855eb7b9338b4ce275d167d3565720e00ff9a6557ef51256",
+      "id": "passive-time-sites",
+      "kind": "command",
+      "command": "PATH=/workspace/.dx-cloud/r5-runtime/node_modules/.bin:$PATH node scripts/acceptance/time-site-inventory.mjs",
+      "startedAt": "2026-11-12T06:59:02.627Z",
+      "endedAt": "2026-11-12T06:59:03.115Z",
+      "log": "/workspace/.dx-cloud/r5-regression-01-time-sites.log",
+      "logSha256": "114d19b3f81e82ca812ccaf79d465b9eac16b584f779c9b621a2e15595e62be6",
+      "context": "Original time-source inventory matches, no regeneration or annotation removal. Actual exit0 observed from executor completion; log creation/last-write timestamps, no invented test counts."
+    },
+    {
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "f0b958862febd91661d0328e36716e21c4c90997",
+      "sourceFingerprint": "74f4263bb013508782f1e18a1faecd1d8a946e9db52ab37c2edfa0c528da38cf",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests",
+        "package.json",
+        "package-lock.json",
+        "vitest.config.ts"
+      ],
+      "inputFingerprint": "e6f281dc04485b39855eb7b9338b4ce275d167d3565720e00ff9a6557ef51256",
+      "id": "passive-resources",
+      "kind": "command",
+      "command": "PATH=/workspace/.dx-cloud/r5-runtime/node_modules/.bin:$PATH node --input-type=module -e 'import {checkResourceRegistration} from \"./scripts/test-preflight.mjs\";checkResourceRegistration();console.log(\"Original resource registration check passed\");'",
+      "startedAt": "2026-11-12T06:59:21.315Z",
+      "endedAt": "2026-11-12T06:59:21.395Z",
+      "log": "/workspace/.dx-cloud/r5-regression-01-resources.log",
+      "logSha256": "3c56bdc1e02c3c177b0a749d101046ba0842e6329c189fcd5c555cba4fb0ce33",
+      "context": "Existing test-resource ownership remains registered. Actual exit0 observed from executor completion; log creation/last-write timestamps, no invented test counts."
     }
   ]
 }
