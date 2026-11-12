@@ -1,3 +1,7 @@
+import {PatternRoomOrderService} from '../../apps/api/src/pattern-room/order-service.js';
+import {PatternRoomPriceService,PATTERN_HOURLY_PRICE_ID} from '../../apps/api/src/pattern-room/price-service.js';
+import {TodoProjectionService} from '../../apps/api/src/todos/projection-service.js';
+import {TodoService} from '../../apps/api/src/todos/service.js';
 import {ReceivingService} from '../../apps/api/src/receiving/receiving-service.js';
 import {linkNewDigitalChild} from '../../apps/api/src/production-platform/child-link-repository.js';
 import {JourneyFactRepository} from '../../apps/api/src/production-platform/journey-fact-repository.js';
@@ -51,9 +55,24 @@ const url=process.env.TEST_DATABASE_URL;
   expect((await f.db.query('SELECT deleted_at FROM receiving_batches WHERE receiving_batch_id=$1',[first.value.receivingBatchId])).rows[0].deleted_at).toBeNull();
   expect((await f.db.query('SELECT count(*)::int n FROM receiving_receipts WHERE receiving_batch_id=$1',[first.value.receivingBatchId])).rows[0].n).toBe(2);
  });
+ it('deletes a linked native misc order but preserves an unrelated misc order',async()=>{
+  const identity=new DigitalProductionIdentityService(f.db,true),service=new WholeOrderDeletionService(f.db);
+  const style='TEST-MISC-DELETE-'+randomUUID();
+  const source=await identity.createSource(f.people['sample-designer']!,{developmentType:'头版',designStyleNo:style,temporaryStyleNo:null,customerCode:'PD'},randomUUID());
+  const price=await new PatternRoomPriceService(f.db).change(f.root,'hourly',PATTERN_HOURLY_PRICE_ID,{version:1,amount:'12.000',enabled:true,reason:'TEST deletion fixture'},randomUUID());
+  const native=new PatternRoomOrderService(f.db,new TodoProjectionService(new TodoService(f.db)),{ordersEnabled:true});
+  const linked=await native.createMisc(f.root,{taskName:'TEST owned misc',styleNo:style,priceVersion:price.version,association:{kind:'source',id:source.sourceId}},randomUUID());
+  const other=await native.createMisc(f.root,{taskName:'TEST unrelated misc',priceVersion:price.version},randomUUID());
+  const preview=await service.preview(f.root,{ids:[source.sourceId]});expect(preview.orders[0]!.counts.pattern_room).toBe(1);
+  expect((await service.remove(f.root,{orders:preview.orders.map(({id,revision})=>({id,revision}))},randomUUID())).results[0]!.status).toBe('deleted');
+  await expect(native.get(f.root,linked.orderId)).rejects.toMatchObject({statusCode:404});
+  expect((await native.get(f.root,other.orderId)).orderId).toBe(other.orderId);
+  expect((await f.db.query('SELECT deleted_at FROM pattern_room_orders WHERE order_id=$1',[linked.orderId])).rows[0].deleted_at).not.toBeNull();
+ });
  it('requires current Root, retains source facts and isolates repeated deletion',async()=>{
   const identity=new DigitalProductionIdentityService(f.db,true),service=new WholeOrderDeletionService(f.db);
-  const source=await identity.createSource(f.people['sample-designer']!,{developmentType:'头版',designStyleNo:'TEST-DELETE-'+randomUUID(),temporaryStyleNo:null,customerCode:'PD'},randomUUID());
+  const style='TEST-DELETE-'+randomUUID();
+  const source=await identity.createSource(f.people['sample-designer']!,{developmentType:'头版',designStyleNo:style,temporaryStyleNo:null,customerCode:'PD'},randomUUID());
   await expect(service.preview(f.people['sample-designer']!,{ids:[source.sourceId]})).rejects.toMatchObject({statusCode:403});
   const preview=await service.preview(f.root,{ids:[source.sourceId,source.sourceId]});
   expect(preview.orders).toHaveLength(1);
@@ -63,7 +82,7 @@ const url=process.env.TEST_DATABASE_URL;
   await expect(service.remove(f.root,{orders:[{id:source.sourceId,revision:'0'.repeat(64)}]},key)).rejects.toMatchObject({statusCode:409});
   expect(await new DigitalProductionAccessPolicy(f.db).allowed(f.root,'source',source.sourceId,'technical')).toBe(false);
   expect((await f.db.query('SELECT 1 FROM digital_production_sources WHERE source_id=$1',[source.sourceId])).rowCount).toBe(1);
-  expect((await identity.sources(f.root,1,source.designStyleNo)).items).toHaveLength(0);
+  expect((await identity.sources(f.root,1,style)).items).toHaveLength(0);
  });
  it('isolates a stale item from a valid batch item and serializes concurrent retries',async()=>{
   const identity=new DigitalProductionIdentityService(f.db,true),service=new WholeOrderDeletionService(f.db);
