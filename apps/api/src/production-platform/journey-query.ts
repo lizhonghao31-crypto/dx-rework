@@ -1,4 +1,4 @@
-import {wholeOrderActiveSql,assertWholeOrderActive} from './whole-order-visibility.js';
+import {wholeOrderActiveSql,assertWholeOrderActive,rememberWholeOrderSnapshot,forgetWholeOrderSnapshot} from './whole-order-visibility.js';
 import {FixedTimelineAdoptionRepository} from './fixed-timeline-adoptions.js';
 import {OrderTimePlanRepository} from './order-time-plan-repository.js';
 import {orderTimeCreated} from './order-time-created.js';
@@ -92,7 +92,7 @@ export class DigitalJourneyQuery {
     try { await db.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
       const asOf=iso((await db.query("SELECT CURRENT_TIMESTAMP AS as_of")).rows[0].as_of)!;
       result=await work(reads,asOf,db);await db.query("COMMIT");
-    } catch(error) { await db.query("ROLLBACK");throw error; } finally {this.observations.delete(reads);this.merchandiserNames.delete(reads);db.release();}
+    } catch(error) { await db.query("ROLLBACK");throw error; } finally {forgetWholeOrderSnapshot(reads);this.observations.delete(reads);this.merchandiserNames.delete(reads);db.release();}
     await journeyMeasure('clock_postcheck',()=>assertBusinessClocksUnchanged(new ContextBusinessClock(this.database),observations.values()));
     return result;
   }
@@ -129,6 +129,7 @@ export class DigitalJourneyQuery {
       const items:OrderJourney[]=[],candidates=new Map<string,Candidate>();
       const patternKinds=options.patternBusiness?PATTERN_GROUPS.flatMap(group=>[...group.nodes]).filter(kind=>options.patternBusiness==="all"||(options.patternBusiness==="bulk"?kind==="bulk_pattern":kind!=="bulk_pattern")):null;
       const rows=await journeyMeasure('candidates',()=>this.candidates(db,actor,null,patternKinds));journeyCandidateCount(rows.length);
+      rememberWholeOrderSnapshot(db,rows.flatMap(row=>row.order?[row.order.production_order_id]:[]));
       // The original management policy grants the full read range for these exact candidates.
       // Assigned/technical partial readers retain their original per-object path.
       if(isDigitalManagementReader(actor))prepareJourneySnapshotBatches(db,rows.flatMap(row=>row.order?[row.order.production_order_id]:[]));

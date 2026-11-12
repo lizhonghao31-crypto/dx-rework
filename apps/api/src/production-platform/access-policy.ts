@@ -1,4 +1,4 @@
-import {wholeOrderActiveSql} from './whole-order-visibility.js';
+import {wholeOrderActiveSql,wholeOrderSnapshotActive} from './whole-order-visibility.js';
 import {acceptanceBusinessContext} from '../acceptance-clock/business-time.js';
 import type { Pool, PoolClient } from "pg";
 import type { DigitalResourceKind, DigitalAccessPurpose } from "@dx-rework/contracts/digital-production-access";
@@ -52,7 +52,10 @@ export class DigitalProductionAccessPolicy {
     if (purpose === "execute") return false;
     const table = kind === "order" ? "digital_production_orders" : "digital_production_sources";
     const column = kind === "order" ? "production_order_id" : "source_id";
-    const row = (await this.database.query(`SELECT * FROM ${table} WHERE ${column}=$1 AND ${await wholeOrderActiveSql(this.database,kind,column)}`, [id])).rows[0];
+    // Reuse only the active object facts already selected in this same RR
+    // snapshot. Other callers retain the atomic filter before any Root shortcut.
+    const active=kind==='order'&&wholeOrderSnapshotActive(this.database,id)?'':` AND ${await wholeOrderActiveSql(this.database,kind,column)}`;
+    const row = (await this.database.query(`SELECT * FROM ${table} WHERE ${column}=$1${active}`, [id])).rows[0];
     if (!row) return false;
     if (isDigitalManagementReader(actor)) return true;
     if (purpose === "technical" && isDigitalTechnicalManager(actor)) return true;

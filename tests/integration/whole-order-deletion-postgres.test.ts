@@ -14,7 +14,7 @@ import {businessAnchorFixture} from '../helpers/business-anchor-fixture.js';
 import {DigitalProductionIdentityService} from '../../apps/api/src/production-platform/identity-service.js';
 import {DigitalProductionAccessPolicy} from '../../apps/api/src/production-platform/access-policy.js';
 import {WholeOrderDeletionService} from '../../apps/api/src/production-platform/whole-order-deletion-service.js';
-const url=process.env.TEST_DATABASE_URL;
+const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (url?describe:describe.skip)('Root whole-order deletion',()=>{
  let f:Awaited<ReturnType<typeof businessAnchorFixture>>;
  beforeAll(async()=>{f=await businessAnchorFixture(url!);},120000);

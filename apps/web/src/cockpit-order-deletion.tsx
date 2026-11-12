@@ -2,12 +2,13 @@ import {useRef,useState,useEffect} from 'react';
 import {Button} from '@dx-rework/ui';
 import {WholeOrderDeletionPreviewSchema,WholeOrderDeletionResultSchema,type WholeOrderDeletionPreview,type WholeOrderDeletionResult} from '@dx-rework/contracts/whole-order-deletion';
 import {digitalRequest} from './digital-production-api.js';
+import {createClientRequestId} from './client-request-id.js';
 import {CockpitHomeDialog} from './cockpit-home-dialog.js';
 import './cockpit-order-deletion.css';
 
 export function CockpitOrderDeletion({ids,onClose,onCommitted}:{ids:string[];onClose:()=>void;onCommitted:()=>void}){
  const [preview,setPreview]=useState<WholeOrderDeletionPreview|null>(null),[result,setResult]=useState<WholeOrderDeletionResult|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[reload,setReload]=useState(0);
- const active=useRef(true),running=useRef(false),key=useRef(crypto.randomUUID());
+ const active=useRef(true),running=useRef(false),key=useRef(createClientRequestId());
  useEffect(()=>{active.current=true;return()=>{active.current=false;};},[]);
  useEffect(()=>{let current=true;setPreview(null);setError('');void digitalRequest('whole-orders/delete-preview','POST',{ids}).then(value=>{if(current)setPreview(WholeOrderDeletionPreviewSchema.parse(value));}).catch(error=>{if(current)setError(error instanceof Error?error.message:'读取失败，请重试');});return()=>{current=false;};},[reload]);
  const submit=async()=>{
@@ -35,7 +36,7 @@ export function CockpitOrderDeletion({ids,onClose,onCommitted}:{ids:string[];onC
     </div><ul className="cockpit-delete-note"><li>未完成待办将取消，相关业务将停止办理。</li><li>历史记录保留，不再计入正常业务列表与统计。</li></ul><p className="cockpit-delete-warning">删除后不能自行恢复。</p></>}
    {result&&<ul aria-label="删除结果">{result.results.map(item=><li key={item.id}>{preview?.orders.find(order=>order.id===item.id)?.label??item.id}：{item.status==='deleted'?'已删除':item.status==='already_deleted'?'此前已删除':item.message??'未删除'}</li>)}</ul>}
    <footer><Button variant="secondary" disabled={busy} onClick={onClose}>{complete?'完成':'取消'}</Button>
-    {result?.results.some(item=>item.status==='failed')&&<Button variant="secondary" disabled={busy} onClick={()=>{setResult(null);key.current=crypto.randomUUID();setReload(value=>value+1);}}>重新核对关联范围</Button>}
+    {result?.results.some(item=>item.status==='failed')&&<Button variant="secondary" disabled={busy} onClick={()=>{setResult(null);key.current=createClientRequestId();setReload(value=>value+1);}}>重新核对关联范围</Button>}
     {!preview&&error&&<Button variant="secondary" onClick={()=>setReload(value=>value+1)}>重试读取</Button>}
     {preview&&!complete&&<Button className="cockpit-delete-danger" disabled={busy} onClick={()=>void submit()}>{busy?'正在处理…':result||error?'核对并重试':`删除这 ${preview.orders.length} 单`}</Button>}
    </footer>

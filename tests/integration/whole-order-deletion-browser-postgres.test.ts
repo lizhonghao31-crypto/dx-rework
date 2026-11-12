@@ -4,10 +4,10 @@ import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {cockpitHomeBrowser,homeReady} from '../acceptance/m01-cockpit-home-native-browser.js';
 vi.setConfig({testTimeout:100000,hookTimeout:100000});
-const url=process.env.TEST_DATABASE_URL;
+const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (url?describe.sequential:describe.skip)('Root deletion in original authenticated App',()=>{
  let h:Awaited<ReturnType<typeof cockpitHomeBrowser>>;
- beforeAll(async()=>{h=await cockpitHomeBrowser({databaseUrl:url!,indexed:true,evidence:join(tmpdir(),'whole-delete-browser-'+randomUUID())});});
+ beforeAll(async()=>{h=await cockpitHomeBrowser({databaseUrl:url!,indexed:true,evidence:join(tmpdir(),'whole-delete-browser-'+randomUUID()),...(process.env.M01_SETTINGS_BROWSER_EXECUTABLE?{executablePath:process.env.M01_SETTINGS_BROWSER_EXECUTABLE}:{})});});
  afterAll(async()=>{await h?.dispose();});
  it('selects, cancels, confirms and updates full count without removing historical facts',async()=>{
   const {context,page}=await h.open(undefined,{},1165);try{

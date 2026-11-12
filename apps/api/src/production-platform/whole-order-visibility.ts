@@ -4,6 +4,12 @@ import {ApplicationError} from '../platform/errors.js';
 type DB=Pick<Pool|PoolClient,'query'>;
 /** Schema capability only. No actor result, object state or authorization is cached. */
 const installed=new WeakSet<DB>();
+// Only Journey's caller-owned RR/read-only proxy may register rows returned by
+// its active-order SELECT. This is object state, never an actor/permission result.
+const activeSnapshots=new WeakMap<DB,ReadonlySet<string>>();
+export function rememberWholeOrderSnapshot(db:DB,orderIds:readonly string[]){activeSnapshots.set(db,new Set(orderIds));}
+export function forgetWholeOrderSnapshot(db:DB){activeSnapshots.delete(db);}
+export function wholeOrderSnapshotActive(db:DB,id:string){return activeSnapshots.get(db)?.has(id)??false;}
 export async function wholeOrderDeletionAvailable(db:DB){
  if(installed.has(db))return true;
  const exists=Boolean((await db.query("SELECT to_regclass('digital_whole_order_deleted_objects') AS relation")).rows[0]?.relation);

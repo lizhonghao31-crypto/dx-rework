@@ -2,12 +2,14 @@
   "version": 1,
   "base": "89f4721018cb3f1a36ee95b04d2c2bb6e7de2355",
   "risk": "full",
-  "sourceFingerprint": "57f71e9437e3161931c44260155db426c02e7c0c98d5767a4f6afe2ca294af93",
+  "sourceFingerprint": "569b403d4f29a807dc36a03bc7be3a840bde5db36677ab9fa248f07525003a33",
   "rules": [
     {
       "rule": "Root whole-order logical deletion is atomic per exact owned order; preserve history, other orders, current permissions and full-range counts.",
       "source": "User approved 2026-11-12 Root single/batch cockpit deletion with historical retention and two reviewed UI mockups; docs/engineering/root-whole-order-delete.md; no onsite deletion/deployment or original PR03.",
       "writes": [
+        "apps/api/migrations/0287_whole_order_deletion.sql",
+        "apps/api/src/pattern-room/misc-associations.ts",
         "apps/api/src/platform/migration-manifest.json",
         "apps/api/src/production-platform/access-policy.ts",
         "apps/api/src/production-platform/child-link-repository.ts",
@@ -18,27 +20,30 @@
         "apps/api/src/production-platform/journey-fact-repository.ts",
         "apps/api/src/production-platform/journey-fact-updates.ts",
         "apps/api/src/production-platform/journey-query.ts",
-        "apps/web/src/cockpit-home-dialog.tsx",
-        "apps/web/src/cockpit-home.tsx",
-        "apps/web/src/digital-cockpit-page.tsx",
-        "apps/web/src/digital-journey-cockpit.tsx",
-        "apps/web/src/digital-production-api.ts",
-        "packages/contracts/package.json",
-        "scripts/ci/full-gate-risk-map.mjs",
-        "scripts/ci/prepare-settings-browser.mjs",
-        "scripts/deploy/acceptance-migration-requirements.json",
-        "scripts/test-suite-plan.mjs",
-        "apps/api/migrations/0287_whole_order_deletion.sql",
         "apps/api/src/production-platform/whole-order-deletion-scope.ts",
         "apps/api/src/production-platform/whole-order-deletion-service.ts",
         "apps/api/src/production-platform/whole-order-native-deletion.ts",
         "apps/api/src/production-platform/whole-order-visibility.ts",
+        "apps/web/src/cockpit-home-dialog.tsx",
+        "apps/web/src/cockpit-home.tsx",
         "apps/web/src/cockpit-order-deletion.css",
         "apps/web/src/cockpit-order-deletion.tsx",
+        "apps/web/src/digital-cockpit-page.tsx",
+        "apps/web/src/digital-journey-cockpit.tsx",
+        "apps/web/src/digital-production-api.ts",
+        "packages/contracts/package.json",
         "packages/contracts/src/whole-order-deletion.ts",
+        "scripts/ci/full-gate-risk-map.mjs",
+        "scripts/ci/prepare-settings-browser.mjs",
+        "scripts/deploy/acceptance-migration-requirements.json",
+        "scripts/test-suite-plan.mjs",
+        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts",
+        "tests/integration/m01-journey-performance-postgres.test.ts",
         "tests/integration/whole-order-deletion-browser-postgres.test.ts",
         "tests/integration/whole-order-deletion-postgres.test.ts",
-        "apps/api/src/pattern-room/misc-associations.ts"
+        "tests/unit/digital-pmc-readonly-access.test.ts",
+        "tests/unit/digital-task-read-boundary.test.ts",
+        "tests/unit/whole-order-visibility.test.ts"
       ],
       "reads": [
         "apps/api/src/production-platform/access-policy.ts",
@@ -53,18 +58,27 @@
       "oldTests": [
         "tests/integration/receiving-postgres.test.ts",
         "tests/integration/journey-fact-updates-postgres.test.ts",
-        "tests/unit/root-delete-wage-cleanup.test.ts"
+        "tests/unit/root-delete-wage-cleanup.test.ts",
+        "tests/unit/client-request-id.test.ts",
+        "tests/unit/digital-pmc-readonly-access.test.ts",
+        "tests/unit/digital-task-read-boundary.test.ts",
+        "tests/unit/journey-snapshot-reads.test.ts",
+        "tests/unit/journey-snapshot-batches.test.ts",
+        "tests/integration/m01-journey-performance-postgres.test.ts",
+        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts"
       ],
       "newTests": [
         "tests/integration/whole-order-deletion-postgres.test.ts",
-        "tests/integration/whole-order-deletion-browser-postgres.test.ts"
+        "tests/integration/whole-order-deletion-browser-postgres.test.ts",
+        "tests/unit/whole-order-visibility.test.ts"
       ],
       "initialization": "0287 additive immutable deletion scope/request ledger; current native receiving guard retained with a same-order audited exception. Real isolated full migrations, original role seeder, no triggers disabled. Historical shared batches are refused atomically instead of deleting unrelated facts.",
       "dateAndPermission": "Current Root is rechecked in each transaction. Audit cancellation time does not synthesize actual completion or reset frozen windows. Same actor after revocation is rejected; existing authorized full-range reads filter deleted IDs before counts/pages; no cached authorization.",
-      "expectation": "Single/batch confirmation in original App; partial failure and re-preview, exact retries, rollback, current Root, original downstream cancellation/exclusion, durable historical records and no unrelated supplier/order mutation. Shared ambiguous receipt scope remains a disclosed failed item, not false success. Review closure: inherited legacy packing aliases invalidate other affected active orders in the same deletion transaction; source and PO association options filter tombstones before LIMIT 30.",
+      "expectation": "Current Root-only whole-order deletion preserves native facts, original amount/quantity semantics, unrelated scopes, atomic rollback and partial retry. Review fixes invalidate packing aliases and filter both misc association kinds before LIMIT. Full failures closed together: original browser UUID helper, explicit absent-schema legacy mocks, designated Acceptance-clock test database without loosening guards, seven peer KPIs plus the Root operation column, and native88 physical SQL <=7100. Active object IDs are reused only in the same caller-owned RR read snapshot and cleared on exit; ordinary reads retain atomic deletion predicates before Root/role shortcuts. Twelve PG/App checks, complete compatibility/cache regression, and native88 role/page/search/export/revocation counterexamples have independent actual reports. Unrelated homepage cases deliberately filtered locally; not claimed passed on this candidate. Historical ambiguous shared batches remain explicitly refused unchanged, not false success.",
       "checks": [
         "delete-pg",
-        "delete-browser",
+        "compat",
+        "performance",
         "types",
         "protocol",
         "lint"
@@ -75,69 +89,99 @@
     {
       "id": "delete-pg",
       "kind": "tests",
-      "command": "DX_REWORK_TEST_SUITE_KIND=postgres npx vitest run tests/integration/whole-order-deletion-postgres.test.ts --reporter=verbose --reporter=json --outputFile.json=/tmp/root-delete-pg-result.json",
+      "command": "TEST_DATABASE_URL=postgresql://dx_r5_test@127.0.0.1:55413/dx_rework_ci ACCEPTANCE_CLOCK_TEST_DATABASE_URL=postgresql://dx_r5_test@127.0.0.1:55413/dx_rework_acceptance_test_r5 DX_REWORK_TEST_SUITE_KIND=postgres PLAYWRIGHT_BROWSERS_PATH=/workspace/.dx-cloud/playwright node node_modules/vitest/vitest.mjs run tests/integration/whole-order-deletion-postgres.test.ts tests/integration/whole-order-deletion-browser-postgres.test.ts tests/integration/m01-cockpit-home-native-browser-postgres.test.ts --testNamePattern='Root whole-order deletion|Root deletion in original authenticated App|renders the original full Shell' --reporter=verbose --reporter=json --outputFile=/tmp/root-delete-pg-atomic-result.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 8,
-      "failed": 0,
-      "skipped": 0,
-      "testedHead": "bb197e641407322e94e1ee360ba5a470f6c23d52",
-      "sourceFingerprint": "57f71e9437e3161931c44260155db426c02e7c0c98d5767a4f6afe2ca294af93",
+      "testedHead": "1a75aeb010ec2c4a6325151ab8b2ee55616e8e72",
+      "sourceFingerprint": "569b403d4f29a807dc36a03bc7be3a840bde5db36677ab9fa248f07525003a33",
       "inputPaths": [
-        "apps/api",
-        "apps/web",
+        "apps",
         "packages",
+        "scripts",
+        "tests",
         "package.json",
         "package-lock.json",
-        "vitest.config.ts",
-        "tests/helpers",
-        "tests/integration/whole-order-deletion-postgres.test.ts"
+        "vitest.config.ts"
       ],
-      "inputFingerprint": "ec85d4f1a037710be4e31b949e9c085787a05d23c9ef460de9c1551b55817c31",
-      "context": "Review fixes on exact bb197e64 parent; current uncommitted inputs. Node22/npm10, PG13.23 low-privilege isolated TEST schema with native guards. No onsite deletion or deployment.",
-      "startedAt": "2026-11-12T10:35:38.755Z",
-      "endedAt": "2026-11-12T10:35:56.666Z",
-      "logSha256": "dd89689be0a134a945bce577352dc231e6b5573ce40f8d38ebe8535db75cc011",
-      "log": "/tmp/root-delete-pg-current.log",
+      "inputFingerprint": "1c140fdee884c7c7c9b0a62541287a4c476198a158b6901deea4eab573ee04a9",
+      "context": "Current concentrated Full fixes on exact 1a75aeb0 parent. Node22/npm10. PG13.23 low-privilege owned TEST schemas, original native guards and authenticated App. UI/performance assertions unchanged except the explicit Root operation column; no onsite deletion/deployment. Test timestamps from native Vitest result; command timestamps from captured output files, exit 0 observed through exec sessions.",
+      "startedAt": "2026-11-12T11:39:27.806Z",
+      "endedAt": "2026-11-12T11:40:31.677Z",
+      "logSha256": "f2c5d6d03db39c17e2a02d7f460606f3504dc64d199ba44b4cde23541374b80d",
+      "log": "/tmp/root-delete-pg-atomic.log",
+      "passed": 12,
+      "failed": 0,
+      "skipped": 14,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "10efe237ec61cb198eb2fd753b6860033c6eeee6dd95579e269882d40b52f41e"
+          "sha256": "4933969dee41ac01410c1f8355b16ebd4e7b110d6cf4095b080cf1f5c6066b65"
         }
       ]
     },
     {
-      "id": "delete-browser",
+      "id": "compat",
       "kind": "tests",
-      "command": "DX_REWORK_TEST_SUITE_KIND=postgres PLAYWRIGHT_BROWSERS_PATH=/workspace/.dx-cloud/playwright npx vitest run tests/integration/whole-order-deletion-browser-postgres.test.ts --reporter=verbose --reporter=json --outputFile.json=/tmp/root-delete-browser-result.json",
+      "command": "DX_REWORK_TEST_SUITE_KIND=unit node node_modules/vitest/vitest.mjs run tests/unit/client-request-id.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/digital-task-read-boundary.test.ts tests/unit/journey-snapshot-reads.test.ts tests/unit/journey-snapshot-batches.test.ts tests/unit/whole-order-visibility.test.ts --reporter=verbose --reporter=json --outputFile=/tmp/root-delete-atomic-unit-result.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 3,
-      "failed": 0,
-      "skipped": 0,
-      "testedHead": "bb197e641407322e94e1ee360ba5a470f6c23d52",
-      "sourceFingerprint": "57f71e9437e3161931c44260155db426c02e7c0c98d5767a4f6afe2ca294af93",
+      "testedHead": "1a75aeb010ec2c4a6325151ab8b2ee55616e8e72",
+      "sourceFingerprint": "569b403d4f29a807dc36a03bc7be3a840bde5db36677ab9fa248f07525003a33",
       "inputPaths": [
-        "apps/api",
-        "apps/web",
+        "apps",
         "packages",
+        "scripts",
+        "tests",
         "package.json",
         "package-lock.json",
-        "vitest.config.ts",
-        "tests/helpers",
-        "tests/acceptance",
-        "tests/integration/whole-order-deletion-browser-postgres.test.ts"
+        "vitest.config.ts"
       ],
-      "inputFingerprint": "cf8cd8ce08f46effdb8d8f2c37c30189f632eaa10f0595b119fbb9e3c23ee648",
-      "context": "Review fixes on exact bb197e64 parent; current uncommitted inputs. Node22/npm10, PG13.23 low-privilege isolated TEST schema with native guards. No onsite deletion or deployment.",
-      "startedAt": "2026-11-12T10:36:18.458Z",
-      "endedAt": "2026-11-12T10:36:55.463Z",
-      "logSha256": "c2bdb47cd0c3c47b9f438c38dfc0f132e0088a5e6a34f74f49d4c018df14eaec",
-      "log": "/tmp/root-delete-browser-current.log",
+      "inputFingerprint": "1c140fdee884c7c7c9b0a62541287a4c476198a158b6901deea4eab573ee04a9",
+      "context": "Current concentrated Full fixes on exact 1a75aeb0 parent. Node22/npm10. PG13.23 low-privilege owned TEST schemas, original native guards and authenticated App. UI/performance assertions unchanged except the explicit Root operation column; no onsite deletion/deployment. Test timestamps from native Vitest result; command timestamps from captured output files, exit 0 observed through exec sessions.",
+      "startedAt": "2026-11-12T11:37:06.788Z",
+      "endedAt": "2026-11-12T11:37:11.477Z",
+      "logSha256": "de95648103df271b74f31bc012987e7357990c3de9cce9eb454909f473889aa0",
+      "log": "/tmp/root-delete-atomic-unit.log",
+      "passed": 89,
+      "failed": 0,
+      "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "cff70a651c4e2034a243ab2d3186c38cd252fd5759345a9a1d559ea5040df5bd"
+          "sha256": "f0049bdd680bda53a0a6e0e1a09845976c0d1078784d222106fa866c2fb8ccb0"
+        }
+      ]
+    },
+    {
+      "id": "performance",
+      "kind": "tests",
+      "command": "DX_REWORK_TEST_SUITE_KIND=postgres M01_JOURNEY_PERF_EVIDENCE=/tmp/root-delete-perf-atomic.json node node_modules/vitest/vitest.mjs run tests/integration/m01-journey-performance-postgres.test.ts --reporter=verbose --reporter=json --outputFile=/tmp/root-delete-perf-atomic-result.json",
+      "status": "passed",
+      "exitCode": 0,
+      "testedHead": "1a75aeb010ec2c4a6325151ab8b2ee55616e8e72",
+      "sourceFingerprint": "569b403d4f29a807dc36a03bc7be3a840bde5db36677ab9fa248f07525003a33",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests",
+        "package.json",
+        "package-lock.json",
+        "vitest.config.ts"
+      ],
+      "inputFingerprint": "1c140fdee884c7c7c9b0a62541287a4c476198a158b6901deea4eab573ee04a9",
+      "context": "Current concentrated Full fixes on exact 1a75aeb0 parent. Node22/npm10. PG13.23 low-privilege owned TEST schemas, original native guards and authenticated App. UI/performance assertions unchanged except the explicit Root operation column; no onsite deletion/deployment. Test timestamps from native Vitest result; command timestamps from captured output files, exit 0 observed through exec sessions.",
+      "startedAt": "2026-11-12T11:37:05.449Z",
+      "endedAt": "2026-11-12T11:38:49.385Z",
+      "logSha256": "594a6a45062c8b1c58942254ae40d90ba697ce1b4ac6302cc0da5d8beb0bab62",
+      "log": "/tmp/root-delete-perf-atomic.log",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "72468e95cd87aa856de9f568fb6ab69af7fb4a836a4c2882827cc0c9391922f3"
         }
       ]
     },
@@ -147,21 +191,23 @@
       "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "bb197e641407322e94e1ee360ba5a470f6c23d52",
-      "sourceFingerprint": "57f71e9437e3161931c44260155db426c02e7c0c98d5767a4f6afe2ca294af93",
+      "testedHead": "1a75aeb010ec2c4a6325151ab8b2ee55616e8e72",
+      "sourceFingerprint": "569b403d4f29a807dc36a03bc7be3a840bde5db36677ab9fa248f07525003a33",
       "inputPaths": [
-        "apps/api",
-        "apps/web",
+        "apps",
         "packages",
+        "scripts",
+        "tests",
         "package.json",
-        "package-lock.json"
+        "package-lock.json",
+        "vitest.config.ts"
       ],
-      "inputFingerprint": "4e35bf0f47062918f66c762b5b33d1db86b83fbdcbd976c90c73f3d2a9cf2f88",
-      "context": "Review fixes on exact bb197e64 parent; current uncommitted inputs. Node22/npm10, PG13.23 low-privilege isolated TEST schema with native guards. No onsite deletion or deployment.",
-      "startedAt": "2026-11-12T10:36:17.894Z",
-      "endedAt": "2026-11-12T10:37:12.039Z",
+      "inputFingerprint": "1c140fdee884c7c7c9b0a62541287a4c476198a158b6901deea4eab573ee04a9",
+      "context": "Current concentrated Full fixes on exact 1a75aeb0 parent. Node22/npm10. PG13.23 low-privilege owned TEST schemas, original native guards and authenticated App. UI/performance assertions unchanged except the explicit Root operation column; no onsite deletion/deployment. Test timestamps from native Vitest result; command timestamps from captured output files, exit 0 observed through exec sessions.",
+      "startedAt": "2026-11-12T11:37:45.896Z",
+      "endedAt": "2026-11-12T11:38:42.157Z",
       "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e",
-      "log": "/tmp/root-delete-types-current.log"
+      "log": "/tmp/root-delete-types-atomic.log"
     },
     {
       "id": "protocol",
@@ -169,49 +215,47 @@
       "command": "npm run test:preflight",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "bb197e641407322e94e1ee360ba5a470f6c23d52",
-      "sourceFingerprint": "57f71e9437e3161931c44260155db426c02e7c0c98d5767a4f6afe2ca294af93",
+      "testedHead": "1a75aeb010ec2c4a6325151ab8b2ee55616e8e72",
+      "sourceFingerprint": "569b403d4f29a807dc36a03bc7be3a840bde5db36677ab9fa248f07525003a33",
       "inputPaths": [
+        "apps",
+        "packages",
         "scripts",
-        "apps/api/migrations",
-        "apps/api/src/platform/migration-manifest.json",
         "tests",
         "package.json",
-        "package-lock.json"
+        "package-lock.json",
+        "vitest.config.ts"
       ],
-      "inputFingerprint": "2e15544135224df2d1e26638cd6a2cea43e4ea111cfd3ba9c9b3661d8f68f586",
-      "context": "Review fixes on exact bb197e64 parent; current uncommitted inputs. Node22/npm10, PG13.23 low-privilege isolated TEST schema with native guards. No onsite deletion or deployment.",
-      "startedAt": "2026-11-12T10:36:19.491Z",
-      "endedAt": "2026-11-12T10:36:27.735Z",
-      "logSha256": "f5c29f4ad5f973f5475d699e3d56944c66e5c028ea0e1da953e8e0128f935435",
-      "log": "/tmp/root-delete-preflight-reviewed.log"
+      "inputFingerprint": "1c140fdee884c7c7c9b0a62541287a4c476198a158b6901deea4eab573ee04a9",
+      "context": "Current concentrated Full fixes on exact 1a75aeb0 parent. Node22/npm10. PG13.23 low-privilege owned TEST schemas, original native guards and authenticated App. UI/performance assertions unchanged except the explicit Root operation column; no onsite deletion/deployment. Test timestamps from native Vitest result; command timestamps from captured output files, exit 0 observed through exec sessions.",
+      "startedAt": "2026-11-12T11:37:45.908Z",
+      "endedAt": "2026-11-12T11:37:55.300Z",
+      "logSha256": "1ca34b7f1805a2cf56835ca51f1484fe16c1d0c5ac0fa584f667aaa54c2216c9",
+      "log": "/tmp/root-delete-preflight-atomic.log"
     },
     {
       "id": "lint",
       "kind": "command",
-      "command": "npx eslint apps/api/src/production-platform/whole-order-*.ts apps/api/src/pattern-room/misc-associations.ts apps/web/src/cockpit-order-deletion.tsx tests/integration/whole-order-deletion*.test.ts scripts/ci/full-gate-risk-map.mjs --max-warnings=0",
+      "command": "node node_modules/eslint/bin/eslint.js apps/api/src/production-platform/whole-order-*.ts apps/api/src/production-platform/access-policy.ts apps/api/src/production-platform/journey-query.ts apps/api/src/pattern-room/misc-associations.ts apps/web/src/cockpit-order-deletion.tsx tests/unit/digital-pmc-readonly-access.test.ts tests/unit/digital-task-read-boundary.test.ts tests/unit/whole-order-visibility.test.ts tests/integration/whole-order-deletion*.test.ts tests/integration/m01-journey-performance-postgres.test.ts tests/integration/m01-cockpit-home-native-browser-postgres.test.ts scripts/ci/full-gate-risk-map.mjs --max-warnings=0",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "bb197e641407322e94e1ee360ba5a470f6c23d52",
-      "sourceFingerprint": "57f71e9437e3161931c44260155db426c02e7c0c98d5767a4f6afe2ca294af93",
+      "testedHead": "1a75aeb010ec2c4a6325151ab8b2ee55616e8e72",
+      "sourceFingerprint": "569b403d4f29a807dc36a03bc7be3a840bde5db36677ab9fa248f07525003a33",
       "inputPaths": [
-        "apps/api",
-        "apps/web",
+        "apps",
         "packages",
+        "scripts",
+        "tests",
         "package.json",
         "package-lock.json",
-        "vitest.config.ts",
-        "tests/helpers",
-        "scripts/ci/full-gate-risk-map.mjs",
-        "tests/integration/whole-order-deletion-postgres.test.ts",
-        "tests/integration/whole-order-deletion-browser-postgres.test.ts"
+        "vitest.config.ts"
       ],
-      "inputFingerprint": "701d1ad5e658a672adc72ad941c9080f6ea07fadc1b974a8fd0a9c8ec35e2297",
-      "context": "Review fixes on exact bb197e64 parent; current uncommitted inputs. Node22/npm10, PG13.23 low-privilege isolated TEST schema with native guards. No onsite deletion or deployment.",
-      "startedAt": "2026-11-12T10:36:17.914Z",
-      "endedAt": "2026-11-12T10:36:19.483Z",
-      "logSha256": "48cf570a0892e8b0c0de796bcbc145f443f637196bce0b9fbbd28c3e106d66c9",
-      "log": "/tmp/root-delete-lint-reviewed.log"
+      "inputFingerprint": "1c140fdee884c7c7c9b0a62541287a4c476198a158b6901deea4eab573ee04a9",
+      "context": "Current concentrated Full fixes on exact 1a75aeb0 parent. Node22/npm10. PG13.23 low-privilege owned TEST schemas, original native guards and authenticated App. UI/performance assertions unchanged except the explicit Root operation column; no onsite deletion/deployment. Test timestamps from native Vitest result; command timestamps from captured output files, exit 0 observed through exec sessions.",
+      "startedAt": "2026-11-12T11:37:45.900Z",
+      "endedAt": "2026-11-12T11:37:45.900Z",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "log": "/tmp/root-delete-lint-atomic.log"
     }
   ]
 }
