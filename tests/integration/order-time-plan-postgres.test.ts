@@ -93,6 +93,9 @@ const duration=(hours:number):OrderTimeRule=>({kind:'work',minutes:hours*60,cale
   const a=await make(),b=await make(),original=await confirm(a,value(a)),next=structuredClone(original.input);
   next.plan.company.nodes.a=duration(1);await expect(confirm(a,next,1)).rejects.toThrow('原标准');
   const h=structuredClone(original.input);h.scopes[0]!.customerGoal={precision:'date',value:'2027-03-02',source:'TEST arbitrary date'};await expect(confirm(a,h,1)).rejects.toThrow('批准改期');
+  const source=structuredClone(original.input);source.scopes[0]!.customerGoal={precision:'date',value:'2027-03-01',source:'TEST forged same-date approval'};await expect(confirm(a,source,1)).rejects.toThrow('批准改期');
+  const terminal=structuredClone(original.input),scope=terminal.scopes[0]!,id=scope.customerGoalIds[0]!;scope.goals[id]={precision:'date',value:'2027-03-01',source:'TEST forged terminal approval'};await expect(confirm(a,terminal,1)).rejects.toThrow('批准改期');
+  const precision=structuredClone(original.input);precision.scopes[0]!.customerGoal={precision:'instant',value:'2027-03-01T16:00:00.000Z',source:'TEST same boundary but different precision'};await expect(confirm(a,precision,1)).rejects.toThrow('批准改期');
   const other=structuredClone(original.input);other.scopes[0]!.lineId=b.lines[0]!.lineId;await expect(confirm(a,other,1)).rejects.toThrow();
   expect((await new OrderTimePlanRepository(f.db).current(original.resource))!.revision).toBe(1);
  }));

@@ -110,7 +110,13 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
   dates=[{po:'样板',date:development?.returnDate??null}];
  }
  const goals=new Map<string,SlaAnchor>();
- for(const [index,consumer]of route.consumers.entries()){const date=dates[index]?.date;if(date)goals.set(consumer.scopeRef,{precision:'date',value:date,source:'本单已填写的客户或样板日期'});}
+ for(const [index,consumer]of route.consumers.entries()){
+  const date=dates[index]?.date;if(!date)continue;
+  const previous=saved?.input.scopes.find(scope=>scope.scopeRef===consumer.scopeRef&&scope.lineId===consumer.lineId)?.customerGoal;
+  // Rebuilding the same dated scope is not a new customer-date approval.
+  // Keep its immutable evidence; changed dates still face repository guards.
+  goals.set(consumer.scopeRef,previous?.precision==='date'&&previous.value===date?structuredClone(previous):{precision:'date',value:date,source:'本单已填写的客户或样板日期'});
+ }
  const value=orderTimeInputFromRoute(plan,route,goals,!missing.length,missing,sourceId?{kind:'source',id:sourceId}:resource??undefined);
  const tasks=resource?(await db.query(`SELECT t.task_id,t.route_version,t.state,t.entered_at,t.entered_quality,t.completed_at,t.completed_quality,a.task_kind,a.source_id,a.production_order_id,p.step_id,
   d.due_at,d.sla_basis,EXISTS(SELECT 1 FROM digital_production_task_events e WHERE e.task_id=t.task_id AND e.event_kind='material_returned') AS returned

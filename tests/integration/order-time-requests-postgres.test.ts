@@ -27,6 +27,7 @@ import {DigitalPoDateRepository} from '../../apps/api/src/production-platform/po
 import {DigitalJourneyQuery} from '../../apps/api/src/production-platform/journey-query.js';
 import {DevelopmentRoundService} from '../../apps/api/src/production-platform/development-round-service.js';
 import {ProductionInstructionService} from '../../apps/api/src/production-platform/production-instruction-service.js';
+import {PoCustomerDateService} from '../../apps/api/src/production-platform/po-customer-date-service.js';
 import {productionReadinessFixture} from '../helpers/production-readiness-fixture.js';
 import {beijingCalendarDate} from '@dx-rework/contracts/digital-production';
 import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
@@ -315,6 +316,57 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(policy?.input.work.find(work=>work.parameterKey==='development_pattern')?.canonicalWorkRef).toContain(':round:2:');
    expect((await f.db.query('SELECT entered_at,due_at FROM digital_production_deadline_revisions WHERE task_id=$1 AND entered_at IS NOT NULL ORDER BY revision_id LIMIT 1',[oldPattern!])).rows[0]).toEqual(oldDeadline);
    const history=(await rounds.read(row!.actor,row!.sourceId)).rounds.find(round=>round.roundNumber===2)!;expect(history.inherited).toHaveProperty('development_materials');
+  });
+ });
+ it('preserves approved PO goal evidence when publishing a version-two instruction and arranging the same order again',async()=>{
+  const scene=await f.scene('2027-07-01T00:00:00.000Z');
+  await f.runtime.run(scene,f.root,async()=>{
+   const row=await make('2027-10-31',true);
+   if(row.operation.kind!=='development_publish')throw Error('TEST source operation');
+   await forms.publish(row.actor,row.sourceId,1,randomUUID(),row.operation.input.patternOrder);
+   const order=await identity.createOrder(row.actor,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:(await forms.read(row.actor,row.sourceId)).designStyleNo,orderDate:'2027-07-01',primaryMerchandiserId:f.people.merchandiser!.actorId,productionPlanning:{craftSteps:[],preshrink:false},lines:[
+    {formalPoNo:'TEST-R5-DATE-RED-'+randomUUID(),color:'红',customerWarehouseArrivalDate:'2027-09-30',sizes:[{size:'M',quantity:1}]},
+    {formalPoNo:'TEST-R5-DATE-GREEN-'+randomUUID(),color:'绿',customerWarehouseArrivalDate:'2027-10-10',sizes:[{size:'M',quantity:1}]}
+   ]}),randomUUID(),row.sourceId);
+   const resource={kind:'order' as const,id:order.productionOrderId},repo=new OrderTimePlanRepository(f.db),main=f.people.merchandiser!,instruction=new ProductionInstructionService(f.db,true);
+   const initial=await instruction.read(main,order.productionOrderId),document={...initial.document,styleName:'TEST approved PO date',category:'上衣',date:'2027-07-01',preshrink:'无需预缩' as const,secondaryCraft:'无' as const,craftSteps:[]};
+   await instruction.save(main,order.productionOrderId,{expectedVersion:0,orderVersion:order.version,sourceRound:1,document},randomUUID());
+   await instruction.save(main,order.productionOrderId,{expectedVersion:1,orderVersion:order.version,document:{...document,styleName:'TEST retained version-two draft'}},randomUUID());
+   await productionReadinessFixture(f.db,f.root,order.productionOrderId,f.people['pattern-room-worker']!.actorId,f.people.warehouse!);
+   const before=(await repo.current(resource))!,red=order.lines[0]!.lineId,green=order.lines[1]!.lineId;
+   const stale=await requests.check(f.root,{kind:'arrangement',resource}),dates=new PoCustomerDateService(f.db),dateState=await dates.read(f.root,order.productionOrderId);
+   const currentOrder=await identity.read(f.root,order.productionOrderId);
+   const request=await dates.request(main,order.productionOrderId,{orderVersion:currentOrder.version,changes:[{lineId:red,date:'2027-10-02',expectedVersion:dateState.customerPoDates.find(line=>line.lineId===red)!.version}],reason:'TEST native approved red PO date'},randomUUID()) as {requestId:string};
+   await dates.decide(f.root,order.productionOrderId,request.requestId,true,randomUUID());
+   const approved=(await repo.current(resource))!,redScope=approved.input.scopes.find(scope=>scope.lineId===red)!,greenScope=approved.input.scopes.find(scope=>scope.lineId===green)!;
+   const change=(await f.db.query("SELECT change_id FROM digital_po_date_changes WHERE production_order_id=$1 AND line_id=$2 AND source='approved_customer_change'",[order.productionOrderId,red])).rows[0];
+   expect(redScope.customerGoal).toEqual({precision:'date',value:'2027-10-02',source:'digital_po_date_changes:'+change.change_id});
+   expect(greenScope).toEqual(before.input.scopes.find(scope=>scope.lineId===green));
+   expect(approved.targets[greenScope.scopeRef]).toEqual(before.targets[greenScope.scopeRef]);
+   await expect(requests.arrange(f.root,{resource,overrides:{},fingerprint:stale.fingerprint,acceptLate:false},randomUUID())).rejects.toMatchObject({code:'ORDER_TIME_STALE'});
+   expect(await repo.current(resource)).toEqual(approved);
+   const draft=await instruction.read(main,order.productionOrderId);
+   expect(draft.version).toBe(2);expect(draft.publishedVersion).toBeNull();
+   const body={expectedVersion:2,orderVersion:draft.currentOrderVersion,expectedReadinessRevision:draft.readiness?.revision},key=randomUUID();
+   const published=await instruction.publish(main,order.productionOrderId,body,key);
+   expect(published.publishedVersion).toBe(2);
+   expect(await instruction.publish(main,order.productionOrderId,body,key)).toEqual(published);
+   const after=(await repo.current(resource))!;
+   expect(after.revision).toBe(approved.revision+1);
+   for(const old of approved.input.scopes){
+    const scope=after.input.scopes.find(scope=>scope.lineId===old.lineId)!;
+    expect(scope.customerGoal).toEqual(old.customerGoal);
+    for(const id of old.customerGoalIds)expect(scope.goals[id]).toEqual(old.goals[id]);
+    for(const [id,target]of Object.entries(approved.targets[old.scopeRef]!))expect(after.targets[scope.scopeRef]![id]).toEqual(target);
+   }
+   expect((await f.db.query('SELECT version FROM digital_instruction_versions WHERE production_order_id=$1',[order.productionOrderId])).rows).toEqual([{version:2}]);
+   const check=await requests.check(f.root,{kind:'arrangement',resource}),arrangeBody={resource,overrides:{},fingerprint:check.fingerprint,acceptLate:false},arrangeKey=randomUUID();
+   const arranged=await requests.arrange(f.root,arrangeBody,arrangeKey);
+   expect(await requests.arrange(f.root,arrangeBody,arrangeKey)).toEqual(arranged);
+   const latest=(await repo.current(resource))!;
+   expect(latest.revision).toBe(after.revision+1);
+   expect(latest.input.scopes.map(scope=>scope.customerGoal)).toEqual(after.input.scopes.map(scope=>scope.customerGoal));
+   expect(latest.targets).toEqual(after.targets);
   });
  });
  it('keeps the old production route effective while the main merchandiser hands an insufficient saved change to its designer and a manager applies both changes once',async()=>{
