@@ -192,7 +192,7 @@
     {
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "809d80ce95c33eeef99c22b71ac1e95117783abd",
+      "testedHead": "107a69dfc474707a3f9a17b593b3b36a8cad2c46",
       "sourceFingerprint": "bca8497ed231601c3562915c5fc43387a6f9b805a0c84e4e61bca4808b41ed1a",
       "inputPaths": [
         "apps",
@@ -209,8 +209,8 @@
       "command": "PATH=/workspace/.dx-cloud/r5-runtime/node_modules/.bin:$PATH node node_modules/vitest/vitest.mjs run tests/unit/order-time-reading.test.ts tests/unit/fixed-schedule-selection.test.ts tests/unit/fixed-schedule-progress.test.ts tests/unit/cockpit-home.test.ts tests/unit/production-readiness-contract.test.ts tests/unit/cockpit-fixed-schedule.test.ts tests/unit/cockpit-detail.test.ts tests/unit/digital-journey-cockpit.test.ts tests/unit/digital-notification-child-context.test.ts tests/unit/digital-notification-runtime.test.ts --reporter=json --outputFile=/workspace/.dx-cloud/r5-regression-02-unit-final.json",
       "startedAt": "2026-11-12T08:31:20.022Z",
       "endedAt": "2026-11-12T08:31:27.463Z",
-      "log": "/workspace/.dx-cloud/r5-regression-02-unit-final.log",
-      "logSha256": "44fc9c4c851cbd36cdf89434fd1bce24b4cb79e20284476bfd4b29d69ac65ed9",
+      "log": "/workspace/.dx-cloud/r5-regression-02-unit-final.json",
+      "logSha256": "32b19509f1515da41eca22a0c0607097790aa78da26ccf3819c8828e56c8e667",
       "passed": 147,
       "failed": 0,
       "skipped": 0,
@@ -220,12 +220,12 @@
           "sha256": "32b19509f1515da41eca22a0c0607097790aa78da26ccf3819c8828e56c8e667"
         }
       ],
-      "context": "Ten affected existing suites; independent numerical forecasts, original responsibility D, mixed PO risk, explicit route versus unknown and started-history preservation. Native source and contract links resolve to this worktree, Node22/npm10; original bounded non-db worker configuration."
+      "context": "Ten affected existing suites; independent numerical forecasts, original responsibility D, mixed PO risk, explicit route versus unknown and started-history preservation. Native source and contract links resolve to this worktree, Node22/npm10; original bounded non-db worker configuration. The actual machine-readable command output is the original Vitest --outputFile JSON; terminal transport log retained at /workspace/.dx-cloud/r5-regression-02-unit-final.log"
     },
     {
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "809d80ce95c33eeef99c22b71ac1e95117783abd",
+      "testedHead": "107a69dfc474707a3f9a17b593b3b36a8cad2c46",
       "sourceFingerprint": "8311d77dbf1547f1a4c783da9617d8b55f4588d1eb0d44620e7276674310956f",
       "inputPaths": [
         "apps",
@@ -243,8 +243,8 @@
       "command": "PATH=/workspace/.dx-cloud/r5-runtime/node_modules/.bin:$PATH TEST_DATABASE_URL=postgresql://dx_r5_test@127.0.0.1:55413/dx_rework_acceptance_test_r5 DX_REWORK_TEST_SUITE_KIND=postgres PLAYWRIGHT_BROWSERS_PATH=/workspace/.dx-cloud/playwright node node_modules/vitest/vitest.mjs run tests/integration/order-time-reading-postgres.test.ts tests/integration/m01-cockpit-home-native-browser-postgres.test.ts --reporter=json --outputFile=/workspace/.dx-cloud/r5-regression-02-pg-final.json",
       "startedAt": "2026-11-12T08:30:12.672Z",
       "endedAt": "2026-11-12T08:33:21.825Z",
-      "log": "/workspace/.dx-cloud/r5-regression-02-pg-final.log",
-      "logSha256": "b5d7e1b157eeebe3e8620b74b8dfb4cdcd8280b086bb6db659bb3cb71b11fb7d",
+      "log": "/workspace/.dx-cloud/r5-regression-02-pg-final.json",
+      "logSha256": "afd991509ab4bfa31973f640b8059e947681ec592c23f1442c3298f19ba07aa3",
       "passed": 21,
       "failed": 0,
       "skipped": 0,
@@ -254,12 +254,12 @@
           "sha256": "afd991509ab4bfa31973f640b8059e947681ec592c23f1442c3298f19ba07aa3"
         }
       ],
-      "context": "Isolated non-superuser PostgreSQL13.23, original complete schema/fixtures; actual signed original App Chromium1194. One PG worker. Actual scoped date request and approval/notification denial, no-craft before preparation, shared fact build/update, RR, complete list and current-page assembly; actual UI primary assignment, release of owner approval and genuine approval, revocation, KPI, modal and filters. Original registered afterAll schema cleanup; no onsite/production writes."
+      "context": "Isolated non-superuser PostgreSQL13.23, original complete schema/fixtures; actual signed original App Chromium1194. One PG worker. Actual scoped date request and approval/notification denial, no-craft before preparation, shared fact build/update, RR, complete list and current-page assembly; actual UI primary assignment, release of owner approval and genuine approval, revocation, KPI, modal and filters. Original registered afterAll schema cleanup; no onsite/production writes. The actual machine-readable command output is the original Vitest --outputFile JSON; terminal transport log retained at /workspace/.dx-cloud/r5-regression-02-pg-final.log"
     },
     {
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "809d80ce95c33eeef99c22b71ac1e95117783abd",
+      "testedHead": "107a69dfc474707a3f9a17b593b3b36a8cad2c46",
       "sourceFingerprint": "bca8497ed231601c3562915c5fc43387a6f9b805a0c84e4e61bca4808b41ed1a",
       "inputPaths": [
         "apps",
@@ -283,7 +283,7 @@
     {
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "809d80ce95c33eeef99c22b71ac1e95117783abd",
+      "testedHead": "107a69dfc474707a3f9a17b593b3b36a8cad2c46",
       "sourceFingerprint": "bca8497ed231601c3562915c5fc43387a6f9b805a0c84e4e61bca4808b41ed1a",
       "inputPaths": [
         "apps",
@@ -307,7 +307,7 @@
     {
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "809d80ce95c33eeef99c22b71ac1e95117783abd",
+      "testedHead": "107a69dfc474707a3f9a17b593b3b36a8cad2c46",
       "sourceFingerprint": "bca8497ed231601c3562915c5fc43387a6f9b805a0c84e4e61bca4808b41ed1a",
       "inputPaths": [
         "apps",
@@ -332,7 +332,7 @@
     {
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "809d80ce95c33eeef99c22b71ac1e95117783abd",
+      "testedHead": "107a69dfc474707a3f9a17b593b3b36a8cad2c46",
       "sourceFingerprint": "bca8497ed231601c3562915c5fc43387a6f9b805a0c84e4e61bca4808b41ed1a",
       "inputPaths": [
         "apps",
