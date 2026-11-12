@@ -95,11 +95,17 @@
         "tests/integration/whole-order-deletion-postgres.test.ts"
       ],
       "inputFingerprint": "3de2a532c711d42e45679d2a8b61f725b9ce1665db39af20788133bb242b18ec",
-      "context": "Uncommitted candidate on exact release base; Node22/npm10; PG13.23 low-privilege isolated TEST schemas; browser uses original authenticated App. Not onsite acceptance.",
+      "context": "Uncommitted candidate on exact release base; Node22/npm10; PG13.23 low-privilege isolated TEST schemas; browser uses original authenticated App. Not onsite acceptance. Structured TAP is a lossless format conversion of every named success and the totals in the unchanged verbose log; it is not a rerun or native TAP output.",
       "startedAt": "2026-11-12T10:19:49Z",
       "endedAt": "2026-11-12T10:20:06.774Z",
       "logSha256": "add5afe24b8a3a5a3ee30c44f7d31c0d89fc8a89a3110b9ba40de1b49bab112c",
-      "logPath": "/tmp/root-delete-shared.log"
+      "log": "/tmp/root-delete-shared.log",
+      "resultReports": [
+        {
+          "format": "node-tap",
+          "sha256": "34ffb442cff5aac919b00d4e0e842a3e7f64b8480c2f33182336041b8af536a2"
+        }
+      ]
     },
     {
       "id": "delete-browser",
@@ -124,11 +130,17 @@
         "tests/integration/whole-order-deletion-browser-postgres.test.ts"
       ],
       "inputFingerprint": "fd358d494e408d62c78c9ae4f6bb7912f9b9c0d3b650526c8f5a7f56132c1ba6",
-      "context": "Uncommitted candidate on exact release base; Node22/npm10; PG13.23 low-privilege isolated TEST schemas; browser uses original authenticated App. Not onsite acceptance. The combined log reports 8 passed (5 PG + 3 browser); only its unchanged browser inputs are reused here; current PG suite now has 6 passed.",
+      "context": "Uncommitted candidate on exact release base; Node22/npm10; PG13.23 low-privilege isolated TEST schemas; browser uses original authenticated App. Not onsite acceptance. The combined log reports 8 passed (5 PG + 3 browser); only its unchanged browser inputs are reused here; current PG suite now has 6 passed. Structured TAP is a lossless format conversion of every named success and the totals in the unchanged verbose log; it is not a rerun or native TAP output.",
       "startedAt": "2026-11-12T10:16:24Z",
       "endedAt": "2026-11-12T10:17:03.655Z",
       "logSha256": "444e42bd8ea3d5b7852dd3a319b55e24e598af717c530ff733cfc441c1358cf1",
-      "logPath": "/tmp/root-delete-combined.log"
+      "log": "/tmp/root-delete-combined.log",
+      "resultReports": [
+        {
+          "format": "node-tap",
+          "sha256": "927f0ea43efa1247a6a8784e01b7b5732c80fa5426658f5935d593c8f7a34049"
+        }
+      ]
     },
     {
       "id": "adjacent-pg",
@@ -153,11 +165,17 @@
         "tests/integration/journey-fact-updates-postgres.test.ts"
       ],
       "inputFingerprint": "00f4a1ae9a284db4c93123c8b97cc062a35f5c1de680111be848d8d1f1ac0c2d",
-      "context": "Uncommitted candidate on exact release base; Node22/npm10; PG13.23 low-privilege isolated TEST schemas; browser uses original authenticated App. Not onsite acceptance.",
+      "context": "Uncommitted candidate on exact release base; Node22/npm10; PG13.23 low-privilege isolated TEST schemas; browser uses original authenticated App. Not onsite acceptance. Structured TAP is a lossless format conversion of every named success and the totals in the unchanged verbose log; it is not a rerun or native TAP output.",
       "startedAt": "2026-11-12T10:17:26Z",
       "endedAt": "2026-11-12T10:17:56.076Z",
       "logSha256": "b4a3252a8b7ad28526065bac68360e7d1c8517e0c16fce653da15c8528c94bda",
-      "logPath": "/tmp/root-delete-adjacent.log"
+      "log": "/tmp/root-delete-adjacent.log",
+      "resultReports": [
+        {
+          "format": "node-tap",
+          "sha256": "df3cd84a14ca6ca0a1f66aedb6a85a2c9742b69d09bc83f5fd1f36f1b4c7eea3"
+        }
+      ]
     },
     {
       "id": "old-delete-unit",
@@ -183,11 +201,17 @@
         "tests/unit/sourcing-list-root-delete-contract.test.ts"
       ],
       "inputFingerprint": "cdacf83a067f8e7f48a3f3d86c4ecb893736b761b9b84ef8ec9d95df028ce6fb",
-      "context": "Uncommitted candidate on exact release base; Node22/npm10; PG13.23 low-privilege isolated TEST schemas; browser uses original authenticated App. Not onsite acceptance.",
+      "context": "Uncommitted candidate on exact release base; Node22/npm10; PG13.23 low-privilege isolated TEST schemas; browser uses original authenticated App. Not onsite acceptance. Structured TAP is a lossless format conversion of every named success and the totals in the unchanged verbose log; it is not a rerun or native TAP output.",
       "startedAt": "2026-11-12T10:19:16Z",
       "endedAt": "2026-11-12T10:19:16.765Z",
       "logSha256": "07483ce5330d565624372730138f5a35e0cdae68daa668753e5131a542778690",
-      "logPath": "/tmp/root-delete-unit.log"
+      "log": "/tmp/root-delete-unit.log",
+      "resultReports": [
+        {
+          "format": "node-tap",
+          "sha256": "ab2b0aef98feb18b071e1cbe7de8f632ce598653623a0d3cea90ca726ce0c56b"
+        }
+      ]
     },
     {
       "id": "types",
@@ -209,7 +233,7 @@
       "startedAt": "2026-11-12T10:19:13.937Z",
       "endedAt": "2026-11-12T10:20:06.578Z",
       "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e",
-      "logPath": "/tmp/root-delete-types-final.log"
+      "log": "/tmp/root-delete-types-final.log"
     },
     {
       "id": "protocol",
@@ -232,7 +256,7 @@
       "startedAt": "2026-11-12T10:21:00.247Z",
       "endedAt": "2026-11-12T10:21:05.919Z",
       "logSha256": "5718e28a115e6a550d0eeea202b2b1f26d30784ace881bd18465f0ce7b9da319",
-      "logPath": "/tmp/root-delete-preflight-final.log"
+      "log": "/tmp/root-delete-preflight-final.log"
     },
     {
       "id": "lint",
@@ -259,7 +283,7 @@
       "startedAt": "2026-11-12T10:20:48Z",
       "endedAt": "2026-11-12T10:21:02.703Z",
       "logSha256": "48cf570a0892e8b0c0de796bcbc145f443f637196bce0b9fbbd28c3e106d66c9",
-      "logPath": "/tmp/root-delete-lint-final.log"
+      "log": "/tmp/root-delete-lint-final.log"
     }
   ]
 }
