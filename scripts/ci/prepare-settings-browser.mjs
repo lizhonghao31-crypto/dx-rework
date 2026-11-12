@@ -2,7 +2,7 @@ import {spawnSync} from 'node:child_process';
 import {pathToFileURL} from 'node:url';
 import {fullGatePostgresPlan} from '../test-suite-plan.mjs';
 const nativeBrowserSuites=new Set(['tests/integration/cockpit-thumbnails-native-browser-postgres.test.ts','tests/integration/workspace-page-native-browser-postgres.test.ts','tests/integration/module-bundles-native-browser-postgres.test.ts','tests/integration/journey-page-native-browser-postgres.test.ts','tests/integration/m01-delivery-calendar-native-browser-postgres.test.ts','tests/integration/m01-settings-native-browser-postgres.test.ts','tests/integration/m01-short-lead-native-browser-postgres.test.ts','tests/integration/m01-current-production-native-browser-postgres.test.ts','tests/integration/m01-production-period-native-browser-postgres.test.ts','tests/integration/m01-production-collaboration-native-browser-postgres.test.ts','tests/integration/acceptance-session-retention-postgres.test.ts','tests/integration/m01-cockpit-home-native-browser-postgres.test.ts']);
-export const isNativeBrowserSuite=path=>nativeBrowserSuites.has(path)||/^tests\/integration\/[a-z0-9-]+-native-browser-postgres\.test\.ts$/.test(path);
+export const isNativeBrowserSuite=path=>path==='tests/integration/order-time-requests-browser-postgres.test.ts'||nativeBrowserSuites.has(path)||/^tests\/integration\/[a-z0-9-]+-native-browser-postgres\.test\.ts$/.test(path);
 export const settingsBrowserRequired=environment=>fullGatePostgresPlan(environment).plan?.some(suite=>isNativeBrowserSuite(suite.path))??false;
 /** The locked browser and host packages are separate official Playwright steps.
  * Hosted runners already provide the Chromium libraries. Verify an actual
