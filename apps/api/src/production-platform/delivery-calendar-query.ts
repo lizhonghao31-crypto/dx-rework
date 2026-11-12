@@ -1,3 +1,4 @@
+import {wholeOrderActiveSql} from './whole-order-visibility.js';
 import {createHash} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {beijingCalendarDate} from '@dx-rework/contracts/digital-production';
@@ -37,7 +38,7 @@ export class DeliveryCalendarQuery{
  }
  private async allowed(db:PoolClient,actor:TrustedActorContext,ids:string[]){
   if(!ids.length)return true;
-  const rows=(await db.query<{production_order_id:string;direct:boolean}>(`SELECT o.production_order_id,coalesce(${basicReadSql},false) AS direct FROM digital_production_orders o WHERE o.production_order_id=ANY($6::uuid[])`,[...basicReadParameters(actor),ids])).rows;
+  const rows=(await db.query<{production_order_id:string;direct:boolean}>(`SELECT o.production_order_id,coalesce(${basicReadSql},false) AS direct FROM digital_production_orders o WHERE ${await wholeOrderActiveSql(db,"order","o.production_order_id")} AND o.production_order_id=ANY($6::uuid[])`,[...basicReadParameters(actor),ids])).rows;
   if(rows.length!==ids.length)return false;
   const policy=new DigitalProductionAccessPolicy(db);
   for(const row of rows)if(!await acceptanceIncludesNative(this.database,row.production_order_id,db)||!row.direct&&!await policy.allowed(actor,'order',row.production_order_id,'technical'))return false;
@@ -47,7 +48,7 @@ export class DeliveryCalendarQuery{
  private async candidates(db:PoolClient,actor:TrustedActorContext,range:{from:string;to:string}){
   // Direct grants are the original technical-read predicates after live role
   // validation; the original policy rechecks task/preparation/QC exceptions.
-  return (await db.query<{production_order_id:string;direct:boolean}>(`SELECT o.production_order_id,coalesce(${basicReadSql},false) AS direct FROM digital_production_orders o WHERE (${basicReadSql}
+  return (await db.query<{production_order_id:string;direct:boolean}>(`SELECT o.production_order_id,coalesce(${basicReadSql},false) AS direct FROM digital_production_orders o WHERE ${await wholeOrderActiveSql(db,"order","o.production_order_id")} AND (${basicReadSql}
    OR EXISTS(SELECT 1 FROM digital_production_task_access a WHERE a.production_order_id=o.production_order_id AND a.assignee_id=$2)
    OR EXISTS(SELECT 1 FROM digital_bulk_dispatch d WHERE d.production_order_id=o.production_order_id AND d.warehouse_worker_id=$2)
    OR EXISTS(SELECT 1 FROM digital_preparation_responsibilities r WHERE ((r.resource_kind='order' AND r.resource_id=o.production_order_id) OR (r.resource_kind='source' AND r.resource_id=o.source_id)) AND (r.warehouse_worker_id=$2 OR r.color_confirmation_worker_id=$2))

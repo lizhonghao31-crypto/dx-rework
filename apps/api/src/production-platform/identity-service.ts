@@ -1,3 +1,5 @@
+import {wholeOrderActiveSql} from './whole-order-visibility.js';
+import {WholeOrderDeletionService} from './whole-order-deletion-service.js';
 import {bridgePreparationMaterials} from './preparation-series-bridge.js';
 import {refreshPreparationWindows} from './production-readiness-repository.js';
 import {enrollPreparation,preparationContext} from './preparation-material-repository.js';
@@ -47,6 +49,7 @@ const readScope = (kind: "order" | "source", alias: string) => {
 };
 export class DigitalProductionIdentityService {
   constructor(private readonly database: Pool, private readonly creationEnabled: boolean, private readonly sourcing?:SourcingService, private readonly now:()=>Date=()=>new Date(), private readonly businessClock?: BusinessClock,private readonly transactionClient?:PoolClient) {}
+  deletions(){return new WholeOrderDeletionService(this.database);}
   inTransaction(client:PoolClient){return new DigitalProductionIdentityService(this.database,this.creationEnabled,this.sourcing,this.now,this.businessClock,client);}
   private async visibleOrder(client: Pick<Pool, "query"> | PoolClient, actor: TrustedActorContext, id: string, lock = false) {
     await new DigitalProductionAccessPolicy(client).assert(actor, "order", id, "technical");
@@ -112,7 +115,7 @@ export class DigitalProductionIdentityService {
     const result = await this.database.query(`SELECT s.source_id AS "sourceId",s.development_type AS "developmentType",s.design_style_no AS "designStyleNo",
       s.temporary_style_no AS "temporaryStyleNo",s.customer_code AS "customerCode",s.created_by AS "createdBy",s.created_at AS "createdAt",o.production_order_id AS "productionOrderId"
       FROM digital_production_sources s LEFT JOIN digital_production_orders o ON o.source_id=s.source_id
-      WHERE ${readScope("source", "s")} AND ($3='' OR strpos(lower(s.design_style_no),lower($3))>0)
+      WHERE ${await wholeOrderActiveSql(this.database,"source","s.source_id")} AND ${readScope("source", "s")} AND ($3='' OR strpos(lower(s.design_style_no),lower($3))>0)
       AND ($6::boolean OR NOT $6::boolean) ORDER BY s.created_at DESC,s.source_id DESC LIMIT 15 OFFSET $4`, [isDigitalManagementReader(actor) || isDigitalTechnicalManager(actor), actor.actorId, search, (page - 1) * 15, actor.actorRoles.includes("sample_designer"), actor.actorRoles.includes("order_merchandiser")]);
     return { items: result.rows, page };
   }
@@ -287,7 +290,7 @@ export class DigitalProductionIdentityService {
   async orders(actor: TrustedActorContext, page: number, search: string): Promise<{ items: DigitalOrder[]; page: number }> {
     assertIdentityActor(actor);
     const rows = await this.database.query(`SELECT production_order_id FROM digital_production_orders o
-      WHERE ${readScope("order", "o")} AND ($3='' OR strpos(lower(design_style_no),lower($3))>0 OR strpos(lower(coalesce(temporary_style_no,'')),lower($3))>0
+      WHERE ${await wholeOrderActiveSql(this.database,"order","o.production_order_id")} AND ${readScope("order", "o")} AND ($3='' OR strpos(lower(design_style_no),lower($3))>0 OR strpos(lower(coalesce(temporary_style_no,'')),lower($3))>0
         OR EXISTS(SELECT 1 FROM digital_production_po_lines l WHERE l.production_order_id=o.production_order_id AND
           (strpos(lower(coalesce(l.formal_style_no,'')),lower($3))>0 OR strpos(lower(coalesce(l.po_number,'')),lower($3))>0)))
       ORDER BY created_at DESC,production_order_id DESC LIMIT 15 OFFSET $4`, [isDigitalManagementReader(actor) || isDigitalTechnicalManager(actor), actor.actorId, search, (page - 1) * 15, actor.actorRoles.includes("sample_designer"), actor.actorRoles.includes("order_merchandiser"), actor.actorRoles.includes("development_clerk") && await new DigitalProductionAccessPolicy(this.database).activeRole(actor.actorId,"development_clerk")]);

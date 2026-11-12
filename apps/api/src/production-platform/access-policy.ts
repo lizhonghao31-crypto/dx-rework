@@ -1,3 +1,4 @@
+import {wholeOrderActiveSql} from './whole-order-visibility.js';
 import {acceptanceBusinessContext} from '../acceptance-clock/business-time.js';
 import type { Pool, PoolClient } from "pg";
 import type { DigitalResourceKind, DigitalAccessPurpose } from "@dx-rework/contracts/digital-production-access";
@@ -36,7 +37,7 @@ export class DigitalProductionAccessPolicy {
   }
   async allowed(actor: TrustedActorContext, kind: DigitalResourceKind, id: string, purpose: DigitalAccessPurpose): Promise<boolean> {
     if (kind === "task") {
-      const task = (await this.database.query("SELECT * FROM digital_production_task_access WHERE task_id=$1", [id])).rows[0];
+      const task = (await this.database.query(`SELECT * FROM digital_production_task_access WHERE task_id=$1 AND ${await wholeOrderActiveSql(this.database,'task','task_id')}`, [id])).rows[0];
       if (!task) return false;
       if (isRootActor(actor)) return true;
       if (purpose === "budget") return false;
@@ -51,7 +52,7 @@ export class DigitalProductionAccessPolicy {
     if (purpose === "execute") return false;
     const table = kind === "order" ? "digital_production_orders" : "digital_production_sources";
     const column = kind === "order" ? "production_order_id" : "source_id";
-    const row = (await this.database.query(`SELECT * FROM ${table} WHERE ${column}=$1`, [id])).rows[0];
+    const row = (await this.database.query(`SELECT * FROM ${table} WHERE ${column}=$1 AND ${await wholeOrderActiveSql(this.database,kind,column)}`, [id])).rows[0];
     if (!row) return false;
     if (isDigitalManagementReader(actor)) return true;
     if (purpose === "technical" && isDigitalTechnicalManager(actor)) return true;

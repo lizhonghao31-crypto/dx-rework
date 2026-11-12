@@ -1,3 +1,4 @@
+import {assertWholeOrderActive} from './whole-order-visibility.js';
 import type { PoolClient } from "pg";
 import { ApplicationError } from "../platform/errors.js";
 import {acceptanceBusinessContext} from '../acceptance-clock/business-time.js';
@@ -25,6 +26,7 @@ export async function linkNewDigitalChild(client: PoolClient, input: {
     }
   }
   await client.query("SELECT production_order_id FROM digital_production_orders WHERE production_order_id=$1 FOR UPDATE", [input.productionOrderId]);
+  await assertWholeOrderActive(client,'order',input.productionOrderId);
   await client.query(`INSERT INTO digital_production_child_links(module,child_id,production_order_id) VALUES($1,$2,$3)
     ON CONFLICT(module,child_id) DO NOTHING`, [input.module, input.childId, input.productionOrderId]);
   const resolved = await resolveDigitalChild(client, input.module, input.childId, "digital_production_v1");

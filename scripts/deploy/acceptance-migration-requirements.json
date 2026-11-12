@@ -2069,5 +2069,29 @@
       "guard_production_order_root_immutable"
     ],
     "sequences": []
+  },
+  "0287_whole_order_deletion": {
+    "checksum": "5581dcf209cb437df6aab5d3088cf18a3fc2f0572f7aa58708fc5348ed27ad4e",
+    "tables": [],
+    "functions": [
+      "guard_receiving_batch_root_update"
+    ],
+    "references": [
+      "digital_production_sources",
+      "digital_production_orders",
+      "app_users",
+      "operation_events"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [
+      "digital_whole_order_deletions",
+      "digital_whole_order_deleted_objects",
+      "digital_whole_order_delete_requests"
+    ],
+    "execute": [
+      "guard_production_order_root_immutable"
+    ],
+    "sequences": []
   }
 }

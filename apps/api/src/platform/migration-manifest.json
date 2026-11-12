@@ -1203,6 +1203,10 @@
     {
       "version": "0286_order_time_requests",
       "checksum": "9baea9ab2d0d44669bfeb3cb0a4dc2111594bcaa16b8bd5c8ee8272de8090d36"
+    },
+    {
+      "version": "0287_whole_order_deletion",
+      "checksum": "5581dcf209cb437df6aab5d3088cf18a3fc2f0572f7aa58708fc5348ed27ad4e"
     }
   ]
 }

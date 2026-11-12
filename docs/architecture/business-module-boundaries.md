@@ -125,3 +125,9 @@ R5-06 时间读取：`order-time-reading.ts`在原授权RR内连接明确本单�
 首次新格式公司发布与新采用同次启用；已保存本单方案不依赖新采用开关。原正式生产继承来源已采用标准，普通调整不改旧B，批准客户改期沿原PO入口重倒推。`order-time-native-timing.ts`及原产前／工艺批次适配器在真实窗口打开时选本单版本，保留已开始的R、D、日历和提醒；`order-time-created.ts`只读真实创建事件，不以数据库登记时间、采用或刷新替代。旧窗口／未知历史保持原依据。
 
 `order-time-todos.ts`只投影当前有权事项与轻量计数，不为角标演算整单。原页面的`order-time-application.tsx`接续当前保存资料；`order-time-request-page.tsx`负责本单输入、演算、单一提交、晚交确认及原正文/key恢复。正式写入、申请状态、方案及结果通知同事务提交；未知回执不能新key重复生产，正常页面没有额外审批中心或说明墙。
+
+### Root 整单删除
+
+`whole-order-deletion-service.ts`拥有当前 Root 复核、预览版本、请求幂等及每单事务；`whole-order-deletion-scope.ts`仅沿稳定归属 ID 收集母单、来源、PO 和原生子单，不按款号或供应商猜归属。`whole-order-native-deletion.ts`在同一 client 接回原外发、板房、生产排除、返工及收货逻辑删除审计，历史和共享目录不物理删除。`whole-order-visibility.ts`为原授权/候选查询提供精确删除过滤，不缓存授权或改全局统计为当前页统计。后台原有增量队列仅退休被删除对象的派生结果。
+
+`cockpit-order-deletion.tsx`负责原座舱的预览、确认、逐单反馈与原请求重试；不替代服务端权限或自行处理业务数量。历史共享收货批次无法按明确归属拆分时，本单事务拒绝并清楚返回原因，其他独立批量项继续，不能把半删报告成功。
