@@ -6,7 +6,7 @@ import {type JourneyNode,type JourneyResult,type OrderJourney} from '@dx-rework/
 import {StatusBadge} from '@dx-rework/ui';
 import {BusinessTable,Pagination} from '@dx-rework/ui/production';
 import {CockpitPhoto} from './cockpit-photo-preview.js';
-import {representativeCockpitNodes,type CockpitContext} from './digital-journey-cockpit-model.js';
+import {cockpitQuery,representativeCockpitNodes,type CockpitContext} from './digital-journey-cockpit-model.js';
 import {poDeliveryKindLabels,sortedCockpitPoLines} from './po-delivery-dates.js';
 import {cockpitVisibleBlockers} from './cockpit-node-rows.js';
 import {CockpitHomeProgress,cockpitReceiptGap} from './cockpit-home-progress.js';
@@ -24,8 +24,9 @@ function HomePos({order,onOpen}:{order:OrderJourney;onOpen:()=>void}){
  return <div className="cockpit-home-pos">{lines.slice(0,2).map(line=><div key={line.id}><strong title={`${line.po||'PO待补'} / ${line.color} / ${line.orderedQuantity.toLocaleString()}件`} tabIndex={0}>{line.po||'PO待补'} / {line.color} / {line.orderedQuantity.toLocaleString()}件</strong><small>出货 <time>{order.poDeliveryDates?.find(date=>date.lineId===line.id)?.customerWarehouseArrivalDate??'—'}</time></small></div>)}{lines.length>2&&<button type="button" className="journey-text-action" onClick={onOpen}>另 {lines.length-2} 个PO，查看订单</button>}{!lines.length&&<span>—</span>}</div>;
 }
 export function CockpitHome({data,error,context,onChange}:{data:JourneyResult|null;error:string;context:CockpitContext;onChange:(patch:Partial<CockpitContext>,preserve?:boolean)=>void}){
- const [riskOrder,setRiskOrder]=useState<{order:OrderJourney;source:JourneyResult}|null>(null);
- useEffect(()=>setRiskOrder(null),[data]);
+ const query=cockpitQuery(context),[riskSelection,setRiskSelection]=useState<{id:string;query:string}|null>(null);
+ const riskOrder=riskSelection?.query===query?data?.items.find(order=>order.id===riskSelection.id):undefined;
+ useEffect(()=>{if(!riskOrder)setRiskSelection(null);},[riskOrder]);
  const enter=(order:OrderJourney,node?:JourneyNode)=>onChange({selected:order.id,...(node?{round:undefined,expanded:node.stage,focus:node.instanceId,row:undefined}:context.stage?{round:undefined,expanded:context.stage,focus:undefined,row:undefined}:{})},true);
  return <section className="dx-production-panel journey-orders cockpit-home" aria-label="订单列表" aria-busy={!data&&!error}>
   <div className="journey-section-title"><h2>订单总览</h2></div>
@@ -43,8 +44,8 @@ export function CockpitHome({data,error,context,onChange}:{data:JourneyResult|nu
      <td><HomePos order={order} onOpen={()=>enter(order)}/></td>
      <td>{node?<button type="button" className="cockpit-home-task" onClick={()=>enter(order,node)}><Task node={node} showBlocker={!gap?.gap}/></button>:<span>{closed?'已完成':display?'暂无在办节点':'—'}</span>}
       {delivery&&<div className="cockpit-home-delivery"><span title={`${delivery.poNumber||'PO待补'} / ${delivery.color}`}>{delivery.poNumber||'PO待补'} / {delivery.color}</span><span>{poDeliveryKindLabels[delivery.kind]} <time>{delivery.date}</time></span><StatusBadge tone={delivery.risk==='overdue'?'danger':'warning'}>{delivery.risk==='overdue'?'约定日期已过':'今天到期'}</StatusBadge></div>}
-      {risks.total>0&&data&&<button type="button" className="journey-text-action cockpit-home-risk-trigger" aria-label={`查看${order.designStyleNo}的全部${risks.total}项风险`} onClick={()=>setRiskOrder({order,source:data})}>{other>0?`${node||delivery?'另':'查看'} ${other} 项风险`:'查看风险'}</button>}
-      {gap&&gap.gap>0&&data&&<button type="button" className="cockpit-home-receipt-gap" onClick={()=>setRiskOrder({order,source:data})}>{gap.full?'':'可见范围'}欠收 {gap.gap.toLocaleString()}件</button>}
+      {risks.total>0&&data&&<button type="button" className="journey-text-action cockpit-home-risk-trigger" aria-label={`查看${order.designStyleNo}的全部${risks.total}项风险`} onClick={()=>setRiskSelection({id:order.id,query})}>{other>0?`${node||delivery?'另':'查看'} ${other} 项风险`:'查看风险'}</button>}
+      {gap&&gap.gap>0&&data&&<button type="button" className="cockpit-home-receipt-gap" onClick={()=>setRiskSelection({id:order.id,query})}>{gap.full?'':'可见范围'}欠收 {gap.gap.toLocaleString()}件</button>}
      </td>
      <td><CockpitHomeProgress order={order}/></td><td>{display?<span className={`cockpit-order-state is-${display.mainState}`}>{stateLabels[display.mainState]}</span>:<span>—</span>}{scheduleReason&&<small className={"cockpit-schedule-reason is-"+scheduleReason.tone} title={scheduleReason.text}>{scheduleReason.text}</small>}</td>
     </tr>;
@@ -52,6 +53,6 @@ export function CockpitHome({data,error,context,onChange}:{data:JourneyResult|nu
   </BusinessTable></div>
   {!data&&!error&&<p role="status">正在读取订单…</p>}{data?.items.length===0&&!data.freshness&&<p role="status">当前授权和筛选范围没有订单。</p>}
   {(!data?.freshness||data.freshness.detailsOnly)&&<Pagination page={context.page} pageSize={15} total={data?.total??null} onPage={page=>onChange({page})}/>}
-  {riskOrder&&riskOrder.source===data&&<CockpitHomeRisks order={riskOrder.order} context={context} onClose={()=>setRiskOrder(null)} onNode={node=>{setRiskOrder(null);enter(riskOrder.order,node);}} onOrder={()=>{setRiskOrder(null);enter(riskOrder.order);}}/>}
+  {riskOrder&&<CockpitHomeRisks order={riskOrder} context={context} onClose={()=>setRiskSelection(null)} onNode={node=>{setRiskSelection(null);enter(riskOrder,node);}} onOrder={()=>{setRiskSelection(null);enter(riskOrder);}}/>}
  </section>;
 }

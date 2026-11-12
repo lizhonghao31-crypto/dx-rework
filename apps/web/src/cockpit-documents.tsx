@@ -1,7 +1,7 @@
 import {NavigationIcon} from './navigation-icons.js';
 import {Button} from '@dx-rework/ui';
 import {cachedVerifiedSession,verifySession,refreshSession,verifiedSessionIdentity,registerSessionInvalidator} from './auth-session.js';
-import {useEffect,useMemo,useRef,useState,useSyncExternalStore} from 'react';
+import {useEffect,useRef,useState,useSyncExternalStore} from 'react';
 import {JOURNEY_STAGES,JOURNEY_NODES,type OrderJourney} from '@dx-rework/contracts/digital-production-journey';
 import {createWebUrls} from '../url-contract.js';
 import {requestFailureMessage} from './request-failure-message.js';
@@ -33,7 +33,6 @@ function Entry({entry,context,path,openPaths,onToggle,readEntry,onNavigate}:{onN
 
 const stageNames={creation:'订单',development:'开发',preparation:'产前',cutting:'开裁',post_cutting:'工艺',production:'生产',receiving:'回货'} as const;
 const documentIdentityListeners=new Set<()=>void>();registerSessionInvalidator(()=>{for(const listener of documentIdentityListeners)listener();});
-let fallbackSnapshotSequence=0;
 const idleStates=emptyCockpitDirectoryStates(),noSubscription=()=>()=>undefined;
 const stateLabel=(state:CockpitDirectoryState,waiting:string)=>state.phase==='error'?(state.denied?'无权查看':'读取失败'):waiting?'读取中':state.phase==='idle'||state.phase==='loading'?'读取中':state.data?({created:'已填',missing:'未填',not_applicable:'不适用',unknown:'待核实'} as const)[state.data.state]:'尚未读取';
 type CategoryDefinition=typeof COCKPIT_DOCUMENT_CATEGORIES[number];
@@ -48,14 +47,14 @@ function Category({category,state,session,context,onChange,onNavigate,onRetryIde
  </details>;
 }
 function DocumentsForSnapshot({order,context,onChange,identity,onRefreshIdentity,identityError,waitingReason}:{order:OrderJourney;context:CockpitContext;onChange(patch:Partial<CockpitContext>):void;identity:{actorId:string;signature:string}|null;onRefreshIdentity():void;identityError:string;waitingReason:string}){
- const [ownedSession,setOwnedSession]=useState<{identity:typeof identity;snapshot:CockpitDocumentSnapshot}|null>(null),dialog=useRef<HTMLDialogElement>(null),body=useRef<HTMLDivElement>(null),directory=useRef<HTMLDivElement>(null),lastTrigger=useRef<HTMLElement|null>(null),closing=useRef(false),restoring=useRef(false),scrollTimer=useRef<ReturnType<typeof setTimeout>|undefined>(undefined);
+ const [ownedSession,setOwnedSession]=useState<{identity:typeof identity;order:OrderJourney;snapshot:CockpitDocumentSnapshot}|null>(null),dialog=useRef<HTMLDialogElement>(null),body=useRef<HTMLDivElement>(null),directory=useRef<HTMLDivElement>(null),lastTrigger=useRef<HTMLElement|null>(null),closing=useRef(false),restoring=useRef(false),scrollTimer=useRef<ReturnType<typeof setTimeout>|undefined>(undefined);
  // Every explicit reopen verifies the original sources again, including scope
  // revocation with unchanged account roles. Never render the previous verified
  // session between the new auth response and the source-read effect.
- const session=ownedSession?.identity===identity?ownedSession.snapshot:null;
+ const session=ownedSession?.identity===identity&&ownedSession.order===order?ownedSession.snapshot:null;
  const changeRef=useRef(onChange),contextRef=useRef(context);changeRef.current=onChange;contextRef.current=context;
  const open=context.documentView==='all',selectedStage=context.documentStage??(order.sourceId?'development':'creation');
- useEffect(()=>{if(!identity)return;const current=createCockpitDocumentSnapshot(order,read,()=>{const verified=cachedVerifiedSession();return Boolean(verified&&verified!=='denied'&&verified.user.id===identity.actorId&&verifiedSessionIdentity(verified)===identity.signature);});setOwnedSession({identity,snapshot:current});return()=>current.dispose();},[identity]);
+ useEffect(()=>{if(!identity)return;const current=createCockpitDocumentSnapshot(order,read,()=>{const verified=cachedVerifiedSession();return Boolean(verified&&verified!=='denied'&&verified.user.id===identity.actorId&&verifiedSessionIdentity(verified)===identity.signature);});setOwnedSession({identity,order,snapshot:current});return()=>current.dispose();},[identity,order]);
  const states=useSyncExternalStore(session?.subscribe??noSubscription,session?.getSnapshot??(()=>idleStates),()=>idleStates);
  useEffect(()=>{if(session&&!waitingReason)for(const category of COCKPIT_VISIBLE_DOCUMENT_CATEGORIES.filter(category=>category.stage===selectedStage))void session.load(category.key);},[selectedStage,session,waitingReason]);
  useEffect(()=>{
@@ -89,9 +88,9 @@ export function CockpitDocuments({order,context,onChange}:{order:OrderJourney;co
  const [identity,setIdentity]=useState<{actorId:string;signature:string}|null>(null),[revalidating,setRevalidating]=useState(false),refreshGeneration=useRef(0),[authRevision,setAuthRevision]=useState(0),[identityError,setIdentityError]=useState('');
  useEffect(()=>{let live=true;const reset=()=>{setIdentity(null);setAuthRevision(value=>value+1);};documentIdentityListeners.add(reset);setIdentityError('');void verifySession().then(verified=>{if(!live||cachedVerifiedSession()!==verified)return;if(verified==='denied'||verified.status!=='authorized'){setIdentityError('登录状态尚未确认，请重新登录后读取本单资料。');return;}setIdentity({actorId:verified.user.id,signature:verifiedSessionIdentity(verified)});});return()=>{live=false;documentIdentityListeners.delete(reset);};},[authRevision]);
  const refreshIdentity=()=>{const generation=++refreshGeneration.current;setRevalidating(true);setIdentityError('');void refreshSession().then(verified=>{if(generation!==refreshGeneration.current||cachedVerifiedSession()!==verified)return;setRevalidating(false);if(verified==='denied'||verified.status!=='authorized'){setIdentity(null);setIdentityError('当前身份尚未通过读取核验；未展示任何原记录或数量。');return;}setIdentity({actorId:verified.user.id,signature:verifiedSessionIdentity(verified)});});};
- const fallback=useMemo(()=>++fallbackSnapshotSequence,[order]),current=identity&&identity.signature===verifiedSessionIdentity(cachedVerifiedSession())?identity:null;
+ const current=identity&&identity.signature===verifiedSessionIdentity(cachedVerifiedSession())?identity:null;
  const waitingReason=context.selected&&context.selected!==order.id?'正在读取所选订单，目录尚未读取。':context.round&&context.round!==order.selectedRound?'正在读取所选开发轮次，目录尚未读取。':!current||revalidating?'正在核验读取身份…':'';
- const key=JSON.stringify([context.selected,context.round,current?.actorId??'unverified',authRevision,order.id,order.sourceId,order.orderId,order.selectedRound,order.sourceVersion,order.instructionVersion,order.asOf??fallback,[...order.links,...order.stages.flatMap(stage=>stage.nodes.flatMap(node=>node.records))].map(record=>[record.domain,record.id,record.version,record.lineId])]);
+ const key=JSON.stringify([context.selected,context.round,current?.actorId??'unverified',authRevision,order.id,order.sourceId,order.orderId,order.selectedRound,order.sourceVersion,order.instructionVersion,[...order.links,...order.stages.flatMap(stage=>stage.nodes.flatMap(node=>node.records))].map(record=>[record.domain,record.id,record.version,record.lineId])]);
  return <DocumentsForSnapshot key={key} order={order} context={context} onChange={onChange} identity={context.selected&&context.selected!==order.id||context.round&&context.round!==order.selectedRound?null:current} identityError={identityError} waitingReason={waitingReason} onRefreshIdentity={refreshIdentity}/>;
 }
 export type {CockpitDocumentCategory};

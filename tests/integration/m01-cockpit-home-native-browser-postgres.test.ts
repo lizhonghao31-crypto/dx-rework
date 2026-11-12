@@ -16,6 +16,48 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  let h:Awaited<ReturnType<typeof cockpitHomeBrowser>>;
  beforeAll(async()=>{h=await cockpitHomeBrowser({databaseUrl:url!,evidence:join(process.env.M01_SETTINGS_NATIVE_EVIDENCE??process.env.RUNNER_TEMP??tmpdir(),'m01-cockpit-home-'+randomUUID()),...(process.env.M01_SETTINGS_BROWSER_EXECUTABLE?{executablePath:process.env.M01_SETTINGS_BROWSER_EXECUTABLE}:{})});},120000);
  afterAll(async()=>{await h?.dispose();});
+ it('keeps live-clock reading passive and preserves original dialogs across explicit same-order refreshes',async()=>{
+  const {context,page}=await h.open();let journeyReads=0,documentReads=0;
+  const isJourney=(url:string)=>/\/digital-production\/journeys(?:\?|\/[0-9a-f-]+\?)/.test(url);
+  // Native signed identity and PG response remain intact. Only the observation
+  // mode is adapted to exercise live UI cadence with the isolated fixed clock.
+  await page.route('**/api/digital-production/journeys**',async route=>{
+   if(!isJourney(route.request().url()))return route.continue();
+   const response=await route.fetch(),value=await response.json();journeyReads++;
+   await route.fulfill({response,json:{...value,observationMode:'live'}});
+  });
+  page.on('request',request=>{if(/\/api\/digital-production\/(?:sources|orders)\//.test(request.url()))documentReads++;});
+  const refresh=async()=>{
+   const received=page.waitForResponse(response=>isJourney(response.url()));
+   // Exercise the existing refresh callback while a modal owns the top layer,
+   // as a committed action can do; this does not submit a business command.
+   await page.getByRole('button',{name:'刷新数据',exact:true}).evaluate((button:HTMLButtonElement)=>button.click());
+   await received;await page.locator('[data-view][aria-busy=false]').waitFor();
+  };
+  try{
+   await page.clock.install();await refresh();
+   await page.locator('.cockpit-home-risk-trigger').first().click();
+   const risk=page.getByRole('dialog',{name:'风险明细',exact:true});await risk.waitFor();
+   let before=journeyReads;await page.clock.fastForward(61000);expect(journeyReads).toBe(before);expect(await risk.isVisible()).toBe(true);
+   await refresh();expect(await risk.isVisible()).toBe(true);await risk.getByRole('button',{name:'关闭风险明细',exact:true}).click();
+   await page.getByRole('button',{name:/时效待补充/}).first().click();const coverage=page.getByRole('dialog',{name:'时效待补充',exact:true});await coverage.waitFor();await refresh();expect(await coverage.isVisible()).toBe(true);await page.keyboard.press('Escape');
+   await page.locator('.journey-order-select').first().click();await page.locator('[data-view=order][aria-busy=false]').waitFor();
+   await page.getByRole('button',{name:'调整主跟单',exact:true}).click();const personnel=page.getByRole('dialog',{name:'调整主跟单',exact:true});await personnel.waitFor();
+   const field=personnel.getByRole('combobox',{name:'主跟单 *',exact:true}),original=await field.inputValue();
+   before=journeyReads;await page.clock.fastForward(61000);expect(journeyReads).toBe(before);expect(await personnel.isVisible()).toBe(true);
+   await refresh();expect(await personnel.isVisible()).toBe(true);expect(await field.inputValue()).toBe(original);expect(await personnel.locator('fieldset').isEnabled()).toBe(true);await personnel.getByRole('button',{name:'关闭',exact:true}).click();
+   const identityRead=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/auth/me');
+   await page.locator('.cockpit-document-open-all').click();await identityRead;const documents=page.getByRole('dialog',{name:'全部相关单据',exact:true});await documents.waitFor();
+   await page.waitForFunction(()=>{const rows=[...document.querySelectorAll('.cockpit-document-priority-row')];return rows.length>0&&rows.every(row=>['ready','error'].includes(row.getAttribute('data-read-state')??'')&&!row.textContent?.includes('读取中'));});
+   const search=documents.getByRole('textbox',{name:'查找已读取资料'});await search.fill('TEST keep input');
+   before=journeyReads;const documentsBefore=documentReads;await page.clock.fastForward(61000);expect(journeyReads).toBe(before);expect(documentReads).toBe(documentsBefore);expect(await documents.isVisible()).toBe(true);
+   await refresh();expect(await documents.isVisible()).toBe(true);expect(await search.inputValue()).toBe('TEST keep input');
+   await expect.poll(()=>documentReads).toBeGreaterThan(documentsBefore);await page.keyboard.press('Escape');
+   // Revocation / switching must still discard former private results, covered
+   // by the native same-session suite and m01-cockpit-reads cases below.
+   expect(h.errors).toEqual([]);
+  }finally{await context.close();}
+ });
  it('renders the original full Shell, seven peer KPIs, and aligned date/progress rows without changing source facts',async()=>{
   const {context,page}=await h.open(undefined,{},1584);
   try{const actual=await h.read(page);expect(actual.total).toBe(31);for(const width of [1165,1366,1440,1920]){

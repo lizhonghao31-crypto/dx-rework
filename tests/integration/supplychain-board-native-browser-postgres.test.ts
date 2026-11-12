@@ -84,13 +84,15 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await page.screenshot({path:join(h.evidence,'r5-per-order-time-detail.png'),fullPage:true});expect(h.errors).toEqual([]);
   }finally{await context.close();}
  });
- it('refreshes the real current page on a live clock while guarded and null-scenario supplied clocks remain fixed',async()=>{
+ it('does not turn a real live clock into page polling and still allows an explicit fresh read',async()=>{
   const style='TEST-R506-LIVE-'+randomUUID(),order=await new DigitalProductionIdentityService(h.db,true).createOrder(h.f.root,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:style,orderDate:beijingCalendarDate(new Date()),primaryMerchandiserId:h.f.people.merchandiser!.actorId,lines:[{formalPoNo:style,color:'黑',customerWarehouseArrivalDate:'2027-03-01',sizes:[{size:'M',quantity:1}]}]}),randomUUID());
   await new JourneyFactRepository(h.db).buildOne({kind:'order',id:order.productionOrderId});
   const {page,context}=await h.open();try{await page.clock.install();await page.goto(h.base+'/ui/digital-cockpit');await page.locator('[data-view="overview"][aria-busy="false"]').waitFor();
    const live=await page.evaluate(async()=> (await fetch('/api/digital-production/journeys?scope=production')).json());expect(live.observationMode).toBe('live');
+   let reads=0;page.on('request',request=>{if(new URL(request.url()).pathname.endsWith('/api/digital-production/journeys')&&request.method()==='GET')reads++;});
+   await page.clock.fastForward(61000);expect(reads).toBe(0);
    const response=page.waitForResponse(response=>new URL(response.url()).pathname.endsWith('/api/digital-production/journeys')&&response.request().method()==='GET');
-   await page.clock.fastForward(31000);expect((await response).status()).toBe(200);expect(h.errors).toEqual([]);
+   await page.getByRole('button',{name:'刷新数据',exact:true}).click();expect((await response).status()).toBe(200);expect(reads).toBe(1);expect(h.errors).toEqual([]);
   }finally{await context.close();}
  });
 });
