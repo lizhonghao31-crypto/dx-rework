@@ -1,3 +1,4 @@
+import {wholeOrderActiveSql} from '../production-platform/whole-order-visibility.js';
 import type {Pool,PoolClient} from 'pg';
 import type {MiscAssociation,MiscAssociationSnapshot} from '@dx-rework/contracts/pattern-orders';
 import type {TrustedActorContext} from '../tools/repositories.js';
@@ -14,11 +15,11 @@ export async function listMiscAssociations(db:DB,actor:TrustedActorContext,searc
  // before LIMIT, then use the same resource policy again when committing a choice.
  const rows=(await db.query(`WITH candidates AS (
   SELECT 'source' AS kind,s.source_id AS id,s.design_style_no AS style_no,s.customer_code AS customer,NULL::text AS po_number,NULL::text AS color,s.created_at,concat_ws(' ',s.design_style_no,s.temporary_style_no,s.customer_code) AS search_terms
-  FROM digital_production_sources s WHERE ($2 OR $3 AND s.created_by=$1 OR $4 AND EXISTS(SELECT 1 FROM digital_production_orders o WHERE o.source_id=s.source_id AND o.primary_merchandiser_id=$1))
+  FROM digital_production_sources s WHERE ${await wholeOrderActiveSql(db,'source','s.source_id')} AND ($2 OR $3 AND s.created_by=$1 OR $4 AND EXISTS(SELECT 1 FROM digital_production_orders o WHERE o.source_id=s.source_id AND o.primary_merchandiser_id=$1))
   UNION ALL
   SELECT 'po',po.line_id,coalesce(po.formal_style_no,po.temporary_style_no,o.design_style_no),o.customer_code,po.po_number,po.color,o.created_at,concat_ws(' ',o.design_style_no,o.temporary_style_no,o.customer_code,po.formal_style_no,po.temporary_style_no,po.po_number,po.color)
   FROM digital_production_po_lines po JOIN digital_production_orders o USING(production_order_id)
-  WHERE ($2 OR $3 AND o.created_by=$1 OR $4 AND o.primary_merchandiser_id=$1)
+  WHERE ${await wholeOrderActiveSql(db,'order','o.production_order_id')} AND ($2 OR $3 AND o.created_by=$1 OR $4 AND o.primary_merchandiser_id=$1)
  ) SELECT * FROM candidates WHERE $5='' OR strpos(lower(search_terms),lower($5))>0
  ORDER BY created_at DESC,kind,id LIMIT 30`,[actor.actorId,broad,designer,merch,search])).rows;
  return rows.map(row=>({kind:row.kind,id:row.id,styleNo:row.style_no,label:row.kind==='source'?sourceLabel(row):poLabel(row)}));

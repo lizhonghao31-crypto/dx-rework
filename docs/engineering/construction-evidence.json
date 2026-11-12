@@ -2,7 +2,7 @@
   "version": 1,
   "base": "89f4721018cb3f1a36ee95b04d2c2bb6e7de2355",
   "risk": "full",
-  "sourceFingerprint": "fdb3fc8e03077d5638515893734b951064215680f1d58078e33ec183ed32a11b",
+  "sourceFingerprint": "57f71e9437e3161931c44260155db426c02e7c0c98d5767a4f6afe2ca294af93",
   "rules": [
     {
       "rule": "Root whole-order logical deletion is atomic per exact owned order; preserve history, other orders, current permissions and full-range counts.",
@@ -37,7 +37,8 @@
         "apps/web/src/cockpit-order-deletion.tsx",
         "packages/contracts/src/whole-order-deletion.ts",
         "tests/integration/whole-order-deletion-browser-postgres.test.ts",
-        "tests/integration/whole-order-deletion-postgres.test.ts"
+        "tests/integration/whole-order-deletion-postgres.test.ts",
+        "apps/api/src/pattern-room/misc-associations.ts"
       ],
       "reads": [
         "apps/api/src/production-platform/access-policy.ts",
@@ -60,12 +61,10 @@
       ],
       "initialization": "0287 additive immutable deletion scope/request ledger; current native receiving guard retained with a same-order audited exception. Real isolated full migrations, original role seeder, no triggers disabled. Historical shared batches are refused atomically instead of deleting unrelated facts.",
       "dateAndPermission": "Current Root is rechecked in each transaction. Audit cancellation time does not synthesize actual completion or reset frozen windows. Same actor after revocation is rejected; existing authorized full-range reads filter deleted IDs before counts/pages; no cached authorization.",
-      "expectation": "Single/batch confirmation in original App; partial failure and re-preview, exact retries, rollback, current Root, original downstream cancellation/exclusion, durable historical records and no unrelated supplier/order mutation. Shared ambiguous receipt scope remains a disclosed failed item, not false success.",
+      "expectation": "Single/batch confirmation in original App; partial failure and re-preview, exact retries, rollback, current Root, original downstream cancellation/exclusion, durable historical records and no unrelated supplier/order mutation. Shared ambiguous receipt scope remains a disclosed failed item, not false success. Review closure: inherited legacy packing aliases invalidate other affected active orders in the same deletion transaction; source and PO association options filter tombstones before LIMIT 30.",
       "checks": [
         "delete-pg",
         "delete-browser",
-        "adjacent-pg",
-        "old-delete-unit",
         "types",
         "protocol",
         "lint"
@@ -79,11 +78,11 @@
       "command": "DX_REWORK_TEST_SUITE_KIND=postgres npx vitest run tests/integration/whole-order-deletion-postgres.test.ts --reporter=verbose --reporter=json --outputFile.json=/tmp/root-delete-pg-result.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 7,
+      "passed": 8,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "89f4721018cb3f1a36ee95b04d2c2bb6e7de2355",
-      "sourceFingerprint": "fdb3fc8e03077d5638515893734b951064215680f1d58078e33ec183ed32a11b",
+      "testedHead": "bb197e641407322e94e1ee360ba5a470f6c23d52",
+      "sourceFingerprint": "57f71e9437e3161931c44260155db426c02e7c0c98d5767a4f6afe2ca294af93",
       "inputPaths": [
         "apps/api",
         "apps/web",
@@ -94,30 +93,30 @@
         "tests/helpers",
         "tests/integration/whole-order-deletion-postgres.test.ts"
       ],
-      "inputFingerprint": "7063a592b26995ca6f0b9b4ae24c3b7a822389095c2216dc4e9a4ecb949bd825",
-      "context": "Current uncommitted test expansion on 5126b3b3; unchanged API code; real PG13.23 isolated low-privilege schema, original guards and native commands. Native Vitest JSON captured together with verbose output. No onsite operations.",
-      "startedAt": "2026-11-12T10:27:16Z",
-      "endedAt": "2026-11-12T10:27:31.654Z",
-      "logSha256": "4ebb44bafce8ab3d8d93aa475b07e301040732dcab26a3ef5d91aeaf10c6e24b",
+      "inputFingerprint": "ec85d4f1a037710be4e31b949e9c085787a05d23c9ef460de9c1551b55817c31",
+      "context": "Review fixes on exact bb197e64 parent; current uncommitted inputs. Node22/npm10, PG13.23 low-privilege isolated TEST schema with native guards. No onsite deletion or deployment.",
+      "startedAt": "2026-11-12T10:35:38.755Z",
+      "endedAt": "2026-11-12T10:35:56.666Z",
+      "logSha256": "dd89689be0a134a945bce577352dc231e6b5573ce40f8d38ebe8535db75cc011",
       "log": "/tmp/root-delete-pg-current.log",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "5c311a223b7b7dda4dd048dd669f76718b5ba51b37479802887a39a5f1fe46b6"
+          "sha256": "10efe237ec61cb198eb2fd753b6860033c6eeee6dd95579e269882d40b52f41e"
         }
       ]
     },
     {
       "id": "delete-browser",
       "kind": "tests",
-      "command": "DX_REWORK_TEST_SUITE_KIND=postgres PLAYWRIGHT_BROWSERS_PATH=/workspace/.dx-cloud/playwright npx vitest run tests/integration/whole-order-deletion-postgres.test.ts tests/integration/whole-order-deletion-browser-postgres.test.ts --reporter=verbose",
+      "command": "DX_REWORK_TEST_SUITE_KIND=postgres PLAYWRIGHT_BROWSERS_PATH=/workspace/.dx-cloud/playwright npx vitest run tests/integration/whole-order-deletion-browser-postgres.test.ts --reporter=verbose --reporter=json --outputFile.json=/tmp/root-delete-browser-result.json",
       "status": "passed",
       "exitCode": 0,
-      "passed": 8,
+      "passed": 3,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "89f4721018cb3f1a36ee95b04d2c2bb6e7de2355",
-      "sourceFingerprint": "2e3d7d586f318a245949d6a0885e7e7b9542919a08ffdffbb69ec175282ae6ba",
+      "testedHead": "bb197e641407322e94e1ee360ba5a470f6c23d52",
+      "sourceFingerprint": "57f71e9437e3161931c44260155db426c02e7c0c98d5767a4f6afe2ca294af93",
       "inputPaths": [
         "apps/api",
         "apps/web",
@@ -129,87 +128,16 @@
         "tests/acceptance",
         "tests/integration/whole-order-deletion-browser-postgres.test.ts"
       ],
-      "inputFingerprint": "fd358d494e408d62c78c9ae4f6bb7912f9b9c0d3b650526c8f5a7f56132c1ba6",
-      "context": "Uncommitted candidate on exact release base; Node22/npm10; PG13.23 low-privilege isolated TEST schemas; browser uses original authenticated App. Not onsite acceptance. The combined log reports 8 passed (5 PG + 3 browser); only its unchanged browser inputs are reused here; current PG suite now has 6 passed. Structured TAP is a lossless format conversion of every named success and the totals in the unchanged verbose log; it is not a rerun or native TAP output.",
-      "startedAt": "2026-11-12T10:16:24Z",
-      "endedAt": "2026-11-12T10:17:03.655Z",
-      "logSha256": "444e42bd8ea3d5b7852dd3a319b55e24e598af717c530ff733cfc441c1358cf1",
-      "log": "/tmp/root-delete-combined.log",
+      "inputFingerprint": "cf8cd8ce08f46effdb8d8f2c37c30189f632eaa10f0595b119fbb9e3c23ee648",
+      "context": "Review fixes on exact bb197e64 parent; current uncommitted inputs. Node22/npm10, PG13.23 low-privilege isolated TEST schema with native guards. No onsite deletion or deployment.",
+      "startedAt": "2026-11-12T10:36:18.458Z",
+      "endedAt": "2026-11-12T10:36:55.463Z",
+      "logSha256": "c2bdb47cd0c3c47b9f438c38dfc0f132e0088a5e6a34f74f49d4c018df14eaec",
+      "log": "/tmp/root-delete-browser-current.log",
       "resultReports": [
         {
-          "format": "node-tap",
-          "sha256": "927f0ea43efa1247a6a8784e01b7b5732c80fa5426658f5935d593c8f7a34049"
-        }
-      ]
-    },
-    {
-      "id": "adjacent-pg",
-      "kind": "tests",
-      "command": "DX_REWORK_TEST_SUITE_KIND=postgres npx vitest run tests/integration/receiving-postgres.test.ts tests/integration/journey-fact-updates-postgres.test.ts --reporter=verbose",
-      "status": "passed",
-      "exitCode": 0,
-      "passed": 56,
-      "failed": 0,
-      "skipped": 0,
-      "testedHead": "89f4721018cb3f1a36ee95b04d2c2bb6e7de2355",
-      "sourceFingerprint": "2e3d7d586f318a245949d6a0885e7e7b9542919a08ffdffbb69ec175282ae6ba",
-      "inputPaths": [
-        "apps/api",
-        "apps/web",
-        "packages",
-        "package.json",
-        "package-lock.json",
-        "vitest.config.ts",
-        "tests/helpers",
-        "tests/integration/receiving-postgres.test.ts",
-        "tests/integration/journey-fact-updates-postgres.test.ts"
-      ],
-      "inputFingerprint": "00f4a1ae9a284db4c93123c8b97cc062a35f5c1de680111be848d8d1f1ac0c2d",
-      "context": "Uncommitted candidate on exact release base; Node22/npm10; PG13.23 low-privilege isolated TEST schemas; browser uses original authenticated App. Not onsite acceptance. Structured TAP is a lossless format conversion of every named success and the totals in the unchanged verbose log; it is not a rerun or native TAP output.",
-      "startedAt": "2026-11-12T10:17:26Z",
-      "endedAt": "2026-11-12T10:17:56.076Z",
-      "logSha256": "b4a3252a8b7ad28526065bac68360e7d1c8517e0c16fce653da15c8528c94bda",
-      "log": "/tmp/root-delete-adjacent.log",
-      "resultReports": [
-        {
-          "format": "node-tap",
-          "sha256": "df3cd84a14ca6ca0a1f66aedb6a85a2c9742b69d09bc83f5fd1f36f1b4c7eea3"
-        }
-      ]
-    },
-    {
-      "id": "old-delete-unit",
-      "kind": "tests",
-      "command": "npx vitest run tests/unit/root-delete-wage-cleanup.test.ts tests/unit/root-logical-deletion-review.test.ts tests/unit/sourcing-list-root-delete-contract.test.ts --reporter=verbose",
-      "status": "passed",
-      "exitCode": 0,
-      "passed": 11,
-      "failed": 0,
-      "skipped": 0,
-      "testedHead": "89f4721018cb3f1a36ee95b04d2c2bb6e7de2355",
-      "sourceFingerprint": "2e3d7d586f318a245949d6a0885e7e7b9542919a08ffdffbb69ec175282ae6ba",
-      "inputPaths": [
-        "apps/api",
-        "apps/web",
-        "packages",
-        "package.json",
-        "package-lock.json",
-        "vitest.config.ts",
-        "tests/helpers",
-        "tests/unit/root-delete-wage-cleanup.test.ts",
-        "tests/unit/root-logical-deletion-review.test.ts",
-        "tests/unit/sourcing-list-root-delete-contract.test.ts"
-      ],
-      "inputFingerprint": "cdacf83a067f8e7f48a3f3d86c4ecb893736b761b9b84ef8ec9d95df028ce6fb",
-      "context": "Uncommitted candidate on exact release base; Node22/npm10; PG13.23 low-privilege isolated TEST schemas; browser uses original authenticated App. Not onsite acceptance. Structured TAP is a lossless format conversion of every named success and the totals in the unchanged verbose log; it is not a rerun or native TAP output.",
-      "startedAt": "2026-11-12T10:19:16Z",
-      "endedAt": "2026-11-12T10:19:16.765Z",
-      "logSha256": "07483ce5330d565624372730138f5a35e0cdae68daa668753e5131a542778690",
-      "log": "/tmp/root-delete-unit.log",
-      "resultReports": [
-        {
-          "format": "node-tap",
-          "sha256": "ab2b0aef98feb18b071e1cbe7de8f632ce598653623a0d3cea90ca726ce0c56b"
+          "format": "vitest-json",
+          "sha256": "cff70a651c4e2034a243ab2d3186c38cd252fd5759345a9a1d559ea5040df5bd"
         }
       ]
     },
@@ -219,8 +147,8 @@
       "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "89f4721018cb3f1a36ee95b04d2c2bb6e7de2355",
-      "sourceFingerprint": "2e3d7d586f318a245949d6a0885e7e7b9542919a08ffdffbb69ec175282ae6ba",
+      "testedHead": "bb197e641407322e94e1ee360ba5a470f6c23d52",
+      "sourceFingerprint": "57f71e9437e3161931c44260155db426c02e7c0c98d5767a4f6afe2ca294af93",
       "inputPaths": [
         "apps/api",
         "apps/web",
@@ -228,12 +156,12 @@
         "package.json",
         "package-lock.json"
       ],
-      "inputFingerprint": "d27f135464661dd9a6945a8212ef6fdad930eed65fc04c234ad033b9413fe587",
-      "context": "Uncommitted candidate on exact release base; Node22/npm10; PG13.23 low-privilege isolated TEST schemas; browser uses original authenticated App. Not onsite acceptance.",
-      "startedAt": "2026-11-12T10:19:13.937Z",
-      "endedAt": "2026-11-12T10:20:06.578Z",
+      "inputFingerprint": "4e35bf0f47062918f66c762b5b33d1db86b83fbdcbd976c90c73f3d2a9cf2f88",
+      "context": "Review fixes on exact bb197e64 parent; current uncommitted inputs. Node22/npm10, PG13.23 low-privilege isolated TEST schema with native guards. No onsite deletion or deployment.",
+      "startedAt": "2026-11-12T10:36:17.894Z",
+      "endedAt": "2026-11-12T10:37:12.039Z",
       "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e",
-      "log": "/tmp/root-delete-types-final.log"
+      "log": "/tmp/root-delete-types-current.log"
     },
     {
       "id": "protocol",
@@ -241,8 +169,8 @@
       "command": "npm run test:preflight",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "89f4721018cb3f1a36ee95b04d2c2bb6e7de2355",
-      "sourceFingerprint": "fdb3fc8e03077d5638515893734b951064215680f1d58078e33ec183ed32a11b",
+      "testedHead": "bb197e641407322e94e1ee360ba5a470f6c23d52",
+      "sourceFingerprint": "57f71e9437e3161931c44260155db426c02e7c0c98d5767a4f6afe2ca294af93",
       "inputPaths": [
         "scripts",
         "apps/api/migrations",
@@ -251,21 +179,21 @@
         "package.json",
         "package-lock.json"
       ],
-      "inputFingerprint": "7958a1ed5231fdc9908b03cb9953727cda625ad6d06bbc1c025728f1ababeaf5",
-      "context": "Uncommitted candidate on exact release base; Node22/npm10; PG13.23 low-privilege isolated TEST schemas; browser uses original authenticated App. Not onsite acceptance.",
-      "startedAt": "2026-11-12T10:27:44.102Z",
-      "endedAt": "2026-11-12T10:27:49.702Z",
-      "logSha256": "4e872f34fd0832c4041dc736c67cedc23517c1f55159b2171dcfc4d055183f6e",
-      "log": "/tmp/root-delete-preflight-current.log"
+      "inputFingerprint": "2e15544135224df2d1e26638cd6a2cea43e4ea111cfd3ba9c9b3661d8f68f586",
+      "context": "Review fixes on exact bb197e64 parent; current uncommitted inputs. Node22/npm10, PG13.23 low-privilege isolated TEST schema with native guards. No onsite deletion or deployment.",
+      "startedAt": "2026-11-12T10:36:19.491Z",
+      "endedAt": "2026-11-12T10:36:27.735Z",
+      "logSha256": "f5c29f4ad5f973f5475d699e3d56944c66e5c028ea0e1da953e8e0128f935435",
+      "log": "/tmp/root-delete-preflight-reviewed.log"
     },
     {
       "id": "lint",
       "kind": "command",
-      "command": "npx eslint apps/api/src/production-platform/whole-order-*.ts apps/web/src/cockpit-order-deletion.tsx tests/integration/whole-order-deletion*.test.ts scripts/ci/full-gate-risk-map.mjs --max-warnings=0",
+      "command": "npx eslint apps/api/src/production-platform/whole-order-*.ts apps/api/src/pattern-room/misc-associations.ts apps/web/src/cockpit-order-deletion.tsx tests/integration/whole-order-deletion*.test.ts scripts/ci/full-gate-risk-map.mjs --max-warnings=0",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "89f4721018cb3f1a36ee95b04d2c2bb6e7de2355",
-      "sourceFingerprint": "fdb3fc8e03077d5638515893734b951064215680f1d58078e33ec183ed32a11b",
+      "testedHead": "bb197e641407322e94e1ee360ba5a470f6c23d52",
+      "sourceFingerprint": "57f71e9437e3161931c44260155db426c02e7c0c98d5767a4f6afe2ca294af93",
       "inputPaths": [
         "apps/api",
         "apps/web",
@@ -278,12 +206,12 @@
         "tests/integration/whole-order-deletion-postgres.test.ts",
         "tests/integration/whole-order-deletion-browser-postgres.test.ts"
       ],
-      "inputFingerprint": "e22bf79be318c0ff9f9e434c112db5cdf38af39a6c5386554857fa11d3ce6abb",
-      "context": "Uncommitted candidate on exact release base; Node22/npm10; PG13.23 low-privilege isolated TEST schemas; browser uses original authenticated App. Not onsite acceptance. startedAt is the recorded pre-command clock bound; endedAt is the actual log last-write time.",
-      "startedAt": "2026-11-12T10:27:44.094Z",
-      "endedAt": "2026-11-12T10:27:45.386Z",
+      "inputFingerprint": "701d1ad5e658a672adc72ad941c9080f6ea07fadc1b974a8fd0a9c8ec35e2297",
+      "context": "Review fixes on exact bb197e64 parent; current uncommitted inputs. Node22/npm10, PG13.23 low-privilege isolated TEST schema with native guards. No onsite deletion or deployment.",
+      "startedAt": "2026-11-12T10:36:17.914Z",
+      "endedAt": "2026-11-12T10:36:19.483Z",
       "logSha256": "48cf570a0892e8b0c0de796bcbc145f443f637196bce0b9fbbd28c3e106d66c9",
-      "log": "/tmp/root-delete-lint-current.log"
+      "log": "/tmp/root-delete-lint-reviewed.log"
     }
   ]
 }

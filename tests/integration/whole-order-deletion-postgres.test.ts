@@ -1,3 +1,5 @@
+import {listMiscAssociations} from '../../apps/api/src/pattern-room/misc-associations.js';
+import {DigitalOrderCreateSchema} from '@dx-rework/contracts/digital-production';
 import {PatternRoomOrderService} from '../../apps/api/src/pattern-room/order-service.js';
 import {PatternRoomPriceService,PATTERN_HOURLY_PRICE_ID} from '../../apps/api/src/pattern-room/price-service.js';
 import {TodoProjectionService} from '../../apps/api/src/todos/projection-service.js';
@@ -22,10 +24,12 @@ const url=process.env.TEST_DATABASE_URL;
   const unrelated=await f.bulkReady('无');
   const preview=await service.preview(f.root,{ids:[chain.ready.id,chain.ready.sourceId]});
   expect(preview.orders).toHaveLength(1);
+  expect((await listMiscAssociations(f.db,f.root,preview.orders[0]!.label)).map(row=>row.kind)).toEqual(expect.arrayContaining(['source','po']));
   expect(preview.orders[0]!.counts.rework).toBe(1);
   expect(preview.orders[0]!.counts.receiving_batch).toBe(1);
   const result=await service.remove(f.root,{orders:preview.orders.map(({id,revision})=>({id,revision}))},randomUUID());
   expect(result.results).toEqual([{id:chain.ready.id,status:'deleted'}]);
+  expect(await listMiscAssociations(f.db,f.root,preview.orders[0]!.label)).toEqual([]);
   expect((await f.sourcing.getCase({...f.root,authorizationCapability:'sourcing:view'},unrelated.caseId)).sourcingCaseId).toBe(unrelated.caseId);
   expect((await f.db.query('SELECT 1 FROM supplier_catalog_items WHERE supplier_id=$1',[f.supplierId])).rowCount).toBe(1);
   expect((await f.db.query("SELECT 1 FROM message_outbox WHERE topic='rework.deleted' AND aggregate_id=$1",[chain.id])).rowCount).toBe(1);
@@ -55,6 +59,19 @@ const url=process.env.TEST_DATABASE_URL;
   expect((await f.db.query('SELECT deleted_at FROM receiving_batches WHERE receiving_batch_id=$1',[first.value.receivingBatchId])).rows[0].deleted_at).toBeNull();
   expect((await f.db.query('SELECT count(*)::int n FROM receiving_receipts WHERE receiving_batch_id=$1',[first.value.receivingBatchId])).rows[0].n).toBe(2);
  });
+ it('invalidates another active order when deleting its matching legacy receipt alias',async()=>{
+  const owner=await f.bulkReady('无'),identity=new DigitalProductionIdentityService(f.db,true),service=new WholeOrderDeletionService(f.db);
+  const style='TEST-ALIAS-'+randomUUID();
+  const candidate=await identity.createOrder(f.people['sample-designer']!,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:style,orderDate:'2026-11-12',primaryMerchandiserId:f.people.merchandiser!.actorId,lines:[{formalPoNo:style,color:'蓝',customerWarehouseArrivalDate:'2027-03-01',sizes:[{size:'M',quantity:10}]}]}),randomUUID());
+  const receiving=new ReceivingService(f.db,undefined,undefined,undefined,{allowLegacyStyleInput:true}),warehouse={...f.people.warehouse!,authorizationCapability:'receiving:create'};
+  const receipt=await receiving.create(warehouse,{styleNo:style,documentQuantity:10,actualQuantity:5,attachmentIds:[await f.image(warehouse)]},randomUUID());
+  const db=await f.db.connect();try{await db.query('BEGIN');await linkNewDigitalChild(db,{module:'receiving',childId:receipt.value.receiptId,productionOrderId:owner.id,lines:[]});await db.query('COMMIT');}finally{db.release();}
+  await f.db.query("DELETE FROM digital_journey_fact_changes WHERE resource_kind='order' AND resource_id=$1",[candidate.productionOrderId]);
+  const preview=await service.preview(f.root,{ids:[owner.id]});
+  expect((await service.remove(f.root,{orders:preview.orders.map(({id,revision})=>({id,revision}))},randomUUID())).results[0]!.status).toBe('deleted');
+  expect((await f.db.query("SELECT 1 FROM digital_journey_fact_changes WHERE resource_kind='order' AND resource_id=$1",[candidate.productionOrderId])).rowCount).toBe(1);
+  expect(await new DigitalProductionAccessPolicy(f.db).allowed(f.root,'order',candidate.productionOrderId,'technical')).toBe(true);
+ });
  it('deletes a linked native misc order but preserves an unrelated misc order',async()=>{
   const identity=new DigitalProductionIdentityService(f.db,true),service=new WholeOrderDeletionService(f.db);
   const style='TEST-MISC-DELETE-'+randomUUID();
@@ -65,6 +82,7 @@ const url=process.env.TEST_DATABASE_URL;
   const other=await native.createMisc(f.root,{taskName:'TEST unrelated misc',priceVersion:price.version},randomUUID());
   const preview=await service.preview(f.root,{ids:[source.sourceId]});expect(preview.orders[0]!.counts.pattern_room).toBe(1);
   expect((await service.remove(f.root,{orders:preview.orders.map(({id,revision})=>({id,revision}))},randomUUID())).results[0]!.status).toBe('deleted');
+  expect(await native.miscAssociations(f.root,style)).toEqual([]);
   await expect(native.get(f.root,linked.orderId)).rejects.toMatchObject({statusCode:404});
   expect((await native.get(f.root,other.orderId)).orderId).toBe(other.orderId);
   expect((await f.db.query('SELECT deleted_at FROM pattern_room_orders WHERE order_id=$1',[linked.orderId])).rows[0].deleted_at).not.toBeNull();

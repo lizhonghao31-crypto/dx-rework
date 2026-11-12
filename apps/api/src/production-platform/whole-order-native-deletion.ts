@@ -1,3 +1,4 @@
+import {invalidatePackingAliasCandidates} from '../receiving/packing-alias-invalidation.js';
 import type {PoolClient} from 'pg';
 import {MessageOutboxRepository,OperationEventRepository,type TrustedActorContext} from '../tools/repositories.js';
 import type {WholeOrderScope} from './whole-order-deletion-scope.js';
@@ -44,5 +45,6 @@ export async function deleteWholeOrderNative(db:PoolClient,actor:TrustedActorCon
   const audit=await event('receiving:correct','receiving.batch.delete','receiving_batch',item.id,row,{receivingBatchId:item.id,version:row.version+1,deleted:true});
   await db.query("SELECT set_config('dx_rework.receiving_root_action','delete',true)");
   await db.query(`UPDATE receiving_batches SET deleted_at=clock_timestamp(),deleted_by=$2,updated_by=$2,updated_at=clock_timestamp(),version=version+1,last_operation_event_id=$3,last_request_id=$4 WHERE receiving_batch_id=$1`,[item.id,actor.actorId,audit,actor.requestId]);
+  await invalidatePackingAliasCandidates(db,[row.style_no]);
  }
 }
