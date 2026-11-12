@@ -1,3 +1,7 @@
+import {createElement} from 'react';
+import {renderToStaticMarkup} from 'react-dom/server';
+import {PreparationWindows} from '../../apps/web/src/production-readiness-panel.js';
+import type {ProductionReadinessState} from '@dx-rework/contracts/production-readiness';
 import {describe,it,expect} from 'vitest';
 import {randomUUID} from 'node:crypto';
 import {PreparationMaterialRecordSchema} from '@dx-rework/contracts/production-readiness';
@@ -20,4 +24,12 @@ describe('native preparation input boundaries',()=>{
  it('rejects client-authored system validity, permissions, material fingerprints and audit fields',()=>{
   for(const extra of [{valid:true},{canRecord:['fabric_receipt']},{materialBasis:'fake'},{recordedBy:randomUUID()},{recordedAt:'2026-11-01T00:00:00Z'}])expect(PreparationMaterialRecordSchema.safeParse({...input(),...extra}).success).toBe(false);
  });
+});
+
+it('Acceptance PR02 labels the original independent frozen instruction windows instead of hard-coded 24 hours',()=>{
+ const window={startedAt:null,dueAt:null,completedAt:null,reason:null,status:'waiting' as const};
+ const state={enrolled:true,draftWindow:{...window,minutes:1440},finalWindow:{...window,minutes:4320}} as ProductionReadinessState;
+ const html=renderToStaticMarkup(createElement(PreparationWindows,{state}));
+ expect(html).toContain('制单草稿 · 到仓后1天');expect(html).toContain('正式制单 · 前提齐后3天');expect(html).not.toContain('24小时');
+ state.finalWindow.minutes=null;expect(renderToStaticMarkup(createElement(PreparationWindows,{state}))).toContain('前提齐后用时待补');
 });

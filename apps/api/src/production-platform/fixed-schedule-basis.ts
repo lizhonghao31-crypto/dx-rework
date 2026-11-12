@@ -20,7 +20,7 @@ import {evaluateFixedScheduleScope,fixedDurationSummary,type ScheduleScopeInput,
 import {readOrderTimeBasis,attachOrderTimeCoverage} from './order-time-reading.js';
 import {fixedScheduleStages} from './fixed-schedule-stages.js';
 
-export type FixedScheduleBasis={version:'fixed-schedule-basis-v1';policyVersion?:'order-time-plan-v1';scopeRevision:string;factRevision:string;scopes:ScheduleScopeInput[];termination:JourneyTermination|null;pending:boolean};
+export type FixedScheduleBasis={version:'fixed-schedule-basis-v1';policyVersion?:'order-time-plan-v1';scopeRevision:string;factRevision:string;scopes:ScheduleScopeInput[];termination:JourneyTermination|null;pending:boolean;notApplicableNodes?:Array<'process_logistics'|'bulk_qc'>};
 type DB=Pick<PoolClient,'query'>;
 const unknown:ScheduleOccurrence={precision:'unknown'};
 const occurrence=(at:unknown):ScheduleOccurrence=>at instanceof Date?{precision:'instant',at:at.toISOString()}:typeof at==='string'&&/T.*(?:Z|[+-]\d{2}:\d{2})$/.test(at)&&Number.isFinite(Date.parse(at))?{precision:'instant',at:new Date(at).toISOString()}:unknown;
@@ -218,9 +218,19 @@ export function nextFixedScheduleClassification(basis:FixedScheduleBasis,asOf:st
 export function attachFixedJourneySchedule(item:OrderJourney,basis:FixedScheduleBasis,asOf:string,options:{progress?:FixedScheduleProgress;nextChange?:boolean}={}){
  attachOrderTimeCoverage(item,basis);
  const progress=options.progress??evaluateFixedJourneyBasis(basis,asOf,item.display?.mainState==='overdue');if(options.nextChange!==false)progress.nextChangeAt=nextFixedScheduleClassification(basis,asOf);item.fixedSchedule=progress;
+ const excluded=new Set(basis.notApplicableNodes??[]);
  const aliases:Record<string,string>={production_sheet:'production_instruction',sourcing_selection:'sourcing_director',sourcing_approval:'sourcing_owner',customer_confirmation:'customer_sample',source_confirmation:'development_confirmation',factory_work:'production_reporting',factory_production:'factory_production_qc',return_logistics:'receipts',garment_inspection:'receiving_inspection',garment_packing:'packing',bulk_printing:'process_logistics',bulk_embroidery:'process_logistics',development_craft_return:'development_craft_confirmation'};
  for(const node of item.stages.flatMap(stage=>stage.nodes)){
   if(!node.current||node.state==='unavailable'||node.unavailableReason==='permission')continue;
+  // Only an explicit complete effective route can suppress a legacy unknown.
+  // Retain genuine started/completed history even after later route changes.
+  if(excluded.has(node.key as 'process_logistics'|'bulk_qc')&&['uncreated','pending','not_applicable'].includes(node.state)&&!node.enteredAt&&!node.actualAt&&!node.actualDate&&!node.nativeWindows?.some(window=>window.startedAt||window.complete)&&![...(node.timings??[]),...(node.timing?[node.timing]:[])].some(timing=>timing.actualStart||timing.actualEnd)){
+   node.state='not_applicable';node.progressApplicability='not_applicable';node.countsInProgress=false;node.sla='not_set';
+   node.risks=node.risks.filter(risk=>!['unknown','overdue','due_soon'].includes(risk));
+   node.expectedAt=null;node.expectedKind='unset';node.expectedPrecision='missing';delete node.timing;delete node.timings;
+   if(item.supervision)item.supervision.nodes=item.supervision.nodes.filter(timing=>!(['bulk_printing','bulk_embroidery','bulk_print_embroidery'].includes(timing.id.split(':')[0]!)&&node.key==='process_logistics'||timing.id.split(':')[0]==='bulk_qc'&&node.key==='bulk_qc'));
+   continue;
+  }
   const ids=new Set(node.records.flatMap(record=>record.lineId?[record.lineId]:[]));
   const taskRef=`task:${node.instanceId}:`,exactTask=basis.scopes.some(scope=>Object.values(scope.facts).some(fact=>fact.evidenceRefs.some(ref=>ref.startsWith(taskRef))));
   const targets=progress.scopes.flatMap(scope=>ids.size&&scope.lineId&&!ids.has(scope.lineId)?[]:scope.nodes.filter(value=>{
@@ -231,10 +241,10 @@ export function attachFixedJourneySchedule(item:OrderJourney,basis:FixedSchedule
   if(node.expectedKind==='sla'&&node.expectedAt&&node.records.some(record=>record.domain==='task'&&record.id===node.instanceId)&&['instant','date'].includes(node.expectedPrecision))node.nativeTaskDeadline={at:node.expectedAt,precision:node.expectedPrecision as 'instant'|'date',mode:node.deadlineMode,exclusive:node.deadlineExclusive};
   node.fixedTargets=targets;
   if(basis.policyVersion==='order-time-plan-v1'&&!['completed','inherited','cancelled','not_applicable'].includes(node.state)){
-   const known=targets.every(target=>!['unknown','not_adopted'].includes(target.progress.ownSla.state));
-   if(known){node.risks=node.risks.filter(risk=>risk!=='overdue'&&risk!=='due_soon');
-    if(targets.some(target=>target.progress.ownSla.state==='overdue'))node.risks.push('overdue');else if(targets.some(target=>target.progress.ownSla.warning))node.risks.push('due_soon');
-   }
+   // Unknown siblings cannot erase a proven own-window risk. Neither can a
+   // legacy aggregate deadline replace the current per-PO responsibility.
+   node.risks=node.risks.filter(risk=>risk!=='overdue'&&risk!=='due_soon');
+   if(targets.some(target=>target.progress.ownSla.state==='overdue'))node.risks.push('overdue');else if(targets.some(target=>target.progress.ownSla.warning))node.risks.push('due_soon');
   }
   const ends=targets.map(target=>target.progress.goalDelta.targetAt),same=ends.every(at=>at!==null&&at===ends[0]);
   // Original native timing.target remains independent D. Only the field named
@@ -247,7 +257,7 @@ export function attachFixedJourneySchedule(item:OrderJourney,basis:FixedSchedule
 /** An explicit minimal shared-fact whitelist: no user, names, grants, URLs,
  * complete adopted settings or executable response can enter this snapshot. */
 export function fixedScheduleBasisSnapshot(basis:FixedScheduleBasis):FixedScheduleBasis{
- return {version:basis.version,...(basis.policyVersion?{policyVersion:basis.policyVersion}:{}),scopeRevision:basis.scopeRevision,factRevision:basis.factRevision,pending:basis.pending,
+ return {version:basis.version,...(basis.policyVersion?{policyVersion:basis.policyVersion}:{}),...(basis.notApplicableNodes?{notApplicableNodes:basis.notApplicableNodes.filter(key=>key==='process_logistics'||key==='bulk_qc')}:{}),scopeRevision:basis.scopeRevision,factRevision:basis.factRevision,pending:basis.pending,
   termination:basis.termination?{kind:basis.termination.kind,at:basis.termination.at,precision:basis.termination.precision,originEventRef:basis.termination.originEventRef,scopeRef:basis.termination.scopeRef}:null,
   scopes:basis.scopes.map(scope=>({scopeRef:scope.scopeRef,lineId:scope.lineId,targetRevision:scope.targetRevision,terminalIds:[...scope.terminalIds],customerGoal:scope.customerGoal,
    work:scope.work.map(work=>({id:work.id,canonicalWorkRef:work.canonicalWorkRef,...(work.stage!==undefined?{stage:work.stage}:{}),dependsOn:[...work.dependsOn],start:work.start,end:work.end,minutes:work.minutes,calendar:work.calendar,

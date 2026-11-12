@@ -709,12 +709,13 @@ export class DigitalJourneyQuery {
         const ie=(await db.query(`SELECT q.sourcing_ie_quote_id,q.quote_version,q.quoted_by,q.quoted_at FROM sourcing_ie_quotes q
           WHERE q.sourcing_case_id=$1 AND ($2::uuid IS NULL OR q.sourcing_ie_quote_id=(SELECT source_ie_quote_id FROM sourcing_decisions WHERE sourcing_decision_id=$2)) ORDER BY quote_version DESC LIMIT 1`,[sourcing.child_id,decision??null])).rows[0];
         setFact("sourcing_ie",ie?"completed":"pending",[{...target,version:ie?.quote_version??null,url:ie?`${target.url}?view=node-history&node=ie_quote&entryId=${ie.sourcing_ie_quote_id}`:target.url}],iso(ie?.quoted_at),ie?{id:ie.quoted_by,name:null}:null);
-        const management=(await db.query("SELECT sourcing_decision_id,decision_version,decided_at,decided_by FROM sourcing_decisions WHERE sourcing_case_id=$1 AND ($2::uuid IS NULL OR sourcing_decision_id=$2) ORDER BY decision_version DESC LIMIT 1",[sourcing.child_id,decision??null])).rows[0];
+        const management=(await db.query("SELECT d.sourcing_decision_id,d.decision_version,d.decided_at,d.decided_by,EXISTS(SELECT 1 FROM rework_todos t WHERE t.entity_type='sourcing_case' AND t.entity_id=d.sourcing_case_id::text AND t.category='sourcing_owner_approval' AND t.todo_type='business_action' AND t.status IN ('pending','blocked_recipient') AND t.dedupe_key LIKE 'sourcing:'||d.sourcing_case_id::text||':owner:'||d.decision_version::text||':%') AS owner_ready FROM sourcing_decisions d WHERE d.sourcing_case_id=$1 AND ($2::uuid IS NULL OR d.sourcing_decision_id=$2) ORDER BY d.decision_version DESC LIMIT 1",[sourcing.child_id,decision??null])).rows[0];
         const managementCompleted=Boolean(management&&sourcingFields.status!=="pending_management_decision");
         setFact("sourcing_director",managementCompleted?"completed":"pending",[{...target,version:management?.decision_version??null,url:management?`${target.url}?view=node-history&node=management&entryId=${management.sourcing_decision_id}`:target.url}],managementCompleted?iso(management?.decided_at):null,managementCompleted?{id:management!.decided_by,name:null}:null);
         const ownerDecision=management?(await db.query("SELECT sourcing_owner_decision_id,decision,decision_reason,decided_at,decided_by FROM sourcing_owner_decisions WHERE sourcing_decision_id=$1",[management.sourcing_decision_id])).rows[0]:null;
         const ownerRecord={...target,version:management?.decision_version??null,url:ownerDecision?`${target.url}?view=node-history&node=owner&entryId=${ownerDecision.sourcing_owner_decision_id}`:target.url};
-        const ownerNode=setFact("sourcing_owner",bulk.ownerApproved?"completed":ownerDecision?.decision==="rejected"?"blocked":"pending",[ownerRecord],bulk.ownerApproved?iso(ownerDecision?.decided_at):null,ownerDecision?{id:ownerDecision.decided_by,name:null}:null);
+        const ownerNode=setFact("sourcing_owner",bulk.ownerApproved?"completed":ownerDecision?.decision==="rejected"?"blocked":sourcingFields.status==="pending_owner_approval"&&management?.owner_ready?"active":"pending",[ownerRecord],bulk.ownerApproved?iso(ownerDecision?.decided_at):null,ownerDecision?{id:ownerDecision.decided_by,name:null}:null);
+        if(ownerNode.state==="active")ownerNode.responsibilityRole="老板审批";
         if(ownerDecision?.decision==="rejected") {
           ownerNode.operator=ownerNode.owner;ownerNode.risks.push("blocked");
           ownerNode.blockers.push({key:"original_owner_rejected",label:ownerDecision.decision_reason,ownerId:null,record:ownerRecord});
@@ -892,9 +893,9 @@ export class DigitalJourneyQuery {
       const adopted=fullOrder&&oid?await readJourneyAdoptedPlan(db,oid,lines):oid?'unavailable' as const:null;
       const replacements=sourceAccess&&sid&&visibleTasks.some(task=>task.returned)
         ?await readMaterialSuccessors(db,sid,visibleTasks.map(task=>task.task_id)):[];
+      if(fixedInputs?.fixedSchedule){attachFixedJourneySchedule(item,fixedInputs.fixedSchedule,observed.now);item.fixedSchedule!.observationMode=observation.mode;}
       item.businessProgress=journeyBusinessProgress(item,observed.now,adopted,businessQuantities,requirementEvidence,replacements);
       item.businessProgress.dates=journeyBusinessDates(item);
-      if(fixedInputs?.fixedSchedule){attachFixedJourneySchedule(item,fixedInputs.fixedSchedule,observed.now);item.fixedSchedule!.observationMode=observation.mode;}
       if(fixedInputs?.fixedSchedule?.policyVersion==='order-time-plan-v1')item.display=journeyDisplay(item,asOf,{cancelled,closedAt:item.display?.closedAt??null});
       item.visualProgress=journeyVisualProgress(item,asOf);
     }

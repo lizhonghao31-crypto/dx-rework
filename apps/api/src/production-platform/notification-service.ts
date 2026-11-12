@@ -360,7 +360,14 @@ export class DigitalProductionNotificationService {
     if(includeContext&&contextTarget&&parentReadable){
       const resource=(await database.query(contextTarget.kind==='order'?"SELECT design_style_no,production_order_id FROM digital_production_orders WHERE production_order_id=$1":"SELECT design_style_no,NULL::uuid AS production_order_id FROM digital_production_sources WHERE source_id=$1",[contextTarget.id])).rows[0];
       if(resource){
-        const lines=resource.production_order_id?(await database.query("SELECT po_number,color FROM digital_production_po_lines WHERE production_order_id=$1 ORDER BY position",[resource.production_order_id])).rows:[];
+        // PO date notices describe only the immutable request's affected lines.
+        // Legacy whole-order notices retain their original scope.
+        const requestId=event.instruction_order_id&&/^po-customer-(?:request|decision):([0-9a-f-]{36})$/i.exec(event.source_key??'')?.[1];
+        const lines=resource.production_order_id?(await database.query(requestId?`SELECT l.po_number,l.color FROM digital_production_po_lines l
+          WHERE l.production_order_id=$1 AND (EXISTS(SELECT 1 FROM digital_po_customer_request_lines r WHERE r.request_id=$2 AND r.production_order_id=l.production_order_id AND r.line_id=l.line_id)
+          OR EXISTS(SELECT 1 FROM digital_instruction_date_requests r WHERE r.request_id=$2 AND r.production_order_id=$1)
+          OR EXISTS(SELECT 1 FROM digital_production_delivery_requests r WHERE r.request_id=$2 AND r.production_order_id=$1)) ORDER BY l.position`
+          :"SELECT po_number,color FROM digital_production_po_lines WHERE production_order_id=$1 ORDER BY position",requestId?[resource.production_order_id,requestId]:[resource.production_order_id])).rows:[];
         context={styleNo:resource.design_style_no??null,orderId:resource.production_order_id??null,colors:[...new Set<string>(lines.map(l=>l.color))],poNumbers:[...new Set<string>(lines.map(l=>l.po_number).filter(Boolean))]};
       }
     }

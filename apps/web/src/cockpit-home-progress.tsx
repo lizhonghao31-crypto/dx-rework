@@ -6,6 +6,19 @@ function HomeDate({value,missing='—'}:{value:JourneyBusinessDate|undefined;mis
   ? <CockpitDate value={value.at} precision={value.precision} missing="—" short/> : <span>{missing}</span>;
 }
 
+/** Completion forecast is derived from all authorized PO estimates, never B/H. */
+export function CockpitCompletionEstimate({order}:{order:OrderJourney}){
+ if(!order.fixedSchedule)return <HomeDate value={order.visualProgress?.expected}/>;
+ const scopes=order.fixedSchedule?.scopes??[];
+ if(!scopes.length)return <span>—</span>;
+ const estimates=scopes.map(scope=>scope.completionEstimate);
+ if(estimates.some(value=>!value||['unknown','terminated'].includes(value.kind)||!value.earliest))return <span>—</span>;
+ const earliest=estimates.map(value=>value!.earliest!).sort().at(-1)!;
+ const bounded=estimates.some(value=>value!.kind==='lower_bound'||!value!.latest);
+ const latest=bounded?null:estimates.map(value=>value!.latest!).sort().at(-1)!;
+ return <span>{bounded&&'不早于'}<CockpitDate value={earliest} precision="instant" short/>{latest&&latest!==earliest&&<>～<CockpitDate value={latest} precision="instant" short/></>}</span>;
+}
+
 /** Quantity remains a separate native fact, never a progress percentage. */
 export function cockpitReceiptGap(order:OrderJourney){
  const quantities=order.businessProgress?.quantities?.lines??[];
@@ -25,6 +38,6 @@ export function CockpitHomeProgress({order}:{order:OrderJourney}){
  return <div className={`cockpit-home-progress is-${order.display?.mainState??'unknown'}`}>
   {meter('时间',progress?.timeRatio,'time')}
   {meter('实际',progress?.actualRatio,'actual')}
-  <div className="cockpit-home-progress-dates"><small className="cockpit-home-progress-date"><span>预计完成</span><HomeDate value={progress?.expected}/></small><small className="cockpit-home-progress-date"><span>实际完成</span><HomeDate value={progress?.actual} missing={progress?.actualRatio===1?'完成时间待核':'—'}/></small></div>
+  <div className="cockpit-home-progress-dates"><small className="cockpit-home-progress-date"><span>预计完成</span><CockpitCompletionEstimate order={order}/></small><small className="cockpit-home-progress-date"><span>实际完成</span><HomeDate value={progress?.actual} missing={progress?.actualRatio===1?'完成时间待核':'—'}/></small></div>
  </div>;
 }

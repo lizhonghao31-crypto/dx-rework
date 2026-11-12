@@ -1,3 +1,5 @@
+import {PoCustomerDateService} from '../../apps/api/src/production-platform/po-customer-date-service.js';
+import {DigitalProductionNotificationService} from '../../apps/api/src/production-platform/notification-service.js';
 import {DigitalProductionAccessPolicy} from '../../apps/api/src/production-platform/access-policy.js';
 import {randomUUID} from 'node:crypto';
 import type {PoolClient} from 'pg';
@@ -42,11 +44,28 @@ const duration=(minutes:number):OrderTimeRule=>({kind:'work',minutes,calendar:'c
   expect((await f.db.query('SELECT count(*)::int n FROM digital_order_time_plan_versions')).rows[0].n).toBe(before);
   expect((await f.db.query('SELECT count(*)::int n FROM digital_timeline_adoptions WHERE production_order_id=$1',[order.productionOrderId])).rows[0].n).toBe(0);
   expect((await f.db.query('SELECT count(*)::int n FROM digital_bulk_preparations WHERE production_order_id=$1',[order.productionOrderId])).rows[0].n).toBe(0);
+  for(const key of ['process_logistics','bulk_qc'])expect(cockpit.stages.flatMap(stage=>stage.nodes).find(node=>node.key===key)).toMatchObject({state:'not_applicable',countsInProgress:false,risks:[]});
   await expect(query.read(f.people['pattern-room-worker']!,order.productionOrderId,undefined,true)).rejects.toMatchObject({statusCode:404});
+ }));
+ it('Acceptance PR02 limits requested and approved date notification context to the changed PO and preserves the other date',()=>run(async()=>{
+  const order=await make(),red=order.lines[0]!,blue=order.lines[1]!,dates=new PoCustomerDateService(f.db),notifications=new DigitalProductionNotificationService(f.db);
+  const requested=await dates.request(f.root,order.productionOrderId,{orderVersion:order.version,reason:'TEST only red PO changes',changes:[{lineId:red.lineId,expectedVersion:red.customerDateVersion??0,date:'2027-03-03'}]},randomUUID());
+  const check=async(key:string,recipient=f.people['production-management']!)=>{
+   const event=(await f.db.query('SELECT event_id FROM digital_production_notification_events WHERE source_key=$1',[key])).rows[0];expect(event).toBeTruthy();
+   for(let i=0;i<100;i++){const shown=await notifications.claim(recipient);if(!shown.notification||shown.notification.eventId===event.event_id)break;}
+   const notice=await notifications.current(recipient,event.event_id);expect(notice.notification?.context).toMatchObject({poNumbers:[red.poNumber],colors:[red.color]});
+   expect((await notifications.current(f.people['pattern-room-worker']!,event.event_id)).notification).toBeNull();
+  };
+  await check('po-customer-request:'+requested.requestId);
+  await dates.decide(f.root,order.productionOrderId,requested.requestId,true,randomUUID());
+  await check('po-customer-decision:'+requested.requestId);
+  const current=await new DigitalProductionIdentityService(f.db,true).read(f.root,order.productionOrderId);
+  expect(current.lines.find(line=>line.lineId===red.lineId)!.customerWarehouseArrivalDate).toBe('2027-03-03');
+  expect(current.lines.find(line=>line.lineId===blue.lineId)!.customerWarehouseArrivalDate).toBe('2027-03-01');
  }));
  it('stores only the exact new factual basis with no actor DTO and switches freshness after the same-transaction dirty registration',()=>run(async()=>{
   const order=await make(),saved=await confirm(order,input(order)),resource={kind:'order' as const,id:order.productionOrderId},repo=new JourneyFactRepository(f.db);
-  const first=await repo.buildOne(resource);expect(first.model.fixedSchedule?.policyVersion).toBe('order-time-plan-v1');expect(first.model.fixedSchedule?.scopes).toHaveLength(2);
+  const first=await repo.buildOne(resource);expect(first.model.fixedSchedule?.policyVersion).toBe('order-time-plan-v1');expect(first.model.fixedSchedule?.scopes).toHaveLength(2);expect(first.model.fixedSchedule?.notApplicableNodes).toEqual(['process_logistics','bulk_qc']);
   for(const privateKey of ['authorizationCapabilities','actorRoles','company','overrides','styleImageUrl'])expect(JSON.stringify(first.model.fixedSchedule)).not.toContain('"'+privateKey+'"');
   const changed=structuredClone(saved.input);changed.plan=reviseOrderTimePlan(changed.plan,{garment_packing:duration(120)});await confirm(order,changed,1);
   const read=await f.db.connect();try{const state=await repo.readStoredWithClient(read,resource);expect(state.status).toBe('pending');}finally{read.release();}
@@ -66,7 +85,7 @@ const duration=(minutes:number):OrderTimeRule=>({kind:'work',minutes,calendar:'c
  it('keeps complete authorized list counts and current15 assembly with new factual storage; ordinary reads never build a mother',()=>run(async()=>{
   const order=await make();await confirm(order,input(order));await new JourneyFactRepository(f.db).buildOne({kind:'order',id:order.productionOrderId});
   const build=vi.spyOn(JourneyFactRepository.prototype,'buildOne'),query=new DigitalJourneyQuery(f.db),filter=JourneyFilterSchema.parse({scope:'production',search:order.designStyleNo});
-  try{const result=await query.list(f.root,filter);expect(result.total).toBe(1);expect(result.items).toHaveLength(1);expect(result.items[0]!.id).toBe(order.productionOrderId);expect(build).not.toHaveBeenCalled();}finally{build.mockRestore();}
+  try{const result=await query.list(f.root,filter);expect(result.total).toBe(1);expect(result.items).toHaveLength(1);expect(result.items[0]!.id).toBe(order.productionOrderId);for(const key of ['process_logistics','bulk_qc'])expect(result.items[0]!.stages.flatMap(stage=>stage.nodes).find(node=>node.key===key)).toMatchObject({state:'not_applicable',risks:[]});expect(build).not.toHaveBeenCalled();}finally{build.mockRestore();}
   const result=await new JourneyFactUpdates(f.db).runOnce();expect(result.failed).toBe(0);
  }));
  it('keeps an old order first adopted by an explicit arrangement visible to its order-only technical reader',()=>run(async()=>{

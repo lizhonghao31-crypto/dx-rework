@@ -50,6 +50,12 @@ export function lateDuration(seconds: number | null): string {
   return "逾期 " + Number((seconds / 3600).toFixed(1)) + " 小时";
 }
 export function nodeOverdue(node: JourneyNode, asOf?: string): string {
+  if(node.fixedTargets?.length){
+    const overdue=node.fixedTargets.flatMap(target=>target.progress.ownSla.state==='overdue'&&target.progress.ownSla.overdueMinutes?[target.progress.ownSla.overdueMinutes]:[]);
+    if(!overdue.length)return '已逾期';
+    const minimum=Math.max(...overdue.map(value=>value.minimum)),maximum=Math.max(...overdue.map(value=>value.maximum));
+    return (minimum!==maximum?'至少':'')+lateDuration(minimum*60);
+  }
   if (node.expectedPrecision === "date" && node.expectedAt && asOf) {
     const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(asOf));
     const days = (Date.parse(today) - Date.parse(node.expectedAt)) / 86400000;

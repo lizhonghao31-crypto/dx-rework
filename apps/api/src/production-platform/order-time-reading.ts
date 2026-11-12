@@ -173,7 +173,10 @@ export function orderTimeReadingBasis(saved:StoredOrderTimePlan,resource:Busines
   const end=scope.customerGoal.precision==='instant'?scope.customerGoal.value:scope.customerGoal.precision==='date'?new Date(Date.parse(scope.customerGoal.value+'T00:00:00+08:00')+86400000).toISOString():null;
   return {scopeRef:scope.scopeRef,lineId:scope.lineId,targetRevision:`${saved.id}:${saved.revision}`,work,facts,terminalIds:[...(scope.customerGoalIds.length?scope.customerGoalIds:scope.terminalIds)],customerGoal:end};
  });
- return {version:'fixed-schedule-basis-v1',policyVersion:'order-time-plan-v1',scopeRevision:saved.identityHash,factRevision:hash(scopes.map(scope=>scope.facts)),scopes,termination:legacy?.termination??null,
+ // A complete saved production route is the applicability authority even
+ // before a formal instruction exists. Missing targets alone prove nothing.
+ const noSecondary=resource.kind==='order'&&saved.input.route.complete&&!saved.input.work.some(work=>['bulk_printing','bulk_embroidery','bulk_print_embroidery','bulk_qc'].includes(work.parameterKey));
+ return {version:'fixed-schedule-basis-v1',policyVersion:'order-time-plan-v1',...(noSecondary?{notApplicableNodes:['process_logistics','bulk_qc'] as Array<'process_logistics'|'bulk_qc'>}:{}),scopeRevision:saved.identityHash,factRevision:hash(scopes.map(scope=>scope.facts)),scopes,termination:legacy?.termination??null,
   pending:!saved.input.route.complete||scopes.some(scope=>{const required=new Set(requiredFixedTimelineWork(scope.work,scope.terminalIds).map(work=>work.id));return scope.work.some(work=>required.has(work.id)&&(!work.start||!work.end));})};
 }
 

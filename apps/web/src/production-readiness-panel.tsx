@@ -19,8 +19,9 @@ const instant=(value:string)=>value?new Date(`${value}:00+08:00`).toISOString():
 const time=(value:string|null)=>value?new Date(value).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'}):'未形成可信时间';
 const statusLabels={waiting:'等待前提',running:'计时中',overdue:'已逾期',completed_on_time:'已按时完成',completed_late:'已逾期完成',unknown:'时效不可评估'};
 export function PreparationWindows({state}:{state:ProductionReadinessState}){
+ const duration=(w:PreparationWindow)=>w.minutes===null?'用时待补':w.minutes%1440===0?`${w.minutes/1440}天`:w.minutes%60===0?`${w.minutes/60}小时`:`${w.minutes}分钟`;
  const window=(name:string,w:PreparationWindow)=><div><strong>{name}</strong><span>{statusLabels[w.status]}</span><small>起点：{time(w.startedAt)} · 截止：{time(w.dueAt)}{w.completedAt&&` · 实际：${time(w.completedAt)}`}</small>{w.reason&&<small>{w.reason}</small>}</div>;
- return state.enrolled?<section className="preparation-readiness-windows" aria-label="跟单制单时效">{window('制单草稿 · 到仓后24小时',state.draftWindow)}{window('正式制单 · 前提齐后24小时',state.finalWindow)}<p>两个窗口独立计时。验布不合格不停止已有计时；质量条件仍须满足。客户约定、系统计划和实绩分别保留。</p></section>:null;
+ return state.enrolled?<section className="preparation-readiness-windows" aria-label="跟单制单时效">{window(`制单草稿 · 到仓后${duration(state.draftWindow)}`,state.draftWindow)}{window(`正式制单 · 前提齐后${duration(state.finalWindow)}`,state.finalWindow)}<p>两个窗口独立计时。验布不合格不停止已有计时；质量条件仍须满足。客户约定、系统计划和实绩分别保留。</p></section>:null;
 }
 export function ProductionReadinessPanel({resource,sourceDocumentVersion,lines=[],readonly=false,onChanged}:{resource:PreparationResource;sourceDocumentVersion?:number|undefined;lines?:Array<{lineId:string;color:string}>;readonly?:boolean;onChanged?:()=>void}){
  const base=`${resource.kind==='order'?'orders':'sources'}/${resource.id}/production-readiness`;

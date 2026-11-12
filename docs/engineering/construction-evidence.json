@@ -1,78 +1,190 @@
 {
   "version": 1,
-  "base": "f0b958862febd91661d0328e36716e21c4c90997",
+  "base": "7d66f4edebd388df1b0fdc2fb8cb9446a08f4537",
   "risk": "full",
-  "sourceFingerprint": "74f4263bb013508782f1e18a1faecd1d8a946e9db52ab37c2edfa0c528da38cf",
+  "sourceFingerprint": "bca8497ed231601c3562915c5fc43387a6f9b805a0c84e4e61bca4808b41ed1a",
   "rules": [
     {
-      "rule": "A live business clock advances display locally and never grants periodic whole-cockpit GET permission; explicit refresh and committed actions still read fresh authorized data.",
-      "source": "2026-11-12 user approved regression PR01 first, four PRs sequentially; onsite f0 modal closure and repeated source reads reproduced and traced; docs/engineering/acceptance-regression-01-reading.md.",
+      "rule": "Display current completion estimates independently from frozen targets/customer promises and preserve known/unknown bounds.",
+      "source": "User approved 2026-11-12 Acceptance regression PR02; actual f0 samples and raw A Journey/SLA plus docs/engineering/acceptance-regression-02-time-facts.md. PR01 Acceptance validated before resuming PR02; merge does not authorize deployment or PR03 before onsite acceptance.",
       "writes": [
-        "apps/web/src/digital-cockpit-page.tsx",
-        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts",
-        "tests/integration/supplychain-board-native-browser-postgres.test.ts"
+        "apps/web/src/cockpit-home-progress.tsx",
+        "tests/unit/cockpit-home.test.ts"
       ],
       "reads": [
-        "apps/web/src/cockpit-reads.ts",
-        "apps/web/src/cockpit-fixed-schedule.tsx",
-        "apps/web/src/digital-journey-cockpit.tsx"
+        "apps/api/src/production-platform/fixed-schedule-progress.ts",
+        "apps/web/src/cockpit-date.tsx"
       ],
       "oldTests": [
-        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts",
-        "tests/integration/supplychain-board-native-browser-postgres.test.ts",
-        "tests/unit/m01-cockpit-reads.test.ts"
+        "tests/unit/cockpit-home.test.ts"
       ],
       "newTests": [
-        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts"
+        "tests/unit/cockpit-home.test.ts"
       ],
-      "initialization": "No schema/config/dependency or business writes. Original two signed-native App browser fixtures and registered PG13 isolated schemas retained; no onsite deployment or data changes.",
-      "dateAndPermission": "Only remove the page polling effect, preserve local live/fixed clock distinction, explicit refresh, query generation, role/scope changes and committed-action refresh. No cached authorization or server calculation changes.",
-      "expectation": "61 seconds of live observation generate zero periodic Journey/source reads. Explicit refresh still fetches current data. Actual live and fixed clocks, full authorized KPI and current-page reads remain distinct.",
+      "initialization": "No schema, dependencies or runtime configuration changes. Original native fixture and registered isolated PG ownership retained; current and old authorized readers remain. Calculation version invalidates prior shared facts through existing bounded worker, never a whole-database GET rebuild.",
+      "dateAndPermission": "Original business clock, per-PO readiness, begun responsibility windows, actual events, approved H changes and frozen B stay distinct. Read permissions and write commands are unchanged; no role grants, new data capture or cross-user cache.",
+      "expectation": "The latest necessary PO estimate is shown; unknown PO means no complete estimate, lower-bound result says not before. Actual completion remains its own field, Legacy without any fixed schedule retains original complete forecast; adopted unknown schedule never falls back to B/H.",
       "checks": [
-        "passive-browser",
-        "passive-unit",
-        "passive-types",
-        "passive-lint",
-        "passive-time-sites",
-        "passive-resources"
+        "time-unit",
+        "time-types",
+        "time-lint"
       ]
     },
     {
-      "rule": "Same-query refresh preserves open dialogs and user input while refreshing underlying facts; changed identity, entity, round or versions retain isolation and revoked reads cannot leak former results.",
-      "source": "Approved PR01; f0 personnel modal was unmounted by loading/readOnly and its unchanged dialog state never reran showModal. Related risk/coverage data identity and document asOf remounts checked together.",
+      "rule": "Known own-PO overdue survives an unready sibling; D and risk duration use the same credible responsibility window without changing whole-order status.",
+      "source": "User approved 2026-11-12 Acceptance regression PR02; actual f0 samples and raw A Journey/SLA plus docs/engineering/acceptance-regression-02-time-facts.md. PR01 Acceptance validated before resuming PR02; merge does not authorize deployment or PR03 before onsite acceptance.",
       "writes": [
-        "apps/web/src/cockpit-documents.tsx",
-        "apps/web/src/cockpit-home.tsx",
-        "apps/web/src/digital-cockpit-personnel.tsx",
-        "apps/web/src/digital-journey-cockpit.tsx"
+        "apps/api/src/production-platform/fixed-schedule-progress.ts",
+        "apps/api/src/production-platform/fixed-schedule-basis.ts",
+        "packages/contracts/src/fixed-schedule-progress.ts",
+        "apps/web/src/cockpit-fixed-schedule.tsx",
+        "apps/web/src/journey-sla-details.tsx",
+        "apps/web/src/digital-journey-cockpit-model.ts",
+        "tests/unit/cockpit-fixed-schedule.test.ts",
+        "tests/unit/order-time-reading.test.ts",
+        "docs/engineering/acceptance-time-sites-20261027.json"
       ],
       "reads": [
-        "apps/web/src/cockpit-documents-model.ts",
-        "apps/web/src/cockpit-reads.ts",
-        "apps/web/src/cockpit-detail.tsx",
-        "apps/web/src/cockpit-home-risks.tsx",
-        "apps/web/src/cockpit-timing-coverage.tsx",
-        "apps/web/src/auth-session.ts"
+        "apps/api/src/production-platform/journey-selection-clock.ts",
+        "apps/web/src/cockpit-node-summary.tsx"
       ],
       "oldTests": [
-        "tests/unit/cockpit-document-snapshot.test.ts",
-        "tests/unit/cockpit-home.test.ts",
-        "tests/unit/cockpit-detail.test.ts",
-        "tests/unit/digital-journey-cockpit.test.ts",
+        "tests/unit/order-time-reading.test.ts",
         "tests/unit/cockpit-fixed-schedule.test.ts",
-        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts"
+        "tests/unit/fixed-schedule-progress.test.ts",
+        "tests/unit/fixed-schedule-selection.test.ts"
       ],
       "newTests": [
+        "tests/unit/order-time-reading.test.ts",
+        "tests/unit/cockpit-fixed-schedule.test.ts",
+        "tests/unit/fixed-schedule-progress.test.ts",
+        "tests/unit/fixed-schedule-selection.test.ts"
+      ],
+      "initialization": "No schema, dependencies or runtime configuration changes. Original native fixture and registered isolated PG ownership retained; current and old authorized readers remain. Calculation version invalidates prior shared facts through existing bounded worker, never a whole-database GET rebuild.",
+      "dateAndPermission": "Original business clock, per-PO readiness, begun responsibility windows, actual events, approved H changes and frozen B stay distinct. Read permissions and write commands are unchanged; no role grants, new data capture or cross-user cache.",
+      "expectation": "PO A ready02 +24h is not overdue at next01 and is60min overdue at next03; B unready has no D. Current own overdue1h cannot display old target10d. Whole-order customerDuePassed stays false. Different native batch deadlines remain visible through scoped original evidence; no unrelated PO or task fallback.",
+      "checks": [
+        "time-unit",
+        "time-types",
+        "time-inventory"
+      ]
+    },
+    {
+      "rule": "Use a complete effective no-secondary route before formal preparation; clear only unused legacy unknowns and rebuild shared selection facts.",
+      "source": "User approved 2026-11-12 Acceptance regression PR02; actual f0 samples and raw A Journey/SLA plus docs/engineering/acceptance-regression-02-time-facts.md. PR01 Acceptance validated before resuming PR02; merge does not authorize deployment or PR03 before onsite acceptance.",
+      "writes": [
+        "apps/api/src/production-platform/order-time-reading.ts",
+        "apps/api/src/production-platform/journey-fact-model.ts",
+        "tests/integration/order-time-reading-postgres.test.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/journey-query.ts",
+        "apps/api/src/production-platform/journey-selection-facts.ts",
+        "apps/api/src/production-platform/journey-fact-repository.ts"
+      ],
+      "oldTests": [
+        "tests/unit/order-time-reading.test.ts",
+        "tests/integration/order-time-reading-postgres.test.ts"
+      ],
+      "newTests": [
+        "tests/unit/order-time-reading.test.ts",
+        "tests/integration/order-time-reading-postgres.test.ts"
+      ],
+      "initialization": "No schema, dependencies or runtime configuration changes. Original native fixture and registered isolated PG ownership retained; current and old authorized readers remain. Calculation version invalidates prior shared facts through existing bounded worker, never a whole-database GET rebuild.",
+      "dateAndPermission": "Original business clock, per-PO readiness, begun responsibility windows, actual events, approved H changes and frozen B stay distinct. Read permissions and write commands are unchanged; no role grants, new data capture or cross-user cache.",
+      "expectation": "No-craft nodes cease counting/alerting in detail and list, storage retains only the explicit applicability flag. Incomplete route remains unknown; begun/native batch history is retained. Other genuine coverage is untouched.",
+      "checks": [
+        "time-unit",
+        "time-pg-browser",
+        "time-types"
+      ]
+    },
+    {
+      "rule": "An actually released current owner-approval todo is active; show its approval role without inventing an assignee.",
+      "source": "User approved 2026-11-12 Acceptance regression PR02; actual f0 samples and raw A Journey/SLA plus docs/engineering/acceptance-regression-02-time-facts.md. PR01 Acceptance validated before resuming PR02; merge does not authorize deployment or PR03 before onsite acceptance.",
+      "writes": [
+        "apps/api/src/production-platform/journey-query.ts",
+        "apps/web/src/cockpit-node-rows.tsx",
+        "apps/web/src/cockpit-home.tsx",
+        "apps/web/src/cockpit-home-risks.tsx",
+        "apps/web/src/cockpit-current-summary.tsx",
+        "apps/web/src/cockpit-detail-risks.tsx",
         "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts"
       ],
-      "initialization": "No new cache/platform or persistence. Document ownership remains component/request-local; a new response swaps/disposes the old source snapshot without asOf-based modal remount. Original auth and server write authorization unchanged.",
-      "dateAndPermission": "Personnel fieldset/save stays disabled during readOnly and selection change clears the old form. Risk/coverage use current authorized results in the same query; identity invalidation clears data. Document reopen revalidates identity; entity, round, source/instruction version changes stay isolated. No UI/sidebar/style changes.",
-      "expectation": "Risk, missing-data, primary-merchandiser and document dialogs stay visible through same-query refresh; input/search preserved, source reads renewed only on explicit fresh results/reopen. Existing original App scope revocation and real assignment/approval cases pass.",
+      "reads": [
+        "apps/api/src/production-platform/sourcing-owner-readiness.ts",
+        "apps/api/src/production-platform/sourcing-sla-evidence.ts"
+      ],
+      "oldTests": [
+        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts",
+        "tests/unit/cockpit-detail.test.ts"
+      ],
+      "newTests": [
+        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts",
+        "tests/unit/cockpit-detail.test.ts"
+      ],
+      "initialization": "No schema, dependencies or runtime configuration changes. Original native fixture and registered isolated PG ownership retained; current and old authorized readers remain. Calculation version invalidates prior shared facts through existing bounded worker, never a whole-database GET rebuild.",
+      "dateAndPermission": "Original business clock, per-PO readiness, begun responsibility windows, actual events, approved H changes and frozen B stay distinct. Read permissions and write commands are unchanged; no role grants, new data capture or cross-user cache.",
+      "expectation": "Original App assignment releases real owner todo and two-hour clock; authorized Journey is active with boss approval role, ordinary merchandiser cannot reassign and genuine owner can approve. No new query per candidate.",
       "checks": [
-        "passive-browser",
-        "passive-unit",
-        "passive-types",
-        "passive-lint"
+        "time-pg-browser",
+        "time-unit",
+        "time-types",
+        "time-lint"
+      ]
+    },
+    {
+      "rule": "PO date notification context follows the immutable affected-line request while preserving original whole-order legacy notices.",
+      "source": "User approved 2026-11-12 Acceptance regression PR02; actual f0 samples and raw A Journey/SLA plus docs/engineering/acceptance-regression-02-time-facts.md. PR01 Acceptance validated before resuming PR02; merge does not authorize deployment or PR03 before onsite acceptance.",
+      "writes": [
+        "apps/api/src/production-platform/notification-service.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/po-customer-date-service.ts",
+        "apps/api/src/production-platform/instruction-notice.ts"
+      ],
+      "oldTests": [
+        "tests/integration/order-time-reading-postgres.test.ts",
+        "tests/unit/digital-notification-child-context.test.ts",
+        "tests/unit/digital-notification-runtime.test.ts"
+      ],
+      "newTests": [
+        "tests/integration/order-time-reading-postgres.test.ts",
+        "tests/unit/digital-notification-child-context.test.ts",
+        "tests/unit/digital-notification-runtime.test.ts"
+      ],
+      "initialization": "No schema, dependencies or runtime configuration changes. Original native fixture and registered isolated PG ownership retained; current and old authorized readers remain. Calculation version invalidates prior shared facts through existing bounded worker, never a whole-database GET rebuild.",
+      "dateAndPermission": "Original business clock, per-PO readiness, begun responsibility windows, actual events, approved H changes and frozen B stay distinct. Read permissions and write commands are unchanged; no role grants, new data capture or cross-user cache.",
+      "expectation": "Request and approved notice identify only red PO; blue date remains unchanged. Actual recipient and technical scope still required; unauthorized reader receives no notification.",
+      "checks": [
+        "time-pg-browser",
+        "time-unit",
+        "time-types"
+      ]
+    },
+    {
+      "rule": "Instruction window labels use the order actual frozen duration, not a hard-coded24h.",
+      "source": "User approved 2026-11-12 Acceptance regression PR02; actual f0 samples and raw A Journey/SLA plus docs/engineering/acceptance-regression-02-time-facts.md. PR01 Acceptance validated before resuming PR02; merge does not authorize deployment or PR03 before onsite acceptance.",
+      "writes": [
+        "apps/web/src/production-readiness-panel.tsx",
+        "tests/unit/production-readiness-contract.test.ts"
+      ],
+      "reads": [
+        "packages/contracts/src/production-readiness.ts"
+      ],
+      "oldTests": [
+        "tests/unit/production-readiness-contract.test.ts"
+      ],
+      "newTests": [
+        "tests/unit/production-readiness-contract.test.ts"
+      ],
+      "initialization": "No schema, dependencies or runtime configuration changes. Original native fixture and registered isolated PG ownership retained; current and old authorized readers remain. Calculation version invalidates prior shared facts through existing bounded worker, never a whole-database GET rebuild.",
+      "dateAndPermission": "Original business clock, per-PO readiness, begun responsibility windows, actual events, approved H changes and frozen B stay distinct. Read permissions and write commands are unchanged; no role grants, new data capture or cross-user cache.",
+      "expectation": "Draft1day and final3days label independently; missing minutes stays unknown. No change to readiness or deadline calculations.",
+      "checks": [
+        "time-unit",
+        "time-types",
+        "time-lint"
       ]
     }
   ],
@@ -80,8 +192,8 @@
     {
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "f0b958862febd91661d0328e36716e21c4c90997",
-      "sourceFingerprint": "74f4263bb013508782f1e18a1faecd1d8a946e9db52ab37c2edfa0c528da38cf",
+      "testedHead": "107a69dfc474707a3f9a17b593b3b36a8cad2c46",
+      "sourceFingerprint": "bca8497ed231601c3562915c5fc43387a6f9b805a0c84e4e61bca4808b41ed1a",
       "inputPaths": [
         "apps",
         "packages",
@@ -91,63 +203,64 @@
         "package-lock.json",
         "vitest.config.ts"
       ],
-      "inputFingerprint": "e6f281dc04485b39855eb7b9338b4ce275d167d3565720e00ff9a6557ef51256",
-      "id": "passive-browser",
+      "inputFingerprint": "345e547300b1a89d0d754b29192214882e1bf2fdff5f539b0f0fe5dd7180ab8b",
+      "id": "time-unit",
       "kind": "tests",
-      "command": "PATH=/workspace/.dx-cloud/r5-runtime/node_modules/.bin:$PATH PLAYWRIGHT_BROWSERS_PATH=/workspace/.dx-cloud/playwright TEST_DATABASE_URL=postgresql://dx_r5_test@127.0.0.1:55413/dx_rework_acceptance_test_r5 DX_REWORK_TEST_SUITE_KIND=postgres node node_modules/vitest/vitest.mjs run tests/integration/m01-cockpit-home-native-browser-postgres.test.ts tests/integration/supplychain-board-native-browser-postgres.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/.dx-cloud/r5-regression-01-browser-final.json",
-      "startedAt": "2026-11-12T06:58:21.971Z",
-      "endedAt": "2026-11-12T07:01:23.973Z",
-      "log": "/workspace/.dx-cloud/r5-regression-01-browser-final.log",
-      "logSha256": "ee81770d71bbd22b909a400c5b7aeaff2d8231dae3749337c7602e941dadb240",
-      "context": "Original App, signed identity, isolated non-superuser PG13.23 fixture, actual Node22/npm10 and locked Chromium1194. Canonical postgres maxWorkers=1, two existing suites sequential; no production or onsite actions. New case adapts only observationMode to advance browser time and tests four real dialogs; existing suite separately verifies actual live clock. Full existing suites retain KPI, pagination, fixed clock, permissions/revocation and native primary assignment. Fixture-owned afterAll cleanup, no new resource class.",
-      "passed": 20,
+      "command": "PATH=/workspace/.dx-cloud/r5-runtime/node_modules/.bin:$PATH node node_modules/vitest/vitest.mjs run tests/unit/order-time-reading.test.ts tests/unit/fixed-schedule-selection.test.ts tests/unit/fixed-schedule-progress.test.ts tests/unit/cockpit-home.test.ts tests/unit/production-readiness-contract.test.ts tests/unit/cockpit-fixed-schedule.test.ts tests/unit/cockpit-detail.test.ts tests/unit/digital-journey-cockpit.test.ts tests/unit/digital-notification-child-context.test.ts tests/unit/digital-notification-runtime.test.ts --reporter=json --outputFile=/workspace/.dx-cloud/r5-regression-02-unit-final.json",
+      "startedAt": "2026-11-12T08:31:20.022Z",
+      "endedAt": "2026-11-12T08:31:27.463Z",
+      "log": "/workspace/.dx-cloud/r5-regression-02-unit-final.json",
+      "logSha256": "32b19509f1515da41eca22a0c0607097790aa78da26ccf3819c8828e56c8e667",
+      "passed": 147,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "4951a3e5fa15fbeee690821198f23312c558ccf0d36acfaaef2599510e348799"
+          "sha256": "32b19509f1515da41eca22a0c0607097790aa78da26ccf3819c8828e56c8e667"
         }
-      ]
+      ],
+      "context": "Ten affected existing suites; independent numerical forecasts, original responsibility D, mixed PO risk, explicit route versus unknown and started-history preservation. Native source and contract links resolve to this worktree, Node22/npm10; original bounded non-db worker configuration. The actual machine-readable command output is the original Vitest --outputFile JSON; terminal transport log retained at /workspace/.dx-cloud/r5-regression-02-unit-final.log"
     },
     {
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "f0b958862febd91661d0328e36716e21c4c90997",
-      "sourceFingerprint": "74f4263bb013508782f1e18a1faecd1d8a946e9db52ab37c2edfa0c528da38cf",
+      "testedHead": "107a69dfc474707a3f9a17b593b3b36a8cad2c46",
+      "sourceFingerprint": "8311d77dbf1547f1a4c783da9617d8b55f4588d1eb0d44620e7276674310956f",
       "inputPaths": [
         "apps",
         "packages",
         "scripts",
-        "tests",
+        "tests/integration",
+        "tests/helpers",
         "package.json",
         "package-lock.json",
         "vitest.config.ts"
       ],
-      "inputFingerprint": "e6f281dc04485b39855eb7b9338b4ce275d167d3565720e00ff9a6557ef51256",
-      "id": "passive-unit",
+      "inputFingerprint": "6ea4eaeedcf565415e87822918b56c068b4635789255a1b6d0c1bc03d1a08a93",
+      "id": "time-pg-browser",
       "kind": "tests",
-      "command": "PATH=/workspace/.dx-cloud/r5-runtime/node_modules/.bin:$PATH node node_modules/vitest/vitest.mjs run tests/unit/m01-cockpit-reads.test.ts tests/unit/cockpit-home.test.ts tests/unit/cockpit-detail.test.ts tests/unit/cockpit-document-snapshot.test.ts tests/unit/digital-journey-cockpit.test.ts tests/unit/cockpit-fixed-schedule.test.ts --reporter=verbose --reporter=json --outputFile=/workspace/.dx-cloud/r5-regression-01-unit-final.json",
-      "startedAt": "2026-11-12T06:59:13.278Z",
-      "endedAt": "2026-11-12T06:59:17.823Z",
-      "log": "/workspace/.dx-cloud/r5-regression-01-unit-final.log",
-      "logSha256": "82322095526bacb91ddbee35b1dfdd51afaa2331c373fb675fd8f7939655e132",
-      "context": "Existing six suites; actual canonical non-database worker limit. Generation, identity, failed reads, directory ownership and original time formatting. Same final source/test inputs.",
-      "passed": 94,
+      "command": "PATH=/workspace/.dx-cloud/r5-runtime/node_modules/.bin:$PATH TEST_DATABASE_URL=postgresql://dx_r5_test@127.0.0.1:55413/dx_rework_acceptance_test_r5 DX_REWORK_TEST_SUITE_KIND=postgres PLAYWRIGHT_BROWSERS_PATH=/workspace/.dx-cloud/playwright node node_modules/vitest/vitest.mjs run tests/integration/order-time-reading-postgres.test.ts tests/integration/m01-cockpit-home-native-browser-postgres.test.ts --reporter=json --outputFile=/workspace/.dx-cloud/r5-regression-02-pg-final.json",
+      "startedAt": "2026-11-12T08:30:12.672Z",
+      "endedAt": "2026-11-12T08:33:21.825Z",
+      "log": "/workspace/.dx-cloud/r5-regression-02-pg-final.json",
+      "logSha256": "afd991509ab4bfa31973f640b8059e947681ec592c23f1442c3298f19ba07aa3",
+      "passed": 21,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "c69e334651272d089604f9f364e11f397a62baa1a0b5868fb4b2c198c9ce1d04"
+          "sha256": "afd991509ab4bfa31973f640b8059e947681ec592c23f1442c3298f19ba07aa3"
         }
-      ]
+      ],
+      "context": "Isolated non-superuser PostgreSQL13.23, original complete schema/fixtures; actual signed original App Chromium1194. One PG worker. Actual scoped date request and approval/notification denial, no-craft before preparation, shared fact build/update, RR, complete list and current-page assembly; actual UI primary assignment, release of owner approval and genuine approval, revocation, KPI, modal and filters. Original registered afterAll schema cleanup; no onsite/production writes. The actual machine-readable command output is the original Vitest --outputFile JSON; terminal transport log retained at /workspace/.dx-cloud/r5-regression-02-pg-final.log"
     },
     {
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "f0b958862febd91661d0328e36716e21c4c90997",
-      "sourceFingerprint": "74f4263bb013508782f1e18a1faecd1d8a946e9db52ab37c2edfa0c528da38cf",
+      "testedHead": "107a69dfc474707a3f9a17b593b3b36a8cad2c46",
+      "sourceFingerprint": "bca8497ed231601c3562915c5fc43387a6f9b805a0c84e4e61bca4808b41ed1a",
       "inputPaths": [
         "apps",
         "packages",
@@ -157,21 +270,21 @@
         "package-lock.json",
         "vitest.config.ts"
       ],
-      "inputFingerprint": "e6f281dc04485b39855eb7b9338b4ce275d167d3565720e00ff9a6557ef51256",
-      "id": "passive-types",
+      "inputFingerprint": "345e547300b1a89d0d754b29192214882e1bf2fdff5f539b0f0fe5dd7180ab8b",
+      "id": "time-types",
       "kind": "command",
-      "command": "PATH=/workspace/.dx-cloud/r5-runtime/node_modules/.bin:$PATH npm run typecheck --workspace=@dx-rework/web",
-      "startedAt": "2026-11-12T06:59:32.187Z",
-      "endedAt": "2026-11-12T07:00:03.920Z",
-      "log": "/workspace/.dx-cloud/r5-regression-01-typecheck-final.log",
-      "logSha256": "752b0f4f80e1f2fdeece6837aa0d8538e17009bd166c8888d0c5c5d0c6148bcd",
-      "context": "Affected web workspace typecheck, unchanged public DTO. Actual exit0 observed from executor completion; log creation/last-write timestamps, no invented test counts."
+      "command": "PATH=/workspace/.dx-cloud/r5-runtime/node_modules/.bin:$PATH npm run typecheck",
+      "startedAt": "2026-11-12T08:10:31.073Z",
+      "endedAt": "2026-11-12T08:33:20.001Z",
+      "log": "/workspace/.dx-cloud/r5-regression-02-typecheck-final.log",
+      "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e",
+      "context": "All workspaces after current workspace package symlinks corrected; initial old-worktree type errors are retained, not claimed passed. Executor observed actual exit0. Log creation/last-write timestamps; no invented test counts."
     },
     {
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "f0b958862febd91661d0328e36716e21c4c90997",
-      "sourceFingerprint": "74f4263bb013508782f1e18a1faecd1d8a946e9db52ab37c2edfa0c528da38cf",
+      "testedHead": "107a69dfc474707a3f9a17b593b3b36a8cad2c46",
+      "sourceFingerprint": "bca8497ed231601c3562915c5fc43387a6f9b805a0c84e4e61bca4808b41ed1a",
       "inputPaths": [
         "apps",
         "packages",
@@ -181,21 +294,21 @@
         "package-lock.json",
         "vitest.config.ts"
       ],
-      "inputFingerprint": "e6f281dc04485b39855eb7b9338b4ce275d167d3565720e00ff9a6557ef51256",
-      "id": "passive-lint",
+      "inputFingerprint": "345e547300b1a89d0d754b29192214882e1bf2fdff5f539b0f0fe5dd7180ab8b",
+      "id": "time-lint",
       "kind": "command",
-      "command": "PATH=/workspace/.dx-cloud/r5-runtime/node_modules/.bin:$PATH node node_modules/eslint/bin/eslint.js apps/web/src/digital-cockpit-page.tsx apps/web/src/cockpit-home.tsx apps/web/src/digital-journey-cockpit.tsx apps/web/src/cockpit-documents.tsx apps/web/src/digital-cockpit-personnel.tsx tests/integration/m01-cockpit-home-native-browser-postgres.test.ts tests/integration/supplychain-board-native-browser-postgres.test.ts --max-warnings=0",
-      "startedAt": "2026-11-12T06:53:58.178Z",
-      "endedAt": "2026-11-12T06:53:58.178Z",
-      "log": "/workspace/.dx-cloud/r5-regression-01-lint.log",
-      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "context": "All seven changed source/test files; no edits after lint. Actual exit0 observed from executor completion; log creation/last-write timestamps, no invented test counts."
+      "command": "PATH=/workspace/.dx-cloud/r5-runtime/node_modules/.bin:$PATH npm run lint",
+      "startedAt": "2026-11-12T08:10:32.359Z",
+      "endedAt": "2026-11-12T08:32:26.928Z",
+      "log": "/workspace/.dx-cloud/r5-regression-02-lint.log",
+      "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763",
+      "context": "Repository existing lint; final changed source/test set. Executor observed actual exit0. Log creation/last-write timestamps; no invented test counts."
     },
     {
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "f0b958862febd91661d0328e36716e21c4c90997",
-      "sourceFingerprint": "74f4263bb013508782f1e18a1faecd1d8a946e9db52ab37c2edfa0c528da38cf",
+      "testedHead": "107a69dfc474707a3f9a17b593b3b36a8cad2c46",
+      "sourceFingerprint": "bca8497ed231601c3562915c5fc43387a6f9b805a0c84e4e61bca4808b41ed1a",
       "inputPaths": [
         "apps",
         "packages",
@@ -203,23 +316,24 @@
         "tests",
         "package.json",
         "package-lock.json",
-        "vitest.config.ts"
+        "vitest.config.ts",
+        "docs/engineering/acceptance-time-sites-20261027.json"
       ],
-      "inputFingerprint": "e6f281dc04485b39855eb7b9338b4ce275d167d3565720e00ff9a6557ef51256",
-      "id": "passive-time-sites",
+      "inputFingerprint": "4f6aa79721334ef3fa0c6e0b8504b00548a523caf33fbad38795407462ba221c",
+      "id": "time-inventory",
       "kind": "command",
       "command": "PATH=/workspace/.dx-cloud/r5-runtime/node_modules/.bin:$PATH node scripts/acceptance/time-site-inventory.mjs",
-      "startedAt": "2026-11-12T06:59:02.627Z",
-      "endedAt": "2026-11-12T06:59:03.115Z",
-      "log": "/workspace/.dx-cloud/r5-regression-01-time-sites.log",
+      "startedAt": "2026-11-12T08:11:18.948Z",
+      "endedAt": "2026-11-12T08:32:12.416Z",
+      "log": "/workspace/.dx-cloud/r5-regression-02-time-sites.log",
       "logSha256": "114d19b3f81e82ca812ccaf79d465b9eac16b584f779c9b621a2e15595e62be6",
-      "context": "Original time-source inventory matches, no regeneration or annotation removal. Actual exit0 observed from executor completion; log creation/last-write timestamps, no invented test counts."
+      "context": "Exact regenerated changed occurrences only; prior semantic reviews retained and scoped original responsibility D/overdue notes added. Executor observed actual exit0. Log creation/last-write timestamps; no invented test counts."
     },
     {
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "f0b958862febd91661d0328e36716e21c4c90997",
-      "sourceFingerprint": "74f4263bb013508782f1e18a1faecd1d8a946e9db52ab37c2edfa0c528da38cf",
+      "testedHead": "107a69dfc474707a3f9a17b593b3b36a8cad2c46",
+      "sourceFingerprint": "bca8497ed231601c3562915c5fc43387a6f9b805a0c84e4e61bca4808b41ed1a",
       "inputPaths": [
         "apps",
         "packages",
@@ -229,15 +343,15 @@
         "package-lock.json",
         "vitest.config.ts"
       ],
-      "inputFingerprint": "e6f281dc04485b39855eb7b9338b4ce275d167d3565720e00ff9a6557ef51256",
-      "id": "passive-resources",
+      "inputFingerprint": "345e547300b1a89d0d754b29192214882e1bf2fdff5f539b0f0fe5dd7180ab8b",
+      "id": "time-resources",
       "kind": "command",
       "command": "PATH=/workspace/.dx-cloud/r5-runtime/node_modules/.bin:$PATH node --input-type=module -e 'import {checkResourceRegistration} from \"./scripts/test-preflight.mjs\";checkResourceRegistration();console.log(\"Original resource registration check passed\");'",
-      "startedAt": "2026-11-12T06:59:21.315Z",
-      "endedAt": "2026-11-12T06:59:21.395Z",
-      "log": "/workspace/.dx-cloud/r5-regression-01-resources.log",
+      "startedAt": "2026-11-12T08:11:19.524Z",
+      "endedAt": "2026-11-12T08:32:12.536Z",
+      "log": "/workspace/.dx-cloud/r5-regression-02-resources.log",
       "logSha256": "3c56bdc1e02c3c177b0a749d101046ba0842e6329c189fcd5c555cba4fb0ce33",
-      "context": "Existing test-resource ownership remains registered. Actual exit0 observed from executor completion; log creation/last-write timestamps, no invented test counts."
+      "context": "Existing resource ownership and canonical suite registration preserved. Executor observed actual exit0. Log creation/last-write timestamps; no invented test counts."
     }
   ]
 }
