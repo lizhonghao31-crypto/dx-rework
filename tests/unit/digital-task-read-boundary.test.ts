@@ -29,7 +29,7 @@ function fixture(sla: "absent" | "unenrolled" | "frozen" = "absent") {
   const rows = [own, foreign];
   const query = vi.fn(async (sql: string, params: unknown[] = []) => {
     let found: object[] = [];
-    if (["SELECT to_regclass('digital_timeline_adoptions') AS relation", "SELECT to_regclass('digital_preparation_responsibilities') AS relation", "SELECT to_regclass('digital_preparation_material_versions') AS relation", "SELECT to_regclass('digital_order_time_standards') AS relation"].includes(sql)) found = [{relation:null}];
+    if (["SELECT to_regclass('digital_timeline_adoptions') AS relation", "SELECT to_regclass('digital_preparation_responsibilities') AS relation", "SELECT to_regclass('digital_preparation_material_versions') AS relation", "SELECT to_regclass('digital_order_time_standards') AS relation", "SELECT to_regclass('digital_whole_order_deleted_objects') AS relation"].includes(sql)) found = [{relation:null}];
     else if (sql === "SELECT to_regclass('digital_bulk_preshrink_corrections') AS relation") found = [{relation:'digital_bulk_preshrink_corrections'}];
     else if (sql === 'SELECT preshrink_task_id FROM digital_bulk_preshrink_corrections ORDER BY preshrink_task_id') found = [];
     else if (sql === "SELECT to_regclass('digital_sla_configurations') AS relation") found = [{relation:sla==='absent'?null:'digital_sla_configurations'}];

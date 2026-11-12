@@ -1,3 +1,4 @@
+import {wholeOrderActiveSql} from './whole-order-visibility.js';
 import {buildFixedReworkTargets} from './fixed-rework-progress.js';
 import type {Pool,PoolClient} from 'pg';
 import type {BusinessTime,BusinessTimeScope} from '@dx-rework/domain/business-clock';
@@ -32,6 +33,18 @@ export class JourneyFactRepository{
    await db.query("SET LOCAL idle_in_transaction_session_timeout='100s'");
    const locked=(await db.query<{locked:boolean}>('SELECT pg_try_advisory_xact_lock(hashtext($1),hashtext($2)) AS locked',['journey-fact:'+resource.kind,resource.id])).rows[0]!.locked;
    if(!locked)throw new JourneyFactBusy();
+   // No sequence watermark: transactions allocated earlier can commit later.
+   // Acknowledge only the exact dirty transactions visible in this snapshot.
+   let pending=(await db.query<{transaction_id:string}>('SELECT transaction_id FROM digital_journey_fact_changes WHERE resource_kind=$1 AND resource_id=$2',[resource.kind,resource.id])).rows.map(r=>r.transaction_id);
+   if(options?.retireMissing){
+    const exists=resource.kind==='order'
+     ?(await db.query(`SELECT 1 FROM digital_production_orders WHERE production_order_id=$1 AND ${await wholeOrderActiveSql(db,'order','production_order_id')}`,[resource.id])).rowCount
+     :(await db.query(`SELECT 1 FROM digital_production_sources s WHERE s.source_id=$1 AND ${await wholeOrderActiveSql(db,'source','s.source_id')} AND NOT EXISTS(SELECT 1 FROM digital_production_orders o WHERE o.source_id=s.source_id)`,[resource.id])).rowCount;
+    if(!exists){await db.query('DELETE FROM digital_journey_fact_models WHERE resource_kind=$1 AND resource_id=$2',[resource.kind,resource.id]);
+     await db.query('DELETE FROM digital_journey_fact_changes WHERE resource_kind=$1 AND resource_id=$2 AND transaction_id=ANY($3::bigint[])',[resource.kind,resource.id,pending]);
+     await db.query('DELETE FROM digital_journey_fact_retries WHERE resource_kind=$1 AND resource_id=$2',[resource.kind,resource.id]);
+     await db.query('COMMIT');return {resource,retired:true};}
+   }
    // Derive fixed targets only in the existing bounded object's write worker,
    // from its immutable original inputs. A target failure keeps this object's
    // dirty entry/retry; it cannot roll back the already committed business action.
@@ -51,18 +64,7 @@ export class JourneyFactRepository{
     await buildTargets(adoption);
     await buildFixedReworkTargets(client,adoption);
    }
-   // No sequence watermark: transactions allocated earlier can commit later.
-   // Acknowledge only the exact dirty transactions visible in this snapshot.
-   const pending=(await db.query<{transaction_id:string}>('SELECT transaction_id FROM digital_journey_fact_changes WHERE resource_kind=$1 AND resource_id=$2',[resource.kind,resource.id])).rows.map(r=>r.transaction_id);
-   if(options?.retireMissing){
-    const exists=resource.kind==='order'
-     ?(await db.query('SELECT 1 FROM digital_production_orders WHERE production_order_id=$1',[resource.id])).rowCount
-     :(await db.query('SELECT 1 FROM digital_production_sources s WHERE s.source_id=$1 AND NOT EXISTS(SELECT 1 FROM digital_production_orders o WHERE o.source_id=s.source_id)',[resource.id])).rowCount;
-    if(!exists){await db.query('DELETE FROM digital_journey_fact_models WHERE resource_kind=$1 AND resource_id=$2',[resource.kind,resource.id]);
-     await db.query('DELETE FROM digital_journey_fact_changes WHERE resource_kind=$1 AND resource_id=$2 AND transaction_id=ANY($3::bigint[])',[resource.kind,resource.id,pending]);
-     await db.query('DELETE FROM digital_journey_fact_retries WHERE resource_kind=$1 AND resource_id=$2',[resource.kind,resource.id]);
-     await db.query('COMMIT');return {resource,retired:true};}
-   }
+   pending=(await db.query<{transaction_id:string}>('SELECT transaction_id FROM digital_journey_fact_changes WHERE resource_kind=$1 AND resource_id=$2',[resource.kind,resource.id])).rows.map(r=>r.transaction_id);
    const time=await new ContextBusinessClock(this.database,db).read(resource);observed=time;
    // Establish the exact resource identity before creating a derived row.
    let selection:{facts:JourneySelectionFacts;expiresAt:string|null}|undefined;

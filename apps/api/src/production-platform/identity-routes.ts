@@ -1,3 +1,4 @@
+import {WholeOrderSelectionSchema,WholeOrderDeletionInputSchema} from '@dx-rework/contracts/whole-order-deletion';
 import {registerDeliveryCalendarRoutes} from './delivery-calendar-routes.js';
 import {registerOrderTimeRequestRoutes} from './order-time-request-routes.js';
 import type {OrderTimeRequestService} from './order-time-request-service.js';
@@ -112,6 +113,8 @@ export function registerDigitalIdentityRoutes(app: FastifyInstance, dependencies
   app.addHook("onSend", async (request, reply) => {
     if (request.routeOptions.url?.startsWith("/digital-production/")) reply.header("cache-control", "no-store");
   });
+  app.post('/digital-production/whole-orders/delete-preview',async request=>dependencies.service.deletions().preview(await actor(request),parse(WholeOrderSelectionSchema,request.body)));
+  app.post('/digital-production/whole-orders/delete',async request=>dependencies.service.deletions().remove(await actor(request),parse(WholeOrderDeletionInputSchema,request.body),key(request)));
   if (dependencies.journeys) {
     const workspaces = new DevelopmentWorkspaceQuery(dependencies.journeys);
     app.get("/digital-production/workspaces/designer", async request => workspaces.designer(await actor(request), parse(DevelopmentWorkspaceFilterSchema, request.query)));

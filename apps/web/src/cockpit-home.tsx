@@ -1,3 +1,5 @@
+import {CockpitOrderDeletion} from './cockpit-order-deletion.js';
+import {Button} from '@dx-rework/ui';
 import {CockpitDate} from './cockpit-date.js';
 import {cockpitScheduleReason} from './cockpit-fixed-schedule.js';
 import {hasDateOnlyTarget,nodeTargetLabel,originalNodeDeadlineLabel} from './journey-sla-details.js';
@@ -23,21 +25,26 @@ function HomePos({order,onOpen}:{order:OrderJourney;onOpen:()=>void}){
  const lines=sortedCockpitPoLines(order);
  return <div className="cockpit-home-pos">{lines.slice(0,2).map(line=><div key={line.id}><strong title={`${line.po||'PO待补'} / ${line.color} / ${line.orderedQuantity.toLocaleString()}件`} tabIndex={0}>{line.po||'PO待补'} / {line.color} / {line.orderedQuantity.toLocaleString()}件</strong><small>出货 <time>{order.poDeliveryDates?.find(date=>date.lineId===line.id)?.customerWarehouseArrivalDate??'—'}</time></small></div>)}{lines.length>2&&<button type="button" className="journey-text-action" onClick={onOpen}>另 {lines.length-2} 个PO，查看订单</button>}{!lines.length&&<span>—</span>}</div>;
 }
-export function CockpitHome({data,error,context,onChange}:{data:JourneyResult|null;error:string;context:CockpitContext;onChange:(patch:Partial<CockpitContext>,preserve?:boolean)=>void}){
+export function CockpitHome({data,error,context,onChange,canDelete=false,onDeleted}:{canDelete?:boolean;onDeleted?:(()=>void)|undefined;data:JourneyResult|null;error:string;context:CockpitContext;onChange:(patch:Partial<CockpitContext>,preserve?:boolean)=>void}){
  const query=cockpitQuery(context),[riskSelection,setRiskSelection]=useState<{id:string;query:string}|null>(null);
+ const [selecting,setSelecting]=useState(false),[selected,setSelected]=useState<string[]>([]),[deleting,setDeleting]=useState<string[]|null>(null);
+ const pageIds=data?.items.map(item=>item.id)??[];
+ const toggle=(id:string)=>setSelected(items=>items.includes(id)?items.filter(value=>value!==id):items.length<200?[...items,id]:items);
  const riskOrder=riskSelection?.query===query?data?.items.find(order=>order.id===riskSelection.id):undefined;
  useEffect(()=>{if(!riskOrder)setRiskSelection(null);},[riskOrder]);
  const enter=(order:OrderJourney,node?:JourneyNode)=>onChange({selected:order.id,...(node?{round:undefined,expanded:node.stage,focus:node.instanceId,row:undefined}:context.stage?{round:undefined,expanded:context.stage,focus:undefined,row:undefined}:{})},true);
  return <section className="dx-production-panel journey-orders cockpit-home" aria-label="订单列表" aria-busy={!data&&!error}>
-  <div className="journey-section-title"><h2>订单总览</h2></div>
+  <div className="journey-section-title"><h2>订单总览</h2>{canDelete&&!selecting&&<Button variant="secondary" onClick={()=>setSelecting(true)}>批量删除</Button>}</div>
+  {canDelete&&selecting&&<div className="cockpit-delete-toolbar"><strong>已选 {selected.length} 单</strong><button className="journey-text-action" onClick={()=>setSelected([])}>清空选择</button><span className="spacer"/><Button variant="secondary" onClick={()=>{setSelecting(false);setSelected([]);}}>退出选择</Button><Button className="cockpit-delete-danger" disabled={!selected.length} onClick={()=>setDeleting([...selected])}>删除所选（{selected.length}）</Button></div>}
   <div className="cockpit-home-scroll" role="region" aria-label="订单列表，可横向滚动查看全部列" tabIndex={0}><BusinessTable>
-   <colgroup><col style={{width:'7%'}}/><col style={{width:'17%'}}/><col style={{width:'12%'}}/><col style={{width:'19%'}}/><col style={{width:'15%'}}/><col style={{width:'21%'}}/><col style={{width:'9%'}}/></colgroup>
-   <thead><tr><th>款图</th><th>订单 / 款名</th><th className="cockpit-home-quantity"><span>客户 / 类型</span><span>下单数量</span></th><th>PO 与日期</th><th>当前任务 / 风险</th><th>{context.scope==='development'?'进度（开发）':'进度（全单）'}</th><th>整单状态</th></tr></thead>
+   <colgroup>{canDelete&&selecting&&<col style={{width:32}}/>}<col style={{width:'7%'}}/><col style={{width:'17%'}}/><col style={{width:'12%'}}/><col style={{width:'19%'}}/><col style={{width:'15%'}}/><col style={{width:'21%'}}/><col style={{width:'9%'}}/>{canDelete&&<col style={{width:32}}/>}</colgroup>
+   <thead><tr>{canDelete&&selecting&&<th><input type="checkbox" aria-label="选择本页订单" checked={pageIds.length>0&&pageIds.every(id=>selected.includes(id))} onChange={event=>setSelected(items=>event.target.checked?[...new Set([...items,...pageIds])].slice(0,200):items.filter(id=>!pageIds.includes(id)))}/></th>}<th>款图</th><th>订单 / 款名</th><th className="cockpit-home-quantity"><span>客户 / 类型</span><span>下单数量</span></th><th>PO 与日期</th><th>当前任务 / 风险</th><th>{context.scope==='development'?'进度（开发）':'进度（全单）'}</th><th>整单状态</th>{canDelete&&<th aria-label="订单操作"/>}</tr></thead>
    <tbody>{data?.items.map(order=>{
     const display=order.display,closed=display?.mainState==='completed',node=closed?undefined:representativeCockpitNodes(order,context)[0],risks=cockpitHomeRisks(order,context),delivery=closed||node?undefined:risks.deliveries[0],gap=cockpitReceiptGap(order);
     const scheduleReason=cockpitScheduleReason(order);
     const other=risks.total-(node&&risks.nodes.some(row=>row.instanceId===node.instanceId)?1:0)-(delivery?1:0);
-    return <tr key={order.id} data-order-id={order.id}>
+    return <tr key={order.id} data-order-id={order.id} className={selecting&&selected.includes(order.id)?"is-delete-selected":undefined}>
+     {canDelete&&selecting&&<td><input type="checkbox" aria-label={`选择${order.designStyleNo}`} checked={selected.includes(order.id)} onChange={()=>toggle(order.id)}/></td>}
      <td><CockpitPhoto src={order.styleImageUrl} label={order.designStyleNo} className="cockpit-home-photo"/></td>
      <td><button type="button" className="journey-order-select" data-cockpit-focus={`home-order:${order.id}`} onClick={()=>enter(order)}>{order.styleName||order.designStyleNo}</button>{order.styleName&&order.styleName!==order.designStyleNo&&<small className="cockpit-home-style" title={order.designStyleNo}>{order.designStyleNo}</small>}<small>{order.orderId?`订单ID：${order.identity?.businessNumber??'—'}`:'尚未下单'}</small><small className="cockpit-home-person" title={order.merchandisers.map(person=>person.name??'姓名未登记').join(' / ')}>跟单：{order.merchandisers.map(person=>person.name??'姓名未登记').join(' / ')||'未指派'}</small></td>
      <td className="cockpit-home-quantity"><div className="cockpit-home-client"><span className="cockpit-home-customer">{order.customer??'—'}</span><span className="cockpit-home-type">{order.orderId?'大货订单':'产品开发'}</span><strong aria-label="下单数量">{order.orderId&&order.lines.length?`${order.lines.reduce((sum,line)=>sum+line.orderedQuantity,0).toLocaleString()}件`:'—'}</strong></div></td>
@@ -48,11 +55,13 @@ export function CockpitHome({data,error,context,onChange}:{data:JourneyResult|nu
       {gap&&gap.gap>0&&data&&<button type="button" className="cockpit-home-receipt-gap" onClick={()=>setRiskSelection({id:order.id,query})}>{gap.full?'':'可见范围'}欠收 {gap.gap.toLocaleString()}件</button>}
      </td>
      <td><CockpitHomeProgress order={order}/></td><td>{display?<span className={`cockpit-order-state is-${display.mainState}`}>{stateLabels[display.mainState]}</span>:<span>—</span>}{scheduleReason&&<small className={"cockpit-schedule-reason is-"+scheduleReason.tone} title={scheduleReason.text}>{scheduleReason.text}</small>}</td>
+     {canDelete&&<td><details className="cockpit-delete-menu"><summary aria-label={`${order.designStyleNo}操作`}>⋯</summary><button onClick={event=>{event.currentTarget.closest("details")?.removeAttribute("open");setDeleting([order.id]);}}>删除整单</button></details></td>}
     </tr>;
    })}</tbody>
   </BusinessTable></div>
   {!data&&!error&&<p role="status">正在读取订单…</p>}{data?.items.length===0&&!data.freshness&&<p role="status">当前授权和筛选范围没有订单。</p>}
   {(!data?.freshness||data.freshness.detailsOnly)&&<Pagination page={context.page} pageSize={15} total={data?.total??null} onPage={page=>onChange({page})}/>}
+  {canDelete&&deleting&&<CockpitOrderDeletion ids={deleting} onClose={()=>setDeleting(null)} onCommitted={()=>{setSelected([]);onDeleted?.();}}/>}
   {riskOrder&&<CockpitHomeRisks order={riskOrder} context={context} onClose={()=>setRiskSelection(null)} onNode={node=>{setRiskSelection(null);enter(riskOrder,node);}} onOrder={()=>{setRiskSelection(null);enter(riskOrder);}}/>}
  </section>;
 }

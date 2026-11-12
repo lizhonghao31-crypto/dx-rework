@@ -1,3 +1,4 @@
+import {wholeOrderActiveSql} from './whole-order-visibility.js';
 import type {Pool} from 'pg';
 import {JOURNEY_FACT_CALCULATION_VERSION} from './journey-fact-model.js';
 import {JourneyFactRepository,JourneyFactBusy} from './journey-fact-repository.js';
@@ -49,9 +50,9 @@ export class JourneyFactUpdates{
  async registerBackfill(after:string|null=null,limit=200,force=false){
   if(!Number.isInteger(limit)||limit<1||limit>200)throw Error('Invalid journey backfill batch size');
   const rows=(await this.database.query<Pending&{cursor:string}>(`WITH resources AS (
-    SELECT 'order'::text resource_kind,production_order_id resource_id FROM digital_production_orders
+    SELECT 'order'::text resource_kind,production_order_id resource_id FROM digital_production_orders WHERE ${await wholeOrderActiveSql(this.database,"order","production_order_id")}
     UNION ALL SELECT 'source',s.source_id FROM digital_production_sources s
-     WHERE NOT EXISTS(SELECT 1 FROM digital_production_orders o WHERE o.source_id=s.source_id)
+     WHERE ${await wholeOrderActiveSql(this.database,"source","s.source_id")} AND NOT EXISTS(SELECT 1 FROM digital_production_orders o WHERE o.source_id=s.source_id)
    ) SELECT r.*,r.resource_kind||':'||r.resource_id::text AS cursor FROM resources r
    LEFT JOIN digital_journey_fact_models m USING(resource_kind,resource_id)
    WHERE ($1::text IS NULL OR r.resource_kind||':'||r.resource_id::text>$1)

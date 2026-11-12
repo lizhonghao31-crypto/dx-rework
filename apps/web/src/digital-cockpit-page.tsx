@@ -5,7 +5,7 @@ import {cockpitContext,type CockpitContext} from './digital-journey-cockpit-mode
 import {createWebUrls} from '../url-contract.js';
 import {canLeaveInternalPage,registerInternalNavigationGuard} from './internal-navigation.js';
 import {useCockpitReads} from './cockpit-reads.js';
-import {verifySession} from './auth-session.js';
+import {cachedVerifiedSession,verifySession} from './auth-session.js';
 import {cockpitViewPatch,rememberCockpitReading,rememberedCockpitView,restoreCockpitReading,reconcileCockpitAnchor,matchesCockpitReading} from './cockpit-reading-context.js';
 import {Button} from '@dx-rework/ui';
 import './production-command-center-view.css';
@@ -18,6 +18,7 @@ export function DigitalCockpitPage({deliveryReturn}:{deliveryReturn?:string|unde
  const [context,setContext]=useState<CockpitContext>(()=>({...cockpitContext(window.location.search),scope:cockpitContext(window.location.search).scope??'production'})),[refresh,setRefresh]=useState(0),[contextError,setContextError]=useState(''),[notice,setNotice]=useState('');
  const [searchDraft,setSearchDraft]=useState({value:context.search,pending:false});
  const reads=useCockpitReads(context,refresh),root=useRef<HTMLDivElement>(null),navigation=useRef(0),previousIdentity=useRef(reads.identity),seeded=useRef(false),initial=useRef(context);
+ const session=cachedVerifiedSession(),canDelete=Boolean(session&&session!=='denied'&&session.status==='authorized'&&session.user.isRoot);
  const ready=context.selected?Boolean(reads.detail)&&!reads.detailLoading:Boolean(reads.data)&&!['preparing','loading'].includes(reads.listPhase);
  // Live observation advances visible time locally, not the whole query.
  // Explicit refresh and committed actions own server reads.
@@ -58,5 +59,5 @@ export function DigitalCockpitPage({deliveryReturn}:{deliveryReturn?:string|unde
  },[reads.detail,reads.detailLoading,context.focus,context.row,context.materialNode]);
  const draftChanged=useCallback((value:string,pending:boolean)=>setSearchDraft(current=>current.value===value&&current.pending===pending?current:{value,pending}),[]);
  const reload=()=>{remember();if(!reads.identity)void verifySession(true);setRefresh(value=>value+1);};
- return <div ref={root} className="digital-cockpit" onFocusCapture={remember}>{notice&&<p role="status">{notice}</p>}<DigitalJourneyCockpit data={reads.data} error={contextError||reads.listError} detail={reads.detail} detailError={reads.detailError} detailLoading={reads.detailLoading} context={context} appliedContext={reads.applied} readPhase={reads.listPhase} searchDraft={searchDraft} onSearchDraft={draftChanged} onPlanCommitted={reload} restoreReading={restoreReading} onChange={changeContext} actions={<div className="pattern-actions">{calendarReturn&&<a className="journey-text-action" href={createWebUrls(import.meta.env.BASE_URL).pageUrl(calendarReturn)}>返回交付点阵图</a>}<Button variant="secondary" onClick={reload}>刷新数据</Button></div>}/></div>;
+ return <div ref={root} className="digital-cockpit" onFocusCapture={remember}>{notice&&<p role="status">{notice}</p>}<DigitalJourneyCockpit canDelete={canDelete} identityKey={reads.identity} data={reads.data} error={contextError||reads.listError} detail={reads.detail} detailError={reads.detailError} detailLoading={reads.detailLoading} context={context} appliedContext={reads.applied} readPhase={reads.listPhase} searchDraft={searchDraft} onSearchDraft={draftChanged} onPlanCommitted={reload} restoreReading={restoreReading} onChange={changeContext} actions={<div className="pattern-actions">{calendarReturn&&<a className="journey-text-action" href={createWebUrls(import.meta.env.BASE_URL).pageUrl(calendarReturn)}>返回交付点阵图</a>}<Button variant="secondary" onClick={reload}>刷新数据</Button></div>}/></div>;
 }

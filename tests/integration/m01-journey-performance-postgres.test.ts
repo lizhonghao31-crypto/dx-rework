@@ -61,7 +61,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL;
    // regression (2173ms vs2155ms medians; local only). Keep a physical driver
    // budget for this legacy full88 compatibility reader and do not confuse it
    // with the indexed15-row page budget guarded by PERF03's own suite.
-   phase('query-counters',{diagnosticSql:records.slice(3).map(row=>row.calls.sql),physicalSql:currentDriverSqlCalls});
+   phase('query-counters',{diagnosticSql:records.slice(3).map(row=>row.calls.sql),physicalSql:currentDriverSqlCalls,deleteReadTemplates:physicalTemplates.filter(row=>row.sql.includes('whole_order')).map(({sql,calls})=>({sql,calls}))});
    expect(records.slice(3).every((row,index)=>row.calls.sql<=currentDriverSqlCalls[index]!)).toBe(true);
    if(!scene)expect(currentDriverSqlCalls.every(calls=>calls<=7100)).toBe(true);
 

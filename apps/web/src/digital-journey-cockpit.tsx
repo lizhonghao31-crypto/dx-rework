@@ -60,8 +60,8 @@ export function cockpitConditionsLabel(context:CockpitContext,data?:JourneyResul
  if(context.node)pieces.push(JOURNEY_NODES.find(node=>node.key===context.node)?.label??'所选节点');if(context.state)pieces.push(journeyStateLabels[context.state]);if(context.risk)pieces.push(journeyRiskLabels[context.risk]);
  if(context.startDate||context.endDate)pieces.push(`创建日期 ${context.startDate??'不限'} 至 ${context.endDate??'不限'}`);if(context.kpi!=='all')pieces.push(kpis.find(kpi=>kpi.key===context.kpi)?.label??'受阻订单');if(context.missing)pieces.push('已应用原时效缺项筛选');pieces.push(`第${context.page}页`);return pieces.join('；');
 }
-type Props = { data: JourneyResult | null; error: string; detail: OrderJourney | null; detailError: string; detailLoading: boolean; context: CockpitContext; appliedContext?:CockpitContext|null;readPhase?:string;searchDraft?:{value:string;pending:boolean};onSearchDraft?:((value:string,pending:boolean)=>void)|undefined;onChange: (patch: Partial<CockpitContext>, preserveSelection?: boolean) => void; actions: ReactNode;onPlanCommitted?:(()=>void)|undefined;restoreReading?:boolean };
-export function DigitalJourneyCockpit({ data, error, detail, detailError, detailLoading, context, appliedContext,readPhase,searchDraft,onSearchDraft,onChange,actions,onPlanCommitted,restoreReading=false }: Props) {
+type Props = { canDelete?:boolean;identityKey?:string; data: JourneyResult | null; error: string; detail: OrderJourney | null; detailError: string; detailLoading: boolean; context: CockpitContext; appliedContext?:CockpitContext|null;readPhase?:string;searchDraft?:{value:string;pending:boolean};onSearchDraft?:((value:string,pending:boolean)=>void)|undefined;onChange: (patch: Partial<CockpitContext>, preserveSelection?: boolean) => void; actions: ReactNode;onPlanCommitted?:(()=>void)|undefined;restoreReading?:boolean };
+export function DigitalJourneyCockpit({ data, error, detail, detailError, detailLoading, context, appliedContext,readPhase,searchDraft,onSearchDraft,onChange,actions,onPlanCommitted,restoreReading=false,canDelete=false,identityKey }: Props) {
  const actual=appliedContext??context,query=cockpitQuery(actual);
  const [coverage,setCoverage]=useState<{query:string;context:CockpitContext}|null>(null);
  useEffect(()=>{if(!data||context.selected||coverage&&coverage.query!==query)setCoverage(null);},[data,context.selected,query,coverage]);
@@ -76,7 +76,7 @@ export function DigitalJourneyCockpit({ data, error, detail, detailError, detail
   <section aria-label="订单状态统计"><div className="journey-kpis" aria-label="七项订单指标">{kpis.map(renderKpi)}</div></section>
   {actual.missing&&<div className="cockpit-applied-coverage"><span>{cockpitCoverageLabels[actual.missing]}</span><Button type="button" variant="secondary" onClick={()=>applyResult({missing:undefined,page:1})}>清除缺项筛选</Button></div>}
   {error&&<p role="alert">读取“{cockpitConditionsLabel(context,data)}”失败：{error}。{data?'仍显示上次读取的订单，可刷新重试。':''}</p>}
-  <CockpitHome data={data} error={error} context={actual} onChange={applyResult}/>
+  <CockpitHome key={identityKey} canDelete={canDelete} onDeleted={onPlanCommitted} data={data} error={error} context={actual} onChange={applyResult}/>
   {coverage&&coverage.query===query&&data&&<CockpitTimingCoverage data={data} context={coverage.context} onClose={()=>setCoverage(null)} onOpen={id=>{setCoverage(null);applyResult({selected:id},true);}}/>}
  </div>;
 }

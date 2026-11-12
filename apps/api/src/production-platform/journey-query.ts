@@ -1,3 +1,4 @@
+import {wholeOrderActiveSql,assertWholeOrderActive,rememberWholeOrderSnapshot,forgetWholeOrderSnapshot} from './whole-order-visibility.js';
 import {FixedTimelineAdoptionRepository} from './fixed-timeline-adoptions.js';
 import {OrderTimePlanRepository} from './order-time-plan-repository.js';
 import {orderTimeCreated} from './order-time-created.js';
@@ -91,7 +92,7 @@ export class DigitalJourneyQuery {
     try { await db.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
       const asOf=iso((await db.query("SELECT CURRENT_TIMESTAMP AS as_of")).rows[0].as_of)!;
       result=await work(reads,asOf,db);await db.query("COMMIT");
-    } catch(error) { await db.query("ROLLBACK");throw error; } finally {this.observations.delete(reads);this.merchandiserNames.delete(reads);db.release();}
+    } catch(error) { await db.query("ROLLBACK");throw error; } finally {forgetWholeOrderSnapshot(reads);this.observations.delete(reads);this.merchandiserNames.delete(reads);db.release();}
     await journeyMeasure('clock_postcheck',()=>assertBusinessClocksUnchanged(new ContextBusinessClock(this.database),observations.values()));
     return result;
   }
@@ -108,7 +109,7 @@ export class DigitalJourneyQuery {
       WHERE o.production_order_id IS NOT NULL AND plan.resource_kind='order' AND plan.production_order_id=o.production_order_id
        OR o.production_order_id IS NULL AND plan.resource_kind='source' AND plan.source_id=s.source_id)`:'false'} AS has_order_time_plan
     FROM digital_production_sources s FULL JOIN digital_production_orders o ON o.source_id=s.source_id
-    WHERE ($4::uuid IS NULL OR s.source_id=$4 OR o.production_order_id=$4)
+    WHERE ${await wholeOrderActiveSql(db,"source","s.source_id")} AND ${await wholeOrderActiveSql(db,"order","o.production_order_id")} AND ($4::uuid IS NULL OR s.source_id=$4 OR o.production_order_id=$4)
       AND ($5::text[] IS NULL OR EXISTS(SELECT 1 FROM digital_production_task_access board_task WHERE (board_task.source_id=s.source_id OR board_task.production_order_id=o.production_order_id) AND board_task.task_kind=ANY($5::text[]))) AND ($3
       OR ('sample_designer' IN (SELECT role_code FROM live_roles) AND $1 IN (s.created_by,o.created_by))
       OR ('order_merchandiser' IN (SELECT role_code FROM live_roles) AND o.primary_merchandiser_id=$1)
@@ -128,6 +129,7 @@ export class DigitalJourneyQuery {
       const items:OrderJourney[]=[],candidates=new Map<string,Candidate>();
       const patternKinds=options.patternBusiness?PATTERN_GROUPS.flatMap(group=>[...group.nodes]).filter(kind=>options.patternBusiness==="all"||(options.patternBusiness==="bulk"?kind==="bulk_pattern":kind!=="bulk_pattern")):null;
       const rows=await journeyMeasure('candidates',()=>this.candidates(db,actor,null,patternKinds));journeyCandidateCount(rows.length);
+      rememberWholeOrderSnapshot(db,rows.flatMap(row=>row.order?[row.order.production_order_id]:[]));
       // The original management policy grants the full read range for these exact candidates.
       // Assigned/technical partial readers retain their original per-object path.
       if(isDigitalManagementReader(actor))prepareJourneySnapshotBatches(db,rows.flatMap(row=>row.order?[row.order.production_order_id]:[]));
@@ -311,6 +313,7 @@ export class DigitalJourneyQuery {
    * Caller owns one consistent snapshot and persists only the whitelist below.
    */
   async buildFactsWithClient(db:PoolClient,resource:{kind:'source'|'order';id:string},asOf:string,captureSelection?:(selection:{facts:JourneySelectionFacts;expiresAt:string|null})=>void):Promise<JourneyFactModel>{
+    await assertWholeOrderActive(db,resource.kind,resource.id);
     const row=(await db.query(`SELECT row_to_json(s) AS source,row_to_json(o) AS "order"
       FROM digital_production_sources s FULL JOIN digital_production_orders o ON o.source_id=s.source_id
       WHERE ($1='order' AND o.production_order_id=$2) OR ($1='source' AND s.source_id=$2 AND o.production_order_id IS NULL)`,[resource.kind,resource.id])).rows[0] as Candidate|undefined;
@@ -356,6 +359,7 @@ export class DigitalJourneyQuery {
    * accepted redo and completion mapping used by the cockpit; return timing
    * facts only, never an unscoped presentation or a substitute user. */
   async orderTimeProgressWithClient(db:PoolClient,resource:{kind:'source'|'order';id:string},asOf:string):Promise<JourneyTimingInputs>{
+    await assertWholeOrderActive(db,resource.kind,resource.id);
     const row=(await db.query(`SELECT row_to_json(s) AS source,row_to_json(o) AS "order"
       FROM digital_production_sources s FULL JOIN digital_production_orders o ON o.source_id=s.source_id
       WHERE ($1='order' AND o.production_order_id=$2) OR ($1='source' AND s.source_id=$2)`,[resource.kind,resource.id])).rows[0] as Candidate|undefined;

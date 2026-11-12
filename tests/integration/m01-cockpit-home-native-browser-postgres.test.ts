@@ -61,7 +61,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  it('renders the original full Shell, seven peer KPIs, and aligned date/progress rows without changing source facts',async()=>{
   const {context,page}=await h.open(undefined,{},1584);
   try{const actual=await h.read(page);expect(actual.total).toBe(31);for(const width of [1165,1366,1440,1920]){
-   await page.setViewportSize({width,height:1003});expect(await page.locator('.app-shell>aside').count()).toBe(1);expect(await page.locator('.journey-kpis button').count()).toBe(7);expect(await page.locator('.journey-secondary-kpis').count()).toBe(0);expect(await page.locator('.journey-orders th').count()).toBe(7);
+   await page.setViewportSize({width,height:1003});expect(await page.locator('.app-shell>aside').count()).toBe(1);expect(await page.locator('.journey-kpis button').count()).toBe(7);expect(await page.locator('.journey-secondary-kpis').count()).toBe(0);expect(await page.locator('.journey-orders th').count()).toBe(8);expect(await page.locator('.journey-orders th[aria-label="订单操作"]').count()).toBe(1);
    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
    const cards=await page.locator('.journey-kpis button').evaluateAll(items=>items.map(el=>el.getBoundingClientRect().top));expect(Math.max(...cards)-Math.min(...cards)).toBeLessThan(2);
    const row=page.locator('.journey-orders tbody tr').first(),before=await row.boundingBox();await row.locator('.journey-order-select').hover();expect((await row.boundingBox())!.height).toBe(before!.height);
