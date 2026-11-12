@@ -32,11 +32,28 @@ it('Acceptance PR02 exposes per-PO own deadlines and does not substitute the tas
  value.fixedTargets!.push({scopeRef:'po:B',lineId:'B',progress:projected(other)});value.nativeTaskDeadline={at:'2026-11-10T09:00:00Z',precision:'instant'};
  expect(originalNodeDeadlineLabel(value)).toBe('各PO责任截止见节点');
  const html=renderToStaticMarkup(createElement(CockpitFixedTargetDates,{node:value,lines:[{id:'A',po:'TEST RED',color:'红',orderedQuantity:1},{id:'B',po:'TEST BLUE',color:'蓝',orderedQuantity:1}] as never}));
- expect(html).toContain('TEST RED');expect(html).toContain('TEST BLUE');expect(html.match(/责任截止/g)).toHaveLength(2);expect(html).toContain('未开始或待核');expect(html).toContain('2026-11-10T10:00:00.000Z');expect(html).not.toContain('2026-11-10T09:00:00Z');
+ expect(html).toContain('TEST RED');expect(html).toContain('TEST BLUE');expect(html.match(/责任截止/g)).toHaveLength(2);expect(html).toContain('责任计时未开始或待核');expect(html).toContain('2026-11-10T10:00:00.000Z');expect(html).not.toContain('2026-11-10T09:00:00Z');
 });
 
 it('Acceptance PR02 risk duration uses the known own-PO window instead of legacy target overdue seconds',()=>{
  const value=node('A',projected(scope('A'),'2026-11-10T11:00:00.000Z'));value.overdueSeconds=10*86400;value.expectedPrecision='date';value.expectedAt='2026-11-01';
  const other=node('B').fixedTargets![0]!;other.progress.ownSla={state:'unknown',deadlineAt:null,overdueMinutes:null,sourceRef:'TEST not ready'};value.fixedTargets!.push(other);
  expect(nodeOverdue(value,'2026-11-10T11:00:00.000Z')).toBe('逾期 1 小时');
+});
+
+it('Acceptance PR02 Review retains distinct native batch deadlines without borrowing another scope or aggregate task deadline',()=>{
+ const input=scope('A'),start={precision:'instant' as const,at:'2026-11-10T08:00:00.000Z'};
+ input.facts.work!.ownWindows=[
+  {sourceRef:'TEST batch A1',started:start,completed:{precision:'unknown'},complete:false,deadline:'2026-11-10T09:00:00.000Z',warningAt:null,calendar:'continuous'},
+  {sourceRef:'TEST batch A2',started:start,completed:{precision:'unknown'},complete:false,deadline:'2026-11-10T12:00:00.000Z',warningAt:null,calendar:'continuous'}
+ ];
+ const value=node('A',projected(input,'2026-11-10T10:00:00.000Z'));
+ value.nativeWindows=input.facts.work!.ownWindows.map(window=>({evidence:window.sourceRef,scopeLabel:'PO A',startedAt:start.at,completedAt:null,complete:false,deadline:window.deadline,warningAt:null}));
+ value.nativeTaskDeadline={at:'2026-11-10T08:30:00.000Z',precision:'instant'};
+ expect(value.fixedTargets![0]!.progress.ownSla).toMatchObject({state:'overdue',deadlineAt:null});
+ expect(originalNodeDeadlineLabel(value)).toBe('各批原截止见节点');
+ const html=()=>renderToStaticMarkup(createElement(CockpitFixedTargetDates,{node:value}));
+ expect(html()).toContain('各批原截止见节点');expect(html()).not.toContain('未开始或待核');
+ value.fixedTargets![0]!.progress.ownSla={state:'unknown',deadlineAt:null,overdueMinutes:null,sourceRef:'TEST unready PO B'};
+ expect(originalNodeDeadlineLabel(value)).toBe('责任计时未开始或待核');expect(html()).not.toContain('各批原截止见节点');expect(html()).not.toContain('08:30');
 });

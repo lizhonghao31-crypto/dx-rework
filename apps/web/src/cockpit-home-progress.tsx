@@ -8,6 +8,7 @@ function HomeDate({value,missing='—'}:{value:JourneyBusinessDate|undefined;mis
 
 /** Completion forecast is derived from all authorized PO estimates, never B/H. */
 export function CockpitCompletionEstimate({order}:{order:OrderJourney}){
+ if(!order.fixedSchedule)return <HomeDate value={order.visualProgress?.expected}/>;
  const scopes=order.fixedSchedule?.scopes??[];
  if(!scopes.length)return <span>—</span>;
  const estimates=scopes.map(scope=>scope.completionEstimate);

@@ -2,7 +2,7 @@
   "version": 1,
   "base": "7d66f4edebd388df1b0fdc2fb8cb9446a08f4537",
   "risk": "full",
-  "sourceFingerprint": "53abcf5fd7a525bf64dd92d7c7ba51691de01ab04f1e76656512282d02fa5ef3",
+  "sourceFingerprint": "bca8497ed231601c3562915c5fc43387a6f9b805a0c84e4e61bca4808b41ed1a",
   "rules": [
     {
       "rule": "Display current completion estimates independently from frozen targets/customer promises and preserve known/unknown bounds.",
@@ -23,7 +23,7 @@
       ],
       "initialization": "No schema, dependencies or runtime configuration changes. Original native fixture and registered isolated PG ownership retained; current and old authorized readers remain. Calculation version invalidates prior shared facts through existing bounded worker, never a whole-database GET rebuild.",
       "dateAndPermission": "Original business clock, per-PO readiness, begun responsibility windows, actual events, approved H changes and frozen B stay distinct. Read permissions and write commands are unchanged; no role grants, new data capture or cross-user cache.",
-      "expectation": "The latest necessary PO estimate is shown; unknown PO means no complete estimate, lower-bound result says not before. Actual completion remains its own field, no fallback from B/H.",
+      "expectation": "The latest necessary PO estimate is shown; unknown PO means no complete estimate, lower-bound result says not before. Actual completion remains its own field, Legacy without any fixed schedule retains original complete forecast; adopted unknown schedule never falls back to B/H.",
       "checks": [
         "time-unit",
         "time-types",
@@ -62,7 +62,7 @@
       ],
       "initialization": "No schema, dependencies or runtime configuration changes. Original native fixture and registered isolated PG ownership retained; current and old authorized readers remain. Calculation version invalidates prior shared facts through existing bounded worker, never a whole-database GET rebuild.",
       "dateAndPermission": "Original business clock, per-PO readiness, begun responsibility windows, actual events, approved H changes and frozen B stay distinct. Read permissions and write commands are unchanged; no role grants, new data capture or cross-user cache.",
-      "expectation": "PO A ready02 +24h is not overdue at next01 and is60min overdue at next03; B unready has no D. Current own overdue1h cannot display old target10d. Whole-order customerDuePassed stays false.",
+      "expectation": "PO A ready02 +24h is not overdue at next01 and is60min overdue at next03; B unready has no D. Current own overdue1h cannot display old target10d. Whole-order customerDuePassed stays false. Different native batch deadlines remain visible through scoped original evidence; no unrelated PO or task fallback.",
       "checks": [
         "time-unit",
         "time-types",
@@ -192,8 +192,8 @@
     {
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "7d66f4edebd388df1b0fdc2fb8cb9446a08f4537",
-      "sourceFingerprint": "53abcf5fd7a525bf64dd92d7c7ba51691de01ab04f1e76656512282d02fa5ef3",
+      "testedHead": "809d80ce95c33eeef99c22b71ac1e95117783abd",
+      "sourceFingerprint": "bca8497ed231601c3562915c5fc43387a6f9b805a0c84e4e61bca4808b41ed1a",
       "inputPaths": [
         "apps",
         "packages",
@@ -203,21 +203,21 @@
         "package-lock.json",
         "vitest.config.ts"
       ],
-      "inputFingerprint": "7fba91eac00bf494aba3704e9c032383ac2312c180d81bfa2ebbdc808ee281e3",
+      "inputFingerprint": "345e547300b1a89d0d754b29192214882e1bf2fdff5f539b0f0fe5dd7180ab8b",
       "id": "time-unit",
       "kind": "tests",
       "command": "PATH=/workspace/.dx-cloud/r5-runtime/node_modules/.bin:$PATH node node_modules/vitest/vitest.mjs run tests/unit/order-time-reading.test.ts tests/unit/fixed-schedule-selection.test.ts tests/unit/fixed-schedule-progress.test.ts tests/unit/cockpit-home.test.ts tests/unit/production-readiness-contract.test.ts tests/unit/cockpit-fixed-schedule.test.ts tests/unit/cockpit-detail.test.ts tests/unit/digital-journey-cockpit.test.ts tests/unit/digital-notification-child-context.test.ts tests/unit/digital-notification-runtime.test.ts --reporter=json --outputFile=/workspace/.dx-cloud/r5-regression-02-unit-final.json",
-      "startedAt": "2026-11-12T08:15:10.059Z",
-      "endedAt": "2026-11-12T08:15:23.207Z",
+      "startedAt": "2026-11-12T08:31:20.022Z",
+      "endedAt": "2026-11-12T08:31:27.463Z",
       "log": "/workspace/.dx-cloud/r5-regression-02-unit-final.log",
       "logSha256": "44fc9c4c851cbd36cdf89434fd1bce24b4cb79e20284476bfd4b29d69ac65ed9",
-      "passed": 145,
+      "passed": 147,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "ca8c23f35cccecb93dc0eaf055ee05870346dcd3b0d1e9104872d95ce5cde3bf"
+          "sha256": "32b19509f1515da41eca22a0c0607097790aa78da26ccf3819c8828e56c8e667"
         }
       ],
       "context": "Ten affected existing suites; independent numerical forecasts, original responsibility D, mixed PO risk, explicit route versus unknown and started-history preservation. Native source and contract links resolve to this worktree, Node22/npm10; original bounded non-db worker configuration."
@@ -225,32 +225,33 @@
     {
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "7d66f4edebd388df1b0fdc2fb8cb9446a08f4537",
-      "sourceFingerprint": "53abcf5fd7a525bf64dd92d7c7ba51691de01ab04f1e76656512282d02fa5ef3",
+      "testedHead": "809d80ce95c33eeef99c22b71ac1e95117783abd",
+      "sourceFingerprint": "8311d77dbf1547f1a4c783da9617d8b55f4588d1eb0d44620e7276674310956f",
       "inputPaths": [
         "apps",
         "packages",
         "scripts",
-        "tests",
+        "tests/integration",
+        "tests/helpers",
         "package.json",
         "package-lock.json",
         "vitest.config.ts"
       ],
-      "inputFingerprint": "7fba91eac00bf494aba3704e9c032383ac2312c180d81bfa2ebbdc808ee281e3",
+      "inputFingerprint": "6ea4eaeedcf565415e87822918b56c068b4635789255a1b6d0c1bc03d1a08a93",
       "id": "time-pg-browser",
       "kind": "tests",
       "command": "PATH=/workspace/.dx-cloud/r5-runtime/node_modules/.bin:$PATH TEST_DATABASE_URL=postgresql://dx_r5_test@127.0.0.1:55413/dx_rework_acceptance_test_r5 DX_REWORK_TEST_SUITE_KIND=postgres PLAYWRIGHT_BROWSERS_PATH=/workspace/.dx-cloud/playwright node node_modules/vitest/vitest.mjs run tests/integration/order-time-reading-postgres.test.ts tests/integration/m01-cockpit-home-native-browser-postgres.test.ts --reporter=json --outputFile=/workspace/.dx-cloud/r5-regression-02-pg-final.json",
-      "startedAt": "2026-11-12T08:15:10.896Z",
-      "endedAt": "2026-11-12T08:18:09.414Z",
+      "startedAt": "2026-11-12T08:30:12.672Z",
+      "endedAt": "2026-11-12T08:33:21.825Z",
       "log": "/workspace/.dx-cloud/r5-regression-02-pg-final.log",
-      "logSha256": "5f63260f4035851ee65cfb4ac9b2c5ebeb23624b9ee07cc5a5f8a7d98406c3c6",
+      "logSha256": "b5d7e1b157eeebe3e8620b74b8dfb4cdcd8280b086bb6db659bb3cb71b11fb7d",
       "passed": 21,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "29911d17923128e7abb056cc513829f7f7935a1ac8cd4926d22e77006a05c561"
+          "sha256": "afd991509ab4bfa31973f640b8059e947681ec592c23f1442c3298f19ba07aa3"
         }
       ],
       "context": "Isolated non-superuser PostgreSQL13.23, original complete schema/fixtures; actual signed original App Chromium1194. One PG worker. Actual scoped date request and approval/notification denial, no-craft before preparation, shared fact build/update, RR, complete list and current-page assembly; actual UI primary assignment, release of owner approval and genuine approval, revocation, KPI, modal and filters. Original registered afterAll schema cleanup; no onsite/production writes."
@@ -258,8 +259,8 @@
     {
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "7d66f4edebd388df1b0fdc2fb8cb9446a08f4537",
-      "sourceFingerprint": "53abcf5fd7a525bf64dd92d7c7ba51691de01ab04f1e76656512282d02fa5ef3",
+      "testedHead": "809d80ce95c33eeef99c22b71ac1e95117783abd",
+      "sourceFingerprint": "bca8497ed231601c3562915c5fc43387a6f9b805a0c84e4e61bca4808b41ed1a",
       "inputPaths": [
         "apps",
         "packages",
@@ -269,12 +270,12 @@
         "package-lock.json",
         "vitest.config.ts"
       ],
-      "inputFingerprint": "7fba91eac00bf494aba3704e9c032383ac2312c180d81bfa2ebbdc808ee281e3",
+      "inputFingerprint": "345e547300b1a89d0d754b29192214882e1bf2fdff5f539b0f0fe5dd7180ab8b",
       "id": "time-types",
       "kind": "command",
       "command": "PATH=/workspace/.dx-cloud/r5-runtime/node_modules/.bin:$PATH npm run typecheck",
       "startedAt": "2026-11-12T08:10:31.073Z",
-      "endedAt": "2026-11-12T08:21:20.850Z",
+      "endedAt": "2026-11-12T08:33:20.001Z",
       "log": "/workspace/.dx-cloud/r5-regression-02-typecheck-final.log",
       "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e",
       "context": "All workspaces after current workspace package symlinks corrected; initial old-worktree type errors are retained, not claimed passed. Executor observed actual exit0. Log creation/last-write timestamps; no invented test counts."
@@ -282,8 +283,8 @@
     {
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "7d66f4edebd388df1b0fdc2fb8cb9446a08f4537",
-      "sourceFingerprint": "53abcf5fd7a525bf64dd92d7c7ba51691de01ab04f1e76656512282d02fa5ef3",
+      "testedHead": "809d80ce95c33eeef99c22b71ac1e95117783abd",
+      "sourceFingerprint": "bca8497ed231601c3562915c5fc43387a6f9b805a0c84e4e61bca4808b41ed1a",
       "inputPaths": [
         "apps",
         "packages",
@@ -293,12 +294,12 @@
         "package-lock.json",
         "vitest.config.ts"
       ],
-      "inputFingerprint": "7fba91eac00bf494aba3704e9c032383ac2312c180d81bfa2ebbdc808ee281e3",
+      "inputFingerprint": "345e547300b1a89d0d754b29192214882e1bf2fdff5f539b0f0fe5dd7180ab8b",
       "id": "time-lint",
       "kind": "command",
       "command": "PATH=/workspace/.dx-cloud/r5-runtime/node_modules/.bin:$PATH npm run lint",
       "startedAt": "2026-11-12T08:10:32.359Z",
-      "endedAt": "2026-11-12T08:15:59.649Z",
+      "endedAt": "2026-11-12T08:32:26.928Z",
       "log": "/workspace/.dx-cloud/r5-regression-02-lint.log",
       "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763",
       "context": "Repository existing lint; final changed source/test set. Executor observed actual exit0. Log creation/last-write timestamps; no invented test counts."
@@ -306,8 +307,8 @@
     {
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "7d66f4edebd388df1b0fdc2fb8cb9446a08f4537",
-      "sourceFingerprint": "53abcf5fd7a525bf64dd92d7c7ba51691de01ab04f1e76656512282d02fa5ef3",
+      "testedHead": "809d80ce95c33eeef99c22b71ac1e95117783abd",
+      "sourceFingerprint": "bca8497ed231601c3562915c5fc43387a6f9b805a0c84e4e61bca4808b41ed1a",
       "inputPaths": [
         "apps",
         "packages",
@@ -318,12 +319,12 @@
         "vitest.config.ts",
         "docs/engineering/acceptance-time-sites-20261027.json"
       ],
-      "inputFingerprint": "b9c3528e42990f7c30190188f2c99ff49810e337f377ff44d8f55d7634414c7d",
+      "inputFingerprint": "4f6aa79721334ef3fa0c6e0b8504b00548a523caf33fbad38795407462ba221c",
       "id": "time-inventory",
       "kind": "command",
       "command": "PATH=/workspace/.dx-cloud/r5-runtime/node_modules/.bin:$PATH node scripts/acceptance/time-site-inventory.mjs",
       "startedAt": "2026-11-12T08:11:18.948Z",
-      "endedAt": "2026-11-12T08:15:55.184Z",
+      "endedAt": "2026-11-12T08:32:12.416Z",
       "log": "/workspace/.dx-cloud/r5-regression-02-time-sites.log",
       "logSha256": "114d19b3f81e82ca812ccaf79d465b9eac16b584f779c9b621a2e15595e62be6",
       "context": "Exact regenerated changed occurrences only; prior semantic reviews retained and scoped original responsibility D/overdue notes added. Executor observed actual exit0. Log creation/last-write timestamps; no invented test counts."
@@ -331,8 +332,8 @@
     {
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "7d66f4edebd388df1b0fdc2fb8cb9446a08f4537",
-      "sourceFingerprint": "53abcf5fd7a525bf64dd92d7c7ba51691de01ab04f1e76656512282d02fa5ef3",
+      "testedHead": "809d80ce95c33eeef99c22b71ac1e95117783abd",
+      "sourceFingerprint": "bca8497ed231601c3562915c5fc43387a6f9b805a0c84e4e61bca4808b41ed1a",
       "inputPaths": [
         "apps",
         "packages",
@@ -342,12 +343,12 @@
         "package-lock.json",
         "vitest.config.ts"
       ],
-      "inputFingerprint": "7fba91eac00bf494aba3704e9c032383ac2312c180d81bfa2ebbdc808ee281e3",
+      "inputFingerprint": "345e547300b1a89d0d754b29192214882e1bf2fdff5f539b0f0fe5dd7180ab8b",
       "id": "time-resources",
       "kind": "command",
       "command": "PATH=/workspace/.dx-cloud/r5-runtime/node_modules/.bin:$PATH node --input-type=module -e 'import {checkResourceRegistration} from \"./scripts/test-preflight.mjs\";checkResourceRegistration();console.log(\"Original resource registration check passed\");'",
       "startedAt": "2026-11-12T08:11:19.524Z",
-      "endedAt": "2026-11-12T08:11:19.604Z",
+      "endedAt": "2026-11-12T08:32:12.536Z",
       "log": "/workspace/.dx-cloud/r5-regression-02-resources.log",
       "logSha256": "3c56bdc1e02c3c177b0a749d101046ba0842e6329c189fcd5c555cba4fb0ce33",
       "context": "Existing resource ownership and canonical suite registration preserved. Executor observed actual exit0. Log creation/last-write timestamps; no invented test counts."
