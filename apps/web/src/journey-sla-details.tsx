@@ -11,6 +11,8 @@ export const hasDateOnlyTarget=(node:NodeDeadline)=>Boolean(hasOriginalTaskDeadl
 export const nodeTargetLabel=(node:NodeDeadline)=>node.nativeWindows?.length?node.nativeWindows.length===1?journeyTime(node.nativeWindows[0]!.deadline,'instant','本批无可信截止'):'各批原截止见节点':hasDateOnlyTarget(node)?slaTargetLabel({at:node.expectedAt,exclusive:true,reasons:[]}):journeyTime(node.expectedAt,node.expectedPrecision,'尚无可信截止');
 /** Original D is preserved separately before the rich v2 node adopts B. */
 export function originalNodeDeadlineLabel(node:JourneyNode){
+ const scoped=node.fixedTargets?.filter(target=>Object.hasOwn(target.progress.ownSla,'deadlineAt'));
+ if(scoped?.length){const dates=scoped.map(target=>target.progress.ownSla.deadlineAt);return dates.every(at=>at&&at===dates[0])?journeyTime(dates[0]!, 'instant'):scoped.length>1?'各PO责任截止见节点':'责任计时未开始或待核';}
  const native=node.nativeTaskDeadline;
  if(native)return nodeTargetLabel({...node,expectedAt:native.at,expectedKind:'sla',expectedPrecision:native.precision,...(native.mode?{deadlineMode:native.mode}:{}),...(native.exclusive!==undefined?{deadlineExclusive:native.exclusive}:{})});
  if(node.fixedTargets?.length){if(node.nativeWindows?.length)return nodeTargetLabel(node);return node.timing?.target.at?slaTargetLabel(node.timing.target):'原截止待核';}

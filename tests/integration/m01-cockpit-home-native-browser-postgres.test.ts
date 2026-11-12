@@ -212,6 +212,10 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await expect.poll(async()=>(await f.db.query('SELECT primary_merchandiser_id FROM digital_production_orders WHERE production_order_id=$1',[orderId])).rows[0].primary_merchandiser_id).toBe(f.people.merchandiser!.actorId);
    await expect.poll(()=>manager.page.locator('[data-identity-fact="merchandiser"]').innerText()).toContain(name);
    expect((await sourcingSlaEvidence(f.db,orderId)).sourcing_approval?.startedAt).toBe('2026-11-07T00:00:00.000Z');
+   const detail=await manager.page.request.get(h.base+'/api/digital-production/journeys/'+orderId+'?view=cockpit');expect(detail.status()).toBe(200);
+   const ownerNode=(await detail.json()).stages.flatMap((stage:{nodes:Array<{key:string}>})=>stage.nodes).find((node:{key:string})=>node.key==='sourcing_owner');
+   expect(ownerNode).toMatchObject({state:'active',responsibilityRole:'老板审批'});
+
   }finally{await manager.context.close();}
   const merchandiser=await h.open(f.people.merchandiser!.actorId);
   await merchandiser.page.goto(h.base+h.path({selected:orderId}));

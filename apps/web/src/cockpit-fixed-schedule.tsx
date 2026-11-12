@@ -56,7 +56,7 @@ export function CockpitDurationSummary({order,asOf}:{order:OrderJourney;asOf?:st
 
 export function CockpitFixedTargetDates({node,lines=[]}:{node:JourneyNode;lines?:OrderJourney['lines']}){
  const targets=node.fixedTargets??[];
- return <>{targets.map((target,index)=>{const goal=target.progress.goalDelta,line=lines.find(line=>line.id===target.lineId);return <span className="cockpit-fixed-target-date" key={target.scopeRef+'|'+target.progress.canonicalWorkRef}>{targets.length>1&&<small title={line?`PO ${line.po??'号码待补'} · ${line.color}`:undefined}>{line?`PO ${line.po??'号码待补'} · ${line.color}`:`对应范围${index+1}`}：</small>}{goal.targetPrecision==='date'&&goal.targetDate?<CockpitDate value={goal.targetDate} precision="date"/>:goal.targetAt?<CockpitDate value={goal.targetAt} precision="instant"/>:'待补充'}</span>;})}</>;
+ return <>{targets.map((target,index)=>{const goal=target.progress.goalDelta,line=lines.find(line=>line.id===target.lineId);return <span className="cockpit-fixed-target-date" key={target.scopeRef+'|'+target.progress.canonicalWorkRef}>{targets.length>1&&<small title={line?`PO ${line.po??'号码待补'} · ${line.color}`:undefined}>{line?`PO ${line.po??'号码待补'} · ${line.color}`:`对应范围${index+1}`}：</small>}{goal.targetPrecision==='date'&&goal.targetDate?<CockpitDate value={goal.targetDate} precision="date"/>:goal.targetAt?<CockpitDate value={goal.targetAt} precision="instant"/>:'待补充'}{Object.hasOwn(target.progress.ownSla,'deadlineAt')&&<small>责任截止：{target.progress.ownSla.deadlineAt?<CockpitDate value={target.progress.ownSla.deadlineAt} precision="instant"/>:'未开始或待核'}</small>}</span>;})}</>;
 }
 
 /** Actual dates and their adjacent delta share this exact scoped occurrence. */

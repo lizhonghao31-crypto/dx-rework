@@ -1,7 +1,7 @@
 import {originalNodeDeadlineLabel} from './journey-sla-details.js';
 import {StatusBadge} from '@dx-rework/ui';
 import {type JourneyNode,type OrderJourney} from '@dx-rework/contracts/digital-production-journey';
-import {cockpitVisibleBlockers} from './cockpit-node-rows.js';
+import {cockpitVisibleBlockers,cockpitNodeOwner} from './cockpit-node-rows.js';
 import {journeyRiskLabels,matchingPoDeliveryRisks,type CockpitContext} from './digital-journey-cockpit-model.js';
 import {poDeliveryKindLabels} from './po-delivery-dates.js';
 import {CockpitHomeDialog} from './cockpit-home-dialog.js';
@@ -25,7 +25,7 @@ export function CockpitHomeRisks({order,context,onClose,onNode,onOrder}:{order:O
   })}</section>}
   {risks.nodes.length>0&&<section aria-label="节点风险"><h3>{order.display?.mainState==='completed'?'已收口订单保留的节点风险':'节点风险'}</h3>{risks.nodes.map(node=><article className="cockpit-home-risk-entry" key={node.instanceId}>
    <div><strong>{node.label}</strong><StatusBadge tone={node.risks.includes('overdue')?'danger':node.risks.includes('due_soon')?'warning':'neutral'}>{node.risks.map(key=>journeyRiskLabels[key]).join(' / ')||'受阻'}</StatusBadge></div>
-   <p>{node.owner?.name??'负责人未指派'} · 截止 {originalNodeDeadlineLabel(node)}</p>
+   <p>{cockpitNodeOwner(node)} · 截止 {originalNodeDeadlineLabel(node)}</p>
    {cockpitVisibleBlockers(node).map(blocker=><p key={blocker.key}>{blocker.label}</p>)}
    <button type="button" className="journey-text-action" onClick={()=>onNode(node)}>查看节点</button>
   </article>)}</section>}

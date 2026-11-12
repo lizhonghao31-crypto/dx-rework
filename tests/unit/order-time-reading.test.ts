@@ -210,3 +210,36 @@ describe('native creation metadata batch',()=>{
   expect(query).toHaveBeenCalledTimes(1);expect(result.get('source:a')).toEqual({at:'2026-11-20T00:00:00.000Z',evidence:'TEST actual creation'});expect(result.get('order:b')).toBeNull();expect(result.get('source:missing')).toBeNull();expect(result.get('order:legacy')).toEqual({at:null,legacy:true});expect(result.get('order:missing-new')).toBeNull();
  });
 });
+
+describe('Acceptance PR02 route and per-PO responsibility projection',()=>{
+ it('clears only never-started legacy craft unknowns for an explicitly complete no-craft order route',()=>{
+  const row=item(),saved=stored(),resource={kind:'order' as const,id:'TEST-order'};
+  row.orderId=resource.id;row.stages[4]!.nodes=[node('process_logistics','pending',null),node('bulk_qc','pending',null)];
+  for(const n of row.stages[4]!.nodes){n.risks=['unknown'];n.progressApplicability='unknown';}
+  const input=orderTimeReadingBasis(saved,resource,row,{},evidence(),null);
+  expect(input.notApplicableNodes).toEqual(['process_logistics','bulk_qc']);
+  attachFixedJourneySchedule(row,input,at(2));
+  for(const n of row.stages[4]!.nodes)expect(n).toMatchObject({state:'not_applicable',risks:[],countsInProgress:false,progressApplicability:'not_applicable'});
+  expect(fixedScheduleBasisSnapshot(input).notApplicableNodes).toEqual(input.notApplicableNodes);
+  saved.input.route.complete=false;
+  expect(orderTimeReadingBasis(saved,resource,row,{},evidence(),null).notApplicableNodes).toBeUndefined();
+  const history=node('bulk_qc','completed',at(0),at(1));row.stages[4]!.nodes=[history];
+  attachFixedJourneySchedule(row,input,at(2));expect(history.state).toBe('completed');expect(history.actualAt).toBe(at(1));
+  const started=node('bulk_qc','pending',null);started.risks=['unknown'];started.nativeWindows=[{evidence:'TEST started native batch',scopeLabel:'TEST PO',startedAt:at(0),deadline:at(5),warningAt:null,completedAt:null,complete:false}];row.stages[4]!.nodes=[started];attachFixedJourneySchedule(row,input,at(2));expect(started.state).toBe('pending');expect(started.risks).toEqual(['unknown']);
+ });
+ it('retains known PO overdue alongside an unready PO and exposes independent deadlines, without changing whole-order delivery state',()=>{
+  const row=item(),saved=stored();row.stages[1]!.nodes=[node('a','active',at(0))];row.stages[1]!.nodes[0]!.risks=['unknown'];
+  const input=build(saved,row),first=input.scopes[0]!;
+  first.work=first.work.filter(w=>w.id==='a').map(w=>({...w,minutes:1440,responsibilityMinutes:1440,responsibilitySlaRef:'TEST original 24h',responsibilityCalendar:'continuous' as const}));first.terminalIds=['a'];first.customerGoal=at(100);
+  first.facts={a:{ready:point(2),clockStart:point(2),completed:unknown,businessCompleted:false,waitingForPredecessors:false,evidenceRefs:['TEST PO A R02']}};
+  const second=structuredClone(first);second.scopeRef='TEST PO B';second.lineId='TEST B';second.facts.a={ready:unknown,clockStart:unknown,completed:unknown,businessCompleted:false,waitingForPredecessors:true,notYetReady:true,evidenceRefs:['TEST PO B not ready']};
+  first.lineId='TEST A';input.scopes=[first,second];
+  let progress=evaluateFixedJourneyBasis(input,at(25),false);
+  expect(progress.scopes[0]!.nodes[0]!.ownSla).toMatchObject({state:'within',deadlineAt:at(26)});
+  expect(progress.scopes[1]!.nodes[0]!.ownSla).toMatchObject({state:'unknown',deadlineAt:null});
+  attachFixedJourneySchedule(row,input,at(27));progress=row.fixedSchedule!;
+  expect(row.stages[1]!.nodes[0]!.risks).toEqual(['unknown','overdue']);
+  expect(progress.scopes.map(s=>s.customerDuePassed)).toEqual([false,false]);
+  expect(progress.scopes[0]!.nodes[0]!.ownSla).toMatchObject({state:'overdue',deadlineAt:at(26),overdueMinutes:{minimum:60,maximum:60}});
+ });
+});

@@ -8,7 +8,7 @@ import {BusinessTable,Pagination} from '@dx-rework/ui/production';
 import {CockpitPhoto} from './cockpit-photo-preview.js';
 import {cockpitQuery,representativeCockpitNodes,type CockpitContext} from './digital-journey-cockpit-model.js';
 import {poDeliveryKindLabels,sortedCockpitPoLines} from './po-delivery-dates.js';
-import {cockpitVisibleBlockers} from './cockpit-node-rows.js';
+import {cockpitVisibleBlockers,cockpitNodeOwner} from './cockpit-node-rows.js';
 import {CockpitHomeProgress,cockpitReceiptGap} from './cockpit-home-progress.js';
 import {CockpitHomeRisks,cockpitHomeRisks} from './cockpit-home-risks.js';
 import './cockpit-home.css';
@@ -17,7 +17,7 @@ import './cockpit-home-r5.css';
 const stateLabels={completed:'整单已完成',overdue:'逾期',due_soon:'临期',active:'进行中',not_started:'未启动',cancelled:'已取消'};
 function Task({node,showBlocker=true}:{node:JourneyNode;showBlocker?:boolean}){
  const status=node.risks.includes('overdue')?'逾期':node.risks.includes('due_soon')?'临期':node.state==='blocked'?'受阻':node.state==='active'?'进行中':'等待前置';
- return <><strong>{node.label}</strong><small>{node.owner?.name??'负责人未指派'}</small><StatusBadge tone={node.risks.includes('overdue')?'danger':node.risks.includes('due_soon')?'warning':node.state==='active'?'info':'neutral'}>{status}</StatusBadge><small>截止 {node.fixedTargets?.length?originalNodeDeadlineLabel(node):node.nativeWindows?.length||hasDateOnlyTarget(node)?nodeTargetLabel(node):<CockpitDate value={node.expectedAt} precision={node.expectedPrecision} missing="—"/>}</small>{showBlocker&&cockpitVisibleBlockers(node).filter(blocker=>!blocker.key.startsWith('completion:')&&!blocker.label.startsWith('完成办理前')).slice(0,1).map(blocker=><small className="cockpit-home-blocker" key={blocker.key}>{blocker.label}</small>)}</>;
+ return <><strong>{node.label}</strong><small>{cockpitNodeOwner(node)}</small><StatusBadge tone={node.risks.includes('overdue')?'danger':node.risks.includes('due_soon')?'warning':node.state==='active'?'info':'neutral'}>{status}</StatusBadge><small>截止 {node.fixedTargets?.length?originalNodeDeadlineLabel(node):node.nativeWindows?.length||hasDateOnlyTarget(node)?nodeTargetLabel(node):<CockpitDate value={node.expectedAt} precision={node.expectedPrecision} missing="—"/>}</small>{showBlocker&&cockpitVisibleBlockers(node).filter(blocker=>!blocker.key.startsWith('completion:')&&!blocker.label.startsWith('完成办理前')).slice(0,1).map(blocker=><small className="cockpit-home-blocker" key={blocker.key}>{blocker.label}</small>)}</>;
 }
 function HomePos({order,onOpen}:{order:OrderJourney;onOpen:()=>void}){
  const lines=sortedCockpitPoLines(order);

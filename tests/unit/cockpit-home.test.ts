@@ -54,7 +54,7 @@ it("keeps a real zero distinct from unavailable progress and uses the server's m
   const o=order([node("local-risk",{risks:["overdue"]})]);o.display={ruleVersion:"cockpit-display-v1",mainState:"active",earliestShipmentDate:"2026-11-30",missingShipmentDates:0,closedAt:null,actualRatio:0,actualLabel:"0.0%",awaitingClosure:false,stages:[],timeRatio:null,timeLabel:"时间规则待完善"};
   o.visualProgress=visual(0);o.visualProgress.expected={at:'2026-11-30',precision:'date',quality:'recorded',status:'complete',covered:1,total:1,reasons:[]};
   const html=renderToStaticMarkup(createElement(CockpitHome,{data:{ruleVersion:"journey-v2.0",asOf:"2026-10-19T00:00:00Z",page:1,pageSize:15,total:1,summary:{all:1,active:1,dueSoon:0,overdue:0,blocked:0,completed:0},items:[o]},error:"",context:JourneyReturnContextSchema.parse({scope:"production"}),onChange(){}}));
-  expect(html).toContain('aria-valuenow="0"');expect(html).toContain('title="0%"');expect(html).toContain("cockpit-order-state is-active");expect(html).toContain('dx-badge--danger">逾期');expect(html).toContain("2026-11-30");expect(html).not.toContain('2026-11-30 00:00');expect(html).toContain("未上传款图");
+  expect(html).toContain('aria-valuenow="0"');expect(html).toContain('title="0%"');expect(html).toContain("cockpit-order-state is-active");expect(html).toContain('dx-badge--danger">逾期');expect(html).not.toContain('datetime="2026-11-30"');expect(html).toContain("未上传款图");
 });
 it("keeps unknown completion and retained original risks without turning closure into 100 percent",()=>{
   const o=order([node("original-work",{risks:["overdue"]})]);
@@ -82,4 +82,15 @@ it('R2-01: pending result submission is not presented as a blocker and actual bl
  const o=order([node('work',{blockers:[{key:'completion:submitted',label:'完成办理前：本次结果尚未提交',ownerId:null,record:null},{key:'materials',label:'本轮主布尚未齐料',ownerId:null,record:null}]})]);
  const before=structuredClone(o),html=renderToStaticMarkup(createElement(CockpitHome,{data:{ruleVersion:'journey-v2.0',asOf:'2026-10-19T00:00:00Z',page:1,pageSize:15,total:1,summary:{all:1,active:1,dueSoon:0,overdue:0,blocked:0,completed:0},items:[o]},error:'',context:JourneyReturnContextSchema.parse({scope:'production'}),onChange(){}}));
  expect(html).not.toContain('完成办理前');expect(html).toContain('本轮主布尚未齐料');expect(html).toContain('进行中');expect(o).toEqual(before);
+});
+
+it('Acceptance PR02 shows the current all-PO completion forecast, not the frozen target, and retains lower-bound uncertainty',()=>{
+ const o=order([]);o.visualProgress=visual(0.5,0.5);o.visualProgress.expected={...missingDate(),at:'2027-01-10T00:00:00Z',precision:'instant',status:'complete'};
+ o.fixedSchedule={version:'fixed-schedule-progress-v1',asOf:'2027-01-07T00:00:00Z',scopeRevision:'TEST',factRevision:'TEST',state:'normal',legacyOverdue:false,nextChangeAt:null,durationSummary:null as never,scopes:[{scopeRef:'A',lineId:'A',targetRevision:'TEST',state:'normal',lagMinutes:null,customerDuePassed:false,nodes:[],coverage:[],completionEstimate:{kind:'conditional',earliest:'2027-01-09T00:00:00Z',latest:'2027-01-09T00:00:00Z'}}]};
+ const html=()=>renderToStaticMarkup(createElement(CockpitHomeProgress,{order:o}));
+ expect(html()).toContain('2027-01-09T00:00:00Z');expect(html()).not.toContain('2027-01-10T00:00:00Z');
+ o.fixedSchedule.scopes.push({...o.fixedSchedule.scopes[0]!,scopeRef:'B',lineId:'B',completionEstimate:{kind:'lower_bound',earliest:'2027-01-11T00:00:00Z',latest:null}});
+ expect(html()).toContain('不早于');expect(html()).toContain('2027-01-11T00:00:00Z');
+ o.fixedSchedule.scopes[1]!.completionEstimate={kind:'unknown',earliest:null,latest:null};
+ expect(html()).not.toContain('2027-01-09T00:00:00Z');expect(html()).not.toContain('2027-01-10T00:00:00Z');
 });
