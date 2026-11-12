@@ -178,7 +178,9 @@ test('short lead browser joins the original finite canonical plan and conditiona
 });
 
 test('canonical native browser names require Chromium preparation, retaining legacy nonstandard names',()=>{
- for(const path of ['tests/integration/responsibility-queue-pages-native-browser-postgres.test.ts','tests/integration/wage-period-pages-native-browser-postgres.test.ts','tests/integration/master-data-pages-native-browser-postgres.test.ts','tests/integration/acceptance-session-retention-postgres.test.ts'])assert.equal(isNativeBrowserSuite(path),true);
+ for(const path of ['tests/integration/responsibility-queue-pages-native-browser-postgres.test.ts','tests/integration/wage-period-pages-native-browser-postgres.test.ts','tests/integration/master-data-pages-native-browser-postgres.test.ts','tests/integration/acceptance-session-retention-postgres.test.ts','tests/integration/order-time-requests-browser-postgres.test.ts'])assert.equal(isNativeBrowserSuite(path),true);
  assert.equal(settingsBrowserRequired({BASE_SHA:'a'.repeat(40),DB_REQUIRED:'true',BUSINESS_CHAIN_SENSITIVE:'false',MIGRATION_SENSITIVE:'false',DEPLOYMENT_SENSITIVE:'false',MAPPED_POSTGRES_TESTS:'tests/integration/responsibility-queue-pages-native-browser-postgres.test.ts'}),true);
- for(const path of ['tests/integration/responsibility-queue-pages-postgres.test.ts','tests/unit/label-native-browser.test.ts'])assert.equal(isNativeBrowserSuite(path),false);
+ const environment={BASE_SHA:'a'.repeat(40),DB_REQUIRED:'true',BUSINESS_CHAIN_SENSITIVE:'false',MIGRATION_SENSITIVE:'false',DEPLOYMENT_SENSITIVE:'false',MAPPED_POSTGRES_TESTS:'tests/integration/order-time-requests-browser-postgres.test.ts'};
+ assert.equal(settingsBrowserRequired(environment),true);
+ for(const path of ['tests/integration/responsibility-queue-pages-postgres.test.ts','tests/integration/order-time-requests-postgres.test.ts','tests/unit/label-native-browser.test.ts'])assert.equal(isNativeBrowserSuite(path),false);
 });
