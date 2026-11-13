@@ -12,6 +12,7 @@ import {AcceptanceObjectStorage,registerAcceptanceStorageRoutes} from '../../app
 import {registerDevelopmentRoutes} from '../../apps/api/src/production-platform/development-routes.js';
 import {ApplicationError} from '../../apps/api/src/platform/errors.js';
 import {registerDevelopmentExecutionRoutes} from '../../apps/api/src/production-platform/development-execution-routes.js';
+import {readDevelopmentRevisionPlan} from '../../apps/api/src/production-platform/development-round-plan.js';
 import {DevelopmentRoundService} from '../../apps/api/src/production-platform/development-round-service.js';
 import {DigitalQuotationService} from '../../apps/api/src/production-platform/quotation-service.js';
 import {SlaConfigurationRepository} from '../../apps/api/src/production-platform/sla-configuration-repository.js';
@@ -320,8 +321,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   await technical.urgent(person('production-management'),p.sourceId,{roundNumber:1,expectedRevision:1,action:'approve',reason:'TEST供应链总监审批板房加急'},randomUUID());
   const after=await technical.read(p.designer,p.sourceId);expect(after.cycle?.allowedSeconds).toBe(5*86400);expect(after.cycle?.publishedAt).toBe(before.cycle?.publishedAt);
  });
- const sampleToTail=async()=>{
-  const p=await prepare(),published=await artifact(p);
+ const sampleToTail=async(options:Parameters<typeof prepare>[1]={})=>{
+  const p=await prepare('无',options),published=await artifact(p);
   await execution.complete(p.worker,p.sourceId,{taskId:p.paper.taskId,attachmentIds:[],artifactRef:{id:published.artifactSetId,version:published.version,scopeRef:'整款'},note:'TEST actual paper'},randomUUID());
   const cut=(await execution.read(f.root,p.sourceId)).tasks.find(t=>t.taskKind==='development_cutting')!;
   await execution.complete(p.worker,p.sourceId,{taskId:cut.taskId,attachmentIds:[],note:'TEST actual cut'},randomUUID());
@@ -331,6 +332,30 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const tail=(await execution.read(f.root,p.sourceId)).tasks.find(t=>t.taskKind==='development_tail_check')!;
   return {...p,tail};
  };
+ it('PR03 retains completed material verification on a supervisor sewing-only remake while prices stay hidden and persisted',async()=>{
+  const p=await sampleToTail({automatic:true}),supervisor=person('pattern-room-supervisor');
+  const before=await forms.read(p.designer,p.sourceId),hidden=await forms.read(supervisor,p.sourceId);
+  expect(hidden.canEdit).toBe(false);expect(hidden.document!.materials[0]!.unitPrice).toBeUndefined();
+  const revision={basedOnRound:1,document:before.document!,origin:'内部发现' as const,customerComment:'',internalProblem:'TEST只重做车缝',explanation:'TEST不变的材料不能重新核配',categories:['车缝' as const],affectedNodes:['车板' as const],outputKind:'整件样板' as const};
+  // The preview and native publication use this same reader; price-only
+  // differences must not reopen physical work or mutate the saved document.
+  const preview=await readDevelopmentRevisionPlan(f.db,p.sourceId,revision,hidden.document!);
+  expect(preview.affectedNodes).not.toContain('核配');expect(preview.inherited.development_materials?.taskId).toBe(p.checkTaskId);
+  const repriced=structuredClone(revision);repriced.document.materials[0]!.unitPrice='21';
+  expect((await readDevelopmentRevisionPlan(f.db,p.sourceId,repriced,before.document!)).route).not.toContain('development_materials');
+  const changed=structuredClone(revision);changed.document.materials[0]!.width='155';
+  expect((await readDevelopmentRevisionPlan(f.db,p.sourceId,changed,before.document!)).route).toContain('development_materials');
+  const orderId=(await f.db.query('SELECT order_id FROM digital_development_pattern_links WHERE source_id=$1',[p.sourceId])).rows[0].order_id;
+  const order=await native.get(supervisor,orderId),key=randomUUID(),input={version:order.version,roundId:order.currentRoundId,reason:'TEST仅车缝返工',reasonCategory:'other',attachmentIds:[],developmentNodes:['车板'],developmentProblems:['车缝'],developmentMaking:{expectedDocumentVersion:p.documentVersion,quantities:[1]}};
+  await native.requestRework(supervisor,orderId,input,key);await native.requestRework(supervisor,orderId,input,key);
+  const recorded=(await f.db.query('SELECT document,route_nodes,inherited,affected_nodes FROM digital_development_rounds WHERE source_id=$1 AND round_number=2',[p.sourceId])).rows[0];
+  expect(recorded.route_nodes).not.toContain('development_materials');expect(recorded.affected_nodes).not.toContain('核配');
+  expect(recorded.inherited.development_materials).toMatchObject({taskId:p.checkTaskId,roundNumber:1});
+  expect(recorded.document.materials[0]).toMatchObject({materialId:p.materialId,unitPrice:'20'});
+  expect((await forms.read(p.designer,p.sourceId)).document!.materials[0]!.unitPrice).toBe('20');
+  expect((await forms.read(supervisor,p.sourceId)).document!.materials[0]!.unitPrice).toBeUndefined();
+  expect((await f.db.query("SELECT count(*)::int n FROM digital_production_task_access a JOIN digital_production_tasks t USING(task_id) WHERE a.source_id=$1 AND t.route_version=2 AND a.task_kind IN ('development_materials','development_material_recheck')",[p.sourceId])).rows[0].n).toBe(0);
+ });
  it('R5 binds a newly submitted first native order to the actual later development round, without inventing a historical link',async()=>{
   const p=await prepare('无',{withoutNative:true}),old=await forms.read(p.designer,p.sourceId),rounds=new DevelopmentRoundService(f.db,true,native);
   const saved=await rounds.save(p.designer,p.sourceId,{expectedDraftVersion:0,revision:{basedOnRound:1,document:old.document!,origin:'内部发现',customerComment:'',internalProblem:'TEST首个原执行尚未生成前的资料复版',explanation:'TEST真实首次衔接',categories:['版型'],affectedNodes:['纸样'],outputKind:'整件样板'}},randomUUID());
@@ -416,7 +441,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect((await technical.read(f.root,p.sourceId)).cycle?.completedAt).not.toBeNull();
  });
  it('rejects an internal revision with changed technical basis and no paper path before cancelling the old round',async()=>{
-  const p=await sampleToTail(),rounds=new DevelopmentRoundService(f.db,true,native),old=await forms.read(p.designer,p.sourceId),document=structuredClone(old.document!);
+  const p=await sampleToTail({automatic:true}),rounds=new DevelopmentRoundService(f.db,true,native),old=await forms.read(p.designer,p.sourceId),document=structuredClone(old.document!);
   document.materials[0]!.width='155';
   const revision={basedOnRound:1,document,origin:'内部发现' as const,customerComment:'',internalProblem:'TEST主料规格改变须重核技术成果',explanation:'TEST preserve old work on rejection',categories:['面料' as const],affectedNodes:['车板' as const],outputKind:'整件样板' as const};
   const draft=await rounds.save(p.designer,p.sourceId,{expectedDraftVersion:0,revision},randomUUID());
@@ -427,7 +452,11 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const next=await rounds.save(p.designer,p.sourceId,{expectedDraftVersion:draft.draftVersion,revision:{...revision,affectedNodes:['纸样','裁板','车板']}},randomUUID());
   await rounds.publish(p.designer,p.sourceId,{expectedDraftVersion:next.draftVersion,basedOnRound:1},randomUUID());
   expect((await forms.read(p.designer,p.sourceId)).roundNumber).toBe(2);
-  expect((await rounds.read(p.designer,p.sourceId)).rounds.at(-1)?.routeNodes).toContain('development_pattern');
+  const finalRound=(await rounds.read(p.designer,p.sourceId)).rounds.at(-1)!;
+  expect(finalRound.routeNodes).toContain('development_pattern');expect(finalRound.routeNodes).toContain('development_materials');
+  const revised=(await forms.read(p.designer,p.sourceId)).document!.materials[0]!;
+  expect(revised.materialId).not.toBe(p.materialId);expect(revised.width).toBe('155');expect(revised.unitPrice).toBe('20');
+  expect((await forms.read(p.worker,p.sourceId)).document!.materials[0]!.unitPrice).toBeUndefined();
  });
  it('opens a new development round for a whole/key-result redo without cloning the old wage amount',async()=>{
   const p=await sampleToTail(),photo=await f.image(f.root);await execution.recordUploadPurpose(f.root,p.sourceId,photo,'尾查照片',p.tail.taskId);

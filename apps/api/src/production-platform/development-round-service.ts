@@ -1,4 +1,4 @@
-import {withoutDevelopmentPrices} from './development-commercial-fields.js';
+import {withoutDevelopmentMaterialPrice} from './development-commercial-fields.js';
 import {developmentDocumentRow} from './development-round-repository.js';
 import {assembleQuotation} from './quotation-assembly.js';
 import {captureTechnicalRound} from './development-cycle-evidence.js';
@@ -116,7 +116,7 @@ export class DevelopmentRoundService {
   const document=structuredClone(input.document),savedPlan=await developmentSlaPlan(db,sourceId);
   const {route,inherited,affectedNodes}=await readDevelopmentRevisionPlan(db,sourceId,input,sheet.document!,savedPlan?.route_schema_version);
   // A changed material gets its own identity; old arrivals never certify a replacement.
-  for(const material of document.materials){const old=sheet.document!.materials.find(item=>item.materialId===material.materialId);if(old&&!isDeepStrictEqual(withoutDevelopmentPrices({...document,materials:[old]}).materials[0],withoutDevelopmentPrices({...document,materials:[material]}).materials[0]))material.materialId=randomUUID();}
+  for(const material of document.materials){const old=sheet.document!.materials.find(item=>item.materialId===material.materialId);if(old&&!isDeepStrictEqual(withoutDevelopmentMaterialPrice(old),withoutDevelopmentMaterialPrice(material)))material.materialId=randomUUID();}
   const roundNumber=input.basedOnRound+1,routeId=randomUUID();
   const native=await linkedDevelopmentOrder(db,sourceId,true);
   if(!patternReworkRoundId&&input.outputKind==='整件样板'&&route.includes('development_sewing')

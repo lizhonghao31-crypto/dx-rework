@@ -7,6 +7,7 @@ import {isDevelopmentMaterialPlaceholder} from '@dx-rework/contracts/digital-dev
 import {isDeepStrictEqual} from 'node:util';
 import {verificationAvailable} from './development-material-verification.js';
 import {developmentSlaRoute} from './development-sla-enrollment.js';
+import {withoutDevelopmentMaterialPrice} from './development-commercial-fields.js';
 export function developmentRevisionPlan(input:DevelopmentRevision,completed:Record<string,{taskId:string;roundNumber:number}>,savedRoute?:DigitalTaskKind[]){
  const all:DigitalTaskKind[]=['development_materials',...(savedRoute??developmentRoute(input.document))];
  const selected=new Set<DigitalTaskKind>();
@@ -35,7 +36,7 @@ export function developmentRevisionPlan(input:DevelopmentRevision,completed:Reco
 export async function readDevelopmentRevisionPlan(db:Pick<PoolClient,'query'>,sourceId:string,input:DevelopmentRevision,previous:DevelopmentDocument,routeSchemaVersion?:number){
  const affectedNodes=[...input.affectedNodes],verified=await verificationAvailable(db);
  for(const material of input.document.materials){const old=previous.materials.find(item=>item.materialId===material.materialId);
-  if((!old||!isDeepStrictEqual(old,material))&&(verified?!isDevelopmentMaterialPlaceholder(material):material.requiredThisRound)&&!affectedNodes.includes('核配'))affectedNodes.push('核配');
+  if((!old||!isDeepStrictEqual(withoutDevelopmentMaterialPrice(old),withoutDevelopmentMaterialPrice(material)))&&(verified?!isDevelopmentMaterialPlaceholder(material):material.requiredThisRound)&&!affectedNodes.includes('核配'))affectedNodes.push('核配');
  }
  if(verified&&previous.materials.some(old=>!isDevelopmentMaterialPlaceholder(old)&&!input.document.materials.some(material=>material.materialId===old.materialId))&&!affectedNodes.includes('核配'))affectedNodes.push('核配');
  const rows=(await db.query(`SELECT t.task_id,t.route_version,a.task_kind FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id)
