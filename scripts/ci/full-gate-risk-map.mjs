@@ -188,7 +188,7 @@ export const classifyFullGatePaths = (inputPaths) => {
     addAll(mappedTests,['tests/integration/order-time-settings-postgres.test.ts','tests/integration/customer-default-merchandisers-postgres.test.ts','tests/integration/r5-settings-native-browser-postgres.test.ts','tests/integration/m01-settings-native-browser-postgres.test.ts','tests/integration/digital-production-identity-postgres.test.ts']);
     domains.add('order-time-settings-and-merchandisers');
   }
-  if(paths.some(path=>/order-time-(?:plan|schedule|reading)|cutting-completion-facts|0284_order_time_plan_versions/.test(path))){
+  if(paths.some(path=>/order-time-(?:framework|plan|schedule|reading)|cutting-completion-facts|0284_order_time_plan_versions/.test(path))){
     addAll(mappedTests,['tests/integration/order-time-plan-postgres.test.ts','tests/integration/order-time-reading-postgres.test.ts','tests/integration/fixed-timeline-postgres.test.ts','tests/integration/fixed-progress-postgres.test.ts']);
     domains.add('order-time-plan-core');
   }
