@@ -1,3 +1,6 @@
+import {QuotationConfirmationSchema} from '@dx-rework/contracts/digital-quotation';
+import {calculateBudget} from '@dx-rework/contracts/digital-budget';
+import {DigitalBudgetService} from '../../apps/api/src/production-platform/budget-service.js';
 import {nodeMaterialsFixture} from '../helpers/node-materials-fixture.js';
 import Fastify from 'fastify';
 import PDFDocument from 'pdfkit';
@@ -9,6 +12,7 @@ import {AcceptanceObjectStorage,registerAcceptanceStorageRoutes} from '../../app
 import {registerDevelopmentRoutes} from '../../apps/api/src/production-platform/development-routes.js';
 import {ApplicationError} from '../../apps/api/src/platform/errors.js';
 import {registerDevelopmentExecutionRoutes} from '../../apps/api/src/production-platform/development-execution-routes.js';
+import {readDevelopmentRevisionPlan} from '../../apps/api/src/production-platform/development-round-plan.js';
 import {DevelopmentRoundService} from '../../apps/api/src/production-platform/development-round-service.js';
 import {DigitalQuotationService} from '../../apps/api/src/production-platform/quotation-service.js';
 import {SlaConfigurationRepository} from '../../apps/api/src/production-platform/sla-configuration-repository.js';
@@ -61,7 +65,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   category={categoryId:changed.priceId,priceVersion:changed.version};
  });
  afterAll(async()=>{await f?.dispose();});
- const prepare=async(craft:'无'|'印花'='无',options:{missingAccessory?:boolean;assignSewing?:boolean;withoutNative?:boolean}={})=>{
+ const prepare=async(craft:'无'|'印花'='无',options:{automatic?:boolean;missingAccessory?:boolean;assignSewing?:boolean;withoutNative?:boolean}={})=>{
   const designer=person('sample-designer'),worker=person('pattern-room-worker'),materialId=randomUUID();
   const created=await identity.createSource(designer,{developmentType:'头版',designStyleNo:`TEST-TECH-${randomUUID()}`,temporaryStyleNo:null,customerCode:'PD'},randomUUID());
   const sourceId=created.sourceId,photo=await f.image(designer);
@@ -70,6 +74,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    materials:[{materialId,category:'主布',label:'主布',supplier:'TEST',name:'TEST棉布',width:'150',weight:'200',composition:'棉',consumption:'',color:'黑',specification:'TEST40支',quantity:'1',requiredThisRound:true,available:true,expectedDate:null}],files:[{attachmentId:photo,kind:'款图'}]});
   const accessoryId=options.missingAccessory?randomUUID():null;
   if(accessoryId)document.materials.push({...document.materials[0]!,materialId:accessoryId,category:'辅料',label:'TEST必要纽扣',name:'纽扣',available:false,expectedDate:'2027-01-01'});
+  if(options.automatic){document.quotationMode='automatic_v1';document.materials=document.materials.map(m=>({...m,pricingUnit:m.category==='辅料'?'件':'米',unitPrice:m.category==='辅料'?'2':'20'}));}
   const saved=await forms.save(designer,sourceId,{expectedVersion:0,document},randomUUID());
   if(options.withoutNative)await new DigitalDevelopmentService(f.db,true).publish(designer,sourceId,saved.version,randomUUID());
   else await forms.publish(designer,sourceId,saved.version,randomUUID(),category);
@@ -96,6 +101,87 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   return technical.saveArtifact(p.worker,p.sourceId,{taskId:p.paper.taskId,expectedDocumentVersion:p.documentVersion,expectedVersion:0,scopeRef:'整款',action:'publish',body,...overrides},randomUUID());
  };
  const comment=(version=0,isFinal=true):RecordFinalComment=>({roundNumber:1,scopeRef:'整款',expectedVersion:version,isFinal,decision:'approved',text:'TEST客户最终批复，技术仍须核对或沿用',evidenceRefs:[],evidenceNote:'TEST客户邮件文字记录，非报价确认',occurredAt:null});
+
+ it('PR03 assembles exact native materials, formal consumption, IE and assigned craft; freezes confirmed budgets across later source changes',async()=>{
+  const p=await prepare('印花',{automatic:true,missingAccessory:true}),resource={kind:'source' as const,id:p.sourceId},quotes=new DigitalQuotationService(f.db,true);
+  let q=await quotes.read(p.designer,resource);
+  expect(q.automatic).toBe(true);expect(q.complete).toBe(false);
+  expect(q.document!.rows).toHaveLength(4);
+  const ie=q.document!.rows.find(r=>r.name==='IE加工单价')!,craft=q.document!.rows.find(r=>r.name==='印花')!;
+  q=await quotes.save(p.designer,resource,{expectedVersion:q.version,document:q.document!,assignments:q.assignments.map(a=>a.rowId===ie.rowId?{...a,priceAssigneeId:person('ie').actorId}:a)},randomUUID());
+  const own=await quotes.read(p.worker,resource);expect(own.document).toBeNull();expect(own.rows.find(r=>r.rowId===p.materialId)!.unitPrice).toBeNull();expect(own.rows.find(r=>r.rowId===craft.rowId)!.canEditPrice).toBe(true);
+  expect((await forms.read(p.worker,p.sourceId)).document!.materials.every(m=>m.unitPrice===undefined)).toBe(true);
+  q=await quotes.fillRow(p.worker,resource,p.materialId,{expectedVersion:q.version,consumption:'1.5'},randomUUID());
+  q=await quotes.fillRow(p.worker,resource,p.accessoryId!,{expectedVersion:q.version,consumption:'1'},randomUUID());
+  q=await quotes.fillRow(person('ie'),resource,ie.rowId,{expectedVersion:q.version,unitPrice:'10'},randomUUID());
+  q=await quotes.fillRow(p.worker,resource,craft.rowId,{expectedVersion:q.version,unitPrice:'3'},randomUUID());
+  q=await quotes.read(p.designer,resource);expect(q.complete).toBe(true);expect(calculateBudget(q.document!).cost).toBe('45');
+  await expect(quotes.fillRow(person('ie'),resource,ie.rowId,{expectedVersion:q.version,consumption:'2'},randomUUID())).rejects.toMatchObject({statusCode:403});
+  const confirmation=QuotationConfirmationSchema.parse({expectedVersion:q.version,customerCode:'PD',customerConfirmedTotal:'45',amountScope:'per_piece',quantity:null,quantityUnit:'件',currency:'人民币',taxBasis:'excludes_tax',sourceKind:'explicit_customer_confirmation',sourceField:'customerConfirmedTotal',templateVersion:'online-quotation-v1',evidenceNote:'TEST independently confirmed 45, not assumed from cost',confirmedAt:businessNow().toISOString()});
+  const confirmedVersion=q.version;
+  const simultaneous=await Promise.allSettled([quotes.confirm(p.designer,resource,confirmation,randomUUID()),quotes.confirm(p.designer,resource,confirmation,randomUUID())]);
+  expect(simultaneous.filter(r=>r.status==='fulfilled')).toHaveLength(1);
+  expect((await f.db.query('SELECT version FROM digital_quotation_versions WHERE quote_id=$1',[q.quoteId])).rows).toHaveLength(1);
+  const order=await identity.createOrder(p.designer,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:(await forms.read(p.designer,p.sourceId)).designStyleNo,temporaryStyleNo:null,orderDate:'2026-10-20',lines:[{color:'黑',sizes:[{size:'M',quantity:10}],deliveryDate:'2027-03-01'}]}),randomUUID(),p.sourceId);
+  const budgets=new DigitalBudgetService(f.db,true),originalBudget=await budgets.read(f.root,order.productionOrderId);
+  expect(originalBudget.comparison?.budgetComparableTotal).toBe('45');
+  q=await quotes.read(p.designer,resource);const priceKey=randomUUID(),priceInput={expectedVersion:q.version,unitPrice:'22'};
+  q=await quotes.fillRow(p.designer,resource,p.materialId,priceInput,priceKey);
+  const version=q.version;expect(calculateBudget(q.document!).cost).toBe('48');
+  await quotes.fillRow(p.designer,resource,p.materialId,priceInput,priceKey);expect((await quotes.read(p.designer,resource)).version).toBe(version);
+  await expect(quotes.confirm(p.designer,resource,{...confirmation,expectedVersion:confirmedVersion},randomUUID())).rejects.toMatchObject({statusCode:409});
+  const body:TechnicalArtifactBody={pltAttachmentIds:[await plot(p)],consumptionRows:[{materialId:p.materialId,unit:'米',consumption:'1.6'},{materialId:p.accessoryId!,unit:'件',consumption:'1'}],baseSizeTable:{unit:'cm',baseSize:'M',sizes:['M'],measurements:[{pointId:randomUUID(),name:'胸围',tolerance:'±1',method:'平量',values:['48']}],gradingNote:'TEST',templateRef:null},note:'TEST source version',basedOnFinalComment:null};
+  await artifact(p,{body});q=await quotes.read(p.designer,resource);expect(calculateBudget(q.document!).cost).toBe('50.2');
+  q=await quotes.fillRow(p.worker,resource,craft.rowId,{expectedVersion:q.version,unitPrice:'5'},randomUUID());
+  q=await quotes.read(p.designer,resource);expect(calculateBudget(q.document!).cost).toBe('52.2');
+  const preserved=await quotes.read(p.designer,resource,undefined,confirmedVersion);expect(calculateBudget(preserved.document!).cost).toBe('45');
+  expect((await budgets.read(f.root,order.productionOrderId)).document).toEqual(originalBudget.document);
+  q=await quotes.fillRow(p.worker,resource,craft.rowId,{expectedVersion:q.version,unitPrice:''},randomUUID());
+  expect(q.complete).toBe(false);await expect(quotes.confirm(p.designer,resource,{...confirmation,expectedVersion:q.version},randomUUID())).rejects.toMatchObject({statusCode:409});
+  q=await quotes.fillRow(p.worker,resource,craft.rowId,{expectedVersion:q.version,unitPrice:'0'},randomUUID());
+  q=await quotes.read(p.designer,resource);expect(q.complete).toBe(true);expect(calculateBudget(q.document!).cost).toBe('47.2');
+  const before=q.version;await quotes.read(p.designer,resource);expect((await quotes.read(p.designer,resource)).version).toBe(before);
+ });
+
+ it('PR03 rejects cross-source/stale inputs, withdraws superseded formal consumption and keeps unpublished artifact drafts out',async()=>{
+  const p=await prepare('无',{automatic:true}),resource={kind:'source' as const,id:p.sourceId},quotes=new DigitalQuotationService(f.db,true);
+  const v1=await artifact(p);let q=await quotes.read(p.designer,resource);
+  expect(q.document!.rows.find(r=>r.rowId===p.materialId)!.consumption).toBe('1.250000');
+  const price=q.version;
+  const body:TechnicalArtifactBody={pltAttachmentIds:[await plot(p)],consumptionRows:[{materialId:p.materialId,unit:'码',consumption:'1.25'}],baseSizeTable:{unit:'cm',baseSize:'M',sizes:['M'],measurements:[{pointId:randomUUID(),name:'胸围',tolerance:'±1',method:'平量',values:['48']}],gradingNote:'TEST',templateRef:null},note:'TEST consumption withdrawn',basedOnFinalComment:null};
+  await artifact(p,{expectedVersion:v1.version,action:'save',body});
+  expect((await quotes.read(p.designer,resource)).version).toBe(price);
+  await artifact(p,{expectedVersion:v1.version+1,body});q=await quotes.read(p.designer,resource);
+  expect(q.document!.rows.find(r=>r.rowId===p.materialId)!.consumption).toBe('');expect(q.complete).toBe(false);
+  await expect(quotes.fillRow(p.worker,resource,p.materialId,{expectedVersion:price,consumption:'2'},randomUUID())).rejects.toMatchObject({statusCode:409});
+  await expect(quotes.fillRow(person('ie'),resource,p.materialId,{expectedVersion:q.version,unitPrice:'1'},randomUUID())).rejects.toMatchObject({statusCode:404});
+  const other=await prepare('无',{automatic:true});
+  await expect(quotes.fillRow(p.worker,resource,other.materialId,{expectedVersion:q.version,consumption:'1'},randomUUID())).rejects.toMatchObject({statusCode:404});
+ });
+
+ it('PR03 follows saved source price/reordering/withdrawal exactly once, without matching by name',async()=>{
+  const p=await prepare('无',{automatic:true,missingAccessory:true}),original=(await forms.read(p.designer,p.sourceId)).document!;
+  const source=await identity.createSource(p.designer,{developmentType:'头版',designStyleNo:'TEST-QUOTE-SOURCE-'+randomUUID(),temporaryStyleNo:null,customerCode:'PD'},randomUUID());
+  const resource={kind:'source' as const,id:source.sourceId},quotes=new DigitalQuotationService(f.db,true);
+  let saved=await forms.save(p.designer,source.sourceId,{expectedVersion:0,document:{...original,orderDate:null,files:[]}},randomUUID());
+  let q=await quotes.read(p.designer,resource);
+  q=await quotes.save(p.designer,resource,{expectedVersion:q.version,document:q.document!,assignments:q.assignments.map(a=>a.priceRole==='ie_reviewer'?{...a,priceAssigneeId:person('ie').actorId}:{...a,technicalAssigneeId:p.worker.actorId})},randomUUID());
+  q=await quotes.fillRow(p.worker,resource,p.materialId,{expectedVersion:q.version,consumption:'1.5'},randomUUID());
+  q=await quotes.fillRow(p.worker,resource,p.accessoryId!,{expectedVersion:q.version,consumption:'1'},randomUUID());
+  const ie=q.rows.find(r=>r.assignment.priceRole==='ie_reviewer')??(await quotes.read(p.designer,resource)).rows.find(r=>r.assignment.priceRole==='ie_reviewer')!;
+  q=await quotes.fillRow(person('ie'),resource,ie.rowId,{expectedVersion:q.version,unitPrice:'10'},randomUUID());
+  const before=await quotes.read(p.designer,resource);expect(calculateBudget(before.document!).cost).toBe('42');
+  const current=(await forms.read(p.designer,source.sourceId)).document!,key=randomUUID();
+  const changed={expectedVersion:saved.version,document:{...current,materials:[...current.materials].reverse().map(m=>m.materialId===p.materialId?{...m,unitPrice:'22'}:m)}};
+  saved=await forms.save(p.designer,source.sourceId,changed,key);q=await quotes.read(p.designer,resource);
+  expect(calculateBudget(q.document!).cost).toBe('45');expect(q.document!.rows.find(r=>r.rowId===p.materialId)!.consumption).toBe('1.5');
+  const version=q.version;await forms.save(p.designer,source.sourceId,changed,key);expect((await quotes.read(p.designer,resource)).version).toBe(version);
+  await expect(forms.save(p.designer,source.sourceId,{...changed,expectedVersion:saved.version-1},randomUUID())).rejects.toMatchObject({statusCode:409});
+  saved=await forms.save(p.designer,source.sourceId,{expectedVersion:saved.version,document:{...changed.document,materials:changed.document.materials.map(m=>m.materialId===p.materialId?{...m,unitPrice:''}:m)}},randomUUID());
+  q=await quotes.read(p.designer,resource);expect(q.complete).toBe(false);expect(q.document!.rows.find(r=>r.rowId===p.materialId)!.unitPrice).toBe('');
+  await forms.save(p.designer,source.sourceId,{expectedVersion:saved.version,document:{...changed.document,materials:changed.document.materials.map(m=>m.materialId===p.materialId?{...m,unitPrice:'0'}:m)}},randomUUID());
+  q=await quotes.read(p.designer,resource);expect(q.complete).toBe(true);expect(calculateBudget(q.document!).cost).toBe('12');
+ });
 
  it('P01 captures sewing readiness at actual late-material verification before assignment and retains correction/restore history',async()=>{
   const scene=await f.scene('2026-11-09T08:00:00.000Z');
@@ -235,8 +321,8 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   await technical.urgent(person('production-management'),p.sourceId,{roundNumber:1,expectedRevision:1,action:'approve',reason:'TEST供应链总监审批板房加急'},randomUUID());
   const after=await technical.read(p.designer,p.sourceId);expect(after.cycle?.allowedSeconds).toBe(5*86400);expect(after.cycle?.publishedAt).toBe(before.cycle?.publishedAt);
  });
- const sampleToTail=async()=>{
-  const p=await prepare(),published=await artifact(p);
+ const sampleToTail=async(options:Parameters<typeof prepare>[1]={})=>{
+  const p=await prepare('无',options),published=await artifact(p);
   await execution.complete(p.worker,p.sourceId,{taskId:p.paper.taskId,attachmentIds:[],artifactRef:{id:published.artifactSetId,version:published.version,scopeRef:'整款'},note:'TEST actual paper'},randomUUID());
   const cut=(await execution.read(f.root,p.sourceId)).tasks.find(t=>t.taskKind==='development_cutting')!;
   await execution.complete(p.worker,p.sourceId,{taskId:cut.taskId,attachmentIds:[],note:'TEST actual cut'},randomUUID());
@@ -246,6 +332,30 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const tail=(await execution.read(f.root,p.sourceId)).tasks.find(t=>t.taskKind==='development_tail_check')!;
   return {...p,tail};
  };
+ it('PR03 retains completed material verification on a supervisor sewing-only remake while prices stay hidden and persisted',async()=>{
+  const p=await sampleToTail({automatic:true}),supervisor=person('pattern-room-supervisor');
+  const before=await forms.read(p.designer,p.sourceId),hidden=await forms.read(supervisor,p.sourceId);
+  expect(hidden.canEdit).toBe(false);expect(hidden.document!.materials[0]!.unitPrice).toBeUndefined();
+  const revision={basedOnRound:1,document:before.document!,origin:'内部发现' as const,customerComment:'',internalProblem:'TEST只重做车缝',explanation:'TEST不变的材料不能重新核配',categories:['车缝' as const],affectedNodes:['车板' as const],outputKind:'整件样板' as const};
+  // The preview and native publication use this same reader; price-only
+  // differences must not reopen physical work or mutate the saved document.
+  const preview=await readDevelopmentRevisionPlan(f.db,p.sourceId,revision,hidden.document!);
+  expect(preview.affectedNodes).not.toContain('核配');expect(preview.inherited.development_materials?.taskId).toBe(p.checkTaskId);
+  const repriced=structuredClone(revision);repriced.document.materials[0]!.unitPrice='21';
+  expect((await readDevelopmentRevisionPlan(f.db,p.sourceId,repriced,before.document!)).route).not.toContain('development_materials');
+  const changed=structuredClone(revision);changed.document.materials[0]!.width='155';
+  expect((await readDevelopmentRevisionPlan(f.db,p.sourceId,changed,before.document!)).route).toContain('development_materials');
+  const orderId=(await f.db.query('SELECT order_id FROM digital_development_pattern_links WHERE source_id=$1',[p.sourceId])).rows[0].order_id;
+  const order=await native.get(supervisor,orderId),key=randomUUID(),input={version:order.version,roundId:order.currentRoundId,reason:'TEST仅车缝返工',reasonCategory:'other',attachmentIds:[],developmentNodes:['车板'],developmentProblems:['车缝'],developmentMaking:{expectedDocumentVersion:p.documentVersion,quantities:[1]}};
+  await native.requestRework(supervisor,orderId,input,key);await native.requestRework(supervisor,orderId,input,key);
+  const recorded=(await f.db.query('SELECT document,route_nodes,inherited,affected_nodes FROM digital_development_rounds WHERE source_id=$1 AND round_number=2',[p.sourceId])).rows[0];
+  expect(recorded.route_nodes).not.toContain('development_materials');expect(recorded.affected_nodes).not.toContain('核配');
+  expect(recorded.inherited.development_materials).toMatchObject({taskId:p.checkTaskId,roundNumber:1});
+  expect(recorded.document.materials[0]).toMatchObject({materialId:p.materialId,unitPrice:'20'});
+  expect((await forms.read(p.designer,p.sourceId)).document!.materials[0]!.unitPrice).toBe('20');
+  expect((await forms.read(supervisor,p.sourceId)).document!.materials[0]!.unitPrice).toBeUndefined();
+  expect((await f.db.query("SELECT count(*)::int n FROM digital_production_task_access a JOIN digital_production_tasks t USING(task_id) WHERE a.source_id=$1 AND t.route_version=2 AND a.task_kind IN ('development_materials','development_material_recheck')",[p.sourceId])).rows[0].n).toBe(0);
+ });
  it('R5 binds a newly submitted first native order to the actual later development round, without inventing a historical link',async()=>{
   const p=await prepare('无',{withoutNative:true}),old=await forms.read(p.designer,p.sourceId),rounds=new DevelopmentRoundService(f.db,true,native);
   const saved=await rounds.save(p.designer,p.sourceId,{expectedDraftVersion:0,revision:{basedOnRound:1,document:old.document!,origin:'内部发现',customerComment:'',internalProblem:'TEST首个原执行尚未生成前的资料复版',explanation:'TEST真实首次衔接',categories:['版型'],affectedNodes:['纸样'],outputKind:'整件样板'}},randomUUID());
@@ -331,7 +441,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect((await technical.read(f.root,p.sourceId)).cycle?.completedAt).not.toBeNull();
  });
  it('rejects an internal revision with changed technical basis and no paper path before cancelling the old round',async()=>{
-  const p=await sampleToTail(),rounds=new DevelopmentRoundService(f.db,true,native),old=await forms.read(p.designer,p.sourceId),document=structuredClone(old.document!);
+  const p=await sampleToTail({automatic:true}),rounds=new DevelopmentRoundService(f.db,true,native),old=await forms.read(p.designer,p.sourceId),document=structuredClone(old.document!);
   document.materials[0]!.width='155';
   const revision={basedOnRound:1,document,origin:'内部发现' as const,customerComment:'',internalProblem:'TEST主料规格改变须重核技术成果',explanation:'TEST preserve old work on rejection',categories:['面料' as const],affectedNodes:['车板' as const],outputKind:'整件样板' as const};
   const draft=await rounds.save(p.designer,p.sourceId,{expectedDraftVersion:0,revision},randomUUID());
@@ -342,7 +452,11 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const next=await rounds.save(p.designer,p.sourceId,{expectedDraftVersion:draft.draftVersion,revision:{...revision,affectedNodes:['纸样','裁板','车板']}},randomUUID());
   await rounds.publish(p.designer,p.sourceId,{expectedDraftVersion:next.draftVersion,basedOnRound:1},randomUUID());
   expect((await forms.read(p.designer,p.sourceId)).roundNumber).toBe(2);
-  expect((await rounds.read(p.designer,p.sourceId)).rounds.at(-1)?.routeNodes).toContain('development_pattern');
+  const finalRound=(await rounds.read(p.designer,p.sourceId)).rounds.at(-1)!;
+  expect(finalRound.routeNodes).toContain('development_pattern');expect(finalRound.routeNodes).toContain('development_materials');
+  const revised=(await forms.read(p.designer,p.sourceId)).document!.materials[0]!;
+  expect(revised.materialId).not.toBe(p.materialId);expect(revised.width).toBe('155');expect(revised.unitPrice).toBe('20');
+  expect((await forms.read(p.worker,p.sourceId)).document!.materials[0]!.unitPrice).toBeUndefined();
  });
  it('opens a new development round for a whole/key-result redo without cloning the old wage amount',async()=>{
   const p=await sampleToTail(),photo=await f.image(f.root);await execution.recordUploadPurpose(f.root,p.sourceId,photo,'尾查照片',p.tail.taskId);

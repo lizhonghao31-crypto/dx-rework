@@ -1207,6 +1207,10 @@
     {
       "version": "0287_whole_order_deletion",
       "checksum": "5581dcf209cb437df6aab5d3088cf18a3fc2f0572f7aa58708fc5348ed27ad4e"
+    },
+    {
+      "version": "0288_automatic_quotation_sources",
+      "checksum": "08f0097258194c19aaa42b215a5ea6dfafd7756e76d69a4bce203ebae930dce1"
     }
   ]
 }

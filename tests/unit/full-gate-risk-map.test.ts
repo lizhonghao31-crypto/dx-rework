@@ -330,3 +330,12 @@ it('maps the new order-time storage and algorithm to its actual PG cases without
   const scope=classifyFullGatePaths([path]);expect(scope.mappedPostgresTests).toContain('tests/integration/order-time-plan-postgres.test.ts');expect(scope.maintenanceSensitive).toBe(false);
  }
 });
+
+ it('keeps automatic quotation browser coverage on the existing native correctness budget',()=>{
+  const suite='tests/integration/automatic-quotation-native-browser-postgres.test.ts';
+  for(const path of ['apps/api/src/production-platform/quotation-assembly.ts','apps/api/src/production-platform/development-commercial-fields.ts','apps/web/src/digital-quotation-panel.tsx',suite]){
+   const plan=amendmentPlan([path]);
+   expect(plan.plan.filter(s=>s.path===suite)).toEqual([{path:suite,config:'vitest.business-chain.config.ts',memberships:['mapped']}]);
+  }
+  for(const path of ['apps/api/src/production-platform/quotation-assembly.ts','apps/api/src/production-platform/development-commercial-fields.ts'])expect(classifyFullGatePaths([path]).mappedPostgresTests).toContain(amendmentSuite);
+ });

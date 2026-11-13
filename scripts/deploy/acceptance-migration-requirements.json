@@ -2093,5 +2093,19 @@
       "guard_production_order_root_immutable"
     ],
     "sequences": []
+  },
+  "0288_automatic_quotation_sources": {
+    "checksum": "08f0097258194c19aaa42b215a5ea6dfafd7756e76d69a4bce203ebae930dce1",
+    "tables": [
+      "digital_quotation_documents",
+      "digital_quotation_versions"
+    ],
+    "functions": [],
+    "references": [],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": [],
+    "sequences": []
   }
 }
