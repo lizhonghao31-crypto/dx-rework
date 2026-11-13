@@ -10,7 +10,7 @@ export const QuotationAssignmentsSchema=z.array(z.object({
 }).strict()).max(300);
 export type QuotationAssignment=z.infer<typeof QuotationAssignmentsSchema>[number];
 /** Stable provenance for automatic rows; prices stay in the protected document. */
-export type QuotationAssembly={schemaVersion:1;sourceVersion:number;roundNumber:number;fingerprint:string;rows:Record<string,{kind:'material'|'ie'|'craft';sourceRef:string;basis:string;stage:'development';artifactRevision?:string;priceBasis?:string}>};
+export type QuotationAssembly={schemaVersion:1;sourceVersion:number;roundNumber:number;fingerprint:string;rows:Record<string,{kind:'material'|'ie'|'craft';sourceRef:string;basis:string;dependencyVersion?:2;stage:'development';artifactRevision?:string;priceBasis?:string}>};
 export const SaveQuotationSchema=z.object({expectedVersion:z.number().int().nonnegative(),document:BudgetDocumentSchema,assignments:QuotationAssignmentsSchema}).strict().superRefine((v,c)=>{
   const ids=v.assignments.map(a=>a.rowId);
   if(new Set(ids).size!==ids.length||ids.length!==v.document.rows.length||v.document.rows.some(r=>!ids.includes(r.rowId)))c.addIssue({code:'custom',message:'每条报价明细须有且仅有一条责任分工'});

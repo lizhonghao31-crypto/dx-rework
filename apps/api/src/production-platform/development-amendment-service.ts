@@ -1,3 +1,4 @@
+import {developmentDocumentRow} from './development-round-repository.js';
 import {withoutDevelopmentPrices} from './development-commercial-fields.js';
 import {assembleQuotation} from './quotation-assembly.js';
 import {validateAuxiliaryReferences} from '../access/auxiliary-catalog-service.js';
@@ -58,8 +59,9 @@ export class DevelopmentAmendmentService{
    if(prior){await db.query("COMMIT");return prior.response as T;}
    this.current(current,input.roundNumber);
    if(current.sheet.version!==input.expectedDocumentVersion)fail("正式资料已更新，请保留输入并重新核对差异，未覆盖他人的修改");
+   const quotationSource=action==='submit'?await developmentDocumentRow(db,sourceId):undefined;
    const response={...await work(db,current),originatingTaskId:input.taskId};
-   if(action==='submit')await assembleQuotation(db,sourceId,actor.actorId);
+   if(action==='submit')await assembleQuotation(db,sourceId,actor.actorId,undefined,quotationSource);
    await db.query("INSERT INTO digital_production_commands(actor_id,command,key,payload_hash,response) VALUES($1,$2,$3,$4,$5)",[actor.actorId,command,key,hash,JSON.stringify(response)]);
    await db.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1,$2,$3,$4,'digital_development',$5,$6)",[randomUUID(),actor.requestId,actor.actorId,`development_amendment_${action}`,sourceId,JSON.stringify({taskId:input.taskId,roundNumber:input.roundNumber,expectedDocumentVersion:input.expectedDocumentVersion,response})]);
    await db.query("COMMIT");return response;

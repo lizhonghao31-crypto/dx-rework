@@ -1,3 +1,4 @@
+import {technicalDocumentFingerprint} from '../../apps/api/src/production-platform/development-technical-repository.js';
 import {QuotationConfirmationSchema} from '@dx-rework/contracts/digital-quotation';
 import {calculateBudget} from '@dx-rework/contracts/digital-budget';
 import {DigitalBudgetService} from '../../apps/api/src/production-platform/budget-service.js';
@@ -181,6 +182,60 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   q=await quotes.read(p.designer,resource);expect(q.complete).toBe(false);expect(q.document!.rows.find(r=>r.rowId===p.materialId)!.unitPrice).toBe('');
   await forms.save(p.designer,source.sourceId,{expectedVersion:saved.version,document:{...changed.document,materials:changed.document.materials.map(m=>m.materialId===p.materialId?{...m,unitPrice:'0'}:m)}},randomUUID());
   q=await quotes.read(p.designer,resource);expect(q.complete).toBe(true);expect(calculateBudget(q.document!).cost).toBe('12');
+ });
+
+ it('quotation dependencies preserve unrelated prices and consumption across legacy upgrade, craft additions/removals and quantity edits',async()=>{
+  const p=await prepare('无',{automatic:true}),original=(await forms.read(p.designer,p.sourceId)).document!;
+  const source=await identity.createSource(p.designer,{developmentType:'头版',designStyleNo:'TEST-QUOTE-DEPS-'+randomUUID(),temporaryStyleNo:null,customerCode:'PD'},randomUUID());
+  const resource={kind:'source' as const,id:source.sourceId},quotes=new DigitalQuotationService(f.db,true);
+  let document={...original,orderDate:null,files:[]},saved=await forms.save(p.designer,source.sourceId,{expectedVersion:0,document},randomUUID());
+  let q=await quotes.read(p.designer,resource);
+  q=await quotes.save(p.designer,resource,{expectedVersion:q.version,document:q.document!,assignments:q.assignments.map(a=>a.priceRole==='ie_reviewer'?{...a,priceAssigneeId:person('ie').actorId}:{...a,technicalAssigneeId:p.worker.actorId})},randomUUID());
+  q=await quotes.fillRow(p.worker,resource,p.materialId,{expectedVersion:q.version,consumption:'1.5'},randomUUID());
+  q=await quotes.read(p.designer,resource);
+  const ie=q.rows.find(r=>r.assignment.priceRole==='ie_reviewer')!;
+  q=await quotes.fillRow(person('ie'),resource,ie.rowId,{expectedVersion:q.version,unitPrice:'10'},randomUUID());
+  // Recreate the genuinely deployed v1 provenance, not an invented new basis.
+  const row=(await f.db.query('SELECT assembly,assignments FROM digital_quotation_documents WHERE source_id=$1',[source.sourceId])).rows[0];
+  const hash=(v:unknown)=>createHash('sha256').update(JSON.stringify(v)).digest('hex');
+  for(const [id,ref] of Object.entries(row.assembly.rows) as Array<[string,{kind:string;sourceRef:string;basis:string;dependencyVersion?:number}]>){
+   delete ref.dependencyVersion;
+   const assigned=row.assignments.find((a:{rowId:string})=>a.rowId===id);
+   ref.basis=ref.kind==='material'?hash([1,id,document.materials[0]!.name,document.materials[0]!.specification,'米',technicalDocumentFingerprint(document),assigned.technicalAssigneeId])
+    :hash([1,ref.sourceRef,technicalDocumentFingerprint(document),null,assigned.priceAssigneeId]);
+  }
+  await f.db.query('UPDATE digital_quotation_documents SET assembly=$2 WHERE source_id=$1',[source.sourceId,JSON.stringify(row.assembly)]);
+  document={...document,craft:'印花'};
+  saved=await forms.save(p.designer,source.sourceId,{expectedVersion:saved.version,document},randomUUID());
+  q=await quotes.read(p.designer,resource);
+  expect(q.document!.rows.find(r=>r.rowId===p.materialId)!.consumption).toBe('1.5');
+  expect(q.document!.rows.find(r=>r.rowId===ie.rowId)!.unitPrice).toBe('10');
+  const printing=q.document!.rows.find(r=>r.name==='印花')!;expect(printing.unitPrice).toBe('');
+  // Supply the existing native assignment fixture; quote commands cannot assign crafts.
+  await f.db.query(`INSERT INTO digital_development_round_arrangements(source_id,round_number,version,entries,manager_id,changed_by,document_version)
+   VALUES($1,1,1,$2,$3,$3,$4)`,[source.sourceId,JSON.stringify({development_printing:p.worker.actorId}),f.root.actorId,saved.version]);
+  saved=await forms.save(p.designer,source.sourceId,{expectedVersion:saved.version,document},randomUUID());
+  q=await quotes.read(p.designer,resource);
+  q=await quotes.fillRow(p.worker,resource,printing.rowId,{expectedVersion:q.version,unitPrice:'5'},randomUUID());
+  q=await quotes.fillRow(p.worker,resource,p.materialId,{expectedVersion:q.version,consumption:'2'},randomUUID());
+  q=await quotes.read(p.designer,resource);expect(calculateBudget(q.document!).cost).toBe('55');
+  expect(q.document!.rows.find(r=>r.rowId===ie.rowId)!.unitPrice).toBe('10');
+  expect(q.document!.rows.find(r=>r.rowId===printing.rowId)!.unitPrice).toBe('5');
+  document={...document,craft:'印绣花'};
+  saved=await forms.save(p.designer,source.sourceId,{expectedVersion:saved.version,document},randomUUID());
+  q=await quotes.read(p.designer,resource);
+  expect(q.document!.rows.find(r=>r.rowId===printing.rowId)!.unitPrice).toBe('5');
+  expect(q.document!.rows.find(r=>r.name==='绣花')!.unitPrice).toBe('');
+  expect(q.document!.rows.find(r=>r.rowId===p.materialId)!.consumption).toBe('2');
+  expect(q.document!.rows.find(r=>r.rowId===ie.rowId)!.unitPrice).toBe('10');
+  document={...document,craft:'绣花'};
+  saved=await forms.save(p.designer,source.sourceId,{expectedVersion:saved.version,document},randomUUID());
+  q=await quotes.read(p.designer,resource);expect(q.document!.rows.some(r=>r.rowId===printing.rowId)).toBe(false);
+  document={...document,craft:'印绣花'};
+  await forms.save(p.designer,source.sourceId,{expectedVersion:saved.version,document},randomUUID());
+  q=await quotes.read(p.designer,resource);expect(q.document!.rows.find(r=>r.rowId===printing.rowId)!.unitPrice).toBe('');
+  expect(q.document!.rows.find(r=>r.rowId===ie.rowId)!.unitPrice).toBe('10');
+  expect(q.document!.rows.find(r=>r.rowId===p.materialId)!.consumption).toBe('2');
  });
 
  it('P01 captures sewing readiness at actual late-material verification before assignment and retains correction/restore history',async()=>{
