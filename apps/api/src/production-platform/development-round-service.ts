@@ -130,7 +130,7 @@ export class DevelopmentRoundService {
     reasonCategory:input.origin==='内部发现'?'other':input.origin==='客户新增要求'?'customer_change':'workmanship',
     attachmentIds:[],developmentNodes:affectedNodes,developmentProblems:input.categories,
    },`development-remake:${sourceId}:${roundNumber}`,{sourceId,revision:{...input,document,affectedNodes},...(returnTaskId?{returnTaskId}:{})});
-   await assembleQuotation(db,sourceId,actor.actorId);
+   await assembleQuotation(db,sourceId,actor.actorId,undefined,rawBasis);
   return {sourceId,roundNumber};
   }
   await this.forms().bindFiles(db,actor,sourceId,document);
@@ -152,7 +152,7 @@ export class DevelopmentRoundService {
   }
   await db.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1,$2,$3,'development_round_published','digital_development',$4,$5)",[randomUUID(),actor.requestId,actor.actorId,sourceId,JSON.stringify({roundNumber,origin:input.origin,affectedNodes,route,inherited,...(patternReworkRoundId||native?.current_round_id?{nativeRoundId:patternReworkRoundId??native!.current_round_id}:{})})]);
   await new BulkPreparationService(this.database).syncSource(db,actor,sourceId);
-  await assembleQuotation(db,sourceId,actor.actorId);
+  await assembleQuotation(db,sourceId,actor.actorId,undefined,rawBasis);
   return {sourceId,roundNumber};
  }
 }
