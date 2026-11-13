@@ -1,3 +1,4 @@
+import {hasBothBuiltinCrafts} from '@dx-rework/contracts/digital-craft';
 import {randomUUID} from 'node:crypto';
 import type {PoolClient} from 'pg';
 import type {BusinessTime} from '@dx-rework/domain/business-clock';
@@ -27,7 +28,7 @@ export async function captureOrderTimeline(db:PoolClient,actorId:string,orderId:
   if(label==='印绣花'&&!selected)throw Error('请在原制单明确绣花、印花的实际先后顺序');
   const choices=label==='无'?[]:CraftStepChoicesSchema.parse(selected??[{craftKind:label==='绣花'?'embroidery':'printing',sequence:1}]);
   const adoptedPolicy=initial.data.orderTimePlan?await new OrderTimePlanRepository(db).current(resource):null;
-  const craftSteps=initial.data.orderTimePlan?orderTimeBulkSteps(orderId,instructionVersion,choices,orderTimeStoredBulkSteps(adoptedPolicy?.input)):choices.map(step=>({...step,stepId:randomUUID()})),dual=craftSteps.length===2;
+  const craftSteps=initial.data.orderTimePlan?orderTimeBulkSteps(orderId,instructionVersion,choices,orderTimeStoredBulkSteps(adoptedPolicy?.input)):choices.map(step=>({...step,stepId:randomUUID()})),dual=hasBothBuiltinCrafts(craftSteps);
   const source=await repo.existing({kind:'source',id:sourceId},sourceRound),lines=(await db.query('SELECT line_id FROM digital_production_po_lines WHERE production_order_id=$1 ORDER BY position',[orderId])).rows;
   const planningLines=[];
   for(const line of lines){const recorded=(await db.query("SELECT version FROM digital_po_date_changes WHERE line_id=$1 AND date_kind='customer' AND source='initial_po' ORDER BY version LIMIT 1",[line.line_id])).rows[0];

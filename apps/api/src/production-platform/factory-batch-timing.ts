@@ -9,7 +9,7 @@ import {fixedTaskPosition} from './fixed-craft-steps.js';
 import {orderTimePolicyHistory} from './order-time-native-timing.js';
 import {orderTimeRule} from '@dx-rework/contracts/order-time-plan';
 import {shiftFixedTimeline} from './fixed-timeline-targets.js';
-export type FactoryWindow={key:string;kind:'process_logistics'|'bulk_qc'|'warehouse_dispatch';enteredAt:string|null;dueAt:string|null;warningAt:string|null;completedAt:string|null;complete:boolean;evidence:string;minutes:number|null;parameterKey:string;applicationId?:string|null;snapshotId?:string;lineId?:string;stepRef?:string;calendarRef?:FixedTimelineCalendar|null;notificationEnabled?:boolean;orderTimePlanRef?:string;warningRatio?:number};
+export type FactoryWindow={key:string;kind:'process_logistics'|'bulk_qc'|'warehouse_dispatch';enteredAt:string|null;dueAt:string|null;warningAt:string|null;completedAt:string|null;complete:boolean;evidence:string;minutes:number|null;parameterKey:string;applicationId?:string|null;snapshotId?:string;lineId?:string;stepRef?:string;calendarRef?:FixedTimelineCalendar|null;notificationEnabled?:boolean;orderTimePlanRef?:string;warningRatio?:number;craftLabel?:string};
 const latest=(values:Array<Date|string|null|undefined>)=>values.every(Boolean)&&values.length?new Date(Math.max(...values.map(v=>new Date(v!).getTime()))).toISOString():null;
 /** Batch windows derive only from original factory facts and the preparation's frozen standard. */
 export async function factoryBatchTiming(db:Pick<PoolClient,'query'>,orderId:string){
@@ -75,6 +75,7 @@ export async function factoryTaskTiming(db:Pick<PoolClient,'query'>,task:{task_i
  return {snapshotId:selected?.snapshotId??timing.snapshotId,parameterKey:selected?.parameterKey??task.task_kind,enteredAt:selected?.enteredAt??null,timeQuality:selected?.enteredAt?'补报未核实':'缺失',seconds:selected?.minutes==null?null:selected.minutes*60,
   ...(timing.routeSchemaVersion===2||selected?.orderTimePlanRef?{calendarRef:selected?.calendarRef??null}:{}),
   warningRatio:selected?.warningRatio??(timing.routeSchemaVersion===2?timing.warningRatio:selected?.warningAt&&selected.enteredAt&&selected.dueAt?(Date.parse(selected.warningAt)-Date.parse(selected.enteredAt))/(Date.parse(selected.dueAt)-Date.parse(selected.enteredAt)):timing.warningRatio),
+  ...(selected?.craftLabel?{craftLabel:selected.craftLabel}:{}),...(selected?.notificationEnabled===undefined?{}:{notificationEnabled:selected.notificationEnabled}),
   ...(selected?.orderTimePlanRef?{orderTimePlanRef:selected.orderTimePlanRef,notificationEnabled:selected.notificationEnabled}:{}),
   basis:[...(step?[`craft-step:${step.stepId}`,`craft-kind:${step.craftKind}`]:[]),...(selected?[selected.key,selected.evidence]:[])],unknownWindows:open.filter(w=>!w.enteredAt).length};
 }

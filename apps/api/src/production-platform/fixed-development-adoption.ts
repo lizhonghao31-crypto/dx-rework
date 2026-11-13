@@ -1,3 +1,4 @@
+import {hasBothBuiltinCrafts} from '@dx-rework/contracts/digital-craft';
 import {randomUUID} from 'node:crypto';
 import type {PoolClient} from 'pg';
 import type {BusinessTime} from '@dx-rework/domain/business-clock';
@@ -21,7 +22,7 @@ export async function captureDevelopmentTimeline(db:PoolClient,actorId:string,so
  const saved=await new FixedTimelineAdoptionRepository(db).capture(resource,round,actorId,eventRef,time,'fixed_v2',async()=>{
   const original=(await db.query('SELECT revision,plan_json FROM digital_development_sla_plans WHERE source_id=$1 ORDER BY revision LIMIT 1',[sourceId])).rows[0];
   const choices=document.craft==='无'?[]:CraftStepChoicesSchema.parse(document.craftSteps??[{craftKind:document.craft==='绣花'?'embroidery':'printing',sequence:1}]);
-  const craftSteps=choices.filter(choice=>routeKinds.includes(choice.craftKind==='embroidery'?'development_embroidery':'development_printing')).map((choice,index)=>({...choice,sequence:index+1,stepId:randomUUID()})),dual=choices.length===2;
+  const craftSteps=choices.filter(choice=>routeKinds.includes(choice.craftKind==='embroidery'?'development_embroidery':'development_printing')).map((choice,index)=>({...choice,sequence:index+1,stepId:randomUUID()})),dual=hasBothBuiltinCrafts(choices);
   const {work,route,previous}=fixedDevelopmentWork(initial,sourceId,round,routeKinds,craftSteps,dual,document.washing,document.materials.some(material=>material.category==='辅料'&&material.requiredThisRound!==false));
   // The existing sample-completion date is a completion goal, not a fabricated
   // customer shipment promise. The independent shipping task stays explicit.

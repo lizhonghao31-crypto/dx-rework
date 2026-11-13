@@ -1,6 +1,7 @@
+import {hasBothBuiltinCrafts} from '@dx-rework/contracts/digital-craft';
 import {DIGITAL_SLA_PARAMETERS,resolveDigitalSlaSnapshot} from '@dx-rework/contracts/digital-sla';
 import {SettingsCalculationSchema,validateSettingsSetValues,type SettingsCalculationInput,type SettingsCalculationResult} from '@dx-rework/contracts/sla-settings-sets';
-import {CraftStepChoicesSchema,craftLegacyLabel} from '@dx-rework/contracts/digital-craft';
+import {CraftStepChoicesSchema,craftLegacyLabel,craftStepIdentity} from '@dx-rework/contracts/digital-craft';
 import {isCalendarDate} from '@dx-rework/contracts/series-calendar';
 import {fixedDevelopmentWork} from './fixed-development-work.js';
 import {fixedOrderWork} from './fixed-order-work.js';
@@ -13,8 +14,8 @@ export function settingsCalculation(raw:SettingsCalculationInput):SettingsCalcul
  const input=SettingsCalculationSchema.parse(raw),values=validateSettingsSetValues(input.values).unified,developmentSteps=CraftStepChoicesSchema.parse(input.development.craftSteps),bulkSteps=CraftStepChoicesSchema.parse(input.bulk.craftSteps);
  if(new Set(input.lines.map(line=>line.id)).size!==input.lines.length||input.lines.some(line=>!isCalendarDate(line.customerDate)))throw Error('请填写不重复的PO编号与有效交期');
  const initial:FixedWorkInputs={data:{unified:{configurationId:'temporary-calculation',snapshotRef:'temporary-calculation',values:resolveDigitalSlaSnapshot({version:1,values})},development:{snapshotRef:'temporary-calculation',version:1,values:input.values.development},planning:{standardRef:'temporary-calculation',version:1,values:input.values.planning}}};
- const doc={craft:craftLegacyLabel(developmentSteps),craftSteps:developmentSteps,washing:input.development.washing},development=input.development.enabled?fixedDevelopmentWork(initial,'temporary-source',1,['development_materials',...developmentSlaRoute(doc,'整件样板',2)],developmentSteps.map(step=>({...step,stepId:'temporary-'+step.craftKind})),developmentSteps.length===2,input.development.washing,input.development.accessories):null;
- const bulk=fixedOrderWork(initial,'temporary-order','temporary-source',1,input.bulk.preshrink?'需要预缩':'不需预缩',bulkSteps.map(step=>({...step,stepId:'temporary-'+step.craftKind})),bulkSteps.length===2,development,input.lines.map(line=>({line_id:line.id,goal:{precision:'date',value:line.customerDate,source:'explicit-calculation-input'},customerDateVersion:0})));
+ const doc={craft:craftLegacyLabel(developmentSteps),craftSteps:developmentSteps,washing:input.development.washing},development=input.development.enabled?fixedDevelopmentWork(initial,'temporary-source',1,['development_materials',...developmentSlaRoute(doc,'整件样板',2)],developmentSteps.map(step=>({...step,stepId:'temporary-'+craftStepIdentity(step)})),hasBothBuiltinCrafts(developmentSteps),input.development.washing,input.development.accessories):null;
+ const bulk=fixedOrderWork(initial,'temporary-order','temporary-source',1,input.bulk.preshrink?'需要预缩':'不需预缩',bulkSteps.map(step=>({...step,stepId:'temporary-'+craftStepIdentity(step)})),hasBothBuiltinCrafts(bulkSteps),development,input.lines.map(line=>({line_id:line.id,goal:{precision:'date',value:line.customerDate,source:'explicit-calculation-input'},customerDateVersion:0})));
  const catalog=new Map(DIGITAL_SLA_PARAMETERS.map(p=>[p.key,p]));
  return {lines:bulk.consumers.map((consumer,index)=>{
   const work=bulk.work.filter(node=>consumer.nodeIds.includes(node.id));

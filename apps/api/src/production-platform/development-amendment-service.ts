@@ -1,3 +1,4 @@
+import {validateSpecialCraftChoices} from './special-craft-library.js';
 import {developmentDocumentRow} from './development-round-repository.js';
 import {withoutDevelopmentPrices} from './development-commercial-fields.js';
 import {assembleQuotation} from './quotation-assembly.js';
@@ -97,6 +98,7 @@ export class DevelopmentAmendmentService{
    }
    if(!draft.reason.trim())fail("请填写本次具体补正 / 澄清说明，再保存并提交");
    const before=current.sheet.document!,document=DevelopmentDocumentSchema.parse(draft.document);
+   await validateSpecialCraftChoices(db,document.craftSteps??[],before.craftSteps??[],'development');
    const errors=[...developmentAmendmentErrors(before,document),...developmentPublishErrors(document,legacyAmendmentPublicationOptions(before,document))];if(errors.length)fail(errors.join("；"));
    for(const issue of requirements?.issues??[]){
     if(developmentReturnNeed(issue)==="supply"||issue.field==="other")continue;

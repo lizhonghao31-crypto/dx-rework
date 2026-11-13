@@ -2107,5 +2107,26 @@
     "creates": [],
     "execute": [],
     "sequences": []
+  },
+  "0289_special_craft_library": {
+    "checksum": "64d112ad1624be4fd0908b19ae62601178f9f84b34e0ef4fd1d23685f020d65e",
+    "tables": [
+      "digital_timeline_craft_steps",
+      "digital_factory_routes"
+    ],
+    "functions": [],
+    "references": [
+      "app_users"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [
+      "digital_special_craft_versions",
+      "digital_special_craft_heads"
+    ],
+    "execute": [
+      "guard_production_order_root_immutable"
+    ],
+    "sequences": []
   }
 }

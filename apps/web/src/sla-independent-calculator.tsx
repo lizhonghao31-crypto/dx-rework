@@ -1,7 +1,7 @@
 import {SlaCalculationCycleInputs} from './sla-calculation-cycle-inputs.js';
 import {useEffect,useRef,useState} from 'react';
 import {Button} from '@dx-rework/ui';
-import type {CraftStepChoice} from '@dx-rework/contracts/digital-craft';
+import {craftChoiceLabel,type CraftStepChoice} from '@dx-rework/contracts/digital-craft';
 import type {SettingsCalculationInput,SettingsCalculationResult,SettingsSetValues,SettingsSetRead,SettingsSetHistory} from '@dx-rework/contracts/sla-settings-sets';
 import {JOURNEY_STAGES} from '@dx-rework/contracts/digital-production-journey';
 import {digitalRequest,DigitalRequestError} from './digital-production-api.js';
@@ -9,7 +9,7 @@ import {SlaPlanningInputs} from './sla-planning-inputs.js';
 import {readableSlaMinutes} from './sla-settings-draft.js';
 import {CockpitDate} from './cockpit-date.js';
 function CraftChoice({label,value,onChange}:{label:string;value:CraftStepChoice[];onChange(value:CraftStepChoice[]):void}){
- return <fieldset className="sla-calculation-craft"><legend>{label}</legend>{(['embroidery','printing'] as const).map(kind=><label key={kind}><input type="checkbox" checked={value.some(step=>step.craftKind===kind)} onChange={event=>onChange((event.target.checked?[...value,{craftKind:kind,sequence:value.length+1}]:value.filter(step=>step.craftKind!==kind)).map((step,index)=>({...step,sequence:index+1})))}/>{kind==='embroidery'?'绣花':'印花'}</label>)}{value.length===2&&<><span>{value[0]!.craftKind==='embroidery'?'绣花 → 印花':'印花 → 绣花'}</span><Button variant="secondary" onClick={()=>onChange([...value].reverse().map((step,index)=>({...step,sequence:index+1})))}>调整先后顺序</Button></>}</fieldset>;
+ return <fieldset className="sla-calculation-craft"><legend>{label}</legend>{(['embroidery','printing'] as const).map(kind=><label key={kind}><input type="checkbox" checked={value.some(step=>step.craftKind===kind)} onChange={event=>onChange((event.target.checked?[...value,{craftKind:kind,sequence:value.length+1}]:value.filter(step=>step.craftKind!==kind)).map((step,index)=>({...step,sequence:index+1})))}/>{kind==='embroidery'?'绣花':'印花'}</label>)}{value.length===2&&<><span>{craftChoiceLabel(value)}</span><Button variant="secondary" onClick={()=>onChange([...value].reverse().map((step,index)=>({...step,sequence:index+1})))}>调整先后顺序</Button></>}</fieldset>;
 }
 /** This state is independent of the configuration editor. Only read-only
  * history and calculation endpoints are used; it cannot publish or adopt. */

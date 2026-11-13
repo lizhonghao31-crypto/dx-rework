@@ -45,6 +45,7 @@ export class DigitalQuotationService{
   const snapshot=version===undefined?null:(await db.query('SELECT * FROM digital_quotation_versions WHERE quote_id=$1 AND version=$2',[q?.quote_id,version])).rows[0]??digitalNotFound();
   const doc=(snapshot?.document??q?.document) as BudgetDocument|undefined;
   const assignments=(snapshot?.assignments??q?.assignments??[]) as QuotationAssignment[];
+  const assembly=(snapshot?.assembly??q?.assembly) as AssembledQuotation['assembly'];
   const sources=(snapshot?.consumption_sources??q?.consumption_sources??{}) as Record<string,QuotationConsumptionSource>;
   const userIds=[...new Set(assignments.flatMap(a=>[a.technicalAssigneeId,a.priceAssigneeId]).filter((v):v is string=>Boolean(v)))];
   const names=new Map<string,string>((userIds.length?(await db.query('SELECT id,display_name FROM app_users WHERE id=ANY($1::uuid[])',[userIds])).rows:[]).map(u=>[u.id,u.display_name]));
@@ -57,7 +58,8 @@ export class DigitalQuotationService{
    const technical=current?.technicalAssigneeId===actor.actorId&&c.roles.has('pattern_room_worker');
    const price=current?.priceAssigneeId===actor.actorId&&c.roles.has(current.priceRole);
    if(!c.full&&!technical&&!price)return [];
-   return [{...row,unitPrice:c.full||price?row.unitPrice:null,consumption:row.consumption,assignment:a,
+   const basis=assembly?.rows[row.rowId];
+   return [{...row,...(basis?.craftRef?{craftBasis:{stage:basis.stage,...basis.craftRef}}:{}),unitPrice:c.full||price?row.unitPrice:null,consumption:row.consumption,assignment:a,
     technicalAssigneeName:a.technicalAssigneeId?names.get(a.technicalAssigneeId)??null:null,priceAssigneeName:a.priceAssigneeId?names.get(a.priceAssigneeId)??null:null,
     canEditConsumption:version===undefined&&(!q?.assembly||q.assembly.rows[row.rowId]?.kind==='material')&&(isRootActor(actor)||technical),canEditPrice:version===undefined&&(isRootActor(actor)||price),consumptionSource:sources[row.rowId]??null}];
   });
@@ -69,7 +71,7 @@ export class DigitalQuotationService{
     if(material&&r.unit&&r.consumption!=='')technicalConsumptionOptions.push({artifactSetId:artifact.artifact.artifactSetId,artifactVersion:artifact.artifact.version,materialId:r.materialId,name:material.name,unit:r.unit,consumption:r.consumption});
    }
   }
-  return {...(q?.assembly?{automatic:true,complete:quotationComplete({...q,document:doc!,assignments,consumption_sources:sources,price_sources:snapshot?.price_sources??q.price_sources,assembly:snapshot?.assembly??q.assembly})}:{}),technicalConsumptionOptions,quoteId:q?.quote_id??null,resource,productionOrderId:c.orderId,sourceId:c.sourceId,designStyleNo:c.row.design_style_no,designerId:c.designerId,customerCode:c.customerCode,
+  return {...(c.full&&assembly?.priorCraftRows?{priorCraftRows:Object.values(assembly.priorCraftRows).map(value=>({row:value.row,stage:value.ref.stage}))}:{}),...(q?.assembly?{automatic:true,complete:quotationComplete({...q,document:doc!,assignments,consumption_sources:sources,price_sources:snapshot?.price_sources??q.price_sources,assembly:snapshot?.assembly??q.assembly})}:{}),technicalConsumptionOptions,quoteId:q?.quote_id??null,resource,productionOrderId:c.orderId,sourceId:c.sourceId,designStyleNo:c.row.design_style_no,designerId:c.designerId,customerCode:c.customerCode,
    version:version??q?.version??0,status:(version!==undefined||Boolean(q)&&q?.version===q?.confirmed_version)?'confirmed':'draft',confirmedVersion:q?.confirmed_version??null,
    versions:c.full&&q?(await db.query('SELECT version FROM digital_quotation_versions WHERE quote_id=$1 ORDER BY version DESC',[q.quote_id])).rows.map(x=>x.version):[],
    document:c.full?doc??null:null,rows,assignments:c.full?assignments:rows.map(r=>r.assignment),confirmation:c.full?confirmation??null:null,
@@ -127,7 +129,7 @@ export class DigitalQuotationService{
     if(!isDeepStrictEqual(input.document,current.document))conflict('自动报价明细来自本单资料；请在原资料修改材料，单价由对应岗位填写');
     for(const a of input.assignments){
      const old=current.assignments.find(value=>value.rowId===a.rowId)!,ref=current.assembly.rows[a.rowId]!;
-     if(ref.kind==='ie'&&(a.priceRole!=='ie_reviewer'||a.technicalAssigneeId!==null)||ref.kind==='material'&&(a.priceRole!=='sample_designer'||a.priceAssigneeId!==c.designerId)||ref.kind==='craft'&&!(ref.sourceRef.includes('内洗')||ref.sourceRef.includes('外洗'))&&!isDeepStrictEqual(a,old))conflict('工艺沿原实际派工；材料由设计定价，IE加工价由IE填写');
+     if(ref.kind==='ie'&&(a.priceRole!=='ie_reviewer'||a.technicalAssigneeId!==null)||ref.kind==='material'&&(a.priceRole!=='sample_designer'||a.priceAssigneeId!==c.designerId)||ref.kind==='craft'&&!(ref.stage==='bulk'&&ref.craftRef)&&!(ref.sourceRef.includes('内洗')||ref.sourceRef.includes('外洗'))&&!isDeepStrictEqual(a,old))conflict('工艺沿原实际派工；材料由设计定价，IE加工价由IE填写');
      if(ref.kind==='craft'&&(a.priceRole!==old.priceRole||a.technicalAssigneeId!==null))conflict('请保留原工艺报价岗位');
      if(a.technicalAssigneeId&&!(isRootActor(actor)&&a.technicalAssigneeId===actor.actorId)&&!await new DigitalProductionAccessPolicy(db).lockActiveRole(a.technicalAssigneeId,'pattern_room_worker'))conflict('用量负责人岗位已失效');
      if(a.priceAssigneeId&&!(isRootActor(actor)&&a.priceAssigneeId===actor.actorId)&&!await new DigitalProductionAccessPolicy(db).lockActiveRole(a.priceAssigneeId,a.priceRole))conflict('报价负责人岗位已失效');

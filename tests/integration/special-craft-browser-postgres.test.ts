@@ -1,0 +1,119 @@
+import {exerciseDevelopmentSlaNative} from '../helpers/development-sla-native-fixture.js';
+import {TodoProjectionService} from '../../apps/api/src/todos/projection-service.js';
+import {TodoService} from '../../apps/api/src/todos/service.js';
+import {DigitalQuotationService} from '../../apps/api/src/production-platform/quotation-service.js';
+import {ProductionInstructionService} from '../../apps/api/src/production-platform/production-instruction-service.js';
+import {productionReadinessFixture} from '../helpers/production-readiness-fixture.js';
+import {DigitalOrderCreateSchema} from '@dx-rework/contracts/digital-production';
+import {businessNow} from '../../apps/api/src/acceptance-clock/business-time.js';
+import {DigitalProductionIdentityService} from '../../apps/api/src/production-platform/identity-service.js';
+import {DigitalDevelopmentService} from '../../apps/api/src/production-platform/development-service.js';
+import {configureTimelineAdoption} from '../../apps/api/src/production-platform/fixed-timeline-mode.js';
+import {initialDevelopmentDocument} from '../../apps/web/src/digital-development-editing.js';
+import {randomUUID} from 'node:crypto';
+import {join} from 'node:path';
+import {tmpdir} from 'node:os';
+import {beforeAll,afterAll,describe,it,expect,vi} from 'vitest';
+import {supplychainSettingsBrowser} from '../acceptance/supplychain-settings-browser.js';
+import {SpecialCraftLibraryService} from '../../apps/api/src/production-platform/special-craft-library.js';
+vi.mock('../../apps/api/src/production-platform/special-craft-activation.js',()=>({SPECIAL_CRAFT_ADOPTION_ENABLED:true}));
+const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
+(url?describe:describe.skip)('special craft library original App settings',()=>{
+ let h:Awaited<ReturnType<typeof supplychainSettingsBrowser>>;
+ beforeAll(async()=>{h=await supplychainSettingsBrowser(url!,join(process.env.RUNNER_TEMP??tmpdir(),'special-craft-ui-'+randomUUID()),{fullApp:true,orderTimeModel:true});});
+ afterAll(async()=>{if(h){configureTimelineAdoption(h.db,'legacy');await h.writeEvidence();await h.dispose();}});
+ it('saves independent stage settings and retains edits when switching tabs at1165px',async()=>{
+  const {page,context}=await h.open(undefined,1165);try{
+   await page.getByRole('tab',{name:'特殊工艺库',exact:true}).click();
+   const panel=page.getByRole('tabpanel',{name:'特殊工艺库',exact:true});
+   await panel.getByRole('button',{name:'新增工艺',exact:true}).click();
+   await panel.getByLabel('工艺名称',{exact:true}).fill('TEST 激光及烫钻独立时效');
+   await panel.getByLabel('开发样板允许用时（小时）',{exact:true}).fill('2');
+   await panel.getByLabel('开发样板哪些天计时',{exact:true}).selectOption('continuous');
+   await panel.getByLabel('大货允许用时（小时）',{exact:true}).fill('8');
+   await panel.getByLabel('大货哪些天计时',{exact:true}).selectOption('beijing_sunday_excluded');
+   await panel.getByRole('group',{name:'大货',exact:true}).getByLabel('提醒',{exact:true}).uncheck();
+   await page.getByRole('tab',{name:'时效设置',exact:true}).click();
+   await page.getByRole('tab',{name:'特殊工艺库',exact:true}).click();
+   expect(await panel.getByLabel('大货允许用时（小时）',{exact:true}).inputValue()).toBe('8');
+   await page.screenshot({path:join(h.evidence,'special-craft-edit-1165.png'),fullPage:true});
+   await panel.getByRole('button',{name:'保存',exact:true}).click();
+   await panel.getByText('已保存，已生效订单保持原设置。',{exact:true}).waitFor();
+   const saved=await new SpecialCraftLibraryService(h.db).list(h.f.root);
+   expect(saved.items).toHaveLength(1);expect(saved.items[0]!.definition).toMatchObject({development:{minutes:120,calendar:'continuous'},bulk:{minutes:480,calendar:'beijing_sunday_excluded',reminder:{enabled:false}}});
+   await panel.getByRole('button',{name:'调整',exact:true}).click();await page.setViewportSize({width:650,height:900});
+   expect(await panel.getByLabel('开发样板允许用时（小时）',{exact:true}).inputValue()).toBe('2');
+   await page.screenshot({path:join(h.evidence,'special-craft-edit-650.png'),fullPage:true});
+   // Existing mobile navigation expands the supply-chain group at650px.
+   // Preserve its screenshot as a known shell limitation; do not force-click through it.
+   await page.setViewportSize({width:1165,height:900});
+   await panel.getByRole('button',{name:'取消',exact:true}).click();expect(h.errors).toEqual([]);
+  }finally{await context.close();}
+ });
+ it('selects several special crafts with printing and retains their explicit order in the original source editor',async()=>{
+  configureTimelineAdoption(h.db,'fixed_v2');
+  const library=new SpecialCraftLibraryService(h.db),standard={minutes:120,calendar:'continuous' as const,reminder:{enabled:true,percent:70}};
+  const items=[];
+  for(const name of ['TEST UI激光','TEST UI烫钻'])items.push(await library.save(h.f.root,{id:null,expectedVersion:0,definition:{name,enabled:true,development:standard,bulk:standard}},randomUUID()));
+  const designer=h.f.people['sample-designer']!,identity=new DigitalProductionIdentityService(h.db,true),forms=new DigitalDevelopmentService(h.db,true);
+  const source=await identity.createSource(designer,{developmentType:'头版',designStyleNo:'TEST-SPECIAL-UI-'+randomUUID(),temporaryStyleNo:null,customerCode:'PD'},randomUUID());
+  await forms.save(designer,source.sourceId,{expectedVersion:0,document:initialDevelopmentDocument()},randomUUID());
+  const {page,context}=await h.open(designer.actorId,1165,{},'/ui/digital-production?development='+source.sourceId);
+  try{
+   await page.getByRole('button',{name:'保存开发资料草稿',exact:true}).waitFor();
+   const selector=page.getByLabel('工艺特殊工艺',{exact:true});
+   await selector.selectOption(items[0]!.id);await selector.selectOption(items[1]!.id);
+   const group=page.getByRole('group',{name:'工艺',exact:true});await group.getByLabel('印花',{exact:true}).check();
+   await page.getByRole('button',{name:'TEST UI烫钻前移',exact:true}).click();
+   await page.getByRole('button',{name:'保存开发资料草稿',exact:true}).click();
+   await expect.poll(async()=>(await forms.read(designer,source.sourceId)).version).toBe(2);
+   const saved=(await forms.read(designer,source.sourceId)).document!.craftSteps!;
+   expect(saved.map(step=>step.specialCraft?.definition.name??step.craftKind)).toEqual(['TEST UI烫钻','TEST UI激光','printing']);
+   expect(saved.map(step=>step.sequence)).toEqual([1,2,3]);
+   await page.screenshot({path:join(h.evidence,'special-craft-source-order-1165.png'),fullPage:true});
+   expect(h.errors).toEqual([]);
+  }finally{await context.close();}
+ });
+
+ it('assigns a bulk-only craft and fills only that price through the original authenticated quotation page',async()=>{
+  configureTimelineAdoption(h.db,'fixed_v2');
+  const f=h.f,worker=f.people['pattern-room-worker']!,quotes=new DigitalQuotationService(h.db,true);
+  const created=await exerciseDevelopmentSlaNative(h.db,new TodoProjectionService(new TodoService(h.db)),f.root,worker.actorId,undefined,[['无','免洗']],{automaticQuotation:true});
+  const resource={kind:'source' as const,id:created[0]!.sourceId};
+  let q=await quotes.read(f.root,resource);
+  q=await quotes.save(f.root,resource,{expectedVersion:q.version,document:q.document!,assignments:q.assignments.map(a=>q.rows.find(row=>row.rowId===a.rowId)?.name==='IE加工单价'?{...a,priceAssigneeId:f.people.ie!.actorId}:a)},randomUUID());
+  for(const row of q.rows)q=await quotes.fillRow(f.root,resource,row.rowId,{expectedVersion:q.version,...(row.section!=='外发工序'?{consumption:'1.5'}:{}),unitPrice:row.section==='外发工序'?'10':'20'},randomUUID());
+  await quotes.confirm(f.root,resource,{expectedVersion:q.version,customerCode:'PD',customerConfirmedTotal:'50',amountScope:'per_piece',quantity:null,quantityUnit:'件',currency:'人民币',taxBasis:'excludes_tax',sourceKind:'explicit_customer_confirmation',sourceField:'customerConfirmedTotal',templateVersion:'online-quotation-v1',evidenceNote:'TEST bulk-only UI',confirmedAt:businessNow().toISOString()},randomUUID());
+  const source=(await h.db.query('SELECT design_style_no FROM digital_production_sources WHERE source_id=$1',[resource.id])).rows[0];
+  const order=await new DigitalProductionIdentityService(h.db,true).createOrder(f.root,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:source.design_style_no,orderDate:'2026-11-13',primaryMerchandiserId:f.people.merchandiser!.actorId,lines:[{color:'黑',customerWarehouseArrivalDate:'2027-03-01',sizes:[{size:'M',quantity:100}]}]}),randomUUID(),resource.id);
+  const standard={minutes:120,calendar:'continuous' as const,reminder:{enabled:true,percent:70}};
+  const craft=await new SpecialCraftLibraryService(h.db).save(f.root,{id:null,expectedVersion:0,definition:{name:'TEST 仅大货压花',enabled:true,development:standard,bulk:standard}},randomUUID());
+  const instructions=new ProductionInstructionService(h.db,true),seed=await instructions.read(f.root,order.productionOrderId);
+  const saved=await instructions.save(f.root,order.productionOrderId,{expectedVersion:0,orderVersion:seed.currentOrderVersion,sourceRound:1,document:{...seed.document,secondaryCraft:'特殊工艺',craftSteps:[{craftKind:'special',sequence:1,specialCraft:craft}],styleName:'TEST bulk only UI',category:'上衣',preshrink:'不需预缩',date:'2026-11-13'}},randomUUID());
+  const ready=await productionReadinessFixture(h.db,f.root,order.productionOrderId,worker.actorId,f.people.warehouse!);
+  await instructions.publish(f.root,order.productionOrderId,{expectedVersion:saved.version,orderVersion:saved.currentOrderVersion,expectedReadinessRevision:ready.revision},randomUUID());
+  const bulk={kind:'order' as const,id:order.productionOrderId},path='/ui/digital-quotation?kind=order&id='+order.productionOrderId;
+  const admin=await h.open(f.root.actorId,1165,{},path);
+  try{
+   await admin.page.getByLabel('TEST 仅大货压花价格负责人',{exact:true}).selectOption('pattern_room_worker:'+worker.actorId);
+   await admin.page.getByRole('button',{name:'保存报价',exact:true}).click();
+   await expect.poll(async()=>(await quotes.read(f.root,bulk)).rows.find(row=>row.name==='TEST 仅大货压花')?.assignment.priceAssigneeId).toBe(worker.actorId);
+   const own=await h.open(worker.actorId,1165,{},path);
+   try{
+    await own.page.getByLabel('TEST 仅大货压花负责单价',{exact:true}).fill('8');
+    expect(await own.page.getByLabel('IE加工单价负责单价',{exact:true}).count()).toBe(0);
+    await own.page.locator('.quotation-row-input').filter({has:own.page.getByLabel('TEST 仅大货压花负责单价',{exact:true})}).getByRole('button',{name:'保存本行负责字段',exact:true}).click();
+    await expect.poll(async()=>(await quotes.read(f.root,bulk)).rows.find(row=>row.name==='TEST 仅大货压花')?.unitPrice).toBe('8');
+    await own.page.screenshot({path:join(h.evidence,'special-craft-bulk-price-1165.png'),fullPage:true});
+    const assignment=(await h.db.query("SELECT assignment_id FROM user_role_assignments WHERE user_id=$1 AND role_code='pattern_room_worker' AND revoked_at IS NULL",[worker.actorId])).rows[0];
+    await f.access.assignRole(h.admin,{userId:worker.actorId,roleCode:'finance_read',reason:'TEST keep same session after craft role withdrawal'});
+    await f.access.revokeRole(h.admin,assignment.assignment_id,'TEST bulk special craft current role withdrawal');
+    const response=await own.page.request.get(h.base+'/api/digital-production/orders/'+order.productionOrderId+'/quotation');
+    expect([403,404]).toContain(response.status());
+
+   }finally{await own.context.close();}
+   expect(h.errors).toEqual([]);
+  }finally{await admin.context.close();}
+ });
+
+});

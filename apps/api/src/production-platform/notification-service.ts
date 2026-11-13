@@ -1,3 +1,4 @@
+import {specialCraftQuotationTodos,specialCraftQuotationNotification} from './special-craft-quotation-todos.js';
 import {type TodoSelection,type TodoSelectionKey,type TodoProjection} from '../todos/selection.js';
 import {shortLeadTodos} from './short-lead-todos.js';
 import {orderTimeTodos,orderTimeNotification} from './order-time-todos.js';
@@ -42,7 +43,7 @@ const ACTIVE = "t.state IN ('pending','ready','blocked') AND coalesce(l.state,'a
 const TASKS = `SELECT t.*,a.assignee_id,a.required_role,a.task_kind,a.production_order_id,a.source_id,
   coalesce(o.created_by,s.created_by) AS designer_id,o.primary_merchandiser_id,
   o.design_style_no AS order_style_no,s.design_style_no AS source_style_no,
-  p.label,d.revision_id,d.entered_at,to_jsonb(d)->'sla_basis' AS sla_basis,d.warning_at,d.due_at,NULLIF(to_jsonb(d)->'sla_basis','null'::jsonb) IS NOT NULL AS source_sla,coalesce((to_jsonb(d)->'sla_basis'->>'exclusive')::boolean,false) AS deadline_exclusive,coalesce(l.state,'active') AS lifecycle
+  coalesce(to_jsonb(d)->'sla_basis'->>'craftLabel',p.label) AS label,d.revision_id,d.entered_at,to_jsonb(d)->'sla_basis' AS sla_basis,d.warning_at,d.due_at,NULLIF(to_jsonb(d)->'sla_basis','null'::jsonb) IS NOT NULL AS source_sla,coalesce((to_jsonb(d)->'sla_basis'->>'exclusive')::boolean,false) AS deadline_exclusive,coalesce(l.state,'active') AS lifecycle
   FROM digital_production_tasks t JOIN digital_production_task_access a ON a.task_id=t.task_id AND a.task_kind<>'factory_material_count'
   LEFT JOIN digital_production_orders o USING(production_order_id)
   LEFT JOIN digital_production_sources s ON s.source_id=a.source_id
@@ -199,6 +200,7 @@ export class DigitalProductionNotificationService {
     const tasks=(await this.database.query<Task>(`${TASKS} WHERE ${ACTIVE}${projection?.todoId?' AND t.task_id=$1::uuid':''} ORDER BY d.due_at NULLS LAST,t.created_at,t.task_id`,...(projection?.todoId?[[projection.todoId]]:[]))).rows;
     const unified=await arrangementsAvailable(this.database);
     const result:TodoResponse[]=unified?[...await arrangementTodos(this.database,actor,projection),...await fabricDecisionTodos(this.database,actor,projection)]:[];
+    result.push(...await specialCraftQuotationTodos(this.database,actor,projection));
     result.push(...await orderTimeTodos(this.database,actor,projection),...await shortLeadTodos(this.database,actor,projection));
     result.push(...await preparationWindowTodos(this.database,actor,projection),...await preparationMaterialsTodos(this.database,actor,projection),...await bulkFabricDecisionTodos(this.database,actor,projection),...await factoryProductionQcTodos(this.database,actor,new ContextBusinessClock(this.database),projection),...await garmentQualityTodos(this.database,actor,new ContextBusinessClock(this.database),projection));
 
@@ -246,6 +248,7 @@ export class DigitalProductionNotificationService {
   async todo(actor:TrustedActorContext,id:string){const selected=await this.todoSelections(actor,{todoId:id});return selected[0]?selected[0].load():null;}
   private async render(database:Database,actor:TrustedActorContext,event:{instruction_order_id?:string|null;development_source_id?:string|null;event_id:string;task_id:string|null;todo_id:string|null;event_kind:string;deadline_revision_id:string|null;created_at:Date;source_key?:string},people:TrustedActorContext[],includeContext=true,prepared?:NotificationTasks):Promise<DigitalNotification|null> {
     if(!people.some(p=>p.actorId===actor.actorId))return null;
+    if(event.event_kind==='special_craft_quotation')return specialCraftQuotationNotification(database,actor,event);
     if(event.event_kind==='order_time_request')return orderTimeNotification(database,actor,event);
     if(event.event_kind==='qc_progress'){
       const parent=(await database.query('SELECT production_order_id FROM digital_production_task_access WHERE task_id=$1',[event.task_id])).rows[0];

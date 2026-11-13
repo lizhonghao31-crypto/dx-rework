@@ -115,7 +115,7 @@ export function orderTimeReadingBasis(saved:StoredOrderTimePlan,resource:Busines
   const original=legacy?.scopes.find(value=>value.scopeRef===scope.scopeRef||scope.lineId&&value.lineId===scope.lineId);
   const required=requiredFixedTimelineWork(definitions,scope.terminalIds),facts:Record<string,ScheduleFact>={};
   const work:ScheduleWork[]=required.map(definition=>{
-   const source=byId.get(definition.id)!,target=saved.targets[scope.scopeRef]?.[source.id],policy=orderTimeWorkDefinition(saved.input.plan,source.parameterKey);
+   const source=byId.get(definition.id)!,target=saved.targets[scope.scopeRef]?.[source.id],policy=orderTimeWorkDefinition(saved.input.plan,source.parameterKey,source.craftStep);
    const old=original?.work.find(value=>source.canonicalWorkRef?value.canonicalWorkRef===source.canonicalWorkRef:value.id===source.id);
    const own=nativeFor(source,scope,resource,item,native,evidence),previous=old&&original?.facts[old.id];
    // An empty legacy placeholder is not a conflicting historical event. It

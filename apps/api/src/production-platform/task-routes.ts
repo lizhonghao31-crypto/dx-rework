@@ -1,4 +1,5 @@
 import {SettingsCalculationSchema,SettingsSetSaveSchema,SettingsSetDraftSchema,SettingsSetBasisSchema,SettingsSetPublishSchema,SettingsSetRestoreSchema} from '@dx-rework/contracts/sla-settings-sets';
+import {SpecialCraftSaveSchema} from '@dx-rework/contracts/digital-craft';
 import {OrderTimeCalculationSchema,OrderTimeSettingsSaveSchema,OrderTimeSettingsUseSchema} from '@dx-rework/contracts/order-time-settings';
 import {orderTimeSettingsCalculation} from './order-time-settings-calculation.js';
 import {settingsCalculation} from './sla-settings-calculation.js';
@@ -43,6 +44,11 @@ export function registerDigitalTaskRoutes(app: FastifyInstance, dependencies: Di
   const orderSelection=z.object({orderId:z.string().uuid(),configurationVersion:z.number().int().positive(),parameterKeys:z.array(z.string()).min(1).max(DIGITAL_SLA_PARAMETERS.length),reason:z.string().trim().min(1).max(1000)}).strict();
   const sets='/digital-production/sla-settings/sets';
   const timeSettings='/digital-production/order-time-settings';
+  const crafts='/digital-production/special-craft-library';
+  app.get(crafts+'/choices',async request=>service.specialCraftLibrary().choices(await actor(request)));
+  app.get(crafts,async request=>service.specialCraftLibrary().list(await actor(request)));
+  app.get(crafts+'/:id/history',async request=>service.specialCraftLibrary().history(await actor(request),parse(z.string().uuid(),(request.params as Record<string,unknown>).id)));
+  app.post(crafts,async request=>service.specialCraftLibrary().save(await actor(request),parse(SpecialCraftSaveSchema,request.body),key(request)));
   app.get(timeSettings,async request=>service.orderTimeSettings().read(await actor(request)));
   app.get(timeSettings+'/history',async request=>service.orderTimeSettings().history(await actor(request),parse(z.object({page:z.coerce.number().int().positive().max(100000).default(1)}).strict(),request.query).page));
   app.post(timeSettings+'/save',async request=>service.orderTimeSettings().save(await actor(request),parse(OrderTimeSettingsSaveSchema,request.body),key(request)));

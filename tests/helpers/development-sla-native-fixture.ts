@@ -19,7 +19,7 @@ import type {CraftStepChoice} from '@dx-rework/contracts/digital-craft';
 
 /** Current enrollment, real migrated schema and original native execution/wage integration. */
 export async function exerciseDevelopmentSlaNative(db: Pool, todos: TodoProjectionService, root: TrustedActorContext, workerId: string, clock?:BusinessClock,
-  variants:readonly (readonly [DevelopmentDocument['craft'],DevelopmentDocument['washing']])[]=[["无", "免洗"], ["印花", "内洗"], ["绣花", "外洗"], ["印绣花", "内洗"]],options?:{fixedCraftSteps:CraftStepChoice[];onRouteComplete?(sourceId:string,kind:string,taskId:string):Promise<void>}) {
+  variants:readonly (readonly [DevelopmentDocument['craft'],DevelopmentDocument['washing']])[]=[["无", "免洗"], ["印花", "内洗"], ["绣花", "外洗"], ["印绣花", "内洗"]],options?:{fixedCraftSteps:CraftStepChoice[];automaticQuotation?:boolean;onRouteComplete?(sourceId:string,kind:string,taskId:string):Promise<void>}) {
   const created:Array<{sourceId:string;orderId:string}>=[];
   const native = new PatternRoomOrderService(db, todos, { ordersEnabled: true });
   const forms = new DigitalDevelopmentService(db, true, native), execution = new DevelopmentExecutionService(db, true, native);
@@ -29,13 +29,13 @@ export async function exerciseDevelopmentSlaNative(db: Pool, todos: TodoProjecti
   const worker = { ...root, actorId: workerId, actorRoles: ["pattern_room_worker"], authorizationCapability: "pattern_room:orders:complete", authorizationCapabilities: ["pattern_room:orders:complete", "pattern_room:orders:view", "digital_production:view"] };
   const price = (await db.query("SELECT price_id,version FROM pattern_room_prices WHERE kind='category' AND enabled ORDER BY price_id LIMIT 1")).rows[0];
   for (const [craft, washing] of variants) {
-    const { sourceId } = await identity.createSource(root, { developmentType: "头版", designStyleNo: `TEST-SLA03-${randomUUID()}`, temporaryStyleNo: null, customerCode: null }, randomUUID());
+    const { sourceId } = await identity.createSource(root, { developmentType: "头版", designStyleNo: `TEST-SLA03-${randomUUID()}`, temporaryStyleNo: null, customerCode: options?.automaticQuotation?"PD":null }, randomUUID());
     const fileId = randomUUID(), materialId = randomUUID();
     await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)", [fileId, `test-sla03/${fileId}`, "a".repeat(64), root.actorId]);
-    const document = DevelopmentDocumentSchema.parse({ documentFormatVersion: 2, sizeQuantities: [1], template: "上衣", quantity: 1, sampleSize: "M", orderDate: null, returnDate: null,
+    const document = DevelopmentDocumentSchema.parse({ ...(options?.automaticQuotation?{quotationMode:'automatic_v1'}:{}),documentFormatVersion: 2, sizeQuantities: [1], template: "上衣", quantity: 1, sampleSize: "M", orderDate: null, returnDate: null,
       unit: "cm", sizes: ["M"], measurements: [{ name: "胸围", values: ["50"] }], interlining: "", placketInterlining: "", sewingThread: "", buttonholeThread: "", stitchDensity: "", washingIroning: "", packaging: "", formalSizes: "", casualSizes: "",
       mainLabel: false, mainLabelMethod: "", sizeLabel: false, careLabel: false, instructions: "", craft, washing,...(options?{craftSteps:options.fixedCraftSteps}:{}),
-      materials: [{ materialId, category: "主布", label: "主布", name: "棉", supplier: "TEST", width: "", weight: "", composition: "", consumption: "", color: "黑", specification: "TEST40支", quantity: "1", requiredThisRound: true, available: true, expectedDate: null }], files: [{ attachmentId: fileId, kind: "款图" }] });
+      materials: [{ ...(options?.automaticQuotation?{pricingUnit:'米',unitPrice:'20'}:{}),materialId, category: "主布", label: "主布", name: "棉", supplier: "TEST", width: "", weight: "", composition: "", consumption: "", color: "黑", specification: "TEST40支", quantity: "1", requiredThisRound: true, available: true, expectedDate: null }], files: [{ attachmentId: fileId, kind: "款图" }] });
     const draft = await forms.save(root, sourceId, { expectedVersion: 0, document }, randomUUID());
     const published = await forms.publish(root, sourceId, draft.version, randomUUID(), { categoryId: price.price_id, priceVersion: price.version });
     const state = () => execution.read(root, sourceId);
@@ -67,10 +67,11 @@ export async function exerciseDevelopmentSlaNative(db: Pool, todos: TodoProjecti
       if(position.state!=='ready'){const candidates=(await db.query("SELECT a.user_id FROM user_role_assignments a JOIN app_users u ON u.id=a.user_id WHERE a.role_code='sample_designer' AND a.revoked_at IS NULL AND u.enabled ORDER BY a.user_id")).rows;const context=acceptanceBusinessContext();let designer:string|undefined;for(const candidate of candidates)if(!context||await context.acceptsActor(candidate.user_id)){designer=candidate.user_id;break;}if(!designer)throw Error("TEST fixture has no eligible original designer in this scene");await new DigitalProductionTaskService(db).reassign(root,position.taskId,designer,randomUUID());}
       await technical.completePosition(root,sourceId,{taskId:position.taskId,artifactSetId:group.artifactSetId,artifactVersion:group.version,attachmentIds:[await taskResult(db,execution,root,sourceId,position.taskId,'定位图')],note:'TEST本轮定位依据'},randomUUID());
       const kinds=options?options.fixedCraftSteps.map(step=>step.craftKind==='embroidery'?'development_embroidery':'development_printing'):[craft === "印花" ? "development_printing" : craft === "绣花" ? "development_embroidery" : "development_print_embroidery"];
-      for(const kind of kinds){
+      for(const [index,kind] of kinds.entries()){
         if(options)expect(await task('development_craft_dispatch')).toMatchObject({slaHours:0.5});
         await route("development_craft_dispatch");
-        expect(await task(kind)).toMatchObject({slaHours:options&&options.fixedCraftSteps.length===2?null:craft === "印绣花" ? 168 : 96});
+        const special=options?.fixedCraftSteps[index]?.specialCraft;
+        expect(await task(kind)).toMatchObject({slaHours:special?special.definition.development.minutes!/60:options&&options.fixedCraftSteps.length===2?null:craft === "印绣花" ? 168 : 96});
         await route(kind);if(options)expect(await task('development_craft_confirmation')).toMatchObject({slaHours:0.5});await route("development_craft_confirmation");
       }
       const sewing=await task("development_sewing");

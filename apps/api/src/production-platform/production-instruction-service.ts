@@ -1,3 +1,5 @@
+import {assembleQuotation} from './quotation-assembly.js';
+import {validateSpecialCraftChoices} from './special-craft-library.js';
 import {readInitialTimelineInput} from './fixed-timeline-initial-input.js';
 import {technicalMeasurementDocument,publishedTechnicalArtifact} from './development-technical-repository.js';
 import {ProductionReadinessService} from './production-readiness-service.js';
@@ -122,6 +124,7 @@ export class ProductionInstructionService {
       if (!current.canEdit || current.version !== input.expectedVersion || order.version !== input.orderVersion) fail("母单或制单已更新，请重新打开");
       if(current.version===0&&order.sourceId&&input.sourceRound===undefined)fail("首次保存请确认采用的开发轮次");
       if(current.version===0&&input.sourceRound!==undefined&&input.sourceRound!==current.sourceRound)fail("开发资料已更新，请重新读取初始制单后核对");
+      await validateSpecialCraftChoices(db,input.document.craftSteps??[],current.document.craftSteps??[],'bulk');
       await this.bindImages(db,actor,order,input.document);
       await db.query(`INSERT INTO digital_instruction_documents(production_order_id,version,order_version,document,source_round,updated_by) VALUES($1,1,$2,$3,$4,$5)
         ON CONFLICT(production_order_id) DO UPDATE SET version=digital_instruction_documents.version+1,order_version=EXCLUDED.order_version,document=EXCLUDED.document,source_round=EXCLUDED.source_round,updated_by=EXCLUDED.updated_by,updated_at=CURRENT_TIMESTAMP`, [id,order.version,JSON.stringify(input.document),current.sourceRound,actor.actorId]);
@@ -138,6 +141,7 @@ export class ProductionInstructionService {
       if(input.decisions.length!==comparison.groups.length||new Set(input.decisions.map(item=>item.group)).size!==input.decisions.length||input.decisions.some(item=>!comparison.groups.includes(item.group)))fail("请逐项选择采用新值或保留本单原值");
       let document:InstructionDocument;
       try{document=applyInstructionSourceReview(input.document,comparison.proposed,input.decisions,comparison.before);}catch{return fail("核对后的资料超出制单限制或尺码不一致，请调整后重试");}
+      await validateSpecialCraftChoices(db,document.craftSteps??[],current.document.craftSteps??[],'bulk');
       await this.bindImages(db,actor,order,document);
       await db.query(`INSERT INTO digital_instruction_documents(production_order_id,version,order_version,document,source_round,updated_by) VALUES($1,1,$2,$3,$4,$5)
         ON CONFLICT(production_order_id) DO UPDATE SET version=digital_instruction_documents.version+1,order_version=EXCLUDED.order_version,document=EXCLUDED.document,source_round=EXCLUDED.source_round,updated_by=EXCLUDED.updated_by,updated_at=CURRENT_TIMESTAMP`,[id,order.version,JSON.stringify(document),comparison.sourceRound,actor.actorId]);
@@ -151,6 +155,11 @@ export class ProductionInstructionService {
       const current=await this.read(actor,id,db);
       if (!current.canEdit || !current.version || current.version!==input.expectedVersion || order.version!==input.orderVersion) fail("母单或制单已更新，请重新打开");
       if(current.publishedVersion===current.version)return current;
+      const previous=current.publishedVersion?(await db.query('SELECT document FROM digital_instruction_versions WHERE production_order_id=$1 AND version=$2',[id,current.publishedVersion])).rows[0]?.document as InstructionDocument|undefined:undefined;
+      if(current.document.craftSteps?.some(step=>step.craftKind==='special')){
+       const inherited=await this.seed(db,order,current.sourceRound??undefined);
+       await validateSpecialCraftChoices(db,current.document.craftSteps,[...(previous?.craftSteps??[]),...(inherited.document.craftSteps??[])],'bulk');
+      }
       if(current.sourceRound!==current.latestSourceRound)fail("开发单有新资料，请逐项核对采用或保留后发布");
       const readiness=await productionReadiness(db,id);
       if(readiness.adoption){if(input.expectedReadinessRevision!==readiness.revision)fail('产前依据已变化，请刷新并核对当前有效资料');if(readiness.finalReasons.length)fail(readiness.finalReasons.join('；'));
@@ -165,6 +174,7 @@ export class ProductionInstructionService {
       await recordInstructionWork(db,actor.actorId,id,'published',current.version,{technicalRevision:readiness.technical?.revision??null});
       await instructionNotice(db,order,current.version,"大货制单已发布",`instruction:${id}:${current.version}`);
       await new BulkPreparationService(this.database).sync(db,actor,id);
+      if(order.sourceId&&(current.document.craftSteps?.some(step=>step.craftKind==='special')||previous?.craftSteps?.some(step=>step.craftKind==='special')||(await developmentDocumentRow(db,order.sourceId))?.document?.craftSteps?.some((step:{craftKind:string})=>step.craftKind==='special')))await assembleQuotation(db,order.sourceId,actor.actorId);
       return this.read(actor,id,db);
     });
   }

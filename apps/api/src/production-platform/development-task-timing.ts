@@ -13,7 +13,7 @@ import {fixedTaskPosition} from './fixed-craft-steps.js';
 type DB=Pick<PoolClient,"query">;
 type Task={task_id:string;source_id:string|null;task_kind:string;route_version:number};
 export type DevelopmentTiming={sourceId:string;sourceRevision:number;configurationId:string;parameterKey:string;
-  enteredAt:string|null;seconds:number|null;warningRatio:number;basis:string[];calendarRef?:FixedTimelineCalendar|null};
+  enteredAt:string|null;seconds:number|null;warningRatio:number;basis:string[];calendarRef?:FixedTimelineCalendar|null;notificationEnabled?:boolean;craftLabel?:string};
 const iso=(value:string|Date)=>new Date(value).toISOString();
 
 /** Responsibility starts at the business boundary, even while assignment or the next action waits. */

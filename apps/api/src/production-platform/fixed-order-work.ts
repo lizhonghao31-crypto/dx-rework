@@ -1,7 +1,7 @@
 import type {SlaAnchor} from '@dx-rework/domain/digital-sla-plan';
 import type {CraftStepChoice} from '@dx-rework/contracts/digital-craft';
 import type {FixedTimelineInput} from './fixed-timeline-adoptions.js';
-import {frozenWorkDefinition,withOrderTimeStageReserves,type FixedWorkInputs} from './fixed-work-definition.js';
+import {frozenWorkDefinition,frozenCraftDefinition,craftParameterKey,withOrderTimeStageReserves,type FixedWorkInputs} from './fixed-work-definition.js';
 import {orderTimeRule} from '@dx-rework/contracts/order-time-plan';
 type Work=FixedTimelineInput['work'][number];
 export type FixedOrderPlanningLine={line_id:string;goal:SlaAnchor|undefined;customerDateVersion:number};
@@ -38,7 +38,7 @@ export function fixedOrderWork(initial:FixedWorkInputs,orderId:string,sourceId:s
   add('bulk_cutting','bulk_cutting',['bulk_pattern',preshrink==='需要预缩'?'warehouse_preshrink':'fabric_inspection','sourcing_approval']);
   let previous='bulk_cutting';
   for(const step of craftSteps){
-   const key=`bulk_${step.craftKind}`,node=add(initial.data.orderTimePlan?`${key}:${step.stepId}`:key,key,[previous],initial.data.orderTimePlan?{canonicalWorkRef:`order:${orderId}:step:${step.stepId}:work`}:{});
+   const key=craftParameterKey(step,'bulk'),node=add(initial.data.orderTimePlan?`${key}:${step.stepId}`:key,key,[previous],{...frozenCraftDefinition(initial,step,'bulk',dual),...(step.craftKind==='special'?{stage:5,craftStep:structuredClone(step)}:{}),...(initial.data.orderTimePlan?{canonicalWorkRef:`order:${orderId}:step:${step.stepId}:work`}:{})});
    const qc=add(`bulk_qc:${step.stepId}`,'bulk_qc',[node.id],initial.data.orderTimePlan?{canonicalWorkRef:`order:${orderId}:step:${step.stepId}:qc`}:{});previous=qc.id;
    route.push({kind:'process_logistics',position:route.length,nodeId:node.id,stepId:step.stepId,phase:'logistics'});
    route.push({kind:'bulk_qc',position:route.length,nodeId:qc.id,stepId:step.stepId,phase:'qc'});

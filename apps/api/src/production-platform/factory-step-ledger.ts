@@ -1,13 +1,13 @@
-import type {AdoptedCraftStep} from '@dx-rework/contracts/digital-craft';
+import {craftStepIdentity,type AdoptedCraftStep} from '@dx-rework/contracts/digital-craft';
 import {factoryBatchLedger,scopes,type BatchFact,type BatchCheck,type FactoryScope} from './factory-batch-ledger.js';
 
-type Step=Pick<AdoptedCraftStep,'stepId'|'craftKind'|'sequence'>;
+type Step=Pick<AdoptedCraftStep,'stepId'|'craftKind'|'sequence'|'specialCraft'>;
 /** Original immutable movements stay the quantity source. A second craft is
  * another operation on the same pieces, never another supply of cut pieces.
  */
 export function factoryStepLedger(lines:FactoryScope[],facts:BatchFact[],checks:BatchCheck[],steps:readonly Step[]){
- if(!steps.length||steps.length>2||new Set(steps.map(step=>step.stepId)).size!==steps.length
-  ||new Set(steps.map(step=>step.craftKind)).size!==steps.length||steps.some((step,index)=>step.sequence!==index+1))throw Error('独立工艺路线身份或先后顺序无效');
+ if(!steps.length||steps.length>64||new Set(steps.map(step=>step.stepId)).size!==steps.length
+  ||new Set(steps.map(craftStepIdentity)).size!==steps.length||steps.some((step,index)=>step.sequence!==index+1))throw Error('独立工艺路线身份或先后顺序无效');
  const result=steps.map((step,index)=>{
   const own=facts.filter(fact=>fact.payload.stepRef===step.stepId);
   const ownReturnIds=new Set(own.filter(fact=>fact.kind==='工艺回仓').map(fact=>fact.fact_id));

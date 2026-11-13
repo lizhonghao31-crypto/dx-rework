@@ -1,3 +1,4 @@
+import {craftStepIdentity,type CraftStepChoice} from '@dx-rework/contracts/digital-craft';
 import type {FrozenInitialTimelineInput} from './fixed-timeline-initial-input.js';
 import type {FixedTimelineCalendar} from './fixed-timeline-targets.js';
 import {orderTimeRule,type FrozenOrderTimePlan} from '@dx-rework/contracts/order-time-plan';
@@ -25,8 +26,13 @@ export function frozenWorkDefinition(initial:FixedWorkInputs,key:string,dualCraf
 }
 
 /** Single adopted value for new plans; old snapshots do not enter this branch. */
-export function orderTimeWorkDefinition(plan:FrozenOrderTimePlan,key:string){
+export function orderTimeWorkDefinition(plan:FrozenOrderTimePlan,key:string,step?:CraftStepChoice){
   const selected=orderTimeRule(plan,key),rule=selected?.rule;
+  if(step?.craftKind==='special'){
+   const stage=key.startsWith('development_special_')?'development':'bulk';
+   if(key!==craftParameterKey(step,stage))throw Error('特殊工艺与冻结节点身份不一致');
+   if(!selected)return specialCraftDefinition(step,stage);
+  }
   const reference=selected?`${selected.reference}:order-time:${selected.revision}:${selected.source}:${key}`:null;
   const owns=rule?.kind==='work'||rule?.kind==='included';
   return {minutes:rule?.kind==='supervision'?0:rule?.minutes??null,
@@ -54,4 +60,21 @@ export function withOrderTimeStageReserves<T extends {id:string;parameterKey?:st
  return staged.map(node=>{const parent=node.includedIn?byId.get(node.includedIn):null;return {...node,
   ...(parent?{calendar:parent.calendar??null,...(node.responsibilitySlaRef?{responsibilityCalendar:parent.calendar??null}:{})}:{}),
   dependencyReserves:buffer?orderTimeDependencyReserves(node,byId,buffer):undefined};});
+}
+
+/** The selected immutable library version supplies the applicable stage only.
+ * Order overrides, when explicitly approved, retain their ordinary provenance. */
+export const craftParameterKey=(step:CraftStepChoice,stage:'development'|'bulk')=>step.craftKind==='special'?`${stage}_special_${step.specialCraft!.id.replaceAll('-','')}`:`${stage}_${step.craftKind}`;
+export function frozenCraftDefinition(initial:FixedWorkInputs,step:CraftStepChoice,stage:'development'|'bulk',dual=false){
+ const key=craftParameterKey(step,stage);
+ if(step.craftKind!=='special')return frozenWorkDefinition(initial,key,dual);
+ if(!step.specialCraft)throw Error('特殊工艺缺少原库版本');
+ if(initial.data.orderTimePlan&&orderTimeRule(initial.data.orderTimePlan,key))return orderTimeWorkDefinition(initial.data.orderTimePlan,key);
+ return specialCraftDefinition(step,stage);
+}
+function specialCraftDefinition(step:CraftStepChoice,stage:'development'|'bulk'){
+ if(!step.specialCraft)throw Error('特殊工艺缺少原库版本');
+ const selected=step.specialCraft,standard=selected.definition[stage],ref=`special-craft:${selected.id}:version:${selected.version}:${stage}`;
+ if(standard.minutes===null||standard.calendar===null)throw Error(`${craftStepIdentity(step)}适用阶段时效尚未设置`);
+ return {minutes:standard.minutes,calendar:standard.calendar,planningParameterRef:ref,responsibilitySlaRef:ref,responsibilityMinutes:standard.minutes,responsibilityCalendar:standard.calendar};
 }

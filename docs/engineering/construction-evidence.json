@@ -1,100 +1,288 @@
 {
   "version": 1,
-  "base": "64a2ccf828f4c262ef60d1dbb57463607acb4ab3",
+  "base": "07dff9b8ab2b66f75c6696dc837480c33f48412b",
   "risk": "full",
-  "sourceFingerprint": "44eb2ea63139ee42ddf92e72ec0882214d2e9f595939fa7cd88b743b9c8ec8e4",
+  "sourceFingerprint": "383eead731f0f3bce6a921dfd79d3f0f57892be5f9cd6b2fdef46eccb124703b",
   "rules": [
     {
-      "rule": "Material consumption updates only material costs; craft additions/removals affect that component, preserving unrelated IE/craft prices and material consumption. Preserve confirmed quotations and adopted budgets/contracts.",
-      "source": "2026-11-13 explicit user decisions and authorization relayed in current conversation; docs/requirements/customer-quotation-budget-v1.md final section; docs/engineering/quotation-component-dependencies.md.",
+      "rule": "Immutable craft library and stage-specific settings, current-role permissions, retained snapshot reads when new adoption is off.",
+      "source": "Approved time framework revision27 §9.1–9.2.1 and eight-PR plan PR04; explicit user authorization 2026-11-13 to complete special crafts, quotes and native processing; docs/engineering/time-framework-04.md.",
       "writes": [
-        "apps/api/src/production-platform/development-amendment-service.ts",
-        "apps/api/src/production-platform/development-round-service.ts",
-        "apps/api/src/production-platform/development-service.ts",
-        "apps/api/src/production-platform/quotation-assembly.ts",
-        "packages/contracts/src/digital-quotation.ts",
-        "tests/integration/development-technical-postgres.test.ts"
+        "apps/api/migrations/0289_special_craft_library.sql",
+        "apps/api/src/platform/migration-manifest.json",
+        "apps/api/src/production-platform/special-craft-activation.ts",
+        "apps/api/src/production-platform/special-craft-library.ts",
+        "apps/web/src/order-time-settings.css",
+        "apps/web/src/sla-settings-workspace.tsx",
+        "apps/web/src/special-craft-library.tsx"
       ],
       "reads": [
-        "apps/api/src/production-platform/quotation-assembly.ts#assembleQuotation",
-        "apps/api/src/production-platform/quotation-service.ts#DigitalQuotationService",
-        "apps/api/src/production-platform/quotation-budget-basis.ts#ensureQuotationBudget",
-        "apps/api/src/production-platform/development-technical-repository.ts#effectiveTechnicalEvidence"
+        "apps/api/src/production-platform/special-craft-library.ts#validateSpecialCraftChoices",
+        "apps/web/src/special-craft-library.tsx"
       ],
       "oldTests": [
-        "tests/integration/customer-quotation-postgres.test.ts",
-        "tests/integration/development-technical-postgres.test.ts",
+        "tests/integration/fixed-timeline-postgres.test.ts"
+      ],
+      "newTests": [
+        "tests/integration/special-craft-native-postgres.test.ts",
+        "tests/integration/special-craft-library-postgres.test.ts",
+        "tests/integration/special-craft-browser-postgres.test.ts"
+      ],
+      "initialization": "0289 adds immutable craft versions/heads and widens existing ordered step constraints; current and pre-0281 fixtures tested without rewriting historical inputs. No user roles assigned. New adoption disabled until PR08; existing snapshots remain readable. Legacy manual quotations are not silently converted.",
+      "dateAndPermission": "Frozen development and bulk calendar/minutes/reminder snapshots stay separate. Real send/return/QC and stage evidence supply facts; no fake start or completion. Active roles, per-step assignee, retained histories and in-app notification restrictions remain.",
+      "expectation": "Real native development multi-craft completion and bulk-only added craft pricing, 47 versus 67 cost snapshots, explicit 70 customer confirmation and budget adoption, final-only QC dispatch, immutable disabled versions, same-session price role withdrawal, and original mixed craft regression pass. Browser1165 reviewed; mobile shell limitation recorded, no onsite acceptance claim.",
+      "checks": [
+        "pg-final",
+        "pg13-final",
+        "browser-final"
+      ]
+    },
+    {
+      "rule": "Stable ordered craft steps across development assignment, actual dispatch/work/return and bulk batch QC; frozen stage clocks and no duplicate included time.",
+      "source": "Approved time framework revision27 §9.1–9.2.1 and eight-PR plan PR04; explicit user authorization 2026-11-13 to complete special crafts, quotes and native processing; docs/engineering/time-framework-04.md.",
+      "writes": [
+        "apps/api/src/production-platform/development-amendment-service.ts",
+        "apps/api/src/production-platform/development-arrangement-todos.ts",
+        "apps/api/src/production-platform/development-arrangement.ts",
+        "apps/api/src/production-platform/development-round-service.ts",
+        "apps/api/src/production-platform/development-route-service.ts",
+        "apps/api/src/production-platform/development-service.ts",
+        "apps/api/src/production-platform/development-sla-enrollment.ts",
+        "apps/api/src/production-platform/development-task-timing.ts",
+        "apps/api/src/production-platform/factory-batch-timing.ts",
+        "apps/api/src/production-platform/factory-flow-service.ts",
+        "apps/api/src/production-platform/factory-step-ledger.ts",
+        "apps/api/src/production-platform/fixed-craft-steps.ts",
+        "apps/api/src/production-platform/fixed-craft-timing.ts",
+        "apps/api/src/production-platform/fixed-development-adoption.ts",
+        "apps/api/src/production-platform/fixed-development-work.ts",
+        "apps/api/src/production-platform/fixed-factory-timing.ts",
+        "apps/api/src/production-platform/fixed-order-adoption.ts",
+        "apps/api/src/production-platform/fixed-order-route.ts",
+        "apps/api/src/production-platform/fixed-order-work.ts",
+        "apps/api/src/production-platform/fixed-schedule-basis.ts",
+        "apps/api/src/production-platform/fixed-timeline-adoptions.ts",
+        "apps/api/src/production-platform/fixed-work-definition.ts",
+        "apps/api/src/production-platform/order-time-operation-state.ts",
+        "apps/api/src/production-platform/order-time-reading.ts",
+        "apps/api/src/production-platform/order-time-request-plan.ts",
+        "apps/api/src/production-platform/order-time-route-identities.ts",
+        "apps/api/src/production-platform/order-time-schedule.ts",
+        "apps/api/src/production-platform/order-time-settings-calculation.ts",
+        "apps/api/src/production-platform/production-instruction-service.ts",
+        "apps/api/src/production-platform/sla-settings-calculation.ts",
+        "apps/api/src/production-platform/task-routes.ts",
+        "apps/api/src/production-platform/task-service.ts",
+        "apps/web/src/development-assignment-table.tsx",
+        "apps/web/src/factory-batch-panel.tsx",
+        "apps/web/src/independent-craft-field.css",
+        "apps/web/src/independent-craft-field.tsx",
+        "apps/web/src/order-time-route-fields.tsx",
+        "apps/web/src/sla-independent-calculator.tsx",
+        "packages/contracts/src/development-arrangement.ts",
+        "packages/contracts/src/digital-craft.ts",
+        "packages/contracts/src/digital-development.ts",
+        "packages/contracts/src/digital-production-tasks.ts",
+        "packages/contracts/src/factory-flow.ts",
+        "packages/contracts/src/production-instruction.ts",
+        "packages/contracts/src/sla-settings-sets.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/fixed-craft-steps.ts#fixedCraftSteps",
+        "apps/api/src/production-platform/development-arrangement.ts#readArrangement",
+        "apps/api/src/production-platform/factory-flow-service.ts#FactoryFlowService"
+      ],
+      "oldTests": [
+        "tests/integration/fixed-timeline-postgres.test.ts",
         "tests/integration/development-amendment-postgres.test.ts"
       ],
       "newTests": [
-        "tests/integration/development-technical-postgres.test.ts"
+        "tests/integration/special-craft-native-postgres.test.ts",
+        "tests/integration/special-craft-library-postgres.test.ts",
+        "tests/integration/special-craft-browser-postgres.test.ts"
       ],
-      "initialization": "No SQL migration. Optional per-row dependencyVersion2 in existing assembly JSON. Genuine previous effective document read before save/amendment/round write under original lifecycle transaction enables legacy hash verification; absent/mismatched old evidence is not invented. Old manual quotations untouched. New development revision sources remain independent. Registered isolated low-privilege PG16 database and native fixture cleanup, not onsite Acceptance.",
-      "dateAndPermission": "No business time change. Original row assignment/role checks, technical validity and explicit customer confirmation remain. Material consumption remains provenance-backed; actual source withdrawal does not revive a stale quantity. GET stays read-only.",
-      "expectation": "68 real PostgreSQL tests pass, including material1.5/IE10 preserved through no-craft→printing on v1 provenance; printing5 plus material2×20 plus IE10=55; adding embroidery preserves printing and material/IE; removal deletes only printing and re-add requires new price. Existing formal artifact updates, empty/zero, stale/cross-source denial, concurrent confirmation, source/confirmation order, frozen quotation and adopted budget checks pass. No production or deployment actions.",
+      "initialization": "0289 adds immutable craft versions/heads and widens existing ordered step constraints; current and pre-0281 fixtures tested without rewriting historical inputs. No user roles assigned. New adoption disabled until PR08; existing snapshots remain readable. Legacy manual quotations are not silently converted.",
+      "dateAndPermission": "Frozen development and bulk calendar/minutes/reminder snapshots stay separate. Real send/return/QC and stage evidence supply facts; no fake start or completion. Active roles, per-step assignee, retained histories and in-app notification restrictions remain.",
+      "expectation": "Real native development multi-craft completion and bulk-only added craft pricing, 47 versus 67 cost snapshots, explicit 70 customer confirmation and budget adoption, final-only QC dispatch, immutable disabled versions, same-session price role withdrawal, and original mixed craft regression pass. Browser1165 reviewed; mobile shell limitation recorded, no onsite acceptance claim.",
       "checks": [
         "pg-final",
-        "test-lint"
+        "browser-final",
+        "units-final"
+      ]
+    },
+    {
+      "rule": "Actual craft owner receives only own price rows and in-app todos; development versus bulk provenance, confirmed quotation/budget history, explicit adoption and original contract price boundaries.",
+      "source": "Approved time framework revision27 §9.1–9.2.1 and eight-PR plan PR04; explicit user authorization 2026-11-13 to complete special crafts, quotes and native processing; docs/engineering/time-framework-04.md.",
+      "writes": [
+        "apps/api/src/production-platform/notification-policy.ts",
+        "apps/api/src/production-platform/notification-service.ts",
+        "apps/api/src/production-platform/quotation-assembly.ts",
+        "apps/api/src/production-platform/quotation-service.ts",
+        "apps/api/src/production-platform/special-craft-quotation-todos.ts",
+        "apps/api/src/todos/deep-link.ts",
+        "apps/api/src/todos/delivery-worker.ts",
+        "apps/web/src/digital-quotation-panel.tsx",
+        "packages/contracts/src/digital-quotation.ts",
+        "packages/contracts/src/todo-destination.ts",
+        "packages/contracts/src/todo-presentation.ts",
+        "packages/contracts/src/todos.ts"
+      ],
+      "reads": [
+        "apps/api/src/production-platform/quotation-service.ts#DigitalQuotationService",
+        "apps/api/src/production-platform/quotation-budget-basis.ts#ensureQuotationBudget",
+        "apps/api/src/production-platform/notification-service.ts#DigitalProductionNotificationService"
+      ],
+      "oldTests": [
+        "tests/integration/customer-quotation-postgres.test.ts",
+        "tests/unit/digital-task-read-boundary.test.ts"
+      ],
+      "newTests": [
+        "tests/integration/special-craft-native-postgres.test.ts",
+        "tests/integration/special-craft-library-postgres.test.ts",
+        "tests/integration/special-craft-browser-postgres.test.ts"
+      ],
+      "initialization": "0289 adds immutable craft versions/heads and widens existing ordered step constraints; current and pre-0281 fixtures tested without rewriting historical inputs. No user roles assigned. New adoption disabled until PR08; existing snapshots remain readable. Legacy manual quotations are not silently converted.",
+      "dateAndPermission": "Frozen development and bulk calendar/minutes/reminder snapshots stay separate. Real send/return/QC and stage evidence supply facts; no fake start or completion. Active roles, per-step assignee, retained histories and in-app notification restrictions remain.",
+      "expectation": "Real native development multi-craft completion and bulk-only added craft pricing, 47 versus 67 cost snapshots, explicit 70 customer confirmation and budget adoption, final-only QC dispatch, immutable disabled versions, same-session price role withdrawal, and original mixed craft regression pass. Browser1165 reviewed; mobile shell limitation recorded, no onsite acceptance claim.",
+      "checks": [
+        "pg-final",
+        "browser-final",
+        "units-final"
+      ]
+    },
+    {
+      "rule": "Migration/checksum permission inventory and canonical risk mapping include new and affected old consumers; test fixtures retain legacy schema meaning and actual role boundaries.",
+      "source": "Approved time framework revision27 §9.1–9.2.1 and eight-PR plan PR04; explicit user authorization 2026-11-13 to complete special crafts, quotes and native processing; docs/engineering/time-framework-04.md.",
+      "writes": [
+        "scripts/ci/full-gate-risk-map.mjs",
+        "scripts/deploy/acceptance-migration-requirements.json",
+        "scripts/test-suite-plan.mjs",
+        "tests/helpers/business-anchor-fixture.ts",
+        "tests/helpers/development-arrangement-fixture.ts",
+        "tests/helpers/development-sla-native-fixture.ts",
+        "tests/integration/special-craft-browser-postgres.test.ts",
+        "tests/integration/special-craft-library-postgres.test.ts",
+        "tests/integration/special-craft-native-postgres.test.ts",
+        "tests/unit/digital-task-read-boundary.test.ts",
+        "tests/unit/special-craft-steps.test.ts"
+      ],
+      "reads": [
+        "scripts/ci/full-gate-risk-map.mjs",
+        "scripts/deploy/acceptance-migration-requirements.json",
+        "scripts/test-suite-plan.mjs"
+      ],
+      "oldTests": [
+        "tests/unit/main-release-compat.test.ts",
+        "tests/unit/full-gate-risk-map.test.ts"
+      ],
+      "newTests": [
+        "tests/integration/special-craft-native-postgres.test.ts",
+        "tests/integration/special-craft-library-postgres.test.ts",
+        "tests/integration/special-craft-browser-postgres.test.ts"
+      ],
+      "initialization": "0289 adds immutable craft versions/heads and widens existing ordered step constraints; current and pre-0281 fixtures tested without rewriting historical inputs. No user roles assigned. New adoption disabled until PR08; existing snapshots remain readable. Legacy manual quotations are not silently converted.",
+      "dateAndPermission": "Frozen development and bulk calendar/minutes/reminder snapshots stay separate. Real send/return/QC and stage evidence supply facts; no fake start or completion. Active roles, per-step assignee, retained histories and in-app notification restrictions remain.",
+      "expectation": "Real native development multi-craft completion and bulk-only added craft pricing, 47 versus 67 cost snapshots, explicit 70 customer confirmation and budget adoption, final-only QC dispatch, immutable disabled versions, same-session price role withdrawal, and original mixed craft regression pass. Browser1165 reviewed; mobile shell limitation recorded, no onsite acceptance claim.",
+      "checks": [
+        "pg13-final",
+        "pg-final",
+        "units-final",
+        "browser-final"
       ]
     }
   ],
   "checks": [
     {
       "id": "pg-final",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/development-technical-postgres.test.ts tests/integration/customer-quotation-postgres.test.ts tests/integration/development-amendment-postgres.test.ts --reporter=default --reporter=json --outputFile=/tmp/quotation-dependencies-evidence/pg-final.report.json",
+      "kind": "tests",
+      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/customer-quotation-postgres.test.ts tests/integration/development-amendment-postgres.test.ts tests/integration/fixed-timeline-postgres.test.ts tests/integration/special-craft-library-postgres.test.ts tests/integration/special-craft-native-postgres.test.ts --reporter=verbose --reporter=json --outputFile.json=/tmp/time-framework-04-pg-final.json",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-13T17:10:04.536Z",
-      "endedAt": "2026-11-13T17:10:57.216Z",
-      "sourceFingerprint": "44eb2ea63139ee42ddf92e72ec0882214d2e9f595939fa7cd88b743b9c8ec8e4",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "tests",
-        "package.json",
-        "package-lock.json",
-        "vitest.config.ts"
-      ],
-      "inputFingerprint": "169ec4cf6d42b4f4ca9e27cf9b410cefc9b4297f69abf34c1f7e31e353e75ae2",
-      "log": "/tmp/quotation-dependencies-evidence/pg-final.log",
-      "logSha256": "f26f1b326b25c88a3aa6443c023da78f6ef7f8493da2736028b40e428df82b31",
-      "context": "Node22.22.0/npm10.9.9; canonical business-chain config, maxWorkers2/correctnessTimeout100000ms. Explicit frozen business clocks. No onsite writes. PG 16.14 uses registered isolated low-privilege TEST database; native fixture cleanup.",
-      "testedHead": "64a2ccf828f4c262ef60d1dbb57463607acb4ab3",
-      "kind": "tests",
-      "passed": 68,
+      "passed": 59,
       "failed": 0,
       "skipped": 0,
+      "testedHead": "07dff9b8ab2b66f75c6696dc837480c33f48412b",
+      "sourceFingerprint": "383eead731f0f3bce6a921dfd79d3f0f57892be5f9cd6b2fdef46eccb124703b",
+      "context": "Node22.22.0/npm10.9.9; owned low-privilege isolated PG16.14 database; original business/auth commands, no onsite or production data changes; browser uses real App and native authenticated routes.",
+      "startedAt": "2026-11-13T18:50:38.689000Z",
+      "endedAt": "2026-11-13T18:51:58.111576Z",
+      "log": "/tmp/time-framework-04-pg-final.log",
+      "logSha256": "bca0729728edb43bd227c78d2d8a16857031e6a545a85ea249251d8986ff5564",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "ec7cedb36d757dd6b43bca5ed40649ced885d3c26fea8389cd69097e5682e5a8"
+          "sha256": "b82b13c8590813a1f3a549d8fc0a201699cd79f2abd3a20410460577783bd100"
         }
       ]
     },
     {
-      "id": "test-lint",
-      "command": "node node_modules/eslint/bin/eslint.js tests/integration/development-technical-postgres.test.ts --max-warnings=0",
+      "id": "pg13-final",
+      "kind": "tests",
+      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/special-craft-library-postgres.test.ts --reporter=verbose --reporter=json --outputFile.json=/tmp/time-framework-04-pg13-final.json",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-13T17:11:03.097Z",
-      "endedAt": "2026-11-13T17:11:04.240Z",
-      "sourceFingerprint": "44eb2ea63139ee42ddf92e72ec0882214d2e9f595939fa7cd88b743b9c8ec8e4",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "tests",
-        "package.json",
-        "package-lock.json",
-        "vitest.config.ts"
-      ],
-      "inputFingerprint": "169ec4cf6d42b4f4ca9e27cf9b410cefc9b4297f69abf34c1f7e31e353e75ae2",
-      "log": "/tmp/quotation-dependencies-evidence/test-lint.log",
-      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "context": "Node22.22.0/npm10.9.9; original default config, nonDatabase1/postgres1. Explicit frozen business clocks. No onsite writes. PG 13.23 uses registered isolated low-privilege TEST database; native fixture cleanup.",
-      "testedHead": "64a2ccf828f4c262ef60d1dbb57463607acb4ab3",
-      "kind": "command"
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0,
+      "testedHead": "07dff9b8ab2b66f75c6696dc837480c33f48412b",
+      "sourceFingerprint": "383eead731f0f3bce6a921dfd79d3f0f57892be5f9cd6b2fdef46eccb124703b",
+      "context": "Node22.22.0/npm10.9.9; owned low-privilege isolated PG13.23 database; original business/auth commands, no onsite or production data changes; browser uses real App and native authenticated routes.",
+      "startedAt": "2026-11-13T18:52:46.510000Z",
+      "endedAt": "2026-11-13T18:52:53.592922Z",
+      "log": "/tmp/time-framework-04-pg13-final.log",
+      "logSha256": "8e4d1352dba1ea5f6a9aea520839e169957e548fcaf1d5a2a11c0e00330385a5",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "1869474f3d154a0639fe388ac60570128945ca6ee03fffac55f1196b1164c60b"
+        }
+      ]
+    },
+    {
+      "id": "browser-final",
+      "kind": "tests",
+      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/special-craft-browser-postgres.test.ts --reporter=verbose --reporter=json --outputFile.json=/tmp/time-framework-04-browser-final.json",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "testedHead": "07dff9b8ab2b66f75c6696dc837480c33f48412b",
+      "sourceFingerprint": "383eead731f0f3bce6a921dfd79d3f0f57892be5f9cd6b2fdef46eccb124703b",
+      "context": "Node22.22.0/npm10.9.9; owned low-privilege isolated PG16.14 database; original business/auth commands, no onsite or production data changes; browser uses real App and native authenticated routes.",
+      "startedAt": "2026-11-13T18:50:20.828000Z",
+      "endedAt": "2026-11-13T18:50:40.537776Z",
+      "log": "/tmp/time-framework-04-browser-final.log",
+      "logSha256": "3e85ae995ebc2db3e4e4b3013be435391298e315745ae538696bd07b17f776da",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "812f735b2153887a92a45396f5141e37dbe7261bfabafddc13d5b2ea24187a0f"
+        }
+      ]
+    },
+    {
+      "id": "units-final",
+      "kind": "tests",
+      "command": "npx vitest run tests/unit/digital-task-read-boundary.test.ts tests/unit/factory-batch-ledger.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/main-release-compat.test.ts tests/unit/special-craft-steps.test.ts --reporter=verbose --reporter=json --outputFile.json=/tmp/time-framework-04-units-final.json",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 123,
+      "failed": 0,
+      "skipped": 0,
+      "testedHead": "07dff9b8ab2b66f75c6696dc837480c33f48412b",
+      "sourceFingerprint": "383eead731f0f3bce6a921dfd79d3f0f57892be5f9cd6b2fdef46eccb124703b",
+      "context": "Node22.22.0/npm10.9.9; unit and migration/risk-map compatibility; original business/auth commands, no onsite or production data changes; browser uses real App and native authenticated routes.",
+      "startedAt": "2026-11-13T18:51:07.204000Z",
+      "endedAt": "2026-11-13T18:51:22.173517Z",
+      "log": "/tmp/time-framework-04-units-final.log",
+      "logSha256": "78713586441c6c25f5b7d4cf58bd7fa965fc01a97bff7e8205de3a041327a615",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "317d6f86c455f669154bf8c20f847e3e8ead539aefea9a09ca0e573108863253"
+        }
+      ]
     }
   ]
 }

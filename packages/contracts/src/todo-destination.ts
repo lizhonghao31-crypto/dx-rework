@@ -40,6 +40,10 @@ export function todoDestination(descriptor:TodoRouteDescriptor):string {
       path = "/ui/digital-production";
       query.set("shortLead", route.entityId);
       break;
+    case "digital_order_quotation":
+      path = "/ui/digital-quotation";
+      query.set("kind", "order");query.set("id", route.entityId);
+      break;
     case "digital_order_time":
       path = "/ui/digital-production";
       query.set("timeRequest", route.entityId);

@@ -1,3 +1,4 @@
+import {validateSpecialCraftChoices} from './special-craft-library.js';
 import {withoutDevelopmentMaterialPrice} from './development-commercial-fields.js';
 import {developmentDocumentRow} from './development-round-repository.js';
 import {assembleQuotation} from './quotation-assembly.js';
@@ -106,6 +107,7 @@ export class DevelopmentRoundService {
   if(input.basedOnRound!==(sheet.roundNumber??1))fail('已有新轮次，不能从旧版重复发布');
   if(returnTaskId){const task=(await db.query("SELECT t.route_version,a.task_kind,a.source_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE t.task_id=$1",[returnTaskId])).rows[0];if(!task||task.source_id!==sourceId||task.task_kind!=='development_tail_check'||task.route_version!==input.basedOnRound||input.origin!=='内部发现')digitalForbidden();}
   await validateAuxiliaryReferences(db,input.document,sheet.document!);
+  await validateSpecialCraftChoices(db,input.document.craftSteps??[],sheet.document?.craftSteps??[],'development');
   const errors=developmentPublishErrors(input.document,{allowMissingOrderDate:sheet.document!.orderDate===null});if(errors.length)fail(errors.join('；'));
   if(input.affectedNodes.includes('工艺')&&input.document.craft==='无')fail('本轮没有印绣花工艺');
   if(input.affectedNodes.includes('洗水')&&input.document.washing==='免洗')fail('本轮为免洗，请核对受影响节点');

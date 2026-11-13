@@ -1,14 +1,16 @@
+import {hasBothBuiltinCrafts} from '@dx-rework/contracts/digital-craft';
+import {isDeepStrictEqual} from 'node:util';
 import {randomUUID} from 'node:crypto';
 import type {PoolClient} from 'pg';
 import type {BusinessTime} from '@dx-rework/domain/business-clock';
 import {validateBusinessTime} from '@dx-rework/domain/business-clock';
 import type {InstructionDocument} from '@dx-rework/contracts/production-instruction';
 import type {DevelopmentDocument} from '@dx-rework/contracts/digital-development';
-import {CraftStepChoicesSchema} from '@dx-rework/contracts/digital-craft';
+import {CraftStepChoicesSchema,craftStepIdentity} from '@dx-rework/contracts/digital-craft';
 import type {FixedTimelineAdoption,FixedTimelineInput} from './fixed-timeline-adoptions.js';
 import {readInitialTimelineInput} from './fixed-timeline-initial-input.js';
 import {fixedTimelineIdentity} from './fixed-timeline-identity.js';
-import {frozenWorkDefinition} from './fixed-work-definition.js';
+import {frozenWorkDefinition,frozenCraftDefinition,craftParameterKey} from './fixed-work-definition.js';
 import {OrderTimePlanRepository} from './order-time-plan-repository.js';
 import {orderTimeBulkSteps,orderTimeStoredBulkSteps} from './order-time-route-identities.js';
 
@@ -35,7 +37,7 @@ export async function captureFixedOrderRoute(db:DB,saved:FixedTimelineAdoption,r
  const label=document.secondaryCraft==='沿用开发'?source.craft:document.secondaryCraft,selected=document.secondaryCraft==='沿用开发'?source.craftSteps:document.craftSteps;
  if(label==='印绣花'&&!selected)throw Error('请在原制单明确绣花、印花的实际先后顺序');
  const choices=label==='无'?[]:CraftStepChoicesSchema.parse(selected??[{craftKind:label==='绣花'?'embroidery':'printing',sequence:1}]);
- const original=saved.input.craftSteps??[],same=choices.length===original.length&&choices.every((step,index)=>step.craftKind===original[index]?.craftKind&&step.sequence===original[index]?.sequence);
+ const original=saved.input.craftSteps??[],same=choices.length===original.length&&choices.every((step,index)=>craftStepIdentity(step)===craftStepIdentity(original[index]!)&&step.sequence===original[index]?.sequence&&isDeepStrictEqual(step.specialCraft,original[index]?.specialCraft));
  const work:FixedTimelineInput['work']=[],groups:FixedOrderRoute['groups']=[],route:FixedOrderRoute['route']=[];
  const initial=await readInitialTimelineInput(db,saved.input.resource);if(!initial)throw Error('原订单冻结标准缺失');
  const typed=Boolean(initial.data.orderTimePlan),current=typed?await new OrderTimePlanRepository(db).current(saved.input.resource):null;
@@ -44,8 +46,8 @@ export async function captureFixedOrderRoute(db:DB,saved:FixedTimelineAdoption,r
  else{
   let previous:string|null=null;
   for(const step of steps){
-   const nodeId=typed?`bulk_${step.craftKind}:${step.stepId}`:`bulk_${step.craftKind}:${routeRef}`,qcId=`bulk_qc:${step.stepId}`;
-   work.push({id:nodeId,parameterKey:`bulk_${step.craftKind}`,dependsOn:previous?[previous]:[],...frozenWorkDefinition(initial,`bulk_${step.craftKind}`,steps.length===2),canonicalWorkRef:typed?`order:${saved.input.resource.id}:step:${step.stepId}:work`:`order:${saved.input.resource.id}:route:${routeRef}:step:${step.stepId}`,accountingRole:'added_work'});
+   const nodeId=typed?`bulk_${step.craftKind}:${step.stepId}`:`bulk_${step.craftKind}:${step.stepId}`,qcId=`bulk_qc:${step.stepId}`;
+   work.push({id:nodeId,parameterKey:craftParameterKey(step,'bulk'),...(step.craftKind==='special'?{stage:5,craftStep:structuredClone(step)}:{}),dependsOn:previous?[previous]:[],...frozenCraftDefinition(initial,step,'bulk',hasBothBuiltinCrafts(steps)),canonicalWorkRef:typed?`order:${saved.input.resource.id}:step:${step.stepId}:work`:`order:${saved.input.resource.id}:route:${routeRef}:step:${step.stepId}`,accountingRole:'added_work'});
    work.push({id:qcId,parameterKey:'bulk_qc',dependsOn:[nodeId],...frozenWorkDefinition(initial,'bulk_qc'),canonicalWorkRef:typed?`order:${saved.input.resource.id}:step:${step.stepId}:qc`:`order:${saved.input.resource.id}:route:${routeRef}:qc:${step.stepId}`,accountingRole:'added_work'});previous=qcId;
    route.push({kind:'process_logistics',position:route.length,nodeId,stepId:step.stepId,phase:'logistics'},{kind:'bulk_qc',position:route.length+1,nodeId:qcId,stepId:step.stepId,phase:'qc'});
   }

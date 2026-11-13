@@ -35,10 +35,13 @@ export async function fixedFactoryBatchTiming(db:Pick<PoolClient,'query'>,orderI
  const policies=saved.input.orderTimePlan||row.order_time_managed==='true'?await orderTimePolicyHistory(db,{kind:'order',id:orderId}):[];
  const add=(key:string,kind:FactoryWindow['kind'],nodeId:string,enteredAt:string|null,complete:boolean,completedAt:string|null,stepRef?:string,lineId?:string)=>{
   const work=workItems.find(work=>work.id===nodeId),chosen=policies.find(policy=>!enteredAt||Date.parse(policy.at)<=Date.parse(enteredAt)),selected=chosen?orderTimeRule(chosen.plan,work?.parameterKey??nodeId)?.rule:null;
-  const minutes=chosen?selected&&['work','included'].includes(selected.kind)?selected.minutes:null:work?.responsibilitySlaRef?work.responsibilityMinutes??null:null,calendar=chosen?selected?.calendar??null:work?.responsibilityCalendar??null;
+  const special=stepRef?steps.find(step=>step.stepId===stepRef)?.specialCraft:null;
+  const reminder=selected?.reminder??(kind==='process_logistics'?special?.definition.bulk.reminder:undefined);
+  const useFrozenSpecial=Boolean(special&&kind==='process_logistics'&&!selected);
+  const minutes=chosen&&!useFrozenSpecial?selected&&['work','included'].includes(selected.kind)?selected.minutes:null:work?.responsibilitySlaRef?work.responsibilityMinutes??null:null,calendar=chosen&&!useFrozenSpecial?selected?.calendar??null:work?.responsibilityCalendar??null;
   const shift=(fraction:number)=>enteredAt&&minutes!==null&&calendar?shiftFixedTimeline(enteredAt,minutes*fraction,calendar):null;
-  windows.push({key,kind,parameterKey:work?.parameterKey??nodeId,enteredAt,complete,completedAt,minutes,calendarRef:calendar,dueAt:shift(1),warningAt:shift(selected?selected.reminder.percent/100:ratio),
-   evidence:`adoption:${saved.adoptionId}:work:${nodeId}`+(chosen?`;order-time:${chosen.id}`:''),snapshotId:row.sla_snapshot_id,...(chosen?{orderTimePlanRef:chosen.id,notificationEnabled:selected?.reminder.enabled===true,warningRatio:selected?.reminder.percent?selected.reminder.percent/100:ratio}:{}),...(stepRef?{stepRef}:{}),...(lineId?{lineId}:{})});
+  windows.push({key,kind,parameterKey:work?.parameterKey??nodeId,enteredAt,complete,completedAt,minutes,calendarRef:calendar,dueAt:shift(1),warningAt:shift(reminder?reminder.percent/100:ratio),
+   evidence:`adoption:${saved.adoptionId}:work:${nodeId}`+(chosen?`;order-time:${chosen.id}`:''),snapshotId:row.sla_snapshot_id,...(chosen?{orderTimePlanRef:chosen.id,notificationEnabled:selected?.reminder.enabled===true,warningRatio:selected?.reminder.percent?selected.reminder.percent/100:ratio}:{}),...(reminder?{notificationEnabled:reminder.enabled,warningRatio:reminder.percent/100}:{}),...(special?{craftLabel:special.definition.name+(kind==='bulk_qc'?' · 检查':' · 发收')}:{}),...(stepRef?{stepRef}:{}),...(lineId?{lineId}:{})});
  };
  for(const step of stepLedger?.steps??[]){
   const own=facts.filter(fact=>fact.payload.stepRef===step.step.stepId),sends=own.filter(fact=>fact.kind==='工艺发出');

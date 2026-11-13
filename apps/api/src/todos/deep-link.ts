@@ -30,7 +30,7 @@ export function buildTodoExternalDeepLink(
   publicBaseUrl: string,
   descriptor: TodoRouteDescriptor,
 ): string {
-  if (["digital_production_task", "digital_short_lead", "digital_order_time", "digital_development", "digital_development_arrangement", "digital_bulk_preparation", "digital_factory_progress"].includes(descriptor.routeName)) throw new ApplicationError("FORBIDDEN", "数字生产任务仅限站内通知", 403);
+  if (["digital_production_task", "digital_short_lead", "digital_order_time", "digital_order_quotation", "digital_development", "digital_development_arrangement", "digital_bulk_preparation", "digital_factory_progress"].includes(descriptor.routeName)) throw new ApplicationError("FORBIDDEN", "数字生产任务仅限站内通知", 403);
   let base: URL;
   try {
     base = new URL(publicBaseUrl);

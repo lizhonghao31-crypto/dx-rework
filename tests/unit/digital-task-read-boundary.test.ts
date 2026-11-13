@@ -264,7 +264,7 @@ describe("task metadata is authorized independently from necessary order documen
   it("keeps the warehouse's factory work and prerequisite state without sibling-task details", async () => {
     const f = fixture(); f.foreign.task_kind = "warehouse_dispatch";
     const flow = new FactoryFlowService(f.pool);
-    vi.spyOn(flow as unknown as { state(...args: unknown[]): Promise<unknown> }, "state").mockResolvedValue({ gate: { order: f.order, reasons: [], approval: {}, instruction: {} }, route: { preparation_id: f.preparationId, secondary_craft: "无" }, returned: null, revision: 1, production: {history: [], checks: [], complete: false, facts: {}}, tasks: f.rows, latest: [], facts: [], checks: [], allQc: true, lastMovement: null, dispatched: false, contract: { status: "ready" } });
+    vi.spyOn(flow as unknown as { state(...args: unknown[]): Promise<unknown> }, "state").mockResolvedValue({ gate: { order: f.order, reasons: [], approval: {}, instruction: {} }, route: { preparation_id: f.preparationId, secondary_craft: "无" }, returned: null, revision: 1, production: {history: [], checks: [], complete: false, facts: {}}, tasks: f.rows, latest: [], facts: [], checks: [], craftSteps: [], allQc: true, lastMovement: null, dispatched: false, contract: { status: "ready" } });
     const sheet = await flow.read(f.actor(f.warehouseId, ["warehouse_receiver"]), f.orderId);
     expect(sheet).toMatchObject({ allCut: true, allQc: true, canWarehouse: true });
     expect(sheet.returnLogistics).toEqual([]);

@@ -23,7 +23,7 @@ export type FixedTimelineInput={
  unified:{snapshotRef:string;values:DigitalSlaSnapshot};
  development:{snapshotRef:string;version:number;values:Record<string,unknown>}|null;
  sourceVersions:Record<string,string|number>;
- work:Array<FixedTimelineWork&{canonicalWorkRef:string;planningParameterRef:string|null;responsibilitySlaRef:string|null;responsibilityMinutes?:number|null;responsibilityCalendar?:FixedTimelineWork['calendar'];parameterKey?:string;stage?:number;accountingRole?:'original_work'|'added_work'|'included'|'event'|'shared_reference'}>;
+ work:Array<FixedTimelineWork&{canonicalWorkRef:string;planningParameterRef:string|null;responsibilitySlaRef:string|null;responsibilityMinutes?:number|null;responsibilityCalendar?:FixedTimelineWork['calendar'];parameterKey?:string;stage?:number;craftStep?:CraftStepChoice;accountingRole?:'original_work'|'added_work'|'included'|'event'|'shared_reference'}>;
  consumers:FixedTimelineConsumer[];
  craftSteps?:Array<CraftStepChoice&{stepId:string}>;
  route?:Array<{kind:string;position:number;nodeId:string;stepId?:string;phase?:'dispatch'|'work'|'confirmation'|'logistics'|'qc'}>;

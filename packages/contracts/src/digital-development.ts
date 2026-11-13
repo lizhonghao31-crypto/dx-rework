@@ -40,11 +40,12 @@ export const DevelopmentDocumentSchema = z.object({
   stitchDensity: text, washingIroning: text, washingMethod: text.optional(), ironing: text.optional(), packaging: text,
   formalSizes: short, casualSizes: short, mainLabel: z.boolean(), mainLabelMethod: text,
   sizeLabel: z.boolean(), careLabel: z.boolean(), instructions: text,
-  craft: z.enum(["无", "印花", "绣花", "印绣花"]), washing: z.enum(["免洗", "内洗", "外洗"]),
+  craft: z.enum(["无", "印花", "绣花", "印绣花", "特殊工艺"]), washing: z.enum(["免洗", "内洗", "外洗"]),
   craftSteps: CraftStepChoicesSchema.optional(),
   materials: z.array(DevelopmentMaterialSchema).max(100),
   files: z.array(z.object({ attachmentId: z.string().uuid(), kind: z.enum(["款图", "局部图", "菲林", "工艺开发板"]) }).strict()).max(30),
 }).strict().superRefine((value, context) => {
+  if(value.craft==='特殊工艺'&&!value.craftSteps?.length)context.addIssue({code:'custom',path:['craftSteps'],message:'请选择具体特殊工艺'});
   if(value.craftSteps&&craftLegacyLabel(value.craftSteps)!==value.craft)context.addIssue({code:'custom',path:['craftSteps'],message:'工艺选择与资料内容不一致，请重新读取后选择'});
   const namedSizes = value.sizes.filter(Boolean);
   if (new Set(namedSizes).size !== namedSizes.length) context.addIssue({ code: "custom", path: ["sizes"], message: "尺码列不能重复" });

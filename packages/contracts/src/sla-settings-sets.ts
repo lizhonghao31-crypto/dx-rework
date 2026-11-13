@@ -1,3 +1,4 @@
+import {CraftStepChoicesSchema} from './digital-craft.js';
 import {z} from 'zod';
 import {DigitalSlaValuesSchema,DIGITAL_SLA_PARAMETERS,validateDigitalSlaValues} from './digital-sla.js';
 import {DevelopmentCycleValuesSchema} from './digital-development-technical.js';
@@ -26,8 +27,8 @@ export type SettingsSetHistory={items:SettingsSetHistoryRow[];page:number;pageSi
 
 export const SettingsCalculationSchema=z.object({values:SettingsSetValuesSchema,
  lines:z.array(z.object({id:z.string().trim().min(1).max(80),customerDate:z.string().regex(/^\d{4}-\d{2}-\d{2}$/)}).strict()).min(1).max(20),
- development:z.object({enabled:z.boolean(),craftSteps:z.array(z.object({craftKind:z.enum(['embroidery','printing']),sequence:z.number().int().min(1).max(2)}).strict()).max(2),washing:z.enum(['免洗','内洗','外洗']),accessories:z.boolean()}).strict(),
- bulk:z.object({craftSteps:z.array(z.object({craftKind:z.enum(['embroidery','printing']),sequence:z.number().int().min(1).max(2)}).strict()).max(2),preshrink:z.boolean()}).strict(),
+ development:z.object({enabled:z.boolean(),craftSteps:CraftStepChoicesSchema,washing:z.enum(['免洗','内洗','外洗']),accessories:z.boolean()}).strict(),
+ bulk:z.object({craftSteps:CraftStepChoicesSchema,preshrink:z.boolean()}).strict(),
 }).strict();
 export type SettingsCalculationInput=z.infer<typeof SettingsCalculationSchema>;
 export type SettingsCalculationResult={lines:Array<{id:string;customerDate:string;startAt:string|null;endAt:string|null;totalSpanMinutes:number|null;
