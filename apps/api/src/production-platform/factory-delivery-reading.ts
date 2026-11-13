@@ -18,7 +18,7 @@ export function factoryDeliveryReadings(scopes:readonly FactoryDeliveryScope[],r
   const ambiguous=first.delivered&&(history.some(row=>!row.at)||history.some(row=>row.at&&at!==null&&end!==null&&Date.parse(row.at)>at&&Date.parse(row.at)<=end));
   const assessmentTargetDate=first.delivered?ambiguous?null:prior?.date??null:scope.targetDate;
   const deadline=assessmentTargetDate?Date.parse(assessmentTargetDate+'T00:00:00+08:00')+86400000:null;
-  const status=uncertain.length||deadline===null?'unknown':first.delivered?at===null?'unknown':at>=deadline?'late':'on_time':Date.parse(asOf)>=deadline?'late':'pending';
+  const status=scope.expected===0&&!first.delivered&&!uncertain.length?'not_applicable':uncertain.length||deadline===null?'unknown':first.delivered?at===null?'unknown':at>=deadline?'late':'on_time':Date.parse(asOf)>=deadline?'late':'pending';
   return {productionId:scope.productionId,factoryDecisionId:scope.factoryDecisionId,lineId:scope.lineId,expected:scope.expected,targetDate:scope.targetDate,assessmentTargetDate,assessmentTargetRef:first.delivered?prior?.reference??null:null,
    delivered:first.delivered?true:uncertain.length?null:false,firstReceipt:first.occurred,firstReceiptIds:first.candidateIds,received,remaining:uncertain.length?null:Math.max(0,scope.expected-received),collected:uncertain.length?null:scope.expected>0&&received>=scope.expected,status,reason:first.reason??(first.delivered&&!assessmentTargetDate?'首次交付时的工厂承诺版本待核':null)};
  });

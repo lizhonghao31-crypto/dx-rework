@@ -32,6 +32,8 @@ it('keeps first-delivery lateness against its effective commitment and restores 
  expect(read([first])).toMatchObject({delivered:true,status:'late',targetDate:'2026-11-15',assessmentTargetDate:'2026-11-11',assessmentTargetRef:'original',remaining:8});
  expect(read([{...first,quantity:0}])).toMatchObject({delivered:false,status:'pending',assessmentTargetDate:'2026-11-15',remaining:10});
  expect(read([{...first,receivedAt:null,receivedDate:'2026-11-13'}])).toMatchObject({delivered:true,status:'unknown',assessmentTargetDate:null});
+ expect(factoryDeliveryReadings([{...scope,expected:0}],[],'2026-11-20T00:00:00Z')[0]).toMatchObject({delivered:false,status:'not_applicable',remaining:0});
+ expect(factoryDeliveryReadings([{...scope,expected:0}],[first],'2026-11-20T00:00:00Z')[0]).toMatchObject({delivered:true,status:'late'});
  const unknown={...first,id:'unknown-scope',productionId:null};
  expect(read([unknown])).toMatchObject({delivered:null,status:'unknown',remaining:null,collected:null});
  expect(read([first,unknown])).toMatchObject({delivered:true,status:'unknown',firstReceipt:{precision:'unknown'},remaining:null});
