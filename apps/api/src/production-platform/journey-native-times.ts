@@ -25,7 +25,8 @@ export function attachJourneyNativeTimes(item:OrderJourney,native:Native,asOf:st
  for(const node of item.stages.flatMap(stage=>stage.nodes)){
   if(!node.current)continue;
   if(node.key==='receipts'&&['active','completed'].includes(node.state)&&(!node.enteredAt||node.occurrence===null&&node.instanceId===`receipts:${node.round??0}`)){
-   const first=native.receiving?.firstEffectiveReceipt?.receivedAt;
+   const delivery=native.receiving?.firstDelivery;
+   const first=delivery?delivery.occurred.precision==='instant'?delivery.occurred.at:null:native.receiving?.firstEffectiveReceipt?.receivedAt;
    node.enteredAt=instant(first,asOf)?first:null;
   }
   if(node.key!=='rework'||!['active','completed'].includes(node.state))continue;

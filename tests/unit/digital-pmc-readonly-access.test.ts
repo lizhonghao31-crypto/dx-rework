@@ -233,6 +233,10 @@ function closureDatabase(roles: string[]) {
   return database(roles, (sql, values) => {
     if (sql.startsWith('SELECT * FROM digital_production_orders ')) return values[0] === ORDER ? [order()] : [];
     if (sql.startsWith('SELECT p.*,(')&&sql.includes('packing_absence_proven')) return [{line_id: ROW, po_number: 'TEST-PMC-PO', color: '黑', total_quantity: '10', cutting_id: TASK}];
+    if (sql.startsWith('SELECT p.production_order_id,p.factory_decision_id,p.sourcing_decision_id')&&sql.includes('sourcing_factory_execution_lines')) {
+      expect(values).toEqual([ORDER]);
+      return [{production_order_id:QUOTE,factory_decision_id:null,line_id:ROW,quantity:10,target_date:null}];
+    }
     if(sql.startsWith('SELECT po.line_id,map.child_id'))return [{line_id:ROW,child_id:TASK,sourcing_case_id:QUOTE,sourcing_line_position:1,approval_snapshot_id:null,source_line_id:ROW}];
     if(sql.includes('FROM unnest($1::uuid[]) requested(cutting_id)'))return [{group_key:`cut:${TASK}`,packing_revision_id:null,packing_quantity:null,packing_actual_time:null,packing_recorded_at:null,packing_scope_unresolved:false}];
     if (sql.includes('SELECT totals.*,action.receiving_batch_id')) return [{
@@ -240,7 +244,7 @@ function closureDatabase(roles: string[]) {
       current_defective_quantity: '1', receipt_count: 1, packing_quantity: null,
     }];
     if (sql.startsWith('SELECT l.line_id,r.receipt_id,r.received_at')) return [{
-      line_id: ROW, receipt_id: RECEIPT, received_at: receivedAt, after_state: {}, actual_quantity: '3', defective_quantity: '1',
+      line_id: ROW, receipt_id: RECEIPT, received_at: receivedAt, after_state: {}, actual_quantity: '3', defective_quantity: '1',factory_production_id:QUOTE,factory_decision_id:null,
     }];
     if (sql.startsWith('SELECT l.line_id,r.*, (SELECT count(*)::int FROM rework_wage_items')) return [{
       line_id: ROW, rework_order_id: REWORK, rework_no: 'TEST-PMC-RW', status: 'completed',
@@ -286,6 +290,7 @@ describe('PMC closure reads retain native links without acquiring closure or QC 
     const manager = await new OrderClosureService(managerDb.pool).read(actor('production_management'), ORDER);
     expect(manager.canClose).toBe(true);
     expect(readonly).toEqual({...manager, canClose: false});
+    expect(readonly.factoryDeliveries).toMatchObject([{productionId:QUOTE,lineId:ROW,delivered:true,received:3,remaining:7,collected:false,status:'unknown'}]);
     expect(readonly).toMatchObject({
       canOpenReceiving: true, canOpenRework: true, canClose: false, canRecordQuality: false,
       collection: {expected: 10, received: 3, remaining: 7},

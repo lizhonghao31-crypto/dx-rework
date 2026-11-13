@@ -147,7 +147,7 @@ async function readLegacyFixedScheduleBasis(db:DB,resource:BusinessTimeScope,ite
   if(!handoff||!definitions.length||routeRef!==currentPreparation)continue;
   const replaced=new Set(nodeId==='warehouse_dispatch'?(saved.input.route??[]).filter(position=>position.phase==='logistics'||position.phase==='qc').map(position=>position.nodeId):[]);
   const originalDependencies=handoff.dependsOn.filter(id=>!replaced.has(id));
-  for(const replacedId of replaced)if(scope.facts[replacedId]&&!scope.facts[replacedId]!.businessCompleted)scope.facts={...scope.facts,[replacedId]:{...scope.facts[replacedId]!,terminated:true}};
+  for(const replacedId of replaced)if(scope.facts[replacedId]&&!scope.facts[replacedId]!.businessCompleted)scope.facts={...scope.facts,[replacedId]:{...scope.facts[replacedId]!,terminated:true,terminationAt:routeTimes.get(routeRef!)??null}};
   let previous=[...originalDependencies];
   for(const definition of definitions.filter(work=>targets.some(target=>target.id===work.id))){const target=targets.find(target=>target.id===definition.id)!;
    scope.work=[...scope.work,{...definition,dependsOn:definition.dependsOn.length?definition.dependsOn:previous,start:target.start.at,end:target.end.at,originalHandoffAt:row.goal_anchor.originalHandoff.start?.at??null}];
@@ -246,10 +246,11 @@ export function attachFixedJourneySchedule(item:OrderJourney,basis:FixedSchedule
    node.risks=node.risks.filter(risk=>risk!=='overdue'&&risk!=='due_soon');
    if(targets.some(target=>target.progress.ownSla.state==='overdue'))node.risks.push('overdue');else if(targets.some(target=>target.progress.ownSla.warning))node.risks.push('due_soon');
   }
-  const ends=targets.map(target=>target.progress.goalDelta.targetAt),same=ends.every(at=>at!==null&&at===ends[0]);
+  const displayed=targets.map(({progress})=>progress.currentTarget??{at:progress.goalDelta.targetAt,date:progress.goalDelta.targetDate,precision:progress.goalDelta.targetPrecision});
+  const ends=displayed.map(target=>target.at),same=ends.every(at=>at!==null&&at===ends[0]);
   // Original native timing.target remains independent D. Only the field named
   // expected uses B; never choose one PO deadline as the whole aggregate.
-  const date=targets[0]!.progress.goalDelta.targetDate,sameDay=same&&date!==null&&targets.every(target=>target.progress.goalDelta.targetPrecision==='date'&&target.progress.goalDelta.targetDate===date);
+  const date=displayed[0]!.date,sameDay=same&&date!==null&&displayed.every(target=>target.precision==='date'&&target.date===date);
   node.expectedAt=sameDay?date:same?ends[0]!:null;node.expectedPrecision=sameDay?'date':same?'instant':'missing';node.expectedKind=same?'plan':'unset';
  }
 }
@@ -260,7 +261,7 @@ export function fixedScheduleBasisSnapshot(basis:FixedScheduleBasis):FixedSchedu
  return {version:basis.version,...(basis.policyVersion?{policyVersion:basis.policyVersion}:{}),...(basis.notApplicableNodes?{notApplicableNodes:basis.notApplicableNodes.filter(key=>key==='process_logistics'||key==='bulk_qc')}:{}),scopeRevision:basis.scopeRevision,factRevision:basis.factRevision,pending:basis.pending,
   termination:basis.termination?{kind:basis.termination.kind,at:basis.termination.at,precision:basis.termination.precision,originEventRef:basis.termination.originEventRef,scopeRef:basis.termination.scopeRef}:null,
   scopes:basis.scopes.map(scope=>({scopeRef:scope.scopeRef,lineId:scope.lineId,targetRevision:scope.targetRevision,terminalIds:[...scope.terminalIds],customerGoal:scope.customerGoal,
-   work:scope.work.map(work=>({id:work.id,canonicalWorkRef:work.canonicalWorkRef,...(work.stage!==undefined?{stage:work.stage}:{}),dependsOn:[...work.dependsOn],start:work.start,end:work.end,minutes:work.minutes,calendar:work.calendar,
+   work:scope.work.map(work=>({id:work.id,canonicalWorkRef:work.canonicalWorkRef,...(work.completionTarget!==undefined?{completionTarget:work.completionTarget?{end:work.completionTarget.end,targetRevision:work.completionTarget.targetRevision,targetPrecision:work.completionTarget.targetPrecision,targetDate:work.completionTarget.targetDate}:null}:{}),...(work.stage!==undefined?{stage:work.stage}:{}),dependsOn:[...work.dependsOn],start:work.start,end:work.end,minutes:work.minutes,calendar:work.calendar,
     ...(work.includedIn!==undefined?{includedIn:work.includedIn}:{}),...(work.accountingRole!==undefined?{accountingRole:work.accountingRole}:{}),...(work.originalHandoffAt!==undefined?{originalHandoffAt:work.originalHandoffAt}:{}),responsibilitySlaRef:work.responsibilitySlaRef,...(work.responsibilityMinutes!==undefined?{responsibilityMinutes:work.responsibilityMinutes}:{}),...(work.responsibilityCalendar!==undefined?{responsibilityCalendar:work.responsibilityCalendar}:{}),...(work.responsibilityWarningAt!==undefined?{responsibilityWarningAt:work.responsibilityWarningAt}:{}),...(work.responsibilityReminderPercent!==undefined?{responsibilityReminderPercent:work.responsibilityReminderPercent}:{}),...(work.targetPrecision!==undefined?{targetPrecision:work.targetPrecision}:{}),...(work.targetDate!==undefined?{targetDate:work.targetDate}:{}),...(work.targetRevision!==undefined?{targetRevision:work.targetRevision}:{})})),
    facts:Object.fromEntries(Object.entries(scope.facts).map(([id,fact])=>[id,{ready:structuredClone(fact.ready),completed:structuredClone(fact.completed),clockStart:structuredClone(fact.clockStart),businessCompleted:fact.businessCompleted,waitingForPredecessors:fact.waitingForPredecessors,evidenceRefs:[...fact.evidenceRefs],...(fact.ownWindows?{ownWindows:fact.ownWindows.map(window=>({sourceRef:window.sourceRef,started:structuredClone(window.started),completed:structuredClone(window.completed),complete:window.complete,deadline:window.deadline,warningAt:window.warningAt,calendar:window.calendar}))}:{}),...(fact.impactStartedAt!==undefined?{impactStartedAt:fact.impactStartedAt}:{}),...(fact.terminated!==undefined?{terminated:fact.terminated}:{}),...(fact.terminationAt!==undefined?{terminationAt:fact.terminationAt}:{}),...(fact.notYetReady!==undefined?{notYetReady:fact.notYetReady}:{})}]))}))};
 }

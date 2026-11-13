@@ -1,5 +1,6 @@
 import type {Pool,PoolClient} from 'pg';
 import {receiptTime} from './receiving-summary.js';
+import {firstEffectiveReceipt} from './first-effective-receipt.js';
 export type ReceiptChange={id:string;receiptId:string;recordedAt:string;quantity:number;actualAt:string|null;date:string|null;kind:'receipt'|'correction'|'deletion'};
 export function replayReceivingSpan(expected:number,changes:ReceiptChange[]){
  const quantities=new Map<string,number>(),history:Array<{recordedAt:string;actualAt:string|null;actualDate?:string;received:number;state:'已收齐'|'待收齐';cause:ReceiptChange['kind'];evidence:string}>=[];
@@ -28,10 +29,10 @@ export async function receivingSpan(db:Pick<Pool|PoolClient,'query'>,orderId:str
  }
  const replay=replayReceivingSpan(expected,changes),reason=initial!==expected?'应收数量历史尚未完整映射，不以当前数量改写旧收齐时间':replay.received!==currentReceived?'原收货合并或批量调整尚未完整映射，收齐历时保留未知':null;
  const effective=receipts.filter(r=>!r.deleted_at&&Number(corrections.filter(c=>c.receipt_id===r.receipt_id).at(-1)?.actual_quantity??r.actual_quantity)>0)
-  .map(r=>({id:r.receipt_id,...receiptTime(r.received_at,r.after_state)})).sort((a,b)=>(a.receivedAt?Date.parse(a.receivedAt):a.receivedDate?Date.parse(`${a.receivedDate}T00:00:00+08:00`):Infinity)-(b.receivedAt?Date.parse(b.receivedAt):b.receivedDate?Date.parse(`${b.receivedDate}T00:00:00+08:00`):Infinity));
- const first=effective[0]??null,last=replay.history.at(-1),correctedAfterCross=last&&changes.some(c=>c.kind!=='receipt'&&c.recordedAt>=last.recordedAt),end=!reason&&!correctedAfterCross&&currentReceived>=expected&&last?.state==='已收齐'?last.actualAt:null;
+  .map(r=>({id:r.receipt_id,...receiptTime(r.received_at,r.after_state)}));
+ const delivery=firstEffectiveReceipt(effective),first=delivery.first,last=replay.history.at(-1),correctedAfterCross=last&&changes.some(c=>c.kind!=='receipt'&&c.recordedAt>=last.recordedAt),end=!reason&&!correctedAfterCross&&currentReceived>=expected&&last?.state==='已收齐'?last.actualAt:null;
  const collectedDate=!reason&&!correctedAfterCross&&currentReceived>=expected&&last?.state==='已收齐'&&!end?last.actualDate??null:null;
- return {firstEffectiveReceipt:first,history:reason?[]:replay.history,collectedAt:end,collectedDate,
-  elapsedHours:!reason&&first?.receivedAt&&end&&Date.parse(end)>=Date.parse(first.receivedAt)?(Date.parse(end)-Date.parse(first.receivedAt))/3600000:null,
-  reason:reason??(!first?'尚无有效实收':!first.receivedAt?'首笔有效实收仅有日期，精确历时未知':collectedDate?'实际收齐仅有日期，精确历时未知':currentReceived>=expected&&!end?'更正后达到应收，实际收齐时刻未知':null)};
+ return {firstEffectiveReceipt:first,firstDelivery:delivery,history:reason?[]:replay.history,collectedAt:end,collectedDate,
+  elapsedHours:!reason&&delivery.occurred.precision==='instant'&&end&&Date.parse(end)>=Date.parse(delivery.occurred.at)?(Date.parse(end)-Date.parse(delivery.occurred.at))/3600000:null,
+  reason:reason??delivery.reason??(collectedDate?'实际收齐仅有日期，精确历时未知':currentReceived>=expected&&!end?'更正后达到应收，实际收齐时刻未知':null)};
 }

@@ -1,3 +1,4 @@
+import {orderTimeCompletionTarget,inheritedSourcePolicyAt,isInheritedSourceWork,type InheritedOrderTimeHistory} from './order-time-completion-target.js';
 import {currentPreparationMaterial} from './preparation-material-repository.js';
 import {createHash} from 'node:crypto';
 import type {PoolClient} from 'pg';
@@ -27,7 +28,7 @@ const aliases:Record<string,string>={production_sheet:'production_instruction',w
 const keyOf=(work:OrderTimeWork)=>aliases[work.parameterKey]??work.parameterKey;
 const empty=():ScheduleFact=>({ready:unknown,clockStart:unknown,completed:unknown,businessCompleted:false,waitingForPredecessors:false,evidenceRefs:[]});
 type NativeTask={task_id:string;task_kind:string;source_id:string|null;production_order_id:string|null;route_version:number;state:string;entered_at:Date|null;entered_quality:string;completed_at:Date|null;completed_quality:string;step_id:string|null;returned:boolean;rejected:boolean;sla_basis:{seconds?:number|null;calendarRef?:ScheduleWork['calendar']}|null;native_entered_at:Date|null;warning_at:Date|null};
-type Evidence={tasks:NativeTask[];readiness:Awaited<ReturnType<typeof nativeTaskReadiness>>;cutting:NativeCuttingReadiness[];cutCompletions:NativeCuttingCompletion[];created?:{reference:string;at:string;evidence:string}|null;policies?:Awaited<ReturnType<typeof orderTimePolicyHistory>>};
+type Evidence={tasks:NativeTask[];readiness:Awaited<ReturnType<typeof nativeTaskReadiness>>;cutting:NativeCuttingReadiness[];cutCompletions:NativeCuttingCompletion[];created?:{reference:string;at:string;evidence:string}|null;policies?:Awaited<ReturnType<typeof orderTimePolicyHistory>>;inheritedPolicies?:InheritedOrderTimeHistory};
 
 /** Current native task identities, not labels or a newly generated adoption ID.
  * The authorized caller already owns the original RR client and resource. */
@@ -136,7 +137,7 @@ export function orderTimeReadingBasis(saved:StoredOrderTimePlan,resource:Busines
    if(taskOwn&&fact.clockStart.precision==='unknown'&&fact.notYetReady!==true&&!own.native?.batchWindows?.length&&!(source.parameterKey==='bulk_cutting'&&scope.lineId!==null)&&own.task?.native_entered_at&&['现场登记','已核实'].includes(own.task.entered_quality))fact.clockStart=instant(own.task.native_entered_at);
    const nativeOwn=begun&&typeof own.native?.standardMinutes==='number'?{responsibilitySlaRef:own.native.evidence,responsibilityMinutes:own.native.standardMinutes,responsibilityCalendar:own.native.standardCalendar??'continuous' as const}:null;
    const start=fact.clockStart.precision==='instant'?fact.clockStart.at:null;
-   const captured=start?evidence.policies?.find(version=>Date.parse(version.at)<=Date.parse(start)):undefined;
+   const captured=start?evidence.policies?.find(version=>Date.parse(version.at)<=Date.parse(start))??inheritedSourcePolicyAt(source,evidence.inheritedPolicies,start,saved.time.scenarioId):undefined;
    const capturedRule=captured?orderTimeRule(captured.plan,source.parameterKey)?.rule:null;
    const atStart=begun&&captured&&capturedRule?.kind==='work'?{responsibilitySlaRef:`order-time:${captured.id}:${source.parameterKey}`,responsibilityMinutes:capturedRule.minutes,responsibilityCalendar:capturedRule.calendar}:null;
    // Exact native task/batch windows own their clocks. Other original events
@@ -169,7 +170,10 @@ export function orderTimeReadingBasis(saved:StoredOrderTimePlan,resource:Busines
   const addedIds=new Set(added.map(node=>node.id));
   for(const node of added){work.push(structuredClone(node));facts[node.id]=structuredClone(original!.facts[node.id]??empty());}
   for(const node of work){const old=original?.work.find(previous=>previous.id===node.id);if(old)node.dependsOn=[...new Set([...node.dependsOn,...old.dependsOn.filter(id=>addedIds.has(id))])];}
-  for(const node of work){const fact=facts[node.id]!;fact.waitingForPredecessors=fact.ready.precision==='unknown'&&node.dependsOn.length>0&&node.dependsOn.some(id=>!facts[id]?.businessCompleted);}
+  for(const node of work){const fact=facts[node.id]!;
+   const source=byId.get(node.id);
+   if(source&&fact.businessCompleted&&(evidence.policies?.some(version=>version.history)||evidence.inheritedPolicies))node.completionTarget=orderTimeCompletionTarget(source,scope,fact.completed,evidence.policies??[],saved.time.scenarioId,evidence.inheritedPolicies);
+   fact.waitingForPredecessors=fact.ready.precision==='unknown'&&node.dependsOn.length>0&&node.dependsOn.some(id=>!facts[id]?.businessCompleted);}
   const end=scope.customerGoal.precision==='instant'?scope.customerGoal.value:scope.customerGoal.precision==='date'?new Date(Date.parse(scope.customerGoal.value+'T00:00:00+08:00')+86400000).toISOString():null;
   return {scopeRef:scope.scopeRef,lineId:scope.lineId,targetRevision:`${saved.id}:${saved.revision}`,work,facts,terminalIds:[...(scope.customerGoalIds.length?scope.customerGoalIds:scope.terminalIds)],customerGoal:end};
  });
@@ -185,6 +189,9 @@ export async function readOrderTimeBasis(db:DB,resource:BusinessTimeScope,item:O
  if(time&&saved.time.scenarioId!==time.scenarioId)throw Error('本单时间方案与当前业务时钟范围不一致');
  const evidence=await taskEvidence(db,resource,item),root=saved.input.work.find(work=>work.canonicalWorkRef?.startsWith('creation:'))?.canonicalWorkRef?.match(/^creation:(source|order):([0-9a-f-]{36})$/);
  evidence.policies=await orderTimePolicyHistory(db,resource);
+ // item.sourceId was resolved under the caller's original order authorization.
+ // Read once on that same RR proxy, not per PO/work and not via a new connection.
+ if(resource.kind==='order'&&item.sourceId&&saved.input.work.some(work=>isInheritedSourceWork(work,item.sourceId!)))evidence.inheritedPolicies={sourceId:item.sourceId,versions:await orderTimePolicyHistory(db,{kind:'source',id:item.sourceId})};
  if(root&&((root[1]==='source'&&root[2]===item.sourceId)||(root[1]==='order'&&resource.kind==='order'&&root[2]===resource.id))){const created=await orderTimeCreated(db,{kind:root[1] as 'source'|'order',id:root[2]!});evidence.created=created&&Date.parse(created.at)<=Date.parse(asOf)?{...created,reference:root[0]}:null;}
  const currentNative={...native};
  // This existing read is already under the caller's full-resource/field scope

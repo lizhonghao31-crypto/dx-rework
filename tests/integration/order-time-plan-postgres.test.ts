@@ -1,3 +1,6 @@
+import {orderTimePolicyHistory} from '../../apps/api/src/production-platform/order-time-native-timing.js';
+import {orderTimeCompletionTarget} from '../../apps/api/src/production-platform/order-time-completion-target.js';
+import {fixedGoalDelta} from '../../apps/api/src/production-platform/fixed-schedule-progress.js';
 import {randomUUID} from 'node:crypto';
 import type {PoolClient} from 'pg';
 import {afterAll,beforeAll,describe,expect,it} from 'vitest';
@@ -22,8 +25,8 @@ const duration=(hours:number):OrderTimeRule=>({kind:'work',minutes:hours*60,cale
  let f:Awaited<ReturnType<typeof businessAnchorFixture>>,scene:string;
  const run=<T,>(action:()=>Promise<T>)=>f.runtime.run(scene,f.root,action);
  const tx=async<T,>(action:(client:PoolClient)=>Promise<T>)=>{const db=await f.db.connect();try{await db.query('BEGIN');const result=await action(db);await db.query('COMMIT');return result;}catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}};
- const make=()=>new DigitalProductionIdentityService(f.db,true).createOrder(f.root,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:'TEST-R504-'+randomUUID(),orderDate:'2026-11-09',primaryMerchandiserId:f.people.merchandiser!.actorId,
-  lines:[0,1].map(index=>({formalPoNo:'TEST-R504-'+randomUUID(),color:index?'白':'黑',customerWarehouseArrivalDate:'2027-03-01',sizes:[{size:'M',quantity:10}]}))}),randomUUID());
+ const make=(date='2027-03-01')=>new DigitalProductionIdentityService(f.db,true).createOrder(f.root,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:'TEST-R504-'+randomUUID(),orderDate:'2026-11-09',primaryMerchandiserId:f.people.merchandiser!.actorId,
+  lines:[0,1].map(index=>({formalPoNo:'TEST-R504-'+randomUUID(),color:index?'白':'黑',customerWarehouseArrivalDate:date,sizes:[{size:'M',quantity:10}]}))}),randomUUID());
  const value=(order:Awaited<ReturnType<typeof make>>):OrderTimeInput=>{
   const plan:FrozenOrderTimePlan={version:'order-time-plan-v1',revision:1,overrides:{},company:{version:'order-time-standard-v1',reference:'TEST explicit frozen original counterpart',revision:1,stageBufferMinutes:0,nodes:{a:duration(48),b:duration(48),packing:duration(24),printing:duration(24)}}};
   return {version:'order-time-input-v1',plan,route:{complete:true,missing:[]},work:order.lines.flatMap(line=>[
@@ -126,6 +129,31 @@ const duration=(hours:number):OrderTimeRule=>({kind:'work',minutes:hours*60,cale
   expect(results.filter(row=>row.status==='fulfilled')).toHaveLength(1);expect(results.filter(row=>row.status==='rejected')).toHaveLength(1);
   expect((await new OrderTimePlanRepository(f.db).current(first.resource))!.revision).toBe(2);
  }));
+ it('reads the completed target from the original physical day after a real approved PO date change',async()=>{
+  const ownScene=await f.scene('2027-02-01T00:00:00.000Z');
+  const {order,line,initial,scope,work}=await f.runtime.run(ownScene,f.root,async()=>{
+   const order=await make('2027-03-08'),input=value(order),line=order.lines[0]!.lineId;
+   for(const scope of input.scopes){scope.customerGoal={precision:'date',value:'2027-03-08',source:'TEST customer date'};scope.goals[scope.customerGoalIds[0]!]=scope.customerGoal;}
+   const initial=await confirm(order,input),scope=initial.input.scopes[0]!,work=initial.input.work.find(row=>row.id==='a:'+line)!;
+   expect(initial.targets[scope.scopeRef]![work.id]!.end.at).toBe('2027-03-05T16:00:00.000Z');
+   return {order,line,initial,scope,work};
+  });
+  await f.advance(ownScene,'2027-03-09T00:00:00.000Z');
+  await f.runtime.run(ownScene,f.root,async()=>{
+   const dates=new PoCustomerDateService(f.db),sheet=await dates.read(f.root,order.productionOrderId),orderVersion=(await f.db.query('SELECT version FROM digital_production_orders WHERE production_order_id=$1',[order.productionOrderId])).rows[0].version;
+   const request=await dates.request(f.root,order.productionOrderId,{orderVersion,changes:[{lineId:line,date:'2027-03-12',expectedVersion:sheet.customerPoDates.find(po=>po.lineId===line)!.version}],reason:'TEST completed then approved change'},randomUUID()) as {requestId:string};
+   await dates.decide(f.root,order.productionOrderId,request.requestId,true,randomUUID());
+   const current=(await new OrderTimePlanRepository(f.db).current(initial.resource))!,history=await orderTimePolicyHistory(f.db,initial.resource);
+   expect(current.time.now).toBe('2027-03-09T00:00:00.000Z');
+   expect(initial.time.now).toBe('2027-02-01T00:00:00.000Z');
+   expect(current.targets[scope.scopeRef]![work.id]!.end.at).toBe('2027-03-09T16:00:00.000Z');
+   const actual={precision:'instant' as const,at:'2027-03-06T16:00:00.000Z'},target=orderTimeCompletionTarget(work,scope,actual,history,ownScene)!;
+   expect(target).toMatchObject({end:'2027-03-05T16:00:00.000Z',targetRevision:initial.id+':1'});
+   expect(fixedGoalDelta({...work,canonicalWorkRef:work.id,start:null,end:current.targets[scope.scopeRef]![work.id]!.end.at,minutes:2880,calendar:'continuous',responsibilitySlaRef:null,completionTarget:target},{ready:{precision:'unknown'},clockStart:{precision:'unknown'},completed:actual,businessCompleted:true,waitingForPredecessors:false,evidenceRefs:['TEST physical completion']},{scopeRef:scope.scopeRef,targetRevision:current.id+':2'},'2027-03-10T00:00:00.000Z')).toMatchObject({kind:'late',signedValue:1440,targetRevision:initial.id+':1'});
+   expect(current.targets[initial.input.scopes[1]!.scopeRef]).toEqual(initial.targets[initial.input.scopes[1]!.scopeRef]);
+   expect(orderTimeCompletionTarget(work,{...scope,lineId:order.lines[1]!.lineId},actual,history,ownScene)).toBeNull();
+  });
+ });
  it('does not alter an existing native task clock or completion when confirming a new policy',()=>run(async()=>{
   const x=await f.bulkReady('无'),order=await new DigitalProductionIdentityService(f.db,true).read(f.root,x.id);
   const read=()=>f.db.query(`SELECT t.task_id,t.entered_at,t.completed_at,(SELECT jsonb_agg(to_jsonb(d) ORDER BY revision_id) FROM digital_production_deadline_revisions d WHERE d.task_id=t.task_id) AS deadline_history FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.production_order_id=$1 OR a.source_id=$2 ORDER BY t.task_id`,[order.productionOrderId,x.sourceId]);
