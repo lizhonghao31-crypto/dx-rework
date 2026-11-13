@@ -16,7 +16,7 @@ const missing=(reason:string):SlaTime=>({at:null,exclusive:false,reasons:[reason
 function latest(values:SlaTime[]):SlaTime{
  if(!values.length)return missing('缺少必要完成工作');
  if(values.some(row=>!row.at))return {at:null,exclusive:false,reasons:[...new Set(values.flatMap(row=>row.reasons))]};
- return structuredClone(values.reduce((a,b)=>Date.parse(a.at!)>Date.parse(b.at!)||Date.parse(a.at!)===Date.parse(b.at!)&&a.exclusive?a:b));
+ return structuredClone(values.reduce((a,b)=>Date.parse(a.at!)>Date.parse(b.at!)||Date.parse(a.at!)===Date.parse(b.at!)&&!a.exclusive?a:b));
 }
 /** Share original A/B constants without creating a second editable default. */
 export function initialFrameworkMilestoneStandard(route:SeriesRoute,reference:string,revision:number){
@@ -89,9 +89,9 @@ export function evaluateFrameworkResponsibility(input:{actual:FrameworkActual;wi
  }
  const deadline=window?shiftFixedTimeline(window.startedAt,window.minutes,window.calendar):null;
  // Date-only actuals are intervals. Keep exact duration/attribution unknown.
- if(!window||!window.attributionKnown||!observation.at||observation.exclusive
+ if(!window||!observation.at||observation.exclusive
   ||Date.parse(observation.at)<Date.parse(window.startedAt)||Date.parse(observation.at)>Date.parse(now))return {deadline,overdueMinutes:null,status:'unknown' as const};
  // Counted overdue duration uses the original clock's calendar, not wall time.
  const overdueMinutes=Math.max(0,scheduleElapsed(Date.parse(deadline!),Date.parse(observation.at),window.calendar));
- return {deadline,overdueMinutes,status:overdueMinutes>0?'overdue' as const:'within_window' as const};
+ return {deadline,overdueMinutes,status:!window.attributionKnown?'unknown' as const:overdueMinutes>0?'overdue' as const:'within_window' as const};
 }

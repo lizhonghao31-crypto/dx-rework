@@ -2,18 +2,18 @@
   "version": 1,
   "base": "908344818941c2910eef024cf2e07aa58bbe34f8",
   "risk": "full",
-  "sourceFingerprint": "fa75fef1109dac5e60cbd9daa480a66881127a3afc3b0fdfd297943730a3b4c5",
+  "sourceFingerprint": "3c0412aa1df9927b0bcb67c4507b2cae78ba43855261d2b5b86bce07116a43be",
   "rules": [
     {
       "rule": "Three-layer candidate planning checks every A/B milestone, keeps native responsibility separate, and adds explicit version decoding without enabling new adoption.",
       "source": "User approved full time proposal revision27 and eight-PR execution; 2026-11-13 好，开工. docs/engineering/time-framework-01.md and docs/requirements/digital-sla-golden-source-20261023.md.",
       "writes": [
         "apps/api/src/production-platform/fixed-timeline-targets.ts",
+        "apps/api/src/production-platform/order-time-framework.ts",
         "packages/contracts/package.json",
+        "packages/contracts/src/order-time-framework.ts",
         "scripts/ci/full-gate-risk-map.mjs",
         "tests/unit/full-gate-risk-map.test.ts",
-        "apps/api/src/production-platform/order-time-framework.ts",
-        "packages/contracts/src/order-time-framework.ts",
         "tests/unit/order-time-framework.test.ts"
       ],
       "reads": [
@@ -54,9 +54,9 @@
       "command": "node node_modules/vitest/vitest.mjs run tests/unit/order-time-framework.test.ts tests/unit/order-time-plan.test.ts tests/unit/fixed-timeline-targets.test.ts tests/unit/fixed-schedule-progress.test.ts tests/unit/series-plan-dates.test.ts tests/unit/full-gate-risk-map.test.ts --reporter=verbose --reporter=json --outputFile=/tmp/time-framework-01-evidence/unit.json",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-13T09:47:28.800Z",
-      "endedAt": "2026-11-13T09:47:31.112Z",
-      "sourceFingerprint": "fa75fef1109dac5e60cbd9daa480a66881127a3afc3b0fdfd297943730a3b4c5",
+      "startedAt": "2026-11-13T09:58:02.962Z",
+      "endedAt": "2026-11-13T09:58:05.287Z",
+      "sourceFingerprint": "3c0412aa1df9927b0bcb67c4507b2cae78ba43855261d2b5b86bce07116a43be",
       "inputPaths": [
         "apps",
         "packages",
@@ -66,19 +66,19 @@
         "package-lock.json",
         "vitest.config.ts"
       ],
-      "inputFingerprint": "6dd8285cfdd109ab3899842bfe967393d882a04cc2ab9a6e31875ff6066d54d2",
+      "inputFingerprint": "419310c3a249bcc9896f5f7dddb66c7769072d14dc69ad0048be1b3a509fb725",
       "log": "/tmp/time-framework-01-evidence/unit.log",
-      "logSha256": "4aa32b400344c4c98a4d71d16c0ba259378b26c55d87abd56a650d5ba2adf58a",
+      "logSha256": "f09e3b48b8fe703008ad07ac405dcbe3b8d907d39283f1a27b2cc937f63dd2a2",
       "context": "Node22.22.0/npm10.9.9; original worker config: nonDatabase1/postgres1. Explicit frozen business clocks. No onsite writes. PG uses registered isolated low-privilege TEST database; native fixture cleanup.",
-      "testedHead": "908344818941c2910eef024cf2e07aa58bbe34f8",
+      "testedHead": "d39705654b859fb119cf683b018c582eb87f6829",
       "kind": "tests",
-      "passed": 157,
+      "passed": 159,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "2553147a26209ca9923f26c6a5abe277b8545bdb6a5c4ff07d7881ec9ea1a262"
+          "sha256": "74b9424087a57c2a9c9f52b18d716df3fc5a1891a11faa24c0bd0031690f2011"
         }
       ]
     },
@@ -87,9 +87,9 @@
       "command": "node node_modules/vitest/vitest.mjs run tests/integration/order-time-plan-postgres.test.ts --reporter=verbose --reporter=json --outputFile=/tmp/time-framework-01-evidence/postgres.json",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-13T09:47:30.214Z",
-      "endedAt": "2026-11-13T09:47:49.949Z",
-      "sourceFingerprint": "fa75fef1109dac5e60cbd9daa480a66881127a3afc3b0fdfd297943730a3b4c5",
+      "startedAt": "2026-11-13T09:58:21.634Z",
+      "endedAt": "2026-11-13T09:58:32.363Z",
+      "sourceFingerprint": "3c0412aa1df9927b0bcb67c4507b2cae78ba43855261d2b5b86bce07116a43be",
       "inputPaths": [
         "apps",
         "packages",
@@ -99,11 +99,11 @@
         "package-lock.json",
         "vitest.config.ts"
       ],
-      "inputFingerprint": "6dd8285cfdd109ab3899842bfe967393d882a04cc2ab9a6e31875ff6066d54d2",
+      "inputFingerprint": "419310c3a249bcc9896f5f7dddb66c7769072d14dc69ad0048be1b3a509fb725",
       "log": "/tmp/time-framework-01-evidence/postgres.log",
-      "logSha256": "ac978c2b77ae20143a34f99f7df6ac027cb336cc1b27495dfc9177c847e35871",
+      "logSha256": "76f5eae8de053a163c09723f08ef1df6a1744b1aa5e938c16bfce9186edce35b",
       "context": "Node22.22.0/npm10.9.9; original worker config: nonDatabase1/postgres1. Explicit frozen business clocks. No onsite writes. PG uses registered isolated low-privilege TEST database; native fixture cleanup.",
-      "testedHead": "908344818941c2910eef024cf2e07aa58bbe34f8",
+      "testedHead": "d39705654b859fb119cf683b018c582eb87f6829",
       "kind": "tests",
       "passed": 8,
       "failed": 0,
@@ -111,7 +111,7 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "e9d3778d600e625c98b447592fca45a2b7f6f79c298d1d79339b297ed0b9d2ca"
+          "sha256": "f3bea7179ea919e43eaccf305c8cc6b640accb6f120bb8525aac97ef7fdf5912"
         }
       ]
     },
@@ -120,9 +120,9 @@
       "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-13T09:47:31.610Z",
-      "endedAt": "2026-11-13T09:48:25.702Z",
-      "sourceFingerprint": "fa75fef1109dac5e60cbd9daa480a66881127a3afc3b0fdfd297943730a3b4c5",
+      "startedAt": "2026-11-13T09:58:46.150Z",
+      "endedAt": "2026-11-13T09:59:36.043Z",
+      "sourceFingerprint": "3c0412aa1df9927b0bcb67c4507b2cae78ba43855261d2b5b86bce07116a43be",
       "inputPaths": [
         "apps",
         "packages",
@@ -132,11 +132,11 @@
         "package-lock.json",
         "vitest.config.ts"
       ],
-      "inputFingerprint": "6dd8285cfdd109ab3899842bfe967393d882a04cc2ab9a6e31875ff6066d54d2",
+      "inputFingerprint": "419310c3a249bcc9896f5f7dddb66c7769072d14dc69ad0048be1b3a509fb725",
       "log": "/tmp/time-framework-01-evidence/types.log",
       "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e",
       "context": "Node22.22.0/npm10.9.9; original worker config: nonDatabase1/postgres1. Explicit frozen business clocks. No onsite writes. PG uses registered isolated low-privilege TEST database; native fixture cleanup.",
-      "testedHead": "908344818941c2910eef024cf2e07aa58bbe34f8",
+      "testedHead": "d39705654b859fb119cf683b018c582eb87f6829",
       "kind": "command"
     },
     {
@@ -144,9 +144,9 @@
       "command": "npm run lint",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-13T09:47:33.002Z",
-      "endedAt": "2026-11-13T09:48:11.996Z",
-      "sourceFingerprint": "fa75fef1109dac5e60cbd9daa480a66881127a3afc3b0fdfd297943730a3b4c5",
+      "startedAt": "2026-11-13T09:59:36.136Z",
+      "endedAt": "2026-11-13T10:00:06.760Z",
+      "sourceFingerprint": "3c0412aa1df9927b0bcb67c4507b2cae78ba43855261d2b5b86bce07116a43be",
       "inputPaths": [
         "apps",
         "packages",
@@ -156,11 +156,11 @@
         "package-lock.json",
         "vitest.config.ts"
       ],
-      "inputFingerprint": "6dd8285cfdd109ab3899842bfe967393d882a04cc2ab9a6e31875ff6066d54d2",
+      "inputFingerprint": "419310c3a249bcc9896f5f7dddb66c7769072d14dc69ad0048be1b3a509fb725",
       "log": "/tmp/time-framework-01-evidence/lint.log",
       "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763",
       "context": "Node22.22.0/npm10.9.9; original worker config: nonDatabase1/postgres1. Explicit frozen business clocks. No onsite writes. PG uses registered isolated low-privilege TEST database; native fixture cleanup.",
-      "testedHead": "908344818941c2910eef024cf2e07aa58bbe34f8",
+      "testedHead": "d39705654b859fb119cf683b018c582eb87f6829",
       "kind": "command"
     },
     {
@@ -169,13 +169,13 @@
       "command": "node scripts/test-preflight.mjs",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "908344818941c2910eef024cf2e07aa58bbe34f8",
-      "sourceFingerprint": "fa75fef1109dac5e60cbd9daa480a66881127a3afc3b0fdfd297943730a3b4c5",
+      "testedHead": "d39705654b859fb119cf683b018c582eb87f6829",
+      "sourceFingerprint": "3c0412aa1df9927b0bcb67c4507b2cae78ba43855261d2b5b86bce07116a43be",
       "startedAt": "2026-11-13T09:44:19.618Z",
-      "endedAt": "2026-11-13T09:46:51.761Z",
+      "endedAt": "2026-11-13T09:58:55.100Z",
       "log": "/tmp/time-framework-01-preflight.log",
-      "logSha256": "fcd49207ad532b337d473798b1c615fa2308948660ff76fe0482819faa563ff9",
-      "context": "Observed session51703 exit0 after explicit inventory refresh; 254 protocol checks pass and migration static check success. Node22/npm10; no database writes from this preflight."
+      "logSha256": "87c0dcb4bd84127b464adfaf9aba282681aef3b0183a9ababbeee029dc37b493",
+      "context": "Observed successful preflight exit after concentrated boundary fixes; protocol and migration static checks pass. Node22/npm10; no database writes from this preflight."
     }
   ]
 }

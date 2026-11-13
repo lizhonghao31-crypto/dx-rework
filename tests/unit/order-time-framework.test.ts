@@ -96,6 +96,7 @@ describe('three-layer time foundation, no live adoption',()=>{
   const saved=freezeTimeFrameworkCandidate(evaluateTimeFrameworkCandidate(fixture(),context()),version);
   expect(()=>readTimeFrameworkPlan({...saved,arranged:[]})).toThrow();
   expect(()=>readTimeFrameworkPlan({...saved,revision:2,previousReference:null})).toThrow();
+  expect(()=>readTimeFrameworkPlan({...saved,revision:2,previousReference:saved.reference})).toThrow();
  });
  it('holds independent scope versions instead of sharing mutable per-PO results',()=>{
   const input=fixture(),one=freezeTimeFrameworkCandidate(evaluateTimeFrameworkCandidate(input,context()),version);
@@ -142,6 +143,15 @@ describe('three-layer time foundation, no live adoption',()=>{
   expect(result.arranged.find(row=>row.id==='pack')!.end.at).toBe(iso(8,0));
   expect(result.milestones.find(row=>row.key==='planned_shipment')).toMatchObject({status:'insufficient',lateMinutes:1/60000});
  });
+ it('keeps an exact-boundary late branch when another completion shares its exclusive upper bound',()=>{
+  const input=fixture();input.bindings.find(row=>row.key==='fabric_receipt')!.workIds=['fabric','pattern'];
+  const target=(id:string,exclusive:boolean)=>({id,start:{at:iso(2),exclusive:false,reasons:[]},end:{at:iso(11,0),exclusive,reasons:[]}});
+  for(const ordered of [['fabric','pattern'],['pattern','fabric']]){
+   input.bindings.find(row=>row.key==='fabric_receipt')!.workIds=ordered;
+   const result=evaluateTimeFrameworkCandidate(input,{...context(),retained:{fabric:{target:target('fabric',true),sourceRef:'TEST retained date bound'},pattern:{target:target('pattern',false),sourceRef:'TEST retained exact plan'}}});
+   expect(result.milestones.find(row=>row.key==='fabric_receipt')).toMatchObject({status:'insufficient',planned:{exclusive:false},lateMinutes:1/60000,blockingWorkIds:['pattern']});
+  }
+ });
  it('rejects retained wrong identities, backwards time, dependency cycles and duplicate work',()=>{
   const input=fixture();input.work[0]!.dependsOn=['pack'];expect(()=>evaluateTimeFrameworkCandidate(input,context())).toThrow('成环');
   const duplicate=fixture();duplicate.work.push(duplicate.work[0]!);expect(()=>evaluateTimeFrameworkCandidate(duplicate,context())).toThrow('身份重复');
@@ -167,8 +177,12 @@ describe('native responsibility is not a plan or a milestone',()=>{
   for(const day of [9,15,20])expect(evaluateFrameworkResponsibility({actual:{state:'terminated',termination:anchor(9)},window:window(),observedAt:at(day)})).toMatchObject({status:'overdue',overdueMinutes:1440});
   expect(evaluateFrameworkResponsibility({actual:{state:'terminated',termination:{precision:'unknown',reason:'原取消时间缺失'}},window:window(),observedAt:at(20)})).toMatchObject({status:'unknown',overdueMinutes:null});
  });
- it('does not label missing, date-only, future or unassigned evidence as innocent',()=>{
-  const cases=[{completion:anchor(9),window:null},{completion:anchor(9),window:{...window(),attributionKnown:false}},
+ it('keeps measured overrun even when its attribution is still unknown',()=>{
+  expect(evaluateFrameworkResponsibility({actual:{state:'completed',completion:anchor(9)},window:{...window(),attributionKnown:false},observedAt:at(10)}))
+   .toMatchObject({deadline:iso(8),status:'unknown',overdueMinutes:1440});
+ });
+ it('does not label missing, date-only or future evidence as innocent',()=>{
+  const cases=[{completion:anchor(9),window:null},
    {completion:{precision:'date' as const,value:'2026-11-09',source:'TEST date only'},window:window()},
    {completion:anchor(11),window:window()},{completion:anchor(4),window:window()}];
   for(const item of cases)expect(evaluateFrameworkResponsibility({actual:{state:'completed',completion:item.completion},window:item.window,observedAt:at(10)})).toMatchObject({status:'unknown',overdueMinutes:null});

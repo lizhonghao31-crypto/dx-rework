@@ -69,6 +69,7 @@ export const FrozenTimeFrameworkSchema=z.object({
  const keys=value.milestones.map(row=>row.key);
  if(new Set(keys).size!==keys.length||keys.length!==value.input.bindings.length||value.input.bindings.some(row=>!keys.includes(row.key)))context.addIssue({code:'custom',path:['milestones'],message:'保存的里程碑必须覆盖本单关联'});
  if(value.revision===1?value.previousReference!==null:value.previousReference===null)context.addIssue({code:'custom',path:['previousReference'],message:'版本必须保留前版来源'});
+ if(value.previousReference===value.reference)context.addIssue({code:'custom',path:['previousReference'],message:'版本不能引用自身为前版'});
  for(const [id,row]of Object.entries(value.retained))if(row.target.id!==id||!expected.includes(id))context.addIssue({code:'custom',path:['retained',id],message:'保留依据不属于本范围工作'});
  for(const milestone of value.milestones){
   const binding=value.input.bindings.find(row=>row.key===milestone.key);
