@@ -135,6 +135,8 @@ const matchesPatternRoom = (path) =>
 // A generic backend fallback remains the existing chain; it is not every PG suite.
 const DEVELOPMENT_AMENDMENT_INPUTS = new Set([
   "apps/api/src/production-platform/development-document-format.ts",
+  "apps/api/src/production-platform/development-commercial-fields.ts",
+  "apps/api/src/production-platform/quotation-assembly.ts",
   "apps/api/src/production-platform/development-amendment-service.ts",
   "apps/api/src/production-platform/development-amendment-repository.ts",
   "apps/api/src/production-platform/development-service.ts",
