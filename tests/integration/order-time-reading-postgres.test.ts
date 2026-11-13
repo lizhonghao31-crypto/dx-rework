@@ -2,7 +2,7 @@ import {PoCustomerDateService} from '../../apps/api/src/production-platform/po-c
 import {DigitalProductionNotificationService} from '../../apps/api/src/production-platform/notification-service.js';
 import {DigitalProductionAccessPolicy} from '../../apps/api/src/production-platform/access-policy.js';
 import {randomUUID} from 'node:crypto';
-import type {PoolClient} from 'pg';
+import {Client,type PoolClient} from 'pg';
 import {afterAll,beforeAll,describe,expect,it,vi} from 'vitest';
 import {DigitalOrderCreateSchema} from '@dx-rework/contracts/digital-production';
 import {JourneyFilterSchema} from '@dx-rework/contracts/digital-production-journey';
@@ -16,6 +16,11 @@ import {JourneyFactRepository} from '../../apps/api/src/production-platform/jour
 import {JourneyFactUpdates} from '../../apps/api/src/production-platform/journey-fact-updates.js';
 import {JOURNEY_FACT_CALCULATION_VERSION} from '../../apps/api/src/production-platform/journey-fact-model.js';
 import {testExecutionConfig} from '../../scripts/test-execution-config.mjs';
+import {exerciseDevelopmentSlaNative} from '../helpers/development-sla-native-fixture.js';
+import {TodoProjectionService} from '../../apps/api/src/todos/projection-service.js';
+import {TodoService} from '../../apps/api/src/todos/service.js';
+import {r5OneHourConfiguration} from '../helpers/r5-order-time-fixture.js';
+import {historicalOrderTimeCompany} from '../../apps/api/src/production-platform/order-time-admission.js';
 
 vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:testExecutionConfig.correctnessTimeoutMs});
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
@@ -102,4 +107,53 @@ const duration=(minutes:number):OrderTimeRule=>({kind:'work',minutes,calendar:'c
   expect((await f.db.query('SELECT count(*)::int AS n FROM digital_order_time_subjects WHERE production_order_id=$1',[old.id])).rows[0].n).toBe(0);
  }));
 
+ it('retains the source completion target across later native conversion into two POs and persisted fact reads',async()=>{
+  const ownScene=await f.scene('2026-11-21T08:00:00.000Z'),ownRun=<T,>(action:()=>Promise<T>)=>f.runtime.run(ownScene,f.root,action);
+  let sourcePlan:Awaited<ReturnType<OrderTimePlanRepository['confirm']>>|undefined;
+  const made=await ownRun(()=>exerciseDevelopmentSlaNative(f.db,new TodoProjectionService(new TodoService(f.db)),f.root,f.people['pattern-room-worker']!.actorId,new ContextBusinessClock(f.db),[['无','免洗']],{
+   fixedCraftSteps:[],onRouteComplete:async(sourceId,kind)=>{
+    if(kind!=='development_sewing')return;
+    const resource={kind:'source' as const,id:sourceId},workId='development_confirmation',goal={precision:'instant' as const,value:'2026-11-21T09:00:00.000Z',source:'TEST confirmed source target before real completion'};
+    const company=await historicalOrderTimeCompany(f.db,resource),complete=r5OneHourConfiguration();
+    // Preserve every already captured native quota; supply only this focused
+    // fixture's missing future planning inputs before native conversion.
+    for(const [key,rule]of Object.entries(company.nodes))if(rule.minutes===null&&complete.nodes[key]?.minutes!==null)company.nodes[key]=complete.nodes[key]!;
+    const value:OrderTimeInput={version:'order-time-input-v1',plan:{version:'order-time-plan-v1',revision:1,overrides:{},company},route:{complete:true,missing:[]},
+     work:[{id:workId,parameterKey:workId,canonicalWorkRef:`source:${sourceId}:round:1:work:${workId}`,stage:2,dependsOn:[]}],
+     scopes:[{scopeRef:`source:${sourceId}:round:1`,lineId:null,terminalIds:[workId],customerGoalIds:[],customerGoal:goal,goals:{[workId]:goal}}]};
+    sourcePlan=await tx(async db=>new OrderTimePlanRepository(db).confirm({resource,value,expectedRevision:0,actorId:f.root.actorId,eventRef:'TEST arrangement before original confirmation',requestKey:randomUUID(),time:await new ContextBusinessClock(f.db,db).read(resource)}));
+   },
+  }));
+  const sourceId=made[0]!.sourceId;
+  const task=(await f.db.query("SELECT t.completed_at FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND a.task_kind='development_confirmation' AND t.route_version=1",[sourceId])).rows[0];
+  expect(task.completed_at.toISOString()).toBe('2026-11-21T08:00:00.000Z');
+  await f.advance(ownScene,'2026-11-22T08:00:00.000Z');
+  await ownRun(async()=>{
+   const source=(await f.db.query('SELECT design_style_no,temporary_style_no FROM digital_production_sources WHERE source_id=$1',[sourceId])).rows[0];
+   const order=await new DigitalProductionIdentityService(f.db,true).createOrder(f.root,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:source.design_style_no,temporaryStyleNo:source.temporary_style_no,orderDate:'2026-11-22',primaryMerchandiserId:f.people.merchandiser!.actorId,productionPlanning:{craftSteps:[],preshrink:false},
+    lines:[0,1].map(index=>({formalPoNo:'TEST-INHERITED-'+randomUUID(),color:index?'白':'黑',customerWarehouseArrivalDate:'2027-03-01',sizes:[{size:'M',quantity:10}]}))}),randomUUID(),sourceId);
+   const sharedId='source:development_confirmation',resource={kind:'order' as const,id:order.productionOrderId},query=new DigitalJourneyQuery(f.db);
+   const saved=(await new OrderTimePlanRepository(f.db).current(resource))!;
+   expect(Date.parse(saved.time.now)).toBeGreaterThan(task.completed_at.getTime());
+   const before=(await f.db.query('SELECT count(*)::int n FROM digital_order_time_plan_versions')).rows[0].n;
+   const check=(detail:Awaited<ReturnType<DigitalJourneyQuery['read']>>)=>{
+    expect(detail.fixedSchedule!.scopes).toHaveLength(2);
+    for(const scope of detail.fixedSchedule!.scopes){
+     expect(scope.nodes.find(node=>node.id===sharedId)).toMatchObject({businessCompleted:true,goalDelta:{targetAt:'2026-11-21T09:00:00.000Z',targetRevision:sourcePlan!.id+':1',actual:{precision:'instant',at:'2026-11-21T08:00:00.000Z'},signedValue:-60,unit:'minute'}});
+    }
+   };
+   const driver=vi.spyOn(Client.prototype,'query');
+   try{
+    check(await query.read(f.root,order.productionOrderId,undefined,true));
+    const histories=(driver.mock.calls as unknown[][]).flatMap((args,index)=>typeof args[0]==='string'&&args[0].startsWith('SELECT plan_version_id,input_snapshot,business_time,fixed_targets,revision,identity_hash')?[{params:args[1],client:driver.mock.instances[index]}]:[]);
+    const sourceReads=histories.filter(row=>JSON.stringify(row.params)===JSON.stringify(['source',sourceId]));
+    const orderReads=histories.filter(row=>JSON.stringify(row.params)===JSON.stringify(['order',order.productionOrderId]));
+    expect(sourceReads).toHaveLength(1);expect(orderReads).toHaveLength(1);expect(sourceReads[0]!.client).toBe(orderReads[0]!.client);
+   }finally{driver.mockRestore();}
+   const built=await new JourneyFactRepository(f.db).buildOne(resource);
+   for(const scope of built.model.fixedSchedule!.scopes)expect(scope.work.find(work=>work.id===sharedId)!.completionTarget).toMatchObject({end:'2026-11-21T09:00:00.000Z',targetRevision:sourcePlan!.id+':1'});
+   check(await query.read(f.root,order.productionOrderId,undefined,true));
+   expect((await f.db.query('SELECT count(*)::int n FROM digital_order_time_plan_versions')).rows[0].n).toBe(before);
+  });
+ });
 });

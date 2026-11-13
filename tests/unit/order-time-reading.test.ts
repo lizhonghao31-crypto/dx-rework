@@ -1,3 +1,4 @@
+import {orderTimeCompletionTarget} from '../../apps/api/src/production-platform/order-time-completion-target.js';
 import {orderTimeCreatedMany} from '../../apps/api/src/production-platform/order-time-created.js';
 import {describe,expect,it,vi} from 'vitest';
 import {JOURNEY_STAGES,type JourneyNode,type OrderJourney} from '@dx-rework/contracts/digital-production-journey';
@@ -46,6 +47,35 @@ describe('R5 exact frozen order-time reading and independent visible endpoints',
   row.stages[1]!.nodes[0]!.actualDate='2027-03-01';
   const ambiguous=orderTimeReadingBasis(changed,resource,row,{}, {...evidence(),policies},null);
   expect(evaluateFixedJourneyBasis(ambiguous,at(30),false).scopes[0]!.nodes.find(n=>n.id==='a')!.goalDelta.kind).toBe('unknown');
+ });
+ it('retains pre-conversion source completion and original responsibility across formal PO scopes without borrowing another source or round',()=>{
+  const original=stored(),later=structuredClone(original),formal=structuredClone(original),row=item();
+  const canonical='source:TEST-source:round:1:node:a';
+  original.input.work[0]!.canonicalWorkRef=canonical;original.targets['TEST scope']!.a!.end.at=at(6);
+  later.input=structuredClone(original.input);later.id='TEST source later';later.revision=2;later.time.now=at(8);later.targets['TEST scope']!.a!.end.at=at(9);
+  formal.resource={kind:'order',id:'TEST formal'};formal.id='TEST formal plan';formal.time.now=at(9);formal.input.plan.overrides.a=duration(1);
+  formal.input.work=[{id:'source:a',parameterKey:'a',canonicalWorkRef:canonical,stage:2,dependsOn:[]}];
+  formal.input.scopes=['red','blue'].map(lineId=>({scopeRef:'po:'+lineId,lineId,terminalIds:['source:a'],customerGoalIds:['source:a'],customerGoal:{precision:'instant',value:at(10),source:'TEST formal goal'},goals:{'source:a':{precision:'instant',value:at(10),source:'TEST formal goal'}}}));
+  formal.targets=Object.fromEntries(formal.input.scopes.map(scope=>[scope.scopeRef,{'source:a':{...original.targets['TEST scope']!.a!,id:'source:a',end:{...original.targets['TEST scope']!.a!.end,at:at(10)}}}]));
+  row.orderId=formal.resource.id;row.adoptedRound=1;
+  const version=(v:StoredOrderTimePlan)=>({id:v.id,at:v.time.now,plan:v.input.plan,history:{input:v.input,targets:v.targets,revision:v.revision,time:v.time}});
+  const inheritedPolicies={sourceId:resource.id,versions:[version(later),version(original)]};
+  const proof={...evidence(),policies:[version(formal)],inheritedPolicies};
+  const native={'source:a':{evidence:'TEST exact original round',startedAt:at(5),completedAt:at(7),businessCompleted:true}};
+  const read=(p=proof)=>orderTimeReadingBasis(formal,formal.resource,row,native,p,null);
+  for(const scope of evaluateFixedJourneyBasis(read(),at(12),false).scopes){
+   expect(scope.nodes[0]!.goalDelta).toMatchObject({kind:'late',signedValue:60,targetAt:at(6),targetRevision:original.id+':1'});
+   expect(scope.nodes[0]!.currentTarget?.at).toBe(at(10));expect(scope.nodes[0]!.ownSla.state).toBe('within');
+  }
+  expect(read().scopes[0]!.work[0]!.responsibilityMinutes).toBe(300);
+  const work=formal.input.work[0]!,scope=formal.input.scopes[0]!;
+  for(const bad of [{...inheritedPolicies,sourceId:'OTHER'}, {...inheritedPolicies,versions:[]}, {...inheritedPolicies,versions:[version({...original,time:{...original.time,scenarioId:'OTHER'}})]}])expect(orderTimeCompletionTarget(work,scope,point(7),proof.policies,null,bad)).toBeNull();
+  expect(orderTimeCompletionTarget({...work,canonicalWorkRef:canonical.replace('round:1','round:2')},scope,point(7),proof.policies,null,inheritedPolicies)).toBeNull();
+  expect(orderTimeCompletionTarget({...work,parameterKey:'b'},scope,point(7),proof.policies,null,inheritedPolicies)).toBeNull();
+  expect(orderTimeCompletionTarget(work,scope,{precision:'date',date:'2027-03-01'},proof.policies,null,inheritedPolicies)).toBeNull();
+  // Once the formal plan is effective its own PO target wins, never a later source edit.
+  expect(orderTimeCompletionTarget(work,scope,point(11),proof.policies,null,inheritedPolicies)).toMatchObject({end:at(10),targetRevision:formal.id+':1'});
+  expect(orderTimeCompletionTarget(work,{scopeRef:'po:unrelated',lineId:'unrelated'},point(11),proof.policies,null,inheritedPolicies)).toBeNull();
  });
  it('uses a verified native completion when the matching old plan has only an empty placeholder, without replacing recorded history',()=>{
   const row=item(),saved=stored(),legacy=build(saved,row);row.stages[1]!.nodes=[node('a','completed',at(0),at(2))];

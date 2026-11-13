@@ -2,7 +2,7 @@
   "version": 1,
   "base": "604579fbe5931c6208a4c683039ffe652e21c811",
   "risk": "full",
-  "sourceFingerprint": "b5a7dd040f4026e71e4a81dbbee9e70cbbf8ac3cb454bf6d9599510231bae684",
+  "sourceFingerprint": "d3f200303150acf811be56eefaaed14012427da9efc4c0a6bb3b2114d951b12f",
   "rules": [
     {
       "rule": "Read physical completion against its effective historical target and preserve native responsibility; distinguish scoped first valid receipt from complete collection, including missing occurrence evidence.",
@@ -27,6 +27,7 @@
         "scripts/ci/full-gate-risk-map.mjs",
         "tests/integration/fixed-progress-postgres.test.ts",
         "tests/integration/order-time-plan-postgres.test.ts",
+        "tests/integration/order-time-reading-postgres.test.ts",
         "tests/unit/digital-pmc-readonly-access.test.ts",
         "tests/unit/journey-fact-model.test.ts",
         "tests/unit/order-time-reading.test.ts",
@@ -65,29 +66,30 @@
         "tests/unit/receiving-span.test.ts",
         "tests/unit/journey-fact-model.test.ts",
         "tests/integration/order-time-plan-postgres.test.ts",
-        "tests/integration/fixed-progress-postgres.test.ts"
+        "tests/integration/fixed-progress-postgres.test.ts",
+        "tests/integration/order-time-reading-postgres.test.ts"
       ],
       "initialization": "No migration, schema, setting/adoption/permission or business write changes. New reader fields are additive and old facts retain their precision; derived calculation version changes use the existing bounded invalidation/rebuild. Same registered low-privilege isolated native fixture and cleanup. New-format adoption and rollback sample integration remain PR06.",
       "dateAndPermission": "Physical occurrence chooses same-scenario same-work/PO history; date-only intervals crossing revisions remain unknown. Current target stays separate. Original task/PO/batch clocks and calendar retained, no automatic innocent attribution. Factory receipt uses original scope/positive effective quantities and approved commitment at first occurrence. PMC original read permission and denied writes/revocation remain; no new actor or grants.",
-      "expectation": "Original6th/actual7th/approved9th-to10th preserves +1day and current10th. Date ambiguity, missing target and unrelated PO do not guess. First3of10 means delivered but7outstanding; sole correction0 restores not delivered, existing dirty build never completes return. Unknown physical first time or factory allocation remains unknown. Real RR concurrent invalidation and failure isolation pass; all88 candidate semantics, full-scope pagination/export and same-session revocation remain, physical SQL7070 within original7100 cap. No onsite acceptance/deployment; UI and future new writes not claimed.",
+      "expectation": "Original6th/actual7th/approved9th-to10th preserves +1day and current10th. Native completed development converts into two formal POs with its exact linked source historical target retained in live and stored facts; one source-history read shares the original RR client. Source, round, parameter and scenario mismatches stay unknown; effective formal PO history has precedence. Date ambiguity, missing target and unrelated PO do not guess. First3of10 means delivered but7outstanding; sole correction0 restores not delivered, existing dirty build never completes return. Unknown physical first time or factory allocation remains unknown. Real RR concurrent invalidation and failure isolation pass; all88 candidate semantics, full-scope pagination/export and same-session revocation remain, physical SQL7070 within original7100 cap. No onsite acceptance/deployment; UI and future new writes not claimed.",
       "checks": [
-        "units-final",
-        "pg-final",
-        "types-assembled",
-        "lint-assembled",
-        "preflight-assembled"
+        "review-units",
+        "review-pg",
+        "review-types",
+        "review-lint",
+        "review-preflight"
       ]
     }
   ],
   "checks": [
     {
-      "id": "units-final",
-      "command": "npx vitest run tests/unit/order-time-reading.test.ts tests/unit/receiving-span.test.ts tests/unit/fixed-schedule-progress.test.ts tests/unit/journey-fact-model.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/digital-task-read-boundary.test.ts tests/unit/journey-native-times.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/journey-snapshot-reads.test.ts --reporter=default --reporter=json --outputFile=/tmp/time-framework-02-evidence/units-final.report.json",
+      "id": "review-units",
+      "command": "npx vitest run tests/unit/order-time-reading.test.ts tests/unit/receiving-span.test.ts tests/unit/fixed-schedule-progress.test.ts tests/unit/journey-fact-model.test.ts tests/unit/digital-pmc-readonly-access.test.ts tests/unit/digital-task-read-boundary.test.ts tests/unit/journey-native-times.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/journey-snapshot-reads.test.ts --reporter=default --reporter=json --outputFile=/tmp/time-framework-02-evidence/review-units.report.json",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-13T12:13:12.222Z",
-      "endedAt": "2026-11-13T12:13:21.404Z",
-      "sourceFingerprint": "b5a7dd040f4026e71e4a81dbbee9e70cbbf8ac3cb454bf6d9599510231bae684",
+      "startedAt": "2026-11-13T12:40:55.134Z",
+      "endedAt": "2026-11-13T12:41:05.926Z",
+      "sourceFingerprint": "d3f200303150acf811be56eefaaed14012427da9efc4c0a6bb3b2114d951b12f",
       "inputPaths": [
         "apps",
         "packages",
@@ -97,30 +99,30 @@
         "package-lock.json",
         "vitest.config.ts"
       ],
-      "inputFingerprint": "5d4603f1cba4b43b551c553bdae0f784705823e75c4705f78cb752ad544448db",
-      "log": "/tmp/time-framework-02-evidence/units-final.log",
-      "logSha256": "98a70ceae470f12eac9e1471b92a1a2806b5c5af122304cf1684b340359a0643",
+      "inputFingerprint": "94d0c902b62e83c4d9d24c12a338e73e6a7a4a32ab6232d382eba1d05c4e0448",
+      "log": "/tmp/time-framework-02-evidence/review-units.log",
+      "logSha256": "952c033465a3fb7de22b2b23dbe0480fee247dd6ad0c57a963ff268a38f61a56",
       "context": "Node22.22.0/npm10.9.9; original default config, nonDatabase1/postgres1. Explicit frozen business clocks. No onsite writes. PG uses registered isolated low-privilege TEST database; native fixture cleanup.",
-      "testedHead": "97719d01fc0afd00e9b423a2f863b1e3f0c70068",
+      "testedHead": "ae568eae756d52ece5653146f571ce3d47678dcc",
       "kind": "tests",
-      "passed": 218,
+      "passed": 219,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "84451726bac8e11640a863554a8ad3473938110528e67351353355d33a551f98"
+          "sha256": "74891afa9b55cef014a685934737e53e36e2d042e5cbdba9cf46d70302dd965a"
         }
       ]
     },
     {
-      "id": "pg-final",
-      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/order-time-plan-postgres.test.ts tests/integration/fixed-progress-postgres.test.ts tests/integration/order-time-reading-postgres.test.ts tests/integration/journey-fact-model-postgres.test.ts tests/integration/journey-fact-updates-postgres.test.ts tests/integration/m01-journey-performance-postgres.test.ts --reporter=default --reporter=json --outputFile=/tmp/time-framework-02-evidence/pg-final.report.json",
+      "id": "review-pg",
+      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/order-time-plan-postgres.test.ts tests/integration/fixed-progress-postgres.test.ts tests/integration/order-time-reading-postgres.test.ts tests/integration/journey-fact-model-postgres.test.ts tests/integration/journey-fact-updates-postgres.test.ts tests/integration/m01-journey-performance-postgres.test.ts --reporter=default --reporter=json --outputFile=/tmp/time-framework-02-evidence/review-pg.report.json",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-13T12:13:13.605Z",
-      "endedAt": "2026-11-13T12:15:42.641Z",
-      "sourceFingerprint": "b5a7dd040f4026e71e4a81dbbee9e70cbbf8ac3cb454bf6d9599510231bae684",
+      "startedAt": "2026-11-13T12:40:43.283Z",
+      "endedAt": "2026-11-13T12:43:08.154Z",
+      "sourceFingerprint": "d3f200303150acf811be56eefaaed14012427da9efc4c0a6bb3b2114d951b12f",
       "inputPaths": [
         "apps",
         "packages",
@@ -130,30 +132,30 @@
         "package-lock.json",
         "vitest.config.ts"
       ],
-      "inputFingerprint": "5d4603f1cba4b43b551c553bdae0f784705823e75c4705f78cb752ad544448db",
-      "log": "/tmp/time-framework-02-evidence/pg-final.log",
-      "logSha256": "2e307be68f395901ef8f9e120a8759bb8d6d5587345505a25469cfd0f72da44f",
+      "inputFingerprint": "94d0c902b62e83c4d9d24c12a338e73e6a7a4a32ab6232d382eba1d05c4e0448",
+      "log": "/tmp/time-framework-02-evidence/review-pg.log",
+      "logSha256": "0fefb6dad88271ab8f11939bb55763dbe4feaef5936368c788656a2852766b96",
       "context": "Node22.22.0/npm10.9.9; canonical business-chain config, maxWorkers2/correctnessTimeout100000ms. Explicit frozen business clocks. No onsite writes. PG uses registered isolated low-privilege TEST database; native fixture cleanup.",
-      "testedHead": "97719d01fc0afd00e9b423a2f863b1e3f0c70068",
+      "testedHead": "ae568eae756d52ece5653146f571ce3d47678dcc",
       "kind": "tests",
-      "passed": 59,
+      "passed": 60,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "e204f9cde6093a6561622942c38e5a7337658ba8f68f33fdd3e6726e013cfefc"
+          "sha256": "4a6df3db28317044fdf5e0f8b04bfee3400a7d90333a5ad83240979c36b0dc1e"
         }
       ]
     },
     {
-      "id": "types-assembled",
+      "id": "review-types",
       "command": "npm run typecheck",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-13T12:13:25.435Z",
-      "endedAt": "2026-11-13T12:14:36.729Z",
-      "sourceFingerprint": "b5a7dd040f4026e71e4a81dbbee9e70cbbf8ac3cb454bf6d9599510231bae684",
+      "startedAt": "2026-11-13T12:41:23.190Z",
+      "endedAt": "2026-11-13T12:42:24.931Z",
+      "sourceFingerprint": "d3f200303150acf811be56eefaaed14012427da9efc4c0a6bb3b2114d951b12f",
       "inputPaths": [
         "apps",
         "packages",
@@ -163,21 +165,21 @@
         "package-lock.json",
         "vitest.config.ts"
       ],
-      "inputFingerprint": "5d4603f1cba4b43b551c553bdae0f784705823e75c4705f78cb752ad544448db",
-      "log": "/tmp/time-framework-02-evidence/types-assembled.log",
+      "inputFingerprint": "94d0c902b62e83c4d9d24c12a338e73e6a7a4a32ab6232d382eba1d05c4e0448",
+      "log": "/tmp/time-framework-02-evidence/review-types.log",
       "logSha256": "2df9af99fe74bad919c36bc1d9e2bc160fcb48526566b4a9ff74653fec0dd74e",
       "context": "Node22.22.0/npm10.9.9; original default config, nonDatabase1/postgres1. Explicit frozen business clocks. No onsite writes. PG uses registered isolated low-privilege TEST database; native fixture cleanup.",
-      "testedHead": "97719d01fc0afd00e9b423a2f863b1e3f0c70068",
+      "testedHead": "ae568eae756d52ece5653146f571ce3d47678dcc",
       "kind": "command"
     },
     {
-      "id": "lint-assembled",
+      "id": "review-lint",
       "command": "npm run lint",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-13T12:13:26.854Z",
-      "endedAt": "2026-11-13T12:14:19.753Z",
-      "sourceFingerprint": "b5a7dd040f4026e71e4a81dbbee9e70cbbf8ac3cb454bf6d9599510231bae684",
+      "startedAt": "2026-11-13T12:40:55.140Z",
+      "endedAt": "2026-11-13T12:41:43.149Z",
+      "sourceFingerprint": "d3f200303150acf811be56eefaaed14012427da9efc4c0a6bb3b2114d951b12f",
       "inputPaths": [
         "apps",
         "packages",
@@ -187,21 +189,21 @@
         "package-lock.json",
         "vitest.config.ts"
       ],
-      "inputFingerprint": "5d4603f1cba4b43b551c553bdae0f784705823e75c4705f78cb752ad544448db",
-      "log": "/tmp/time-framework-02-evidence/lint-assembled.log",
+      "inputFingerprint": "94d0c902b62e83c4d9d24c12a338e73e6a7a4a32ab6232d382eba1d05c4e0448",
+      "log": "/tmp/time-framework-02-evidence/review-lint.log",
       "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763",
       "context": "Node22.22.0/npm10.9.9; original default config, nonDatabase1/postgres1. Explicit frozen business clocks. No onsite writes. PG uses registered isolated low-privilege TEST database; native fixture cleanup.",
-      "testedHead": "97719d01fc0afd00e9b423a2f863b1e3f0c70068",
+      "testedHead": "ae568eae756d52ece5653146f571ce3d47678dcc",
       "kind": "command"
     },
     {
-      "id": "preflight-assembled",
-      "command": "node scripts/test-preflight.mjs",
+      "id": "review-preflight",
+      "command": "npm run test:preflight",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-13T12:13:28.311Z",
-      "endedAt": "2026-11-13T12:13:42.863Z",
-      "sourceFingerprint": "b5a7dd040f4026e71e4a81dbbee9e70cbbf8ac3cb454bf6d9599510231bae684",
+      "startedAt": "2026-11-13T12:41:03.906Z",
+      "endedAt": "2026-11-13T12:41:13.092Z",
+      "sourceFingerprint": "d3f200303150acf811be56eefaaed14012427da9efc4c0a6bb3b2114d951b12f",
       "inputPaths": [
         "apps",
         "packages",
@@ -211,11 +213,11 @@
         "package-lock.json",
         "vitest.config.ts"
       ],
-      "inputFingerprint": "5d4603f1cba4b43b551c553bdae0f784705823e75c4705f78cb752ad544448db",
-      "log": "/tmp/time-framework-02-evidence/preflight-assembled.log",
-      "logSha256": "18d09f610e543eea263439c8d794bae02a5b30555e5945b871cbf3b0ae825815",
+      "inputFingerprint": "94d0c902b62e83c4d9d24c12a338e73e6a7a4a32ab6232d382eba1d05c4e0448",
+      "log": "/tmp/time-framework-02-evidence/review-preflight.log",
+      "logSha256": "96504655ebb6f6ca135f1267c5cc7d14611db0b36b854565f7ea7f1da0854880",
       "context": "Node22.22.0/npm10.9.9; original default config, nonDatabase1/postgres1. Explicit frozen business clocks. No onsite writes. PG uses registered isolated low-privilege TEST database; native fixture cleanup.",
-      "testedHead": "97719d01fc0afd00e9b423a2f863b1e3f0c70068",
+      "testedHead": "ae568eae756d52ece5653146f571ce3d47678dcc",
       "kind": "command"
     }
   ]
