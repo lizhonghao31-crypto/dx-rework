@@ -50,7 +50,9 @@ export class JourneyFactRepository{
    // dirty entry/retry; it cannot roll back the already committed business action.
    // Use the same original client and RR transaction, before capturing the dirty
    // transaction set, so these derived writes do not cause a second rebuild.
-   const timelines=new FixedTimelineAdoptionRepository(client),adoption=await timelines.existing(resource);
+   // Derived writes must use the same proxy as reads: their native dirty
+   // triggers invalidate cached reads before the second pending-set capture.
+   const timelines=new FixedTimelineAdoptionRepository(db),adoption=await timelines.existing(resource);
    if(adoption){
     const buildTargets=async(saved:NonNullable<typeof adoption>)=>{
      if(saved.input.resource.kind==='source'&&saved.input.round>1){const origin=await timelines.existing(saved.input.resource,1);if(origin)await timelines.buildPendingTargets(origin);}
@@ -62,7 +64,7 @@ export class JourneyFactRepository{
     // a later PO constraint. This remains the bounded worker, not a GET write.
     if(source)await buildTargets(source);
     await buildTargets(adoption);
-    await buildFixedReworkTargets(client,adoption);
+    await buildFixedReworkTargets(db,adoption);
    }
    pending=(await db.query<{transaction_id:string}>('SELECT transaction_id FROM digital_journey_fact_changes WHERE resource_kind=$1 AND resource_id=$2',[resource.kind,resource.id])).rows.map(r=>r.transaction_id);
    const time=await new ContextBusinessClock(this.database,db).read(resource);observed=time;

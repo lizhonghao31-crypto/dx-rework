@@ -183,6 +183,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect((await f.db.query('SELECT version FROM digital_production_orders WHERE production_order_id=$1',[bad.resource.id])).rows[0].version).toBe(originalVersion);
   expect((await f.db.query('SELECT 1 FROM digital_timeline_target_revisions WHERE adoption_id=$1',[badAdoption.adoptionId])).rowCount).toBe(0);
   expect((await f.db.query('SELECT 1 FROM digital_timeline_target_revisions WHERE adoption_id=$1',[goodAdoption.adoptionId])).rowCount).toBe(1);
+  expect((await f.db.query("SELECT 1 FROM digital_journey_fact_changes WHERE resource_kind='order' AND resource_id=$1",[good.resource.id])).rowCount).toBe(0);
   expect((await f.db.query("SELECT error_code FROM digital_journey_fact_retries WHERE resource_kind='order' AND resource_id=$1",[bad.resource.id])).rows[0]?.error_code).toBe('BUILD_FAILED');
   await new JourneyFactRepository(f.db).buildOne(bad.resource);
   expect((await f.db.query('SELECT targets_json,business_time FROM digital_timeline_target_revisions WHERE adoption_id=$1',[badAdoption.adoptionId])).rows[0]).toMatchObject({business_time:badAdoption.time,targets_json:[{start:{at:'2027-03-01T15:00:00.000Z'}}]});
