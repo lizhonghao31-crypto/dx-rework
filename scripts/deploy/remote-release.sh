@@ -61,6 +61,7 @@ apply_release() {
 
   python3 - "$incoming/transfer.tar.gz" "$incoming" <<'PY'
 import sys
+import os
 import tarfile
 
 archive, destination = sys.argv[1:]
@@ -73,6 +74,14 @@ with tarfile.open(archive, "r:gz") as tar:
             or not (member.isfile() or member.isdir())
         ):
             raise SystemExit("unsafe tar entry")
+    # Archive bytes are already on disk. Reserve only the uncompressed copy
+    # here; immutable install has its own subsequent per-filesystem check.
+    space = os.statvfs(destination)
+    total, available = space.f_blocks * space.f_frsize, space.f_bavail * space.f_frsize
+    margin = max(512 * 1024**2, min(2 * 1024**3, (total + 19) // 20))
+    required = sum(max(member.size, 4096) for member in tar.getmembers()) + margin
+    if available < required:
+        raise SystemExit("transfer extraction capacity_insufficient: available=%d required=%d" % (available, required))
     tar.extractall(destination, filter="data")
 PY
 

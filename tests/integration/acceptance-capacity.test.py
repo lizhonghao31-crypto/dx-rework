@@ -2,6 +2,12 @@
 """Pure capacity/storage boundary tests; no live services, Python 3.6 compatible."""
 import importlib.util
 import json
+import hashlib
+import shutil
+import io
+import subprocess
+import tarfile
+import sys
 import os
 from pathlib import Path
 import tempfile
@@ -20,6 +26,9 @@ def load(name, file):
 
 
 capacity = load('capacity', 'scripts/deploy/acceptance-capacity.py')
+source_cleanup = load('source_cleanup', 'scripts/deploy/cleanup-update-source.py')
+cleanup = load('cleanup_builds', 'scripts/deploy/cleanup-acceptance-builds.py')
+release = load('release_capacity', 'scripts/deploy/release-capacity.py')
 storage = load('storage', 'scripts/deploy/inspect-acceptance-storage.py')
 
 
@@ -160,6 +169,221 @@ class CapacityTests(unittest.TestCase):
         self.assertTrue(any('/build/update-' in row['paths'][0] for row in rows))
 
 
+class LifecycleTests(unittest.TestCase):
+    def data(self):
+        return {'database': 'dx_rework_acceptance', 'databaseBytes': capacity.GIB, 'maxWalBytes': capacity.GIB,
+                'dataPaths': ['/data'], 'walPath': '/wal', 'logPath': '/logs'}
+
+    def test_peak_is_maximum_simultaneous_allocations_not_sum_of_every_stage(self):
+        rows = capacity.plan([
+            {'name': 'retained', 'paths': ['/one'], 'bytesPerFilesystem': 10},
+            {'name': 'extract', 'paths': ['/one'], 'bytesPerFilesystem': 100, 'stages': ['build']},
+            {'name': 'install', 'paths': ['/one'], 'bytesPerFilesystem': 70, 'stages': ['install', 'database']},
+            {'name': 'rewrite', 'paths': ['/one'], 'bytesPerFilesystem': 40, 'stages': ['database']}],
+            lambda path: {'device': 'one', 'probe': path, 'available': capacity.GIB, 'total': capacity.GIB})
+        self.assertEqual(rows[0]['requiredAdditionalBytes'], 120 + 512 * capacity.MIB)
+        self.assertEqual(rows[0]['stageAdditionalBytes']['build'], 110 + 512 * capacity.MIB)
+
+    def test_same_tool_sha_has_no_refresh_allocation_unknown_or_different_still_does(self):
+        with tempfile.TemporaryDirectory() as directory:
+            tool = Path(directory)
+            (tool / 'TOOL_SHA').write_text('a' * 40)
+            for sha, refresh in [('a' * 40, False), ('b' * 40, True), (None, True)]:
+                rows = capacity.components('archive', str(tool), str(tool), self.data(), target_sha=sha)
+                self.assertEqual(any('tool staging' in row['name'] for row in rows), refresh)
+
+    def test_no_schema_change_requires_every_checksum_and_keeps_new_backup_and_margin(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory)
+            file = source / 'apps/api/src/platform/migration-manifest.json'
+            file.parent.mkdir(parents=True)
+            migrations = [{'version': '0001', 'checksum': 'a' * 64}]
+            file.write_text(json.dumps({'migrations': migrations}))
+            for history, unchanged in [(migrations, True), ([], False), ([{'version': '0001', 'checksum': 'b' * 64}], False)]:
+                rows = capacity.components('backup', str(source), str(source), dict(self.data(), migrations=history))
+                rewrite = next(row for row in rows if row['name'].startswith('database rewrite'))
+                self.assertEqual(rewrite['bytesPerFilesystem'] == 0, unchanged)
+                self.assertTrue(any(row['name'].startswith('new consistent backup') and row['bytesPerFilesystem'] > 0 for row in rows))
+                self.assertGreater(capacity.plan(rows)[0]['requiredAdditionalBytes'], 0)
+
+    def bundle(self, root, source, sha):
+        for part in ('api', 'frontend'):
+            (root / part).mkdir(parents=True)
+        for part in ('', 'api', 'frontend'):
+            (root / part / 'release-manifest.json').write_text(json.dumps({'gitSha': sha, 'appBasePath': '/acceptance/'}))
+        for name, value in [('package-lock.json', '{}'), ('apps/api/src/platform/migration-manifest.json', '{"migrations":[]}')]:
+            for base in (root / 'api', source):
+                (base / name).parent.mkdir(parents=True, exist_ok=True)
+                (base / name).write_text(value)
+        (root / 'build-provenance.json').write_text(json.dumps({'sourceSha': sha, 'frontendSourceSha': sha, 'frontendBuilt': True}))
+        files = sorted(file for file in root.rglob('*') if file.is_file())
+        (root / 'SHA256SUMS').write_text(''.join(hashlib.sha256(file.read_bytes()).hexdigest() + '  ' + str(file.relative_to(root)) + '\n' for file in files))
+
+    def test_verified_candidate_retries_only_allocate_missing_installed_copies(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'acceptance'
+            source = Path(directory) / 'source'
+            sha = 'a' * 40
+            candidate = root / 'candidates' / sha
+            self.bundle(candidate, source, sha)
+            with patch.object(capacity, 'ROOT', str(root)):
+                rows = capacity.components('build', str(source), str(source), self.data(), target_sha=sha)
+                self.assertFalse(any(row['name'].startswith(('build source', 'candidate bundle', 'npm')) for row in rows))
+                api = next(row for row in rows if row['name'].startswith('installed API'))
+                self.assertEqual(api['bytesPerFilesystem'], capacity.tree_bytes(candidate / 'api'))
+                shutil.copytree(str(candidate / 'api'), str(root / 'releases' / sha))
+                rows = capacity.components('build', str(source), str(source), self.data(), target_sha=sha)
+                self.assertEqual(next(row for row in rows if row['name'].startswith('installed API'))['bytesPerFilesystem'], 0)
+                (root / 'releases' / sha / 'unexpected').write_text('different')
+                with self.assertRaisesRegex(ValueError, 'differs'):
+                    capacity.components('build', str(source), str(source), self.data(), target_sha=sha)
+
+    def test_invalid_candidate_is_never_credited_and_symlinks_are_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, source = Path(directory) / 'candidate', Path(directory) / 'source'
+            self.bundle(root, source, 'a' * 40)
+            (root / 'frontend/extra').write_text('untracked')
+            with self.assertRaisesRegex(ValueError, 'checksum'):
+                capacity.verified_candidate(root, 'a' * 40, source)
+            (root / 'frontend/extra').unlink()
+            (root / 'frontend/extra').symlink_to(source)
+            with self.assertRaisesRegex(ValueError, 'symlink'):
+                capacity.verified_candidate(root, 'a' * 40, source)
+
+    def test_production_persistent_dependencies_are_not_charged_as_three_copies(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, source = Path(directory) / 'runtime', Path(directory) / 'source'
+            (source / 'node_modules/.bin').mkdir(parents=True)
+            for name in ('tsc', 'vite'):
+                (source / 'node_modules/.bin' / name).write_text('TEST executable')
+                (source / 'node_modules/.bin' / name).chmod(0o755)
+            lock = b'{}'
+            (source / 'package-lock.json').write_bytes(lock)
+            (root / 'shared').mkdir(parents=True)
+            (root / 'shared/build-package-lock.sha256').write_text(hashlib.sha256(lock).hexdigest())
+            rows = release.allocations('build', source, root, 'a' * 40, '/cache', '/tmp')
+            self.assertEqual(len(rows), 2)
+            (source / 'package-lock.json').write_text('changed')
+            rows = release.allocations('build', source, root, 'a' * 40, '/cache', '/tmp')
+            self.assertEqual(len(rows), 5)
+            self.assertEqual(rows[0]['bytesPerFilesystem'], 2 * capacity.GIB)
+
+
+    def test_collection_only_removes_verified_unreferenced_build_not_candidate_or_backup(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, proc = Path(directory) / 'root', Path(directory) / 'proc'
+            proc.mkdir()
+            sha = 'a' * 40
+            build = root / 'build' / ('update-' + sha)
+            candidate = root / 'candidates' / sha
+            self.bundle(candidate, build, sha)
+            (build / 'node_modules').mkdir()
+            (build / 'node_modules/test').write_text('rebuildable')
+            for name in ('build/npm-cache', 'backups/postgres', 'releases/old', 'build/update-' + 'b' * 40):
+                (root / name).mkdir(parents=True)
+                (root / name / 'keep').write_text('retain')
+            result = cleanup.collect(root, proc, os.getuid())
+            self.assertEqual(result[0]['status'], 'removed')
+            self.assertEqual(result[1]['status'], 'retained')
+            self.assertFalse(build.exists())
+            self.assertTrue(candidate.exists())
+            for name in ('build/npm-cache', 'backups/postgres', 'releases/old', 'build/update-' + 'b' * 40):
+                self.assertEqual((root / name / 'keep').read_text(), 'retain')
+
+    def test_collection_preserves_live_process_rollback_reference_and_symlink(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, proc = Path(directory) / 'root', Path(directory) / 'proc'
+            (proc / '123').mkdir(parents=True)
+            sha = 'a' * 40
+            build = root / 'build' / ('update-' + sha)
+            self.bundle(root / 'candidates' / sha, build, sha)
+            (proc / '123/cwd').symlink_to(build)
+            self.assertEqual(cleanup.collect(root, proc, os.getuid())[0]['status'], 'retained')
+            (proc / '123/cwd').unlink()
+            (root / 'generations/old').mkdir(parents=True)
+            (root / 'generations/old/api').symlink_to(build)
+            self.assertEqual(cleanup.collect(root, proc, os.getuid())[0]['status'], 'retained')
+            (root / 'generations/old/api').unlink()
+            (proc / '123/cmdline').write_bytes(str(build / 'script.py').encode() + b'\0')
+            self.assertEqual(cleanup.collect(root, proc, os.getuid())[0]['status'], 'retained')
+            (root / 'build' / ('update-' + 'b' * 40)).symlink_to(build)
+            result = cleanup.collect(root, proc, os.getuid())
+            self.assertTrue(all(row['status'] == 'retained' for row in result))
+
+
+    def test_failed_source_cleanup_preserves_diagnostics_and_never_follows_parent_link(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'source'
+            (root / '.acceptance-preflight').mkdir(parents=True)
+            (root / 'scripts').mkdir()
+            (root / 'scripts/code.py').write_text('source')
+            (root / 'worker-evidence').write_text('/TEST/logs')
+            inventory = root / '.acceptance-preflight/tree-sizes.txt'
+            inventory.write_text('100644 blob ' + 'a' * 40 + ' 6\tscripts/code.py\n')
+            self.assertEqual(source_cleanup.trim(root)['status'], 'source_removed_evidence_retained')
+            self.assertFalse((root / 'scripts').exists())
+            self.assertEqual((root / 'worker-evidence').read_text(), '/TEST/logs')
+            self.assertTrue(inventory.exists())
+            outside = Path(directory) / 'outside'
+            outside.mkdir()
+            (outside / 'code.py').write_text('must stay')
+            (root / 'scripts').symlink_to(outside)
+            with self.assertRaisesRegex(ValueError, 'Unsafe source parent'):
+                source_cleanup.trim(root)
+            self.assertEqual((outside / 'code.py').read_text(), 'must stay')
+
+
+    def test_same_active_sha_with_verified_current_schema_reserves_no_backup_or_migration(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, source = Path(directory) / 'root', Path(directory) / 'source'
+            sha = 'a' * 40
+            candidate = root / 'candidates' / sha
+            self.bundle(candidate, source, sha)
+            migrations = [{'version': '0001', 'checksum': 'a' * 64}]
+            for base in (source, candidate / 'api'):
+                (base / 'apps/api/src/platform/migration-manifest.json').write_text(json.dumps({'migrations': migrations}))
+            files = sorted(file for file in candidate.rglob('*') if file.is_file() and file.name != 'SHA256SUMS')
+            (candidate / 'SHA256SUMS').write_text(''.join(hashlib.sha256(file.read_bytes()).hexdigest() + '  ' + str(file.relative_to(candidate)) + '\n' for file in files))
+            for part, target in [('api', root / 'releases' / sha), ('frontend', root / 'frontend/releases' / sha)]:
+                shutil.copytree(str(candidate / part), str(target))
+            (root / 'current').symlink_to(root / 'releases' / sha)
+            (root / 'frontend/current').symlink_to(root / 'frontend/releases' / sha)
+            with patch.object(capacity, 'ROOT', str(root)):
+                rows = capacity.components('build', str(source), str(source), dict(self.data(), migrations=migrations), target_sha=sha)
+                self.assertFalse(any(row['name'].startswith(('new consistent backup', 'database rewrite', 'WAL growth')) for row in rows))
+                self.assertTrue(all(row['bytesPerFilesystem'] == 0 for row in rows if row['name'].startswith('installed')))
+                rows = capacity.components('build', str(source), str(source), self.data(), target_sha=sha)
+                self.assertTrue(any(row['name'].startswith('new consistent backup') for row in rows))
+
+
+    def test_both_remote_extractors_reject_real_shortage_before_writing_then_extract(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            archive = root / 'transfer.tar.gz'
+            with tarfile.open(str(archive), 'w:gz') as tar:
+                info = tarfile.TarInfo('bundle/file');info.size = 4
+                tar.addfile(info, io.BytesIO(b'TEST'))
+            for script in ('remote-release.sh', 'acceptance-remote-release.sh'):
+                text = (ROOT / 'scripts/deploy' / script).read_text()
+                code = text.split("<<'PY'\n", 1)[1].split('\nPY', 1)[0]
+                for available in (1, capacity.GIB):
+                    destination = root / (script + str(available))
+                    destination.mkdir()
+                    adapted = "import os\nfrom types import SimpleNamespace\nos.statvfs=lambda path:SimpleNamespace(f_blocks=1073741824,f_frsize=1,f_bavail=%d)\n" % available
+                    # Older Python tarfile has no data filter; equivalent safe
+                    # entries are already validated by the actual script above.
+                    if sys.version_info < (3, 12):
+                        code = code.replace('tar.extractall(destination, filter="data")', 'tar.extractall(destination)')
+                    result = subprocess.run([sys.executable, '-B', '-c', adapted + code, str(archive), str(destination)], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                    if available == 1:
+                        self.assertNotEqual(result.returncode, 0)
+                        self.assertIn(b'capacity_insufficient', result.stderr)
+                        self.assertEqual(list(destination.iterdir()), [])
+                    else:
+                        self.assertEqual(result.returncode, 0, result.stderr)
+                        self.assertEqual((destination / 'bundle/file').read_bytes(), b'TEST')
+
+
 class StorageTests(unittest.TestCase):
     def identity(self):
         return {'database': 'dx_rework_acceptance', 'port': 5432, 'oid': 42,
@@ -180,6 +404,8 @@ class StorageTests(unittest.TestCase):
         self.assertIn('BEGIN READ ONLY', args)
         self.assertIn('PGOPTIONS=-c default_transaction_read_only=on -c statement_timeout=10000 -c lock_timeout=3000', args)
         self.assertIn('SET LOCAL search_path=pg_catalog', args)
+        self.assertNotIn('schema_migrations', storage.storage_query(self.identity()))
+        self.assertIn('FROM public.schema_migrations', storage.storage_query(self.identity(), True))
         self.assertIn('--port=5432', args)
         self.assertNotIn('text', kwargs)
         self.assertEqual(result['dataPaths'], ['/TEST/pgdata/base/42', '/TEST/pgdata/pg_tblspc/123/PG_13/42'])

@@ -1,72 +1,61 @@
 {
   "version": 1,
-  "base": "786edbe7a144ec91c1a01099f0f24790c9a1ac96",
+  "base": "64a2ccf828f4c262ef60d1dbb57463607acb4ab3",
   "risk": "full",
-  "sourceFingerprint": "ee0d9986d4b6d416e486064d4e02ca67bd607fcb47cca094b3f7eb1aa32d8198",
+  "sourceFingerprint": "cbdbe2a43ef7c04e72800056e66dc6f2cb4efb27a9f924fa97e6e07ba310ec09",
   "rules": [
     {
-      "rule": "Assemble current saved material unit prices, formal same-material same-unit technical consumption, IE unit price and actually assigned craft unit prices exactly once; freeze customer confirmation and preserve explicit quotation-to-budget adoption and original contract guards.",
-      "source": "User-approved time framework revision27 sections4.7-4.7.4 and9.2; eight-PR plan PR03 and2026-11-13 coordinator authorization after PR02 Acceptance at786edbe7. docs/engineering/time-framework-03.md and latest section of customer-quotation-budget-v1.md.",
+      "rule": "Budget actual additional per-filesystem lifecycle peaks and verified reuse; retain genuine dependency copies, operational headroom, identity/locks, fresh backups, stop-time recheck, immutable runtime/rollback protection. Collect only proven disposable workspaces and this invocation staging/source files.",
+      "source": "2026-11-13/14 user/coordinator explicitly authorized updating future Acceptance and production capacity/lifecycle mechanisms, implementation/tests/PR without server operations or PR04; docs/engineering/update-capacity-lifecycle-20261113.md.",
       "writes": [
-        "apps/api/migrations/0288_automatic_quotation_sources.sql",
-        "apps/api/src/platform/migration-manifest.json",
-        "apps/api/src/production-platform/development-amendment-service.ts",
-        "apps/api/src/production-platform/development-arrangement.ts",
-        "apps/api/src/production-platform/development-commercial-fields.ts",
-        "apps/api/src/production-platform/development-document-format.ts",
-        "apps/api/src/production-platform/development-execution-service.ts",
-        "apps/api/src/production-platform/development-revision-source.ts",
-        "apps/api/src/production-platform/development-round-plan.ts",
-        "apps/api/src/production-platform/development-round-service.ts",
-        "apps/api/src/production-platform/development-service.ts",
-        "apps/api/src/production-platform/development-technical-service.ts",
-        "apps/api/src/production-platform/quotation-assembly.ts",
-        "apps/api/src/production-platform/quotation-service.ts",
-        "apps/api/src/production-platform/task-service.ts",
-        "apps/web/src/development-document-fields.tsx",
-        "apps/web/src/digital-development-editing.ts",
-        "apps/web/src/digital-quotation-panel.tsx",
-        "packages/contracts/src/digital-development.ts",
-        "packages/contracts/src/digital-quotation.ts",
-        "scripts/ci/full-gate-risk-map.mjs",
-        "scripts/deploy/acceptance-migration-requirements.json",
-        "scripts/test-suite-plan.mjs",
-        "tests/acceptance/supplychain-settings-browser.ts",
-        "tests/integration/automatic-quotation-native-browser-postgres.test.ts",
-        "tests/integration/development-amendment-postgres.test.ts",
-        "tests/integration/development-technical-postgres.test.ts",
-        "tests/unit/full-gate-risk-map.test.ts"
+        "scripts/ci/acceptance-maintenance-drill.mjs",
+        "scripts/deploy-ecs.sh",
+        "scripts/deploy/acceptance-capacity.py",
+        "scripts/deploy/acceptance-remote-release.sh",
+        "scripts/deploy/inspect-acceptance-storage.py",
+        "scripts/deploy/install-release.sh",
+        "scripts/deploy/remote-release.sh",
+        "scripts/deploy/update-acceptance-local.sh",
+        "scripts/dx-acceptance.sh",
+        "tests/integration/acceptance-capacity.test.py",
+        "tests/unit/acceptance-capacity.test.ts",
+        "scripts/deploy/cleanup-acceptance-builds.py",
+        "scripts/deploy/cleanup-update-source.py",
+        "scripts/deploy/release-capacity.py"
       ],
       "reads": [
-        "apps/api/src/production-platform/quotation-assembly.ts#assembleQuotation",
-        "apps/api/src/production-platform/quotation-service.ts#DigitalQuotationService",
-        "apps/api/src/production-platform/quotation-budget-basis.ts#ensureQuotationBudget",
-        "apps/api/src/production-platform/development-commercial-fields.ts#withoutDevelopmentPrices",
-        "apps/web/src/development-document-fields.tsx",
-        "apps/web/src/digital-quotation-panel.tsx"
+        "scripts/deploy/acceptance-capacity.py#components",
+        "scripts/deploy/acceptance-capacity.py#plan",
+        "scripts/deploy/inspect-acceptance-storage.py#storage_query",
+        "scripts/deploy/update-acceptance-local.sh",
+        "scripts/dx-acceptance.sh",
+        "scripts/deploy/install-release.sh",
+        "scripts/deploy-ecs.sh",
+        "scripts/deploy/acceptance-update-flow.sh",
+        "scripts/deploy/package-release.sh",
+        "scripts/backup-postgres.sh",
+        "scripts/deploy/release.sh"
       ],
       "oldTests": [
-        "tests/integration/customer-quotation-postgres.test.ts",
-        "tests/integration/development-technical-postgres.test.ts",
-        "tests/integration/development-amendment-postgres.test.ts",
-        "tests/unit/full-gate-risk-map.test.ts",
-        "tests/unit/customer-quotation.test.ts",
-        "tests/unit/development-order-editing.test.ts",
-        "tests/unit/development-amendment-contract.test.ts",
-        "tests/unit/development-technical-contract.test.ts",
-        "tests/unit/digital-task-read-boundary.test.ts",
-        "tests/unit/digital-pmc-readonly-access.test.ts"
+        "tests/unit/acceptance-capacity.test.ts",
+        "tests/integration/acceptance-capacity.test.py",
+        "tests/unit/acceptance-storage.test.ts",
+        "tests/unit/acceptance-update-flow.test.ts",
+        "tests/unit/acceptance-update-policy.test.ts",
+        "tests/unit/ecs-deploy-entry.test.ts",
+        "tests/unit/pr-17-deployment.test.ts",
+        "tests/integration/pr-17-deploy-failure.test.ts",
+        "tests/integration/acceptance-deployment-contract.test.ts"
       ],
       "newTests": [
-        "tests/integration/development-technical-postgres.test.ts",
-        "tests/integration/automatic-quotation-native-browser-postgres.test.ts"
+        "tests/integration/acceptance-capacity.test.py",
+        "tests/unit/acceptance-capacity.test.ts",
+        "scripts/ci/acceptance-maintenance-drill.mjs"
       ],
-      "initialization": "Additive migration0288 adds optional assembly provenance to quote documents/immutable confirmation rows. Existing manual quotes and snapshots unchanged. Complete registered low-privilege PG13 native fixture and original AuthService/App used, cleanup completed. Historical pre0248 fixture explicitly remains manual before quotation tables exist; native automatic browser is registered with the existing long correctness configuration. New commercial helper and assembly writes trigger the amendment consumer suite. No new queue, GET writer, onsite data or deployment. New-format maintenance requires this compatibility reader/writer, not blind rollback to manual-only code.",
-      "dateAndPermission": "Source version and current round/material/unit/technical fingerprint bind consumption; actual current assignment and active role bind row writes. Original development reads/history redact material prices for technical actors. Business timestamps describe source recording, never customer confirmation; explicit confirmation actual time remains validated. Original authenticated session loses quote access on role revocation while retaining unrelated login role.",
-      "expectation": "Independent exact45→48→50.2→52.2→47.2 and source42→45→missing→12 examples pass. Zero differs from absent; old/unpublished artifacts do not replace effective consumption; reordered materials keep identity; stale/cross-source requests reject; duplicate key applies once and two concurrent confirmations create one immutable snapshot. Both formal/confirmation arrival orders and explicit budget adoption retained. Original App1165px source price save, assignment, row-scoped fills, completeness, confirmation, later draft, frozen history and same-session revocation pass. Existing native technical/rework/permission cases pass. Review4564589429 reproduced in isolated PG before fix. Supervisor-only sewing remake now inherits completed material verification and preserves saved price hidden from that actor; preview agrees. Actual material width change still creates a new identity and verification. Material audit and technical validity comparisons retain their own original semantics. Special-craft library/multiple steps and normal bulk washing remain later approved PR; no claim of onsite acceptance.",
+      "initialization": "No schema, dependencies, business settings or live server changes. Old unverified/failed build workspaces, all candidates/releases/frontends/npm cache/backups remain. Verified unreferenced build directories alone are collected under original two update locks. Existing immutable destinations must be identical. Missing ledger/lock evidence keeps conservative estimates. Production persistent-source entry and shared immutable install use their own actual allocations; remote extraction keeps its subsequent install check. Existing backup/restore and PG13/15/16 maintenance drills remain required in canonical FULL, with optional ledger SQL now exercised by the same drill.",
+      "dateAndPermission": "Download remains fixed catalog-only; optional read-only ledger is requested only at build/backup/stop after source compatibility. No new grants/roles/configuration. Cleanup inspects process and current/rollback references, skips uninspectable or unsafe ownership/mount/link cases, and cannot delete running/rollback directories or backups. Failed source removes exact Git-listed files only, retaining identity/history/SQL and worker-log pointer. Concurrent controller locks and original failed-activation recovery remain intact.",
+      "expectation": "49 targeted Vitest tests passed, including actual Python estimator/storage/lifecycle 27-case entry; same-SHA reuse, all-checksum ledger comparison, corrupt candidate, independent filesystem shortage, staged peak, real temporary-tree collection, process/rollback/symlink preservation, failed source evidence retention, both transfer extractors shortage-before-write, and actual install_one failure cleanup. Existing activation rollback/maintenance, policy, guards and three phase stop-prevention cases pass. New ledger real-PG SQL is part of retained canonical maintenance drill; not claimed locally run or deployed. Full and Codex Review pending.",
       "checks": [
-        "pg-final",
-        "pg-amendment",
         "unit-final",
         "preflight-final",
         "lint-final"
@@ -75,79 +64,13 @@
   ],
   "checks": [
     {
-      "id": "pg-final",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.business-chain.config.ts tests/integration/customer-quotation-postgres.test.ts tests/integration/development-technical-postgres.test.ts tests/integration/automatic-quotation-native-browser-postgres.test.ts --reporter=default --reporter=json --outputFile=/tmp/time-framework-03-evidence/pg-final.report.json",
-      "status": "passed",
-      "exitCode": 0,
-      "startedAt": "2026-11-13T15:09:31.065Z",
-      "endedAt": "2026-11-13T15:10:21.084Z",
-      "sourceFingerprint": "ee0d9986d4b6d416e486064d4e02ca67bd607fcb47cca094b3f7eb1aa32d8198",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "tests",
-        "package.json",
-        "package-lock.json",
-        "vitest.config.ts"
-      ],
-      "inputFingerprint": "baa749dfeebaaf1b07a9ccd8babb393acb0b1d915dcd27a5317b41d47ad85c54",
-      "log": "/tmp/time-framework-03-evidence/pg-final.log",
-      "logSha256": "8bd079bae9c1a8dc1cccefd8ac3ec8664882a83f4a2dabd704435dcb76a53732",
-      "context": "Node22.22.0/npm10.9.9; canonical business-chain config, maxWorkers2/correctnessTimeout100000ms. Explicit frozen business clocks. No onsite writes. PG 16.14 uses registered isolated low-privilege TEST database; native fixture cleanup.",
-      "testedHead": "d752749710d8e083b4e6ad33dd000be45f3b5649",
-      "kind": "tests",
-      "passed": 43,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "99162186b61c1a06ad5e9ed20a9e9fae8c0ae82b925f0a8e78d57fa6a189b8e5"
-        }
-      ]
-    },
-    {
-      "id": "pg-amendment",
-      "command": "node node_modules/vitest/vitest.mjs run --config vitest.config.ts tests/integration/development-amendment-postgres.test.ts --reporter=default --reporter=json --outputFile=/tmp/time-framework-03-evidence/pg-amendment.report.json",
-      "status": "passed",
-      "exitCode": 0,
-      "startedAt": "2026-11-13T15:08:45.626Z",
-      "endedAt": "2026-11-13T15:09:12.376Z",
-      "sourceFingerprint": "ee0d9986d4b6d416e486064d4e02ca67bd607fcb47cca094b3f7eb1aa32d8198",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "tests",
-        "package.json",
-        "package-lock.json",
-        "vitest.config.ts"
-      ],
-      "inputFingerprint": "baa749dfeebaaf1b07a9ccd8babb393acb0b1d915dcd27a5317b41d47ad85c54",
-      "log": "/tmp/time-framework-03-evidence/pg-amendment.log",
-      "logSha256": "0453200f4fbd2733ecb01733153c554b39dab4a692d251df7f6135452f6ed50b",
-      "context": "Node22.22.0/npm10.9.9; original default config, nonDatabase1/postgres1. Explicit frozen business clocks. No onsite writes. PG 16.14 uses registered isolated low-privilege TEST database; native fixture cleanup.",
-      "testedHead": "d752749710d8e083b4e6ad33dd000be45f3b5649",
-      "kind": "tests",
-      "passed": 25,
-      "failed": 0,
-      "skipped": 0,
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "d008d3da8ec706fbb373c0e26982176eb7073fbb61046935e140147465bbb1c2"
-        }
-      ]
-    },
-    {
       "id": "unit-final",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/full-gate-risk-map.test.ts tests/unit/customer-quotation.test.ts tests/unit/development-order-editing.test.ts tests/unit/development-amendment-contract.test.ts tests/unit/development-technical-contract.test.ts tests/unit/digital-task-read-boundary.test.ts tests/unit/digital-pmc-readonly-access.test.ts --reporter=default --reporter=json --outputFile=/tmp/time-framework-03-evidence/unit-final.report.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/unit/acceptance-capacity.test.ts tests/unit/acceptance-update-flow.test.ts tests/unit/acceptance-update-policy.test.ts tests/unit/acceptance-storage.test.ts tests/unit/ecs-deploy-entry.test.ts tests/unit/pr-17-deployment.test.ts tests/integration/acceptance-deployment-contract.test.ts tests/integration/pr-17-deploy-failure.test.ts --reporter=json --outputFile=/tmp/update-capacity-evidence/unit-final.report.json",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-13T15:07:18.945Z",
-      "endedAt": "2026-11-13T15:07:24.937Z",
-      "sourceFingerprint": "ee0d9986d4b6d416e486064d4e02ca67bd607fcb47cca094b3f7eb1aa32d8198",
+      "startedAt": "2026-11-13T16:20:32.203Z",
+      "endedAt": "2026-11-13T16:20:36.794Z",
+      "sourceFingerprint": "cbdbe2a43ef7c04e72800056e66dc6f2cb4efb27a9f924fa97e6e07ba310ec09",
       "inputPaths": [
         "apps",
         "packages",
@@ -157,30 +80,30 @@
         "package-lock.json",
         "vitest.config.ts"
       ],
-      "inputFingerprint": "baa749dfeebaaf1b07a9ccd8babb393acb0b1d915dcd27a5317b41d47ad85c54",
-      "log": "/tmp/time-framework-03-evidence/unit-final.log",
-      "logSha256": "7f5dc91605fdb58d733bd68c2b9193de50e87379c9420e116a1c6a1e69153e68",
-      "context": "Node22.22.0/npm10.9.9; original default config, nonDatabase1/postgres1. Explicit frozen business clocks. No onsite writes. PG uses registered isolated low-privilege TEST database; native fixture cleanup.",
-      "testedHead": "d752749710d8e083b4e6ad33dd000be45f3b5649",
+      "inputFingerprint": "0c54340f0e3d25095d8c4156d6b8da7a9e628b277f89a25db512d295ed9ba0a8",
+      "log": "/tmp/update-capacity-evidence/unit-final.log",
+      "logSha256": "cf0f2b66db37463ef52fd86b59c14796503341383f993b48e769360797f6acff",
+      "context": "Node22.22.0/npm10.9.9; original unit config, bounded default runner. Pure temporary filesystem/role adapters, no server operations. Python capacity/storage tests run through their original unit entry; deployment activation failure fixtures are isolated.",
+      "testedHead": "64a2ccf828f4c262ef60d1dbb57463607acb4ab3",
       "kind": "tests",
-      "passed": 158,
+      "passed": 49,
       "failed": 0,
       "skipped": 0,
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "a0d0ed8b95dcddebd913215790a6c4627b869614117e9d1e6935be6c9ed05376"
+          "sha256": "a8dad981c7d84ab0a9b5cb4936c21faea7d04411927d247e16509a907d11ceb4"
         }
       ]
     },
     {
       "id": "preflight-final",
-      "command": "npm run test:preflight",
+      "command": "node scripts/test-preflight.mjs",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-13T15:08:02.137Z",
-      "endedAt": "2026-11-13T15:08:08.131Z",
-      "sourceFingerprint": "ee0d9986d4b6d416e486064d4e02ca67bd607fcb47cca094b3f7eb1aa32d8198",
+      "startedAt": "2026-11-13T16:20:59.420Z",
+      "endedAt": "2026-11-13T16:21:05.516Z",
+      "sourceFingerprint": "cbdbe2a43ef7c04e72800056e66dc6f2cb4efb27a9f924fa97e6e07ba310ec09",
       "inputPaths": [
         "apps",
         "packages",
@@ -190,21 +113,21 @@
         "package-lock.json",
         "vitest.config.ts"
       ],
-      "inputFingerprint": "baa749dfeebaaf1b07a9ccd8babb393acb0b1d915dcd27a5317b41d47ad85c54",
-      "log": "/tmp/time-framework-03-evidence/preflight-final.log",
-      "logSha256": "476fc5e653b57457fff760140ab3f501a4eb5d7e2662412607395c3e5d410b22",
-      "context": "Node22.22.0/npm10.9.9; original default config, nonDatabase1/postgres1. Explicit frozen business clocks. No onsite writes. PG uses registered isolated low-privilege TEST database; native fixture cleanup.",
-      "testedHead": "d752749710d8e083b4e6ad33dd000be45f3b5649",
+      "inputFingerprint": "0c54340f0e3d25095d8c4156d6b8da7a9e628b277f89a25db512d295ed9ba0a8",
+      "log": "/tmp/update-capacity-evidence/preflight-final.log",
+      "logSha256": "cb1a6af04ab3f7c3675011b56e677568c32ec41a6b2ed2e91629bbee58d93c05",
+      "context": "Node22.22.0/npm10.9.9; original unit config, bounded default runner. Pure temporary filesystem/role adapters, no server operations. Python capacity/storage tests run through their original unit entry; deployment activation failure fixtures are isolated.",
+      "testedHead": "64a2ccf828f4c262ef60d1dbb57463607acb4ab3",
       "kind": "command"
     },
     {
       "id": "lint-final",
-      "command": "npm run lint",
+      "command": "node node_modules/eslint/bin/eslint.js scripts/ci/acceptance-maintenance-drill.mjs tests/unit/acceptance-capacity.test.ts --max-warnings=0",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-13T15:08:46.986Z",
-      "endedAt": "2026-11-13T15:09:22.513Z",
-      "sourceFingerprint": "ee0d9986d4b6d416e486064d4e02ca67bd607fcb47cca094b3f7eb1aa32d8198",
+      "startedAt": "2026-11-13T16:20:59.443Z",
+      "endedAt": "2026-11-13T16:21:00.567Z",
+      "sourceFingerprint": "cbdbe2a43ef7c04e72800056e66dc6f2cb4efb27a9f924fa97e6e07ba310ec09",
       "inputPaths": [
         "apps",
         "packages",
@@ -214,11 +137,11 @@
         "package-lock.json",
         "vitest.config.ts"
       ],
-      "inputFingerprint": "baa749dfeebaaf1b07a9ccd8babb393acb0b1d915dcd27a5317b41d47ad85c54",
-      "log": "/tmp/time-framework-03-evidence/lint-final.log",
-      "logSha256": "fe68a45f894b97fe42ab32bd073231806b176f891729cd5a5a0715707246e763",
-      "context": "Node22.22.0/npm10.9.9; original default config, nonDatabase1/postgres1. Explicit frozen business clocks. No onsite writes. PG 13.23 uses registered isolated low-privilege TEST database; native fixture cleanup.",
-      "testedHead": "d752749710d8e083b4e6ad33dd000be45f3b5649",
+      "inputFingerprint": "0c54340f0e3d25095d8c4156d6b8da7a9e628b277f89a25db512d295ed9ba0a8",
+      "log": "/tmp/update-capacity-evidence/lint-final.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "context": "Node22.22.0/npm10.9.9; original unit config, bounded default runner. Pure temporary filesystem/role adapters, no server operations. Python capacity/storage tests run through their original unit entry; deployment activation failure fixtures are isolated.",
+      "testedHead": "64a2ccf828f4c262ef60d1dbb57463607acb4ab3",
       "kind": "command"
     }
   ]

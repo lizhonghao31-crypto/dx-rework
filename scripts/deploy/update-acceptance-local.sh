@@ -137,6 +137,13 @@ echo "Evidence: $evidence"
 fi
 echo '[1/5] Independent Acceptance target: production promotion remains unverified'
 
+# Only this invocation's extraction directory is disposable. The shared cache,
+# candidates and installed/rollback generations are never removed here.
+build_tmp=''
+cleanup_build_tmp() {
+  if [[ -n "$build_tmp" ]]; then rm -rf -- "$build_tmp"; fi
+}
+trap cleanup_build_tmp EXIT
 echo '[2/5] Prepare immutable candidate'
 if [[ ! -d "$candidate" ]]; then
   mkdir -p "$build"
@@ -144,7 +151,8 @@ if [[ ! -d "$candidate" ]]; then
   cd "$build"
   [[ ! -L "$DX_ROOT/build/npm-cache" && ! -L "$DX_ROOT/build/tmp" ]] || die 'Acceptance cache/temp path cannot be shared symlinks'
   mkdir -m 0700 -p "$DX_ROOT/build/npm-cache" "$DX_ROOT/build/tmp"
-  export npm_config_cache="$DX_ROOT/build/npm-cache" TMPDIR="$DX_ROOT/build/tmp"
+  build_tmp="$(mktemp -d "$DX_ROOT/build/tmp/update-$sha.XXXXXX")"
+  export npm_config_cache="$DX_ROOT/build/npm-cache" TMPDIR="$build_tmp"
   lock_hash="$(sha256sum package-lock.json | cut -d' ' -f1)"
   dependencies_ready=false
   if [[ -f .dependencies-ready && "$(cat .dependencies-ready)" == "$lock_hash" && -d node_modules && ! -L node_modules ]] && \
@@ -181,6 +189,9 @@ JS
   (cd "$candidate" && sha256sum build-provenance.json >> SHA256SUMS)
 
 fi
+cleanup_build_tmp
+build_tmp=
+unset TMPDIR
 verify_sums "$candidate"
 node_exec -e 'const p=require(process.argv[1]);if(p.sourceSha!==process.argv[2]||p.frontendSourceSha!==process.argv[2]||p.frontendBuilt!==true)process.exit(1)' "$candidate/build-provenance.json" "$sha"
 assert_release "$candidate/api" "$sha" "$DX_ROOT/candidates"
