@@ -179,6 +179,7 @@ export const classifyFullGatePaths = (inputPaths) => {
     "tests/integration/development-execution-read-native-browser-postgres.test.ts",
   ]);
   const domains = new Set();
+  if(paths.some(path=>/first-effective-receipt|factory-delivery-reading|receiving-span|factory-return-logistics/.test(path))){addAll(mappedTests,['tests/integration/fixed-progress-postgres.test.ts','tests/integration/order-time-reading-postgres.test.ts','tests/integration/m01-journey-performance-postgres.test.ts']);domains.add('native-first-delivery');}
   if(paths.some(path=>/whole-order-(?:deletion|native-deletion|visibility)|cockpit-order-deletion|0287_whole_order/.test(path))){addAll(mappedTests,['tests/integration/whole-order-deletion-postgres.test.ts','tests/integration/whole-order-deletion-browser-postgres.test.ts']);domains.add('whole-order-deletion');}
   if(paths.some(path=>/order-time-(?:request|admission|automatic|native|operation|application|production-route|route-identities)|0286_order_time_requests/.test(path))){
     addAll(mappedTests,['tests/integration/order-time-requests-postgres.test.ts','tests/integration/order-time-requests-browser-postgres.test.ts','tests/integration/order-time-reading-postgres.test.ts','tests/integration/order-time-settings-postgres.test.ts','tests/integration/development-technical-postgres.test.ts','tests/integration/development-round-history-clock-postgres.test.ts','tests/integration/production-readiness-postgres.test.ts']);
@@ -188,7 +189,7 @@ export const classifyFullGatePaths = (inputPaths) => {
     addAll(mappedTests,['tests/integration/order-time-settings-postgres.test.ts','tests/integration/customer-default-merchandisers-postgres.test.ts','tests/integration/r5-settings-native-browser-postgres.test.ts','tests/integration/m01-settings-native-browser-postgres.test.ts','tests/integration/digital-production-identity-postgres.test.ts']);
     domains.add('order-time-settings-and-merchandisers');
   }
-  if(paths.some(path=>/order-time-(?:framework|plan|schedule|reading)|cutting-completion-facts|0284_order_time_plan_versions/.test(path))){
+  if(paths.some(path=>/order-time-(?:framework|completion-target|plan|schedule|reading)|cutting-completion-facts|0284_order_time_plan_versions/.test(path))){
     addAll(mappedTests,['tests/integration/order-time-plan-postgres.test.ts','tests/integration/order-time-reading-postgres.test.ts','tests/integration/fixed-timeline-postgres.test.ts','tests/integration/fixed-progress-postgres.test.ts']);
     domains.add('order-time-plan-core');
   }

@@ -143,7 +143,7 @@ export class SlaOrderService {
       const garments=await garmentSlaEvidence(client,orderId);Object.assign(facts,garments.facts);
       const receiving=actor?await new OrderClosureService(this.database).read(actor,orderId,client):await new OrderClosureService(this.database).readFactsWithClient(orderId,client);
       const span=receiving.receivingSpan;facts.receiving_span={businessCompleted:receiving.collection?.status==='已收齐',evidence:`native-receipts:${receiving.revision}`,
-       ...(span?.firstEffectiveReceipt?.receivedAt?{startedAt:span.firstEffectiveReceipt.receivedAt}:{}),...(span?.collectedAt?{completedAt:span.collectedAt}:{})};
+       ...(span?.firstDelivery?.occurred.precision==='instant'?{startedAt:span.firstDelivery.occurred.at}:!span?.firstDelivery&&span?.firstEffectiveReceipt?.receivedAt?{startedAt:span.firstEffectiveReceipt.receivedAt}:{}),...(span?.collectedAt?{completedAt:span.collectedAt}:{})};
       const packing=packingSlaEvidence(receiving);Object.assign(facts,packing.facts);
       const rework=await reworkSlaEvidence(client,orderId);Object.assign(facts,rework.facts);
       // No adopted plan means no synthetic target/evaluation, not no native work.

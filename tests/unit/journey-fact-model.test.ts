@@ -14,6 +14,12 @@ it('stores only explicit facts, not identity, action, attachment, price or time-
  const json=JSON.stringify(model);expect(json).not.toContain('PRIVATE');expect(json).not.toContain('/ui/');expect(json).not.toContain('/api/');expect(json).not.toContain('canExecute');expect(json).not.toContain('risks');expect(json).not.toContain('overdueSeconds');expect(source).toEqual(original);
  expect(model.nodes[0]!.scopes).toEqual([{domain:'task',id:'TEST-current',lineId:'TEST-po',version:2}]);expect(model.sla.facts.pattern).toEqual({evidence:'TEST native',startedAt:'2026-11-01T00:00:00.000Z',businessCompleted:true});
 });
+it('retains the original responsibility calendars in the shared facts without copying additional metadata',()=>{
+ const input={evidence:'native',standardCalendar:'beijing_sunday_excluded' as const,batchWindows:[{startedAt:'2026-11-07T00:00:00Z',deadline:'2026-11-09T00:00:00Z',warningAt:null,completedAt:null,complete:false,evidence:'batch',calendarRef:'beijing_sunday_excluded' as const,...{actorName:'PRIVATE'}}]};
+ const model=minimalJourneyFacts(item,{plan:null,original:null,facts:{factory:input}});
+ expect(model.sla.facts.factory).toMatchObject({standardCalendar:'beijing_sunday_excluded',batchWindows:[{calendarRef:'beijing_sunday_excluded'}]});
+ expect(JSON.stringify(model)).not.toContain('PRIVATE');
+});
 it('retains date precision, unknown execution start, original result and separate actual adoption without synthesizing midnight',()=>{
  const dependencies=[{taskId:'TEST-current',predecessorId:'TEST-prior',...{canExecute:true}}];
  const model=minimalJourneyFacts(item,{plan:null,original:null,facts:{}},[],dependencies),n=model.nodes[0]!;

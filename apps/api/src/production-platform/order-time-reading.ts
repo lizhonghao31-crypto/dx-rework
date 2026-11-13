@@ -1,3 +1,4 @@
+import {orderTimeCompletionTarget} from './order-time-completion-target.js';
 import {currentPreparationMaterial} from './preparation-material-repository.js';
 import {createHash} from 'node:crypto';
 import type {PoolClient} from 'pg';
@@ -169,7 +170,10 @@ export function orderTimeReadingBasis(saved:StoredOrderTimePlan,resource:Busines
   const addedIds=new Set(added.map(node=>node.id));
   for(const node of added){work.push(structuredClone(node));facts[node.id]=structuredClone(original!.facts[node.id]??empty());}
   for(const node of work){const old=original?.work.find(previous=>previous.id===node.id);if(old)node.dependsOn=[...new Set([...node.dependsOn,...old.dependsOn.filter(id=>addedIds.has(id))])];}
-  for(const node of work){const fact=facts[node.id]!;fact.waitingForPredecessors=fact.ready.precision==='unknown'&&node.dependsOn.length>0&&node.dependsOn.some(id=>!facts[id]?.businessCompleted);}
+  for(const node of work){const fact=facts[node.id]!;
+   const source=byId.get(node.id);
+   if(source&&fact.businessCompleted&&evidence.policies?.some(version=>version.history))node.completionTarget=orderTimeCompletionTarget(source,scope,fact.completed,evidence.policies,saved.time.scenarioId);
+   fact.waitingForPredecessors=fact.ready.precision==='unknown'&&node.dependsOn.length>0&&node.dependsOn.some(id=>!facts[id]?.businessCompleted);}
   const end=scope.customerGoal.precision==='instant'?scope.customerGoal.value:scope.customerGoal.precision==='date'?new Date(Date.parse(scope.customerGoal.value+'T00:00:00+08:00')+86400000).toISOString():null;
   return {scopeRef:scope.scopeRef,lineId:scope.lineId,targetRevision:`${saved.id}:${saved.revision}`,work,facts,terminalIds:[...(scope.customerGoalIds.length?scope.customerGoalIds:scope.terminalIds)],customerGoal:end};
  });

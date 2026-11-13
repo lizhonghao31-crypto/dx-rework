@@ -29,7 +29,10 @@ export function fixedScheduleStages(basis:FixedScheduleBasis,asOf:string):Schedu
   const actual=complete?summary.deliveryCompletedAt:unknown;
   const expected:ScheduleOccurrence=!end?unknown:end.targetPrecision==='date'&&end.targetDate?{precision:'date',date:end.targetDate}:{precision:'instant',at:end.end!};
   const scope={scopeRef:`stage:${stage}`,targetRevision:basis.scopeRevision};
-  const goalDelta=fixedGoalDelta({id:scope.scopeRef,canonicalWorkRef:scope.scopeRef,dependsOn:[],start:summary.planStart,end:end?.end??null,minutes:0,calendar:'continuous',responsibilitySlaRef:null,...(end?.targetPrecision?{targetPrecision:end.targetPrecision}:{}),...(end?.targetDate?{targetDate:end.targetDate}:{})},
+  const historical=complete&&all.some(work=>work.completionTarget!==undefined);
+  const completedTargets=all.map(work=>work.completionTarget);
+  const completionTarget=historical&&completedTargets.every((target):target is NonNullable<ScheduleWork['completionTarget']>=>Boolean(target))?completedTargets.reduce((latest,target)=>Date.parse(target.end)>Date.parse(latest.end)?target:latest):null;
+  const goalDelta=fixedGoalDelta({id:scope.scopeRef,canonicalWorkRef:scope.scopeRef,dependsOn:[],start:summary.planStart,end:end?.end??null,minutes:0,calendar:'continuous',responsibilitySlaRef:null,...(historical?{completionTarget}:{}),...(end?.targetPrecision?{targetPrecision:end.targetPrecision}:{}),...(end?.targetDate?{targetDate:end.targetDate}:{})},
    {ready:summary.actualStart,clockStart:summary.actualStart,completed:actual,businessCompleted:complete,waitingForPredecessors:false,evidenceRefs:[]},scope,asOf,basis.termination);
   return [{stage,startedAt:summary.actualStart,expected,actual,goalDelta}];
  });

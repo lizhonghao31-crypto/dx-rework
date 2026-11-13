@@ -1,3 +1,6 @@
+import {ReceivingService} from '../../apps/api/src/receiving/receiving-service.js';
+import {ProductionClosureService} from '../../apps/api/src/sourcing/production-closure-service.js';
+import {OrderClosureService} from '../../apps/api/src/production-platform/order-closure-service.js';
 import {exerciseDevelopmentSlaNative} from '../helpers/development-sla-native-fixture.js';
 import {TodoProjectionService} from '../../apps/api/src/todos/projection-service.js';
 import {TodoService} from '../../apps/api/src/todos/service.js';
@@ -110,6 +113,22 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(detail.fixedSchedule!.scopes[0]!.nodes.find(node=>node.id===`factory_work:${lineId}`)).toMatchObject({businessCompleted:true,goalDelta:{actual:{precision:'date',date:'2026-11-21'}}});
    const built=await new JourneyFactRepository(f.db).buildOne({kind:'order',id:made.id}),returned=built.model.fixedSchedule!.scopes[0]!.facts[`return_logistics:${lineId}`]!;
    expect(returned.ready).toEqual({precision:'date',date:'2026-11-21'});expect(returned.completed).toEqual({precision:'unknown'});expect(returned.businessCompleted).toBe(false);
+   await new ProductionClosureService(f.db).setPilot(f.root,{supplierId:f.supplierId,enabled:true});
+   const receiver={...f.root,authorizationCapability:'receiving:create'},receiving=new ReceivingService(f.db,undefined,undefined,new ProductionClosureService(f.db)),closure=new OrderClosureService(f.db);
+   const receipt=await receiving.create(receiver,{cuttingOrderId:cut.cutting_order_id,productionOrderId:productionId,factoryDecisionId:null,documentQuantity:10,actualQuantity:3,attachmentIds:[await f.image(receiver)]},randomUUID());
+   let sheet=await closure.read(f.root,made.id);
+   expect(sheet.factoryDeliveries).toEqual([expect.objectContaining({lineId,productionId,factoryDecisionId:null,delivered:true,received:3,remaining:7,collected:false,status:'on_time',firstReceipt:{precision:'instant',at:'2026-11-21T08:00:00.000Z'}})]);
+   expect(sheet.collection).toMatchObject({received:3,remaining:7,status:'待收齐'});
+   expect(sheet.receivingSpan!.collectedAt).toBeNull();
+   const version=(await f.db.query('SELECT version FROM receiving_batches WHERE receiving_batch_id=$1',[receipt.value.receivingBatchId])).rows[0].version;
+   await receiving.correctReceipt({...f.root,authorizationCapability:'receiving:correct'},receipt.value.receiptId,{expectedVersion:version,source:'jiashun',documentQuantity:10,actualQuantity:0,defectiveQuantity:0});
+   sheet=await closure.read(f.root,made.id);
+   expect(sheet.factoryDeliveries![0]).toMatchObject({delivered:false,received:0,remaining:10,status:'pending'});
+   expect(sheet.receivingSpan!.firstDelivery).toMatchObject({delivered:false});
+   expect((await f.db.query("SELECT 1 FROM digital_journey_fact_changes WHERE resource_kind='order' AND resource_id=$1",[made.id])).rowCount).toBeGreaterThan(0);
+   await new JourneyFactRepository(f.db).buildOne({kind:'order',id:made.id});
+   expect((await query.read(f.root,made.id,undefined,true)).fixedSchedule!.scopes[0]!.nodes.find(node=>node.id===`return_logistics:${lineId}`)!.businessCompleted).toBe(false);
+
   });
  });
  it('closes each adopted development craft parent only on its matching original return confirmation',async()=>{

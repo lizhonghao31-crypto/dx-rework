@@ -30,6 +30,23 @@ function stored():StoredOrderTimePlan{
 const evidence=()=>({tasks:[],readiness:new Map(),cutting:[],cutCompletions:[]});
 const build=(saved=stored(),row=item(),old:FixedScheduleBasis|null=null)=>orderTimeReadingBasis(saved,resource,row,{},evidence(),old);
 describe('R5 exact frozen order-time reading and independent visible endpoints',()=>{
+ it('retains completed deviation against the occurrence-time version while exposing the later current arrangement',()=>{
+  const original=stored(),changed=structuredClone(original),row=item();
+  original.targets['TEST scope']!.a!.end.at=at(6);original.time.now=at(0);
+  changed.id='TEST changed';changed.revision=2;changed.time.now=at(9);changed.targets['TEST scope']!.a!.end.at=at(10);
+  row.stages[1]!.nodes=[node('a','completed',at(5),at(7))];
+  const policies=[changed,original].map(plan=>({id:plan.id,at:plan.time.now,plan:plan.input.plan,history:{input:plan.input,targets:plan.targets,revision:plan.revision,time:plan.time}}));
+  const basis=orderTimeReadingBasis(changed,resource,row,{}, {...evidence(),policies},null);
+  const projected=evaluateFixedJourneyBasis(fixedScheduleBasisSnapshot(basis),at(12),false),a=projected.scopes[0]!.nodes.find(n=>n.id==='a')!;
+  expect(a.goalDelta).toMatchObject({kind:'late',signedValue:60,targetAt:at(6),targetRevision:'TEST plan:1'});
+  expect(a.currentTarget).toMatchObject({at:at(10),revision:'TEST changed:2'});
+  expect(basis.scopes[0]!.work.find(n=>n.id==='a')!.end).toBe(at(10));
+  expect(a.ownSla.state).toBe('within');
+  // Later registration cannot select the current plan for an earlier physical completion.
+  row.stages[1]!.nodes[0]!.actualDate='2027-03-01';
+  const ambiguous=orderTimeReadingBasis(changed,resource,row,{}, {...evidence(),policies},null);
+  expect(evaluateFixedJourneyBasis(ambiguous,at(30),false).scopes[0]!.nodes.find(n=>n.id==='a')!.goalDelta.kind).toBe('unknown');
+ });
  it('uses a verified native completion when the matching old plan has only an empty placeholder, without replacing recorded history',()=>{
   const row=item(),saved=stored(),legacy=build(saved,row);row.stages[1]!.nodes=[node('a','completed',at(0),at(2))];
   const native={a:{evidence:'TEST original policy without occurrence'}};
