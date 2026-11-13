@@ -134,17 +134,24 @@ export function fixedTimelineTargets(work:readonly FixedTimelineWork[],ends:Read
 /** Exact forward arrangement on the same validated DAG/calendars. The inputs
  * are planning assumptions, never completion events or employee clock starts.
  */
-export function fixedTimelineForward(work:readonly FixedTimelineWork[],start:SlaAnchor,notBefore:Readonly<Record<string,SlaAnchor>>={}):FixedTimelineTarget[]{
+export function fixedTimelineForward(work:readonly FixedTimelineWork[],start:SlaAnchor,notBefore:Readonly<Record<string,SlaAnchor>>={},options:{minimumStart?:SlaAnchor;retained?:Readonly<Record<string,FixedTimelineTarget>>}={}):FixedTimelineTarget[]{
  const {ordered}=orderedFixedWork(work,true),targets=new Map<string,FixedTimelineTarget>();
+ for(const [id,row]of Object.entries(options.retained??{})){
+  if(row.id!==id||!work.some(node=>node.id===id))throw Error('保留安排不属于本范围工作');
+  if(row.start.at)instant(row.start.at);if(row.end.at)instant(row.end.at);
+  if(row.start.at&&row.end.at&&instant(row.end.at)<instant(row.start.at))throw Error('保留安排结束早于开始');
+ }
  const missing=(...reasons:string[]):SlaTime=>({at:null,exclusive:false,reasons:[...new Set(reasons)]});
  const initial=slaAnchorTime(start,'本次安排开始');
  for(const node of ordered){
   if(node.includedIn)continue;
+  const retained=options.retained?.[node.id];if(retained){targets.set(node.id,structuredClone(retained));continue;}
   const candidates=node.dependsOn.length?node.dependsOn.map(id=>{
    const end=targets.get(id)!.end,reserve=node.dependencyReserves?.[id];
    return end.at&&reserve?{...end,at:shiftFixedTimeline(end.at,reserve.minutes,reserve.calendar),reasons:[...end.reasons]}:end;
   }):[initial];
   if(notBefore[node.id])candidates.push(slaAnchorTime(notBefore[node.id]!,`本节点预计前提:${node.id}`));
+  if(options.minimumStart)candidates.push(slaAnchorTime(options.minimumStart,'本次提交的剩余工作下界'));
   const begin=candidates.some(value=>value.at===null)?missing(...candidates.flatMap(value=>value.reasons))
    :candidates.reduce((a,b)=>instant(a.at!)>instant(b.at!)||instant(a.at!)===instant(b.at!)&&a.exclusive?a:b);
   const end=begin.at===null?{...begin,reasons:[...begin.reasons]}:node.minutes===0?{...begin}
@@ -153,6 +160,7 @@ export function fixedTimelineForward(work:readonly FixedTimelineWork[],start:Sla
   targets.set(node.id,{id:node.id,start:begin,end});
  }
  for(const node of ordered.filter(node=>node.includedIn)){
+  const retained=options.retained?.[node.id];if(retained){targets.set(node.id,structuredClone(retained));continue;}
   const parent=targets.get(node.includedIn!)!,base=node.includedPosition==='end'?parent.end:parent.start;
   const moved=base.at===null?{...base,reasons:[...base.reasons]}:node.minutes===0?{...base}
    :node.minutes===null||!node.calendar?missing('内含交接用时或日历待核')

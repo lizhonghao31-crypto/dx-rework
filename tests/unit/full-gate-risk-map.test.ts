@@ -7,6 +7,14 @@ import { assertMappedPostgresTests, classifyFullGatePaths, POSTGRES_CASE_SUITES 
 import {configForSuite,fullGatePostgresPlan,POSTGRES_CHAIN_TESTS} from '../../scripts/test-suite-plan.mjs';
 import {settingsBrowserRequired} from '../../scripts/ci/prepare-settings-browser.mjs';
 
+it('keeps framework and version-reader changes in the original time-plan database regression scope',()=>{
+ for(const path of ['apps/api/src/production-platform/order-time-framework.ts','packages/contracts/src/order-time-framework.ts']){
+  const risk=classifyFullGatePaths([path]);
+  expect(risk.mappedPostgresTests).toContain('tests/integration/order-time-plan-postgres.test.ts');
+  expect(risk.mappedPostgresTests).toContain('tests/integration/order-time-reading-postgres.test.ts');
+ }
+});
+
 it('keeps the extracted development read and original GET/QR consumers in the existing native plan',()=>{
  const suite='tests/integration/development-execution-read-native-browser-postgres.test.ts';
  for(const path of ['apps/api/src/production-platform/development-execution-read.ts','apps/api/src/production-platform/development-execution-service.ts','apps/api/src/production-platform/development-execution-routes.ts',suite]){
