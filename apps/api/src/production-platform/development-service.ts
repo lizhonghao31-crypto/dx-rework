@@ -25,6 +25,8 @@ import {captureDevelopmentTimeline} from './fixed-development-adoption.js';
 import type { BusinessClock } from "@dx-rework/domain/business-clock";
 import {approvedOrderTimeSource,acceptsNewOrderTime} from './order-time-admission.js';
 import {automaticOrderTime} from './order-time-automatic.js';
+import {assembleQuotation} from './quotation-assembly.js';
+import {withoutDevelopmentPrices} from './development-commercial-fields.js';
 
 type Database = Pick<Pool | PoolClient, "query">;
 const conflict = (message: string): never => { throw new ApplicationError("DEVELOPMENT_CONFLICT", message, 409); };
@@ -63,6 +65,7 @@ export class DigitalDevelopmentService {
     const productionOrderId=source.can_view_order_draft?(await db.query("SELECT production_order_id FROM digital_production_orders WHERE source_id=$1",[sourceId])).rows[0]?.production_order_id??null:null;
     let document=row?.document??null;
     if(document?.customerOrderDraft&&!source.can_view_order_draft){document={...document};delete document.customerOrderDraft;}
+    if(document&&!source.can_view_order_draft)document=withoutDevelopmentPrices(document);
     const effectiveMaterials=row?.status==="published"&&(await db.query("SELECT to_regclass('digital_development_execution_facts') AS relation")).rows[0]?.relation?(await materialReadiness(db,sourceId,row.round_number??1)).materials:[];
     const createdTime=source.order_time_managed?(await db.query('SELECT created_business_time FROM digital_order_time_subjects WHERE source_id=$1',[sourceId])).rows[0]?.created_business_time?.now
       :acceptanceBusinessContext()?(await db.query('SELECT business_time FROM digital_development_sla_plans WHERE source_id=$1 ORDER BY revision LIMIT 1',[sourceId])).rows[0]?.business_time?.now:null;
@@ -86,6 +89,7 @@ export class DigitalDevelopmentService {
       if (prior && prior.payload_hash !== hash) conflict("同一操作标识不能用于不同内容");
       const result = prior ? prior.response as T : await action(db);
       if (!prior) {
+        if(command==='save'||command==='publish')await assembleQuotation(db,sourceId,actor.actorId);
         await db.query("INSERT INTO digital_production_commands(actor_id,command,key,payload_hash,response) VALUES($1,$2,$3,$4,$5)", [actor.actorId, name, key, hash, JSON.stringify(result)]);
         await db.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1,$2,$3,$4,'digital_development',$5,$6)", [randomUUID(), actor.requestId, actor.actorId, `development_${command}`, sourceId, JSON.stringify({ command, version: (result as { version?: number }).version })]);
       }

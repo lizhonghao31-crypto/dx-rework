@@ -1,3 +1,4 @@
+import {assembleQuotation} from './quotation-assembly.js';
 import {SlaSettingsSetsService} from './sla-settings-sets.js';
 import {OrderTimeSettingsService} from './order-time-settings-service.js';
 import {ORDER_TIME_MODEL_ENABLED} from './order-time-activation.js';
@@ -588,6 +589,7 @@ export class DigitalProductionTaskService {
         if (task.state === "cancelled" || (task.state === "completed" && !currentFactoryScopePending)) fail("已结束任务不可日常改派");
         const result = await reassignDigitalTask(client, actor, id, assigneeId);
         await this.event(client, actor, id, this.resource(task), "reassigned", businessNow().toISOString(), "现场登记", { previousAssigneeId: task.assignee_id, assigneeId });
+        if(task.source_id&&['development_pattern','development_printing','development_embroidery'].includes(task.task_kind))await assembleQuotation(client,task.source_id,actor.actorId);
         await this.refreshDevelopmentMaterialCondition(client,actor,id);
         if (await requiresDevelopmentAssignee(client,task)) await this.activate(client, actor, id, businessNow().toISOString(), "现场登记");
         return result;
@@ -797,6 +799,7 @@ export class DigitalProductionTaskService {
     await assertAcceptanceAssignee(assigneeId);
     const task=await this.task(client,id,true);if(task.task_kind==='development_patch')fail('补做归属须随原计件执行段派工或转交');if(task.state==='cancelled'||task.state==='completed'&&(task.task_kind!=='factory_production_qc'||!(await factoryProductionScopes(client,task.production_order_id)).some(scope=>scope.execution_status==='in_production')))fail("已结束任务不可改派");
     await reassignDigitalTask(client,actor,id,assigneeId);await this.event(client,actor,id,this.resource(task),"reassigned",businessNow().toISOString(),"现场登记",{assigneeId});
+    if(task.source_id&&['development_pattern','development_printing','development_embroidery'].includes(task.task_kind))await assembleQuotation(client,task.source_id,actor.actorId);
     await this.refreshDevelopmentMaterialCondition(client,actor,id);
     if (await requiresDevelopmentAssignee(client,task)) await this.activate(client,actor,id,businessNow().toISOString(),"现场登记");
   }

@@ -1,3 +1,4 @@
+import {assembleQuotation} from './quotation-assembly.js';
 import {randomUUID} from 'node:crypto';
 import type {PoolClient} from 'pg';
 import type {DevelopmentRevision} from '@dx-rework/contracts/digital-development-rounds';
@@ -49,5 +50,6 @@ export async function createIndependentDevelopmentRevision(db:PoolClient,actor:T
  await db.query("INSERT INTO digital_development_documents(source_id,version,status,document,updated_by) VALUES($1,1,'draft',$2,$3)",[sourceId,JSON.stringify(document),actor.actorId]);
  if(managed)await db.query("INSERT INTO digital_order_time_subjects(resource_kind,source_id,created_by,created_business_time,creation_event_ref) VALUES('source',$1,$2,$3,$4)",[sourceId,parent.created_by,JSON.stringify(time),'audit_events:'+eventId]);
  else await captureDevelopmentSla(db,actor,sourceId,null,time,eventId);
+ await assembleQuotation(db,sourceId,actor.actorId);
  return {sourceId,roundNumber:1,revisionNumber:number,status:'draft' as const};
 }

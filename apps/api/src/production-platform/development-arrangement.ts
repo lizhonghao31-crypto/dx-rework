@@ -1,3 +1,4 @@
+import {assembleQuotation} from './quotation-assembly.js';
 import {isNativeRootSewingRecipient} from './development-native-recipient.js';
 import {randomUUID} from "node:crypto";
 import type {Pool,PoolClient} from "pg";
@@ -113,5 +114,6 @@ export async function saveArrangement(db:PoolClient,database:Pool,actor:TrustedA
   }
   await db.query(`INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,before_state,after_state)
     VALUES($1,$2,$3,'development_round_arranged','digital_development',$4,$5,$6)`,[randomUUID(),actor.requestId,actor.actorId,sourceId,JSON.stringify(before),JSON.stringify({...input,version:before.version+1,managerId:manager})]);
+  await assembleQuotation(db,sourceId,actor.actorId);
   return {roundNumber:input.roundNumber,version:before.version+1};
 }

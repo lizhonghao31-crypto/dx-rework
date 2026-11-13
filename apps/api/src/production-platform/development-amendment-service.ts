@@ -1,3 +1,5 @@
+import {withoutDevelopmentPrices} from './development-commercial-fields.js';
+import {assembleQuotation} from './quotation-assembly.js';
 import {validateAuxiliaryReferences} from '../access/auxiliary-catalog-service.js';
 import {createHash,randomUUID} from "node:crypto";
 import {isDeepStrictEqual} from "node:util";
@@ -57,6 +59,7 @@ export class DevelopmentAmendmentService{
    this.current(current,input.roundNumber);
    if(current.sheet.version!==input.expectedDocumentVersion)fail("正式资料已更新，请保留输入并重新核对差异，未覆盖他人的修改");
    const response={...await work(db,current),originatingTaskId:input.taskId};
+   if(action==='submit')await assembleQuotation(db,sourceId,actor.actorId);
    await db.query("INSERT INTO digital_production_commands(actor_id,command,key,payload_hash,response) VALUES($1,$2,$3,$4,$5)",[actor.actorId,command,key,hash,JSON.stringify(response)]);
    await db.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1,$2,$3,$4,'digital_development',$5,$6)",[randomUUID(),actor.requestId,actor.actorId,`development_amendment_${action}`,sourceId,JSON.stringify({taskId:input.taskId,roundNumber:input.roundNumber,expectedDocumentVersion:input.expectedDocumentVersion,response})]);
    await db.query("COMMIT");return response;
@@ -137,6 +140,7 @@ export class DevelopmentAmendmentService{
   const original=(await this.database.query(roundNumber===1?"SELECT document,version,published_at FROM digital_development_documents WHERE source_id=$1":"SELECT document,document_version AS version,published_at FROM digital_development_rounds WHERE source_id=$1 AND round_number=$2",roundNumber===1?[sourceId]:[sourceId,roundNumber])).rows[0];
   const revisions=await developmentAmendmentsAvailable(this.database)?(await this.database.query("SELECT amendment_id,document_version AS version,base_document_version,document,reason,changes,published_at,published_by FROM digital_development_amendments WHERE source_id=$1 AND round_number=$2 ORDER BY document_version",[sourceId,roundNumber])).rows:[];
   if(!sheet.canRevise)for(const row of [original,...revisions])if(row?.document?.customerOrderDraft){row.document={...row.document};delete row.document.customerOrderDraft;}
+  if(!sheet.canRevise)for(const row of [original,...revisions])if(row?.document){row.document=withoutDevelopmentPrices(row.document);if(row.changes)row.changes=row.changes.map((change:{field:string;before:unknown;after:unknown})=>change.field==='materials'?{...change,before:withoutDevelopmentPrices({...row.document,materials:change.before}).materials,after:withoutDevelopmentPrices({...row.document,materials:change.after}).materials}:change);}
   return {sourceId,roundNumber,original,revisions};
  }
 }

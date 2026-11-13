@@ -1,3 +1,6 @@
+import {withoutDevelopmentPrices} from './development-commercial-fields.js';
+import {developmentDocumentRow} from './development-round-repository.js';
+import {assembleQuotation} from './quotation-assembly.js';
 import {captureTechnicalRound} from './development-cycle-evidence.js';
 import {technicalEnrollment,inheritTechnicalArtifact,publishedTechnicalArtifact} from './development-technical-repository.js';
 import {DevelopmentTechnicalService} from './development-technical-service.js';
@@ -75,8 +78,18 @@ export class DevelopmentRoundService {
  }
  async publishWithClient(db:PoolClient,actor:TrustedActorContext,sourceId:string,input:DevelopmentRevision,returnTaskId?:string,patternReworkRoundId?:string){
   if(!this.enabled)digitalForbidden();
+  const rawBasis=await developmentDocumentRow(db,sourceId);
+  if(rawBasis?.document.quotationMode)input={...input,document:{...input.document,quotationMode:rawBasis.document.quotationMode,materials:input.document.materials.map(m=>{const original=rawBasis.document.materials.find((v:{materialId:string})=>v.materialId===m.materialId);return m.unitPrice===undefined&&original?.unitPrice!==undefined?{...m,unitPrice:original.unitPrice}:m;})}};
   const parsed=DevelopmentRevisionSchema.safeParse(input);if(!parsed.success)fail(parsed.error.issues[0]?.message??"复版资料无效");input=parsed.data!;
   const sheet=await this.forms().read(actor,sourceId,db);
+  // A technical return carries the commercial basis forward without granting
+  // its assignee the designer's price-writing authority.
+  if(!sheet.canEdit&&rawBasis){
+   for(const material of input.document.materials){
+    const original=rawBasis.document.materials.find((m:{materialId:string})=>m.materialId===material.materialId);
+    if(material.unitPrice!==undefined&&material.unitPrice!==original?.unitPrice)digitalForbidden();
+   }
+  }
   if(input.document.orderDate!==sheet.document!.orderDate)fail('实际复版不能改写首次开发下单日期');
   if(patternReworkRoundId){
    const lifecycle=(await db.query("SELECT state FROM digital_production_resource_lifecycle WHERE resource_kind='source' AND resource_id=$1",[sourceId])).rows[0];
@@ -103,7 +116,7 @@ export class DevelopmentRoundService {
   const document=structuredClone(input.document),savedPlan=await developmentSlaPlan(db,sourceId);
   const {route,inherited,affectedNodes}=await readDevelopmentRevisionPlan(db,sourceId,input,sheet.document!,savedPlan?.route_schema_version);
   // A changed material gets its own identity; old arrivals never certify a replacement.
-  for(const material of document.materials){const old=sheet.document!.materials.find(item=>item.materialId===material.materialId);if(old&&!isDeepStrictEqual(old,material))material.materialId=randomUUID();}
+  for(const material of document.materials){const old=sheet.document!.materials.find(item=>item.materialId===material.materialId);if(old&&!isDeepStrictEqual(withoutDevelopmentPrices({...document,materials:[old]}).materials[0],withoutDevelopmentPrices({...document,materials:[material]}).materials[0]))material.materialId=randomUUID();}
   const roundNumber=input.basedOnRound+1,routeId=randomUUID();
   const native=await linkedDevelopmentOrder(db,sourceId,true);
   if(!patternReworkRoundId&&input.outputKind==='整件样板'&&route.includes('development_sewing')
@@ -117,7 +130,8 @@ export class DevelopmentRoundService {
     reasonCategory:input.origin==='内部发现'?'other':input.origin==='客户新增要求'?'customer_change':'workmanship',
     attachmentIds:[],developmentNodes:affectedNodes,developmentProblems:input.categories,
    },`development-remake:${sourceId}:${roundNumber}`,{sourceId,revision:{...input,document,affectedNodes},...(returnTaskId?{returnTaskId}:{})});
-   return {sourceId,roundNumber};
+   await assembleQuotation(db,sourceId,actor.actorId);
+  return {sourceId,roundNumber};
   }
   await this.forms().bindFiles(db,actor,sourceId,document);
   await db.query(`INSERT INTO digital_development_rounds(source_id,round_number,based_on_round,document_version,document,origin,customer_comment,internal_problem,explanation,categories,affected_nodes,output_kind,route_nodes,inherited,return_task_id,route_id,created_by,published_at)
@@ -138,6 +152,7 @@ export class DevelopmentRoundService {
   }
   await db.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1,$2,$3,'development_round_published','digital_development',$4,$5)",[randomUUID(),actor.requestId,actor.actorId,sourceId,JSON.stringify({roundNumber,origin:input.origin,affectedNodes,route,inherited,...(patternReworkRoundId||native?.current_round_id?{nativeRoundId:patternReworkRoundId??native!.current_round_id}:{})})]);
   await new BulkPreparationService(this.database).syncSource(db,actor,sourceId);
+  await assembleQuotation(db,sourceId,actor.actorId);
   return {sourceId,roundNumber};
  }
 }

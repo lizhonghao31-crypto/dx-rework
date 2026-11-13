@@ -1,3 +1,4 @@
+import {assembleQuotation} from './quotation-assembly.js';
 import {BulkPreparationService} from './bulk-preparation-service.js';
 import type {PatternRoomOrderService} from '../pattern-room/order-service.js';
 import {DevelopmentPatchDecisionSchema,CompleteDevelopmentPatchSchema} from '@dx-rework/contracts/digital-development-technical';
@@ -60,6 +61,7 @@ export class DevelopmentTechnicalService {
    const prior=(await db.query('SELECT payload_hash,response FROM digital_production_commands WHERE actor_id=$1 AND command=$2 AND key=$3',[actor.actorId,command,key])).rows[0];
    if(prior&&prior.payload_hash!==hash)conflict('原操作标识不能用于不同内容');
    const result=prior?prior.response as T:await work(db);
+   if(!prior&&kind==='artifact')await assembleQuotation(db,sourceId,actor.actorId);
    if(!prior&&['artifact','comment','review','preparation-basis'].includes(kind))await new BulkPreparationService(this.database).syncSource(db,actor,sourceId);
    if(!prior&&kind==='material-decision')await new BulkPreparationService(this.database).refreshSourceCuttingReadiness(db,actor,sourceId);
    if(!prior)await db.query('INSERT INTO digital_production_commands(actor_id,command,key,payload_hash,response) VALUES($1,$2,$3,$4,$5)',[actor.actorId,command,key,hash,JSON.stringify(result)]);

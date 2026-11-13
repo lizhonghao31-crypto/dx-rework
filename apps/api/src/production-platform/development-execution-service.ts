@@ -1,3 +1,4 @@
+import {assembleQuotation} from './quotation-assembly.js';
 import {readDevelopmentExecutionSnapshot} from "./development-execution-read.js";
 import {businessNow} from '../acceptance-clock/business-time.js';
 import {developmentOccurrence} from './development-occurrence.js';
@@ -68,6 +69,7 @@ export class DevelopmentExecutionService {
       const prior=(await db.query("SELECT payload_hash,response FROM digital_production_commands WHERE actor_id=$1 AND command=$2 AND key=$3",[actor.actorId,command,key])).rows[0];
       if(prior&&prior.payload_hash!==hash)fail("同一操作标识不能用于不同内容");
       const response=prior?prior.response:await action(db);
+      if(!prior)await assembleQuotation(db,sourceId,actor.actorId);
       if(!prior)await db.query("INSERT INTO digital_production_commands(actor_id,command,key,payload_hash,response) VALUES($1,$2,$3,$4,$5)",[actor.actorId,command,key,hash,JSON.stringify(response)]);
       await db.query("COMMIT");return response;
     }catch(error){await db.query("ROLLBACK");throw error;}finally{db.release();}

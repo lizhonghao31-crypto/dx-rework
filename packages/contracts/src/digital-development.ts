@@ -11,6 +11,8 @@ export const DEVELOPMENT_MEASUREMENTS = {
   裤子: ["腰围（自然平放腰顶直量）", "坐围（浪上2 1/2度）", "坐围（浪上2 3/4度）", "坐围（浪上3 1/4度）", "脾围（浪下0）", "脚口", "前浪（连腰）", "后浪（连腰）", "裤长（连腰）"],
 } as const;
 export const DevelopmentMaterialSchema = z.object({
+  pricingUnit: short.optional(),
+  unitPrice: z.union([z.literal(""),z.string().regex(/^(?:0|[1-9]\d{0,9})(?:\.\d{1,6})?$/,"请输入最多六位小数的非负单价")]).optional(),
   auxiliaryCatalog:AuxiliaryReferenceSchema.optional(),
   materialId: z.string().uuid(), category: z.enum(["主布", "配布", "辅料"]), label: short,
   auxiliaryKind: z.enum(["普通辅料", "拉链", "扁机"]).optional(),
@@ -22,6 +24,7 @@ export const DevelopmentMaterialSchema = z.object({
   if (value.auxiliaryKind && value.category !== "辅料") context.addIssue({code:"custom",path:["auxiliaryKind"],message:"仅辅料可以设置辅料类型"});
 });
 export const DevelopmentDocumentSchema = z.object({
+  quotationMode: z.literal('automatic_v1').optional(),
   // Missing version belongs to frozen historical documents, never an exemption for new publication.
   documentFormatVersion: z.literal(2).optional(),
   sizeQuantities: z.array(z.number().int().min(0).max(100000).nullable()).max(20).optional(),
