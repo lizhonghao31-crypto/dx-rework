@@ -26,3 +26,9 @@
 - 仓库中未找到名为 `install-remote` 的独立安装器，不能声称已修改服务器侧未知包装脚本。仓库固定安装入口及本次失败 snapshot 路径已覆盖；更新工具仍须用户通过审核的正常 install 步骤安装。
 
 本地最终针对性结果：49 项 Vitest 全通过（其中原 Python 入口执行27项模型、真实临时文件、跨卷及安全边界），preflight 和目标 ESLint 退出0。实际安装复制失败、激活恢复/维护模式、并发锁、build/backup/stop 容量不足前置保护已覆盖。新增可选 ledger SQL 接入既有真实 PG13/15/16 maintenance drill，保留 backup/restore 等 canonical FULL 演练；目前尚未跑远端 Full、Review，未部署、未操作现场、未声称现场实际节省字节数。原始日志 `/tmp/update-capacity-evidence/`；提交内 `construction-evidence.json` 绑定被测输入。
+
+## #978 吸收最新 release（2026-11-13）
+
+独立工作区从原 Head `580d421e45851e96286ee378f2d5342e066d36e9` 合并最新 release `07dff9b8ab2b66f75c6696dc837480c33f48412b`。唯一冲突是当前 construction-evidence.json；容量/部署代码与报价业务代码无交叉冲突。已按最新真实 base 和合并后的源码指纹重建本 PR 当前证据，旧报告仍可从原 Head 读取，不冒充新组合验证。
+
+对新组合重新执行原容量、存储、更新派发、生产入口与失败恢复定向测试，8文件49项全部通过；重新执行 preflight 与目标 lint 均退出0。日志及 JSON 报告位于 `/tmp/update-capacity-reconcile/`。逐文件比较确认容量脚本保持原 #978 内容，apps/packages 保持最新 release 内容。此次只更新分支及冲突证据，不取消草稿，不部署、不操作服务器；PR04 的在途 CI 未受影响。

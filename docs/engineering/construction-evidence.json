@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "base": "64a2ccf828f4c262ef60d1dbb57463607acb4ab3",
+  "base": "07dff9b8ab2b66f75c6696dc837480c33f48412b",
   "risk": "full",
-  "sourceFingerprint": "cbdbe2a43ef7c04e72800056e66dc6f2cb4efb27a9f924fa97e6e07ba310ec09",
+  "sourceFingerprint": "03e5d70843499c2b7855b35ce1e70d37d992000a04c75936f35cd6f4e5ccea0d",
   "rules": [
     {
       "rule": "Budget actual additional per-filesystem lifecycle peaks and verified reuse; retain genuine dependency copies, operational headroom, identity/locks, fresh backups, stop-time recheck, immutable runtime/rollback protection. Collect only proven disposable workspaces and this invocation staging/source files.",
@@ -65,26 +65,16 @@
   "checks": [
     {
       "id": "unit-final",
-      "command": "node node_modules/vitest/vitest.mjs run tests/unit/acceptance-capacity.test.ts tests/unit/acceptance-update-flow.test.ts tests/unit/acceptance-update-policy.test.ts tests/unit/acceptance-storage.test.ts tests/unit/ecs-deploy-entry.test.ts tests/unit/pr-17-deployment.test.ts tests/integration/acceptance-deployment-contract.test.ts tests/integration/pr-17-deploy-failure.test.ts --reporter=json --outputFile=/tmp/update-capacity-evidence/unit-final.report.json",
+      "command": "node node_modules/vitest/vitest.mjs run tests/integration/acceptance-deployment-contract.test.ts tests/integration/pr-17-deploy-failure.test.ts tests/unit/acceptance-capacity.test.ts tests/unit/acceptance-storage.test.ts tests/unit/acceptance-update-flow.test.ts tests/unit/acceptance-update-policy.test.ts tests/unit/ecs-deploy-entry.test.ts tests/unit/pr-17-deployment.test.ts --reporter=verbose --reporter=json --outputFile.json=/tmp/update-capacity-reconcile/tests.json",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-13T16:20:32.203Z",
-      "endedAt": "2026-11-13T16:20:36.794Z",
-      "sourceFingerprint": "cbdbe2a43ef7c04e72800056e66dc6f2cb4efb27a9f924fa97e6e07ba310ec09",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "tests",
-        "package.json",
-        "package-lock.json",
-        "vitest.config.ts"
-      ],
-      "inputFingerprint": "0c54340f0e3d25095d8c4156d6b8da7a9e628b277f89a25db512d295ed9ba0a8",
-      "log": "/tmp/update-capacity-evidence/unit-final.log",
-      "logSha256": "cf0f2b66db37463ef52fd86b59c14796503341383f993b48e769360797f6acff",
-      "context": "Node22.22.0/npm10.9.9; original unit config, bounded default runner. Pure temporary filesystem/role adapters, no server operations. Python capacity/storage tests run through their original unit entry; deployment activation failure fixtures are isolated.",
-      "testedHead": "64a2ccf828f4c262ef60d1dbb57463607acb4ab3",
+      "startedAt": "2026-11-13T18:57:50.267000Z",
+      "endedAt": "2026-11-13T18:57:54.049664Z",
+      "sourceFingerprint": "03e5d70843499c2b7855b35ce1e70d37d992000a04c75936f35cd6f4e5ccea0d",
+      "log": "/tmp/update-capacity-reconcile/tests.log",
+      "logSha256": "f968296feb3caf49637f01cbfa050d59b00c95711d60a066220d31e9ca903211",
+      "context": "Fresh validation of PR978 plus release 07dff9b8ab2b66f75c6696dc837480c33f48412b merged worktree; Node22.22.0/npm10.9.9; real temporary filesystem deployment fixtures only, no servers or business data. Original 580d421 evidence is historical and not reused as new validation.",
+      "testedHead": "580d421e45851e96286ee378f2d5342e066d36e9",
       "kind": "tests",
       "passed": 49,
       "failed": 0,
@@ -92,7 +82,7 @@
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "a8dad981c7d84ab0a9b5cb4936c21faea7d04411927d247e16509a907d11ceb4"
+          "sha256": "aee8e5078b4cb8559e32cad41e57cf9527b6494483fa192489c285bc01f2268b"
         }
       ]
     },
@@ -101,23 +91,13 @@
       "command": "node scripts/test-preflight.mjs",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-13T16:20:59.420Z",
-      "endedAt": "2026-11-13T16:21:05.516Z",
-      "sourceFingerprint": "cbdbe2a43ef7c04e72800056e66dc6f2cb4efb27a9f924fa97e6e07ba310ec09",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "tests",
-        "package.json",
-        "package-lock.json",
-        "vitest.config.ts"
-      ],
-      "inputFingerprint": "0c54340f0e3d25095d8c4156d6b8da7a9e628b277f89a25db512d295ed9ba0a8",
-      "log": "/tmp/update-capacity-evidence/preflight-final.log",
-      "logSha256": "cb1a6af04ab3f7c3675011b56e677568c32ec41a6b2ed2e91629bbee58d93c05",
-      "context": "Node22.22.0/npm10.9.9; original unit config, bounded default runner. Pure temporary filesystem/role adapters, no server operations. Python capacity/storage tests run through their original unit entry; deployment activation failure fixtures are isolated.",
-      "testedHead": "64a2ccf828f4c262ef60d1dbb57463607acb4ab3",
+      "startedAt": "2026-11-13T18:58:04Z",
+      "endedAt": "2026-11-13T18:58:10.752282Z",
+      "sourceFingerprint": "03e5d70843499c2b7855b35ce1e70d37d992000a04c75936f35cd6f4e5ccea0d",
+      "log": "/tmp/update-capacity-reconcile/preflight.log",
+      "logSha256": "0d7d93f227fe2697dac3334d8c53dab9c3b78ac842630631a1e6adb05803d92b",
+      "context": "Fresh validation of PR978 plus release 07dff9b8ab2b66f75c6696dc837480c33f48412b merged worktree; Node22.22.0/npm10.9.9; real temporary filesystem deployment fixtures only, no servers or business data. Original 580d421 evidence is historical and not reused as new validation.",
+      "testedHead": "580d421e45851e96286ee378f2d5342e066d36e9",
       "kind": "command"
     },
     {
@@ -125,23 +105,13 @@
       "command": "node node_modules/eslint/bin/eslint.js scripts/ci/acceptance-maintenance-drill.mjs tests/unit/acceptance-capacity.test.ts --max-warnings=0",
       "status": "passed",
       "exitCode": 0,
-      "startedAt": "2026-11-13T16:20:59.443Z",
-      "endedAt": "2026-11-13T16:21:00.567Z",
-      "sourceFingerprint": "cbdbe2a43ef7c04e72800056e66dc6f2cb4efb27a9f924fa97e6e07ba310ec09",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "scripts",
-        "tests",
-        "package.json",
-        "package-lock.json",
-        "vitest.config.ts"
-      ],
-      "inputFingerprint": "0c54340f0e3d25095d8c4156d6b8da7a9e628b277f89a25db512d295ed9ba0a8",
-      "log": "/tmp/update-capacity-evidence/lint-final.log",
+      "startedAt": "2026-11-13T18:58:10Z",
+      "endedAt": "2026-11-13T18:58:10.760282Z",
+      "sourceFingerprint": "03e5d70843499c2b7855b35ce1e70d37d992000a04c75936f35cd6f4e5ccea0d",
+      "log": "/tmp/update-capacity-reconcile/lint.log",
       "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "context": "Node22.22.0/npm10.9.9; original unit config, bounded default runner. Pure temporary filesystem/role adapters, no server operations. Python capacity/storage tests run through their original unit entry; deployment activation failure fixtures are isolated.",
-      "testedHead": "64a2ccf828f4c262ef60d1dbb57463607acb4ab3",
+      "context": "Fresh validation of PR978 plus release 07dff9b8ab2b66f75c6696dc837480c33f48412b merged worktree; Node22.22.0/npm10.9.9; real temporary filesystem deployment fixtures only, no servers or business data. Original 580d421 evidence is historical and not reused as new validation.",
+      "testedHead": "580d421e45851e96286ee378f2d5342e066d36e9",
       "kind": "command"
     }
   ]

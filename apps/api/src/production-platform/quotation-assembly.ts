@@ -16,7 +16,7 @@ function rowId(sourceId:string,key:string){const h=digest([sourceId,key]);return
 /** Called by original write commands inside their lifecycle lock/transaction.
  * Re-read current source state rather than applying a potentially late event payload.
  * No GET invokes this writer; confirmed snapshots and budgets are never updated here. */
-export async function assembleQuotation(db:PoolClient,sourceId:string,actorId:string,appliedVersion?:number):Promise<AssembledQuotation|undefined>{
+export async function assembleQuotation(db:PoolClient,sourceId:string,actorId:string,appliedVersion?:number,previousSource?:Awaited<ReturnType<typeof developmentDocumentRow>>):Promise<AssembledQuotation|undefined>{
  const saved=await developmentDocumentRow(db,sourceId);
  if(saved?.document?.quotationMode!=='automatic_v1')return;
  const document=saved.document as DevelopmentDocument,round=saved.round_number??1;
@@ -25,6 +25,15 @@ export async function assembleQuotation(db:PoolClient,sourceId:string,actorId:st
  const old=(await db.query('SELECT * FROM digital_quotation_documents WHERE source_id=$1 FOR UPDATE',[sourceId])).rows[0] as AssembledQuotation|undefined;
  // A historical manual quote is never silently converted, even when source data gains prices.
  if(old&&!old.assembly)return old;
+ // A legacy hash can only be upgraded against its actual source version.
+ // Document-changing commands provide the pre-write row under the lifecycle lock.
+ const legacySource=previousSource??saved;
+ const legacyDocument=old?.assembly?.sourceVersion===legacySource?.version&&old?.assembly?.roundNumber===(legacySource?.round_number??1)?legacySource?.document as DevelopmentDocument:undefined;
+ const commercialFingerprint=(d:DevelopmentDocument)=>technicalDocumentFingerprint({...d,craft:'无',washing:'免洗'});
+ const matches=(id:string,basis:string,legacyBasis:()=>string)=>{
+  const ref=old?.assembly?.rows[id];
+  return ref?.dependencyVersion===2?ref.basis===basis:Boolean(legacyDocument&&ref?.basis===legacyBasis());
+ };
  const artifact=await publishedTechnicalArtifact(db,sourceId,round);
  const validArtifact=artifact?.row.document_fingerprint===technicalDocumentFingerprint(document)?artifact:null;
  const plan=(await db.query("SELECT entries FROM digital_development_round_arrangements WHERE source_id=$1 AND round_number=$2",[sourceId,round])).rows[0]?.entries??{};
@@ -36,10 +45,11 @@ export async function assembleQuotation(db:PoolClient,sourceId:string,actorId:st
  const add=(row:BudgetRow,assignment:QuotationAssignment,ref:QuotationAssembly['rows'][string])=>{rows.push(row);assignments.push(assignment);refs[row.rowId]=ref;};
  for(const m of document.materials.filter(m=>!isDevelopmentMaterialPlaceholder(m))){
   const id=m.materialId,tech=recipient('development_pattern',old?.assignments.find(a=>a.rowId===id)?.technicalAssigneeId??null),unit=m.pricingUnit??'';
-  const basis=digest([round,m.materialId,m.name,m.specification,unit,technicalDocumentFingerprint(document),tech]);
-  const prior=old?.document.rows.find(r=>r.rowId===id),same=old?.assembly?.rows[id]?.basis===basis;
+  const basis=digest([m.materialId,m.name,m.specification,unit,commercialFingerprint(document),tech]);
+  const prior=old?.document.rows.find(r=>r.rowId===id),same=matches(id,basis,()=>digest([old!.assembly!.roundNumber,m.materialId,m.name,m.specification,unit,technicalDocumentFingerprint(legacyDocument!),tech]))
+   &&(!legacyDocument||old?.assembly?.rows[id]?.dependencyVersion===2||commercialFingerprint(legacyDocument)===commercialFingerprint(document));
   const sourceConsumption=validArtifact?.artifact.body.consumptionRows.find(r=>r.materialId===id&&r.unit===unit);
-  const artifactRevision=validArtifact?`${validArtifact.artifact.artifactSetId}:${validArtifact.artifact.version}`:'';
+  const artifactRevision=artifact?`${artifact.artifact.artifactSetId}:${artifact.artifact.version}`:'';
   const keepManual=same&&old?.consumption_sources[id]?.kind==='technical_manual'&&old.assembly?.rows[id]?.artifactRevision===artifactRevision;
   let consumption='';
   if(keepManual){consumption=prior?.consumption??'';consumptions[id]=old!.consumption_sources[id]!;}
@@ -49,20 +59,26 @@ export async function assembleQuotation(db:PoolClient,sourceId:string,actorId:st
    consumptions[id]=same&&existing?.artifactRef?.id===validArtifact!.artifact.artifactSetId&&existing.artifactRef.version===validArtifact!.artifact.version?existing:
     {kind:'technical_artifact',actorId:validArtifact!.artifact.createdBy,version:nextVersion,recordedAt:at,artifactRef:{id:validArtifact!.artifact.artifactSetId,version:validArtifact!.artifact.version,materialId:id}};
   }
+  else if(same&&old?.consumption_sources[id]?.kind==='technical_artifact'&&artifactRevision&&old.assembly?.rows[id]?.artifactRevision===artifactRevision){
+   // A craft-only edit does not revoke an already adopted material quantity.
+   // A changed/withdrawn artifact head still requires a valid new source above.
+   consumption=prior?.consumption??'';consumptions[id]=old.consumption_sources[id]!;
+  }
   const priceBasis=digest([m.unitPrice??'',unit,m.materialId,m.name,m.specification,m.supplier]),override=old?.price_sources[id]?.documentPriceHash===priceBasis;
   const unitPrice=override?prior?.unitPrice??'':m.unitPrice??'';
   if(override&&old?.price_sources[id])prices[id]=old.price_sources[id]!;
   else if(unitPrice!==''&&unit)prices[id]=same&&prior?.unitPrice===unitPrice&&old?.price_sources[id]?old.price_sources[id]!:{actorId:saved.revision?.updated_by??saved.updated_by??source.created_by,role:'development_document',version:saved.version,recordedAt:at};
   add({rowId:id,section:m.category==='辅料'?'辅料':'主料',category:m.category,name:m.name,specification:m.specification,unit,supplier:m.supplier,consumption,unitPrice},
    {rowId:id,technicalAssigneeId:tech,priceAssigneeId:source.created_by,priceRole:'sample_designer'},
-   {kind:'material',sourceRef:id,basis,stage:'development',artifactRevision,priceBasis});
+   {kind:'material',sourceRef:id,basis,dependencyVersion:2,stage:'development',artifactRevision,priceBasis});
  }
  const component=(key:string,name:string,kind:'ie'|'craft',worker:string|null,priceRole:QuotationAssignment['priceRole'])=>{
-  const id=rowId(sourceId,key),basis=digest([round,key,technicalDocumentFingerprint(document),document.craftSteps??null,worker]),prior=old?.document.rows.find(r=>r.rowId===id);
-  const same=old?.assembly?.rows[id]?.basis===basis,unitPrice=same?prior?.unitPrice??'':'';
+  const id=rowId(sourceId,key),basis=digest([key,commercialFingerprint(document),worker]),prior=old?.document.rows.find(r=>r.rowId===id);
+  const same=matches(id,basis,()=>digest([old!.assembly!.roundNumber,key,technicalDocumentFingerprint(legacyDocument!),legacyDocument!.craftSteps??null,worker]))
+   &&(!legacyDocument||old?.assembly?.rows[id]?.dependencyVersion===2||commercialFingerprint(legacyDocument)===commercialFingerprint(document)),unitPrice=same?prior?.unitPrice??'':'';
   if(unitPrice!==''&&old?.price_sources[id])prices[id]=old.price_sources[id]!;
   add({rowId:id,section:'外发工序',category:kind==='ie'?'IE加工':'工艺',name,specification:'',unit:'件',supplier:'',consumption:'1',unitPrice},
-   {rowId:id,technicalAssigneeId:null,priceAssigneeId:worker,priceRole},{kind,sourceRef:key,basis,stage:'development'});
+   {rowId:id,technicalAssigneeId:null,priceAssigneeId:worker,priceRole},{kind,sourceRef:key,basis,dependencyVersion:2,stage:'development'});
  };
  const ieId=rowId(sourceId,'ie:processing'),ie=old?.assignments.find(a=>a.rowId===ieId)?.priceAssigneeId??null;
  component('ie:processing','IE加工单价','ie',ie,'ie_reviewer');
