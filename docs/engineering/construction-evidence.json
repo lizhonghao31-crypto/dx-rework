@@ -2,7 +2,7 @@
   "version": 1,
   "base": "b47663670cf2af0fa4d5dedc145ec68a372e0599",
   "risk": "full",
-  "sourceFingerprint": "fba394d89631e20446ddae340b8b925a6df0a474c4027d542a72a1a912520b00",
+  "sourceFingerprint": "f0c7266b4c9608114ada79e00b6fa52394cba581d36a080863a6799b6f827633",
   "rules": [
     {
       "rule": "Frozen event constraints, precise original task ownership and exclusive date boundaries remain separate from actual facts and responsibility windows.",
@@ -21,7 +21,8 @@
         "tests/unit/fixed-schedule-progress.test.ts",
         "tests/unit/journey-time-framework.test.ts",
         "tests/unit/order-time-framework.test.ts",
-        "tests/unit/order-time-reading.test.ts"
+        "tests/unit/order-time-reading.test.ts",
+        "tests/integration/order-time-requests-postgres.test.ts"
       ],
       "reads": [
         "apps/api/src/production-platform/journey-query.ts",
@@ -40,7 +41,8 @@
       "expectation": "No immediate creation-time budget overdue; genuinely missed handover remains late. Cutting does not acquire sewing facts. Date-only approval shows correct Beijing day and no spurious1ms gap. Original role scopes, pagination, historical facts and88-order SQL threshold retained.",
       "checks": [
         "unit",
-        "native"
+        "native",
+        "requests"
       ]
     }
   ],
@@ -56,7 +58,7 @@
       "skipped": 0,
       "testedHead": "b47663670cf2af0fa4d5dedc145ec68a372e0599",
       "sourceFingerprint": "fba394d89631e20446ddae340b8b925a6df0a474c4027d542a72a1a912520b00",
-      "context": "Candidate working tree on stated base, Node22, canonical Vitest configs, maxWorkers1. Native suites use actual low-privilege marked PG16 and lock-pinned Chromium1194; no live data or deployment. Reports describe local verification, not CI.",
+      "context": "Candidate working tree on stated base, Node22, canonical Vitest configs, maxWorkers1. Native suites use actual low-privilege marked PG16 and lock-pinned Chromium1194; no live data or deployment. Reports describe local verification, not CI. Reused unchanged runtime and listed test inputs from507d2781; only the separate order-time-requests integration assertions changed after that verification.",
       "startedAt": "2026-11-14T14:57:37.317Z",
       "endedAt": "2026-11-14T14:57:40.349Z",
       "log": "/tmp/framework-event-final-unit.json",
@@ -66,7 +68,23 @@
           "format": "vitest-json",
           "sha256": "020e4d9c49fed2b15ced2567b553e93cb4072138343b88fc28852c47f99195a5"
         }
-      ]
+      ],
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests/helpers",
+        "tests/unit",
+        "tests/integration/time-framework-cockpit-native-browser-postgres.test.ts",
+        "tests/integration/order-time-reading-postgres.test.ts",
+        "tests/integration/journey-fact-model-postgres.test.ts",
+        "tests/integration/m01-journey-performance-postgres.test.ts",
+        "package.json",
+        "package-lock.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts"
+      ],
+      "inputFingerprint": "15f904d53d81d5f23c137c38d7433036d38d321ce627e5cf6d5da99c280e1f7d"
     },
     {
       "id": "native",
@@ -79,7 +97,7 @@
       "skipped": 0,
       "testedHead": "b47663670cf2af0fa4d5dedc145ec68a372e0599",
       "sourceFingerprint": "fba394d89631e20446ddae340b8b925a6df0a474c4027d542a72a1a912520b00",
-      "context": "Candidate working tree on stated base, Node22, canonical Vitest configs, maxWorkers1. Native suites use actual low-privilege marked PG16 and lock-pinned Chromium1194; no live data or deployment. Reports describe local verification, not CI.",
+      "context": "Candidate working tree on stated base, Node22, canonical Vitest configs, maxWorkers1. Native suites use actual low-privilege marked PG16 and lock-pinned Chromium1194; no live data or deployment. Reports describe local verification, not CI. Reused unchanged runtime and listed test inputs from507d2781; only the separate order-time-requests integration assertions changed after that verification.",
       "startedAt": "2026-11-14T14:57:44.146Z",
       "endedAt": "2026-11-14T15:00:59.806Z",
       "log": "/tmp/framework-event-pg-final.json",
@@ -88,6 +106,45 @@
         {
           "format": "vitest-json",
           "sha256": "a07093de03c3edac41717df0501fdd5fd48403b06eb39c22b8b2527479846e94"
+        }
+      ],
+      "inputPaths": [
+        "apps",
+        "packages",
+        "scripts",
+        "tests/helpers",
+        "tests/unit",
+        "tests/integration/time-framework-cockpit-native-browser-postgres.test.ts",
+        "tests/integration/order-time-reading-postgres.test.ts",
+        "tests/integration/journey-fact-model-postgres.test.ts",
+        "tests/integration/m01-journey-performance-postgres.test.ts",
+        "package.json",
+        "package-lock.json",
+        "vitest.business-chain.config.ts",
+        "vitest.config.ts"
+      ],
+      "inputFingerprint": "15f904d53d81d5f23c137c38d7433036d38d321ce627e5cf6d5da99c280e1f7d"
+    },
+    {
+      "id": "requests",
+      "kind": "tests",
+      "command": "bash /tmp/framework-event-request-regression.sh",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 16,
+      "failed": 0,
+      "skipped": 0,
+      "testedHead": "507d27819ca702336ec6cf12b95415c5b271222e",
+      "sourceFingerprint": "f0c7266b4c9608114ada79e00b6fa52394cba581d36a080863a6799b6f827633",
+      "context": "Candidate test changes on507d2781; unchanged runtime. Actual low-privilege marked PG16, original manager transaction, all16 order-time request regressions. No live data.",
+      "startedAt": "2026-11-14T15:38:35.979Z",
+      "endedAt": "2026-11-14T15:38:58.635Z",
+      "log": "/tmp/framework-event-request-regression.json",
+      "logSha256": "fdaf9aa4da0673e47c9ba67f6490d4d08d7834273610d47d395a6cfd122c6e6f",
+      "resultReports": [
+        {
+          "format": "vitest-json",
+          "sha256": "fdaf9aa4da0673e47c9ba67f6490d4d08d7834273610d47d395a6cfd122c6e6f"
         }
       ]
     }
