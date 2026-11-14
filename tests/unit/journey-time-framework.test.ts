@@ -56,3 +56,25 @@ it('retains a known milestone gap when another required branch has unknown actua
  const view=evaluateJourneyFramework(b,[s],[evaluateFixedScheduleScope(s,at(20))],at(20),null).scopes[0]!.milestones[0]!;
  expect(view).toMatchObject({actual:{precision:'unknown'},forecast:{kind:'unknown'},feasibility:'insufficient',lateMinutes:60});
 });
+
+it('does not certify an unfinished over-budget lower bound as sufficient before its milestone',()=>{
+ const s=scope();s.work=[s.work[0]!];s.terminalIds=['a'];s.facts.a!.ready={precision:'instant',at:at(0)};s.facts.a!.clockStart={precision:'instant',at:at(0)};
+ const b=basis(s);b[0]!.milestones[0]!.workIds=['a'];
+ for(const hour of [4,16,17]){
+  const progress=evaluateFixedScheduleScope(s,at(hour)),view=evaluateJourneyFramework(b,[s],[progress],at(hour),null).scopes[0]!.milestones[0]!;
+  expect(view.forecast).toMatchObject({kind:'lower_bound',earliest:at(hour),latest:null});
+  expect(view.feasibility).toBe(hour<16?'unknown':'insufficient');
+  expect(view.lateMinutes).toBe(hour<16?null:hour===16?1/60000:60);
+  expect(progress.nodes[0]!.ownSla.state).toBe('overdue');
+  expect(view.delta.kind).toBe(hour<16?'on_target':'late');
+ }
+});
+it('requires a finite latest bound strictly before the exclusive milestone deadline',()=>{
+ const s=scope(),b=basis(s);b[0]!.milestones[0]!.workIds=['a'];
+ const progress=evaluateFixedScheduleScope(s,at(0));
+ for(const [earliest,latest,expected] of [[14,15,'sufficient'],[14,16,'unknown'],[14,17,'unknown'],[16,17,'insufficient']] as const){
+  progress.nodes[0]!.availabilityBound={earliest:at(earliest),latest:at(latest)};progress.nodes[0]!.estimateKind='conditional';
+  const view=evaluateJourneyFramework(b,[s],[progress],at(0),null).scopes[0]!.milestones[0]!;
+  expect(view.feasibility).toBe(expected);expect(view.lateMinutes).toBe(expected==='sufficient'?0:expected==='unknown'?null:1/60000);
+ }
+});

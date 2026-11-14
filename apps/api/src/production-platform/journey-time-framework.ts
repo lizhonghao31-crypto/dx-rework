@@ -53,7 +53,9 @@ export function evaluateJourneyFramework(basis:JourneyFrameworkBasis,scopes:read
    // The date's following midnight is exclusive, not an on-time instant.
    const late=target===null?[]:knownEnds.filter(end=>end>=target),stopped=Boolean(termination&&!completion.completed);
    const gap=target===null||!knownEnds.length?null:Math.max(0,(Math.max(...knownEnds)-target+(late.some(end=>end===target)?1:0))/60000);
-   return {key:m.key,targetDate:m.date,plannedAt:m.plannedAt,workIds:[...m.workIds],...completion,delta,forecast,feasibility:stopped?'terminated' as const:late.length?'insufficient' as const:known&&target!==null?'sufficient' as const:'unknown' as const,lateMinutes:stopped?null:gap,coverage:[...new Set(nodes.flatMap(n=>n?.coverage??['里程碑关联工作待核']))]};
+   const sufficient=target!==null&&forecast.latest!==null&&Date.parse(forecast.latest)<target;
+   const feasibility=stopped?'terminated' as const:late.length?'insufficient' as const:sufficient?'sufficient' as const:'unknown' as const;
+   return {key:m.key,targetDate:m.date,plannedAt:m.plannedAt,workIds:[...m.workIds],...completion,delta,forecast,feasibility,lateMinutes:feasibility==='insufficient'?gap:feasibility==='sufficient'?0:null,coverage:[...new Set(nodes.flatMap(n=>n?.coverage??['里程碑关联工作待核']))]};
   })};
  });
  const completedWork=[...unique.values()].filter(Boolean).length;

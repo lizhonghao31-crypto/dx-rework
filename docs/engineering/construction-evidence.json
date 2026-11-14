@@ -2,7 +2,7 @@
   "version": 1,
   "base": "ea426c9e6b07542363afd6c788e7cdab20e1d2e4",
   "risk": "full",
-  "sourceFingerprint": "0417831d31c5ca1dfdf6c8ccbf875b1c22b176f00263174feb8947de55120085",
+  "sourceFingerprint": "401ebd681c6c9e4d1146c13d7bdb145268bb47319c14433deb1b70d06007e64d",
   "rules": [
     {
       "rule": "Plan and milestone facts remain distinct; read effective forward targets, actual occurrence, original batch responsibility and completion-time historical targets without inventing starts.",
@@ -12,15 +12,15 @@
         "apps/api/src/production-platform/factory-sla-evidence.ts",
         "apps/api/src/production-platform/fixed-schedule-basis.ts",
         "apps/api/src/production-platform/fixed-schedule-progress.ts",
+        "apps/api/src/production-platform/journey-time-framework.ts",
+        "apps/api/src/production-platform/journey-washing-facts.ts",
         "apps/api/src/production-platform/order-time-reading.ts",
         "apps/web/src/cockpit-fixed-schedule.tsx",
         "packages/contracts/src/fixed-schedule-progress.ts",
-        "tests/unit/order-time-reading.test.ts",
-        "apps/api/src/production-platform/journey-time-framework.ts",
-        "apps/api/src/production-platform/journey-washing-facts.ts",
         "packages/contracts/src/time-framework-journey.ts",
         "tests/unit/journey-time-framework.test.ts",
-        "tests/unit/journey-washing-facts.test.ts"
+        "tests/unit/journey-washing-facts.test.ts",
+        "tests/unit/order-time-reading.test.ts"
       ],
       "reads": [
         "apps/api/src/production-platform/order-time-reading.ts",
@@ -108,20 +108,20 @@
       "command": "vitest run relevant Journey/cockpit/fixed-schedule/order-time reading/settings and risk-map unit suites; original vitest.config.ts",
       "status": "passed",
       "exitCode": 0,
-      "passed": 385,
+      "passed": 387,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "ea426c9e6b07542363afd6c788e7cdab20e1d2e4",
-      "sourceFingerprint": "0417831d31c5ca1dfdf6c8ccbf875b1c22b176f00263174feb8947de55120085",
+      "testedHead": "5fdd4c61bd0a89a00f80330f6f09ad3907b6f557",
+      "sourceFingerprint": "401ebd681c6c9e4d1146c13d7bdb145268bb47319c14433deb1b70d06007e64d",
       "context": "Uncommitted PR07 candidate at recorded fingerprint; Node22/npm10, canonical Vitest worker limits; PG explicitly maxWorkers1, owned Docker PG16 NOSUPERUSER marked isolated test database, actual service and persisted reader calls. No deployment.",
-      "startedAt": "2026-11-14T07:45:00.292Z",
-      "endedAt": "2026-11-14T07:45:13.771Z",
+      "startedAt": "2026-11-14T08:12:57.111Z",
+      "endedAt": "2026-11-14T08:13:10.356Z",
       "logSha256": "e3612edd5842cd8964f5d5f4a4fd8d5eb52f0e320cf36bbccdca3d74edc83502",
       "logPath": "/tmp/time07-final-unit.log",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "631153a6c29b912dd6764842c7d940bfb39708247d62bb7dcebc438cfb55843a"
+          "sha256": "d89bb859ad25e225eba9d57a25bafb03bf2750c28bdcad76d7d38b7596739184"
         }
       ]
     },
@@ -134,17 +134,17 @@
       "passed": 47,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "ea426c9e6b07542363afd6c788e7cdab20e1d2e4",
-      "sourceFingerprint": "0417831d31c5ca1dfdf6c8ccbf875b1c22b176f00263174feb8947de55120085",
+      "testedHead": "5fdd4c61bd0a89a00f80330f6f09ad3907b6f557",
+      "sourceFingerprint": "401ebd681c6c9e4d1146c13d7bdb145268bb47319c14433deb1b70d06007e64d",
       "context": "Uncommitted PR07 candidate at recorded fingerprint; Node22/npm10, canonical Vitest worker limits; PG explicitly maxWorkers1, owned Docker PG16 NOSUPERUSER marked isolated test database, actual service and persisted reader calls. No deployment.",
-      "startedAt": "2026-11-14T07:47:40.500Z",
-      "endedAt": "2026-11-14T07:51:16.170Z",
-      "logSha256": "794a8022a8f8050beeca2a2dc5c255f24236df0de786fdd1239ed618b04acd52",
+      "startedAt": "2026-11-14T08:13:00.847Z",
+      "endedAt": "2026-11-14T08:16:42.827Z",
+      "logSha256": "67c98de63ce2cae83b9a26a6d0de6d06368001997ed0fbed79fa18e9989c4c73",
       "logPath": "/tmp/time07-final-pg.log",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "2b206448c0f0e8f1c4deffb2c85ee572e9a3b3f58cd07ded4ed9606019d18b3a"
+          "sha256": "01ebdcebb8ea99548520c0ccab826c6f654ea435520b385a063ae88f88a3b1f8"
         }
       ]
     }
