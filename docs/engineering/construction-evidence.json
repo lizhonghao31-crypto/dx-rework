@@ -2,7 +2,7 @@
   "version": 1,
   "base": "b47663670cf2af0fa4d5dedc145ec68a372e0599",
   "risk": "full",
-  "sourceFingerprint": "a71177dcd6cca3440c3e81bd591e9c4b2560589da67c23c33b8fcf534d42fbf0",
+  "sourceFingerprint": "fba394d89631e20446ddae340b8b925a6df0a474c4027d542a72a1a912520b00",
   "rules": [
     {
       "rule": "Frozen event constraints, precise original task ownership and exclusive date boundaries remain separate from actual facts and responsibility windows.",
@@ -10,6 +10,7 @@
       "writes": [
         "apps/api/src/production-platform/fixed-schedule-basis.ts",
         "apps/api/src/production-platform/fixed-schedule-progress.ts",
+        "apps/api/src/production-platform/framework-node-targets.ts",
         "apps/api/src/production-platform/journey-fact-model.ts",
         "apps/api/src/production-platform/journey-time-framework.ts",
         "apps/api/src/production-platform/order-time-completion-target.ts",
@@ -17,10 +18,10 @@
         "packages/contracts/src/fixed-schedule-progress.ts",
         "scripts/ci/full-gate-risk-map.mjs",
         "tests/integration/time-framework-cockpit-native-browser-postgres.test.ts",
+        "tests/unit/fixed-schedule-progress.test.ts",
         "tests/unit/journey-time-framework.test.ts",
         "tests/unit/order-time-framework.test.ts",
-        "tests/unit/order-time-reading.test.ts",
-        "apps/api/src/production-platform/framework-node-targets.ts"
+        "tests/unit/order-time-reading.test.ts"
       ],
       "reads": [
         "apps/api/src/production-platform/journey-query.ts",
@@ -50,20 +51,20 @@
       "command": "vitest six affected time and mapping unit suites --maxWorkers=1",
       "status": "passed",
       "exitCode": 0,
-      "passed": 169,
+      "passed": 172,
       "failed": 0,
       "skipped": 0,
       "testedHead": "b47663670cf2af0fa4d5dedc145ec68a372e0599",
-      "sourceFingerprint": "a71177dcd6cca3440c3e81bd591e9c4b2560589da67c23c33b8fcf534d42fbf0",
+      "sourceFingerprint": "fba394d89631e20446ddae340b8b925a6df0a474c4027d542a72a1a912520b00",
       "context": "Candidate working tree on stated base, Node22, canonical Vitest configs, maxWorkers1. Native suites use actual low-privilege marked PG16 and lock-pinned Chromium1194; no live data or deployment. Reports describe local verification, not CI.",
-      "startedAt": "2026-11-14T14:42:14.298Z",
-      "endedAt": "2026-11-14T14:42:17.866Z",
+      "startedAt": "2026-11-14T14:57:37.317Z",
+      "endedAt": "2026-11-14T14:57:40.349Z",
       "log": "/tmp/framework-event-final-unit.json",
-      "logSha256": "2e856f5a343ddb7b90fff78abf1673d8baa06636f80feb910827cd3747b8b324",
+      "logSha256": "020e4d9c49fed2b15ced2567b553e93cb4072138343b88fc28852c47f99195a5",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "2e856f5a343ddb7b90fff78abf1673d8baa06636f80feb910827cd3747b8b324"
+          "sha256": "020e4d9c49fed2b15ced2567b553e93cb4072138343b88fc28852c47f99195a5"
         }
       ]
     },
@@ -77,16 +78,16 @@
       "failed": 0,
       "skipped": 0,
       "testedHead": "b47663670cf2af0fa4d5dedc145ec68a372e0599",
-      "sourceFingerprint": "a71177dcd6cca3440c3e81bd591e9c4b2560589da67c23c33b8fcf534d42fbf0",
+      "sourceFingerprint": "fba394d89631e20446ddae340b8b925a6df0a474c4027d542a72a1a912520b00",
       "context": "Candidate working tree on stated base, Node22, canonical Vitest configs, maxWorkers1. Native suites use actual low-privilege marked PG16 and lock-pinned Chromium1194; no live data or deployment. Reports describe local verification, not CI.",
-      "startedAt": "2026-11-14T14:42:04.506Z",
-      "endedAt": "2026-11-14T14:45:25.807Z",
+      "startedAt": "2026-11-14T14:57:44.146Z",
+      "endedAt": "2026-11-14T15:00:59.806Z",
       "log": "/tmp/framework-event-pg-final.json",
-      "logSha256": "da2c6c59a532cf89b63c0e6d21c1818a0e95e0838339c48ecb9f5f3dc3b0072c",
+      "logSha256": "a07093de03c3edac41717df0501fdd5fd48403b06eb39c22b8b2527479846e94",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "da2c6c59a532cf89b63c0e6d21c1818a0e95e0838339c48ecb9f5f3dc3b0072c"
+          "sha256": "a07093de03c3edac41717df0501fdd5fd48403b06eb39c22b8b2527479846e94"
         }
       ]
     }

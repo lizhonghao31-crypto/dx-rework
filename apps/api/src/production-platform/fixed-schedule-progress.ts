@@ -1,7 +1,7 @@
 import type {FixedScheduleCalendar,ScheduleOccurrence,ScheduleRange,ScheduleGoalDelta,ScheduleNodeProgress,ScheduleScopeProgress,ScheduleDurationSummary} from '@dx-rework/contracts';
 import {shiftFixedTimeline} from './fixed-timeline-targets.js';
 
-export type ScheduleWork={id:string;canonicalWorkRef:string;stage?:number;dependsOn:readonly string[];dependencyReserves?:Readonly<Record<string,{minutes:number;calendar:FixedScheduleCalendar}>>;start:string|null;end:string|null;startExclusive?:boolean;endExclusive?:boolean;eventTarget?:{end:string|null;targetPrecision:'instant'|'date';targetDate:string|null;exclusive:boolean};minutes:number|null;calendar:FixedScheduleCalendar|null;includedIn?:string;accountingRole?:'original_work'|'added_work'|'included'|'event'|'shared_reference';originalHandoffAt?:string|null;responsibilitySlaRef:string|null;responsibilityMinutes?:number|null;responsibilityCalendar?:FixedScheduleCalendar|null;responsibilityWarningAt?:string|null;responsibilityReminderPercent?:number|null;targetPrecision?:'instant'|'date';targetDate?:string|null;targetRevision?:string;completionTarget?:{end:string;targetRevision:string;targetPrecision:'instant'|'date';targetDate:string|null}|null};
+export type ScheduleWork={id:string;canonicalWorkRef:string;stage?:number;dependsOn:readonly string[];dependencyReserves?:Readonly<Record<string,{minutes:number;calendar:FixedScheduleCalendar}>>;start:string|null;end:string|null;startExclusive?:boolean;endExclusive?:boolean;eventTarget?:{end:string|null;targetPrecision:'instant'|'date';targetDate:string|null;exclusive:boolean};minutes:number|null;calendar:FixedScheduleCalendar|null;includedIn?:string;accountingRole?:'original_work'|'added_work'|'included'|'event'|'shared_reference';originalHandoffAt?:string|null;responsibilitySlaRef:string|null;responsibilityMinutes?:number|null;responsibilityCalendar?:FixedScheduleCalendar|null;responsibilityWarningAt?:string|null;responsibilityReminderPercent?:number|null;targetPrecision?:'instant'|'date';targetDate?:string|null;targetRevision?:string;completionTarget?:{end:string;endExclusive?:boolean;targetRevision:string;targetPrecision:'instant'|'date';targetDate:string|null}|null};
 export type ScheduleResponsibilityWindow={sourceRef:string;started:ScheduleOccurrence;completed:ScheduleOccurrence;complete:boolean;deadline:string|null;warningAt:string|null;calendar:FixedScheduleCalendar|null};
 export type ScheduleFact={ownTaskId?:string;ready:ScheduleOccurrence;completed:ScheduleOccurrence;businessCompleted:boolean;waitingForPredecessors:boolean;clockStart:ScheduleOccurrence;evidenceRefs:readonly string[];ownWindows?:readonly ScheduleResponsibilityWindow[];impactStartedAt?:string|null;terminated?:boolean;terminationAt?:string|null;notYetReady?:boolean};
 export type ScheduleScopeInput={plannedReadiness?:boolean;scopeRef:string;lineId:string|null;targetRevision:string;work:readonly ScheduleWork[];facts:Readonly<Record<string,ScheduleFact>>;terminalIds:readonly string[];customerGoal:string|null};
@@ -62,9 +62,9 @@ export function fixedGoalDelta(work:ScheduleWork,fact:ScheduleFact|undefined,sco
  if(fact?.businessCompleted&&work.completionTarget!==undefined){
   const {completionTarget,...base}=work;delete base.eventTarget;
   if(completionTarget===null)return {...fixedGoalDelta({...base,end:null},fact,scope,asOf,termination),targetRevision:'unknown:completion-plan'};
-  return fixedGoalDelta({...base,...completionTarget},fact,scope,asOf,termination);
+  return fixedGoalDelta({...base,...completionTarget,endExclusive:completionTarget.endExclusive??false},fact,scope,asOf,termination);
  }
- if(work.eventTarget){const {eventTarget,...base}=work;return fixedGoalDelta({...base,...eventTarget},fact,scope,asOf,termination);}
+ if(work.eventTarget){const {eventTarget,...base}=work;return fixedGoalDelta({...base,...eventTarget,endExclusive:eventTarget.exclusive},fact,scope,asOf,termination);}
  const result:ScheduleGoalDelta={kind:'unknown',signedValue:null,unit:work.targetPrecision==='date'?'day':'minute',asOf,targetAt:work.end,targetPrecision:work.targetPrecision??'instant',targetDate:work.targetDate??null,actual:fact?.completed??unknown,targetRevision:work.targetRevision??scope.targetRevision,scopeRef:scope.scopeRef};
  if(!fact?.businessCompleted&&(termination||fact?.terminated))return {...result,kind:'terminated'};
  const end=timestamp(work.end),now=timestamp(asOf);if(end===null||now===null)return result;
@@ -78,9 +78,9 @@ export function fixedGoalDelta(work:ScheduleWork,fact:ScheduleFact|undefined,sco
   const value=actual?difference:Math.max(0,difference);
   return {...result,signedValue:value,kind:value>0?'late':value<0?'early':'on_target'};
  }
- if(!fact?.businessCompleted){const value=Math.max(0,(now-end)/MINUTE);return {...result,signedValue:value,kind:value>0?'late':'on_target'};}
+ if(!fact?.businessCompleted){const value=Math.max(0,(now-end+(work.endExclusive&&now===end?1:0))/MINUTE);return {...result,signedValue:value,kind:value>0?'late':'on_target'};}
  const actual=completedBounds(fact,asOf);if(!actual||actual[0]!==actual[1])return result;
- const value=(actual[0]-end)/MINUTE;return {...result,signedValue:value,kind:value>0?'late':value<0?'early':'on_target'};
+ const value=(actual[0]-end+(work.endExclusive&&actual[0]===end?1:0))/MINUTE;return {...result,signedValue:value,kind:value>0?'late':value<0?'early':'on_target'};
 }
 
 /** One DAG evaluation per scope. Completed facts replace estimates; pending
@@ -131,7 +131,9 @@ export function evaluateFixedScheduleScope(input:ScheduleScopeInput,asOf:string,
     boundary={available:[available[0]!,available[1]!],credit:[credit[0]!,credit[1]!],reference:work.accountingRole==='added_work'?timestamp(work.originalHandoffAt)??end:end,completed:false,estimate:lowerBound?'lower_bound':'conditional',exclusive:!ready&&!lowerBound&&(work.eventTarget?.exclusive??work.endExclusive)===true&&available.every(at=>at===end)&&deps.every(dep=>dep!.available[1]<start||dep!.exclusive===true)};
    }
   }
-  const lag=boundary&&end!==null&&calendar?range(scheduleElapsed(end,boundary.available[0],calendar),scheduleElapsed(end,boundary.available[1],calendar)):null;
+  const strictEnd=work.eventTarget?.exclusive??work.endExclusive;
+  const boundaryLag=(at:number)=>scheduleElapsed(end!,at,calendar!)+(strictEnd&&!boundary?.exclusive&&at===end?1/MINUTE:0);
+  const lag=boundary&&end!==null&&calendar?range(boundaryLag(boundary.available[0]),boundaryLag(boundary.available[1])):null;
   const stop=terminated?timestamp(fact?.terminated?fact.terminationAt??termination?.at:termination?.at):null;
   const ownCalendar=work.responsibilityCalendar,ownStart=fact?scheduleOccurrenceBounds(fact.clockStart,asOf):null,ownEnd=completed?actual:terminated?stop!==null&&stop<=now?[stop,stop] as const:null:[now,now] as const;
   const ownKnown=Boolean(work.responsibilitySlaRef&&work.responsibilityMinutes!==null&&work.responsibilityMinutes!==undefined&&ownCalendar&&ownStart&&ownEnd&&ownEnd[1]>=ownStart[0]);

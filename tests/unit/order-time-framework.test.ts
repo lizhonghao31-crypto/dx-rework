@@ -239,3 +239,12 @@ it('derives event constraints from frozen milestones and downstream preparation 
  expect(frameworkNodeTargets(later).get('budget')).toEqual(targets.get('budget'));
  expect(frameworkTargetPrecision({id:'precise',start:{at:iso(5,0),exclusive:false,reasons:[]},end:{at:iso(5,0),exclusive:false,reasons:[]}})).toEqual({targetPrecision:'instant',targetDate:null});
 });
+
+it('keeps a non-midnight exclusive preparation deadline derived from a date milestone',async()=>{
+ const {frameworkNodeTargets,frameworkTargetPrecision}=await import('../../apps/api/src/production-platform/framework-node-targets.js');
+ const input=fixture();input.plan.company.nodes.budget={kind:'event',minutes:0,calendar:'continuous',reminder:{enabled:false,percent:70}};
+ input.plan.company.nodes.dispatch=rule(0.5);input.work.push({id:'budget',parameterKey:'budget',stage:2,dependsOn:[]});input.work.find(row=>row.id==='dispatch')!.dependsOn.push('budget');
+ const frozen=freezeTimeFrameworkCandidate(evaluateTimeFrameworkCandidate(input,context()),version),target=frameworkNodeTargets(frozen).get('budget')!;
+ expect(target.end).toMatchObject({at:iso(5,12),exclusive:true});
+ expect(frameworkTargetPrecision(target)).toEqual({targetPrecision:'instant',targetDate:null});
+});

@@ -48,5 +48,5 @@ export function orderTimeCompletionTarget(work:OrderTimeWork,scope:{scopeRef:str
  if(framework&&!frameworkTargets){frameworkTargets=frameworkNodeTargets(framework);targetCache?.set(framework,frameworkTargets);}
  const target=framework?frameworkTargets!.get(node.id):old.targets[oldScope.scopeRef]?.[node.id],goal=!framework&&oldScope.customerGoalIds.includes(node.id)?oldScope.goals[node.id]:null;
  if(!target?.end.at)return null;
- return {end:target.end.at,targetRevision:`${chosen.id}:${old.revision}`,...(framework?frameworkTargetPrecision(target):{targetPrecision:goal?.precision==='date'?'date' as const:'instant' as const,targetDate:goal?.precision==='date'?goal.value:null})};
+ return {end:target.end.at,endExclusive:target.end.exclusive,targetRevision:`${chosen.id}:${old.revision}`,...(framework?frameworkTargetPrecision(target):{targetPrecision:goal?.precision==='date'?'date' as const:'instant' as const,targetDate:goal?.precision==='date'?goal.value:null})};
 }

@@ -181,7 +181,7 @@ export function orderTimeReadingBasis(saved:StoredOrderTimePlan,resource:Busines
    const goal=!framework&&scope.customerGoalIds.includes(source.id),anchor=scope.goals[source.id];
    const eventConstraint=frameworkTargets?.get(source.id),eventTarget=eventConstraint&&eventConstraint!==target?{end:eventConstraint.end.at,...frameworkTargetPrecision(eventConstraint),exclusive:eventConstraint.end.exclusive}:undefined;
    return {...definition,stage:source.stage,canonicalWorkRef:source.canonicalWorkRef??`${resource.kind}:${resource.id}:work:${source.id}`,
-    start:target?.start.at??null,end:target?.end.at??null,...(framework?{startExclusive:target?.start.exclusive??false,endExclusive:target?.end.exclusive??false}:{}),...originalOwn,...(eventTarget?{eventTarget}:{}),
+    start:target?.start.at??null,end:target?.end.at??null,...(target?{startExclusive:target.start.exclusive,endExclusive:target.end.exclusive}:{}),...originalOwn,...(eventTarget?{eventTarget}:{}),
     responsibilitySlaRef:originalOwn.responsibilitySlaRef,responsibilityMinutes:originalOwn.responsibilityMinutes??null,responsibilityCalendar:originalOwn.responsibilityCalendar??null,
     ...(begun?{responsibilityWarningAt:own.task?.warning_at?.toISOString()??(atStart?capturedWarning:old?.responsibilityWarningAt??null)}:{responsibilityReminderPercent:reminder?.enabled?reminder.percent:null}),
     ...(framework?frameworkTargetPrecision(target):{targetPrecision:goal&&anchor?.precision==='date'?'date' as const:'instant' as const,targetDate:goal&&anchor?.precision==='date'?anchor.value:null})};
