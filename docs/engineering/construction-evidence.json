@@ -187,7 +187,8 @@
           "format": "vitest-json",
           "sha256": "18decd12693aeb3a8fbd750cbce21bfd7ea64ee0548d80cd07122cea13414bcf"
         }
-      ]
+      ],
+      "log": "/tmp/time05-review-final-pg16.log"
     },
     {
       "id": "washing-pg13",
@@ -210,7 +211,8 @@
           "format": "vitest-json",
           "sha256": "9fd056cde987c6fdc54b52d270e0d832eb5ef2941fcf3112b0371478576997a1"
         }
-      ]
+      ],
+      "log": "/tmp/time05-review-final-pg13.log"
     },
     {
       "id": "washing-unit",
@@ -233,7 +235,8 @@
           "format": "vitest-json",
           "sha256": "19245bffa37e7ecce27caba7d2a24ab74060c78a836d747e388068bcc76ec70d"
         }
-      ]
+      ],
+      "log": "/tmp/time05-review-final-unit.log"
     },
     {
       "id": "deploy-compat",
@@ -271,7 +274,8 @@
         "package-lock.json",
         "vitest.config.ts"
       ],
-      "inputFingerprint": "fae28c836e3c261f6c7c2e6cc7ff02bbcd827f22eb4541312d6b19fa89d3b8c3"
+      "inputFingerprint": "fae28c836e3c261f6c7c2e6cc7ff02bbcd827f22eb4541312d6b19fa89d3b8c3",
+      "log": "/tmp/time05-deploy-resolved.log"
     },
     {
       "id": "capacity-readonly",
@@ -300,7 +304,8 @@
         "package-lock.json",
         "vitest.config.ts"
       ],
-      "inputFingerprint": "fae28c836e3c261f6c7c2e6cc7ff02bbcd827f22eb4541312d6b19fa89d3b8c3"
+      "inputFingerprint": "fae28c836e3c261f6c7c2e6cc7ff02bbcd827f22eb4541312d6b19fa89d3b8c3",
+      "log": "/tmp/time05-capacity-readonly-final.log"
     },
     {
       "id": "migration-contract",
@@ -322,7 +327,8 @@
         "scripts/migration-lib.mjs",
         "scripts/migration-branches.json"
       ],
-      "inputFingerprint": "1f3fd957ec7f9e1a8f7fc16be8f1c4d4a4be5ffd547b0c266de1d5dc9a81f7d2"
+      "inputFingerprint": "1f3fd957ec7f9e1a8f7fc16be8f1c4d4a4be5ffd547b0c266de1d5dc9a81f7d2",
+      "log": "/tmp/time05-final-migrations.log"
     }
   ]
 }
