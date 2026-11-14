@@ -80,6 +80,25 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   await service.remove(f.root,{id:pair.id,kind:pair.kind,expectedVersion:used.record.version},randomUUID());
   expect((await f.db.query('SELECT count(*)::int AS n FROM digital_timeline_standard_versions WHERE standard_id=$1',[pair.id])).rows[0].n).toBe(1);
  });
+ it('publishes the complete framework only when enabled, preserves adopted orders and round-trips history',async()=>{
+  const enabled=new OrderTimeSettingsService(f.db,true,true),before=await service.read(f.root),prepared=await enabled.read(f.root);
+  expect(before.current.framework).toBeUndefined();expect(prepared.current.framework?.milestoneOffsets.B.color_confirmation).toBeNull();
+  expect(prepared.current.nodes.development_positioning?.minutes).toBe(240);
+  expect(prepared.current.nodes.development_confirmation?.minutes).toBe(120);
+  const originalOrder=await new OrderTimePlanRepository(f.db).current({kind:'order',id:historicalOrder.productionOrderId});
+  await expect(service.save(f.root,{expectedVersion:before.version,values:prepared.current},randomUUID())).rejects.toMatchObject({statusCode:409});
+  expect((await service.read(f.root)).version).toBe(before.version);
+  const first=await enabled.save(f.root,{expectedVersion:prepared.version,values:prepared.current},randomUUID());
+  const changed=structuredClone(prepared.current);changed.framework!.milestoneOffsets.A.material_investment=96;
+  const next=await enabled.save(f.root,{expectedVersion:first.record.version,values:changed},randomUUID());
+  const restored=await enabled.use(f.root,{id:first.record.id,expectedVersion:next.record.version},randomUUID());
+  expect(restored.record.standard.framework).toEqual(first.record.standard.framework);
+  expect((await enabled.history(f.root)).items.find(item=>item.id===first.record.id)?.standard.framework).toEqual(first.record.standard.framework);
+  // A compatible reader can read new data without enabling writes; no existing
+  // order is rebased onto a subsequently published company counterpart.
+  expect((await service.read(f.root)).current.framework).toEqual(first.record.standard.framework);
+  expect(await new OrderTimePlanRepository(f.db).current({kind:'order',id:historicalOrder.productionOrderId})).toEqual(originalOrder);
+ });
  it('keeps the original management roles and rechecks actual role withdrawal in the same actor context',async()=>{
   const {actor:pmc}=await r5RoleFixture(f.db,f.access,f.root,'pmc'),state=await service.read(f.root);
   await expect(service.read(pmc)).resolves.toMatchObject({version:state.version});

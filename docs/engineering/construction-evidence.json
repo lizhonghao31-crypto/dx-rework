@@ -1,406 +1,229 @@
 {
   "version": 1,
-  "base": "0bcd95e83e657646033ef804f75057f6c4b1469e",
+  "base": "08cbefb91fdfe5cef0a30b5772caade72ec2524b",
   "risk": "full",
-  "sourceFingerprint": "c32f5db1ae25db732a9d641e59539e8b8dcc2c8a4600b9f07c4cee0f31385d10",
+  "sourceFingerprint": "c6d53eb26aac376a78dd887969eede2d0944ebd9cbecc5fcc8dea7d89bedb8cb",
   "rules": [
     {
-      "rule": "Normal washing quantity, immutable facts, fees and active scoped authority are consistent with original receipts and packing.",
-      "source": "Approved time framework revision27 §9.4 and eight-PR plan PR05; current authorization after PR04 Acceptance; docs/engineering/time-framework-05.md.",
+      "rule": "Company standard and preview use frozen A/B offsets, applicable work and independent washing times; original history use and roles remain intact.",
+      "source": "Approved time framework revision27 and eight-PR plan PR06; docs/engineering/time-framework-06.md; user authorized implementation after PR05 Acceptance.",
       "writes": [
-        "apps/api/src/platform/migration-manifest.json",
-        "apps/api/src/production-platform/delivery-calendar-debt-summary.ts",
-        "apps/api/src/production-platform/order-closure-service.ts",
-        "apps/api/src/production-platform/packing-quality-coverage.ts",
-        "scripts/deploy/acceptance-migration-requirements.json",
-        "tests/helpers/business-anchor-fixture.ts",
-        "apps/api/migrations/0290_bulk_washing.sql",
-        "apps/api/src/production-platform/bulk-washing-coverage.ts",
-        "apps/api/src/production-platform/bulk-washing-ledger.ts",
-        "apps/api/src/production-platform/bulk-washing-repository.ts",
-        "apps/api/src/production-platform/bulk-washing-service.ts",
-        "apps/api/src/production-platform/bulk-washing-windows.ts",
-        "packages/contracts/src/bulk-washing.ts",
-        "tests/integration/bulk-washing-postgres.test.ts",
-        "tests/unit/bulk-washing-ledger.test.ts",
-        "tests/unit/bulk-washing-windows.test.ts"
+        "apps/api/src/production-platform/order-time-settings-calculation.ts",
+        "apps/api/src/production-platform/order-time-settings-service.ts",
+        "apps/web/src/order-time-calculator.tsx",
+        "apps/web/src/order-time-route-fields.tsx",
+        "apps/web/src/order-time-settings-model.ts",
+        "apps/web/src/order-time-standard-editor.tsx",
+        "packages/contracts/src/digital-series-plan.ts",
+        "packages/contracts/src/order-time-settings.ts",
+        "packages/domain/src/series-plan.ts",
+        "tests/integration/order-time-settings-postgres.test.ts",
+        "apps/web/src/order-time-milestone-fields.tsx",
+        "tests/unit/order-time-framework-settings.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/order-closure-service.ts",
-        "apps/api/src/production-platform/packing-quality-coverage.ts",
-        "apps/api/src/production-platform/bulk-washing-service.ts"
+        "apps/api/src/production-platform/order-time-settings-service.ts",
+        "apps/api/src/production-platform/order-time-settings-calculation.ts"
       ],
       "oldTests": [
-        "tests/integration/effective-packing-postgres.test.ts"
+        "tests/integration/order-time-settings-postgres.test.ts"
       ],
-      "newTests": [
-        "tests/integration/bulk-washing-postgres.test.ts"
-      ],
-      "initialization": "0290 immutable washing plans/events and disposable quantity-version projection. Fresh isolated low-privilege schemas tested; old orders without adoption preserve existing QC/packing semantics. Public adoption remains PR06 and integrated enablement PR08.",
-      "dateAndPermission": "Actual send/start/return/inspection opens clocks; unknown timestamps remain unknown. Frozen started allowances, independent native first receipt, active role and scoped assignee authorization; root correction preserves immutable history. No real role grants, external messaging or server updates.",
-      "expectation": "100 ordered /30 received /20 washed and qualified stays partial; native corrections invalidate coverage; fee version history preserved; repeated and competing writes cannot double quantities; old 88-order performance within7100 SQL. Review P1/P2: cumulative receipt links20 versus replacement QC15 invalidate coverage; correcting links restores10/15 only; concurrent adoption permits exactly one version and refreshes valid20 coverage atomically without resetting started clocks. The previously recorded88-order performance result remains historical; final gate verifies current candidate.",
+      "initialization": "No migration or real data operation. Existing standards keep their stored shape; new framework publication remains disabled until PR08. Fresh isolated low-privilege schema used for actual persistence and original App.",
+      "dateAndPermission": "Same authenticated actor and transaction, original roles and per-PO scope; explicit observation and true occurrence remain separate; a later approved change cannot erase completed historical deviation. Preview does not write.",
+      "expectation": "Company standard and preview use frozen A/B offsets, applicable work and independent washing times; original history use and roles remain intact. Final Journey/UI integration remains PR07/08; no claim of Acceptance deployment or final rollback SHA validation.",
       "checks": [
-        "washing-pg16",
-        "washing-pg13",
-        "washing-unit",
-        "migration-contract"
+        "unit",
+        "postgres",
+        "browser"
       ]
     },
     {
-      "rule": "Factory-inclusive and after-receipt route expansion use frozen explicit standard without duplicate time or invented start.",
-      "source": "Approved time framework revision27 §9.4 and eight-PR plan PR05; current authorization after PR04 Acceptance; docs/engineering/time-framework-05.md.",
+      "rule": "Original authorized request and management submit adopt actual proposed route and washing once; per-PO customer and factory dates remain distinct; first receipt never means fully collected.",
+      "source": "Approved time framework revision27 and eight-PR plan PR06; docs/engineering/time-framework-06.md; user authorized implementation after PR05 Acceptance.",
       "writes": [
-        "apps/api/src/production-platform/fixed-order-work.ts",
-        "packages/contracts/package.json",
         "apps/api/src/production-platform/bulk-washing-work.ts",
-        "tests/unit/bulk-washing-work.test.ts"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/fixed-order-work.ts",
-        "apps/api/src/production-platform/bulk-washing-work.ts"
-      ],
-      "oldTests": [
-        "tests/unit/fixed-timeline-targets.test.ts"
-      ],
-      "newTests": [
+        "apps/api/src/production-platform/order-time-activation.ts",
+        "apps/api/src/production-platform/order-time-automatic.ts",
+        "apps/api/src/production-platform/order-time-operation-state.ts",
+        "apps/api/src/production-platform/order-time-request-plan.ts",
+        "apps/api/src/production-platform/order-time-request-routes.ts",
+        "apps/api/src/production-platform/order-time-request-service.ts",
+        "apps/api/src/production-platform/sla-po-date-adapter.ts",
+        "apps/web/src/order-time-request-page.tsx",
+        "apps/web/src/order-time-request.css",
+        "packages/contracts/src/order-time-requests.ts",
+        "tests/integration/order-time-requests-browser-postgres.test.ts",
+        "tests/integration/order-time-requests-postgres.test.ts",
         "tests/unit/bulk-washing-work.test.ts",
-        "tests/unit/bulk-washing-windows.test.ts"
-      ],
-      "initialization": "0290 immutable washing plans/events and disposable quantity-version projection. Fresh isolated low-privilege schemas tested; old orders without adoption preserve existing QC/packing semantics. Public adoption remains PR06 and integrated enablement PR08.",
-      "dateAndPermission": "Actual send/start/return/inspection opens clocks; unknown timestamps remain unknown. Frozen started allowances, independent native first receipt, active role and scoped assignee authorization; root correction preserves immutable history. No real role grants, external messaging or server updates.",
-      "expectation": "Parallel PO scopes independent; Sunday and continuous calendars checked; included washing preserves factory total; exemption creates no fake completion and termination freezes clocks.",
-      "checks": [
-        "washing-unit"
-      ]
-    },
-    {
-      "rule": "Original App washing, native todo notifications and same-session revocation preserve current authority and recoverable submissions.",
-      "source": "Approved time framework revision27 §9.4 and eight-PR plan PR05; current authorization after PR04 Acceptance; docs/engineering/time-framework-05.md.",
-      "writes": [
-        "apps/api/src/production-platform/identity-routes.ts",
-        "apps/api/src/production-platform/notification-policy.ts",
-        "apps/api/src/production-platform/notification-service.ts",
-        "apps/api/src/server.ts",
-        "apps/api/src/todos/deep-link.ts",
-        "apps/api/src/todos/delivery-worker.ts",
-        "apps/web/src/factory-flow-panel.tsx",
-        "apps/web/src/factory-task-target.ts",
-        "apps/web/src/order-closure-panel.tsx",
-        "packages/contracts/src/todo-destination.ts",
-        "packages/contracts/src/todo-presentation.ts",
-        "tests/acceptance/supplychain-settings-browser.ts",
-        "tests/unit/todo-destination-parity.test.ts",
-        "apps/api/src/production-platform/bulk-washing-routes.ts",
-        "apps/api/src/production-platform/bulk-washing-todos.ts",
-        "apps/web/src/bulk-washing-panel.tsx",
-        "tests/integration/bulk-washing-browser-postgres.test.ts"
+        "apps/api/src/production-platform/order-time-washing.ts",
+        "apps/web/src/order-time-washing-fields.tsx",
+        "tests/unit/order-time-washing.test.ts"
       ],
       "reads": [
-        "apps/web/src/factory-flow-panel.tsx",
-        "apps/web/src/order-closure-panel.tsx",
-        "apps/api/src/production-platform/notification-service.ts"
+        "apps/api/src/production-platform/order-time-request-service.ts",
+        "apps/api/src/production-platform/order-time-operation-state.ts"
       ],
       "oldTests": [
-        "tests/unit/todo-destination-parity.test.ts"
+        "tests/integration/order-time-requests-postgres.test.ts",
+        "tests/integration/order-time-requests-browser-postgres.test.ts"
       ],
-      "newTests": [
-        "tests/integration/bulk-washing-browser-postgres.test.ts"
-      ],
-      "initialization": "0290 immutable washing plans/events and disposable quantity-version projection. Fresh isolated low-privilege schemas tested; old orders without adoption preserve existing QC/packing semantics. Public adoption remains PR06 and integrated enablement PR08.",
-      "dateAndPermission": "Actual send/start/return/inspection opens clocks; unknown timestamps remain unknown. Frozen started allowances, independent native first receipt, active role and scoped assignee authorization; root correction preserves immutable history. No real role grants, external messaging or server updates.",
-      "expectation": "Original1165px App dispatch30/return20/QC20 and remaining10; same authenticated QC session loses washing access after revoke. In-app notifications persist idempotently and route to original factory page; budget price remains hidden to logistics.",
+      "initialization": "No migration or real data operation. Existing standards keep their stored shape; new framework publication remains disabled until PR08. Fresh isolated low-privilege schema used for actual persistence and original App.",
+      "dateAndPermission": "Same authenticated actor and transaction, original roles and per-PO scope; explicit observation and true occurrence remain separate; a later approved change cannot erase completed historical deviation. Preview does not write.",
+      "expectation": "Original authorized request and management submit adopt actual proposed route and washing once; per-PO customer and factory dates remain distinct; first receipt never means fully collected. Final Journey/UI integration remains PR07/08; no claim of Acceptance deployment or final rollback SHA validation.",
       "checks": [
-        "washing-pg16",
-        "washing-unit"
+        "unit",
+        "postgres",
+        "browser"
       ]
     },
     {
-      "rule": "Necessary existing deployment baseline compatibility restores empty-target install and complete offline candidate fixtures without weakening protection.",
-      "source": "Approved time framework revision27 §9.4 and eight-PR plan PR05; current authorization after PR04 Acceptance; docs/engineering/time-framework-05.md.",
+      "rule": "Persist A/B milestones and forward arrangement separately; retain completed targets and native responsibility; shared graph and calendars, exact scope and source/version history.",
+      "source": "Approved time framework revision27 and eight-PR plan PR06; docs/engineering/time-framework-06.md; user authorized implementation after PR05 Acceptance.",
       "writes": [
-        "scripts/deploy/install-release.sh",
-        "tests/integration/acceptance-active-slot-chain.test.py"
+        "apps/api/src/production-platform/fixed-development-work.ts",
+        "apps/api/src/production-platform/fixed-order-adoption.ts",
+        "apps/api/src/production-platform/fixed-order-work.ts",
+        "apps/api/src/production-platform/fixed-timeline-targets.ts",
+        "apps/api/src/production-platform/fixed-work-definition.ts",
+        "apps/api/src/production-platform/order-time-completion-target.ts",
+        "apps/api/src/production-platform/order-time-framework.ts",
+        "apps/api/src/production-platform/order-time-plan-repository.ts",
+        "apps/api/src/production-platform/order-time-schedule.ts",
+        "apps/api/src/production-platform/series-plan-service.ts",
+        "apps/web/src/series-plan-panel.tsx",
+        "apps/web/src/series-plan-reading.tsx",
+        "packages/contracts/src/order-time-framework.ts",
+        "packages/contracts/src/order-time-plan.ts",
+        "tests/integration/order-time-plan-postgres.test.ts",
+        "tests/unit/order-time-framework.test.ts",
+        "tests/unit/order-time-reading.test.ts",
+        "apps/api/src/production-platform/order-time-factory-commitments.ts",
+        "apps/api/src/production-platform/order-time-framework-route.ts",
+        "apps/api/src/production-platform/order-time-framework-submission.ts",
+        "tests/unit/order-time-framework-submission.test.ts"
       ],
       "reads": [
-        "scripts/deploy/acceptance-capacity.py",
-        "scripts/deploy/install-release.sh"
+        "apps/api/src/production-platform/order-time-plan-repository.ts",
+        "apps/api/src/production-platform/order-time-completion-target.ts",
+        "apps/api/src/production-platform/series-plan-service.ts"
       ],
       "oldTests": [
-        "tests/integration/pr-17-release-lifecycle.test.ts",
-        "tests/integration/acceptance-active-slot-chain.test.ts",
-        "tests/unit/acceptance-capacity.test.ts"
+        "tests/integration/order-time-plan-postgres.test.ts",
+        "tests/unit/order-time-reading.test.ts"
       ],
-      "newTests": [],
-      "initialization": "0290 immutable washing plans/events and disposable quantity-version projection. Fresh isolated low-privilege schemas tested; old orders without adoption preserve existing QC/packing semantics. Public adoption remains PR06 and integrated enablement PR08.",
-      "dateAndPermission": "Actual send/start/return/inspection opens clocks; unknown timestamps remain unknown. Frozen started allowances, independent native first receipt, active role and scoped assignee authorization; root correction preserves immutable history. No real role grants, external messaging or server updates.",
-      "expectation": "Original 5 failed assertions caused by missing parent and old incomplete fixture; retain immutable compare, locks, capacity refusal, rollback, sameSHA recovery, and exact cleanup; no server operation.",
+      "initialization": "No migration or real data operation. Existing standards keep their stored shape; new framework publication remains disabled until PR08. Fresh isolated low-privilege schema used for actual persistence and original App.",
+      "dateAndPermission": "Same authenticated actor and transaction, original roles and per-PO scope; explicit observation and true occurrence remain separate; a later approved change cannot erase completed historical deviation. Preview does not write.",
+      "expectation": "Persist A/B milestones and forward arrangement separately; retain completed targets and native responsibility; shared graph and calendars, exact scope and source/version history. Final Journey/UI integration remains PR07/08; no claim of Acceptance deployment or final rollback SHA validation.",
       "checks": [
-        "deploy-compat"
+        "unit",
+        "postgres",
+        "browser"
       ]
     },
     {
-      "rule": "Canonical test selection and existing safeguards cover new native resources and original consumers.",
-      "source": "Approved time framework revision27 §9.4 and eight-PR plan PR05; current authorization after PR04 Acceptance; docs/engineering/time-framework-05.md.",
+      "rule": "Changed adapters remain mapped to native PostgreSQL and browser tests without repeating Light or weakening assertions.",
+      "source": "Approved time framework revision27 and eight-PR plan PR06; docs/engineering/time-framework-06.md; user authorized implementation after PR05 Acceptance.",
       "writes": [
-        "packages/contracts/src/todos.ts",
         "scripts/ci/full-gate-risk-map.mjs",
-        "scripts/test-suite-plan.mjs"
+        "tests/unit/full-gate-risk-map.test.ts"
       ],
       "reads": [
-        "scripts/test-suite-plan.mjs",
         "scripts/ci/full-gate-risk-map.mjs"
       ],
       "oldTests": [
         "tests/unit/full-gate-risk-map.test.ts"
       ],
-      "newTests": [
-        "tests/unit/bulk-washing-ledger.test.ts"
-      ],
-      "initialization": "0290 immutable washing plans/events and disposable quantity-version projection. Fresh isolated low-privilege schemas tested; old orders without adoption preserve existing QC/packing semantics. Public adoption remains PR06 and integrated enablement PR08.",
-      "dateAndPermission": "Actual send/start/return/inspection opens clocks; unknown timestamps remain unknown. Frozen started allowances, independent native first receipt, active role and scoped assignee authorization; root correction preserves immutable history. No real role grants, external messaging or server updates.",
-      "expectation": "New native washing suites participate in bounded PG/browser planning; dependency and permissions assertions remain; no reduction of existing query or business thresholds.",
+      "initialization": "No migration or real data operation. Existing standards keep their stored shape; new framework publication remains disabled until PR08. Fresh isolated low-privilege schema used for actual persistence and original App.",
+      "dateAndPermission": "Same authenticated actor and transaction, original roles and per-PO scope; explicit observation and true occurrence remain separate; a later approved change cannot erase completed historical deviation. Preview does not write.",
+      "expectation": "Changed adapters remain mapped to native PostgreSQL and browser tests without repeating Light or weakening assertions. Final Journey/UI integration remains PR07/08; no claim of Acceptance deployment or final rollback SHA validation.",
       "checks": [
-        "washing-unit"
-      ]
-    },
-    {
-      "rule": "One initial Light per PR and current-head final checks; immutable storage identity remains fail-closed after explicit test database replacement.",
-      "source": "User2026-11-14 no repeated Light per PR; Full43551402248 failure and authorized complete repair; docs/engineering/time-framework-05.md.",
-      "writes": [
-        ".github/workflows/ci.yml",
-        "AGENTS.md",
-        "scripts/ci/pr-gate-controller.mjs",
-        "scripts/ci/pr-gate-controller.test.mjs",
-        "scripts/ci/pr-gate-protocol.mjs",
-        "scripts/ci/pr-gate-protocol.test.mjs",
-        "scripts/ci/review-final-gate.test.mjs",
-        "scripts/ci/acceptance-maintenance-drill.mjs"
-      ],
-      "reads": [
-        ".github/workflows/full-gate.yml",
-        "scripts/ci/light-reuse.mjs",
-        "scripts/deploy/inspect-acceptance-storage.py",
-        "scripts/dx-acceptance.sh"
-      ],
-      "oldTests": [
-        "scripts/ci/pr-gate-controller.test.mjs",
-        "scripts/ci/review-final-gate.test.mjs",
-        "scripts/ci/acceptance-maintenance-drill.mjs"
-      ],
-      "newTests": [
-        "scripts/ci/pr-gate-controller.test.mjs",
-        "scripts/ci/acceptance-maintenance-drill.mjs"
-      ],
-      "initialization": "Only TEST fixture deliberate DROP/CREATE re-pins new identity; stale SQL still returns empty. No updater auto re-pin, grants, production identity or backup data modified.",
-      "dateAndPermission": "PR initial opened attempt1 only. Later actual final is required; old Light never proves new head. Actual reuse keeps exact provenance, Review threads and platform boundaries remain.",
-      "expectation": "All three real PG versions complete original migration/ACL/idempotency/backup/restore checks; stale OID refused and new ledger matches. No Light on changed/reopened/retried PR. Missing/cancelled/failed/old Light does not block new exact-head final; failed final and forged reuse remain rejected.",
-      "checks": [
-        "ci-protocol",
-        "maintenance-three-pg"
+        "unit",
+        "static"
       ]
     }
   ],
   "checks": [
     {
-      "id": "washing-pg16",
+      "id": "unit",
       "kind": "tests",
-      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/bulk-washing-postgres.test.ts tests/integration/bulk-washing-browser-postgres.test.ts tests/integration/effective-packing-postgres.test.ts --reporter=verbose --reporter=json --outputFile.json=/tmp/time05-review-final-pg16.json",
+      "command": "vitest run tests/unit/order-time*.test.ts tests/unit/bulk-washing-work.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/fixed-timeline-targets.test.ts --maxWorkers=1",
       "status": "passed",
       "exitCode": 0,
-      "passed": 15,
+      "passed": 200,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "61cdd60929f8baebb185dd12b65e29f17233e8c5",
-      "sourceFingerprint": "7e88b424ad8107adb8791f4228742119906cf11c5a77b5a309c346a781f1b698",
-      "context": "Node22 / npm10; repository bounded test execution configuration; PG16.14 port55416 or PG13.23 port55413 isolated registered TEST schema, no production/Acceptance writes. Browser uses original App and actual AuthService. Repair-only reuse: full declared application/contract/test/migration/deployment inputs byte-compared with exact e85495d4 checkout and unchanged; CI policy and isolated maintenance harness changes do not run in these suites.",
-      "startedAt": "2026-11-14T03:01:44.621Z",
-      "endedAt": "2026-11-14T03:02:23.513Z",
-      "logPath": "/tmp/time05-review-final-pg16.log",
-      "logSha256": "2c7e15633a5ca85056386c0592bc8ff3662aa87b887a811ae13c6137783248dc",
+      "testedHead": "08cbefb91fdfe5cef0a30b5772caade72ec2524b",
+      "sourceFingerprint": "c6d53eb26aac376a78dd887969eede2d0944ebd9cbecc5fcc8dea7d89bedb8cb",
+      "context": "Node22/npm10; source is uncommitted PR06 candidate at recorded fingerprint based on 08cbefb91fdfe5cef0a30b5772caade72ec2524b; one Vitest worker; pure unit and mapping regression",
+      "startedAt": "2026-11-14T05:33:04.730Z",
+      "endedAt": "2026-11-14T05:33:09.708Z",
+      "logSha256": "310c6821cb7b8b4aa9388345338249302c23768eb098343183995c7f33a77a24",
+      "logPath": "/tmp/time06-final-unit.log",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "18decd12693aeb3a8fbd750cbce21bfd7ea64ee0548d80cd07122cea13414bcf"
+          "sha256": "a13d99bbdcb940bf38846ebceb18f71707e4882017cda4f77c792bd8db6331c1"
         }
-      ],
-      "log": "/tmp/time05-review-final-pg16.log",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "tests",
-        "package.json",
-        "package-lock.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts",
-        "scripts/test-execution-config.mjs",
-        "scripts/test-suite-plan.mjs",
-        "scripts/migration-lib.mjs",
-        "scripts/migration-history-policy.mjs",
-        "scripts/migration-branches.json",
-        "scripts/migration-main-extensions.json",
-        "scripts/deploy",
-        "docs/requirements"
-      ],
-      "inputFingerprint": "feee10c0758d65651c667afa8d4c82c94615a787bf3138799db918c0ffbef0ea"
+      ]
     },
     {
-      "id": "washing-pg13",
+      "id": "postgres",
       "kind": "tests",
-      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/bulk-washing-postgres.test.ts --reporter=verbose --reporter=json --outputFile.json=/tmp/time05-review-final-pg13.json",
+      "command": "bash /tmp/time06-pg-regression.sh (original settings, plans, requests; isolated low-privilege PG16)",
       "status": "passed",
       "exitCode": 0,
-      "passed": 7,
+      "passed": 34,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "61cdd60929f8baebb185dd12b65e29f17233e8c5",
-      "sourceFingerprint": "7e88b424ad8107adb8791f4228742119906cf11c5a77b5a309c346a781f1b698",
-      "context": "Node22 / npm10; repository bounded test execution configuration; PG16.14 port55416 or PG13.23 port55413 isolated registered TEST schema, no production/Acceptance writes. Browser uses original App and actual AuthService. Repair-only reuse: full declared application/contract/test/migration/deployment inputs byte-compared with exact e85495d4 checkout and unchanged; CI policy and isolated maintenance harness changes do not run in these suites.",
-      "startedAt": "2026-11-14T03:01:46.142Z",
-      "endedAt": "2026-11-14T03:02:05.784Z",
-      "logPath": "/tmp/time05-review-final-pg13.log",
-      "logSha256": "dce7704438ac65700d710ee9b133ea55ed756798781089f532a374a893868037",
+      "testedHead": "08cbefb91fdfe5cef0a30b5772caade72ec2524b",
+      "sourceFingerprint": "c6d53eb26aac376a78dd887969eede2d0944ebd9cbecc5fcc8dea7d89bedb8cb",
+      "context": "Node22/npm10; source is uncommitted PR06 candidate at recorded fingerprint based on 08cbefb91fdfe5cef0a30b5772caade72ec2524b; one Vitest worker; owned Docker PG16, explicit isolated database marker, NOSUPERUSER test role; original authenticated service/App paths; resource cleanup trap",
+      "startedAt": "2026-11-14T05:31:32.367Z",
+      "endedAt": "2026-11-14T05:32:13.958Z",
+      "logSha256": "c7b2844148e20f72c88ab837df498ad045249e6d1b1e2fa00cd029048bbfdd4f",
+      "logPath": "/tmp/time06-pg-current2.log",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "9fd056cde987c6fdc54b52d270e0d832eb5ef2941fcf3112b0371478576997a1"
+          "sha256": "94a9501a1c9d348e78dae852e6e496c082cb3fcf4e552190db3fe68ac7d4c12b"
         }
-      ],
-      "log": "/tmp/time05-review-final-pg13.log",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "tests",
-        "package.json",
-        "package-lock.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts",
-        "scripts/test-execution-config.mjs",
-        "scripts/test-suite-plan.mjs",
-        "scripts/migration-lib.mjs",
-        "scripts/migration-history-policy.mjs",
-        "scripts/migration-branches.json",
-        "scripts/migration-main-extensions.json",
-        "scripts/deploy",
-        "docs/requirements"
-      ],
-      "inputFingerprint": "feee10c0758d65651c667afa8d4c82c94615a787bf3138799db918c0ffbef0ea"
+      ]
     },
     {
-      "id": "washing-unit",
+      "id": "browser",
       "kind": "tests",
-      "command": "npx vitest run tests/unit/bulk-washing-ledger.test.ts tests/unit/bulk-washing-windows.test.ts tests/unit/bulk-washing-work.test.ts tests/unit/todo-destination-parity.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/fixed-timeline-targets.test.ts --reporter=verbose --reporter=json --outputFile.json=/tmp/time05-gate-repair-unit.json",
+      "command": "bash /tmp/time06-browser-regression.sh (original App, Chromium, isolated low-privilege PG16)",
       "status": "passed",
       "exitCode": 0,
-      "passed": 124,
+      "passed": 6,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "4806be7b0581d490c2f289d8a7e755a89a1ae6dc",
-      "sourceFingerprint": "c32f5db1ae25db732a9d641e59539e8b8dcc2c8a4600b9f07c4cee0f31385d10",
-      "context": "Node22 / npm10; repository bounded test execution configuration; PG16.14 port55416 or PG13.23 port55413 isolated registered TEST schema, no production/Acceptance writes. Browser uses original App and actual AuthService.",
-      "startedAt": "2026-11-14T04:00:41.487Z",
-      "endedAt": "2026-11-14T04:00:43.686Z",
-      "logPath": "/tmp/time05-gate-repair-unit.log",
-      "logSha256": "f34daf02b752d8e67f717ff01e5dca155360fea7257e6b3301f222740a10ff3c",
+      "testedHead": "08cbefb91fdfe5cef0a30b5772caade72ec2524b",
+      "sourceFingerprint": "c6d53eb26aac376a78dd887969eede2d0944ebd9cbecc5fcc8dea7d89bedb8cb",
+      "context": "Node22/npm10; source is uncommitted PR06 candidate at recorded fingerprint based on 08cbefb91fdfe5cef0a30b5772caade72ec2524b; one Vitest worker; owned Docker PG16, explicit isolated database marker, NOSUPERUSER test role; original authenticated service/App paths; resource cleanup trap",
+      "startedAt": "2026-11-14T05:33:11.266Z",
+      "endedAt": "2026-11-14T05:34:05.119Z",
+      "logSha256": "10d2e09432d38cfec16ca3eb125a11c7bfdc715cf519860a15be4a21a896c863",
+      "logPath": "/tmp/time06-browser-final.log",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "025c7e726a3a67fce0f8eabe2f55be012a018e9b79b6c12da4b586219432a5cb"
+          "sha256": "b6ae52f759648d86eb6170796dd34c8ec98a9126b29f44618d6b83b8358051cd"
         }
-      ],
-      "log": "/tmp/time05-gate-repair-unit.log"
+      ]
     },
     {
-      "id": "deploy-compat",
-      "kind": "tests",
-      "command": "npx vitest run tests/integration/pr-17-release-lifecycle.test.ts tests/unit/acceptance-capacity.test.ts tests/integration/pr-17-deploy-failure.test.ts --reporter=verbose --reporter=json --outputFile.json=/tmp/time05-gate-repair-deploy.json",
-      "status": "passed",
-      "exitCode": 0,
-      "passed": 27,
-      "failed": 0,
-      "skipped": 0,
-      "testedHead": "4806be7b0581d490c2f289d8a7e755a89a1ae6dc",
-      "sourceFingerprint": "c32f5db1ae25db732a9d641e59539e8b8dcc2c8a4600b9f07c4cee0f31385d10",
-      "context": "Node22 / npm10; repository bounded test execution configuration; PG16.14 port55416 or PG13.23 port55413 isolated registered TEST schema, no production/Acceptance writes. Browser uses original App and actual AuthService.",
-      "startedAt": "2026-11-14T04:00:14.877Z",
-      "endedAt": "2026-11-14T04:00:18.380Z",
-      "logPath": "/tmp/time05-gate-repair-deploy.log",
-      "logSha256": "cda8c4b8cbfe56c4c115a252ca8eb08c5d73df41c3ba460f52150cc48548761c",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "6fd7f5faa3c75f2fedd3d6f40f54c89821c1b3d8f360953d50e24bc1cca704d5"
-        }
-      ],
-      "log": "/tmp/time05-gate-repair-deploy.log"
-    },
-    {
-      "id": "migration-contract",
+      "id": "static",
       "kind": "command",
-      "command": "node scripts/check-migrations.mjs",
+      "command": "eslint changed TS/TSX/MJS --max-warnings=0; node scripts/acceptance/time-site-inventory.mjs; git diff --check",
       "status": "passed",
       "exitCode": 0,
-      "testedHead": "0bcd95e83e657646033ef804f75057f6c4b1469e",
-      "sourceFingerprint": "f98f014e1ee9c7b436f7d37f00b70a69f996208dede778dfcb6035f49454c49a",
-      "context": "Static migration checksum and manifest validation; no database writes.",
-      "startedAt": "2026-11-14T02:40:48.741Z",
-      "endedAt": "2026-11-14T02:40:48.841Z",
-      "logPath": "/tmp/time05-final-migrations.log",
-      "logSha256": "97cc7b2d64f71a0f94effb09a7d64342948e0a1f604b791fbe95fdaf97a06e53",
-      "inputPaths": [
-        "apps/api/migrations",
-        "apps/api/src/platform/migration-manifest.json",
-        "scripts/check-migrations.mjs",
-        "scripts/migration-lib.mjs",
-        "scripts/migration-branches.json"
-      ],
-      "inputFingerprint": "1f3fd957ec7f9e1a8f7fc16be8f1c4d4a4be5ffd547b0c266de1d5dc9a81f7d2",
-      "log": "/tmp/time05-final-migrations.log"
-    },
-    {
-      "id": "ci-protocol",
-      "kind": "tests",
-      "command": "node --test scripts/ci/*.test.mjs",
-      "status": "passed",
-      "exitCode": 0,
-      "passed": 257,
-      "failed": 0,
-      "skipped": 0,
-      "testedHead": "4806be7b0581d490c2f289d8a7e755a89a1ae6dc",
-      "sourceFingerprint": "c32f5db1ae25db732a9d641e59539e8b8dcc2c8a4600b9f07c4cee0f31385d10",
-      "context": "Node22.22.0; actual workflow expression and all CI protocol tests, temporary fixtures and mock GitHub; no production or live gate changes.",
-      "startedAt": "2026-11-14T03:57:05.664Z",
-      "endedAt": "2026-11-14T03:57:11.672Z",
-      "log": "/tmp/time05-final-ci-protocol.log",
-      "logSha256": "641a7b3e092e874f3fb156ec097637306507c6cead7bd7197538cb43083cb54e",
-      "resultReports": [
-        {
-          "format": "node-tap",
-          "sha256": "641a7b3e092e874f3fb156ec097637306507c6cead7bd7197538cb43083cb54e"
-        }
-      ]
-    },
-    {
-      "id": "maintenance-three-pg",
-      "kind": "tests",
-      "command": "node --test /tmp/time05-maintenance-regressions.mjs",
-      "status": "passed",
-      "exitCode": 0,
-      "passed": 3,
-      "failed": 0,
-      "skipped": 0,
-      "testedHead": "4806be7b0581d490c2f289d8a7e755a89a1ae6dc",
-      "sourceFingerprint": "c32f5db1ae25db732a9d641e59539e8b8dcc2c8a4600b9f07c4cee0f31385d10",
-      "context": "Node22.22.0; three real isolated loopback Docker PG13.23/15-bookworm/16-bookworm scenarios via original maintenance drill and Python3.6, low-privilege app, no existing server data. /tmp harness invokes original script with each major and asserts zero exit.",
-      "startedAt": "2026-11-14T03:59:07.066Z",
-      "endedAt": "2026-11-14T04:01:26.788Z",
-      "log": "/tmp/time05-maintenance-final.tap",
-      "logSha256": "3c1c70653c4a60489aeeb9aa13682ea4901907c9c2d407412a8e4acb80f87483",
-      "resultReports": [
-        {
-          "format": "node-tap",
-          "sha256": "3c1c70653c4a60489aeeb9aa13682ea4901907c9c2d407412a8e4acb80f87483"
-        }
-      ]
+      "testedHead": "08cbefb91fdfe5cef0a30b5772caade72ec2524b",
+      "sourceFingerprint": "c6d53eb26aac376a78dd887969eede2d0944ebd9cbecc5fcc8dea7d89bedb8cb",
+      "context": "Node22/npm10; actual changed files in /tmp/time06-final-static.meta.json; no test counts invented",
+      "startedAt": "2026-11-14T05:33:45.486Z",
+      "endedAt": "2026-11-14T05:33:48.163Z",
+      "logSha256": "114d19b3f81e82ca812ccaf79d465b9eac16b584f779c9b621a2e15595e62be6"
     }
   ]
 }

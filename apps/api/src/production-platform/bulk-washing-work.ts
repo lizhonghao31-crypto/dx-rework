@@ -18,11 +18,12 @@ export function bulkWashingWork(orderId:string,lineId:string,arrangement:BulkWas
   id:`${key}:${lineId}`,parameterKey:key,dependsOn,minutes:policy.minutes,calendar:policy.calendar,stage:inFactory?6:7,
   canonicalWorkRef:`order:${orderId}:work:${key}:${lineId}`,accountingRole:'original_work',
   planningParameterRef:`${plan.reference}:washing:${plan.revision}:${key}`,
+  nativeDuration:{reference:`${plan.reference}:washing:${plan.revision}:${key}`,minutes:policy.minutes,calendar:policy.calendar},
   responsibilitySlaRef:`${plan.reference}:washing:${plan.revision}:${key}`,
   responsibilityMinutes:policy.minutes,responsibilityCalendar:policy.calendar,
  });
  const washing=node(prefix,plan.washing,[inFactory?factory.id:receivedInspectionId]);
  const inspection=node(`${prefix}_inspection`,plan.inspection,[washing.id]);
- return {factory:included?{...factory,minutes:factory.minutes!-total}:factory,work:[washing,inspection],
+ return {factory:included?{...factory,minutes:factory.minutes!-total,nativeDuration:{reference:`${plan.reference}:washing:${plan.revision}:factory-remainder`,minutes:factory.minutes!-total,calendar:factory.calendar}}:factory,work:[washing,inspection],
   factoryEnd:inFactory?inspection.id:factory.id,packingPredecessor:inFactory?receivedInspectionId:inspection.id};
 }

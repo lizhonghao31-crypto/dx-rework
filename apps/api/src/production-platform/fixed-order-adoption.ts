@@ -34,7 +34,8 @@ export async function captureOrderTimeline(db:PoolClient,actorId:string,orderId:
   for(const line of lines){const recorded=(await db.query("SELECT version FROM digital_po_date_changes WHERE line_id=$1 AND date_kind='customer' AND source='initial_po' ORDER BY version LIMIT 1",[line.line_id])).rows[0];
    planningLines.push({line_id:String(line.line_id),goal:original.plan_json.anchors[`customer_shipping_date:${line.line_id}`] as SlaAnchor|undefined,customerDateVersion:Number(recorded?.version??0)});
   }
-  const {work,route,consumers}=fixedOrderWork(initial,orderId,sourceId,sourceRound,document.preshrink,craftSteps,dual,source?.input??null,planningLines);
+  const colorMatching=initial.data.orderTimePlan?.company.framework?(await db.query('SELECT requires_color_matching FROM digital_production_orders WHERE production_order_id=$1',[orderId])).rows[0]?.requires_color_matching:null;
+  const {work,route,consumers}=fixedOrderWork(initial,orderId,sourceId,sourceRound,document.preshrink,craftSteps,dual,source?.input??null,planningLines,colorMatching===true?'A':colorMatching===false?'B':undefined);
   return {timelineSchemaVersion:2,routeSchemaVersion:2,calculationVersion:initial.data.orderTimePlan?'fixed-backward-v2':'fixed-backward-v1',resource,round:1,
    originalPlan:{ref:`digital_sla_plans:${original.plan_id}`,revision:original.revision,plan:original.plan_json},
    unified:{snapshotRef:initial.data.unified.snapshotRef,values:initial.data.unified.values},development:initial.data.development,...(initial.data.orderTimePlan?{orderTimePlan:initial.data.orderTimePlan}:{}),

@@ -1,6 +1,8 @@
 import {orderTimePolicyHistory} from '../../apps/api/src/production-platform/order-time-native-timing.js';
 import {orderTimeCompletionTarget} from '../../apps/api/src/production-platform/order-time-completion-target.js';
 import {fixedGoalDelta} from '../../apps/api/src/production-platform/fixed-schedule-progress.js';
+import {evaluateTimeFrameworkCandidate,freezeTimeFrameworkCandidate,initialFrameworkMilestoneStandard} from '../../apps/api/src/production-platform/order-time-framework.js';
+import {readTimeFrameworkPlan,type TimeFrameworkInput} from '@dx-rework/contracts/order-time-framework';
 import {randomUUID} from 'node:crypto';
 import type {PoolClient} from 'pg';
 import {afterAll,beforeAll,describe,expect,it} from 'vitest';
@@ -152,6 +154,36 @@ const duration=(hours:number):OrderTimeRule=>({kind:'work',minutes:hours*60,cale
    expect(fixedGoalDelta({...work,canonicalWorkRef:work.id,start:null,end:current.targets[scope.scopeRef]![work.id]!.end.at,minutes:2880,calendar:'continuous',responsibilitySlaRef:null,completionTarget:target},{ready:{precision:'unknown'},clockStart:{precision:'unknown'},completed:actual,businessCompleted:true,waitingForPredecessors:false,evidenceRefs:['TEST physical completion']},{scopeRef:scope.scopeRef,targetRevision:current.id+':2'},'2027-03-10T00:00:00.000Z')).toMatchObject({kind:'late',signedValue:1440,targetRevision:initial.id+':1'});
    expect(current.targets[initial.input.scopes[1]!.scopeRef]).toEqual(initial.targets[initial.input.scopes[1]!.scopeRef]);
    expect(orderTimeCompletionTarget(work,{...scope,lineId:order.lines[1]!.lineId},actual,history,ownScene)).toBeNull();
+  });
+ });
+ it('reads persisted new-format completion targets from the completed version, not the later arrangement',async()=>{
+  const ownScene=await f.scene('2027-03-04T00:00:00.000Z');
+  const first=await f.runtime.run(ownScene,f.root,async()=>{
+   const order=await make('2027-04-20'),input=value(order);
+   for(const scope of input.scopes){scope.customerGoal={precision:'date',value:'2027-04-20',source:'TEST original customer date'};scope.goals[scope.customerGoalIds[0]!]=scope.customerGoal;}
+   const scope=input.scopes[0]!,work=input.work.filter(row=>row.id.endsWith(':'+scope.lineId));
+   const standard=initialFrameworkMilestoneStandard('B','TEST frozen milestone standard',1);
+   const frameworkInput:TimeFrameworkInput={scopeRef:scope.scopeRef,route:'B',acceptedAt:{precision:'instant',value:'2027-03-04T00:00:00.000Z',source:'TEST accepted event'},customerDelivery:{date:'2027-04-20',source:'TEST original customer date',revision:1},plan:input.plan,milestoneStandard:standard,work,bindings:Object.entries(standard.offsets).filter(([,offset])=>offset!==null).map(([key])=>({key:key as TimeFrameworkInput['bindings'][number]['key'],workIds:[key==='design_handover'?work[0]!.id:work.at(-1)!.id]})),notBefore:{}};
+   const snapshot=freezeTimeFrameworkCandidate(evaluateTimeFrameworkCandidate(frameworkInput,{purpose:'order_proposal',observedAt:'2027-03-04T00:00:00.000Z'}),{reference:'TEST framework history 1',revision:1,previousReference:null,eventRef:'TEST first arrangement'});
+   input.frameworkPlans={[scope.scopeRef]:snapshot};
+   const saved=await confirm(order,input);
+   expect(readTimeFrameworkPlan(saved.input.frameworkPlans![scope.scopeRef])).toEqual({kind:'framework',plan:snapshot});
+   expect(snapshot.arranged[0]!.end.at).toBe('2027-03-06T00:00:00.000Z');
+   return {order,saved,frameworkInput,scope,work:work[0]!};
+  });
+  await f.advance(ownScene,'2027-03-09T00:00:00.000Z');
+  await f.runtime.run(ownScene,f.root,async()=>{
+   const next=structuredClone(first.saved.input);next.plan=reviseOrderTimePlan(next.plan,{a:duration(24)});
+   const snapshot=freezeTimeFrameworkCandidate(evaluateTimeFrameworkCandidate({...first.frameworkInput,plan:next.plan},{purpose:'order_proposal',observedAt:'2027-03-09T00:00:00.000Z'}),{reference:'TEST framework history 2',revision:2,previousReference:'TEST framework history 1',eventRef:'TEST approved new arrangement'});
+   next.frameworkPlans={[first.scope.scopeRef]:snapshot};
+   const current=await confirm(first.order,next,1),history=await orderTimePolicyHistory(f.db,current.resource);
+   expect(snapshot.arranged[0]!.end.at).toBe('2027-03-10T00:00:00.000Z');
+   // Physical completion supplied to the historical reader is 7th; this test
+   // verifies persisted version selection, not recording a fabricated task event.
+   const target=orderTimeCompletionTarget(first.work,first.scope,{precision:'instant',at:'2027-03-07T00:00:00.000Z'},history,ownScene)!;
+   expect(target).toMatchObject({end:'2027-03-06T00:00:00.000Z',targetRevision:first.saved.id+':1'});
+   expect((Date.parse('2027-03-07T00:00:00.000Z')-Date.parse(target.end))/86400000).toBe(1);
+   expect(readTimeFrameworkPlan(current.input.frameworkPlans![first.scope.scopeRef])).toEqual({kind:'framework',plan:snapshot});
   });
  });
  it('does not alter an existing native task clock or completion when confirming a new policy',()=>run(async()=>{

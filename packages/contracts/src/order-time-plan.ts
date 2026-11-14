@@ -1,4 +1,5 @@
 import {z} from 'zod';
+import {SeriesMilestoneOffsetsSchema} from './digital-series-plan.js';
 import {isSlaDurationMinutes} from './digital-sla.js';
 
 export const OrderTimeCalendarSchema=z.enum(['continuous','natural_days','beijing_sunday_excluded']);
@@ -17,9 +18,13 @@ export const OrderTimeRuleSchema=z.discriminatedUnion('kind',[
 ]);
 export type OrderTimeRule=z.infer<typeof OrderTimeRuleSchema>;
 const rules=z.record(z.string().regex(/^[a-z][a-z0-9_]{0,99}$/),OrderTimeRuleSchema);
+export const OrderTimeFrameworkConfigurationSchema=z.object({
+ version:z.literal('time-framework-company-v1'),milestoneOffsets:SeriesMilestoneOffsetsSchema,
+}).strict();
 export const OrderTimeStandardSchema=z.object({
  version:z.literal('order-time-standard-v1'),reference:z.string().trim().min(1).max(300),
  revision:z.number().int().positive(),nodes:rules,
+ framework:OrderTimeFrameworkConfigurationSchema.optional(),
  stageBufferMinutes:z.number().int().min(0).max(525600),
 }).strict();
 export type OrderTimeStandard=z.infer<typeof OrderTimeStandardSchema>;
@@ -33,7 +38,10 @@ export const FrozenOrderTimePlanSchema=z.object({
   const standard=plan.company.nodes[key];
   if(standard&&standard.kind!==value.kind)context.addIssue({code:'custom',path:['overrides',key,'kind'],message:'本单调整不能改变节点性质'});
  }
- const normal=plan.overrides.development_cycle_normal??plan.company.nodes.development_cycle_normal,urgent=plan.overrides.development_cycle_urgent??plan.company.nodes.development_cycle_urgent;
+ // A per-order adjustment edits only its applicable supervision route. An
+ // unused frozen company counterpart cannot veto that order's allowed duration.
+ // Company publication still validates the pair in OrderTimeConfigurationSchema.
+ const normal=plan.overrides.development_cycle_normal,urgent=plan.overrides.development_cycle_urgent;
  if(normal?.kind==='supervision'&&urgent?.kind==='supervision'&&normal.minutes!==null&&urgent.minutes!==null&&urgent.minutes>normal.minutes)context.addIssue({code:'custom',path:['overrides','development_cycle_urgent'],message:'加急开发周期不能长于普通开发周期'});
 });
 export type FrozenOrderTimePlan=z.infer<typeof FrozenOrderTimePlanSchema>;

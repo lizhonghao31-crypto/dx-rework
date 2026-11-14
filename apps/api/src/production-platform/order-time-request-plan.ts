@@ -1,7 +1,9 @@
+import {craftStepLabel} from '@dx-rework/contracts/digital-craft';
+import type {OrderTimeRule} from '@dx-rework/contracts/order-time-plan';
 import {createHash} from 'node:crypto';
 import type {BusinessTime} from '@dx-rework/domain/business-clock';
 import {slaAnchorTime,type SlaAnchor,type SlaTime} from '@dx-rework/domain/digital-sla-plan';
-import {orderTimeNodeStage,ORDER_TIME_NODES} from '@dx-rework/contracts/order-time-settings';
+import {orderTimeNodeStage,ORDER_TIME_NODES,FRAMEWORK_TIME_NODES} from '@dx-rework/contracts/order-time-settings';
 import {orderTimeRule,type FrozenOrderTimePlan} from '@dx-rework/contracts/order-time-plan';
 import type {OrderTimeCheckResult} from '@dx-rework/contracts/order-time-requests';
 import type {FixedTimelineInput} from './fixed-timeline-adoptions.js';
@@ -28,7 +30,7 @@ export function orderTimeBegunStates(input:OrderTimeInput,progress:ReadonlyMap<s
  * dependency order nor the identity of a real task/step/PO. */
 export function orderTimeInputFromRoute(plan:FrozenOrderTimePlan,route:Pick<FixedTimelineInput,'work'|'consumers'>,goals:ReadonlyMap<string,SlaAnchor>,complete:boolean,missing:string[]=[],creation?:{kind:'source'|'order';id:string}):OrderTimeInput{
  const work=route.work.map(node=>({id:node.id,parameterKey:node.parameterKey??node.id,stage:orderTimeNodeStage(node.parameterKey??node.id,node.stage??2),dependsOn:[...node.dependsOn],
-  canonicalWorkRef:node.canonicalWorkRef,...(node.craftStep?{craftStep:structuredClone(node.craftStep)}:{}),...(node.includedIn?{includedIn:node.includedIn,includedPosition:node.includedPosition??'start' as const}:{})}));
+  canonicalWorkRef:node.canonicalWorkRef,...(node.craftStep?{craftStep:structuredClone(node.craftStep)}:{}),...(node.nativeDuration?{nativeDuration:structuredClone(node.nativeDuration)}:{}),...(node.includedIn?{includedIn:node.includedIn,includedPosition:node.includedPosition??'start' as const}:{})}));
  if(creation&&!work.some(node=>node.parameterKey==='order_creation')){
   for(const node of work)if(!node.dependsOn.length&&!node.includedIn)node.dependsOn=['order_creation'];
   work.unshift({id:'order_creation',parameterKey:'order_creation',stage:1,dependsOn:[],canonicalWorkRef:`creation:${creation.kind}:${creation.id}`});
@@ -36,7 +38,7 @@ export function orderTimeInputFromRoute(plan:FrozenOrderTimePlan,route:Pick<Fixe
  const scopes=route.consumers.map(consumer=>{
   const terminalIds=consumer.customerGoalIds?.length?[...consumer.customerGoalIds]:Object.keys(consumer.ends).filter(id=>id!=='development_shipping'&&!id.startsWith('ship_sample'));
   const goal=goals.get(consumer.scopeRef)??(terminalIds.length===1?consumer.ends[terminalIds[0]!]:undefined)??{precision:'unknown' as const,reason:'请填写本单交期'};
-  return {scopeRef:consumer.scopeRef,lineId:consumer.lineId,terminalIds,customerGoalIds:consumer.lineId?[...terminalIds]:[],customerGoal:goal,
+  return {scopeRef:consumer.scopeRef,lineId:consumer.lineId,customerDateVersion:consumer.customerDateVersion||1,terminalIds,customerGoalIds:consumer.lineId?[...terminalIds]:[],customerGoal:goal,
    goals:{...consumer.ends,...Object.fromEntries(terminalIds.map(id=>[id,goal]))},...(consumer.shipSample?{shipSample:consumer.shipSample}:{})};
  });
  return {version:'order-time-input-v1',plan:structuredClone(plan),work,scopes,route:{complete,missing:[...missing]}};
@@ -105,11 +107,15 @@ export function orderTimeCheck(input:{value:OrderTimeInput;time:BusinessTime;pro
  const known=computable&&(!lowerBound||late!>0);if(computable&&lowerBound&&late===0)coverage.push('在办节点已超时，剩余工作时间尚未确认');
  const required=computable?Math.max(...scopes.map(scope=>scope.requiredSpanMinutes??0)):null;
  const available=scopes.map(scope=>slaAnchorTime(value.scopes.find(row=>row.scopeRef===scope.scopeRef)!.customerGoal,'客户交期').at).filter((at):at is string=>Boolean(at));
- const catalog=new Map(ORDER_TIME_NODES.map(node=>[node.key,node]));
+ const catalog=new Map([...ORDER_TIME_NODES,...FRAMEWORK_TIME_NODES].map(node=>[node.key,node]));
  const begun=orderTimeBegunStates(value,input.progress);
- const rows=value.work.map(work=>({id:work.id,parameterKey:work.parameterKey,label:catalog.get(work.parameterKey)?.label??(work.parameterKey==='source_confirmation'?'开发交接':'流程交接'),stage:work.stage,
-  rule:orderTimeRule(value.plan,work.parameterKey)?.rule??null,originalRule:value.plan.company.nodes[work.parameterKey]??null,
-  begun:begun.get(work.id)?.all===true,preserveBegun:begun.get(work.id)?.any===true,includedIn:work.includedIn??null}));
+ const rows=value.work.map(work=>{
+  const special=work.craftStep?.specialCraft?.definition[work.parameterKey.startsWith('development_')?'development':'bulk'];
+  const nativeRule:OrderTimeRule|null=special?{kind:'work',...structuredClone(special)}:null;
+  return {id:work.id,parameterKey:work.parameterKey,label:work.craftStep?craftStepLabel(work.craftStep):catalog.get(work.parameterKey)?.label??(work.parameterKey==='source_confirmation'?'开发交接':'流程交接'),stage:work.stage,
+   rule:orderTimeRule(value.plan,work.parameterKey)?.rule??nativeRule,originalRule:value.plan.company.nodes[work.parameterKey]??nativeRule,
+   begun:begun.get(work.id)?.all===true,preserveBegun:begun.get(work.id)?.any===true,includedIn:work.includedIn??null};
+ });
  for(const [key,begun]of input.extraSettings??[]){const node=catalog.get(key);if(node&&!rows.some(row=>row.parameterKey===key))rows.push({id:'setting:'+key,parameterKey:key,label:node.label,stage:node.stage,rule:orderTimeRule(value.plan,key)?.rule??null,originalRule:value.plan.company.nodes[key]??null,begun,preserveBegun:begun,includedIn:null});}
  return {enabled:true,fingerprint:digest({operation:input.sourceVersion,company:value.plan.company,work:value.work,scopes:value.scopes,scenario:time.scenarioId,revision:time.revision}),resource:input.resource,styleNo:input.styleNo,customerDates:input.customerDates,plan:value.plan,rows,coverage,
   feasibility:!known?'unknown':late!>0?'insufficient':'sufficient',availableMinutes:available.length===scopes.length?Math.min(...available.map(at=>(Date.parse(at)-Date.parse(time.now))/60000)):null,

@@ -21,13 +21,25 @@ export function fixedDevelopmentWork(initial:FixedWorkInputs,sourceId:string,rou
    if(kind==='development_washing_dispatch'||kind==='development_sewing_transfer'){
     work.push({id,parameterKey:key,dependsOn:[],...definition(initial,key),includedIn:kind==='development_washing_dispatch'?'development_washing':'development_sewing',includedPosition:'start',canonicalWorkRef:ref(id),accountingRole:'included'});continue;
    }
-   const milestone=kind==='development_confirmation',policy=milestone?{minutes:0,calendar:null,planningParameterRef:null,responsibilitySlaRef:null,responsibilityMinutes:null,responsibilityCalendar:null}:step?frozenCraftDefinition(initial,step,'development',dual):definition(initial,key);
+   const milestone=kind==='development_confirmation'&&!initial.data.orderTimePlan?.company.framework,policy=milestone?{minutes:0,calendar:null,planningParameterRef:null,responsibilitySlaRef:null,responsibilityMinutes:null,responsibilityCalendar:null}:step?frozenCraftDefinition(initial,step,'development',dual):definition(initial,key);
    if(kind==='development_washing'&&washing==='外洗'&&!initial.data.orderTimePlan){
     const days=initial.data.development?.values.externalWashDays;
     if(typeof days==='number'){policy.minutes=days*1440;policy.calendar='natural_days';policy.planningParameterRef=`${initial.data.development!.snapshotRef}:externalWashDays`;policy.responsibilitySlaRef=policy.planningParameterRef;policy.responsibilityMinutes=days*1440;policy.responsibilityCalendar='natural_days';}
    }
    work.push({id,parameterKey:key,...(step?.craftKind==='special'?{stage:2,craftStep:structuredClone(step)}:{}),dependsOn:previous?[previous]:[],...policy,canonicalWorkRef:step?`source:${sourceId}:round:${round}:step:${step.stepId}:work`:ref(id),accountingRole:milestone?'event':round===1?'original_work':'added_work'});
    previous=id;
+  }
+  // Positioning follows this round's pattern in parallel with cutting. Only
+  // the explicitly adopted framework owns the new 4h/2h rules; legacy windows
+  // and historical route shapes are not silently upgraded.
+  if(initial.data.orderTimePlan?.company.framework&&craftSteps.length){
+   const pattern=work.find(node=>['development_pattern','development_external_pattern','external_pattern'].includes(node.parameterKey??''));
+   if(pattern){
+    const id='development_positioning';
+    if(!work.some(node=>node.id===id))work.push({id,parameterKey:id,dependsOn:[pattern.id],...definition(initial,id),canonicalWorkRef:ref(id),accountingRole:round===1?'original_work':'added_work'});
+    const first=work.find(node=>node.canonicalWorkRef===`source:${sourceId}:round:${round}:step:${craftSteps[0]!.stepId}:work`);
+    if(first&&!first.dependsOn.includes(id))first.dependsOn=[...first.dependsOn,id];
+   }
   }
   const sewing=work.find(work=>work.id==='development_sewing');
   if(sewing){

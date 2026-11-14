@@ -1,3 +1,4 @@
+import type {SeriesRoute} from '@dx-rework/contracts/digital-series-plan';
 import type {SlaAnchor} from '@dx-rework/domain/digital-sla-plan';
 import type {CraftStepChoice} from '@dx-rework/contracts/digital-craft';
 import type {FixedTimelineInput} from './fixed-timeline-adoptions.js';
@@ -8,7 +9,7 @@ import {bulkWashingWork} from './bulk-washing-work.js';
 type Work=FixedTimelineInput['work'][number];
 export type FixedOrderPlanningLine={line_id:string;goal:SlaAnchor|undefined;customerDateVersion:number;washing?:BulkWashingArrangement};
 /** The native capture and the read-only calculator share this exact DAG. */
-export function fixedOrderWork(initial:FixedWorkInputs,orderId:string,sourceId:string,sourceRound:number,preshrink:string,craftSteps:Array<CraftStepChoice&{stepId:string}>,dual:boolean,source:Pick<FixedTimelineInput,'work'|'route'>|null,lines:FixedOrderPlanningLine[]){
+export function fixedOrderWork(initial:FixedWorkInputs,orderId:string,sourceId:string,sourceRound:number,preshrink:string,craftSteps:Array<CraftStepChoice&{stepId:string}>,dual:boolean,source:Pick<FixedTimelineInput,'work'|'route'>|null,lines:FixedOrderPlanningLine[],frameworkRoute?:SeriesRoute){
   const work:Work[]=[],route:NonNullable<FixedTimelineInput['route']>=[];
   const add=(id:string,parameterKey:string,dependsOn:string[]=[],options:Partial<Work>={})=>{
    const policy=frozenWorkDefinition(initial,parameterKey,dual&&['bulk_embroidery','bulk_printing'].includes(parameterKey));
@@ -16,6 +17,8 @@ export function fixedOrderWork(initial:FixedWorkInputs,orderId:string,sourceId:s
     canonicalWorkRef:`order:${orderId}:work:${id}`,accountingRole:'original_work',...options};
    work.push(node);return node;
   };
+  const framework=initial.data.orderTimePlan?.company.framework;
+  if(framework&&!frameworkRoute)throw Error('请在原单确认是否需要对色');
   let sourceEnd:string|null=null;
   if(source){
    const used=source.work.filter(node=>node.id!=='development_shipping');
@@ -28,16 +31,26 @@ export function fixedOrderWork(initial:FixedWorkInputs,orderId:string,sourceId:s
    add('source_confirmation','source_confirmation',[],{minutes:0,calendar:null,planningParameterRef:null,responsibilitySlaRef:null,
     canonicalWorkRef:`source:${sourceId}:round:${sourceRound}:confirmation`,accountingRole:'shared_reference'});sourceEnd='source_confirmation';
   }
+  if(framework){
+   add('design_handover','design_handover',[],{stage:1,accountingRole:'event'});
+   const pattern=work.find(node=>['development_pattern','external_pattern','development_external_pattern'].includes(node.parameterKey??''));
+   add('material_investment','material_investment',['design_handover',...(pattern?[pattern.id]:[])],{stage:3,accountingRole:'event'});
+   add('fabric_receipt',frameworkRoute==='A'?'fabric_receipt_a':'fabric_receipt_b',['material_investment'],{stage:3});
+   if(frameworkRoute==='A')add('color_confirmation','color_confirmation',['fabric_receipt'],{stage:3});
+   add('client_sample_approval','client_sample_approval',sourceEnd?[sourceEnd]:[],{stage:2,accountingRole:'event'});
+   add('development_size_review','development_size_review',['client_sample_approval'],{stage:2});
+   add('style_label_ready','style_label_ready',[],{stage:3,accountingRole:'event'});
+  }
   // A new direct formal order has no independent development route. Do not
   // invent a legacy confirmation node and make every real successor unknown.
   add('customer_confirmation','customer_confirmation',[],{minutes:0,calendar:null,accountingRole:'event'});
   add('budget','budget',['customer_confirmation']);
-  add('production_sheet','production_sheet',['customer_confirmation',...(sourceEnd?[sourceEnd]:[])]);
+  add('production_sheet','production_sheet',['customer_confirmation',...(framework?['development_size_review','fabric_inspection']:sourceEnd?[sourceEnd]:[])]);
   add('bulk_pattern','bulk_pattern',['production_sheet']);
   add('sourcing_ie','sourcing_ie',['budget']);add('sourcing_selection','sourcing_selection',['sourcing_ie']);add('sourcing_approval','sourcing_approval',['sourcing_selection']);
-  add('fabric_inspection','fabric_inspection');
+  add('fabric_inspection','fabric_inspection',framework?['fabric_receipt']:[]);
   if(preshrink==='需要预缩')add('warehouse_preshrink','warehouse_preshrink',['fabric_inspection']);
-  add('bulk_cutting','bulk_cutting',['bulk_pattern',preshrink==='需要预缩'?'warehouse_preshrink':'fabric_inspection','sourcing_approval']);
+  add('bulk_cutting','bulk_cutting',['bulk_pattern',preshrink==='需要预缩'?'warehouse_preshrink':'fabric_inspection','sourcing_approval',...(framework?['style_label_ready']:[])]);
   let previous='bulk_cutting';
   for(const step of craftSteps){
    const key=craftParameterKey(step,'bulk'),node=add(initial.data.orderTimePlan?`${key}:${step.stepId}`:key,key,[previous],{...frozenCraftDefinition(initial,step,'bulk',dual),...(step.craftKind==='special'?{stage:5,craftStep:structuredClone(step)}:{}),...(initial.data.orderTimePlan?{canonicalWorkRef:`order:${orderId}:step:${step.stepId}:work`}:{})});
@@ -45,7 +58,7 @@ export function fixedOrderWork(initial:FixedWorkInputs,orderId:string,sourceId:s
    route.push({kind:'process_logistics',position:route.length,nodeId:node.id,stepId:step.stepId,phase:'logistics'});
    route.push({kind:'bulk_qc',position:route.length,nodeId:qc.id,stepId:step.stepId,phase:'qc'});
   }
-  add('warehouse_accessories','warehouse_accessories');
+  add('warehouse_accessories','warehouse_accessories',framework&&frameworkRoute==='A'?['color_confirmation']:[]);
   add('warehouse_dispatch','warehouse_dispatch',[previous,'sourcing_approval','warehouse_accessories']);
   route.push({kind:'warehouse_dispatch',position:route.length,nodeId:'warehouse_dispatch'});
   const common=work.map(node=>node.id);

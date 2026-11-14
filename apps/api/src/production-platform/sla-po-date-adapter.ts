@@ -1,5 +1,5 @@
 import { ContextBusinessClock } from '../acceptance-clock/business-time.js';
-import type { PoolClient } from "pg";
+import type { Pool, PoolClient } from "pg";
 import type { TrustedActorContext } from "../tools/repositories.js";
 import type { BusinessClock } from "@dx-rework/domain/business-clock";
 import { SlaPlanRepository } from "./sla-plan-repository.js";
@@ -27,5 +27,13 @@ export async function recordSlaPoDateChange(client: Pick<PoolClient, "query">, a
     await repo.appendPlan({ orderId, expectedRevision: previous.revision, snapshotId: previous.snapshotId, plan,
       time, actorId: actor.actorId, reason, requestKey: approvalEventId });
   }
-  if(confirmed)await orderTime.approvedCustomerChange(resource,actor.actorId,approvalEventId,time);
+  if(confirmed)await orderTime.approvedCustomerChange(resource,actor.actorId,approvalEventId,time,async()=>{
+    // All services on this internal read are bound to the approved writer's
+    // original client. An accidental attempt to open a second transaction fails.
+    const bound={query:client.query.bind(client),connect:async()=>{throw Error('改期事实读取不能切换事务');}} as unknown as Pool;
+    const {loadOrderTimeOperation}=await import('./order-time-operation-state.js');
+    const current=await loadOrderTimeOperation(bound,client as PoolClient,actor,{kind:'arrangement',resource},time);
+    if(!current.value.frameworkContext)throw Error('本单三层时间依据不可读取');
+    return current.value.frameworkContext;
+  });
 }

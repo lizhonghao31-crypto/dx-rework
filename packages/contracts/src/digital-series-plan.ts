@@ -1,3 +1,4 @@
+import type {FrameworkMilestoneResultSchema} from './order-time-framework.js';
 import {z} from 'zod';
 import {isCalendarDate} from './series-calendar.js';
 
@@ -17,6 +18,16 @@ export const SERIES_MILESTONES=[
 export const SeriesMilestoneKeySchema=z.enum(SERIES_MILESTONES.map(x=>x.key));
 export type SeriesMilestoneKey=z.infer<typeof SeriesMilestoneKeySchema>;
 export type SeriesRoute='A'|'B';
+/** Approved A/B defaults shared by series plans and versioned company settings. */
+export const SERIES_MILESTONE_OFFSETS={A:{design_handover:95,material_investment:95,fabric_receipt:54,color_confirmation:42,client_sample_approval:44,accessories_ready:33,style_label_ready:33,processing_dispatch:28,planned_shipment:0},
+ B:{design_handover:64,material_investment:64,fabric_receipt:33,color_confirmation:null,client_sample_approval:44,accessories_ready:33,style_label_ready:33,processing_dispatch:28,planned_shipment:0}} as const;
+export const SeriesMilestoneOffsetsSchema=z.object({
+ A:z.record(SeriesMilestoneKeySchema,z.number().int().min(0).max(365)),
+ B:z.record(SeriesMilestoneKeySchema,z.number().int().min(0).max(365).nullable()),
+}).strict().superRefine((value,ctx)=>{
+ if(value.A.planned_shipment!==0||value.B.planned_shipment!==0)ctx.addIssue({code:'custom',message:'出货使用客户交货日期，不能另设偏移'});
+ for(const [key,days]of Object.entries(value.B))if(key==='color_confirmation'?days!==null:days===null)ctx.addIssue({code:'custom',message:'不对色路线只取消对色里程碑'});
+});
 export const SeriesProfileInputSchema=z.object({
  customerCode:z.string().trim().min(1).max(100).nullable().default(null),expectedVersion:z.number().int().nonnegative(),
  monthOffset:z.number().int().min(-12).max(0),shippingDay:z.number().int().min(1).max(31).nullable(),reason:z.string().trim().min(1).max(1000),
@@ -59,6 +70,7 @@ export type SeriesPlanPreview={orderId:string;input:SeriesPreviewInput;orderVers
  candidateDate:string|null;basis:'manual'|'configured-series'|'series-suggestion'|'unavailable';route:SeriesRoute|null;
  previewToken:string;milestones:SeriesMilestone[];facts:SeriesObservedFact[];selectedNodeIds:string[];risks:SeriesRisk[];
  planningGraph:PlanningDependency[];dependencies:PlanningDependencyResult[];sourceRevisionSet:Record<string,unknown>};
-export type SeriesPlanState={orderId:string;serverToday:string;orderVersion:number;sourceId:string|null;canEditSeries:boolean;canApply:boolean;canRequest:boolean;active:boolean;
+export type SeriesFrameworkReading={reference:string;revision:number;effectiveAt:string;scopes:Array<{scopeRef:string;lineId:string|null;customerDate:string;dateSource:string;route:SeriesRoute;milestones:z.infer<typeof FrameworkMilestoneResultSchema>[]}>};
+export type SeriesPlanState={framework?:SeriesFrameworkReading;orderId:string;serverToday:string;orderVersion:number;sourceId:string|null;canEditSeries:boolean;canApply:boolean;canRequest:boolean;active:boolean;
  salesYear:number|null;salesSeries:string|null;requiresColorMatching:boolean|null;profile:SeriesProfile;customerDates:Array<{lineId:string;poNumber:string|null;color:string;date:string|null;version:number}>;
  current:SeriesPlanSnapshot|null;history:SeriesPlanSnapshot[];facts:SeriesObservedFact[];risks:SeriesRisk[];pendingRequests:Array<{requestId:string;requestedBy:string;reason:string;candidateDate:string|null;requestedAt:string;input:SeriesPreviewInput;stale:boolean}>};

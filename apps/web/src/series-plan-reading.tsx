@@ -4,15 +4,15 @@ import {CockpitDate} from './cockpit-date.js';
 
 /** These are the saved plan's own targets, never today's execution facts
  * relabelled as historical actual progress. Date targets end at local day end. */
-export function SeriesPlanReading({state,stale=false}:{state:SeriesPlanState;stale?:boolean}){
+export function SeriesPlanReading({state,stale=false,historicalOnly=false}:{state:SeriesPlanState;stale?:boolean;historicalOnly?:boolean}){
  const [revision,setRevision]=useState<number|null>(null);
  const versions=[...(state.current?[state.current]:[]),...state.history].filter((value,index,all)=>all.findIndex(row=>row.revision===value.revision)===index).sort((a,b)=>b.revision-a.revision);
- const selected=revision===null?state.current:versions.find(value=>value.revision===revision),historical=Boolean(selected&&selected.revision!==state.current?.revision);
+ const selected=revision===null?state.current:versions.find(value=>value.revision===revision),historical=historicalOnly||Boolean(selected&&selected.revision!==state.current?.revision);
  if(!versions.length)return <p>本单尚未采用系列计划，实际业务进度仍可在上方查看。</p>;
  const dated=selected?.milestones.filter(row=>row.targetDate)??[],due=dated.filter(row=>row.targetDate!<state.serverToday),missing=(selected?.milestones.length??0)-dated.length;
  return <section className="series-plan-reading" aria-label="采用计划版本与日期依据">
   <label>阅读计划版本<select aria-label="阅读计划版本" value={revision===null?'current':String(revision)} onChange={event=>setRevision(event.target.value==='current'?null:Number(event.target.value))}>
-   <option value="current">{stale?'上次读取的采用版':'当前采用'}{state.current?` · 第${state.current.revision}版`:' · 尚未采用'}</option>{versions.filter(row=>row.revision!==state.current?.revision).map(row=><option key={row.revision} value={row.revision}>历史第{row.revision}版</option>)}
+   <option value="current">{historicalOnly?'原系列历史':stale?'上次读取的采用版':'当前采用'}{state.current?` · 第${state.current.revision}版`:' · 尚未采用'}</option>{versions.filter(row=>row.revision!==state.current?.revision).map(row=><option key={row.revision} value={row.revision}>历史第{row.revision}版</option>)}
   </select></label>
   {!selected?<p role="status">该版本已无法读取，请选择仍可读取的版本；未将当前版本数字套用到旧版。</p>:<div data-reading-plan-revision={selected.revision}>
    <h3>{historical?'历史':stale?'上次读取的采用':'当前已采用'}系列计划第{selected.revision}版 · {selected.route}路线</h3>

@@ -4,6 +4,7 @@ export type FixedTimelineCalendar='continuous'|'natural_days'|'beijing_sunday_ex
 export type FixedTimelineWork={
  id:string;dependsOn:readonly string[];minutes:number|null;calendar:FixedTimelineCalendar|null;
  includedIn?:string;includedPosition?:'start'|'end';
+ nativeDuration?:{reference:string;minutes:number|null;calendar:FixedTimelineCalendar|null};
  dependencyReserves?:Readonly<Record<string,{minutes:number;calendar:FixedTimelineCalendar}>>;
 };
 export type FixedTimelineTarget={id:string;start:SlaTime;end:SlaTime};
@@ -134,12 +135,16 @@ export function fixedTimelineTargets(work:readonly FixedTimelineWork[],ends:Read
 /** Exact forward arrangement on the same validated DAG/calendars. The inputs
  * are planning assumptions, never completion events or employee clock starts.
  */
-export function fixedTimelineForward(work:readonly FixedTimelineWork[],start:SlaAnchor,notBefore:Readonly<Record<string,SlaAnchor>>={},options:{minimumStart?:SlaAnchor;retained?:Readonly<Record<string,FixedTimelineTarget>>}={}):FixedTimelineTarget[]{
+export function fixedTimelineForward(work:readonly FixedTimelineWork[],start:SlaAnchor,notBefore:Readonly<Record<string,SlaAnchor>>={},options:{minimumStart?:SlaAnchor;retained?:Readonly<Record<string,FixedTimelineTarget>>;completions?:Readonly<Record<string,SlaTime>>}={}):FixedTimelineTarget[]{
  const {ordered}=orderedFixedWork(work,true),targets=new Map<string,FixedTimelineTarget>();
  for(const [id,row]of Object.entries(options.retained??{})){
   if(row.id!==id||!work.some(node=>node.id===id))throw Error('保留安排不属于本范围工作');
   if(row.start.at)instant(row.start.at);if(row.end.at)instant(row.end.at);
   if(row.start.at&&row.end.at&&instant(row.end.at)<instant(row.start.at))throw Error('保留安排结束早于开始');
+ }
+ for(const [id,time]of Object.entries(options.completions??{})){
+  if(!options.retained?.[id])throw Error('实际完成边界必须引用保留的本范围工作');
+  if(time.at)instant(time.at);else if(!time.reasons.length)throw Error('未知实际完成时间须保留原因');
  }
  const missing=(...reasons:string[]):SlaTime=>({at:null,exclusive:false,reasons:[...new Set(reasons)]});
  const initial=slaAnchorTime(start,'本次安排开始');
@@ -147,7 +152,7 @@ export function fixedTimelineForward(work:readonly FixedTimelineWork[],start:Sla
   if(node.includedIn)continue;
   const retained=options.retained?.[node.id];if(retained){targets.set(node.id,structuredClone(retained));continue;}
   const candidates=node.dependsOn.length?node.dependsOn.map(id=>{
-   const end=targets.get(id)!.end,reserve=node.dependencyReserves?.[id];
+   const end=options.completions?.[id]??targets.get(id)!.end,reserve=node.dependencyReserves?.[id];
    return end.at&&reserve?{...end,at:shiftFixedTimeline(end.at,reserve.minutes,reserve.calendar),reasons:[...end.reasons]}:end;
   }):[initial];
   if(notBefore[node.id])candidates.push(slaAnchorTime(notBefore[node.id]!,`本节点预计前提:${node.id}`));

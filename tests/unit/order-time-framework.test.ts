@@ -25,6 +25,17 @@ function fixture():TimeFrameworkInput{
 const version={reference:'TEST plan1',revision:1,previousReference:null,eventRef:'TEST native approval'};
 
 describe('three-layer time foundation, no live adoption',()=>{
+ it('retains a completed original plan while successors use the genuine later completion boundary',()=>{
+  const input=fixture(),end={at:iso(5),exclusive:false,reasons:[]},start={...end,at:iso(2)};
+  const result=evaluateTimeFrameworkCandidate(input,{...context(6),retained:{fabric:{target:{id:'fabric',start,end},sourceRef:'TEST plan before completion',actualCompletion:{...end,at:iso(6)}}}});
+  expect(result.arranged.find(row=>row.id==='fabric')?.end.at).toBe(iso(5));
+  // The unstarted pattern cannot be placed before the actual approval on 6th.
+  expect(result.arranged.find(row=>row.id==='pattern')?.start.at).toBe(iso(6));
+  expect(result.arranged.find(row=>row.id==='dispatch')?.start.at).toBe(iso(8));
+  expect(result.retained.fabric?.actualCompletion?.at).toBe(iso(6));
+  const snapshot=freezeTimeFrameworkCandidate(result,version);
+  expect(readTimeFrameworkPlan(snapshot)).toMatchObject({kind:'framework',plan:{retained:{fabric:{target:{end:{at:iso(5)}},actualCompletion:{at:iso(6)}}}}});
+ });
  it('reuses original A9/B8 offsets including shipment without conflating factory and customer dates',()=>{
   const a=initialFrameworkMilestoneStandard('A','TEST A',1),b=initialFrameworkMilestoneStandard('B','TEST B',1);
   expect(a.offsets).toEqual({design_handover:95,material_investment:95,fabric_receipt:54,color_confirmation:42,client_sample_approval:44,accessories_ready:33,style_label_ready:33,processing_dispatch:28,planned_shipment:0});

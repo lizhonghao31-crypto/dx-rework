@@ -6,6 +6,9 @@ import {fixedTimelineForward} from '../../apps/api/src/production-platform/fixed
 import {fixedOrderWork} from '../../apps/api/src/production-platform/fixed-order-work.js';
 import {digitalSlaDefaults,DIGITAL_SLA_RULE_VERSION} from '@dx-rework/contracts/digital-sla';
 import type {FixedWorkInputs} from '../../apps/api/src/production-platform/fixed-work-definition.js';
+import {FrozenOrderTimePlanSchema} from '@dx-rework/contracts/order-time-plan';
+import {orderTimeInputFromRoute} from '../../apps/api/src/production-platform/order-time-request-plan.js';
+import {buildOrderTimeWork} from '../../apps/api/src/production-platform/order-time-schedule.js';
 type Work=FixedTimelineInput['work'][number];
 const policy={minutes:1440,calendar:'continuous' as const,reminder:{enabled:true,percent:70}};
 const factory:Work={id:'factory',dependsOn:[],minutes:7200,calendar:'continuous',canonicalWorkRef:'factory',planningParameterRef:'original',responsibilitySlaRef:null};
@@ -62,4 +65,20 @@ it('uses the selected bulk calendar, including a Sunday boundary, without creati
   {...start,value:'2026-11-14T15:00:00.000Z'}); // Saturday23:00 Beijing → Monday02:00
  expect(rows.at(-1)?.end.at).toBe('2026-11-15T18:00:00.000Z');
  expect(route.work.every(node=>!('ready' in node)&&!('startedAt' in node))).toBe(true);
+});
+it('preserves the per-PO washing duration and inclusive factory remainder across the original adoption adapter',()=>{
+ const company=FrozenOrderTimePlanSchema.parse({version:'order-time-plan-v1',revision:1,overrides:{},company:{version:'order-time-standard-v1',reference:'TEST company',revision:1,stageBufferMinutes:0,nodes:{
+  factory_production_work:{kind:'forecast',...policy,minutes:7200},
+ }}});
+ const route=bulkWashingWork('order','red',plan('factory',true),{...factory,parameterKey:'factory_production_work',stage:6},'receipt-qc');
+ const converted=orderTimeInputFromRoute(company,{work:[route.factory,...route.work],consumers:[{scopeRef:'po:red',lineId:'red',nodeIds:[route.factory.id,...route.work.map(row=>row.id)],ends:{[route.factoryEnd]:start}}]},new Map([['po:red',start]]),true);
+ const rebuilt=buildOrderTimeWork(converted.plan,converted.work);
+ expect(rebuilt.map(row=>row.minutes)).toEqual([5640,1440,120]);
+ expect(fixedTimelineForward(rebuilt,start).at(-1)?.end.at).toBe('2026-11-17T00:00:00.000Z');
+ expect(converted.work[1]?.nativeDuration?.reference).toBe('bulk-standard:washing:1:bulk_factory_washing');
+ expect(company.company.nodes.factory_production_work?.minutes).toBe(7200);
+});
+it('does not accept a per-scope washing policy as a substitute for an unrelated node SLA',()=>{
+ const company=FrozenOrderTimePlanSchema.parse({version:'order-time-plan-v1',revision:1,overrides:{},company:{version:'order-time-standard-v1',reference:'TEST company',revision:1,stageBufferMinutes:0,nodes:{cut:{kind:'work',...policy}}}});
+ expect(()=>buildOrderTimeWork(company,[{id:'cut',parameterKey:'cut',stage:4,dependsOn:[],nativeDuration:{reference:'TEST unrelated',minutes:1,calendar:'continuous'}}])).toThrow('不属于洗水');
 });

@@ -2,11 +2,12 @@ import type {CraftStepChoice} from '@dx-rework/contracts/digital-craft';
 import type {SlaAnchor} from '@dx-rework/domain/digital-sla-plan';
 import {slaAnchorTime} from '@dx-rework/domain/digital-sla-plan';
 import {FrozenOrderTimePlanSchema,orderTimeRule,type FrozenOrderTimePlan} from '@dx-rework/contracts/order-time-plan';
+import {FrameworkNativeDurationSchema} from '@dx-rework/contracts/order-time-framework';
 import {orderTimeWorkDefinition,orderTimeDependencyReserves} from './fixed-work-definition.js';
-import {fixedTimelineForward,requiredFixedTimelineWork,type FixedTimelineTarget,type FixedTimelineWork} from './fixed-timeline-targets.js';
+import {fixedTimelineForward,requiredFixedTimelineWork,type FixedTimelineTarget,type FixedTimelineWork,type FixedTimelineCalendar} from './fixed-timeline-targets.js';
 import {fixedConsumerTargets,type ShipSampleTarget} from './fixed-consumer-targets.js';
 
-export type OrderTimeWork={id:string;parameterKey:string;stage:number;dependsOn:readonly string[];includedIn?:string;includedPosition?:'start'|'end';canonicalWorkRef?:string;craftStep?:CraftStepChoice};
+export type OrderTimeWork={id:string;parameterKey:string;stage:number;dependsOn:readonly string[];includedIn?:string;includedPosition?:'start'|'end';canonicalWorkRef?:string;craftStep?:CraftStepChoice;nativeDuration?:{reference:string;minutes:number|null;calendar:FixedTimelineCalendar|null}};
 export type OrderTimeScope={scopeRef:string;terminalIds:readonly string[];goals:Readonly<Record<string,SlaAnchor>>;customerGoal:SlaAnchor;shipSample?:ShipSampleTarget};
 export type OrderTimeScenario={plan:FrozenOrderTimePlan;work:readonly OrderTimeWork[];scopes:readonly OrderTimeScope[];
  route:{complete:boolean;missing:readonly string[]};start:SlaAnchor;notBefore?:Readonly<Record<string,SlaAnchor>>;
@@ -22,6 +23,10 @@ export function buildOrderTimeWork(plan:FrozenOrderTimePlan,work:readonly OrderT
  return work.map(node=>{
   if(!Number.isInteger(node.stage)||node.stage<1||node.stage>7)throw Error('本单节点阶段无效');
   const definition=orderTimeWorkDefinition(saved,node.parameterKey,node.craftStep);
+  if(node.nativeDuration){
+   if(!/^(bulk_(factory|return)_washing(_inspection)?|factory_production_work)$/.test(node.parameterKey))throw Error('原生范围用时不属于洗水或工厂内含分解');
+   Object.assign(definition,FrameworkNativeDurationSchema.parse(node.nativeDuration));
+  }
   const rule=orderTimeRule(saved,node.parameterKey)?.rule;
   if(rule&&(rule.kind==='included')!==Boolean(node.includedIn))throw Error('内含交接必须沿真实所属窗口，不能重复计入路径');
   const parent=node.includedIn?byId.get(node.includedIn):null;

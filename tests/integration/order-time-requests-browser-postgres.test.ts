@@ -1,3 +1,6 @@
+import {prepareTimeFrameworkConfiguration} from '@dx-rework/contracts/order-time-settings';
+import {OrderTimeRequestService} from '../../apps/api/src/production-platform/order-time-request-service.js';
+import {orderTimeNativeExecutor} from '../../apps/api/src/production-platform/order-time-native-commands.js';
 import {SourcingService} from '../../apps/api/src/sourcing/sourcing-service.js';
 import {TodoProjectionService} from '../../apps/api/src/todos/projection-service.js';
 import {TodoService} from '../../apps/api/src/todos/service.js';
@@ -131,8 +134,12 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const tab=await h.open(manager.actorId,1586,{losePath:path},'/ui/my-tasks?q='+encodeURIComponent(row.designStyleNo));
   try{
    const link=tab.page.locator('a.my-todo-row').filter({hasText:row.designStyleNo});await link.waitFor();expect(await link.getAttribute('href')).toContain('timeRequest='+row.requestId);await link.click();await applyPage(tab.page);
-   const inputs=tab.page.locator('.r5-time-table input[inputmode="decimal"]');
-   for(let i=0;i<await inputs.count();i++){const input=inputs.nth(i);if(await input.isEnabled()){const row=input.locator('xpath=ancestor::tr');await row.getByRole('combobox',{name:/用时单位$/}).selectOption('minutes');await input.fill((await row.innerText()).includes('跟随所属工序')?'2':'10');}}
+   const stages=tab.page.getByRole('navigation',{name:'本单时效阶段'}).getByRole('button');
+   for(let stage=0;stage<await stages.count();stage++){
+    await stages.nth(stage).click();
+    const inputs=tab.page.locator('.r5-time-table input[inputmode="decimal"]');
+    for(let i=0;i<await inputs.count();i++){const input=inputs.nth(i);if(await input.isEnabled()){const row=input.locator('xpath=ancestor::tr');await row.getByRole('combobox',{name:/用时单位$/}).selectOption('minutes');await input.fill((await row.innerText()).includes('跟随所属工序')?'2':'10');}}
+   }
    await expect.poll(()=>tab.page.locator('.r5-time-sufficient').count()).toBe(1);
    for(const width of [1586,1165]){
     await tab.page.setViewportSize({width,height:992});await tab.page.getByRole('heading',{name:'本单时效调整',exact:false}).scrollIntoViewIfNeeded();expect(await tab.page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
@@ -256,6 +263,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   try{
    await applyPage(tab.page);
    const previewed=tab.page.waitForResponse(response=>response.url().endsWith('/order-time/requests/'+row.requestId+'/preview')&&response.status()===200);
+   await tab.page.getByRole('navigation',{name:'本单时效阶段'}).getByRole('button',{name:'产品开发打板',exact:true}).click();
    await tab.page.getByLabel('开发纸样本次用时',{exact:true}).fill('0.5');await previewed;
    await expect.poll(()=>tab.page.locator('.r5-time-changes').innerText()).toContain('30分钟');
    await h.f.access.revokeRole(h.admin,assignment.assignment_id,'TEST 同一有效会话撤销时效办理角色');
@@ -265,4 +273,47 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(h.requests.filter(call=>call.session===tab.session&&call.status===401)).toHaveLength(0);
   }finally{await tab.context.close();}
  });
+ it('adopts washing through the original grouped order adjustment page with real authenticated roles',async()=>{
+  const settings=new OrderTimeSettingsService(h.db,true,true),current=await settings.read(h.f.root);
+  await settings.save(h.f.root,{expectedVersion:current.version,values:prepareTimeFrameworkConfiguration(r5OneHourConfiguration())},randomUUID());
+  const requests=new OrderTimeRequestService(h.db,orderTimeNativeExecutor(h.db,true,h.patternOrders));
+  const orderId=await h.f.runtime.run(scene,h.f.root,async()=>{
+   const designer=h.f.people['sample-designer']!,input=DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',requiresColorMatching:false,designStyleNo:'TEST-TIME06-UI-'+randomUUID(),orderDate:'2027-01-07',primaryMerchandiserId:h.f.people.merchandiser!.actorId,lines:[{formalPoNo:'TEST-TIME06-PO-'+randomUUID(),color:'黑',customerWarehouseArrivalDate:'2027-02-20',sizes:[{size:'M',quantity:10}]}]});
+   const operation={kind:'direct_order' as const,input,route:{craftSteps:[],preshrink:false}},check=await requests.check(designer,operation);
+   const pending=await requests.submit(designer,{operation,fingerprint:check.fingerprint,reason:'TEST original UI new arrangement'},randomUUID());
+   const manager=h.f.people.owner!,preview=await requests.read(manager,pending.requestId);
+   return (await requests.apply(manager,pending.requestId,{expectedVersion:preview.version,fingerprint:preview.check.fingerprint,overrides:{},acceptLate:true},randomUUID())).result!.orderId!;
+  });
+  const tab=await h.open(h.f.people.owner!.actorId,1165,{},'/ui/digital-production?timeOrder='+orderId);
+  try{
+   const page=tab.page;await applyPage(page);
+   const stages=page.getByRole('navigation',{name:'本单时效阶段'}).getByRole('button');
+   expect(await stages.count()).toBeGreaterThan(1);
+   await stages.last().click();
+   expect(await stages.last().getAttribute('aria-pressed')).toBe('true');
+   expect(await page.locator('.r5-time-table').innerText()).not.toContain('订单创建');
+   await page.locator('summary').filter({hasText:'大货洗水'}).click();
+   await page.getByRole('combobox',{name:/^洗水方式/}).selectOption('after_receipt');
+   expect(await page.getByRole('button',{name:'提交',exact:true}).isEnabled()).toBe(false);
+   await page.getByLabel('洗水用时（小时）',{exact:true}).fill('2');
+   await page.getByLabel('洗后检查（小时）',{exact:true}).fill('1');
+   await page.getByRole('combobox',{name:/^洗水跟单/}).selectOption(h.f.people['embroidery-washing-merchandiser']!.actorId);
+   const previewed=page.waitForResponse(response=>response.url().endsWith('/order-time/preview')&&response.status()===200);
+   await page.getByRole('combobox',{name:/^质检/}).selectOption(h.f.people.qc!.actorId);await previewed;
+   await expect.poll(()=>page.getByRole('button',{name:'提交',exact:true}).isEnabled()).toBe(true);
+   const layout=await page.locator('.r5-time-table,.r5-time-changes').evaluateAll(elements=>elements.map(element=>({top:element.getBoundingClientRect().top,left:element.getBoundingClientRect().left,right:element.getBoundingClientRect().right})));
+   expect(Math.abs(layout[0]!.top-layout[1]!.top)).toBeLessThan(2);
+   expect(layout[1]!.left).toBeGreaterThanOrEqual(layout[0]!.right);
+   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+   await page.screenshot({path:join(h.evidence,'time06-real-grouped-adjustment-1165.png'),fullPage:true});
+   const needsConfirmation=await page.locator('.r5-time-risk').count()>0;
+   await page.getByRole('button',{name:'提交',exact:true}).click();
+   const dialog=page.getByRole('dialog',{name:'提交本单时效',exact:true});
+   if(needsConfirmation){await dialog.waitFor();await dialog.getByRole('button',{name:'确认',exact:true}).click();}
+   await page.getByText('本单新安排已生效。',{exact:true}).waitFor();
+   const plans=(await h.db.query('SELECT document FROM digital_bulk_washing_plans WHERE production_order_id=$1',[orderId])).rows;
+   expect(plans).toHaveLength(1);expect(plans[0].document.arrangement).toMatchObject({mode:'after_receipt',washing:{minutes:120},inspection:{minutes:60}});
+  }finally{await tab.context.close();}
+ });
+
 });

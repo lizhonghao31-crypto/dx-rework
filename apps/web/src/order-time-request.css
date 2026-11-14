@@ -22,4 +22,8 @@
 .r5-time-late-confirmation .system-dialog__copy{text-align:center}
 .r5-time-late-confirmation .system-dialog__copy p{white-space:pre-line;color:#34415a;font-size:17px;line-height:1.9}
 .r5-time-late-confirmation .system-dialog__actions{justify-content:center;gap:14px;margin-top:23px;padding-top:20px}
-@media(max-width:1200px){.r5-time-request .r5-time-layout{grid-template-columns:minmax(0,1fr)}.r5-time-request .r5-time-changes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.r5-time-request .r5-time-changes h2{grid-column:1/-1}}
+
+
+.r5-time-stage-tabs{display:flex;gap:5px;padding:10px;overflow-x:auto;border-bottom:1px solid #dce4ef}.r5-time-stage-tabs button{flex:0 0 auto;border:1px solid #d5dfed;border-radius:6px;background:#fff;color:inherit;padding:8px 10px;font:inherit}.r5-time-stage-tabs button[aria-pressed="true"]{background:#e8f0ff;color:#215bc2;border-color:#8caee8}.r5-time-changes{position:sticky;top:12px}@media(max-width:800px){.r5-time-changes{position:static}}
+
+.r5-time-washing{display:block;margin:12px 0 18px}.r5-time-washing summary{cursor:pointer;margin-bottom:10px}.r5-time-washing fieldset{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 18px;border:1px solid #d5dfed;border-radius:8px;padding:16px;margin:10px 0}.r5-time-washing legend{overflow-wrap:anywhere;max-width:100%}.r5-time-washing input,.r5-time-washing select{box-sizing:border-box;width:100%;min-height:36px;border:1px solid #c7d2e3;border-radius:5px;padding:7px;font:inherit}.r5-time-washing p{grid-column:1/-1;margin:0}.r5-time-stage-tabs{scroll-padding:10px}@media(max-width:600px){.r5-time-washing fieldset{grid-template-columns:1fr}}

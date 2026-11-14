@@ -1,7 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import type {BusinessTime} from '@dx-rework/domain/business-clock';
-import {OrderTimeOperationSchema,OrderTimeRequestSchema,OrderTimeApplySchema,OrderTimeArrangementSchema,OrderTimeReturnSchema,OrderTimeWithdrawSchema,type OrderTimeOperation,type OrderTimeRequestRead} from '@dx-rework/contracts/order-time-requests';
+import {orderTimeGapText,OrderTimeOperationSchema,OrderTimeRequestSchema,OrderTimeApplySchema,OrderTimeArrangementSchema,OrderTimeReturnSchema,OrderTimeWithdrawSchema,type OrderTimeOperation,type OrderTimeRequestRead,type OrderTimeWashingChanges} from '@dx-rework/contracts/order-time-requests';
 import type {OrderTimeRule} from '@dx-rework/contracts/order-time-plan';
 import type {TrustedActorContext} from '../tools/repositories.js';
 import {ApplicationError} from '../platform/errors.js';
@@ -14,11 +14,12 @@ import {withinOrderTimeAdmission,orderTimeRequester} from './order-time-admissio
 import {OrderTimeRequestRepository,type OrderTimeRequestRow} from './order-time-request-repository.js';
 import {OrderTimePlanRepository} from './order-time-plan-repository.js';
 import {currentOrderTimeOperation} from './order-time-native-commands.js';
+import {adoptBulkWashingWithClient} from './bulk-washing-repository.js';
 import {DigitalProductionTaskService} from './task-service.js';
 
 export type OrderTimeNativeExecutor=(db:PoolClient,actor:TrustedActorContext,operation:OrderTimeOperation,key:string)=>Promise<{sourceId:string|null;orderId:string|null}>;
 const conflict=(code:string,message:string):never=>{throw new ApplicationError(code,message,409);};
-const lateText=(minutes:number)=>(Math.ceil(minutes/1440*100)/100).toLocaleString('zh-CN',{maximumFractionDigits:2});
+export {orderTimeGapText} from '@dx-rework/contracts/order-time-requests';
 
 /** One original lifecycle transaction covers request decision, native business
  * publication, selected policy and receipts. The real manager stays the actor. */
@@ -42,29 +43,30 @@ export class OrderTimeRequestService{
   else if(!isRootActor(actor)&&!await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,actor.actorId===row!.designer_id?'sample_designer':'order_merchandiser'))digitalForbidden();
   return row!;
  }
- private async result(db:PoolClient,actor:TrustedActorContext,row:OrderTimeRequestRow,changes:Record<string,OrderTimeRule>={}):Promise<OrderTimeRequestRead>{
+ private async result(db:PoolClient,actor:TrustedActorContext,row:OrderTimeRequestRow,changes:Record<string,OrderTimeRule>={},washing:OrderTimeWashingChanges=[]):Promise<OrderTimeRequestRead>{
   // Publication can consume a revision draft or create a new native source.
   // Its receipt must read the committed result, not require the old draft again.
   const target=row.state==='applied'&&row.applied_plan_id?(await db.query('SELECT resource_kind,source_id,production_order_id FROM digital_order_time_plan_versions WHERE plan_version_id=$1',[row.applied_plan_id])).rows[0]:null;
   const operation:OrderTimeOperation=target?{kind:'arrangement',resource:{kind:target.resource_kind,id:target.resource_kind==='source'?target.source_id:target.production_order_id}}:await currentOrderTimeOperation(db,row.operation_json);
-  const state=await loadOrderTimeOperation(this.database,db,actor,operation,await this.time(db,operation),changes);
+  const state=await loadOrderTimeOperation(this.database,db,actor,operation,await this.time(db,operation),changes,washing);
   return {requestId:row.request_id,version:row.version,state:row.state,operation,requestedBy:{id:row.requested_by,name:row.requested_name??null},designerId:row.designer_id,reason:row.reason,returnReason:row.return_reason,
    appliedBy:row.applied_by?{id:row.applied_by,name:row.applied_name??null}:null,result:row.state==='applied'?{orderId:row.result_order_id,lateMinutes:row.result_late_minutes===null?null:Number(row.result_late_minutes)}:null,
    check:state.check,canWithdraw:actor.actorId===row.designer_id&&['pending','returned'].includes(row.state)};
  }
- check(actor:TrustedActorContext,raw:unknown,changes:Record<string,OrderTimeRule>={}){const operation=OrderTimeOperationSchema.parse(raw);return this.transaction(false,async db=>(await loadOrderTimeOperation(this.database,db,actor,operation,await this.time(db,operation),changes)).check);}
- read(actor:TrustedActorContext,id:string,changes:Record<string,OrderTimeRule>={}){return this.transaction(false,async db=>this.result(db,actor,await this.visible(db,actor,id),changes));}
+ check(actor:TrustedActorContext,raw:unknown,changes:Record<string,OrderTimeRule>={},washing:OrderTimeWashingChanges=[]){const operation=OrderTimeOperationSchema.parse(raw);return this.transaction(false,async db=>(await loadOrderTimeOperation(this.database,db,actor,operation,await this.time(db,operation),changes,washing)).check);}
+ read(actor:TrustedActorContext,id:string,changes:Record<string,OrderTimeRule>={},washing:OrderTimeWashingChanges=[]){return this.transaction(false,async db=>this.result(db,actor,await this.visible(db,actor,id),changes,washing));}
  arrange(actor:TrustedActorContext,raw:unknown,key:string){const input=OrderTimeArrangementSchema.parse(raw);return this.transaction(true,async db=>{
   await assertSlaSettingsActor(db,actor,true);const repo=new OrderTimeRequestRepository(db);
   return repo.receipt(actor.actorId,'arrange:'+input.resource.kind+':'+input.resource.id,key,input,async()=>{
-   const operation:OrderTimeOperation={kind:'arrangement',resource:input.resource},time=await this.time(db,operation),state=await loadOrderTimeOperation(this.database,db,actor,operation,time,input.overrides);
+   const operation:OrderTimeOperation={kind:'arrangement',resource:input.resource},time=await this.time(db,operation),state=await loadOrderTimeOperation(this.database,db,actor,operation,time,input.overrides,input.washing);
    const subject=(await db.query(`SELECT effective FROM digital_order_time_subjects WHERE resource_kind=$1 AND ${input.resource.kind==='source'?'source_id':'production_order_id'}=$2`,[input.resource.kind,input.resource.id])).rows[0];
    if(subject&&!subject.effective)conflict('ORDER_TIME_REQUEST_REQUIRED','新订单尚未生效，请从设计师原申请接续办理');
    if(input.fingerprint!==state.check.fingerprint)conflict('ORDER_TIME_STALE','原单资料已更新，本次调整已保留，请重新核对后提交');
    if(state.check.feasibility==='unknown')conflict('ORDER_TIME_INPUT_REQUIRED',state.check.coverage.join('；')||'请补齐本单必要时间');
-   if(state.check.feasibility==='insufficient'&&!input.acceptLate)conflict('ORDER_TIME_LATE_CONFIRMATION',`按目前安排预计晚交${lateText(state.check.lateMinutes!)}天，是否继续？`);
+   if(state.check.feasibility==='insufficient'&&!input.acceptLate)conflict('ORDER_TIME_LATE_CONFIRMATION',orderTimeGapText(state.check));
    const eventId=randomUUID();await db.query(`INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1,$2,$3,'order_time_arranged','digital_production',$4,$5)`,[eventId,actor.requestId,actor.actorId,input.resource.id,JSON.stringify({plan:state.value.plan,lateMinutes:state.check.lateMinutes,acceptedLate:input.acceptLate})]);
-   const previous=await new OrderTimePlanRepository(db).current(input.resource),saved=await new OrderTimePlanRepository(db).confirm({resource:input.resource,expectedRevision:previous?.revision??0,value:state.value,actorId:actor.actorId,eventRef:'audit_events:'+eventId,time,requestKey:'order-time-arrange:'+eventId});
+   if(input.washing?.length){if(input.resource.kind!=='order')conflict('ORDER_TIME_INPUT_REQUIRED','请在正式订单采用洗水安排');for(const change of input.washing)await adoptBulkWashingWithClient(db,actor,input.resource.id,change.lineId,change.expectedVersion,change.document);}
+   const previous=await new OrderTimePlanRepository(db).current(input.resource),saved=await new OrderTimePlanRepository(db).confirm({resource:input.resource,expectedRevision:previous?.revision??0,value:state.value,actorId:actor.actorId,eventRef:'audit_events:'+eventId,time,requestKey:'order-time-arrange:'+eventId},async(resource,changes)=>(await loadOrderTimeOperation(this.database,db,actor,{kind:'arrangement',resource},time,changes)).value);
    if(input.resource.kind==='order')await db.query('UPDATE digital_production_orders SET order_time_managed=true WHERE production_order_id=$1',[input.resource.id]);
    return {saved:true as const,planRevision:saved.revision,check:state.check};
   });
@@ -98,10 +100,10 @@ export class OrderTimeRequestService{
   await assertSlaSettingsActor(db,actor,true);const row=await this.visible(db,actor,id,true),repo=new OrderTimeRequestRepository(db);
   return repo.receipt(actor.actorId,'apply:'+id,key,input,async()=>{
    if(row.version!==input.expectedVersion||row.state!=='pending')conflict('ORDER_TIME_STALE','申请已由其他人处理或更新，请刷新查看结果');
-   const operation=await currentOrderTimeOperation(db,row.operation_json),time=await this.time(db,operation),state=await loadOrderTimeOperation(this.database,db,actor,operation,time,input.overrides);
+   const operation=await currentOrderTimeOperation(db,row.operation_json),time=await this.time(db,operation),state=await loadOrderTimeOperation(this.database,db,actor,operation,time,input.overrides,input.washing);
    if(input.fingerprint!==state.check.fingerprint)conflict('ORDER_TIME_STALE','原单资料已更新，本次调整已保留，请重新核对后提交');
    if(state.check.feasibility==='unknown')conflict('ORDER_TIME_INPUT_REQUIRED',state.check.coverage.join('；')||'请先补齐本单适用流程及必要时间');
-   if(state.check.feasibility==='insufficient'&&!input.acceptLate)conflict('ORDER_TIME_LATE_CONFIRMATION',`按目前安排预计晚交${lateText(state.check.lateMinutes!)}天，是否继续？`);
+   if(state.check.feasibility==='insufficient'&&!input.acceptLate)conflict('ORDER_TIME_LATE_CONFIRMATION',orderTimeGapText(state.check));
    const eventId=randomUUID(),resource=orderTimeOperationScope(state.operation);
    await db.query(`INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state)
     VALUES($1,$2,$3,'order_time_activated','digital_production',$4,$5)`,[eventId,actor.requestId,actor.actorId,resource?.id??id,JSON.stringify({requestId:id,requestedBy:row.requested_by,designerId:row.designer_id,operation:state.operation,plan:state.value.plan,lateMinutes:state.check.lateMinutes,acceptedLate:input.acceptLate})]);
@@ -112,10 +114,11 @@ export class OrderTimeRequestService{
     if(!target)throw Error('原业务办理没有返回本单身份');
     // Re-read actual native task/step/PO identities after publication on this
     // same client; temporary preview IDs never become real execution events.
+    if(input.washing?.length){if(target.kind!=='order')conflict('ORDER_TIME_INPUT_REQUIRED','请在正式订单采用洗水安排');for(const change of input.washing)await adoptBulkWashingWithClient(db,actor,target.id,change.lineId,change.expectedVersion,change.document);}
     const actualOperation:OrderTimeOperation={kind:'arrangement',resource:target};
-    const actual=state.operation.kind==='arrangement'?state:await loadOrderTimeOperation(this.database,db,actor,actualOperation,time,input.overrides);
+    const actual=state.operation.kind==='arrangement'&&!input.washing?.length?state:await loadOrderTimeOperation(this.database,db,actor,actualOperation,time,input.overrides);
     const previous=await new OrderTimePlanRepository(db).current(target);
-    const saved=await new OrderTimePlanRepository(db).confirm({resource:target,expectedRevision:previous?.revision??0,value:actual.value,actorId:actor.actorId,eventRef:'audit_events:'+eventId,time,requestKey:'order-time-request:'+id+':'+row.version});
+    const saved=await new OrderTimePlanRepository(db).confirm({resource:target,expectedRevision:previous?.revision??0,value:actual.value,actorId:actor.actorId,eventRef:'audit_events:'+eventId,time,requestKey:'order-time-request:'+id+':'+row.version},async(resource,changes)=>(await loadOrderTimeOperation(this.database,db,actor,{kind:'arrangement',resource},time,changes)).value);
     if(target.kind==='order')await new DigitalProductionTaskService(this.database).refreshShipSampleTimingWithClient(db,actor,target.id);
     await db.query(`UPDATE digital_order_time_subjects SET effective=true WHERE resource_kind=$1 AND ${target.kind==='source'?'source_id':'production_order_id'}=$2`,[target.kind,target.id]);
     return {native,saved};

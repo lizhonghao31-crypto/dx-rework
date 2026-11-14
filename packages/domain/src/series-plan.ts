@@ -1,7 +1,6 @@
-import {SERIES_MILESTONES,type SeriesRoute,type SeriesMilestone,type SeriesObservedFact,type PlanningDependency,type PlanningDependencyResult} from '@dx-rework/contracts/digital-series-plan';
+import {SERIES_MILESTONE_OFFSETS,SERIES_MILESTONES,type SeriesRoute,type SeriesMilestone,type SeriesObservedFact,type PlanningDependency,type PlanningDependencyResult} from '@dx-rework/contracts/digital-series-plan';
 import {addCalendarDays,isCalendarDate} from '@dx-rework/contracts/series-calendar';
-const OFFSETS={A:{design_handover:95,material_investment:95,fabric_receipt:54,color_confirmation:42,client_sample_approval:44,accessories_ready:33,style_label_ready:33,processing_dispatch:28,planned_shipment:0},
- B:{design_handover:64,material_investment:64,fabric_receipt:33,color_confirmation:null,client_sample_approval:44,accessories_ready:33,style_label_ready:33,processing_dispatch:28,planned_shipment:0}} as const;
+const OFFSETS=SERIES_MILESTONE_OFFSETS;
 export function seriesMilestones(plannedShippingDate:string,route:SeriesRoute,scopeRef='whole'):SeriesMilestone[]{
  if(!isCalendarDate(plannedShippingDate)||!['A','B'].includes(route))throw new Error('计划出货日期或对色路线无效');
  return SERIES_MILESTONES.flatMap(m=>{const days=OFFSETS[route][m.key];if(days===null)return [];

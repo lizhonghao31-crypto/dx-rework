@@ -1,4 +1,7 @@
 import {z} from 'zod';
+import {SERIES_MILESTONES} from './digital-series-plan.js';
+import {BulkWashingAdoptionSchema} from './bulk-washing.js';
+import {FrameworkMilestoneResultSchema} from './order-time-framework.js';
 import {DigitalOrderCreateSchema} from './digital-production.js';
 import {PublishDevelopmentSchema} from './digital-development.js';
 import {PublishDevelopmentRevisionSchema} from './digital-development-rounds.js';
@@ -24,7 +27,9 @@ export const OrderTimeRequestStateSchema=z.enum(['needs_designer','pending','ret
 export type OrderTimeRequestState=z.infer<typeof OrderTimeRequestStateSchema>;
 export const OrderTimeCheckSchema=z.object({operation:OrderTimeOperationSchema}).strict();
 export const OrderTimeRequestSchema=z.object({operation:OrderTimeOperationSchema,fingerprint:z.string().length(64),reason:z.string().trim().min(1).max(2000)}).strict();
-export const OrderTimeApplySchema=z.object({expectedVersion:z.number().int().positive(),fingerprint:z.string().length(64),overrides:z.record(z.string(),OrderTimeRuleSchema),acceptLate:z.boolean().default(false)}).strict();
+export const OrderTimeWashingChangesSchema=z.array(z.object({lineId:z.uuid(),expectedVersion:z.number().int().nonnegative(),document:BulkWashingAdoptionSchema}).strict()).max(50).refine(rows=>new Set(rows.map(row=>row.lineId)).size===rows.length,'请选择不重复的洗水PO');
+export type OrderTimeWashingChanges=z.infer<typeof OrderTimeWashingChangesSchema>;
+export const OrderTimeApplySchema=z.object({expectedVersion:z.number().int().positive(),fingerprint:z.string().length(64),overrides:z.record(z.string(),OrderTimeRuleSchema),acceptLate:z.boolean().default(false),washing:OrderTimeWashingChangesSchema.optional()}).strict();
 export const OrderTimeArrangementSchema=OrderTimeApplySchema.omit({expectedVersion:true}).extend({resource:z.object({kind:z.enum(['source','order']),id:z.string().uuid()}).strict()}).strict();
 export const OrderTimeReturnSchema=z.object({expectedVersion:z.number().int().positive(),reason:z.string().trim().min(1).max(2000)}).strict();
 export const OrderTimeWithdrawSchema=z.object({expectedVersion:z.number().int().positive()}).strict();
@@ -34,8 +39,21 @@ export const OrderTimeCheckResultSchema=z.object({
  styleNo:z.string(),customerDates:z.array(z.object({po:z.string(),date:z.iso.date().nullable()}).strict()),
  plan:FrozenOrderTimePlanSchema,rows:OrderTimeRowsSchema,coverage:z.array(z.string()),
  feasibility:z.enum(['sufficient','insufficient','unknown']),availableMinutes:z.number().nullable(),requiredMinutes:z.number().nullable(),lateMinutes:z.number().nullable(),expectedEnd:z.string().nullable(),forecastQuality:z.enum(['conditional','lower_bound','unknown']),
+ factoryCommitments:z.array(z.object({lineId:z.string(),label:z.string(),date:z.string(),version:z.number().int().nonnegative(),source:z.string(),plannedReceipt:z.string().nullable(),lateMinutes:z.number().nonnegative().nullable(),status:z.enum(['sufficient','insufficient','unknown'])}).strict()).optional(),
+ washing:z.array(z.object({lineId:z.uuid(),label:z.string(),version:z.number().int().nonnegative(),document:BulkWashingAdoptionSchema.nullable()}).strict()).optional(),
+ framework:z.object({milestones:z.array(FrameworkMilestoneResultSchema.extend({scopeRef:z.string()})),riskAccepted:z.boolean()}).strict().optional(),
  canRequest:z.boolean(),canApply:z.boolean(),sourceVersion:z.record(z.string(),z.unknown()),
 }).strict();
 export type OrderTimeCheckResult=z.infer<typeof OrderTimeCheckResultSchema>;
 export const OrderTimeRequestReadSchema=z.object({requestId:z.string().uuid(),version:z.number().int().positive(),state:OrderTimeRequestStateSchema,operation:OrderTimeOperationSchema,requestedBy:z.object({id:z.string().uuid(),name:z.string().nullable()}).strict(),designerId:z.string().uuid(),reason:z.string(),returnReason:z.string().nullable(),appliedBy:z.object({id:z.string().uuid(),name:z.string().nullable()}).strict().nullable(),result:z.object({orderId:z.string().uuid().nullable(),lateMinutes:z.number().nullable()}).strict().nullable(),check:OrderTimeCheckResultSchema,canWithdraw:z.boolean()}).strict();
 export type OrderTimeRequestRead=z.infer<typeof OrderTimeRequestReadSchema>;
+
+/** The preview and final confirmation describe the same intermediate gaps. */
+export function orderTimeGapText(check:Pick<OrderTimeCheckResult,'framework'|'lateMinutes'|'factoryCommitments'>){
+ const days=(minutes:number)=>(Math.ceil(minutes/1440*100)/100).toLocaleString('zh-CN',{maximumFractionDigits:2});
+ const gaps=check.framework?.milestones.filter(row=>row.status==='insufficient')??[];
+ const factoryGaps=(check.factoryCommitments??[]).filter(row=>row.status==='insufficient');
+ if(!gaps.length&&!factoryGaps.length)return check.lateMinutes===null?'完成时间尚待核实':`按目前安排预计晚交${days(check.lateMinutes)}天，是否继续？`;
+ const detail=[...factoryGaps.map(row=>`${row.label}工厂交货晚${days(row.lateMinutes!)}天`),...gaps.map(row=>`${SERIES_MILESTONES.find(item=>item.key===row.key)!.label}晚${days(row.lateMinutes!)}天`)].join('、');
+ return `${detail}；${check.lateMinutes===null?'最终交期尚待核实':check.lateMinutes>0?`最终交期晚${days(check.lateMinutes)}天`:'最终交期仍可满足'}，是否继续？`;
+}
