@@ -86,7 +86,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   await database.query(`INSERT INTO owner_bootstrap_consumptions(singleton,user_id,provider_user_id,corp_id)
     VALUES(true,$1,$2,'corp')`,[user,`ding-${user}`]);
   craftId=(await access.ensureCrafts(root("master_data:manage"),{craftNames:["车缝＋线＋包装，回厂装箱＋一程运费"]}))[0]!.craftId;
-  for(let i=1;i<=3;i++)factories.push((await access.createSupplier(root("supplier_profile:write"),CreateSupplierSchema.parse({supplierCode:`SSP09-${i}`,supplierType:"factory",supplierName:`试点厂${i}`,active:true,changeReason:"SSP09合成验收数据",address:`试点路${i}号`,contractEntityName:`试点厂${i}有限公司`,partyBRepresentative:"试点代表",payeeName:"试点收款人",bankAccount:`62220${i}`,bankName:"测试银行"}))).supplierId);
+  for(let i=1;i<=4;i++)factories.push((await access.createSupplier(root("supplier_profile:write"),CreateSupplierSchema.parse({supplierCode:`SSP09-${i}`,supplierType:"factory",supplierName:`试点厂${i}`,active:true,changeReason:"SSP09合成验收数据",address:`试点路${i}号`,contractEntityName:`试点厂${i}有限公司`,partyBRepresentative:"试点代表",payeeName:"试点收款人",bankAccount:`62220${i}`,bankName:"测试银行"}))).supplierId);
  },testExecutionConfig.correctnessTimeoutMs);
  afterAll(async()=>{await database.end();await releaseOwnedPostgresSchema(admin,schema);await admin.end();});
  const readyCuttingSheet=async(uploadedBy:string)=>{const attachmentId=randomUUID();await database.query(
@@ -176,7 +176,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
    const key=randomUUID();await reporting.execute(root(),item.productionOrderId,"ship",{businessDate:today(),confirmed:true},key);
    await reporting.execute(root(),item.productionOrderId,"ship",{businessDate:today(),confirmed:true},key);}
   expect((await closure.expected(receiver())).items.map(s=>s.productionOrderId)).toContain(order.productionOrderId);
-  expect((await closure.expected(receiver())).items.map(s=>s.productionOrderId)).not.toContain(off.productionOrderId);
+  expect((await closure.expected(receiver())).items.map(s=>s.productionOrderId)).toContain(off.productionOrderId);
   expect((await closure.receiptSummary(root(),order.productionOrderId)).shipment).toMatchObject({firstStyleNo:order.firstStyleNo,expectedQuantity:25,receipts:[]});
   await expect(closure.expected(boss())).rejects.toMatchObject({statusCode:403});
   await expect(receiving.create(receiver(),{...payload,styleNo:order.lines[1]!.styleNo},randomUUID())).rejects.toMatchObject({statusCode:409});
@@ -190,11 +190,11 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   expect(second.value.styleNo).toBe(order.firstStyleNo);
   const summary=JSON.stringify(await closure.receiptSummary(root(),order.productionOrderId));expect(summary).not.toMatch(/777\.1234|daxing|unitPrice|bankAccount/);
   await closure.setPilot(root(),{supplierId:factories[1],enabled:false});
-  expect((await closure.expected(receiver())).items.some(s=>s.productionOrderId===order.productionOrderId)).toBe(false);
+  expect((await closure.expected(receiver())).items.some(s=>s.productionOrderId===order.productionOrderId)).toBe(true);
   expect((await closure.receiptSummary(root(),order.productionOrderId)).shipment?.receipts).toHaveLength(2);
   expect((await database.query("SELECT 1 FROM sourcing_finance_reconciliations")).rowCount).toBe(0);
  },testExecutionConfig.correctnessTimeoutMs);
- it("auto-links shipped pilot receipts from the selected cutting order without a second production picker",async()=>{
+ it("auto-links shipped receipts from the selected cutting order without a second production picker",async()=>{
   const order=await create(factories[1]!,"AUTO-LINK");
   await closure.setPilot(root(),{supplierId:factories[1],enabled:true});
   for(const line of order.lines) await reporting.report(root(),order.productionOrderId,{position:line.position,businessDate:today(),quantity:line.quantity},randomUUID());
@@ -228,6 +228,40 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
     actualCutCount:20,receiptCount:2,cuttingRecordedBy:"SSP09跟单",
   });
  },testExecutionConfig.correctnessTimeoutMs);
+
+ it.each([null,false,true])("links both receipt paths with pilot=%s, including a concurrent toggle and original replay",async enabled=>{
+  const supplier=factories[3]!;
+  if(enabled===null)expect((await database.query('SELECT 1 FROM sourcing_production_pilots WHERE supplier_id=$1',[supplier])).rowCount).toBe(0);
+  else await closure.setPilot(root(),{supplierId:supplier,enabled});
+  const order=await create(supplier,'NO-PILOT-'+String(enabled).toUpperCase());
+  const cuttingId=(await database.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1 AND sourcing_line_position=1',[order.sourcingCaseId])).rows[0].cutting_order_id;
+  const selected=(await strictReceiving.listCuttingOptions(order.firstStyleNo)).find(row=>row.cuttingOrderId===cuttingId);expect(selected).toBeDefined();
+  const body={cuttingOrderId:selected!.cuttingOrderId,documentQuantity:20,actualQuantity:2,attachmentIds:[await readyImage()]};
+  expect((await closure.expected(receiver(),{cuttingOrderId:selected!.cuttingOrderId})).items).toEqual([]);
+  // Before real dispatch, automatic receipt may exist without a link. It must
+  // not be silently backfilled when shipment/pilot state later changes.
+  const earlier=await strictReceiving.create(receiver(),body,randomUUID());
+  for(const line of order.lines)await reporting.report(root(),order.productionOrderId,{position:line.position,businessDate:today(),quantity:line.quantity},randomUUID());
+  await reporting.execute(root(),order.productionOrderId,'complete',{businessDate:today(),confirmed:true},randomUUID());
+  await reporting.execute(root(),order.productionOrderId,'ship',{businessDate:today(),confirmed:true},randomUUID());
+  expect((await closure.expected(receiver(),{cuttingOrderId:selected!.cuttingOrderId})).items.map(row=>row.productionOrderId)).toEqual([order.productionOrderId]);
+  const key=randomUUID(),[received]=await Promise.all([
+   strictReceiving.createRepeated(receiver(),{cuttingOrderId:selected!.cuttingOrderId,receivingBatchId:earlier.value.receivingBatchId,source:'jiashun',actualQuantity:2},key),
+   closure.setPilot(root(),{supplierId:supplier,enabled:enabled!==true}),
+  ]);
+  const replay=await strictReceiving.createRepeated(receiver(),{cuttingOrderId:selected!.cuttingOrderId,receivingBatchId:earlier.value.receivingBatchId,source:'jiashun',actualQuantity:2},key);
+  expect(replay.value.receiptId).toBe(received.value.receiptId);
+  expect((await database.query('SELECT production_order_id FROM sourcing_production_receipt_links WHERE receipt_id=$1',[received.value.receiptId])).rows).toEqual([{production_order_id:order.productionOrderId}]);
+  expect((await database.query('SELECT 1 FROM sourcing_production_receipt_links WHERE receipt_id=$1',[earlier.value.receiptId])).rowCount).toBe(0);
+  const legacy=await create(supplier,'DIRECT-PILOT-'+String(enabled).toUpperCase());
+  for(const line of legacy.lines)await reporting.report(root(),legacy.productionOrderId,{position:line.position,businessDate:today(),quantity:line.quantity},randomUUID());
+  await reporting.execute(root(),legacy.productionOrderId,'complete',{businessDate:today(),confirmed:true},randomUUID());
+  await reporting.execute(root(),legacy.productionOrderId,'ship',{businessDate:today(),confirmed:true},randomUUID());
+  const direct=await receiving.create(receiver(),{styleNo:legacy.firstStyleNo,documentQuantity:1,actualQuantity:1,attachmentIds:[await readyImage()],productionOrderId:legacy.productionOrderId},randomUUID());
+  expect((await closure.receiptSummary(root(),legacy.productionOrderId)).shipment?.receipts.map(row=>row.receiptId)).toEqual([direct.value.receiptId]);
+  expect((await closure.receiptSummary(root(),order.productionOrderId)).shipment?.receipts.map(row=>row.receiptId)).toEqual([received.value.receiptId]);
+  expect((await closure.expected(receiver(),{cuttingOrderId:selected!.cuttingOrderId})).items).toHaveLength(1);
+ });
 
  it("keeps same-style cutting orders in separate receiving batches and repeat options",async()=>{
   const firstOrder=await create(factories[1]!,"SAMECUT-1");

@@ -2153,5 +2153,18 @@
       "digital_journey_register_change"
     ],
     "sequences": []
+  },
+  "0291_receiving_without_production_pilot": {
+    "checksum": "7e7df6b9501ab0d967ff6f84f1bdebe12a6a096ceca08390a2e009e26d5c36f0",
+    "tables": [],
+    "functions": [
+      "guard_sourcing_production_receipt_link"
+    ],
+    "references": [],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": [],
+    "sequences": []
   }
 }

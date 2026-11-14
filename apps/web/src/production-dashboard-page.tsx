@@ -6,7 +6,7 @@ import { productionDisplayReturnUrl,productionDisplayDomainHref,productionReport
 import { todoReturnPath } from "./todo-query-state.js";
 import { ProductionExclusionControls } from "./production-exclusion-controls.js";
 import { NavigationIcon } from "./navigation-icons.js";
-import { ProductionPilotControls, ProductionReceiptSummary } from "./production-closure-ui.js";
+import { ProductionReceiptSummary } from "./production-closure-ui.js";
 import { useEffect, useRef, useState } from "react";
 import type { z } from "zod";
 import { ProductionDashboardSchema, ProductionDashboardDetailSchema, type ProductionDashboard, type ProductionDashboardItem } from "@dx-rework/contracts";
@@ -93,7 +93,7 @@ function ProductionDashboardContent({productionOrderId}:{productionOrderId?:stri
       <Button variant="secondary" disabled={loading} onClick={()=>{void load(true);}}><span aria-hidden="true" className={loading?"production-dashboard__refreshing":""}>↻</span> {loading?"刷新中…":"刷新"}</Button>
       {root?<Button variant="secondary" aria-expanded={managementOpen} onClick={()=>setManagementOpen(value=>!value)}>管理⌄</Button>:null}
     </div>
-    {root&&managementOpen?<div className="production-admin-tools"><ProductionExclusionControls onExcluded={()=>{setData(null);setDetail(null);last.current=null;void load();}}/>{!productionOrderId?<ProductionPilotControls/>:null}</div>:null}
+    {root&&managementOpen?<div className="production-admin-tools"><ProductionExclusionControls onExcluded={()=>{setData(null);setDetail(null);last.current=null;void load();}}/></div>:null}
     {productionOrderId?<ProductionReceiptSummary factoryDecisionId={factoryDecisionId} productionOrderId={productionOrderId} refreshKey={detail?.asOf}/>:null}
     {error?<p role="alert" className="sourcing-delete-error">{error}</p>:null}
     {!data&&!detail&&loading?<p role="status">正在加载生产数据…</p>:null}

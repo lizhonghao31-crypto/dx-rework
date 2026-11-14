@@ -1219,6 +1219,10 @@
     {
       "version": "0290_bulk_washing",
       "checksum": "34f0bfe7ef60ddf75cfc7c70dfa073107f035690d2533eafdf2be12316fa8eee"
+    },
+    {
+      "version": "0291_receiving_without_production_pilot",
+      "checksum": "7e7df6b9501ab0d967ff6f84f1bdebe12a6a096ceca08390a2e009e26d5c36f0"
     }
   ]
 }
