@@ -2,7 +2,7 @@
   "version": 1,
   "base": "0bcd95e83e657646033ef804f75057f6c4b1469e",
   "risk": "full",
-  "sourceFingerprint": "f98f014e1ee9c7b436f7d37f00b70a69f996208dede778dfcb6035f49454c49a",
+  "sourceFingerprint": "7e88b424ad8107adb8791f4228742119906cf11c5a77b5a309c346a781f1b698",
   "rules": [
     {
       "rule": "Normal washing quantity, immutable facts, fees and active scoped authority are consistent with original receipts and packing.",
@@ -38,11 +38,10 @@
       ],
       "initialization": "0290 immutable washing plans/events and disposable quantity-version projection. Fresh isolated low-privilege schemas tested; old orders without adoption preserve existing QC/packing semantics. Public adoption remains PR06 and integrated enablement PR08.",
       "dateAndPermission": "Actual send/start/return/inspection opens clocks; unknown timestamps remain unknown. Frozen started allowances, independent native first receipt, active role and scoped assignee authorization; root correction preserves immutable history. No real role grants, external messaging or server updates.",
-      "expectation": "100 ordered /30 received /20 washed and qualified stays partial; native corrections invalidate coverage; fee version history preserved; repeated and competing writes cannot double quantities; old 88-order performance within7100 SQL.",
+      "expectation": "100 ordered /30 received /20 washed and qualified stays partial; native corrections invalidate coverage; fee version history preserved; repeated and competing writes cannot double quantities; old 88-order performance within7100 SQL. Review P1/P2: cumulative receipt links20 versus replacement QC15 invalidate coverage; correcting links restores10/15 only; concurrent adoption permits exactly one version and refreshes valid20 coverage atomically without resetting started clocks. The previously recorded88-order performance result remains historical; final gate verifies current candidate.",
       "checks": [
         "washing-pg16",
         "washing-pg13",
-        "journey-performance",
         "washing-unit",
         "migration-contract"
       ]
@@ -170,162 +169,69 @@
     {
       "id": "washing-pg16",
       "kind": "tests",
-      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/bulk-washing-postgres.test.ts tests/integration/bulk-washing-browser-postgres.test.ts tests/integration/effective-packing-postgres.test.ts --reporter=verbose --reporter=json --outputFile.json=/tmp/time05-baseline-pg.json",
+      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/bulk-washing-postgres.test.ts tests/integration/bulk-washing-browser-postgres.test.ts tests/integration/effective-packing-postgres.test.ts --reporter=verbose --reporter=json --outputFile.json=/tmp/time05-review-final-pg16.json",
       "status": "passed",
       "exitCode": 0,
       "passed": 15,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "0bcd95e83e657646033ef804f75057f6c4b1469e",
-      "sourceFingerprint": "be5899ae606d9a5d32cee6d729b75e896c4945f421a932c996d8480cd716b08b",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "tests/helpers",
-        "tests/acceptance",
-        "tests/integration/bulk-washing-postgres.test.ts",
-        "tests/integration/bulk-washing-browser-postgres.test.ts",
-        "tests/integration/effective-packing-postgres.test.ts",
-        "tests/integration/m01-journey-performance-postgres.test.ts",
-        "scripts/test-suite-plan.mjs",
-        "scripts/test-execution-config.mjs",
-        "scripts/test-resource-lifecycle.mjs",
-        "package.json",
-        "package-lock.json",
-        "tsconfig.base.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts"
-      ],
-      "inputFingerprint": "f6125c8fd34b6397f7e97ce8625760836b5b77ac59b72d971781eb0f5c79ab67",
+      "testedHead": "61cdd60929f8baebb185dd12b65e29f17233e8c5",
+      "sourceFingerprint": "7e88b424ad8107adb8791f4228742119906cf11c5a77b5a309c346a781f1b698",
       "context": "Node22 / npm10; repository bounded test execution configuration; PG16.14 port55416 or PG13.23 port55413 isolated registered TEST schema, no production/Acceptance writes. Browser uses original App and actual AuthService.",
-      "startedAt": "2026-11-14T02:26:55.137Z",
-      "endedAt": "2026-11-14T02:27:45.012Z",
-      "logPath": "/tmp/time05-baseline-pg.log",
-      "logSha256": "5d6b7becc1838b0a083a1abdb5dd37573885f006fe309c9f8db913210c5e7e3d",
+      "startedAt": "2026-11-14T03:01:44.621Z",
+      "endedAt": "2026-11-14T03:02:23.513Z",
+      "logPath": "/tmp/time05-review-final-pg16.log",
+      "logSha256": "2c7e15633a5ca85056386c0592bc8ff3662aa87b887a811ae13c6137783248dc",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "936fe20626ab7ce0ca102835a61286c7d3392e1f96ac9c23ea51e2971fe03d13"
+          "sha256": "18decd12693aeb3a8fbd750cbce21bfd7ea64ee0548d80cd07122cea13414bcf"
         }
       ]
     },
     {
       "id": "washing-pg13",
       "kind": "tests",
-      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/bulk-washing-postgres.test.ts --reporter=verbose --reporter=json --outputFile.json=/tmp/time05-baseline-pg13.json",
+      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/bulk-washing-postgres.test.ts --reporter=verbose --reporter=json --outputFile.json=/tmp/time05-review-final-pg13.json",
       "status": "passed",
       "exitCode": 0,
       "passed": 7,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "0bcd95e83e657646033ef804f75057f6c4b1469e",
-      "sourceFingerprint": "be5899ae606d9a5d32cee6d729b75e896c4945f421a932c996d8480cd716b08b",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "tests/helpers",
-        "tests/acceptance",
-        "tests/integration/bulk-washing-postgres.test.ts",
-        "tests/integration/bulk-washing-browser-postgres.test.ts",
-        "tests/integration/effective-packing-postgres.test.ts",
-        "tests/integration/m01-journey-performance-postgres.test.ts",
-        "scripts/test-suite-plan.mjs",
-        "scripts/test-execution-config.mjs",
-        "scripts/test-resource-lifecycle.mjs",
-        "package.json",
-        "package-lock.json",
-        "tsconfig.base.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts"
-      ],
-      "inputFingerprint": "f6125c8fd34b6397f7e97ce8625760836b5b77ac59b72d971781eb0f5c79ab67",
+      "testedHead": "61cdd60929f8baebb185dd12b65e29f17233e8c5",
+      "sourceFingerprint": "7e88b424ad8107adb8791f4228742119906cf11c5a77b5a309c346a781f1b698",
       "context": "Node22 / npm10; repository bounded test execution configuration; PG16.14 port55416 or PG13.23 port55413 isolated registered TEST schema, no production/Acceptance writes. Browser uses original App and actual AuthService.",
-      "startedAt": "2026-11-14T02:29:59.148Z",
-      "endedAt": "2026-11-14T02:30:19.415Z",
-      "logPath": "/tmp/time05-baseline-pg13.log",
-      "logSha256": "135245a6ebbd3554566d3aec1ac8f9fe5ad67b6bb43e8285a976eccc78a67cd1",
+      "startedAt": "2026-11-14T03:01:46.142Z",
+      "endedAt": "2026-11-14T03:02:05.784Z",
+      "logPath": "/tmp/time05-review-final-pg13.log",
+      "logSha256": "dce7704438ac65700d710ee9b133ea55ed756798781089f532a374a893868037",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "2e51b929afc6d763328e1d38474387c4468af855d2a57f74c41bea699a5d57a6"
-        }
-      ]
-    },
-    {
-      "id": "journey-performance",
-      "kind": "tests",
-      "command": "npx vitest run --config vitest.business-chain.config.ts tests/integration/m01-journey-performance-postgres.test.ts --reporter=verbose --reporter=json --outputFile.json=/tmp/time05-performance.json",
-      "status": "passed",
-      "exitCode": 0,
-      "passed": 1,
-      "failed": 0,
-      "skipped": 0,
-      "testedHead": "0bcd95e83e657646033ef804f75057f6c4b1469e",
-      "sourceFingerprint": "be5899ae606d9a5d32cee6d729b75e896c4945f421a932c996d8480cd716b08b",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "tests/helpers",
-        "tests/acceptance",
-        "tests/integration/bulk-washing-postgres.test.ts",
-        "tests/integration/bulk-washing-browser-postgres.test.ts",
-        "tests/integration/effective-packing-postgres.test.ts",
-        "tests/integration/m01-journey-performance-postgres.test.ts",
-        "scripts/test-suite-plan.mjs",
-        "scripts/test-execution-config.mjs",
-        "scripts/test-resource-lifecycle.mjs",
-        "package.json",
-        "package-lock.json",
-        "tsconfig.base.json",
-        "vitest.config.ts",
-        "vitest.business-chain.config.ts"
-      ],
-      "inputFingerprint": "f6125c8fd34b6397f7e97ce8625760836b5b77ac59b72d971781eb0f5c79ab67",
-      "context": "Node22 / npm10; repository bounded test execution configuration; PG16.14 port55416 or PG13.23 port55413 isolated registered TEST schema, no production/Acceptance writes. Browser uses original App and actual AuthService.",
-      "startedAt": "2026-11-14T02:29:57.720Z",
-      "endedAt": "2026-11-14T02:31:46.120Z",
-      "logPath": "/tmp/time05-performance.log",
-      "logSha256": "80158643a9e79332193f29c8ac95e7ad63de0323b8eaced8d8fe6a251f907435",
-      "resultReports": [
-        {
-          "format": "vitest-json",
-          "sha256": "c199ddabc8de6e38cd8a6ccd39e5035f3e9ebf7007e5330a68f09e2e39e1dabb"
+          "sha256": "9fd056cde987c6fdc54b52d270e0d832eb5ef2941fcf3112b0371478576997a1"
         }
       ]
     },
     {
       "id": "washing-unit",
       "kind": "tests",
-      "command": "npx vitest run tests/unit/bulk-washing-ledger.test.ts tests/unit/bulk-washing-windows.test.ts tests/unit/bulk-washing-work.test.ts tests/unit/todo-destination-parity.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/fixed-timeline-targets.test.ts --reporter=verbose --reporter=json --outputFile.json=/tmp/time05-final-targeted.json",
+      "command": "npx vitest run tests/unit/bulk-washing-ledger.test.ts tests/unit/bulk-washing-windows.test.ts tests/unit/bulk-washing-work.test.ts tests/unit/todo-destination-parity.test.ts tests/unit/full-gate-risk-map.test.ts tests/unit/fixed-timeline-targets.test.ts --reporter=verbose --reporter=json --outputFile.json=/tmp/time05-review-final-unit.json",
       "status": "passed",
       "exitCode": 0,
       "passed": 124,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "0bcd95e83e657646033ef804f75057f6c4b1469e",
-      "sourceFingerprint": "4644fbf4ddd628860fbc5b1bfc2635cc0aff53cfcd07854977c43f4312fe75dc",
-      "inputPaths": [
-        "apps",
-        "packages",
-        "tests/unit",
-        "tests/helpers",
-        "scripts/ci",
-        "scripts/test-suite-plan.mjs",
-        "scripts/test-execution-config.mjs",
-        "package.json",
-        "package-lock.json",
-        "vitest.config.ts"
-      ],
-      "inputFingerprint": "fe8681b202896cdb323152354b6834387647fdfaca42f25115629eadaf65f915",
+      "testedHead": "61cdd60929f8baebb185dd12b65e29f17233e8c5",
+      "sourceFingerprint": "7e88b424ad8107adb8791f4228742119906cf11c5a77b5a309c346a781f1b698",
       "context": "Node22 / npm10; repository bounded test execution configuration; PG16.14 port55416 or PG13.23 port55413 isolated registered TEST schema, no production/Acceptance writes. Browser uses original App and actual AuthService.",
-      "startedAt": "2026-11-14T02:37:36.250Z",
-      "endedAt": "2026-11-14T02:37:38.498Z",
-      "logPath": "/tmp/time05-final-targeted.log",
-      "logSha256": "c0f5d9ea56eb315f318245dbdcaff72868cbfa30d54e5863bb5f6504b24b60d3",
+      "startedAt": "2026-11-14T03:02:20.249Z",
+      "endedAt": "2026-11-14T03:02:22.420Z",
+      "logPath": "/tmp/time05-review-final-unit.log",
+      "logSha256": "d66e2513b09e8b0cdbb33be4f09feda060fc32c132d6f6de9d4306b968a28f2b",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "fd75c6cdbdf2941f3e9c0d96454bf4d22001f4ded4d34b52e23b87db22b2ed76"
+          "sha256": "19245bffa37e7ecce27caba7d2a24ab74060c78a836d747e388068bcc76ec70d"
         }
       ]
     },
@@ -350,7 +256,22 @@
           "format": "vitest-json",
           "sha256": "bfa310d26feb30d127c7263f7c010034abcdd5e342dc5ce621f544f97fc12ccb"
         }
-      ]
+      ],
+      "inputPaths": [
+        "scripts",
+        "tests/fixtures",
+        "tests/integration/acceptance-active-slot-chain.test.py",
+        "tests/integration/acceptance-active-slot-chain.test.ts",
+        "tests/integration/pr-17-release-lifecycle.test.ts",
+        "tests/integration/pr-17-deploy-failure.test.ts",
+        "tests/unit/acceptance-capacity.test.ts",
+        "tests/integration/acceptance-capacity.test.py",
+        "docs/operations",
+        "package.json",
+        "package-lock.json",
+        "vitest.config.ts"
+      ],
+      "inputFingerprint": "fae28c836e3c261f6c7c2e6cc7ff02bbcd827f22eb4541312d6b19fa89d3b8c3"
     },
     {
       "id": "capacity-readonly",
@@ -364,7 +285,22 @@
       "startedAt": "2026-11-14T02:39:31.536Z",
       "endedAt": "2026-11-14T02:39:55.493Z",
       "logPath": "/tmp/time05-capacity-readonly-final.log",
-      "logSha256": "35df39b5aa9feea1d261abcf7dcfc7cf43ed2430da0e77453f46df055cee61f1"
+      "logSha256": "35df39b5aa9feea1d261abcf7dcfc7cf43ed2430da0e77453f46df055cee61f1",
+      "inputPaths": [
+        "scripts",
+        "tests/fixtures",
+        "tests/integration/acceptance-active-slot-chain.test.py",
+        "tests/integration/acceptance-active-slot-chain.test.ts",
+        "tests/integration/pr-17-release-lifecycle.test.ts",
+        "tests/integration/pr-17-deploy-failure.test.ts",
+        "tests/unit/acceptance-capacity.test.ts",
+        "tests/integration/acceptance-capacity.test.py",
+        "docs/operations",
+        "package.json",
+        "package-lock.json",
+        "vitest.config.ts"
+      ],
+      "inputFingerprint": "fae28c836e3c261f6c7c2e6cc7ff02bbcd827f22eb4541312d6b19fa89d3b8c3"
     },
     {
       "id": "migration-contract",
@@ -378,7 +314,15 @@
       "startedAt": "2026-11-14T02:40:48.741Z",
       "endedAt": "2026-11-14T02:40:48.841Z",
       "logPath": "/tmp/time05-final-migrations.log",
-      "logSha256": "97cc7b2d64f71a0f94effb09a7d64342948e0a1f604b791fbe95fdaf97a06e53"
+      "logSha256": "97cc7b2d64f71a0f94effb09a7d64342948e0a1f604b791fbe95fdaf97a06e53",
+      "inputPaths": [
+        "apps/api/migrations",
+        "apps/api/src/platform/migration-manifest.json",
+        "scripts/check-migrations.mjs",
+        "scripts/migration-lib.mjs",
+        "scripts/migration-branches.json"
+      ],
+      "inputFingerprint": "1f3fd957ec7f9e1a8f7fc16be8f1c4d4a4be5ffd547b0c266de1d5dc9a81f7d2"
     }
   ]
 }

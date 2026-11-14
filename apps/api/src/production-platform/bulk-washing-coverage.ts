@@ -18,7 +18,12 @@ export async function refreshBulkWashingCoverage(db:WashingDB,orderId:string,she
     if(link.kind!=='receipt_link')continue;
     const completion=scope.facts.find(f=>!f.voided&&f.id===link.completionId&&f.kind==='factory_complete');
     const qc=scope.facts.find(f=>!f.voided&&f.kind==='inspection'&&f.completionId===link.completionId);
-    if(link.receiptQuantityVersion!==receipt.quantityVersion||!completion||!qc){qualified=null;break;}
+    // One completion may feed several receipts. Re-check its entire live
+    // allocation after QC withdrawal/replacement, not just this receipt.
+    const allocated=scope.facts.filter(f=>!f.voided&&f.kind==='receipt_link'&&f.completionId===link.completionId)
+     .reduce((sum,f)=>sum+f.quantity,0);
+    if(link.receiptQuantityVersion!==receipt.quantityVersion||!completion||!qc||qc.kind!=='inspection'
+     ||allocated>qc.qualifiedQuantity){qualified=null;break;}
     qualified+=link.quantity;
    }
   }

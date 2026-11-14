@@ -41,7 +41,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  const body=async()=>{const scope=(await service.read(logistics.actor,orderId)).scopes[0]!;return {planId:scope.planId,scopeId:scope.scopeId,quantityVersion:scope.quantityVersion,expectedRevision:scope.revision,occurredAt:new Date().toISOString(),note:'TEST original batch'};};
  let sendId:string,returnId:string;
  it('sends only received/qualified30, keeps wash return20 partial and does not disclose budget to logistics',async()=>{
-  const before=(await service.read(logistics.actor,orderId)).scopes[0]!;expect((await readPackingQualityCoverage(f.db,[orderId])).has(lineId)).toBe(false);expect(before.quantity).toBe(30);expect(before.fee).toBeUndefined();
+  const before=(await service.read(logistics.actor,orderId)).scopes[0]!;expect((await readPackingQualityCoverage(f.db,[orderId])).get(lineId)?.qualified).toBe(0);expect(before.quantity).toBe(30);expect(before.fee).toBeUndefined();
   await expect(service.record(logistics.actor,orderId,{...await body(),kind:'send',quantity:31},randomUUID())).rejects.toMatchObject({statusCode:409});
   const sent=await service.record(logistics.actor,orderId,{...await body(),kind:'send',quantity:30},randomUUID());sendId=sent.eventId;
   const returned=await service.record(logistics.actor,orderId,{...await body(),kind:'return',sendId,quantity:20},randomUUID());returnId=returned.eventId;
@@ -107,7 +107,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const command=async()=>{const scope=(await service.read(f.root,ready.id)).scopes[0]!;return {planId:scope.planId,scopeId:scope.scopeId,quantityVersion:scope.quantityVersion,expectedRevision:scope.revision,occurredAt:new Date().toISOString(),note:'TEST factory washing'};};
   const start=await service.record(f.root,ready.id,{...await command(),kind:'factory_start',quantity:30},randomUUID());
   const complete=await service.record(f.root,ready.id,{...await command(),kind:'factory_complete',startId:start.eventId,quantity:20},randomUUID());
-  await service.record(f.root,ready.id,{...await command(),kind:'inspection',completionId:complete.eventId,quantity:20,qualifiedQuantity:20},randomUUID());
+  const inspection=await service.record(f.root,ready.id,{...await command(),kind:'inspection',completionId:complete.eventId,quantity:20,qualifiedQuantity:20},randomUUID());
   const production=(await flow.read(f.root,ready.id)).productionId!,reporting=new ProductionReportingService(f.db),businessDate=beijingCalendarDate(new Date());
   await reporting.report(f.root,production,{position:1,businessDate,quantity:30},randomUUID());
   await reporting.execute(f.root,production,'complete',{businessDate,confirmed:true},randomUUID());
@@ -120,11 +120,32 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect((await readWashingCoverage(f.db,ready.id)).get(receipt.receiptId)).toBeNull();
   const link={...await command(),kind:'receipt_link' as const,completionId:complete.eventId,receiptId:receipt.receiptId,receiptQuantityVersion:receipt.quantityVersion,quantity:20};
   await expect(service.record(f.root,ready.id,{...link,quantity:21},randomUUID())).rejects.toMatchObject({statusCode:409});
-  await service.record(f.root,ready.id,link,randomUUID());
+  await service.record(f.root,ready.id,{...link,quantity:10},randomUUID());
+  const secondLink=await service.record(f.root,ready.id,{...link,...await command(),quantity:10},randomUUID());
   expect((await readWashingCoverage(f.db,ready.id)).get(receipt.receiptId)).toBe(20);
   expect((await readPackingQualityCoverage(f.db,[ready.id])).get(po)).toEqual({received:30,inspected:30,qualified:20});
   expect((await garmentQuality(f.db,ready.id))[0]).toMatchObject({receiptId:receipt.receiptId,quantity:30,receivedAt:receipt.receivedAt});
   expect((await service.read(f.root,ready.id)).scopes[0]!.ledger.complete).toBe(false);
+  const originalScope=(await service.read(f.root,ready.id)).scopes[0]!;
+  const update=async()=>{const client=await f.db.connect();try{await client.query('BEGIN');const result=await adoptBulkWashingWithClient(client,f.root,ready.id,po,1,{...adoption,fee:{kind:'pending'},staff:{...adoption.staff,inspectorId:f.people.qc!.actorId},arrangement:{...adoption.arrangement,mode:'factory',washing:{minutes:240,calendar:'continuous',reminder:{enabled:true,percent:70}}} as BulkWashingAdoption['arrangement']});await client.query('COMMIT');return result;}catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}};
+  const adopted=await Promise.allSettled([update(),update()]);
+  expect(adopted.filter(r=>r.status==='fulfilled')).toHaveLength(1);
+  expect(adopted.filter(r=>r.status==='rejected')).toHaveLength(1);
+  expect((await readWashingCoverage(f.db,ready.id)).get(receipt.receiptId)).toBe(20);
+  expect((await readPackingQualityCoverage(f.db,[ready.id])).get(po)?.qualified).toBe(20);
+  expect((await service.read(f.root,ready.id)).scopes[0]!.windows).toEqual(originalScope.windows);
+  await service.record(f.root,ready.id,{...await command(),kind:'void',factId:inspection.eventId,reason:'TEST replace overstated QC'},randomUUID());
+  expect((await readWashingCoverage(f.db,ready.id)).get(receipt.receiptId)).toBeNull();
+  await service.record(f.root,ready.id,{...await command(),kind:'inspection',completionId:complete.eventId,quantity:20,qualifiedQuantity:15},randomUUID());
+  // Each10 link fits15 on its own, but their cumulative20 cannot be released.
+  expect((await readWashingCoverage(f.db,ready.id)).get(receipt.receiptId)).toBeNull();
+  expect((await readPackingQualityCoverage(f.db,[ready.id])).has(po)).toBe(false);
+  await service.record(f.root,ready.id,{...await command(),kind:'void',factId:secondLink.eventId,reason:'TEST remove obsolete allocation'},randomUUID());
+  expect((await readWashingCoverage(f.db,ready.id)).get(receipt.receiptId)).toBe(10);
+  await expect(service.record(f.root,ready.id,{...link,...await command(),quantity:6},randomUUID())).rejects.toMatchObject({statusCode:409});
+  await service.record(f.root,ready.id,{...link,...await command(),quantity:5},randomUUID());
+  expect((await readWashingCoverage(f.db,ready.id)).get(receipt.receiptId)).toBe(15);
+  expect((await readPackingQualityCoverage(f.db,[ready.id])).get(po)?.qualified).toBe(15);
   const batch=(await f.db.query('SELECT b.version FROM receiving_batches b JOIN receiving_receipts r USING(receiving_batch_id) WHERE r.receipt_id=$1',[receipt.receiptId])).rows[0];
   await new ReceivingService(f.db).correctReceipt({...f.root,authorizationCapability:'receiving:correct'},receipt.receiptId,{expectedVersion:batch.version,source:'jiashun',documentQuantity:30,actualQuantity:25,defectiveQuantity:0});
   expect((await readWashingCoverage(f.db,ready.id)).get(receipt.receiptId)).toBeNull();

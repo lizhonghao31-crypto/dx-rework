@@ -52,5 +52,11 @@ export async function adoptBulkWashingWithClient(db:PoolClient,actor:TrustedActo
  if((prior?.version??0)!==expectedVersion)washingConflict('本单洗水安排已更新，请重新读取');
  const id=randomUUID();await db.query('INSERT INTO digital_bulk_washing_plans(plan_id,production_order_id,line_id,version,document,created_by) VALUES($1,$2,$3,$4,$5,$6)',[id,orderId,lineId,expectedVersion+1,JSON.stringify(document),actor.actorId]);
  await db.query('UPDATE digital_production_po_lines SET bulk_washing_plan_id=$2 WHERE line_id=$1',[lineId,id]);
+ // Adoption and its disposable coverage move together under the original
+ // lifecycle transaction lock. Started scopes still read their frozen plan;
+ // new assignees/fees/durations cannot invalidate unchanged physical evidence.
+ const {readBulkWashing}=await import('./bulk-washing-service.js');
+ const {refreshBulkWashingCoverage}=await import('./bulk-washing-coverage.js');
+ await refreshBulkWashingCoverage(db,orderId,await readBulkWashing(db,orderId,null));
  return {id,version:expectedVersion+1};
 }
