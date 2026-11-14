@@ -1,3 +1,4 @@
+import type {OrderJourney} from '@dx-rework/contracts/digital-production-journey';
 import {randomUUID} from 'node:crypto';
 import {join} from 'node:path';
 import {writeFile} from 'node:fs/promises';
@@ -51,6 +52,20 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   try{
    const page=tab.page,flow=page.locator('.cockpit-milestones');await flow.waitFor();
    expect(await flow.locator('.cockpit-stage').count()).toBe(route==='A'?9:8);
+   const dto=await page.evaluate(async id=>{const response=await fetch('/api/digital-production/journeys/'+id+'?view=cockpit');if(!response.ok)throw Error('Journey read failed '+response.status);return response.json();},order.id) as OrderJourney;
+   await writeFile(join(h.evidence,'event-target-'+route+'.json'),JSON.stringify(dto,null,2));
+   for(const node of dto.stages.flatMap(stage=>stage.nodes).filter(node=>node.key==='budget'||node.key==='design_handover')){
+    expect(node.actualAt).toBeNull();
+    for(const target of node.fixedTargets??[]){
+     expect(target.progress.ownSla.deadlineAt).toBeNull();
+     if(node.key==='budget')expect(target.progress.goalDelta).toMatchObject({kind:'on_target',targetAt:'2027-01-23T11:00:00.000Z'});
+     else expect(target.progress.goalDelta).toMatchObject({kind:'late',targetPrecision:'date',targetDate:route==='A'?'2026-11-17':'2026-12-18',signedValue:route==='A'?51:20});
+    }
+   }
+
+   const approval=dto.stages.flatMap(stage=>stage.nodes).find(node=>node.key==='customer_sample');
+   expect(approval).toMatchObject({expectedAt:'2027-01-07',expectedPrecision:'date'});
+   expect(dto.fixedSchedule?.framework?.scopes[0]?.milestones.find(row=>row.key==='client_sample_approval')).toMatchObject({feasibility:'sufficient',lateMinutes:0});
    expect(await page.locator('.cockpit-flow-panel').count()).toBe(1);
    await flow.getByRole('button',{name:'发加工节点明细',exact:true}).click();
    const panel=page.getByRole('region',{name:'小流程明细',exact:true});

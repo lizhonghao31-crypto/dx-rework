@@ -217,3 +217,25 @@ describe('native responsibility is not a plan or a milestone',()=>{
   expect(evaluateFrameworkResponsibility({actual:{state:'running'},window:own,observedAt:at(9)})).toMatchObject({deadline:iso(7),overdueMinutes:1440});
  });
 });
+
+it('derives event constraints from frozen milestones and downstream preparation without inventing event work or changing the plan',async()=>{
+ const {frameworkNodeTargets,frameworkTargetPrecision}=await import('../../apps/api/src/production-platform/framework-node-targets.js');
+ const input=fixture(),event={kind:'event' as const,minutes:0 as const,calendar:'continuous' as const,reminder:{enabled:false,percent:70}};
+ input.plan.company.nodes.budget=event;input.plan.company.nodes.design_handover=event;
+ input.work.push({id:'budget',parameterKey:'budget',stage:2,dependsOn:[]},{id:'handover',parameterKey:'design_handover',stage:1,dependsOn:[]});
+ input.work.find(row=>row.id==='dispatch')!.dependsOn.push('budget');
+ input.bindings.find(row=>row.key==='design_handover')!.workIds=['handover'];
+ const frozen=freezeTimeFrameworkCandidate(evaluateTimeFrameworkCandidate(input,context()),version),before=structuredClone(frozen);
+ const targets=frameworkNodeTargets(frozen);
+ expect(targets.get('handover')!.end).toMatchObject({at:iso(11,0),exclusive:true});
+ // Dispatch must end by November5, and takes one day; budget has no extra
+ // work quota, but must be available before that downstream work begins.
+ expect(targets.get('budget')!.end).toMatchObject({at:iso(5,0),exclusive:true});
+ expect(frameworkTargetPrecision(targets.get('budget'))).toEqual({targetPrecision:'date',targetDate:'2026-11-04'});
+ expect(frozen.arranged.find(row=>row.id==='budget')!.end.at).toBe(iso(2));
+ expect(frozen).toEqual(before);
+ const later=freezeTimeFrameworkCandidate(evaluateTimeFrameworkCandidate(input,context(3)),{...version,reference:"TEST plan2",revision:2,previousReference:version.reference});
+ expect(later.arranged.find(row=>row.id==='budget')!.end.at).toBe(iso(3));
+ expect(frameworkNodeTargets(later).get('budget')).toEqual(targets.get('budget'));
+ expect(frameworkTargetPrecision({id:'precise',start:{at:iso(5,0),exclusive:false,reasons:[]},end:{at:iso(5,0),exclusive:false,reasons:[]}})).toEqual({targetPrecision:'instant',targetDate:null});
+});

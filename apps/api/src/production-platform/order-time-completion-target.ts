@@ -1,3 +1,5 @@
+import type {FrozenTimeFramework} from '@dx-rework/contracts/order-time-framework';
+import {frameworkNodeTargets,frameworkTargetPrecision} from './framework-node-targets.js';
 import type {ScheduleOccurrence} from '@dx-rework/contracts';
 import type {OrderTimeWork} from './order-time-schedule.js';
 import type {OrderTimePolicyVersion} from './order-time-native-timing.js';
@@ -24,7 +26,7 @@ export function inheritedSourcePolicyAt(work:OrderTimeWork,inherited:InheritedOr
 }
 /** Resolve by physical occurrence, not when it was entered or when GET runs.
  * A date spanning a version change has no provable single target. */
-export function orderTimeCompletionTarget(work:OrderTimeWork,scope:{scopeRef:string;lineId:string|null},actual:ScheduleOccurrence,versions:readonly OrderTimePolicyVersion[],scenarioId:string|null,inherited?:InheritedOrderTimeHistory):NonNullable<ScheduleWork['completionTarget']>|null{
+export function orderTimeCompletionTarget(work:OrderTimeWork,scope:{scopeRef:string;lineId:string|null},actual:ScheduleOccurrence,versions:readonly OrderTimePolicyVersion[],scenarioId:string|null,inherited?:InheritedOrderTimeHistory,targetCache?:Map<FrozenTimeFramework,ReturnType<typeof frameworkNodeTargets>>):NonNullable<ScheduleWork['completionTarget']>|null{
  if(actual.precision==='unknown')return null;
  const start=Date.parse(actual.precision==='instant'?actual.at:actual.date+'T00:00:00+08:00'),end=actual.precision==='instant'?start:start+86400000-1;
  if(!Number.isFinite(start))return null;
@@ -42,7 +44,9 @@ export function orderTimeCompletionTarget(work:OrderTimeWork,scope:{scopeRef:str
  const old=chosen.history!,oldScope=old.input.scopes.find(row=>row.scopeRef===originalScope.scopeRef&&row.lineId===originalScope.lineId),node=matchingWork(work,chosen);
  if(!oldScope||!node)return null;
  const framework=old.input.frameworkPlans?.[oldScope.scopeRef];
- const target=framework?framework.arranged.find(row=>row.id===node.id):old.targets[oldScope.scopeRef]?.[node.id],goal=!framework&&oldScope.customerGoalIds.includes(node.id)?oldScope.goals[node.id]:null;
+ let frameworkTargets=framework?targetCache?.get(framework):undefined;
+ if(framework&&!frameworkTargets){frameworkTargets=frameworkNodeTargets(framework);targetCache?.set(framework,frameworkTargets);}
+ const target=framework?frameworkTargets!.get(node.id):old.targets[oldScope.scopeRef]?.[node.id],goal=!framework&&oldScope.customerGoalIds.includes(node.id)?oldScope.goals[node.id]:null;
  if(!target?.end.at)return null;
- return {end:target.end.at,targetRevision:`${chosen.id}:${old.revision}`,targetPrecision:goal?.precision==='date'?'date':'instant',targetDate:goal?.precision==='date'?goal.value:null};
+ return {end:target.end.at,targetRevision:`${chosen.id}:${old.revision}`,...(framework?frameworkTargetPrecision(target):{targetPrecision:goal?.precision==='date'?'date' as const:'instant' as const,targetDate:goal?.precision==='date'?goal.value:null})};
 }

@@ -97,3 +97,27 @@ it('projects preparation facts through original records without duplicating task
  attachFrameworkEvents(item,{...b,framework:undefined},progress);
  expect(item.stages[0]!.nodes).toHaveLength(1);
 });
+
+it('preserves an exclusive planned date boundary without accepting an actual next-midnight completion',()=>{
+ const s=scope();s.work=[{...s.work[0]!,start:at(16),end:at(16),minutes:0,responsibilitySlaRef:null,startExclusive:true,endExclusive:true,targetPrecision:'date',targetDate:'2027-03-01'}];s.terminalIds=['a'];
+ const b=basis(s);b[0]!.milestones[0]!.workIds=['a'];
+ const read=(hour:number)=>evaluateJourneyFramework(b,[s],[evaluateFixedScheduleScope(s,at(hour))],at(hour),null).scopes[0]!.milestones[0]!;
+ expect(read(0)).toMatchObject({feasibility:'sufficient',lateMinutes:0,delta:{kind:'on_target'}});
+ s.facts.a={...pending(),businessCompleted:true,completed:{precision:'instant',at:at(16)}};
+ expect(read(17)).toMatchObject({feasibility:'insufficient',lateMinutes:1/60000,delta:{kind:'late',signedValue:1}});
+ s.facts.a={...pending(),businessCompleted:true,completed:{precision:'date',date:'2027-03-01'}};
+ expect(read(17)).toMatchObject({feasibility:'sufficient',delta:{kind:'on_target'}});
+});
+
+it('evaluates an event constraint without rewriting its frozen planning position or starting responsibility',()=>{
+ const s=scope();s.work=[{...s.work[0]!,start:at(0),end:at(0),minutes:0,responsibilitySlaRef:null,eventTarget:{end:at(16),targetPrecision:'date',targetDate:'2027-03-01',exclusive:true}}];s.terminalIds=['a'];
+ const original=structuredClone(s);
+ const node=evaluateFixedScheduleScope(s,at(1)).nodes[0]!;
+ expect(node.goalDelta).toMatchObject({kind:'on_target',targetDate:'2027-03-01'});
+ expect(node.ownSla).toMatchObject({state:'not_adopted',deadlineAt:null});
+ expect(node.availabilityBound).toEqual({earliest:at(16),latest:at(16),exclusive:true});
+ expect(s).toEqual(original);
+ expect(evaluateFixedScheduleScope(s,at(17)).nodes[0]!.goalDelta.kind).toBe('late');
+ s.facts.a={...pending(),businessCompleted:true,completed:{precision:'instant',at:at(2)}};
+ expect(evaluateFixedScheduleScope(s,at(17)).nodes[0]).toMatchObject({state:'normal',goalDelta:{kind:'on_target'},availabilityBound:{earliest:at(2),latest:at(2)}});
+});
