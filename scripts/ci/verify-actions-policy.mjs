@@ -59,14 +59,15 @@ for(const input of ['pr_number','head_sha','base_sha','base_ref','gate_kind']) {
   assert(full.includes(`      ${input}:\n        type: string\n        required: true`), `Full request must freeze ${input}`);
   assert(quick.includes(input + ": ${{ needs.request.outputs."), `Caller must pass frozen ${input}`);
 }
-for(const event of ['opened','synchronize','reopened','edited']) assert(quick.includes(`- ${event}`), `Light checks must react to ${event}`);
+const lightEvents=quick.match(/ {4}types:\n((?: {6}- [^\n]+\n)+)/)?.[1].trim().split('\n').map(line=>line.trim().slice(2));
+assert(JSON.stringify(lightEvents)===JSON.stringify(['opened']), 'Light must trigger only once on PR opening');
+assert(quick.includes("github.event_name == 'pull_request' && github.event.action == 'opened' && github.run_attempt == 1"),
+  'Light worker must reject later events and repeat attempts');
 assert(/^ {2}create:/m.test(quick) && quick.includes("github.event.ref_type == 'branch'"), "Final requests must use branch creation only");
 assert(quick.includes("startsWith(github.event.ref, 'gate/full/')") && quick.includes("startsWith(github.event.ref, 'gate/quick/')"),
   "Ordinary branch/tag creation must allocate no final job");
-assert(quick.includes("github.event.action != 'edited' || github.event.changes.base || (github.event.changes.title &&"),
-  "Body and same-mode wording edits must allocate no runner");
-for(const mode of ['FULL','QUICK']) assert(quick.includes(`startsWith(github.event.changes.title.from, '[${mode}] ') != startsWith(github.event.pull_request.title, '[${mode}] ')`),
-  "Risk mode and base edits must invalidate the old request");
+// Head/base/mode freshness belongs to the immutable final request, not to
+// additional Light runs for metadata or source changes.
 assert(quick.includes("'Push light checks'") && quick.includes("'Final Gate exact Head' || 'Final approval not selected'"),
   "Skipped/metadata/light checks must not impersonate final approval");
 assert(quick.includes("WORKER_RESULT:") && quick.includes("needs.full.result") && quick.includes("needs.validate.result")
@@ -74,9 +75,9 @@ assert(quick.includes("WORKER_RESULT:") && quick.includes("needs.full.result") &
   "Final approval must certify GitHub's actual selected worker result and receipt");
 assert(quick.includes("uses: ./.github/workflows/full-gate.yml"), "Caller must select the existing full worker");
 assert(quick.includes("group: pr-gate-${{ github.event.pull_request.number || needs.request.outputs.pr || format('manual-{0}', github.ref) }}")
-  && quick.includes("cancel-in-progress: ${{ github.event_name != 'create' }}")
+  && countOccurrences(quick,'cancel-in-progress: false')===2
   && quick.includes("group: pr-gate-${{ needs.request.outputs.pr }}\n      cancel-in-progress: false"),
-  "A new PR Head must cancel stale work; duplicate explicit final requests must not cancel/restart it");
+  "Initial Light and explicit final requests must queue without cancelling each other");
 for(const [name,source] of [["CI caller",quick],["Full worker",full]]) {
   assert(!/^concurrency:/m.test(source), `${name} must filter events before acquiring concurrency`);
   assert(source.includes("permissions:\n  contents: read") && !/(?:pull-requests|checks|issues):|contents: write|actions: write/.test(source),
