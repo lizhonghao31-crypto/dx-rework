@@ -30,6 +30,9 @@ remote_sha="$(git rev-parse origin/main)"
 
 acquire_lock "$DX_ROOT/locks/release.lock"
 build_time="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+# This path builds in place: reserve one dependency install only when needed,
+# rather than charging the Acceptance immutable bundle lifecycle.
+python3 scripts/deploy/release-capacity.py build "$SOURCE_ROOT" "$DX_ROOT" "$sha" "$(npm config get cache)" "${TMPDIR:-/tmp}"
 
 repair_links() {
   "$DX_REWORK_NODE_BIN" <<'NODE'

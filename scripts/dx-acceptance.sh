@@ -113,11 +113,22 @@ production_guard="$(python3 "$tool_root/scripts/deploy/production-runtime-health
 nginx -t
 snapshot="$(mktemp -d /tmp/dx-acceptance-source.XXXXXX)"
 chmod 0755 "$snapshot"
-trap 'rc=$?; if [[ -n "${staging:-}" && "$staging" == /opt/dx-rework-acceptance-tools/.refresh.* ]]; then rm -rf -- "$staging"; fi; if ((rc)); then echo "Acceptance update failed; evidence=$snapshot; no production deployment was performed." >&2; else rm -rf -- "$snapshot"; fi' EXIT
+cleanup_update() {
+  local rc=$?
+  if [[ -n "${staging:-}" && "$staging" == /opt/dx-rework-acceptance-tools/.refresh.* ]]; then rm -rf -- "$staging"; fi
+  if ((rc)); then
+    python3 "$tool_root/scripts/deploy/cleanup-update-source.py" "$snapshot" || true
+    echo "Acceptance update failed; evidence=$snapshot; no production deployment was performed." >&2
+  else
+    rm -rf -- "$snapshot"
+  fi
+  return "$rc"
+}
+trap cleanup_update EXIT
 metadata="$snapshot/.acceptance-preflight"
 mkdir -m 0755 "$metadata"
 capacity_check() {
-  local phase="$1" target_sha="$2" identity="$metadata/identity-$1.json" input="$metadata/identity-$1-input.json" source_dir="$snapshot" storage=()
+  local phase="$1" target_sha="$2" identity="$metadata/identity-$1.json" input="$metadata/identity-$1-input.json" source_dir="$snapshot" storage=() ledger=()
   [[ "$phase" == *download ]] && source_dir="$src"
   install -o dxacceptance -g dxacceptance -m 0600 /dev/null "$input"
   runuser -u dxacceptance -- env -i HOME=/home/dxacceptance USER=dxacceptance PATH="$PATH" \
@@ -125,7 +136,8 @@ capacity_check() {
   install -o root -g root -m 0444 "$input" "$identity"
   rm -f -- "$input"
   if [[ "$command" == update ]]; then
-    python3 "$tool_root/scripts/deploy/inspect-acceptance-storage.py" "$identity" "$metadata/storage-$phase.json" || return $?
+    case "$phase" in build|backup|stop) ledger=(--with-history);; esac
+    python3 "$tool_root/scripts/deploy/inspect-acceptance-storage.py" "$identity" "$metadata/storage-$phase.json" "${ledger[@]}" || return $?
     storage=(--storage "$metadata/storage-$phase.json")
   else
     python3 "$tool_root/scripts/deploy/inspect-acceptance-storage.py" "$identity" --validate-only || return $?
@@ -234,7 +246,15 @@ maintenance() {
   bash "$tool_root/scripts/deploy/run-acceptance-maintenance.sh" "$snapshot" "$1" 7<&-
 }
 source "$tool_root/scripts/deploy/acceptance-update-flow.sh"
+# Both update and release locks are held. Collection never credits hypothetical
+# free space: the following capacity probe measures only actual reclaimed bytes.
+if ! python3 "$tool_root/scripts/deploy/cleanup-acceptance-builds.py" | tee "$metadata/build-collection-before.json"; then
+  echo 'Build collection incomplete; capacity check uses actual remaining free space.' >&2
+fi
 acceptance_update_flow
+if ! python3 "$tool_root/scripts/deploy/cleanup-acceptance-builds.py" | tee "$metadata/build-collection-after.json"; then
+  echo 'Build collection incomplete; installed runtime and backup retention are unchanged.' >&2
+fi
 production_after="$(python3 "$tool_root/scripts/deploy/production-runtime-health.py" check)"
 [[ "$production_after" == "$production_guard" ]] || { echo 'Production identity changed; Acceptance update verification failed.' >&2; exit 1; }
 echo "ACCEPTANCE_UPDATE_FINISHED sha=$sha production_ready=$production_after"

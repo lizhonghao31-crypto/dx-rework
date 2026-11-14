@@ -1,4 +1,4 @@
-import {readFileSync,writeFileSync,mkdtempSync,rmSync} from 'node:fs';
+import {readFileSync,writeFileSync,mkdtempSync,rmSync,mkdirSync,existsSync,readdirSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {spawnSync} from 'node:child_process';
@@ -6,7 +6,7 @@ import {describe,it,expect} from 'vitest';
 describe('official staged capacity and fixed storage metadata',()=>{
  it('runs real Python estimator boundaries without privileged services',()=>{
   const result=spawnSync('python3',['-B','tests/integration/acceptance-capacity.test.py'],{encoding:'utf8',timeout:20000});
-  expect(result.status,result.stdout+'\n'+result.stderr).toBe(0);expect(result.stderr).toContain('Ran 16 tests');expect(result.stderr).toContain('OK');
+  expect(result.status,result.stdout+'\n'+result.stderr).toBe(0);expect(result.stderr).toContain('Ran 27 tests');expect(result.stderr).toContain('OK');
  });
  it.each(['build','backup','stop'])('rechecks the real %s estimator after download/archive and refuses before service stop',phase=>{
   const directory=mkdtempSync(join(tmpdir(),'acceptance-capacity-flow-'));
@@ -40,4 +40,24 @@ acceptance_update_flow
    if(phase==='backup')expect(result.stdout).not.toContain('EFFECT:backup');
   }finally{rmSync(directory,{recursive:true,force:true});}
  });
+ it('cleans only this immutable install staging on copy failure and preserves rollback files',()=>{
+  const directory=mkdtempSync(join(tmpdir(),'capacity-install-failure-'));
+  try{
+   const source=readFileSync('scripts/deploy/install-release.sh','utf8');
+   const start=source.indexOf('install_tmp='),end=source.indexOf('\ninstall_one "$source_dir/api"');
+   expect(start).toBeGreaterThan(0);expect(end).toBeGreaterThan(start);
+   const previous=join(directory,'old');mkdirSync(previous);writeFileSync(join(previous,'keep'),'rollback');
+   const result=spawnSync('bash',['-c',`set -euo pipefail
+ die() { echo "$*" >&2; exit 1; }
+ cp() { touch "$TEST_ROOT/new.tmp.$$/partial"; return 42; }
+ ${source.slice(start,end)}
+ install_one "$TEST_ROOT/source" "$TEST_ROOT/new"
+ `],{encoding:'utf8',env:{...process.env,TEST_ROOT:directory}});
+   expect(result.status).toBe(42);
+   expect(existsSync(join(directory,'new'))).toBe(false);
+   expect(readdirSync(directory)).toEqual(['old']);
+   expect(readFileSync(join(previous,'keep'),'utf8')).toBe('rollback');
+  }finally{rmSync(directory,{recursive:true,force:true});}
+ });
+
 });

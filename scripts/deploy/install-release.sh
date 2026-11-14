@@ -12,6 +12,13 @@ assert_release "$source_dir/frontend" "$sha" "$source_dir"
 api="$(assert_safe_path "$DX_ROOT/releases/$sha")"
 web="$(assert_safe_path "$DX_ROOT/frontend/releases/$sha")"
 acquire_lock "$DX_ROOT/locks/release.lock"
+python3 "$(dirname "$0")/release-capacity.py" install "$source_dir" "$DX_ROOT" "$sha"
+
+install_tmp=
+cleanup_install_tmp() {
+  if [[ -n "$install_tmp" ]]; then rm -rf -- "$install_tmp"; fi
+}
+trap cleanup_install_tmp EXIT
 
 install_one() {
   local src="$1" dst="$2" tmp
@@ -20,9 +27,12 @@ install_one() {
     return
   fi
   tmp="${dst}.tmp.$$"
-  mkdir -p "$tmp"
+  [[ ! -e "$tmp" && ! -L "$tmp" ]] || die 'install staging already exists'
+  mkdir "$tmp"
+  install_tmp="$tmp"
   cp -a "$src/." "$tmp/"
   mv "$tmp" "$dst"
+  install_tmp=
 }
 
 install_one "$source_dir/api" "$api"

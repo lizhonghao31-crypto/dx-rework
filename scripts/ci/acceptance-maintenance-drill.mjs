@@ -174,6 +174,14 @@ try {
  await db.query('DROP TRIGGER test_interrupt ON schema_migrations; DROP FUNCTION test_interrupt()');
  execute(apply,'retry');const after=(await db.query('SELECT version,checksum,applied_at::text AS applied_at FROM schema_migrations ORDER BY version')).rows;
  assert.equal(after.length,manifest.migrations.length);for(const old of before)assert.deepEqual(after.find(x=>x.version===old.version),old);
+ // Only the post-source-check capacity stages request ledger evidence. Exercise
+ // that exact optional SQL on a real completed schema, without changing grants.
+ docker(['run','--rm','--network','none','-v',`${repo}:${repo}:ro`,'-v',`${scratch}:${scratch}`,pythonImage,'python','-B','-c',queryGenerator.replace('m.storage_query(i)','m.storage_query(i, True)'),join(repo,'scripts/deploy/inspect-acceptance-storage.py'),join(scratch,'capacity-identity.json'),join(scratch,'capacity-history-query.sql')]);
+ const capacityHistory=inspectStorage('postgres',readFileSync(join(scratch,'capacity-history-query.sql'),'utf8'));
+ assert.equal(capacityHistory.status,0,capacityHistory.stderr);
+ assert.deepEqual(JSON.parse(capacityHistory.stdout).migrations,manifest.migrations.map(({version,checksum})=>({version,checksum})));
+ assert.deepEqual((await db.query('SELECT version,checksum,applied_at::text AS applied_at FROM schema_migrations ORDER BY version')).rows,after);
+ report('post-source capacity ledger matches every target checksum; observation preserves applied history');
  const finalSignal=join(scratch,'final-signal-failure.sql');
  const generated=readFileSync(apply,'utf8');const marker=generated.lastIndexOf('\\set acceptance_history_signal `');
  writeFileSync(finalSignal,generated.slice(0,marker)+generated.slice(marker).replace(/\\set acceptance_history_signal `[^\n]+`/,'\\set acceptance_history_signal `true`'));
