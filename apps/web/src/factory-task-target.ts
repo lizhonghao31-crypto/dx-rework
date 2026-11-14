@@ -1,5 +1,5 @@
 import {DigitalIdSchema} from "@dx-rework/contracts/digital-production";
-export const factoryActions=['overview','logistics','qc','dispatch','followup','productionQc','productionProgress'] as const;
+export const factoryActions=['overview','logistics','qc','dispatch','followup','productionQc','productionProgress','washing'] as const;
 export type FactoryTaskTarget={action:typeof factoryActions[number];lineId:string|null;error:string|null};
 export function factoryTaskTarget(search:string):FactoryTaskTarget{
  const params=new URLSearchParams(search),action=params.get('factoryAction')??'overview',lineId=params.get('line');

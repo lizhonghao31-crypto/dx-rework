@@ -1,0 +1,58 @@
+import {r5RoleFixture} from '../helpers/r5-role-fixture.js';
+import {randomUUID} from 'node:crypto';
+import {join} from 'node:path';
+import {tmpdir} from 'node:os';
+import {beforeAll,afterAll,describe,it,expect} from 'vitest';
+import {supplychainSettingsBrowser} from '../acceptance/supplychain-settings-browser.js';
+import {ReceivingService} from '../../apps/api/src/receiving/receiving-service.js';
+import {GarmentQualityService,garmentQuality} from '../../apps/api/src/production-platform/garment-quality.js';
+import {adoptBulkWashingWithClient} from '../../apps/api/src/production-platform/bulk-washing-repository.js';
+import {BulkWashingService} from '../../apps/api/src/production-platform/bulk-washing-service.js';
+const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
+(url?describe:describe.skip)('normal bulk washing in original App',()=>{
+ let h:Awaited<ReturnType<typeof supplychainSettingsBrowser>>,orderId:string,inspector:Awaited<ReturnType<typeof r5RoleFixture>>;
+ beforeAll(async()=>{
+  h=await supplychainSettingsBrowser(url!,join(process.env.RUNNER_TEMP??tmpdir(),'bulk-washing-ui-'+randomUUID()),{fullApp:true});
+  inspector=await r5RoleFixture(h.db,h.f.access,{...h.f.root,requestId:randomUUID()},'quality_control');
+  const f=h.f,ready=await f.bulkReady('无',undefined,1,undefined,{quantity:100});orderId=ready.id;
+  const line=(await f.db.query('SELECT line_id FROM digital_production_po_lines WHERE production_order_id=$1',[orderId])).rows[0].line_id;
+  const cut=(await f.db.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[ready.caseId])).rows[0].cutting_order_id;
+  const cutter={...f.people['cutting-worker']!,authorizationCapability:'cutting:records:create',authorizationCapabilities:['cutting:records:create']};
+  await ready.cutting.record(cutter,cut,{pieceCount:1,actualCutCount:100,attachmentIds:[await f.image(cutter)]},randomUUID());
+  const warehouse={...f.people.warehouse!,authorizationCapability:'receiving:create',authorizationCapabilities:['receiving:create']};
+  await new ReceivingService(f.db).create(warehouse,{cuttingOrderId:cut,documentQuantity:30,actualQuantity:30,attachmentIds:[await f.image(warehouse)]},randomUUID());
+  const receipt=(await garmentQuality(f.db,orderId))[0]!;
+  await new GarmentQualityService(f.db).record(f.root,orderId,{receiptId:receipt.receiptId,quantityVersion:receipt.quantityVersion,qualifiedQuantity:30,occurredAt:new Date().toISOString(),problem:''},randomUUID());
+  const time={minutes:60,calendar:'continuous' as const,reminder:{enabled:true,percent:70}},db=await f.db.connect();
+  try{await db.query('BEGIN');await adoptBulkWashingWithClient(db,f.root,orderId,line,0,{arrangement:{mode:'after_receipt',reference:'TEST',revision:1,accounting:'additional',washing:time,inspection:time},staff:{logisticsId:f.people['embroidery-washing-merchandiser']!.actorId,inspectorId:inspector.actor.actorId},fee:{kind:'pending'},sourceRef:'TEST approved washing'});await db.query('COMMIT');}finally{db.release();}
+ });
+ afterAll(async()=>{if(h){await h.writeEvidence();await h.dispose();}});
+ it('assigned logistics records30 sent and20 returned, then QC releases only20 in the same existing page',async()=>{
+  const path=`/ui/digital-production?factory=${orderId}&factoryAction=washing`;
+  const {page,context}=await h.open(h.f.people['embroidery-washing-merchandiser']!.actorId,1165,{},path);
+  try{
+   await page.getByText(/收货批次.*合格 0 \/ 30/).click();
+   await page.getByLabel('本次数量',{exact:true}).fill('30');await page.getByRole('button',{name:'保存',exact:true}).click();
+   await page.getByText('送洗 30 · 洗回／洗好 0 · 合格 0 · 剩余 30',{exact:true}).waitFor();
+   await page.getByLabel('办理',{exact:true}).selectOption('return');await page.getByLabel('对应记录',{exact:true}).selectOption({index:1});
+   await page.getByLabel('本次数量',{exact:true}).fill('20');await page.getByRole('button',{name:'保存',exact:true}).click();
+   await page.getByText('送洗 30 · 洗回／洗好 20 · 合格 0 · 剩余 30',{exact:true}).waitFor();
+   expect(await page.getByText(/洗水费用：/).count()).toBe(0);
+   await page.screenshot({path:join(h.evidence,'washing-logistics-1165.png'),fullPage:true});
+  }catch(error){await page.screenshot({path:join(h.evidence,'washing-logistics-failure.png'),fullPage:true});throw error;}finally{await context.close();}
+  const qc=await h.open(inspector.actor.actorId,1165,{},path);
+  try{
+   await qc.page.getByText(/收货批次.*合格 0 \/ 30/).click();
+   await qc.page.getByLabel('对应记录',{exact:true}).selectOption({index:1});await qc.page.getByLabel('本次数量',{exact:true}).fill('20');await qc.page.getByLabel('合格数量',{exact:true}).fill('20');
+   await qc.page.getByRole('button',{name:'保存',exact:true}).click();await qc.page.getByText('送洗 30 · 洗回／洗好 20 · 合格 20 · 剩余 10',{exact:true}).waitFor();
+   await qc.page.getByText('洗后检查：时间待核 — 时间待核 · 已完成 · 时间待核',{exact:true}).waitFor();
+   expect((await new BulkWashingService(h.db).read(h.f.root,orderId)).scopes[0]!.ledger).toMatchObject({complete:false,qualified:20,remaining:10});
+   await qc.page.screenshot({path:join(h.evidence,'washing-qc-1165.png'),fullPage:true});expect(h.errors).toEqual([]);
+   await h.f.access.revokeRole({...h.f.root,requestId:randomUUID()},inspector.assignmentId,'TEST same-session washing withdrawal');
+   await qc.page.getByRole('button',{name:'刷新洗水记录',exact:true}).click();
+   await qc.page.getByRole('alert').waitFor();
+   expect(await qc.page.getByText('登记本批洗水',{exact:true}).count()).toBe(0);
+   expect(await qc.page.getByText('送洗 30 · 洗回／洗好 20 · 合格 20 · 剩余 10',{exact:true}).count()).toBe(0);
+  }catch(error){await qc.page.screenshot({path:join(h.evidence,'washing-qc-failure.png'),fullPage:true});throw error;}finally{await qc.context.close();}
+ });
+});

@@ -18,6 +18,8 @@ import type { DigitalCockpitQuery } from "./cockpit-query.js";
 import { z as cockpitZ } from "zod";
 import {registerOrderClosureRoutes} from "./order-closure-routes.js";
 import type {OrderClosureService} from "./order-closure-service.js";
+import type {BulkWashingService} from './bulk-washing-service.js';
+import {registerBulkWashingRoutes} from './bulk-washing-routes.js';
 import {registerFactoryFlowRoutes} from "./factory-flow-routes.js";
 import type {FactoryFlowService} from "./factory-flow-service.js";
 import { registerBulkPreparationRoutes } from "./bulk-preparation-routes.js";
@@ -54,6 +56,7 @@ import { ApplicationError } from "../platform/errors.js";
 import { assertIdentityActor, type DigitalProductionIdentityService } from "./identity-service.js";
 
 export type DigitalIdentityDependencies = {
+  bulkWashing?:BulkWashingService;
   orderTimeRequests?:OrderTimeRequestService;
   deliveryCalendar?:DeliveryCalendarQuery;
   readinessService?:ProductionReadinessService;
@@ -84,6 +87,7 @@ const parse = <T>(schema: z.ZodType<T>, value: unknown): T => {
   return result.data;
 };
 export function registerDigitalIdentityRoutes(app: FastifyInstance, dependencies: DigitalIdentityDependencies): void {
+  if(dependencies.bulkWashing)registerBulkWashingRoutes(app,dependencies,dependencies.bulkWashing);
   if(dependencies.orderTimeRequests)registerOrderTimeRequestRoutes(app,dependencies,dependencies.orderTimeRequests);
   if(dependencies.qcProgress&&dependencies.developmentAttachments)registerQcProductionProgressRoutes(app,dependencies,dependencies.qcProgress,dependencies.developmentAttachments);
   if(dependencies.readinessService&&dependencies.developmentAttachments)registerProductionReadinessRoutes(app,dependencies,dependencies.readinessService,dependencies.developmentAttachments);

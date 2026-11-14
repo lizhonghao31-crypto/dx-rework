@@ -1215,6 +1215,10 @@
     {
       "version": "0289_special_craft_library",
       "checksum": "64d112ad1624be4fd0908b19ae62601178f9f84b34e0ef4fd1d23685f020d65e"
+    },
+    {
+      "version": "0290_bulk_washing",
+      "checksum": "34f0bfe7ef60ddf75cfc7c70dfa073107f035690d2533eafdf2be12316fa8eee"
     }
   ]
 }

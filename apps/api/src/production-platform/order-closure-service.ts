@@ -1,3 +1,4 @@
+import {readWashingCoverage} from './bulk-washing-coverage.js';
 import {readNativePackingHeads,RECEIVING_GROUP_RESOLUTION_SCOPE_SQL,RECEIVING_GROUP_PACKING_JOIN_SQL} from '../receiving/receiving-quantity-query.js';
 import {packingQualityCoverage} from './packing-quality-coverage.js';
 import {packingActualTime} from '@dx-rework/contracts';
@@ -73,10 +74,11 @@ export class OrderClosureService{
   }
   const lines:ClosureLine[]=original.map(r=>{const total=totals.find(t=>t.group_key===`cut:${r.cutting_id}`),head=heads.get(`cut:${r.cutting_id}`),t={...total,...head},own=receipts.filter(receipt=>receipt.line_id===r.line_id),known=(key:'actual_quantity'|'document_quantity'|'defective_quantity')=>r.cut_scope==='unresolved'?own.reduce((sum,receipt)=>sum+Number(receipt[key]),0):0;return {lineId:r.line_id,poNumber:r.po_number,color:r.color,orderedQuantity:Number(r.total_quantity),cutScope:r.cut_scope,cuttingId:r.cutting_id??null,receivingBatchId:t?.receiving_batch_id??null,actualQuantity:Number(t?.current_actual_quantity??known('actual_quantity')),documentQuantity:Number(t?.document_quantity??known('document_quantity')),defectiveQuantity:Number(t?.current_defective_quantity??known('defective_quantity')),receiptCount:Number(t?.receipt_count??(r.cut_scope==='unresolved'?own.length:0)),packingQuantity:t?.packing_quantity==null?(r.packing_absence_proven||r.cut_scope==='verified'&&head?.packing_revision_id===null?0:null):Number(t.packing_quantity),packingRevisionId:t?.packing_revision_id??null,...(t?.packing_actual_time?{packingActualTime:packingActualTime(t.packing_actual_time)}:{}),packingRecordedAt:t?.packing_recorded_at?new Date(t.packing_recorded_at).toISOString():null,receivingResolution:t?.receiving_resolution??null,packingResolution:t?.packing_resolution??null,receipts:receipts.filter(x=>x.line_id===r.line_id).map(x=>({receiptId:x.receipt_id,...receiptTime(x.received_at,x.after_state),actualQuantity:Number(x.actual_quantity),defectiveQuantity:Number(x.defective_quantity)})),reworks:reworks.filter(x=>x.line_id===r.line_id).map(x=>({reworkId:x.rework_order_id,canView:readable.get(x.rework_order_id)===true,reworkNo:x.rework_no,status:x.status,problem:[x.problem_part,x.problem_description].filter(Boolean).join('：'),quantity:x.rework_quantity,wageItemCount:x.wage_items,...(summaries.has(x.rework_order_id)?{businessSummary:summaries.get(x.rework_order_id)!}:{})}))};});
   const quality=await garmentQuality(db,id);
+  const washing=original.some(row=>row.bulk_washing_plan_id)?await readWashingCoverage(db,id):undefined;
   const registered=new Set((await db.query("SELECT payload->>'receiptId' AS id FROM digital_production_task_events WHERE resource_kind='order' AND resource_id=$1 AND event_kind='garment_receipt_registered'",[id])).rows.map(r=>r.id));
   const outstanding:string[]=[];
   for(const line of lines){
-   const coverage=packingQualityCoverage(line,quality);line.effectivePackingQuantity=coverage.effectiveQuantity;
+   const coverage=packingQualityCoverage(line,quality,washing);line.effectivePackingQuantity=coverage.effectiveQuantity;
    if(line.packingQuantity!==null&&line.packingQuantity>0&&coverage.effectiveQuantity===null){
     const label=`${line.poNumber??'待补PO'} ${line.color}`;
     outstanding.push(coverage.totals&&coverage.totals.inspected>=line.actualQuantity
@@ -92,7 +94,7 @@ export class OrderClosureService{
   const native=(await db.query("SELECT child_id FROM digital_production_child_links WHERE module='production' AND production_order_id=$1",[id])).rows[0];
   const closed=(await db.query('SELECT c.*,u.display_name FROM digital_order_closures c JOIN app_users u ON u.id=c.closed_by WHERE c.production_order_id=$1',[id])).rows[0];
   const revisionLines=lines.map(l=>({...l,reworks:l.reworks.map(r=>Object.fromEntries(Object.entries(r).filter(([key])=>key!=='canView'&&key!=='businessSummary')))}));
-  const revision=hash({lines:revisionLines,quality,pending,productionId:native?.child_id??null,closed:closed?.source_revision??null});
+  const revision=hash({lines:revisionLines,quality,washing:washing?[...washing]:undefined,pending,productionId:native?.child_id??null,closed:closed?.source_revision??null});
   const roles=actor?.actorRoles??[];
   const collection=receivingSummary(lines),span=await receivingSpan(db,id,collection.expected,collection.received);
   const now=new Date((await new ContextBusinessClock(this.database,db===this.database?undefined:db as PoolClient).read({kind:'order',id})).now);

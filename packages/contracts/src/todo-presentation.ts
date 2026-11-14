@@ -12,6 +12,7 @@ export const todoRouteTaskLabels: Readonly<Record<TodoResponse["route"]["routeNa
   sourcing_detail: "处理外发定价选厂订单",
   digital_production_instruction: "大货制单",
   digital_production_closure: "办理本单回货质检",
+  digital_bulk_washing: "办理大货洗水",
   digital_factory_progress: "记录QC生产进度与现场照片",
   digital_bulk_preparation: "办理产前准备",
   digital_development_arrangement: "安排本轮师傅",
@@ -34,7 +35,7 @@ export const todoTaskHeadingOverrides: Readonly<Record<string, string>> = {
 };
 
 export const todoTaskTitle = (todo: Pick<TodoResponse, "route" | "category" | "taskTitle">): string =>
-  ["digital_production_task","digital_short_lead","digital_order_time","digital_order_quotation"].includes(todo.route.routeName) && todo.taskTitle
+  ["digital_production_task","digital_short_lead","digital_order_time","digital_order_quotation","digital_bulk_washing"].includes(todo.route.routeName) && todo.taskTitle
     ? todo.taskTitle
     : todoTaskHeadingOverrides[todo.category] ?? todoRouteTaskLabels[todo.route.routeName];
 

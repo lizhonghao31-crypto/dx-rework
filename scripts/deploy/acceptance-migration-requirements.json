@@ -2128,5 +2128,30 @@
       "guard_production_order_root_immutable"
     ],
     "sequences": []
+  },
+  "0290_bulk_washing": {
+    "checksum": "34f0bfe7ef60ddf75cfc7c70dfa073107f035690d2533eafdf2be12316fa8eee",
+    "tables": [
+      "digital_production_po_lines"
+    ],
+    "functions": [],
+    "references": [
+      "digital_production_orders",
+      "digital_production_po_lines",
+      "app_users",
+      "receiving_receipts"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [
+      "digital_bulk_washing_plans",
+      "digital_bulk_washing_events",
+      "digital_bulk_washing_receipt_coverage"
+    ],
+    "execute": [
+      "guard_production_order_root_immutable",
+      "digital_journey_register_change"
+    ],
+    "sequences": []
   }
 }

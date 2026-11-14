@@ -21,6 +21,11 @@ export function todoDestination(descriptor:TodoRouteDescriptor):string {
     case "wage_period_detail":
       path = `/ui/wages/${route.entityId}`;
       break;
+    case "digital_bulk_washing":
+      path = "/ui/digital-production";
+      query.set("factory",route.entityId);
+      query.set("factoryAction","washing");
+      break;
     case "digital_factory_progress":
       path = "/ui/digital-production";
       query.set("factory", route.entityId);
