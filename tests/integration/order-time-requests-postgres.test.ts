@@ -52,7 +52,9 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  beforeAll(async()=>{
   f=await businessAnchorFixture(url!);identity=new DigitalProductionIdentityService(f.db,true);
   native=new PatternRoomOrderService(f.db,new TodoProjectionService(new TodoService(f.db)),{ordersEnabled:true});forms=new DigitalDevelopmentService(f.db,true,native);requests=new OrderTimeRequestService(f.db,orderTimeNativeExecutor(f.db,true,native));
-  const standard=await new OrderTimeSettingsService(f.db).save(f.root,{expectedVersion:0,values:r5OneHourConfiguration()},randomUUID());standardId=standard.record.id;
+  // These cases exercise orders frozen under the pre-framework company version.
+  // Explicit historical setup avoids silently publishing a different standard.
+  const standard=await new OrderTimeSettingsService(f.db,true,false).save(f.root,{expectedVersion:0,values:r5OneHourConfiguration()},randomUUID());standardId=standard.record.id;
   expect((await f.db.query("SELECT current_setting('is_superuser') AS value")).rows[0].value).toBe('off');
  });
  afterAll(async()=>{await f?.dispose();});
@@ -173,7 +175,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    original=(await new OrderTimePlanRepository(f.db).current({kind:'source',id:row.sourceId}))!;
   });
   const changed=r5OneHourConfiguration();for(const rule of Object.values(changed.nodes))if(rule.minutes&&rule.kind!=='included')rule.minutes*=2;
-  await new OrderTimeSettingsService(f.db).save(f.root,{expectedVersion:1,values:changed},randomUUID());
+  await new OrderTimeSettingsService(f.db,true,false).save(f.root,{expectedVersion:1,values:changed},randomUUID());
   await f.advance(scene,'2027-03-01T00:30:00.000Z');await f.runtime.run(scene,f.root,async()=>{
    const sheet=await forms.read(row!.actor,row!.sourceId),input=DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:sheet.designStyleNo,orderDate:'2027-03-01',productionPlanning:{craftSteps:[],preshrink:false},lines:[{formalPoNo:'TEST-R507-FORMAL-'+randomUUID(),color:'黑',customerWarehouseArrivalDate:'2027-03-31',sizes:[{size:'M',quantity:1}]}]});
    const order=await identity.createOrder(row!.actor,input,randomUUID(),row!.sourceId),saved=(await new OrderTimePlanRepository(f.db).current({kind:'order',id:order.productionOrderId}))!;
@@ -237,7 +239,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   });
  });
  it('keeps the original active quota and fixed target while the next native task adopts this order calendar and disabled reminder',async()=>{
-  const standards=new OrderTimeSettingsService(f.db),current=await standards.read(f.root);await standards.save(f.root,{expectedVersion:current.version,values:r5OneHourConfiguration()},randomUUID());
+  const standards=new OrderTimeSettingsService(f.db,true,false),current=await standards.read(f.root);await standards.save(f.root,{expectedVersion:current.version,values:r5OneHourConfiguration()},randomUUID());
   const scene=await f.scene('2027-01-09T15:00:00.000Z');let row:Awaited<ReturnType<typeof make>>;
   await f.runtime.run(scene,f.root,async()=>{
    row=await make('2027-01-20',true);const pattern=row.operation.kind==='development_publish'?row.operation.input.patternOrder:undefined;
@@ -314,7 +316,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(preview.check.feasibility).toBe('sufficient');
    await requests.apply(manager,requested.requestId,{expectedVersion:preview.version,fingerprint:preview.check.fingerprint,overrides,acceptLate:false},randomUUID());
    expect((await forms.read(row!.actor,row!.sourceId)).latestRoundNumber).toBe(2);
-   const policy=await new OrderTimePlanRepository(f.db).current({kind:'source',id:row!.sourceId});expect(policy?.input.plan.company.reference).toBe('order-time-company:'+((await new OrderTimeSettingsService(f.db).read(f.root)).record!.id));
+   const policy=await new OrderTimePlanRepository(f.db).current({kind:'source',id:row!.sourceId});expect(policy?.input.plan.company.reference).toBe('order-time-company:'+((await new OrderTimeSettingsService(f.db,true,false).read(f.root)).record!.id));
    expect(policy?.input.work.some(work=>work.parameterKey==='development_materials')).toBe(false);expect(policy?.input.work.filter(work=>work.parameterKey==='development_printing')).toHaveLength(1);
    expect(policy?.input.work.find(work=>work.parameterKey==='development_pattern')?.canonicalWorkRef).toContain(':round:2:');
    expect((await f.db.query('SELECT entered_at,due_at FROM digital_production_deadline_revisions WHERE task_id=$1 AND entered_at IS NOT NULL ORDER BY revision_id LIMIT 1',[oldPattern!])).rows[0]).toEqual(oldDeadline);
@@ -373,7 +375,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   });
  });
  it('keeps the old production route effective while the main merchandiser hands an insufficient saved change to its designer and a manager applies both changes once',async()=>{
-  const settings=new OrderTimeSettingsService(f.db),standard=await settings.read(f.root),values=r5OneHourConfiguration();values.nodes.bulk_printing={kind:'work',minutes:2880,calendar:'continuous',reminder:{enabled:true,percent:70}};await settings.save(f.root,{expectedVersion:standard.version,values},randomUUID());
+  const settings=new OrderTimeSettingsService(f.db,true,false),standard=await settings.read(f.root),values=r5OneHourConfiguration();values.nodes.bulk_printing={kind:'work',minutes:2880,calendar:'continuous',reminder:{enabled:true,percent:70}};await settings.save(f.root,{expectedVersion:standard.version,values},randomUUID());
   const scene=await f.scene('2027-06-01T00:00:00.000Z');await f.runtime.run(scene,f.root,async()=>{
    const row=await make('2027-06-02',true);if(row.operation.kind!=='development_publish')throw Error('TEST source operation');
    await forms.publish(row.actor,row.sourceId,1,randomUUID(),row.operation.input.patternOrder);
@@ -400,12 +402,24 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   });
  });
  it('adopts intermediate-gap framework and washing in the same original manager transaction without inventing ready events',async()=>{
-  const settings=new OrderTimeSettingsService(f.db,true,true),old=await settings.read(f.root);
-  await settings.save(f.root,{expectedVersion:old.version,values:prepareTimeFrameworkConfiguration(r5OneHourConfiguration())},randomUUID());
+  const settings=new OrderTimeSettingsService(f.db),old=await settings.read(f.root);
+  const historical=(await f.db.query('SELECT plan_version_id,input_snapshot,fixed_targets FROM digital_order_time_plan_versions ORDER BY plan_version_id')).rows;
+  expect(historical.length).toBeGreaterThan(0);
+  expect(historical.every(row=>!row.input_snapshot.plan.company.framework)).toBe(true);
+  const published=await settings.save(f.root,{expectedVersion:old.version,values:prepareTimeFrameworkConfiguration(r5OneHourConfiguration())},randomUUID());
+  expect(published.record.standard.framework).toBeDefined();
+  expect(published.record.standard.nodes.development_confirmation?.minutes).toBe(120);
+  expect((await f.db.query('SELECT plan_version_id,input_snapshot,fixed_targets FROM digital_order_time_plan_versions ORDER BY plan_version_id')).rows).toEqual(historical);
   const scene=await f.scene('2027-08-01T00:00:00.000Z');
   await f.runtime.run(scene,f.root,async()=>{
    const designer=f.people['sample-designer']!,input=DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',requiresColorMatching:false,designStyleNo:'TEST-FRAMEWORK-'+randomUUID(),orderDate:'2027-08-01',primaryMerchandiserId:f.people.merchandiser!.actorId,lines:[{formalPoNo:'TEST-FRAMEWORK-'+randomUUID(),color:'黑',customerWarehouseArrivalDate:'2027-08-15',sizes:[{size:'M',quantity:10}]}]});
+   const development=await make('2027-08-15');
+   const developmentCheck=await requests.check(development.actor,development.operation);
+   // Five original hour-long tasks + the adopted final-design2h; positioning
+   // is not applicable without a craft. No blanket addition to old orders.
+   expect(developmentCheck.requiredMinutes).toBe(420);
    const operation={kind:'direct_order' as const,input,route:{craftSteps:[],preshrink:false}};
+   await expect(requests.check(designer,{...operation,input:{...input,requiresColorMatching:null}})).rejects.toThrow('请在原单确认是否需要对色');
    const check=await requests.check(designer,operation);
    expect(check.framework?.milestones).toHaveLength(8);
    expect(check.feasibility,JSON.stringify(check.coverage)).toBe('insufficient');

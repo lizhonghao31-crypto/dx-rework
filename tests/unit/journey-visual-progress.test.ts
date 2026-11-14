@@ -208,6 +208,11 @@ it('PR08 uses the customer commitment for elapsed time and freezes it at known c
  order.businessProgress!.dates!.overall.forecast={...date('2027-01-01T00:00:00Z'),bases:['standard_window']};
  const live=journeyVisualProgress(order,now);
  expect(live).toMatchObject({delivery:{at:'2026-11-08'},timeRatio:24/40,expected:{at:'2027-01-01T00:00:00Z'}});
+ order.businessProgress!.dates!.overall.forecast={...date('2026-11-10T00:00:00Z'),bases:['standard_window']};
+ expect(journeyVisualProgress(order,now)).toMatchObject({timeRatio:24/40,actualRatio:live.actualRatio,expected:{at:'2026-11-10T00:00:00Z'}});
+ order.poDeliveryDates![0]!.customerWarehouseArrivalDate=null;
+ expect(journeyVisualProgress(order,now)).toMatchObject({startedAt:live.startedAt,timeRatio:null,actualRatio:live.actualRatio,delivery:{at:null}});
+ order.poDeliveryDates![0]!.customerWarehouseArrivalDate='2026-11-08';
  order.display={stages:[],mainState:'completed',closedAt:'2026-11-07T12:00:00Z'} as OrderJourney['display'];
  expect(journeyVisualProgress(order,now).timeRatio).toBe(12/40);
  order.display!.mainState='closed';expect(journeyVisualProgress(order,now).timeRatio).toBe(12/40);
