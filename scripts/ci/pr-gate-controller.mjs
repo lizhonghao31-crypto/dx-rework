@@ -181,7 +181,6 @@ async function existingRef(api, ref, head) {
 export async function requestFinal(api, number, head, {apply = false, reviewPolicy, closeoutPath} = {}) {
   const snapshot = await inspect(api, number, head);
   const review = await reviewFor(api, snapshot, reviewPolicy);
-  const light = await lightProof(api, snapshot.plan);
   if (await existingRef(api, snapshot.ref, head)) {
     const status = await finalStatus(api, snapshot.plan, snapshot.ref);
     if ((await inspect(api, number, head)).ref !== snapshot.ref) throw new Error('PR base/mode changed while inspecting the existing final request');
@@ -191,7 +190,7 @@ export async function requestFinal(api, number, head, {apply = false, reviewPoli
   const request = {ref: `refs/heads/${snapshot.ref}`, sha: head};
   const fresh = await inspect(api, number, head);
   if (fresh.ref !== snapshot.ref) throw new Error('PR base/mode changed before the final request');
-  if (!apply) return {state: 'plan', request, closeout, review: review.commentId ?? null, reviewDecision: review, lightRun: light.runId};
+  if (!apply) return {state: 'plan', request, closeout, review: review.commentId ?? null, reviewDecision: review};
   try { await api.request(`${prefix}/git/refs`, {method: 'POST', body: request}); }
   catch (error) {
     // Atomic create is the idempotency boundary. Never update, force, delete or
@@ -199,22 +198,25 @@ export async function requestFinal(api, number, head, {apply = false, reviewPoli
     if (error instanceof GitHubError && ![422].includes(error.status)) throw error;
     if (!await existingRef(api, snapshot.ref, head)) throw error;
   }
-  return {state: 'requested', ref: snapshot.ref, head, closeout, review: review.commentId ?? null, reviewDecision: review, lightRun: light.runId};
+  return {state: 'requested', ref: snapshot.ref, head, closeout, review: review.commentId ?? null, reviewDecision: review};
 }
 
 export async function verifyMerge(api, number, head, {reviewPolicy} = {}) {
   const snapshot = await inspect(api, number, head);
   const review = await reviewFor(api, snapshot, reviewPolicy);
-  const light = await lightProof(api, snapshot.plan);
   if (!await existingRef(api, snapshot.ref, head)) throw new Error('No explicit final request for this Head/base/mode');
   const final = await finalStatus(api, snapshot.plan, snapshot.ref);
   if (final.state !== 'approved') throw new Error(`Final Gate is ${final.state}, not approved`);
+  // Light is optional evidence reuse, never a prerequisite for a later Head.
+  // If Full actually reused checks, still verify their exact original provenance.
+  const light = final.receipt.checks.some(check => check.execution === 'verified_reuse')
+    ? await lightProof(api, snapshot.plan) : null;
   assertReuseLineage(final.receipt,light);
   const fresh = await inspect(api, number, head);
   if (fresh.ref !== snapshot.ref) throw new Error('PR Head/base/mode changed during merge verification');
   const {branch} = fresh;
   return {head, base: snapshot.plan.base, review: review.commentId ?? null, reviewedHead: review.commit_sha ?? null, reviewDecision: review,
-    lightRun: light.runId, final, platform: {protected: branch.protected,
+    lightRun: light?.runId ?? null, final, platform: {protected: branch.protected,
       visibleRequiredChecks: branch.protection?.required_status_checks ?? null,
       boundary: 'Read-only evidence permits the governed merge operation; this command does not merge or change server protection.'}};
 }

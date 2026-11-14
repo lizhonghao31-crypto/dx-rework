@@ -32,8 +32,8 @@ test('final request refs bind the full Head/base SHA, PR, mode and base branch',
 });
 for (const kind of ['full', 'quick']) {
   const title = kind === 'full' ? '[FULL] safe' : '[QUICK] safe';
-  for (const action of ['opened', 'synchronize', 'reopened']) test(`${kind} ${action} is light only`, () => {
-    assert.equal(eventPlan('pull_request', event(action, title)).phase, 'light');
+  for (const action of ['opened', 'synchronize', 'reopened']) test(`${kind} ${action} runs Light only on opening`, () => {
+    assert.equal(eventPlan('pull_request', event(action, title)).phase, action === 'opened' ? 'light' : 'ignore');
   });
   test(`${kind} accepts only creation of its explicit immutable request`, () => {
     const create = {repository: {full_name: REPOSITORY}, ref_type: 'branch', ref: requestRef(kind)};
@@ -43,13 +43,13 @@ for (const kind of ['full', 'quick']) {
     assert.equal(eventPlan('pull_request', event('labeled', title, 'documentation')).phase, 'ignore');
   });
 }
-test('wording/body edits do not repeat a Gate, mode/base edits invalidate old approval', () => {
+test('all later metadata changes skip Light; final tuple still binds mode and base', () => {
   const wording = event('edited'); wording.changes = {title: {from: '[FULL] old'}, body: {from: 'old'}};
   assert.equal(eventPlan('pull_request', wording).phase, 'ignore');
   const mode = event('edited'); mode.changes.title = {from: '[QUICK] old'};
-  assert.equal(eventPlan('pull_request', mode).phase, 'invalidate');
+  assert.equal(eventPlan('pull_request', mode).phase, 'ignore');
   const retarget = event('edited'); retarget.changes.base = {ref: {from: 'main'}};
-  assert.equal(eventPlan('pull_request', retarget).phase, 'invalidate');
+  assert.equal(eventPlan('pull_request', retarget).phase, 'ignore');
 });
 test('unknown repositories, unsupported bases and malformed Heads fail closed', () => {
   const wrongRepo = event(); wrongRepo.repository.full_name = 'other/repo';

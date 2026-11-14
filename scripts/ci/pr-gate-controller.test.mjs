@@ -60,14 +60,12 @@ test('a completed actual final job is verified without writing or changing branc
  const result=await verifyMerge(api,901,head);assert.equal(result.final.state,'approved');assert.equal(result.final.receipt.head,head);
  assert.equal(result.platform.protected,false);assert.deepEqual(state.writes.map(w=>w.path),['/graphql']);
 });
-for(const fault of ['review','threads','head','light_skipped','light_old','final_skipped','final_old','final_running','final_failed','rewritten_ref','actual_base_moved'])test(`merge evidence fails closed for ${fault}`,async()=>{
+for(const fault of ['review','threads','head','final_skipped','final_old','final_running','final_failed','rewritten_ref','actual_base_moved'])test(`merge evidence fails closed for ${fault}`,async()=>{
  const{api,state,addFinal}=fixture();state.ref={ref:`refs/heads/${finalRef(plan)}`,object:{sha:head}};addFinal();
  if(fault==='actual_base_moved')state.actualBase='d'.repeat(40);
  if(fault==='review')state.comments=[request,summary('failed')];
  if(fault==='threads')state.threads=[{id:'r1',isResolved:false}];
  if(fault==='head')state.pr.head.sha='c'.repeat(40);
- if(fault==='light_skipped')state.jobs[101][0].conclusion='skipped';
- if(fault==='light_old')state.logs[201]=state.logs[201].replace(head,'c'.repeat(40));
  if(fault==='final_skipped')state.jobs[102][0].conclusion='skipped';
  if(fault==='final_old')state.runs.final[0].head_sha='c'.repeat(40);
  if(fault==='final_running')state.runs.final[0].status='in_progress';
@@ -75,9 +73,27 @@ for(const fault of ['review','threads','head','light_skipped','light_old','final
  if(fault==='rewritten_ref')state.ref.object.sha='c'.repeat(40);
  await assert.rejects(()=>verifyMerge(api,901,head));assert.equal(state.writes.some(w=>w.path!=='/graphql'),false);
 });
-test('a newer failed light result cannot fall back to an older pass',async()=>{
- const{api,state}=fixture();state.runs.light.unshift({...state.runs.light[0],id:103,conclusion:'failure'});state.jobs[103]=[{...state.jobs[101][0],id:203,run_id:103,conclusion:'failure'}];
- await assert.rejects(()=>requestFinal(api,901,head,{apply:true}));assert.equal(state.ref,null);
+for(const stateName of ['absent','failed','cancelled','older_head','running'])test(`final validates its own Head without repeating Light: ${stateName}`,async()=>{
+ const{api,state,addFinal}=fixture();
+ if(stateName==='absent')state.runs.light=[];
+ else if(stateName==='older_head')state.runs.light[0].head_sha='c'.repeat(40);
+ else if(stateName==='running')state.runs.light[0].status='in_progress';
+ else state.runs.light[0].conclusion=stateName==='failed'?'failure':'cancelled';
+ assert.equal((await requestFinal(api,901,head,{apply:true})).state,'requested');
+ addFinal();const result=await verifyMerge(api,901,head);
+ assert.equal(result.final.state,'approved');assert.equal(result.lightRun,null);
+ assert.equal(state.reads.some(path=>path.includes('event=pull_request')),false);
+ assert.equal(state.writes.some(w=>w.path.includes('rerun')),false);
+});
+test('a final receipt claiming reuse still requires the actual same-Head Light source',async()=>{
+ const{api,state,addFinal}=fixture();await requestFinal(api,901,head,{apply:true});
+ const receipt=addFinal();const check=receipt.checks.find(c=>c.id==='lint');
+ check.execution='verified_reuse';check.source={...plan,phase:'light',check:'lint',workflow:'.github/workflows/ci.yml',runId:101,attempt:1,jobId:201,fingerprint:'d'.repeat(64),artifactSha256:'e'.repeat(64)};
+ state.logs[202]=RECEIPT_PREFIX+JSON.stringify(receipt);
+ state.runs.light=[];
+ await assert.rejects(()=>verifyMerge(api,901,head),/light/);
+ state.runs.light=[{id:101,run_attempt:1,head_sha:'c'.repeat(40),path:'.github/workflows/ci.yml',event:'pull_request',status:'completed',conclusion:'success'}];
+ await assert.rejects(()=>verifyMerge(api,901,head),/identity|differs/);
 });
 test('explicit denial is not retried; an uncertain create is inspected before treating it as successful',async()=>{
  const{api,state}=fixture();state.createError=new GitHubError(403,'Resource not accessible');await assert.rejects(()=>requestFinal(api,901,head,{apply:true}),/403/);assert.equal(state.ref,null);

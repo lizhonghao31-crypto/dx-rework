@@ -11,9 +11,6 @@ on:
       - deliver/sla-preparation-cutting-dispatch-20261024
     types:
       - opened
-      - synchronize
-      - reopened
-      - edited
   workflow_dispatch:
   create:
 
@@ -49,13 +46,13 @@ jobs:
 
   validate:
     needs: request
-    if: ${{ always() && ((github.event_name == 'pull_request' && (github.event.action != 'edited' || github.event.changes.base || (github.event.changes.title && (startsWith(github.event.changes.title.from, '[FULL] ') != startsWith(github.event.pull_request.title, '[FULL] ') || startsWith(github.event.changes.title.from, '[QUICK] ') != startsWith(github.event.pull_request.title, '[QUICK] '))))) || github.event_name == 'workflow_dispatch' || ((github.event_name == 'create' && github.event.ref_type == 'branch' && (startsWith(github.event.ref, 'gate/full/') || startsWith(github.event.ref, 'gate/quick/'))) && needs.request.result == 'success' && needs.request.outputs.kind == 'quick')) }}
-    name: ${{ (github.event_name == 'pull_request' && (github.event.action != 'edited' || github.event.changes.base || (github.event.changes.title && (startsWith(github.event.changes.title.from, '[FULL] ') != startsWith(github.event.pull_request.title, '[FULL] ') || startsWith(github.event.changes.title.from, '[QUICK] ') != startsWith(github.event.pull_request.title, '[QUICK] '))))) && 'Push light checks' || github.event_name == 'create' && 'Quick Gate exact Head' || 'Manual Quick checks' }}
+    if: ${{ always() && ((github.event_name == 'pull_request' && github.event.action == 'opened' && github.run_attempt == 1) || github.event_name == 'workflow_dispatch' || ((github.event_name == 'create' && github.event.ref_type == 'branch' && (startsWith(github.event.ref, 'gate/full/') || startsWith(github.event.ref, 'gate/quick/'))) && needs.request.result == 'success' && needs.request.outputs.kind == 'quick')) }}
+    name: ${{ (github.event_name == 'pull_request' && github.event.action == 'opened' && github.run_attempt == 1) && 'Push light checks' || github.event_name == 'create' && 'Quick Gate exact Head' || 'Manual Quick checks' }}
     outputs:
       receipt: ${{ steps.summary.outputs.receipt }}
     concurrency:
       group: pr-gate-${{ github.event.pull_request.number || needs.request.outputs.pr || format('manual-{0}', github.ref) }}
-      cancel-in-progress: ${{ github.event_name != 'create' }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
