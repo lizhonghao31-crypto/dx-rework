@@ -5,7 +5,7 @@ import type {StoredOrderTimePlan} from './order-time-plan-repository.js';
 import type {OrderTimePolicyVersion} from './order-time-native-timing.js';
 import {fixedGoalDelta,scheduleOccurrenceBounds,type ScheduleScopeInput,type ScheduleWork,type ScheduleTermination} from './fixed-schedule-progress.js';
 
-type MilestoneBasis={key:SeriesMilestoneKey;date:string;at:string|null;plannedAt:string|null;workIds:string[];completionTarget?:ScheduleWork['completionTarget']};
+type MilestoneBasis={key:SeriesMilestoneKey;date:string;at:string|null;plannedAt:string|null;workIds:string[];relatedWorkIds?:string[];completionTarget?:ScheduleWork['completionTarget']};
 export type JourneyFrameworkBasis=Array<{scopeRef:string;lineId:string|null;route:SeriesRoute;reference:string;revision:number;effectiveAt:string;customerDate:string;milestones:MilestoneBasis[]}>;
 const unknown:ScheduleOccurrence={precision:'unknown'};
 /** A whole required set must finish. Unknown timestamps are not sorted last
@@ -22,6 +22,8 @@ export function frameworkCompletion(scope:ScheduleScopeInput,ids:readonly string
 export function frameworkJourneyBasis(saved:StoredOrderTimePlan,scopes:readonly ScheduleScopeInput[],history:readonly OrderTimePolicyVersion[],asOf:string):JourneyFrameworkBasis|undefined{
  if(!saved.input.frameworkPlans)return undefined;
  return scopes.flatMap(scope=>{const plan=saved.input.frameworkPlans![scope.scopeRef];if(!plan)return [];
+  const milestoneEnds=new Set(plan.milestones.flatMap(row=>row.workIds));
+  const related=(ends:string[])=>{const selected=new Set<string>(),byId=new Map(scope.work.map(work=>[work.id,work]));const visit=(id:string,root=false)=>{if(selected.has(id))return;selected.add(id);if(!root&&milestoneEnds.has(id))return;for(const dependency of byId.get(id)?.dependsOn??[])visit(dependency);};for(const end of ends)visit(end,true);for(const work of scope.work)if(work.includedIn&&selected.has(work.includedIn))selected.add(work.id);return [...selected];};
   return [{scopeRef:scope.scopeRef,lineId:scope.lineId,route:plan.input.route,reference:plan.reference,revision:plan.revision,effectiveAt:plan.effectiveAt,customerDate:plan.input.customerDelivery.date,
    milestones:plan.milestones.map(m=>{
     const completion=frameworkCompletion(scope,m.workIds,asOf);let completionTarget:ScheduleWork['completionTarget'];
@@ -32,7 +34,7 @@ export function frameworkJourneyBasis(saved:StoredOrderTimePlan,scopes:readonly 
       if(!changedDuring&&prior?.target.at&&prior.workIds.length===m.workIds.length&&prior.workIds.every(id=>m.workIds.includes(id)))completionTarget={end:prior.target.at,targetRevision:old!.id+':'+old!.history!.revision,targetPrecision:'date',targetDate:prior.date};
      }
     }
-    return {key:m.key,date:m.date,at:m.target.at,plannedAt:m.planned.at,workIds:[...m.workIds],...(completionTarget!==undefined?{completionTarget}:{})};
+    return {key:m.key,date:m.date,at:m.target.at,plannedAt:m.planned.at,workIds:[...m.workIds],relatedWorkIds:related(m.workIds),...(completionTarget!==undefined?{completionTarget}:{})};
    })}];
  });
 }
@@ -55,7 +57,7 @@ export function evaluateJourneyFramework(basis:JourneyFrameworkBasis,scopes:read
    const gap=target===null||!knownEnds.length?null:Math.max(0,(Math.max(...knownEnds)-target+(late.some(end=>end===target)?1:0))/60000);
    const sufficient=target!==null&&forecast.latest!==null&&Date.parse(forecast.latest)<target;
    const feasibility=stopped?'terminated' as const:late.length?'insufficient' as const:sufficient?'sufficient' as const:'unknown' as const;
-   return {key:m.key,targetDate:m.date,plannedAt:m.plannedAt,workIds:[...m.workIds],...completion,delta,forecast,feasibility,lateMinutes:feasibility==='insufficient'?gap:feasibility==='sufficient'?0:null,coverage:[...new Set(nodes.flatMap(n=>n?.coverage??['里程碑关联工作待核']))]};
+   return {key:m.key,targetDate:m.date,plannedAt:m.plannedAt,workIds:[...m.workIds],...(m.relatedWorkIds?{relatedWorkIds:[...m.relatedWorkIds]}:{}),...completion,delta,forecast,feasibility,lateMinutes:feasibility==='insufficient'?gap:feasibility==='sufficient'?0:null,coverage:[...new Set(nodes.flatMap(n=>n?.coverage??['里程碑关联工作待核']))]};
   })};
  });
  const completedWork=[...unique.values()].filter(Boolean).length;

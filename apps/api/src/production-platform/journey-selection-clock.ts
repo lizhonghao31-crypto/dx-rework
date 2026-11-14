@@ -31,7 +31,6 @@ export type JourneySelectionDelivery={finished:boolean;terminal?:boolean;factory
 export function compileJourneySelectionClock(item:OrderJourney,untimed:OrderJourney,inputs:JourneyTimingInputs,tasks:readonly JourneySelectionTask[],nativeNodes:JourneySelectionFacts['nodes'],delivery:JourneySelectionDelivery,time:BusinessTime):{frames:JourneySelectionClockFrame[];expiresAt:string|null}{
  if(item.asOf!==time.now||untimed.asOf!==time.now)throw Error('Journey clock compilation requires one observation');
  const taskById=new Map(tasks.map(task=>[task.id,task]));
- const baseNodes=untimed.stages.flatMap(stage=>stage.nodes).filter(node=>node.current);
  const originalNative=structuredClone(nativeNodes);
  let hardBoundary:number|null=null;
  for(const fact of Object.values(inputs.facts))for(const actual of [fact,...fact.batchWindows??[]])for(const at of [actual.startedAt,actual.completedAt]){
@@ -108,7 +107,7 @@ export function compileJourneySelectionClock(item:OrderJourney,untimed:OrderJour
  // Guard the compiler against silently missing any already-visible native
  // behaviour. A disagreement fails only this object's background build.
  const first=frames[0]!;
- const actual=baseNodes.map(node=>({id:node.instanceId,risks:item.stages.flatMap(stage=>stage.nodes).find(value=>value.current&&value.instanceId===node.instanceId)?.risks??[]}));
+ const actual=item.stages.flatMap(stage=>stage.nodes).filter(node=>node.current).map(node=>({id:node.instanceId,risks:[...node.risks]}));
  if(JSON.stringify(first.risks)!==JSON.stringify(actual))throw Error('Journey selection clock differs from canonical observation');
  return {frames,expiresAt:hardBoundary===null?null:new Date(hardBoundary).toISOString()};
 }

@@ -35,6 +35,8 @@ describe('three-layer time foundation, no live adoption',()=>{
   expect(evaluateTimeFrameworkCandidate(input,{...context(6),retained:kept}).arranged[0]).toEqual(original.arranged[0]);
   const done={...native,completed:true,actualAt:iso(5)};
   expect(overlayFrameworkCompletion(done,{scopeRef:'whole',completed:false,precision:'unknown',occurredAt:null})).toEqual(done);
+  expect(overlayFrameworkCompletion({...done,actualAt:null},{scopeRef:'whole',completed:true,precision:'instant',occurredAt:iso(6)})).toEqual({...done,actualAt:iso(6)});
+  expect(overlayFrameworkCompletion(done,{scopeRef:'whole',completed:true,precision:'instant',occurredAt:iso(8)})).toEqual(done);
   expect(overlayFrameworkCompletion(native,{scopeRef:input.scopeRef,completed:true,precision:'instant',occurredAt:iso(6)})).toEqual({...native,completed:true,actualAt:iso(6)});
  });
  it('retains a completed original plan while successors use the genuine later completion boundary',()=>{

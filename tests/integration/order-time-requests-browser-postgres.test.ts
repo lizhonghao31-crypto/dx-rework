@@ -40,9 +40,9 @@ vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:t
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (url?describe.sequential:describe.skip)('R5 original App per-order time application, processing and recovery',()=>{
  let h:Awaited<ReturnType<typeof supplychainSettingsBrowser>>,scene:string;
- const source=async(label:string,date='2027-01-07')=>h.f.runtime.run(scene,h.f.root,async()=>{
+ const source=async(label:string,date='2027-01-07',customerCode:string|null=null)=>h.f.runtime.run(scene,h.f.root,async()=>{
   const original=h.f.people['sample-designer']!,actor={...original,authorizationCapabilities:[...original.authorizationCapabilities!,'pattern_room:orders:view']};
-  const designStyleNo='TEST-R507-UI-'+label+'-'+randomUUID(),item=await new DigitalProductionIdentityService(h.db,true).createSource(actor,{developmentType:'头版',designStyleNo,temporaryStyleNo:null,customerCode:null},randomUUID());
+  const designStyleNo='TEST-R507-UI-'+label+'-'+randomUUID(),item=await new DigitalProductionIdentityService(h.db,true).createSource(actor,{developmentType:'头版',designStyleNo,temporaryStyleNo:null,customerCode},randomUUID());
   const category=(await h.db.query("SELECT price_id,name FROM pattern_room_prices WHERE kind='category' AND enabled ORDER BY price_id LIMIT 1")).rows[0];
   const document=DevelopmentDocumentSchema.parse({documentFormatVersion:2,sizeQuantities:[1],template:'上衣',quantity:1,sampleSize:'M',orderDate:null,returnDate:date,unit:'cm',sizes:['M'],measurements:[{name:'胸围',values:['50']}],interlining:'',placketInterlining:'',sewingThread:'',buttonholeThread:'',stitchDensity:'',washingIroning:'',packaging:'',formalSizes:'',casualSizes:'',mainLabel:false,mainLabelMethod:'',sizeLabel:false,careLabel:false,instructions:'TEST 浏览器原生开发资料',craft:'无',washing:'免洗',materials:[],files:[{attachmentId:await h.f.image(actor),kind:'款图'}],patternCategoryId:category.price_id});
   await new DigitalDevelopmentService(h.db,true,h.patternOrders).save(actor,item.sourceId,{expectedVersion:0,document},randomUUID());
@@ -68,7 +68,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  };
  beforeAll(async()=>{
   h=await supplychainSettingsBrowser(url!,process.env.R507_BROWSER_EVIDENCE??join(process.env.RUNNER_TEMP??tmpdir(),'r507-ui-'+randomUUID()),{fullApp:true,orderTimeModel:true,orderTimeFlow:true});
-  await new OrderTimeSettingsService(h.db).save(h.f.root,{expectedVersion:0,values:r5OneHourConfiguration()},randomUUID());
+  await new OrderTimeSettingsService(h.db,true,false).save(h.f.root,{expectedVersion:0,values:r5OneHourConfiguration()},randomUUID());
   scene=await h.f.scene('2027-01-07T15:00:00.000Z');h.setCollectionScene(scene);
  });
  it('R5-08 opens actual independent PLT, sizes, usage, comments and exact older files in the original authenticated App',async()=>{
@@ -115,10 +115,10 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    for(const width of [1585,1165]){
     await page.setViewportSize({width,height:992});
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
-    const panels=await page.locator('.journey-node-panel,.journey-documents-panel,.journey-activity-panel').evaluateAll(elements=>elements.map(element=>element.getBoundingClientRect().bottom));
+    const panels=await page.locator('.journey-documents-panel,.journey-activity-panel').evaluateAll(elements=>elements.map(element=>element.getBoundingClientRect().bottom));
     expect(Math.max(...panels)-Math.min(...panels)).toBeLessThanOrEqual(1);
     const dates=await page.locator('.cockpit-stage-dates>div').evaluateAll(elements=>elements.map(element=>({height:element.getBoundingClientRect().height,date:element.querySelector('time')?.textContent??null})));
-    for(const row of dates){expect(row.height).toBeLessThan(24);if(row.date)expect(row.date).toMatch(/^\d{2}-\d{2}$/);}
+    for(const row of dates){expect(row.height).toBeLessThan(24);if(row.date)expect(row.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);}
     const differences=await page.locator('.cockpit-stage-dates-with-delta').evaluateAll(elements=>elements.map(element=>{const dates=element.querySelector('.cockpit-stage-dates')!.getBoundingClientRect(),delta=element.querySelector('.cockpit-target-difference')!.getBoundingClientRect();return {separation:delta.left-dates.right,alignment:Math.abs((delta.top+delta.bottom-dates.top-dates.bottom)/2),overflow:delta.right-element.getBoundingClientRect().right};}));
     for(const difference of differences){expect(difference.separation).toBeGreaterThanOrEqual(0);expect(difference.alignment).toBeLessThanOrEqual(1);expect(difference.overflow).toBeLessThanOrEqual(1);}
     await page.screenshot({path:join(h.evidence,`r508-real-source-${width}.png`),fullPage:true});
@@ -166,7 +166,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   }finally{await tab.context.close();}
  });
  it('R5-09 follows one new order from actual saved company time through native work, qualified packing and the original cockpit/calendar',async()=>{
-  const standards=new OrderTimeSettingsService(h.db),original=await standards.read(h.f.root),priorScene=scene;
+  const standards=new OrderTimeSettingsService(h.db,true,false),original=await standards.read(h.f.root),priorScene=scene;
   const settings=await h.open(h.f.root.actorId,1586,{},'/ui/digital-cockpit?workspace=settings');
   try{
    for(const [key,hours]of [['development_pattern','4'],['development_cutting','2'],['development_sewing','1.5']] as const){
@@ -181,7 +181,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const at=async<T>(hours:number,work:()=>Promise<T>)=>{await h.f.advance(scene,new Date(Date.parse('2026-11-20T00:00:00.000Z')+hours*3600000).toISOString());return h.f.runtime.run(scene,h.f.root,work);};
   let sourceId='',orderId='',style='',lineId='';
   try{
-   const row=await source('R509-COMPLETE','2026-12-01');sourceId=row.sourceId;style=row.designStyleNo;
+   const row=await source('R509-COMPLETE','2026-12-01','PD');sourceId=row.sourceId;style=row.designStyleNo;
    const worker=h.f.people['pattern-room-worker']!,forms=new DigitalDevelopmentService(h.db,true,h.patternOrders),execution=new DevelopmentExecutionService(h.db,true,h.patternOrders),technical=execution.technicalEvidenceService();
    // This older downstream fixture supplies only digital-read capabilities.
    // Load the real persisted native capabilities for the two actual operators;
@@ -215,7 +215,7 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await at(9.5,async()=>{const task=(await execution.read(row.actor,sourceId)).tasks.find(task=>task.taskKind==='development_confirmation')!;await execution.route(row.actor,sourceId,{taskId:task.taskId,note:'TEST真实设计确认',result:'通过',craftExecution:null,nextAssigneeId:null,sentDate:null,trackingNo:null},randomUUID());});
    await at(10,async()=>{const task=(await execution.read(h.f.root,sourceId)).tasks.find(task=>task.taskKind==='development_shipping')!;await execution.route(h.f.root,sourceId,{taskId:task.taskId,note:'TEST实际寄样',result:'通过',craftExecution:null,nextAssigneeId:null,sentDate:'2026-11-20',trackingNo:'TEST-R509-'+sourceId},randomUUID());});
    await at(10.5,async()=>{const state=await technical.read(row.actor,sourceId,1),comment=await technical.recordComment(row.actor,sourceId,{roundNumber:1,scopeRef:'整款',expectedVersion:state.comments[0]?.version??0,isFinal:true,decision:'approved',text:'TEST全链客户实际认可',evidenceRefs:[],evidenceNote:'TEST客户确认',occurredAt:businessNow().toISOString()},randomUUID());await technical.completeReview(h.f.root,sourceId,{taskId:comment.reviewTaskId!,expectedReviewVersion:1,finalCommentId:comment.commentId,finalCommentVersion:comment.version,decision:'reuse',artifactSetId:published.artifactSetId,artifactVersion:published.version,note:'TEST真实复核'},randomUUID());
-    const order=await new DigitalProductionIdentityService(h.db,true).createOrder(row.actor,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:style,orderDate:'2026-11-20',primaryMerchandiserId:h.f.people.merchandiser!.actorId,productionPlanning:{craftSteps:[],preshrink:true},lines:[{formalPoNo:style+'-PO1',color:'黑',customerWarehouseArrivalDate:'2027-03-01',sizes:[{size:'M',quantity:10}]}]}),randomUUID(),sourceId);orderId=order.productionOrderId;lineId=order.lines[0]!.lineId;
+    const order=await new DigitalProductionIdentityService(h.db,true).createOrder(row.actor,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:style,requiresColorMatching:false,orderDate:'2026-11-20',primaryMerchandiserId:h.f.people.merchandiser!.actorId,productionPlanning:{craftSteps:[],preshrink:true},lines:[{formalPoNo:style+'-PO1',color:'黑',customerWarehouseArrivalDate:'2027-03-01',sizes:[{size:'M',quantity:10}]}]}),randomUUID(),sourceId);orderId=order.productionOrderId;lineId=order.lines[0]!.lineId;
    });
    await at(11.5,async()=>{
     const ready=await h.f.bulkReady('无',undefined,1,new SourcingService(h.db,undefined,undefined,new TodoProjectionService(new TodoService(h.db)),h.f.contracts),{designerActor:row.actor,existingOrder:{orderId,sourceId}}),cut=(await h.db.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1',[ready.caseId])).rows[0]!.cutting_order_id;
@@ -236,18 +236,19 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
     await writeFile(join(h.evidence,'r509-new-order-actuals.json'),JSON.stringify({sourceId,orderId,style,createdAt:dto.createdAt,persisted,fixed:dto.fixedSchedule,stages:dto.stages.map((stage:{key:string;nodes:Array<{key:string;state:string;enteredAt:string|null;expectedAt:string|null;actualAt:string|null;actualDate?:string|null}>})=>({key:stage.key,nodes:stage.nodes.map(node=>({key:node.key,state:node.state,enteredAt:node.enteredAt,expectedAt:node.expectedAt,actualAt:node.actualAt,actualDate:node.actualDate}))})),summary:result.summary},null,2));
     expect(result.summary.completed,JSON.stringify({summary:result.summary,nodes:dto.stages.flatMap((stage:{nodes:Array<{key:string;state:string}>})=>stage.nodes.map(node=>[node.key,node.state]))})).toBe(1);
     expect(dto.createdAt).toBe('2026-11-20T00:00:00.000Z');
-    expect(dto.fixedSchedule.durationSummary).toMatchObject({planStart:'2026-12-01T06:30:00.000Z',planEnd:'2027-03-01T16:00:00.000Z',planSpanMinutes:130170,finalActualSpanMinutes:{minimum:690,maximum:690}});
-    // Independent arithmetic: source path1+4+2+1.5+1=9.5h before
-    // Dec1 16:00Z; Dec1→Mar1 is31+31+28 days, plus9.5h.
+    expect(dto.fixedSchedule.durationSummary).toMatchObject({planStart:'2026-11-20T10:30:00.000Z',planEnd:'2027-03-01T16:00:00.000Z',planSpanMinutes:145770,finalActualSpanMinutes:{minimum:690,maximum:690}});
+    // Independent arithmetic: formal adoption Nov20 10:30Z to Mar1 16:00Z
+    // is101 days5.5h. Source history adds the approved2h final-design standard:
+    // paper target Dec1 16:00Z minus2+1.5+1+2h =09:30Z; own window still ends05:00Z.
     for(const key of ['budget','sourcing_ie','sourcing_selection','sourcing_approval','warehouse_accessories']){const result=dto.fixedSchedule.scopes[0].nodes.find((node:{id:string})=>node.id===key);expect(result.goalDelta.actual,key+' verified native completion').toMatchObject({precision:'instant',at:'2026-11-20T11:30:00.000Z'});}
-    const paperResult=dto.fixedSchedule.scopes[0].nodes.find((node:{id:string})=>node.id==='source:development_pattern');expect(paperResult.goalDelta).toMatchObject({kind:'early',targetAt:'2026-12-01T11:30:00.000Z',signedValue:-16200,unit:'minute'});expect(paperResult.ownSla).toMatchObject({state:'overdue',overdueMinutes:{minimum:30,maximum:30}});
+    const paperResult=dto.fixedSchedule.scopes[0].nodes.find((node:{id:string})=>node.id==='source:development_pattern');expect(paperResult.goalDelta).toMatchObject({kind:'early',targetAt:'2026-12-01T09:30:00.000Z',signedValue:-16080,unit:'minute'});expect(paperResult.ownSla).toMatchObject({state:'overdue',overdueMinutes:{minimum:30,maximum:30}});
     const indexed=await new DigitalJourneyQuery(h.db,{listReadMode:'indexed'}).list(h.f.root,JourneyFilterSchema.parse({scope:'production',search:style,startDate:'2026-11-20',endDate:'2026-11-20'}));expect(indexed.total).toBe(1);expect(indexed.items[0]?.createdAt).toBe('2026-11-20T00:00:00.000Z');
     const excluded=await new DigitalJourneyQuery(h.db,{listReadMode:'indexed'}).list(h.f.root,JourneyFilterSchema.parse({scope:'production',search:style,startDate:'2026-11-11',endDate:'2026-11-11'}));expect(excluded.total).toBe(0);
-    await tab.page.locator('.journey-order-select').click();await tab.page.locator('[data-view=order][aria-busy=false]').waitFor();const durations=await tab.page.getByLabel('订单总用时').locator('strong').allTextContents();expect(durations.map(value=>value.replace(/\s+/g,''))).toEqual(['90天9小时30分钟','11小时30分钟','11小时30分钟']);
+    await tab.page.locator('.journey-order-select').click();await tab.page.locator('[data-view=order][aria-busy=false]').waitFor();const durations=await tab.page.getByLabel('订单总用时').locator('strong').allTextContents();expect(durations.map(value=>value.replace(/\s+/g,''))).toEqual(['101天5小时30分钟','11小时30分钟','11小时30分钟']);
     const photo=await tab.page.locator('.cockpit-detail-photo').boundingBox(),heading=await tab.page.locator('.cockpit-identity-heading').boundingBox();expect(photo!.x+photo!.width).toBeLessThanOrEqual(heading!.x);
     expect(await tab.page.locator('[data-identity-fact="created"] time').getAttribute('datetime')).toBe('2026-11-20T00:00:00.000Z');
-    await tab.page.locator('.cockpit-stage').nth(1).click();await tab.page.locator('[data-view=order][aria-busy=false]').waitFor();const paperLabel=dto.stages.flatMap((stage:{nodes:Array<{key:string;label:string}>})=>stage.nodes).find((node:{key:string})=>node.key==='development_pattern').label,paperRow=tab.page.locator('.cockpit-node-summary tbody tr').filter({hasText:paperLabel});await paperRow.waitFor();expect((await paperRow.locator('td').last().innerText()).replace(/\s+/g,'')).toBe('逾期30分钟');expect(await paperRow.locator('td').last().getAttribute('class')).toContain('is-danger');expect(await tab.page.getByRole('heading',{name:'全部节点',exact:true}).count()).toBe(1);await tab.page.screenshot({path:join(h.evidence,'r509-new-order-complete.png'),fullPage:true});
-    await tab.page.getByRole('button',{name:'全部阶段',exact:true}).click();await tab.page.locator('[data-view=order][aria-busy=false]').waitFor();await tab.page.locator('.journey-node-panel').getByRole('button',{name:'查看更多 ›',exact:true}).click();const allNodes=tab.page.getByRole('dialog',{name:'全部节点明细',exact:true});await allNodes.waitFor();
+    await tab.page.getByRole('button',{name:'本单全部节点',exact:true}).click();await tab.page.locator('[data-view=order][aria-busy=false]').waitFor();const paperLabel=dto.stages.flatMap((stage:{nodes:Array<{key:string;label:string}>})=>stage.nodes).find((node:{key:string})=>node.key==='development_pattern').label,paperRow=tab.page.locator('.cockpit-framework-nodes tbody tr').filter({has:tab.page.getByRole('button',{name:paperLabel,exact:true})});await paperRow.waitFor();expect((await paperRow.locator('td').last().innerText()).replace(/\s+/g,'')).toBe('责任超时（有责）');expect(await paperRow.locator('td').last().getAttribute('class')).toContain('is-danger');expect(await tab.page.getByRole('heading',{name:'全部节点',exact:true}).count()).toBe(1);await tab.page.screenshot({path:join(h.evidence,'r509-new-order-complete.png'),fullPage:true});
+    await tab.page.getByRole('button',{name:'本单全部节点',exact:true}).click();await tab.page.locator('[data-view=order][aria-busy=false]').waitFor();await tab.page.locator('.journey-node-panel').getByRole('button',{name:'查看更多 ›',exact:true}).click();const allNodes=tab.page.getByRole('dialog',{name:'全部节点明细',exact:true});await allNodes.waitFor();
     for(const [key,at]of [['customer_sample','2026-11-20T10:30:00.000Z'],['budget','2026-11-20T11:30:00.000Z'],['sourcing_ie','2026-11-20T11:30:00.000Z']] as const){const label=dto.stages.flatMap((stage:{nodes:Array<{key:string;label:string}>})=>stage.nodes).find((node:{key:string})=>node.key===key).label,actual=allNodes.locator('tbody tr').filter({hasText:label}).locator('td').nth(4);expect(await actual.locator('time').getAttribute('datetime'),key+' actual column uses the delta occurrence').toBe(at);}
     await allNodes.getByRole('button',{name:'关闭全部节点明细',exact:true}).click();
     const calendarResponse=tab.page.waitForResponse(response=>response.url().includes('/delivery-calendar/day?')&&response.url().includes(encodeURIComponent(style)));

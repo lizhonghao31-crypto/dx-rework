@@ -2,7 +2,7 @@ import type {OrderJourney} from '@dx-rework/contracts/digital-production-journey
 import {registerSessionInvalidator} from './auth-session.js';
 import type {CockpitContext} from './digital-journey-cockpit-model.js';
 
-const keys=['expanded','focus','row','round','flow','nodeView','materialNode','materialView','materialFilter','materialScroll','materialFocus','documentOpen','documentView','documentStage','documentSearch','documentScroll','documentFocus'] as const;
+const keys=['milestone','expanded','focus','row','round','flow','nodeView','materialNode','materialView','materialFilter','materialScroll','materialFocus','documentOpen','documentView','documentStage','documentSearch','documentScroll','documentFocus'] as const;
 type Point={left:number;top:number};
 type Preferences={view:Partial<CockpitContext>;window:Point;outer:Point[];scrolls:Array<{selector:string}&Point>;disclosures:Array<{key:string;open:boolean}>;focus:{attribute:string;value:string}|null};
 // Only UI preferences, held in this tab's bounded memory. No API result, grant,
@@ -16,7 +16,7 @@ export function rememberedCockpitView(identity:string,id:string):Partial<Cockpit
  * explicit new node link must still reveal its requested node. */
 export function matchesCockpitReading(identity:string,context:CockpitContext){
  const saved=views.get(stamp(identity,context.selected??''));
- return Boolean(identity&&saved?.scrolls.some(item=>item.selector==='.journey-node-viewport')&&(['focus','row','round','expanded','nodeView'] as const).every(key=>(saved.view[key]??(key==='nodeView'?'all':undefined))===(context[key]??(key==='nodeView'?'all':undefined))));
+ return Boolean(identity&&saved?.scrolls.some(item=>item.selector==='.journey-node-viewport')&&(['milestone','focus','row','round','expanded','nodeView'] as const).every(key=>(saved.view[key]??(key==='nodeView'?'all':undefined))===(context[key]??(key==='nodeView'?'all':undefined))));
 }
 const point=(element:Element)=>({left:element.scrollLeft,top:element.scrollTop});
 const ancestors=(root:HTMLElement)=>{const result:HTMLElement[]=[];for(let item=root.parentElement;item;item=item.parentElement)result.push(item);return result;};

@@ -10,7 +10,7 @@ import type {SeriesObservedFact} from '@dx-rework/contracts/digital-series-plan'
 /** Completion evidence cannot erase a separately established native clock.
  * Whole-order partial completion cannot negate a completed individual PO. */
 export function overlayFrameworkCompletion(native:OrderTimeNativeProgress|undefined,fact:Pick<SeriesObservedFact,'completed'|'precision'|'occurredAt'|'scopeRef'>):OrderTimeNativeProgress{
- if(fact.scopeRef==='whole'&&native?.completed)return {...native};
+ if(fact.scopeRef==='whole'&&native?.completed&&(native.actualAt||!fact.completed))return {...native};
  return {...native,completed:fact.completed,actualAt:fact.completed&&fact.precision==='instant'?fact.occurredAt:null,readyAt:native?.readyAt??null,deadline:native?.deadline??null};
 }
 

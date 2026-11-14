@@ -13,7 +13,7 @@ import {assertSlaSettingsActor} from '../../apps/api/src/production-platform/sla
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (url?describe.sequential:describe.skip)('R5 native company time settings and explicit disabled compatibility',()=>{
  let f:Awaited<ReturnType<typeof businessAnchorFixture>>,service:OrderTimeSettingsService,historicalOrder:Awaited<ReturnType<DigitalProductionIdentityService['createOrder']>>;
- beforeAll(async()=>{f=await businessAnchorFixture(url!);service=new OrderTimeSettingsService(f.db,true);
+ beforeAll(async()=>{f=await businessAnchorFixture(url!);service=new OrderTimeSettingsService(f.db,true,false);
   // This case protects an existing historical counterpart. Create it before
   // new company publication instead of bypassing the new admission chain.
   const style='TEST-R5-HISTORY-'+randomUUID();historicalOrder=await new DigitalProductionIdentityService(f.db,true).createOrder(f.people['sample-designer']!,DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:style,orderDate:beijingCalendarDate(businessNow()),lines:[{formalPoNo:style,color:'黑',customerWarehouseArrivalDate:'2027-03-01',sizes:[{size:'M',quantity:1}]}]}),randomUUID());

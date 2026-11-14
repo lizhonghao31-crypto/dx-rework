@@ -1,3 +1,6 @@
+import type {FixedScheduleProgress} from '@dx-rework/contracts';
+import type {FixedScheduleBasis} from '../../apps/api/src/production-platform/fixed-schedule-basis.js';
+import type {OrderJourney} from '@dx-rework/contracts/digital-production-journey';
 import {describe,it,expect} from 'vitest';
 import {evaluateFixedScheduleScope,type ScheduleScopeInput,type ScheduleFact} from '../../apps/api/src/production-platform/fixed-schedule-progress.js';
 import {evaluateJourneyFramework,frameworkCompletion,type JourneyFrameworkBasis} from '../../apps/api/src/production-platform/journey-time-framework.js';
@@ -77,4 +80,20 @@ it('requires a finite latest bound strictly before the exclusive milestone deadl
   const view=evaluateJourneyFramework(b,[s],[progress],at(0),null).scopes[0]!.milestones[0]!;
   expect(view.feasibility).toBe(expected);expect(view.lateMinutes).toBe(expected==='sufficient'?0:expected==='unknown'?null:1/60000);
  }
+});
+it('projects preparation facts through original records without duplicating tasks or changing clock/quantity denominators',async()=>{
+ const {attachFrameworkEvents}=await import('../../apps/api/src/production-platform/journey-framework-events.js');
+ const s=scope();s.work[0]!.id='design_handover:whole';s.facts[s.work[0]!.id]=pending();delete s.facts.a;s.work=[s.work[0]!];s.terminalIds=[s.work[0]!.id];
+ const progress={scopes:[evaluateFixedScheduleScope(s,at(1))]} as FixedScheduleProgress;
+ const b={framework:basis(s),scopes:[s],termination:null} as FixedScheduleBasis;
+ const item={orderId:'TEST-order',lines:[{id:'red',po:'TEST-PO'}],stages:[{key:'preparation',nodes:[]}]} as unknown as OrderJourney;
+ const before=structuredClone(s);
+ attachFrameworkEvents(item,b,progress);attachFrameworkEvents(item,b,progress);
+ expect(item.stages[0]!.nodes).toHaveLength(1);
+ const second=structuredClone(s);second.scopeRef='po:blue';second.lineId='blue';b.scopes.push(second);progress.scopes.push(evaluateFixedScheduleScope(second,at(1)));
+ attachFrameworkEvents(item,b,progress);expect(item.stages[0]!.nodes).toHaveLength(1);expect(item.stages[0]!.nodes[0]!.fixedTargets).toHaveLength(2);expect(item.stages[0]!.nodes[0]!.records[0]!.lineId).toBeNull();
+ expect(item.stages[0]!.nodes[0]).toMatchObject({label:'设计资料交接',planningOnly:true,countsInProgress:false,enteredAt:null,actualAt:null,owner:null,records:[{url:'/ui/digital-production?bulk=TEST-order',mode:'read'}]});
+ expect(s).toEqual(before);
+ attachFrameworkEvents(item,{...b,framework:undefined},progress);
+ expect(item.stages[0]!.nodes).toHaveLength(1);
 });

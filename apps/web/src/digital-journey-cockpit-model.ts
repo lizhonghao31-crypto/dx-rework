@@ -6,7 +6,7 @@ export const journeyStateLabels: Record<JourneyState, string> = { uncreated: "�
 export const journeyRiskLabels = { overdue: "已逾期", due_soon: "即将到期", blocked: "受阻", unknown: "时间待核实" };
 export function cockpitContext(search: string): CockpitContext {
   const params = new URLSearchParams(search);
-  const input = Object.fromEntries([...params].filter(([key]) => key in JourneyReturnContextSchema.shape && (params.get(key) !== "" || key === "expanded" || key === "row")));
+  const input = Object.fromEntries([...params].filter(([key]) => key in JourneyReturnContextSchema.shape && (params.get(key) !== "" || key === "milestone" || key === "expanded" || key === "row")));
   // Retired workspace links remain usable without treating "bulk" as a Journey stage.
   if (input.stage === "bulk") input.stage = "preparation";
   const parsed = JourneyReturnContextSchema.safeParse(input);

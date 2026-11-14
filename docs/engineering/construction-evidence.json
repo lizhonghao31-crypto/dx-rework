@@ -1,103 +1,118 @@
 {
   "version": 1,
-  "base": "ea426c9e6b07542363afd6c788e7cdab20e1d2e4",
+  "base": "414c60c0c79d57bac75062684fa13ce9a7e7abff",
   "risk": "full",
-  "sourceFingerprint": "401ebd681c6c9e4d1146c13d7bdb145268bb47319c14433deb1b70d06007e64d",
+  "sourceFingerprint": "79699929642e51304235ba1459ab096c184a6a7762b0483739c02ca62d4aa363",
   "rules": [
     {
-      "rule": "Plan and milestone facts remain distinct; read effective forward targets, actual occurrence, original batch responsibility and completion-time historical targets without inventing starts.",
-      "source": "Approved time framework v27 and original eight-PR plan PR07; coordinator authorization after PR06 Acceptance. docs/engineering/time-framework-07.md",
+      "rule": "Activate explicit new-standard adoption and project milestone-related original facts with stable scope, history, responsibility and exact selection clock agreement.",
       "writes": [
-        "apps/api/src/production-platform/bulk-washing-service.ts",
-        "apps/api/src/production-platform/factory-sla-evidence.ts",
         "apps/api/src/production-platform/fixed-schedule-basis.ts",
-        "apps/api/src/production-platform/fixed-schedule-progress.ts",
-        "apps/api/src/production-platform/journey-time-framework.ts",
-        "apps/api/src/production-platform/journey-washing-facts.ts",
-        "apps/api/src/production-platform/order-time-reading.ts",
-        "apps/web/src/cockpit-fixed-schedule.tsx",
-        "packages/contracts/src/fixed-schedule-progress.ts",
-        "packages/contracts/src/time-framework-journey.ts",
-        "tests/unit/journey-time-framework.test.ts",
-        "tests/unit/journey-washing-facts.test.ts",
-        "tests/unit/order-time-reading.test.ts"
-      ],
-      "reads": [
-        "apps/api/src/production-platform/order-time-reading.ts",
-        "apps/api/src/production-platform/journey-supervision.ts",
-        "apps/api/src/production-platform/journey-query.ts"
-      ],
-      "oldTests": [
-        "tests/unit/order-time-reading.test.ts",
-        "tests/integration/order-time-requests-postgres.test.ts",
-        "tests/integration/bulk-washing-postgres.test.ts"
-      ],
-      "initialization": "No migration. New framework only for explicitly adopted frozen versions; legacy reads and deployment feature switch remain unchanged. Tests own fresh low-privilege isolated database and cleanup.",
-      "dateAndPermission": "Actual observation and date-only precision preserved; scope/round/batch identities retained; business completion is not responsibility start. Existing full technical and timing permissions govern these projections, no new authority.",
-      "expectation": "Plan and milestone facts remain distinct; read effective forward targets, actual occurrence, original batch responsibility and completion-time historical targets without inventing starts. Default framework activation and final layout remain PR08, no claim of on-site acceptance.",
-      "checks": [
-        "unit",
-        "postgres"
-      ]
-    },
-    {
-      "rule": "Full authorized KPI and current-page reads retain same-client snapshots, scoped clocks and query budget; special closure is distinct from delivered completion.",
-      "source": "Approved time framework v27 and original eight-PR plan PR07; coordinator authorization after PR06 Acceptance. docs/engineering/time-framework-07.md",
-      "writes": [
-        "apps/api/src/production-platform/journey-display.ts",
         "apps/api/src/production-platform/journey-fact-model.ts",
-        "apps/api/src/production-platform/journey-projection.ts",
-        "apps/api/src/production-platform/journey-selection-facts.ts",
-        "apps/api/src/production-platform/journey-selection-query.ts",
+        "apps/api/src/production-platform/journey-selection-clock.ts",
+        "apps/api/src/production-platform/journey-time-framework.ts",
         "apps/api/src/production-platform/journey-visual-progress.ts",
-        "apps/web/src/cockpit-home.tsx",
-        "apps/web/src/digital-journey-cockpit-model.ts",
+        "apps/api/src/production-platform/order-time-activation.ts",
+        "apps/api/src/production-platform/order-time-framework-route.ts",
+        "apps/api/src/production-platform/special-craft-activation.ts",
         "packages/contracts/src/digital-production-journey.ts",
-        "tests/unit/cockpit-display-facts.test.ts",
-        "tests/unit/journey-craft-facts.test.ts"
+        "packages/contracts/src/time-framework-journey.ts",
+        "packages/domain/src/index.ts",
+        "apps/api/src/production-platform/journey-framework-events.ts",
+        "packages/domain/src/journey-time-ratio.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/journey-selection-query.ts",
-        "apps/api/src/production-platform/journey-selection-clock.ts",
-        "apps/api/src/production-platform/journey-fact-repository.ts"
+        "apps/api/src/production-platform/order-time-operation-state.ts",
+        "apps/api/src/production-platform/order-time-reading.ts",
+        "apps/api/src/production-platform/journey-query.ts",
+        "apps/api/src/production-platform/journey-selection-facts.ts"
       ],
       "oldTests": [
-        "tests/integration/journey-fact-model-postgres.test.ts",
-        "tests/integration/m01-journey-performance-postgres.test.ts",
-        "tests/unit/cockpit-display-facts.test.ts"
+        "tests/unit/order-time-framework.test.ts",
+        "tests/unit/fixed-schedule-selection.test.ts",
+        "tests/integration/order-time-requests-browser-postgres.test.ts"
       ],
-      "initialization": "No migration. New framework only for explicitly adopted frozen versions; legacy reads and deployment feature switch remain unchanged. Tests own fresh low-privilege isolated database and cleanup.",
-      "dateAndPermission": "Actual observation and date-only precision preserved; scope/round/batch identities retained; business completion is not responsibility start. Existing full technical and timing permissions govern these projections, no new authority.",
-      "expectation": "Full authorized KPI and current-page reads retain same-client snapshots, scoped clocks and query budget; special closure is distinct from delivered completion. Default framework activation and final layout remain PR08, no claim of on-site acceptance.",
+      "source": "Approved time framework v27, original eight-PR plan PR08, final detail DX_scheme_1 version4 and home version4; coordinator authorization after PR07 Acceptance. docs/engineering/time-framework-08.md",
+      "initialization": "No SQL migration or live settings write. New framework only on original explicit company publication and saved order adoption; existing frozen plans and old-format consumers remain readable. Isolated tests use registered original resource lifecycle.",
+      "dateAndPermission": "Customer delivery and factory delivery remain distinct. Trusted actual occurrence is not registration time; native clock and completed historical delta remain unchanged. Original role and record permissions retained, no new grants. Local observation never polls the server.",
+      "expectation": "Activate explicit new-standard adoption and project milestone-related original facts with stable scope, history, responsibility and exact selection clock agreement.",
       "checks": [
         "unit",
-        "postgres"
+        "native_app"
       ]
     },
     {
-      "rule": "Existing setting duration display rounds only presentation and never rewrites duration; direct consumers remain included in canonical regression mapping.",
-      "source": "Approved time framework v27 and original eight-PR plan PR07; coordinator authorization after PR06 Acceptance. docs/engineering/time-framework-07.md",
+      "rule": "Approved original UI layout presents A9/B8 milestones and complete node access; delivery timeflow and actual work stay separate with full dates and truthful day differences.",
       "writes": [
-        "apps/web/src/order-time-settings-model.ts",
-        "packages/contracts/package.json",
-        "scripts/ci/full-gate-risk-map.mjs",
-        "tests/integration/order-time-requests-postgres.test.ts",
-        "tests/unit/order-time-settings.test.ts"
+        "apps/web/src/cockpit-date.tsx",
+        "apps/web/src/cockpit-detail-r5.css",
+        "apps/web/src/cockpit-detail-risks.tsx",
+        "apps/web/src/cockpit-detail.tsx",
+        "apps/web/src/cockpit-fixed-schedule.tsx",
+        "apps/web/src/cockpit-home-progress.tsx",
+        "apps/web/src/cockpit-home-r5.css",
+        "apps/web/src/cockpit-home.tsx",
+        "apps/web/src/cockpit-reading-context.ts",
+        "apps/web/src/digital-journey-cockpit-model.ts",
+        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts",
+        "tests/integration/order-time-requests-browser-postgres.test.ts",
+        "tests/integration/order-time-settings-postgres.test.ts",
+        "tests/integration/special-craft-browser-postgres.test.ts",
+        "tests/integration/special-craft-native-postgres.test.ts",
+        "tests/unit/cockpit-fixed-schedule.test.ts",
+        "tests/unit/cockpit-home.test.ts",
+        "tests/unit/fixed-schedule-selection.test.ts",
+        "tests/unit/journey-time-framework.test.ts",
+        "tests/unit/journey-visual-progress.test.ts",
+        "tests/unit/m01-cockpit-reading-context.test.ts",
+        "tests/unit/order-time-framework.test.ts",
+        "apps/web/src/cockpit-difference-days.ts",
+        "apps/web/src/cockpit-framework-nodes.tsx",
+        "apps/web/src/cockpit-milestones.tsx",
+        "tests/integration/time-framework-cockpit-native-browser-postgres.test.ts",
+        "tests/unit/cockpit-date-days.test.ts",
+        "tests/unit/cockpit-framework.test.ts"
       ],
       "reads": [
-        "apps/web/src/order-time-settings-model.ts",
-        "scripts/ci/full-gate-risk-map.mjs"
+        "apps/web/src/cockpit-reads.ts",
+        "apps/web/src/cockpit-detail.tsx",
+        "apps/web/src/cockpit-home.tsx"
       ],
       "oldTests": [
-        "tests/unit/order-time-settings.test.ts",
+        "tests/unit/cockpit-home.test.ts",
+        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts",
+        "tests/integration/order-time-requests-browser-postgres.test.ts"
+      ],
+      "source": "Approved time framework v27, original eight-PR plan PR08, final detail DX_scheme_1 version4 and home version4; coordinator authorization after PR07 Acceptance. docs/engineering/time-framework-08.md",
+      "initialization": "No SQL migration or live settings write. New framework only on original explicit company publication and saved order adoption; existing frozen plans and old-format consumers remain readable. Isolated tests use registered original resource lifecycle.",
+      "dateAndPermission": "Customer delivery and factory delivery remain distinct. Trusted actual occurrence is not registration time; native clock and completed historical delta remain unchanged. Original role and record permissions retained, no new grants. Local observation never polls the server.",
+      "expectation": "Approved original UI layout presents A9/B8 milestones and complete node access; delivery timeflow and actual work stay separate with full dates and truthful day differences.",
+      "checks": [
+        "unit",
+        "native_app"
+      ]
+    },
+    {
+      "rule": "Register activated original-browser integration with canonical bounded test runner and changed-source mapping; preserve one Light per PR and current Full obligations.",
+      "writes": [
+        "scripts/ci/full-gate-risk-map.mjs",
+        "scripts/test-suite-plan.mjs"
+      ],
+      "reads": [
+        "scripts/ci/full-gate-risk-map.mjs",
+        "scripts/test-suite-plan.mjs",
+        "vitest.business-chain.config.ts"
+      ],
+      "oldTests": [
         "tests/unit/full-gate-risk-map.test.ts"
       ],
-      "initialization": "No migration. New framework only for explicitly adopted frozen versions; legacy reads and deployment feature switch remain unchanged. Tests own fresh low-privilege isolated database and cleanup.",
-      "dateAndPermission": "Actual observation and date-only precision preserved; scope/round/batch identities retained; business completion is not responsibility start. Existing full technical and timing permissions govern these projections, no new authority.",
-      "expectation": "Existing setting duration display rounds only presentation and never rewrites duration; direct consumers remain included in canonical regression mapping. Default framework activation and final layout remain PR08, no claim of on-site acceptance.",
+      "source": "Approved time framework v27, original eight-PR plan PR08, final detail DX_scheme_1 version4 and home version4; coordinator authorization after PR07 Acceptance. docs/engineering/time-framework-08.md",
+      "initialization": "No SQL migration or live settings write. New framework only on original explicit company publication and saved order adoption; existing frozen plans and old-format consumers remain readable. Isolated tests use registered original resource lifecycle.",
+      "dateAndPermission": "Customer delivery and factory delivery remain distinct. Trusted actual occurrence is not registration time; native clock and completed historical delta remain unchanged. Original role and record permissions retained, no new grants. Local observation never polls the server.",
+      "expectation": "Register activated original-browser integration with canonical bounded test runner and changed-source mapping; preserve one Light per PR and current Full obligations.",
       "checks": [
         "unit",
-        "postgres"
+        "native_app"
       ]
     }
   ],
@@ -105,52 +120,52 @@
     {
       "id": "unit",
       "kind": "tests",
-      "command": "vitest run relevant Journey/cockpit/fixed-schedule/order-time reading/settings and risk-map unit suites; original vitest.config.ts",
+      "command": "Canonical Vitest unit suites for timeline, scope clock, milestones, home, dates, reading context and risk map; maxWorkers=2",
       "status": "passed",
       "exitCode": 0,
-      "passed": 387,
+      "passed": 186,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "5fdd4c61bd0a89a00f80330f6f09ad3907b6f557",
-      "sourceFingerprint": "401ebd681c6c9e4d1146c13d7bdb145268bb47319c14433deb1b70d06007e64d",
-      "context": "Uncommitted PR07 candidate at recorded fingerprint; Node22/npm10, canonical Vitest worker limits; PG explicitly maxWorkers1, owned Docker PG16 NOSUPERUSER marked isolated test database, actual service and persisted reader calls. No deployment. Canonical result log is the original Vitest JSON reporter output; separate stdout retained unchanged.",
-      "startedAt": "2026-11-14T08:12:57.111Z",
-      "endedAt": "2026-11-14T08:13:10.356Z",
-      "logSha256": "d89bb859ad25e225eba9d57a25bafb03bf2750c28bdcad76d7d38b7596739184",
+      "testedHead": "414c60c0c79d57bac75062684fa13ce9a7e7abff",
+      "sourceFingerprint": "79699929642e51304235ba1459ab096c184a6a7762b0483739c02ca62d4aa363",
+      "context": "Uncommitted PR08 candidate at captured before/after identical source fingerprint. Node22/npm10; canonical Vitest configuration. Native App uses isolated marked PG16 NOSUPERUSER database, real role/session and owned cleanup; no live system writes. Earlier component/performance/rollback results are described separately, not mislabelled as final-head CI.",
+      "startedAt": "2026-11-14T10:05:28.637Z",
+      "endedAt": "2026-11-14T10:05:33.276Z",
+      "logSha256": "a5d2f0dc30b6fed6aee0b0537cbeeea3306d818b9a6386f406c5cb33e73ece82",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "d89bb859ad25e225eba9d57a25bafb03bf2750c28bdcad76d7d38b7596739184"
+          "sha256": "a5d2f0dc30b6fed6aee0b0537cbeeea3306d818b9a6386f406c5cb33e73ece82"
         }
       ],
-      "stdoutLog": "/tmp/time07-final-unit.log",
-      "stdoutLogSha256": "e3612edd5842cd8964f5d5f4a4fd8d5eb52f0e320cf36bbccdca3d74edc83502",
-      "log": "/tmp/time07-final-unit.json"
+      "log": "/tmp/time08-candidate-unit.json",
+      "stdoutLog": "/tmp/time08-candidate-unit.log",
+      "stdoutLogSha256": "ee3c1cb2dfd6509777bc293d1c8341afe931321c3c5024edf3527baf18c0b491"
     },
     {
-      "id": "postgres",
+      "id": "native_app",
       "kind": "tests",
-      "command": "bash /tmp/time07-final-pg.sh; requests, fact model, 88-order performance, time reading and washing in isolated low-privilege PG16",
+      "command": "bash /tmp/time08-candidate-pg.sh; original authenticated App A/B plus R5-09 new order through native completion/qualified packing, canonical business-chain config maxWorkers=1",
       "status": "passed",
       "exitCode": 0,
-      "passed": 47,
+      "passed": 4,
       "failed": 0,
-      "skipped": 0,
-      "testedHead": "5fdd4c61bd0a89a00f80330f6f09ad3907b6f557",
-      "sourceFingerprint": "401ebd681c6c9e4d1146c13d7bdb145268bb47319c14433deb1b70d06007e64d",
-      "context": "Uncommitted PR07 candidate at recorded fingerprint; Node22/npm10, canonical Vitest worker limits; PG explicitly maxWorkers1, owned Docker PG16 NOSUPERUSER marked isolated test database, actual service and persisted reader calls. No deployment. Canonical result log is the original Vitest JSON reporter output; separate stdout retained unchanged.",
-      "startedAt": "2026-11-14T08:13:00.847Z",
-      "endedAt": "2026-11-14T08:16:42.827Z",
-      "logSha256": "01ebdcebb8ea99548520c0ccab826c6f654ea435520b385a063ae88f88a3b1f8",
+      "skipped": 5,
+      "testedHead": "414c60c0c79d57bac75062684fa13ce9a7e7abff",
+      "sourceFingerprint": "79699929642e51304235ba1459ab096c184a6a7762b0483739c02ca62d4aa363",
+      "context": "Uncommitted PR08 candidate at captured before/after identical source fingerprint. Node22/npm10; canonical Vitest configuration. Native App uses isolated marked PG16 NOSUPERUSER database, real role/session and owned cleanup; no live system writes. Earlier component/performance/rollback results are described separately, not mislabelled as final-head CI.",
+      "startedAt": "2026-11-14T10:05:22.786Z",
+      "endedAt": "2026-11-14T10:06:10.563Z",
+      "logSha256": "0a863498d7f33f821317edb293d15df5d3de1665d16c2ba00929d8d8694b3262",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "01ebdcebb8ea99548520c0ccab826c6f654ea435520b385a063ae88f88a3b1f8"
+          "sha256": "0a863498d7f33f821317edb293d15df5d3de1665d16c2ba00929d8d8694b3262"
         }
       ],
-      "stdoutLog": "/tmp/time07-final-pg.log",
-      "stdoutLogSha256": "67c98de63ce2cae83b9a26a6d0de6d06368001997ed0fbed79fa18e9989c4c73",
-      "log": "/tmp/time07-final-pg.json"
+      "log": "/tmp/time08-candidate-pg.json",
+      "stdoutLog": "/tmp/time08-candidate-pg.log",
+      "stdoutLogSha256": "038d51bc64d2f18cea7c947efa22c7504ec0a4fbfbd7a66b007807cdfbd097c0"
     }
   ]
 }
