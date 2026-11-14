@@ -113,17 +113,19 @@
       "skipped": 0,
       "testedHead": "5fdd4c61bd0a89a00f80330f6f09ad3907b6f557",
       "sourceFingerprint": "401ebd681c6c9e4d1146c13d7bdb145268bb47319c14433deb1b70d06007e64d",
-      "context": "Uncommitted PR07 candidate at recorded fingerprint; Node22/npm10, canonical Vitest worker limits; PG explicitly maxWorkers1, owned Docker PG16 NOSUPERUSER marked isolated test database, actual service and persisted reader calls. No deployment.",
+      "context": "Uncommitted PR07 candidate at recorded fingerprint; Node22/npm10, canonical Vitest worker limits; PG explicitly maxWorkers1, owned Docker PG16 NOSUPERUSER marked isolated test database, actual service and persisted reader calls. No deployment. Canonical result log is the original Vitest JSON reporter output; separate stdout retained unchanged.",
       "startedAt": "2026-11-14T08:12:57.111Z",
       "endedAt": "2026-11-14T08:13:10.356Z",
-      "logSha256": "e3612edd5842cd8964f5d5f4a4fd8d5eb52f0e320cf36bbccdca3d74edc83502",
-      "logPath": "/tmp/time07-final-unit.log",
+      "logSha256": "d89bb859ad25e225eba9d57a25bafb03bf2750c28bdcad76d7d38b7596739184",
       "resultReports": [
         {
           "format": "vitest-json",
           "sha256": "d89bb859ad25e225eba9d57a25bafb03bf2750c28bdcad76d7d38b7596739184"
         }
-      ]
+      ],
+      "stdoutLog": "/tmp/time07-final-unit.log",
+      "stdoutLogSha256": "e3612edd5842cd8964f5d5f4a4fd8d5eb52f0e320cf36bbccdca3d74edc83502",
+      "log": "/tmp/time07-final-unit.json"
     },
     {
       "id": "postgres",
@@ -136,17 +138,19 @@
       "skipped": 0,
       "testedHead": "5fdd4c61bd0a89a00f80330f6f09ad3907b6f557",
       "sourceFingerprint": "401ebd681c6c9e4d1146c13d7bdb145268bb47319c14433deb1b70d06007e64d",
-      "context": "Uncommitted PR07 candidate at recorded fingerprint; Node22/npm10, canonical Vitest worker limits; PG explicitly maxWorkers1, owned Docker PG16 NOSUPERUSER marked isolated test database, actual service and persisted reader calls. No deployment.",
+      "context": "Uncommitted PR07 candidate at recorded fingerprint; Node22/npm10, canonical Vitest worker limits; PG explicitly maxWorkers1, owned Docker PG16 NOSUPERUSER marked isolated test database, actual service and persisted reader calls. No deployment. Canonical result log is the original Vitest JSON reporter output; separate stdout retained unchanged.",
       "startedAt": "2026-11-14T08:13:00.847Z",
       "endedAt": "2026-11-14T08:16:42.827Z",
-      "logSha256": "67c98de63ce2cae83b9a26a6d0de6d06368001997ed0fbed79fa18e9989c4c73",
-      "logPath": "/tmp/time07-final-pg.log",
+      "logSha256": "01ebdcebb8ea99548520c0ccab826c6f654ea435520b385a063ae88f88a3b1f8",
       "resultReports": [
         {
           "format": "vitest-json",
           "sha256": "01ebdcebb8ea99548520c0ccab826c6f654ea435520b385a063ae88f88a3b1f8"
         }
-      ]
+      ],
+      "stdoutLog": "/tmp/time07-final-pg.log",
+      "stdoutLogSha256": "67c98de63ce2cae83b9a26a6d0de6d06368001997ed0fbed79fa18e9989c4c73",
+      "log": "/tmp/time07-final-pg.json"
     }
   ]
 }
