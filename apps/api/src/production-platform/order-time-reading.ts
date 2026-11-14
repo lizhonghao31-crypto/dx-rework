@@ -1,3 +1,5 @@
+import type {FrozenTimeFramework} from '@dx-rework/contracts/order-time-framework';
+import {frameworkNodeTargets,frameworkTargetPrecision} from './framework-node-targets.js';
 import {journeyWashingFact} from './journey-washing-facts.js';
 import {readBulkWashing} from './bulk-washing-service.js';
 import {washingPlans} from './bulk-washing-repository.js';
@@ -84,7 +86,7 @@ function nativeFor(work:OrderTimeWork,scope:{lineId:string|null},resource:Busine
  if(task){
   const readiness=evidence.readiness.get(task.task_id),accepted=task.state==='completed'&&!task.returned&&!task.rejected;
   const ready=readiness?.tracked?instant(readiness.firstReadyAt):['现场登记','已核实'].includes(task.entered_quality)?instant(task.entered_at):unknown;
-  fact={...fact,ready,clockStart:ready,completed:accepted&&['现场登记','已核实'].includes(task.completed_quality)?instant(task.completed_at):unknown,businessCompleted:accepted,
+  fact={...fact,ownTaskId:task.task_id,ready,clockStart:ready,completed:accepted&&['现场登记','已核实'].includes(task.completed_quality)?instant(task.completed_at):unknown,businessCompleted:accepted,
    notYetReady:readiness?.tracked===true&&readiness.eventId===null&&!accepted,
    evidenceRefs:[`task:${task.task_id}:round:${task.route_version}`,...readiness?.basis??[]]};
  }else if(node&&!value){
@@ -118,11 +120,13 @@ function nativeFor(work:OrderTimeWork,scope:{lineId:string|null},resource:Busine
  * order arrangement changes. No current-company lookup or implicit adoption. */
 export function orderTimeReadingBasis(saved:StoredOrderTimePlan,resource:BusinessTimeScope,item:OrderJourney,native:Readonly<Record<string,SlaNodeFact>>,evidence:Evidence,legacy:FixedScheduleBasis|null):FixedScheduleBasis{
  const definitions=buildOrderTimeWork(saved.input.plan,saved.input.work),byId=new Map(saved.input.work.map(work=>[work.id,work]));
+ const completionTargets=new Map<FrozenTimeFramework,ReturnType<typeof frameworkNodeTargets>>();
  const scopes=saved.input.scopes.map(scope=>{
   const original=legacy?.scopes.find(value=>value.scopeRef===scope.scopeRef||scope.lineId&&value.lineId===scope.lineId);
+  const framework=saved.input.frameworkPlans?.[scope.scopeRef],frameworkTargets=framework?frameworkNodeTargets(framework):null;
   const required=requiredFixedTimelineWork(definitions,scope.terminalIds),facts:Record<string,ScheduleFact>={};
   const work:ScheduleWork[]=required.map(definition=>{
-   const source=byId.get(definition.id)!,framework=saved.input.frameworkPlans?.[scope.scopeRef],target=framework?framework.arranged.find(row=>row.id===source.id):saved.targets[scope.scopeRef]?.[source.id],policy=orderTimeWorkDefinition(saved.input.plan,source.parameterKey,source.craftStep);
+   const source=byId.get(definition.id)!,target=framework?framework.arranged.find(row=>row.id===source.id):saved.targets[scope.scopeRef]?.[source.id],policy=orderTimeWorkDefinition(saved.input.plan,source.parameterKey,source.craftStep);
    const old=original?.work.find(value=>source.canonicalWorkRef?value.canonicalWorkRef===source.canonicalWorkRef:value.id===source.id);
    const own=nativeFor(source,scope,resource,item,native,evidence),previous=old&&original?.facts[old.id];
    // An empty legacy placeholder is not a conflicting historical event. It
@@ -154,6 +158,7 @@ export function orderTimeReadingBasis(saved:StoredOrderTimePlan,resource:Busines
    // that event's position without inventing an enteredAt for a human task.
    const rule=orderTimeRule(saved.input.plan,source.parameterKey)?.rule;
    if(rule?.kind==='event'&&fact.ready.precision==='unknown'&&fact.businessCompleted&&fact.completed.precision!=='unknown')fact.ready=structuredClone(fact.completed);
+   if(own.task)fact.ownTaskId=own.task.task_id;
    facts[source.id]=fact;
    const begun=fact.clockStart.precision!=='unknown'||fact.businessCompleted||Boolean(own.task?.native_entered_at);
    if(own.native?.batchWindows?.length&&(policy.responsibilitySlaRef||old?.responsibilitySlaRef))fact.ownWindows=own.native.batchWindows.map(window=>({sourceRef:window.evidence,started:instant(window.startedAt),completed:instant(window.completedAt),complete:window.complete,deadline:window.deadline,warningAt:window.warningAt,
@@ -174,11 +179,12 @@ export function orderTimeReadingBasis(saved:StoredOrderTimePlan,resource:Busines
    const capturedWarning=atStart&&start&&capturedRule?.minutes!==null&&capturedRule?.calendar&&capturedRule.reminder.enabled?shiftFixedTimeline(start,capturedRule.minutes*capturedRule.reminder.percent/100,capturedRule.calendar):null;
    const reminder=orderTimeRule(saved.input.plan,source.parameterKey)?.rule.reminder;
    const goal=!framework&&scope.customerGoalIds.includes(source.id),anchor=scope.goals[source.id];
+   const eventConstraint=frameworkTargets?.get(source.id),eventTarget=eventConstraint&&eventConstraint!==target?{end:eventConstraint.end.at,...frameworkTargetPrecision(eventConstraint),exclusive:eventConstraint.end.exclusive}:undefined;
    return {...definition,stage:source.stage,canonicalWorkRef:source.canonicalWorkRef??`${resource.kind}:${resource.id}:work:${source.id}`,
-    start:target?.start.at??null,end:target?.end.at??null,...originalOwn,
+    start:target?.start.at??null,end:target?.end.at??null,...(target?{startExclusive:target.start.exclusive,endExclusive:target.end.exclusive}:{}),...originalOwn,...(eventTarget?{eventTarget}:{}),
     responsibilitySlaRef:originalOwn.responsibilitySlaRef,responsibilityMinutes:originalOwn.responsibilityMinutes??null,responsibilityCalendar:originalOwn.responsibilityCalendar??null,
     ...(begun?{responsibilityWarningAt:own.task?.warning_at?.toISOString()??(atStart?capturedWarning:old?.responsibilityWarningAt??null)}:{responsibilityReminderPercent:reminder?.enabled?reminder.percent:null}),
-    targetPrecision:goal&&anchor?.precision==='date'?'date' as const:'instant' as const,targetDate:goal&&anchor?.precision==='date'?anchor.value:null};
+    ...(framework?frameworkTargetPrecision(target):{targetPrecision:goal&&anchor?.precision==='date'?'date' as const:'instant' as const,targetDate:goal&&anchor?.precision==='date'?anchor.value:null})};
   });
   // Native accepted redo remains real work even when it was not in the
   // original route. Preserve its original handoff/clock and reconnect only
@@ -200,7 +206,7 @@ export function orderTimeReadingBasis(saved:StoredOrderTimePlan,resource:Busines
   for(const node of work){const old=original?.work.find(previous=>previous.id===node.id);if(old)node.dependsOn=[...new Set([...node.dependsOn,...old.dependsOn.filter(id=>addedIds.has(id))])];}
   for(const node of work){const fact=facts[node.id]!;
    const source=byId.get(node.id);
-   if(source&&fact.businessCompleted&&(evidence.policies?.some(version=>version.history)||evidence.inheritedPolicies))node.completionTarget=orderTimeCompletionTarget(source,scope,fact.completed,evidence.policies??[],saved.time.scenarioId,evidence.inheritedPolicies);
+   if(source&&fact.businessCompleted&&(evidence.policies?.some(version=>version.history)||evidence.inheritedPolicies))node.completionTarget=orderTimeCompletionTarget(source,scope,fact.completed,evidence.policies??[],saved.time.scenarioId,evidence.inheritedPolicies,completionTargets);
    fact.waitingForPredecessors=fact.ready.precision==='unknown'&&node.dependsOn.length>0&&node.dependsOn.some(id=>!facts[id]?.businessCompleted);}
   const end=scope.customerGoal.precision==='instant'?scope.customerGoal.value:scope.customerGoal.precision==='date'?new Date(Date.parse(scope.customerGoal.value+'T00:00:00+08:00')+86400000).toISOString():null;
   return {...(saved.input.frameworkPlans?.[scope.scopeRef]?{plannedReadiness:true}:{}),scopeRef:scope.scopeRef,lineId:scope.lineId,targetRevision:`${saved.id}:${saved.revision}`,work,facts,terminalIds:[...(scope.customerGoalIds.length?scope.customerGoalIds:scope.terminalIds)],customerGoal:end};

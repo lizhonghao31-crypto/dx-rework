@@ -1,0 +1,40 @@
+import type {FrozenTimeFramework} from '@dx-rework/contracts/order-time-framework';
+import {orderTimeRule} from '@dx-rework/contracts/order-time-plan';
+import {buildOrderTimeWork} from './order-time-schedule.js';
+import {fixedTimelineTargets,type FixedTimelineTarget} from './fixed-timeline-targets.js';
+import type {SlaAnchor} from '@dx-rework/domain/digital-sla-plan';
+
+/** An event contributes no extra work duration. Its scheduling position is not
+ * an instruction to finish at order creation. Read its approved milestone or
+ * downstream preparation constraint from this exact frozen version instead.
+ * No current clock, company lookup, persisted rewrite or employee SLA here. */
+export function frameworkNodeTargets(plan:FrozenTimeFramework):Map<string,FixedTimelineTarget>{
+ const targets=new Map(plan.arranged.map(row=>[row.id,row]));
+ const constrained=new Set(['design_handover','material_investment','budget','customer_confirmation']);
+ const events=plan.input.work.filter(row=>constrained.has(row.parameterKey)&&orderTimeRule(plan.input.plan,row.parameterKey)?.rule.kind==='event');
+ if(!events.length)return targets;
+ const ends:Record<string,SlaAnchor>={};
+ for(const milestone of plan.milestones)for(const id of milestone.workIds){
+  const prior=ends[id];if(!prior||prior.precision==='date'&&milestone.date<prior.value)ends[id]={precision:'date',value:milestone.date,source:`本单里程碑:${milestone.key}`};
+ }
+ const bounds=new Map(fixedTimelineTargets(buildOrderTimeWork(plan.input.plan,plan.input.work.map(row=>({id:row.id,parameterKey:row.parameterKey,stage:row.stage,dependsOn:row.dependsOn,...(row.includedIn?{includedIn:row.includedIn}:{}),...(row.includedPosition?{includedPosition:row.includedPosition}:{}),...(row.canonicalWorkRef?{canonicalWorkRef:row.canonicalWorkRef}:{}),...(row.craftStep?{craftStep:row.craftStep}:{}),...(row.nativeDuration?{nativeDuration:row.nativeDuration}:{})}))),ends,{preserveUnknown:true}).map(row=>[row.id,row]));
+ for(const event of events){
+  // A direct milestone owns its business date. Budget/commercial preparation
+  // uses the necessary downstream boundary, never an invented work duration.
+  const direct=plan.milestones.filter(row=>row.workIds.includes(event.id)).sort((a,b)=>a.date.localeCompare(b.date))[0];
+  const end=direct?.target??bounds.get(event.id)?.end;
+  if(end)targets.set(event.id,{id:event.id,start:structuredClone(end),end:structuredClone(end)});
+ }
+ return targets;
+}
+
+/** A date end is encoded as following Beijing midnight, exclusive. Only a
+ * proven date boundary gets a date label; arbitrary instants stay instants. */
+export function frameworkTargetPrecision(target:FixedTimelineTarget|undefined){
+ const end=target?.end;
+ if(end?.at&&end.exclusive){
+  const at=Date.parse(end.at),beijing=new Date(at+8*3600000);
+  if(beijing.getUTCHours()===0&&beijing.getUTCMinutes()===0&&beijing.getUTCSeconds()===0&&beijing.getUTCMilliseconds()===0)return {targetPrecision:'date' as const,targetDate:new Date(at+8*3600000-86400000).toISOString().slice(0,10)};
+ }
+ return {targetPrecision:'instant' as const,targetDate:null};
+}

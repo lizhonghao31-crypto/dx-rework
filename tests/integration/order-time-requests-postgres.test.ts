@@ -451,11 +451,29 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect(journey.fixedSchedule?.framework?.scopes[0]?.milestones).toHaveLength(8);
    const adopted=(await repo.current(resource))!,forward=Object.values(adopted.input.frameworkPlans!)[0]!;
    const projected=journey.fixedSchedule!.scopes[0]!;
-   for(const work of projected.nodes)expect(work.currentTarget?.at??work.goalDelta.targetAt).toBe(forward.arranged.find(row=>row.id===work.id)?.end.at);
+   // B handover/investment are June12 for an August15 delivery. The
+   // downstream budget bound is July18 end minus IE/selection/approval/
+   // cutting/dispatch (five one-hour tasks), not the August1 event position.
+   const eventDeadlines:Record<string,string>={design_handover:'2027-06-12T16:00:00.000Z',material_investment:'2027-06-12T16:00:00.000Z',customer_confirmation:'2027-07-18T11:00:00.000Z',budget:'2027-07-18T11:00:00.000Z'};
+   for(const work of projected.nodes){
+    const arranged=forward.arranged.find(row=>row.id===work.id)?.end.at;
+    expect(work.currentTarget?.at??work.goalDelta.targetAt,work.id).toBe(eventDeadlines[work.id]??arranged);
+    if(eventDeadlines[work.id]){
+     expect(arranged).toBe('2027-08-01T00:00:00.000Z');
+     expect(work.goalDelta.kind).toBe('late');
+     expect(work.ownSla.deadlineAt).toBeNull();
+    }
+   }
+   expect(projected.nodes.filter(work=>eventDeadlines[work.id])).toHaveLength(4);
+   expect((await repo.current(resource))!.input.frameworkPlans).toEqual(adopted.input.frameworkPlans);
    expect(projected.nodes.find(work=>work.id.startsWith('bulk_return_washing:'))?.businessCompleted).toBe(false);
    expect(journey.visualProgress?.expected.at).toBe('2027-08-15');
    const model=await new JourneyFactRepository(f.db).buildOne(resource);
    expect(model.model.fixedSchedule?.framework).toHaveLength(1);
+   for(const work of model.model.fixedSchedule!.scopes[0]!.work)if(eventDeadlines[work.id]){
+    expect(work.end).toBe('2027-08-01T00:00:00.000Z');
+    expect(work.eventTarget?.end).toBe(eventDeadlines[work.id]);
+   }
    expect(model.model.fixedSchedule?.scopes[0]?.plannedReadiness).toBe(true);
    const series=new SeriesPlanService(f.db,'TEST framework series shared date '.repeat(3));
    const same=await series.read(f.root,resource.id);

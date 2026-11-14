@@ -168,7 +168,7 @@ const addAll = (target, values) => {
 export const classifyFullGatePaths = (inputPaths) => {
   const paths = [...new Set(inputPaths.map(normalize).filter(Boolean))];
   const mappedTests = new Set();
-  if(paths.some(path=>/cockpit|journey-visual-progress|journey-framework-events|journey-time-framework|journey-time-ratio|time-framework-journey|fixed-schedule-basis|order-time-activation|special-craft-activation/.test(path)))addAll(mappedTests,['tests/integration/time-framework-cockpit-native-browser-postgres.test.ts']);
+  if(paths.some(path=>/cockpit|journey-visual-progress|journey-framework-events|journey-time-framework|journey-time-ratio|framework-node-targets|time-framework-journey|fixed-schedule-basis|order-time-activation|special-craft-activation/.test(path)))addAll(mappedTests,['tests/integration/time-framework-cockpit-native-browser-postgres.test.ts']);
   if(paths.some(path=>/bulk-washing|factory-flow-service|production-closure-service|production-reporting-service|garment-quality|packing-quality-coverage|receiving-service|todo-destination/.test(path)))addAll(mappedTests,['tests/integration/bulk-washing-postgres.test.ts','tests/integration/bulk-washing-browser-postgres.test.ts']);
   if(paths.some(path=>/special-craft|digital-craft|sla-settings-workspace|task-routes|task-service/.test(path)))addAll(mappedTests,['tests/integration/special-craft-library-postgres.test.ts','tests/integration/special-craft-native-postgres.test.ts','tests/integration/special-craft-browser-postgres.test.ts']);
   if(paths.some(path=>/quotation|development-commercial-fields|0288_automatic_quotation_sources/.test(path))){
@@ -201,7 +201,7 @@ export const classifyFullGatePaths = (inputPaths) => {
     addAll(mappedTests,['tests/integration/order-time-settings-postgres.test.ts','tests/integration/customer-default-merchandisers-postgres.test.ts','tests/integration/r5-settings-native-browser-postgres.test.ts','tests/integration/m01-settings-native-browser-postgres.test.ts','tests/integration/digital-production-identity-postgres.test.ts']);
     domains.add('order-time-settings-and-merchandisers');
   }
-  if(paths.some(path=>/order-time-(?:framework|completion-target|plan|schedule|reading)|cutting-completion-facts|0284_order_time_plan_versions/.test(path))){
+  if(paths.some(path=>/framework-node-targets|order-time-(?:framework|completion-target|plan|schedule|reading)|cutting-completion-facts|0284_order_time_plan_versions/.test(path))){
     addAll(mappedTests,['tests/integration/order-time-plan-postgres.test.ts','tests/integration/order-time-reading-postgres.test.ts','tests/integration/fixed-timeline-postgres.test.ts','tests/integration/fixed-progress-postgres.test.ts']);
     domains.add('order-time-plan-core');
   }

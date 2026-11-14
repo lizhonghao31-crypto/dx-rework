@@ -1,13 +1,13 @@
 import type {FixedScheduleCalendar,ScheduleOccurrence,ScheduleRange,ScheduleGoalDelta,ScheduleNodeProgress,ScheduleScopeProgress,ScheduleDurationSummary} from '@dx-rework/contracts';
 import {shiftFixedTimeline} from './fixed-timeline-targets.js';
 
-export type ScheduleWork={id:string;canonicalWorkRef:string;stage?:number;dependsOn:readonly string[];dependencyReserves?:Readonly<Record<string,{minutes:number;calendar:FixedScheduleCalendar}>>;start:string|null;end:string|null;minutes:number|null;calendar:FixedScheduleCalendar|null;includedIn?:string;accountingRole?:'original_work'|'added_work'|'included'|'event'|'shared_reference';originalHandoffAt?:string|null;responsibilitySlaRef:string|null;responsibilityMinutes?:number|null;responsibilityCalendar?:FixedScheduleCalendar|null;responsibilityWarningAt?:string|null;responsibilityReminderPercent?:number|null;targetPrecision?:'instant'|'date';targetDate?:string|null;targetRevision?:string;completionTarget?:{end:string;targetRevision:string;targetPrecision:'instant'|'date';targetDate:string|null}|null};
+export type ScheduleWork={id:string;canonicalWorkRef:string;stage?:number;dependsOn:readonly string[];dependencyReserves?:Readonly<Record<string,{minutes:number;calendar:FixedScheduleCalendar}>>;start:string|null;end:string|null;startExclusive?:boolean;endExclusive?:boolean;eventTarget?:{end:string|null;targetPrecision:'instant'|'date';targetDate:string|null;exclusive:boolean};minutes:number|null;calendar:FixedScheduleCalendar|null;includedIn?:string;accountingRole?:'original_work'|'added_work'|'included'|'event'|'shared_reference';originalHandoffAt?:string|null;responsibilitySlaRef:string|null;responsibilityMinutes?:number|null;responsibilityCalendar?:FixedScheduleCalendar|null;responsibilityWarningAt?:string|null;responsibilityReminderPercent?:number|null;targetPrecision?:'instant'|'date';targetDate?:string|null;targetRevision?:string;completionTarget?:{end:string;endExclusive?:boolean;targetRevision:string;targetPrecision:'instant'|'date';targetDate:string|null}|null};
 export type ScheduleResponsibilityWindow={sourceRef:string;started:ScheduleOccurrence;completed:ScheduleOccurrence;complete:boolean;deadline:string|null;warningAt:string|null;calendar:FixedScheduleCalendar|null};
-export type ScheduleFact={ready:ScheduleOccurrence;completed:ScheduleOccurrence;businessCompleted:boolean;waitingForPredecessors:boolean;clockStart:ScheduleOccurrence;evidenceRefs:readonly string[];ownWindows?:readonly ScheduleResponsibilityWindow[];impactStartedAt?:string|null;terminated?:boolean;terminationAt?:string|null;notYetReady?:boolean};
+export type ScheduleFact={ownTaskId?:string;ready:ScheduleOccurrence;completed:ScheduleOccurrence;businessCompleted:boolean;waitingForPredecessors:boolean;clockStart:ScheduleOccurrence;evidenceRefs:readonly string[];ownWindows?:readonly ScheduleResponsibilityWindow[];impactStartedAt?:string|null;terminated?:boolean;terminationAt?:string|null;notYetReady?:boolean};
 export type ScheduleScopeInput={plannedReadiness?:boolean;scopeRef:string;lineId:string|null;targetRevision:string;work:readonly ScheduleWork[];facts:Readonly<Record<string,ScheduleFact>>;terminalIds:readonly string[];customerGoal:string|null};
 export type ScheduleTermination={at:string|null;kind:'cancelled'|'special_closure'};
 type Interval=readonly[number,number];
-type Boundary={available:Interval;credit:Interval;reference:number;completed:boolean;estimate:'actual'|'conditional'|'lower_bound'};
+type Boundary={available:Interval;credit:Interval;reference:number;completed:boolean;estimate:'actual'|'conditional'|'lower_bound';exclusive?:boolean};
 const MINUTE=60000,DAY=86400000,OFFSET=8*60*MINUTE;
 const iso=(value:number)=>new Date(value).toISOString();
 const timestamp=(value:string|null|undefined)=>value&&Number.isFinite(Date.parse(value))?Date.parse(value):null;
@@ -60,10 +60,11 @@ function nativeOwnWindows(windows:readonly ScheduleResponsibilityWindow[],asOf:s
 
 export function fixedGoalDelta(work:ScheduleWork,fact:ScheduleFact|undefined,scope:Pick<ScheduleScopeInput,'scopeRef'|'targetRevision'>,asOf:string,termination?:ScheduleTermination|null):ScheduleGoalDelta{
  if(fact?.businessCompleted&&work.completionTarget!==undefined){
-  const {completionTarget,...base}=work;
+  const {completionTarget,...base}=work;delete base.eventTarget;
   if(completionTarget===null)return {...fixedGoalDelta({...base,end:null},fact,scope,asOf,termination),targetRevision:'unknown:completion-plan'};
-  return fixedGoalDelta({...base,...completionTarget},fact,scope,asOf,termination);
+  return fixedGoalDelta({...base,...completionTarget,endExclusive:completionTarget.endExclusive??false},fact,scope,asOf,termination);
  }
+ if(work.eventTarget){const {eventTarget,...base}=work;return fixedGoalDelta({...base,...eventTarget,endExclusive:eventTarget.exclusive},fact,scope,asOf,termination);}
  const result:ScheduleGoalDelta={kind:'unknown',signedValue:null,unit:work.targetPrecision==='date'?'day':'minute',asOf,targetAt:work.end,targetPrecision:work.targetPrecision??'instant',targetDate:work.targetDate??null,actual:fact?.completed??unknown,targetRevision:work.targetRevision??scope.targetRevision,scopeRef:scope.scopeRef};
  if(!fact?.businessCompleted&&(termination||fact?.terminated))return {...result,kind:'terminated'};
  const end=timestamp(work.end),now=timestamp(asOf);if(end===null||now===null)return result;
@@ -77,9 +78,9 @@ export function fixedGoalDelta(work:ScheduleWork,fact:ScheduleFact|undefined,sco
   const value=actual?difference:Math.max(0,difference);
   return {...result,signedValue:value,kind:value>0?'late':value<0?'early':'on_target'};
  }
- if(!fact?.businessCompleted){const value=Math.max(0,(now-end)/MINUTE);return {...result,signedValue:value,kind:value>0?'late':'on_target'};}
+ if(!fact?.businessCompleted){const value=Math.max(0,(now-end+(work.endExclusive&&now===end?1:0))/MINUTE);return {...result,signedValue:value,kind:value>0?'late':'on_target'};}
  const actual=completedBounds(fact,asOf);if(!actual||actual[0]!==actual[1])return result;
- const value=(actual[0]-end)/MINUTE;return {...result,signedValue:value,kind:value>0?'late':value<0?'early':'on_target'};
+ const value=(actual[0]-end+(work.endExclusive&&actual[0]===end?1:0))/MINUTE;return {...result,signedValue:value,kind:value>0?'late':value<0?'early':'on_target'};
 }
 
 /** One DAG evaluation per scope. Completed facts replace estimates; pending
@@ -92,7 +93,7 @@ export function evaluateFixedScheduleScope(input:ScheduleScopeInput,asOf:string,
  const evaluate=(id:string):Boundary|null=>{
   if(boundaries.has(id))return boundaries.get(id)!;
   const work=works.get(id);if(!work)throw Error('进度缺少原依赖工作');if(visiting.has(id))throw Error('进度依赖成环');visiting.add(id);
-  const fact=input.facts[id],coverage:string[]=[],added=work.accountingRole==='added_work',budget=added?0:work.minutes,start=timestamp(added?work.originalHandoffAt:work.start),end=timestamp(added?work.originalHandoffAt:work.end),calendar=work.calendar??(budget===0?'continuous':null);
+  const fact=input.facts[id],coverage:string[]=[],added=work.accountingRole==='added_work',budget=added?0:work.minutes,eventPosition=work.eventTarget&&!fact?.businessCompleted?work.eventTarget.end:undefined,start=timestamp(eventPosition??(added?work.originalHandoffAt:work.start)),end=timestamp(work.eventTarget?.end??(added?work.originalHandoffAt:work.end)),calendar=work.calendar??(budget===0?'continuous':null);
   const completed=fact?.businessCompleted===true,actual=completedBounds(fact,asOf);
   const terminated=!completed&&Boolean(termination||fact?.terminated);
   const deps=work.dependsOn.map(evaluate);
@@ -127,10 +128,12 @@ export function evaluateFixedScheduleScope(input:ScheduleScopeInput,asOf:string,
       available.push(bound);credit.push(shift(end,Math.min(0,scheduleElapsed(end,bound,calendar)),calendar));lowerBound ||= Boolean(ready&&now>=quota)||Boolean(input.plannedReadiness&&!ready&&now>start);
      }
     }
-    boundary={available:[available[0]!,available[1]!],credit:[credit[0]!,credit[1]!],reference:work.accountingRole==='added_work'?timestamp(work.originalHandoffAt)??end:end,completed:false,estimate:lowerBound?'lower_bound':'conditional'};
+    boundary={available:[available[0]!,available[1]!],credit:[credit[0]!,credit[1]!],reference:work.accountingRole==='added_work'?timestamp(work.originalHandoffAt)??end:end,completed:false,estimate:lowerBound?'lower_bound':'conditional',exclusive:!ready&&!lowerBound&&(work.eventTarget?.exclusive??work.endExclusive)===true&&available.every(at=>at===end)&&deps.every(dep=>dep!.available[1]<start||dep!.exclusive===true)};
    }
   }
-  const lag=boundary&&end!==null&&calendar?range(scheduleElapsed(end,boundary.available[0],calendar),scheduleElapsed(end,boundary.available[1],calendar)):null;
+  const strictEnd=work.eventTarget?.exclusive??work.endExclusive;
+  const boundaryLag=(at:number)=>scheduleElapsed(end!,at,calendar!)+(strictEnd&&!boundary?.exclusive&&at===end?1/MINUTE:0);
+  const lag=boundary&&end!==null&&calendar?range(boundaryLag(boundary.available[0]),boundaryLag(boundary.available[1])):null;
   const stop=terminated?timestamp(fact?.terminated?fact.terminationAt??termination?.at:termination?.at):null;
   const ownCalendar=work.responsibilityCalendar,ownStart=fact?scheduleOccurrenceBounds(fact.clockStart,asOf):null,ownEnd=completed?actual:terminated?stop!==null&&stop<=now?[stop,stop] as const:null:[now,now] as const;
   const ownKnown=Boolean(work.responsibilitySlaRef&&work.responsibilityMinutes!==null&&work.responsibilityMinutes!==undefined&&ownCalendar&&ownStart&&ownEnd&&ownEnd[1]>=ownStart[0]);
@@ -139,7 +142,7 @@ export function evaluateFixedScheduleScope(input:ScheduleScopeInput,asOf:string,
   const warningAt=work.responsibilityWarningAt!==undefined?work.responsibilityWarningAt:ownKnown&&ownStart![0]===ownStart![1]&&work.responsibilityReminderPercent!==null&&work.responsibilityReminderPercent!==undefined?iso(shift(ownStart![0],work.responsibilityMinutes!*work.responsibilityReminderPercent/100,ownCalendar!)):null;
   const deadlineAt=work.responsibilitySlaRef&&work.responsibilityMinutes!==null&&work.responsibilityMinutes!==undefined&&ownCalendar&&ownStart&&ownStart[0]===ownStart[1]?iso(shift(ownStart[0],work.responsibilityMinutes,ownCalendar)):null;
   const ownSla:ScheduleNodeProgress['ownSla']=fact?.ownWindows?.length?nativeOwnWindows(fact.ownWindows,asOf,stop,terminated):{state:ownState,deadlineAt,overdueMinutes:own,sourceRef:work.responsibilitySlaRef,...(work.responsibilityWarningAt!==undefined||work.responsibilityReminderPercent!==undefined?{warningAt,warning:!completed&&!terminated&&ownState==='within'&&warningAt!==null&&now>=Date.parse(warningAt)}:{})};
-  results.set(id,{id,scopeRef:input.scopeRef,targetRevision:work.targetRevision??input.targetRevision,canonicalWorkRef:work.canonicalWorkRef,state:terminated?'terminated':state(lag),lagMinutes:lag,businessCompleted:completed,...(input.plannedReadiness?{estimateKind:terminated?'terminated' as const:boundary?.estimate??'unknown' as const}:{}),availabilityBound:boundary?{earliest:iso(boundary.available[0]),latest:iso(boundary.available[1])}:null,creditLimit:boundary?{earliest:iso(boundary.credit[0]),latest:iso(boundary.credit[1])}:null,goalDelta,...(work.completionTarget!==undefined?{currentTarget:{at:work.end,date:work.targetDate??null,precision:work.targetPrecision??'instant',revision:work.targetRevision??input.targetRevision}}:{}),ownSla,coverage});
+  results.set(id,{id,scopeRef:input.scopeRef,targetRevision:work.targetRevision??input.targetRevision,canonicalWorkRef:work.canonicalWorkRef,state:terminated?'terminated':state(lag),lagMinutes:lag,businessCompleted:completed,...(input.plannedReadiness?{estimateKind:terminated?'terminated' as const:boundary?.estimate??'unknown' as const}:{}),availabilityBound:boundary?{earliest:iso(boundary.available[0]),latest:iso(boundary.available[1]),...(boundary.exclusive?{exclusive:true}:{})}:null,creditLimit:boundary?{earliest:iso(boundary.credit[0]),latest:iso(boundary.credit[1])}:null,goalDelta,...(work.completionTarget!==undefined?{currentTarget:{at:work.eventTarget?work.eventTarget.end:work.end,date:work.eventTarget?work.eventTarget.targetDate:work.targetDate??null,precision:work.eventTarget?.targetPrecision??work.targetPrecision??'instant',revision:work.targetRevision??input.targetRevision}}:{}),ownSla,coverage});
   visiting.delete(id);boundaries.set(id,boundary);return boundary;
  };
  for(const work of input.work)evaluate(work.id);

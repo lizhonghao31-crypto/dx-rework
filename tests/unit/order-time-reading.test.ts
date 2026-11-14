@@ -315,3 +315,30 @@ describe('Acceptance PR02 route and per-PO responsibility projection',()=>{
   expect(progress.scopes[0]!.nodes[0]!.ownSla).toMatchObject({state:'overdue',deadlineAt:at(26),overdueMinutes:{minimum:60,maximum:60}});
  });
 });
+
+it('attaches only the owning task, not another work whose readiness cites that task',()=>{
+ const row=item(),cut=node('development_cutting','completed',at(1),at(2)),sew=node('development_sewing','completed',at(2),at(3));
+ cut.instanceId='TEST-cut-task';sew.instanceId='TEST-sew-task';row.stages[1]!.nodes=[cut,sew];
+ const basis=build(),scope=basis.scopes[0]!;
+ scope.work=[{...scope.work[0]!,id:'source:development_cutting',canonicalWorkRef:'source:TEST:round:1:work:development_cutting'},{...scope.work[0]!,id:'source:development_sewing',canonicalWorkRef:'source:TEST:round:1:work:development_sewing'}];scope.terminalIds=scope.work.map(w=>w.id);
+ scope.facts=Object.fromEntries(scope.work.map((w,i)=>[w.id,{ready:point(1),clockStart:point(1),completed:point(i+2),businessCompleted:true,waitingForPredecessors:false,evidenceRefs:[`task:${i?'TEST-sew-task':'TEST-cut-task'}:round:1`,...(i?['task:TEST-cut-task:completed']:[])],ownTaskId:i?'TEST-sew-task':'TEST-cut-task'}]));
+ for(const explicit of [true,false]){
+  if(!explicit)for(const fact of Object.values(scope.facts))delete fact.ownTaskId;
+  attachFixedJourneySchedule(row,basis,at(4));
+  expect(cut.fixedTargets?.map(t=>t.progress.id)).toEqual(['source:development_cutting']);
+  expect(sew.fixedTargets?.map(t=>t.progress.id)).toEqual(['source:development_sewing']);
+  expect(sew.fixedTargets?.[0]?.progress.goalDelta.actual).toEqual(point(3));
+ }
+});
+
+it('retains strict non-midnight completion goals through later plan changes and stored fact snapshots',()=>{
+ for(const exclusive of [false,true]){
+  const original=stored();original.targets['TEST scope']!.a!.end={at:at(6),exclusive,reasons:[]};
+  const changed=structuredClone(original);changed.id='TEST later';changed.revision=2;changed.time.now=at(9);changed.targets['TEST scope']!.a!.end={at:at(10),exclusive:!exclusive,reasons:[]};
+  const policies=[changed,original].map(plan=>({id:plan.id,at:plan.time.now,plan:plan.input.plan,history:{input:plan.input,targets:plan.targets,revision:plan.revision,time:plan.time}}));
+  const row=item();row.stages[1]!.nodes=[node('a','completed',at(1),at(6))];
+  const basis=fixedScheduleBasisSnapshot(orderTimeReadingBasis(changed,resource,row,{}, {...evidence(),policies},null));
+  expect(basis.scopes[0]!.work.find(w=>w.id==='a')!.completionTarget).toMatchObject({end:at(6),endExclusive:exclusive,targetRevision:'TEST plan:1'});
+  expect(evaluateFixedJourneyBasis(basis,at(12),false).scopes[0]!.nodes.find(n=>n.id==='a')!.goalDelta).toMatchObject({kind:exclusive?'late':'on_target',signedValue:exclusive?1/60000:0,targetAt:at(6)});
+ }
+});

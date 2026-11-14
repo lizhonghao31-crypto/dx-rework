@@ -73,3 +73,15 @@ describe('fixed schedule progress, independent goal/own SLA and physical spans',
  });
 
 });
+
+ it('distinguishes precise inclusive and exclusive non-midnight goals before, at and after the boundary',()=>{
+  for(const exclusive of [false,true]){
+   const node=work('event',0,12,[],{minutes:0,responsibilitySlaRef:null,eventTarget:{end:at(12),exclusive,targetPrecision:'instant',targetDate:null}}),input=scope([node],{});
+   for(const offset of [-1,0,1]){const hour=12+offset/3600000,expected=offset<0?'early':offset>0||exclusive?'late':'on_target';
+    expect(fixedGoalDelta(node,fact(null,hour),input,at(13)).kind).toBe(expected);
+    expect(evaluateFixedScheduleScope(scope([node],{event:fact(null,hour)}),at(13)).nodes[0]!.state).toBe(expected==='late'?'late':'normal');
+   }
+   expect(fixedGoalDelta(node,fact(null,null),input,at(12)).kind).toBe(exclusive?'late':'on_target');
+   expect(fixedGoalDelta(work('ordinary',0,12),fact(null,12),input,at(13)).kind).toBe('on_target');
+  }
+ });
