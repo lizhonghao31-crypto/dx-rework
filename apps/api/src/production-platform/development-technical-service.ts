@@ -1,3 +1,4 @@
+import {commentTimeColumns,commentTimeDto,customerCommentTime,appendCommentTime} from './development-comment-time.js';
 import {assembleQuotation} from './quotation-assembly.js';
 import {BulkPreparationService} from './bulk-preparation-service.js';
 import type {PatternRoomOrderService} from '../pattern-room/order-service.js';
@@ -9,7 +10,7 @@ import {ExternalPaperIntervalSchema} from '@dx-rework/contracts/digital-developm
 import {createHash,randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {
- CompletePositionSchema,CompleteSizeReviewSchema,RecordFinalCommentSchema,SaveTechnicalArtifactSchema,DevelopmentUrgentRequestSchema,SaveTechnicalMaterialDecisionSchema,SavePreparationBasisSchema,
+ CompletePositionSchema,CompleteSizeReviewSchema,RecordFinalCommentSchema,SupplementCommentTimeSchema,type SupplementCommentTime,SaveTechnicalArtifactSchema,DevelopmentUrgentRequestSchema,SaveTechnicalMaterialDecisionSchema,SavePreparationBasisSchema,
  type CompleteSizeReview,type DevelopmentTechnicalState,type RecordFinalComment,type SaveTechnicalArtifact,
 } from '@dx-rework/contracts/digital-development-technical';
 import type {TrustedActorContext} from '../tools/repositories.js';
@@ -127,12 +128,13 @@ export class DevelopmentTechnicalService {
    await this.scope(db,sourceId,input.scopeRef);
    const version=(await db.query('SELECT coalesce(max(version),0)::int AS n FROM digital_development_final_comments WHERE source_id=$1 AND round_number=$2 AND scope_ref=$3',[sourceId,input.roundNumber,input.scopeRef])).rows[0].n;
    if(version!==input.expectedVersion)conflict('客户评语已有更新，请核对后登记');
-   const at=businessNow().toISOString();if(input.occurredAt&&Date.parse(input.occurredAt)>Date.parse(at))conflict('客户评语发生时间不能在未来');
+   const now=businessNow(),at=now.toISOString(),occurrence=customerCommentTime(input.actualTime,input.occurredAt,now);
    await this.bindTechnicalFiles(db,actor,sourceId,input.evidenceRefs,'客户评语依据');
    const customer=(await db.query('SELECT customer_code FROM digital_production_orders WHERE source_id=$1',[sourceId])).rows[0]?.customer_code??sheet.customerCode;
    const id=randomUUID(),next=version+1;
    await db.query(`INSERT INTO digital_development_final_comments(comment_id,source_id,round_number,scope_ref,version,is_final,decision,customer_code,text_value,evidence_refs,evidence_note,occurred_at,recorded_at,recorded_by)
-    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,[id,sourceId,input.roundNumber,input.scopeRef,next,input.isFinal,input.decision,customer,input.text,input.evidenceRefs,input.evidenceNote,input.occurredAt,at,actor.actorId]);
+    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,[id,sourceId,input.roundNumber,input.scopeRef,next,input.isFinal,input.decision,customer,input.text,input.evidenceRefs,input.evidenceNote,occurrence.occurredAt,at,actor.actorId]);
+   if(input.actualTime)await appendCommentTime(db,actor.actorId,randomUUID(),{comment_id:id,source_id:sourceId,round_number:input.roundNumber,scope_ref:input.scopeRef,version:next},occurrence,input.evidenceNote,at);
    let reviewTaskId:string|null=null;
    if(input.isFinal){
     const old=(await db.query(`SELECT q.task_id FROM digital_development_size_review_requests q JOIN digital_production_tasks t USING(task_id)
@@ -151,6 +153,18 @@ export class DevelopmentTechnicalService {
     await this.tasks().refreshDevelopmentDeadlineWithClient(db,actor,reviewTaskId);
    }
    return {commentId:id,version:next,reviewTaskId};
+  });
+ }
+ async supplementCommentTime(actor:TrustedActorContext,sourceId:string,raw:SupplementCommentTime,key:string){
+  const input=SupplementCommentTimeSchema.parse(raw);
+  return this.command(actor,sourceId,'comment-time',key,input,db=>this.designer(db,actor,sourceId),async db=>{
+   const timeSql=await commentTimeColumns(db);
+   const comment=(await db.query(`SELECT c.*,${timeSql.columns} FROM digital_development_final_comments c ${timeSql.join} WHERE c.comment_id=$1 AND c.source_id=$2`,[input.commentId,sourceId])).rows[0];
+   if(!comment||comment.version!==input.commentVersion||!comment.is_final||comment.decision!=='approved')conflict('请核对本单原客户认可的最终评语');
+   if(comment.occurred_at||comment.occurred_date)conflict('该批复已登记实际时间，请刷新查看原记录');
+   const now=businessNow(),occurrence=customerCommentTime(input.actualTime,null,now);
+   await appendCommentTime(db,actor.actorId,randomUUID(),comment,occurrence,input.note,now.toISOString());
+   return {commentId:comment.comment_id,version:comment.version,timeSupplemented:true};
   });
  }
  private async cancelReview(db:PoolClient,actor:TrustedActorContext,sourceId:string,taskId:string,at:string){
@@ -382,13 +396,14 @@ export class DevelopmentTechnicalService {
    }
    const values=[sourceId,input.roundNumber,input.scopeRef,input.beforeVersion??null,input.version??null];
    const directory=input.view==='directory';
-   const selection=input.kind==='artifacts'?(directory?'v.artifact_set_id,v.version,v.source_id,v.round_number,v.scope_ref,v.task_id,v.document_version,v.status,v.created_by,v.created_at,u.display_name AS author_name':'v.*'):(directory?'v.comment_id,v.version,v.is_final,v.decision,v.occurred_at,v.recorded_at,q.task_id AS review_task_id,q.review_id,r.version AS review_result_version,r.decision AS review_decision,r.artifact_version AS review_artifact_version,r.note AS review_note':'v.*');
+   const timeSql=input.kind==='comments'?await commentTimeColumns(db,'v'):null;
+   const selection=input.kind==='artifacts'?(directory?'v.artifact_set_id,v.version,v.source_id,v.round_number,v.scope_ref,v.task_id,v.document_version,v.status,v.created_by,v.created_at,u.display_name AS author_name':'v.*'):(directory?`v.comment_id,v.version,v.is_final,v.decision,${timeSql!.columns},v.recorded_at,q.task_id AS review_task_id,q.review_id,r.version AS review_result_version,r.decision AS review_decision,r.artifact_version AS review_artifact_version,r.note AS review_note`:`v.*,${timeSql!.columns}`);
    const table=input.kind==='artifacts'?'digital_development_artifact_versions':'digital_development_final_comments';
    // Only fixed internal table/selection strings are interpolated; all resource/cursor inputs remain bound.
    const joins=input.kind==='artifacts'?' LEFT JOIN app_users u ON u.id=v.created_by':' LEFT JOIN digital_development_size_review_requests q ON q.final_comment_id=v.comment_id LEFT JOIN digital_development_size_review_results r ON r.review_id=q.review_id';
-   const found=(await db.query(`SELECT ${selection} FROM ${table} v ${joins} WHERE v.source_id=$1 AND v.round_number=$2 AND v.scope_ref=$3 AND ($4::integer IS NULL OR v.version<$4) AND ($5::integer IS NULL OR v.version=$5) ORDER BY v.version DESC LIMIT 21`,values)).rows;
+   const found=(await db.query(`SELECT ${selection} FROM ${table} v ${timeSql?.join??''} ${joins} WHERE v.source_id=$1 AND v.round_number=$2 AND v.scope_ref=$3 AND ($4::integer IS NULL OR v.version<$4) AND ($5::integer IS NULL OR v.version=$5) ORDER BY v.version DESC LIMIT 21`,values)).rows;
    if(input.version!==undefined&&!found.length)digitalNotFound();
-   const page=found.slice(0,20),items=input.kind==='artifacts'?page.map(a=>directory?{artifactSetId:a.artifact_set_id,version:a.version,sourceId:a.source_id,roundNumber:a.round_number,scopeRef:a.scope_ref,taskId:a.task_id,documentVersion:a.document_version,status:a.status,createdByName:a.author_name??null,createdAt:iso(a.created_at)}:technicalArtifactDto(a)):page.map(c=>({commentId:c.comment_id,version:c.version,isFinal:c.is_final,decision:c.decision,...(directory?{reviewTaskId:c.review_task_id??null,review:c.review_task_id?{taskId:c.review_task_id,reviewId:c.review_id,completed:Boolean(c.review_result_version),decision:c.review_decision??null,artifactVersion:c.review_artifact_version??null,note:c.review_note??''}:null}:{text:c.text_value,evidenceRefs:c.evidence_refs,evidenceNote:c.evidence_note}),occurredAt:c.occurred_at?iso(c.occurred_at):null,recordedAt:iso(c.recorded_at)}));
+   const page=found.slice(0,20),items=input.kind==='artifacts'?page.map(a=>directory?{artifactSetId:a.artifact_set_id,version:a.version,sourceId:a.source_id,roundNumber:a.round_number,scopeRef:a.scope_ref,taskId:a.task_id,documentVersion:a.document_version,status:a.status,createdByName:a.author_name??null,createdAt:iso(a.created_at)}:technicalArtifactDto(a)):page.map(c=>({commentId:c.comment_id,version:c.version,isFinal:c.is_final,decision:c.decision,...(directory?{reviewTaskId:c.review_task_id??null,review:c.review_task_id?{taskId:c.review_task_id,reviewId:c.review_id,completed:Boolean(c.review_result_version),decision:c.review_decision??null,artifactVersion:c.review_artifact_version??null,note:c.review_note??''}:null}:{text:c.text_value,evidenceRefs:c.evidence_refs,evidenceNote:c.evidence_note}),...commentTimeDto(c),recordedAt:iso(c.recorded_at)}));
    const effective=directory?await effectiveTechnicalEvidence(db,sourceId,input.roundNumber,input.scopeRef):undefined;
    const contextAvailable=directory?Boolean((await db.query('SELECT 1 FROM digital_development_preparation_basis WHERE source_id=$1 AND round_number=$2 UNION ALL SELECT 1 FROM digital_development_technical_material_decisions WHERE source_id=$1 AND round_number=$2 LIMIT 1',[sourceId,input.roundNumber])).rowCount):undefined;
    const adoptedRow=directory&&effective?.artifactRef?(await db.query('SELECT a.artifact_set_id,a.version,a.source_id,a.round_number,a.scope_ref,a.task_id,a.document_version,a.status,a.created_at,u.display_name AS author_name,i.created_at AS inherited_at FROM digital_development_artifact_versions a LEFT JOIN app_users u ON u.id=a.created_by LEFT JOIN digital_development_artifact_inheritances i ON i.artifact_set_id=a.artifact_set_id AND i.artifact_version=a.version AND i.source_id=$3 AND i.round_number=$4 AND i.scope_ref=$5 WHERE a.artifact_set_id=$1 AND a.version=$2',[effective.artifactRef.id,effective.artifactRef.version,sourceId,input.roundNumber,input.scopeRef])).rows[0]:null;
@@ -408,13 +423,14 @@ export class DevelopmentTechnicalService {
   const rows=(await db.query('SELECT * FROM digital_development_artifact_versions WHERE source_id=$1 AND round_number=$2 AND scope_ref=$3 ORDER BY version DESC LIMIT 100',[sourceId,selected,scope])).rows;
   empty.artifacts=rows.map(technicalArtifactDto);
   const inherited=await publishedTechnicalArtifact(db,sourceId,selected,scope);if(inherited&&!empty.artifacts.some(a=>a.artifactSetId===inherited.artifact.artifactSetId&&a.version===inherited.artifact.version))empty.artifacts.push(inherited.artifact);
-  const comments=(await db.query(`SELECT c.*,q.task_id AS review_task_id FROM digital_development_final_comments c LEFT JOIN digital_development_size_review_requests q ON q.final_comment_id=c.comment_id
+  const commentTime=await commentTimeColumns(db);
+  const comments=(await db.query(`SELECT c.*,${commentTime.columns},q.task_id AS review_task_id FROM digital_development_final_comments c ${commentTime.join} LEFT JOIN digital_development_size_review_requests q ON q.final_comment_id=c.comment_id
    WHERE c.source_id=$1 AND c.round_number=$2 AND c.scope_ref=$3 ORDER BY c.version DESC LIMIT 100`,[sourceId,selected,scope])).rows;
-  const finalRow=(await db.query(`SELECT c.*,q.task_id AS review_task_id FROM digital_development_final_comments c LEFT JOIN digital_development_size_review_requests q ON q.final_comment_id=c.comment_id
+  const finalRow=(await db.query(`SELECT c.*,${commentTime.columns},q.task_id AS review_task_id FROM digital_development_final_comments c ${commentTime.join} LEFT JOIN digital_development_size_review_requests q ON q.final_comment_id=c.comment_id
    WHERE c.source_id=$1 AND c.round_number=$2 AND c.scope_ref=$3 AND c.is_final ORDER BY c.version DESC LIMIT 1`,[sourceId,selected,scope])).rows[0];
   // An active final basis must remain visible even after a long intermediate discussion.
   if(finalRow&&!comments.some(c=>c.comment_id===finalRow.comment_id))comments.push(finalRow);
-  empty.comments=comments.map(c=>({commentId:c.comment_id,version:c.version,roundNumber:c.round_number,scopeRef:c.scope_ref,isFinal:c.is_final,decision:c.decision,text:c.text_value,evidenceRefs:c.evidence_refs,evidenceNote:c.evidence_note,customerCode:c.customer_code,occurredAt:c.occurred_at?iso(c.occurred_at):null,recordedAt:iso(c.recorded_at),reviewTaskId:c.review_task_id??null}));
+  empty.comments=comments.map(c=>({commentId:c.comment_id,version:c.version,roundNumber:c.round_number,scopeRef:c.scope_ref,isFinal:c.is_final,decision:c.decision,text:c.text_value,evidenceRefs:c.evidence_refs,evidenceNote:c.evidence_note,customerCode:c.customer_code,...commentTimeDto(c),recordedAt:iso(c.recorded_at),reviewTaskId:c.review_task_id??null}));
   const latestFinal=finalRow?.comment_id;
   empty.reviews=(await db.query(`SELECT q.*,r.version AS result_version,r.decision,r.artifact_set_id,r.artifact_version,r.note,a.assignee_id,d.due_at
    FROM digital_development_size_review_requests q LEFT JOIN digital_development_size_review_results r USING(review_id)

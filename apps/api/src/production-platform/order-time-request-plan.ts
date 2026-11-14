@@ -2,7 +2,7 @@ import {craftStepLabel} from '@dx-rework/contracts/digital-craft';
 import type {OrderTimeRule} from '@dx-rework/contracts/order-time-plan';
 import {createHash} from 'node:crypto';
 import type {BusinessTime} from '@dx-rework/domain/business-clock';
-import {slaAnchorTime,type SlaAnchor,type SlaTime} from '@dx-rework/domain/digital-sla-plan';
+import {slaAnchorTime,slaDateBoundary,type SlaAnchor,type SlaTime} from '@dx-rework/domain/digital-sla-plan';
 import {orderTimeNodeStage,ORDER_TIME_NODES,FRAMEWORK_TIME_NODES} from '@dx-rework/contracts/order-time-settings';
 import {orderTimeRule,type FrozenOrderTimePlan} from '@dx-rework/contracts/order-time-plan';
 import type {OrderTimeCheckResult} from '@dx-rework/contracts/order-time-requests';
@@ -11,7 +11,15 @@ import type {OrderTimeInput} from './order-time-plan-repository.js';
 import {buildOrderTimeWork} from './order-time-schedule.js';
 import {fixedTimelineForward,requiredFixedTimelineWork,shiftFixedTimeline,type FixedTimelineCalendar} from './fixed-timeline-targets.js';
 
-export type OrderTimeNativeProgress={completed:boolean;actualAt:string|null;readyAt:string|null;deadline:string|null;calendar?:FixedTimelineCalendar|null;unresolvedOverrun?:boolean};
+export type OrderTimeNativeProgress={completed:boolean;actualAt:string|null;actualDate?:string|null;readyAt:string|null;deadline:string|null;calendar?:FixedTimelineCalendar|null;unresolvedOverrun?:boolean};
+/** Scheduling upper bound for a completed date, never its actual timestamp.
+ * Completed evidence is known by this observation; retain date precision in facts. */
+export function orderTimeCompletionBound(fact:Pick<OrderTimeNativeProgress,'actualAt'|'actualDate'>,asOf?:string):SlaTime{
+ if(fact.actualAt)return {at:fact.actualAt,exclusive:false,reasons:[]};
+ if(fact.actualDate){const end=slaDateBoundary(fact.actualDate),upper=asOf?Math.min(Date.parse(end.at!),Date.parse(asOf)):Date.parse(end.at!);return {at:new Date(upper).toISOString(),exclusive:upper===Date.parse(end.at!),reasons:[]};}
+ return {at:null,exclusive:false,reasons:['已完成但缺少可信完成时间']};
+}
+
 const digest=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
 /** The parameter can still serve a future PO while a sibling keeps its old
  * native R/D. Determine applicability from the actual dependency graph, not
@@ -89,7 +97,7 @@ export function orderTimeRemaining(input:OrderTimeInput,time:BusinessTime,progre
  const scopes=input.scopes.map(scope=>{
   const required=requiredFixedTimelineWork(remaining,scope.terminalIds),arranged=fixedTimelineForward(required,{precision:'instant',value:time.now,source:'当前进度演算，不是真实完成'},notBefore);
   const ends=scope.terminalIds.map(id=>{const work=byId.get(id)!,actual=progress.get(work.canonicalWorkRef??id);
-   return actual?.completed?{at:actual.actualAt,exclusive:false,reasons:actual.actualAt?[]:['已完成节点尚无可信实际完成时间']}:arranged.find(node=>node.id===id)!.end;
+   return actual?.completed?orderTimeCompletionBound(actual,time.now):arranged.find(node=>node.id===id)!.end;
   }),goal=slaAnchorTime(scope.customerGoal,'客户交期');
   const end=ends.length&&ends.every(value=>value.at)?ends.reduce((a,b)=>Date.parse(a.at!)>=Date.parse(b.at!)?a:b):null;
   const coverage=[...new Set([...(input.route.complete?[]:input.route.missing),...arranged.flatMap(node=>{const original=byId.get(node.id)!,label=ORDER_TIME_NODES.find(entry=>entry.key===original.parameterKey)?.label??'流程交接';return [...node.start.reasons,...node.end.reasons].map(reason=>`${label}：${reason}`);}),...ends.flatMap(end=>end.reasons),...goal.reasons])];

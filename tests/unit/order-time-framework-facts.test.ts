@@ -11,6 +11,7 @@ describe('adopted development-round milestone facts',()=>{
  it('reads original round approval and evidence without borrowing a later rejection',async()=>{
   const queried:number[]=[];
   const db={query:async(sql:string,values:unknown[])=>{
+   if(sql.includes('to_regclass'))return {rows:[{relation:null}]};
    if(sql.includes('digital_series_source_events')||sql.includes('digital_factory_routes'))return {rows:[]};
    if(sql.includes('digital_development_final_comments')){const round=Number(values[1]);queried.push(round);return {rows:[{comment_id:'TEST-comment-'+round,scope_ref:'整款',version:1,decision:round===1?'approved':'rejected',occurred_at:round===1?'2027-01-06T00:00:00Z':'2027-01-09T00:00:00Z',customer_code:'PD'}]};}
    throw Error('Unexpected query '+sql);

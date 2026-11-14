@@ -1,3 +1,4 @@
+import {commentTimeColumns} from './development-comment-time.js';
 import {preparationAvailable,preparationContext,preparationMaterialHistory,currentPreparationMaterials} from './preparation-material-repository.js';
 import type {PoolClient} from 'pg';
 import type {SeriesObservedFact,SeriesSourceEvent} from '@dx-rework/contracts/digital-series-plan';
@@ -26,12 +27,13 @@ export async function readSeriesPlanFacts(db:DB,orderId:string,sourceId:string|n
  if(sourceId){
   document=await developmentDocumentRow(db,sourceId,sourceRound);revisions.development=document?{version:document.version,round:document.round_number,document:document.document}:null;
   if(document){const evidence=await effectiveTechnicalEvidence(db,sourceId,document.round_number,'整款',customerCode);revisions.technical=evidence;
-   const comments=(await db.query(`SELECT DISTINCT ON(scope_ref) comment_id,scope_ref,version,decision,occurred_at,customer_code FROM digital_development_final_comments
-    WHERE source_id=$1 AND round_number=$2 AND is_final ORDER BY scope_ref,version DESC`,[sourceId,document.round_number])).rows;
-   revisions.finalComments=comments.map(c=>[c.comment_id,c.scope_ref,c.version,c.decision,c.customer_code]);
-   for(const c of comments){if(instrumented.has(`client_sample_approval:${c.scope_ref==='整款'?'whole':c.scope_ref}`))continue;const ok=c.decision==='approved'&&c.customer_code===customerCode,at=iso(c.occurred_at);
+   const timeSql=await commentTimeColumns(db);
+   const comments=(await db.query(`SELECT DISTINCT ON(c.scope_ref) c.comment_id,c.scope_ref,c.version,c.decision,${timeSql.columns},c.customer_code FROM digital_development_final_comments c ${timeSql.join}
+    WHERE c.source_id=$1 AND c.round_number=$2 AND c.is_final ORDER BY c.scope_ref,c.version DESC`,[sourceId,document.round_number])).rows;
+   revisions.finalComments=comments.map(c=>[c.comment_id,c.scope_ref,c.version,c.decision,c.customer_code,c.time_evidence_id,c.occurred_date]);
+   for(const c of comments){if(instrumented.has(`client_sample_approval:${c.scope_ref==='整款'?'whole':c.scope_ref}`))continue;const ok=c.decision==='approved'&&c.customer_code===customerCode,at=iso(c.occurred_at),date=c.occurred_date??null;
     facts.push({key:'client_sample_approval',scopeRef:c.scope_ref==='整款'?'whole':c.scope_ref,sourceDomain:'development',sourceRecordId:c.comment_id,sourceVersion:c.version,
-     completed:ok,started:ok,occurredAt:at,occurredDate:null,precision:at?'instant':'unknown',reason:ok?(at?null:'客户已批复，但实际批复时间未知；不使用录入时间代替'):'最新最终评语尚未批准本客户成果'});
+     completed:ok,started:ok,occurredAt:at,occurredDate:date,precision:at?'instant':date?'date':'unknown',reason:ok?(at||date?null:'客户已批复，但实际批复时间未知；不使用录入时间代替'):'最新最终评语尚未批准本客户成果'});
    }
   }
  }

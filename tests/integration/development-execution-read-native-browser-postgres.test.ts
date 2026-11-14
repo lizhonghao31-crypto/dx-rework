@@ -34,7 +34,7 @@ vi.setConfig({testTimeout:testExecutionConfig.correctnessTimeoutMs,hookTimeout:t
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (url?describe.sequential:describe.skip)("S1 development read through original App and native signed identity",()=>{
  let f:Awaited<ReturnType<typeof businessAnchorFixture>>,app:ReturnType<typeof buildApp>,browser:Browser,server:Server,output:string,base:string;
- let execution:DevelopmentExecutionService,employeeAccess:EmployeeAccessService,sourceId:string,paperId:string,foreignSourceId:string,foreignTaskId:string,draftId:string;
+ let execution:DevelopmentExecutionService,employeeAccess:EmployeeAccessService,sourceId:string,paperId:string,foreignSourceId:string,foreignTaskId:string,draftId:string,commentSourceId:string,commentShippingId:string;
  const tokens=new Map<string,string>(),evidence=join(process.env.M01_SETTINGS_NATIVE_EVIDENCE??tmpdir(),"development-read");
  const path=(id:string)=>`/digital-production/sources/${id}/execution`;
  const get=(role:string,url:string)=>app.inject({method:"GET",url,headers:{cookie:"dx_rework_session="+tokens.get(role)}});
@@ -66,14 +66,18 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    if(published)await forms.publish(designer,source.sourceId,saved.version,randomUUID(),{categoryId:category.priceId,priceVersion:category.version});
    return {id:source.sourceId,materialId};
   };
-  const own=await prepare();sourceId=own.id;
-  const fixed=await execution.read(f.root,sourceId);
-  await execution.configureFixedCutting(f.root,sourceId,{expectedVersion:fixed.fixedCutting?.version??0,assigneeId:worker.actorId,reason:'TEST native fixed cutter'},randomUUID());
-  const before=await execution.read(f.root,sourceId),check=before.tasks.find(t=>t.taskKind==='development_materials')!;
-  const verified=await execution.saveMaterials(f.root,sourceId,{taskId:check.taskId,expectedVersion:before.materialVerification!.version,expectedDocumentVersion:before.sheet.version,entries:[{materialId:own.materialId,usage:'use',physical:true,quantity:true,color:true,specification:true,note:'TEST actual clerk verification',confirmedWith:''}],note:'TEST S1 material verification',result:'通过'},randomUUID());
-  await execution.check(f.root,sourceId,{taskId:check.taskId,result:'通过',note:'TEST native material check',expectedVerificationVersion:verified.version,items:[{materialId:own.materialId,physical:true,quantity:true,color:true,specification:true}]},randomUUID());
-  await arrangeTestRound(f.db,execution,f.root,sourceId,worker.actorId);
-  paperId=(await execution.read(worker,sourceId)).tasks.find(t=>t.taskKind==='development_pattern')!.taskId;
+  const prepareHandling=async()=>{
+   const own=await prepare(),id=own.id;
+   const fixed=await execution.read(f.root,id);
+   await execution.configureFixedCutting(f.root,id,{expectedVersion:fixed.fixedCutting?.version??0,assigneeId:worker.actorId,reason:'TEST native fixed cutter'},randomUUID());
+   const before=await execution.read(f.root,id),check=before.tasks.find(t=>t.taskKind==='development_materials')!;
+   const verified=await execution.saveMaterials(f.root,id,{taskId:check.taskId,expectedVersion:before.materialVerification!.version,expectedDocumentVersion:before.sheet.version,entries:[{materialId:own.materialId,usage:'use',physical:true,quantity:true,color:true,specification:true,note:'TEST actual clerk verification',confirmedWith:''}],note:'TEST S1 material verification',result:'通过'},randomUUID());
+   await execution.check(f.root,id,{taskId:check.taskId,result:'通过',note:'TEST native material check',expectedVerificationVersion:verified.version,items:[{materialId:own.materialId,physical:true,quantity:true,color:true,specification:true}]},randomUUID());
+   await arrangeTestRound(f.db,execution,f.root,id,worker.actorId);
+   const state=await execution.read(f.root,id);return {id,paperId:state.tasks.find(t=>t.taskKind==='development_pattern')!.taskId,shippingId:state.tasks.find(t=>t.taskKind==='development_shipping')!.taskId};
+  };
+  const own=await prepareHandling();sourceId=own.id;paperId=own.paperId;
+  const commentOwn=await prepareHandling();commentSourceId=commentOwn.id;commentShippingId=commentOwn.shippingId;
   foreignSourceId=(await prepare()).id;foreignTaskId=(await execution.read(f.root,foreignSourceId)).tasks.find(t=>t.taskKind==='development_materials')!.taskId;
   draftId=(await prepare(false)).id;
   app=buildApp({config,auth,checkDatabase:async()=>undefined,getAppliedSchemaHistory:async()=>null,access:{authenticate,root,service:f.access},patternRoomPrices:{authenticate,root,service:prices},digitalIdentity:{authenticate,root,service:identity,creationEnabled:true,developmentQrBase:'https://architecture.invalid/',developmentService:forms,developmentExecution:execution,developmentAttachments:f.attachments,quotationService:new DigitalQuotationService(f.db,true),taskService:tasks,accessService:new DigitalProductionAccessService(f.db),notificationService:new DigitalProductionNotificationService(f.db)}});await app.ready();
@@ -131,6 +135,30 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await page.getByRole('button',{name:'当前办理',exact:true}).click();await technical.waitFor({state:'visible'});expect(await technical.getByLabel('原因',{exact:true}).inputValue()).toBe('TEST S1 尚未提交的技术原因');
    expect(errors).toEqual([]);await page.screenshot({path:join(evidence,'development-technical-1165.png'),fullPage:true});
   }catch(error){await page.screenshot({path:join(evidence,'failure.png'),fullPage:true});await writeFile(join(evidence,'failure-body.txt'),await page.locator('body').innerText());throw error;}finally{await context.close();}
+ });
+ it('captures and supplements the original customer approval date in the authenticated App without creating another review',async()=>{
+  const context=await browser.newContext({viewport:{width:1165,height:1003}});await context.addCookies([{name:'dx_rework_session',value:tokens.get('root')!,url:base}]);const page=await context.newPage();page.setDefaultTimeout(12000);
+  try{
+   await page.goto(base+`/ui/digital-production?task=${commentShippingId}&taskView=handle`);
+   await page.getByText('登记实际客户样板确认',{exact:true}).click();
+   await page.getByText('客户评语与最终批复',{exact:true}).click();
+   await page.getByLabel('反馈性质',{exact:true}).selectOption('final');
+   expect(await page.getByLabel('客户实际反馈时间',{exact:true}).inputValue()).toBe('unknown');
+   await page.getByLabel('评语原意',{exact:true}).fill('TEST original customer approval without an invented time');
+   await page.getByLabel('确认依据与原记录位置',{exact:true}).fill('TEST original message location');
+   const save=page.waitForResponse(response=>response.request().method()==='POST'&&response.url().endsWith('/technical/comments'));
+   await page.getByRole('button',{name:'保存客户评语',exact:true}).click();expect((await save).status()).toBe(200);
+   const form=page.getByRole('form',{name:'补充客户批复时间第1版',exact:true});await form.waitFor();
+   const before=(await f.db.query('SELECT * FROM digital_development_size_review_requests WHERE source_id=$1',[commentSourceId])).rows;expect(before).toHaveLength(1);
+   await form.getByLabel('客户实际反馈日期',{exact:true}).fill('2026-11-09');
+   await form.getByLabel('批复时间依据',{exact:true}).fill('TEST dated customer message, actual date only');
+   const supplement=page.waitForResponse(response=>response.request().method()==='POST'&&response.url().endsWith('/technical/comment-time'));
+   await form.getByRole('button',{name:'保存批复时间',exact:true}).click();expect((await supplement).status()).toBe(200);
+   await form.waitFor({state:'detached'});await page.getByText('第1版客户批复 · 实际发生：2026-11-09',{exact:false}).waitFor();
+   expect((await f.db.query('SELECT * FROM digital_development_size_review_requests WHERE source_id=$1',[commentSourceId])).rows).toEqual(before);
+   const facts=(await f.db.query('SELECT precision,occurred_at,occurred_date::text AS date FROM digital_development_comment_times WHERE source_id=$1',[commentSourceId])).rows;expect(facts).toEqual([{precision:'date',occurred_at:null,date:'2026-11-09'}]);
+   await page.screenshot({path:join(evidence,'customer-approval-time-1165.png'),fullPage:true});
+  }catch(error){await page.screenshot({path:join(evidence,'customer-approval-time-failure.png'),fullPage:true});await writeFile(join(evidence,'customer-approval-time-failure-body.txt'),await page.locator('body').innerText());throw error;}finally{await context.close();}
  });
  it("records a date-only material occurrence through the original App without replacing its registration time",async()=>{
   const context=await browser.newContext({viewport:{width:1165,height:1003}});

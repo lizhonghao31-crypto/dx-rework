@@ -133,7 +133,7 @@ export class OrderTimePlanRepository{
    for(const scope of frameworkScopeInputs(value,context.route,context.acceptedAt,context.notBefore)){
     const old=previous?.input.frameworkPlans?.[scope.scopeRef];
     if(old&&kind==='customer_date_change'&&!changedScopes.has(scope.scopeRef)){plans[scope.scopeRef]=structuredClone(old);continue;}
-    const result=evaluateTimeFrameworkCandidate(scope,{purpose:'order_proposal',observedAt:time.now,retained:retainedFrameworkWork(scope,progress,old)});
+    const result=evaluateTimeFrameworkCandidate(scope,{purpose:'order_proposal',observedAt:time.now,retained:retainedFrameworkWork(scope,progress,old,time.now)});
     plans[scope.scopeRef]=freezeTimeFrameworkCandidate(result,{reference:`${input.eventRef}:${scope.scopeRef}`,revision:(old?.revision??0)+1,previousReference:old?.reference??null,eventRef:input.eventRef});
    }
    value.frameworkPlans=plans;

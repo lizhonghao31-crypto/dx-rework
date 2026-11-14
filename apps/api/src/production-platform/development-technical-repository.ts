@@ -1,3 +1,4 @@
+import {noteCommentTimeAvailability} from './development-comment-time.js';
 import {createHash} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import type {DevelopmentDocument} from '@dx-rework/contracts/digital-development';
@@ -5,7 +6,7 @@ import {DEVELOPMENT_TECHNICAL_RULE,TechnicalArtifactBodySchema,technicalMakingDo
 import {developmentDocumentRow} from './development-round-repository.js';
 
 export type TechnicalDB=Pick<Pool|PoolClient,'query'>;
-export async function technicalEvidenceAvailable(db:TechnicalDB){return Boolean((await db.query("SELECT to_regclass('digital_development_technical_enrollments') AS relation")).rows[0]?.relation);}
+export async function technicalEvidenceAvailable(db:TechnicalDB){const row=(await db.query("SELECT to_regclass('digital_development_technical_enrollments') AS relation,to_regclass('digital_development_comment_times') AS comment_times")).rows[0];noteCommentTimeAvailability(db,Boolean(row?.comment_times));return Boolean(row?.relation);}
 export async function technicalEnrollment(db:TechnicalDB,sourceId:string){return await technicalEvidenceAvailable(db)?(await db.query('SELECT * FROM digital_development_technical_enrollments WHERE source_id=$1',[sourceId])).rows[0]??null:null;}
 export function technicalDocumentFingerprint(d:DevelopmentDocument):string {
  // Packing wording and commercial prices are not a new technical revision.

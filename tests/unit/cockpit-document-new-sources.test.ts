@@ -158,3 +158,11 @@ it('does not promote a source-only closure/quality entry into an existing busine
  const read:CockpitDocumentReader=async()=>({orderId:oid,lines:[],closed:null,quality:[]});
  for(const key of ['closure','receiving'] as const){const data=await loadCockpitDirectoryPages(order,key,read,signal);expect(data.state).toBe('unknown');expect(data.entries.every(e=>e.sourceOnly)).toBe(true);}
 });
+
+it('keeps actual customer approval date distinct from registration in original document history',async()=>{
+ const make=(known:boolean)=>async()=>({sourceId:sid,roundNumber:1,scopeRef:'整款',enrolled:true,items:[{commentId:'customer-date',version:1,isFinal:true,decision:'approved',occurredAt:null,occurredDate:known?'2026-11-09':null,recordedAt:'2026-11-15T03:00:00Z'}],nextBeforeVersion:null});
+ const dated=await category(order,'customer_final_approval',make(true),signal),unknown=await category(order,'customer_final_approval',make(false),signal);
+ expect(dated.entries[0]).toMatchObject({at:'2026-11-09',metadata:[{label:'客户实际反馈',at:'2026-11-09'},{label:'原评语登记',at:'2026-11-15T03:00:00Z'}]});
+ expect(documentTime(dated.entries[0]!.at!)).toBe('2026-11-09');expect(unknown.entries[0]!.at).toBe('');
+ expect(unknown.entries[0]!.metadata![0]!.at).toBe('');
+});
