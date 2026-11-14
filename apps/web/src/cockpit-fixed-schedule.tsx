@@ -79,7 +79,7 @@ export function cockpitScopeProgress(scope:ScheduleScopeProgress|undefined){
  return {text:'可用'+cockpitDurationRange({minimum:-lag.maximum,maximum:-lag.minimum}),tone:'success'};
 }
 export function cockpitScheduleReason(order:OrderJourney){
- if(!order.fixedSchedule||['completed','cancelled'].includes(order.display?.mainState??''))return null;
+ if(!order.fixedSchedule||['completed','closed','cancelled'].includes(order.display?.mainState??''))return null;
  const scope=order.fixedSchedule.scopes.find(scope=>scope.customerDuePassed===true)??order.fixedSchedule.scopes.find(scope=>scope.state==='late');
  if(!scope)return order.fixedSchedule.state==='unknown'?{text:'计划待核',tone:'neutral'}:null;
  const po=order.lines.find(line=>line.id===scope.lineId)?.po;

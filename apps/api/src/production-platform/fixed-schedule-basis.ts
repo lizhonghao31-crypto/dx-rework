@@ -1,3 +1,4 @@
+import {evaluateJourneyFramework,type JourneyFrameworkBasis} from './journey-time-framework.js';
 import {nativeCuttingCompletions} from './cutting-completion-facts.js';
 import {fixedReworkProgressFacts} from './fixed-rework-progress.js';
 import {receivingSpan} from './receiving-span.js';
@@ -20,7 +21,7 @@ import {evaluateFixedScheduleScope,fixedDurationSummary,type ScheduleScopeInput,
 import {readOrderTimeBasis,attachOrderTimeCoverage} from './order-time-reading.js';
 import {fixedScheduleStages} from './fixed-schedule-stages.js';
 
-export type FixedScheduleBasis={version:'fixed-schedule-basis-v1';policyVersion?:'order-time-plan-v1';scopeRevision:string;factRevision:string;scopes:ScheduleScopeInput[];termination:JourneyTermination|null;pending:boolean;notApplicableNodes?:Array<'process_logistics'|'bulk_qc'>};
+export type FixedScheduleBasis={framework?:JourneyFrameworkBasis;version:'fixed-schedule-basis-v1';policyVersion?:'order-time-plan-v1';scopeRevision:string;factRevision:string;scopes:ScheduleScopeInput[];termination:JourneyTermination|null;pending:boolean;notApplicableNodes?:Array<'process_logistics'|'bulk_qc'>};
 type DB=Pick<PoolClient,'query'>;
 const unknown:ScheduleOccurrence={precision:'unknown'};
 const occurrence=(at:unknown):ScheduleOccurrence=>at instanceof Date?{precision:'instant',at:at.toISOString()}:typeof at==='string'&&/T.*(?:Z|[+-]\d{2}:\d{2})$/.test(at)&&Number.isFinite(Date.parse(at))?{precision:'instant',at:new Date(at).toISOString()}:unknown;
@@ -182,7 +183,7 @@ export function evaluateFixedJourneyBasis(basis:FixedScheduleBasis,asOf:string,l
  const scopes=basis.scopes.map(scope=>evaluateFixedScheduleScope(scope,asOf,basis.termination));
  const unfinished=basis.scopes.some(scope=>scope.terminalIds.some(id=>!scope.facts[id]?.businessCompleted));
  const state=basis.termination&&unfinished?'terminated':scopes.some(scope=>scope.state==='late')?'late':basis.pending||!scopes.length||scopes.some(scope=>scope.state==='unknown')?'unknown':'normal';
- return {version:'fixed-schedule-progress-v1',asOf,scopeRevision:basis.scopeRevision,factRevision:basis.factRevision,state,scopes,...(includeStages?{stages:fixedScheduleStages(basis,asOf)}:{}),durationSummary:fixedDurationSummary(basis.scopes,asOf,basis.termination),legacyOverdue,nextChangeAt:null};
+ return {...(basis.framework?{framework:evaluateJourneyFramework(basis.framework,basis.scopes,scopes,asOf,basis.termination)}:{}),version:'fixed-schedule-progress-v1',asOf,scopeRevision:basis.scopeRevision,factRevision:basis.factRevision,state,scopes,...(includeStages?{stages:fixedScheduleStages(basis,asOf)}:{}),durationSummary:fixedDurationSummary(basis.scopes,asOf,basis.termination),legacyOverdue,nextChangeAt:null};
 }
 
 /** Only finite classification changes are compiled. Numeric display values are
@@ -193,7 +194,9 @@ export function nextFixedScheduleClassification(basis:FixedScheduleBasis,asOf:st
  const consider=(at:number)=>{if(at>now&&(next===null||at<next))next=at;};
  for(const scope of basis.scopes){
   const current=evaluateFixedScheduleScope(scope,asOf);
+  for(const milestone of basis.framework?.find(row=>row.scopeRef===scope.scopeRef)?.milestones??[])if(milestone.at&&!milestone.workIds.every(id=>scope.facts[id]?.businessCompleted))consider(Date.parse(milestone.at));
   for(const node of current.nodes){if(node.businessCompleted||node.ownSla.state==='terminated')continue;const work=scope.work.find(work=>work.id===node.id)!,fact=scope.facts[node.id];
+   if(work.end)consider(Date.parse(work.end)+(work.targetPrecision==='date'?0:1));
    if(node.ownSla.warningAt)consider(Date.parse(node.ownSla.warningAt));
    for(const window of fact?.ownWindows??[])if(!window.complete){if(window.warningAt)consider(Date.parse(window.warningAt));if(window.deadline&&window.calendar)consider(Date.parse(shiftFixedTimeline(window.deadline,1/60000,window.calendar)));}
    if(fact?.clockStart.precision==='instant'&&work.responsibilityMinutes!==undefined&&work.responsibilityMinutes!==null&&work.responsibilityCalendar)consider(Date.parse(shiftFixedTimeline(shiftFixedTimeline(fact.clockStart.at,work.responsibilityMinutes,work.responsibilityCalendar),1/60000,work.responsibilityCalendar)));
@@ -235,7 +238,10 @@ export function attachFixedJourneySchedule(item:OrderJourney,basis:FixedSchedule
   const taskRef=`task:${node.instanceId}:`,exactTask=basis.scopes.some(scope=>Object.values(scope.facts).some(fact=>fact.evidenceRefs.some(ref=>ref.startsWith(taskRef))));
   const targets=progress.scopes.flatMap(scope=>ids.size&&scope.lineId&&!ids.has(scope.lineId)?[]:scope.nodes.filter(value=>{
    if(exactTask)return basis.scopes.find(input=>input.scopeRef===scope.scopeRef)?.facts[value.id]?.evidenceRefs.some(ref=>ref.startsWith(taskRef));
-   const raw=value.id.startsWith('source:')?value.id.slice(7):value.id,key=raw.split(':')[0]!;return (aliases[key]??key)===node.key;
+   const raw=value.id.startsWith('source:')?value.id.slice(7):value.id,key=raw.split(':')[0]!;
+   if(basis.framework&&key==='customer_confirmation')return false;
+   if(basis.framework&&key==='client_sample_approval')return node.key==='customer_sample';
+   return (aliases[key]??key)===node.key;
   }).map(value=>({scopeRef:scope.scopeRef,lineId:scope.lineId,progress:value})));
   if(!targets.length)continue;
   if(node.expectedKind==='sla'&&node.expectedAt&&node.records.some(record=>record.domain==='task'&&record.id===node.instanceId)&&['instant','date'].includes(node.expectedPrecision))node.nativeTaskDeadline={at:node.expectedAt,precision:node.expectedPrecision as 'instant'|'date',mode:node.deadlineMode,exclusive:node.deadlineExclusive};
@@ -244,7 +250,7 @@ export function attachFixedJourneySchedule(item:OrderJourney,basis:FixedSchedule
    // Unknown siblings cannot erase a proven own-window risk. Neither can a
    // legacy aggregate deadline replace the current per-PO responsibility.
    node.risks=node.risks.filter(risk=>risk!=='overdue'&&risk!=='due_soon');
-   if(targets.some(target=>target.progress.ownSla.state==='overdue'))node.risks.push('overdue');else if(targets.some(target=>target.progress.ownSla.warning))node.risks.push('due_soon');
+   if(targets.some(target=>target.progress.ownSla.state==='overdue'||target.progress.goalDelta.kind==='late'))node.risks.push('overdue');else if(targets.some(target=>target.progress.ownSla.warning))node.risks.push('due_soon');
   }
   const displayed=targets.map(({progress})=>progress.currentTarget??{at:progress.goalDelta.targetAt,date:progress.goalDelta.targetDate,precision:progress.goalDelta.targetPrecision});
   const ends=displayed.map(target=>target.at),same=ends.every(at=>at!==null&&at===ends[0]);
@@ -258,10 +264,10 @@ export function attachFixedJourneySchedule(item:OrderJourney,basis:FixedSchedule
 /** An explicit minimal shared-fact whitelist: no user, names, grants, URLs,
  * complete adopted settings or executable response can enter this snapshot. */
 export function fixedScheduleBasisSnapshot(basis:FixedScheduleBasis):FixedScheduleBasis{
- return {version:basis.version,...(basis.policyVersion?{policyVersion:basis.policyVersion}:{}),...(basis.notApplicableNodes?{notApplicableNodes:basis.notApplicableNodes.filter(key=>key==='process_logistics'||key==='bulk_qc')}:{}),scopeRevision:basis.scopeRevision,factRevision:basis.factRevision,pending:basis.pending,
+ return {...(basis.framework?{framework:structuredClone(basis.framework)}:{}),version:basis.version,...(basis.policyVersion?{policyVersion:basis.policyVersion}:{}),...(basis.notApplicableNodes?{notApplicableNodes:basis.notApplicableNodes.filter(key=>key==='process_logistics'||key==='bulk_qc')}:{}),scopeRevision:basis.scopeRevision,factRevision:basis.factRevision,pending:basis.pending,
   termination:basis.termination?{kind:basis.termination.kind,at:basis.termination.at,precision:basis.termination.precision,originEventRef:basis.termination.originEventRef,scopeRef:basis.termination.scopeRef}:null,
-  scopes:basis.scopes.map(scope=>({scopeRef:scope.scopeRef,lineId:scope.lineId,targetRevision:scope.targetRevision,terminalIds:[...scope.terminalIds],customerGoal:scope.customerGoal,
-   work:scope.work.map(work=>({id:work.id,canonicalWorkRef:work.canonicalWorkRef,...(work.completionTarget!==undefined?{completionTarget:work.completionTarget?{end:work.completionTarget.end,targetRevision:work.completionTarget.targetRevision,targetPrecision:work.completionTarget.targetPrecision,targetDate:work.completionTarget.targetDate}:null}:{}),...(work.stage!==undefined?{stage:work.stage}:{}),dependsOn:[...work.dependsOn],start:work.start,end:work.end,minutes:work.minutes,calendar:work.calendar,
+  scopes:basis.scopes.map(scope=>({... (scope.plannedReadiness?{plannedReadiness:true}:{}),scopeRef:scope.scopeRef,lineId:scope.lineId,targetRevision:scope.targetRevision,terminalIds:[...scope.terminalIds],customerGoal:scope.customerGoal,
+   work:scope.work.map(work=>({id:work.id,canonicalWorkRef:work.canonicalWorkRef,...(work.completionTarget!==undefined?{completionTarget:work.completionTarget?{end:work.completionTarget.end,targetRevision:work.completionTarget.targetRevision,targetPrecision:work.completionTarget.targetPrecision,targetDate:work.completionTarget.targetDate}:null}:{}),...(work.stage!==undefined?{stage:work.stage}:{}),dependsOn:[...work.dependsOn],...(work.dependencyReserves?{dependencyReserves:Object.fromEntries(Object.entries(work.dependencyReserves).map(([id,reserve])=>[id,{minutes:reserve.minutes,calendar:reserve.calendar}]))}:{}),start:work.start,end:work.end,minutes:work.minutes,calendar:work.calendar,
     ...(work.includedIn!==undefined?{includedIn:work.includedIn}:{}),...(work.accountingRole!==undefined?{accountingRole:work.accountingRole}:{}),...(work.originalHandoffAt!==undefined?{originalHandoffAt:work.originalHandoffAt}:{}),responsibilitySlaRef:work.responsibilitySlaRef,...(work.responsibilityMinutes!==undefined?{responsibilityMinutes:work.responsibilityMinutes}:{}),...(work.responsibilityCalendar!==undefined?{responsibilityCalendar:work.responsibilityCalendar}:{}),...(work.responsibilityWarningAt!==undefined?{responsibilityWarningAt:work.responsibilityWarningAt}:{}),...(work.responsibilityReminderPercent!==undefined?{responsibilityReminderPercent:work.responsibilityReminderPercent}:{}),...(work.targetPrecision!==undefined?{targetPrecision:work.targetPrecision}:{}),...(work.targetDate!==undefined?{targetDate:work.targetDate}:{}),...(work.targetRevision!==undefined?{targetRevision:work.targetRevision}:{})})),
    facts:Object.fromEntries(Object.entries(scope.facts).map(([id,fact])=>[id,{ready:structuredClone(fact.ready),completed:structuredClone(fact.completed),clockStart:structuredClone(fact.clockStart),businessCompleted:fact.businessCompleted,waitingForPredecessors:fact.waitingForPredecessors,evidenceRefs:[...fact.evidenceRefs],...(fact.ownWindows?{ownWindows:fact.ownWindows.map(window=>({sourceRef:window.sourceRef,started:structuredClone(window.started),completed:structuredClone(window.completed),complete:window.complete,deadline:window.deadline,warningAt:window.warningAt,calendar:window.calendar}))}:{}),...(fact.impactStartedAt!==undefined?{impactStartedAt:fact.impactStartedAt}:{}),...(fact.terminated!==undefined?{terminated:fact.terminated}:{}),...(fact.terminationAt!==undefined?{terminationAt:fact.terminationAt}:{}),...(fact.notYetReady!==undefined?{notYetReady:fact.notYetReady}:{})}]))}))};
 }

@@ -67,3 +67,5 @@ describe('R5 explicit customer batch arrangements',()=>{
   expect(CustomerMerchandisersSaveSchema.safeParse({...base,secondaryMerchandiserIds:[secondary[0],secondary[0]]}).success).toBe(false);
  });
 });
+
+it('renders duration without long decimal minutes while preserving a positive remainder',()=>{expect(timeText(19*1440+13*60+51.7746)).toBe('19天13小时52分钟');expect(timeText(59.99)).toBe('1小时');expect(timeText(0.001)).toBe('不足1分钟');expect(timeText(0)).toBe('0小时');});

@@ -1,3 +1,4 @@
+import {JourneyFactRepository} from '../../apps/api/src/production-platform/journey-fact-repository.js';
 import {SeriesPlanService} from '../../apps/api/src/production-platform/series-plan-service.js';
 import {prepareTimeFrameworkConfiguration} from '@dx-rework/contracts/order-time-settings';
 import {randomUUID} from 'node:crypto';
@@ -432,6 +433,16 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    const secondPreview=await requests.check(manager,operation2,{},editAgain);
    const second=await requests.arrange(manager,{resource,fingerprint:secondPreview.fingerprint,overrides:{},washing:editAgain,acceptLate:true},randomUUID());
    expect(second.check.washing?.find(row=>row.lineId===lineId)?.version).toBe(2);
+   const journey=await new DigitalJourneyQuery(f.db).read(manager,resource.id,undefined,true);
+   expect(journey.fixedSchedule?.framework?.scopes[0]?.milestones).toHaveLength(8);
+   const adopted=(await repo.current(resource))!,forward=Object.values(adopted.input.frameworkPlans!)[0]!;
+   const projected=journey.fixedSchedule!.scopes[0]!;
+   for(const work of projected.nodes)expect(work.currentTarget?.at??work.goalDelta.targetAt).toBe(forward.arranged.find(row=>row.id===work.id)?.end.at);
+   expect(projected.nodes.find(work=>work.id.startsWith('bulk_return_washing:'))?.businessCompleted).toBe(false);
+   expect(journey.visualProgress?.expected.at).toBe('2027-08-15');
+   const model=await new JourneyFactRepository(f.db).buildOne(resource);
+   expect(model.model.fixedSchedule?.framework).toHaveLength(1);
+   expect(model.model.fixedSchedule?.scopes[0]?.plannedReadiness).toBe(true);
    const series=new SeriesPlanService(f.db,'TEST framework series shared date '.repeat(3));
    const same=await series.read(f.root,resource.id);
    expect(same.framework?.scopes[0]?.customerDate).toBe('2027-08-15');

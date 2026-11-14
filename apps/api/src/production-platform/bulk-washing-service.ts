@@ -20,13 +20,13 @@ async function capabilities(db:WashingDB,actor:TrustedActorContext,plan:WashingP
   canInspect:isRoot||await role(plan.document.staff?.inspectorId??'','quality_control'),canCorrect:isRoot};
 }
 /** Same client for native quantities, adopted plan, facts and permission checks. */
-export async function readBulkWashing(db:WashingDB,orderId:string,actor:TrustedActorContext|null):Promise<BulkWashingSheet>{
+export async function readBulkWashing(db:WashingDB,orderId:string,actor:TrustedActorContext|null,observationAt?:string):Promise<BulkWashingSheet>{
  const plans=await washingPlans(db,orderId);if(!plans.length)return {orderId,scopes:[]};
  const events=await washingEvents(db,orderId),latest=new Map(plans.map(p=>[p.lineId,p]));
  const receipts=await garmentQuality(db,orderId),factories=await factoryProductionScopes(db,orderId);
  const receiptLinks=(await db.query(`SELECT l.receipt_id,l.production_order_id,l.factory_decision_id FROM sourcing_production_receipt_links l
   JOIN digital_production_child_links c ON c.module='production' AND c.child_id=l.production_order_id WHERE c.production_order_id=$1`,[orderId])).rows;
- const observed=businessNow().toISOString(),termination=await journeyTermination(db,{kind:'order',id:orderId},observed);
+ const observed=observationAt??businessNow().toISOString(),termination=await journeyTermination(db,{kind:'order',id:orderId},observed);
  const inputs=[...receipts.map(r=>({scopeId:`receipt:${r.receiptId}`,lineId:r.lineId,factoryDecisionId:null,quantityVersion:r.quantityVersion,quantity:r.quantity,
   label:`收货批次 ${r.receiptId.slice(0,8)}`,receivedAt:r.receivedAt,availableAt:r.receivedAt??(r.receivedDate?`${r.receivedDate}T00:00:00+08:00`:null),mode:'after_receipt' as const,
   allowedSend:r.inspected?r.qualifiedQuantity:0})),...factories.map(r=>({scopeId:`factory:${r.production_order_id}:${r.factory_decision_id??'original'}:${r.line_id}`,

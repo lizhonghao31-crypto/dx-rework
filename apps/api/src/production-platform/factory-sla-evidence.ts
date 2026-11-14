@@ -2,6 +2,7 @@ import type {PoolClient} from 'pg';
 import type {SlaNodeFact,SlaPlan} from '@dx-rework/domain/digital-sla-plan';
 import {factoryBatchTiming} from './factory-batch-timing.js';
 import type {AdoptedCraftStep} from '@dx-rework/contracts/digital-craft';
+import {craftParameterKey} from './fixed-work-definition.js';
 import {fixedCraftSteps} from './fixed-craft-steps.js';
 /** Stage completion requires all applicable physical quantities, not the first dispatch. */
 export async function factorySlaEvidence(db:Pick<PoolClient,'query'>,orderId:string){
@@ -16,8 +17,15 @@ export async function factorySlaEvidence(db:Pick<PoolClient,'query'>,orderId:str
     ...(done&&ends.length&&ends.every(Boolean)?{completedAt:new Date(Math.max(...ends.map(at=>Date.parse(at!)))).toISOString()}:{}),};
   };
   for(const step of timing.stepLedger.steps){
-   const windows=timing.windows.filter(window=>window.kind==='process_logistics'&&window.stepRef===step.step.stepId);
-   put(`bulk_${step.step.craftKind}`,windows,windows.length>0&&windows.every(window=>window.complete),step.completion.every(line=>line.complete));
+   const windows=timing.windows.filter(window=>window.kind==='process_logistics'&&window.stepRef===step.step.stepId),covered=step.completion.every(line=>line.complete);
+   put(`${craftParameterKey(step.step,'bulk')}:${step.step.stepId}`,windows,covered&&windows.length>0&&windows.every(window=>window.complete),covered);
+  }
+  // Legacy kind readers still receive the whole applicable kind, never the
+  // last special step. New plans select the exact immutable step identity.
+  for(const kind of new Set(timing.stepLedger.steps.map(row=>row.step.craftKind))){
+   const selected=timing.stepLedger.steps.filter(row=>row.step.craftKind===kind),ids=new Set(selected.map(row=>row.step.stepId));
+   const windows=timing.windows.filter(window=>window.kind==='process_logistics'&&window.stepRef&&ids.has(window.stepRef)),covered=selected.every(row=>row.completion.every(line=>line.complete));
+   put(`bulk_${kind}`,windows,covered&&windows.length>0&&windows.every(window=>window.complete),covered);
   }
   const qc=timing.windows.filter(window=>window.kind==='bulk_qc'),dispatch=timing.windows.filter(window=>window.kind==='warehouse_dispatch');
   put('bulk_qc',qc,qc.length===steps.length&&qc.every(window=>window.complete),timing.stepLedger.steps.every(step=>step.completion.every(line=>line.complete)));

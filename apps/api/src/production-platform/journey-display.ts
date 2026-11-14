@@ -3,9 +3,9 @@ import {journeyObservedDay} from './journey-risk-clock.js';
 
 /** The same whole-order state for the full DTO and lightweight SQL reductions.
  * Node lateness does not redefine the customer's whole-order delivery state. */
-export function journeyOrderState(input:{cancelled:boolean;closed:boolean;activated:boolean;earliestShipmentDate:string|null;reminderDate:string|null},asOf:string):JourneyDisplay['mainState']{
+export function journeyOrderState(input:{cancelled:boolean;closed:boolean;specialClosed?:boolean;activated:boolean;earliestShipmentDate:string|null;reminderDate:string|null},asOf:string):JourneyDisplay['mainState']{
  const today=journeyObservedDay(asOf),date=input.earliestShipmentDate;
- return input.cancelled?'cancelled':input.closed?'completed':date&&date<today?'overdue':date&&(input.reminderDate??date)<=today?'due_soon':input.activated?'active':'not_started';
+ return input.cancelled?'cancelled':input.closed?'completed':input.specialClosed?'closed':date&&date<today?'overdue':date&&(input.reminderDate??date)<=today?'due_soon':input.activated?'active':'not_started';
 }
 
 /** Canonical business shares, independent of legacy count flags and PO/task multiplicity. */
@@ -23,11 +23,11 @@ export function progressLabel(ratio:number|null):string {
 }
 export function journeyDisplay(order:OrderJourney,asOf:string,terminal:{cancelled?:boolean;closedAt?:string|null}={}):JourneyDisplay {
   const nodes=order.stages.flatMap(stage=>stage.nodes).filter(node=>node.current&&!isJourneyPlanningNode(node));
-  const closed=nodes.some(node=>["packing","special_closure"].includes(node.key)&&node.state==="completed");
+  const closed=nodes.some(node=>node.key==="packing"&&node.state==="completed"),specialClosed=nodes.some(node=>node.key==="special_closure"&&node.state==="completed");
   const dates=order.poDeliveryDates??[];
   const earliestShipmentDate=dates.flatMap(line=>line.customerWarehouseArrivalDate?[line.customerWarehouseArrivalDate]:[]).sort()[0]??null;
   const activated=journeyActivated(order);
-  const mainState=journeyOrderState({cancelled:Boolean(terminal.cancelled),closed,activated,earliestShipmentDate,reminderDate:itemReminder(order)??null},asOf);
+  const mainState=journeyOrderState({cancelled:Boolean(terminal.cancelled),closed,specialClosed,activated,earliestShipmentDate,reminderDate:itemReminder(order)??null},asOf);
   const stages=JOURNEY_STAGES.map(definition=>{
     const candidates=nodes.filter(node=>node.stage===definition.key&&(definition.key!=="creation"||node.key===(order.orderId?"order_information":"product_development")));
     const expectedKeys=new Set(JOURNEY_NODES.filter(node=>!node.planningOnly&&node.stage===definition.key&&(definition.key!=="creation"||node.key===(order.orderId?"order_information":"product_development"))).map(node=>businessKey(node.key)));
@@ -47,15 +47,16 @@ export function journeyDisplay(order:OrderJourney,asOf:string,terminal:{cancelle
   const actualRatio=progressStages.some(stage=>stage.ratio===null)?null:progressStages.reduce((sum,stage)=>sum+stage.ratio!,0)/progressStages.length;
   const unknownLabels=progressStages.filter(stage=>stage.ratio===null).map(stage=>JOURNEY_STAGES.find(definition=>definition.key===stage.key)!.label);
   const actualLabel=actualRatio===null?`${unknownLabels.join("、")}资料待核`:progressLabel(actualRatio);
-  return {ruleVersion:"cockpit-display-v1",mainState,earliestShipmentDate,missingShipmentDates:Math.max(order.lines.length-dates.filter(line=>line.customerWarehouseArrivalDate).length,0),closedAt:terminal.closedAt??null,actualRatio,actualLabel,awaitingClosure:Boolean(order.orderId)&&actualRatio===1&&!closed&&!terminal.cancelled,stages,timeRatio:null,timeLabel:order.supervision?.assessment==='partially_unavailable'?"部分节点时效不可评估，请查看原因":order.supervision?.status==='planned'?"节点时效按冻结标准评价":"沿原任务截止监督"};
+  return {ruleVersion:"cockpit-display-v1",mainState,earliestShipmentDate,missingShipmentDates:Math.max(order.lines.length-dates.filter(line=>line.customerWarehouseArrivalDate).length,0),closedAt:terminal.closedAt??null,actualRatio,actualLabel,awaitingClosure:Boolean(order.orderId)&&actualRatio===1&&!closed&&!specialClosed&&!terminal.cancelled,stages,timeRatio:null,timeLabel:order.supervision?.assessment==='partially_unavailable'?"部分节点时效不可评估，请查看原因":order.supervision?.status==='planned'?"节点时效按冻结标准评价":"沿原任务截止监督"};
 }
 const itemReminder=(order:OrderJourney)=>order.supervision?.customerReminderDate;
 /** Explicit cockpit scope. Existing workspace consumers keep their legacy selection contract. */
 type CockpitSortable=Pick<OrderJourney,'id'|'orderNumbers'|'designStyleNo'>&{display?:Pick<NonNullable<OrderJourney['display']>,'mainState'|'closedAt'|'earliestShipmentDate'>};
 export function compareCockpitOrders(a:CockpitSortable,b:CockpitSortable):number {
   const x=a.display!,y=b.display!;
-  if((x.mainState==="completed")!==(y.mainState==="completed"))return x.mainState==="completed"?1:-1;
-  if(x.mainState==="completed"){
+  const xClosed=["completed","closed"].includes(x.mainState),yClosed=["completed","closed"].includes(y.mainState);
+  if(xClosed!==yClosed)return xClosed?1:-1;
+  if(xClosed){
     if(Boolean(x.closedAt)!==Boolean(y.closedAt))return x.closedAt?-1:1;
     if(x.closedAt&&y.closedAt&&x.closedAt!==y.closedAt)return y.closedAt.localeCompare(x.closedAt);
   }else{
