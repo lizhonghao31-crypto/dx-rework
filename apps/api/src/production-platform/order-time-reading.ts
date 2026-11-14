@@ -1,3 +1,9 @@
+import {journeyWashingFact} from './journey-washing-facts.js';
+import {readBulkWashing} from './bulk-washing-service.js';
+import {washingPlans} from './bulk-washing-repository.js';
+import type {SeriesObservedFact} from '@dx-rework/contracts/digital-series-plan';
+import {readSeriesPlanFacts} from './series-plan-facts.js';
+import {frameworkJourneyBasis} from './journey-time-framework.js';
 import {orderTimeCompletionTarget,inheritedSourcePolicyAt,isInheritedSourceWork,type InheritedOrderTimeHistory} from './order-time-completion-target.js';
 import {currentPreparationMaterial} from './preparation-material-repository.js';
 import {createHash} from 'node:crypto';
@@ -25,10 +31,10 @@ const unknown:ScheduleOccurrence={precision:'unknown'};
 const instant=(value:unknown):ScheduleOccurrence=>value instanceof Date?{precision:'instant',at:value.toISOString()}:typeof value==='string'&&/T.*(?:Z|[+-]\d{2}:\d{2})$/.test(value)&&Number.isFinite(Date.parse(value))?{precision:'instant',at:new Date(value).toISOString()}:unknown;
 const hash=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const aliases:Record<string,string>={production_sheet:'production_instruction',warehouse_accessories:'accessories_ready',sourcing_selection:'sourcing_director',sourcing_approval:'sourcing_owner',customer_confirmation:'customer_sample',source_confirmation:'development_confirmation',external_pattern:'development_external_pattern',development_craft_return:'development_craft_confirmation',factory_production_work:'production_reporting',factory_production:'factory_production_qc',garment_inspection:'receiving_inspection',garment_packing:'packing',return_logistics:'receipts'};
-const keyOf=(work:OrderTimeWork)=>aliases[work.parameterKey]??work.parameterKey;
+const keyOf=(work:OrderTimeWork)=>work.parameterKey.startsWith('development_special_')?'development_printing':aliases[work.parameterKey]??work.parameterKey;
 const empty=():ScheduleFact=>({ready:unknown,clockStart:unknown,completed:unknown,businessCompleted:false,waitingForPredecessors:false,evidenceRefs:[]});
 type NativeTask={task_id:string;task_kind:string;source_id:string|null;production_order_id:string|null;route_version:number;state:string;entered_at:Date|null;entered_quality:string;completed_at:Date|null;completed_quality:string;step_id:string|null;returned:boolean;rejected:boolean;sla_basis:{seconds?:number|null;calendarRef?:ScheduleWork['calendar']}|null;native_entered_at:Date|null;warning_at:Date|null};
-type Evidence={tasks:NativeTask[];readiness:Awaited<ReturnType<typeof nativeTaskReadiness>>;cutting:NativeCuttingReadiness[];cutCompletions:NativeCuttingCompletion[];created?:{reference:string;at:string;evidence:string}|null;policies?:Awaited<ReturnType<typeof orderTimePolicyHistory>>;inheritedPolicies?:InheritedOrderTimeHistory};
+type Evidence={tasks:NativeTask[];readiness:Awaited<ReturnType<typeof nativeTaskReadiness>>;cutting:NativeCuttingReadiness[];cutCompletions:NativeCuttingCompletion[];created?:{reference:string;at:string;evidence:string}|null;policies?:Awaited<ReturnType<typeof orderTimePolicyHistory>>;inheritedPolicies?:InheritedOrderTimeHistory;washing?:Record<string,ScheduleFact>;frameworkFacts?:SeriesObservedFact[];commercial?:{completed:boolean;at:string|null;evidence:string}};
 
 /** Current native task identities, not labels or a newly generated adoption ID.
  * The authorized caller already owns the original RR client and resource. */
@@ -66,6 +72,7 @@ function nativeFor(work:OrderTimeWork,scope:{lineId:string|null},resource:Busine
  const nodes=item.stages.flatMap(stage=>stage.nodes).filter(node=>node.current&&node.state!=='unavailable'&&node.key===key
   &&(!scope.lineId||!node.records.some(record=>record.lineId)||node.records.some(record=>record.lineId===scope.lineId))
   &&(!perPo||new Set(node.records.flatMap(record=>record.lineId?[record.lineId]:[])).size===1)
+  &&(!step||Boolean(task&&node.records.some(record=>record.domain==='task'&&record.id===task.task_id)))
   &&(round===null||node.round===round||node.round===null));
  const node=nodes.length===1?nodes[0]:undefined;
  const matchesReadRound=round===null||round===(resource.kind==='source'?item.selectedRound??1:item.adoptedRound);
@@ -115,13 +122,34 @@ export function orderTimeReadingBasis(saved:StoredOrderTimePlan,resource:Busines
   const original=legacy?.scopes.find(value=>value.scopeRef===scope.scopeRef||scope.lineId&&value.lineId===scope.lineId);
   const required=requiredFixedTimelineWork(definitions,scope.terminalIds),facts:Record<string,ScheduleFact>={};
   const work:ScheduleWork[]=required.map(definition=>{
-   const source=byId.get(definition.id)!,target=saved.targets[scope.scopeRef]?.[source.id],policy=orderTimeWorkDefinition(saved.input.plan,source.parameterKey,source.craftStep);
+   const source=byId.get(definition.id)!,framework=saved.input.frameworkPlans?.[scope.scopeRef],target=framework?framework.arranged.find(row=>row.id===source.id):saved.targets[scope.scopeRef]?.[source.id],policy=orderTimeWorkDefinition(saved.input.plan,source.parameterKey,source.craftStep);
    const old=original?.work.find(value=>source.canonicalWorkRef?value.canonicalWorkRef===source.canonicalWorkRef:value.id===source.id);
    const own=nativeFor(source,scope,resource,item,native,evidence),previous=old&&original?.facts[old.id];
    // An empty legacy placeholder is not a conflicting historical event. It
    // cannot hide this exact scope's already verified native completion.
    const emptyPrevious=previous&&!previous.businessCompleted&&!previous.evidenceRefs.length&&[previous.ready,previous.clockStart,previous.completed].every(value=>value.precision==='unknown');
-   const fact=previous&&!(emptyPrevious&&own.fact.businessCompleted&&own.fact.completed.precision!=='unknown')?structuredClone(previous):own.fact;
+   let fact=previous&&!(emptyPrevious&&own.fact.businessCompleted&&own.fact.completed.precision!=='unknown')?structuredClone(previous):own.fact;
+   if(evidence.washing?.[source.id])fact=structuredClone(evidence.washing[source.id]!);
+   if(framework){
+    const names:Record<string,string>={fabric_receipt_a:'fabric_receipt',fabric_receipt_b:'fabric_receipt',warehouse_accessories:'accessories_ready',warehouse_dispatch:'processing_dispatch'};
+    const rows=evidence.frameworkFacts?.filter(row=>row.key===(names[source.parameterKey]??source.parameterKey))??[];
+    const exact=rows.filter(row=>row.scopeRef===scope.scopeRef),selected=exact.length?exact:rows.filter(row=>row.scopeRef==='whole');
+    const observed=selected.length===1?selected[0]:null;
+    // Partial whole-order dispatch cannot erase a completed PO; the native
+    // task's ready/clock/windows stay intact when completion is overlaid.
+    if(observed&&!(observed.scopeRef==='whole'&&scope.lineId&&source.id.endsWith(':'+scope.lineId)&&fact.businessCompleted&&!observed.completed)){
+     fact.businessCompleted=observed.completed;
+     fact.completed=!observed.completed?unknown:observed.precision==='instant'?instant(observed.occurredAt):observed.precision==='date'&&observed.occurredDate?{precision:'date',date:observed.occurredDate}:unknown;
+     fact.evidenceRefs=[...new Set([...fact.evidenceRefs,`${observed.sourceDomain}:${observed.sourceRecordId}:v${observed.sourceVersion}`])];
+    }
+    if(source.parameterKey==='customer_confirmation'){
+     // Commercial acceptance is not the client's final sample approval.
+     fact.businessCompleted=evidence.commercial?.completed===true;
+     fact.completed=fact.businessCompleted?instant(evidence.commercial?.at):unknown;
+     fact.ready=unknown;fact.clockStart=unknown;
+     fact.evidenceRefs=evidence.commercial?[evidence.commercial.evidence]:[];
+    }
+   }
    // A genuine zero-duration event occurs once. Its own occurrence can anchor
    // that event's position without inventing an enteredAt for a human task.
    const rule=orderTimeRule(saved.input.plan,source.parameterKey)?.rule;
@@ -145,7 +173,7 @@ export function orderTimeReadingBasis(saved:StoredOrderTimePlan,resource:Busines
    const originalOwn=taskOwn??(own.native?.standardCalendar||own.native?.batchWindows?.length?nativeOwn:null)??atStart??nativeOwn??(begun&&old?{responsibilitySlaRef:old.responsibilitySlaRef,responsibilityMinutes:old.responsibilityMinutes,responsibilityCalendar:old.responsibilityCalendar}:begun?{responsibilitySlaRef:null,responsibilityMinutes:null,responsibilityCalendar:null}:policy);
    const capturedWarning=atStart&&start&&capturedRule?.minutes!==null&&capturedRule?.calendar&&capturedRule.reminder.enabled?shiftFixedTimeline(start,capturedRule.minutes*capturedRule.reminder.percent/100,capturedRule.calendar):null;
    const reminder=orderTimeRule(saved.input.plan,source.parameterKey)?.rule.reminder;
-   const goal=scope.customerGoalIds.includes(source.id),anchor=scope.goals[source.id];
+   const goal=!framework&&scope.customerGoalIds.includes(source.id),anchor=scope.goals[source.id];
    return {...definition,stage:source.stage,canonicalWorkRef:source.canonicalWorkRef??`${resource.kind}:${resource.id}:work:${source.id}`,
     start:target?.start.at??null,end:target?.end.at??null,...originalOwn,
     responsibilitySlaRef:originalOwn.responsibilitySlaRef,responsibilityMinutes:originalOwn.responsibilityMinutes??null,responsibilityCalendar:originalOwn.responsibilityCalendar??null,
@@ -159,7 +187,7 @@ export function orderTimeReadingBasis(saved:StoredOrderTimePlan,resource:Busines
   // A craft's processing report does not close its parent window. Reconcile
   // only that frozen work's included return, so another craft/round cannot
   // supply its completion when there is no matching legacy basis.
-  for(const parent of saved.input.work.filter(node=>['development_printing','development_embroidery'].includes(node.parameterKey))){
+  for(const parent of saved.input.work.filter(node=>(['development_printing','development_embroidery'].includes(node.parameterKey)||node.parameterKey.startsWith('development_special_')))){
    const fact=facts[parent.id];if(!fact)continue;
    const returns=saved.input.work.filter(node=>node.includedIn===parent.id&&node.parameterKey==='development_craft_return');
    const receipt=returns.length===1?(facts[returns[0]!.id]??nativeFor(returns[0]!,scope,resource,item,native,evidence).fact):undefined;
@@ -175,12 +203,13 @@ export function orderTimeReadingBasis(saved:StoredOrderTimePlan,resource:Busines
    if(source&&fact.businessCompleted&&(evidence.policies?.some(version=>version.history)||evidence.inheritedPolicies))node.completionTarget=orderTimeCompletionTarget(source,scope,fact.completed,evidence.policies??[],saved.time.scenarioId,evidence.inheritedPolicies);
    fact.waitingForPredecessors=fact.ready.precision==='unknown'&&node.dependsOn.length>0&&node.dependsOn.some(id=>!facts[id]?.businessCompleted);}
   const end=scope.customerGoal.precision==='instant'?scope.customerGoal.value:scope.customerGoal.precision==='date'?new Date(Date.parse(scope.customerGoal.value+'T00:00:00+08:00')+86400000).toISOString():null;
-  return {scopeRef:scope.scopeRef,lineId:scope.lineId,targetRevision:`${saved.id}:${saved.revision}`,work,facts,terminalIds:[...(scope.customerGoalIds.length?scope.customerGoalIds:scope.terminalIds)],customerGoal:end};
+  return {...(saved.input.frameworkPlans?.[scope.scopeRef]?{plannedReadiness:true}:{}),scopeRef:scope.scopeRef,lineId:scope.lineId,targetRevision:`${saved.id}:${saved.revision}`,work,facts,terminalIds:[...(scope.customerGoalIds.length?scope.customerGoalIds:scope.terminalIds)],customerGoal:end};
  });
  // A complete saved production route is the applicability authority even
  // before a formal instruction exists. Missing targets alone prove nothing.
- const noSecondary=resource.kind==='order'&&saved.input.route.complete&&!saved.input.work.some(work=>['bulk_printing','bulk_embroidery','bulk_print_embroidery','bulk_qc'].includes(work.parameterKey));
- return {version:'fixed-schedule-basis-v1',policyVersion:'order-time-plan-v1',...(noSecondary?{notApplicableNodes:['process_logistics','bulk_qc'] as Array<'process_logistics'|'bulk_qc'>}:{}),scopeRevision:saved.identityHash,factRevision:hash(scopes.map(scope=>scope.facts)),scopes,termination:legacy?.termination??null,
+ const framework=frameworkJourneyBasis(saved,scopes,evidence.policies??[],item.asOf??saved.time.now);
+ const noSecondary=resource.kind==='order'&&saved.input.route.complete&&!saved.input.work.some(work=>(['bulk_printing','bulk_embroidery','bulk_print_embroidery','bulk_qc'].includes(work.parameterKey)||work.parameterKey.startsWith('bulk_special_')));
+ return {...(framework?{framework}:{}),version:'fixed-schedule-basis-v1',policyVersion:'order-time-plan-v1',...(noSecondary?{notApplicableNodes:['process_logistics','bulk_qc'] as Array<'process_logistics'|'bulk_qc'>}:{}),scopeRevision:saved.identityHash,factRevision:hash(scopes.map(scope=>scope.facts)),scopes,termination:legacy?.termination??null,
   pending:!saved.input.route.complete||scopes.some(scope=>{const required=new Set(requiredFixedTimelineWork(scope.work,scope.terminalIds).map(work=>work.id));return scope.work.some(work=>required.has(work.id)&&(!work.start||!work.end));})};
 }
 
@@ -202,6 +231,28 @@ export async function readOrderTimeBasis(db:DB,resource:BusinessTimeScope,item:O
   const known=material?.valid&&material.state==='ready'&&material.occurredAt&&Date.parse(material.occurredAt)<=Date.parse(asOf);
   currentNative.warehouse_accessories={evidence:material?`preparation-material:${material.recordId}:v${material.version}`:`preparation-material:${resource.id}:missing`,businessCompleted:Boolean(known),...(known?{completedAt:material.occurredAt!}:{})};
  }
+ if(resource.kind==='order'&&saved.input.frameworkPlans){
+  const order=(await db.query('SELECT customer_code FROM digital_production_orders WHERE production_order_id=$1',[resource.id])).rows[0];
+  if(!order)throw Error('本单时间事实缺少原订单');
+  evidence.frameworkFacts=(await readSeriesPlanFacts(db,resource.id,item.sourceId,order.customer_code,Number(saved.input.work.map(work=>work.canonicalWorkRef?.match(/^source:[^:]+:round:(\d+):/)?.[1]).find(Boolean)??item.adoptedRound??1))).facts;
+  const commercial=(await db.query(`SELECT q.quote_id,q.confirmed_version,v.confirmation->>'confirmedAt' AS confirmed_at
+   FROM digital_quotation_documents q JOIN digital_quotation_versions v ON v.quote_id=q.quote_id AND v.version=q.confirmed_version
+   WHERE q.production_order_id=$1`,[resource.id])).rows[0];
+  evidence.commercial={completed:Boolean(commercial),at:commercial?.confirmed_at&&Date.parse(commercial.confirmed_at)<=Date.parse(asOf)?commercial.confirmed_at:null,evidence:commercial?`quotation:${commercial.quote_id}:v${commercial.confirmed_version}`:`quotation:${resource.id}:unconfirmed`};
+  const work=saved.input.work.filter(w=>/^bulk_(factory|return)_washing/.test(w.parameterKey));
+  if(work.length){
+   const sheet=await readBulkWashing(db,resource.id,null,asOf),plans=await washingPlans(db,resource.id);
+   const quantities=(await db.query(`SELECT po.line_id,r.actual_cut_count::int AS quantity FROM digital_production_po_lines po
+    LEFT JOIN digital_production_child_lines l ON l.module='cutting' AND l.line_id=po.line_id
+    LEFT JOIN current_cutting_records r ON r.cutting_order_id=l.child_id WHERE po.production_order_id=$1`,[resource.id])).rows;
+   evidence.washing={};
+   for(const w of work){const lineId=saved.input.scopes.find(s=>s.lineId&&w.id.endsWith(':'+s.lineId))?.lineId;if(!lineId)continue;
+    const rows=quantities.filter(q=>q.line_id===lineId),quantity=rows.length===1&&rows[0].quantity!==null?Number(rows[0].quantity):null;
+    evidence.washing[w.id]=journeyWashingFact(sheet.scopes,plans,lineId,w.parameterKey,quantity,asOf);
+   }
+  }
+
+ }
  const result=orderTimeReadingBasis(saved,resource,item,currentNative,evidence,legacy);
  result.termination=await journeyTermination(db,resource,asOf);return result;
 }
@@ -210,7 +261,11 @@ export async function readOrderTimeBasis(db:DB,resource:BusinessTimeScope,item:O
  * Unperformed actuals are not missing history and do not become fake dates. */
 export function attachOrderTimeCoverage(item:OrderJourney,basis:FixedScheduleBasis){
  if(basis.policyVersion!=='order-time-plan-v1'||!item.supervision)return;
- const coverage=item.supervision.coverage.filter(value=>value.key!=='plan');
+ const issuedFactoryCommitment=item.stages.flatMap(stage=>stage.nodes).some(node=>node.current&&node.key==='sourcing_owner'&&node.state==='completed');
+ const coverage=item.supervision.coverage.filter(value=>value.key!=='plan'&&(!basis.framework||!['customer_date','fabric_date'].includes(value.key)&&!(value.key==='factory_date'&&!issuedFactoryCommitment)));
+ // A new frozen framework already has its approved customer date and material
+ // planning basis. A factory promise is required only once actually issued;
+ // old legacy date warnings cannot turn an adopted route into missing input.
  const missing=basis.pending||basis.scopes.some(scope=>scope.work.some(work=>work.minutes===null||work.calendar===null&&work.minutes!==0));
  if(missing)coverage.push({key:'plan',message:'本单适用流程或所需时间还没设置完整'});
  if(basis.scopes.some(scope=>Object.values(scope.facts).some(fact=>fact.businessCompleted&&fact.completed.precision==='unknown'))&&!coverage.some(value=>value.key==='fact_time'))coverage.push({key:'fact_time',message:'已有完成记录的真实时间还需核对'});

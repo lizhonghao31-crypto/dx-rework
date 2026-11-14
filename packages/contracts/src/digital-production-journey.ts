@@ -237,7 +237,7 @@ export type JourneyResult=Omit<JourneyCompleteResult,'total'|'summary'>&{
 
 export type JourneyDisplay = {
   ruleVersion: "cockpit-display-v1";
-  mainState: "completed" | "overdue" | "due_soon" | "active" | "not_started" | "cancelled";
+  mainState: "closed" | "completed" | "overdue" | "due_soon" | "active" | "not_started" | "cancelled";
   earliestShipmentDate: string | null; missingShipmentDates: number; closedAt: string | null;
   actualRatio: number | null; actualLabel: string; awaitingClosure: boolean;
   stages: Array<{key:JourneyStageKey;ratio:number|null;applicable:number|null;completed:number|null;notApplicable:boolean;risk:"overdue"|"due_soon"|"normal"|"unknown"}>;

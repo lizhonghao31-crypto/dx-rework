@@ -56,6 +56,12 @@ describe('R5 exact frozen order-time reading and independent visible endpoints',
   original.input.frameworkPlans={'TEST scope':frozen};original.targets['TEST scope']!.a!.end.at=at(20);
   const changed=structuredClone(original);changed.id='TEST framework changed';changed.revision=2;changed.time.now=at(9);changed.input.frameworkPlans!['TEST scope']!.arranged.find(row=>row.id==='a')!.end.at=at(10);
   const policies=[changed,original].map(plan=>({id:plan.id,at:plan.time.now,plan:plan.input.plan,history:{input:plan.input,targets:plan.targets,revision:plan.revision,time:plan.time}}));
+  const view=item();view.asOf=at(12);view.stages[1]!.nodes=[node('a','completed',at(5),at(7))];
+  const read=orderTimeReadingBasis(changed,resource,view,{}, {...evidence(),policies},null),current=evaluateFixedJourneyBasis(read,at(12),false);
+  expect(read.scopes[0]!.work.find(work=>work.id==='a')!.end).toBe(at(10));
+  expect(current.scopes[0]!.nodes.find(work=>work.id==='a')!.goalDelta).toMatchObject({targetAt:at(6),signedValue:60});
+  expect(current.framework?.scopes[0]?.milestones).toHaveLength(8);
+  expect(fixedScheduleBasisSnapshot(read).framework).toEqual(read.framework);
   const result=orderTimeCompletionTarget(original.input.work[0]!,original.input.scopes[0]!,point(7),policies,null);
   expect(result).toMatchObject({end:at(6),targetRevision:'TEST plan:1',targetPrecision:'instant',targetDate:null});
   expect((Date.parse(at(7))-Date.parse(result!.end))/3600000).toBe(1);

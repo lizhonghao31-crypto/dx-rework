@@ -53,7 +53,7 @@ export function journeySelectionFacts(item:OrderJourney,inputs:JourneyTimingInpu
   if(!open(node))continue;
   if(node.expectedPrecision==='date'&&/^\d{4}-\d{2}-\d{2}$/.test(node.expectedAt??''))reconsiderDate(node.expectedAt);
  }
- const terminal=item.display?.mainState==='completed'||item.display?.mainState==='cancelled';
+ const terminal=item.display?.mainState==='completed'||item.display?.mainState==='closed'||item.display?.mainState==='cancelled';
  if(!terminal){
   for(const line of item.poDeliveryDates??[]){reconsiderDate(line.customerWarehouseArrivalDate);reconsiderDate(line.factoryDeliveryDate);reconsiderDate(line.sampleTargetDate);}
   reconsiderDate(item.supervision?.customerReminderDate);

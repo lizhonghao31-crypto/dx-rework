@@ -105,3 +105,17 @@ it('R3 closed coverage is counted and reachable only for original fact-time cont
  expect(selectJourneys([closed],{...filter,missing:'customer_date'},asOf).total).toBe(0);expect(selectJourneys([closed],{...filter,missing:'fact_time'},asOf).total).toBe(1);
  closed.supervision.coverage=closed.supervision.coverage.filter(row=>row.key!=='fact_time');expect(selectJourneys([closed],filter,asOf).summary.timingMissing).toBe(0);
 });
+it('separates special closure from delivered completion and stops treating it as active work',()=>{
+ const o=date(order('TEST-closed'),'2026-10-01');
+ nodes(o).find(n=>n.key==='special_closure')!.state='completed';
+ nodes(o).find(n=>n.key==='bulk_cutting')!.state='blocked';
+ nodes(o).find(n=>n.key==='bulk_cutting')!.risks=['overdue'];
+ o.supervision={asOf,status:'legacy_unenrolled',originalRevision:null,currentRevision:null,nodes:[],customerReminderDate:null,coverage:[{key:'factory_date',message:'旧缺项'}]};
+ o.display=journeyDisplay(o,asOf,{closedAt:asOf});
+ expect(o.display).toMatchObject({mainState:'closed',awaitingClosure:false});
+ const result=selectJourneys([o],JourneyFilterSchema.parse({scope:'production'}),asOf);
+ expect(result.summary.completed).toBe(0);expect(result.summary.overdue).toBe(0);
+ expect(result.summary.active).toBe(0);expect(result.summary.blocked).toBe(0);expect(result.summary.timingMissing).toBe(0);expect(result.supervision?.overdue).toBe(0);
+ nodes(o).find(n=>n.key==='packing')!.state='completed';
+ expect(journeyDisplay(o,asOf).mainState).toBe('completed');
+});

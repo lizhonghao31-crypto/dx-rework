@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./time-framework-journey": { "types": "./src/time-framework-journey.ts", "import": "./dist/time-framework-journey.js" },
     "./bulk-washing": { "types": "./src/bulk-washing.ts", "import": "./dist/bulk-washing.js" },
     "./order-time-framework": { "types": "./src/order-time-framework.ts", "import": "./dist/order-time-framework.js" },
     "./whole-order-deletion": { "types": "./src/whole-order-deletion.ts", "import": "./dist/whole-order-deletion.js" },

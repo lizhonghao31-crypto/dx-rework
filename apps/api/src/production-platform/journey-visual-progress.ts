@@ -130,7 +130,10 @@ export function journeyVisualProgress(order: OrderJourney, asOf: string): Journe
   const applicable = stages.filter(stage => stage.applicability === 'applicable');
   const unknownStages = stages.filter(stage => stage.applicability === 'unknown').length;
   const fixed=order.fixedSchedule,planEnd=fixed?.durationSummary.planEnd,terminalTargets=fixed?.scopes.flatMap(scope=>scope.nodes.filter(node=>node.goalDelta.targetAt===planEnd).map(progress=>({scopeRef:scope.scopeRef,lineId:scope.lineId,progress})))??[];
-  const expected = fixed?planEnd?fixedExpectedDate(terminalTargets):unknownDate():copyDate(dates?.overall.forecast);
+  const framework=fixed?.framework,deliveryDates=framework?.scopes.map(scope=>scope.customerDate).sort();
+  // Forward work can finish before the customer commitment. Its terminal
+  // target need not equal that date; never search for an artificial equality.
+  const expected:JourneyBusinessDate = deliveryDates?.length?{at:deliveryDates.at(-1)!,precision:'date',quality:'recorded',status:'complete',covered:deliveryDates.length,total:deliveryDates.length,reasons:[]}:fixed?planEnd?fixedExpectedDate(terminalTargets):unknownDate():copyDate(dates?.overall.forecast);
   const completed=fixed?.durationSummary.deliveryCompletedAt;
   const actual = fixed?completed&&completed.precision!=='unknown'?{at:completed.precision==='date'?completed.date:completed.at,precision:completed.precision,quality:'recorded' as const,status:'complete' as const,covered:fixed.scopes.length,total:fixed.scopes.length,reasons:[]}:unknownDate():copyDate(dates?.overall.actual);
   const startedAt = fixed?fixed.durationSummary.actualStart.precision==='instant'?fixed.durationSummary.actualStart.at:null:observed && !unknownStages ? recordedStart(rows, nodes, asOf) : null;

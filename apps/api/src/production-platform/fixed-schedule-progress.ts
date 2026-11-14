@@ -1,10 +1,10 @@
 import type {FixedScheduleCalendar,ScheduleOccurrence,ScheduleRange,ScheduleGoalDelta,ScheduleNodeProgress,ScheduleScopeProgress,ScheduleDurationSummary} from '@dx-rework/contracts';
 import {shiftFixedTimeline} from './fixed-timeline-targets.js';
 
-export type ScheduleWork={id:string;canonicalWorkRef:string;stage?:number;dependsOn:readonly string[];start:string|null;end:string|null;minutes:number|null;calendar:FixedScheduleCalendar|null;includedIn?:string;accountingRole?:'original_work'|'added_work'|'included'|'event'|'shared_reference';originalHandoffAt?:string|null;responsibilitySlaRef:string|null;responsibilityMinutes?:number|null;responsibilityCalendar?:FixedScheduleCalendar|null;responsibilityWarningAt?:string|null;responsibilityReminderPercent?:number|null;targetPrecision?:'instant'|'date';targetDate?:string|null;targetRevision?:string;completionTarget?:{end:string;targetRevision:string;targetPrecision:'instant'|'date';targetDate:string|null}|null};
+export type ScheduleWork={id:string;canonicalWorkRef:string;stage?:number;dependsOn:readonly string[];dependencyReserves?:Readonly<Record<string,{minutes:number;calendar:FixedScheduleCalendar}>>;start:string|null;end:string|null;minutes:number|null;calendar:FixedScheduleCalendar|null;includedIn?:string;accountingRole?:'original_work'|'added_work'|'included'|'event'|'shared_reference';originalHandoffAt?:string|null;responsibilitySlaRef:string|null;responsibilityMinutes?:number|null;responsibilityCalendar?:FixedScheduleCalendar|null;responsibilityWarningAt?:string|null;responsibilityReminderPercent?:number|null;targetPrecision?:'instant'|'date';targetDate?:string|null;targetRevision?:string;completionTarget?:{end:string;targetRevision:string;targetPrecision:'instant'|'date';targetDate:string|null}|null};
 export type ScheduleResponsibilityWindow={sourceRef:string;started:ScheduleOccurrence;completed:ScheduleOccurrence;complete:boolean;deadline:string|null;warningAt:string|null;calendar:FixedScheduleCalendar|null};
 export type ScheduleFact={ready:ScheduleOccurrence;completed:ScheduleOccurrence;businessCompleted:boolean;waitingForPredecessors:boolean;clockStart:ScheduleOccurrence;evidenceRefs:readonly string[];ownWindows?:readonly ScheduleResponsibilityWindow[];impactStartedAt?:string|null;terminated?:boolean;terminationAt?:string|null;notYetReady?:boolean};
-export type ScheduleScopeInput={scopeRef:string;lineId:string|null;targetRevision:string;work:readonly ScheduleWork[];facts:Readonly<Record<string,ScheduleFact>>;terminalIds:readonly string[];customerGoal:string|null};
+export type ScheduleScopeInput={plannedReadiness?:boolean;scopeRef:string;lineId:string|null;targetRevision:string;work:readonly ScheduleWork[];facts:Readonly<Record<string,ScheduleFact>>;terminalIds:readonly string[];customerGoal:string|null};
 export type ScheduleTermination={at:string|null;kind:'cancelled'|'special_closure'};
 type Interval=readonly[number,number];
 type Boundary={available:Interval;credit:Interval;reference:number;completed:boolean;estimate:'actual'|'conditional'|'lower_bound'};
@@ -108,20 +108,23 @@ export function evaluateFixedScheduleScope(input:ScheduleScopeInput,asOf:string,
   else {
    const ready=fact?scheduleOccurrenceBounds(fact.ready,asOf):null;
    const allComplete=deps.every(dep=>dep!.completed);
-   if(!ready&&work.accountingRole!=='added_work'&&!(deps.length&&!allComplete&&fact?.waitingForPredecessors))coverage.push('真实就绪或未完成前置依据待核');
+   if(!input.plannedReadiness&&!ready&&work.accountingRole!=='added_work'&&!(deps.length&&!allComplete&&fact?.waitingForPredecessors))coverage.push('真实就绪或未完成前置依据待核');
    else {
     const available:number[]=[],credit:number[]=[];let lowerBound=deps.some(dep=>dep!.estimate==='lower_bound');
     for(const side of [0,1] as const){
-     const candidates=deps.map(dep=>dep!.completed?dep!.available[side]:Math.max(dep!.available[side],shift(start,Math.min(0,scheduleElapsed(dep!.reference,dep!.credit[side],calendar)),calendar)));
+     const candidates=deps.map((dep,index)=>{
+      const reserve=work.dependencyReserves?.[work.dependsOn[index]!],arrival=reserve?shift(dep!.available[side],reserve.minutes,reserve.calendar):dep!.available[side];
+      return dep!.completed?arrival:Math.max(arrival,shift(start,Math.min(0,scheduleElapsed(dep!.reference,dep!.credit[side],calendar)),calendar));
+     });
      const join=candidates.length?Math.max(...candidates):start;
      const joinCredit=allComplete&&deps.length?join:shift(start,Math.min(0,scheduleElapsed(start,join,calendar)),calendar);
-     const position=Math.max(join,shift(start,Math.min(0,scheduleElapsed(start,joinCredit,calendar)),calendar),ready?.[side]??-Infinity);
+     const position=Math.max(join,shift(start,Math.min(0,scheduleElapsed(start,joinCredit,calendar)),calendar),ready?.[side]??(input.plannedReadiness?Math.max(now,start):-Infinity));
      if(work.accountingRole==='added_work'){
       const impact=timestamp(fact?.impactStartedAt),active=impact!==null&&impact<=now;
       available.push(active?Math.max(join,now):join);credit.push(active?Math.max(joinCredit,now):joinCredit);lowerBound ||= active;
      }else{
       const quota=shift(position,budget!,calendar),bound=ready?Math.max(quota,now):quota;
-      available.push(bound);credit.push(shift(end,Math.min(0,scheduleElapsed(end,bound,calendar)),calendar));lowerBound ||= Boolean(ready&&now>=quota);
+      available.push(bound);credit.push(shift(end,Math.min(0,scheduleElapsed(end,bound,calendar)),calendar));lowerBound ||= Boolean(ready&&now>=quota)||Boolean(input.plannedReadiness&&!ready&&now>start);
      }
     }
     boundary={available:[available[0]!,available[1]!],credit:[credit[0]!,credit[1]!],reference:work.accountingRole==='added_work'?timestamp(work.originalHandoffAt)??end:end,completed:false,estimate:lowerBound?'lower_bound':'conditional'};
@@ -136,7 +139,7 @@ export function evaluateFixedScheduleScope(input:ScheduleScopeInput,asOf:string,
   const warningAt=work.responsibilityWarningAt!==undefined?work.responsibilityWarningAt:ownKnown&&ownStart![0]===ownStart![1]&&work.responsibilityReminderPercent!==null&&work.responsibilityReminderPercent!==undefined?iso(shift(ownStart![0],work.responsibilityMinutes!*work.responsibilityReminderPercent/100,ownCalendar!)):null;
   const deadlineAt=work.responsibilitySlaRef&&work.responsibilityMinutes!==null&&work.responsibilityMinutes!==undefined&&ownCalendar&&ownStart&&ownStart[0]===ownStart[1]?iso(shift(ownStart[0],work.responsibilityMinutes,ownCalendar)):null;
   const ownSla:ScheduleNodeProgress['ownSla']=fact?.ownWindows?.length?nativeOwnWindows(fact.ownWindows,asOf,stop,terminated):{state:ownState,deadlineAt,overdueMinutes:own,sourceRef:work.responsibilitySlaRef,...(work.responsibilityWarningAt!==undefined||work.responsibilityReminderPercent!==undefined?{warningAt,warning:!completed&&!terminated&&ownState==='within'&&warningAt!==null&&now>=Date.parse(warningAt)}:{})};
-  results.set(id,{id,scopeRef:input.scopeRef,targetRevision:work.targetRevision??input.targetRevision,canonicalWorkRef:work.canonicalWorkRef,state:terminated?'terminated':state(lag),lagMinutes:lag,businessCompleted:completed,availabilityBound:boundary?{earliest:iso(boundary.available[0]),latest:iso(boundary.available[1])}:null,creditLimit:boundary?{earliest:iso(boundary.credit[0]),latest:iso(boundary.credit[1])}:null,goalDelta,...(work.completionTarget!==undefined?{currentTarget:{at:work.end,date:work.targetDate??null,precision:work.targetPrecision??'instant',revision:work.targetRevision??input.targetRevision}}:{}),ownSla,coverage});
+  results.set(id,{id,scopeRef:input.scopeRef,targetRevision:work.targetRevision??input.targetRevision,canonicalWorkRef:work.canonicalWorkRef,state:terminated?'terminated':state(lag),lagMinutes:lag,businessCompleted:completed,...(input.plannedReadiness?{estimateKind:terminated?'terminated' as const:boundary?.estimate??'unknown' as const}:{}),availabilityBound:boundary?{earliest:iso(boundary.available[0]),latest:iso(boundary.available[1])}:null,creditLimit:boundary?{earliest:iso(boundary.credit[0]),latest:iso(boundary.credit[1])}:null,goalDelta,...(work.completionTarget!==undefined?{currentTarget:{at:work.end,date:work.targetDate??null,precision:work.targetPrecision??'instant',revision:work.targetRevision??input.targetRevision}}:{}),ownSla,coverage});
   visiting.delete(id);boundaries.set(id,boundary);return boundary;
  };
  for(const work of input.work)evaluate(work.id);

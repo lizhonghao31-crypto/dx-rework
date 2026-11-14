@@ -8,7 +8,7 @@ export type JourneySelectionNode=Pick<JourneyNode,'key'|'instanceId'|'stage'|'st
 /** Filter-specific native SQL reductions. A global selection can carry these
  * booleans instead of transferring every mother's node collection. Detail
  * hydration still supplies the actual nodes/reasons for the selected page. */
-export type JourneySelectionSignals={completed:boolean;ongoing:boolean;nodeMatched:boolean;deliveryMatched:boolean;
+export type JourneySelectionSignals={specialClosed?:boolean;completed:boolean;ongoing:boolean;nodeMatched:boolean;deliveryMatched:boolean;
  risks:{overdue:boolean;due_soon:boolean;blocked:boolean};scopedBlocked:boolean;scopedOverdue:boolean;scopedDueSoon:boolean;searchMatched?:boolean};
 export type JourneySelection=Pick<OrderJourney,'id'|'sourceId'|'orderId'|'designStyleNo'|'temporaryStyleNo'|'customer'|'category'|'designer'|'styleName'|'merchandisers'|'orderNumbers'|'createdAt'>&{
  links:Array<{id:string}>;
@@ -53,16 +53,17 @@ export function journeyStages(nodes:JourneyNode[]) { return JOURNEY_STAGES.map(s
 export function journeyScheduleSelection(item:JourneySelection){return item.scheduleSelection??(item.fixedSchedule?{state:item.fixedSchedule.state,lagLineIds:item.fixedSchedule.scopes.filter(scope=>scope.state==='late').flatMap(scope=>scope.lineId?[scope.lineId]:[]),dueLineIds:item.fixedSchedule.scopes.filter(scope=>scope.customerDuePassed).flatMap(scope=>scope.lineId?[scope.lineId]:[]),unknownLineIds:item.fixedSchedule.scopes.filter(scope=>scope.state==='unknown').flatMap(scope=>scope.lineId?[scope.lineId]:[])}:undefined);}
 const scheduleMatches=(item:JourneySelection,filter:JourneyFilter)=>!filter.progress||Boolean(filter.progress==='schedule_lag'?journeyScheduleSelection(item)?.state==='late':filter.progress==='customer_due_passed'?journeyScheduleSelection(item)?.dueLineIds.length:journeyScheduleSelection(item)?.state==='unknown');
 const nodesOf=(item:JourneySelection)=>item.stages.flatMap(stage=>stage.nodes).filter(node=>node.current);
-const ongoing=(item:JourneySelection)=>item.selectionSignals?.ongoing??(!completed(item)&&nodesOf(item).some(node=>!isJourneyPlanningNode(node)&&["active","pending","blocked"].includes(node.state)));
-// Whole-order completion comes only from the authoritative final packing/special-closure projection.
-const completed=(item:JourneySelection)=>item.selectionSignals?.completed??nodesOf(item).some(node=>["packing","special_closure"].includes(node.key)&&node.state==="completed");
+const ongoing=(item:JourneySelection)=>item.selectionSignals?.ongoing??(!completed(item)&&!specialClosed(item)&&nodesOf(item).some(node=>!isJourneyPlanningNode(node)&&["active","pending","blocked"].includes(node.state)));
+// Special closure stops the order but is not normal delivered completion.
+const specialClosed=(item:JourneySelection)=>item.selectionSignals?.specialClosed??nodesOf(item).some(node=>node.key==="special_closure"&&node.state==="completed");
+const completed=(item:JourneySelection)=>item.selectionSignals?.completed??nodesOf(item).some(node=>node.key==="packing"&&node.state==="completed");
 /** The same unfiltered predicates, compiled once only for a complete native
  * view. Partial permissions or node filters must still use scoped reductions. */
 export function journeyUnfilteredSignals(item:JourneySelection):JourneySelectionSignals{
  const nodes=nodesOf(item),delivery=item.deliveryRisks??[];
  const risk=(value:'overdue'|'due_soon'|'blocked')=>nodes.some(node=>node.risks.includes(value))||delivery.some(row=>row.risk===value);
  const open=nodes.filter(node=>!['completed','inherited','cancelled','not_applicable','unavailable'].includes(node.state));
- return {completed:completed(item),ongoing:ongoing(item),nodeMatched:nodes.length>0,deliveryMatched:delivery.length>0,
+ return {...(specialClosed(item)?{specialClosed:true}:{}),completed:completed(item),ongoing:ongoing(item),nodeMatched:nodes.length>0,deliveryMatched:delivery.length>0,
   risks:{overdue:risk('overdue'),due_soon:risk('due_soon'),blocked:risk('blocked')},
   scopedBlocked:nodes.some(node=>node.state==='blocked'),scopedOverdue:open.some(node=>node.risks.includes('overdue')),scopedDueSoon:open.some(node=>node.risks.includes('due_soon'))};
 }
@@ -101,13 +102,13 @@ function selectCockpitSelections<T extends JourneySelection>(items:T[],filter:Jo
   const scopeCounts={production:base.filter(item=>item.orderId&&item.display.mainState!=="cancelled").length,development:base.filter(item=>!item.orderId).length,cancelled:base.filter(item=>item.display.mainState==="cancelled").length};
   const scoped=base.filter(item=>filter.scope==="development"?!item.orderId:Boolean(item.orderId)&&item.display.mainState!=="cancelled").sort(compareCockpitOrders);
   const scopeNodes=(item:JourneySelection)=>nodesOf(item).filter(node=>(!filter.stage||node.stage===filter.stage)&&(!filter.node||node.key===filter.node)&&(!filter.state||node.state===filter.state)&&(!filter.risk||node.risks.includes(filter.risk)));
-  const blocked=(item:typeof scoped[number])=>!['completed','cancelled'].includes(item.display.mainState)&&(item.selectionSignals?.scopedBlocked??scopeNodes(item).some(node=>node.state==='blocked'));
+  const blocked=(item:typeof scoped[number])=>!['completed','closed','cancelled'].includes(item.display.mainState)&&(item.selectionSignals?.scopedBlocked??scopeNodes(item).some(node=>node.state==='blocked'));
   const count=(state:NonNullable<OrderJourney["display"]>["mainState"])=>scoped.filter(item=>item.display.mainState===state).length;
   // Keep original closed-order coverage policy, and use it for both counts and
   // drill-down. Overlapping categories still count one mother in the KPI.
-  const missing=(item:JourneySelection,key:JourneyCoverage['key'])=>(key==='fact_time'||!['completed','cancelled'].includes(item.display!.mainState))&&Boolean(item.supervision?.coverage.some(c=>c.key===key));
+  const missing=(item:JourneySelection,key:JourneyCoverage['key'])=>(key==='fact_time'||!['completed','closed','cancelled'].includes(item.display!.mainState))&&Boolean(item.supervision?.coverage.some(c=>c.key===key));
   const summary={all:scoped.length,active:count("active"),notStarted:count("not_started"),dueSoon:count("due_soon"),overdue:count("overdue"),completed:count("completed"),blocked:scoped.filter(blocked).length,timingMissing:scoped.filter(item=>JOURNEY_COVERAGE_KEYS.some(key=>missing(item,key))).length,...(scoped.some(item=>journeyScheduleSelection(item))?{scheduleLag:scoped.filter(item=>journeyScheduleSelection(item)?.state==='late').length,customerDuePassed:scoped.filter(item=>(journeyScheduleSelection(item)?.dueLineIds.length??0)>0).length,scheduleUnknown:scoped.filter(item=>journeyScheduleSelection(item)?.state==='unknown').length}:{})};
-  const active=scoped.filter(item=>!["completed","cancelled"].includes(item.display.mainState));
+  const active=scoped.filter(item=>!["completed","closed","cancelled"].includes(item.display.mainState));
   const inProgress=(item:JourneySelection)=>scopeNodes(item).filter(n=>!["completed","inherited","cancelled","not_applicable","unavailable"].includes(n.state));
   const supervision={overdue:active.filter(item=>item.selectionSignals?.scopedOverdue??inProgress(item).some(n=>n.risks.includes("overdue"))).length,dueSoon:active.filter(item=>item.selectionSignals?.scopedDueSoon??inProgress(item).some(n=>n.risks.includes("due_soon"))).length,
     coverage:JOURNEY_COVERAGE_KEYS.flatMap(key=>{const affected=scoped.filter(item=>missing(item,key));return affected.length?[{key,orders:affected.length,message:affected[0]!.supervision!.coverage.find(c=>c.key===key)!.message}]:[];})};

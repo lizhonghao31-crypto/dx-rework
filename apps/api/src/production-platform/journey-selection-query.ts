@@ -51,7 +51,7 @@ export async function readJourneySelections(database:Pool,db:PoolClient,actor:Tr
   AND nullif($3::jsonb->>'state','') IS NULL AND nullif($3::jsonb->>'risk','') IS NULL)`;
  const selection=`CASE WHEN ${fullView} THEN m.selection_full_json ELSE m.selection_json END`;
  type Row={creationKind:'source'|'order'|null;creationId:string|null;kind:'source'|'order';resource_id:string;status:JourneySelectionRead['status'];id:string;sourceId:string|null;orderId:string|null;designStyleNo:string;temporaryStyleNo:string|null;customer:string|null;category:string|null;designer:string|null;styleName:string|null;
-  merchandisers:JourneySelection['merchandisers'];orderNumbers:string[];createdAt:string;closed:boolean;activated:boolean;cancelled:boolean;closedAt:string|null;earliestShipmentDate:string|null;reminder:string|null;coverage:JourneyCoverage[];signals:JourneySelectionSignals;search_values:string[];workspace_nodes:WorkspaceNodeFact[];scheduleSelection:JourneySelection['scheduleSelection']};
+  merchandisers:JourneySelection['merchandisers'];orderNumbers:string[];createdAt:string;specialClosed:boolean;closed:boolean;activated:boolean;cancelled:boolean;closedAt:string|null;earliestShipmentDate:string|null;reminder:string|null;coverage:JourneyCoverage[];signals:JourneySelectionSignals;search_values:string[];workspace_nodes:WorkspaceNodeFact[];scheduleSelection:JourneySelection['scheduleSelection']};
  const rows=(await db.query<Row>(`WITH requested AS (
   SELECT * FROM jsonb_to_recordset($1::jsonb) AS r(kind text,id uuid,"sourceAccess" boolean,"orderAccess" boolean,"fullOrder" boolean,timing boolean,budget boolean,now timestamptz,scenario uuid,revision bigint)
  ), native AS MATERIALIZED (
@@ -139,7 +139,7 @@ export async function readJourneySelections(database:Pool,db:PoolClient,actor:Tr
   SELECT s.*,((nullif($3::jsonb->>'stage','') IS NULL OR stage=$3::jsonb->>'stage') AND (nullif($3::jsonb->>'node','') IS NULL OR key=$3::jsonb->>'node')
    AND (nullif($3::jsonb->>'state','') IS NULL OR state=$3::jsonb->>'state') AND (nullif($3::jsonb->>'risk','') IS NULL OR risks ? ($3::jsonb->>'risk'))) AS matches FROM scoped s
  ),
-flags AS (SELECT kind,id,bool_or(key IN ('packing','special_closure') AND state='completed') AS closed,
+flags AS (SELECT kind,id,bool_or(key='packing' AND state='completed') AS closed,bool_or(key='special_closure' AND state='completed') AS special_closed,
   bool_or(NOT planning AND stage<>'creation' AND (entered OR state IN ('active','completed') AND recorded)) AS activated,
   bool_or(NOT planning AND state IN ('active','pending','blocked')) AS ongoing,bool_or(matches) AS matched,
   bool_or(risks ? 'overdue') AS overdue,bool_or(risks ? 'due_soon') AS warning,bool_or(risks ? 'blocked') AS blocked,
@@ -147,7 +147,7 @@ flags AS (SELECT kind,id,bool_or(key IN ('packing','special_closure') AND state=
   bool_or(matches AND state NOT IN ('completed','inherited','cancelled','not_applicable','unavailable') AND risks ? 'overdue') AS scoped_overdue,
   bool_or(matches AND state NOT IN ('completed','inherited','cancelled','not_applicable','unavailable') AND risks ? 'due_soon') AS scoped_warning
   FROM reduced GROUP BY kind,id
-  UNION ALL SELECT n.kind,n.id,(n.frame->'fullSignals'->>'completed')::boolean,(n.frame->'fullSignals'->>'activated')::boolean,
+  UNION ALL SELECT n.kind,n.id,(n.frame->'fullSignals'->>'completed')::boolean,coalesce((n.frame->'fullSignals'->>'specialClosed')::boolean,false),(n.frame->'fullSignals'->>'activated')::boolean,
    (n.frame->'fullSignals'->>'ongoing')::boolean,(n.frame->'fullSignals'->>'nodeMatched')::boolean,
    (n.frame->'fullSignals'->'risks'->>'overdue')::boolean,(n.frame->'fullSignals'->'risks'->>'due_soon')::boolean,(n.frame->'fullSignals'->'risks'->>'blocked')::boolean,
    (n.frame->'fullSignals'->>'scopedBlocked')::boolean,(n.frame->'fullSignals'->>'scopedOverdue')::boolean,(n.frame->'fullSignals'->>'scopedDueSoon')::boolean FROM framed n WHERE n.fast),
@@ -174,14 +174,14 @@ flags AS (SELECT kind,id,bool_or(key IN ('packing','special_closure') AND state=
   CASE WHEN n."sourceAccess" THEN CASE WHEN n.source_managed THEN 'source' END WHEN n."orderAccess" AND n.order_managed THEN 'order' END AS "creationKind",
   CASE WHEN n."sourceAccess" THEN CASE WHEN n.source_managed THEN n.sid::text END WHEN n."orderAccess" AND n.order_managed THEN n.oid::text END AS "creationId",
   coalesce(CASE WHEN n."sourceAccess" THEN n.source_created WHEN n."orderAccess" THEN n.order_created END,n.source_created,n.order_created)::text AS "createdAt",
-  coalesce(flags.closed,false) AS closed,coalesce(flags.activated,false) AS activated,
+  coalesce(flags.closed,false) AS closed,coalesce(flags.special_closed,false) AS "specialClosed",coalesce(flags.activated,false) AS activated,
   n."orderAccess" AND coalesce((n.facts->>'cancelled')::boolean,false) OR n.oid IS NULL AND n."sourceAccess" AND coalesce((n.facts->>'cancelled')::boolean,false) AS cancelled,
-  CASE WHEN flags.closed THEN n.facts->>'closedAt' END AS "closedAt",
+  CASE WHEN flags.closed OR flags.special_closed THEN n.facts->>'closedAt' END AS "closedAt",
   (SELECT min(l.customer_warehouse_arrival_date)::text FROM digital_production_po_lines l WHERE n."orderAccess" AND l.production_order_id=n.oid) AS "earliestShipmentDate",
   CASE WHEN n.timing THEN n.frame->>'customerReminderDate' END AS reminder,
   CASE WHEN n.timing THEN n.frame->'schedule' END AS "scheduleSelection",
   CASE WHEN n.timing THEN coalesce(n.frame->'coverage','[]'::jsonb) ELSE '[{"key":"scope","message":"仅有本岗位节点权限，整单SLA未计入；已授权节点照常监督"}]'::jsonb END AS coverage,
-  jsonb_build_object('completed',coalesce(flags.closed,false),'ongoing',NOT coalesce(flags.closed,false) AND coalesce(flags.ongoing,false),
+  jsonb_build_object('specialClosed',coalesce(flags.special_closed,false),'completed',coalesce(flags.closed,false),'ongoing',NOT coalesce(flags.closed,false) AND NOT coalesce(flags.special_closed,false) AND coalesce(flags.ongoing,false),
    'nodeMatched',coalesce(flags.matched,false),'deliveryMatched',coalesce(delivery.matched,false),
    'risks',jsonb_build_object('overdue',coalesce(flags.overdue,false) OR coalesce(delivery.overdue,false),'due_soon',coalesce(flags.warning,false) OR coalesce(delivery.warning,false),'blocked',coalesce(flags.blocked,false)),
    'scopedBlocked',coalesce(flags.scoped_blocked,false),'scopedOverdue',coalesce(flags.scoped_overdue,false),'scopedDueSoon',coalesce(flags.scoped_warning,false)) AS signals,
@@ -218,7 +218,7 @@ flags AS (SELECT kind,id,bool_or(key IN ('packing','special_closure') AND state=
   const resource={kind:row.kind,id:row.resource_id},clock=clocks.get(businessScopeKey(resource))!;
   const selection:JourneySelection={id:row.id,sourceId:row.sourceId,orderId:row.orderId,designStyleNo:row.designStyleNo,temporaryStyleNo:row.temporaryStyleNo,customer:row.customer,category:row.category,designer:row.designer,styleName:row.styleName,
    merchandisers:row.merchandisers,orderNumbers:row.orderNumbers,createdAt:created.get(row.creationKind+':'+row.creationId)?.at??new Date(row.createdAt).toISOString(),links:[],lines:[],stages:[],supervision:{coverage:row.coverage},
-   ...(row.scheduleSelection?{scheduleSelection:row.scheduleSelection}:{}),display:{mainState:journeyOrderState({cancelled:row.cancelled,closed:row.closed,activated:row.activated,earliestShipmentDate:row.earliestShipmentDate,reminderDate:row.reminder},clock.now),earliestShipmentDate:row.earliestShipmentDate,closedAt:row.closedAt},selectionSignals:row.signals};
+   ...(row.scheduleSelection?{scheduleSelection:row.scheduleSelection}:{}),display:{mainState:journeyOrderState({cancelled:row.cancelled,closed:row.closed,specialClosed:row.specialClosed,activated:row.activated,earliestShipmentDate:row.earliestShipmentDate,reminderDate:row.reminder},clock.now),earliestShipmentDate:row.earliestShipmentDate,closedAt:row.closedAt},selectionSignals:row.signals};
   selection.selectionSignals!.searchMatched=journeyMatchesSearch(selection,filter.search.toLocaleLowerCase())||row.search_values.some(value=>value?.toLocaleLowerCase().includes(filter.search.toLocaleLowerCase()));
   return {resource,status:row.creationKind&&!created.get(row.creationKind+':'+row.creationId)?'failed':row.status,selection,...(options.workspaceNodes?{workspaceNodes:row.workspace_nodes}:{})};
  });
