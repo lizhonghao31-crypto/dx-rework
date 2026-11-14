@@ -23,6 +23,7 @@ export async function developmentSlaPlan(db: DB, sourceId: string) {
 }
 /** Fixed route for newly enrolled sources only. Historical routes stay on their original reader. */
 export function developmentSlaRoute(document: Pick<DevelopmentDocument, "craft" | "washing" | "craftSteps">,outputKind="整件样板",routeSchemaVersion:1|2=1): DigitalTaskKind[] {
+  if(routeSchemaVersion!==2&&document.craftSteps?.some(step=>step.craftKind==='special'))throw Error('特殊工艺须采用独立步骤路线，不能合并为旧印绣流程');
   const route: DigitalTaskKind[] = ["development_pattern", "development_cutting"];
   if (document.craft !== "无") {
     if(routeSchemaVersion===2){

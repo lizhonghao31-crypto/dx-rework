@@ -24,7 +24,7 @@ export async function arrangementTodos(db:DB,actor:TrustedActorContext,projectio
   if(plan.managerId&&plan.managerId!==actor.actorId&&!plan.canTakeOver)continue;
   const id=arrangementTodoId(source.source_id,plan.roundNumber),at=new Date(source.created_at).toISOString();
   const check=(await db.query("SELECT f.fact_id FROM digital_development_execution_facts f JOIN digital_production_tasks t ON t.task_id=f.task_id WHERE f.source_id=$1 AND t.route_version=$2 AND f.kind='核配通过' ORDER BY f.sequence DESC LIMIT 1",[source.source_id,plan.roundNumber])).rows[0]?.fact_id??null;
-  const contentToken=todoContentToken(['arrangement',id,plan.documentVersion,check,plan.managerId,plan.rows.filter(row=>row.editable&&!row.valid).map(row=>[row.kind,row.assigneeId])]);
+  const contentToken=todoContentToken(['arrangement',id,plan.documentVersion,check,plan.managerId,plan.rows.filter(row=>row.editable&&!row.valid).map(row=>[row.kind,row.stepRef??null,row.assigneeId])]);
   const selectionKey:TodoSelectionKey={contentToken,todoId:id,taskTitle:"安排本轮师傅",todoType:"business_action",category:"digital_assignment",sourceAction:"development_arrangement",recipientUserId:actor.actorId,route:{routeName:"digital_development_arrangement",entityId:source.source_id,todoId:id,developmentRound:plan.roundNumber},dueAt:null,status:"pending",orderContext:{reworkNo:null,orderNo:null,styleNo:source.design_style_no,supplierName:null,status:"尚未安排完整",updatedAt:at},unread:true,createdAt:at};
   appendSelectedTodo(result,projection,selectionKey,()=>({...selectionKey,sourceEventId:id,entityType:"digital_development",entityId:source.source_id,requiredRole:null,requiredCapability:null,policyKey:null,reminderCount:0,blockedReason:null,version:plan.version+1,updatedAt:at}));
  }

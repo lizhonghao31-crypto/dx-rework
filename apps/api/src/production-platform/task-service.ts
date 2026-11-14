@@ -1,5 +1,6 @@
 import {assembleQuotation} from './quotation-assembly.js';
 import {SlaSettingsSetsService} from './sla-settings-sets.js';
+import {SpecialCraftLibraryService} from './special-craft-library.js';
 import {OrderTimeSettingsService} from './order-time-settings-service.js';
 import {ORDER_TIME_MODEL_ENABLED} from './order-time-activation.js';
 import type {SlaApplicationCandidatesQuery} from '@dx-rework/contracts/sla-settings-history';
@@ -610,6 +611,7 @@ export class DigitalProductionTaskService {
   async previewSlaOrder(actor:TrustedActorContext,input:Parameters<SlaOrderApplicationService['preview']>[1]){return new SlaOrderApplicationService(this.database,this.previewSecret).preview(actor,input);}
   async applySlaOrder(actor:TrustedActorContext,input:Parameters<SlaOrderApplicationService['apply']>[1],key:string){return new SlaOrderApplicationService(this.database,this.previewSecret).apply(actor,input,key);}
   settingsSets(){return new SlaSettingsSetsService(this.database,this.previewSecret);}
+  specialCraftLibrary(){return new SpecialCraftLibraryService(this.database);}
   orderTimeSettings(){return new OrderTimeSettingsService(this.database,this.orderTimeEnabled);}
   async readSlaDraft(actor:TrustedActorContext,group:SlaDraftGroup){return new SlaSettingsDraftService(this.database).read(actor,group);}
   async saveSlaDraft(actor:TrustedActorContext,input:unknown,key:string){return new SlaSettingsDraftService(this.database).save(actor,input,key);}
@@ -779,10 +781,11 @@ export class DigitalProductionTaskService {
     const observed=await new ContextBusinessClock(this.database,db === this.database ? undefined : db as PoolClient).read(resource);
     const taskBasis:string[]=effective?.sla_basis?.basis??[];
     const stepRef=taskBasis.find(ref=>ref.startsWith('craft-step:'))?.slice(11),craftKind=taskBasis.find(ref=>ref.startsWith('craft-kind:'))?.slice(11);
-    const craftName=craftKind==='embroidery'?'绣花':craftKind==='printing'?'印花':null;
+    const specialName=craftKind==='special'&&stepRef?(await db.query("SELECT special_craft->'definition'->>'name' AS name FROM digital_timeline_craft_steps WHERE step_id=$1",[stepRef])).rows[0]?.name:null;
+    const craftName=specialName??(craftKind==='embroidery'?'绣花':craftKind==='printing'?'印花':null);
     const plannedTargets=await fixedTaskTargets(db,{taskId:id,resource,round:task.route_version,routeRef:task.route_instance_id,kind:task.task_kind});
-    const stepLabel=craftName?({development_craft_dispatch:`发${craftName}`,development_craft_confirmation:`${craftName}回样确认`,process_logistics:`${craftName}物流`,bulk_qc:`${craftName}回仓检查`} as Record<string,string>)[task.task_kind]:null;
-    return { ...(stepRef&&craftName?{stepRef,craftKind:craftKind as 'embroidery'|'printing'}:{}),...(effective?.timing_mode?{deadlineMode:effective.timing_mode as "duration"|"date_target"|"unlimited",...(effective.timing_mode==='date_target'?{deadlineExclusive:true}:{})}:{}),...(observed.scenarioId?{acceptanceBusinessNow:observed.now,...(effective?.sla_basis?{deadlineExclusive:effective.sla_basis.exclusive===true}:{})}:{}),unmetConditions, identity, priority,...(retired?{retiredRule:FACTORY_RECEIPT_RETIREMENT}:{}), taskId: id, orderId: task.production_order_id as string | null, sourceId: task.source_id as string | null, taskKind: task.task_kind as string, label: retired?`${currentPolicy.label}（已停用）`:stepLabel??currentPolicy.label as string,
+    const stepLabel=craftName?({development_printing:craftName,development_craft_dispatch:`发${craftName}`,development_craft_confirmation:`${craftName}回样确认`,process_logistics:`${craftName}物流`,bulk_qc:`${craftName}回仓检查`} as Record<string,string>)[task.task_kind]:null;
+    return { ...(stepRef&&craftName?{stepRef,craftKind:craftKind as 'embroidery'|'printing'|'special'}:{}),...(effective?.timing_mode?{deadlineMode:effective.timing_mode as "duration"|"date_target"|"unlimited",...(effective.timing_mode==='date_target'?{deadlineExclusive:true}:{})}:{}),...(observed.scenarioId?{acceptanceBusinessNow:observed.now,...(effective?.sla_basis?{deadlineExclusive:effective.sla_basis.exclusive===true}:{})}:{}),unmetConditions, identity, priority,...(retired?{retiredRule:FACTORY_RECEIPT_RETIREMENT}:{}), taskId: id, orderId: task.production_order_id as string | null, sourceId: task.source_id as string | null, taskKind: task.task_kind as string, label: retired?`${currentPolicy.label}（已停用）`:stepLabel??currentPolicy.label as string,
       ...(plannedTargets?{plannedTargets}:{}),routeProgress: route, assigneeName: assignee, requiredRole: task.required_role, hasHandover: Boolean(handover.rowCount), canManage:!retired&&canManage, canControl:!retired&&canControl, canCorrect:!retired&&( isDigitalLeader(actor) || isDigitalTechnicalManager(actor)),
       assigneeId: task.assignee_id as string | null, state: (factoryQc&&task.state==='completed'&&!factoryQc.complete?'ready':task.state) as DigitalTaskState, routeVersion: task.route_version as number, occurrence: task.occurrence as number,
       enteredAt: iso(effective?.sla_basis?effective.entered_at:task.entered_at), recordedAt: iso(task.created_at)!, completedAt: factoryQc?factoryQc.complete&&factoryQc.checks.every(c=>c.completedAt)?new Date(Math.max(...factoryQc.checks.map(c=>Date.parse(c.completedAt!)))).toISOString():null:iso(task.completed_at), paused,

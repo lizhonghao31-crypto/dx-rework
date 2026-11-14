@@ -1,3 +1,4 @@
+import {SpecialCraftLibraryService} from '../../apps/api/src/production-platform/special-craft-library.js';
 import {randomUUID} from 'node:crypto';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
@@ -84,9 +85,26 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
  });
  it('keeps PMC truly read-only in the same authenticated App and uses keyboard tabs',async()=>{
   const pmc=await h.dedicated('pmc'),{page,context}=await h.open(pmc.id,1165);try{
-   await ready(page);expect(await page.getByRole('button',{name:'保存并使用',exact:true}).isDisabled()).toBe(true);const tab=page.getByRole('tab',{name:'时效设置',exact:true});await tab.focus();await page.keyboard.press('End');expect(await page.getByRole('tab',{name:'客户跟单',exact:true}).getAttribute('aria-selected')).toBe('true');
+   const standard={minutes:60,calendar:'continuous' as const,reminder:{enabled:true,percent:70}};
+   const craft=await new SpecialCraftLibraryService(h.db).save(h.f.root,{id:null,expectedVersion:0,definition:{name:'TEST PMC只读工艺',enabled:true,development:standard,bulk:standard}},randomUUID());
+   await ready(page);expect(await page.getByRole('button',{name:'保存并使用',exact:true}).isDisabled()).toBe(true);
+   const tab=page.getByRole('tab',{name:'时效设置',exact:true});await tab.focus();await page.keyboard.press('End');
+   const crafts=page.getByRole('tab',{name:'特殊工艺库',exact:true});await expect.poll(()=>crafts.getAttribute('aria-selected')).toBe('true');
+   expect(await crafts.evaluate(element=>element===document.activeElement)).toBe(true);
+   const panel=page.getByRole('tabpanel',{name:'特殊工艺库',exact:true});
+   await panel.getByRole('button',{name:'查看',exact:true}).click();
+   expect(await panel.getByLabel('工艺名称',{exact:true}).isDisabled()).toBe(true);
+   for(const label of ['开发样板允许用时（小时）','大货允许用时（小时）','开发样板哪些天计时','大货哪些天计时'])expect(await panel.getByLabel(label,{exact:true}).isDisabled()).toBe(true);
+   expect(await panel.getByRole('button',{name:'新增工艺',exact:true}).count()).toBe(0);
+   expect(await panel.getByRole('button',{name:'保存',exact:true}).count()).toBe(0);
+   const denied=await page.request.post(h.base+'/api/digital-production/special-craft-library',{headers:{'idempotency-key':randomUUID()},data:{id:craft.id,expectedVersion:craft.version,definition:{...craft.definition,name:'TEST unauthorized rename'}}});expect(denied.status()).toBe(403);
+   expect((await new SpecialCraftLibraryService(h.db).history(h.f.root,craft.id)).items).toHaveLength(1);
+   await panel.getByRole('button',{name:'关闭',exact:true}).click();await crafts.focus();await page.keyboard.press('ArrowLeft');
+   await expect.poll(()=>page.getByRole('tab',{name:'客户跟单',exact:true}).getAttribute('aria-selected')).toBe('true');
    expect(await page.getByRole('button',{name:'批量设置',exact:true}).count()).toBe(0);expect(await page.getByRole('button',{name:'设置',exact:true}).count()).toBe(0);
    const status=await page.evaluate(async()=> (await fetch('/api/digital-production/customers/default-merchandisers',{method:'POST',headers:{'content-type':'application/json','idempotency-key':'TEST-pmc-refused'},body:JSON.stringify({customers:[{code:'PD',expectedVersion:0}],primaryMerchandiserId:'00000000-0000-4000-a000-000000000001',secondaryMerchandiserIds:[],mode:'replace'})})).status);expect(status).toBe(403);
+   await page.getByRole('tab',{name:'客户跟单',exact:true}).focus();await page.keyboard.press('Home');await expect.poll(()=>tab.getAttribute('aria-selected')).toBe('true');
+   expect(await page.getByRole('button',{name:'保存并使用',exact:true}).isDisabled()).toBe(true);
   }finally{await context.close();}
  });
  it('records no runtime exceptions in the original App scenarios',()=>{expect(h.errors).toEqual([]);});

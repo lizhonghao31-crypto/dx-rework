@@ -32,7 +32,9 @@ export async function fixedCraftTiming(db:DB,task:{task_id:string;source_id:stri
   const own=ready.get(task.task_id);enteredAt=own?.tracked?own.firstReadyAt:null;
  }
  const warning=saved.input.unified.values.parameters.warning_ratio?.value;
+ const step=saved.input.craftSteps!.find(step=>step.stepId===position.step_id)!;
+ const reminder=step.specialCraft?.definition.development.reminder;
  return {sourceId:task.source_id,sourceRevision:saved.input.originalPlan.revision,configurationId:String(saved.input.sourceVersions.configurationId),
   parameterKey:work.parameterKey??task.task_kind,enteredAt,seconds:work.responsibilitySlaRef&&work.responsibilityMinutes!=null&&work.responsibilityCalendar?work.responsibilityMinutes*60:null,calendarRef:work.responsibilityCalendar??null,
-  warningRatio:warning?.kind==='ratio'?warning.percent/100:0.7,basis:[`craft-step:${position.step_id}`,`craft-kind:${saved.input.craftSteps!.find(step=>step.stepId===position.step_id)!.craftKind}`,`adoption:${saved.adoptionId}`,...rows.map(row=>`task:${row.task_id}:completed`)]};
+  warningRatio:reminder?reminder.percent/100:warning?.kind==='ratio'?warning.percent/100:0.7,...(reminder?{notificationEnabled:reminder.enabled}:{}),...(step.specialCraft?{craftLabel:step.specialCraft.definition.name+(position.phase==='dispatch'?' · 发出':position.phase==='confirmation'?' · 回样确认':'')}:{}),basis:[`craft-step:${position.step_id}`,`craft-kind:${saved.input.craftSteps!.find(step=>step.stepId===position.step_id)!.craftKind}`,`adoption:${saved.adoptionId}`,...rows.map(row=>`task:${row.task_id}:completed`)]};
 }

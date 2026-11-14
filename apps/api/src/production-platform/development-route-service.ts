@@ -30,7 +30,7 @@ export type DevelopmentRouteAction={actualTime?:DevelopmentOccurrence|undefined;
 export class DevelopmentRouteService {
  constructor(private readonly database:Pool,private readonly patternOrders?:PatternRoomOrderService){}
  private async task(db:PoolClient,sourceId:string,taskId:string){return (await db.query('SELECT t.*,a.task_kind,a.assignee_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND t.task_id=$2',[sourceId,taskId])).rows[0]??digitalNotFound();}
- private async recipient(db:PoolClient,sourceId:string,kind:DigitalTaskKind,explicit:string|null,round:number){
+ private async recipient(db:PoolClient,sourceId:string,kind:DigitalTaskKind,explicit:string|null,round:number,stepRef?:string){
    const role=DIGITAL_TASK_ROLES[kind],policy=new DigitalProductionAccessPolicy(db);
    if(kind==='development_cutting'&&await developmentSlaPlan(db,sourceId)){
      const fixed=await fixedDevelopmentCutter(db);
@@ -38,7 +38,7 @@ export class DevelopmentRouteService {
      return fixed?.valid?fixed.assigneeId:null;
    }
    if((DEVELOPMENT_ARRANGEABLE_KINDS as readonly string[]).includes(kind)){
-     const saved=await plannedRecipient(db,sourceId,round,kind);
+     const saved=await plannedRecipient(db,sourceId,round,kind,stepRef);
      if(saved.planned){if(explicit&&explicit!==saved.id)fail("本轮已保存人员安排，请在总委派页明确改派。");return saved.id&&await policy.activeRole(saved.id,role)?saved.id:null;}
      if(await arrangementsAvailable(db)&&(round>1||!["development_pattern","development_cutting","development_sewing"].includes(kind)))return null;
    }
@@ -59,7 +59,9 @@ export class DevelopmentRouteService {
  async startRound(db:PoolClient,actor:TrustedActorContext,sourceId:string,kind:DigitalTaskKind,routeId:string,roundNumber:number,authorizingTaskId?:string,predecessorId?:string,nextAssigneeId:string|null=null,requireActualReceipt=false,routePosition?:number){
    const sheet=await new DigitalDevelopmentService(this.database,true).read(actor,sourceId,db,roundNumber),service=new DigitalProductionTaskService(this.database);
    const positioning=kind==='development_craft_dispatch'&&await technicalEnrollment(db,sourceId)?(await db.query(`SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND t.route_version=$2 AND a.task_kind='development_positioning' AND t.state<>'cancelled' ORDER BY t.created_at DESC LIMIT 1`,[sourceId,roundNumber])).rows[0]:null;
-   const next=await service.createWithClient(db,actor,{resource:{kind:'source',id:sourceId},...(authorizingTaskId?{authorizingTaskId}:{}),kind,routeId,routeVersion:roundNumber,occurrence:roundNumber,...(routePosition===undefined?{}:{routePosition}),assigneeId:await this.recipient(db,sourceId,kind,nextAssigneeId,roundNumber),predecessors:[...(predecessorId?[predecessorId]:[]),...(positioning?[positioning.task_id]:[])],conditions:kind==='development_sewing'?['pattern_assignment_ready']:kind==='development_cutting'?['materials_ready']:[]});
+   const adopted=sheet.document?.craftSteps?.some(step=>step.craftKind==='special')?await new FixedTimelineAdoptionRepository(db).existing({kind:'source',id:sourceId},roundNumber):null;
+   const position=adopted?.input.route?.find(row=>row.position===routePosition),specialStep=adopted?.input.craftSteps?.find(step=>step.stepId===position?.stepId&&step.craftKind==='special');
+   const next=await service.createWithClient(db,actor,{resource:{kind:'source',id:sourceId},...(authorizingTaskId?{authorizingTaskId}:{}),kind,routeId,routeVersion:roundNumber,occurrence:roundNumber,...(routePosition===undefined?{}:{routePosition}),assigneeId:await this.recipient(db,sourceId,kind,nextAssigneeId,roundNumber,specialStep?.stepId),predecessors:[...(predecessorId?[predecessorId]:[]),...(positioning?[positioning.task_id]:[])],conditions:kind==='development_sewing'?['pattern_assignment_ready']:kind==='development_cutting'?['materials_ready']:[]});
    if(!requireActualReceipt&&['development_pattern','development_cutting','development_sewing','development_washing'].includes(kind))await service.setConditionWithClient(db,actor,next.taskId,'handover_received',true,undefined,'本轮已交出');
    if(['development_pattern','development_cutting','development_sewing'].includes(kind)){
      const materialState=await materialReadiness(db,sourceId,roundNumber);
@@ -151,7 +153,7 @@ export class DevelopmentRouteService {
      const saved=await new FixedTimelineAdoptionRepository(db).existing({kind:'source',id:sourceId},task.route_version),position=await fixedTaskPosition(db,task.task_id);
      const route:DigitalTaskKind[]=saved&&position?saved.input.route!.map(row=>row.kind as DigitalTaskKind):task.route_version===1?await savedDevelopmentRoute(db,sourceId,sheet.document!):(await db.query('SELECT route_nodes FROM digital_development_rounds WHERE source_id=$1 AND round_number=$2',[sourceId,task.route_version])).rows[0].route_nodes;
      const nextKind=route[(position?Number(position.route_position):route.indexOf(task.task_kind))+1];
-     const recipient=nextKind?await this.recipient(db,sourceId,nextKind,input.nextAssigneeId,task.route_version):null;
+     const recipient=nextKind?await this.recipient(db,sourceId,nextKind,input.nextAssigneeId,task.route_version,saved?.input.craftSteps?.find(step=>step.stepId===position?.step_id&&step.craftKind==='special')?.stepId):null;
      if(!recipient)fail('本轮工艺尚无有效办理人，请开发文员在总委派页安排后再发出。');
      input={...input,nextAssigneeId:recipient};
    }

@@ -1,8 +1,9 @@
+import {hasBothBuiltinCrafts} from '@dx-rework/contracts/digital-craft';
 import type {Pool,PoolClient} from 'pg';
 import type {BusinessTime,BusinessTimeScope} from '@dx-rework/domain/business-clock';
 import type {SlaAnchor} from '@dx-rework/domain/digital-sla-plan';
 import {FrozenOrderTimePlanSchema,type OrderTimeRule} from '@dx-rework/contracts/order-time-plan';
-import {CraftStepChoicesSchema,type CraftStepChoice} from '@dx-rework/contracts/digital-craft';
+import {CraftStepChoicesSchema,craftStepIdentity,type CraftStepChoice} from '@dx-rework/contracts/digital-craft';
 import {OrderTimeOperationSchema,type OrderTimeOperation,type OrderTimeProductionRoute} from '@dx-rework/contracts/order-time-requests';
 import type {DevelopmentDocument} from '@dx-rework/contracts/digital-development';
 import type {InstructionDocument} from '@dx-rework/contracts/production-instruction';
@@ -71,7 +72,7 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
  const styleNo=source?.design_style_no??order?.design_style_no??(operation.kind==='direct_order'?operation.input.designStyleNo:''),missing:string[]=[];
  const adopted=sourceId?await new FixedTimelineAdoptionRepository(db).existing({kind:'source',id:sourceId},round):null;
  const kinds=document?.revision?.route_nodes??['development_materials',...developmentSlaRoute(development??{craft:'无',washing:'免洗'},document?.output_kind??'整件样板',2)];
- const built=development?fixedDevelopmentWork(initial,sourceId!,round,kinds,steps(development).map(step=>({...step,stepId:adopted?.input.craftSteps?.find(old=>old.craftKind===step.craftKind)?.stepId??`planned-${round}-${step.craftKind}`})),steps(development).length===2,development.washing,development.materials.some(material=>material.category==='辅料'&&material.requiredThisRound!==false)):null;
+ const built=development?fixedDevelopmentWork(initial,sourceId!,round,kinds,steps(development).map(step=>({...step,stepId:adopted?.input.craftSteps?.find(old=>craftStepIdentity(old)===craftStepIdentity(step))?.stepId??`planned-${round}-${craftStepIdentity(step)}`})),hasBothBuiltinCrafts(steps(development)),development.washing,development.materials.some(material=>material.category==='辅料'&&material.requiredThisRound!==false)):null;
  // A new native revision is new work, not the original node under the same
  // display label. Preserve the original target identity and allocate this
  // round's work its own keys; inherited completed work is not scheduled again.
@@ -102,7 +103,7 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
   const actualRoute=orderAdoption&&preparation?await (await import('./fixed-order-route.js')).readFixedOrderRoute(db,orderAdoption,preparation.preparation_id):null;
   const selectedSteps=actualRoute?.craftSteps??orderTimeStoredBulkSteps(saved?.input),originalSteps=selectedSteps.length?selectedSteps:orderAdoption?.input.craftSteps??[];
   const declaredSteps=orderTimeBulkSteps(order?.production_order_id??'planned-order',Number(sourceVersion.instructionVersion??0),production?.craftSteps??[],originalSteps);
-  const bulk=fixedOrderWork(initial,order?.production_order_id??'planned-order',sourceId??'planned-source',round,production?.preshrink?'需要预缩':'无需预缩',declaredSteps,production?.craftSteps?.length===2,dev,lines.map(line=>({line_id:line.id,goal:line.date?{precision:'date',value:line.date,source:'本单客户交期'}:{precision:'unknown',reason:'请填写本单客户交期'},customerDateVersion:0})));
+  const bulk=fixedOrderWork(initial,order?.production_order_id??'planned-order',sourceId??'planned-source',round,production?.preshrink?'需要预缩':'无需预缩',declaredSteps,hasBothBuiltinCrafts(declaredSteps),dev,lines.map(line=>({line_id:line.id,goal:line.date?{precision:'date',value:line.date,source:'本单客户交期'}:{precision:'unknown',reason:'请填写本单客户交期'},customerDateVersion:0})));
   route={work:bulk.work,consumers:bulk.consumers.map(consumer=>({...consumer,lineId:resource?.kind==='order'?consumer.lineId:null}))};
  }else{
   if(!dev)return conflict('请先保存本单开发资料');

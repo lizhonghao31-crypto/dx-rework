@@ -1,3 +1,4 @@
+import {validateSpecialCraftChoices} from './special-craft-library.js';
 import {developmentRevisionSource,inheritedDevelopmentFile} from './development-revision-source.js';
 import {acceptanceBusinessContext,observedBusinessTime,businessNow} from '../acceptance-clock/business-time.js';
 import {validateAuxiliaryReferences} from '../access/auxiliary-catalog-service.js';
@@ -118,6 +119,7 @@ export class DigitalDevelopmentService {
       const document=developmentDraftForSave(input.document,row?.document,sourceDate);
       if(document.customerOrderDraft?.withOrder&&await developmentRevisionSource(db,sourceId))conflict('复版沿原开发档案的客户订单，不重复填写大货数量');
       await validateAuxiliaryReferences(db,document,row?.document);
+      await validateSpecialCraftChoices(db,document.craftSteps??[],row?.document?.craftSteps??[],'development');
       await this.bindFiles(db, actor, sourceId, document);
       await db.query(`INSERT INTO digital_development_documents(source_id,version,status,document,updated_by) VALUES($1,1,'draft',$2,$3)
         ON CONFLICT(source_id) DO UPDATE SET version=digital_development_documents.version+1,document=EXCLUDED.document,updated_by=EXCLUDED.updated_by,updated_at=CURRENT_TIMESTAMP`, [sourceId, JSON.stringify(document), actor.actorId]);
@@ -129,6 +131,7 @@ export class DigitalDevelopmentService {
       const row = (await db.query("SELECT * FROM digital_development_documents WHERE source_id=$1", [sourceId])).rows[0] ?? conflict("请先保存开发单");
       if (row.status === "published") { if (row.version === expectedVersion + 1) return this.read(actor, sourceId, db); conflict("开发单已经发布"); }
       if (row.version !== expectedVersion) conflict("开发单已更新，请重新打开后发布");
+      await validateSpecialCraftChoices(db,row.document.craftSteps??[],[],'development');
       const errors = developmentPublishErrors(row.document);
       if (errors.length) throw new ApplicationError("VALIDATION_ERROR", errors.join("；"), 400);
       if(row.document.customerOrderDraft?.withOrder){

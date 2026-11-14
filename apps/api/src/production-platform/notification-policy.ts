@@ -23,6 +23,7 @@ export async function digitalTodoOrder(database: Pick<Pool | PoolClient, "query"
 }
 
 export async function digitalTodoTarget(database: Pick<Pool|PoolClient,"query">,route:TodoRouteDescriptor):Promise<{kind:"order"|"source";id:string}|null>{
+  if(route.routeName==="digital_order_quotation")return {kind:"order",id:route.entityId};
   const order=await digitalTodoOrder(database,route);
   if(order)return {kind:"order",id:order};
   if(route.routeName!=="pattern_room_order"||!(await database.query("SELECT to_regclass('digital_development_pattern_links') AS relation")).rows[0]?.relation)return null;

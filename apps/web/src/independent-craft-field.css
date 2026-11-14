@@ -25,3 +25,12 @@
   margin: 0;
   flex: 0 0 18px;
 }
+
+.development-craft-choice[data-special=true] { grid-column: 1 / -1; }
+.development-craft-choice[data-special=true] > label { white-space: nowrap; width: auto; }
+.development-craft-choice[data-special=true] select { min-width: 12rem; max-width: 100%; }
+.development-craft-choice ol { flex: 1 0 100%; margin: 0; padding: 0; list-style: none; display: grid; gap: .5rem; counter-reset: craft-step; }
+.development-craft-choice li { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem; min-width: 0; counter-increment: craft-step; }
+.development-craft-choice li::before { content: counter(craft-step) "."; }
+.development-craft-choice li > span { flex: 1 1 10rem; overflow-wrap: anywhere; }
+.development-craft-choice li > button { flex: 0 0 auto; white-space: nowrap; }

@@ -1,3 +1,4 @@
+import type {CraftStepChoice} from '@dx-rework/contracts/digital-craft';
 import type {SlaAnchor} from '@dx-rework/domain/digital-sla-plan';
 import {slaAnchorTime} from '@dx-rework/domain/digital-sla-plan';
 import {FrozenOrderTimePlanSchema,orderTimeRule,type FrozenOrderTimePlan} from '@dx-rework/contracts/order-time-plan';
@@ -5,7 +6,7 @@ import {orderTimeWorkDefinition,orderTimeDependencyReserves} from './fixed-work-
 import {fixedTimelineForward,requiredFixedTimelineWork,type FixedTimelineTarget,type FixedTimelineWork} from './fixed-timeline-targets.js';
 import {fixedConsumerTargets,type ShipSampleTarget} from './fixed-consumer-targets.js';
 
-export type OrderTimeWork={id:string;parameterKey:string;stage:number;dependsOn:readonly string[];includedIn?:string;includedPosition?:'start'|'end';canonicalWorkRef?:string};
+export type OrderTimeWork={id:string;parameterKey:string;stage:number;dependsOn:readonly string[];includedIn?:string;includedPosition?:'start'|'end';canonicalWorkRef?:string;craftStep?:CraftStepChoice};
 export type OrderTimeScope={scopeRef:string;terminalIds:readonly string[];goals:Readonly<Record<string,SlaAnchor>>;customerGoal:SlaAnchor;shipSample?:ShipSampleTarget};
 export type OrderTimeScenario={plan:FrozenOrderTimePlan;work:readonly OrderTimeWork[];scopes:readonly OrderTimeScope[];
  route:{complete:boolean;missing:readonly string[]};start:SlaAnchor;notBefore?:Readonly<Record<string,SlaAnchor>>;
@@ -20,12 +21,12 @@ export function buildOrderTimeWork(plan:FrozenOrderTimePlan,work:readonly OrderT
  const buffer=saved.stageBufferMinutes??saved.company.stageBufferMinutes;
  return work.map(node=>{
   if(!Number.isInteger(node.stage)||node.stage<1||node.stage>7)throw Error('本单节点阶段无效');
-  const definition=orderTimeWorkDefinition(saved,node.parameterKey);
+  const definition=orderTimeWorkDefinition(saved,node.parameterKey,node.craftStep);
   const rule=orderTimeRule(saved,node.parameterKey)?.rule;
   if(rule&&(rule.kind==='included')!==Boolean(node.includedIn))throw Error('内含交接必须沿真实所属窗口，不能重复计入路径');
   const parent=node.includedIn?byId.get(node.includedIn):null;
   if(node.includedIn&&!parent)throw Error('内含工序缺少原所属窗口');
-  const calendar=parent?orderTimeWorkDefinition(saved,parent.parameterKey).calendar:definition.calendar;
+  const calendar=parent?orderTimeWorkDefinition(saved,parent.parameterKey,parent.craftStep).calendar:definition.calendar;
   const reserves=orderTimeDependencyReserves(node,byId,buffer);
   return {id:node.id,dependsOn:[...node.dependsOn],minutes:definition.minutes,calendar,
    ...(node.includedIn?{includedIn:node.includedIn,includedPosition:node.includedPosition??'start'}:{}),

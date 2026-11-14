@@ -168,6 +168,7 @@ const addAll = (target, values) => {
 export const classifyFullGatePaths = (inputPaths) => {
   const paths = [...new Set(inputPaths.map(normalize).filter(Boolean))];
   const mappedTests = new Set();
+  if(paths.some(path=>/special-craft|digital-craft|sla-settings-workspace|task-routes|task-service/.test(path)))addAll(mappedTests,['tests/integration/special-craft-library-postgres.test.ts','tests/integration/special-craft-native-postgres.test.ts','tests/integration/special-craft-browser-postgres.test.ts']);
   if(paths.some(path=>/quotation|development-commercial-fields|0288_automatic_quotation_sources/.test(path))){
     addAll(mappedTests,['tests/integration/customer-quotation-postgres.test.ts','tests/integration/development-technical-postgres.test.ts','tests/integration/automatic-quotation-native-browser-postgres.test.ts']);
   }

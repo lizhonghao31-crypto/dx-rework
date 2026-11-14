@@ -116,7 +116,7 @@ async function readLegacyFixedScheduleBasis(db:DB,resource:BusinessTimeScope,ite
   }
   // Each adopted craft window includes its own return confirmation. A
   // processing report closes only that task, not the parent craft window.
-  for(const parent of definitions.filter(work=>['development_printing','development_embroidery'].includes(work.parameterKey??''))){
+  for(const parent of definitions.filter(work=>(['development_printing','development_embroidery'].includes(work.parameterKey??'')||work.parameterKey?.startsWith('development_special_')))){
    const confirmations=definitions.filter(work=>work.includedIn===parent.id&&work.parameterKey==='development_craft_return');
    const receipt=confirmations.length===1?facts[confirmations[0]!.id]:null,fact=facts[parent.id]!;
    fact.businessCompleted=fact.businessCompleted&&receipt?.businessCompleted===true;

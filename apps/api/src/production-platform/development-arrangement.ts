@@ -1,8 +1,10 @@
+import {FixedTimelineAdoptionRepository} from './fixed-timeline-adoptions.js';
+import {type CraftStepChoice,craftStepLabel} from '@dx-rework/contracts/digital-craft';
 import {assembleQuotation} from './quotation-assembly.js';
 import {isNativeRootSewingRecipient} from './development-native-recipient.js';
 import {randomUUID} from "node:crypto";
 import type {Pool,PoolClient} from "pg";
-import {DEVELOPMENT_ARRANGEABLE_KINDS,type DevelopmentArrangement,type DevelopmentArrangementInput} from "@dx-rework/contracts/development-arrangement";
+import {DEVELOPMENT_ARRANGEABLE_KINDS,arrangementEntryKey,type DevelopmentArrangement,type DevelopmentArrangementInput} from "@dx-rework/contracts/development-arrangement";
 import type {TrustedActorContext} from "../tools/repositories.js";
 import {isRootActor} from "../access/business-authority.js";
 import {ApplicationError} from "../platform/errors.js";
@@ -24,10 +26,11 @@ export async function canArrange(db:DB,actor:TrustedActorContext){
     if(actor.actorRoles.includes(role)&&await policy.activeRole(actor.actorId,role))return true;
   return false;
 }
-export async function plannedRecipient(db:DB,sourceId:string,round:number,kind:string):Promise<{planned:boolean;id:string|null}>{
+export async function plannedRecipient(db:DB,sourceId:string,round:number,kind:string,stepRef?:string):Promise<{planned:boolean;id:string|null}>{
   if(!await arrangementsAvailable(db))return {planned:false,id:null};
+  const key=arrangementEntryKey({kind,...(stepRef?{stepRef}:{})});
   const row=(await db.query("SELECT entries FROM digital_development_round_arrangements WHERE source_id=$1 AND round_number=$2",[sourceId,round])).rows[0];
-  return {planned:Boolean(row&&Object.hasOwn(row.entries,kind)),id:row?.entries[kind]??null};
+  return {planned:Boolean(row&&Object.hasOwn(row.entries,key)),id:row?.entries[key]??null};
 }
 export async function readArrangement(db:DB,actor:TrustedActorContext,sourceId:string):Promise<DevelopmentArrangement|null>{
   if(!await arrangementsAvailable(db)||!await canArrange(db,actor))return null;
@@ -49,14 +52,21 @@ export async function readArrangement(db:DB,actor:TrustedActorContext,sourceId:s
   const rows:DevelopmentArrangement["rows"]=[];
   const fixed=await developmentSlaPlan(db,sourceId)?await fixedDevelopmentCutter(db):null;
   const applicable=route.filter((kind,index)=>kind!=="development_sewing_transfer"||route[index-1]!=="development_craft_confirmation"||route[index+1]!=="development_sewing"||tasks.some(task=>task.task_kind===kind));
+  const adopted=document.document?.craftSteps?.some((step:CraftStepChoice)=>step.craftKind==='special')?await new FixedTimelineAdoptionRepository(db).existing({kind:'source',id:sourceId},round):null;
+  const specialSteps=adopted?.input.craftSteps?.filter(step=>step.craftKind==='special')??[];
+  const specialPositions=specialSteps.length?(await db.query("SELECT task_id,step_id FROM digital_timeline_task_positions WHERE route_ref=$1 AND phase='work'",[adopted!.input.sourceVersions.routeRef])).rows:[];
+  const specialTaskIds=new Set(specialPositions.filter(p=>specialSteps.some(s=>s.stepId===p.step_id)).map(p=>p.task_id));
   const kinds=[...new Set([...applicable,...tasks.filter(t=>t.task_kind==="development_sewing_transfer"&&!["completed","cancelled"].includes(t.state)).map(t=>t.task_kind)])];
-  for(const kind of kinds.filter(kind=>DEVELOPMENT_ARRANGEABLE_KINDS.includes(kind as typeof DEVELOPMENT_ARRANGEABLE_KINDS[number]))){
-    const task=tasks.filter(t=>t.task_kind===kind).at(-1);
-    const assigneeId=task?task.assignee_id:kind==='development_cutting'&&fixed?fixed.assigneeId:(plan?plan.entries[kind]??null:round===1?legacy?.[oldFields[kind]!]??null:null);
+  const entries:Array<{kind:string;stepRef?:string;label?:string}>=kinds.filter(kind=>DEVELOPMENT_ARRANGEABLE_KINDS.includes(kind as typeof DEVELOPMENT_ARRANGEABLE_KINDS[number])&&(kind!=='development_printing'||!specialSteps.length||adopted?.input.craftSteps?.some(step=>step.craftKind==='printing'))).map(kind=>({kind}));
+  entries.push(...specialSteps.map(step=>({kind:'development_printing',stepRef:step.stepId,label:craftStepLabel(step)})));
+  for(const entry of entries){
+    const {kind,stepRef}=entry,key=arrangementEntryKey(entry);
+    const task=tasks.filter(t=>t.task_kind===kind&&(stepRef?specialPositions.some(p=>p.task_id===t.task_id&&p.step_id===stepRef):!specialTaskIds.has(t.task_id))).at(-1);
+    const assigneeId=task?task.assignee_id:kind==='development_cutting'&&fixed?fixed.assigneeId:(plan?plan.entries[key]??null:round===1?legacy?.[oldFields[kind]!]??null:null);
     const requiredRole=DIGITAL_TASK_ROLES[kind as DigitalTaskKind];
-    const label=(await db.query("SELECT label FROM digital_production_deadline_policies WHERE node_key=$1 ORDER BY version DESC LIMIT 1",[kind])).rows[0]?.label??kind;
+    const label=entry.label??(await db.query("SELECT label FROM digital_production_deadline_policies WHERE node_key=$1 ORDER BY version DESC LIMIT 1",[kind])).rows[0]?.label??kind;
     const assigneeName=assigneeId?(await db.query("SELECT display_name FROM app_users WHERE id=$1",[assigneeId])).rows[0]?.display_name??null:null;
-    rows.push({kind,label,requiredRole,assigneeId,assigneeName,valid:Boolean(assigneeId&&(await policy.activeRole(assigneeId,requiredRole)||kind==='development_sewing'&&await isNativeRootSewingRecipient(db,sourceId,assigneeId))),taskId:task?.task_id??null,state:task?.state??null,fixed:Boolean(kind==='development_cutting'&&fixed),editable:!(kind==='development_cutting'&&fixed)&&(!task||!["completed","cancelled"].includes(task.state))});
+    rows.push({kind,...(stepRef?{stepRef}:{}),label,requiredRole,assigneeId,assigneeName,valid:Boolean(assigneeId&&(await policy.activeRole(assigneeId,requiredRole)||kind==='development_sewing'&&await isNativeRootSewingRecipient(db,sourceId,assigneeId))),taskId:task?.task_id??null,state:task?.state??null,fixed:Boolean(kind==='development_cutting'&&fixed),editable:!(kind==='development_cutting'&&fixed)&&(!task||!["completed","cancelled"].includes(task.state))});
   }
   return {roundNumber:round,documentVersion:document.version,version:plan?.version??0,managerId,managerName,canEdit:Boolean(readyToArrange&&(!managerId||managerId===actor.actorId||isRootActor(actor))),canTakeOver:isRootActor(actor)||actor.actorRoles.includes("pattern_room_supervisor")&&await policy.activeRole(actor.actorId,"pattern_room_supervisor"),readyToArrange:Boolean(readyToArrange),unavailableReason,rows};
 }
@@ -71,7 +81,7 @@ export async function saveArrangement(db:PoolClient,database:Pool,actor:TrustedA
   if(input.management!=="keep"&&!before.canTakeOver)digitalForbidden();
   if(input.management==="keep"&&!before.canEdit)conflict(`本轮安排已由${before.managerName??"技术主管"}接管，请由接管人处理或交回文员。`);
   if(input.management==="release"&&before.managerId!==actor.actorId&&!isRootActor(actor))digitalForbidden();
-  if(input.entries.length!==before.rows.length||input.entries.some(entry=>!before.rows.some(row=>row.kind===entry.kind)))
+  if(input.entries.length!==before.rows.length||input.entries.some(entry=>!before.rows.some(row=>arrangementEntryKey(row)===arrangementEntryKey(entry))))
     conflict("本轮流程已变化。本次未保存，请重新读取本轮安排。");
   const policy=new DigitalProductionAccessPolicy(db);
   if(!isRootActor(actor)){
@@ -81,7 +91,7 @@ export async function saveArrangement(db:PoolClient,database:Pool,actor:TrustedA
   }
   const entries:Record<string,string|null>={};
   for(const row of before.rows){
-    const inputRow=input.entries.find(entry=>entry.kind===row.kind)!;
+    const inputRow=input.entries.find(entry=>arrangementEntryKey(entry)===arrangementEntryKey(row))!;
     const expected=inputRow.expectedTask;
     if((row.taskId===null)!==(expected===null)||expected&&(expected.taskId!==row.taskId||expected.state!==row.state||expected.assigneeId!==row.assigneeId))
       conflict(`${row.label}已被办理或改派。本次未保存，请核对当前记录。`);
@@ -98,7 +108,7 @@ export async function saveArrangement(db:PoolClient,database:Pool,actor:TrustedA
         JOIN pattern_room_segments s ON s.round_id=o.current_round_id WHERE l.source_id=$1 AND s.ended_at IS NULL FOR UPDATE OF o,s`,[sourceId])).rows[0];
       if(worker&&worker.worker_user_id!==inputRow.assigneeId)conflict("车板已建立实际执行归属。请技术主管先在原执行单办理换人分段，再更新安排。");
     }
-    entries[row.kind]=inputRow.assigneeId;
+    entries[arrangementEntryKey(row)]=inputRow.assigneeId;
   }
   const manager=input.management==="takeover"?actor.actorId:input.management==="release"?null:before.managerId;
   await db.query(`INSERT INTO digital_development_round_arrangements(source_id,round_number,version,entries,manager_id,changed_by,document_version)
@@ -106,7 +116,7 @@ export async function saveArrangement(db:PoolClient,database:Pool,actor:TrustedA
     document_version=excluded.document_version,entries=excluded.entries,manager_id=excluded.manager_id,changed_by=excluded.changed_by,changed_at=CURRENT_TIMESTAMP`,[sourceId,input.roundNumber,JSON.stringify(entries),manager,actor.actorId,input.expectedDocumentVersion]);
   const service=new DigitalProductionTaskService(database);
   for(const row of before.rows){
-    const next=entries[row.kind]!;
+    const next=entries[arrangementEntryKey(row)]!;
     if(!row.editable||!row.taskId)continue;
     if(next===row.assigneeId){if(next)await service.refreshBusinessConditionsWithClient(db,actor,row.taskId);continue;}
     if(next)await service.reassignWithClient(db,actor,row.taskId,next);

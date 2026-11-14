@@ -14,7 +14,7 @@ export const SEWING_REQUIREMENTS = [
 export const MATERIAL_COUNT_TERM = "大货面、辅料到贵公司，请在48小时之内清点数量，并确认收到的面、辅料是否正确，数量是否对数，如不正确，及时跟我司沟通，并及时补齐数量，如贵司不能及时清点数量，由贵司承担相应责任，感谢贵司的支持及配合！";
 export const InstructionDocumentSchema = z.object({
   styleName: short, category: short, season: short, fabricType: short, composition: text,
-  date: z.iso.date().nullable(), process: text, secondaryCraft:z.enum(["沿用开发","无","印花","绣花","印绣花"]).default("沿用开发"), remarks: text, patternMaker: short,
+  date: z.iso.date().nullable(), process: text, secondaryCraft:z.enum(["沿用开发","无","印花","绣花","印绣花","特殊工艺"]).default("沿用开发"), remarks: text, patternMaker: short,
   craftSteps:CraftStepChoicesSchema.optional(),
   preshrink: z.enum(["待确认", "需要预缩", "无需预缩"]), shipSample: text,
   sewingRequirements: text, comments: text,
@@ -24,6 +24,7 @@ export const InstructionDocumentSchema = z.object({
   unit: z.enum(["inch", "cm"]), sizes: z.array(short.min(1)).max(50),
   measurements: z.array(z.object({ id: z.string().uuid(), name: short, tolerance: short, method: text, values: z.array(short).max(50) }).strict()).max(200),
 }).strict().superRefine((doc, ctx) => {
+  if(doc.secondaryCraft==='特殊工艺'&&!doc.craftSteps?.length)ctx.addIssue({code:'custom',path:['craftSteps'],message:'请选择具体特殊工艺'});
   if(doc.craftSteps&&(doc.secondaryCraft==='沿用开发'||craftLegacyLabel(doc.craftSteps)!==doc.secondaryCraft))ctx.addIssue({code:'custom',path:['craftSteps'],message:'请明确沿用开发工艺或本制单独立工艺选择'});
   if (new Set(doc.sizes).size !== doc.sizes.length) ctx.addIssue({ code: "custom", message: "尺码列不能重复", path: ["sizes"] });
   if (doc.measurements.some(row => row.values.length !== doc.sizes.length)) ctx.addIssue({ code: "custom", message: "尺寸须对应尺码列", path: ["measurements"] });
