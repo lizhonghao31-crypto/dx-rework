@@ -316,14 +316,30 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    // Same page and session: the saved editor must use the new native version,
    // without requiring a reload to make the next ordinary edit possible.
    await page.locator('summary').filter({hasText:'大货洗水'}).click();
-   const secondPreview=page.waitForResponse(response=>response.url().endsWith('/order-time/preview')&&response.status()===200);
+   const secondPreview=page.waitForResponse(response=>response.url().endsWith('/order-time/preview')&&response.request().postDataJSON()?.washing?.[0]?.document?.arrangement?.washing?.minutes===180);
    await page.getByLabel('洗水用时（小时）',{exact:true}).fill('3');
-   await secondPreview;
+   const previewResponse=await secondPreview;expect(previewResponse.status()).toBe(200);
+   const previewBody=await previewResponse.json();
    await expect.poll(()=>page.getByRole('button',{name:'提交',exact:true}).isEnabled()).toBe(true);
-   const secondConfirmation=await page.locator('.r5-time-risk').count()>0;
+   const secondConfirmation=previewBody.feasibility==='insufficient';
+   // Hold only this command before forwarding: prove that pending submission
+   // is not confused with persisted success, without sleeps or a longer poll.
+   let releaseSave!:()=>void,requestStarted!:()=>void;
+   const saveGate=new Promise<void>(resolve=>{releaseSave=resolve;}),started=new Promise<void>(resolve=>{requestStarted=resolve;});
+   await page.route('**/order-time/arrange',async route=>{requestStarted();await saveGate;await route.continue();});
+   const secondSaved=page.waitForResponse(response=>response.url().endsWith('/order-time/arrange')&&response.request().postDataJSON()?.washing?.[0]?.document?.arrangement?.washing?.minutes===180);
    await page.getByRole('button',{name:'提交',exact:true}).click();
    if(secondConfirmation){await dialog.waitFor();await dialog.getByRole('button',{name:'确认',exact:true}).click();}
-   await expect.poll(async()=>Number((await h.db.query('SELECT count(*) AS count FROM digital_bulk_washing_plans WHERE production_order_id=$1',[orderId])).rows[0].count)).toBe(2);
+   try{
+    await started;
+    expect(Number((await h.db.query('SELECT count(*) AS count FROM digital_bulk_washing_plans WHERE production_order_id=$1',[orderId])).rows[0].count)).toBe(1);
+    expect(await page.getByRole('button',{name:'提交',exact:true}).isDisabled()).toBe(true);
+   }finally{releaseSave();}
+   const savedResponse=await secondSaved;const savedBody=await savedResponse.json();
+   expect({status:savedResponse.status(),body:savedBody}).toMatchObject({status:200,body:{saved:true}});
+   expect(savedBody.check.washing[0]).toMatchObject({version:2,document:{arrangement:{washing:{minutes:180}}}});
+   const savedPlans=(await h.db.query('SELECT document FROM digital_bulk_washing_plans WHERE production_order_id=$1 ORDER BY version',[orderId])).rows;
+   expect(savedPlans).toHaveLength(2);expect(savedPlans[1].document.arrangement.washing.minutes).toBe(180);
   }finally{await tab.context.close();}
  });
 
