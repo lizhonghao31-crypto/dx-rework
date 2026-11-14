@@ -161,6 +161,20 @@ try {
  assert.equal((await db.query('SELECT count(*)::int n FROM schema_migrations')).rows[0].n,catalog.filter(x=>x.version<'0226_digital_budget_documents').length);
  await db.end();db=null;await admin.query(`DROP DATABASE ${database}`);await admin.query(`CREATE DATABASE ${database} TEMPLATE dx_rework_drill_baseline OWNER ${owner}`);
  db=new pg.Client({connectionString:url('postgres',database)});await db.connect();
+ // This fixture deliberately replaced the database. Its old OID must remain
+ // rejected; only this explicit test lifecycle starts a new identity scope.
+ // The real updater must never silently re-pin a database during an update.
+ const staleCapacity=inspectStorage('postgres',capacitySql);
+ assert.equal(staleCapacity.status,0,staleCapacity.stderr);
+ assert.equal(staleCapacity.stdout.trim(),'','Recreated database must reject the old pinned OID');
+ const replacementIdentity=(await db.query("SELECT current_database() AS database,current_setting('port')::int AS port,(SELECT oid::bigint FROM pg_database WHERE datname=current_database()) AS oid")).rows[0];
+ replacementIdentity.oid=Number(replacementIdentity.oid);
+ assert.equal(replacementIdentity.database,pinnedIdentity.database);
+ assert.equal(replacementIdentity.port,pinnedIdentity.port);
+ assert.notEqual(replacementIdentity.oid,pinnedIdentity.oid);
+ Object.assign(replacementIdentity,{address:'127.0.0.1',role:app,sessionRole:app});
+ writeFileSync(join(scratch,'capacity-identity.json'),JSON.stringify(replacementIdentity));
+ report('explicit fixture database replacement rejects stale OID and records its new identity');
  const oldRelations=(await db.query("SELECT c.relname,c.relowner,c.relacl FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind IN ('r','p','S') ORDER BY c.relname")).rows;
  const apply=await generate();
  await db.query("CREATE FUNCTION test_interrupt() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.version='0227_digital_production_instructions' THEN RAISE EXCEPTION 'TEST intentional interruption'; END IF; RETURN NEW; END $$; CREATE TRIGGER test_interrupt BEFORE INSERT ON schema_migrations FOR EACH ROW EXECUTE FUNCTION test_interrupt()");
@@ -179,7 +193,10 @@ try {
  docker(['run','--rm','--network','none','-v',`${repo}:${repo}:ro`,'-v',`${scratch}:${scratch}`,pythonImage,'python','-B','-c',queryGenerator.replace('m.storage_query(i)','m.storage_query(i, True)'),join(repo,'scripts/deploy/inspect-acceptance-storage.py'),join(scratch,'capacity-identity.json'),join(scratch,'capacity-history-query.sql')]);
  const capacityHistory=inspectStorage('postgres',readFileSync(join(scratch,'capacity-history-query.sql'),'utf8'));
  assert.equal(capacityHistory.status,0,capacityHistory.stderr);
- assert.deepEqual(JSON.parse(capacityHistory.stdout).migrations,manifest.migrations.map(({version,checksum})=>({version,checksum})));
+ assert.ok(capacityHistory.stdout.trim(),'Current pinned database must return storage history JSON');
+ const capacityHistoryValue=JSON.parse(capacityHistory.stdout);
+ assert.equal(capacityHistoryValue.oid,replacementIdentity.oid);
+ assert.deepEqual(capacityHistoryValue.migrations,manifest.migrations.map(({version,checksum})=>({version,checksum})));
  assert.deepEqual((await db.query('SELECT version,checksum,applied_at::text AS applied_at FROM schema_migrations ORDER BY version')).rows,after);
  report('post-source capacity ledger matches every target checksum; observation preserves applied history');
  const finalSignal=join(scratch,'final-signal-failure.sql');

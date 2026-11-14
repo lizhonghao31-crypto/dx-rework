@@ -8,9 +8,13 @@
 
 `verify-merge`继续只核自动验收批准，其代码契约不变，不用于生成或伪装人工授权。人工合并仍受平台工具审批、服务端分支保护和身份权限约束；工具拒绝或结果不确定时先核事实、报告并停止该动作，不能借修改本地规则或换渠道规避该次拒绝。
 
+## 每PR一次Light
+
+仅PR首次opened且run_attempt=1执行Light。后续任何变动、重开和重试不重跑Light。最终Quick/Full直接验证当前Head，不要求当前Head另有Light；失败或缺失的初始Light不冒充通过。Full无可用同Head产物时执行全部原检查；复用仍必须核准来源。
+
 ## 请求与核证
 
-`node scripts/ci/pr-gate-controller.mjs request-final --pr <N> --head <Head40> --closeout <外置收口包>`只读核真实PR、当前目标tip、light、必要Review及[本批收口包](final-closeout-v1.md)；preview/apply均在新建引用前校验包、固定Head的construction摘要和实际报告，已有授权内加`--apply`创建唯一请求：
+`node scripts/ci/pr-gate-controller.mjs request-final --pr <N> --head <Head40> --closeout <外置收口包>`只读核真实PR、当前目标tip、必要Review及[本批收口包](final-closeout-v1.md)；preview/apply均在新建引用前校验包、固定Head的construction摘要和实际报告，已有授权内加`--apply`创建唯一请求：
 
 `gate/{quick|full}/{PR}/{Head40}/{base40}/{baseRefBase64url}`
 
@@ -20,7 +24,7 @@
 
 ## Review与恢复
 
-本地和light后请求GitHub Codex Review，正常一轮；集中修复后记录被审SHA与最终SHA，不冒称后者又审过。源码/模式/权限的新风险按实际授权处理，不把纯偏好扩大成新增工程。
+本地验证后请求GitHub Codex Review，正常一轮；集中修复后记录被审SHA与最终SHA，不冒称后者又审过。源码/模式/权限的新风险按实际授权处理，不把纯偏好扩大成新增工程。
 
 `watch-review --pr <N> --head <Head40> --request-id <ID> --watch --apply --review-retry-authorized --state-dir <private-dir>`使用已存在的15分钟恢复授权。时间从请求的服务端created_at起，先核已完成/新请求/在途状态，防重复发送；本地锁只对同一控制者有效，不能冒充跨机器互斥。拒绝和不确定写入保留journal，先只读reconcile，不删除锁或另换发送通道。
 

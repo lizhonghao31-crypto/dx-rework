@@ -1,3 +1,4 @@
+import {bulkWashingTodos} from './bulk-washing-todos.js';
 import {specialCraftQuotationTodos,specialCraftQuotationNotification} from './special-craft-quotation-todos.js';
 import {type TodoSelection,type TodoSelectionKey,type TodoProjection} from '../todos/selection.js';
 import {shortLeadTodos} from './short-lead-todos.js';
@@ -162,6 +163,7 @@ export class DigitalProductionNotificationService {
           await this.notice(client,{key:prior?.source_key??`deadline:${task.task_id}:${task.revision_id}:${kind}`,taskId:task.task_id,kind,revision:task.revision_id},(await this.recipients(client,task,kind,people)).map(p=>p.actorId));
         }
       }
+      for(const person of people)for(const todo of await bulkWashingTodos(client,person))await this.notice(client,{key:`bulk-washing:${todo.todoId}:${todo.contentToken}`,todoId:todo.todoId,kind:'bulk_washing'},[person.actorId]);
       for(const notice of await qcProgressNotices(client,people,undefined,this.database)){if(await acceptanceIncludesNative(this.database,notice.taskId))await this.notice(client,{key:notice.key,taskId:notice.taskId,kind:'qc_progress'},notice.recipients);}
       await this.projectChildren(client);
     });
@@ -200,6 +202,7 @@ export class DigitalProductionNotificationService {
     const tasks=(await this.database.query<Task>(`${TASKS} WHERE ${ACTIVE}${projection?.todoId?' AND t.task_id=$1::uuid':''} ORDER BY d.due_at NULLS LAST,t.created_at,t.task_id`,...(projection?.todoId?[[projection.todoId]]:[]))).rows;
     const unified=await arrangementsAvailable(this.database);
     const result:TodoResponse[]=unified?[...await arrangementTodos(this.database,actor,projection),...await fabricDecisionTodos(this.database,actor,projection)]:[];
+    result.push(...await bulkWashingTodos(this.database,actor,projection));
     result.push(...await specialCraftQuotationTodos(this.database,actor,projection));
     result.push(...await orderTimeTodos(this.database,actor,projection),...await shortLeadTodos(this.database,actor,projection));
     result.push(...await preparationWindowTodos(this.database,actor,projection),...await preparationMaterialsTodos(this.database,actor,projection),...await bulkFabricDecisionTodos(this.database,actor,projection),...await factoryProductionQcTodos(this.database,actor,new ContextBusinessClock(this.database),projection),...await garmentQualityTodos(this.database,actor,new ContextBusinessClock(this.database),projection));
@@ -248,6 +251,10 @@ export class DigitalProductionNotificationService {
   async todo(actor:TrustedActorContext,id:string){const selected=await this.todoSelections(actor,{todoId:id});return selected[0]?selected[0].load():null;}
   private async render(database:Database,actor:TrustedActorContext,event:{instruction_order_id?:string|null;development_source_id?:string|null;event_id:string;task_id:string|null;todo_id:string|null;event_kind:string;deadline_revision_id:string|null;created_at:Date;source_key?:string},people:TrustedActorContext[],includeContext=true,prepared?:NotificationTasks):Promise<DigitalNotification|null> {
     if(!people.some(p=>p.actorId===actor.actorId))return null;
+    if(event.event_kind==='bulk_washing'){
+      const todo=event.todo_id?(await bulkWashingTodos(database,actor,{todoId:event.todo_id}))[0]:null;
+      return todo&&event.source_key===`bulk-washing:${todo.todoId}:${todo.contentToken}`?{eventId:event.event_id,title:todo.taskTitle!,actionable:true,route:todo.route,createdAt:new Date(event.created_at).toISOString()}:null;
+    }
     if(event.event_kind==='special_craft_quotation')return specialCraftQuotationNotification(database,actor,event);
     if(event.event_kind==='order_time_request')return orderTimeNotification(database,actor,event);
     if(event.event_kind==='qc_progress'){

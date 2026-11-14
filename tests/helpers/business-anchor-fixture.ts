@@ -29,7 +29,7 @@ import type {TrustedActorContext} from '../../apps/api/src/tools/repositories.js
 import {maintainAcceptanceCuttingWorker} from '../../scripts/acceptance/cutting-worker-maintenance.js';
 import {DigitalOrderCreateSchema,beijingCalendarDate} from '@dx-rework/contracts/digital-production';
 import {DevelopmentDocumentSchema} from '@dx-rework/contracts/digital-development';
-import {BudgetDocumentSchema} from '@dx-rework/contracts/digital-budget';
+import {BudgetDocumentSchema,type BudgetRow} from '@dx-rework/contracts/digital-budget';
 import {initialInstruction} from '@dx-rework/contracts/production-instruction';
 import {CreateSupplierSchema} from '@dx-rework/contracts';
 import {ReceivingService} from '../../apps/api/src/receiving/receiving-service.js';
@@ -84,7 +84,7 @@ export async function businessAnchorFixture(url:string,options?:{throughVersion?
    }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
   };
   const advance=async(id:string,at:string)=>runtime.run(id,root,async()=>{const row=await runtime.repository.row(id);await runtime.repository.change(id,root.actorId,{expectedVersion:row.version,requestKey:randomUUID(),at});});
-  const bulkReady=async(secondaryCraft:'无'|'印花'|'绣花'|'印绣花'|'特殊工艺',beforeCreate?:(input:Parameters<SourcingService['createCase']>[1],key:string,primary:TrustedActorContext)=>Promise<void>,poCount=1,sourcingCommands=sourcing,options?:{stopBeforeCompletion?:boolean;cuttingProcess?:'in_house'|'outsourced';accessory?:boolean;quantity?:number;primaryActor?:TrustedActorContext;designerActor?:TrustedActorContext;stylePrefix?:string;developmentReturnDate?:string;craftSteps?:CraftStepChoice[];existingOrder?:{orderId:string;sourceId:string}})=>{
+  const bulkReady=async(secondaryCraft:'无'|'印花'|'绣花'|'印绣花'|'特殊工艺',beforeCreate?:(input:Parameters<SourcingService['createCase']>[1],key:string,primary:TrustedActorContext)=>Promise<void>,poCount=1,sourcingCommands=sourcing,options?:{budgetRows?:BudgetRow[];stopBeforeCompletion?:boolean;cuttingProcess?:'in_house'|'outsourced';accessory?:boolean;quantity?:number;primaryActor?:TrustedActorContext;designerActor?:TrustedActorContext;stylePrefix?:string;developmentReturnDate?:string;craftSteps?:CraftStepChoice[];existingOrder?:{orderId:string;sourceId:string}})=>{
    const designer=options?.designerActor??people['sample-designer']!,primary=options?.primaryActor??people.merchandiser!,manager=people['production-management']!,owner=people.owner!,ie=people.ie!;
    const identity=new DigitalProductionIdentityService(db,true),forms=new DigitalDevelopmentService(db,true),bulk=new BulkPreparationService(db),instruction=new ProductionInstructionService(db,true),budget=new DigitalBudgetService(db,true);
    const style=`${options?.stylePrefix??'TEST-ANCHOR-'}${randomUUID()}`;
@@ -109,7 +109,7 @@ export async function businessAnchorFixture(url:string,options?:{throughVersion?
    await instruction.save(primary,id,{expectedVersion:0,orderVersion:current.version,sourceRound:1,document:instructionDoc},randomUUID());const readyBasis=await productionReadinessFixture(db,root,id,people['pattern-room-worker']!.actorId,people.warehouse!);await instruction.publish(primary,id,{expectedVersion:1,orderVersion:current.version,expectedReadinessRevision:readyBasis.revision},randomUUID());
    await bulk.dispatch(manager,id,{expectedVersion:0,patternWorkerId:people['pattern-room-worker']!.actorId,warehouseWorkerId:people.warehouse!.actorId,cuttingWorkerId:people['cutting-worker']!.actorId,deliverPattern:false},randomUUID());
    await customerQuotationFixture(db,root,id);
-   const budgetImage=await image(designer),budgetDoc=BudgetDocumentSchema.parse({fabricType:'梭织',productCategory:'上衣',date:beijingCalendarDate(businessNow()),currency:'人民币',monthSeries:'',rows:[],freight:'0',cm:'5',salePrice:'20',outsourcingScope:'车缝',outsourcingUnitPrice:'5',imageAttachmentIds:[budgetImage]});
+   const budgetImage=await image(designer),budgetDoc=BudgetDocumentSchema.parse({fabricType:'梭织',productCategory:'上衣',date:beijingCalendarDate(businessNow()),currency:'人民币',monthSeries:'',rows:options?.budgetRows??[],freight:'0',cm:'5',salePrice:'20',outsourcingScope:'车缝',outsourcingUnitPrice:'5',imageAttachmentIds:[budgetImage]});
    await budget.save(designer,id,{expectedVersion:1,document:budgetDoc},randomUUID());await budget.publish(primary,id,2,randomUUID());
    const prepared=await budget.prepareSourcing(primary,id,2,attachments);
    const input={gender:prepared.gender,styleName:prepared.styleName,deliveryDate:'2026-12-10',estimatedCutPieceSendDate:'2026-11-01',daxingUnitPrice:prepared.daxingUnitPrice,attachmentIds:prepared.images.map(i=>i.attachmentId),lineItems:prepared.lineItems.map(({lineId,styleNo,alternateStyleNo,color,quantity})=>({lineId,styleNo,alternateStyleNo,color,quantity,factoryDeliveryDate:'2026-12-10'})),digitalBudget:{productionOrderId:id,budgetVersion:prepared.budgetVersion,orderVersion:prepared.orderVersion}};

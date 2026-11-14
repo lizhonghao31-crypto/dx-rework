@@ -134,6 +134,8 @@ class Fixture:
                     "scripts/deploy/inspect-acceptance-identity.sh",
                     "scripts/deploy/inspect-acceptance-storage.py",
                     "scripts/deploy/acceptance-capacity.py",
+                    "scripts/deploy/cleanup-acceptance-builds.py",
+                    "scripts/deploy/cleanup-update-source.py",
                     "scripts/deploy/acceptance-runtime-state.mjs",
                     "scripts/deploy/acceptance-pm2-activation.mjs",
                     "scripts/migration-history-policy.mjs", "scripts/migration-branches.json",
@@ -421,6 +423,8 @@ class Fixture:
         write(frontend / "index.html", '<html><script src="/acceptance/assets/fixture.js"></script></html>\n')
         write(frontend / "assets/fixture.js", "console.log('offline fixture')\n")
         write(api / "apps/api/src/platform/migration-manifest.json", json.dumps(self.manifest) + "\n")
+        write(api / "package-lock.json", (self.repo / "package-lock.json").read_text())
+        write(root / "release-manifest.json", json.dumps(version) + "\n")
         for script in ("database-state.mjs", "verify-database-readiness.mjs"):
             write(api / "scripts/deploy" / script, "// fixture data boundary\n")
         write(api / "scripts/check-migration-export.mjs", "// fixture data boundary\n")
@@ -440,7 +444,7 @@ class Fixture:
         for directory in (api, frontend, root):
             rows=[]
             for file in sorted(directory.rglob("*")):
-                if file.is_file() and file.name != "SHA256SUMS":
+                if file.is_file() and file != directory / "SHA256SUMS":
                     rows.append(hashlib.sha256(file.read_bytes()).hexdigest() + "  " + str(file.relative_to(directory)))
             write(directory / "SHA256SUMS", "\n".join(rows) + "\n")
         return version
@@ -721,11 +725,14 @@ class ActiveSlotChainTests(unittest.TestCase):
         self.assertEqual(before,f.production_fingerprint())
         self.assertTrue(any(x['kind']=='maintenance' for x in f.calls()))
         metadata=[x for x in f.calls() if x['kind']=='capacity-metadata']
-        self.assertTrue(metadata, 'Capacity must inspect only fixed catalog metadata before download')
+        self.assertTrue(metadata, 'Capacity must inspect fixed catalog and migration metadata read-only before download')
+        self.assertTrue(any('FROM public.schema_migrations' in ' '.join(call['args']) for call in metadata))
         for call in metadata:
             self.assertTrue(call['readonly'])
             sql=' '.join(call['args'])
-            self.assertNotIn('schema_migrations',sql)
+            if 'schema_migrations' in sql:
+                self.assertIn('BEGIN READ ONLY',sql)
+                self.assertIn("current_database()='dx_rework_acceptance'",sql)
             self.assertFalse(any(word in sql.upper() for word in ('INSERT ', 'UPDATE ', 'DELETE ', 'ALTER ', 'GRANT ')))
 
     def test_real_main_then_acceptance_then_main_controller_chain(self):

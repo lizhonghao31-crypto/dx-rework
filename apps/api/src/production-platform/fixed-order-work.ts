@@ -3,8 +3,10 @@ import type {CraftStepChoice} from '@dx-rework/contracts/digital-craft';
 import type {FixedTimelineInput} from './fixed-timeline-adoptions.js';
 import {frozenWorkDefinition,frozenCraftDefinition,craftParameterKey,withOrderTimeStageReserves,type FixedWorkInputs} from './fixed-work-definition.js';
 import {orderTimeRule} from '@dx-rework/contracts/order-time-plan';
+import type {BulkWashingArrangement} from '@dx-rework/contracts/bulk-washing';
+import {bulkWashingWork} from './bulk-washing-work.js';
 type Work=FixedTimelineInput['work'][number];
-export type FixedOrderPlanningLine={line_id:string;goal:SlaAnchor|undefined;customerDateVersion:number};
+export type FixedOrderPlanningLine={line_id:string;goal:SlaAnchor|undefined;customerDateVersion:number;washing?:BulkWashingArrangement};
 /** The native capture and the read-only calculator share this exact DAG. */
 export function fixedOrderWork(initial:FixedWorkInputs,orderId:string,sourceId:string,sourceRound:number,preshrink:string,craftSteps:Array<CraftStepChoice&{stepId:string}>,dual:boolean,source:Pick<FixedTimelineInput,'work'|'route'>|null,lines:FixedOrderPlanningLine[]){
   const work:Work[]=[],route:NonNullable<FixedTimelineInput['route']>=[];
@@ -50,11 +52,13 @@ export function fixedOrderWork(initial:FixedWorkInputs,orderId:string,sourceId:s
   const consumers:FixedTimelineInput['consumers']=[];
   for(const line of lines){
    const suffix=`:${line.line_id}`,goal=line.goal;
-   add(`factory_work${suffix}`,'factory_production_work',['warehouse_dispatch']);
-   add(`factory_production${suffix}`,'factory_production',[`factory_work${suffix}`]);
+   const factory=add(`factory_work${suffix}`,'factory_production_work',['warehouse_dispatch']);
+   const washing=bulkWashingWork(orderId,line.line_id,line.washing,factory,`garment_inspection${suffix}`);
+   Object.assign(factory,washing.factory);work.push(...washing.work);
+   add(`factory_production${suffix}`,'factory_production',[washing.factoryEnd]);
    add(`return_logistics${suffix}`,'return_logistics',[`factory_production${suffix}`]);
    add(`garment_inspection${suffix}`,'garment_inspection',[`return_logistics${suffix}`]);
-   add(`garment_packing${suffix}`,'garment_packing',[`garment_inspection${suffix}`]);
+   add(`garment_packing${suffix}`,'garment_packing',[washing.packingPredecessor]);
    add(`ship_sample${suffix}`,'ship_sample');
    const nodeIds=[...common,...work.filter(node=>node.id.endsWith(suffix)).map(node=>node.id)];
    const advance=initial.data.orderTimePlan?orderTimeRule(initial.data.orderTimePlan,'ship_sample_advance')?.rule:initial.data.unified.values.parameters.ship_sample_advance?.value;

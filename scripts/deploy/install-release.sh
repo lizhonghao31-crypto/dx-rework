@@ -28,6 +28,7 @@ install_one() {
   fi
   tmp="${dst}.tmp.$$"
   [[ ! -e "$tmp" && ! -L "$tmp" ]] || die 'install staging already exists'
+  mkdir -p "$(dirname "$dst")"
   mkdir "$tmp"
   install_tmp="$tmp"
   cp -a "$src/." "$tmp/"

@@ -1,0 +1,96 @@
+# 时间专项 PR05：正常大货洗水（施工中）
+
+依据已审核第27版 §9.4 及八PR计划。2026-11-14 PR04 Acceptance 通过后，用户授权在实际合并基线上继续PR05；完成后等待用户更新及验收，再进入PR06。
+
+- 目标分支：release/digital-production-v1；实际基线 `0bcd95e83e657646033ef804f75057f6c4b1469e`，工作分支 `feat/time-framework-05`。PR04为squash合并，已保留两份本地stash并将全部隔离成果无冲突接入该真实基线。
+- 范围：工厂洗好交付、回货后另送洗及免洗；实际批次发收、检查、费用、计划与责任。FULL 风险：数量、权限、持久化和原消费者。
+- 禁止：部署、服务器或真实业务数据操作；不启动新采用链，不用开发洗水默认额度，不改变首收规则或旧返工职责。
+
+## 影响关系（持续补全）
+
+|规则|原入口/消费者|本次处理及验证|
+|---|---|---|
+|首收不等洗回，洗回不等整单交齐|原 receiving_receipts、garmentQuality、packingQualityCoverage、结案/统计|复用有效实收版本；独立洗水批次投影，不制造额外收货；100件仅收30洗回20必须仍未完成|
+|洗水两路线不得混用，免洗无假风险|原制单、fixedOrderWork、公司/本单时效|显式冻结路线和用时来源；无1/3天默认；工厂内含只计算一次|
+|更正/撤销保持事实并重新核覆盖|原收货更正账及质检有效版本|旧数量版本不得继续提供洗水合格覆盖；缺有效送洗/洗回不能放行|
+
+已补持久化、原发厂/回货页面、批次责任窗口、洗水放行与原装箱/交付读取、岗位待办。仍在隔离环境验证；新采用入口由PR06集中整合，默认不启用新采用链，不能当作已上线或完整验收。
+
+## 历史隔离准备记录（2026-11-13，下列旧状态不代表当前状态）
+
+- `bulk-washing.ts`：显式路线、冻结标准版本、用时/日历及提醒；缺配置不猜默认。
+- `bulk-washing-ledger.ts`：按唯一批次和有效数量版本核送洗、洗回、洗后检查；数量改正/父记录失效时覆盖待核，旧记录不重写。免洗不造完成时间。
+- `bulk-washing-work.ts`、`fixed-order-work.ts`：仅显式传入本PO采用安排才扩展路线；工厂内含采用明确分解，保持总额及日历；收货后洗接本批检查后，不改首次收货。未接入正式采用入口，不改变旧订单。
+- 2026-11-13 隔离工作区：契约/领域/config构建通过；API typecheck退出0，日志 `/tmp/time-framework-05-api-types.log`。
+- 定向五文件48项通过，日志 `/tmp/time-framework-05-foundation.log`；随后新增逐PO隔离、跨周日两例，洗水排期文件7项全部通过（先前该文件5项已含在48项内，不重复累计）。共50个不同用例有通过结果。
+- 首次排期文件未执行原因是新工作区未生成契约dist，构建后已执行通过；不是业务断言失败，不隐藏该次失败。
+
+## 后续独立实现和验证
+
+- 0290：不可改写的采用版本/批次事件；原数量不复制覆盖，洗水合格覆盖为可重建投影，读取时核原实收更正版本和工厂当前分配，过期即待核。
+- 原装箱、结案、交付日历及债务汇总采用同一放行依据；原订单无洗水安排保持旧语义，未知不冒充零。仅处理本单本厂本批，显式关联洗水合格批次与原实收；不因已有20件洗好而认定30件实收全部洗好。
+- 批次时钟用实际送洗/工厂开始洗水及洗回/检查；业务已完成但时间缺失不继续按当前时间累计超时，取消有可信时间则冻结，缺失则待核。撤销保留历史。
+- 原预算版本/行引用，不生成洗水报价、不改合同；费用按预算权限显示。最新有效指派/费用与已开始时效分别读取，后改指派不重置窗口。
+- 原站内待办与工厂页面洗水定位，动态按有效批次生成/消失；不另建实际收货、不用任务点击代洗水事实，不发外部消息。
+- 当前独立结果：23个洗水单元用例通过；包含原路由、风险映射及迁移校验的6文件117项通过，日志 `/tmp/time05-current-unit.log`。不是117项现场验收。
+- PG16：洗水5项通过，含原生工厂发货→收货→洗水合格关联、批次部分完成、权限撤销、并发/幂等、撤销后原装箱与SQL聚合一致；日志 `/tmp/time05-washing-pg7.log`。另原装箱跨批次7项回归通过 `/tmp/time05-packing-regression.log`。
+- 浏览器首轮未执行业务：测试依赖名误写导致原注册未挂载HTTP端点（404），已修测试装载，正在复验。不能记为UI通过。原生工厂链先前缺“工厂发货”前置导致收货未关联，补原命令后通过，未放宽服务保护。
+- API/Web类型检查通过（后续变动仍按影响补验）；新增源文件eslint通过 `/tmp/time05-eslint2.log`。
+- 尚需：原App浏览器结果及实际像素、费用历史/变更与收货更正边界、通知完整回执、两种日历和剩余关联回归；PR04实际合并后核真实基线、完整diff和最终检查。
+- 没有提交、推送、PR、合并或部署；#980审查拒绝仍未重试，未操作真实业务数据。
+
+## 本轮补验（隔离库，未提交）
+
+- PG16 最新7项全部通过：`/tmp/time05-pg10.log`，包含后改检查人员和240分钟标准，已启动批次仍保持原60分钟起点/截止，撤权人员不恢复访问。测试首次尝试创建第二名全局唯一洗水跟单被既有岗位规则拒绝，已改为合法的检查人员变更，不放宽岗位约束。
+- PG13 原6项全部通过：`/tmp/time05-pg13.log`；新增第7项目前仅PG16执行，不冒称全部两版本覆盖。
+- 原App浏览器1项通过：`/tmp/time05-browser5.log`，已实际打开1165px截图核对。专属跟单送30回20、QC放行20，界面保留剩余10；未知完成时间显示“已完成·时间待核”，不误写未完成；保存成功清空表单，未决提交保留重试内容。此前404和选择器问题均已定位修复。
+- 最新5个单元文件116项通过：`/tmp/time05-final-unit.log`；API/Web类型与新增文件lint通过。测试集合重叠，不与此前117相加。
+- 采用适配器复用实际办理的整单删除/终止/结案保护。新的时间来源已入原清单：登记/投影更新时间只作审计，业务发生时间来自命令，观察时刻用业务时钟。
+- 尚未完成最终整体集成审查、有效费用引用/历史变更的专门业务回归及通知持久化全链验证；当前结果不代表Full或现场验收。PR04未合并，PR05保持隔离、未提交推送，不提前建立伪release基线。
+
+## 独立实现收尾：费用、通知及原消费者
+
+- `tests/helpers/business-anchor-fixture.ts` 可选预算行仍由原预算保存/发布及外发采用命令建立；未提供参数的旧夹具不变。无直接伪造已发布费用。
+- `bulk-washing-postgres.test.ts` 当前7项在PG16及PG13均通过，日志 `/tmp/time05-fee-notice.log`、`/tmp/time05-pg13-complete.log`。覆盖已发布预算第2版洗水2元引用、非费用岗位隐藏、当前安排改引用不覆盖旧洗水版本或已发预算；通知原runOnce重复运行幂等、领取/权限隔离、检查完成后回执失效。
+- `bulk-washing-browser-postgres.test.ts` 当前1项通过，日志 `/tmp/time05-browser-revoke.log`；真实原App同一会话撤销专属QC岗位后刷新，旧洗水资料及办理表单清除。订单切换有响应序号及orderId隔离，迟到回包不替换当前订单。
+- 原消费者10文件75项通过，日志 `/tmp/time05-consumers.log`；新文件和夹具lint通过 `/tmp/time05-lint-current.log`，Web typecheck `/tmp/time05-web-scope.log`，此前API类型通过。未重新跑输入未变的整体Full，也没有把重叠用例累计成新覆盖。
+- 2026-11-13 只读再次核GitHub：#980仍open/draft，head `9d4afb90078cea0e3ec67b05b0928e93f43838da`，merged=false；其审查拒绝未重试。PR05本地实现及定向验证已推进，当前无可用于顺序合并的PR04实际合并基线，因此没有推送/建PR/最终Gate，后续基线整合和正式审查仍待执行，不冒称完整验收。
+- 费用的源维护保持原预算/外发入口，洗水模块不新增报价授权。PR06负责正式采用与改期整合，PR07负责Journey统一风险读取，PR08才整体启用；PR05的内部采用适配器和原办理页面默认不会使旧单自动采用洗水。
+
+## 2026-11-14 实际合并基线复验
+
+- PR04现场已通过的开放部分不等于新工艺全链现场通过；PR05不提前启用新采用链。
+- 当前基线PG16三文件15项通过（洗水原生7、原App1、原装箱7），`/tmp/time05-baseline-pg.json`；PG13洗水7项通过，`/tmp/time05-baseline-pg13.json`。均为隔离TEST数据，非Acceptance现场。
+- 全工作区类型检查、preflight及迁移清单校验通过。原App1165px检查了真实截图，洗回20/实收30仍剩10，未把100件订单显示完成。
+- 全量非数据库及88单原生性能回归正在收齐，最终结果另补；没有创建PR或部署。
+
+### 关联回归结果与必要基线修补
+
+- 当前88单原生Journey性能/分页/搜索/全量统计及同会话撤权回归1项通过，物理SQL7070次，保留既有7100上限，未抬阈值。`/tmp/time05-performance.json`。
+- 全量非数据库首次3951通过、5失败、15跳过，`/tmp/time05-baseline-nondb.json`。失败集中在已有部署演练：#978后install-release的`mkdir`未建立首次安装父目录；旧active-slot夹具未复制新清理脚本，且候选缺锁文件/根manifest、根校验和遗漏嵌套SHA256SUMS。原基线中这些文件与首次失败时完全一致，另用独立临时空安装目录直接复现父目录错误。
+- 为不把已知基线故障带进最终检查，附最小兼容修补：先创建安全目标的父目录再独占创建临时目录，保留锁、容量检查、原子切换、失败清理与不可变版本；夹具生成完整真实格式，不关闭校验或放宽断言。只执行隔离离线演练，不操作服务器。
+- 洗水业务源码/输入在该两文件修补前后一致，已保存输入指纹据此复用PG及性能结果；新增单位/路由/风险映射五文件116项再次通过。全工作区lint通过；部署关联演练复验结果待收齐，不宣称全量非数据库已全部通过。
+
+### 提交前结果
+
+- 关联部署复验：原生命周期/容量/失败恢复27项通过 `/tmp/time05-deploy-resolved.json`；active-slot全部22个Python场景中，13个普通场景及8个PM2场景在 `/tmp/time05-deploy-compat.log` 通过，最后的迁移只读元数据断言单独修正后直接执行通过 `/tmp/time05-capacity-readonly-final.log`（23.873秒）。该元数据集合还包含合法的 `select current_database()`，因此只对包含迁移表的查询要求完整只读事务/数据库身份，所有调用仍禁止写SQL；不要求每条身份查询都包含迁移表。没有重复执行已通过的21个场景，不将分组结果冒充同一次全量运行。
+- 当前单位及原消费者6文件124项通过 `/tmp/time05-final-targeted.json`；完整build退出0、原静态业务门禁通过，未配置OSS的运行时检查明确skip；全工作区lint/typecheck通过。最终Light/Review/Full仍待真实提交后执行。
+- 当前证据以实际base及源码/未变输入指纹绑定；原失败日志保留。未创建现场洗水安排、未删除任何现场数据、未部署。PR06/PR08采用及整体开放未在本PR冒称完成。
+
+## Codex Review 修复（2026-11-14）
+
+- P1 `discussion_r4571088587`：原投影只检查QC存在，漏掉重录后较低合格量。现在每个完成批次按全部有效收货关联合计核当前QC上限；超限覆盖待核，撤销/更正旧关联后恢复实际可放行量，不篡改原实收。
+- P2 `discussion_r4571088593`：采用新版后原覆盖plan_id落后。采用、PO指针和投影重建放在原生命周期锁的同一事务；读取仍用已开始批次冻结安排，人员/费用/时长更新不凭空失去有效20件，也不重置旧责任。
+- PG16洗水/原页面/原装箱15项、PG13洗水7项及单位124项均通过，日志 `/tmp/time05-review-final-pg16.json`、`/tmp/time05-review-final-pg13.json`、`/tmp/time05-review-final-unit.json`。反例包含两个10件关联、复检仅15件时不得放行20，关联更正恢复10/15；并发采用仅一次成功且有效覆盖与原窗口保留。API类型检查及改动文件lint通过。
+- 首次修复复验的旧断言仍期待采用后无覆盖行；现在原生证据完整且尚未洗水时已知合格量为0，因此改为检查0，而非未知或通过。该首项失败后的串联断言不当作独立根因；完整7项已重新执行通过。
+- 未变部署修补与演练输入按提交逐文件比对复用；原性能结果不冒称修复提交新测。未重新请求Review；等待修复准确Head的Light与Full。
+
+## Full43551402248: isolated maintenance identity and Light policy
+
+The non-db and completed PG/business/backup lanes succeeded. Acceptance low-privilege maintenance failed at the post-migration storage-history JSON parse on PG13; later deployment-lifecycle steps did not execute and are not claimed passed. The original failure was reproduced locally before repair.
+
+The drill pins an OID, then explicitly drops/recreates its TEST database from a template. Its later fixed storage query still used the old identity, so the real read-only observer returned no row as designed. The repair asserts that the stale OID continues to return no row, obtains the replacement TEST database identity at that explicit fixture boundary and checks the returned ledger belongs to that new OID. No runtime updater identity comparison, role/grant boundary, SQL filter or production logic is relaxed. A real update continues to reject identity drift; it never silently re-pins a replaced database.
+
+Local full recovery initially reached the repaired ledger and low-privilege application assertions on PG13/15/16 but could not restore because local node_modules linked to another worktree not mounted in the test container. Locked local dependencies were installed in this worktree without source/lock changes; those partial attempts are not complete passes. Final three-version results are recorded separately in the current construction evidence when complete.
+
+The user expressly changed policy to one initial Light per PR, no rerun for later changes. This repair includes the already locally verified workflow/controller policy change: only opened attempt1 selects Light, later events/retries do not; final requests and automatic merge do not require Light, but any actual reused artifact remains same-head/source-verified. Full executes original checks when no eligible artifact exists. Necessary Review, exact final head/base/mode, failed final rejection and platform protections remain. Prior Light attempts are preserved as history, not relabelled as a single run or proof for the repaired head. No production deployment or data operation occurred.

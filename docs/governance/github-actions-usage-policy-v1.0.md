@@ -2,7 +2,7 @@
 
 长期规则见[AGENTS §4–5](../../AGENTS.md)。本文件说明实现边界；历史单次授权、分组发布与旧预算不再作为默认规则。
 
-- PR push 只跑 light；必要 Review 后冻结候选，显式选择最终 Quick 或 Full。无关正文/同模式标题编辑不分配校验 runner，也不取消已有最终请求。
+- 每PR首次opened只跑一次light；后续push、重开、编辑及重试不再跑light；必要 Review 后冻结候选，显式选择最终 Quick 或 Full。无关正文/同模式标题编辑不分配校验 runner，也不取消已有最终请求。
 - Quick 不运行 PostgreSQL、恢复、打包或现场验收；Full 按实际 base→candidate 风险执行所需领域。未知执行风险不能当无风险。最终批准绑定准确 Head/base、等级、run/job/attempt 及实际回执。
 - 请求 ref 不可变，不删除重建、force、更换nonce或用noop触发。相同请求先 reconcile。过期 Head、失败、取消、全skip、空计划和缺阶段均不能签成功。
 - 实际预算由 `.github/workflows/ci.yml` 和 `full-gate.yml` 维护，文档不复制另一组值。超时先定位阶段和资源，不直接加大全局限制。
@@ -13,7 +13,7 @@
 
 可复用项仅为同语义的 lint、typecheck、workspace build、迁移静态检查。Head、实际base、PR/等级、树/锁文件、Node/npm、runner镜像/平台、声明的构建环境必须一致。源快照不是最终Gate回执；源Job最终成功且服务端实际检查成功才可采用。
 
-产物逐文件校验内容、路径和权限，禁止跳目录、覆盖tracked源码、符号链接或未验证内容。源缺失/不适用/环境变化会执行真实原检查；损坏产物与伪造来源拒绝。每个采用项保存源run/job/attempt与指纹，最终核证还要与当前已核light对照。不是把skipped同名检查变绿，不跨Head复用；完整历史secret扫描、生产依赖审计、业务测试、DB/恢复保持各自语义，不拿light替代。
+产物逐文件校验内容、路径和权限，禁止跳目录、覆盖tracked源码、符号链接或未验证内容。源缺失/不适用/环境变化会执行真实原检查，不能为此补跑Light；损坏产物与伪造来源拒绝。每个采用项保存源run/job/attempt与指纹，最终核证还要与当前已核light对照。不是把skipped同名检查变绿，不跨Head复用；完整历史secret扫描、生产依赖审计、业务测试、DB/恢复保持各自语义，不拿light替代。
 
 ## 受管PostgreSQL
 

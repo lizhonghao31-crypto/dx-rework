@@ -3,7 +3,6 @@ import {readFileSync} from 'node:fs';
 import {runInNewContext} from 'node:vm';
 import {test} from 'node:test';
 import {finalRef, FINAL_CHECK, LIGHT_CHECK, REPOSITORY} from './pr-gate-protocol.mjs';
-import {scopeFor,scopeRequired} from './ci-gate-runtime.mjs';
 const ci=readFileSync('.github/workflows/ci.yml','utf8');
 const full=readFileSync('.github/workflows/full-gate.yml','utf8');
 const head='a'.repeat(40),base='b'.repeat(40),baseRef='release/digital-production-v1';
@@ -14,7 +13,7 @@ const evaluate=(value,c)=>{
  if(value?.startsWith('${{ '))return runInNewContext(value.slice(4,-3),env);
  return value?.replace(/\$\{\{ (.*?) \}\}/g,(_,e)=>runInNewContext(e,env));
 };
-const context=(title='[FULL] change',action='opened',changes={})=>({github:{event_name:'pull_request',sha:'c'.repeat(40),ref:'refs/pull/901/merge',event:{action,changes,pull_request:{number:901,title,head:{sha:head},base:{sha:base,ref:baseRef}}}},needs:{request:{result:'skipped',outputs:{}}}});
+const context=(title='[FULL] change',action='opened',changes={})=>({github:{event_name:'pull_request',run_attempt:1,sha:'c'.repeat(40),ref:'refs/pull/901/merge',event:{action,changes,pull_request:{number:901,title,head:{sha:head},base:{sha:base,ref:baseRef}}}},needs:{request:{result:'skipped',outputs:{}}}});
 const created=(kind='full')=>{
  const ref=finalRef({kind,head,base,baseRef,pr:901});
  return {github:{event_name:'create',sha:head,ref:`refs/heads/${ref}`,event:{ref,ref_type:'branch',pull_request:{}}},needs:{request:{result:'success',outputs:{kind,pr:'901'}}}};
@@ -23,9 +22,9 @@ const selected=(id,c)=>Boolean(evaluate(expression(job(ci,id),'if'),c));
 const name=(id,c)=>evaluate(expression(job(ci,id),'name'),c);
 for(const kind of ['FULL','QUICK'])for(const action of ['opened','synchronize','reopened'])test(`${kind} ${action}: only light checks, no expensive worker or final approval`,()=>{
  const c=context(`[${kind}] change`,action);
- assert.equal(selected('request',c),false);assert.equal(selected('validate',c),true);
+ assert.equal(selected('request',c),false);assert.equal(selected('validate',c),action==='opened');
  assert.equal(selected('full',c),false);assert.equal(selected('approval',c),false);
- assert.equal(name('validate',c),LIGHT_CHECK);assert.notEqual(name('approval',c),FINAL_CHECK);
+ assert.equal(name('validate',c)===LIGHT_CHECK,action==='opened');assert.notEqual(name('approval',c),FINAL_CHECK);
 });
 for(const changes of [{body:{from:'old'}},{title:{from:'[FULL] old'}},{title:{from:'[FULL] old'},body:{from:'old'}},{}])test(`unrelated metadata ${JSON.stringify(changes)} allocates no runner or required name`,()=>{
  const c=context('[FULL] change','edited',changes);
@@ -44,17 +43,17 @@ for(const kind of ['quick','full'])test(`canonical ${kind} create selects one wo
  c.needs.request.result='failure';assert.equal(selected('validate',c),false);assert.equal(selected('full',c),false);
  assert.equal(selected('approval',c),true); // The certifier must fail, not become a green skipped approval.
 });
-for(const changes of [{base:{ref:{from:'main'}}},{title:{from:'[QUICK] old'}}])test('base or risk-mode edits invalidate previous evidence without expensive work',()=>{
- const c=context('[FULL] change','edited',changes);assert.equal(selected('validate',c),true);
+for(const changes of [{base:{ref:{from:'main'}}},{title:{from:'[QUICK] old'}}])test('base or risk-mode edits run no additional Light; final binding remains exact',()=>{
+ const c=context('[FULL] change','edited',changes);assert.equal(selected('validate',c),false);
  assert.equal(selected('full',c),false);assert.equal(selected('approval',c),false);
 });
-test('new PR Head cancels stale work using the same job-level group; duplicate final events queue',()=>{
+test('initial Light and final requests queue without cancelling either',()=>{
  const light=context(),fin=created();
  const group=c=>evaluate(expression(job(ci,'validate'),'group',6),c);
  assert.equal(`pr-gate-${light.github.event.pull_request.number}`,evaluate(expression(job(ci,'full'),'group',6),{needs:{request:{outputs:{pr:901}}}}));
  assert.equal(group(light),group(fin));
- assert.equal(evaluate(expression(job(ci,'validate'),'cancel-in-progress',6),light),true);
- assert.equal(evaluate(expression(job(ci,'validate'),'cancel-in-progress',6),fin),false);
+ assert.equal(evaluate(expression(job(ci,'validate'),'cancel-in-progress',6),light),'false');
+ assert.equal(evaluate(expression(job(ci,'validate'),'cancel-in-progress',6),fin),'false');
  assert.match(job(ci,'full'),/cancel-in-progress: false/);
  assert.doesNotMatch(full,/^ {4}concurrency:/m);
  assert.doesNotMatch(ci,/^concurrency:/m);assert.doesNotMatch(full,/^concurrency:/m);
@@ -75,8 +74,11 @@ test('workflow wiring preserves least privilege, actual receipts, exact Head and
  assert.equal(REPOSITORY,'lizhonghao31-crypto/dx-rework');
 });
 
-for(const changes of [{base:{ref:{from:'main'}}},{title:{from:'[QUICK] old'}}])test('edited base/mode business light publishes the same artifact required by its catalog',()=>{
- const c=context('[FULL] change','edited',changes);const scope=scopeFor({phase:'invalidate',baseRef,kind:'full'},['scripts/test-execution-config.mjs']);assert.equal(scopeRequired('light_build',scope),true);c.steps={protocol:{outputs:{phase:'invalidate'}},build:{outcome:'success'}};assert.equal(selected('validate',c),true);
- for(const id of ['reuse_publish','reuse_upload']){const block=job(ci,'validate').split(`        id: ${id}\n`)[1].split('      - name:')[0];const condition=expression(block,'if',8);assert.equal(Boolean(evaluate(condition,c)),true,id);}
- c.github.event_name='create';for(const id of ['reuse_publish','reuse_upload']){const block=job(ci,'validate').split(`        id: ${id}\n`)[1].split('      - name:')[0];assert.equal(Boolean(evaluate(expression(block,'if',8),c)),false,id);}
+test('only opened triggers PR Light and reruns never allocate another Light worker',()=>{
+ const triggers=ci.split('  pull_request:')[1].split('  workflow_dispatch:')[0];
+ assert.match(triggers,/- opened/);assert.doesNotMatch(triggers,/- synchronize|- reopened|- edited/);
+ for(const attempt of [2,3]){const c=context();c.github.run_attempt=attempt;assert.equal(selected('validate',c),false);assert.notEqual(name('validate',c),LIGHT_CHECK);}
+});
+test('Full still executes lint, types and build when same-Head Light evidence is unavailable',()=>{
+ for(const [id,command] of [['lint','npm run lint'],['types','npm run typecheck'],['build','npm run build --workspaces --if-present'],['migration_lint','npm run db:migrate:lint']])assert.ok(full.includes(`light-reuse.mjs run ${id} ${command}`));
 });

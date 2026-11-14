@@ -8,6 +8,11 @@ describe('shared business destinations',()=>{
  it.each(['rework_detail','process_configuration','whole_order_review','wage_period_detail','supplier_onboarding','sample_detail','pattern_room_order','sourcing_detail','production_detail','responsibility_detail','own_factory_approval','external_responsibility_detail','digital_production_instruction','digital_development','digital_development_arrangement','digital_production_task','digital_short_lead'] as const)('keeps browser and notification destinations identical for %s',routeName=>{
   const route={routeName,entityId,todoId};expect(todoRouteHref(route)).toBe(todoDestination(route));expect(buildTodoDeepLink('/pilot/',route)).toBe('/pilot'+todoDestination(route));
  });
+ it('opens normal bulk washing in its original factory page, with no alternate external route',()=>{
+  const route={routeName:'digital_bulk_washing' as const,entityId,todoId};
+  expect(todoRouteHref(route)).toBe(todoDestination(route));
+  expect(todoDestination(route)).toContain('factoryAction=washing');
+ });
  it('preserves real published version and legacy round without guessing',()=>{
   expect(todoDestination({routeName:'digital_production_instruction',entityId,todoId,developmentRound:2})).toContain('instructionVersion=2');
   expect(todoDestination({routeName:'pattern_room_order',entityId,todoId,roundId:todoId})).toContain('round='+todoId);
