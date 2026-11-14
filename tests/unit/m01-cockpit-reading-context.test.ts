@@ -17,3 +17,8 @@ it('keeps explicit different-node and different-stage navigation eligible to rev
 it('does not suppress initial anchor positioning with an unread placeholder and clears UI memory on session invalidation',()=>{
  const current=context();rememberCockpitReading('TEST-authorized-identity',current,host,false);expect(matchesCockpitReading('TEST-authorized-identity',current)).toBe(false);rememberCockpitReading('TEST-authorized-identity',current,host,true);expect(matchesCockpitReading('TEST-authorized-identity',current)).toBe(true);invalidateSession();expect(matchesCockpitReading('TEST-authorized-identity',current)).toBe(false);
 });
+it('retains milestone selection independently from all-nodes and never restores another milestone scroll',()=>{
+ const current={...context(),milestone:'po:TEST|processing_dispatch'};rememberCockpitReading('TEST-authorized-identity',current,host,true);
+ expect(matchesCockpitReading('TEST-authorized-identity',current)).toBe(true);
+ expect(matchesCockpitReading('TEST-authorized-identity',{...current,milestone:''})).toBe(false);
+});

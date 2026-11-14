@@ -15,10 +15,9 @@ import {initialDevelopmentDocument} from '../../apps/web/src/digital-development
 import {randomUUID} from 'node:crypto';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
-import {beforeAll,afterAll,describe,it,expect,vi} from 'vitest';
+import {beforeAll,afterAll,describe,it,expect} from 'vitest';
 import {supplychainSettingsBrowser} from '../acceptance/supplychain-settings-browser.js';
 import {SpecialCraftLibraryService} from '../../apps/api/src/production-platform/special-craft-library.js';
-vi.mock('../../apps/api/src/production-platform/special-craft-activation.js',()=>({SPECIAL_CRAFT_ADOPTION_ENABLED:true}));
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (url?describe:describe.skip)('special craft library original App settings',()=>{
  let h:Awaited<ReturnType<typeof supplychainSettingsBrowser>>;

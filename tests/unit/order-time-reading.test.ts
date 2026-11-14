@@ -227,7 +227,12 @@ describe('R5 exact frozen order-time reading and independent visible endpoints',
  it('keeps the whole reliable start independent from unrelated missing UI milestones and returns no fake actual finish',()=>{
   const row=item();row.stages[1]!.nodes=[node('a','active',at(0)),node('b','uncreated',null),node('future','pending',null)];
   attachFixedJourneySchedule(row,build(stored(),row),at(1));const visual=journeyVisualProgress(row,at(1));
-  expect(visual.startedAt).toBe(at(0));expect(visual.timeRatio).toBe(0.1);expect(visual.actual.at).toBeNull();
+  expect(visual.startedAt).toBe(at(0));expect(visual.timeRatio).toBeNull();expect(visual.actual.at).toBeNull();
+  expect(visual.expected.at).toBe(at(10)); // Frozen work target remains readable, not a customer date.
+  row.lines=[{id:'TEST delivery PO',po:'TEST-PO',color:'黑',formalStyleNo:null,temporaryStyleNo:null,orderedQuantity:1}];
+  row.poDeliveryDates=[{lineId:'TEST delivery PO',customerWarehouseArrivalDate:'2027-03-01'} as NonNullable<OrderJourney['poDeliveryDates']>[number]];
+  // 08:00 Beijing start, 09:00 observation, next midnight deadline: 1/16.
+  expect(journeyVisualProgress(row,at(1))).toMatchObject({startedAt:at(0),timeRatio:1/16,actual:{at:null}});
  });
  it('preserves the completed own late result even when its fixed target is early, with normal target zero shown as green minus-zero',()=>{
   const row=item();row.stages[1]!.nodes=[node('a','completed',at(0),at(2))];const basis=build(stored(),row),work=basis.scopes[0]!.work.find(work=>work.id==='a')!;

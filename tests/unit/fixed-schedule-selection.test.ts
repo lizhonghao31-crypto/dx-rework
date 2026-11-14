@@ -13,6 +13,17 @@ describe('one fixed classification for complete scope, finite clock boundaries a
   expect(compiled.expiresAt).toBeNull();expect(compiled.frames.map(frame=>[frame.from,frame.schedule?.lagLineIds.length,frame.schedule?.dueLineIds.length])).toEqual([[at(6),0,0],[at(9),0,1],[new Date(Date.parse(at(9))+1).toISOString(),1,1]]);
   expect(evaluateFixedJourneyBasis(input,at(9),false).scopes[0]!.lagMinutes?.minimum).toBe(0);expect(evaluateFixedJourneyBasis(input,at(10),false).state).toBe('late');
  });
+ it('compares the final canonical node set after framework event projection and still rejects a real risk mismatch',()=>{
+  const input=basis(),scope=input.scopes[0]!,now=at(6),old=scope.work[0]!.id;
+  scope.work[0]!.id='design_handover:whole';scope.work[1]!.dependsOn=['design_handover:whole'];scope.facts['design_handover:whole']=scope.facts[old]!;delete scope.facts[old];
+  input.framework=[{scopeRef:scope.scopeRef,lineId:scope.lineId,route:'B',reference:'TEST-framework',revision:1,effectiveAt:at(0),customerDate:'2026-11-02',milestones:[{key:'design_handover',date:'2026-11-02',at:at(8),plannedAt:at(5),workIds:['design_handover:whole']}]}];
+  const original=item(now),canonical=structuredClone(original);attachFixedJourneySchedule(canonical,input,now);
+  const timing={plan:null,original:null,facts:{},fixedSchedule:input},delivery={finished:false,factoryFinished:false,sampleFinished:false,sentLineIds:[]},time={now,scenarioId:null,revision:0};
+  const result=compileJourneySelectionClock(canonical,original,timing,[],[],delivery,time);
+  expect(result.frames[0]!.risks).toHaveLength(1);expect(result.frames[0]!.risks[0]!.id).toContain('framework-event:');
+  canonical.stages.find(stage=>stage.key==='preparation')!.nodes[0]!.risks.push('unknown');
+  expect(()=>compileJourneySelectionClock(canonical,original,timing,[],[],delivery,time)).toThrow('Journey selection clock differs');
+ });
  it('keeps the63rd authorized row in global independent progress selection and count, with only15 displayed',()=>{
   const rows:JourneySelection[]=Array.from({length:63},(_,index)=>({...item(at(6)),id:'TEST-'+String(index).padStart(3,'0'),orderId:'TEST-'+index,scheduleSelection:{state:index===62?'late':'normal',lagLineIds:index===62?['TEST-tail-po']:[],dueLineIds:[],unknownLineIds:[]}}));
   const all=selectJourneySelections(rows,JourneyFilterSchema.parse({scope:'production'}),at(6));expect(all.total).toBe(63);expect(all.items).toHaveLength(15);expect(all.summary).toMatchObject({overdue:0,scheduleLag:1});

@@ -183,3 +183,5 @@ export function sanitizeOperationalError(error: unknown): string {
 
 export * from "./production-progress.js";
 export * from "./production-node-clock.js";
+
+export {naturalTimeRatio} from './journey-time-ratio.js';

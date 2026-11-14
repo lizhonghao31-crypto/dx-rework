@@ -1,3 +1,4 @@
+import {cockpitDifferenceDays} from './cockpit-difference-days.js';
 import {CockpitDate} from './cockpit-date.js';
 import {scopedDeadlineFallback} from './journey-sla-details.js';
 import {useEffect,useRef,useState} from 'react';
@@ -18,12 +19,12 @@ export function useScheduleObservation(order:OrderJourney,stale=false){
  useEffect(()=>{origin.current=performance.now();setElapsed(0);if(stale||schedule?.observationMode!=='live'||!schedule.scopes.some(s=>s.nodes.some(n=>!n.businessCompleted&&!['unknown','terminated'].includes(n.goalDelta.kind))))return;
   const update=()=>{if(!document.hidden)setElapsed(performance.now()-origin.current);};const timer=setInterval(update,30000);document.addEventListener('visibilitychange',update);return()=>{clearInterval(timer);document.removeEventListener('visibilitychange',update);};
  },[schedule,stale]);
- return schedule?new Date(Date.parse(schedule.asOf)+(stale?0:elapsed)).toISOString():undefined;
+ const base=schedule?.asOf?Date.parse(schedule.asOf):NaN;return Number.isFinite(base)?new Date(base+(stale?0:elapsed)).toISOString():undefined;
 }
 export function observedTargetDelta(progress:ScheduleNodeProgress,asOf?:string):ScheduleGoalDelta{
  return observedGoalDelta(progress.goalDelta,progress.businessCompleted,asOf);
 }
-function observedGoalDelta(goal:ScheduleGoalDelta,completed:boolean,asOf?:string):ScheduleGoalDelta{
+export function observedGoalDelta(goal:ScheduleGoalDelta,completed:boolean,asOf?:string):ScheduleGoalDelta{
  if(completed||goal.kind==='unknown'||goal.kind==='terminated'||!asOf||!goal.targetAt)return goal;
  const at=Date.parse(asOf);if(!Number.isFinite(at)||at<Date.parse(goal.asOf))return goal;
  const signedValue=goal.unit==='day'&&goal.targetDate?Math.max(0,(Date.parse(new Date(at+8*3600000).toISOString().slice(0,10))-Date.parse(goal.targetDate))/day):Math.max(0,(at-Date.parse(goal.targetAt))/minute);
@@ -37,15 +38,15 @@ export function cockpitTargetDifference(nodes:JourneyNode[],asOf?:string,lines:O
  const known=values.filter(v=>v.goal.signedValue!==null&&!['unknown','terminated'].includes(v.goal.kind));
  const minutes=(goal:ScheduleGoalDelta)=>goal.signedValue!*(goal.unit==='day'?1440:1),late=known.filter(v=>v.goal.kind==='late');
  const chosen=late.sort((a,b)=>minutes(b.goal)-minutes(a.goal))[0]??(known.length===values.length?known.sort((a,b)=>minutes(b.goal)-minutes(a.goal))[0]:undefined);
- const format=(goal:ScheduleGoalDelta)=>goal.signedValue===null?'—':goal.signedValue===0?'-0':`${goal.signedValue>0?'+':'-'}${goal.unit==='day'?Math.abs(goal.signedValue)+'天':cockpitDuration(Math.abs(goal.signedValue))}`;
+ const format=cockpitDifferenceDays;
  return {text:chosen?format(chosen.goal):'—',tone:chosen?(chosen.goal.kind==='late'?'danger':'success'):'neutral',title:values.map(v=>v.label+' · '+v.scope+'：'+format(v.goal)).join('\n'),count:values.length};
 }
 function differenceUnits(text:string){return text.match(/.*?(?:天|小时|分钟|$)/g)?.filter(Boolean).map((part,index)=><span className="cockpit-delta-unit" key={index}>{part}</span>);}
 export function CockpitTargetDifference({nodes,asOf,lines=[],wrapUnits=false}:{nodes:JourneyNode[];asOf?:string|undefined;lines?:OrderJourney['lines'];wrapUnits?:boolean}){const value=cockpitTargetDifference(nodes,asOf,lines);return <span className={'cockpit-target-difference is-'+value.tone} title={value.title||'尚无可信固定目标差'} aria-label={'节点目标差 '+value.text}>{wrapUnits?differenceUnits(value.text):value.text}</span>;}
 export function CockpitStageDifference({goal,asOf,wrapUnits=false}:{goal:ScheduleGoalDelta;asOf?:string|undefined;wrapUnits?:boolean}){
  const value=observedGoalDelta(goal,goal.actual.precision!=='unknown',asOf),amount=value.signedValue;
- const text=amount===null?'—':amount===0?'-0':`${amount>0?'+':'-'}${value.unit==='day'?Math.abs(amount)+'天':cockpitDuration(Math.abs(amount))}`;
- return <span className={'cockpit-target-difference is-'+(amount===null?'neutral':amount>0?'danger':'success')} aria-label={'阶段目标差 '+text}>{wrapUnits?differenceUnits(text):text}</span>;
+ const text=cockpitDifferenceDays(value);
+ return <span className={'cockpit-target-difference is-'+(text==='—'?'neutral':amount!>0?'danger':'success')} aria-label={'阶段目标差 '+text}>{wrapUnits?differenceUnits(text):text}</span>;
 }
 export function cockpitOwnStatus(node:JourneyNode):{text:string;tone:'danger'|'warning'|'neutral'}|null{
  if(!node.fixedTargets?.length||['inherited','cancelled','not_applicable','unavailable'].includes(node.state))return null;
@@ -61,10 +62,10 @@ export function CockpitFixedTargetDates({node,lines=[]}:{node:JourneyNode;lines?
 }
 
 /** Actual dates and their adjacent delta share this exact scoped occurrence. */
-export function CockpitActualDates({node,lines=[],stacked=false}:{node:JourneyNode;lines?:OrderJourney['lines'];stacked?:boolean}){
+export function CockpitActualDates({node,lines=[],stacked=false,short=false}:{node:JourneyNode;lines?:OrderJourney['lines'];stacked?:boolean;short?:boolean}){
  const targets=node.fixedTargets??[],missing=node.state==='completed'?'完成时间待核实':'—';
- if(!targets.length)return <><CockpitDate value={node.actualDate??node.actualAt} precision={node.actualDate?'date':'instant'} missing={missing} stacked={stacked}/>{(node.actualAt||node.actualDate)&&node.actualQuality!=='verified'&&<small>原完成记录，时间待核</small>}</>;
- return <>{targets.map((target,index)=>{const actual=target.progress.goalDelta.actual,line=lines.find(line=>line.id===target.lineId);return <span className="cockpit-fixed-target-date" key={target.scopeRef+'|'+target.progress.canonicalWorkRef}>{targets.length>1&&<small>{line?`PO ${line.po??'号码待补'} · ${line.color}`:`对应范围${index+1}`}：</small>}<CockpitDate value={actual.precision==='instant'?actual.at:actual.precision==='date'?actual.date:null} precision={actual.precision==='date'?'date':'instant'} missing={missing} stacked={stacked}/></span>;})}</>;
+ if(!targets.length)return <><CockpitDate value={node.actualDate??node.actualAt} precision={node.actualDate?'date':'instant'} missing={missing} stacked={stacked} short={short}/>{(node.actualAt||node.actualDate)&&node.actualQuality!=='verified'&&<small>原完成记录，时间待核</small>}</>;
+ return <>{targets.map((target,index)=>{const actual=target.progress.goalDelta.actual,line=lines.find(line=>line.id===target.lineId);return <span className="cockpit-fixed-target-date" key={target.scopeRef+'|'+target.progress.canonicalWorkRef}>{targets.length>1&&<small>{line?`PO ${line.po??'号码待补'} · ${line.color}`:`对应范围${index+1}`}：</small>}<CockpitDate value={actual.precision==='instant'?actual.at:actual.precision==='date'?actual.date:null} precision={actual.precision==='date'?'date':'instant'} missing={missing} stacked={stacked} short={short}/></span>;})}</>;
 }
 
 /** Snapshot of the canonical perPO evaluator, no crossPO arithmetic or client

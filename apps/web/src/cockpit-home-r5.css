@@ -39,3 +39,15 @@
  .dx-production-ui .digital-journey-cockpit[data-view="overview"] .journey-kpis .dx-production-kpi>strong{font-size:29px}
 }
 @media(max-width:900px){.dx-production-ui .digital-journey-cockpit[data-view="overview"] .journey-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home-delivery-date {display:flex;flex-direction:column;text-align:center;font-variant-numeric:tabular-nums;font-weight:600}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home-progress-row {grid-template-columns:minmax(0,1fr);gap:4px}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home-progress-label {text-align:center}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home-completed-date {display:block;text-align:center}
+
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home-task {gap:1px}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home-task small {font-size:12px;line-height:1.4;margin-top:0}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home-task-date {display:grid;grid-template-columns:2em minmax(0,1fr);gap:4px;align-items:start}
+
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home-task-heading>strong {flex:1 1 auto;min-width:0;font-size:14px}
+.dx-production-ui .digital-journey-cockpit[data-view="overview"] .cockpit-home-task .dx-badge {font-size:12px;padding:1px 4px}

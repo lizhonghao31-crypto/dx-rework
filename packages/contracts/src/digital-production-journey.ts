@@ -215,6 +215,8 @@ export type JourneyVisualStage = {
   risk: 'overdue' | 'due_soon' | 'normal' | 'unknown';
 };
 export type JourneyVisualProgress = {
+  /** Customer commitment, separate from a legacy completion forecast. */
+  delivery?: JourneyBusinessDate;
   ruleVersion: 'journey-visual-v1' | 'journey-visual-v2'; asOf: string;
   actualRatio: number | null; timeRatio: number | null; startedAt: string | null;
   applicableStages: number; completedStages: number; unknownStages: number;
@@ -249,12 +251,12 @@ export type JourneyRiskHistory={eventId:string;nodeId:string;label:string;round:
 export const JourneyLogFilterSchema=z.object({cursor:z.string().min(1).max(2048).optional()}).strict();
 
 /** Stable, local-only return context. Consumers restore these values after domain handling. */
-export const JourneyReturnContextSchema = JourneyFilterSchema.safeExtend({ materialNode:z.string().max(500).optional(),materialView:z.literal('expanded').optional(),materialFilter:z.enum(['all','pending','effective','mine']).optional(),materialScroll:z.coerce.number().int().min(0).max(1000000).optional(),materialFocus:z.string().max(300).optional(),nodeView:z.enum(['all','completed','active','not_started','overdue']).optional(), selected: z.string().uuid().optional(), flow: z.enum(["collapsed", "expanded"]).optional(), documentOpen:z.string().max(3000).optional(), documentView:z.literal('all').optional(), documentStage:z.enum(JOURNEY_STAGES.map(s=>s.key)).optional(), documentSearch:z.string().max(100).optional(), documentScroll:z.coerce.number().int().min(0).max(1000000).optional(), documentFocus:z.string().max(300).optional(), expanded: z.string().max(100).optional(), focus: z.string().max(100).optional(), row: z.string().max(100).optional(), round: z.coerce.number().int().positive().max(10000).optional() });
+export const JourneyReturnContextSchema = JourneyFilterSchema.safeExtend({ milestone:z.string().max(500).optional(), materialNode:z.string().max(500).optional(),materialView:z.literal('expanded').optional(),materialFilter:z.enum(['all','pending','effective','mine']).optional(),materialScroll:z.coerce.number().int().min(0).max(1000000).optional(),materialFocus:z.string().max(300).optional(),nodeView:z.enum(['all','completed','active','not_started','overdue']).optional(), selected: z.string().uuid().optional(), flow: z.enum(["collapsed", "expanded"]).optional(), documentOpen:z.string().max(3000).optional(), documentView:z.literal('all').optional(), documentStage:z.enum(JOURNEY_STAGES.map(s=>s.key)).optional(), documentSearch:z.string().max(100).optional(), documentScroll:z.coerce.number().int().min(0).max(1000000).optional(), documentFocus:z.string().max(300).optional(), expanded: z.string().max(100).optional(), focus: z.string().max(100).optional(), row: z.string().max(100).optional(), round: z.coerce.number().int().positive().max(10000).optional() });
 export function journeyReturnUrl(context: z.input<typeof JourneyReturnContextSchema>): string {
   const value = JourneyReturnContextSchema.parse(context);
   const params = new URLSearchParams();
   // Preserve an explicit all-phases selection separately from an absent
   // preference. The flow field independently retains collapsed time details.
-  for (const [key, item] of Object.entries(value)) if (item !== undefined && (item !== "" || key === "expanded" || key === "row")) params.set(key, String(item));
+  for (const [key, item] of Object.entries(value)) if (item !== undefined && (item !== "" || key === "milestone" || key === "expanded" || key === "row")) params.set(key, String(item));
   return `/ui/digital-cockpit?${params}`;
 }

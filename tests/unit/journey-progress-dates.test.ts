@@ -64,7 +64,15 @@ it('Final10 real completed gate and running native task retain a whole forecast 
  const dates=read(order);order.businessProgress!.dates=dates;
  expect(dates.overall.forecast).toMatchObject({status:'complete',at:'2026-11-05T01:00:00.000Z',covered:2,total:2,bases:['standard_window']});
  expect(dates.overall.actual).toMatchObject({status:'incomplete',at:null});
- expect(journeyVisualProgress(order,now)).toMatchObject({startedAt:task.enteredAt,timeRatio:.5,actualRatio:.5});
+ const visual=journeyVisualProgress(order,now);
+ expect(visual).toMatchObject({startedAt:task.enteredAt,timeRatio:null,actualRatio:.5,delivery:{status:'unknown',at:null}});
+ // The stage retains its native two-hour window. The whole-order delivery
+ // bar must not turn that forecast into an absent customer commitment.
+ expect(visual.stages.find(stage=>stage.key==='cutting')?.timeRatio).toBe(.5);
+ order.lines=[{id:'TEST delivery PO',po:'TEST-PO',color:'黑',formalStyleNo:null,temporaryStyleNo:null,orderedQuantity:1}];
+ order.poDeliveryDates=[{lineId:'TEST delivery PO',customerWarehouseArrivalDate:'2026-11-05'} as NonNullable<OrderJourney['poDeliveryDates']>[number]];
+ // 07:00 Beijing start, 08:00 observation, next midnight deadline: 1/17.
+ expect(journeyVisualProgress(order,now)).toMatchObject({startedAt:task.enteredAt,timeRatio:1/17,actualRatio:.5});
  expect(gate).toMatchObject({state:'completed',actualAt:null,enteredAt:null});
  task.state='completed';task.actualAt=null;task.actualQuality='missing';
  expect(read(order).overall.forecast.at).toBeNull();

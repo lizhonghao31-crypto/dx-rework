@@ -37,24 +37,27 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const {page,context}=await h.open();try{
    await ready(page);expect(await page.getByRole('tab',{name:'时效设置',exact:true}).count()).toBe(1);expect(await page.getByRole('tab',{name:'时效演算',exact:true}).count()).toBe(1);expect(await page.getByRole('tab',{name:'客户跟单',exact:true}).count()).toBe(1);
    expect(await page.getByText('查找节点与版本',{exact:true}).count()).toBe(0);expect(await page.getByText('提醒与缓冲',{exact:true}).count()).toBe(0);
-   await expect.poll(()=>page.locator('.r5-span-summary').innerText()).toContain('13小时');
-   await edit(page,'2',false);await expect.poll(()=>page.locator('.r5-span-summary').innerText()).toContain('14小时');
+   // B route: 2h until pattern/material investment +31d fabric lead +9h downstream.
+   // Final design confirmation adds2h to development (8h total), not the critical fabric branch.
+   await expect.poll(()=>page.locator('.r5-span-summary').innerText()).toContain('本阶段需要多久 8小时');
+   await expect.poll(()=>page.locator('.r5-span-summary').innerText()).toContain('31天11小时');
+   await edit(page,'2',false);await expect.poll(()=>page.locator('.r5-span-summary').innerText()).toContain('31天12小时');
    await page.locator('.r5-node-list').getByRole('button',{name:'固定裁板',exact:true}).click();expect(await page.getByLabel('开发纸样用时',{exact:true}).inputValue()).toBe('2');
-   await page.getByRole('region',{name:'开发纸样设置'}).getByRole('button',{name:'取消',exact:true}).click();await expect.poll(()=>page.locator('.r5-span-summary').innerText()).toContain('13小时');
+   await page.getByRole('region',{name:'开发纸样设置'}).getByRole('button',{name:'取消',exact:true}).click();await expect.poll(()=>page.locator('.r5-span-summary').innerText()).toContain('31天11小时');
    await page.locator('.r5-node-list').getByRole('button',{name:'开发纸样',exact:true}).click();
    for(const width of [1586,1165]){await page.setViewportSize({width,height:992});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);await page.screenshot({path:join(h.evidence,'r5-settings-'+width+'.png'),fullPage:true});}
    expect((await standards.read(h.f.root)).version).toBe(1);
   }finally{await context.close();}
  });
- it('keeps the calculator simple, reads exact temporary thirteen/seventeen hour routes and imports history without writing settings',async()=>{
+ it('keeps the calculator simple, reads exact temporary B-route material lead time and serial craft additions and imports history without writing settings',async()=>{
   const before=(await standards.read(h.f.root)).version,{page,context}=await h.open();try{
    await ready(page);await page.getByRole('tab',{name:'时效演算',exact:true}).click();await page.getByLabel('演算参考时间',{exact:true}).fill('2026-11-02T08:00');await page.getByLabel('演算客户交期1',{exact:true}).fill('2026-11-02');
-   await expect.poll(()=>page.locator('.r5-calculation-kpis').innerText()).toContain('13小时');await expect.poll(()=>page.locator('.r5-calculation-kpis').innerText()).toContain('余3小时');
-   const calculation=page.getByRole('tabpanel',{name:'时效演算',exact:true});await calculation.locator('.r5-route-fields summary').click();const craft=calculation.locator('.r5-craft-choice').filter({hasText:'大货工艺'});await craft.getByLabel('绣花',{exact:true}).check();await craft.getByLabel('印花',{exact:true}).check();
-   await expect.poll(()=>page.locator('.r5-calculation-kpis').innerText()).toContain('17小时');await expect.poll(()=>page.locator('.r5-calculation-kpis').innerText()).toContain('差1小时');
+   await expect.poll(()=>page.locator('.r5-calculation-kpis').innerText()).toContain('31天11小时');await expect.poll(()=>page.locator('.r5-calculation-kpis').innerText()).toContain('差30天19小时');
+   const calculation=page.getByRole('tabpanel',{name:'时效演算',exact:true});await calculation.locator('summary').filter({hasText:'适用工艺：'}).click();const craft=calculation.getByRole('group',{name:'大货工艺',exact:true});await craft.getByLabel('绣花',{exact:true}).check();await craft.getByLabel('印花',{exact:true}).check();
+   await expect.poll(()=>page.locator('.r5-calculation-kpis').innerText()).toContain('31天15小时');await expect.poll(()=>page.locator('.r5-calculation-kpis').innerText()).toContain('差30天23小时');
    await page.setViewportSize({width:1586,height:992});await page.screenshot({path:join(h.evidence,'r5-calculator-1586.png'),fullPage:true});
    await page.getByRole('button',{name:'导入历史设置',exact:true}).click();await page.getByLabel('选择历史设置',{exact:true}).selectOption({index:1});await page.getByRole('button',{name:'导入',exact:true}).click();
-   await page.getByRole('button',{name:'重新填写',exact:true}).click();await expect.poll(()=>page.locator('.r5-calculation-kpis').innerText()).toContain('13小时');expect((await standards.read(h.f.root)).version).toBe(before);
+   await page.getByRole('button',{name:'重新填写',exact:true}).click();await expect.poll(()=>page.locator('.r5-calculation-kpis').innerText()).toContain('31天11小时');expect((await standards.read(h.f.root)).version).toBe(before);
   }finally{await context.close();}
  });
  it('recovers the same single save after a lost receipt and makes exactly one new standard',async()=>{

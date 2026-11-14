@@ -132,7 +132,7 @@ it('Final10 list and detail visual projection keep the same date forecast and in
   order.businessProgress!.dates!.overall.forecast = structuredClone(expected);
   order.businessProgress!.dates!.stages.find(stage => stage.key === 'cutting')!.forecast = structuredClone(expected);
   const before = structuredClone(order), visual = journeyVisualProgress(order, now);
-  expect(visual).toMatchObject({ timeRatio: 24 / 40, actualRatio: 0, expected });
+  expect(visual).toMatchObject({ timeRatio: null, actualRatio: 0, expected });
   expect(visual.stages.find(stage => stage.key === 'cutting')).toMatchObject({ timeRatio: 24 / 40, actualRatio: 0, expected });
   expect(order).toEqual(before);
 });
@@ -149,7 +149,7 @@ it('Final10 completed native milestones without task entry cannot erase a known 
   const initial=progress(order),forecast={...date(),covered:5,total:5,bases:['standard_window' as const]};
   order.businessProgress!.dates!.overall.forecast=forecast;
   const result=journeyVisualProgress(order,now);
-  expect(result).toMatchObject({startedAt:start,timeRatio:.5,actualRatio:initial.actualRatio});
+  expect(result).toMatchObject({startedAt:start,timeRatio:null,actualRatio:initial.actualRatio});
   expect(result.stages.find(stage=>stage.key==='preparation')!.startedAt).toBeNull();
   for(const key of ['customer_sample','bulk_marker','receipts'])expect(node(order,key).enteredAt).toBeNull();
 });
@@ -171,7 +171,7 @@ it('R3 two visual ratios reuse the same snapshot and existing forecast/actual da
   dates.overall.forecast = { ...date(), bases: ['standard_window'] };
   dates.stages.find(stage => stage.key === 'cutting')!.forecast = { ...date(), bases: ['standard_window'] };
   const before = JSON.stringify(order), result = journeyVisualProgress(order, now);
-  expect(result).toMatchObject({ timeRatio: 0.5, actualRatio: 0, startedAt: start, expected: { at: end } });
+  expect(result).toMatchObject({ timeRatio: null, actualRatio: 0, startedAt: start, expected: { at: end } });
   expect(result.stages.find(stage => stage.key === 'cutting')?.timeRatio).toBe(0.5);
   expect(JSON.stringify(order)).toBe(before);
   dates.overall.forecast = { ...dates.overall.forecast, at: null, status: 'unknown' };
@@ -198,4 +198,23 @@ it('supply-chain v2 uses frozen per-scope B and physical delivery A while preser
  order.display=journeyDisplay(order,now);const lifecycle=JSON.stringify(order.display),result=progress(order);
  expect(result.stages.find(stage=>stage.key==='cutting')?.expected).toMatchObject({at:end,precision:'instant',status:'complete'});expect(result.expected.at).toBe(end);expect(result.actual).toMatchObject({at:null,status:'unknown'});expect(result.actualRatio).toBe(0);expect(JSON.stringify(order.display)).toBe(lifecycle);
  point.goalDelta.targetAt=null;expect(progress(order).stages.find(stage=>stage.key==='cutting')?.expected.at).toBeNull();
+});
+
+
+it('PR08 uses the customer commitment for elapsed time and freezes it at known completion or termination',()=>{
+ const order=fixture(['bulk_cutting']);progress(order);
+ order.lines=[{id:'TEST line',po:'TEST-PO',color:'黑',formalStyleNo:null,temporaryStyleNo:null,orderedQuantity:1}];
+ order.poDeliveryDates=[{lineId:'TEST line',customerWarehouseArrivalDate:'2026-11-08'} as NonNullable<OrderJourney['poDeliveryDates']>[number]];
+ order.businessProgress!.dates!.overall.forecast={...date('2027-01-01T00:00:00Z'),bases:['standard_window']};
+ const live=journeyVisualProgress(order,now);
+ expect(live).toMatchObject({delivery:{at:'2026-11-08'},timeRatio:24/40,expected:{at:'2027-01-01T00:00:00Z'}});
+ order.businessProgress!.dates!.overall.forecast={...date('2026-11-10T00:00:00Z'),bases:['standard_window']};
+ expect(journeyVisualProgress(order,now)).toMatchObject({timeRatio:24/40,actualRatio:live.actualRatio,expected:{at:'2026-11-10T00:00:00Z'}});
+ order.poDeliveryDates![0]!.customerWarehouseArrivalDate=null;
+ expect(journeyVisualProgress(order,now)).toMatchObject({startedAt:live.startedAt,timeRatio:null,actualRatio:live.actualRatio,delivery:{at:null}});
+ order.poDeliveryDates![0]!.customerWarehouseArrivalDate='2026-11-08';
+ order.display={stages:[],mainState:'completed',closedAt:'2026-11-07T12:00:00Z'} as OrderJourney['display'];
+ expect(journeyVisualProgress(order,now).timeRatio).toBe(12/40);
+ order.display!.mainState='closed';expect(journeyVisualProgress(order,now).timeRatio).toBe(12/40);
+ order.display!.closedAt=null;expect(journeyVisualProgress(order,now).timeRatio).toBeNull();
 });

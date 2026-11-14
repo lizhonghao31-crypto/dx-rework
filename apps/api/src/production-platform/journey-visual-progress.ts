@@ -3,7 +3,9 @@ import {
   type JourneyBusinessDate, type JourneyBusinessRequirement, type JourneyNode,
   type JourneyVisualProgress, type OrderJourney,
 } from '@dx-rework/contracts/digital-production-journey';
-import { slaDateBoundary } from '@dx-rework/domain/digital-sla-plan';
+import {naturalTimeRatio} from '@dx-rework/domain';
+import {slaDateBoundary} from '@dx-rework/domain/digital-sla-plan';
+export {naturalTimeRatio} from '@dx-rework/domain';
 import { journeyActualPoint } from './journey-progress-dates.js';
 import type {ScheduleOccurrence} from '@dx-rework/contracts';
 
@@ -18,31 +20,6 @@ const copyDate = (date: JourneyBusinessDate | undefined): JourneyBusinessDate =>
   ? { ...date, reasons: [...date.reasons], ...(date.coveredAt ? { coveredAt: { ...date.coveredAt } } : {}) }
   : unknownDate();
 const occurrenceDate=(point:ScheduleOccurrence):JourneyBusinessDate=>point.precision==='unknown'?unknownDate():{at:point.precision==='date'?point.date:point.at,precision:point.precision,quality:'recorded',status:'complete',covered:1,total:1,reasons:[]};
-
-/** A forecast day has the existing Beijing exclusive boundary for calculation.
- * Keep its original date/precision for display; it is never an actual event.
- */
-function forecastBoundary(expected: JourneyBusinessDate): number | null {
-  if (expected.status !== 'complete') return null;
-  if (expected.precision === 'instant') return instant(expected.at);
-  if (expected.precision !== 'date' || !expected.at) return null;
-  try {
-    return instant(slaDateBoundary(expected.at).at);
-  } catch (error) {
-    if (error instanceof Error && error.message === 'Invalid SLA calendar date') return null;
-    throw error;
-  }
-}
-
-/** Natural elapsed time is independent from each node's business SLA calendar.
- * A date-only start without an approved calculation boundary remains unknown.
- */
-export function naturalTimeRatio(start: string | null, expected: JourneyBusinessDate, asOf: string): number | null {
-  const from = instant(start), now = instant(asOf);
-  const until = forecastBoundary(expected);
-  if (from === null || until === null || now === null || until <= from) return null;
-  return Math.max(0, Math.min(1, (now - from) / (until - from)));
-}
 
 /** Only effective current execution entries establish a start. Creation's exact
  * event is its own start; an old inherited work end is not current adoption.
@@ -137,9 +114,13 @@ export function journeyVisualProgress(order: OrderJourney, asOf: string): Journe
   const completed=fixed?.durationSummary.deliveryCompletedAt;
   const actual = fixed?completed&&completed.precision!=='unknown'?{at:completed.precision==='date'?completed.date:completed.at,precision:completed.precision,quality:'recorded' as const,status:'complete' as const,covered:fixed.scopes.length,total:fixed.scopes.length,reasons:[]}:unknownDate():copyDate(dates?.overall.actual);
   const startedAt = fixed?fixed.durationSummary.actualStart.precision==='instant'?fixed.durationSummary.actualStart.at:null:observed && !unknownStages ? recordedStart(rows, nodes, asOf) : null;
-  return { ruleVersion: 'journey-visual-v2', asOf,
+  const committed=deliveryDates??order.poDeliveryDates?.map(line=>line.customerWarehouseArrivalDate)??[];
+  const delivery:JourneyBusinessDate=committed.length&&committed.length===order.lines.length&&committed.every(Boolean)?{at:[...committed].sort().at(-1)!,precision:'date',quality:'recorded',status:'complete',covered:committed.length,total:committed.length,reasons:[]}:unknownDate();
+  const stopped=['completed','closed','cancelled'].includes(order.display?.mainState??'');
+  const observation=fixed?fixed.durationSummary.observationAt??'':stopped?order.display?.closedAt??(actual.precision==='instant'?actual.at:null)??'':asOf;
+  return { ruleVersion: 'journey-visual-v2', asOf, delivery,
     actualRatio: unknownStages || !applicable.length ? null : applicable.reduce((sum, stage) => sum + stage.actualRatio!, 0) / applicable.length,
-    timeRatio: naturalTimeRatio(startedAt, expected, asOf), startedAt,
+    timeRatio: naturalTimeRatio(startedAt, delivery, observation), startedAt,
     applicableStages: applicable.length, completedStages: applicable.filter(stage => stage.actualRatio === 1).length, unknownStages,
     expected, actual, stages };
 }

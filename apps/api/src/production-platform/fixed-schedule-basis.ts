@@ -1,4 +1,5 @@
 import {evaluateJourneyFramework,type JourneyFrameworkBasis} from './journey-time-framework.js';
+import {attachFrameworkEvents} from './journey-framework-events.js';
 import {nativeCuttingCompletions} from './cutting-completion-facts.js';
 import {fixedReworkProgressFacts} from './fixed-rework-progress.js';
 import {receivingSpan} from './receiving-span.js';
@@ -222,6 +223,7 @@ export function attachFixedJourneySchedule(item:OrderJourney,basis:FixedSchedule
  attachOrderTimeCoverage(item,basis);
  const progress=options.progress??evaluateFixedJourneyBasis(basis,asOf,item.display?.mainState==='overdue');if(options.nextChange!==false)progress.nextChangeAt=nextFixedScheduleClassification(basis,asOf);item.fixedSchedule=progress;
  const excluded=new Set(basis.notApplicableNodes??[]);
+ attachFrameworkEvents(item,basis,progress);
  const aliases:Record<string,string>={production_sheet:'production_instruction',sourcing_selection:'sourcing_director',sourcing_approval:'sourcing_owner',customer_confirmation:'customer_sample',source_confirmation:'development_confirmation',factory_work:'production_reporting',factory_production:'factory_production_qc',return_logistics:'receipts',garment_inspection:'receiving_inspection',garment_packing:'packing',bulk_printing:'process_logistics',bulk_embroidery:'process_logistics',development_craft_return:'development_craft_confirmation'};
  for(const node of item.stages.flatMap(stage=>stage.nodes)){
   if(!node.current||node.state==='unavailable'||node.unavailableReason==='permission')continue;

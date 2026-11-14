@@ -6,7 +6,7 @@ import {DigitalOrderCreateSchema} from '@dx-rework/contracts/digital-production'
 import {DigitalProductionIdentityService} from '../../apps/api/src/production-platform/identity-service.js';
 import {DigitalBudgetService} from '../../apps/api/src/production-platform/budget-service.js';
 import {randomUUID} from 'node:crypto';
-import {beforeAll,afterAll,describe,it,expect,vi} from 'vitest';
+import {beforeAll,afterAll,describe,it,expect} from 'vitest';
 import {businessAnchorFixture} from '../helpers/business-anchor-fixture.js';
 import {exerciseDevelopmentSlaNative} from '../helpers/development-sla-native-fixture.js';
 import {SpecialCraftLibraryService} from '../../apps/api/src/production-platform/special-craft-library.js';
@@ -20,8 +20,6 @@ import {DigitalQuotationService} from '../../apps/api/src/production-platform/qu
 import {TodoProjectionService} from '../../apps/api/src/todos/projection-service.js';
 import {TodoService} from '../../apps/api/src/todos/service.js';
 import type {CraftStepChoice} from '@dx-rework/contracts/digital-craft';
-// Candidate-only activation; the production default stays off until PR08.
-vi.mock('../../apps/api/src/production-platform/special-craft-activation.js',()=>({SPECIAL_CRAFT_ADOPTION_ENABLED:true}));
 const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATABASE_URL;
 (url?describe.sequential:describe.skip)('special crafts through original development commands',()=>{
  let f:Awaited<ReturnType<typeof businessAnchorFixture>>;
