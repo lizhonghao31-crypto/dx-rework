@@ -84,3 +84,13 @@
 - PG16洗水/原页面/原装箱15项、PG13洗水7项及单位124项均通过，日志 `/tmp/time05-review-final-pg16.json`、`/tmp/time05-review-final-pg13.json`、`/tmp/time05-review-final-unit.json`。反例包含两个10件关联、复检仅15件时不得放行20，关联更正恢复10/15；并发采用仅一次成功且有效覆盖与原窗口保留。API类型检查及改动文件lint通过。
 - 首次修复复验的旧断言仍期待采用后无覆盖行；现在原生证据完整且尚未洗水时已知合格量为0，因此改为检查0，而非未知或通过。该首项失败后的串联断言不当作独立根因；完整7项已重新执行通过。
 - 未变部署修补与演练输入按提交逐文件比对复用；原性能结果不冒称修复提交新测。未重新请求Review；等待修复准确Head的Light与Full。
+
+## Full43551402248: isolated maintenance identity and Light policy
+
+The non-db and completed PG/business/backup lanes succeeded. Acceptance low-privilege maintenance failed at the post-migration storage-history JSON parse on PG13; later deployment-lifecycle steps did not execute and are not claimed passed. The original failure was reproduced locally before repair.
+
+The drill pins an OID, then explicitly drops/recreates its TEST database from a template. Its later fixed storage query still used the old identity, so the real read-only observer returned no row as designed. The repair asserts that the stale OID continues to return no row, obtains the replacement TEST database identity at that explicit fixture boundary and checks the returned ledger belongs to that new OID. No runtime updater identity comparison, role/grant boundary, SQL filter or production logic is relaxed. A real update continues to reject identity drift; it never silently re-pins a replaced database.
+
+Local full recovery initially reached the repaired ledger and low-privilege application assertions on PG13/15/16 but could not restore because local node_modules linked to another worktree not mounted in the test container. Locked local dependencies were installed in this worktree without source/lock changes; those partial attempts are not complete passes. Final three-version results are recorded separately in the current construction evidence when complete.
+
+The user expressly changed policy to one initial Light per PR, no rerun for later changes. This repair includes the already locally verified workflow/controller policy change: only opened attempt1 selects Light, later events/retries do not; final requests and automatic merge do not require Light, but any actual reused artifact remains same-head/source-verified. Full executes original checks when no eligible artifact exists. Necessary Review, exact final head/base/mode, failed final rejection and platform protections remain. Prior Light attempts are preserved as history, not relabelled as a single run or proof for the repaired head. No production deployment or data operation occurred.

@@ -62,13 +62,8 @@ export function eventPlan(eventName, event, repository = REPOSITORY, actualHead)
   let kind;
   try { kind = gateKind(pr.title); } catch { kind = 'invalid'; }
   const common = { kind, head, base, pr: pr.number, repository };
-  if (event.action === 'edited') {
-    let oldKind;
-    try { oldKind = gateKind(event.changes?.title?.from ?? pr.title); } catch { oldKind = 'invalid'; }
-    if (event.changes?.base || oldKind !== kind) return { ...common, phase: 'invalidate' };
-    return { ...common, phase: 'ignore' };
-  }
-  if (['opened', 'synchronize', 'reopened'].includes(event.action)) return { ...common, phase: 'light' };
+  // One initial Light per PR; later changes are verified by the exact-head final gate.
+  if (event.action === 'opened') return { ...common, phase: 'light' };
   return { ...common, phase: 'ignore' };
 }
 
