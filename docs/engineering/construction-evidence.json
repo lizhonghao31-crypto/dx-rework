@@ -1,219 +1,173 @@
 {
   "version": 1,
-  "base": "414c60c0c79d57bac75062684fa13ce9a7e7abff",
+  "base": "5a42950439321d15b317272aa8ea746532ef211a",
   "risk": "full",
-  "sourceFingerprint": "11ff7069c74eb9e19b1f5fa33fbe8f8faf31e2863fbf94b9f4700bd4e6939b7c",
+  "sourceFingerprint": "f54ebbafa9007280a74418a5de6fca432e0573367d063e7bc51c8bd87a19544c",
   "rules": [
     {
-      "rule": "Activate explicit new-standard adoption and project milestone-related original facts with stable scope, history, responsibility and exact selection clock agreement.",
+      "rule": "New managed source drafts retain their independent craft editor before first plan adoption, without changing legacy source versions or stored selections.",
+      "source": "2026-11-14 Acceptance regression repair authorization; docs/engineering/development-draft-craft-version.md; approved PR08 source-specific rollout.",
       "writes": [
-        "apps/api/src/production-platform/fixed-schedule-basis.ts",
-        "apps/api/src/production-platform/journey-fact-model.ts",
-        "apps/api/src/production-platform/journey-selection-clock.ts",
-        "apps/api/src/production-platform/journey-time-framework.ts",
-        "apps/api/src/production-platform/journey-visual-progress.ts",
-        "apps/api/src/production-platform/order-time-activation.ts",
-        "apps/api/src/production-platform/order-time-framework-route.ts",
-        "apps/api/src/production-platform/special-craft-activation.ts",
-        "packages/contracts/src/digital-production-journey.ts",
-        "packages/contracts/src/time-framework-journey.ts",
-        "packages/domain/src/index.ts",
-        "apps/api/src/production-platform/journey-framework-events.ts",
-        "packages/domain/src/journey-time-ratio.ts"
+        "apps/api/src/production-platform/development-service.ts",
+        "tests/integration/special-craft-browser-postgres.test.ts"
       ],
       "reads": [
-        "apps/api/src/production-platform/order-time-operation-state.ts",
-        "apps/api/src/production-platform/order-time-reading.ts",
-        "apps/api/src/production-platform/journey-query.ts",
-        "apps/api/src/production-platform/journey-selection-facts.ts"
+        "apps/web/src/digital-development-create-form.tsx",
+        "apps/web/src/digital-development-panel.tsx",
+        "apps/api/src/production-platform/identity-service.ts",
+        "apps/api/src/production-platform/development-revision-source.ts",
+        "apps/api/src/production-platform/development-sla-enrollment.ts",
+        "apps/api/src/production-platform/quotation-assembly.ts"
       ],
       "oldTests": [
-        "tests/unit/order-time-framework.test.ts",
-        "tests/unit/fixed-schedule-selection.test.ts",
-        "tests/integration/order-time-requests-browser-postgres.test.ts"
-      ],
-      "source": "Approved time framework v27, original eight-PR plan PR08, final detail DX_scheme_1 version4 and home version4; coordinator authorization after PR07 Acceptance. docs/engineering/time-framework-08.md",
-      "initialization": "No SQL migration or live settings write. New framework only on original explicit company publication and saved order adoption; existing frozen plans and old-format consumers remain readable. Isolated tests use registered original resource lifecycle.",
-      "dateAndPermission": "Customer delivery and factory delivery remain distinct. Trusted actual occurrence is not registration time; native clock and completed historical delta remain unchanged. Original role and record permissions retained, no new grants. Local observation never polls the server.",
-      "expectation": "Activate explicit new-standard adoption and project milestone-related original facts with stable scope, history, responsibility and exact selection clock agreement.",
-      "checks": [
-        "unit",
-        "native_app",
-        "pg_repair"
-      ]
-    },
-    {
-      "rule": "Approved original UI layout presents A9/B8 milestones and complete node access; delivery timeflow and actual work stay separate with full dates and truthful day differences.",
-      "writes": [
-        "apps/web/src/cockpit-date.tsx",
-        "apps/web/src/cockpit-detail-r5.css",
-        "apps/web/src/cockpit-detail-risks.tsx",
-        "apps/web/src/cockpit-detail.tsx",
-        "apps/web/src/cockpit-fixed-schedule.tsx",
-        "apps/web/src/cockpit-home-progress.tsx",
-        "apps/web/src/cockpit-home-r5.css",
-        "apps/web/src/cockpit-home.tsx",
-        "apps/web/src/cockpit-reading-context.ts",
-        "apps/web/src/digital-journey-cockpit-model.ts",
-        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts",
-        "tests/integration/order-time-requests-browser-postgres.test.ts",
-        "tests/integration/order-time-settings-postgres.test.ts",
         "tests/integration/special-craft-browser-postgres.test.ts",
         "tests/integration/special-craft-native-postgres.test.ts",
-        "tests/unit/cockpit-fixed-schedule.test.ts",
-        "tests/unit/cockpit-home.test.ts",
-        "tests/unit/fixed-schedule-selection.test.ts",
-        "tests/unit/journey-time-framework.test.ts",
-        "tests/unit/journey-visual-progress.test.ts",
-        "tests/unit/m01-cockpit-reading-context.test.ts",
-        "tests/unit/order-time-framework.test.ts",
-        "apps/web/src/cockpit-difference-days.ts",
-        "apps/web/src/cockpit-framework-nodes.tsx",
-        "apps/web/src/cockpit-milestones.tsx",
-        "tests/integration/time-framework-cockpit-native-browser-postgres.test.ts",
-        "tests/unit/cockpit-date-days.test.ts",
-        "tests/unit/cockpit-framework.test.ts",
-        "tests/unit/journey-progress-dates.test.ts",
-        "tests/unit/order-time-reading.test.ts",
         "tests/integration/order-time-requests-postgres.test.ts",
-        "tests/integration/r5-settings-native-browser-postgres.test.ts"
+        "tests/integration/automatic-quotation-native-browser-postgres.test.ts"
       ],
-      "reads": [
-        "apps/web/src/cockpit-reads.ts",
-        "apps/web/src/cockpit-detail.tsx",
-        "apps/web/src/cockpit-home.tsx"
-      ],
-      "oldTests": [
-        "tests/unit/cockpit-home.test.ts",
-        "tests/integration/m01-cockpit-home-native-browser-postgres.test.ts",
-        "tests/integration/order-time-requests-browser-postgres.test.ts"
-      ],
-      "source": "Approved time framework v27, original eight-PR plan PR08, final detail DX_scheme_1 version4 and home version4; coordinator authorization after PR07 Acceptance. docs/engineering/time-framework-08.md",
-      "initialization": "No SQL migration or live settings write. New framework only on original explicit company publication and saved order adoption; existing frozen plans and old-format consumers remain readable. Isolated tests use registered original resource lifecycle.",
-      "dateAndPermission": "Customer delivery and factory delivery remain distinct. Trusted actual occurrence is not registration time; native clock and completed historical delta remain unchanged. Original role and record permissions retained, no new grants. Local observation never polls the server.",
-      "expectation": "Approved original UI layout presents A9/B8 milestones and complete node access; delivery timeflow and actual work stay separate with full dates and truthful day differences.",
+      "initialization": "No migration. Existing plan version takes priority. No-plan managed source uses immutable creation marker; publishing current company settings does not upgrade older sources. Copy creates own new identity. Original fixtures and owned resource cleanup.",
+      "dateAndPermission": "No new dates, adopted plan, actual work or clocks are generated by reading a draft. Original source ownership, craft reference validation and quotation row privileges unchanged; original App unauthorized-write and same-session revoked-role checks pass.",
+      "expectation": "First save, reopen and repeated save preserve printing plus ordered special crafts and new editor; legacy draft stays legacy. Native dispatch, quotation, adoption, historical version and permissions remain valid.",
       "checks": [
-        "unit",
-        "native_app",
-        "pg_repair"
+        "native",
+        "linked",
+        "mapping"
       ]
     },
     {
-      "rule": "Register activated original-browser integration with canonical bounded test runner and changed-source mapping; preserve one Light per PR and current Full obligations.",
+      "rule": "Every browser suite selected in the exact canonical PG plan prepares the locked browser before execution.",
+      "source": "Full43600357230 PG missing Chromium1194; authorized regression repair, no skipped test accepted as success.",
       "writes": [
-        "scripts/ci/full-gate-risk-map.mjs",
-        "scripts/test-suite-plan.mjs"
+        "scripts/ci/prepare-settings-browser.mjs",
+        "scripts/ci/test-execution-contract.test.mjs"
       ],
       "reads": [
-        "scripts/ci/full-gate-risk-map.mjs",
         "scripts/test-suite-plan.mjs",
-        "vitest.business-chain.config.ts"
+        ".github/workflows/full-gate.yml",
+        "tests/acceptance/supplychain-settings-browser.ts"
       ],
       "oldTests": [
-        "tests/unit/full-gate-risk-map.test.ts"
+        "tests/integration/special-craft-browser-postgres.test.ts",
+        "tests/integration/bulk-washing-browser-postgres.test.ts"
       ],
-      "source": "Approved time framework v27, original eight-PR plan PR08, final detail DX_scheme_1 version4 and home version4; coordinator authorization after PR07 Acceptance. docs/engineering/time-framework-08.md",
-      "initialization": "No SQL migration or live settings write. New framework only on original explicit company publication and saved order adoption; existing frozen plans and old-format consumers remain readable. Isolated tests use registered original resource lifecycle.",
-      "dateAndPermission": "Customer delivery and factory delivery remain distinct. Trusted actual occurrence is not registration time; native clock and completed historical delta remain unchanged. Original role and record permissions retained, no new grants. Local observation never polls the server.",
-      "expectation": "Register activated original-browser integration with canonical bounded test runner and changed-source mapping; preserve one Light per PR and current Full obligations.",
+      "initialization": "Native and non-native browser filename conventions share preparation; retained historical session-retention exception. Empty independent cache actual install and launch verified.",
+      "dateAndPermission": "No business clocks or role permissions modified. Install, launch and timeout failures remain errors; every PR initial Light only once.",
+      "expectation": "Exact plan containing special craft alone requires Chromium; all browser suites covered individually; original authenticated five App cases run with pinned executable.",
       "checks": [
-        "unit",
-        "native_app",
-        "pg_repair"
+        "browser-preparation",
+        "native",
+        "mapping"
       ]
     }
   ],
   "checks": [
     {
-      "id": "unit",
+      "id": "native",
       "kind": "tests",
-      "command": "Canonical Vitest13 unit suites including whole delivery versus forecast and frozen reading; maxWorkers2",
+      "command": "bash /tmp/draft-craft-pinned-pg.sh",
       "status": "passed",
       "exitCode": 0,
-      "passed": 222,
+      "passed": 5,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "a8cbf66e3333e46b6f32be9eed5d411cf742c630",
-      "sourceFingerprint": "11ff7069c74eb9e19b1f5fa33fbe8f8faf31e2863fbf94b9f4700bd4e6939b7c",
-      "context": "PR08 repair candidate, identical source fingerprint around final targeted unit run and PG suites. Node22/npm10; canonical configs, unit maxWorkers2, PG maxWorkers1, owned marked PG16 low-privilege isolated DB with cleanup. No live business writes; original failed Full retained.",
-      "startedAt": "2026-11-14T11:13:17.174Z",
-      "endedAt": "2026-11-14T11:13:22.917Z",
-      "logSha256": "9e8534f954b5cb6a86ba2db91308ec9d3de842b5593d0e5757c09ba5a451e2b1",
+      "testedHead": "6af4a72cffe1a27367689e4a7ca2aaa682911fae",
+      "sourceFingerprint": "f54ebbafa9007280a74418a5de6fca432e0573367d063e7bc51c8bd87a19544c",
+      "context": "Node22 canonical config; native App uses independently installed lock-pinned Chromium1194, original low-privilege PG16 isolated database and cleanup. Mapping unit maxWorkers2; no live data or deployment.",
+      "startedAt": "2026-11-14T13:57:45.890Z",
+      "endedAt": "2026-11-14T13:58:15.845Z",
+      "logSha256": "7aa9caf5c59110fd9d182d219656da07e20b87954ebf72cfe59e65fd7a9b0d8e",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "9e8534f954b5cb6a86ba2db91308ec9d3de842b5593d0e5757c09ba5a451e2b1"
+          "sha256": "7aa9caf5c59110fd9d182d219656da07e20b87954ebf72cfe59e65fd7a9b0d8e"
         }
       ],
-      "log": "/tmp/time08-repair-unit.json",
-      "stdoutLog": "/tmp/time08-repair-unit.log",
-      "stdoutLogSha256": "140aec3e2c18279279b5113ab7285cbaf880c6c119683930657f578ba04e4375"
+      "log": "/tmp/draft-craft-pinned-pg.json"
     },
     {
-      "id": "native_app",
+      "id": "linked",
       "kind": "tests",
-      "command": "bash /tmp/time08-candidate-pg.sh; original authenticated App A/B plus R5-09 new order through native completion/qualified packing, canonical business-chain config maxWorkers=1",
+      "command": "bash /tmp/draft-craft-linked-pg.sh",
       "status": "passed",
       "exitCode": 0,
-      "passed": 4,
+      "passed": 20,
       "failed": 0,
-      "skipped": 5,
-      "testedHead": "414c60c0c79d57bac75062684fa13ce9a7e7abff",
-      "sourceFingerprint": "79699929642e51304235ba1459ab096c184a6a7762b0483739c02ca62d4aa363",
-      "context": "Uncommitted PR08 candidate at captured before/after identical source fingerprint. Node22/npm10; canonical Vitest configuration. Native App uses isolated marked PG16 NOSUPERUSER database, real role/session and owned cleanup; no live system writes. Earlier component/performance/rollback results are described separately, not mislabelled as final-head CI. Reused after test-only repairs outside these inputPaths; input fingerprint compared equal with immutable a8cbf66e checkout. Original source fingerprint, timestamps and reports retained.",
-      "startedAt": "2026-11-14T10:05:22.786Z",
-      "endedAt": "2026-11-14T10:06:10.563Z",
-      "logSha256": "0a863498d7f33f821317edb293d15df5d3de1665d16c2ba00929d8d8694b3262",
+      "skipped": 0,
+      "testedHead": "5a42950439321d15b317272aa8ea746532ef211a",
+      "sourceFingerprint": "4e979efa237d56dd5e8f1203d28d074e628f5f512d07601e15c9cfb860e2a6f7",
+      "context": "Actual candidate working tree; Node22/npm10, canonical configs. Browser and native PG16 owned marked low-privilege isolated database, maxWorkers1, cleanup verified; unit maxWorkers2. No production or Acceptance writes. Reused unchanged application, contract, fixture, lockfile and canonical runner inputs; only CI browser selection and its protocol test changed, independently verified with locked Chromium. Original source SHA and report retained.",
+      "startedAt": "2026-11-14T13:22:31.467Z",
+      "endedAt": "2026-11-14T13:23:32.453Z",
+      "logSha256": "4ce8fbf23d31b4b5c2518e3e84549a7d09cade14f484251dc9b12110a51796cc",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "0a863498d7f33f821317edb293d15df5d3de1665d16c2ba00929d8d8694b3262"
+          "sha256": "4ce8fbf23d31b4b5c2518e3e84549a7d09cade14f484251dc9b12110a51796cc"
         }
       ],
-      "log": "/tmp/time08-candidate-pg.json",
-      "stdoutLog": "/tmp/time08-candidate-pg.log",
-      "stdoutLogSha256": "038d51bc64d2f18cea7c947efa22c7504ec0a4fbfbd7a66b007807cdfbd097c0",
+      "log": "/tmp/draft-craft-linked-repair-pg.json",
+      "stdoutLog": "/tmp/draft-craft-linked-pg.log",
+      "stdoutLogSha256": "bb70f5e6dd206302a6bd7aae39b2c4b652a4fc764c1ad7f97e2761cdae8569b6",
       "inputPaths": [
         "apps",
         "packages",
-        "scripts",
-        "tests/acceptance",
-        "tests/helpers",
-        "tests/fixtures",
-        "tests/integration/time-framework-cockpit-native-browser-postgres.test.ts",
-        "tests/integration/order-time-requests-browser-postgres.test.ts",
+        "tests",
         "package.json",
         "package-lock.json",
-        "tsconfig.base.json",
         "vitest.config.ts",
-        "vitest.business-chain.config.ts"
+        "vitest.business-chain.config.ts",
+        "scripts/run-business-chain-gate.mjs",
+        "scripts/test-resource-contract.mjs",
+        "scripts/test-execution-config.mjs",
+        "scripts/test-suite-plan.mjs"
       ],
-      "inputFingerprint": "75d2c5fd4044c82a180961f1966641cd0a7e50b01ddfa3a1f28d975a781c4dc0"
+      "inputFingerprint": "28637c0172cb52272855085c452c6ca05c9e9d7fca5db58fe7d15bec1cc11469"
     },
     {
-      "id": "pg_repair",
+      "id": "mapping",
       "kind": "tests",
-      "command": "bash /tmp/time08-repair-pg.sh; original order-time requests legacy/new version and complete settings App suites, canonical business-chain maxWorkers1",
+      "command": "vitest run tests/unit/full-gate-risk-map.test.ts --maxWorkers=2",
       "status": "passed",
       "exitCode": 0,
-      "passed": 23,
+      "passed": 74,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "a8cbf66e3333e46b6f32be9eed5d411cf742c630",
-      "sourceFingerprint": "11ff7069c74eb9e19b1f5fa33fbe8f8faf31e2863fbf94b9f4700bd4e6939b7c",
-      "context": "PR08 repair candidate, identical source fingerprint around final targeted unit run and PG suites. Node22/npm10; canonical configs, unit maxWorkers2, PG maxWorkers1, owned marked PG16 low-privilege isolated DB with cleanup. No live business writes; original failed Full retained.",
-      "startedAt": "2026-11-14T11:13:03.294Z",
-      "endedAt": "2026-11-14T11:13:48.071Z",
-      "logSha256": "df06a72253ea109c71e85f66370a177223746a4c30c7b30038971b92a0e068fa",
+      "testedHead": "6af4a72cffe1a27367689e4a7ca2aaa682911fae",
+      "sourceFingerprint": "f54ebbafa9007280a74418a5de6fca432e0573367d063e7bc51c8bd87a19544c",
+      "context": "Node22 canonical config; native App uses independently installed lock-pinned Chromium1194, original low-privilege PG16 isolated database and cleanup. Mapping unit maxWorkers2; no live data or deployment.",
+      "startedAt": "2026-11-14T13:57:44.517Z",
+      "endedAt": "2026-11-14T13:57:44.857Z",
+      "logSha256": "b125f28218405b78c6760638071586c5f7548eaaa9430a4451c13da78778138f",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "df06a72253ea109c71e85f66370a177223746a4c30c7b30038971b92a0e068fa"
+          "sha256": "b125f28218405b78c6760638071586c5f7548eaaa9430a4451c13da78778138f"
         }
       ],
-      "log": "/tmp/time08-repair-pg.json",
-      "stdoutLog": "/tmp/time08-repair-pg-final.log",
-      "stdoutLogSha256": "1f6ee0ac53e713b6858d94974f57475d586aa7a28814320ecedbf9057dad4bb2"
+      "log": "/tmp/draft-craft-prep-unit.json"
+    },
+    {
+      "id": "browser-preparation",
+      "kind": "tests",
+      "command": "node --test scripts/ci/test-execution-contract.test.mjs",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 21,
+      "failed": 0,
+      "skipped": 0,
+      "testedHead": "6af4a72cffe1a27367689e4a7ca2aaa682911fae",
+      "sourceFingerprint": "f54ebbafa9007280a74418a5de6fca432e0573367d063e7bc51c8bd87a19544c",
+      "context": "Node22 real protocol execution; every browser suite selected alone must prepare Chromium; install and launch failures still reject. Real empty-cache install and native run separately verified.",
+      "startedAt": "2026-11-14T13:58:27.200Z",
+      "endedAt": "2026-11-14T13:58:27.617Z",
+      "log": "/tmp/draft-craft-browser-prep-protocol.log",
+      "logSha256": "68f24d28aa93de66ff6f5eafb5ec544cbc95ba6d82b0fc8ec426e4f0bcb7f095",
+      "resultReports": [
+        {
+          "format": "tap",
+          "sha256": "68f24d28aa93de66ff6f5eafb5ec544cbc95ba6d82b0fc8ec426e4f0bcb7f095"
+        }
+      ]
     }
   ]
 }

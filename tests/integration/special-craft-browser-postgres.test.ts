@@ -1,3 +1,6 @@
+import {OrderTimeSettingsService} from '../../apps/api/src/production-platform/order-time-settings-service.js';
+import {prepareTimeFrameworkConfiguration} from '@dx-rework/contracts/order-time-settings';
+import {r5OneHourConfiguration} from '../helpers/r5-order-time-fixture.js';
 import {arrangementInput} from '../helpers/development-arrangement-fixture.js';
 import {DevelopmentExecutionService} from '../../apps/api/src/production-platform/development-execution-service.js';
 import {exerciseDevelopmentSlaNative} from '../helpers/development-sla-native-fixture.js';
@@ -148,6 +151,53 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    }finally{await own.context.close();}
    expect(h.errors).toEqual([]);
   }finally{await admin.context.close();}
+ });
+
+ it('keeps new managed drafts on the independent craft editor before plan adoption, after save and reopen',async()=>{
+  const designer=h.f.people['sample-designer']!,identity=new DigitalProductionIdentityService(h.db,true),forms=new DigitalDevelopmentService(h.db,true);
+  configureTimelineAdoption(h.db,'legacy');
+  const old=await identity.createSource(designer,{developmentType:'头版',designStyleNo:'TEST-OLD-DRAFT-'+randomUUID(),temporaryStyleNo:null,customerCode:null},randomUUID());
+  await forms.save(designer,old.sourceId,{expectedVersion:0,document:initialDevelopmentDocument()},randomUUID());
+  const settings=new OrderTimeSettingsService(h.db),current=await settings.read(h.f.root);
+  await settings.save(h.f.root,{expectedVersion:current.version,values:prepareTimeFrameworkConfiguration(r5OneHourConfiguration())},randomUUID());
+  expect((await forms.read(designer,old.sourceId)).timelineSchemaVersion).toBeUndefined();
+  const standard={minutes:60,calendar:'continuous' as const,reminder:{enabled:false,percent:70}};
+  const craft=await new SpecialCraftLibraryService(h.db).save(h.f.root,{id:null,expectedVersion:0,definition:{name:'TEST managed draft special',enabled:true,development:standard,bulk:standard}},randomUUID());
+  const style='TEST-MANAGED-DRAFT-'+randomUUID(),tab=await h.open(designer.actorId,1165,{},'/ui/digital-production');
+  try{
+   const page=tab.page;
+   await page.getByRole('button',{name:'新建开发订单',exact:true}).click();
+   await page.getByLabel('设计款号',{exact:true}).fill(style);
+   await page.getByRole('group',{name:'工艺',exact:true}).getByLabel('印花',{exact:true}).check();
+   await page.getByLabel('工艺特殊工艺',{exact:true}).selectOption(craft.id);
+   await page.getByRole('button',{name:'保存开发资料草稿',exact:true}).click();
+   let id='';
+   await expect.poll(async()=>{id=(await h.db.query('SELECT source_id FROM digital_production_sources WHERE design_style_no=$1',[style])).rows[0]?.source_id??'';return id?(await forms.read(designer,id)).version:0;}).toBe(1);
+   const first=await forms.read(designer,id);
+   expect(first.timelineSchemaVersion).toBe(2);expect(first.independentRevisions).toBe(false);
+   expect(first.document!.craft).toBe('特殊工艺');
+   expect(first.document!.craftSteps!.map(s=>s.craftKind)).toEqual(['printing','special']);
+   expect((await h.db.query('SELECT 1 FROM digital_development_sla_plans WHERE source_id=$1',[id])).rowCount).toBe(0);
+   await expect.poll(()=>page.getByLabel('工艺特殊工艺',{exact:true}).count()).toBe(1);
+   expect(await page.getByRole('group',{name:'工艺',exact:true}).getByLabel('印花',{exact:true}).isChecked()).toBe(true);
+   await page.goto(h.base+'/ui/digital-production?development='+id);
+   await page.getByLabel('工艺特殊工艺',{exact:true}).waitFor();
+   expect(await page.getByRole('group',{name:'工艺',exact:true}).getByLabel('印花',{exact:true}).isChecked()).toBe(true);
+   await page.getByRole('button',{name:craft.definition.name+'前移',exact:true}).click();
+   await page.getByRole('button',{name:'保存开发资料草稿',exact:true}).click();
+   await expect.poll(async()=>(await forms.read(designer,id)).version).toBe(2);
+   const reopened=await forms.read(designer,id);
+   expect(reopened.document!.craftSteps!.map(s=>s.craftKind)).toEqual(['special','printing']);
+   expect(reopened.document!.craftSteps![0]!.specialCraft).toEqual(craft);
+   // Copying specifications creates a new source; it does not inherit an old editor/version.
+   const copy=await identity.createSource(designer,{developmentType:'头版',designStyleNo:style+'-COPY',temporaryStyleNo:null,customerCode:null},randomUUID());
+   const copied=await forms.save(designer,copy.sourceId,{expectedVersion:0,document:{...reopened.document!,orderDate:null}},randomUUID());
+   expect(copied.timelineSchemaVersion).toBe(2);expect(copied.document!.craftSteps).toEqual(reopened.document!.craftSteps);
+   await expect(forms.save(h.f.people['pattern-room-worker']!,id,{expectedVersion:2,document:reopened.document!},randomUUID())).rejects.toMatchObject({statusCode:403});
+   expect((await forms.read(designer,old.sourceId)).timelineSchemaVersion).toBeUndefined();
+   await page.screenshot({path:join(h.evidence,'managed-draft-reopened.png'),fullPage:true});
+   expect(h.errors).toEqual([]);
+  }finally{await tab.context.close();}
  });
 
 });

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {execFileSync} from 'node:child_process';
-import {mkdtempSync,readFileSync,writeFileSync,rmSync,mkdirSync,cpSync,existsSync} from 'node:fs';
+import {mkdtempSync,readdirSync,readFileSync,writeFileSync,rmSync,mkdirSync,cpSync,existsSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join,dirname} from 'node:path';
 import {createHash} from 'node:crypto';
@@ -183,4 +183,14 @@ test('canonical native browser names require Chromium preparation, retaining leg
  const environment={BASE_SHA:'a'.repeat(40),DB_REQUIRED:'true',BUSINESS_CHAIN_SENSITIVE:'false',MIGRATION_SENSITIVE:'false',DEPLOYMENT_SENSITIVE:'false',MAPPED_POSTGRES_TESTS:'tests/integration/order-time-requests-browser-postgres.test.ts'};
  assert.equal(settingsBrowserRequired(environment),true);
  for(const path of ['tests/integration/responsibility-queue-pages-postgres.test.ts','tests/integration/order-time-requests-postgres.test.ts','tests/unit/label-native-browser.test.ts'])assert.equal(isNativeBrowserSuite(path),false);
+});
+
+test('every original App browser suite prepares Chromium even when selected alone',()=>{
+ const suites=readdirSync('tests/integration').filter(name=>name.endsWith('-browser-postgres.test.ts')).map(name=>'tests/integration/'+name);
+ assert.ok(suites.includes('tests/integration/special-craft-browser-postgres.test.ts'));
+ assert.ok(suites.includes('tests/integration/bulk-washing-browser-postgres.test.ts'));
+ for(const suite of suites){
+  assert.equal(isNativeBrowserSuite(suite),true,suite);
+  assert.equal(settingsBrowserRequired({BASE_SHA:'a'.repeat(40),DB_REQUIRED:'true',BUSINESS_CHAIN_SENSITIVE:'false',MIGRATION_SENSITIVE:'false',DEPLOYMENT_SENSITIVE:'false',MAPPED_POSTGRES_TESTS:suite}),true,suite);
+ }
 });
