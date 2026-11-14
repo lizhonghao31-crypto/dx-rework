@@ -2,7 +2,7 @@
   "version": 1,
   "base": "5a42950439321d15b317272aa8ea746532ef211a",
   "risk": "full",
-  "sourceFingerprint": "4e979efa237d56dd5e8f1203d28d074e628f5f512d07601e15c9cfb860e2a6f7",
+  "sourceFingerprint": "f54ebbafa9007280a74418a5de6fca432e0573367d063e7bc51c8bd87a19544c",
   "rules": [
     {
       "rule": "New managed source drafts retain their independent craft editor before first plan adoption, without changing legacy source versions or stored selections.",
@@ -33,33 +33,56 @@
         "linked",
         "mapping"
       ]
+    },
+    {
+      "rule": "Every browser suite selected in the exact canonical PG plan prepares the locked browser before execution.",
+      "source": "Full43600357230 PG missing Chromium1194; authorized regression repair, no skipped test accepted as success.",
+      "writes": [
+        "scripts/ci/prepare-settings-browser.mjs",
+        "scripts/ci/test-execution-contract.test.mjs"
+      ],
+      "reads": [
+        "scripts/test-suite-plan.mjs",
+        ".github/workflows/full-gate.yml",
+        "tests/acceptance/supplychain-settings-browser.ts"
+      ],
+      "oldTests": [
+        "tests/integration/special-craft-browser-postgres.test.ts",
+        "tests/integration/bulk-washing-browser-postgres.test.ts"
+      ],
+      "initialization": "Native and non-native browser filename conventions share preparation; retained historical session-retention exception. Empty independent cache actual install and launch verified.",
+      "dateAndPermission": "No business clocks or role permissions modified. Install, launch and timeout failures remain errors; every PR initial Light only once.",
+      "expectation": "Exact plan containing special craft alone requires Chromium; all browser suites covered individually; original authenticated five App cases run with pinned executable.",
+      "checks": [
+        "browser-preparation",
+        "native",
+        "mapping"
+      ]
     }
   ],
   "checks": [
     {
       "id": "native",
       "kind": "tests",
-      "command": "bash /tmp/draft-craft-pg.sh",
+      "command": "bash /tmp/draft-craft-pinned-pg.sh",
       "status": "passed",
       "exitCode": 0,
       "passed": 5,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "5a42950439321d15b317272aa8ea746532ef211a",
-      "sourceFingerprint": "4e979efa237d56dd5e8f1203d28d074e628f5f512d07601e15c9cfb860e2a6f7",
-      "context": "Actual candidate working tree; Node22/npm10, canonical configs. Browser and native PG16 owned marked low-privilege isolated database, maxWorkers1, cleanup verified; unit maxWorkers2. No production or Acceptance writes.",
-      "startedAt": "2026-11-14T13:21:10.435Z",
-      "endedAt": "2026-11-14T13:21:43.001Z",
-      "logSha256": "b1ad0bc70885d4e1804bf6bdce9f1dee7a77110dc827767ae11b2be90f59e380",
+      "testedHead": "6af4a72cffe1a27367689e4a7ca2aaa682911fae",
+      "sourceFingerprint": "f54ebbafa9007280a74418a5de6fca432e0573367d063e7bc51c8bd87a19544c",
+      "context": "Node22 canonical config; native App uses independently installed lock-pinned Chromium1194, original low-privilege PG16 isolated database and cleanup. Mapping unit maxWorkers2; no live data or deployment.",
+      "startedAt": "2026-11-14T13:57:45.890Z",
+      "endedAt": "2026-11-14T13:58:15.845Z",
+      "logSha256": "7aa9caf5c59110fd9d182d219656da07e20b87954ebf72cfe59e65fd7a9b0d8e",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "b1ad0bc70885d4e1804bf6bdce9f1dee7a77110dc827767ae11b2be90f59e380"
+          "sha256": "7aa9caf5c59110fd9d182d219656da07e20b87954ebf72cfe59e65fd7a9b0d8e"
         }
       ],
-      "log": "/tmp/draft-craft-repair-pg.json",
-      "stdoutLog": "/tmp/draft-craft-pg.log",
-      "stdoutLogSha256": "330bafe740c08aecfb29e17b201e75fb1505af1281dfea86929a376a9e1ae1eb"
+      "log": "/tmp/draft-craft-pinned-pg.json"
     },
     {
       "id": "linked",
@@ -72,7 +95,7 @@
       "skipped": 0,
       "testedHead": "5a42950439321d15b317272aa8ea746532ef211a",
       "sourceFingerprint": "4e979efa237d56dd5e8f1203d28d074e628f5f512d07601e15c9cfb860e2a6f7",
-      "context": "Actual candidate working tree; Node22/npm10, canonical configs. Browser and native PG16 owned marked low-privilege isolated database, maxWorkers1, cleanup verified; unit maxWorkers2. No production or Acceptance writes.",
+      "context": "Actual candidate working tree; Node22/npm10, canonical configs. Browser and native PG16 owned marked low-privilege isolated database, maxWorkers1, cleanup verified; unit maxWorkers2. No production or Acceptance writes. Reused unchanged application, contract, fixture, lockfile and canonical runner inputs; only CI browser selection and its protocol test changed, independently verified with locked Chromium. Original source SHA and report retained.",
       "startedAt": "2026-11-14T13:22:31.467Z",
       "endedAt": "2026-11-14T13:23:32.453Z",
       "logSha256": "4ce8fbf23d31b4b5c2518e3e84549a7d09cade14f484251dc9b12110a51796cc",
@@ -84,7 +107,21 @@
       ],
       "log": "/tmp/draft-craft-linked-repair-pg.json",
       "stdoutLog": "/tmp/draft-craft-linked-pg.log",
-      "stdoutLogSha256": "bb70f5e6dd206302a6bd7aae39b2c4b652a4fc764c1ad7f97e2761cdae8569b6"
+      "stdoutLogSha256": "bb70f5e6dd206302a6bd7aae39b2c4b652a4fc764c1ad7f97e2761cdae8569b6",
+      "inputPaths": [
+        "apps",
+        "packages",
+        "tests",
+        "package.json",
+        "package-lock.json",
+        "vitest.config.ts",
+        "vitest.business-chain.config.ts",
+        "scripts/run-business-chain-gate.mjs",
+        "scripts/test-resource-contract.mjs",
+        "scripts/test-execution-config.mjs",
+        "scripts/test-suite-plan.mjs"
+      ],
+      "inputFingerprint": "28637c0172cb52272855085c452c6ca05c9e9d7fca5db58fe7d15bec1cc11469"
     },
     {
       "id": "mapping",
@@ -95,21 +132,42 @@
       "passed": 74,
       "failed": 0,
       "skipped": 0,
-      "testedHead": "5a42950439321d15b317272aa8ea746532ef211a",
-      "sourceFingerprint": "4e979efa237d56dd5e8f1203d28d074e628f5f512d07601e15c9cfb860e2a6f7",
-      "context": "Actual candidate working tree; Node22/npm10, canonical configs. Browser and native PG16 owned marked low-privilege isolated database, maxWorkers1, cleanup verified; unit maxWorkers2. No production or Acceptance writes.",
-      "startedAt": "2026-11-14T13:23:25.107Z",
-      "endedAt": "2026-11-14T13:23:25.469Z",
-      "logSha256": "1900b612193d2d9b107bfd476290d8f2fc4fbf4a20dad9a6f0bd00a41a536190",
+      "testedHead": "6af4a72cffe1a27367689e4a7ca2aaa682911fae",
+      "sourceFingerprint": "f54ebbafa9007280a74418a5de6fca432e0573367d063e7bc51c8bd87a19544c",
+      "context": "Node22 canonical config; native App uses independently installed lock-pinned Chromium1194, original low-privilege PG16 isolated database and cleanup. Mapping unit maxWorkers2; no live data or deployment.",
+      "startedAt": "2026-11-14T13:57:44.517Z",
+      "endedAt": "2026-11-14T13:57:44.857Z",
+      "logSha256": "b125f28218405b78c6760638071586c5f7548eaaa9430a4451c13da78778138f",
       "resultReports": [
         {
           "format": "vitest-json",
-          "sha256": "1900b612193d2d9b107bfd476290d8f2fc4fbf4a20dad9a6f0bd00a41a536190"
+          "sha256": "b125f28218405b78c6760638071586c5f7548eaaa9430a4451c13da78778138f"
         }
       ],
-      "log": "/tmp/draft-craft-unit.json",
-      "stdoutLog": "/tmp/draft-craft-unit.log",
-      "stdoutLogSha256": "2327c8a38a806d99ad06cdc0dd30464b1af5b1673acde2ff5b33530e53e3dd96"
+      "log": "/tmp/draft-craft-prep-unit.json"
+    },
+    {
+      "id": "browser-preparation",
+      "kind": "tests",
+      "command": "node --test scripts/ci/test-execution-contract.test.mjs",
+      "status": "passed",
+      "exitCode": 0,
+      "passed": 21,
+      "failed": 0,
+      "skipped": 0,
+      "testedHead": "6af4a72cffe1a27367689e4a7ca2aaa682911fae",
+      "sourceFingerprint": "f54ebbafa9007280a74418a5de6fca432e0573367d063e7bc51c8bd87a19544c",
+      "context": "Node22 real protocol execution; every browser suite selected alone must prepare Chromium; install and launch failures still reject. Real empty-cache install and native run separately verified.",
+      "startedAt": "2026-11-14T13:58:27.200Z",
+      "endedAt": "2026-11-14T13:58:27.617Z",
+      "log": "/tmp/draft-craft-browser-prep-protocol.log",
+      "logSha256": "68f24d28aa93de66ff6f5eafb5ec544cbc95ba6d82b0fc8ec426e4f0bcb7f095",
+      "resultReports": [
+        {
+          "format": "tap",
+          "sha256": "68f24d28aa93de66ff6f5eafb5ec544cbc95ba6d82b0fc8ec426e4f0bcb7f095"
+        }
+      ]
     }
   ]
 }
