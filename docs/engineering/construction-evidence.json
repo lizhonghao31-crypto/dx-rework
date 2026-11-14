@@ -190,7 +190,7 @@
       "context": "Node22/npm10, one Vitest worker; uncommitted Review fixes on 4581b1596bd1807e98ec4be65902df58a87a84bb. Exact listed test/runtime inputs unchanged since this run; later edits only other test files or documentation. Unit mapping and business invariants.",
       "startedAt": "2026-11-14T05:44:38.400Z",
       "endedAt": "2026-11-14T05:44:44.262Z",
-      "logSha256": "99d4fefb0a03973453dc6c1cd9ad7445583b7adb86274699a5fc45b0d1f62a1d",
+      "logSha256": "9ac16689d262f3f7cc735f0ed09a5e5de3e671cfe25b0cfbcba05b24c0a0e414",
       "logPath": "/tmp/time06-review-unit.log",
       "resultReports": [
         {
@@ -211,7 +211,10 @@
         "vitest.business-chain.config.ts",
         "tests/unit"
       ],
-      "inputFingerprint": "0856c131845478dd93a50444a394547bce42361f9f954223dc826439f43d42c3"
+      "inputFingerprint": "0856c131845478dd93a50444a394547bce42361f9f954223dc826439f43d42c3",
+      "consoleLogSha256": "99d4fefb0a03973453dc6c1cd9ad7445583b7adb86274699a5fc45b0d1f62a1d",
+      "consoleLogPath": "/tmp/time06-review-unit.log",
+      "log": "/tmp/time06-review-unit.json"
     },
     {
       "id": "postgres",
@@ -227,7 +230,7 @@
       "context": "Node22/npm10, one Vitest worker; uncommitted Review fixes on 4581b1596bd1807e98ec4be65902df58a87a84bb. Exact listed test/runtime inputs unchanged since this run; later edits only other test files or documentation. Owned isolated PG16 low-privilege database, resource cleanup; native services and persistence",
       "startedAt": "2026-11-14T05:44:42.511Z",
       "endedAt": "2026-11-14T05:45:53.122Z",
-      "logSha256": "664ab227ec67be92fd04dbabbb01cfcc3a4dc4052aeaced923c4c335cc1b5199",
+      "logSha256": "68f8dbcc133aa63f230f3cc0ecd9c676a0c7a499be8a772124b1cf0ac71dedf9",
       "logPath": "/tmp/time06-review-pg.log",
       "resultReports": [
         {
@@ -251,7 +254,10 @@
         "tests/integration/order-time-requests-postgres.test.ts",
         "tests/integration/series-plan-postgres.test.ts"
       ],
-      "inputFingerprint": "66e3e685532066f93a177699961d91bde40ac123a1b32036fd60be47ff1d18a7"
+      "inputFingerprint": "66e3e685532066f93a177699961d91bde40ac123a1b32036fd60be47ff1d18a7",
+      "consoleLogSha256": "664ab227ec67be92fd04dbabbb01cfcc3a4dc4052aeaced923c4c335cc1b5199",
+      "consoleLogPath": "/tmp/time06-review-pg.log",
+      "log": "/tmp/time06-review-pg.json"
     },
     {
       "id": "browser",
@@ -267,7 +273,7 @@
       "context": "Node22/npm10, one Vitest worker; uncommitted Review fixes on 4581b1596bd1807e98ec4be65902df58a87a84bb. Exact listed test/runtime inputs unchanged since this run; later edits only other test files or documentation. Owned isolated PG16 low-privilege database, resource cleanup; real authenticated Chromium App",
       "startedAt": "2026-11-14T05:46:50.300Z",
       "endedAt": "2026-11-14T05:47:45.938Z",
-      "logSha256": "c55a6163e9a25ab290c2acde33f2649c7c7354e2ba1e497b70bddcb6f5b9aac5",
+      "logSha256": "d6b9b872c0e7f4084851e597e4e9c177608acc6e8c6f62093ddfd9dc199e87c8",
       "logPath": "/tmp/time06-review-browser2.log",
       "resultReports": [
         {
@@ -288,7 +294,10 @@
         "vitest.business-chain.config.ts",
         "tests/integration/order-time-requests-browser-postgres.test.ts"
       ],
-      "inputFingerprint": "e7d050d2a617891c1932a500b84c179ea3c13c8d2f5744c313778676214971ab"
+      "inputFingerprint": "e7d050d2a617891c1932a500b84c179ea3c13c8d2f5744c313778676214971ab",
+      "consoleLogSha256": "c55a6163e9a25ab290c2acde33f2649c7c7354e2ba1e497b70bddcb6f5b9aac5",
+      "consoleLogPath": "/tmp/time06-review-browser2.log",
+      "log": "/tmp/time06-browser-regression.json"
     },
     {
       "id": "static",
@@ -302,7 +311,8 @@
       "startedAt": "2026-11-14T05:49:39.535Z",
       "endedAt": "2026-11-14T05:49:42.757Z",
       "logSha256": "114d19b3f81e82ca812ccaf79d465b9eac16b584f779c9b621a2e15595e62be6",
-      "logPath": "/tmp/time06-review-static.log"
+      "logPath": "/tmp/time06-review-static.log",
+      "log": "/tmp/time06-review-static.log"
     },
     {
       "id": "once-light-policy",
@@ -319,7 +329,8 @@
       "startedAt": "2026-11-14T05:49:38.133Z",
       "endedAt": "2026-11-14T05:49:43.417Z",
       "logSha256": "455c5c52a95ba56489e5806ff6bc0e55323ed3119feecbfc9552ece7dff233f8",
-      "logPath": "/tmp/time06-review-protocol.log"
+      "logPath": "/tmp/time06-review-protocol.log",
+      "log": "/tmp/time06-review-protocol.log"
     }
   ]
 }
