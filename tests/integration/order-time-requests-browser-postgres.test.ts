@@ -313,6 +313,17 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await page.getByText('本单新安排已生效。',{exact:true}).waitFor();
    const plans=(await h.db.query('SELECT document FROM digital_bulk_washing_plans WHERE production_order_id=$1',[orderId])).rows;
    expect(plans).toHaveLength(1);expect(plans[0].document.arrangement).toMatchObject({mode:'after_receipt',washing:{minutes:120},inspection:{minutes:60}});
+   // Same page and session: the saved editor must use the new native version,
+   // without requiring a reload to make the next ordinary edit possible.
+   await page.locator('summary').filter({hasText:'大货洗水'}).click();
+   const secondPreview=page.waitForResponse(response=>response.url().endsWith('/order-time/preview')&&response.status()===200);
+   await page.getByLabel('洗水用时（小时）',{exact:true}).fill('3');
+   await secondPreview;
+   await expect.poll(()=>page.getByRole('button',{name:'提交',exact:true}).isEnabled()).toBe(true);
+   const secondConfirmation=await page.locator('.r5-time-risk').count()>0;
+   await page.getByRole('button',{name:'提交',exact:true}).click();
+   if(secondConfirmation){await dialog.waitFor();await dialog.getByRole('button',{name:'确认',exact:true}).click();}
+   await expect.poll(async()=>Number((await h.db.query('SELECT count(*) AS count FROM digital_bulk_washing_plans WHERE production_order_id=$1',[orderId])).rows[0].count)).toBe(2);
   }finally{await tab.context.close();}
  });
 

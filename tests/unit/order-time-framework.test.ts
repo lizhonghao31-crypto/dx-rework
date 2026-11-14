@@ -3,6 +3,7 @@ import {FrozenOrderTimePlanSchema,reviseOrderTimePlan,type OrderTimeRule} from '
 import {TimeFrameworkInputSchema,readTimeFrameworkPlan,type TimeFrameworkInput,type FrameworkResponsibilityWindow} from '../../packages/contracts/src/order-time-framework.js';
 import {evaluateTimeFrameworkCandidate,freezeTimeFrameworkCandidate,initialFrameworkMilestoneStandard,evaluateFrameworkResponsibility} from '../../apps/api/src/production-platform/order-time-framework.js';
 import {fixedTimelineForward} from '../../apps/api/src/production-platform/fixed-timeline-targets.js';
+import {overlayFrameworkCompletion,retainedFrameworkWork} from '../../apps/api/src/production-platform/order-time-framework-route.js';
 
 const at=(day:number,hour=8)=>`2026-11-${String(day).padStart(2,'0')}T${String(hour).padStart(2,'0')}:00:00+08:00`;
 const iso=(day:number,hour=8)=>new Date(at(day,hour)).toISOString();
@@ -25,6 +26,17 @@ function fixture():TimeFrameworkInput{
 const version={reference:'TEST plan1',revision:1,previousReference:null,eventRef:'TEST native approval'};
 
 describe('three-layer time foundation, no live adoption',()=>{
+ it('retains started native windows and arrangements when a milestone is only partly complete',()=>{
+  const input=fixture(),original=evaluateTimeFrameworkCandidate(input,context()),native={completed:false,actualAt:null,readyAt:iso(3),deadline:iso(7),calendar:'continuous' as const,unresolvedOverrun:true};
+  const partial=overlayFrameworkCompletion(native,{scopeRef:'whole',completed:false,precision:'unknown',occurredAt:null});
+  expect(partial).toEqual(native);
+  const kept=retainedFrameworkWork(input,new Map([['fabric',partial]]),{reference:'TEST current plan',arranged:original.arranged});
+  expect(kept.fabric?.target).toEqual(original.arranged[0]);
+  expect(evaluateTimeFrameworkCandidate(input,{...context(6),retained:kept}).arranged[0]).toEqual(original.arranged[0]);
+  const done={...native,completed:true,actualAt:iso(5)};
+  expect(overlayFrameworkCompletion(done,{scopeRef:'whole',completed:false,precision:'unknown',occurredAt:null})).toEqual(done);
+  expect(overlayFrameworkCompletion(native,{scopeRef:input.scopeRef,completed:true,precision:'instant',occurredAt:iso(6)})).toEqual({...native,completed:true,actualAt:iso(6)});
+ });
  it('retains a completed original plan while successors use the genuine later completion boundary',()=>{
   const input=fixture(),end={at:iso(5),exclusive:false,reasons:[]},start={...end,at:iso(2)};
   const result=evaluateTimeFrameworkCandidate(input,{...context(6),retained:{fabric:{target:{id:'fabric',start,end},sourceRef:'TEST plan before completion',actualCompletion:{...end,at:iso(6)}}}});

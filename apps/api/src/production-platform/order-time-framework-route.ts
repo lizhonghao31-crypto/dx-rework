@@ -5,6 +5,14 @@ import type {SlaAnchor} from '@dx-rework/domain/digital-sla-plan';
 import type {OrderTimeInput} from './order-time-plan-repository.js';
 import type {OrderTimeNativeProgress} from './order-time-request-plan.js';
 import type {FrameworkCandidateContext} from './order-time-framework.js';
+import type {SeriesObservedFact} from '@dx-rework/contracts/digital-series-plan';
+
+/** Completion evidence cannot erase a separately established native clock.
+ * Whole-order partial completion cannot negate a completed individual PO. */
+export function overlayFrameworkCompletion(native:OrderTimeNativeProgress|undefined,fact:Pick<SeriesObservedFact,'completed'|'precision'|'occurredAt'|'scopeRef'>):OrderTimeNativeProgress{
+ if(fact.scopeRef==='whole'&&native?.completed)return {...native};
+ return {...native,completed:fact.completed,actualAt:fact.completed&&fact.precision==='instant'?fact.occurredAt:null,readyAt:native?.readyAt??null,deadline:native?.deadline??null};
+}
 
 /** Bind the actual original graph by business identity, not display labels or
  * array order. These references never create another business task. */

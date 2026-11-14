@@ -68,7 +68,8 @@ export class OrderTimeRequestService{
    if(input.washing?.length){if(input.resource.kind!=='order')conflict('ORDER_TIME_INPUT_REQUIRED','请在正式订单采用洗水安排');for(const change of input.washing)await adoptBulkWashingWithClient(db,actor,input.resource.id,change.lineId,change.expectedVersion,change.document);}
    const previous=await new OrderTimePlanRepository(db).current(input.resource),saved=await new OrderTimePlanRepository(db).confirm({resource:input.resource,expectedRevision:previous?.revision??0,value:state.value,actorId:actor.actorId,eventRef:'audit_events:'+eventId,time,requestKey:'order-time-arrange:'+eventId},async(resource,changes)=>(await loadOrderTimeOperation(this.database,db,actor,{kind:'arrangement',resource},time,changes)).value);
    if(input.resource.kind==='order')await db.query('UPDATE digital_production_orders SET order_time_managed=true WHERE production_order_id=$1',[input.resource.id]);
-   return {saved:true as const,planRevision:saved.revision,check:state.check};
+   const current=await loadOrderTimeOperation(this.database,db,actor,operation,time);
+   return {saved:true as const,planRevision:saved.revision,check:current.check};
   });
  });}
  submit(actor:TrustedActorContext,raw:unknown,key:string){const input=OrderTimeRequestSchema.parse(raw);return this.transaction(true,async db=>{

@@ -422,10 +422,16 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect((await f.db.query('SELECT 1 FROM digital_bulk_washing_plans WHERE production_order_id=$1',[resource.id])).rowCount).toBe(0);
    const body={resource,fingerprint:next.fingerprint,overrides:{},washing,acceptLate:true},key=randomUUID();
    const saved=await requests.arrange(manager,body,key);expect(await requests.arrange(manager,body,key)).toEqual(saved);
+   expect(saved.check.washing?.find(row=>row.lineId===lineId)?.version).toBe(1);
    expect((await f.db.query('SELECT 1 FROM digital_bulk_washing_plans WHERE production_order_id=$1',[resource.id])).rowCount).toBe(1);
    expect((await repo.current(resource))!.input.work.filter(work=>work.parameterKey==='bulk_return_washing')).toHaveLength(1);
    expect((await f.db.query('SELECT task_id,entered_at,completed_at FROM digital_production_tasks WHERE task_id IN (SELECT task_id FROM digital_production_task_access WHERE production_order_id=$1) ORDER BY task_id',[resource.id])).rows).toEqual(originalTasks);
    await expect(requests.arrange(manager,body,randomUUID())).rejects.toMatchObject({statusCode:409});
+   const persisted=saved.check.washing!.find(row=>row.lineId===lineId)!;
+   const editAgain=[{lineId,expectedVersion:persisted.version,document:{...persisted.document!,arrangement:{...persisted.document!.arrangement,washing:{...duration,minutes:180}}}}];
+   const secondPreview=await requests.check(manager,operation2,{},editAgain);
+   const second=await requests.arrange(manager,{resource,fingerprint:secondPreview.fingerprint,overrides:{},washing:editAgain,acceptLate:true},randomUUID());
+   expect(second.check.washing?.find(row=>row.lineId===lineId)?.version).toBe(2);
    const series=new SeriesPlanService(f.db,'TEST framework series shared date '.repeat(3));
    const same=await series.read(f.root,resource.id);
    expect(same.framework?.scopes[0]?.customerDate).toBe('2027-08-15');

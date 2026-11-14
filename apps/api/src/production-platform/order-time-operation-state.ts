@@ -2,7 +2,7 @@ import {orderTimeFactoryCommitments,outstandingFactoryCommitments} from './order
 import type {SeriesRoute} from '@dx-rework/contracts/digital-series-plan';
 import {orderTimeCreated} from './order-time-created.js';
 import {fixedTimelineIdentity} from './fixed-timeline-identity.js';
-import {frameworkScopeInputs,retainedFrameworkWork} from './order-time-framework-route.js';
+import {frameworkScopeInputs,retainedFrameworkWork,overlayFrameworkCompletion} from './order-time-framework-route.js';
 import {evaluateFrameworkSubmission} from './order-time-framework-submission.js';
 import {hasBothBuiltinCrafts} from '@dx-rework/contracts/digital-craft';
 import type {Pool,PoolClient} from 'pg';
@@ -215,14 +215,15 @@ export async function loadOrderTimeOperation(database:Pool,db:DB,actor:TrustedAc
    const commercialAt=commercial?.confirmed_at&&Number.isFinite(Date.parse(commercial.confirmed_at))&&Date.parse(commercial.confirmed_at)<=Date.parse(time.now)?new Date(commercial.confirmed_at).toISOString():null;
    sourceVersion.commercialConfirmation=commercial?{id:commercial.quote_id,version:commercial.confirmed_version,at:commercialAt}:null;
    for(const work of value.work.filter(row=>row.parameterKey==='customer_confirmation'))progress.set(work.canonicalWorkRef??work.id,{completed:Boolean(commercial),actualAt:commercialAt,readyAt:null,deadline:null});
-   const native=await (await import('./series-plan-facts.js')).readSeriesPlanFacts(db,order.production_order_id,sourceId,order.customer_code);
+   const native=await (await import('./series-plan-facts.js')).readSeriesPlanFacts(db,order.production_order_id,sourceId,order.customer_code,round);
    const aliases:Record<string,string>={fabric_receipt_a:'fabric_receipt',fabric_receipt_b:'fabric_receipt',warehouse_accessories:'accessories_ready',warehouse_dispatch:'processing_dispatch'};
    for(const scope of value.scopes)for(const work of value.work){
     const key=aliases[work.parameterKey]??work.parameterKey;
     const rows=native.facts.filter(fact=>fact.key===key&&(fact.scopeRef===scope.scopeRef||fact.scopeRef==='whole'));
     const exact=rows.filter(fact=>fact.scopeRef===scope.scopeRef),selected=exact.length?exact:rows.filter(fact=>fact.scopeRef==='whole');
     if(selected.length!==1)continue;const fact=selected[0]!;
-    progress.set(scope.scopeRef+'|'+(work.canonicalWorkRef??work.id),{completed:fact.completed,actualAt:fact.completed&&fact.precision==='instant'?fact.occurredAt:null,readyAt:null,deadline:null});
+    const ref=work.canonicalWorkRef??work.id,scoped=scope.scopeRef+'|'+ref;
+    progress.set(scoped,overlayFrameworkCompletion(progress.get(scoped)??progress.get(ref),fact));
    }
    sourceVersion.frameworkFactRevisions=native.revisions;
   }
