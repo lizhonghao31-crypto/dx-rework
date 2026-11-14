@@ -1,3 +1,5 @@
+import {arrangementInput} from '../helpers/development-arrangement-fixture.js';
+import {DevelopmentExecutionService} from '../../apps/api/src/production-platform/development-execution-service.js';
 import {productionReadinessFixture} from '../helpers/production-readiness-fixture.js';
 import {ProductionInstructionService} from '../../apps/api/src/production-platform/production-instruction-service.js';
 import {DigitalOrderCreateSchema} from '@dx-rework/contracts/digital-production';
@@ -122,6 +124,41 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   expect(rows).toHaveLength(6);expect(rows.every(row=>row.state==='completed')).toBe(true);
   expect(new Set(rows.filter(row=>row.phase==='work').map(row=>row.step_id)).size).toBe(2);
   expect(rows.filter(row=>row.phase==='work').map(row=>row.assignee_id)).toEqual([f.people['pattern-room-worker']!.actorId,f.people['pattern-room-worker']!.actorId]);
+ });
+ it('keeps built-in printing price and permissions when different artisans start special steps',async()=>{
+  const worker=f.people['pattern-room-worker']!,other={...worker,actorId:randomUUID()};
+  await f.db.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'TEST special quote artisan',true)",[other.actorId]);
+  await f.db.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) VALUES($1,$2,'dingtalk','anchor-test',$3,$4,true,true,CURRENT_TIMESTAMP)",[randomUUID(),other.actorId,'uat-special-'+other.actorId,'uat-special-union-'+other.actorId]);
+  await f.access.assignRole({...f.root,authorizationCapability:'access:admin',authorizationCapabilities:['access:admin']},{userId:other.actorId,roleCode:'pattern_room_worker',reason:'TEST isolated craft identity'});
+  const library=new SpecialCraftLibraryService(f.db),steps:CraftStepChoice[]=[{craftKind:'printing',sequence:1}];
+  for(const [index,name]of ['TEST independent laser','TEST independent stones'].entries()){
+   const saved=await library.save(f.root,{id:null,expectedVersion:0,definition:{name,enabled:true,development:{minutes:60,calendar:'continuous',reminder:{enabled:false,percent:70}},bulk:{minutes:120,calendar:'continuous',reminder:{enabled:false,percent:70}}}},randomUUID());
+   steps.push({craftKind:'special',sequence:index+2,specialCraft:saved});
+  }
+  const quotes=new DigitalQuotationService(f.db,true);let dispatches=0,printingId='';
+  await exerciseDevelopmentSlaNative(f.db,new TodoProjectionService(new TodoService(f.db)),f.root,worker.actorId,undefined,[['特殊工艺','免洗']],{fixedCraftSteps:steps,automaticQuotation:true,onRouteComplete:async(sourceId,kind)=>{
+   if(kind!=='development_craft_dispatch')return;
+   const resource={kind:'source' as const,id:sourceId};dispatches++;
+   if(dispatches===1){
+    const quote=await quotes.read(worker,resource),printing=quote.rows.find(row=>row.name==='印花')!;printingId=printing.rowId;
+    expect(printing.canEditPrice).toBe(true);
+    await quotes.fillRow(worker,resource,printingId,{expectedVersion:quote.version,unitPrice:'5'},randomUUID());
+   }else{
+    const pending=(await f.db.query("SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND a.task_kind='development_printing' AND t.state='ready'",[sourceId])).rows[0];
+    const execution=new DevelopmentExecutionService(f.db,true),input=await arrangementInput(f.db,execution,f.root,sourceId,worker.actorId);
+    input.entries=input.entries.map(entry=>entry.expectedTask?.taskId===pending.task_id?{...entry,assigneeId:other.actorId,reason:'TEST separate special artisan'}:entry);
+    await execution.arrange(f.root,sourceId,input,randomUUID());
+    const own=await quotes.read(worker,resource),foreign=await quotes.read(other,resource);
+    expect(own.rows.find(row=>row.rowId===printingId)).toMatchObject({unitPrice:'5',canEditPrice:true,assignment:{priceAssigneeId:worker.actorId}});
+    expect(foreign.rows.some(row=>row.rowId===printingId&&row.canEditPrice)).toBe(false);
+    await expect(quotes.fillRow(other,resource,printingId,{expectedVersion:foreign.version,unitPrice:'99'},randomUUID())).rejects.toMatchObject({statusCode:403});
+    const special=foreign.rows.find(row=>row.name===steps[dispatches-1]!.specialCraft!.definition.name)!;
+    expect(special.canEditPrice).toBe(true);
+    await quotes.fillRow(other,resource,special.rowId,{expectedVersion:foreign.version,unitPrice:String(dispatches)},randomUUID());
+    expect((await quotes.read(worker,resource)).rows.find(row=>row.rowId===printingId)?.unitPrice).toBe('5');
+   }
+  }});
+  expect(dispatches).toBe(3);
  });
  it('keeps separate bulk clocks and permits dispatch only after the final craft return passes QC',async()=>{
   const library=new SpecialCraftLibraryService(f.db),steps:CraftStepChoice[]=[];

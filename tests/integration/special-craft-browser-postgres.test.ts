@@ -1,3 +1,5 @@
+import {arrangementInput} from '../helpers/development-arrangement-fixture.js';
+import {DevelopmentExecutionService} from '../../apps/api/src/production-platform/development-execution-service.js';
 import {exerciseDevelopmentSlaNative} from '../helpers/development-sla-native-fixture.js';
 import {TodoProjectionService} from '../../apps/api/src/todos/projection-service.js';
 import {TodoService} from '../../apps/api/src/todos/service.js';
@@ -73,6 +75,39 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    await page.screenshot({path:join(h.evidence,'special-craft-source-order-1165.png'),fullPage:true});
    expect(h.errors).toEqual([]);
   }finally{await context.close();}
+ });
+
+ it('keeps the same printing session authorized after another artisan starts a special craft',async()=>{
+  configureTimelineAdoption(h.db,'fixed_v2');
+  const f=h.f,worker=f.people['pattern-room-worker']!,other=await h.dedicated('pattern_room_worker');
+  const standard={minutes:60,calendar:'continuous' as const,reminder:{enabled:false,percent:70}};
+  const craft=await new SpecialCraftLibraryService(h.db).save(f.root,{id:null,expectedVersion:0,definition:{name:'TEST session special',enabled:true,development:standard,bulk:standard}},randomUUID());
+  let session:Awaited<ReturnType<typeof h.open>>|undefined,foreign:Awaited<ReturnType<typeof h.open>>|undefined,dispatches=0,rowId='';
+  try{
+   await exerciseDevelopmentSlaNative(h.db,new TodoProjectionService(new TodoService(h.db)),f.root,worker.actorId,undefined,[['特殊工艺','免洗']],{automaticQuotation:true,fixedCraftSteps:[{craftKind:'printing',sequence:1},{craftKind:'special',sequence:2,specialCraft:craft}],onRouteComplete:async(sourceId,kind)=>{
+    if(kind!=='development_craft_dispatch')return;dispatches++;
+    const path='/ui/digital-quotation?kind=source&id='+sourceId,api=h.base+'/api/digital-production/sources/'+sourceId+'/quotation';
+    if(dispatches===1){
+     session=await h.open(worker.actorId,1165,{},path);
+     await session.page.getByLabel('印花负责单价',{exact:true}).fill('5');
+     await session.page.locator('.quotation-row-input').filter({has:session.page.getByLabel('印花负责单价',{exact:true})}).getByRole('button',{name:'保存本行负责字段',exact:true}).click();
+     await expect.poll(async()=>{const q=await (await session!.page.request.get(api)).json();rowId=q.rows.find((r:{name:string})=>r.name==='印花').rowId;return q.rows.find((r:{rowId:string})=>r.rowId===rowId).unitPrice;}).toBe('5');
+    }else{
+     const pending=(await h.db.query("SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND a.task_kind='development_printing' AND t.state='ready'",[sourceId])).rows[0];
+     const execution=new DevelopmentExecutionService(h.db,true),input=await arrangementInput(h.db,execution,f.root,sourceId,worker.actorId);
+     input.entries=input.entries.map(entry=>entry.expectedTask?.taskId===pending.task_id?{...entry,assigneeId:other.id,reason:'TEST separate special artisan'}:entry);
+     await execution.arrange(f.root,sourceId,input,randomUUID());
+     const q=await (await session!.page.request.get(api)).json();
+     expect(q.rows.find((r:{rowId:string})=>r.rowId===rowId)).toMatchObject({unitPrice:'5',canEditPrice:true});
+     const write=await session!.page.request.post(api+'/rows/'+rowId,{headers:{'idempotency-key':randomUUID()},data:{expectedVersion:q.version,unitPrice:'6'}});expect(write.status()).toBe(200);
+     foreign=await h.open(other.id,1165,{},path);
+     await foreign.page.getByLabel('TEST session special负责单价',{exact:true}).waitFor();
+     expect(await foreign.page.getByLabel('印花负责单价',{exact:true}).count()).toBe(0);
+     const latest=await (await foreign.page.request.get(api)).json();
+     const denied=await foreign.page.request.post(api+'/rows/'+rowId,{headers:{'idempotency-key':randomUUID()},data:{expectedVersion:latest.version,unitPrice:'99'}});expect(denied.status()).toBe(403);
+    }
+   }});expect(dispatches).toBe(2);
+  }finally{await session?.context.close();await foreign?.context.close();}
  });
 
  it('assigns a bulk-only craft and fills only that price through the original authenticated quotation page',async()=>{

@@ -39,9 +39,20 @@ export async function assembleQuotation(db:PoolClient,sourceId:string,actorId:st
  const artifact=await publishedTechnicalArtifact(db,sourceId,round);
  const validArtifact=artifact?.row.document_fingerprint===technicalDocumentFingerprint(document)?artifact:null;
  const plan=(await db.query("SELECT entries FROM digital_development_round_arrangements WHERE source_id=$1 AND round_number=$2",[sourceId,round])).rows[0]?.entries??{};
- const tasks=(await db.query(`SELECT a.task_kind,a.assignee_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id)
+ const tasks=(await db.query(`SELECT t.task_id,a.task_kind,a.assignee_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id)
   WHERE a.source_id=$1 AND t.route_version=$2 AND t.state<>'cancelled' ORDER BY t.created_at,t.task_id`,[sourceId,round])).rows;
- const recipient=(kind:string,fallback:string|null=null):string|null=>{const task=tasks.filter(t=>t.task_kind===kind).at(-1);return task?task.assignee_id:Object.hasOwn(plan,kind)?plan[kind]:fallback;};
+ // Special crafts reuse the printing task kind, but never its quotation identity.
+ // Only mixed/special routes need this table; legacy automatic quotes keep their
+ // original pre-timeline schema path.
+ const craftRecipients=document.craftSteps?.some(step=>step.craftKind==='special')?(await db.query(`SELECT s.special_craft_id,s.craft_kind,s.step_id,p.task_id,a.assignee_id
+  FROM digital_timeline_craft_steps s LEFT JOIN digital_timeline_task_positions p ON p.step_id=s.step_id AND p.phase='work'
+  LEFT JOIN digital_production_tasks t ON t.task_id=p.task_id
+  LEFT JOIN digital_production_task_access a ON a.task_id=t.task_id AND t.state<>'cancelled'
+  WHERE s.source_id=$1 AND s.round_number=$2`,[sourceId,round])).rows:[];
+ const recipient=(kind:string,fallback:string|null=null):string|null=>{
+  const task=tasks.filter(t=>t.task_kind===kind&&!craftRecipients.some(c=>c.task_id===t.task_id&&c.craft_kind==='special')).at(-1);
+  return task?task.assignee_id:Object.hasOwn(plan,kind)?plan[kind]:fallback;
+ };
  const rows:BudgetRow[]=[],assignments:QuotationAssignment[]=[],consumptions:AssembledQuotation['consumption_sources']={},prices:AssembledQuotation['price_sources']={};
  const refs:QuotationAssembly['rows']={},at=businessNow().toISOString(),nextVersion=appliedVersion??(old?.version??0)+1;
  const add=(row:BudgetRow,assignment:QuotationAssignment,ref:QuotationAssembly['rows'][string])=>{rows.push(row);assignments.push(assignment);refs[row.rowId]=ref;};
@@ -91,7 +102,7 @@ export async function assembleQuotation(db:PoolClient,sourceId:string,actorId:st
  const bulkSteps:CraftStepChoice[]=instruction?.document?.craftSteps??[];
  const bulkSpecial=bulkSteps.filter(step=>step.craftKind==='special');
  const useBulkSpecial=Boolean(instruction&&(bulkSpecial.length||old?.assembly&&Object.values(old.assembly.rows).some(row=>row.stage==='bulk'&&row.craftRef)||steps.some(step=>step.craftKind==='special')));
- const specialRecipients=steps.some(step=>step.craftKind==='special')?(await db.query(`SELECT s.special_craft_id,s.step_id,a.assignee_id FROM digital_timeline_craft_steps s LEFT JOIN digital_timeline_task_positions p ON p.step_id=s.step_id AND p.phase='work' LEFT JOIN digital_production_task_access a ON a.task_id=p.task_id WHERE s.source_id=$1 AND s.round_number=$2 AND s.craft_kind='special'`,[sourceId,round])).rows:[];
+ const specialRecipients=craftRecipients.filter(row=>row.craft_kind==='special');
  for(const step of steps.filter(step=>!useBulkSpecial||step.craftKind!=='special')){
   const own=step.specialCraft?specialRecipients.find(row=>row.special_craft_id===step.specialCraft!.id):null;
   const worker=step.craftKind==='special'?own?.assignee_id??(own?plan[`development_printing:${own.step_id}`]??null:null):recipient(`development_${step.craftKind}`);

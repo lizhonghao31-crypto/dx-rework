@@ -36,3 +36,11 @@
 - 真实App通过大货新增工艺指派、师傅填价以及同一登录会话撤权后的拒绝。实际查看1165px截图；沿原界面横向表格，新增阶段/版本与历史工艺信息。新选择仍关闭，未部署、未修改现场数据。
 - 当前源码定向结果：PG16共59项、PG13库/版本/权限5项、浏览器3项、单元及兼容123项均通过；完整typecheck及lint退出0。日志与结构化结果位于 /tmp/time-framework-04-{pg-final,pg13-final,browser-final,units-final}.{log,json}。先前总non-db发现旧mock缺craftSteps及迁移权限清单遗漏，已集中修正并在123项中验证；首轮总non-db已结束：3928通过、3失败、15跳过；失败仅上述两类，共3项，修复后对应22项权限及18项迁移兼容已全部通过（含在123项内），不因这三项重跑整个non-db。
 - 已核当前远端目标仍为07dff9b8ab2b66f75c6696dc837480c33f48412b。历史manual报价不被转换；新采用链整体启用及正式回退SHA读取验证仍属06/08。正常大货洗水仍属05。此记录不构成现场Acceptance验收。
+
+## Review 4570033438 — built-in printing quote identity
+
+The shared task kind selected the latest special-craft worker for built-in printing. Quotation assembly now uses task-position/step identities to exclude special work from the built-in recipient and shares that scoped lookup with special quote recipients. Cancelled task access is not used. Legacy routes without special steps retain the original schema path. The arrangement reader already distinguishes special step references; no global role changes were required.
+
+Regression: built-in printing followed by two special crafts, different craftsmen, original price retained, wrong-row writes rejected; the original App also verifies retained printing read/write permission in the same authenticated session after another artisan starts special work. A helper's old assumption that any two craft choices imply the built-in dual SLA was corrected to apply only to the two built-in choices. Isolated role setup uses the existing audited assignment service and reassignment uses the original total-arrangement command.
+
+Current repaired working-tree results: PG16/native/browser/legacy combinations 64 passed, PG13 8 passed, unit/mapping/compatibility 123 passed; focused ESLint and API typecheck passed. Initial new fixture attempts failed on missing trusted role context, direct reassignment outside total arrangement, and the mixed-two-step helper expectation; all were corrected without weakening business guards. Exact logs/reports are recorded in construction-evidence.json. Prior full non-db run is not relabelled successful. No deployment or onsite data changes; follow-up Review was not requested.

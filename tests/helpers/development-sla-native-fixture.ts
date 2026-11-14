@@ -71,7 +71,7 @@ export async function exerciseDevelopmentSlaNative(db: Pool, todos: TodoProjecti
         if(options)expect(await task('development_craft_dispatch')).toMatchObject({slaHours:0.5});
         await route("development_craft_dispatch");
         const special=options?.fixedCraftSteps[index]?.specialCraft;
-        expect(await task(kind)).toMatchObject({slaHours:special?special.definition.development.minutes!/60:options&&options.fixedCraftSteps.length===2?null:craft === "印绣花" ? 168 : 96});
+        expect(await task(kind)).toMatchObject({slaHours:special?special.definition.development.minutes!/60:options&&options.fixedCraftSteps.length===2&&options.fixedCraftSteps.every(step=>step.craftKind!=='special')?null:craft === "印绣花" ? 168 : 96});
         await route(kind);if(options)expect(await task('development_craft_confirmation')).toMatchObject({slaHours:0.5});await route("development_craft_confirmation");
       }
       const sewing=await task("development_sewing");
