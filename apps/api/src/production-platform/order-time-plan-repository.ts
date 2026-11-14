@@ -1,8 +1,13 @@
 import {randomUUID} from 'node:crypto';
+import type {SeriesRoute} from '@dx-rework/contracts/digital-series-plan';
+import {FrozenTimeFrameworkSchema,type FrozenTimeFramework} from '@dx-rework/contracts/order-time-framework';
+import type {OrderTimeNativeProgress} from './order-time-request-plan.js';
+import {frameworkScopeInputs,retainedFrameworkWork} from './order-time-framework-route.js';
+import {evaluateTimeFrameworkCandidate,freezeTimeFrameworkCandidate} from './order-time-framework.js';
 import type {PoolClient} from 'pg';
 import {validateBusinessTime,type BusinessTime,type BusinessTimeScope} from '@dx-rework/domain/business-clock';
 import type {SlaAnchor} from '@dx-rework/domain/digital-sla-plan';
-import {FrozenOrderTimePlanSchema,type FrozenOrderTimePlan} from '@dx-rework/contracts/order-time-plan';
+import {FrozenOrderTimePlanSchema,type FrozenOrderTimePlan,type OrderTimeRule} from '@dx-rework/contracts/order-time-plan';
 import {orderTimeRule} from '@dx-rework/contracts/order-time-plan';
 import {fixedTimelineIdentity} from './fixed-timeline-identity.js';
 import {SlaVersionConflict,SlaIdempotencyConflict} from './sla-configuration-repository.js';
@@ -11,7 +16,10 @@ import type {FixedTimelineTarget} from './fixed-timeline-targets.js';
 
 type DB=Pick<PoolClient,'query'>;
 export type OrderTimeInput={version:'order-time-input-v1';plan:FrozenOrderTimePlan;work:OrderTimeWork[];
- scopes:Array<OrderTimeScope&{lineId:string|null;customerGoalIds:string[]}>;route:{complete:boolean;missing:string[]}};
+ frameworkContext?:{route:SeriesRoute;acceptedAt:SlaAnchor;notBefore:Record<string,SlaAnchor>;progress:Record<string,OrderTimeNativeProgress>};
+ frameworkPlans?:Record<string,FrozenTimeFramework>;
+ factoryCommitments?:Array<{lineId:string;label:string;date:string;version:number;source:string}>;
+ scopes:Array<OrderTimeScope&{lineId:string|null;customerGoalIds:string[];customerDateVersion?:number}>;route:{complete:boolean;missing:string[]}};
 type Targets=Record<string,Record<string,FixedTimelineTarget>>;
 export type StoredOrderTimePlan={id:string;resource:BusinessTimeScope;revision:number;input:OrderTimeInput;targets:Targets;
  identityHash:string;time:BusinessTime;actorId:string;eventRef:string;changeKind:'initial'|'arrangement'|'customer_date_change'};
@@ -22,6 +30,7 @@ function saved(row:Row):StoredOrderTimePlan{
  const input=row.input_snapshot,targets=row.fixed_targets;
  if(input.version!=='order-time-input-v1'||identity(input,targets)!==row.identity_hash)throw Error('本单时间方案版本或校验不受当前程序支持');
  FrozenOrderTimePlanSchema.parse(input.plan);
+ for(const plan of Object.values(input.frameworkPlans??{}))FrozenTimeFrameworkSchema.parse(plan);
  return {id:row.plan_version_id,resource:{kind:row.resource_kind,id:(row.production_order_id??row.source_id)!},revision:row.revision,input,targets,
   identityHash:row.identity_hash,time:validateBusinessTime(row.business_time),actorId:row.created_by,eventRef:row.source_event_ref,changeKind:row.change_kind};
 }
@@ -39,7 +48,7 @@ export class OrderTimePlanRepository{
    AND ${resource.kind==='source'?'source_id':'production_order_id'}=$2 ORDER BY revision DESC LIMIT 1`,[resource.kind,resource.id])).rows[0];
   return row?saved(row):null;
  }
- async confirm(input:{resource:BusinessTimeScope;expectedRevision:number;value:OrderTimeInput;actorId:string;eventRef:string;time:BusinessTime;requestKey:string}):Promise<StoredOrderTimePlan>{
+ async confirm(input:{resource:BusinessTimeScope;expectedRevision:number;value:OrderTimeInput;actorId:string;eventRef:string;time:BusinessTime;requestKey:string},refreshLinked?:(resource:BusinessTimeScope,changes:Record<string,OrderTimeRule>)=>Promise<OrderTimeInput>):Promise<StoredOrderTimePlan>{
   const previous=await this.current(input.resource),result=await this.append(input,'arrangement');
   if(!previous||result.revision<=previous.revision)return result;
   const keys=new Set([...Object.keys(previous.input.plan.overrides),...Object.keys(result.input.plan.overrides)]),changed=Object.fromEntries([...keys].filter(key=>fixedTimelineIdentity(orderTimeRule(previous.input.plan,key)?.rule??null)!==fixedTimelineIdentity(orderTimeRule(result.input.plan,key)?.rule??null)).flatMap(key=>{const rule=orderTimeRule(result.input.plan,key)?.rule;return rule?[[key,rule]]:[];}));
@@ -52,7 +61,7 @@ export class OrderTimePlanRepository{
   if(!linked||!counterpart||fixedTimelineIdentity(counterpart.input.plan.company)!==fixedTimelineIdentity(result.input.plan.company))return result;
   const updates=Object.fromEntries(Object.entries(changed).filter(([key,rule])=>fixedTimelineIdentity(orderTimeRule(counterpart.input.plan,key)?.rule??null)!==fixedTimelineIdentity(rule)));
   if(!Object.keys(updates).length)return result;
-  const value=structuredClone(counterpart.input);value.plan={...value.plan,revision:value.plan.revision+1,overrides:{...value.plan.overrides,...updates}};
+  const value=counterpart.input.frameworkContext?await (refreshLinked??(()=>{throw Error('关联本单调整须重新读取事实');}))(linked,updates):structuredClone(counterpart.input);value.plan={...value.plan,revision:counterpart.input.plan.revision+1,overrides:{...value.plan.overrides,...updates}};
   await this.append({resource:linked,expectedRevision:counterpart.revision,value,actorId:input.actorId,eventRef:input.eventRef,time:input.time,requestKey:'order-time:linked:'+fixedTimelineIdentity([input.requestKey,linked])},'arrangement');
   return result;
  }
@@ -67,7 +76,7 @@ export class OrderTimePlanRepository{
   const prior=(await this.db.query('SELECT * FROM digital_order_time_plan_versions WHERE request_key=$1',[input.requestKey])).rows[0];
   if(prior){
    const result=saved(prior);
-   if(result.resource.kind!==resource.kind||result.resource.id!==resource.id||result.revision!==input.expectedRevision+1||result.actorId!==input.actorId||result.eventRef!==input.eventRef||fixedTimelineIdentity(result.input)!==fixedTimelineIdentity(value))throw new SlaIdempotencyConflict('本次操作标识已用于其他时间方案');
+   if(result.resource.kind!==resource.kind||result.resource.id!==resource.id||result.revision!==input.expectedRevision+1||result.actorId!==input.actorId||result.eventRef!==input.eventRef||fixedTimelineIdentity({...result.input,frameworkPlans:undefined})!==fixedTimelineIdentity({...value,frameworkPlans:undefined}))throw new SlaIdempotencyConflict('本次操作标识已用于其他时间方案');
    return result;
   }
   const previous=await this.current(resource);
@@ -118,6 +127,17 @@ export class OrderTimePlanRepository{
    const evaluated=evaluateOrderTimeScenario({...value,start:{precision:'instant',value:time.now,source:input.eventRef},scopes:[scope],...(kept?{fixedTargets:kept}:{})})[0]!;
    targets[scope.scopeRef]={...targets[scope.scopeRef],...Object.fromEntries(evaluated.targets.map(target=>[target.id,target]))};
   }
+  if(value.frameworkContext){
+   const context=value.frameworkContext,progress=new Map(Object.entries(context.progress));
+   const plans:Record<string,FrozenTimeFramework>={};
+   for(const scope of frameworkScopeInputs(value,context.route,context.acceptedAt,context.notBefore)){
+    const old=previous?.input.frameworkPlans?.[scope.scopeRef];
+    if(old&&kind==='customer_date_change'&&!changedScopes.has(scope.scopeRef)){plans[scope.scopeRef]=structuredClone(old);continue;}
+    const result=evaluateTimeFrameworkCandidate(scope,{purpose:'order_proposal',observedAt:time.now,retained:retainedFrameworkWork(scope,progress,old)});
+    plans[scope.scopeRef]=freezeTimeFrameworkCandidate(result,{reference:`${input.eventRef}:${scope.scopeRef}`,revision:(old?.revision??0)+1,previousReference:old?.reference??null,eventRef:input.eventRef});
+   }
+   value.frameworkPlans=plans;
+  }
   const row=(await this.db.query(`INSERT INTO digital_order_time_plan_versions(plan_version_id,resource_kind,source_id,production_order_id,revision,input_snapshot,fixed_targets,identity_hash,change_kind,source_event_ref,business_time,created_by,request_key)
    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,[randomUUID(),resource.kind,resource.kind==='source'?resource.id:null,resource.kind==='order'?resource.id:null,input.expectedRevision+1,JSON.stringify(value),JSON.stringify(targets),identity(value,targets),previous?kind:'initial',input.eventRef,JSON.stringify(time),input.actorId,input.requestKey])).rows[0];
   return saved(row);
@@ -126,10 +146,10 @@ export class OrderTimePlanRepository{
   * the genuine H approval, in that same transaction. The effective policy is
   * captured now, so a later standard/arrangement cannot change this revision.
   */
- async approvedCustomerChange(resource:BusinessTimeScope,actorId:string,eventId:string,time:BusinessTime):Promise<StoredOrderTimePlan|null>{
+ async approvedCustomerChange(resource:BusinessTimeScope,actorId:string,eventId:string,time:BusinessTime,refreshFramework?:()=>Promise<NonNullable<OrderTimeInput['frameworkContext']>>):Promise<StoredOrderTimePlan|null>{
   const previous=await this.current(resource);if(!previous)return null;
   if(resource.kind!=='order')throw Error('客户PO改期只属于正式订单');
-  const rows=(await this.db.query(`SELECT change_id,line_id,old_date::text AS old_date,new_date::text AS new_date FROM digital_po_date_changes
+  const rows=(await this.db.query(`SELECT change_id,line_id,version,old_date::text AS old_date,new_date::text AS new_date FROM digital_po_date_changes
    WHERE production_order_id=$1 AND approval_event_id=$2 AND date_kind='customer' AND source='approved_customer_change'
     AND old_date IS DISTINCT FROM new_date ORDER BY line_id`,[resource.id,eventId])).rows;
   if(!rows.length)return previous;
@@ -140,9 +160,10 @@ export class OrderTimePlanRepository{
    const goal:SlaAnchor={precision:'date',value:row.new_date,source:`digital_po_date_changes:${row.change_id}`};
    const advance=orderTimeRule(value.plan,'ship_sample_advance')?.rule;
    if(scope.shipSample)scope.shipSample.advanceDays=advance?.kind==='offset'?advance.days:null;
-   scope.customerGoal=goal;scope.goals={...scope.goals,...Object.fromEntries(scope.customerGoalIds.map(id=>[id,goal]))};changed.add(scope.scopeRef);
+   scope.customerDateVersion=Number(row.version);scope.customerGoal=goal;scope.goals={...scope.goals,...Object.fromEntries(scope.customerGoalIds.map(id=>[id,goal]))};changed.add(scope.scopeRef);
   }
   if(!changed.size)return previous;
+  if(value.frameworkContext){if(!refreshFramework)throw Error('批准改期须重新读取本单事实');value.frameworkContext=await refreshFramework();}
   return this.append({resource,expectedRevision:previous.revision,value,actorId,eventRef:`audit_events:${eventId}`,time,requestKey:`order-time:customer:${eventId}`},'customer_date_change',changed);
  }
 }

@@ -1,3 +1,5 @@
+import {SERIES_MILESTONE_OFFSETS} from '@dx-rework/contracts/digital-series-plan';
+import {evaluateTimeFrameworkCandidate,freezeTimeFrameworkCandidate} from '../../apps/api/src/production-platform/order-time-framework.js';
 import {orderTimeCompletionTarget} from '../../apps/api/src/production-platform/order-time-completion-target.js';
 import {orderTimeCreatedMany} from '../../apps/api/src/production-platform/order-time-created.js';
 import {describe,expect,it,vi} from 'vitest';
@@ -47,6 +49,18 @@ describe('R5 exact frozen order-time reading and independent visible endpoints',
   row.stages[1]!.nodes[0]!.actualDate='2027-03-01';
   const ambiguous=orderTimeReadingBasis(changed,resource,row,{}, {...evidence(),policies},null);
   expect(evaluateFixedJourneyBasis(ambiguous,at(30),false).scopes[0]!.nodes.find(n=>n.id==='a')!.goalDelta.kind).toBe('unknown');
+ });
+ it('reads the completed node from its frozen forward plan, never the separate backward compatibility target',()=>{
+  const original=stored();original.input.plan.company.nodes.a=duration(6);
+  const frozen=freezeTimeFrameworkCandidate(evaluateTimeFrameworkCandidate({scopeRef:'TEST scope',route:'B',acceptedAt:{precision:'instant',value:at(0),source:'TEST actual acceptance'},customerDelivery:{date:'2027-03-02',source:'TEST customer date',revision:1},milestoneStandard:{reference:'TEST company',revision:1,offsets:SERIES_MILESTONE_OFFSETS.B},plan:original.input.plan,work:original.input.work,notBefore:{},bindings:Object.entries(SERIES_MILESTONE_OFFSETS.B).filter(([,offset])=>offset!==null).map(([key])=>({key:key as keyof typeof SERIES_MILESTONE_OFFSETS.B,workIds:['b']}))},{purpose:'order_proposal',observedAt:at(0)}),{reference:'TEST framework original',revision:1,previousReference:null,eventRef:'TEST approved'});
+  original.input.frameworkPlans={'TEST scope':frozen};original.targets['TEST scope']!.a!.end.at=at(20);
+  const changed=structuredClone(original);changed.id='TEST framework changed';changed.revision=2;changed.time.now=at(9);changed.input.frameworkPlans!['TEST scope']!.arranged.find(row=>row.id==='a')!.end.at=at(10);
+  const policies=[changed,original].map(plan=>({id:plan.id,at:plan.time.now,plan:plan.input.plan,history:{input:plan.input,targets:plan.targets,revision:plan.revision,time:plan.time}}));
+  const result=orderTimeCompletionTarget(original.input.work[0]!,original.input.scopes[0]!,point(7),policies,null);
+  expect(result).toMatchObject({end:at(6),targetRevision:'TEST plan:1',targetPrecision:'instant',targetDate:null});
+  expect((Date.parse(at(7))-Date.parse(result!.end))/3600000).toBe(1);
+  changed.input.frameworkPlans!['TEST scope']!.arranged=[];
+  expect(orderTimeCompletionTarget(original.input.work[0]!,original.input.scopes[0]!,point(11),policies,null)).toBeNull();
  });
  it('retains pre-conversion source completion and original responsibility across formal PO scopes without borrowing another source or round',()=>{
   const original=stored(),later=structuredClone(original),formal=structuredClone(original),row=item();

@@ -7,6 +7,15 @@ import { assertMappedPostgresTests, classifyFullGatePaths, POSTGRES_CASE_SUITES 
 import {configForSuite,fullGatePostgresPlan,POSTGRES_CHAIN_TESTS} from '../../scripts/test-suite-plan.mjs';
 import {settingsBrowserRequired} from '../../scripts/ci/prepare-settings-browser.mjs';
 
+it('maps factory promise and washing adoption adapters to original request and browser regressions',()=>{
+ for(const name of ['factory-commitments','washing']){
+  const risk=classifyFullGatePaths([`apps/api/src/production-platform/order-time-${name}.ts`]);
+  expect(risk.mappedPostgresTests).toContain('tests/integration/order-time-requests-postgres.test.ts');
+  expect(risk.mappedPostgresTests).toContain('tests/integration/order-time-requests-browser-postgres.test.ts');
+ }
+ expect(classifyFullGatePaths(['apps/web/src/order-time-milestone-fields.tsx']).mappedPostgresTests).toContain('tests/integration/r5-settings-native-browser-postgres.test.ts');
+});
+
 it('keeps framework and version-reader changes in the original time-plan database regression scope',()=>{
  for(const path of ['apps/api/src/production-platform/order-time-framework.ts','packages/contracts/src/order-time-framework.ts']){
   const risk=classifyFullGatePaths([path]);

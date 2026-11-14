@@ -9,7 +9,7 @@ export function timeText(minutes:number|null){
 }
 export function includedTimeOwner(key:string){return ORDER_TIME_NODES.find(n=>n.key===key)?.includedIn?.map(k=>ORDER_TIME_NODES.find(n=>n.key===k)?.label).join('／')??'对应工序';}
 export function nodeTimeText(rule:OrderTimeRule,key?:string){
- return rule.kind==='event'?'按实际办理记录':rule.kind==='date'?'按工厂交货日':rule.kind==='offset'?rule.days===null?'还没设置':'提前'+rule.days+'天':rule.kind==='included'&&key?timeText(rule.minutes)+'，已含在'+includedTimeOwner(key)+'用时内':timeText(rule.minutes);
+ return rule.kind==='event'?'按实际办理记录':rule.kind==='date'?['client_sample_approval','warehouse_accessories','style_label_ready'].includes(key??'')?'按本单里程碑安排':'按工厂交货日':rule.kind==='offset'?rule.days===null?'还没设置':'提前'+rule.days+'天':rule.kind==='included'&&key?timeText(rule.minutes)+'，已含在'+includedTimeOwner(key)+'用时内':timeText(rule.minutes);
 }
 export function nodeCalendarText(rule:OrderTimeRule,key:string){
  const node=ORDER_TIME_NODES.find(n=>n.key===key);

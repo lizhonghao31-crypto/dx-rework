@@ -1,3 +1,5 @@
+import {SeriesPlanService} from '../../apps/api/src/production-platform/series-plan-service.js';
+import {prepareTimeFrameworkConfiguration} from '@dx-rework/contracts/order-time-settings';
 import {randomUUID} from 'node:crypto';
 import {beforeAll,afterAll,describe,it,expect,vi} from 'vitest';
 import {businessAnchorFixture} from '../helpers/business-anchor-fixture.js';
@@ -396,4 +398,76 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
    expect((await orderTimeTodos(f.db,f.root)).some(todo=>todo.todoId===pending.requestId)).toBe(false);
   });
  });
+ it('adopts intermediate-gap framework and washing in the same original manager transaction without inventing ready events',async()=>{
+  const settings=new OrderTimeSettingsService(f.db,true,true),old=await settings.read(f.root);
+  await settings.save(f.root,{expectedVersion:old.version,values:prepareTimeFrameworkConfiguration(r5OneHourConfiguration())},randomUUID());
+  const scene=await f.scene('2027-08-01T00:00:00.000Z');
+  await f.runtime.run(scene,f.root,async()=>{
+   const designer=f.people['sample-designer']!,input=DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',requiresColorMatching:false,designStyleNo:'TEST-FRAMEWORK-'+randomUUID(),orderDate:'2027-08-01',primaryMerchandiserId:f.people.merchandiser!.actorId,lines:[{formalPoNo:'TEST-FRAMEWORK-'+randomUUID(),color:'黑',customerWarehouseArrivalDate:'2027-08-15',sizes:[{size:'M',quantity:10}]}]});
+   const operation={kind:'direct_order' as const,input,route:{craftSteps:[],preshrink:false}};
+   const check=await requests.check(designer,operation);
+   expect(check.framework?.milestones).toHaveLength(8);
+   expect(check.feasibility,JSON.stringify(check.coverage)).toBe('insufficient');
+   const pending=await requests.submit(designer,{operation,fingerprint:check.fingerprint,reason:'TEST intermediate milestone gaps'},randomUUID());
+   const manager=f.people.owner!,preview=await requests.read(manager,pending.requestId);
+   await expect(requests.apply(manager,pending.requestId,{expectedVersion:preview.version,fingerprint:preview.check.fingerprint,overrides:{},acceptLate:false},randomUUID())).rejects.toMatchObject({code:'ORDER_TIME_LATE_CONFIRMATION'});
+   const applied=await requests.apply(manager,pending.requestId,{expectedVersion:preview.version,fingerprint:preview.check.fingerprint,overrides:{},acceptLate:true},randomUUID());
+   const resource={kind:'order' as const,id:applied.result!.orderId!},repo=new OrderTimePlanRepository(f.db),before=(await repo.current(resource))!;
+   expect(Object.values(before.input.frameworkPlans??{})).toHaveLength(1);
+   expect(Object.values(before.input.frameworkPlans!)[0]!.milestones).toHaveLength(8);
+   const lineId=before.input.scopes[0]!.lineId!,duration={minutes:120,calendar:'continuous' as const,reminder:{enabled:true,percent:70}};
+   const washing=[{lineId,expectedVersion:0,document:{arrangement:{mode:'after_receipt' as const,reference:'TEST original order change',revision:1,accounting:'additional' as const,washing:duration,inspection:duration},staff:{logisticsId:f.people['embroidery-washing-merchandiser']!.actorId,inspectorId:f.people.qc!.actorId},fee:{kind:'pending' as const},sourceRef:'TEST original management adjustment'}}];
+   const originalTasks=(await f.db.query('SELECT task_id,entered_at,completed_at FROM digital_production_tasks WHERE task_id IN (SELECT task_id FROM digital_production_task_access WHERE production_order_id=$1) ORDER BY task_id',[resource.id])).rows;
+   const operation2={kind:'arrangement' as const,resource},next=await requests.check(manager,operation2,{},washing);
+   expect((await f.db.query('SELECT 1 FROM digital_bulk_washing_plans WHERE production_order_id=$1',[resource.id])).rowCount).toBe(0);
+   const body={resource,fingerprint:next.fingerprint,overrides:{},washing,acceptLate:true},key=randomUUID();
+   const saved=await requests.arrange(manager,body,key);expect(await requests.arrange(manager,body,key)).toEqual(saved);
+   expect(saved.check.washing?.find(row=>row.lineId===lineId)?.version).toBe(1);
+   expect((await f.db.query('SELECT 1 FROM digital_bulk_washing_plans WHERE production_order_id=$1',[resource.id])).rowCount).toBe(1);
+   expect((await repo.current(resource))!.input.work.filter(work=>work.parameterKey==='bulk_return_washing')).toHaveLength(1);
+   expect((await f.db.query('SELECT task_id,entered_at,completed_at FROM digital_production_tasks WHERE task_id IN (SELECT task_id FROM digital_production_task_access WHERE production_order_id=$1) ORDER BY task_id',[resource.id])).rows).toEqual(originalTasks);
+   await expect(requests.arrange(manager,body,randomUUID())).rejects.toMatchObject({statusCode:409});
+   const persisted=saved.check.washing!.find(row=>row.lineId===lineId)!;
+   const editAgain=[{lineId,expectedVersion:persisted.version,document:{...persisted.document!,arrangement:{...persisted.document!.arrangement,washing:{...duration,minutes:180}}}}];
+   const secondPreview=await requests.check(manager,operation2,{},editAgain);
+   const second=await requests.arrange(manager,{resource,fingerprint:secondPreview.fingerprint,overrides:{},washing:editAgain,acceptLate:true},randomUUID());
+   expect(second.check.washing?.find(row=>row.lineId===lineId)?.version).toBe(2);
+   const series=new SeriesPlanService(f.db,'TEST framework series shared date '.repeat(3));
+   const same=await series.read(f.root,resource.id);
+   expect(same.framework?.scopes[0]?.customerDate).toBe('2027-08-15');
+   expect(same.framework?.reference).toBe((await repo.current(resource))!.id);
+   await expect(series.preview(f.root,resource.id,{expectedOrderVersion:same.orderVersion,expectedPlanRevision:same.current?.revision??0,plannedShippingDate:'2027-08-20',plannedDurations:{},selectedNodeIds:null})).rejects.toMatchObject({statusCode:409});
+   const dates=new PoCustomerDateService(f.db),dateSheet=await dates.read(f.root,resource.id),orderVersion=(await f.db.query('SELECT version FROM digital_production_orders WHERE production_order_id=$1',[resource.id])).rows[0].version;
+   const dateRequest=await dates.request(f.root,resource.id,{orderVersion,changes:[{lineId,date:'2027-08-20',expectedVersion:dateSheet.customerPoDates.find(line=>line.lineId===lineId)!.version}],reason:'TEST same real approved date'},randomUUID()) as {requestId:string};
+   await dates.decide(f.root,resource.id,dateRequest.requestId,true,randomUUID());
+   const afterDate=(await repo.current(resource))!,seriesAfter=await series.read(f.root,resource.id);
+   expect(seriesAfter.framework?.reference).toBe(afterDate.id);
+   expect(seriesAfter.framework?.scopes[0]?.customerDate).toBe('2027-08-20');
+   expect(seriesAfter.framework?.scopes[0]?.dateSource).toMatch(/^digital_po_date_changes:/);
+   expect(seriesAfter.framework?.scopes[0]?.milestones.find(row=>row.key==='planned_shipment')?.date).toBe('2027-08-20');
+   expect(Object.values(before.input.frameworkPlans!)[0]!.input.customerDelivery.date).toBe('2027-08-15');
+   const beforeFactory=await requests.check(manager,operation2),customerSnapshot=structuredClone(afterDate.input.frameworkPlans);
+   expect(beforeFactory.factoryCommitments).toEqual([]);
+   const approveFactory=async(date:string,expectedVersion:number)=>{
+    const client=await f.db.connect();try{
+     await client.query('BEGIN');const eventId=randomUUID(),oldDate=(await client.query('SELECT factory_delivery_date::text AS date FROM digital_production_po_lines WHERE line_id=$1',[lineId])).rows[0].date;
+     await client.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1,$2,$3,'digital_po_factory_dates_approved','digital_production',$4,$5)",[eventId,f.root.requestId,f.root.actorId,resource.id,JSON.stringify({reason:'TEST original approved factory-date adapter',dateChanges:[{lineId,date,expectedVersion,oldDate,dateKind:'factory'}]})]);
+     await new DigitalPoDateRepository(client).applyWithClient(f.root,resource.id,'approved_factory_change',[{lineId,date,expectedVersion}],eventId);
+     await client.query('COMMIT');
+    }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
+   };
+   await approveFactory('2027-08-02',0);
+   const constrained=await requests.check(manager,operation2);
+   expect(constrained.factoryCommitments?.[0]).toMatchObject({lineId,date:'2027-08-02',version:1,status:'insufficient'});
+   expect(constrained.fingerprint).not.toBe(beforeFactory.fingerprint);
+   await approveFactory('2027-08-19',1);
+   const later=await requests.check(manager,operation2);
+   expect(later.factoryCommitments?.[0]).toMatchObject({lineId,date:'2027-08-19',version:2});
+   expect(later.factoryCommitments?.[0]?.plannedReceipt).toBe(constrained.factoryCommitments?.[0]?.plannedReceipt);
+   expect((await repo.current(resource))!.input.frameworkPlans).toEqual(customerSnapshot);
+   expect(later.customerDates).toEqual(constrained.customerDates);
+
+  });
+ });
+
 });

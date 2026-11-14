@@ -1,4 +1,5 @@
 import {z} from 'zod';
+import {CraftStepChoiceSchema} from './digital-craft.js';
 import {FrozenOrderTimePlanSchema,OrderTimeCalendarSchema} from './order-time-plan.js';
 import {SeriesDateSchema,SeriesMilestoneKeySchema} from './digital-series-plan.js';
 
@@ -13,9 +14,12 @@ export const FrameworkTimeSchema=z.object({at:instant.nullable(),exclusive:z.boo
  .refine(time=>time.at!==null||time.reasons.length>0,'未知时间必须保留原因');
 export const FrameworkTargetSchema=z.object({id:reference,start:FrameworkTimeSchema,end:FrameworkTimeSchema}).strict()
  .refine(row=>!row.start.at||!row.end.at||Date.parse(row.start.at)<=Date.parse(row.end.at),'计划结束不能早于开始');
-export const FrameworkRetainedWorkSchema=z.object({target:FrameworkTargetSchema,sourceRef:reference}).strict();
+export const FrameworkRetainedWorkSchema=z.object({target:FrameworkTargetSchema,sourceRef:reference,actualCompletion:FrameworkTimeSchema.optional()}).strict();
+/** Native per-scope duration, e.g. the exact washing adoption or its explicit
+ * factory-inclusive remainder. Not a client override of a responsibility clock. */
+export const FrameworkNativeDurationSchema=z.object({reference,minutes:z.number().nonnegative().max(525600).nullable(),calendar:OrderTimeCalendarSchema.nullable()}).strict();
 export const FrameworkWorkSchema=z.object({id:reference,parameterKey:reference,stage:z.number().int().min(1).max(7),
- dependsOn:z.array(reference),includedIn:reference.optional(),includedPosition:z.enum(['start','end']).optional(),canonicalWorkRef:reference.optional(),
+ dependsOn:z.array(reference),craftStep:CraftStepChoiceSchema.optional(),nativeDuration:FrameworkNativeDurationSchema.optional(),includedIn:reference.optional(),includedPosition:z.enum(['start','end']).optional(),canonicalWorkRef:reference.optional(),
 }).strict();
 export const FrameworkMilestoneStandardSchema=z.object({reference,revision:z.number().int().positive(),
  offsets:z.record(SeriesMilestoneKeySchema,z.number().int().min(0).max(365).nullable()),

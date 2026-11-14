@@ -2,7 +2,7 @@ import {randomUUID,createHash} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {z} from 'zod';
 import {OrderTimeStandardSchema} from '@dx-rework/contracts/order-time-plan';
-import {OrderTimeConfigurationSchema,OrderTimeSettingsSaveSchema,OrderTimeSettingsUseSchema,orderTimeConfigurationFromLegacy,type OrderTimeStandardRecord,type OrderTimeSettingsRead,type OrderTimeConfiguration} from '@dx-rework/contracts/order-time-settings';
+import {OrderTimeConfigurationSchema,prepareTimeFrameworkConfiguration,OrderTimeSettingsSaveSchema,OrderTimeSettingsUseSchema,orderTimeConfigurationFromLegacy,type OrderTimeStandardRecord,type OrderTimeSettingsRead,type OrderTimeConfiguration} from '@dx-rework/contracts/order-time-settings';
 import {DevelopmentCycleValuesSchema} from '@dx-rework/contracts/digital-development-technical';
 import type {TrustedActorContext} from '../tools/repositories.js';
 import {ApplicationError} from '../platform/errors.js';
@@ -10,7 +10,7 @@ import {acceptanceBusinessContext,businessNow} from '../acceptance-clock/busines
 import {assertSlaSettingsActor,assertSlaSettingsReadActor} from './sla-settings-authority.js';
 import {SlaConfigurationRepository} from './sla-configuration-repository.js';
 import {latestSettingsSet} from './sla-settings-set-repository.js';
-import {ORDER_TIME_MODEL_ENABLED} from './order-time-activation.js';
+import {ORDER_TIME_MODEL_ENABLED,TIME_FRAMEWORK_MODEL_ENABLED} from './order-time-activation.js';
 import {orderTimeHistoryEntry,orderTimeHistoryPage} from './order-time-settings-history.js';
 
 const conflict=(message:string):never=>{throw new ApplicationError('ORDER_TIME_SETTINGS_CONFLICT',message,409);};
@@ -21,7 +21,7 @@ const record=(row:Row):OrderTimeStandardRecord=>({id:row.standard_id,version:row
  * global backfill or personal-draft publication steps are needed here.
  */
 export class OrderTimeSettingsService{
- constructor(private readonly database:Pool,private readonly enabled=ORDER_TIME_MODEL_ENABLED){}
+ constructor(private readonly database:Pool,private readonly enabled=ORDER_TIME_MODEL_ENABLED,private readonly frameworkEnabled=TIME_FRAMEWORK_MODEL_ENABLED){}
  private async transaction<T>(write:boolean,actor:TrustedActorContext,work:(db:PoolClient)=>Promise<T>){
   const db=await this.database.connect();try{
    await db.query(write?'BEGIN':'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
@@ -31,11 +31,12 @@ export class OrderTimeSettingsService{
   }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
  }
  private async latest(db:PoolClient){const row=(await db.query<Row>('SELECT * FROM digital_order_time_standards ORDER BY version DESC LIMIT 1')).rows[0];return row?record(row):null;}
+ private configuration(value:OrderTimeConfiguration){return this.frameworkEnabled?prepareTimeFrameworkConfiguration(value):value;}
  private async state(db:PoolClient):Promise<OrderTimeSettingsRead>{
-  const referenceTime=businessNow().toISOString(),current=await this.latest(db);if(current)return {enabled:this.enabled,version:current.version,referenceTime,current:{nodes:current.standard.nodes,stageBufferMinutes:current.standard.stageBufferMinutes},record:current};
+  const referenceTime=businessNow().toISOString(),current=await this.latest(db);if(current)return {enabled:this.enabled,version:current.version,referenceTime,current:this.configuration({nodes:current.standard.nodes,stageBufferMinutes:current.standard.stageBufferMinutes,...(current.standard.framework?{framework:current.standard.framework}:{})}),record:current};
   const repo=new SlaConfigurationRepository(db),unified=await repo.current(),development=(await db.query('SELECT values_json FROM digital_development_cycle_standards ORDER BY version DESC LIMIT 1')).rows[0],set=await latestSettingsSet(db);
   if(!development)throw new ApplicationError('NOT_FOUND','开发周期设置尚未安装',404);
-  return {enabled:this.enabled,version:0,referenceTime,current:orderTimeConfigurationFromLegacy({unified:unified?.values??await repo.bootstrapValues(),development:DevelopmentCycleValuesSchema.parse(development.values_json),planning:set?.planning??{}}),record:null};
+  return {enabled:this.enabled,version:0,referenceTime,current:this.configuration(orderTimeConfigurationFromLegacy({unified:unified?.values??await repo.bootstrapValues(),development:DevelopmentCycleValuesSchema.parse(development.values_json),planning:set?.planning??{}})),record:null};
  }
  read(actor:TrustedActorContext){return this.transaction(false,actor,db=>this.state(db));}
  private async receipt<T>(db:PoolClient,actor:TrustedActorContext,action:string,key:string,input:unknown,work:()=>Promise<T>):Promise<T>{
@@ -45,7 +46,8 @@ export class OrderTimeSettingsService{
  }
  private async append(db:PoolClient,actor:TrustedActorContext,expected:number,values:OrderTimeConfiguration,key:string,sourceId:string|null,sourceReference:string|null=null){
   const current=await this.latest(db);if((current?.version??0)!==expected)conflict('设置已更新，本次填写已保留，请刷新后核对');
-  const configuration=OrderTimeConfigurationSchema.parse(values),id=randomUUID(),version=expected+1;
+  const configuration=this.configuration(OrderTimeConfigurationSchema.parse(values)),id=randomUUID(),version=expected+1;
+  if(configuration.framework&&!this.frameworkEnabled)conflict('三层时间与订单采用一起启用，当前设置未改变');
   const standard=OrderTimeStandardSchema.parse({version:'order-time-standard-v1',reference:'order-time-company:'+id,revision:version,...configuration});
   const row=(await db.query<Row>('INSERT INTO digital_order_time_standards(standard_id,version,standard_json,source_standard_id,created_by,request_key,source_reference) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *',[id,version,JSON.stringify(standard),sourceId,actor.actorId,key,sourceReference])).rows[0];
   if(!row)throw Error('新设置未保存');
@@ -59,7 +61,7 @@ export class OrderTimeSettingsService{
  use(actor:TrustedActorContext,raw:unknown,key:string){const input=OrderTimeSettingsUseSchema.parse(raw);return this.transaction(true,actor,db=>this.receipt(db,actor,'use',key,input,async()=>{
   const source=await orderTimeHistoryEntry(db,input.kind,input.id);
   if(source.partial)conflict('历史记录不完整，缺少'+source.missing.join('、')+'，不能直接使用');
-  return this.append(db,actor,input.expectedVersion,{nodes:source.standard.nodes,stageBufferMinutes:source.standard.stageBufferMinutes},key,source.kind==='order_time'?source.id:null,source.kind+':'+source.id);
+  return this.append(db,actor,input.expectedVersion,{nodes:source.standard.nodes,stageBufferMinutes:source.standard.stageBufferMinutes,...(source.standard.framework?{framework:source.standard.framework}:{})},key,source.kind==='order_time'?source.id:null,source.kind+':'+source.id);
  }));}
  remove(actor:TrustedActorContext,raw:unknown,key:string){const input=OrderTimeSettingsUseSchema.parse(raw);return this.transaction(true,actor,db=>this.receipt(db,actor,'remove',key,input,async()=>{
   const current=await this.latest(db);if((current?.version??0)!==input.expectedVersion)conflict('设置已更新，请刷新后核对');if(input.kind==='order_time'&&current?.id===input.id)conflict('正在使用的设置不能删除');

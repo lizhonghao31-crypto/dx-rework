@@ -9,7 +9,7 @@ import {factoryBatchLedger,type FactoryScope} from './factory-batch-ledger.js';
 type DB=Pick<PoolClient,'query'>;
 const iso=(v:Date|string|null|undefined)=>v?new Date(v).toISOString():null;
 /** Native records remain authoritative. recorded_at is never substituted for an unknown actual time. */
-export async function readSeriesPlanFacts(db:DB,orderId:string,sourceId:string|null,customerCode:string){
+export async function readSeriesPlanFacts(db:DB,orderId:string,sourceId:string|null,customerCode:string,sourceRound?:number){
  const facts:SeriesObservedFact[]=[],revisions:Record<string,unknown>={};
  const events=(await db.query(`SELECT DISTINCT ON(node_key,scope_ref) *,occurred_date::text AS occurred_date
   FROM digital_series_source_events WHERE production_order_id=$1 ORDER BY node_key,scope_ref,source_version DESC`,[orderId])).rows;
@@ -24,7 +24,7 @@ export async function readSeriesPlanFacts(db:DB,orderId:string,sourceId:string|n
   completed:Boolean(at),started:Boolean(at),occurredAt:at,occurredDate:null,precision:at?'instant':'unknown',reason:at?'来自原验布到仓记录':'原验布记录未提供可信到仓时间'});}
  let document:Awaited<ReturnType<typeof developmentDocumentRow>>|null=null;
  if(sourceId){
-  document=await developmentDocumentRow(db,sourceId);revisions.development=document?{version:document.version,round:document.round_number,document:document.document}:null;
+  document=await developmentDocumentRow(db,sourceId,sourceRound);revisions.development=document?{version:document.version,round:document.round_number,document:document.document}:null;
   if(document){const evidence=await effectiveTechnicalEvidence(db,sourceId,document.round_number,'整款',customerCode);revisions.technical=evidence;
    const comments=(await db.query(`SELECT DISTINCT ON(scope_ref) comment_id,scope_ref,version,decision,occurred_at,customer_code FROM digital_development_final_comments
     WHERE source_id=$1 AND round_number=$2 AND is_final ORDER BY scope_ref,version DESC`,[sourceId,document.round_number])).rows;

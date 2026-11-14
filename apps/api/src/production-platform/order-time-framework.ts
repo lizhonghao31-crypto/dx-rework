@@ -27,7 +27,7 @@ export function initialFrameworkMilestoneStandard(route:SeriesRoute,reference:st
 export type FrameworkCandidateContext={purpose:'settings_preview'|'order_proposal';observedAt:string;
  /** Only adapters with original source evidence may retain completed work or
   * begun work's separately established plan. This is not a ready-event writer. */
- retained?:Readonly<Record<string,{target:FrameworkTarget;sourceRef:string}>>};
+ retained?:Readonly<Record<string,{target:FrameworkTarget;sourceRef:string;actualCompletion?:FrameworkTarget['end']}>>};
 
 /** Candidate-only pure evaluation. Ordinary reads decode the saved snapshot;
  * they do not call this function to slide its plan with the current clock.
@@ -38,9 +38,9 @@ export function evaluateTimeFrameworkCandidate(value:TimeFrameworkInput,context:
  const retained=Object.fromEntries(Object.entries(context.retained??{}).map(([id,row])=>[id,FrameworkRetainedWorkSchema.parse(row)]));
  const work=input.work.map(row=>({id:row.id,parameterKey:row.parameterKey,stage:row.stage,dependsOn:row.dependsOn,
   ...(row.includedIn?{includedIn:row.includedIn}:{}),...(row.includedPosition?{includedPosition:row.includedPosition}:{}),
-  ...(row.canonicalWorkRef?{canonicalWorkRef:row.canonicalWorkRef}:{})}));
+  ...(row.canonicalWorkRef?{canonicalWorkRef:row.canonicalWorkRef}:{}),...(row.craftStep?{craftStep:row.craftStep}:{}),...(row.nativeDuration?{nativeDuration:row.nativeDuration}:{})}));
  const arranged=fixedTimelineForward(buildOrderTimeWork(input.plan,work),input.acceptedAt,input.notBefore,
-  {...(context.purpose==='order_proposal'?{minimumStart:{precision:'instant' as const,value:observedAt,source:'本次提交观察时刻'}}:{}),retained:Object.fromEntries(Object.entries(retained).map(([id,row])=>[id,row.target]))});
+  {...(context.purpose==='order_proposal'?{minimumStart:{precision:'instant' as const,value:observedAt,source:'本次提交观察时刻'}}:{}),retained:Object.fromEntries(Object.entries(retained).map(([id,row])=>[id,row.target])),completions:Object.fromEntries(Object.entries(retained).flatMap(([id,row])=>row.actualCompletion?[[id,row.actualCompletion]]:[]))});
  const byId=new Map(arranged.map(row=>[row.id,row]));
  const milestones=input.bindings.map(binding=>{
   const offset=input.milestoneStandard.offsets[binding.key]!;

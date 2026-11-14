@@ -2,7 +2,7 @@
 
 长期入口为根AGENTS V3.1；仅增强原`pr-gate-controller.mjs request-final`，不改CI运行时、权限、保护或流水线。已有引用的观察不要求补包。新引用的preview和apply均在POST之前验证；失败合并输出具体问题，禁止创建引用。
 
-冻结候选、light成功、唯一必要Review及集中修复后，由任务确定的收口负责人完成具体结论，执行者准备外置JSON并运行：
+冻结候选、保留首次 Light 的真实结果、唯一必要 Review 及集中修复后，由任务确定的收口负责人完成具体结论，执行者准备外置JSON并运行：
 
 `node scripts/ci/pr-gate-controller.mjs request-final --pr <PR> --head <完整SHA> --closeout /绝对路径/closeout.json`
 
@@ -14,7 +14,7 @@ JSON字段：
 |---|---|
 |version|1|
 |repository/pr/head/base/baseRef/kind|与实时PR及原控制器plan逐字一致|
-|constructionEvidenceSha256/sourceFingerprint|从准确head的现有construction-evidence原始字节与字段取得；原light已核源码/证据，控制器通过原API重读固定head记录，拒绝本地替换|
+|constructionEvidenceSha256/sourceFingerprint|从准确head的现有construction-evidence原始字节与字段取得；首次 Light 不要求成功或匹配当前 head；控制器通过原 API 重读固定 head 记录，拒绝本地替换|
 |decision|具体本批结论，20–4000字符；不冒称可验证作者身份|
 |review|原reviewFor的required与reviewedHead；不需Review时理由/授权逐字一致且有界，不能豁免FULL或已有Review|
 |findings|固定已知发现；id/source/status=closed/conclusion/checkId/testNames。GitHub Codex已知发现还需reviewCommentId；不可遗漏。人工发现完整性由收口负责人负责|

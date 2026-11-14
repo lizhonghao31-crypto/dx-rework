@@ -1,3 +1,4 @@
+import {OrderTimePlanRepository} from './order-time-plan-repository.js';
 import {createHash,randomUUID} from 'node:crypto';
 import {readBulkPreshrinkRequirement} from './bulk-preshrink-requirement.js';
 import {z} from 'zod';
@@ -49,6 +50,7 @@ export class SeriesPlanService{
  private async history(db:DB,id:string):Promise<SeriesPlanSnapshot[]>{return (await db.query('SELECT snapshot_json FROM digital_series_plans WHERE production_order_id=$1 ORDER BY revision DESC',[id])).rows.map(r=>r.snapshot_json);}
  private async prepare(db:PoolClient,actor:TrustedActorContext,id:string,input:SeriesPreviewInput):Promise<SeriesPlanPreview>{
   const order=await this.order(db,actor,id),history=await this.history(db,id),previous=history[0]??null;
+  if((await new OrderTimePlanRepository(db).current({kind:'order',id}))?.input.frameworkPlans)fail('本单里程碑已采用统一时效，请从本单时效或原客户改期入口办理');
   if(order.version!==input.expectedOrderVersion||(previous?.revision??0)!==input.expectedPlanRevision)fail('订单或计划版本已更新，请重新预览');
   const profile=await this.profile(db,order.customer_code),native=await readSeriesPlanFacts(db,id,order.source_id,order.customer_code),time=await new ContextBusinessClock(this.database,db).read({kind:'order',id});
   const route=order.requires_color_matching===true?'A':order.requires_color_matching===false?'B':null;
@@ -108,13 +110,16 @@ export class SeriesPlanService{
  async preview(actor:TrustedActorContext,id:string,raw:unknown){const input=parse(SeriesPreviewInputSchema,raw),db=await this.database.connect();try{await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ');const p=await this.prepare(db,actor,id,input);await db.query('COMMIT');return p;}catch(e){await db.query('ROLLBACK');throw e;}finally{db.release();}}
  async read(actor:TrustedActorContext,id:string):Promise<SeriesPlanState>{const db=await this.database.connect();try{await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
   const order=await this.order(db,actor,id,true),history=await this.history(db,id),time=await new ContextBusinessClock(this.database,db).read({kind:'order',id}),active=await this.active(db,id);
-  const facts=(await readSeriesPlanFacts(db,id,order.source_id,order.customer_code)).facts,profile=await this.profile(db,order.customer_code),current=history[0]??null;
+  const adopted=await new OrderTimePlanRepository(db).current({kind:'order',id});
+  const sourceWork=adopted?.input.frameworkPlans?adopted.input.work.map(work=>work.canonicalWorkRef?.match(/^source:([^:]+):round:(\d+):/)).find(match=>match?.[1]===order.source_id):null;
+  const facts=(await readSeriesPlanFacts(db,id,order.source_id,order.customer_code,sourceWork?Number(sourceWork[2]):undefined)).facts,profile=await this.profile(db,order.customer_code),current=history[0]??null;
   const customerDates=(await db.query(`SELECT line_id AS "lineId",po_number AS "poNumber",color,coalesce(customer_warehouse_arrival_date,delivery_date)::text AS date,factory_delivery_date::text AS factory_date,customer_date_version AS version FROM digital_production_po_lines WHERE production_order_id=$1 ORDER BY position`,[id])).rows;
   const pending=(await db.query(`SELECT r.*,r.candidate_date::text AS candidate_date FROM digital_series_requests r LEFT JOIN digital_series_request_decisions d USING(request_id) WHERE r.production_order_id=$1 AND d.request_id IS NULL ORDER BY r.recorded_at DESC`,[id])).rows;
+  const framework=adopted?.input.frameworkPlans?{reference:adopted.id,revision:adopted.revision,effectiveAt:adopted.time.now,scopes:Object.entries(adopted.input.frameworkPlans).map(([scopeRef,plan])=>({scopeRef,lineId:adopted.input.scopes.find(scope=>scope.scopeRef===scopeRef)?.lineId??null,customerDate:plan.input.customerDelivery.date,dateSource:plan.input.customerDelivery.source,route:plan.input.route,milestones:plan.milestones}))}:undefined;
   const currentRisks:SeriesRisk[]=[];
-  if(current){for(const line of customerDates)if(line.date&&line.date<current.plannedShippingDate)currentRisks.push({code:'CUSTOMER_EARLIER_THAN_PLAN',tone:'danger',nodeId:null,message:`${line.poNumber??line.color} 客户约定出货 ${line.date} 早于当前计划 ${current.plannedShippingDate}；冲突仍在，未因采用或刷新消除`});
+  if(current&&!framework){for(const line of customerDates)if(line.date&&line.date<current.plannedShippingDate)currentRisks.push({code:'CUSTOMER_EARLIER_THAN_PLAN',tone:'danger',nodeId:null,message:`${line.poNumber??line.color} 客户约定出货 ${line.date} 早于当前计划 ${current.plannedShippingDate}；冲突仍在，未因采用或刷新消除`});
    if(current.salesYear!==order.sales_year||current.salesSeries!==order.sales_series||current.route!==(order.requires_color_matching===true?'A':order.requires_color_matching===false?'B':null))currentRisks.push({code:'SERIES_CONTEXT_CHANGED',tone:'warning',nodeId:null,message:'销售系列或设计对色分类已变，当前采用计划仍保留原版；请有权人员重新预览决定'});}
-  const result:SeriesPlanState={orderId:id,serverToday:beijingCalendarDate(new Date(time.now)),orderVersion:order.version,sourceId:order.source_id,canEditSeries:active&&await this.designer(db,actor,order),canApply:active&&await this.manager(db,actor),canRequest:active&&await this.requester(db,actor,order),active,
+  const result:SeriesPlanState={...(framework?{framework}:{}),orderId:id,serverToday:beijingCalendarDate(new Date(time.now)),orderVersion:order.version,sourceId:order.source_id,canEditSeries:active&&await this.designer(db,actor,order),canApply:active&&await this.manager(db,actor),canRequest:active&&await this.requester(db,actor,order),active,
    salesYear:order.sales_year,salesSeries:order.sales_series,requiresColorMatching:order.requires_color_matching,profile,customerDates,current,history,facts,risks:currentRisks,pendingRequests:pending.map(r=>({requestId:r.request_id,requestedBy:r.requested_by,reason:r.reason,candidateDate:r.candidate_date?String(r.candidate_date).slice(0,10):null,requestedAt:new Date(r.recorded_at).toISOString(),input:r.input_json,stale:r.order_version!==order.version||r.expected_plan_revision!==(current?.revision??0)}))};
   await db.query('COMMIT');return result;
  }catch(e){await db.query('ROLLBACK');throw e;}finally{db.release();}}
