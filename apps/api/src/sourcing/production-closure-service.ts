@@ -34,15 +34,15 @@ export class ProductionClosureService {
  private async rootActor(actor:TrustedActorContext) {return isRootActor(actor)||await this.root?.isRootUser(actor.actorId)===true;}
  private warehouse(actor:TrustedActorContext){return isRootActor(actor)||(hasWarehouseReceivingRole(actor.actorRoles)&&caps(actor).includes("receiving:create"));}
  async pilots(actor:TrustedActorContext){
-  if(!await this.rootActor(actor))fail("仅超级用户可设置生产试点");
+  if(!await this.rootActor(actor))fail("仅超级用户可设置生产风险提醒");
   const result=await this.database.query<{supplier_id:string;supplier_name:string;enabled:boolean}>(`SELECT DISTINCT ON(production.supplier_id) production.supplier_id,
    production.supplier_name_snapshot AS supplier_name,COALESCE(pilot.enabled,false) AS enabled FROM sourcing_production_factory_orders production
    LEFT JOIN sourcing_production_pilots pilot USING(supplier_id) WHERE ${productionNotExcluded} ORDER BY production.supplier_id,production.dispatched_at DESC,production.production_order_id`);
   return ProductionPilotListSchema.parse({suppliers:result.rows.map(r=>({supplierId:r.supplier_id,supplierName:r.supplier_name,enabled:r.enabled}))});
  }
  async setPilot(actor:TrustedActorContext,input:unknown){
-  if(!await this.rootActor(actor))fail("仅超级用户可设置生产试点");
-  const parsed=ProductionPilotInputSchema.safeParse(input);if(!parsed.success)fail("试点设置无效",400);
+  if(!await this.rootActor(actor))fail("仅超级用户可设置生产风险提醒");
+  const parsed=ProductionPilotInputSchema.safeParse(input);if(!parsed.success)fail("生产风险提醒设置无效",400);
   const {supplierId,enabled}=parsed.data,client=await this.database.connect();
   try{await client.query("BEGIN");await client.query("SELECT pg_advisory_xact_lock(hashtext('production-closure'))");
    const supplier=await client.query("SELECT 1 FROM supplier_catalog_items WHERE supplier_id=$1",[supplierId]);if(!supplier.rows[0])fail("供应商不存在",404);
@@ -131,11 +131,10 @@ export class ProductionClosureService {
   const matched=await client.query<{production_order_id:string;factory_decision_id:string|null;sourcing_line_position:number}>(`SELECT production.production_order_id,production.factory_decision_id,cutting.sourcing_line_position
    FROM cutting_orders cutting JOIN sourcing_production_factory_orders production ON production.sourcing_case_id=cutting.sourcing_case_id
    JOIN sourcing_production_shipments shipment ON shipment.production_order_id=production.production_order_id AND shipment.factory_decision_id IS NOT DISTINCT FROM production.factory_decision_id
-   JOIN sourcing_production_pilots pilot ON pilot.supplier_id=production.supplier_id AND pilot.enabled=true
    WHERE cutting.cutting_order_id=$1 AND shipment.shipped_on<=($2::timestamptz AT TIME ZONE 'Asia/Shanghai')::date
     AND ($3::uuid IS NULL OR production.production_order_id=$3) AND (NOT $4::boolean OR production.factory_decision_id IS NOT DISTINCT FROM $5::uuid)
     AND EXISTS(SELECT 1 FROM sourcing_factory_execution_lines(production.production_order_id,production.sourcing_decision_id) allocation WHERE allocation.position=cutting.sourcing_line_position AND allocation.quantity>0)
-    AND ${productionNotExcluded} ORDER BY shipment.shipped_on DESC,production.production_order_id LIMIT 2 FOR SHARE OF pilot`,
+    AND ${productionNotExcluded} ORDER BY shipment.shipped_on DESC,production.production_order_id LIMIT 2 FOR SHARE OF shipment`,
    [input.cuttingOrderId,input.receivedAt,input.productionOrderId??null,input.factoryDecisionId!==undefined,input.factoryDecisionId??null]);
   if(matched.rows.length>1)fail("该裁剪单有多个工厂发货，请选择本次到货工厂",409);
   const match=matched.rows[0];if(match?.factory_decision_id&&input.factoryDecisionId===undefined)fail("请明确选择本次到货加工厂",409);if(!match){if(input.productionOrderId||input.factoryDecisionId!==undefined)fail("所选工厂尚未发货或与该裁剪单不符",409);return null;}
@@ -147,10 +146,10 @@ export class ProductionClosureService {
   if(!z.string().uuid().safeParse(input.productionOrderId).success)fail("生产订单编号无效",400);
   const result=await client.query<{style_matches:boolean;shipped_on:string}>(`SELECT EXISTS(SELECT 1 FROM sourcing_style_aliases alias WHERE alias.sourcing_case_id=production.sourcing_case_id AND alias.position=COALESCE($3,1) AND upper(btrim(alias.style_no))=upper(btrim($2))) AS style_matches,shipment.shipped_on::text
    FROM sourcing_production_shipments shipment JOIN sourcing_production_factory_orders production ON production.production_order_id=shipment.production_order_id AND production.factory_decision_id IS NOT DISTINCT FROM shipment.factory_decision_id
-   JOIN sourcing_production_pilots pilot USING(supplier_id) WHERE shipment.production_order_id=$1 AND shipment.factory_decision_id IS NOT DISTINCT FROM $4::uuid AND ${productionNotExcluded} AND pilot.enabled=true
-   AND EXISTS(SELECT 1 FROM sourcing_factory_execution_lines(production.production_order_id,production.sourcing_decision_id) allocation WHERE allocation.position=COALESCE($3,1) AND allocation.quantity>0) FOR SHARE OF pilot`,
+   WHERE shipment.production_order_id=$1 AND shipment.factory_decision_id IS NOT DISTINCT FROM $4::uuid AND ${productionNotExcluded}
+   AND EXISTS(SELECT 1 FROM sourcing_factory_execution_lines(production.production_order_id,production.sourcing_decision_id) allocation WHERE allocation.position=COALESCE($3,1) AND allocation.quantity>0) FOR SHARE OF shipment`,
    [input.productionOrderId,input.styleNo,input.sourcePosition??null,input.factoryDecisionId??null]);
-  const shipment=result.rows[0];if(!shipment)fail("该工厂未发货或未启用试点",409);
+  const shipment=result.rows[0];if(!shipment)fail("该工厂尚未有效发货",409);
   const day=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(input.receivedAt));
   if(!shipment.style_matches||day<shipment.shipped_on)fail("收货款号或日期与所选发货单不符",409);
   await client.query("INSERT INTO sourcing_production_receipt_links(receipt_id,production_order_id,operation_event_id,factory_decision_id) VALUES($1,$2,$3,$4)",[input.receiptId,input.productionOrderId,input.operationEventId,input.factoryDecisionId??null]);
@@ -173,7 +172,7 @@ export class ProductionClosureService {
   const q=input.q?.trim()??"",page=input.page??1;if(q.length>100||!Number.isInteger(page)||page<1||page>100000)fail("回货筛选无效",400);
   if(input.cuttingOrderId&&!z.string().uuid().safeParse(input.cuttingOrderId).success)fail("裁剪单编号无效",400);
   const where=`FROM sourcing_production_shipments shipment JOIN sourcing_production_factory_orders production ON production.production_order_id=shipment.production_order_id AND production.factory_decision_id IS NOT DISTINCT FROM shipment.factory_decision_id
-   JOIN sourcing_production_pilots pilot USING(supplier_id) WHERE pilot.enabled=true AND ${productionNotExcluded}
+   WHERE ${productionNotExcluded}
    AND ($1='' OR EXISTS(SELECT 1 FROM sourcing_style_aliases alias WHERE alias.sourcing_case_id=production.sourcing_case_id AND alias.position=1 AND strpos(upper(alias.style_no),upper($1))>0) OR strpos(upper(production.supplier_name_snapshot),upper($1))>0)
    AND ($2::uuid IS NULL OR EXISTS(SELECT 1 FROM cutting_orders cutting JOIN sourcing_factory_execution_lines(production.production_order_id,production.sourcing_decision_id) allocation ON allocation.position=cutting.sourcing_line_position AND allocation.quantity>0
      WHERE cutting.cutting_order_id=$2 AND cutting.sourcing_case_id=production.sourcing_case_id))`;

@@ -1,3 +1,5 @@
+import {ProductionClosureService} from '../../apps/api/src/sourcing/production-closure-service.js';
+import {registerProductionClosureRoutes} from '../../apps/api/src/sourcing/production-closure-routes.js';
 import {BulkWashingService} from '../../apps/api/src/production-platform/bulk-washing-service.js';
 import {DigitalQuotationService} from '../../apps/api/src/production-platform/quotation-service.js';
 import assert from 'node:assert/strict';
@@ -56,6 +58,7 @@ export async function supplychainSettingsBrowser(url:string,evidence:string,opti
   const orderTimeRequests=options?.orderTimeFlow?new OrderTimeRequestService(db,orderTimeNativeExecutor(db,true,patternOrders)):undefined;
   let controlToken:string|undefined;
   if(options?.orderTimeFlow){registerAcceptanceClockRoutes(app,f.runtime,auth,root);controlToken=await auth.beginAcceptanceControl(mintAcceptanceControlCode(secret));registerPatternRoomPriceRoutes(app,{authenticate:token=>auth.authenticate(token),root,service:new PatternRoomPriceService(db)});registerTodoRoutes(app,{authenticate:token=>auth.authenticate(token),root,service:todos!});}
+  registerProductionClosureRoutes(app,{authenticate:token=>auth.authenticate(token),root,service:new ProductionClosureService(db,root)});
   registerDigitalIdentityRoutes(app,{bulkWashing:options?.fullApp?new BulkWashingService(db):undefined,service:new DigitalProductionIdentityService(db,true),quotationService:options?.fullApp?new DigitalQuotationService(db,true):undefined,creationEnabled:true,root,authenticate:token=>auth.authenticate(token),accessService:new DigitalProductionAccessService(db),taskService:new DigitalProductionTaskService(db,secret,options?.orderTimeModel),developmentService:new DigitalDevelopmentService(db,true,patternOrders),developmentExecution:new DevelopmentExecutionService(db,true,patternOrders),developmentAttachments:f.attachments,readinessService:new ProductionReadinessService(db),journeys:new DigitalJourneyQuery(db),...(options?.fullApp?{deliveryCalendar:new DeliveryCalendarQuery(db)}:{}),seriesPlans:new SeriesPlanService(db,secret),shortLead:new ShortLeadService(db),...(orderTimeRequests?{orderTimeRequests,notificationService:notifications!,instructionService:new ProductionInstructionService(db,true),developmentRounds:new DevelopmentRoundService(db,true,patternOrders)}:{})});
   // Unrelated navigation indicator is a clearly labelled TEST response.
   if(!options?.orderTimeFlow)app.get('/todos/mine/indicator',async(request,reply)=>{const user=await auth.authenticate(request.headers.cookie?.split(';').map(v=>v.trim()).find(v=>v.startsWith('dx_rework_session='))?.slice(18));reply.header('x-dx-rework-actor-id',user.id);return {pendingCount:0,unreadCount:0};});

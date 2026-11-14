@@ -126,6 +126,30 @@ const url=process.env.ACCEPTANCE_CLOCK_TEST_DATABASE_URL??process.env.TEST_DATAB
   const list=await new DigitalJourneyQuery(f.db).list(f.root,JourneyFilterSchema.parse({scope:'production'}));
   for(const order of orders){const item=list.items.find(i=>i.orderId===order.id)!;expect(item.supervision!.nodes.find(n=>n.id.startsWith('return_logistics:'))!.logisticsWindows![0]!.shippedOn).toBe(order.day);if(order.scene)expect(item.supervision!.asOf).toBe(order.at);}
  },testExecutionConfig.correctnessTimeoutMs);
+ it('matches shared cutting receipts to the explicit shipped factory even when both supplier pilots are off',async()=>{
+  const ctx=await context('2026-11-24T09:00:00.000Z'),r=await prepare(ctx.run);
+  const supplier=await f.access.createSupplier(f.root,CreateSupplierSchema.parse({supplierCode:`TEST-${randomUUID().slice(0,8).toUpperCase()}`,supplierType:'factory',supplierName:'TEST nonpilot transfer factory',address:'TEST',contractEntityName:'TEST',partyBRepresentative:'TEST',payeeName:'TEST',bankAccount:'TEST0002',bankName:'TEST',changeReason:'TEST receipt factory isolation'}));
+  await ctx.run(async()=>{
+   const closure=new ProductionClosureService(f.db),reports=new ProductionReportingService(f.db),receiver={...f.people.warehouse!,authorizationCapability:'receiving:create',authorizationCapabilities:['receiving:create']},service=new ReceivingService(f.db,undefined,undefined,closure);
+   await closure.setPilot(f.root,{supplierId:f.supplierId,enabled:false});
+   await reports.report(f.root,r.productionId,{position:1,businessDate:r.day,quantity:2},randomUUID());
+   await f.sourcing.requestFactoryChange(f.people['production-management']!,r.caseId,{supplierId:supplier.supplierId,unitPrice:'6',changeReason:'TEST transfer remaining eight'},randomUUID());
+   const request=(await f.sourcing.getCurrentFactoryChange({...f.root,authorizationCapability:'sourcing:view'},r.caseId)).item!;
+   const changed=await f.sourcing.decideFactoryChange(f.people.owner!,r.caseId,request.factoryChangeRequestId,{decision:'approved',verificationReason:'TEST receipt split scope'},randomUUID()),factoryDecisionId=changed.value.decision!.sourcingDecisionId;
+   await reports.execute(f.root,r.productionId,'complete',{factoryDecisionId:null,businessDate:r.day,confirmed:true},randomUUID());
+   await reports.execute(f.root,r.productionId,'ship',{factoryDecisionId:null,businessDate:r.day,confirmed:true},randomUUID());
+   await ship(r,factoryDecisionId,[8]);
+   expect((await closure.expected(receiver,{cuttingOrderId:r.cuts[0].cutting_order_id})).items.map(row=>row.factoryDecisionId)).toEqual(expect.arrayContaining([null,factoryDecisionId]));
+   const body={cuttingOrderId:r.cuts[0].cutting_order_id,documentQuantity:2,actualQuantity:2,attachmentIds:[await f.image(receiver)]};
+   await expect(service.create(receiver,body,randomUUID())).rejects.toMatchObject({statusCode:409});
+   await expect(service.create(receiver,{...body,productionOrderId:r.productionId,factoryDecisionId:randomUUID()},randomUUID())).rejects.toMatchObject({statusCode:409});
+   expect((await f.db.query('SELECT 1 FROM sourcing_production_receipt_links WHERE production_order_id=$1',[r.productionId])).rowCount).toBe(0);
+   const original=await service.create(receiver,{...body,productionOrderId:r.productionId,factoryDecisionId:null},randomUUID());
+   const current=await service.createRepeated(receiver,{cuttingOrderId:r.cuts[0].cutting_order_id,receivingBatchId:original.value.receivingBatchId,source:'other_factory',documentQuantity:8,actualQuantity:8,productionOrderId:r.productionId,factoryDecisionId},randomUUID());
+   expect((await closure.receiptSummary(f.root,r.productionId,null)).shipment?.receipts.map(row=>row.receiptId)).toEqual([original.value.receiptId]);
+   expect((await closure.receiptSummary(f.root,r.productionId,factoryDecisionId)).shipment?.receipts.map(row=>row.receiptId)).toEqual([current.value.receiptId]);
+  });
+ });
  it('R5 exposes the current approved factory after all original allocation is transferred',async()=>{
   const ctx=await context('2026-11-24T09:00:00.000Z'),r=await prepare(ctx.run);
   const supplier=await f.access.createSupplier(f.root,CreateSupplierSchema.parse({supplierCode:`TEST-${randomUUID().slice(0,8).toUpperCase()}`,supplierType:'factory',supplierName:'TEST current factory after full transfer',address:'TEST',contractEntityName:'TEST',partyBRepresentative:'TEST',payeeName:'TEST',bankAccount:'TEST0002',bankName:'TEST',changeReason:'TEST original factory zero allocation'}));

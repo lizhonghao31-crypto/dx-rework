@@ -12,9 +12,10 @@ import './order-time-settings.css';
 // three approved business workspaces below.
 export type SlaSettingsTab='standard'|'reminders'|'development';
 const noAuthorityChange=()=>undefined;
-const tabs=[['settings','时效设置'],['calculation','时效演算'],['customers','客户跟单'],['crafts','特殊工艺库']] as const;
-type Tab=typeof tabs[number][0];
-function SettingsWorkspaces({readOnly,customerControl,onAuthorityChanged,onHistoryChange}:{readOnly:boolean;customerControl?:ReactNode;onAuthorityChanged():void;onHistoryChange?(open:boolean):void}){
+const baseTabs=[['settings','时效设置'],['calculation','时效演算'],['customers','客户跟单'],['crafts','特殊工艺库']] as const;
+type Tab=typeof baseTabs[number][0]|'risks';
+function SettingsWorkspaces({readOnly,customerControl,riskControl,onAuthorityChanged,onHistoryChange}:{readOnly:boolean;customerControl?:ReactNode;riskControl?:ReactNode;onAuthorityChanged():void;onHistoryChange?(open:boolean):void}){
+ const tabs:readonly (readonly [Tab,string])[]=riskControl?[...baseTabs,['risks','生产风险提醒']]:baseTabs;
  const [tab,setTab]=useState<Tab>('settings'),[calculationVisited,setCalculationVisited]=useState(false),[historyOpen,setHistoryOpen]=useState(false),[craftsVisited,setCraftsVisited]=useState(false);
  const [timeSettings,setTimeSettings]=useState<OrderTimeSettingsRead|null>(null),[timeError,setTimeError]=useState(''),[reload,setReload]=useState(0);
  useEffect(()=>{let live=true;const controller=new AbortController();setTimeError('');void digitalRequest<OrderTimeSettingsRead>('order-time-settings','GET',undefined,undefined,{signal:controller.signal}).then(value=>{if(live)setTimeSettings(value);}).catch(reason=>{if(live&&reason.name!=='AbortError'){setTimeError(reason.message);if(reason instanceof DigitalRequestError&&[401,403].includes(reason.status??0))onAuthorityChanged();}});return()=>{live=false;controller.abort();};},[reload,onAuthorityChanged]);
@@ -25,6 +26,7 @@ function SettingsWorkspaces({readOnly,customerControl,onAuthorityChanged,onHisto
    const next=event.key==='ArrowRight'?(index+1)%tabs.length:event.key==='ArrowLeft'?(index+tabs.length-1)%tabs.length:event.key==='Home'?0:event.key==='End'?tabs.length-1:null;
    if(next!==null){event.preventDefault();const value=tabs[next]![0];setTab(value);if(value==='crafts')setCraftsVisited(true);if(value==='calculation')setCalculationVisited(true);document.getElementById('sla-tab-'+value)?.focus();}
   }} onClick={()=>{setTab(key);if(key==='crafts')setCraftsVisited(true);if(key==='calculation')setCalculationVisited(true);}}>{label}</button>)}</div></nav>
+  {riskControl&&<div role="tabpanel" id="sla-panel-risks" aria-labelledby="sla-tab-risks" hidden={tab!=='risks'}>{tab==='risks'&&riskControl}</div>}
   {timeError&&<p role="alert">{timeError}<button type="button" className="r5-link" onClick={()=>setReload(v=>v+1)}>重试</button></p>}
   {!timeSettings&&!timeError&&<p role="status">正在读取设置…</p>}
   <div role="tabpanel" id="sla-panel-settings" aria-labelledby="sla-tab-settings" hidden={tab!=='settings'}>{timeSettings&&(enhanced?<OrderTimeStandardEditor initial={timeSettings} readOnly={readOnly} onAuthorityChanged={onAuthorityChanged} onSaved={setTimeSettings}/>:<SlaSettingsSetEditor readOnly={readOnly} onAuthorityChanged={onAuthorityChanged} onHistoryChange={setHistoryOpen}/>)}</div>
@@ -33,8 +35,8 @@ function SettingsWorkspaces({readOnly,customerControl,onAuthorityChanged,onHisto
   <div role="tabpanel" id="sla-panel-customers" aria-labelledby="sla-tab-customers" hidden={tab!=='customers'}>{customerControl??<p>当前岗位无权读取客户跟单配置。</p>}</div>
  </div>;
 }
-export function SlaSettingsWorkspace({readOnly=false,customerControl,onAuthorityChanged=noAuthorityChange,onHistoryChange}:{readOnly?:boolean;customerControl?:ReactNode;onAuthorityChanged?():void;onHistoryChange?(open:boolean):void}){
+export function SlaSettingsWorkspace({readOnly=false,customerControl,riskControl,onAuthorityChanged=noAuthorityChange,onHistoryChange}:{readOnly?:boolean;customerControl?:ReactNode;riskControl?:ReactNode;onAuthorityChanged?():void;onHistoryChange?(open:boolean):void}){
  const [identity,setIdentity]=useState(sessionCacheVersion);
  useEffect(()=>registerSessionInvalidator(()=>setIdentity(sessionCacheVersion())),[]);
- return <SettingsWorkspaces key={identity} readOnly={readOnly} customerControl={customerControl} onAuthorityChanged={onAuthorityChanged} {...(onHistoryChange?{onHistoryChange}:{})}/>;
+ return <SettingsWorkspaces key={identity} readOnly={readOnly} customerControl={customerControl} riskControl={riskControl} onAuthorityChanged={onAuthorityChanged} {...(onHistoryChange?{onHistoryChange}:{})}/>;
 }

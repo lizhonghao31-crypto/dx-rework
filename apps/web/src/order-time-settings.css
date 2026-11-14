@@ -134,3 +134,7 @@
 @media(max-width:850px){.r5-settings-grid{grid-template-columns:1fr}.r5-current-settings{justify-content:flex-start;position:static;margin-bottom:12px}.r5-calculation-kpis{gap:7px}.r5-calculation-kpis>div{padding:10px}.r5-calculation-kpis strong{font-size:19px}.r5-table-scroll{max-height:490px}.r5-workspace-tabs{gap:5px}.r5-workspace-tabs button{min-width:0;flex:1;padding:8px 10px}.r5-customer-assignment{grid-template-columns:100px minmax(0,1fr)}.r5-customer-dialog{padding:19px}.r5-calculation-assumptions{padding:10px}.r5-po-condition{flex-wrap:wrap}}
 
 .r5-special-stages{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}.r5-special-stages fieldset{min-width:0}.r5-special-stages label{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin:.5rem 0}.r5-special-stages input[type=number]{width:7rem}@media(max-width:650px){.r5-special-stages{grid-template-columns:1fr}}
+
+.r5-risk-settings-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:16px}
+.r5-risk-settings-grid label{display:grid;gap:8px;min-width:0;overflow-wrap:anywhere}
+.r5-risk-settings-grid select{width:100%}
