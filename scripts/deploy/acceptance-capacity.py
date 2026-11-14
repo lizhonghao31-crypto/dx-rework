@@ -2,6 +2,8 @@
 """Read-only, staged Acceptance capacity budget. Python 3.6, no env bypass."""
 import argparse
 import datetime
+import hashlib
+import subprocess
 import json
 import os
 from pathlib import Path
@@ -34,6 +36,73 @@ def tree_bytes(directory, excluded=()):
             info = os.stat(path)
             total += max(info.st_size, getattr(info, 'st_blocks', 0) * 512, 4096)
     return total
+
+
+def verified_candidate(directory, sha, source):
+    """Sizing evidence only; worker still verifies runtime, identity and schema.
+
+    Never credit an unverified directory or a manifest-only stub as reusable.
+    Hash the complete packaged file set, including provenance and nested sums.
+    """
+    root = Path(directory)
+    if not root.exists():
+        return False
+    if root.is_symlink() or not root.is_dir():
+        raise ValueError('Unsafe existing candidate')
+    sums = root / 'SHA256SUMS'
+    expected = {}
+    for line in sums.read_text().splitlines():
+        match = re.fullmatch(r'([0-9a-f]{64}) [ *](.+)', line)
+        if not match:
+            raise ValueError('Invalid candidate checksums')
+        name = match.group(2)
+        path = Path(name)
+        if path.is_absolute() or '..' in path.parts or name in expected:
+            raise ValueError('Unsafe candidate checksum path')
+        expected[name] = match.group(1)
+    actual = set()
+    for parent, dirs, names in os.walk(str(root), followlinks=False):
+        if any((Path(parent) / name).is_symlink() for name in dirs + names):
+            raise ValueError('Candidate contains a symlink')
+        for name in names:
+            file = Path(parent) / name
+            relative = str(file.relative_to(root))
+            if relative == 'SHA256SUMS':
+                continue
+            actual.add(relative)
+            digest = hashlib.sha256()
+            with file.open('rb') as stream:
+                for block in iter(lambda: stream.read(1024 * 1024), b''):
+                    digest.update(block)
+            if expected.get(relative) != digest.hexdigest():
+                raise ValueError('Candidate checksum mismatch: ' + relative)
+    if actual != set(expected) or not actual:
+        raise ValueError('Incomplete candidate checksums')
+    for part in ('', 'api', 'frontend'):
+        manifest = json.loads((root / part / 'release-manifest.json').read_text())
+        if manifest.get('gitSha') != sha or manifest.get('appBasePath') != '/acceptance/':
+            raise ValueError('Candidate SHA/base path mismatch')
+    provenance = json.loads((root / 'build-provenance.json').read_text())
+    if provenance.get('sourceSha') != sha or provenance.get('frontendSourceSha') != sha or provenance.get('frontendBuilt') is not True:
+        raise ValueError('Candidate provenance mismatch')
+    for name in ('package-lock.json', 'apps/api/src/platform/migration-manifest.json'):
+        if (root / 'api' / name).read_bytes() != (Path(source) / name).read_bytes():
+            raise ValueError('Candidate differs from pinned source: ' + name)
+    return True
+
+
+def installed_allocation(source, destination):
+    """install-release refuses a different existing immutable destination."""
+    destination = Path(destination)
+    if not destination.exists() and not destination.is_symlink():
+        return tree_bytes(source)
+    if destination.is_symlink() or not destination.is_dir():
+        raise ValueError('Unsafe installed release')
+    result = subprocess.run(['diff', '-qr', '--no-dereference', str(source), str(destination)],
+                            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    if result.returncode:
+        raise ValueError('Existing installed release differs from candidate')
+    return 0
 
 
 def git_bytes(repository):
@@ -81,6 +150,27 @@ def filesystem(path):
             'available': space.f_bavail * space.f_frsize, 'total': space.f_blocks * space.f_frsize}
 
 
+def schema_unchanged(source, storage):
+    # Missing evidence is deliberately the conservative migration branch. Equal
+    # version numbers alone are insufficient: every applied checksum must match.
+    file = Path(source) / 'apps/api/src/platform/migration-manifest.json'
+    history = storage.get('migrations')
+    if not file.is_file() or not isinstance(history, list) or not history:
+        return False
+    target = json.loads(file.read_text()).get('migrations')
+    if not isinstance(target, list) or not target:
+        return False
+    def normalize(rows):
+        result = {}
+        for row in rows:
+            version, checksum = row.get('version'), row.get('checksum')
+            if not isinstance(version, str) or not re.fullmatch(r'[0-9a-f]{64}', checksum or '') or version in result:
+                raise ValueError('Invalid migration sizing evidence')
+            result[version] = checksum
+        return result
+    return normalize(target) == normalize(history)
+
+
 def components(phase, source, tool, storage=None, tree_file=None, target_sha=None):
     if phase not in PHASES:
         raise ValueError('Unknown capacity phase')
@@ -89,7 +179,8 @@ def components(phase, source, tool, storage=None, tree_file=None, target_sha=Non
                           tree_bytes(tool, ('.git', 'node_modules', 'dist')))))
     dependency_roots = (Path(REPOSITORY), Path(ROOT) / 'current')
     dependency_sizes = [tree_bytes(root / 'node_modules') for root in dependency_roots]
-    target = Path(tool) / 'package-lock.json'
+    # Build from the pinned source, not the possibly older installed tool.
+    target = Path(source if phase == 'build' else tool) / 'package-lock.json'
     matched_sizes = []
     if target.is_file():
         target_lock = target.read_bytes()
@@ -103,16 +194,21 @@ def components(phase, source, tool, storage=None, tree_file=None, target_sha=Non
     measured = max(matched_sizes or dependency_sizes)
     dependency_size = max(512 * MIB if matched_sizes else 2 * GIB,
                           (3 * measured + 1) // 2)
-    output_size = max(256 * MIB, 2 * (tree_bytes(Path(ROOT) / 'current/apps/api/dist') +
-                                     tree_bytes(Path(ROOT) / 'frontend/current')))
+    api_output = max(128 * MIB, 2 * (tree_bytes(Path(ROOT) / 'current/apps/api/dist') +
+                                         tree_bytes(Path(ROOT) / 'current/packages')))
+    web_output = max(128 * MIB, 2 * tree_bytes(Path(ROOT) / 'frontend/current'))
+    output_size = api_output + web_output
     items = []
     build = Path(ROOT) / 'build' / ('update-' + target_sha) if target_sha else Path(ROOT) / 'build'
     candidate = Path(ROOT) / 'candidates' / target_sha if target_sha else Path(ROOT) / 'candidates'
     release = Path(ROOT) / 'releases' / target_sha if target_sha else Path(ROOT) / 'releases'
     frontend = Path(ROOT) / 'frontend/releases' / target_sha if target_sha else Path(ROOT) / 'frontend/releases'
 
-    def add(name, path, size):
-        items.append({'name': name, 'paths': [str(path)], 'bytesPerFilesystem': size})
+    def add(name, path, size, stages=None):
+        item = {'name': name, 'paths': [str(path)], 'bytesPerFilesystem': size}
+        if stages is not None:
+            item['stages'] = stages
+        items.append(item)
 
     if phase == 'install':
         add('immutable tool staging and entry backup', TOOLS, 2 * source_size + 32 * MIB)
@@ -125,14 +221,27 @@ def components(phase, source, tool, storage=None, tree_file=None, target_sha=Non
     if phase.startswith('diagnose-'):
         return items
     if phase in ('download', 'archive'):
-        add('possible immutable data-only tool staging', TOOLS, 2 * source_size)
+        marker = Path(tool) / 'TOOL_SHA'
+        # The controller skips refresh altogether for this exact tool version.
+        if not target_sha or not marker.is_file() or marker.read_text().strip() != target_sha:
+            add('possible immutable data-only tool staging', TOOLS, 2 * source_size)
+    candidate_reused = False
     if phase == 'build':
-        add('build source/dependencies/output', build, source_size + dependency_size + output_size)
-        add('candidate bundle staging', candidate, source_size + dependency_size + output_size)
-        add('installed API release with old generation retained', release, source_size + dependency_size + output_size)
-        add('installed frontend release with old generation retained', frontend, output_size)
-        add('npm locked-package cache', Path(ROOT) / 'build/npm-cache', dependency_size)
-        add('npm/build extraction temporary set', Path(ROOT) / 'build/tmp', dependency_size)
+        candidate_reused = bool(target_sha and verified_candidate(candidate, target_sha, source))
+        if candidate_reused:
+            # Existing bytes already reduce statvfs.available. Only missing
+            # installed copies allocate space; existing copies must be identical.
+            add('installed API release with old generation retained', release,
+                installed_allocation(candidate / 'api', release), ['install', 'database'])
+            add('installed frontend release with old generation retained', frontend,
+                installed_allocation(candidate / 'frontend', frontend), ['install', 'database'])
+        else:
+            add('build source/dependencies/output', build, source_size + dependency_size + output_size)
+            add('candidate bundle staging', candidate, source_size + dependency_size + output_size)
+            add('installed API release with old generation retained', release, source_size + dependency_size + api_output, ['install', 'database'])
+            add('installed frontend release with old generation retained', frontend, web_output, ['install', 'database'])
+            add('npm locked-package cache', Path(ROOT) / 'build/npm-cache', dependency_size)
+            add('npm/build extraction temporary set', Path(ROOT) / 'build/tmp', dependency_size, ['build'])
     if not storage or storage.get('database') != 'dx_rework_acceptance':
         raise ValueError('Pinned Acceptance storage metadata is required')
     size = integer(storage.get('databaseBytes'), 'databaseBytes')
@@ -149,13 +258,29 @@ def components(phase, source, tool, storage=None, tree_file=None, target_sha=Non
             if not isinstance(storage.get(key), str) or not os.path.isabs(storage[key]):
                 raise ValueError('Invalid PostgreSQL storage path: ' + key)
         return items
+    unchanged = schema_unchanged(source, storage)
+    verification_only = (phase == 'build' and candidate_reused and unchanged and
+                         (Path(ROOT) / 'current').resolve() == release.resolve() and
+                         (Path(ROOT) / 'frontend/current').resolve() == frontend.resolve())
+    if verification_only:
+        # The worker's existing same-SHA/current-schema policy can only verify
+        # or reactivate (or reject an invalid PM2 state), never run a backup or
+        # migration. Keep filesystem headroom checks, not imaginary copies.
+        items.append({'name': 'unchanged database operating headroom', 'paths': paths, 'bytesPerFilesystem': 0})
+        for key in ('walPath', 'logPath'):
+            if not isinstance(storage.get(key), str) or not os.path.isabs(storage[key]):
+                raise ValueError('Invalid PostgreSQL storage path: ' + key)
+            add('unchanged ' + key + ' operating headroom', storage[key], 0)
+        add('Acceptance update/runtime logs', Path(ROOT) / 'logs', 128 * MIB)
+        return items
     if phase != 'stop':
-        add('new consistent backup temporary set', Path(ROOT) / 'backups/postgres', 2 * size + 256 * MIB)
-    items.append({'name': 'database rewrite per data filesystem', 'paths': paths, 'bytesPerFilesystem': 2 * size + 256 * MIB})
+        add('new consistent backup temporary set', Path(ROOT) / 'backups/postgres', 2 * size + 256 * MIB, ['database'] if phase == 'build' else None)
+    items.append({'name': 'database rewrite per data filesystem', 'paths': paths, 'bytesPerFilesystem': 0 if unchanged else 2 * size + 256 * MIB,
+                  **({'stages': ['database']} if phase == 'build' else {})})
     for key in ('walPath', 'logPath'):
         if not isinstance(storage.get(key), str) or not os.path.isabs(storage[key]):
             raise ValueError('Invalid PostgreSQL storage path: ' + key)
-    add('WAL growth and retained segments', storage['walPath'], 2 * max(size, wal) + GIB)
+    add('WAL growth and retained segments', storage['walPath'], 256 * MIB if unchanged else 2 * max(size, wal) + GIB, ['database'] if phase == 'build' else None)
     add('PostgreSQL logs', storage['logPath'], max(256 * MIB, size // 4))
     add('Acceptance update/runtime logs', Path(ROOT) / 'logs', 128 * MIB)
     return items
@@ -179,12 +304,24 @@ def plan(items, probe=filesystem):
             volume['totalBytes'] = min(volume['totalBytes'], total)
             volume['paths'].append({'path': path, 'probe': measured['probe']})
             if key not in seen:
-                volume['components'].append({'name': item['name'], 'bytes': amount})
+                component = {'name': item['name'], 'bytes': amount}
+                if 'stages' in item:
+                    if not item['stages'] or any(stage not in ('build', 'install', 'database') for stage in item['stages']):
+                        raise ValueError('Invalid capacity lifecycle stage')
+                    component['stages'] = item['stages']
+                volume['components'].append(component)
                 seen.add(key)
     for volume in volumes.values():
         margin = max(512 * MIB, min(2 * GIB, (volume['totalBytes'] + 19) // 20))
         volume['components'].append({'name': 'filesystem operating headroom', 'bytes': margin})
-        volume['requiredAdditionalBytes'] = sum(item['bytes'] for item in volume['components'])
+        stages = sorted({stage for item in volume['components'] for stage in item.get('stages', [])})
+        if stages:
+            volume['stageAdditionalBytes'] = {stage: sum(item['bytes'] for item in volume['components']
+                                                        if 'stages' not in item or stage in item['stages'])
+                                              for stage in stages}
+            volume['requiredAdditionalBytes'] = max(volume['stageAdditionalBytes'].values())
+        else:
+            volume['requiredAdditionalBytes'] = sum(item['bytes'] for item in volume['components'])
         volume['shortfallBytes'] = max(0, volume['requiredAdditionalBytes'] - volume['availableBytes'])
     return list(volumes.values())
 

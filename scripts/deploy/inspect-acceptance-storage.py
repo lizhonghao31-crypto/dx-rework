@@ -41,7 +41,7 @@ def identity_values(identity):
     return port, oid
 
 
-def storage_query(identity):
+def storage_query(identity, with_history=False):
     port, oid = identity_values(identity)
     # No caller SQL, identifiers, URLs, GUC proof or role changes. Search path is
     # pinned to pg_catalog by the command. Runtime receives no extra privilege.
@@ -50,6 +50,7 @@ def storage_query(identity):
       'oid',d.oid::bigint,'storageRole',current_user,
       'serverVersion',current_setting('server_version_num')::integer,
       'databaseBytes',pg_database_size(d.oid),
+      %s
       'dataDirectory',current_setting('data_directory'),
       'maxWalBytes',pg_size_bytes(current_setting('max_wal_size')),
       'logDirectory',current_setting('log_directory'),
@@ -58,16 +59,16 @@ def storage_query(identity):
         FROM pg_class c WHERE pg_relation_filepath(c.oid) IS NOT NULL) paths))
       FROM pg_database d WHERE d.datname=current_database()
       AND current_database()='dx_rework_acceptance' AND current_user='postgres'
-      AND d.oid::bigint=%d AND current_setting('port')::integer=%d""" % (oid, port)
+      AND d.oid::bigint=%d AND current_setting('port')::integer=%d""" % ("'migrations',(SELECT coalesce(json_agg(json_build_object('version',version,'checksum',btrim(checksum)) ORDER BY version),'[]'::json) FROM public.schema_migrations)," if with_history else '', oid, port)
 
 
-def collect(identity, psql, run=subprocess.run):
+def collect(identity, psql, run=subprocess.run, with_history=False):
     port, oid = identity_values(identity)
     result = run(['runuser', '-u', 'postgres', '--', 'env', '-i', 'PATH=/usr/bin:/bin',
                   'PGCONNECT_TIMEOUT=10', 'PGOPTIONS=-c default_transaction_read_only=on -c statement_timeout=10000 -c lock_timeout=3000',
                   psql, '-XqAt', '--port=' + str(port), '--dbname=dx_rework_acceptance',
                   '-v', 'ON_ERROR_STOP=1', '-c', 'BEGIN READ ONLY',
-                  '-c', 'SET LOCAL search_path=pg_catalog', '-c', storage_query(identity), '-c', 'COMMIT'],
+                  '-c', 'SET LOCAL search_path=pg_catalog', '-c', storage_query(identity, with_history), '-c', 'COMMIT'],
                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, timeout=15)
     if result.returncode:
         raise ValueError('Fixed read-only Acceptance storage inspection failed; no privileges changed')
@@ -99,6 +100,9 @@ def collect(identity, psql, run=subprocess.run):
 
 
 def main(argv, owner_uid=0, psql=None):
+    with_history = len(argv) == 3 and argv[2] == '--with-history'
+    if with_history:
+        argv = argv[:2]
     if os.getuid() != owner_uid or len(argv) != 2:
         raise ValueError('Storage inspection requires the root controller and pinned identity/output files')
     identity_file, output = map(Path, argv)
@@ -109,7 +113,7 @@ def main(argv, owner_uid=0, psql=None):
     identity_values(identity)
     if str(output) == '--validate-only':
         return
-    value = collect(identity, psql or trusted_psql(owner_uid=owner_uid))
+    value = collect(identity, psql or trusted_psql(owner_uid=owner_uid), with_history=with_history)
     with tempfile.NamedTemporaryFile(mode='w', dir=str(output.parent), delete=False) as stream:
         temporary = stream.name
         json.dump(value, stream, sort_keys=True)
